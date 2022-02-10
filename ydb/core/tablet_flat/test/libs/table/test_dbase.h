@@ -284,14 +284,14 @@ namespace NTest {
         {
             Y_VERIFY(back < RedoLog.size(), "Out of redo log entries");
 
-            const auto &have = RedoLog[RedoLog.size() - (1 + back)]->Affects;
+            const auto &have = RedoLog[RedoLog.size() - (1 + back)]->Affects; 
 
             if (have.size() == tables.size()
                 && std::equal(have.begin(), have.end(), tables.begin())) {
 
             } else {
                 TSteps<TDbExec>::Log()
-                    << "For " << NFmt::Do(*RedoLog[RedoLog.size() - (1 + back)])
+                    << "For " << NFmt::Do(*RedoLog[RedoLog.size() - (1 + back)]) 
                     << " expected affects " << NFmt::Arr(tables)
                     << Endl;
 
@@ -328,12 +328,12 @@ namespace NTest {
 
                 TString alter = TString::TUninitialized(header.Alter);
 
-                if (in.Load((void*)alter.data(), alter.size()) != alter.size())
+                if (in.Load((void*)alter.data(), alter.size()) != alter.size()) 
                     Y_FAIL("Cannot read alter chunk data in change page");
 
                 TString redo = TString::TUninitialized(header.Redo);
 
-                if (in.Load((void*)redo.data(), redo.size()) != redo.size())
+                if (in.Load((void*)redo.data(), redo.size()) != redo.size()) 
                     Y_FAIL("Cannot read redo log data in change page");
 
                 if (in.Skip(abytes) != abytes)

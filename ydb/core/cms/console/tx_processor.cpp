@@ -19,7 +19,7 @@ TTxProcessor::TTxProcessor(ITxExecutor &executor,
     Y_VERIFY(!Temporary || Parent);
     if (!Parent || Parent->State == EState::LOCKED_BY_CHILDREN)
         State = EState::ACTIVE;
-    LogPrefix = Sprintf("TTxProcessor(%s) ", Name.data());
+    LogPrefix = Sprintf("TTxProcessor(%s) ", Name.data()); 
 }
 
 TTxProcessor::TPtr TTxProcessor::GetSubProcessor(const TString &name,

@@ -274,8 +274,8 @@ struct TPDiskFailureInjectionTest {
 
                     // ...and move it through pipe
                     size_t pos = 0;
-                    while (pos < state.size()) {
-                        ssize_t written = write(fds[1], state.data() + pos, state.size() - pos);
+                    while (pos < state.size()) { 
+                        ssize_t written = write(fds[1], state.data() + pos, state.size() - pos); 
                         if (written == -1) {
                             if (errno == EINTR) {
                                 continue;

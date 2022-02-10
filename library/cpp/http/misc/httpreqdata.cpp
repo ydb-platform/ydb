@@ -42,8 +42,8 @@ void TBaseServerRequestData::AppendQueryString(const char* str, size_t length) {
         ModifiedQueryString.Assign(str, length);
     }
     ModifiedQueryString.Append('\0');
-    Search = ModifiedQueryString.data();
-    SearchLength = ModifiedQueryString.size() - 1; // ignore terminator
+    Search = ModifiedQueryString.data(); 
+    SearchLength = ModifiedQueryString.size() - 1; // ignore terminator 
 }
 
 void TBaseServerRequestData::SetRemoteAddr(TStringBuf addr) {
@@ -71,7 +71,7 @@ const char* TBaseServerRequestData::HeaderIn(TStringBuf key) const {
         return nullptr;
     }
 
-    return it->second.data();
+    return it->second.data(); 
 }
 
 TString TBaseServerRequestData::HeaderByIndex(size_t n) const noexcept {
@@ -98,9 +98,9 @@ const char* TBaseServerRequestData::Environment(const char* key) const {
     } else if (stricmp(key, "QUERY_STRING") == 0) {
         return QueryString();
     } else if (stricmp(key, "SERVER_NAME") == 0) {
-        return ServerName().data();
+        return ServerName().data(); 
     } else if (stricmp(key, "SERVER_PORT") == 0) {
-        return ServerPort().data();
+        return ServerPort().data(); 
     } else if (stricmp(key, "SCRIPT_NAME") == 0) {
         return ScriptName();
     }
@@ -133,7 +133,7 @@ const char* TBaseServerRequestData::GetCurPage() const {
             CurPage += Search;
         }
     }
-    return CurPage.data();
+    return CurPage.data(); 
 }
 
 bool TBaseServerRequestData::Parse(const char* origReq) {
@@ -182,8 +182,8 @@ bool TBaseServerRequestData::Parse(const char* origReq) {
 void TBaseServerRequestData::AddHeader(const TString& name, const TString& value) {
     HeadersIn_[name] = value;
 
-    if (stricmp(name.data(), "Host") == 0) {
-        size_t hostLen = strcspn(value.data(), ":");
+    if (stricmp(name.data(), "Host") == 0) { 
+        size_t hostLen = strcspn(value.data(), ":"); 
         if (value[hostLen] == ':')
             Port = value.substr(hostLen + 1);
         Host = value.substr(0, hostLen);
@@ -191,6 +191,6 @@ void TBaseServerRequestData::AddHeader(const TString& name, const TString& value
 }
 
 void TBaseServerRequestData::SetPath(const TString& path) {
-    PathStorage = TBuffer(path.data(), path.size() + 1);
+    PathStorage = TBuffer(path.data(), path.size() + 1); 
     Path = PathStorage.Data();
 }

@@ -28,16 +28,16 @@ struct TCollectOperationHeader {
         return ReadUnaligned<ui64>(&DoNotKeepCount);
     }
     void SetCollectGeneration(ui64 value) {
-        WriteUnaligned<ui64>(&CollectGeneration, value);
+        WriteUnaligned<ui64>(&CollectGeneration, value); 
     }
     void SetCollectStep(ui64 value) {
-        WriteUnaligned<ui64>(&CollectStep, value);
+        WriteUnaligned<ui64>(&CollectStep, value); 
     }
     void SetKeepCount(ui64 value) {
-        WriteUnaligned<ui64>(&KeepCount, value);
+        WriteUnaligned<ui64>(&KeepCount, value); 
     }
     void SetDoNotKeepCount(ui64 value) {
-        WriteUnaligned<ui64>(&DoNotKeepCount, value);
+        WriteUnaligned<ui64>(&DoNotKeepCount, value); 
     }
 
 

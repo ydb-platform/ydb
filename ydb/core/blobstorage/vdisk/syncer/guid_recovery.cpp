@@ -711,7 +711,7 @@ namespace NKikimr {
                         pri = NActors::NLog::PRI_ERROR;
                     LOG_LOG(ctx, pri, BS_SYNCER,
                             VDISKP(VCtx->VDiskLogPrefix, "TVDiskGuidRecoveryActor: DECISION: %s",
-                                  Decision->ToString().data()));
+                                  Decision->ToString().data())); 
                     SUBLOGLINE(NotifyId, ctx, {
                         stream << "GuidRecovery: DECISION: " << Decision->ToString();
                     });
@@ -764,7 +764,7 @@ namespace NKikimr {
                 if (outcome.BadDecision())
                     pri = NActors::NLog::PRI_ERROR;
                 LOG_LOG(ctx, pri, BS_SYNCER,
-                        VDISKP(VCtx->VDiskLogPrefix, "TVDiskGuidRecoveryActor: FINISH: %s", outcome.ToString().data()));
+                        VDISKP(VCtx->VDiskLogPrefix, "TVDiskGuidRecoveryActor: FINISH: %s", outcome.ToString().data())); 
                 SUBLOGLINE(NotifyId, ctx, {
                     stream << "GuidRecovery: FINISH: " << outcome.ToString();
                 });

@@ -21,7 +21,7 @@
 
 #include <util/generic/xrange.h>
 #include <util/string/vector.h>
-#include <util/string/split.h>
+#include <util/string/split.h> 
 
 #ifdef _darwin_
 #pragma GCC diagnostic ignored "-Wformat"
@@ -113,8 +113,8 @@ public:
         TString maxName = Sprintf("MAX(%s)", name);
         TString sumName = Sprintf("SUM(%s)", name);
 
-        fnAddCounter(maxName.data(), MaxSimpleCounters);
-        fnAddCounter(sumName.data(), SumSimpleCounters);
+        fnAddCounter(maxName.data(), MaxSimpleCounters); 
+        fnAddCounter(sumName.data(), SumSimpleCounters); 
 
         HistSimpleCounters.emplace_back(std::move(percentileAggregate));
     }
@@ -532,7 +532,7 @@ public:
             TString tabletTypeStr = TTabletTypes::TypeToStr(tabletType);
             TString groupNames;
             TVector<TString> rr;
-            StringSplitter(labeledCounters->GetGroup()).Split('/').SkipEmpty().Collect(&rr); // TODO: change here to "|"
+            StringSplitter(labeledCounters->GetGroup()).Split('/').SkipEmpty().Collect(&rr); // TODO: change here to "|" 
             for (ui32 i = 0; i < rr.size(); ++i) {
                 if (i > 0)
                     groupNames += '/';
@@ -1700,7 +1700,7 @@ TTabletCountersAggregatorActor::HandleWork(TEvTabletCounters::TEvTabletLabeledCo
         TVector<TString> groups;
         TVector<TString> groupNames;
         Y_VERIFY(ucByGroup.GetDelimiter() == "/");
-        StringSplitter(ucByGroup.GetGroup()).Split('/').SkipEmpty().Collect(&groups);
+        StringSplitter(ucByGroup.GetGroup()).Split('/').SkipEmpty().Collect(&groups); 
 
         if (parsePQTopic) {
             bool skip = false;
@@ -1714,7 +1714,7 @@ TTabletCountersAggregatorActor::HandleWork(TEvTabletCounters::TEvTabletLabeledCo
                 continue;
         }
 
-        StringSplitter(ucByGroup.GetGroupNames()).Split('/').SkipEmpty().Collect(&groupNames);
+        StringSplitter(ucByGroup.GetGroupNames()).Split('/').SkipEmpty().Collect(&groupNames); 
         Y_VERIFY(groups.size() == groupNames.size(), "%s and %s", ucByGroup.GetGroup().c_str(), ucByGroup.GetGroupNames().c_str());
         auto group = mainGroup;
         for (ui32 j = 0; j < groups.size(); ++j) {
@@ -2079,7 +2079,7 @@ public:
 
                 TVector<TString> aggrGroups;
                 TVector<TString> groupParts, groupParts2;
-                StringSplitter(originalGroup).Split('/').SkipEmpty().Collect(&groupParts);
+                StringSplitter(originalGroup).Split('/').SkipEmpty().Collect(&groupParts); 
                 Y_VERIFY(groupParts.size() > 0);
                 groupParts2 = groupParts;
                 ui32 changePos = groupParts.size();
@@ -2399,7 +2399,7 @@ public:
         if (NewFormat) {
             for (auto& counters : *Response->Record.MutableLabeledCountersByGroup()) {
                 TVector<TString> groups;
-                StringSplitter(counters.GetGroup()).SplitByString(counters.GetDelimiter()).SkipEmpty().Collect(&groups);
+                StringSplitter(counters.GetGroup()).SplitByString(counters.GetDelimiter()).SkipEmpty().Collect(&groups); 
                 TStringBuf ff;
                 TString topic = "";
                 TString dc = "";

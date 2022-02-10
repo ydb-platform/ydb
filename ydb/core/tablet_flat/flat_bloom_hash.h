@@ -66,7 +66,7 @@ namespace NBloom {
 
         static THashRoot Root(TArrayRef<const char> row) noexcept
         {
-            return THashRoot{ MurmurHash<ui64>(row.data(), row.size(), 0x4b7db4c869874dd1ull) };
+            return THashRoot{ MurmurHash<ui64>(row.data(), row.size(), 0x4b7db4c869874dd1ull) }; 
         }
 
     private:

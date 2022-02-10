@@ -81,7 +81,7 @@ namespace NKikimr {
             CHECK_PDISK_RESPONSE(VCtx, ev, ctx);
 
             Y_VERIFY(msg->Status == NKikimrProto::OK, "Expected OK from PDisk on every TEvCheckSpace request, "
-                     "but got Status# %s", NKikimrProto::EReplyStatus_Name(msg->Status).data());
+                     "but got Status# %s", NKikimrProto::EReplyStatus_Name(msg->Status).data()); 
 
             TotalChunks = msg->TotalChunks;
             FreeChunks = msg->FreeChunks;

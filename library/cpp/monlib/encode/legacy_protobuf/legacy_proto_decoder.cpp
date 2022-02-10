@@ -7,7 +7,7 @@
 #include <util/generic/yexception.h>
 #include <util/generic/maybe.h>
 #include <util/datetime/base.h>
-#include <util/string/split.h>
+#include <util/string/split.h> 
 
 #include <google/protobuf/reflection.h>
 
@@ -256,7 +256,7 @@ namespace NMonitoring {
                     return !maybeMeta->HasPath() || maybeMeta->GetPath();
                 };
 
-                if (!name.empty() && (!maybeMeta || usePath())) {
+                if (!name.empty() && (!maybeMeta || usePath())) { 
                     child.AppendPath(name);
                 }
 
@@ -495,7 +495,7 @@ namespace NMonitoring {
                     Consumer_->OnLabel(label.Name(), label.Value());
                 }
 
-                const auto fullPath = name.empty()
+                const auto fullPath = name.empty() 
                                           ? ctx.Path()
                                           : ctx.Path() + '/' + name;
 

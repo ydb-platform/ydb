@@ -60,7 +60,7 @@ TTask::TTask(const TEvResourceBroker::TTask &task,
     , SubmitTime(timestamp)
     , Counters(counters)
 {
-    IdString = Sprintf("%s (%" PRIu64 " by %s)", Name.data(), TaskId, ToString(Client).data());
+    IdString = Sprintf("%s (%" PRIu64 " by %s)", Name.data(), TaskId, ToString(Client).data()); 
 }
 
 TString TTask::GetIdString() const
@@ -388,8 +388,8 @@ bool TScheduler::SubmitTask(const TEvResourceBroker::TTask &task,
 
     LOG_DEBUG(as, NKikimrServices::RESOURCE_BROKER,
               "Submitted new %s task %s priority=%" PRIu64 " resources={%s}",
-              config.Name.data(), newTask->GetIdString().data(), task.Priority,
-              JoinSeq(", ", task.RequiredResources).data());
+              config.Name.data(), newTask->GetIdString().data(), task.Priority, 
+              JoinSeq(", ", task.RequiredResources).data()); 
 
     auto id = std::make_pair(client, task.TaskId);
     if (!task.TaskId) {
@@ -436,7 +436,7 @@ bool TScheduler::UpdateTask(ui64 taskId,
     auto task = it->second;
     LOG_DEBUG(as, NKikimrServices::RESOURCE_BROKER,
               "Update task %s (priority=%" PRIu64 " type=%s resources={%s} resubmit=%" PRIu32 ")",
-              task->GetIdString().data(), priority, type.data(), JoinSeq(", ", requiredResources).data(),
+              task->GetIdString().data(), priority, type.data(), JoinSeq(", ", requiredResources).data(), 
               (ui32)resubmit);
 
     auto queue = task->Queue;
@@ -468,7 +468,7 @@ bool TScheduler::UpdateTaskCookie(ui64 taskId,
 
     auto task = it->second;
     LOG_DEBUG(as, NKikimrServices::RESOURCE_BROKER,
-              "Update cookie for task %s", task->GetIdString().data());
+              "Update cookie for task %s", task->GetIdString().data()); 
 
     task->Cookie = cookie;
     return true;
@@ -495,7 +495,7 @@ TScheduler::TTerminateTaskResult TScheduler::RemoveQueuedTask(ui64 taskId,
     }
 
     LOG_DEBUG(as, NKikimrServices::RESOURCE_BROKER, "Removing task %s",
-              task->GetIdString().data());
+              task->GetIdString().data()); 
 
     EraseTask(task, false, as);
 
@@ -524,7 +524,7 @@ TScheduler::TTerminateTaskResult TScheduler::FinishTask(ui64 taskId,
     }
 
     LOG_DEBUG(as, NKikimrServices::RESOURCE_BROKER, "Finish task %s (release resources {%s})",
-              task->GetIdString().data(), JoinSeq(", ", task->RequiredResources).data());
+              task->GetIdString().data(), JoinSeq(", ", task->RequiredResources).data()); 
 
     // Add execution time to statistics but cancelled tasks
     // don't affect average execution time.
@@ -573,12 +573,12 @@ void TScheduler::EraseTask(TTaskPtr task, bool finished, const TActorSystem &as)
     if (oldp != queue->PlannedResourceUsage)
         LOG_DEBUG(as, NKikimrServices::RESOURCE_BROKER,
                   "Updated planned resource usage for queue %s from %f to %f (remove task %s)",
-                  queue->Name.data(), oldp, queue->PlannedResourceUsage, task->GetIdString().data());
+                  queue->Name.data(), oldp, queue->PlannedResourceUsage, task->GetIdString().data()); 
 
     if (oldr != queue->RealResourceUsage)
         LOG_DEBUG(as, NKikimrServices::RESOURCE_BROKER,
                   "Updated real resource usage for queue %s from %f to %f",
-                  queue->Name.data(), oldr, queue->RealResourceUsage);
+                  queue->Name.data(), oldr, queue->RealResourceUsage); 
 
     Tasks.erase(std::make_pair(task->Client, task->TaskId));
 }
@@ -615,7 +615,7 @@ void TScheduler::ScheduleTasks(const TActorSystem &as,
             && *TotalCounters->InFlyTasks) {
             LOG_DEBUG(as, NKikimrServices::RESOURCE_BROKER,
                       "Not enough resources to start task %s",
-                      task->GetIdString().data());
+                      task->GetIdString().data()); 
             blockedResources |= task->GetRequiredResourcesMask();
             continue;
         }
@@ -626,14 +626,14 @@ void TScheduler::ScheduleTasks(const TActorSystem &as,
             && *queue->QueueCounters.InFlyTasks) {
             LOG_DEBUG(as, NKikimrServices::RESOURCE_BROKER,
                       "Skip queue %s due to exceeded limits",
-                      queue->Name.data());
+                      queue->Name.data()); 
             continue;
         }
 
         LOG_DEBUG(as, NKikimrServices::RESOURCE_BROKER,
                   "Allocate resources {%s} for task %s from queue %s",
-                  JoinSeq(", ", task->RequiredResources).data(),
-                  task->GetIdString().data(), queue->Name.data());
+                  JoinSeq(", ", task->RequiredResources).data(), 
+                  task->GetIdString().data(), queue->Name.data()); 
 
         queue->PopTask();
         task->InFly = true;
@@ -658,8 +658,8 @@ void TScheduler::UpdateResourceUsage(const TActorSystem &as)
         if (old != queue->RealResourceUsage)
             LOG_DEBUG(as, NKikimrServices::RESOURCE_BROKER,
                       "Updated real resource usage for queue %s from %f to %f (in-fly consumption {%s})",
-                      queue->Name.data(), old, queue->RealResourceUsage,
-                      JoinSeq(", ", queue->QueueLimit.Used).data());
+                      queue->Name.data(), old, queue->RealResourceUsage, 
+                      JoinSeq(", ", queue->QueueLimit.Used).data()); 
     }
 }
 
@@ -671,11 +671,11 @@ void TScheduler::AssignTask(TTaskPtr &task, const TActorSystem &as)
     if (!TaskConfigs.contains(task->Type)) {
         LOG_ERROR(as, NKikimrServices::RESOURCE_BROKER,
                   "Assigning %s task '%s' of unknown type '%s' to default queue",
-                  state.data(), task->GetIdString().data(), task->Type.data());
+                  state.data(), task->GetIdString().data(), task->Type.data()); 
     } else {
         LOG_DEBUG(as, NKikimrServices::RESOURCE_BROKER,
                   "Assigning %s task %s to queue %s",
-                  state.data(), task->GetIdString().data(), queue->Name.data());
+                  state.data(), task->GetIdString().data(), queue->Name.data()); 
     }
 
     auto oldp = queue->PlannedResourceUsage;
@@ -702,12 +702,12 @@ void TScheduler::AssignTask(TTaskPtr &task, const TActorSystem &as)
     if (oldr != queue->RealResourceUsage)
         LOG_DEBUG(as, NKikimrServices::RESOURCE_BROKER,
                   "Updated real resource usage for queue %s from %f to %f",
-                  queue->Name.data(), oldr, queue->RealResourceUsage);
+                  queue->Name.data(), oldr, queue->RealResourceUsage); 
 
     if (oldp != queue->PlannedResourceUsage)
         LOG_DEBUG(as, NKikimrServices::RESOURCE_BROKER,
                   "Updated planned resource usage for queue %s from %f to %f (insert task %s)",
-                  queue->Name.data(), oldp, queue->PlannedResourceUsage, task->GetIdString().data());
+                  queue->Name.data(), oldp, queue->PlannedResourceUsage, task->GetIdString().data()); 
 }
 
 const TScheduler::TTaskConfig &TScheduler::TaskConfig(const TString &type) const
@@ -1181,7 +1181,7 @@ void TResourceBrokerActor::Handle(TEvResourceBroker::TEvConfigure::TPtr &ev,
         = new TEvResourceBroker::TEvConfigureResult;
 
     LOG_DEBUG(ctx, NKikimrServices::RESOURCE_BROKER, "New config: %s",
-              rec.ShortDebugString().data());
+              rec.ShortDebugString().data()); 
 
     TSet<TString> queues;
     TSet<TString> tasks;
@@ -1222,7 +1222,7 @@ void TResourceBrokerActor::Handle(TEvResourceBroker::TEvConfigure::TPtr &ev,
     }
 
     LOG_DEBUG(ctx, NKikimrServices::RESOURCE_BROKER, "Configure result: %s",
-              response->Record.ShortDebugString().data());
+              response->Record.ShortDebugString().data()); 
 
     ctx.Send(ev->Sender, response.Release());
 }

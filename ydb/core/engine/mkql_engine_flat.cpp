@@ -178,7 +178,7 @@ void ExtractResultType(TCallable& callable, const TTypeEnvironment& env, TMap<TS
     MKQL_ENSURE(labelData.GetType()->GetSchemeType() == NUdf::TDataType<char*>::Id, "Expected string");
 
     TStringBuf label = labelData.AsValue().AsStringRef();
-    MKQL_ENSURE(!label.empty(), "Empty result label is not allowed");
+    MKQL_ENSURE(!label.empty(), "Empty result label is not allowed"); 
     MKQL_ENSURE(!label.StartsWith(TxInternalResultPrefix),
         TStringBuilder() << "Label can't be used in SetResult as it's reserved for internal purposes: " << label);
 
@@ -393,7 +393,7 @@ public:
             AddShards(affectedShardSet, *key);
             if (affectedShardSet.size() > limits.ShardCount) {
                 AddError("PrepareShardPrograms", __LINE__,
-                         Sprintf("too many affected shards: %u (max allowed %u)", (ui32)affectedShardSet.size(), limits.ShardCount).data());
+                         Sprintf("too many affected shards: %u (max allowed %u)", (ui32)affectedShardSet.size(), limits.ShardCount).data()); 
                 return EResult::TooManyShards;
             }
 
@@ -489,11 +489,11 @@ public:
             }
 
             AddError("PrepareShardPrograms", __LINE__,
-                Sprintf("too many shard readsets (%u > %u), src tables: %s, dst tables: %s",
+                Sprintf("too many shard readsets (%u > %u), src tables: %s, dst tables: %s", 
                 (ui32)readsets.size(),
                 limits.RSCount,
                 JoinStrings(srcTables.begin(), srcTables.end(), ",").c_str(),
-                JoinStrings(dstTables.begin(), dstTables.end(), ",").c_str()).data());
+                JoinStrings(dstTables.begin(), dstTables.end(), ",").c_str()).data()); 
             return EResult::TooManyRS;
         }
 
@@ -535,7 +535,7 @@ public:
     void AddShardReply(ui64 origin, const TStringBuf& reply) noexcept override {
         Y_VERIFY(!IsResultBuilt, "BuildResult is already called");
         TGuard<TScopedAlloc> allocGuard(Alloc);
-        if (reply.empty()) {
+        if (reply.empty()) { 
             Status = EStatus::Error;
             AddError("AddShardReply", __LINE__, "Shard reply is empty");
             return;
@@ -555,7 +555,7 @@ public:
             }
         }
 
-        AddError("FinalizeOriginReplies", __LINE__, Sprintf("Unknown shard: %" PRIu64, origin).data());
+        AddError("FinalizeOriginReplies", __LINE__, Sprintf("Unknown shard: %" PRIu64, origin).data()); 
         Status = EStatus::Error;
     }
 
@@ -616,8 +616,8 @@ public:
 
                             const auto nodeIt = ProxyRepliesCallables.find(id);
                             if (nodeIt == ProxyRepliesCallables.end()) {
-                                AddError("BuildResult", __LINE__, Sprintf(
-                                    "Bad shard reply, node %" PRIu32 " not found", id).data());
+                                AddError("BuildResult", __LINE__, Sprintf( 
+                                    "Bad shard reply, node %" PRIu32 " not found", id).data()); 
                                 Status = EStatus::Error;
                                 return;
                             }

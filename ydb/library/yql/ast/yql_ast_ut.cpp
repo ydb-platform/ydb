@@ -92,7 +92,7 @@ Y_UNIT_TEST_SUITE(TParseYqlAst) {
         UNIT_ASSERT(!!astWithPositions.Root);
 
         TString sAnn = astWithPositions.Root->ToString();
-        UNIT_ASSERT(false == sAnn.empty());
+        UNIT_ASSERT(false == sAnn.empty()); 
 
         TAstParseResult annRes = ParseAst(sAnn);
         UNIT_ASSERT(annRes.IsOk());
@@ -130,7 +130,7 @@ Y_UNIT_TEST_SUITE(TParseYqlAst) {
         UNIT_ASSERT(atom->IsAtom());
         UNIT_ASSERT_STRINGS_EQUAL_C(
                     atom->GetContent(),
-                    TString((char*)expectedValue.data(), expectedValue.size()),
+                    TString((char*)expectedValue.data(), expectedValue.size()), 
                     program);
     }
 

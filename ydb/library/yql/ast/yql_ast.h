@@ -83,14 +83,14 @@ struct TAstNode {
     inline void SetContent(TStringBuf newContent, TMemoryPool& pool) {
         Y_VERIFY(IsAtom());
         auto poolContent = pool.AppendString(newContent);
-        Data.A.Content = poolContent.data();
-        Data.A.Size = poolContent.size();
+        Data.A.Content = poolContent.data(); 
+        Data.A.Size = poolContent.size(); 
     }
 
     inline void SetLiteralContent(TStringBuf newContent) {
         Y_VERIFY(IsAtom());
-        Data.A.Content = newContent.data();
-        Data.A.Size = newContent.size();
+        Data.A.Content = newContent.data(); 
+        Data.A.Size = newContent.size(); 
     }
 
     inline ui32 GetFlags() const {
@@ -190,8 +190,8 @@ private:
         , Type(Atom)
         , ListCount(0)
     {
-        Data.A.Content = content.data();
-        Data.A.Size = content.size();
+        Data.A.Content = content.data(); 
+        Data.A.Size = content.size(); 
         Data.A.Flags = flags;
     }
 

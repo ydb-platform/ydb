@@ -50,7 +50,7 @@ namespace NXml {
         void Save(IOutputStream& stream, TZtStringBuf enc = "", bool shouldFormat = true) const {
             int bufferSize = 0;
             xmlChar* xmlBuff = nullptr;
-            const char* encoding = enc.size() ? enc.data() : Doc->encoding ? nullptr : "UTF-8";
+            const char* encoding = enc.size() ? enc.data() : Doc->encoding ? nullptr : "UTF-8"; 
             xmlDocDumpFormatMemoryEnc(Doc.Get(), &xmlBuff, &bufferSize, encoding, shouldFormat);
             TCharPtr xmlCharBuffPtr(xmlBuff);
             stream.Write(xmlBuff, bufferSize);

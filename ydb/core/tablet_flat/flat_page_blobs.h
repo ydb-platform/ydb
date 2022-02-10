@@ -61,11 +61,11 @@ namespace NPage {
             return Array;
         }
 
-        const TArrayRef<const TEntry>* operator->() const noexcept
-        {
-            return &Array;
-        }
-
+        const TArrayRef<const TEntry>* operator->() const noexcept 
+        { 
+            return &Array; 
+        } 
+ 
         const TLogoBlobID& Label() const noexcept override
         {
             return Label_;

@@ -31,13 +31,13 @@ Y_UNIT_TEST_SUITE(TestNormalDistribution) {
             mm += x;
         }
 
-        mm /= v.size();
+        mm /= v.size(); 
 
         for (auto x : v) {
             vv += (mm - x) * (mm - x);
         }
 
-        vv /= v.size();
+        vv /= v.size(); 
 
         long double dd = std::sqrt(vv);
 

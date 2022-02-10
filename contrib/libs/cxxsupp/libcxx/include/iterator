@@ -1,9 +1,9 @@
 // -*- C++ -*-
 //===-------------------------- iterator ----------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions. 
+// See https://llvm.org/LICENSE.txt for license information. 
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception 
 //
 //===----------------------------------------------------------------------===//
 
@@ -394,7 +394,7 @@ operator-(const move_iterator<Iterator1>& x,
 template <class Iterator>
 constexpr move_iterator<Iterator> operator+(   // constexpr in C++17
             typename move_iterator<Iterator>::difference_type n,
-            const move_iterator<Iterator>& x);
+            const move_iterator<Iterator>& x); 
 
 template <class Iterator>   // constexpr in C++17
 constexpr  move_iterator<Iterator> make_move_iterator(const Iterator& i);
@@ -576,7 +576,7 @@ template <class E> constexpr const E* data(initializer_list<E> il) noexcept;    
 }  // std
 
 */
-
+ 
 #include <__config>
 #include <__debug>
 #include <__functional_base>
@@ -620,7 +620,7 @@ template <class E> constexpr const E* data(initializer_list<E> il) noexcept;    
 #include <cstddef>
 #include <initializer_list>
 #include <type_traits>
-#include <version>
+#include <version> 
 
 #if !defined(_LIBCPP_HAS_NO_PRAGMA_SYSTEM_HEADER)
 #pragma GCC system_header

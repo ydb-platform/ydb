@@ -12,9 +12,9 @@ namespace NCodecs {
 
         Y_ENSURE_EX(p->AlreadyTrained(), TCodecException() << "untrained codec " << p->GetName());
         const TString& n = p->GetName();
-        Y_VERIFY(n.size() <= Max<ui16>());
-        ::Save(out, (ui16)n.size());
-        out->Write(n.data(), n.size());
+        Y_VERIFY(n.size() <= Max<ui16>()); 
+        ::Save(out, (ui16)n.size()); 
+        out->Write(n.data(), n.size()); 
         p->Save(out);
     }
 
@@ -38,7 +38,7 @@ namespace NCodecs {
     }
 
     TCodecPtr ICodec::RestoreFromString(TStringBuf s) {
-        TMemoryInput minp{s.data(), s.size()};
+        TMemoryInput minp{s.data(), s.size()}; 
         return Restore(&minp);
     }
 
@@ -47,12 +47,12 @@ namespace NCodecs {
     }
 
     ui8 TPipelineCodec::Encode(TStringBuf in, TBuffer& out) const {
-        size_t res = Traits().ApproximateSizeOnEncode(in.size());
+        size_t res = Traits().ApproximateSizeOnEncode(in.size()); 
         out.Reserve(res);
         out.Clear();
 
         if (Pipeline.empty()) {
-            out.Append(in.data(), in.size());
+            out.Append(in.data(), in.size()); 
             return 0;
         } else if (Pipeline.size() == 1) {
             return Pipeline.front()->Encode(in, out);
@@ -68,7 +68,7 @@ namespace NCodecs {
             if (it != Pipeline.begin()) {
                 tmp.Clear();
                 tmp.Swap(out);
-                in = TStringBuf{tmp.data(), tmp.size()};
+                in = TStringBuf{tmp.data(), tmp.size()}; 
             }
             freelastbits = (*it)->Encode(in, out);
         }
@@ -77,12 +77,12 @@ namespace NCodecs {
     }
 
     void TPipelineCodec::Decode(TStringBuf in, TBuffer& out) const {
-        size_t res = Traits().ApproximateSizeOnDecode(in.size());
+        size_t res = Traits().ApproximateSizeOnDecode(in.size()); 
         out.Reserve(res);
         out.Clear();
 
         if (Pipeline.empty()) {
-            out.Append(in.data(), in.size());
+            out.Append(in.data(), in.size()); 
             return;
         } else if (Pipeline.size() == 1) {
             Pipeline.front()->Decode(in, out);
@@ -98,7 +98,7 @@ namespace NCodecs {
             if (it != Pipeline.rbegin()) {
                 tmp.Clear();
                 tmp.Swap(out);
-                in = TStringBuf{tmp.data(), tmp.size()};
+                in = TStringBuf{tmp.data(), tmp.size()}; 
             }
             (*it)->Decode(in, out);
         }
@@ -163,7 +163,7 @@ namespace NCodecs {
 
         TStringBuf r;
         while (in.NextRegion(r)) {
-            trainingInput.emplace_back(r.data(), r.size());
+            trainingInput.emplace_back(r.data(), r.size()); 
         }
 
         TBuffer buff;
@@ -172,7 +172,7 @@ namespace NCodecs {
 
             for (auto& bit : trainingInput) {
                 buff.Clear();
-                it->Encode(TStringBuf{bit.data(), bit.size()}, buff);
+                it->Encode(TStringBuf{bit.data(), bit.size()}, buff); 
                 buff.Swap(bit);
             }
         }

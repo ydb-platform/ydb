@@ -61,7 +61,7 @@ namespace NKikimr {
                     ui64 firstLogLsn = 0;
 
                     if (!e->MemLogEmpty && !e->DiskLogEmpty) {
-                        Y_VERIFY(e->FirstDiskLsn <= e->FirstMemLsn, "%s", reportInternals().data());
+                        Y_VERIFY(e->FirstDiskLsn <= e->FirstMemLsn, "%s", reportInternals().data()); 
                         firstLogLsn = e->FirstDiskLsn;
                     } else if (e->MemLogEmpty) {
                         firstLogLsn = e->FirstDiskLsn;
@@ -71,7 +71,7 @@ namespace NKikimr {
 
                     Y_VERIFY(lastLogLsn != 0 && firstLogLsn <= lastLogLsn,
                              " firstLogLsn# %" PRIu64 " lastLogLsn# %" PRIu64 " %s",
-                             firstLogLsn, lastLogLsn, reportInternals().data());
+                             firstLogLsn, lastLogLsn, reportInternals().data()); 
 
                     if (!(syncedLsn + 1 >= logStartLsn)) {
                         return TWhatsNextOutcome::Error(2);
@@ -232,7 +232,7 @@ namespace NKikimr {
                           VDISKP(SlCtx->VCtx->VDiskLogPrefix,
                                 "Handle(TEvSyncLogRead): OK; whatsNext# %s %s",
                                 Name2Str(wno.WhatsNext),
-                                InternalsToString(Ev->Get(), SnapPtr.Get(), DbBirthLsn).data()));
+                                InternalsToString(Ev->Get(), SnapPtr.Get(), DbBirthLsn).data())); 
 
                 switch (wno.WhatsNext) {
                     case EWnDiskSynced:

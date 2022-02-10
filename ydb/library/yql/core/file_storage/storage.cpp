@@ -41,7 +41,7 @@ struct TFileObject {
 
 TFsPath ToFilePath(const TString& path)
 {
-    if (path.empty()) {
+    if (path.empty()) { 
         char tempDir[MAX_PATH];
         if (MakeTempDir(tempDir, nullptr) != 0)
             ythrow yexception() << "FileStorage: Can't create temporary directory " << tempDir;
@@ -92,7 +92,7 @@ TFileLinkPtr CreateFakeFileLink(const TFsPath& path, const TString& md5, bool de
 }
 
 bool SetCacheFilePermissionsNoThrow(const TString& path) {
-    return Chmod(path.data(), MODE0755) == 0;
+    return Chmod(path.data(), MODE0755) == 0; 
 }
 
 void SetCacheFilePermissions(const TString& path) {
@@ -100,8 +100,8 @@ void SetCacheFilePermissions(const TString& path) {
 }
 
 void SetFilePermissions(const TString& path, int mode) {
-    if (Chmod(path.data(), mode)) {
-        TFileStat fstat(path.data());
+    if (Chmod(path.data(), mode)) { 
+        TFileStat fstat(path.data()); 
         ythrow TSystemError() << "Failed to chmod file " << path.Quote() << ", uid = " << fstat.Uid << ", mode = " << fstat.Mode << ", new mode = " << mode;
     }
 }
@@ -152,7 +152,7 @@ public:
     TImpl(size_t maxFiles, ui64 maxSize, const TString& storagePath)
         : StorageDir(ToFilePath(storagePath))
         , ProcessTempDir(StorageDir / ToString(GetPID())) // must be subfolder for fast hardlinking
-        , IsTemp(storagePath.empty())
+        , IsTemp(storagePath.empty()) 
         , MaxFiles(maxFiles)
         , MaxSize(maxSize)
     {
@@ -225,7 +225,7 @@ public:
                 AtomicAdd(CurrentSize, fileSize);
             }
             // Ignore HardLink fail. Another process managed to download before us
-            TouchFile(storageFile.c_str());
+            TouchFile(storageFile.c_str()); 
 
             newFileAdded = true;
             result = MakeIntrusive<TFileLink>(hardlinkFile, storageFileName, fileSize, pullerMd5);
@@ -250,7 +250,7 @@ public:
             return nullptr;
         }
 
-        TouchFile(storageFile.c_str());
+        TouchFile(storageFile.c_str()); 
         SetCacheFilePermissionsNoThrow(hardlinkFile);
 
         const i64 fileSize = GetFileLength(hardlinkFile);
@@ -270,14 +270,14 @@ public:
     void MoveToStorage(const TFsPath& src, const TString& dstStorageFileName) {
         TFsPath dstStorageFile = StorageDir / dstStorageFileName;
         const bool prevFileExisted = dstStorageFile.Exists();
-        const i64 prevFileSize = Max<i64>(0, GetFileLength(dstStorageFile.c_str()));
+        const i64 prevFileSize = Max<i64>(0, GetFileLength(dstStorageFile.c_str())); 
 
         if (!NFs::Rename(src, dstStorageFile)) {
             ythrow yexception() << "Failed to rename file from " << src << " to " << dstStorageFile;
         }
         SetCacheFilePermissionsNoThrow(dstStorageFile);
 
-        const i64 newFileSize = Max<i64>(0, GetFileLength(dstStorageFile.c_str()));
+        const i64 newFileSize = Max<i64>(0, GetFileLength(dstStorageFile.c_str())); 
 
         if (!prevFileExisted) {
             AtomicIncrement(CurrentFiles);
@@ -295,7 +295,7 @@ public:
         }
 
         // file could be removed by another process, handle this situation
-        const i64 prevFileSize = Max<i64>(0, GetFileLength(storageFile.c_str()));
+        const i64 prevFileSize = Max<i64>(0, GetFileLength(storageFile.c_str())); 
         const bool result = NFs::Remove(storageFile);
 
         if (result || !storageFile.Exists()) {

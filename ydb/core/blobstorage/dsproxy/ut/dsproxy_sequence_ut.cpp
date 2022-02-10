@@ -257,7 +257,7 @@ void SendVGetResult(ui32 vDiskIdx, NKikimrProto::EReplyStatus status, ui32 partI
         Y_VERIFY(subgroup.size() > partId - 1);
         part = &subgroup[partId - 1];
 
-        result->AddResult(status, part->LogoBlobId, 0, part->Data.data(), part->Data.size(),
+        result->AddResult(status, part->LogoBlobId, 0, part->Data.data(), part->Data.size(), 
             &queryCookie);
     } else if (status == NKikimrProto::NODATA) {
         result->Record.SetCookie(from->InnerCookie);
@@ -334,8 +334,8 @@ void SendVGetResult(ui32 blobIdx, ui32 vDiskIdx, NKikimrProto::EReplyStatus stat
                 }
             }
             TLogoBlobID id(it->LogoBlobId, partIdx + 1);
-            result->AddResult(status, id, it->Shift, data.data(),
-                data.size(), &it->QueryCookie);
+            result->AddResult(status, id, it->Shift, data.data(), 
+                data.size(), &it->QueryCookie); 
         }
         result->Record.MutableMsgQoS()->MutableMsgId()->SetMsgId(request.MsgId);
         result->Record.MutableMsgQoS()->MutableMsgId()->SetSequenceId(request.SequenceId);
@@ -1156,7 +1156,7 @@ Y_UNIT_TEST(TestGivenBlock42PutWhenPartialGetThenSingleDiskRequestOk) {
     TString data;
     data.resize(400 << 10);
     for (ui64 i = 0; i < data.size(); ++i) {
-        *const_cast<char *>(data.data() + i) = (char)(i % 251);
+        *const_cast<char *>(data.data() + i) = (char)(i % 251); 
     }
     TLogoBlobID logoblobid(1, 2, 3, 4, (ui32)data.size(), 5);
     TVector<TVDiskState> blobSubgroup;
@@ -1214,8 +1214,8 @@ Y_UNIT_TEST(TestGivenBlock42PutWhenPartialGetThenSingleDiskRequestOk) {
                         NKikimrProto::OK, theRequest.VDiskId, TAppData::TimeProvider->Now(), 0, nullptr,
                         nullptr, nullptr, nullptr, NWilson::TTraceId(), {}, 0U, 0U));
                 result->AddResult(
-                    NKikimrProto::OK, id, query.Shift, resultData.data(),
-                    resultData.size(), &query.QueryCookie);
+                    NKikimrProto::OK, id, query.Shift, resultData.data(), 
+                    resultData.size(), &query.QueryCookie); 
                 result->Record.MutableMsgQoS()->MutableMsgId()->SetMsgId(msgId);
                 result->Record.MutableMsgQoS()->MutableMsgId()->SetSequenceId(sequenceId);
                 result->Record.SetCookie(theRequest.RecordCookie);
@@ -1265,7 +1265,7 @@ Y_UNIT_TEST(TestGivenBlock42Put6PartsOnOneVDiskWhenDiscoverThenRecoverFirst) {
     TString data;
     data.resize(400 << 10);
     for (ui64 i = 0; i < data.size(); ++i) {
-        *const_cast<char *>(data.data() + i) = (char)(i / 1024);
+        *const_cast<char *>(data.data() + i) = (char)(i / 1024); 
     }
     TLogoBlobID logoblobid(1, 2, 3, 4, (ui32)data.size(), 5);
     TVector<TVector<TVDiskState>> blobSubgroups;

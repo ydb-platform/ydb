@@ -93,11 +93,11 @@ TFsPath TFsPath::RelativePath(const TFsPath& root) const {
     for (size_t i = 0; i < rsplit.size() - cnt; i++) {
         r += i == 0 ? ".." : "/..";
     }
-    for (size_t i = cnt; i < split.size(); i++) {
-        r += (i == 0 || i == cnt && rsplit.size() - cnt == 0 ? "" : "/");
+    for (size_t i = cnt; i < split.size(); i++) { 
+        r += (i == 0 || i == cnt && rsplit.size() - cnt == 0 ? "" : "/"); 
         r += split[i];
     }
-    return r.size() ? TFsPath(r) : TFsPath();
+    return r.size() ? TFsPath(r) : TFsPath(); 
 }
 
 TFsPath TFsPath::Parent() const {
@@ -230,7 +230,7 @@ struct TClosedir {
 
 void TFsPath::ListNames(TVector<TString>& children) const {
     CheckDefined();
-    THolder<DIR, TClosedir> dir(opendir(this->c_str()));
+    THolder<DIR, TClosedir> dir(opendir(this->c_str())); 
     if (!dir) {
         ythrow TIoSystemError() << "failed to opendir " << Path_;
     }
@@ -340,15 +340,15 @@ void TFsPath::CheckExists() const {
 }
 
 bool TFsPath::IsDirectory() const {
-    return IsDefined() && TFileStat(GetPath().data()).IsDir();
+    return IsDefined() && TFileStat(GetPath().data()).IsDir(); 
 }
 
 bool TFsPath::IsFile() const {
-    return IsDefined() && TFileStat(GetPath().data()).IsFile();
+    return IsDefined() && TFileStat(GetPath().data()).IsFile(); 
 }
 
 bool TFsPath::IsSymlink() const {
-    return IsDefined() && TFileStat(GetPath().data(), true).IsSymlink();
+    return IsDefined() && TFileStat(GetPath().data(), true).IsSymlink(); 
 }
 
 void TFsPath::DeleteIfExists() const {
@@ -356,8 +356,8 @@ void TFsPath::DeleteIfExists() const {
         return;
     }
 
-    ::unlink(this->c_str());
-    ::rmdir(this->c_str());
+    ::unlink(this->c_str()); 
+    ::rmdir(this->c_str()); 
     if (Exists()) {
         ythrow TIoException() << "failed to delete " << Path_;
     }
@@ -366,7 +366,7 @@ void TFsPath::DeleteIfExists() const {
 void TFsPath::MkDir(const int mode) const {
     CheckDefined();
     if (!Exists()) {
-        int r = Mkdir(this->c_str(), mode);
+        int r = Mkdir(this->c_str(), mode); 
         if (r != 0) {
             // TODO (stanly) will still fail on Windows because
             // LastSystemError() returns windows specific ERROR_ALREADY_EXISTS

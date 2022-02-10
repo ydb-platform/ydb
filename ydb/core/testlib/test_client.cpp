@@ -1848,7 +1848,7 @@ namespace Tests {
         err = response.GetErrorReason();
         scheme.CopyFrom(response.GetLocalDbScheme());
 
-        return err.empty();
+        return err.empty(); 
     }
 
     bool TClient::LocalSchemeTx(const ui64 tabletId, const TString &schemeChangesStr, bool dryRun,
@@ -1928,10 +1928,10 @@ namespace Tests {
         NKikimrClient::TResponse response;
         FlatQueryRaw(query, opts, response);
 
-        if (!response.GetDataShardErrors().empty()) {
+        if (!response.GetDataShardErrors().empty()) { 
             Cerr << "DataShardErrors:" << Endl << response.GetDataShardErrors() << Endl;
         }
-        if (!response.GetMiniKQLErrors().empty()) {
+        if (!response.GetMiniKQLErrors().empty()) { 
             Cerr << "MiniKQLErrors:" << Endl << response.GetMiniKQLErrors() << Endl;
         }
         if (response.HasProxyErrorCode()) {
@@ -2024,7 +2024,7 @@ namespace Tests {
         TInstant deadline = TInstant::Now() + TIMEOUT;
         while (TInstant::Now() <= deadline) {
             TString res = SendTabletMonQuery(runtime, hive, TString("/app?page=SetDown&node=") + ToString(nodeId) + "&down=" + (up ? "0" : "1"));
-            if (!res.empty() && !res.Contains("Error"))
+            if (!res.empty() && !res.Contains("Error")) 
                 return res;
 
         }
@@ -2276,7 +2276,7 @@ namespace Tests {
         TStringBuf port;
         str.Split('/', address, port);
         ui64 portValue = 0;
-        if (address.empty() || !TryFromString(port, portValue))
+        if (address.empty() || !TryFromString(port, portValue)) 
             ythrow TWithBackTrace<yexception>() << "Incorrect server redirect, expected 'IpAddress/Port'";
 
         return TServerSetup(TString(address), portValue);

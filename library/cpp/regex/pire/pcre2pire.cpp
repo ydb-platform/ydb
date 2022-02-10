@@ -4,7 +4,7 @@
 
 TString Pcre2Pire(const TString& src) {
     TVector<char> result;
-    result.reserve(src.size() + 1);
+    result.reserve(src.size() + 1); 
 
     enum EState {
         S_SIMPLE,
@@ -19,7 +19,7 @@ TString Pcre2Pire(const TString& src) {
 
     EState state = S_SIMPLE;
 
-    for (ui32 i = 0; i < src.size(); ++i) {
+    for (ui32 i = 0; i < src.size(); ++i) { 
         const char c = src[i];
 
         switch (state) {
@@ -32,7 +32,7 @@ TString Pcre2Pire(const TString& src) {
                     state = S_EXPECT_Q;
                     result.push_back(c);
                 } else {
-                    if (c == ')' && result.size() > 0 && result.back() == '(') {
+                    if (c == ')' && result.size() > 0 && result.back() == '(') { 
                         // eliminating "()"
                         result.pop_back();
                     } else {

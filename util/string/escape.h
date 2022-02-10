@@ -25,7 +25,7 @@ static inline TBasicString<TChar> EscapeC(const TChar* str, size_t len) {
 
 template <typename TChar>
 static inline TBasicString<TChar> EscapeC(const TBasicStringBuf<TChar>& str) {
-    return EscapeC(str.data(), str.size());
+    return EscapeC(str.data(), str.size()); 
 }
 
 template <typename TChar>

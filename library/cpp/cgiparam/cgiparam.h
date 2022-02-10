@@ -129,7 +129,7 @@ public:
             return nullptr;
         }
 
-        return it->second.data();
+        return it->second.data(); 
     }
 };
 

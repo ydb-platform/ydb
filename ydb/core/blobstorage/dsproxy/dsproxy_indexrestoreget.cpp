@@ -35,7 +35,7 @@ class TBlobStorageGroupIndexRestoreGetRequest
     void ReplyAndDie(NKikimrProto::EReplyStatus status) {
         A_LOG_DEBUG_S("DSPI14", "ReplyAndDie"
             << " Reply with status# " << NKikimrProto::EReplyStatus_Name(status)
-            << " PendingResult# " << (PendingResult ? PendingResult->ToString().data() : "nullptr"));
+            << " PendingResult# " << (PendingResult ? PendingResult->ToString().data() : "nullptr")); 
         if (status != NKikimrProto::OK) {
             PendingResult.reset(new TEvBlobStorage::TEvGetResult(status, QuerySize, Info->GroupID));
             for (ui32 i = 0; i < QuerySize; ++i) {
@@ -90,7 +90,7 @@ class TBlobStorageGroupIndexRestoreGetRequest
         --VGetsInFlight;
 
         A_LOG_DEBUG_S("DSPI10", "Handle TEvVGetResult"
-            << " status# " << NKikimrProto::EReplyStatus_Name(status).data()
+            << " status# " << NKikimrProto::EReplyStatus_Name(status).data() 
             << " VDiskId# " << vdisk
             << " ev# " << ev->Get()->ToString());
 
@@ -110,7 +110,7 @@ class TBlobStorageGroupIndexRestoreGetRequest
                 break;
 
             default:
-                Y_FAIL("unexpected newStatus# %s", NKikimrProto::EReplyStatus_Name(newStatus).data());
+                Y_FAIL("unexpected newStatus# %s", NKikimrProto::EReplyStatus_Name(newStatus).data()); 
         }
 
         for (const auto& result : record.GetResult()) {
@@ -193,7 +193,7 @@ class TBlobStorageGroupIndexRestoreGetRequest
         TEvBlobStorage::TEvGetResult &getResult = *ev->Get();
         NKikimrProto::EReplyStatus status = getResult.Status;
         if (status != NKikimrProto::OK) {
-            R_LOG_ERROR_S("DSPI06", "Handle TEvGetResult status# " << NKikimrProto::EReplyStatus_Name(status).data()
+            R_LOG_ERROR_S("DSPI06", "Handle TEvGetResult status# " << NKikimrProto::EReplyStatus_Name(status).data() 
                 << " for tablet# " << TabletId
                 << " BlobStatus# " << DumpBlobStatus());
             ReplyAndDie(status);

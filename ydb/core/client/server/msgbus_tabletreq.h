@@ -36,7 +36,7 @@ private:
             PipeClient = TActorId();
             return SendReplyAndDie(CreateErrorReply(MSTATUS_ERROR, ctx,
                 Sprintf("Tablet pipe client connected with status# %s for tablet %" PRIu64 " Marker# MBT3",
-                    NKikimrProto::EReplyStatus_Name(msg->Status).data(), msg->TabletId)), ctx);
+                    NKikimrProto::EReplyStatus_Name(msg->Status).data(), msg->TabletId)), ctx); 
         }
     }
 

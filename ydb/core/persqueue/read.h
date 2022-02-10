@@ -180,7 +180,7 @@ namespace NPQ {
 
                 Y_VERIFY(resp.ReadResultSize() && resp.ReadResultSize() + cachedCount == outBlobs.size(),
                     "Unexpected KV read result size %" PRIu64 " for cached %" PRIu32 "/%" PRIu64 " blobs, proto %s",
-                    resp.ReadResultSize(), cachedCount, outBlobs.size(), ev->Get()->ToString().data());
+                    resp.ReadResultSize(), cachedCount, outBlobs.size(), ev->Get()->ToString().data()); 
 
                 TVector<bool> kvBlobs(outBlobs.size(), false);
                 ui32 pos = 0;
@@ -239,7 +239,7 @@ namespace NPQ {
 
                 for (ui32 i = 0; i < resp.WriteResultSize(); ++i) {
                     auto status = resp.GetWriteResult(i).GetStatus();
-                    Y_VERIFY(status == NKikimrProto::OK, "Not OK from KV blob: %s", ev->Get()->ToString().data());
+                    Y_VERIFY(status == NKikimrProto::OK, "Not OK from KV blob: %s", ev->Get()->ToString().data()); 
                 }
 
                 Cache.SaveHeadBlobs(ctx, kvReq);

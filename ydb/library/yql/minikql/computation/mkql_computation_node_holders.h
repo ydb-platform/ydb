@@ -242,27 +242,27 @@ inline TStringBuf GetSmallValue(const ui64& value) {
 }
 
 inline ui64 AddSmallValue(TPagedArena& pool, const TStringBuf& value) {
-    if (value.size() <= 8) {
+    if (value.size() <= 8) { 
         ui64 ret = 0;
-        memcpy((ui8*)&ret, value.data(), value.size());
+        memcpy((ui8*)&ret, value.data(), value.size()); 
         Y_VERIFY_DEBUG(IsSmallValueEmbedded(ret));
         return ret;
     }
     else {
-        auto ptr = pool.Alloc(value.size());
-        memcpy((ui8*)ptr, value.data(), value.size());
+        auto ptr = pool.Alloc(value.size()); 
+        memcpy((ui8*)ptr, value.data(), value.size()); 
         return (ui64)ptr;
     }
 }
 
 inline ui64 AsSmallValue(const TStringBuf& value) {
-    if (value.size() <= 8) {
+    if (value.size() <= 8) { 
         ui64 ret = 0;
-        memcpy((ui8*)&ret, value.data(), value.size());
+        memcpy((ui8*)&ret, value.data(), value.size()); 
         return ret;
     }
     else {
-        return (ui64)value.data();
+        return (ui64)value.data(); 
     }
 }
 

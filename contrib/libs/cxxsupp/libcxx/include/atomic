@@ -1,9 +1,9 @@
 // -*- C++ -*-
 //===--------------------------- atomic -----------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions. 
+// See https://llvm.org/LICENSE.txt for license information. 
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception 
 //
 //===----------------------------------------------------------------------===//
 
@@ -525,7 +525,7 @@ template <class T>
 #include <cstdint>
 #include <cstring>
 #include <type_traits>
-#include <version>
+#include <version> 
 
 #if !defined(_LIBCPP_HAS_NO_PRAGMA_SYSTEM_HEADER)
 #pragma GCC system_header
@@ -639,7 +639,7 @@ __cxx_atomic_assign_volatile(_Tp volatile& __a_value, _Tv volatile const& __val)
 
 template <typename _Tp>
 struct __cxx_atomic_base_impl {
-
+ 
   _LIBCPP_INLINE_VISIBILITY
 #ifndef _LIBCPP_CXX03_LANG
     __cxx_atomic_base_impl() _NOEXCEPT = default;

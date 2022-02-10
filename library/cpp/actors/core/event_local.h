@@ -14,7 +14,7 @@ namespace NActors {
         }
 
         bool SerializeToArcadiaStream(TChunkSerializer* /*serializer*/) const override {
-            Y_FAIL("Serialization of local event %s type %" PRIu32, TypeName<TEv>().data(), TEventType);
+            Y_FAIL("Serialization of local event %s type %" PRIu32, TypeName<TEv>().data(), TEventType); 
         }
 
         bool IsSerializable() const override {
@@ -22,7 +22,7 @@ namespace NActors {
         }
 
         static IEventBase* Load(TEventSerializedData*) {
-            Y_FAIL("Loading of local event %s type %" PRIu32, TypeName<TEv>().data(), TEventType);
+            Y_FAIL("Loading of local event %s type %" PRIu32, TypeName<TEv>().data(), TEventType); 
         }
     };
 

@@ -1,12 +1,12 @@
 LIBRARY()
 
-OWNER(
-    g:base
-    danlark
-)
+OWNER( 
+    g:base 
+    danlark 
+) 
 
 SRCS(
-    sse.cpp
+    sse.cpp 
 )
 
 END()

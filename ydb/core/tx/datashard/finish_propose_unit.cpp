@@ -138,7 +138,7 @@ void TFinishProposeUnit::CompleteRequest(TOperation::TPtr op,
                 << duration.MilliSeconds() << " ms, status: " << res->GetStatus());
 
     TString errors = res->GetError();
-    if (errors.size()) {
+    if (errors.size()) { 
         LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD,
                     "Errors while proposing transaction txid " << op->GetTxId()
                     << " at tablet " << DataShard.TabletID() << " status: "

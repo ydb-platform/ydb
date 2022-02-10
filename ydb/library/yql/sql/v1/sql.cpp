@@ -3456,7 +3456,7 @@ bool TSqlCallExpr::Init(const TRule_invoke_expr& node) {
 void TSqlCallExpr::IncCounters() {
     if (Node) {
         Ctx.IncrementMonCounter("sql_features", "NamedNodeUseApply");
-    } else if (!Module.empty()) {
+    } else if (!Module.empty()) { 
         if (ValidateForCounters(Module)) {
             Ctx.IncrementMonCounter("udf_modules", Module);
             Ctx.IncrementMonCounter("sql_features", "CallUdf");
@@ -3618,7 +3618,7 @@ const TString TGroupByClause::AutogenerateNamePrefix = "group";
 
 bool ParseNumbers(TContext& ctx, const TString& strOrig, ui64& value, TString& suffix) {
     const auto str = to_lower(strOrig);
-    const auto strLen = str.size();
+    const auto strLen = str.size(); 
     ui64 base = 10;
     if (strLen > 2 && str[0] == '0') {
         const auto formatChar = str[1];
@@ -3641,7 +3641,7 @@ bool ParseNumbers(TContext& ctx, const TString& strOrig, ui64& value, TString& s
         suffix = TString(++iter, str.cend());
     }
     value = 0;
-    const TString digString(str.begin() + (base == 10 ? 0 : 2), str.end() - suffix.size());
+    const TString digString(str.begin() + (base == 10 ? 0 : 2), str.end() - suffix.size()); 
     for (const char& cur: digString) {
         const ui64 curDigit = Char2DigitTable[static_cast<int>(cur)];
         if (curDigit >= base) {
@@ -3708,9 +3708,9 @@ TNodePtr LiteralNumber(TContext& ctx, const TRule_integer& node) {
 TNodePtr LiteralReal(TContext& ctx, const TRule_real& node) {
     const TString value(ctx.Token(node.GetToken1()));
     YQL_ENSURE(!value.empty());
-    const auto lastValue = value[value.size() - 1];
+    const auto lastValue = value[value.size() - 1]; 
     if (lastValue == 'f' || lastValue == 'F') {
-        return new TLiteralNumberNode<float>(ctx.Pos(), "Float", value.substr(0, value.size()-1));
+        return new TLiteralNumberNode<float>(ctx.Pos(), "Float", value.substr(0, value.size()-1)); 
     } else {
         return new TLiteralNumberNode<double>(ctx.Pos(), "Double", value);
     }
@@ -4943,7 +4943,7 @@ TNodePtr TSqlExpression::SubExpr(const TRule_xor_subexpr& node, const TTrailingQ
                         escapeNode = escapeExpr;
                         if (escapeLiteral) {
                             Ctx.IncrementMonCounter("sql_features", "LikeEscape");
-                            if (escapeLiteral->size() != 1) {
+                            if (escapeLiteral->size() != 1) { 
                                 Ctx.IncrementMonCounter("sql_errors", "LikeMultiCharEscape");
                                 Error() << "ESCAPE clause requires single character argument";
                                 return nullptr;
@@ -9196,7 +9196,7 @@ TNodePtr TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt, bool& success
         }
     }
 
-    if (prefix.empty()) {
+    if (prefix.empty()) { 
         if (!TopLevel && !hasLexicalScope) {
             Error() << "This pragma '" << pragma << "' is not allowed to be used in actions or subqueries";
             Ctx.IncrementMonCounter("sql_errors", "BadPragmaValue");

@@ -7,7 +7,7 @@
 
 namespace NUri {
     TState::EParsed TUri::CheckHost(const TStringBuf& host) {
-        if (host.empty())
+        if (host.empty()) 
             return ParsedOK;
 
         unsigned domainLevel = 0;
@@ -62,8 +62,8 @@ namespace NUri {
         , Scheme(SchemeEmpty)
         , FieldsDirty(0)
     {
-        if (!scheme.empty()) {
-            if (SetSchemeImpl(TSchemeInfo::Get(scheme)).Str.empty())
+        if (!scheme.empty()) { 
+            if (SetSchemeImpl(TSchemeInfo::Get(scheme)).Str.empty()) 
                 FldSet(FieldScheme, scheme);
         }
 
@@ -91,12 +91,12 @@ namespace NUri {
 
         switch (field) {
             case FieldScheme:
-                if (!SetScheme(TSchemeInfo::Get(value)).Str.empty())
+                if (!SetScheme(TSchemeInfo::Get(value)).Str.empty()) 
                     return false;
                 break;
 
             case FieldPort:
-                Port = value.empty() ? 0 : FromString<ui16>(value);
+                Port = value.empty() ? 0 : FromString<ui16>(value); 
                 break;
 
             default:
@@ -213,7 +213,7 @@ namespace NUri {
             static constexpr TStringBuf rootPath = "/";
 
             if (noscheme) {
-                if (!basescheme.empty()) {
+                if (!basescheme.empty()) { 
                     FldSetNoDirty(FieldScheme, basescheme);
                     // check if it is canonical
                     if (basescheme.data() != base.GetSchemeInfo().Str.data())
@@ -296,7 +296,7 @@ namespace NUri {
 
         // merge with base URL
         // taken either from _BASE_ property or from optional argument
-        if (!codebase.empty()) {
+        if (!codebase.empty()) { 
             // if optional code base given -- parse it
             TUri codebaseUrl;
             if (codebaseUrl.ParseImpl(codebase, careFlags, 0, SchemeEmpty, enc) != ParsedOK || !codebaseUrl.IsValidAbs())
@@ -312,7 +312,7 @@ namespace NUri {
         if (!IsValidAbs())
             return LinkBadAbs;
 
-        if (!host.empty()) {
+        if (!host.empty()) { 
             //  - we don't care about different ports for the same server
             //  - we don't care about win|www|koi|etc. preffixes for the same server
             if (GetPort() != base.GetPort() || !EqualNoCase(host, base.GetHost()))
@@ -359,7 +359,7 @@ namespace NUri {
 
         if (flags & FlagScheme) {
             v = Fields[FieldScheme];
-            if (!v.empty())
+            if (!v.empty()) 
                 out << v << ':';
         }
 
@@ -381,7 +381,7 @@ namespace NUri {
             if (flags & FlagAuth) {
                 if (flags & FlagUser) {
                     v = Fields[FieldUser];
-                    if (!v.empty())
+                    if (!v.empty()) 
                         TEncoder::EncodeNotAlnum(out, v);
                 }
 
@@ -407,7 +407,7 @@ namespace NUri {
         if (flags & FlagPath) {
             v = Fields[FieldPath];
             // for relative, empty path is not the same as missing
-            if (v.empty() && 0 == (flags & FlagHost))
+            if (v.empty() && 0 == (flags & FlagHost)) 
                 v = TStringBuf(".");
             out << v;
         }

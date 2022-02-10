@@ -147,7 +147,7 @@ public:
                     return false; \
             } \
             if (isStrictCheck) { \
-                Y_VERIFY(str.empty(), #table " table is not empty when starting Split at tablet %" PRIu64 " : \n%s", Self->TabletID(), str.Str().data()); \
+                Y_VERIFY(str.empty(), #table " table is not empty when starting Split at tablet %" PRIu64 " : \n%s", Self->TabletID(), str.Str().data()); \ 
             } else if (!str.empty()) { \
                 LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD, \
                      #table " table is not empty when starting Split at tablet " << Self->TabletID() << " : " << str.Str()); \
@@ -224,7 +224,7 @@ public:
         ui64 opId = Self->SrcSplitOpId;
         LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " snapshot complete for split OpId " << opId);
 
-        Y_VERIFY(Self->State == TShardState::SplitSrcMakeSnapshot, "Datashard in unexpected state %s", DatashardStateName(Self->State).data());
+        Y_VERIFY(Self->State == TShardState::SplitSrcMakeSnapshot, "Datashard in unexpected state %s", DatashardStateName(Self->State).data()); 
 
         txc.Env.ClearSnapshot(*SnapContext);
 
@@ -489,7 +489,7 @@ public:
         if (Self->State != TShardState::SplitSrcWaitForPartitioningChanged) {
             Y_VERIFY(Self->State == TShardState::PreOffline || Self->State == TShardState::Offline,
                 "Unexpected TEvSplitPartitioningChanged opId %" PRIu64 " at datashard %" PRIu64 " state %s",
-                Ev->Get()->Record.GetOperationCookie(), Self->TabletID(), DatashardStateName(Self->State).data());
+                Ev->Get()->Record.GetOperationCookie(), Self->TabletID(), DatashardStateName(Self->State).data()); 
 
             return true;
         }

@@ -57,9 +57,9 @@ namespace NFwd {
             const auto limit = Blobs ? Blobs->Total() : 0;
 
             for (ui64 seq = 0, off = 0; off <= Holes.size(); off++) {
-                Y_VERIFY(off == Holes.size() || Holes.at(off).End <= limit);
+                Y_VERIFY(off == Holes.size() || Holes.at(off).End <= limit); 
 
-                auto end = off < Holes.size() ? Holes[off].Begin : limit;
+                auto end = off < Holes.size() ? Holes[off].Begin : limit; 
 
                 for (; seq < end; seq++) {
                     if (!Frames || Filter.Has(Frames->Relation(seq).Row)) {
@@ -67,7 +67,7 @@ namespace NFwd {
                     }
                 }
 
-                seq = Max(seq, off < Holes.size() ? Holes[off].End : limit);
+                seq = Max(seq, off < Holes.size() ? Holes[off].End : limit); 
             }
         }
 

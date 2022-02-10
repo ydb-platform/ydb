@@ -900,8 +900,8 @@ namespace {
                     continue;
                 }
                 const auto& name = it->first;
-                WriteVar32(name.Str().size());
-                WriteMany(name.Str().data(), name.Str().size());
+                WriteVar32(name.Str().size()); 
+                WriteMany(name.Str().data(), name.Str().size()); 
                 it->second = nameIndex++;
             }
 
@@ -931,8 +931,8 @@ namespace {
         void WriteName(TInternName name) {
             auto it = Names.find(name);
             if (it == Names.end()) {
-                WriteVar32(name.Str().size() << 1);
-                WriteMany(name.Str().data(), name.Str().size());
+                WriteVar32(name.Str().size() << 1); 
+                WriteMany(name.Str().data(), name.Str().size()); 
             } else {
                 WriteVar32((it->second << 1) | NameRefMark);
             }
@@ -967,8 +967,8 @@ namespace {
     class TReader {
     public:
         TReader(const TStringBuf& buffer, const TTypeEnvironment& env)
-            : Current(buffer.data())
-            , End(buffer.data() + buffer.size())
+            : Current(buffer.data()) 
+            , End(buffer.data() + buffer.size()) 
             , Env(env)
         {
         }

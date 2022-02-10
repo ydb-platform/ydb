@@ -294,7 +294,7 @@ namespace NTest {
         NFwd::IPageLoadingLogic* MakeOuter(const TPart *part) const noexcept
         {
             if (auto &small = part->Small) {
-                TVector<ui32> edge(small->Stats().Tags.size(), Max<ui32>());
+                TVector<ui32> edge(small->Stats().Tags.size(), Max<ui32>()); 
 
                 return new NFwd::TBlobs(small, TSlices::All(), edge, false);
             } else

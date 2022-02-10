@@ -8,7 +8,7 @@ namespace NCodecs {
     template <class T>
     ui64 DataSignature(const T& t) {
         static_assert(!std::is_scalar<T>::value, "no scalars");
-        return CityHash64(t.data(), t.size());
+        return CityHash64(t.data(), t.size()); 
     }
 
     template <class T>
@@ -24,7 +24,7 @@ namespace NCodecs {
     T HexReadScalar(TStringBuf s) {
         static_assert(std::is_scalar<T>::value, "scalars only");
         T t = 0;
-        HexDecode(s.data(), Min(s.size(), sizeof(T)), &t);
+        HexDecode(s.data(), Min(s.size(), sizeof(T)), &t); 
         t = BigToLittle(t);
         return t;
     }

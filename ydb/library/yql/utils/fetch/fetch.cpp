@@ -48,13 +48,13 @@ public:
 
             IOutputStream::TPart request[] = {
                 IOutputStream::TPart("GET ", 4),
-                IOutputStream::TPart(path.data(), path.size()),
+                IOutputStream::TPart(path.data(), path.size()), 
                 IOutputStream::TPart(" HTTP/1.1", 9),
                 IOutputStream::TPart::CrLf(),
                 IOutputStream::TPart("Host: ", 6),
-                IOutputStream::TPart(host.data(), host.size()),
+                IOutputStream::TPart(host.data(), host.size()), 
                 IOutputStream::TPart::CrLf(),
-                IOutputStream::TPart(userAgent.data(), userAgent.size()),
+                IOutputStream::TPart(userAgent.data(), userAgent.size()), 
                 IOutputStream::TPart::CrLf(),
             };
             rqs.Write(request, Y_ARRAY_SIZE(request));

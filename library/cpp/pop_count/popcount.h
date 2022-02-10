@@ -11,17 +11,17 @@
 #endif
 
 static inline ui32 PopCountImpl(ui8 n) {
-#if defined(_ppc64_)
-    ui32 r;
-    __asm__("popcntb %0, %1"
-            : "=r"(r)
-            : "r"(n)
-            :);
-    return r;
-#else
+#if defined(_ppc64_) 
+    ui32 r; 
+    __asm__("popcntb %0, %1" 
+            : "=r"(r) 
+            : "r"(n) 
+            :); 
+    return r; 
+#else 
     extern ui8 const* PopCountLUT8;
     return PopCountLUT8[n];
-#endif
+#endif 
 }
 
 static inline ui32 PopCountImpl(ui16 n) {
@@ -48,18 +48,18 @@ static inline ui32 PopCountImpl(ui32 n) {
 
         return r;
     }
-#else
-#if defined(_ppc64_)
-    ui32 r;
-
-    __asm__("popcntw %0, %1"
-            : "=r"(r)
-            : "r"(n)
-            :);
-
-    return r;
+#else 
+#if defined(_ppc64_) 
+    ui32 r; 
+ 
+    __asm__("popcntw %0, %1" 
+            : "=r"(r) 
+            : "r"(n) 
+            :); 
+ 
+    return r; 
 #endif
-#endif
+#endif 
 
     return PopCountImpl((ui16)Lo16(n)) + PopCountImpl((ui16)Hi16(n));
 #endif
@@ -80,18 +80,18 @@ static inline ui32 PopCountImpl(ui64 n) {
 
         return r;
     }
-#else
-#if defined(_ppc64_)
-    ui32 r;
-
-    __asm__("popcntd %0, %1"
-            : "=r"(r)
-            : "r"(n)
-            :);
-
-    return r;
+#else 
+#if defined(_ppc64_) 
+    ui32 r; 
+ 
+    __asm__("popcntd %0, %1" 
+            : "=r"(r) 
+            : "r"(n) 
+            :); 
+ 
+    return r; 
 #endif
-#endif
+#endif 
 
     return PopCountImpl((ui32)Lo32(n)) + PopCountImpl((ui32)Hi32(n));
 #endif

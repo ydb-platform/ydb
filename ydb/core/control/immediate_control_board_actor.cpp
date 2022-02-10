@@ -73,7 +73,7 @@ private:
             *ChangedCount = 0;
         }
         for (const auto &param : cgi) {
-            TAtomicBase newValue = strtoull(param.second.data(), nullptr, 10);
+            TAtomicBase newValue = strtoull(param.second.data(), nullptr, 10); 
             TAtomicBase prevValue = newValue;
             bool isDefault = Board->SetValue(param.first, newValue, prevValue);
             if (prevValue != newValue) {

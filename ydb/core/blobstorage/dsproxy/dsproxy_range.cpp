@@ -48,7 +48,7 @@ class TBlobStorageGroupRangeRequest : public TBlobStorageGroupRequestActor<TBlob
     void SendReply(TPtr& reply) {
         ui32 size = 0;
         for (const TEvBlobStorage::TEvRangeResult::TResponse& resp : reply->Responses) {
-            size += resp.Buffer.size();
+            size += resp.Buffer.size(); 
         }
         Mon->CountRangeResponseTime(TActivationContext::Now() - StartTime);
         WILSON_TRACE_FROM_ACTOR(*TlsActivationContext, *this, &TraceId, RangeGetResultSent, ReplyStatus = reply->Status, ResponseSize = size);
@@ -117,7 +117,7 @@ class TBlobStorageGroupRangeRequest : public TBlobStorageGroupRequestActor<TBlob
                 break;
 
             default:
-                Y_FAIL("unexpected queryStatus# %s", NKikimrProto::EReplyStatus_Name(status).data());
+                Y_FAIL("unexpected queryStatus# %s", NKikimrProto::EReplyStatus_Name(status).data()); 
         }
 
         if (isOk) {
@@ -276,7 +276,7 @@ class TBlobStorageGroupRangeRequest : public TBlobStorageGroupRequestActor<TBlob
         TEvBlobStorage::TEvGetResult &getResult = *ev->Get();
         NKikimrProto::EReplyStatus status = getResult.Status;
         if (status != NKikimrProto::OK) {
-            R_LOG_ERROR_S("DSR03", "Handle TEvGetResult status# " << NKikimrProto::EReplyStatus_Name(status).data());
+            R_LOG_ERROR_S("DSR03", "Handle TEvGetResult status# " << NKikimrProto::EReplyStatus_Name(status).data()); 
             ReplyAndDie(status);
             return;
         }

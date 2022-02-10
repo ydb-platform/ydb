@@ -242,7 +242,7 @@ void EscapeBinaryAtom(TStringBuf atom, char quoteChar, IOutputStream* out)
 {
     char prefix[] = { 'x', quoteChar };
     out->Write(prefix, 2);
-    out->Write(HexEncode(atom.data(), atom.size()));
+    out->Write(HexEncode(atom.data(), atom.size())); 
     out->Write(quoteChar);
 }
 

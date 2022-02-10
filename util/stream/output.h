@@ -31,8 +31,8 @@ public:
         }
 
         inline TPart(const TStringBuf s) noexcept
-            : buf(s.data())
-            , len(s.size())
+            : buf(s.data()) 
+            , len(s.size()) 
         {
         }
 
@@ -80,7 +80,7 @@ public:
      * @param st                        String to write.
      */
     inline void Write(const TStringBuf st) {
-        Write(st.data(), st.size());
+        Write(st.data(), st.size()); 
     }
 
     /**

@@ -29,7 +29,7 @@ void TMappedFile::precharge(size_t off, size_t size) const {
 
 void TMappedFile::init(const TString& name) {
     THolder<TFileMap> map(new TFileMap(name));
-    TMappedFile newFile(map.Get(), name.data());
+    TMappedFile newFile(map.Get(), name.data()); 
     Y_UNUSED(map.Release());
     newFile.swap(*this);
     newFile.term();
@@ -37,7 +37,7 @@ void TMappedFile::init(const TString& name) {
 
 void TMappedFile::init(const TString& name, size_t length, TFileMap::EOpenMode om) {
     THolder<TFileMap> map(new TFileMap(name, length, om));
-    TMappedFile newFile(map.Get(), name.data());
+    TMappedFile newFile(map.Get(), name.data()); 
     Y_UNUSED(map.Release());
     newFile.swap(*this);
     newFile.term();
@@ -53,7 +53,7 @@ void TMappedFile::init(const TFile& file, TFileMap::EOpenMode om, const char* db
 
 void TMappedFile::init(const TString& name, TFileMap::EOpenMode om) {
     THolder<TFileMap> map(new TFileMap(name, om));
-    TMappedFile newFile(map.Get(), name.data());
+    TMappedFile newFile(map.Get(), name.data()); 
     Y_UNUSED(map.Release());
     newFile.swap(*this);
     newFile.term();

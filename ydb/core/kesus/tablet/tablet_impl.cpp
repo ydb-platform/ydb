@@ -106,8 +106,8 @@ void TKesusTablet::ForgetProxy(TProxyInfo* proxy) {
 void TKesusTablet::VerifyKesusPath(const TString& kesusPath) {
     Y_VERIFY_DEBUG(SplitPath(kesusPath) == SplitPath(KesusPath),
         "Incoming request has KesusPath=%s (tablet has KesusPath=%s)",
-        kesusPath.Quote().data(),
-        KesusPath.Quote().data());
+        kesusPath.Quote().data(), 
+        KesusPath.Quote().data()); 
 }
 
 void TKesusTablet::Handle(TEvents::TEvPoisonPill::TPtr& ev) {

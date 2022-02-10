@@ -1,9 +1,9 @@
 // -*- C++ -*-
 //===-------------------------- typeinfo ----------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions. 
+// See https://llvm.org/LICENSE.txt for license information. 
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception 
 //
 //===----------------------------------------------------------------------===//
 
@@ -79,8 +79,8 @@ namespace std  // purposefully not using versioning namespace
 {
 
 
-#if defined(_LIBCPP_ABI_MICROSOFT)
-
+#if defined(_LIBCPP_ABI_MICROSOFT) 
+ 
 class _LIBCPP_EXCEPTION_ABI type_info
 {
     type_info& operator=(const type_info&);
@@ -110,14 +110,14 @@ public:
     bool operator==(const type_info& __arg) const _NOEXCEPT {
       return __compare(__arg) == 0;
     }
-
+ 
     _LIBCPP_INLINE_VISIBILITY
-    bool operator!=(const type_info& __arg) const _NOEXCEPT
-    { return !operator==(__arg); }
-};
-
+    bool operator!=(const type_info& __arg) const _NOEXCEPT 
+    { return !operator==(__arg); } 
+}; 
+ 
 #else // !defined(_LIBCPP_ABI_MICROSOFT)
-
+ 
 // ========================================================================== //
 //                           Implementations
 // ========================================================================== //
@@ -147,14 +147,14 @@ public:
 // -------------------------------------------------------------------------- //
 // This implementation is specific to ARM64 on Apple platforms.
 //
-// This implementation of type_info does not assume always a unique copy of
+// This implementation of type_info does not assume always a unique copy of 
 // the RTTI for a given type inside a program. When constructing the type_info,
 // the compiler packs the pointer to the type name into a uintptr_t and reserves
 // the high bit of that pointer, which is assumed to be free for use under that
 // ABI. If that high bit is set, that specific copy of the RTTI can't be assumed
 // to be unique within the program. If the high bit is unset, then the RTTI can
 // be assumed to be unique within the program.
-//
+// 
 // When comparing type_infos, if both RTTIs can be assumed to be unique, it
 // suffices to compare their addresses. If both the RTTIs can't be assumed to
 // be unique, we must perform a deep string comparison of the type names.
@@ -168,7 +168,7 @@ public:
 // a unique RTTI: the RTTI is emitted with linkonce_odr linkage and is assumed
 // to be deduplicated by the linker within the linked image. Across linked image
 // boundaries, such types are thus considered different types.
-
+ 
 // This value can be overriden in the __config_site. When it's not overriden,
 // we pick a default implementation based on the platform here.
 #ifndef _LIBCPP_TYPEINFO_COMPARISON_IMPLEMENTATION
@@ -268,7 +268,7 @@ struct __type_info_implementations {
         return __lhs < __rhs;
       return __builtin_strcmp(__type_name_to_string(__lhs), __type_name_to_string(__rhs)) < 0;
     }
-
+ 
    private:
     // The unique bit is the top bit. It is expected that __type_name_t is 64 bits when
     // this implementation is actually used.
@@ -280,7 +280,7 @@ struct __type_info_implementations {
       return !(__lhs & __non_unique_rtti_bit::value);
     }
   };
-
+ 
   typedef
 #if _LIBCPP_TYPEINFO_COMPARISON_IMPLEMENTATION == 1
     __unique_impl
@@ -293,26 +293,26 @@ struct __type_info_implementations {
 #endif
      __impl;
 };
-
-class _LIBCPP_EXCEPTION_ABI type_info
-{
+ 
+class _LIBCPP_EXCEPTION_ABI type_info 
+{ 
   type_info& operator=(const type_info&);
   type_info(const type_info&);
-
+ 
  protected:
     typedef __type_info_implementations::__impl __impl;
-
+ 
     __impl::__type_name_t __type_name;
 
-    _LIBCPP_INLINE_VISIBILITY
+    _LIBCPP_INLINE_VISIBILITY 
     explicit type_info(const char* __n)
       : __type_name(__impl::__string_to_type_name(__n)) {}
-
-public:
-    _LIBCPP_AVAILABILITY_TYPEINFO_VTABLE
-    virtual ~type_info();
-
-    _LIBCPP_INLINE_VISIBILITY
+ 
+public: 
+    _LIBCPP_AVAILABILITY_TYPEINFO_VTABLE 
+    virtual ~type_info(); 
+ 
+    _LIBCPP_INLINE_VISIBILITY 
     const char* name() const _NOEXCEPT
     {
       return __impl::__type_name_to_string(__type_name);
@@ -394,7 +394,7 @@ void __throw_bad_cast()
 #ifndef _LIBCPP_NO_EXCEPTIONS
     throw bad_cast();
 #else
-    _VSTD::abort();
+    _VSTD::abort(); 
 #endif
 }
 _LIBCPP_END_NAMESPACE_STD

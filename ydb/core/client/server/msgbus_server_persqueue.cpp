@@ -1140,7 +1140,7 @@ public:
                 return;
 
             ErrorReason = Sprintf("Client pipe to %" PRIu64 " connection error, Status# %s, Marker# PQ6",
-                tabletId, NKikimrProto::EReplyStatus_Name(msg->Status).data());
+                tabletId, NKikimrProto::EReplyStatus_Name(msg->Status).data()); 
             return SendReplyAndDie(CreateErrorReply(MSTATUS_ERROR, NPersQueue::NErrorCode::ERROR, ctx), ctx);
         }
 
@@ -1289,7 +1289,7 @@ public:
         rec.SetStatus(status);
         rec.SetErrorCode(code);
 
-        if (ErrorReason.size()) {
+        if (ErrorReason.size()) { 
             rec.SetErrorReason(ErrorReason);
         } else {
             rec.SetErrorReason("Unknown, Marker# PQ12");

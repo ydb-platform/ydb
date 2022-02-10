@@ -247,7 +247,7 @@ Y_FORCE_INLINE void ConvertData(NUdf::TDataTypeId typeId, const NKikimrMiniKQL::
         case NUdf::TDataType<NUdf::TJson>::Id:
         case NUdf::TDataType<NUdf::TUtf8>::Id: {
             const auto& stringRef = value.GetText();
-            res.set_text_value(stringRef.data(), stringRef.size());
+            res.set_text_value(stringRef.data(), stringRef.size()); 
             break;
             }
         case NUdf::TDataType<NUdf::TDate>::Id:
@@ -281,7 +281,7 @@ Y_FORCE_INLINE void ConvertData(NUdf::TDataTypeId typeId, const NKikimrMiniKQL::
         }
         default:
             const auto& stringRef = value.GetBytes();
-            res.set_bytes_value(stringRef.data(), stringRef.size());
+            res.set_bytes_value(stringRef.data(), stringRef.size()); 
     }
 }
 
@@ -370,7 +370,7 @@ Y_FORCE_INLINE void ConvertData(NUdf::TDataTypeId typeId, const Ydb::Value& valu
             if (!NYql::IsUtf8(stringRef)) {
                 throw yexception() << "Invalid Utf8 value";
             }
-            res.SetText(stringRef.data(), stringRef.size());
+            res.SetText(stringRef.data(), stringRef.size()); 
             break;
         }
         case NUdf::TDataType<NUdf::TDate>::Id:
@@ -427,7 +427,7 @@ Y_FORCE_INLINE void ConvertData(NUdf::TDataTypeId typeId, const Ydb::Value& valu
         case NUdf::TDataType<char*>::Id: {
             CheckTypeId(value.value_case(), Ydb::Value::kBytesValue, "String");
             const auto& stringRef = value.bytes_value();
-            res.SetBytes(stringRef.data(), stringRef.size());
+            res.SetBytes(stringRef.data(), stringRef.size()); 
             break;
         }
         case NUdf::TDataType<NUdf::TYson>::Id: {

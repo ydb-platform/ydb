@@ -324,7 +324,7 @@ void TGenCompactionStrategy::ReflectSchema() {
 
     TString err;
     bool ok = NLocalDb::ValidateCompactionPolicyChange(*Policy, *scheme->CompactionPolicy, err);
-    Y_VERIFY(ok, "table %s id %u: %s", scheme->Name.data(), scheme->Id, err.data());
+    Y_VERIFY(ok, "table %s id %u: %s", scheme->Name.data(), scheme->Id, err.data()); 
 
     Policy = scheme->CompactionPolicy;
     Y_VERIFY(Generations.size() <= Policy->Generations.size(), "Cannot currently shrink the number of generations");
@@ -1070,7 +1070,7 @@ void TGenCompactionStrategy::SubmitTask(
     task.Priority = priority;
 
     TString name = Sprintf("gen%" PRIu32 "-table-%" PRIu32 "-%s",
-                           generation, Table, TaskNameSuffix.data());
+                           generation, Table, TaskNameSuffix.data()); 
 
     task.TaskId = Broker->SubmitTask(
         std::move(name),

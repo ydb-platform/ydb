@@ -114,7 +114,7 @@ namespace NKikimr {
 
             LOG_DEBUG(ctx, NKikimrServices::BS_VDISK_CHUNKS,
                       VDISKP(HullLogCtx->VCtx->VDiskLogPrefix,"COMMIT: type# %s msg# %s",
-                            THullCommitFinished::TypeToString(NotifyType), CommitMsg->CommitRecord.ToString().data()));
+                            THullCommitFinished::TypeToString(NotifyType), CommitMsg->CommitRecord.ToString().data())); 
 
             ctx.Send(Ctx->LoggerId, CommitMsg.release());
         }

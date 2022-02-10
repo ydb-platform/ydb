@@ -22,7 +22,7 @@ namespace NScheme {
 /// 0x2001 - 0x8000
 /// DO NOT FORGET TO REGISTER THE TYPES in Library::OpenLibrary() / file tablet_library.h
 namespace NNames {
-    extern const char ActorID[8];
+    extern const char ActorID[8]; 
 }
 
 class TActorId : public TTypedType<NActors::TActorId, TActorId, NTypeIds::ActorId, NNames::ActorID>
@@ -31,7 +31,7 @@ public:
 };
 
 namespace NNames {
-    extern const char StepOrderId[12];
+    extern const char StepOrderId[12]; 
 }
 
 class TStepOrderId : public IIntegerPair<ui64, ui64, NTypeIds::StepOrderId, NNames::StepOrderId> {};

@@ -5,7 +5,7 @@
 namespace NKikimr {
 
 TString TLogoBlobID::ToString() const {
-    return Sprintf(
+    return Sprintf( 
         "[%" PRIu64 ":%" PRIu32 ":%" PRIu32 ":%" PRIu32 ":%" PRIu32 ":%" PRIu32 ":%" PRIu32 "]",
         TabletID(),
         Generation(),
@@ -13,7 +13,7 @@ TString TLogoBlobID::ToString() const {
         Channel(),
         Cookie(),
         BlobSize(),
-        PartId()).data();
+        PartId()).data(); 
 }
 
 void TLogoBlobID::Out(IOutputStream &o) const {
@@ -56,7 +56,7 @@ static const char *SkipSpaces(const char *str) {
 
 
 bool TLogoBlobID::Parse(TLogoBlobID &out, const TString &buf, TString &errorExplanation) {
-    const char *str = buf.data();
+    const char *str = buf.data(); 
     char *endptr = nullptr;
 
     str = SkipSpaces(str);

@@ -135,7 +135,7 @@ namespace NKikimr {
             NPDisk::TCommitRecord commitRec;
             commitRec.IsStartingPoint = true;
             TString data = State.Serialize();
-            size_t dataSize = data.size();
+            size_t dataSize = data.size(); 
             TLsnSeg seg = SyncerCtx->LsnMngr->AllocLsnForLocalUse();
             auto msg = std::make_unique<NPDisk::TEvLog>(SyncerCtx->PDiskCtx->Dsk->Owner,
                 SyncerCtx->PDiskCtx->Dsk->OwnerRound, TLogSignature::SignatureSyncerState,

@@ -1,9 +1,9 @@
 // -*- C++ -*-
 //===-----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions. 
+// See https://llvm.org/LICENSE.txt for license information. 
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception 
 //
 //===----------------------------------------------------------------------===//
 // These are reimplementations of some extended locale functions ( *_l ) that
@@ -20,17 +20,17 @@ extern "C" {
 #endif
 
 inline _LIBCPP_INLINE_VISIBILITY float strtof_l(const char *nptr,
-                                                char **endptr, locale_t) {
+                                                char **endptr, locale_t) { 
   return ::strtof(nptr, endptr);
 }
 
 inline _LIBCPP_INLINE_VISIBILITY double strtod_l(const char *nptr,
-                                                 char **endptr, locale_t) {
+                                                 char **endptr, locale_t) { 
   return ::strtod(nptr, endptr);
 }
 
 inline _LIBCPP_INLINE_VISIBILITY long double strtold_l(const char *nptr,
-                                                       char **endptr, locale_t) {
+                                                       char **endptr, locale_t) { 
   return ::strtold(nptr, endptr);
 }
 
@@ -55,7 +55,7 @@ wcstoull_l(const wchar_t *nptr, wchar_t **endptr, int base, locale_t) {
 }
 
 inline _LIBCPP_INLINE_VISIBILITY long double wcstold_l(const wchar_t *nptr,
-                                                       wchar_t **endptr, locale_t) {
+                                                       wchar_t **endptr, locale_t) { 
   return ::wcstold(nptr, endptr);
 }
 

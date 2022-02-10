@@ -1112,7 +1112,7 @@ void TResourceBrokerInitializer::InitializeServices(
 
 void TRestartsCountPublisher::PublishRestartsCount(const NMonitoring::TDynamicCounters::TCounterPtr& counter,
                                                       const TString& restartsCountFile) {
-    if (restartsCountFile.size()) {
+    if (restartsCountFile.size()) { 
         try {
             TUnbufferedFileInput fileInput(restartsCountFile);
             const TString content = fileInput.ReadAll();

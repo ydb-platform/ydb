@@ -100,10 +100,10 @@ int CompileAndExecMiniKQL(TCommandConfig &cmdConf, int argc, char **argv) {
     }
 
 
-    if (!response.GetDataShardErrors().empty()) {
+    if (!response.GetDataShardErrors().empty()) { 
         Cerr << "DataShard errors:\n " << response.GetDataShardErrors() << Endl;
     }
-    if (!response.GetMiniKQLErrors().empty()) {
+    if (!response.GetMiniKQLErrors().empty()) { 
         Cerr << "MiniKQL errors:\n" << response.GetMiniKQLErrors() << Endl;
     }
     if (response.HasProxyErrorCode()) {

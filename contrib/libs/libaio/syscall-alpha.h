@@ -13,8 +13,8 @@
 
 #define inline_syscall0(name, args...)                          \
 {                                                               \
-        register long _sc_0 inline_syscall_r0_asm;              \
-        register long _sc_19 __asm__("$19");                    \
+        register long _sc_0 inline_syscall_r0_asm;              \ 
+        register long _sc_19 __asm__("$19");                    \ 
                                                                 \
         _sc_0 = name;                                           \
         __asm__ __volatile__                                    \
@@ -29,9 +29,9 @@
 
 #define inline_syscall1(name,arg1)                              \
 {                                                               \
-        register long _sc_0 inline_syscall_r0_asm;              \
-        register long _sc_16 __asm__("$16");                    \
-        register long _sc_19 __asm__("$19");                    \
+        register long _sc_0 inline_syscall_r0_asm;              \ 
+        register long _sc_16 __asm__("$16");                    \ 
+        register long _sc_19 __asm__("$19");                    \ 
                                                                 \
         _sc_0 = name;                                           \
         _sc_16 = (long) (arg1);                                 \
@@ -47,10 +47,10 @@
 
 #define inline_syscall2(name,arg1,arg2)                         \
 {                                                               \
-        register long _sc_0 inline_syscall_r0_asm;              \
-        register long _sc_16 __asm__("$16");                    \
-        register long _sc_17 __asm__("$17");                    \
-        register long _sc_19 __asm__("$19");                    \
+        register long _sc_0 inline_syscall_r0_asm;              \ 
+        register long _sc_16 __asm__("$16");                    \ 
+        register long _sc_17 __asm__("$17");                    \ 
+        register long _sc_19 __asm__("$19");                    \ 
                                                                 \
         _sc_0 = name;                                           \
         _sc_16 = (long) (arg1);                                 \
@@ -67,11 +67,11 @@
 
 #define inline_syscall3(name,arg1,arg2,arg3)                    \
 {                                                               \
-        register long _sc_0 inline_syscall_r0_asm;              \
-        register long _sc_16 __asm__("$16");                    \
-        register long _sc_17 __asm__("$17");                    \
-        register long _sc_18 __asm__("$18");                    \
-        register long _sc_19 __asm__("$19");                    \
+        register long _sc_0 inline_syscall_r0_asm;              \ 
+        register long _sc_16 __asm__("$16");                    \ 
+        register long _sc_17 __asm__("$17");                    \ 
+        register long _sc_18 __asm__("$18");                    \ 
+        register long _sc_19 __asm__("$19");                    \ 
                                                                 \
         _sc_0 = name;                                           \
         _sc_16 = (long) (arg1);                                 \
@@ -90,11 +90,11 @@
 
 #define inline_syscall4(name,arg1,arg2,arg3,arg4)               \
 {                                                               \
-        register long _sc_0 inline_syscall_r0_asm;              \
-        register long _sc_16 __asm__("$16");                    \
-        register long _sc_17 __asm__("$17");                    \
-        register long _sc_18 __asm__("$18");                    \
-        register long _sc_19 __asm__("$19");                    \
+        register long _sc_0 inline_syscall_r0_asm;              \ 
+        register long _sc_16 __asm__("$16");                    \ 
+        register long _sc_17 __asm__("$17");                    \ 
+        register long _sc_18 __asm__("$18");                    \ 
+        register long _sc_19 __asm__("$19");                    \ 
                                                                 \
         _sc_0 = name;                                           \
         _sc_16 = (long) (arg1);                                 \
@@ -114,12 +114,12 @@
 
 #define inline_syscall5(name,arg1,arg2,arg3,arg4,arg5)          \
 {                                                               \
-        register long _sc_0 inline_syscall_r0_asm;              \
-        register long _sc_16 __asm__("$16");                    \
-        register long _sc_17 __asm__("$17");                    \
-        register long _sc_18 __asm__("$18");                    \
-        register long _sc_19 __asm__("$19");                    \
-        register long _sc_20 __asm__("$20");                    \
+        register long _sc_0 inline_syscall_r0_asm;              \ 
+        register long _sc_16 __asm__("$16");                    \ 
+        register long _sc_17 __asm__("$17");                    \ 
+        register long _sc_18 __asm__("$18");                    \ 
+        register long _sc_19 __asm__("$19");                    \ 
+        register long _sc_20 __asm__("$20");                    \ 
                                                                 \
         _sc_0 = name;                                           \
         _sc_16 = (long) (arg1);                                 \
@@ -140,13 +140,13 @@
 
 #define inline_syscall6(name,arg1,arg2,arg3,arg4,arg5,arg6)     \
 {                                                               \
-        register long _sc_0 inline_syscall_r0_asm;              \
-        register long _sc_16 __asm__("$16");                    \
-        register long _sc_17 __asm__("$17");                    \
-        register long _sc_18 __asm__("$18");                    \
-        register long _sc_19 __asm__("$19");                    \
-        register long _sc_20 __asm__("$20");                    \
-        register long _sc_21 __asm__("$21");                    \
+        register long _sc_0 inline_syscall_r0_asm;              \ 
+        register long _sc_16 __asm__("$16");                    \ 
+        register long _sc_17 __asm__("$17");                    \ 
+        register long _sc_18 __asm__("$18");                    \ 
+        register long _sc_19 __asm__("$19");                    \ 
+        register long _sc_20 __asm__("$20");                    \ 
+        register long _sc_21 __asm__("$21");                    \ 
                                                                 \
         _sc_0 = name;                                           \
         _sc_16 = (long) (arg1);                                 \

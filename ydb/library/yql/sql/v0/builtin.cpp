@@ -370,7 +370,7 @@ public:
 
             Args[1] = BuildQuotedAtom(Args[1]->GetPos(), to_lower(*literal));
         } else {
-            if (Cluster.empty()) {
+            if (Cluster.empty()) { 
                 ctx.Error(GetPos()) << GetOpName() << " requires either one of \"yt\"/\"kikimr\"/\"rtmr\" as second argument or current cluster name";
                 return false;
             }
@@ -1496,7 +1496,7 @@ public:
             return false;
         }
         auto scriptStrPtr = Args.back()->GetLiteral("String");
-        if (scriptStrPtr && scriptStrPtr->size() > SQL_MAX_INLINE_SCRIPT_LEN) {
+        if (scriptStrPtr && scriptStrPtr->size() > SQL_MAX_INLINE_SCRIPT_LEN) { 
             scriptNode = ctx.UniversalAlias("scriptudf", std::move(scriptNode));
         }
 

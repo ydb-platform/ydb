@@ -47,7 +47,7 @@ namespace NKikimr {
                             Priority, cookie));
 
                 LOG_DEBUG(ctx, BS_VDISK_GET,
-                    VDISKP(Ctx->VCtx->VDiskLogPrefix, "GLUEREAD(%p): %s", this, msg->ToString().data()));
+                    VDISKP(Ctx->VCtx->VDiskLogPrefix, "GLUEREAD(%p): %s", this, msg->ToString().data())); 
 
                 // send request
                 TReplQuoter::QuoteMessage(quoter, std::make_unique<IEventHandle>(Ctx->PDiskCtx->PDiskId, SelfId(),

@@ -254,7 +254,7 @@ class TTxProxy : public TActorBootstrapped<TTxProxy> {
                          " Cookie# " << cookie <<
                          " userReqId# \"" << userRequestId << "\""
                          " txid# " << txid <<
-                         " SEND to# " << reqId.ToString().data());
+                         " SEND to# " << reqId.ToString().data()); 
             return;
         }
 
@@ -269,7 +269,7 @@ class TTxProxy : public TActorBootstrapped<TTxProxy> {
                          " Cookie# " << (ui64)ev->Cookie <<
                          " userReqId# \"" << tx.GetUserRequestId() << "\"" <<
                          " txid# " << txid <<
-                         " SEND to# " << reqId.ToString().data() <<
+                         " SEND to# " << reqId.ToString().data() << 
                          " DataReq marker# P0");
             ctx.Send(reqId, new TEvTxProxyReq::TEvMakeRequest(ev));
             return;

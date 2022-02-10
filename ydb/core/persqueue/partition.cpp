@@ -22,7 +22,7 @@
 #include <util/system/byteorder.h>
 
 #define VERIFY_RESULT_BLOB(blob, pos) \
-    Y_VERIFY(!blob.Data.empty(), "Empty data. SourceId: %s, SeqNo: %" PRIu64, blob.SourceId.data(), blob.SeqNo); \
+    Y_VERIFY(!blob.Data.empty(), "Empty data. SourceId: %s, SeqNo: %" PRIu64, blob.SourceId.data(), blob.SeqNo); \ 
     Y_VERIFY(blob.SeqNo <= (ui64)Max<i64>(), "SeqNo is too big: %" PRIu64, blob.SeqNo);
 
 namespace NKikimr {
@@ -332,7 +332,7 @@ static void RequestRange(const TActorContext& ctx, const TActorId& dst, ui32 par
     if (!key.empty()) {
         Y_VERIFY(key.StartsWith(TStringBuf(from.Data(), from.Size())));
         from.Clear();
-        from.Append(key.data(), key.size());
+        from.Append(key.data(), key.size()); 
     }
     range->SetFrom(from.Data(), from.Size());
 

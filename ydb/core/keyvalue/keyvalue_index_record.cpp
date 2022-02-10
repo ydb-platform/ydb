@@ -64,13 +64,13 @@ ui32 TIndexRecord::GetReadItems(ui64 offset, ui64 size, TIntermediate::TRead& re
         Y_VERIFY(it != Chain.end());
         ui32 readSize = Min<ui64>(size, it->GetSize() - offset);
         if (it->IsInline()) {
-            if (read.Value.size() != read.ValueSize) {
+            if (read.Value.size() != read.ValueSize) { 
                 read.Value.resize(read.ValueSize);
             }
             Y_VERIFY(it->InlineData.size() >= readSize + offset, "size# %" PRIu64 " read# %" PRIu64 " offset# %" PRIu64,
                     (ui64)it->InlineData.size(), (ui64)readSize, (ui64)offset);
             Y_VERIFY(read.ValueSize >= readSize + valueOffset);
-            memcpy(const_cast<char *>(read.Value.data()) + valueOffset, it->InlineData.data() + offset, readSize);
+            memcpy(const_cast<char *>(read.Value.data()) + valueOffset, it->InlineData.data() + offset, readSize); 
         } else {
             read.ReadItems.push_back(TIntermediate::TRead::TReadItem(
                     it->LogoBlobId, static_cast<ui32>(offset), readSize, valueOffset));
@@ -100,7 +100,7 @@ TString TIndexRecord::Serialize() const {
         }
     }
     value.resize(totalSize);
-    auto *data = reinterpret_cast<TKeyValueData2 *>(const_cast<char *>(value.data()));
+    auto *data = reinterpret_cast<TKeyValueData2 *>(const_cast<char *>(value.data())); 
     new(data) TKeyValueData2();
     data->CreationUnixTime = CreationUnixTime;
 
@@ -112,7 +112,7 @@ TString TIndexRecord::Serialize() const {
             ui32 size = Chain[i].InlineData.size();
             memcpy(data->Serialized + offset, &size, sizeof(ui32));
             offset += sizeof(ui32);
-            memcpy(data->Serialized + offset, Chain[i].InlineData.data(), Chain[i].InlineData.size());
+            memcpy(data->Serialized + offset, Chain[i].InlineData.data(), Chain[i].InlineData.size()); 
             offset += Chain[i].InlineData.size();
         } else {
             memcpy(data->Serialized + offset, &Chain[i].LogoBlobId, sizeof(TLogoBlobID));
@@ -125,13 +125,13 @@ TString TIndexRecord::Serialize() const {
 
 EItemType TIndexRecord::ReadItemType(const TString &rawData) {
     Y_VERIFY(rawData.size() >= sizeof(TDataHeader));
-    const TDataHeader *dataHeader = (const TDataHeader *)rawData.data();
+    const TDataHeader *dataHeader = (const TDataHeader *)rawData.data(); 
     return (EItemType)dataHeader->ItemType;
 }
 
 bool TIndexRecord::Deserialize1(const TString &rawData, TString &outErrorInfo) {
     Y_VERIFY(rawData.size() >= sizeof(TKeyValueData1));
-    const TKeyValueData1 *data = (const TKeyValueData1 *)rawData.data();
+    const TKeyValueData1 *data = (const TKeyValueData1 *)rawData.data(); 
     const ui32 numItems = TKeyValueData1::GetNumItems(rawData.size());
     if (!data->CheckChecksum(numItems)) {
         TStringStream str;
@@ -141,7 +141,7 @@ bool TIndexRecord::Deserialize1(const TString &rawData, TString &outErrorInfo) {
         str << " GetRecordSize# " << TKeyValueData1::GetRecordSize(numItems);
         str << " data# ";
         for (ui32 i = 0; i < rawData.size(); ++i) {
-            ui8 d = ((const ui8*)rawData.data())[i];
+            ui8 d = ((const ui8*)rawData.data())[i]; 
             str << Sprintf("%02x", (ui32)d);
         }
         str << " FirstLogoBlobId# " << data->FirstLogoBlobId.ToString();
@@ -169,7 +169,7 @@ bool TIndexRecord::Deserialize1(const TString &rawData, TString &outErrorInfo) {
 
 bool TIndexRecord::Deserialize2(const TString &rawData, TString &outErrorInfo) {
     Y_VERIFY(rawData.size() >= sizeof(TKeyValueData2));
-    const TKeyValueData2 *data = (const TKeyValueData2 *)rawData.data();
+    const TKeyValueData2 *data = (const TKeyValueData2 *)rawData.data(); 
     if (!data->CheckChecksum(rawData.size())) {
         TStringStream str;
         str << " data->CheckChecksum(rawData.size)# ERROR ";
@@ -177,7 +177,7 @@ bool TIndexRecord::Deserialize2(const TString &rawData, TString &outErrorInfo) {
         str << " rawData.size# " << rawData.size();
         str << " data# ";
         for (ui32 i = 0; i < rawData.size(); ++i) {
-            ui8 d = ((const ui8*)rawData.data())[i];
+            ui8 d = ((const ui8*)rawData.data())[i]; 
             str << Sprintf("%02x", (ui32)d);
         }
         outErrorInfo = str.Str();
@@ -219,7 +219,7 @@ bool TIndexRecord::Deserialize2(const TString &rawData, TString &outErrorInfo) {
                 return false;
             }
             TString inlineData = TString::Uninitialized(size);
-            memcpy(const_cast<char *>(inlineData.data()), data->Serialized + offset, size);
+            memcpy(const_cast<char *>(inlineData.data()), data->Serialized + offset, size); 
             offset += size;
             Chain.push_back(TIndexRecord::TChainItem(inlineData, chainOffset));
             chainOffset += size;

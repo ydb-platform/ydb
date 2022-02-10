@@ -103,8 +103,8 @@ Y_UNIT_TEST_SUITE(TUdfValue) {
         UNIT_ASSERT_STRINGS_EQUAL((TStringBuilder() << TUnboxedValuePod(ui32(258))),
             "Embedded, size: 0, buffer: \"\\2\\1\\0\\0\\0\\0\\0\\0\\0\\0\\0\\0\\0\\0\"");
         TString pattern = "VERY VERY LONG STRING";
-        TStringValue str(pattern.size());
-        memcpy(str.Data(), pattern.data(), pattern.size());
+        TStringValue str(pattern.size()); 
+        memcpy(str.Data(), pattern.data(), pattern.size()); 
         TUnboxedValue strVal(TUnboxedValuePod(std::move(str)));
         UNIT_ASSERT_STRINGS_EQUAL((TStringBuilder() << strVal),
             "String, size: 21, offset: 0, buffer: \"VERY VERY LONG STRING\"");

@@ -119,7 +119,7 @@ NKikimr::NMiniKQL::TType* BuildType(const TTypeAnnotationNode& annotation, NKiki
         NKikimr::NMiniKQL::TCallableTypeBuilder callableTypeBuilder(pgmBuilder.GetTypeEnvironment(), "", returnType);
         for (auto& child : callable->GetArguments()) {
             callableTypeBuilder.Add(BuildType(*child.Type, pgmBuilder, err, withTagged));
-            if (!child.Name.empty()) {
+            if (!child.Name.empty()) { 
                 callableTypeBuilder.SetArgumentName(child.Name);
             }
 
@@ -129,7 +129,7 @@ NKikimr::NMiniKQL::TType* BuildType(const TTypeAnnotationNode& annotation, NKiki
         }
 
         callableTypeBuilder.SetOptionalArgs(callable->GetOptionalArgumentsCount());
-        if (!callable->GetPayload().empty()) {
+        if (!callable->GetPayload().empty()) { 
             callableTypeBuilder.SetPayload(callable->GetPayload());
         }
 

@@ -15,7 +15,7 @@ ui8 THelpers::Checksum(ui8 prev, size_t dataSize, const ui8* data) {
 }
 
 bool THelpers::CheckChecksum(const TString &key) {
-    ui8 sum = Checksum(0, key.size(), (const ui8*)key.data());
+    ui8 sum = Checksum(0, key.size(), (const ui8*)key.data()); 
     return (sum == 0);
 }
 
@@ -24,14 +24,14 @@ TString THelpers::GenerateKeyFor(EItemType itemType, const ui8* data, size_t siz
     TDataHeader header;
     header.ItemType = itemType;
     header.Checksum = Checksum(itemType, size, data);
-    memcpy(const_cast<char *>(key.data()), &header, sizeof(TKeyHeader));
-    memcpy(const_cast<char *>(key.data()) + sizeof(TKeyHeader), data, size);
+    memcpy(const_cast<char *>(key.data()), &header, sizeof(TKeyHeader)); 
+    memcpy(const_cast<char *>(key.data()) + sizeof(TKeyHeader), data, size); 
     return key;
 }
 
 TString THelpers::GenerateKeyFor(EItemType itemType, const TString &arbitraryPart) {
     const size_t size = arbitraryPart.size();
-    const ui8 *data = (const ui8 *) arbitraryPart.data();
+    const ui8 *data = (const ui8 *) arbitraryPart.data(); 
     return GenerateKeyFor(itemType, data, size);
 }
 
@@ -39,14 +39,14 @@ bool THelpers::ExtractKeyParts(const TString &key, TString &arbitraryPart, TKeyH
     if (!CheckChecksum(key)) {
         return false;
     }
-    if (key.size() < sizeof(TKeyHeader)) {
+    if (key.size() < sizeof(TKeyHeader)) { 
         return false;
     }
-    memcpy(&header, key.data(), sizeof(TKeyHeader));
+    memcpy(&header, key.data(), sizeof(TKeyHeader)); 
     size_t arbitrarySize = key.size() - sizeof(TKeyHeader);
     arbitraryPart.clear();
     arbitraryPart.resize(arbitrarySize);
-    memcpy(const_cast<char *>(arbitraryPart.data()), key.data() + sizeof(TKeyHeader), arbitrarySize);
+    memcpy(const_cast<char *>(arbitraryPart.data()), key.data() + sizeof(TKeyHeader), arbitrarySize); 
     return true;
 }
 
@@ -55,7 +55,7 @@ void THelpers::DbUpdateState(TKeyValueStoredStateData &state, ISimpleDb &db, con
     TString key = THelpers::GenerateKeyFor(EIT_STATE, empty);
     state.UpdateChecksum();
     TString value = TString::Uninitialized(sizeof(state));
-    memcpy(const_cast<char*>(value.data()), &state, sizeof(state));
+    memcpy(const_cast<char*>(value.data()), &state, sizeof(state)); 
     db.Update(key, value, ctx);
 }
 
@@ -92,7 +92,7 @@ void THelpers::DbUpdateCollect(ui64 collectGeneration, ui64 collectStep,
     TCollectOperationHeader header(collectGeneration, collectStep, keep, doNotKeep);
     TString value = TString::Uninitialized(
             sizeof(TCollectOperationHeader) + sizeof(TLogoBlobID) * (keep.size() + doNotKeep.size()));
-    ui8 *data = (ui8*)const_cast<char *>(value.data());
+    ui8 *data = (ui8*)const_cast<char *>(value.data()); 
     memcpy(data, &header, sizeof(header));
     data += sizeof(header);
     if (keep.size()) {

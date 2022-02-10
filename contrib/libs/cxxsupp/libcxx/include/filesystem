@@ -1,9 +1,9 @@
 // -*- C++ -*-
 //===--------------------------- filesystem -------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions. 
+// See https://llvm.org/LICENSE.txt for license information. 
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception 
 //
 //===----------------------------------------------------------------------===//
 #ifndef _LIBCPP_FILESYSTEM
@@ -245,7 +245,7 @@
 #include <string_view>
 #include <system_error>
 #include <utility>
-#include <version>
+#include <version> 
 
 #if !defined(_LIBCPP_HAS_NO_LOCALIZATION)
 # include <locale>
@@ -590,7 +590,7 @@ __is_separator(_ECharT __e) {
 #else
   return __e == _ECharT('/');
 #endif
-}
+} 
 
 #ifndef _LIBCPP_HAS_NO_CHAR8_T
 typedef u8string __u8_string;
@@ -1484,31 +1484,31 @@ public:
   }
 #endif // !_LIBCPP_HAS_NO_LOCALIZATION
 
-  friend _LIBCPP_INLINE_VISIBILITY bool operator==(const path& __lhs, const path& __rhs) noexcept {
-    return __lhs.compare(__rhs) == 0;
-  }
-  friend _LIBCPP_INLINE_VISIBILITY bool operator!=(const path& __lhs, const path& __rhs) noexcept {
-    return __lhs.compare(__rhs) != 0;
-  }
-  friend _LIBCPP_INLINE_VISIBILITY bool operator<(const path& __lhs, const path& __rhs) noexcept {
-    return __lhs.compare(__rhs) < 0;
-  }
-  friend _LIBCPP_INLINE_VISIBILITY bool operator<=(const path& __lhs, const path& __rhs) noexcept {
-    return __lhs.compare(__rhs) <= 0;
-  }
-  friend _LIBCPP_INLINE_VISIBILITY bool operator>(const path& __lhs, const path& __rhs) noexcept {
-    return __lhs.compare(__rhs) > 0;
-  }
-  friend _LIBCPP_INLINE_VISIBILITY bool operator>=(const path& __lhs, const path& __rhs) noexcept {
-    return __lhs.compare(__rhs) >= 0;
-  }
-
-  friend _LIBCPP_INLINE_VISIBILITY path operator/(const path& __lhs,
-                                                  const path& __rhs) {
-    path __result(__lhs);
-    __result /= __rhs;
-    return __result;
-  }
+  friend _LIBCPP_INLINE_VISIBILITY bool operator==(const path& __lhs, const path& __rhs) noexcept { 
+    return __lhs.compare(__rhs) == 0; 
+  } 
+  friend _LIBCPP_INLINE_VISIBILITY bool operator!=(const path& __lhs, const path& __rhs) noexcept { 
+    return __lhs.compare(__rhs) != 0; 
+  } 
+  friend _LIBCPP_INLINE_VISIBILITY bool operator<(const path& __lhs, const path& __rhs) noexcept { 
+    return __lhs.compare(__rhs) < 0; 
+  } 
+  friend _LIBCPP_INLINE_VISIBILITY bool operator<=(const path& __lhs, const path& __rhs) noexcept { 
+    return __lhs.compare(__rhs) <= 0; 
+  } 
+  friend _LIBCPP_INLINE_VISIBILITY bool operator>(const path& __lhs, const path& __rhs) noexcept { 
+    return __lhs.compare(__rhs) > 0; 
+  } 
+  friend _LIBCPP_INLINE_VISIBILITY bool operator>=(const path& __lhs, const path& __rhs) noexcept { 
+    return __lhs.compare(__rhs) >= 0; 
+  } 
+ 
+  friend _LIBCPP_INLINE_VISIBILITY path operator/(const path& __lhs, 
+                                                  const path& __rhs) { 
+    path __result(__lhs); 
+    __result /= __rhs; 
+    return __result; 
+  } 
 private:
   inline _LIBCPP_INLINE_VISIBILITY path&
   __assign_view(__string_view const& __s) noexcept {

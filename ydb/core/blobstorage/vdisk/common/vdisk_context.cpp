@@ -60,7 +60,7 @@ namespace NKikimr {
         , OutOfSpaceState(Top->GetTotalVDisksNum(), Top->GetOrderNumber(ShortSelfVDisk))
         , Logger(as ? ActorSystemLogger(as) : DevNullLogger())
     {
-        Y_VERIFY(!VDiskLogPrefix.empty());
+        Y_VERIFY(!VDiskLogPrefix.empty()); 
     }
 
     TString TVDiskContext::FormatMessage(

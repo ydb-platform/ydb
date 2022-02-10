@@ -1070,12 +1070,12 @@ TNetworkAddress::TNetworkAddress(const TUnixSocketPath& unixSocketPath, int flag
 }
 
 TNetworkAddress::TNetworkAddress(const TString& host, ui16 port, int flags)
-    : Impl_(new TImpl(host.data(), port, flags))
+    : Impl_(new TImpl(host.data(), port, flags)) 
 {
 }
 
 TNetworkAddress::TNetworkAddress(const TString& host, ui16 port)
-    : Impl_(new TImpl(host.data(), port, 0))
+    : Impl_(new TImpl(host.data(), port, 0)) 
 {
 }
 

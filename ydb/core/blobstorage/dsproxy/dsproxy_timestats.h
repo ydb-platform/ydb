@@ -267,7 +267,7 @@ public:
         if (cgi.Has("aggrTime")) {
             TString param = cgi.Get("aggrTime");
             TDurationParser parser;
-            if (parser.ParsePart(param.data(), param.size())) {
+            if (parser.ParsePart(param.data(), param.size())) { 
                 AggrTime = parser.GetResult(AggrTime);
             }
         }

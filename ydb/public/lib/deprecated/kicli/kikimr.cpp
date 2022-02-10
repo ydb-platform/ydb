@@ -292,7 +292,7 @@ public:
         case NMsgBusProxy::MTYPE_CLIENT_FILL_NODE:
             return ExecuteGRpcRequest<NMsgBusProxy::TBusFillNode, NMsgBusProxy::TBusResponse>(&NGRpcProxy::TGRpcClient::FillNode, promise, request);
         default:
-            Y_FAIL("%s", (TStringBuilder() << "unexpected message type# " << type).data());
+            Y_FAIL("%s", (TStringBuilder() << "unexpected message type# " << type).data()); 
         }
     }
 

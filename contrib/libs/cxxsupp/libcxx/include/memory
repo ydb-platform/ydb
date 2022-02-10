@@ -1,9 +1,9 @@
 // -*- C++ -*-
 //===-------------------------- memory ------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions. 
+// See https://llvm.org/LICENSE.txt for license information. 
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception 
 //
 //===----------------------------------------------------------------------===//
 
@@ -42,7 +42,7 @@ struct pointer_traits<T*>
 
     template <class U> using rebind = U*;
 
-    static pointer pointer_to(<details>) noexcept; // constexpr in C++20
+    static pointer pointer_to(<details>) noexcept; // constexpr in C++20 
 };
 
 template <class T> constexpr T* to_address(T* p) noexcept; // C++20
@@ -222,10 +222,10 @@ template <class ForwardIterator>
 template <class ForwardIterator, class Size>
  ForwardIterator uninitialized_default_construct_n(ForwardIterator first, Size n);
 
-template <class Y> struct auto_ptr_ref {};      // deprecated in C++11, removed in C++17
+template <class Y> struct auto_ptr_ref {};      // deprecated in C++11, removed in C++17 
 
 template<class X>
-class auto_ptr                                  // deprecated in C++11, removed in C++17
+class auto_ptr                                  // deprecated in C++11, removed in C++17 
 {
 public:
     typedef X element_type;
@@ -697,7 +697,7 @@ void* align(size_t alignment, size_t size, void*& ptr, size_t& space);
 #include <type_traits>
 #include <typeinfo>
 #include <utility>
-#include <version>
+#include <version> 
 
 #if _LIBCPP_STD_VER <= 14 || defined(_LIBCPP_ENABLE_CXX17_REMOVED_AUTO_PTR)
 #   include <__memory/auto_ptr.h>
@@ -883,18 +883,18 @@ template <class _Tp, class _Alloc>
 struct __temp_value {
     typedef allocator_traits<_Alloc> _Traits;
 
-    typename aligned_storage<sizeof(_Tp), _LIBCPP_ALIGNOF(_Tp)>::type __v;
+    typename aligned_storage<sizeof(_Tp), _LIBCPP_ALIGNOF(_Tp)>::type __v; 
     _Alloc &__a;
 
     _Tp *__addr() { return reinterpret_cast<_Tp *>(addressof(__v)); }
     _Tp &   get() { return *__addr(); }
 
     template<class... _Args>
-    _LIBCPP_NO_CFI
-    __temp_value(_Alloc &__alloc, _Args&& ... __args) : __a(__alloc) {
-      _Traits::construct(__a, reinterpret_cast<_Tp*>(addressof(__v)),
-                         _VSTD::forward<_Args>(__args)...);
-    }
+    _LIBCPP_NO_CFI 
+    __temp_value(_Alloc &__alloc, _Args&& ... __args) : __a(__alloc) { 
+      _Traits::construct(__a, reinterpret_cast<_Tp*>(addressof(__v)), 
+                         _VSTD::forward<_Args>(__args)...); 
+    } 
 
     ~__temp_value() { _Traits::destroy(__a, __addr()); }
     };

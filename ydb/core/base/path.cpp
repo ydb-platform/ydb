@@ -123,7 +123,7 @@ bool CheckDbPath(const TString &path, const TString &domain, TString &error) {
     }
 
     if (parts.front() != domain) {
-        error = Sprintf("Database path should be in domain /%s", domain.data());
+        error = Sprintf("Database path should be in domain /%s", domain.data()); 
         return false;
     }
 

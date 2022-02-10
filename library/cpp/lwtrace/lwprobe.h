@@ -33,28 +33,28 @@ namespace NLWTrace {
             probe.Init();
 
             // initialize TEvent
-            Y_VERIFY(IsCppIdentifier(Name), "probe '%s' is not C++ identifier", Name.data());
-            Y_VERIFY(IsCppIdentifier(Provider), "provider '%s' is not C++ identifier in probe %s", Provider.data(), Name.data());
+            Y_VERIFY(IsCppIdentifier(Name), "probe '%s' is not C++ identifier", Name.data()); 
+            Y_VERIFY(IsCppIdentifier(Provider), "provider '%s' is not C++ identifier in probe %s", Provider.data(), Name.data()); 
             probe.Event.Name = Name.c_str();
             Zero(probe.Event.Groups);
             probe.Event.Groups[0] = Provider.c_str();
             auto i = Groups.begin(), ie = Groups.end();
-            Y_VERIFY(Groups.size() < LWTRACE_MAX_GROUPS, "too many groups in probe %s", Name.data());
+            Y_VERIFY(Groups.size() < LWTRACE_MAX_GROUPS, "too many groups in probe %s", Name.data()); 
             for (size_t n = 1; n < LWTRACE_MAX_GROUPS && i != ie; n++, ++i) {
-                Y_VERIFY(IsCppIdentifier(*i), "group '%s' is not C++ identifier in probe %s", i->data(), Name.data());
+                Y_VERIFY(IsCppIdentifier(*i), "group '%s' is not C++ identifier in probe %s", i->data(), Name.data()); 
                 probe.Event.Groups[n] = i->c_str();
             }
 
             // initialize TSignature
             using TUsrSign = TUserSignature<LWTRACE_TEMPLATE_ARGS>;
             Y_VERIFY(TUsrSign::ParamCount == (int)Params.size(), "param count mismatch in probe %s: %d != %d",
-                     Name.data(), int(Params.size()), TUsrSign::ParamCount);
+                     Name.data(), int(Params.size()), TUsrSign::ParamCount); 
             TSignature& signature = probe.Event.Signature;
             signature.ParamTypes = TUsrSign::ParamTypes;
             Zero(signature.ParamNames);
             auto j = Params.begin(), je = Params.end();
             for (size_t n = 0; n < LWTRACE_MAX_PARAMS && j != je; n++, ++j) {
-                Y_VERIFY(IsCppIdentifier(*j), "param '%s' is not C++ identifier in probe %s", j->data(), Name.data());
+                Y_VERIFY(IsCppIdentifier(*j), "param '%s' is not C++ identifier in probe %s", j->data(), Name.data()); 
                 signature.ParamNames[n] = j->c_str();
             }
             signature.ParamCount = TUsrSign::ParamCount;

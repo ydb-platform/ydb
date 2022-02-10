@@ -151,7 +151,7 @@ namespace NActors {
 
             const char* ComponentName(EComponent component) const {
                 Y_VERIFY_DEBUG((component & Mask) == component);
-                return ComponentNames[component & Mask].data();
+                return ComponentNames[component & Mask].data(); 
             }
 
             int SetLevel(EPriority priority, EComponent component, TString& explanation);

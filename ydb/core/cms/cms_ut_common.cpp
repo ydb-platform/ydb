@@ -333,7 +333,7 @@ static void SetupServices(TTestActorRuntime &runtime,
     { // setup channel profiles
         TIntrusivePtr<TChannelProfiles> channelProfiles = new TChannelProfiles;
         channelProfiles->Profiles.emplace_back();
-        TChannelProfiles::TProfile &profile = channelProfiles->Profiles.back();
+        TChannelProfiles::TProfile &profile = channelProfiles->Profiles.back(); 
         for (ui32 channelIdx = 0; channelIdx < 3; ++channelIdx) {
             profile.Channels.push_back(
                                        TChannelProfiles::TProfile::TChannel(TBlobStorageGroupType::ErasureNone, 0, NKikimrBlobStorage::TVDiskKind::Default));

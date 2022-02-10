@@ -53,7 +53,7 @@ namespace NMonitoring {
             void OnGroupBegin(
                 const TString& labelName, const TString& labelValue,
                 const TDynamicCounters*) override {
-                if (labelName.empty() && labelValue.empty()) {
+                if (labelName.empty() && labelValue.empty()) { 
                     // root group has empty label name and value
                     EncoderImpl_->OnStreamBegin();
                 } else {
@@ -64,7 +64,7 @@ namespace NMonitoring {
             void OnGroupEnd(
                 const TString& labelName, const TString& labelValue,
                 const TDynamicCounters*) override {
-                if (labelName.empty() && labelValue.empty()) {
+                if (labelName.empty() && labelValue.empty()) { 
                     // root group has empty label name and value
                     EncoderImpl_->OnStreamEnd();
                     EncoderImpl_->Close();

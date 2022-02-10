@@ -144,7 +144,7 @@ namespace NCodecs {
     class TBasicTrivialCodec: public ICodec {
     public:
         ui8 Encode(TStringBuf in, TBuffer& out) const override {
-            out.Assign(in.data(), in.size());
+            out.Assign(in.data(), in.size()); 
             return 0;
         }
 

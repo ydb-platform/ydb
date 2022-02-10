@@ -2,7 +2,7 @@
 #include <util/stream/str.h>
 #include <util/string/vector.h>
 #include <algorithm>
-#include <util/string/split.h>
+#include <util/string/split.h> 
 #include <library/cpp/protobuf/util/is_equal.h>
 
 namespace NACLib {
@@ -511,7 +511,7 @@ TString TACL::ToString() const {
 ui32 TACL::SpecialRightsFromString(const TString& string) {
     TVector<TString> rights;
     ui32 result = 0;
-    StringSplitter(string).Split('|').SkipEmpty().Collect(&rights);
+    StringSplitter(string).Split('|').SkipEmpty().Collect(&rights); 
     for (const TString& r : rights) {
         if (r == "SR")
             result |= EAccessRights::SelectRow;

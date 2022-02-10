@@ -79,7 +79,7 @@ Y_UNIT_TEST_SUITE(Bloom) {
                 const auto key = Tool.KeyCells(one);
                 const NBloom::TPrefix prefix(key);
 
-                filtered += Page->MightHave(prefix.Get(key.size())) ? 0 : 1;
+                filtered += Page->MightHave(prefix.Get(key.size())) ? 0 : 1; 
             }
 
             return filtered;
@@ -121,7 +121,7 @@ Y_UNIT_TEST_SUITE(Bloom) {
             const auto key = tool.KeyCells(one);
             const NBloom::TPrefix raw(key);
 
-            ui64 val = NBloom::THash(raw.Get(key.size())).Next();
+            ui64 val = NBloom::THash(raw.Get(key.size())).Next(); 
 
             salt = MurmurHash<ui64>((void*)&val, sizeof(val), salt);
         }
@@ -180,7 +180,7 @@ Y_UNIT_TEST_SUITE(Bloom) {
         {
             auto subset = me->Subset(1, TEpoch::Max(), { }, { });
 
-            UNIT_ASSERT(subset->Flatten.size() == 1 && !subset->Flatten[0]->ByKey);
+            UNIT_ASSERT(subset->Flatten.size() == 1 && !subset->Flatten[0]->ByKey); 
 
             auto &stats = me.Relax().BackLog().Stats;
 
@@ -220,7 +220,7 @@ Y_UNIT_TEST_SUITE(Bloom) {
         {
             const auto subset = me->Subset(1, TEpoch::Max(), { }, { });
 
-            UNIT_ASSERT(subset->Flatten.size() == 1 && subset->Flatten[0]->ByKey);
+            UNIT_ASSERT(subset->Flatten.size() == 1 && subset->Flatten[0]->ByKey); 
 
             auto &stats = me.Relax().BackLog().Stats;
 
@@ -239,7 +239,7 @@ Y_UNIT_TEST_SUITE(Bloom) {
         {
             const auto subset = me->Subset(1, TEpoch::Max(), { }, { });
 
-            UNIT_ASSERT(subset->Flatten.size() == 1 && !subset->Flatten[0]->ByKey);
+            UNIT_ASSERT(subset->Flatten.size() == 1 && !subset->Flatten[0]->ByKey); 
         }
     }
 
@@ -285,8 +285,8 @@ Y_UNIT_TEST_SUITE(Bloom) {
         {
             const auto subset = me->Subset(1, TEpoch::Max(), { }, { });
 
-            UNIT_ASSERT_VALUES_EQUAL(subset->Flatten.size(), Height);
-            UNIT_ASSERT_VALUES_EQUAL(subset->Frozen.size(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(subset->Flatten.size(), Height); 
+            UNIT_ASSERT_VALUES_EQUAL(subset->Frozen.size(), 0); 
         }
 
         /* 8xxx: Extend incomplete keys with nulls and check it precense */

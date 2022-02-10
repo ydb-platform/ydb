@@ -44,8 +44,8 @@ public:
         return IsDefined();
     }
 
-    inline const char* c_str() const {
-        return Path_.c_str();
+    inline const char* c_str() const { 
+        return Path_.c_str(); 
     }
 
     inline operator const TString&() const {
@@ -166,7 +166,7 @@ public:
     // XXX: ino
 
     inline bool Stat(TFileStat& stat) const {
-        stat = TFileStat(Path_.data());
+        stat = TFileStat(Path_.data()); 
 
         return stat.Mode;
     }

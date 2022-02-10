@@ -25,8 +25,8 @@ Y_UNIT_TEST_SUITE(THttpServerTest) {
                 }
 
                 Output() << "HTTP/1.1 200 Ok\r\n\r\n";
-                if (Buf.Size()) {
-                    Output().Write(Buf.AsCharPtr(), Buf.Size());
+                if (Buf.Size()) { 
+                    Output().Write(Buf.AsCharPtr(), Buf.Size()); 
                 } else {
                     Output() << Parent_->Res_;
                 }
@@ -153,7 +153,7 @@ Y_UNIT_TEST_SUITE(THttpServerTest) {
                 for (;;) {
                     TString buf;
                     si.ReadLine(buf);
-                    if (buf.size() == 0) {
+                    if (buf.size() == 0) { 
                         break;
                     }
                     ss << buf << CrLf;
@@ -189,7 +189,7 @@ Y_UNIT_TEST_SUITE(THttpServerTest) {
                 r << Type << " / HTTP/1.1" << CrLf;
                 r << "Host: localhost:" + ToString(Port) << CrLf;
                 if (isPost) {
-                    if (ContentEncoding.size()) {
+                    if (ContentEncoding.size()) { 
                         r << "Content-Encoding: " << ContentEncoding << CrLf;
                     } else {
                         r << "Transfer-Encoding: chunked" << CrLf;
@@ -225,34 +225,34 @@ Y_UNIT_TEST_SUITE(THttpServerTest) {
                 if (isPost && Expect100Continue) {
                     r << "Expect: 100-continue" << CrLf;
                 }
-                if (isPost && ContentEncoding.size() && Content.size()) {
+                if (isPost && ContentEncoding.size() && Content.size()) { 
                     r << "Content-Encoding: " << ContentEncoding << CrLf;
                     TStringStream compressedContent;
                     {
                         TZLibCompress zlib(&compressedContent);
-                        zlib.Write(Content.data(), Content.size());
+                        zlib.Write(Content.data(), Content.size()); 
                         zlib.Flush();
                         zlib.Finish();
                     }
                     r << "Content-Length: " << compressedContent.Size() << CrLf;
                     r << CrLf;
-                    s->Send(r.Data(), r.Size());
+                    s->Send(r.Data(), r.Size()); 
                     CheckContinue(si);
                     Hdr = r.Str();
                     TString tosend = compressedContent.Str();
-                    s->Send(tosend.data(), tosend.size());
+                    s->Send(tosend.data(), tosend.size()); 
                 } else {
                     if (isPost) {
-                        r << "Content-Length: " << Content.size() << CrLf;
+                        r << "Content-Length: " << Content.size() << CrLf; 
                         r << CrLf;
-                        s->Send(r.Data(), r.Size());
+                        s->Send(r.Data(), r.Size()); 
                         CheckContinue(si);
                         Hdr = r.Str();
-                        s->Send(Content.data(), Content.size());
+                        s->Send(Content.data(), Content.size()); 
                     } else {
                         r << CrLf;
                         Hdr = r.Str();
-                        s->Send(r.Data(), r.Size());
+                        s->Send(r.Data(), r.Size()); 
                     }
                 }
             }
@@ -268,7 +268,7 @@ Y_UNIT_TEST_SUITE(THttpServerTest) {
             if (UseHttpOutput) {
                 TStringStream ss;
                 ss << (KeepAliveConnection ? "keep-alive " : "") << Type;
-                if (ContentEncoding.size()) {
+                if (ContentEncoding.size()) { 
                     ss << " with encoding=" << ContentEncoding;
                 }
                 return ss.Str();

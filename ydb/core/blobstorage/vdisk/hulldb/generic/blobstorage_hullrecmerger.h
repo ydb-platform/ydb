@@ -337,13 +337,13 @@ namespace NKikimr {
             Y_VERIFY(ProducingSmallBlob);
 
             // add all read small blobs into blob merger
-            const size_t count = ReadSmallBlobs.size();
+            const size_t count = ReadSmallBlobs.size(); 
             Y_VERIFY(count == +MemRecs, "count# %zu +MemRecs# %zu", count, +MemRecs);
             for (size_t i = 0; i < count; ++i) {
                 const TMemRec& memRec = MemRecs[i]->GetMemRec();
                 const TString& buffer = ReadSmallBlobs[i];
-                Y_VERIFY(buffer.size() == memRec.DataSize());
-                DataMerger.AddBlob(TDiskBlob(buffer.data(), buffer.size(), memRec.GetLocalParts(GType)));
+                Y_VERIFY(buffer.size() == memRec.DataSize()); 
+                DataMerger.AddBlob(TDiskBlob(buffer.data(), buffer.size(), memRec.GetLocalParts(GType))); 
             }
 
 

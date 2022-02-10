@@ -97,7 +97,7 @@ void TPersQueueCacheL2::AddBlobs(const TActorContext& ctx, TString topic, const 
             auto oldest = Cache.FindOldest();
             Y_VERIFY(oldest != Cache.End(), "Topic '%s' count %" PRIu64 " size %" PRIu64
                 " maxSize %" PRIu64 " blobSize %" PRIu64 " blobs %" PRIu64 " evicted %" PRIu64,
-                topic.data(), Cache.Size(), CurrentSize, MaxSize, blob.Value->DataSize(), blobs.size(), outEvicted.size());
+                topic.data(), Cache.Size(), CurrentSize, MaxSize, blob.Value->DataSize(), blobs.size(), outEvicted.size()); 
 
             TCacheValue::TPtr value = oldest.Value();
             outEvicted.insert({oldest.Key(), value});
@@ -202,7 +202,7 @@ void TPersQueueCacheL2::Handle(NMon::TEvHttpInfo::TPtr& ev, const TActorContext&
     if (params.Has("submit")) {
         TString strParam = params.Get("newCacheLimit");
         if (strParam.size()) {
-            ui32 valueMb = atoll(strParam.data());
+            ui32 valueMb = atoll(strParam.data()); 
             MaxSize = SizeInBytes(valueMb); // will be applyed at next AddBlobs
         }
     }

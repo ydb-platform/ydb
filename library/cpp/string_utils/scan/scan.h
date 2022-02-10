@@ -6,10 +6,10 @@ template <bool addAll, char sep, char sepKeyVal, class F>
 static inline void ScanKeyValue(TStringBuf s, F&& f) {
     TStringBuf key, val;
 
-    while (!s.empty()) {
+    while (!s.empty()) { 
         val = s.NextTok(sep);
 
-        if (val.empty()) {
+        if (val.empty()) { 
             continue; // && case
         }
 

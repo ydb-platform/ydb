@@ -25,7 +25,7 @@ namespace {
             const TString json(args[0].AsStringRef());
             const TString field(args[1].AsStringRef());
 
-            if (field.empty()) {
+            if (field.empty()) { 
                 return valueBuilder->NewEmptyList();
             }
 

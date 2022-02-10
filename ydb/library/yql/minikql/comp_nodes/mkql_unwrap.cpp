@@ -58,7 +58,7 @@ private:
             res << ":\n\n" << TStringBuf(messageStr) << "\n\n";
         }
 
-        UdfTerminate(res.data());
+        UdfTerminate(res.data()); 
     }
 
     IComputationNode* const Message;

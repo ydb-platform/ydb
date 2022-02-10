@@ -36,22 +36,22 @@ struct TKeyValueStoredStateData {
         return ReadUnaligned<ui64>(&ChannelStep);
     }
     void SetVersion(ui64 value) {
-        WriteUnaligned<ui64>(&Version, value);
+        WriteUnaligned<ui64>(&Version, value); 
     }
     void SetUserGeneration(ui64 value) {
-        WriteUnaligned<ui64>(&UserGeneration, value);
+        WriteUnaligned<ui64>(&UserGeneration, value); 
     }
     void SetCollectGeneration(ui64 value) {
-        WriteUnaligned<ui64>(&CollectGeneration, value);
+        WriteUnaligned<ui64>(&CollectGeneration, value); 
     }
     void SetCollectStep(ui64 value) {
-        WriteUnaligned<ui64>(&CollectStep, value);
+        WriteUnaligned<ui64>(&CollectStep, value); 
     }
     void SetChannelGeneration(ui64 value) {
-        WriteUnaligned<ui64>(&ChannelGeneration, value);
+        WriteUnaligned<ui64>(&ChannelGeneration, value); 
     }
     void SetChannelStep(ui64 value) {
-        WriteUnaligned<ui64>(&ChannelStep, value);
+        WriteUnaligned<ui64>(&ChannelStep, value); 
     }
 
     TKeyValueStoredStateData();

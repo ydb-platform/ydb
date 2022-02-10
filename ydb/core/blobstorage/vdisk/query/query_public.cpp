@@ -72,7 +72,7 @@ namespace NKikimr {
                             VDISKP(hullCtx->VCtx->VDiskLogPrefix,
                                 "Db# LogoBlobs getting blob beyond the barrier id# %s ingress# %s barrier# %s",
                                 id.ToString().data(), ingress.ToString(hullCtx->VCtx->Top.get(),
-                                hullCtx->VCtx->ShortSelfVDisk, id).data(), explanation.data()));
+                                hullCtx->VCtx->ShortSelfVDisk, id).data(), explanation.data())); 
                 }
             }
         }
@@ -158,7 +158,7 @@ namespace NKikimr {
         result->SetError();
         LOG_DEBUG(ctx, NKikimrServices::BS_VDISK_OTHER,
                 VDISKP(vctx->VDiskLogPrefix,
-                    "TEvVDbStatResult: %s", result->ToString().data()));
+                    "TEvVDbStatResult: %s", result->ToString().data())); 
         SendVDiskResponse(ctx, ev->Sender, result.release(), actor, ev->Cookie);
     }
 

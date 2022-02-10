@@ -536,7 +536,7 @@ TDatabase::TProd TDatabase::Commit(TTxStamp stamp, bool commit, TCookieAllocator
 
         if (Change->Redo.size() > offset && !Change->Affects) {
             Y_Fail(
-                NFmt::Do(*Change) << " produced " << (Change->Redo.size() - offset)
+                NFmt::Do(*Change) << " produced " << (Change->Redo.size() - offset) 
                 << "b of non technical redo without leaving effects on data");
         } else if (Change->Serial != DatabaseImpl->Serial()) {
             Y_Fail(

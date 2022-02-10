@@ -6,7 +6,7 @@
 #include <util/string/cast.h>
 #include <library/cpp/string_utils/url/url.h>
 #include <util/string/join.h>
-#include <util/string/split.h>
+#include <util/string/split.h> 
 
 THttpRequestException::THttpRequestException(int statusCode):
     StatusCode(statusCode)
@@ -53,8 +53,8 @@ void THttpClient::SendHttpRequest(const TStringBuf relativeUrl,
     parts.push_back(IOutputStream::TPart::CrLf());
     parts.push_back(TStringBuf("From: oxygen@yandex-team.ru"));
     parts.push_back(IOutputStream::TPart::CrLf());
-    if (body.size() > 0) {
-        contentLength = ToString(body.size());
+    if (body.size() > 0) { 
+        contentLength = ToString(body.size()); 
         parts.push_back(TStringBuf("Content-Length: "));
         parts.push_back(TStringBuf(contentLength));
         parts.push_back(IOutputStream::TPart::CrLf());
@@ -66,7 +66,7 @@ void THttpClient::SendHttpRequest(const TStringBuf relativeUrl,
         parts.push_back(IOutputStream::TPart::CrLf());
     }
     parts.push_back(IOutputStream::TPart::CrLf());
-    if (body.size() > 0) {
+    if (body.size() > 0) { 
         parts.push_back(IOutputStream::TPart(body));
     }
 

@@ -274,7 +274,7 @@ Y_UNIT_TEST_SUITE(TLogTest)
 
             // second call without throw returns empty string
             throwedLogCtx = ThrowedLogContextPath();
-            UNIT_ASSERT(throwedLogCtx.empty());
+            UNIT_ASSERT(throwedLogCtx.empty()); 
         }
 
         UNIT_ASSERT_C(isThrown, "exception was not thrown");

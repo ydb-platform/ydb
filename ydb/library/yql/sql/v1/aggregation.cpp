@@ -32,7 +32,7 @@ namespace {
 class TAggregationFactory : public IAggregation {
 public:
     TAggregationFactory(TPosition pos, const TString& name, const TString& func, EAggregateMode aggMode, bool multi = false)
-        : IAggregation(pos, name, func, aggMode), Factory(!func.empty() ?
+        : IAggregation(pos, name, func, aggMode), Factory(!func.empty() ? 
             BuildBind(Pos, aggMode == EAggregateMode::OverWindow ? "window_module" : "aggregate_module", func) : nullptr),
         Multi(multi), DynamicFactory(!Factory)
     {

@@ -74,7 +74,7 @@ namespace NRainCheck {
         THolder<THttpCallback> callback(new THttpCallback(future));
         NNeh::TServiceStatRef stat;
         try {
-            NNeh::TMessage msg(addr.replace(0, NNeh::TParsedLocation(addr).Scheme.size(), "post"), data);
+            NNeh::TMessage msg(addr.replace(0, NNeh::TParsedLocation(addr).Scheme.size(), "post"), data); 
             TStringStream headersText;
             headers.OutTo(&headersText);
             NNeh::NHttp::MakeFullRequest(msg, headersText.Str(), TString());

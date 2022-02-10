@@ -1054,8 +1054,8 @@ namespace NKikimr {
             TString regex = Sprintf(".*sensor=%s:\\s(\\d+).*", i == 0 ? "FreeChunks" : "UntrimmedFreeChunks");
             TRegExBase matcher(regex);
             regmatch_t groups[2] = {};
-            matcher.Exec(event->Answer.data(), groups, 0, 2);
-            const ui64 freeSize = IntFromString<ui64, 10>(event->Answer.data() + groups[1].rm_so, groups[1].rm_eo - groups[1].rm_so);
+            matcher.Exec(event->Answer.data(), groups, 0, 2); 
+            const ui64 freeSize = IntFromString<ui64, 10>(event->Answer.data() + groups[1].rm_so, groups[1].rm_eo - groups[1].rm_so); 
             totalFreeSize += freeSize;
         }
 

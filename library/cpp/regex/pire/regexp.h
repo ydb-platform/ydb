@@ -278,8 +278,8 @@ namespace NRegExp {
         }
 
         inline TStringBuf GetCaptured() const noexcept {
-            return TStringBuf(Data.data() + GetState().Begin() - 1,
-                              Data.data() + GetState().End() - 1);
+            return TStringBuf(Data.data() + GetState().Begin() - 1, 
+                              Data.data() + GetState().End() - 1); 
         }
 
     private:
@@ -302,7 +302,7 @@ namespace NRegExp {
         inline TSlowSearcher& Search(const char* data, size_t len, bool addBegin = false, bool addEnd = false) noexcept {
             TStringBuf textData(data, len);
             Data = textData;
-            Run(Data.begin(), Data.size(), addBegin, addEnd);
+            Run(Data.begin(), Data.size(), addBegin, addEnd); 
             return GetAns();
         }
 

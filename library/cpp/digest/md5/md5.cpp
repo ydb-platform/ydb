@@ -248,7 +248,7 @@ bool MD5::IsMD5(TStringBuf data) {
 }
 
 bool MD5::IsMD5(const TArrayRef<const ui8>& data) {
-    if (data.size() != 32) {
+    if (data.size() != 32) { 
         return false;
     }
     for (const ui8 *p = data.data(), *e = data.data() + data.size(); p != e; ++p) {

@@ -29,7 +29,7 @@ private:
 
     void Handle(TEvBlobStorage::TEvVPutResult::TPtr &ev, const TActorContext &ctx) {
         Y_VERIFY(ev->Get()->Record.GetStatus() == NKikimrProto::OK, "Status=%s",
-               NKikimrProto::EReplyStatus_Name(ev->Get()->Record.GetStatus()).data());
+               NKikimrProto::EReplyStatus_Name(ev->Get()->Record.GetStatus()).data()); 
         LOG_NOTICE(ctx, NActorsServices::TEST, "  TEvVPutResult succeded");
 
         --Counter;
@@ -327,7 +327,7 @@ protected:
     using TBasePutAllFromDataSet::SendReadRequests;
 
     virtual void SendReadRequests(const TActorContext &ctx, const TLogoBlobID &from, const TLogoBlobID &to) {
-        LOG_NOTICE(ctx, NActorsServices::TEST, "  Test: from=%s to=%s\n", from.ToString().data(), to.ToString().data());
+        LOG_NOTICE(ctx, NActorsServices::TEST, "  Test: from=%s to=%s\n", from.ToString().data(), to.ToString().data()); 
         auto req = TEvBlobStorage::TEvVGet::CreateRangeIndexQuery(VDiskInfo.VDiskID, TInstant::Max(),
                 NKikimrBlobStorage::EGetHandleClass::AsyncRead, TEvBlobStorage::TEvVGet::EFlags::None, {},
                 from, to, 10);
@@ -486,7 +486,7 @@ class TRangeGetFromEmptyDBActor : public TActorBootstrapped<TRangeGetFromEmptyDB
 
         TLogoBlobID from(0, 4294967295, 4294967295, 0, 0, 0, TLogoBlobID::MaxPartId);
         TLogoBlobID to  (0, 0, 0, 0, 0, 0, 1);
-        LOG_NOTICE(ctx, NActorsServices::TEST, "  Test: from=%s to=%s\n", from.ToString().data(), to.ToString().data());
+        LOG_NOTICE(ctx, NActorsServices::TEST, "  Test: from=%s to=%s\n", from.ToString().data(), to.ToString().data()); 
         auto req = TEvBlobStorage::TEvVGet::CreateRangeIndexQuery(VDiskInfo.VDiskID, TInstant::Max(),
                 NKikimrBlobStorage::EGetHandleClass::AsyncRead, TEvBlobStorage::TEvVGet::EFlags::None, {}, from, to, 10);
         ctx.Send(VDiskInfo.ActorID, req.release());

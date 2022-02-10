@@ -175,7 +175,7 @@ namespace NKikimr {
     {
         bool result = google::protobuf::TextFormat::ParseFromString(prototext, &AllKindsConfig);
         Y_VERIFY(result, "Failed to parse AllVDiskKinds config "
-                "(error in protobuf format):\n%s\n", prototext.data());
+                "(error in protobuf format):\n%s\n", prototext.data()); 
         ParseConfig();
     }
 
@@ -187,7 +187,7 @@ namespace NKikimr {
             const auto it = KindsMap.find(k);
             Y_VERIFY(it != KindsMap.end(),
                     "Can't find kind='%s' in the config (probably config is incorrect)",
-                    NKikimrBlobStorage::TVDiskKind::EVDiskKind_Name(k).data());
+                    NKikimrBlobStorage::TVDiskKind::EVDiskKind_Name(k).data()); 
             merge.push_back(it->second);
             k = it->second->GetBaseKind();
 
@@ -219,7 +219,7 @@ namespace NKikimr {
             const NKikimrBlobStorage::TVDiskKind *val = &x;
             result = KindsMap.emplace(kind, val).second;
             Y_VERIFY(result, "Duplicate elements in the AllVDiskKinds config: kind='%s",
-                    NKikimrBlobStorage::TVDiskKind::EVDiskKind_Name(kind).data());
+                    NKikimrBlobStorage::TVDiskKind::EVDiskKind_Name(kind).data()); 
         }
     }
 

@@ -1,8 +1,8 @@
 //===------------------------ memory_resource.cpp -------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions. 
+// See https://llvm.org/LICENSE.txt for license information. 
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception 
 //
 //===----------------------------------------------------------------------===//
 
@@ -38,7 +38,7 @@ class _LIBCPP_TYPE_VIS __new_delete_memory_resource_imp
 
     void do_deallocate(void *p, size_t n, size_t align) override {
       _VSTD::__libcpp_deallocate(p, n, align);
-    }
+    } 
 
     bool do_is_equal(memory_resource const & other) const noexcept override
         { return &other == this; }

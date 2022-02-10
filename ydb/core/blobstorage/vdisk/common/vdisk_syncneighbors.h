@@ -10,8 +10,8 @@
 #include <util/generic/vector.h>
 #include <util/stream/str.h>
 #include <library/cpp/monlib/service/pages/templates.h>
-
-#include <type_traits>
+ 
+#include <type_traits> 
 #include <iterator>
 
 
@@ -131,11 +131,11 @@ namespace NKikimr {
                 ui32 VDisk;
 
             public:
-                using value_type = TValue;
-                using reference = value_type&;
-                using pointer = value_type*;
-                using difference_type = std::size_t;
-                using iterator_category = std::forward_iterator_tag;
+                using value_type = TValue; 
+                using reference = value_type&; 
+                using pointer = value_type*; 
+                using difference_type = std::size_t; 
+                using iterator_category = std::forward_iterator_tag; 
                 TIteratorImpl(const TFailDomainIterator& failDomainIter, ui32 vdisk)
                     : FailDomainIter(failDomainIter)
                     , VDisk(vdisk)
@@ -151,7 +151,7 @@ namespace NKikimr {
 
                 void MoveNext() {
                     const auto& vec = FailDomainIter.GetVDiskVector();
-                    if (++VDisk == vec.size()) {
+                    if (++VDisk == vec.size()) { 
                         VDisk = 0;
                         ++FailDomainIter;
                     }
@@ -167,7 +167,7 @@ namespace NKikimr {
                     ui32 offset = VDisk;
                     TFailDomainIterator iter(FailDomainIter);
                     while (iter != other.FailDomainIter) {
-                        rv += iter.GetVDiskVector().size() - offset;
+                        rv += iter.GetVDiskVector().size() - offset; 
                         ++iter;
                         offset = 0;
                     }
@@ -208,11 +208,11 @@ namespace NKikimr {
                 ui32 FailDomain;
 
             public:
-                using value_type = TValue;
-                using reference = value_type&;
-                using pointer = value_type*;
-                using difference_type = std::size_t;
-                using iterator_category = std::forward_iterator_tag;
+                using value_type = TValue; 
+                using reference = value_type&; 
+                using pointer = value_type*; 
+                using difference_type = std::size_t; 
+                using iterator_category = std::forward_iterator_tag; 
                 TFailDomainIteratorImpl(TNeighbors &ref, ui32 ring, ui32 failDomain)
                     : Ref(ref)
                     , FailRealm(ring)
@@ -252,7 +252,7 @@ namespace NKikimr {
                 }
 
                 void MoveNext() {
-                    if (++FailDomain == Ref[FailRealm].size()) {
+                    if (++FailDomain == Ref[FailRealm].size()) { 
                         FailDomain = 0;
                         ++FailRealm;
                     }
@@ -287,12 +287,12 @@ namespace NKikimr {
 
             TFailDomainRangeImpl<true> GetFailDomains() const {
                 return TFailDomainRangeImpl<true>(TConstFailDomainIterator(Neighbors, 0, 0),
-                                                  TConstFailDomainIterator(Neighbors, Neighbors.size(), 0));
+                                                  TConstFailDomainIterator(Neighbors, Neighbors.size(), 0)); 
             }
 
             TFailDomainRangeImpl<false> GetFailDomains() {
                 return TFailDomainRangeImpl<false>(TFailDomainIterator(Neighbors, 0, 0),
-                                                   TFailDomainIterator(Neighbors, Neighbors.size(), 0));
+                                                   TFailDomainIterator(Neighbors, Neighbors.size(), 0)); 
             }
 
             TIterator Begin() {
@@ -312,7 +312,7 @@ namespace NKikimr {
             }
 
             TIterator End() {
-                return TIterator(TFailDomainIterator(Neighbors, Neighbors.size(), 0), 0);
+                return TIterator(TFailDomainIterator(Neighbors, Neighbors.size(), 0), 0); 
             }
 
             TIterator end() {
@@ -320,7 +320,7 @@ namespace NKikimr {
             }
 
             TConstIterator End() const {
-                return TConstIterator(TConstFailDomainIterator(Neighbors, Neighbors.size(), 0), 0);
+                return TConstIterator(TConstFailDomainIterator(Neighbors, Neighbors.size(), 0), 0); 
             }
 
             TConstIterator end() const {
@@ -486,5 +486,5 @@ namespace NKikimr {
     } // NSync
 
 } // NKikimr
-
-
+ 
+ 

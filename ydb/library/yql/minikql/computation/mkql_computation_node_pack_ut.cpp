@@ -291,10 +291,10 @@ protected:
     }
 
     void ValidateEmbeddedLength(const TStringBuf& buf, const TString& info) {
-        if (buf.size() > 8) {
-            UNIT_ASSERT_VALUES_EQUAL_C(*(const ui32*)buf.data() + 4, buf.size(), info);
+        if (buf.size() > 8) { 
+            UNIT_ASSERT_VALUES_EQUAL_C(*(const ui32*)buf.data() + 4, buf.size(), info); 
         } else {
-            UNIT_ASSERT_VALUES_EQUAL_C(((ui32(*buf.data()) & 0x0f) >> 1) + 1, buf.size(), info);
+            UNIT_ASSERT_VALUES_EQUAL_C(((ui32(*buf.data()) & 0x0f) >> 1) + 1, buf.size(), info); 
         }
     }
 
@@ -312,7 +312,7 @@ protected:
     {
         TStringBuf packedValue = packer.Pack(uValue);
         if (expectedLength) {
-            UNIT_ASSERT_VALUES_EQUAL_C(packedValue.size(), *expectedLength, additionalMsg);
+            UNIT_ASSERT_VALUES_EQUAL_C(packedValue.size(), *expectedLength, additionalMsg); 
         }
         ValidateEmbeddedLength(packedValue,  additionalMsg);
         return packer.Unpack(packedValue, HolderFactory);

@@ -10,7 +10,7 @@ void TBlobState::TState::AddResponseData(ui32 fullSize, ui32 shift, TString &dat
     // Add the data to the Data buffer
     Y_VERIFY(data.size());
     Y_VERIFY(shift + data.size() <= fullSize);
-    Data.Write(shift, data.data(), data.size());
+    Data.Write(shift, data.data(), data.size()); 
     // Mark the interval as present in the Data buffer
     Here.Add(shift, shift + data.size());
 }
@@ -94,7 +94,7 @@ bool TBlobState::Restore(const TBlobStorageGroupInfo &info) {
 
     TString whole;
     info.Type.RestoreData((TErasureType::ECrcMode)Id.CrcMode(), partSet, whole, false, true, false);
-    Whole.Data.Write(0, whole.data(), Id.BlobSize());
+    Whole.Data.Write(0, whole.data(), Id.BlobSize()); 
     Whole.Here.Add(fullBlobInterval);
     Whole.NotHere.Subtract(fullBlobInterval);
     return true;

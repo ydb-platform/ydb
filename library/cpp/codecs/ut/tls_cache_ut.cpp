@@ -3,7 +3,7 @@
 
 Y_UNIT_TEST_SUITE(CodecsBufferFactoryTest){
     void AssignToBuffer(TBuffer & buf, TStringBuf val){
-        buf.Assign(val.data(), val.size());
+        buf.Assign(val.data(), val.size()); 
 }
 
 TStringBuf AsStringBuf(const TBuffer& b) {

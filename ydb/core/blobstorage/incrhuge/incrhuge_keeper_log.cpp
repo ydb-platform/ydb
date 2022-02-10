@@ -37,7 +37,7 @@ namespace NKikimr {
         }
 
         void TChunkRecordMerger::operator ()(const TChunkAllocation& record) {
-            for (size_t i = 0; i < record.NewChunkIds.size(); ++i) {
+            for (size_t i = 0; i < record.NewChunkIds.size(); ++i) { 
                 const TChunkIdx chunkIdx = record.NewChunkIds[i];
                 Y_VERIFY(!Chunks.count(chunkIdx));
                 Chunks[chunkIdx] = TChunkInfo{
@@ -88,7 +88,7 @@ namespace NKikimr {
 
         TString TChunkRecordMerger::Serialize(const TChunkAllocation& record) {
             NKikimrVDiskData::TIncrHugeChunks protobuf;
-            for (size_t i = 0; i < record.NewChunkIds.size(); ++i) {
+            for (size_t i = 0; i < record.NewChunkIds.size(); ++i) { 
                 auto *c = protobuf.AddChunks();
                 c->SetChunkIdx(record.NewChunkIds[i]);
                 c->SetChunkSerNum(static_cast<ui64>(record.BaseSerNum.Add(i)));
@@ -222,7 +222,7 @@ namespace NKikimr {
                 for (; it != record.DeleteLocators.end() && it->ChunkIdx == chunkIdx; ++it) {
                     Y_VERIFY(!deletedItems.Get(it->IndexInsideChunk), "trying to delete already deleted item ChunkIdx# %"
                             PRIu32 " ChunkSerNum# %s Id# %016" PRIx64 " IndexInsideChunk# %" PRIu32 " SizeInBlocks# %"
-                            PRIu32, it->ChunkIdx, it->ChunkSerNum.ToString().data(), it->Id, it->IndexInsideChunk,
+                            PRIu32, it->ChunkIdx, it->ChunkSerNum.ToString().data(), it->Id, it->IndexInsideChunk, 
                             it->SizeInBlocks);
                     deletedItems.Set(it->IndexInsideChunk);
                 }
@@ -457,7 +457,7 @@ namespace NKikimr {
             Y_VERIFY(ChunkQueue && &item == &ChunkQueue.front());
 
             IHLOG_DEBUG(ctx, "ApplyLogChunkItem Lsn# %" PRIu64 " Status# %s",
-                    item.Lsn, NKikimrProto::EReplyStatus_Name(status).data());
+                    item.Lsn, NKikimrProto::EReplyStatus_Name(status).data()); 
 
             if (status == NKikimrProto::OK) {
                 // if this was an entrypoint, reset merger and update LSN
@@ -471,7 +471,7 @@ namespace NKikimr {
                 // if it was chunk deletion, propagate this information to deleter state
                 if (auto *record = std::get_if<TChunkRecordMerger::TChunkDeletion>(&item.Content)) {
                     IHLOG_DEBUG(ctx, "DeleteChunk ChunkIdx# %" PRIu32 " ChunkSerNum# %s",
-                            record->ChunkIdx, record->ChunkSerNum.ToString().data());
+                            record->ChunkIdx, record->ChunkSerNum.ToString().data()); 
 
                     TDeleteQueueItem deleteItem{
                         TDeleteRecordMerger::TDeleteChunk{record->ChunkSerNum, record->NumItems}, // Content
@@ -539,7 +539,7 @@ namespace NKikimr {
             for (const TBlobDeleteLocator& deleteLocator : deleteLocators) {
                 IHLOG_DEBUG(ctx, "LogBlobDeletes ChunkIdx# %" PRIu32 " ChunkSerNum# %s"
                         " Id# %016" PRIx64 " IndexInsideChunk# %" PRIu32 " SizeInBlocks# %" PRIu32 " Lsn# %" PRIu64
-                        " Owner# %d SeqNo# %" PRIu64, deleteLocator.ChunkIdx, deleteLocator.ChunkSerNum.ToString().data(),
+                        " Owner# %d SeqNo# %" PRIu64, deleteLocator.ChunkIdx, deleteLocator.ChunkSerNum.ToString().data(), 
                         deleteLocator.Id, deleteLocator.IndexInsideChunk, deleteLocator.SizeInBlocks, Lsn, owner,
                         seqNo);
             }
@@ -576,7 +576,7 @@ namespace NKikimr {
             for (const TBlobDeleteLocator& deleteLocator : deleteLocators) {
                 IHLOG_DEBUG(ctx, "LogVirtualBlobDeletes ChunkIdx# %" PRIu32 " ChunkSerNum# %s"
                         " Id# %016" PRIx64 " IndexInsideChunk# %" PRIu32 " SizeInBlocks# %" PRIu32 " Lsn# %" PRIu64,
-                        deleteLocator.ChunkIdx, deleteLocator.ChunkSerNum.ToString().data(), deleteLocator.Id,
+                        deleteLocator.ChunkIdx, deleteLocator.ChunkSerNum.ToString().data(), deleteLocator.Id, 
                         deleteLocator.IndexInsideChunk, deleteLocator.SizeInBlocks, Lsn);
             }
 
@@ -645,7 +645,7 @@ namespace NKikimr {
             // create callback that will be invoked upon completion of log
             auto callback = [this, p = &item](NKikimrProto::EReplyStatus status, IEventBase *msg, const TActorContext& ctx) {
                 IHLOG_DEBUG(ctx, "ProcessDeleteQueueItem Lsn# %" PRIu64 " Status# %s",
-                        p->Lsn, NKikimrProto::EReplyStatus_Name(status).data());
+                        p->Lsn, NKikimrProto::EReplyStatus_Name(status).data()); 
                 ApplyLogDeleteItem(*p, status, msg, ctx);
             };
 

@@ -404,7 +404,7 @@ void TCompactTrieTest::CheckData(const char* data, size_t datalen) {
     typename TCompactTrie<T>::TKey key = MakeWideKey<T>(testkey);
     ui64 value = 0;
     size_t prefixLen = 0;
-    UNIT_ASSERT(trie.FindLongestPrefix(key.data(), testkey.length() - 1, &prefixLen, &value));
+    UNIT_ASSERT(trie.FindLongestPrefix(key.data(), testkey.length() - 1, &prefixLen, &value)); 
     UNIT_ASSERT_EQUAL(prefixLen, 3);
     UNIT_ASSERT_EQUAL(6, value);
 
@@ -671,9 +671,9 @@ void TCompactTrieTest::TestRandom(const size_t n, const size_t maxKeySize) {
         if (key != EMPTY_KEY && keys.find(key) == keys.end()) {
             const typename T::TData val = T::Data(key);
             keys[key] = val;
-            UNIT_ASSERT_C(!builder.Find(key.data(), key.size(), &dummy), "key = " << HexEncode(TString(key)));
-            builder.Add(key.data(), key.size(), val);
-            UNIT_ASSERT_C(builder.Find(key.data(), key.size(), &dummy), "key = " << HexEncode(TString(key)));
+            UNIT_ASSERT_C(!builder.Find(key.data(), key.size(), &dummy), "key = " << HexEncode(TString(key))); 
+            builder.Add(key.data(), key.size(), val); 
+            UNIT_ASSERT_C(builder.Find(key.data(), key.size(), &dummy), "key = " << HexEncode(TString(key))); 
             UNIT_ASSERT(dummy == val);
         }
     }
@@ -737,7 +737,7 @@ void TCompactTrieTest::TestFindTailsImpl(const TString& prefix) {
     for (auto& i : SampleData) {
         TString temp = i;
         ui64 val = temp.size() * 2;
-        builder.Add(temp.data(), temp.size(), val);
+        builder.Add(temp.data(), temp.size(), val); 
         if (temp.StartsWith(prefix)) {
             input[temp.substr(prefix.size())] = val;
         }
@@ -749,13 +749,13 @@ void TCompactTrieTest::TestFindTailsImpl(const TString& prefix) {
     size_t len = builder.Save(stream);
     TTrie trie(stream.Buffer().Data(), len);
 
-    TTrie subtrie = trie.FindTails(prefix.data(), prefix.size());
+    TTrie subtrie = trie.FindTails(prefix.data(), prefix.size()); 
 
     TMap<TString, ui64> output;
 
     for (TTrie::TConstIterator i = subtrie.Begin(), mi = subtrie.End(); i != mi; ++i) {
         TTrie::TValueType val = *i;
-        output[TString(val.first.data(), val.first.size())] = val.second;
+        output[TString(val.first.data(), val.first.size())] = val.second; 
     }
     UNIT_ASSERT(input.size() == output.size());
     UNIT_ASSERT(input == output);
@@ -764,12 +764,12 @@ void TCompactTrieTest::TestFindTailsImpl(const TString& prefix) {
     CompactTrieMinimize<TTrie::TPacker>(buftmp, stream.Buffer().Data(), len, false);
     TTrie trieMin(buftmp.Buffer().Data(), buftmp.Buffer().Size());
 
-    subtrie = trieMin.FindTails(prefix.data(), prefix.size());
+    subtrie = trieMin.FindTails(prefix.data(), prefix.size()); 
     output.clear();
 
     for (TTrie::TConstIterator i = subtrie.Begin(), mi = subtrie.End(); i != mi; ++i) {
         TTrie::TValueType val = *i;
-        output[TString(val.first.data(), val.first.size())] = val.second;
+        output[TString(val.first.data(), val.first.size())] = val.second; 
     }
     UNIT_ASSERT(input.size() == output.size());
     UNIT_ASSERT(input == output);
@@ -878,9 +878,9 @@ void TCompactTrieTest::TestMergeFromFile() {
     UNIT_ASSERT_VALUES_EQUAL(113u, trie.Get("com.google"));
     UNIT_ASSERT_VALUES_EQUAL(114u, trie.Get("com.yahoo"));
 
-    unlink((GetSystemTempDir() + "/TCompactTrieTest-TestMerge-res").data());
-    unlink((GetSystemTempDir() + "/TCompactTrieTest-TestMerge-com").data());
-    unlink((GetSystemTempDir() + "/TCompactTrieTest-TestMerge-ru").data());
+    unlink((GetSystemTempDir() + "/TCompactTrieTest-TestMerge-res").data()); 
+    unlink((GetSystemTempDir() + "/TCompactTrieTest-TestMerge-com").data()); 
+    unlink((GetSystemTempDir() + "/TCompactTrieTest-TestMerge-ru").data()); 
 }
 
 void TCompactTrieTest::TestMergeFromBuffer() {
@@ -926,7 +926,7 @@ void TCompactTrieTest::TestMergeFromBuffer() {
     UNIT_ASSERT_VALUES_EQUAL(2u, trie.Get("com.bbbbb"));
     UNIT_ASSERT_VALUES_EQUAL(3u, trie.Get("com.ccccc"));
 
-    unlink((GetSystemTempDir() + "/TCompactTrieTest-TestMergeFromBuffer-res").data());
+    unlink((GetSystemTempDir() + "/TCompactTrieTest-TestMergeFromBuffer-res").data()); 
 }
 
 void TCompactTrieTest::TestUnique() {
@@ -1168,7 +1168,7 @@ void TCompactTrieTest::TestTrieWithContainers(const TVector<TUtf16String>& keys,
             CheckEquality<typename TContainer::value_type>(*p, *p1);
     }
 
-    unlink(fileName.data());
+    unlink(fileName.data()); 
 }
 
 template <>
@@ -1190,7 +1190,7 @@ void TCompactTrieTest::TestTrieWithContainers<std::pair<TUtf16String, TVector<i6
         CheckEquality<TContainer::second_type>(value.second, sampleData[i].second);
     }
 
-    unlink(fileName.data());
+    unlink(fileName.data()); 
 }
 
 void TCompactTrieTest::TestTrieForVectorInt64() {
@@ -1525,7 +1525,7 @@ void TCompactTrieTest::TestBuilderFindLongestPrefix(size_t keysCount, double bra
             size_t prefixSize = 0xfcfcfc;
             TString value = "abcd";
             const bool expectedResult = hasEmptyKey || expectedSize != 0;
-            UNIT_ASSERT_VALUES_EQUAL_C(expectedResult, builder.FindLongestPrefix(otherKey.data(), otherKey.size(), &prefixSize, &value), "otherKey = " << HexEncode(otherKey));
+            UNIT_ASSERT_VALUES_EQUAL_C(expectedResult, builder.FindLongestPrefix(otherKey.data(), otherKey.size(), &prefixSize, &value), "otherKey = " << HexEncode(otherKey)); 
             if (expectedResult) {
                 UNIT_ASSERT_VALUES_EQUAL(expectedSize, prefixSize);
                 if (expectedSize) {
@@ -1543,7 +1543,7 @@ void TCompactTrieTest::TestBuilderFindLongestPrefix(size_t keysCount, double bra
                 extendedKey += RandChar();
                 size_t extendedPrefixSize = 0xdddddd;
                 TString extendedValue = "dcba";
-                UNIT_ASSERT_VALUES_EQUAL(expectedResult, builder.FindLongestPrefix(extendedKey.data(), extendedKey.size(), &extendedPrefixSize, &extendedValue));
+                UNIT_ASSERT_VALUES_EQUAL(expectedResult, builder.FindLongestPrefix(extendedKey.data(), extendedKey.size(), &extendedPrefixSize, &extendedValue)); 
                 if (expectedResult) {
                     UNIT_ASSERT_VALUES_EQUAL(value, extendedValue);
                     UNIT_ASSERT_VALUES_EQUAL(prefixSize, extendedPrefixSize);
@@ -1553,7 +1553,7 @@ void TCompactTrieTest::TestBuilderFindLongestPrefix(size_t keysCount, double bra
                 }
             }
         }
-        builder.Add(key.data(), key.size(), key);
+        builder.Add(key.data(), key.size(), key); 
     }
 
     TBufferOutput buffer;

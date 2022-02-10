@@ -47,8 +47,8 @@ namespace NKikimr {
                             VDISKP(HullCtx->VCtx->VDiskLogPrefix,
                                 "%s: FreeSpace: action# %s timeSpent# %s candidate# %s",
                                 PDiskSignatureForHullDbKey<TKey>().ToString().data(),
-                                ActionToStr(action), (finishTime - startTime).ToString().data(),
-                                Candidate.ToString().data()));
+                                ActionToStr(action), (finishTime - startTime).ToString().data(), 
+                                Candidate.ToString().data())); 
                 }
 
                 return action;

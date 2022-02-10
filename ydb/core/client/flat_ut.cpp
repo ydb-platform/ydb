@@ -62,25 +62,25 @@ namespace {
                     return true;
                 }
 
-                if (strncmp(RequestString.data(), "GET /hosts HTTP/1.", 18) == 0) {
+                if (strncmp(RequestString.data(), "GET /hosts HTTP/1.", 18) == 0) { 
                     TString list = Sprintf("[\"localhost\"]");
                     Output() << "HTTP/1.1 200 Ok\r\n";
                     Output() << "Connection: close\r\n";
                     Output() << "X-Server: unit test server\r\n";
-                    Output() << "Content-Length: " << list.size() << "\r\n";
+                    Output() << "Content-Length: " << list.size() << "\r\n"; 
                     Output() << "\r\n";
                     Output() << list;
                     return true;
                 }
 
                 Output() << "HTTP/1.1 200 Ok\r\n";
-                if (Buf.Size()) {
+                if (Buf.Size()) { 
                     Output() << "X-Server: unit test server\r\n";
-                    Output() << "Content-Length: " << Buf.Size() << "\r\n\r\n";
-                    Output().Write(Buf.AsCharPtr(), Buf.Size());
+                    Output() << "Content-Length: " << Buf.Size() << "\r\n\r\n"; 
+                    Output().Write(Buf.AsCharPtr(), Buf.Size()); 
                 } else {
                     Output() << "X-Server: unit test server\r\n";
-                    Output() << "Content-Length: " << (Parent_->Res_).size()
+                    Output() << "Content-Length: " << (Parent_->Res_).size() 
                              << "\r\n\r\n";
                     Output() << Parent_->Res_;
                 }
@@ -1479,7 +1479,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         int errorCount = 0;
         for (ui32 i = 0; i < 20; ++i) {
             Cout << "row " << i << Endl;
-            ui32 status = annoyingClient.FlatQueryRaw(Sprintf(insertRowQuery.data(), i, TString(6000000, 'A').data()), opts, response);
+            ui32 status = annoyingClient.FlatQueryRaw(Sprintf(insertRowQuery.data(), i, TString(6000000, 'A').data()), opts, response); 
             UNIT_ASSERT(status == NMsgBusProxy::MSTATUS_OK || status == NMsgBusProxy::MSTATUS_REJECTED);
             if (status == NMsgBusProxy::MSTATUS_REJECTED) {
                 ++errorCount;
@@ -1499,13 +1499,13 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
                 ")";
 
         ui32 status = 0;
-        status = annoyingClient.FlatQueryRaw(Sprintf(readQuery.data(), "Uint32 '10", "'head"), opts, response);
+        status = annoyingClient.FlatQueryRaw(Sprintf(readQuery.data(), "Uint32 '10", "'head"), opts, response); 
         UNIT_ASSERT_VALUES_EQUAL_C(status, NMsgBusProxy::MSTATUS_OK, "Single-shard read query should not fail");
 
-        status = annoyingClient.FlatQueryRaw(Sprintf(readQuery.data(), "Uint32 '10", ""), opts, response);
+        status = annoyingClient.FlatQueryRaw(Sprintf(readQuery.data(), "Uint32 '10", ""), opts, response); 
         UNIT_ASSERT_VALUES_EQUAL_C(status, NMsgBusProxy::MSTATUS_OK, "Single-shard read query should not fail");
 
-        status = annoyingClient.FlatQueryRaw(Sprintf(readQuery.data(), "Uint32 '3000000000", ""), opts, response);
+        status = annoyingClient.FlatQueryRaw(Sprintf(readQuery.data(), "Uint32 '3000000000", ""), opts, response); 
         UNIT_ASSERT_VALUES_EQUAL_C(status, NMsgBusProxy::MSTATUS_REJECTED, "Multi-shard read query should fail");
     }
 
@@ -1540,7 +1540,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
                 ")";
 
         for (ui32 i = 0; i < 100; ++i) {
-            annoyingClient.FlatQuery(Sprintf(insertRowQuery.data(), i, TString(1000000, 'A').data()));
+            annoyingClient.FlatQuery(Sprintf(insertRowQuery.data(), i, TString(1000000, 'A').data())); 
         }
 
         ui32 status = 0;
@@ -1611,8 +1611,8 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
                 ")";
 
         for (ui32 i = 5000; i < 5020; ++i) {
-            annoyingClient.FlatQuery(Sprintf(insertRowQuery.data(), i, TString(1000000, 'A').data()));
-            annoyingClient.FlatQuery(Sprintf(insertRowQuery.data(), (i/2)+10000, TString(1000000, 'A').data()));
+            annoyingClient.FlatQuery(Sprintf(insertRowQuery.data(), i, TString(1000000, 'A').data())); 
+            annoyingClient.FlatQuery(Sprintf(insertRowQuery.data(), (i/2)+10000, TString(1000000, 'A').data())); 
         }
 
         TString readQuery = R"(
@@ -1683,7 +1683,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
                 ")";
 
         for (ui32 i = 4241; i < 4281; ++i) {
-            annoyingClient.FlatQuery(Sprintf(insertRowQuery.data(), i, TString(1000000, 'A').data()));
+            annoyingClient.FlatQuery(Sprintf(insertRowQuery.data(), i, TString(1000000, 'A').data())); 
         }
 
         TString readQuery =
@@ -1739,7 +1739,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
                 "(return ret_)"
                 ")";
 
-        RunWriteQueryRetryOverloads(annoyingClient, Sprintf(insertRowQuery.data(), key, value.data(), large.data(), table.data()));
+        RunWriteQueryRetryOverloads(annoyingClient, Sprintf(insertRowQuery.data(), key, value.data(), large.data(), table.data())); 
     }
 
     void WriteRow(TFlatMsgBusClient& annoyingClient, TString table, ui32 key, TString value) {
@@ -1752,7 +1752,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
                 "(return ret_)"
                 ")";
 
-        RunWriteQueryRetryOverloads(annoyingClient, Sprintf(insertRowQuery.data(), key, value.data(), table.data()));
+        RunWriteQueryRetryOverloads(annoyingClient, Sprintf(insertRowQuery.data(), key, value.data(), table.data())); 
     }
 
     void WriteRandomRows(TFlatMsgBusClient &client, TString table, ui64 seed, ui32 rows) {
@@ -1778,7 +1778,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
                     )";
 
         NKikimrMiniKQL::TResult readRes;
-        bool res = annoyingClient.FlatQuery(Sprintf(query.data(), key, table.data()), readRes);
+        bool res = annoyingClient.FlatQuery(Sprintf(query.data(), key, table.data()), readRes); 
         UNIT_ASSERT(res);
 
         //Cerr << readRes << Endl;
@@ -2610,10 +2610,10 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
                 "(return ret_)"
                 ")";
 
-            annoyingClient.FlatQuery(Sprintf(insertRowQuery.data(),
-                 key1 ? Sprintf("Uint32 '%u", *key1).data() : "Nothing (OptionalType (DataType 'Uint32))",
-                 key2 ? Sprintf("Uint32 '%u", *key2).data() : "Nothing (OptionalType (DataType 'Uint32))",
-                 value.data()));
+            annoyingClient.FlatQuery(Sprintf(insertRowQuery.data(), 
+                 key1 ? Sprintf("Uint32 '%u", *key1).data() : "Nothing (OptionalType (DataType 'Uint32))", 
+                 key2 ? Sprintf("Uint32 '%u", *key2).data() : "Nothing (OptionalType (DataType 'Uint32))", 
+                 value.data())); 
         };
 
         const ui32 splitKey = 100;
@@ -2958,7 +2958,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
             while (retryCnt--) {
                 TFlatMsgBusClient::TFlatQueryOptions opts;
                 NKikimrClient::TResponse response;
-                annoyingClient.FlatQueryRaw(Sprintf(insertRowQuery.data(), key.data(), value.data(), "T1"), opts, response);
+                annoyingClient.FlatQueryRaw(Sprintf(insertRowQuery.data(), key.data(), value.data(), "T1"), opts, response); 
                 ui32 responseStatus = response.GetStatus();
                 if (responseStatus == NMsgBusProxy::MSTATUS_REJECTED) {
                     Sleep(TDuration::Seconds(1));
@@ -3013,7 +3013,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
             while (retryCnt--) {
                 TFlatMsgBusClient::TFlatQueryOptions opts;
                 NKikimrClient::TResponse response;
-                annoyingClient.FlatQueryRaw(Sprintf(insertRowQuery.data(), key, value.data(), "T1"), opts, response);
+                annoyingClient.FlatQueryRaw(Sprintf(insertRowQuery.data(), key, value.data(), "T1"), opts, response); 
                 ui32 responseStatus = response.GetStatus();
                 if (responseStatus == NMsgBusProxy::MSTATUS_REJECTED) {
                     Sleep(TDuration::Seconds(1));
@@ -3040,7 +3040,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
             while (retryCnt--) {
                 TFlatMsgBusClient::TFlatQueryOptions opts;
                 NKikimrClient::TResponse response;
-                annoyingClient.FlatQueryRaw(Sprintf(query.data(), key, "T1"), opts, response);
+                annoyingClient.FlatQueryRaw(Sprintf(query.data(), key, "T1"), opts, response); 
                 ui32 responseStatus = response.GetStatus();
                 if (responseStatus == NMsgBusProxy::MSTATUS_REJECTED) {
                     Sleep(TDuration::Seconds(1));

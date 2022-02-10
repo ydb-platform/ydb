@@ -87,20 +87,20 @@ bool TBounds::LessByKey(const TBounds& a, const TBounds& b, const TKeyNulls& nul
     if (Y_UNLIKELY(!left)) {
         // Empty LastKey is +inf-epsilon => +inf-epsilon < any is never true
         Y_VERIFY_DEBUG(!a.LastInclusive,
-            "Unexpected inclusion of +inf: %s", NFmt::Ln(a, nulls).data());
+            "Unexpected inclusion of +inf: %s", NFmt::Ln(a, nulls).data()); 
         return false;
     }
     if (Y_UNLIKELY(!right)) {
         // Empty FirstKey is -inf => any < -inf is never true
         Y_VERIFY_DEBUG(b.FirstInclusive,
-            "Unexpected exclusion of -inf: %s", NFmt::Ln(b, nulls).data());
+            "Unexpected exclusion of -inf: %s", NFmt::Ln(b, nulls).data()); 
         return false;
     }
-    size_t end = Max(left.size(), right.size());
+    size_t end = Max(left.size(), right.size()); 
     Y_VERIFY_DEBUG(end <= nulls.Size(), "Key schema is smaller than slice boundary keys");
     for (size_t pos = 0; pos < end; ++pos) {
-        const auto& leftCell = pos < left.size() ? left[pos] : nulls[pos];
-        const auto& rightCell = pos < right.size() ? right[pos] : nulls[pos];
+        const auto& leftCell = pos < left.size() ? left[pos] : nulls[pos]; 
+        const auto& rightCell = pos < right.size() ? right[pos] : nulls[pos]; 
         if (int cmp = CompareTypedCells(leftCell, rightCell, nulls.Types[pos])) {
             return cmp < 0;
         }
@@ -121,20 +121,20 @@ int TBounds::CompareSearchKeyFirstKey(
     auto right = bounds.FirstKey.GetCells();
     if (Y_UNLIKELY(!right)) {
         Y_VERIFY_DEBUG(bounds.FirstInclusive,
-            "Unexpected exclusion of -inf: %s", NFmt::Ln(bounds, nulls).data());
+            "Unexpected exclusion of -inf: %s", NFmt::Ln(bounds, nulls).data()); 
         // Empty FirstKey is -inf => any > -inf
         return +1;
     }
-    Y_VERIFY_DEBUG(key.size() <= nulls.Size(),
+    Y_VERIFY_DEBUG(key.size() <= nulls.Size(), 
         "Key schema is smaller than the search key");
-    for (size_t pos = 0; pos < key.size(); ++pos) {
+    for (size_t pos = 0; pos < key.size(); ++pos) { 
         const auto& leftCell = key[pos];
-        const auto& rightCell = pos < right.size() ? right[pos] : nulls[pos];
+        const auto& rightCell = pos < right.size() ? right[pos] : nulls[pos]; 
         if (int cmp = CompareTypedCells(leftCell, rightCell, nulls.Types[pos])) {
             return cmp;
         }
     }
-    if (key.size() < nulls.Size()) {
+    if (key.size() < nulls.Size()) { 
         // Search key is extended with +inf => +inf > any
         return +1;
     }
@@ -150,7 +150,7 @@ int TBounds::CompareLastKeySearchKey(
     auto left = bounds.LastKey.GetCells();
     if (Y_UNLIKELY(!left)) {
         Y_VERIFY_DEBUG(!bounds.LastInclusive,
-            "Unexpected inclusion of +inf: %s", NFmt::Ln(bounds, nulls).data());
+            "Unexpected inclusion of +inf: %s", NFmt::Ln(bounds, nulls).data()); 
         // Empty LastKey is +inf-epsilon
         // +inf-epsilon > any,
         // +inf-epsilon < +inf
@@ -160,16 +160,16 @@ int TBounds::CompareLastKeySearchKey(
         // Search key is +inf => any < +inf
         return -1;
     }
-    Y_VERIFY_DEBUG(key.size() <= nulls.Size(),
+    Y_VERIFY_DEBUG(key.size() <= nulls.Size(), 
         "Key schema is smaller than the search key");
-    for (size_t pos = 0; pos < key.size(); ++pos) {
-        const auto& leftCell = pos < left.size() ? left[pos] : nulls[pos];
+    for (size_t pos = 0; pos < key.size(); ++pos) { 
+        const auto& leftCell = pos < left.size() ? left[pos] : nulls[pos]; 
         const auto& rightCell = key[pos];
         if (int cmp = CompareTypedCells(leftCell, rightCell, nulls.Types[pos])) {
             return cmp;
         }
     }
-    if (key.size() < nulls.Size()) {
+    if (key.size() < nulls.Size()) { 
         // Search key is extended with +inf => any < +inf
         return -1;
     }

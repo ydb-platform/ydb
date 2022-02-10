@@ -131,7 +131,7 @@ namespace NKikimr {
 
         TSortedLevel(TVDiskContextPtr vctx, const NKikimrVDiskData::TLevelX &pb)
             : Segs(MakeIntrusive<TOrderedLevelSegments>(vctx, pb.GetSsts()))
-            , LastCompactedKey(*(TKey*)pb.GetLastCompacted().data())
+            , LastCompactedKey(*(TKey*)pb.GetLastCompacted().data()) 
         {}
 
         void SerializeToProto(NKikimrVDiskData::TLevelX &pb) const {

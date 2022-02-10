@@ -290,7 +290,7 @@ std::conditional_t<GetValue, TValue, TParams> TQueryFromFileIterator::ReadNext()
     i64 querySizeRows = 0;
     i64 querySizeBytes = 0;
     while (line || LinesBunch) {
-        if (line.empty()) {
+        if (line.empty()) { 
             continue;
         }
         Query.AddLine(line);

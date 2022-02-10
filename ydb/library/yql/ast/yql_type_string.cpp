@@ -302,7 +302,7 @@ private:
             break;
 
         default:
-            if (Identifier.empty()) {
+            if (Identifier.empty()) { 
                 return AddError("Expected type");
             }
             return AddError(TString("Unknown type: '") + Identifier + "\'");
@@ -319,10 +319,10 @@ private:
 
     char LookaheadNonSpaceChar() {
         size_t i = Index;
-        while (i < Str.size() && isspace(Str[i])) {
+        while (i < Str.size() && isspace(Str[i])) { 
             i++;
         }
-        return (i < Str.size()) ? Str[i] : -1;
+        return (i < Str.size()) ? Str[i] : -1; 
     }
 
     int GetNextToken() {
@@ -473,11 +473,11 @@ private:
 
                 TSmallVec<TAstNode*> argSettings;
                 argSettings.push_back(argType);
-                if (!argName.empty()) {
+                if (!argName.empty()) { 
                     argSettings.push_back(MakeQuotedAtom(argName, argNameFlags));
                 }
                 if (argFlags) {
-                    if (argName.empty()) {
+                    if (argName.empty()) { 
                         auto atom = MakeQuotedLiteralAtom(TStringBuf(""), TNodeFlags::ArbitraryContent);
                         argSettings.push_back(atom);
                     }
@@ -723,7 +723,7 @@ private:
                     return AddError("Expected struct member name");
                 }
 
-                if (name.empty()) {
+                if (name.empty()) { 
                     return AddError("Empty name is not allowed");
                 } else if (members.contains(name)) {
                     return AddError("Member name duplication");
@@ -823,13 +823,13 @@ private:
     {
         args[0] = MakeLiteralAtom(TStringBuf("CallableType"));
         TSmallVec<TAstNode*> mainSettings;
-        if (optionalArgsCount || !payload.empty()) {
+        if (optionalArgsCount || !payload.empty()) { 
             mainSettings.push_back(optionalArgsCount
                 ? MakeQuotedAtom(ToString(optionalArgsCount))
                 : MakeQuotedLiteralAtom(TStringBuf("0")));
         }
 
-        if (!payload.empty()) {
+        if (!payload.empty()) { 
             mainSettings.push_back(MakeQuotedAtom(payload, TNodeFlags::ArbitraryContent));
         }
 
@@ -912,7 +912,7 @@ private:
         }
 
         TStringBuf tag = Identifier;
-        if (tag.empty()) {
+        if (tag.empty()) { 
             return AddError("Expected non empty resource tag");
         }
 
@@ -935,7 +935,7 @@ private:
         }
 
         TStringBuf tag = Identifier;
-        if (tag.empty()) {
+        if (tag.empty()) { 
             return AddError("Expected non empty tag of type");
         }
 
@@ -1063,7 +1063,7 @@ private:
     }
 
     bool AtEnd() const {
-        return Index >= Str.size();
+        return Index >= Str.size(); 
     }
 
     void Move() {
@@ -1210,7 +1210,7 @@ private:
                 Out_ << '[';
             }
             const TCallableExprType::TArgumentInfo& argInfo = args[i];
-            if (!argInfo.Name.empty()) {
+            if (!argInfo.Name.empty()) { 
                 EscapeArbitraryAtom(argInfo.Name, '\'', &Out_);
                 Out_ << ':';
             }
@@ -1230,7 +1230,7 @@ private:
 
         Out_ << TStringBuf(")->");
         type.GetReturnType()->Accept(*this);
-        if (!type.GetPayload().empty()) {
+        if (!type.GetPayload().empty()) { 
             Out_ << TStringBuf("{Payload:") << type.GetPayload() << '}';
         }
         Out_ << '>';
@@ -1298,7 +1298,7 @@ private:
     void Visit(const TErrorExprType& type) final {
         Out_ << TStringBuf("Error<");
         auto pos = type.GetError().Position;
-        EscapeArbitraryAtom(pos.File.empty() ? "<main>" : pos.File, '\'', &Out_);
+        EscapeArbitraryAtom(pos.File.empty() ? "<main>" : pos.File, '\'', &Out_); 
         Out_ << ':';
         if (pos) {
             Out_ << pos.Row << ':' << pos.Column << ':';

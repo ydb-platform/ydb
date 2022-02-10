@@ -495,7 +495,7 @@ protected:
                 }
             } catch(TSystemError& e) {
             }
-            Y_VERIFY(nodeIdMatchesConfig, "Cannot find passed NodeId = %" PRIu32 " for hostname %s", NodeId, hostname.data());
+            Y_VERIFY(nodeIdMatchesConfig, "Cannot find passed NodeId = %" PRIu32 " for hostname %s", NodeId, hostname.data()); 
         }
         if (config.ParseResult->Has("suppress-version-check")) {
             if (AppConfig.HasNameserviceConfig()) {

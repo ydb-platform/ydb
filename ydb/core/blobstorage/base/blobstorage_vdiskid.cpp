@@ -27,13 +27,13 @@ namespace NKikimr {
     }
 
     TString TVDiskID::ToString() const {
-        return Sprintf("[%" PRIx32 ":%" PRIu32 ":%" PRIu8 ":%" PRIu8 ":%" PRIu8 "]",
-                        GroupID, GroupGeneration, FailRealm, FailDomain, VDisk).data();
+        return Sprintf("[%" PRIx32 ":%" PRIu32 ":%" PRIu8 ":%" PRIu8 ":%" PRIu8 "]", 
+                        GroupID, GroupGeneration, FailRealm, FailDomain, VDisk).data(); 
     }
 
     TString TVDiskID::ToStringWOGeneration() const {
-        return Sprintf("[%" PRIx32 ":_:%" PRIu8 ":%" PRIu8 ":%" PRIu8 "]",
-                        GroupID, FailRealm, FailDomain, VDisk).data();
+        return Sprintf("[%" PRIx32 ":_:%" PRIu8 ":%" PRIu8 ":%" PRIu8 "]", 
+                        GroupID, FailRealm, FailDomain, VDisk).data(); 
     }
 
     void TVDiskID::Serialize(IOutputStream &s) const {

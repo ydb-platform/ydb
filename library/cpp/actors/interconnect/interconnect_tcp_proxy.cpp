@@ -37,7 +37,7 @@ namespace NActors {
     }
 
     void TInterconnectProxyTCP::Bootstrap() {
-        SetPrefix(Sprintf("Proxy %s [node %" PRIu32 "]", SelfId().ToString().data(), PeerNodeId));
+        SetPrefix(Sprintf("Proxy %s [node %" PRIu32 "]", SelfId().ToString().data(), PeerNodeId)); 
 
         SwitchToInitialState();
         PassAwayTimestamp = TActivationContext::Now() + TDuration::Seconds(15);
@@ -197,7 +197,7 @@ namespace NActors {
         if (OutgoingHandshakeActor && SelfId().NodeId() < PeerNodeId) {
             // Both outgoing and incoming handshake are in progress. To prevent race condition during semultanous handshake
             // incoming handshake must be held till outgoing handshake is complete or failed
-            LOG_DEBUG_IC("ICP06", "reply for incoming handshake (actor %s) is held", IncomingHandshakeActor.ToString().data());
+            LOG_DEBUG_IC("ICP06", "reply for incoming handshake (actor %s) is held", IncomingHandshakeActor.ToString().data()); 
             HeldHandshakeReply = std::move(event);
 
             // Check that we are in one of acceptable states that would properly handle handshake statuses.
@@ -227,19 +227,19 @@ namespace NActors {
         TEvHandshakeAsk *msg = ev->Get();
 
         // TEvHandshakeAsk is only applicable for continuation requests
-        LOG_DEBUG_IC("ICP09", "(actor %s) from: %s for: %s", ev->Sender.ToString().data(),
-                     ev->Get()->Self.ToString().data(), ev->Get()->Peer.ToString().data());
+        LOG_DEBUG_IC("ICP09", "(actor %s) from: %s for: %s", ev->Sender.ToString().data(), 
+                     ev->Get()->Self.ToString().data(), ev->Get()->Peer.ToString().data()); 
 
         if (!Session) {
             // if there is no open session, report error -- continuation request works only with open sessions
             LOG_NOTICE_IC("ICP12", "(actor %s) peer tries to resume nonexistent session Self# %s Peer# %s",
-                ev->Sender.ToString().data(), msg->Self.ToString().data(), msg->Peer.ToString().data());
+                ev->Sender.ToString().data(), msg->Self.ToString().data(), msg->Peer.ToString().data()); 
         } else if (SessionVirtualId != ev->Get()->Peer || RemoteSessionVirtualId != ev->Get()->Self) {
             // check session virtual ids for continuation
             LOG_NOTICE_IC("ICP13", "(actor %s) virtual id mismatch with existing session (Peer: %s Self: %s"
-                   " SessionVirtualId: %s RemoteSessionVirtualId: %s)", ev->Sender.ToString().data(),
-                  ev->Get()->Peer.ToString().data(), ev->Get()->Self.ToString().data(), SessionVirtualId.ToString().data(),
-                  RemoteSessionVirtualId.ToString().data());
+                   " SessionVirtualId: %s RemoteSessionVirtualId: %s)", ev->Sender.ToString().data(), 
+                  ev->Get()->Peer.ToString().data(), ev->Get()->Self.ToString().data(), SessionVirtualId.ToString().data(), 
+                  RemoteSessionVirtualId.ToString().data()); 
         } else {
             // if we already have incoming handshake, then terminate existing one
             DropIncomingHandshake();
@@ -256,7 +256,7 @@ namespace NActors {
     void TInterconnectProxyTCP::IncomingHandshake(TEvHandshakeRequest::TPtr& ev) {
         ICPROXY_PROFILED;
 
-        LOG_DEBUG_IC("ICP17", "incoming handshake (actor %s)", ev->Sender.ToString().data());
+        LOG_DEBUG_IC("ICP17", "incoming handshake (actor %s)", ev->Sender.ToString().data()); 
 
         const auto& record = ev->Get()->Record;
         ui64 remotePID = record.GetProgramPID();
@@ -265,7 +265,7 @@ namespace NActors {
 
         if (RemoteProgramInfo && remotePID == RemoteProgramInfo->PID && remoteStartTime == RemoteProgramInfo->StartTime) {
             if (remoteSerial < RemoteProgramInfo->Serial) {
-                LOG_INFO_IC("ICP18", "handshake (actor %s) is too old", ev->Sender.ToString().data());
+                LOG_INFO_IC("ICP18", "handshake (actor %s) is too old", ev->Sender.ToString().data()); 
                 Send(ev->Sender, new TEvents::TEvPoisonPill);
                 return;
             } else {
@@ -290,13 +290,13 @@ namespace NActors {
             const ui64 serial = record.GetSerial();
             if (serial < *LastSerialFromIncomingHandshake) {
                 LOG_NOTICE_IC("ICP15", "Handshake# %s has duplicate serial# %" PRIu64
-                    " LastSerialFromIncomingHandshake# %" PRIu64, ev->Sender.ToString().data(),
+                    " LastSerialFromIncomingHandshake# %" PRIu64, ev->Sender.ToString().data(), 
                     serial, *LastSerialFromIncomingHandshake);
                 Send(ev->Sender, new TEvHandshakeReplyError("duplicate serial"));
                 return;
             } else if (serial == *LastSerialFromIncomingHandshake) {
                 LOG_NOTICE_IC("ICP15", "Handshake# %s is obsolete, serial# %" PRIu64
-                    " LastSerialFromIncomingHandshake# %" PRIu64, ev->Sender.ToString().data(),
+                    " LastSerialFromIncomingHandshake# %" PRIu64, ev->Sender.ToString().data(), 
                     serial, *LastSerialFromIncomingHandshake);
                 Send(ev->Sender, new TEvents::TEvPoisonPill);
                 return;
@@ -368,7 +368,7 @@ namespace NActors {
             IActor::InvokeOtherActor(*Session, &TInterconnectSessionTCP::Init);
             SessionVirtualId = msg->Self;
             RemoteSessionVirtualId = msg->Peer;
-            LOG_INFO_IC("ICP22", "created new session: %s", SessionID.ToString().data());
+            LOG_INFO_IC("ICP22", "created new session: %s", SessionID.ToString().data()); 
         }
 
         // ensure that we have session local/peer virtual ids
@@ -394,17 +394,17 @@ namespace NActors {
 
         if (ev->Sender == IncomingHandshakeActor) {
             LOG_NOTICE_IC("ICP24", "incoming handshake failed, temporary: %" PRIu32 " explanation: %s outgoing: %s",
-                          ui32(ev->Get()->Temporary), ev->Get()->Explanation.data(), OutgoingHandshakeActor.ToString().data());
+                          ui32(ev->Get()->Temporary), ev->Get()->Explanation.data(), OutgoingHandshakeActor.ToString().data()); 
             DropIncomingHandshake(false);
         } else if (ev->Sender == OutgoingHandshakeActor) {
             LOG_NOTICE_IC("ICP25", "outgoing handshake failed, temporary: %" PRIu32 " explanation: %s incoming: %s held: %s",
-                          ui32(ev->Get()->Temporary), ev->Get()->Explanation.data(), IncomingHandshakeActor.ToString().data(),
+                          ui32(ev->Get()->Temporary), ev->Get()->Explanation.data(), IncomingHandshakeActor.ToString().data(), 
                           HeldHandshakeReply ? "yes" : "no");
             DropOutgoingHandshake(false);
 
             if (IEventBase* reply = HeldHandshakeReply.Release()) {
                 Y_VERIFY(IncomingHandshakeActor);
-                LOG_DEBUG_IC("ICP26", "sent held handshake reply to %s", IncomingHandshakeActor.ToString().data());
+                LOG_DEBUG_IC("ICP26", "sent held handshake reply to %s", IncomingHandshakeActor.ToString().data()); 
                 Send(IncomingHandshakeActor, reply);
             }
 
@@ -532,8 +532,8 @@ namespace NActors {
 
         Y_VERIFY(Session && Session == session && SessionID);
 
-        LOG_INFO_IC("ICP30", "unregister session Session# %s VirtualId# %s", SessionID.ToString().data(),
-            SessionVirtualId.ToString().data());
+        LOG_INFO_IC("ICP30", "unregister session Session# %s VirtualId# %s", SessionID.ToString().data(), 
+            SessionVirtualId.ToString().data()); 
 
         Session = nullptr;
         SessionID = TActorId();
@@ -739,7 +739,7 @@ namespace NActors {
     void TInterconnectProxyTCP::TransitToErrorState(TString explanation, bool updateErrorLog) {
         ICPROXY_PROFILED;
 
-        LOG_NOTICE_IC("ICP32", "transit to hold-by-error state Explanation# %s", explanation.data());
+        LOG_NOTICE_IC("ICP32", "transit to hold-by-error state Explanation# %s", explanation.data()); 
         LOG_INFO(*TlsActivationContext, NActorsServices::INTERCONNECT_STATUS, "[%u] error state: %s", PeerNodeId, explanation.data());
 
         if (updateErrorLog) {

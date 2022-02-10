@@ -114,15 +114,15 @@ namespace NXml {
     }
 
     TString TTextReader::GetAttribute(TZtStringBuf name) const {
-        return TempStringResult(xmlTextReaderGetAttribute(Impl.Get(), XMLCHAR(name.data())));
+        return TempStringResult(xmlTextReaderGetAttribute(Impl.Get(), XMLCHAR(name.data()))); 
     }
 
     TString TTextReader::GetAttribute(TZtStringBuf localName, TZtStringBuf nsUri) const {
-        return TempStringResult(xmlTextReaderGetAttributeNs(Impl.Get(), XMLCHAR(localName.data()), XMLCHAR(nsUri.data())));
+        return TempStringResult(xmlTextReaderGetAttributeNs(Impl.Get(), XMLCHAR(localName.data()), XMLCHAR(nsUri.data()))); 
     }
 
     TString TTextReader::LookupNamespace(TZtStringBuf prefix) const {
-        return TempStringResult(xmlTextReaderLookupNamespace(Impl.Get(), XMLCHAR(prefix.data())));
+        return TempStringResult(xmlTextReaderLookupNamespace(Impl.Get(), XMLCHAR(prefix.data()))); 
     }
 
     bool TTextReader::MoveToAttribute(int number) {
@@ -130,11 +130,11 @@ namespace NXml {
     }
 
     bool TTextReader::MoveToAttribute(TZtStringBuf name) {
-        return BoolResult(xmlTextReaderMoveToAttribute(Impl.Get(), XMLCHAR(name.data())));
+        return BoolResult(xmlTextReaderMoveToAttribute(Impl.Get(), XMLCHAR(name.data()))); 
     }
 
     bool TTextReader::MoveToAttribute(TZtStringBuf localName, TZtStringBuf nsUri) {
-        return BoolResult(xmlTextReaderMoveToAttributeNs(Impl.Get(), XMLCHAR(localName.data()), XMLCHAR(nsUri.data())));
+        return BoolResult(xmlTextReaderMoveToAttributeNs(Impl.Get(), XMLCHAR(localName.data()), XMLCHAR(nsUri.data()))); 
     }
 
     bool TTextReader::MoveToFirstAttribute() {

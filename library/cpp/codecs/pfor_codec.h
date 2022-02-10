@@ -37,19 +37,19 @@ namespace NCodecs {
 
         ui8 Encode(TStringBuf s, TBuffer& b) const override {
             b.Clear();
-            if (s.empty()) {
+            if (s.empty()) { 
                 return 0;
             }
 
-            b.Reserve(2 * s.size() + b.Size());
+            b.Reserve(2 * s.size() + b.Size()); 
 
             if (WithDelta) {
                 auto buffer = TBufferTlsCache::TlsInstance().Item();
                 TBuffer& db = buffer.Get();
                 db.Clear();
-                db.Reserve(2 * s.size());
+                db.Reserve(2 * s.size()); 
                 DeltaCodec.Encode(s, db);
-                s = TStringBuf{db.data(), db.size()};
+                s = TStringBuf{db.data(), db.size()}; 
             }
 
             TArrayRef<const TValue> tin{(const TValue*)s.data(), s.size() / sizeof(TValue)};
@@ -97,7 +97,7 @@ namespace NCodecs {
 
             if (!optimalbits || BitsInT == optimalbits) {
                 b.Append((ui8)-1);
-                b.Append(s.data(), s.size());
+                b.Append(s.data(), s.size()); 
                 return 0;
             } else {
                 NBitIO::TBitOutputVector<TBuffer> bout(&b);
@@ -124,11 +124,11 @@ namespace NCodecs {
 
         void Decode(TStringBuf s, TBuffer& b) const override {
             b.Clear();
-            if (s.empty()) {
+            if (s.empty()) { 
                 return;
             }
 
-            b.Reserve(s.size() * sizeof(T) + b.Size());
+            b.Reserve(s.size() * sizeof(T) + b.Size()); 
 
             ui64 isplain = 0;
             ui64 hasexceptions = 0;
@@ -145,7 +145,7 @@ namespace NCodecs {
                 if (WithDelta) {
                     DeltaCodec.Decode(s, b);
                 } else {
-                    b.Append(s.data(), s.size());
+                    b.Append(s.data(), s.size()); 
                 }
             } else {
                 typename TDCodec::TDecoder decoder;
@@ -161,11 +161,11 @@ namespace NCodecs {
                             if (WithDelta) {
                                 if (decoder.Decode(t)) {
                                     TStringBuf r{(char*)&decoder.Result, sizeof(decoder.Result)};
-                                    b.Append(r.data(), r.size());
+                                    b.Append(r.data(), r.size()); 
                                 }
                             } else {
                                 TStringBuf r{(char*)&t, sizeof(t)};
-                                b.Append(r.data(), r.size());
+                                b.Append(r.data(), r.size()); 
                             }
                         }
                     }

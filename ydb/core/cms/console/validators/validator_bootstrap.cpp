@@ -127,12 +127,12 @@ bool TBootstrapConfigValidator::CheckResourceBrokerConfig(const NKikimrConfig::T
         }
         if (queues.contains(queue.GetName())) {
             AddError(issues, Sprintf("multiple queues with '%s' name",
-                                     queue.GetName().data()));
+                                     queue.GetName().data())); 
             return false;
         }
         if (!queue.GetWeight()) {
             AddError(issues, Sprintf("queue '%s' should have non-zero weight",
-                                     queue.GetName().data()));
+                                     queue.GetName().data())); 
             return false;
         }
         if (IsUnlimitedResource(queue.GetLimit())) {
@@ -151,17 +151,17 @@ bool TBootstrapConfigValidator::CheckResourceBrokerConfig(const NKikimrConfig::T
         }
         if (tasks.contains(task.GetName())) {
             AddError(issues, Sprintf("multiple tasks with '%s' name",
-                                     task.GetName().data()));
+                                     task.GetName().data())); 
             return false;
         }
         if (!queues.contains(task.GetQueueName())) {
             AddError(issues, Sprintf("task '%s' uses unknown queue '%s'",
-                                     task.GetName().data(), task.GetQueueName().data()));
+                                     task.GetName().data(), task.GetQueueName().data())); 
             return false;
         }
         if (!task.GetDefaultDuration()) {
             AddError(issues, Sprintf("task '%s' should have non-zero default duration",
-                                     task.GetName().data()));
+                                     task.GetName().data())); 
             return false;
         }
         tasks.insert(task.GetName());
@@ -170,12 +170,12 @@ bool TBootstrapConfigValidator::CheckResourceBrokerConfig(const NKikimrConfig::T
 
     if (!queues.contains(NLocalDb::DefaultQueueName)) {
         AddError(issues, Sprintf("config should have '%s' queue defined",
-                                 NLocalDb::DefaultQueueName.data()));
+                                 NLocalDb::DefaultQueueName.data())); 
         return false;
     }
     if (!tasks.contains(NLocalDb::UnknownTaskName)) {
         AddError(issues, Sprintf("config should have '%s' task defined",
-                                 NLocalDb::UnknownTaskName.data()));
+                                 NLocalDb::UnknownTaskName.data())); 
         return false;
     }
 

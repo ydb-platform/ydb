@@ -60,7 +60,7 @@ namespace NKikimr {
             LOG_DEBUG(ctx, BS_SYNCER,
                       VDISKP(SyncerCtx->VCtx->VDiskLogPrefix,
                         "TSyncerRLDFullSyncProxyActor(%s): START",
-                            TargetVDiskId.ToString().data()));
+                            TargetVDiskId.ToString().data())); 
 
             // run job
             CreateAndRunTask(ctx);
@@ -70,7 +70,7 @@ namespace NKikimr {
             LOG_DEBUG(ctx, BS_SYNCER,
                       VDISKP(SyncerCtx->VCtx->VDiskLogPrefix,
                         "TSyncerRLDFullSyncProxyActor(%s): TEvSyncerJobDone; Task# %s",
-                            TargetVDiskId.ToString().data(), ev->Get()->Task->ToString().data()));
+                            TargetVDiskId.ToString().data(), ev->Get()->Task->ToString().data())); 
             ActiveActors.Erase(ev->Sender);
             std::unique_ptr<TSyncerJobTask> task = std::move(ev->Get()->Task);
             auto syncStatus = task->GetCurrent().LastSyncStatus;
@@ -94,7 +94,7 @@ namespace NKikimr {
             LOG_DEBUG(ctx, BS_SYNCER,
                       VDISKP(SyncerCtx->VCtx->VDiskLogPrefix,
                         "TSyncerRLDFullSyncProxyActor(%s): RerunTaskAfterTimeout",
-                            TargetVDiskId.ToString().data()));
+                            TargetVDiskId.ToString().data())); 
             auto timeout = SyncerCtx->Config->SyncerRLDRetryTimeout;
             ctx.Schedule(timeout, new TEvSyncerRLDWakeup(nullptr));
             // state func
@@ -121,7 +121,7 @@ namespace NKikimr {
             LOG_DEBUG(ctx, BS_SYNCER,
                       VDISKP(SyncerCtx->VCtx->VDiskLogPrefix,
                         "TSyncerRLDFullSyncProxyActor(%s): Commit",
-                            TargetVDiskId.ToString().data()));
+                            TargetVDiskId.ToString().data())); 
             auto msg = TEvSyncerCommit::Remote(task->VDiskId, task->GetCurrent());
             ctx.Send(CommitterId, msg.release());
             Become(&TThis::WaitForCommitStateFunc);
@@ -132,7 +132,7 @@ namespace NKikimr {
             LOG_DEBUG(ctx, BS_SYNCER,
                      VDISKP(SyncerCtx->VCtx->VDiskLogPrefix,
                         "TSyncerRLDFullSyncProxyActor(%s): FINISH",
-                           TargetVDiskId.ToString().data()));
+                           TargetVDiskId.ToString().data())); 
             ctx.Send(NotifyId, new TEvSyncerFullSyncedWithPeer(TargetVDiskId));
             Die(ctx);
         }
@@ -150,7 +150,7 @@ namespace NKikimr {
             LOG_DEBUG(ctx, BS_SYNCER,
                      VDISKP(SyncerCtx->VCtx->VDiskLogPrefix,
                         "TSyncerRLDFullSyncProxyActor(%s): PoisonPill",
-                           TargetVDiskId.ToString().data()));
+                           TargetVDiskId.ToString().data())); 
             Y_UNUSED(ev);
             ActiveActors.KillAndClear(ctx);
             Die(ctx);

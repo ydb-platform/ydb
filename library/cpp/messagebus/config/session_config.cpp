@@ -46,13 +46,13 @@ static T ParseWithKmgSuffixT(const char* option) {
     T multiplier = 1;
     if (str.EndsWith('k')) {
         multiplier = 1024;
-        str = str.Head(str.size() - 1);
+        str = str.Head(str.size() - 1); 
     } else if (str.EndsWith('m')) {
         multiplier = 1024 * 1024;
-        str = str.Head(str.size() - 1);
+        str = str.Head(str.size() - 1); 
     } else if (str.EndsWith('g')) {
         multiplier = 1024 * 1024 * 1024;
-        str = str.Head(str.size() - 1);
+        str = str.Head(str.size() - 1); 
     }
     return FromString<T>(str) * multiplier;
 }

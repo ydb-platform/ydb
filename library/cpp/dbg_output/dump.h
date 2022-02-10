@@ -33,7 +33,7 @@ namespace NPrivate {
                 if (v) {
                     *this << DumpRaw("(") << DumpRaw(TypeName(v).data()) << DumpRaw(")") << Hex((size_t)v);
                 } else {
-                    *this << DumpRaw("(") << DumpRaw(TypeName<V>().data()) << DumpRaw("*)nullptr");
+                    *this << DumpRaw("(") << DumpRaw(TypeName<V>().data()) << DumpRaw("*)nullptr"); 
                 }
             }
         };
@@ -55,7 +55,7 @@ namespace NPrivate {
                     *this << DumpRaw("(") << DumpRaw(TypeName(v).data()) << DumpRaw(")") << Hex((size_t)v) << DumpRaw(" -> ") << *v;
                     Visited.erase((size_t)v);
                 } else {
-                    *this << DumpRaw("(") << DumpRaw(TypeName<V>().data()) << DumpRaw("*)nullptr");
+                    *this << DumpRaw("(") << DumpRaw(TypeName<V>().data()) << DumpRaw("*)nullptr"); 
                 }
             }
 

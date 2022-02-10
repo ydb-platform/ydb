@@ -72,7 +72,7 @@ public:
             WriteBool(out, Started);
             WriteBool(out, Finished);
 
-            auto strRef = NUdf::TStringRef(out.data(), out.size());
+            auto strRef = NUdf::TStringRef(out.data(), out.size()); 
             return MakeString(strRef);
         }
 

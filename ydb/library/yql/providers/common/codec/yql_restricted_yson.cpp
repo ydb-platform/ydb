@@ -28,7 +28,7 @@ public:
 
         Buffer.clear();
         bool isAscii = true;
-        for (size_t i = 0; i < value.size(); ++i) {
+        for (size_t i = 0; i < value.size(); ++i) { 
             if (ui8(value[i]) < 128) {
                 if (!isAscii) {
                     Buffer.push_back(value[i]);
@@ -36,7 +36,7 @@ public:
             } else {
                 if (isAscii) {
                     Buffer.resize(i);
-                    Copy(value.data(), value.data() + i, Buffer.data());
+                    Copy(value.data(), value.data() + i, Buffer.data()); 
                     isAscii = false;
                 }
                 Buffer.push_back('\xC0' | (ui8(value[i]) >> 6));
@@ -183,10 +183,10 @@ private:
 
 TString DecodeRestrictedBinaryString(const TString& data) {
     TString res;
-    for (size_t i = 0; i < data.size(); ++i) {
+    for (size_t i = 0; i < data.size(); ++i) { 
         char c = data[i];
         if (((unsigned char)c) >= 128) {
-            YQL_ENSURE(i + 1 < data.size());
+            YQL_ENSURE(i + 1 < data.size()); 
             res.push_back(((c & 0x03) << 6) | (data[i + 1] & 0x3f));
             ++i;
         } else {

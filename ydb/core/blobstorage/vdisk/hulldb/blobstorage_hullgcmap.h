@@ -164,7 +164,7 @@ namespace NKikimr {
             Stat.Finish();
             LOG_INFO(ctx, NKikimrServices::BS_HULLCOMP,
                     VDISKP(HullCtx->VCtx->VDiskLogPrefix,
-                            "TGcMap: map build: %s", Stat.ToString().data()));
+                            "TGcMap: map build: %s", Stat.ToString().data())); 
         }
 
         const TStat &GetStat() const {

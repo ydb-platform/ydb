@@ -276,7 +276,7 @@ TString THttpRequest::GetRequestPathPart(TStringBuf path, size_t partIdx) const 
     }
 
     TVector<TStringBuf> items;
-    StringSplitter(path).Split('/').AddTo(&items);
+    StringSplitter(path).Split('/').AddTo(&items); 
     if (items.size() > partIdx) {
         return TString(items[partIdx]);
     }
@@ -973,7 +973,7 @@ THttpActionCounters* THttpRequest::GetActionCounters() const {
 
 bool THttpRequest::SetupPing(const TReplyParams& params) {
     TParsedHttpFull parsed(params.Input.FirstLine());
-    if (parsed.Method == "GET" && (parsed.Path == "/private/ping" || parsed.Path == "/private/ping/") && parsed.Cgi.empty()) {
+    if (parsed.Method == "GET" && (parsed.Path == "/private/ping" || parsed.Path == "/private/ping/") && parsed.Cgi.empty()) { 
         HttpMethod = TString(parsed.Method); // for logging
         Parent_->ActorSystem_->Register(CreatePingActor(MakeHolder<TPingHttpCallback>(this), RequestId_),
                                         NActors::TMailboxType::HTSwap, Parent_->PoolId_);

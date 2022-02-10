@@ -30,7 +30,7 @@ namespace NKikimr {
 
         Y_VERIFY(domainsNum * disksInDomain == totalVDisks, "domainsNum# %" PRIu32 " disksInDomain# %" PRIu32
                 " totalVDisks# %" PRIu32 " erasure# %s", domainsNum, disksInDomain, totalVDisks,
-                TBlobStorageGroupType::ErasureName[top->GType.GetErasure()].data());
+                TBlobStorageGroupType::ErasureName[top->GType.GetErasure()].data()); 
 
         // handoff
         ui32 handoff = top->GType.Handoff();
@@ -287,7 +287,7 @@ namespace NKikimr {
 
         ui8 nodeId = top->GetIdxInSubgroup(vdisk, id.Hash());
         Y_VERIFY(nodeId >= totalParts, "DeleteHandoff: can't delete main replica; nodeId# %u totalParts# %u vdisk# %s "
-               "id# %s", unsigned(nodeId), unsigned(totalParts), vdisk.ToString().data(), id.ToString().data());
+               "id# %s", unsigned(nodeId), unsigned(totalParts), vdisk.ToString().data(), id.ToString().data()); 
 
         ui8 handoffNodeId = nodeId - totalParts;
         Y_VERIFY_DEBUG(handoffNodeId < handoffNum);

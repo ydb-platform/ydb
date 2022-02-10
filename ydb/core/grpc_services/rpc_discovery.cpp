@@ -407,7 +407,7 @@ public:
     }
 
     bool IsSafeLocationMarker(TStringBuf location) {
-        const ui8* isrc = reinterpret_cast<const ui8*>(location.data());
+        const ui8* isrc = reinterpret_cast<const ui8*>(location.data()); 
         for (auto idx : xrange(location.size())) {
             if (isrc[idx] >= 0x80)
                 return false;

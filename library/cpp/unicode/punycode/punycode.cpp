@@ -48,7 +48,7 @@ TStringBuf WideToPunycode(const TWtringBuf& in16, TString& out) {
     do {
         outlen *= 2;
         out.ReserveAndResize(outlen);
-        rc = punycode_encode(in32.size(), in32.data(), nullptr, &outlen, out.begin());
+        rc = punycode_encode(in32.size(), in32.data(), nullptr, &outlen, out.begin()); 
     } while (rc == PUNYCODE_BIG_OUTPUT);
 
     CheckPunycodeResult(rc);
@@ -61,7 +61,7 @@ TWtringBuf PunycodeToWide(const TStringBuf& in, TUtf16String& out16) {
     size_t outlen = in.size();
     TVector<ui32> out32(outlen);
 
-    int rc = punycode_decode(in.size(), in.data(), &outlen, out32.begin(), nullptr);
+    int rc = punycode_decode(in.size(), in.data(), &outlen, out32.begin(), nullptr); 
     CheckPunycodeResult(rc);
 
     AppendUtf32ToWide(out32.begin(), outlen, out16);

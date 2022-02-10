@@ -27,8 +27,8 @@ public:
 
     TGUID GenUuid4() noexcept override {
         TGUID ret;
-        WriteUnaligned<ui64>(ret.dw, RandomNumber<ui64>());
-        WriteUnaligned<ui64>(ret.dw + 2, RandomNumber<ui64>());
+        WriteUnaligned<ui64>(ret.dw, RandomNumber<ui64>()); 
+        WriteUnaligned<ui64>(ret.dw + 2, RandomNumber<ui64>()); 
         SetV4(ret);
         return ret;
     }

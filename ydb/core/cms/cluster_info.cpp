@@ -56,7 +56,7 @@ bool TLockableItem::IsLocked(TErrorInfo &error, TDuration defaultRetryTime,
         error.Code = TStatus::DISALLOW_TEMP;
         error.Reason = Sprintf("%s has scheduled action %s owned by %s (order %" PRIu64 " vs %" PRIu64 ")",
                                PrettyItemName().data(), ScheduledLocks.begin()->RequestId.data(),
-                               ScheduledLocks.begin()->Owner.data(), ScheduledLocks.begin()->Order,
+                               ScheduledLocks.begin()->Owner.data(), ScheduledLocks.begin()->Order, 
                                DeactivatedLocksOrder);
         error.Deadline = now + defaultRetryTime;
         return true;
@@ -161,7 +161,7 @@ void TNodeInfo::MigrateOldInfo(const TLockableItem &old)
 
 TString TPDiskInfo::ItemName() const
 {
-    return Sprintf("PDisk %s", PDiskId.ToString().data());
+    return Sprintf("PDisk %s", PDiskId.ToString().data()); 
 }
 
 TString TPDiskInfo::PrettyItemName() const
@@ -194,7 +194,7 @@ bool TPDiskInfo::NameToId(const TString &name, TPDiskID &id)
 {
     int size;
 
-    if (sscanf(name.data(), "pdisk-%" SCNu32 "-%" SCNu32 "%n", &id.NodeId, &id.DiskId, &size) != 2)
+    if (sscanf(name.data(), "pdisk-%" SCNu32 "-%" SCNu32 "%n", &id.NodeId, &id.DiskId, &size) != 2) 
         return false;
 
     if (size != static_cast<int>(name.size()))
@@ -227,7 +227,7 @@ void TPDiskInfo::MigrateOldInfo(const TLockableItem &old)
 
 TString TVDiskInfo::ItemName() const
 {
-    return Sprintf("VDisk %s", VDiskId.ToString().data());
+    return Sprintf("VDisk %s", VDiskId.ToString().data()); 
 }
 
 TString TVDiskInfo::PrettyItemName() const
@@ -262,7 +262,7 @@ bool TVDiskInfo::NameToId(const TString &name, TVDiskID &id)
     ui32 group, gen, ring, domain, vdisk;
     int size;
 
-    if (sscanf(name.data(), "vdisk-%" SCNu32 "-%" SCNu32 "-%" SCNu32 "-%" SCNu32 "-%" SCNu32 "%n",
+    if (sscanf(name.data(), "vdisk-%" SCNu32 "-%" SCNu32 "-%" SCNu32 "-%" SCNu32 "-%" SCNu32 "%n", 
                &group, &gen, &ring, &domain, &vdisk, &size) != 5)
         return false;
 
@@ -379,7 +379,7 @@ void TClusterInfo::ApplyInitialNodeTenants(const TActorContext& ctx, const THash
         if (!HasNode(nodeId)) {
             LOG_ERROR(ctx, NKikimrServices::CMS,
                       "Forgoten node tenant '%s' at node %" PRIu32 ". Node is unknown.",
-                      tenant.data(), nodeId);
+                      tenant.data(), nodeId); 
             continue;
         }
 
@@ -388,7 +388,7 @@ void TClusterInfo::ApplyInitialNodeTenants(const TActorContext& ctx, const THash
 
         LOG_DEBUG(ctx, NKikimrServices::CMS,
                   "Initial node tenant '%s' at node %" PRIu32,
-                  tenant.data(), nodeId);
+                  tenant.data(), nodeId); 
     }
 }
 
@@ -597,7 +597,7 @@ TSet<TLockableItem *> TClusterInfo::FindLockedItems(const NKikimrCms::TAction &a
     if (ActionRequiresHost(action) && !HasNode(action.GetHost())) {
         if (ctx)
             LOG_ERROR(*ctx, NKikimrServices::CMS, "FindLockedItems: unknown host %s",
-                      action.GetHost().data());
+                      action.GetHost().data()); 
         return res;
     }
 
@@ -626,14 +626,14 @@ TSet<TLockableItem *> TClusterInfo::FindLockedItems(const NKikimrCms::TAction &a
             if (item)
                 res.insert(item);
             else if (ctx)
-                LOG_ERROR(*ctx, NKikimrServices::CMS, "FindLockedItems: unknown device %s", device.data());
+                LOG_ERROR(*ctx, NKikimrServices::CMS, "FindLockedItems: unknown device %s", device.data()); 
         }
         break;
 
     default:
         if (ctx) {
             LOG_ERROR(*ctx, NKikimrServices::CMS, "FindLockedItems: action %s is not supported",
-                      TAction::EType_Name(action.GetType()).data());
+                      TAction::EType_Name(action.GetType()).data()); 
         }
         break;
     }
@@ -667,7 +667,7 @@ ui64 TClusterInfo::AddLocks(const TPermissionInfo &permission, const TActorConte
             if (ctx)
                 LOG_INFO(*ctx, NKikimrServices::CMS, "Adding lock for %s (permission %s until %s)",
                           item->PrettyItemName().data(), permission.PermissionId.data(),
-                          permission.Deadline.ToStringLocalUpToSeconds().data());
+                          permission.Deadline.ToStringLocalUpToSeconds().data()); 
             item->AddLock(permission);
             ++locks;
         }

@@ -74,9 +74,9 @@ Y_UNIT_TEST_SUITE(TAsciiTest) {
         TString z = "qQnB";
         TString zz = "qQqq";
         TString zzz = "qQqqq";
-        TStringBuf xs = TStringBuf(x.data(), 3);
-        TStringBuf ys = TStringBuf(y.data(), 3);
-        TStringBuf zs = TStringBuf(z.data(), 3);
+        TStringBuf xs = TStringBuf(x.data(), 3); 
+        TStringBuf ys = TStringBuf(y.data(), 3); 
+        TStringBuf zs = TStringBuf(z.data(), 3); 
         UNIT_ASSERT(AsciiCompareIgnoreCase(xs, ys) == 0);
         UNIT_ASSERT(AsciiCompareIgnoreCase(xs, zs) > 0);
         UNIT_ASSERT(AsciiCompareIgnoreCase(xs, zz) < 0);

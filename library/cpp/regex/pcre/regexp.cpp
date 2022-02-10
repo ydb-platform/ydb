@@ -5,9 +5,9 @@
 #include <util/system/defaults.h>
 
 #include <cstdlib>
-#include <util/generic/noncopyable.h>
+#include <util/generic/noncopyable.h> 
 
-class TGlobalImpl : TNonCopyable {
+class TGlobalImpl : TNonCopyable { 
 private:
     const char* Str;
     regmatch_t* Pmatch;
@@ -149,13 +149,13 @@ public:
         : CompileOptions(cflags)
         , RegExpr(re)
     {
-        int rc = regcomp(&Preg, re.data(), cflags);
+        int rc = regcomp(&Preg, re.data(), cflags); 
         if (rc) {
             const size_t ERRBUF_SIZE = 100;
             char errbuf[ERRBUF_SIZE];
             regerror(rc, &Preg, errbuf, ERRBUF_SIZE);
             Error = "Error: regular expression " + re + " is wrong: " + errbuf;
-            ythrow yexception() << "RegExp " << re << ": " << Error.data();
+            ythrow yexception() << "RegExp " << re << ": " << Error.data(); 
         }
     }
 
@@ -297,7 +297,7 @@ int TRegExSubst::ParseReplacement(const char* repl) {
             while (IsAsciiDigit(*pos2))
                 pos2++;
             if (pos2 > pos1 + 1) {
-                Brfs[i].Refer = atol(TString(Replacement, pos1 + 1 - Replacement, pos2 - (pos1 + 1)).data());
+                Brfs[i].Refer = atol(TString(Replacement, pos1 + 1 - Replacement, pos2 - (pos1 + 1)).data()); 
             } else {
                 pos1++;
                 if (*pos2 == '$')

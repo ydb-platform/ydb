@@ -17,12 +17,12 @@ Y_UNIT_TEST_SUITE(BufferWithGaps) {
         TString data = "Hello! How are you? I'm fine, and you? Me too, thanks!";
         TString gaps = "G           GGGG           GG              GGG G     G";
         buffer.SetData(TString(data));
-        for (size_t k = 0; k < gaps.size(); ++k) {
+        for (size_t k = 0; k < gaps.size(); ++k) { 
             if (gaps[k] != ' ') {
                 buffer.AddGap(k, k + 1);
             }
         }
-        UNIT_ASSERT_EQUAL(buffer.Size(), data.size());
+        UNIT_ASSERT_EQUAL(buffer.Size(), data.size()); 
         for (size_t k = 0; k < buffer.Size(); ++k) {
             for (size_t len = 1; len <= buffer.Size() - k; ++len) {
                 bool haveGaps = false;

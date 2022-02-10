@@ -189,7 +189,7 @@ namespace {
     }
 
     inline TSamples RemoveOutliers(const TSamples& s, double fraction) {
-        if (s.size() < 20) {
+        if (s.size() < 20) { 
             return s;
         }
 
@@ -205,7 +205,7 @@ namespace {
         using TSampleWithError = std::pair<const TSample*, double>;
         TVector<TSampleWithError> v;
 
-        v.reserve(s.size());
+        v.reserve(s.size()); 
 
         for (const auto& p : s) {
             v.emplace_back(&p, errfunc(p));
@@ -223,9 +223,9 @@ namespace {
 
         TSamples ret;
 
-        ret.reserve(v.size());
+        ret.reserve(v.size()); 
 
-        for (const auto i : xrange<size_t>(0, fraction * v.size())) {
+        for (const auto i : xrange<size_t>(0, fraction * v.size())) { 
             ret.push_back(*v[i].first);
         }
 
@@ -246,7 +246,7 @@ namespace {
         func(1);
 
         while (start.Passed() < budget) {
-            if (start.Passed() < ((budget * samples.size()) / 2000000.0)) {
+            if (start.Passed() < ((budget * samples.size()) / 2000000.0)) { 
                 ThreadYield();
             } else {
                 const size_t n = sample.Next();
@@ -258,7 +258,7 @@ namespace {
 
         auto filtered = RemoveOutliers(samples, 0.9);
 
-        return {test.Name(), filtered.size(), iters, CalcModel(filtered).A, Nothing(), start.Passed(), test.SequentialId};
+        return {test.Name(), filtered.size(), iters, CalcModel(filtered).A, Nothing(), start.Passed(), test.SequentialId}; 
     }
 
     using TTests = TIntrusiveListWithAutoDelete<ITestRunner, TDestructor>;
@@ -523,7 +523,7 @@ namespace {
             const TOptsParseResult parseResult{&opts, argc, argv};
 
             for (const auto& regexp : parseResult.GetFreeArgs()) {
-                Filters.push_back(MakeHolder<RE2>(regexp.data(), RE2::Quiet));
+                Filters.push_back(MakeHolder<RE2>(regexp.data(), RE2::Quiet)); 
                 Y_ENSURE(Filters.back()->ok(), "incorrect RE2 expression '" << regexp << "'");
             }
         }
@@ -534,7 +534,7 @@ namespace {
             }
 
             for (auto&& re : Filters) {
-                if (RE2::FullMatchN({name.data(), name.size()}, *re, nullptr, 0)) {
+                if (RE2::FullMatchN({name.data(), name.size()}, *re, nullptr, 0)) { 
                     return true;
                 }
             }
@@ -577,10 +577,10 @@ int NBench::Main(int argc, char** argv) {
     double timeBudget = opts.TimeBudget;
 
     if (timeBudget < 0) {
-        timeBudget = 5.0 * tests.size();
+        timeBudget = 5.0 * tests.size(); 
     }
 
-    const TOptions testOpts = {timeBudget / tests.size()};
+    const TOptions testOpts = {timeBudget / tests.size()}; 
     const auto reporter = MakeOrderedReporter(opts.OutFormat);
 
     std::function<void(ITestRunner**)> func = [&](ITestRunner** it) {

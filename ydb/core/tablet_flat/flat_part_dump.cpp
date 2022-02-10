@@ -64,7 +64,7 @@ namespace {
         Out
             << " + " << tag << " Label{" << page.Raw.size() << "b}"
             << " (" << page.Stats().Items << ", " << page.Stats().Size << "b)"
-            << " " << page.Stats().Rows << "r " << page.Stats().Tags.size() << " tags"
+            << " " << page.Stats().Rows << "r " << page.Stats().Tags.size() << " tags" 
             << Endl;
     }
 

@@ -44,13 +44,13 @@ namespace NMonitoring {
         struct TBlock: public TStringBuf {
             template <typename T>
             TBlock(T&& t)
-                : TStringBuf(t.data(), t.size())
+                : TStringBuf(t.data(), t.size()) 
             {
                 Y_ENSURE(t.data() != nullptr);
             }
 
-            char* data() noexcept {
-                return const_cast<char*>(TStringBuf::data());
+            char* data() noexcept { 
+                return const_cast<char*>(TStringBuf::data()); 
             }
         };
 
@@ -73,7 +73,7 @@ namespace NMonitoring {
         ///////////////////////////////////////////////////////////////////////////////
         struct TAdler32 {
             static TCheckSum Calc(TBlock in) {
-                return adler32(1L, reinterpret_cast<const Bytef*>(in.data()), in.size());
+                return adler32(1L, reinterpret_cast<const Bytef*>(in.data()), in.size()); 
             }
 
             static bool Check(TBlock in, TCheckSum checksum) {
@@ -93,20 +93,20 @@ namespace NMonitoring {
 
             static size_t Compress(TBlock in, TBlock out) {
                 int rc = LZ4_compress_default(
-                    in.data(),
-                    out.data(),
-                    SafeIntegerCast<int>(in.size()),
-                    SafeIntegerCast<int>(out.size()));
+                    in.data(), 
+                    out.data(), 
+                    SafeIntegerCast<int>(in.size()), 
+                    SafeIntegerCast<int>(out.size())); 
                 Y_ENSURE(rc != 0, "lz4 compression failed");
                 return rc;
             }
 
             static void Decompress(TBlock in, TBlock out) {
                 int rc = LZ4_decompress_safe(
-                    in.data(),
-                    out.data(),
-                    SafeIntegerCast<int>(in.size()),
-                    SafeIntegerCast<int>(out.size()));
+                    in.data(), 
+                    out.data(), 
+                    SafeIntegerCast<int>(in.size()), 
+                    SafeIntegerCast<int>(out.size())); 
                 Y_ENSURE(rc >= 0, "the lz4 stream is detected malformed");
             }
         };
@@ -122,7 +122,7 @@ namespace NMonitoring {
             }
 
             static size_t Compress(TBlock in, TBlock out) {
-                size_t rc = ZSTD_compress(out.data(), out.size(), in.data(), in.size(), LEVEL);
+                size_t rc = ZSTD_compress(out.data(), out.size(), in.data(), in.size(), LEVEL); 
                 if (Y_UNLIKELY(ZSTD_isError(rc))) {
                     ythrow yexception() << TStringBuf("zstd compression failed: ")
                                         << ZSTD_getErrorName(rc);
@@ -131,12 +131,12 @@ namespace NMonitoring {
             }
 
             static void Decompress(TBlock in, TBlock out) {
-                size_t rc = ZSTD_decompress(out.data(), out.size(), in.data(), in.size());
+                size_t rc = ZSTD_decompress(out.data(), out.size(), in.data(), in.size()); 
                 if (Y_UNLIKELY(ZSTD_isError(rc))) {
                     ythrow yexception() << TStringBuf("zstd decompression failed: ")
                                         << ZSTD_getErrorName(rc);
                 }
-                Y_ENSURE(rc == out.size(), "zstd decompressed wrong size");
+                Y_ENSURE(rc == out.size(), "zstd decompressed wrong size"); 
             }
         };
 
@@ -151,26 +151,26 @@ namespace NMonitoring {
             }
 
             static size_t Compress(TBlock in, TBlock out) {
-                uLong ret = out.size();
+                uLong ret = out.size(); 
                 int rc = compress2(
-                    reinterpret_cast<Bytef*>(out.data()),
+                    reinterpret_cast<Bytef*>(out.data()), 
                     &ret,
-                    reinterpret_cast<const Bytef*>(in.data()),
-                    in.size(),
+                    reinterpret_cast<const Bytef*>(in.data()), 
+                    in.size(), 
                     LEVEL);
                 Y_ENSURE(rc == Z_OK, "zlib compression failed");
                 return ret;
             }
 
             static void Decompress(TBlock in, TBlock out) {
-                uLong ret = out.size();
+                uLong ret = out.size(); 
                 int rc = uncompress(
-                    reinterpret_cast<Bytef*>(out.data()),
+                    reinterpret_cast<Bytef*>(out.data()), 
                     &ret,
-                    reinterpret_cast<const Bytef*>(in.data()),
-                    in.size());
+                    reinterpret_cast<const Bytef*>(in.data()), 
+                    in.size()); 
                 Y_ENSURE(rc == Z_OK, "zlib decompression failed");
-                Y_ENSURE(ret == out.size(), "zlib decompressed wrong size");
+                Y_ENSURE(ret == out.size(), "zlib decompressed wrong size"); 
             }
         };
 
@@ -321,7 +321,7 @@ namespace NMonitoring {
 
                 // add header
                 auto header = reinterpret_cast<TFrameHeader*>(Frame_.Data());
-                header->CompressedSize = SafeIntegerCast<TCompressedSize>(compressedBlock.size());
+                header->CompressedSize = SafeIntegerCast<TCompressedSize>(compressedBlock.size()); 
                 header->UncompressedSize = SafeIntegerCast<TUncompressedSize>(Uncompressed_.Size());
 
                 // add footer

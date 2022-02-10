@@ -176,7 +176,7 @@ namespace NKikimr {
                     ui32 prevEnd = back->Part.Offset + back->Part.Size;
                     ui32 nextBeg = item->ActualRead.Offset;
                     Y_VERIFY(prevEnd <= nextBeg, "back: %s item: %s dataItems: %s",
-                           back->Part.ToString().data(), item->ActualRead.ToString().data(), DiskDataItemsToString().data());
+                           back->Part.ToString().data(), item->ActualRead.ToString().data(), DiskDataItemsToString().data()); 
 
                     if (nextBeg <= prevEnd + Ctx->PDiskCtx->Dsk->GlueRequestDistanceBytes) {
                         // glue requests

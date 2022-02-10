@@ -84,7 +84,7 @@ void TestWithParams(const TString& metainfo, const ECompMode mode, const TTestPa
     ui8* dataEnd = pageStart + busyPages * PAGESIZEX;
     ProtectMemory(dataEnd, PAGESIZEX, PM_NONE);
     // memory copying should be performed without any problems
-    memcpy(dataStart, buffer.Out.data(), byteSize);
+    memcpy(dataStart, buffer.Out.data(), byteSize); 
 
     ui64 position = 0;
     TMetaIterator<TDecompressor> instance;

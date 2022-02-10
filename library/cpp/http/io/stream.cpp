@@ -24,7 +24,7 @@
 
 #define HEADERCMP(header, str) \
     case sizeof(str) - 1:      \
-        if (!stricmp((header).Name().data(), str))
+        if (!stricmp((header).Name().data(), str)) 
 
 namespace {
     inline size_t SuggestBufferSize() {
@@ -274,12 +274,12 @@ private:
     }
 
     inline bool IsRequest() const {
-        return strnicmp(FirstLine().data(), "get", 3) == 0 ||
-               strnicmp(FirstLine().data(), "post", 4) == 0 ||
-               strnicmp(FirstLine().data(), "put", 3) == 0 ||
+        return strnicmp(FirstLine().data(), "get", 3) == 0 || 
+               strnicmp(FirstLine().data(), "post", 4) == 0 || 
+               strnicmp(FirstLine().data(), "put", 3) == 0 || 
                strnicmp(FirstLine().data(), "patch", 5) == 0 ||
-               strnicmp(FirstLine().data(), "head", 4) == 0 ||
-               strnicmp(FirstLine().data(), "delete", 6) == 0;
+               strnicmp(FirstLine().data(), "head", 4) == 0 || 
+               strnicmp(FirstLine().data(), "delete", 6) == 0; 
     }
 
     inline void BuildInputChain() {
@@ -289,13 +289,13 @@ private:
         // In HTTP/1.1 Keep-Alive is turned on by default
         if (pos != TString::npos && strcmp(FirstLine_.c_str() + pos + 1, "HTTP/1.1") == 0) {
             p.KeepAlive = true; //request
-        } else if (strnicmp(FirstLine_.data(), "HTTP/1.1", 8) == 0) {
+        } else if (strnicmp(FirstLine_.data(), "HTTP/1.1", 8) == 0) { 
             p.KeepAlive = true; //reply
         }
 
         for (THttpHeaders::TConstIterator h = Headers_.Begin(); h != Headers_.End(); ++h) {
             const THttpInputHeader& header = *h;
-            switch (header.Name().size()) {
+            switch (header.Name().size()) { 
                 HEADERCMP(header, "transfer-encoding") {
                     TTrEnc f = {&p};
                     ForEach(header.Value(), f);
@@ -317,16 +317,16 @@ private:
                 break;
                 HEADERCMP(header, "connection") {
                     // accept header "Connection: Keep-Alive, TE"
-                    if (strnicmp(header.Value().data(), "keep-alive", 10) == 0) {
+                    if (strnicmp(header.Value().data(), "keep-alive", 10) == 0) { 
                         p.KeepAlive = true;
-                    } else if (stricmp(header.Value().data(), "close") == 0) {
+                    } else if (stricmp(header.Value().data(), "close") == 0) { 
                         p.KeepAlive = false;
                     }
                 }
                 [[fallthrough]];
                 HEADERCMP(header, "expect") {
                     auto findContinue = [&](const TStringBuf& s) {
-                        if (strnicmp(s.data(), "100-continue", 13) == 0) {
+                        if (strnicmp(s.data(), "100-continue", 13) == 0) { 
                             Expect100Continue_ = true;
                         }
                     };
@@ -629,7 +629,7 @@ public:
 
 private:
     static inline bool IsResponse(const TString& s) noexcept {
-        return strnicmp(s.data(), "HTTP/", 5) == 0;
+        return strnicmp(s.data(), "HTTP/", 5) == 0; 
     }
 
     static inline bool IsRequest(const TString& s) noexcept {
@@ -644,7 +644,7 @@ private:
         if (IsHttpResponse()) {
             if (Request_ && Request_->FirstLine().StartsWith(TStringBuf("HEAD")))
                 return false;
-            if (FirstLine_.size() > 9 && strncmp(FirstLine_.data() + 9, "204", 3) == 0)
+            if (FirstLine_.size() > 9 && strncmp(FirstLine_.data() + 9, "204", 3) == 0) 
                 return false;
             return true;
         }
@@ -656,9 +656,9 @@ private:
     }
 
     inline bool HasRequestBody() const noexcept {
-        return strnicmp(FirstLine_.data(), "POST", 4) == 0 ||
+        return strnicmp(FirstLine_.data(), "POST", 4) == 0 || 
                strnicmp(FirstLine_.data(), "PATCH", 5) == 0 ||
-               strnicmp(FirstLine_.data(), "PUT", 3) == 0;
+               strnicmp(FirstLine_.data(), "PUT", 3) == 0; 
     }
     static inline size_t ParseHttpVersion(const TString& s) {
         if (s.empty()) {
@@ -668,7 +668,7 @@ private:
         size_t parsed_version = 0;
 
         if (IsResponse(s)) {
-            const char* b = s.data() + 5;
+            const char* b = s.data() + 5; 
 
             while (*b && *b != ' ') {
                 if (*b != '.') {
@@ -728,7 +728,7 @@ private:
     }
 
     inline void WriteCachedImpl(IOutputStream* s) const {
-        s->Write(FirstLine_.data(), FirstLine_.size());
+        s->Write(FirstLine_.data(), FirstLine_.size()); 
         s->Write("\r\n", 2);
         Headers_.OutTo(s);
         s->Write("\r\n", 2);
@@ -969,7 +969,7 @@ size_t THttpOutput::SentSize() const noexcept {
 unsigned ParseHttpRetCode(const TStringBuf& ret) {
     const TStringBuf code = StripString(StripString(ret.After(' ')).Before(' '));
 
-    return FromString<unsigned>(code.data(), code.size());
+    return FromString<unsigned>(code.data(), code.size()); 
 }
 
 void SendMinimalHttpRequest(TSocket& s, const TStringBuf& host, const TStringBuf& request, const TStringBuf& agent, const TStringBuf& from) {

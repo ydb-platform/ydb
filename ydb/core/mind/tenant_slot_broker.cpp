@@ -217,7 +217,7 @@ void TTenantSlotBroker::TTenant::MarkSlotLabelAsUnused(const TString &label)
 
 TString TTenantSlotBroker::TTenant::GetFirstUnusedSlotLabel() const
 {
-    Y_VERIFY(!UnusedSlotLabels.empty(), "tenant %s has no unused slot labels", Name.data());
+    Y_VERIFY(!UnusedSlotLabels.empty(), "tenant %s has no unused slot labels", Name.data()); 
     return *UnusedSlotLabels.begin();
 }
 
@@ -445,7 +445,7 @@ void TTenantSlotBroker::Enqueue(TAutoPtr<IEventHandle> &ev,
 {
     LOG_DEBUG(ctx, NKikimrServices::TENANT_SLOT_BROKER,
               "Enqueue: %" PRIu64 ", event type: %" PRIu32 " event: %s",
-              TabletID(), ev->GetTypeRewrite(), ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?");
+              TabletID(), ev->GetTypeRewrite(), ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?"); 
     InitQueue.push_back(ev);
 }
 
@@ -634,7 +634,7 @@ void TTenantSlotBroker::ProcessEnqueuedEvents(const TActorContext &ctx)
         TAutoPtr<IEventHandle> &ev = InitQueue.front();
         LOG_DEBUG(ctx, NKikimrServices::TENANT_SLOT_BROKER,
                   "Dequeue: %" PRIu64 ", event type: %" PRIu32 " event: %s",
-                  TabletID(), ev->GetTypeRewrite(), ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?");
+                  TabletID(), ev->GetTypeRewrite(), ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?"); 
         ctx.ExecutorThread.Send(ev.Release());
         InitQueue.pop_front();
     }
@@ -771,7 +771,7 @@ void TTenantSlotBroker::AddSlot(TSlot::TPtr slot,
 
     NIceDb::TNiceDb db(txc.DB);
     auto row = db.Table<Schema::Slots>().Key(slot->Id.NodeId, slot->Id.SlotId);
-    row.Update(NIceDb::TUpdate<Schema::Slots::SlotType>(slot->Type.data()),
+    row.Update(NIceDb::TUpdate<Schema::Slots::SlotType>(slot->Type.data()), 
                NIceDb::TUpdate<Schema::Slots::DataCenter>(DataCenterFromString(slot->DataCenter)),
                NIceDb::TUpdate<Schema::Slots::DataCenterName>(slot->DataCenter),
                NIceDb::TUpdate<Schema::Slots::AssignedTenant>(""),

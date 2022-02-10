@@ -44,11 +44,11 @@
     } while (0) /**/
 
 #define LOG_LOG_S_SAMPLED_BY(actorCtxOrSystem, priority, component, sampleBy, stream)  \
-    LOG_LOG_SAMPLED_BY(actorCtxOrSystem, priority, component, sampleBy, "%s", [&]() { \
+    LOG_LOG_SAMPLED_BY(actorCtxOrSystem, priority, component, sampleBy, "%s", [&]() { \ 
         TStringBuilder logStringBuilder;                                               \
         logStringBuilder << stream;                                                    \
         return static_cast<TString>(logStringBuilder);                                 \
-    }().data())
+    }().data()) 
 
 #define LOG_LOG(actorCtxOrSystem, priority, component, ...) LOG_LOG_SAMPLED_BY(actorCtxOrSystem, priority, component, 0ull, __VA_ARGS__)
 #define LOG_LOG_S(actorCtxOrSystem, priority, component, stream) LOG_LOG_S_SAMPLED_BY(actorCtxOrSystem, priority, component, 0ull, stream)
@@ -109,7 +109,7 @@
                   __FUNCTION__, ev->Type, ev->Sender.ToString().data(), SelfId().ToString().data(), ev->GetBase()->ToString().substr(0, 1000).data()); \
     } else {                                                                                                                           \
         LOG_TRACE(*TlsActivationContext, currentTracer, "%s, received event# %" PRIu32 ", Sender %s, Recipient %s",                                      \
-                  __FUNCTION__, ev->Type, ev->Sender.ToString().data(), ev->Recipient.ToString().data());                                          \
+                  __FUNCTION__, ev->Type, ev->Sender.ToString().data(), ev->Recipient.ToString().data());                                          \ 
     }
 #define TRACE_EVENT_TYPE(eventType) LOG_TRACE(*TlsActivationContext, currentTracer, "%s, processing event %s", __FUNCTION__, eventType)
 
@@ -341,7 +341,7 @@ namespace NActors {
             NDetail::PrintfV(Formatted, "%s", format);
         }
 
-        MemLogWrite(Formatted.data(), Formatted.size(), true);
+        MemLogWrite(Formatted.data(), Formatted.size(), true); 
         DeliverLogMessage(actorCtxOrSystem, mPriority, mComponent, std::move(Formatted));
     }
 
@@ -352,7 +352,7 @@ namespace NActors {
         NLog::EComponent mComponent,
         const TString& str) {
 
-        MemLogWrite(str.data(), str.size(), true);
+        MemLogWrite(str.data(), str.size(), true); 
         DeliverLogMessage(actorCtxOrSystem, mPriority, mComponent, TString(str));
     }
 

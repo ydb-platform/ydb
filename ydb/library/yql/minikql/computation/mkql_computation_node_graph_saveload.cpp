@@ -68,8 +68,8 @@ void SaveGraphState(const NUdf::TUnboxedValue* roots, ui32 rootCount, ui64 hash,
 void LoadGraphState(const NUdf::TUnboxedValue* roots, ui32 rootCount, ui64 hash, const TStringBuf& in) {
     TStringBuf state(in);
 
-    MKQL_ENSURE(state.size() >= sizeof(ui64), "Serialized state is corrupted - no hash");
-    ui64 storedHash = *(ui64*)state.data();
+    MKQL_ENSURE(state.size() >= sizeof(ui64), "Serialized state is corrupted - no hash"); 
+    ui64 storedHash = *(ui64*)state.data(); 
     state.Skip(sizeof(storedHash));
 
     MKQL_ENSURE(hash == storedHash, "Unable to load graph state, different hashes");
@@ -80,13 +80,13 @@ void LoadGraphState(const NUdf::TUnboxedValue* roots, ui32 rootCount, ui64 hash,
     for (ui32 i = 0; i < values.size(); ++i) {
         auto size = ReadUi32(state);
         if (size) {
-            MKQL_ENSURE(size <= state.size(), "Serialized state is corrupted");
-            values[i].Load(NUdf::TStringRef(state.data(), size));
+            MKQL_ENSURE(size <= state.size(), "Serialized state is corrupted"); 
+            values[i].Load(NUdf::TStringRef(state.data(), size)); 
             state.Skip(size);
         }
     }
 
-    MKQL_ENSURE(state.size() == 0, "State was not loaded correctly");
+    MKQL_ENSURE(state.size() == 0, "State was not loaded correctly"); 
 }
 
 } // namespace NMiniKQL

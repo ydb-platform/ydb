@@ -188,7 +188,7 @@ private:
                     TStringStream str;
                     str << "Response version missmatched";
                     LOG_ERROR(ctx, NKikimrServices::READ_TABLE_API,
-                              "%s", str.Str().data());
+                              "%s", str.Str().data()); 
                     const NYql::TIssue& issue = MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, str.Str());
                     auto tmp = issueMessage.Add();
                     NYql::IssueToMessage(issue, tmp);

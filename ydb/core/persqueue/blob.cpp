@@ -106,8 +106,8 @@ void TClientBlob::Serialize(TBuffer& res) const
 
     ui16 sz = SourceId.size();
     res.Append((const char*)&sz, sizeof(ui16));
-    res.Append(SourceId.data(), SourceId.size());
-    res.Append(Data.data(), Data.size());
+    res.Append(SourceId.data(), SourceId.size()); 
+    res.Append(Data.data(), Data.size()); 
 
     Y_VERIFY(res.Size() == psize + totalSize);
 }
@@ -201,9 +201,9 @@ TAutoPtr<NScheme::IChunkCoder> MakeChunk(TAutoPtr<TFlatBlobDataOutputStream>& ou
 void OutputChunk(TAutoPtr<NScheme::IChunkCoder> chunk, TAutoPtr<TFlatBlobDataOutputStream> output, TBuffer& res)
 {
     chunk->Seal();
-    ui32 size = output->CurrentBuffer().size();
+    ui32 size = output->CurrentBuffer().size(); 
     res.Append((const char*)&size, sizeof(ui32));
-    res.Append(output->CurrentBuffer().data(), output->CurrentBuffer().size());
+    res.Append(output->CurrentBuffer().data(), output->CurrentBuffer().size()); 
 }
 
 void TBatch::Pack() {
@@ -268,7 +268,7 @@ void TBatch::Pack() {
     {
         auto chunk = MakeChunk<NScheme::TVarLenCodec<false>>(output);
         for (auto it = reorderMap.begin(); it != reorderMap.end(); ++it) {
-            chunk->AddData(it->first.data(), it->first.size());
+            chunk->AddData(it->first.data(), it->first.size()); 
         }
         OutputChunk(chunk, output, res);
     }
@@ -286,7 +286,7 @@ void TBatch::Pack() {
     {
         auto chunk = MakeChunk<NScheme::TVarLenCodec<false>>(output);
         for (const auto& p : pos) {
-            chunk->AddData(Blobs[p].Data.data(), Blobs[p].Data.size());
+            chunk->AddData(Blobs[p].Data.data(), Blobs[p].Data.size()); 
         }
         OutputChunk(chunk, output, res);
     }
@@ -426,8 +426,8 @@ void TBatch::UnpackToType1(TVector<TClientBlob> *blobs) {
     TVector<ui32> end;
     TVector<ui32> pos;
     pos.reserve(totalBlobs);
-    const char* data = PackedData.data();
-    const char* dataEnd = PackedData.data() + PackedData.size();
+    const char* data = PackedData.data(); 
+    const char* dataEnd = PackedData.data() + PackedData.size(); 
     ui32 sourceIdCount = 0;
     TVector<TString> sourceIds;
 

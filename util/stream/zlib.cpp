@@ -215,8 +215,8 @@ public:
             deflateSetHeader(Z(), GZHeader_.Get());
         }
 
-        if (p.Dict.size()) {
-            if (deflateSetDictionary(Z(), (const Bytef*)p.Dict.data(), p.Dict.size())) {
+        if (p.Dict.size()) { 
+            if (deflateSetDictionary(Z(), (const Bytef*)p.Dict.data(), p.Dict.size())) { 
                 ythrow TZLibCompressorError() << "can not set deflate dictionary";
             }
         }

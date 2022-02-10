@@ -330,7 +330,7 @@ namespace NFwd {
 
                 const auto tablet = part->Label.TabletID();
 
-                TVector<ui32> edge(part->Large->Stats().Tags.size(), Conf.Edge);
+                TVector<ui32> edge(part->Large->Stats().Tags.size(), Conf.Edge); 
 
                 for (auto& col : part->Scheme->AllColumns) {
                     if (TRowScheme::HasTag(Keys, col.Tag)) {
@@ -354,7 +354,7 @@ namespace NFwd {
             if (auto small = part->Small) {
                 auto *partStore = CheckedCast<const TPartStore*>(part);
 
-                TVector<ui32> edge(small->Stats().Tags.size(), Max<ui32>());
+                TVector<ui32> edge(small->Stats().Tags.size(), Max<ui32>()); 
 
                 auto pageCollection = partStore->PageCollections.at(partStore->Groups)->PageCollection;
 

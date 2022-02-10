@@ -26,7 +26,7 @@ namespace NKikimr {
             auto state = guidInfo.GetState();
             LOG_DEBUG(ctx, BS_SYNCER,
                       VDISKP(VCtx->VDiskLogPrefix, "TObtainVDiskGuidProxy: SUCCESS; vdisk# %s guid# %" PRIu64,
-                            fromVDisk.ToString().data(), guid));
+                            fromVDisk.ToString().data(), guid)); 
 
             ctx.Send(NotifyId, new TEvVDiskGuidObtained(fromVDisk, guid, state));
 

@@ -82,7 +82,7 @@ public:
 
     bool Find(const TSymbol* key, size_t keylen, TData* value = nullptr) const;
     bool Find(const TKeyBuf& key, TData* value = nullptr) const {
-        return Find(key.data(), key.size(), value);
+        return Find(key.data(), key.size(), value); 
     }
 
     TData Get(const TSymbol* key, size_t keylen) const {
@@ -92,11 +92,11 @@ public:
         return value;
     }
     TData Get(const TKeyBuf& key) const {
-        return Get(key.data(), key.size());
+        return Get(key.data(), key.size()); 
     }
     TData GetDefault(const TKeyBuf& key, const TData& def) const {
         TData value;
-        if (!Find(key.data(), key.size(), &value))
+        if (!Find(key.data(), key.size(), &value)) 
             return def;
         else
             return value;
@@ -120,21 +120,21 @@ public:
 
     void FindPhrases(const TSymbol* key, size_t keylen, TPhraseMatchVector& matches, TSymbol separator = TSymbol(' ')) const;
     void FindPhrases(const TKeyBuf& key, TPhraseMatchVector& matches, TSymbol separator = TSymbol(' ')) const {
-        return FindPhrases(key.data(), key.size(), matches, separator);
+        return FindPhrases(key.data(), key.size(), matches, separator); 
     }
     bool FindLongestPrefix(const TSymbol* key, size_t keylen, size_t* prefixLen, TData* value = nullptr, bool* hasNext = nullptr) const;
     bool FindLongestPrefix(const TKeyBuf& key, size_t* prefixLen, TData* value = nullptr, bool* hasNext = nullptr) const {
-        return FindLongestPrefix(key.data(), key.size(), prefixLen, value, hasNext);
+        return FindLongestPrefix(key.data(), key.size(), prefixLen, value, hasNext); 
     }
 
     // Return trie, containing all tails for the given key
     inline TCompactTrie<T, D, S> FindTails(const TSymbol* key, size_t keylen) const;
     TCompactTrie<T, D, S> FindTails(const TKeyBuf& key) const {
-        return FindTails(key.data(), key.size());
+        return FindTails(key.data(), key.size()); 
     }
     bool FindTails(const TSymbol* key, size_t keylen, TCompactTrie<T, D, S>& res) const;
     bool FindTails(const TKeyBuf& key, TCompactTrie<T, D, S>& res) const {
-        return FindTails(key.data(), key.size(), res);
+        return FindTails(key.data(), key.size(), res); 
     }
 
     // same as FindTails(&key, 1), a bit faster
@@ -455,7 +455,7 @@ template <class T, class D, class S>
 void TCompactTrie<T, D, S>::Print(IOutputStream& os) {
     typedef typename ::TCompactTrieKeySelector<T>::TKeyBuf TSBuffer;
     for (TConstIterator it = Begin(); it != End(); ++it) {
-        os << TSBuffer((*it).first.data(), (*it).first.size()) << "\t" << (*it).second << Endl;
+        os << TSBuffer((*it).first.data(), (*it).first.size()) << "\t" << (*it).second << Endl; 
     }
 }
 

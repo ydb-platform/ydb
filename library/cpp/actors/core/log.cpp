@@ -490,7 +490,7 @@ namespace NActors {
             }
 
             HTML(str) {
-                if (!explanation.empty()) {
+                if (!explanation.empty()) { 
                     DIV_CLASS("row") {
                         DIV_CLASS("col-md-12 alert alert-info") {
                             str << explanation;
@@ -609,7 +609,7 @@ namespace NActors {
                 NJsonWriter::TBuf json;
                 json.BeginObject()
                     .WriteKey("@timestamp")
-                    .WriteString(Settings->UseLocalTimestamps ? FormatLocalTimestamp(time, buf) : time.ToString().data())
+                    .WriteString(Settings->UseLocalTimestamps ? FormatLocalTimestamp(time, buf) : time.ToString().data()) 
                     .WriteKey("microseconds")
                     .WriteULongLong(time.MicroSeconds())
                     .WriteKey("host")
@@ -665,7 +665,7 @@ namespace NActors {
         if (logCons)
             flags |= TSysLogBackend::LogCons;
 
-        return new TSysLogBackend(ident.data(), TSysLogBackend::TSYSLOG_LOCAL1, flags);
+        return new TSysLogBackend(ident.data(), TSysLogBackend::TSYSLOG_LOCAL1, flags); 
     }
 
     class TStderrBackend: public TLogBackend {

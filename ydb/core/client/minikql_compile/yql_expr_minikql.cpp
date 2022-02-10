@@ -210,7 +210,7 @@ void CollectSelectRowKey(const TExprNode* child, TContext::TPtr ctx) {
 
     for (auto& tupleItem : selectTuple->Children()) {
         Y_ENSURE_EX(tupleItem->IsAtom() &&
-            !tupleItem->Content().empty(), TNodeException(*tupleItem) << "Expected column name as non-empty atom.");
+            !tupleItem->Content().empty(), TNodeException(*tupleItem) << "Expected column name as non-empty atom."); 
         request.ColumnNames.insert(TString(tupleItem->Content()));
     }
 
@@ -237,7 +237,7 @@ void CollectSelectRangeKey(const TExprNode* child, TContext::TPtr ctx) {
                 TNodeException(*rangeItem) << child->Content() << "Expected 3 items in range item - column/from/to");
 
             Y_ENSURE_EX(rangeItem->Child(0)->IsAtom() &&
-                !rangeItem->Child(0)->Content().empty(), TNodeException(rangeItem->Child(0)) << "Expected column name as non-empty atom.");
+                !rangeItem->Child(0)->Content().empty(), TNodeException(rangeItem->Child(0)) << "Expected column name as non-empty atom."); 
             request.ColumnNames.insert(TString(rangeItem->Child(0)->Content()));
         }
     }
@@ -247,7 +247,7 @@ void CollectSelectRangeKey(const TExprNode* child, TContext::TPtr ctx) {
 
     for (auto& tupleItem : selectTuple->Children()) {
         Y_ENSURE_EX(tupleItem->IsAtom() &&
-            !tupleItem->Content().empty(), TNodeException(*tupleItem) << "Expected column name as non-empty atom.");
+            !tupleItem->Content().empty(), TNodeException(*tupleItem) << "Expected column name as non-empty atom."); 
         request.ColumnNames.insert(TString(tupleItem->Content()));
     }
 

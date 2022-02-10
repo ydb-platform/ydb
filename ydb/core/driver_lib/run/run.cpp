@@ -978,7 +978,7 @@ void TKikimrRunner::InitializeLogSettings(const TKikimrRunConfig& runConfig)
     } else if (logConfig.GetFormat() == "json") {
         LogSettings->Format = NLog::TSettings::JSON_FORMAT;
     } else {
-        Y_FAIL("Unknown log format: \"%s\"", logConfig.GetFormat().data());
+        Y_FAIL("Unknown log format: \"%s\"", logConfig.GetFormat().data()); 
     }
 
     if (logConfig.HasAllowDropEntries()) {
@@ -1006,12 +1006,12 @@ void TKikimrRunner::ApplyLogSettings(const TKikimrRunConfig& runConfig)
         const TString& componentName = entry.GetComponent();
 
         NLog::EComponent component;
-        if (componentName.empty()) {
+        if (componentName.empty()) { 
             component = NLog::InvalidComponent;
         } else {
             component = LogSettings->FindComponent(componentName);
             Y_VERIFY(component != NLog::InvalidComponent, "Invalid component name in log configuration file: \"%s\"",
-                componentName.data());
+                componentName.data()); 
         }
 
         TString explanation;
@@ -1533,7 +1533,7 @@ void TKikimrRunner::InitializeRegistries(const TKikimrRunConfig& runConfig) {
     const TString& udfsDir = runConfig.AppConfig.GetUDFsDir();
 
     TVector<TString> udfsPaths;
-    if (!udfsDir.empty()) {
+    if (!udfsDir.empty()) { 
         if (NFs::Exists(udfsDir) && IsDir(udfsDir)) {
             NMiniKQL::FindUdfsInDir(udfsDir, &udfsPaths);
         } else {

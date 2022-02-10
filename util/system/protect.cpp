@@ -29,7 +29,7 @@ static TString ModeToString(const EProtectMemory mode) {
     if (mode & PM_EXEC) {
         strMode += "PM_EXEC|";
     }
-    return strMode.substr(0, strMode.size() - 1);
+    return strMode.substr(0, strMode.size() - 1); 
 }
 
 void ProtectMemory(void* addr, const size_t length, const EProtectMemory mode) {

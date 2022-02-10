@@ -877,9 +877,9 @@ private:
         TStringOutput sout(s);
         sout << codec << ": " << i << ", "
              << "\n";
-        sout << HexEncode(learn.data(), learn.size()); //NEscJ::EscapeJ<true>(learn, sout);
+        sout << HexEncode(learn.data(), learn.size()); //NEscJ::EscapeJ<true>(learn, sout); 
         sout << " != \n";
-        sout << HexEncode(test.data(), test.size()); //NEscJ::EscapeJ<true>(test, sout);
+        sout << HexEncode(test.data(), test.size()); //NEscJ::EscapeJ<true>(test, sout); 
 
         if (s.Size() > 1536) {
             TString res = s.substr(0, 512);
@@ -891,7 +891,7 @@ private:
     }
 
     TStringBuf AsStrBuf(const TBuffer& b) {
-        return TStringBuf(b.data(), b.size());
+        return TStringBuf(b.data(), b.size()); 
     }
 
     template <typename TCodec, bool testsaveload>
@@ -936,7 +936,7 @@ private:
                     c->Decode(AsStrBuf(out[i]), vecl);
 
                     UNIT_ASSERT_EQUAL_C(AsStrBuf(inlearn[i]), AsStrBuf(vecl),
-                                        PrintError(TStringBuf(inlearn[i].data(), inlearn[i].size()),
+                                        PrintError(TStringBuf(inlearn[i].data(), inlearn[i].size()), 
                                                    TStringBuf(vecl.data(), vecl.size()), c->GetName(), i));
                 }
             }
@@ -960,7 +960,7 @@ private:
                 outsz += out.Size();
                 c->Decode(AsStrBuf(out), in1);
                 UNIT_ASSERT_EQUAL_C(AsStrBuf(in[i]), AsStrBuf(in1),
-                                    PrintError(TStringBuf(in[i].data(), in[i].size()),
+                                    PrintError(TStringBuf(in[i].data(), in[i].size()), 
                                                TStringBuf(in1.data(), in1.size()), c->GetName(), i));
             }
         }

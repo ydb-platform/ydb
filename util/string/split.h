@@ -3,24 +3,24 @@
 #include "strspn.h"
 #include "cast.h"
 
-#include <util/generic/algorithm.h>
+#include <util/generic/algorithm.h> 
 #include <util/generic/fwd.h>
-#include <util/generic/iterator.h>
-#include <util/generic/iterator_range.h>
-#include <util/generic/store_policy.h>
-#include <util/generic/strbuf.h>
+#include <util/generic/iterator.h> 
+#include <util/generic/iterator_range.h> 
+#include <util/generic/store_policy.h> 
+#include <util/generic/strbuf.h> 
 #include <util/generic/string.h>
 #include <util/generic/typetraits.h>
-#include <util/generic/vector.h>
+#include <util/generic/vector.h> 
 #include <util/generic/ylimits.h>
-#include <util/system/compat.h>
-#include <util/system/defaults.h>
+#include <util/system/compat.h> 
+#include <util/system/defaults.h> 
 
-#include <utility>
-#include <stlfwd>
+#include <utility> 
+#include <stlfwd> 
 
-// NOTE: Check StringSplitter below to get more convenient split string interface.
-
+// NOTE: Check StringSplitter below to get more convenient split string interface. 
+ 
 namespace NStringSplitPrivate {
 
     template <class T, class I, class = void>
@@ -420,7 +420,7 @@ inline size_t Split(const TStringBuf s, const TSetDelimiter<const char>& delim, 
     res.clear();
     TContainerConsumer<TVector<TStringBuf>> res1(&res);
     TSkipEmptyTokens<TContainerConsumer<TVector<TStringBuf>>> consumer(&res1);
-    SplitString(s.data(), s.data() + s.size(), delim, consumer);
+    SplitString(s.data(), s.data() + s.size(), delim, consumer); 
     return res.size();
 }
 
@@ -455,218 +455,218 @@ void Split(TStringBuf s, D delim, P1& p1, P2& p2, Other&... other) {
     GetNext(s, delim, p1);
     Split(s, delim, p2, other...);
 }
-
-/**
- * \fn auto StringSplitter(...)
- *
- * Creates a string splitter object. The only use for it is to call one of its
- * `Split*` methods, and then do something with the resulting proxy range.
- *
- * Some examples:
- * \code
- * TVector<TStringBuf> values = StringSplitter("1\t2\t3").Split('\t');
- *
- * for(TStringBuf part: StringSplitter("1::2::::3").SplitByString("::").SkipEmpty()) {
- *     Cerr << part;
- * }
- *
- * TVector<TString> firstTwoValues = StringSplitter("1\t2\t3").Split('\t').Take(2);
- * \endcode
- *
- * Use `Collect` or `AddTo` to store split results into an existing container:
- * \code
- * TVector<TStringBuf> values = {"0"};
- * StringSplitter("1\t2\t3").Split('\t').AddTo(&values);
- * \endcode
- * Note that `Collect` clears target container, while `AddTo` just inserts values.
- * You can use these methods with any container that has `emplace` / `emplace_back`.
- *
- * Use `ParseInto` to also perform string conversions before inserting values
- * into target container:
- * \code
- * TSet<int> values;
- * StringSplitter("1\t2\t3").Split('\t').ParseInto(&values);
- * \endcode
- */
-
+ 
+/** 
+ * \fn auto StringSplitter(...) 
+ * 
+ * Creates a string splitter object. The only use for it is to call one of its 
+ * `Split*` methods, and then do something with the resulting proxy range. 
+ * 
+ * Some examples: 
+ * \code 
+ * TVector<TStringBuf> values = StringSplitter("1\t2\t3").Split('\t'); 
+ * 
+ * for(TStringBuf part: StringSplitter("1::2::::3").SplitByString("::").SkipEmpty()) { 
+ *     Cerr << part; 
+ * } 
+ * 
+ * TVector<TString> firstTwoValues = StringSplitter("1\t2\t3").Split('\t').Take(2); 
+ * \endcode 
+ * 
+ * Use `Collect` or `AddTo` to store split results into an existing container: 
+ * \code 
+ * TVector<TStringBuf> values = {"0"}; 
+ * StringSplitter("1\t2\t3").Split('\t').AddTo(&values); 
+ * \endcode 
+ * Note that `Collect` clears target container, while `AddTo` just inserts values. 
+ * You can use these methods with any container that has `emplace` / `emplace_back`. 
+ * 
+ * Use `ParseInto` to also perform string conversions before inserting values 
+ * into target container: 
+ * \code 
+ * TSet<int> values; 
+ * StringSplitter("1\t2\t3").Split('\t').ParseInto(&values); 
+ * \endcode 
+ */ 
+ 
 namespace NStringSplitPrivate {
-    Y_HAS_MEMBER(push_back, PushBack);
-    Y_HAS_MEMBER(insert, Insert);
-    Y_HAS_MEMBER(data, Data);
-
-    /**
-     * This one is needed here so that `std::string_view -> std::string_view`
-     * conversion works.
-     */
+    Y_HAS_MEMBER(push_back, PushBack); 
+    Y_HAS_MEMBER(insert, Insert); 
+    Y_HAS_MEMBER(data, Data); 
+ 
+    /** 
+     * This one is needed here so that `std::string_view -> std::string_view` 
+     * conversion works. 
+     */ 
     template <class Src, class Dst>
-    inline void DoFromString(const Src& src, Dst* dst) {
-        *dst = ::FromString<Dst>(src);
-    }
-
+    inline void DoFromString(const Src& src, Dst* dst) { 
+        *dst = ::FromString<Dst>(src); 
+    } 
+ 
     template <class T>
-    inline void DoFromString(const T& src, T* dst) noexcept {
-        *dst = src;
-    }
-
+    inline void DoFromString(const T& src, T* dst) noexcept { 
+        *dst = src; 
+    } 
+ 
     template <class T>
     inline void DoFromString(const T& src, decltype(std::ignore)* dst) noexcept {
         *dst = src;
     }
 
     template <class Src, class Dst>
-    inline Y_WARN_UNUSED_RESULT bool TryDoFromString(const Src& src, Dst* dst) noexcept {
-        return ::TryFromString(src, *dst);
-    }
-
+    inline Y_WARN_UNUSED_RESULT bool TryDoFromString(const Src& src, Dst* dst) noexcept { 
+        return ::TryFromString(src, *dst); 
+    } 
+ 
     template <class T>
-    inline Y_WARN_UNUSED_RESULT bool TryDoFromString(const T& src, T* dst) noexcept {
-        *dst = src;
-        return true;
-    }
-
+    inline Y_WARN_UNUSED_RESULT bool TryDoFromString(const T& src, T* dst) noexcept { 
+        *dst = src; 
+        return true; 
+    } 
+ 
     template <class T>
     inline Y_WARN_UNUSED_RESULT bool TryDoFromString(const T& src, decltype(std::ignore)* dst) noexcept {
         *dst = src;
         return true;
     }
 
-    /**
-     * Consumer that places provided elements into a container. Not using
-     * `emplace(iterator)` for efficiency.
-     */
-    template <class Container>
-    struct TContainerConsumer {
-        using value_type = typename Container::value_type;
-
-        TContainerConsumer(Container* c)
-            : C_(c)
-        {
-        }
-
-        // TODO: return bool (continue)
+    /** 
+     * Consumer that places provided elements into a container. Not using 
+     * `emplace(iterator)` for efficiency. 
+     */ 
+    template <class Container> 
+    struct TContainerConsumer { 
+        using value_type = typename Container::value_type; 
+ 
+        TContainerConsumer(Container* c) 
+            : C_(c) 
+        { 
+        } 
+ 
+        // TODO: return bool (continue) 
         template <class StringBuf>
-        void operator()(StringBuf e) const {
-            this->operator()(C_, e);
-        }
-
-    private:
+        void operator()(StringBuf e) const { 
+            this->operator()(C_, e); 
+        } 
+ 
+    private: 
         template <class OtherContainer, class StringBuf>
-        auto operator()(OtherContainer* c, StringBuf e) const -> decltype(c->emplace_back()) {
-            return c->emplace_back(value_type(e));
-        }
-
+        auto operator()(OtherContainer* c, StringBuf e) const -> decltype(c->emplace_back()) { 
+            return c->emplace_back(value_type(e)); 
+        } 
+ 
         template <class OtherContainer, class StringBuf>
-        auto operator()(OtherContainer* c, StringBuf e) const -> decltype(c->emplace()) {
-            return c->emplace(value_type(e));
-        }
-
-        Container* C_;
-    };
-
-    /**
-     * Consumer that converts provided elements via `FromString` and places them
-     * into a container.
-     */
-    template <class Container>
-    struct TContainerConvertingConsumer {
-        using value_type = typename Container::value_type;
-
-        TContainerConvertingConsumer(Container* c)
-            : C_(c)
-        {
-        }
-
-        template <class StringBuf>
-        void operator()(StringBuf e) const {
-            this->operator()(C_, e);
-        }
-
-    private:
+        auto operator()(OtherContainer* c, StringBuf e) const -> decltype(c->emplace()) { 
+            return c->emplace(value_type(e)); 
+        } 
+ 
+        Container* C_; 
+    }; 
+ 
+    /** 
+     * Consumer that converts provided elements via `FromString` and places them 
+     * into a container. 
+     */ 
+    template <class Container> 
+    struct TContainerConvertingConsumer { 
+        using value_type = typename Container::value_type; 
+ 
+        TContainerConvertingConsumer(Container* c) 
+            : C_(c) 
+        { 
+        } 
+ 
+        template <class StringBuf> 
+        void operator()(StringBuf e) const { 
+            this->operator()(C_, e); 
+        } 
+ 
+    private: 
         template <class OtherContainer, class StringBuf>
-        auto operator()(OtherContainer* c, StringBuf e) const -> decltype(c->emplace_back()) {
-            value_type v;
-            DoFromString(e, &v);
-            return c->emplace_back(std::move(v));
-        }
-
+        auto operator()(OtherContainer* c, StringBuf e) const -> decltype(c->emplace_back()) { 
+            value_type v; 
+            DoFromString(e, &v); 
+            return c->emplace_back(std::move(v)); 
+        } 
+ 
         template <class OtherContainer, class StringBuf>
-        auto operator()(OtherContainer* c, StringBuf e) const -> decltype(c->emplace()) {
-            value_type v;
-            DoFromString(e, &v);
-            return c->emplace(std::move(v));
-        }
-
-        Container* C_;
-    };
-
-    template <class String>
-    struct TStringBufOfImpl {
-        using type = std::conditional_t<
-            THasData<String>::value,
-            TBasicStringBuf<typename String::value_type>,
+        auto operator()(OtherContainer* c, StringBuf e) const -> decltype(c->emplace()) { 
+            value_type v; 
+            DoFromString(e, &v); 
+            return c->emplace(std::move(v)); 
+        } 
+ 
+        Container* C_; 
+    }; 
+ 
+    template <class String> 
+    struct TStringBufOfImpl { 
+        using type = std::conditional_t< 
+            THasData<String>::value, 
+            TBasicStringBuf<typename String::value_type>, 
             TIteratorRange<typename String::const_iterator>>;
-    };
-
-    template <class Char, class Traits, class Allocator>
-    struct TStringBufOfImpl<std::basic_string<Char, Traits, Allocator>> {
-        using type = std::basic_string_view<Char, Traits>;
-    };
-
-    template <class Char, class Traits>
-    struct TStringBufOfImpl<std::basic_string_view<Char, Traits>> {
-        using type = std::basic_string_view<Char, Traits>;
-    };
-
-    /**
-     * Metafunction that returns a string buffer for the given type. This is to
-     * make sure that splitting `std::string` returns `std::string_view`.
-     */
+    }; 
+ 
+    template <class Char, class Traits, class Allocator> 
+    struct TStringBufOfImpl<std::basic_string<Char, Traits, Allocator>> { 
+        using type = std::basic_string_view<Char, Traits>; 
+    }; 
+ 
+    template <class Char, class Traits> 
+    struct TStringBufOfImpl<std::basic_string_view<Char, Traits>> { 
+        using type = std::basic_string_view<Char, Traits>; 
+    }; 
+ 
+    /** 
+     * Metafunction that returns a string buffer for the given type. This is to 
+     * make sure that splitting `std::string` returns `std::string_view`. 
+     */ 
     template <class String>
-    using TStringBufOf = typename TStringBufOfImpl<String>::type;
-
+    using TStringBufOf = typename TStringBufOfImpl<String>::type; 
+ 
     template <class StringBuf, class Iterator>
-    StringBuf DoMakeStringBuf(Iterator b, Iterator e, StringBuf*) {
-        return StringBuf(b, e);
-    }
-
+    StringBuf DoMakeStringBuf(Iterator b, Iterator e, StringBuf*) { 
+        return StringBuf(b, e); 
+    } 
+ 
     template <class Char, class Traits, class Iterator>
-    std::basic_string_view<Char, Traits> DoMakeStringBuf(Iterator b, Iterator e, std::basic_string_view<Char, Traits>*) {
-        return std::basic_string_view<Char, Traits>(b, e - b);
-    }
-
+    std::basic_string_view<Char, Traits> DoMakeStringBuf(Iterator b, Iterator e, std::basic_string_view<Char, Traits>*) { 
+        return std::basic_string_view<Char, Traits>(b, e - b); 
+    } 
+ 
     template <class StringBuf, class Iterator>
-    StringBuf MakeStringBuf(Iterator b, Iterator e) {
-        return DoMakeStringBuf(b, e, static_cast<StringBuf*>(nullptr));
-    }
-
+    StringBuf MakeStringBuf(Iterator b, Iterator e) { 
+        return DoMakeStringBuf(b, e, static_cast<StringBuf*>(nullptr)); 
+    } 
+ 
     template <class String>
-    struct TIteratorOfImpl {
-        using type = std::conditional_t<
-            THasData<String>::value,
-            const typename String::value_type*,
+    struct TIteratorOfImpl { 
+        using type = std::conditional_t< 
+            THasData<String>::value, 
+            const typename String::value_type*, 
             typename String::const_iterator>;
-    };
-
+    }; 
+ 
     template <class String>
-    using TIteratorOf = typename TIteratorOfImpl<String>::type;
-
+    using TIteratorOf = typename TIteratorOfImpl<String>::type; 
+ 
     template <class String>
     class TStringSplitter;
 
     template <class String>
     struct TIterState: public TStringBufOf<String> {
     public:
-        using TStringBufType = TStringBufOf<String>;
-        using TIterator = TIteratorOf<String>;
+        using TStringBufType = TStringBufOf<String>; 
+        using TIterator = TIteratorOf<String>; 
         friend class TStringSplitter<String>;
-
-        TIterState(const String& string) noexcept
+ 
+        TIterState(const String& string) noexcept 
             : TStringBufType()
             , DelimiterEnd_(std::begin(string))
             , OriginEnd_(std::end(string))
-        {
-        }
-
+        { 
+        } 
+ 
         template <
             typename Other,
             typename = std::enable_if_t<
@@ -675,397 +675,397 @@ namespace NStringSplitPrivate {
             return TStringBufType(*this) == TStringBufType(toCompare);
         }
 
-        TIterator TokenStart() const noexcept {
+        TIterator TokenStart() const noexcept { 
             return this->begin();
-        }
-
-        TIterator TokenDelim() const noexcept {
+        } 
+ 
+        TIterator TokenDelim() const noexcept { 
             return this->end();
-        }
-
-        TStringBufType Token() const noexcept {
+        } 
+ 
+        TStringBufType Token() const noexcept { 
             return *this;
-        }
-
-        TStringBufType Delim() const noexcept {
+        } 
+ 
+        TStringBufType Delim() const noexcept { 
             return MakeStringBuf<TStringBufType>(TokenDelim(), DelimiterEnd_);
-        }
-
-    private:
+        } 
+ 
+    private: 
         void UpdateParentBuf(TIterator tokenStart, TIterator tokenDelim) noexcept {
             *static_cast<TStringBufType*>(this) = MakeStringBuf<TStringBufType>(tokenStart, tokenDelim);
-        }
-
+        } 
+ 
         bool DelimiterIsEmpty() const noexcept {
             return TokenDelim() == DelimiterEnd_;
-        }
+        } 
 
     private:
         TIterator DelimiterEnd_;
         const TIterator OriginEnd_;
-    };
-
-    template <class Base>
+    }; 
+ 
+    template <class Base> 
     class TSplitRange: public Base, public TInputRangeAdaptor<TSplitRange<Base>> {
-        using TStringBufType = decltype(std::declval<Base>().Next()->Token());
-
-    public:
-        template <typename... Args>
-        inline TSplitRange(Args&&... args)
-            : Base(std::forward<Args>(args)...)
-        {
-        }
-
-        template <class Consumer, std::enable_if_t<std::is_same<decltype(std::declval<Consumer>()(std::declval<TStringBufType>())), void>::value, int>* = nullptr>
-        inline void Consume(Consumer&& f) {
-            for (auto&& it : *this) {
-                f(it.Token());
-            }
-        }
-
-        template <class Consumer, std::enable_if_t<std::is_same<decltype(std::declval<Consumer>()(std::declval<TStringBufType>())), bool>::value, int>* = nullptr>
-        inline bool Consume(Consumer&& f) {
-            for (auto&& it : *this) {
-                if (!f(it.Token())) {
-                    return false;
-                }
-            }
-            return true;
-        }
-
+        using TStringBufType = decltype(std::declval<Base>().Next()->Token()); 
+ 
+    public: 
+        template <typename... Args> 
+        inline TSplitRange(Args&&... args) 
+            : Base(std::forward<Args>(args)...) 
+        { 
+        } 
+ 
+        template <class Consumer, std::enable_if_t<std::is_same<decltype(std::declval<Consumer>()(std::declval<TStringBufType>())), void>::value, int>* = nullptr> 
+        inline void Consume(Consumer&& f) { 
+            for (auto&& it : *this) { 
+                f(it.Token()); 
+            } 
+        } 
+ 
+        template <class Consumer, std::enable_if_t<std::is_same<decltype(std::declval<Consumer>()(std::declval<TStringBufType>())), bool>::value, int>* = nullptr> 
+        inline bool Consume(Consumer&& f) { 
+            for (auto&& it : *this) { 
+                if (!f(it.Token())) { 
+                    return false; 
+                } 
+            } 
+            return true; 
+        } 
+ 
         template <class Container, class = std::enable_if_t<THasInsert<Container>::value || THasPushBack<Container>::value>>
-        operator Container() {
-            Container result;
-            AddTo(&result);
-            return result;
-        }
-
-        template <class S>
-        inline TVector<S> ToList() {
-            TVector<S> result;
-            for (auto&& it : *this) {
-                result.push_back(S(it.Token()));
-            }
-            return result;
-        }
-
-        template <class Container>
-        inline void Collect(Container* c) {
-            Y_ASSERT(c);
-            c->clear();
-            AddTo(c);
-        }
-
-        template <class Container>
-        inline void AddTo(Container* c) {
-            Y_ASSERT(c);
-            TContainerConsumer<Container> consumer(c);
-            Consume(consumer);
-        }
-
-        template <class Container>
-        inline void ParseInto(Container* c) {
-            Y_ASSERT(c);
-            TContainerConvertingConsumer<Container> consumer(c);
-            Consume(consumer);
-        }
-
-        // TODO: this is actually TryParseInto
-        /**
-         * Same as `CollectInto`, just doesn't throw.
-         *
-         * \param[out] args                 Output arguments.
-         * \returns                         Whether parsing was successful.
-         */
-        template <typename... Args>
-        inline bool TryCollectInto(Args*... args) noexcept {
-            size_t successfullyFilled = 0;
-            auto it = this->begin();
-
-            //FIXME: actually, some kind of TryApplyToMany is needed in order to stop iteration upon first failure
-            ApplyToMany([&](auto&& arg) {
-                if (it != this->end()) {
-                    if (TryDoFromString(it->Token(), arg)) {
-                        ++successfullyFilled;
-                    }
-                    ++it;
-                }
+        operator Container() { 
+            Container result; 
+            AddTo(&result); 
+            return result; 
+        } 
+ 
+        template <class S> 
+        inline TVector<S> ToList() { 
+            TVector<S> result; 
+            for (auto&& it : *this) { 
+                result.push_back(S(it.Token())); 
+            } 
+            return result; 
+        } 
+ 
+        template <class Container> 
+        inline void Collect(Container* c) { 
+            Y_ASSERT(c); 
+            c->clear(); 
+            AddTo(c); 
+        } 
+ 
+        template <class Container> 
+        inline void AddTo(Container* c) { 
+            Y_ASSERT(c); 
+            TContainerConsumer<Container> consumer(c); 
+            Consume(consumer); 
+        } 
+ 
+        template <class Container> 
+        inline void ParseInto(Container* c) { 
+            Y_ASSERT(c); 
+            TContainerConvertingConsumer<Container> consumer(c); 
+            Consume(consumer); 
+        } 
+ 
+        // TODO: this is actually TryParseInto 
+        /** 
+         * Same as `CollectInto`, just doesn't throw. 
+         * 
+         * \param[out] args                 Output arguments. 
+         * \returns                         Whether parsing was successful. 
+         */ 
+        template <typename... Args> 
+        inline bool TryCollectInto(Args*... args) noexcept { 
+            size_t successfullyFilled = 0; 
+            auto it = this->begin(); 
+ 
+            //FIXME: actually, some kind of TryApplyToMany is needed in order to stop iteration upon first failure 
+            ApplyToMany([&](auto&& arg) { 
+                if (it != this->end()) { 
+                    if (TryDoFromString(it->Token(), arg)) { 
+                        ++successfullyFilled; 
+                    } 
+                    ++it; 
+                } 
             }, args...);
-
-            return successfullyFilled == sizeof...(args) && it == this->end();
-        }
-
-        // TODO: this is actually ParseInto
-        /**
-         * Splits and parses everything that's in this splitter into `args`.
-         *
-         * Example usage:
-         * \code
-         * int l, r;
-         * StringSplitter("100*200").Split('*').CollectInto(&l, &r);
-         * \endcode
-         *
-         * \param[out] args                 Output arguments.
-         * \throws                          If not all items were parsed, or
-         *                                  if there were too many items in the split.
-         */
-        template <typename... Args>
-        inline void CollectInto(Args*... args) {
-            Y_ENSURE(TryCollectInto<Args...>(args...));
-        }
-
-        inline size_t Count() const {
-            size_t cnt = 0;
-            for (auto&& it : *this) {
-                Y_UNUSED(it);
-                ++cnt;
-            }
-            return cnt;
-        }
-    };
-
-    template <class String>
-    class TStringSplitter {
-        using TStringType = String;
-        using TChar = typename TStringType::value_type;
-        using TIteratorState = TIterState<TStringType>;
+ 
+            return successfullyFilled == sizeof...(args) && it == this->end(); 
+        } 
+ 
+        // TODO: this is actually ParseInto 
+        /** 
+         * Splits and parses everything that's in this splitter into `args`. 
+         * 
+         * Example usage: 
+         * \code 
+         * int l, r; 
+         * StringSplitter("100*200").Split('*').CollectInto(&l, &r); 
+         * \endcode 
+         * 
+         * \param[out] args                 Output arguments. 
+         * \throws                          If not all items were parsed, or 
+         *                                  if there were too many items in the split. 
+         */ 
+        template <typename... Args> 
+        inline void CollectInto(Args*... args) { 
+            Y_ENSURE(TryCollectInto<Args...>(args...)); 
+        } 
+ 
+        inline size_t Count() const { 
+            size_t cnt = 0; 
+            for (auto&& it : *this) { 
+                Y_UNUSED(it); 
+                ++cnt; 
+            } 
+            return cnt; 
+        } 
+    }; 
+ 
+    template <class String> 
+    class TStringSplitter { 
+        using TStringType = String; 
+        using TChar = typename TStringType::value_type; 
+        using TIteratorState = TIterState<TStringType>; 
         using TStringBufType = typename TIteratorState::TStringBufType;
         using TIterator = typename TIteratorState::TIterator;
-
-        /**
-         * Base class for all split ranges that actually does the splitting.
-         */
-        template <class DelimStorage>
-        struct TSplitRangeBase {
-            template <class OtherString, class... Args>
-            inline TSplitRangeBase(OtherString&& s, Args&&... args)
-                : String_(std::forward<OtherString>(s))
-                , State_(String_)
+ 
+        /** 
+         * Base class for all split ranges that actually does the splitting. 
+         */ 
+        template <class DelimStorage> 
+        struct TSplitRangeBase { 
+            template <class OtherString, class... Args> 
+            inline TSplitRangeBase(OtherString&& s, Args&&... args) 
+                : String_(std::forward<OtherString>(s)) 
+                , State_(String_) 
                 , Delimiter_(std::forward<Args>(args)...)
-            {
-            }
-
-            inline TIteratorState* Next() {
+            { 
+            } 
+ 
+            inline TIteratorState* Next() { 
                 if (State_.DelimiterIsEmpty()) {
-                    return nullptr;
-                }
-
+                    return nullptr; 
+                } 
+ 
                 const auto tokenBegin = State_.DelimiterEnd_;
                 const auto tokenEnd = Delimiter_.Ptr()->Find(State_.DelimiterEnd_, State_.OriginEnd_);
                 State_.UpdateParentBuf(tokenBegin, tokenEnd);
-
-                return &State_;
-            }
-
-        private:
-            TStringType String_;
-            TIteratorState State_;
+ 
+                return &State_; 
+            } 
+ 
+        private: 
+            TStringType String_; 
+            TIteratorState State_; 
             DelimStorage Delimiter_;
-        };
-
-        template <class Base, class Filter>
+        }; 
+ 
+        template <class Base, class Filter> 
         struct TFilterRange: public Base {
-            template <class... Args>
-            inline TFilterRange(const Base& base, Args&&... args)
-                : Base(base)
-                , Filter_(std::forward<Args>(args)...)
-            {
-            }
-
-            inline TIteratorState* Next() {
-                TIteratorState* ret;
-
-                do {
-                    ret = Base::Next();
-                } while (ret && !Filter_.Accept(ret));
-
-                return ret;
-            }
-
-            Filter Filter_;
-        };
-
-        struct TNonEmptyFilter {
-            template <class TToken>
-            inline bool Accept(const TToken* token) noexcept {
+            template <class... Args> 
+            inline TFilterRange(const Base& base, Args&&... args) 
+                : Base(base) 
+                , Filter_(std::forward<Args>(args)...) 
+            { 
+            } 
+ 
+            inline TIteratorState* Next() { 
+                TIteratorState* ret; 
+ 
+                do { 
+                    ret = Base::Next(); 
+                } while (ret && !Filter_.Accept(ret)); 
+ 
+                return ret; 
+            } 
+ 
+            Filter Filter_; 
+        }; 
+ 
+        struct TNonEmptyFilter { 
+            template <class TToken> 
+            inline bool Accept(const TToken* token) noexcept { 
                 return !token->empty();
-            }
-        };
-
-        template <class TIter>
-        struct TStopIteration;
-
-        template <class Base>
+            } 
+        }; 
+ 
+        template <class TIter> 
+        struct TStopIteration; 
+ 
+        template <class Base> 
         struct TFilters: public Base {
-            template <class TFilter>
-            using TIt = TSplitRange<TStopIteration<TFilters<TFilterRange<Base, TFilter>>>>;
-
-            template <typename... Args>
-            inline TFilters(Args&&... args)
-                : Base(std::forward<Args>(args)...)
-            {
-            }
-
-            inline TIt<TNonEmptyFilter> SkipEmpty() const {
+            template <class TFilter> 
+            using TIt = TSplitRange<TStopIteration<TFilters<TFilterRange<Base, TFilter>>>>; 
+ 
+            template <typename... Args> 
+            inline TFilters(Args&&... args) 
+                : Base(std::forward<Args>(args)...) 
+            { 
+            } 
+ 
+            inline TIt<TNonEmptyFilter> SkipEmpty() const { 
                 return {*this};
-            }
-        };
-
-        template <class Base, class Stopper>
+            } 
+        }; 
+ 
+        template <class Base, class Stopper> 
         struct TStopRange: public Base {
-            template <typename... Args>
-            inline TStopRange(const Base& base, Args&&... args)
-                : Base(base)
-                , Stopper_(std::forward<Args>(args)...)
-            {
-            }
-
-            inline TIteratorState* Next() {
-                TIteratorState* ret = Base::Next();
-                if (!ret || Stopper_.Stop(ret)) {
-                    return nullptr;
-                }
-                return ret;
-            }
-
-            Stopper Stopper_;
-        };
-
-        struct TTake {
-            TTake() = default;
-
-            TTake(size_t count)
-                : Count(count)
-            {
-            }
-
-            template <class TToken>
-            inline bool Stop(TToken*) noexcept {
-                if (Count > 0) {
-                    --Count;
-                    return false;
-                } else {
-                    return true;
-                }
-            }
-
-            size_t Count = 0;
-        };
-
-        struct TLimit {
-            TLimit() = default;
-
-            TLimit(size_t count)
-                : Count(count)
-            {
-                Y_ASSERT(Count > 0);
-            }
-
-            template <class TToken>
-            inline bool Stop(TToken* token) noexcept {
-                if (Count > 1) {
-                    --Count;
-                    return false;
-                } else if (Count == 1) {
+            template <typename... Args> 
+            inline TStopRange(const Base& base, Args&&... args) 
+                : Base(base) 
+                , Stopper_(std::forward<Args>(args)...) 
+            { 
+            } 
+ 
+            inline TIteratorState* Next() { 
+                TIteratorState* ret = Base::Next(); 
+                if (!ret || Stopper_.Stop(ret)) { 
+                    return nullptr; 
+                } 
+                return ret; 
+            } 
+ 
+            Stopper Stopper_; 
+        }; 
+ 
+        struct TTake { 
+            TTake() = default; 
+ 
+            TTake(size_t count) 
+                : Count(count) 
+            { 
+            } 
+ 
+            template <class TToken> 
+            inline bool Stop(TToken*) noexcept { 
+                if (Count > 0) { 
+                    --Count; 
+                    return false; 
+                } else { 
+                    return true; 
+                } 
+            } 
+ 
+            size_t Count = 0; 
+        }; 
+ 
+        struct TLimit { 
+            TLimit() = default; 
+ 
+            TLimit(size_t count) 
+                : Count(count) 
+            { 
+                Y_ASSERT(Count > 0); 
+            } 
+ 
+            template <class TToken> 
+            inline bool Stop(TToken* token) noexcept { 
+                if (Count > 1) { 
+                    --Count; 
+                    return false; 
+                } else if (Count == 1) { 
                     token->DelimiterEnd_ = token->OriginEnd_;
                     token->UpdateParentBuf(token->TokenStart(), token->DelimiterEnd_);
-                    return false;
-                }
-                return true;
-            }
-
-            size_t Count = 0;
-        };
-
-        template <class Base>
+                    return false; 
+                } 
+                return true; 
+            } 
+ 
+            size_t Count = 0; 
+        }; 
+ 
+        template <class Base> 
         struct TStopIteration: public Base {
-            template <class TStopper>
-            using TIt = TSplitRange<TStopIteration<TFilters<TStopRange<Base, TStopper>>>>;
-
-            template <typename... Args>
-            inline TStopIteration(Args&&... args)
-                : Base(std::forward<Args>(args)...)
-            {
-            }
-
-            inline TIt<TTake> Take(size_t count) {
+            template <class TStopper> 
+            using TIt = TSplitRange<TStopIteration<TFilters<TStopRange<Base, TStopper>>>>; 
+ 
+            template <typename... Args> 
+            inline TStopIteration(Args&&... args) 
+                : Base(std::forward<Args>(args)...) 
+            { 
+            } 
+ 
+            inline TIt<TTake> Take(size_t count) { 
                 return {*this, count};
-            }
-
-            inline TIt<TLimit> Limit(size_t count) {
+            } 
+ 
+            inline TIt<TLimit> Limit(size_t count) { 
                 return {*this, count};
-            }
-        };
-
-        template <class TPolicy>
-        using TIt = TSplitRange<TStopIteration<TFilters<TSplitRangeBase<TPolicy>>>>;
-
-    public:
+            } 
+        }; 
+ 
+        template <class TPolicy> 
+        using TIt = TSplitRange<TStopIteration<TFilters<TSplitRangeBase<TPolicy>>>>; 
+ 
+    public: 
         template <class OtherString>
-        explicit TStringSplitter(OtherString&& s)
-            : String_(std::forward<OtherString>(s))
-        {
-        }
-
-        //does not own TDelim
-        template <class TDelim>
-        inline TIt<TPtrPolicy<const TDelim>> Split(const TDelim& d) const noexcept {
+        explicit TStringSplitter(OtherString&& s) 
+            : String_(std::forward<OtherString>(s)) 
+        { 
+        } 
+ 
+        //does not own TDelim 
+        template <class TDelim> 
+        inline TIt<TPtrPolicy<const TDelim>> Split(const TDelim& d) const noexcept { 
             return {String_, &d};
-        }
-
-        inline TIt<TEmbedPolicy<TCharDelimiter<const TChar>>> Split(TChar ch) const noexcept {
+        } 
+ 
+        inline TIt<TEmbedPolicy<TCharDelimiter<const TChar>>> Split(TChar ch) const noexcept { 
             return {String_, ch};
-        }
-
-        inline TIt<TSimpleRefPolicy<TSetDelimiter<const TChar>>> SplitBySet(const TChar* set) const noexcept {
+        } 
+ 
+        inline TIt<TSimpleRefPolicy<TSetDelimiter<const TChar>>> SplitBySet(const TChar* set) const noexcept { 
             return {String_, set};
-        }
-
-        inline TIt<TEmbedPolicy<TStringDelimiter<const TChar>>> SplitByString(const TStringBufType& str) const noexcept {
+        } 
+ 
+        inline TIt<TEmbedPolicy<TStringDelimiter<const TChar>>> SplitByString(const TStringBufType& str) const noexcept { 
             return {String_, str.data(), str.size()};
-        }
-
-        template <class TFunc>
-        inline TIt<TEmbedPolicy<TFuncDelimiter<TIterator, TFunc>>> SplitByFunc(TFunc f) const noexcept {
+        } 
+ 
+        template <class TFunc> 
+        inline TIt<TEmbedPolicy<TFuncDelimiter<TIterator, TFunc>>> SplitByFunc(TFunc f) const noexcept { 
             return {String_, f};
-        }
-
-    private:
-        TStringType String_;
-    };
-
+        } 
+ 
+    private: 
+        TStringType String_; 
+    }; 
+ 
     template <class String>
-    auto MakeStringSplitter(String&& s) {
-        return TStringSplitter<std::remove_reference_t<String>>(std::forward<String>(s));
-    }
-}
-
-template <class Iterator>
-auto StringSplitter(Iterator begin, Iterator end) {
+    auto MakeStringSplitter(String&& s) { 
+        return TStringSplitter<std::remove_reference_t<String>>(std::forward<String>(s)); 
+    } 
+} 
+ 
+template <class Iterator> 
+auto StringSplitter(Iterator begin, Iterator end) { 
     return ::NStringSplitPrivate::MakeStringSplitter(TIteratorRange<Iterator>(begin, end));
-}
-
-template <class Char>
-auto StringSplitter(const Char* begin, const Char* end) {
+} 
+ 
+template <class Char> 
+auto StringSplitter(const Char* begin, const Char* end) { 
     return ::NStringSplitPrivate::MakeStringSplitter(TBasicStringBuf<Char>(begin, end));
-}
-
-template <class Char>
-auto StringSplitter(const Char* begin, size_t len) {
+} 
+ 
+template <class Char> 
+auto StringSplitter(const Char* begin, size_t len) { 
     return ::NStringSplitPrivate::MakeStringSplitter(TBasicStringBuf<Char>(begin, len));
-}
-
-template <class Char>
-auto StringSplitter(const Char* str) {
+} 
+ 
+template <class Char> 
+auto StringSplitter(const Char* str) { 
     return ::NStringSplitPrivate::MakeStringSplitter(TBasicStringBuf<Char>(str));
-}
-
-template <class String, std::enable_if_t<!std::is_pointer<std::remove_reference_t<String>>::value, int> = 0>
-auto StringSplitter(String& s) {
+} 
+ 
+template <class String, std::enable_if_t<!std::is_pointer<std::remove_reference_t<String>>::value, int> = 0> 
+auto StringSplitter(String& s) { 
     return ::NStringSplitPrivate::MakeStringSplitter(::NStringSplitPrivate::TStringBufOf<String>(s.data(), s.size()));
-}
-
-template <class String, std::enable_if_t<!std::is_pointer<std::remove_reference_t<String>>::value, int> = 0>
-auto StringSplitter(String&& s) {
+} 
+ 
+template <class String, std::enable_if_t<!std::is_pointer<std::remove_reference_t<String>>::value, int> = 0> 
+auto StringSplitter(String&& s) { 
     return ::NStringSplitPrivate::MakeStringSplitter(std::move(s));
-}
+} 

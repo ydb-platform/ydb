@@ -68,7 +68,7 @@ public:
     NUdf::IFunctionTypeInfoBuilder1& UserTypeImpl(const NUdf::ITypeBuilder& typeBuilder) override;
 
     void SetError(const NUdf::TStringRef& error) override;
-    inline bool HasError() const { return !Error_.empty(); }
+    inline bool HasError() const { return !Error_.empty(); } 
     inline const TString& GetError() const { return Error_; }
 
     void Build(TFunctionTypeInfo* funcInfo);

@@ -412,7 +412,7 @@ struct TEvDataShard {
             ActorIdToProto(source, Record.MutableSource());
             Record.SetTxId(txId);
             Record.SetExecLevel(0);
-            Record.SetTxBody(txBody.data(), txBody.size());
+            Record.SetTxBody(txBody.data(), txBody.size()); 
             Record.SetFlags(flags);
         }
 
@@ -531,7 +531,7 @@ struct TEvDataShard {
         }
 
         void SetTxResult(const TStringBuf& txResult) {
-            Record.SetTxResult(txResult.data(), txResult.size());
+            Record.SetTxResult(txResult.data(), txResult.size()); 
         }
 
         void SetExecutionError(const NKikimrTxDataShard::TError::EKind& error, const TStringBuf& message) {
@@ -626,11 +626,11 @@ struct TEvDataShard {
             auto error = Record.MutableError()->Add();
             error->SetKind(kind);
             if (reason) {
-                error->SetReason(reason.data(), reason.size());
+                error->SetReason(reason.data(), reason.size()); 
             }
 
             if (keyBuffer) {
-                error->SetKey(keyBuffer.data(), keyBuffer.size());
+                error->SetKey(keyBuffer.data(), keyBuffer.size()); 
             }
         }
 

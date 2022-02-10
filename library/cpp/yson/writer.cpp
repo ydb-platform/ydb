@@ -126,7 +126,7 @@ namespace NYson {
             } else {
                 str = negativeInfLiteral;
             }
-            return TString(str.data(), str.size());
+            return TString(str.data(), str.size()); 
         }
 
     }

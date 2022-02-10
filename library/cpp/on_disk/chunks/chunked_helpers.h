@@ -66,7 +66,7 @@ public:
     void Save(IOutputStream& out) const {
         ui64 uSize = (ui64)Vector.size();
         out.Write(&uSize, sizeof(uSize));
-        out.Write(Vector.data(), Vector.size() * sizeof(T));
+        out.Write(Vector.data(), Vector.size() * sizeof(T)); 
     }
 
     const T& At(size_t idx) const {
@@ -239,7 +239,7 @@ private:
 
     bool IsPlainEnought(ui16 bits) const {
         TVector<size_t> counts(1LL << bits, 0);
-        for (size_t i = 0; i < Data.size(); ++i) {
+        for (size_t i = 0; i < Data.size(); ++i) { 
             size_t& count = counts[KeyHash<TKey>(TKeyValuePair::GetFirst(&Data[i]), bits)];
             ++count;
             if (count > 2)
@@ -273,7 +273,7 @@ public:
 
         const ui32 nBuckets = ui32(1) << bits;
         TData2 data2(nBuckets);
-        for (size_t i = 0; i < Data.size(); ++i)
+        for (size_t i = 0; i < Data.size(); ++i) 
             data2[KeyHash<TKey>(TKeyValuePair::GetFirst(&Data[i]), bits)].push_back(Data[i]);
 
         typedef TVector<TInterval> TIntervals;
@@ -292,9 +292,9 @@ public:
                         ythrow yexception() << "key clash";
         }
 #endif
-        out.Write(intervals.data(), intervals.size() * sizeof(intervals[0]));
+        out.Write(intervals.data(), intervals.size() * sizeof(intervals[0])); 
         for (ui32 i = 0; i < nBuckets; ++i)
-            out.Write(data2[i].data(), data2[i].size() * sizeof(data2[i][0]));
+            out.Write(data2[i].data(), data2[i].size() * sizeof(data2[i][0])); 
     }
 };
 
@@ -497,7 +497,7 @@ public:
 
     inline const char* GetBlockName(size_t index) const {
         Y_ASSERT(index < GetBlocksCount());
-        return Names[index].data();
+        return Names[index].data(); 
     }
 
     inline const void* GetBlockByName(const char* name) const {
@@ -595,7 +595,7 @@ public:
     }
 
     void PushBack(const T& t) {
-        Offsets.push_back((ui64) Data.size());
+        Offsets.push_back((ui64) Data.size()); 
         TSaveLoadVectorNonPodElement<T>::Save(&DataStream, t);
     }
 
@@ -604,12 +604,12 @@ public:
     }
 
     void Save(IOutputStream& out) const {
-        ui64 sizeofOffsets = Offsets.size() + 1;
+        ui64 sizeofOffsets = Offsets.size() + 1; 
         out.Write(&sizeofOffsets, sizeof(sizeofOffsets));
-        out.Write(Offsets.data(), Offsets.size() * sizeof(Offsets[0]));
-        ui64 lastOffset = (ui64) Data.size();
+        out.Write(Offsets.data(), Offsets.size() * sizeof(Offsets[0])); 
+        ui64 lastOffset = (ui64) Data.size(); 
         out.Write(&lastOffset, sizeof(lastOffset));
-        out.Write(Data.data(), Data.size());
+        out.Write(Data.data(), Data.size()); 
     }
 };
 
@@ -657,7 +657,7 @@ struct TGeneralVectorG<TItem, true> {
 template <>
 struct TSaveLoadVectorNonPodElement<TString> {
     static inline void Save(IOutputStream* out, const TString& s) {
-        out->Write(s.data(), s.size() + 1);
+        out->Write(s.data(), s.size() + 1); 
     }
 
     static inline void Load(TMemoryInput* in, TString& s, size_t elementSize) {

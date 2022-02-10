@@ -3,7 +3,7 @@
 
 #include <ydb/library/aclib/aclib.h>
 
-#include <util/string/split.h>
+#include <util/string/split.h> 
 #include <util/string/join.h>
 #include <util/string/printf.h>
 
@@ -995,7 +995,7 @@ public:
         for (ui32 i = NKikimrCms::EMarker_MIN + 1; i <= NKikimrCms::EMarker_MAX; ++i)
             if (NKikimrCms::EMarker_IsValid(i))
                 allMarkers.push_back(static_cast<NKikimrCms::EMarker>(i));
-        TString desc = Sprintf("Marker name (%s)", JoinSeq(", ", allMarkers).data());
+        TString desc = Sprintf("Marker name (%s)", JoinSeq(", ", allMarkers).data()); 
 
         config.SetFreeArgsNum(1);
         SetFreeArgTitle(0, "<MARKER>", desc);
@@ -1101,7 +1101,7 @@ public:
              ++i)
             if (NKikimrCms::TLogRecordData::EType_IsValid(i))
                 allTypes.push_back(static_cast<NKikimrCms::TLogRecordData::EType>(i));
-        TString desc = Sprintf("Filter log records by type (%s)", JoinSeq(", ", allTypes).data());
+        TString desc = Sprintf("Filter log records by type (%s)", JoinSeq(", ", allTypes).data()); 
 
         config.Opts->AddLongOption("detailed", "Show more detailed log messages")
             .NoArgument();

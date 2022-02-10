@@ -1,9 +1,9 @@
 // -*- C++ -*-
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions. 
+// See https://llvm.org/LICENSE.txt for license information. 
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception 
 //
 //===----------------------------------------------------------------------===//
 
@@ -57,7 +57,7 @@ public:
         }
         return allocator<_Tp>().allocate(__n);
     }
-    _LIBCPP_INLINE_VISIBILITY void deallocate(pointer __p, size_type __n)
+    _LIBCPP_INLINE_VISIBILITY void deallocate(pointer __p, size_type __n) 
     {
         if (__p == (pointer)&buf_)
             __allocated_ = false;

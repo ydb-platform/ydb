@@ -106,8 +106,8 @@ namespace NTest {
             Out
                 << " | Update " << tid
                 << ": " << TNames::Do(rop) << "." << unsigned(rop)
-                << ", " << key.size() << " keys (" << keyBytes << "b)"
-                << " " << ops.size() << " ops (" << opsBytes << "b)"
+                << ", " << key.size() << " keys (" << keyBytes << "b)" 
+                << " " << ops.size() << " ops (" << opsBytes << "b)" 
                 << " " << rowVersion
                 << Endl;
 

@@ -121,7 +121,7 @@ namespace NKikimr {
 
             TString ToString() const {
                 return Sprintf("{ChunkIdx# %" PRIu32 " ChunkSerNum# %s Id# %016" PRIx64 " IndexInsideChunk# %"
-                    PRIu32 " SizeInBlocks# %" PRIu32 "}", ChunkIdx, ChunkSerNum.ToString().data(), Id, IndexInsideChunk,
+                    PRIu32 " SizeInBlocks# %" PRIu32 "}", ChunkIdx, ChunkSerNum.ToString().data(), Id, IndexInsideChunk, 
                     SizeInBlocks);
             }
         };

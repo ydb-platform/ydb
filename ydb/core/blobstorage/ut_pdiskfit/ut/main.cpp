@@ -22,7 +22,7 @@ public:
     void *ThreadProc() override {
         with_lock (Mutex) {
             do {
-                Cerr << Sprintf("Watchdog# %s\n", TInstant::Now().ToString().data());
+                Cerr << Sprintf("Watchdog# %s\n", TInstant::Now().ToString().data()); 
             } while (!AtomicGet(QuitFlag) && !Stop.WaitT(Mutex, TDuration::Seconds(5)));
         }
 

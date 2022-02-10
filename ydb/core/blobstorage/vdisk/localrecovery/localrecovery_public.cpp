@@ -505,7 +505,7 @@ namespace NKikimr {
                     LOG_DEBUG(ctx, BS_LOCALRECOVERY,
                               VDISKP(LocRecCtx->VCtx->VDiskLogPrefix,
                                     "STARTING POINT: signature# %" PRIu32 " record# %s",
-                                    ui32(x.first), x.second.ToString().data()));
+                                    ui32(x.first), x.second.ToString().data())); 
                     LocRecCtx->RecovInfo->SetStartingPoint(x.first, x.second.Lsn);
                     switch (x.first) {
                         case TLogSignature::SignatureSyncLogIdx:
@@ -583,7 +583,7 @@ namespace NKikimr {
                        VDISKP(LocRecCtx->VCtx->VDiskLogPrefix,
                             "Sending TEvYardInit: pdiskGuid# %" PRIu64 " skeletonid# %s selfid# %s",
                             ui64(Config->BaseInfo.PDiskGuid), SkeletonId.ToString().data(),
-                            ctx.SelfID.ToString().data()));
+                            ctx.SelfID.ToString().data())); 
 
             Become(&TThis::StateInitialize, ctx, VDiskCooldownTimeout, new TEvents::TEvWakeup);
             VDiskMonGroup.VDiskLocalRecoveryState() = TDbMon::TDbLocalRecovery::YardInit;

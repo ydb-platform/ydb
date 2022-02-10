@@ -14,12 +14,12 @@ public:
     }
 
     inline static TStatus Error(const TStringBuf& error) {
-        Y_VERIFY_DEBUG(!error.empty());
+        Y_VERIFY_DEBUG(!error.empty()); 
         return TStatus(TString(error));
     }
 
     inline static TStatus Error(TString&& error) {
-        Y_VERIFY_DEBUG(!error.empty());
+        Y_VERIFY_DEBUG(!error.empty()); 
         return TStatus(std::move(error));
     }
 
@@ -34,7 +34,7 @@ public:
     }
 
     inline bool IsOk() const {
-        return Error_.empty();
+        return Error_.empty(); 
     }
 
     inline const TString& GetError() const {

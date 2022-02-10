@@ -34,9 +34,9 @@ namespace {
 
 namespace NSize {
     ui64 ParseSize(TStringBuf str) {
-        if (! str.size())
+        if (! str.size()) 
             ythrow yexception() << "Wrong size " << str;
-        char suff = tolower(str[str.size() - 1]);
+        char suff = tolower(str[str.size() - 1]); 
         if (isdigit(suff))
             return FromString<ui64>(str);
         ui64 shift = 1;
@@ -57,7 +57,7 @@ namespace NSize {
                 ythrow yexception() << "Unknown suffix " << str;
         }
 
-        ui64 value = FromString<ui64>(str.substr(0, str.size() - 1));
+        ui64 value = FromString<ui64>(str.substr(0, str.size() - 1)); 
 
         if (!TryShiftValue(value, shift)) {
             ythrow yexception() << "Value overflow " << str;

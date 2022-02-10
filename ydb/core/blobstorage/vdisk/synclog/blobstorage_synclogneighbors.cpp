@@ -65,7 +65,7 @@ namespace NKikimr {
         void TSyncLogNeighbors::Lock(const TVDiskID &vdisk, ui64 lsn) {
             LOG_DEBUG(*ActorSystem, BS_SYNCLOG,
                       VDISKP(LogPrefix, "Lock: vdisk# %s lsn# %" PRIu64,
-                             vdisk.ToString().data(), lsn));
+                             vdisk.ToString().data(), lsn)); 
 
             TNeighbors::TValue &ref = Neighbors[vdisk];
             Y_VERIFY(ref.Get().LockedLsn == (ui64)-1);
@@ -76,7 +76,7 @@ namespace NKikimr {
         void TSyncLogNeighbors::Unlock(const TVDiskID &vdisk) {
             LOG_DEBUG(*ActorSystem, BS_SYNCLOG,
                       VDISKP(LogPrefix, "Unlock: vdisk# %s",
-                             vdisk.ToString().data()));
+                             vdisk.ToString().data())); 
 
             TNeighbors::TValue &ref = Neighbors[vdisk];
             Y_VERIFY(ref.Get().LockedLsn != (ui64)-1);
@@ -90,7 +90,7 @@ namespace NKikimr {
 
             LOG_DEBUG(*ActorSystem, BS_SYNCLOG,
                       VDISKP(LogPrefix, "IsLocked: vdisk# %s res# %s",
-                             vdisk.ToString().data(),
+                             vdisk.ToString().data(), 
                              (isLocked ? "true" : "false")));
 
             return isLocked;

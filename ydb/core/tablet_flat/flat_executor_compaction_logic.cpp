@@ -215,7 +215,7 @@ TReflectSchemeChangesResult TCompactionLogic::ReflectSchemeChanges()
         if (auto *policy = table.Policy.Get()) {
             TString err;
             bool ok = NLocalDb::ValidateCompactionPolicyChange(*policy, *info.CompactionPolicy, err);
-            Y_VERIFY(ok, "table %s id %u: %s", info.Name.data(), info.Id, err.data());
+            Y_VERIFY(ok, "table %s id %u: %s", info.Name.data(), info.Id, err.data()); 
         }
 
         table.Policy = info.CompactionPolicy;
@@ -653,7 +653,7 @@ void TCompactionLogic::SubmitCompactionTask(ui32 table,
     task.SubmissionTimestamp = Time->Now();
 
     TString name = Sprintf("gen%" PRIu32 "-table-%" PRIu32 "-%s",
-                           generation, table, TaskNameSuffix.data());
+                           generation, table, TaskNameSuffix.data()); 
     task.TaskId = Broker->SubmitTask(
         std::move(name),
         TResourceParams(type)

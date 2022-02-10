@@ -120,7 +120,7 @@ void TIntermediate::UpdateStat() {
     }
     for (const auto &write: Writes) {
         if (write.Status == NKikimrProto::OK) {
-            Stat.WriteBytes += write.Data.size();
+            Stat.WriteBytes += write.Data.size(); 
         }
     }
 

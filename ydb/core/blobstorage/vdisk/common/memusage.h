@@ -434,7 +434,7 @@ namespace NKikimr {
         WRAP_METHOD(capacity, const)
         WRAP_METHOD(is_null, const)
         WRAP_METHOD(empty, const)
-        WRAP_METHOD(data, const)
+        WRAP_METHOD(data, const) 
         WRAP_METHOD(compare, const)
         WRAP_METHOD(equal, const)
         WRAP_METHOD(StartsWith, const)
@@ -451,8 +451,8 @@ namespace NKikimr {
         WRAP_METHOD(strcpy, const)
         WRAP_METHOD(substr, const)
 
-        decltype(std::declval<const TString>().data()) operator~() const {
-            return TBase::data();
+        decltype(std::declval<const TString>().data()) operator~() const { 
+            return TBase::data(); 
         }
     };
 

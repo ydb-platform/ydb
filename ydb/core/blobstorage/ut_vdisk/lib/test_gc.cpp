@@ -83,7 +83,7 @@ virtual void Scenario(const TActorContext &ctx) {
         TAllVDisks::TVDiskInstance &instance = Conf->VDisks->Get(0);
         TLogoBlobID from(0, 4294967295, 4294967295, 0, TLogoBlobID::MaxBlobSize, 0, TLogoBlobID::MaxPartId);
         TLogoBlobID to  (0, 0, 0, 0, 0, 0, 1);
-        LOG_NOTICE(ctx, NActorsServices::TEST, "  Test: from=%s to=%s\n", from.ToString().data(), to.ToString().data());
+        LOG_NOTICE(ctx, NActorsServices::TEST, "  Test: from=%s to=%s\n", from.ToString().data(), to.ToString().data()); 
         auto req = TEvBlobStorage::TEvVGet::CreateRangeIndexQuery(instance.VDiskID,
                                                                   TInstant::Max(),
                                                                   NKikimrBlobStorage::EGetHandleClass::AsyncRead,
@@ -151,7 +151,7 @@ SYNC_TEST_BEGIN(TGCPutBarrier, TSyncTestWithSmallCommonDataset)
             TAllVDisks::TVDiskInstance &instance = Conf->VDisks->Get(0);
             TLogoBlobID from(0, 4294967295, 4294967295, 0, TLogoBlobID::MaxBlobSize, 0, TLogoBlobID::MaxPartId);
             TLogoBlobID to  (0, 0, 0, 0, 0, 0, 1);
-            LOG_NOTICE(ctx, NActorsServices::TEST, "  Test: from=%s to=%s\n", from.ToString().data(), to.ToString().data());
+            LOG_NOTICE(ctx, NActorsServices::TEST, "  Test: from=%s to=%s\n", from.ToString().data(), to.ToString().data()); 
             auto req = TEvBlobStorage::TEvVGet::CreateRangeIndexQuery(instance.VDiskID,
                                                                       TInstant::Max(),
                                                                       NKikimrBlobStorage::EGetHandleClass::AsyncRead,
@@ -189,7 +189,7 @@ virtual void Scenario(const TActorContext &ctx) {
     ui32 collectStep = 1000;
     TAutoPtr<TVector<NKikimr::TLogoBlobID>> keep(new TVector<NKikimr::TLogoBlobID>());
     TString qqqqq("qqqqq");
-    keep->push_back(TLogoBlobID(0, 1, 909, 0, qqqqq.size(), 0));
+    keep->push_back(TLogoBlobID(0, 1, 909, 0, qqqqq.size(), 0)); 
     TAutoPtr<IActor> gcCommand(PutGCToCorrespondingVDisks(SyncRunner->NotifyID(), Conf, tabletID, recGen, recGenCounter,
                                                           channel, collect, collectGen, collectStep, keep, nullptr));
     // set gc settings
@@ -221,7 +221,7 @@ virtual void Scenario(const TActorContext &ctx) {
         TAllVDisks::TVDiskInstance &instance = Conf->VDisks->Get(0);
         TLogoBlobID from(0, 4294967295, 4294967295, 0, TLogoBlobID::MaxBlobSize, 0, TLogoBlobID::MaxPartId);
         TLogoBlobID to  (0, 0, 0, 0, 0, 0, 1);
-        LOG_NOTICE(ctx, NActorsServices::TEST, "  Test: from=%s to=%s\n", from.ToString().data(), to.ToString().data());
+        LOG_NOTICE(ctx, NActorsServices::TEST, "  Test: from=%s to=%s\n", from.ToString().data(), to.ToString().data()); 
         auto req = TEvBlobStorage::TEvVGet::CreateRangeIndexQuery(instance.VDiskID,
                                                                   TInstant::Max(),
                                                                   NKikimrBlobStorage::EGetHandleClass::AsyncRead,
@@ -282,7 +282,7 @@ virtual void Scenario(const TActorContext &ctx) {
             TAllVDisks::TVDiskInstance &instance = Conf->VDisks->Get(0);
             TLogoBlobID from(0, 0, 0, 0, 0, 0, 1);
             TLogoBlobID to  (0, 4294967295, 4294967295, 0, TLogoBlobID::MaxBlobSize, 0, TLogoBlobID::MaxPartId);
-            LOG_NOTICE(ctx, NActorsServices::TEST, "  Test: from=%s to=%s", from.ToString().data(), to.ToString().data());
+            LOG_NOTICE(ctx, NActorsServices::TEST, "  Test: from=%s to=%s", from.ToString().data(), to.ToString().data()); 
             auto req = TEvBlobStorage::TEvVGet::CreateRangeIndexQuery(instance.VDiskID,
                                                                       TInstant::Max(),
                                                                       NKikimrBlobStorage::EGetHandleClass::FastRead,
@@ -348,7 +348,7 @@ virtual void Scenario(const TActorContext &ctx) {
             TAllVDisks::TVDiskInstance &instance = Conf->VDisks->Get(0);
             TLogoBlobID from(0, 0, 0, 0, 0, 0, 1);
             TLogoBlobID to  (0, 4294967295, 4294967295, 0, TLogoBlobID::MaxBlobSize, 0, TLogoBlobID::MaxPartId);
-            LOG_NOTICE(ctx, NActorsServices::TEST, "  Test: from=%s to=%s", from.ToString().data(), to.ToString().data());
+            LOG_NOTICE(ctx, NActorsServices::TEST, "  Test: from=%s to=%s", from.ToString().data(), to.ToString().data()); 
             auto req = TEvBlobStorage::TEvVGet::CreateRangeIndexQuery(instance.VDiskID,
                                                                       TInstant::Max(),
                                                                       NKikimrBlobStorage::EGetHandleClass::FastRead,

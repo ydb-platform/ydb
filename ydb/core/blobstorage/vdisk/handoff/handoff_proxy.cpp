@@ -116,7 +116,7 @@ namespace NKikimr {
             LOG_DEBUG(ctx, BS_HANDOFF,
                       VDISKP(VDiskLogPrefix,
                              "THandoffProxyActor(%s)::Handle(TEvLocalHandoff)",
-                             VDiskInfoPtr->VDiskIdShort.ToString().data()));
+                             VDiskInfoPtr->VDiskIdShort.ToString().data())); 
 
             std::unique_ptr<TEvLocalHandoff> item(ev->Release().Release());
             ui32 byteSize = item->ByteSize();
@@ -143,7 +143,7 @@ namespace NKikimr {
                 LOG_NOTICE(ctx, BS_HANDOFF,
                            VDISKP(VDiskLogPrefix,
                                   "THandoffProxyActor(%s)::SwitchToBadState",
-                                  VDiskInfoPtr->VDiskIdShort.ToString().data()));
+                                  VDiskInfoPtr->VDiskIdShort.ToString().data())); 
                 Counters.StateGoodToBadTransition++;
             }
             State.BadnessState = TPrivateProxyState::NextBad(State.BadnessState);
@@ -173,7 +173,7 @@ namespace NKikimr {
                 LOG_NOTICE(ctx, BS_HANDOFF,
                            VDISKP(VDiskLogPrefix,
                                   "THandoffProxyActor(%s)::SwitchToGoodState",
-                                  VDiskInfoPtr->VDiskIdShort.ToString().data()));
+                                  VDiskInfoPtr->VDiskIdShort.ToString().data())); 
                 Counters.StateBadToGoodTransition++;
             }
             State.BadnessState = TPrivateProxyState::GOOD;
@@ -183,7 +183,7 @@ namespace NKikimr {
             LOG_DEBUG(ctx, BS_HANDOFF,
                       VDISKP(VDiskLogPrefix,
                              "THandoffProxyActor(%s)::Handle(TEvVPutResult)",
-                             VDiskInfoPtr->VDiskIdShort.ToString().data()));
+                             VDiskInfoPtr->VDiskIdShort.ToString().data())); 
             const NKikimrBlobStorage::TEvVPutResult &record = ev->Get()->Record;
             const TVDiskID vdisk(VDiskIDFromVDiskID(record.GetVDiskID()));
 
@@ -192,7 +192,7 @@ namespace NKikimr {
                 LOG_ERROR(ctx, BS_HANDOFF,
                           VDISKP(VDiskLogPrefix, "THandoffProxyActor(%s)::Handle(TEvVPutResult): "
                                  "unexpected vdisk; vdisk# %s",
-                                 VDiskInfoPtr->VDiskIdShort.ToString().data(), vdisk.ToString().data()));
+                                 VDiskInfoPtr->VDiskIdShort.ToString().data(), vdisk.ToString().data())); 
                 Counters.ReplyInvalidVDisk++;
                 return;
             }
@@ -203,8 +203,8 @@ namespace NKikimr {
                           VDISKP(VDiskLogPrefix,
                                  "THandoffProxyActor(%s)::Handle(TEvVPutResult): "
                                  "bad result status; vdisk# %s msg# %s",
-                                 VDiskInfoPtr->VDiskIdShort.ToString().data(), vdisk.ToString().data(),
-                                 TEvBlobStorage::TEvVPutResult::ToString(record).data()));
+                                 VDiskInfoPtr->VDiskIdShort.ToString().data(), vdisk.ToString().data(), 
+                                 TEvBlobStorage::TEvVPutResult::ToString(record).data())); 
                 Counters.ReplyBadStatusResult++;
                 SwitchToBadState(ctx);
                 return;
@@ -219,9 +219,9 @@ namespace NKikimr {
                               VDISKP(VDiskLogPrefix,
                                      "THandoffProxyActor(%s)::Handle(TEvVPutResult): "
                                      "orphand ok result; vdisk# %s msg# %s",
-                                     VDiskInfoPtr->VDiskIdShort.ToString().data(),
-                                     vdisk.ToString().data(),
-                                     TEvBlobStorage::TEvVPutResult::ToString(record).data()));
+                                     VDiskInfoPtr->VDiskIdShort.ToString().data(), 
+                                     vdisk.ToString().data(), 
+                                     TEvBlobStorage::TEvVPutResult::ToString(record).data())); 
                     Counters.ReplyOrphanOKResult++;
                 } else {
                     // check if cookies match
@@ -237,9 +237,9 @@ namespace NKikimr {
                                          "THandoffProxyActor(%s)::Handle(TEvVPutResult): "
                                          "cookie mismatch; vdisk# %s expectedCookie# %"
                                          PRIu64 " msg# %s",
-                                         VDiskInfoPtr->VDiskIdShort.ToString().data(),
-                                         vdisk.ToString().data(), expectedCookie,
-                                         TEvBlobStorage::TEvVPutResult::ToString(record).data()));
+                                         VDiskInfoPtr->VDiskIdShort.ToString().data(), 
+                                         vdisk.ToString().data(), expectedCookie, 
+                                         TEvBlobStorage::TEvVPutResult::ToString(record).data())); 
                         Counters.ReplyCookieMismatch++;
                         SwitchToBadState(ctx);
                     }
@@ -256,7 +256,7 @@ namespace NKikimr {
                 LOG_DEBUG(ctx, BS_HANDOFF,
                           VDISKP(VDiskLogPrefix,
                                  "THandoffProxyActor(%s)::Handle(TEvUndelivered)",
-                                 VDiskInfoPtr->VDiskIdShort.ToString().data()));
+                                 VDiskInfoPtr->VDiskIdShort.ToString().data())); 
                 Counters.ReplyUndelivered++;
                 SwitchToBadState(ctx);
             } else

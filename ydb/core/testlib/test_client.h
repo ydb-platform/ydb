@@ -445,7 +445,7 @@ namespace Tests {
             auto res = dynamic_cast<TMsg*>(msg);
             TString s;
             ::google::protobuf::TextFormat::PrintToString(res->Record, &s);
-            if (s.size() > maxSz) {
+            if (s.size() > maxSz) { 
                 s.resize(maxSz);
                 s += "...\n(TRUNCATED)\n";
             }

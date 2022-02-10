@@ -127,7 +127,7 @@ struct TEvTxProcessing {
             str << " TabletSource# " << Record.GetTabletSource();
             str << " TabletDest# " << Record.GetTabletDest();
             str << " SetTabletProducer# " << Record.GetTabletProducer();
-            str << " ReadSet.Size()# " << Record.GetReadSet().size();
+            str << " ReadSet.Size()# " << Record.GetReadSet().size(); 
             str << " Seqno# " << Record.GetSeqno();
             // BalanceTrackList
             str << "}";

@@ -43,7 +43,7 @@ namespace NKikimr {
                             VDISKP(HullCtx->VCtx->VDiskLogPrefix,
                                 "%s: StorageRatio: timeSpent# %s stat# %s",
                                 PDiskSignatureForHullDbKey<TKey>().ToString().data(),
-                                (finishTime - startTime).ToString().data(), stat.ToString().data()));
+                                (finishTime - startTime).ToString().data(), stat.ToString().data())); 
                 }
 
                 BarriersEssence.Reset();

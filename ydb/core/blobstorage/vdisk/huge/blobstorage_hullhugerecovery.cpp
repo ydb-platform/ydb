@@ -59,7 +59,7 @@ namespace NKikimr {
         }
 
         void THullHugeRecoveryLogPos::ParseFromString(const TString &serialized) {
-            const char *cur = serialized.data();
+            const char *cur = serialized.data(); 
             ChunkAllocationLsn = *(const ui64 *)cur;
             cur += sizeof(ui64);
             ChunkFreeingLsn = *(const ui64 *)cur;
@@ -77,7 +77,7 @@ namespace NKikimr {
         }
 
         bool THullHugeRecoveryLogPos::CheckEntryPoint(const TString &serialized) {
-            return serialized.size() == SerializedSize;
+            return serialized.size() == SerializedSize; 
         }
 
 
@@ -220,14 +220,14 @@ namespace NKikimr {
 
             // log pos
             TString serializedLogPos = LogPos.Serialize();
-            Y_VERIFY_DEBUG(serializedLogPos.size() == THullHugeRecoveryLogPos::SerializedSize);
-            str.Write(serializedLogPos.data(), THullHugeRecoveryLogPos::SerializedSize);
+            Y_VERIFY_DEBUG(serializedLogPos.size() == THullHugeRecoveryLogPos::SerializedSize); 
+            str.Write(serializedLogPos.data(), THullHugeRecoveryLogPos::SerializedSize); 
 
             // heap
             TString serializedHeap = Heap->Serialize();
-            ui32 heapSize = serializedHeap.size();
+            ui32 heapSize = serializedHeap.size(); 
             str.Write(&heapSize, sizeof(ui32));
-            str.Write(serializedHeap.data(), heapSize);
+            str.Write(serializedHeap.data(), heapSize); 
 
             // chunks to free -- obsolete field
             const ui32 chunksSize = 0;
@@ -249,7 +249,7 @@ namespace NKikimr {
         void THullHugeKeeperPersState::ParseFromString(const TString &data) {
             AllocatedSlots.clear();
 
-            const char *cur = data.data();
+            const char *cur = data.data(); 
             cur += sizeof(ui32); // signature
 
             // log pos
@@ -281,14 +281,14 @@ namespace NKikimr {
         }
 
         TString THullHugeKeeperPersState::ExtractLogPosition(const TString &data) {
-            const char *cur = data.data();
+            const char *cur = data.data(); 
             cur += sizeof(ui32); // signature
             return TString(cur, cur + THullHugeRecoveryLogPos::SerializedSize);
         }
 
         bool THullHugeKeeperPersState::CheckEntryPoint(const TString &data) {
-            const char *cur = data.data();
-            const char *end = cur + data.size();
+            const char *cur = data.data(); 
+            const char *end = cur + data.size(); 
 
             if (size_t(end - cur) < sizeof(ui32) + THullHugeRecoveryLogPos::SerializedSize + sizeof(ui32))
                 return false;
@@ -533,13 +533,13 @@ namespace NKikimr {
                               VDISKP(VCtx->VDiskLogPrefix,
                                     "Recovery(guid# %" PRIu64 " lsn# %" PRIu64 " entryLsn# %" PRIu64 "): "
                                     "HugeBlob apply(1): rec# %s hugeSlot# %s",
-                                    Guid, lsn, LogPos.EntryPointLsn, rec.ToString().data(), hugeSlot.ToString().data()));
+                                    Guid, lsn, LogPos.EntryPointLsn, rec.ToString().data(), hugeSlot.ToString().data())); 
                 } else {
                     LOG_DEBUG(ctx, BS_HULLHUGE,
                               VDISKP(VCtx->VDiskLogPrefix,
                                     "Recovery(guid# %" PRIu64 " lsn# %" PRIu64 " entryLsn# %" PRIu64 "): "
                                     "HugeBlob apply(2): rec# %s hugeSlot# %s",
-                                    Guid, lsn, LogPos.EntryPointLsn, rec.ToString().data(), hugeSlot.ToString().data()));
+                                    Guid, lsn, LogPos.EntryPointLsn, rec.ToString().data(), hugeSlot.ToString().data())); 
                     Heap->RecoveryModeAllocate(rec.DiskAddr);
                 }
                 LogPos.HugeBlobLoggedLsn = lsn;
@@ -550,7 +550,7 @@ namespace NKikimr {
                           VDISKP(VCtx->VDiskLogPrefix,
                                 "Recovery(guid# %" PRIu64 " lsn# %" PRIu64 " entryLsn# %" PRIu64 "): "
                                 "HugeBlob skip: rec# %s hugeSlot# %s",
-                                Guid, lsn, LogPos.EntryPointLsn, rec.ToString().data(), hugeSlot.ToString().data()));
+                                Guid, lsn, LogPos.EntryPointLsn, rec.ToString().data(), hugeSlot.ToString().data())); 
                 return TRlas(true, true);
             }
         }
@@ -574,7 +574,7 @@ namespace NKikimr {
                     VDISKP(VCtx->VDiskLogPrefix,
                         "Recovery(guid# %" PRIu64 " lsn# %" PRIu64 " entryLsn# %" PRIu64 "): "
                         "EntryPoint: logPos# %s",
-                        Guid, lsn, LogPos.EntryPointLsn, logPos.ToString().data()));
+                        Guid, lsn, LogPos.EntryPointLsn, logPos.ToString().data())); 
 
             return TRlas(true, false);
         }

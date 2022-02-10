@@ -563,13 +563,13 @@ void TShellCommand::TImpl::StartProcess(TShellCommand::TImpl::TPipes& pipes) {
 
     Y_ENSURE_EX(cmd.size() < MAX_COMMAND_LINE, yexception() << "Command is too long (length=" << cmd.size() << ")");
     TTempArray<wchar_t> cmdcopy(MAX_COMMAND_LINE);
-    Copy(cmd.data(), cmd.data() + cmd.size(), cmdcopy.Data());
-    *(cmdcopy.Data() + cmd.size()) = 0;
+    Copy(cmd.data(), cmd.data() + cmd.size(), cmdcopy.Data()); 
+    *(cmdcopy.Data() + cmd.size()) = 0; 
 
     const wchar_t* cwd = NULL;
     std::wstring cwdBuff;
-    if (WorkDir.size()) {
-        cwdBuff = GetWString(WorkDir.data());
+    if (WorkDir.size()) { 
+        cwdBuff = GetWString(WorkDir.data()); 
         cwd = cwdBuff.c_str();
     }
 
@@ -580,7 +580,7 @@ void TShellCommand::TImpl::StartProcess(TShellCommand::TImpl::TPipes& pipes) {
             env += e->first + '=' + e->second + '\0';
         }
         env += '\0';
-        lpEnvironment = const_cast<char*>(env.data());
+        lpEnvironment = const_cast<char*>(env.data()); 
     }
 
     // disable messagebox (may be in debug too)
@@ -602,9 +602,9 @@ void TShellCommand::TImpl::StartProcess(TShellCommand::TImpl::TPipes& pipes) {
             &process_info);
     } else {
         res = CreateProcessWithLogonW(
-            GetWString(User.Name.data()).c_str(),
+            GetWString(User.Name.data()).c_str(), 
             nullptr, // domain (if this parameter is NULL, the user name must be specified in UPN format)
-            GetWString(User.Password.data()).c_str(),
+            GetWString(User.Password.data()).c_str(), 
             0,    // logon flags
             NULL, // image name
             cmdcopy.Data(),
@@ -796,12 +796,12 @@ void TShellCommand::TImpl::Run() {
         qargv.push_back(const_cast<char*>("-c"));
         // two args for 'sh -c -- ',
         // one for program name, and one for NULL at the end
-        qargv.push_back(const_cast<char*>(shellArg.data()));
+        qargv.push_back(const_cast<char*>(shellArg.data())); 
     } else {
         qargv.reserve(Arguments.size() + 2);
-        qargv.push_back(const_cast<char*>(Command.data()));
+        qargv.push_back(const_cast<char*>(Command.data())); 
         for (auto& i : Arguments) {
-            qargv.push_back(const_cast<char*>(i.data()));
+            qargv.push_back(const_cast<char*>(i.data())); 
         }
     }
 
@@ -812,7 +812,7 @@ void TShellCommand::TImpl::Run() {
     if (!Environment.empty()) {
         for (auto& env : Environment) {
             envHolder.emplace_back(env.first + '=' + env.second);
-            envp.push_back(const_cast<char*>(envHolder.back().data()));
+            envp.push_back(const_cast<char*>(envHolder.back().data())); 
         }
         envp.push_back(nullptr);
     }

@@ -532,7 +532,7 @@ TEngineBay::TEngineBay(TDataShard * self, TTransactionContext& txc, const TActor
             [actorSystem, this](const char * operation, ui32 line, const TBackTrace* backtrace)
             {
                 LOG_DEBUG(*actorSystem, NKikimrServices::MINIKQL_ENGINE, "%s, %s (%" PRIu32 ")\n%s",
-                    TraceMessage.data(), operation, line, backtrace ? backtrace->PrintToString().data() : "");
+                    TraceMessage.data(), operation, line, backtrace ? backtrace->PrintToString().data() : ""); 
             };
     }
 

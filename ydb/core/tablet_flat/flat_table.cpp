@@ -37,7 +37,7 @@ void TTable::SetScheme(const TScheme::TTableInfo &table)
     /* This restriction is required for external blobs inverted index, for
         details read NPage::TFrames and NFwd blobs cache implementation. */
 
-    Y_VERIFY(Scheme->Cols.size() <= ui32(-Min<i16>()), "Too many columns in row");
+    Y_VERIFY(Scheme->Cols.size() <= ui32(-Min<i16>()), "Too many columns in row"); 
 
     EraseCacheEnabled = table.EraseCacheEnabled;
     EraseCacheConfig = { };

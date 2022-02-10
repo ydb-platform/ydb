@@ -65,7 +65,7 @@ public:
         , Action(action)
         , PoolId(0)
     {
-        LogPrefix = Sprintf("TPoolManip(%s) ", Pool->Config.GetName().data());
+        LogPrefix = Sprintf("TPoolManip(%s) ", Pool->Config.GetName().data()); 
     }
 
     void OpenPipe(const TActorContext &ctx)
@@ -325,7 +325,7 @@ public:
 
         default:
             Y_FAIL("unexpected event type: %" PRIx32 " event: %s",
-                   ev->GetTypeRewrite(), ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?");
+                   ev->GetTypeRewrite(), ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?"); 
             break;
         }
     }
@@ -338,7 +338,7 @@ public:
 
         default:
             Y_FAIL("unexpected event type: %" PRIx32 " event: %s",
-                   ev->GetTypeRewrite(), ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?");
+                   ev->GetTypeRewrite(), ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?"); 
             break;
         }
     }
@@ -364,7 +364,7 @@ public:
 
         default:
             Y_FAIL("unexpected event type: %" PRIx32 " event: %s",
-                   ev->GetTypeRewrite(), ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?");
+                   ev->GetTypeRewrite(), ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?"); 
             break;
         }
     }
@@ -875,7 +875,7 @@ public:
 
         default:
             Y_FAIL("unexpected event type: %" PRIx32 " event: %s",
-                   ev->GetTypeRewrite(), ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?");
+                   ev->GetTypeRewrite(), ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?"); 
             break;
         }
     }
@@ -1053,7 +1053,7 @@ bool TTenantsManager::TTenantsConfig::Parse(const NKikimrConsole::TTenantsConfig
 
     for (auto &kind : config.GetAvailabilityZoneKinds()) {
         if (AvailabilityZones.contains(kind.GetKind())) {
-            error = Sprintf("double definition of zone kind '%s'", kind.GetKind().data());
+            error = Sprintf("double definition of zone kind '%s'", kind.GetKind().data()); 
             return false;
         }
 
@@ -1080,7 +1080,7 @@ bool TTenantsManager::TTenantsConfig::Parse(const NKikimrConsole::TTenantsConfig
                 break;
             }
         default:
-            error = Sprintf("unexpected zone case for zone '%s'", kind.GetKind().data());
+            error = Sprintf("unexpected zone case for zone '%s'", kind.GetKind().data()); 
             return false;
         }
     }
@@ -1088,13 +1088,13 @@ bool TTenantsManager::TTenantsConfig::Parse(const NKikimrConsole::TTenantsConfig
     THashMap<TString, TSet<TString>> zoneSets;
     for (auto &set : config.GetAvailabilityZoneSets()) {
         if (zoneSets.contains(set.GetName())) {
-            error = Sprintf("double definition of zone set '%s'", set.GetName().data());
+            error = Sprintf("double definition of zone set '%s'", set.GetName().data()); 
             return false;
         }
 
         for (auto &kind : set.GetZoneKinds()) {
             if (!AvailabilityZones.contains(kind)) {
-                error = Sprintf("uknown zone kind '%s' in zone set '%s'", kind.data(), set.GetName().data());
+                error = Sprintf("uknown zone kind '%s' in zone set '%s'", kind.data(), set.GetName().data()); 
                 return false;
             }
 
@@ -1107,7 +1107,7 @@ bool TTenantsManager::TTenantsConfig::Parse(const NKikimrConsole::TTenantsConfig
         case NKikimrConsole::TComputationalUnitKind::kTenantSlotType:
             {
                 if (TenantSlotKinds.contains(kind.GetKind())) {
-                    error = Sprintf("double definition of computational unit kind '%s'", kind.GetKind().data());
+                    error = Sprintf("double definition of computational unit kind '%s'", kind.GetKind().data()); 
                     return false;
                 }
 
@@ -1117,7 +1117,7 @@ bool TTenantsManager::TTenantsConfig::Parse(const NKikimrConsole::TTenantsConfig
 
                 if(!zoneSets.contains(kind.GetAvailabilityZoneSet())) {
                     error = Sprintf("unknown zone set '%s' is referred from computational unit kind '%s'",
-                                    kind.GetAvailabilityZoneSet().data(), kind.GetKind().data());
+                                    kind.GetAvailabilityZoneSet().data(), kind.GetKind().data()); 
                     return false;
                 }
 
@@ -1125,7 +1125,7 @@ bool TTenantsManager::TTenantsConfig::Parse(const NKikimrConsole::TTenantsConfig
             }
             break;
         default:
-            error = Sprintf("unexpected resource case for computational unit kind '%s'", kind.GetKind().data());
+            error = Sprintf("unexpected resource case for computational unit kind '%s'", kind.GetKind().data()); 
             return false;
         }
     }
@@ -1251,7 +1251,7 @@ bool TTenantsManager::TTenant::HasSubDomainKey() const
 
 TString TTenantsManager::TTenant::MakeStoragePoolName(const TString &poolTypeName)
 {
-    return Sprintf("%s:%s", Path.data(), poolTypeName.data());
+    return Sprintf("%s:%s", Path.data(), poolTypeName.data()); 
 }
 
 bool TTenantsManager::TTenant::CheckComputationalUnitsQuota(const TUnitsCount &units,
@@ -1492,7 +1492,7 @@ bool TTenantsManager::MakeBasicPoolCheck(const TString &kind, ui64 size, Ydb::St
 
     if (!Domain->StoragePoolTypes.contains(kind)) {
         code = Ydb::StatusIds::BAD_REQUEST;
-        error = Sprintf("Unsupported storage unit kind '%s'.", kind.data());
+        error = Sprintf("Unsupported storage unit kind '%s'.", kind.data()); 
         return false;
     }
 
@@ -1505,21 +1505,21 @@ bool TTenantsManager::MakeBasicComputationalUnitCheck(const TString &kind, const
 {
     if (!Config.TenantSlotKinds.contains(kind)) {
         code = Ydb::StatusIds::BAD_REQUEST;
-        error = Sprintf("Unknown computational unit kind '%s'", kind.data());
+        error = Sprintf("Unknown computational unit kind '%s'", kind.data()); 
         return false;
     }
 
     if (zone) {
         if (!Config.AvailabilityZones.contains(zone)) {
             code = Ydb::StatusIds::BAD_REQUEST;
-            error = Sprintf("Unknown availability zone '%s'", zone.data());
+            error = Sprintf("Unknown availability zone '%s'", zone.data()); 
             return false;
         }
 
         auto &slotKind = Config.TenantSlotKinds.at(kind);
         if (!slotKind.AllowedZones.contains(zone)) {
             code = Ydb::StatusIds::BAD_REQUEST;
-            error = Sprintf("Zone '%s' is unavailable for units of kind '%s'", zone.data(), kind.data());
+            error = Sprintf("Zone '%s' is unavailable for units of kind '%s'", zone.data(), kind.data()); 
             return false;
         }
     }
@@ -1616,7 +1616,7 @@ bool TTenantsManager::CheckTenantsConfig(const NKikimrConsole::TTenantsConfig &c
             if (tenant) {
                 code = Ydb::StatusIds::BAD_REQUEST;
                 error = Sprintf("cannot remove or modify availability zone '%s' used by tenant '%s'",
-                                pr.first.data(), tenant->Path.data());
+                                pr.first.data(), tenant->Path.data()); 
                 return false;
             }
         }
@@ -1632,7 +1632,7 @@ bool TTenantsManager::CheckTenantsConfig(const NKikimrConsole::TTenantsConfig &c
             if (tenant) {
                 code = Ydb::StatusIds::BAD_REQUEST;
                 error = Sprintf("cannot remove computational unit kind '%s' used by tenant '%s'",
-                                pr.first.data(), tenant->Path.data());
+                                pr.first.data(), tenant->Path.data()); 
                 return false;
             }
             continue;
@@ -1644,7 +1644,7 @@ bool TTenantsManager::CheckTenantsConfig(const NKikimrConsole::TTenantsConfig &c
             if (tenant) {
                 code = Ydb::StatusIds::BAD_REQUEST;
                 error = Sprintf("cannot modify computational unit kind '%s' used by tenant '%s'",
-                                pr.first.data(), tenant->Path.data());
+                                pr.first.data(), tenant->Path.data()); 
                 return false;
             }
         }
@@ -1658,7 +1658,7 @@ bool TTenantsManager::CheckTenantsConfig(const NKikimrConsole::TTenantsConfig &c
                         code = Ydb::StatusIds::BAD_REQUEST;
                         error = Sprintf("cannot remove allowed availability zone '%s' from computational"
                                         " unit kind '%s' used by tenant '%s'",
-                                        zone.data(), pr.first.data(), tenant->Path.data());
+                                        zone.data(), pr.first.data(), tenant->Path.data()); 
                         return false;
                     }
                 }
@@ -2465,7 +2465,7 @@ bool TTenantsManager::DbLoadState(TTransactionContext &txc, const TActorContext 
         pool->State = state;
 
         auto tenant = GetTenant(path);
-        Y_VERIFY_DEBUG(tenant, "loaded pool for unknown tenant %s", path.data());
+        Y_VERIFY_DEBUG(tenant, "loaded pool for unknown tenant %s", path.data()); 
         if (tenant) {
             tenant->StoragePools[type] = pool;
 
@@ -2491,7 +2491,7 @@ bool TTenantsManager::DbLoadState(TTransactionContext &txc, const TActorContext 
 
         auto tenant = GetTenant(path);
         Y_VERIFY_DEBUG(tenant, "loaded units <%s, %s>(%" PRIu64 ") for unknown tenant %s",
-                       kind.data(), zone.data(), count, path.data());
+                       kind.data(), zone.data(), count, path.data()); 
         if (tenant) {
             tenant->ComputationalUnits[std::make_pair(kind, zone)] = count;
 
@@ -2518,7 +2518,7 @@ bool TTenantsManager::DbLoadState(TTransactionContext &txc, const TActorContext 
 
         auto tenant = GetTenant(path);
         Y_VERIFY_DEBUG(tenant, "loaded registered unit %s:%" PRIu32 " for unknown tenant %s",
-                       host.data(), port, path.data());
+                       host.data(), port, path.data()); 
         if (tenant) {
             TAllocatedComputationalUnit unit{host, port, kind};
             tenant->RegisteredComputationalUnits[std::make_pair(host, port)] = unit;
@@ -2998,7 +2998,7 @@ void TTenantsManager::Handle(TEvConsole::TEvGetTenantStatusRequest::TPtr &ev, co
         operation.set_status(Ydb::StatusIds::NOT_FOUND);
         auto issue = operation.add_issues();
         issue->set_severity(NYql::TSeverityIds::S_ERROR);
-        issue->set_message(Sprintf("Unknown tenant %s", path.data()));
+        issue->set_message(Sprintf("Unknown tenant %s", path.data())); 
 
         LOG_TRACE_S(ctx, NKikimrServices::CMS_TENANTS,
                     "Send TEvConsole::TEvGetTenantStatusResponse: "
@@ -3386,7 +3386,7 @@ void TTenantsManager::Handle(TEvTenantSlotBroker::TEvTenantState::TPtr &ev, cons
 
 TString MakeStoragePoolName(const TString &tenantName, const TString &poolTypeName)
 {
-    return Sprintf("%s:%s", tenantName.data(), poolTypeName.data());
+    return Sprintf("%s:%s", tenantName.data(), poolTypeName.data()); 
 }
 
 } // namespace NConsole

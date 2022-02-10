@@ -1,9 +1,9 @@
 // -*- C++ -*-
 //===------------------------------ span ---------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions. 
+// See https://llvm.org/LICENSE.txt for license information. 
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception 
 //
 //===---------------------------------------------------------------------===//
 
@@ -30,11 +30,11 @@ template<class ElementType, size_t Extent>
 
 // [span.objectrep], views of object representation
 template <class ElementType, size_t Extent>
-    span<const byte, ((Extent == dynamic_extent) ? dynamic_extent :
+    span<const byte, ((Extent == dynamic_extent) ? dynamic_extent : 
         (sizeof(ElementType) * Extent))> as_bytes(span<ElementType, Extent> s) noexcept;
 
 template <class ElementType, size_t Extent>
-    span<      byte, ((Extent == dynamic_extent) ? dynamic_extent :
+    span<      byte, ((Extent == dynamic_extent) ? dynamic_extent : 
         (sizeof(ElementType) * Extent))> as_writable_bytes(span<ElementType, Extent> s) noexcept;
 
 
@@ -113,7 +113,7 @@ template<class It, class EndOrSize>
 
 template<class T, size_t N>
     span(T (&)[N]) -> span<T, N>;
-
+ 
 template<class T, size_t N>
     span(array<T, N>&) -> span<T, N>;
 
@@ -198,8 +198,8 @@ struct __is_span_compatible_container<_Tp, _ElementType,
             decltype(size(declval<_Tp>())),
         // remove_pointer_t<decltype(data(cont))>(*)[] is convertible to ElementType(*)[]
             enable_if_t<
-                is_convertible_v<remove_pointer_t<decltype(data(declval<_Tp &>()))>(*)[],
-                                 _ElementType(*)[]>,
+                is_convertible_v<remove_pointer_t<decltype(data(declval<_Tp &>()))>(*)[], 
+                                 _ElementType(*)[]>, 
                 nullptr_t>
         >>
     : public true_type {};
@@ -226,7 +226,7 @@ public:
 
     static constexpr size_type extent = _Extent;
 
-// [span.cons], span constructors, copy, assignment, and destructor
+// [span.cons], span constructors, copy, assignment, and destructor 
     template <size_t _Sz = _Extent, enable_if_t<_Sz == 0, nullptr_t> = nullptr>
     _LIBCPP_INLINE_VISIBILITY constexpr span() noexcept : __data{nullptr} {}
 
@@ -334,7 +334,7 @@ public:
         static_assert(_Count <= _Extent, "Count out of range in span::last()");
         return span<element_type, _Count>{data() + size() - _Count, _Count};
     }
-
+ 
     _LIBCPP_INLINE_VISIBILITY
     constexpr span<element_type, dynamic_extent> first(size_type __count) const noexcept
     {
@@ -365,7 +365,7 @@ public:
     _LIBCPP_INLINE_VISIBILITY
     constexpr span<element_type, dynamic_extent>
        subspan(size_type __offset, size_type __count = dynamic_extent) const noexcept
-    {
+    { 
         _LIBCPP_ASSERT(__offset <= size(), "Offset out of range in span::subspan(offset, count)");
         _LIBCPP_ASSERT(__count  <= size() || __count == dynamic_extent, "Count out of range in span::subspan(offset, count)");
         if (__count == dynamic_extent)
@@ -381,14 +381,14 @@ public:
     _LIBCPP_INLINE_VISIBILITY constexpr reference operator[](size_type __idx) const noexcept
     {
         _LIBCPP_ASSERT(__idx < size(), "span<T,N>[] index out of bounds");
-        return __data[__idx];
-    }
+        return __data[__idx]; 
+    } 
 
     _LIBCPP_INLINE_VISIBILITY constexpr reference front() const noexcept
     {
         _LIBCPP_ASSERT(!empty(), "span<T, N>::front() on empty span");
         return __data[0];
-    }
+    } 
 
     _LIBCPP_INLINE_VISIBILITY constexpr reference back() const noexcept
     {
@@ -439,7 +439,7 @@ public:
 
     static constexpr size_type extent = dynamic_extent;
 
-// [span.cons], span constructors, copy, assignment, and destructor
+// [span.cons], span constructors, copy, assignment, and destructor 
     _LIBCPP_INLINE_VISIBILITY constexpr span() noexcept : __data{nullptr}, __size{0} {}
 
     constexpr span           (const span&) noexcept = default;
@@ -475,7 +475,7 @@ public:
               enable_if_t<is_convertible_v<_OtherElementType(*)[], element_type (*)[]>, nullptr_t> = nullptr>
     _LIBCPP_INLINE_VISIBILITY
     constexpr span(array<_OtherElementType, _Sz>& __arr) noexcept : __data{__arr.data()}, __size{_Sz} {}
-
+ 
     template <class _OtherElementType, size_t _Sz,
               enable_if_t<is_convertible_v<const _OtherElementType(*)[], element_type (*)[]>, nullptr_t> = nullptr>
     _LIBCPP_INLINE_VISIBILITY
@@ -531,7 +531,7 @@ public:
         _LIBCPP_ASSERT(__count <= size(), "Count out of range in span::first(count)");
         return {data(), __count};
     }
-
+ 
     _LIBCPP_INLINE_VISIBILITY
     constexpr span<element_type, dynamic_extent> last (size_type __count) const noexcept
     {
@@ -551,7 +551,7 @@ public:
     constexpr span<element_type, dynamic_extent>
     _LIBCPP_INLINE_VISIBILITY
     subspan(size_type __offset, size_type __count = dynamic_extent) const noexcept
-    {
+    { 
         _LIBCPP_ASSERT(__offset <= size(), "Offset out of range in span::subspan(offset, count)");
         _LIBCPP_ASSERT(__count  <= size() || __count == dynamic_extent, "count out of range in span::subspan(offset, count)");
         if (__count == dynamic_extent)
@@ -567,14 +567,14 @@ public:
     _LIBCPP_INLINE_VISIBILITY constexpr reference operator[](size_type __idx) const noexcept
     {
         _LIBCPP_ASSERT(__idx < size(), "span<T>[] index out of bounds");
-        return __data[__idx];
-    }
+        return __data[__idx]; 
+    } 
 
     _LIBCPP_INLINE_VISIBILITY constexpr reference front() const noexcept
     {
         _LIBCPP_ASSERT(!empty(), "span<T>[].front() on empty span");
         return __data[0];
-    }
+    } 
 
     _LIBCPP_INLINE_VISIBILITY constexpr reference back() const noexcept
     {
@@ -637,7 +637,7 @@ template<contiguous_iterator _It, class _EndOrSize>
 
 template<class _Tp, size_t _Sz>
     span(_Tp (&)[_Sz]) -> span<_Tp, _Sz>;
-
+ 
 template<class _Tp, size_t _Sz>
     span(array<_Tp, _Sz>&) -> span<_Tp, _Sz>;
 

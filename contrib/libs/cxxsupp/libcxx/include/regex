@@ -1,9 +1,9 @@
 // -*- C++ -*-
 //===--------------------------- regex ------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions. 
+// See https://llvm.org/LICENSE.txt for license information. 
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception 
 //
 //===----------------------------------------------------------------------===//
 
@@ -775,7 +775,7 @@ typedef regex_token_iterator<wstring::const_iterator> wsregex_token_iterator;
 #include <string>
 #include <utility>
 #include <vector>
-#include <version>
+#include <version> 
 
 #if !defined(_LIBCPP_HAS_NO_PRAGMA_SYSTEM_HEADER)
 #pragma GCC system_header
@@ -1397,9 +1397,9 @@ public:
     virtual ~__node() {}
 
     _LIBCPP_INLINE_VISIBILITY
-    virtual void __exec(__state&) const {}
+    virtual void __exec(__state&) const {} 
     _LIBCPP_INLINE_VISIBILITY
-    virtual void __exec_split(bool, __state&) const {}
+    virtual void __exec_split(bool, __state&) const {} 
 };
 
 // __end_state
@@ -2485,24 +2485,24 @@ __bracket_expression<_CharT, _Traits>::__exec(__state& __s) const
                 goto __exit;
             }
         }
-        // When there's at least one of __neg_chars_ and __neg_mask_, the set
-        // of "__found" chars is
+        // When there's at least one of __neg_chars_ and __neg_mask_, the set 
+        // of "__found" chars is 
         //   union(complement(union(__neg_chars_, __neg_mask_)),
         //         other cases...)
         //
-        // It doesn't make sense to check this when there are no __neg_chars_
-        // and no __neg_mask_.
-        if (!(__neg_mask_ == 0 && __neg_chars_.empty()))
+        // It doesn't make sense to check this when there are no __neg_chars_ 
+        // and no __neg_mask_. 
+        if (!(__neg_mask_ == 0 && __neg_chars_.empty())) 
         {
-            const bool __in_neg_mask = __traits_.isctype(__ch, __neg_mask_);
+            const bool __in_neg_mask = __traits_.isctype(__ch, __neg_mask_); 
           const bool __in_neg_chars =
               _VSTD::find(__neg_chars_.begin(), __neg_chars_.end(), __ch) !=
               __neg_chars_.end();
           if (!(__in_neg_mask || __in_neg_chars))
-          {
+          { 
             __found = true;
             goto __exit;
-          }
+          } 
         }
         if (!__ranges_.empty())
         {
@@ -3116,10 +3116,10 @@ __lookahead<_CharT, _Traits>::__exec(__state& __s) const
     __m.__init(1 + __exp_.mark_count(), __s.__current_, __s.__last_);
     bool __matched = __exp_.__match_at_start_ecma(
         __s.__current_, __s.__last_,
-        __m,
+        __m, 
         (__s.__flags_ | regex_constants::match_continuous) &
         ~regex_constants::__full_match,
-        __s.__at_first_ && __s.__current_ == __s.__first_);
+        __s.__at_first_ && __s.__current_ == __s.__first_); 
     if (__matched != __invert_)
     {
         __s.__do_ = __state::__accept_but_not_consume;
@@ -6316,7 +6316,7 @@ public:
     _LIBCPP_INLINE_VISIBILITY
     reference operator*() const {return  __match_;}
     _LIBCPP_INLINE_VISIBILITY
-    pointer operator->() const  {return _VSTD::addressof(__match_);}
+    pointer operator->() const  {return _VSTD::addressof(__match_);} 
 
     regex_iterator& operator++();
     _LIBCPP_INLINE_VISIBILITY
@@ -6340,7 +6340,7 @@ regex_iterator<_BidirectionalIterator, _CharT, _Traits>::
                    const regex_type& __re, regex_constants::match_flag_type __m)
     : __begin_(__a),
       __end_(__b),
-      __pregex_(_VSTD::addressof(__re)),
+      __pregex_(_VSTD::addressof(__re)), 
       __flags_(__m)
 {
     _VSTD::regex_search(__begin_, __end_, __match_, *__pregex_, __flags_);
@@ -6592,7 +6592,7 @@ regex_token_iterator<_BidirectionalIterator, _CharT, _Traits>::
                              regex_constants::match_flag_type __m)
     : __position_(__a, __b, __re, __m),
       __n_(0),
-      __subs_(begin(__submatches), end(__submatches))
+      __subs_(begin(__submatches), end(__submatches)) 
 {
     __init(__a, __b);
 }

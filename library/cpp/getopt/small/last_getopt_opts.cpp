@@ -297,7 +297,7 @@ namespace NLastGetopt {
 
         static const TString metavarDef("VAL");
         const TString& title = option->GetArgTitle();
-        const TString& metavar = title.empty() ? metavarDef : title;
+        const TString& metavar = title.empty() ? metavarDef : title; 
 
         if (option->GetHasArg() == OPTIONAL_ARGUMENT) {
             result << " [" << metavar;
@@ -414,7 +414,7 @@ namespace NLastGetopt {
                 } else {
                     os << SPad << leftColumn[i] << ' ';
                     if (leftColumnSizes[i] < leftWidth)
-                        os << TStringBuf(leftPadding.data(), leftWidth - leftColumnSizes[i]);
+                        os << TStringBuf(leftPadding.data(), leftWidth - leftColumnSizes[i]); 
                 }
 
                 TStringBuf help = opt->GetHelp();

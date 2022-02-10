@@ -314,7 +314,7 @@ namespace NXml {
     }
 
     void TNode::SaveInternal(IOutputStream& stream, TZtStringBuf enc, int options) const {
-        const char* encoding = enc.size() ? enc.data() : "utf-8";
+        const char* encoding = enc.size() ? enc.data() : "utf-8"; 
         TSaveCtxtPtr ctx(xmlSaveToIO(XmlWriteToOstream, /* close */ nullptr, &stream,
                                      encoding, options));
         if (xmlSaveTree(ctx.Get(), (xmlNode*)GetPtr()) < 0)

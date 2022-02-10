@@ -28,7 +28,7 @@ public:
         TString id = RequestEvent->Get()->Record.GetTaskId();
 
         LOG_INFO(ctx, NKikimrServices::CMS, "Processing Wall-E request: %s",
-                  RequestEvent->Get()->Record.ShortDebugString().data());
+                  RequestEvent->Get()->Record.ShortDebugString().data()); 
 
         if (!State->WalleTasks.contains(id)) {
             ReplyWithErrorAndDie(TStatus::WRONG_REQUEST, "Unknown task", ctx);
@@ -79,7 +79,7 @@ private:
         default:
             LOG_DEBUG(ctx, NKikimrServices::CMS,
                       "TWalleRemoveTaskAdapter::StateWork ignored event type: %" PRIx32 " event: %s",
-                      ev->GetTypeRewrite(), ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?");
+                      ev->GetTypeRewrite(), ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?"); 
         }
     }
 

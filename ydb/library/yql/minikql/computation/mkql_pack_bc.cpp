@@ -38,7 +38,7 @@ void PackInt32(i32 val, TBuffer& buf) {
 
 ui64 UnpackUInt64(TStringBuf& buf) {
     ui64 res = 0;
-    size_t read = Unpack64(buf.data(), buf.length(), res);
+    size_t read = Unpack64(buf.data(), buf.length(), res); 
     MKQL_ENSURE(read, "Bad ui64 packed data");
     buf.Skip(read);
     return res;
@@ -50,7 +50,7 @@ i64 UnpackInt64(TStringBuf& buf) {
 
 ui32 UnpackUInt32(TStringBuf& buf) {
     ui32 res = 0;
-    size_t read = Unpack32(buf.data(), buf.length(), res);
+    size_t read = Unpack32(buf.data(), buf.length(), res); 
     MKQL_ENSURE(read, "Bad ui32 packed data");
     buf.Skip(read);
     return res;
@@ -67,9 +67,9 @@ void PutRawData(T val, TBuffer& buf) {
 
 template <typename T>
 T GetRawData(TStringBuf& buf) {
-    MKQL_ENSURE(sizeof(T) <= buf.size(), "Bad packed data. Buffer too small");
+    MKQL_ENSURE(sizeof(T) <= buf.size(), "Bad packed data. Buffer too small"); 
     T val = 0;
-    std::memcpy(&val, buf.data(), sizeof(T));
+    std::memcpy(&val, buf.data(), sizeof(T)); 
     buf.Skip(sizeof(T));
     return val;
 }

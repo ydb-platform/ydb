@@ -957,8 +957,8 @@ TFailDomain::TFailDomain() {
 }
 
 TFailDomain::TFailDomain(const TString &data) {
-    ui8 *end = (ui8*)const_cast<char*>(data.data()) + (data.size() / RecordSize) * RecordSize;
-    for (ui8 *cursor = (ui8*)const_cast<char*>(data.data()); cursor < end; cursor += RecordSize) {
+    ui8 *end = (ui8*)const_cast<char*>(data.data()) + (data.size() / RecordSize) * RecordSize; 
+    for (ui8 *cursor = (ui8*)const_cast<char*>(data.data()); cursor < end; cursor += RecordSize) { 
         Levels[*cursor] = ReadUnaligned<ui32>((ui32*)(cursor + 1));
     }
 }
@@ -968,8 +968,8 @@ TString TFailDomain::SerializeFailDomain() const {
     TLevels::const_iterator a = Levels.begin();
     size_t offset = 0;
     while (a != Levels.end()) {
-        *(ui8*)(data.data() + offset) = a->first;
-        WriteUnaligned<ui32>((ui32*)(data.data() + offset + sizeof(ui8)), a->second);
+        *(ui8*)(data.data() + offset) = a->first; 
+        WriteUnaligned<ui32>((ui32*)(data.data() + offset + sizeof(ui8)), a->second); 
         offset += RecordSize;
         ++a;
     }

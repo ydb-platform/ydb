@@ -1,9 +1,9 @@
 // -*- C++ -*-
 //===-------------------------- utility -----------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions. 
+// See https://llvm.org/LICENSE.txt for license information. 
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception 
 //
 //===----------------------------------------------------------------------===//
 
@@ -114,7 +114,7 @@ swap(pair<T1, T2>& x, pair<T1, T2>& y) noexcept(noexcept(x.swap(y)));           
 struct piecewise_construct_t { explicit piecewise_construct_t() = default; };
 inline constexpr piecewise_construct_t piecewise_construct = piecewise_construct_t();
 
-template <class T> struct tuple_size;
+template <class T> struct tuple_size; 
 template <size_t I, class T> struct tuple_element;
 
 template <class T1, class T2> struct tuple_size<pair<T1, T2> >;
@@ -230,6 +230,6 @@ template <class T>
 #include <__utility/to_underlying.h>
 #include <compare>
 #include <initializer_list>
-#include <version>
+#include <version> 
 
 #endif // _LIBCPP_UTILITY

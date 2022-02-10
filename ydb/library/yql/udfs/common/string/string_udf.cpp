@@ -196,14 +196,14 @@ namespace {
         TString result(args[0].AsStringRef());
         TStringBuf what(args[1].AsStringRef());
         TStringBuf with(args[2].AsStringRef());
-        if (what.size() != 1) {
+        if (what.size() != 1) { 
             UdfTerminate("Only one char is supported as second argument");
         }
-        if (with.size() != 1) {
+        if (with.size() != 1) { 
             UdfTerminate("Only one char is supported as third argument");
         }
         if (const auto index = result.find(what[0]); index != TStringBuf::npos) {
-            result.replace(index, 1, with.data());
+            result.replace(index, 1, with.data()); 
             return valueBuilder->NewString(result);
         }
         return args[0];
@@ -213,14 +213,14 @@ namespace {
         TString result(args[0].AsStringRef());
         TStringBuf what(args[1].AsStringRef());
         TStringBuf with(args[2].AsStringRef());
-        if (what.size() != 1) {
+        if (what.size() != 1) { 
             UdfTerminate("Only one char is supported as second argument");
         }
-        if (with.size() != 1) {
+        if (with.size() != 1) { 
             UdfTerminate("Only one char is supported as third argument");
         }
         if (const auto index = result.rfind(what[0]); index != TStringBuf::npos) {
-            result.replace(index, 1, with.data());
+            result.replace(index, 1, with.data()); 
             return valueBuilder->NewString(result);
         }
         return args[0];
@@ -238,7 +238,7 @@ namespace {
     SIMPLE_UDF(TRemoveFirst, char*(TAutoMap<char*>, char*)) {
         TString result(args[0].AsStringRef());
         TStringBuf remove(args[1].AsStringRef());
-        if (remove.size() != 1) {
+        if (remove.size() != 1) { 
             UdfTerminate("Only one char is supported as second argument");
         }
         if (const auto index = result.find(remove[0]); index != TStringBuf::npos) {
@@ -251,7 +251,7 @@ namespace {
     SIMPLE_UDF(TRemoveLast, char*(TAutoMap<char*>, char*)) {
         TString result(args[0].AsStringRef());
         TStringBuf remove(args[1].AsStringRef());
-        if (remove.size() != 1) {
+        if (remove.size() != 1) { 
             UdfTerminate("Only one char is supported as second argument");
         }
         if (const auto index = result.rfind(remove[0]); index != TStringBuf::npos) {
@@ -340,7 +340,7 @@ namespace {
             const auto limit = args[4].GetOrDefault<ui64>(0);
             if (delimiterString) {
                 if (limit) {
-                    auto it = StringSplitter(input).SplitByString(delimeter).Limit(limit + 1);
+                    auto it = StringSplitter(input).SplitByString(delimeter).Limit(limit + 1); 
                     SplitToListImpl(valueBuilder, args[0], input.cbegin(), it, skipEmpty, result);
                 } else {
                     auto it = StringSplitter(input).SplitByString(delimeter);
@@ -475,7 +475,7 @@ namespace {
     SIMPLE_UDF(TToByteList, TListType<ui8>(char*)) {
         const TStringBuf input(args[0].AsStringRef());
         TUnboxedValue* items = nullptr;
-        TUnboxedValue result = valueBuilder->NewArray(input.size(), items);
+        TUnboxedValue result = valueBuilder->NewArray(input.size(), items); 
         for (const unsigned char c : input) {
             *items++ = TUnboxedValuePod(c);
         }

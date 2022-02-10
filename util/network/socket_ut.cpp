@@ -48,7 +48,7 @@ void TSockTest::TestSock() {
     TSocketInput si(s);
     const TStringBuf req = "GET / HTTP/1.1\r\nHost: yandex.ru\r\n\r\n";
 
-    so.Write(req.data(), req.size());
+    so.Write(req.data(), req.size()); 
 
     UNIT_ASSERT(!si.ReadLine().empty());
 }

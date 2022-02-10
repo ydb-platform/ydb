@@ -87,7 +87,7 @@ struct TPartFragment {
         OwnedString = whole;
         Bytes = OwnedString.Detach();
         Offset = 0;
-        Size = whole.size();
+        Size = whole.size(); 
         PartSize = Size;
     }
 
@@ -133,11 +133,11 @@ struct TPartFragment {
         char *newBytes = nullptr;
         if (Bytes) {
             char *oldBytes = Bytes;
-            char *oldData = const_cast<char*>(OwnedString.data());
+            char *oldData = const_cast<char*>(OwnedString.data()); 
             intptr_t bytesOffset = oldBytes - oldData;
             OwnedString.Detach();
-            if (OwnedString.data() != oldData) {
-                newBytes = const_cast<char*>(OwnedString.data()) + bytesOffset;
+            if (OwnedString.data() != oldData) { 
+                newBytes = const_cast<char*>(OwnedString.data()) + bytesOffset; 
             } else {
                 newBytes = oldBytes;
             }

@@ -99,7 +99,7 @@ namespace NKikimr {
                 LOG_CRIT(ctx, NKikimrServices::BS_HULLRECS,
                         VDISKP(HullDs->HullCtx->VCtx->VDiskLogPrefix,
                             "Db# LogoBlobs; putting blob beyond the barrier id# %s barrier# %s",
-                            id.ToString().data(), explanation.data()));
+                            id.ToString().data(), explanation.data())); 
             }
         }
     }
@@ -314,7 +314,7 @@ namespace NKikimr {
                     VDISKP(HullDs->HullCtx->VCtx->VDiskLogPrefix,
                            "Db# Barriers ValidateGCCmd: incorrect collect cmd: tabletID# %" PRIu64
                             " key# %s existing barrier# %" PRIu32 ":%" PRIu32 " new barrier# %"
-                            PRIu32 ":%" PRIu32, tabletID, newKey.ToString().data(), memRec.CollectGen, memRec.CollectStep,
+                            PRIu32 ":%" PRIu32, tabletID, newKey.ToString().data(), memRec.CollectGen, memRec.CollectStep, 
                             collectGeneration, collectStep));
                 return NKikimrProto::ERROR;
             }
@@ -341,8 +341,8 @@ namespace NKikimr {
             LOG_ERROR(ctx, NKikimrServices::BS_HULLRECS,
                  VDISKP(HullDs->HullCtx->VCtx->VDiskLogPrefix,
                         "Db# Barriers ValidateGCCmd: out-of-order requests:"
-                        " existing key# %s new key# %s new barrier# %" PRIu32 ":%" PRIu32, key.ToString().data(),
-                        newKey.ToString().data(), collectGeneration, collectStep));
+                        " existing key# %s new key# %s new barrier# %" PRIu32 ":%" PRIu32, key.ToString().data(), 
+                        newKey.ToString().data(), collectGeneration, collectStep)); 
             return NKikimrProto::ERROR;
         }
 
@@ -368,7 +368,7 @@ namespace NKikimr {
                      VDISKP(HullDs->HullCtx->VCtx->VDiskLogPrefix,
                             "Db# Barriers ValidateGCCmd: decreasing barrier:"
                             " existing key# %s barrier# %" PRIu32 ":%" PRIu32 " new key# %s barrier# %" PRIu32 ":%"
-                            PRIu32, key.ToString().data(), memRec.CollectGen, memRec.CollectStep, newKey.ToString().data(),
+                            PRIu32, key.ToString().data(), memRec.CollectGen, memRec.CollectStep, newKey.ToString().data(), 
                             collectGeneration, collectStep));
                 return NKikimrProto::ERROR;
             }
@@ -559,8 +559,8 @@ namespace NKikimr {
                                                            HullDs->HullCtx->VCtx->ShortSelfVDisk,
                                                            rec->LogoBlobID()),
                          "logoBlobID# %s ShortSelfVDisk# %s top# %s",
-                           rec->LogoBlobID().ToString().data(),
-                           HullDs->HullCtx->VCtx->ShortSelfVDisk.ToString().data(),
+                           rec->LogoBlobID().ToString().data(), 
+                           HullDs->HullCtx->VCtx->ShortSelfVDisk.ToString().data(), 
                            HullDs->HullCtx->VCtx->Top->ToString().data());
             TLogoBlobID genId(rec->LogoBlobID(), 0); // TODO: add verify for logoBlob.PartId() == 0 after migration
             ReplayAddLogoBlobCmd(ctx, genId, rec->Ingress, curLsn++, THullDbRecovery::NORMAL);

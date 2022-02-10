@@ -20,10 +20,10 @@ Y_UNIT_TEST_SUITE(AlignmentTest) {
         );
         auto dataFile1 = dataArchive.BlobByKey("/data_file.txt");
         auto dataFile2 = dataArchive.BlobByKey("/data_file2.txt");
-        UNIT_ASSERT_NO_DIFF(TStringBuf(dataFile1.AsCharPtr(), dataFile1.Size()), "some text\n");
-        UNIT_ASSERT_NO_DIFF(TStringBuf(dataFile2.AsCharPtr(), dataFile2.Size()), "second file content\n");
-        UNIT_ASSERT_VALUES_EQUAL(size_t(dataFile1.AsCharPtr()) % ArchiveWriterDefaultDataAlignment, 0);
-        UNIT_ASSERT_VALUES_EQUAL(size_t(dataFile2.AsCharPtr()) % ArchiveWriterDefaultDataAlignment, 0);
+        UNIT_ASSERT_NO_DIFF(TStringBuf(dataFile1.AsCharPtr(), dataFile1.Size()), "some text\n"); 
+        UNIT_ASSERT_NO_DIFF(TStringBuf(dataFile2.AsCharPtr(), dataFile2.Size()), "second file content\n"); 
+        UNIT_ASSERT_VALUES_EQUAL(size_t(dataFile1.AsCharPtr()) % ArchiveWriterDefaultDataAlignment, 0); 
+        UNIT_ASSERT_VALUES_EQUAL(size_t(dataFile2.AsCharPtr()) % ArchiveWriterDefaultDataAlignment, 0); 
     }
 
     Y_UNIT_TEST(ArchiveAsmCheck) {
@@ -33,9 +33,9 @@ Y_UNIT_TEST_SUITE(AlignmentTest) {
         );
         auto dataFile1 = dataArchive.BlobByKey("/data_file.txt");
         auto dataFile2 = dataArchive.BlobByKey("/data_file2.txt");
-        UNIT_ASSERT_NO_DIFF(TStringBuf(dataFile1.AsCharPtr(), dataFile1.Size()), "some text\n");
-        UNIT_ASSERT_NO_DIFF(TStringBuf(dataFile2.AsCharPtr(), dataFile2.Size()), "second file content\n");
-        UNIT_ASSERT_VALUES_EQUAL(size_t(dataFile1.AsCharPtr()) % ArchiveWriterDefaultDataAlignment, 0);
-        UNIT_ASSERT_VALUES_EQUAL(size_t(dataFile2.AsCharPtr()) % ArchiveWriterDefaultDataAlignment, 0);
+        UNIT_ASSERT_NO_DIFF(TStringBuf(dataFile1.AsCharPtr(), dataFile1.Size()), "some text\n"); 
+        UNIT_ASSERT_NO_DIFF(TStringBuf(dataFile2.AsCharPtr(), dataFile2.Size()), "second file content\n"); 
+        UNIT_ASSERT_VALUES_EQUAL(size_t(dataFile1.AsCharPtr()) % ArchiveWriterDefaultDataAlignment, 0); 
+        UNIT_ASSERT_VALUES_EQUAL(size_t(dataFile2.AsCharPtr()) % ArchiveWriterDefaultDataAlignment, 0); 
     }
 }

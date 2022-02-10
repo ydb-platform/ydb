@@ -112,10 +112,10 @@ namespace boost
 
         template<typename U,typename V>
         static true_type has_member(V (U::*)());
-#if __cpp_noexcept_function_type
-        template<typename U,typename V>
-        static true_type has_member(V (U::*)() noexcept);
-#endif
+#if __cpp_noexcept_function_type 
+        template<typename U,typename V> 
+        static true_type has_member(V (U::*)() noexcept); 
+#endif 
         template<typename U>
         static false_type has_member(U);
 
@@ -140,11 +140,11 @@ namespace boost
 
         template<typename U>
         static true_type has_member(bool (U::*)());
-#if __cpp_noexcept_function_type
+#if __cpp_noexcept_function_type 
         template<typename U>
-        static true_type has_member(bool (U::*)() noexcept);
-#endif
-        template<typename U>
+        static true_type has_member(bool (U::*)() noexcept); 
+#endif 
+        template<typename U> 
         static false_type has_member(U);
 
         BOOST_STATIC_CONSTANT(

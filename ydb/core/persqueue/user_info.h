@@ -48,7 +48,7 @@ class TQuotaTracker {
             i64 newStart = ts - Duration;
             if (Values.size() > 1) {
                 Sum += GetSum(Values.size() - 2);
-                Y_VERIFY(Values.back().second >= Values.back().second);
+                Y_VERIFY(Values.back().second >= Values.back().second); 
             }
             while (Values.size() > 2 && newStart > Values[1].second) {
                 Sum -= GetSum(0);

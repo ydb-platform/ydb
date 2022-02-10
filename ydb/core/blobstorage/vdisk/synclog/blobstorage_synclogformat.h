@@ -34,7 +34,7 @@ namespace NKikimr {
             }
 
             TString ToString() const {
-                return Sprintf("[%s %" PRIu64 "]", LogoBlobID().ToString().data(), Ingress.Raw());
+                return Sprintf("[%s %" PRIu64 "]", LogoBlobID().ToString().data(), Ingress.Raw()); 
             }
         };
 
@@ -160,7 +160,7 @@ namespace NKikimr {
             }
 
             TString ToString() const {
-                return Sprintf("{Lsn# %" PRIu64 " Rec# %s %s}", Lsn, RecTypeToStr(RecType), ValueToString().data());
+                return Sprintf("{Lsn# %" PRIu64 " Rec# %s %s}", Lsn, RecTypeToStr(RecType), ValueToString().data()); 
             }
 
             TString ValueToString() const {

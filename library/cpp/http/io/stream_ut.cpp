@@ -42,8 +42,8 @@ Y_UNIT_TEST_SUITE(THttpStreamTest) {
                                 "\r\n";
                 } else {
                     Output() << "HTTP/1.1 200 Ok\r\n\r\n";
-                    if (Buf.Size()) {
-                        Output().Write(Buf.AsCharPtr(), Buf.Size());
+                    if (Buf.Size()) { 
+                        Output().Write(Buf.AsCharPtr(), Buf.Size()); 
                     } else {
                         Output() << Parent_->Res_;
                     }
@@ -79,7 +79,7 @@ Y_UNIT_TEST_SUITE(THttpStreamTest) {
     };
 
     Y_UNIT_TEST(TestCodings1) {
-        UNIT_ASSERT(SupportedCodings().size() > 0);
+        UNIT_ASSERT(SupportedCodings().size() > 0); 
     }
 
     Y_UNIT_TEST(TestHttpInput) {
@@ -113,7 +113,7 @@ Y_UNIT_TEST_SUITE(THttpStreamTest) {
             r += "\r\n";
             r += "\r\n";
 
-            output.Write(r.data(), r.size());
+            output.Write(r.data(), r.size()); 
             output.Finish();
         }
 
@@ -159,7 +159,7 @@ Y_UNIT_TEST_SUITE(THttpStreamTest) {
             r += "\r\n";
             r += "\r\n";
 
-            output.Write(r.data(), r.size());
+            output.Write(r.data(), r.size()); 
             output.Finish();
         }
 
@@ -299,12 +299,12 @@ Y_UNIT_TEST_SUITE(THttpStreamTest) {
         const char* header = "GET / HTTP/1.1\r\nHost: yandex.ru\r\n\r\n";
         httpOut << header;
 
-        unsigned curLen = str.size();
+        unsigned curLen = str.size(); 
         const char* body = "<html>Hello</html>";
         httpOut << body;
-        UNIT_ASSERT_VALUES_EQUAL(curLen, str.size());
+        UNIT_ASSERT_VALUES_EQUAL(curLen, str.size()); 
         httpOut.Flush();
-        UNIT_ASSERT_VALUES_EQUAL(curLen + strlen(body), str.size());
+        UNIT_ASSERT_VALUES_EQUAL(curLen + strlen(body), str.size()); 
     }
 
     Y_UNIT_TEST(TestOutputPostFlush) {
@@ -322,14 +322,14 @@ Y_UNIT_TEST_SUITE(THttpStreamTest) {
         const char* header = "POST / HTTP/1.1\r\nHost: yandex.ru\r\n\r\n";
         httpOut << header;
 
-        UNIT_ASSERT_VALUES_EQUAL(str.size(), 0u);
+        UNIT_ASSERT_VALUES_EQUAL(str.size(), 0u); 
 
         const char* body = "<html>Hello</html>";
         httpOut << body;
-        UNIT_ASSERT_VALUES_EQUAL(str.size(), 0u);
+        UNIT_ASSERT_VALUES_EQUAL(str.size(), 0u); 
 
         httpOut.Flush();
-        UNIT_ASSERT_VALUES_EQUAL(checkStr.size(), str.size());
+        UNIT_ASSERT_VALUES_EQUAL(checkStr.size(), str.size()); 
     }
 
     TString MakeHttpOutputBody(const char* body, bool encodingEnabled) {
@@ -348,7 +348,7 @@ Y_UNIT_TEST_SUITE(THttpStreamTest) {
             httpOut << "Content-Encoding: gzip\r\n";
             httpOut << "\r\n";
 
-            UNIT_ASSERT_VALUES_EQUAL(str.size(), 0u);
+            UNIT_ASSERT_VALUES_EQUAL(str.size(), 0u); 
             httpOut << body;
         }
         const char* bodyDelimiter = "\r\n\r\n";
@@ -384,12 +384,12 @@ Y_UNIT_TEST_SUITE(THttpStreamTest) {
         const char* header = "GET / HTTP/1.1\r\nHost: yandex.ru\r\n\r\n";
         httpOut << header;
 
-        unsigned curLen = str.size();
+        unsigned curLen = str.size(); 
         const char* body = "<html>Hello</html>";
         httpOut << body;
-        UNIT_ASSERT_VALUES_EQUAL(curLen, str.size());
+        UNIT_ASSERT_VALUES_EQUAL(curLen, str.size()); 
         httpOut.Finish();
-        UNIT_ASSERT_VALUES_EQUAL(curLen + strlen(body), str.size());
+        UNIT_ASSERT_VALUES_EQUAL(curLen + strlen(body), str.size()); 
     }
 
     Y_UNIT_TEST(TestMultilineHeaders) {
@@ -622,7 +622,7 @@ Y_UNIT_TEST_SUITE(THttpStreamTest) {
                     ythrow yexception() << "should not read after EOF";
                 }
 
-                const size_t toWrite = Min(len, Data_.size() - Pos_);
+                const size_t toWrite = Min(len, Data_.size() - Pos_); 
                 if (toWrite == 0) {
                     Eof_ = true;
                     return 0;

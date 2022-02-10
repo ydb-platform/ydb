@@ -8,8 +8,8 @@ void TUrlMapper::AddMapping(const TString& pattern, const TString& targetUrl) {
 
 bool TUrlMapper::MapUrl(const TString& url, TString& mappedUrl) const {
     for (const auto& sc : CustomSchemes) {
-        if (sc.Pattern.Match(url.data())) {
-            mappedUrl = TRegExSubst(sc.TargetUrlSubst).Replace(url.data());
+        if (sc.Pattern.Match(url.data())) { 
+            mappedUrl = TRegExSubst(sc.TargetUrlSubst).Replace(url.data()); 
             return true;
         }
     }

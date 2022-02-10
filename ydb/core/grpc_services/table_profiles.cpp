@@ -94,7 +94,7 @@ bool TTableProfiles::ApplyTableProfile(const Ydb::Table::TableProfile &profile,
 
     if (profile.preset_name() && !TableProfiles.contains(profile.preset_name())) {
         code = Ydb::StatusIds::BAD_REQUEST;
-        error = Sprintf("unknown table profile preset '%s'", profile.preset_name().data());
+        error = Sprintf("unknown table profile preset '%s'", profile.preset_name().data()); 
         return false;
     }
 
@@ -108,7 +108,7 @@ bool TTableProfiles::ApplyTableProfile(const Ydb::Table::TableProfile &profile,
         auto &policy = profile.compaction_policy();
         if (!CompactionPolicies.contains(policy.preset_name())) {
             code = Ydb::StatusIds::BAD_REQUEST;
-            error = Sprintf("unknown compaction policy preset '%s'", policy.preset_name().data());
+            error = Sprintf("unknown compaction policy preset '%s'", policy.preset_name().data()); 
             return false;
         }
         compactionPolicy = CompactionPolicies.at(policy.preset_name());
@@ -121,7 +121,7 @@ bool TTableProfiles::ApplyTableProfile(const Ydb::Table::TableProfile &profile,
         auto &policy = profile.execution_policy();
         if (!ExecutionPolicies.contains(policy.preset_name())) {
             code = Ydb::StatusIds::BAD_REQUEST;
-            error = Sprintf("unknown execution policy preset '%s'", policy.preset_name().data());
+            error = Sprintf("unknown execution policy preset '%s'", policy.preset_name().data()); 
             return false;
         }
         executionPolicy = ExecutionPolicies.at(policy.preset_name());
@@ -135,7 +135,7 @@ bool TTableProfiles::ApplyTableProfile(const Ydb::Table::TableProfile &profile,
         if (policy.preset_name()) {
             if (!PartitioningPolicies.contains(policy.preset_name())) {
                 code = Ydb::StatusIds::BAD_REQUEST;
-                error = Sprintf("unknown partitioning policy preset '%s'", policy.preset_name().data());
+                error = Sprintf("unknown partitioning policy preset '%s'", policy.preset_name().data()); 
                 return false;
             }
             partitioningPolicy = PartitioningPolicies.at(policy.preset_name());
@@ -186,7 +186,7 @@ bool TTableProfiles::ApplyTableProfile(const Ydb::Table::TableProfile &profile,
         if (policy.preset_name()) {
             if (!StoragePolicies.contains(policy.preset_name())) {
                 code = Ydb::StatusIds::BAD_REQUEST;
-                error = Sprintf("unknown storage policy preset '%s'", policy.preset_name().data());
+                error = Sprintf("unknown storage policy preset '%s'", policy.preset_name().data()); 
                 return false;
             }
             storagePolicy = StoragePolicies.at(policy.preset_name());
@@ -315,7 +315,7 @@ bool TTableProfiles::ApplyTableProfile(const Ydb::Table::TableProfile &profile,
         if (policy.preset_name()) {
             if (!ReplicationPolicies.contains(policy.preset_name())) {
                 code = Ydb::StatusIds::BAD_REQUEST;
-                error = Sprintf("unknown replciation policy preset '%s'", policy.preset_name().data());
+                error = Sprintf("unknown replciation policy preset '%s'", policy.preset_name().data()); 
                 return false;
             }
             replicationPolicy = ReplicationPolicies.at(policy.preset_name());
@@ -363,7 +363,7 @@ bool TTableProfiles::ApplyTableProfile(const Ydb::Table::TableProfile &profile,
         auto &policy = profile.caching_policy();
         if (!CachingPolicies.contains(policy.preset_name())) {
             code = Ydb::StatusIds::BAD_REQUEST;
-            error = Sprintf("unknown caching policy preset '%s'", policy.preset_name().data());
+            error = Sprintf("unknown caching policy preset '%s'", policy.preset_name().data()); 
             return false;
         }
         cachingPolicy = CachingPolicies.at(policy.preset_name());

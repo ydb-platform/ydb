@@ -834,7 +834,7 @@ Y_UNIT_TEST_SUITE(TBsVDiskRepl3) {
                 Conf.GroupInfo, vdisks));
         dataSetPtr.Reset(new TGeneratedDataSet(generator));
 
-        LOG_NOTICE_S(*Conf.ActorSystem1, NActorsServices::TEST, "first read pass w/repl took " << timedelta.ToString().data());
+        LOG_NOTICE_S(*Conf.ActorSystem1, NActorsServices::TEST, "first read pass w/repl took " << timedelta.ToString().data()); 
         LOG_NOTICE(*Conf.ActorSystem1, NActorsServices::TEST, "starting second read pass");
         TReadUntilSuccess verifyRead(dataSetPtr.Get(), 3, SMALL_TIMEOUT);
         begin = Now();

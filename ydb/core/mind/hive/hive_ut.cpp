@@ -116,7 +116,7 @@ namespace {
     void SetupChannels(TAppPrepare &app) {
         TIntrusivePtr<TChannelProfiles> channelProfiles = new TChannelProfiles;
         channelProfiles->Profiles.emplace_back();
-        TChannelProfiles::TProfile &profile = channelProfiles->Profiles.back();
+        TChannelProfiles::TProfile &profile = channelProfiles->Profiles.back(); 
         for (ui32 channelIdx = 0; channelIdx < 3; ++channelIdx) {
             profile.Channels.push_back(
                 TChannelProfiles::TProfile::TChannel(TBlobStorageGroupType::ErasureNone, 0, NKikimrBlobStorage::TVDiskKind::Default));
@@ -2574,7 +2574,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
 //        { // setup channel profiles
 //            TIntrusivePtr<TChannelProfiles> channelProfiles = new TChannelProfiles;
 //            channelProfiles->Profiles.emplace_back();
-//            TChannelProfiles::TProfile &profile = channelProfiles->Profiles.back();
+//            TChannelProfiles::TProfile &profile = channelProfiles->Profiles.back(); 
 //            for (ui32 channelIdx = 0; channelIdx < 4; ++channelIdx) {
 //                profile.Channels.emplace_back(TBlobStorageGroupType::Erasure4Plus2Block, 0, NKikimrBlobStorage::TVDiskKind::Default);
 //            }

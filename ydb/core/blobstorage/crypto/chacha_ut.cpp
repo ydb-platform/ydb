@@ -90,7 +90,7 @@ Y_UNIT_TEST_SUITE(TChaCha)
                 "occaecat cupidatat non proident, sunt in culpa qui officia "
                 "deserunt mollit anim id est laborum.";
 
-        TSecuredBlock<> buf(lorem.data(), lorem.size());
+        TSecuredBlock<> buf(lorem.data(), lorem.size()); 
 
         ChaCha cipher;
         cipher.SetIV(tc8_iv);

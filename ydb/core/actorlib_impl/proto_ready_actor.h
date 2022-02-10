@@ -77,7 +77,7 @@ public:
 private:
     IActor::TReceiveFunc DerivedActorFunc;
 
-    STFUNC(ProtocolDispatcher) {
+    STFUNC(ProtocolDispatcher) { 
         Y_VERIFY(ev.Get() != nullptr);
 
         auto funcIter = ProtocolFunctions.find(ev->Type);

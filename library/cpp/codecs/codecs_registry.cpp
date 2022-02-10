@@ -73,9 +73,9 @@ namespace NCodecs {
                     return new TSolarCodec();
                 }
                 if (name.EndsWith(TStringBuf("-a"))) {
-                    return MakeCodecImpl<TAdaptiveSolarCodec>(name, name.SubStr(TSolarCodec::MyName().size()).Chop(2));
+                    return MakeCodecImpl<TAdaptiveSolarCodec>(name, name.SubStr(TSolarCodec::MyName().size()).Chop(2)); 
                 } else {
-                    return MakeCodecImpl<TSolarCodec>(name, name.SubStr(TSolarCodec::MyName().size()));
+                    return MakeCodecImpl<TSolarCodec>(name, name.SubStr(TSolarCodec::MyName().size())); 
                 }
             }
 

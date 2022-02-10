@@ -13,8 +13,8 @@ namespace NKikimr {
 
         void TNaiveFragmentReader::ForEach(const TString &d, TReadLogoBlobRec fblob, TReadBlockRec fblock,
                                            TReadBarrierRec fbar, TReadBlockRecV2 fblock2) {
-            const TRecordHdr *begin = (const TRecordHdr *)(d.data());
-            const TRecordHdr *end = (const TRecordHdr *)(d.data() + d.size());
+            const TRecordHdr *begin = (const TRecordHdr *)(d.data()); 
+            const TRecordHdr *end = (const TRecordHdr *)(d.data() + d.size()); 
 
             for (const TRecordHdr *it = begin; it < end; it = it->Next()) {
                 switch (it->RecType) {
@@ -57,7 +57,7 @@ namespace NKikimr {
             if (Uncompressed.empty()) {
                 // remove header from original string
                 size_t hdrSize = GetLz4HeaderSize();
-                TStringBuf d(Data.data() + hdrSize, Data.size() - hdrSize);
+                TStringBuf d(Data.data() + hdrSize, Data.size() - hdrSize); 
                 GetLz4Codec()->Decode(d, Uncompressed);
             }
         }
@@ -126,7 +126,7 @@ namespace NKikimr {
                 // remove header from original string
                 TString uncompressed;
                 size_t hdrSize = GetOrderedLz4HeaderSize();
-                TStringBuf d(Data.data() + hdrSize, Data.size() - hdrSize);
+                TStringBuf d(Data.data() + hdrSize, Data.size() - hdrSize); 
                 GetLz4Codec()->Decode(d, uncompressed);
 
                 // build vectors
@@ -150,8 +150,8 @@ namespace NKikimr {
                 // build vectors
                 size_t hdrSize = GetCustomCodecHeaderSize();
                 TReorderCodec codec(TReorderCodec::EEncoding::Custom);
-                const char *pos = Data.data() + hdrSize;
-                const char *end = pos + (Data.size() - hdrSize);
+                const char *pos = Data.data() + hdrSize; 
+                const char *end = pos + (Data.size() - hdrSize); 
                 Decompressed = codec.Decode(pos, end, Records);
             }
 

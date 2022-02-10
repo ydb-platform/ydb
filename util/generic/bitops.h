@@ -424,31 +424,31 @@ constexpr T RotateBitsRightCT(T value, const ui8 shift) noexcept {
     // do trick with mask to avoid undefined behaviour
     return (value >> shift) | (value << ((-shift) & (sizeof(T) * 8 - 1)));
 }
-
-/* Remain `size` bits to current `offset` of `value`
-   size, offset are less than number of bits in size_type
- */
+ 
+/* Remain `size` bits to current `offset` of `value` 
+   size, offset are less than number of bits in size_type 
+ */ 
 template <size_t Offset, size_t Size, class T>
-Y_FORCE_INLINE T SelectBits(T value) {
+Y_FORCE_INLINE T SelectBits(T value) { 
     static_assert(Size < sizeof(T) * 8, "violated: Size < sizeof(T) * 8");
     static_assert(Offset < sizeof(T) * 8, "violated: Offset < sizeof(T) * 8");
-    T id = 1;
-    return (value >> Offset) & ((id << Size) - id);
-}
-
-/* Set `size` bits of `bits` to current offset of `value`. Requires that bits <= (1 << size) - 1
-   size, offset are less than number of bits in size_type
- */
+    T id = 1; 
+    return (value >> Offset) & ((id << Size) - id); 
+} 
+ 
+/* Set `size` bits of `bits` to current offset of `value`. Requires that bits <= (1 << size) - 1 
+   size, offset are less than number of bits in size_type 
+ */ 
 template <size_t Offset, size_t Size, class T>
-void SetBits(T& value, T bits) {
+void SetBits(T& value, T bits) { 
     static_assert(Size < sizeof(T) * 8, "violated: Size < sizeof(T) * 8");
     static_assert(Offset < sizeof(T) * 8, "violated: Offset < sizeof(T) * 8");
-    T id = 1;
-    T maxValue = ((id << Size) - id);
-    Y_ASSERT(bits <= maxValue);
-    value &= ~(maxValue << Offset);
-    value |= bits << Offset;
-}
+    T id = 1; 
+    T maxValue = ((id << Size) - id); 
+    Y_ASSERT(bits <= maxValue); 
+    value &= ~(maxValue << Offset); 
+    value |= bits << Offset; 
+} 
 
 inline constexpr ui64 NthBit64(int bit) {
     return ui64(1) << bit;

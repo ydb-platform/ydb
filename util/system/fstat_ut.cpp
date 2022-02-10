@@ -13,7 +13,7 @@ Y_UNIT_TEST_SUITE(TestFileStat) {
         TString fileName = "f1.txt";
         TFileStat oFs;
         {
-            TFile file(fileName.data(), OpenAlways | WrOnly);
+            TFile file(fileName.data(), OpenAlways | WrOnly); 
             file.Write("1234567", 7);
 
             {
@@ -43,7 +43,7 @@ Y_UNIT_TEST_SUITE(TestFileStat) {
         UNIT_ASSERT_VALUES_EQUAL(cFs.Uid, oFs.Uid);
         UNIT_ASSERT_VALUES_EQUAL(cFs.Gid, oFs.Gid);
         UNIT_ASSERT_VALUES_EQUAL(cFs.INode, oFs.INode);
-        UNIT_ASSERT(unlink(fileName.data()) == 0);
+        UNIT_ASSERT(unlink(fileName.data()) == 0); 
     }
 
     Y_UNIT_TEST(DirTest) {

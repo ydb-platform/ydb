@@ -115,7 +115,7 @@ void SetupServices(TTestActorRuntime &runtime, TString extraPath, TIntrusivePtr<
 
     {
         TString baseDir = runtime.GetTempDir();
-        TString keyfile = Sprintf("%s/key.txt", baseDir.data());
+        TString keyfile = Sprintf("%s/key.txt", baseDir.data()); 
 
         TFileOutput file(keyfile);
         file << "some data";
@@ -141,7 +141,7 @@ void SetupServices(TTestActorRuntime &runtime, TString extraPath, TIntrusivePtr<
     if (false) { // setup channel profiles
         TIntrusivePtr<TChannelProfiles> channelProfiles = new TChannelProfiles;
         channelProfiles->Profiles.emplace_back();
-        TChannelProfiles::TProfile &profile = channelProfiles->Profiles.back();
+        TChannelProfiles::TProfile &profile = channelProfiles->Profiles.back(); 
         for (ui32 channelIdx = 0; channelIdx < 3; ++channelIdx) {
             profile.Channels.push_back(
                 TChannelProfiles::TProfile::TChannel(TBlobStorageGroupType::ErasureMirror3, 0,

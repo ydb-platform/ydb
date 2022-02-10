@@ -4582,7 +4582,7 @@ static TString GetStructDiff(const TStructExprType& left, const TStructExprType&
     for (auto& item: rightItems) {
         res << '+' << item.first << '(' << *item.second->GetItemType() << TStringBuf("),");
     }
-    if (!res.empty()) {
+    if (!res.empty()) { 
         return res.pop_back(); // remove trailing comma
     }
     return "no diff";
@@ -4724,11 +4724,11 @@ TExprNode::TPtr ExpandTypeNoCache(TPositionHandle position, const TTypeAnnotatio
 
         TExprNode::TListType callableArgs;
         TExprNode::TListType mainSettings;
-        if (callableType->GetOptionalArgumentsCount() != 0 || !callableType->GetPayload().empty()) {
+        if (callableType->GetOptionalArgumentsCount() != 0 || !callableType->GetPayload().empty()) { 
             mainSettings.push_back(ctx.NewAtom(position, ToString(callableType->GetOptionalArgumentsCount())));
         }
 
-        if (!callableType->GetPayload().empty()) {
+        if (!callableType->GetPayload().empty()) { 
             mainSettings.push_back(ctx.NewAtom(position, callableType->GetPayload()));
         }
 
@@ -4741,7 +4741,7 @@ TExprNode::TPtr ExpandTypeNoCache(TPositionHandle position, const TTypeAnnotatio
         for (const auto& child : callableType->GetArguments()) {
             TExprNode::TListType argSettings;
             argSettings.push_back(ExpandType(position, *child.Type, ctx));
-            if (!child.Name.empty() || child.Flags != 0) {
+            if (!child.Name.empty() || child.Flags != 0) { 
                 argSettings.push_back(ctx.NewAtom(position, child.Name));
             }
 

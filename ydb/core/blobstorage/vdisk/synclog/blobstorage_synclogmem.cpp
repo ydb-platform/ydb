@@ -11,7 +11,7 @@ namespace NKikimr {
             Y_VERIFY(HaveRoom(pageSize, dataSize) &&
                    (Header.LastLsn == 0 || rec->Lsn > Header.LastLsn),
                    "Header# %s rec# %s pageSize# %" PRIu32 " dataSize# %" PRIu32,
-                   Header.ToString().data(), rec->ToString().data(), pageSize, dataSize);
+                   Header.ToString().data(), rec->ToString().data(), pageSize, dataSize); 
 
             memcpy(Data() + Header.FreePos, rec, dataSize);
             Header.FreePos += dataSize;
@@ -231,7 +231,7 @@ namespace NKikimr {
 
             Y_VERIFY(Pages.empty() || Pages.back()->GetLastLsn() < rec->Lsn,
                    "pagesSize# %" PRIu32 " lastLsn# %" PRIu64 " recLsn# %" PRIu64 " dump#\n %s",
-                   ui32(Pages.size()), Pages.back()->GetLastLsn(), rec->Lsn, errorReport().data());
+                   ui32(Pages.size()), Pages.back()->GetLastLsn(), rec->Lsn, errorReport().data()); 
 
 
             if (Pages.empty() || !(Pages.back()->HaveRoom(AppendBlockSize, size))) {

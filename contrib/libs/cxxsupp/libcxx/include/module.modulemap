@@ -332,14 +332,14 @@ module std [system] {
     header "barrier"
     export *
   }
-  module bit {
-    header "bit"
-    export *
+  module bit { 
+    header "bit" 
+    export * 
 
     module __bit {
       module bit_cast { private header "__bit/bit_cast.h" }
     }
-  }
+  } 
   module bitset {
     header "bitset"
     export string
@@ -347,9 +347,9 @@ module std [system] {
     export *
   }
   // No submodule for cassert. It fundamentally needs repeated, textual inclusion.
-  module charconv {
-    header "charconv"
-    export *
+  module charconv { 
+    header "charconv" 
+    export * 
 
     module __charconv {
       module chars_format      { private header "__charconv/chars_format.h"      }
@@ -357,7 +357,7 @@ module std [system] {
       module to_chars_result   { private header "__charconv/to_chars_result.h"   }
     }
 
-  }
+  } 
   module chrono {
     header "chrono"
     export *

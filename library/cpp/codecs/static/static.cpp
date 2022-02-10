@@ -31,10 +31,10 @@ namespace NCodecs {
     TStaticCodecInfo LoadCodecInfoFromStream(IInputStream& in) {
         {
             TBuffer magic;
-            magic.Resize(GetStaticCodecInfoMagic().size());
-            Y_ENSURE_EX(in.Read(magic.Data(), GetStaticCodecInfoMagic().size()) == GetStaticCodecInfoMagic().size(),
+            magic.Resize(GetStaticCodecInfoMagic().size()); 
+            Y_ENSURE_EX(in.Read(magic.Data(), GetStaticCodecInfoMagic().size()) == GetStaticCodecInfoMagic().size(), 
                         TCodecException() << "bad codec info");
-            Y_ENSURE_EX(TStringBuf(magic.data(), magic.size()) == GetStaticCodecInfoMagic(),
+            Y_ENSURE_EX(TStringBuf(magic.data(), magic.size()) == GetStaticCodecInfoMagic(), 
                         TCodecException() << "bad codec info");
         }
 
@@ -45,7 +45,7 @@ namespace NCodecs {
         Y_ENSURE_EX(hash == DataSignature(info), TCodecException() << "bad codec info");
 
         TStaticCodecInfo result;
-        Y_ENSURE_EX(result.ParseFromArray(info.data(), info.size()), TCodecException() << "bad codec info");
+        Y_ENSURE_EX(result.ParseFromArray(info.data(), info.size()), TCodecException() << "bad codec info"); 
 
         return result;
     }
@@ -57,7 +57,7 @@ namespace NCodecs {
     }
 
     TStaticCodecInfo LoadCodecInfoFromString(TStringBuf data) {
-        TMemoryInput m{data.data(), data.size()};
+        TMemoryInput m{data.data(), data.size()}; 
         return LoadCodecInfoFromStream(m);
     }
 
@@ -81,7 +81,7 @@ namespace NCodecs {
         TArchiveReader ar(TBlob::NoCopy(begin, size));
         Y_VERIFY(ar.Count() == 1, "invalid number of entries");
         auto blob = ar.ObjectBlobByKey(ar.KeyByIndex(0));
-        return TString{blob.AsCharPtr(), blob.Size()};
+        return TString{blob.AsCharPtr(), blob.Size()}; 
     }
 
     TCodecConstPtr RestoreCodecFromCodecInfo(const TStaticCodecInfo& info) {

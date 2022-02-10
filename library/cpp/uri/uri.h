@@ -566,7 +566,7 @@ namespace NUri {
         const TSchemeInfo& SetSchemeImpl(const TSchemeInfo& info) {
             Scheme = info.Kind;
             DefaultPort = info.Port;
-            if (!info.Str.empty())
+            if (!info.Str.empty()) 
                 FldSetNoDirty(FieldScheme, info.Str);
             return info;
         }
@@ -577,7 +577,7 @@ namespace NUri {
     public:
         const TSchemeInfo& SetScheme(const TSchemeInfo& info) {
             SetSchemeImpl(info);
-            if (!info.Str.empty())
+            if (!info.Str.empty()) 
                 FldMarkClean(FieldScheme);
             return info;
         }

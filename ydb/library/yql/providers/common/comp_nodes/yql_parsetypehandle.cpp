@@ -29,7 +29,7 @@ public:
         NYql::TIssues issues;
         auto parsedType = NYql::ParseType(str.AsStringRef(), pool, issues, Pos_);
         if (!parsedType) {
-            UdfTerminate(issues.ToString().data());
+            UdfTerminate(issues.ToString().data()); 
         }
 
         auto exprCtxPtr = GetExprContextPtr(ctx, ExprCtxMutableIndex_);

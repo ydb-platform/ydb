@@ -34,8 +34,8 @@ namespace NKikimr {
 
     bool TPutRecoveryLogRecOpt::ParseFromString(const TBlobStorageGroupType &gtype,
                                                 const TString &data) {
-        const char *pos = data.data();
-        const char *end = data.data() + data.size();
+        const char *pos = data.data(); 
+        const char *end = data.data() + data.size(); 
         if (size_t(end - pos) < 24)
             return false;
 

@@ -474,7 +474,7 @@ TStructType::TStructType(ui32 membersCount, std::pair<TInternName, TType*>* memb
     TInternName lastMemberName;
     for (size_t index = 0; index < membersCount; ++index) {
         const auto& name = Members[index].first;
-        MKQL_ENSURE(!name.Str().empty(), "Empty member name is not allowed");
+        MKQL_ENSURE(!name.Str().empty(), "Empty member name is not allowed"); 
 
         MKQL_ENSURE(name.Str() > lastMemberName.Str(), "Member names are not sorted: "
                     << name.Str() << " <= " << lastMemberName.Str());
@@ -623,7 +623,7 @@ TStructLiteral::TStructLiteral(TRuntimeNode* values, TStructType* type, bool val
     }
 
     for (size_t index = 0; index < GetValuesCount(); ++index) {
-        MKQL_ENSURE(!type->GetMemberName(index).empty(), "Empty struct member name is not allowed");
+        MKQL_ENSURE(!type->GetMemberName(index).empty(), "Empty struct member name is not allowed"); 
 
         auto& value = Values[index];
         MKQL_ENSURE(value.GetStaticType()->IsSameType(*type->GetMemberType(index)), "Wrong type of member");

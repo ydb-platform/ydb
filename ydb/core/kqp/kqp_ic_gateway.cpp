@@ -2275,12 +2275,12 @@ private:
                     + response.ExecutionEngineStatusName + "): " + response.ExecutionEngineStatusDesc));
             }
 
-            if (!response.DataShardErrors.empty()) {
+            if (!response.DataShardErrors.empty()) { 
                 internalIssues.AddIssue(TIssue(NYql::TPosition(), TString("Data shard errors: ")
                     + response.DataShardErrors));
             }
 
-            if (!response.MiniKQLErrors.empty()) {
+            if (!response.MiniKQLErrors.empty()) { 
                 internalIssues.AddIssue(TIssue(NYql::TPosition(), TString("Execution engine errors: ")
                     + response.MiniKQLErrors));
             }

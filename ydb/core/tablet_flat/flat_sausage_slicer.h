@@ -26,7 +26,7 @@ namespace NPageCollection {
                     << " as single blob, block limit is " << Block << "b");
             }
 
-            Y_VERIFY(body.size() < Block, "Too large blob to be a TGlobId");
+            Y_VERIFY(body.size() < Block, "Too large blob to be a TGlobId"); 
 
             if (lz4) std::exchange(body, Lz4()->Encode(body));
 

@@ -20,7 +20,7 @@
 #include <util/stream/str.h>
 #include <util/string/strip.h>
 #include <util/system/shellcommand.h>
-#include <util/string/split.h>
+#include <util/string/split.h> 
 
 #include <regex>
 
@@ -144,7 +144,7 @@ public:
         bool hasErrors = false;
         for (auto udf : functions) {
             TStringBuf moduleName, funcName;
-            if (!SplitUdfName(udf->Name, moduleName, funcName) || moduleName.empty() || funcName.empty()) {
+            if (!SplitUdfName(udf->Name, moduleName, funcName) || moduleName.empty() || funcName.empty()) { 
                 ctx.AddError(TIssue(udf->Pos, TStringBuilder() <<
                     "Incorrect format of function name: " << udf->Name));
                 hasErrors = true;
@@ -392,7 +392,7 @@ void LoadSystemModulePaths(
         for (const auto& it : StringSplitter(output).Split('\n')) {
             TStringBuf moduleName, modulePath;
             const TStringBuf& line = it.Token();
-            if (!line.empty()) {
+            if (!line.empty()) { 
                 line.Split('\t', moduleName, modulePath);
                 paths->emplace(moduleName, modulePath);
             }

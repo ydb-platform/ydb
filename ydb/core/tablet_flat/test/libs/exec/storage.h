@@ -42,7 +42,7 @@ namespace NFake {
                         << " with missmatched data size";
                 }
 
-                ++PutItems, PutBytes += ev->Buffer.size();
+                ++PutItems, PutBytes += ev->Buffer.size(); 
 
                 Reply(eh, Model->Handle(ev));
 

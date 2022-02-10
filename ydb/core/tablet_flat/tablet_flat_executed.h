@@ -108,7 +108,7 @@ private:
                 if (!TTabletExecutedFlat::HandleDefaultEvents(ev, ctx))                             \
                     Y_VERIFY_DEBUG(false, "%s: unexpected event type: %" PRIx32 " event: %s",       \
                                    __func__, ev->GetTypeRewrite(),                                  \
-                                   ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?");    \
+                                   ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?");    \ 
         }                                                                                           \
     }
 

@@ -41,7 +41,7 @@ namespace NHiLoPrivate {
         }
 
         TIntRef& operator=(TRepr value) {
-            WriteUnaligned<TRepr>(GetPtr(), value);
+            WriteUnaligned<TRepr>(GetPtr(), value); 
             return *this;
         }
 

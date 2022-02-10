@@ -125,13 +125,13 @@ bool CheckCrcAtTheEnd(TErasureType::ECrcMode crcMode, const TString& buf) {
     case TErasureType::CrcModeNone:
         return true;
     case TErasureType::CrcModeWholePart:
-        if (buf.size() == 0) {
+        if (buf.size() == 0) { 
                 return true;
         } else {
-            Y_VERIFY(buf.size() > sizeof(ui32), "Error in CheckWholeBlobCrc: blob part size# %" PRIu64
-                    " is less then crcSize# %" PRIu64, (ui64)buf.size(), (ui64)sizeof(ui32));
-            ui32 crc = Crc32c(buf.data(), buf.size() - sizeof(ui32));
-            ui32 expectedCrc = ReadUnaligned<ui32>(buf.data() + buf.size() - sizeof(ui32));
+            Y_VERIFY(buf.size() > sizeof(ui32), "Error in CheckWholeBlobCrc: blob part size# %" PRIu64 
+                    " is less then crcSize# %" PRIu64, (ui64)buf.size(), (ui64)sizeof(ui32)); 
+            ui32 crc = Crc32c(buf.data(), buf.size() - sizeof(ui32)); 
+            ui32 expectedCrc = ReadUnaligned<ui32>(buf.data() + buf.size() - sizeof(ui32)); 
             return crc == expectedCrc;
         }
     }
@@ -1380,12 +1380,12 @@ void PadAndCrcParts(TErasureType::ECrcMode crcMode, const TBlockParams &p, TData
 template <bool isStripe>
 void StarBlockSplit(TErasureType::ECrcMode crcMode, const TErasureType &type, const TString &buffer,
         TDataPartSet &outPartSet) {
-    TBlockParams p(crcMode, type, buffer.size());
+    TBlockParams p(crcMode, type, buffer.size()); 
 
     // Prepare input data pointers
     p.PrepareInputDataPointers<isStripe>(const_cast<char*>(buffer.data()));
 
-    outPartSet.FullDataSize = buffer.size();
+    outPartSet.FullDataSize = buffer.size(); 
     outPartSet.PartsMask = ~((~(ui32)0) << p.TotalParts);
     outPartSet.Parts.resize(p.TotalParts);
     for (ui32 i = 0; i < p.TotalParts; ++i) {
@@ -1401,7 +1401,7 @@ void StarBlockSplit(TErasureType::ECrcMode crcMode, const TErasureType &type, co
 template <bool isStripe>
 void EoBlockSplit(TErasureType::ECrcMode crcMode, const TErasureType &type, const TString &buffer,
         TDataPartSet &outPartSet) {
-    TBlockParams p(crcMode, type, buffer.size());
+    TBlockParams p(crcMode, type, buffer.size()); 
 
     // Prepare input data pointers
     p.PrepareInputDataPointers<isStripe>(const_cast<char*>(buffer.data()));
@@ -1431,12 +1431,12 @@ void EoBlockSplit(TErasureType::ECrcMode crcMode, const TErasureType &type, cons
 template <bool isStripe>
 void XorBlockSplit(TErasureType::ECrcMode crcMode, const TErasureType &type, const TString& buffer,
         TDataPartSet& outPartSet) {
-    TBlockParams p(crcMode, type, buffer.size());
+    TBlockParams p(crcMode, type, buffer.size()); 
 
     // Prepare input data pointers
     p.PrepareInputDataPointers<isStripe>(const_cast<char*>(buffer.data()));
 
-    outPartSet.FullDataSize = buffer.size();
+    outPartSet.FullDataSize = buffer.size(); 
     outPartSet.PartsMask = ~((~(ui32)0) << p.TotalParts);
     outPartSet.Parts.resize(p.TotalParts);
     for (ui32 i = 0; i < p.TotalParts; ++i) {
@@ -1468,7 +1468,7 @@ void EoBlockRestore(TErasureType::ECrcMode crcMode, const TErasureType &type, TD
         } else {
             Y_VERIFY(partSet.Parts[i].size() == expectedPartSize, "partSet.Parts[%" PRIu32 "].size(): %" PRIu64
                 " expectedPartSize: %" PRIu64 " erasure: %s partSet.FullDataSize: %" PRIu64,
-                (ui32)i, (ui64)partSet.Parts[i].size(), expectedPartSize, type.ErasureName[type.GetErasure()].data(),
+                (ui32)i, (ui64)partSet.Parts[i].size(), expectedPartSize, type.ErasureName[type.GetErasure()].data(), 
                 (ui64)partSet.FullDataSize);
         }
     }
@@ -1480,7 +1480,7 @@ void EoBlockRestore(TErasureType::ECrcMode crcMode, const TErasureType &type, TD
         } else {
             Y_VERIFY(partSet.Parts[i].size() == expectedPartSize, "partSet.Parts[%" PRIu32 "].size()# %" PRIu32
                 " != expectedPartSize# %" PRIu32 " erasure: %s partSet.FullDataSize: %" PRIu64,
-                (ui32)i, (ui32)partSet.Parts[i].size(), (ui32)expectedPartSize, type.ErasureName[type.GetErasure()].data(),
+                (ui32)i, (ui32)partSet.Parts[i].size(), (ui32)expectedPartSize, type.ErasureName[type.GetErasure()].data(), 
                 (ui64)partSet.FullDataSize);
         }
     }
@@ -1669,7 +1669,7 @@ void StarBlockRestore(TErasureType::ECrcMode crcMode, const TErasureType &type, 
         } else {
             Y_VERIFY(partSet.Parts[i].size() == expectedPartSize, "partSet.Parts[%" PRIu32 "].size(): %" PRIu64
                 " expectedPartSize: %" PRIu64 " erasure: %s partSet.FullDataSize: %" PRIu64,
-                (ui32)i, (ui64)partSet.Parts[i].size(), expectedPartSize, type.ErasureName[type.GetErasure()].data(),
+                (ui32)i, (ui64)partSet.Parts[i].size(), expectedPartSize, type.ErasureName[type.GetErasure()].data(), 
                 (ui64)partSet.FullDataSize);
         }
     }
@@ -1682,7 +1682,7 @@ void StarBlockRestore(TErasureType::ECrcMode crcMode, const TErasureType &type, 
         } else {
             Y_VERIFY(partSet.Parts[i].size() == expectedPartSize, "partSet.Parts[%" PRIu32 "].size()# %" PRIu32
                 " != expectedPartSize# %" PRIu32 " erasure: %s partSet.FullDataSize: %" PRIu64,
-                (ui32)i, (ui32)partSet.Parts[i].size(), (ui32)expectedPartSize, type.ErasureName[type.GetErasure()].data(),
+                (ui32)i, (ui32)partSet.Parts[i].size(), (ui32)expectedPartSize, type.ErasureName[type.GetErasure()].data(), 
                 (ui64)partSet.FullDataSize);
         }
     }
@@ -1695,7 +1695,7 @@ void StarBlockRestore(TErasureType::ECrcMode crcMode, const TErasureType &type, 
         } else {
             Y_VERIFY(partSet.Parts[i].size() == expectedPartSize, "partSet.Parts[%" PRIu32 "].size()# %" PRIu32
                 " != expectedPartSize# %" PRIu32 " erasure: %s partSet.FullDataSize: %" PRIu64,
-                (ui32)i, (ui32)partSet.Parts[i].size(), (ui32)expectedPartSize, type.ErasureName[type.GetErasure()].data(),
+                (ui32)i, (ui32)partSet.Parts[i].size(), (ui32)expectedPartSize, type.ErasureName[type.GetErasure()].data(), 
                 (ui64)partSet.FullDataSize);
         }
     }
@@ -1884,7 +1884,7 @@ void XorBlockRestore(TErasureType::ECrcMode crcMode, const TErasureType &type, T
     ui32 totalParts = type.TotalPartCount();
     Y_VERIFY(partSet.Parts.size() == totalParts,
         "partSet.Parts.size(): %" PRIu64 " totalParts: %" PRIu32 " erasure: %s",
-        (ui64)partSet.Parts.size(), (ui32)totalParts, type.ErasureName[type.GetErasure()].data());
+        (ui64)partSet.Parts.size(), (ui32)totalParts, type.ErasureName[type.GetErasure()].data()); 
 
     ui32 missingDataPartIdx = totalParts;
     ui32 missingDataPartCount = 0;
@@ -1896,7 +1896,7 @@ void XorBlockRestore(TErasureType::ECrcMode crcMode, const TErasureType &type, T
         } else {
             Y_VERIFY(partSet.Parts[i].size() == expectedPartSize, "partSet.Parts[%" PRIu32 "].size(): %" PRIu64
                 " expectedPartSize: %" PRIu64 " erasure: %s partSet.FullDataSize: %" PRIu64,
-                (ui32)i, (ui64)partSet.Parts[i].size(), expectedPartSize, type.ErasureName[type.GetErasure()].data(),
+                (ui32)i, (ui64)partSet.Parts[i].size(), expectedPartSize, type.ErasureName[type.GetErasure()].data(), 
                 (ui64)partSet.FullDataSize);
         }
     }

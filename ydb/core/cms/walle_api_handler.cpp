@@ -102,7 +102,7 @@ private:
             CFunc(TEvents::TSystem::Wakeup, Timeout);
         default:
             LOG_DEBUG(ctx, NKikimrServices::CMS, "TWalleApiHandler::StateCreateTask ignored event type: %" PRIx32 " event: %s",
-                      ev->GetTypeRewrite(), ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?");
+                      ev->GetTypeRewrite(), ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?"); 
         }
     }
 
@@ -149,7 +149,7 @@ private:
             CFunc(TEvents::TSystem::Wakeup, Timeout);
         default:
             LOG_DEBUG(ctx, NKikimrServices::CMS, "TWalleApiHandler::StateListTasks ignored event type: %" PRIx32 " event: %s",
-                      ev->GetTypeRewrite(), ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?");
+                      ev->GetTypeRewrite(), ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?"); 
         }
     }
 
@@ -200,7 +200,7 @@ private:
             CFunc(TEvents::TSystem::Wakeup, Timeout);
         default:
             LOG_DEBUG(ctx, NKikimrServices::CMS, "TWalleApiHandler::StateCheckTask ignored event type: %" PRIx32 " event: %s",
-                      ev->GetTypeRewrite(), ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?");
+                      ev->GetTypeRewrite(), ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?"); 
         }
     }
 
@@ -248,7 +248,7 @@ private:
             CFunc(TEvents::TSystem::Wakeup, Timeout);
         default:
             LOG_DEBUG(ctx, NKikimrServices::CMS, "TWalleApiHandler::StateRemoveTask ignored event type: %" PRIx32 " event: %s",
-                      ev->GetTypeRewrite(), ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?");
+                      ev->GetTypeRewrite(), ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?"); 
         }
     }
 
@@ -292,12 +292,12 @@ private:
             if (use404)
                 err = NMonitoring::HTTPNOTFOUND;
             else
-                err = Sprintf("HTTP/1.1 400 Bad Request\r\n\r\n%s", status.GetReason().data());
+                err = Sprintf("HTTP/1.1 400 Bad Request\r\n\r\n%s", status.GetReason().data()); 
             ReplyWithError(err, ctx);
             return false;
         }
 
-        auto err = Sprintf("HTTP/1.1 500 Internal Server Error\r\n\r\n%s", status.GetReason().data());
+        auto err = Sprintf("HTTP/1.1 500 Internal Server Error\r\n\r\n%s", status.GetReason().data()); 
         ReplyWithError(err, ctx);
         return false;
     }

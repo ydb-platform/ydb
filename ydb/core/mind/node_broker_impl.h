@@ -147,7 +147,7 @@ private:
                         const TActorContext &ctx)
     {
         LOG_DEBUG(ctx, NKikimrServices::NODE_BROKER, "Reply with %s (%s)",
-                  NKikimrNodeBroker::TStatus::ECode_Name(code).data(), reason.data());
+                  NKikimrNodeBroker::TStatus::ECode_Name(code).data(), reason.data()); 
 
         TAutoPtr<TResponseEvent> resp = new TResponseEvent;
         resp->Record.MutableStatus()->SetCode(code);
@@ -158,7 +158,7 @@ private:
     STFUNC(StateInit)
     {
         LOG_DEBUG(ctx, NKikimrServices::NODE_BROKER, "StateInit event type: %" PRIx32 " event: %s",
-                  ev->GetTypeRewrite(), ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?");
+                  ev->GetTypeRewrite(), ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?"); 
         StateInitImpl(ev, ctx);
     }
 
@@ -182,8 +182,8 @@ private:
         default:
             if (!HandleDefaultEvents(ev, ctx)) {
                 Y_FAIL("TNodeBroker::StateWork unexpected event type: %" PRIx32 " event: %s from %s",
-                       ev->GetTypeRewrite(), ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?",
-                       ev->Sender.ToString().data());
+                       ev->GetTypeRewrite(), ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?", 
+                       ev->Sender.ToString().data()); 
             }
         }
     }

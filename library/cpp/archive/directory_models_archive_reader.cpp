@@ -1,5 +1,5 @@
 #include "directory_models_archive_reader.h"
-#include "yarchive.h"
+#include "yarchive.h" 
 
 #include <util/folder/dirut.h>
 #include <util/folder/filelist.h>
@@ -81,29 +81,29 @@ void TDirectoryModelsArchiveReader::LoadFilesAndSubdirs(const TString& subPath, 
     while ((file = fileList.Next()) != nullptr) {
         TString key = JoinFsPaths(subPath, TString(file));
         TString fullPath = JoinFsPaths(Path_, key);
-        TBlob fileBlob;
+        TBlob fileBlob; 
         if (lockMemory) {
             fileBlob = TBlob::LockedFromFile(fullPath);
         } else {
             fileBlob = TBlob::FromFile(fullPath);
         }
-        if (key.EndsWith(".archive")) {
-            TArchiveReader reader(fileBlob);
-            for (size_t i = 0, iEnd = reader.Count(); i < iEnd; ++i) {
-                const TString archiveKey = reader.KeyByIndex(i);
-                const TString normalizedPath = NormalizePath(JoinFsPaths(subPath, archiveKey.substr(1)));
-                BlobByKey_.emplace(normalizedPath, reader.ObjectBlobByKey(archiveKey));
-                Recs_.push_back(normalizedPath);
-            }
-        } else {
-            const TString normalizedPath = NormalizePath(key);
+        if (key.EndsWith(".archive")) { 
+            TArchiveReader reader(fileBlob); 
+            for (size_t i = 0, iEnd = reader.Count(); i < iEnd; ++i) { 
+                const TString archiveKey = reader.KeyByIndex(i); 
+                const TString normalizedPath = NormalizePath(JoinFsPaths(subPath, archiveKey.substr(1))); 
+                BlobByKey_.emplace(normalizedPath, reader.ObjectBlobByKey(archiveKey)); 
+                Recs_.push_back(normalizedPath); 
+            } 
+        } else { 
+            const TString normalizedPath = NormalizePath(key); 
             if (lockMemory || ownBlobs) {
                 BlobByKey_.emplace(normalizedPath, fileBlob);
             } else {
                 PathByKey_.emplace(normalizedPath, RealPath(fullPath));
             }
-            Recs_.push_back(normalizedPath);
-        }
+            Recs_.push_back(normalizedPath); 
+        } 
     }
 
     TDirsList dirsList;

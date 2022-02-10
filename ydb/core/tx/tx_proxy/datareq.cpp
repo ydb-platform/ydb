@@ -734,7 +734,7 @@ void TDataReq::ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus
         x->Record.MutableExecutionEngineEvaluatedResponse()->Swap(&FlatMKQLRequest->EngineEvaluatedResponse);
         if (FlatMKQLRequest->Engine) {
             auto errors = FlatMKQLRequest->Engine->GetErrors();
-            if (!errors.empty()) {
+            if (!errors.empty()) { 
                 x->Record.SetMiniKQLErrors(errors);
             }
         }
@@ -746,7 +746,7 @@ void TDataReq::ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus
         x->Record.SetReadTableResponseVersion(ReadTableRequest->ResponseVersion);
     }
 
-    if (!DatashardErrors.empty())
+    if (!DatashardErrors.empty()) 
         x->Record.SetDataShardErrors(DatashardErrors);
 
     if (const ui32 cs = ComplainingDatashards.size()) {
@@ -1307,7 +1307,7 @@ void TDataReq::Handle(TEvTxProxyReq::TEvMakeRequest::TPtr &ev, const TActorConte
                 settings.BacktraceWriter = [txId, actorSystem](const char* operation, ui32 line, const TBackTrace* backtrace) {
                     LOG_DEBUG_SAMPLED_BY(*actorSystem, NKikimrServices::MINIKQL_ENGINE, txId,
                         "Proxy data request, txId: %" PRIu64 ", %s (%" PRIu32 ")\n%s",
-                        txId, operation, line, backtrace ? backtrace->PrintToString().data() : "");
+                        txId, operation, line, backtrace ? backtrace->PrintToString().data() : ""); 
                 };
                 settings.LogErrorWriter = [txId, actorSystem](const TString& message) {
                     LOG_ERROR_S(*actorSystem, NKikimrServices::MINIKQL_ENGINE, "Proxy data request, txId: "
@@ -1960,7 +1960,7 @@ void TDataReq::CancelProposal(ui64 exceptTablet) {
 void TDataReq::ExtractDatashardErrors(const NKikimrTxDataShard::TEvProposeTransactionResult & record) {
     TString allErrors;
     for (const auto &er : record.GetError()) {
-        allErrors += Sprintf("[%s] %s\n", NKikimrTxDataShard::TError_EKind_Name(er.GetKind()).data(), er.GetReason().data());
+        allErrors += Sprintf("[%s] %s\n", NKikimrTxDataShard::TError_EKind_Name(er.GetKind()).data(), er.GetReason().data()); 
     }
 
     DatashardErrors = allErrors;
@@ -2501,7 +2501,7 @@ void TDataReq::MergeResult(TEvDataShard::TEvProposeTransactionResult::TPtr &ev, 
     NKikimrTxDataShard::TEvProposeTransactionResult &record = ev->Get()->Record;
 
     ResultsReceivedCount++;
-    ResultsReceivedSize += record.GetTxResult().size();
+    ResultsReceivedSize += record.GetTxResult().size(); 
 
     WallClockLastExecReply = Now();
     if (WallClockFirstExecReply.GetValue() == 0)

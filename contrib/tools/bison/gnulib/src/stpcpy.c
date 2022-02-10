@@ -36,8 +36,8 @@
 char *
 __stpcpy (char *dest, const char *src)
 {
-  char *d = dest;
-  const char *s = src;
+  char *d = dest; 
+  const char *s = src; 
 
   do
     *d++ = *s;

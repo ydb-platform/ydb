@@ -57,7 +57,7 @@ using namespace std::string_view_literals;
                                                                                                                                \
     Y_DECLARE_UNUSED                                                                                                           \
     static inline TStringBuf prefix##Base64Encode(const TStringBuf& src, void* tmp) {                                          \
-        return TStringBuf((const char*)tmp, ::NB64Etalon::prefix##Base64Encode((char*)tmp, (const unsigned char*)src.data(), src.size())); \
+        return TStringBuf((const char*)tmp, ::NB64Etalon::prefix##Base64Encode((char*)tmp, (const unsigned char*)src.data(), src.size())); \ 
     }                                                                                                                          \
                                                                                                                                \
     Y_DECLARE_UNUSED                                                                                                           \
@@ -436,7 +436,7 @@ Y_UNIT_TEST_SUITE(TBase64) {
             }
 
             buf.assign(Base64EncodeBufSize(x.size()), Max<char>());
-            const auto* const xEncEnd = Base64Encode(buf.data(), (const unsigned char*)x.data(), x.size());
+            const auto* const xEncEnd = Base64Encode(buf.data(), (const unsigned char*)x.data(), x.size()); 
             UNIT_ASSERT_VALUES_EQUAL(*xEncEnd, '\0');
         }
     }

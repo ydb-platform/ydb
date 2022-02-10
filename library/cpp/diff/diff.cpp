@@ -43,7 +43,7 @@ struct TCollection {
 template <>
 struct TCollection<char>: public TCollectionImpl<char> {
     TCollection(const TStringBuf& str, const TString& delims) {
-        TSetDelimiter<const char> set(delims.data());
+        TSetDelimiter<const char> set(delims.data()); 
         TKeepDelimiters<TCollection<char>> c(this);
         SplitString(str.begin(), str.end(), set, c);
     }
@@ -60,7 +60,7 @@ struct TCollection<wchar16>: public TCollectionImpl<wchar16> {
 
 size_t NDiff::InlineDiff(TVector<TChunk<char>>& chunks, const TStringBuf& left, const TStringBuf& right, const TString& delims) {
     if (delims.empty()) {
-        return InlineDiff<char>(chunks, TConstArrayRef<char>(left.data(), left.size()), TConstArrayRef<char>(right.data(), right.size()));
+        return InlineDiff<char>(chunks, TConstArrayRef<char>(left.data(), left.size()), TConstArrayRef<char>(right.data(), right.size())); 
     }
     TCollection<char> c1(left, delims);
     TCollection<char> c2(right, delims);

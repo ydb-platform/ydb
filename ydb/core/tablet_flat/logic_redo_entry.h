@@ -26,7 +26,7 @@ namespace NRedo {
         void Describe(IOutputStream &out) const noexcept
         {
             out
-                << "Redo{" << NFmt::TStamp(Stamp) << " (" << Embedded.size()
+                << "Redo{" << NFmt::TStamp(Stamp) << " (" << Embedded.size() 
                 << " +" << LargeGlobId.Bytes << ")b, ~" << NFmt::Arr(Tables())
                 << "}";
         }

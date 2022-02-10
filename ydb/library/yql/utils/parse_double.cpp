@@ -9,9 +9,9 @@ namespace {
 template <typename T>
 bool GenericTryFloatFromString(TStringBuf buf, T& value) {
     value = 0;
-    if (!buf.size() || !TryFromString(buf.data(), buf.size(), value)) {
-        const char* ptr = buf.data();
-        ui32 size = buf.size();
+    if (!buf.size() || !TryFromString(buf.data(), buf.size(), value)) { 
+        const char* ptr = buf.data(); 
+        ui32 size = buf.size(); 
         char sign = '+';
         if (*ptr == '+' || *ptr == '-') {
             sign = *ptr;

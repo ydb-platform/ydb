@@ -260,7 +260,7 @@ namespace NJson {
     bool TJsonPrettifier::Prettify(TStringBuf in, IOutputStream& out) const {
         TPrettifier p(out, *this);
         if (Strict) {
-            TMemoryInput mIn(in.data(), in.size());
+            TMemoryInput mIn(in.data(), in.size()); 
             return ReadJson(&mIn, &p);
         } else {
             return ReadJsonFast(in, &p);

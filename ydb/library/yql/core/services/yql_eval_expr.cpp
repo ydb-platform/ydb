@@ -537,12 +537,12 @@ IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExp
             auto predAtom = node->Child(1)->Child(0);
             ui8 predValue;
             if (predAtom->Flags() & TNodeFlags::BinaryContent) {
-                if (predAtom->Content().size() != 1) {
+                if (predAtom->Content().size() != 1) { 
                     ctx.AddError(TIssue(ctx.GetPosition(predAtom->Pos()), TStringBuilder() << "Incorrect literal bool value"));
                     return nullptr;
                 }
 
-                predValue = *(const ui8*)predAtom->Content().data();
+                predValue = *(const ui8*)predAtom->Content().data(); 
             } else {
                 predValue = (predAtom->Content() == "true" || predAtom->Content() == "1");
             }

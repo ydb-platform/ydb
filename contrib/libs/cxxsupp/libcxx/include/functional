@@ -1,9 +1,9 @@
 // -*- C++ -*-
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions. 
+// See https://llvm.org/LICENSE.txt for license information. 
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception 
 //
 //===----------------------------------------------------------------------===//
 
@@ -70,11 +70,11 @@ template <class T> reference_wrapper<const T> cref(const T& t) noexcept;
 template <class T> void cref(const T&& t) = delete;
 template <class T> reference_wrapper<const T> cref(reference_wrapper<T> t) noexcept;
 
-template <class T> struct unwrap_reference;                                       // since C++20
-template <class T> struct unwrap_ref_decay : unwrap_reference<decay_t<T>> { };    // since C++20
-template <class T> using unwrap_reference_t = typename unwrap_reference<T>::type; // since C++20
-template <class T> using unwrap_ref_decay_t = typename unwrap_ref_decay<T>::type; // since C++20
-
+template <class T> struct unwrap_reference;                                       // since C++20 
+template <class T> struct unwrap_ref_decay : unwrap_reference<decay_t<T>> { };    // since C++20 
+template <class T> using unwrap_reference_t = typename unwrap_reference<T>::type; // since C++20 
+template <class T> using unwrap_ref_decay_t = typename unwrap_ref_decay<T>::type; // since C++20 
+ 
 template <class T> // <class T=void> in C++14
 struct plus {
     T operator()(const T& x, const T& y) const;
@@ -185,7 +185,7 @@ public:
 };
 
 template <class Predicate> // deprecated in C++17, removed in C++20
-unary_negate<Predicate> not1(const Predicate& pred);
+unary_negate<Predicate> not1(const Predicate& pred); 
 
 template <class Predicate>
 class binary_negate // deprecated in C++17, removed in C++20
@@ -200,7 +200,7 @@ public:
 };
 
 template <class Predicate> // deprecated in C++17, removed in C++20
-binary_negate<Predicate> not2(const Predicate& pred);
+binary_negate<Predicate> not2(const Predicate& pred); 
 
 template <class F>
 constexpr unspecified not_fn(F&& f); // C++17, constexpr in C++20
@@ -526,7 +526,7 @@ POLICY:  For non-variadic implementations, the number of arguments is limited
 #include <type_traits>
 #include <typeinfo>
 #include <utility>
-#include <version>
+#include <version> 
 
 #if !defined(_LIBCPP_HAS_NO_PRAGMA_SYSTEM_HEADER)
 #pragma GCC system_header

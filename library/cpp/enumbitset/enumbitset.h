@@ -295,7 +295,7 @@ public:
         for (int pos = numOfChunks * chunkSize; pos >= 0; pos -= chunkSize) {
             ui64 t = 0;
             this->Export(pos, t);
-            ret += Sprintf(templ.data(), t);
+            ret += Sprintf(templ.data(), t); 
         }
 
         size_t n = 0;

@@ -55,7 +55,7 @@ TUnsigned DecodeUnsigned(TStringBuf& input) {
     constexpr size_t size = sizeof(TUnsigned);
 
     EnsureInputSize(input, size);
-    auto value = ReadUnaligned<TUnsigned>(input.data());
+    auto value = ReadUnaligned<TUnsigned>(input.data()); 
     input.Skip(size);
 
     value = SwapBytes(value);
@@ -279,7 +279,7 @@ template <bool Desc>
 Y_FORCE_INLINE
 TStringBuf DecodeUuid(TStringBuf& input, TVector<ui8>& value) {
     EnsureInputSize(input, UuidSize);
-    auto data = input.data();
+    auto data = input.data(); 
     input.Skip(UuidSize);
 
     value.resize(UuidSize);
@@ -317,8 +317,8 @@ void DecodeTzUnsigned(TStringBuf& input, TUnsigned& value, ui16& tzId) {
     constexpr size_t size = sizeof(TUnsigned);
 
     EnsureInputSize(input, size + sizeof(ui16));
-    auto v = ReadUnaligned<TUnsigned>(input.data());
-    auto t = ReadUnaligned<ui16>(input.data() + size);
+    auto v = ReadUnaligned<TUnsigned>(input.data()); 
+    auto t = ReadUnaligned<ui16>(input.data() + size); 
     input.Skip(size + sizeof(ui16));
 
     if (Desc) {
@@ -344,7 +344,7 @@ template <bool Desc>
 Y_FORCE_INLINE
 NYql::NDecimal::TInt128 DecodeDecimal(TStringBuf& input) {
     MKQL_ENSURE(input.size() > 0U && input.size() <= DecimalSize, "premature end of input");
-    const auto des = NYql::NDecimal::Deserialize(input.data());
+    const auto des = NYql::NDecimal::Deserialize(input.data()); 
     input.Skip(des.second);
     return Desc ? -des.first : des.first;
 }
@@ -729,8 +729,8 @@ void TPresortEncoder::Start() {
 
 void TPresortEncoder::Start(TStringBuf prefix) {
     Output.clear();
-    auto data = reinterpret_cast<const ui8*>(prefix.data());
-    Output.insert(Output.begin(), data, data + prefix.size());
+    auto data = reinterpret_cast<const ui8*>(prefix.data()); 
+    Output.insert(Output.begin(), data, data + prefix.size()); 
     Current = 0;
 }
 

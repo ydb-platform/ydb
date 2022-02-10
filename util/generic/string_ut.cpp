@@ -29,7 +29,7 @@ public:
     void TestZero() {
         const char data[] = "abc\0def\0";
         TString s(data, sizeof(data));
-        UNIT_ASSERT(s.size() == sizeof(data));
+        UNIT_ASSERT(s.size() == sizeof(data)); 
         UNIT_ASSERT(s.StartsWith(s));
         UNIT_ASSERT(s.EndsWith(s));
         UNIT_ASSERT(s.Contains('\0'));
@@ -48,7 +48,7 @@ public:
         UNIT_ASSERT_EQUAL(TString::npos, s.find(TString(nonSubstring, sizeof(nonSubstring))));
 
         TString copy = s;
-        copy.replace(copy.size() - 1, 1, "z");
+        copy.replace(copy.size() - 1, 1, "z"); 
         UNIT_ASSERT(s != copy);
         copy.replace(copy.size() - 1, 1, "\0", 0, 1);
         UNIT_ASSERT(s == copy);
@@ -57,8 +57,8 @@ public:
         UNIT_ASSERT(s.StartsWith(prefix));
         UNIT_ASSERT(s != prefix);
         UNIT_ASSERT(s > prefix);
-        UNIT_ASSERT(s > s.data());
-        UNIT_ASSERT(s == TString(s.data(), s.size()));
+        UNIT_ASSERT(s > s.data()); 
+        UNIT_ASSERT(s == TString(s.data(), s.size())); 
         UNIT_ASSERT(data < s);
 
         s.remove(5);
@@ -552,13 +552,13 @@ protected:
 
         str2 = Data_.abcdef();
         UNIT_ASSERT(str1.compare(str2) == 0);
-        UNIT_ASSERT(str1.compare(str2.data(), str2.size()) == 0);
+        UNIT_ASSERT(str1.compare(str2.data(), str2.size()) == 0); 
         str2 = Data_.abcde();
         UNIT_ASSERT(str1.compare(str2) > 0);
-        UNIT_ASSERT(str1.compare(str2.data(), str2.size()) > 0);
+        UNIT_ASSERT(str1.compare(str2.data(), str2.size()) > 0); 
         str2 = Data_.abcdefg();
         UNIT_ASSERT(str1.compare(str2) < 0);
-        UNIT_ASSERT(str1.compare(str2.data(), str2.size()) < 0);
+        UNIT_ASSERT(str1.compare(str2.data(), str2.size()) < 0); 
 
         UNIT_ASSERT(str1.compare(Data_.abcdef()) == 0);
         UNIT_ASSERT(str1.compare(Data_.abcde()) > 0);
@@ -889,7 +889,7 @@ private:
         UNIT_ASSERT(str == TUtf16String::FromAscii("X"));
 
         const TUtf16String hello = TUtf16String::FromAscii("hello");
-        str = hello.data();
+        str = hello.data(); 
         UNIT_ASSERT(str == hello);
 
         str = hello;
@@ -1087,7 +1087,7 @@ private:
         UNIT_ASSERT(str == TUtf32String::FromAscii("X"));
 
         const TUtf32String hello = TUtf32String::FromAscii("hello");
-        str = hello.data();
+        str = hello.data(); 
         UNIT_ASSERT(str == hello);
 
         str = hello;

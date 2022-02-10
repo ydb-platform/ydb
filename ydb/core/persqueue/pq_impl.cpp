@@ -1316,10 +1316,10 @@ void TPersQueue::HandleDeleteSessionRequest(const ui64 responseCookie, const TAc
 
     if (!cmd.HasClientId()){
         ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST,
-            TStringBuilder() << "no clientId in DeleteSession request: " << ToString(req).data());
+            TStringBuilder() << "no clientId in DeleteSession request: " << ToString(req).data()); 
     } else if (!cmd.HasSessionId()) {
         ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST,
-            TStringBuilder() << "not sessionId in DeleteSession request: " << ToString(req).data());
+            TStringBuilder() << "not sessionId in DeleteSession request: " << ToString(req).data()); 
     } else {
         THolder<TEvPQ::TEvSetClientInfo> event = MakeHolder<TEvPQ::TEvSetClientInfo>(responseCookie, cmd.GetClientId(),
                                                                 0, cmd.GetSessionId(), 0, 0, TEvPQ::TEvSetClientInfo::ESCI_DROP_SESSION);
@@ -1335,16 +1335,16 @@ void TPersQueue::HandleCreateSessionRequest(const ui64 responseCookie, const TAc
 
     if (!cmd.HasClientId()){
         ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST,
-            TStringBuilder() << "no clientId in CreateSession request: " << ToString(req).data());
+            TStringBuilder() << "no clientId in CreateSession request: " << ToString(req).data()); 
     } else if (!cmd.HasSessionId()) {
         ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST,
-            TStringBuilder() << "not sessionId in CreateSession request: " << ToString(req).data());
+            TStringBuilder() << "not sessionId in CreateSession request: " << ToString(req).data()); 
     } else if (!cmd.HasGeneration()) {
         ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST,
-            TStringBuilder() << "not geneartion in CreateSession request: " << ToString(req).data());
+            TStringBuilder() << "not geneartion in CreateSession request: " << ToString(req).data()); 
     } else if (!cmd.HasStep()) {
         ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST,
-            TStringBuilder() << "not step in CreateSession request: " << ToString(req).data());
+            TStringBuilder() << "not step in CreateSession request: " << ToString(req).data()); 
     } else {
         InitResponseBuilder(responseCookie, 1, COUNTER_LATENCY_PQ_CREATE_SESSION);
         THolder<TEvPQ::TEvSetClientInfo> event = MakeHolder<TEvPQ::TEvSetClientInfo>(responseCookie, cmd.GetClientId(),
@@ -1361,13 +1361,13 @@ void TPersQueue::HandleSetClientOffsetRequest(const ui64 responseCookie, const T
 
     if (!cmd.HasClientId()) {
         ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST,
-            TStringBuilder() << "no clientId in SetClientOffset request: " << ToString(req).data());
+            TStringBuilder() << "no clientId in SetClientOffset request: " << ToString(req).data()); 
     } else if (!cmd.HasOffset()) {
         ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST,
-            TStringBuilder() << "no offset in SetClientOffset request: " << ToString(req).data());
+            TStringBuilder() << "no offset in SetClientOffset request: " << ToString(req).data()); 
     } else if (cmd.GetOffset() < 0) {
         ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST,
-            TStringBuilder() << "negative offset in SetClientOffset request: " << ToString(req).data());
+            TStringBuilder() << "negative offset in SetClientOffset request: " << ToString(req).data()); 
     } else {
         InitResponseBuilder(responseCookie, 1, COUNTER_LATENCY_PQ_SET_OFFSET);
         THolder<TEvPQ::TEvSetClientInfo> event = MakeHolder<TEvPQ::TEvSetClientInfo>(responseCookie, cmd.GetClientId(),
@@ -1384,7 +1384,7 @@ void TPersQueue::HandleGetClientOffsetRequest(const ui64 responseCookie, const T
     const auto& cmd = req.GetCmdGetClientOffset();
     if (!cmd.HasClientId() || cmd.GetClientId().empty()) {
         ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST,
-            TStringBuilder() << "no clientId in GetClientOffset request: " << ToString(req).data());
+            TStringBuilder() << "no clientId in GetClientOffset request: " << ToString(req).data()); 
     } else {
         InitResponseBuilder(responseCookie, 1, COUNTER_LATENCY_PQ_GET_OFFSET);
         THolder<TEvPQ::TEvGetClientOffset> event = MakeHolder<TEvPQ::TEvGetClientOffset>(responseCookie, cmd.GetClientId());
@@ -1628,31 +1628,31 @@ void TPersQueue::HandleReadRequest(const ui64 responseCookie, const TActorId& pa
     auto cmd = req.GetCmdRead();
     if (!cmd.HasOffset()) {
         ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST,
-            TStringBuilder() << "no offset in read request: " << ToString(req).data());
+            TStringBuilder() << "no offset in read request: " << ToString(req).data()); 
     } else if (!cmd.HasClientId()) {
         ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST,
-            TStringBuilder() << "no clientId in read request: " << ToString(req).data());
+            TStringBuilder() << "no clientId in read request: " << ToString(req).data()); 
     } else if (cmd.HasCount() && cmd.GetCount() <= 0) {
         ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST,
-            TStringBuilder() << "invalid count in read request: " << ToString(req).data());
+            TStringBuilder() << "invalid count in read request: " << ToString(req).data()); 
     } else if (!cmd.HasOffset() || cmd.GetOffset() < 0) {
         ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST,
-            TStringBuilder() << "invalid offset in read request: " << ToString(req).data());
+            TStringBuilder() << "invalid offset in read request: " << ToString(req).data()); 
     } else if (cmd.HasBytes() && cmd.GetBytes() <= 0) {
         ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST,
-            TStringBuilder() << "invalid bytes in read request: " << ToString(req).data());
+            TStringBuilder() << "invalid bytes in read request: " << ToString(req).data()); 
     } else if (cmd.HasTimeoutMs() && cmd.GetTimeoutMs() < 0) {
         ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST,
-            TStringBuilder() << "invalid timeout in read request: " << ToString(req).data());
+            TStringBuilder() << "invalid timeout in read request: " << ToString(req).data()); 
     } else if (cmd.HasTimeoutMs() && cmd.GetTimeoutMs() > 120000) {
         ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST,
-            TStringBuilder() << "invalid timeout in read request, must be less than 120 secs: " << ToString(req).data());
+            TStringBuilder() << "invalid timeout in read request, must be less than 120 secs: " << ToString(req).data()); 
     } else if (cmd.HasPartNo() && cmd.GetPartNo() < 0) {
         ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST,
-            TStringBuilder() << "invalid partNo in read request: " << ToString(req).data());
+            TStringBuilder() << "invalid partNo in read request: " << ToString(req).data()); 
     } else if (cmd.HasMaxTimeLagMs() && cmd.GetMaxTimeLagMs() < 0) {
         ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST,
-            TStringBuilder() << "invalid maxTimeLagMs in read request: " << ToString(req).data());
+            TStringBuilder() << "invalid maxTimeLagMs in read request: " << ToString(req).data()); 
     } else {
         InitResponseBuilder(responseCookie, 1, COUNTER_LATENCY_PQ_READ);
         ui32 count = cmd.HasCount() ? cmd.GetCount() : Max<ui32>();

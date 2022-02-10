@@ -1149,7 +1149,7 @@ namespace NTable {
 
                     row.Set(pin.To, op, { } /* cannot put some useful data */);
                 } else {
-                    Y_VERIFY(ref < (*Part->Blobs)->size(), "out of blobs catalog");
+                    Y_VERIFY(ref < (*Part->Blobs)->size(), "out of blobs catalog"); 
 
                     /* Have to preserve reference to memory with TGlobId until
                         of next iterator alteration method invocation. This is

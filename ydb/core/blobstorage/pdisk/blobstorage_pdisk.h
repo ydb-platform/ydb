@@ -211,7 +211,7 @@ struct TEvYardInitResult : public TEventLocal<TEvYardInitResult, TEvBlobStorage:
 
     static TString ToString(const TEvYardInitResult &record) {
         TStringStream str;
-        str << "{EvYardInitResult Status# " << NKikimrProto::EReplyStatus_Name(record.Status).data();
+        str << "{EvYardInitResult Status# " << NKikimrProto::EReplyStatus_Name(record.Status).data(); 
         str << " ErrorReason# \"" << record.ErrorReason << "\"";
         for (auto it = record.StartingPoints.begin(); it != record.StartingPoints.end(); ++it) {
             str << "{StartingPoint Signature# " << (ui32)it->first;
@@ -300,7 +300,7 @@ struct TEvLog : public TEventLocal<TEvLog, TEvBlobStorage::EvLog> {
         str << "{EvLog ownerId# " << (ui32)record.Owner;
         str << " ownerRound# " << record.OwnerRound;
         str << " Signature# " << (ui32)record.Signature;
-        str << " DataSize# " << record.Data.size();
+        str << " DataSize# " << record.Data.size(); 
         str << " Lsn# " << (ui64)record.Lsn;
         str << " LsnSegmentStart# " << (ui32)record.LsnSegmentStart;
         str << " Cookie# " << (ui64)record.Cookie;
@@ -312,7 +312,7 @@ struct TEvLog : public TEventLocal<TEvLog, TEvBlobStorage::EvLog> {
     }
 
     size_t ApproximateSize() const {
-        return (sizeof(TEvLog) - sizeof(TCommitRecord)) + Data.size() + CommitRecord.ApproximateSize();
+        return (sizeof(TEvLog) - sizeof(TCommitRecord)) + Data.size() + CommitRecord.ApproximateSize(); 
     }
 
     TOwner Owner;
@@ -382,7 +382,7 @@ struct TEvLogResult : public TEventLocal<TEvLogResult, TEvBlobStorage::EvLogResu
 
     static TString ToString(const TEvLogResult &record) {
         TStringStream str;
-        str << "{EvLogResult Status# " << NKikimrProto::EReplyStatus_Name(record.Status).data();
+        str << "{EvLogResult Status# " << NKikimrProto::EReplyStatus_Name(record.Status).data(); 
         str << " ErrorReason# \"" << record.ErrorReason << "\"";
         str << " StatusFlags# " << StatusFlagsToString(record.StatusFlags);
         for (auto it = record.Results.begin(); it != record.Results.end(); ++it) {
@@ -465,7 +465,7 @@ struct TEvReadLogResult : public TEventLocal<TEvReadLogResult, TEvBlobStorage::E
 
     static TString ToString(const TEvReadLogResult &record) {
         TStringStream str;
-        str << "{EvReadLogResult Status# " << NKikimrProto::EReplyStatus_Name(record.Status).data();
+        str << "{EvReadLogResult Status# " << NKikimrProto::EReplyStatus_Name(record.Status).data(); 
         str << " ErrorReason# \"" << record.ErrorReason << "\"";
         str << " position# " << record.Position;
         str << " nextPosition# " << record.NextPosition;
@@ -524,7 +524,7 @@ struct TEvChunksLockResult : public TEventLocal<TEvChunksLockResult, TEvBlobStor
 
     static TString ToString(const TEvChunksLockResult &record) {
         TStringStream str;
-        str << "{EvChunksLockResult Status# " << NKikimrProto::EReplyStatus_Name(record.Status).data();
+        str << "{EvChunksLockResult Status# " << NKikimrProto::EReplyStatus_Name(record.Status).data(); 
         str << " LockedChunks# {";
         for (ui64 i = 0; i < record.LockedChunks.size(); ++i) {
             if (i) {
@@ -572,7 +572,7 @@ struct TEvChunksUnlockResult : public TEventLocal<TEvChunksUnlockResult, TEvBlob
 
     static TString ToString(const TEvChunksUnlockResult &record) {
         TStringStream str;
-        str << "{EvChunksUnlockResult Status# " << NKikimrProto::EReplyStatus_Name(record.Status).data();
+        str << "{EvChunksUnlockResult Status# " << NKikimrProto::EReplyStatus_Name(record.Status).data(); 
         str << " UnlockedChunks# " << record.UnlockedChunks;
         str << "}";
         return str.Str();
@@ -630,7 +630,7 @@ struct TEvChunkReserveResult : public TEventLocal<TEvChunkReserveResult, TEvBlob
 
     static TString ToString(const TEvChunkReserveResult &record) {
         TStringStream str;
-        str << "{EvChunkReserveResult Status# " << NKikimrProto::EReplyStatus_Name(record.Status).data();
+        str << "{EvChunkReserveResult Status# " << NKikimrProto::EReplyStatus_Name(record.Status).data(); 
         str << " ErrorReason# \"" << record.ErrorReason << "\"";
         str << " StatusFlags# " << StatusFlagsToString(record.StatusFlags);
         str << "}";
@@ -705,7 +705,7 @@ struct TEvChunkReadResult : public TEventLocal<TEvChunkReadResult, TEvBlobStorag
 
     static TString ToString(const TEvChunkReadResult &record) {
         TStringStream str;
-        str << "{EvChunkReadres Status# " << NKikimrProto::EReplyStatus_Name(record.Status).data();
+        str << "{EvChunkReadres Status# " << NKikimrProto::EReplyStatus_Name(record.Status).data(); 
         str << " ErrorReason# \"" << record.ErrorReason << "\"";
         str << " chunkIdx# " << record.ChunkIdx;
         str << " Offset# " << record.Offset;
@@ -825,7 +825,7 @@ struct TEvChunkWrite : public TEventLocal<TEvChunkWrite, TEvBlobStorage::EvChunk
 
         virtual TDataRef operator[] (ui32 i) const override {
             Y_VERIFY_DEBUG(i == 0);
-            return TDataRef(Buf.data(), (ui32)Buf.size());
+            return TDataRef(Buf.data(), (ui32)Buf.size()); 
         }
 
         virtual ui32 Size() const override {
@@ -846,18 +846,18 @@ struct TEvChunkWrite : public TEventLocal<TEvChunkWrite, TEvBlobStorage::EvChunk
             : Data(std::move(data))
             , FullSize(fullSize)
         {
-            Y_VERIFY_DEBUG(Data.size() <= FullSize);
+            Y_VERIFY_DEBUG(Data.size() <= FullSize); 
         }
 
         virtual ui32 Size() const override {
-            return Data.size() == FullSize ? 1 : 2;
+            return Data.size() == FullSize ? 1 : 2; 
         }
 
         virtual TDataRef operator [](ui32 index) const override {
             if (!index) {
-                return std::make_pair(Data.data(), Data.size());
+                return std::make_pair(Data.data(), Data.size()); 
             } else {
-                ui32 padding = FullSize - Data.size();
+                ui32 padding = FullSize - Data.size(); 
                 Y_VERIFY_DEBUG(padding);
                 return std::make_pair(nullptr, padding);
             }
@@ -977,7 +977,7 @@ struct TEvChunkWriteResult : public TEventLocal<TEvChunkWriteResult, TEvBlobStor
 
     static TString ToString(const TEvChunkWriteResult &record) {
         TStringStream str;
-        str << "{EvChunkWrite Status# " << NKikimrProto::EReplyStatus_Name(record.Status).data();
+        str << "{EvChunkWrite Status# " << NKikimrProto::EReplyStatus_Name(record.Status).data(); 
         str << " ErrorReason# \"" << record.ErrorReason << "\"";
         str << " chunkIdx# " << record.ChunkIdx;
         str << " Cookie# " << (ui64)record.Cookie;
@@ -1029,7 +1029,7 @@ struct TEvHarakiriResult : public TEventLocal<TEvHarakiriResult, TEvBlobStorage:
 
     static TString ToString(const TEvHarakiriResult &record) {
         TStringStream str;
-        str << "{EvHarakiriResult Status# " << NKikimrProto::EReplyStatus_Name(record.Status).data();
+        str << "{EvHarakiriResult Status# " << NKikimrProto::EReplyStatus_Name(record.Status).data(); 
         str << " ErrorReason# \"" << record.ErrorReason << "\"";
         str << " StatusFlags# " << StatusFlagsToString(record.StatusFlags);
         str << "}";
@@ -1095,7 +1095,7 @@ struct TEvSlayResult : public TEventLocal<TEvSlayResult, TEvBlobStorage::EvSlayR
 
     static TString ToString(const TEvSlayResult &record) {
         TStringStream str;
-        str << "{EvSlayResult Status# " << NKikimrProto::EReplyStatus_Name(record.Status).data();
+        str << "{EvSlayResult Status# " << NKikimrProto::EReplyStatus_Name(record.Status).data(); 
         str << " ErrorReason# \"" << record.ErrorReason << "\"";
         str << " StatusFlags# " << StatusFlagsToString(record.StatusFlags);
         str << " VDiskId# " << record.VDiskId.ToString();
@@ -1148,7 +1148,7 @@ struct TEvCheckSpaceResult : public TEventLocal<TEvCheckSpaceResult, TEvBlobStor
 
     TString ToString() const {
         TStringStream str;
-        str << "{TEvCheckSpaceResult Status# " << NKikimrProto::EReplyStatus_Name(Status).data();
+        str << "{TEvCheckSpaceResult Status# " << NKikimrProto::EReplyStatus_Name(Status).data(); 
         str << " StatusFlags# " << StatusFlagsToString(StatusFlags);
         str << " FreeChunks# " << FreeChunks;
         str << " TotalChunks# " << TotalChunks;
@@ -1195,7 +1195,7 @@ struct TEvConfigureSchedulerResult :
 
     TString ToString() const {
         TStringStream str;
-        str << "{TEvConfigureSchedulerResult Status# " << NKikimrProto::EReplyStatus_Name(Status).data();
+        str << "{TEvConfigureSchedulerResult Status# " << NKikimrProto::EReplyStatus_Name(Status).data(); 
         str << " ErrorReason# \"" << ErrorReason << "\"";
         str << "}";
         return str.Str();
@@ -1257,7 +1257,7 @@ struct TEvYardControlResult : public TEventLocal<TEvYardControlResult, TEvBlobSt
 
     static TString ToString(const TEvYardControlResult &record) {
         TStringStream str;
-        str << "{EvYardControlResult Status# " << NKikimrProto::EReplyStatus_Name(record.Status).data();
+        str << "{EvYardControlResult Status# " << NKikimrProto::EReplyStatus_Name(record.Status).data(); 
         str << " ErrorReason# \"" << record.ErrorReason << "\"";
         str << " Cookie# " << (ui64)record.Cookie;
         str << "}";

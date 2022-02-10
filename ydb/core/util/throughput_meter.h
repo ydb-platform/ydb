@@ -61,7 +61,7 @@ namespace NKikimr {
             if (!Histogram) {
                 Histogram.push_back(0);
             }
-            const size_t maxIndex = Histogram.size() - 1;
+            const size_t maxIndex = Histogram.size() - 1; 
             for (const auto& p : Counters) {
                 const float threshold = p.first;
                 const auto& counter = p.second;

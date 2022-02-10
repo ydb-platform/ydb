@@ -3781,7 +3781,7 @@ TRuntimeNode TProgramBuilder::ScriptUdf(
     auto scriptTypeStr = ScriptTypeAsStr(CanonizeScriptType(scriptType));
 
     TStringBuilder name;
-    name.reserve(scriptTypeStr.size() + funcName.size() + 1);
+    name.reserve(scriptTypeStr.size() + funcName.size() + 1); 
     name << scriptTypeStr << '.' << funcName;
     auto funcNameNode = NewDataLiteral<NUdf::EDataSlot::String>(name);
     TRuntimeNode userTypeNode(funcType, true);

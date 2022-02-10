@@ -1,9 +1,9 @@
 // -*- C++ -*-
 //===-------------------------- algorithm ---------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions. 
+// See https://llvm.org/LICENSE.txt for license information. 
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception 
 //
 //===----------------------------------------------------------------------===//
 
@@ -658,7 +658,7 @@ template <class BidirectionalIterator, class Compare>
 #include <memory>
 #include <type_traits>
 #include <utility> // swap_ranges
-#include <version>
+#include <version> 
 
 #include <__algorithm/adjacent_find.h>
 #include <__algorithm/all_of.h>

@@ -157,7 +157,7 @@ void CheckRequest(TPerftestRequest* request) {
 TAutoPtr<TPerftestResponse> NewResponse(TPerftestRequest* request) {
     TAutoPtr<TPerftestResponse> r(new TPerftestResponse);
     r->SetCompressed(TheConfig->UseCompression);
-    r->Record.SetData(TString(request->Record.GetData().size(), '.'));
+    r->Record.SetData(TString(request->Record.GetData().size(), '.')); 
     return r;
 }
 
@@ -475,10 +475,10 @@ TVector<TNetAddr> ParseNodes(const TString nodes) {
 
     TVector<TString> hosts;
 
-    size_t numh = Split(nodes.data(), ",", hosts);
+    size_t numh = Split(nodes.data(), ",", hosts); 
 
     for (int i = 0; i < int(numh); i++) {
-        const TNetworkAddress& networkAddress = ParseNetworkAddress(hosts[i].data());
+        const TNetworkAddress& networkAddress = ParseNetworkAddress(hosts[i].data()); 
         Y_VERIFY(networkAddress.Begin() != networkAddress.End(), "no addresses");
         r.push_back(TNetAddr(networkAddress, &*networkAddress.Begin()));
     }
@@ -542,17 +542,17 @@ void TTestStats::PeriodicallyPrint() {
         if (!!Server) {
             fprintf(stderr, "server: q: %u %s\n",
                     (unsigned)Server->Bus->GetExecutor()->GetWorkQueueSize(),
-                    Server->Session->GetStatusSingleLine().data());
+                    Server->Session->GetStatusSingleLine().data()); 
         }
         if (!!ServerUsingModule) {
             fprintf(stderr, "server: q: %u %s\n",
                     (unsigned)ServerUsingModule->Bus->GetExecutor()->GetWorkQueueSize(),
-                    ServerUsingModule->Session->GetStatusSingleLine().data());
+                    ServerUsingModule->Session->GetStatusSingleLine().data()); 
         }
         for (const auto& client : clients) {
             fprintf(stderr, "client: q: %u %s\n",
                     (unsigned)client->Bus->GetExecutor()->GetWorkQueueSize(),
-                    client->Session->GetStatusSingleLine().data());
+                    client->Session->GetStatusSingleLine().data()); 
         }
 
         TStringStream stats;

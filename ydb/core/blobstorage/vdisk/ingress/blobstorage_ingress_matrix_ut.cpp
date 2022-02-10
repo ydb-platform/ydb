@@ -256,7 +256,7 @@ namespace NKikimr {
 
         void DebugPrint(const TVector<std::pair<TVDiskID, TActorId> > &vec) {
             for (unsigned i = 0; i < vec.size(); i++) {
-                fprintf(stderr, "%s\n", vec[i].first.ToString().data());
+                fprintf(stderr, "%s\n", vec[i].first.ToString().data()); 
             }
         }
 

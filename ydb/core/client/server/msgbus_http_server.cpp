@@ -88,7 +88,7 @@ public:
             NKikimrClient::TJSON* json(static_cast<NKikimrClient::TJSON*>(response->GetRecord()));
             const auto& jsonString(json->GetJSON());
             out << jsonString;
-            *HttpServer->OutboundSize += jsonString.size();
+            *HttpServer->OutboundSize += jsonString.size(); 
         } else {
             out << response->GetRecord()->AsJSON();
             // TODO
@@ -177,7 +177,7 @@ void TMessageBusHttpServer::Output(NMonitoring::IMonHttpRequest& request) {
             RequestsCount->Inc();
             RequestsActive->Inc();
             TStringBuf postContent(request.GetPostContent());
-            *InboundSize += postContent.size();
+            *InboundSize += postContent.size(); 
             const ::google::protobuf::Descriptor* msgDescriptor = message->GetRecord()->GetDescriptor();
             if (msgDescriptor->name() == "TJSON") {
                 NKikimrClient::TJSON* json(static_cast<NKikimrClient::TJSON*>(message->GetRecord()));

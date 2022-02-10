@@ -147,60 +147,60 @@ private:
             val = 0;
             UNIT_ASSERT_VALUES_EQUAL_C(in.GetOffset(), 0u, (rem + ": " + NBitIO::PrintBits(val)));
 
-            UNIT_ASSERT_C(in.Read(val, 3), (rem + ": " + NBitIO::PrintBits(val)).data());
+            UNIT_ASSERT_C(in.Read(val, 3), (rem + ": " + NBitIO::PrintBits(val)).data()); 
 
             UNIT_ASSERT_VALUES_EQUAL_C(val, 0x4u, (rem + ": " + NBitIO::PrintBits(val)));
             UNIT_ASSERT_VALUES_EQUAL_C(in.GetOffset(), 1u, (rem + ": " + NBitIO::PrintBits(val)));
-            UNIT_ASSERT_C(!in.Eof(), (rem + ", " + ToString(__LINE__)).data());
+            UNIT_ASSERT_C(!in.Eof(), (rem + ", " + ToString(__LINE__)).data()); 
 
             val = 0;
-            UNIT_ASSERT_C(in.Read(val, 4), (rem + ": " + NBitIO::PrintBits(val)).data());
+            UNIT_ASSERT_C(in.Read(val, 4), (rem + ": " + NBitIO::PrintBits(val)).data()); 
 
             UNIT_ASSERT_VALUES_EQUAL_C(val, 0x8u, (rem + ": " + NBitIO::PrintBits(val)));
             UNIT_ASSERT_VALUES_EQUAL_C(in.GetOffset(), 1u, (rem + ": " + NBitIO::PrintBits(val)));
-            UNIT_ASSERT_C(!in.Eof(), (rem + ", " + ToString(__LINE__)).data());
+            UNIT_ASSERT_C(!in.Eof(), (rem + ", " + ToString(__LINE__)).data()); 
 
             val = 0;
-            UNIT_ASSERT_C(in.Read(val, 3), (rem + ": " + NBitIO::PrintBits(val)).data());
+            UNIT_ASSERT_C(in.Read(val, 3), (rem + ": " + NBitIO::PrintBits(val)).data()); 
 
             UNIT_ASSERT_VALUES_EQUAL_C(val, 0x4u, (rem + ": " + NBitIO::PrintBits(val)));
             UNIT_ASSERT_VALUES_EQUAL_C(in.GetOffset(), 2u, (rem + ": " + NBitIO::PrintBits(val)));
-            UNIT_ASSERT_C(!in.Eof(), (rem + ", " + ToString(__LINE__)).data());
+            UNIT_ASSERT_C(!in.Eof(), (rem + ", " + ToString(__LINE__)).data()); 
 
             val = 0;
-            UNIT_ASSERT_C(in.Read(val, 17), (rem + ": " + NBitIO::PrintBits(val)).data());
+            UNIT_ASSERT_C(in.Read(val, 17), (rem + ": " + NBitIO::PrintBits(val)).data()); 
 
             UNIT_ASSERT_VALUES_EQUAL_C(val, 0x10000u, (rem + ": " + NBitIO::PrintBits(val)));
             UNIT_ASSERT_VALUES_EQUAL_C(in.GetOffset(), 4u, (rem + ": " + NBitIO::PrintBits(val)));
-            UNIT_ASSERT_C(!in.Eof(), (rem + ", " + ToString(__LINE__)).data());
+            UNIT_ASSERT_C(!in.Eof(), (rem + ", " + ToString(__LINE__)).data()); 
 
             UNIT_ASSERT_VALUES_EQUAL_C(in.GetOffset(), 4u, (rem + ": " + NBitIO::PrintBits(val)));
 
             {
                 ui32 rt = 0;
                 in.ReadRandom(30, rt, 10, 20);
-                UNIT_ASSERT_STRINGS_EQUAL(NBitIO::PrintBits(rt).data(), "00000000 00000000 00001111 01111100");
+                UNIT_ASSERT_STRINGS_EQUAL(NBitIO::PrintBits(rt).data(), "00000000 00000000 00001111 01111100"); 
             }
             val = 0;
-            UNIT_ASSERT_C(in.Read(val, 3), (rem + ": " + NBitIO::PrintBits(val)).data());
+            UNIT_ASSERT_C(in.Read(val, 3), (rem + ": " + NBitIO::PrintBits(val)).data()); 
 
             UNIT_ASSERT_VALUES_EQUAL_C(val, 0x4u, (rem + ": " + NBitIO::PrintBits(val)));
             UNIT_ASSERT_VALUES_EQUAL_C(in.GetOffset(), 4u, (rem + ": " + NBitIO::PrintBits(val)));
-            UNIT_ASSERT_C(!in.Eof(), (rem + ", " + ToString(__LINE__)).data());
+            UNIT_ASSERT_C(!in.Eof(), (rem + ", " + ToString(__LINE__)).data()); 
 
             val = 0;
-            UNIT_ASSERT_C(in.ReadWords<8>(val), (rem + ": " + NBitIO::PrintBits(val)).data());
+            UNIT_ASSERT_C(in.ReadWords<8>(val), (rem + ": " + NBitIO::PrintBits(val)).data()); 
 
             UNIT_ASSERT_VALUES_EQUAL_C(val, 0xabcdefU, (rem + ": " + NBitIO::PrintBits(val)));
             UNIT_ASSERT_VALUES_EQUAL_C(in.GetOffset(), 8u, (rem + ": " + NBitIO::PrintBits(val)));
-            UNIT_ASSERT_C(!in.Eof(), (rem + ", " + ToString(__LINE__)).data());
+            UNIT_ASSERT_C(!in.Eof(), (rem + ", " + ToString(__LINE__)).data()); 
 
             val = 0;
-            UNIT_ASSERT_C(in.Read(val, 3), (rem + ", " + ToString(__LINE__)).data());
+            UNIT_ASSERT_C(in.Read(val, 3), (rem + ", " + ToString(__LINE__)).data()); 
 
             UNIT_ASSERT_VALUES_EQUAL_C(val, 0x4u, (rem + ": " + NBitIO::PrintBits(val)));
             UNIT_ASSERT_VALUES_EQUAL_C(in.GetOffset(), 8u, (rem + ": " + NBitIO::PrintBits(val)));
-            UNIT_ASSERT_C(!in.Eof(), (rem + ", " + ToString(__LINE__)).data());
+            UNIT_ASSERT_C(!in.Eof(), (rem + ", " + ToString(__LINE__)).data()); 
 
             val = 0;
             in.Read(val, 7);
@@ -237,9 +237,9 @@ private:
         }
 
         ui32 v = 0;
-        UNIT_ASSERT_C(!in.Eof(), (rem + ", " + ToString(__LINE__)).data());
-        UNIT_ASSERT_C(in.Read(v, 5), (rem + ", " + ToString(__LINE__)).data());
-        UNIT_ASSERT_C(in.Eof(), (rem + ", " + ToString(__LINE__)).data());
+        UNIT_ASSERT_C(!in.Eof(), (rem + ", " + ToString(__LINE__)).data()); 
+        UNIT_ASSERT_C(in.Read(v, 5), (rem + ", " + ToString(__LINE__)).data()); 
+        UNIT_ASSERT_C(in.Eof(), (rem + ", " + ToString(__LINE__)).data()); 
     }
 
     void TestBitIO() {
@@ -251,7 +251,7 @@ private:
                 DoBitOutput(out, ToString(__LINE__));
             }
 
-            CheckBits(vec, NBitIO::BITS_REF, ToString(__LINE__).data());
+            CheckBits(vec, NBitIO::BITS_REF, ToString(__LINE__).data()); 
 
             {
                 TBi in(vec);
@@ -266,7 +266,7 @@ private:
                 DoBitOutput(out, ToString(__LINE__));
             }
 
-            CheckBits(vec, NBitIO::BITS_REF, ToString(__LINE__).data());
+            CheckBits(vec, NBitIO::BITS_REF, ToString(__LINE__).data()); 
 
             {
                 TBi in(vec);

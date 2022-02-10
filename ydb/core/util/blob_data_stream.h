@@ -19,10 +19,10 @@ public:
 
     //
     const void* ReadAt(ui32 offset, ui32 size) const {
-        Y_VERIFY_DEBUG(Buffer.size() >= offset + size);
+        Y_VERIFY_DEBUG(Buffer.size() >= offset + size); 
         Y_UNUSED(size);
 
-        return Buffer.data() + offset;
+        return Buffer.data() + offset; 
     }
 
     //
@@ -49,7 +49,7 @@ public:
 
     // IBlobDataStream intarface
     ui32 GetCurrentOffset() const {
-        return Buffer.size();
+        return Buffer.size(); 
     }
 
     template<typename T>
@@ -62,16 +62,16 @@ public:
     }
 
     void WriteAtPosition(ui32 position, const char* data, ui32 size) {
-        memcpy((char*)Buffer.data() + position, data, size);
+        memcpy((char*)Buffer.data() + position, data, size); 
     }
 
     void Write(const TFlatBlobDataOutputStream* anotherStream) {
         TStringBuf buf = anotherStream->CurrentBuffer();
-        Write(buf.data(), buf.size());
+        Write(buf.data(), buf.size()); 
     }
 
     TStringBuf CurrentBuffer() const {
-        return TStringBuf(Buffer.data(), Buffer.size());
+        return TStringBuf(Buffer.data(), Buffer.size()); 
     }
 
     const TString& GetBuffer() const {
@@ -167,32 +167,32 @@ public:
 
     void SetOffset(ui32 newOffset) {
         Offset = newOffset;
-        Y_VERIFY_DEBUG(Offset <= Buffer.size());
+        Y_VERIFY_DEBUG(Offset <= Buffer.size()); 
     }
     void AddOffset(ui32 incOffset) {
         Offset += incOffset;
-        Y_VERIFY_DEBUG(Offset <= Buffer.size());
+        Y_VERIFY_DEBUG(Offset <= Buffer.size()); 
     }
 
     //
     template<typename T>
     const T* ReadData() {
-        Y_VERIFY_DEBUG(Offset + sizeof(T) <= Buffer.size());
-        T* retVal = (T*) (Buffer.data() + Offset);
+        Y_VERIFY_DEBUG(Offset + sizeof(T) <= Buffer.size()); 
+        T* retVal = (T*) (Buffer.data() + Offset); 
         Offset += sizeof(T);
         return retVal;
     }
 
     TStringBuf ReadData(ui32 len) {
-        Y_VERIFY_DEBUG(Offset + len <= Buffer.size());
-        TStringBuf retVal(Buffer.data() + Offset, len);
+        Y_VERIFY_DEBUG(Offset + len <= Buffer.size()); 
+        TStringBuf retVal(Buffer.data() + Offset, len); 
         Offset += len;
         return retVal;
     }
 
     TStringBuf GetBuffer() const {
-        Y_VERIFY_DEBUG(Buffer.size() > Offset);
-        return TStringBuf(Buffer.data() + Offset, Buffer.size() - Offset);
+        Y_VERIFY_DEBUG(Buffer.size() > Offset); 
+        return TStringBuf(Buffer.data() + Offset, Buffer.size() - Offset); 
     }
 
 private:

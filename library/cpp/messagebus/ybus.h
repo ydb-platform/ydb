@@ -67,7 +67,7 @@ namespace NBus {
 
         /// returns service type for this protocol and message
         TBusService GetService() const {
-            return ServiceName.data();
+            return ServiceName.data(); 
         }
 
         /// returns port number for destination session to open socket

@@ -110,7 +110,7 @@ namespace NKikimr {
 
             TString ToString() const {
                 TStringStream str;
-                str << "{EvBootTabletReply Status: " << NKikimrProto::EReplyStatus_Name(Record.GetStatus()).data();
+                str << "{EvBootTabletReply Status: " << NKikimrProto::EReplyStatus_Name(Record.GetStatus()).data(); 
                 str << " Msg: " << Record.GetStatusMsg();
                 str << "}";
                 return str.Str();
@@ -224,7 +224,7 @@ namespace NKikimr {
 
             TString ToString() const {
                 TStringStream str;
-                str << "{EvCreateTabletReply Status: " << NKikimrProto::EReplyStatus_Name(Record.GetStatus()).data();
+                str << "{EvCreateTabletReply Status: " << NKikimrProto::EReplyStatus_Name(Record.GetStatus()).data(); 
                 str << " Owner: " << Record.GetOwner();
                 str << " OwnerIdx: " << Record.GetOwnerIdx();
                 if (Record.HasTabletID()) {
@@ -252,7 +252,7 @@ namespace NKikimr {
 
             TString ToString() const {
                 TStringStream str;
-                str << "{EvTabletCreationResult Status: " << NKikimrProto::EReplyStatus_Name(Record.GetStatus()).data();
+                str << "{EvTabletCreationResult Status: " << NKikimrProto::EReplyStatus_Name(Record.GetStatus()).data(); 
                 if (Record.HasTabletID()) {
                     str << " TabletID: " << Record.GetTabletID();
                 }
@@ -359,7 +359,7 @@ namespace NKikimr {
 
             TString ToString() const {
                 TStringStream str;
-                str << "{TEvAdoptTabletReply Status: " << NKikimrProto::EReplyStatus_Name(Record.GetStatus()).data();
+                str << "{TEvAdoptTabletReply Status: " << NKikimrProto::EReplyStatus_Name(Record.GetStatus()).data(); 
                 str << " TabletID: " << Record.GetTabletID();
                 str << " Explain: " << Record.GetExplain();
                 str << "}";
@@ -396,7 +396,7 @@ namespace NKikimr {
 
             TString ToString() const {
                 TStringStream str;
-                str << "{EvReconfigureTabletReply Status: " << NKikimrProto::EReplyStatus_Name(Record.GetStatus()).data();
+                str << "{EvReconfigureTabletReply Status: " << NKikimrProto::EReplyStatus_Name(Record.GetStatus()).data(); 
                 str << " TabletID: " << Record.GetTabletID();
                 str << "}";
                 return str.Str();
@@ -486,7 +486,7 @@ namespace NKikimr {
 
             TString ToString() const {
                 TStringStream str;
-                str << "{EvChannelInfo Status: " << NKikimrProto::EReplyStatus_Name(Record.GetStatus()).data();
+                str << "{EvChannelInfo Status: " << NKikimrProto::EReplyStatus_Name(Record.GetStatus()).data(); 
                 str << " TabletID: " << Record.GetTabletID();
                 str << "}";
                 return str.Str();

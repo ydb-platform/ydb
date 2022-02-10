@@ -529,7 +529,7 @@ public:
                 if (Items == 0) {
                     TArrayRef<TCell> array(const_cast<TCell*>(tuple.Columns), tuple.ColumnCount);
                     auto cells = TSerializedCellVec::Serialize(array);
-                    ui32 totalSize = sizeof(ui32) + tuple.ColumnCount * sizeof(NScheme::TTypeId) + cells.size();
+                    ui32 totalSize = sizeof(ui32) + tuple.ColumnCount * sizeof(NScheme::TTypeId) + cells.size(); 
                     TString firstKey;
                     firstKey.reserve(totalSize);
                     firstKey.AppendNoAlias((const char*)&tuple.ColumnCount, sizeof(ui32));

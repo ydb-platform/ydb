@@ -13,7 +13,7 @@ namespace NKikimr {
     // FreshData
     /////////////////////////////////////////////////////////////////////////
     template <class TKey, class TMemRec>
-    class TFreshData : TNonCopyable {
+    class TFreshData : TNonCopyable { 
     public:
         using TFreshSegment = ::NKikimr::TFreshSegment<TKey, TMemRec>;
         using TFreshSegmentSnapshot = ::NKikimr::TFreshSegmentSnapshot<TKey, TMemRec>;

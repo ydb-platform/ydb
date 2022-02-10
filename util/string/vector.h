@@ -1,7 +1,7 @@
 #pragma once
 
 #include "cast.h"
-#include "split.h"
+#include "split.h" 
 
 #include <util/generic/map.h>
 #include <util/generic/strbuf.h>
@@ -13,7 +13,7 @@
 #define KEEP_EMPTY_TOKENS 0x01
 
 //
-// NOTE: Check StringSplitter below to get more convenient split string interface.
+// NOTE: Check StringSplitter below to get more convenient split string interface. 
 
 namespace NPrivate {
 
@@ -46,7 +46,7 @@ TVector<typename ::NPrivate::TStringDeducer<C>::type>
 SplitString(const C* ptr, const C* delimiter,
             size_t maxFields = 0, int options = 0) {
     TVector<typename ::NPrivate::TStringDeducer<C>::type> res;
-    ::NPrivate::SplitStringImpl(&res, ptr, delimiter, maxFields, options);
+    ::NPrivate::SplitStringImpl(&res, ptr, delimiter, maxFields, options); 
     return res;
 }
 
@@ -55,7 +55,7 @@ TVector<typename ::NPrivate::TStringDeducer<C>::type>
 SplitString(const C* ptr, size_t len, const C* delimiter,
             size_t maxFields = 0, int options = 0) {
     TVector<typename ::NPrivate::TStringDeducer<C>::type> res;
-    ::NPrivate::SplitStringImpl(&res, ptr, len, delimiter, maxFields, options);
+    ::NPrivate::SplitStringImpl(&res, ptr, len, delimiter, maxFields, options); 
     return res;
 }
 
@@ -63,7 +63,7 @@ template <typename C>
 TVector<typename ::NPrivate::TStringDeducer<C>::type>
 SplitString(const typename ::NPrivate::TStringDeducer<C>::type& str, const C* delimiter,
             size_t maxFields = 0, int options = 0) {
-    return SplitString(str.data(), str.size(), delimiter, maxFields, options);
+    return SplitString(str.data(), str.size(), delimiter, maxFields, options); 
 }
 
 template <class TIter>

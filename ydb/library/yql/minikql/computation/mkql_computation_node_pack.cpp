@@ -63,7 +63,7 @@ void PackInt16(i16 val, TBuffer& buf) {
 
 ui64 UnpackUInt64(TStringBuf& buf) {
     ui64 res = 0;
-    size_t read = Unpack64(buf.data(), buf.length(), res);
+    size_t read = Unpack64(buf.data(), buf.length(), res); 
     MKQL_ENSURE(read, "Bad ui64 packed data");
     buf.Skip(read);
     return res;
@@ -75,7 +75,7 @@ i64 UnpackInt64(TStringBuf& buf) {
 
 ui32 UnpackUInt32(TStringBuf& buf) {
     ui32 res = 0;
-    size_t read = Unpack32(buf.data(), buf.length(), res);
+    size_t read = Unpack32(buf.data(), buf.length(), res); 
     MKQL_ENSURE(read, "Bad ui32 packed data");
     buf.Skip(read);
     return res;
@@ -87,7 +87,7 @@ i32 UnpackInt32(TStringBuf& buf) {
 
 ui16 UnpackUInt16(TStringBuf& buf) {
     ui32 res = 0;
-    size_t read = Unpack32(buf.data(), buf.length(), res);
+    size_t read = Unpack32(buf.data(), buf.length(), res); 
     MKQL_ENSURE(read, "Bad ui32 packed data");
     buf.Skip(read);
     MKQL_ENSURE(res <= Max<ui16>(), "Corrupted data");
@@ -105,9 +105,9 @@ void PutRawData(T val, TBuffer& buf) {
 
 template <typename T>
 T GetRawData(TStringBuf& buf) {
-    MKQL_ENSURE(sizeof(T) <= buf.size(), "Bad packed data. Buffer too small");
+    MKQL_ENSURE(sizeof(T) <= buf.size(), "Bad packed data. Buffer too small"); 
     T val = 0;
-    memcpy(&val, buf.data(), sizeof(T));
+    memcpy(&val, buf.data(), sizeof(T)); 
     buf.Skip(sizeof(T));
     return val;
 }
@@ -374,16 +374,16 @@ TValuePacker::TValuePacker(const TValuePacker& other)
 std::pair<ui32, bool> TValuePacker::SkipEmbeddedLength(TStringBuf& buf) {
     ui32 length = 0;
     bool emptySingleOptional = false;
-    if (buf.size() > 8) {
+    if (buf.size() > 8) { 
         length = ReadUnaligned<ui32>(buf.data());
-        MKQL_ENSURE(length + 4 == buf.size(), "Bad packed data. Invalid embedded size");
+        MKQL_ENSURE(length + 4 == buf.size(), "Bad packed data. Invalid embedded size"); 
         buf.Skip(4);
     } else {
-        length = *buf.data();
+        length = *buf.data(); 
         MKQL_ENSURE(length & 1, "Bad packed data. Invalid embedded size");
         emptySingleOptional = 0 != (length & 0x10);
         length = (length & 0x0f) >> 1;
-        MKQL_ENSURE(length + 1 == buf.size(), "Bad packed data. Invalid embedded size");
+        MKQL_ENSURE(length + 1 == buf.size(), "Bad packed data. Invalid embedded size"); 
         buf.Skip(1);
     }
     return {length, emptySingleOptional};
@@ -412,7 +412,7 @@ NUdf::TUnboxedValue TValuePacker::Unpack(TStringBuf buf, const THolderFactory& h
         res = UnpackImpl(Type, buf, length, holderFactory);
     }
 
-    MKQL_ENSURE(buf.empty(), "Bad packed data. Not fully data read");
+    MKQL_ENSURE(buf.empty(), "Bad packed data. Not fully data read"); 
     return res;
 }
 
@@ -484,13 +484,13 @@ NUdf::TUnboxedValue TValuePacker::UnpackImpl(const TType* type, TStringBuf& buf,
             return ret;
         }
         case NUdf::EDataSlot::Uuid: {
-            MKQL_ENSURE(16 <= buf.size(), "Bad packed data. Buffer too small");
-            const char* ptr = buf.data();
+            MKQL_ENSURE(16 <= buf.size(), "Bad packed data. Buffer too small"); 
+            const char* ptr = buf.data(); 
             buf.Skip(16);
             return MakeString(NUdf::TStringRef(ptr, 16));
         }
         case NUdf::EDataSlot::Decimal: {
-            const auto des = NYql::NDecimal::Deserialize(buf.data());
+            const auto des = NYql::NDecimal::Deserialize(buf.data()); 
             MKQL_ENSURE(!NYql::NDecimal::IsError(des.first), "Bad packed data: invalid decimal.");
             buf.Skip(des.second);
             return NUdf::TUnboxedValuePod(des.first);
@@ -502,8 +502,8 @@ NUdf::TUnboxedValue TValuePacker::UnpackImpl(const TType* type, TStringBuf& buf,
             } else {
                 size = NDetails::UnpackUInt32(buf);
             }
-            MKQL_ENSURE(size <= buf.size(), "Bad packed data. Buffer too small");
-            const char* ptr = buf.data();
+            MKQL_ENSURE(size <= buf.size(), "Bad packed data. Buffer too small"); 
+            const char* ptr = buf.data(); 
             buf.Skip(size);
             return MakeString(NUdf::TStringRef(ptr, size));
         }

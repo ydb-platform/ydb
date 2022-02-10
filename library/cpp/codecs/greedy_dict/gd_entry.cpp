@@ -41,11 +41,11 @@ namespace NGreedyDict {
             size_t len = 0;
             ui32 val = 0;
 
-            if (builder.FindLongestPrefix(suff.data(), suff.size(), &len, &val) && len) {
+            if (builder.FindLongestPrefix(suff.data(), suff.size(), &len, &val) && len) { 
                 it->NearestPrefix = val;
             }
 
-            builder.Add(suff.data(), suff.size(), it->Number);
+            builder.Add(suff.data(), suff.size(), it->Number); 
         }
 
         TBufferOutput bout;

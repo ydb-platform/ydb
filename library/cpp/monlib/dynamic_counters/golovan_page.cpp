@@ -44,7 +44,7 @@ public:
 
     void OnGroupBegin(const TString&, const TString& value, const TDynamicCounters*) override {
         prefix += value;
-        if (!value.empty()) {
+        if (!value.empty()) { 
             prefix += "_";
         }
     }

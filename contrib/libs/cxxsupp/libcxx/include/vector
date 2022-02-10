@@ -1,9 +1,9 @@
 // -*- C++ -*-
 //===------------------------------ vector --------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions. 
+// See https://llvm.org/LICENSE.txt for license information. 
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception 
 //
 //===----------------------------------------------------------------------===//
 
@@ -260,13 +260,13 @@ template <class T, class Allocator>
 void swap(vector<T,Allocator>& x, vector<T,Allocator>& y)
     noexcept(noexcept(x.swap(y)));
 
-template <class T, class Allocator, class U>
+template <class T, class Allocator, class U> 
 typename vector<T, Allocator>::size_type
 erase(vector<T, Allocator>& c, const U& value);       // C++20
-template <class T, class Allocator, class Predicate>
+template <class T, class Allocator, class Predicate> 
 typename vector<T, Allocator>::size_type
 erase_if(vector<T, Allocator>& c, Predicate pred);    // C++20
-
+ 
 }  // std
 
 */
@@ -289,7 +289,7 @@ erase_if(vector<T, Allocator>& c, Predicate pred);    // C++20
 #include <memory>
 #include <stdexcept>
 #include <type_traits>
-#include <version>
+#include <version> 
 
 #if !defined(_LIBCPP_HAS_NO_PRAGMA_SYSTEM_HEADER)
 #pragma GCC system_header
@@ -499,8 +499,8 @@ public:
     typedef __wrap_iter<pointer>                     iterator;
     typedef __wrap_iter<const_pointer>               const_iterator;
 #endif
-    typedef _VSTD::reverse_iterator<iterator>         reverse_iterator;
-    typedef _VSTD::reverse_iterator<const_iterator>   const_reverse_iterator;
+    typedef _VSTD::reverse_iterator<iterator>         reverse_iterator; 
+    typedef _VSTD::reverse_iterator<const_iterator>   const_reverse_iterator; 
 
     static_assert((is_same<typename allocator_type::value_type, value_type>::value),
                   "Allocator::value_type must be same type as value_type");
@@ -562,10 +562,10 @@ public:
     _LIBCPP_INLINE_VISIBILITY
     ~vector()
     {
-        __annotate_delete();
+        __annotate_delete(); 
 #if _LIBCPP_DEBUG_LEVEL == 2
         __get_db()->__erase_c(this);
-#endif
+#endif 
     }
 
     vector(const vector& __x);
@@ -729,12 +729,12 @@ public:
 
     template <class... _Args>
         _LIBCPP_INLINE_VISIBILITY
-#if _LIBCPP_STD_VER > 14
+#if _LIBCPP_STD_VER > 14 
         reference emplace_back(_Args&&... __args);
-#else
-        void      emplace_back(_Args&&... __args);
-#endif
-#endif // !_LIBCPP_CXX03_LANG
+#else 
+        void      emplace_back(_Args&&... __args); 
+#endif 
+#endif // !_LIBCPP_CXX03_LANG 
 
     _LIBCPP_INLINE_VISIBILITY
     void pop_back();
@@ -1714,11 +1714,11 @@ vector<_Tp, _Allocator>::__emplace_back_slow_path(_Args&&... __args)
 template <class _Tp, class _Allocator>
 template <class... _Args>
 inline
-#if _LIBCPP_STD_VER > 14
+#if _LIBCPP_STD_VER > 14 
 typename vector<_Tp, _Allocator>::reference
-#else
-void
-#endif
+#else 
+void 
+#endif 
 vector<_Tp, _Allocator>::emplace_back(_Args&&... __args)
 {
     if (this->__end_ < this->__end_cap())
@@ -1727,9 +1727,9 @@ vector<_Tp, _Allocator>::emplace_back(_Args&&... __args)
     }
     else
         __emplace_back_slow_path(_VSTD::forward<_Args>(__args)...);
-#if _LIBCPP_STD_VER > 14
+#if _LIBCPP_STD_VER > 14 
     return this->back();
-#endif
+#endif 
 }
 
 #endif // !_LIBCPP_CXX03_LANG
@@ -2424,16 +2424,16 @@ public:
     void push_back(const value_type& __x);
 #if _LIBCPP_STD_VER > 11
     template <class... _Args>
-#if _LIBCPP_STD_VER > 14
+#if _LIBCPP_STD_VER > 14 
     _LIBCPP_INLINE_VISIBILITY reference emplace_back(_Args&&... __args)
-#else
-    _LIBCPP_INLINE_VISIBILITY void      emplace_back(_Args&&... __args)
-#endif
+#else 
+    _LIBCPP_INLINE_VISIBILITY void      emplace_back(_Args&&... __args) 
+#endif 
     {
         push_back ( value_type ( _VSTD::forward<_Args>(__args)... ));
-#if _LIBCPP_STD_VER > 14
+#if _LIBCPP_STD_VER > 14 
         return this->back();
-#endif
+#endif 
     }
 #endif
 
@@ -2496,7 +2496,7 @@ private:
     void __vdeallocate() _NOEXCEPT;
     _LIBCPP_INLINE_VISIBILITY
     static size_type __align_it(size_type __new_size) _NOEXCEPT
-        {return __new_size + (__bits_per_word-1) & ~((size_type)__bits_per_word-1);}
+        {return __new_size + (__bits_per_word-1) & ~((size_type)__bits_per_word-1);} 
     _LIBCPP_INLINE_VISIBILITY  size_type __recommend(size_type __new_size) const;
     _LIBCPP_INLINE_VISIBILITY void __construct_at_end(size_type __n, bool __x);
     template <class _ForwardIterator>
@@ -2647,13 +2647,13 @@ vector<bool, _Allocator>::__construct_at_end(size_type __n, bool __x)
 {
     size_type __old_size = this->__size_;
     this->__size_ += __n;
-    if (__old_size == 0 || ((__old_size - 1) / __bits_per_word) != ((this->__size_ - 1) / __bits_per_word))
-    {
-        if (this->__size_ <= __bits_per_word)
-            this->__begin_[0] = __storage_type(0);
-        else
-            this->__begin_[(this->__size_ - 1) / __bits_per_word] = __storage_type(0);
-    }
+    if (__old_size == 0 || ((__old_size - 1) / __bits_per_word) != ((this->__size_ - 1) / __bits_per_word)) 
+    { 
+        if (this->__size_ <= __bits_per_word) 
+            this->__begin_[0] = __storage_type(0); 
+        else 
+            this->__begin_[(this->__size_ - 1) / __bits_per_word] = __storage_type(0); 
+    } 
     _VSTD::fill_n(__make_iter(__old_size), __n, __x);
 }
 
@@ -2668,13 +2668,13 @@ vector<bool, _Allocator>::__construct_at_end(_ForwardIterator __first, _ForwardI
 {
     size_type __old_size = this->__size_;
     this->__size_ += _VSTD::distance(__first, __last);
-    if (__old_size == 0 || ((__old_size - 1) / __bits_per_word) != ((this->__size_ - 1) / __bits_per_word))
-    {
-        if (this->__size_ <= __bits_per_word)
-            this->__begin_[0] = __storage_type(0);
-        else
-            this->__begin_[(this->__size_ - 1) / __bits_per_word] = __storage_type(0);
-    }
+    if (__old_size == 0 || ((__old_size - 1) / __bits_per_word) != ((this->__size_ - 1) / __bits_per_word)) 
+    { 
+        if (this->__size_ <= __bits_per_word) 
+            this->__begin_[0] = __storage_type(0); 
+        else 
+            this->__begin_[(this->__size_ - 1) / __bits_per_word] = __storage_type(0); 
+    } 
     _VSTD::copy(__first, __last, __make_iter(__old_size));
 }
 
@@ -2934,9 +2934,9 @@ vector<bool, _Allocator>::operator=(const vector& __v)
 template <class _Allocator>
 inline _LIBCPP_INLINE_VISIBILITY vector<bool, _Allocator>::vector(vector&& __v)
 #if _LIBCPP_STD_VER > 14
-    _NOEXCEPT
+    _NOEXCEPT 
 #else
-    _NOEXCEPT_(is_nothrow_move_constructible<allocator_type>::value)
+    _NOEXCEPT_(is_nothrow_move_constructible<allocator_type>::value) 
 #endif
     : __begin_(__v.__begin_),
       __size_(__v.__size_),
@@ -3450,24 +3450,24 @@ swap(vector<_Tp, _Allocator>& __x, vector<_Tp, _Allocator>& __y)
     __x.swap(__y);
 }
 
-#if _LIBCPP_STD_VER > 17
-template <class _Tp, class _Allocator, class _Up>
+#if _LIBCPP_STD_VER > 17 
+template <class _Tp, class _Allocator, class _Up> 
 inline _LIBCPP_INLINE_VISIBILITY typename vector<_Tp, _Allocator>::size_type
 erase(vector<_Tp, _Allocator>& __c, const _Up& __v) {
   auto __old_size = __c.size();
   __c.erase(_VSTD::remove(__c.begin(), __c.end(), __v), __c.end());
   return __old_size - __c.size();
 }
-
-template <class _Tp, class _Allocator, class _Predicate>
+ 
+template <class _Tp, class _Allocator, class _Predicate> 
 inline _LIBCPP_INLINE_VISIBILITY typename vector<_Tp, _Allocator>::size_type
 erase_if(vector<_Tp, _Allocator>& __c, _Predicate __pred) {
   auto __old_size = __c.size();
   __c.erase(_VSTD::remove_if(__c.begin(), __c.end(), __pred), __c.end());
   return __old_size - __c.size();
 }
-#endif
-
+#endif 
+ 
 _LIBCPP_END_NAMESPACE_STD
 
 _LIBCPP_POP_MACROS

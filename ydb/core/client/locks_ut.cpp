@@ -102,8 +102,8 @@ struct TClientServer {
             KeyColumnNames: ["key"])";
 
         Client.MkDir("/dc-1", "Dir");
-        Client.CreateTable("/dc-1/Dir", Sprintf(tableA, addition.data()).data());
-        Client.CreateTable("/dc-1/Dir", Sprintf(tableB, addition.data()).data());
+        Client.CreateTable("/dc-1/Dir", Sprintf(tableA, addition.data()).data()); 
+        Client.CreateTable("/dc-1/Dir", Sprintf(tableB, addition.data()).data()); 
         Client.CreateTable("/dc-1/Dir", tableC);
     }
 
@@ -123,7 +123,7 @@ using NKikimr::NClient::TValue;
 struct TLocksV1 {
     static constexpr const char * TableName() { return "/sys/locks"; }
     static constexpr const char * Columns() { return "'LockId 'DataShard 'Generation 'Counter"; }
-    static constexpr const char * ResultLabel() { return NMiniKQL::TxLocksResultLabel.data(); }
+    static constexpr const char * ResultLabel() { return NMiniKQL::TxLocksResultLabel.data(); } 
 
     static TString Key(ui64 lockId, ui64 datashard, ui64 schemeshard, ui64 pathId) {
         Y_UNUSED(schemeshard);
@@ -152,7 +152,7 @@ struct TLocksV1 {
 struct TLocksV2 {
     static constexpr const char * TableName() { return "/sys/locks2"; }
     static constexpr const char * Columns() { return "'LockId 'DataShard 'Generation 'Counter 'SchemeShard 'PathId"; }
-    static constexpr const char * ResultLabel() { return NMiniKQL::TxLocksResultLabel2.data(); }
+    static constexpr const char * ResultLabel() { return NMiniKQL::TxLocksResultLabel2.data(); } 
 
     static TString Key(ui64 lockId, ui64 datashard, ui64 schemeshard, ui64 pathId) {
         return Sprintf(
@@ -434,8 +434,8 @@ void TestLock(const TLocksTestOptions& testOpts) {
 
     cs.Client.FlatQuery(Sprintf(commit, testOpts.Table,
         TLocksVer::TableName(), TLocksVer::Columns(),
-        TLocksVer::Key(txLocks[0].LockId, txLocks[0].DataShard, txLocks[0].SchemeShard, txLocks[0].PathId).data(),
-        TLocksVer::Key(txLocks[1].LockId, txLocks[1].DataShard, txLocks[1].SchemeShard, txLocks[1].PathId).data(),
+        TLocksVer::Key(txLocks[0].LockId, txLocks[0].DataShard, txLocks[0].SchemeShard, txLocks[0].PathId).data(), 
+        TLocksVer::Key(txLocks[1].LockId, txLocks[1].DataShard, txLocks[1].SchemeShard, txLocks[1].PathId).data(), 
         txLocks[0].Generation, txLocks[0].Counter,
         txLocks[1].Generation, txLocks[1].Counter,
         testOpts.UpdateKey, testOpts.UpdateValue), res);
@@ -514,8 +514,8 @@ void TestLock(const TLocksTestOptions& testOpts) {
 
     cs.Client.FlatQuery(Sprintf(eraseLocks,
         TLocksVer::TableName(),
-        TLocksVer::Key(txLocks[0].LockId, txLocks[0].DataShard, txLocks[0].SchemeShard, txLocks[0].PathId).data(),
-        TLocksVer::Key(txLocks[1].LockId, txLocks[1].DataShard, txLocks[1].SchemeShard, txLocks[1].PathId).data()), res);
+        TLocksVer::Key(txLocks[0].LockId, txLocks[0].DataShard, txLocks[0].SchemeShard, txLocks[0].PathId).data(), 
+        TLocksVer::Key(txLocks[1].LockId, txLocks[1].DataShard, txLocks[1].SchemeShard, txLocks[1].PathId).data()), res); 
 
     const char * checkErased = R"___((
         (let locksTable_ '%s)
@@ -532,8 +532,8 @@ void TestLock(const TLocksTestOptions& testOpts) {
 
     cs.Client.FlatQuery(Sprintf(checkErased,
         TLocksVer::TableName(), TLocksVer::Columns(),
-        TLocksVer::Key(txLocks[0].LockId, txLocks[0].DataShard, txLocks[0].SchemeShard, txLocks[0].PathId).data(),
-        TLocksVer::Key(txLocks[1].LockId, txLocks[1].DataShard, txLocks[1].SchemeShard, txLocks[1].PathId).data()), res);
+        TLocksVer::Key(txLocks[0].LockId, txLocks[0].DataShard, txLocks[0].SchemeShard, txLocks[0].PathId).data(), 
+        TLocksVer::Key(txLocks[1].LockId, txLocks[1].DataShard, txLocks[1].SchemeShard, txLocks[1].PathId).data()), res); 
 
     {
         TValue result = TValue::Create(res.GetValue(), res.GetType());
@@ -1190,9 +1190,9 @@ static void MultipleLocks() {
     ))___";
     TString selectLocks = Sprintf(selectLocksT,
         TLocksVer::TableName(), TLocksVer::Columns(),
-        TLocksVer::Key(locks1[0].LockId, locks1[0].DataShard, locks1[0].SchemeShard, locks1[0].PathId).data(),
-        TLocksVer::Key(locks2[0].LockId, locks2[0].DataShard, locks2[0].SchemeShard, locks2[0].PathId).data(),
-        TLocksVer::Key(locks2[1].LockId, locks2[1].DataShard, locks2[1].SchemeShard, locks2[1].PathId).data());
+        TLocksVer::Key(locks1[0].LockId, locks1[0].DataShard, locks1[0].SchemeShard, locks1[0].PathId).data(), 
+        TLocksVer::Key(locks2[0].LockId, locks2[0].DataShard, locks2[0].SchemeShard, locks2[0].PathId).data(), 
+        TLocksVer::Key(locks2[1].LockId, locks2[1].DataShard, locks2[1].SchemeShard, locks2[1].PathId).data()); 
 
     { // select locks
         cs.Client.FlatQuery(selectLocks, res);
@@ -1233,7 +1233,7 @@ static void MultipleLocks() {
     ))___";
     cs.Client.FlatQuery(Sprintf(eraseLock,
         TLocksVer::TableName(),
-        TLocksVer::Key(locks1[0].LockId, locks1[0].DataShard, locks1[0].SchemeShard, locks1[0].PathId).data()), res);
+        TLocksVer::Key(locks1[0].LockId, locks1[0].DataShard, locks1[0].SchemeShard, locks1[0].PathId).data()), res); 
 
     { // select locks
         cs.Client.FlatQuery(selectLocks, res);
@@ -1359,7 +1359,7 @@ static void SetEraseSet() {
     ))___";
     cs.Client.FlatQuery(Sprintf(eraseLock,
         TLocksVer::TableName(),
-        TLocksVer::Key(locks1[0].LockId, locks1[0].DataShard, locks1[0].SchemeShard, locks1[0].PathId).data()), res);
+        TLocksVer::Key(locks1[0].LockId, locks1[0].DataShard, locks1[0].SchemeShard, locks1[0].PathId).data()), res); 
 
     cs.Client.FlatQuery(Sprintf(queryT, locks1[0].LockId), res);
     TVector<NMiniKQL::IEngineFlat::TTxLock> locks2;
@@ -1393,7 +1393,7 @@ static void SetEraseSet() {
     ))";
     cs.Client.FlatQuery(Sprintf(checkLocks,
         TLocksVer::TableName(), TLocksVer::Columns(),
-        TLocksVer::Key(locks1[0].LockId, locks1[0].DataShard, locks1[0].SchemeShard, locks1[0].PathId).data(),
+        TLocksVer::Key(locks1[0].LockId, locks1[0].DataShard, locks1[0].SchemeShard, locks1[0].PathId).data(), 
         locks1[0].Generation, locks1[0].Counter), res);
 
     {
@@ -1491,7 +1491,7 @@ static void SetBreakSetEraseBreak() {
     NKikimrMiniKQL::TResult res2;
     cs.Client.FlatQuery(Sprintf(qCheckLocks,
         TLocksVer::TableName(), TLocksVer::Columns(),
-        TLocksVer::Key(l.LockId, l.DataShard, l.SchemeShard, l.PathId).data(),
+        TLocksVer::Key(l.LockId, l.DataShard, l.SchemeShard, l.PathId).data(), 
         l.Generation, l.Counter), res2);
 
     {
@@ -1509,7 +1509,7 @@ static void SetBreakSetEraseBreak() {
     NKikimrMiniKQL::TResult res3;
     cs.Client.FlatQuery(Sprintf(qCheckLocks,
         TLocksVer::TableName(), TLocksVer::Columns(),
-        TLocksVer::Key(l.LockId, l.DataShard, l.SchemeShard, l.PathId).data(),
+        TLocksVer::Key(l.LockId, l.DataShard, l.SchemeShard, l.PathId).data(), 
         l.Generation, l.Counter), res3);
 
     {
@@ -1541,12 +1541,12 @@ static void SetBreakSetEraseBreak() {
     // erase first
     NKikimrMiniKQL::TResult res5;
     cs.Client.FlatQuery(Sprintf(qEraseLock,
-        TLocksVer::TableName(), TLocksVer::Key(l.LockId, l.DataShard, l.SchemeShard, l.PathId).data()), res5);
+        TLocksVer::TableName(), TLocksVer::Key(l.LockId, l.DataShard, l.SchemeShard, l.PathId).data()), res5); 
 
     // check second
     cs.Client.FlatQuery(Sprintf(qCheckLocks,
         TLocksVer::TableName(), TLocksVer::Columns(),
-        TLocksVer::Key(locks[0].LockId, locks[0].DataShard, locks[0].SchemeShard, locks[0].PathId).data(),
+        TLocksVer::Key(locks[0].LockId, locks[0].DataShard, locks[0].SchemeShard, locks[0].PathId).data(), 
         locks[0].Generation, locks[0].Counter), res5);
 
     {
@@ -1564,7 +1564,7 @@ static void SetBreakSetEraseBreak() {
     NKikimrMiniKQL::TResult res6;
     cs.Client.FlatQuery(Sprintf(qCheckLocks,
         TLocksVer::TableName(), TLocksVer::Columns(),
-        TLocksVer::Key(locks[0].LockId, locks[0].DataShard, locks[0].SchemeShard, locks[0].PathId).data(),
+        TLocksVer::Key(locks[0].LockId, locks[0].DataShard, locks[0].SchemeShard, locks[0].PathId).data(), 
         locks[0].Generation, locks[0].Counter), res6);
 
     {
@@ -1690,7 +1690,7 @@ static void PointSetRemove() {
     for (auto& lock : locks) {
         cs.Client.FlatQuery(Sprintf(removeLock,
             TLocksVer::TableName(),
-            TLocksVer::Key(lock.LockId, lock.DataShard, lock.SchemeShard, lock.PathId).data()));
+            TLocksVer::Key(lock.LockId, lock.DataShard, lock.SchemeShard, lock.PathId).data())); 
     }
 }
 
@@ -1793,7 +1793,7 @@ static void RangeSetRemove() {
     for (auto& lock : locks) {
         cs.Client.FlatQuery(Sprintf(removeLock,
             TLocksVer::TableName(),
-            TLocksVer::Key(lock.LockId, lock.DataShard, lock.SchemeShard, lock.PathId).data()));
+            TLocksVer::Key(lock.LockId, lock.DataShard, lock.SchemeShard, lock.PathId).data())); 
     }
 }
 
@@ -1891,7 +1891,7 @@ static void LocksLimit() {
     for (const auto& lock : locks) {
         cs.Client.FlatQuery(Sprintf(selectLocksT,
             TLocksVer::TableName(), TLocksVer::Columns(),
-            TLocksVer::Key(lock.LockId, lock.DataShard, lock.SchemeShard, lock.PathId).data()), res);
+            TLocksVer::Key(lock.LockId, lock.DataShard, lock.SchemeShard, lock.PathId).data()), res); 
 
         {
             TValue result = TValue::Create(res.GetValue(), res.GetType());
@@ -1955,10 +1955,10 @@ static void ShardLocks() {
     {
         cs.Client.FlatQuery(Sprintf(checkLock,
                                     TLocksVer::TableName(),
-                                    TLocksVer::Key(locks.back().LockId,
+                                    TLocksVer::Key(locks.back().LockId, 
                                                     locks.back().DataShard,
                                                     locks.back().SchemeShard,
-                                                    locks.back().PathId).data(),
+                                                    locks.back().PathId).data(), 
                                     TLocksVer::Columns()), res);
         TValue result = TValue::Create(res.GetValue(), res.GetType());
         TValue xres = result["Result"];
@@ -1984,10 +1984,10 @@ static void ShardLocks() {
     {
         cs.Client.FlatQuery(Sprintf(checkLock,
                                     TLocksVer::TableName(),
-                                    TLocksVer::Key(locks.back().LockId,
+                                    TLocksVer::Key(locks.back().LockId, 
                                                     locks.back().DataShard,
                                                     locks.back().SchemeShard,
-                                                    locks.back().PathId).data(),
+                                                    locks.back().PathId).data(), 
                                     TLocksVer::Columns()), res);
         TValue result = TValue::Create(res.GetValue(), res.GetType());
         TValue xres = result["Result"];
@@ -1997,10 +1997,10 @@ static void ShardLocks() {
     {
         cs.Client.FlatQuery(Sprintf(checkLock,
                                     TLocksVer::TableName(),
-                                    TLocksVer::Key(locks[0].LockId,
+                                    TLocksVer::Key(locks[0].LockId, 
                                                     locks[0].DataShard,
                                                     locks[0].SchemeShard,
-                                                    locks[0].PathId).data(),
+                                                    locks[0].PathId).data(), 
                                     TLocksVer::Columns()), res);
         TValue result = TValue::Create(res.GetValue(), res.GetType());
         TValue xres = result["Result"];

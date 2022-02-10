@@ -1808,7 +1808,7 @@ private:
             bool hasName = true;
             if (label.empty()) {
                 auto source = term->GetSourceName();
-                if (term->IsAsterisk() && !source->empty()) {
+                if (term->IsAsterisk() && !source->empty()) { 
                     Columns.QualifiedAll = true;
                     label = DotJoin(*source, "*");
                 } else if (column) {

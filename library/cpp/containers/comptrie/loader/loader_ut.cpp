@@ -19,7 +19,7 @@ Y_UNIT_TEST_SUITE(ArchiveLoaderTests) {
             "zero", "one", "two"};
         i32 val = -1;
         for (i32 i = 0; i < 3; ++i) {
-            UNIT_ASSERT(trie.Find(TrieKyes[i].data(), TrieKyes[i].size(), &val));
+            UNIT_ASSERT(trie.Find(TrieKyes[i].data(), TrieKyes[i].size(), &val)); 
             UNIT_ASSERT_EQUAL(i, val);
         }
 

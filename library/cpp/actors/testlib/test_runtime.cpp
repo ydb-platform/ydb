@@ -1426,7 +1426,7 @@ namespace NActors {
         ui32 dispatchCount = 0;
         if (!edgeFilter.empty()) {
             for (auto edgeActor : edgeFilter) {
-                Y_VERIFY(EdgeActors.contains(edgeActor), "%s is not an edge actor", ToString(edgeActor).data());
+                Y_VERIFY(EdgeActors.contains(edgeActor), "%s is not an edge actor", ToString(edgeActor).data()); 
             }
         }
         const TSet<TActorId>& edgeActors = edgeFilter.empty() ? EdgeActors : edgeFilter;

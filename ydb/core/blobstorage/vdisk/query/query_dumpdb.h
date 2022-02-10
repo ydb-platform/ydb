@@ -38,7 +38,7 @@ namespace NKikimr {
             TStringStream dump;
             typename TDumper::EDumpRes status = dumper.Dump(dump);
             if (status == TDumper::EDumpRes::Limited) {
-                TString errMsg = Sprintf("Dump is limited to %" PRIu64 " bytes", ui64(dump.Str().size()));
+                TString errMsg = Sprintf("Dump is limited to %" PRIu64 " bytes", ui64(dump.Str().size())); 
                 THtmlLightSignalRenderer(NKikimrWhiteboard::Red, errMsg).Output(str);
             }
             str << "<pre><small><small>\n";

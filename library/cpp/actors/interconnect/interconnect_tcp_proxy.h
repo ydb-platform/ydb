@@ -186,7 +186,7 @@ namespace NActors {
             ICPROXY_PROFILED;
 
             Y_VERIFY(!PendingSessionEvents && !PendingIncomingHandshakeEvents, "%s PendingSessionEvents# %zu"
-                " PendingIncomingHandshakeEvents# %zu State# %s", LogPrefix.data(), PendingSessionEvents.size(),
+                " PendingIncomingHandshakeEvents# %zu State# %s", LogPrefix.data(), PendingSessionEvents.size(), 
                 PendingIncomingHandshakeEvents.size(), State);
             SwitchToState(__LINE__, "PendingActivation", &TThis::PendingActivation);
             if (DynamicPtr && !PassAwayScheduled && PassAwayTimestamp != TInstant::Max()) {
@@ -351,14 +351,14 @@ namespace NActors {
                 TString msg = Sprintf("Event Type# 0x%08" PRIx32 " TypeRewrite# 0x%08" PRIx32
                     " from Sender# %s sent to the proxy for the node itself via Interconnect;"
                     " THIS IS NOT A BUG IN INTERCONNECT, check the event sender instead",
-                    ev->Type, ev->GetTypeRewrite(), ev->Sender.ToString().data());
-                LOG_ERROR_IC("ICP03", "%s", msg.data());
-                Y_VERIFY_DEBUG(false, "%s", msg.data());
+                    ev->Type, ev->GetTypeRewrite(), ev->Sender.ToString().data()); 
+                LOG_ERROR_IC("ICP03", "%s", msg.data()); 
+                Y_VERIFY_DEBUG(false, "%s", msg.data()); 
             }
 
             Y_VERIFY(ev->GetTypeRewrite() != TEvInterconnect::EvForward || ev->Recipient.NodeId() == PeerNodeId,
                 "Recipient/Proxy NodeId mismatch Recipient# %s Type# 0x%08" PRIx32 " PeerNodeId# %" PRIu32 " Func# %s",
-                ev->Recipient.ToString().data(), ev->Type, PeerNodeId, func);
+                ev->Recipient.ToString().data(), ev->Type, PeerNodeId, func); 
         }
 
         // Common with helpers
@@ -430,7 +430,7 @@ namespace NActors {
             ICPROXY_PROFILED;
 
             if (const TActorId& actorId = std::exchange(IncomingHandshakeActor, TActorId())) {
-                LOG_DEBUG_IC("ICP111", "dropped incoming handshake: %s poison: %s", actorId.ToString().data(),
+                LOG_DEBUG_IC("ICP111", "dropped incoming handshake: %s poison: %s", actorId.ToString().data(), 
                              poison ? "true" : "false");
                 if (poison) {
                     Send(actorId, new TEvents::TEvPoisonPill);
@@ -445,7 +445,7 @@ namespace NActors {
             ICPROXY_PROFILED;
 
             if (const TActorId& actorId = std::exchange(OutgoingHandshakeActor, TActorId())) {
-                LOG_DEBUG_IC("ICP112", "dropped outgoing handshake: %s poison: %s", actorId.ToString().data(),
+                LOG_DEBUG_IC("ICP112", "dropped outgoing handshake: %s poison: %s", actorId.ToString().data(), 
                              poison ? "true" : "false");
                 if (poison) {
                     Send(actorId, new TEvents::TEvPoisonPill);

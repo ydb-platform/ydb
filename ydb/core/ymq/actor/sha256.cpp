@@ -16,7 +16,7 @@ TString CalcSHA256(TStringBuf data) {
     if (!SHA256_Init(&sha256)) {
         throw std::runtime_error("Failed to init SHA-256");
     }
-    if (!SHA256_Update(&sha256, data.data(), data.size())) {
+    if (!SHA256_Update(&sha256, data.data(), data.size())) { 
         throw std::runtime_error("Failed to update SHA-256");
     }
     if (!SHA256_Final(hash, &sha256)) {

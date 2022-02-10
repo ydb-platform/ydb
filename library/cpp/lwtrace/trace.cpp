@@ -50,7 +50,7 @@ namespace NLWTrace {
             return; // silently skip probe double registration
         }
         TIds::key_type key(probe->Event.GetProvider(), probe->Event.Name);
-        Y_VERIFY(Ids.count(key) == 0, "duplicate provider:probe pair %s:%s", key.first.data(), key.second.data());
+        Y_VERIFY(Ids.count(key) == 0, "duplicate provider:probe pair %s:%s", key.first.data(), key.second.data()); 
         Probes.emplace(probe, box);
         Ids.insert(key);
     }

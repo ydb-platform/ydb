@@ -185,7 +185,7 @@ namespace NKikimr {
                 LOG_ERROR(ctx, BS_SYNCER,
                           VDISKP(HullCtx->VCtx->VDiskLogPrefix,
                                 "TAnubisQuantumActor: local write failed: Status# %s",
-                                NKikimrProto::EReplyStatus_Name(ev->Get()->Status).data()));
+                                NKikimrProto::EReplyStatus_Name(ev->Get()->Status).data())); 
             }
 
             --InFly;

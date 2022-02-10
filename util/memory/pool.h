@@ -225,10 +225,10 @@ public:
 
     template <typename TChar>
     inline TBasicStringBuf<TChar> AppendCString(const TBasicStringBuf<TChar>& buf) {
-        TChar* ret = static_cast<TChar*>(Allocate((buf.size() + 1) * sizeof(TChar)));
+        TChar* ret = static_cast<TChar*>(Allocate((buf.size() + 1) * sizeof(TChar))); 
 
         std::char_traits<TChar>::copy(ret, buf.data(), buf.size());
-        *(ret + buf.size()) = 0;
+        *(ret + buf.size()) = 0; 
         return TBasicStringBuf<TChar>(ret, buf.size());
     }
 

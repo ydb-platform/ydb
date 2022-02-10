@@ -54,12 +54,12 @@ Y_UNIT_TEST_SUITE(TSchemeMergeTest) {
 
             NSc::TValue v2;
             v2.MergeUpdate(v["a"]);
-            UNIT_ASSERT_C(NSc::TValue::Equal(v["a"], v2), Sprintf("\n%s\n!=\n%s\n", v["a"].ToJson().data(), v2.ToJson().data()));
+            UNIT_ASSERT_C(NSc::TValue::Equal(v["a"], v2), Sprintf("\n%s\n!=\n%s\n", v["a"].ToJson().data(), v2.ToJson().data())); 
 
             v.MergeUpdate(v1);
-            UNIT_ASSERT_C(!NSc::TValue::Equal(v["a"], v2), Sprintf("\n%s\n!=\n%s\n", v["a"].ToJson().data(), v2.ToJson().data()));
+            UNIT_ASSERT_C(!NSc::TValue::Equal(v["a"], v2), Sprintf("\n%s\n!=\n%s\n", v["a"].ToJson().data(), v2.ToJson().data())); 
             v2.MergeUpdate(v1["a"]);
-            UNIT_ASSERT_C(NSc::TValue::Equal(v["a"], v2), Sprintf("\n%s\n!=\n%s\n", v["a"].ToJson().data(), v2.ToJson().data()));
+            UNIT_ASSERT_C(NSc::TValue::Equal(v["a"], v2), Sprintf("\n%s\n!=\n%s\n", v["a"].ToJson().data(), v2.ToJson().data())); 
         }
 
         UNIT_ASSERT(v.Has("a"));

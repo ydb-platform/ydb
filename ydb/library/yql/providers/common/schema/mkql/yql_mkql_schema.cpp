@@ -269,7 +269,7 @@ struct TRuntimeTypeLoader {
         NKikimr::NMiniKQL::TCallableTypeBuilder callableTypeBuilder(Builder.GetTypeEnvironment(), "", returnType);
         for (size_t i = 0; i < argTypes.size(); ++i) {
             callableTypeBuilder.Add(argTypes[i]);
-            if (!argNames[i].empty()) {
+            if (!argNames[i].empty()) { 
                 callableTypeBuilder.SetArgumentName(argNames[i]);
             }
 
@@ -279,7 +279,7 @@ struct TRuntimeTypeLoader {
         }
 
         callableTypeBuilder.SetOptionalArgs(optionalCount);
-        if (!payload.empty()) {
+        if (!payload.empty()) { 
             callableTypeBuilder.SetPayload(payload);
         }
         return callableTypeBuilder.Build();

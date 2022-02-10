@@ -14,8 +14,8 @@ static void FillWithJunk(TArrayRef<char> data) {
         "01234567890123456789012345678901234567890123456789012345678901234567890123456789"
         "01234567890123456789012345678901234567890123456789012345678901234567890123456789";
 
-    for (size_t i = 0; i < data.size(); i += junk.size()) {
-        memcpy(data.data() + i, junk.data(), Min(junk.size(), data.size() - i));
+    for (size_t i = 0; i < data.size(); i += junk.size()) { 
+        memcpy(data.data() + i, junk.data(), Min(junk.size(), data.size() - i)); 
     }
 }
 
@@ -79,9 +79,9 @@ void TExampleProtocol::Serialize(const TBusMessage* message, TBuffer& buffer) {
     // Messages have no data, we recreate them from scratch
     // instead of sending, so we don't need to serialize them.
     if (const TExampleRequest* exampleMessage = dynamic_cast<const TExampleRequest*>(message)) {
-        buffer.Append(exampleMessage->Data.data(), exampleMessage->Data.size());
+        buffer.Append(exampleMessage->Data.data(), exampleMessage->Data.size()); 
     } else if (const TExampleResponse* exampleReply = dynamic_cast<const TExampleResponse*>(message)) {
-        buffer.Append(exampleReply->Data.data(), exampleReply->Data.size());
+        buffer.Append(exampleReply->Data.data(), exampleReply->Data.size()); 
     } else {
         Y_FAIL("unknown message type");
     }
@@ -277,5 +277,5 @@ void TExampleServer::OnMessage(TOnMessageContext& mess) {
         status = mess.SendReplyMove(reply);
     }
 
-    Y_VERIFY(status == MESSAGE_OK, "failed to send reply: %s", ToString(status).data());
+    Y_VERIFY(status == MESSAGE_OK, "failed to send reply: %s", ToString(status).data()); 
 }

@@ -36,23 +36,23 @@ namespace NBlockCodecs {
 
     struct TNullCodec: public ICodec {
         size_t DecompressedLength(const TData& in) const override {
-            return in.size();
+            return in.size(); 
         }
 
         size_t MaxCompressedLength(const TData& in) const override {
-            return in.size();
+            return in.size(); 
         }
 
         size_t Compress(const TData& in, void* out) const override {
-            MemCopy((char*)out, in.data(), in.size());
+            MemCopy((char*)out, in.data(), in.size()); 
 
-            return in.size();
+            return in.size(); 
         }
 
         size_t Decompress(const TData& in, void* out) const override {
-            MemCopy((char*)out, in.data(), in.size());
+            MemCopy((char*)out, in.data(), in.size()); 
 
-            return in.size();
+            return in.size(); 
         }
 
         TStringBuf Name() const noexcept override {
@@ -63,7 +63,7 @@ namespace NBlockCodecs {
     template <class T>
     struct TAddLengthCodec: public ICodec {
         static inline void Check(const TData& in) {
-            if (in.size() < sizeof(ui64)) {
+            if (in.size() < sizeof(ui64)) { 
                 ythrow TDataError() << "too small input";
             }
         }
@@ -71,17 +71,17 @@ namespace NBlockCodecs {
         size_t DecompressedLength(const TData& in) const override {
             Check(in);
 
-            return ReadUnaligned<ui64>(in.data());
+            return ReadUnaligned<ui64>(in.data()); 
         }
 
         size_t MaxCompressedLength(const TData& in) const override {
-            return T::DoMaxCompressedLength(in.size()) + sizeof(ui64);
+            return T::DoMaxCompressedLength(in.size()) + sizeof(ui64); 
         }
 
         size_t Compress(const TData& in, void* out) const override {
             ui64* ptr = (ui64*)out;
 
-            WriteUnaligned<ui64>(ptr, (ui64) in.size());
+            WriteUnaligned<ui64>(ptr, (ui64) in.size()); 
 
             return Base()->DoCompress(!in ? TData(TStringBuf("")) : in, ptr + 1) + sizeof(*ptr);
         }
@@ -89,7 +89,7 @@ namespace NBlockCodecs {
         size_t Decompress(const TData& in, void* out) const override {
             Check(in);
 
-            const auto len = ReadUnaligned<ui64>(in.data());
+            const auto len = ReadUnaligned<ui64>(in.data()); 
 
             if (!len)
                 return 0;

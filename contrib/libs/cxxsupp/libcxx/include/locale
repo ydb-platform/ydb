@@ -1,9 +1,9 @@
 // -*- C++ -*-
 //===-------------------------- locale ------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions. 
+// See https://llvm.org/LICENSE.txt for license information. 
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception 
 //
 //===----------------------------------------------------------------------===//
 
@@ -202,7 +202,7 @@ template <class charT> class messages_byname;
 #include <limits>
 #include <memory>
 #include <streambuf>
-#include <version>
+#include <version> 
 
 #if defined(__unix__) || (defined(__APPLE__) && defined(__MACH__))
 // Most unix variants have catopen.  These are the specific ones that don't.
@@ -557,7 +557,7 @@ __num_get<_CharT>::__stage2_float_loop(_CharT __ct, bool& __in_units, char& __ex
         __exp = 'P';
     else if ((__x & 0x5F) == __exp)
     {
-        __exp |= (char) 0x80;
+        __exp |= (char) 0x80; 
         if (__in_units)
         {
             __in_units = false;
@@ -740,7 +740,7 @@ locale::id
 num_get<_CharT, _InputIterator>::id;
 
 template <class _Tp>
-_LIBCPP_HIDDEN _Tp
+_LIBCPP_HIDDEN _Tp 
 __num_get_signed_integral(const char* __a, const char* __a_end,
                           ios_base::iostate& __err, int __base)
 {
@@ -775,7 +775,7 @@ __num_get_signed_integral(const char* __a, const char* __a_end,
 }
 
 template <class _Tp>
-_LIBCPP_HIDDEN _Tp
+_LIBCPP_HIDDEN _Tp 
 __num_get_unsigned_integral(const char* __a, const char* __a_end,
                             ios_base::iostate& __err, int __base)
 {
@@ -783,8 +783,8 @@ __num_get_unsigned_integral(const char* __a, const char* __a_end,
     {
         const bool __negate = *__a == '-';
         if (__negate && ++__a == __a_end) {
-          __err = ios_base::failbit;
-          return 0;
+          __err = ios_base::failbit; 
+          return 0; 
         }
         typename remove_reference<decltype(errno)>::type __save_errno = errno;
         errno = 0;
@@ -2442,23 +2442,23 @@ private:
     string_type __analyze(char __fmt, const ctype<_CharT>&);
 };
 
-#define _LIBCPP_TIME_GET_STORAGE_EXPLICIT_INSTANTIATION(_CharT) \
-template <> _LIBCPP_FUNC_VIS time_base::dateorder __time_get_storage<_CharT>::__do_date_order() const; \
-template <> _LIBCPP_FUNC_VIS __time_get_storage<_CharT>::__time_get_storage(const char*); \
-template <> _LIBCPP_FUNC_VIS __time_get_storage<_CharT>::__time_get_storage(const string&); \
-template <> _LIBCPP_FUNC_VIS void __time_get_storage<_CharT>::init(const ctype<_CharT>&); \
-template <> _LIBCPP_FUNC_VIS __time_get_storage<_CharT>::string_type __time_get_storage<_CharT>::__analyze(char, const ctype<_CharT>&); \
-extern template _LIBCPP_FUNC_VIS time_base::dateorder __time_get_storage<_CharT>::__do_date_order() const; \
-extern template _LIBCPP_FUNC_VIS __time_get_storage<_CharT>::__time_get_storage(const char*); \
-extern template _LIBCPP_FUNC_VIS __time_get_storage<_CharT>::__time_get_storage(const string&); \
-extern template _LIBCPP_FUNC_VIS void __time_get_storage<_CharT>::init(const ctype<_CharT>&); \
-extern template _LIBCPP_FUNC_VIS __time_get_storage<_CharT>::string_type __time_get_storage<_CharT>::__analyze(char, const ctype<_CharT>&); \
-/**/
-
-_LIBCPP_TIME_GET_STORAGE_EXPLICIT_INSTANTIATION(char)
-_LIBCPP_TIME_GET_STORAGE_EXPLICIT_INSTANTIATION(wchar_t)
-#undef _LIBCPP_TIME_GET_STORAGE_EXPLICIT_INSTANTIATION
-
+#define _LIBCPP_TIME_GET_STORAGE_EXPLICIT_INSTANTIATION(_CharT) \ 
+template <> _LIBCPP_FUNC_VIS time_base::dateorder __time_get_storage<_CharT>::__do_date_order() const; \ 
+template <> _LIBCPP_FUNC_VIS __time_get_storage<_CharT>::__time_get_storage(const char*); \ 
+template <> _LIBCPP_FUNC_VIS __time_get_storage<_CharT>::__time_get_storage(const string&); \ 
+template <> _LIBCPP_FUNC_VIS void __time_get_storage<_CharT>::init(const ctype<_CharT>&); \ 
+template <> _LIBCPP_FUNC_VIS __time_get_storage<_CharT>::string_type __time_get_storage<_CharT>::__analyze(char, const ctype<_CharT>&); \ 
+extern template _LIBCPP_FUNC_VIS time_base::dateorder __time_get_storage<_CharT>::__do_date_order() const; \ 
+extern template _LIBCPP_FUNC_VIS __time_get_storage<_CharT>::__time_get_storage(const char*); \ 
+extern template _LIBCPP_FUNC_VIS __time_get_storage<_CharT>::__time_get_storage(const string&); \ 
+extern template _LIBCPP_FUNC_VIS void __time_get_storage<_CharT>::init(const ctype<_CharT>&); \ 
+extern template _LIBCPP_FUNC_VIS __time_get_storage<_CharT>::string_type __time_get_storage<_CharT>::__analyze(char, const ctype<_CharT>&); \ 
+/**/ 
+ 
+_LIBCPP_TIME_GET_STORAGE_EXPLICIT_INSTANTIATION(char) 
+_LIBCPP_TIME_GET_STORAGE_EXPLICIT_INSTANTIATION(wchar_t) 
+#undef _LIBCPP_TIME_GET_STORAGE_EXPLICIT_INSTANTIATION 
+ 
 template <class _CharT, class _InputIterator = istreambuf_iterator<_CharT> >
 class _LIBCPP_TEMPLATE_VIS time_get_byname
     : public time_get<_CharT, _InputIterator>,
@@ -3667,7 +3667,7 @@ messages<_CharT>::do_close(catalog __c) const
         __c <<= 1;
     nl_catd __cat = (nl_catd)__c;
     catclose(__cat);
-#else // !_LIBCPP_HAS_CATOPEN
+#else // !_LIBCPP_HAS_CATOPEN 
     (void)__c;
 #endif // _LIBCPP_HAS_CATOPEN
 }

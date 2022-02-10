@@ -79,7 +79,7 @@ namespace NKikimr {
                     break;
 
                 default:
-                    Y_FAIL("unexpected blob status# %s", NKikimrProto::EReplyStatus_Name(status).data());
+                    Y_FAIL("unexpected blob status# %s", NKikimrProto::EReplyStatus_Name(status).data()); 
             }
         }
 

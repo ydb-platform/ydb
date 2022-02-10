@@ -27,8 +27,8 @@
 #define io_syscall1(type,fname,sname,type1,arg1)			\
 type fname(type1 arg1) {						\
   __SYS_REG(sname)							\
-  register long __x0 __asm__("x0") = (long)arg1;			\
-  register long __res_x0 __asm__("x0");					\
+  register long __x0 __asm__("x0") = (long)arg1;			\ 
+  register long __res_x0 __asm__("x0");					\ 
   __asm__ __volatile__ (						\
   __syscall(sname)							\
 	: "=r" (__res_x0)						\
@@ -40,9 +40,9 @@ type fname(type1 arg1) {						\
 #define io_syscall2(type,fname,sname,type1,arg1,type2,arg2)		\
 type fname(type1 arg1,type2 arg2) {					\
   __SYS_REG(sname)							\
-  register long __x0 __asm__("x0") = (long)arg1;			\
-  register long __x1 __asm__("x1") = (long)arg2;			\
-  register long __res_x0 __asm__("x0");					\
+  register long __x0 __asm__("x0") = (long)arg1;			\ 
+  register long __x1 __asm__("x1") = (long)arg2;			\ 
+  register long __res_x0 __asm__("x0");					\ 
   __asm__ __volatile__ (						\
   __syscall(sname)							\
 	: "=r" (__res_x0)						\
@@ -54,10 +54,10 @@ type fname(type1 arg1,type2 arg2) {					\
 #define io_syscall3(type,fname,sname,type1,arg1,type2,arg2,type3,arg3)	\
 type fname(type1 arg1,type2 arg2,type3 arg3) {				\
   __SYS_REG(sname)							\
-  register long __x0 __asm__("x0") = (long)arg1;			\
-  register long __x1 __asm__("x1") = (long)arg2;			\
-  register long __x2 __asm__("x2") = (long)arg3;			\
-  register long __res_x0 __asm__("x0");					\
+  register long __x0 __asm__("x0") = (long)arg1;			\ 
+  register long __x1 __asm__("x1") = (long)arg2;			\ 
+  register long __x2 __asm__("x2") = (long)arg3;			\ 
+  register long __res_x0 __asm__("x0");					\ 
   __asm__ __volatile__ (						\
   __syscall(sname)							\
 	: "=r" (__res_x0)						\
@@ -69,11 +69,11 @@ type fname(type1 arg1,type2 arg2,type3 arg3) {				\
 #define io_syscall4(type,fname,sname,type1,arg1,type2,arg2,type3,arg3,type4,arg4)\
 type fname(type1 arg1, type2 arg2, type3 arg3, type4 arg4) {		\
   __SYS_REG(sname)							\
-  register long __x0 __asm__("x0") = (long)arg1;			\
-  register long __x1 __asm__("x1") = (long)arg2;			\
-  register long __x2 __asm__("x2") = (long)arg3;			\
-  register long __x3 __asm__("x3") = (long)arg4;			\
-  register long __res_x0 __asm__("x0");					\
+  register long __x0 __asm__("x0") = (long)arg1;			\ 
+  register long __x1 __asm__("x1") = (long)arg2;			\ 
+  register long __x2 __asm__("x2") = (long)arg3;			\ 
+  register long __x3 __asm__("x3") = (long)arg4;			\ 
+  register long __res_x0 __asm__("x0");					\ 
   __asm__ __volatile__ (						\
   __syscall(sname)							\
 	: "=r" (__res_x0)						\
@@ -85,12 +85,12 @@ type fname(type1 arg1, type2 arg2, type3 arg3, type4 arg4) {		\
 #define io_syscall5(type,fname,sname,type1,arg1,type2,arg2,type3,arg3,type4,arg4,type5,arg5)	\
 type fname(type1 arg1, type2 arg2, type3 arg3, type4 arg4, type5 arg5) {\
   __SYS_REG(sname)							\
-  register long __x0 __asm__("x0") = (long)arg1;			\
-  register long __x1 __asm__("x1") = (long)arg2;			\
-  register long __x2 __asm__("x2") = (long)arg3;			\
-  register long __x3 __asm__("x3") = (long)arg4;			\
-  register long __x4 __asm__("x4") = (long)arg5;			\
-  register long __res_x0 __asm__("x0");					\
+  register long __x0 __asm__("x0") = (long)arg1;			\ 
+  register long __x1 __asm__("x1") = (long)arg2;			\ 
+  register long __x2 __asm__("x2") = (long)arg3;			\ 
+  register long __x3 __asm__("x3") = (long)arg4;			\ 
+  register long __x4 __asm__("x4") = (long)arg5;			\ 
+  register long __res_x0 __asm__("x0");					\ 
   __asm__ __volatile__ (						\
   __syscall(sname)							\
 	: "=r" (__res_x0)						\

@@ -354,7 +354,7 @@ private:
     {
         auto parts = SplitString(s, ".");
         WWW_CHECK(parts.size() <= 3, "too many name specifiers");
-        ParseParamSelector(parts.back());
+        ParseParamSelector(parts.back()); 
         if (parts.size() >= 2) {
             ParseProbeSelector(parts[parts.size() - 2]);
         }
@@ -396,7 +396,7 @@ private:
         for (const auto& p : specials) {
             if (paramName.StartsWith(p.first)) {
                 SpecialParam = p.second;
-                paramName.erase(0, p.first.size());
+                paramName.erase(0, p.first.size()); 
                 break;
             }
         }
@@ -418,7 +418,7 @@ private:
         for (const auto& p : timeUnits) {
             if (paramName.EndsWith(p.first)) {
                 TimeUnitSec = p.second;
-                paramName.erase(paramName.size() - p.first.size());
+                paramName.erase(paramName.size() - p.first.size()); 
                 break;
             }
         }
@@ -437,14 +437,14 @@ private:
             for (const auto& p : timeZeros) {
                 if (paramName.EndsWith(p.first)) {
                     ZeroTs = p.second;
-                    paramName.erase(paramName.size() - p.first.size());
+                    paramName.erase(paramName.size() - p.first.size()); 
                     break;
                 }
             }
-            WWW_CHECK(ZeroTs != -1, "wrong special param name (postfix '*Time' required): %s", s.data());
+            WWW_CHECK(ZeroTs != -1, "wrong special param name (postfix '*Time' required): %s", s.data()); 
         }
 
-        WWW_CHECK(paramName.empty(), "wrong special param name: %s", s.data());
+        WWW_CHECK(paramName.empty(), "wrong special param name: %s", s.data()); 
     }
 
     void ParseProbeSelector(const TString& s)
@@ -581,7 +581,7 @@ struct TAdHocTraceConfig {
                 }
                 size_t cutPos = (block[0] == '.'? 1: 0);
                 TVector<TString> parts = SplitString(block.substr(cutPos), ".");
-                WWW_CHECK(parts.size() >= 2, "too few parts in adhoc trace id '%s' block '%s'", id.data(), block.data());
+                WWW_CHECK(parts.size() >= 2, "too few parts in adhoc trace id '%s' block '%s'", id.data(), block.data()); 
                 auto blockPb = Cfg.AddBlocks();
                 auto pdescPb = blockPb->MutableProbeDesc();
                 if (parts[0] == "Group") {
@@ -602,7 +602,7 @@ struct TAdHocTraceConfig {
                     case 's': blockPb->MutablePredicate()->SetSampleRate(1.0 / Max<ui64>(1, FromString<ui64>(part.substr(1)))); break;
                     case 'p': ParsePredicate(blockPb->MutablePredicate()->AddOperators(), part.substr(1)); break;
                     case 'a': ParseAction(blockPb->AddAction(), part.substr(1)); defaultAction = false; break;
-                    default: WWW_CHECK(false, "unknown adhoc trace part type '%s' in '%s'", part.data(), id.data());
+                    default: WWW_CHECK(false, "unknown adhoc trace part type '%s' in '%s'", part.data(), id.data()); 
                     }
                 }
                 if (defaultAction) {
@@ -622,7 +622,7 @@ private:
     void ParsePredicate(NLWTrace::TOperator* op, const TString& p)
     {
         size_t sign = p.find_first_of("=!><");
-        WWW_CHECK(sign != TString::npos, "wrong predicate format in adhoc trace: %s", p.data());
+        WWW_CHECK(sign != TString::npos, "wrong predicate format in adhoc trace: %s", p.data()); 
         op->AddArgument()->SetParam(p.substr(0, sign));
         size_t value = sign + 1;
         switch (p[sign]) {
@@ -630,14 +630,14 @@ private:
             op->SetType(NLWTrace::OT_EQ);
             break;
         case '!': {
-            WWW_CHECK(p.size() > sign + 1, "wrong predicate operator format in adhoc trace: %s", p.data());
-            WWW_CHECK(p[sign + 1] == '=', "wrong predicate operator format in adhoc trace: %s", p.data());
+            WWW_CHECK(p.size() > sign + 1, "wrong predicate operator format in adhoc trace: %s", p.data()); 
+            WWW_CHECK(p[sign + 1] == '=', "wrong predicate operator format in adhoc trace: %s", p.data()); 
             value++;
             op->SetType(NLWTrace::OT_NE);
             break;
         }
         case '<': {
-            WWW_CHECK(p.size() > sign + 1, "wrong predicate operator format in adhoc trace: %s", p.data());
+            WWW_CHECK(p.size() > sign + 1, "wrong predicate operator format in adhoc trace: %s", p.data()); 
             if (p[sign + 1] == '=') {
                 value++;
                 op->SetType(NLWTrace::OT_LE);
@@ -647,7 +647,7 @@ private:
             break;
         }
         case '>': {
-            WWW_CHECK(p.size() > sign + 1, "wrong predicate operator format in adhoc trace: %s", p.data());
+            WWW_CHECK(p.size() > sign + 1, "wrong predicate operator format in adhoc trace: %s", p.data()); 
             if (p[sign + 1] == '=') {
                 value++;
                 op->SetType(NLWTrace::OT_GE);
@@ -656,7 +656,7 @@ private:
             }
             break;
         }
-        default: WWW_CHECK(false, "wrong predicate operator format in adhoc trace: %s", p.data());
+        default: WWW_CHECK(false, "wrong predicate operator format in adhoc trace: %s", p.data()); 
         }
         op->AddArgument()->SetValue(p.substr(value));
     }
@@ -672,7 +672,7 @@ private:
                     case 'i': pb->SetIgnore(true); break;
                     case 's': pb->SetShuttlesCount(FromString<ui64>(opt.substr(1))); break;
                     case 't': pb->SetMaxTrackLength(FromString<ui64>(opt.substr(1))); break;
-                    default: WWW_CHECK(false, "unknown adhoc trace log shuttle opt '%s' in '%s'", opt.data(), a.data());
+                    default: WWW_CHECK(false, "unknown adhoc trace log shuttle opt '%s' in '%s'", opt.data(), a.data()); 
                     }
                 }
             }
@@ -682,7 +682,7 @@ private:
                 if (!opt.empty()) {
                     switch (opt[0]) {
                     case 'i': pb->SetIgnore(true); break;
-                    default: WWW_CHECK(false, "unknown adhoc trace log shuttle opt '%s' in '%s'", opt.data(), a.data());
+                    default: WWW_CHECK(false, "unknown adhoc trace log shuttle opt '%s' in '%s'", opt.data(), a.data()); 
                     }
                 }
             }
@@ -695,12 +695,12 @@ private:
                     switch (opt[0]) {
                     case 't': pb->SetLogTimestamp(true); break;
                     case 'r': pb->SetMaxRecords(FromString<ui32>(opt.substr(1))); break;
-                    default: WWW_CHECK(false, "unknown adhoc trace log opt '%s' in '%s'", opt.data(), a.data());
+                    default: WWW_CHECK(false, "unknown adhoc trace log opt '%s' in '%s'", opt.data(), a.data()); 
                     }
                 }
             }
         } else {
-            WWW_CHECK(false, "wrong action format in adhoc trace: %s", a.data());
+            WWW_CHECK(false, "wrong action format in adhoc trace: %s", a.data()); 
         }
     }
 
@@ -984,8 +984,8 @@ TString MakeUrlErase(const TCgiParameters& e, const TString& key, const TString&
 TString EscapeSubvalue(const TString& s)
 {
     TString ret;
-    ret.reserve(s.size());
-    for (size_t i = 0; i < s.size(); i++) {
+    ret.reserve(s.size()); 
+    for (size_t i = 0; i < s.size(); i++) { 
         char c = s[i];
         if (c == ':') {
             ret.append("^c");
@@ -1001,10 +1001,10 @@ TString EscapeSubvalue(const TString& s)
 TString UnescapeSubvalue(const TString& s)
 {
     TString ret;
-    ret.reserve(s.size());
-    for (size_t i = 0; i < s.size(); i++) {
+    ret.reserve(s.size()); 
+    for (size_t i = 0; i < s.size(); i++) { 
         char c = s[i];
-        if (c == '^' && i + 1 < s.size()) {
+        if (c == '^' && i + 1 < s.size()) { 
             char c2 = s[++i];
             if (c2 == 'c') {
                 ret.append(':');
@@ -1234,8 +1234,8 @@ public:
         BuildResponse();
     }
 
-    virtual const char* what() const noexcept { return HttpResponse.data(); }
-    operator bool() const { return !Content.empty(); }
+    virtual const char* what() const noexcept { return HttpResponse.data(); } 
+    operator bool() const { return !Content.empty(); } 
 };
 
 enum EStyleFlags {
@@ -2547,7 +2547,7 @@ private:
             TString paramValues[LWTRACE_MAX_PARAMS];
             item.Probe->Event.Signature.SerializeParams(item.Params, paramValues);
             for (size_t i = 0; i < item.SavedParamsCount; i++) {
-                double value = FromString<double>(paramValues[i].data(), paramValues[i].size(), NAN);
+                double value = FromString<double>(paramValues[i].data(), paramValues[i].size(), NAN); 
                 // If value cannot be cast to double or is inf/nan -- assume it's a string
                 if (isfinite(value)) {
                     row[item.Probe->Event.Signature.ParamNames[i]] = value;
@@ -2756,7 +2756,7 @@ struct TPatternNode {
         if (bn == "resTotal") {
             filterTotal = true;
         } else {
-            WWW_CHECK(bn == "resLast", "wrong sample filter param: %s", bn.data());
+            WWW_CHECK(bn == "resLast", "wrong sample filter param: %s", bn.data()); 
         }
 
         size_t spaceLeft = opts.SizeLimit;
@@ -2860,10 +2860,10 @@ public:
         TPatternNode* Classify(TTrackIter cur, const TTrack& track) override
         {
             WWW_CHECK((i64)Rollbacks >= 0 && std::distance(TTrackTr::begin(track), cur) >= (i64)Rollbacks, "wrong rollbacks in node '%s'",
-                      Node->GetPath().data());
+                      Node->GetPath().data()); 
             const NLWTrace::TLogItem& item = *(cur - Rollbacks);
             WWW_CHECK(item.SavedParamsCount > 0, "classify by params on probe w/o param loggging in node '%s'",
-                      Node->GetPath().data());
+                      Node->GetPath().data()); 
             TString paramValues[LWTRACE_MAX_PARAMS];
             TString* paramValue = nullptr;
             item.Probe->Event.Signature.SerializeParams(item.Params, paramValues);
@@ -2873,7 +2873,7 @@ public:
                 }
             }
             WWW_CHECK(paramValue, "param '%s' not found in probe '%s' at path '%s'",
-                      ParamName.data(), GetProbeName(item.Probe).data(), Node->GetPath().data());
+                      ParamName.data(), GetProbeName(item.Probe).data(), Node->GetPath().data()); 
 
             TPatternNode* node = &Children[*paramValue];
             // Path example: "//Provider1.Probe1/Provider2.Probe2@1.xxx=123@2.type=harakiri"
@@ -3014,8 +3014,8 @@ public:
 
     bool MatchTrack(const TTrack& track, const TString& patternStr)
     {
-        const char* pi = patternStr.data();
-        const char* pe = pi + patternStr.size();
+        const char* pi = patternStr.data(); 
+        const char* pe = pi + patternStr.size(); 
         WWW_CHECK_PATTERN("/");
         for (TTrackIter i = TTrackTr::begin(track), e = TTrackTr::end(track); i != e; ++i) {
             if (pi == pe) {
@@ -3603,7 +3603,7 @@ private:
         }
         TPatternNode* n = node;
         for (auto i = ret.rbegin(), e = ret.rend(); i != e; ++i) {
-            WWW_CHECK(n, "internal bug: wrong timeline length at pattern node '%s'", node->GetPath().data());
+            WWW_CHECK(n, "internal bug: wrong timeline length at pattern node '%s'", node->GetPath().data()); 
             i->first = n;
             n = n->Parent;
         }
@@ -4540,7 +4540,7 @@ private:
             TraceMngr->New(id, query);
             Cleaner.Postpone(id, timeout, false);
         } else {
-            WWW_CHECK(!request.GetPostParams().Has("query"), "trace id '%s' is reserved for ad-hoc traces", id.data());
+            WWW_CHECK(!request.GetPostParams().Has("query"), "trace id '%s' is reserved for ad-hoc traces", id.data()); 
         }
         if (ui) {
             WWW_HTML(out) {

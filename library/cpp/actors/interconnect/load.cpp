@@ -186,7 +186,7 @@ namespace NInterconnect {
         }
 
         void GenerateMessages(const TActorContext& ctx) {
-            while (InFly.size() < Params.InFlyMax && ctx.Now() >= NextMessageTimestamp) {
+            while (InFly.size() < Params.InFlyMax && ctx.Now() >= NextMessageTimestamp) { 
                 // generate payload
                 const ui32 size = Params.SizeMin + RandomNumber(Params.SizeMax - Params.SizeMin + 1);
 
@@ -360,7 +360,7 @@ namespace NInterconnect {
                 std::sort(v.begin(), v.end());
                 for (double q : {0.5, 0.9, 0.99, 0.999, 0.9999, 1.0}) {
                     const size_t pos = q * (v.size() - 1);
-                    msg << Sprintf(" %.4f# %s", q, v[pos].ToString().data());
+                    msg << Sprintf(" %.4f# %s", q, v[pos].ToString().data()); 
                 }
                 msg << "}";
             } else {
@@ -373,7 +373,7 @@ namespace NInterconnect {
                 msg << " final";
             }
 
-            LOG_NOTICE(ctx, NActorsServices::INTERCONNECT_SPEED_TEST, "%s", msg.Str().data());
+            LOG_NOTICE(ctx, NActorsServices::INTERCONNECT_SPEED_TEST, "%s", msg.Str().data()); 
 
             if (schedule) {
                 SchedulePublishResults(ctx);

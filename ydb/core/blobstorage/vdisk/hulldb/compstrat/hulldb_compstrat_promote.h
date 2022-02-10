@@ -47,7 +47,7 @@ namespace NKikimr {
                             VDISKP(HullCtx->VCtx->VDiskLogPrefix,
                                 "%s: PromoteSsts: action# %s timeSpent# %s",
                                 PDiskSignatureForHullDbKey<TKey>().ToString().data(),
-                                ActionToStr(action), (finishTime - startTime).ToString().data()));
+                                ActionToStr(action), (finishTime - startTime).ToString().data())); 
                 }
 
                 return action;

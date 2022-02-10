@@ -91,7 +91,7 @@ static void WriteString(IOutputStream& o, const wchar32* w, size_t n) {
 
 template <>
 void Out<TString>(IOutputStream& o, const TString& p) {
-    o.Write(p.data(), p.size());
+    o.Write(p.data(), p.size()); 
 }
 
 template <>

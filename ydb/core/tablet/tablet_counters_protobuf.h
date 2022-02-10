@@ -4,7 +4,7 @@
 #include "tablet_counters_aggregator.h"
 #include <ydb/core/tablet_flat/defs.h>
 #include <util/string/vector.h>
-#include <util/string/split.h>
+#include <util/string/split.h> 
 
 namespace NKikimr {
 
@@ -287,7 +287,7 @@ public:
         for (ui32 i = 0; i < Size; ++i) {
             const NProtoBuf::EnumValueDescriptor* vdesc = labeledCounterDesc->value(i);
             Y_VERIFY(vdesc->number() == vdesc->index(), "counter '%s' number (%d) != index (%d)",
-                   vdesc->full_name().data(), vdesc->number(), vdesc->index());
+                   vdesc->full_name().data(), vdesc->number(), vdesc->index()); 
             const TLabeledCounterOptions& co = vdesc->options().GetExtension(LabeledCounterOpts);
 
             NamesStrings.push_back(GetFilePrefix(labeledCounterDesc->file()) + co.GetName());
@@ -297,7 +297,7 @@ public:
 
         // Make plain strings out of Strokas to fullfil interface of TTabletCountersBase
         for (const TString& s : NamesStrings) {
-            Names.push_back(s.data());
+            Names.push_back(s.data()); 
         }
 
         //parse types for counter groups;
@@ -310,7 +310,7 @@ public:
         }
 
         for (const TString& s : GroupNamesStrings) {
-            GroupNames.push_back(s.data());
+            GroupNames.push_back(s.data()); 
         }
     }
     virtual ~TLabeledCounterParsedOpts()
@@ -629,7 +629,7 @@ public:
               SimpleOpts()->GetAggregateFuncs(), group, SimpleOpts()->GetGroupNames(), id)
     {
         TVector<TString> groups;
-        StringSplitter(group).Split('/').SkipEmpty().Collect(&groups); //TODO: change here to "|"
+        StringSplitter(group).Split('/').SkipEmpty().Collect(&groups); //TODO: change here to "|" 
         Y_VERIFY(SimpleOpts()->GetGroupNamesSize() == groups.size());
     }
 

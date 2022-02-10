@@ -156,7 +156,7 @@ namespace NKikimr {
             }
 
             void DebugPrint() const {
-                fprintf(stderr, "%s\n", ToString().data());
+                fprintf(stderr, "%s\n", ToString().data()); 
             }
 
             inline ui8 GetSize() const {

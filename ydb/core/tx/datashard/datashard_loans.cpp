@@ -166,7 +166,7 @@ public:
             return true;
 
         Y_VERIFY(Self->State == TShardState::PreOffline, "Unexpected state %s tabletId %" PRIu64,
-                 DatashardStateName(Self->State).data(), Self->TabletID());
+                 DatashardStateName(Self->State).data(), Self->TabletID()); 
         Y_VERIFY(!Self->HasSharedBlobs(), "Cannot go offline while there are shared blobs at tablet %" PRIu64, Self->TabletID());
         Y_VERIFY(!Self->TransQueue.TxInFly(), "Cannot go offline while there is a Tx in flight at tablet %" PRIu64, Self->TabletID());
         Y_VERIFY(Self->OutReadSets.Empty(), "Cannot go offline while there is a non-Ack-ed readset at tablet %" PRIu64, Self->TabletID());

@@ -704,7 +704,7 @@ namespace NBus {
                 dataSize = sizeof(TBusHeader) + plaindata.Size();
 
                 NCodecs::TCodecPtr c = Proto->GetTransportCodec();
-                c->Encode(TStringBuf{plaindata.data(), plaindata.size()}, compdata);
+                c->Encode(TStringBuf{plaindata.data(), plaindata.size()}, compdata); 
 
                 if (compdata.Size() < plaindata.Size()) {
                     plaindata.Clear();

@@ -67,7 +67,7 @@ namespace NPage {
             Y_VERIFY(got == ECodec::Plain && (got.Version == 2 || got.Version == 3));
 
             auto *hdr = TDeref<const TRecordsHeader>::At(got.Page.data(), 0);
-            auto skip = got.Page.size() - hdr->Records * sizeof(TPgSize);
+            auto skip = got.Page.size() - hdr->Records * sizeof(TPgSize); 
 
             Y_VERIFY(hdr->Records >= 1u + (got.Version < 3 ? 0u : 1u));
 

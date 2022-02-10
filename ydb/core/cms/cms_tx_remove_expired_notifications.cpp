@@ -32,7 +32,7 @@ public:
 
                 if (deadline <= now) {
                     LOG_INFO(ctx, NKikimrServices::CMS, "Removing expired action from notification %s: %s",
-                              info.NotificationId.data(), i->ShortDebugString().data());
+                              info.NotificationId.data(), i->ShortDebugString().data()); 
 
                     i = actions->erase(i);
                     modified = true;

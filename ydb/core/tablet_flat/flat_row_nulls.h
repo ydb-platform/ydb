@@ -35,7 +35,7 @@ namespace NTable {
             size_t offT = AlignUp(sizeof(TSelf));
             size_t offO = offT + AlignUp(sizeof(TType) * types.size());
             size_t offC = offO + AlignUp(sizeof(TOrder) * order.size());
-            size_t offD = offC + AlignUp(sizeof(TCell) * defs.size());
+            size_t offD = offC + AlignUp(sizeof(TCell) * defs.size()); 
 
             size_t tail = std::accumulate(defs.begin(), defs.end(), size_t(0),
                 [](size_t sum, const TCell &cell) {
@@ -86,11 +86,11 @@ namespace NTable {
             return Defs;
         }
 
-        const TArrayRef<const TCell>* operator->() const noexcept
-        {
-            return &Defs;
-        }
-
+        const TArrayRef<const TCell>* operator->() const noexcept 
+        { 
+            return &Defs; 
+        } 
+ 
         const TCell& operator[](size_t on) const noexcept
         {
             return Defs[on];

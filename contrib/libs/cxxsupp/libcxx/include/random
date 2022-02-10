@@ -1,9 +1,9 @@
 // -*- C++ -*-
 //===--------------------------- random -----------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions. 
+// See https://llvm.org/LICENSE.txt for license information. 
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception 
 //
 //===----------------------------------------------------------------------===//
 
@@ -2439,7 +2439,7 @@ mersenne_twister_engine<_UIntType, __w, __n, __m, __r, __a, __u, __d, __s, __b,
         for (size_t __i = 1; __i < __n; ++__i)
             if (__x_[__i] != 0)
                 return;
-        __x_[0] = result_type(1) << (__w - 1);
+        __x_[0] = result_type(1) << (__w - 1); 
     }
 }
 
@@ -2465,7 +2465,7 @@ mersenne_twister_engine<_UIntType, __w, __n, __m, __r, __a, __u, __d, __s, __b,
         for (size_t __i = 1; __i < __n; ++__i)
             if (__x_[__i] != 0)
                 return;
-        __x_[0] = result_type(1) << (__w - 1);
+        __x_[0] = result_type(1) << (__w - 1); 
     }
 }
 

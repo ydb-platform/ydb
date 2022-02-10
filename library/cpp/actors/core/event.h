@@ -77,7 +77,7 @@ namespace NActors {
                 return static_cast<TEventType*>(Event.Get());
             }
 
-            Y_FAIL("Failed to Load() event type %" PRIu32 " class %s", Type, TypeName<TEventType>().data());
+            Y_FAIL("Failed to Load() event type %" PRIu32 " class %s", Type, TypeName<TEventType>().data()); 
         }
 
         template <typename T>

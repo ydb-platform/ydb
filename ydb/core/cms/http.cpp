@@ -121,7 +121,7 @@ private:
         if (NResource::FindExact(filename, &blob))
             type = mimetypeByExt(filename.c_str());
 
-        if (blob.empty()) {
+        if (blob.empty()) { 
             ctx.Send(ev->Sender, new NMon::TEvHttpInfoRes(TString(NMonitoring::HTTPNOTFOUND), 0,
                                                           NMon::IEvHttpInfoRes::EContentType::Custom));
             return;

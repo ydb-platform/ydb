@@ -225,7 +225,7 @@ public:
         if (delim.size() == 1) {
             return ProcessData(target, source, delim[0], maxLen);
         }
-        if (ProcessData(target, source, delim.back(), maxLen + 1)) {
+        if (ProcessData(target, source, delim.back(), maxLen + 1)) { 
             for (signed i = delim.size() - 2; i >= 0; --i) {
                 TrimEnd(target, delim[i]);
             }

@@ -196,7 +196,7 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor<TBlobSt
         for (ui32 i = 0; i < record.ResultSize(); ++i) {
             const NKikimrBlobStorage::TQueryResult &queryResult = record.GetResult(i);
             if (record.GetStatus() == NKikimrProto::OK) {
-                totalSize += queryResult.GetBuffer().size();
+                totalSize += queryResult.GetBuffer().size(); 
             }
             const TLogoBlobID blob = LogoBlobIDFromLogoBlobID(queryResult.GetBlobID());
             tabletId = blob.TabletID();
@@ -361,7 +361,7 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor<TBlobSt
         const NKikimrProto::EReplyStatus status = record.GetStatus();
         NActors::NLog::EPriority priority = PriorityForStatusInbound(status);
         A_LOG_LOG_S(priority != NActors::NLog::PRI_DEBUG, priority, "BPG30", "Handle VPuEventResult"
-            << " status# " << NKikimrProto::EReplyStatus_Name(status).data()
+            << " status# " << NKikimrProto::EReplyStatus_Name(status).data() 
             << " node# " << GetVDiskActorId(shortId).NodeId());
 
         const TLogoBlobID blob = GetFirstBlobId(ev);

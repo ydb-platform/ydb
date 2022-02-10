@@ -866,7 +866,7 @@ TExprNode::TPtr FuseEquiJoins(const TExprNode::TPtr& node, ui32 upstreamIndex, T
             return node;
         }
 
-        if (setting->Child(2)->Content().empty()) {
+        if (setting->Child(2)->Content().empty()) { 
             auto drop = setting->Child(1)->Content();
             TStringBuf part1;
             TStringBuf part2;

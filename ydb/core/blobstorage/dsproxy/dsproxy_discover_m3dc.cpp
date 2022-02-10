@@ -135,7 +135,7 @@ public:
                 break;
 
             default:
-                Y_FAIL("unexpected reply status# %s", NKikimrProto::EReplyStatus_Name(status).data());
+                Y_FAIL("unexpected reply status# %s", NKikimrProto::EReplyStatus_Name(status).data()); 
         }
 
         return true;
@@ -209,7 +209,7 @@ private:
         // and then check for strict ordering
         if (BlobQueue.size() > 1) {
             for (auto it1 = BlobQueue.begin(), it2 = std::next(it1); it2 != BlobQueue.end(); ++it1, ++it2) {
-                Y_VERIFY(it1->Id > it2->Id, "id1# %s id2# %s", it1->Id.ToString().data(), it2->Id.ToString().data());
+                Y_VERIFY(it1->Id > it2->Id, "id1# %s id2# %s", it1->Id.ToString().data(), it2->Id.ToString().data()); 
             }
         }
 
@@ -410,7 +410,7 @@ private:
                     break;
 
                 default:
-                    Y_FAIL("unexpected status# %s", NKikimrProto::EReplyStatus_Name(status).data());
+                    Y_FAIL("unexpected status# %s", NKikimrProto::EReplyStatus_Name(status).data()); 
             }
         }
 
@@ -632,11 +632,11 @@ public:
                 break;
 
             default:
-                Y_FAIL("unexpected item status# %s", NKikimrProto::EReplyStatus_Name(resp.Status).data());
+                Y_FAIL("unexpected item status# %s", NKikimrProto::EReplyStatus_Name(resp.Status).data()); 
         }
 
         Y_VERIFY(RequestsInFlight || Responded, "Status# %s GetInFlight# %s GetBlockFinished# %s",
-                NKikimrProto::EReplyStatus_Name(resp.Status).data(), GetInFlight ? "true" : "false",
+                NKikimrProto::EReplyStatus_Name(resp.Status).data(), GetInFlight ? "true" : "false", 
                 GetBlockFinished ? "true" : "false");
     }
 
@@ -714,7 +714,7 @@ public:
                 break;
 
             default:
-                Y_FAIL("unexpected TEvVGetBlockResult status# %s", NKikimrProto::EReplyStatus_Name(quorumStatus).data());
+                Y_FAIL("unexpected TEvVGetBlockResult status# %s", NKikimrProto::EReplyStatus_Name(quorumStatus).data()); 
         }
 
         Y_VERIFY(RequestsInFlight || Responded);

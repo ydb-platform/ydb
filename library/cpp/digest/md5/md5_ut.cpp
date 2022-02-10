@@ -31,13 +31,13 @@ Y_UNIT_TEST_SUITE(TMD5Test) {
 
         {
             TFixedBufferFileOutput fo(tmpFile);
-            fo.Write(s.data(), s.size());
+            fo.Write(s.data(), s.size()); 
         }
 
         char fileBuf[100];
         char memBuf[100];
-        TString fileHash = MD5::File(tmpFile.data(), fileBuf);
-        TString memoryHash = MD5::Data((const unsigned char*)s.data(), s.size(), memBuf);
+        TString fileHash = MD5::File(tmpFile.data(), fileBuf); 
+        TString memoryHash = MD5::Data((const unsigned char*)s.data(), s.size(), memBuf); 
 
         UNIT_ASSERT_NO_DIFF(fileHash, memoryHash);
 

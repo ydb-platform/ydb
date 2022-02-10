@@ -719,7 +719,7 @@ namespace NKikimr {
 
             // parse str
             char *endptr = nullptr;
-            ui64 num = strtoll(str.data(), &endptr, 10);
+            ui64 num = strtoll(str.data(), &endptr, 10); 
             if (!(endptr && *endptr == '\0')) {
                 return {NMonUtil::EParseRes::Error, str, 0};
             } else {
@@ -744,11 +744,11 @@ namespace NKikimr {
             auto tabletIdParseRes = ParseTabletId();
             auto channelParseRes = ParseChannel();
             if (tabletIdParseRes.Status == NMonUtil::EParseRes::Error) {
-                auto s = Sprintf("Unsupported value '%s' for CGI parameter 'tabletid'", tabletIdParseRes.StrVal.data());
+                auto s = Sprintf("Unsupported value '%s' for CGI parameter 'tabletid'", tabletIdParseRes.StrVal.data()); 
                 return TMessage {true, std::unique_ptr<IEventBase>(NMonUtil::PrepareError(s))};
             }
             if (channelParseRes.Status == NMonUtil::EParseRes::Error) {
-                auto s = Sprintf("Unsupported value '%s' for CGI parameter 'channel'", channelParseRes.StrVal.data());
+                auto s = Sprintf("Unsupported value '%s' for CGI parameter 'channel'", channelParseRes.StrVal.data()); 
                 return TMessage {true, std::unique_ptr<IEventBase>(NMonUtil::PrepareError(s))};
             }
             if (tabletIdParseRes.Status != channelParseRes.Status) {
@@ -774,7 +774,7 @@ namespace NKikimr {
         TMessage CreateStatDumpDbMessage() {
             auto r = NMonUtil::ParseDbName(Dbname);
             if (r.Status == NMonUtil::EParseRes::Error || r.Status == NMonUtil::EParseRes::Empty) {
-                auto s = Sprintf("Unsupported value '%s' for CGI parameter 'dbname'", r.StrVal.data());
+                auto s = Sprintf("Unsupported value '%s' for CGI parameter 'dbname'", r.StrVal.data()); 
                 return TMessage {true, std::unique_ptr<IEventBase>(NMonUtil::PrepareError(s))};
             } else {
                 // send db stat request
@@ -797,7 +797,7 @@ namespace NKikimr {
                 const bool pretty = PrettyPrint();
                 return TMessage {false, std::make_unique<TEvBlobStorage::TEvVDbStat>(SelfVDiskId, r.Value, pretty)};
             } else {
-                auto s = Sprintf("Unsupported value '%s' for CGI parameter 'tabletid'", r.StrVal.data());
+                auto s = Sprintf("Unsupported value '%s' for CGI parameter 'tabletid'", r.StrVal.data()); 
                 return TMessage {true, std::unique_ptr<IEventBase>(NMonUtil::PrepareError(s))};
             }
         }
@@ -995,7 +995,7 @@ namespace NKikimr {
             } else if(dbname == "Barriers") {
                 return new TSkeletonFrontMonBarriersQueryActor(selfVDiskId, notifyId, cfg, top, skeletonID, ev);
             } else {
-                auto s = Sprintf("Unsupported value '%s' for CGI parameter 'dbname'", dbname.data());
+                auto s = Sprintf("Unsupported value '%s' for CGI parameter 'dbname'", dbname.data()); 
                 return new TMonErrorActor(notifyId, ev, s);
             }
         } else if (type == "stat") {
@@ -1013,7 +1013,7 @@ namespace NKikimr {
         } else if (type == "dbmainpage") {
             return CreateMonDbMainPageActor(selfVDiskId, notifyId, skeletonFrontID, skeletonID, ev);
         } else {
-            auto s = Sprintf("Unknown value '%s' for CGI parameter 'type'", type.data());
+            auto s = Sprintf("Unknown value '%s' for CGI parameter 'type'", type.data()); 
             return new TMonErrorActor(notifyId, ev, s);
         }
     }

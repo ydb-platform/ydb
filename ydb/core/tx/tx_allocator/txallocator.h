@@ -56,7 +56,7 @@ struct TEvTxAllocator {
 
 template<>
 inline void Out<NKikimrTx::TEvTxAllocateResult::EStatus>(IOutputStream& o, NKikimrTx::TEvTxAllocateResult::EStatus x) {
-    o << NKikimrTx::TEvTxAllocateResult::EStatus_Name(x).data();
+    o << NKikimrTx::TEvTxAllocateResult::EStatus_Name(x).data(); 
     return;
 }
 

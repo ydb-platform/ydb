@@ -123,8 +123,8 @@ TInt128 FromString(const TStringBuf& str, ui8 precision, ui8 scale) {
     if (scale > precision)
         return Err();
 
-    auto s = str.data();
-    auto l = str.size();
+    auto s = str.data(); 
+    auto l = str.size(); 
 
     if (!s || !l)
         return Err();
@@ -209,9 +209,9 @@ TInt128 FromStringEx(const TStringBuf& str, ui8 precision, ui8 scale) {
     if (scale > precision)
         return Err();
 
-    const auto s = str.data();
+    const auto s = str.data(); 
 
-    for (auto ptr = s + str.size() - 1U; ptr > s; --ptr) {
+    for (auto ptr = s + str.size() - 1U; ptr > s; --ptr) { 
         if (*ptr == 'E' || *ptr == 'e') {
             const auto len = ptr - s;
             if (!len)
@@ -248,8 +248,8 @@ TInt128 FromStringEx(const TStringBuf& str, ui8 precision, ui8 scale) {
 }
 
 bool IsValid(const TStringBuf& str) {
-    auto s = str.data();
-    auto l = str.size();
+    auto s = str.data(); 
+    auto l = str.size(); 
 
     if (!s || !l)
         return false;

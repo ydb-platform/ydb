@@ -325,9 +325,9 @@ private:
         TStringStream response;
         response << "HTTP/1.1 200 Ok\r\n";
         response << "Content-Type: application/json\r\n";
-        response << "Content-Length: " << json.size() << "\r\n";
+        response << "Content-Length: " << json.size() << "\r\n"; 
         response << "\r\n";
-        response.Write(json.data(), json.size());
+        response.Write(json.data(), json.size()); 
         ctx.Send(ev->Sender, new NMon::TEvHttpInfoRes(response.Str(), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
         return true;
     }
@@ -346,7 +346,7 @@ private:
                 type = mimetypeByExt(filename.c_str());
             }
         }
-        if (blob.empty()) {
+        if (blob.empty()) { 
             filename = TString("viewer") + name;
             if (NResource::FindExact(filename, &blob)) {
                 type = mimetypeByExt(filename.c_str());
@@ -357,16 +357,16 @@ private:
                 }
             }
         }
-        if (!blob.empty()) {
+        if (!blob.empty()) { 
             if (name == "/index.html" || name == "/v2/index.html") { // we send root's index in such format that it could be embedded into existing web interface
-                ctx.Send(ev->Sender, new NMon::TEvHttpInfoRes(TString(static_cast<const char*>(blob.data()), blob.size())));
+                ctx.Send(ev->Sender, new NMon::TEvHttpInfoRes(TString(static_cast<const char*>(blob.data()), blob.size()))); 
             } else {
                 TStringStream response;
                 response << "HTTP/1.1 200 Ok\r\n";
                 response << "Content-Type: " << type << "\r\n";
-                response << "Content-Length: " << blob.size() << "\r\n";
+                response << "Content-Length: " << blob.size() << "\r\n"; 
                 response << "\r\n";
-                response.Write(blob.data(), blob.size());
+                response.Write(blob.data(), blob.size()); 
                 ctx.Send(ev->Sender, new NMon::TEvHttpInfoRes(response.Str(), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
             }
             return true;

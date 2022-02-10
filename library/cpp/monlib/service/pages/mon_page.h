@@ -57,7 +57,7 @@ namespace NMonitoring {
         }
 
         bool IsInIndex() const {
-            return !Title.empty();
+            return !Title.empty(); 
         }
 
         virtual void Output(IMonHttpRequest& request) = 0;

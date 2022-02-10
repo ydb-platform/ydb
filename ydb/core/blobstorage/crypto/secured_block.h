@@ -206,7 +206,7 @@ public:
 
     bool operator==(const TBaseBlock<Allocator>& other) const {
         bool sameSize = (Size_ == other.Size_);
-        return sameSize && !memcmp(Ptr_, other.Ptr_, Size_);
+        return sameSize && !memcmp(Ptr_, other.Ptr_, Size_); 
     }
 
     bool operator!=(const TBaseBlock<Allocator>& other) const {

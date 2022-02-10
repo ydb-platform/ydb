@@ -32,7 +32,7 @@ void TIndexMonPage::Output(IMonHttpRequest& request) {
             if (i != PagesByPath.end()) {
                 found = i->second;
                 pathInfo = request.GetPathInfo().substr(pathTmp.size());
-                Y_VERIFY(pathInfo.empty() || pathInfo.StartsWith('/'));
+                Y_VERIFY(pathInfo.empty() || pathInfo.StartsWith('/')); 
                 break;
             }
             size_t slash = pathTmp.find_last_of('/');

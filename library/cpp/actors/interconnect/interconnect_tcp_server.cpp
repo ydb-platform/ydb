@@ -9,7 +9,7 @@
 namespace NActors {
     TInterconnectListenerTCP::TInterconnectListenerTCP(const TString& address, ui16 port, TInterconnectProxyCommon::TPtr common, const TMaybe<SOCKET>& socket)
         : TActor(&TThis::Initial)
-        , TInterconnectLoggingBase(Sprintf("ICListener: %s", SelfId().ToString().data()))
+        , TInterconnectLoggingBase(Sprintf("ICListener: %s", SelfId().ToString().data())) 
         , Address(address.c_str(), port)
         , Listener(
             socket

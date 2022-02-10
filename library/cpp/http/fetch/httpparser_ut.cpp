@@ -55,7 +55,7 @@ Y_UNIT_TEST_SUITE(TestHttpParser) {
         THttpHeader hdr;
         THttpParser<> parser;
         parser.Init(&hdr);
-        parser.Parse((void*)blob.data(), blob.size());
+        parser.Parse((void*)blob.data(), blob.size()); 
         UNIT_ASSERT_EQUAL(parser.GetState(), parser.hp_error); // can't parse request as response
     }
 
@@ -69,7 +69,7 @@ Y_UNIT_TEST_SUITE(TestHttpParser) {
         THttpHeader hdr;
         TTestHttpParser parser;
         parser.Init(&hdr);
-        parser.Parse((void*)blob.data(), blob.size());
+        parser.Parse((void*)blob.data(), blob.size()); 
         UNIT_ASSERT_EQUAL(parser.GetState(), parser.hp_eof);
         UNIT_ASSERT_EQUAL(parser.Body(), "OK");
         UNIT_ASSERT_EQUAL(hdr.header_size, strlen(
@@ -94,7 +94,7 @@ Y_UNIT_TEST_SUITE(TestHttpParser) {
         THttpHeader hdr;
         TTestHttpParser parser;
         parser.Init(&hdr);
-        parser.Parse((void*)blob.data(), blob.size());
+        parser.Parse((void*)blob.data(), blob.size()); 
         UNIT_ASSERT_EQUAL(parser.GetState(), parser.hp_eof);
         UNIT_ASSERT_EQUAL(parser.Body(), "OkAllRight");
         UNIT_ASSERT_EQUAL(hdr.header_size, strlen(
@@ -135,9 +135,9 @@ Y_UNIT_TEST_SUITE(TestHttpParser) {
         THttpHeader hdr;
         TTestHttpParser parser;
         parser.Init(&hdr);
-        for (size_t i = 0; i < blob.size(); ++i) {
+        for (size_t i = 0; i < blob.size(); ++i) { 
             const TStringBuf d{blob, i, 1};
-            parser.Parse((void*)d.data(), d.size());
+            parser.Parse((void*)d.data(), d.size()); 
             Cout << TString(d).Quote() << " -> " << parser.GetState() << Endl;
         }
         AssertPipelineClen(parser, hdr);
@@ -151,7 +151,7 @@ Y_UNIT_TEST_SUITE(TestHttpParser) {
         THttpHeader hdr;
         TTestHttpParser parser;
         parser.Init(&hdr);
-        parser.Parse((void*)blob.data(), blob.size());
+        parser.Parse((void*)blob.data(), blob.size()); 
         AssertPipelineClen(parser, hdr);
         UNIT_ASSERT_EQUAL(parser.Body(),
                           "OK\r\n"
@@ -210,11 +210,11 @@ Y_UNIT_TEST_SUITE(TestHttpParser) {
         THttpHeader hdr;
         TTestHttpParser parser;
         parser.Init(&hdr);
-        for (size_t i = 0; i < blob.size(); ++i) {
+        for (size_t i = 0; i < blob.size(); ++i) { 
             const TStringBuf d{blob, i, 1};
-            parser.Parse((void*)d.data(), d.size());
+            parser.Parse((void*)d.data(), d.size()); 
             Cout << TString(d).Quote() << " -> " << parser.GetState() << Endl;
-            if (blob.size() / 2 - 1 <= i) // last \n sets EOF
+            if (blob.size() / 2 - 1 <= i) // last \n sets EOF 
                 UNIT_ASSERT_EQUAL(parser.GetState(), parser.hp_eof);
         }
         AssertPipelineChunked(parser, hdr);
@@ -225,7 +225,7 @@ Y_UNIT_TEST_SUITE(TestHttpParser) {
         THttpHeader hdr;
         TTestHttpParser parser;
         parser.Init(&hdr);
-        parser.Parse((void*)blob.data(), blob.size());
+        parser.Parse((void*)blob.data(), blob.size()); 
         AssertPipelineChunked(parser, hdr);
     }
 }

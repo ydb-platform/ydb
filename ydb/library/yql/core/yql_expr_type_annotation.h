@@ -16,8 +16,8 @@ namespace NYql {
 template <typename T>
 T FromString(const TExprNode& node, NKikimr::NUdf::EDataSlot slot) {
     if (node.Flags() & TNodeFlags::BinaryContent) {
-        if (node.Content().size() == sizeof(T)) {
-            T ret = *(T*)(node.Content().data());
+        if (node.Content().size() == sizeof(T)) { 
+            T ret = *(T*)(node.Content().data()); 
             if (NKikimr::NMiniKQL::IsValidValue(slot, NKikimr::NUdf::TUnboxedValuePod(ret))) {
                 return ret;
             }

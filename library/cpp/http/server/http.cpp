@@ -352,7 +352,7 @@ public:
         for (;;) {
             try {
                 const TInstant deadline = Options_.PollTimeout == TDuration::Zero() ? TInstant::Max() : now + Options_.PollTimeout;
-                const size_t ret = Poller->WaitD(events.data(), events.size(), deadline);
+                const size_t ret = Poller->WaitD(events.data(), events.size(), deadline); 
 
                 now = TInstant::Now();
                 for (size_t i = 0; i < ret; ++i) {
@@ -368,7 +368,7 @@ public:
                 // poller. Thus in this case we can safely process only one
                 // event from the poller at a time.
                 if (!Options_.MaxConnections && Options_.ExpirationTimeout == TDuration::Zero()) {
-                    if (ret >= events.size()) {
+                    if (ret >= events.size()) { 
                         events.resize(ret * 2);
                     }
                 }
@@ -617,7 +617,7 @@ TClientRequest::~TClientRequest() {
 }
 
 bool TClientRequest::Reply(void* /*ThreadSpecificResource*/) {
-    if (strnicmp(RequestString.data(), "GET ", 4)) {
+    if (strnicmp(RequestString.data(), "GET ", 4)) { 
         Output() << "HTTP/1.0 501 Not Implemented\r\n\r\n";
     } else {
         Output() << "HTTP/1.0 200 OK\r\n"
@@ -732,9 +732,9 @@ void TClientRequest::ProcessFailRequest(int failstate) {
 
     TString url;
 
-    if (!strnicmp(RequestString.data(), "GET ", 4)) {
+    if (!strnicmp(RequestString.data(), "GET ", 4)) { 
         // Trying to extract url...
-        const char* str = RequestString.data();
+        const char* str = RequestString.data(); 
 
         // Skipping spaces before url...
         size_t start = 3;

@@ -241,9 +241,9 @@ void TBuiltinFunctionRegistry::CalculateMetadataEtag() {
     ui64 hash = 0;
 
     for (const auto& op : operations) {
-        const ui64 nameLength = op.first.size();
+        const ui64 nameLength = op.first.size(); 
         hash = MurmurHash<ui64>(&nameLength, sizeof(nameLength), hash);
-        hash = MurmurHash<ui64>(op.first.data(), op.first.size(), hash);
+        hash = MurmurHash<ui64>(op.first.data(), op.first.size(), hash); 
         const auto& descriptions = *op.second;
         const ui64 descriptionCount = descriptions.size();
         hash = MurmurHash<ui64>(&descriptionCount, sizeof(descriptionCount), hash);

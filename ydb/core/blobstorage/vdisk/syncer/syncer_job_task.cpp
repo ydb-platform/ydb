@@ -94,13 +94,13 @@ namespace NKikimr {
             if (!good) {
                 Ctx->SyncerCtx->VCtx->Logger(NActors::NLog::PRI_ERROR, BS_SYNCER,
                        VDISKP(Ctx->SyncerCtx->VCtx->VDiskLogPrefix,
-                              "TSyncerJob::CheckFragmentFormat: %s", errorString.data()));
+                              "TSyncerJob::CheckFragmentFormat: %s", errorString.data())); 
             }
             return good;
         }
 
         void TSyncerJobTask::PrepareToFullRecovery(const TSyncState &syncState) {
-            Y_VERIFY(Phase == EStart || Phase == EWaitRemote, "%s", Sublog.Get().data());
+            Y_VERIFY(Phase == EStart || Phase == EWaitRemote, "%s", Sublog.Get().data()); 
             Phase = EStart;
             Type = EFullRecover;
             Current.LastSyncStatus = TSyncStatusVal::FullRecover;
@@ -122,7 +122,7 @@ namespace NKikimr {
             Phase = EFinished;
 
             // setup Current
-            Y_VERIFY(status != TSyncStatusVal::Running, "%s", Sublog.Get().data());
+            Y_VERIFY(status != TSyncStatusVal::Running, "%s", Sublog.Get().data()); 
             auto now = TAppData::TimeProvider->Now();
             Current.LastSyncStatus = status;
             Current.LastTry = now;
@@ -133,7 +133,7 @@ namespace NKikimr {
             Ctx->SyncerCtx->VCtx->Logger(NActors::NLog::PRI_DEBUG, BS_SYNCER,
                    VDISKP(Ctx->SyncerCtx->VCtx->VDiskLogPrefix,
                           "TSyncerJob: FINISHED: status# %s",
-                          NKikimrVDiskData::TSyncerVDiskEntry::ESyncStatus_Name(status).data()));
+                          NKikimrVDiskData::TSyncerVDiskEntry::ESyncStatus_Name(status).data())); 
 
             // death
             return TSjOutcome::Death();
@@ -141,7 +141,7 @@ namespace NKikimr {
 
         TSjOutcome TSyncerJobTask::NextRequest() {
             Y_VERIFY(Phase == EStart || Phase == EWaitLocal || Phase == ETerminated,
-                     "Phase# %s Log# %s", EPhaseToStr(Phase), Sublog.Get().data());
+                     "Phase# %s Log# %s", EPhaseToStr(Phase), Sublog.Get().data()); 
 
             Sublog.Log() << "NextRequest\n";
 
@@ -151,7 +151,7 @@ namespace NKikimr {
 
             if (EndOfStream) {
                 Y_VERIFY(Phase == EWaitLocal,
-                         "Phase# %s Log# %s", EPhaseToStr(Phase), Sublog.Get().data());
+                         "Phase# %s Log# %s", EPhaseToStr(Phase), Sublog.Get().data()); 
                 return ReplyAndDie(TSyncStatusVal::SyncDone);
             }
 
@@ -240,7 +240,7 @@ namespace NKikimr {
 
         TSjOutcome TSyncerJobTask::Handle(TEvBlobStorage::TEvVSyncResult::TPtr &ev, const TActorId &parentId) {
             Y_VERIFY(Phase == EWaitRemote,
-                     "Phase# %s Log# %s", EPhaseToStr(Phase), Sublog.Get().data());
+                     "Phase# %s Log# %s", EPhaseToStr(Phase), Sublog.Get().data()); 
             Sublog.Log() << "Handle(TEvVSyncResult): " << ev->Get()->ToString() << "\n";
 
 
@@ -258,7 +258,7 @@ namespace NKikimr {
             Ctx->SyncerCtx->VCtx->Logger(NActors::NLog::PRI_DEBUG, BS_SYNCER,
                     VDISKP(Ctx->SyncerCtx->VCtx->VDiskLogPrefix,
                         "SYNCER_VSYNCRES: fromVDisk# %s newSyncState# %s",
-                        fromVDisk.ToString().data(), newSyncState.ToString().data()));
+                        fromVDisk.ToString().data(), newSyncState.ToString().data())); 
             // status check
             NKikimrProto::EReplyStatus status = record.GetStatus();
             switch (status) {
@@ -288,7 +288,7 @@ namespace NKikimr {
                     Ctx->SyncerCtx->VCtx->Logger(NActors::NLog::PRI_ERROR, BS_SYNCER,
                            VDISKP(Ctx->SyncerCtx->VCtx->VDiskLogPrefix,
                                   "TSyncerJob::Handle(TEvVSyncResult): status# %s",
-                                  NKikimrProto::EReplyStatus_Name(status).data()));
+                                  NKikimrProto::EReplyStatus_Name(status).data())); 
                     return ReplyAndDie(TSyncStatusVal::ProtocolError);
                 }
             }
@@ -316,9 +316,9 @@ namespace NKikimr {
                 SetSyncState(syncState); // from now keep this position in memory
             } else {
                 Y_VERIFY(FullRecoverInfo->VSyncFullMsgsReceived > 1,
-                         "Phase# %s Log# %s", EPhaseToStr(Phase), Sublog.Get().data());
+                         "Phase# %s Log# %s", EPhaseToStr(Phase), Sublog.Get().data()); 
                 Y_VERIFY(GetCurrent().SyncState == syncState,
-                         "Phase# %s Log# %s", EPhaseToStr(Phase), Sublog.Get().data());
+                         "Phase# %s Log# %s", EPhaseToStr(Phase), Sublog.Get().data()); 
             }
 
             if (!data.empty()) {
@@ -354,7 +354,7 @@ namespace NKikimr {
 
         TSjOutcome TSyncerJobTask::Handle(TEvBlobStorage::TEvVSyncFullResult::TPtr &ev, const TActorId &parentId) {
             Y_VERIFY(Phase == EWaitRemote,
-                     "Phase# %s Log# %s", EPhaseToStr(Phase), Sublog.Get().data());
+                     "Phase# %s Log# %s", EPhaseToStr(Phase), Sublog.Get().data()); 
             Sublog.Log() << "Handle(TEvVSyncFullResult): " << ev->Get()->ToString() << "\n";
 
             size_t bytesReceived = ev->Get()->GetCachedByteSize();
@@ -363,7 +363,7 @@ namespace NKikimr {
 
             const NKikimrBlobStorage::TEvVSyncFullResult &record = ev->Get()->Record;
             Y_VERIFY(record.GetCookie() == FullRecoverInfo->VSyncFullMsgsReceived,
-                     "Phase# %s Log# %s", EPhaseToStr(Phase), Sublog.Get().data());
+                     "Phase# %s Log# %s", EPhaseToStr(Phase), Sublog.Get().data()); 
             FullRecoverInfo->VSyncFullMsgsReceived++;
             TVDiskID fromVDisk = VDiskIDFromVDiskID(record.GetVDiskID());
             if (!Ctx->SelfVDiskId.SameGroupAndGeneration(fromVDisk)) {
@@ -374,7 +374,7 @@ namespace NKikimr {
             Ctx->SyncerCtx->VCtx->Logger(NActors::NLog::PRI_DEBUG, BS_SYNCER,
                     VDISKP(Ctx->SyncerCtx->VCtx->VDiskLogPrefix,
                         "SYNCER_VSYNCFULLRES: fromVDisk# %s syncState# %s",
-                        fromVDisk.ToString().data(), syncState.ToString().data()));
+                        fromVDisk.ToString().data(), syncState.ToString().data())); 
 
             // status check
             NKikimrProto::EReplyStatus status = record.GetStatus();
@@ -397,7 +397,7 @@ namespace NKikimr {
                     Ctx->SyncerCtx->VCtx->Logger(NActors::NLog::PRI_ERROR, BS_SYNCER,
                            VDISKP(Ctx->SyncerCtx->VCtx->VDiskLogPrefix,
                                   "TSyncerJob::Handle(TEvVSyncFullResult): status# %s",
-                                  NKikimrProto::EReplyStatus_Name(status).data()));
+                                  NKikimrProto::EReplyStatus_Name(status).data())); 
                     return ReplyAndDie(TSyncStatusVal::ProtocolError);
                 }
             }
@@ -405,7 +405,7 @@ namespace NKikimr {
 
         TSjOutcome TSyncerJobTask::Handle(TEvLocalSyncDataResult::TPtr &ev) {
             Y_VERIFY(Phase == EWaitLocal || Phase == ETerminated,
-                     "Phase# %s Log# %s", EPhaseToStr(Phase), Sublog.Get().data());
+                     "Phase# %s Log# %s", EPhaseToStr(Phase), Sublog.Get().data()); 
             Sublog.Log() << "Handle(TEvLocalSyncDataResult): " << ev->Get()->ToString() << "\n";
 
             if (ev->Get()->Status == NKikimrProto::OUT_OF_SPACE) {
@@ -413,7 +413,7 @@ namespace NKikimr {
                 return ReplyAndDie(TSyncStatusVal::OutOfSpace);
             }
             Y_VERIFY(ev->Get()->Status == NKikimrProto::OK,
-                     "msg# %s Phase# %s Log# %s", ev->Get()->ToString().data(), EPhaseToStr(Phase), Sublog.Get().data());
+                     "msg# %s Phase# %s Log# %s", ev->Get()->ToString().data(), EPhaseToStr(Phase), Sublog.Get().data()); 
 
             if (EndOfStream) {
                 return ReplyAndDie(TSyncStatusVal::SyncDone);
@@ -430,7 +430,7 @@ namespace NKikimr {
 
         TSjOutcome TSyncerJobTask::Terminate(ESyncStatus status) {
             Y_VERIFY(Phase == EWaitLocal || Phase == EWaitRemote || Phase == EStart,
-                     "Phase# %s Log# %s", EPhaseToStr(Phase), Sublog.Get().data());
+                     "Phase# %s Log# %s", EPhaseToStr(Phase), Sublog.Get().data()); 
             Sublog.Log() << "Terminate: status# " << status << "\n";
             Phase = ETerminated;
             Current.LastSyncStatus = status;

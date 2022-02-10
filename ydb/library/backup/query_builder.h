@@ -70,7 +70,7 @@ public:
     {}
 
     bool Empty() const {
-        return BytesRemaining == 0 && LinesBunch.empty();
+        return BytesRemaining == 0 && LinesBunch.empty(); 
     }
 
     TParams ReadNextGetParams() {

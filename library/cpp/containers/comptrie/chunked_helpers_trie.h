@@ -36,7 +36,7 @@ public:
 
     void Add(const char* key, size_t keylen) {
         Builder.Add(key, keylen, 0);
-        assert(Has(((TString)key).substr(0, keylen).data()));
+        assert(Has(((TString)key).substr(0, keylen).data())); 
     }
 
     void Add(const char* key) {
@@ -195,7 +195,7 @@ public:
         Sort(Values.begin(), Values.end());
         TTrieMapWriter<T, true> writer;
         for (typename TValues::const_iterator toValue = Values.begin(); toValue != Values.end(); ++toValue)
-            writer.Add(toValue->first.data(), toValue->second);
+            writer.Add(toValue->first.data(), toValue->second); 
         writer.Save(out);
     }
 

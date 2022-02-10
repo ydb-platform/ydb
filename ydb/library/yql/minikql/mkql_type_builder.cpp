@@ -1407,7 +1407,7 @@ void TFunctionTypeInfoBuilder::Build(TFunctionTypeInfo* funcInfo)
         TCallableTypeBuilder builder(Env_, UdfName, const_cast<NMiniKQL::TType*>(ReturnType_));
         for (const auto& arg : Args_) {
             builder.Add(arg.Type_);
-            if (!arg.Name_.Str().empty()) {
+            if (!arg.Name_.Str().empty()) { 
                 builder.SetArgumentName(arg.Name_.Str());
             }
 
@@ -1416,7 +1416,7 @@ void TFunctionTypeInfoBuilder::Build(TFunctionTypeInfo* funcInfo)
             }
         }
 
-        if (!Payload_.empty()) {
+        if (!Payload_.empty()) { 
             builder.SetPayload(Payload_);
         }
 
@@ -1570,7 +1570,7 @@ NUdf::ETypeKind TTypeInfoHelper::GetTypeKind(const NUdf::TType* type) const {
     case NMiniKQL::TType::EKind::EmptyDict: return NUdf::ETypeKind::EmptyDict;
     case NMiniKQL::TType::EKind::Tagged: return NUdf::ETypeKind::Tagged;
     default:
-        Y_VERIFY_DEBUG(false, "Wrong MQKL type kind %s", mkqlType->GetKindAsStr().data());
+        Y_VERIFY_DEBUG(false, "Wrong MQKL type kind %s", mkqlType->GetKindAsStr().data()); 
         return NUdf::ETypeKind::Unknown;
     }
 }
@@ -1604,7 +1604,7 @@ case NMiniKQL::TType::EKind::TypeKind: { \
         MKQL_HANDLE_UDF_TYPE(Resource)
         MKQL_HANDLE_UDF_TYPE(Tagged)
     default:
-        Y_VERIFY_DEBUG(false, "Wrong MQKL type kind %s", mkqlType->GetKindAsStr().data());
+        Y_VERIFY_DEBUG(false, "Wrong MQKL type kind %s", mkqlType->GetKindAsStr().data()); 
     }
 
 #undef MKQL_HANDLE_UDF_TYPE

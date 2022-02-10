@@ -17,7 +17,7 @@ void TestPacker() {
     p.PackLeaf(buffer.begin(), valueRegion, sz);
     UNIT_ASSERT_VALUES_EQUAL(buffer[0], 4);
 
-    p.UnpackLeaf(buffer.data(), valueRegion);
+    p.UnpackLeaf(buffer.data(), valueRegion); 
     UNIT_ASSERT_EQUAL(valueRegion.data(), (const TValue*)(buffer.begin() + 1));
     UNIT_ASSERT_EQUAL(valueRegion.size(), Y_ARRAY_SIZE(values));
     UNIT_ASSERT_EQUAL(0, memcmp(values, valueRegion.data(), sizeof(values)));

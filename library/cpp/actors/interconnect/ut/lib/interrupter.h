@@ -85,13 +85,13 @@ public:
         , RejectingTraffic(false)
     {
         SetReuseAddressAndPort(ListenSocket);
-        TSockAddrInet6 addr(Address.data(), listenPort);
+        TSockAddrInet6 addr(Address.data(), listenPort); 
         Y_VERIFY(ListenSocket.Bind(&addr) == 0);
         Y_VERIFY(ListenSocket.Listen(5) == 0);
 
         DelayTraffic = (Bandwidth == 0.0) ? false : true;
 
-        ForwardAddrress.Reset(new TSockAddrInet6(Address.data(), ForwardPort));
+        ForwardAddrress.Reset(new TSockAddrInet6(Address.data(), ForwardPort)); 
         const ui32 BufSize = DelayTraffic ? 4096 : 65536 + 4096;
         Buf.resize(BufSize);
     }
@@ -164,7 +164,7 @@ private:
                     updateTimout(it.ForwardConnection);
                     updateTimout(it.BackwardConnection);
                 }
-                pollReadyCount = SocketPoller.WaitT(Events.data(), Events.size(), timeout);
+                pollReadyCount = SocketPoller.WaitT(Events.data(), Events.size(), timeout); 
                 if (pollReadyCount > 0) {
                     for (int i = 0; i < pollReadyCount; i++) {
                         HandleSocketPollEvent(Events[i]);
@@ -182,7 +182,7 @@ private:
                         if (TInstant::Now() >= frontPackage.first) {
                             TInet6StreamSocket* sock = frontPackage.second.ForwardSocket;
                             if (sock) {
-                                sock->Send(frontPackage.second.Data.data(), frontPackage.second.Data.size());
+                                sock->Send(frontPackage.second.Data.data(), frontPackage.second.Data.size()); 
                             }
                             conn.DelayedQueue.pop();
                         } else {
@@ -222,7 +222,7 @@ private:
             TDirectedConnection* directedConnection = static_cast<TDirectedConnection*>(ev);
             int recvSize = 0;
             do {
-                recvSize = directedConnection->Source->Recv(Buf.data(), Buf.size());
+                recvSize = directedConnection->Source->Recv(Buf.data(), Buf.size()); 
             } while (recvSize == -EINTR);
 
             if (recvSize > 0) {
@@ -234,10 +234,10 @@ private:
                     TDelayedPacket pkt;
                     pkt.ForwardSocket = directedConnection->Destination;
                     pkt.Data.resize(recvSize);
-                    memcpy(pkt.Data.data(), Buf.data(), recvSize);
+                    memcpy(pkt.Data.data(), Buf.data(), recvSize); 
                     directedConnection->DelayedQueue.emplace(directedConnection->Timestamp, std::move(pkt));
                 } else {
-                    directedConnection->Destination->Send(Buf.data(), recvSize);
+                    directedConnection->Destination->Send(Buf.data(), recvSize); 
                 }
             } else {
                 SocketPoller.Unwait(static_cast<SOCKET>(*directedConnection->Source));

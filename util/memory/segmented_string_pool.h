@@ -3,7 +3,7 @@
 #include <util/system/align.h>
 #include <util/system/yassert.h>
 #include <util/system/defaults.h>
-#include <util/generic/noncopyable.h>
+#include <util/generic/noncopyable.h> 
 #include <util/generic/vector.h>
 #include <util/generic/strbuf.h>
 
@@ -172,7 +172,7 @@ public:
         return rv;
     }
     char* Append(const TStringBuf s) {
-        return append(s.data(), s.size());
+        return append(s.data(), s.size()); 
     }
     void align_4() {
         size_t t = (curseg->freepos + 3) & ~3;

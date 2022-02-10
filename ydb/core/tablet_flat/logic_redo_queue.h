@@ -33,7 +33,7 @@ namespace NRedo {
 
         void Push(TStamp stamp, TAffects affects, TString embedded)
         {
-            NSan::CheckMemIsInitialized(embedded.data(), embedded.size());
+            NSan::CheckMemIsInitialized(embedded.data(), embedded.size()); 
             Push(TEntry::Create(stamp, affects, std::move(embedded)));
         }
 
@@ -126,7 +126,7 @@ namespace NRedo {
             Usage.clear();
 
             while (auto *one = Changes ? Changes.PopFront() : nullptr) {
-                Usage.push_back({ one->Table, one->Trace.size(), one->Bytes });
+                Usage.push_back({ one->Table, one->Trace.size(), one->Bytes }); 
             }
 
             return Usage;

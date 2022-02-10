@@ -3704,7 +3704,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
             UNIT_ASSERT_VALUES_EQUAL(localTid, 1001);
             UNIT_ASSERT(!schemaStr.empty());
             NKikimrSchemeOp::TTableDescription tableDescr;
-            bool ok = tableDescr.ParseFromArray(schemaStr.data(), schemaStr.size());
+            bool ok = tableDescr.ParseFromArray(schemaStr.data(), schemaStr.size()); 
             UNIT_ASSERT(ok);
 //            Cerr << tableDescr << Endl;
             UNIT_ASSERT_VALUES_EQUAL(tableDescr.GetPartitionConfig().GetExecutorCacheSize(), 12121212);
@@ -7031,7 +7031,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
     void TestSerializedCellVec(TVector<TCell>& cells) {
         TString serialized = TSerializedCellVec::Serialize(TArrayRef<const TCell>(cells));
-        UNIT_ASSERT_VALUES_EQUAL_C(cells.empty(), serialized.empty(), "Empty/non-empty mismatch");
+        UNIT_ASSERT_VALUES_EQUAL_C(cells.empty(), serialized.empty(), "Empty/non-empty mismatch"); 
         TSerializedCellVec deserialized(serialized);
         UNIT_ASSERT_VALUES_EQUAL_C(cells.size(), deserialized.GetCells().size(), "Sizes don't match");
         for (size_t i = 0; i < cells.size(); ++i) {

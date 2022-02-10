@@ -1,9 +1,9 @@
 // -*- C++ -*-
 //===--------------------------- tuple ------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions. 
+// See https://llvm.org/LICENSE.txt for license information. 
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception 
 //
 //===----------------------------------------------------------------------===//
 
@@ -98,8 +98,8 @@ template <class T, class Tuple>
   constexpr T make_from_tuple(Tuple&& t); // C++17
 
 // 20.4.1.4, tuple helper classes:
-template <class T> struct tuple_size; // undefined
-template <class... T> struct tuple_size<tuple<T...>>;
+template <class T> struct tuple_size; // undefined 
+template <class... T> struct tuple_size<tuple<T...>>; 
 template <class T>
  inline constexpr size_t tuple_size_v = tuple_size<T>::value; // C++17
 template <size_t I, class T> struct tuple_element; // undefined
@@ -161,7 +161,7 @@ template <class... Types>
 #include <cstddef>
 #include <type_traits>
 #include <utility>
-#include <version>
+#include <version> 
 
 #if !defined(_LIBCPP_HAS_NO_PRAGMA_SYSTEM_HEADER)
 #pragma GCC system_header
@@ -1272,10 +1272,10 @@ namespace {
 
 template <class... _Tp>
 inline _LIBCPP_INLINE_VISIBILITY _LIBCPP_CONSTEXPR_AFTER_CXX11
-tuple<typename __unwrap_ref_decay<_Tp>::type...>
+tuple<typename __unwrap_ref_decay<_Tp>::type...> 
 make_tuple(_Tp&&... __t)
 {
-    return tuple<typename __unwrap_ref_decay<_Tp>::type...>(_VSTD::forward<_Tp>(__t)...);
+    return tuple<typename __unwrap_ref_decay<_Tp>::type...>(_VSTD::forward<_Tp>(__t)...); 
 }
 
 template <class... _Tp>

@@ -97,7 +97,7 @@ namespace NKikimr {
                        VDISKP(HullCtx->VCtx->VDiskLogPrefix,
                              "%s: Compaction job (%" PRIu64 ") started: fresh# %s freedHugeBlobs# %s",
                              PDiskSignatureForHullDbKey<TKey>().ToString().data(), CompactionID,
-                             (FreshSegment ? "true" : "false"), Worker.GetFreedHugeBlobs().ToString().data()));
+                             (FreshSegment ? "true" : "false"), Worker.GetFreedHugeBlobs().ToString().data())); 
 
             // bool debug output of brs
             int brsDebugLevel = 0;
@@ -218,7 +218,7 @@ namespace NKikimr {
 
             LOG_INFO(ctx, NKikimrServices::BS_SKELETON,
                     VDISKP(HullCtx->VCtx->VDiskLogPrefix,
-                            "comp reserve ChunkIds# %s", FormatList(ev->Get()->ChunkIds).data()));
+                            "comp reserve ChunkIds# %s", FormatList(ev->Get()->ChunkIds).data())); 
 
             Worker.Apply(ev->Get());
             MainCycle(ctx);
@@ -278,7 +278,7 @@ namespace NKikimr {
                        VDISKP(HullCtx->VCtx->VDiskLogPrefix,
                             "%s: Compaction job (%" PRIu64 ") finished (freedHugeBlobs): fresh# %s freedHugeBlobs# %s",
                             PDiskSignatureForHullDbKey<TKey>().ToString().data(), CompactionID,
-                            (FreshSegment ? "true" : "false"), Worker.GetFreedHugeBlobs().ToString().data()));
+                            (FreshSegment ? "true" : "false"), Worker.GetFreedHugeBlobs().ToString().data())); 
             msg->FreedHugeBlobs = IsAborting ? TDiskPartVec() : Worker.GetFreedHugeBlobs();
 
             // chunks to commit

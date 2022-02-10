@@ -218,14 +218,14 @@ RECURSE(
     django-admin-view-permission
     django-advanced-filters
     django-ajax-selects
-    django-alive
+    django-alive 
     django-autoconfig
     django-appconf
     django-bootstrap3
     django-braces
     django-bulk-update
     django-cachalot
-    django-cache-memoize
+    django-cache-memoize 
     django-celery-beat
     django-celery-email
     django-celery-results
@@ -238,7 +238,7 @@ RECURSE(
     django-csp
     django-cte
     django-datetime-widget
-    django-db-geventpool
+    django-db-geventpool 
     django-dbtemplates
     django-debug-panel
     django-debug-toolbar
@@ -255,7 +255,7 @@ RECURSE(
     django-fsm
     django-grappelli
     django-guardian
-    django-hosts
+    django-hosts 
     django-http-proxy
     django-import-export
     django-introspection
@@ -387,7 +387,7 @@ RECURSE(
     Flask-Babel
     Flask-Bootstrap
     Flask-Bootstrap/example
-    Flask-Caching
+    Flask-Caching 
     flask-cors
     flask_graphql
     Flask-Humanize
@@ -773,7 +773,7 @@ RECURSE(
     protobuf_std
     protobuf_to_dict
     psutil
-    psycogreen
+    psycogreen 
     psycopg2
     ptpython
     ptyprocess

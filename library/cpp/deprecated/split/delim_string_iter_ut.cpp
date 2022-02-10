@@ -1,35 +1,35 @@
 #include "delim_string_iter.h"
-#include <util/generic/vector.h> 
+#include <util/generic/vector.h>
 #include <library/cpp/testing/unittest/registar.h>
- 
+
 /// Test that TDelimStringIter build on top of given string and delimeter will produce expected sequence
 static void AssertStringSplit(const TString& str, const TString& delim, const TVector<TString>& expected) {
     TDelimStringIter it(str, delim);
- 
-    // test iterator invariants 
-    for (const auto& expectedString : expected) { 
-        UNIT_ASSERT(it.Valid()); 
+
+    // test iterator invariants
+    for (const auto& expectedString : expected) {
+        UNIT_ASSERT(it.Valid());
         UNIT_ASSERT(bool(it));
         UNIT_ASSERT_STRINGS_EQUAL(it->ToString(), expectedString);
-        ++it; 
-    } 
-    UNIT_ASSERT(!it.Valid()); 
-}; 
- 
+        ++it;
+    }
+    UNIT_ASSERT(!it.Valid());
+};
+
 Y_UNIT_TEST_SUITE(TDelimStrokaIterTestSuite) {
     Y_UNIT_TEST(SingleCharacterAsDelimiter) {
-        AssertStringSplit( 
+        AssertStringSplit(
             "Hello words!", " ", {"Hello", "words!"});
-    } 
- 
+    }
+
     Y_UNIT_TEST(MultipleCharactersAsDelimiter) {
-        AssertStringSplit( 
+        AssertStringSplit(
             "0, 1, 1, 2, 3, 5, 8, 13, 21, 34", "1, ", {"0, ", "", "2, 3, 5, 8, 13, 2", "34"});
-    } 
- 
+    }
+
     Y_UNIT_TEST(NoDelimitersPresent) {
         AssertStringSplit("This string could be yours", "\t", {"This string could be yours"});
-    } 
+    }
 
     Y_UNIT_TEST(Cdr) {
         TDelimStringIter it("a\tc\t", "\t");
@@ -49,7 +49,7 @@ Y_UNIT_TEST_SUITE(TDelimStrokaIterTestSuite) {
 
         UNIT_ASSERT_EQUAL(got, expected);
     }
-} 
+}
 
 static void AssertKeyValueStringSplit(
     const TStringBuf str,

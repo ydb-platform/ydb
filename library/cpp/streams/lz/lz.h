@@ -4,7 +4,7 @@
 #include <util/stream/input.h>
 #include <util/generic/ptr.h>
 #include <util/generic/yexception.h>
-
+ 
 /**
  * @file
  *
@@ -18,8 +18,8 @@
  */
 
 struct TDecompressorError: public yexception {
-};
-
+}; 
+ 
 /**
  * @addtogroup Streams_Archs
  * @{

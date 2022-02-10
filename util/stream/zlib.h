@@ -15,8 +15,8 @@
  */
 
 struct TZLibError: public yexception {
-};
-
+}; 
+ 
 struct TZLibCompressorError: public TZLibError {
 };
 

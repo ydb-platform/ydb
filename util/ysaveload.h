@@ -26,8 +26,8 @@ public:
 };
 
 struct TSerializeException: public yexception {
-};
-
+}; 
+ 
 struct TLoadEOF: public TSerializeException {
 };
 

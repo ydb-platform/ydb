@@ -13,7 +13,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "-d", "--database", required=True, help="Name of the database to use"
     )
-    parser.add_argument("-e", "--endpoint", required=True, help="Endpoint url to use") 
+    parser.add_argument("-e", "--endpoint", required=True, help="Endpoint url to use")
     parser.add_argument("-p", "--path", default="", help="Base path for tables")
 
     args = parser.parse_args()

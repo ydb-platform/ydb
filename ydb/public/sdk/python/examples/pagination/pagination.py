@@ -15,12 +15,12 @@ class SchoolsPaginated(object):
         self.last_city = None
         self.last_number = None
 
-        next_page_query = """ 
+        next_page_query = """
         PRAGMA TablePathPrefix("{path}");
 
         DECLARE $limit AS Uint32;
-        DECLARE $lastCity AS Utf8; 
-        DECLARE $lastNumber AS Uint32; 
+        DECLARE $lastCity AS Utf8;
+        DECLARE $lastNumber AS Uint32;
 
         $Part1 = (
             SELECT * FROM schools
@@ -42,15 +42,15 @@ class SchoolsPaginated(object):
             path=self.path
         )
 
-        self.prepared_next_page_query = self.session.prepare(next_page_query) 
- 
-    def get_first_page(self): 
+        self.prepared_next_page_query = self.session.prepare(next_page_query)
+
+    def get_first_page(self):
         query = """
         PRAGMA TablePathPrefix("{path}");
 
         DECLARE $limit AS Uint32;
 
-        SELECT * FROM schools 
+        SELECT * FROM schools
         ORDER BY `city`, `number`
         LIMIT $limit;
         """.format(
@@ -59,10 +59,10 @@ class SchoolsPaginated(object):
         prepared_query = self.session.prepare(query)
         result_sets = self.session.transaction(ydb.SerializableReadWrite()).execute(
             prepared_query, {"$limit": self.limit}, commit_tx=True
-        ) 
-        return result_sets[0] 
- 
-    def get_next_page(self): 
+        )
+        return result_sets[0]
+
+    def get_next_page(self):
         result_sets = self.session.transaction(ydb.SerializableReadWrite()).execute(
             self.prepared_next_page_query,
             {
@@ -83,8 +83,8 @@ class SchoolsPaginated(object):
             if not result.rows:
                 return
             last_row = result.rows[-1]
-            self.last_city = last_row.city 
-            self.last_number = last_row.number 
+            self.last_city = last_row.city
+            self.last_number = last_row.number
             yield result
 
 

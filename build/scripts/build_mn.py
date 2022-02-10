@@ -16,7 +16,7 @@ def get_value(val):
 
 
 class BuildMnBase(object):
-    def Run(self, mninfo, mnname, mnrankingSuffix, mncppPath, check=False, ptr=False, multi=False): 
+    def Run(self, mninfo, mnname, mnrankingSuffix, mncppPath, check=False, ptr=False, multi=False):
         self.mninfo = mninfo
         self.mnname = mnname
         self.mnrankingSuffix = mnrankingSuffix
@@ -24,10 +24,10 @@ class BuildMnBase(object):
         self.check = check
         self.ptr = ptr
         self.multi = multi
-        dataprefix = "MN_External_" 
-        mninfoName = os.path.basename(self.mninfo) 
-        data = dataprefix + mnname 
-        datasize = data + "Size" 
+        dataprefix = "MN_External_"
+        mninfoName = os.path.basename(self.mninfo)
+        data = dataprefix + mnname
+        datasize = data + "Size"
 
         if self.multi:
             if self.ptr:
@@ -39,10 +39,10 @@ class BuildMnBase(object):
         else:
             if self.ptr:
                 mntype = "const NMatrixnet::TMnSsePtr"
-                mnload = "(new NMatrixnet::TMnSseInfo({1}, {2}, \"{0}\"))".format(mninfoName, data, datasize) 
+                mnload = "(new NMatrixnet::TMnSseInfo({1}, {2}, \"{0}\"))".format(mninfoName, data, datasize)
             else:
                 mntype = "const NMatrixnet::TMnSseInfo"
-                mnload = "({1}, {2}, \"{0}\")".format(mninfoName, data, datasize) 
+                mnload = "({1}, {2}, \"{0}\")".format(mninfoName, data, datasize)
 
         if self.check:
             self.CheckMn()
@@ -54,16 +54,16 @@ class BuildMnBase(object):
             mncpptmp.write("#include <kernel/matrixnet/mn_multi_categ.h>\n")
         else:
             mncpptmp.write("#include <kernel/matrixnet/mn_sse.h>\n")
- 
-        rodatapath = os.path.dirname(self.mncppPath) + "/" + dataprefix + self.mnname + ".rodata" 
-        mncpptmp.write("namespace{\n") 
-        mncpptmp.write("    extern \"C\" {\n") 
-        mncpptmp.write("        extern const unsigned char {1}{0}[];\n".format(self.mnname, dataprefix)) 
-        mncpptmp.write("        extern const ui32 {1}{0}Size;\n".format(self.mnname, dataprefix)) 
-        mncpptmp.write("    }\n") 
-        mncpptmp.write("}\n") 
+
+        rodatapath = os.path.dirname(self.mncppPath) + "/" + dataprefix + self.mnname + ".rodata"
+        mncpptmp.write("namespace{\n")
+        mncpptmp.write("    extern \"C\" {\n")
+        mncpptmp.write("        extern const unsigned char {1}{0}[];\n".format(self.mnname, dataprefix))
+        mncpptmp.write("        extern const ui32 {1}{0}Size;\n".format(self.mnname, dataprefix))
+        mncpptmp.write("    }\n")
+        mncpptmp.write("}\n")
         archiverCall = subprocess.Popen([self.archiver, "-q", "-p", "-o", rodatapath, self.mninfo], stdout=None, stderr=subprocess.PIPE)
-        archiverCall.wait() 
+        archiverCall.wait()
         mncpptmp.write("extern {0} {1};\n".format(mntype, self.mnname))
         mncpptmp.write("{0} {1}{2};".format(mntype, self.mnname, mnload))
         mncpptmp.close()

@@ -421,24 +421,24 @@ Y_UNIT_TEST_SUITE(TTypeTraitsTestNg) {
     TYPE_TEST(NonPodClassReference, TNonPodClass&)
     TYPE_TEST(NonPodClassConstReference, const TNonPodClass&)
 }
- 
-enum E4 { 
-    X 
-}; 
- 
+
+enum E4 {
+    X
+};
+
 enum class E64: ui64 {
-    X 
-}; 
- 
+    X
+};
+
 enum class E8: ui8 {
-    X 
-}; 
- 
+    X
+};
+
 // test for std::underlying_type_t
 static_assert(sizeof(std::underlying_type_t<E4>) == sizeof(int), "");
 static_assert(sizeof(std::underlying_type_t<E64>) == sizeof(ui64), "");
 static_assert(sizeof(std::underlying_type_t<E8>) == sizeof(ui8), "");
- 
+
 // tests for TFixedWidthUnsignedInt
 static_assert(std::is_same<ui8, TFixedWidthUnsignedInt<i8>>::value, "");
 static_assert(std::is_same<ui16, TFixedWidthUnsignedInt<i16>>::value, "");

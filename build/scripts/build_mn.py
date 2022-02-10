@@ -50,10 +50,10 @@ class BuildMnBase(object):
         mncpptmpPath = self.mncppPath + ".tmp"
         mncpptmp = open(mncpptmpPath, 'w')
 
-        if self.multi:
-            mncpptmp.write("#include <kernel/matrixnet/mn_multi_categ.h>\n")
-        else:
-            mncpptmp.write("#include <kernel/matrixnet/mn_sse.h>\n")
+        if self.multi: 
+            mncpptmp.write("#include <kernel/matrixnet/mn_multi_categ.h>\n") 
+        else: 
+            mncpptmp.write("#include <kernel/matrixnet/mn_sse.h>\n") 
 
         rodatapath = os.path.dirname(self.mncppPath) + "/" + dataprefix + self.mnname + ".rodata"
         mncpptmp.write("namespace{\n")
@@ -257,7 +257,7 @@ class BuildMns(BuildMnBase):
             if ext == ".info":
                 mnnames.append(mnfilename)
             elif ext == ".mnmc":
-                mnmultinames.append(mnfilename)
+                mnmultinames.append(mnfilename) 
 
         tmpSrcFile.write(self.autogen)
         tmpSrcFile.write("#include \"{0}\"\n\n".format(hdrrel))

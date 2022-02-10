@@ -2,7 +2,7 @@
 #include "msgbus_server_request.h"
 #include "msgbus_server_proxy.h"
 #include "msgbus_securereq.h"
- 
+
 #include <library/cpp/actors/core/hfunc.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>
@@ -120,8 +120,8 @@ TBusResponse* ProposeTransactionStatusToResponse(EResponseStatus status,
         response->Record.SetExecutionEngineStatus(result.GetExecutionEngineStatus());
     if (result.HasExecutionEngineResponseStatus())
         response->Record.SetExecutionEngineResponseStatus(result.GetExecutionEngineResponseStatus());
-    if (result.HasMiniKQLCompileResults()) 
-        response->Record.MutableMiniKQLCompileResults()->CopyFrom(result.GetMiniKQLCompileResults()); 
+    if (result.HasMiniKQLCompileResults())
+        response->Record.MutableMiniKQLCompileResults()->CopyFrom(result.GetMiniKQLCompileResults());
     if (result.HasMiniKQLErrors())
         response->Record.SetMiniKQLErrors(result.GetMiniKQLErrors());
     if (result.HasDataShardErrors())

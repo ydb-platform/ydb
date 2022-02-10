@@ -12,10 +12,10 @@ PEERDIR(
     ydb/core/client/server
     ydb/core/engine
     ydb/public/lib/deprecated/kicli
-) 
+)
 
 END()
- 
+
 RECURSE(
     metadata
     minikql_compile

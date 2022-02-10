@@ -1,23 +1,23 @@
-LIBRARY() 
- 
+LIBRARY()
+
 OWNER(
     ddoarn
     g:kikimr
     g:logbroker
 )
- 
-SRCS( 
-    document_conversion.h 
+
+SRCS(
+    document_conversion.h
     http_ping.cpp
     http_ping.h
     msgbus_blobstorage_config.cpp
-    msgbus_bsadm.cpp 
+    msgbus_bsadm.cpp
     msgbus_http_server.h
     msgbus_http_server.cpp
-    msgbus_server.cpp 
-    msgbus_server.h 
+    msgbus_server.cpp
+    msgbus_server.h
     msgbus_server_cms.cpp
-    msgbus_server_configdummy.cpp 
+    msgbus_server_configdummy.cpp
     msgbus_server_console.cpp
     msgbus_server_db.cpp
     msgbus_server_drain_node.cpp
@@ -39,12 +39,12 @@ SRCS(
     msgbus_server_local_minikql.cpp
     msgbus_server_local_scheme_tx.cpp
     msgbus_server_node_registration.cpp
-    msgbus_server_proxy.cpp 
+    msgbus_server_proxy.cpp
     msgbus_server_proxy.h
     msgbus_server_request.cpp
     msgbus_server_request.h
     msgbus_server_s3_listing.cpp
-    msgbus_server_scheme_initroot.cpp 
+    msgbus_server_scheme_initroot.cpp
     msgbus_server_scheme_request.cpp
     msgbus_server_sqs.cpp
     msgbus_server_tablet_counters.cpp
@@ -54,17 +54,17 @@ SRCS(
     msgbus_server_tracer.cpp
     msgbus_server_tracer.h
     msgbus_server_tx_request.cpp
-    msgbus_server_types.cpp 
+    msgbus_server_types.cpp
     msgbus_server_whoami.cpp
     msgbus_servicereq.h
-    msgbus_tabletreq.h 
+    msgbus_tabletreq.h
     grpc_server.cpp
     grpc_server.h
     grpc_proxy_status.h
     grpc_proxy_status.cpp
-) 
- 
-PEERDIR( 
+)
+
+PEERDIR(
     library/cpp/actors/helpers
     library/cpp/json
     library/cpp/messagebus
@@ -96,8 +96,8 @@ PEERDIR(
     ydb/public/lib/deprecated/client
     ydb/public/lib/deprecated/kicli
     ydb/services/persqueue_v1
-) 
- 
+)
+
 YQL_LAST_ABI_VERSION()
 
 END()

@@ -1,10 +1,10 @@
 #include "proxy.h"
- 
+
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/balance_coverage/balance_coverage_builder.h>
 #include <ydb/core/tx/tx_processing.h>
- 
+
 #include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/blobstorage.h>
@@ -19,7 +19,7 @@
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/core/scheme/scheme_types_defs.h>
 #include <ydb/core/base/row_version.h>
- 
+
 #include <ydb/library/yql/minikql/mkql_type_ops.h>
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 #include <ydb/library/yql/public/issue/yql_issue_manager.h>
@@ -1274,8 +1274,8 @@ void TDataReq::Handle(TEvTxProxyReq::TEvMakeRequest::TPtr &ev, const TActorConte
 
     NCpuTime::TCpuTimer timer(CpuTime);
     if (txbody.HasMiniKQLTransaction()) {
-        const auto& mkqlTxBody = txbody.GetMiniKQLTransaction(); 
- 
+        const auto& mkqlTxBody = txbody.GetMiniKQLTransaction();
+
         const TAppData* appData = AppData(ctx);
         const auto functionRegistry = appData->FunctionRegistry;
 

@@ -4,7 +4,7 @@
 
 #include <ydb/public/lib/base/defs.h>
 #include <ydb/public/lib/base/msgbus.h>
- 
+
 #include <functional>
 #include <util/system/info.h>
 #include <library/cpp/messagebus/ybus.h>

@@ -1,13 +1,13 @@
-#include "http_code_extractor.h" 
- 
+#include "http_code_extractor.h"
+
 #include <library/cpp/http/io/stream.h>
 #include <library/cpp/http/misc/httpcodes.h>
 
 #include <util/generic/maybe.h>
-#include <util/generic/strbuf.h> 
-#include <util/string/cast.h> 
- 
-namespace NRainCheck { 
+#include <util/generic/strbuf.h>
+#include <util/string/cast.h>
+
+namespace NRainCheck {
     TMaybe<HttpCodes> TryGetHttpCodeFromErrorDescription(const TStringBuf& errorMessage) {
         // Try to get HttpCode from library/cpp/neh response.
         // If response has HttpCode and it is not 200 OK, library/cpp/neh will send a message
@@ -17,9 +17,9 @@ namespace NRainCheck {
         const TStringBuf SUBSTR = "request failed(";
         const size_t SUBSTR_LEN = SUBSTR.size();
         const size_t FIRST_LINE_LEN = TStringBuf("HTTP/1.X NNN").size();
- 
+
         TMaybe<HttpCodes> httpCode;
- 
+
         const size_t substrPos = errorMessage.find(SUBSTR);
         if (substrPos != TStringBuf::npos) {
             const TStringBuf firstLineStart = errorMessage.SubStr(substrPos + SUBSTR_LEN, FIRST_LINE_LEN);
@@ -30,10 +30,10 @@ namespace NRainCheck {
                 }
             } catch (const TFromStringException& ex) {
                 // Can't parse HttpCode: it is OK, because ErrorDescription can be random string.
-            } 
-        } 
+            }
+        }
 
         return httpCode;
-    } 
- 
-} 
+    }
+
+}

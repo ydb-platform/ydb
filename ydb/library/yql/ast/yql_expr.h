@@ -1,13 +1,13 @@
-#pragma once 
- 
-#include "yql_ast.h" 
-#include "yql_expr_types.h" 
-#include "yql_type_string.h" 
+#pragma once
+
+#include "yql_ast.h"
+#include "yql_expr_types.h"
+#include "yql_type_string.h"
 #include "yql_expr_builder.h"
 #include "yql_gc_nodes.h"
 #include "yql_constraint.h"
 #include "yql_pos_handle.h"
- 
+
 #include <ydb/library/yql/utils/yql_panic.h>
 #include <ydb/library/yql/public/issue/yql_issue_manager.h>
 #include <ydb/library/yql/public/udf/udf_data_type.h>
@@ -17,16 +17,16 @@
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 #include <library/cpp/deprecated/enum_codegen/enum_codegen.h>
 
-#include <util/string/builder.h> 
+#include <util/string/builder.h>
 #include <util/generic/array_ref.h>
-#include <util/generic/deque.h> 
-#include <util/generic/cast.h> 
-#include <util/generic/hash.h> 
-#include <util/generic/maybe.h> 
-#include <util/generic/bt_exception.h> 
-#include <util/generic/algorithm.h> 
+#include <util/generic/deque.h>
+#include <util/generic/cast.h>
+#include <util/generic/hash.h>
+#include <util/generic/maybe.h>
+#include <util/generic/bt_exception.h>
+#include <util/generic/algorithm.h>
 #include <util/digest/murmur.h>
- 
+
 #include <algorithm>
 #include <unordered_set>
 #include <unordered_map>
@@ -47,27 +47,27 @@
     #define ENSURE_NOT_FROZEN_CTX Y_VERIFY_DEBUG(!Frozen);
 #endif
 
-namespace NYql { 
+namespace NYql {
 
 using NUdf::EDataSlot;
 
 class TUnitExprType;
 class TMultiExprType;
-class TTupleExprType; 
-class TStructExprType; 
-class TItemExprType; 
-class TListExprType; 
+class TTupleExprType;
+class TStructExprType;
+class TItemExprType;
+class TListExprType;
 class TStreamExprType;
-class TDataExprType; 
-class TWorldExprType; 
-class TOptionalExprType; 
-class TCallableExprType; 
-class TResourceExprType; 
-class TTypeExprType; 
-class TDictExprType; 
-class TVoidExprType; 
+class TDataExprType;
+class TWorldExprType;
+class TOptionalExprType;
+class TCallableExprType;
+class TResourceExprType;
+class TTypeExprType;
+class TDictExprType;
+class TVoidExprType;
 class TNullExprType;
-class TGenericExprType; 
+class TGenericExprType;
 class TTaggedExprType;
 class TErrorExprType;
 class TVariantExprType;
@@ -75,44 +75,44 @@ class TStreamExprType;
 class TFlowExprType;
 class TEmptyListExprType;
 class TEmptyDictExprType;
- 
+
 const size_t DefaultMistypeDistance = 3;
 
 extern const TStringBuf ZeroString;
 
-struct TTypeAnnotationVisitor { 
-    virtual ~TTypeAnnotationVisitor() = default; 
- 
+struct TTypeAnnotationVisitor {
+    virtual ~TTypeAnnotationVisitor() = default;
+
     virtual void Visit(const TUnitExprType& type) = 0;
     virtual void Visit(const TMultiExprType& type) = 0;
-    virtual void Visit(const TTupleExprType& type) = 0; 
-    virtual void Visit(const TStructExprType& type) = 0; 
-    virtual void Visit(const TItemExprType& type) = 0; 
-    virtual void Visit(const TListExprType& type) = 0; 
+    virtual void Visit(const TTupleExprType& type) = 0;
+    virtual void Visit(const TStructExprType& type) = 0;
+    virtual void Visit(const TItemExprType& type) = 0;
+    virtual void Visit(const TListExprType& type) = 0;
     virtual void Visit(const TStreamExprType& type) = 0;
     virtual void Visit(const TFlowExprType& type) = 0;
-    virtual void Visit(const TDataExprType& type) = 0; 
-    virtual void Visit(const TWorldExprType& type) = 0; 
-    virtual void Visit(const TOptionalExprType& type) = 0; 
-    virtual void Visit(const TCallableExprType& type) = 0; 
-    virtual void Visit(const TResourceExprType& type) = 0; 
-    virtual void Visit(const TTypeExprType& type) = 0; 
-    virtual void Visit(const TDictExprType& type) = 0; 
-    virtual void Visit(const TVoidExprType& type) = 0; 
+    virtual void Visit(const TDataExprType& type) = 0;
+    virtual void Visit(const TWorldExprType& type) = 0;
+    virtual void Visit(const TOptionalExprType& type) = 0;
+    virtual void Visit(const TCallableExprType& type) = 0;
+    virtual void Visit(const TResourceExprType& type) = 0;
+    virtual void Visit(const TTypeExprType& type) = 0;
+    virtual void Visit(const TDictExprType& type) = 0;
+    virtual void Visit(const TVoidExprType& type) = 0;
     virtual void Visit(const TNullExprType& type) = 0;
-    virtual void Visit(const TGenericExprType& type) = 0; 
+    virtual void Visit(const TGenericExprType& type) = 0;
     virtual void Visit(const TTaggedExprType& type) = 0;
     virtual void Visit(const TErrorExprType& type) = 0;
     virtual void Visit(const TVariantExprType& type) = 0;
     virtual void Visit(const TEmptyListExprType& type) = 0;
     virtual void Visit(const TEmptyDictExprType& type) = 0;
-}; 
- 
-enum ETypeAnnotationFlags { 
-    TypeNonComposable = 0x01, 
-    TypeNonPersistable = 0x02, 
-    TypeNonComputable = 0x04, 
-    TypeNonInspectable = 0x08, 
+};
+
+enum ETypeAnnotationFlags {
+    TypeNonComposable = 0x01,
+    TypeNonPersistable = 0x02,
+    TypeNonComputable = 0x04,
+    TypeNonInspectable = 0x08,
     TypeNonHashable = 0x10,
     TypeNonEquatable = 0x20,
     TypeNonComparable = 0x40,
@@ -120,8 +120,8 @@ enum ETypeAnnotationFlags {
     TypeHasOptional = 0x100,
     TypeHasManyValues = 0x200,
     TypeHasBareYson = 0x400,
-}; 
- 
+};
+
 const ui64 TypeHashMagic = 0x10000;
 
 inline ui64 StreamHash(const void* buffer, size_t size, ui64 seed) {
@@ -135,27 +135,27 @@ inline ui64 StreamHash(ui64 value, ui64 seed) {
 void ReportError(TExprContext& ctx, const TIssue& issue);
 
 class TTypeAnnotationNode {
-protected: 
+protected:
     TTypeAnnotationNode(ETypeAnnotationKind kind, ui32 flags, ui64 hash)
-        : Kind(kind) 
+        : Kind(kind)
         , Flags(flags)
         , Hash(hash)
-    { 
-    } 
- 
-public: 
+    {
+    }
+
+public:
     virtual ~TTypeAnnotationNode() = default;
 
-    template <typename T> 
-    const T* Cast() const { 
+    template <typename T>
+    const T* Cast() const {
         static_assert(std::is_base_of<TTypeAnnotationNode, T>::value,
                       "Should be derived from TTypeAnnotationNode");
 
         const auto ret = dynamic_cast<const T*>(this);
         YQL_ENSURE(ret, "Cannot cast type " << *this << " to " << ETypeAnnotationKind(T::KindValue));
         return ret;
-    } 
- 
+    }
+
     template <typename T>
     const T* UserCast(TPosition pos, TExprContext& ctx) const {
         static_assert(std::is_base_of<TTypeAnnotationNode, T>::value,
@@ -169,26 +169,26 @@ public:
         return ret;
     }
 
-    ETypeAnnotationKind GetKind() const { 
-        return Kind; 
-    } 
- 
-    bool IsComposable() const { 
-        return (GetFlags() & TypeNonComposable) == 0; 
-    } 
- 
-    bool IsPersistable() const { 
-        return (GetFlags() & TypeNonPersistable) == 0; 
-    } 
- 
-    bool IsComputable() const { 
-        return (GetFlags() & TypeNonComputable) == 0; 
-    } 
- 
-    bool IsInspectable() const { 
-        return (GetFlags() & TypeNonInspectable) == 0; 
-    } 
- 
+    ETypeAnnotationKind GetKind() const {
+        return Kind;
+    }
+
+    bool IsComposable() const {
+        return (GetFlags() & TypeNonComposable) == 0;
+    }
+
+    bool IsPersistable() const {
+        return (GetFlags() & TypeNonPersistable) == 0;
+    }
+
+    bool IsComputable() const {
+        return (GetFlags() & TypeNonComputable) == 0;
+    }
+
+    bool IsInspectable() const {
+        return (GetFlags() & TypeNonInspectable) == 0;
+    }
+
     bool IsHashable() const {
         return IsPersistable() && (GetFlags() & TypeNonHashable) == 0;
     }
@@ -229,24 +229,24 @@ public:
     ui32 GetFlags() const {
         return Flags;
     }
- 
+
     ui64 GetHash() const {
         return Hash;
     }
 
-    bool Equals(const TTypeAnnotationNode& node) const; 
-    void Accept(TTypeAnnotationVisitor& visitor) const; 
- 
+    bool Equals(const TTypeAnnotationNode& node) const;
+    void Accept(TTypeAnnotationVisitor& visitor) const;
+
     void Out(IOutputStream& out) const {
-        out << FormatType(this); 
-    } 
- 
+        out << FormatType(this);
+    }
+
     struct THash {
         size_t operator()(const TTypeAnnotationNode* node) const {
             return node->GetHash();
         }
     };
- 
+
     struct TEqual {
         bool operator()(const TTypeAnnotationNode* one, const TTypeAnnotationNode* two) const {
             return one->Equals(*two);
@@ -266,12 +266,12 @@ protected:
         return flags;
     }
 
-private: 
-    const ETypeAnnotationKind Kind; 
+private:
+    const ETypeAnnotationKind Kind;
     const ui32 Flags;
     const ui64 Hash;
-}; 
- 
+};
+
 class TUnitExprType : public TTypeAnnotationNode {
 public:
     static constexpr ETypeAnnotationKind KindValue = ETypeAnnotationKind::Unit;
@@ -281,25 +281,25 @@ public:
             TypeNonComputable | TypeNonPersistable, hash)
     {
     }
- 
+
     static ui64 MakeHash() {
         return TypeHashMagic | (ui64)ETypeAnnotationKind::Unit;
-    } 
- 
+    }
+
     bool operator==(const TUnitExprType& other) const {
         Y_UNUSED(other);
-        return true; 
-    } 
-}; 
- 
-class TTupleExprType : public TTypeAnnotationNode { 
-public: 
+        return true;
+    }
+};
+
+class TTupleExprType : public TTypeAnnotationNode {
+public:
     static constexpr ETypeAnnotationKind KindValue = ETypeAnnotationKind::Tuple;
 
     TTupleExprType(ui64 hash, const TTypeAnnotationNode::TListType& items)
         : TTypeAnnotationNode(KindValue, CombineFlags(items), hash)
-        , Items(items) 
-    { 
+        , Items(items)
+    {
     }
 
     static ui64 MakeHash(const TTypeAnnotationNode::TListType& items) {
@@ -307,40 +307,40 @@ public:
         hash = StreamHash(items.size(), hash);
         for (const auto& item : items) {
             hash = StreamHash(item->GetHash(), hash);
-        } 
+        }
 
         return hash;
-    } 
- 
-    size_t GetSize() const { 
-        return Items.size(); 
-    } 
- 
+    }
+
+    size_t GetSize() const {
+        return Items.size();
+    }
+
     const TTypeAnnotationNode::TListType& GetItems() const {
-        return Items; 
-    } 
- 
-    bool operator==(const TTupleExprType& other) const { 
-        if (GetSize() != other.GetSize()) { 
-            return false; 
-        } 
- 
-        for (ui32 i = 0, e = GetSize(); i < e; ++i) { 
+        return Items;
+    }
+
+    bool operator==(const TTupleExprType& other) const {
+        if (GetSize() != other.GetSize()) {
+            return false;
+        }
+
+        for (ui32 i = 0, e = GetSize(); i < e; ++i) {
             if (GetItems()[i] != other.GetItems()[i]) {
-                return false; 
-            } 
-        } 
- 
-        return true; 
-    } 
- 
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     bool Validate(TPosition position, TExprContext& ctx) const;
     bool Validate(TPositionHandle position, TExprContext& ctx) const;
 
-private: 
+private:
     TTypeAnnotationNode::TListType Items;
-}; 
- 
+};
+
 class TMultiExprType : public TTypeAnnotationNode {
 public:
     static constexpr ETypeAnnotationKind KindValue = ETypeAnnotationKind::Multi;
@@ -396,17 +396,17 @@ struct TExprContext;
 bool ValidateName(TPosition position, TStringBuf name, TStringBuf descr, TExprContext& ctx);
 bool ValidateName(TPositionHandle position, TStringBuf name, TStringBuf descr, TExprContext& ctx);
 
-class TItemExprType : public TTypeAnnotationNode { 
-public: 
+class TItemExprType : public TTypeAnnotationNode {
+public:
     static constexpr ETypeAnnotationKind KindValue = ETypeAnnotationKind::Item;
 
     TItemExprType(ui64 hash, const TStringBuf& name, const TTypeAnnotationNode* itemType)
         : TTypeAnnotationNode(KindValue, itemType->GetFlags(), hash)
-        , Name(name) 
-        , ItemType(itemType) 
-    { 
-    } 
- 
+        , Name(name)
+        , ItemType(itemType)
+    {
+    }
+
     static ui64 MakeHash(const TStringBuf& name, const TTypeAnnotationNode* itemType) {
         ui64 hash = TypeHashMagic | (ui64)ETypeAnnotationKind::Item;
         hash = StreamHash(name.size(), hash);
@@ -414,48 +414,48 @@ public:
         return StreamHash(itemType->GetHash(), hash);
     }
 
-    bool Validate(TPosition position, TExprContext& ctx) const; 
+    bool Validate(TPosition position, TExprContext& ctx) const;
     bool Validate(TPositionHandle position, TExprContext& ctx) const;
- 
+
     const TStringBuf& GetName() const {
-        return Name; 
-    } 
- 
-    const TTypeAnnotationNode* GetItemType() const { 
-        return ItemType; 
-    } 
- 
-    bool operator==(const TItemExprType& other) const { 
+        return Name;
+    }
+
+    const TTypeAnnotationNode* GetItemType() const {
+        return ItemType;
+    }
+
+    bool operator==(const TItemExprType& other) const {
         return GetName() == other.GetName() && GetItemType() == other.GetItemType();
-    } 
- 
-private: 
+    }
+
+private:
     const TStringBuf Name;
     const TTypeAnnotationNode* ItemType;
-}; 
- 
-class TStructExprType : public TTypeAnnotationNode { 
-public: 
+};
+
+class TStructExprType : public TTypeAnnotationNode {
+public:
     static constexpr ETypeAnnotationKind KindValue = ETypeAnnotationKind::Struct;
 
-    struct TItemLess { 
-        bool operator()(const TItemExprType* x, const TItemExprType* y) const { 
-            return x->GetName() < y->GetName(); 
-        }; 
- 
+    struct TItemLess {
+        bool operator()(const TItemExprType* x, const TItemExprType* y) const {
+            return x->GetName() < y->GetName();
+        };
+
         bool operator()(const TItemExprType* x, const TStringBuf& y) const {
-            return x->GetName() < y; 
-        }; 
- 
+            return x->GetName() < y;
+        };
+
         bool operator()(const TStringBuf& x, const TItemExprType* y) const {
-            return x < y->GetName(); 
-        }; 
-    }; 
- 
+            return x < y->GetName();
+        };
+    };
+
     TStructExprType(ui64 hash, const TVector<const TItemExprType*>& items)
         : TTypeAnnotationNode(KindValue, TypeNonComparable | CombineFlags(items), hash)
-        , Items(items) 
-    { 
+        , Items(items)
+    {
     }
 
     static ui64 MakeHash(const TVector<const TItemExprType*>& items) {
@@ -464,31 +464,31 @@ public:
         hash = StreamHash(items.size(), hash);
         for (const auto& item : items) {
             hash = StreamHash(item->GetHash(), hash);
-        } 
- 
+        }
+
         return hash;
-    } 
- 
-    bool Validate(TPosition position, TExprContext& ctx) const; 
+    }
+
+    bool Validate(TPosition position, TExprContext& ctx) const;
     bool Validate(TPositionHandle position, TExprContext& ctx) const;
- 
-    size_t GetSize() const { 
-        return Items.size(); 
-    } 
- 
+
+    size_t GetSize() const {
+        return Items.size();
+    }
+
     const TVector<const TItemExprType*>& GetItems() const {
-        return Items; 
-    } 
- 
+        return Items;
+    }
+
     TMaybe<ui32> FindItem(const TStringBuf& name) const {
-        auto it = LowerBound(Items.begin(), Items.end(), name, TItemLess()); 
-        if (it == Items.end() || (*it)->GetName() != name) { 
-            return TMaybe<ui32>(); 
-        } 
- 
-        return it - Items.begin(); 
-    } 
- 
+        auto it = LowerBound(Items.begin(), Items.end(), name, TItemLess());
+        if (it == Items.end() || (*it)->GetName() != name) {
+            return TMaybe<ui32>();
+        }
+
+        return it - Items.begin();
+    }
+
     const TTypeAnnotationNode* FindItemType(const TStringBuf& name) const {
         const auto it = LowerBound(Items.begin(), Items.end(), name, TItemLess());
         if (it == Items.end() || (*it)->GetName() != name) {
@@ -507,51 +507,51 @@ public:
         return TMaybe<TStringBuf>();
     }
 
-    bool operator==(const TStructExprType& other) const { 
-        if (GetSize() != other.GetSize()) { 
-            return false; 
-        } 
- 
-        for (ui32 i = 0, e = GetSize(); i < e; ++i) { 
+    bool operator==(const TStructExprType& other) const {
+        if (GetSize() != other.GetSize()) {
+            return false;
+        }
+
+        for (ui32 i = 0, e = GetSize(); i < e; ++i) {
             if (GetItems()[i] != other.GetItems()[i]) {
-                return false; 
-            } 
-        } 
- 
-        return true; 
-    } 
- 
-private: 
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+private:
     TVector<const TItemExprType*> Items;
-}; 
- 
-class TListExprType : public TTypeAnnotationNode { 
-public: 
+};
+
+class TListExprType : public TTypeAnnotationNode {
+public:
     static constexpr ETypeAnnotationKind KindValue = ETypeAnnotationKind::List;
 
     TListExprType(ui64 hash, const TTypeAnnotationNode* itemType)
         : TTypeAnnotationNode(KindValue, itemType->GetFlags(), hash)
-        , ItemType(itemType) 
-    { 
-    } 
- 
+        , ItemType(itemType)
+    {
+    }
+
     static ui64 MakeHash(const TTypeAnnotationNode* itemType) {
         ui64 hash = TypeHashMagic | (ui64)ETypeAnnotationKind::List;
         return StreamHash(itemType->GetHash(), hash);
     }
 
-    const TTypeAnnotationNode* GetItemType() const { 
-        return ItemType; 
-    } 
- 
-    bool operator==(const TListExprType& other) const { 
+    const TTypeAnnotationNode* GetItemType() const {
+        return ItemType;
+    }
+
+    bool operator==(const TListExprType& other) const {
         return GetItemType() == other.GetItemType();
-    } 
- 
-private: 
+    }
+
+private:
     const TTypeAnnotationNode* ItemType;
-}; 
- 
+};
+
 class TStreamExprType : public TTypeAnnotationNode {
 public:
     static constexpr ETypeAnnotationKind KindValue = ETypeAnnotationKind::Stream;
@@ -606,8 +606,8 @@ private:
     const TTypeAnnotationNode* ItemType;
 };
 
-class TDataExprType : public TTypeAnnotationNode { 
-public: 
+class TDataExprType : public TTypeAnnotationNode {
+public:
     static constexpr ETypeAnnotationKind KindValue = ETypeAnnotationKind::Data;
 
     TDataExprType(ui64 hash, EDataSlot slot)
@@ -615,7 +615,7 @@ public:
         , Slot(slot)
     {
     }
- 
+
     static ui32 GetFlags(EDataSlot slot) {
         ui32 ret = TypeHasManyValues;
         auto props = NUdf::GetDataTypeInfo(slot).Features;
@@ -647,20 +647,20 @@ public:
 
     EDataSlot GetSlot() const {
         return Slot;
-    } 
- 
+    }
+
     TStringBuf GetName() const {
         return NUdf::GetDataTypeInfo(Slot).Name;
     }
 
-    bool operator==(const TDataExprType& other) const { 
+    bool operator==(const TDataExprType& other) const {
         return Slot == other.Slot;
-    } 
- 
-private: 
+    }
+
+private:
     EDataSlot Slot;
-}; 
- 
+};
+
 class TDataExprParamsType : public TDataExprType {
 public:
     TDataExprParamsType(ui64 hash, EDataSlot slot, const TStringBuf& one, const TStringBuf& two)
@@ -695,7 +695,7 @@ private:
     const TStringBuf One, Two;
 };
 
-class TWorldExprType : public TTypeAnnotationNode { 
+class TWorldExprType : public TTypeAnnotationNode {
 public:
     static constexpr ETypeAnnotationKind KindValue = ETypeAnnotationKind::World;
 
@@ -704,27 +704,27 @@ public:
             TypeNonComposable | TypeNonComputable | TypeNonPersistable | TypeNonInspectable, hash)
     {
     }
- 
+
     static ui64 MakeHash() {
         return TypeHashMagic | (ui64)ETypeAnnotationKind::World;
-    } 
- 
-    bool operator==(const TWorldExprType& other) const { 
+    }
+
+    bool operator==(const TWorldExprType& other) const {
         Y_UNUSED(other);
-        return true; 
-    } 
-}; 
- 
-class TOptionalExprType : public TTypeAnnotationNode { 
-public: 
+        return true;
+    }
+};
+
+class TOptionalExprType : public TTypeAnnotationNode {
+public:
     static constexpr ETypeAnnotationKind KindValue = ETypeAnnotationKind::Optional;
 
     TOptionalExprType(ui64 hash, const TTypeAnnotationNode* itemType)
         : TTypeAnnotationNode(KindValue, GetFlags(itemType), hash)
-        , ItemType(itemType) 
-    { 
-    } 
- 
+        , ItemType(itemType)
+    {
+    }
+
     static ui32 GetFlags(const TTypeAnnotationNode* itemType) {
         auto ret = TypeHasOptional | itemType->GetFlags();
         if (itemType->GetKind() == ETypeAnnotationKind::Data &&
@@ -740,18 +740,18 @@ public:
         return StreamHash(itemType->GetHash(), hash);
     }
 
-    const TTypeAnnotationNode* GetItemType() const { 
-        return ItemType; 
-    } 
- 
-    bool operator==(const TOptionalExprType& other) const { 
+    const TTypeAnnotationNode* GetItemType() const {
+        return ItemType;
+    }
+
+    bool operator==(const TOptionalExprType& other) const {
         return GetItemType() == other.GetItemType();
-    } 
- 
-private: 
+    }
+
+private:
     const TTypeAnnotationNode* ItemType;
-}; 
- 
+};
+
 class TVariantExprType : public TTypeAnnotationNode {
 public:
     static constexpr ETypeAnnotationKind KindValue = ETypeAnnotationKind::Variant;
@@ -784,44 +784,44 @@ private:
     const TTypeAnnotationNode* UnderlyingType;
 };
 
-class TTypeExprType : public TTypeAnnotationNode { 
-public: 
+class TTypeExprType : public TTypeAnnotationNode {
+public:
     static constexpr ETypeAnnotationKind KindValue = ETypeAnnotationKind::Type;
 
     TTypeExprType(ui64 hash, const TTypeAnnotationNode* type)
         : TTypeAnnotationNode(KindValue, TypeNonPersistable | TypeNonComputable, hash)
-        , Type(type) 
+        , Type(type)
     {
     }
- 
+
     static ui64 MakeHash(const TTypeAnnotationNode* type) {
         ui64 hash = TypeHashMagic | (ui64)ETypeAnnotationKind::Type;
         return StreamHash(type->GetHash(), hash);
-    } 
- 
-    const TTypeAnnotationNode* GetType() const { 
-        return Type; 
-    } 
- 
-    bool operator==(const TTypeExprType& other) const { 
+    }
+
+    const TTypeAnnotationNode* GetType() const {
+        return Type;
+    }
+
+    bool operator==(const TTypeExprType& other) const {
         return GetType() == other.GetType();
-    } 
- 
-private: 
+    }
+
+private:
     const TTypeAnnotationNode* Type;
-}; 
- 
-class TDictExprType : public TTypeAnnotationNode { 
-public: 
+};
+
+class TDictExprType : public TTypeAnnotationNode {
+public:
     static constexpr ETypeAnnotationKind KindValue = ETypeAnnotationKind::Dict;
 
     TDictExprType(ui64 hash, const TTypeAnnotationNode* keyType, const TTypeAnnotationNode* payloadType)
         : TTypeAnnotationNode(KindValue, TypeNonComparable | keyType->GetFlags() | payloadType->GetFlags(), hash)
-        , KeyType(keyType) 
-        , PayloadType(payloadType) 
-    { 
-    } 
- 
+        , KeyType(keyType)
+        , PayloadType(payloadType)
+    {
+    }
+
     static ui64 MakeHash(const TTypeAnnotationNode* keyType, const TTypeAnnotationNode* payloadType) {
         ui64 hash = TypeHashMagic | (ui64)ETypeAnnotationKind::Dict;
         return StreamHash(StreamHash(keyType->GetHash(), hash), payloadType->GetHash());
@@ -830,25 +830,25 @@ public:
     bool Validate(TPosition position, TExprContext& ctx) const;
     bool Validate(TPositionHandle position, TExprContext& ctx) const;
 
-    const TTypeAnnotationNode* GetKeyType() const { 
-        return KeyType; 
-    } 
- 
-    const TTypeAnnotationNode* GetPayloadType() const { 
-        return PayloadType; 
-    } 
- 
-    bool operator==(const TDictExprType& other) const { 
+    const TTypeAnnotationNode* GetKeyType() const {
+        return KeyType;
+    }
+
+    const TTypeAnnotationNode* GetPayloadType() const {
+        return PayloadType;
+    }
+
+    bool operator==(const TDictExprType& other) const {
         return GetKeyType() == other.GetKeyType() &&
             GetPayloadType() == other.GetPayloadType();
-    } 
- 
-private: 
+    }
+
+private:
     const TTypeAnnotationNode* KeyType;
     const TTypeAnnotationNode* PayloadType;
-}; 
- 
-class TVoidExprType : public TTypeAnnotationNode { 
+};
+
+class TVoidExprType : public TTypeAnnotationNode {
 public:
     static constexpr ETypeAnnotationKind KindValue = ETypeAnnotationKind::Void;
 
@@ -856,17 +856,17 @@ public:
         : TTypeAnnotationNode(KindValue, 0, hash)
     {
     }
- 
+
     static ui64 MakeHash() {
         return TypeHashMagic | (ui64)ETypeAnnotationKind::Void;
-    } 
- 
-    bool operator==(const TVoidExprType& other) const { 
+    }
+
+    bool operator==(const TVoidExprType& other) const {
         Y_UNUSED(other);
-        return true; 
-    } 
-}; 
- 
+        return true;
+    }
+};
+
 class TNullExprType : public TTypeAnnotationNode {
 public:
     static constexpr ETypeAnnotationKind KindValue = ETypeAnnotationKind::Null;
@@ -892,8 +892,8 @@ struct TArgumentFlags {
     };
 };
 
-class TCallableExprType : public TTypeAnnotationNode { 
-public: 
+class TCallableExprType : public TTypeAnnotationNode {
+public:
     static constexpr ETypeAnnotationKind KindValue = ETypeAnnotationKind::Callable;
 
     struct TArgumentInfo {
@@ -913,19 +913,19 @@ public:
     TCallableExprType(ui64 hash, const TTypeAnnotationNode* returnType, const TVector<TArgumentInfo>& arguments
         , size_t optionalArgumentsCount, const TStringBuf& payload)
         : TTypeAnnotationNode(KindValue, MakeFlags(returnType), hash)
-        , ReturnType(returnType) 
-        , Arguments(arguments) 
-        , OptionalArgumentsCount(optionalArgumentsCount) 
+        , ReturnType(returnType)
+        , Arguments(arguments)
+        , OptionalArgumentsCount(optionalArgumentsCount)
         , Payload(payload)
-    { 
+    {
         for (ui32 i = 0; i < Arguments.size(); ++i) {
             const auto& arg = Arguments[i];
             if (!arg.Name.empty()) {
                 IndexByName.insert({ arg.Name, i });
             }
-        } 
+        }
     }
- 
+
     static ui64 MakeHash(const TTypeAnnotationNode* returnType, const TVector<TArgumentInfo>& arguments
         , size_t optionalArgumentsCount, const TStringBuf& payload) {
         ui64 hash = TypeHashMagic | (ui64)ETypeAnnotationKind::Callable;
@@ -942,50 +942,50 @@ public:
         hash = StreamHash(payload.size(), hash);
         hash = StreamHash(payload.data(), payload.size(), hash);
         return hash;
-    } 
- 
-    const TTypeAnnotationNode* GetReturnType() const { 
-        return ReturnType; 
-    } 
- 
-    size_t GetOptionalArgumentsCount() const { 
-        return OptionalArgumentsCount; 
-    } 
- 
+    }
+
+    const TTypeAnnotationNode* GetReturnType() const {
+        return ReturnType;
+    }
+
+    size_t GetOptionalArgumentsCount() const {
+        return OptionalArgumentsCount;
+    }
+
     const TStringBuf& GetPayload() const {
         return Payload;
     }
 
-    size_t GetArgumentsSize() const { 
-        return Arguments.size(); 
-    } 
- 
+    size_t GetArgumentsSize() const {
+        return Arguments.size();
+    }
+
     const TVector<TArgumentInfo>& GetArguments() const {
-        return Arguments; 
-    } 
- 
-    bool operator==(const TCallableExprType& other) const { 
-        if (GetArgumentsSize() != other.GetArgumentsSize()) { 
-            return false; 
-        } 
- 
-        if (GetOptionalArgumentsCount() != other.GetOptionalArgumentsCount()) { 
-            return false; 
-        } 
- 
+        return Arguments;
+    }
+
+    bool operator==(const TCallableExprType& other) const {
+        if (GetArgumentsSize() != other.GetArgumentsSize()) {
+            return false;
+        }
+
+        if (GetOptionalArgumentsCount() != other.GetOptionalArgumentsCount()) {
+            return false;
+        }
+
         if (GetReturnType() != other.GetReturnType()) {
-            return false; 
-        } 
- 
-        for (ui32 i = 0, e = GetArgumentsSize(); i < e; ++i) { 
+            return false;
+        }
+
+        for (ui32 i = 0, e = GetArgumentsSize(); i < e; ++i) {
             if (GetArguments()[i] != other.GetArguments()[i]) {
-                return false; 
-            } 
-        } 
- 
-        return true; 
-    } 
- 
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     bool Validate(TPosition position, TExprContext& ctx) const;
     bool Validate(TPositionHandle position, TExprContext& ctx) const;
 
@@ -998,7 +998,7 @@ public:
         return it->second;
     }
 
-private: 
+private:
     static ui32 MakeFlags(const TTypeAnnotationNode* returnType) {
         ui32 flags = TypeNonPersistable;
         flags |= returnType->GetFlags();
@@ -1008,12 +1008,12 @@ private:
 private:
     const TTypeAnnotationNode* ReturnType;
     TVector<TArgumentInfo> Arguments;
-    const size_t OptionalArgumentsCount; 
+    const size_t OptionalArgumentsCount;
     const TStringBuf Payload;
     THashMap<TStringBuf, ui32> IndexByName;
-}; 
- 
-class TGenericExprType : public TTypeAnnotationNode { 
+};
+
+class TGenericExprType : public TTypeAnnotationNode {
 public:
     static constexpr ETypeAnnotationKind KindValue = ETypeAnnotationKind::Generic;
 
@@ -1021,26 +1021,26 @@ public:
         : TTypeAnnotationNode(KindValue, TypeNonComputable, hash)
     {
     }
- 
+
     static ui64 MakeHash() {
         return TypeHashMagic | (ui64)ETypeAnnotationKind::Generic;
-    } 
- 
-    bool operator==(const TGenericExprType& other) const { 
+    }
+
+    bool operator==(const TGenericExprType& other) const {
         Y_UNUSED(other);
-        return true; 
-    } 
-}; 
- 
-class TResourceExprType : public TTypeAnnotationNode { 
-public: 
+        return true;
+    }
+};
+
+class TResourceExprType : public TTypeAnnotationNode {
+public:
     static constexpr ETypeAnnotationKind KindValue = ETypeAnnotationKind::Resource;
 
     TResourceExprType(ui64 hash, const TStringBuf& tag)
         : TTypeAnnotationNode(KindValue, TypeNonPersistable | TypeHasManyValues, hash)
         , Tag(tag)
-    {} 
- 
+    {}
+
     static ui64 MakeHash(const TStringBuf& tag) {
         ui64 hash = TypeHashMagic | (ui64)ETypeAnnotationKind::Resource;
         hash = StreamHash(tag.size(), hash);
@@ -1051,14 +1051,14 @@ public:
         return Tag;
     }
 
-    bool operator==(const TResourceExprType& other) const { 
+    bool operator==(const TResourceExprType& other) const {
         return Tag == other.Tag;
-    } 
- 
+    }
+
 private:
     const TStringBuf Tag;
-}; 
- 
+};
+
 class TTaggedExprType : public TTypeAnnotationNode {
 public:
     static constexpr ETypeAnnotationKind KindValue = ETypeAnnotationKind::Tagged;
@@ -1159,7 +1159,7 @@ public:
     }
 };
 
-inline bool TTypeAnnotationNode::Equals(const TTypeAnnotationNode& node) const { 
+inline bool TTypeAnnotationNode::Equals(const TTypeAnnotationNode& node) const {
     if (this == &node) {
         return true;
     }
@@ -1168,56 +1168,56 @@ inline bool TTypeAnnotationNode::Equals(const TTypeAnnotationNode& node) const {
         return false;
     }
 
-    if (Kind != node.GetKind()) { 
-        return false; 
-    } 
- 
-    switch (Kind) { 
+    if (Kind != node.GetKind()) {
+        return false;
+    }
+
+    switch (Kind) {
     case ETypeAnnotationKind::Unit:
         return static_cast<const TUnitExprType&>(*this) == static_cast<const TUnitExprType&>(node);
- 
-    case ETypeAnnotationKind::Tuple: 
-        return static_cast<const TTupleExprType&>(*this) == static_cast<const TTupleExprType&>(node); 
- 
-    case ETypeAnnotationKind::Struct: 
-        return static_cast<const TStructExprType&>(*this) == static_cast<const TStructExprType&>(node); 
- 
-    case ETypeAnnotationKind::Item: 
-        return static_cast<const TItemExprType&>(*this) == static_cast<const TItemExprType&>(node); 
- 
-    case ETypeAnnotationKind::List: 
-        return static_cast<const TListExprType&>(*this) == static_cast<const TListExprType&>(node); 
- 
-    case ETypeAnnotationKind::Data: 
-        return static_cast<const TDataExprType&>(*this) == static_cast<const TDataExprType&>(node); 
- 
-    case ETypeAnnotationKind::World: 
-        return static_cast<const TWorldExprType&>(*this) == static_cast<const TWorldExprType&>(node); 
- 
-    case ETypeAnnotationKind::Optional: 
-        return static_cast<const TOptionalExprType&>(*this) == static_cast<const TOptionalExprType&>(node); 
- 
-    case ETypeAnnotationKind::Type: 
-        return static_cast<const TTypeExprType&>(*this) == static_cast<const TTypeExprType&>(node); 
- 
-    case ETypeAnnotationKind::Dict: 
-        return static_cast<const TDictExprType&>(*this) == static_cast<const TDictExprType&>(node); 
- 
-    case ETypeAnnotationKind::Void: 
-        return static_cast<const TVoidExprType&>(*this) == static_cast<const TVoidExprType&>(node); 
- 
+
+    case ETypeAnnotationKind::Tuple:
+        return static_cast<const TTupleExprType&>(*this) == static_cast<const TTupleExprType&>(node);
+
+    case ETypeAnnotationKind::Struct:
+        return static_cast<const TStructExprType&>(*this) == static_cast<const TStructExprType&>(node);
+
+    case ETypeAnnotationKind::Item:
+        return static_cast<const TItemExprType&>(*this) == static_cast<const TItemExprType&>(node);
+
+    case ETypeAnnotationKind::List:
+        return static_cast<const TListExprType&>(*this) == static_cast<const TListExprType&>(node);
+
+    case ETypeAnnotationKind::Data:
+        return static_cast<const TDataExprType&>(*this) == static_cast<const TDataExprType&>(node);
+
+    case ETypeAnnotationKind::World:
+        return static_cast<const TWorldExprType&>(*this) == static_cast<const TWorldExprType&>(node);
+
+    case ETypeAnnotationKind::Optional:
+        return static_cast<const TOptionalExprType&>(*this) == static_cast<const TOptionalExprType&>(node);
+
+    case ETypeAnnotationKind::Type:
+        return static_cast<const TTypeExprType&>(*this) == static_cast<const TTypeExprType&>(node);
+
+    case ETypeAnnotationKind::Dict:
+        return static_cast<const TDictExprType&>(*this) == static_cast<const TDictExprType&>(node);
+
+    case ETypeAnnotationKind::Void:
+        return static_cast<const TVoidExprType&>(*this) == static_cast<const TVoidExprType&>(node);
+
     case ETypeAnnotationKind::Null:
         return static_cast<const TNullExprType&>(*this) == static_cast<const TNullExprType&>(node);
 
-    case ETypeAnnotationKind::Callable: 
-        return static_cast<const TCallableExprType&>(*this) == static_cast<const TCallableExprType&>(node); 
- 
+    case ETypeAnnotationKind::Callable:
+        return static_cast<const TCallableExprType&>(*this) == static_cast<const TCallableExprType&>(node);
+
     case ETypeAnnotationKind::Generic:
-        return static_cast<const TGenericExprType&>(*this) == static_cast<const TGenericExprType&>(node); 
- 
-    case ETypeAnnotationKind::Resource: 
-        return static_cast<const TResourceExprType&>(*this) == static_cast<const TResourceExprType&>(node); 
- 
+        return static_cast<const TGenericExprType&>(*this) == static_cast<const TGenericExprType&>(node);
+
+    case ETypeAnnotationKind::Resource:
+        return static_cast<const TResourceExprType&>(*this) == static_cast<const TResourceExprType&>(node);
+
     case ETypeAnnotationKind::Tagged:
         return static_cast<const TTaggedExprType&>(*this) == static_cast<const TTaggedExprType&>(node);
 
@@ -1245,41 +1245,41 @@ inline bool TTypeAnnotationNode::Equals(const TTypeAnnotationNode& node) const {
     case ETypeAnnotationKind::LastType:
         YQL_ENSURE(false, "Incorrect type");
 
-    } 
+    }
     return false;
-} 
- 
-inline void TTypeAnnotationNode::Accept(TTypeAnnotationVisitor& visitor) const { 
-    switch (Kind) { 
+}
+
+inline void TTypeAnnotationNode::Accept(TTypeAnnotationVisitor& visitor) const {
+    switch (Kind) {
     case ETypeAnnotationKind::Unit:
         return visitor.Visit(static_cast<const TUnitExprType&>(*this));
-    case ETypeAnnotationKind::Tuple: 
+    case ETypeAnnotationKind::Tuple:
         return visitor.Visit(static_cast<const TTupleExprType&>(*this));
-    case ETypeAnnotationKind::Struct: 
+    case ETypeAnnotationKind::Struct:
         return visitor.Visit(static_cast<const TStructExprType&>(*this));
-    case ETypeAnnotationKind::Item: 
+    case ETypeAnnotationKind::Item:
         return visitor.Visit(static_cast<const TItemExprType&>(*this));
-    case ETypeAnnotationKind::List: 
+    case ETypeAnnotationKind::List:
         return visitor.Visit(static_cast<const TListExprType&>(*this));
-    case ETypeAnnotationKind::Data: 
+    case ETypeAnnotationKind::Data:
         return visitor.Visit(static_cast<const TDataExprType&>(*this));
-    case ETypeAnnotationKind::World: 
+    case ETypeAnnotationKind::World:
         return visitor.Visit(static_cast<const TWorldExprType&>(*this));
-    case ETypeAnnotationKind::Optional: 
+    case ETypeAnnotationKind::Optional:
         return visitor.Visit(static_cast<const TOptionalExprType&>(*this));
-    case ETypeAnnotationKind::Type: 
+    case ETypeAnnotationKind::Type:
         return visitor.Visit(static_cast<const TTypeExprType&>(*this));
-    case ETypeAnnotationKind::Dict: 
+    case ETypeAnnotationKind::Dict:
         return visitor.Visit(static_cast<const TDictExprType&>(*this));
-    case ETypeAnnotationKind::Void: 
+    case ETypeAnnotationKind::Void:
         return visitor.Visit(static_cast<const TVoidExprType&>(*this));
     case ETypeAnnotationKind::Null:
         return visitor.Visit(static_cast<const TNullExprType&>(*this));
-    case ETypeAnnotationKind::Callable: 
+    case ETypeAnnotationKind::Callable:
         return visitor.Visit(static_cast<const TCallableExprType&>(*this));
     case ETypeAnnotationKind::Generic:
         return visitor.Visit(static_cast<const TGenericExprType&>(*this));
-    case ETypeAnnotationKind::Resource: 
+    case ETypeAnnotationKind::Resource:
         return visitor.Visit(static_cast<const TResourceExprType&>(*this));
     case ETypeAnnotationKind::Tagged:
         return visitor.Visit(static_cast<const TTaggedExprType&>(*this));
@@ -1299,9 +1299,9 @@ inline void TTypeAnnotationNode::Accept(TTypeAnnotationVisitor& visitor) const {
         return visitor.Visit(static_cast<const TMultiExprType&>(*this));
     case ETypeAnnotationKind::LastType:
         YQL_ENSURE(false, "Incorrect type");
-    } 
-} 
- 
+    }
+}
+
 class TExprNode {
     friend class TExprNodeBuilder;
     friend class TExprNodeReplaceBuilder;
@@ -1317,7 +1317,7 @@ private:
         static constexpr ui32 FlagsMask = 0x03; // all flags should fit here
     };
 
-public: 
+public:
     typedef TIntrusivePtr<TExprNode> TPtr;
     typedef std::vector<TPtr> TListType;
     typedef TArrayRef<const TPtr> TChildrenType;
@@ -1328,26 +1328,26 @@ public:
         }
     };
 
-#define YQL_EXPR_NODE_TYPE_MAP(xx) \ 
-    xx(List, 0) \ 
-    xx(Atom, 1) \ 
-    xx(Callable, 2) \ 
-    xx(Lambda, 3) \ 
-    xx(Argument, 4) \ 
-    xx(Arguments, 5) \ 
-    xx(World, 7) 
- 
+#define YQL_EXPR_NODE_TYPE_MAP(xx) \
+    xx(List, 0) \
+    xx(Atom, 1) \
+    xx(Callable, 2) \
+    xx(Lambda, 3) \
+    xx(Argument, 4) \
+    xx(Arguments, 5) \
+    xx(World, 7)
+
     enum EType : ui8 {
-        YQL_EXPR_NODE_TYPE_MAP(ENUM_VALUE_GEN) 
-    }; 
- 
+        YQL_EXPR_NODE_TYPE_MAP(ENUM_VALUE_GEN)
+    };
+
     static constexpr ui32 TypeMask = 0x07; // all types should fit here
 
-#define YQL_EXPR_NODE_STATE_MAP(xx) \ 
-    xx(Initial, 0) \ 
-    xx(TypeInProgress, 1) \ 
-    xx(TypePending, 2) \ 
-    xx(TypeComplete, 3) \ 
+#define YQL_EXPR_NODE_STATE_MAP(xx) \
+    xx(Initial, 0) \
+    xx(TypeInProgress, 1) \
+    xx(TypePending, 2) \
+    xx(TypeComplete, 3) \
     xx(ConstrInProgress, 4) \
     xx(ConstrPending, 5) \
     xx(ConstrComplete, 6) \
@@ -1357,11 +1357,11 @@ public:
     xx(ExecutionComplete, 10) \
     xx(Error, 11) \
     xx(Last, 12)
- 
+
     enum class EState : ui8 {
-        YQL_EXPR_NODE_STATE_MAP(ENUM_VALUE_GEN) 
-    }; 
- 
+        YQL_EXPR_NODE_STATE_MAP(ENUM_VALUE_GEN)
+    };
+
     static TPtr GetResult(const TPtr& node) {
         return node->Type() == Callable ? node->Result : node;
     }
@@ -1369,24 +1369,24 @@ public:
     const TExprNode& GetResult() const {
         ENSURE_NOT_DELETED
         return Type() == Callable ? *Result : *this;
-    } 
- 
-    bool HasResult() const { 
+    }
+
+    bool HasResult() const {
         ENSURE_NOT_DELETED
         return Type() != Callable || bool(Result);
-    } 
- 
+    }
+
     void SetResult(TPtr&& result) {
         ENSURE_NOT_DELETED
         ENSURE_NOT_FROZEN
         Result = std::move(result);
-    } 
- 
-    bool IsCallable(const TStringBuf& name) const { 
+    }
+
+    bool IsCallable(const TStringBuf& name) const {
         ENSURE_NOT_DELETED
         return Type() == TExprNode::Callable && Content() == name;
-    } 
- 
+    }
+
     bool IsCallable(const std::initializer_list<std::string_view>& names) const {
         ENSURE_NOT_DELETED
         return Type() == TExprNode::Callable && names.end() != std::find(names.begin(), names.end(), Content());
@@ -1413,11 +1413,11 @@ public:
         return Type() == TExprNode::World;
     }
 
-    bool IsAtom(const TStringBuf& content) const { 
+    bool IsAtom(const TStringBuf& content) const {
         ENSURE_NOT_DELETED
         return Type() == TExprNode::Atom && Content() == content;
-    } 
- 
+    }
+
     bool IsList() const {
         ENSURE_NOT_DELETED
         return Type() == TExprNode::List;
@@ -1433,26 +1433,26 @@ public:
         return Type() == TExprNode::Argument;
     }
 
-    bool IsComposable() const { 
+    bool IsComposable() const {
         ENSURE_NOT_DELETED
         return !IsLambda() && TypeAnnotation_->IsComposable();
-    } 
- 
-    bool IsPersistable() const { 
+    }
+
+    bool IsPersistable() const {
         ENSURE_NOT_DELETED
         return !IsLambda() && TypeAnnotation_->IsPersistable();
-    } 
- 
-    bool IsComputable() const { 
+    }
+
+    bool IsComputable() const {
         ENSURE_NOT_DELETED
         return !IsLambda() && TypeAnnotation_->IsComputable();
-    } 
- 
-    bool IsInspectable() const { 
+    }
+
+    bool IsInspectable() const {
         ENSURE_NOT_DELETED
         return !IsLambda() && TypeAnnotation_->IsInspectable();
-    } 
- 
+    }
+
     bool ForDisclosing() const {
         ENSURE_NOT_DELETED
         return Type() == TExprNode::List && ShallBeDisclosed;
@@ -1464,16 +1464,16 @@ public:
         ShallBeDisclosed = true;
     }
 
-    ui32 GetFlagsToCompare() const { 
+    ui32 GetFlagsToCompare() const {
         ENSURE_NOT_DELETED
         ui32 ret = Flags();
-        if ((ret & TNodeFlags::BinaryContent) == 0) { 
-            ret |= TNodeFlags::ArbitraryContent | TNodeFlags::MultilineContent; 
-        } 
- 
-        return ret; 
-    } 
- 
+        if ((ret & TNodeFlags::BinaryContent) == 0) {
+            ret |= TNodeFlags::ArbitraryContent | TNodeFlags::MultilineContent;
+        }
+
+        return ret;
+    }
+
     TString Dump() const;
 
     bool StartsExecution() const {
@@ -1968,8 +1968,8 @@ private:
         ui8 UnordChildren   : 1;
         ui8 ShallBeDisclosed: 1;
     };
-}; 
- 
+};
+
 class TExportTable {
 public:
     using TSymbols = THashMap<TString, TExprNode::TPtr>;
@@ -2025,46 +2025,46 @@ public:
     virtual ~IModuleResolver() = default;
 };
 
-struct TExprStep { 
-    enum ELevel { 
-        ExpandApplyForLambdas, 
+struct TExprStep {
+    enum ELevel {
+        ExpandApplyForLambdas,
         ValidateProviders,
         Configure,
         ExprEval,
         DiscoveryIO,
         Epochs,
         Intents,
-        LoadTablesMetadata, 
+        LoadTablesMetadata,
         RewriteIO,
         Recapture,
         LastLevel
-    }; 
- 
+    };
+
     TExprStep()
-    { 
-    } 
- 
-    void Done(ELevel level) { 
+    {
+    }
+
+    void Done(ELevel level) {
         Steps_.Set(level);
-    } 
- 
+    }
+
     void Reset() {
         Steps_.Reset();
-    } 
- 
+    }
+
     TExprStep& Repeat(ELevel level) {
         Steps_.Reset(level);
         return *this;
     }
 
-    bool IsDone(ELevel level) { 
+    bool IsDone(ELevel level) {
         return Steps_.Test(level);
-    } 
- 
-private: 
+    }
+
+private:
     TEnumBitSet<ELevel, ExpandApplyForLambdas, LastLevel> Steps_;
-}; 
- 
+};
+
 template <typename T>
 struct TMakeTypeImpl;
 
@@ -2213,7 +2213,7 @@ using TSingletonTypeCache = std::tuple<
     const TMultiExprType*
 >;
 
-struct TExprContext : private TNonCopyable { 
+struct TExprContext : private TNonCopyable {
     class TFreezeGuard {
     public:
         TFreezeGuard(const TFreezeGuard&) = delete;
@@ -2250,7 +2250,7 @@ struct TExprContext : private TNonCopyable {
     std::unordered_set<TStringBuf, THash<TStringBuf>> DisabledConstraints;
 
     ui64 NextUniqueId = 0;
-    ui64 NodeAllocationCounter = 0; 
+    ui64 NodeAllocationCounter = 0;
     ui64 NodesAllocationLimit = 3000000;
     ui64 StringsAllocationLimit = 100000000;
     ui64 RepeatTransformLimit = 1000000;
@@ -2260,13 +2260,13 @@ struct TExprContext : private TNonCopyable {
 
     std::unordered_multimap<ui64, TExprNode*> UniqueNodes;
 
-    TExprStep Step; 
- 
+    TExprStep Step;
+
     bool Frozen;
 
     explicit TExprContext(ui64 nextUniqueId = 0ULL);
-    ~TExprContext(); 
- 
+    ~TExprContext();
+
     ui64 AllocateNextUniqueId() {
         ENSURE_NOT_FROZEN_CTX
         const auto ret = ++NextUniqueId;
@@ -2314,7 +2314,7 @@ struct TExprContext : private TNonCopyable {
     TExprNode::TPtr DeepCopyLambda(const TExprNode& node, TExprNode::TPtr&& body = TExprNode::TPtr());
     [[nodiscard]]
     TExprNode::TPtr FuseLambdas(const TExprNode& outer, const TExprNode& inner);
- 
+
     using TCustomDeepCopier = std::function<bool(const TExprNode& node, TExprNode::TListType& newChildren)>;
 
     [[nodiscard]]
@@ -2333,22 +2333,22 @@ struct TExprContext : private TNonCopyable {
         const auto node = TExprNode::NewAtom(AllocateNextUniqueId(), pos, AppendString(content), flags);
         ExprNodes.emplace_back(node.Get());
         return node;
-    } 
- 
+    }
+
     TExprNode::TPtr NewArgument(TPositionHandle pos, const TStringBuf& name) {
-        ++NodeAllocationCounter; 
+        ++NodeAllocationCounter;
         const auto node = TExprNode::NewArgument(AllocateNextUniqueId(), pos, AppendString(name));
         ExprNodes.emplace_back(node.Get());
         return node;
-    } 
- 
+    }
+
     TExprNode::TPtr NewArguments(TPositionHandle pos, TExprNode::TListType&& argNodes) {
         ++NodeAllocationCounter;
         const auto node = TExprNode::NewArguments(AllocateNextUniqueId(), pos, std::move(argNodes));
         ExprNodes.emplace_back(node.Get());
         return node;
-    } 
- 
+    }
+
     TExprNode::TPtr NewLambda(TPositionHandle pos, TExprNode::TListType&& lambda) {
         ++NodeAllocationCounter;
         const auto node = TExprNode::NewLambda(AllocateNextUniqueId(), pos, std::move(lambda));
@@ -2368,8 +2368,8 @@ struct TExprContext : private TNonCopyable {
         const auto node = TExprNode::NewLambda(AllocateNextUniqueId(), pos, std::move(args), std::move(body));
         ExprNodes.emplace_back(node.Get());
         return node;
-    } 
- 
+    }
+
     TExprNode::TPtr NewWorld(TPositionHandle pos) {
         ++NodeAllocationCounter;
         const auto node = TExprNode::NewWorld(AllocateNextUniqueId(), pos);
@@ -2382,15 +2382,15 @@ struct TExprContext : private TNonCopyable {
         const auto node = TExprNode::NewList(AllocateNextUniqueId(), pos, std::move(children));
         ExprNodes.emplace_back(node.Get());
         return node;
-    } 
- 
+    }
+
     TExprNode::TPtr NewCallable(TPositionHandle pos, const TStringBuf& name, TExprNode::TListType&& children) {
         ++NodeAllocationCounter;
         const auto node = TExprNode::NewCallable(AllocateNextUniqueId(), pos, AppendString(name), std::move(children));
         ExprNodes.emplace_back(node.Get());
         return node;
-    } 
- 
+    }
+
     TExprNode::TPtr NewAtom(TPosition pos, const TStringBuf& content, ui32 flags = TNodeFlags::ArbitraryContent) {
         return NewAtom(AppendPosition(pos), content, flags);
     }
@@ -2438,7 +2438,7 @@ struct TExprContext : private TNonCopyable {
     void AddError(const TIssue& error) {
         ENSURE_NOT_FROZEN_CTX
         IssueManager.RaiseIssue(error);
-    } 
+    }
 
     bool AddWarning(const TIssue& warning) {
         ENSURE_NOT_FROZEN_CTX
@@ -2464,8 +2464,8 @@ private:
 
     std::unordered_set<TPositionHandle, TPositionHandleHasher, TPositionHandleEqualPred> PositionSet;
     std::deque<TPosition> Positions;
-}; 
- 
+};
+
 template <typename T, typename... Args>
 inline const T* TExprContext::MakeConstraint(Args&&... args) {
     ENSURE_NOT_FROZEN_CTX
@@ -2497,35 +2497,35 @@ const T* TExprContext::MakeType(Args&&... args) {
     return TMakeTypeImpl<T>::Make(*this, std::forward<Args>(args)...);
 }
 
-struct TExprAnnotationFlags { 
-    enum { 
-        None = 0x00, 
-        Position = 0x01, 
-        Types = 0x02 
-    }; 
-}; 
- 
-/////////////////////////////////////////////////////////////////////////////// 
-// TNodeException 
-/////////////////////////////////////////////////////////////////////////////// 
-class TNodeException: public yexception { 
-public: 
-    TNodeException(); 
-    explicit TNodeException(const TExprNode& node); 
-    explicit TNodeException(const TExprNode* node); 
+struct TExprAnnotationFlags {
+    enum {
+        None = 0x00,
+        Position = 0x01,
+        Types = 0x02
+    };
+};
+
+///////////////////////////////////////////////////////////////////////////////
+// TNodeException
+///////////////////////////////////////////////////////////////////////////////
+class TNodeException: public yexception {
+public:
+    TNodeException();
+    explicit TNodeException(const TExprNode& node);
+    explicit TNodeException(const TExprNode* node);
     explicit TNodeException(const TPositionHandle& pos);
- 
+
     inline const TPositionHandle& Pos() const {
-        return Pos_; 
-    } 
- 
-private: 
+        return Pos_;
+    }
+
+private:
     const TPositionHandle Pos_;
-}; 
- 
+};
+
 bool CompileExpr(TAstNode& astRoot, TExprNode::TPtr& exprRoot, TExprContext& ctx,
     IModuleResolver* resolver, bool hasAnnotations = false, ui32 typeAnnotationIndex = Max<ui32>(), ui16 syntaxVersion = 0);
- 
+
 bool CompileExpr(TAstNode& astRoot, TExprNode::TPtr& exprRoot, TExprContext& ctx,
     IModuleResolver* resolver, ui32 annotationFlags, ui16 syntaxVersion = 0);
 
@@ -2537,10 +2537,10 @@ struct TLibraryCohesion {
 bool CompileExpr(TAstNode& astRoot, TLibraryCohesion& cohesion, TExprContext& ctx, ui16 syntaxVersion = 0);
 
 const TTypeAnnotationNode* CompileTypeAnnotation(const TAstNode& node, TExprContext& ctx);
- 
+
 // validate consistency of arguments and lambdas
 void CheckArguments(const TExprNode& root);
- 
+
 void CheckCounts(const TExprNode& root);
 
 // Compare expression trees and return first diffrent nodes.
@@ -2565,13 +2565,13 @@ TAstParseResult ConvertToAst(const TExprNode& root, TExprContext& ctx, ui32 anno
 
 TExprNode::TListType GetLambdaBody(const TExprNode& lambda);
 
-} // namespace NYql 
- 
-template<> 
-inline void Out<NYql::TTypeAnnotationNode>( 
+} // namespace NYql
+
+template<>
+inline void Out<NYql::TTypeAnnotationNode>(
         IOutputStream &out, const NYql::TTypeAnnotationNode& type)
-{ 
-    type.Out(out); 
-} 
+{
+    type.Out(out);
+}
 
 #include "yql_expr_builder.inl"

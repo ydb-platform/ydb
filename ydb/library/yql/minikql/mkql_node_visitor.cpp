@@ -559,7 +559,7 @@ TRuntimeNode SinglePassVisitCallablesImpl(TRuntimeNode root, TExploringNodeVisit
 {
     auto& nodes = explorer.GetNodes();
 
-    wereChanges = false; 
+    wereChanges = false;
 
     for (TNode* exploredNode : nodes) {
         TNode* node;
@@ -582,7 +582,7 @@ TRuntimeNode SinglePassVisitCallablesImpl(TRuntimeNode root, TExploringNodeVisit
                     if (result.GetNode() != node) {
                         if (InPlace) {
                             callable.SetResult(result, env);
-                            wereChanges = true; 
+                            wereChanges = true;
                         } else {
                             TNode* wrappedResult = TCallable::Create(result, callable.GetType(), env);
                             exploredNode->SetCookie((ui64)wrappedResult);
@@ -603,7 +603,7 @@ TRuntimeNode SinglePassVisitCallablesImpl(TRuntimeNode root, TExploringNodeVisit
         auto newRoot = (TNode*)root.GetNode()->GetCookie();
         if (newRoot) {
             root = TRuntimeNode(newRoot, root.IsImmediate());
-            wereChanges = true; 
+            wereChanges = true;
         }
     }
 

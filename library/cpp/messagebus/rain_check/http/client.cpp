@@ -1,7 +1,7 @@
 #include "client.h"
 
-#include "http_code_extractor.h" 
- 
+#include "http_code_extractor.h"
+
 #include <library/cpp/http/io/stream.h>
 #include <library/cpp/neh/factory.h>
 #include <library/cpp/neh/http_common.h>
@@ -9,7 +9,7 @@
 #include <library/cpp/neh/neh.h>
 
 #include <util/generic/ptr.h>
-#include <util/generic/strbuf.h> 
+#include <util/generic/strbuf.h>
 #include <util/network/socket.h>
 #include <util/stream/str.h>
 
@@ -129,7 +129,7 @@ namespace NRainCheck {
 
         return Response->Data;
     }
- 
+
     void THttpFuture::SetDoneAndSchedule(TAutoPtr<NNeh::TResponse> response) {
         if (!response->IsError()) {
             ErrorCode = THttpFuture::NoError;

@@ -116,31 +116,31 @@ TString TIpv6Address::ToString(bool* ok) const noexcept {
 TString TIpv6Address::ToString(bool PrintScopeId, bool* ok) const noexcept {
     TString result;
     bool isOk = true;
- 
+
     if (Type_ == TIpv6Address::Ipv4) {
-        result.resize(INET_ADDRSTRLEN + 2); 
-        in_addr addr; 
+        result.resize(INET_ADDRSTRLEN + 2);
+        in_addr addr;
         ToInAddr(addr);
-        isOk = inet_ntop(AF_INET, &addr, result.begin(), INET_ADDRSTRLEN); 
+        isOk = inet_ntop(AF_INET, &addr, result.begin(), INET_ADDRSTRLEN);
         result.resize(result.find('\0'));
     } else if (Type_ == TIpv6Address::Ipv6) {
-        result.resize(INET6_ADDRSTRLEN + 2); 
-        in6_addr addr; 
+        result.resize(INET6_ADDRSTRLEN + 2);
+        in6_addr addr;
         ToIn6Addr(addr);
-        isOk = inet_ntop(AF_INET6, &addr, result.begin(), INET6_ADDRSTRLEN); 
+        isOk = inet_ntop(AF_INET6, &addr, result.begin(), INET6_ADDRSTRLEN);
         result.resize(result.find('\0'));
         if (PrintScopeId)
             result += "%" + ::ToString(ScopeId_);
     } else {
         result = "null";
         isOk = true;
-    } 
- 
+    }
+
     if (ok) {
-        *ok = isOk; 
-    } 
- 
-    return result; 
+        *ok = isOk;
+    }
+
+    return result;
 }
 
 void TIpv6Address::ToSockaddrAndSocklen(sockaddr_in& sockAddrIPv4,
@@ -259,9 +259,9 @@ IOutputStream& operator<<(IOutputStream& out, const TIpv6Address& ipv6Address) n
     bool ok;
     const TString& strIp = ipv6Address.ToString(&ok);
     if (!ok) {
-        return out << "Can not convert ip to string"; 
+        return out << "Can not convert ip to string";
     } else {
-        return out << strIp; 
+        return out << strIp;
     }
 }
 

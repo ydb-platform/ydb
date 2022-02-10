@@ -10,12 +10,12 @@
 class TFileListTest: public TTestBase {
     UNIT_TEST_SUITE(TFileListTest);
     UNIT_TEST(TestSimple);
-    UNIT_TEST(TestPrefix); 
+    UNIT_TEST(TestPrefix);
     UNIT_TEST_SUITE_END();
 
 public:
     void TestSimple();
-    void TestPrefix(); 
+    void TestPrefix();
 };
 
 void TFileListTest::TestSimple() {
@@ -30,27 +30,27 @@ void TFileListTest::TestSimple() {
     UNIT_ASSERT_EQUAL(fileList.Next(), nullptr);
 }
 
-void TFileListTest::TestPrefix() { 
-    TTempDir tempDir("nonexistingdir"); 
+void TFileListTest::TestPrefix() {
+    TTempDir tempDir("nonexistingdir");
     TFile((tempDir() + LOCSLASH_S "good_file1").data(), CreateAlways);
     TFile((tempDir() + LOCSLASH_S "good_file2").data(), CreateAlways);
     TFile((tempDir() + LOCSLASH_S "bad_file1").data(), CreateAlways);
     TFile((tempDir() + LOCSLASH_S "bad_file2").data(), CreateAlways);
- 
-    const bool SORT = true; 
-    TFileList fileList; 
-    { 
+
+    const bool SORT = true;
+    TFileList fileList;
+    {
         fileList.Fill(tempDir().data(), "good_file", SORT);
         UNIT_ASSERT_EQUAL(TString(fileList.Next()), "good_file1");
         UNIT_ASSERT_EQUAL(TString(fileList.Next()), "good_file2");
-        UNIT_ASSERT_EQUAL(fileList.Next(), nullptr); 
-    } 
-    { 
+        UNIT_ASSERT_EQUAL(fileList.Next(), nullptr);
+    }
+    {
         fileList.Fill(tempDir().data(), "bad_file", SORT);
         UNIT_ASSERT_EQUAL(TString(fileList.Next()), "bad_file1");
         UNIT_ASSERT_EQUAL(TString(fileList.Next()), "bad_file2");
-        UNIT_ASSERT_EQUAL(fileList.Next(), nullptr); 
-    } 
-} 
- 
+        UNIT_ASSERT_EQUAL(fileList.Next(), nullptr);
+    }
+}
+
 UNIT_TEST_SUITE_REGISTRATION(TFileListTest);

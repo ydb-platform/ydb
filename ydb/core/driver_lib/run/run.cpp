@@ -323,7 +323,7 @@ TKikimrRunner::TKikimrRunner(std::shared_ptr<TModuleFactories> factories)
     , PollerThreads(new NInterconnect::TPollerThreads)
 {
 }
- 
+
 TKikimrRunner::~TKikimrRunner() {
     if (!!ActorSystem) {
         // Stop ActorSystem first, so no one actor can call any grpc stuff.
@@ -1240,7 +1240,7 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
             new NNodeTabletMonitor::TTabletStateClassifier(),
             new NNodeTabletMonitor::TTabletListRenderer()));
     }
- 
+
     if (serviceMask.EnableViewerService) {
         sil->AddServiceInitializer(new TViewerInitializer(runConfig));
     }
@@ -1351,18 +1351,18 @@ void TKikimrRunner::KikimrStart() {
 
     if (!!Monitoring) {
         Monitoring->Start();
-    } 
- 
+    }
+
     if (!!PollerThreads) {
         PollerThreads->Start();
     }
 
-    ThreadSigmask(SIG_BLOCK); 
+    ThreadSigmask(SIG_BLOCK);
     if (ActorSystem) {
         RegisterBaseTagForMemoryProfiling(ActorSystem.Get());
         ActorSystem->Start();
     }
- 
+
     for (auto& server : GRpcServers) {
         if (server.second) {
             server.second->Start();

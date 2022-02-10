@@ -1,5 +1,5 @@
-#include "mkql_compile_service.h" 
- 
+#include "mkql_compile_service.h"
+
 #include <library/cpp/actors/core/actor.h>
 #include <library/cpp/actors/core/executor_thread.h>
 #include <library/cpp/actors/core/hfunc.h>
@@ -10,32 +10,32 @@
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>
- 
+
 #include <util/generic/queue.h>
- 
-namespace NKikimr { 
- 
+
+namespace NKikimr {
+
 TMiniKQLCompileServiceEvents::TEvCompile::TEvCompile(const TString& program)
-    : Program(program) 
+    : Program(program)
 {}
- 
+
 TMiniKQLCompileServiceEvents::TEvCompileStatus::TEvCompileStatus(const TString& pgm, const NYql::TMiniKQLCompileResult& result)
-    : Program(pgm) 
-    , Result(result) 
+    : Program(pgm)
+    , Result(result)
 {}
- 
-// Actor with queue of programs to compile. Creates TMiniKQLCompileActor for each program. 
-class TMiniKQLCompileService : public NActors::TActorBootstrapped<TMiniKQLCompileService> { 
-public: 
-    struct TCompileContext : public TSimpleRefCount<TCompileContext>{ 
-        using TPtr = TIntrusivePtr<TCompileContext>; 
- 
+
+// Actor with queue of programs to compile. Creates TMiniKQLCompileActor for each program.
+class TMiniKQLCompileService : public NActors::TActorBootstrapped<TMiniKQLCompileService> {
+public:
+    struct TCompileContext : public TSimpleRefCount<TCompileContext>{
+        using TPtr = TIntrusivePtr<TCompileContext>;
+
         TCompileContext(const TString& pgm,
             TActorId sender,
             const TAlignedPagePoolCounters& allocPoolCounters,
             const NMiniKQL::IFunctionRegistry* functionRegistry)
-            : Program(pgm) 
-            , ResponseTo(sender) 
+            : Program(pgm)
+            , ResponseTo(sender)
             , Alloc(allocPoolCounters, functionRegistry->SupportsSizedAllocators())
             , TypeEnv(Alloc)
             , Cookie(0)
@@ -43,7 +43,7 @@ public:
         {
             Alloc.Release();
         }
- 
+
         ~TCompileContext()
         {
             Alloc.Acquire();
@@ -52,13 +52,13 @@ public:
         TString Program;
         TActorId ResponseTo;
         NMiniKQL::TScopedAlloc Alloc;
-        NMiniKQL::TTypeEnvironment TypeEnv; 
+        NMiniKQL::TTypeEnvironment TypeEnv;
         ui64 Cookie;
         bool Retried;
         THashMap<TString, ui64> CompileResolveCookies;
         bool ForceRefresh;
-    }; 
- 
+    };
+
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::MINIKQL_COMPILE_SERVICE;
     }
@@ -68,8 +68,8 @@ public:
         , DbSchemeResolver(std::move(dbSchemeResolver))
     {
     }
- 
-    void Bootstrap(const TActorContext& ctx) { 
+
+    void Bootstrap(const TActorContext& ctx) {
 
         Counters = GetServiceCounters(AppData(ctx)->Counters, "compile")->GetSubgroup("subsystem", "cache");
         AllocPoolCounters = TAlignedPagePoolCounters(AppData(ctx)->Counters, "compile");
@@ -85,36 +85,36 @@ public:
         auto cacheConfig = MakeIntrusive<NSchemeCache::TSchemeCacheConfig>(AppData(ctx), Counters);
         SchemeCache = ctx.ExecutorThread.RegisterActor(CreateSchemeBoardSchemeCache(cacheConfig.Get()));
         return NSchCache::CreateDbSchemeResolver(ctx.ExecutorThread.ActorSystem, SchemeCache);
-    } 
- 
-    STFUNC(StateWork) { 
-        switch (ev->GetTypeRewrite()) { 
-            HFunc(TMiniKQLCompileServiceEvents::TEvCompile, Handle); 
-            HFunc(NYql::TMiniKQLCompileActorEvents::TEvCompileResult, Handle); 
+    }
+
+    STFUNC(StateWork) {
+        switch (ev->GetTypeRewrite()) {
+            HFunc(TMiniKQLCompileServiceEvents::TEvCompile, Handle);
+            HFunc(NYql::TMiniKQLCompileActorEvents::TEvCompileResult, Handle);
             cFunc(TEvents::TEvPoison::EventType, PassAway);
-            default: 
+            default:
                 Y_FAIL("");
-        } 
-    } 
- 
-private: 
-    void Handle(TMiniKQLCompileServiceEvents::TEvCompile::TPtr& ev, const TActorContext& ctx) { 
+        }
+    }
+
+private:
+    void Handle(TMiniKQLCompileServiceEvents::TEvCompile::TPtr& ev, const TActorContext& ctx) {
         TMiniKQLCompileServiceEvents::TEvCompile *msg = ev->Get();
         TCompileContext::TPtr c(new TCompileContext(msg->Program, ev->Sender, AllocPoolCounters, AppData(ctx)->FunctionRegistry));
         c->Cookie = ev->Cookie;
         c->CompileResolveCookies = std::move(msg->CompileResolveCookies);
         c->ForceRefresh = msg->ForceRefresh;
-        CompileQueue.push(c); 
-        Compile(ctx); 
-    } 
- 
-    void Handle(NYql::TMiniKQLCompileActorEvents::TEvCompileResult::TPtr& ev, const TActorContext& ctx) { 
+        CompileQueue.push(c);
+        Compile(ctx);
+    }
+
+    void Handle(NYql::TMiniKQLCompileActorEvents::TEvCompileResult::TPtr& ev, const TActorContext& ctx) {
         auto *msg = ev->Get();
-        auto it = Compiling.find(ev->Sender); 
+        auto it = Compiling.find(ev->Sender);
         Y_VERIFY(it != Compiling.end());
 
         TCompileContext::TPtr cptr = it->second;
-        Compiling.erase(it); 
+        Compiling.erase(it);
 
         const bool hasErrors = !msg->Result.Errors.Empty();
         if (!hasErrors || cptr->Retried || cptr->ForceRefresh) {
@@ -134,13 +134,13 @@ private:
             const TActorId actId = ctx.ExecutorThread.RegisterActor(compileActor, TMailboxType::HTSwap, appData->UserPoolId);
             Compiling.insert(TCompilingMap::value_type(actId, c));
         }
-    } 
- 
-    void Compile(const TActorContext& ctx) { 
-        if (IsCompileLimitReached() || CompileQueue.empty()) { 
-            return; 
-        } 
-        auto next = CompileQueue.front(); 
+    }
+
+    void Compile(const TActorContext& ctx) {
+        if (IsCompileLimitReached() || CompileQueue.empty()) {
+            return;
+        }
+        auto next = CompileQueue.front();
         auto* act = NYql::CreateCompileActor(
             next->Program,
             &next->TypeEnv,
@@ -150,32 +150,32 @@ private:
             next->ForceRefresh);
         auto *appData = AppData(ctx);
         auto actId = ctx.ExecutorThread.RegisterActor(act, TMailboxType::HTSwap, appData->UserPoolId);
-        Compiling.insert(TCompilingMap::value_type(actId, next)); 
-        CompileQueue.pop(); 
-    } 
- 
-    bool IsCompileLimitReached() const { 
-        return Compiling.size() >= COMPILE_INFLIGHT_LIMIT; 
-    } 
- 
-private: 
-    const size_t COMPILE_INFLIGHT_LIMIT; 
+        Compiling.insert(TCompilingMap::value_type(actId, next));
+        CompileQueue.pop();
+    }
+
+    bool IsCompileLimitReached() const {
+        return Compiling.size() >= COMPILE_INFLIGHT_LIMIT;
+    }
+
+private:
+    const size_t COMPILE_INFLIGHT_LIMIT;
     TQueue<TCompileContext::TPtr> CompileQueue;
     using TCompilingMap = THashMap<TActorId, TCompileContext::TPtr>;
-    TCompilingMap Compiling; 
- 
+    TCompilingMap Compiling;
+
     TIntrusivePtr<NMonitoring::TDynamicCounters> Counters;
     TAlignedPagePoolCounters AllocPoolCounters;
     TActorId SchemeCache;
-    THolder<NYql::IDbSchemeResolver> DbSchemeResolver; 
-}; 
- 
- 
+    THolder<NYql::IDbSchemeResolver> DbSchemeResolver;
+};
+
+
 TActorId MakeMiniKQLCompileServiceID() {
-    const char x[12] = "MKQLCompile"; 
+    const char x[12] = "MKQLCompile";
     return TActorId(0, TStringBuf(x, 12));
-} 
- 
+}
+
 const TActorId& GetMiniKQLCompileServiceID() {
     static TActorId miniKQLCompileServiceID = MakeMiniKQLCompileServiceID();
     return miniKQLCompileServiceID;
@@ -184,10 +184,10 @@ const TActorId& GetMiniKQLCompileServiceID() {
 IActor* CreateMiniKQLCompileService(size_t compileInflightLimit) {
     THolder<NYql::IDbSchemeResolver> resolver;
     return new TMiniKQLCompileService(compileInflightLimit, std::move(resolver));
-} 
- 
+}
+
 IActor* CreateMiniKQLCompileService(size_t compileInflightLimit, THolder<NYql::IDbSchemeResolver>&& dbSchemeResolver) {
     return new TMiniKQLCompileService(compileInflightLimit, std::move(dbSchemeResolver));
 }
 
-} // namespace NKikimr 
+} // namespace NKikimr

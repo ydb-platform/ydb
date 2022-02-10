@@ -1,14 +1,14 @@
 UNITTEST_FOR(ydb/core/client/minikql_compile)
- 
-OWNER(vvvv) 
- 
+
+OWNER(vvvv)
+
 ALLOCATOR(J)
 
-SRCS( 
+SRCS(
     yql_expr_minikql_compile_ut.cpp
-) 
- 
-PEERDIR( 
+)
+
+PEERDIR(
     library/cpp/testing/unittest
     library/cpp/threading/future
     ydb/core/client/scheme_cache_lib
@@ -17,8 +17,8 @@ PEERDIR(
     ydb/core/testlib
     ydb/library/yql/minikql
     ydb/library/yql/public/udf/service/exception_policy
-) 
- 
+)
+
 YQL_LAST_ABI_VERSION()
 
-END() 
+END()

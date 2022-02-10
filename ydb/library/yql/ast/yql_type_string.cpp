@@ -1,36 +1,36 @@
-#include "yql_type_string.h" 
-#include "yql_expr.h" 
+#include "yql_type_string.h"
+#include "yql_expr.h"
 #include "yql_ast_escaping.h"
- 
+
 #include <library/cpp/containers/stack_vector/stack_vec.h>
- 
-#include <util/string/cast.h> 
-#include <util/generic/map.h> 
-#include <util/generic/utility.h> 
+
+#include <util/string/cast.h>
+#include <util/generic/map.h>
+#include <util/generic/utility.h>
 #include <library/cpp/deprecated/enum_codegen/enum_codegen.h>
- 
- 
+
+
 #define EXPECT_AND_SKIP_TOKEN_IMPL(token, message, result) \
-    do { \ 
+    do { \
         if (Y_LIKELY(Token == token)) { \
             GetNextToken(); \
         } else { \
             AddError(message); \
             return result; \
-        } \ 
-    } while (0); 
- 
+        } \
+    } while (0);
+
 #define EXPECT_AND_SKIP_TOKEN(token, result) \
     EXPECT_AND_SKIP_TOKEN_IMPL(token, "Expected " #token, result)
- 
 
-namespace NYql { 
-namespace { 
- 
+
+namespace NYql {
+namespace {
+
 enum EToken
 {
     TOKEN_EOF = -1,
- 
+
     // type keywords
     TOKEN_TYPE_MIN = -2,
     TOKEN_STRING = -3,
@@ -147,29 +147,29 @@ EToken TokenTypeFromStr(TStringBuf str)
     if (it != map.end()) {
         return it->second;
     }
- 
+
     return TOKEN_IDENTIFIER;
 }
 
 
-////////////////////////////////////////////////////////////////////////////// 
-// TTypeParser 
-////////////////////////////////////////////////////////////////////////////// 
-class TTypeParser 
-{ 
-public: 
-    TTypeParser( 
+//////////////////////////////////////////////////////////////////////////////
+// TTypeParser
+//////////////////////////////////////////////////////////////////////////////
+class TTypeParser
+{
+public:
+    TTypeParser(
             TStringBuf str, TIssues& issues,
-            TPosition position, TMemoryPool& pool) 
-        : Str(str) 
+            TPosition position, TMemoryPool& pool)
+        : Str(str)
         , Issues(issues)
-        , Position(position) 
-        , Index(0) 
-        , Pool(pool) 
+        , Position(position)
+        , Index(0)
+        , Pool(pool)
     {
         GetNextToken();
     }
- 
+
     TAstNode* ParseTopLevelType() {
         TAstNode* type = ParseType();
         if (type) {
@@ -180,12 +180,12 @@ public:
     }
 
 private:
-    TAstNode* ParseType() { 
-        TAstNode* type = nullptr; 
+    TAstNode* ParseType() {
+        TAstNode* type = nullptr;
 
         switch (Token) {
         case '(': return ParseCallableType();
- 
+
         case TOKEN_STRING:
         case TOKEN_BOOL:
         case TOKEN_INT8:
@@ -214,7 +214,7 @@ private:
             type = MakeDataType(Identifier);
             GetNextToken();
             break;
- 
+
         case TOKEN_DECIMAL:
             type = ParseDecimalType();
             break;
@@ -222,7 +222,7 @@ private:
         case TOKEN_LIST:
             type = ParseListType();
             break;
- 
+
         case TOKEN_OPTIONAL:
             type = ParseOptionalType();
             break;
@@ -307,16 +307,16 @@ private:
             }
             return AddError(TString("Unknown type: '") + Identifier + "\'");
         }
- 
+
         if (type) {
             while (Token == '?') {
                 type = MakeOptionalType(type);
                 GetNextToken();
             }
         }
-        return type; 
-    } 
- 
+        return type;
+    }
+
     char LookaheadNonSpaceChar() {
         size_t i = Index;
         while (i < Str.size() && isspace(Str[i])) {
@@ -327,8 +327,8 @@ private:
 
     int GetNextToken() {
         return Token = ReadNextToken();
-    } 
- 
+    }
+
     int ReadNextToken() {
         // skip spaces
         while (!AtEnd() && isspace(Get())) {
@@ -387,38 +387,38 @@ private:
         }
     }
 
-    TAstNode* ParseCallableType() { 
+    TAstNode* ParseCallableType() {
         EXPECT_AND_SKIP_TOKEN('(', nullptr);
- 
-        TSmallVec<TAstNode*> args; 
+
+        TSmallVec<TAstNode*> args;
         args.push_back(nullptr); // CallableType Atom + settings + return type
-        args.push_back(nullptr); 
-        args.push_back(nullptr); 
-        bool optArgsStarted = false; 
+        args.push_back(nullptr);
+        args.push_back(nullptr);
+        bool optArgsStarted = false;
         bool namedArgsStarted = false;
-        ui32 optArgsCount = 0; 
+        ui32 optArgsCount = 0;
         bool lastWasTypeStatement = false;
- 
-        // (1) parse argements 
-        for (;;) { 
+
+        // (1) parse argements
+        for (;;) {
             if (Token == TOKEN_EOF) {
-                if (optArgsStarted) { 
-                    return AddError("Expected ']'"); 
-                } 
-                return AddError("Expected ')'"); 
-            } 
- 
+                if (optArgsStarted) {
+                    return AddError("Expected ']'");
+                }
+                return AddError("Expected ')'");
+            }
+
             if (Token == ']' || Token == ')') {
-                break; 
-            } 
- 
+                break;
+            }
+
             if (lastWasTypeStatement) {
                 EXPECT_AND_SKIP_TOKEN(',', nullptr);
                 lastWasTypeStatement = false;
-            } 
- 
+            }
+
             if (Token == '[') {
-                optArgsStarted = true; 
+                optArgsStarted = true;
                 GetNextToken(); // eat '['
             } else if (Token == ':') {
                 return AddError("Expected non empty argument name");
@@ -453,9 +453,9 @@ private:
                 auto argType = ParseType();
                 if (!argType) {
                     return nullptr;
-                } 
+                }
                 lastWasTypeStatement = true;
- 
+
                 if (optArgsStarted) {
                     if (!argType->IsList() || argType->GetChildrenCount() == 0 ||
                         !argType->GetChild(0)->IsAtom() ||
@@ -469,7 +469,7 @@ private:
                 ui32 argFlags = 0;
                 if (Token == '{') {
                     if (!ParseCallableArgFlags(argFlags)) return nullptr;
-                } 
+                }
 
                 TSmallVec<TAstNode*> argSettings;
                 argSettings.push_back(argType);
@@ -488,24 +488,24 @@ private:
             } else {
                 return AddError("Expected type or argument name");
             }
-        } 
- 
-        if (optArgsStarted) { 
+        }
+
+        if (optArgsStarted) {
             EXPECT_AND_SKIP_TOKEN(']', nullptr);
-        } 
- 
+        }
+
         EXPECT_AND_SKIP_TOKEN(')', nullptr);
- 
-        // (2) expect '->' after arguments 
+
+        // (2) expect '->' after arguments
         EXPECT_AND_SKIP_TOKEN_IMPL(
                 TOKEN_ARROW, "Expected '->' after arguments", nullptr);
- 
-        // (3) parse return type 
-        TAstNode* returnType = ParseType(); 
-        if (!returnType) { 
-            return nullptr; 
-        } 
- 
+
+        // (3) parse return type
+        TAstNode* returnType = ParseType();
+        if (!returnType) {
+            return nullptr;
+        }
+
         // (4) parse payload
         TStringBuf payload;
         if (Token == '{') {
@@ -513,8 +513,8 @@ private:
         }
 
         return MakeCallableType(args, optArgsCount, returnType, payload);
-    } 
- 
+    }
+
     // { Flags: f1 | f2 | f3 }
     bool ParseCallableArgFlags(ui32& argFlags) {
         GetNextToken(); // eat '{'
@@ -577,28 +577,28 @@ private:
         return true;
     }
 
-    TAstNode* ParseCallableTypeWithKeyword() { 
+    TAstNode* ParseCallableTypeWithKeyword() {
         GetNextToken(); // eat keyword
         EXPECT_AND_SKIP_TOKEN('<', nullptr);
- 
-        auto type = ParseCallableType(); 
-        if (!type) return nullptr; 
- 
+
+        auto type = ParseCallableType();
+        if (!type) return nullptr;
+
         EXPECT_AND_SKIP_TOKEN('>', nullptr);
-        return type; 
-    } 
- 
-    TAstNode* ParseListType() { 
+        return type;
+    }
+
+    TAstNode* ParseListType() {
         GetNextToken(); // eat keyword
         EXPECT_AND_SKIP_TOKEN('<', nullptr);
- 
-        auto itemType = ParseType(); 
-        if (!itemType) return nullptr; 
- 
+
+        auto itemType = ParseType();
+        if (!itemType) return nullptr;
+
         EXPECT_AND_SKIP_TOKEN('>', nullptr);
-        return MakeListType(itemType); 
-    } 
- 
+        return MakeListType(itemType);
+    }
+
     TAstNode* ParseStreamType() {
         GetNextToken(); // eat keyword
         EXPECT_AND_SKIP_TOKEN('<', nullptr);
@@ -638,33 +638,33 @@ private:
         return MakeDecimalType(precision, scale);
     }
 
-    TAstNode* ParseOptionalType() { 
+    TAstNode* ParseOptionalType() {
         GetNextToken(); // eat keyword
         EXPECT_AND_SKIP_TOKEN('<', nullptr);
- 
-        auto itemType = ParseType(); 
-        if (!itemType) return nullptr; 
- 
+
+        auto itemType = ParseType();
+        if (!itemType) return nullptr;
+
         EXPECT_AND_SKIP_TOKEN('>', nullptr);
-        return MakeOptionalType(itemType); 
-    } 
- 
-    TAstNode* ParseDictType() { 
+        return MakeOptionalType(itemType);
+    }
+
+    TAstNode* ParseDictType() {
         GetNextToken(); // eat keyword
         EXPECT_AND_SKIP_TOKEN('<', nullptr);
- 
-        auto keyType = ParseType(); 
-        if (!keyType) return nullptr; 
- 
+
+        auto keyType = ParseType();
+        if (!keyType) return nullptr;
+
         EXPECT_AND_SKIP_TOKEN(',', nullptr);
- 
-        auto valueType = ParseType(); 
-        if (!valueType) return nullptr; 
- 
+
+        auto valueType = ParseType();
+        if (!valueType) return nullptr;
+
         EXPECT_AND_SKIP_TOKEN('>', nullptr);
-        return MakeDictType(keyType, valueType); 
-    } 
- 
+        return MakeDictType(keyType, valueType);
+    }
+
     TAstNode* ParseSetType() {
         GetNextToken(); // eat keyword
         EXPECT_AND_SKIP_TOKEN('<', nullptr);
@@ -677,16 +677,16 @@ private:
     }
 
     TAstNode* ParseTupleTypeImpl() {
-        TSmallVec<TAstNode*> items; 
-        items.push_back(nullptr);  // reserve for TupleType 
- 
+        TSmallVec<TAstNode*> items;
+        items.push_back(nullptr);  // reserve for TupleType
+
         if (Token != '>') {
             for (;;) {
                 auto itemType = ParseType();
                 if (!itemType) return nullptr;
- 
+
                 items.push_back(itemType);
- 
+
                 if (Token == '>') {
                     break;
                 } else if (Token == ',') {
@@ -694,12 +694,12 @@ private:
                 } else {
                     return AddError("Expected '>' or ','");
                 }
-            } 
-        } 
+            }
+        }
 
-        return MakeTupleType(items); 
-    } 
- 
+        return MakeTupleType(items);
+    }
+
     TAstNode* ParseTupleType() {
         GetNextToken(); // eat keyword
         EXPECT_AND_SKIP_TOKEN('<', nullptr);
@@ -709,7 +709,7 @@ private:
         }
         return tupleType;
     }
- 
+
     TAstNode* ParseStructTypeImpl() {
         TMap<TString, TAstNode*> members;
         if (Token != '>') {
@@ -722,7 +722,7 @@ private:
                 } else {
                     return AddError("Expected struct member name");
                 }
- 
+
                 if (name.empty()) {
                     return AddError("Empty name is not allowed");
                 } else if (members.contains(name)) {
@@ -731,12 +731,12 @@ private:
 
                 GetNextToken(); // eat member name
                 EXPECT_AND_SKIP_TOKEN(':', nullptr);
- 
+
                 auto type = ParseType();
                 if (!type) return nullptr;
- 
+
                 members.emplace(std::move(name), type);
- 
+
                 if (Token == '>') {
                     break;
                 } else if (Token == ',') {
@@ -744,12 +744,12 @@ private:
                 } else {
                     return AddError("Expected '>' or ','");
                 }
-            } 
-        } 
+            }
+        }
 
         return MakeStructType(members);
     }
- 
+
     TAstNode* ParseStructType() {
         GetNextToken(); // eat keyword
         EXPECT_AND_SKIP_TOKEN('<', nullptr);
@@ -777,8 +777,8 @@ private:
 
         EXPECT_AND_SKIP_TOKEN('>', nullptr);
         return MakeVariantType(underlyingType);
-    } 
- 
+    }
+
     TAstNode* ParseEnumType() {
         GetNextToken(); // eat keyword
         EXPECT_AND_SKIP_TOKEN('<', nullptr);
@@ -817,15 +817,15 @@ private:
         return MakeVariantType(underlyingType);
     }
 
-    TAstNode* MakeCallableType( 
-            TSmallVec<TAstNode*>& args, size_t optionalArgsCount, 
+    TAstNode* MakeCallableType(
+            TSmallVec<TAstNode*>& args, size_t optionalArgsCount,
             TAstNode* returnType, TStringBuf payload)
-    { 
+    {
         args[0] = MakeLiteralAtom(TStringBuf("CallableType"));
         TSmallVec<TAstNode*> mainSettings;
         if (optionalArgsCount || !payload.empty()) {
             mainSettings.push_back(optionalArgsCount
-                ? MakeQuotedAtom(ToString(optionalArgsCount)) 
+                ? MakeQuotedAtom(ToString(optionalArgsCount))
                 : MakeQuotedLiteralAtom(TStringBuf("0")));
         }
 
@@ -839,17 +839,17 @@ private:
         returnSettings.push_back(returnType);
         args[2] = MakeQuote(MakeList(returnSettings.data(), returnSettings.size()));
 
-        return MakeList(args.data(), args.size()); 
-    } 
- 
-    TAstNode* MakeListType(TAstNode* itemType) { 
-        TAstNode* items[] = { 
+        return MakeList(args.data(), args.size());
+    }
+
+    TAstNode* MakeListType(TAstNode* itemType) {
+        TAstNode* items[] = {
             MakeLiteralAtom(TStringBuf("ListType")),
-            itemType, 
-        }; 
+            itemType,
+        };
         return MakeList(items, Y_ARRAY_SIZE(items));
-    } 
- 
+    }
+
     TAstNode* MakeStreamType(TAstNode* itemType) {
         TAstNode* items[] = {
             MakeLiteralAtom(TStringBuf("StreamType")),
@@ -874,35 +874,35 @@ private:
         return MakeList(items, Y_ARRAY_SIZE(items));
     }
 
-    TAstNode* MakeDictType(TAstNode* keyType, TAstNode* valueType) { 
-        TAstNode* items[] = { 
+    TAstNode* MakeDictType(TAstNode* keyType, TAstNode* valueType) {
+        TAstNode* items[] = {
             MakeLiteralAtom(TStringBuf("DictType")),
-            keyType, 
-            valueType, 
-        }; 
+            keyType,
+            valueType,
+        };
         return MakeList(items, Y_ARRAY_SIZE(items));
-    } 
- 
-    TAstNode* MakeTupleType(TSmallVec<TAstNode*>& items) { 
+    }
+
+    TAstNode* MakeTupleType(TSmallVec<TAstNode*>& items) {
         items[0] = MakeLiteralAtom(TStringBuf("TupleType"));
-        return MakeList(items.data(), items.size()); 
-    } 
- 
+        return MakeList(items.data(), items.size());
+    }
+
     TAstNode* MakeStructType(const TMap<TString, TAstNode*>& members) {
-        TSmallVec<TAstNode*> items; 
+        TSmallVec<TAstNode*> items;
         items.push_back(MakeLiteralAtom(TStringBuf("StructType")));
- 
-        for (const auto& member: members) { 
-            TAstNode* memberType[] = { 
-                MakeQuotedAtom(member.first, TNodeFlags::ArbitraryContent), // name 
-                member.second,                // type 
-            }; 
+
+        for (const auto& member: members) {
+            TAstNode* memberType[] = {
+                MakeQuotedAtom(member.first, TNodeFlags::ArbitraryContent), // name
+                member.second,                // type
+            };
             items.push_back(MakeQuote(MakeList(memberType, Y_ARRAY_SIZE(memberType))));
-        } 
- 
-        return MakeList(items.data(), items.size()); 
-    } 
- 
+        }
+
+        return MakeList(items.data(), items.size());
+    }
+
     TAstNode* ParseResourceType() {
         GetNextToken(); // eat keyword
         EXPECT_AND_SKIP_TOKEN('<', nullptr);
@@ -945,13 +945,13 @@ private:
     }
 
     TAstNode* MakeResourceType(TStringBuf tag) {
-        TAstNode* items[] = { 
+        TAstNode* items[] = {
             MakeLiteralAtom(TStringBuf("ResourceType")),
             MakeQuotedAtom(tag),
-        }; 
+        };
         return MakeList(items, Y_ARRAY_SIZE(items));
-    } 
- 
+    }
+
     TAstNode* MakeVoidType() {
         TAstNode* items[] = {
             MakeLiteralAtom(TStringBuf("VoidType"))
@@ -1005,13 +1005,13 @@ private:
     }
 
     TAstNode* MakeDataType(TStringBuf type) {
-        TAstNode* items[] = { 
+        TAstNode* items[] = {
             MakeLiteralAtom(TStringBuf("DataType")),
             MakeQuotedAtom(type),
-        }; 
+        };
         return MakeList(items, Y_ARRAY_SIZE(items));
-    } 
- 
+    }
+
     TAstNode* MakeDecimalType(TStringBuf precision, TStringBuf scale) {
         TAstNode* items[] = {
             MakeLiteralAtom(TStringBuf("DataType")),
@@ -1022,95 +1022,95 @@ private:
         return MakeList(items, Y_ARRAY_SIZE(items));
     }
 
-    TAstNode* MakeOptionalType(TAstNode* type) { 
-        TAstNode* items[] = { 
+    TAstNode* MakeOptionalType(TAstNode* type) {
+        TAstNode* items[] = {
             MakeLiteralAtom(TStringBuf("OptionalType")),
-            type, 
-        }; 
+            type,
+        };
         return MakeList(items, Y_ARRAY_SIZE(items));
-    } 
- 
+    }
+
     TAstNode* MakeAtom(TStringBuf content, ui32 flags = TNodeFlags::Default) {
-        return TAstNode::NewAtom(Position, content, Pool, flags); 
-    } 
- 
+        return TAstNode::NewAtom(Position, content, Pool, flags);
+    }
+
     TAstNode* MakeLiteralAtom(TStringBuf content, ui32 flags = TNodeFlags::Default) {
-        return TAstNode::NewLiteralAtom(Position, content, Pool, flags); 
-    } 
- 
-    TAstNode* MakeQuote(TAstNode* node) { 
-        TAstNode* items[] = { 
-            &TAstNode::QuoteAtom, 
-            node, 
-        }; 
+        return TAstNode::NewLiteralAtom(Position, content, Pool, flags);
+    }
+
+    TAstNode* MakeQuote(TAstNode* node) {
+        TAstNode* items[] = {
+            &TAstNode::QuoteAtom,
+            node,
+        };
         return MakeList(items, Y_ARRAY_SIZE(items));
-    } 
- 
+    }
+
     TAstNode* MakeQuotedAtom(TStringBuf content, ui32 flags = TNodeFlags::Default) {
-        return MakeQuote(MakeAtom(content, flags)); 
-    } 
- 
+        return MakeQuote(MakeAtom(content, flags));
+    }
+
     TAstNode* MakeQuotedLiteralAtom(TStringBuf content, ui32 flags = TNodeFlags::Default) {
-        return MakeQuote(MakeLiteralAtom(content, flags)); 
-    } 
- 
-    TAstNode* MakeList(TAstNode** children, ui32 count) { 
-        return TAstNode::NewList(Position, children, count, Pool); 
-    } 
- 
-    char Get() const { 
-        return Str[Index]; 
-    } 
- 
-    bool AtEnd() const { 
+        return MakeQuote(MakeLiteralAtom(content, flags));
+    }
+
+    TAstNode* MakeList(TAstNode** children, ui32 count) {
+        return TAstNode::NewList(Position, children, count, Pool);
+    }
+
+    char Get() const {
+        return Str[Index];
+    }
+
+    bool AtEnd() const {
         return Index >= Str.size();
-    } 
- 
-    void Move() { 
+    }
+
+    void Move() {
         if (AtEnd()) return;
 
-        ++Index; 
-        ++Position.Column; 
+        ++Index;
+        ++Position.Column;
 
         if (!AtEnd() && Str[Index] == '\n') {
             Position.Row++;
-            Position.Column = 1; 
-        } 
-    } 
- 
+            Position.Column = 1;
+        }
+    }
+
     TAstNode* AddError(const TString& message) {
         Issues.AddIssue(TIssue(TokenBegin, message));
-        return nullptr; 
-    } 
- 
-private: 
-    TStringBuf Str; 
+        return nullptr;
+    }
+
+private:
+    TStringBuf Str;
     TIssues& Issues;
     TPosition TokenBegin, Position;
-    size_t Index; 
+    size_t Index;
     int Token;
     TString UnescapedIdentifier;
     TStringBuf Identifier;
-    TMemoryPool& Pool; 
-}; 
- 
-////////////////////////////////////////////////////////////////////////////// 
-// TTypePrinter 
-////////////////////////////////////////////////////////////////////////////// 
-class TTypePrinter: public TTypeAnnotationVisitor 
-{ 
-public: 
+    TMemoryPool& Pool;
+};
+
+//////////////////////////////////////////////////////////////////////////////
+// TTypePrinter
+//////////////////////////////////////////////////////////////////////////////
+class TTypePrinter: public TTypeAnnotationVisitor
+{
+public:
     TTypePrinter(IOutputStream& out)
-        : Out_(out) 
-    { 
-    } 
- 
-private: 
+        : Out_(out)
+    {
+    }
+
+private:
     void Visit(const TUnitExprType& type) final {
         Y_UNUSED(type);
         Out_ << TStringBuf("Unit");
-    } 
- 
+    }
+
     void Visit(const TMultiExprType& type) final {
         Out_ << TStringBuf("Multi<");
         const auto& items = type.GetItems();
@@ -1125,40 +1125,40 @@ private:
 
     void Visit(const TTupleExprType& type) final {
         Out_ << TStringBuf("Tuple<");
-        const auto& items = type.GetItems(); 
-        for (ui32 i = 0; i < items.size(); ++i) { 
-            if (i) { 
-                Out_ << ','; 
-            } 
-            items[i]->Accept(*this); 
-        } 
-        Out_ << '>'; 
-    } 
- 
+        const auto& items = type.GetItems();
+        for (ui32 i = 0; i < items.size(); ++i) {
+            if (i) {
+                Out_ << ',';
+            }
+            items[i]->Accept(*this);
+        }
+        Out_ << '>';
+    }
+
     void Visit(const TStructExprType& type) final {
         Out_ << TStringBuf("Struct<");
-        const auto& items = type.GetItems(); 
-        for (ui32 i = 0; i < items.size(); ++i) { 
-            if (i) { 
-                Out_ << ','; 
-            } 
-            items[i]->Accept(*this); 
-        } 
-        Out_ << '>'; 
-    } 
- 
+        const auto& items = type.GetItems();
+        for (ui32 i = 0; i < items.size(); ++i) {
+            if (i) {
+                Out_ << ',';
+            }
+            items[i]->Accept(*this);
+        }
+        Out_ << '>';
+    }
+
     void Visit(const TItemExprType& type) final {
         EscapeArbitraryAtom(type.GetName(), '\'', &Out_);
         Out_ << ':';
-        type.GetItemType()->Accept(*this); 
-    } 
- 
+        type.GetItemType()->Accept(*this);
+    }
+
     void Visit(const TListExprType& type) final {
         Out_ << TStringBuf("List<");
-        type.GetItemType()->Accept(*this); 
-        Out_ << '>'; 
-    } 
- 
+        type.GetItemType()->Accept(*this);
+        Out_ << '>';
+    }
+
     void Visit(const TStreamExprType& type) final {
         Out_ << TStringBuf("Stream<");
         type.GetItemType()->Accept(*this);
@@ -1176,39 +1176,39 @@ private:
         if (const auto dataExprParamsType = dynamic_cast<const TDataExprParamsType*>(&type)) {
             Out_ << '(' << dataExprParamsType->GetParamOne() << ',' << dataExprParamsType->GetParamTwo() << ')';
         }
-    } 
- 
+    }
+
     void Visit(const TWorldExprType& type) final {
         Y_UNUSED(type);
         Out_ << TStringBuf("World");
-    } 
- 
+    }
+
     void Visit(const TOptionalExprType& type) final {
-        const TTypeAnnotationNode* itemType = type.GetItemType(); 
-        if (itemType->GetKind() == ETypeAnnotationKind::Callable) { 
+        const TTypeAnnotationNode* itemType = type.GetItemType();
+        if (itemType->GetKind() == ETypeAnnotationKind::Callable) {
             Out_ << TStringBuf("Optional<");
-            itemType->Accept(*this); 
-            Out_ << '>'; 
-        } else { 
-            itemType->Accept(*this); 
-            Out_ << '?'; 
-        } 
-    } 
- 
+            itemType->Accept(*this);
+            Out_ << '>';
+        } else {
+            itemType->Accept(*this);
+            Out_ << '?';
+        }
+    }
+
     void Visit(const TCallableExprType& type) final {
-        const auto& args = type.GetArguments(); 
-        ui32 argsCount = type.GetArgumentsSize(); 
-        ui32 optArgsCount = 
-                Min<ui32>(type.GetOptionalArgumentsCount(), argsCount); 
- 
+        const auto& args = type.GetArguments();
+        ui32 argsCount = type.GetArgumentsSize();
+        ui32 optArgsCount =
+                Min<ui32>(type.GetOptionalArgumentsCount(), argsCount);
+
         Out_ << TStringBuf("Callable<(");
-        for (ui32 i = 0; i < argsCount; ++i) { 
-            if (i) { 
-                Out_ << ','; 
-            } 
-            if (i == argsCount - optArgsCount) { 
-                Out_ << '['; 
-            } 
+        for (ui32 i = 0; i < argsCount; ++i) {
+            if (i) {
+                Out_ << ',';
+            }
+            if (i == argsCount - optArgsCount) {
+                Out_ << '[';
+            }
             const TCallableExprType::TArgumentInfo& argInfo = args[i];
             if (!argInfo.Name.empty()) {
                 EscapeArbitraryAtom(argInfo.Name, '\'', &Out_);
@@ -1222,32 +1222,32 @@ private:
                 }
                 Out_ << '}';
             }
-        } 
- 
-        if (optArgsCount > 0) { 
-            Out_ << ']'; 
-        } 
- 
+        }
+
+        if (optArgsCount > 0) {
+            Out_ << ']';
+        }
+
         Out_ << TStringBuf(")->");
-        type.GetReturnType()->Accept(*this); 
+        type.GetReturnType()->Accept(*this);
         if (!type.GetPayload().empty()) {
             Out_ << TStringBuf("{Payload:") << type.GetPayload() << '}';
         }
-        Out_ << '>'; 
-    } 
- 
+        Out_ << '>';
+    }
+
     void Visit(const TResourceExprType& type) final {
         Out_ << TStringBuf("Resource<");
         EscapeArbitraryAtom(type.GetTag(), '\'', &Out_);
         Out_ << '>';
-    } 
- 
+    }
+
     void Visit(const TTypeExprType& type) final {
         Out_ << TStringBuf("Type<");
-        type.GetType()->Accept(*this); 
-        Out_ << '>'; 
-    } 
- 
+        type.GetType()->Accept(*this);
+        Out_ << '>';
+    }
+
     void Visit(const TDictExprType& type) final {
         if (type.GetPayloadType()->GetKind() == ETypeAnnotationKind::Void) {
             Out_ << TStringBuf("Set<");
@@ -1260,13 +1260,13 @@ private:
             type.GetPayloadType()->Accept(*this);
             Out_ << '>';
        }
-    } 
- 
+    }
+
     void Visit(const TVoidExprType& type) final {
         Y_UNUSED(type);
         Out_ << TStringBuf("Void");
-    } 
- 
+    }
+
     void Visit(const TNullExprType& type) final {
         Y_UNUSED(type);
         Out_ << TStringBuf("Null");
@@ -1285,8 +1285,8 @@ private:
     void Visit(const TGenericExprType& type) final {
         Y_UNUSED(type);
         Out_ << TStringBuf("Generic");
-    } 
- 
+    }
+
     void Visit(const TTaggedExprType& type) final {
         Out_ << TStringBuf("Tagged<");
         type.GetBaseType()->Accept(*this);
@@ -1345,26 +1345,26 @@ private:
         Out_ << '>';
     }
 
-private: 
+private:
     IOutputStream& Out_;
-}; 
- 
-} // namespace 
- 
- 
+};
+
+} // namespace
+
+
 TAstNode* ParseType(TStringBuf str, TMemoryPool& pool, TIssues& issues,
-        TPosition position /* = TPosition(1, 1) */) 
-{ 
+        TPosition position /* = TPosition(1, 1) */)
+{
     TTypeParser parser(str, issues, position, pool);
     return parser.ParseTopLevelType();
-} 
- 
+}
+
 TString FormatType(const TTypeAnnotationNode* typeNode)
-{ 
-    TStringStream ss; 
-    TTypePrinter printer(ss); 
-    typeNode->Accept(printer); 
-    return ss.Str(); 
-} 
- 
-} // namespace NYql 
+{
+    TStringStream ss;
+    TTypePrinter printer(ss);
+    typeNode->Accept(printer);
+    return ss.Str();
+}
+
+} // namespace NYql

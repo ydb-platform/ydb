@@ -1,14 +1,14 @@
-#include "converter.h" 
- 
+#include "converter.h"
+
 #include <ydb/library/mkql_proto/protos/minikql.pb.h>
- 
- 
-namespace NKikimr { 
+
+
+namespace NKikimr {
 namespace NResultLib {
- 
-TStruct ConvertResult(const NKikimrMiniKQL::TValue& value, const NKikimrMiniKQL::TType& type) { 
-    return TStruct(value, type); 
-} 
- 
+
+TStruct ConvertResult(const NKikimrMiniKQL::TValue& value, const NKikimrMiniKQL::TType& type) {
+    return TStruct(value, type);
+}
+
 } // namespace NResultLib
-} // namespace NKikimr 
+} // namespace NKikimr

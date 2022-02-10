@@ -1,19 +1,19 @@
-#include "yql_db_scheme_resolver.h" 
- 
+#include "yql_db_scheme_resolver.h"
+
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/client/minikql_compile/yql_expr_minikql.h>
- 
+
 #include <library/cpp/actors/core/actorsystem.h>
- 
-namespace NKikimr { 
-namespace NSchCache { 
- 
-using namespace NYql; 
-using namespace NThreading; 
- 
-namespace { 
- 
+
+namespace NKikimr {
+namespace NSchCache {
+
+using namespace NYql;
+using namespace NThreading;
+
+namespace {
+
 class TTableProxyActor : public TActorBootstrapped<TTableProxyActor> {
     using TTable = NYql::IDbSchemeResolver::TTable;
     using TTableResult = NYql::IDbSchemeResolver::TTableResult;
@@ -130,22 +130,22 @@ public:
     }
 };
 
-} // anonymous namespace 
- 
-class TDbSchemeResolver : public IDbSchemeResolver { 
-public: 
+} // anonymous namespace
+
+class TDbSchemeResolver : public IDbSchemeResolver {
+public:
     TDbSchemeResolver(TActorSystem *actorSystem)
         : HostActorSystem(actorSystem)
-    { 
-    } 
- 
+    {
+    }
+
     TDbSchemeResolver(TActorSystem *actorSystem, const TActorId &schemeCacheActor)
         : HostActorSystem(actorSystem)
         , SchemeCacheActor(schemeCacheActor)
     {}
- 
+
     virtual ~TDbSchemeResolver() {}
- 
+
     virtual NThreading::TFuture<TTableResults> ResolveTables(const TVector<TTable>& tables) override {
         TTableResults results;
         for (auto& table : tables) {
@@ -162,16 +162,16 @@ public:
         HostActorSystem->Register(proxyActor.Release(), TMailboxType::HTSwap, HostActorSystem->AppData<TAppData>()->UserPoolId);
     }
 
-private: 
+private:
     TActorSystem *HostActorSystem;
     TActorId SchemeCacheActor;
-}; 
- 
+};
+
 NYql::IDbSchemeResolver* CreateDbSchemeResolver(TActorSystem *actorSystem, const TActorId &schemeCacheActor) {
     TAutoPtr<NYql::IDbSchemeResolver> resolver(new TDbSchemeResolver(actorSystem, schemeCacheActor));
-    return resolver.Release(); 
-} 
- 
- 
-} // namespace NSchCache 
-} // namespace NKikimr 
+    return resolver.Release();
+}
+
+
+} // namespace NSchCache
+} // namespace NKikimr

@@ -60,15 +60,15 @@ protected:
     size_t NodeMeasureLeafValue(TNode* thiz) const;
     ui64 NodeSaveLeafValue(TNode* thiz, IOutputStream& os) const;
 
-    virtual ui64 ArcMeasure(const TArc* thiz, size_t leftsize, size_t rightsize) const; 
+    virtual ui64 ArcMeasure(const TArc* thiz, size_t leftsize, size_t rightsize) const;
 
-    virtual ui64 ArcSaveSelf(const TArc* thiz, IOutputStream& os) const; 
+    virtual ui64 ArcSaveSelf(const TArc* thiz, IOutputStream& os) const;
     ui64 ArcSave(const TArc* thiz, IOutputStream& os) const;
     ui64 ArcSaveAndDestroy(const TArc* thiz, IOutputStream& os);
 
 public:
     TCompactTrieBuilderImpl(TCompactTrieBuilderFlags flags, TPacker packer, IAllocator* alloc);
-    virtual ~TCompactTrieBuilderImpl(); 
+    virtual ~TCompactTrieBuilderImpl();
 
     void DestroyNode(TNode* node);
     void NodeReleasePayload(TNode* thiz);

@@ -34,7 +34,7 @@ namespace {
             Exec(id);
         }
     };
-
+ 
     class TFunctionWrapperWithPromise: public NPar::ILocallyExecutable {
     private:
         NPar::TLocallyExecutableFunction Exec;

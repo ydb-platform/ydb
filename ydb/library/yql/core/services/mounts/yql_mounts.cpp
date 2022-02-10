@@ -115,10 +115,10 @@ namespace NYql {
         IModuleResolver::TPtr& moduleResolver,
         const TVector<NUserData::TUserData>& userData,
         const THashMap<TString, TString>& clusterMapping,
-        const THashSet<TString>& sqlFlags, 
+        const THashSet<TString>& sqlFlags,
         bool optimizeLibraries,
         THolder<TExprContext> ownedCtx)
-    { 
+    {
         auto ctx = rawCtx ? rawCtx : ownedCtx.Get();
         Y_ENSURE(ctx);
         TUserDataTable mounts = GetYqlDefaultMounts();
@@ -150,7 +150,7 @@ namespace NYql {
     bool GetYqlDefaultModuleResolver(
         TExprContext& ctx,
         IModuleResolver::TPtr& moduleResolver,
-        const THashMap<TString, TString>& clusterMapping, 
+        const THashMap<TString, TString>& clusterMapping,
         bool optimizeLibraries) {
         return !GetYqlModuleResolverImpl(&ctx, moduleResolver, {}, clusterMapping, {}, optimizeLibraries, nullptr).empty();
     }

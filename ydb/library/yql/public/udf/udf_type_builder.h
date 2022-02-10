@@ -532,17 +532,17 @@ public:
     virtual TType* Decimal(ui8 precision, ui8 scale) const = 0;
 };
 #endif
- 
-#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 16) 
+
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 16)
 class IFunctionTypeInfoBuilder7: public IFunctionTypeInfoBuilder6 {
 public:
     virtual IFunctionTypeInfoBuilder7& IRImplementationImpl(
-        const TStringRef& moduleIR, 
-        const TStringRef& moduleIRUniqId, 
-        const TStringRef& functionName 
-    ) = 0; 
+        const TStringRef& moduleIR,
+        const TStringRef& moduleIRUniqId,
+        const TStringRef& functionName
+    ) = 0;
 };
-#endif 
+#endif
 
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 18)
 class IFunctionTypeInfoBuilder8: public IFunctionTypeInfoBuilder7 {
@@ -871,7 +871,7 @@ struct TTypeBuilderHelper<TTuple<TArgs...>> {
 };
 
 template <typename... TArgs>
-struct TTypeBuilderHelper<NUdf::TVariant<TArgs...>> { 
+struct TTypeBuilderHelper<NUdf::TVariant<TArgs...>> {
     static TType* Build(const IFunctionTypeInfoBuilder& builder) {
         auto tupleBuilder = builder.Tuple(sizeof...(TArgs));
         TTupleHelper<TArgs...>::Add(*tupleBuilder, builder);

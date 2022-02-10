@@ -37,11 +37,11 @@ ids {
   format: "Type annotation"
 }
 ids {
-  code: CORE_POST_TYPE_ANN 
-  severity: S_INFO 
-  format: "Post type annotation" 
-} 
-ids { 
+  code: CORE_POST_TYPE_ANN
+  severity: S_INFO
+  format: "Post type annotation"
+}
+ids {
   code: CORE_INTENT
   severity: S_INFO
   format: "Table intent determination"
@@ -84,18 +84,18 @@ ids {
   severity: S_WARNING
 }
 ids {
-  code: CORE_FREE_KEY_SWITCH 
-  severity: S_WARNING 
-} 
-ids { 
+  code: CORE_FREE_KEY_SWITCH
+  severity: S_WARNING
+}
+ids {
   code: CORE_NON_PERSISTABLE_ENTITY
   severity: S_WARNING
 }
 ids {
-  code: CORE_NON_STREAM_BATCH_UDF 
-  severity: S_WARNING 
-} 
-ids { 
+  code: CORE_NON_STREAM_BATCH_UDF
+  severity: S_WARNING
+}
+ids {
   code: CORE_FLATTEN_BY_OPT
   severity: S_WARNING
 }
@@ -333,14 +333,14 @@ ids {
   severity: S_WARNING
 }
 ids {
-  code: YQL_DEPRECATED_PRAGMA 
-  severity: S_WARNING 
-} 
-ids { 
-  code: YT_TABLE_PATH_RECORD_FOR_TMP 
-  severity: S_WARNING 
-} 
-ids { 
+  code: YQL_DEPRECATED_PRAGMA
+  severity: S_WARNING
+}
+ids {
+  code: YT_TABLE_PATH_RECORD_FOR_TMP
+  severity: S_WARNING
+}
+ids {
   code: YQL_DEPRECATED_DATETIME2
   severity: S_WARNING
 }
@@ -349,22 +349,22 @@ ids {
   severity: S_WARNING
 }
 ids {
-  code: YT_INFER_SCHEMA 
-  severity: S_ERROR 
-} 
-ids { 
-  code: YT_ACCESS_DENIED 
-  severity: S_ERROR 
-} 
-ids { 
-  code: YT_TABLE_NOT_FOUND 
-  severity: S_ERROR 
-} 
-ids { 
-  code: YT_NATIVE_PRAGMA 
-  severity: S_WARNING 
-} 
-ids { 
+  code: YT_INFER_SCHEMA
+  severity: S_ERROR
+}
+ids {
+  code: YT_ACCESS_DENIED
+  severity: S_ERROR
+}
+ids {
+  code: YT_TABLE_NOT_FOUND
+  severity: S_ERROR
+}
+ids {
+  code: YT_NATIVE_PRAGMA
+  severity: S_WARNING
+}
+ids {
   code: YT_VIEW_NOT_FOUND
   severity: S_ERROR
 }
@@ -377,38 +377,38 @@ ids {
   severity: S_ERROR
 }
 ids {
-  code: YT_CONCURRENT_TABLE_MODIF 
-  severity: S_ERROR 
-} 
-ids { 
-  code: YT_LATE_TABLE_XLOCK 
-  severity: S_WARNING 
-} 
-ids { 
-  code: YT_SORT_ORDER_CHANGE 
-  severity: S_WARNING 
-} 
-ids { 
+  code: YT_CONCURRENT_TABLE_MODIF
+  severity: S_ERROR
+}
+ids {
+  code: YT_LATE_TABLE_XLOCK
+  severity: S_WARNING
+}
+ids {
+  code: YT_SORT_ORDER_CHANGE
+  severity: S_WARNING
+}
+ids {
   code: YT_MAX_DATAWEIGHT_PER_JOB_EXCEEDED
   severity: S_ERROR
 }
 ids {
-  code: YT_WARN_TABLE_DOES_NOT_EXIST 
-  severity: S_WARNING 
-} 
-ids { 
-  code: YT_ROWSPEC_HIDES_FIELDS 
-  severity: S_WARNING 
-} 
-ids { 
-  code: YT_ROWSPEC_DIFF_SORT 
-  severity: S_WARNING 
-} 
-ids { 
-  code: YT_NATIVE_DESC_SORT_IGNORED 
-  severity: S_WARNING 
-} 
-ids { 
+  code: YT_WARN_TABLE_DOES_NOT_EXIST
+  severity: S_WARNING
+}
+ids {
+  code: YT_ROWSPEC_HIDES_FIELDS
+  severity: S_WARNING
+}
+ids {
+  code: YT_ROWSPEC_DIFF_SORT
+  severity: S_WARNING
+}
+ids {
+  code: YT_NATIVE_DESC_SORT_IGNORED
+  severity: S_WARNING
+}
+ids {
   code: STAT_DEPRECATED_STRING_TREE
   severity: S_WARNING
 }
@@ -439,10 +439,10 @@ ids {
 ids {
   code: YQL_SOURCE_SELECT_COLUMN_MISMATCH
   severity: S_WARNING
-} 
-ids { 
-  code: YQL_NOT_ALLOWED_IN_DISCOVERY 
-  severity: S_ERROR 
+}
+ids {
+  code: YQL_NOT_ALLOWED_IN_DISCOVERY
+  severity: S_ERROR
 }
 ids {
   code: JSONPATH_PARSE_ERROR

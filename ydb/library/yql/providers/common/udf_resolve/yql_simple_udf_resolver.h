@@ -10,8 +10,8 @@ namespace NYql {
 namespace NCommon {
 
 IUdfResolver::TPtr CreateSimpleUdfResolver(
-    const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry, 
-    const TFileStoragePtr& fileStorage = {}, bool useFakeMD5 = false); 
+    const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
+    const TFileStoragePtr& fileStorage = {}, bool useFakeMD5 = false);
 
 bool LoadFunctionsMetadata(const TVector<IUdfResolver::TFunction*>& functions,
     const NKikimr::NMiniKQL::IFunctionRegistry& functionRegistry,

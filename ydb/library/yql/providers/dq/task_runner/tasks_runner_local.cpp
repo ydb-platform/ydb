@@ -1,5 +1,5 @@
-#include "tasks_runner_local.h" 
-#include "file_cache.h" 
+#include "tasks_runner_local.h"
+#include "file_cache.h"
 
 #include <ydb/library/yql/providers/dq/counters/counters.h>
 #include <ydb/library/yql/dq/runtime/dq_input_channel.h>
@@ -13,16 +13,16 @@
 #include <ydb/library/yql/utils/backtrace/backtrace.h>
 #include <ydb/library/yql/utils/yql_panic.h>
 
-#include <library/cpp/yson/node/node.h> 
-#include <library/cpp/yson/node/node_io.h> 
-#include <library/cpp/svnversion/svnversion.h> 
- 
+#include <library/cpp/yson/node/node.h>
+#include <library/cpp/yson/node/node_io.h>
+#include <library/cpp/svnversion/svnversion.h>
+
 #include <util/system/env.h>
 #include <util/stream/file.h>
-#include <util/generic/size_literals.h> 
+#include <util/generic/size_literals.h>
 
 
-namespace NYql::NTaskRunnerProxy { 
+namespace NYql::NTaskRunnerProxy {
 
 using namespace NKikimr;
 using namespace NDq;
@@ -206,7 +206,7 @@ private:
 
 class TAbstractFactory: public IProxyFactory {
 public:
-    TAbstractFactory(const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry, NKikimr::NMiniKQL::TComputationNodeFactory compFactory, TTaskTransformFactory taskTransformFactory) 
+    TAbstractFactory(const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry, NKikimr::NMiniKQL::TComputationNodeFactory compFactory, TTaskTransformFactory taskTransformFactory)
         : DeterministicMode(!!GetEnv("YQL_DETERMINISTIC_MODE"))
         , RandomProvider(
             DeterministicMode
@@ -217,10 +217,10 @@ public:
                 ? CreateDeterministicTimeProvider(10000000)
                 : CreateDefaultTimeProvider())
         , FunctionRegistry(functionRegistry)
-        , TaskTransformFactory(std::move(taskTransformFactory)) 
+        , TaskTransformFactory(std::move(taskTransformFactory))
     {
         ExecutionContext.FuncRegistry = FunctionRegistry;
-        ExecutionContext.ComputationFactory = compFactory; 
+        ExecutionContext.ComputationFactory = compFactory;
         ExecutionContext.RandomProvider = RandomProvider.Get();
         ExecutionContext.TimeProvider = TimeProvider.Get();
     }
@@ -230,20 +230,20 @@ protected:
     TIntrusivePtr<IRandomProvider> RandomProvider;
     TIntrusivePtr<ITimeProvider> TimeProvider;
     const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry;
-    TTaskTransformFactory TaskTransformFactory; 
+    TTaskTransformFactory TaskTransformFactory;
 
     NDq::TDqTaskRunnerContext ExecutionContext;
 };
 
-/*______________________________________________________________________________________________*/ 
- 
+/*______________________________________________________________________________________________*/
+
 class TLocalFactory: public TAbstractFactory {
 public:
     TLocalFactory(const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
         NKikimr::NMiniKQL::TComputationNodeFactory compFactory,
         TTaskTransformFactory taskTransformFactory,
         bool terminateOnError)
-        : TAbstractFactory(functionRegistry, compFactory, taskTransformFactory) 
+        : TAbstractFactory(functionRegistry, compFactory, taskTransformFactory)
         , TerminateOnError(terminateOnError)
     { }
 
@@ -253,7 +253,7 @@ public:
 
     TIntrusivePtr<NDq::IDqTaskRunner> Get(const NDqProto::TDqTask& task, const TString& traceId) override {
         Y_UNUSED(traceId);
-        NDq::TDqTaskRunnerSettings settings; 
+        NDq::TDqTaskRunnerSettings settings;
         settings.TerminateOnError = TerminateOnError;
         settings.CollectBasicStats = true;
         settings.CollectProfileStats = true;
@@ -267,13 +267,13 @@ public:
                 settings.OptLLVM = s.GetValue();
         }
         for (const auto& x : taskMeta.GetSecureParams()) {
-            settings.SecureParams[x.first] = x.second; 
-        } 
- 
+            settings.SecureParams[x.first] = x.second;
+        }
+
         for (const auto& x : taskMeta.GetTaskParams()) {
             settings.TaskParams[x.first] = x.second;
-        } 
-        auto ctx = ExecutionContext; 
+        }
+        auto ctx = ExecutionContext;
         ctx.FuncProvider = TaskTransformFactory(settings.TaskParams, ctx.FuncRegistry);
         return MakeDqTaskRunner(ctx, settings, { });
     }
@@ -282,11 +282,11 @@ private:
     const bool TerminateOnError;
 };
 
-IProxyFactory::TPtr CreateFactory(const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry, 
-    NKikimr::NMiniKQL::TComputationNodeFactory compFactory, 
+IProxyFactory::TPtr CreateFactory(const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
+    NKikimr::NMiniKQL::TComputationNodeFactory compFactory,
     TTaskTransformFactory taskTransformFactory, bool terminateOnError)
 {
     return new TLocalFactory(functionRegistry, compFactory, taskTransformFactory, terminateOnError);
 }
 
-} // namespace NYql::NTaskRunnerProxy 
+} // namespace NYql::NTaskRunnerProxy

@@ -264,9 +264,9 @@ bool IsEmptyList(const TExprNode& node);
 bool IsEmptyList(const TTypeAnnotationNode& type);
 bool IsInstantEqual(const TTypeAnnotationNode& type);
 
-TString GetTypeDiff(const TTypeAnnotationNode& left, const TTypeAnnotationNode& right); 
+TString GetTypeDiff(const TTypeAnnotationNode& left, const TTypeAnnotationNode& right);
 TExprNode::TPtr ExpandType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx);
- 
+
 bool IsSystemMember(const TStringBuf& memberName);
 
 IGraphTransformer::TStatus NormalizeTupleOfAtoms(const TExprNode::TPtr& input, ui32 index, TExprNode::TPtr& output, TExprContext& ctx,
@@ -278,6 +278,6 @@ std::optional<ui32> GetFieldPosition(const TMultiExprType& tupleType, const TStr
 std::optional<ui32> GetFieldPosition(const TTupleExprType& tupleType, const TStringBuf& field);
 std::optional<ui32> GetFieldPosition(const TStructExprType& structType, const TStringBuf& field);
 
-bool IsCallableTypeHasStreams(const TCallableExprType* callableType); 
- 
+bool IsCallableTypeHasStreams(const TCallableExprType* callableType);
+
 }

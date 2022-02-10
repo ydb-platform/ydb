@@ -1,27 +1,27 @@
 OWNER(g:yql g:yql_ydb_core)
- 
+
 IF (OS_LINUX AND CLANG)
 
-    YQL_UDF(hyperscan_udf) 
+    YQL_UDF(hyperscan_udf)
 
-    YQL_ABI_VERSION( 
-        2 
+    YQL_ABI_VERSION(
+        2
         23
-        0 
-    ) 
+        0
+    )
 
-    SRCS( 
-        hyperscan_udf.cpp 
-    ) 
+    SRCS(
+        hyperscan_udf.cpp
+    )
 
-    PEERDIR( 
+    PEERDIR(
         library/cpp/regex/hyperscan
         library/cpp/regex/pcre
-    ) 
+    )
 
-    END() 
+    END()
 
-ELSE() 
-    LIBRARY() 
-    END() 
+ELSE()
+    LIBRARY()
+    END()
 ENDIF()

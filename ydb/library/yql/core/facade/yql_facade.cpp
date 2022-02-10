@@ -24,7 +24,7 @@
 #include <ydb/library/yql/public/issue/yql_issue.h>
 
 #include <library/cpp/yson/node/node_io.h>
-#include <library/cpp/deprecated/split/split_iterator.h> 
+#include <library/cpp/deprecated/split/split_iterator.h>
 #include <library/cpp/yson/writer.h>
 #include <library/cpp/string_utils/base64/base64.h>
 
@@ -32,8 +32,8 @@
 #include <util/stream/null.h>
 #include <util/string/split.h>
 #include <util/generic/guid.h>
-#include <util/system/rusage.h> 
-#include <util/generic/yexception.h> 
+#include <util/system/rusage.h>
+#include <util/generic/yexception.h>
 
 
 using namespace NThreading;
@@ -116,13 +116,13 @@ TProgramFactory::TProgramFactory(
     const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
     ui64 nextUniqueId,
     const TVector<TDataProviderInitializer>& dataProvidersInit,
-    const TString& runner) 
+    const TString& runner)
     : UseRepeatableRandomAndTimeProviders_(useRepeatableRandomAndTimeProviders)
     , FunctionRegistry_(functionRegistry)
     , NextUniqueId_(nextUniqueId)
     , DataProvidersInit_(dataProvidersInit)
     , GatewaysConfig_(nullptr)
-    , Runner_(runner) 
+    , Runner_(runner)
 {
     AddCredentialsTable(std::make_shared<TCredentialTable>());
 }
@@ -159,10 +159,10 @@ void TProgramFactory::SetModules(IModuleResolver::TPtr modules) {
     Modules_ = modules;
 }
 
-void TProgramFactory::SetUdfResolver(IUdfResolver::TPtr udfResolver) { 
-    UdfResolver_ = udfResolver; 
-} 
- 
+void TProgramFactory::SetUdfResolver(IUdfResolver::TPtr udfResolver) {
+    UdfResolver_ = udfResolver;
+}
+
 void TProgramFactory::SetUdfIndex(TUdfIndex::TPtr udfIndex, TUdfIndexPackageSet::TPtr udfIndexPackageSet) {
     UdfIndex_ = std::move(udfIndex);
     UdfIndexPackageSet_ = std::move(udfIndexPackageSet);
@@ -214,14 +214,14 @@ TProgram::TProgram(
         const TVector<TCredentialTablePtr>& credentialTables,
         const TUserCredentials& userCredentials,
         const IModuleResolver::TPtr& modules,
-        const IUdfResolver::TPtr& udfResolver, 
+        const IUdfResolver::TPtr& udfResolver,
         const TUdfIndex::TPtr& udfIndex,
         const TUdfIndexPackageSet::TPtr& udfIndexPackageSet,
         const TFileStoragePtr& fileStorage,
         const TGatewaysConfig* gatewaysConfig,
         const TString& filename,
         const TString& sourceCode,
-        const TString& sessionId, 
+        const TString& sessionId,
         const TString& runner,
         bool enableRangeComputeFor
     )
@@ -232,7 +232,7 @@ TProgram::TProgram(
     , DataProvidersInit_(dataProvidersInit)
     , CredentialTables_(credentialTables)
     , UserCredentials_(userCredentials)
-    , UdfResolver_(udfResolver) 
+    , UdfResolver_(udfResolver)
     , UdfIndex_(udfIndex)
     , UdfIndexPackageSet_(udfIndexPackageSet)
     , FileStorage_(fileStorage)
@@ -258,7 +258,7 @@ TProgram::TProgram(
         modules->AttachUserData(UserDataStorage_);
         modules->SetUrlLoader(new TUrlLoader(FileStorage_));
     }
-    OperationOptions_.Runner = runner; 
+    OperationOptions_.Runner = runner;
 }
 
 TProgram::~TProgram() {
@@ -286,11 +286,11 @@ void TProgram::SetDisableNativeUdfSupport(bool disable) {
     DisableNativeUdfSupport_ = disable;
 }
 
-void TProgram::SetUseTableMetaFromGraph(bool use) { 
-    Y_ENSURE(!TypeCtx_, "TypeCtx_ already created"); 
-    UseTableMetaFromGraph_ = use; 
-} 
- 
+void TProgram::SetUseTableMetaFromGraph(bool use) {
+    Y_ENSURE(!TypeCtx_, "TypeCtx_ already created");
+    UseTableMetaFromGraph_ = use;
+}
+
 TTypeAnnotationContextPtr TProgram::GetAnnotationContext() const {
     Y_ENSURE(TypeCtx_, "TypeCtx_ is not created");
     return TypeCtx_;
@@ -302,7 +302,7 @@ TTypeAnnotationContextPtr TProgram::ProvideAnnotationContext(const TString& user
         TypeCtx_->OperationOptions = OperationOptions_;
         TypeCtx_->ValidateMode = ValidateMode_;
         TypeCtx_->DisableNativeUdfSupport = DisableNativeUdfSupport_;
-        TypeCtx_->UseTableMetaFromGraph = UseTableMetaFromGraph_; 
+        TypeCtx_->UseTableMetaFromGraph = UseTableMetaFromGraph_;
     }
 
     return TypeCtx_;
@@ -399,7 +399,7 @@ bool TProgram::ParseSql() {
     YQL_PROFILE_FUNC(TRACE);
 
     static const THashMap<TString, TString> clusters = {
-        { "plato", TString(YtProviderName) } 
+        { "plato", TString(YtProviderName) }
     };
 
     NSQLTranslation::TTranslationSettings settings;
@@ -459,9 +459,9 @@ bool TProgram::CollectUsedClusters() {
         bool hasErrors = false;
 
         VisitExpr(ExprRoot_, [&typesCtx, &ctx, &usedClusters, &usedProviders, &hasErrors](const TExprNode::TPtr& node) {
-            if (auto dsNode = TMaybeNode<TCoDataSource>(node)) { 
-                auto datasource = typesCtx.DataSourceMap.FindPtr(dsNode.Cast().Category()); 
-                YQL_ENSURE(datasource, "Unknown DataSource: " << dsNode.Cast().Category().Value()); 
+            if (auto dsNode = TMaybeNode<TCoDataSource>(node)) {
+                auto datasource = typesCtx.DataSourceMap.FindPtr(dsNode.Cast().Category());
+                YQL_ENSURE(datasource, "Unknown DataSource: " << dsNode.Cast().Category().Value());
 
                 TMaybe<TString> cluster;
                 if (!(*datasource)->ValidateParameters(*node, ctx, cluster)) {
@@ -475,9 +475,9 @@ bool TProgram::CollectUsedClusters() {
                 }
             }
 
-            if (auto dsNode = TMaybeNode<TCoDataSink>(node)) { 
-                auto datasink = typesCtx.DataSinkMap.FindPtr(dsNode.Cast().Category()); 
-                YQL_ENSURE(datasink, "Unknown DataSink: " << dsNode.Cast().Category().Value()); 
+            if (auto dsNode = TMaybeNode<TCoDataSink>(node)) {
+                auto datasink = typesCtx.DataSinkMap.FindPtr(dsNode.Cast().Category());
+                YQL_ENSURE(datasink, "Unknown DataSink: " << dsNode.Cast().Category().Value());
 
                 TMaybe<TString> cluster;
                 if (!(*datasink)->ValidateParameters(*node, ctx, cluster)) {
@@ -504,46 +504,46 @@ bool TProgram::CollectUsedClusters() {
     return true;
 }
 
-TProgram::TStatus TProgram::Discover(const TString& username) { 
-    YQL_PROFILE_FUNC(TRACE); 
-    auto m = &TProgram::DiscoverAsync; 
-    return SyncExecution(this, m, username); 
-} 
- 
-TProgram::TFutureStatus TProgram::DiscoverAsync(const TString& username) { 
-    if (!ProvideAnnotationContext(username)->Initialize(*ExprCtx_) || !CollectUsedClusters()) { 
-        return NThreading::MakeFuture<TStatus>(IGraphTransformer::TStatus::Error); 
-    } 
-    TypeCtx_->DiscoveryMode = true; 
- 
-    Y_ENSURE(ExprRoot_, "Program not compiled yet"); 
- 
-    Transformer_ = TTransformationPipeline(TypeCtx_) 
-            .AddServiceTransformers() 
-            .AddParametersEvaluation(*FunctionRegistry_) 
-            .AddPreTypeAnnotation() 
-            .AddExpressionEvaluation(*FunctionRegistry_) 
-            .AddPreIOAnnotation() 
-            .Build(); 
- 
-    TFuture<void> openSession = OpenSession(username); 
-    if (!openSession.Initialized()) { 
-        return NThreading::MakeFuture<TStatus>(IGraphTransformer::TStatus::Error); 
-    } 
- 
-    return openSession.Apply([this](const TFuture<void>& f) { 
-        YQL_LOG_CTX_ROOT_SCOPE(GetSessionId()); 
-        try { 
-            f.GetValue(); 
-        } catch (const std::exception& e) { 
-            YQL_LOG(ERROR) << "OpenSession error: " << e.what(); 
-            ExprCtx_->IssueManager.RaiseIssue(ExceptionToIssue(e)); 
-            return NThreading::MakeFuture<TStatus>(IGraphTransformer::TStatus::Error); 
-        } 
-        return AsyncTransform(*Transformer_, ExprRoot_, *ExprCtx_, false); 
-    }); 
-} 
- 
+TProgram::TStatus TProgram::Discover(const TString& username) {
+    YQL_PROFILE_FUNC(TRACE);
+    auto m = &TProgram::DiscoverAsync;
+    return SyncExecution(this, m, username);
+}
+
+TProgram::TFutureStatus TProgram::DiscoverAsync(const TString& username) {
+    if (!ProvideAnnotationContext(username)->Initialize(*ExprCtx_) || !CollectUsedClusters()) {
+        return NThreading::MakeFuture<TStatus>(IGraphTransformer::TStatus::Error);
+    }
+    TypeCtx_->DiscoveryMode = true;
+
+    Y_ENSURE(ExprRoot_, "Program not compiled yet");
+
+    Transformer_ = TTransformationPipeline(TypeCtx_)
+            .AddServiceTransformers()
+            .AddParametersEvaluation(*FunctionRegistry_)
+            .AddPreTypeAnnotation()
+            .AddExpressionEvaluation(*FunctionRegistry_)
+            .AddPreIOAnnotation()
+            .Build();
+
+    TFuture<void> openSession = OpenSession(username);
+    if (!openSession.Initialized()) {
+        return NThreading::MakeFuture<TStatus>(IGraphTransformer::TStatus::Error);
+    }
+
+    return openSession.Apply([this](const TFuture<void>& f) {
+        YQL_LOG_CTX_ROOT_SCOPE(GetSessionId());
+        try {
+            f.GetValue();
+        } catch (const std::exception& e) {
+            YQL_LOG(ERROR) << "OpenSession error: " << e.what();
+            ExprCtx_->IssueManager.RaiseIssue(ExceptionToIssue(e));
+            return NThreading::MakeFuture<TStatus>(IGraphTransformer::TStatus::Error);
+        }
+        return AsyncTransform(*Transformer_, ExprRoot_, *ExprCtx_, false);
+    });
+}
+
 TProgram::TStatus TProgram::Validate(const TString& username, IOutputStream* exprOut, bool withTypes) {
     YQL_PROFILE_FUNC(TRACE);
     auto m = &TProgram::ValidateAsync;
@@ -572,10 +572,10 @@ TProgram::TFutureStatus TProgram::ValidateAsync(const TString& username, IOutput
     Transformer_ = TTransformationPipeline(TypeCtx_)
             .AddServiceTransformers()
             .AddParametersEvaluation(*FunctionRegistry_)
-            .AddPreTypeAnnotation() 
-            .AddExpressionEvaluation(*FunctionRegistry_) 
-            .AddIOAnnotation() 
-            .AddTypeAnnotation() 
+            .AddPreTypeAnnotation()
+            .AddExpressionEvaluation(*FunctionRegistry_)
+            .AddIOAnnotation()
+            .AddTypeAnnotation()
             .Add(TExprOutputTransformer::Sync(ExprRoot_, exprOut, withTypes), "AstOutput")
             .Build();
 
@@ -584,16 +584,16 @@ TProgram::TFutureStatus TProgram::ValidateAsync(const TString& username, IOutput
         return NThreading::MakeFuture<TStatus>(IGraphTransformer::TStatus::Error);
     }
 
-    return openSession.Apply([this](const TFuture<void>& f) { 
+    return openSession.Apply([this](const TFuture<void>& f) {
         YQL_LOG_CTX_ROOT_SCOPE(GetSessionId());
-        try { 
-            f.GetValue(); 
-        } catch (const std::exception& e) { 
-            YQL_LOG(ERROR) << "OpenSession error: " << e.what(); 
-            ExprCtx_->IssueManager.RaiseIssue(ExceptionToIssue(e)); 
-            return NThreading::MakeFuture<TStatus>(IGraphTransformer::TStatus::Error); 
-        } 
-        return AsyncTransformWithFallback(false); 
+        try {
+            f.GetValue();
+        } catch (const std::exception& e) {
+            YQL_LOG(ERROR) << "OpenSession error: " << e.what();
+            ExprCtx_->IssueManager.RaiseIssue(ExceptionToIssue(e));
+            return NThreading::MakeFuture<TStatus>(IGraphTransformer::TStatus::Error);
+        }
+        return AsyncTransformWithFallback(false);
     });
 }
 
@@ -640,31 +640,31 @@ TProgram::TFutureStatus TProgram::OptimizeAsync(
     Transformer_ = TTransformationPipeline(TypeCtx_)
         .AddServiceTransformers()
         .AddParametersEvaluation(*FunctionRegistry_)
-        .AddPreTypeAnnotation() 
-        .AddExpressionEvaluation(*FunctionRegistry_) 
-        .AddIOAnnotation() 
-        .AddTypeAnnotation() 
-        .AddPostTypeAnnotation() 
+        .AddPreTypeAnnotation()
+        .AddExpressionEvaluation(*FunctionRegistry_)
+        .AddIOAnnotation()
+        .AddTypeAnnotation()
+        .AddPostTypeAnnotation()
         .Add(TExprOutputTransformer::Sync(ExprRoot_, traceOut), "ExprOutput")
         .AddOptimization()
         .Add(CreatePlanInfoTransformer(*TypeCtx_), "PlanInfo")
         .Add(TExprOutputTransformer::Sync(ExprRoot_, exprOut, withTypes), "AstOutput")
-        .Add(TPlanOutputTransformer::Sync(tracePlan, GetPlanBuilder(), OutputFormat_), "PlanOutput") 
+        .Add(TPlanOutputTransformer::Sync(tracePlan, GetPlanBuilder(), OutputFormat_), "PlanOutput")
         .Build();
 
     TFuture<void> openSession = OpenSession(username);
     if (!openSession.Initialized())
         return NThreading::MakeFuture<TStatus>(IGraphTransformer::TStatus::Error);
 
-    return openSession.Apply([this](const TFuture<void>& f) { 
+    return openSession.Apply([this](const TFuture<void>& f) {
         YQL_LOG_CTX_ROOT_SCOPE(GetSessionId());
-        try { 
-            f.GetValue(); 
-        } catch (const std::exception& e) { 
-            YQL_LOG(ERROR) << "OpenSession error: " << e.what(); 
-            ExprCtx_->IssueManager.RaiseIssue(ExceptionToIssue(e)); 
-            return NThreading::MakeFuture<TStatus>(IGraphTransformer::TStatus::Error); 
-        } 
+        try {
+            f.GetValue();
+        } catch (const std::exception& e) {
+            YQL_LOG(ERROR) << "OpenSession error: " << e.what();
+            ExprCtx_->IssueManager.RaiseIssue(ExceptionToIssue(e));
+            return NThreading::MakeFuture<TStatus>(IGraphTransformer::TStatus::Error);
+        }
         return AsyncTransformWithFallback(false);
     });
 }
@@ -703,11 +703,11 @@ TProgram::TFutureStatus TProgram::OptimizeAsyncWithConfig(
     pipelineConf.AfterCreate(&pipeline);
     pipeline.AddServiceTransformers();
     pipeline.AddParametersEvaluation(*FunctionRegistry_);
-    pipeline.AddPreTypeAnnotation(); 
-    pipeline.AddExpressionEvaluation(*FunctionRegistry_); 
-    pipeline.AddIOAnnotation(); 
-    pipeline.AddTypeAnnotation(); 
-    pipeline.AddPostTypeAnnotation(); 
+    pipeline.AddPreTypeAnnotation();
+    pipeline.AddExpressionEvaluation(*FunctionRegistry_);
+    pipeline.AddIOAnnotation();
+    pipeline.AddTypeAnnotation();
+    pipeline.AddPostTypeAnnotation();
     pipelineConf.AfterTypeAnnotation(&pipeline);
 
     pipeline.AddOptimization();
@@ -725,15 +725,15 @@ TProgram::TFutureStatus TProgram::OptimizeAsyncWithConfig(
     if (!openSession.Initialized())
         return NThreading::MakeFuture<TStatus>(IGraphTransformer::TStatus::Error);
 
-    return openSession.Apply([this](const TFuture<void>& f) { 
+    return openSession.Apply([this](const TFuture<void>& f) {
         YQL_LOG_CTX_ROOT_SCOPE(GetSessionId());
-        try { 
-            f.GetValue(); 
-        } catch (const std::exception& e) { 
-            YQL_LOG(ERROR) << "OpenSession error: " << e.what(); 
-            ExprCtx_->IssueManager.RaiseIssue(ExceptionToIssue(e)); 
-            return NThreading::MakeFuture<TStatus>(IGraphTransformer::TStatus::Error); 
-        } 
+        try {
+            f.GetValue();
+        } catch (const std::exception& e) {
+            YQL_LOG(ERROR) << "OpenSession error: " << e.what();
+            ExprCtx_->IssueManager.RaiseIssue(ExceptionToIssue(e));
+            return NThreading::MakeFuture<TStatus>(IGraphTransformer::TStatus::Error);
+        }
         return AsyncTransformWithFallback(false);
     });
 }
@@ -807,15 +807,15 @@ TProgram::TFutureStatus TProgram::RunAsync(
 
     SavedExprRoot_ = ExprRoot_;
 
-    return openSession.Apply([this](const TFuture<void>& f) { 
+    return openSession.Apply([this](const TFuture<void>& f) {
         YQL_LOG_CTX_ROOT_SCOPE(GetSessionId());
-        try { 
-            f.GetValue(); 
-        } catch (const std::exception& e) { 
-            YQL_LOG(ERROR) << "OpenSession error: " << e.what(); 
-            ExprCtx_->IssueManager.RaiseIssue(ExceptionToIssue(e)); 
-            return NThreading::MakeFuture<TStatus>(IGraphTransformer::TStatus::Error); 
-        } 
+        try {
+            f.GetValue();
+        } catch (const std::exception& e) {
+            YQL_LOG(ERROR) << "OpenSession error: " << e.what();
+            ExprCtx_->IssueManager.RaiseIssue(ExceptionToIssue(e));
+            return NThreading::MakeFuture<TStatus>(IGraphTransformer::TStatus::Error);
+        }
         return AsyncTransformWithFallback(false);
     });
 }
@@ -855,11 +855,11 @@ TProgram::TFutureStatus TProgram::RunAsyncWithConfig(
     pipelineConf.AfterCreate(&pipeline);
     pipeline.AddServiceTransformers();
     pipeline.AddParametersEvaluation(*FunctionRegistry_);
-    pipeline.AddPreTypeAnnotation(); 
-    pipeline.AddExpressionEvaluation(*FunctionRegistry_); 
-    pipeline.AddIOAnnotation(); 
-    pipeline.AddTypeAnnotation(); 
-    pipeline.AddPostTypeAnnotation(); 
+    pipeline.AddPreTypeAnnotation();
+    pipeline.AddExpressionEvaluation(*FunctionRegistry_);
+    pipeline.AddIOAnnotation();
+    pipeline.AddTypeAnnotation();
+    pipeline.AddPostTypeAnnotation();
     pipelineConf.AfterTypeAnnotation(&pipeline);
 
     pipeline.AddOptimization();
@@ -868,7 +868,7 @@ TProgram::TFutureStatus TProgram::RunAsyncWithConfig(
             "ExpandRangeComputeFor", TIssuesIds::CORE_EXEC);
     }
     pipelineConf.AfterOptimize(&pipeline);
-    pipeline.AddRun(ProgressWriter_); 
+    pipeline.AddRun(ProgressWriter_);
 
     Transformer_ = pipeline.Build();
 
@@ -879,15 +879,15 @@ TProgram::TFutureStatus TProgram::RunAsyncWithConfig(
 
     SavedExprRoot_ = ExprRoot_;
 
-    return openSession.Apply([this](const TFuture<void>& f) { 
+    return openSession.Apply([this](const TFuture<void>& f) {
         YQL_LOG_CTX_ROOT_SCOPE(GetSessionId());
-        try { 
-            f.GetValue(); 
-        } catch (const std::exception& e) { 
-            YQL_LOG(ERROR) << "OpenSession error: " << e.what(); 
-            ExprCtx_->IssueManager.RaiseIssue(ExceptionToIssue(e)); 
-            return NThreading::MakeFuture<TStatus>(IGraphTransformer::TStatus::Error); 
-        } 
+        try {
+            f.GetValue();
+        } catch (const std::exception& e) {
+            YQL_LOG(ERROR) << "OpenSession error: " << e.what();
+            ExprCtx_->IssueManager.RaiseIssue(ExceptionToIssue(e));
+            return NThreading::MakeFuture<TStatus>(IGraphTransformer::TStatus::Error);
+        }
         return AsyncTransformWithFallback(false);
     });
 }
@@ -966,7 +966,7 @@ TFuture<IGraphTransformer::TStatus> TProgram::AsyncTransformWithFallback(bool ap
             for (auto source : TypeCtx_->DataSources) {
                 source->Reset();
             }
-            CleanupLastSession(); 
+            CleanupLastSession();
 
             if (hasDqGatewayError) {
                 TIssue warning("DQ cannot execute the query");
@@ -1066,8 +1066,8 @@ TMaybe<TString> TProgram::GetDiagnostics() {
     NCommon::TransformerStatsToYson("", transformStats, writer);
 
     for (auto& datasink : TypeCtx_->DataSinks) {
-        writer.OnKeyedItem(datasink->GetName()); 
-        if (!datasink->CollectDiagnostics(writer)) { 
+        writer.OnKeyedItem(datasink->GetName());
+        if (!datasink->CollectDiagnostics(writer)) {
             writer.OnEntity();
         }
     }
@@ -1081,10 +1081,10 @@ TMaybe<TString> TProgram::GetDiagnostics() {
     return out.Str();
 }
 
-IGraphTransformer::TStatistics TProgram::GetRawDiagnostics() { 
-    return Transformer_ ? Transformer_->GetStatistics() : IGraphTransformer::TStatistics::NotPresent(); 
-} 
- 
+IGraphTransformer::TStatistics TProgram::GetRawDiagnostics() {
+    return Transformer_ ? Transformer_->GetStatistics() : IGraphTransformer::TStatistics::NotPresent();
+}
+
 TMaybe<TString> TProgram::GetTasksInfo() {
     if (!TypeCtx_) {
         return Nothing();
@@ -1104,7 +1104,7 @@ TMaybe<TString> TProgram::GetTasksInfo() {
     writer.OnBeginList();
 
     for (auto& datasink : TypeCtx_->DataSinks) {
-        hasTasks = hasTasks || datasink->GetTasksInfo(writer); 
+        hasTasks = hasTasks || datasink->GetTasksInfo(writer);
     }
 
     writer.OnEndList();
@@ -1119,74 +1119,74 @@ TMaybe<TString> TProgram::GetTasksInfo() {
     }
 }
 
-TMaybe<TString> TProgram::GetStatistics(bool totalOnly) { 
+TMaybe<TString> TProgram::GetStatistics(bool totalOnly) {
     if (!TypeCtx_) {
         return Nothing();
     }
 
     TStringStream out;
     NYson::TYsonWriter writer(&out);
-    // Header 
+    // Header
     writer.OnBeginMap();
     writer.OnKeyedItem("ExecutionStatistics");
     writer.OnBeginMap();
 
-    // Providers 
+    // Providers
     bool hasStatistics = false;
     for (auto& datasink : TypeCtx_->DataSinks) {
-        TStringStream providerOut; 
+        TStringStream providerOut;
         NYson::TYsonWriter providerWriter(&providerOut);
-        if (datasink->CollectStatistics(providerWriter, totalOnly)) { 
+        if (datasink->CollectStatistics(providerWriter, totalOnly)) {
             writer.OnKeyedItem(datasink->GetName());
-            writer.OnRaw(providerOut.Str()); 
-            hasStatistics = true; 
+            writer.OnRaw(providerOut.Str());
+            hasStatistics = true;
         }
     }
 
-    auto rusage = TRusage::Get(); 
-    // System stats 
-    writer.OnKeyedItem("system"); 
-    writer.OnBeginMap(); 
-        writer.OnKeyedItem("MaxRSS"); 
-        writer.OnBeginMap(); 
-            writer.OnKeyedItem("max"); 
-            writer.OnInt64Scalar(rusage.MaxRss); 
-        writer.OnEndMap(); 
- 
-        writer.OnKeyedItem("MajorPageFaults"); 
-        writer.OnBeginMap(); 
-            writer.OnKeyedItem("count"); 
-            writer.OnInt64Scalar(rusage.MajorPageFaults); 
-        writer.OnEndMap(); 
-    writer.OnEndMap(); // system 
- 
-    // Footer 
+    auto rusage = TRusage::Get();
+    // System stats
+    writer.OnKeyedItem("system");
+    writer.OnBeginMap();
+        writer.OnKeyedItem("MaxRSS");
+        writer.OnBeginMap();
+            writer.OnKeyedItem("max");
+            writer.OnInt64Scalar(rusage.MaxRss);
+        writer.OnEndMap();
+
+        writer.OnKeyedItem("MajorPageFaults");
+        writer.OnBeginMap();
+            writer.OnKeyedItem("count");
+            writer.OnInt64Scalar(rusage.MajorPageFaults);
+        writer.OnEndMap();
+    writer.OnEndMap(); // system
+
+    // Footer
     writer.OnEndMap();
     writer.OnEndMap();
     if (hasStatistics) {
         return out.Str();
     }
     return Nothing();
-} 
+}
 
-TMaybe<TString> TProgram::GetDiscoveredData() { 
-    if (!TypeCtx_) { 
-        return Nothing(); 
-    } 
- 
-    TStringStream out; 
+TMaybe<TString> TProgram::GetDiscoveredData() {
+    if (!TypeCtx_) {
+        return Nothing();
+    }
+
+    TStringStream out;
     NYson::TYsonWriter writer(&out);
-    writer.OnBeginMap(); 
-    for (auto& datasource: TypeCtx_->DataSources) { 
-        TStringStream providerOut; 
+    writer.OnBeginMap();
+    for (auto& datasource: TypeCtx_->DataSources) {
+        TStringStream providerOut;
         NYson::TYsonWriter providerWriter(&providerOut);
-        if (datasource->CollectDiscoveredData(providerWriter)) { 
-            writer.OnKeyedItem(datasource->GetName()); 
-            writer.OnRaw(providerOut.Str()); 
-        } 
-    } 
-    writer.OnEndMap(); 
-    return out.Str(); 
+        if (datasource->CollectDiscoveredData(providerWriter)) {
+            writer.OnKeyedItem(datasource->GetName());
+            writer.OnRaw(providerOut.Str());
+        }
+    }
+    writer.OnEndMap();
+    return out.Str();
 }
 
 TProgram::TFutureStatus TProgram::ContinueAsync() {
@@ -1199,21 +1199,21 @@ void TProgram::Abort()
     CloseLastSession();
 }
 
-void TProgram::CleanupLastSession() { 
-    YQL_LOG_CTX_ROOT_SCOPE(GetSessionId()); 
- 
+void TProgram::CleanupLastSession() {
+    YQL_LOG_CTX_ROOT_SCOPE(GetSessionId());
+
     TString sessionId = GetSessionId();
-    if (sessionId.empty()) { 
-        return; 
-    } 
- 
-    for (const auto& dp : DataProviders_) { 
-        if (dp.CleanupSession) { 
-            dp.CleanupSession(sessionId); 
-        } 
-    } 
-} 
- 
+    if (sessionId.empty()) {
+        return;
+    }
+
+    for (const auto& dp : DataProviders_) {
+        if (dp.CleanupSession) {
+            dp.CleanupSession(sessionId);
+        }
+    }
+}
+
 void TProgram::CloseLastSession() {
     YQL_LOG_CTX_ROOT_SCOPE(GetSessionId());
 
@@ -1251,7 +1251,7 @@ TTypeAnnotationContextPtr TProgram::BuildTypeAnnotationContext(const TString& us
     typeAnnotationContext->Credentials = CredentialTables_;
     typeAnnotationContext->UserCredentials = UserCredentials_;
     typeAnnotationContext->Modules = Modules_;
-    typeAnnotationContext->UdfResolver = UdfResolver_; 
+    typeAnnotationContext->UdfResolver = UdfResolver_;
     typeAnnotationContext->UdfIndex = UdfIndex_;
     typeAnnotationContext->UdfIndexPackageSet = UdfIndexPackageSet_;
     typeAnnotationContext->RandomProvider = RandomProvider_;
@@ -1268,7 +1268,7 @@ TTypeAnnotationContextPtr TProgram::BuildTypeAnnotationContext(const TString& us
 
     PlanBuilder_ = CreatePlanBuilder(*typeAnnotationContext);
     THashSet<TString> providerNames;
-    TVector<TString> fullResultDataSinks; 
+    TVector<TString> fullResultDataSinks;
     TVector<std::function<TMaybe<TString>(const TString& url)>> tokenResolvers;
     for (const auto& dpi : DataProvidersInit_) {
         auto dp = dpi(
@@ -1282,34 +1282,34 @@ TTypeAnnotationContextPtr TProgram::BuildTypeAnnotationContext(const TString& us
             OperationOptions_
         );
 
-        providerNames.insert(dp.Names.begin(), dp.Names.end()); 
+        providerNames.insert(dp.Names.begin(), dp.Names.end());
         DataProviders_.emplace_back(dp);
         if (dp.Source) {
-            typeAnnotationContext->AddDataSource(dp.Names, dp.Source); 
+            typeAnnotationContext->AddDataSource(dp.Names, dp.Source);
         }
 
         if (dp.Sink) {
-            typeAnnotationContext->AddDataSink(dp.Names, dp.Sink); 
-        } 
+            typeAnnotationContext->AddDataSink(dp.Names, dp.Sink);
+        }
 
         if (dp.TokenResolver) {
             tokenResolvers.push_back(dp.TokenResolver);
         }
- 
-        if (dp.SupportFullResultDataSink) { 
-            fullResultDataSinks.insert(fullResultDataSinks.end(), dp.Names.begin(), dp.Names.end()); 
-        } 
+
+        if (dp.SupportFullResultDataSink) {
+            fullResultDataSinks.insert(fullResultDataSinks.end(), dp.Names.begin(), dp.Names.end());
+        }
     }
 
     TVector<TString> resultProviderDataSources;
     if (providerNames.contains(YtProviderName)) {
-        resultProviderDataSources.push_back(TString(YtProviderName)); 
-    } 
- 
+        resultProviderDataSources.push_back(TString(YtProviderName));
+    }
+
     if (providerNames.contains(KikimrProviderName)) {
         resultProviderDataSources.push_back(TString(KikimrProviderName));
-    } 
- 
+    }
+
     if (providerNames.contains(RtmrProviderName)) {
         resultProviderDataSources.push_back(TString(RtmrProviderName));
     }
@@ -1330,17 +1330,17 @@ TTypeAnnotationContextPtr TProgram::BuildTypeAnnotationContext(const TString& us
             *FunctionRegistry_, IDataProvider::EResultFormat::Yson, ToString((ui32)resultFormat), writerFactory);
         ResultProviderConfig_->SupportsResultPosition = SupportsResultPosition_;
         auto resultProvider = CreateResultProvider(ResultProviderConfig_);
-        typeAnnotationContext->AddDataSink(ResultProviderName, resultProvider); 
+        typeAnnotationContext->AddDataSink(ResultProviderName, resultProvider);
         typeAnnotationContext->AvailablePureResultDataSources = resultProviderDataSources;
     }
 
-    if (!fullResultDataSinks.empty()) { 
-        typeAnnotationContext->FullResultDataSink = fullResultDataSinks.front(); 
-    } 
- 
+    if (!fullResultDataSinks.empty()) {
+        typeAnnotationContext->FullResultDataSink = fullResultDataSinks.front();
+    }
+
     {
-        auto configProvider = CreateConfigProvider(*typeAnnotationContext, GatewaysConfig_); 
-        typeAnnotationContext->AddDataSource(ConfigProviderName, configProvider); 
+        auto configProvider = CreateConfigProvider(*typeAnnotationContext, GatewaysConfig_);
+        typeAnnotationContext->AddDataSource(ConfigProviderName, configProvider);
     }
 
     typeAnnotationContext->UserDataStorage->SetTokenResolver(BuildCompositeTokenResolver(std::move(tokenResolvers)));
@@ -1353,7 +1353,7 @@ TFuture<void> TProgram::OpenSession(const TString& username)
     for (const auto& dp : DataProviders_) {
         if (dp.OpenSession) {
             auto future = dp.OpenSession(SessionId_, username, ProgressWriter_, OperationOptions_,
-                RandomProvider_, TimeProvider_); 
+                RandomProvider_, TimeProvider_);
             openFutures.push_back(future);
         }
     }
@@ -1375,7 +1375,7 @@ void TProgram::Print(IOutputStream* exprOut, IOutputStream* planOut, bool cleanP
             GetPlanBuilder().Clear();
         }
         printTransformers.push_back(TTransformStage(
-            TPlanOutputTransformer::Sync(planOut, GetPlanBuilder(), OutputFormat_), 
+            TPlanOutputTransformer::Sync(planOut, GetPlanBuilder(), OutputFormat_),
             "PlanOutput",
             issueCode));
     }

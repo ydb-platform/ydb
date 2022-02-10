@@ -1,13 +1,13 @@
-#include "mkql_combine.h" 
- 
+#include "mkql_combine.h"
+
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h>
 #include <ydb/library/yql/minikql/mkql_node_cast.h>
 #include <ydb/library/yql/minikql/mkql_stats_registry.h>
 #include <ydb/library/yql/minikql/defs.h>
- 
-namespace NKikimr { 
-namespace NMiniKQL { 
- 
+
+namespace NKikimr {
+namespace NMiniKQL {
+
 TStatKey Combine_FlushesCount("Combine_FlushesCount", true);
 TStatKey Combine_MaxRowsCount("Combine_MaxRowsCount", false);
 
@@ -545,19 +545,19 @@ class TCombineCoreWrapper: public TCustomValueCodegeneratorNode<TCombineCoreWrap
 #ifndef MKQL_DISABLE_CODEGEN
     using TCodegenValue = std::conditional_t<IsMultiRowState, TStreamCodegenSelfStatePlusValue<TState>, TStreamCodegenSelfStateValue<TState>>;
 #endif
-public: 
+public:
     class TStreamValue : public TState {
-    public: 
+    public:
         TStreamValue(TMemoryUsageInfo* memInfo, NUdf::TUnboxedValue&& stream, const TCombineCoreNodes& nodes, ui64 memLimit, TComputationContext& compCtx, const THashFunc& hash, const TEqualsFunc& equal)
             : TState(memInfo, hash, equal)
-            , Stream(std::move(stream)) 
+            , Stream(std::move(stream))
             , Nodes(nodes)
             , MemLimit(memLimit)
             , CompCtx(compCtx)
         {}
- 
-    private: 
-        NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) override { 
+
+    private:
+        NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) override {
             for (;;) {
                 if (IsMultiRowState && Iterator) {
                     if constexpr (StateContainerOpt) {
@@ -571,8 +571,8 @@ public:
                         return NUdf::EFetchStatus::Ok;
                     }
                     Iterator.Clear();
-                } 
- 
+                }
+
                 if (IsEmpty()) {
                     switch (InputStatus) {
                         case NUdf::EFetchStatus::Ok: break;
@@ -581,8 +581,8 @@ public:
                         case NUdf::EFetchStatus::Yield:
                             InputStatus = NUdf::EFetchStatus::Ok;
                             return NUdf::EFetchStatus::Yield;
-                    } 
- 
+                    }
+
                     const auto initUsage = MemLimit ? CompCtx.HolderFactory.GetMemoryUsed() : 0ULL;
 
                     do {
@@ -597,8 +597,8 @@ public:
                     } while (!CompCtx.template CheckAdjustedMemLimit<TrackRss>(MemLimit, initUsage));
 
                     PushStat(CompCtx.Stats);
-                } 
- 
+                }
+
                 if (NUdf::TUnboxedValue key, state; Extract(key, state)) {
                     NUdf::TUnboxedValue finishItem = Nodes.FinishItem(CompCtx, key, state);
 
@@ -608,17 +608,17 @@ public:
                         result = finishItem.Release().GetOptionalValueIf<StateContainerOpt>();
                         return NUdf::EFetchStatus::Ok;
                     }
-                } 
-            } 
-        } 
- 
+                }
+            }
+        }
+
         const NUdf::TUnboxedValue Stream;
         NUdf::TUnboxedValue Iterator;
         const TCombineCoreNodes Nodes;
         const ui64 MemLimit;
         TComputationContext& CompCtx;
-    }; 
- 
+    };
+
     TCombineCoreWrapper(TComputationMutables& mutables, IComputationNode* stream, const TCombineCoreNodes& nodes, TKeyTypes&& keyTypes, bool isTuple, ui64 memLimit)
         : TBaseComputation(mutables)
         , Stream(stream)
@@ -936,32 +936,32 @@ private:
 
 }
 
-IComputationNode* WrapCombineCore(TCallable& callable, const TComputationNodeFactoryContext& ctx) { 
+IComputationNode* WrapCombineCore(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() == 9U, "Expected 9 args");
- 
+
     const auto type = callable.GetType()->GetReturnType();
     const auto finishResultType = callable.GetInput(7).GetStaticType();
-    MKQL_ENSURE(finishResultType->IsList() || finishResultType->IsOptional() || finishResultType->IsStream(), "Expected list, stream or optional"); 
- 
+    MKQL_ENSURE(finishResultType->IsList() || finishResultType->IsOptional() || finishResultType->IsStream(), "Expected list, stream or optional");
+
     const auto keyType = callable.GetInput(2).GetStaticType();
-    TKeyTypes keyTypes; 
+    TKeyTypes keyTypes;
     bool isTuple;
     bool encoded;
     GetDictionaryKeyTypes(keyType, keyTypes, isTuple, encoded);
     Y_VERIFY(!encoded, "TODO");
     const auto memLimit = AS_VALUE(TDataLiteral, callable.GetInput(8))->AsValue().Get<ui64>();
     const bool trackRss = EGraphPerProcess::Single == ctx.GraphPerProcess;
- 
+
     const auto stream = LocateNode(ctx.NodeLocator, callable, 0);
     const auto keyExtractorResultNode = LocateNode(ctx.NodeLocator, callable, 2);
     const auto initResultNode = LocateNode(ctx.NodeLocator, callable, 4);
     const auto updateResultNode = LocateNode(ctx.NodeLocator, callable, 6);
     const auto finishResultNode = LocateNode(ctx.NodeLocator, callable, 7);
- 
+
     const auto itemNode = LocateExternalNode(ctx.NodeLocator, callable, 1);
     const auto keyNode = LocateExternalNode(ctx.NodeLocator, callable, 3);
     const auto stateNode = LocateExternalNode(ctx.NodeLocator, callable, 5);
- 
+
     const TCombineCoreNodes nodes = {
         itemNode,
         keyNode,
@@ -1021,10 +1021,10 @@ IComputationNode* WrapCombineCore(TCallable& callable, const TComputationNodeFac
                     return new TCombineCoreWrapper<false, false, false>(ctx.Mutables, stream, nodes, std::move(keyTypes), isTuple, memLimit);
             }
         }
-    } 
+    }
 
     THROW yexception() << "Expected flow or stream.";
-} 
- 
-} 
-} 
+}
+
+}
+}

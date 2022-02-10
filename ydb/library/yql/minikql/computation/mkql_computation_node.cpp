@@ -1,9 +1,9 @@
 #include "mkql_computation_node_holders.h"
 #include "mkql_computation_node_impl.h"
 #include "mkql_computation_node_pack.h"
-#include "mkql_value_builder.h" 
-#include "mkql_validate.h" 
- 
+#include "mkql_value_builder.h"
+#include "mkql_validate.h"
+
 #include <ydb/library/yql/minikql/mkql_node_builder.h>
 #include <ydb/library/yql/minikql/mkql_node_cast.h>
 #include <ydb/library/yql/minikql/mkql_node_printer.h>
@@ -15,12 +15,12 @@
 #include <util/generic/set.h>
 #include <util/generic/algorithm.h>
 #include <util/random/mersenne.h>
-#include <util/random/random.h> 
+#include <util/random/random.h>
 #include <util/system/tempfile.h>
-#include <util/system/fstat.h> 
-#include <util/system/rusage.h> 
+#include <util/system/fstat.h>
+#include <util/system/rusage.h>
 #include <util/stream/file.h>
-#include <util/stream/output.h> 
+#include <util/stream/output.h>
 #include <util/memory/pool.h>
 
 namespace NKikimr {
@@ -35,56 +35,56 @@ TComputationContext::TComputationContext(const THolderFactory& holderFactory,
     , RandomProvider(opts.RandomProvider)
     , TimeProvider(opts.TimeProvider)
     , ArrowMemoryPool(arrowMemoryPool)
-{ 
+{
     std::fill_n(MutableValues.get(), mutables.CurValueIndex, NUdf::TUnboxedValue(NUdf::TUnboxedValuePod::Invalid()));
-} 
- 
-TComputationContext::~TComputationContext() { 
-#ifndef NDEBUG 
+}
+
+TComputationContext::~TComputationContext() {
+#ifndef NDEBUG
     if (RssCounter) {
-        Cerr << "UsageOnFinish: graph=" << HolderFactory.GetPagePool().GetUsed() 
+        Cerr << "UsageOnFinish: graph=" << HolderFactory.GetPagePool().GetUsed()
             << ", rss=" << TRusage::Get().MaxRss
-            << ", peakAlloc=" << HolderFactory.GetPagePool().GetPeakAllocated() 
-            << ", adjustor=" << UsageAdjustor 
-            << Endl; 
-    } 
-#endif 
-} 
- 
-void TComputationContext::UpdateUsageAdjustor(ui64 memLimit) { 
+            << ", peakAlloc=" << HolderFactory.GetPagePool().GetPeakAllocated()
+            << ", adjustor=" << UsageAdjustor
+            << Endl;
+    }
+#endif
+}
+
+void TComputationContext::UpdateUsageAdjustor(ui64 memLimit) {
     const auto rss = TRusage::Get().MaxRss;
-    if (!InitRss) { 
-        LastRss = InitRss = rss; 
-    } 
- 
-#ifndef NDEBUG 
+    if (!InitRss) {
+        LastRss = InitRss = rss;
+    }
+
+#ifndef NDEBUG
     // Print first time and then each 30 seconds
     bool printUsage = LastPrintUsage == TInstant::Zero()
         || TInstant::Now() > TDuration::Seconds(30).ToDeadLine(LastPrintUsage);
-#endif 
- 
-    if (auto peakAlloc = HolderFactory.GetPagePool().GetPeakAllocated()) { 
-        if (rss - InitRss > memLimit && rss - LastRss > (memLimit / 4)) { 
+#endif
+
+    if (auto peakAlloc = HolderFactory.GetPagePool().GetPeakAllocated()) {
+        if (rss - InitRss > memLimit && rss - LastRss > (memLimit / 4)) {
             UsageAdjustor = std::max(1.f, float(rss - InitRss) / float(peakAlloc));
-            LastRss = rss; 
-#ifndef NDEBUG 
+            LastRss = rss;
+#ifndef NDEBUG
             printUsage = UsageAdjustor > 1.f;
-#endif 
-        } 
+#endif
+        }
     }
- 
-#ifndef NDEBUG 
+
+#ifndef NDEBUG
     if (printUsage) {
-        Cerr << "Usage: graph=" << HolderFactory.GetPagePool().GetUsed() 
+        Cerr << "Usage: graph=" << HolderFactory.GetPagePool().GetUsed()
             << ", rss=" << rss
             << ", peakAlloc=" << HolderFactory.GetPagePool().GetPeakAllocated()
             << ", adjustor=" << UsageAdjustor
             << Endl;
         LastPrintUsage = TInstant::Now();
     }
-#endif 
-} 
- 
+#endif
+}
+
 class TSimpleSecureParamsProvider : public NUdf::ISecureParamsProvider {
 public:
     TSimpleSecureParamsProvider(const THashMap<TString, TString>& secureParams)

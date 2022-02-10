@@ -23,7 +23,7 @@ public:
     {
     }
 
-    ui64 Partition(const TDqSettings&, size_t maxPartitions, const TExprNode& node, TVector<TString>& partitions, TString*, TExprContext&, bool) override { 
+    ui64 Partition(const TDqSettings&, size_t maxPartitions, const TExprNode& node, TVector<TString>& partitions, TString*, TExprContext&, bool) override {
         TString cluster;
         std::vector<std::vector<TString>> parts;
         if (const TMaybeNode<TDqSource> source = &node) {

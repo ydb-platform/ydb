@@ -440,7 +440,7 @@ TExprBase DqPushJoinToStage(const TExprBase node, TExprContext& ctx, IOptimizati
         return node;
     }
 
-    if (!IsSingleConsumerConnection(connection.Cast(), parentsMap, allowStageMultiUsage)) { 
+    if (!IsSingleConsumerConnection(connection.Cast(), parentsMap, allowStageMultiUsage)) {
         return node;
     }
 

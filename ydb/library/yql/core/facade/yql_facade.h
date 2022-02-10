@@ -7,13 +7,13 @@
 #include <ydb/library/yql/providers/result/provider/yql_result_provider.h>
 #include <ydb/library/yql/core/yql_type_annotation.h>
 #include <ydb/library/yql/sql/sql.h>
- 
+
 #include <library/cpp/random_provider/random_provider.h>
 #include <library/cpp/time_provider/time_provider.h>
 #include <library/cpp/threading/future/future.h>
 
 #include <util/system/file.h>
-#include <util/generic/ptr.h> 
+#include <util/generic/ptr.h>
 
 #include <functional>
 
@@ -25,16 +25,16 @@ namespace NMiniKQL {
 
 namespace NYql {
 
-class TGatewaysConfig; 
+class TGatewaysConfig;
 class TProgram;
-using TProgramPtr = TIntrusivePtr<TProgram>; 
-class TProgramFactory; 
-using TProgramFactoryPtr = TIntrusivePtr<TProgramFactory>; 
+using TProgramPtr = TIntrusivePtr<TProgram>;
+class TProgramFactory;
+using TProgramFactoryPtr = TIntrusivePtr<TProgramFactory>;
 
 ///////////////////////////////////////////////////////////////////////////////
 // TProgramFactory
 ///////////////////////////////////////////////////////////////////////////////
-class TProgramFactory: public TThrRefBase, private TMoveOnly 
+class TProgramFactory: public TThrRefBase, private TMoveOnly
 {
 public:
     TProgramFactory(
@@ -42,14 +42,14 @@ public:
         const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
         ui64 nextUniqueId,
         const TVector<TDataProviderInitializer>& dataProvidersInit,
-        const TString& runner); 
+        const TString& runner);
 
     void AddUserDataTable(const TUserDataTable& userDataTable);
     void AddCredentialsTable(TCredentialTablePtr credentialTable);
     void SetUserCredentials(const TUserCredentials& userCredentials);
     void SetGatewaysConfig(const TGatewaysConfig* gatewaysConfig);
     void SetModules(IModuleResolver::TPtr modules);
-    void SetUdfResolver(IUdfResolver::TPtr udfResolver); 
+    void SetUdfResolver(IUdfResolver::TPtr udfResolver);
     void SetUdfIndex(TUdfIndex::TPtr udfIndex, TUdfIndexPackageSet::TPtr udfIndexPackageSet);
     void SetFileStorage(TFileStoragePtr fileStorage);
     void EnableRangeComputeFor();
@@ -75,18 +75,18 @@ private:
     TUserCredentials UserCredentials_;
     const TGatewaysConfig* GatewaysConfig_;
     IModuleResolver::TPtr Modules_;
-    IUdfResolver::TPtr UdfResolver_; 
+    IUdfResolver::TPtr UdfResolver_;
     TUdfIndex::TPtr UdfIndex_;
     TUdfIndexPackageSet::TPtr UdfIndexPackageSet_;
     TFileStoragePtr FileStorage_;
-    TString Runner_; 
+    TString Runner_;
     bool EnableRangeComputeFor_ = false;
 };
 
 ///////////////////////////////////////////////////////////////////////////////
 // TProgram
 ///////////////////////////////////////////////////////////////////////////////
-class TProgram: public TThrRefBase, private TNonCopyable 
+class TProgram: public TThrRefBase, private TNonCopyable
 {
 public:
     friend TProgramFactory;
@@ -102,10 +102,10 @@ public:
 
     bool Compile(const TString& username);
 
-    TStatus Discover(const TString& username); 
- 
-    TFutureStatus DiscoverAsync(const TString& username); 
- 
+    TStatus Discover(const TString& username);
+
+    TFutureStatus DiscoverAsync(const TString& username);
+
     TStatus Validate(const TString& username, IOutputStream* exprOut = nullptr, bool withTypes = false);
 
     TFutureStatus ValidateAsync(const TString& username, IOutputStream* exprOut = nullptr, bool withTypes = false);
@@ -160,19 +160,19 @@ public:
 
     void Abort();
 
-    inline TIssues Issues() { 
+    inline TIssues Issues() {
         if (ExprCtx_) {
             return ExprCtx_->IssueManager.GetIssues();
         } else {
-            return {}; 
+            return {};
         }
     }
 
-    inline TIssues CompletedIssues() const { 
+    inline TIssues CompletedIssues() const {
         if (ExprCtx_) {
             return ExprCtx_->IssueManager.GetCompletedIssues();
         } else {
-            return {}; 
+            return {};
         }
     }
 
@@ -213,14 +213,14 @@ public:
     }
 
     TMaybe<TString> GetDiagnostics();
-    IGraphTransformer::TStatistics GetRawDiagnostics(); 
+    IGraphTransformer::TStatistics GetRawDiagnostics();
 
     TMaybe<TString> GetTasksInfo();
 
-    TMaybe<TString> GetStatistics(bool totalOnly = false); 
+    TMaybe<TString> GetStatistics(bool totalOnly = false);
 
-    TMaybe<TString> GetDiscoveredData(); 
- 
+    TMaybe<TString> GetDiscoveredData();
+
     TString ResultsAsString() const;
     void ConfigureYsonResultFormat(NYson::EYsonFormat format);
 
@@ -232,7 +232,7 @@ public:
 
     void SetValidateOptions(NUdf::EValidateMode validateMode);
     void SetDisableNativeUdfSupport(bool disable);
-    void SetUseTableMetaFromGraph(bool use); 
+    void SetUseTableMetaFromGraph(bool use);
 
     void SetProgressWriter(TOperationProgressWriter writer) {
         Y_ENSURE(!TypeCtx_, "TypeCtx_ already created");
@@ -263,16 +263,16 @@ public:
         OperationOptions_.Title = title;
     }
 
-    void SetOperationUrl(const TString& url) { 
-        Y_ENSURE(!TypeCtx_, "TypeCtx_ already created"); 
-        OperationOptions_.Url = url; 
-    } 
- 
-    void SetQueryName(const TString& name) { 
+    void SetOperationUrl(const TString& url) {
         Y_ENSURE(!TypeCtx_, "TypeCtx_ already created");
-        OperationOptions_.QueryName = name; 
-    } 
- 
+        OperationOptions_.Url = url;
+    }
+
+    void SetQueryName(const TString& name) {
+        Y_ENSURE(!TypeCtx_, "TypeCtx_ already created");
+        OperationOptions_.QueryName = name;
+    }
+
     void SetOperationAttrsYson(const TString& attrs) {
         Y_ENSURE(!TypeCtx_, "TypeCtx_ already created");
         OperationOptions_.AttrsYson = attrs;
@@ -303,14 +303,14 @@ private:
         const TVector<TCredentialTablePtr>& credentialTables,
         const TUserCredentials& userCredentials,
         const IModuleResolver::TPtr& modules,
-        const IUdfResolver::TPtr& udfResolver, 
+        const IUdfResolver::TPtr& udfResolver,
         const TUdfIndex::TPtr& udfIndex,
         const TUdfIndexPackageSet::TPtr& udfIndexPackageSet,
         const TFileStoragePtr& fileStorage,
         const TGatewaysConfig* gatewaysConfig,
         const TString& filename,
         const TString& sourceCode,
-        const TString& sessionId, 
+        const TString& sessionId,
         const TString& runner,
         bool enableRangeComputeFor);
 
@@ -321,7 +321,7 @@ private:
 
     NThreading::TFuture<void> OpenSession(const TString& username);
 
-    void CleanupLastSession(); 
+    void CleanupLastSession();
     void CloseLastSession();
 
     TFutureStatus RemoteKikimrValidate(const TString& cluster);
@@ -344,7 +344,7 @@ private:
     TYqlOperationOptions OperationOptions_;
     TVector<TCredentialTablePtr> CredentialTables_;
     TUserCredentials UserCredentials_;
-    const IUdfResolver::TPtr UdfResolver_; 
+    const IUdfResolver::TPtr UdfResolver_;
     const TUdfIndex::TPtr UdfIndex_;
     const TUdfIndexPackageSet::TPtr UdfIndexPackageSet_;
     const TFileStoragePtr FileStorage_;
@@ -373,7 +373,7 @@ private:
     TMaybe<NYson::EYsonFormat> DiagnosticFormat_;
     NUdf::EValidateMode ValidateMode_ = NUdf::EValidateMode::None;
     bool DisableNativeUdfSupport_ = false;
-    bool UseTableMetaFromGraph_ = false; 
+    bool UseTableMetaFromGraph_ = false;
     TMaybe<TSet<TString>> UsedClusters_;
     TMaybe<TSet<TString>> UsedProviders_;
     TMaybe<TString> ExternalQueryAst_;

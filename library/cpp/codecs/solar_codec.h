@@ -13,15 +13,15 @@ namespace NCodecs {
 
     struct TVarIntTraits {
         static const size_t MAX_VARINT32_BYTES = 5;
- 
+
         static void Write(ui32 value, TBuffer& b) {
             while (value > 0x7F) {
                 b.Append(static_cast<ui8>(value) | 0x80);
                 value >>= 7;
             }
             b.Append(static_cast<ui8>(value) & 0x7F);
-        } 
- 
+        }
+
         static void Read(TStringBuf& r, ui32& value) {
             ui32 result = 0;
             for (ui32 count = 0; count < MAX_VARINT32_BYTES; ++count) {
@@ -34,22 +34,22 @@ namespace NCodecs {
                 } else if (Y_UNLIKELY(r.empty())) {
                     break;
                 }
-            } 
+            }
             Y_ENSURE_EX(false, TCodecException() << "Bad data");
-        } 
+        }
     };
- 
+
     struct TShortIntTraits {
         static const size_t SHORTINT_SIZE_LIMIT = 0x8000;
- 
+
         Y_FORCE_INLINE static void Write(ui32 value, TBuffer& b) {
             Y_ENSURE_EX(value < SHORTINT_SIZE_LIMIT, TCodecException() << "Bad write method");
             if (value >= 0x80) {
                 b.Append(static_cast<ui8>(value >> 8) | 0x80);
             }
             b.Append(static_cast<ui8>(value));
-        } 
- 
+        }
+
         Y_FORCE_INLINE static void Read(TStringBuf& r, ui32& value) {
             ui32 result = static_cast<ui8>(r[0]);
             r.Skip(1);
@@ -59,9 +59,9 @@ namespace NCodecs {
                 r.Skip(1);
             }
             value = result;
-        } 
+        }
     };
- 
+
     class TSolarCodec: public ICodec {
     public:
         static TStringBuf MyName8k() {
@@ -115,28 +115,28 @@ namespace NCodecs {
             EncodeImpl<TVarIntTraits>(r, b);
             return 0;
         }
- 
+
         void Decode(TStringBuf r, TBuffer& b) const override {
             DecodeImpl<TVarIntTraits>(r, b);
         }
- 
+
         TString GetName() const override {
             return ToString(MyName());
         }
- 
+
     protected:
         void DoLearn(ISequenceReader&) override;
         void Save(IOutputStream*) const override;
         void Load(IInputStream*) override;
- 
+
         Y_FORCE_INLINE TStringBuf SubStr(ui32 begoff, ui32 endoff) const {
             return TStringBuf(Pool.Data() + begoff, endoff - begoff);
         }
- 
+
         Y_FORCE_INLINE TStringBuf DoDecode(ui32 num) const {
             return SubStr(Decoder[num - 1], Decoder[num]);
         }
- 
+
         template <class TTraits>
         Y_FORCE_INLINE void EncodeImpl(TStringBuf r, TBuffer& b) const {
             b.Clear();
@@ -195,8 +195,8 @@ namespace NCodecs {
             }
 
             return 0;
-        } 
- 
+        }
+
         void Decode(TStringBuf r, TBuffer& b) const override {
             if (CanUseShortInt()) {
                 DecodeImpl<TShortIntTraits>(r, b);
@@ -204,23 +204,23 @@ namespace NCodecs {
                 DecodeImpl<TVarIntTraits>(r, b);
             }
         }
- 
+
         TString GetName() const override {
             if (CanUseShortInt()) {
                 return ToString(MyNameShortInt());
             } else {
                 return ToString(MyName());
             }
-        } 
+        }
     };
- 
+
     class TSolarCodecShortInt: public TSolarCodec {
     public:
         explicit TSolarCodecShortInt(ui32 maxentries = 1 << 14, ui32 maxiter = 16, const NGreedyDict::TBuildSettings& s = NGreedyDict::TBuildSettings())
             : TSolarCodec(maxentries, maxiter, s)
         {
-        } 
- 
+        }
+
         ui8 /*free bits in last byte*/ Encode(TStringBuf r, TBuffer& b) const override {
             EncodeImpl<TShortIntTraits>(r, b);
             return 0;
@@ -229,16 +229,16 @@ namespace NCodecs {
         void Decode(TStringBuf r, TBuffer& b) const override {
             DecodeImpl<TShortIntTraits>(r, b);
         }
- 
+
         TString GetName() const override {
             return ToString(MyNameShortInt());
         }
- 
+
     protected:
         void Load(IInputStream* in) override {
             TSolarCodec::Load(in);
             Y_ENSURE_EX(CanUseShortInt(), TCodecException() << "Bad data");
         }
     };
- 
+
 }

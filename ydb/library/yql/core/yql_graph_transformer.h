@@ -4,12 +4,12 @@
 #include <ydb/library/yql/core/issue/yql_issue.h>
 
 #include <library/cpp/threading/future/future.h>
- 
-#include <util/generic/hash.h>
-#include <util/datetime/base.h> 
 
-#include <functional> 
- 
+#include <util/generic/hash.h>
+#include <util/datetime/base.h>
+
+#include <functional>
+
 namespace NYql {
 
 class IGraphTransformer {
@@ -75,7 +75,7 @@ public:
         TDuration WaitDuration;
         i32 NewExprNodes;
         i32 NewTypeNodes;
-        i32 NewConstraintNodes; 
+        i32 NewConstraintNodes;
         ui32 Repeats;
         ui32 Restarts;
 
@@ -86,7 +86,7 @@ public:
             , WaitDuration(TDuration::Zero())
             , NewExprNodes(0)
             , NewTypeNodes(0)
-            , NewConstraintNodes(0) 
+            , NewConstraintNodes(0)
             , Repeats(0)
             , Restarts(0)
             , Stages() {}
@@ -114,17 +114,17 @@ private:
             , ExprCtx(exprCtx)
             , TransformStart(TInstant::Now())
             , ExprNodesSize(exprCtx ? exprCtx->ExprNodes.size() : 0)
-            , TypeNodesSize(exprCtx ? exprCtx->TypeNodes.size() : 0) 
-            , ConstraintNodesSize(exprCtx ? exprCtx->ConstraintNodes.size() : 0) 
-        { 
-        } 
+            , TypeNodesSize(exprCtx ? exprCtx->TypeNodes.size() : 0)
+            , ConstraintNodesSize(exprCtx ? exprCtx->ConstraintNodes.size() : 0)
+        {
+        }
 
         ~TTransformScope() {
             Statistics.TransformDuration += TInstant::Now() - TransformStart;
             if (ExprCtx) {
                 Statistics.NewExprNodes += ExprCtx->ExprNodes.size() - ExprNodesSize;
                 Statistics.NewTypeNodes += ExprCtx->TypeNodes.size() - TypeNodesSize;
-                Statistics.NewConstraintNodes += ExprCtx->ConstraintNodes.size() - ConstraintNodesSize; 
+                Statistics.NewConstraintNodes += ExprCtx->ConstraintNodes.size() - ConstraintNodesSize;
             }
         }
 
@@ -146,7 +146,7 @@ private:
         TInstant TransformStart;
         i64 ExprNodesSize;
         i64 TypeNodesSize;
-        i64 ConstraintNodesSize; 
+        i64 ConstraintNodesSize;
     };
 
 public:
@@ -312,15 +312,15 @@ public:
         return status;
     }
 
-    void Rewind() override { 
-        Callbacks.clear(); 
-    } 
- 
+    void Rewind() override {
+        Callbacks.clear();
+    }
+
 private:
     TNodeMap<TAsyncTransformCallbackFuture> Callbacks;
 };
 
-template <typename TFuture, typename TCallback> 
+template <typename TFuture, typename TCallback>
 std::pair<IGraphTransformer::TStatus, TAsyncTransformCallbackFuture>
 WrapFutureCallback(const TFuture& future, const TCallback& callback, const TString& message = "") {
     return std::make_pair(IGraphTransformer::TStatus::Async, future.Apply(
@@ -351,30 +351,30 @@ WrapFutureCallback(const TFuture& future, const TCallback& callback, const TStri
         }));
 }
 
-template <typename TFuture, typename TResultExtractor> 
-std::pair<IGraphTransformer::TStatus, TAsyncTransformCallbackFuture> 
+template <typename TFuture, typename TResultExtractor>
+std::pair<IGraphTransformer::TStatus, TAsyncTransformCallbackFuture>
 WrapFuture(const TFuture& future, const TResultExtractor& extractor, const TString& message = "") {
-    return WrapFutureCallback(future, [extractor](const NThreading::TFutureType<TFuture>& res, const TExprNode::TPtr& input, TExprNode::TPtr& /*output*/, TExprContext& ctx) { 
+    return WrapFutureCallback(future, [extractor](const NThreading::TFutureType<TFuture>& res, const TExprNode::TPtr& input, TExprNode::TPtr& /*output*/, TExprContext& ctx) {
         input->SetState(TExprNode::EState::ExecutionComplete);
         input->SetResult(extractor(res, input, ctx));
-        return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Ok); 
+        return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Ok);
     }, message);
-} 
- 
-template <typename TFuture, typename TResultExtractor> 
-std::pair<IGraphTransformer::TStatus, TAsyncTransformCallbackFuture> 
+}
+
+template <typename TFuture, typename TResultExtractor>
+std::pair<IGraphTransformer::TStatus, TAsyncTransformCallbackFuture>
 WrapModifyFuture(const TFuture& future, const TResultExtractor& extractor, const TString& message = "") {
-    return WrapFutureCallback(future, [extractor](const NThreading::TFutureType<TFuture>& res, const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) { 
-        TExprNode::TPtr resultNode = extractor(res, input, output, ctx); 
+    return WrapFutureCallback(future, [extractor](const NThreading::TFutureType<TFuture>& res, const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
+        TExprNode::TPtr resultNode = extractor(res, input, output, ctx);
         input->SetState(TExprNode::EState::ExecutionComplete);
-        output->SetResult(std::move(resultNode)); 
-        if (input != output) { 
-            return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, true); 
-        } 
-        return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Ok); 
+        output->SetResult(std::move(resultNode));
+        if (input != output) {
+            return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, true);
+        }
+        return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Ok);
     }, message);
-} 
- 
+}
+
 inline std::pair<IGraphTransformer::TStatus, TAsyncTransformCallbackFuture> SyncStatus(IGraphTransformer::TStatus status) {
     return std::make_pair(status, TAsyncTransformCallbackFuture());
 }

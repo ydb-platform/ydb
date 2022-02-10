@@ -1,6 +1,6 @@
-#include "logical_optimize.h" 
-#include "dqs_opt.h" 
- 
+#include "logical_optimize.h"
+#include "dqs_opt.h"
+
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
 #include <ydb/library/yql/providers/common/transform/yql_optimize.h>
 #include <ydb/library/yql/dq/opt/dq_opt_log.h>
@@ -8,13 +8,13 @@
 #include <ydb/library/yql/dq/opt/dq_opt.h>
 #include <ydb/library/yql/core/yql_opt_utils.h>
 #include <ydb/library/yql/utils/log/log.h>
- 
-namespace NYql::NDqs { 
- 
-using namespace NYql; 
-using namespace NYql::NDq; 
-using namespace NYql::NNodes; 
- 
+
+namespace NYql::NDqs {
+
+using namespace NYql;
+using namespace NYql::NDq;
+using namespace NYql::NNodes;
+
 namespace {
 
 constexpr TStringBuf YQL_TIME = "_yql_time";
@@ -39,41 +39,41 @@ TString BuildColumnName(const TExprBase column) {
 
 }
 
-class TDqsLogicalOptProposalTransformer : public TOptimizeTransformerBase { 
-public: 
+class TDqsLogicalOptProposalTransformer : public TOptimizeTransformerBase {
+public:
     TDqsLogicalOptProposalTransformer(TTypeAnnotationContext* typeCtx, const TDqConfiguration::TPtr& config)
-        : TOptimizeTransformerBase(typeCtx, NLog::EComponent::ProviderDq, {}) 
+        : TOptimizeTransformerBase(typeCtx, NLog::EComponent::ProviderDq, {})
         , Config(config)
-    { 
-#define HNDL(name) "DqsLogical-"#name, Hndl(&TDqsLogicalOptProposalTransformer::name) 
+    {
+#define HNDL(name) "DqsLogical-"#name, Hndl(&TDqsLogicalOptProposalTransformer::name)
         AddHandler(0, &TCoUnorderedBase::Match, HNDL(SkipUnordered));
-        AddHandler(0, &TCoAggregate::Match, HNDL(RewriteAggregate)); 
-        AddHandler(0, &TCoTake::Match, HNDL(RewriteTakeSortToTopSort)); 
-        AddHandler(0, &TCoEquiJoin::Match, HNDL(RewriteEquiJoin)); 
+        AddHandler(0, &TCoAggregate::Match, HNDL(RewriteAggregate));
+        AddHandler(0, &TCoTake::Match, HNDL(RewriteTakeSortToTopSort));
+        AddHandler(0, &TCoEquiJoin::Match, HNDL(RewriteEquiJoin));
         AddHandler(0, &TCoCalcOverWindow::Match, HNDL(ExpandWindowFunctions));
         AddHandler(0, &TCoCalcOverWindowGroup::Match, HNDL(ExpandWindowFunctions));
         AddHandler(0, &TCoFlatMapBase::Match, HNDL(FlatMapOverExtend));
         AddHandler(0, &TDqQuery::Match, HNDL(MergeQueriesWithSinks));
-        AddHandler(0, &TDqStageBase::Match, HNDL(UnorderedInStage)); 
-#undef HNDL 
-    } 
- 
-protected: 
-    TMaybeNode<TExprBase> SkipUnordered(TExprBase node, TExprContext& ctx) { 
-        Y_UNUSED(ctx); 
+        AddHandler(0, &TDqStageBase::Match, HNDL(UnorderedInStage));
+#undef HNDL
+    }
+
+protected:
+    TMaybeNode<TExprBase> SkipUnordered(TExprBase node, TExprContext& ctx) {
+        Y_UNUSED(ctx);
         auto unordered = node.Cast<TCoUnorderedBase>();
-        if (unordered.Input().Maybe<TDqConnection>()) { 
-            return unordered.Input(); 
-        } 
-        return node; 
-    } 
- 
+        if (unordered.Input().Maybe<TDqConnection>()) {
+            return unordered.Input();
+        }
+        return node;
+    }
+
     TMaybeNode<TExprBase> FlatMapOverExtend(TExprBase node, TExprContext& ctx) {
         return DqFlatMapOverExtend(node, ctx);
     }
 
-    TMaybeNode<TExprBase> RewriteAggregate(TExprBase node, TExprContext& ctx) { 
-        auto aggregate = node.Cast<TCoAggregate>(); 
+    TMaybeNode<TExprBase> RewriteAggregate(TExprBase node, TExprContext& ctx) {
+        auto aggregate = node.Cast<TCoAggregate>();
         auto input = aggregate.Input().Maybe<TDqConnection>();
 
         auto hopSetting = GetSetting(aggregate.Settings().Ref(), "hopping");
@@ -83,49 +83,49 @@ protected:
             } else {
                 return DqRewriteAggregate(node, ctx);
             }
-        } 
-        return node; 
-    } 
- 
-    TMaybeNode<TExprBase> RewriteTakeSortToTopSort(TExprBase node, TExprContext& ctx, const TGetParents& getParents) { 
-        if (node.Maybe<TCoTake>().Input().Maybe<TCoSort>().Input().Maybe<TDqConnection>()) { 
-            return DqRewriteTakeSortToTopSort(node, ctx, *getParents()); 
-        } 
-        return node; 
-    } 
- 
-    TMaybeNode<TExprBase> RewriteEquiJoin(TExprBase node, TExprContext& ctx) { 
-        auto equiJoin = node.Cast<TCoEquiJoin>(); 
-        for (size_t i = 0; i + 2 < equiJoin.ArgCount(); ++i) { 
-            auto list = equiJoin.Arg(i).Cast<TCoEquiJoinInput>().List(); 
-            if (auto maybeExtractMembers = list.Maybe<TCoExtractMembers>()) { 
-                list = maybeExtractMembers.Cast().Input(); 
-            } 
-            if (auto maybeFlatMap = list.Maybe<TCoFlatMapBase>()) { 
-                list = maybeFlatMap.Cast().Input(); 
-            } 
-            if (!list.Maybe<TDqConnection>()) { 
-                return node; 
-            } 
-        } 
-        return DqRewriteEquiJoin(node, ctx); 
-    } 
+        }
+        return node;
+    }
+
+    TMaybeNode<TExprBase> RewriteTakeSortToTopSort(TExprBase node, TExprContext& ctx, const TGetParents& getParents) {
+        if (node.Maybe<TCoTake>().Input().Maybe<TCoSort>().Input().Maybe<TDqConnection>()) {
+            return DqRewriteTakeSortToTopSort(node, ctx, *getParents());
+        }
+        return node;
+    }
+
+    TMaybeNode<TExprBase> RewriteEquiJoin(TExprBase node, TExprContext& ctx) {
+        auto equiJoin = node.Cast<TCoEquiJoin>();
+        for (size_t i = 0; i + 2 < equiJoin.ArgCount(); ++i) {
+            auto list = equiJoin.Arg(i).Cast<TCoEquiJoinInput>().List();
+            if (auto maybeExtractMembers = list.Maybe<TCoExtractMembers>()) {
+                list = maybeExtractMembers.Cast().Input();
+            }
+            if (auto maybeFlatMap = list.Maybe<TCoFlatMapBase>()) {
+                list = maybeFlatMap.Cast().Input();
+            }
+            if (!list.Maybe<TDqConnection>()) {
+                return node;
+            }
+        }
+        return DqRewriteEquiJoin(node, ctx);
+    }
 
     TMaybeNode<TExprBase> ExpandWindowFunctions(TExprBase node, TExprContext& ctx) {
-        if (node.Cast<TCoInputBase>().Input().Maybe<TDqConnection>()) { 
-            return DqExpandWindowFunctions(node, ctx, true); 
-        } 
-        return node; 
+        if (node.Cast<TCoInputBase>().Input().Maybe<TDqConnection>()) {
+            return DqExpandWindowFunctions(node, ctx, true);
+        }
+        return node;
     }
 
     TMaybeNode<TExprBase> MergeQueriesWithSinks(TExprBase node, TExprContext& ctx) {
         return DqMergeQueriesWithSinks(node, ctx);
     }
 
-    TMaybeNode<TExprBase> UnorderedInStage(TExprBase node, TExprContext& ctx) const { 
-        return DqUnorderedInStage(node, TDqReadWrapBase::Match, ctx, Types); 
-    } 
- 
+    TMaybeNode<TExprBase> UnorderedInStage(TExprBase node, TExprContext& ctx) const {
+        return DqUnorderedInStage(node, TDqReadWrapBase::Match, ctx, Types);
+    }
+
 private:
     TMaybeNode<TExprBase> RewriteAsHoppingWindow(const TExprBase node, TExprContext& ctx, const TDqConnection& input) {
         const auto aggregate = node.Cast<TCoAggregate>();
@@ -777,10 +777,10 @@ private:
 
 private:
     TDqConfiguration::TPtr Config;
-}; 
- 
+};
+
 THolder<IGraphTransformer> CreateDqsLogOptTransformer(TTypeAnnotationContext* typeCtx, const TDqConfiguration::TPtr& config) {
     return THolder(new TDqsLogicalOptProposalTransformer(typeCtx, config));
-} 
- 
-} // NYql::NDqs 
+}
+
+} // NYql::NDqs

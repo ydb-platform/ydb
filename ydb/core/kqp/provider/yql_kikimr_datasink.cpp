@@ -2,7 +2,7 @@
 
 #include <ydb/library/yql/providers/common/provider/yql_data_provider_impl.h>
 #include <ydb/library/yql/providers/common/proto/gateways_config.pb.h>
- 
+
 #include <ydb/library/yql/core/yql_expr_optimize.h>
 
 namespace NYql {
@@ -298,7 +298,7 @@ private:
     TIntrusivePtr<TKikimrSessionContext> SessionCtx;
 };
 
-class TKikimrDataSink : public TDataProviderBase 
+class TKikimrDataSink : public TDataProviderBase
 {
 public:
     TKikimrDataSink(
@@ -386,8 +386,8 @@ public:
         return *PlanInfoTransformer;
     }
 
-    bool ValidateParameters(TExprNode& node, TExprContext& ctx, TMaybe<TString>& cluster) override { 
-        if (node.IsCallable(TCoDataSink::CallableName())) { 
+    bool ValidateParameters(TExprNode& node, TExprContext& ctx, TMaybe<TString>& cluster) override {
+        if (node.IsCallable(TCoDataSink::CallableName())) {
             if (node.Child(0)->Content() == KikimrProviderName) {
                 if (node.Child(1)->Content().empty()) {
                     ctx.AddError(TIssue(ctx.GetPosition(node.Child(1)->Pos()), "Empty cluster name"));
@@ -404,7 +404,7 @@ public:
     }
 
     bool CanParse(const TExprNode& node) override {
-        if (node.IsCallable(WriteName)) { 
+        if (node.IsCallable(WriteName)) {
             return node.Child(1)->Child(0)->Content() == KikimrProviderName;
         }
 
@@ -754,7 +754,7 @@ IGraphTransformer::TStatus TKiSinkVisitorTransformer::DoTransform(TExprNode::TPt
         return HandleWrite(TExprBase(input), ctx);
     }
 
-    if (auto node = callable.Maybe<TCoCommit>()) { 
+    if (auto node = callable.Maybe<TCoCommit>()) {
         return HandleCommit(node.Cast(), ctx);
     }
 

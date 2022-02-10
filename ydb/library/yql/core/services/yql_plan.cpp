@@ -111,7 +111,7 @@ struct TProviderInfo {
 };
 
 using TProviderInfoMap = TMap<TString, TProviderInfo>;
- 
+
 void WriteProviders(const TString& tag, const TProviderInfoMap& providers, NYson::TYsonWriter& writer) {
     writer.OnKeyedItem(tag);
     writer.OnBeginList();
@@ -191,7 +191,7 @@ public:
 
         TNodeMap<TNodeInfo> nodes;
         TExprNode::TListType order;
-        TProviderInfoMap providers; 
+        TProviderInfoMap providers;
 
         writer.OnBeginMap();
         writer.OnKeyedItem("Detailed");
@@ -242,8 +242,8 @@ public:
                     outputs.resize(LIMIT_PINS, TPinInfo(nullptr, nullptr, nullptr, "", true));
                 }
 
-                WritePins("Inputs", inputs, writer, info.Inputs, providers); 
-                WritePins("Outputs", outputs, writer, info.Outputs, providers); 
+                WritePins("Inputs", inputs, writer, info.Inputs, providers);
+                WritePins("Outputs", outputs, writer, info.Outputs, providers);
                 info.Provider->GetPlanFormatter().WritePlanDetails(*info.Node, writer);
             }
 
@@ -269,7 +269,7 @@ public:
         writer.OnEndList();
         writer.OnKeyedItem("OperationRoot");
         writer.OnUint64Scalar(lastId);
-        WriteProviders("Providers", providers, writer); 
+        WriteProviders("Providers", providers, writer);
         writer.OnKeyedItem("OperationStats");
         writer.OnBeginMap();
         for (auto& x : opStats) {
@@ -335,7 +335,7 @@ public:
             return;
         }
 
-        auto& translatedId = Types_.NodeToOperationId[node->UniqueId()]; 
+        auto& translatedId = Types_.NodeToOperationId[node->UniqueId()];
         if (translatedId == 0) {
             translatedId = ++NextId_;
         }
@@ -345,21 +345,21 @@ public:
         if (node->Content() == CommitName) {
             dependencies.push_back(node->Child(0));
             auto dataSinkName = node->Child(1)->Child(0)->Content();
-            auto datasink = Types_.DataSinkMap.FindPtr(dataSinkName); 
+            auto datasink = Types_.DataSinkMap.FindPtr(dataSinkName);
             YQL_ENSURE(datasink);
             info.Provider = (*datasink).Get();
             info.IsVisible = dataSinkName != ResultProviderName;
         }
         else if (node->ChildrenSize() >= 2 && node->Child(1)->IsCallable("DataSource")) {
             auto dataSourceName = node->Child(1)->Child(0)->Content();
-            auto datasource = Types_.DataSourceMap.FindPtr(dataSourceName); 
+            auto datasource = Types_.DataSourceMap.FindPtr(dataSourceName);
             YQL_ENSURE(datasource);
             info.Provider = (*datasource).Get();
             info.IsVisible = (*datasource)->GetPlanFormatter().GetDependencies(*node, dependencies, true);
         }
         else if (node->ChildrenSize() >= 2 && node->Child(1)->IsCallable("DataSink")) {
             auto dataSinkName = node->Child(1)->Child(0)->Content();
-            auto datasink = Types_.DataSinkMap.FindPtr(dataSinkName); 
+            auto datasink = Types_.DataSinkMap.FindPtr(dataSinkName);
             YQL_ENSURE(datasink);
             info.Provider = (*datasink).Get();
             info.IsVisible = (*datasink)->GetPlanFormatter().GetDependencies(*node, dependencies, true);
@@ -372,8 +372,8 @@ public:
             YQL_ENSURE(provider);
             info.Provider = (*provider).Get();
             info.IsVisible = (*provider)->GetPlanFormatter().GetDependencies(*node, dependencies, true);
-        } else { 
-            info.IsVisible = false; 
+        } else {
+            info.IsVisible = false;
             for (auto& child : node->Children()) {
                 dependencies.push_back(child.Get());
             }
@@ -549,21 +549,21 @@ public:
         }
     }
 
-    void UpdateProviders(TProviderInfoMap& providers, const TExprNode* node, IDataProvider* provider) { 
+    void UpdateProviders(TProviderInfoMap& providers, const TExprNode* node, IDataProvider* provider) {
         auto path = provider->GetPlanFormatter().GetProviderPath(*node);
-        if (providers.FindPtr(path)) { 
-            return; 
+        if (providers.FindPtr(path)) {
+            return;
         }
 
-        ui32 providerId = 0; 
-        if (auto p = ProviderIds_.FindPtr(path)) { 
-            providerId = *p; 
-        } else { 
-            providerId = static_cast<ui32>(ProviderIds_.size() + 1); 
-            ProviderIds_.insert({path, providerId}); 
-        } 
- 
-        providers.insert(std::make_pair(path, TProviderInfo(providerId, node, provider))); 
+        ui32 providerId = 0;
+        if (auto p = ProviderIds_.FindPtr(path)) {
+            providerId = *p;
+        } else {
+            providerId = static_cast<ui32>(ProviderIds_.size() + 1);
+            ProviderIds_.insert({path, providerId});
+        }
+
+        providers.insert(std::make_pair(path, TProviderInfo(providerId, node, provider)));
     }
 
     void UpdateProviders(TProviderInfoMap& providers, const TVector<TPinInfo>& pins) {
@@ -602,7 +602,7 @@ public:
         YQL_ENSURE(false, "Expected either datasource or sink");
     }
 
-    TProviderInfo& FindProvider(TProviderInfoMap& providers, const TPinInfo& pin) const { 
+    TProviderInfo& FindProvider(TProviderInfoMap& providers, const TPinInfo& pin) const {
         if (pin.DataSource) {
             auto providerName = pin.DataSource->Child(0)->Content();
             auto providerPtr = Types_.DataSourceMap.FindPtr(providerName);
@@ -627,12 +627,12 @@ public:
     void WritePins(const TString& tag, const TVector<TPinInfo>& pins, NYson::TYsonWriter& writer,
         TVector<TPinAttrs>& pinAttrs, TProviderInfoMap& providers) {
         if (!pins.empty()) {
-            UpdateProviders(providers, pins); 
+            UpdateProviders(providers, pins);
             writer.OnKeyedItem(tag);
             writer.OnBeginList();
             for (auto pin : pins) {
                 TPinAttrs attrs(pin);
-                auto& info = FindProvider(providers, pin); 
+                auto& info = FindProvider(providers, pin);
                 attrs.ProviderId = info.Id;
                 writer.OnListItem();
                 writer.OnBeginList();
@@ -658,7 +658,7 @@ public:
     }
 
     void Clear() override {
-        Types_.NodeToOperationId.clear(); 
+        Types_.NodeToOperationId.clear();
         PinMap_.clear();
         ProviderIds_.clear();
         NextId_ = 0;

@@ -1,5 +1,5 @@
 #include "yql_dq_datasource.h"
-#include "yql_dq_datasource_type_ann.h" 
+#include "yql_dq_datasource_type_ann.h"
 #include "yql_dq_state.h"
 
 #include <ydb/library/yql/providers/common/config/yql_configuration_transformer.h>
@@ -42,7 +42,7 @@ public:
             return MakeHolder<NCommon::TProviderConfigurationTransformer>(State->Settings, *State->TypeCtx, TString{DqProviderName});
         })
         , ExecTransformer([this, execTransformerFactory] () { return THolder<IGraphTransformer>(execTransformerFactory(State)); })
-        , TypeAnnotationTransformer([] () { return CreateDqsDataSourceTypeAnnotationTransformer(); }) 
+        , TypeAnnotationTransformer([] () { return CreateDqsDataSourceTypeAnnotationTransformer(); })
     { }
 
     TStringBuf GetName() const override {
@@ -58,20 +58,20 @@ public:
         return *ConfigurationTransformer;
     }
 
-    TExprNode::TPtr OptimizePull(const TExprNode::TPtr& node, const TFillSettings& fillSettings, TExprContext& ctx, 
+    TExprNode::TPtr OptimizePull(const TExprNode::TPtr& node, const TFillSettings& fillSettings, TExprContext& ctx,
         IOptimizationContext& optCtx) override
     {
         Y_UNUSED(optCtx);
         Y_UNUSED(fillSettings);
 
-        if (TDqCnResult::Match(node.Get())) { 
-            return node; 
-        } 
+        if (TDqCnResult::Match(node.Get())) {
+            return node;
+        }
 
-        if (!TDqCnUnionAll::Match(node.Get())) { 
-            ctx.AddError(TIssue(node->Pos(ctx), "Last connection must be union all")); 
-            return {}; 
-        } 
+        if (!TDqCnUnionAll::Match(node.Get())) {
+            ctx.AddError(TIssue(node->Pos(ctx), "Last connection must be union all"));
+            return {};
+        }
 
         TExprNode::TListType worlds;
         VisitExpr(node, [&worlds] (const TExprNode::TPtr& item) {
@@ -87,43 +87,43 @@ public:
         for (const auto& w : worlds)
             replaces.emplace(w.Get(), newWorld);
 
-        return Build<TDqCnResult>(ctx, node->Pos()) 
-            .Output() 
-                .Stage<TDqStage>() 
-                    .Inputs() 
+        return Build<TDqCnResult>(ctx, node->Pos())
+            .Output()
+                .Stage<TDqStage>()
+                    .Inputs()
                         .Add(ctx.ReplaceNodes(TExprNode::TPtr(node), std::move(replaces)))
-                    .Build() 
-                    .Program() 
-                        .Args({"row"}) 
-                        .Body("row") 
-                    .Build() 
+                    .Build()
+                    .Program()
+                        .Args({"row"})
+                        .Body("row")
+                    .Build()
                     .Settings(TDqStageSettings().BuildNode(ctx, node->Pos()))
-                .Build() 
-                .Index().Build("0") 
-            .Build() 
-            .ColumnHints() // TODO: set column hints 
-            .Build() 
-            .Done().Ptr(); 
+                .Build()
+                .Index().Build("0")
+            .Build()
+            .ColumnHints() // TODO: set column hints
+            .Build()
+            .Done().Ptr();
     }
 
     bool CanPullResult(const TExprNode& node, TSyncMap& syncList, bool& canRef) override {
-        if (!TDqCnUnionAll::Match(&node)) { 
+        if (!TDqCnUnionAll::Match(&node)) {
             return false;
-        } 
+        }
 
-        if (auto type = GetItemType(*node.GetTypeAnn()); !type || type->GetKind() != ETypeAnnotationKind::Struct) { 
-            return false; 
-        } 
- 
-        canRef = State->Settings->EnableFullResultWrite.Get().GetOrElse(false); 
-        if (canRef) { 
-            if (auto fullResultTableProvider = State->TypeCtx->DataSinkMap.Value(State->TypeCtx->FullResultDataSink, nullptr)) { 
-                canRef = !!fullResultTableProvider->GetDqIntegration(); 
-            } else { 
-                canRef = false; 
-            } 
-        } 
- 
+        if (auto type = GetItemType(*node.GetTypeAnn()); !type || type->GetKind() != ETypeAnnotationKind::Struct) {
+            return false;
+        }
+
+        canRef = State->Settings->EnableFullResultWrite.Get().GetOrElse(false);
+        if (canRef) {
+            if (auto fullResultTableProvider = State->TypeCtx->DataSinkMap.Value(State->TypeCtx->FullResultDataSink, nullptr)) {
+                canRef = !!fullResultTableProvider->GetDqIntegration();
+            } else {
+                canRef = false;
+            }
+        }
+
         for (const auto& child : node.ChildrenList())
             VisitExpr(child, [&syncList] (const TExprNode::TPtr& item) {
                 if (ETypeAnnotationKind::World == item->GetTypeAnn()->GetKind()) {
@@ -135,30 +135,30 @@ public:
         return true;
     }
 
-    bool ValidateParameters(TExprNode& node, TExprContext& ctx, TMaybe<TString>& cluster) override { 
-        if (node.IsCallable(TCoDataSource::CallableName())) { 
-            if (!EnsureMinMaxArgsCount(node, 1, 2, ctx)) { 
-                return false; 
+    bool ValidateParameters(TExprNode& node, TExprContext& ctx, TMaybe<TString>& cluster) override {
+        if (node.IsCallable(TCoDataSource::CallableName())) {
+            if (!EnsureMinMaxArgsCount(node, 1, 2, ctx)) {
+                return false;
             }
 
             if (node.Child(0)->Content() == DqProviderName) {
-                if (node.ChildrenSize() == 2) { 
-                    if (!EnsureAtom(*node.Child(1), ctx)) { 
-                        return false; 
-                    } 
+                if (node.ChildrenSize() == 2) {
+                    if (!EnsureAtom(*node.Child(1), ctx)) {
+                        return false;
+                    }
 
-                    if (node.Child(1)->Content() != "$all") { 
-                        ctx.AddError(TIssue(ctx.GetPosition(node.Child(1)->Pos()), TStringBuilder() << "Unexpected cluster name: " << node.Child(1)->Content())); 
-                        return false; 
-                    } 
-                } 
-                cluster = Nothing(); 
+                    if (node.Child(1)->Content() != "$all") {
+                        ctx.AddError(TIssue(ctx.GetPosition(node.Child(1)->Pos()), TStringBuilder() << "Unexpected cluster name: " << node.Child(1)->Content()));
+                        return false;
+                    }
+                }
+                cluster = Nothing();
                 return true;
             }
         }
 
-        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), "Invalid DQ DataSource parameters")); 
-        return false; 
+        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), "Invalid DQ DataSource parameters"));
+        return false;
     }
 
     bool CanExecute(const TExprNode& node) override {
@@ -166,7 +166,7 @@ public:
     }
 
     bool CanParse(const TExprNode& node) override {
-        return TypeAnnotationTransformer->CanParse(node); 
+        return TypeAnnotationTransformer->CanParse(node);
     }
 
     IGraphTransformer& GetCallableExecutionTransformer() override {
@@ -200,7 +200,7 @@ private:
     TDqStatePtr State;
     TLazyInitHolder<IGraphTransformer> ConfigurationTransformer;
     TLazyInitHolder<IGraphTransformer> ExecTransformer;
-    TLazyInitHolder<TVisitorTransformerBase> TypeAnnotationTransformer; 
+    TLazyInitHolder<TVisitorTransformerBase> TypeAnnotationTransformer;
 };
 
 TIntrusivePtr<IDataProvider> CreateDqDataSource(const TDqStatePtr& state, TExecTransformerFactory execTransformerFactory) {

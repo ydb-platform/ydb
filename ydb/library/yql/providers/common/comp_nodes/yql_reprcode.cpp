@@ -1,7 +1,7 @@
 #include "yql_formatcode.h"
 #include "yql_type_resource.h"
 #include "yql_position.h"
- 
+
 #include <ydb/library/yql/providers/common/schema/expr/yql_expr_schema.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_impl.h>
 #include <ydb/library/yql/minikql/mkql_node_cast.h>
@@ -23,7 +23,7 @@ public:
 
     NUdf::TUnboxedValue DoCalculate(TComputationContext& ctx) const {
         auto exprCtxPtr = GetExprContextPtr(ctx, ExprCtxMutableIndex_);
-        const NYql::TTypeAnnotationNode* type = NYql::NCommon::ParseTypeFromYson(TStringBuf{Yson_}, *exprCtxPtr, Pos_); 
+        const NYql::TTypeAnnotationNode* type = NYql::NCommon::ParseTypeFromYson(TStringBuf{Yson_}, *exprCtxPtr, Pos_);
         auto value = Value_->GetValue(ctx);
         auto node = NYql::NCommon::ValueToExprLiteral(type, value, *exprCtxPtr, exprCtxPtr->AppendPosition(Pos_));
         return NUdf::TUnboxedValuePod(new TYqlCodeResource(exprCtxPtr, node));

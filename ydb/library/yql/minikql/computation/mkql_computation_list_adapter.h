@@ -2,7 +2,7 @@
 #include <ydb/library/yql/minikql/defs.h>
 #include "mkql_computation_node_impl.h"
 #include <ydb/library/yql/minikql/mkql_alloc.h>
- 
+
 namespace NKikimr {
 namespace NMiniKQL {
 

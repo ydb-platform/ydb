@@ -38,11 +38,11 @@ for node in model["Nodes"]:
         node["Builder"]["Kind"] = "List"
         node["Builder"]["ListItemType"] = node["ListBase"]
 
-    if "VarArgBase" in node: 
-        node["Base"] = "TVarArgCallable<{0}>".format(node["VarArgBase"]) 
-        node["Builder"]["Kind"] = "List" 
-        node["Builder"]["ListItemType"] = node["VarArgBase"] 
- 
+    if "VarArgBase" in node:
+        node["Base"] = "TVarArgCallable<{0}>".format(node["VarArgBase"])
+        node["Builder"]["Kind"] = "List"
+        node["Builder"]["ListItemType"] = node["VarArgBase"]
+
     if "Children" in node:
         for child in node["Children"]:
             childAux = child["aux"] = {}

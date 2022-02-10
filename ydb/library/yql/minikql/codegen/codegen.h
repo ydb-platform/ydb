@@ -56,7 +56,7 @@ public:
     virtual void* GetPointerToFunction(llvm::Function* function) = 0;
     virtual ui64 GetFunctionCodeSize(llvm::Function* function) = 0;
     virtual void ShowGeneratedFunctions(IOutputStream* out) = 0;
-    virtual void LoadBitCode(TStringBuf bitcode, TStringBuf uniqId) = 0; 
+    virtual void LoadBitCode(TStringBuf bitcode, TStringBuf uniqId) = 0;
     virtual void AddGlobalMapping(TStringBuf name, const void* address) = 0;
     virtual void TogglePerfJITEventListener() = 0;
 

@@ -8,11 +8,11 @@ SRCS(
     yql_clickhouse_datasink_type_ann.cpp
     yql_clickhouse_datasource.cpp
     yql_clickhouse_datasource_type_ann.cpp
-    yql_clickhouse_dq_integration.cpp 
+    yql_clickhouse_dq_integration.cpp
     yql_clickhouse_io_discovery.cpp
     yql_clickhouse_load_meta.cpp
     yql_clickhouse_logical_opt.cpp
-    yql_clickhouse_mkql_compiler.cpp 
+    yql_clickhouse_mkql_compiler.cpp
     yql_clickhouse_physical_opt.cpp
     yql_clickhouse_provider.cpp
     yql_clickhouse_provider.h

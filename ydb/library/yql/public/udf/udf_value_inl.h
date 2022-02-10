@@ -5,22 +5,22 @@
 #endif  // INCLUDE_UDF_VALUE_INL_H
 
 #ifdef LLVM_BC
- 
-#define UDF_VERIFY(expr, ...)                     \ 
-    do {                                          \ 
-        if (false) {                              \ 
-            bool __xxx = static_cast<bool>(expr); \ 
-            Y_UNUSED(__xxx);                      \ 
-        }                                         \ 
-    } while (false) 
- 
-#define UDF_ALWAYS_INLINE   __attribute__((always_inline)) 
- 
+
+#define UDF_VERIFY(expr, ...)                     \
+    do {                                          \
+        if (false) {                              \
+            bool __xxx = static_cast<bool>(expr); \
+            Y_UNUSED(__xxx);                      \
+        }                                         \
+    } while (false)
+
+#define UDF_ALWAYS_INLINE   __attribute__((always_inline))
+
 #else
- 
+
 #define UDF_VERIFY Y_VERIFY_DEBUG
-#define UDF_ALWAYS_INLINE   Y_FORCE_INLINE 
- 
+#define UDF_ALWAYS_INLINE   Y_FORCE_INLINE
+
 #endif
 
 //////////////////////////////////////////////////////////////////////////////

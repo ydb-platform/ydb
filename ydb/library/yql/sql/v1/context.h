@@ -88,8 +88,8 @@ namespace NSQLTranslationV1 {
         void ClearBlockScope();
         TString MakeName(const TString& name);
 
-        IOutputStream& Error(NYql::TIssueCode code = NYql::TIssuesIds::DEFAULT_ERROR); 
-        IOutputStream& Error(NYql::TPosition pos, NYql::TIssueCode code = NYql::TIssuesIds::DEFAULT_ERROR); 
+        IOutputStream& Error(NYql::TIssueCode code = NYql::TIssuesIds::DEFAULT_ERROR);
+        IOutputStream& Error(NYql::TPosition pos, NYql::TIssueCode code = NYql::TIssuesIds::DEFAULT_ERROR);
         IOutputStream& Warning(NYql::TPosition pos, NYql::TIssueCode code);
         IOutputStream& Info(NYql::TPosition pos);
 
@@ -139,9 +139,9 @@ namespace NSQLTranslationV1 {
         }
 
         bool HasNonYtProvider(const ISource& source) const;
-        bool UseUnordered(const ISource& source) const; 
-        bool UseUnordered(const TTableRef& table) const; 
- 
+        bool UseUnordered(const ISource& source) const;
+        bool UseUnordered(const TTableRef& table) const;
+
         bool SetPathPrefix(const TString& value, TMaybe<TString> arg = TMaybe<TString>());
 
         TNodePtr GetPrefixedPath(const TString& service, const TDeferredAtom& cluster, const TDeferredAtom& path);
@@ -225,14 +225,14 @@ namespace NSQLTranslationV1 {
         bool PragmaAutoCommit = false;
         bool SimpleColumns = true;
         bool CoalesceJoinKeysOnQualifiedAll = false;
-        bool PragmaDirectRead = false; 
+        bool PragmaDirectRead = false;
         bool PragmaYsonFast = true;
         bool PragmaYsonAutoConvert = false;
         bool PragmaYsonStrict = true;
         bool PragmaRegexUseRe2 = true;
         bool PragmaPullUpFlatMapOverJoin = true;
         bool WarnUnnamedColumns = false;
-        bool DiscoveryMode = false; 
+        bool DiscoveryMode = false;
         bool EnableSystemColumns = true;
         bool DqEngineEnable = false;
         bool DqEngineForce = false;

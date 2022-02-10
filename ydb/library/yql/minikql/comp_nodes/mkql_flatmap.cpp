@@ -1104,9 +1104,9 @@ private:
                 current = IsNewStream ? NewItem->GetValue(CompCtx) : NewItem->GetValue(CompCtx).GetListIterator();
             }
 
-            auto status = NUdf::EFetchStatus::Ok; 
+            auto status = NUdf::EFetchStatus::Ok;
             if constexpr (IsNewStream) {
-                status = current.Fetch(result); 
+                status = current.Fetch(result);
                 if (NUdf::EFetchStatus::Finish == status) {
                     continue;
                 }
@@ -1117,7 +1117,7 @@ private:
             }
 
             Current = std::move(current);
-            return status; 
+            return status;
         }
     }
 

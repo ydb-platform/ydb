@@ -1,4 +1,4 @@
-#include <ydb/library/yql/core/file_storage/http_download/pattern_group.h> 
+#include <ydb/library/yql/core/file_storage/http_download/pattern_group.h>
 
 namespace NYql {
 

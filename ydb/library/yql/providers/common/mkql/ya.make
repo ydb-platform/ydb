@@ -11,8 +11,8 @@ SRCS(
     parser.h
     yql_provider_mkql.cpp
     yql_provider_mkql.h
-    yql_type_mkql.cpp 
-    yql_type_mkql.h 
+    yql_type_mkql.cpp
+    yql_type_mkql.h
 )
 
 PEERDIR(
@@ -28,7 +28,7 @@ PEERDIR(
     ydb/library/yql/providers/dq/expr_nodes
 )
 
-YQL_LAST_ABI_VERSION() 
+YQL_LAST_ABI_VERSION()
 
 END()
 

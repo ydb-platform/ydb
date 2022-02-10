@@ -67,9 +67,9 @@ public:
     inline void Take(const void* mem, ui64 size, TString location) {
         Allocated_ += size;
         Peak_ = Max(Peak_, Allocated_ - Freed_);
-        if (size == 0) { 
-            return; 
-        } 
+        if (size == 0) {
+            return;
+        }
         if (AllowMissing_) {
             auto it = AllocationsMap_.find(mem);
             if (it != AllocationsMap_.end() && it->second.IsDeleted) {
@@ -86,9 +86,9 @@ public:
 #ifndef NDEBUG
     inline void Return(const void* mem, ui64 size) {
         Freed_ += size;
-        if (size == 0) { 
-            return; 
-        } 
+        if (size == 0) {
+            return;
+        }
         //Clog << Title_ << " free: " << size << " -> " << mem << " " << AllocationsMap_.size() << Endl;
         auto it = AllocationsMap_.find(mem);
         if (AllowMissing_ && it == AllocationsMap_.end()) {

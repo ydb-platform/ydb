@@ -6,10 +6,10 @@
 
 namespace NYql {
 
-namespace NProto { 
-class TMetricsRegistrySnapshot; 
-} 
- 
+namespace NProto {
+class TMetricsRegistrySnapshot;
+}
+
 struct IMetricsRegistry;
 using IMetricsRegistryPtr = TIntrusivePtr<IMetricsRegistry>;
 

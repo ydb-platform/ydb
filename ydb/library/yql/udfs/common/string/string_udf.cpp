@@ -72,16 +72,16 @@ namespace {
         }                                                        \
     }
 
-#define STROKA_ASCII_CASE_UDF(udfName, function)                 \ 
+#define STROKA_ASCII_CASE_UDF(udfName, function)                 \
     SIMPLE_UDF(T##udfName, char*(TAutoMap<char*>)) {             \
-        TString input(args[0].AsStringRef());                    \ 
-        if (input.function()) {                                  \ 
-            return valueBuilder->NewString(input);               \ 
-        } else {                                                 \ 
-            return args[0];                                      \ 
-        }                                                        \ 
-    } 
- 
+        TString input(args[0].AsStringRef());                    \
+        if (input.function()) {                                  \
+            return valueBuilder->NewString(input);               \
+        } else {                                                 \
+            return args[0];                                      \
+        }                                                        \
+    }
+
 #define STROKA_FIND_UDF(udfName, function)                      \
     SIMPLE_UDF(T##udfName, bool(TOptional<char*>, char*)) {     \
         Y_UNUSED(valueBuilder);                                 \
@@ -147,11 +147,11 @@ namespace {
     XX(ToUpper, ToUpper)        \
     XX(ToTitle, ToTitle)
 
-#define STROKA_ASCII_CASE_UDF_MAP(XX) \ 
-    XX(AsciiToLower, to_lower)        \ 
-    XX(AsciiToUpper, to_upper)        \ 
-    XX(AsciiToTitle, to_title) 
- 
+#define STROKA_ASCII_CASE_UDF_MAP(XX) \
+    XX(AsciiToLower, to_lower)        \
+    XX(AsciiToUpper, to_upper)        \
+    XX(AsciiToTitle, to_title)
+
 #define STROKA_FIND_UDF_MAP(XX) \
     XX(Contains, Contains)      \
     XX(StartsWith, StartsWith)  \
@@ -197,10 +197,10 @@ namespace {
         TStringBuf what(args[1].AsStringRef());
         TStringBuf with(args[2].AsStringRef());
         if (what.size() != 1) {
-            UdfTerminate("Only one char is supported as second argument"); 
+            UdfTerminate("Only one char is supported as second argument");
         }
         if (with.size() != 1) {
-            UdfTerminate("Only one char is supported as third argument"); 
+            UdfTerminate("Only one char is supported as third argument");
         }
         if (const auto index = result.find(what[0]); index != TStringBuf::npos) {
             result.replace(index, 1, with.data());
@@ -214,10 +214,10 @@ namespace {
         TStringBuf what(args[1].AsStringRef());
         TStringBuf with(args[2].AsStringRef());
         if (what.size() != 1) {
-            UdfTerminate("Only one char is supported as second argument"); 
+            UdfTerminate("Only one char is supported as second argument");
         }
         if (with.size() != 1) {
-            UdfTerminate("Only one char is supported as third argument"); 
+            UdfTerminate("Only one char is supported as third argument");
         }
         if (const auto index = result.rfind(what[0]); index != TStringBuf::npos) {
             result.replace(index, 1, with.data());
@@ -239,7 +239,7 @@ namespace {
         TString result(args[0].AsStringRef());
         TStringBuf remove(args[1].AsStringRef());
         if (remove.size() != 1) {
-            UdfTerminate("Only one char is supported as second argument"); 
+            UdfTerminate("Only one char is supported as second argument");
         }
         if (const auto index = result.find(remove[0]); index != TStringBuf::npos) {
             result.remove(index, 1);
@@ -252,7 +252,7 @@ namespace {
         TString result(args[0].AsStringRef());
         TStringBuf remove(args[1].AsStringRef());
         if (remove.size() != 1) {
-            UdfTerminate("Only one char is supported as second argument"); 
+            UdfTerminate("Only one char is supported as second argument");
         }
         if (const auto index = result.rfind(remove[0]); index != TStringBuf::npos) {
             result.remove(index, 1);
@@ -512,46 +512,46 @@ namespace {
     STRING_UNSAFE_UDF_MAP(STRING_UNSAFE_UDF)
     STROKA_UDF_MAP(STROKA_UDF)
     STROKA_CASE_UDF_MAP(STROKA_CASE_UDF)
-    STROKA_ASCII_CASE_UDF_MAP(STROKA_ASCII_CASE_UDF) 
+    STROKA_ASCII_CASE_UDF_MAP(STROKA_ASCII_CASE_UDF)
     STROKA_FIND_UDF_MAP(STROKA_FIND_UDF)
     STRING_TWO_ARGS_UDF_MAP(STRING_TWO_ARGS_UDF)
     IS_ASCII_UDF_MAP(IS_ASCII_UDF)
 
     SIMPLE_MODULE(TStringModule,
-        STRING_UDF_MAP(STRING_REGISTER_UDF) 
-        STRING_UNSAFE_UDF_MAP(STRING_REGISTER_UDF) 
-        STROKA_UDF_MAP(STRING_REGISTER_UDF) 
-        STROKA_CASE_UDF_MAP(STRING_REGISTER_UDF) 
-        STROKA_ASCII_CASE_UDF_MAP(STRING_REGISTER_UDF) 
-        STROKA_FIND_UDF_MAP(STRING_REGISTER_UDF) 
-        STRING_TWO_ARGS_UDF_MAP(STRING_REGISTER_UDF) 
-        IS_ASCII_UDF_MAP(STRING_REGISTER_UDF) 
-        TCollapseText, 
-        TReplaceAll, 
-        TReplaceFirst, 
-        TReplaceLast, 
-        TRemoveAll, 
-        TRemoveFirst, 
-        TRemoveLast, 
-        TContains, 
-        TFind, 
-        TReverseFind, 
-        TSubstring, 
-        TSplitToList, 
-        TJoinFromList, 
-        TLevensteinDistance, 
-        TRightPad, 
+        STRING_UDF_MAP(STRING_REGISTER_UDF)
+        STRING_UNSAFE_UDF_MAP(STRING_REGISTER_UDF)
+        STROKA_UDF_MAP(STRING_REGISTER_UDF)
+        STROKA_CASE_UDF_MAP(STRING_REGISTER_UDF)
+        STROKA_ASCII_CASE_UDF_MAP(STRING_REGISTER_UDF)
+        STROKA_FIND_UDF_MAP(STRING_REGISTER_UDF)
+        STRING_TWO_ARGS_UDF_MAP(STRING_REGISTER_UDF)
+        IS_ASCII_UDF_MAP(STRING_REGISTER_UDF)
+        TCollapseText,
+        TReplaceAll,
+        TReplaceFirst,
+        TReplaceLast,
+        TRemoveAll,
+        TRemoveFirst,
+        TRemoveLast,
+        TContains,
+        TFind,
+        TReverseFind,
+        TSubstring,
+        TSplitToList,
+        TJoinFromList,
+        TLevensteinDistance,
+        TRightPad,
         TLeftPad,
-        THex, 
-        TSHex, 
-        TBin, 
-        TSBin, 
-        THexText, 
-        TBinText, 
-        THumanReadableDuration, 
-        THumanReadableQuantity, 
-        THumanReadableBytes, 
-        TPrec, 
+        THex,
+        TSHex,
+        TBin,
+        TSBin,
+        THexText,
+        TBinText,
+        THumanReadableDuration,
+        THumanReadableQuantity,
+        THumanReadableBytes,
+        TPrec,
         TToByteList,
         TFromByteList)
 }

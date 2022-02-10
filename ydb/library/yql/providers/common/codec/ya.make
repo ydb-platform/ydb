@@ -11,8 +11,8 @@ SRCS(
     yql_codec_results.h
     yql_restricted_yson.cpp
     yql_restricted_yson.h
-    yql_codec_type_flags.cpp 
-    yql_codec_type_flags.h 
+    yql_codec_type_flags.cpp
+    yql_codec_type_flags.h
 )
 
 PEERDIR(
@@ -23,8 +23,8 @@ PEERDIR(
     library/cpp/yson
 )
 
-YQL_LAST_ABI_VERSION() 
+YQL_LAST_ABI_VERSION()
 
-GENERATE_ENUM_SERIALIZATION(yql_codec_type_flags.h) 
+GENERATE_ENUM_SERIALIZATION(yql_codec_type_flags.h)
 
 END()

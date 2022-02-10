@@ -96,7 +96,7 @@ private:
     UNIT_TEST(TestSearchIterChar);
     UNIT_TEST(TestSearchIterWchar);
     UNIT_TEST(TestSearchIterWchar32)
- 
+
     UNIT_TEST(TestCopyAndAssignment);
 
     UNIT_TEST(TestFirstSymbolIterator8);
@@ -152,9 +152,9 @@ private:
     template <class TContainer>
     void TestTrieWithContainers(const TVector<TUtf16String>& keys, const TVector<TContainer>& sampleData, TString methodName);
 
-    template <typename TChar> 
-    void TestSearchIterImpl(); 
- 
+    template <typename TChar>
+    void TestSearchIterImpl();
+
     template <class TTrie>
     void TestFirstSymbolIteratorForTrie(const TTrie& trie, const TStringBuf& narrowAnswers);
 
@@ -230,8 +230,8 @@ public:
     void TestEmptyValueOutOfOrder();
     void TestFindLongestPrefixWithEmptyValue();
 
-    void TestSearchIterChar(); 
-    void TestSearchIterWchar(); 
+    void TestSearchIterChar();
+    void TestSearchIterWchar();
     void TestSearchIterWchar32();
 
     void TestCopyAndAssignment();
@@ -1292,21 +1292,21 @@ void TCompactTrieTest::TestFindLongestPrefixWithEmptyValue() {
         UNIT_ASSERT(value == 31415);
     }
 }
- 
-template <typename TChar> 
-struct TConvertKey { 
+
+template <typename TChar>
+struct TConvertKey {
     static inline TString Convert(const TStringBuf& key) {
         return ToString(key);
-    } 
-}; 
- 
-template <> 
-struct TConvertKey<wchar16> { 
+    }
+};
+
+template <>
+struct TConvertKey<wchar16> {
     static inline TUtf16String Convert(const TStringBuf& key) {
-        return UTF8ToWide(key); 
-    } 
-}; 
- 
+        return UTF8ToWide(key);
+    }
+};
+
 template <>
 struct TConvertKey<wchar32> {
     static inline TUtf32String Convert(const TStringBuf& key) {
@@ -1314,62 +1314,62 @@ struct TConvertKey<wchar32> {
     }
 };
 
-template <class TSearchIter, class TKeyBuf> 
-static void MoveIter(TSearchIter& iter, const TKeyBuf& key) { 
-    for (size_t i = 0; i < key.length(); ++i) { 
-        UNIT_ASSERT(iter.Advance(key[i])); 
-    } 
-} 
- 
-template <typename TChar> 
-void TCompactTrieTest::TestSearchIterImpl() { 
-    TBufferOutput buffer; 
-    { 
-        TCompactTrieBuilder<TChar, ui32> builder; 
-        TStringBuf data[] = { 
+template <class TSearchIter, class TKeyBuf>
+static void MoveIter(TSearchIter& iter, const TKeyBuf& key) {
+    for (size_t i = 0; i < key.length(); ++i) {
+        UNIT_ASSERT(iter.Advance(key[i]));
+    }
+}
+
+template <typename TChar>
+void TCompactTrieTest::TestSearchIterImpl() {
+    TBufferOutput buffer;
+    {
+        TCompactTrieBuilder<TChar, ui32> builder;
+        TStringBuf data[] = {
             TStringBuf("abaab"),
             TStringBuf("abcdef"),
             TStringBuf("abbbc"),
             TStringBuf("bdfaa"),
-        }; 
+        };
         for (size_t i = 0; i < Y_ARRAY_SIZE(data); ++i) {
-            builder.Add(TConvertKey<TChar>::Convert(data[i]), i + 1); 
-        } 
-        builder.Save(buffer); 
-    } 
- 
-    TCompactTrie<TChar, ui32> trie(buffer.Buffer().Data(), buffer.Buffer().Size()); 
-    ui32 value = 0; 
+            builder.Add(TConvertKey<TChar>::Convert(data[i]), i + 1);
+        }
+        builder.Save(buffer);
+    }
+
+    TCompactTrie<TChar, ui32> trie(buffer.Buffer().Data(), buffer.Buffer().Size());
+    ui32 value = 0;
     auto iter(MakeSearchIterator(trie));
     MoveIter(iter, TConvertKey<TChar>::Convert(TStringBuf("abc")));
-    UNIT_ASSERT(!iter.GetValue(&value)); 
- 
+    UNIT_ASSERT(!iter.GetValue(&value));
+
     iter = MakeSearchIterator(trie);
     MoveIter(iter, TConvertKey<TChar>::Convert(TStringBuf("abbbc")));
-    UNIT_ASSERT(iter.GetValue(&value)); 
-    UNIT_ASSERT_EQUAL(value, 3); 
- 
+    UNIT_ASSERT(iter.GetValue(&value));
+    UNIT_ASSERT_EQUAL(value, 3);
+
     iter = MakeSearchIterator(trie);
     UNIT_ASSERT(iter.Advance(TConvertKey<TChar>::Convert(TStringBuf("bdfa"))));
-    UNIT_ASSERT(!iter.GetValue(&value)); 
- 
+    UNIT_ASSERT(!iter.GetValue(&value));
+
     iter = MakeSearchIterator(trie);
     UNIT_ASSERT(iter.Advance(TConvertKey<TChar>::Convert(TStringBuf("bdfaa"))));
-    UNIT_ASSERT(iter.GetValue(&value)); 
-    UNIT_ASSERT_EQUAL(value, 4); 
- 
+    UNIT_ASSERT(iter.GetValue(&value));
+    UNIT_ASSERT_EQUAL(value, 4);
+
     UNIT_ASSERT(!MakeSearchIterator(trie).Advance(TChar('z')));
     UNIT_ASSERT(!MakeSearchIterator(trie).Advance(TConvertKey<TChar>::Convert(TStringBuf("cdf"))));
     UNIT_ASSERT(!MakeSearchIterator(trie).Advance(TConvertKey<TChar>::Convert(TStringBuf("abca"))));
-} 
- 
-void TCompactTrieTest::TestSearchIterChar() { 
-    TestSearchIterImpl<char>(); 
-} 
- 
-void TCompactTrieTest::TestSearchIterWchar() { 
-    TestSearchIterImpl<wchar16>(); 
-} 
+}
+
+void TCompactTrieTest::TestSearchIterChar() {
+    TestSearchIterImpl<char>();
+}
+
+void TCompactTrieTest::TestSearchIterWchar() {
+    TestSearchIterImpl<wchar16>();
+}
 
 void TCompactTrieTest::TestSearchIterWchar32() {
     TestSearchIterImpl<wchar32>();

@@ -1281,9 +1281,9 @@ private:
             }
 
             TestCodec<TSolarCodec, true>(learn, test, new TSolarCodec(512, 8));
-            TestCodec<TAdaptiveSolarCodec, false>(learn, test, new TAdaptiveSolarCodec(512, 8)); 
-            TestCodec<TAdaptiveSolarCodec, true>(learn, test, new TAdaptiveSolarCodec(512, 8)); 
-            TestCodec<TSolarCodecShortInt, true>(learn, test, new TSolarCodecShortInt(512, 8)); 
+            TestCodec<TAdaptiveSolarCodec, false>(learn, test, new TAdaptiveSolarCodec(512, 8));
+            TestCodec<TAdaptiveSolarCodec, true>(learn, test, new TAdaptiveSolarCodec(512, 8));
+            TestCodec<TSolarCodecShortInt, true>(learn, test, new TSolarCodecShortInt(512, 8));
         }
 
         {
@@ -1302,9 +1302,9 @@ private:
             }
 
             TestCodec<TSolarCodec, true>(learn, test, new TSolarCodec(512, 8));
-            TestCodec<TAdaptiveSolarCodec, false>(learn, test, new TAdaptiveSolarCodec(512, 8)); 
-            TestCodec<TAdaptiveSolarCodec, true>(learn, test, new TAdaptiveSolarCodec(512, 8)); 
-            TestCodec<TSolarCodecShortInt, true>(learn, test, new TSolarCodecShortInt(512, 8)); 
+            TestCodec<TAdaptiveSolarCodec, false>(learn, test, new TAdaptiveSolarCodec(512, 8));
+            TestCodec<TAdaptiveSolarCodec, true>(learn, test, new TAdaptiveSolarCodec(512, 8));
+            TestCodec<TSolarCodecShortInt, true>(learn, test, new TSolarCodecShortInt(512, 8));
         }
     }
 

@@ -2,11 +2,11 @@
 #include <ydb/library/yql/ast/yql_expr.h>
 #include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
 #include <ydb/library/yql/core/yql_graph_transformer.h>
- 
+
 #include <util/generic/set.h>
-#include <util/generic/vector.h> 
-#include <util/generic/hash.h> 
-#include <util/generic/strbuf.h> 
+#include <util/generic/vector.h>
+#include <util/generic/hash.h>
+#include <util/generic/strbuf.h>
 
 namespace NYql {
 
@@ -59,13 +59,13 @@ struct TJoinOptions {
     bool StrictKeys = false;
 };
 
-IGraphTransformer::TStatus ValidateEquiJoinOptions( 
-    TPositionHandle positionHandle, 
+IGraphTransformer::TStatus ValidateEquiJoinOptions(
+    TPositionHandle positionHandle,
     const TExprNode& optionsNode,
     TJoinOptions& options,
-    TExprContext& ctx 
-); 
- 
+    TExprContext& ctx
+);
+
 IGraphTransformer::TStatus EquiJoinAnnotation(
     TPositionHandle position,
     const TStructExprType*& resultType,

@@ -960,7 +960,7 @@ void TransformerStatsToProto(const TString& name, const IGraphTransformer::TStat
     if (stats.NewTypeNodes > 0) {
         profile.SetNewTypeNodes(stats.NewTypeNodes);
     }
-    // TODO: stats.NewConstraintNodes 
+    // TODO: stats.NewConstraintNodes
     if (stats.Repeats > 0) {
         profile.SetRepeats(stats.Repeats);
     }

@@ -27,9 +27,9 @@ namespace {
                 }
             } else {
                 Out = &Cnull;
-                Level = 0; 
-            } 
-        } 
+                Level = 0;
+            }
+        }
 
         IOutputStream* Out;
         int Level;
@@ -44,7 +44,7 @@ struct TSingletonTraits<TDbgSelector> {
 IOutputStream& StdDbgStream() noexcept {
     return *(Singleton<TDbgSelector>()->Out);
 }
- 
+
 int StdDbgLevel() noexcept {
-    return Singleton<TDbgSelector>()->Level; 
-} 
+    return Singleton<TDbgSelector>()->Level;
+}

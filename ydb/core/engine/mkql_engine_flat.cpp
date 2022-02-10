@@ -241,7 +241,7 @@ public:
     TEngineFlat(const TEngineFlatSettings& settings)
         : Settings(settings)
         , Alloc(Settings.AllocCounters, settings.FunctionRegistry->SupportsSizedAllocators())
-        , Env(Alloc) 
+        , Env(Alloc)
         , Strings(Env)
         , NeedDiagnostics(false)
         , Status(EStatus::Unknown)
@@ -1022,7 +1022,7 @@ public:
             TComputationPatternOpts opts(Alloc.Ref(), Env,
                 GetFlatShardExecutionFactory(execData, true),
                 Settings.FunctionRegistry,
-                NUdf::EValidateMode::None, NUdf::EValidatePolicy::Exception, 
+                NUdf::EValidateMode::None, NUdf::EValidatePolicy::Exception,
                 Settings.LlvmRuntime ? "" : "OFF", EGraphPerProcess::Multi);
             auto pattern = MakeComputationPattern(explorer, runPgm, {}, opts);
             auto graph = pattern->Clone(opts.ToComputationOptions(Settings.RandomProvider, Settings.TimeProvider));

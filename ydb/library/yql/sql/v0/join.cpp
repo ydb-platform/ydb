@@ -477,14 +477,14 @@ public:
         }
 
         TNodePtr equiJoin(Y("EquiJoin"));
-        bool ordered = false; 
+        bool ordered = false;
         for (auto& source: Sources) {
             auto sourceNode = source->Build(ctx);
             if (!sourceNode) {
                 return nullptr;
             }
-            const bool useOrderedForSource = ctx.UseUnordered(*source); 
-            ordered = ordered || useOrderedForSource; 
+            const bool useOrderedForSource = ctx.UseUnordered(*source);
+            ordered = ordered || useOrderedForSource;
             if (source->IsFlattenByColumns() || source->IsFlattenColumns()) {
                 auto flatten = source->IsFlattenByColumns() ?
                     source->BuildFlattenByColumns("row") :
@@ -494,7 +494,7 @@ public:
                     return nullptr;
                 }
                 auto block = Y(Y("let", "flatten", sourceNode));
-                block = L(block, Y("let", "flatten", Y(useOrderedForSource ? "OrderedFlatMap" : "FlatMap", "flatten", BuildLambda(Pos, Y("row"), flatten, "res")))); 
+                block = L(block, Y("let", "flatten", Y(useOrderedForSource ? "OrderedFlatMap" : "FlatMap", "flatten", BuildLambda(Pos, Y("row"), flatten, "res"))));
                 sourceNode = Y("block", Q(L(block, Y("return", "flatten"))));
             }
             TNodePtr extraMembers;
@@ -511,7 +511,7 @@ public:
                 );
             }
             if (extraMembers) {
-                sourceNode = Y(useOrderedForSource ? "OrderedMap" : "Map", sourceNode, BuildLambda(Pos, Y("row"), extraMembers, "row")); 
+                sourceNode = Y(useOrderedForSource ? "OrderedMap" : "Map", sourceNode, BuildLambda(Pos, Y("row"), extraMembers, "row"));
             }
             if (ctx.EnableSystemColumns && source->IsTableSource()) {
                 sourceNode = Y("RemoveSystemMembers", sourceNode);
@@ -531,7 +531,7 @@ public:
         auto options = Y();
         equiJoin = L(equiJoin, joinTree, Q(options));
         if (removeMembers) {
-            equiJoin = Y(ordered ? "OrderedMap" : "Map", equiJoin, BuildLambda(Pos, Y("row"), removeMembers, "row")); 
+            equiJoin = Y(ordered ? "OrderedMap" : "Map", equiJoin, BuildLambda(Pos, Y("row"), removeMembers, "row"));
         }
         return equiJoin;
     }

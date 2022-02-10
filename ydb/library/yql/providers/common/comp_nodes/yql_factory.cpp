@@ -1,4 +1,4 @@
-#include "yql_factory.h" 
+#include "yql_factory.h"
 #include "yql_formatcode.h"
 #include "yql_formattype.h"
 #include "yql_makecode.h"
@@ -75,16 +75,16 @@ TComputationNodeFactory GetYqlFactory(ui32 exprCtxMutableIndex) {
     };
 }
 
-TComputationNodeFactory GetYqlFactory() { 
-    TComputationNodeFactory yqlFactory; 
-    return [yqlFactory] 
-        (TCallable& callable, const TComputationNodeFactoryContext& ctx) mutable -> IComputationNode* { 
-            if (!yqlFactory) { 
-                yqlFactory = GetYqlFactory(ctx.Mutables.CurValueIndex++); 
-            } 
-            return yqlFactory(callable, ctx); 
-        }; 
+TComputationNodeFactory GetYqlFactory() {
+    TComputationNodeFactory yqlFactory;
+    return [yqlFactory]
+        (TCallable& callable, const TComputationNodeFactoryContext& ctx) mutable -> IComputationNode* {
+            if (!yqlFactory) {
+                yqlFactory = GetYqlFactory(ctx.Mutables.CurValueIndex++);
+            }
+            return yqlFactory(callable, ctx);
+        };
 }
- 
+
 }
-} 
+}

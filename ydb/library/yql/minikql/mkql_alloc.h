@@ -1,18 +1,18 @@
-#pragma once 
+#pragma once
 #include "aligned_page_pool.h"
 #include "mkql_mem_info.h"
 #include <ydb/library/yql/public/udf/udf_allocator.h>
 #include <ydb/library/yql/public/udf/udf_value.h>
-#include <util/system/defaults.h> 
+#include <util/system/defaults.h>
 #include <util/system/tls.h>
 #include <util/system/align.h>
-#include <new> 
+#include <new>
 #include <unordered_map>
- 
-namespace NKikimr { 
- 
-namespace NMiniKQL { 
- 
+
+namespace NKikimr {
+
+namespace NMiniKQL {
+
 const ui64 MKQL_ALIGNMENT = 16;
 
 struct TAllocPageHeader {
@@ -236,7 +236,7 @@ private:
     void* AllocSlow(size_t sz);
 
 private:
-    TAlignedPagePool* PagePool_; 
+    TAlignedPagePool* PagePool_;
     TAllocPageHeader* CurrentPage_ = &TAllocState::EmptyPageHeader;
 };
 
@@ -332,22 +332,22 @@ inline void MKQLUnregisterObject(NUdf::TBoxedValue* value) noexcept {
     return value->Unlink();
 }
 
-struct TWithMiniKQLAlloc { 
-    void* operator new(size_t sz) { 
+struct TWithMiniKQLAlloc {
+    void* operator new(size_t sz) {
         return MKQLAllocWithSize(sz);
-    } 
- 
-    void* operator new[](size_t sz) { 
+    }
+
+    void* operator new[](size_t sz) {
         return MKQLAllocWithSize(sz);
-    } 
- 
+    }
+
     void operator delete(void *mem, std::size_t sz) noexcept {
         MKQLFreeWithSize(mem, sz);
-    } 
- 
+    }
+
     void operator delete[](void *mem, std::size_t sz) noexcept {
         MKQLFreeWithSize(mem, sz);
-    } 
+    }
 };
 
 template <typename T, typename... Args>
@@ -610,6 +610,6 @@ private:
 };
 
 
-} // NMiniKQL 
- 
-} // NKikimr 
+} // NMiniKQL
+
+} // NKikimr

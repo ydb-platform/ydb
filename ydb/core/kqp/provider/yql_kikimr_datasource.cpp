@@ -2,7 +2,7 @@
 
 #include <ydb/library/yql/providers/common/provider/yql_data_provider_impl.h>
 #include <ydb/library/yql/providers/common/config/yql_configuration_transformer.h>
- 
+
 #include <ydb/library/yql/core/yql_expr_optimize.h>
 #include <ydb/library/yql/core/yql_expr_type_annotation.h>
 
@@ -267,7 +267,7 @@ private:
     TIntrusivePtr<TKikimrSessionContext> SessionCtx;
 };
 
-class TKikimrDataSource : public TDataProviderBase { 
+class TKikimrDataSource : public TDataProviderBase {
 public:
     TKikimrDataSource(
         const NKikimr::NMiniKQL::IFunctionRegistry& functionRegistry,
@@ -361,8 +361,8 @@ public:
         return *CallableExecutionTransformer;
     }
 
-    bool ValidateParameters(TExprNode& node, TExprContext& ctx, TMaybe<TString>& cluster) override { 
-        if (node.IsCallable(TCoDataSource::CallableName())) { 
+    bool ValidateParameters(TExprNode& node, TExprContext& ctx, TMaybe<TString>& cluster) override {
+        if (node.IsCallable(TCoDataSource::CallableName())) {
             if (node.Child(0)->Content() == KikimrProviderName) {
                 if (node.Child(1)->Content().empty()) {
                     ctx.AddError(TIssue(ctx.GetPosition(node.Child(1)->Pos()), "Empty cluster name"));
@@ -379,7 +379,7 @@ public:
     }
 
     bool CanParse(const TExprNode& node) override {
-        if (node.IsCallable(ReadName)) { 
+        if (node.IsCallable(ReadName)) {
             return node.Child(1)->Child(0)->Content() == KikimrProviderName;
         }
 
@@ -392,22 +392,22 @@ public:
     }
 
     bool IsPersistent(const TExprNode& node) override {
-        if (node.IsCallable(ReadName)) { 
-            return node.Child(1)->Child(0)->Content() == KikimrProviderName; 
-        } 
- 
-        if (node.IsCallable(TKiReadTable::CallableName())) { 
-            return TKiDataSource(node.ChildPtr(1)).Category() == KikimrProviderName; 
-        } 
- 
-        return false; 
-    } 
- 
+        if (node.IsCallable(ReadName)) {
+            return node.Child(1)->Child(0)->Content() == KikimrProviderName;
+        }
+
+        if (node.IsCallable(TKiReadTable::CallableName())) {
+            return TKiDataSource(node.ChildPtr(1)).Category() == KikimrProviderName;
+        }
+
+        return false;
+    }
+
     bool CanPullResult(const TExprNode& node, TSyncMap& syncList, bool& canRef) override {
         Y_UNUSED(syncList);
         canRef = false;
 
-        if (node.IsCallable(TCoRight::CallableName())) { 
+        if (node.IsCallable(TCoRight::CallableName())) {
             const auto input = node.Child(0);
             if (input->IsCallable(TKiReadTableList::CallableName())) {
                 return true;
@@ -432,7 +432,7 @@ public:
             return true;
         }
 
-        if (auto configure = TMaybeNode<TCoConfigure>(&node)) { 
+        if (auto configure = TMaybeNode<TCoConfigure>(&node)) {
             if (configure.DataSource().Maybe<TKiDataSource>()) {
                 return true;
             }
@@ -443,7 +443,7 @@ public:
 
     TExprNode::TPtr RewriteIO(const TExprNode::TPtr& node, TExprContext& ctx) override {
         auto read = node->Child(0);
-        if (!read->IsCallable(ReadName)) { 
+        if (!read->IsCallable(ReadName)) {
             ythrow yexception() << "Expected Read!";
         }
 

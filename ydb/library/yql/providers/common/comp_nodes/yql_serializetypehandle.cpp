@@ -1,6 +1,6 @@
 #include "yql_serializetypehandle.h"
 #include "yql_type_resource.h"
- 
+
 #include <ydb/library/yql/providers/common/schema/expr/yql_expr_schema.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_impl.h>
 #include <ydb/library/yql/minikql/mkql_string_util.h>

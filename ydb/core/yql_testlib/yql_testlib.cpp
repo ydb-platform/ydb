@@ -191,7 +191,7 @@ void TYqlServer::Initialize() {
 
 void MakeGatewaysConfig(const THashMap<TString, TString>& clusterMapping, NYql::TGatewaysConfig& gatewaysConfig) {
     for (auto& x : clusterMapping) {
-        if (x.second == NYql::YtProviderName) { 
+        if (x.second == NYql::YtProviderName) {
             auto cluster = gatewaysConfig.MutableYt()->AddClusterMapping();
             cluster->SetName(x.first);
         }

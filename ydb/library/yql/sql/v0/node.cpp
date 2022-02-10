@@ -585,11 +585,11 @@ bool TCallDirectRow::DoInit(TContext& ctx, ISource* src) {
         ctx.Error(Pos) << "Failed to use function: " << OpName << " with aggregation, join, flatten by or window functions";
         return false;
     }
-    if (!TCallNode::DoInit(ctx, src)) { 
-        return false; 
-    } 
-    Nodes.push_back(Y("DependsOn", "row")); 
-    return true; 
+    if (!TCallNode::DoInit(ctx, src)) {
+        return false;
+    }
+    Nodes.push_back(Y("DependsOn", "row"));
+    return true;
 }
 
 void TCallDirectRow::DoUpdateState() const {
@@ -1325,10 +1325,10 @@ bool ISource::IsStream() const {
     return false;
 }
 
-bool ISource::IsOrdered() const { 
-    return false; 
-} 
- 
+bool ISource::IsOrdered() const {
+    return false;
+}
+
 TWriteSettings ISource::GetWriteSettings() const {
     return {};
 }
@@ -1353,8 +1353,8 @@ bool ISource::CalculateGroupingHint(TContext& ctx, const TVector<TString>& colum
     return false;
 }
 
-TNodePtr ISource::BuildFilter(TContext& ctx, const TString& label, const TNodePtr& groundNode) { 
-    return Filters.empty() ? nullptr : Y(ctx.UseUnordered(*this) ? "OrderedFilter" : "Filter", label, BuildFilterLambda(groundNode)); 
+TNodePtr ISource::BuildFilter(TContext& ctx, const TString& label, const TNodePtr& groundNode) {
+    return Filters.empty() ? nullptr : Y(ctx.UseUnordered(*this) ? "OrderedFilter" : "Filter", label, BuildFilterLambda(groundNode));
 }
 
 TNodePtr ISource::BuildFilterLambda(const TNodePtr& groundNode) {
@@ -1419,7 +1419,7 @@ TNodePtr ISource::BuildPrewindowMap(TContext& ctx, const TNodePtr& groundNode) {
             feed = Y("AddMember", feed, Q(name), GroundWithExpr(groundNode, exprNode));
         }
     }
-    return Y(ctx.UseUnordered(*this) ? "OrderedFlatMap" : "FlatMap", "core", BuildLambda(Pos, Y("row"), Y("AsList", feed))); 
+    return Y(ctx.UseUnordered(*this) ? "OrderedFlatMap" : "FlatMap", "core", BuildLambda(Pos, Y("row"), Y("AsList", feed)));
 }
 
 TNodePtr ISource::BuildAggregation(const TString& label) {
@@ -2849,43 +2849,43 @@ bool TryMakeClusterAndTableFromExpression(TNodePtr node, TString& cluster, TDefe
     return true;
 }
 
-class TTupleResultNode: public INode { 
-public: 
-    TTupleResultNode(TNodePtr&& tuple, int ensureTupleSize) 
-        : INode(tuple->GetPos()) 
-        , Node(std::move(tuple)) 
-        , EnsureTupleSize(ensureTupleSize) 
-    { 
-    } 
- 
-    bool DoInit(TContext& ctx, ISource* src) override { 
-        ctx.PushBlockShortcuts(); 
-        if (!Node->Init(ctx, src)) { 
-            return false; 
-        } 
- 
-        Node = ctx.GroundBlockShortcutsForExpr(Node); 
-        Node = Y("EnsureTupleSize", Node, Q(ToString(EnsureTupleSize))); 
- 
-        return true; 
-    } 
- 
-    TAstNode* Translate(TContext& ctx) const override { 
-        return Node->Translate(ctx); 
-    } 
- 
-    TPtr DoClone() const final { 
-        return {}; 
-    } 
- 
-protected: 
-    TNodePtr Node; 
-    const int EnsureTupleSize; 
-}; 
- 
-TNodePtr BuildTupleResult(TNodePtr tuple, int ensureTupleSize) { 
-    return new TTupleResultNode(std::move(tuple), ensureTupleSize); 
-} 
- 
- 
+class TTupleResultNode: public INode {
+public:
+    TTupleResultNode(TNodePtr&& tuple, int ensureTupleSize)
+        : INode(tuple->GetPos())
+        , Node(std::move(tuple))
+        , EnsureTupleSize(ensureTupleSize)
+    {
+    }
+
+    bool DoInit(TContext& ctx, ISource* src) override {
+        ctx.PushBlockShortcuts();
+        if (!Node->Init(ctx, src)) {
+            return false;
+        }
+
+        Node = ctx.GroundBlockShortcutsForExpr(Node);
+        Node = Y("EnsureTupleSize", Node, Q(ToString(EnsureTupleSize)));
+
+        return true;
+    }
+
+    TAstNode* Translate(TContext& ctx) const override {
+        return Node->Translate(ctx);
+    }
+
+    TPtr DoClone() const final {
+        return {};
+    }
+
+protected:
+    TNodePtr Node;
+    const int EnsureTupleSize;
+};
+
+TNodePtr BuildTupleResult(TNodePtr tuple, int ensureTupleSize) {
+    return new TTupleResultNode(std::move(tuple), ensureTupleSize);
+}
+
+
 } // namespace NSQLTranslationV0

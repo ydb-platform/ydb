@@ -358,7 +358,7 @@ public:
         }
 
         if (Args.empty()) {
-            Args.push_back(Y("TablePath", Y("DependsOn", "row"))); 
+            Args.push_back(Y("TablePath", Y("DependsOn", "row")));
         }
 
         if (Args.size() == 2) {

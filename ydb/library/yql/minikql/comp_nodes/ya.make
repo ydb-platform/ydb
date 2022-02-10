@@ -32,8 +32,8 @@ SRCS(
     mkql_coalesce.h
     mkql_collect.cpp
     mkql_collect.h
-    mkql_combine.cpp 
-    mkql_combine.h 
+    mkql_combine.cpp
+    mkql_combine.h
     mkql_contains.cpp
     mkql_contains.h
     mkql_decimal_div.cpp
@@ -74,8 +74,8 @@ SRCS(
     mkql_fromstring.h
     mkql_fromyson.cpp
     mkql_fromyson.h
-    mkql_group.cpp 
-    mkql_group.h 
+    mkql_group.cpp
+    mkql_group.h
     mkql_guess.cpp
     mkql_guess.h
     mkql_hasitems.cpp
@@ -183,8 +183,8 @@ SRCS(
     mkql_udf.h
     mkql_unwrap.cpp
     mkql_unwrap.h
-    mkql_varitem.cpp 
-    mkql_varitem.h 
+    mkql_varitem.cpp
+    mkql_varitem.h
     mkql_visitall.cpp
     mkql_visitall.h
     mkql_way.cpp

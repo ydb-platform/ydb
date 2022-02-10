@@ -118,18 +118,18 @@ def signature(script, name):
         raise RuntimeError("Failed to extract type signature in the function: " + name + ", reason: \n" + out.getvalue())
 @@))
 
-(let PythonFuncSignature (lambda '(flavor script name) (Apply  
+(let PythonFuncSignature (lambda '(flavor script name) (Apply 
     (ScriptUdf flavor 'signature (ParseType '"(String, String)->String") PythonFuncSignatureScript) script name)))
 
 (let KeysImpl (lambda '(seq)
-   (MatchType seq 'Dict (lambda '() (DictKeys seq)) (lambda '()  
+   (MatchType seq 'Dict (lambda '() (DictKeys seq)) (lambda '() 
        (MatchType seq 'EmptyDict (lambda '() (EmptyList)) (lambda '() seq)))
 )))
 
 (let ToSet (lambda '(list) (ToDict list (lambda '(x) x) (lambda '(x) (Void)) '('Hashed 'One))))
 (let SetIsDisjointImpl (lambda '(dict scan) (Not (HasItems (SkipWhile
     (Apply KeysImpl scan)
-    (lambda '(item) (Not (Contains dict item)))))))) 
+    (lambda '(item) (Not (Contains dict item))))))))
 
 (let AutoMap2 (lambda '(f) (lambda '(x y) (MatchType x 'Optional
 (lambda '() (MatchType y 'Optional
@@ -162,10 +162,10 @@ def signature(script, name):
 
 (let SetIncludesImpl (lambda '(dict scan) (Not (HasItems (SkipWhile
     (Apply KeysImpl scan)
-    (lambda '(item) (Contains dict item))))))) 
+    (lambda '(item) (Contains dict item)))))))
 
 (let SetDifferenceImpl (lambda '(x y) (ToDict (Filter (DictItems x) (lambda '(p)
-    (Not (Contains y (Nth p '0))))) 
+    (Not (Contains y (Nth p '0)))))
     (lambda '(z) (Nth z '0)) (lambda '(z) (Nth z '1)) '('Hashed 'One) )))
 
 (let SetUnionImpl (lambda '(f)
@@ -212,7 +212,7 @@ def signature(script, name):
 (let SetSymmetricDifference3 (lambda '(x y f) (Apply (Apply AutoMap2 (Apply SetSymmetricDifferenceImpl f)) x y)))
 (let SetSymmetricDifference2 (lambda '(x y) (Apply SetSymmetricDifference3 x y (lambda '(k a b) (Void)))))
 
-(let ListAggregateImpl (lambda '(list factory) (MatchType list 'EmptyList  
+(let ListAggregateImpl (lambda '(list factory) (MatchType list 'EmptyList 
    (lambda '() (AsList (Null)))
    (lambda '() (Extract (Aggregate
    (Map list (lambda '(x) (AsStruct '('Data x))))
@@ -235,7 +235,7 @@ def signature(script, name):
    '('Key)
    '('('Data (Apply factory (StructType '('Data (ListItemType (DictPayloadType (TypeOf dict))))) (lambda '(x) (Member x 'Data)))))
    '('('compact))
-)  
+) 
 (lambda '(x) (Member x 'Key)) (lambda '(x) (Member x 'Data)) '('Hashed 'One)
 )))))
 
@@ -272,9 +272,9 @@ def signature(script, name):
         (lambda '(x) (NamedApply init '(x) (AsStruct) (DependsOn parent)))
         (lambda '(x y) (NamedApply update '(x y) (AsStruct) (DependsOn parent)))
     )))
-    (let list_update (lambda '(value state parent) (IfPresent state (lambda '(unpackedState)  
+    (let list_update (lambda '(value state parent) (IfPresent state (lambda '(unpackedState) 
         (Just (Fold (Apply extractor value) unpackedState
-        (lambda '(x y) (NamedApply update '(x y) (AsStruct) (DependsOn parent))))))  
+        (lambda '(x y) (NamedApply update '(x y) (AsStruct) (DependsOn parent)))))) 
         (Fold1 (Apply extractor value)
             (lambda '(x) (NamedApply init '(x) (AsStruct) (DependsOn parent)))
             (lambda '(x y) (NamedApply update '(x y) (AsStruct) (DependsOn parent))) ))))
@@ -286,7 +286,7 @@ def signature(script, name):
     (return (AggregationTraits type list_init list_update list_save list_load list_merge list_finish (Null)))
 )))))
 
-(let ChooseMembersImpl (lambda '(str fields)  
+(let ChooseMembersImpl (lambda '(str fields) 
     (Apply (EvaluateCode (LambdaCode (lambda '(row) (block '(
         (let items (ListMap fields (lambda '(f) (block '(
             (let atom (AtomCode f))
@@ -326,7 +326,7 @@ def signature(script, name):
     ))))) str))))
 ))
 
-(let DispatchStructFunc (lambda '(impl) (lambda '(str fields)  
+(let DispatchStructFunc (lambda '(impl) (lambda '(str fields) 
     (MatchType str 'Null (lambda '() (Null)) (lambda '()
     (MatchType str 'Optional (lambda '() (Map str (lambda '(unpacked) (Apply impl unpacked fields))))
     (lambda '() (Apply impl str fields))))
@@ -336,12 +336,12 @@ def signature(script, name):
 (let RemoveMembers (Apply DispatchStructFunc RemoveMembersImpl))
 (let ForceRemoveMembers (Apply DispatchStructFunc ForceRemoveMembersImpl))
 
-(let StructMembers (lambda '(str)  
+(let StructMembers (lambda '(str) 
     (MatchType str 'Null (lambda '() (List (ListType (DataType 'String)))) (lambda '()
     (Extract (StructTypeComponents (TypeHandle (Apply RemoveOptionalType (TypeOf str)))) 'Name))
 )))
 
-(let GatherMembersImpl (lambda '(str)  
+(let GatherMembersImpl (lambda '(str) 
     (Apply (EvaluateCode (LambdaCode (lambda '(strCode) (block '(
         (let type (Apply RemoveOptionalType (TypeOf str)))
         (let fields (ListExtract (StructTypeComponents (TypeHandle type)) 'Name))
@@ -368,32 +368,32 @@ def signature(script, name):
         (let renameSet (Apply ToSet (ListExtract renames '0)))
         (let oldItems (ListNotNull (ListMap originalFields (lambda '(f) (block '(
             (let atom (AtomCode f))
-            (return (If (Contains renameSet f) (Null) 
+            (return (If (Contains renameSet f) (Null)
                 (ListCode atom (FuncCode (String 'Member) strCode atom))))
         ))))))
         (let newItems (ListNotNull (ListMap renames (lambda '(r) (block '(
             (let prevAtom (AtomCode (Nth r '0)))
             (let newAtom (AtomCode (Nth r '1)))
             (let item (ListCode newAtom (FuncCode (String 'Member) strCode prevAtom)))
-            (return (If force (If (Contains originalSet (Nth r '0)) item (Null)) (Just item))) 
+            (return (If force (If (Contains originalSet (Nth r '0)) item (Null)) (Just item)))
         ))))))
         (return (MatchType type 'Null (lambda '() (ReprCode (Null))) (lambda '() (FuncCode (String 'AsStruct) (Extend oldItems newItems)))))
     ))))) str)
 ))
 
-(let RenameMembers (lambda '(str renames)  
+(let RenameMembers (lambda '(str renames) 
     (MatchType str 'Null (lambda '() (Null)) (lambda '()
     (MatchType str 'Optional (lambda '() (Map str (lambda '(unpacked) (Apply RenameMembersImpl unpacked renames (Bool '0)))))
     (lambda '() (Apply RenameMembersImpl str renames (Bool '0)))))
 )))
 
-(let ForceRenameMembers (lambda '(str renames)  
+(let ForceRenameMembers (lambda '(str renames) 
     (MatchType str 'Null (lambda '() (Null)) (lambda '()
     (MatchType str 'Optional (lambda '() (Map str (lambda '(unpacked) (Apply RenameMembersImpl unpacked renames (Bool '1)))))
     (lambda '() (Apply RenameMembersImpl str renames (Bool '1)))))
 )))
 
-(let RenameMembers (lambda '(str renames)  
+(let RenameMembers (lambda '(str renames) 
     (MatchType str 'Null (lambda '() (Null)) (lambda '()
     (MatchType str 'Optional (lambda '() (Map str (lambda '(unpacked) (Apply RenameMembersImpl unpacked renames (Bool '0)))))
     (lambda '() (Apply RenameMembersImpl str renames (Bool '0)))))
@@ -401,13 +401,13 @@ def signature(script, name):
 
 (let SpreadMembersImpl (lambda '(list fields force) (block '(
     (let fieldsSet (Apply ToSet fields))
-    (let check (lambda '(item) (Ensure item (SqlIn fieldsSet (Nth item '0) '())  
+    (let check (lambda '(item) (Ensure item (SqlIn fieldsSet (Nth item '0) '()) 
         (Concat (String '"Member not found: ") (Nth item '0)))))
     (let list (If force list (ListMap list check)))
     (let type (Apply RemoveOptionalType (TypeOf list)))
     (let itemType (TupleElementType (ListItemType type) '1))
     (let optType (OptionalType (Apply RemoveOptionalType itemType)))
-    (let empty (MatchType type 'EmptyList (lambda '() (Null)) (lambda '()  
+    (let empty (MatchType type 'EmptyList (lambda '() (Null)) (lambda '() 
         (MatchType type 'Null (lambda '() (Null)) (lambda '() (Nothing optType)))))
     )
     (return (Apply (EvaluateCode (LambdaCode (lambda '(listCode) (block '(
@@ -430,13 +430,13 @@ def signature(script, name):
     ))))) list))
 ))))
 
-(let SpreadMembers (lambda '(list fields)  
+(let SpreadMembers (lambda '(list fields) 
     (MatchType list 'Null (lambda '() (Null)) (lambda '()
     (MatchType list 'Optional (lambda '() (Map list (lambda '(unpacked) (Apply SpreadMembersImpl unpacked fields (Bool '0)))))
     (lambda '() (Apply SpreadMembersImpl list fields (Bool '0)))))
 )))
 
-(let ForceSpreadMembers (lambda '(list fields)  
+(let ForceSpreadMembers (lambda '(list fields) 
     (MatchType list 'Null (lambda '() (Null)) (lambda '()
     (MatchType list 'Optional (lambda '() (Map list (lambda '(unpacked) (Apply SpreadMembersImpl unpacked fields (Bool '1)))))
     (lambda '() (Apply SpreadMembersImpl list fields (Bool '1)))))

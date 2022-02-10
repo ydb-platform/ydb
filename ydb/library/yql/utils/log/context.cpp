@@ -1,19 +1,19 @@
-#include "context.h" 
+#include "context.h"
 #include "log.h"
- 
-#include <util/thread/singleton.h>
- 
 
-namespace NYql { 
+#include <util/thread/singleton.h>
+
+
+namespace NYql {
 namespace NLog {
 namespace {
- 
+
 struct TThrowedLogContext {
     TString LocationWithLogContext; // separated with ': '
 };
 
-} // namspace 
- 
+} // namspace
+
 void OutputLogCtx(IOutputStream* out, bool withBraces) {
     const NImpl::TLogContextListItem* ctxList = NImpl::GetLogContextList();
 
@@ -26,8 +26,8 @@ void OutputLogCtx(IOutputStream* out, bool withBraces) {
         NImpl::TLogContextListItem* ctxItem = ctxList->Next;
 
         { // special case for outputing the first element
-            const TString* it = ctxItem->begin(); 
-            const TString* end = ctxItem->end(); 
+            const TString* it = ctxItem->begin();
+            const TString* end = ctxItem->end();
 
             (*out) << *it++;
             for (; it != end; ++it) {
@@ -39,7 +39,7 @@ void OutputLogCtx(IOutputStream* out, bool withBraces) {
 
         // output remaining elements
         while (ctxItem != ctxList) {
-            for (const TString& name: *ctxItem) { 
+            for (const TString& name: *ctxItem) {
                 (*out) << '/' << name;
             }
             ctxItem = ctxItem->Next;
@@ -49,12 +49,12 @@ void OutputLogCtx(IOutputStream* out, bool withBraces) {
             (*out) << TStringBuf("} ");
         }
     }
-} 
- 
+}
+
 NImpl::TLogContextListItem* NImpl::GetLogContextList() {
     return FastTlsSingleton<NImpl::TLogContextListItem>();
-} 
- 
+}
+
 TString CurrentLogContextPath() {
     TStringStream ss;
     OutputLogCtx(&ss, false);
@@ -71,15 +71,15 @@ TAutoPtr<TLogElement> TContextPreprocessor::Preprocess(
 {
     OutputLogCtx(element.Get(), true);
     return element;
-} 
- 
+}
+
 void TYqlLogContextLocation::SetThrowedLogContextPath() const {
     TStringStream ss;
     ss << Location_ << TStringBuf(": ");
     OutputLogCtx(&ss, true);
     TThrowedLogContext* tlc = FastTlsSingleton<TThrowedLogContext>();
     tlc->LocationWithLogContext = ss.Str();
-} 
- 
+}
+
 } // namespace NLog
-} // namespace NYql 
+} // namespace NYql

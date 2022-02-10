@@ -1,4 +1,4 @@
-RECURSE( 
-    expr_nodes 
-    provider 
+RECURSE(
+    expr_nodes
+    provider
 )

@@ -45,8 +45,8 @@ public:
         return false;
     }
 
-    TNodePtr BuildFilter(TContext& ctx, const TString& label, const TNodePtr& groundNode) override { 
-        Y_UNUSED(ctx); 
+    TNodePtr BuildFilter(TContext& ctx, const TString& label, const TNodePtr& groundNode) override {
+        Y_UNUSED(ctx);
         Y_UNUSED(label);
         Y_UNUSED(groundNode);
         return nullptr;
@@ -241,10 +241,10 @@ public:
         return new TModifyBySource(Pos, OperationHumanName, ColumnsHint, Source->CloneSource());
     }
 
-    bool IsOrdered() const final { 
-        return Source->IsOrdered(); 
-    } 
- 
+    bool IsOrdered() const final {
+        return Source->IsOrdered();
+    }
+
 private:
     TString OperationHumanName;
     TSourcePtr Source;
@@ -311,7 +311,7 @@ public:
             options = L(options, Q(Y(Q("filter"), TableSource->BuildFilterLambda(ctx.GroundBlockShortcuts(Pos)))));
         }
 
-        bool unordered = false; 
+        bool unordered = false;
         ctx.PushBlockShortcuts();
         if (Values) {
             if (!Values->Init(ctx, TableSource.Get())) {
@@ -324,7 +324,7 @@ public:
             if (!values) {
                 return false;
             }
-            unordered = !Values->IsOrdered(); 
+            unordered = !Values->IsOrdered();
         }
 
         TNodePtr node(BuildInputTables(Pos, tableList, false));
@@ -346,9 +346,9 @@ public:
         node = ctx.GroundBlockShortcuts(Pos, node);
         if (values) {
             node = L(node, Y("let", "values", values));
-            if (unordered && ctx.UseUnordered(Table)) { 
-                node = L(node, Y("let", "values", Y("Unordered", "values"))); 
-            } 
+            if (unordered && ctx.UseUnordered(Table)) {
+                node = L(node, Y("let", "values", Y("Unordered", "values")));
+            }
         } else {
             node = L(node, Y("let", "values", Y("Void")));
         }

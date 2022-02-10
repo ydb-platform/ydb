@@ -11,7 +11,7 @@ namespace NNodes {
 
 #include <ydb/core/kqp/provider/yql_kikimr_expr_nodes.decl.inl.h>
 
-class TKiDataSource : public NGenerated::TKiDataSourceStub<TExprBase, TCallable, TCoAtom> { 
+class TKiDataSource : public NGenerated::TKiDataSourceStub<TExprBase, TCallable, TCoAtom> {
 public:
     explicit TKiDataSource(const TExprNode* node)
         : TKiDataSourceStub(node) {}
@@ -32,7 +32,7 @@ public:
     }
 };
 
-class TKiDataSink : public NGenerated::TKiDataSinkStub<TExprBase, TCallable, TCoAtom> { 
+class TKiDataSink : public NGenerated::TKiDataSinkStub<TExprBase, TCallable, TCoAtom> {
 public:
     explicit TKiDataSink(const TExprNode* node)
         : TKiDataSinkStub(node) {}

@@ -54,8 +54,8 @@ RECURSE(
     safe_vector
     safe_vector/ut
     segmented_pool_container
-    sorted_vector 
-    sorted_vector/ut 
+    sorted_vector
+    sorted_vector/ut
     spars_ar
     stack_array
     stack_array/ut

@@ -277,8 +277,8 @@ RECURSE(
     pop_count
     pop_count/benchmark
     pop_count/ut
-    presort 
-    presort/ut 
+    presort
+    presort/ut
     prob_counter
     prob_counter/ut
     progress_bar
@@ -356,8 +356,8 @@ RECURSE(
     succinct_arrays
     succinct_arrays/ut
     svnversion
-    telfinder 
-    telfinder/ut 
+    telfinder
+    telfinder/ut
     terminate_handler
     terminate_handler/sample
     testing
@@ -386,7 +386,7 @@ RECURSE(
     udp
     uilangdetect
     uilangdetect/ut
-    unicode 
+    unicode
     unistat
     unistat/ut
     uri

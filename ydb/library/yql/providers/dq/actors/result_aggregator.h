@@ -15,6 +15,6 @@ namespace NYql::NDqs::NExecutionHelpers {
         const THashMap<TString, TString>& secureParams,
         const TDqConfiguration::TPtr& settings,
         const TString& resultType,
-        bool discard, 
-        const NActors::TActorId& graphExecutionEventsId); 
+        bool discard,
+        const NActors::TActorId& graphExecutionEventsId);
 } // namespace NYql::NDqs::NExecutionHelpers

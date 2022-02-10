@@ -8,7 +8,7 @@
 namespace NYql {
 
 struct TOptimizeContext {
-    TTypeAnnotationContext* Types = nullptr; 
+    TTypeAnnotationContext* Types = nullptr;
     TParentsMap* ParentsMap = nullptr;
 
     const TExprNode* GetParentIfSingle(const TExprNode& node) const {
@@ -33,7 +33,7 @@ struct TOptimizeContext {
         YQL_ENSURE(usageCount == 1);
         return *parents.cbegin();
     }
- 
+
     bool IsSingleUsage(const TExprNode& node) const {
         return bool(GetParentIfSingle(node));
     }
@@ -47,23 +47,23 @@ struct TOptimizeContext {
         return ParentsMap->contains(&node);
     }
 
-    bool IsPersistentNode(const TExprNode& node) const { 
-        if (Types) { 
-            for (auto& source: Types->DataSources) { 
-                if (source->IsPersistent(node)) { 
-                    return true; 
-                } 
-            } 
- 
-            for (auto& sink: Types->DataSinks) { 
-                if (sink->IsPersistent(node)) { 
-                    return true; 
-                } 
-            } 
-        } 
- 
-        return false; 
-    } 
+    bool IsPersistentNode(const TExprNode& node) const {
+        if (Types) {
+            for (auto& source: Types->DataSources) {
+                if (source->IsPersistent(node)) {
+                    return true;
+                }
+            }
+
+            for (auto& sink: Types->DataSinks) {
+                if (sink->IsPersistent(node)) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
 
     bool IsPersistentNode(const NNodes::TExprBase& node) const {
         return IsPersistentNode(node.Ref());
@@ -72,7 +72,7 @@ struct TOptimizeContext {
 
 using TCallableOptimizerExt = std::function<TExprNode::TPtr (const TExprNode::TPtr&, TExprContext&, TOptimizeContext&)>;
 using TCallableOptimizerMap = std::unordered_map<std::string_view, TCallableOptimizerExt>;
-using TFinalizingOptimizerExt = std::function<void (const TExprNode::TPtr&, TNodeOnNodeOwnedMap&, TExprContext&, TOptimizeContext&)>; 
+using TFinalizingOptimizerExt = std::function<void (const TExprNode::TPtr&, TNodeOnNodeOwnedMap&, TExprContext&, TOptimizeContext&)>;
 using TFinalizingOptimizerMap = std::unordered_map<std::string_view, TFinalizingOptimizerExt>;
 
 struct TCoCallableRules {
@@ -93,8 +93,8 @@ struct TCoCallableRules {
     // rules that make a flow fork - Join pushdown if Join has multiple usage
     TCallableOptimizerMap FlowCallables[FLOW_STEPS];
 
-    TFinalizingOptimizerMap Finalizers; 
- 
+    TFinalizingOptimizerMap Finalizers;
+
     // rules to be applied before execution
     TCallableOptimizerMap FinalCallables;
 
@@ -106,7 +106,7 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map);
 void RegisterCoSimpleCallables2(TCallableOptimizerMap& map);
 void RegisterCoFlowCallables1(TCallableOptimizerMap& map);
 void RegisterCoFlowCallables2(TCallableOptimizerMap& map);
-void RegisterCoFinalizers(TFinalizingOptimizerMap& map); 
+void RegisterCoFinalizers(TFinalizingOptimizerMap& map);
 void RegisterCoFinalCallables(TCallableOptimizerMap& map);
 
 }

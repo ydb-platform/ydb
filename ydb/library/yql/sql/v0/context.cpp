@@ -36,12 +36,12 @@ TNodePtr AddTablePathPrefix(TContext &ctx, TStringBuf prefixPath, const TDeferre
     return BuildQuotedAtom(path.Build()->GetPos(), prefixPathSplit.AppendMany(pathSplit.begin(), pathSplit.end()).Reconstruct());
 }
 
-typedef bool TContext::*TPragmaField; 
- 
-THashMap<TStringBuf, TPragmaField> CTX_PRAGMA_FIELDS = { 
+typedef bool TContext::*TPragmaField;
+
+THashMap<TStringBuf, TPragmaField> CTX_PRAGMA_FIELDS = {
     {"PullUpFlatMapOverJoin", &TContext::PragmaPullUpFlatMapOverJoin},
-}; 
- 
+};
+
 } // namespace
 
 TContext::TContext(const NSQLTranslation::TTranslationSettings& settings,
@@ -59,18 +59,18 @@ TContext::TContext(const NSQLTranslation::TTranslationSettings& settings,
 {
     Position.File = settings.File;
 
-    for (auto& flag: settings.Flags) { 
-        bool value = true; 
-        TStringBuf key = flag; 
-        auto ptr = CTX_PRAGMA_FIELDS.FindPtr(key); 
-        if (!ptr && key.SkipPrefix("Disable")) { 
-            value = false; 
-            ptr = CTX_PRAGMA_FIELDS.FindPtr(key); 
-        } 
+    for (auto& flag: settings.Flags) {
+        bool value = true;
+        TStringBuf key = flag;
+        auto ptr = CTX_PRAGMA_FIELDS.FindPtr(key);
+        if (!ptr && key.SkipPrefix("Disable")) {
+            value = false;
+            ptr = CTX_PRAGMA_FIELDS.FindPtr(key);
+        }
         if (ptr) {
             this->*(*ptr) = value;
         }
-    } 
+    }
 }
 
 TContext::~TContext()
@@ -147,10 +147,10 @@ IOutputStream& TContext::MakeIssue(ESeverity severity, TIssueCode code, NYql::TP
 
 bool TContext::SetPathPrefix(const TString& value, TMaybe<TString> arg) {
     if (arg.Defined()) {
-        if (*arg == YtProviderName 
-            || *arg == KikimrProviderName 
-            || *arg == RtmrProviderName 
-            ) 
+        if (*arg == YtProviderName
+            || *arg == KikimrProviderName
+            || *arg == RtmrProviderName
+            )
         {
             ProviderPathPrefixes[*arg] = value;
             return true;
@@ -309,34 +309,34 @@ TString TContext::AddSimpleUdf(const TString& udf) {
     return name;
 }
 
-TString TContext::GetServiceName(const ISource& source) const { 
-    TTableList tableList; 
-    source.GetInputTables(tableList); 
+TString TContext::GetServiceName(const ISource& source) const {
+    TTableList tableList;
+    source.GetInputTables(tableList);
 
-    TSet<TString> clusters; 
-    for (auto& it: tableList) { 
-        if (auto provider = GetClusterProvider(it.Cluster)) { 
-            return *provider; 
-        } 
-    } 
- 
-    for (auto& cluster: UsedClusters) { 
-        if (auto provider = GetClusterProvider(cluster)) { 
-            return *provider; 
-        } 
-    } 
- 
-    return CurrCluster.empty() ? TString() : GetClusterProvider(CurrCluster).GetOrElse(TString()); 
-} 
- 
-bool TContext::UseUnordered(const ISource& source) const { 
-    return YtProviderName == to_lower(GetServiceName(source)); 
-} 
- 
-bool TContext::UseUnordered(const TTableRef& table) const { 
-    return YtProviderName == to_lower(GetClusterProvider(table.Cluster).GetOrElse(TString())); 
-} 
- 
+    TSet<TString> clusters;
+    for (auto& it: tableList) {
+        if (auto provider = GetClusterProvider(it.Cluster)) {
+            return *provider;
+        }
+    }
+
+    for (auto& cluster: UsedClusters) {
+        if (auto provider = GetClusterProvider(cluster)) {
+            return *provider;
+        }
+    }
+
+    return CurrCluster.empty() ? TString() : GetClusterProvider(CurrCluster).GetOrElse(TString());
+}
+
+bool TContext::UseUnordered(const ISource& source) const {
+    return YtProviderName == to_lower(GetServiceName(source));
+}
+
+bool TContext::UseUnordered(const TTableRef& table) const {
+    return YtProviderName == to_lower(GetClusterProvider(table.Cluster).GetOrElse(TString()));
+}
+
 TTranslation::TTranslation(TContext& ctx)
     : Ctx(ctx)
 {

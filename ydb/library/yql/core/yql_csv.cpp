@@ -1,4 +1,4 @@
-#include "yql_csv.h" 
+#include "yql_csv.h"
 
 #include <util/string/split.h>
 #include <util/string/escape.h>
@@ -186,9 +186,9 @@ void TCsvOutputStream::DoWrite(const void* buf, size_t len)
     }
 }
 
-void TCsvOutputStream::DoFlush() { 
-    Slave_.Flush(); 
-} 
- 
+void TCsvOutputStream::DoFlush() {
+    Slave_.Flush();
+}
+
 } // namspace NUtils
 } // namspace NYql

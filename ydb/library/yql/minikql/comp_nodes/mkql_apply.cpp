@@ -64,20 +64,20 @@ public:
             }
         }
 
-        if (const auto codegen = dynamic_cast<ICodegeneratorRunNode*>(CallableNode)) { 
-            codegen->CreateRun(ctx, block, pointer, args); 
-        } else { 
-            const auto callable = GetNodeValue(CallableNode, ctx, block); 
+        if (const auto codegen = dynamic_cast<ICodegeneratorRunNode*>(CallableNode)) {
+            codegen->CreateRun(ctx, block, pointer, args);
+        } else {
+            const auto callable = GetNodeValue(CallableNode, ctx, block);
             const auto calleePtr = GetElementPtrInst::CreateInBounds(ctx.Ctx, {ConstantInt::get(idxType, 0), ConstantInt::get(idxType, 6)}, "callee_ptr", block);
             const auto previous = new LoadInst(calleePtr, "previous", block);
             const auto callee = CastInst::Create(Instruction::IntToPtr, ConstantInt::get(Type::getInt64Ty(context), ui64(&Position)), previous->getType(), "callee", block);
             new StoreInst(callee, calleePtr, block);
-            CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::Run>(pointer, callable, ctx.Codegen, block, ctx.GetBuilder(), args); 
+            CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::Run>(pointer, callable, ctx.Codegen, block, ctx.GetBuilder(), args);
             new StoreInst(previous, calleePtr, block);
-            if (CallableNode->IsTemporaryValue()) { 
-                CleanupBoxed(callable, ctx, block); 
-            } 
-        } 
+            if (CallableNode->IsTemporaryValue()) {
+                CleanupBoxed(callable, ctx, block);
+            }
+        }
         for (const auto& arg : argsv) {
             ValueUnRef(arg.second, arg.first, ctx, block);
         }

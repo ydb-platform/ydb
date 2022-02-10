@@ -4,7 +4,7 @@
 #pragma once
 
 #include <ydb/library/yql/core/expr_nodes_gen/yql_expr_nodes_gen.h>
-#include <util/generic/hash_set.h> 
+#include <util/generic/hash_set.h>
 
 namespace NYql {
 namespace NNodes {
@@ -56,7 +56,7 @@ public:
     {{child.Type}} {{child.Name}}() const {
         return {{child.Type}}(this->Ref().ChildPtr(idx_{{child.Name}}));
     }
-        {% endif -%} 
+        {% endif -%}
     {%- endfor %}
 
     {%- if node.Match %}
@@ -70,9 +70,9 @@ public:
         static THashSet<TStringBuf> namesToMatch = {
             {%- for name in node.aux.namesToMatch %}
             TStringBuf("{{ name }}"),
-            {%- endfor %} 
-        }; 
-        return node->IsCallable(namesToMatch); 
+            {%- endfor %}
+        };
+        return node->IsCallable(namesToMatch);
         {% elif node.Match.Type == "Tuple" %}
         return node->IsList()
             && node->ChildrenSize() >= {{ node.aux.fixedChildrenCount }}
@@ -99,7 +99,7 @@ protected:
 public:
     {% for child in node.Children %}
     TMaybe<{{child.Type}}> {{child.Name}}() const {
-        return TMaybe<{{child.Type}}>(this->IsValid() {% if child.Optional %}&& {{child.Index}} < this->Ref().ChildrenSize() {% endif %}? this->Ref().ChildPtr({{child.Index}}) : TExprNode::TPtr()); 
+        return TMaybe<{{child.Type}}>(this->IsValid() {% if child.Optional %}&& {{child.Index}} < this->Ref().ChildrenSize() {% endif %}? this->Ref().ChildPtr({{child.Index}}) : TExprNode::TPtr());
     }
     {% endfor %}
     TDerived Cast() const {
@@ -118,20 +118,20 @@ protected:
         , BuildFunc(buildFunc) {}
 
     void Check() {
-        {% if node.Match and node.Match.Type == "CallableBase" %} 
-        if (CallableNameHolder.empty()) { 
-            ythrow yexception() << "{{node.Name}} builder: CallableName not defined."; 
-        } 
- 
-        static THashSet<TStringBuf> namesToMatch = { 
-            {%- for name in node.aux.namesToMatch %} 
+        {% if node.Match and node.Match.Type == "CallableBase" %}
+        if (CallableNameHolder.empty()) {
+            ythrow yexception() << "{{node.Name}} builder: CallableName not defined.";
+        }
+
+        static THashSet<TStringBuf> namesToMatch = {
+            {%- for name in node.aux.namesToMatch %}
             TStringBuf("{{ name }}"),
-            {%- endfor %} 
-        }; 
-        if (namesToMatch.find(CallableNameHolder) == namesToMatch.end()) { 
-            ythrow yexception() << "{{node.Name}} builder: Invalid CallableName: " << CallableNameHolder; 
-        } 
-        {% endif %} 
+            {%- endfor %}
+        };
+        if (namesToMatch.find(CallableNameHolder) == namesToMatch.end()) {
+            ythrow yexception() << "{{node.Name}} builder: Invalid CallableName: " << CallableNameHolder;
+        }
+        {% endif %}
         {% if node.aux.allChildren | count > 0 %}
         bool argsValid = true;
         bool argValid;
@@ -151,9 +151,9 @@ protected:
         {% endif %}
     }
 
-    {% if node.Match and node.Match.Type == "CallableBase" %} 
-    TString CallableNameHolder; 
-    {% endif %} 
+    {% if node.Match and node.Match.Type == "CallableBase" %}
+    TString CallableNameHolder;
+    {% endif %}
     {% for child in node.aux.allChildren %}
     TMaybe<{{child.Type}}> {{child.aux.holderName}};
     {%- endfor %}
@@ -174,33 +174,33 @@ public:
         return parent.Value();
     }
 
-    {% if node.aux.allChildren | count > 0 %} 
-    TNodeBuilder<TParent, TDerived>& InitFrom(const ResultType& item) { 
-        {% if node.Match.Type == "CallableBase" %} 
-        CallableNameHolder = item.Ref().Content(); 
-        {% endif %} 
-        {%- for child in node.aux.allChildren %} 
-        {%- if child.Optional %} 
-        if (item.{{child.Name}}()) { 
-            {{child.aux.holderName}} = item.{{child.Name}}().Cast(); 
-        } 
-        {%- else %} 
-        {{child.aux.holderName}} = item.{{child.Name}}(); 
-        {%- endif %} 
-        {%- endfor %} 
- 
-        {%- if node.Builder.Kind == "FreeArg" %} 
-        TBase::FreeArgsHolder.assign(item.FreeArgs().begin(), item.FreeArgs().end()); 
-        {%- endif %} 
- 
-        return *static_cast<TNodeBuilder<TParent, TDerived>*>(this); 
-    } 
-    {% endif %} 
- 
-    {% if node.Match and node.Match.Type == "CallableBase" %} 
-    TBuilder<TParent, TDerived>& CallableName(TStringBuf name) { CallableNameHolder = name; return *static_cast<TBuilder<TParent, TDerived>*>(this); } 
-    {% endif %} 
- 
+    {% if node.aux.allChildren | count > 0 %}
+    TNodeBuilder<TParent, TDerived>& InitFrom(const ResultType& item) {
+        {% if node.Match.Type == "CallableBase" %}
+        CallableNameHolder = item.Ref().Content();
+        {% endif %}
+        {%- for child in node.aux.allChildren %}
+        {%- if child.Optional %}
+        if (item.{{child.Name}}()) {
+            {{child.aux.holderName}} = item.{{child.Name}}().Cast();
+        }
+        {%- else %}
+        {{child.aux.holderName}} = item.{{child.Name}}();
+        {%- endif %}
+        {%- endfor %}
+
+        {%- if node.Builder.Kind == "FreeArg" %}
+        TBase::FreeArgsHolder.assign(item.FreeArgs().begin(), item.FreeArgs().end());
+        {%- endif %}
+
+        return *static_cast<TNodeBuilder<TParent, TDerived>*>(this);
+    }
+    {% endif %}
+
+    {% if node.Match and node.Match.Type == "CallableBase" %}
+    TBuilder<TParent, TDerived>& CallableName(TStringBuf name) { CallableNameHolder = name; return *static_cast<TBuilder<TParent, TDerived>*>(this); }
+    {% endif %}
+
     {%- for child in node.aux.allChildren %}
     TBuilder<TParent, TDerived>& {{child.Name}}(const TStringBuf& argName) { {{child.aux.holderName}} = {{child.Type}}(this->GetArgFunc(argName)); return *static_cast<TBuilder<TParent, TDerived>*>(this); }
         {% if child.Optional %}
@@ -210,13 +210,13 @@ public:
 
     TBuilder<TParent, TDerived>& {{child.Name}}(const TExprNode::TPtr& node) { {{child.aux.holderName}} = {{child.Type}}(node); return *static_cast<TBuilder<TParent, TDerived>*>(this); }
 
-    TBuilder<TParent, TDerived>& {{child.Name}}(std::function<void(TExprNodeBuilder&)> fluentFunc) { 
+    TBuilder<TParent, TDerived>& {{child.Name}}(std::function<void(TExprNodeBuilder&)> fluentFunc) {
         TExprNodeBuilder fluentBuilder(this->Pos, this->Ctx, [this] (const TStringBuf& argName) {
-            return this->GetArgFunc(argName).Ptr(); 
+            return this->GetArgFunc(argName).Ptr();
         });
 
-        fluentFunc(fluentBuilder); 
-        {{child.aux.holderName}} = fluentBuilder.Build(); 
+        fluentFunc(fluentBuilder);
+        {{child.aux.holderName}} = fluentBuilder.Build();
         return *static_cast<TBuilder<TParent, TDerived>*>(this);
     }
 
@@ -321,7 +321,7 @@ class UnknownBuilder {
     static_assert(false, "Unknown builder kind: {{ node.Builder.Kind }}.");
         {% endif %}
     {{ node.Name }} DoBuild() {
-        {%- if node.Match and (node.Match.Type == "Callable" or node.Match.Type == "CallableBase") %} 
+        {%- if node.Match and (node.Match.Type == "Callable" or node.Match.Type == "CallableBase") %}
         TExprNode::TListType argsList;
             {%- if node.Builder.Kind == "List" %}
         for (auto child : this->Items) {
@@ -342,11 +342,11 @@ class UnknownBuilder {
         }
                 {% endif %}
             {%- endif %}
-            {%- if node.Match.Type == "CallableBase" %} 
-        auto node = this->Ctx.NewCallable(this->Pos, this->CallableNameHolder, std::move(argsList)); 
-            {%- else %} 
+            {%- if node.Match.Type == "CallableBase" %}
+        auto node = this->Ctx.NewCallable(this->Pos, this->CallableNameHolder, std::move(argsList));
+            {%- else %}
         auto node = this->Ctx.NewCallable(this->Pos, "{{ node.Match.Name }}", std::move(argsList));
-            {%- endif %} 
+            {%- endif %}
         return {{ node.Name }}(node);
         {%- elif node.Match and node.Match.Type == "Tuple"%}
         TExprNode::TListType tupleItems;

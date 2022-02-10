@@ -1,6 +1,6 @@
-#include "yql_clickhouse_dq_integration.h" 
-#include "yql_clickhouse_mkql_compiler.h" 
- 
+#include "yql_clickhouse_dq_integration.h"
+#include "yql_clickhouse_mkql_compiler.h"
+
 #include <ydb/library/yql/providers/common/dq/yql_dq_integration_impl.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
@@ -9,26 +9,26 @@
 #include <ydb/library/yql/providers/clickhouse/proto/range.pb.h>
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
 #include <ydb/library/yql/ast/yql_expr.h>
- 
-namespace NYql { 
- 
-using namespace NNodes; 
- 
+
+namespace NYql {
+
+using namespace NNodes;
+
 namespace {
 
-class TClickHouseDqIntegration: public TDqIntegrationBase { 
-public: 
+class TClickHouseDqIntegration: public TDqIntegrationBase {
+public:
     TClickHouseDqIntegration(TClickHouseState::TPtr state)
-        : State_(state) 
+        : State_(state)
     {}
- 
+
     TMaybe<ui64> CanRead(const TDqSettings&, const TExprNode& read, TExprContext&, bool) override {
         if (TClReadTable::Match(&read)) {
-            return 0ul; // TODO: return real size 
-        } 
-        return Nothing(); 
-    } 
- 
+            return 0ul; // TODO: return real size
+        }
+        return Nothing();
+    }
+
     TExprNode::TPtr WrapRead(const TDqSettings&, const TExprNode::TPtr& read, TExprContext& ctx) override {
         if (const auto maybeClReadTable = TMaybeNode<TClReadTable>(read)) {
             const auto clReadTable = maybeClReadTable.Cast();
@@ -57,10 +57,10 @@ public:
                 .RowType(ExpandType(clReadTable.Pos(), *rowType, ctx))
                 .DataSource(clReadTable.DataSource().Cast<TCoDataSource>())
                 .Done().Ptr();
-        } 
-        return read; 
-    } 
- 
+        }
+        return read;
+    }
+
     ui64 Partition(const TDqSettings&, size_t, const TExprNode&, TVector<TString>& partitions, TString*, TExprContext&, bool) override {
         partitions.clear();
         NCH::TRange range;
@@ -111,16 +111,16 @@ public:
 
     void RegisterMkqlCompiler(NCommon::TMkqlCallableCompilerBase& compiler) override {
         RegisterDqClickHouseMkqlCompilers(compiler, State_);
-    } 
- 
-private: 
+    }
+
+private:
     const TClickHouseState::TPtr State_;
-}; 
- 
-} 
- 
+};
+
+}
+
 THolder<IDqIntegration> CreateClickHouseDqIntegration(TClickHouseState::TPtr state) {
     return MakeHolder<TClickHouseDqIntegration>(state);
-} 
+}
 
 }

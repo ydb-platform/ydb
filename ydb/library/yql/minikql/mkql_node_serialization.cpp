@@ -4,10 +4,10 @@
 #include "mkql_type_ops.h"
 
 #include <ydb/library/yql/minikql/pack_num.h>
- 
+
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 #include <library/cpp/packedtypes/zigzag.h>
- 
+
 #include <util/generic/algorithm.h>
 #include <util/system/unaligned_mem.h>
 
@@ -947,13 +947,13 @@ namespace {
         }
 
         Y_FORCE_INLINE void WriteVar32(ui32 value) {
-            char buf[MAX_PACKED32_SIZE]; 
-            Out.AppendNoAlias(buf, Pack32(value, buf)); 
+            char buf[MAX_PACKED32_SIZE];
+            Out.AppendNoAlias(buf, Pack32(value, buf));
         }
 
         Y_FORCE_INLINE void WriteVar64(ui64 value) {
-            char buf[MAX_PACKED64_SIZE]; 
-            Out.AppendNoAlias(buf, Pack64(value, buf)); 
+            char buf[MAX_PACKED64_SIZE];
+            Out.AppendNoAlias(buf, Pack64(value, buf));
         }
 
     private:
@@ -1070,21 +1070,21 @@ namespace {
 
         Y_FORCE_INLINE ui32 ReadVar32() {
             ui32 result = 0;
-            size_t count = Unpack32(Current, End - Current, result); 
-            if (!count) { 
+            size_t count = Unpack32(Current, End - Current, result);
+            if (!count) {
                 ThrowCorrupted();
-            } 
-            Current += count; 
+            }
+            Current += count;
             return result;
         }
 
         Y_FORCE_INLINE ui64 ReadVar64() {
             ui64 result = 0;
-            size_t count = Unpack64(Current, End - Current, result); 
-            if (!count) { 
+            size_t count = Unpack64(Current, End - Current, result);
+            if (!count) {
                 ThrowCorrupted();
-            } 
-            Current += count; 
+            }
+            Current += count;
             return result;
         }
 

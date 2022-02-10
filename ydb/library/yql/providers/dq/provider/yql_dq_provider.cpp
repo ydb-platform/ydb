@@ -15,7 +15,7 @@ namespace NYql {
 TDataProviderInitializer GetDqDataProviderInitializer(
     TExecTransformerFactory execTransformerFactory,
     const IDqGateway::TPtr& dqGateway,
-    NKikimr::NMiniKQL::TComputationNodeFactory compFactory, 
+    NKikimr::NMiniKQL::TComputationNodeFactory compFactory,
     const IMetricsRegistryPtr& metrics,
     const TFileStoragePtr& fileStorage,
     bool externalUser)
@@ -32,11 +32,11 @@ TDataProviderInitializer GetDqDataProviderInitializer(
     ) {
         Y_UNUSED(userName);
 
-        TDqStatePtr state = MakeIntrusive<TDqState>( 
+        TDqStatePtr state = MakeIntrusive<TDqState>(
             dqGateway, // nullptr for yqlrun
             gatewaysConfig,
             functionRegistry,
-            compFactory, 
+            compFactory,
             randomProvider,
             typeCtx.Get(),
             progressWriter,

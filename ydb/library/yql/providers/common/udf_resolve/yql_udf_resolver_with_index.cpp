@@ -161,14 +161,14 @@ private:
             return false;
         }
 
-        function.CallableType = ParseTypeFromYson(TStringBuf{info.CallableType}, ctx, function.Pos); 
+        function.CallableType = ParseTypeFromYson(TStringBuf{info.CallableType}, ctx, function.Pos);
         if (!function.CallableType) {
             ctx.AddError(TIssue(function.Pos, TStringBuilder() << "Failed to build callable type from YSON for function " << function.Name));
             return false;
         }
 
         if (info.RunConfigType) {
-            function.RunConfigType = ParseTypeFromYson(TStringBuf{info.RunConfigType}, ctx, function.Pos); 
+            function.RunConfigType = ParseTypeFromYson(TStringBuf{info.RunConfigType}, ctx, function.Pos);
             if (!function.RunConfigType) {
                 ctx.AddError(TIssue(function.Pos, TStringBuilder() << "Failed to build run config type from YSON for function " << function.Name));
                 return false;

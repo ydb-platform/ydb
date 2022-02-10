@@ -264,12 +264,12 @@ public:
         auto programRootIdx = programType->FindMemberIndex("Program");
         YQL_ENSURE(programRootIdx);
         TRuntimeNode programRoot = programStruct.GetValue(*programRootIdx);
-        if (Context.FuncProvider) { 
-            TExploringNodeVisitor explorer; 
+        if (Context.FuncProvider) {
+            TExploringNodeVisitor explorer;
             explorer.Walk(programRoot.GetNode(), typeEnv);
-            bool wereChanges = false; 
+            bool wereChanges = false;
             programRoot = SinglePassVisitCallables(programRoot, explorer, Context.FuncProvider, typeEnv, true, wereChanges);
-        } 
+        }
 
         ProgramParsed.OutputItemTypes.resize(task.OutputsSize());
 

@@ -4,7 +4,7 @@ PROTO_LIBRARY()
 
 SRCS(
     gateways_config.proto
-    udf_resolver.proto 
+    udf_resolver.proto
 )
 
 PEERDIR(

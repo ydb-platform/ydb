@@ -902,7 +902,7 @@ TExprNode::TPtr KiRewriteEquiJoin(TExprBase node, const TKikimrTablesData& table
         auto input = join.Arg(i).Cast<TCoEquiJoinInput>();
         joinInputs.push_back(input);
 
-        auto itemType = input.List().Ptr()->GetTypeAnn()->Cast<TListExprType>()->GetItemType(); 
+        auto itemType = input.List().Ptr()->GetTypeAnn()->Cast<TListExprType>()->GetItemType();
         joinLabels.Add(ctx, *input.Scope().Ptr(), itemType->Cast<TStructExprType>());
     }
 

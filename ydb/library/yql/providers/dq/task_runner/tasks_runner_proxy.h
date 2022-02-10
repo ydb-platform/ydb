@@ -5,7 +5,7 @@
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
 #include <ydb/library/yql/minikql/mkql_node.h>
 
-namespace NYql::NTaskRunnerProxy { 
+namespace NYql::NTaskRunnerProxy {
 
 extern const TString WorkingDirectoryParamName;
 extern const TString WorkingDirectoryDontInitParamName; // COMPAT(aozeritsky)
@@ -97,4 +97,4 @@ public:
 
 NDq::TDqTaskRunnerMemoryLimits DefaultMemoryLimits();
 
-} // namespace NYql::NTaskRunnerProxy 
+} // namespace NYql::NTaskRunnerProxy

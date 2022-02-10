@@ -8,7 +8,7 @@ namespace NYql::NDqs {
     class TDatabaseManager;
 
     THolder<IGraphTransformer> CreateDqsWrapListsOptTransformer();
-    THolder<IGraphTransformer> CreateDqsFinalizingOptTransformer(); 
+    THolder<IGraphTransformer> CreateDqsFinalizingOptTransformer();
     THolder<IGraphTransformer> CreateDqsBuildTransformer();
     THolder<IGraphTransformer> CreateDqsRewritePhyCallablesTransformer();
     THolder<IGraphTransformer> CreateDqsPeepholeTransformer(THolder<IGraphTransformer>&& typeAnnTransformer, TTypeAnnotationContext& typesCtx);

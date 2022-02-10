@@ -878,9 +878,9 @@ bool operator==(const TNode& lhs, const TNode& rhs)
 
     if (lhs.Attributes_) {
         if (rhs.Attributes_) {
-            if (*lhs.Attributes_ != *rhs.Attributes_) { 
-                return false; 
-            } 
+            if (*lhs.Attributes_ != *rhs.Attributes_) {
+                return false;
+            }
         } else {
             return false;
         }

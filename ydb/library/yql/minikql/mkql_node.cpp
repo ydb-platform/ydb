@@ -15,7 +15,7 @@ namespace NMiniKQL {
 
 using namespace NDetail;
 
-TTypeEnvironment::TTypeEnvironment(TScopedAlloc& alloc) 
+TTypeEnvironment::TTypeEnvironment(TScopedAlloc& alloc)
     : Alloc(alloc)
     , Arena(&Alloc.Ref())
     , EmptyStruct(nullptr)

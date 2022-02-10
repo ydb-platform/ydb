@@ -12,16 +12,16 @@ namespace {
 
 template<typename TMapNode>
 TExprBase RebuildMapToList(TMapNode map, TExprContext& ctx) {
-    if (map.Lambda().Ptr()->GetTypeAnn()->GetKind() == ETypeAnnotationKind::List && 
-        map.Input().Ptr()->GetTypeAnn()->GetKind() == ETypeAnnotationKind::List) 
+    if (map.Lambda().Ptr()->GetTypeAnn()->GetKind() == ETypeAnnotationKind::List &&
+        map.Input().Ptr()->GetTypeAnn()->GetKind() == ETypeAnnotationKind::List)
     {
         return map;
     }
 
-    bool isOptional = map.Ptr()->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Optional; 
+    bool isOptional = map.Ptr()->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Optional;
 
-    if (map.Lambda().Ptr()->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Optional) { 
-        auto newBody = Build<TCoToList>(ctx, map.Pos()) 
+    if (map.Lambda().Ptr()->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Optional) {
+        auto newBody = Build<TCoToList>(ctx, map.Pos())
             .Optional(map.Lambda().Body())
             .Done();
 
@@ -37,9 +37,9 @@ TExprBase RebuildMapToList(TMapNode map, TExprContext& ctx) {
             .Done();
     }
 
-    if (map.Input().Ptr()->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Optional) { 
+    if (map.Input().Ptr()->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Optional) {
         map = Build<TMapNode>(ctx, map.Pos())
-            .template Input<TCoToList>() 
+            .template Input<TCoToList>()
                 .Optional(map.Input())
                 .Build()
             .Lambda(map.Lambda())
@@ -47,7 +47,7 @@ TExprBase RebuildMapToList(TMapNode map, TExprContext& ctx) {
     }
 
     if (isOptional) {
-        return Build<TCoToOptional>(ctx, map.Pos()) 
+        return Build<TCoToOptional>(ctx, map.Pos())
             .List(map)
             .Done();
     }
@@ -61,15 +61,15 @@ TExprNode::TPtr NormalizeCallables(TExprBase node, TExprContext& ctx, const TKqp
         return node.Ptr();
     }
 
-    if (node.Maybe<TCoMap>() || node.Maybe<TCoFlatMap>()) { 
-        return node.Maybe<TCoMap>() 
-            ? RebuildMapToList<TCoMap>(node.Cast<TCoMap>(), ctx).Ptr() 
-            : RebuildMapToList<TCoFlatMap>(node.Cast<TCoFlatMap>(), ctx).Ptr(); 
+    if (node.Maybe<TCoMap>() || node.Maybe<TCoFlatMap>()) {
+        return node.Maybe<TCoMap>()
+            ? RebuildMapToList<TCoMap>(node.Cast<TCoMap>(), ctx).Ptr()
+            : RebuildMapToList<TCoFlatMap>(node.Cast<TCoFlatMap>(), ctx).Ptr();
     }
 
-    if (auto filter = node.Maybe<TCoFilter>()) { 
+    if (auto filter = node.Maybe<TCoFilter>()) {
         YQL_CLOG(INFO, ProviderKqp) << "NormalizeCallables: Filter";
-        return Build<TCoFlatMap>(ctx, node.Pos()) 
+        return Build<TCoFlatMap>(ctx, node.Pos())
             .Input(filter.Cast().Input())
             .Lambda()
                 .Args({"item"})
@@ -100,8 +100,8 @@ TExprNode::TPtr NormalizeCallables(TExprBase node, TExprContext& ctx, const TKqp
 TExprNode::TPtr ToListOverToOptional(TExprBase node, TExprContext& ctx) {
     Y_UNUSED(ctx);
 
-    if (auto toList = node.Maybe<TCoToList>()) { 
-        if (auto toOpt = toList.Cast().Optional().Maybe<TCoToOptional>()) { 
+    if (auto toList = node.Maybe<TCoToList>()) {
+        if (auto toOpt = toList.Cast().Optional().Maybe<TCoToOptional>()) {
             YQL_CLOG(INFO, ProviderKqp) << "ToListOverToOptional";
             return toOpt.Cast().List().Ptr();
         }
@@ -119,7 +119,7 @@ TExprNode::TPtr ToListOverToOptional(TExprBase node, TExprContext& ctx) {
 }
 
 template<typename TInner, typename TOuter>
-TExprBase SplitMap(TExprBase input, TCoLambda lambda, TExprContext& ctx, const TVector<TExprBase> execRoots, 
+TExprBase SplitMap(TExprBase input, TCoLambda lambda, TExprContext& ctx, const TVector<TExprBase> execRoots,
     const TKqpAnalyzeResults& analyzeResults)
 {
     auto exprRootsTuple = Build<TExprList>(ctx, lambda.Pos())
@@ -165,7 +165,7 @@ TExprBase SplitMap(TExprBase input, TCoLambda lambda, TExprContext& ctx, const T
             auto* nodeInfo = analyzeResults.ExprToNodeInfoMap.FindPtr(node.Get());
             YQL_ENSURE(nodeInfo);
 
-            YQL_ENSURE(node->GetTypeAnn()); 
+            YQL_ENSURE(node->GetTypeAnn());
             bool isComputable = node->IsComputable();
 
             if (innerNodes.contains(node.Get())) {
@@ -186,8 +186,8 @@ TExprBase SplitMap(TExprBase input, TCoLambda lambda, TExprContext& ctx, const T
                     bool innerChild = innerNodes.contains(child.Get());
                     hasInnerChild = hasInnerChild | innerChild;
 
-                    YQL_ENSURE(child->GetTypeAnn()); 
-                    if (child->GetTypeAnn()->IsComputable() && !innerChild) { 
+                    YQL_ENSURE(child->GetTypeAnn());
+                    if (child->GetTypeAnn()->IsComputable() && !innerChild) {
                         return true;
                     }
                 }
@@ -211,7 +211,7 @@ TExprBase SplitMap(TExprBase input, TCoLambda lambda, TExprContext& ctx, const T
         .Add(jointNodes)
         .Done();
 
-    auto innerLambda = Build<TCoLambda>(ctx, lambda.Pos()) 
+    auto innerLambda = Build<TCoLambda>(ctx, lambda.Pos())
         .Args({"item"})
         .Body<TExprApplier>()
             .Apply(innerLambdaBody)
@@ -219,13 +219,13 @@ TExprBase SplitMap(TExprBase input, TCoLambda lambda, TExprContext& ctx, const T
             .Build()
         .Done();
 
-    TCoArgument outerLambdaArg = Build<TCoArgument>(ctx, lambda.Pos()) 
+    TCoArgument outerLambdaArg = Build<TCoArgument>(ctx, lambda.Pos())
         .Name("item")
         .Done();
 
     TNodeOnNodeOwnedMap replaceMap;
     for (size_t i = 0; i < jointNodes.size(); ++i) {
-        auto node = Build<TCoNth>(ctx, lambda.Pos()) 
+        auto node = Build<TCoNth>(ctx, lambda.Pos())
             .Tuple(outerLambdaArg)
             .Index().Build(i)
             .Done();
@@ -234,7 +234,7 @@ TExprBase SplitMap(TExprBase input, TCoLambda lambda, TExprContext& ctx, const T
     }
 
     auto outerLambdaBody = ctx.ReplaceNodes(lambda.Body().Ptr(), replaceMap);
-    auto outerLambda = Build<TCoLambda>(ctx, lambda.Pos()) 
+    auto outerLambda = Build<TCoLambda>(ctx, lambda.Pos())
         .Args({outerLambdaArg})
         .Body(TExprBase(outerLambdaBody))
         .Done();
@@ -251,18 +251,18 @@ TExprBase SplitMap(TExprBase input, TCoLambda lambda, TExprContext& ctx, const T
 TExprNode::TPtr SplitMap(TExprBase mapNode, TExprContext& ctx, const TVector<TExprBase>& execRoots,
     const TKqpAnalyzeResults& analyzeResults)
 {
-    YQL_ENSURE(mapNode.Ptr()->GetTypeAnn()->GetKind() == ETypeAnnotationKind::List); 
+    YQL_ENSURE(mapNode.Ptr()->GetTypeAnn()->GetKind() == ETypeAnnotationKind::List);
 
-    if (auto map = mapNode.Maybe<TCoMap>()) { 
+    if (auto map = mapNode.Maybe<TCoMap>()) {
         YQL_CLOG(INFO, ProviderKqp) << "SplitMap: Map, MapParameter";
-        return SplitMap<TCoMap, TKiMapParameter>(map.Cast().Input(), map.Cast().Lambda(), ctx, execRoots, 
+        return SplitMap<TCoMap, TKiMapParameter>(map.Cast().Input(), map.Cast().Lambda(), ctx, execRoots,
             analyzeResults).Ptr();
     }
 
-    if (auto map = mapNode.Maybe<TCoFlatMap>()) { 
+    if (auto map = mapNode.Maybe<TCoFlatMap>()) {
         YQL_CLOG(INFO, ProviderKqp) << "SplitMap: Map, FlatMapParameter";
-        YQL_ENSURE(map.Cast().Lambda().Ptr()->GetTypeAnn()->GetKind() == ETypeAnnotationKind::List); 
-        return SplitMap<TCoMap, TKiFlatMapParameter>(map.Cast().Input(), map.Cast().Lambda(), ctx, execRoots, 
+        YQL_ENSURE(map.Cast().Lambda().Ptr()->GetTypeAnn()->GetKind() == ETypeAnnotationKind::List);
+        return SplitMap<TCoMap, TKiFlatMapParameter>(map.Cast().Input(), map.Cast().Lambda(), ctx, execRoots,
             analyzeResults).Ptr();
     }
 
@@ -313,8 +313,8 @@ TExprNode::TPtr UnnestExecutionRoots(TExprBase node, TExprContext& ctx, const TK
         }
     }
 
-    if (node.Maybe<TCoMap>() || 
-        node.Maybe<TCoFlatMap>() || 
+    if (node.Maybe<TCoMap>() ||
+        node.Maybe<TCoFlatMap>() ||
         node.Maybe<TKiMapParameter>() ||
         node.Maybe<TKiFlatMapParameter>())
     {

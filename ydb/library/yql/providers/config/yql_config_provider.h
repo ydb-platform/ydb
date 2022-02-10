@@ -6,10 +6,10 @@
 
 namespace NYql {
 
-class TGatewaysConfig; 
- 
+class TGatewaysConfig;
+
 const TStringBuf ConfReadName = "ConfRead!";
- 
+
 using TAllowSettingPolicy = std::function<bool(TStringBuf settingName)>;
 
 TIntrusivePtr<IDataProvider> CreateConfigProvider(TTypeAnnotationContext& types, const TGatewaysConfig* config,

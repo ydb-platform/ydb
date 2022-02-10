@@ -17,7 +17,7 @@
 #include <ydb/library/yql/core/services/yql_transform_pipeline.h>
 #include <ydb/library/yql/core/services/yql_out_transformers.h>
 #include <ydb/library/yql/utils/yql_paths.h>
- 
+
 #include <util/generic/xrange.h>
 
 #include <library/cpp/yson/writer.h>
@@ -44,7 +44,7 @@ template <typename T> TString ToLiteral(const T value) { return ToString<T>(valu
 template <typename TRandomType>
 TExprNode::TPtr Random0Arg(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& types) {
     if (node->ChildrenSize() == 0U) {
-        YQL_CLOG(DEBUG, CorePeepHole) << "0-arg " << node->Content(); 
+        YQL_CLOG(DEBUG, CorePeepHole) << "0-arg " << node->Content();
         const auto random = types.GetCachedRandom<TRandomType>();
         return ctx.NewCallable(node->Pos(), node->GetTypeAnn()->Cast<TDataExprType>()->GetName(), { ctx.NewAtom(node->Pos(), ToLiteral(random)) });
     }
@@ -54,7 +54,7 @@ TExprNode::TPtr Random0Arg(const TExprNode::TPtr& node, TExprContext& ctx, TType
 template <ui64(*Convert)(ui64)>
 TExprNode::TPtr Now0Arg(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& types) {
     if (node->ChildrenSize() == 0U) {
-        YQL_CLOG(DEBUG, CorePeepHole) << "0-arg " << node->Content(); 
+        YQL_CLOG(DEBUG, CorePeepHole) << "0-arg " << node->Content();
         const auto now = types.GetCachedNow();
         return ctx.NewCallable(node->Pos(), node->GetTypeAnn()->Cast<TDataExprType>()->GetName(), { ctx.NewAtom(node->Pos(), ToString(bool(Convert) ? Convert(now) : now), TNodeFlags::Default) });
     }
@@ -446,7 +446,7 @@ TExprNode::TPtr PeepHoleConvertGroupBySingleKey(const TExprNode::TPtr& node, TEx
         return node;
     }
 
-    YQL_CLOG(DEBUG, CorePeepHole) << "Convert " << node->Content() << " single key"; 
+    YQL_CLOG(DEBUG, CorePeepHole) << "Convert " << node->Content() << " single key";
     const auto handlerLambda = node->Child(2);
     const auto& keyArg = handlerLambda->Head().Head();
     const auto& listArg = handlerLambda->Head().Tail();
@@ -457,10 +457,10 @@ TExprNode::TPtr PeepHoleConvertGroupBySingleKey(const TExprNode::TPtr& node, TEx
 TExprNode::TPtr PeepHolePlainKeyForPartitionByKey(const TExprNode::TPtr& node, TExprContext& ctx) {
     auto keySelectorLambda = node->Child(1);
     bool needPickle = false;
-    if (RemoveOptionalType(keySelectorLambda->GetTypeAnn())->GetKind() == ETypeAnnotationKind::Data) { 
+    if (RemoveOptionalType(keySelectorLambda->GetTypeAnn())->GetKind() == ETypeAnnotationKind::Data) {
         // ok
-    } else if (keySelectorLambda->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Tuple) { 
-        auto tupleType = keySelectorLambda->GetTypeAnn()->Cast<TTupleExprType>(); 
+    } else if (keySelectorLambda->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Tuple) {
+        auto tupleType = keySelectorLambda->GetTypeAnn()->Cast<TTupleExprType>();
         if (tupleType->GetSize() < 2) {
             needPickle = true;
         } else {
@@ -479,7 +479,7 @@ TExprNode::TPtr PeepHolePlainKeyForPartitionByKey(const TExprNode::TPtr& node, T
         return node;
     }
 
-    YQL_CLOG(DEBUG, CorePeepHole) << "Plain key for " << node->Content(); 
+    YQL_CLOG(DEBUG, CorePeepHole) << "Plain key for " << node->Content();
     return ctx.Builder(node->Pos())
         .Callable(node->Content())
             .Add(0, node->HeadPtr())
@@ -501,7 +501,7 @@ TExprNode::TPtr PeepHolePlainKeyForPartitionByKey(const TExprNode::TPtr& node, T
                                 .Param("item")
                                 .List()
                                     .Callable(0, "Unpickle")
-                                        .Add(0, ExpandType(keySelectorLambda->Pos(), *keySelectorLambda->GetTypeAnn(), ctx)) 
+                                        .Add(0, ExpandType(keySelectorLambda->Pos(), *keySelectorLambda->GetTypeAnn(), ctx))
                                         .Callable(1, "Nth")
                                             .Arg(0, "item")
                                             .Atom(1, "0", TNodeFlags::Default)
@@ -522,7 +522,7 @@ TExprNode::TPtr PeepHolePlainKeyForPartitionByKey(const TExprNode::TPtr& node, T
 }
 
 TExprNode::TPtr PeepHoleExpandExtractItems(const TExprNode::TPtr& node, TExprContext& ctx) {
-    YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << node->Content(); 
+    YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << node->Content();
 
     const TCoExtractMembers extract(node);
     const auto& input = extract.Input();
@@ -543,13 +543,13 @@ TExprNode::TPtr PeepHoleExpandExtractItems(const TExprNode::TPtr& node, TExprCon
 
     auto body = ctx.NewCallable(extract.Pos(), "AsStruct", std::move(fields));
     auto lambda = ctx.NewLambda(extract.Pos(), ctx.NewArguments(extract.Pos(), { std::move(arg) }), std::move(body));
-    const bool ordered = input.Ref().GetConstraint<TSortedConstraintNode>(); 
+    const bool ordered = input.Ref().GetConstraint<TSortedConstraintNode>();
     return ctx.Builder(extract.Pos())
-        .Callable(ordered ? "OrderedMap" : "Map") 
-            .Add(0, input.Ptr()) 
+        .Callable(ordered ? "OrderedMap" : "Map")
+            .Add(0, input.Ptr())
             .Add(1, std::move(lambda))
-        .Seal() 
-        .Build(); 
+        .Seal()
+        .Build();
 }
 
 TExprNode::TPtr PeepHoleDictFromKeysToDict(const TExprNode::TPtr& node, TExprContext& ctx) {
@@ -580,7 +580,7 @@ TExprNode::TPtr PeepHoleDictFromKeysToDict(const TExprNode::TPtr& node, TExprCon
             .Build()
         .PayloadSelector()
             .Args({"item"})
-            .Body<TCoVoid>().Build() 
+            .Body<TCoVoid>().Build()
             .Build()
         .Settings()
             .Add().Build("One")
@@ -606,7 +606,7 @@ TExprNode::TPtr ExpandCastOverData(const TExprNode::TPtr& input, TExprContext& c
     auto to = input->GetTypeAnn()->Cast<TDataExprType>();
     auto ret = input;
     if constexpr (Strong) {
-        YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << input->Content() 
+        YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << input->Content()
             << " for " << *input->Head().GetTypeAnn()
             << " to " << *input->GetTypeAnn();
          ret = ctx.RenameNode(*input, "SafeCast");
@@ -632,7 +632,7 @@ TExprNode::TPtr ExpandCastOverData(const TExprNode::TPtr& input, TExprContext& c
 template <bool Strong>
 TExprNode::TPtr ExpandCastOverOptionalData(const TExprNode::TPtr& input, TExprContext& ctx) {
     if constexpr (Strong) {
-        YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << input->Content() 
+        YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << input->Content()
             << " for " << *input->Head().GetTypeAnn()
             << " to " << *input->GetTypeAnn();
 
@@ -678,7 +678,7 @@ TExprNode::TPtr ExpandCastOverOptional(const TExprNode::TPtr& input, TExprContex
     const auto targetItemType = targetType->Cast<TOptionalExprType>()->GetItemType();
 
     if (ETypeAnnotationKind::Null == targetItemType->GetKind()) {
-        YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << input->Content() << " for Null?"; 
+        YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << input->Content() << " for Null?";
         return ctx.Builder(input->Pos())
             .Callable("If")
                 .Callable(0, "Exists")
@@ -696,7 +696,7 @@ TExprNode::TPtr ExpandCastOverOptional(const TExprNode::TPtr& input, TExprContex
     const auto targetLevel = GetOptionalLevel(targetItemType);
 
     if (opt && targetLevel > 0U) {
-        YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << input->Content(); 
+        YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << input->Content();
         auto stub = ExpandType(input->Tail().Pos(), *targetType, ctx);
         auto type = ExpandType(input->Tail().Pos(), *targetItemType, ctx);
 
@@ -759,7 +759,7 @@ TExprNode::TPtr ExpandCastOverOptional(const TExprNode::TPtr& input, TExprContex
     const bool flat = opt || sourceLevel > targetLevel;
     auto type = ExpandType(input->Tail().Pos(), flat ? *targetType : *targetItemType, ctx);
     if (!opt && sourceLevel < targetLevel) {
-        YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << input->Content() << " as Just"; 
+        YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << input->Content() << " as Just";
         return ctx.Builder(input->Pos())
             .Callable("Just")
                 .Callable(0, input->Content())
@@ -770,7 +770,7 @@ TExprNode::TPtr ExpandCastOverOptional(const TExprNode::TPtr& input, TExprContex
     }
 
     const auto worker = flat ? "FlatMap" : "Map";
-    YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << input->Content() << " as " << worker; 
+    YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << input->Content() << " as " << worker;
     return ctx.Builder(input->Pos())
         .Callable(worker)
             .Add(0, input->HeadPtr())
@@ -786,7 +786,7 @@ TExprNode::TPtr ExpandCastOverOptional(const TExprNode::TPtr& input, TExprContex
 
 template <bool Strong>
 TExprNode::TPtr ExpandCastOverList(const TExprNode::TPtr& input, TExprContext& ctx) {
-    YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << input->Content() << " for List"; 
+    YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << input->Content() << " for List";
     const auto sourceType = input->Head().GetTypeAnn();
     const auto targetType = input->GetTypeAnn();
     const auto sourceItemType = sourceType->Cast<TListExprType>()->GetItemType();
@@ -806,31 +806,31 @@ TExprNode::TPtr ExpandCastOverList(const TExprNode::TPtr& input, TExprContext& c
         .Seal().Build();
 }
 
-template <bool Strong, class TSeqType> 
-TExprNode::TPtr ExpandCastOverSequence(const TExprNode::TPtr& input, TExprContext& ctx) { 
-    YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << input->Content() << " for sequence"; 
-    const auto sourceType = input->Head().GetTypeAnn(); 
-    const auto targetType = input->GetTypeAnn(); 
-    const auto sourceItemType = sourceType->Cast<TSeqType>()->GetItemType(); 
-    const auto targetItemType = targetType->Cast<TSeqType>()->GetItemType(); 
-    const bool opt = CastMayFail<Strong>(sourceItemType, targetItemType); 
-    auto type = ExpandType(input->Tail().Pos(), opt ? *ctx.MakeType<TOptionalExprType>(targetItemType) : *targetItemType, ctx); 
-    return ctx.Builder(input->Pos()) 
-        .Callable(opt ? "OrderedFlatMap" : "OrderedMap") 
-            .Add(0, input->HeadPtr()) 
-            .Lambda(1) 
-                .Param("item") 
-                .Callable(input->Content()) 
-                    .Arg(0, "item") 
-                    .Add(1, std::move(type)) 
-                .Seal() 
-            .Seal() 
-        .Seal().Build(); 
-} 
- 
+template <bool Strong, class TSeqType>
+TExprNode::TPtr ExpandCastOverSequence(const TExprNode::TPtr& input, TExprContext& ctx) {
+    YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << input->Content() << " for sequence";
+    const auto sourceType = input->Head().GetTypeAnn();
+    const auto targetType = input->GetTypeAnn();
+    const auto sourceItemType = sourceType->Cast<TSeqType>()->GetItemType();
+    const auto targetItemType = targetType->Cast<TSeqType>()->GetItemType();
+    const bool opt = CastMayFail<Strong>(sourceItemType, targetItemType);
+    auto type = ExpandType(input->Tail().Pos(), opt ? *ctx.MakeType<TOptionalExprType>(targetItemType) : *targetItemType, ctx);
+    return ctx.Builder(input->Pos())
+        .Callable(opt ? "OrderedFlatMap" : "OrderedMap")
+            .Add(0, input->HeadPtr())
+            .Lambda(1)
+                .Param("item")
+                .Callable(input->Content())
+                    .Arg(0, "item")
+                    .Add(1, std::move(type))
+                .Seal()
+            .Seal()
+        .Seal().Build();
+}
+
 template <bool Strong>
 TExprNode::TPtr ExpandCastOverDict(const TExprNode::TPtr& input, TExprContext& ctx) {
-    YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << input->Content() << " for Dict"; 
+    YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << input->Content() << " for Dict";
     const auto targetType = input->GetTypeAnn();
     const auto targetDictType = targetType->Cast<TDictExprType>();
     const TTypeAnnotationNode::TListType items = {targetDictType->GetKeyType(), targetDictType->GetPayloadType()};
@@ -866,7 +866,7 @@ TExprNode::TPtr ExpandCastOverDict(const TExprNode::TPtr& input, TExprContext& c
 
 template <bool Strong>
 TExprNode::TPtr ExpandCastOverTuple(const TExprNode::TPtr& input, TExprContext& ctx) {
-    YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << input->Content() << " for Tuple"; 
+    YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << input->Content() << " for Tuple";
     const auto targetType = input->GetTypeAnn();
     const auto& targetItems = targetType->Cast<TTupleExprType>()->GetItems();
     const auto sourceSize = input->Head().GetTypeAnn()->Cast<TTupleExprType>()->GetSize();
@@ -898,7 +898,7 @@ TExprNode::TPtr ExpandCastOverTuple(const TExprNode::TPtr& input, TExprContext& 
 
 template <bool Strong>
 TExprNode::TPtr ExpandCastOverStruct(const TExprNode::TPtr& input, TExprContext& ctx) {
-    YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << input->Content() << " for Struct"; 
+    YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << input->Content() << " for Struct";
     const auto sourceType = input->Head().GetTypeAnn();
     const auto targetType = input->GetTypeAnn();
     const auto& sourceItems = sourceType->Cast<TStructExprType>()->GetItems();
@@ -938,7 +938,7 @@ TExprNode::TPtr ExpandCastOverStruct(const TExprNode::TPtr& input, TExprContext&
 
 template <bool Strong>
 TExprNode::TPtr ExpandCastOverVariant(const TExprNode::TPtr& input, TExprContext& ctx) {
-    YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << input->Content() << " for Variant"; 
+    YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << input->Content() << " for Variant";
     const auto targetType = input->GetTypeAnn();
     const auto targetUnderType = targetType->Cast<TVariantExprType>()->GetUnderlyingType();
     TExprNode::TListType variants, types;
@@ -991,7 +991,7 @@ TExprNode::TPtr ExpandCastOverVariant(const TExprNode::TPtr& input, TExprContext
 
 template <bool Strong>
 TExprNode::TPtr ExpandCastOverOptionalList(const TExprNode::TPtr& input, TExprContext& ctx) {
-    YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << input->Content() << " for List?"; 
+    YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << input->Content() << " for List?";
     const auto targetType = input->GetTypeAnn();
     const auto targetItemType = targetType->Cast<TOptionalExprType>()->GetItemType()->Cast<TListExprType>()->GetItemType();
     auto type = ExpandType(input->Tail().Pos(), *ctx.MakeType<TOptionalExprType>(targetItemType), ctx);
@@ -1039,7 +1039,7 @@ TExprNode::TPtr ExpandCastOverOptionalList(const TExprNode::TPtr& input, TExprCo
 
 template <bool Strong>
 TExprNode::TPtr ExpandCastOverOptionalDict(const TExprNode::TPtr& input, TExprContext& ctx) {
-    YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << input->Content() << " for Dict?"; 
+    YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << input->Content() << " for Dict?";
     const auto targetType = input->GetTypeAnn();
     const auto targetDictType = targetType->Cast<TOptionalExprType>()->GetItemType()->Cast<TDictExprType>();
     const TTypeAnnotationNode::TListType items = {targetDictType->GetKeyType(), targetDictType->GetPayloadType()};
@@ -1160,7 +1160,7 @@ TExprNode::TPtr FilterByOptionalItems(TExprNode::TPtr&& casted, TExprNode::TList
 
 template <bool Strong>
 TExprNode::TPtr ExpandCastOverOptionalTuple(const TExprNode::TPtr& input, TExprContext& ctx) {
-    YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << input->Content() << " for Tuple?"; 
+    YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << input->Content() << " for Tuple?";
     const auto sourceType = input->Head().GetTypeAnn();
     const auto targetType = input->GetTypeAnn()->Cast<TOptionalExprType>()->GetItemType();
     const auto& sourceItems = sourceType->Cast<TTupleExprType>()->GetItems();
@@ -1257,7 +1257,7 @@ TExprNode::TPtr ExpandCastOverOptionalTuple(const TExprNode::TPtr& input, TExprC
 
 template <bool Strong>
 TExprNode::TPtr ExpandCastOverOptionalStruct(const TExprNode::TPtr& input, TExprContext& ctx) {
-    YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << input->Content() << " for Struct?"; 
+    YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << input->Content() << " for Struct?";
     const auto sourceType = input->Head().GetTypeAnn();
     const auto targetType = input->GetTypeAnn()->Cast<TOptionalExprType>()->GetItemType();
     const auto& sourceItems = sourceType->Cast<TStructExprType>()->GetItems();
@@ -1371,7 +1371,7 @@ TExprNode::TPtr ExpandCastOverOptionalStruct(const TExprNode::TPtr& input, TExpr
 
 template <bool Strong>
 TExprNode::TPtr ExpandCastOverOptionalVariant(const TExprNode::TPtr& input, TExprContext& ctx) {
-    YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << input->Content() << " for Variant?"; 
+    YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << input->Content() << " for Variant?";
     const auto sourceType = input->Head().GetTypeAnn();
     const auto targetType = input->GetTypeAnn()->Cast<TOptionalExprType>()->GetItemType();
     const auto sourceUnderType = sourceType->Cast<TVariantExprType>()->GetUnderlyingType();
@@ -1494,8 +1494,8 @@ TExprNode::TPtr ExpandCast(const TExprNode::TPtr& input, TExprContext& ctx) {
             case ETypeAnnotationKind::Tuple:    return ExpandCastOverTuple<Strong>(input, ctx);
             case ETypeAnnotationKind::Struct:   return ExpandCastOverStruct<Strong>(input, ctx);
             case ETypeAnnotationKind::Variant:  return ExpandCastOverVariant<Strong>(input, ctx);
-            case ETypeAnnotationKind::Stream:     return ExpandCastOverSequence<Strong, TStreamExprType>(input, ctx); 
-            case ETypeAnnotationKind::Flow:     return ExpandCastOverSequence<Strong, TFlowExprType>(input, ctx); 
+            case ETypeAnnotationKind::Stream:     return ExpandCastOverSequence<Strong, TStreamExprType>(input, ctx);
+            case ETypeAnnotationKind::Flow:     return ExpandCastOverSequence<Strong, TFlowExprType>(input, ctx);
             default: break;
         }
     } else if (tKind == ETypeAnnotationKind::Optional) {
@@ -1513,7 +1513,7 @@ TExprNode::TPtr ExpandCast(const TExprNode::TPtr& input, TExprContext& ctx) {
                     default: break;
                 }
             } else {
-                YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << input->Content() << " as Map Just"; 
+                YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << input->Content() << " as Map Just";
                 return ctx.Builder(input->Pos())
                     .Callable("Map")
                         .Callable(0, input->Content())
@@ -1529,7 +1529,7 @@ TExprNode::TPtr ExpandCast(const TExprNode::TPtr& input, TExprContext& ctx) {
                     .Seal().Build();
             }
         } else {
-            YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << input->Content() << " as Just"; 
+            YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << input->Content() << " as Just";
             return ctx.Builder(input->Pos())
                 .Callable("Just")
                     .Callable(0, input->Content())
@@ -1552,7 +1552,7 @@ TExprNode::TPtr ExpandAlterTo(const TExprNode::TPtr& node, TExprContext& ctx) {
     const auto targetType = node->Child(1)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
 
     if (targetType->GetKind() == ETypeAnnotationKind::Null) {
-        YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << node->Content() << " to " << *targetType; 
+        YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << node->Content() << " to " << *targetType;
         return ctx.Builder(node->Pos())
             .Callable("If")
                 .Callable(0, "Exists")
@@ -1568,7 +1568,7 @@ TExprNode::TPtr ExpandAlterTo(const TExprNode::TPtr& node, TExprContext& ctx) {
     }
 
     if (CastMayFail<true>(sourceType, targetType)) {
-        YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << node->Content(); 
+        YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << node->Content();
         auto type = ExpandType(node->Child(1)->Pos(), *ctx.MakeType<TOptionalExprType>(targetType), ctx);
         return ctx.Builder(node->Pos())
             .Callable("IfPresent")
@@ -1587,7 +1587,7 @@ TExprNode::TPtr ExpandAlterTo(const TExprNode::TPtr& node, TExprContext& ctx) {
     }
 
     auto casted = ctx.NewCallable(node->Pos(), "StrictCast", {node->HeadPtr(), node->ChildPtr(1)});
-    YQL_CLOG(DEBUG, CorePeepHole) << "Replace " << node->Content() << " on " << casted->Content(); 
+    YQL_CLOG(DEBUG, CorePeepHole) << "Replace " << node->Content() << " on " << casted->Content();
     return ctx.ReplaceNode(node->Child(2)->TailPtr(), node->Child(2)->Head().Head(), std::move(casted));
 }
 
@@ -1680,10 +1680,10 @@ TExprNode::TPtr ExpandSqlIn(const TExprNode::TPtr& input, TExprContext& ctx) {
     if (collectionType->GetKind() == ETypeAnnotationKind::List)
     {
         if (collectionType->Cast<TListExprType>()->GetItemType()->GetKind() == ETypeAnnotationKind::Struct) {
-            YQL_CLOG(DEBUG, CorePeepHole) << "IN List of Structs"; 
+            YQL_CLOG(DEBUG, CorePeepHole) << "IN List of Structs";
             dict = BuildDictOverListOfStructs(input->Pos(), collection, dictKeyType, ctx);
         } else {
-            YQL_CLOG(DEBUG, CorePeepHole) << "IN List"; 
+            YQL_CLOG(DEBUG, CorePeepHole) << "IN List";
             dict = BuildDictOverList(input->Pos(), collection, ctx);
             dictKeyType = collectionType->Cast<TListExprType>()->GetItemType();
         }
@@ -1699,15 +1699,15 @@ TExprNode::TPtr ExpandSqlIn(const TExprNode::TPtr& input, TExprContext& ctx) {
                 .Seal()
                 .Build();
         }
-        YQL_CLOG(DEBUG, CorePeepHole) << "IN Tuple"; 
+        YQL_CLOG(DEBUG, CorePeepHole) << "IN Tuple";
         dict = BuildDictOverTuple(std::move(collection), dictKeyType, ctx);
     } else if (collectionType->GetKind() == ETypeAnnotationKind::EmptyDict) {
-        YQL_CLOG(DEBUG, CorePeepHole) << "IN EmptyDict"; 
+        YQL_CLOG(DEBUG, CorePeepHole) << "IN EmptyDict";
     } else if (collectionType->GetKind() == ETypeAnnotationKind::EmptyList) {
-        YQL_CLOG(DEBUG, CorePeepHole) << "IN EmptyList"; 
+        YQL_CLOG(DEBUG, CorePeepHole) << "IN EmptyList";
     } else {
         YQL_ENSURE(collectionType->GetKind() == ETypeAnnotationKind::Dict);
-        YQL_CLOG(DEBUG, CorePeepHole) << "IN Dict"; 
+        YQL_CLOG(DEBUG, CorePeepHole) << "IN Dict";
         dict = collection;
         dictKeyType = collectionType->Cast<TDictExprType>()->GetKeyType();
     }
@@ -1717,20 +1717,20 @@ TExprNode::TPtr ExpandSqlIn(const TExprNode::TPtr& input, TExprContext& ctx) {
     const auto justFalseNode = ctx.NewCallable(input->Pos(), "Just", { falseNode });
 
     if (ansiIn && !dict) {
-        YQL_CLOG(DEBUG, CorePeepHole) << "ANSI IN: with statically deduced empty collection"; 
+        YQL_CLOG(DEBUG, CorePeepHole) << "ANSI IN: with statically deduced empty collection";
         return lookupType->HasOptionalOrNull() ? justFalseNode: falseNode;
     }
 
     TExprNode::TPtr contains = falseNode;
     if (!dictKeyType) {
-        YQL_CLOG(DEBUG, CorePeepHole) << "IN: Trivial Contains() due to statically deduced empty collection"; 
+        YQL_CLOG(DEBUG, CorePeepHole) << "IN: Trivial Contains() due to statically deduced empty collection";
     } else if (NUdf::ECastOptions::Impossible & CastResult<true>(lookupType, dictKeyType)) {
-        YQL_CLOG(DEBUG, CorePeepHole) << "IN: Trivial Contains() due to uncompatible type of lookup (" << *lookupType 
+        YQL_CLOG(DEBUG, CorePeepHole) << "IN: Trivial Contains() due to uncompatible type of lookup (" << *lookupType
                               << ") and collection item (" << *dictKeyType << ")";
     } else {
         YQL_ENSURE(dict);
         contains = ctx.Builder(input->Pos())
-            .Callable("Contains") 
+            .Callable("Contains")
                 .Add(0, dict)
                 .Add(1, lookup)
             .Seal()
@@ -1739,7 +1739,7 @@ TExprNode::TPtr ExpandSqlIn(const TExprNode::TPtr& input, TExprContext& ctx) {
 
     const bool nullableCollectionItems = IsSqlInCollectionItemsNullable(NNodes::TCoSqlIn(input));
     if (ansiIn && (nullableCollectionItems || lookupType->HasOptionalOrNull())) {
-        YQL_CLOG(DEBUG, CorePeepHole) << "ANSI IN: with nullable items in collection or lookup"; 
+        YQL_CLOG(DEBUG, CorePeepHole) << "ANSI IN: with nullable items in collection or lookup";
         YQL_ENSURE(dict);
         const auto trueNode = MakeBool(input->Pos(), true, ctx);
         const auto nullNode = MakeNull(input->Pos(), ctx);
@@ -1855,7 +1855,7 @@ TExprNode::TPtr CleckClosureOnUpperLambdaOverList(const TExprNode::TPtr& input, 
             const auto outerLambda = lambda->GetDependencyScope()->first;
             if (outerLambda && lambda != outerLambda &&
                 !SkipCallables(input->Head(), SkippableCallables).IsCallable({"Collect", "AsList", "List", "ListIf"})) {
-                YQL_CLOG(DEBUG, CorePeepHole) << input->Content() << " closure on upper lambda over list"; 
+                YQL_CLOG(DEBUG, CorePeepHole) << input->Content() << " closure on upper lambda over list";
                 return ctx.ChangeChild(*input, 0U, ctx.NewCallable(input->Head().Pos(), "Collect", {input->HeadPtr()}));
             }
         }
@@ -1867,7 +1867,7 @@ TExprNode::TPtr CleckClosureOnUpperLambdaOverList(const TExprNode::TPtr& input, 
 template <bool Inverse = false>
 TExprNode::TPtr ExpandFilter(const TExprNode::TPtr& input, TExprContext& ctx) {
     if (ETypeAnnotationKind::Optional == input->GetTypeAnn()->GetKind()) {
-        YQL_CLOG(DEBUG, CorePeepHole) << input->Content() << " over Optional"; 
+        YQL_CLOG(DEBUG, CorePeepHole) << input->Content() << " over Optional";
         auto none = ctx.Builder(input->Pos())
             .Callable("Nothing")
                 .Add(0, ExpandType(input->Pos(), *input->GetTypeAnn(), ctx))
@@ -1926,7 +1926,7 @@ IGraphTransformer::TStatus PeepHoleCommonStage(const TExprNode::TPtr& input, TEx
 }
 
 IGraphTransformer::TStatus PeepHoleFinalStage(const TExprNode::TPtr& input, TExprNode::TPtr& output,
-    TExprContext& ctx, TTypeAnnotationContext& types, bool* hasNonDeterministicFunctions, 
+    TExprContext& ctx, TTypeAnnotationContext& types, bool* hasNonDeterministicFunctions,
     const TPeepHoleOptimizerMap& optimizers, const TNonDeterministicOptimizerMap& nonDetOptimizers)
 {
     TOptimizeExprSettings settings(&types);
@@ -1934,9 +1934,9 @@ IGraphTransformer::TStatus PeepHoleFinalStage(const TExprNode::TPtr& input, TExp
 
     return OptimizeExpr(input, output, [hasNonDeterministicFunctions, &types, &nonDetOptimizers, &optimizers](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
         if (const auto nrule = nonDetOptimizers.find(node->Content()); nonDetOptimizers.cend() != nrule) {
-            if (hasNonDeterministicFunctions) { 
-                *hasNonDeterministicFunctions = true; 
-            } 
+            if (hasNonDeterministicFunctions) {
+                *hasNonDeterministicFunctions = true;
+            }
             return (nrule->second)(node, ctx, types);
         }
 
@@ -1946,18 +1946,18 @@ IGraphTransformer::TStatus PeepHoleFinalStage(const TExprNode::TPtr& input, TExp
     }, ctx, settings);
 }
 
-void AddStandardTransformers(TTransformationPipeline& pipelene, IGraphTransformer* typeAnnotator) { 
+void AddStandardTransformers(TTransformationPipeline& pipelene, IGraphTransformer* typeAnnotator) {
     auto issueCode = TIssuesIds::CORE_EXEC;
-    pipelene.AddServiceTransformers(issueCode); 
-    if (typeAnnotator) { 
-        pipelene.Add(*typeAnnotator, "TypeAnnotation", issueCode); 
-    } else { 
-        pipelene.AddTypeAnnotationTransformer(issueCode); 
-    } 
+    pipelene.AddServiceTransformers(issueCode);
+    if (typeAnnotator) {
+        pipelene.Add(*typeAnnotator, "TypeAnnotation", issueCode);
+    } else {
+        pipelene.AddTypeAnnotationTransformer(issueCode);
+    }
 
-    pipelene.AddPostTypeAnnotation(true, issueCode); 
-    pipelene.Add(TExprLogTransformer::Sync("PeepHoleOpt", NLog::EComponent::CorePeepHole, NLog::ELevel::TRACE), 
-        "PeepHoleOptTrace", issueCode, "PeepHoleOptTrace"); 
+    pipelene.AddPostTypeAnnotation(true, issueCode);
+    pipelene.Add(TExprLogTransformer::Sync("PeepHoleOpt", NLog::EComponent::CorePeepHole, NLog::ELevel::TRACE),
+        "PeepHoleOptTrace", issueCode, "PeepHoleOptTrace");
 }
 
 template<bool FlatOrMulti>
@@ -1987,7 +1987,7 @@ TExprNode::TPtr ExpandFlatMap(const TExprNode::TPtr& node, TExprContext& ctx) {
     if ((node->Head().GetTypeAnn()->GetKind() != ETypeAnnotationKind::Optional || body.GetTypeAnn()->GetKind() == ETypeAnnotationKind::Optional) &&
         body.IsCallable({"Just","AsList"}) && body.ChildrenSize() == 1U) {
 
-        YQL_CLOG(DEBUG, CorePeepHole) << node->Content() << " to " << map; 
+        YQL_CLOG(DEBUG, CorePeepHole) << node->Content() << " to " << map;
         return ctx.Builder(node->Pos())
             .Callable(map)
                 .Add(0, node->HeadPtr())
@@ -2028,7 +2028,7 @@ TExprNode::TPtr ExpandFlatMap(const TExprNode::TPtr& node, TExprContext& ctx) {
 
         if (!haveSharedCallables) {
             constexpr auto filter = Ordered ? "OrderedFilter" : "Filter";
-            YQL_CLOG(DEBUG, CorePeepHole) << node->Content() << " over " << body.Content() << " to " << filter; 
+            YQL_CLOG(DEBUG, CorePeepHole) << node->Content() << " over " << body.Content() << " to " << filter;
             auto ret = ctx.Builder(node->Pos())
                 .Callable(filter)
                     .Add(0, node->HeadPtr())
@@ -2056,7 +2056,7 @@ TExprNode::TPtr ExpandFlatMap(const TExprNode::TPtr& node, TExprContext& ctx) {
     }
 
     if (ETypeAnnotationKind::Optional == node->GetTypeAnn()->GetKind()) {
-        YQL_CLOG(DEBUG, CorePeepHole) << node->Content() << " over Optional"; 
+        YQL_CLOG(DEBUG, CorePeepHole) << node->Content() << " over Optional";
         return ctx.Builder(node->Pos())
             .Callable("IfPresent")
                 .Add(0, node->HeadPtr())
@@ -2095,13 +2095,13 @@ TExprNode::TPtr OptimizeMultiMap(const TExprNode::TPtr& node, TExprContext& ctx)
 }
 
 TExprNode::TPtr LikelyExclude(const TExprNode::TPtr& node, TExprContext&) {
-    YQL_CLOG(DEBUG, CorePeepHole) << "Exclude " << node->Content(); 
+    YQL_CLOG(DEBUG, CorePeepHole) << "Exclude " << node->Content();
     return node->HeadPtr();
 }
 
 TExprNode::TPtr WrapIteratorForOptionalList(const TExprNode::TPtr& node, TExprContext& ctx) {
     if (node->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Optional) {
-        YQL_CLOG(DEBUG, CorePeepHole) << "Wrap " << node->Content() << " for optional list."; 
+        YQL_CLOG(DEBUG, CorePeepHole) << "Wrap " << node->Content() << " for optional list.";
         return ctx.Builder(node->Pos())
             .Callable("IfPresent")
                 .Add(0, node->HeadPtr())
@@ -2128,7 +2128,7 @@ TExprNode::TPtr WrapIteratorForOptionalList(const TExprNode::TPtr& node, TExprCo
 
 TExprNode::TPtr MapForOptionalContainer(const TExprNode::TPtr& node, TExprContext& ctx) {
     if (node->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Optional) {
-        YQL_CLOG(DEBUG, CorePeepHole) << "Map " << node->Content() << " for optional container."; 
+        YQL_CLOG(DEBUG, CorePeepHole) << "Map " << node->Content() << " for optional container.";
         return ctx.Builder(node->Pos())
             .Callable("Map")
                 .Add(0, node->HeadPtr())
@@ -2147,14 +2147,14 @@ TExprNode::TPtr MapForOptionalContainer(const TExprNode::TPtr& node, TExprContex
 template <bool BoolResult, bool ByList = false>
 TExprNode::TPtr RewriteSearchByKeyForTypesMismatch(const TExprNode::TPtr& node, TExprContext& ctx) {
     const auto type = node->Head().GetTypeAnn();
-    if constexpr (BoolResult) { 
-        if (IsDataOrOptionalOfData(type)) { 
-            return node; 
-        } 
-    } 
- 
+    if constexpr (BoolResult) {
+        if (IsDataOrOptionalOfData(type)) {
+            return node;
+        }
+    }
+
     if (type->GetKind() == ETypeAnnotationKind::Optional) {
-        YQL_CLOG(DEBUG, CorePeepHole) << "Wrap " << node->Content() << " for optional collection."; 
+        YQL_CLOG(DEBUG, CorePeepHole) << "Wrap " << node->Content() << " for optional collection.";
         const auto unwrapType = type->Cast<TOptionalExprType>()->GetItemType();
         const auto payloadType = ByList ? unwrapType->Cast<TListExprType>()->GetItemType() : unwrapType->Cast<TDictExprType>()->GetPayloadType();
         return ctx.Builder(node->Pos())
@@ -2174,7 +2174,7 @@ TExprNode::TPtr RewriteSearchByKeyForTypesMismatch(const TExprNode::TPtr& node, 
     const auto keyType = ByList ? type->Cast<TListExprType>()->GetItemType() : type->Cast<TDictExprType>()->GetKeyType();
 
     if (!IsSameAnnotation(*keyType, *node->Tail().GetTypeAnn())) {
-        YQL_CLOG(DEBUG, CorePeepHole) << "Wrap " << node->Content() << " for key type mismatch."; 
+        YQL_CLOG(DEBUG, CorePeepHole) << "Wrap " << node->Content() << " for key type mismatch.";
         const auto payloadType = ByList ? type->Cast<TListExprType>()->GetItemType() : type->Cast<TDictExprType>()->GetPayloadType();
         return ctx.Builder(node->Pos())
             .Callable("AlterTo")
@@ -2198,7 +2198,7 @@ TExprNode::TPtr ExpandListHas(const TExprNode::TPtr& input, TExprContext& ctx) {
     const auto type = input->Head().GetTypeAnn();
     if (ETypeAnnotationKind::List == type->GetKind() &&
         IsSameAnnotation(*type->Cast<TListExprType>()->GetItemType(), *input->Tail().GetTypeAnn())) {
-        YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << input->Content(); 
+        YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << input->Content();
         return ctx.Builder(input->Pos())
             .Callable("Exists")
                 .Callable(0, "Head")
@@ -2221,14 +2221,14 @@ TExprNode::TPtr ExpandListHas(const TExprNode::TPtr& input, TExprContext& ctx) {
 
 template <bool Flat, bool List>
 TExprNode::TPtr ExpandContainerIf(const TExprNode::TPtr& input, TExprContext& ctx) {
-    YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << input->Content(); 
+    YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << input->Content();
     auto item = Flat ? input->TailPtr() : ctx.NewCallable(input->Tail().Pos(), List ? "AsList" : "Just", {input->TailPtr()});
     auto none = ctx.NewCallable(input->Tail().Pos(), List ? "List" : "Nothing", {ExpandType(input->Tail().Pos(), *input->GetTypeAnn(), ctx)});
     return ctx.NewCallable(input->Pos(), "If", {input->HeadPtr(), std::move(item), std::move(none)});
 }
 
 TExprNode::TPtr ExpandPartitionsByKeys(const TExprNode::TPtr& node, TExprContext& ctx) {
-    YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << node->Content(); 
+    YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << node->Content();
     TExprNode::TPtr sort;
     if (node->Child(2)->IsCallable("Void") || node->Child(3)->IsCallable("Void")) {
         sort = ctx.NewCallable(node->Pos(), "Sort", {node->HeadPtr(), MakeBool<true>(node->Pos(), ctx), node->ChildPtr(1)});
@@ -2307,7 +2307,7 @@ TExprNode::TPtr ExpandPartitionsByKeys(const TExprNode::TPtr& node, TExprContext
 }
 
 TExprNode::TPtr ExpandIsKeySwitch(const TExprNode::TPtr& node, TExprContext& ctx) {
-    YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << node->Content(); 
+    YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << node->Content();
     return ctx.Builder(node->Pos())
         .Callable("AggrNotEquals")
             .Add(0, ctx.ReplaceNode(node->Child(2)->TailPtr(), node->Child(2)->Head().Head(), node->ChildPtr(0)))
@@ -2316,7 +2316,7 @@ TExprNode::TPtr ExpandIsKeySwitch(const TExprNode::TPtr& node, TExprContext& ctx
 }
 
 TExprNode::TPtr ExpandMux(const TExprNode::TPtr& node, TExprContext& ctx) {
-    YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << node->Content(); 
+    YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << node->Content();
     const auto varType = ExpandType(node->Pos(), *GetSeqItemType(node->GetTypeAnn()), ctx);
     TExprNode::TListType lists;
     switch (node->Head().GetTypeAnn()->GetKind()) {
@@ -2325,7 +2325,7 @@ TExprNode::TPtr ExpandMux(const TExprNode::TPtr& node, TExprContext& ctx) {
             lists.resize(type->GetSize());
             for (ui32 i = 0U; i < lists.size(); ++i) {
                 lists[i] = ctx.Builder(node->Head().Pos())
-                    .Callable("OrderedMap") 
+                    .Callable("OrderedMap")
                         .Callable(0, "Nth")
                             .Add(0, node->HeadPtr())
                             .Atom(1, ToString(i), TNodeFlags::Default)
@@ -2348,7 +2348,7 @@ TExprNode::TPtr ExpandMux(const TExprNode::TPtr& node, TExprContext& ctx) {
             for (const auto& item : type->GetItems()) {
                 lists.emplace_back(
                     ctx.Builder(node->Head().Pos())
-                        .Callable("OrderedMap") 
+                        .Callable("OrderedMap")
                             .Callable(0, "Member")
                                 .Add(0, node->HeadPtr())
                                 .Atom(1, item->GetName())
@@ -2373,7 +2373,7 @@ TExprNode::TPtr ExpandMux(const TExprNode::TPtr& node, TExprContext& ctx) {
 }
 
 TExprNode::TPtr ExpandLMap(const TExprNode::TPtr& node, TExprContext& ctx) {
-    YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << node->Content(); 
+    YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << node->Content();
     return ctx.Builder(node->Pos())
         .Callable("Collect")
             .Apply(0, node->Tail())
@@ -2387,7 +2387,7 @@ TExprNode::TPtr ExpandLMap(const TExprNode::TPtr& node, TExprContext& ctx) {
 }
 
 TExprNode::TPtr ExpandDemux(const TExprNode::TPtr& node, TExprContext& ctx) {
-    YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << node->Content(); 
+    YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << node->Content();
     TExprNode::TListType lists;
     switch (node->GetTypeAnn()->GetKind()) {
         case ETypeAnnotationKind::Tuple: {
@@ -2395,7 +2395,7 @@ TExprNode::TPtr ExpandDemux(const TExprNode::TPtr& node, TExprContext& ctx) {
             lists.resize(type->GetSize());
             for (ui32 i = 0U; i < lists.size(); ++i) {
                 lists[i] = ctx.Builder(node->Head().Pos())
-                    .Callable("OrderedFlatMap") 
+                    .Callable("OrderedFlatMap")
                         .Add(0, node->HeadPtr())
                         .Lambda(1)
                             .Param("item")
@@ -2416,7 +2416,7 @@ TExprNode::TPtr ExpandDemux(const TExprNode::TPtr& node, TExprContext& ctx) {
                     ctx.Builder(node->Head().Pos())
                         .List()
                             .Atom(0, item->GetName())
-                            .Callable(1, "OrderedFlatMap") 
+                            .Callable(1, "OrderedFlatMap")
                                 .Add(0, node->HeadPtr())
                                 .Lambda(1)
                                     .Param("item")
@@ -2438,7 +2438,7 @@ TExprNode::TPtr ExpandDemux(const TExprNode::TPtr& node, TExprContext& ctx) {
 }
 
 TExprNode::TPtr ExpandOptionalReduce(const TExprNode::TPtr& node, TExprContext& ctx) {
-    YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << node->Content(); 
+    YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << node->Content();
     return ctx.Builder(node->Pos())
         .Callable("IfPresent")
             .Add(0, node->ChildPtr(0))
@@ -2469,7 +2469,7 @@ TExprNode::TPtr ExpandAggrMinMax(const TExprNode::TPtr& node, TExprContext& ctx)
     }
 
     if (ETypeAnnotationKind::Optional == node->GetTypeAnn()->GetKind()) {
-        YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << node->Content() << " over Optional"; 
+        YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << node->Content() << " over Optional";
         return ctx.Builder(node->Pos())
             .Callable("OptionalReduce")
                 .Add(0, node->HeadPtr())
@@ -2485,7 +2485,7 @@ TExprNode::TPtr ExpandAggrMinMax(const TExprNode::TPtr& node, TExprContext& ctx)
             .Seal().Build();
     }
 
-    YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << node->Content(); 
+    YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << node->Content();
     return ctx.Builder(node->Pos())
         .Callable("If")
             .Callable(0, MinOrMax ? "AggrLessOrEqual" : "AggrGreaterOrEqual")
@@ -2534,27 +2534,27 @@ TExprNode::TPtr OptimizeMap(const TExprNode::TPtr& node, TExprContext& ctx) {
     }
 
     if (node->Head().IsCallable("NarrowMap")) {
-        if (!arg.IsUsedInDependsOn()) { 
-            YQL_CLOG(DEBUG, CorePeepHole) << "Fuse " << node->Content() << " with " << node->Head().Content(); 
-            const auto width = node->Head().Tail().Head().ChildrenSize(); 
-            auto lambda = ctx.Builder(node->Pos()) 
-                .Lambda() 
-                    .Params("items", width) 
-                    .Apply(node->Tail()) 
-                        .With(0) 
-                            .Apply(node->Head().Tail()) 
-                                .With("items") 
-                            .Seal() 
-                        .Done() 
-                    .Seal() 
-                .Seal().Build(); 
-            return ctx.ChangeChild(node->Head(), 1U, std::move(lambda)); 
-        } 
+        if (!arg.IsUsedInDependsOn()) {
+            YQL_CLOG(DEBUG, CorePeepHole) << "Fuse " << node->Content() << " with " << node->Head().Content();
+            const auto width = node->Head().Tail().Head().ChildrenSize();
+            auto lambda = ctx.Builder(node->Pos())
+                .Lambda()
+                    .Params("items", width)
+                    .Apply(node->Tail())
+                        .With(0)
+                            .Apply(node->Head().Tail())
+                                .With("items")
+                            .Seal()
+                        .Done()
+                    .Seal()
+                .Seal().Build();
+            return ctx.ChangeChild(node->Head(), 1U, std::move(lambda));
+        }
     }
 
     if (1U == node->Head().UseCount() && !arg.IsUsedInDependsOn()) {
         if (node->Head().IsCallable({"Map", "OrderedMap"})) {
-            YQL_CLOG(DEBUG, CorePeepHole) << "Fuse " << node->Content() << " over " << node->Head().Content(); 
+            YQL_CLOG(DEBUG, CorePeepHole) << "Fuse " << node->Content() << " over " << node->Head().Content();
             auto lambda = ctx.Builder(node->Pos())
                     .Lambda()
                         .Param("it")
@@ -2609,7 +2609,7 @@ TExprNode::TPtr OptimizeTake(const TExprNode::TPtr& node, TExprContext& ctx) {
 }
 
 TExprNode::TPtr ExpandAsSet(const TExprNode::TPtr& node, TExprContext& ctx) {
-    YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << node->Content(); 
+    YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << node->Content();
     return ctx.Builder(node->Pos())
         .Callable("AsDict")
             .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
@@ -5698,7 +5698,7 @@ struct TPeepHoleRules {
         {"AlterTo", &ExpandAlterTo},
         {"SqlIn", &ExpandSqlIn},
         {"Lookup", &RewriteSearchByKeyForTypesMismatch<false>},
-        {"Contains", &RewriteSearchByKeyForTypesMismatch<true>}, 
+        {"Contains", &RewriteSearchByKeyForTypesMismatch<true>},
         {"ListHas", &ExpandListHas},
         {"Map", &CleckClosureOnUpperLambdaOverList},
         {"OrderedMap", &CleckClosureOnUpperLambdaOverList},
@@ -5781,7 +5781,7 @@ struct TPeepHoleRules {
         {"AddMember", &ExpandAddMember},
         {"ReplaceMember", &ExpandReplaceMember},
         {"RemoveMember", &ExpandRemoveMember},
-        {"RemovePrefixMembers", &ExpandRemovePrefixMembers}, 
+        {"RemovePrefixMembers", &ExpandRemovePrefixMembers},
         {"AsSet", &ExpandAsSet},
         {"ForceRemoveMember", &ExpandRemoveMember},
         {"DivePrefixMembers", &ExpandDivePrefixMembers},
@@ -5851,12 +5851,12 @@ THolder<IGraphTransformer> CreatePeepHoleCommonStageTransformer(TTypeAnnotationC
     TTransformationPipeline pipeline(&types);
     if (peepholeSettings.CommonConfig) {
         peepholeSettings.CommonConfig->AfterCreate(&pipeline);
-    } 
+    }
 
     AddStandardTransformers(pipeline, typeAnnotator);
     if (peepholeSettings.CommonConfig) {
         peepholeSettings.CommonConfig->AfterTypeAnnotation(&pipeline);
-    } 
+    }
 
     auto issueCode = TIssuesIds::CORE_EXEC;
 
@@ -5871,8 +5871,8 @@ THolder<IGraphTransformer> CreatePeepHoleCommonStageTransformer(TTypeAnnotationC
 
     if (peepholeSettings.CommonConfig) {
         peepholeSettings.CommonConfig->AfterOptimize(&pipeline);
-    } 
- 
+    }
+
     return pipeline.BuildWithNoArgChecks(false);
 }
 
@@ -5885,12 +5885,12 @@ THolder<IGraphTransformer> CreatePeepHoleFinalStageTransformer(TTypeAnnotationCo
     TTransformationPipeline pipeline(&types);
     if (peepholeSettings.FinalConfig) {
         peepholeSettings.FinalConfig->AfterCreate(&pipeline);
-    } 
+    }
 
     AddStandardTransformers(pipeline, typeAnnotator);
     if (peepholeSettings.FinalConfig) {
         peepholeSettings.FinalConfig->AfterTypeAnnotation(&pipeline);
-    } 
+    }
 
     auto issueCode = TIssuesIds::CORE_EXEC;
 
@@ -5915,15 +5915,15 @@ THolder<IGraphTransformer> CreatePeepHoleFinalStageTransformer(TTypeAnnotationCo
 
     if (peepholeSettings.FinalConfig) {
         peepholeSettings.FinalConfig->AfterOptimize(&pipeline);
-    } 
- 
+    }
+
     return pipeline.BuildWithNoArgChecks(false);
 }
 
 }
 
-IGraphTransformer::TStatus DoPeepHoleOptimizeNode(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx, 
-    IGraphTransformer& commonTransformer, IGraphTransformer& finalTransformer) 
+IGraphTransformer::TStatus DoPeepHoleOptimizeNode(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx,
+    IGraphTransformer& commonTransformer, IGraphTransformer& finalTransformer)
 {
     output = input;
 
@@ -5944,17 +5944,17 @@ IGraphTransformer::TStatus DoPeepHoleOptimizeNode(const TExprNode::TPtr& input, 
 }
 
 template <bool EnableNewOptimizers>
-IGraphTransformer::TStatus PeepHoleOptimizeNode(const TExprNode::TPtr& input, TExprNode::TPtr& output, 
+IGraphTransformer::TStatus PeepHoleOptimizeNode(const TExprNode::TPtr& input, TExprNode::TPtr& output,
     TExprContext& ctx, TTypeAnnotationContext& types, IGraphTransformer* typeAnnotator,
     bool& hasNonDeterministicFunctions, const TPeepholeSettings& peepholeSettings)
-{ 
-    hasNonDeterministicFunctions = false; 
+{
+    hasNonDeterministicFunctions = false;
     const auto commonTransformer = CreatePeepHoleCommonStageTransformer<EnableNewOptimizers>(types, typeAnnotator, peepholeSettings);
     const auto finalTransformer = CreatePeepHoleFinalStageTransformer<EnableNewOptimizers>(types, typeAnnotator,
         &hasNonDeterministicFunctions, peepholeSettings);
-    return DoPeepHoleOptimizeNode(input, output, ctx, *commonTransformer, *finalTransformer); 
-} 
- 
+    return DoPeepHoleOptimizeNode(input, output, ctx, *commonTransformer, *finalTransformer);
+}
+
 THolder<IGraphTransformer> MakePeepholeOptimization(TTypeAnnotationContextPtr typeAnnotationContext, const IPipelineConfigurator* config) {
     TPeepholeSettings peepholeSettings;
     peepholeSettings.CommonConfig = peepholeSettings.FinalConfig = config;

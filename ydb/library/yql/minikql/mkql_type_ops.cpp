@@ -401,11 +401,11 @@ NUdf::TUnboxedValuePod ValueToString(NUdf::EDataSlot type, NUdf::TUnboxedValuePo
         break;
 
     case NUdf::EDataSlot::Float:
-        out << ::FloatToString(value.Get<float>()); 
+        out << ::FloatToString(value.Get<float>());
         break;
 
     case NUdf::EDataSlot::Double:
-        out << ::FloatToString(value.Get<double>()); 
+        out << ::FloatToString(value.Get<double>());
         break;
 
     case NUdf::EDataSlot::String:

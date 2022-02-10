@@ -11,8 +11,8 @@
             "Definition": "Custom",
             "Match": {"Type": "Callable", "Name": "DataSource"},
             "Children": [
-                {"Index": 0, "Name": "Category", "Type": "TCoAtom"}, 
-                {"Index": 1, "Name": "Cluster", "Type": "TCoAtom"} 
+                {"Index": 0, "Name": "Category", "Type": "TCoAtom"},
+                {"Index": 1, "Name": "Cluster", "Type": "TCoAtom"}
             ]
         },
         {
@@ -21,8 +21,8 @@
             "Definition": "Custom",
             "Match": {"Type": "Callable", "Name": "DataSink"},
             "Children": [
-                {"Index": 0, "Name": "Category", "Type": "TCoAtom"}, 
-                {"Index": 1, "Name": "Cluster", "Type": "TCoAtom"} 
+                {"Index": 0, "Name": "Category", "Type": "TCoAtom"},
+                {"Index": 1, "Name": "Cluster", "Type": "TCoAtom"}
             ]
         },
         {
@@ -53,7 +53,7 @@
             "Match": {"Type": "Callable", "Name": "KiReadTable!"},
             "Children": [
                 {"Index": 3, "Name": "Select", "Type": "TExprBase"},
-                {"Index": 4, "Name": "Settings", "Type": "TCoNameValueTupleList"} 
+                {"Index": 4, "Name": "Settings", "Type": "TCoNameValueTupleList"}
             ]
         },
         {
@@ -73,10 +73,10 @@
             "Children": [
                 {"Index": 0, "Name": "World", "Type": "TExprBase"},
                 {"Index": 1, "Name": "DataSink", "Type": "TKiDataSink"},
-                {"Index": 2, "Name": "Table", "Type": "TCoAtom"}, 
+                {"Index": 2, "Name": "Table", "Type": "TCoAtom"},
                 {"Index": 3, "Name": "Input", "Type": "TExprBase"},
-                {"Index": 4, "Name": "Mode", "Type": "TCoAtom"}, 
-                {"Index": 5, "Name": "Settings", "Type": "TCoNameValueTupleList"} 
+                {"Index": 4, "Name": "Mode", "Type": "TCoAtom"},
+                {"Index": 5, "Name": "Settings", "Type": "TCoNameValueTupleList"}
             ]
         },
         {
@@ -86,9 +86,9 @@
             "Children": [
                 {"Index": 0, "Name": "World", "Type": "TExprBase"},
                 {"Index": 1, "Name": "DataSink", "Type": "TKiDataSink"},
-                {"Index": 2, "Name": "Table", "Type": "TCoAtom"}, 
-                {"Index": 3, "Name": "Filter", "Type": "TCoLambda"}, 
-                {"Index": 4, "Name": "Update", "Type": "TCoLambda"} 
+                {"Index": 2, "Name": "Table", "Type": "TCoAtom"},
+                {"Index": 3, "Name": "Filter", "Type": "TCoLambda"},
+                {"Index": 4, "Name": "Update", "Type": "TCoLambda"}
             ]
         },
         {
@@ -98,8 +98,8 @@
             "Children": [
                 {"Index": 0, "Name": "World", "Type": "TExprBase"},
                 {"Index": 1, "Name": "DataSink", "Type": "TKiDataSink"},
-                {"Index": 2, "Name": "Table", "Type": "TCoAtom"}, 
-                {"Index": 3, "Name": "Filter", "Type": "TCoLambda"} 
+                {"Index": 2, "Name": "Table", "Type": "TCoAtom"},
+                {"Index": 3, "Name": "Filter", "Type": "TCoLambda"}
             ]
         },
         {
@@ -109,9 +109,9 @@
             "Children": [
                 {"Index": 0, "Name": "World", "Type": "TExprBase"},
                 {"Index": 1, "Name": "DataSink", "Type": "TKiDataSink"},
-                {"Index": 2, "Name": "Table", "Type": "TCoAtom"}, 
+                {"Index": 2, "Name": "Table", "Type": "TCoAtom"},
                 {"Index": 3, "Name": "Columns", "Type": "TExprList"},
-                {"Index": 4, "Name": "PrimaryKey", "Type": "TCoAtomList"}, 
+                {"Index": 4, "Name": "PrimaryKey", "Type": "TCoAtomList"},
                 {"Index": 5, "Name": "Settings", "Type": "TCoNameValueTupleList"},
                 {"Index": 6, "Name": "Indexes", "Type": "TCoIndexList"},
                 {"Index": 7, "Name": "PartitionBy", "Type": "TCoAtomList"},
@@ -127,7 +127,7 @@
             "Children": [
                 {"Index": 0, "Name": "World", "Type": "TExprBase"},
                 {"Index": 1, "Name": "DataSink", "Type": "TKiDataSink"},
-                {"Index": 2, "Name": "Table", "Type": "TCoAtom"}, 
+                {"Index": 2, "Name": "Table", "Type": "TCoAtom"},
                 {"Index": 3, "Name": "Actions", "Type": "TCoNameValueTupleList"}
             ]
         },
@@ -138,8 +138,8 @@
             "Children": [
                 {"Index": 0, "Name": "World", "Type": "TExprBase"},
                 {"Index": 1, "Name": "DataSink", "Type": "TKiDataSink"},
-                {"Index": 2, "Name": "Table", "Type": "TCoAtom"}, 
-                {"Index": 3, "Name": "Settings", "Type": "TCoNameValueTupleList"} 
+                {"Index": 2, "Name": "Table", "Type": "TCoAtom"},
+                {"Index": 3, "Name": "Settings", "Type": "TCoNameValueTupleList"}
             ]
         },
         {
@@ -269,7 +269,7 @@
             "Match": {"Type": "NodeType", "TypeName": "List"},
             "Builder": {"Generate": "Custom"},
             "Children": [
-                {"Index": 0, "Name": "Column", "Type": "TCoAtom"}, 
+                {"Index": 0, "Name": "Column", "Type": "TCoAtom"},
                 {"Index": 1, "Name": "From", "Type": "TExprBase"},
                 {"Index": 2, "Name": "To", "Type": "TExprBase"}
             ]
@@ -279,10 +279,10 @@
             "Base": "TCallable",
             "Match": {"Type": "Callable", "Name": "KiSelectRow"},
             "Children": [
-                {"Index": 0, "Name": "Cluster", "Type": "TCoAtom"}, 
+                {"Index": 0, "Name": "Cluster", "Type": "TCoAtom"},
                 {"Index": 1, "Name": "Table", "Type": "TKiVersionedTable"},
-                {"Index": 2, "Name": "Key", "Type": "TCoNameValueTupleList"}, 
-                {"Index": 3, "Name": "Select", "Type": "TCoAtomList"} 
+                {"Index": 2, "Name": "Key", "Type": "TCoNameValueTupleList"},
+                {"Index": 3, "Name": "Select", "Type": "TCoAtomList"}
             ]
         },
         {
@@ -290,9 +290,9 @@
             "Base": "TCallable",
             "Match": {"Type": "Callable", "Name": "KiUpdateRow"},
             "Children": [
-                {"Index": 0, "Name": "Cluster", "Type": "TCoAtom"}, 
+                {"Index": 0, "Name": "Cluster", "Type": "TCoAtom"},
                 {"Index": 1, "Name": "Table", "Type": "TKiVersionedTable"},
-                {"Index": 2, "Name": "Key", "Type": "TCoNameValueTupleList"}, 
+                {"Index": 2, "Name": "Key", "Type": "TCoNameValueTupleList"},
                 {"Index": 3, "Name": "Update", "Type": "TCoNameValueTupleList"}
             ]
         },
@@ -301,9 +301,9 @@
             "Base": "TCallable",
             "Match": {"Type": "Callable", "Name": "KiEraseRow"},
             "Children": [
-                {"Index": 0, "Name": "Cluster", "Type": "TCoAtom"}, 
+                {"Index": 0, "Name": "Cluster", "Type": "TCoAtom"},
                 {"Index": 1, "Name": "Table", "Type": "TKiVersionedTable"},
-                {"Index": 2, "Name": "Key", "Type": "TCoNameValueTupleList"} 
+                {"Index": 2, "Name": "Key", "Type": "TCoNameValueTupleList"}
             ]
         },
         {
@@ -312,11 +312,11 @@
             "Match": {"Type": "CallableBase"},
             "Builder": {"Generate": "None"},
             "Children": [
-                {"Index": 0, "Name": "Cluster", "Type": "TCoAtom"}, 
+                {"Index": 0, "Name": "Cluster", "Type": "TCoAtom"},
                 {"Index": 1, "Name": "Table", "Type": "TKiVersionedTable"},
                 {"Index": 2, "Name": "Range", "Type": "TExprList"},
-                {"Index": 3, "Name": "Select", "Type": "TCoAtomList"}, 
-                {"Index": 4, "Name": "Settings", "Type": "TCoNameValueTupleList"} 
+                {"Index": 3, "Name": "Select", "Type": "TCoAtomList"},
+                {"Index": 4, "Name": "Settings", "Type": "TCoNameValueTupleList"}
             ]
         },
         {
@@ -337,7 +337,7 @@
             "Base": "TCallable",
             "Match": {"Type": "Callable", "Name": "KiSetResult"},
             "Children": [
-                {"Index": 0, "Name": "Name", "Type": "TCoAtom"}, 
+                {"Index": 0, "Name": "Name", "Type": "TCoAtom"},
                 {"Index": 1, "Name": "Data", "Type": "TExprBase"}
             ]
         },
@@ -355,7 +355,7 @@
             "Match": {"Type": "Callable", "Name": "KiMapParameter"},
             "Children": [
                 {"Index": 0, "Name": "Input", "Type": "TExprBase"},
-                {"Index": 1, "Name": "Lambda", "Type": "TCoLambda"} 
+                {"Index": 1, "Name": "Lambda", "Type": "TCoLambda"}
             ]
         },
         {
@@ -373,7 +373,7 @@
             "Match": {"Type": "Callable", "Name": "KiFlatMapParameter"},
             "Children": [
                 {"Index": 0, "Name": "Input", "Type": "TExprBase"},
-                {"Index": 1, "Name": "Lambda", "Type": "TCoLambda"} 
+                {"Index": 1, "Name": "Lambda", "Type": "TCoLambda"}
             ]
         },
         {
@@ -384,7 +384,7 @@
             "Children": [
                 {"Index": 0, "Name": "Predicate", "Type": "TExprBase"},
                 {"Index": 1, "Name": "Effect", "Type": "TExprBase"},
-                {"Index": 2, "Name": "Constraint", "Type": "TCoAtom"} 
+                {"Index": 2, "Name": "Constraint", "Type": "TCoAtom"}
             ]
         },
         {
@@ -413,7 +413,7 @@
             "Children": [
                 {"Index": 0, "Name": "Input",             "Type": "TExprBase"},
                 {"Index": 1, "Name": "SortDirections",    "Type": "TExprBase"},
-                {"Index": 2, "Name": "KeySelectorLambda", "Type": "TCoLambda"} 
+                {"Index": 2, "Name": "KeySelectorLambda", "Type": "TCoLambda"}
             ]
         },
         {

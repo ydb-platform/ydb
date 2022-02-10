@@ -343,29 +343,29 @@ select_kind: (DISCARD)? (process_core | reduce_core | select_core) (INTO RESULT 
 process_core:
   PROCESS STREAM? named_single_source (COMMA named_single_source)* (USING using_call_expr (AS an_id)?
   (WITH external_call_settings)?
-  (WHERE expr)? (HAVING expr)? (ASSUME order_by_clause)?)? 
+  (WHERE expr)? (HAVING expr)? (ASSUME order_by_clause)?)?
 ;
 
 external_call_param: an_id EQUALS expr;
 external_call_settings: external_call_param (COMMA external_call_param)*;
 
 reduce_core:
-  REDUCE named_single_source (COMMA named_single_source)* (PRESORT sort_specification_list)? 
+  REDUCE named_single_source (COMMA named_single_source)* (PRESORT sort_specification_list)?
   ON column_list USING ALL? using_call_expr (AS an_id)?
-  (WHERE expr)? (HAVING expr)? (ASSUME order_by_clause)? 
+  (WHERE expr)? (HAVING expr)? (ASSUME order_by_clause)?
 ;
 
 opt_set_quantifier: (ALL | DISTINCT)?;
 
 select_core:
   (FROM join_source)? SELECT STREAM? opt_set_quantifier result_column (COMMA result_column)* COMMA? (WITHOUT without_column_list)? (FROM join_source)? (WHERE expr)?
-  group_by_clause? (HAVING expr)? window_clause? ext_order_by_clause? 
+  group_by_clause? (HAVING expr)? window_clause? ext_order_by_clause?
 ;
 
 order_by_clause: ORDER BY sort_specification_list;
 
-ext_order_by_clause: ASSUME? order_by_clause; 
- 
+ext_order_by_clause: ASSUME? order_by_clause;
+
 group_by_clause: GROUP COMPACT? BY opt_set_quantifier grouping_element_list;
 
 grouping_element_list: grouping_element (COMMA grouping_element)*;
@@ -1124,7 +1124,7 @@ ANY: A N Y;
 ARRAY: A R R A Y;
 AS: A S;
 ASC: A S C;
-ASSUME: A S S U M E; 
+ASSUME: A S S U M E;
 ASYNC: A S Y N C;
 ATTACH: A T T A C H;
 AUTOINCREMENT: A U T O I N C R E M E N T;

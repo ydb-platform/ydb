@@ -37,13 +37,13 @@ struct TParamBinding {
         , ResultIndex(resultIndex) {}
 };
 
-NKikimrKqp::TParameterBinding GetParameterBinding(TCoParameter param) { 
+NKikimrKqp::TParameterBinding GetParameterBinding(TCoParameter param) {
     auto name = TString(param.Name().Value());
 
     NKikimrKqp::TParameterBinding binding;
     binding.SetName(name);
     if (param.Ref().HasResult()) {
-        auto indexTuple = TCoAtomList(TExprNode::GetResult(param.Ptr())); 
+        auto indexTuple = TCoAtomList(TExprNode::GetResult(param.Ptr()));
         ui32 mkqlIndex = FromString<ui32>(indexTuple.Item(0).Value());
         ui32 resultIndex = FromString<ui32>(indexTuple.Item(1).Value());
         binding.SetMkqlIndex(mkqlIndex);
@@ -84,8 +84,8 @@ NKikimrMiniKQL::TParams BuildParamFromResult(const NKikimrKqp::TParameterBinding
 bool GetPredicateValue(const TKiConditionalEffect& effect, const TKqlTransformContext& transformCtx,
     const THashMap<TString, NKikimrKqp::TParameterBinding>& bindingsMap)
 {
-    YQL_ENSURE(effect.Predicate().Maybe<TCoParameter>()); 
-    auto paramName = effect.Predicate().Cast<TCoParameter>().Name().Value(); 
+    YQL_ENSURE(effect.Predicate().Maybe<TCoParameter>());
+    auto paramName = effect.Predicate().Cast<TCoParameter>().Name().Value();
 
     auto binding = bindingsMap.FindPtr(paramName);
     YQL_ENSURE(binding);
@@ -808,7 +808,7 @@ void LogMkqlResult(const NKikimrMiniKQL::TResult& result, TExprContext& ctx) {
 }
 
 bool HasEffects(const TKiProgram& program) {
-    return !program.Effects().Maybe<TCoList>(); 
+    return !program.Effects().Maybe<TCoList>();
 }
 
 bool HasResults(const TKiProgram& program) {

@@ -1,7 +1,7 @@
 #pragma once
 
 #include "yql_graph_transformer.h"
-#include "yql_callable_names.h" 
+#include "yql_callable_names.h"
 
 #include <ydb/library/yql/public/udf/udf_validate.h>
 
@@ -9,8 +9,8 @@
 
 #include <util/generic/maybe.h>
 #include <util/generic/set.h>
-#include <util/generic/hash_set.h> 
-#include <util/generic/string.h> 
+#include <util/generic/hash_set.h>
+#include <util/generic/string.h>
 
 #include <functional>
 
@@ -49,7 +49,7 @@ public:
     virtual void WriteDetails(const TExprNode& node, NYson::TYsonWriter& writer) = 0;
     // returns visibility of node
     virtual bool GetDependencies(const TExprNode& node, TExprNode::TListType& children, bool compact) = 0;
-    virtual void GetResultDependencies(const TExprNode::TPtr& node, TExprNode::TListType& children, bool compact) = 0; 
+    virtual void GetResultDependencies(const TExprNode::TPtr& node, TExprNode::TListType& children, bool compact) = 0;
     virtual void GetInputs(const TExprNode& node, TVector<TPinInfo>& inputs) = 0;
     virtual void GetOutputs(const TExprNode& node, TVector<TPinInfo>& outputs) = 0;
     virtual TString GetProviderPath(const TExprNode& node) = 0;
@@ -74,8 +74,8 @@ public:
     virtual IGraphTransformer& GetCleanupTransformer() = 0;
 };
 
-class IDqIntegration; 
- 
+class IDqIntegration;
+
 class IOptimizationContext;
 
 class IDataProvider : public TThrRefBase {
@@ -108,23 +108,23 @@ public:
     //-- discovery & rewrite
     virtual IGraphTransformer& GetIODiscoveryTransformer() = 0;
 
-    //-- assign epochs 
-    virtual IGraphTransformer& GetEpochsTransformer() = 0; 
- 
+    //-- assign epochs
+    virtual IGraphTransformer& GetEpochsTransformer() = 0;
+
     //-- intent determination
     virtual IGraphTransformer& GetIntentDeterminationTransformer() = 0;
 
     //-- type check
-    virtual bool ValidateParameters(TExprNode& node, TExprContext& ctx, TMaybe<TString>& cluster) = 0; 
+    virtual bool ValidateParameters(TExprNode& node, TExprContext& ctx, TMaybe<TString>& cluster) = 0;
     virtual bool CanParse(const TExprNode& node) = 0;
     virtual IGraphTransformer& GetTypeAnnotationTransformer(bool instantOnly) = 0;
-    virtual IGraphTransformer& GetConstraintTransformer(bool instantOnly, bool subGraph) = 0; 
-    // Fill set of callables, which have world as first child and should be trimmed in evaluation 
-    virtual void FillModifyCallables(THashSet<TStringBuf>& callables) = 0; 
+    virtual IGraphTransformer& GetConstraintTransformer(bool instantOnly, bool subGraph) = 0;
+    // Fill set of callables, which have world as first child and should be trimmed in evaluation
+    virtual void FillModifyCallables(THashSet<TStringBuf>& callables) = 0;
 
     //-- optimizations
     virtual TExprNode::TPtr RewriteIO(const TExprNode::TPtr& node, TExprContext& ctx) = 0;
-    virtual IGraphTransformer& GetRecaptureOptProposalTransformer() = 0; 
+    virtual IGraphTransformer& GetRecaptureOptProposalTransformer() = 0;
     virtual IGraphTransformer& GetLogicalOptProposalTransformer() = 0;
     virtual IGraphTransformer& GetPhysicalOptProposalTransformer() = 0;
     virtual IGraphTransformer& GetPhysicalFinalizingTransformer() = 0;
@@ -134,9 +134,9 @@ public:
     //-- metadata loading
     virtual IGraphTransformer& GetLoadTableMetadataTransformer() = 0;
 
-    // This function is used in core optimizers to check either the node can be used as input multiple times or not 
-    virtual bool IsPersistent(const TExprNode& node) = 0; 
- 
+    // This function is used in core optimizers to check either the node can be used as input multiple times or not
+    virtual bool IsPersistent(const TExprNode& node) = 0;
+
     // Right! or worlds are written to syncList
     virtual bool CanBuildResult(const TExprNode& node, TSyncMap& syncList) = 0;
     virtual bool CanPullResult(const TExprNode& node, TSyncMap& syncList, bool& canRef) = 0;
@@ -165,9 +165,9 @@ public:
 
     //-- garbage collection
     virtual ITrackableNodeProcessor& GetTrackableNodeProcessor() = 0;
- 
-    // DQ 
-    virtual IDqIntegration* GetDqIntegration() = 0; 
+
+    // DQ
+    virtual IDqIntegration* GetDqIntegration() = 0;
 };
 
 struct IPipelineConfigurator;
@@ -189,10 +189,10 @@ enum class ESourceSyntax {
 struct TDataProviderInfo {
     using TFutureStatus = NThreading::TFuture<IGraphTransformer::TStatus>;
 
-    THashSet<TString> Names; 
+    THashSet<TString> Names;
     TIntrusivePtr<IDataProvider> Source;
     TIntrusivePtr<IDataProvider> Sink;
-    bool SupportFullResultDataSink = false; 
+    bool SupportFullResultDataSink = false;
 
     std::function<TMaybe<TString>(const TMaybe<TSet<TString>>& usedClusters, const TMaybe<TSet<TString>>& usedProviders,
         ESourceSyntax syntax)> RemoteClusterProvider;
@@ -218,14 +218,14 @@ struct TDataProviderInfo {
 
     std::function<NThreading::TFuture<void>(const TString& sessionId, const TString& username,
         const TOperationProgressWriter& progressWriter, const TYqlOperationOptions& operationOptions,
-        TIntrusivePtr<IRandomProvider> randomProvider, TIntrusivePtr<ITimeProvider> timeProvider)> OpenSession; 
+        TIntrusivePtr<IRandomProvider> randomProvider, TIntrusivePtr<ITimeProvider> timeProvider)> OpenSession;
 
     std::function<bool()> HasActiveProcesses;
 
     std::function<void(const TString& sessionId)> CloseSession;
 
-    std::function<void(const TString& sessionId)> CleanupSession; 
- 
+    std::function<void(const TString& sessionId)> CleanupSession;
+
     std::function<TMaybe<TString>(const TString& url)> TokenResolver;
 };
 

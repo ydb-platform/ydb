@@ -1,4 +1,4 @@
-#include "backtrace.h" 
+#include "backtrace.h"
 
 #include <llvm/DebugInfo/Symbolize/Symbolize.h>
 #include <llvm/DebugInfo/Symbolize/DIPrinter.h>
@@ -14,30 +14,30 @@
 #include <util/system/backtrace.h>
 #include <util/system/type_name.h>
 #include <util/system/execpath.h>
-#include <util/system/platform.h> 
-#include <util/system/mlock.h> 
+#include <util/system/platform.h>
+#include <util/system/mlock.h>
 
 #ifdef _linux_
 #include <dlfcn.h>
 #include <link.h>
 #endif
 
-#ifndef _win_ 
+#ifndef _win_
 
 namespace {
 
-bool SetSignalHandler(int signo, void (*handler)(int)) { 
-    struct sigaction sa; 
-    memset(&sa, 0, sizeof(sa)); 
-    sa.sa_flags = SA_RESETHAND; 
-    sa.sa_handler = handler; 
-    sigfillset(&sa.sa_mask); 
-    return sigaction(signo, &sa, nullptr) != -1; 
-} 
+bool SetSignalHandler(int signo, void (*handler)(int)) {
+    struct sigaction sa;
+    memset(&sa, 0, sizeof(sa));
+    sa.sa_flags = SA_RESETHAND;
+    sa.sa_handler = handler;
+    sigfillset(&sa.sa_mask);
+    return sigaction(signo, &sa, nullptr) != -1;
+}
 
 } // namespace
 
-#endif // _win_ 
+#endif // _win_
 
 void KikimrBackTrace() {
     KikimrBacktraceFormatImpl(&Cerr);
@@ -62,37 +62,37 @@ int DlIterCallback(struct dl_phdr_info *info, size_t size, void *data)
 }
 #endif
 
-TAtomic BacktraceStarted = 0; 
+TAtomic BacktraceStarted = 0;
 
-class TRawOStreamProxy: public llvm::raw_ostream { 
-public: 
-    TRawOStreamProxy(IOutputStream& out) 
-        : llvm::raw_ostream(true) // unbuffered 
-        , Slave_(out) 
-    { 
-    } 
-    void write_impl(const char* ptr, size_t size) override { 
-        Slave_.Write(ptr, size); 
-    } 
-    uint64_t current_pos() const override { 
-        return 0; 
-    } 
-    size_t preferred_buffer_size() const override { 
-        return 0; 
-    } 
-private: 
-    IOutputStream& Slave_; 
-}; 
- 
- 
+class TRawOStreamProxy: public llvm::raw_ostream {
+public:
+    TRawOStreamProxy(IOutputStream& out)
+        : llvm::raw_ostream(true) // unbuffered
+        , Slave_(out)
+    {
+    }
+    void write_impl(const char* ptr, size_t size) override {
+        Slave_.Write(ptr, size);
+    }
+    uint64_t current_pos() const override {
+        return 0;
+    }
+    size_t preferred_buffer_size() const override {
+        return 0;
+    }
+private:
+    IOutputStream& Slave_;
+};
+
+
 void KikimrBacktraceFormatImpl(IOutputStream* out) {
-    if (out == &Cerr && !AtomicTryLock(&BacktraceStarted)) { 
+    if (out == &Cerr && !AtomicTryLock(&BacktraceStarted)) {
         return;
     }
 
-    // Unlock memory to avoid extra RSS consumption while touching debug info 
-    UnlockAllMemory(); 
- 
+    // Unlock memory to avoid extra RSS consumption while touching debug info
+    UnlockAllMemory();
+
     void* array[300];
     const size_t s = BackTrace(array, Y_ARRAY_SIZE(array));
     KikimrBacktraceFormatImpl(out, array, s);
@@ -108,7 +108,7 @@ void KikimrBacktraceFormatImpl(IOutputStream* out, void* const* stack, size_t st
     dl_iterate_phdr(DlIterCallback, &dlls);
 #endif
     auto binaryPath = GetPersistentExecPath();
-    DIPrinter printer(outStream, true, true, false); 
+    DIPrinter printer(outStream, true, true, false);
     LLVMSymbolizer::Options opts;
     LLVMSymbolizer symbolyzer(opts);
     for (const auto i : xrange(stackSize)) {
@@ -139,13 +139,13 @@ void KikimrBacktraceFormatImpl(IOutputStream* out, void* const* stack, size_t st
 
             printer << value;
         } else {
-            logAllUnhandledErrors(resOrErr.takeError(), outStream, 
+            logAllUnhandledErrors(resOrErr.takeError(), outStream,
                 "LLVMSymbolizer: error reading file: ");
         }
     }
 }
 
-void PrintBacktraceToStderr(int signum) 
+void PrintBacktraceToStderr(int signum)
 {
     if (!NMalloc::IsAllocatorCorrupted) {
         /* we want memory allocation for backtrace printing */
@@ -160,17 +160,17 @@ void PrintBacktraceToStderr(int signum)
 
 void EnableKikimrBacktraceFormat()
 {
-    SetFormatBackTraceFn(KikimrBacktraceFormatImpl); 
+    SetFormatBackTraceFn(KikimrBacktraceFormatImpl);
 }
 
-void SetFatalSignalHandler(void (*handler)(int)) 
+void SetFatalSignalHandler(void (*handler)(int))
 {
-    Y_UNUSED(handler); 
+    Y_UNUSED(handler);
 #ifndef _win_
-    for (int signo: {SIGSEGV, SIGILL, SIGABRT, SIGFPE}) { 
-        if (!SetSignalHandler(signo, handler)) { 
-            ythrow TSystemError() << "Cannot set handler for signal " << strsignal(signo); 
-        } 
+    for (int signo: {SIGSEGV, SIGILL, SIGABRT, SIGFPE}) {
+        if (!SetSignalHandler(signo, handler)) {
+            ythrow TSystemError() << "Cannot set handler for signal " << strsignal(signo);
+        }
     }
 #endif
 }

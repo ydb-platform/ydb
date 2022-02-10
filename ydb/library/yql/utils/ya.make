@@ -21,8 +21,8 @@ SRCS(
     multi_resource_lock.h
     parse_double.cpp
     parse_double.h
-    proc_alive.cpp 
-    proc_alive.h 
+    proc_alive.cpp
+    proc_alive.h
     rand_guid.cpp
     rand_guid.h
     resetable_setting.h

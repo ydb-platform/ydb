@@ -15,10 +15,10 @@ namespace NYql::NDqs {
 
     struct TTaskOutputMeta {};
 
-    struct TTaskMeta { 
-        THashMap<TString, TString> TaskParams; 
+    struct TTaskMeta {
+        THashMap<TString, TString> TaskParams;
         TString ClusterNameHint;
-    }; 
+    };
 
     using TStageInfo = NYql::NDq::TStageInfo<TStageInfoMeta>;
     using TTaskOutput = NYql::NDq::TTaskOutput<TTaskOutputMeta>;

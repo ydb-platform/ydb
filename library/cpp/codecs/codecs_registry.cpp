@@ -27,8 +27,8 @@ namespace NCodecs {
                 Y_VERIFY(!Registry.contains(name), "already has %s", name.data());
                 Registry[name] = fac;
             }
-        } 
- 
+        }
+
         TCodecPtr TCodecRegistry::GetCodec(TStringBuf name) const {
             using namespace NPrivate;
 

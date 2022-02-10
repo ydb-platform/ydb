@@ -13,7 +13,7 @@ namespace {
 template<typename TCompare>
 TExprBase BuildColumnCompare(TExprBase row, const TString& columnName, TExprBase value, TExprContext& ctx) {
     auto compare = Build<TCompare>(ctx, row.Pos())
-        .template Left<TCoMember>() 
+        .template Left<TCoMember>()
             .Struct(row)
             .Name().Build(columnName)
             .Build()
@@ -22,13 +22,13 @@ TExprBase BuildColumnCompare(TExprBase row, const TString& columnName, TExprBase
 
     TMaybeNode<TExprBase> ret = compare;
 
-    auto rowType = row.Ref().GetTypeAnn()->Cast<TStructExprType>(); 
+    auto rowType = row.Ref().GetTypeAnn()->Cast<TStructExprType>();
     auto columnType = rowType->GetItems()[*rowType->FindItem(columnName)]->GetItemType();
 
     if (columnType->GetKind() == ETypeAnnotationKind::Optional) {
-        ret = Build<TCoCoalesce>(ctx, row.Pos()) 
+        ret = Build<TCoCoalesce>(ctx, row.Pos())
             .Predicate(compare)
-            .template Value<TCoBool>() 
+            .template Value<TCoBool>()
                 .Literal().Build("false")
                 .Build()
             .Done();
@@ -39,7 +39,7 @@ TExprBase BuildColumnCompare(TExprBase row, const TString& columnName, TExprBase
 
 TMaybeNode<TExprBase> CombinePredicatesAnd(TMaybeNode<TExprBase> left, TMaybeNode<TExprBase> right, TExprContext& ctx) {
     if (left && right) {
-        return Build<TCoAnd>(ctx, left.Cast().Pos()) 
+        return Build<TCoAnd>(ctx, left.Cast().Pos())
             .Add({left.Cast(), right.Cast()})
             .Done();
     } else if (left) {
@@ -53,7 +53,7 @@ TMaybeNode<TExprBase> CombinePredicatesAnd(TMaybeNode<TExprBase> left, TMaybeNod
 
 TMaybeNode<TExprBase> CombinePredicatesOr(TMaybeNode<TExprBase> left, TMaybeNode<TExprBase> right, TExprContext& ctx) {
     if (left && right) {
-        return Build<TCoOr>(ctx, left.Cast().Pos()) 
+        return Build<TCoOr>(ctx, left.Cast().Pos())
             .Add({left.Cast(), right.Cast()})
             .Done();
     }
@@ -111,7 +111,7 @@ TMaybeNode<TExprBase> BuildColumnRangePredicate(const TString& column, const TCo
     }
 
     if (fromPredicate && toPredicate) {
-        return Build<TCoAnd>(ctx, row.Pos()) 
+        return Build<TCoAnd>(ctx, row.Pos())
             .Add({fromPredicate.Cast(), toPredicate.Cast()})
             .Done();
     } else if (fromPredicate) {
@@ -645,23 +645,23 @@ TTableLookupBuilder CollectLookups(TExprBase row, TExprBase predicate,
         return CombineLookupsOr(row, keyColumns, builders.data(), builders.size(), ctx);
     }
 
-    TMaybeNode<TCoCompare> maybeCompare = predicate.Maybe<TCoCompare>(); 
-    if (auto maybeLiteral = predicate.Maybe<TCoCoalesce>().Value().Maybe<TCoBool>().Literal()) { 
+    TMaybeNode<TCoCompare> maybeCompare = predicate.Maybe<TCoCompare>();
+    if (auto maybeLiteral = predicate.Maybe<TCoCoalesce>().Value().Maybe<TCoBool>().Literal()) {
         if (maybeLiteral.Cast().Value() == "false") {
-            maybeCompare = predicate.Cast<TCoCoalesce>().Predicate().Maybe<TCoCompare>(); 
+            maybeCompare = predicate.Cast<TCoCoalesce>().Predicate().Maybe<TCoCompare>();
         }
     }
 
     TTableLookupBuilder fullScan(keyColumns, TKeyRangeBuilder(keyColumns, predicate));
 
     auto getRowMember = [row] (TExprBase expr) {
-        if (auto maybeMember = expr.Maybe<TCoMember>()) { 
+        if (auto maybeMember = expr.Maybe<TCoMember>()) {
             if (maybeMember.Cast().Struct().Raw() == row.Raw()) {
                 return maybeMember;
             }
         }
 
-        return TMaybeNode<TCoMember>(); 
+        return TMaybeNode<TCoMember>();
     };
 
     auto getTableLookup = [&keyColumns, fullScan] (const TStringBuf& column, const TColumnRange& range,
@@ -677,7 +677,7 @@ TTableLookupBuilder CollectLookups(TExprBase row, TExprBase predicate,
     };
 
     auto getNullComparePredicate = [&ctx](TExprBase value, TExprBase rowValue) -> TMaybeNode<TExprBase> {
-        if (ctx.AllowNullCompare || rowValue.Ref().GetTypeAnn()->GetKind() != ETypeAnnotationKind::Optional) { 
+        if (ctx.AllowNullCompare || rowValue.Ref().GetTypeAnn()->GetKind() != ETypeAnnotationKind::Optional) {
             return TMaybeNode<TExprBase>();
         }
 
@@ -698,10 +698,10 @@ TTableLookupBuilder CollectLookups(TExprBase row, TExprBase predicate,
         bool reverseCompare = false;
         if (maybeLeftMember) {
             maybeMember = maybeLeftMember;
-            maybeValue = ctx.GetValueFunc(right, maybeMember.Cast().Ref().GetTypeAnn(), ctx.ExprCtx); 
+            maybeValue = ctx.GetValueFunc(right, maybeMember.Cast().Ref().GetTypeAnn(), ctx.ExprCtx);
         } else if (maybeRightMember) {
             maybeMember = maybeRightMember;
-            maybeValue = ctx.GetValueFunc(left, maybeMember.Cast().Ref().GetTypeAnn(), ctx.ExprCtx); 
+            maybeValue = ctx.GetValueFunc(left, maybeMember.Cast().Ref().GetTypeAnn(), ctx.ExprCtx);
             reverseCompare = true;
         }
 
@@ -714,29 +714,29 @@ TTableLookupBuilder CollectLookups(TExprBase row, TExprBase predicate,
 
         TMaybe<TColumnRange> columnRange;
 
-        if (maybeCompare.Maybe<TCoCmpEqual>()) { 
+        if (maybeCompare.Maybe<TCoCmpEqual>()) {
             columnRange = TColumnRange::MakePoint(value);
         }
 
-        if (maybeCompare.Maybe<TCoCmpLess>()) { 
+        if (maybeCompare.Maybe<TCoCmpLess>()) {
             columnRange = reverseCompare
                 ? MakeColumnRange(TRangeBound::MakeExclusive(value), TRangeBound::MakeUndefined(), ctx)
                 : MakeColumnRange(TRangeBound::MakeUndefined(), TRangeBound::MakeExclusive(value), ctx);
         }
 
-        if (maybeCompare.Maybe<TCoCmpLessOrEqual>()) { 
+        if (maybeCompare.Maybe<TCoCmpLessOrEqual>()) {
             columnRange = reverseCompare
                 ? MakeColumnRange(TRangeBound::MakeInclusive(value), TRangeBound::MakeUndefined(), ctx)
                 : MakeColumnRange(TRangeBound::MakeUndefined(), TRangeBound::MakeInclusive(value), ctx);
         }
 
-        if (maybeCompare.Maybe<TCoCmpGreater>()) { 
+        if (maybeCompare.Maybe<TCoCmpGreater>()) {
             columnRange = reverseCompare
                 ? MakeColumnRange(TRangeBound::MakeUndefined(), TRangeBound::MakeExclusive(value), ctx)
                 : MakeColumnRange(TRangeBound::MakeExclusive(value), TRangeBound::MakeUndefined(), ctx);
         }
 
-        if (maybeCompare.Maybe<TCoCmpGreaterOrEqual>()) { 
+        if (maybeCompare.Maybe<TCoCmpGreaterOrEqual>()) {
             columnRange = reverseCompare
                 ? MakeColumnRange(TRangeBound::MakeUndefined(), TRangeBound::MakeInclusive(value), ctx)
                 : MakeColumnRange(TRangeBound::MakeInclusive(value), TRangeBound::MakeUndefined(), ctx);
@@ -803,27 +803,27 @@ TTableLookupBuilder CollectLookups(TExprBase row, TExprBase predicate,
         return TTableLookupBuilder(keyColumns, keyRanges);
     }
 
-    if (auto maybeBool = predicate.Maybe<TCoCoalesce>().Value().Maybe<TCoBool>().Literal()) { 
+    if (auto maybeBool = predicate.Maybe<TCoCoalesce>().Value().Maybe<TCoBool>().Literal()) {
         if (maybeBool.Cast().Value() == "false") {
-            TExprBase value = predicate.Cast<TCoCoalesce>().Predicate(); 
-            TMaybeNode<TCoMember> maybeMember = getRowMember(value); 
+            TExprBase value = predicate.Cast<TCoCoalesce>().Predicate();
+            TMaybeNode<TCoMember> maybeMember = getRowMember(value);
             if (maybeMember) {
                 auto column = maybeMember.Cast().Name().Value();
                 auto columnRange = TColumnRange::MakePoint(
-                    Build<TCoBool>(ctx.ExprCtx, row.Pos()).Literal().Build("true").Done()); 
+                    Build<TCoBool>(ctx.ExprCtx, row.Pos()).Literal().Build("true").Done());
                 return getTableLookup(column, columnRange, {});
             }
         }
     }
 
-    if (auto maybeBool = predicate.Maybe<TCoNot>().Value().Maybe<TCoCoalesce>().Value().Maybe<TCoBool>().Literal()) { 
+    if (auto maybeBool = predicate.Maybe<TCoNot>().Value().Maybe<TCoCoalesce>().Value().Maybe<TCoBool>().Literal()) {
         if (maybeBool.Cast().Value() == "true") {
-            TExprBase value = predicate.Cast<TCoNot>().Value().Cast<TCoCoalesce>().Predicate(); 
-            TMaybeNode<TCoMember> maybeMember = getRowMember(value); 
+            TExprBase value = predicate.Cast<TCoNot>().Value().Cast<TCoCoalesce>().Predicate();
+            TMaybeNode<TCoMember> maybeMember = getRowMember(value);
             if (maybeMember) {
                 auto column = maybeMember.Cast().Name().Value();
                 auto columnRange = TColumnRange::MakePoint(
-                    Build<TCoBool>(ctx.ExprCtx, row.Pos()).Literal().Build("false").Done()); 
+                    Build<TCoBool>(ctx.ExprCtx, row.Pos()).Literal().Build("false").Done());
                 return getTableLookup(column, columnRange, {});
             }
         }

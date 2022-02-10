@@ -470,7 +470,7 @@ public:
                                                                "Please consult https://yql.yandex-team.ru/docs/yt/builtins/basic/#tablepath for possible workaround";
             }
 
-            Args.push_back(Y("TablePath", Y("DependsOn", "row"))); 
+            Args.push_back(Y("TablePath", Y("DependsOn", "row")));
         }
 
         if (Args.size() == 2) {
@@ -1635,7 +1635,7 @@ public:
 
             Node = Y("block", Q(L(block, Y("return", "res"))));
         } else {
-            Node = ctx.EnableSystemColumns ? Y("RemoveSystemMembers", "row") : BuildAtom(Pos, "row", 0); 
+            Node = ctx.EnableSystemColumns ? Y("RemoveSystemMembers", "row") : BuildAtom(Pos, "row", 0);
         }
         return true;
     }
@@ -1663,24 +1663,24 @@ TTableRows::TTableRows(TPosition pos, const TVector<TNodePtr>& args)
 {}
 
 TTableRows::TTableRows(TPosition pos, ui32 argsCount)
-    : INode(pos) 
+    : INode(pos)
     , ArgsCount(argsCount)
 {}
 
-bool TTableRows::DoInit(TContext& ctx, ISource* /*src*/) { 
+bool TTableRows::DoInit(TContext& ctx, ISource* /*src*/) {
     if (ArgsCount > 0) {
         ctx.Error(Pos) << "TableRows requires exactly 0 arguments";
         return false;
     }
-    Node = ctx.EnableSystemColumns ? Y("RemoveSystemMembers", "inputRowsList") : BuildAtom(Pos, "inputRowsList", 0); 
+    Node = ctx.EnableSystemColumns ? Y("RemoveSystemMembers", "inputRowsList") : BuildAtom(Pos, "inputRowsList", 0);
     return true;
 }
 
-TAstNode* TTableRows::Translate(TContext& ctx) const { 
-    Y_VERIFY_DEBUG(Node); 
-    return Node->Translate(ctx); 
-} 
- 
+TAstNode* TTableRows::Translate(TContext& ctx) const {
+    Y_VERIFY_DEBUG(Node);
+    return Node->Translate(ctx);
+}
+
 void TTableRows::DoUpdateState() const {
     State.Set(ENodeState::Const, false);
 }
@@ -2561,7 +2561,7 @@ struct TBuiltinFuncData {
             {"dictpayloads", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("DictPayloads", 1, 1) },
             {"dictitems", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("DictItems", 1, 1) },
             {"dictlookup", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("Lookup", 2, 2) },
-            {"dictcontains", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("Contains", 2, 2) }, 
+            {"dictcontains", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("Contains", 2, 2) },
 
             // Atom builtins
             {"asatom", BuildSimpleBuiltinFactoryCallback<TYqlAsAtom>()},

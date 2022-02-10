@@ -320,8 +320,8 @@ IComputationNode* WrapVisitAll(TCallable& callable, const TComputationNodeFactor
     args.reserve(varType->GetAlternativesCount());
     for (auto i = 0U; i < varType->GetAlternativesCount() << 1U; ++i) {
         args.emplace_back(LocateExternalNode(ctx.NodeLocator, callable, ++i));
-    } 
- 
+    }
+
     if (const auto type = callable.GetType()->GetReturnType(); type->IsFlow()) {
         TComputationWideFlowNodePtrVector wideNodes;
         wideNodes.reserve(newNodes.size());

@@ -10,7 +10,7 @@ namespace NCommon {
 class IMkqlCallableCompiler;
 
 struct TMkqlBuildContext {
-    using TArgumentsMap = TNodeMap<NKikimr::NMiniKQL::TRuntimeNode>; 
+    using TArgumentsMap = TNodeMap<NKikimr::NMiniKQL::TRuntimeNode>;
     using TMemoizedNodesMap = TArgumentsMap;
 
     const IMkqlCallableCompiler& MkqlCompiler;

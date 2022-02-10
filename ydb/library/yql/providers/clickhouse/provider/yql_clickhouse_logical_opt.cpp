@@ -10,7 +10,7 @@
 #include <ydb/library/yql/core/yql_opt_utils.h>
 #include <ydb/library/yql/utils/log/log.h>
 
- 
+
 namespace NYql {
 
 using namespace NNodes;
@@ -26,7 +26,7 @@ public:
 #define HNDL(name) "LogicalOptimizer-"#name, Hndl(&TClickHouseLogicalOptProposalTransformer::name)
         AddHandler(0, &TCoLeft::Match, HNDL(TrimReadWorld));
         AddHandler(0, &TCoExtractMembers::Match, HNDL(ExtractMembers));
-        AddHandler(0, &TCoExtractMembers::Match, HNDL(ExtractMembersOverDqWrap)); 
+        AddHandler(0, &TCoExtractMembers::Match, HNDL(ExtractMembersOverDqWrap));
         AddHandler(0, &TCoExtractMembers::Match, HNDL(ExtractMembersOverDqSourceWrap));
 #undef HNDL
     }
@@ -54,23 +54,23 @@ public:
             .Done();
     }
 
-    TMaybeNode<TExprBase> ExtractMembersOverDqWrap(TExprBase node, TExprContext& ctx) const { 
-        auto extract = node.Cast<TCoExtractMembers>(); 
-        auto input = extract.Input(); 
-        auto read = input.Maybe<TDqReadWrap>().Input().Maybe<TClReadTable>(); 
-        if (!read) { 
-            return node; 
-        } 
+    TMaybeNode<TExprBase> ExtractMembersOverDqWrap(TExprBase node, TExprContext& ctx) const {
+        auto extract = node.Cast<TCoExtractMembers>();
+        auto input = extract.Input();
+        auto read = input.Maybe<TDqReadWrap>().Input().Maybe<TClReadTable>();
+        if (!read) {
+            return node;
+        }
 
-        return Build<TDqReadWrap>(ctx, node.Pos()) 
-            .InitFrom(input.Cast<TDqReadWrap>()) 
-            .Input<TClReadTable>() 
+        return Build<TDqReadWrap>(ctx, node.Pos())
+            .InitFrom(input.Cast<TDqReadWrap>())
+            .Input<TClReadTable>()
                 .InitFrom(read.Cast())
-                .Columns(extract.Members()) 
-            .Build() 
-            .Done(); 
-    } 
- 
+                .Columns(extract.Members())
+            .Build()
+            .Done();
+    }
+
     TMaybeNode<TExprBase> ExtractMembersOverDqSourceWrap(TExprBase node, TExprContext& ctx) const {
         const auto extract = node.Cast<TCoExtractMembers>();
         const auto input = extract.Input();

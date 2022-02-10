@@ -81,8 +81,8 @@ private:
         HFunc(TEvQueryResponse, OnQueryResponse);
         // execution timeout
         cFunc(TEvents::TEvBootstrap::EventType, [this]() {
-            YQL_LOG_CTX_SCOPE(TraceId); 
-            YQL_LOG(DEBUG) << "Execution timeout"; 
+            YQL_LOG_CTX_SCOPE(TraceId);
+            YQL_LOG(DEBUG) << "Execution timeout";
             auto issue = TIssue("Execution timeout");
             issue.SetCode(TIssuesIds::DQ_GATEWAY_NEED_FALLBACK_ERROR, TSeverityIds::S_ERROR);
             Issues.AddIssues({issue});
@@ -238,7 +238,7 @@ private:
 
     void Finish(bool retriable, bool needFallback = false)
     {
-        YQL_LOG(DEBUG) << __FUNCTION__ << ", retriable=" << retriable << ", needFallback=" << needFallback; 
+        YQL_LOG(DEBUG) << __FUNCTION__ << ", retriable=" << retriable << ", needFallback=" << needFallback;
         if (Finished) {
             YQL_LOG(WARN) << "Re-Finish IGNORED with Retriable=" << retriable << ", NeedFallback=" << needFallback;
         } else {
@@ -256,7 +256,7 @@ private:
     void OnFailure(TEvDqFailure::TPtr& ev, const NActors::TActorContext&) {
         if (!Finished) {
             YQL_LOG_CTX_SCOPE(TraceId);
-            YQL_LOG(DEBUG) << __FUNCTION__; 
+            YQL_LOG(DEBUG) << __FUNCTION__;
             AddCounters(ev->Get()->Record);
             bool retriable = ev->Get()->Record.GetRetriable();
             bool fallback = ev->Get()->Record.GetNeedFallback();
@@ -265,13 +265,13 @@ private:
                 IssuesFromMessage(ev->Get()->Record.GetIssues(), issues);
                 Issues.AddIssues(issues);
             }
-            Finish(retriable, fallback); 
+            Finish(retriable, fallback);
         }
     }
 
     void OnGraphFinished(TEvGraphFinished::TPtr&, const NActors::TActorContext&) {
-        YQL_LOG_CTX_SCOPE(TraceId); 
-        YQL_LOG(DEBUG) << __FUNCTION__; 
+        YQL_LOG_CTX_SCOPE(TraceId);
+        YQL_LOG(DEBUG) << __FUNCTION__;
         if (!Finished) {
             try {
                 TFailureInjector::Reach("dq_fail_on_finish", [] { throw yexception() << "dq_fail_on_finish"; });
@@ -287,8 +287,8 @@ private:
     // TBD: wait for PoisonTaken from CheckPointCoordinator before send TEvQueryResponse to PrinterId
 
     void OnQueryResponse(TEvQueryResponse::TPtr& ev, const TActorContext&) {
-        YQL_LOG_CTX_SCOPE(TraceId); 
-        YQL_LOG(DEBUG) << __FUNCTION__; 
+        YQL_LOG_CTX_SCOPE(TraceId);
+        YQL_LOG(DEBUG) << __FUNCTION__;
         Send(PrinterId, ev->Release().Release());
         PassAway();
     }

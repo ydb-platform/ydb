@@ -726,11 +726,11 @@ namespace NSQLTranslationV0 {
         virtual bool IsCalcOverWindow() const;
         virtual bool IsOverWindowSource() const;
         virtual bool IsStream() const;
-        virtual bool IsOrdered() const; 
+        virtual bool IsOrdered() const;
         virtual TWriteSettings GetWriteSettings() const;
         virtual bool SetSamplingOptions(TContext& ctx, TPosition pos, ESampleMode mode, TNodePtr samplingRate, TNodePtr samplingSeed);
         virtual bool CalculateGroupingHint(TContext& ctx, const TVector<TString>& columns, ui64& hint) const;
-        virtual TNodePtr BuildFilter(TContext& ctx, const TString& label, const TNodePtr& groundNode); 
+        virtual TNodePtr BuildFilter(TContext& ctx, const TString& label, const TNodePtr& groundNode);
         virtual TNodePtr BuildFilterLambda(const TNodePtr& groundNode);
         virtual TNodePtr BuildFlattenByColumns(const TString& label);
         virtual TNodePtr BuildFlattenColumns(const TString& label);
@@ -902,7 +902,7 @@ namespace NSQLTranslationV0 {
 
     TNodePtr BuildShortcutNode(const TNodePtr& node, const TString& baseName);
     TNodePtr BuildDoCall(TPosition pos, const TNodePtr& node);
-    TNodePtr BuildTupleResult(TNodePtr tuple, int ensureTupleSize); 
+    TNodePtr BuildTupleResult(TNodePtr tuple, int ensureTupleSize);
 
     // Implemented in aggregation.cpp
     TAggregationPtr BuildFactoryAggregation(TPosition pos, const TString& name, const TString& func, EAggregateMode aggMode, bool multi = false);
@@ -944,9 +944,9 @@ namespace NSQLTranslationV0 {
 
     // Implemented in select.cpp
     TNodePtr BuildSubquery(TSourcePtr source, const TString& alias, bool inSubquery, int ensureTupleSize = -1);
-    TNodePtr BuildSubqueryRef(TNodePtr subquery, const TString& alias, int tupleIndex = -1); 
+    TNodePtr BuildSubqueryRef(TNodePtr subquery, const TString& alias, int tupleIndex = -1);
     TNodePtr BuildSourceNode(TPosition pos, TSourcePtr source, bool checkExist = false);
-    TSourcePtr BuildMuxSource(TPosition pos, TVector<TSourcePtr>&& sources); 
+    TSourcePtr BuildMuxSource(TPosition pos, TVector<TSourcePtr>&& sources);
     TSourcePtr BuildFakeSource(TPosition pos);
     TSourcePtr BuildNodeSource(TPosition pos, const TNodePtr& node);
     TSourcePtr BuildTableSource(TPosition pos, const TTableRef& table, bool stream, const TString& label = TString());

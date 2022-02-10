@@ -16,7 +16,7 @@
 #include <llvm/Support/SourceMgr.h>
 #include <llvm/Support/TargetSelect.h>
 #include <llvm/Support/Timer.h>
-#include <llvm/Support/ErrorHandling.h> 
+#include <llvm/Support/ErrorHandling.h>
 #include <llvm/Transforms/IPO.h>
 #include <llvm/Transforms/IPO/PassManagerBuilder.h>
 #include <llvm/Transforms/Instrumentation.h>
@@ -30,10 +30,10 @@
 #include <util/generic/maybe.h>
 #include <util/generic/singleton.h>
 #include <util/generic/hash_set.h>
-#include <util/generic/hash.h> 
+#include <util/generic/hash.h>
 #include <util/generic/yexception.h>
-#include <util/generic/strbuf.h> 
-#include <util/generic/string.h> 
+#include <util/generic/strbuf.h>
+#include <util/generic/string.h>
 #include <util/stream/format.h>
 #include <util/system/defaults.h>
 #include <util/system/platform.h>
@@ -210,13 +210,13 @@ namespace NYql {
 namespace NCodegen {
 
 namespace {
- 
-    void FatalErrorHandler(void* user_data, const std::string& reason, bool gen_crash_diag) { 
-        Y_UNUSED(user_data); 
-        Y_UNUSED(gen_crash_diag); 
-        ythrow yexception() << "LLVM fatal error: " << reason.c_str(); 
-    } 
- 
+
+    void FatalErrorHandler(void* user_data, const std::string& reason, bool gen_crash_diag) {
+        Y_UNUSED(user_data);
+        Y_UNUSED(gen_crash_diag);
+        ythrow yexception() << "LLVM fatal error: " << reason.c_str();
+    }
+
     void AddAddressSanitizerPasses(const llvm::PassManagerBuilder& builder, llvm::legacy::PassManagerBase& pm) {
         Y_UNUSED(builder);
         pm.add(llvm::createAddressSanitizerFunctionPass());
@@ -239,7 +239,7 @@ namespace {
             llvm::InitializeNativeTargetAsmPrinter();
             llvm::InitializeNativeTargetAsmParser();
             llvm::InitializeNativeTargetDisassembler();
-            llvm::install_fatal_error_handler(&FatalErrorHandler, nullptr); 
+            llvm::install_fatal_error_handler(&FatalErrorHandler, nullptr);
         }
     };
 
@@ -403,7 +403,7 @@ public:
     }
 
     void Compile(const TStringBuf compileOpts, TCompileStats* compileStats) override {
- 
+
         bool dumpTimers = compileOpts.Contains("time-passes");
         bool disableOpt = compileOpts.Contains("disable-opt");
 
@@ -612,10 +612,10 @@ public:
         }
     }
 
-    void LoadBitCode(TStringBuf bitcode, TStringBuf uniqId) override { 
+    void LoadBitCode(TStringBuf bitcode, TStringBuf uniqId) override {
         if (uniqId && LoadedModules_.contains(uniqId)) {
-            return; 
-        } 
+            return;
+        }
         llvm::SMDiagnostic error;
         auto buffer = llvm::MemoryBuffer::getMemBuffer(
             llvm::StringRef(bitcode.data(), bitcode.size()));
@@ -630,25 +630,25 @@ public:
 
         module->setTargetTriple(Triple_);
         module->setDataLayout(Engine_->getDataLayout().getStringRepresentation());
-        if (uniqId) { 
+        if (uniqId) {
             module->setModuleIdentifier(llvm::StringRef(uniqId.data(), uniqId.size()));
-        } 
+        }
 
         if (llvm::Linker::linkModules(*Module_, std::move(module))) {
-            TString err; 
-            err.append("LLVM: error linking module"); 
-            if (uniqId) { 
-                err.append(' ').append(uniqId); 
-            } 
-            if (Diagnostic_.size()) { 
-                err.append(": ").append(Diagnostic_.c_str(), Diagnostic_.size()); 
-            } 
-            ythrow yexception() << err; 
+            TString err;
+            err.append("LLVM: error linking module");
+            if (uniqId) {
+                err.append(' ').append(uniqId);
+            }
+            if (Diagnostic_.size()) {
+                err.append(": ").append(Diagnostic_.c_str(), Diagnostic_.size());
+            }
+            ythrow yexception() << err;
         }
- 
-        if (uniqId) { 
-            LoadedModules_.emplace(uniqId); 
-        } 
+
+        if (uniqId) {
+            LoadedModules_.emplace(uniqId);
+        }
     }
 
     void AddGlobalMapping(TStringBuf name, const void* address) override {
@@ -737,7 +737,7 @@ private:
     THashMap<const void*, TString> ReverseGlobalMapping_;
     TMaybe<TPatterns> Patterns_;
     TTlsManager TlsManager_;
-    THashSet<TString> LoadedModules_; 
+    THashSet<TString> LoadedModules_;
 };
 
 ICodegen::TPtr

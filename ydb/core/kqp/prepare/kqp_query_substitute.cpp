@@ -32,16 +32,16 @@ public:
 
             auto node = analyzeResults.ExecutionRoots[i].Node;
 
-            YQL_ENSURE(node.Ref().GetTypeAnn()); 
-            auto paramNode = Build<TCoParameter>(ctx, node.Pos()) 
+            YQL_ENSURE(node.Ref().GetTypeAnn());
+            auto paramNode = Build<TCoParameter>(ctx, node.Pos())
                 .Name().Build(newParamName)
-                .Type(ExpandType(node.Pos(), *node.Ref().GetTypeAnn(), ctx)) 
+                .Type(ExpandType(node.Pos(), *node.Ref().GetTypeAnn(), ctx))
                 .Done();
 
             YQL_ENSURE(!TransformCtx->MkqlResults.empty());
             ui32 mkqlIndex = TransformCtx->MkqlResults.size() - 1;
             ui32 resultIndex = i;
-            auto indexTuple = Build<TCoAtomList>(ctx, paramNode.Pos()) 
+            auto indexTuple = Build<TCoAtomList>(ctx, paramNode.Pos())
                 .Add().Build(ToString(mkqlIndex))
                 .Add().Build(ToString(resultIndex))
                 .Done();

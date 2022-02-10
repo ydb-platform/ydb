@@ -341,7 +341,7 @@ namespace NYson {
     ////////////////////////////////////////////////////////////////////////////////
 
     void ReformatYsonStream(
-        IInputStream* input, 
+        IInputStream* input,
         IOutputStream* output,
         EYsonFormat format,
         EYsonType type) {

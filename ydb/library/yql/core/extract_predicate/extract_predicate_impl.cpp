@@ -715,8 +715,8 @@ THolder<IGraphTransformer> CreateRangeExtractionOptimizer(TTypeAnnotationContext
     auto issueCode = TIssuesIds::CORE_EXEC;
     pipeline.AddServiceTransformers(issueCode);
     pipeline.AddTypeAnnotationTransformer(issueCode);
-    // pipeline.Add(TExprLogTransformer::Sync("ExtractPredicateOpt", NLog::EComponent::Core, NLog::ELevel::TRACE), 
-    //     "ExtractPredicateOpt", issueCode, "ExtractPredicateOpt"); 
+    // pipeline.Add(TExprLogTransformer::Sync("ExtractPredicateOpt", NLog::EComponent::Core, NLog::ELevel::TRACE),
+    //     "ExtractPredicateOpt", issueCode, "ExtractPredicateOpt");
     pipeline.Add(CreateFunctorTransformer(
         [](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
             DoOptimizeForRangeExtraction(input, output, true, ctx);

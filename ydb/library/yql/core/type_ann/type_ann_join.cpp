@@ -39,42 +39,42 @@ namespace NTypeAnnImpl {
             return IGraphTransformer::TStatus::Error;
         }
 
-        const auto leftItemType = input->Head().GetTypeAnn()->Cast<TListExprType>()->GetItemType(); 
-        if (leftItemType->GetKind() == ETypeAnnotationKind::Struct) { 
-            auto structType = leftItemType->Cast<TStructExprType>(); 
-            if (AnyOf(structType->GetItems(), [](const TItemExprType* structItem) { return structItem->GetName().StartsWith("_yql_sys_"); })) { 
-                output = ctx.Expr.ChangeChild(*input, 0, 
-                    ctx.Expr.Builder(input->Child(0)->Pos()) 
-                        .Callable("RemovePrefixMembers") 
-                            .Add(0, input->ChildPtr(0)) 
-                            .List(1) 
-                                .Atom(0, "_yql_sys_", TNodeFlags::Default) 
-                            .Seal() 
-                        .Seal() 
-                        .Build() 
-                    ); 
-                return IGraphTransformer::TStatus::Repeat; 
-            } 
-        } 
- 
-        const TTypeAnnotationNode* rightItemType = input->Child(1)->GetTypeAnn()->Cast<TListExprType>()->GetItemType(); 
-        if (rightItemType->GetKind() == ETypeAnnotationKind::Struct) { 
-            auto structType = rightItemType->Cast<TStructExprType>(); 
-            if (AnyOf(structType->GetItems(), [](const TItemExprType* structItem) { return structItem->GetName().StartsWith("_yql_sys_"); })) { 
-                output = ctx.Expr.ChangeChild(*input, 1, 
-                    ctx.Expr.Builder(input->Child(1)->Pos()) 
-                        .Callable("RemovePrefixMembers") 
-                            .Add(0, input->ChildPtr(1)) 
-                            .List(1) 
-                                .Atom(0, "_yql_sys_", TNodeFlags::Default) 
-                            .Seal() 
-                        .Seal() 
-                        .Build() 
-                    ); 
-                return IGraphTransformer::TStatus::Repeat; 
-            } 
-        } 
- 
+        const auto leftItemType = input->Head().GetTypeAnn()->Cast<TListExprType>()->GetItemType();
+        if (leftItemType->GetKind() == ETypeAnnotationKind::Struct) {
+            auto structType = leftItemType->Cast<TStructExprType>();
+            if (AnyOf(structType->GetItems(), [](const TItemExprType* structItem) { return structItem->GetName().StartsWith("_yql_sys_"); })) {
+                output = ctx.Expr.ChangeChild(*input, 0,
+                    ctx.Expr.Builder(input->Child(0)->Pos())
+                        .Callable("RemovePrefixMembers")
+                            .Add(0, input->ChildPtr(0))
+                            .List(1)
+                                .Atom(0, "_yql_sys_", TNodeFlags::Default)
+                            .Seal()
+                        .Seal()
+                        .Build()
+                    );
+                return IGraphTransformer::TStatus::Repeat;
+            }
+        }
+
+        const TTypeAnnotationNode* rightItemType = input->Child(1)->GetTypeAnn()->Cast<TListExprType>()->GetItemType();
+        if (rightItemType->GetKind() == ETypeAnnotationKind::Struct) {
+            auto structType = rightItemType->Cast<TStructExprType>();
+            if (AnyOf(structType->GetItems(), [](const TItemExprType* structItem) { return structItem->GetName().StartsWith("_yql_sys_"); })) {
+                output = ctx.Expr.ChangeChild(*input, 1,
+                    ctx.Expr.Builder(input->Child(1)->Pos())
+                        .Callable("RemovePrefixMembers")
+                            .Add(0, input->ChildPtr(1))
+                            .List(1)
+                                .Atom(0, "_yql_sys_", TNodeFlags::Default)
+                            .Seal()
+                        .Seal()
+                        .Build()
+                    );
+                return IGraphTransformer::TStatus::Repeat;
+            }
+        }
+
         auto& lambda1 = input->ChildRef(2);
         if (!UpdateLambdaAllArgumentsTypes(lambda1, {leftItemType}, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
@@ -85,7 +85,7 @@ namespace NTypeAnnImpl {
             return IGraphTransformer::TStatus::Error;
         }
 
-        if (!lambda1->GetTypeAnn() || !lambda2->GetTypeAnn()) { 
+        if (!lambda1->GetTypeAnn() || !lambda2->GetTypeAnn()) {
             return IGraphTransformer::TStatus::Repeat;
         }
 
@@ -97,17 +97,17 @@ namespace NTypeAnnImpl {
             return IGraphTransformer::TStatus::Error;
         }
 
-        if (!EnsureComparableKey(lambda1->Pos(), lambda1->GetTypeAnn(), ctx.Expr)) { 
+        if (!EnsureComparableKey(lambda1->Pos(), lambda1->GetTypeAnn(), ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
 
-        if (!EnsureComparableKey(lambda2->Pos(), lambda2->GetTypeAnn(), ctx.Expr)) { 
+        if (!EnsureComparableKey(lambda2->Pos(), lambda2->GetTypeAnn(), ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
 
-        if (!IsSameAnnotation(*lambda1->GetTypeAnn(), *lambda2->GetTypeAnn())) { 
+        if (!IsSameAnnotation(*lambda1->GetTypeAnn(), *lambda2->GetTypeAnn())) {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), TStringBuilder() << "mismatch of key extractors types, "
-                << *lambda1->GetTypeAnn() << " != " << *lambda2->GetTypeAnn())); 
+                << *lambda1->GetTypeAnn() << " != " << *lambda2->GetTypeAnn()));
             return IGraphTransformer::TStatus::Error;
         }
 
@@ -123,7 +123,7 @@ namespace NTypeAnnImpl {
         }
 
         auto tupleType = ctx.Expr.MakeType<TTupleExprType>(tupleItems);
-        input->SetTypeAnn(ctx.Expr.MakeType<TListExprType>(tupleType)); 
+        input->SetTypeAnn(ctx.Expr.MakeType<TListExprType>(tupleType));
         return IGraphTransformer::TStatus::Ok;
     }
 
@@ -243,12 +243,12 @@ namespace NTypeAnnImpl {
         auto optionsNode = input->Child(input->ChildrenSize() - 1);
         TJoinOptions options;
         auto status = ValidateEquiJoinOptions(input->Pos(), *optionsNode, options, ctx.Expr);
-        if (status != IGraphTransformer::TStatus::Ok) { 
-            return status; 
-        } 
- 
+        if (status != IGraphTransformer::TStatus::Ok) {
+            return status;
+        }
+
         TJoinLabels labels;
-        TExprNode::TListType updatedChildren; 
+        TExprNode::TListType updatedChildren;
         for (ui32 idx = 0; idx < numLists; ++idx) {
             auto& listPair = *input->Child(idx);
             if (!EnsureTupleSize(listPair, 2, ctx.Expr)) {
@@ -260,7 +260,7 @@ namespace NTypeAnnImpl {
                 return IGraphTransformer::TStatus::Error;
             }
 
-            const TTypeAnnotationNode* itemType = list.GetTypeAnn()->Cast<TListExprType>()->GetItemType(); 
+            const TTypeAnnotationNode* itemType = list.GetTypeAnn()->Cast<TListExprType>()->GetItemType();
             if (itemType->GetKind() != ETypeAnnotationKind::Struct) {
                 ctx.Expr.AddError(TIssue(
                     ctx.Expr.GetPosition(list.Pos()),
@@ -271,21 +271,21 @@ namespace NTypeAnnImpl {
 
             auto structType = itemType->Cast<TStructExprType>();
             if (!options.KeepSysColumns && AnyOf(structType->GetItems(), [](const TItemExprType* structItem) { return structItem->GetName().StartsWith("_yql_sys_"); })) {
-                if (updatedChildren.empty()) { 
-                    updatedChildren = input->ChildrenList(); 
-                } 
-                updatedChildren[idx] = ctx.Expr.ChangeChild(listPair, 0, 
-                    ctx.Expr.Builder(list.Pos()) 
-                        .Callable("RemovePrefixMembers") 
-                            .Add(0, listPair.HeadPtr()) 
-                            .List(1) 
-                                .Atom(0, "_yql_sys_", TNodeFlags::Default) 
-                            .Seal() 
-                        .Seal() 
-                        .Build() 
-                    ); 
-                continue; 
-            } 
+                if (updatedChildren.empty()) {
+                    updatedChildren = input->ChildrenList();
+                }
+                updatedChildren[idx] = ctx.Expr.ChangeChild(listPair, 0,
+                    ctx.Expr.Builder(list.Pos())
+                        .Callable("RemovePrefixMembers")
+                            .Add(0, listPair.HeadPtr())
+                            .List(1)
+                                .Atom(0, "_yql_sys_", TNodeFlags::Default)
+                            .Seal()
+                        .Seal()
+                        .Build()
+                    );
+                continue;
+            }
             if (auto err = labels.Add(ctx.Expr, *listPair.Child(1), structType)) {
                 ctx.Expr.AddError(*err);
                 ctx.Expr.AddError(TIssue(
@@ -295,10 +295,10 @@ namespace NTypeAnnImpl {
                 return IGraphTransformer::TStatus::Error;
             }
         }
-        if (!updatedChildren.empty()) { 
-            output = ctx.Expr.ChangeChildren(*input, std::move(updatedChildren)); 
-            return IGraphTransformer::TStatus::Repeat; 
-        } 
+        if (!updatedChildren.empty()) {
+            output = ctx.Expr.ChangeChildren(*input, std::move(updatedChildren));
+            return IGraphTransformer::TStatus::Repeat;
+        }
 
         auto joins = input->Child(input->ChildrenSize() - 2);
         const TStructExprType* resultType = nullptr;
@@ -307,7 +307,7 @@ namespace NTypeAnnImpl {
             return status;
         }
 
-        input->SetTypeAnn(ctx.Expr.MakeType<TListExprType>(resultType)); 
+        input->SetTypeAnn(ctx.Expr.MakeType<TListExprType>(resultType));
         return IGraphTransformer::TStatus::Ok;
     }
 
@@ -326,7 +326,7 @@ namespace NTypeAnnImpl {
     template<class TLeftType>
     IGraphTransformer::TStatus MapJoinCoreWrapperT(const TExprNode::TPtr& input, const TLeftType& leftItemType, TContext& ctx) {
         constexpr bool ByStruct = std::is_same<TLeftType, TStructExprType>::value;
-        const auto dictType = input->Child(1)->GetTypeAnn()->Cast<TDictExprType>(); 
+        const auto dictType = input->Child(1)->GetTypeAnn()->Cast<TDictExprType>();
         const auto dictPayloadType = dictType->GetPayloadType();
 
         if (!EnsureAtom(*input->Child(2), ctx.Expr)) {
@@ -694,21 +694,21 @@ namespace NTypeAnnImpl {
                     return IGraphTransformer::TStatus::Error;
                 }
             }
-            else if (optionName == "memLimit") { 
-                if (!EnsureTupleSize(*child, 2, ctx.Expr)) { 
-                    return IGraphTransformer::TStatus::Error; 
-                } 
- 
-                if (!EnsureAtom(*child->Child(1), ctx.Expr)) { 
-                    return IGraphTransformer::TStatus::Error; 
-                } 
- 
+            else if (optionName == "memLimit") {
+                if (!EnsureTupleSize(*child, 2, ctx.Expr)) {
+                    return IGraphTransformer::TStatus::Error;
+                }
+
+                if (!EnsureAtom(*child->Child(1), ctx.Expr)) {
+                    return IGraphTransformer::TStatus::Error;
+                }
+
                 if (ui64 memLimit = 0ULL; !TryFromString(child->Child(1)->Content(), memLimit)) {
                     ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(child->Child(1)->Pos()), TStringBuilder() <<
-                        "Bad memLimit value: " << child->Child(1)->Content())); 
-                    return IGraphTransformer::TStatus::Error; 
-                } 
-            } 
+                        "Bad memLimit value: " << child->Child(1)->Content()));
+                    return IGraphTransformer::TStatus::Error;
+                }
+            }
             else if (optionName == "any") {
                 if (!EnsureTupleSize(*child, 2, ctx.Expr)) {
                     return IGraphTransformer::TStatus::Error;

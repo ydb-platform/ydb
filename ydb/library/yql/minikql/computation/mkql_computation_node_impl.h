@@ -1,7 +1,7 @@
 #pragma once
 
 #include "mkql_computation_node.h"
- 
+
 #include <ydb/library/yql/minikql/mkql_alloc.h>
 #include <ydb/library/yql/public/udf/udf_value.h>
 
@@ -90,7 +90,7 @@ protected:
 
     NUdf::TUnboxedValue& ValueRef(TComputationContext& compCtx) const {
         return compCtx.MutableValues[ValueIndex];
-    } 
+    }
 
     ui32 GetIndex() const final;
 

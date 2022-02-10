@@ -1,1 +1,1 @@
-#include "yql_dq_full_result_writer.h" 
+#include "yql_dq_full_result_writer.h"

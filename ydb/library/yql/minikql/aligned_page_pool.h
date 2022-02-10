@@ -1,20 +1,20 @@
-#pragma once 
- 
+#pragma once
+
 #include <util/generic/yexception.h>
-#include <util/stream/output.h> 
-#include <util/system/yassert.h> 
-#include <util/system/defaults.h> 
- 
+#include <util/stream/output.h>
+#include <util/system/yassert.h>
+#include <util/system/defaults.h>
+
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
-#include <type_traits> 
+#include <type_traits>
 #include <stack>
 #include <vector>
 #include <unordered_set>
 #include <unordered_map>
- 
-namespace NKikimr { 
- 
+
+namespace NKikimr {
+
 struct TAlignedPagePoolCounters {
     explicit TAlignedPagePoolCounters(NMonitoring::TDynamicCounterPtr countersRoot = nullptr, const TString& name = TString());
 
@@ -35,11 +35,11 @@ struct TAlignedPagePoolCounters {
 // to catch this exception in UDFs code, so we can handle it in the host.
 class TMemoryLimitExceededException {};
 
-class TAlignedPagePool { 
-public: 
+class TAlignedPagePool {
+public:
     static constexpr ui64 POOL_PAGE_SIZE = 1ULL << 16; // 64k
     static constexpr ui64 PAGE_ADDR_MASK = ~(POOL_PAGE_SIZE - 1);
- 
+
     explicit TAlignedPagePool(const TAlignedPagePoolCounters& counters = TAlignedPagePoolCounters())
         : Counters(counters)
     {
@@ -48,36 +48,36 @@ public:
         }
     }
 
-    TAlignedPagePool(const TAlignedPagePool&) = delete; 
+    TAlignedPagePool(const TAlignedPagePool&) = delete;
     TAlignedPagePool(TAlignedPagePool&& other) = delete;
 
     TAlignedPagePool& operator = (const TAlignedPagePool&) = delete;
     TAlignedPagePool& operator = (TAlignedPagePool&& other) = delete;
 
-    ~TAlignedPagePool(); 
- 
+    ~TAlignedPagePool();
+
     inline size_t GetAllocated() const noexcept {
-        return TotalAllocated; 
-    } 
- 
+        return TotalAllocated;
+    }
+
     inline size_t GetUsed() const noexcept {
         return TotalAllocated - GetFreePageCount() * POOL_PAGE_SIZE;
     }
 
     inline size_t GetFreePageCount() const noexcept {
-        return FreePages.size(); 
-    } 
- 
+        return FreePages.size();
+    }
+
     static inline const void* GetPageStart(const void* addr) noexcept {
-        return reinterpret_cast<const void*>(reinterpret_cast<uintptr_t>(addr) & PAGE_ADDR_MASK); 
-    } 
- 
+        return reinterpret_cast<const void*>(reinterpret_cast<uintptr_t>(addr) & PAGE_ADDR_MASK);
+    }
+
     static inline void* GetPageStart(void* addr) noexcept {
-        return reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(addr) & PAGE_ADDR_MASK); 
-    } 
- 
-    void* GetPage(); 
- 
+        return reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(addr) & PAGE_ADDR_MASK);
+    }
+
+    void* GetPage();
+
     void ReturnPage(void* addr) noexcept;
 
     void Swap(TAlignedPagePool& other) {
@@ -85,14 +85,14 @@ public:
         DoSwap(AllPages, other.AllPages);
         DoSwap(ActiveBlocks, other.ActiveBlocks);
         DoSwap(TotalAllocated, other.TotalAllocated);
-        DoSwap(PeakAllocated, other.PeakAllocated); 
-        DoSwap(PeakUsed, other.PeakUsed); 
+        DoSwap(PeakAllocated, other.PeakAllocated);
+        DoSwap(PeakUsed, other.PeakUsed);
         DoSwap(Limit, other.Limit);
-        DoSwap(AllocCount, other.AllocCount); 
-        DoSwap(PageAllocCount, other.PageAllocCount); 
-        DoSwap(PageHitCount, other.PageHitCount); 
-        DoSwap(PageGlobalHitCount, other.PageGlobalHitCount); 
-        DoSwap(PageMissCount, other.PageMissCount); 
+        DoSwap(AllocCount, other.AllocCount);
+        DoSwap(PageAllocCount, other.PageAllocCount);
+        DoSwap(PageHitCount, other.PageHitCount);
+        DoSwap(PageGlobalHitCount, other.PageGlobalHitCount);
+        DoSwap(PageMissCount, other.PageMissCount);
         DoSwap(OffloadedAllocCount, other.OffloadedAllocCount);
         DoSwap(OffloadedBytes, other.OffloadedBytes);
         DoSwap(OffloadedActiveBytes, other.OffloadedActiveBytes);
@@ -103,7 +103,7 @@ public:
     }
 
     void PrintStat(size_t usedPages, IOutputStream& out) const;
- 
+
     void* GetBlock(size_t size);
 
     void ReturnBlock(void* ptr, size_t size) noexcept;
@@ -129,9 +129,9 @@ public:
     }
 
     ui64 GetPageGlobalHitCount() const noexcept {
-        return PageGlobalHitCount; 
-    } 
- 
+        return PageGlobalHitCount;
+    }
+
     ui64 GetPageMissCount() const noexcept {
         return PageMissCount;
     }
@@ -176,10 +176,10 @@ public:
         IncreaseMemoryLimitCallback = std::move(callback);
     }
 
-protected: 
-    void* Alloc(size_t size); 
+protected:
+    void* Alloc(size_t size);
     void Free(void* ptr, size_t size) noexcept;
- 
+
     void UpdatePeaks() {
         PeakAllocated = Max(PeakAllocated, GetAllocated());
         PeakUsed = Max(PeakUsed, GetUsed());
@@ -187,11 +187,11 @@ protected:
 
     bool TryIncreaseLimit(ui64 required);
 
-protected: 
+protected:
     std::stack<void*, std::vector<void*>> FreePages;
     std::unordered_set<void*> AllPages;
     std::unordered_map<void*, size_t> ActiveBlocks;
-    size_t TotalAllocated = 0; 
+    size_t TotalAllocated = 0;
     size_t PeakAllocated = 0;
     size_t PeakUsed = 0;
     size_t Limit = 0;
@@ -199,9 +199,9 @@ protected:
     ui64 AllocCount = 0;
     ui64 PageAllocCount = 0;
     ui64 PageHitCount = 0;
-    ui64 PageGlobalHitCount = 0; 
+    ui64 PageGlobalHitCount = 0;
     ui64 PageMissCount = 0;
- 
+
     ui64 OffloadedAllocCount = 0;
     ui64 OffloadedBytes = 0;
     ui64 OffloadedActiveBytes = 0;
@@ -214,6 +214,6 @@ protected:
     ui64 AllocNotifyCurrentBytes = 0;
 
     TIncreaseMemoryLimitCallback IncreaseMemoryLimitCallback;
-}; 
- 
-} // NKikimr 
+};
+
+} // NKikimr

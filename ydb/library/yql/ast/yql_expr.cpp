@@ -6,7 +6,7 @@
 
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 #include <util/generic/hash.h>
-#include <util/generic/size_literals.h> 
+#include <util/generic/size_literals.h>
 #include <util/string/cast.h>
 #include <util/string/join.h>
 
@@ -50,8 +50,8 @@ namespace {
             out << " <" << node.Content() << ">";
         }
 
-        if (node.GetTypeAnn()) { 
-            out << ", type: " << *node.GetTypeAnn(); 
+        if (node.GetTypeAnn()) {
+            out << ", type: " << *node.GetTypeAnn();
         }
 
         if (const auto scope = node.GetDependencyScope()) {
@@ -117,7 +117,7 @@ namespace {
 
         TExprNode::TPtr&& ProcessNode(const TAstNode& node, TExprNode::TPtr&& exprNode) {
             if (TypeAnnotationIndex != Max<ui32>()) {
-                exprNode->SetTypeAnn(CompileTypeAnnotation(node)); 
+                exprNode->SetTypeAnn(CompileTypeAnnotation(node));
             }
 
             return std::move(exprNode);
@@ -181,12 +181,12 @@ namespace {
                 else if (node.GetContent() == TStringBuf("Generic")) {
                     return Expr.MakeType<TGenericExprType>();
                 }
-                else if (node.GetContent() == TStringBuf("EmptyList")) { 
-                    return Expr.MakeType<TEmptyListExprType>(); 
-                } 
-                else if (node.GetContent() == TStringBuf("EmptyDict")) { 
-                    return Expr.MakeType<TEmptyDictExprType>(); 
-                } 
+                else if (node.GetContent() == TStringBuf("EmptyList")) {
+                    return Expr.MakeType<TEmptyListExprType>();
+                }
+                else if (node.GetContent() == TStringBuf("EmptyDict")) {
+                    return Expr.MakeType<TEmptyDictExprType>();
+                }
                 else {
                     AddError(node, TStringBuilder() << "Unknown type annotation: " << node.GetContent());
                     return nullptr;
@@ -477,12 +477,12 @@ namespace {
                         return nullptr;
 
                     TString tag(node.GetChild(2)->GetContent());
-                    auto ann = Expr.MakeType<TTaggedExprType>(type, tag); 
-                    if (!ann->Validate(node.GetPosition(), Expr)) { 
-                        return nullptr; 
-                    } 
- 
-                    return ann; 
+                    auto ann = Expr.MakeType<TTaggedExprType>(type, tag);
+                    if (!ann->Validate(node.GetPosition(), Expr)) {
+                        return nullptr;
+                    }
+
+                    return ann;
                 } else if (content == TStringBuf("Error")) {
                     if (node.GetChildrenCount() != 5 || !node.GetChild(1)->IsAtom() ||
                         !node.GetChild(2)->IsAtom() || !node.GetChild(3)->IsAtom() || !node.GetChild(4)->IsAtom()) {
@@ -775,13 +775,13 @@ namespace {
         }
 
         case ETypeAnnotationKind::EmptyList:
-        { 
-            return TAstNode::NewLiteralAtom(TPosition(), TStringBuf("EmptyList"), pool); 
-        } 
+        {
+            return TAstNode::NewLiteralAtom(TPosition(), TStringBuf("EmptyList"), pool);
+        }
         case ETypeAnnotationKind::EmptyDict:
-        { 
-            return TAstNode::NewLiteralAtom(TPosition(), TStringBuf("EmptyDict"), pool); 
-        } 
+        {
+            return TAstNode::NewLiteralAtom(TPosition(), TStringBuf("EmptyDict"), pool);
+        }
         case ETypeAnnotationKind::LastType:
             YQL_ENSURE(false, "Unknown kind: " << annotation.GetKind());
 
@@ -800,8 +800,8 @@ namespace {
         if ((flags & TExprAnnotationFlags::Types)) {
             TAstNode* typeAnn = nullptr;
             if (exprNode) {
-                YQL_ENSURE(exprNode->GetTypeAnn()); 
-                typeAnn = ConvertTypeAnnotationToAst(*exprNode->GetTypeAnn(), pool, refAtoms); 
+                YQL_ENSURE(exprNode->GetTypeAnn());
+                typeAnn = ConvertTypeAnnotationToAst(*exprNode->GetTypeAnn(), pool, refAtoms);
             } else {
                 typeAnn = TAstNode::NewLiteralAtom(node->GetPosition(), TStringBuf("."), pool);
             }
@@ -1972,7 +1972,7 @@ bool CompileExpr(TAstNode& astRoot, TExprNode::TPtr& exprRoot, TExprContext& ctx
     compileCtx.PushFrame();
     auto world = compileCtx.Expr.NewWorld(astRoot.GetPosition());
     if (typeAnnotationIndex != Max<ui32>()) {
-        world->SetTypeAnn(compileCtx.Expr.MakeType<TWorldExprType>()); 
+        world->SetTypeAnn(compileCtx.Expr.MakeType<TWorldExprType>());
     }
 
     compileCtx.Frames.back().Bindings[TStringBuf("world")] = {std::move(world)};
@@ -2047,56 +2047,56 @@ ui64 CalcBloom(const ui64 id) {
 }
 
 inline bool InBloom(const ui64 set, const ui64 bloom) {
-    return (bloom >> 1) == ((bloom & set) >> 1); 
+    return (bloom >> 1) == ((bloom & set) >> 1);
 }
 
-EChangeState GetChanges(TExprNode* start, const TNodeOnNodeOwnedMap& replaces, const TNodeMap<TNodeOnNodeOwnedMap>& localReplaces, 
-    TNodeMap<EChangeState>& changes, TNodeMap<bool>& updatedLambdas); 
- 
-EChangeState DoGetChanges(TExprNode* start, const TNodeOnNodeOwnedMap& replaces, const TNodeMap<TNodeOnNodeOwnedMap>& localReplaces, 
+EChangeState GetChanges(TExprNode* start, const TNodeOnNodeOwnedMap& replaces, const TNodeMap<TNodeOnNodeOwnedMap>& localReplaces,
+    TNodeMap<EChangeState>& changes, TNodeMap<bool>& updatedLambdas);
+
+EChangeState DoGetChanges(TExprNode* start, const TNodeOnNodeOwnedMap& replaces, const TNodeMap<TNodeOnNodeOwnedMap>& localReplaces,
     TNodeMap<EChangeState>& changes, TNodeMap<bool>& updatedLambdas) {
- 
-    if (start->GetBloom() & 1ULL) { 
-        bool maybe = false; 
+
+    if (start->GetBloom() & 1ULL) {
+        bool maybe = false;
         for (const auto& repl : replaces) {
             if (repl.second && !repl.first->Dead()) {
-                if (TExprNode::Argument != repl.first->Type()) { 
-                    maybe = true; 
-                    break; 
-                } 
- 
+                if (TExprNode::Argument != repl.first->Type()) {
+                    maybe = true;
+                    break;
+                }
+
                 if (!repl.first->GetBloom())
                     const_cast<TExprNode*>(repl.first)->SetBloom(CalcBloom(repl.first->UniqueId()));
- 
+
                 if (InBloom(start->GetBloom(), repl.first->GetBloom())) {
-                    maybe = true; 
-                    break; 
-                } 
-            } 
-        } 
- 
-        if (!maybe) { 
-            return EChangeState::Unchanged; 
-        } 
-    } 
- 
+                    maybe = true;
+                    break;
+                }
+            }
+        }
+
+        if (!maybe) {
+            return EChangeState::Unchanged;
+        }
+    }
+
     start->SetBloom(1ULL);
-    ui32 combinedState = EChangeState::Unchanged; 
-    bool incompleteBloom = false; 
-    start->ForEachChild([&](TExprNode& child) { 
-        combinedState |= GetChanges(&child, replaces, localReplaces, changes, updatedLambdas); 
+    ui32 combinedState = EChangeState::Unchanged;
+    bool incompleteBloom = false;
+    start->ForEachChild([&](TExprNode& child) {
+        combinedState |= GetChanges(&child, replaces, localReplaces, changes, updatedLambdas);
         start->SetBloom(start->GetBloom() | child.GetBloom());
-        incompleteBloom = incompleteBloom || (child.Type() != TExprNode::Arguments && !child.GetBloom()); 
-    }); 
+        incompleteBloom = incompleteBloom || (child.Type() != TExprNode::Arguments && !child.GetBloom());
+    });
     if (incompleteBloom) {
         start->SetBloom(0ULL);
-    } 
- 
-    return (EChangeState)combinedState; 
-} 
- 
-EChangeState GetChanges(TExprNode* start, const TNodeOnNodeOwnedMap& replaces, const TNodeMap<TNodeOnNodeOwnedMap>& localReplaces, 
-    TNodeMap<EChangeState>& changes, TNodeMap<bool>& updatedLambdas) { 
+    }
+
+    return (EChangeState)combinedState;
+}
+
+EChangeState GetChanges(TExprNode* start, const TNodeOnNodeOwnedMap& replaces, const TNodeMap<TNodeOnNodeOwnedMap>& localReplaces,
+    TNodeMap<EChangeState>& changes, TNodeMap<bool>& updatedLambdas) {
     if (start->Type() == TExprNode::Arguments) {
         return EChangeState::Unchanged;
     }
@@ -2118,32 +2118,32 @@ EChangeState GetChanges(TExprNode* start, const TNodeOnNodeOwnedMap& replaces, c
         return state = EChangeState::Unchanged;
     }
 
-    if (start->Type() == TExprNode::Lambda) { 
-        TNodeOnNodeOwnedMap newReplaces = replaces; 
+    if (start->Type() == TExprNode::Lambda) {
+        TNodeOnNodeOwnedMap newReplaces = replaces;
 
         start->Head().ForEachChild([&](const TExprNode& arg){ newReplaces[&arg] = {}; });
 
         const auto locIt = localReplaces.find(start);
-        if (locIt != localReplaces.end()) { 
-            for (auto& r: locIt->second) { 
-                newReplaces[r.first] = r.second; 
+        if (locIt != localReplaces.end()) {
+            for (auto& r: locIt->second) {
+                newReplaces[r.first] = r.second;
             }
         }
 
-        state = DoGetChanges(start, newReplaces, localReplaces, changes, updatedLambdas); 
- 
-        if ((state & EChangeState::Changed) != 0) { 
-            updatedLambdas.emplace(start, false); 
+        state = DoGetChanges(start, newReplaces, localReplaces, changes, updatedLambdas);
+
+        if ((state & EChangeState::Changed) != 0) {
+            updatedLambdas.emplace(start, false);
         }
 
-        return state; 
+        return state;
     }
 
-    return state = DoGetChanges(start, replaces, localReplaces, changes, updatedLambdas); 
+    return state = DoGetChanges(start, replaces, localReplaces, changes, updatedLambdas);
 }
 
 template<bool KeepTypeAnns>
-TExprNode::TPtr DoReplace(const TExprNode::TPtr& start, const TNodeOnNodeOwnedMap& replaces, const TNodeMap<TNodeOnNodeOwnedMap>& localReplaces, 
+TExprNode::TPtr DoReplace(const TExprNode::TPtr& start, const TNodeOnNodeOwnedMap& replaces, const TNodeMap<TNodeOnNodeOwnedMap>& localReplaces,
     TNodeMap<EChangeState>& changes, TNodeOnNodeOwnedMap& processed, TExprContext& ctx) {
 
     auto& target = processed[start.Get()];
@@ -2162,19 +2162,19 @@ TExprNode::TPtr DoReplace(const TExprNode::TPtr& start, const TNodeOnNodeOwnedMa
         const bool isChanged = (changeIt->second & EChangeState::Changed) != 0;
         if (isChanged) {
             if (start->Type() == TExprNode::Lambda) {
-                TNodeOnNodeOwnedMap newReplaces = replaces; 
+                TNodeOnNodeOwnedMap newReplaces = replaces;
                 const auto locIt = localReplaces.find(start.Get());
-                YQL_ENSURE(locIt != localReplaces.end(), "Missing local changes"); 
-                for (auto& r: locIt->second) { 
-                    newReplaces[r.first] = r.second; 
-                } 
- 
+                YQL_ENSURE(locIt != localReplaces.end(), "Missing local changes");
+                for (auto& r: locIt->second) {
+                    newReplaces[r.first] = r.second;
+                }
+
                 const auto& args = start->Head();
                 TExprNode::TListType newArgsList;
                 newArgsList.reserve(args.ChildrenSize());
                 args.ForEachChild([&](const TExprNode& arg) {
                     const auto argIt = newReplaces.find(&arg);
-                    YQL_ENSURE(argIt != newReplaces.end(), "Missing argument"); 
+                    YQL_ENSURE(argIt != newReplaces.end(), "Missing argument");
                     processed.emplace(&arg, argIt->second);
                     newArgsList.emplace_back(argIt->second);
                 });
@@ -2226,10 +2226,10 @@ void EnsureNoBadReplaces(const TExprNode& start, const TNodeOnNodeOwnedMap& repl
     }
 
     if (start.Type() == TExprNode::Lambda) {
-        TNodeOnNodeOwnedMap newReplaces = replaces; 
+        TNodeOnNodeOwnedMap newReplaces = replaces;
         start.Head().ForEachChild([&](const TExprNode& arg){ newReplaces[&arg] = {}; });
         start.ForEachChild([&](const TExprNode& child){ EnsureNoBadReplaces(child, newReplaces, std::move(visited)); });
-    } else { 
+    } else {
         start.ForEachChild([&](const TExprNode& child){ EnsureNoBadReplaces(child, replaces, std::move(visited)); });
     }
 }
@@ -2251,8 +2251,8 @@ TExprNode::TPtr ReplaceNodesImpl(TExprNode::TPtr&& start, const TNodeOnNodeOwned
 
     TNodeMap<EChangeState> changes;
     TNodeMap<bool> updatedLambdas;
-    TNodeMap<TNodeOnNodeOwnedMap> localReplaces; 
-    if ((GetChanges(start.Get(), replaces, localReplaces, changes, updatedLambdas) & EChangeState::Changed) == 0) { 
+    TNodeMap<TNodeOnNodeOwnedMap> localReplaces;
+    if ((GetChanges(start.Get(), replaces, localReplaces, changes, updatedLambdas) & EChangeState::Changed) == 0) {
         return std::move(start);
     }
 
@@ -2261,7 +2261,7 @@ TExprNode::TPtr ReplaceNodesImpl(TExprNode::TPtr&& start, const TNodeOnNodeOwned
             changes.clear();
             for (auto& x : updatedLambdas) {
                 if (!x.second) {
-                    TNodeOnNodeOwnedMap& lambdaReplaces = localReplaces[x.first]; 
+                    TNodeOnNodeOwnedMap& lambdaReplaces = localReplaces[x.first];
                     const auto& args = x.first->Head();
                     args.ForEachChild([&](const TExprNode& arg) {
                         const auto newArg = lambdaReplaces.emplace(&arg, ctx.ShallowCopy(arg)).first->second;
@@ -2273,7 +2273,7 @@ TExprNode::TPtr ReplaceNodesImpl(TExprNode::TPtr&& start, const TNodeOnNodeOwned
             }
 
             auto prevSize = updatedLambdas.size();
-            GetChanges(start.Get(), replaces, localReplaces, changes, updatedLambdas); 
+            GetChanges(start.Get(), replaces, localReplaces, changes, updatedLambdas);
             if (updatedLambdas.size() == prevSize) {
                 break;
             }
@@ -2458,8 +2458,8 @@ TExprNode::TPtr TExprContext::ChangeChild(const TExprNode& node, ui32 index, TEx
 
 TExprNode::TPtr TExprContext::ExactChangeChildren(const TExprNode& node, TExprNode::TListType&& children) {
     const auto newNode = node.ChangeChildren(AllocateNextUniqueId(), std::move(children));
-    newNode->SetTypeAnn(node.GetTypeAnn()); 
-    newNode->CopyConstraints(node); 
+    newNode->SetTypeAnn(node.GetTypeAnn());
+    newNode->CopyConstraints(node);
     newNode->SetState(node.GetState());
     newNode->Result = node.Result;
     ExprNodes.emplace_back(newNode.Get());
@@ -2469,8 +2469,8 @@ TExprNode::TPtr TExprContext::ExactChangeChildren(const TExprNode& node, TExprNo
 TExprNode::TPtr TExprContext::ExactShallowCopy(const TExprNode& node) {
     YQL_ENSURE(node.Type() != TExprNode::Lambda);
     const auto newNode = node.Clone(AllocateNextUniqueId());
-    newNode->SetTypeAnn(node.GetTypeAnn()); 
-    newNode->CopyConstraints(node); 
+    newNode->SetTypeAnn(node.GetTypeAnn());
+    newNode->CopyConstraints(node);
     newNode->SetState(node.GetState());
     newNode->Result = node.Result;
     ExprNodes.emplace_back(newNode.Get());
@@ -2566,7 +2566,7 @@ TExprNode::TPtr TExprContext::FuseLambdas(const TExprNode& outer, const TExprNod
 }
 
 TExprNode::TPtr TExprContext::DeepCopy(const TExprNode& node, TExprContext& nodeCtx, TNodeOnNodeOwnedMap& deepClones,
-    bool internStrings, bool copyTypes, bool copyResult, TCustomDeepCopier customCopier) 
+    bool internStrings, bool copyTypes, bool copyResult, TCustomDeepCopier customCopier)
 {
     const auto ins = deepClones.emplace(&node, nullptr);
     if (ins.second) {
@@ -2576,7 +2576,7 @@ TExprNode::TPtr TExprContext::DeepCopy(const TExprNode& node, TExprContext& node
         if (customCopier && customCopier(node, children)) {
         } else {
             node.ForEachChild([&](const TExprNode& child) {
-                children.emplace_back(DeepCopy(child, nodeCtx, deepClones, internStrings, copyTypes, copyResult, customCopier)); 
+                children.emplace_back(DeepCopy(child, nodeCtx, deepClones, internStrings, copyTypes, copyResult, customCopier));
             });
         }
 
@@ -2589,10 +2589,10 @@ TExprNode::TPtr TExprContext::DeepCopy(const TExprNode& node, TExprContext& node
             newNode->SetTypeAnn(node.GetTypeAnn());
         }
 
-        if (copyResult && node.IsCallable() && node.HasResult()) { 
-            newNode->SetResult(nodeCtx.ShallowCopy(node.GetResult())); 
-        } 
- 
+        if (copyResult && node.IsCallable() && node.HasResult()) {
+            newNode->SetResult(nodeCtx.ShallowCopy(node.GetResult()));
+        }
+
         ins.first->second = newNode;
         ExprNodes.emplace_back(ins.first->second.Get());
     }
@@ -2631,10 +2631,10 @@ TNodeException::TNodeException(const TPositionHandle& pos)
 {
 }
 
-bool ValidateName(TPosition position, TStringBuf name, TStringBuf descr, TExprContext& ctx) { 
+bool ValidateName(TPosition position, TStringBuf name, TStringBuf descr, TExprContext& ctx) {
     if (name.empty()) {
-        ctx.AddError(TIssue(position, 
-            TStringBuilder() << "Empty " << descr << " name is not allowed")); 
+        ctx.AddError(TIssue(position,
+            TStringBuilder() << "Empty " << descr << " name is not allowed"));
         return false;
     }
 
@@ -2644,17 +2644,17 @@ bool ValidateName(TPosition position, TStringBuf name, TStringBuf descr, TExprCo
         return false;
     }
 
-    if (name.size() > 16_KB) { 
-        ctx.AddError(TIssue(position, TStringBuilder() << 
+    if (name.size() > 16_KB) {
+        ctx.AddError(TIssue(position, TStringBuilder() <<
             TString(descr).to_title() << " name length must be less than " << 16_KB));
-        return false; 
-    } 
- 
+        return false;
+    }
+
     return true;
 }
 
-bool ValidateName(TPositionHandle position, TStringBuf name, TStringBuf descr, TExprContext& ctx) { 
-    return ValidateName(ctx.GetPosition(position), name, descr, ctx); 
+bool ValidateName(TPositionHandle position, TStringBuf name, TStringBuf descr, TExprContext& ctx) {
+    return ValidateName(ctx.GetPosition(position), name, descr, ctx);
 }
 
 bool TDataExprParamsType::Validate(TPosition position, TExprContext& ctx) const {
@@ -2685,7 +2685,7 @@ bool TDataExprParamsType::Validate(TPositionHandle position, TExprContext& ctx) 
 }
 
 bool TItemExprType::Validate(TPosition position, TExprContext& ctx) const {
-    return ValidateName(position, Name, "member", ctx); 
+    return ValidateName(position, Name, "member", ctx);
 }
 
 bool TItemExprType::Validate(TPositionHandle position, TExprContext& ctx) const {
@@ -2853,14 +2853,14 @@ bool TCallableExprType::Validate(TPositionHandle position, TExprContext& ctx) co
     return Validate(ctx.GetPosition(position), ctx);
 }
 
-bool TTaggedExprType::Validate(TPosition position, TExprContext& ctx) const { 
-    return ValidateName(position, Tag, "tag", ctx); 
-} 
- 
-bool TTaggedExprType::Validate(TPositionHandle position, TExprContext& ctx) const { 
-    return Validate(ctx.GetPosition(position), ctx); 
-} 
- 
+bool TTaggedExprType::Validate(TPosition position, TExprContext& ctx) const {
+    return ValidateName(position, Tag, "tag", ctx);
+}
+
+bool TTaggedExprType::Validate(TPositionHandle position, TExprContext& ctx) const {
+    return Validate(ctx.GetPosition(position), ctx);
+}
+
 TExprContext::TExprContext(ui64 nextUniqueId)
     : StringPool(4096)
     , NextUniqueId(nextUniqueId)
@@ -2876,7 +2876,7 @@ TExprContext::TExprContext(ui64 nextUniqueId)
     IssueManager.SetWarningToErrorTreatMessage(
         "Treat warning as error mode enabled. "
         "To disable it use \"pragma warning(\"default\", <code>);\"");
-    IssueManager.SetIssueCountLimit(100); 
+    IssueManager.SetIssueCountLimit(100);
 }
 
 TPositionHandle TExprContext::AppendPosition(const TPosition& pos) {

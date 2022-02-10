@@ -23,8 +23,8 @@ public:
     {
     }
 
-    ui64 Partition(const TDqSettings& settings, size_t maxPartitions, const TExprNode& node, 
-        TVector<TString>& partitions, TString*, TExprContext&, bool) override { 
+    ui64 Partition(const TDqSettings& settings, size_t maxPartitions, const TExprNode& node,
+        TVector<TString>& partitions, TString*, TExprContext&, bool) override {
         TString cluster, table;
         if (const TMaybeNode<TDqSource> source = &node) {
             cluster = source.Cast().DataSource().Cast<TYdbDataSource>().Cluster().Value();

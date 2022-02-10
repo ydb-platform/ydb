@@ -11,8 +11,8 @@
 
 #include <util/generic/vector.h>
 
-#include <tuple> 
- 
+#include <tuple>
+
 namespace NYql::NDqs {
     class IDqsExecutionPlanner {
     public:
@@ -28,7 +28,7 @@ namespace NYql::NDqs {
         explicit TDqsExecutionPlanner(TIntrusivePtr<TTypeAnnotationContext> typeContext,
                                       NYql::TExprContext& exprContext,
                                       const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
-                                      NYql::TExprNode::TPtr dqExprRoot, 
+                                      NYql::TExprNode::TPtr dqExprRoot,
                                       NActors::TActorId executerID = NActors::TActorId(),
                                       NActors::TActorId resultID = NActors::TActorId(1, 0, 1, 0));
 
@@ -38,7 +38,7 @@ namespace NYql::NDqs {
             return _MaxDataSizePerJob;
         }
         ui64 StagesCount();
-        ui32 PlanExecution(const TDqSettings::TPtr& settings, bool canFallback = false); 
+        ui32 PlanExecution(const TDqSettings::TPtr& settings, bool canFallback = false);
         TVector<NDqProto::TDqTask> GetTasks(const TVector<NActors::TActorId>& workers) override;
         TVector<NDqProto::TDqTask>& GetTasks() override;
 
@@ -50,22 +50,22 @@ namespace NYql::NDqs {
         }
 
     private:
-        bool BuildReadStage(const TDqSettings::TPtr& settings, const NNodes::TDqPhyStage& stage, bool dqSource, bool canFallback); 
+        bool BuildReadStage(const TDqSettings::TPtr& settings, const NNodes::TDqPhyStage& stage, bool dqSource, bool canFallback);
         void BuildConnections(const NNodes::TDqPhyStage& stage);
         THashMap<NDq::TStageId, std::tuple<TString,ui64>> BuildAllPrograms();
         void FillChannelDesc(NDqProto::TChannel& channelDesc, const NDq::TChannel& channel);
         void FillInputDesc(NDqProto::TTaskInput& inputDesc, const TTaskInput& input);
         void FillOutputDesc(NDqProto::TTaskOutput& outputDesc, const TTaskOutput& output);
 
-        void GatherPhyMapping(THashMap<std::tuple<TString, TString>, TString>& clusters, THashMap<std::tuple<TString, TString, TString>, TString>& tables); 
+        void GatherPhyMapping(THashMap<std::tuple<TString, TString>, TString>& clusters, THashMap<std::tuple<TString, TString, TString>, TString>& tables);
         void BuildCheckpointingMode();
         bool IsEgressTask(const TDqsTasksGraph::TTaskType& task) const;
- 
+
     private:
         TIntrusivePtr<TTypeAnnotationContext> TypeContext;
         NYql::TExprContext& ExprContext;
         const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry;
-        NYql::TExprNode::TPtr DqExprRoot; 
+        NYql::TExprNode::TPtr DqExprRoot;
         TVector<const TTypeAnnotationNode*> InputType;
         NActors::TActorId ExecuterID;
         NActors::TActorId ResultID;

@@ -93,7 +93,7 @@ RECURSE(
     printdom
     printkeys
     printlinks
-    printphones 
+    printphones
     printreqs
     printreqs/tests
     printrichnode

@@ -5,7 +5,7 @@
 namespace NYql {
 namespace NCommon {
 
-NYT::TNode ParseSkiffTypeFromYson(const NYT::TNode& node, ui64 nativeYTTypesFlags); 
- 
+NYT::TNode ParseSkiffTypeFromYson(const NYT::TNode& node, ui64 nativeYTTypesFlags);
+
 } // namespace NCommon
 } // namespace NYql

@@ -7,27 +7,27 @@
 
 #include <ydb/library/yql/utils/log/log.h>
 
-#include <util/generic/hash.h> 
-#include <util/generic/string.h> 
-#include <util/generic/set.h> 
-#include <util/string/cast.h> 
- 
-#include <utility> 
- 
+#include <util/generic/hash.h>
+#include <util/generic/string.h>
+#include <util/generic/set.h>
+#include <util/string/cast.h>
+
+#include <utility>
+
 namespace NYql {
 
 namespace {
 
 using namespace NNodes;
 
-bool IsConstMapLambda(TCoLambda lambda) { 
+bool IsConstMapLambda(TCoLambda lambda) {
     const auto body = lambda.Body();
     return body.Ref().IsCallable("Just") && body.Ref().GetDependencyScope()->second != lambda.Raw();
 }
 
-template <typename TResult> 
-TExprNode::TPtr FuseFlatmaps(TCoFlatMapBase outerMap, TExprContext& ctx, TTypeAnnotationContext* types) { 
-    auto innerMap = outerMap.Input().template Cast<TCoFlatMapBase>(); 
+template <typename TResult>
+TExprNode::TPtr FuseFlatmaps(TCoFlatMapBase outerMap, TExprContext& ctx, TTypeAnnotationContext* types) {
+    auto innerMap = outerMap.Input().template Cast<TCoFlatMapBase>();
     auto innerBody = innerMap.Lambda().Body();
     auto outerBody = outerMap.Lambda().Body();
     auto outerLambda = outerMap.Lambda().Ptr();
@@ -68,28 +68,28 @@ TExprNode::TPtr FuseFlatmaps(TCoFlatMapBase outerMap, TExprContext& ctx, TTypeAn
 
 
     if (IsJustOrSingleAsList(innerBody.Ref())) {
-        auto placeHolder = ctx.NewArgument(outerMap.Pos(), "placeholder"); 
- 
-        auto status = OptimizeExpr(outerLambda, outerLambda, [&placeHolder, outerLambdaArg](const TExprNode::TPtr& node, TExprContext&) -> TExprNode::TPtr { 
-            if (TCoDependsOn::Match(node.Get()) && node->Child(0) == outerLambdaArg) { 
-                return placeHolder; 
-            } 
-            return node; 
-        }, ctx, TOptimizeExprSettings(types)); 
- 
-        if (status.Level == IGraphTransformer::TStatus::Error) { 
-            return {}; 
-        } 
- 
-        auto outerArgValue = innerBody.template Maybe<TCoJust>() 
-            ? innerBody.template Cast<TCoJust>().Input() 
-            : innerBody.template Cast<TCoAsList>().Arg(0); 
+        auto placeHolder = ctx.NewArgument(outerMap.Pos(), "placeholder");
 
-        YQL_CLOG(DEBUG, Core) << "FuseFlatmaps with inner " << innerBody.Ref().Content(); 
- 
-        if (outerMap.Input().Ref().GetTypeAnn()->GetKind() != innerMap.Input().Ref().GetTypeAnn()->GetKind() 
-            && innerMap.Input().Ref().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Optional) { 
- 
+        auto status = OptimizeExpr(outerLambda, outerLambda, [&placeHolder, outerLambdaArg](const TExprNode::TPtr& node, TExprContext&) -> TExprNode::TPtr {
+            if (TCoDependsOn::Match(node.Get()) && node->Child(0) == outerLambdaArg) {
+                return placeHolder;
+            }
+            return node;
+        }, ctx, TOptimizeExprSettings(types));
+
+        if (status.Level == IGraphTransformer::TStatus::Error) {
+            return {};
+        }
+
+        auto outerArgValue = innerBody.template Maybe<TCoJust>()
+            ? innerBody.template Cast<TCoJust>().Input()
+            : innerBody.template Cast<TCoAsList>().Arg(0);
+
+        YQL_CLOG(DEBUG, Core) << "FuseFlatmaps with inner " << innerBody.Ref().Content();
+
+        if (outerMap.Input().Ref().GetTypeAnn()->GetKind() != innerMap.Input().Ref().GetTypeAnn()->GetKind()
+            && innerMap.Input().Ref().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Optional) {
+
             if (outerMap.Ref().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Flow &&
                 outerBody.Ref().GetTypeAnn()->GetKind() != ETypeAnnotationKind::Flow) {
 
@@ -111,115 +111,115 @@ TExprNode::TPtr FuseFlatmaps(TCoFlatMapBase outerMap, TExprContext& ctx, TTypeAn
                     .Done().Ptr();
 
             } else if (outerMap.Ref().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Stream &&
-                outerBody.Ref().GetTypeAnn()->GetKind() != ETypeAnnotationKind::Stream) { 
- 
-                return Build<TResult>(ctx, outerMap.Pos()) 
-                    .Input(innerMap.Input()) 
-                    .Lambda() 
-                        .Args({"item"}) 
-                        .template Body<TCoToStream>() 
-                            .template Input<TExprApplier>() 
-                                .Apply(TCoLambda(outerLambda)) 
-                                .With(0, outerArgValue) 
-                                .With(innerMap.Lambda().Args().Arg(0), "item") 
-                                .template With<TCoDependsOn>(TExprBase(placeHolder)) 
-                                    .Input("item") 
-                                .Build() 
-                            .Build() 
-                            .FreeArgs() 
-                                .template Add<TCoDependsOn>() 
-                                    .Input("item") 
-                                .Build() 
-                            .Build() 
-                        .Build() 
-                    .Build() 
-                    .Done().Ptr(); 
- 
-            } else if (outerMap.Ref().GetTypeAnn()->GetKind() == ETypeAnnotationKind::List && 
-                outerBody.Ref().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Optional) { 
- 
-                return Build<TResult>(ctx, outerMap.Pos()) 
-                    .Input(innerMap.Input()) 
-                    .Lambda() 
-                        .Args({"item"}) 
-                        .template Body<TCoToList>() 
-                            .template Optional<TExprApplier>() 
-                                .Apply(TCoLambda(outerLambda)) 
-                                .With(0, outerArgValue) 
-                                .With(innerMap.Lambda().Args().Arg(0), "item") 
-                                .template With<TCoDependsOn>(TExprBase(placeHolder)) 
-                                    .Input("item") 
-                                .Build() 
-                            .Build() 
-                        .Build() 
-                    .Build() 
-                    .Done().Ptr(); 
-            } 
-        } 
- 
+                outerBody.Ref().GetTypeAnn()->GetKind() != ETypeAnnotationKind::Stream) {
+
+                return Build<TResult>(ctx, outerMap.Pos())
+                    .Input(innerMap.Input())
+                    .Lambda()
+                        .Args({"item"})
+                        .template Body<TCoToStream>()
+                            .template Input<TExprApplier>()
+                                .Apply(TCoLambda(outerLambda))
+                                .With(0, outerArgValue)
+                                .With(innerMap.Lambda().Args().Arg(0), "item")
+                                .template With<TCoDependsOn>(TExprBase(placeHolder))
+                                    .Input("item")
+                                .Build()
+                            .Build()
+                            .FreeArgs()
+                                .template Add<TCoDependsOn>()
+                                    .Input("item")
+                                .Build()
+                            .Build()
+                        .Build()
+                    .Build()
+                    .Done().Ptr();
+
+            } else if (outerMap.Ref().GetTypeAnn()->GetKind() == ETypeAnnotationKind::List &&
+                outerBody.Ref().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Optional) {
+
+                return Build<TResult>(ctx, outerMap.Pos())
+                    .Input(innerMap.Input())
+                    .Lambda()
+                        .Args({"item"})
+                        .template Body<TCoToList>()
+                            .template Optional<TExprApplier>()
+                                .Apply(TCoLambda(outerLambda))
+                                .With(0, outerArgValue)
+                                .With(innerMap.Lambda().Args().Arg(0), "item")
+                                .template With<TCoDependsOn>(TExprBase(placeHolder))
+                                    .Input("item")
+                                .Build()
+                            .Build()
+                        .Build()
+                    .Build()
+                    .Done().Ptr();
+            }
+        }
+
         return Build<TResult>(ctx, outerMap.Pos())
             .Input(innerMap.Input())
             .Lambda()
                 .Args({"item"})
                 .template Body<TExprApplier>()
-                    .Apply(TCoLambda(outerLambda)) 
-                    .With(0, outerArgValue) 
-                    .With(innerMap.Lambda().Args().Arg(0), "item") 
-                    .template With<TCoDependsOn>(TExprBase(placeHolder)) 
-                        .Input("item") 
+                    .Apply(TCoLambda(outerLambda))
+                    .With(0, outerArgValue)
+                    .With(innerMap.Lambda().Args().Arg(0), "item")
+                    .template With<TCoDependsOn>(TExprBase(placeHolder))
+                        .Input("item")
                     .Build()
                 .Build()
-            .Build() 
-            .Done().Ptr(); 
+            .Build()
+            .Done().Ptr();
     }
 
-    if (innerBody.template Maybe<TCoOptionalIf>() || innerBody.template Maybe<TCoListIf>()) { 
-        auto conditional = innerBody.template Cast<TCoConditionalValueBase>(); 
- 
-        auto placeHolder = ctx.NewArgument(outerMap.Pos(), "placeholder"); 
-        auto outerLambda = outerMap.Lambda().Ptr(); 
-        auto outerLambdaArg = outerMap.Lambda().Args().Arg(0).Raw(); 
- 
-        auto status = OptimizeExpr(outerLambda, outerLambda, [&placeHolder, outerLambdaArg](const TExprNode::TPtr& node, TExprContext&) -> TExprNode::TPtr { 
-            if (TCoDependsOn::Match(node.Get()) && node->Child(0) == outerLambdaArg) { 
-                return placeHolder; 
-            } 
-            return node; 
-        }, ctx, TOptimizeExprSettings(types)); 
- 
-        if (status.Level == IGraphTransformer::TStatus::Error) { 
-            return {}; 
-        } 
- 
-        auto value = ctx.Builder(outerMap.Pos()) 
-            .Apply(outerLambda) 
-            .With(0, conditional.Value().Ptr()) 
-            .Seal() 
-            .Build(); 
- 
-        if (outerBody.Ref().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Stream || outerBody.Ref().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Flow) {
-            value = ctx.Builder(outerMap.Pos()) 
-                .Callable(TCoForwardList::CallableName()) 
-                    .Add(0, value) 
-                .Seal() 
-                .Build(); 
-        } 
- 
-        auto conditionName = outerBody.Ref().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Optional 
-            ? TCoFlatOptionalIf::CallableName() 
-            : TCoFlatListIf::CallableName(); 
+    if (innerBody.template Maybe<TCoOptionalIf>() || innerBody.template Maybe<TCoListIf>()) {
+        auto conditional = innerBody.template Cast<TCoConditionalValueBase>();
 
-        auto newBody = Build<TCoConditionalValueBase>(ctx, outerMap.Pos()) 
-            .CallableName(conditionName) 
-            .Predicate(conditional.Predicate()) 
-            .Value(value) 
-            .Done(); 
- 
-        YQL_CLOG(DEBUG, Core) << "FuseFlatmaps with inner " << innerBody.Ref().Content(); 
- 
-        if (outerMap.Input().Ref().GetTypeAnn()->GetKind() != innerMap.Input().Ref().GetTypeAnn()->GetKind() 
-            && innerMap.Input().Ref().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Optional) { 
- 
+        auto placeHolder = ctx.NewArgument(outerMap.Pos(), "placeholder");
+        auto outerLambda = outerMap.Lambda().Ptr();
+        auto outerLambdaArg = outerMap.Lambda().Args().Arg(0).Raw();
+
+        auto status = OptimizeExpr(outerLambda, outerLambda, [&placeHolder, outerLambdaArg](const TExprNode::TPtr& node, TExprContext&) -> TExprNode::TPtr {
+            if (TCoDependsOn::Match(node.Get()) && node->Child(0) == outerLambdaArg) {
+                return placeHolder;
+            }
+            return node;
+        }, ctx, TOptimizeExprSettings(types));
+
+        if (status.Level == IGraphTransformer::TStatus::Error) {
+            return {};
+        }
+
+        auto value = ctx.Builder(outerMap.Pos())
+            .Apply(outerLambda)
+            .With(0, conditional.Value().Ptr())
+            .Seal()
+            .Build();
+
+        if (outerBody.Ref().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Stream || outerBody.Ref().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Flow) {
+            value = ctx.Builder(outerMap.Pos())
+                .Callable(TCoForwardList::CallableName())
+                    .Add(0, value)
+                .Seal()
+                .Build();
+        }
+
+        auto conditionName = outerBody.Ref().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Optional
+            ? TCoFlatOptionalIf::CallableName()
+            : TCoFlatListIf::CallableName();
+
+        auto newBody = Build<TCoConditionalValueBase>(ctx, outerMap.Pos())
+            .CallableName(conditionName)
+            .Predicate(conditional.Predicate())
+            .Value(value)
+            .Done();
+
+        YQL_CLOG(DEBUG, Core) << "FuseFlatmaps with inner " << innerBody.Ref().Content();
+
+        if (outerMap.Input().Ref().GetTypeAnn()->GetKind() != innerMap.Input().Ref().GetTypeAnn()->GetKind()
+            && innerMap.Input().Ref().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Optional) {
+
             if (outerMap.Ref().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Flow &&
                 outerBody.Ref().GetTypeAnn()->GetKind() != ETypeAnnotationKind::Flow) {
 
@@ -240,183 +240,183 @@ TExprNode::TPtr FuseFlatmaps(TCoFlatMapBase outerMap, TExprContext& ctx, TTypeAn
                     .Done().Ptr();
 
             } else if (outerMap.Ref().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Stream &&
-                outerBody.Ref().GetTypeAnn()->GetKind() != ETypeAnnotationKind::Stream) { 
- 
-                return Build<TResult>(ctx, outerMap.Pos()) 
-                    .Input(innerMap.Input()) 
-                    .Lambda() 
-                        .Args({"item"}) 
-                        .template Body<TCoToStream>() 
-                            .template Input<TExprApplier>() 
-                                .Apply(newBody) 
-                                .With(innerMap.Lambda().Args().Arg(0), "item") 
-                                .template With<TCoDependsOn>(TExprBase(placeHolder)) 
-                                    .Input("item") 
-                                .Build() 
-                            .Build() 
-                            .FreeArgs() 
-                                .template Add<TCoDependsOn>() 
-                                    .Input("item") 
-                                .Build() 
-                            .Build() 
-                        .Build() 
-                    .Build() 
-                    .Done().Ptr(); 
- 
-            } else if (outerMap.Ref().GetTypeAnn()->GetKind() == ETypeAnnotationKind::List && 
-                outerBody.Ref().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Optional) { 
- 
-                return Build<TResult>(ctx, outerMap.Pos()) 
-                    .Input(innerMap.Input()) 
-                    .Lambda() 
-                        .Args({"item"}) 
-                        .template Body<TCoToList>() 
-                            .template Optional<TExprApplier>() 
-                                .Apply(newBody) 
-                                .With(innerMap.Lambda().Args().Arg(0), "item") 
-                                .template With<TCoDependsOn>(TExprBase(placeHolder)) 
-                                    .Input("item") 
-                                .Build() 
-                            .Build() 
-                        .Build() 
-                    .Build() 
-                    .Done().Ptr(); 
-            } 
-        } 
- 
+                outerBody.Ref().GetTypeAnn()->GetKind() != ETypeAnnotationKind::Stream) {
+
+                return Build<TResult>(ctx, outerMap.Pos())
+                    .Input(innerMap.Input())
+                    .Lambda()
+                        .Args({"item"})
+                        .template Body<TCoToStream>()
+                            .template Input<TExprApplier>()
+                                .Apply(newBody)
+                                .With(innerMap.Lambda().Args().Arg(0), "item")
+                                .template With<TCoDependsOn>(TExprBase(placeHolder))
+                                    .Input("item")
+                                .Build()
+                            .Build()
+                            .FreeArgs()
+                                .template Add<TCoDependsOn>()
+                                    .Input("item")
+                                .Build()
+                            .Build()
+                        .Build()
+                    .Build()
+                    .Done().Ptr();
+
+            } else if (outerMap.Ref().GetTypeAnn()->GetKind() == ETypeAnnotationKind::List &&
+                outerBody.Ref().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Optional) {
+
+                return Build<TResult>(ctx, outerMap.Pos())
+                    .Input(innerMap.Input())
+                    .Lambda()
+                        .Args({"item"})
+                        .template Body<TCoToList>()
+                            .template Optional<TExprApplier>()
+                                .Apply(newBody)
+                                .With(innerMap.Lambda().Args().Arg(0), "item")
+                                .template With<TCoDependsOn>(TExprBase(placeHolder))
+                                    .Input("item")
+                                .Build()
+                            .Build()
+                        .Build()
+                    .Build()
+                    .Done().Ptr();
+            }
+        }
+
         return Build<TResult>(ctx, outerMap.Pos())
             .Input(innerMap.Input())
             .Lambda()
                 .Args({"item"})
                 .template Body<TExprApplier>()
-                    .Apply(newBody) 
-                    .With(innerMap.Lambda().Args().Arg(0), "item") 
-                    .template With<TCoDependsOn>(TExprBase(placeHolder)) 
-                        .Input("item") 
+                    .Apply(newBody)
+                    .With(innerMap.Lambda().Args().Arg(0), "item")
+                    .template With<TCoDependsOn>(TExprBase(placeHolder))
+                        .Input("item")
                     .Build()
                 .Build()
-            .Build() 
-            .Done().Ptr(); 
+            .Build()
+            .Done().Ptr();
     }
 
-    if (innerBody.template Maybe<TCoVisit>() && outerBody.template Maybe<TCoJust>()) { 
-        auto outerLambda = outerMap.Lambda().Ptr(); 
- 
-        auto originalVisit = innerBody.Ptr(); 
-        YQL_CLOG(DEBUG, Core) << "FuseFlatmaps with inner " << innerBody.Ref().Content(); 
-        return ctx.Builder(outerMap.Pos()) 
-            .Callable(TResult::CallableName()) 
-                .Add(0, innerMap.Input().Ptr()) 
-                .Lambda(1) 
-                    .Param("item") 
-                    .Callable("Visit") 
-                        .ApplyPartial(0, innerMap.Lambda().Args().Ptr(), originalVisit->HeadPtr()) 
-                            .With(0, "item") 
-                        .Seal() 
-                        .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& { 
-                            for (size_t i = 1; i < originalVisit->ChildrenSize(); ++i) { 
-                                auto child = originalVisit->ChildPtr(i); 
-                                if (child->IsAtom()) { 
-                                    auto lambda = originalVisit->Child(i + 1); 
-                                    parent 
-                                        .Add(i, std::move(child)) 
-                                        .Lambda(i + 1) 
-                                            .Param("visitItem") 
-                                            .Callable(TResult::CallableName()) 
-                                                .Apply(0, lambda) 
-                                                    .With(0, "visitItem") 
-                                                .Seal() 
-                                                .Lambda(1) 
-                                                    .Param("mapItem") 
-                                                    .Apply(outerLambda) 
-                                                        .With(0, "mapItem") 
-                                                    .Seal() 
-                                                .Seal() 
-                                            .Seal() 
-                                        .Seal(); 
-                                    ++i; 
-                                } 
-                                else { 
-                                    parent.Callable(i, TResult::CallableName()) 
-                                        .Add(0, std::move(child)) 
-                                        .Lambda(1) 
-                                            .Param("mapItem") 
-                                            .Apply(outerLambda) 
-                                                .With(0, "mapItem") 
-                                            .Seal() 
-                                        .Seal() 
-                                    .Seal(); 
-                                } 
-                            } 
-                            return parent; 
-                        }) 
-                    .Seal() 
-                .Seal() 
-            .Seal() 
-            .Build(); 
-    } 
- 
-    if (innerBody.template Maybe<TCoAsList>() && outerBody.template Maybe<TCoJust>()) { 
- 
-        auto outerJustInput = outerBody.template Cast<TCoJust>().Input().Ptr(); 
-        auto outerLambdaArgs = outerMap.Lambda().Args().Ptr(); 
-        auto innerLambdaArg = innerMap.Lambda().Args().Arg(0).Raw(); 
- 
-        auto originalAsList = innerBody.Ptr(); 
- 
-        YQL_CLOG(DEBUG, Core) << "FuseFlatmaps with inner " << innerBody.Ref().Content(); 
-        return ctx.Builder(outerMap.Pos()) 
-            .Callable(TResult::CallableName()) 
-                .Add(0, innerMap.Input().Ptr()) 
-                .Lambda(1) 
-                    .Param("item") 
-                    .Callable("AsList") 
-                        .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& { 
-                            for (size_t i = 0; i < originalAsList->ChildrenSize(); ++i) { 
-                                parent.ApplyPartial(i, outerLambdaArgs, outerJustInput) 
-                                    .With(0, originalAsList->ChildPtr(i)) 
-                                    .WithNode(*innerLambdaArg, "item") 
-                                .Seal(); 
-                            } 
-                            return parent; 
-                        }) 
-                    .Seal() 
-                .Seal() 
-            .Seal() 
-            .Build(); 
-    } 
- 
-    if (innerBody.template Maybe<TCoExtendBase>() && outerBody.template Maybe<TCoJust>()) { 
- 
-        auto originalExtend = innerBody.Ptr(); 
- 
-        YQL_CLOG(DEBUG, Core) << "FuseFlatmaps with inner " << innerBody.Ref().Content(); 
-        return ctx.Builder(outerMap.Pos()) 
-            .Callable(TResult::CallableName()) 
-                .Add(0, innerMap.Input().Ptr()) 
-                .Lambda(1) 
-                    .Param("item") 
-                    .Callable(originalExtend->Content()) 
-                        .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& { 
-                            for (size_t i = 0; i < originalExtend->ChildrenSize(); ++i) { 
-                                parent.ApplyPartial(i, {}, outerMap.Ptr()) 
-                                    .WithNode(outerMap.Input().Ref(), originalExtend->ChildPtr(i)) 
-                                    .WithNode(innerMap.Lambda().Args().Arg(0).Ref(), "item") 
-                                .Seal(); 
-                            } 
-                            return parent; 
-                        }) 
-                    .Seal() 
-                .Seal() 
-            .Seal() 
-            .Build(); 
-    } 
- 
+    if (innerBody.template Maybe<TCoVisit>() && outerBody.template Maybe<TCoJust>()) {
+        auto outerLambda = outerMap.Lambda().Ptr();
+
+        auto originalVisit = innerBody.Ptr();
+        YQL_CLOG(DEBUG, Core) << "FuseFlatmaps with inner " << innerBody.Ref().Content();
+        return ctx.Builder(outerMap.Pos())
+            .Callable(TResult::CallableName())
+                .Add(0, innerMap.Input().Ptr())
+                .Lambda(1)
+                    .Param("item")
+                    .Callable("Visit")
+                        .ApplyPartial(0, innerMap.Lambda().Args().Ptr(), originalVisit->HeadPtr())
+                            .With(0, "item")
+                        .Seal()
+                        .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                            for (size_t i = 1; i < originalVisit->ChildrenSize(); ++i) {
+                                auto child = originalVisit->ChildPtr(i);
+                                if (child->IsAtom()) {
+                                    auto lambda = originalVisit->Child(i + 1);
+                                    parent
+                                        .Add(i, std::move(child))
+                                        .Lambda(i + 1)
+                                            .Param("visitItem")
+                                            .Callable(TResult::CallableName())
+                                                .Apply(0, lambda)
+                                                    .With(0, "visitItem")
+                                                .Seal()
+                                                .Lambda(1)
+                                                    .Param("mapItem")
+                                                    .Apply(outerLambda)
+                                                        .With(0, "mapItem")
+                                                    .Seal()
+                                                .Seal()
+                                            .Seal()
+                                        .Seal();
+                                    ++i;
+                                }
+                                else {
+                                    parent.Callable(i, TResult::CallableName())
+                                        .Add(0, std::move(child))
+                                        .Lambda(1)
+                                            .Param("mapItem")
+                                            .Apply(outerLambda)
+                                                .With(0, "mapItem")
+                                            .Seal()
+                                        .Seal()
+                                    .Seal();
+                                }
+                            }
+                            return parent;
+                        })
+                    .Seal()
+                .Seal()
+            .Seal()
+            .Build();
+    }
+
+    if (innerBody.template Maybe<TCoAsList>() && outerBody.template Maybe<TCoJust>()) {
+
+        auto outerJustInput = outerBody.template Cast<TCoJust>().Input().Ptr();
+        auto outerLambdaArgs = outerMap.Lambda().Args().Ptr();
+        auto innerLambdaArg = innerMap.Lambda().Args().Arg(0).Raw();
+
+        auto originalAsList = innerBody.Ptr();
+
+        YQL_CLOG(DEBUG, Core) << "FuseFlatmaps with inner " << innerBody.Ref().Content();
+        return ctx.Builder(outerMap.Pos())
+            .Callable(TResult::CallableName())
+                .Add(0, innerMap.Input().Ptr())
+                .Lambda(1)
+                    .Param("item")
+                    .Callable("AsList")
+                        .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                            for (size_t i = 0; i < originalAsList->ChildrenSize(); ++i) {
+                                parent.ApplyPartial(i, outerLambdaArgs, outerJustInput)
+                                    .With(0, originalAsList->ChildPtr(i))
+                                    .WithNode(*innerLambdaArg, "item")
+                                .Seal();
+                            }
+                            return parent;
+                        })
+                    .Seal()
+                .Seal()
+            .Seal()
+            .Build();
+    }
+
+    if (innerBody.template Maybe<TCoExtendBase>() && outerBody.template Maybe<TCoJust>()) {
+
+        auto originalExtend = innerBody.Ptr();
+
+        YQL_CLOG(DEBUG, Core) << "FuseFlatmaps with inner " << innerBody.Ref().Content();
+        return ctx.Builder(outerMap.Pos())
+            .Callable(TResult::CallableName())
+                .Add(0, innerMap.Input().Ptr())
+                .Lambda(1)
+                    .Param("item")
+                    .Callable(originalExtend->Content())
+                        .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                            for (size_t i = 0; i < originalExtend->ChildrenSize(); ++i) {
+                                parent.ApplyPartial(i, {}, outerMap.Ptr())
+                                    .WithNode(outerMap.Input().Ref(), originalExtend->ChildPtr(i))
+                                    .WithNode(innerMap.Lambda().Args().Arg(0).Ref(), "item")
+                                .Seal();
+                            }
+                            return parent;
+                        })
+                    .Seal()
+                .Seal()
+            .Seal()
+            .Build();
+    }
+
     return outerMap.Ptr();
 }
 
-TExprNode::TPtr FuseCombineByKeyOverFlatmap(TCoCombineByKey combine, TExprContext& ctx) { 
-    auto flatmap = combine.Input().Cast<TCoFlatMapBase>(); 
+TExprNode::TPtr FuseCombineByKeyOverFlatmap(TCoCombineByKey combine, TExprContext& ctx) {
+    auto flatmap = combine.Input().Cast<TCoFlatMapBase>();
 
     auto inputType = flatmap.Input().Ref().GetTypeAnn();
     if (inputType->GetKind() == ETypeAnnotationKind::Optional) {
@@ -434,7 +434,7 @@ TExprNode::TPtr FuseCombineByKeyOverFlatmap(TCoCombineByKey combine, TExprContex
         ? flatmapBody.Cast<TCoJust>().Input()
         : flatmapBody.Cast<TCoAsList>().Arg(0);
 
-    auto ret = Build<TCoCombineByKey>(ctx, combine.Pos()) 
+    auto ret = Build<TCoCombineByKey>(ctx, combine.Pos())
         .Input(flatmap.Input())
         .PreMapLambda()
             .Args({"item"})
@@ -927,8 +927,8 @@ TExprNode::TPtr ConvertFoldBySumToLength(const TExprNode::TPtr& node, TExprConte
     auto arg1 = lambda.Tail().Child(0);
     const bool isInc = lambda.Tail().IsCallable("Inc");
     auto arg2 = isInc ? nullptr : lambda.Tail().Child(1);
-    if (arg1->GetTypeAnn()->GetKind() != ETypeAnnotationKind::Data || 
-        (arg2 && arg2->GetTypeAnn()->GetKind() != ETypeAnnotationKind::Data)) { 
+    if (arg1->GetTypeAnn()->GetKind() != ETypeAnnotationKind::Data ||
+        (arg2 && arg2->GetTypeAnn()->GetKind() != ETypeAnnotationKind::Data)) {
         return node;
     }
 
@@ -972,8 +972,8 @@ TExprNode::TPtr ConvertFold1BySumToLength(const TExprNode::TPtr& node, TExprCont
     auto arg1 = updateLambda.Tail().Child(0);
     const bool isInc = updateLambda.Tail().IsCallable("Inc");
     auto arg2 = isInc ? nullptr : updateLambda.Tail().Child(1);
-    if (arg1->GetTypeAnn()->GetKind() != ETypeAnnotationKind::Data || 
-        (arg2 && arg2->GetTypeAnn()->GetKind() != ETypeAnnotationKind::Data)) { 
+    if (arg1->GetTypeAnn()->GetKind() != ETypeAnnotationKind::Data ||
+        (arg2 && arg2->GetTypeAnn()->GetKind() != ETypeAnnotationKind::Data)) {
         return node;
     }
 
@@ -1065,8 +1065,8 @@ TExprNode::TPtr ConvertFold1ByConstMinMax(const TExprNode::TPtr& node, TExprCont
     const auto& updateLambda = node->Tail();
     auto arg1 = updateLambda.Tail().Child(0);
     auto arg2 = updateLambda.Tail().Child(1);
-    if (arg1->GetTypeAnn()->GetKind() != ETypeAnnotationKind::Data || 
-        arg2->GetTypeAnn()->GetKind() != ETypeAnnotationKind::Data) { 
+    if (arg1->GetTypeAnn()->GetKind() != ETypeAnnotationKind::Data ||
+        arg2->GetTypeAnn()->GetKind() != ETypeAnnotationKind::Data) {
         return node;
     }
 
@@ -1280,7 +1280,7 @@ TExprNode::TPtr PropagateConstPremapIntoCombineByKey(const TExprNode& node, TExp
     return ctx.ChangeChildren(node, std::move(children));
 }
 
-TExprNode::TPtr CountAggregateRewrite(const TCoAggregate& node, TExprContext& ctx) { 
+TExprNode::TPtr CountAggregateRewrite(const TCoAggregate& node, TExprContext& ctx) {
     auto keyColumns = node.Keys();
     auto aggregatedColumns = node.Handlers();
     if (keyColumns.Size() > 0 || aggregatedColumns.Size() != 1) {
@@ -1307,7 +1307,7 @@ TExprNode::TPtr CountAggregateRewrite(const TCoAggregate& node, TExprContext& ct
     auto inputItemType = traits->Head().GetTypeAnn()->Cast<TTypeExprType>()->GetType();
     const bool isOptionalColumn = inputItemType->GetKind() == ETypeAnnotationKind::Optional;
 
-    auto init = TCoLambda(traits->Child(1)); 
+    auto init = TCoLambda(traits->Child(1));
     bool onlyColumn = true;
     bool onlyZero = true;
     TExprNode::TPtr initVal;
@@ -1326,7 +1326,7 @@ TExprNode::TPtr CountAggregateRewrite(const TCoAggregate& node, TExprContext& ct
         return node.Ptr();
     }
 
-    auto update = TCoLambda(traits->Child(2)); 
+    auto update = TCoLambda(traits->Child(2));
     auto inc = update.Body().Ptr();
     if (inc->IsCallable("Inc") && inc->Child(0) == update.Args().Arg(1).Raw()) {
         onlyZero = false;
@@ -1340,17 +1340,17 @@ TExprNode::TPtr CountAggregateRewrite(const TCoAggregate& node, TExprContext& ct
         return node.Ptr();
     }
 
-    auto save = TCoLambda(traits->Child(3)); 
+    auto save = TCoLambda(traits->Child(3));
     if (save.Body().Raw() != save.Args().Arg(0).Raw()) {
         return node.Ptr();
     }
 
-    auto load = TCoLambda(traits->Child(4)); 
+    auto load = TCoLambda(traits->Child(4));
     if (load.Body().Raw() != load.Args().Arg(0).Raw()) {
         return node.Ptr();
     }
 
-    auto merge = TCoLambda(traits->Child(5)); 
+    auto merge = TCoLambda(traits->Child(5));
     {
         auto& plus = merge.Body().Ref();
         if (!plus.IsCallable("+")) {
@@ -1363,7 +1363,7 @@ TExprNode::TPtr CountAggregateRewrite(const TCoAggregate& node, TExprContext& ct
         }
     }
 
-    auto finish = TCoLambda(traits->Child(6)); 
+    auto finish = TCoLambda(traits->Child(6));
     if (finish.Body().Raw() != finish.Args().Arg(0).Raw()) {
         return node.Ptr();
     }
@@ -1599,7 +1599,7 @@ TExprNode::TPtr OptimizeLookup(const TExprNode::TPtr& node, TExprContext& ctx, T
 }
 
 constexpr std::initializer_list<std::string_view> FlowPriority = {
-    "AssumeSorted", "AssumeUnique", 
+    "AssumeSorted", "AssumeUnique",
     "Map", "OrderedMap",
     "Filter", "OrderedFilter",
     "FlatMap", "OrderedFlatMap",
@@ -1766,9 +1766,9 @@ TExprNode::TPtr OptimizeFlatMap(const TExprNode::TPtr& node, TExprContext& ctx, 
 
 void RegisterCoFlowCallables1(TCallableOptimizerMap& map) {
     using namespace std::placeholders;
- 
+
     map["ToFlow"] = std::bind(&OptimizeToFlow, _1, _2, _3);
- 
+
     map["FlatMap"] = std::bind(&OptimizeFlatMap<false>, _1, _2, _3);
     map["OrderedFlatMap"] = std::bind(&OptimizeFlatMap<true>, _1, _2, _3);
 
@@ -2013,8 +2013,8 @@ void RegisterCoFlowCallables1(TCallableOptimizerMap& map) {
             return node;
         }
 
-        TCoCombineByKey self(node); 
-        if (self.Input().Maybe<TCoFlatMapBase>()) { 
+        TCoCombineByKey self(node);
+        if (self.Input().Maybe<TCoFlatMapBase>()) {
             YQL_CLOG(DEBUG, Core) << "FuseCombineByKeyOverFlatmap";
             return FuseCombineByKeyOverFlatmap(self, ctx);
         }
@@ -2034,9 +2034,9 @@ void RegisterCoFlowCallables1(TCallableOptimizerMap& map) {
             YQL_CLOG(DEBUG, Core) << node->Content() << " premap ToList elimination";
             TExprNode::TPtr newPreMapLambda = ctx.DeepCopyLambda(preMap.Ref());
             newPreMapLambda = ctx.ChangeChild(*newPreMapLambda, 1, newPreMapLambda->Child(1)->Child(0));
-            return Build<TCoCombineByKey>(ctx, node->Pos()) 
+            return Build<TCoCombineByKey>(ctx, node->Pos())
                 .Input(self.Input())
-                .PreMapLambda(TCoLambda(newPreMapLambda)) 
+                .PreMapLambda(TCoLambda(newPreMapLambda))
                 .KeySelectorLambda(self.KeySelectorLambda())
                 .InitHandlerLambda(self.InitHandlerLambda())
                 .UpdateHandlerLambda(self.UpdateHandlerLambda())
@@ -2052,7 +2052,7 @@ void RegisterCoFlowCallables1(TCallableOptimizerMap& map) {
             return node;
         }
 
-        TCoAggregate self(node); 
+        TCoAggregate self(node);
         auto ret = CountAggregateRewrite(self, ctx);
         if (ret != node) {
             YQL_CLOG(DEBUG, Core) << "CountAggregateRewrite";
@@ -2064,230 +2064,230 @@ void RegisterCoFlowCallables1(TCallableOptimizerMap& map) {
 
     map["Reverse"] = std::bind(&OptimizeReverse, _1, _2, _3);
 
-    map["Visit"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) { 
+    map["Visit"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
         if (!optCtx.IsSingleUsage(node->Head())) {
-            return node; 
-        } 
- 
+            return node;
+        }
+
         if (!TCoVisit::Match(&node->Head())) {
-            return node; 
-        } 
- 
-        // Outer variant index to inner index + lambda 
-        THashMap<TStringBuf, std::pair<TStringBuf, TExprNode::TPtr>> innerLambdas; 
-        TExprNode::TPtr defValue; 
-        TStringBuf defOutIndex; 
-        TSet<TString> defInnerIndicies; 
- 
+            return node;
+        }
+
+        // Outer variant index to inner index + lambda
+        THashMap<TStringBuf, std::pair<TStringBuf, TExprNode::TPtr>> innerLambdas;
+        TExprNode::TPtr defValue;
+        TStringBuf defOutIndex;
+        TSet<TString> defInnerIndicies;
+
         const auto& innerVisit = node->Head();
- 
+
         if (innerVisit.ChildrenSize() % 2 == 0) {
-            // Has default value 
+            // Has default value
             auto innerVarType = innerVisit.GetTypeAnn()->Cast<TVariantExprType>();
-            if (innerVarType->GetUnderlyingType()->GetKind() == ETypeAnnotationKind::Struct) { 
-                for (auto item: innerVarType->GetUnderlyingType()->Cast<TStructExprType>()->GetItems()) { 
-                    defInnerIndicies.emplace(item->GetName()); 
-                } 
-            } 
-            else { 
-                for (size_t i = 0; i < innerVarType->GetUnderlyingType()->Cast<TTupleExprType>()->GetSize(); ++i) { 
-                    defInnerIndicies.emplace(ToString(i)); 
-                } 
-            } 
-        } 
- 
+            if (innerVarType->GetUnderlyingType()->GetKind() == ETypeAnnotationKind::Struct) {
+                for (auto item: innerVarType->GetUnderlyingType()->Cast<TStructExprType>()->GetItems()) {
+                    defInnerIndicies.emplace(item->GetName());
+                }
+            }
+            else {
+                for (size_t i = 0; i < innerVarType->GetUnderlyingType()->Cast<TTupleExprType>()->GetSize(); ++i) {
+                    defInnerIndicies.emplace(ToString(i));
+                }
+            }
+        }
+
         for (ui32 index = 1; index < innerVisit.ChildrenSize(); ++index) {
             if (innerVisit.Child(index)->IsAtom()) {
                 const auto itemIndex = innerVisit.Child(index)->Content();
                 defInnerIndicies.erase(TString(itemIndex));
-                ++index; 
+                ++index;
                 auto lambda = innerVisit.ChildPtr(index);
-                if (auto var = TMaybeNode<TCoVariant>(lambda->Child(1))) { 
-                    innerLambdas[var.Cast().Index().Value()] = std::make_pair(itemIndex, std::move(lambda)); 
-                } 
-                else { 
-                    return node; 
-                } 
-            } 
-            else { 
+                if (auto var = TMaybeNode<TCoVariant>(lambda->Child(1))) {
+                    innerLambdas[var.Cast().Index().Value()] = std::make_pair(itemIndex, std::move(lambda));
+                }
+                else {
+                    return node;
+                }
+            }
+            else {
                 if (auto var = TMaybeNode<TCoVariant>(innerVisit.Child(index))) {
-                    defOutIndex = var.Cast().Index().Value(); 
-                    defValue = var.Cast().Item().Ptr(); 
-                } 
-                else { 
-                    return node; 
-                } 
-            } 
-        } 
- 
+                    defOutIndex = var.Cast().Index().Value();
+                    defValue = var.Cast().Item().Ptr();
+                }
+                else {
+                    return node;
+                }
+            }
+        }
+
         if (innerLambdas.contains(defOutIndex)) {
-            return node; 
-        } 
- 
-        for (ui32 index = 1; index < node->ChildrenSize(); ++index) { 
-            if (node->Child(index)->IsAtom()) { 
-                const auto itemIndex = node->Child(index)->Content(); 
+            return node;
+        }
+
+        for (ui32 index = 1; index < node->ChildrenSize(); ++index) {
+            if (node->Child(index)->IsAtom()) {
+                const auto itemIndex = node->Child(index)->Content();
                 if (!innerLambdas.contains(itemIndex) && defOutIndex != itemIndex) {
-                    return node; 
-                } 
-            } 
-        } 
- 
+                    return node;
+                }
+            }
+        }
+
         YQL_CLOG(DEBUG, Core) << node->Content() << " over " << node->Head().Content();
-        return ctx.Builder(node->Pos()) 
-            .Callable("Visit") 
+        return ctx.Builder(node->Pos())
+            .Callable("Visit")
                 .Add(0, innerVisit.HeadPtr())
-                .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& { 
-                    ui32 index = 0; 
-                    for (ui32 i = 1; i < node->ChildrenSize(); ++i) { 
-                        if (node->Child(i)->IsAtom()) { 
-                            const auto itemIndex = node->Child(i)->Content(); 
-                            auto lambda = node->ChildPtr(i + 1); 
-                            if (auto p = innerLambdas.FindPtr(itemIndex)) { 
-                                lambda = ctx.Builder(lambda->Pos()) 
-                                    .Lambda() 
-                                        .Param("item") 
+                .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                    ui32 index = 0;
+                    for (ui32 i = 1; i < node->ChildrenSize(); ++i) {
+                        if (node->Child(i)->IsAtom()) {
+                            const auto itemIndex = node->Child(i)->Content();
+                            auto lambda = node->ChildPtr(i + 1);
+                            if (auto p = innerLambdas.FindPtr(itemIndex)) {
+                                lambda = ctx.Builder(lambda->Pos())
+                                    .Lambda()
+                                        .Param("item")
                                         .Apply(*lambda)
-                                            .With(0) 
+                                            .With(0)
                                                 .ApplyPartial(p->second->HeadPtr(), p->second->Child(1)->ChildPtr(TCoVariant::idx_Item))
-                                                    .With(0, "item") 
-                                                .Seal() 
-                                            .Done() 
-                                        .Seal() 
-                                    .Seal() 
-                                    .Build(); 
- 
-                                parent.Atom(++index, p->first); 
-                                parent.Add(++index, lambda); 
-                            } 
-                            else { 
-                                lambda = ctx.Builder(lambda->Pos()) 
-                                    .Lambda() 
-                                        .Param("item") 
+                                                    .With(0, "item")
+                                                .Seal()
+                                            .Done()
+                                        .Seal()
+                                    .Seal()
+                                    .Build();
+
+                                parent.Atom(++index, p->first);
+                                parent.Add(++index, lambda);
+                            }
+                            else {
+                                lambda = ctx.Builder(lambda->Pos())
+                                    .Lambda()
+                                        .Param("item")
                                         .Apply(*lambda)
-                                            .With(0, defValue) 
-                                        .Seal() 
-                                    .Seal() 
-                                    .Build(); 
-                                for (auto& newItemIndex: defInnerIndicies) { 
-                                    parent.Atom(++index, newItemIndex); 
-                                    parent.Add(++index, lambda); 
-                                } 
-                            } 
-                            ++i; 
-                        } 
-                        else { 
-                            parent.Add(++index, node->ChildPtr(i)); 
-                        } 
-                    } 
-                    return parent; 
-                }) 
-            .Seal() 
-            .Build(); 
-    }; 
- 
-    map["VariantItem"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) { 
+                                            .With(0, defValue)
+                                        .Seal()
+                                    .Seal()
+                                    .Build();
+                                for (auto& newItemIndex: defInnerIndicies) {
+                                    parent.Atom(++index, newItemIndex);
+                                    parent.Add(++index, lambda);
+                                }
+                            }
+                            ++i;
+                        }
+                        else {
+                            parent.Add(++index, node->ChildPtr(i));
+                        }
+                    }
+                    return parent;
+                })
+            .Seal()
+            .Build();
+    };
+
+    map["VariantItem"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
         if (!optCtx.IsSingleUsage(node->Head())) {
-            return node; 
-        } 
- 
+            return node;
+        }
+
         if (!TCoVisit::Match(&node->Head())) {
-            return node; 
-        } 
- 
+            return node;
+        }
+
         const auto& visit = node->Head();
         for (ui32 index = 1; index < visit.ChildrenSize(); ++index) {
             if (visit.Child(index)->IsAtom()) {
-                ++index; 
+                ++index;
                 if (!TCoVariant::Match(visit.Child(index)->Child(1))) {
-                    return node; 
-                } 
-            } 
-            else { 
+                    return node;
+                }
+            }
+            else {
                 if (!TCoVariant::Match(visit.Child(index))) {
-                    return node; 
-                } 
-            } 
-        } 
- 
+                    return node;
+                }
+            }
+        }
+
         YQL_CLOG(DEBUG, Core) << node->Content() << " over " << node->Head().Content();
         return ctx.Builder(visit.Pos())
-            .Callable("Visit") 
+            .Callable("Visit")
                 .Add(0, visit.HeadPtr())
-                .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& { 
+                .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
                     for (ui32 i = 1; i < visit.ChildrenSize(); ++i) {
                         if (visit.Child(i)->IsAtom()) {
                             parent.Add(i, visit.ChildPtr(i));
                             auto visitLambda = visit.Child(i + 1);
-                            parent.Lambda(i + 1, visitLambda->Pos()) 
-                                .Param("item") 
+                            parent.Lambda(i + 1, visitLambda->Pos())
+                                .Param("item")
                                 .ApplyPartial(visitLambda->HeadPtr(), visitLambda->Child(1)->ChildPtr(TCoVariant::idx_Item))
-                                    .With(0, "item") 
-                                .Seal() 
-                                .Seal(); 
-                            ++i; 
-                        } 
-                        else { 
+                                    .With(0, "item")
+                                .Seal()
+                                .Seal();
+                            ++i;
+                        }
+                        else {
                             parent.Add(i, visit.Child(i)->ChildPtr(TCoVariant::idx_Item));
-                        } 
-                    } 
-                    return parent; 
-                }) 
-            .Seal() 
-            .Build(); 
-    }; 
- 
-    map["SkipNullMembers"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) { 
+                        }
+                    }
+                    return parent;
+                })
+            .Seal()
+            .Build();
+    };
+
+    map["SkipNullMembers"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
         if (!optCtx.IsSingleUsage(node->Head())) {
-            return node; 
-        } 
- 
-        const auto skipNullMembers = TCoSkipNullMembers(node); 
-        if (!skipNullMembers.Members()) { 
-            return node; 
-        } 
- 
-        if (auto maybeFlatmap = skipNullMembers.Input().Maybe<TCoFlatMapBase>()) { 
-            auto flatmap = maybeFlatmap.Cast(); 
- 
-            TMaybe<THashSet<TStringBuf>> passthroughFields; 
+            return node;
+        }
+
+        const auto skipNullMembers = TCoSkipNullMembers(node);
+        if (!skipNullMembers.Members()) {
+            return node;
+        }
+
+        if (auto maybeFlatmap = skipNullMembers.Input().Maybe<TCoFlatMapBase>()) {
+            auto flatmap = maybeFlatmap.Cast();
+
+            TMaybe<THashSet<TStringBuf>> passthroughFields;
             if (IsPassthroughFlatMap(flatmap, &passthroughFields)
                 && !IsTablePropsDependent(flatmap.Lambda().Body().Ref())
                 // SkipNullMembers doesn't support optional items
                 && flatmap.Lambda().Args().Arg(0).Ref().GetTypeAnn()->GetKind() != ETypeAnnotationKind::Optional)
             {
-                bool hasAllMembers = true; 
-                if (passthroughFields) { 
-                    for (const auto& member : skipNullMembers.Members().Cast()) { 
-                        if (!passthroughFields->contains(member)) { 
-                            hasAllMembers = false; 
-                            break; 
-                        } 
-                    } 
-                } 
- 
-                if (hasAllMembers) { 
-                    YQL_CLOG(DEBUG, Core) << node->Content() << "OverFlatmap"; 
-                    return ctx.Builder(flatmap.Pos()) 
-                        .Callable(flatmap.CallableName()) 
-                            .Callable(0, TCoSkipNullMembers::CallableName()) 
-                                .Add(0, flatmap.Input().Ptr()) 
-                                .Add(1, skipNullMembers.Members().Cast().Ptr()) 
-                            .Seal() 
-                            .Add(1, flatmap.Lambda().Ptr()) 
-                        .Seal() 
-                        .Build(); 
-                } 
-            } 
-        } 
- 
+                bool hasAllMembers = true;
+                if (passthroughFields) {
+                    for (const auto& member : skipNullMembers.Members().Cast()) {
+                        if (!passthroughFields->contains(member)) {
+                            hasAllMembers = false;
+                            break;
+                        }
+                    }
+                }
+
+                if (hasAllMembers) {
+                    YQL_CLOG(DEBUG, Core) << node->Content() << "OverFlatmap";
+                    return ctx.Builder(flatmap.Pos())
+                        .Callable(flatmap.CallableName())
+                            .Callable(0, TCoSkipNullMembers::CallableName())
+                                .Add(0, flatmap.Input().Ptr())
+                                .Add(1, skipNullMembers.Members().Cast().Ptr())
+                            .Seal()
+                            .Add(1, flatmap.Lambda().Ptr())
+                        .Seal()
+                        .Build();
+                }
+            }
+        }
+
         if (node->Head().IsCallable({"ForwardList", "FromFlow"})) {
             YQL_CLOG(DEBUG, Core) << "Swap " << node->Content() << " with " << node->Head().Content();
             return ctx.SwapWithHead(*node);
         }
 
-        return node; 
-    }; 
+        return node;
+    };
 
     map["Exists"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
         if (!optCtx.IsSingleUsage(node->Head())) {
@@ -2296,7 +2296,7 @@ void RegisterCoFlowCallables1(TCallableOptimizerMap& map) {
 
         if (node->Head().IsCallable("Lookup")) {
             YQL_CLOG(DEBUG, Core) << node->Content() << " over " << node->Head().Content();
-            return ctx.RenameNode(node->Head(), "Contains"); 
+            return ctx.RenameNode(node->Head(), "Contains");
         }
 
         return node;

@@ -53,7 +53,7 @@ public:
     void OnResponse(NThreading::TPromise<TResult> promise, TString sessionId, NGrpc::TGrpcStatus&& status, RespType&& resp, const THashMap<TString, TString>& modulesMapping, bool alwaysFallback = false)
     {
         YQL_LOG_CTX_SCOPE(sessionId);
-        YQL_CLOG(TRACE, ProviderDq) << "TDqGateway::callback"; 
+        YQL_CLOG(TRACE, ProviderDq) << "TDqGateway::callback";
 
         {
             TGuard<TMutex> lock(ProgressMutex);
@@ -66,14 +66,14 @@ public:
         bool fallback = false;
 
         if (status.Ok()) {
-            YQL_CLOG(TRACE, ProviderDq) << "TDqGateway::Ok"; 
+            YQL_CLOG(TRACE, ProviderDq) << "TDqGateway::Ok";
 
             result.Truncated = resp.GetTruncated();
 
             TOperationStatistics statistics;
 
             for (const auto& t : resp.GetMetric()) {
-                YQL_CLOG(TRACE, ProviderDq) << "Counter: " << t.GetName() << " : " << t.GetSum() << " : " << t.GetCount(); 
+                YQL_CLOG(TRACE, ProviderDq) << "Counter: " << t.GetName() << " : " << t.GetSum() << " : " << t.GetCount();
                 TOperationStatistics::TEntry entry(
                     t.GetName(),
                     t.GetSum(),
@@ -112,7 +112,7 @@ public:
                 result.Issues.AddIssues(issues);
                 result.SetSuccess();
             } else {
-                YQL_CLOG(ERROR, ProviderDq) << "Issue " << issues.ToString(); 
+                YQL_CLOG(ERROR, ProviderDq) << "Issue " << issues.ToString();
                 result.Issues.AddIssues(issues);
                 if (fallback) {
                     result.Fallback = true;
@@ -120,7 +120,7 @@ public:
                 }
             }
         } else {
-            YQL_CLOG(ERROR, ProviderDq) << "Issue " << status.Msg; 
+            YQL_CLOG(ERROR, ProviderDq) << "Issue " << status.Msg;
             auto issue = TIssue(TStringBuilder{} << "Error " << status.GRpcStatusCode << " message: " << status.Msg);
             result.Retriable = status.GRpcStatusCode == grpc::CANCELLED;
             if ((status.GRpcStatusCode == grpc::UNAVAILABLE /* terminating state */
@@ -128,7 +128,7 @@ public:
                 || status.GRpcStatusCode == grpc::RESOURCE_EXHAUSTED /* send message limit */
                 )
             {
-                YQL_CLOG(ERROR, ProviderDq) << "Fallback " << status.GRpcStatusCode; 
+                YQL_CLOG(ERROR, ProviderDq) << "Fallback " << status.GRpcStatusCode;
                 result.Fallback = true;
                 result.SetSuccess();
                 result.Issues.AddIssue(issue.SetCode(TIssuesIds::DQ_GATEWAY_NEED_FALLBACK_ERROR, TSeverityIds::S_ERROR));
@@ -139,7 +139,7 @@ public:
         }
 
         if (error && alwaysFallback) {
-            YQL_CLOG(ERROR, ProviderDq) << "Force Fallback"; 
+            YQL_CLOG(ERROR, ProviderDq) << "Force Fallback";
             result.Fallback = true;
             result.ForceFallback = true;
             result.SetSuccess();
@@ -229,13 +229,13 @@ public:
     }
 
     NThreading::TFuture<TResult>
-    ExecutePlan(const TString& sessionId, NDqs::IDqsExecutionPlanner& plan, const TVector<TString>& columns, 
-                const THashMap<TString, TString>& secureParams, const THashMap<TString, TString>& graphParams, 
-                const TDqSettings::TPtr& settings, 
-                const TDqProgressWriter& progressWriter, const THashMap<TString, TString>& modulesMapping, 
-                bool discard) override 
+    ExecutePlan(const TString& sessionId, NDqs::IDqsExecutionPlanner& plan, const TVector<TString>& columns,
+                const THashMap<TString, TString>& secureParams, const THashMap<TString, TString>& graphParams,
+                const TDqSettings::TPtr& settings,
+                const TDqProgressWriter& progressWriter, const THashMap<TString, TString>& modulesMapping,
+                bool discard) override
     {
-        YQL_LOG_CTX_SCOPE(sessionId); 
+        YQL_LOG_CTX_SCOPE(sessionId);
         auto tasks = plan.GetTasks();
 
         Yql::DqsProto::ExecuteGraphRequest queryPB;
@@ -259,19 +259,19 @@ public:
         settings->Save(queryPB);
 
         {
-            auto& secParams = *queryPB.MutableSecureParams(); 
+            auto& secParams = *queryPB.MutableSecureParams();
             for (const auto&[k, v] : secureParams) {
                 secParams[k] = v;
             }
         }
 
-        { 
-            auto& gParams = *queryPB.MutableGraphParams(); 
-            for (const auto&[k, v] : graphParams) { 
-                gParams[k] = v; 
-            } 
-        } 
- 
+        {
+            auto& gParams = *queryPB.MutableGraphParams();
+            for (const auto&[k, v] : graphParams) {
+                gParams[k] = v;
+            }
+        }
+
         queryPB.SetDiscard(discard);
 
         int retry = settings->MaxRetries.Get().GetOrElse(5);
@@ -293,8 +293,8 @@ public:
     }
 
     NThreading::TFuture<void> OpenSession(const TString& sessionId, const TString& username) override {
-        YQL_LOG_CTX_SCOPE(sessionId); 
-        YQL_CLOG(INFO, ProviderDq) << "OpenSession"; 
+        YQL_LOG_CTX_SCOPE(sessionId);
+        YQL_CLOG(INFO, ProviderDq) << "OpenSession";
         Yql::DqsProto::OpenSessionRequest request;
         request.SetSession(sessionId);
         request.SetUsername(username);
@@ -305,13 +305,13 @@ public:
         auto promise = NThreading::NewPromise<void>();
         auto callback = [this, promise, sessionId](NGrpc::TGrpcStatus&& status, Yql::DqsProto::OpenSessionResponse&& resp) mutable {
             Y_UNUSED(resp);
-            YQL_LOG_CTX_SCOPE(sessionId); 
+            YQL_LOG_CTX_SCOPE(sessionId);
             if (status.Ok()) {
-                YQL_CLOG(INFO, ProviderDq) << "OpenSession OK"; 
+                YQL_CLOG(INFO, ProviderDq) << "OpenSession OK";
                 SchedulePingSessionRequest(sessionId);
                 Async([promise=std::move(promise)]() mutable { promise.SetValue(); });
             } else {
-                YQL_CLOG(ERROR, ProviderDq) << "OpenSession error: " << status.Msg; 
+                YQL_CLOG(ERROR, ProviderDq) << "OpenSession error: " << status.Msg;
                 Async([promise=std::move(promise), status]() mutable { promise.SetException(status.Msg); });
             }
         };

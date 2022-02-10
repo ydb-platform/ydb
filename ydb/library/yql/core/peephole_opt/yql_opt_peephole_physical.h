@@ -5,8 +5,8 @@
 
 namespace NYql {
 
-struct IPipelineConfigurator; 
- 
+struct IPipelineConfigurator;
+
 struct TPeepholeSettings {
     const IPipelineConfigurator* CommonConfig = nullptr;
     const IPipelineConfigurator* FinalConfig = nullptr;

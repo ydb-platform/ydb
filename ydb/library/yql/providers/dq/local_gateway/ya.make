@@ -2,8 +2,8 @@ LIBRARY()
 
 OWNER(g:yql)
 
-YQL_LAST_ABI_VERSION() 
- 
+YQL_LAST_ABI_VERSION()
+
 SRCS(
     yql_dq_gateway_local.cpp
 )

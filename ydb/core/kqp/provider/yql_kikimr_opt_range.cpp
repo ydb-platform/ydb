@@ -244,7 +244,7 @@ TMaybeNode<TExprBase> KiTableLookupGetValue(TExprBase node, const TTypeAnnotatio
         return ret;
     }
 
-    auto valueType = valueNode.Ref().GetTypeAnn(); 
+    auto valueType = valueNode.Ref().GetTypeAnn();
     if (isTargetOptional && valueType->GetKind() == ETypeAnnotationKind::Optional) {
         valueType = valueType->Cast<TOptionalExprType>()->GetItemType();
     }

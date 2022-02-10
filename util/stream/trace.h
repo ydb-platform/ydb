@@ -1,7 +1,7 @@
-#pragma once 
- 
-#include "debug.h" 
- 
+#pragma once
+
+#include "debug.h"
+
 /**
  * Debug level, as set via `DBGOUT` environment variable.
  */
@@ -13,14 +13,14 @@ enum ETraceLevel: ui8 {
     TRACE_DEBUG = 5,
     TRACE_DETAIL = 6,
     TRACE_VERBOSE = 7
-}; 
- 
+};
+
 #if !defined(NDEBUG) && !defined(Y_ENABLE_TRACE)
     #define Y_ENABLE_TRACE
-#endif 
- 
+#endif
+
 #ifdef Y_ENABLE_TRACE
- 
+
     /**
  * Writes the given data into standard debug stream if current debug level set
  * via `DBGOUT` environment variable permits it.
@@ -47,14 +47,14 @@ enum ETraceLevel: ui8 {
                 StdDbgStream() << args << Endl; \
             }                                   \
         while (false)
- 
-#else 
- 
+
+#else
+
     #define Y_DBGTRACE(elevel, args) \
         do {                         \
         } while (false)
     #define Y_DBGTRACE0(level, args) \
         do {                         \
         } while (false)
- 
-#endif 
+
+#endif

@@ -225,9 +225,9 @@ public:
             auto tagType = exprCtxPtr->template MakeType<NYql::TTaggedExprType>(baseType, tagValue.AsStringRef());
             if (!tagType->Validate(Pos_, *exprCtxPtr)) {
                 UdfTerminate(exprCtxPtr->IssueManager.GetIssues().ToString().data());
-            } 
- 
-            retType = tagType; 
+            }
+
+            retType = tagType;
             break;
         }
 

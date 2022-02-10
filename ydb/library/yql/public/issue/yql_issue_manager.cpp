@@ -1,7 +1,7 @@
 #include "yql_issue_manager.h"
 
 #include <util/string/cast.h>
-#include <util/string/builder.h> 
+#include <util/string/builder.h>
 
 using namespace NYql;
 
@@ -34,21 +34,21 @@ void TIssueManager::LeaveScope() {
         return;
     }
 
-    auto subIssue = *RawIssues_.top().first; 
-    if (subIssue->GetSubIssues().size() == 1) { 
-        auto nestedIssue = subIssue->GetSubIssues().front(); 
-        if (!nestedIssue->GetSubIssues().empty() && nestedIssue->Position == subIssue->Position && nestedIssue->EndPosition == subIssue->EndPosition) { 
-            auto msg = subIssue->Message; 
-            if (nestedIssue->Message) { 
-                if (msg) { 
-                    msg.append(", "); 
-                } 
-                msg.append(nestedIssue->Message); 
-            } 
-            subIssue = nestedIssue; 
-            subIssue->Message = msg; 
-        } 
-    } 
+    auto subIssue = *RawIssues_.top().first;
+    if (subIssue->GetSubIssues().size() == 1) {
+        auto nestedIssue = subIssue->GetSubIssues().front();
+        if (!nestedIssue->GetSubIssues().empty() && nestedIssue->Position == subIssue->Position && nestedIssue->EndPosition == subIssue->EndPosition) {
+            auto msg = subIssue->Message;
+            if (nestedIssue->Message) {
+                if (msg) {
+                    msg.append(", ");
+                }
+                msg.append(nestedIssue->Message);
+            }
+            subIssue = nestedIssue;
+            subIssue->Message = msg;
+        }
+    }
     RawIssues_.pop();
     if (RawIssues_.top().first.Empty()) {
         RawIssues_.top().first = RawIssues_.top().second();
@@ -56,16 +56,16 @@ void TIssueManager::LeaveScope() {
             RawIssues_.top().first = new TIssue();
             (*RawIssues_.top().first)->SetCode(Max<ui32>(), ESeverity::TSeverityIds_ESeverityId_S_INFO);
         } else {
-           (*RawIssues_.top().first)->Severity = ESeverity::TSeverityIds_ESeverityId_S_INFO; 
-        } 
+           (*RawIssues_.top().first)->Severity = ESeverity::TSeverityIds_ESeverityId_S_INFO;
+        }
     }
 
-    if (subIssue->GetCode() == Max<ui32>()) { 
-        for (const auto& nestedIssue : subIssue->GetSubIssues()) { 
+    if (subIssue->GetCode() == Max<ui32>()) {
+        for (const auto& nestedIssue : subIssue->GetSubIssues()) {
             RawIssues_.top().first->Get()->AddSubIssue(nestedIssue);
         }
     } else {
-        RawIssues_.top().first->Get()->AddSubIssue(subIssue); 
+        RawIssues_.top().first->Get()->AddSubIssue(subIssue);
     }
 }
 
@@ -75,30 +75,30 @@ void TIssueManager::LeaveAllScopes() {
     }
 }
 
-TIssuePtr TIssueManager::CheckUniqAndLimit(const TIssue& issue) { 
-    const auto severity = issue.GetSeverity(); 
-    if (OverflowIssues_[severity]) { 
-        return {}; 
-    } 
-    TIssuePtr p = MakeIntrusive<TIssue>(issue); 
-    if (UniqueIssues_[severity].contains(p)) { 
-        return {}; 
-    } 
-    if (IssueLimit_ && UniqueIssues_[severity].size() == IssueLimit_) { 
-        OverflowIssues_[severity] = MakeIntrusive<TIssue>(TStringBuilder() 
-            << "Too many " << SeverityToString(issue.GetSeverity()) << " issues"); 
-        OverflowIssues_[severity]->Severity = severity; 
-        return {}; 
-    } 
-    UniqueIssues_[severity].insert(p); 
-    return p; 
-} 
- 
+TIssuePtr TIssueManager::CheckUniqAndLimit(const TIssue& issue) {
+    const auto severity = issue.GetSeverity();
+    if (OverflowIssues_[severity]) {
+        return {};
+    }
+    TIssuePtr p = MakeIntrusive<TIssue>(issue);
+    if (UniqueIssues_[severity].contains(p)) {
+        return {};
+    }
+    if (IssueLimit_ && UniqueIssues_[severity].size() == IssueLimit_) {
+        OverflowIssues_[severity] = MakeIntrusive<TIssue>(TStringBuilder()
+            << "Too many " << SeverityToString(issue.GetSeverity()) << " issues");
+        OverflowIssues_[severity]->Severity = severity;
+        return {};
+    }
+    UniqueIssues_[severity].insert(p);
+    return p;
+}
+
 void TIssueManager::RaiseIssue(const TIssue& issue) {
-    TIssuePtr p = CheckUniqAndLimit(issue); 
-    if (!p) { 
-        return; 
-    } 
+    TIssuePtr p = CheckUniqAndLimit(issue);
+    if (!p) {
+        return;
+    }
     if (RawIssues_.empty()) {
         CompletedIssues_.AddIssue(issue);
         return;
@@ -112,7 +112,7 @@ void TIssueManager::RaiseIssue(const TIssue& issue) {
             (*RawIssues_.top().first)->Severity = ESeverity::TSeverityIds_ESeverityId_S_INFO;
        }
     }
-    RawIssues_.top().first->Get()->AddSubIssue(p); 
+    RawIssues_.top().first->Get()->AddSubIssue(p);
 }
 
 void TIssueManager::RaiseIssues(const TIssues& issues) {
@@ -154,52 +154,52 @@ bool TIssueManager::HasOpenScopes() const {
     return !RawIssues_.empty();
 }
 
-TIssues TIssueManager::GetIssues() { 
+TIssues TIssueManager::GetIssues() {
     LeaveAllScopes();
-    return GetCompletedIssues(); 
+    return GetCompletedIssues();
 }
 
-TIssues TIssueManager::GetCompletedIssues() const { 
-    TIssues res; 
-    for (auto& p: OverflowIssues_) { 
-        if (p) { 
-            res.AddIssue(*p); 
-        } 
-    } 
-    res.AddIssues(CompletedIssues_); 
-    return res; 
+TIssues TIssueManager::GetCompletedIssues() const {
+    TIssues res;
+    for (auto& p: OverflowIssues_) {
+        if (p) {
+            res.AddIssue(*p);
+        }
+    }
+    res.AddIssues(CompletedIssues_);
+    return res;
 }
 
-void TIssueManager::AddIssues(const TIssues& issues) { 
-    for (auto& issue: issues) { 
-        if (auto p = CheckUniqAndLimit(issue)) { 
-            CompletedIssues_.AddIssue(*p); 
-        } 
-    } 
+void TIssueManager::AddIssues(const TIssues& issues) {
+    for (auto& issue: issues) {
+        if (auto p = CheckUniqAndLimit(issue)) {
+            CompletedIssues_.AddIssue(*p);
+        }
+    }
 }
 
 void TIssueManager::AddIssues(const TPosition& pos, const TIssues& issues) {
-    for (auto& issue: issues) { 
-        if (auto p = CheckUniqAndLimit(TIssue(pos, issue.Message))) { 
-            CompletedIssues_.AddIssue(*p); 
-        } 
-    } 
+    for (auto& issue: issues) {
+        if (auto p = CheckUniqAndLimit(TIssue(pos, issue.Message))) {
+            CompletedIssues_.AddIssue(*p);
+        }
+    }
 }
 
-void TIssueManager::Reset(const TIssues& issues) { 
-    for (auto& p: OverflowIssues_) { 
-        p.Drop(); 
-    } 
- 
-    for (auto& s: UniqueIssues_) { 
-        s.clear(); 
-    } 
-    CompletedIssues_.Clear(); 
- 
+void TIssueManager::Reset(const TIssues& issues) {
+    for (auto& p: OverflowIssues_) {
+        p.Drop();
+    }
+
+    for (auto& s: UniqueIssues_) {
+        s.clear();
+    }
+    CompletedIssues_.Clear();
+
     while (!RawIssues_.empty()) {
         RawIssues_.pop();
     }
-    AddIssues(issues); 
+    AddIssues(issues);
 }
 
 void TIssueManager::Reset() {

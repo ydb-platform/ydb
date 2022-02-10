@@ -166,7 +166,7 @@ TMaybeNode<TExprBase> TranslateToMkql(TExprBase node, TExprContext& ctx, const T
     bool hasResult = !program.Results().Empty();
 
     if (hasResult) {
-        node = Build<TCoAppend>(ctx, node.Pos()) 
+        node = Build<TCoAppend>(ctx, node.Pos())
             .List(program.Effects())
             .Item<TKiSetResult>()
                 .Name().Build("Result")

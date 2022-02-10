@@ -388,11 +388,11 @@ static inline TO RemoveCopyIf(TI f, TI l, TO t, TP p) {
     return std::remove_copy_if(f, l, t, p);
 }
 
-template <class TI, class TO> 
-static inline TO ReverseCopy(TI f, TI l, TO t) { 
+template <class TI, class TO>
+static inline TO ReverseCopy(TI f, TI l, TO t) {
     return std::reverse_copy(f, l, t);
-} 
- 
+}
+
 template <class TI1, class TI2, class TO>
 static inline TO SetUnion(TI1 f1, TI1 l1, TI2 f2, TI2 l2, TO p) {
     return std::set_union(f1, l1, f2, l2, p);

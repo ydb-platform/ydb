@@ -446,94 +446,94 @@ Y_UNIT_TEST_SUITE(TLogTest)
             UNIT_ASSERT_C(isMatch, "Unexpected message: " << logRow.Message);
         }
     }
- 
-    Y_UNIT_TEST(Limit1) { 
-        size_t limit = 0; 
-        { 
-            TStringStream out; 
+
+    Y_UNIT_TEST(Limit1) {
+        size_t limit = 0;
+        {
+            TStringStream out;
             YqlLoggerScope logger(&out);
-            YqlLogger().UpdateProcInfo("proc"); 
-            YQL_CLOG(INFO, Core) << "message1"; 
-            limit = out.Str().length() * 2 - 7; // Not more than 2 log lines 
-        } 
- 
-        TStringStream out; 
+            YqlLogger().UpdateProcInfo("proc");
+            YQL_CLOG(INFO, Core) << "message1";
+            limit = out.Str().length() * 2 - 7; // Not more than 2 log lines
+        }
+
+        TStringStream out;
         YqlLoggerScope logger(&out);
-        YqlLogger().UpdateProcInfo("proc"); 
-        YqlLogger().SetMaxLogLimit(limit); 
- 
-        YQL_CLOG(INFO, Core) << "message1"; 
-        YQL_CLOG(INFO, Core) << "message2"; 
-        YQL_CLOG(INFO, Core) << "message3"; 
- 
-        TString row1Str, row2Str, row3Str, _; 
-        Split(out.Str(), '\n', row1Str, row2Str, row3Str, _); 
- 
-        { 
-            TLogRow logRow = ParseLogRow(row1Str); 
-            UNIT_ASSERT_EQUAL(logRow.Level, ELevel::INFO); 
-            UNIT_ASSERT_EQUAL(logRow.Component, EComponent::Core); 
-            UNIT_ASSERT_STRINGS_EQUAL(logRow.Message, "message1"); 
-        } 
-        { 
-            TLogRow logRow = ParseLogRow(row2Str); 
-            UNIT_ASSERT_EQUAL(logRow.Level, ELevel::INFO); 
-            UNIT_ASSERT_EQUAL(logRow.Component, EComponent::Core); 
-            UNIT_ASSERT_STRINGS_EQUAL(logRow.Message, "message2"); 
-        } 
-        { 
-            TLogRow logRow = ParseLogRow(row3Str); 
-            UNIT_ASSERT_EQUAL(logRow.Level, ELevel::FATAL); 
-            UNIT_ASSERT_EQUAL(logRow.Component, EComponent::Default); 
-            UNIT_ASSERT_STRINGS_EQUAL(logRow.Message, "Log is truncated by limit"); 
-        } 
-    } 
- 
-    Y_UNIT_TEST(Limit2) { 
-        size_t limit = 0; 
-        { 
-            TStringStream out; 
+        YqlLogger().UpdateProcInfo("proc");
+        YqlLogger().SetMaxLogLimit(limit);
+
+        YQL_CLOG(INFO, Core) << "message1";
+        YQL_CLOG(INFO, Core) << "message2";
+        YQL_CLOG(INFO, Core) << "message3";
+
+        TString row1Str, row2Str, row3Str, _;
+        Split(out.Str(), '\n', row1Str, row2Str, row3Str, _);
+
+        {
+            TLogRow logRow = ParseLogRow(row1Str);
+            UNIT_ASSERT_EQUAL(logRow.Level, ELevel::INFO);
+            UNIT_ASSERT_EQUAL(logRow.Component, EComponent::Core);
+            UNIT_ASSERT_STRINGS_EQUAL(logRow.Message, "message1");
+        }
+        {
+            TLogRow logRow = ParseLogRow(row2Str);
+            UNIT_ASSERT_EQUAL(logRow.Level, ELevel::INFO);
+            UNIT_ASSERT_EQUAL(logRow.Component, EComponent::Core);
+            UNIT_ASSERT_STRINGS_EQUAL(logRow.Message, "message2");
+        }
+        {
+            TLogRow logRow = ParseLogRow(row3Str);
+            UNIT_ASSERT_EQUAL(logRow.Level, ELevel::FATAL);
+            UNIT_ASSERT_EQUAL(logRow.Component, EComponent::Default);
+            UNIT_ASSERT_STRINGS_EQUAL(logRow.Message, "Log is truncated by limit");
+        }
+    }
+
+    Y_UNIT_TEST(Limit2) {
+        size_t limit = 0;
+        {
+            TStringStream out;
             YqlLoggerScope logger(&out);
-            YqlLogger().UpdateProcInfo("proc"); 
-            YQL_CLOG(INFO, Core) << "message1"; 
-            limit = out.Str().length() * 2 - 7; // Not more than 2 log lines 
-        } 
- 
-        TStringStream out; 
+            YqlLogger().UpdateProcInfo("proc");
+            YQL_CLOG(INFO, Core) << "message1";
+            limit = out.Str().length() * 2 - 7; // Not more than 2 log lines
+        }
+
+        TStringStream out;
         YqlLoggerScope logger(&out);
-        YqlLogger().UpdateProcInfo("proc"); 
-        YqlLogger().SetMaxLogLimit(limit); 
- 
-        YQL_CLOG(INFO, Core) << "message1"; 
-        YQL_CLOG(INFO, Core) << "message2"; 
-        YQL_CLOG(WARN, Core) << "message3"; 
- 
-        TString row1Str, row2Str, row3Str, row4Str, _; 
-        Split(out.Str(), '\n', row1Str, row2Str, row3Str, row4Str, _); 
- 
-        { 
-            TLogRow logRow = ParseLogRow(row1Str); 
-            UNIT_ASSERT_EQUAL(logRow.Level, ELevel::INFO); 
-            UNIT_ASSERT_EQUAL(logRow.Component, EComponent::Core); 
-            UNIT_ASSERT_STRINGS_EQUAL(logRow.Message, "message1"); 
-        } 
-        { 
-            TLogRow logRow = ParseLogRow(row2Str); 
-            UNIT_ASSERT_EQUAL(logRow.Level, ELevel::INFO); 
-            UNIT_ASSERT_EQUAL(logRow.Component, EComponent::Core); 
-            UNIT_ASSERT_STRINGS_EQUAL(logRow.Message, "message2"); 
-        } 
-        { 
-            TLogRow logRow = ParseLogRow(row3Str); 
-            UNIT_ASSERT_EQUAL(logRow.Level, ELevel::FATAL); 
-            UNIT_ASSERT_EQUAL(logRow.Component, EComponent::Default); 
-            UNIT_ASSERT_STRINGS_EQUAL(logRow.Message, "Log is truncated by limit"); 
-        } 
-        { 
-            TLogRow logRow = ParseLogRow(row4Str); 
-            UNIT_ASSERT_EQUAL(logRow.Level, ELevel::WARN); 
-            UNIT_ASSERT_EQUAL(logRow.Component, EComponent::Core); 
-            UNIT_ASSERT_STRINGS_EQUAL(logRow.Message, "message3"); 
-        } 
-    } 
+        YqlLogger().UpdateProcInfo("proc");
+        YqlLogger().SetMaxLogLimit(limit);
+
+        YQL_CLOG(INFO, Core) << "message1";
+        YQL_CLOG(INFO, Core) << "message2";
+        YQL_CLOG(WARN, Core) << "message3";
+
+        TString row1Str, row2Str, row3Str, row4Str, _;
+        Split(out.Str(), '\n', row1Str, row2Str, row3Str, row4Str, _);
+
+        {
+            TLogRow logRow = ParseLogRow(row1Str);
+            UNIT_ASSERT_EQUAL(logRow.Level, ELevel::INFO);
+            UNIT_ASSERT_EQUAL(logRow.Component, EComponent::Core);
+            UNIT_ASSERT_STRINGS_EQUAL(logRow.Message, "message1");
+        }
+        {
+            TLogRow logRow = ParseLogRow(row2Str);
+            UNIT_ASSERT_EQUAL(logRow.Level, ELevel::INFO);
+            UNIT_ASSERT_EQUAL(logRow.Component, EComponent::Core);
+            UNIT_ASSERT_STRINGS_EQUAL(logRow.Message, "message2");
+        }
+        {
+            TLogRow logRow = ParseLogRow(row3Str);
+            UNIT_ASSERT_EQUAL(logRow.Level, ELevel::FATAL);
+            UNIT_ASSERT_EQUAL(logRow.Component, EComponent::Default);
+            UNIT_ASSERT_STRINGS_EQUAL(logRow.Message, "Log is truncated by limit");
+        }
+        {
+            TLogRow logRow = ParseLogRow(row4Str);
+            UNIT_ASSERT_EQUAL(logRow.Level, ELevel::WARN);
+            UNIT_ASSERT_EQUAL(logRow.Component, EComponent::Core);
+            UNIT_ASSERT_STRINGS_EQUAL(logRow.Message, "message3");
+        }
+    }
 }

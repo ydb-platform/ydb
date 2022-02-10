@@ -12,8 +12,8 @@ PEERDIR(
 
 SRCS(
     dqs_opt.cpp
-    logical_optimize.cpp 
-    physical_optimize.cpp 
+    logical_optimize.cpp
+    physical_optimize.cpp
 )
 
 YQL_LAST_ABI_VERSION()

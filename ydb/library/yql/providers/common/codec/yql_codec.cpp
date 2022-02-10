@@ -1,7 +1,7 @@
 #include "yql_codec.h"
 #include "yql_restricted_yson.h"
-#include "yql_codec_type_flags.h" 
- 
+#include "yql_codec_type_flags.h"
+
 #include <ydb/library/yql/core/yql_expr_type_annotation.h>
 
 #include <ydb/library/yql/public/decimal/yql_decimal.h>
@@ -19,10 +19,10 @@
 #include <library/cpp/string_utils/base64/base64.h>
 #include <library/cpp/yson/parser.h>
 #include <library/cpp/yson/detail.h>
- 
-#include <util/string/cast.h> 
+
+#include <util/string/cast.h>
 #include <util/generic/map.h>
- 
+
 namespace NYql {
 namespace NCommon {
 
@@ -141,10 +141,10 @@ void WriteYsonValueImpl(TYsonResultWriter& writer, const NUdf::TUnboxedValuePod&
             }
             for (ui32 i = 0, e = structType->GetMembersCount(); i < e; ++i) {
                 const ui32 pos = structPositions ? (*structPositions)[i] : i;
-                if (pos < e) { 
-                    writer.OnListItem(); 
+                if (pos < e) {
+                    writer.OnListItem();
                     WriteYsonValueImpl(writer, value.GetElement(pos), structType->GetMemberType(pos), nullptr);
-                } 
+                }
             }
 
             writer.OnEndList();
@@ -170,7 +170,7 @@ void WriteYsonValueImpl(TYsonResultWriter& writer, const NUdf::TUnboxedValuePod&
             } else {
                 writer.OnBeginList();
                 auto optionalType = AS_TYPE(TOptionalType, type);
-                writer.OnListItem(); 
+                writer.OnListItem();
                 WriteYsonValueImpl(writer, value.GetOptionalValue(), optionalType->GetItemType(), nullptr);
                 writer.OnEndList();
             }
@@ -265,51 +265,51 @@ TCodecContext::TCodecContext(
 }
 
 TMaybe<TVector<ui32>> CreateStructPositions(TType* inputType, const TVector<TString>* columns) {
-    if (inputType->GetKind() != TType::EKind::Struct) { 
-        return Nothing(); 
-    } 
-    auto inputStruct = AS_TYPE(TStructType, inputType); 
+    if (inputType->GetKind() != TType::EKind::Struct) {
+        return Nothing();
+    }
+    auto inputStruct = AS_TYPE(TStructType, inputType);
     TMap<TStringBuf, ui32> members;
     TVector<ui32> structPositions(inputStruct->GetMembersCount(), Max<ui32>());
-    for (ui32 i = 0; i < inputStruct->GetMembersCount(); ++i) { 
-        if (columns) { 
-            members.insert(std::make_pair(inputStruct->GetMemberName(i), i)); 
-        } else { 
-            structPositions[i] = i; 
-        } 
-    } 
-    if (columns) { 
-        ui32 pos = 0; 
-        for (auto& column: *columns) { 
-            const ui32* idx = members.FindPtr(column); 
-            YQL_ENSURE(idx, "Unknown member: " << column); 
-            structPositions[pos] = *idx; 
-            ++pos; 
-        } 
-    } 
-    return structPositions; 
-} 
- 
+    for (ui32 i = 0; i < inputStruct->GetMembersCount(); ++i) {
+        if (columns) {
+            members.insert(std::make_pair(inputStruct->GetMemberName(i), i));
+        } else {
+            structPositions[i] = i;
+        }
+    }
+    if (columns) {
+        ui32 pos = 0;
+        for (auto& column: *columns) {
+            const ui32* idx = members.FindPtr(column);
+            YQL_ENSURE(idx, "Unknown member: " << column);
+            structPositions[pos] = *idx;
+            ++pos;
+        }
+    }
+    return structPositions;
+}
+
 namespace {
 NYT::TNode DataValueToNode(const NKikimr::NUdf::TUnboxedValuePod& value, NKikimr::NMiniKQL::TType* type) {
-    YQL_ENSURE(type->GetKind() == TType::EKind::Data); 
- 
-    auto dataType = AS_TYPE(TDataType, type); 
-    switch (dataType->GetSchemeType()) { 
+    YQL_ENSURE(type->GetKind() == TType::EKind::Data);
+
+    auto dataType = AS_TYPE(TDataType, type);
+    switch (dataType->GetSchemeType()) {
         case NUdf::TDataType<i32>::Id:
-            return NYT::TNode(value.Get<i32>()); 
+            return NYT::TNode(value.Get<i32>());
         case NUdf::TDataType<i64>::Id:
-            return NYT::TNode(value.Get<i64>()); 
+            return NYT::TNode(value.Get<i64>());
         case NUdf::TDataType<ui32>::Id:
-            return NYT::TNode(value.Get<ui32>()); 
+            return NYT::TNode(value.Get<ui32>());
         case NUdf::TDataType<ui64>::Id:
-            return NYT::TNode(value.Get<ui64>()); 
+            return NYT::TNode(value.Get<ui64>());
         case NUdf::TDataType<float>::Id:
-            return NYT::TNode(value.Get<float>()); 
+            return NYT::TNode(value.Get<float>());
         case NUdf::TDataType<double>::Id:
-            return NYT::TNode(value.Get<double>()); 
+            return NYT::TNode(value.Get<double>());
         case NUdf::TDataType<bool>::Id:
-            return NYT::TNode(value.Get<bool>()); 
+            return NYT::TNode(value.Get<bool>());
         case NUdf::TDataType<ui8>::Id:
             return NYT::TNode((ui64)value.Get<ui8>());
         case NUdf::TDataType<i8>::Id:
@@ -335,31 +335,31 @@ NYT::TNode DataValueToNode(const NKikimr::NUdf::TUnboxedValuePod& value, NKikimr
             return NYT::TNode(value.Get<i64>());
         case NUdf::TDataType<NUdf::TTzDate>::Id: {
             TStringStream out;
-            out << value.Get<ui16>() << "," << NKikimr::NMiniKQL::GetTimezoneIANAName(value.GetTimezoneId()); 
+            out << value.Get<ui16>() << "," << NKikimr::NMiniKQL::GetTimezoneIANAName(value.GetTimezoneId());
             return NYT::TNode(out.Str());
         }
         case NUdf::TDataType<NUdf::TTzDatetime>::Id: {
             TStringStream out;
-            out << value.Get<ui32>() << "," << NKikimr::NMiniKQL::GetTimezoneIANAName(value.GetTimezoneId()); 
+            out << value.Get<ui32>() << "," << NKikimr::NMiniKQL::GetTimezoneIANAName(value.GetTimezoneId());
             return NYT::TNode(out.Str());
         }
         case NUdf::TDataType<NUdf::TTzTimestamp>::Id: {
             TStringStream out;
-            out << value.Get<ui64>() << "," << NKikimr::NMiniKQL::GetTimezoneIANAName(value.GetTimezoneId()); 
+            out << value.Get<ui64>() << "," << NKikimr::NMiniKQL::GetTimezoneIANAName(value.GetTimezoneId());
             return NYT::TNode(out.Str());
         }
-        case NUdf::TDataType<NUdf::TDecimal>::Id: { 
-            const auto params = static_cast<NKikimr::NMiniKQL::TDataDecimalType*>(type)->GetParams(); 
-            return NYT::TNode(NDecimal::ToString(value.GetInt128(), params.first, params.second)); 
-        } 
+        case NUdf::TDataType<NUdf::TDecimal>::Id: {
+            const auto params = static_cast<NKikimr::NMiniKQL::TDataDecimalType*>(type)->GetParams();
+            return NYT::TNode(NDecimal::ToString(value.GetInt128(), params.first, params.second));
+        }
         case NUdf::TDataType<NUdf::TJsonDocument>::Id: {
             NUdf::TUnboxedValue json = ValueToString(EDataSlot::JsonDocument, value);
             return NYT::TNode(ToString(TStringBuf(value.AsStringRef())));
         }
-    } 
+    }
     YQL_ENSURE(false, "Unsupported type: " << static_cast<int>(dataType->GetSchemeType()));
-} 
- 
+}
+
 TExprNode::TPtr DataNodeToExprLiteral(TPositionHandle pos, const TTypeAnnotationNode& type, const NYT::TNode& node, TExprContext& ctx) {
     YQL_ENSURE(type.GetKind() == ETypeAnnotationKind::Data, "Expecting data type, got: " << type);
 
@@ -466,7 +466,7 @@ TString DataValueToString(const NKikimr::NUdf::TUnboxedValuePod& value, const TD
     }
 
     Y_FAIL("Unexpected");
-} 
+}
 } //namespace
 
 NYT::TNode ValueToNode(const NKikimr::NUdf::TUnboxedValuePod& value, NKikimr::NMiniKQL::TType* type) {
@@ -502,7 +502,7 @@ NYT::TNode ValueToNode(const NKikimr::NUdf::TUnboxedValuePod& value, NKikimr::NM
     }
     return result;
 }
- 
+
 TExprNode::TPtr NodeToExprLiteral(TPositionHandle pos, const TTypeAnnotationNode& type, const NYT::TNode& node, TExprContext& ctx) {
     TExprNode::TPtr result;
     switch(type.GetKind()) {
@@ -747,8 +747,8 @@ NUdf::TUnboxedValue ReadYsonValue(TType* type,
         cmd = buf.Read();
         ui64 index = 0;
         if (isTableFormat) {
-            CHECK_EXPECTED(cmd, Uint64Marker); 
-            index = buf.ReadVarUI64(); 
+            CHECK_EXPECTED(cmd, Uint64Marker);
+            index = buf.ReadVarUI64();
         } else {
             index = ReadNextSerializedNumber<ui64>(cmd, buf);
         }
@@ -1312,7 +1312,7 @@ extern "C" void ReadYsonContainerValue(TType* type, const NKikimr::NMiniKQL::THo
     }
 }
 
-NUdf::TUnboxedValue ReadSkiffData(TType* type, ui64 nativeYtTypeFlags, TInputBuf& buf) { 
+NUdf::TUnboxedValue ReadSkiffData(TType* type, ui64 nativeYtTypeFlags, TInputBuf& buf) {
     auto schemeType = static_cast<TDataType*>(type)->GetSchemeType();
     switch (schemeType) {
     case NUdf::TDataType<bool>::Id: {
@@ -1400,34 +1400,34 @@ NUdf::TUnboxedValue ReadSkiffData(TType* type, ui64 nativeYtTypeFlags, TInputBuf
     }
 
     case NUdf::TDataType<NUdf::TDecimal>::Id: {
-        if (nativeYtTypeFlags & NTCF_DECIMAL) { 
-            auto const params = static_cast<TDataDecimalType*>(type)->GetParams(); 
-            if (params.first < 10) { 
-                i32 data; 
-                buf.ReadMany((char*)&data, sizeof(data)); 
-                return NUdf::TUnboxedValuePod(NDecimal::FromYtDecimal(data)); 
-            } else if (params.first < 19) { 
-                i64 data; 
-                buf.ReadMany((char*)&data, sizeof(data)); 
-                return NUdf::TUnboxedValuePod(NDecimal::FromYtDecimal(data)); 
-            } else { 
-                YQL_ENSURE(params.first < 36); 
-                NDecimal::TInt128 data; 
-                buf.ReadMany((char*)&data, sizeof(data)); 
-                return NUdf::TUnboxedValuePod(NDecimal::FromYtDecimal(data)); 
-            } 
-        } else { 
-            ui32 size; 
-            buf.ReadMany(reinterpret_cast<char*>(&size), sizeof(size)); 
-            const auto maxSize = sizeof(NDecimal::TInt128); 
-            YQL_ENSURE(size > 0U && size <= maxSize, "Bad decimal field size: " << size); 
-            char data[maxSize]; 
-            buf.ReadMany(data, size); 
-            const auto& v = NDecimal::Deserialize(data); 
-            YQL_ENSURE(size == v.second, "Bad decimal field size: " << size); 
-            YQL_ENSURE(!NDecimal::IsError(v.first), "Bad decimal field data: " << data); 
-            return NUdf::TUnboxedValuePod(v.first); 
-        } 
+        if (nativeYtTypeFlags & NTCF_DECIMAL) {
+            auto const params = static_cast<TDataDecimalType*>(type)->GetParams();
+            if (params.first < 10) {
+                i32 data;
+                buf.ReadMany((char*)&data, sizeof(data));
+                return NUdf::TUnboxedValuePod(NDecimal::FromYtDecimal(data));
+            } else if (params.first < 19) {
+                i64 data;
+                buf.ReadMany((char*)&data, sizeof(data));
+                return NUdf::TUnboxedValuePod(NDecimal::FromYtDecimal(data));
+            } else {
+                YQL_ENSURE(params.first < 36);
+                NDecimal::TInt128 data;
+                buf.ReadMany((char*)&data, sizeof(data));
+                return NUdf::TUnboxedValuePod(NDecimal::FromYtDecimal(data));
+            }
+        } else {
+            ui32 size;
+            buf.ReadMany(reinterpret_cast<char*>(&size), sizeof(size));
+            const auto maxSize = sizeof(NDecimal::TInt128);
+            YQL_ENSURE(size > 0U && size <= maxSize, "Bad decimal field size: " << size);
+            char data[maxSize];
+            buf.ReadMany(data, size);
+            const auto& v = NDecimal::Deserialize(data);
+            YQL_ENSURE(size == v.second, "Bad decimal field size: " << size);
+            YQL_ENSURE(!NDecimal::IsError(v.first), "Bad decimal field data: " << data);
+            return NUdf::TUnboxedValuePod(v.first);
+        }
     }
 
     case NUdf::TDataType<NUdf::TTzDate>::Id: {
@@ -1489,11 +1489,11 @@ NUdf::TUnboxedValue ReadSkiffData(TType* type, ui64 nativeYtTypeFlags, TInputBuf
     }
 }
 
-NKikimr::NUdf::TUnboxedValue ReadSkiffNativeYtValue(NKikimr::NMiniKQL::TType* type, ui64 nativeYtTypeFlags, 
-    const NKikimr::NMiniKQL::THolderFactory& holderFactory, TInputBuf& buf) 
-{ 
+NKikimr::NUdf::TUnboxedValue ReadSkiffNativeYtValue(NKikimr::NMiniKQL::TType* type, ui64 nativeYtTypeFlags,
+    const NKikimr::NMiniKQL::THolderFactory& holderFactory, TInputBuf& buf)
+{
     if (type->IsData()) {
-        return ReadSkiffData(type, nativeYtTypeFlags, buf); 
+        return ReadSkiffData(type, nativeYtTypeFlags, buf);
     }
 
     if (type->IsOptional()) {
@@ -1502,7 +1502,7 @@ NKikimr::NUdf::TUnboxedValue ReadSkiffNativeYtValue(NKikimr::NMiniKQL::TType* ty
             return NUdf::TUnboxedValue();
         }
 
-        auto value = ReadSkiffNativeYtValue(AS_TYPE(TOptionalType, type)->GetItemType(), nativeYtTypeFlags, holderFactory, buf); 
+        auto value = ReadSkiffNativeYtValue(AS_TYPE(TOptionalType, type)->GetItemType(), nativeYtTypeFlags, holderFactory, buf);
         return value.Release().MakeOptional();
     }
 
@@ -1511,7 +1511,7 @@ NKikimr::NUdf::TUnboxedValue ReadSkiffNativeYtValue(NKikimr::NMiniKQL::TType* ty
         NUdf::TUnboxedValue* items;
         auto value = holderFactory.CreateDirectArrayHolder(tupleType->GetElementsCount(), items);
         for (ui32 i = 0; i < tupleType->GetElementsCount(); ++i) {
-            items[i] = ReadSkiffNativeYtValue(tupleType->GetElementType(i), nativeYtTypeFlags, holderFactory, buf); 
+            items[i] = ReadSkiffNativeYtValue(tupleType->GetElementType(i), nativeYtTypeFlags, holderFactory, buf);
         }
 
         return value;
@@ -1521,17 +1521,17 @@ NKikimr::NUdf::TUnboxedValue ReadSkiffNativeYtValue(NKikimr::NMiniKQL::TType* ty
         auto structType = AS_TYPE(TStructType, type);
         NUdf::TUnboxedValue* items;
         auto value = holderFactory.CreateDirectArrayHolder(structType->GetMembersCount(), items);
- 
-        if (auto cookie = type->GetCookie()) { 
-            const std::vector<size_t>& reorder = *((const std::vector<size_t>*)cookie); 
-            for (ui32 i = 0; i < structType->GetMembersCount(); ++i) { 
-                const auto ndx = reorder[i]; 
-                items[ndx] = ReadSkiffNativeYtValue(structType->GetMemberType(ndx), nativeYtTypeFlags, holderFactory, buf); 
-            } 
-        } else { 
-            for (ui32 i = 0; i < structType->GetMembersCount(); ++i) { 
-                items[i] = ReadSkiffNativeYtValue(structType->GetMemberType(i), nativeYtTypeFlags, holderFactory, buf); 
-            } 
+
+        if (auto cookie = type->GetCookie()) {
+            const std::vector<size_t>& reorder = *((const std::vector<size_t>*)cookie);
+            for (ui32 i = 0; i < structType->GetMembersCount(); ++i) {
+                const auto ndx = reorder[i];
+                items[ndx] = ReadSkiffNativeYtValue(structType->GetMemberType(ndx), nativeYtTypeFlags, holderFactory, buf);
+            }
+        } else {
+            for (ui32 i = 0; i < structType->GetMembersCount(); ++i) {
+                items[i] = ReadSkiffNativeYtValue(structType->GetMemberType(i), nativeYtTypeFlags, holderFactory, buf);
+            }
         }
 
         return value;
@@ -1541,7 +1541,7 @@ NKikimr::NUdf::TUnboxedValue ReadSkiffNativeYtValue(NKikimr::NMiniKQL::TType* ty
         auto itemType = AS_TYPE(TListType, type)->GetItemType();
         TDefaultListRepresentation items;
         while (buf.Read() == '\0') {
-            items = items.Append(ReadSkiffNativeYtValue(itemType, nativeYtTypeFlags, holderFactory, buf)); 
+            items = items.Append(ReadSkiffNativeYtValue(itemType, nativeYtTypeFlags, holderFactory, buf));
         }
 
         return holderFactory.CreateDirectListHolder(std::move(items));
@@ -1558,18 +1558,18 @@ NKikimr::NUdf::TUnboxedValue ReadSkiffNativeYtValue(NKikimr::NMiniKQL::TType* ty
         if (varType->GetUnderlyingType()->IsTuple()) {
             auto tupleType = AS_TYPE(TTupleType, varType->GetUnderlyingType());
             YQL_ENSURE(data < tupleType->GetElementsCount());
-            auto item = ReadSkiffNativeYtValue(tupleType->GetElementType(data), nativeYtTypeFlags, holderFactory, buf); 
+            auto item = ReadSkiffNativeYtValue(tupleType->GetElementType(data), nativeYtTypeFlags, holderFactory, buf);
             return holderFactory.CreateVariantHolder(item.Release(), data);
         }
         else {
             auto structType = AS_TYPE(TStructType, varType->GetUnderlyingType());
-            if (auto cookie = structType->GetCookie()) { 
-                const std::vector<size_t>& reorder = *((const std::vector<size_t>*)cookie); 
-                data = reorder[data]; 
-            } 
+            if (auto cookie = structType->GetCookie()) {
+                const std::vector<size_t>& reorder = *((const std::vector<size_t>*)cookie);
+                data = reorder[data];
+            }
             YQL_ENSURE(data < structType->GetMembersCount());
- 
-            auto item = ReadSkiffNativeYtValue(structType->GetMemberType(data), nativeYtTypeFlags, holderFactory, buf); 
+
+            auto item = ReadSkiffNativeYtValue(structType->GetMemberType(data), nativeYtTypeFlags, holderFactory, buf);
             return holderFactory.CreateVariantHolder(item.Release(), data);
         }
     }
@@ -1593,8 +1593,8 @@ NKikimr::NUdf::TUnboxedValue ReadSkiffNativeYtValue(NKikimr::NMiniKQL::TType* ty
 
         auto builder = holderFactory.NewDict(dictType, NUdf::TDictFlags::EDictKind::Hashed);
         while (buf.Read() == '\0') {
-            auto key = ReadSkiffNativeYtValue(keyType, nativeYtTypeFlags, holderFactory, buf); 
-            auto payload = ReadSkiffNativeYtValue(payloadType, nativeYtTypeFlags, holderFactory, buf); 
+            auto key = ReadSkiffNativeYtValue(keyType, nativeYtTypeFlags, holderFactory, buf);
+            auto payload = ReadSkiffNativeYtValue(payloadType, nativeYtTypeFlags, holderFactory, buf);
             builder->Add(std::move(key), std::move(payload));
         }
 
@@ -1604,9 +1604,9 @@ NKikimr::NUdf::TUnboxedValue ReadSkiffNativeYtValue(NKikimr::NMiniKQL::TType* ty
     YQL_ENSURE(false, "Unsupported type: " << type->GetKindAsStr());
 }
 
-extern "C" void ReadContainerNativeYtValue(TType* type, ui64 nativeYtTypeFlags, const NKikimr::NMiniKQL::THolderFactory& holderFactory, 
+extern "C" void ReadContainerNativeYtValue(TType* type, ui64 nativeYtTypeFlags, const NKikimr::NMiniKQL::THolderFactory& holderFactory,
     NUdf::TUnboxedValue& value, TInputBuf& buf, bool wrapOptional) {
-    auto tmp = ReadSkiffNativeYtValue(type, nativeYtTypeFlags, holderFactory, buf); 
+    auto tmp = ReadSkiffNativeYtValue(type, nativeYtTypeFlags, holderFactory, buf);
     if (!wrapOptional) {
         value = std::move(tmp);
     } else {
@@ -1641,10 +1641,10 @@ public:
         }
     }
 
-    void SetRecordBoundaryCallback(std::function<void()> callback) override { 
-        Y_UNUSED(callback); 
-    } 
- 
+    void SetRecordBoundaryCallback(std::function<void()> callback) override {
+        Y_UNUSED(callback);
+    }
+
     void WriteBlocks(TOutputBuf& buf) const {
         auto current = Dummy_.Next_; // skip dummy node
         while (current != &Dummy_) {
@@ -1667,8 +1667,8 @@ public:
         return std::make_pair((char*)(header + 1), (char*)newPage + TAlignedPagePool::POOL_PAGE_SIZE);
     }
 
-    void ReturnBlock(size_t avail, std::optional<size_t> lastRecordBoundary) override { 
-        Y_UNUSED(lastRecordBoundary); 
+    void ReturnBlock(size_t avail, std::optional<size_t> lastRecordBoundary) override {
+        Y_UNUSED(lastRecordBoundary);
         YQL_ENSURE(avail <= TAlignedPagePool::POOL_PAGE_SIZE - sizeof(TPageHeader));
         Last_->Avail_ = avail;
     }
@@ -1985,11 +1985,11 @@ extern "C" void WriteYsonContainerValue(TType* type, const NUdf::TUnboxedValuePo
     blockWriter.WriteBlocks(buf);
 }
 
-extern "C" void WriteContainerNativeYtValue(TType* type, ui64 nativeYtTypeFlags, const NUdf::TUnboxedValuePod& value, TOutputBuf& buf) { 
-    WriteSkiffNativeYtValue(type, nativeYtTypeFlags, value, buf); 
+extern "C" void WriteContainerNativeYtValue(TType* type, ui64 nativeYtTypeFlags, const NUdf::TUnboxedValuePod& value, TOutputBuf& buf) {
+    WriteSkiffNativeYtValue(type, nativeYtTypeFlags, value, buf);
 }
 
-void WriteSkiffData(NKikimr::NMiniKQL::TType* type, ui64 nativeYtTypeFlags, const NKikimr::NUdf::TUnboxedValuePod& value, NCommon::TOutputBuf& buf) { 
+void WriteSkiffData(NKikimr::NMiniKQL::TType* type, ui64 nativeYtTypeFlags, const NKikimr::NUdf::TUnboxedValuePod& value, NCommon::TOutputBuf& buf) {
     auto schemeType = static_cast<TDataType*>(type)->GetSchemeType();
     switch (schemeType) {
     case NUdf::TDataType<bool>::Id: {
@@ -2076,26 +2076,26 @@ void WriteSkiffData(NKikimr::NMiniKQL::TType* type, ui64 nativeYtTypeFlags, cons
     }
 
     case NUdf::TDataType<NUdf::TDecimal>::Id: {
-        if (nativeYtTypeFlags & NTCF_DECIMAL) { 
-            auto const params = static_cast<TDataDecimalType*>(type)->GetParams(); 
-            const NDecimal::TInt128 data128 = value.GetInt128(); 
-            if (params.first < 10) { 
-                auto data = NDecimal::ToYtDecimal<i32>(data128); 
-                buf.WriteMany((const char*)&data, sizeof(data)); 
-            } else if (params.first < 19) { 
-                auto data = NDecimal::ToYtDecimal<i64>(data128); 
-                buf.WriteMany((const char*)&data, sizeof(data)); 
-            } else { 
-                YQL_ENSURE(params.first < 36); 
-                auto data = NDecimal::ToYtDecimal<NDecimal::TInt128>(data128); 
-                buf.WriteMany((const char*)&data, sizeof(data)); 
-            } 
-        } else { 
-            char data[sizeof(NDecimal::TInt128)]; 
-            const ui32 size = NDecimal::Serialize(value.GetInt128(), data); 
-            buf.WriteMany(reinterpret_cast<const char*>(&size), sizeof(size)); 
-            buf.WriteMany(data, size); 
-        } 
+        if (nativeYtTypeFlags & NTCF_DECIMAL) {
+            auto const params = static_cast<TDataDecimalType*>(type)->GetParams();
+            const NDecimal::TInt128 data128 = value.GetInt128();
+            if (params.first < 10) {
+                auto data = NDecimal::ToYtDecimal<i32>(data128);
+                buf.WriteMany((const char*)&data, sizeof(data));
+            } else if (params.first < 19) {
+                auto data = NDecimal::ToYtDecimal<i64>(data128);
+                buf.WriteMany((const char*)&data, sizeof(data));
+            } else {
+                YQL_ENSURE(params.first < 36);
+                auto data = NDecimal::ToYtDecimal<NDecimal::TInt128>(data128);
+                buf.WriteMany((const char*)&data, sizeof(data));
+            }
+        } else {
+            char data[sizeof(NDecimal::TInt128)];
+            const ui32 size = NDecimal::Serialize(value.GetInt128(), data);
+            buf.WriteMany(reinterpret_cast<const char*>(&size), sizeof(size));
+            buf.WriteMany(data, size);
+        }
         break;
     }
 
@@ -2143,9 +2143,9 @@ void WriteSkiffData(NKikimr::NMiniKQL::TType* type, ui64 nativeYtTypeFlags, cons
     }
 }
 
-void WriteSkiffNativeYtValue(NKikimr::NMiniKQL::TType* type, ui64 nativeYtTypeFlags, const NKikimr::NUdf::TUnboxedValuePod& value, NCommon::TOutputBuf& buf) { 
+void WriteSkiffNativeYtValue(NKikimr::NMiniKQL::TType* type, ui64 nativeYtTypeFlags, const NKikimr::NUdf::TUnboxedValuePod& value, NCommon::TOutputBuf& buf) {
     if (type->IsData()) {
-        WriteSkiffData(type, nativeYtTypeFlags, value, buf); 
+        WriteSkiffData(type, nativeYtTypeFlags, value, buf);
     } else if (type->IsOptional()) {
         if (!value) {
             buf.Write('\0');
@@ -2153,7 +2153,7 @@ void WriteSkiffNativeYtValue(NKikimr::NMiniKQL::TType* type, ui64 nativeYtTypeFl
         }
 
         buf.Write('\1');
-        WriteSkiffNativeYtValue(AS_TYPE(TOptionalType, type)->GetItemType(), nativeYtTypeFlags, value.GetOptionalValue(), buf); 
+        WriteSkiffNativeYtValue(AS_TYPE(TOptionalType, type)->GetItemType(), nativeYtTypeFlags, value.GetOptionalValue(), buf);
     } else if (type->IsList()) {
         auto itemType = AS_TYPE(TListType, type)->GetItemType();
         auto elements = value.GetElements();
@@ -2161,13 +2161,13 @@ void WriteSkiffNativeYtValue(NKikimr::NMiniKQL::TType* type, ui64 nativeYtTypeFl
             ui32 size = value.GetListLength();
             for (ui32 i = 0; i < size; ++i) {
                 buf.Write('\0');
-                WriteSkiffNativeYtValue(itemType, nativeYtTypeFlags, elements[i], buf); 
+                WriteSkiffNativeYtValue(itemType, nativeYtTypeFlags, elements[i], buf);
             }
         } else {
             NUdf::TUnboxedValue item;
             for (auto iter = value.GetListIterator(); iter.Next(item); ) {
                 buf.Write('\0');
-                WriteSkiffNativeYtValue(itemType, nativeYtTypeFlags, item, buf); 
+                WriteSkiffNativeYtValue(itemType, nativeYtTypeFlags, item, buf);
             }
         }
 
@@ -2177,38 +2177,38 @@ void WriteSkiffNativeYtValue(NKikimr::NMiniKQL::TType* type, ui64 nativeYtTypeFl
         auto elements = value.GetElements();
         if (elements) {
             for (ui32 i = 0; i < tupleType->GetElementsCount(); ++i) {
-                WriteSkiffNativeYtValue(tupleType->GetElementType(i), nativeYtTypeFlags, elements[i], buf); 
+                WriteSkiffNativeYtValue(tupleType->GetElementType(i), nativeYtTypeFlags, elements[i], buf);
             }
         } else {
             for (ui32 i = 0; i < tupleType->GetElementsCount(); ++i) {
-                WriteSkiffNativeYtValue(tupleType->GetElementType(i), nativeYtTypeFlags, value.GetElement(i), buf); 
+                WriteSkiffNativeYtValue(tupleType->GetElementType(i), nativeYtTypeFlags, value.GetElement(i), buf);
             }
         }
     } else if (type->IsStruct()) {
         auto structType = AS_TYPE(TStructType, type);
         auto elements = value.GetElements();
-        if (auto cookie = type->GetCookie()) { 
-            const std::vector<size_t>& reorder = *((const std::vector<size_t>*)cookie); 
-            if (elements) { 
-                for (ui32 i = 0; i < structType->GetMembersCount(); ++i) { 
-                    const auto ndx = reorder[i]; 
-                    WriteSkiffNativeYtValue(structType->GetMemberType(ndx), nativeYtTypeFlags, elements[ndx], buf); 
-                } 
-            } else { 
-                for (ui32 i = 0; i < structType->GetMembersCount(); ++i) { 
-                    const auto ndx = reorder[i]; 
-                    WriteSkiffNativeYtValue(structType->GetMemberType(ndx), nativeYtTypeFlags, value.GetElement(ndx), buf); 
-                } 
+        if (auto cookie = type->GetCookie()) {
+            const std::vector<size_t>& reorder = *((const std::vector<size_t>*)cookie);
+            if (elements) {
+                for (ui32 i = 0; i < structType->GetMembersCount(); ++i) {
+                    const auto ndx = reorder[i];
+                    WriteSkiffNativeYtValue(structType->GetMemberType(ndx), nativeYtTypeFlags, elements[ndx], buf);
+                }
+            } else {
+                for (ui32 i = 0; i < structType->GetMembersCount(); ++i) {
+                    const auto ndx = reorder[i];
+                    WriteSkiffNativeYtValue(structType->GetMemberType(ndx), nativeYtTypeFlags, value.GetElement(ndx), buf);
+                }
             }
         } else {
-            if (elements) { 
-                for (ui32 i = 0; i < structType->GetMembersCount(); ++i) { 
-                    WriteSkiffNativeYtValue(structType->GetMemberType(i), nativeYtTypeFlags, elements[i], buf); 
-                } 
-            } else { 
-                for (ui32 i = 0; i < structType->GetMembersCount(); ++i) { 
-                    WriteSkiffNativeYtValue(structType->GetMemberType(i), nativeYtTypeFlags, value.GetElement(i), buf); 
-                } 
+            if (elements) {
+                for (ui32 i = 0; i < structType->GetMembersCount(); ++i) {
+                    WriteSkiffNativeYtValue(structType->GetMemberType(i), nativeYtTypeFlags, elements[i], buf);
+                }
+            } else {
+                for (ui32 i = 0; i < structType->GetMembersCount(); ++i) {
+                    WriteSkiffNativeYtValue(structType->GetMemberType(i), nativeYtTypeFlags, value.GetElement(i), buf);
+                }
             }
         }
     } else if (type->IsVariant()) {
@@ -2222,16 +2222,16 @@ void WriteSkiffNativeYtValue(NKikimr::NMiniKQL::TType* type, ui64 nativeYtTypeFl
 
         if (varType->GetUnderlyingType()->IsTuple()) {
             auto tupleType = AS_TYPE(TTupleType, varType->GetUnderlyingType());
-            WriteSkiffNativeYtValue(tupleType->GetElementType(index), nativeYtTypeFlags, value.GetVariantItem(), buf); 
+            WriteSkiffNativeYtValue(tupleType->GetElementType(index), nativeYtTypeFlags, value.GetVariantItem(), buf);
         } else {
             auto structType = AS_TYPE(TStructType, varType->GetUnderlyingType());
-            if (auto cookie = structType->GetCookie()) { 
-                const std::vector<size_t>& reorder = *((const std::vector<size_t>*)cookie); 
-                index = reorder[index]; 
-            } 
-            YQL_ENSURE(index < structType->GetMembersCount()); 
- 
-            WriteSkiffNativeYtValue(structType->GetMemberType(index), nativeYtTypeFlags, value.GetVariantItem(), buf); 
+            if (auto cookie = structType->GetCookie()) {
+                const std::vector<size_t>& reorder = *((const std::vector<size_t>*)cookie);
+                index = reorder[index];
+            }
+            YQL_ENSURE(index < structType->GetMembersCount());
+
+            WriteSkiffNativeYtValue(structType->GetMemberType(index), nativeYtTypeFlags, value.GetVariantItem(), buf);
         }
     } else if (type->IsVoid() || type->IsNull() || type->IsEmptyList() || type->IsEmptyDict()) {
     } else if (type->IsDict()) {
@@ -2241,8 +2241,8 @@ void WriteSkiffNativeYtValue(NKikimr::NMiniKQL::TType* type, ui64 nativeYtTypeFl
         NUdf::TUnboxedValue key, payload;
         for (auto iter = value.GetDictIterator(); iter.NextPair(key, payload); ) {
             buf.Write('\0');
-            WriteSkiffNativeYtValue(keyType, nativeYtTypeFlags, key, buf); 
-            WriteSkiffNativeYtValue(payloadType, nativeYtTypeFlags, payload, buf); 
+            WriteSkiffNativeYtValue(keyType, nativeYtTypeFlags, key, buf);
+            WriteSkiffNativeYtValue(payloadType, nativeYtTypeFlags, payload, buf);
         }
 
         buf.Write('\xff');

@@ -200,12 +200,12 @@ select_kind_partial: select_kind
 select_kind: (DISCARD)? (process_core | reduce_core | select_core) (INTO RESULT pure_column_or_named)?;
 
 process_core:
-  PROCESS STREAM? named_single_source (COMMA named_single_source)* (USING call_expr (AS id_or_string)? 
+  PROCESS STREAM? named_single_source (COMMA named_single_source)* (USING call_expr (AS id_or_string)?
   (WHERE expr)? (HAVING expr)?)?
 ;
 
 reduce_core:
-  REDUCE named_single_source (COMMA named_single_source)* (PRESORT sort_specification_list)? 
+  REDUCE named_single_source (COMMA named_single_source)* (PRESORT sort_specification_list)?
   ON column_list USING ALL? call_expr (AS id_or_string)?
   (WHERE expr)? (HAVING expr)?
 ;

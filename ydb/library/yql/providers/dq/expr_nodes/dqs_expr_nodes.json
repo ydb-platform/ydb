@@ -6,22 +6,22 @@
   "FreeArgBuilderBase": "TFreeArgCallableBuilderBase",
   "Nodes": [
     {
-      "Name": "TDqReadWrapBase", 
-      "Base": "TExprBase", 
-      "Match": {"Type": "CallableBase"}, 
-      "Builder": {"Generate": "None"}, 
-      "Children": [ 
-        {"Index": 0, "Name": "Input", "Type": "TExprBase"}, 
+      "Name": "TDqReadWrapBase",
+      "Base": "TExprBase",
+      "Match": {"Type": "CallableBase"},
+      "Builder": {"Generate": "None"},
+      "Children": [
+        {"Index": 0, "Name": "Input", "Type": "TExprBase"},
         {"Index": 1, "Name": "Token", "Type": "TCoSecureParam", "Optional": true},
         {"Index": 2, "Name": "Flags", "Type": "TCoAtomList", "Optional": true}
-      ] 
-    }, 
-    { 
-      "Name": "TDqReadWrap", 
-      "Base": "TDqReadWrapBase", 
-      "Match": {"Type": "Callable", "Name": "DqReadWrap"} 
-    }, 
-    { 
+      ]
+    },
+    {
+      "Name": "TDqReadWrap",
+      "Base": "TDqReadWrapBase",
+      "Match": {"Type": "Callable", "Name": "DqReadWrap"}
+    },
+    {
       "Name": "TDqReadWideWrap",
       "Base": "TDqReadWrapBase",
       "Match": {"Type": "Callable", "Name": "DqReadWideWrap"}

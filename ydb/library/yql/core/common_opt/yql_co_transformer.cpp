@@ -20,9 +20,9 @@ namespace {
 class TCommonOptTransformer final : public TSyncTransformerBase {
 public:
     TCommonOptTransformer(TTypeAnnotationContext* typeCtx, bool final)
-        : TypeCtx(typeCtx) 
-        , Final(final) 
-    {} 
+        : TypeCtx(typeCtx)
+        , Final(final)
+    {}
 
     IGraphTransformer::TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final;
     void Rewind() final;
@@ -31,9 +31,9 @@ private:
         const TCallableOptimizerMap& callables, TProcessedNodesSet& processedNodes,
         bool withParents);
 
-    IGraphTransformer::TStatus DoTransform(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx, 
-        const TFinalizingOptimizerMap& callables); 
- 
+    IGraphTransformer::TStatus DoTransform(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx,
+        const TFinalizingOptimizerMap& callables);
+
 private:
     TProcessedNodesSet SimpleProcessedNodes[TCoCallableRules::SIMPLE_STEPS];
     TProcessedNodesSet FlowProcessedNodes[TCoCallableRules::FLOW_STEPS];
@@ -52,7 +52,7 @@ TAutoPtr<IGraphTransformer> CreateCommonOptFinalTransformer(TTypeAnnotationConte
     return new TCommonOptTransformer(typeCtx, true);
 }
 
-IGraphTransformer::TStatus TCommonOptTransformer::DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) { 
+IGraphTransformer::TStatus TCommonOptTransformer::DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) {
     IGraphTransformer::TStatus status = IGraphTransformer::TStatus::Ok;
     output = std::move(input);
 
@@ -74,11 +74,11 @@ IGraphTransformer::TStatus TCommonOptTransformer::DoTransform(TExprNode::TPtr in
         }
     }
 
-    status = DoTransform(input = std::move(output), output, ctx, TCoCallableRules::Instance().Finalizers); 
-    if (status.Level != IGraphTransformer::TStatus::Ok) { 
-        return status; 
-    } 
- 
+    status = DoTransform(input = std::move(output), output, ctx, TCoCallableRules::Instance().Finalizers);
+    if (status.Level != IGraphTransformer::TStatus::Ok) {
+        return status;
+    }
+
     return status;
 }
 
@@ -97,8 +97,8 @@ void TCommonOptTransformer::Rewind() {
 IGraphTransformer::TStatus TCommonOptTransformer::DoTransform(
     const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx,
     const TCallableOptimizerMap& callables,
-    TProcessedNodesSet& processedNodes, bool withParents) 
-{ 
+    TProcessedNodesSet& processedNodes, bool withParents)
+{
     TOptimizeExprSettings settings(TypeCtx);
     settings.ProcessedNodes = &processedNodes;
     settings.CustomInstantTypeTransformer = TypeCtx->CustomInstantTypeTransformer.Get();
@@ -131,42 +131,42 @@ IGraphTransformer::TStatus TCommonOptTransformer::DoTransform(
     }, ctx, settings);
 }
 
-IGraphTransformer::TStatus TCommonOptTransformer::DoTransform(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx, 
-    const TFinalizingOptimizerMap& callables) 
-{ 
-    TParentsMap parentsMap; 
-    TOptimizeContext optCtx; 
-    optCtx.Types = TypeCtx; 
-    GatherParents(*input, parentsMap); 
-    optCtx.ParentsMap = &parentsMap; 
- 
-    TNodeOnNodeOwnedMap toOptimize; 
-    VisitExpr(input, 
-        [&toOptimize](const TExprNode::TPtr&) { 
-            return toOptimize.empty(); 
-        }, 
-        [&callables, &toOptimize, &ctx, &optCtx](const TExprNode::TPtr& node) { 
-            if (toOptimize.empty()) { 
+IGraphTransformer::TStatus TCommonOptTransformer::DoTransform(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx,
+    const TFinalizingOptimizerMap& callables)
+{
+    TParentsMap parentsMap;
+    TOptimizeContext optCtx;
+    optCtx.Types = TypeCtx;
+    GatherParents(*input, parentsMap);
+    optCtx.ParentsMap = &parentsMap;
+
+    TNodeOnNodeOwnedMap toOptimize;
+    VisitExpr(input,
+        [&toOptimize](const TExprNode::TPtr&) {
+            return toOptimize.empty();
+        },
+        [&callables, &toOptimize, &ctx, &optCtx](const TExprNode::TPtr& node) {
+            if (toOptimize.empty()) {
                 const auto rule = callables.find(node->Content());
                 if (callables.cend() != rule) {
                     (rule->second)(node, toOptimize, ctx, optCtx);
-                } 
-            } 
-            return toOptimize.empty(); 
-        } 
-    ); 
- 
-    if (!toOptimize.empty()) { 
+                }
+            }
+            return toOptimize.empty();
+        }
+    );
+
+    if (!toOptimize.empty()) {
         TOptimizeExprSettings settings(TypeCtx);
-        settings.VisitTuples = true; 
-        settings.CustomInstantTypeTransformer = TypeCtx->CustomInstantTypeTransformer.Get(); 
-        return RemapExpr(input, output, toOptimize, ctx, settings); 
-    } 
- 
-    output = input; 
-    return IGraphTransformer::TStatus::Ok; 
-} 
- 
+        settings.VisitTuples = true;
+        settings.CustomInstantTypeTransformer = TypeCtx->CustomInstantTypeTransformer.Get();
+        return RemapExpr(input, output, toOptimize, ctx, settings);
+    }
+
+    output = input;
+    return IGraphTransformer::TStatus::Ok;
+}
+
 const TCoCallableRules& TCoCallableRules::Instance() {
     return *Singleton<TCoCallableRules>();
 }
@@ -176,7 +176,7 @@ TCoCallableRules::TCoCallableRules() {
     RegisterCoSimpleCallables2(SimpleCallables[SIMPLE_STEP_2]);
     RegisterCoFlowCallables1(FlowCallables[FLOW_STEP_1]);
     RegisterCoFlowCallables2(FlowCallables[FLOW_STEP_2]);
-    RegisterCoFinalizers(Finalizers); 
+    RegisterCoFinalizers(Finalizers);
     RegisterCoFinalCallables(FinalCallables);
 }
 

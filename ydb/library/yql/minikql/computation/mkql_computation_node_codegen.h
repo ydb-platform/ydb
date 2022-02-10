@@ -11,7 +11,7 @@ namespace NKikimr {
 namespace NMiniKQL {
 
 using TUnboxedImmutableCodegeneratorNode = TUnboxedImmutableComputationNode;
-using TUnboxedImmutableRunCodegeneratorNode = TUnboxedImmutableComputationNode; 
+using TUnboxedImmutableRunCodegeneratorNode = TUnboxedImmutableComputationNode;
 using TExternalCodegeneratorNode = TExternalComputationNode;
 using TWideFlowProxyCodegeneratorNode = TWideFlowProxyComputationNode;
 
@@ -106,14 +106,14 @@ using TGeneratorPtr = Value* (*)(Value *const * args, const TCodegenContext& ctx
 
 class ICodegeneratorRootNode {
 public:
-    virtual ~ICodegeneratorRootNode() {} 
+    virtual ~ICodegeneratorRootNode() {}
     virtual void GenerateFunctions(const NYql::NCodegen::ICodegen::TPtr& codegen) = 0;
     virtual void FinalizeFunctions(const NYql::NCodegen::ICodegen::TPtr& codegen) = 0;
 };
 
 class ICodegeneratorInlineNode {
 public:
-    virtual ~ICodegeneratorInlineNode() {} 
+    virtual ~ICodegeneratorInlineNode() {}
     virtual Value* CreateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const = 0;
 };
 
@@ -147,12 +147,12 @@ public:
     virtual void SetValueGetter(Function* value) = 0;
 };
 
-class ICodegeneratorRunNode { 
-public: 
-    virtual ~ICodegeneratorRunNode() {} 
+class ICodegeneratorRunNode {
+public:
+    virtual ~ICodegeneratorRunNode() {}
     virtual void CreateRun(const TCodegenContext& ctx, BasicBlock*& block, Value* result, Value* args) const = 0;
-}; 
- 
+};
+
 size_t GetMethodPtrIndex(uintptr_t ptr);
 
 template<typename Method>
@@ -918,12 +918,12 @@ private:
     Value* CreateGetValue(const TCodegenContext& ctx, BasicBlock*&) const final;
 };
 
-class TUnboxedImmutableRunCodegeneratorNode: public TUnboxedImmutableComputationNode, public ICodegeneratorRunNode 
-{ 
-public: 
-    TUnboxedImmutableRunCodegeneratorNode(TMemoryUsageInfo* memInfo, NUdf::TUnboxedValue&& value); 
-}; 
- 
+class TUnboxedImmutableRunCodegeneratorNode: public TUnboxedImmutableComputationNode, public ICodegeneratorRunNode
+{
+public:
+    TUnboxedImmutableRunCodegeneratorNode(TMemoryUsageInfo* memInfo, NUdf::TUnboxedValue&& value);
+};
+
 class TExternalCodegeneratorNode: public TExternalComputationNode, public ICodegeneratorExternalNode
 {
 public:

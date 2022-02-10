@@ -45,7 +45,7 @@ namespace {
 class TLocalServiceHolder {
 public:
     TLocalServiceHolder(NYdb::TDriver driver, IHTTPGateway::TPtr httpGateway, const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry, NKikimr::NMiniKQL::TComputationNodeFactory compFactory,
-        TTaskTransformFactory taskTransformFactory, const TDqTaskPreprocessorFactoryCollection& dqTaskPreprocessorFactories, NBus::TBindResult interconnectPort, NBus::TBindResult grpcPort) 
+        TTaskTransformFactory taskTransformFactory, const TDqTaskPreprocessorFactoryCollection& dqTaskPreprocessorFactories, NBus::TBindResult interconnectPort, NBus::TBindResult grpcPort)
     {
         ui32 nodeId = 1;
 
@@ -112,17 +112,17 @@ public:
     }
 
     void CloseSession(const TString& sessionId) override {
-        return Gateway->CloseSession(sessionId); 
+        return Gateway->CloseSession(sessionId);
     }
 
     NThreading::TFuture<TResult>
-    ExecutePlan(const TString& sessionId, NDqs::IDqsExecutionPlanner& plan, const TVector<TString>& columns, 
-                const THashMap<TString, TString>& secureParams, const THashMap<TString, TString>& graphParams, 
-                const TDqSettings::TPtr& settings, 
-                const TDqProgressWriter& progressWriter, const THashMap<TString, TString>& modulesMapping, 
-                bool discard) override 
+    ExecutePlan(const TString& sessionId, NDqs::IDqsExecutionPlanner& plan, const TVector<TString>& columns,
+                const THashMap<TString, TString>& secureParams, const THashMap<TString, TString>& graphParams,
+                const TDqSettings::TPtr& settings,
+                const TDqProgressWriter& progressWriter, const THashMap<TString, TString>& modulesMapping,
+                bool discard) override
     {
-        return Gateway->ExecutePlan(sessionId, plan, columns, secureParams, graphParams, settings, progressWriter, modulesMapping, discard); 
+        return Gateway->ExecutePlan(sessionId, plan, columns, secureParams, graphParams, settings, progressWriter, modulesMapping, discard);
     }
 
 private:
@@ -131,26 +131,26 @@ private:
 };
 
 THolder<TLocalServiceHolder> CreateLocalServiceHolder(NYdb::TDriver driver, const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
-    NKikimr::NMiniKQL::TComputationNodeFactory compFactory, 
+    NKikimr::NMiniKQL::TComputationNodeFactory compFactory,
     TTaskTransformFactory taskTransformFactory, const TDqTaskPreprocessorFactoryCollection& dqTaskPreprocessorFactories, IHTTPGateway::TPtr gateway,
-    NBus::TBindResult interconnectPort, NBus::TBindResult grpcPort) 
-{ 
-    return MakeHolder<TLocalServiceHolder>(driver, std::move(gateway), functionRegistry, compFactory, taskTransformFactory, dqTaskPreprocessorFactories, interconnectPort, grpcPort); 
+    NBus::TBindResult interconnectPort, NBus::TBindResult grpcPort)
+{
+    return MakeHolder<TLocalServiceHolder>(driver, std::move(gateway), functionRegistry, compFactory, taskTransformFactory, dqTaskPreprocessorFactories, interconnectPort, grpcPort);
 }
 
 TIntrusivePtr<IDqGateway> CreateLocalDqGateway(NYdb::TDriver driver, const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
-    NKikimr::NMiniKQL::TComputationNodeFactory compFactory, 
-    TTaskTransformFactory taskTransformFactory, const TDqTaskPreprocessorFactoryCollection& dqTaskPreprocessorFactories, 
+    NKikimr::NMiniKQL::TComputationNodeFactory compFactory,
+    TTaskTransformFactory taskTransformFactory, const TDqTaskPreprocessorFactoryCollection& dqTaskPreprocessorFactories,
     IHTTPGateway::TPtr gateway)
-{ 
+{
     int startPort = 31337;
     TRangeWalker<int> portWalker(startPort, startPort+100);
     auto interconnectPort = BindInRange(portWalker)[1];
     auto grpcPort = BindInRange(portWalker)[1];
 
     return new TDqGatewayLocal(
-        CreateLocalServiceHolder(driver, functionRegistry, compFactory, taskTransformFactory, dqTaskPreprocessorFactories, std::move(gateway), interconnectPort, grpcPort), 
-        CreateDqGateway(std::get<0>(NDqs::GetLocalAddress()), grpcPort.Addr.GetPort(), 8)); 
+        CreateLocalServiceHolder(driver, functionRegistry, compFactory, taskTransformFactory, dqTaskPreprocessorFactories, std::move(gateway), interconnectPort, grpcPort),
+        CreateDqGateway(std::get<0>(NDqs::GetLocalAddress()), grpcPort.Addr.GetPort(), 8));
 }
 
 } // namespace NYql

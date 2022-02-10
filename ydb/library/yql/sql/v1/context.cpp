@@ -39,9 +39,9 @@ TNodePtr AddTablePathPrefix(TContext& ctx, TStringBuf prefixPath, const TDeferre
     return result.Build();
 }
 
-typedef bool TContext::*TPragmaField; 
- 
-THashMap<TStringBuf, TPragmaField> CTX_PRAGMA_FIELDS = { 
+typedef bool TContext::*TPragmaField;
+
+THashMap<TStringBuf, TPragmaField> CTX_PRAGMA_FIELDS = {
     {"AnsiOptionalAs", &TContext::AnsiOptionalAs},
     {"WarnOnAnsiAliasShadowing", &TContext::WarnOnAnsiAliasShadowing},
     {"PullUpFlatMapOverJoin", &TContext::PragmaPullUpFlatMapOverJoin},
@@ -53,8 +53,8 @@ THashMap<TStringBuf, TPragmaField> CTX_PRAGMA_FIELDS = {
     {"CoalesceJoinKeysOnQualifiedAll", &TContext::CoalesceJoinKeysOnQualifiedAll},
     {"UnorderedSubqueries", &TContext::UnorderedSubqueries},
     {"FlexibleTypes", &TContext::FlexibleTypes},
-}; 
- 
+};
+
 typedef TMaybe<bool> TContext::*TPragmaMaybeField;
 
 THashMap<TStringBuf, TPragmaMaybeField> CTX_PRAGMA_MAYBE_FIELDS = {
@@ -93,23 +93,23 @@ TContext::TContext(const NSQLTranslation::TTranslationSettings& settings,
 
     Position.File = settings.File;
 
-    for (auto& flag: settings.Flags) { 
-        bool value = true; 
-        TStringBuf key = flag; 
-        auto ptr = CTX_PRAGMA_FIELDS.FindPtr(key); 
+    for (auto& flag: settings.Flags) {
+        bool value = true;
+        TStringBuf key = flag;
+        auto ptr = CTX_PRAGMA_FIELDS.FindPtr(key);
         auto ptrMaybe = CTX_PRAGMA_MAYBE_FIELDS.FindPtr(key);
         if (!ptr && !ptrMaybe && key.SkipPrefix("Disable")) {
-            value = false; 
-            ptr = CTX_PRAGMA_FIELDS.FindPtr(key); 
+            value = false;
+            ptr = CTX_PRAGMA_FIELDS.FindPtr(key);
             ptrMaybe = CTX_PRAGMA_MAYBE_FIELDS.FindPtr(key);
-        } 
+        }
         if (ptr) {
             this->*(*ptr) = value;
         } else if (ptrMaybe) {
             this->*(*ptrMaybe) = value;
         }
-    } 
-    DiscoveryMode = (NSQLTranslation::ESqlMode::DISCOVERY == Settings.Mode); 
+    }
+    DiscoveryMode = (NSQLTranslation::ESqlMode::DISCOVERY == Settings.Mode);
 }
 
 TContext::~TContext()
@@ -134,13 +134,13 @@ TString TContext::MakeName(const TString& name) {
     return str;
 }
 
-IOutputStream& TContext::Error(NYql::TIssueCode code) { 
-    return Error(Pos(), code); 
+IOutputStream& TContext::Error(NYql::TIssueCode code) {
+    return Error(Pos(), code);
 }
 
-IOutputStream& TContext::Error(NYql::TPosition pos, NYql::TIssueCode code) { 
+IOutputStream& TContext::Error(NYql::TPosition pos, NYql::TIssueCode code) {
     HasPendingErrors = true;
-    return MakeIssue(TSeverityIds::S_ERROR, code, pos); 
+    return MakeIssue(TSeverityIds::S_ERROR, code, pos);
 }
 
 IOutputStream& TContext::Warning(NYql::TPosition pos, NYql::TIssueCode code) {
@@ -200,10 +200,10 @@ IOutputStream& TContext::MakeIssue(ESeverity severity, TIssueCode code, NYql::TP
 
 bool TContext::SetPathPrefix(const TString& value, TMaybe<TString> arg) {
     if (arg.Defined()) {
-        if (*arg == YtProviderName 
-            || *arg == KikimrProviderName 
-            || *arg == RtmrProviderName 
-            ) 
+        if (*arg == YtProviderName
+            || *arg == KikimrProviderName
+            || *arg == RtmrProviderName
+            )
         {
             ProviderPathPrefixes[*arg] = value;
             return true;
@@ -347,33 +347,33 @@ TNodePtr TScopedState::LookupNode(const TString& name) {
 }
 
 bool TContext::HasNonYtProvider(const ISource& source) const {
-    TTableList tableList; 
-    source.GetInputTables(tableList); 
+    TTableList tableList;
+    source.GetInputTables(tableList);
 
-    TSet<TString> clusters; 
-    for (auto& it: tableList) { 
+    TSet<TString> clusters;
+    for (auto& it: tableList) {
         if (it.Service != YtProviderName) {
             return true;
-        } 
-    } 
- 
+        }
+    }
+
     for (auto& cl: Scoped->Local.UsedClusters) {
         if (cl.first != YtProviderName) {
             return true;
-        } 
-    } 
- 
+        }
+    }
+
     return false;
-} 
- 
-bool TContext::UseUnordered(const ISource& source) const { 
-    return !HasNonYtProvider(source); 
-} 
- 
-bool TContext::UseUnordered(const TTableRef& table) const { 
-    return YtProviderName == table.Service; 
-} 
- 
+}
+
+bool TContext::UseUnordered(const ISource& source) const {
+    return !HasNonYtProvider(source);
+}
+
+bool TContext::UseUnordered(const TTableRef& table) const {
+    return YtProviderName == table.Service;
+}
+
 
 TMaybe<EColumnRefState> GetFunctionArgColumnStatus(TContext& ctx, const TString& module, const TString& func, size_t argIndex) {
     static const TSet<TStringBuf> denyForAllArgs = {

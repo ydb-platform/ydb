@@ -1,16 +1,16 @@
-#pragma once 
- 
+#pragma once
+
 #include "log_component.h"
 #include "log_level.h"
 #include "context.h"
 #include "profile.h"
- 
+
 #include <library/cpp/logger/global/common.h>
 
-#include <util/system/atomic.h> 
-#include <util/stream/output.h> 
-#include <util/generic/strbuf.h> 
- 
+#include <util/system/atomic.h>
+#include <util/stream/output.h>
+#include <util/generic/strbuf.h>
+
 #include <array>
 
 
@@ -84,12 +84,12 @@
     YQL_LOG_PREP_IF(level, ::NYql::NLog::TContextPreprocessor, condition)
 
 
-namespace NYql { 
+namespace NYql {
 namespace NLog {
- 
+
 using TComponentLevels =
         std::array<ELevel, EComponentHelpers::ToInt(EComponent::MaxValue)>;
- 
+
 /**
  * @brief Component based logger frontend.
  */
@@ -114,17 +114,17 @@ public:
         return ELevelHelpers::Lte(level, GetComponentLevel(component));
     }
 
-    void SetMaxLogLimit(ui64 limit); 
+    void SetMaxLogLimit(ui64 limit);
 
-    TAutoPtr<TLogElement> CreateLogElement(EComponent component, ELevel level, TStringBuf file, int line) const; 
- 
-    void WriteLogPrefix(IOutputStream* out, EComponent component, ELevel level, TStringBuf file, int line) const; 
- 
-private: 
+    TAutoPtr<TLogElement> CreateLogElement(EComponent component, ELevel level, TStringBuf file, int line) const;
+
+    void WriteLogPrefix(IOutputStream* out, EComponent component, ELevel level, TStringBuf file, int line) const;
+
+private:
     TString ProcName_;
     pid_t ProcId_;
     std::array<TAtomic, EComponentHelpers::ToInt(EComponent::MaxValue)> ComponentLevels_{0};
-    mutable TAtomic WriteTruncMsg_; 
+    mutable TAtomic WriteTruncMsg_;
 };
 
 /**
@@ -175,7 +175,7 @@ public:
 };
 
 } // namespace NLog
-} // namespace NYql 
+} // namespace NYql
 
 template <>
 NYql::NLog::TYqlLog* CreateDefaultLogger<NYql::NLog::TYqlLog>();

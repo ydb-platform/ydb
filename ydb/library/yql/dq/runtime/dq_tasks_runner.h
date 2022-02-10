@@ -94,7 +94,7 @@ struct TDqTaskRunnerContext {
     TDqComputeContextBase* ComputeCtx = nullptr;
     NKikimr::NMiniKQL::TComputationNodeFactory ComputationFactory;
     NUdf::IApplyContext* ApplyCtx = nullptr;
-    NKikimr::NMiniKQL::TCallableVisitFuncProvider FuncProvider; 
+    NKikimr::NMiniKQL::TCallableVisitFuncProvider FuncProvider;
     NKikimr::NMiniKQL::TScopedAlloc* Alloc = nullptr;
     NKikimr::NMiniKQL::TTypeEnvironment* TypeEnv = nullptr;
 };

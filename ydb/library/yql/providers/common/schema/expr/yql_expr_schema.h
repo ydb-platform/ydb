@@ -5,18 +5,18 @@
 #include <library/cpp/yson/consumer.h>
 #include <library/cpp/yson/node/node.h>
 
-#include <util/generic/maybe.h> 
-#include <util/generic/string.h> 
-#include <util/generic/vector.h> 
-#include <util/generic/strbuf.h> 
- 
-#include <functional> 
- 
-namespace NYql { 
+#include <util/generic/maybe.h>
+#include <util/generic/string.h>
+#include <util/generic/vector.h>
+#include <util/generic/strbuf.h>
 
-class TTypeAnnotationNode; 
-class TStructExprType; 
-struct TExprContext; 
+#include <functional>
+
+namespace NYql {
+
+class TTypeAnnotationNode;
+class TStructExprType;
+struct TExprContext;
 
 namespace NCommon {
 
@@ -31,9 +31,9 @@ void SaveStructTypeToYson(NYson::TYsonConsumerBase& writer, const TStructExprTyp
 NYT::TNode TypeToYsonNode(const TTypeAnnotationNode* type);
 TString WriteTypeToYson(const TTypeAnnotationNode* type, NYT::NYson::EYsonFormat format = NYT::NYson::EYsonFormat::Binary);
 
-const TTypeAnnotationNode* ParseTypeFromYson(const TStringBuf yson, TExprContext& ctx, const TPosition& pos = TPosition()); 
+const TTypeAnnotationNode* ParseTypeFromYson(const TStringBuf yson, TExprContext& ctx, const TPosition& pos = TPosition());
 const TTypeAnnotationNode* ParseOrderAwareTypeFromYson(const TStringBuf yson, TVector<TString>& topLevelColumns, TExprContext& ctx, const TPosition& pos = TPosition());
-const TTypeAnnotationNode* ParseTypeFromYson(const NYT::TNode& node, TExprContext& ctx, const TPosition& pos = TPosition()); 
+const TTypeAnnotationNode* ParseTypeFromYson(const NYT::TNode& node, TExprContext& ctx, const TPosition& pos = TPosition());
 const TTypeAnnotationNode* ParseOrderAwareTypeFromYson(const NYT::TNode& node, TVector<TString>& topLevelColumns, TExprContext& ctx, const TPosition& pos = TPosition());
 
 void WriteResOrPullType(NYson::TYsonConsumerBase& writer, const TTypeAnnotationNode* type,

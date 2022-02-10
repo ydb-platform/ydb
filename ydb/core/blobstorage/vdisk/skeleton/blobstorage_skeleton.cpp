@@ -365,23 +365,23 @@ namespace NKikimr {
         THullCheckStatus ValidateVPut(const TActorContext &ctx, TString evPrefix,
                 TLogoBlobID id, ui64 bufSize, bool ignoreBlock)
         {
-            ui64 blobPartSize = 0; 
-            try { 
-                blobPartSize = GInfo->Type.PartSize(id); 
-            } catch (yexception ex) { 
-                LOG_ERROR_S(ctx, BS_VDISK_PUT, VCtx->VDiskLogPrefix << ex.what() << " Marker# BSVS40"); 
-                return {NKikimrProto::ERROR, ex.what()}; 
-            } 
- 
-            if (bufSize != blobPartSize) { 
+            ui64 blobPartSize = 0;
+            try {
+                blobPartSize = GInfo->Type.PartSize(id);
+            } catch (yexception ex) {
+                LOG_ERROR_S(ctx, BS_VDISK_PUT, VCtx->VDiskLogPrefix << ex.what() << " Marker# BSVS40");
+                return {NKikimrProto::ERROR, ex.what()};
+            }
+
+            if (bufSize != blobPartSize) {
                 LOG_ERROR_S(ctx, BS_VDISK_PUT, VCtx->VDiskLogPrefix
                         << evPrefix << ": buffer size does not match with part size;"
                         << " buffer size# " << bufSize
-                        << " PartSize# " << blobPartSize 
+                        << " PartSize# " << blobPartSize
                         << " id# " << id
                         << " Marker# BSVS01");
                 return {NKikimrProto::ERROR, "buffer size mismatch"};
-            } 
+            }
 
             if (bufSize > Config->MaxLogoBlobDataSize) {
                 LOG_ERROR_S(ctx, BS_VDISK_PUT, VCtx->VDiskLogPrefix << evPrefix << ": data is too large;"
@@ -463,17 +463,17 @@ namespace NKikimr {
                 putsInfo.emplace_back(blobId, ev->Get()->GetItemBuffer(itemIdx));
                 TVPutInfo &info = putsInfo.back();
 
-                try { 
-                    info.IsHugeBlob = HugeBlobCtx->IsHugeBlob(VCtx->Top->GType, blobId.FullID()); 
-                } catch (yexception ex) { 
-                    LOG_ERROR_S(ctx, BS_VDISK_PUT, VCtx->VDiskLogPrefix << ex.what() << " Marker# BSVS39"); 
-                    info.HullStatus = {NKikimrProto::ERROR, 0, false}; 
-                } 
- 
-                if (info.HullStatus.Status == NKikimrProto::UNKNOWN) { 
-                    info.HullStatus = ValidateVPut(ctx, "TEvVMultiPut", blobId, info.Buffer.GetSize(), ignoreBlock); 
-                } 
- 
+                try {
+                    info.IsHugeBlob = HugeBlobCtx->IsHugeBlob(VCtx->Top->GType, blobId.FullID());
+                } catch (yexception ex) {
+                    LOG_ERROR_S(ctx, BS_VDISK_PUT, VCtx->VDiskLogPrefix << ex.what() << " Marker# BSVS39");
+                    info.HullStatus = {NKikimrProto::ERROR, 0, false};
+                }
+
+                if (info.HullStatus.Status == NKikimrProto::UNKNOWN) {
+                    info.HullStatus = ValidateVPut(ctx, "TEvVMultiPut", blobId, info.Buffer.GetSize(), ignoreBlock);
+                }
+
                 if (info.HullStatus.Status == NKikimrProto::OK) {
                     auto ingressOpt = TIngress::CreateIngressWithLocal(VCtx->Top.get(), VCtx->ShortSelfVDisk, blobId);
                     if (!ingressOpt) {
@@ -628,16 +628,16 @@ namespace NKikimr {
                    VCtx->Top->GetFailDomainOrderNumber(VCtx->ShortSelfVDisk), id.TabletID(), id.BlobSize());
             TVPutInfo info(id, ev->Get()->GetBuffer());
             const ui64 bufSize = info.Buffer.GetSize();
- 
-            try { 
-                info.IsHugeBlob = HugeBlobCtx->IsHugeBlob(VCtx->Top->GType, id.FullID()); 
-            } catch (yexception ex) { 
-                LOG_ERROR_S(ctx, BS_VDISK_PUT, VCtx->VDiskLogPrefix << ex.what()  << " Marker# BSVS41"); 
-                info.HullStatus = {NKikimrProto::ERROR, 0, false}; 
-                ReplyError({NKikimrProto::ERROR, ex.what(), 0, false}, ev, ctx, now); 
-                return; 
-            } 
- 
+
+            try {
+                info.IsHugeBlob = HugeBlobCtx->IsHugeBlob(VCtx->Top->GType, id.FullID());
+            } catch (yexception ex) {
+                LOG_ERROR_S(ctx, BS_VDISK_PUT, VCtx->VDiskLogPrefix << ex.what()  << " Marker# BSVS41");
+                info.HullStatus = {NKikimrProto::ERROR, 0, false};
+                ReplyError({NKikimrProto::ERROR, ex.what(), 0, false}, ev, ctx, now);
+                return;
+            }
+
             const bool ignoreBlock = record.GetIgnoreBlock();
 
             if (!OutOfSpaceLogic->Allow(ctx, ev)) {

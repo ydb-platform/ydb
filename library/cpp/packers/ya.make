@@ -4,8 +4,8 @@ OWNER(velavokr)
 
 SRCS(
     packers.cpp
-    proto_packer.cpp
-    region_packer.cpp
+    proto_packer.cpp 
+    region_packer.cpp 
 )
 
 END()

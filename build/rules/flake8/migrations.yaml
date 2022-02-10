@@ -1515,7 +1515,7 @@ migrations:
     - ydo/payments/balance_notifications_processor/lib
     - ydo/server/apphost_source/lib/endpoints
     - ydo/tools/direct/make_ya_clients_export
-    - yp/eviction_alerter/bin
+    - yp/eviction_alerter/bin 
     - yp/scheduler_simulator/analysis/library
     - yql/library/test_framework
     - yweb/antimalware/mitb/mitb_monitor/lib

@@ -1,101 +1,101 @@
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/json_writer.h>
-
+ 
 #include <library/cpp/testing/unittest/registar.h>
-#include <util/stream/str.h>
-
-using namespace NJson;
-
-class TReformatCallbacks: public TJsonCallbacks {
+#include <util/stream/str.h> 
+ 
+using namespace NJson; 
+ 
+class TReformatCallbacks: public TJsonCallbacks { 
     TJsonWriter& Writer;
 
-public:
+public: 
     TReformatCallbacks(TJsonWriter& writer)
         : Writer(writer)
     {
-    }
-
+    } 
+ 
     bool OnBoolean(bool val) override {
-        Writer.Write(val);
-        return true;
-    }
-
+        Writer.Write(val); 
+        return true; 
+    } 
+ 
     bool OnInteger(long long val) override {
-        Writer.Write(val);
-        return true;
-    }
-
+        Writer.Write(val); 
+        return true; 
+    } 
+ 
     bool OnUInteger(unsigned long long val) override {
         Writer.Write(val);
         return true;
     }
 
     bool OnString(const TStringBuf& val) override {
-        Writer.Write(val);
-        return true;
-    }
-
+        Writer.Write(val); 
+        return true; 
+    } 
+ 
     bool OnDouble(double val) override {
-        Writer.Write(val);
-        return true;
-    }
-
+        Writer.Write(val); 
+        return true; 
+    } 
+ 
     bool OnOpenArray() override {
-        Writer.OpenArray();
-        return true;
-    }
-
+        Writer.OpenArray(); 
+        return true; 
+    } 
+ 
     bool OnCloseArray() override {
-        Writer.CloseArray();
-        return true;
-    }
-
+        Writer.CloseArray(); 
+        return true; 
+    } 
+ 
     bool OnOpenMap() override {
-        Writer.OpenArray();
-        return true;
-    }
-
+        Writer.OpenArray(); 
+        return true; 
+    } 
+ 
     bool OnCloseMap() override {
-        Writer.CloseArray();
-        return true;
-    }
-
+        Writer.CloseArray(); 
+        return true; 
+    } 
+ 
     bool OnMapKey(const TStringBuf& val) override {
-        Writer.Write(val);
-        return true;
-    }
-};
-
+        Writer.Write(val); 
+        return true; 
+    } 
+}; 
+ 
 Y_UNIT_TEST_SUITE(TJsonReaderTest) {
     Y_UNIT_TEST(JsonReformatTest) {
         TString data = "{\"null value\": null, \"intkey\": 10, \"double key\": 11.11, \"string key\": \"string\", \"array\": [1,2,3,\"TString\"], \"bool key\": true}";
-
+ 
         TString result1, result2;
-        {
-            TStringStream in;
-            in << data;
-            TStringStream out;
-            TJsonWriter writer(&out, false);
-            TReformatCallbacks cb(writer);
-            ReadJson(&in, &cb);
-            writer.Flush();
-            result1 = out.Str();
-        }
-
-        {
-            TStringStream in;
-            in << result1;
-            TStringStream out;
-            TJsonWriter writer(&out, false);
-            TReformatCallbacks cb(writer);
-            ReadJson(&in, &cb);
-            writer.Flush();
+        { 
+            TStringStream in; 
+            in << data; 
+            TStringStream out; 
+            TJsonWriter writer(&out, false); 
+            TReformatCallbacks cb(writer); 
+            ReadJson(&in, &cb); 
+            writer.Flush(); 
+            result1 = out.Str(); 
+        } 
+ 
+        { 
+            TStringStream in; 
+            in << result1; 
+            TStringStream out; 
+            TJsonWriter writer(&out, false); 
+            TReformatCallbacks cb(writer); 
+            ReadJson(&in, &cb); 
+            writer.Flush(); 
             result2 = out.Str();
-        }
-
-        UNIT_ASSERT_VALUES_EQUAL(result1, result2);
-    }
-
+        } 
+ 
+        UNIT_ASSERT_VALUES_EQUAL(result1, result2); 
+    } 
+ 
     Y_UNIT_TEST(TJsonEscapedApostrophe) {
         TString jsonString = "{ \"foo\" : \"bar\\'buzz\" }";
         {
@@ -121,22 +121,22 @@ Y_UNIT_TEST_SUITE(TJsonReaderTest) {
 
     Y_UNIT_TEST(TJsonTreeTest) {
         TString data = "{\"intkey\": 10, \"double key\": 11.11, \"null value\":null, \"string key\": \"string\", \"array\": [1,2,3,\"TString\"], \"bool key\": true}";
-        TStringStream in;
-        in << data;
-        TJsonValue value;
-        ReadJsonTree(&in, &value);
-
+        TStringStream in; 
+        in << data; 
+        TJsonValue value; 
+        ReadJsonTree(&in, &value); 
+ 
         UNIT_ASSERT_VALUES_EQUAL(value["intkey"].GetInteger(), 10);
-        UNIT_ASSERT_DOUBLES_EQUAL(value["double key"].GetDouble(), 11.11, 0.001);
-        UNIT_ASSERT_VALUES_EQUAL(value["bool key"].GetBoolean(), true);
+        UNIT_ASSERT_DOUBLES_EQUAL(value["double key"].GetDouble(), 11.11, 0.001); 
+        UNIT_ASSERT_VALUES_EQUAL(value["bool key"].GetBoolean(), true); 
         UNIT_ASSERT_VALUES_EQUAL(value["absent string key"].GetString(), TString(""));
         UNIT_ASSERT_VALUES_EQUAL(value["string key"].GetString(), TString("string"));
-        UNIT_ASSERT_VALUES_EQUAL(value["array"][0].GetInteger(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(value["array"][1].GetInteger(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(value["array"][2].GetInteger(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(value["array"][0].GetInteger(), 1); 
+        UNIT_ASSERT_VALUES_EQUAL(value["array"][1].GetInteger(), 2); 
+        UNIT_ASSERT_VALUES_EQUAL(value["array"][2].GetInteger(), 3); 
         UNIT_ASSERT_VALUES_EQUAL(value["array"][3].GetString(), TString("TString"));
         UNIT_ASSERT(value["null value"].IsNull());
-
+ 
         // AsString
         UNIT_ASSERT_VALUES_EQUAL(value["intkey"].GetStringRobust(), "10");
         UNIT_ASSERT_VALUES_EQUAL(value["double key"].GetStringRobust(), "11.11");
@@ -149,22 +149,22 @@ Y_UNIT_TEST_SUITE(TJsonReaderTest) {
         UNIT_ASSERT(GetArrayPointer(value, "array", &array));
         UNIT_ASSERT_VALUES_EQUAL(value["array"].GetArray().size(), array->size());
         UNIT_ASSERT_VALUES_EQUAL(value["array"][0].GetInteger(), (*array)[0].GetInteger());
-        UNIT_ASSERT_VALUES_EQUAL(value["array"][1].GetInteger(), (*array)[1].GetInteger());
-        UNIT_ASSERT_VALUES_EQUAL(value["array"][2].GetInteger(), (*array)[2].GetInteger());
+        UNIT_ASSERT_VALUES_EQUAL(value["array"][1].GetInteger(), (*array)[1].GetInteger()); 
+        UNIT_ASSERT_VALUES_EQUAL(value["array"][2].GetInteger(), (*array)[2].GetInteger()); 
         UNIT_ASSERT_VALUES_EQUAL(value["array"][3].GetString(), (*array)[3].GetString());
-    }
-
+    } 
+ 
     Y_UNIT_TEST(TJsonRomaTest) {
         TString data = "{\"test\": [ {\"name\": \"A\"} ]}";
-
-        TStringStream in;
-        in << data;
-        TJsonValue value;
-        ReadJsonTree(&in, &value);
-
+ 
+        TStringStream in; 
+        in << data; 
+        TJsonValue value; 
+        ReadJsonTree(&in, &value); 
+ 
         UNIT_ASSERT_VALUES_EQUAL(value["test"][0]["name"].GetString(), TString("A"));
-    }
-
+    } 
+ 
     Y_UNIT_TEST(TJsonReadTreeWithComments) {
         {
             TString leadingCommentData = "{ // \"test\" : 1 \n}";
@@ -396,7 +396,7 @@ Y_UNIT_TEST_SUITE(TJsonReaderTest) {
         UNIT_ASSERT(v.GetMap().begin()->second.IsString());
         UNIT_ASSERT_VALUES_EQUAL("", v.GetMap().begin()->second.GetString());
     }
-}
+} 
 
 
 static const TString YANDEX_STREAMING_JSON("{\"a\":1}//d{\"b\":2}");

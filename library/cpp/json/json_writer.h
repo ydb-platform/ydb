@@ -1,17 +1,17 @@
-#pragma once
-
+#pragma once 
+ 
 // Deprecated. Use library/cpp/json/writer in new code.
 
 #include "json_value.h"
 
 #include <library/cpp/json/writer/json.h>
 
-#include <util/stream/output.h>
-#include <util/generic/hash.h>
+#include <util/stream/output.h> 
+#include <util/generic/hash.h> 
 #include <util/generic/maybe.h>
-#include <util/generic/strbuf.h>
-
-namespace NJson {
+#include <util/generic/strbuf.h> 
+ 
+namespace NJson { 
     struct TJsonWriterConfig {
         constexpr static ui32 DefaultDoubleNDigits = 10;
         constexpr static ui32 DefaultFloatNDigits = 6;
@@ -19,7 +19,7 @@ namespace NJson {
 
         inline TJsonWriterConfig& SetUnbuffered(bool v) noexcept {
             Unbuffered = v;
-
+ 
             return *this;
         }
 
@@ -61,25 +61,25 @@ namespace NJson {
         TJsonWriter(IOutputStream* out, bool formatOutput, bool sortkeys = false, bool validateUtf8 = true);
         TJsonWriter(IOutputStream* out, const TJsonWriterConfig& config, bool DontFlushInDestructor = false);
         ~TJsonWriter();
-
+ 
         void Flush();
-
+ 
         void OpenMap();
         void OpenMap(const TStringBuf& key) {
             Buf.WriteKey(key);
             OpenMap();
         }
         void CloseMap();
-
+ 
         void OpenArray();
         void OpenArray(const TStringBuf& key) {
             Buf.WriteKey(key);
             OpenArray();
         }
         void CloseArray();
-
+ 
         void WriteNull();
-
+ 
         void Write(const TStringBuf& value);
         void Write(float value);
         void Write(double value);
@@ -109,7 +109,7 @@ namespace NJson {
         void Write(unsigned short value) {
             Write((unsigned long long)value);
         }
-
+ 
         void Write(const unsigned char* value) {
             Write((const char*)value);
         }
@@ -122,12 +122,12 @@ namespace NJson {
         void Write(const std::string& value) {
             Write(TStringBuf(value));
         }
-
+ 
         // write raw json without checks
         void UnsafeWrite(const TStringBuf& value) {
             Buf.UnsafeWriteValue(value);
         }
-
+ 
         template <typename T>
         void Write(const TStringBuf& key, const T& value) {
             Buf.WriteKey(key);
@@ -139,7 +139,7 @@ namespace NJson {
             Buf.WriteKey(key);
             UnsafeWrite(value);
         }
-
+ 
         void WriteNull(const TStringBuf& key) {
             Buf.WriteKey(key);
             WriteNull();
@@ -193,4 +193,4 @@ namespace NJson {
     TString WriteJson(const TJsonValue*, bool formatOutput = true, bool sortkeys = false, bool validateUtf8 = false);
     TString WriteJson(const TJsonValue&, bool formatOutput = true, bool sortkeys = false, bool validateUtf8 = false);
     void WriteJson(IOutputStream*, const TJsonValue*, const TJsonWriterConfig& config);
-}
+} 

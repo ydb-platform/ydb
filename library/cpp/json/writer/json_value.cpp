@@ -1,6 +1,6 @@
-#include "json_value.h"
+#include "json_value.h" 
 #include "json.h"
-
+ 
 #include <util/generic/ymath.h>
 #include <util/generic/ylimits.h>
 #include <util/generic/utility.h>
@@ -67,9 +67,9 @@ AreJsonArraysEqual(const NJson::TJsonValue& lhs, const NJson::TJsonValue& rhs) {
     return true;
 }
 
-namespace NJson {
+namespace NJson { 
     const TJsonValue TJsonValue::UNDEFINED{};
-
+ 
     TJsonValue::TJsonValue(const EJsonValueType type) {
         SetType(type);
     }
@@ -80,7 +80,7 @@ namespace NJson {
         vval.SwapWithUndefined(*this);
         Zero(vval.Value);
     }
-
+ 
     TJsonValue::TJsonValue(const TJsonValue& val)
         : Type(val.Type)
     {
@@ -103,16 +103,16 @@ namespace NJson {
                 std::memcpy(&Value, &val.Value, sizeof(Value));
                 break;
         }
-    }
-
+    } 
+ 
     TJsonValue& TJsonValue::operator=(const TJsonValue& val) {
         if (this == &val)
             return *this;
         TJsonValue tmp(val);
         tmp.Swap(*this);
-        return *this;
+        return *this; 
     }
-
+ 
     TJsonValue& TJsonValue::operator=(TJsonValue&& val) noexcept {
         if (this == &val)
             return *this;
@@ -125,12 +125,12 @@ namespace NJson {
         SetType(JSON_BOOLEAN);
         Value.Boolean = value;
     }
-
+ 
     TJsonValue::TJsonValue(const long long value) noexcept {
         SetType(JSON_INTEGER);
         Value.Integer = value;
     }
-
+ 
     TJsonValue::TJsonValue(const unsigned long long value) noexcept {
         SetType(JSON_UINTEGER);
         Value.UInteger = value;
@@ -140,7 +140,7 @@ namespace NJson {
         SetType(JSON_INTEGER);
         Value.Integer = value;
     }
-
+ 
     TJsonValue::TJsonValue(const unsigned int value) noexcept {
         SetType(JSON_UINTEGER);
         Value.UInteger = value;
@@ -150,7 +150,7 @@ namespace NJson {
         SetType(JSON_INTEGER);
         Value.Integer = value;
     }
-
+ 
     TJsonValue::TJsonValue(const unsigned long value) noexcept {
         SetType(JSON_UINTEGER);
         Value.UInteger = value;
@@ -179,14 +179,14 @@ namespace NJson {
     EJsonValueType TJsonValue::GetType() const noexcept {
         return Type;
     }
-
+ 
     TJsonValue& TJsonValue::SetType(const EJsonValueType type) {
         if (Type == type)
             return *this;
 
         Clear();
         Type = type;
-
+ 
         switch (Type) {
             case JSON_STRING:
                 new (&Value.String) TString();
@@ -207,17 +207,17 @@ namespace NJson {
         }
 
         return *this;
-    }
-
+    } 
+ 
     TJsonValue& TJsonValue::SetValue(const TJsonValue& value) {
         return *this = value;
     }
-
+ 
     TJsonValue& TJsonValue::SetValue(TJsonValue&& value) {
         *this = std::move(value);
         return *this;
     }
-
+ 
     TJsonValue& TJsonValue::InsertValue(const TString& key, const TJsonValue& value) {
         SetType(JSON_MAP);
         return (*Value.Map)[key] = value;
@@ -227,12 +227,12 @@ namespace NJson {
         SetType(JSON_MAP);
         return (*Value.Map)[key] = value;
     }
-
+ 
     TJsonValue& TJsonValue::InsertValue(const char* key, const TJsonValue& value) {
         SetType(JSON_MAP);
         return (*Value.Map)[key] = value;
     }
-
+ 
     TJsonValue& TJsonValue::InsertValue(const TString& key, TJsonValue&& value) {
         SetType(JSON_MAP);
         return (*Value.Map)[key] = std::move(value);
@@ -269,7 +269,7 @@ namespace NJson {
         Value.Array->push_back(std::move(value));
         return Value.Array->back();
     }
-
+ 
     void TJsonValue::EraseValue(const TStringBuf key) {
         if (IsMap()) {
             TMapType::iterator it = Value.Map->find(key);
@@ -317,12 +317,12 @@ namespace NJson {
             Value.Array->resize(idx + 1);
         return (*Value.Array)[idx];
     }
-
+ 
     TJsonValue& TJsonValue::operator[](const TStringBuf& key) {
         SetType(JSON_MAP);
         return (*Value.Map)[key];
-    }
-
+    } 
+ 
     namespace {
         struct TDefaultsHolder {
             const TString String{};
@@ -331,23 +331,23 @@ namespace NJson {
             const TJsonValue Value{};
         };
     }
-
+ 
     const TJsonValue& TJsonValue::operator[](const size_t idx) const noexcept {
         const TJsonValue* ret = nullptr;
         if (GetValuePointer(idx, &ret))
             return *ret;
-
+ 
         return Singleton<TDefaultsHolder>()->Value;
     }
-
+ 
     const TJsonValue& TJsonValue::operator[](const TStringBuf& key) const noexcept {
         const TJsonValue* ret = nullptr;
         if (GetValuePointer(key, &ret))
             return *ret;
-
+ 
         return Singleton<TDefaultsHolder>()->Value;
     }
-
+ 
     bool TJsonValue::GetBoolean() const {
         return Type != JSON_BOOLEAN ? false : Value.Boolean;
     }
@@ -355,11 +355,11 @@ namespace NJson {
     long long TJsonValue::GetInteger() const {
         if (!IsInteger())
             return 0;
-
+ 
         switch (Type) {
             case JSON_INTEGER:
                 return Value.Integer;
-
+ 
             case JSON_UINTEGER:
                 return Value.UInteger;
 
@@ -652,7 +652,7 @@ namespace NJson {
         *value = Value.Boolean;
         return true;
     }
-
+ 
     bool TJsonValue::GetInteger(long long* value) const noexcept {
         if (!IsInteger())
             return false;
@@ -660,7 +660,7 @@ namespace NJson {
         *value = GetInteger();
         return true;
     }
-
+ 
     bool TJsonValue::GetUInteger(unsigned long long* value) const noexcept {
         if (!IsUInteger())
             return false;
@@ -676,7 +676,7 @@ namespace NJson {
         *value = GetDouble();
         return true;
     }
-
+ 
     bool TJsonValue::GetString(TString* value) const {
         if (Type != JSON_STRING)
             return false;
@@ -684,7 +684,7 @@ namespace NJson {
         *value = Value.String;
         return true;
     }
-
+ 
     bool TJsonValue::GetMap(TJsonValue::TMapType* value) const {
         if (Type != JSON_MAP)
             return false;
@@ -692,7 +692,7 @@ namespace NJson {
         *value = *Value.Map;
         return true;
     }
-
+ 
     bool TJsonValue::GetArray(TJsonValue::TArray* value) const {
         if (Type != JSON_ARRAY)
             return false;
@@ -700,15 +700,15 @@ namespace NJson {
         *value = *Value.Array;
         return true;
     }
-
+ 
     bool TJsonValue::GetMapPointer(const TJsonValue::TMapType** value) const noexcept {
         if (Type != JSON_MAP)
             return false;
-
+ 
         *value = Value.Map;
         return true;
     }
-
+ 
     bool TJsonValue::GetArrayPointer(const TJsonValue::TArray** value) const noexcept {
         if (Type != JSON_ARRAY)
             return false;
@@ -716,7 +716,7 @@ namespace NJson {
         *value = Value.Array;
         return true;
     }
-
+ 
     bool TJsonValue::GetValue(const size_t index, TJsonValue* value) const {
         const TJsonValue* tmp = nullptr;
         if (GetValuePointer(index, &tmp)) {
@@ -725,7 +725,7 @@ namespace NJson {
         }
         return false;
     }
-
+ 
     bool TJsonValue::GetValue(const TStringBuf key, TJsonValue* value) const {
         const TJsonValue* tmp = nullptr;
         if (GetValuePointer(key, &tmp)) {
@@ -734,7 +734,7 @@ namespace NJson {
         }
         return false;
     }
-
+ 
     bool TJsonValue::GetValuePointer(const size_t index, const TJsonValue** value) const noexcept {
         if (Type == JSON_ARRAY && index < Value.Array->size()) {
             *value = &(*Value.Array)[index];
@@ -742,7 +742,7 @@ namespace NJson {
         }
         return false;
     }
-
+ 
     bool TJsonValue::GetValuePointer(const TStringBuf key, const TJsonValue** value) const noexcept {
         if (Type == JSON_MAP) {
             const TMapType::const_iterator it = Value.Map->find(key);
@@ -757,11 +757,11 @@ namespace NJson {
     bool TJsonValue::GetValuePointer(const TStringBuf key, TJsonValue** value) noexcept {
         return static_cast<const TJsonValue*>(this)->GetValuePointer(key, const_cast<const TJsonValue**>(value));
     }
-
+ 
     bool TJsonValue::IsNull() const noexcept {
         return Type == JSON_NULL;
     }
-
+ 
     bool TJsonValue::IsBoolean() const noexcept {
         return Type == JSON_BOOLEAN;
     }
@@ -781,7 +781,7 @@ namespace NJson {
                 return false;
         }
     }
-
+ 
     bool TJsonValue::IsUInteger() const noexcept {
         switch (Type) {
             case JSON_UINTEGER:
@@ -815,7 +815,7 @@ namespace NJson {
                 return false;
         }
     }
-
+ 
     namespace {
         template <class TPtr, class T>
         TPtr* CreateOrNullptr(TPtr* p, T key, std::true_type /*create*/) {
@@ -988,7 +988,7 @@ namespace NJson {
         rhs.SwapWithUndefined(*this);
         tmp.SwapWithUndefined(rhs);
     }
-
+ 
     void TJsonValue::Save(IOutputStream* s) const {
         ::Save(s, static_cast<ui8>(Type));
         switch (Type) {
@@ -1061,7 +1061,7 @@ namespace NJson {
         *value = &v->GetMap();
         return true;
     }
-
+ 
     bool GetArrayPointer(const TJsonValue& jv, const size_t index, const TJsonValue::TArray** value) {
         const TJsonValue* v;
         if (!jv.GetValuePointer(index, &v) || !v->IsArray())
@@ -1070,7 +1070,7 @@ namespace NJson {
         *value = &v->GetArray();
         return true;
     }
-
+ 
     bool GetMapPointer(const TJsonValue& jv, const TStringBuf key, const TJsonValue::TMapType** value) {
         const TJsonValue* v;
         if (!jv.GetValuePointer(key, &v) || !v->IsMap())
@@ -1084,7 +1084,7 @@ namespace NJson {
         const TJsonValue* v;
         if (!jv.GetValuePointer(key, &v) || !v->IsArray())
             return false;
-
+ 
         *value = &v->GetArray();
         return true;
     }
@@ -1096,8 +1096,8 @@ namespace NJson {
         if (Value.Array->empty())
             ythrow TJsonException() << "Get back on empty array";
     }
-}
-
+} 
+ 
 template <>
 void Out<NJson::TJsonValue>(IOutputStream& out, const NJson::TJsonValue& v) {
     NJsonWriter::TBuf buf(NJsonWriter::HEM_DONT_ESCAPE_HTML, &out);

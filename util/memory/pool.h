@@ -150,7 +150,7 @@ public:
     inline void* Allocate(size_t len) {
         return RawAllocate(AlignUp<size_t>(len, PLATFORM_DATA_ALIGN));
     }
-
+ 
     inline void* Allocate(size_t len, size_t align) {
         return RawAllocate(AlignUp<size_t>(len, PLATFORM_DATA_ALIGN), align);
     }

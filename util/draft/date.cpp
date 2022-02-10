@@ -85,7 +85,7 @@ time_t TDate::GetStartUTC() const {
 TString TDate::ToStroka(const char* format) const {
     tm dateTm;
     localtime_r(&Timestamp, &dateTm);
-    return Strftime(format, &dateTm); 
+    return Strftime(format, &dateTm);
 }
 
 unsigned TDate::GetWeekDay() const {

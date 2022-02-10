@@ -9,10 +9,10 @@ Y_UNIT_TEST_SUITE(TDateTest) {
             UNIT_ASSERT_EQUAL(d.GetYear(), 2011);
             UNIT_ASSERT_EQUAL(d.GetMonth(), 2);
             UNIT_ASSERT_EQUAL(d.GetMonthDay(), 15);
-            UNIT_ASSERT_EQUAL(d.ToStroka("%Y%m%d"), "20110215"); 
-            UNIT_ASSERT_EQUAL(d.ToStroka(), "20110215"); 
-            UNIT_ASSERT_EQUAL(d.ToStroka("%Y--%m--%d"), "2011--02--15"); 
-            UNIT_ASSERT_EQUAL(d.ToStroka("%U"), "07"); 
+            UNIT_ASSERT_EQUAL(d.ToStroka("%Y%m%d"), "20110215");
+            UNIT_ASSERT_EQUAL(d.ToStroka(), "20110215");
+            UNIT_ASSERT_EQUAL(d.ToStroka("%Y--%m--%d"), "2011--02--15");
+            UNIT_ASSERT_EQUAL(d.ToStroka("%U"), "07");
             UNIT_ASSERT_EQUAL(d.GetStartUTC(), 1297728000);
         }
         {
@@ -20,8 +20,8 @@ Y_UNIT_TEST_SUITE(TDateTest) {
             UNIT_ASSERT_EQUAL(d.GetYear(), 2005);
             UNIT_ASSERT_EQUAL(d.GetMonth(), 6);
             UNIT_ASSERT_EQUAL(d.GetMonthDay(), 3);
-            UNIT_ASSERT_EQUAL(d.ToStroka(), "20050603"); 
-            UNIT_ASSERT_EQUAL(d.ToStroka("____%Y__%m____%d"), "____2005__06____03"); 
+            UNIT_ASSERT_EQUAL(d.ToStroka(), "20050603");
+            UNIT_ASSERT_EQUAL(d.ToStroka("____%Y__%m____%d"), "____2005__06____03");
             UNIT_ASSERT_EQUAL(d.GetStartUTC(), 1117756800);
         }
         {

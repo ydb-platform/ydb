@@ -864,7 +864,7 @@ class TCodecsTest: public TTestBase {
     UNIT_TEST(TestHuffman)
     UNIT_TEST(TestZStdDict)
     UNIT_TEST(TestCompTable)
-    UNIT_TEST(TestHuffmanLearnByFreqs) 
+    UNIT_TEST(TestHuffmanLearnByFreqs)
     UNIT_TEST(TestSolar)
     UNIT_TEST(TestPFor)
     UNIT_TEST(TestRegistry)
@@ -1194,60 +1194,60 @@ private:
         DoTestSimpleCodec<NCodecs::TCompTableCodec>();
     }
 
-    void TestHuffmanLearnByFreqs() { 
-        using namespace NCodecs; 
- 
+    void TestHuffmanLearnByFreqs() {
+        using namespace NCodecs;
+
         TVector<TBuffer> data;
- 
+
         for (auto& textValue : TextValues) {
             data.emplace_back(textValue, strlen(textValue));
-        } 
- 
+        }
+
         TVector<TBuffer> outLearn;
- 
-        { 
-            THuffmanCodec codec; 
-            static_cast<ICodec&>(codec).Learn(data.begin(), data.end()); 
- 
-            for (ui32 i = 0; i < data.size(); ++i) { 
+
+        {
+            THuffmanCodec codec;
+            static_cast<ICodec&>(codec).Learn(data.begin(), data.end());
+
+            for (ui32 i = 0; i < data.size(); ++i) {
                 outLearn.emplace_back();
                 codec.Encode(AsStrBuf(data[i]), outLearn[i]);
-            } 
-        } 
- 
+            }
+        }
+
         TVector<TBuffer> outLearnByFreqs;
- 
-        { 
-            THuffmanCodec codec; 
+
+        {
+            THuffmanCodec codec;
             std::pair<char, ui64> freqs[256];
- 
+
             for (size_t i = 0; i < Y_ARRAY_SIZE(freqs); ++i) {
-                freqs[i].first = (char)i; 
-                freqs[i].second = 0; 
-            } 
- 
+                freqs[i].first = (char)i;
+                freqs[i].second = 0;
+            }
+
             for (auto& textValue : TextValues) {
                 size_t len = strlen(textValue);
                 for (size_t j = 0; j < len; ++j) {
                     ++freqs[(ui32)(0xFF & textValue[j])].second;
                 }
-            } 
- 
+            }
+
             codec.LearnByFreqs(TArrayRef<std::pair<char, ui64>>(freqs, Y_ARRAY_SIZE(freqs)));
- 
-            for (ui32 i = 0; i < data.size(); ++i) { 
+
+            for (ui32 i = 0; i < data.size(); ++i) {
                 outLearnByFreqs.emplace_back();
                 codec.Encode(AsStrBuf(data[i]), outLearnByFreqs[i]);
-            } 
-        } 
- 
+            }
+        }
+
         UNIT_ASSERT_EQUAL(outLearn.size(), outLearnByFreqs.size());
         const size_t sz = outLearn.size();
         for (size_t n = 0; n < sz; ++n) {
             UNIT_ASSERT_EQUAL(AsStrBuf(outLearn[n]), AsStrBuf(outLearnByFreqs[n]));
         }
-    } 
- 
+    }
+
     void TestSolar() {
         using namespace NCodecs;
         {

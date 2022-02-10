@@ -175,7 +175,7 @@ RECURSE(
     libpqxx
     libpsl
     libraw
-    librdkafka 
+    librdkafka
     librosa-cpp
     librsvg
     libsamplerate

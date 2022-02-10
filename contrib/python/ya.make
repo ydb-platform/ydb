@@ -591,7 +591,7 @@ RECURSE(
     localshop
     lockfile
     logging-tree
-    loguru
+    loguru 
     logutils
     luigi
     LunarCalendar

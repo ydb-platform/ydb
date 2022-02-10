@@ -7038,17 +7038,17 @@
                 ]
             }
         },
-        "protobin_diff": { 
-            "formula": { 
+        "protobin_diff": {
+            "formula": {
                 "sandbox_id": 28621470,
-                "match": "protobin_diff" 
-            }, 
-            "executable": { 
+                "match": "protobin_diff"
+            },
+            "executable": {
                 "protobin_diff": [
                     "protobin_diff"
                 ]
-            } 
-        }, 
+            }
+        },
         "multipb_convert": {
             "formula": {
                 "sandbox_id": 31061929,

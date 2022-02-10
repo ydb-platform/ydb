@@ -500,7 +500,7 @@ void RemoteQueryExecutor::sendExternalTables()
 
                     if (pipe.empty())
                         return std::make_unique<Pipe>(
-                            std::make_shared<SourceFromSingleChunk>(metadata_snapshot->getSampleBlock(), Chunk())); 
+                            std::make_shared<SourceFromSingleChunk>(metadata_snapshot->getSampleBlock(), Chunk()));
 
                     return std::make_unique<Pipe>(std::move(pipe));
                 };

@@ -36,12 +36,12 @@ struct ViewRuntimeData
 class PushingToViewsBlockOutputStream : public IBlockOutputStream, WithContext
 {
 public:
-    PushingToViewsBlockOutputStream( 
-        const StoragePtr & storage_, 
-        const StorageMetadataPtr & metadata_snapshot_, 
+    PushingToViewsBlockOutputStream(
+        const StoragePtr & storage_,
+        const StorageMetadataPtr & metadata_snapshot_,
         ContextPtr context_,
-        const ASTPtr & query_ptr_, 
-        bool no_destination = false); 
+        const ASTPtr & query_ptr_,
+        bool no_destination = false);
 
     Block getHeader() const override;
     void write(const Block & block) override;
@@ -53,7 +53,7 @@ public:
 
 private:
     StoragePtr storage;
-    StorageMetadataPtr metadata_snapshot; 
+    StorageMetadataPtr metadata_snapshot;
     BlockOutputStreamPtr output;
     ReplicatedMergeTreeSink * replicated_output = nullptr;
     Poco::Logger * log;

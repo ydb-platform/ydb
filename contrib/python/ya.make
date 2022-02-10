@@ -272,7 +272,7 @@ RECURSE(
     django-mptt-admin
     django-nested-inline
     django-netfields
-    django-ninja 
+    django-ninja
     django-object-actions
     django-opentracing
     django-partial-index
@@ -290,7 +290,7 @@ RECURSE(
     django-rest-multiple-models
     django-reversion
     django-select2-forms
-    django-sentinel 
+    django-sentinel
     django-simple-history
     django-siteforms
     django-sitemessage
@@ -1140,7 +1140,7 @@ RECURSE(
     wcwidth
     webargs
     webauthn
-    webcolors 
+    webcolors
     webencodings
     WebOb
     websocket-client

@@ -48,10 +48,10 @@ int operator&(NProtoBuf::Message& m, IBinSaver& f);
 void SerializeToTextFormat(const NProtoBuf::Message& m, const TString& fileName);
 void SerializeToTextFormat(const NProtoBuf::Message& m, IOutputStream& out);
 
-// Write a textual representation of the given message to the given output stream
-// with flags UseShortRepeatedPrimitives and UseUtf8StringEscaping set to true.
-void SerializeToTextFormatPretty(const NProtoBuf::Message& m, IOutputStream& out);
-
+// Write a textual representation of the given message to the given output stream 
+// with flags UseShortRepeatedPrimitives and UseUtf8StringEscaping set to true. 
+void SerializeToTextFormatPretty(const NProtoBuf::Message& m, IOutputStream& out); 
+ 
 // Write a textual representation of the given message to the given output stream
 // use enum id instead of enum name for all enum fields.
 void SerializeToTextFormatWithEnumId(const NProtoBuf::Message& m, IOutputStream& out);

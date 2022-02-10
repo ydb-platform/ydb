@@ -118,18 +118,18 @@ void SerializeToTextFormatWithEnumId(const NProtoBuf::Message& m, IOutputStream&
     }
 }
 
-void SerializeToTextFormatPretty(const NProtoBuf::Message& m, IOutputStream& out) {
-    google::protobuf::TextFormat::Printer printer;
-    printer.SetUseUtf8StringEscaping(true);
-    printer.SetUseShortRepeatedPrimitives(true);
-
-    NProtoBuf::io::TCopyingOutputStreamAdaptor adaptor(&out);
-
-    if (!printer.Print(m, &adaptor)) {
-         ythrow yexception() << "SerializeToTextFormatPretty failed on Print";
-    }
-}
-
+void SerializeToTextFormatPretty(const NProtoBuf::Message& m, IOutputStream& out) { 
+    google::protobuf::TextFormat::Printer printer; 
+    printer.SetUseUtf8StringEscaping(true); 
+    printer.SetUseShortRepeatedPrimitives(true); 
+ 
+    NProtoBuf::io::TCopyingOutputStreamAdaptor adaptor(&out); 
+ 
+    if (!printer.Print(m, &adaptor)) { 
+         ythrow yexception() << "SerializeToTextFormatPretty failed on Print"; 
+    } 
+} 
+ 
 static void ConfigureParser(const EParseFromTextFormatOptions options,
                             NProtoBuf::TextFormat::Parser& p) {
     if (options & EParseFromTextFormatOption::AllowUnknownField) {

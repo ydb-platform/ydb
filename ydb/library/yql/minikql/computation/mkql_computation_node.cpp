@@ -43,7 +43,7 @@ TComputationContext::~TComputationContext() {
 #ifndef NDEBUG
     if (RssCounter) {
         Cerr << "UsageOnFinish: graph=" << HolderFactory.GetPagePool().GetUsed()
-            << ", rss=" << TRusage::Get().MaxRss
+            << ", rss=" << TRusage::Get().MaxRss 
             << ", peakAlloc=" << HolderFactory.GetPagePool().GetPeakAllocated()
             << ", adjustor=" << UsageAdjustor
             << Endl;
@@ -52,7 +52,7 @@ TComputationContext::~TComputationContext() {
 }
 
 void TComputationContext::UpdateUsageAdjustor(ui64 memLimit) {
-    const auto rss = TRusage::Get().MaxRss;
+    const auto rss = TRusage::Get().MaxRss; 
     if (!InitRss) {
         LastRss = InitRss = rss;
     }

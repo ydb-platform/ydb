@@ -86,8 +86,8 @@ ALLOW library/cpp/containers/absl_tstring_flat_hash -> contrib/restricted/abseil
 ALLOW quasar/backend/src/base -> contrib/restricted/spdlog
 ALLOW crypta/lib/native/log -> contrib/restricted/spdlog
 ALLOW yandex_io -> contrib/restricted/spdlog
-ALLOW smart_devices/tools/launcher2 -> contrib/restricted/spdlog
-ALLOW smart_devices/tools/updater -> contrib/restricted/spdlog
+ALLOW smart_devices/tools/launcher2 -> contrib/restricted/spdlog 
+ALLOW smart_devices/tools/updater -> contrib/restricted/spdlog 
 
 # cmph is a limited-use library
 ALLOW ads/yacontext -> contrib/restricted/cmph

@@ -300,7 +300,7 @@ RECURSE(
     django-tastypie
     django-test-migrations
     django-timezone-field
-    django-treebeard 
+    django-treebeard
     django-waffle
     django-webpack-loader
     django-webtest

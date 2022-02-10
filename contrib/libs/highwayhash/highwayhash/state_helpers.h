@@ -46,7 +46,7 @@ typedef unsigned long long HH_U64;  // NOLINT
 template <class State>
 HH_INLINE void PaddedUpdate(const HH_U64 size, const char* remaining_bytes,
                             const HH_U64 remaining_size, State* state) {
-  HH_ALIGNAS(32) char final_packet[State::kPacketSize] = {0}; 
+  HH_ALIGNAS(32) char final_packet[State::kPacketSize] = {0};
 
   // This layout matches the AVX-2 specialization in highway_tree_hash.h.
   uint32_t packet4 = static_cast<uint32_t>(size) << 24;

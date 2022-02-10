@@ -236,7 +236,7 @@ RECURSE(
     django-crispy-forms
     django-cron
     django-csp
-    django-cte
+    django-cte 
     django-datetime-widget
     django-db-geventpool
     django-dbtemplates

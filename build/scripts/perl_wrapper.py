@@ -1,7 +1,7 @@
-import os
-import sys
+import os 
+import sys 
 import shutil
-
+ 
 if __name__ == '__main__':
     path = sys.argv[1]
     to = sys.argv[-1]

@@ -3,9 +3,9 @@ import json
 import logging
 import argparse
 import os
-import random
+import random 
 import subprocess
-import sys
+import sys 
 import time
 import urllib2
 import uuid
@@ -13,11 +13,11 @@ import uuid
 import fetch_from
 
 
-ORIGIN_SUFFIX = '?origin=fetch-from-sandbox'
-MDS_PREFIX = 'http://storage-int.mds.yandex.net/get-sandbox/'
+ORIGIN_SUFFIX = '?origin=fetch-from-sandbox' 
+MDS_PREFIX = 'http://storage-int.mds.yandex.net/get-sandbox/' 
 TEMPORARY_ERROR_CODES = (429, 500, 503, 504)
-
-
+ 
+ 
 def parse_args():
     parser = argparse.ArgumentParser()
     fetch_from.add_common_arguments(parser)
@@ -128,10 +128,10 @@ def get_resource_http_links(resource_id):
     return [r['url'] + ORIGIN_SUFFIX for r in _query(url)]
 
 
-def fetch_via_script(script, resource_id):
-    return subprocess.check_output([script, str(resource_id)]).rstrip()
-
-
+def fetch_via_script(script, resource_id): 
+    return subprocess.check_output([script, str(resource_id)]).rstrip() 
+ 
+ 
 def fetch(resource_id, custom_fetcher):
     try:
         resource_info = get_resource_info(resource_id, touch=True, no_links=True)
@@ -146,14 +146,14 @@ def fetch(resource_id, custom_fetcher):
 
     logging.info('Resource %s info %s', str(resource_id), json.dumps(resource_info))
 
-    resource_file_name = os.path.basename(resource_info["file_name"])
-    expected_md5 = resource_info.get('md5')
-
-    proxy_link = resource_info['http']['proxy'] + ORIGIN_SUFFIX
-
-    mds_id = resource_info.get('attributes', {}).get('mds')
-    mds_link = MDS_PREFIX + mds_id if mds_id else None
-
+    resource_file_name = os.path.basename(resource_info["file_name"]) 
+    expected_md5 = resource_info.get('md5') 
+ 
+    proxy_link = resource_info['http']['proxy'] + ORIGIN_SUFFIX 
+ 
+    mds_id = resource_info.get('attributes', {}).get('mds') 
+    mds_link = MDS_PREFIX + mds_id if mds_id else None 
+ 
     def get_storage_links():
         storage_links = get_resource_http_links(resource_id)
         random.shuffle(storage_links)
@@ -164,33 +164,33 @@ def fetch(resource_id, custom_fetcher):
     if not skynet:
         logging.info("Skynet is not available, will try other protocols")
 
-    def iter_tries():
+    def iter_tries(): 
         if skynet:
             yield lambda: download_by_skynet(resource_info, resource_file_name)
 
-        if custom_fetcher:
-            yield lambda: fetch_via_script(custom_fetcher, resource_id)
+        if custom_fetcher: 
+            yield lambda: fetch_via_script(custom_fetcher, resource_id) 
 
         # Don't try too hard here: we will get back to proxy later on
         yield lambda: fetch_from.fetch_url(proxy_link, False, resource_file_name, expected_md5, tries=2)
         for x in get_storage_links():
             # Don't spend too much time connecting single host
             yield lambda: fetch_from.fetch_url(x, False, resource_file_name, expected_md5, tries=1)
-            if mds_link is not None:
+            if mds_link is not None: 
                 # Don't try too hard here: we will get back to MDS later on
                 yield lambda: fetch_from.fetch_url(mds_link, True, resource_file_name, expected_md5, tries=2)
         yield lambda: fetch_from.fetch_url(proxy_link, False, resource_file_name, expected_md5)
-        if mds_link is not None:
+        if mds_link is not None: 
             yield lambda: fetch_from.fetch_url(mds_link, True, resource_file_name, expected_md5)
-
+ 
     if resource_info.get('attributes', {}).get('ttl') != 'inf':
         sys.stderr.write('WARNING: resource {} ttl is not "inf".\n'.format(resource_id))
 
-    exc_info = None
-    for i, action in enumerate(itertools.islice(iter_tries(), 0, 10)):
-        try:
-            fetched_file = action()
-            break
+    exc_info = None 
+    for i, action in enumerate(itertools.islice(iter_tries(), 0, 10)): 
+        try: 
+            fetched_file = action() 
+            break 
         except UnsupportedProtocolException:
             pass
         except subprocess.CalledProcessError as e:
@@ -201,18 +201,18 @@ def fetch(resource_id, custom_fetcher):
             if e.code not in TEMPORARY_ERROR_CODES:
                 exc_info = exc_info or sys.exc_info()
             time.sleep(i)
-        except Exception as e:
-            logging.exception(e)
-            exc_info = exc_info or sys.exc_info()
-            time.sleep(i)
-    else:
+        except Exception as e: 
+            logging.exception(e) 
+            exc_info = exc_info or sys.exc_info() 
+            time.sleep(i) 
+    else: 
         if exc_info:
             raise exc_info[0], exc_info[1], exc_info[2]
         else:
             raise Exception("No available protocol and/or server to fetch resource")
 
     return fetched_file, resource_info['file_name']
-
+ 
 
 def _get_resource_info_from_file(resource_file):
     if resource_file is None or not os.path.exists(resource_file):
@@ -254,16 +254,16 @@ def main(args):
     fetch_from.process(fetched_file, file_name, args, remove=not custom_fetcher and not resource_info)
 
 
-if __name__ == '__main__':
+if __name__ == '__main__': 
     args = parse_args()
     fetch_from.setup_logging(args, os.path.basename(__file__))
 
-    try:
+    try: 
         main(args)
-    except Exception as e:
-        logging.exception(e)
+    except Exception as e: 
+        logging.exception(e) 
         print >>sys.stderr, open(args.abs_log_path).read()
-        sys.stderr.flush()
+        sys.stderr.flush() 
 
         import error
         sys.exit(error.ExitCodes.INFRASTRUCTURE_ERROR if fetch_from.is_temporary(e) else 1)

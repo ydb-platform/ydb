@@ -1039,9 +1039,9 @@ static {{c_ret_type}} {{cfunc_name}}(PyObject *op1, PyObject *op2, CYTHON_UNUSED
             }
             {{endif}}
             // copied from floatobject.c in Py3.5:
-//            PyFPE_START_PROTECT("{{op.lower() if not op.endswith('Divide') else 'divide'}}", return NULL)
+//            PyFPE_START_PROTECT("{{op.lower() if not op.endswith('Divide') else 'divide'}}", return NULL) 
             result = ((double)a) {{c_op}} (double)b;
-//            PyFPE_END_PROTECT(result)
+//            PyFPE_END_PROTECT(result) 
             return PyFloat_FromDouble(result);
         {{endif}}
     }
@@ -1178,7 +1178,7 @@ static {{c_ret_type}} {{cfunc_name}}(PyObject *op1, PyObject *op2, double floatv
     {{else}}
         // copied from floatobject.c in Py3.5:
         {{if order == 'CObj' and c_op in '%/'}}{{zerodiv_check('b')}}{{endif}}
-//        PyFPE_START_PROTECT("{{op.lower() if not op.endswith('Divide') else 'divide'}}", return NULL)
+//        PyFPE_START_PROTECT("{{op.lower() if not op.endswith('Divide') else 'divide'}}", return NULL) 
         {{if c_op == '%'}}
         result = fmod(a, b);
         if (result)
@@ -1188,7 +1188,7 @@ static {{c_ret_type}} {{cfunc_name}}(PyObject *op1, PyObject *op2, double floatv
         {{else}}
         result = a {{c_op}} b;
         {{endif}}
-//        PyFPE_END_PROTECT(result)
+//        PyFPE_END_PROTECT(result) 
         return PyFloat_FromDouble(result);
     {{endif}}
 }

@@ -43,8 +43,8 @@ def pb2_arg(suf, path, mod, unit):
         modsuf=stripext(suf)
     )
 
-def proto_arg(path, mod, unit):
-    return '{}.proto={}'.format(stripext(to_build_root(path, unit)), mod)
+def proto_arg(path, mod, unit): 
+    return '{}.proto={}'.format(stripext(to_build_root(path, unit)), mod) 
 
 def pb_cc_arg(suf, path, unit):
     return '{}{suf}'.format(stripext(to_build_root(path, unit)), suf=suf)
@@ -311,7 +311,7 @@ def onpy_srcs(unit, *args):
                         mod_root_path = root_rel_path[:-(len(path) + 1)]
                         py_namespaces.setdefault(mod_root_path, set()).add(ns if ns else '.')
                     mod = ns + mod_name
-
+ 
             if main_mod:
                 py_main(unit, mod + ":main")
             elif py3 and unit_needs_main and main_py:

@@ -3,9 +3,9 @@ import argparse
 TEMPLATE = '''\
 {includes}\
 #include <tasklet/runtime/lib/{language}_wrapper.h>
-#include <tasklet/runtime/lib/registry.h>
+#include <tasklet/runtime/lib/registry.h> 
 
-static const NTasklet::TRegHelper REG(
+static const NTasklet::TRegHelper REG( 
     "{name}",
     new NTasklet::{wrapper}
 );

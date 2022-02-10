@@ -1,11 +1,11 @@
-import sys
-import tarfile
+import sys 
+import tarfile 
 import copy
 import os
 import uuid
-
-
-def main(args):
+ 
+ 
+def main(args): 
     output_file, args = args[0], args[1:]
     # heretic@: Splits files on which could be merged( files ) and which should not be merged( expendables )
     # expendables will be in output_file in form {name}{ordinal number of archive in args[]}.{extension}
@@ -14,8 +14,8 @@ def main(args):
     except ValueError:
         split_i = len(args)
     files, expendables = args[:split_i], args[split_i + 1:]
-
-    with tarfile.open(output_file, 'w') as outf:
+ 
+    with tarfile.open(output_file, 'w') as outf: 
         for x in files:
             with tarfile.open(x) as tf:
                 for tarinfo in tf:
@@ -26,7 +26,7 @@ def main(args):
                         new_basename = '.'.join([basename_parts[0] + str(uuid.uuid4())] + basename_parts[1:])
                         new_tarinfo.name = os.path.join(dirname, new_basename)
                     outf.addfile(new_tarinfo, tf.extractfile(tarinfo))
-
-
-if __name__ == '__main__':
-    main(sys.argv[1:])
+ 
+ 
+if __name__ == '__main__': 
+    main(sys.argv[1:]) 

@@ -40,7 +40,7 @@ namespace {
                                  " new size: %zu.",
                                  TString{key}.Quote().c_str(), vsize, dsize);
                     }
-                }
+                } 
             } else {
                 D_.push_back(TDescriptor(key, data));
                 (*this)[key] = &D_.back();

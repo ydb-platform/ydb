@@ -6,7 +6,7 @@ OWNER(
 NEED_CHECK()
 
 PY2_LIBRARY()
-
+ 
 PY_SRCS(
     ymake_conf.py
 )
@@ -17,8 +17,8 @@ PEERDIR(
     library/cpp/string_utils/scan
 )
 
-END()
-
+END() 
+ 
 RECURSE(
     conf_fatal_error
     config
@@ -32,7 +32,7 @@ RECURSE(
     plugins
     prebuilt
     scripts
-    tests
+    tests 
     tests_slow
     yandex_specific/config
 )

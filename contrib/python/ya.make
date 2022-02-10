@@ -184,10 +184,10 @@ RECURSE(
     crontab
     cryptography
     cssselect
-    cssutils
+    cssutils 
     curlify
     cx-Oracle
-    cycler
+    cycler 
     cymem
     cytoolz
     czipfile
@@ -750,7 +750,7 @@ RECURSE(
     plugincode
     plumbum
     ply
-    plyvel
+    plyvel 
     polib
     portalocker
     portpicker

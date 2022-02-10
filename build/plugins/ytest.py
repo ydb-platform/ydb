@@ -12,7 +12,7 @@ import _requirements as reqs
 import StringIO
 import subprocess
 import collections
-
+ 
 import ymake
 
 
@@ -131,7 +131,7 @@ def validate_test(unit, kw):
 
     if valid_kw.get('SCRIPT-REL-PATH') == 'boost.test':
         project_path = valid_kw.get('BUILD-FOLDER-PATH', "")
-        if not project_path.startswith(("contrib", "mail", "maps", "tools/idl", "metrika", "devtools", "mds", "yandex_io", "smart_devices")):
+        if not project_path.startswith(("contrib", "mail", "maps", "tools/idl", "metrika", "devtools", "mds", "yandex_io", "smart_devices")): 
             errors.append("BOOSTTEST is not allowed here")
     elif valid_kw.get('SCRIPT-REL-PATH') == 'gtest':
         project_path = valid_kw.get('BUILD-FOLDER-PATH', "")

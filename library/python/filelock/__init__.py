@@ -41,7 +41,7 @@ class _NixFileLock(AbstractFileLock):
         super(_NixFileLock, self).__init__(path)
         from fcntl import flock, LOCK_EX, LOCK_UN, LOCK_NB
         self._locker = lambda lock, blocking: flock(lock, LOCK_EX if blocking else LOCK_EX | LOCK_NB)
-        self._unlocker = lambda lock: flock(lock, LOCK_UN)
+        self._unlocker = lambda lock: flock(lock, LOCK_UN) 
         self._lock = open(self.path, 'a')
         set_close_on_exec(self._lock)
 

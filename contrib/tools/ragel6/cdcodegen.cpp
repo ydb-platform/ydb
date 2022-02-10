@@ -704,11 +704,11 @@ string CCodeGen::PTR_CONST_END()
 
 std::ostream &CCodeGen::OPEN_ARRAY( string type, string name )
 {
-	out << "#if defined(__GNUC__)\n";
-	out << "static __attribute__((used)) const " << type << " " << name << "[] = {\n";
-	out << "#else\n";
+	out << "#if defined(__GNUC__)\n"; 
+	out << "static __attribute__((used)) const " << type << " " << name << "[] = {\n"; 
+	out << "#else\n"; 
 	out << "static const " << type << " " << name << "[] = {\n";
-	out << "#endif\n";
+	out << "#endif\n"; 
 	return out;
 }
 

@@ -223,7 +223,7 @@ RECURSE(
     django-appconf
     django-bootstrap3
     django-braces
-    django-bulk-update 
+    django-bulk-update
     django-cachalot
     django-cache-memoize
     django-celery-beat
@@ -277,7 +277,7 @@ RECURSE(
     django-opentracing
     django-partial-index
     django-pdb
-    django-phonenumbers 
+    django-phonenumbers
     django-picklefield
     django-post-office
     django-postgrespool2
@@ -625,7 +625,7 @@ RECURSE(
     mkdocs
     mkdocs-material
     mock
-    model-mommy 
+    model-mommy
     Momoko
     MongoDBProxy
     mongoengine
@@ -734,7 +734,7 @@ RECURSE(
     pefile
     pem
     pexpect
-    pgcli 
+    pgcli
     PGPy
     pgspecial
     phonenumbers

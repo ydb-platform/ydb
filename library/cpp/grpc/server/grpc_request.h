@@ -374,11 +374,11 @@ private:
             }
 
             //TODO: Move this in to grpc_request_proxy
-            auto maybeDatabase = GetPeerMetaValues(TStringBuf("x-ydb-database")); 
+            auto maybeDatabase = GetPeerMetaValues(TStringBuf("x-ydb-database"));
             if (maybeDatabase.empty()) {
                 Counters_->CountRequestsWithoutDatabase();
             }
-            auto maybeToken = GetPeerMetaValues(TStringBuf("x-ydb-auth-ticket")); 
+            auto maybeToken = GetPeerMetaValues(TStringBuf("x-ydb-auth-ticket"));
             if (maybeToken.empty() || maybeToken[0].empty()) {
                 TString db{maybeDatabase ? maybeDatabase[0] : TStringBuf{}};
                 Counters_->CountRequestsWithoutToken();

@@ -179,7 +179,7 @@ The compiled executable will require ZSTD DLL which is available at `dll\libzstd
 
 
 #### Advanced Build options
- 
+
 The build system requires a hash function in order to
 separate object files created with different compilation flags.
 By default, it tries to use `md5sum` or equivalent.
@@ -199,15 +199,15 @@ In which case, the hash function doesn't matter.
 
 
 #### Deprecated API
- 
+
 Obsolete API on their way out are stored in directory `lib/deprecated`.
 At this stage, it contains older streaming prototypes, in `lib/deprecated/zbuff.h`.
 These prototypes will be removed in some future version.
 Consider migrating code towards supported streaming API exposed in `zstd.h`.
- 
- 
+
+
 #### Miscellaneous
- 
+
 The other files are not source code. There are :
 
  - `BUCK` : support for `buck` build system (https://buckbuild.com/)

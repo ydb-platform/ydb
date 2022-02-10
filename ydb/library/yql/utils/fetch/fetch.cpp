@@ -32,7 +32,7 @@ public:
         ui16 port = 80;
         bool https = false;
 
-        if (url.Get(THttpURL::FieldScheme) == TStringBuf("https")) { 
+        if (url.Get(THttpURL::FieldScheme) == TStringBuf("https")) {
             port = 443;
             https = true;
         }
@@ -44,7 +44,7 @@ public:
         TString req;
         {
             TStringOutput rqs(req);
-            TStringBuf userAgent = "User-Agent: Mozilla/5.0 (compatible; YQL/1.0)"; 
+            TStringBuf userAgent = "User-Agent: Mozilla/5.0 (compatible; YQL/1.0)";
 
             IOutputStream::TPart request[] = {
                 IOutputStream::TPart("GET ", 4),
@@ -91,7 +91,7 @@ public:
 
     THttpURL GetRedirectURL(const THttpURL& baseUrl) override {
         for (auto i = HttpInput->Headers().Begin(); i != HttpInput->Headers().End(); ++i) {
-            if (0 == TCiString::compare(i->Name(), TStringBuf("location"))) { 
+            if (0 == TCiString::compare(i->Name(), TStringBuf("location"))) {
                 THttpURL target = ParseURL(i->Value(), THttpURL::FeaturesAll | NUri::TFeature::FeatureConvertHostIDN);
                 if (!target.IsValidAbs()) {
                     target.Merge(baseUrl);

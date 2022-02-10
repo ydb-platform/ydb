@@ -16,7 +16,7 @@ void TFileEntitiesList::Fill(const TString& dirname, TStringBuf prefix, TStringB
 
     size_t dirNameLength = dirname.length();
     while (dirNameLength && (dirname[dirNameLength - 1] == '\\' || dirname[dirNameLength - 1] == '/')) {
-        --dirNameLength; 
+        --dirNameLength;
     }
 
     for (auto file = dir.begin(); file != dir.end(); ++file) {

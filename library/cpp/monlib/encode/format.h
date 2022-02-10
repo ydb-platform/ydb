@@ -4,18 +4,18 @@
 
 namespace NMonitoring {
     namespace NFormatContenType {
-        constexpr TStringBuf TEXT = "application/x-solomon-txt"; 
-        constexpr TStringBuf JSON = "application/json"; 
-        constexpr TStringBuf PROTOBUF = "application/x-solomon-pb"; 
-        constexpr TStringBuf SPACK = "application/x-solomon-spack"; 
-        constexpr TStringBuf PROMETHEUS = "text/plain"; 
+        constexpr TStringBuf TEXT = "application/x-solomon-txt";
+        constexpr TStringBuf JSON = "application/json";
+        constexpr TStringBuf PROTOBUF = "application/x-solomon-pb";
+        constexpr TStringBuf SPACK = "application/x-solomon-spack";
+        constexpr TStringBuf PROMETHEUS = "text/plain";
     }
 
     namespace NFormatContentEncoding {
-        constexpr TStringBuf IDENTITY = "identity"; 
-        constexpr TStringBuf ZLIB = "zlib"; 
-        constexpr TStringBuf LZ4 = "lz4"; 
-        constexpr TStringBuf ZSTD = "zstd"; 
+        constexpr TStringBuf IDENTITY = "identity";
+        constexpr TStringBuf ZLIB = "zlib";
+        constexpr TStringBuf LZ4 = "lz4";
+        constexpr TStringBuf ZSTD = "zstd";
     }
 
     /**

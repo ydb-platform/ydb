@@ -77,8 +77,8 @@ struct __yhashtable_iterator {
         : cur(n)
     {
     } /*y*/
-    __yhashtable_iterator() = default; 
- 
+    __yhashtable_iterator() = default;
+
     reference operator*() const {
         return cur->val;
     }
@@ -961,7 +961,7 @@ __yhashtable_iterator<V>& __yhashtable_iterator<V>::operator++() {
     if ((uintptr_t)cur & 1) {
         node** bucket = (node**)((uintptr_t)cur & ~1);
         while (*bucket == nullptr)
-            ++bucket; 
+            ++bucket;
         Y_ASSERT(*bucket != nullptr);
         cur = (node*)((uintptr_t)*bucket & ~1);
     }
@@ -982,7 +982,7 @@ __yhashtable_const_iterator<V>& __yhashtable_const_iterator<V>::operator++() {
     if ((uintptr_t)cur & 1) {
         node** bucket = (node**)((uintptr_t)cur & ~1);
         while (*bucket == nullptr)
-            ++bucket; 
+            ++bucket;
         Y_ASSERT(*bucket != nullptr);
         cur = (node*)((uintptr_t)*bucket & ~1);
     }

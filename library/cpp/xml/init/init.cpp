@@ -9,7 +9,7 @@
 #include <util/generic/singleton.h>
 
 namespace {
-    int CharEncodingInput(unsigned char* out, int* outlen, const unsigned char* in, int* inlen) { 
+    int CharEncodingInput(unsigned char* out, int* outlen, const unsigned char* in, int* inlen) {
         size_t read = 0, written = 0;
         RECODE_RESULT r = Recode(CODES_WIN, CODES_UTF8, (const char*)in, (char*)out, (size_t)*inlen, (size_t)*outlen, read, written);
         if (r == RECODE_EOOUTPUT)

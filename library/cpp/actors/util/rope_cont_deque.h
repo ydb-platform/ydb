@@ -8,7 +8,7 @@ namespace NRopeDetails {
 template<typename TChunk>
 class TChunkList {
     std::deque<TChunk> Chunks;
- 
+
     static constexpr size_t MaxInplaceItems = 4;
     using TInplace = TStackVec<TChunk, MaxInplaceItems>;
     TInplace Inplace;

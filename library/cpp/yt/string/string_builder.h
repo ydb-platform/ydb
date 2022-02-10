@@ -75,7 +75,7 @@ protected:
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class T>
-TString ToStringViaBuilder(const T& value, TStringBuf spec = TStringBuf("v")); 
+TString ToStringViaBuilder(const T& value, TStringBuf spec = TStringBuf("v"));
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -86,7 +86,7 @@ class TDelimitedStringBuilderWrapper
 public:
     TDelimitedStringBuilderWrapper(
         TStringBuilderBase* builder,
-        TStringBuf delimiter = TStringBuf(", ")) 
+        TStringBuf delimiter = TStringBuf(", "))
         : Builder_(builder)
         , Delimiter_(delimiter)
     { }

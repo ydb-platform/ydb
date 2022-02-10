@@ -123,7 +123,7 @@ Y_UNIT_TEST(TestNameGenerator) {
     cfg.SetNameGenerator([](const NProtoBuf::FieldDescriptor&) { return "42"; });
 
     TNameGeneratorType proto;
-    Json2Proto(TStringBuf(R"({"42":42})"), proto, cfg); 
+    Json2Proto(TStringBuf(R"({"42":42})"), proto, cfg);
 
     TNameGeneratorType expected;
     expected.SetField(42);
@@ -524,7 +524,7 @@ Y_UNIT_TEST(TestInvalidRepeatedFieldWithMapAsObject) {
     TCompositeRepeated proto;
     TJson2ProtoConfig config;
     config.MapAsObject = true;
-    UNIT_ASSERT_EXCEPTION(Json2Proto(TStringBuf(R"({"Part":{"Boo":{}}})"), proto, config), yexception); 
+    UNIT_ASSERT_EXCEPTION(Json2Proto(TStringBuf(R"({"Part":{"Boo":{}}})"), proto, config), yexception);
 }
 
 Y_UNIT_TEST(TestStringTransforms) {

@@ -695,7 +695,7 @@ static void ZSTDMT_compressionJob(void* jobDescription)
 
     /* init */
     if (job->cdict) {
-        size_t const initError = ZSTD_compressBegin_advanced_internal(cctx, NULL, 0, ZSTD_dct_auto, ZSTD_dtlm_fast, job->cdict, &jobParams, job->fullFrameSize); 
+        size_t const initError = ZSTD_compressBegin_advanced_internal(cctx, NULL, 0, ZSTD_dct_auto, ZSTD_dtlm_fast, job->cdict, &jobParams, job->fullFrameSize);
         assert(job->firstJob);  /* only allowed for first job */
         if (ZSTD_isError(initError)) JOB_ERROR(initError);
     } else {  /* srcStart points at reloaded section */
@@ -711,7 +711,7 @@ static void ZSTDMT_compressionJob(void* jobDescription)
                                         job->prefix.start, job->prefix.size, ZSTD_dct_rawContent, /* load dictionary in "content-only" mode (no header analysis) */
                                         ZSTD_dtlm_fast,
                                         NULL, /*cdict*/
-                                        &jobParams, pledgedSrcSize); 
+                                        &jobParams, pledgedSrcSize);
             if (ZSTD_isError(initError)) JOB_ERROR(initError);
     }   }
 
@@ -977,17 +977,17 @@ static void ZSTDMT_releaseAllJobResources(ZSTDMT_CCtx* mtctx)
     unsigned jobID;
     DEBUGLOG(3, "ZSTDMT_releaseAllJobResources");
     for (jobID=0; jobID <= mtctx->jobIDMask; jobID++) {
-        /* Copy the mutex/cond out */ 
-        ZSTD_pthread_mutex_t const mutex = mtctx->jobs[jobID].job_mutex; 
-        ZSTD_pthread_cond_t const cond = mtctx->jobs[jobID].job_cond; 
- 
+        /* Copy the mutex/cond out */
+        ZSTD_pthread_mutex_t const mutex = mtctx->jobs[jobID].job_mutex;
+        ZSTD_pthread_cond_t const cond = mtctx->jobs[jobID].job_cond;
+
         DEBUGLOG(4, "job%02u: release dst address %08X", jobID, (U32)(size_t)mtctx->jobs[jobID].dstBuff.start);
         ZSTDMT_releaseBuffer(mtctx->bufPool, mtctx->jobs[jobID].dstBuff);
- 
-        /* Clear the job description, but keep the mutex/cond */ 
+
+        /* Clear the job description, but keep the mutex/cond */
         ZSTD_memset(&mtctx->jobs[jobID], 0, sizeof(mtctx->jobs[jobID]));
-        mtctx->jobs[jobID].job_mutex = mutex; 
-        mtctx->jobs[jobID].job_cond = cond; 
+        mtctx->jobs[jobID].job_mutex = mutex;
+        mtctx->jobs[jobID].job_cond = cond;
     }
     mtctx->inBuff.buffer = g_nullBuffer;
     mtctx->inBuff.filled = 0;
@@ -1149,7 +1149,7 @@ size_t ZSTDMT_toFlushNow(ZSTDMT_CCtx* mtctx)
 /* =====   Multi-threaded compression   ===== */
 /* ------------------------------------------ */
 
-static unsigned ZSTDMT_computeTargetJobLog(const ZSTD_CCtx_params* params) 
+static unsigned ZSTDMT_computeTargetJobLog(const ZSTD_CCtx_params* params)
 {
     unsigned jobLog;
     if (params->ldmParams.enableLdm == ZSTD_ps_enable) {
@@ -1158,7 +1158,7 @@ static unsigned ZSTDMT_computeTargetJobLog(const ZSTD_CCtx_params* params)
          * based on cycleLog instead. */
         jobLog = MAX(21, ZSTD_cycleLog(params->cParams.chainLog, params->cParams.strategy) + 3);
     } else {
-        jobLog = MAX(20, params->cParams.windowLog + 2); 
+        jobLog = MAX(20, params->cParams.windowLog + 2);
     }
     return MIN(jobLog, (unsigned)ZSTDMT_JOBLOG_MAX);
 }
@@ -1191,21 +1191,21 @@ static int ZSTDMT_overlapLog(int ovlog, ZSTD_strategy strat)
     return ovlog;
 }
 
-static size_t ZSTDMT_computeOverlapSize(const ZSTD_CCtx_params* params) 
+static size_t ZSTDMT_computeOverlapSize(const ZSTD_CCtx_params* params)
 {
-    int const overlapRLog = 9 - ZSTDMT_overlapLog(params->overlapLog, params->cParams.strategy); 
-    int ovLog = (overlapRLog >= 8) ? 0 : (params->cParams.windowLog - overlapRLog); 
+    int const overlapRLog = 9 - ZSTDMT_overlapLog(params->overlapLog, params->cParams.strategy);
+    int ovLog = (overlapRLog >= 8) ? 0 : (params->cParams.windowLog - overlapRLog);
     assert(0 <= overlapRLog && overlapRLog <= 8);
     if (params->ldmParams.enableLdm == ZSTD_ps_enable) {
         /* In Long Range Mode, the windowLog is typically oversized.
          * In which case, it's preferable to determine the jobSize
          * based on chainLog instead.
          * Then, ovLog becomes a fraction of the jobSize, rather than windowSize */
-        ovLog = MIN(params->cParams.windowLog, ZSTDMT_computeTargetJobLog(params) - 2) 
+        ovLog = MIN(params->cParams.windowLog, ZSTDMT_computeTargetJobLog(params) - 2)
                 - overlapRLog;
     }
     assert(0 <= ovLog && ovLog <= ZSTD_WINDOWLOG_MAX);
-    DEBUGLOG(4, "overlapLog : %i", params->overlapLog); 
+    DEBUGLOG(4, "overlapLog : %i", params->overlapLog);
     DEBUGLOG(4, "overlap size : %i", 1 << ovLog);
     return (ovLog==0) ? 0 : (size_t)1 << ovLog;
 }
@@ -1257,11 +1257,11 @@ size_t ZSTDMT_initCStream_internal(
         mtctx->cdict = cdict;
     }
 
-    mtctx->targetPrefixSize = ZSTDMT_computeOverlapSize(&params); 
+    mtctx->targetPrefixSize = ZSTDMT_computeOverlapSize(&params);
     DEBUGLOG(4, "overlapLog=%i => %u KB", params.overlapLog, (U32)(mtctx->targetPrefixSize>>10));
     mtctx->targetSectionSize = params.jobSize;
     if (mtctx->targetSectionSize == 0) {
-        mtctx->targetSectionSize = 1ULL << ZSTDMT_computeTargetJobLog(&params); 
+        mtctx->targetSectionSize = 1ULL << ZSTDMT_computeTargetJobLog(&params);
     }
     assert(mtctx->targetSectionSize <= (size_t)ZSTDMT_JOBSIZE_MAX);
 

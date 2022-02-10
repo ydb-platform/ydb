@@ -80,13 +80,13 @@ Y_UNIT_TEST_SUITE(TYMapTest) {
 
         m.insert(std::pair<const char, int>('Y', 32)); // jbuck: standard way
         typename mmap::iterator i = m.find('X');       // Find first match.
-        ++i; 
+        ++i;
         UNIT_ASSERT((*i).first == 'X');
         UNIT_ASSERT((*i).second == 20);
-        ++i; 
+        ++i;
         UNIT_ASSERT((*i).first == 'Y');
         UNIT_ASSERT((*i).second == 32);
-        ++i; 
+        ++i;
         UNIT_ASSERT(i == m.end());
 
         size_t count = m.erase('X');

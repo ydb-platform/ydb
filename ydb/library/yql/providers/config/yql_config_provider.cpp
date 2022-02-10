@@ -551,7 +551,7 @@ namespace {
 
                 Types.Diagnostics = true;
             }
-            else if (name == TStringBuf("Warning")) { 
+            else if (name == TStringBuf("Warning")) {
                 if (!SetWarningRule(pos, args, ctx)) {
                     return false;
                 }

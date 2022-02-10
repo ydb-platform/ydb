@@ -178,89 +178,89 @@ TStringBuf ExtHttpCodeStr(int code) noexcept {
     }
     switch (code) {
         case HTTP_BAD_RESPONSE_HEADER:
-            return TStringBuf("Bad response header"); 
+            return TStringBuf("Bad response header");
         case HTTP_CONNECTION_LOST:
-            return TStringBuf("Connection lost"); 
+            return TStringBuf("Connection lost");
         case HTTP_BODY_TOO_LARGE:
-            return TStringBuf("Body too large"); 
+            return TStringBuf("Body too large");
         case HTTP_ROBOTS_TXT_DISALLOW:
-            return TStringBuf("robots.txt disallow"); 
+            return TStringBuf("robots.txt disallow");
         case HTTP_BAD_URL:
-            return TStringBuf("Bad url"); 
+            return TStringBuf("Bad url");
         case HTTP_BAD_MIME:
-            return TStringBuf("Bad mime type"); 
+            return TStringBuf("Bad mime type");
         case HTTP_DNS_FAILURE:
-            return TStringBuf("Dns failure"); 
+            return TStringBuf("Dns failure");
         case HTTP_BAD_STATUS_CODE:
-            return TStringBuf("Bad status code"); 
+            return TStringBuf("Bad status code");
         case HTTP_BAD_HEADER_STRING:
-            return TStringBuf("Bad header string"); 
+            return TStringBuf("Bad header string");
         case HTTP_BAD_CHUNK:
-            return TStringBuf("Bad chunk"); 
+            return TStringBuf("Bad chunk");
         case HTTP_CONNECT_FAILED:
-            return TStringBuf("Connect failed"); 
+            return TStringBuf("Connect failed");
         case HTTP_FILTER_DISALLOW:
-            return TStringBuf("Filter disallow"); 
+            return TStringBuf("Filter disallow");
         case HTTP_LOCAL_EIO:
-            return TStringBuf("Local eio"); 
+            return TStringBuf("Local eio");
         case HTTP_BAD_CONTENT_LENGTH:
-            return TStringBuf("Bad content length"); 
+            return TStringBuf("Bad content length");
         case HTTP_BAD_ENCODING:
-            return TStringBuf("Bad encoding"); 
+            return TStringBuf("Bad encoding");
         case HTTP_LENGTH_UNKNOWN:
-            return TStringBuf("Length unknown"); 
+            return TStringBuf("Length unknown");
         case HTTP_HEADER_EOF:
-            return TStringBuf("Header EOF"); 
+            return TStringBuf("Header EOF");
         case HTTP_MESSAGE_EOF:
-            return TStringBuf("Message EOF"); 
+            return TStringBuf("Message EOF");
         case HTTP_CHUNK_EOF:
-            return TStringBuf("Chunk EOF"); 
+            return TStringBuf("Chunk EOF");
         case HTTP_PAST_EOF:
-            return TStringBuf("Past EOF"); 
+            return TStringBuf("Past EOF");
         case HTTP_HEADER_TOO_LARGE:
-            return TStringBuf("Header is too large"); 
+            return TStringBuf("Header is too large");
         case HTTP_URL_TOO_LARGE:
-            return TStringBuf("Url is too large"); 
+            return TStringBuf("Url is too large");
         case HTTP_INTERRUPTED:
-            return TStringBuf("Interrupted"); 
+            return TStringBuf("Interrupted");
         case HTTP_CUSTOM_NOT_MODIFIED:
-            return TStringBuf("Signature detector thinks that doc is not modified"); 
+            return TStringBuf("Signature detector thinks that doc is not modified");
         case HTTP_BAD_CONTENT_ENCODING:
-            return TStringBuf("Bad content encoding"); 
+            return TStringBuf("Bad content encoding");
         case HTTP_NO_RESOURCES:
-            return TStringBuf("No resources"); 
+            return TStringBuf("No resources");
         case HTTP_FETCHER_SHUTDOWN:
-            return TStringBuf("Fetcher shutdown"); 
+            return TStringBuf("Fetcher shutdown");
         case HTTP_CHUNK_TOO_LARGE:
-            return TStringBuf("Chunk size is too big"); 
+            return TStringBuf("Chunk size is too big");
         case HTTP_SERVER_BUSY:
-            return TStringBuf("Server is busy"); 
+            return TStringBuf("Server is busy");
         case HTTP_SERVICE_UNKNOWN:
-            return TStringBuf("Service is unknown"); 
+            return TStringBuf("Service is unknown");
         case HTTP_PROXY_UNKNOWN:
-            return TStringBuf("Zora: unknown error"); 
+            return TStringBuf("Zora: unknown error");
         case HTTP_PROXY_REQUEST_TIME_OUT:
-            return TStringBuf("Zora: request time out"); 
+            return TStringBuf("Zora: request time out");
         case HTTP_PROXY_INTERNAL_ERROR:
-            return TStringBuf("Zora: internal server error"); 
+            return TStringBuf("Zora: internal server error");
         case HTTP_PROXY_CONNECT_FAILED:
-            return TStringBuf("Spider proxy connect failed"); 
+            return TStringBuf("Spider proxy connect failed");
         case HTTP_PROXY_CONNECTION_LOST:
-            return TStringBuf("Spider proxy connection lost"); 
+            return TStringBuf("Spider proxy connection lost");
         case HTTP_PROXY_NO_PROXY:
-            return TStringBuf("Spider proxy no proxy alive in region"); 
+            return TStringBuf("Spider proxy no proxy alive in region");
         case HTTP_PROXY_ERROR:
-            return TStringBuf("Spider proxy returned custom error"); 
+            return TStringBuf("Spider proxy returned custom error");
         case HTTP_SSL_ERROR:
-            return TStringBuf("Ssl library returned error"); 
+            return TStringBuf("Ssl library returned error");
         case HTTP_CACHED_COPY_NOT_FOUND:
-            return TStringBuf("Cached copy for the url is not available"); 
+            return TStringBuf("Cached copy for the url is not available");
         case HTTP_TIMEDOUT_WHILE_BYTES_RECEIVING:
-            return TStringBuf("Timed out while bytes receiving"); 
+            return TStringBuf("Timed out while bytes receiving");
 
             // TODO: messages for >2000 codes
 
         default:
-            return TStringBuf("Unknown HTTP code"); 
+            return TStringBuf("Unknown HTTP code");
     }
 }

@@ -63,13 +63,13 @@ public:
 
     static bool Match(const TExprNode* node) {
         {%- if node.Match.Type == "Callable" %}
-        return node->IsCallable(TStringBuf("{{ node.Match.Name }}")); 
+        return node->IsCallable(TStringBuf("{{ node.Match.Name }}"));
         {% elif node.Match.Type == "NodeType" %}
         return node->Type() == TExprNode::{{ node.Match.TypeName }};
         {% elif node.Match.Type == "CallableBase" %}
         static THashSet<TStringBuf> namesToMatch = {
             {%- for name in node.aux.namesToMatch %}
-            TStringBuf("{{ name }}"), 
+            TStringBuf("{{ name }}"),
             {%- endfor %}
         };
         return node->IsCallable(namesToMatch);
@@ -83,7 +83,7 @@ public:
     }
         {%- if node.Match.Type == "Callable" %}
     static const TStringBuf CallableName() {
-        return "{{ node.Match.Name }}"sv; 
+        return "{{ node.Match.Name }}"sv;
     }
         {%- endif %}
     {%- endif %}
@@ -125,7 +125,7 @@ protected:
 
         static THashSet<TStringBuf> namesToMatch = {
             {%- for name in node.aux.namesToMatch %}
-            TStringBuf("{{ name }}"), 
+            TStringBuf("{{ name }}"),
             {%- endfor %}
         };
         if (namesToMatch.find(CallableNameHolder) == namesToMatch.end()) {

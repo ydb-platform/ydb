@@ -902,7 +902,7 @@ fts_build(FTS* sp, int type)
         /* GCC, you're too verbose. */
         cp = nullptr;
     }
-    ++len; 
+    ++len;
     maxlen = sp->fts_pathlen - len;
 
     level = cur->fts_level + 1;

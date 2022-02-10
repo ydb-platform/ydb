@@ -8,8 +8,8 @@
 #include <climits>
 #include <limits>
 
-using namespace std::string_view_literals; 
- 
+using namespace std::string_view_literals;
+
 namespace {
     template <typename Writer, typename Function>
     TString with_writer(Function&& function) {
@@ -155,101 +155,101 @@ Y_UNIT_TEST_SUITE(Writer) {
 
     Y_UNIT_TEST(BinaryBoolean) {
         UNIT_ASSERT_VALUES_EQUAL(
-            TStringBuf("\x4"), 
+            TStringBuf("\x4"),
             to_yson_binary_string(NYsonPull::TScalar{false}));
         UNIT_ASSERT_VALUES_EQUAL(
-            TStringBuf("\x5"), 
+            TStringBuf("\x5"),
             to_yson_binary_string(NYsonPull::TScalar{true}));
     }
 
     Y_UNIT_TEST(BinaryInt64) {
         UNIT_ASSERT_VALUES_EQUAL(
-            TStringBuf("\x2\0"sv), 
+            TStringBuf("\x2\0"sv),
             to_yson_binary_string(NYsonPull::TScalar{i64{0}}));
         UNIT_ASSERT_VALUES_EQUAL(
-            TStringBuf("\x2\x90\x3"), 
+            TStringBuf("\x2\x90\x3"),
             to_yson_binary_string(NYsonPull::TScalar{i64{200}}));
         UNIT_ASSERT_VALUES_EQUAL(
-            TStringBuf("\x2\xC0\xB8\x2"), 
+            TStringBuf("\x2\xC0\xB8\x2"),
             to_yson_binary_string(NYsonPull::TScalar{i64{20000}}));
         UNIT_ASSERT_VALUES_EQUAL(
-            TStringBuf("\x2\x80\x88\xDE\xBE\x1"), 
+            TStringBuf("\x2\x80\x88\xDE\xBE\x1"),
             to_yson_binary_string(NYsonPull::TScalar{i64{200000000}}));
         UNIT_ASSERT_VALUES_EQUAL(
-            TStringBuf("\x2\x80\x80\x90\xF8\x9B\xF9\x86G"), 
+            TStringBuf("\x2\x80\x80\x90\xF8\x9B\xF9\x86G"),
             to_yson_binary_string(NYsonPull::TScalar{i64{20000000000000000}}));
         UNIT_ASSERT_VALUES_EQUAL(
-            TStringBuf("\x2\xFE\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\x1"), 
+            TStringBuf("\x2\xFE\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\x1"),
             to_yson_binary_string(NYsonPull::TScalar{i64{INT64_MAX}}));
 
         UNIT_ASSERT_VALUES_EQUAL(
-            TStringBuf("\x2\x8F\x3"), 
+            TStringBuf("\x2\x8F\x3"),
             to_yson_binary_string(NYsonPull::TScalar{i64{-200}}));
         UNIT_ASSERT_VALUES_EQUAL(
-            TStringBuf("\x2\xBF\xB8\x2"), 
+            TStringBuf("\x2\xBF\xB8\x2"),
             to_yson_binary_string(NYsonPull::TScalar{i64{-20000}}));
         UNIT_ASSERT_VALUES_EQUAL(
-            TStringBuf("\x2\xFF\x87\xDE\xBE\x1"), 
+            TStringBuf("\x2\xFF\x87\xDE\xBE\x1"),
             to_yson_binary_string(NYsonPull::TScalar{i64{-200000000}}));
         UNIT_ASSERT_VALUES_EQUAL(
-            TStringBuf("\x2\xFF\xFF\x8F\xF8\x9B\xF9\x86G"), 
+            TStringBuf("\x2\xFF\xFF\x8F\xF8\x9B\xF9\x86G"),
             to_yson_binary_string(NYsonPull::TScalar{i64{-20000000000000000}}));
         UNIT_ASSERT_VALUES_EQUAL(
-            TStringBuf("\x2\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\x1"), 
+            TStringBuf("\x2\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\x1"),
             to_yson_binary_string(NYsonPull::TScalar{i64{INT64_MIN}}));
     }
 
     Y_UNIT_TEST(BinaryUInt64) {
         UNIT_ASSERT_VALUES_EQUAL(
-            TStringBuf("\x6\0"sv), 
+            TStringBuf("\x6\0"sv),
             to_yson_binary_string(NYsonPull::TScalar{ui64{0}}));
         UNIT_ASSERT_VALUES_EQUAL(
-            TStringBuf("\x6\xC8\x1"), 
+            TStringBuf("\x6\xC8\x1"),
             to_yson_binary_string(NYsonPull::TScalar{ui64{200}}));
         UNIT_ASSERT_VALUES_EQUAL(
-            TStringBuf("\x6\xA0\x9C\x1"), 
+            TStringBuf("\x6\xA0\x9C\x1"),
             to_yson_binary_string(NYsonPull::TScalar{ui64{20000}}));
         UNIT_ASSERT_VALUES_EQUAL(
-            TStringBuf("\x6\x80\x84\xAF_"), 
+            TStringBuf("\x6\x80\x84\xAF_"),
             to_yson_binary_string(NYsonPull::TScalar{ui64{200000000}}));
         UNIT_ASSERT_VALUES_EQUAL(
-            TStringBuf("\x6\x80\x80\x88\xFC\xCD\xBC\xC3#"), 
+            TStringBuf("\x6\x80\x80\x88\xFC\xCD\xBC\xC3#"),
             to_yson_binary_string(NYsonPull::TScalar{ui64{20000000000000000}}));
         UNIT_ASSERT_VALUES_EQUAL(
-            TStringBuf("\x6\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\x7F"), 
+            TStringBuf("\x6\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\x7F"),
             to_yson_binary_string(NYsonPull::TScalar{ui64{INT64_MAX}}));
         UNIT_ASSERT_VALUES_EQUAL(
-            TStringBuf("\x6\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\x1"), 
+            TStringBuf("\x6\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\x1"),
             to_yson_binary_string(NYsonPull::TScalar{ui64{UINT64_MAX}}));
     }
 
     Y_UNIT_TEST(BinaryFloat64) {
         UNIT_ASSERT_VALUES_EQUAL(
-            TStringBuf("\x03\x00\x00\x00\x00\x00\x00\xf0\x7f"sv), 
+            TStringBuf("\x03\x00\x00\x00\x00\x00\x00\xf0\x7f"sv),
             to_yson_binary_string(NYsonPull::TScalar{std::numeric_limits<double>::infinity()}));
         UNIT_ASSERT_VALUES_EQUAL(
-            TStringBuf("\x03\x00\x00\x00\x00\x00\x00\xf0\xff"sv), 
+            TStringBuf("\x03\x00\x00\x00\x00\x00\x00\xf0\xff"sv),
             to_yson_binary_string(NYsonPull::TScalar{-std::numeric_limits<double>::infinity()}));
         UNIT_ASSERT_VALUES_EQUAL(
-            TStringBuf("\x03\x00\x00\x00\x00\x00\x00\xf8\x7f"sv), 
+            TStringBuf("\x03\x00\x00\x00\x00\x00\x00\xf8\x7f"sv),
             to_yson_binary_string(NYsonPull::TScalar{std::numeric_limits<double>::quiet_NaN()}));
         UNIT_ASSERT_VALUES_EQUAL(
-            TStringBuf("\x03\x9a\x99\x99\x99\x99\x99\xf1\x3f"), 
+            TStringBuf("\x03\x9a\x99\x99\x99\x99\x99\xf1\x3f"),
             to_yson_binary_string(NYsonPull::TScalar{double{1.1}}));
         UNIT_ASSERT_VALUES_EQUAL(
-            TStringBuf("\x03\x9a\x99\x99\x99\x99\x99\xf1\xbf"), 
+            TStringBuf("\x03\x9a\x99\x99\x99\x99\x99\xf1\xbf"),
             to_yson_binary_string(NYsonPull::TScalar{double{-1.1}}));
     }
 
     Y_UNIT_TEST(BinaryString) {
         UNIT_ASSERT_VALUES_EQUAL(
-            TStringBuf("\x1\0"sv), 
+            TStringBuf("\x1\0"sv),
             to_yson_binary_string(NYsonPull::TScalar{""}));
         UNIT_ASSERT_VALUES_EQUAL(
-            TStringBuf("\x1\nhello"), 
+            TStringBuf("\x1\nhello"),
             to_yson_binary_string(NYsonPull::TScalar{"hello"}));
         UNIT_ASSERT_VALUES_EQUAL(
-            TStringBuf("\x1\x16hello\nworld"), 
+            TStringBuf("\x1\x16hello\nworld"),
             to_yson_binary_string(NYsonPull::TScalar{"hello\nworld"}));
     }
 

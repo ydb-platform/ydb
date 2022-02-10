@@ -19,7 +19,7 @@
 
 namespace NYql {
 
-const TStringBuf ZeroString = ""; 
+const TStringBuf ZeroString = "";
 
 void ReportError(TExprContext& ctx, const TIssue& issue) {
     ctx.AddError(issue);
@@ -163,22 +163,22 @@ namespace {
 
         const TTypeAnnotationNode* CompileTypeAnnotationNode(const TAstNode& node) {
             if (node.IsAtom()) {
-                if (node.GetContent() == TStringBuf(".")) { 
+                if (node.GetContent() == TStringBuf(".")) {
                     return nullptr;
                 }
-                else if (node.GetContent() == TStringBuf("Unit")) { 
+                else if (node.GetContent() == TStringBuf("Unit")) {
                     return Expr.MakeType<TUnitExprType>();
                 }
-                else if (node.GetContent() == TStringBuf("World")) { 
+                else if (node.GetContent() == TStringBuf("World")) {
                     return Expr.MakeType<TWorldExprType>();
                 }
-                else if (node.GetContent() == TStringBuf("Void")) { 
+                else if (node.GetContent() == TStringBuf("Void")) {
                     return Expr.MakeType<TVoidExprType>();
                 }
-                else if (node.GetContent() == TStringBuf("Null")) { 
+                else if (node.GetContent() == TStringBuf("Null")) {
                     return Expr.MakeType<TNullExprType>();
                 }
-                else if (node.GetContent() == TStringBuf("Generic")) { 
+                else if (node.GetContent() == TStringBuf("Generic")) {
                     return Expr.MakeType<TGenericExprType>();
                 }
                 else if (node.GetContent() == TStringBuf("EmptyList")) {
@@ -203,7 +203,7 @@ namespace {
                 }
 
                 auto content = node.GetChild(0)->GetContent();
-                if (content == TStringBuf("Data")) { 
+                if (content == TStringBuf("Data")) {
                     const auto count = node.GetChildrenCount();
                     if (!(count == 2 || count == 4) || !node.GetChild(1)->IsAtom()) {
                         AddError(node, "Bad data type annotation");
@@ -230,7 +230,7 @@ namespace {
 
                         return ann;
                     }
-                } else if (content == TStringBuf("List")) { 
+                } else if (content == TStringBuf("List")) {
                     if (node.GetChildrenCount() != 2) {
                         AddError(node, "Bad list type annotation");
                         return nullptr;
@@ -241,7 +241,7 @@ namespace {
                         return nullptr;
 
                     return Expr.MakeType<TListExprType>(r);
-                } else if (content == TStringBuf("Stream")) { 
+                } else if (content == TStringBuf("Stream")) {
                     if (node.GetChildrenCount() != 2) {
                         AddError(node, "Bad stream type annotation");
                         return nullptr;
@@ -252,7 +252,7 @@ namespace {
                         return nullptr;
 
                     return Expr.MakeType<TStreamExprType>(r);
-                } else if (content == TStringBuf("Struct")) { 
+                } else if (content == TStringBuf("Struct")) {
                     TVector<const TItemExprType*> children;
                     for (size_t index = 1; index < node.GetChildrenCount(); ++index) {
                         auto r = CompileTypeAnnotationNode(*node.GetChild(index));
@@ -273,7 +273,7 @@ namespace {
                     }
 
                     return ann;
-                } else if (content == TStringBuf("Multi")) { 
+                } else if (content == TStringBuf("Multi")) {
                     TTypeAnnotationNode::TListType children;
                     for (size_t index = 1; index < node.GetChildrenCount(); ++index) {
                         auto r = CompileTypeAnnotationNode(*node.GetChild(index));
@@ -289,7 +289,7 @@ namespace {
                     }
 
                     return ann;
-                } else if (content == TStringBuf("Tuple")) { 
+                } else if (content == TStringBuf("Tuple")) {
                     TTypeAnnotationNode::TListType children;
                     for (size_t index = 1; index < node.GetChildrenCount(); ++index) {
                         auto r = CompileTypeAnnotationNode(*node.GetChild(index));
@@ -305,7 +305,7 @@ namespace {
                     }
 
                     return ann;
-                } else if (content == TStringBuf("Item")) { 
+                } else if (content == TStringBuf("Item")) {
                     if (node.GetChildrenCount() != 3 || !node.GetChild(1)->IsAtom()) {
                         AddError(node, "Bad item type annotation");
                         return nullptr;
@@ -316,7 +316,7 @@ namespace {
                         return nullptr;
 
                     return Expr.MakeType<TItemExprType>(TString(node.GetChild(1)->GetContent()), r);
-                } else if (content == TStringBuf("Optional")) { 
+                } else if (content == TStringBuf("Optional")) {
                     if (node.GetChildrenCount() != 2) {
                         AddError(node, "Bad optional type annotation");
                         return nullptr;
@@ -327,7 +327,7 @@ namespace {
                         return nullptr;
 
                     return Expr.MakeType<TOptionalExprType>(r);
-                } else if (content == TStringBuf("Type")) { 
+                } else if (content == TStringBuf("Type")) {
                     if (node.GetChildrenCount() != 2) {
                         AddError(node, "Bad type annotation");
                         return nullptr;
@@ -339,7 +339,7 @@ namespace {
 
                     return Expr.MakeType<TTypeExprType>(r);
                 }
-                else if (content == TStringBuf("Dict")) { 
+                else if (content == TStringBuf("Dict")) {
                     if (node.GetChildrenCount() != 3) {
                         AddError(node, "Bad dict annotation");
                         return nullptr;
@@ -360,7 +360,7 @@ namespace {
 
                     return ann;
                 }
-                else if (content == TStringBuf("Callable")) { 
+                else if (content == TStringBuf("Callable")) {
                     if (node.GetChildrenCount() <= 2) {
                         AddError(node, "Bad callable annotation");
                         return nullptr;
@@ -459,14 +459,14 @@ namespace {
                     }
 
                     return ann;
-                } else if (content == TStringBuf("Resource")) { 
+                } else if (content == TStringBuf("Resource")) {
                     if (node.GetChildrenCount() != 2 || !node.GetChild(1)->IsAtom()) {
                         AddError(node, "Bad resource type annotation");
                         return nullptr;
                     }
 
                     return Expr.MakeType<TResourceExprType>(TString(node.GetChild(1)->GetContent()));
-                } else if (content == TStringBuf("Tagged")) { 
+                } else if (content == TStringBuf("Tagged")) {
                     if (node.GetChildrenCount() != 3 || !node.GetChild(2)->IsAtom()) {
                         AddError(node, "Bad tagged type annotation");
                         return nullptr;
@@ -483,7 +483,7 @@ namespace {
                     }
 
                     return ann;
-                } else if (content == TStringBuf("Error")) { 
+                } else if (content == TStringBuf("Error")) {
                     if (node.GetChildrenCount() != 5 || !node.GetChild(1)->IsAtom() ||
                         !node.GetChild(2)->IsAtom() || !node.GetChild(3)->IsAtom() || !node.GetChild(4)->IsAtom()) {
                         AddError(node, "Bad error type annotation");
@@ -504,7 +504,7 @@ namespace {
 
                     auto file = TString(node.GetChild(3)->GetContent());
                     return Expr.MakeType<TErrorExprType>(TIssue(TPosition(column, row, file), TString(node.GetChild(4)->GetContent())));
-                } else if (content == TStringBuf("Variant")) { 
+                } else if (content == TStringBuf("Variant")) {
                     if (node.GetChildrenCount() != 2) {
                         AddError(node, "Bad variant type annotation");
                         return nullptr;
@@ -520,7 +520,7 @@ namespace {
                     }
 
                     return ann;
-                } else if (content == TStringBuf("Stream")) { 
+                } else if (content == TStringBuf("Stream")) {
                     if (node.GetChildrenCount() != 2) {
                         AddError(node, "Bad stream type annotation");
                         return nullptr;
@@ -531,7 +531,7 @@ namespace {
                         return nullptr;
 
                     return Expr.MakeType<TStreamExprType>(r);
-                } else if (content == TStringBuf("Flow")) { 
+                } else if (content == TStringBuf("Flow")) {
                     if (node.GetChildrenCount() != 2) {
                         AddError(node, "Bad flow type annotation");
                         return nullptr;
@@ -554,12 +554,12 @@ namespace {
         switch (annotation.GetKind()) {
         case ETypeAnnotationKind::Unit:
             {
-                return TAstNode::NewLiteralAtom(TPosition(), TStringBuf("Unit"), pool); 
+                return TAstNode::NewLiteralAtom(TPosition(), TStringBuf("Unit"), pool);
             }
 
         case ETypeAnnotationKind::Tuple:
             {
-                auto self = TAstNode::NewLiteralAtom(TPosition(), TStringBuf("Tuple"), pool); 
+                auto self = TAstNode::NewLiteralAtom(TPosition(), TStringBuf("Tuple"), pool);
                 TSmallVec<TAstNode*> children;
                 children.push_back(self);
                 for (auto& child : annotation.Cast<TTupleExprType>()->GetItems()) {
@@ -571,7 +571,7 @@ namespace {
 
         case ETypeAnnotationKind::Struct:
             {
-                auto self = TAstNode::NewLiteralAtom(TPosition(), TStringBuf("Struct"), pool); 
+                auto self = TAstNode::NewLiteralAtom(TPosition(), TStringBuf("Struct"), pool);
                 TSmallVec<TAstNode*> children;
                 children.push_back(self);
                 for (auto& child : annotation.Cast<TStructExprType>()->GetItems()) {
@@ -583,14 +583,14 @@ namespace {
 
         case ETypeAnnotationKind::List:
             {
-                auto self = TAstNode::NewLiteralAtom(TPosition(), TStringBuf("List"), pool); 
+                auto self = TAstNode::NewLiteralAtom(TPosition(), TStringBuf("List"), pool);
                 auto itemType = ConvertTypeAnnotationToAst(*annotation.Cast<TListExprType>()->GetItemType(), pool, refAtoms);
                 return TAstNode::NewList(TPosition(), pool, self, itemType);
             }
 
         case ETypeAnnotationKind::Optional:
         {
-            auto self = TAstNode::NewLiteralAtom(TPosition(), TStringBuf("Optional"), pool); 
+            auto self = TAstNode::NewLiteralAtom(TPosition(), TStringBuf("Optional"), pool);
             auto itemType = ConvertTypeAnnotationToAst(*annotation.Cast<TOptionalExprType>()->GetItemType(), pool, refAtoms);
             return TAstNode::NewList(TPosition(), pool, self, itemType);
         }
@@ -598,7 +598,7 @@ namespace {
         case ETypeAnnotationKind::Item:
             {
                 auto casted = annotation.Cast<TItemExprType>();
-                auto self = TAstNode::NewLiteralAtom(TPosition(), TStringBuf("Item"), pool); 
+                auto self = TAstNode::NewLiteralAtom(TPosition(), TStringBuf("Item"), pool);
                 auto name = refAtoms ?
                     TAstNode::NewLiteralAtom(TPosition(), casted->GetName(), pool, TNodeFlags::ArbitraryContent) :
                     TAstNode::NewAtom(TPosition(), casted->GetName(), pool, TNodeFlags::ArbitraryContent);
@@ -608,7 +608,7 @@ namespace {
 
         case ETypeAnnotationKind::Data:
             {
-                auto self = TAstNode::NewLiteralAtom(TPosition(), TStringBuf("Data"), pool); 
+                auto self = TAstNode::NewLiteralAtom(TPosition(), TStringBuf("Data"), pool);
                 auto datatype = refAtoms ?
                     TAstNode::NewLiteralAtom(TPosition(), annotation.Cast<TDataExprType>()->GetName(), pool) :
                     TAstNode::NewAtom(TPosition(), annotation.Cast<TDataExprType>()->GetName(), pool);
@@ -629,19 +629,19 @@ namespace {
 
         case ETypeAnnotationKind::World:
         {
-            return TAstNode::NewLiteralAtom(TPosition(), TStringBuf("World"), pool); 
+            return TAstNode::NewLiteralAtom(TPosition(), TStringBuf("World"), pool);
         }
 
         case ETypeAnnotationKind::Type:
         {
-            auto self = TAstNode::NewLiteralAtom(TPosition(), TStringBuf("Type"), pool); 
+            auto self = TAstNode::NewLiteralAtom(TPosition(), TStringBuf("Type"), pool);
             auto type = ConvertTypeAnnotationToAst(*annotation.Cast<TTypeExprType>()->GetType(), pool, refAtoms);
             return TAstNode::NewList(TPosition(), pool, self, type);
         }
 
         case ETypeAnnotationKind::Dict:
         {
-            auto self = TAstNode::NewLiteralAtom(TPosition(), TStringBuf("Dict"), pool); 
+            auto self = TAstNode::NewLiteralAtom(TPosition(), TStringBuf("Dict"), pool);
             auto dictType = annotation.Cast<TDictExprType>();
             auto keyType = ConvertTypeAnnotationToAst(*dictType->GetKeyType(), pool, refAtoms);
             auto payloadType = ConvertTypeAnnotationToAst(*dictType->GetPayloadType(), pool, refAtoms);
@@ -650,17 +650,17 @@ namespace {
 
         case ETypeAnnotationKind::Void:
         {
-            return TAstNode::NewLiteralAtom(TPosition(), TStringBuf("Void"), pool); 
+            return TAstNode::NewLiteralAtom(TPosition(), TStringBuf("Void"), pool);
         }
 
         case ETypeAnnotationKind::Null:
         {
-            return TAstNode::NewLiteralAtom(TPosition(), TStringBuf("Null"), pool); 
+            return TAstNode::NewLiteralAtom(TPosition(), TStringBuf("Null"), pool);
         }
 
         case ETypeAnnotationKind::Callable:
         {
-            auto self = TAstNode::NewLiteralAtom(TPosition(), TStringBuf("Callable"), pool); 
+            auto self = TAstNode::NewLiteralAtom(TPosition(), TStringBuf("Callable"), pool);
             auto callable = annotation.Cast<TCallableExprType>();
             TSmallVec<TAstNode*> mainSettings;
             if (callable->GetOptionalArgumentsCount() > 0 || !callable->GetPayload().empty()) {
@@ -704,12 +704,12 @@ namespace {
 
         case ETypeAnnotationKind::Generic:
         {
-            return TAstNode::NewLiteralAtom(TPosition(), TStringBuf("Generic"), pool); 
+            return TAstNode::NewLiteralAtom(TPosition(), TStringBuf("Generic"), pool);
         }
 
         case ETypeAnnotationKind::Resource:
         {
-            auto self = TAstNode::NewLiteralAtom(TPosition(), TStringBuf("Resource"), pool); 
+            auto self = TAstNode::NewLiteralAtom(TPosition(), TStringBuf("Resource"), pool);
             auto restype = refAtoms ?
                 TAstNode::NewLiteralAtom(TPosition(), annotation.Cast<TResourceExprType>()->GetTag(), pool, TNodeFlags::ArbitraryContent) :
                 TAstNode::NewAtom(TPosition(), annotation.Cast<TResourceExprType>()->GetTag(), pool, TNodeFlags::ArbitraryContent);
@@ -718,7 +718,7 @@ namespace {
 
         case ETypeAnnotationKind::Tagged:
         {
-            auto self = TAstNode::NewLiteralAtom(TPosition(), TStringBuf("Tagged"), pool); 
+            auto self = TAstNode::NewLiteralAtom(TPosition(), TStringBuf("Tagged"), pool);
             auto type = ConvertTypeAnnotationToAst(*annotation.Cast<TTaggedExprType>()->GetBaseType(), pool, refAtoms);
             auto restype = refAtoms ?
                 TAstNode::NewLiteralAtom(TPosition(), annotation.Cast<TTaggedExprType>()->GetTag(), pool, TNodeFlags::ArbitraryContent) :
@@ -728,7 +728,7 @@ namespace {
 
         case ETypeAnnotationKind::Error:
         {
-            auto self = TAstNode::NewLiteralAtom(TPosition(), TStringBuf("Error"), pool); 
+            auto self = TAstNode::NewLiteralAtom(TPosition(), TStringBuf("Error"), pool);
             const auto& err = annotation.Cast<TErrorExprType>()->GetError();
             auto row = TAstNode::NewAtom(TPosition(), ToString(err.Position.Row), pool);
             auto column = TAstNode::NewAtom(TPosition(), ToString(err.Position.Column), pool);
@@ -743,28 +743,28 @@ namespace {
 
         case ETypeAnnotationKind::Variant:
         {
-            auto self = TAstNode::NewLiteralAtom(TPosition(), TStringBuf("Variant"), pool); 
+            auto self = TAstNode::NewLiteralAtom(TPosition(), TStringBuf("Variant"), pool);
             auto underlyingType = ConvertTypeAnnotationToAst(*annotation.Cast<TVariantExprType>()->GetUnderlyingType(), pool, refAtoms);
             return TAstNode::NewList(TPosition(), pool, self, underlyingType);
         }
 
         case ETypeAnnotationKind::Stream:
         {
-            auto self = TAstNode::NewLiteralAtom(TPosition(), TStringBuf("Stream"), pool); 
+            auto self = TAstNode::NewLiteralAtom(TPosition(), TStringBuf("Stream"), pool);
             auto itemType = ConvertTypeAnnotationToAst(*annotation.Cast<TStreamExprType>()->GetItemType(), pool, refAtoms);
             return TAstNode::NewList(TPosition(), pool, self, itemType);
         }
 
         case ETypeAnnotationKind::Flow:
         {
-            auto self = TAstNode::NewLiteralAtom(TPosition(), TStringBuf("Flow"), pool); 
+            auto self = TAstNode::NewLiteralAtom(TPosition(), TStringBuf("Flow"), pool);
             auto itemType = ConvertTypeAnnotationToAst(*annotation.Cast<TFlowExprType>()->GetItemType(), pool, refAtoms);
             return TAstNode::NewList(TPosition(), pool, self, itemType);
         }
 
         case ETypeAnnotationKind::Multi:
         {
-            auto self = TAstNode::NewLiteralAtom(TPosition(), TStringBuf("Multi"), pool); 
+            auto self = TAstNode::NewLiteralAtom(TPosition(), TStringBuf("Multi"), pool);
             TSmallVec<TAstNode*> children;
             children.push_back(self);
             for (auto& child : annotation.Cast<TMultiExprType>()->GetItems()) {
@@ -803,7 +803,7 @@ namespace {
                 YQL_ENSURE(exprNode->GetTypeAnn());
                 typeAnn = ConvertTypeAnnotationToAst(*exprNode->GetTypeAnn(), pool, refAtoms);
             } else {
-                typeAnn = TAstNode::NewLiteralAtom(node->GetPosition(), TStringBuf("."), pool); 
+                typeAnn = TAstNode::NewLiteralAtom(node->GetPosition(), TStringBuf("."), pool);
             }
 
             children.push_back(typeAnn);
@@ -841,7 +841,7 @@ namespace {
 
         const auto args = node.GetChild(1);
         if (!args->IsList() || args->GetChildrenCount() != 2 || !args->GetChild(0)->IsAtom() ||
-            args->GetChild(0)->GetContent() != TStringBuf("quote") || !args->GetChild(1)->IsList()) { 
+            args->GetChild(0)->GetContent() != TStringBuf("quote") || !args->GetChild(1)->IsList()) {
             ctx.AddError(node, "Lambda arguments must be a quoted list of atoms");
             return {};
         }
@@ -893,14 +893,14 @@ namespace {
 
         const auto name = node.GetChild(1);
         if (name->IsAtom() || name->GetChildrenCount() != 2 || !name->GetChild(0)->IsAtom() || !name->GetChild(1)->IsAtom() ||
-            name->GetChild(0)->GetContent() != TStringBuf("quote")) { 
+            name->GetChild(0)->GetContent() != TStringBuf("quote")) {
             ctx.AddError(*name, "Expected quoted atom for package name");
             return false;
         }
 
         const auto versionNode = node.GetChild(2);
         if (versionNode->IsAtom() || versionNode->GetChildrenCount() != 2 || !versionNode->GetChild(0)->IsAtom() || !versionNode->GetChild(1)->IsAtom() ||
-            versionNode->GetChild(0)->GetContent() != TStringBuf("quote")) { 
+            versionNode->GetChild(0)->GetContent() != TStringBuf("quote")) {
             ctx.AddError(*versionNode, "Expected quoted atom for package version");
             return false;
         }
@@ -932,7 +932,7 @@ namespace {
 
         const auto alias = node.GetChild(2);
         if (alias->IsAtom() || alias->GetChildrenCount() != 2 || !alias->GetChild(0)->IsAtom() || !alias->GetChild(1)->IsAtom() ||
-            alias->GetChild(0)->GetContent() != TStringBuf("quote")) { 
+            alias->GetChild(0)->GetContent() != TStringBuf("quote")) {
             ctx.AddError(*alias, "Expected quoted pair");
             return nullptr;
         }
@@ -1011,7 +1011,7 @@ namespace {
 
         const auto alias = node.GetChild(2);
         if (!alias->IsListOfSize(2) || !alias->GetChild(0)->IsAtom() || !alias->GetChild(1)->IsAtom() ||
-            alias->GetChild(0)->GetContent() != TStringBuf("quote")) { 
+            alias->GetChild(0)->GetContent() != TStringBuf("quote")) {
             ctx.AddError(node, "Expected quoted pair");
             return false;
         }
@@ -1173,10 +1173,10 @@ namespace {
                     return {};
                 }
 
-                if (firstChild->GetContent() == TStringBuf("library")) { 
+                if (firstChild->GetContent() == TStringBuf("library")) {
                     if (!CompileLibraryDef(*node, ctx))
                         return {};
-                } else if (firstChild->GetContent() == TStringBuf("set_package_version")) { 
+                } else if (firstChild->GetContent() == TStringBuf("set_package_version")) {
                     if (!CompileSetPackageVersion(*node, ctx))
                         return {};
                 }
@@ -1215,16 +1215,16 @@ namespace {
                 return {};
             }
 
-            if (firstChild->GetContent() == TStringBuf("let")) { 
+            if (firstChild->GetContent() == TStringBuf("let")) {
                 if (!CompileLet(*node, ctx))
                     return {};
-            } else if (firstChild->GetContent() == TStringBuf("return")) { 
+            } else if (firstChild->GetContent() == TStringBuf("return")) {
                 if (!CompileReturn(*node, ctx))
                     return {};
-            } else if (firstChild->GetContent() == TStringBuf("import")) { 
+            } else if (firstChild->GetContent() == TStringBuf("import")) {
                 if (!CompileImport(*node, ctx))
                     return {};
-            } else if (firstChild->GetContent() == TStringBuf("declare")) { 
+            } else if (firstChild->GetContent() == TStringBuf("declare")) {
                 if (!topLevel) {
                     ctx.AddError(*firstChild, "Declare statements are only allowed on top level block");
                     return {};
@@ -1232,14 +1232,14 @@ namespace {
 
                 if (!CompileDeclare(*node, ctx))
                     return {};
-            } else if (firstChild->GetContent() == TStringBuf("library")) { 
+            } else if (firstChild->GetContent() == TStringBuf("library")) {
                 if (!topLevel) {
                     ctx.AddError(*firstChild, "Library statements are only allowed on top level block");
                     return {};
                 }
 
                 continue;
-            } else if (firstChild->GetContent() == TStringBuf("set_package_version")) { 
+            } else if (firstChild->GetContent() == TStringBuf("set_package_version")) {
                 if (!topLevel) {
                     ctx.AddError(*firstChild, "set_package_version statements are only allowed on top level block");
                     return {};
@@ -1287,13 +1287,13 @@ namespace {
                 return false;
             }
 
-            if (firstChild->GetContent() == TStringBuf("let")) { 
+            if (firstChild->GetContent() == TStringBuf("let")) {
                 if (!CompileLet(*node, ctx))
                     return false;
-            } else if (firstChild->GetContent() == TStringBuf("import")) { 
+            } else if (firstChild->GetContent() == TStringBuf("import")) {
                 if (!CompileImport(*node, ctx))
                     return false;
-            } else if (firstChild->GetContent() == TStringBuf("export")) { 
+            } else if (firstChild->GetContent() == TStringBuf("export")) {
                 if (!CompileExport(*node, ctx))
                     return false;
             } else {
@@ -1328,7 +1328,7 @@ namespace {
         }
 
         auto function = node.GetChild(0)->GetContent();
-        if (function == TStringBuf("quote")) { 
+        if (function == TStringBuf("quote")) {
             if (node.GetChildrenCount() != 2) {
                 ctx.AddError(node, "Quote should have one argument");
                 return {};
@@ -1340,22 +1340,22 @@ namespace {
             return {};
         }
 
-        if (function == TStringBuf("let") || function == TStringBuf("return")) { 
+        if (function == TStringBuf("let") || function == TStringBuf("return")) {
             ctx.AddError(node, "Let and return should be used only at first level or inside def");
             return {};
         }
 
-        if (function == TStringBuf("lambda")) { 
+        if (function == TStringBuf("lambda")) {
             return CompileLambda(node, ctx);
         }
 
-        if (function == TStringBuf("bind")) { 
+        if (function == TStringBuf("bind")) {
             if (auto bind = CompileBind(node, ctx))
                 return {std::move(bind)};
             return {};
         }
 
-        if (function == TStringBuf("block")) { 
+        if (function == TStringBuf("block")) {
             if (node.GetChildrenCount() != 2) {
                 ctx.AddError(node, "Block should have one argument");
                 return {};
@@ -1363,7 +1363,7 @@ namespace {
 
             const auto quotedList = node.GetChild(1);
             if (quotedList->GetChildrenCount() != 2 || !quotedList->GetChild(0)->IsAtom() ||
-                quotedList->GetChild(0)->GetContent() != TStringBuf("quote")) { 
+                quotedList->GetChild(0)->GetContent() != TStringBuf("quote")) {
                 ctx.AddError(node, "Expected quoted list");
                 return {};
             }
@@ -1562,7 +1562,7 @@ namespace {
                             break;
                         }
 
-                        auto declareAtom = TAstNode::NewLiteralAtom(ctx.Expr.GetPosition(node.Pos()), TStringBuf("declare"), pool); 
+                        auto declareAtom = TAstNode::NewLiteralAtom(ctx.Expr.GetPosition(node.Pos()), TStringBuf("declare"), pool);
                         auto nameAtom = ctx.RefAtoms
                             ? TAstNode::NewLiteralAtom(ctx.Expr.GetPosition(nameNode.Pos()), nameNode.Content(), pool)
                             : TAstNode::NewAtom(ctx.Expr.GetPosition(nameNode.Pos()), nameNode.Content(), pool);
@@ -1619,7 +1619,7 @@ namespace {
                         TSmallVec<const TExprNode*> body(node.ChildrenSize() - 1U);
                         for (ui32 i = 0U; i < body.size(); ++i)
                             body[i] = node.Child(i + 1U);
-                        const auto blockNode = TAstNode::NewLiteralAtom(ctx.Expr.GetPosition(node.Pos()), TStringBuf("block"), pool); 
+                        const auto blockNode = TAstNode::NewLiteralAtom(ctx.Expr.GetPosition(node.Pos()), TStringBuf("block"), pool);
                         const auto quotedListNode = TAstNode::NewList(ctx.Expr.GetPosition(node.Pos()), pool,
                             AnnotateAstNode(&TAstNode::QuoteAtom, nullptr, annotationFlags, pool, ctx.RefAtoms),
                             ConvertFunction(node.Pos(), body, ctx, annotationFlags, pool));
@@ -1632,7 +1632,7 @@ namespace {
                         ctx.CurrentFrame = prevFrame;
                         res = TAstNode::NewList(ctx.Expr.GetPosition(node.Pos()), pool,
                             AnnotateAstNode(TAstNode::NewLiteralAtom(
-                                ctx.Expr.GetPosition(node.Pos()), TStringBuf("lambda"), pool), nullptr, annotationFlags, pool, ctx.RefAtoms), 
+                                ctx.Expr.GetPosition(node.Pos()), TStringBuf("lambda"), pool), nullptr, annotationFlags, pool, ctx.RefAtoms),
                             AnnotateAstNode(argsContainer, &args, annotationFlags, pool, ctx.RefAtoms),
                             res);
                     } else {
@@ -1643,7 +1643,7 @@ namespace {
 
                         ctx.CurrentFrame = prevFrame;
                         children[0] = AnnotateAstNode(TAstNode::NewLiteralAtom(
-                                ctx.Expr.GetPosition(node.Pos()), TStringBuf("lambda"), pool), nullptr, annotationFlags, pool, ctx.RefAtoms); 
+                                ctx.Expr.GetPosition(node.Pos()), TStringBuf("lambda"), pool), nullptr, annotationFlags, pool, ctx.RefAtoms);
                         children[1] = AnnotateAstNode(argsContainer, &args, annotationFlags, pool, ctx.RefAtoms);
                         res = TAstNode::NewList(ctx.Expr.GetPosition(node.Pos()), children.data(), children.size(), pool);
                     }
@@ -1651,7 +1651,7 @@ namespace {
                 }
 
             case TExprNode::World:
-                res = TAstNode::NewLiteralAtom(ctx.Expr.GetPosition(node.Pos()), TStringBuf("world"), pool); 
+                res = TAstNode::NewLiteralAtom(ctx.Expr.GetPosition(node.Pos()), TStringBuf("world"), pool);
                 break;
             default:
                 YQL_ENSURE(false, "Unknown type: " << static_cast<ui32>(node.Type()));
@@ -1670,7 +1670,7 @@ namespace {
                 continue;
             }
 
-            const auto letAtom = TAstNode::NewLiteralAtom(ctx.Expr.GetPosition(node->Pos()), TStringBuf("let"), pool); 
+            const auto letAtom = TAstNode::NewLiteralAtom(ctx.Expr.GetPosition(node->Pos()), TStringBuf("let"), pool);
             const auto nameAtom = TAstNode::NewAtom(ctx.Expr.GetPosition(node->Pos()), name, pool);
             const auto valueNode = BuildValueNode(*node, ctx, name, annotationFlags, pool, true);
 
@@ -1681,7 +1681,7 @@ namespace {
             children.push_back(AnnotateAstNode(letNode, nullptr, annotationFlags, pool, ctx.RefAtoms));
         }
 
-        const auto returnAtom = TAstNode::NewLiteralAtom(ctx.Expr.GetPosition(position), TStringBuf("return"), pool); 
+        const auto returnAtom = TAstNode::NewLiteralAtom(ctx.Expr.GetPosition(position), TStringBuf("return"), pool);
         TSmallVec<TAstNode*> returnChildren;
         returnChildren.reserve(roots.size() + 1U);
         returnChildren.emplace_back(AnnotateAstNode(returnAtom, nullptr, annotationFlags, pool, ctx.RefAtoms));
@@ -1975,7 +1975,7 @@ bool CompileExpr(TAstNode& astRoot, TExprNode::TPtr& exprRoot, TExprContext& ctx
         world->SetTypeAnn(compileCtx.Expr.MakeType<TWorldExprType>());
     }
 
-    compileCtx.Frames.back().Bindings[TStringBuf("world")] = {std::move(world)}; 
+    compileCtx.Frames.back().Bindings[TStringBuf("world")] = {std::move(world)};
     auto ret = CompileFunction(*cleanRoot, compileCtx, true);
     if (1U != ret.size())
         return false;

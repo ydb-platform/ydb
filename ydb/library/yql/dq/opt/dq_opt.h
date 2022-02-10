@@ -10,7 +10,7 @@ namespace NYql::NDq {
 
 struct TDqStageSettings {
     static constexpr TStringBuf LogicalIdSettingName = "_logical_id";
-    static constexpr TStringBuf IdSettingName = "_id"; 
+    static constexpr TStringBuf IdSettingName = "_id";
     static constexpr TStringBuf SinglePartitionSettingName = "_single_partition";
     static constexpr TStringBuf IsExternalSetting = "is_external_function";
     static constexpr TStringBuf TransformNameSetting = "transform_name";

@@ -99,18 +99,18 @@ TNode::TNode(const char* s)
     : Value_(TString(s))
 { }
 
-TNode::TNode(TStringBuf s) 
+TNode::TNode(TStringBuf s)
     : Value_(TString(s))
 { }
 
-TNode::TNode(std::string_view s) 
+TNode::TNode(std::string_view s)
     : Value_(TString(s))
-{ } 
- 
-TNode::TNode(const std::string& s) 
+{ }
+
+TNode::TNode(const std::string& s)
     : Value_(TString(s))
-{ } 
- 
+{ }
+
 TNode::TNode(TString s)
     : Value_(std::move(s))
 { }

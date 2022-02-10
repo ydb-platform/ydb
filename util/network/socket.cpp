@@ -163,7 +163,7 @@ int poll(struct pollfd fds[], nfds_t nfds, int timeout) noexcept {
             int error = WSAGetLastError();
             if (error == WSAEINVAL || error == WSAENOTSOCK) {
                 fd->revents = POLLNVAL;
-                ++checked_sockets; 
+                ++checked_sockets;
             } else {
                 errno = EIO;
                 return -1;
@@ -188,7 +188,7 @@ int poll(struct pollfd fds[], nfds_t nfds, int timeout) noexcept {
             if (FD_ISSET(fd->fd, &writefds)) {
                 fd->revents |= POLLOUT;
             }
-            ++checked_sockets; 
+            ++checked_sockets;
         }
     }
 

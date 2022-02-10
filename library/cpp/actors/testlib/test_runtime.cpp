@@ -242,7 +242,7 @@ namespace NActors {
             Y_UNUSED(Runtime);
         }
 
-        void Prepare(TActorSystem *actorSystem, volatile ui64 *currentTimestamp, volatile ui64 *currentMonotonic) override { 
+        void Prepare(TActorSystem *actorSystem, volatile ui64 *currentTimestamp, volatile ui64 *currentMonotonic) override {
             Y_UNUSED(actorSystem);
             Node->ActorSystemTimestamp = currentTimestamp;
             Node->ActorSystemMonotonic = currentMonotonic;
@@ -253,13 +253,13 @@ namespace NActors {
             Y_UNUSED(scheduleReadersCount);
         }
 
-        void Start() override { 
+        void Start() override {
         }
 
-        void PrepareStop() override { 
+        void PrepareStop() override {
         }
 
-        void Stop() override { 
+        void Stop() override {
         }
 
     private:
@@ -343,7 +343,7 @@ namespace NActors {
         }
 
         // for actorsystem
-        bool Send(TAutoPtr<IEventHandle>& ev) override { 
+        bool Send(TAutoPtr<IEventHandle>& ev) override {
             TGuard<TMutex> guard(Runtime->Mutex);
             bool verbose = (Runtime->CurrentDispatchContext ? !Runtime->CurrentDispatchContext->Options->Quiet : true) && VERBOSE;
             if (Runtime->BlockedOutput.find(ev->Sender) != Runtime->BlockedOutput.end()) {
@@ -393,21 +393,21 @@ namespace NActors {
             return true;
         }
 
-        void ScheduleActivation(ui32 activation) override { 
+        void ScheduleActivation(ui32 activation) override {
             Y_UNUSED(activation);
         }
 
-        void ScheduleActivationEx(ui32 activation, ui64 revolvingCounter) override { 
+        void ScheduleActivationEx(ui32 activation, ui64 revolvingCounter) override {
             Y_UNUSED(activation);
             Y_UNUSED(revolvingCounter);
         }
 
-        TActorId Register(IActor *actor, TMailboxType::EType mailboxType, ui64 revolvingCounter, 
+        TActorId Register(IActor *actor, TMailboxType::EType mailboxType, ui64 revolvingCounter,
             const TActorId& parentId) override {
             return Runtime->Register(actor, NodeIndex, PoolId, mailboxType, revolvingCounter, parentId);
         }
 
-        TActorId Register(IActor *actor, TMailboxHeader *mailbox, ui32 hint, const TActorId& parentId) override { 
+        TActorId Register(IActor *actor, TMailboxHeader *mailbox, ui32 hint, const TActorId& parentId) override {
             return Runtime->Register(actor, NodeIndex, PoolId, mailbox, hint, parentId);
         }
 
@@ -418,13 +418,13 @@ namespace NActors {
             Y_UNUSED(scheduleSz);
         }
 
-        void Start() override { 
+        void Start() override {
         }
 
-        void PrepareStop() override { 
+        void PrepareStop() override {
         }
 
-        void Shutdown() override { 
+        void Shutdown() override {
         }
 
         bool Cleanup() override {
@@ -432,7 +432,7 @@ namespace NActors {
         }
 
         // generic
-        TAffinity* Affinity() const override { 
+        TAffinity* Affinity() const override {
             Y_FAIL();
         }
 

@@ -107,10 +107,10 @@ public:
     using const_reverse_iterator = TReverseIteratorBase<const_iterator>;
 
     static constexpr size_t StrLen(const TCharType* s) noexcept {
-        if (Y_LIKELY(s)) { 
+        if (Y_LIKELY(s)) {
             return TTraits::length(s);
-        } 
-        return 0; 
+        }
+        return 0;
     }
 
     template <class TCharTraits>
@@ -172,7 +172,7 @@ public:
         return Ptr()[Len() - 1];
     }
 
-    inline TCharType front() const noexcept { 
+    inline TCharType front() const noexcept {
         Y_ASSERT(!empty());
         return Ptr()[0];
     }
@@ -261,16 +261,16 @@ public:
         return s1.AsStringView() == s2.AsStringView();
     }
 
-    static bool equal(const TSelf& s1, const TCharType* p) noexcept { 
-        if (p == nullptr) { 
-            return s1.Len() == 0; 
-        } 
- 
+    static bool equal(const TSelf& s1, const TCharType* p) noexcept {
+        if (p == nullptr) {
+            return s1.Len() == 0;
+        }
+
         return s1.AsStringView() == p;
     }
 
-    static bool equal(const TCharType* p, const TSelf& s2) noexcept { 
-        return equal(s2, p); 
+    static bool equal(const TCharType* p, const TSelf& s2) noexcept {
+        return equal(s2, p);
     }
 
     static bool equal(const TStringView s1, const TStringView s2) noexcept {

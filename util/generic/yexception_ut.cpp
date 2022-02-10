@@ -29,9 +29,9 @@ static void CallbackFun(int i) {
 
 static IOutputStream* OUTS = nullptr;
 
-namespace NOuter::NInner { 
-    void Compare10And20() { 
-        Y_ENSURE(10 > 20); 
+namespace NOuter::NInner {
+    void Compare10And20() {
+        Y_ENSURE(10 > 20);
     }
 }
 

@@ -1,7 +1,7 @@
 #include <util/charset/unidata.h>
 
 namespace { namespace NUnidataTableGenerated {
-    using TV = const NUnicode::NPrivate::TUnidataTable::TStored; 
+    using TV = const NUnicode::NPrivate::TUnidataTable::TStored;
 
     static const TV V[] = {
 #undef V0

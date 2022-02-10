@@ -17,7 +17,7 @@ namespace NGRpcService {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static constexpr TStringBuf SnapshotUriPrefix = "snapshot:///"; 
+static constexpr TStringBuf SnapshotUriPrefix = "snapshot:///";
 static constexpr ui64 SNAPSHOT_TIMEOUT_MS = 30000;
 static constexpr ui64 REQUEST_TIMEOUT_MS = 5000;
 

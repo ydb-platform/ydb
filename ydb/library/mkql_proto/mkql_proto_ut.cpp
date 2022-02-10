@@ -2,8 +2,8 @@
 
 #include <ydb/library/mkql_proto/ut/helpers/helpers.h>
 
-using namespace std::string_view_literals; 
- 
+using namespace std::string_view_literals;
+
 namespace NKikimr::NMiniKQL {
 
 Y_UNIT_TEST_SUITE(TMiniKQLProtoTest) {
@@ -66,7 +66,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLProtoTest) {
 
     Y_UNIT_TEST(TestExportUuidType) {
         TestExportType<NKikimrMiniKQL::TType>([](TProgramBuilder& pgmBuilder) {
-            auto pgmReturn = pgmBuilder.NewDataLiteral<NUdf::EDataSlot::Uuid>(TStringBuf("\1\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0"sv)); 
+            auto pgmReturn = pgmBuilder.NewDataLiteral<NUdf::EDataSlot::Uuid>(TStringBuf("\1\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0"sv));
             return pgmReturn;
         },
         "Kind: Data\n"
@@ -338,7 +338,7 @@ Variant {
 
     Y_UNIT_TEST(TestExportUuid) {
         TestExportValue<NKikimrMiniKQL::TValue>([](TProgramBuilder& pgmBuilder) {
-            auto pgmReturn = pgmBuilder.NewDataLiteral<NUdf::EDataSlot::Uuid>(TStringBuf("\1\0\0\0\0\0\0\0\2\0\0\0\0\0\0\0"sv)); 
+            auto pgmReturn = pgmBuilder.NewDataLiteral<NUdf::EDataSlot::Uuid>(TStringBuf("\1\0\0\0\0\0\0\0\2\0\0\0\0\0\0\0"sv));
             return pgmReturn;
         }, "Low128: 1\n"
            "Hi128: 2\n");

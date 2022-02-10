@@ -9,7 +9,7 @@
 namespace NYql {
 
 Y_UNIT_TEST_SUITE(TParseYqlAst) {
-    constexpr TStringBuf TEST_PROGRAM = 
+    constexpr TStringBuf TEST_PROGRAM =
         "(\n"
         "#comment\n"
         "(let mr_source (DataSource 'yamr 'cedar))\n"
@@ -22,7 +22,7 @@ Y_UNIT_TEST_SUITE(TParseYqlAst) {
         "(let world (Write! world mr_sink (Key '('table (KeyString 'Output))) table1low '('('mode 'append))))\n"
         "(let world (Commit! world mr_sink))\n"
         "(return world)\n"
-        ")"; 
+        ")";
 
     Y_UNIT_TEST(ParseAstTest) {
         TAstParseResult res = ParseAst(TEST_PROGRAM);
@@ -136,45 +136,45 @@ Y_UNIT_TEST_SUITE(TParseYqlAst) {
 
     Y_UNIT_TEST(GoodArbitraryAtom) {
         TestGoodArbitraryAtom("(\"\")", TStringBuf());
-        TestGoodArbitraryAtom("(\" 1 a 3 b \")", TStringBuf(" 1 a 3 b ")); 
+        TestGoodArbitraryAtom("(\" 1 a 3 b \")", TStringBuf(" 1 a 3 b "));
 
         ui8 expectedHex[] = { 0xab, 'c', 'd', 0x00 };
-        TestGoodArbitraryAtom("(\"\\xabcd\")", TBasicStringBuf<ui8>(expectedHex)); 
-        TestGoodArbitraryAtom("(\" \\x3d \")", TStringBuf(" \x3d ")); 
+        TestGoodArbitraryAtom("(\"\\xabcd\")", TBasicStringBuf<ui8>(expectedHex));
+        TestGoodArbitraryAtom("(\" \\x3d \")", TStringBuf(" \x3d "));
 
         ui8 expectedOctal[] = { 056, '7', '8', 0x00 };
-        TestGoodArbitraryAtom("(\"\\05678\")", TBasicStringBuf<ui8>(expectedOctal)); 
-        TestGoodArbitraryAtom("(\" \\056 \")", TStringBuf(" \056 ")); 
-        TestGoodArbitraryAtom("(\" \\177 \")", TStringBuf(" \177 ")); 
-        TestGoodArbitraryAtom("(\" \\377 \")", TStringBuf(" \377 ")); 
-        TestGoodArbitraryAtom("(\" \\477 \")", TStringBuf(" 477 ")); 
+        TestGoodArbitraryAtom("(\"\\05678\")", TBasicStringBuf<ui8>(expectedOctal));
+        TestGoodArbitraryAtom("(\" \\056 \")", TStringBuf(" \056 "));
+        TestGoodArbitraryAtom("(\" \\177 \")", TStringBuf(" \177 "));
+        TestGoodArbitraryAtom("(\" \\377 \")", TStringBuf(" \377 "));
+        TestGoodArbitraryAtom("(\" \\477 \")", TStringBuf(" 477 "));
 
         {
             ui8 expected1[] = { 0x01, 0x00 };
-            TestGoodArbitraryAtom("(\"\\u0001\")", TBasicStringBuf<ui8>(expected1)); 
+            TestGoodArbitraryAtom("(\"\\u0001\")", TBasicStringBuf<ui8>(expected1));
 
             ui8 expected2[] = { 0xE1, 0x88, 0xB4, 0x00 };
-            TestGoodArbitraryAtom("(\"\\u1234\")", TBasicStringBuf<ui8>(expected2)); 
+            TestGoodArbitraryAtom("(\"\\u1234\")", TBasicStringBuf<ui8>(expected2));
 
             ui8 expected3[] = { 0xef, 0xbf, 0xbf, 0x00 };
-            TestGoodArbitraryAtom("(\"\\uffff\")", TBasicStringBuf<ui8>(expected3)); 
+            TestGoodArbitraryAtom("(\"\\uffff\")", TBasicStringBuf<ui8>(expected3));
         }
 
         {
             ui8 expected1[] = { 0x01, 0x00 };
-            TestGoodArbitraryAtom("(\"\\U00000001\")", TBasicStringBuf<ui8>(expected1)); 
+            TestGoodArbitraryAtom("(\"\\U00000001\")", TBasicStringBuf<ui8>(expected1));
 
             ui8 expected2[] = { 0xf4, 0x8f, 0xbf, 0xbf, 0x00 };
-            TestGoodArbitraryAtom("(\"\\U0010ffff\")", TBasicStringBuf<ui8>(expected2)); 
+            TestGoodArbitraryAtom("(\"\\U0010ffff\")", TBasicStringBuf<ui8>(expected2));
         }
 
-        TestGoodArbitraryAtom("(\"\\t\")", TStringBuf("\t")); 
-        TestGoodArbitraryAtom("(\"\\n\")", TStringBuf("\n")); 
-        TestGoodArbitraryAtom("(\"\\r\")", TStringBuf("\r")); 
-        TestGoodArbitraryAtom("(\"\\b\")", TStringBuf("\b")); 
-        TestGoodArbitraryAtom("(\"\\f\")", TStringBuf("\f")); 
-        TestGoodArbitraryAtom("(\"\\a\")", TStringBuf("\a")); 
-        TestGoodArbitraryAtom("(\"\\v\")", TStringBuf("\v")); 
+        TestGoodArbitraryAtom("(\"\\t\")", TStringBuf("\t"));
+        TestGoodArbitraryAtom("(\"\\n\")", TStringBuf("\n"));
+        TestGoodArbitraryAtom("(\"\\r\")", TStringBuf("\r"));
+        TestGoodArbitraryAtom("(\"\\b\")", TStringBuf("\b"));
+        TestGoodArbitraryAtom("(\"\\f\")", TStringBuf("\f"));
+        TestGoodArbitraryAtom("(\"\\a\")", TStringBuf("\a"));
+        TestGoodArbitraryAtom("(\"\\v\")", TStringBuf("\v"));
     }
 
     void TestBadArbitraryAtom(

@@ -6,20 +6,20 @@
 Y_UNIT_TEST_SUITE(TEventSerialization) {
     struct TMockEvent: public NActors::IEventBase {
         TBigMessage* msg;
-        bool 
-        SerializeToArcadiaStream(NActors::TChunkSerializer* chunker) const override { 
+        bool
+        SerializeToArcadiaStream(NActors::TChunkSerializer* chunker) const override {
             return msg->SerializeToZeroCopyStream(chunker);
         }
         bool IsSerializable() const override {
             return true;
         }
-        TString ToStringHeader() const override { 
+        TString ToStringHeader() const override {
             return TString();
         }
         virtual TString Serialize() const {
             return TString();
         }
-        ui32 Type() const override { 
+        ui32 Type() const override {
             return 0;
         };
     };

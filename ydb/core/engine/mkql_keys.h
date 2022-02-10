@@ -17,10 +17,10 @@ TReadTarget ExtractFlatReadTarget(TRuntimeNode modeInput);
 
 struct TTableStrings {
     TTableStrings(const TTypeEnvironment& env)
-        : SelectRow(env.InternName(TStringBuf("SelectRow"))) 
-        , SelectRange(env.InternName(TStringBuf("SelectRange"))) 
-        , UpdateRow(env.InternName(TStringBuf("UpdateRow"))) 
-        , EraseRow(env.InternName(TStringBuf("EraseRow"))) 
+        : SelectRow(env.InternName(TStringBuf("SelectRow")))
+        , SelectRange(env.InternName(TStringBuf("SelectRange")))
+        , UpdateRow(env.InternName(TStringBuf("UpdateRow")))
+        , EraseRow(env.InternName(TStringBuf("EraseRow")))
     {
         All.reserve(10);
         All.insert(SelectRow);

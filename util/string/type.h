@@ -18,7 +18,7 @@ Y_PURE_FUNCTION bool IsNumber(const TWtringBuf s) noexcept;
 Y_PURE_FUNCTION bool IsHexNumber(const TStringBuf s) noexcept;
 
 Y_PURE_FUNCTION bool IsHexNumber(const TWtringBuf s) noexcept;
- 
+
 /* Tests if the given string is case insensitive equal to one of:
  * - "true",
  * - "t",

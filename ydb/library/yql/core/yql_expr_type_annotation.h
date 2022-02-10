@@ -27,10 +27,10 @@ T FromString(const TExprNode& node, NKikimr::NUdf::EDataSlot slot) {
             return out.Get<T>();
         } else if (slot == NKikimr::NUdf::EDataSlot::Bool) {
             T value = T();
-            if (node.Content() == TStringBuf("0")) { 
+            if (node.Content() == TStringBuf("0")) {
                 *(ui8*)&value = 0;
                 return value;
-            } else if (node.Content() == TStringBuf("1")) { 
+            } else if (node.Content() == TStringBuf("1")) {
                 *(ui8*)&value = 1;
                 return value;
             }

@@ -170,7 +170,7 @@ TCsvOutputStream::TCsvOutputStream(IOutputStream& slave, char delimiter, bool qu
 void TCsvOutputStream::DoWrite(const void* buf, size_t len)
 {
     TStringBuf charBuf(reinterpret_cast<const char*>(buf), len);
-    if (charBuf == TStringBuf("\n")) { 
+    if (charBuf == TStringBuf("\n")) {
         WasNL_ = true;
         Slave_.Write(buf, len);
     } else {

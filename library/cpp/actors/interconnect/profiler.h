@@ -131,7 +131,7 @@ namespace NActors {
                     s << key << " num# " << value.size() << " sum# " << sum << "ns max# " << (i->Duration * 1000000 / cyclesPerMs) << "ns";
                     if (i->Interior) {
                         s << " {" << i->Interior << "}";
-                    } 
+                    }
                 }
             }
 

@@ -80,7 +80,7 @@ Y_UNIT_TEST_SUITE(TChaCha)
     }
 
     Y_UNIT_TEST(MultiEncipherOneDecipher) {
-        TStringBuf lorem = 
+        TStringBuf lorem =
                 "Lorem ipsum dolor sit amet, consectetur adipisicing elit, "
                 "sed do eiusmod tempor incididunt ut labore et dolore magna "
                 "aliqua. Ut enim ad minim veniam, quis nostrud exercitation "
@@ -88,7 +88,7 @@ Y_UNIT_TEST_SUITE(TChaCha)
                 "Duis aute irure dolor in reprehenderit in voluptate velit "
                 "esse cillum dolore eu fugiat nulla pariatur. Excepteur sint "
                 "occaecat cupidatat non proident, sunt in culpa qui officia "
-                "deserunt mollit anim id est laborum."; 
+                "deserunt mollit anim id est laborum.";
 
         TSecuredBlock<> buf(lorem.data(), lorem.size());
 
@@ -111,9 +111,9 @@ Y_UNIT_TEST_SUITE(TChaCha)
     }
 
     Y_UNIT_TEST(SecondBlock) {
-        TStringBuf plaintext = 
+        TStringBuf plaintext =
                 "1111111122222222333333334444444455555555666666667777777788888888"
-                "qqqqqqqqwwwwwwwweeeeeeeerrrrrrrrttttttttyyyyyyyyuuuuuuuuiiiiiiii"; 
+                "qqqqqqqqwwwwwwwweeeeeeeerrrrrrrrttttttttyyyyyyyyuuuuuuuuiiiiiiii";
 
         TSecuredBlock<> buf(plaintext.data(), plaintext.size());
 

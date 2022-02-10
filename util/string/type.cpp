@@ -17,38 +17,38 @@ bool IsSpace(const char* s, size_t len) noexcept {
 
 template <typename TStringType>
 static bool IsNumberT(const TStringType& s) noexcept {
-    if (s.empty()) { 
-        return false; 
-    } 
- 
+    if (s.empty()) {
+        return false;
+    }
+
     return std::all_of(s.begin(), s.end(), IsAsciiDigit<typename TStringType::value_type>);
-} 
- 
+}
+
 bool IsNumber(const TStringBuf s) noexcept {
-    return IsNumberT(s); 
-} 
- 
+    return IsNumberT(s);
+}
+
 bool IsNumber(const TWtringBuf s) noexcept {
-    return IsNumberT(s); 
-} 
- 
+    return IsNumberT(s);
+}
+
 template <typename TStringType>
 static bool IsHexNumberT(const TStringType& s) noexcept {
-    if (s.empty()) { 
+    if (s.empty()) {
         return false;
-    } 
+    }
 
     return std::all_of(s.begin(), s.end(), IsAsciiHex<typename TStringType::value_type>);
 }
 
 bool IsHexNumber(const TStringBuf s) noexcept {
-    return IsHexNumberT(s); 
-} 
- 
+    return IsHexNumberT(s);
+}
+
 bool IsHexNumber(const TWtringBuf s) noexcept {
-    return IsHexNumberT(s); 
-} 
- 
+    return IsHexNumberT(s);
+}
+
 namespace {
     template <size_t N>
     bool IsCaseInsensitiveAnyOf(TStringBuf str, const std::array<TStringBuf, N>& options) {
@@ -63,24 +63,24 @@ namespace {
 
 bool IsTrue(const TStringBuf v) noexcept {
     static constexpr std::array<TStringBuf, 7> trueOptions{
-        "true", 
-        "t", 
-        "yes", 
-        "y", 
-        "on", 
-        "1", 
-        "da"}; 
+        "true",
+        "t",
+        "yes",
+        "y",
+        "on",
+        "1",
+        "da"};
     return IsCaseInsensitiveAnyOf(v, trueOptions);
 }
 
 bool IsFalse(const TStringBuf v) noexcept {
     static constexpr std::array<TStringBuf, 7> falseOptions{
-        "false", 
-        "f", 
-        "no", 
-        "n", 
-        "off", 
-        "0", 
-        "net"}; 
+        "false",
+        "f",
+        "no",
+        "n",
+        "off",
+        "0",
+        "net"};
     return IsCaseInsensitiveAnyOf(v, falseOptions);
 }

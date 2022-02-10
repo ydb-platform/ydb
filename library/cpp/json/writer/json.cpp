@@ -214,13 +214,13 @@ namespace NJsonWriter {
     }
 
     TValueContext TBuf::WriteNull() {
-        UnsafeWriteValue(TStringBuf("null")); 
+        UnsafeWriteValue(TStringBuf("null"));
         return TValueContext(*this);
     }
 
     TValueContext TBuf::WriteBool(bool b) {
-        constexpr TStringBuf trueVal = "true"; 
-        constexpr TStringBuf falseVal = "false"; 
+        constexpr TStringBuf trueVal = "true";
+        constexpr TStringBuf falseVal = "false";
         UnsafeWriteValue(b ? trueVal : falseVal);
         return TValueContext(*this);
     }
@@ -323,7 +323,7 @@ namespace NJsonWriter {
 #define MATCH(sym, string)                        \
     case sym:                                     \
         UnsafeWriteRawBytes(beg, cur - beg);      \
-        UnsafeWriteRawBytes(TStringBuf(string));  \ 
+        UnsafeWriteRawBytes(TStringBuf(string));  \
         return true
 
     inline bool TBuf::EscapedWriteChar(const char* beg, const char* cur, EHtmlEscapeMode hem) {

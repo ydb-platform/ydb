@@ -24,7 +24,7 @@ public:
 
     void OnStringScalar(TStringBuf value) override {
         Open();
-        Type(TStringBuf("string")); 
+        Type(TStringBuf("string"));
 
         Buffer.clear();
         bool isAscii = true;
@@ -55,35 +55,35 @@ public:
 
     void OnInt64Scalar(i64 value) override {
         Open();
-        Type(TStringBuf("int64")); 
+        Type(TStringBuf("int64"));
         Value(ToString(value));
         Close();
     }
 
     void OnUint64Scalar(ui64 value) override {
         Open();
-        Type(TStringBuf("uint64")); 
+        Type(TStringBuf("uint64"));
         Value(ToString(value));
         Close();
     }
 
     void OnDoubleScalar(double value) override {
         Open();
-        Type(TStringBuf("double")); 
+        Type(TStringBuf("double"));
         Value(::FloatToString(value));
         Close();
     }
 
     void OnBooleanScalar(bool value) override {
         Open();
-        Type(TStringBuf("boolean")); 
-        Value(value ? TStringBuf("true") : TStringBuf("false")); 
+        Type(TStringBuf("boolean"));
+        Value(value ? TStringBuf("true") : TStringBuf("false"));
         Close();
     }
 
     void OnEntity() override {
         if (AfterAttributes) {
-            Writer.OnKeyedItem(TStringBuf("$value")); 
+            Writer.OnKeyedItem(TStringBuf("$value"));
             Writer.OnEntity();
             Writer.OnEndMap();
             AfterAttributes = false;
@@ -94,7 +94,7 @@ public:
 
     void OnBeginList() override {
         if (AfterAttributes) {
-            Writer.OnKeyedItem(TStringBuf("$value")); 
+            Writer.OnKeyedItem(TStringBuf("$value"));
         }
 
         Writer.OnBeginList();
@@ -117,7 +117,7 @@ public:
 
     void OnBeginMap() override {
         if (AfterAttributes) {
-            Writer.OnKeyedItem(TStringBuf("$value")); 
+            Writer.OnKeyedItem(TStringBuf("$value"));
         }
 
         Writer.OnBeginMap();
@@ -144,7 +144,7 @@ public:
 
     void OnBeginAttributes() override {
         Writer.OnBeginMap();
-        Writer.OnKeyedItem(TStringBuf("$attributes")); 
+        Writer.OnKeyedItem(TStringBuf("$attributes"));
         Writer.OnBeginMap();
     }
 
@@ -165,12 +165,12 @@ public:
     }
 
     void Type(const TStringBuf& type) {
-        Writer.OnKeyedItem(TStringBuf("$type")); 
+        Writer.OnKeyedItem(TStringBuf("$type"));
         Writer.OnUtf8StringScalar(type);
     }
 
     void Value(const TStringBuf& value) {
-        Writer.OnKeyedItem(TStringBuf("$value")); 
+        Writer.OnKeyedItem(TStringBuf("$value"));
         Writer.OnUtf8StringScalar(value);
     }
 

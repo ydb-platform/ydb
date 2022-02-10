@@ -76,8 +76,8 @@ Y_UNIT_TEST_SUITE(TZLibTest) {
     }
 
     Y_UNIT_TEST(Dictionary) {
-        static constexpr TStringBuf data = "<html><body></body></html>"; 
-        static constexpr TStringBuf dict = "</<html><body>"; 
+        static constexpr TStringBuf data = "<html><body></body></html>";
+        static constexpr TStringBuf dict = "</<html><body>";
         for (auto type : {ZLib::Raw, ZLib::ZLib}) {
             TStringStream compressed;
             {

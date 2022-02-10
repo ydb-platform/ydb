@@ -71,7 +71,7 @@ namespace NMonitoring {
                     TBucketBound bound = h->UpperBound(i);
                     TStringBuf boundStr;
                     if (bound == HISTOGRAM_INF_BOUND) {
-                        boundStr = TStringBuf("+Inf"); 
+                        boundStr = TStringBuf("+Inf");
                     } else {
                         size_t len = FloatToString(bound, TmpBuf_, Y_ARRAY_SIZE(TmpBuf_));
                         boundStr = TStringBuf(TmpBuf_, len);

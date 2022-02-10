@@ -14,9 +14,9 @@ namespace NRainCheck {
         // "library/cpp/neh/http.cpp:<LINE>: request failed(<FIRST-HTTP-RESPONSE-LINE>)"
         // (see library/cpp/neh/http.cpp:625). So, we will try to parse this message and
         // find out HttpCode in it. It is bad temporary solution, but we have no choice.
-        const TStringBuf SUBSTR = "request failed("; 
+        const TStringBuf SUBSTR = "request failed(";
         const size_t SUBSTR_LEN = SUBSTR.size();
-        const size_t FIRST_LINE_LEN = TStringBuf("HTTP/1.X NNN").size(); 
+        const size_t FIRST_LINE_LEN = TStringBuf("HTTP/1.X NNN").size();
 
         TMaybe<HttpCodes> httpCode;
 

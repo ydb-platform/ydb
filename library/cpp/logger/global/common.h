@@ -69,7 +69,7 @@ namespace NLoggingImpl {
     TString GetLocalTimeSSimple();
 
     // Returns correct log type to use
-    TString PrepareToOpenLog(TString logType, int logLevel, bool rotation, bool startAsDaemon); 
+    TString PrepareToOpenLog(TString logType, int logLevel, bool rotation, bool startAsDaemon);
 
     template <class TLoggerType>
     void InitLogImpl(TString logType, const int logLevel, const bool rotation, const bool startAsDaemon) {
@@ -78,11 +78,11 @@ namespace NLoggingImpl {
 }
 
 struct TLogRecordContext {
-    constexpr TLogRecordContext(const TSourceLocation& sourceLocation, TStringBuf customMessage, ELogPriority priority) 
-        : SourceLocation(sourceLocation) 
-        , CustomMessage(customMessage) 
-        , Priority(priority) 
-    {} 
+    constexpr TLogRecordContext(const TSourceLocation& sourceLocation, TStringBuf customMessage, ELogPriority priority)
+        : SourceLocation(sourceLocation)
+        , CustomMessage(customMessage)
+        , Priority(priority)
+    {}
 
     TSourceLocation SourceLocation;
     TStringBuf CustomMessage;

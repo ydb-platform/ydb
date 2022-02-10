@@ -87,29 +87,29 @@ bool resolvepath(TString& folder, const TString& home) {
                 break;
             } else {
                 memmove(pp + j, pp + j + 1, (i - j - 1) * sizeof(p));
-                --i; 
+                --i;
             }
         } else if (strcmp(p, "..") == 0) {
             if (j == i - 1) {
                 if (j == 1) {
                     p = "";
                 } else {
-                    --i; 
+                    --i;
                     pp[j - 1] = "";
                 }
                 break;
             } else {
                 if (j == 1) {
                     memmove(pp + j, pp + j + 1, (i - j - 1) * sizeof(p));
-                    --i; 
+                    --i;
                 } else {
                     memmove(pp + j - 1, pp + j + 1, (i - j - 1) * sizeof(p));
                     i -= 2;
-                    --j; 
+                    --j;
                 }
             }
         } else
-            ++j; 
+            ++j;
     }
 
     char* s = newpath;
@@ -144,10 +144,10 @@ static int next_dir(T*& ptr) {
         int c = (unsigned char)*ptr++;
         switch (c) {
             case ' ':
-                ++has_blank; 
+                ++has_blank;
                 break;
             case '.':
-                ++has_dot; 
+                ++has_dot;
                 break;
             case '/':
             case ':':
@@ -157,17 +157,17 @@ static int next_dir(T*& ptr) {
             case '<':
             case '>':
             case '|':
-                ++has_ctrl; 
+                ++has_ctrl;
                 break;
             default:
                 if (c == 127 || c < ' ')
-                    ++has_ctrl; 
+                    ++has_ctrl;
                 else
-                    ++has_letter; 
+                    ++has_letter;
         }
     }
     if (*ptr)
-        ++ptr; 
+        ++ptr;
     if (has_ctrl)
         return dt_error;
     if (has_letter)
@@ -208,7 +208,7 @@ static int skip_disk(T*& ptr) {
             ptr += 2;
         }
         if (*ptr == '\\' || *ptr == '/') {
-            ++ptr; 
+            ++ptr;
             result |= dk_fromroot;
         }
     }
@@ -228,14 +228,14 @@ int correctpath(char* cpath, const char* path) {
         if (c == '/')
             c = '\\';
         if (c == '\\')
-            ++counter; 
+            ++counter;
         else
             counter = 0;
         if (counter <= 1) {
             *cptr = c;
-            ++cptr; 
+            ++cptr;
         }
-        ++ptr; 
+        ++ptr;
     }
     *cptr = 0;
     // replace '/' by '\'
@@ -249,21 +249,21 @@ int correctpath(char* cpath, const char* path) {
     while (*ptr) {
         switch (next_dir(ptr)) {
             case dt_dir:
-                ++level; 
+                ++level;
                 break;
             case dt_empty:
                 memmove(ptr1, ptr, strlen(ptr) + 1);
                 ptr = ptr1;
                 break;
             case dt_up:
-                --level; 
+                --level;
                 if (level >= 0) {
                     *--ptr1 = 0;
                     ptr1 = strrchr(cpath, '\\');
                     if (!ptr1)
                         ptr1 = cpath;
                     else
-                        ++ptr1; 
+                        ++ptr1;
                     memmove(ptr1, ptr, strlen(ptr) + 1);
                     ptr = ptr1;
                     break;

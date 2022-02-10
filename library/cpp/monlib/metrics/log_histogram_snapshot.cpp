@@ -9,16 +9,16 @@ namespace {
 
 template <typename TStream>
 auto& Output(TStream& o, const NMonitoring::TLogHistogramSnapshot& hist) {
-    o << TStringBuf("{"); 
+    o << TStringBuf("{");
 
     for (auto i = 0u; i < hist.Count(); ++i) {
-        o << hist.UpperBound(i) << TStringBuf(": ") << hist.Bucket(i); 
-        o << TStringBuf(", "); 
+        o << hist.UpperBound(i) << TStringBuf(": ") << hist.Bucket(i);
+        o << TStringBuf(", ");
     }
 
-    o << TStringBuf("zeros: ") << hist.ZerosCount(); 
+    o << TStringBuf("zeros: ") << hist.ZerosCount();
 
-    o << TStringBuf("}"); 
+    o << TStringBuf("}");
 
     return o;
 }

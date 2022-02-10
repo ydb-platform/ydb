@@ -64,7 +64,7 @@ struct NullClient : TBusClientHandlerError {
         Session->RegisterService("localhost");
     }
 
-    ~NullClient() override { 
+    ~NullClient() override {
         Session->Shutdown();
     }
 
@@ -106,7 +106,7 @@ public:
         Session = TBusServerSession::Create(&Proto, this, sessionConfig, Queue);
     }
 
-    ~NullServer() override { 
+    ~NullServer() override {
         Session->Shutdown();
     }
 

@@ -22,7 +22,7 @@
 
 namespace NMonitoring {
     namespace {
-        constexpr ui32 MAX_LABEL_VALUE_LEN = 256; 
+        constexpr ui32 MAX_LABEL_VALUE_LEN = 256;
 
         using TLabelsMap = THashMap<TString, TString>;
 
@@ -225,7 +225,7 @@ namespace NMonitoring {
                 SkipSpaces();
 
                 TStringBuf keyword = ReadToken();
-                if (keyword == TStringBuf("TYPE")) { 
+                if (keyword == TStringBuf("TYPE")) {
                     SkipSpaces();
 
                     TStringBuf nextName = ReadTokenAsMetricName();
@@ -561,11 +561,11 @@ namespace NMonitoring {
             }
 
             double ParseGoDouble(TStringBuf str) {
-                if (str == TStringBuf("+Inf")) { 
+                if (str == TStringBuf("+Inf")) {
                     return std::numeric_limits<double>::infinity();
-                } else if (str == TStringBuf("-Inf")) { 
+                } else if (str == TStringBuf("-Inf")) {
                     return -std::numeric_limits<double>::infinity();
-                } else if (str == TStringBuf("NaN")) { 
+                } else if (str == TStringBuf("NaN")) {
                     return NAN;
                 }
 

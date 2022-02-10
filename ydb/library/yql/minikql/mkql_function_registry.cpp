@@ -407,7 +407,7 @@ public:
         Y_UNUSED(pos);
         Y_UNUSED(secureParamsProvider);
         Y_UNUSED(funcInfo);
-        return TStatus::Error(TStringBuf("Unsupported access to builtins registry")); 
+        return TStatus::Error(TStringBuf("Unsupported access to builtins registry"));
     }
 
     TMaybe<TString> FindUdfPath(

@@ -655,8 +655,8 @@ void COVER_warnOnSmallCorpus(size_t maxDictSize, size_t nbDmers, int displayLeve
                     "compared to the source size %u! "
                     "size(source)/size(dictionary) = %f, but it should be >= "
                     "10! This may lead to a subpar dictionary! We recommend "
-                    "training on sources at least 10x, and preferably 100x " 
-                    "the size of the dictionary! \n", (U32)maxDictSize, 
+                    "training on sources at least 10x, and preferably 100x "
+                    "the size of the dictionary! \n", (U32)maxDictSize,
                     (U32)nbDmers, ratio);
 }
 
@@ -936,11 +936,11 @@ void COVER_best_finish(COVER_best_t *best, ZDICT_cover_params_t parameters,
         }
       }
       /* Save the dictionary, parameters, and size */
-      if (dict) { 
-        memcpy(best->dict, dict, dictSize); 
-        best->dictSize = dictSize; 
-        best->parameters = parameters; 
-        best->compressedSize = compressedSize; 
+      if (dict) {
+        memcpy(best->dict, dict, dictSize);
+        best->dictSize = dictSize;
+        best->parameters = parameters;
+        best->compressedSize = compressedSize;
       }
     }
     if (liveJobs == 0) {

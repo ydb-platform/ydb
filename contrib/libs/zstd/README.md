@@ -150,7 +150,7 @@ You can also take a look at [`.travis.yml`](.travis.yml) file for an
 example about how Meson is used to build this project.
 
 Note that default build type is **release**.
- 
+
 ### VCPKG
 You can build and install zstd [vcpkg](https://github.com/Microsoft/vcpkg/) dependency manager:
 
@@ -164,18 +164,18 @@ The zstd port in vcpkg is kept up to date by Microsoft team members and communit
 If the version is out of date, please [create an issue or pull request](https://github.com/Microsoft/vcpkg) on the vcpkg repository.
 
 ### Visual Studio (Windows)
- 
+
 Going into `build` directory, you will find additional possibilities:
 - Projects for Visual Studio 2005, 2008 and 2010.
   + VS2010 project is compatible with VS2012, VS2013, VS2015 and VS2017.
 - Automated build scripts for Visual compiler by [@KrzysFR](https://github.com/KrzysFR), in `build/VS_scripts`,
   which will build `zstd` cli and `libzstd` library without any need to open Visual Studio solution.
- 
+
 ### Buck
- 
+
 You can build the zstd binary via buck by executing: `buck build programs:zstd` from the root of the repo.
 The output binary will be in `buck-out/gen/programs/`.
- 
+
 ## Testing
 
 You can run quick local smoke tests by executing the `playTest.sh` script from the `src/tests` directory.

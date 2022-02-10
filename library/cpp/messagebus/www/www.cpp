@@ -121,23 +121,23 @@ namespace {
 }
 
 namespace {
-    TString RootHref() { 
+    TString RootHref() {
         return ConcatStrings("?");
     }
 
-    TString QueueHref(TStringBuf name) { 
+    TString QueueHref(TStringBuf name) {
         return ConcatStrings("?q=", name);
     }
 
-    TString ServerSessionHref(TStringBuf name) { 
+    TString ServerSessionHref(TStringBuf name) {
         return ConcatStrings("?ss=", name);
     }
 
-    TString ClientSessionHref(TStringBuf name) { 
+    TString ClientSessionHref(TStringBuf name) {
         return ConcatStrings("?cs=", name);
     }
 
-    TString OldModuleHref(TStringBuf name) { 
+    TString OldModuleHref(TStringBuf name) {
         return ConcatStrings("?om=", name);
     }
 
@@ -147,19 +147,19 @@ namespace {
     }
     */
 
-    void QueueLink(TStringBuf name) { 
+    void QueueLink(TStringBuf name) {
         A(QueueHref(name), name);
     }
 
-    void ServerSessionLink(TStringBuf name) { 
+    void ServerSessionLink(TStringBuf name) {
         A(ServerSessionHref(name), name);
     }
 
-    void ClientSessionLink(TStringBuf name) { 
+    void ClientSessionLink(TStringBuf name) {
         A(ClientSessionHref(name), name);
     }
 
-    void OldModuleLink(TStringBuf name) { 
+    void OldModuleLink(TStringBuf name) {
         A(OldModuleHref(name), name);
     }
 

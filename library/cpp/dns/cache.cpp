@@ -123,7 +123,7 @@ namespace {
                 na = ThreadedResolve(host, rt.Info.Port);
             } else {
                 Y_ASSERT(0);
-                throw yexception() << TStringBuf("invalid resolve method"); 
+                throw yexception() << TStringBuf("invalid resolve method");
             }
 
             return new TResolvedHost(originalHost, *na);
@@ -174,7 +174,7 @@ namespace {
         }
     };
 
-    inline IDns* ThrDns() { 
+    inline IDns* ThrDns() {
         return FastTlsSingleton<TThreadedDns>();
     }
 }

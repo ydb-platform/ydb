@@ -278,7 +278,7 @@ public:
                 NUdf::TUnboxedValue flagValue;
                 while (flagsIterator.Next(flagValue)) {
                     auto flagName = TStringBuf(flagValue.AsStringRef());
-                    if (flagName == TStringBuf("AutoMap")) { 
+                    if (flagName == TStringBuf("AutoMap")) {
                         info.Flags |= NUdf::ICallablePayload::TArgumentFlags::AutoMap;
                     } else {
                         UdfTerminate((TStringBuilder() << Pos_ << ": Unknown flag: " << flagName << ", known flags: AutoMap.").data());
@@ -293,7 +293,7 @@ public:
             auto optCountValue = Args_.size() > 2 ? Args_[2]->GetValue(ctx) : NUdf::TUnboxedValue();
             auto payloadValue = Args_.size() > 3 ? Args_[3]->GetValue(ctx) : NUdf::TUnboxedValue();
             auto optCount = optCountValue ? optCountValue.template Get<ui32>() : 0;
-            auto payload = payloadValue ? TStringBuf(payloadValue.AsStringRef()) : TStringBuf(""); 
+            auto payload = payloadValue ? TStringBuf(payloadValue.AsStringRef()) : TStringBuf("");
             auto callableType = exprCtxPtr->template MakeType<NYql::TCallableExprType>(resultType, args, optCount, payload);
             if (!callableType->Validate(Pos_, *exprCtxPtr)) {
                 UdfTerminate(exprCtxPtr->IssueManager.GetIssues().ToString().data());

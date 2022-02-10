@@ -57,7 +57,7 @@ size_t TCgiParameters::EraseAll(const TStringBuf name) {
     return num;
 }
 
-void TCgiParameters::JoinUnescaped(const TStringBuf key, char sep, TStringBuf val) { 
+void TCgiParameters::JoinUnescaped(const TStringBuf key, char sep, TStringBuf val) {
     const auto pair = equal_range(key);
     auto it = pair.first;
 

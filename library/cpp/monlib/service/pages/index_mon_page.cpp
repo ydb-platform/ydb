@@ -15,7 +15,7 @@ void TIndexMonPage::OutputIndexPage(IMonHttpRequest& request) {
 
 void TIndexMonPage::Output(IMonHttpRequest& request) {
     TStringBuf pathInfo = request.GetPathInfo();
-    if (pathInfo.empty() || pathInfo == TStringBuf("/")) { 
+    if (pathInfo.empty() || pathInfo == TStringBuf("/")) {
         OutputIndexPage(request);
         return;
     }

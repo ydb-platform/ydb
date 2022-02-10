@@ -100,12 +100,12 @@ namespace NPrivate {
         if (Y_UNLIKELY(!(expr))) {                                                                   \
             ::NPrivate::Panic(__SOURCE_FILE_IMPL__, __LINE__, __FUNCTION__, #expr, " " __VA_ARGS__); \
         }                                                                                            \
-    } while (false) 
+    } while (false)
 
 #define Y_FAIL(...)                                                                                \
     do {                                                                                           \
         ::NPrivate::Panic(__SOURCE_FILE_IMPL__, __LINE__, __FUNCTION__, nullptr, " " __VA_ARGS__); \
-    } while (false) 
+    } while (false)
 
 #ifndef NDEBUG
     /// Assert that depend on NDEBUG macro and outputs message like printf

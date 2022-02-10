@@ -25,9 +25,9 @@
 #include <util/generic/hash.h>
 
 namespace {
-    volatile int SIGNAL_PIPE_WRITE_FD = 0; // will be initialized in ctor 
+    volatile int SIGNAL_PIPE_WRITE_FD = 0; // will be initialized in ctor
 
-    void WriteAllOrDie(const int fd, const void* buf, size_t bufsize) { 
+    void WriteAllOrDie(const int fd, const void* buf, size_t bufsize) {
         size_t totalBytesWritten = 0;
 
         while (totalBytesWritten != bufsize) {
@@ -38,7 +38,7 @@ namespace {
         }
     }
 
-    void PipeWriterSignalHandler(int, siginfo_t* info, void*) { 
+    void PipeWriterSignalHandler(int, siginfo_t* info, void*) {
         const ui8 signum = static_cast<ui8>(info->si_signo);
 
         WriteAllOrDie(SIGNAL_PIPE_WRITE_FD, &signum, 1);
@@ -188,7 +188,7 @@ namespace {
     // It such situation we have 2 options:
     //  - wait for auxiliary thread to die - which will cause dead lock
     //  - destruct variable, ignoring thread - which will cause data corruption.
-    TAsyncSignalsHandler* SIGNALS_HANDLER = nullptr; 
+    TAsyncSignalsHandler* SIGNALS_HANDLER = nullptr;
 }
 
 void SetAsyncSignalHandler(int signum, TAutoPtr<TEventHandler> handler) {

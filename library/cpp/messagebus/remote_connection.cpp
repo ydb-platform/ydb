@@ -676,14 +676,14 @@ namespace NBus {
         }
 
         namespace {
-            inline void WriteHeader(const TBusHeader& header, TBuffer& data) { 
+            inline void WriteHeader(const TBusHeader& header, TBuffer& data) {
                 data.Reserve(data.Size() + sizeof(TBusHeader));
                 /// \todo hton instead of memcpy
                 memcpy(data.Data() + data.Size(), &header, sizeof(TBusHeader));
                 data.Advance(sizeof(TBusHeader));
             }
 
-            inline void WriteDummyHeader(TBuffer& data) { 
+            inline void WriteDummyHeader(TBuffer& data) {
                 data.Resize(data.Size() + sizeof(TBusHeader));
             }
 

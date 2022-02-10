@@ -323,7 +323,7 @@ namespace NUri {
             // cause a dirty field
             url.FldMemSet(TField::FieldUser, "use"); // it is now shorter
             UNIT_ASSERT(!url.FldIsDirty());
-            url.FldMemSet(TField::FieldUser, TStringBuf("user")); 
+            url.FldMemSet(TField::FieldUser, TStringBuf("user"));
             UNIT_ASSERT(url.FldIsDirty());
 
             // copy again

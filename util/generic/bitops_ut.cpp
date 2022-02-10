@@ -36,7 +36,7 @@ static T ReverseBitsSlow(T v) {
     for (v >>= 1; v; v >>= 1) {
         r <<= 1;
         r |= v & 1;
-        --s; 
+        --s;
     }
 
     r <<= s; // shift when v's highest bits are zero

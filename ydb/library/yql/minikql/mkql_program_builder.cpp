@@ -12,8 +12,8 @@
 #include <util/string/printf.h>
 #include <array>
 
-using namespace std::string_view_literals; 
- 
+using namespace std::string_view_literals;
+
 namespace NKikimr {
 namespace NMiniKQL {
 
@@ -4752,7 +4752,7 @@ TRuntimeNode TProgramBuilder::Default(TType* type) {
 
     const auto scheme = targetType->GetSchemeType();
     const auto value = scheme == NUdf::TDataType<NUdf::TUuid>::Id ?
-        Env.NewStringValue("\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0"sv) : 
+        Env.NewStringValue("\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0"sv) :
         scheme == NUdf::TDataType<NUdf::TDyNumber>::Id ? NUdf::TUnboxedValuePod::Embedded("\1") : NUdf::TUnboxedValuePod::Zero();
     return TRuntimeNode(TDataLiteral::Create(value, targetType, Env), true);
 }

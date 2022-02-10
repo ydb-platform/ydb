@@ -19,7 +19,7 @@ struct TOptimizationParams {
 
     size_t IterationsCount = 1000;
 
-    TOptimizationParams() = default; 
+    TOptimizationParams() = default;
 
     static TOptimizationParams Default(const TVector<double>& values) {
         TOptimizationParams optimizationParams;

@@ -1965,11 +1965,11 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
     };
 
     static EPathType PathType(const TStringBuf path) {
-        if (path == "/sys"sv) { 
+        if (path == "/sys"sv) {
             return EPathType::SysPath;
-        } else if (path == "/sys/locks"sv) { 
+        } else if (path == "/sys/locks"sv) {
             return EPathType::SysLocksV1;
-        } else if (path == "/sys/locks2"sv) { 
+        } else if (path == "/sys/locks2"sv) {
             return EPathType::SysLocksV2;
         }
 

@@ -147,7 +147,7 @@ class TExportScan: private NActors::IActor, public NTable::IScan {
 
 public:
     static constexpr TStringBuf LogPrefix() {
-        return "scanner"sv; 
+        return "scanner"sv;
     }
 
     explicit TExportScan(std::function<IActor*()>&& createUploaderFn, IBuffer::TPtr buffer)

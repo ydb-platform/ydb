@@ -19,31 +19,31 @@ static void EncodeHtmlPcdataAppendInternal(const TStringBuf str, TString& strout
 
         switch (*s) {
             case '\"':
-                strout += TStringBuf("&quot;"); 
-                ++s; 
+                strout += TStringBuf("&quot;");
+                ++s;
                 break;
 
             case '<':
-                strout += TStringBuf("&lt;"); 
-                ++s; 
+                strout += TStringBuf("&lt;");
+                ++s;
                 break;
 
             case '>':
-                strout += TStringBuf("&gt;"); 
-                ++s; 
+                strout += TStringBuf("&gt;");
+                ++s;
                 break;
 
             case '\'':
-                strout += TStringBuf("&#39;"); 
-                ++s; 
+                strout += TStringBuf("&#39;");
+                ++s;
                 break;
 
             case '&':
                 if (qAmp)
-                    strout += TStringBuf("&amp;"); 
+                    strout += TStringBuf("&amp;");
                 else
-                    strout += TStringBuf("&"); 
-                ++s; 
+                    strout += TStringBuf("&");
+                ++s;
                 break;
         }
     }

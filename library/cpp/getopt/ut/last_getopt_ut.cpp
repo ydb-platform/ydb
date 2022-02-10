@@ -126,7 +126,7 @@ struct TOptsParserTester {
 };
 
 namespace {
-    bool gSimpleFlag = false; 
+    bool gSimpleFlag = false;
     void SimpleHander(void) {
         gSimpleFlag = true;
     }

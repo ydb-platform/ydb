@@ -15,7 +15,7 @@ Y_UNIT_TEST_SUITE(XRange) {
         size_t last = 0;
 
         for (auto i : xrange(begin, end)) {
-            ++count; 
+            ++count;
             sum += i;
             last = i;
             if (!firstInited) {

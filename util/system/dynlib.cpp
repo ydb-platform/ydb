@@ -18,7 +18,7 @@
         #define RTLD_GLOBAL (0)
     #endif
 
-using HINSTANCE = void*; 
+using HINSTANCE = void*;
 
     #define DLLOPEN(path, flags) dlopen(path, flags)
     #define DLLCLOSE(hndl) dlclose(hndl)
@@ -37,7 +37,7 @@ inline TString DLLERR() {
     if (!msg)
         return "DLLERR() unknown error";
     while (cnt && isspace(msg[cnt - 1]))
-        --cnt; 
+        --cnt;
     TString err(msg, 0, cnt);
     LocalFree(msg);
     return err;

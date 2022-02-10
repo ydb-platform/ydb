@@ -79,12 +79,12 @@ TMaybe<TCastResultOptions> GetCastResult(EDataSlot source, EDataSlot target) {
     case xId: return EDataSlot::xName;
 
 #define UDF_TYPE_PARSE(xName, xUnused1, xUnused2, xUnused3, xUnused4, xUnused5) \
-    if (TStringBuf(#xName) == str) {                        \ 
+    if (TStringBuf(#xName) == str) {                        \
         return EDataSlot::xName;                           \
     }
 
 #define UDF_TYPE_INFO(xName, xId, xType, xFeatures, xLayoutType, xParamsCount) \
-    { TStringBuf(#xName), xId, static_cast<EDataTypeFeatures>(xFeatures), \ 
+    { TStringBuf(#xName), xId, static_cast<EDataTypeFeatures>(xFeatures), \
         TPlainDataType<xType>::Result || TTzDataType<xType>::Result ? sizeof(xLayoutType) : 0, xParamsCount, GetDecimalWidth(static_cast<EDataTypeFeatures>(xFeatures), sizeof(xLayoutType)) },
 
 TMaybe<EDataSlot> FindDataSlot(TDataTypeId id) {

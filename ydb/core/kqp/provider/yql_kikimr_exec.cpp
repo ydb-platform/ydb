@@ -263,7 +263,7 @@ public:
 
             auto configure = TCoConfigure(input);
             auto clusterName = TString(configure.DataSource().Arg(1).Cast<TCoAtom>().Value());
-            if (configure.Arg(2).Cast<TCoAtom>().Value() == TStringBuf("Attr")) { 
+            if (configure.Arg(2).Cast<TCoAtom>().Value() == TStringBuf("Attr")) {
                 auto name = TString(configure.Arg(3).Cast<TCoAtom>().Value());
                 TMaybe<TString> value;
                 if (configure.Args().Count() == 5) {

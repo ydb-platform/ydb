@@ -198,7 +198,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader>, private TS3User {
             << ": self# " << SelfId()
             << ", result# " << result);
 
-        if (!CheckResult(result, TStringBuf("HeadObject"))) { 
+        if (!CheckResult(result, TStringBuf("HeadObject"))) {
             return;
         }
 
@@ -221,7 +221,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader>, private TS3User {
             return;
         }
 
-        if (!CheckETag(*info.DataETag, ETag, TStringBuf("DownloadInfo"))) { 
+        if (!CheckETag(*info.DataETag, ETag, TStringBuf("DownloadInfo"))) {
             return;
         }
 

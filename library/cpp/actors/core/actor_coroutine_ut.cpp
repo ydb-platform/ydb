@@ -94,7 +94,7 @@ Y_UNIT_TEST_SUITE(ActorCoro) {
             DoneEvent.Signal();
         }
 
-        void ProcessUnexpectedEvent(TAutoPtr<IEventHandle> event) override { 
+        void ProcessUnexpectedEvent(TAutoPtr<IEventHandle> event) override {
             if (event->GetTypeRewrite() == Enough) {
                 Finish = true;
             }

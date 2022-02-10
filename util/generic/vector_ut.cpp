@@ -505,7 +505,7 @@ private:
 
         template <class TOther>
         struct rebind {
-            using other = TDebugAlloc<TOther>; 
+            using other = TDebugAlloc<TOther>;
         };
     };
 

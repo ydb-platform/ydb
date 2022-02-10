@@ -12,18 +12,18 @@ void TGMockTestEventListener::OnTestPartResult(const testing::TestPartResult& re
         const TString summary = result.summary();
         TStringBuilder msg;
         if (result.file_name())
-            msg << result.file_name() << TStringBuf(":"); 
+            msg << result.file_name() << TStringBuf(":");
         if (result.line_number() != -1)
-            msg << result.line_number() << TStringBuf(":"); 
+            msg << result.line_number() << TStringBuf(":");
         if (summary) {
             if (msg) {
-                msg << TStringBuf("\n"); 
+                msg << TStringBuf("\n");
             }
             msg << summary;
         }
         if (message && summary != message) {
             if (msg) {
-                msg << TStringBuf("\n"); 
+                msg << TStringBuf("\n");
             }
             msg << message;
         }

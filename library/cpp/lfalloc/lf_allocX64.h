@@ -31,7 +31,7 @@
 #define _win_
 #define Y_FORCE_INLINE __forceinline
 
-using TAtomic = volatile long; 
+using TAtomic = volatile long;
 
 static inline long AtomicAdd(TAtomic& a, long b) {
     return _InterlockedExchangeAdd(&a, b) + b;

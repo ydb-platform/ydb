@@ -29,7 +29,7 @@ public:
         AtomicIncrement(Queue_->ObjectCount_);
     }
 
-    ~TDecrementingWrapper() override { 
+    ~TDecrementingWrapper() override {
         AtomicDecrement(Queue_->ObjectCount_);
         AtomicDecrement(Queue_->GuardCount_);
     }

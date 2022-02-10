@@ -103,7 +103,7 @@ public:
 /********************************************************/
 // Here is httpAgent that uses socketAbstractHandler class
 // ant its derivatives
-using httpSpecialAgent = THttpAgent<TSocketHandlerPtr>; 
+using httpSpecialAgent = THttpAgent<TSocketHandlerPtr>;
 
 /********************************************************/
 // Regular handler is used as implementation of

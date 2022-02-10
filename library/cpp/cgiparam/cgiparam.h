@@ -18,7 +18,7 @@ struct TStringLess {
 
 class TCgiParameters: public TMultiMap<TString, TString> {
 public:
-    TCgiParameters() = default; 
+    TCgiParameters() = default;
 
     explicit TCgiParameters(const TStringBuf cgiParamStr) {
         Scan(cgiParamStr);
@@ -117,7 +117,7 @@ public:
 
     // join multiple values into a single one using a separator
     // if val is a [possibly empty] non-NULL string, append it as well
-    void JoinUnescaped(const TStringBuf key, char sep, TStringBuf val = TStringBuf()); 
+    void JoinUnescaped(const TStringBuf key, char sep, TStringBuf val = TStringBuf());
 
     bool Erase(const TStringBuf name, size_t numOfValue = 0);
     bool Erase(const TStringBuf name, const TStringBuf val);
@@ -163,7 +163,7 @@ void TCgiParameters::ReplaceUnescaped(const TStringBuf key, TIter valuesBegin, c
 
 class TQuickCgiParam: public TMultiMap<TStringBuf, TStringBuf> {
 public:
-    TQuickCgiParam() = default; 
+    TQuickCgiParam() = default;
 
     explicit TQuickCgiParam(const TStringBuf cgiParamStr);
 

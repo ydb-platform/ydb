@@ -206,7 +206,7 @@ public:
             THashSet<TType> allowed(container.cbegin(), container.cend());
             Validators_.push_back([allowed = std::move(allowed)](const TString&, TType value) {
                 if (!allowed.has(value)) {
-                    throw yexception() << "Value " << value << " is not in set of allowed values: " << JoinSeq(TStringBuf(","), allowed); 
+                    throw yexception() << "Value " << value << " is not in set of allowed values: " << JoinSeq(TStringBuf(","), allowed);
                 }
             });
             return *this;
@@ -216,7 +216,7 @@ public:
             THashSet<TType> allowed(list);
             Validators_.push_back([allowed = std::move(allowed)](const TString&, TType value) {
                 if (!allowed.contains(value)) {
-                    throw yexception() << "Value " << value << " is not in set of allowed values: " << JoinSeq(TStringBuf(","), allowed); 
+                    throw yexception() << "Value " << value << " is not in set of allowed values: " << JoinSeq(TStringBuf(","), allowed);
                 }
             });
             return *this;

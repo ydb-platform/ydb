@@ -253,7 +253,7 @@ private:
 public:
     Y_SAVELOAD_DEFINE(TransformationType, TransformationParameters);
 
-    TFeaturesTransformer() = default; 
+    TFeaturesTransformer() = default;
 
     TFeaturesTransformer(const ETransformationType transformationType,
                          const TTransformationParameters transformationParameters)

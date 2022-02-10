@@ -16,14 +16,14 @@
 namespace NKikimr {
 namespace NSchemeShard {
 
-constexpr TStringBuf ATTR_PREFIX = "__"; 
-constexpr TStringBuf ATTR_VOLUME_SPACE_LIMIT = "__volume_space_limit"; 
-constexpr TStringBuf ATTR_VOLUME_SPACE_LIMIT_HDD = "__volume_space_limit_hdd"; 
-constexpr TStringBuf ATTR_VOLUME_SPACE_LIMIT_SSD = "__volume_space_limit_ssd"; 
-constexpr TStringBuf ATTR_VOLUME_SPACE_LIMIT_SSD_NONREPL = "__volume_space_limit_ssd_nonrepl"; 
+constexpr TStringBuf ATTR_PREFIX = "__";
+constexpr TStringBuf ATTR_VOLUME_SPACE_LIMIT = "__volume_space_limit";
+constexpr TStringBuf ATTR_VOLUME_SPACE_LIMIT_HDD = "__volume_space_limit_hdd";
+constexpr TStringBuf ATTR_VOLUME_SPACE_LIMIT_SSD = "__volume_space_limit_ssd";
+constexpr TStringBuf ATTR_VOLUME_SPACE_LIMIT_SSD_NONREPL = "__volume_space_limit_ssd_nonrepl";
 constexpr TStringBuf ATTR_VOLUME_SPACE_LIMIT_SSD_SYSTEM = "__volume_space_limit_ssd_system";
-constexpr TStringBuf ATTR_EXTRA_PATH_SYMBOLS_ALLOWED = "__extra_path_symbols_allowed"; 
-constexpr TStringBuf ATTR_DOCUMENT_API_VERSION = "__document_api_version"; 
+constexpr TStringBuf ATTR_EXTRA_PATH_SYMBOLS_ALLOWED = "__extra_path_symbols_allowed";
+constexpr TStringBuf ATTR_DOCUMENT_API_VERSION = "__document_api_version";
 
 inline bool WeakCheck(char c) {
     // 33: ! " # $ % & ' ( ) * + , - . /

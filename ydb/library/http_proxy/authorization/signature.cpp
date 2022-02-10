@@ -48,7 +48,7 @@ static TString HashSHA256(TStringBuf data) {
 static const char newline = '\n';
 static const char pathDelim = '/';
 
-constexpr TStringBuf AUTHORIZATION_HEADER = "authorization"; 
+constexpr TStringBuf AUTHORIZATION_HEADER = "authorization";
 
 static const TString SIGNED_HEADERS_PARAM = "signedheaders";
 static const TString SIGNATURE_PARAM = "signature";
@@ -214,7 +214,7 @@ void TAwsRequestSignV4::MakeCanonicalRequest(const THttpInput& input, const TPar
     }
 
     for (const auto& [key, value] : canonicalHeaders) {
-        canonicalRequest << key << ":"sv << JoinRange(",", value.begin(), value.end()) << newline; 
+        canonicalRequest << key << ":"sv << JoinRange(",", value.begin(), value.end()) << newline;
     }
 
     canonicalRequest << newline; // skip additional line after headers
@@ -247,7 +247,7 @@ void TAwsRequestSignV4::MakeCanonicalRequest(const THttpInput& input, const TPar
 
 void TAwsRequestSignV4::MakeFinalStringToSign() {
     TStringStream finalStringToSign;
-    finalStringToSign << "AWS4-HMAC-SHA256"sv << newline; 
+    finalStringToSign << "AWS4-HMAC-SHA256"sv << newline;
     finalStringToSign << AwsTimestamp_ << newline;
 
     finalStringToSign << AwsDate_ << pathDelim;

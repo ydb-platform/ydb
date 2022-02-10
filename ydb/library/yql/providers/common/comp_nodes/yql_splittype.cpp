@@ -167,7 +167,7 @@ public:
                 if (flags & NUdf::ICallablePayload::TArgumentFlags::AutoMap) {
                     NUdf::TUnboxedValue* inplaceFlags = nullptr;
                     flagsList = ctx.HolderFactory.CreateDirectArrayHolder(1, inplaceFlags);
-                    inplaceFlags[0] = MakeString(TStringBuf("AutoMap")); 
+                    inplaceFlags[0] = MakeString(TStringBuf("AutoMap"));
                 }
 
                 inplaceArg[0] = flagsList; // Flags

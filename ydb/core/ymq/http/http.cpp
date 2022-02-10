@@ -36,11 +36,11 @@ using NKikimrClient::TSqsResponse;
 
 namespace {
 
-constexpr TStringBuf AUTHORIZATION_HEADER = "authorization"; 
-constexpr TStringBuf SECURITY_TOKEN_HEADER = "x-amz-security-token"; 
-constexpr TStringBuf IAM_TOKEN_HEADER = "x-yacloud-subjecttoken"; 
-constexpr TStringBuf FORWARDED_IP_HEADER = "x-forwarded-for"; 
-constexpr TStringBuf REQUEST_ID_HEADER = "x-request-id"; 
+constexpr TStringBuf AUTHORIZATION_HEADER = "authorization";
+constexpr TStringBuf SECURITY_TOKEN_HEADER = "x-amz-security-token";
+constexpr TStringBuf IAM_TOKEN_HEADER = "x-yacloud-subjecttoken";
+constexpr TStringBuf FORWARDED_IP_HEADER = "x-forwarded-for";
+constexpr TStringBuf REQUEST_ID_HEADER = "x-request-id";
 
 const std::vector<TStringBuf> PRIVATE_TOKENS_HEADERS = {
     SECURITY_TOKEN_HEADER,
@@ -49,7 +49,7 @@ const std::vector<TStringBuf> PRIVATE_TOKENS_HEADERS = {
 
 const TString CREDENTIAL_PARAM = "credential";
 
-constexpr TStringBuf PRIVATE_REQUEST_PATH_PREFIX = "/private"; 
+constexpr TStringBuf PRIVATE_REQUEST_PATH_PREFIX = "/private";
 
 const TSet<TString> ModifyPermissionsActions = {"GrantPermissions", "RevokePermissions", "SetPermissions"};
 

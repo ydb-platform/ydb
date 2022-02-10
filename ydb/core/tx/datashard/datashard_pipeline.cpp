@@ -1165,7 +1165,7 @@ TOperation::TPtr TPipeline::BuildOperation(TEvDataShard::TEvProposeTransaction::
         tx->SetProcessingParams(rec.GetProcessingParams());
 
         if (!tx->BuildSchemeTx()) {
-            malformed(TStringBuf("scheme"), tx->GetSchemeTx().ShortDebugString()); 
+            malformed(TStringBuf("scheme"), tx->GetSchemeTx().ShortDebugString());
             return tx;
         }
 
@@ -1180,7 +1180,7 @@ TOperation::TPtr TPipeline::BuildOperation(TEvDataShard::TEvProposeTransaction::
         }
     } else if (tx->IsSnapshotTx()) {
         if (!tx->BuildSnapshotTx()) {
-            malformed(TStringBuf("snapshot"), tx->GetSnapshotTx().ShortDebugString()); 
+            malformed(TStringBuf("snapshot"), tx->GetSnapshotTx().ShortDebugString());
             return tx;
         }
 
@@ -1195,7 +1195,7 @@ TOperation::TPtr TPipeline::BuildOperation(TEvDataShard::TEvProposeTransaction::
         }
     } else if (tx->IsDistributedEraseTx()) {
         if (!tx->BuildDistributedEraseTx()) {
-            malformed(TStringBuf("distributed erase"), tx->GetDistributedEraseTx()->GetBody().ShortDebugString()); 
+            malformed(TStringBuf("distributed erase"), tx->GetDistributedEraseTx()->GetBody().ShortDebugString());
             return tx;
         }
 

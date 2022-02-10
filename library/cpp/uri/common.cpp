@@ -8,12 +8,12 @@ namespace NUri {
 
     const TSchemeInfo TSchemeInfo::Registry[] = {
         TSchemeInfo(TScheme::SchemeEmpty, TStringBuf()), // scheme is empty and inited
-        TSchemeInfo(TScheme::SchemeHTTP, TStringBuf("http"), TField::FlagHost | TField::FlagPath, 80), 
-        TSchemeInfo(TScheme::SchemeHTTPS, TStringBuf("https"), TField::FlagHost | TField::FlagPath, 443), 
-        TSchemeInfo(TScheme::SchemeFTP, TStringBuf("ftp"), TField::FlagHost | TField::FlagPath, 20), 
-        TSchemeInfo(TScheme::SchemeFILE, TStringBuf("file"), TField::FlagPath), 
-        TSchemeInfo(TScheme::SchemeWS, TStringBuf("ws"), TField::FlagHost | TField::FlagPath, 80), 
-        TSchemeInfo(TScheme::SchemeWSS, TStringBuf("wss"), TField::FlagHost | TField::FlagPath, 443), 
+        TSchemeInfo(TScheme::SchemeHTTP, TStringBuf("http"), TField::FlagHost | TField::FlagPath, 80),
+        TSchemeInfo(TScheme::SchemeHTTPS, TStringBuf("https"), TField::FlagHost | TField::FlagPath, 443),
+        TSchemeInfo(TScheme::SchemeFTP, TStringBuf("ftp"), TField::FlagHost | TField::FlagPath, 20),
+        TSchemeInfo(TScheme::SchemeFILE, TStringBuf("file"), TField::FlagPath),
+        TSchemeInfo(TScheme::SchemeWS, TStringBuf("ws"), TField::FlagHost | TField::FlagPath, 80),
+        TSchemeInfo(TScheme::SchemeWSS, TStringBuf("wss"), TField::FlagHost | TField::FlagPath, 443),
         // add above
         TSchemeInfo(TScheme::SchemeUnknown, TStringBuf()) // scheme is empty and uninited
     };

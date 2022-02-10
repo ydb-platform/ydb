@@ -65,7 +65,7 @@ namespace {
         }
     };
 
-    const TImpl GetImpl() { 
+    const TImpl GetImpl() {
         static const TImpl IMPL;
         return IMPL;
     }

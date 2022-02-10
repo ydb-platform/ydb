@@ -358,7 +358,7 @@ class TDistEraser: public TActorBootstrapped<TDistEraser> {
 
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
         const auto& request = ev->Get()->Request;
-        const TStringBuf marker = "ResolveTables"; 
+        const TStringBuf marker = "ResolveTables";
 
         LOG_D("Handle TEvTxProxySchemeCache::TEvNavigateKeySetResult"
             << ": request# " << (request ? request->ToString(*AppData()->TypeRegistry) : "nullptr"));
@@ -522,7 +522,7 @@ class TDistEraser: public TActorBootstrapped<TDistEraser> {
         }
 
         const auto& request = ev->Get()->Request;
-        const TStringBuf marker = "ResolveKeys"; 
+        const TStringBuf marker = "ResolveKeys";
 
         LOG_D("Handle TEvTxProxySchemeCache::TEvResolveKeySetResult"
             << ": request# " << (request ? request->ToString(*AppData()->TypeRegistry) : "nullptr"));
@@ -833,30 +833,30 @@ class TDistEraser: public TActorBootstrapped<TDistEraser> {
             case NKikimrTxDataShard::TEvProposeTransactionResult::ERROR:
                 CancelProposal(shardId);
                 Mon->TxResultError->Inc();
-                return error(TEvResponse::SHARD_NOT_AVAILABLE, TStringBuf("Not available")); 
+                return error(TEvResponse::SHARD_NOT_AVAILABLE, TStringBuf("Not available"));
             case NKikimrTxDataShard::TEvProposeTransactionResult::ABORTED:
                 Mon->TxResultAborted->Inc();
-                return error(TEvResponse::SHARD_ABORTED, TStringBuf("Aborted")); 
+                return error(TEvResponse::SHARD_ABORTED, TStringBuf("Aborted"));
             case NKikimrTxDataShard::TEvProposeTransactionResult::TRY_LATER:
                 CancelProposal(shardId);
                 Mon->TxResultShardTryLater->Inc();
-                return error(TEvResponse::SHARD_TRY_LATER, TStringBuf("Try later")); 
+                return error(TEvResponse::SHARD_TRY_LATER, TStringBuf("Try later"));
             case NKikimrTxDataShard::TEvProposeTransactionResult::OVERLOADED:
                 CancelProposal(shardId);
                 Mon->TxResultShardOverloaded->Inc();
-                return error(TEvResponse::SHARD_OVERLOADED, TStringBuf("Overloaded")); 
+                return error(TEvResponse::SHARD_OVERLOADED, TStringBuf("Overloaded"));
             case NKikimrTxDataShard::TEvProposeTransactionResult::EXEC_ERROR:
                 Mon->TxResultExecError->Inc();
-                return error(TEvResponse::SHARD_EXEC_ERROR, TStringBuf("Execution error")); 
+                return error(TEvResponse::SHARD_EXEC_ERROR, TStringBuf("Execution error"));
             case NKikimrTxDataShard::TEvProposeTransactionResult::RESULT_UNAVAILABLE:
                 Mon->TxResultResultUnavailable->Inc();
-                return error(TEvResponse::SHARD_RESULT_UNAVAILABLE, TStringBuf("Result unavailable")); 
+                return error(TEvResponse::SHARD_RESULT_UNAVAILABLE, TStringBuf("Result unavailable"));
             case NKikimrTxDataShard::TEvProposeTransactionResult::CANCELLED:
                 Mon->TxResultCancelled->Inc();
-                return error(TEvResponse::SHARD_CANCELLED, TStringBuf("Cancelled")); 
+                return error(TEvResponse::SHARD_CANCELLED, TStringBuf("Cancelled"));
             case NKikimrTxDataShard::TEvProposeTransactionResult::BAD_REQUEST:
                 Mon->TxResultCancelled->Inc();
-                return error(TEvResponse::SHARD_CANCELLED, TStringBuf("Bad request")); 
+                return error(TEvResponse::SHARD_CANCELLED, TStringBuf("Bad request"));
             default:
                 CancelProposal();
                 Mon->TxResultFatal->Inc();
@@ -997,16 +997,16 @@ class TDistEraser: public TActorBootstrapped<TDistEraser> {
             }
             case NKikimrTxDataShard::TEvProposeTransactionResult::ABORTED:
                 Mon->PlanClientTxResultAborted->Inc();
-                return error(TEvResponse::SHARD_ABORTED, TStringBuf("Aborted")); 
+                return error(TEvResponse::SHARD_ABORTED, TStringBuf("Aborted"));
             case NKikimrTxDataShard::TEvProposeTransactionResult::RESULT_UNAVAILABLE:
                 Mon->PlanClientTxResultResultUnavailable->Inc();
-                return error(TEvResponse::SHARD_RESULT_UNAVAILABLE, TStringBuf("Result unavailable")); 
+                return error(TEvResponse::SHARD_RESULT_UNAVAILABLE, TStringBuf("Result unavailable"));
             case NKikimrTxDataShard::TEvProposeTransactionResult::CANCELLED:
                 Mon->PlanClientTxResultCancelled->Inc();
-                return error(TEvResponse::SHARD_CANCELLED, TStringBuf("Cancelled")); 
+                return error(TEvResponse::SHARD_CANCELLED, TStringBuf("Cancelled"));
             default:
                 Mon->PlanClientTxResultExecError->Inc();
-                return error(TEvResponse::SHARD_EXEC_ERROR, TStringBuf("Unexpected status")); 
+                return error(TEvResponse::SHARD_EXEC_ERROR, TStringBuf("Unexpected status"));
         }
     }
 

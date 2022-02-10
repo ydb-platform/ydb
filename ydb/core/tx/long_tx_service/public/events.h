@@ -10,7 +10,7 @@ namespace NKikimr {
 namespace NLongTxService {
 
     inline TActorId MakeLongTxServiceID(ui32 nodeId) {
-        return TActorId(nodeId, TStringBuf("long_tx_svc")); 
+        return TActorId(nodeId, TStringBuf("long_tx_svc"));
     }
 
     struct TEvLongTxService {

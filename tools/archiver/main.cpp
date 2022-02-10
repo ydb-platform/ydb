@@ -41,7 +41,7 @@ namespace {
 
     private:
         void WriteBuf() {
-            Slave << '"' << Buf << "\",\n"sv; 
+            Slave << '"' << Buf << "\",\n"sv;
             Buf.clear();
         }
 

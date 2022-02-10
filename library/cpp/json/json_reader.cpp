@@ -14,9 +14,9 @@
 namespace NJson {
     namespace {
         TString PrintError(const rapidjson::ParseResult& result) {
-            return TStringBuilder() << TStringBuf("Offset: ") << result.Offset() 
-                                    << TStringBuf(", Code: ") << (int)result.Code() 
-                                    << TStringBuf(", Error: ") << GetParseError_En(result.Code()); 
+            return TStringBuilder() << TStringBuf("Offset: ") << result.Offset()
+                                    << TStringBuf(", Code: ") << (int)result.Code()
+                                    << TStringBuf(", Error: ") << GetParseError_En(result.Code());
         }
     }
 

@@ -73,7 +73,7 @@ static constexpr bool AreValuesDistinct(const TValues& values)
         \
         static TStringBuf GetTypeName() \
         { \
-            static constexpr TStringBuf typeName = PP_STRINGIZE(name); \ 
+            static constexpr TStringBuf typeName = PP_STRINGIZE(name); \
             return typeName; \
         } \
         \
@@ -143,7 +143,7 @@ static constexpr bool AreValuesDistinct(const TValues& values)
     ENUM__GET_DOMAIN_NAMES_ITEM_ATOMIC(PP_ELEMENT(seq, 0))
 
 #define ENUM__GET_DOMAIN_NAMES_ITEM_ATOMIC(item) \
-    TStringBuf(PP_STRINGIZE(item)), 
+    TStringBuf(PP_STRINGIZE(item)),
 
 #define ENUM__DECOMPOSE \
     static std::vector<TType> Decompose(TType value) \

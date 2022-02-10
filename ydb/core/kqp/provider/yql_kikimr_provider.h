@@ -16,7 +16,7 @@
 
 namespace NYql {
 
-const TStringBuf KikimrMkqlProtoFormat = "mkql_proto"; 
+const TStringBuf KikimrMkqlProtoFormat = "mkql_proto";
 
 class IKikimrRemoteGateway;
 

@@ -24,7 +24,7 @@ enum ECompactTrieBuilderFlags {
     CTBF_UNIQUE = 1 << 2,
 };
 
-using TCompactTrieBuilderFlags = ECompactTrieBuilderFlags; 
+using TCompactTrieBuilderFlags = ECompactTrieBuilderFlags;
 
 inline TCompactTrieBuilderFlags operator|(TCompactTrieBuilderFlags first, TCompactTrieBuilderFlags second) {
     return static_cast<TCompactTrieBuilderFlags>(static_cast<int>(first) | second);

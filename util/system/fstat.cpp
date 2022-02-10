@@ -5,7 +5,7 @@
 
 #include <util/folder/path.h>
 
-#include <cerrno> 
+#include <cerrno>
 
 #if defined(_win_)
     #include "fs_win.h"
@@ -96,7 +96,7 @@ static bool GetStatByName(TSystemFStat& fs, const char* fileName, bool nofollow)
 #endif
 }
 
-TFileStat::TFileStat() = default; 
+TFileStat::TFileStat() = default;
 
 TFileStat::TFileStat(const TFile& f) {
     *this = TFileStat(f.GetHandle());

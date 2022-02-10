@@ -89,10 +89,10 @@ TMaybe<TJoinInputDesc> BuildDqJoin(const TCoEquiJoinTuple& joinTuple,
 
     TStringBuf joinType = joinTuple.Type().Value();
     TSet<std::pair<TStringBuf, TStringBuf>> resultKeys;
-    if (joinType != TStringBuf("RightOnly") && joinType != TStringBuf("RightSemi")) { 
+    if (joinType != TStringBuf("RightOnly") && joinType != TStringBuf("RightSemi")) {
         resultKeys.insert(left->Keys.begin(), left->Keys.end());
     }
-    if (joinType != TStringBuf("LeftOnly") && joinType != TStringBuf("LeftSemi")) { 
+    if (joinType != TStringBuf("LeftOnly") && joinType != TStringBuf("LeftSemi")) {
         resultKeys.insert(right->Keys.begin(), right->Keys.end());
     }
 

@@ -59,26 +59,26 @@ struct ELevelHelpers {
     static TStringBuf ToString(ELevel level) {
         // aligned 5-letters string
         switch (level) {
-        case ELevel::FATAL: return TStringBuf("FATAL"); 
-        case ELevel::ERROR: return TStringBuf("ERROR"); 
-        case ELevel::WARN:  return TStringBuf("WARN "); 
-        case ELevel::NOTICE:return TStringBuf("NOTE "); 
-        case ELevel::INFO:  return TStringBuf("INFO "); 
-        case ELevel::DEBUG: return TStringBuf("DEBUG"); 
-        case ELevel::TRACE: return TStringBuf("TRACE"); 
+        case ELevel::FATAL: return TStringBuf("FATAL");
+        case ELevel::ERROR: return TStringBuf("ERROR");
+        case ELevel::WARN:  return TStringBuf("WARN ");
+        case ELevel::NOTICE:return TStringBuf("NOTE ");
+        case ELevel::INFO:  return TStringBuf("INFO ");
+        case ELevel::DEBUG: return TStringBuf("DEBUG");
+        case ELevel::TRACE: return TStringBuf("TRACE");
         }
         ythrow yexception() << "unknown log level: " << ToInt(level);
     }
 
     static ELevel FromString(TStringBuf str) {
         // aligned 5-letters string
-        if (str == TStringBuf("FATAL")) return ELevel::FATAL; 
-        if (str == TStringBuf("ERROR")) return ELevel::ERROR; 
-        if (str == TStringBuf("WARN ")) return ELevel::WARN; 
-        if (str == TStringBuf("NOTE ")) return ELevel::NOTICE; 
-        if (str == TStringBuf("INFO ")) return ELevel::INFO; 
-        if (str == TStringBuf("DEBUG")) return ELevel::DEBUG; 
-        if (str == TStringBuf("TRACE")) return ELevel::TRACE; 
+        if (str == TStringBuf("FATAL")) return ELevel::FATAL;
+        if (str == TStringBuf("ERROR")) return ELevel::ERROR;
+        if (str == TStringBuf("WARN ")) return ELevel::WARN;
+        if (str == TStringBuf("NOTE ")) return ELevel::NOTICE;
+        if (str == TStringBuf("INFO ")) return ELevel::INFO;
+        if (str == TStringBuf("DEBUG")) return ELevel::DEBUG;
+        if (str == TStringBuf("TRACE")) return ELevel::TRACE;
         ythrow yexception() << "unknown log level: " << str;
     }
 

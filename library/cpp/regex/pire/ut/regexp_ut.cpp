@@ -19,16 +19,16 @@ Y_UNIT_TEST_SUITE(TRegExp) {
     Y_UNIT_TEST(Boundaries) {
         UNIT_ASSERT(!TMatcher(TFsm("qwb$", TFsm::TOptions().SetSurround(true))).Match("aqwb").Final());
         UNIT_ASSERT(!TMatcher(TFsm("^aqw", TFsm::TOptions().SetSurround(true))).Match("aqwb").Final());
-        UNIT_ASSERT(TMatcher(TFsm("qwb$", TFsm::TOptions().SetSurround(true))).Match(TStringBuf("aqwb"), true, true).Final()); 
-        UNIT_ASSERT(TMatcher(TFsm("^aqw", TFsm::TOptions().SetSurround(true))).Match(TStringBuf("aqwb"), true, true).Final()); 
-        UNIT_ASSERT(!TMatcher(TFsm("qw$", TFsm::TOptions().SetSurround(true))).Match(TStringBuf("aqwb"), true, true).Final()); 
-        UNIT_ASSERT(!TMatcher(TFsm("^qw", TFsm::TOptions().SetSurround(true))).Match(TStringBuf("aqwb"), true, true).Final()); 
+        UNIT_ASSERT(TMatcher(TFsm("qwb$", TFsm::TOptions().SetSurround(true))).Match(TStringBuf("aqwb"), true, true).Final());
+        UNIT_ASSERT(TMatcher(TFsm("^aqw", TFsm::TOptions().SetSurround(true))).Match(TStringBuf("aqwb"), true, true).Final());
+        UNIT_ASSERT(!TMatcher(TFsm("qw$", TFsm::TOptions().SetSurround(true))).Match(TStringBuf("aqwb"), true, true).Final());
+        UNIT_ASSERT(!TMatcher(TFsm("^qw", TFsm::TOptions().SetSurround(true))).Match(TStringBuf("aqwb"), true, true).Final());
 
         UNIT_ASSERT(TMatcher(TFsm("^aqwb$", TFsm::TOptions().SetSurround(true)))
-                        .Match(TStringBuf("a"), true, false) 
-                        .Match(TStringBuf("q"), false, false) 
-                        .Match(TStringBuf("w"), false, false) 
-                        .Match(TStringBuf("b"), false, true) 
+                        .Match(TStringBuf("a"), true, false)
+                        .Match(TStringBuf("q"), false, false)
+                        .Match(TStringBuf("w"), false, false)
+                        .Match(TStringBuf("b"), false, true)
                         .Final());
     }
 
@@ -100,7 +100,7 @@ Y_UNIT_TEST_SUITE(TRegExp) {
         TSearcher searcher(fsm);
         searcher.Search("in db and here we have user_id=0x0d0a; same as CRLF");
         UNIT_ASSERT(searcher.Captured());
-        UNIT_ASSERT_VALUES_EQUAL(searcher.GetCaptured(), TStringBuf("0x0d0a")); 
+        UNIT_ASSERT_VALUES_EQUAL(searcher.GetCaptured(), TStringBuf("0x0d0a"));
     }
 
     Y_UNIT_TEST(Capture2) {
@@ -109,7 +109,7 @@ Y_UNIT_TEST_SUITE(TRegExp) {
         TSearcher searcher(fsm);
         searcher.Search("wabcdef");
         UNIT_ASSERT(searcher.Captured());
-        UNIT_ASSERT_VALUES_EQUAL(searcher.GetCaptured(), TStringBuf("abcde")); 
+        UNIT_ASSERT_VALUES_EQUAL(searcher.GetCaptured(), TStringBuf("abcde"));
     }
 
     Y_UNIT_TEST(Capture3) {
@@ -119,7 +119,7 @@ Y_UNIT_TEST_SUITE(TRegExp) {
         TSearcher searcher(fsm);
         searcher.Search("http://vkontakte.ru/id100500");
         UNIT_ASSERT(searcher.Captured());
-        UNIT_ASSERT_VALUES_EQUAL(searcher.GetCaptured(), TStringBuf("100500")); 
+        UNIT_ASSERT_VALUES_EQUAL(searcher.GetCaptured(), TStringBuf("100500"));
     }
 
     Y_UNIT_TEST(Capture4) {
@@ -129,7 +129,7 @@ Y_UNIT_TEST_SUITE(TRegExp) {
         TSearcher searcher(fsm);
         searcher.Search("   Здравствуйте, Уважаемый (-ая)!   ");
         UNIT_ASSERT(searcher.Captured());
-        UNIT_ASSERT_VALUES_EQUAL(searcher.GetCaptured(), TStringBuf("Уважаемый (-ая)")); 
+        UNIT_ASSERT_VALUES_EQUAL(searcher.GetCaptured(), TStringBuf("Уважаемый (-ая)"));
     }
 
     Y_UNIT_TEST(Capture5) {
@@ -137,7 +137,7 @@ Y_UNIT_TEST_SUITE(TRegExp) {
         TSearcher searcher(fsm);
         searcher.Search("\"/away.php?to=http:some.addr\"&id=1");
         UNIT_ASSERT(searcher.Captured());
-        //UNIT_ASSERT_VALUES_EQUAL(searcher.GetCaptured(), TStringBuf("some.addr")); 
+        //UNIT_ASSERT_VALUES_EQUAL(searcher.GetCaptured(), TStringBuf("some.addr"));
     }
 
     Y_UNIT_TEST(Capture6) {
@@ -145,7 +145,7 @@ Y_UNIT_TEST_SUITE(TRegExp) {
         TSearcher searcher(fsm);
         searcher.Search("/some/table/path/to-match-with");
         UNIT_ASSERT(searcher.Captured());
-        UNIT_ASSERT_VALUES_EQUAL(searcher.GetCaptured(), TStringBuf("/to-match-with")); 
+        UNIT_ASSERT_VALUES_EQUAL(searcher.GetCaptured(), TStringBuf("/to-match-with"));
     }
 
     Y_UNIT_TEST(Capture7) {
@@ -153,7 +153,7 @@ Y_UNIT_TEST_SUITE(TRegExp) {
         TSearcher searcher(fsm);
         searcher.Search("ala pref bla suff cla");
         UNIT_ASSERT(searcher.Captured());
-        //UNIT_ASSERT_VALUES_EQUAL(searcher.GetCaptured(), TStringBuf("pref bla suff")); 
+        //UNIT_ASSERT_VALUES_EQUAL(searcher.GetCaptured(), TStringBuf("pref bla suff"));
     }
 
     Y_UNIT_TEST(CaptureXA) {
@@ -162,7 +162,7 @@ Y_UNIT_TEST_SUITE(TRegExp) {
         TSearcher searcher(fsm);
         searcher.Search("xa");
         UNIT_ASSERT(searcher.Captured());
-        UNIT_ASSERT_VALUES_EQUAL(searcher.GetCaptured(), TStringBuf("xa")); 
+        UNIT_ASSERT_VALUES_EQUAL(searcher.GetCaptured(), TStringBuf("xa"));
     }
 
     Y_UNIT_TEST(CaptureWrongXX) {
@@ -175,7 +175,7 @@ Y_UNIT_TEST_SUITE(TRegExp) {
         // TCapturingFsm uses a fast - O(|text|) - but incorrect algorithm.
         // It works more or less for a particular class of regexps to which ".*(xx).*" does not belong.
         // So it returns not the expected "xx" but just the second "x" instead.
-        UNIT_ASSERT_VALUES_EQUAL(searcher.GetCaptured(), TStringBuf("x")); 
+        UNIT_ASSERT_VALUES_EQUAL(searcher.GetCaptured(), TStringBuf("x"));
     }
 
     Y_UNIT_TEST(CaptureRight1XX) {
@@ -194,7 +194,7 @@ Y_UNIT_TEST_SUITE(TRegExp) {
 
         searcher.Search("axx");
         UNIT_ASSERT(searcher.Captured());
-        UNIT_ASSERT_VALUES_EQUAL(searcher.GetCaptured(), TStringBuf("xx")); 
+        UNIT_ASSERT_VALUES_EQUAL(searcher.GetCaptured(), TStringBuf("xx"));
     }
 
     Y_UNIT_TEST(CaptureRight3XX) {
@@ -204,7 +204,7 @@ Y_UNIT_TEST_SUITE(TRegExp) {
 
         searcher.Search("axxb");
         UNIT_ASSERT(searcher.Captured());
-        UNIT_ASSERT_VALUES_EQUAL(searcher.GetCaptured(), TStringBuf("xx")); 
+        UNIT_ASSERT_VALUES_EQUAL(searcher.GetCaptured(), TStringBuf("xx"));
     }
 
     Y_UNIT_TEST(SlowCaptureXX) {
@@ -213,7 +213,7 @@ Y_UNIT_TEST_SUITE(TRegExp) {
         TSlowSearcher searcher(fsm);
         searcher.Search("xx");
         UNIT_ASSERT(searcher.Captured());
-        UNIT_ASSERT_VALUES_EQUAL(searcher.GetCaptured(), TStringBuf("xx")); 
+        UNIT_ASSERT_VALUES_EQUAL(searcher.GetCaptured(), TStringBuf("xx"));
     }
 
     Y_UNIT_TEST(SlowCapture) {
@@ -222,7 +222,7 @@ Y_UNIT_TEST_SUITE(TRegExp) {
         TSlowSearcher searcher(fsm);
         searcher.Search("http://vkontakte.ru/id100500");
         UNIT_ASSERT(searcher.Captured());
-        UNIT_ASSERT_VALUES_EQUAL(searcher.GetCaptured(), TStringBuf("100500")); 
+        UNIT_ASSERT_VALUES_EQUAL(searcher.GetCaptured(), TStringBuf("100500"));
     }
 
     Y_UNIT_TEST(SlowCaptureGreedy) {
@@ -230,7 +230,7 @@ Y_UNIT_TEST_SUITE(TRegExp) {
         TSlowSearcher searcher(fsm);
         searcher.Search("pref ala bla pref cla suff dla");
         UNIT_ASSERT(searcher.Captured());
-        UNIT_ASSERT_VALUES_EQUAL(searcher.GetCaptured(), TStringBuf("pref cla suff")); 
+        UNIT_ASSERT_VALUES_EQUAL(searcher.GetCaptured(), TStringBuf("pref cla suff"));
     }
 
     Y_UNIT_TEST(SlowCaptureNonGreedy) {
@@ -238,7 +238,7 @@ Y_UNIT_TEST_SUITE(TRegExp) {
         TSlowSearcher searcher(fsm);
         searcher.Search("pref ala bla pref cla suff dla");
         UNIT_ASSERT(searcher.Captured());
-        UNIT_ASSERT_VALUES_EQUAL(searcher.GetCaptured(), TStringBuf("pref ala bla pref cla suff")); 
+        UNIT_ASSERT_VALUES_EQUAL(searcher.GetCaptured(), TStringBuf("pref ala bla pref cla suff"));
     }
 
     Y_UNIT_TEST(SlowCapture2) {
@@ -248,7 +248,7 @@ Y_UNIT_TEST_SUITE(TRegExp) {
         TSlowSearcher searcher(fsm);
         searcher.Search("   Здравствуйте, Уважаемый (-ая)!   ");
         UNIT_ASSERT(searcher.Captured());
-        UNIT_ASSERT_VALUES_EQUAL(searcher.GetCaptured(), TStringBuf("Уважаемый (-ая)")); 
+        UNIT_ASSERT_VALUES_EQUAL(searcher.GetCaptured(), TStringBuf("Уважаемый (-ая)"));
     }
 
     Y_UNIT_TEST(SlowCapture3) {
@@ -256,7 +256,7 @@ Y_UNIT_TEST_SUITE(TRegExp) {
         TSlowSearcher searcher(fsm);
         searcher.Search("in db and here we have user_id=0x0d0a; same as CRLF");
         UNIT_ASSERT(searcher.Captured());
-        UNIT_ASSERT_VALUES_EQUAL(searcher.GetCaptured(), TStringBuf("0x0d0a")); 
+        UNIT_ASSERT_VALUES_EQUAL(searcher.GetCaptured(), TStringBuf("0x0d0a"));
     }
 
     Y_UNIT_TEST(SlowCapture4) {
@@ -264,7 +264,7 @@ Y_UNIT_TEST_SUITE(TRegExp) {
         TSlowSearcher searcher(fsm);
         searcher.Search("\"/away.php?to=http:some.addr\"&id=1");
         UNIT_ASSERT(searcher.Captured());
-        UNIT_ASSERT_VALUES_EQUAL(searcher.GetCaptured(), TStringBuf("some.addr")); 
+        UNIT_ASSERT_VALUES_EQUAL(searcher.GetCaptured(), TStringBuf("some.addr"));
     }
 
     Y_UNIT_TEST(CapturedEmptySlow) {
@@ -272,7 +272,7 @@ Y_UNIT_TEST_SUITE(TRegExp) {
         TSlowSearcher searcher(fsm);
         searcher.Search("And Comments=");
         UNIT_ASSERT(searcher.Captured());
-        UNIT_ASSERT_VALUES_EQUAL(searcher.GetCaptured(), TStringBuf("")); 
+        UNIT_ASSERT_VALUES_EQUAL(searcher.GetCaptured(), TStringBuf(""));
     }
 
     Y_UNIT_TEST(CaptureInOrFirst) {
@@ -294,7 +294,7 @@ Y_UNIT_TEST_SUITE(TRegExp) {
         TSlowSearcher searcher(fsm);
         searcher.Search("ID=");
         UNIT_ASSERT(searcher.Captured());
-        UNIT_ASSERT_VALUES_EQUAL(searcher.GetCaptured(), TStringBuf("")); 
+        UNIT_ASSERT_VALUES_EQUAL(searcher.GetCaptured(), TStringBuf(""));
     }
 
     Y_UNIT_TEST(CaptureInside) {

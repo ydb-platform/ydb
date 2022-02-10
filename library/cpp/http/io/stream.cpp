@@ -27,15 +27,15 @@
         if (!stricmp((header).Name().data(), str))
 
 namespace {
-    inline size_t SuggestBufferSize() { 
+    inline size_t SuggestBufferSize() {
         return 8192;
     }
 
-    inline TStringBuf Trim(const char* b, const char* e) noexcept { 
+    inline TStringBuf Trim(const char* b, const char* e) noexcept {
         return StripString(TStringBuf(b, e));
     }
 
-    inline TStringBuf RmSemiColon(const TStringBuf& s) { 
+    inline TStringBuf RmSemiColon(const TStringBuf& s) {
         return s.Before(';');
     }
 
@@ -235,7 +235,7 @@ private:
 
     struct TTrEnc {
         inline void operator()(const TStringBuf& s) {
-            if (s == TStringBuf("chunked")) { 
+            if (s == TStringBuf("chunked")) {
                 p->Chunked = true;
             }
         }
@@ -642,7 +642,7 @@ private:
 
     inline bool HasResponseBody() const noexcept {
         if (IsHttpResponse()) {
-            if (Request_ && Request_->FirstLine().StartsWith(TStringBuf("HEAD"))) 
+            if (Request_ && Request_->FirstLine().StartsWith(TStringBuf("HEAD")))
                 return false;
             if (FirstLine_.size() > 9 && strncmp(FirstLine_.data() + 9, "204", 3) == 0)
                 return false;
@@ -815,13 +815,13 @@ private:
             const THttpInputHeader& header = *h;
             const TString hl = to_lower(header.Name());
 
-            if (hl == TStringBuf("connection")) { 
-                keepAlive = to_lower(header.Value()) == TStringBuf("keep-alive"); 
-            } else if (IsCompressionHeaderEnabled() && hl == TStringBuf("content-encoding")) { 
+            if (hl == TStringBuf("connection")) {
+                keepAlive = to_lower(header.Value()) == TStringBuf("keep-alive");
+            } else if (IsCompressionHeaderEnabled() && hl == TStringBuf("content-encoding")) {
                 encoder = TCompressionCodecFactory::Instance().FindEncoder(to_lower(header.Value()));
-            } else if (hl == TStringBuf("transfer-encoding")) { 
-                chunked = to_lower(header.Value()) == TStringBuf("chunked"); 
-            } else if (hl == TStringBuf("content-length")) { 
+            } else if (hl == TStringBuf("transfer-encoding")) {
+                chunked = to_lower(header.Value()) == TStringBuf("chunked");
+            } else if (hl == TStringBuf("content-length")) {
                 haveContentLength = true;
             }
         }
@@ -980,17 +980,17 @@ void SendMinimalHttpRequest(TSocket& s, const TStringBuf& host, const TStringBuf
     output.EnableCompression(false);
 
     const IOutputStream::TPart parts[] = {
-        IOutputStream::TPart(TStringBuf("GET ")), 
+        IOutputStream::TPart(TStringBuf("GET ")),
         IOutputStream::TPart(request),
-        IOutputStream::TPart(TStringBuf(" HTTP/1.1")), 
+        IOutputStream::TPart(TStringBuf(" HTTP/1.1")),
         IOutputStream::TPart::CrLf(),
-        IOutputStream::TPart(TStringBuf("Host: ")), 
+        IOutputStream::TPart(TStringBuf("Host: ")),
         IOutputStream::TPart(host),
         IOutputStream::TPart::CrLf(),
-        IOutputStream::TPart(TStringBuf("User-Agent: ")), 
+        IOutputStream::TPart(TStringBuf("User-Agent: ")),
         IOutputStream::TPart(agent),
         IOutputStream::TPart::CrLf(),
-        IOutputStream::TPart(TStringBuf("From: ")), 
+        IOutputStream::TPart(TStringBuf("From: ")),
         IOutputStream::TPart(from),
         IOutputStream::TPart::CrLf(),
         IOutputStream::TPart::CrLf(),

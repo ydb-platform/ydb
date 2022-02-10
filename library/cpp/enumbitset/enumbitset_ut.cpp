@@ -19,7 +19,7 @@ enum ETestEnum {
 
     TE_OVERFLOW, // to test overflow
 };
-using TTestBitSet = TEnumBitSet<ETestEnum, TE_FIRST, TE_MAX>; 
+using TTestBitSet = TEnumBitSet<ETestEnum, TE_FIRST, TE_MAX>;
 
 Y_UNIT_TEST_SUITE(TEnumBitSetTest) {
     Y_UNIT_TEST(TestMainFunctions) {

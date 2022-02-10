@@ -1030,7 +1030,7 @@ inline ui128 FromStringImpl<ui128>(const char* data, size_t length) {
         const TStringBuf string(data, length);
         for (auto&& c : string) {
             if (!std::isdigit(c)) {
-                ythrow TFromStringException() << "Unexpected symbol \""sv << c << "\""sv; 
+                ythrow TFromStringException() << "Unexpected symbol \""sv << c << "\""sv;
             }
 
             ui128 x1 = result;
@@ -1042,7 +1042,7 @@ inline ui128 FromStringImpl<ui128>(const char* data, size_t length) {
             result = x10 + s;
 
             if (GetHigh(result) < GetHigh(x1)) {
-                ythrow TFromStringException() << TStringBuf("Integer overflow"); 
+                ythrow TFromStringException() << TStringBuf("Integer overflow");
             }
         }
 
@@ -1237,7 +1237,7 @@ inline i128 FromStringImpl<i128>(const char* data, size_t length) {
         const TStringBuf string(data, length);
         for (auto&& c : string) {
             if (!std::isdigit(c)) {
-                ythrow TFromStringException() << "Unexpected symbol \""sv << c << "\""sv; 
+                ythrow TFromStringException() << "Unexpected symbol \""sv << c << "\""sv;
             }
 
             i128 x1 = result;
@@ -1249,7 +1249,7 @@ inline i128 FromStringImpl<i128>(const char* data, size_t length) {
             result = x10 + s;
 
             if (GetHigh(result) < GetHigh(x1)) {
-                ythrow TFromStringException() << TStringBuf("Integer overflow"); 
+                ythrow TFromStringException() << TStringBuf("Integer overflow");
             }
         }
 

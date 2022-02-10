@@ -4,7 +4,7 @@ namespace NKikimr::NAddressClassifier {
 
 TString ExtractAddress(const TString& peer) {
     TStringBuf buf(peer);
-    if (buf.SkipPrefix(TStringBuf("ipv"))) { 
+    if (buf.SkipPrefix(TStringBuf("ipv"))) {
         buf.Skip(2); // skip 4/6 and ':'
         if (buf.StartsWith('[')) {
             buf.Skip(1);

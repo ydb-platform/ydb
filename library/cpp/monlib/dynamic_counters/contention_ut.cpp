@@ -24,7 +24,7 @@ Y_UNIT_TEST_SUITE(TDynamicCountersContentionTest) {
                 Thread.Start();
             }
 
-            ~TConsumer() override { 
+            ~TConsumer() override {
                 Thread.Join();
             }
 

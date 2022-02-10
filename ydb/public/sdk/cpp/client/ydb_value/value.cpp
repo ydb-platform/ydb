@@ -523,7 +523,7 @@ void FormatTypeInternal(TTypeParser& parser, IOutputStream& out) {
             break;
 
         case TTypeParser::ETypeKind::Void:
-            out << "Void"sv; 
+            out << "Void"sv;
             break;
 
         default:

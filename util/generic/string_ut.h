@@ -517,13 +517,13 @@ protected:
     TTestData Data;
 
 public:
-    void TestMaxSize() { 
+    void TestMaxSize() {
         const size_t badMaxVal = TStringType{}.max_size() + 1;
- 
-        TStringType s; 
-        UNIT_CHECK_GENERATED_EXCEPTION(s.reserve(badMaxVal), std::length_error); 
-    } 
- 
+
+        TStringType s;
+        UNIT_CHECK_GENERATED_EXCEPTION(s.reserve(badMaxVal), std::length_error);
+    }
+
     void TestConstructors() {
         TStringType s0(nullptr);
         UNIT_ASSERT(s0.size() == 0);

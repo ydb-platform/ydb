@@ -190,7 +190,7 @@ _strptime(const char* buf, const char* fmt, struct tm* tm, int* GMTp)
         if (c != '%') {
             if (isspace((unsigned char)c))
                 while (*buf != 0 && isspace((unsigned char)*buf))
-                    ++buf; 
+                    ++buf;
             else if (c != *buf++)
                 return 0;
             continue;

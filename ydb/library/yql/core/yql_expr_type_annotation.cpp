@@ -27,8 +27,8 @@ using namespace NKikimr;
 
 namespace {
 
-constexpr TStringBuf TypeResourceTag = "_Type"; 
-constexpr TStringBuf CodeResourceTag = "_Expr"; 
+constexpr TStringBuf TypeResourceTag = "_Type";
+constexpr TStringBuf CodeResourceTag = "_Expr";
 
 TExprNode::TPtr RebuildDict(const TExprNode::TPtr& node, const TExprNode::TPtr& lambda, TExprContext& ctx) {
     auto ret = ctx.Builder(node->Pos())
@@ -4572,15 +4572,15 @@ static TString GetStructDiff(const TStructExprType& left, const TStructExprType&
     for (auto item: left.GetItems()) {
         if (auto rightItem = rightItems.Value(item->GetName(), nullptr)) {
             if (!IsSameAnnotation(*item, *rightItem)) {
-                res << item->GetName() << '(' << GetTypeDiff(*item->GetItemType(), *rightItem->GetItemType()) << TStringBuf("),"); 
+                res << item->GetName() << '(' << GetTypeDiff(*item->GetItemType(), *rightItem->GetItemType()) << TStringBuf("),");
             }
             rightItems.erase(item->GetName());
         } else {
-            res << '-' << item->GetName() << '(' << *item->GetItemType() << TStringBuf("),"); 
+            res << '-' << item->GetName() << '(' << *item->GetItemType() << TStringBuf("),");
         }
     }
     for (auto& item: rightItems) {
-        res << '+' << item.first << '(' << *item.second->GetItemType() << TStringBuf("),"); 
+        res << '+' << item.first << '(' << *item.second->GetItemType() << TStringBuf("),");
     }
     if (!res.empty()) {
         return res.pop_back(); // remove trailing comma
@@ -4596,31 +4596,31 @@ TString GetTypeDiff(const TTypeAnnotationNode& left, const TTypeAnnotationNode& 
     if (left.GetKind() == right.GetKind()) {
         switch (left.GetKind()) {
         case ETypeAnnotationKind::List:
-            res << TStringBuf("List<") 
+            res << TStringBuf("List<")
                 << GetTypeDiff(*left.Cast<TListExprType>()->GetItemType(), *right.Cast<TListExprType>()->GetItemType())
                 << '>';
             return res;
         case ETypeAnnotationKind::Stream:
-            res << TStringBuf("Stream<") 
+            res << TStringBuf("Stream<")
                 << GetTypeDiff(*left.Cast<TStreamExprType>()->GetItemType(), *right.Cast<TStreamExprType>()->GetItemType())
                 << '>';
                 return res;
         case ETypeAnnotationKind::Struct:
-            res << TStringBuf("Struct<") 
+            res << TStringBuf("Struct<")
                 << GetStructDiff(*left.Cast<TStructExprType>(), *right.Cast<TStructExprType>())
                 << '>';
             return res;
         case ETypeAnnotationKind::Flow:
-            res << TStringBuf("Flow<") 
+            res << TStringBuf("Flow<")
                 << GetTypeDiff(*left.Cast<TFlowExprType>()->GetItemType(), *right.Cast<TFlowExprType>()->GetItemType())
                 << '>';
                 return res;
         default:
-            res << left << TStringBuf("!=") << right; 
+            res << left << TStringBuf("!=") << right;
             return res;
         }
     }
-    res << left.GetKind() << TStringBuf("!=") << right.GetKind(); 
+    res << left.GetKind() << TStringBuf("!=") << right.GetKind();
     return res;
 }
 
@@ -4814,7 +4814,7 @@ TExprNode::TPtr ExpandType(TPositionHandle position, const TTypeAnnotationNode& 
 }
 
 bool IsSystemMember(const TStringBuf& memberName) {
-    return memberName.StartsWith(TStringBuf("_yql_")); 
+    return memberName.StartsWith(TStringBuf("_yql_"));
 }
 
 IGraphTransformer::TStatus NormalizeTupleOfAtoms(const TExprNode::TPtr& input, ui32 index, TExprNode::TPtr& output, TExprContext& ctx,

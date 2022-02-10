@@ -64,7 +64,7 @@ static inline void LoadPodType(IInputStream* rh, T& t) {
     const size_t res = rh->Load(&t, sizeof(T));
 
     if (Y_UNLIKELY(res != sizeof(T))) {
-        ::NPrivate::ThrowLoadEOFException(sizeof(T), res, TStringBuf("pod type")); 
+        ::NPrivate::ThrowLoadEOFException(sizeof(T), res, TStringBuf("pod type"));
     }
 }
 
@@ -79,7 +79,7 @@ static inline void LoadPodArray(IInputStream* rh, T* arr, size_t count) {
     const size_t res = rh->Load(arr, len);
 
     if (Y_UNLIKELY(res != len)) {
-        ::NPrivate::ThrowLoadEOFException(len, res, TStringBuf("pod array")); 
+        ::NPrivate::ThrowLoadEOFException(len, res, TStringBuf("pod array"));
     }
 }
 
@@ -453,10 +453,10 @@ public:
     static void Load(IInputStream* rh, TBuffer& buf);
 };
 
-template <class TSetOrMap, class TValue> 
-class TSetSerializerInserterBase { 
+template <class TSetOrMap, class TValue>
+class TSetSerializerInserterBase {
 public:
-    inline TSetSerializerInserterBase(TSetOrMap& s) 
+    inline TSetSerializerInserterBase(TSetOrMap& s)
         : S_(s)
     {
         S_.clear();
@@ -466,29 +466,29 @@ public:
         S_.insert(v);
     }
 
-protected: 
-    TSetOrMap& S_; 
+protected:
+    TSetOrMap& S_;
 };
 
-template <class TSetOrMap, class TValue, bool sorted> 
+template <class TSetOrMap, class TValue, bool sorted>
 class TSetSerializerInserter: public TSetSerializerInserterBase<TSetOrMap, TValue> {
-    using TBase = TSetSerializerInserterBase<TSetOrMap, TValue>; 
+    using TBase = TSetSerializerInserterBase<TSetOrMap, TValue>;
 
-public: 
-    inline TSetSerializerInserter(TSetOrMap& s, size_t cnt) 
-        : TBase(s) 
-    { 
+public:
+    inline TSetSerializerInserter(TSetOrMap& s, size_t cnt)
+        : TBase(s)
+    {
         Y_UNUSED(cnt);
-    } 
-}; 
- 
+    }
+};
+
 template <class TSetType, class TValue>
 class TSetSerializerInserter<TSetType, TValue, true>: public TSetSerializerInserterBase<TSetType, TValue> {
     using TBase = TSetSerializerInserterBase<TSetType, TValue>;
 
 public:
     inline TSetSerializerInserter(TSetType& s, size_t cnt)
-        : TBase(s) 
+        : TBase(s)
     {
         Y_UNUSED(cnt);
         P_ = this->S_.begin();
@@ -502,19 +502,19 @@ private:
     typename TSetType::iterator P_;
 };
 
-template <class T1, class T2, class T3, class T4, class T5, class TValue> 
+template <class T1, class T2, class T3, class T4, class T5, class TValue>
 class TSetSerializerInserter<THashMap<T1, T2, T3, T4, T5>, TValue, false>: public TSetSerializerInserterBase<THashMap<T1, T2, T3, T4, T5>, TValue> {
     using TMapType = THashMap<T1, T2, T3, T4, T5>;
     using TBase = TSetSerializerInserterBase<TMapType, TValue>;
 
-public: 
+public:
     inline TSetSerializerInserter(TMapType& m, size_t cnt)
-        : TBase(m) 
-    { 
+        : TBase(m)
+    {
         m.reserve(cnt);
-    } 
-}; 
- 
+    }
+};
+
 template <class T1, class T2, class T3, class T4, class T5, class TValue>
 class TSetSerializerInserter<THashMultiMap<T1, T2, T3, T4, T5>, TValue, false>: public TSetSerializerInserterBase<THashMultiMap<T1, T2, T3, T4, T5>, TValue> {
     using TMapType = THashMultiMap<T1, T2, T3, T4, T5>;
@@ -528,19 +528,19 @@ public:
     }
 };
 
-template <class T1, class T2, class T3, class T4, class TValue> 
+template <class T1, class T2, class T3, class T4, class TValue>
 class TSetSerializerInserter<THashSet<T1, T2, T3, T4>, TValue, false>: public TSetSerializerInserterBase<THashSet<T1, T2, T3, T4>, TValue> {
     using TSetType = THashSet<T1, T2, T3, T4>;
     using TBase = TSetSerializerInserterBase<TSetType, TValue>;
 
-public: 
+public:
     inline TSetSerializerInserter(TSetType& s, size_t cnt)
-        : TBase(s) 
-    { 
+        : TBase(s)
+    {
         s.reserve(cnt);
-    } 
-}; 
- 
+    }
+};
+
 template <class TSetType, class TValue, bool sorted>
 class TSetSerializerBase {
 public:

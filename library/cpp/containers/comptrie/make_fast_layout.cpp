@@ -35,7 +35,7 @@ namespace NCompactTrie {
     namespace {
         class TTrieNodeSet {
         public:
-            TTrieNodeSet() = default; 
+            TTrieNodeSet() = default;
 
             explicit TTrieNodeSet(const TOpaqueTrie& trie)
                 : Body(trie.Length / (8 * MinNodeSize) + 1, 0)
@@ -83,7 +83,7 @@ namespace NCompactTrie {
 
         class TTrieNodeCounts {
         public:
-            TTrieNodeCounts() = default; 
+            TTrieNodeCounts() = default;
 
             explicit TTrieNodeCounts(const TOpaqueTrie& trie)
                 : Body(trie.Length / MinNodeSize, 0)

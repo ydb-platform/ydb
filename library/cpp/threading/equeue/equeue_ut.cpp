@@ -41,7 +41,7 @@ Y_UNIT_TEST_SUITE(TElasticQueueTest) {
         Counters.Reset();
 
         struct TWaitJob: public IObjectInQueue {
-            void Process(void*) override { 
+            void Process(void*) override {
                 WaitEvent.Wait();
                 AtomicIncrement(Counters.Processed);
             }
@@ -72,7 +72,7 @@ Y_UNIT_TEST_SUITE(TElasticQueueTest) {
 
 //concurrent test -- send many jobs from different threads
     struct TJob: public IObjectInQueue {
-        void Process(void*) override { 
+        void Process(void*) override {
             AtomicIncrement(Counters.Processed);
         };
     };
@@ -96,7 +96,7 @@ Y_UNIT_TEST_SUITE(TElasticQueueTest) {
         TryCounter = 0;
 
         struct TSender: public IThreadFactory::IThreadAble {
-            void DoExecute() override { 
+            void DoExecute() override {
                 while ((size_t)AtomicIncrement(TryCounter) <= N) {
                     if (!TryAdd()) {
                         Sleep(TDuration::MicroSeconds(50));

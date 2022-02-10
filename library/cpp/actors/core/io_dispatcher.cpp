@@ -27,7 +27,7 @@ namespace NActors {
                 : Timestamp(timestamp)
                 , Callback(std::move(ev->Callback))
             {}
- 
+
             void Execute() {
                 Callback();
             }
@@ -52,7 +52,7 @@ namespace NActors {
                 }
                 CondVar.Signal();
             }
- 
+
             bool Dequeue(std::list<TTask>& list, bool *sendNotify) {
                 with_lock (Mutex) {
                     CondVar.Wait(Mutex, [&] { return NumThreadsToStop || !Tasks.empty(); });
@@ -169,7 +169,7 @@ namespace NActors {
             , ThreadsStopped(counters->GetCounter("ThreadsStopped", true))
         {}
 
-        ~TIoDispatcherActor() override { 
+        ~TIoDispatcherActor() override {
             TaskQueue.Stop();
         }
 

@@ -164,7 +164,7 @@ void PrintValue(IOutputStream& out, TValueParser& parser) {
             break;
 
         case TTypeParser::ETypeKind::Void:
-            out << "Void"sv; 
+            out << "Void"sv;
             break;
 
         case TTypeParser::ETypeKind::List:

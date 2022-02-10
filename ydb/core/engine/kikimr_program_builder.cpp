@@ -95,7 +95,7 @@ TUpdateRowBuilder::TUpdateRowBuilder(const TTypeEnvironment& env)
     : Builder(env)
     , Env(env)
 {
-    NullInternName = Env.InternName(TStringBuf("Null")); 
+    NullInternName = Env.InternName(TStringBuf("Null"));
 }
 
 void TUpdateRowBuilder::SetColumn(
@@ -178,7 +178,7 @@ TKikimrProgramBuilder::TKikimrProgramBuilder(
     : TProgramBuilder(env, functionRegistry, true)
 {
     UseNullType = false;
-    NullInternName = Env.InternName(TStringBuf("Null")); 
+    NullInternName = Env.InternName(TStringBuf("Null"));
 
     std::array<TType*, 3> tupleTypes;
     tupleTypes[0] = NewDataType(NUdf::TDataType<ui64>::Id);
@@ -341,8 +341,8 @@ TRuntimeNode TKikimrProgramBuilder::SelectRange(
 
     TStructTypeBuilder returnTypeBuilder(Env);
     returnTypeBuilder.Reserve(2);
-    returnTypeBuilder.Add(TStringBuf("List"), listType); 
-    returnTypeBuilder.Add(TStringBuf("Truncated"), boolType); 
+    returnTypeBuilder.Add(TStringBuf("List"), listType);
+    returnTypeBuilder.Add(TStringBuf("Truncated"), boolType);
     auto returnType = returnTypeBuilder.Build();
     TCallableBuilder builder(Env, "SelectRange", returnType);
 
@@ -518,10 +518,10 @@ TRuntimeNode TKikimrProgramBuilder::Bind(TRuntimeNode program, TRuntimeNode para
     {
         TExploringNodeVisitor explorer;
         explorer.Walk(program.GetNode(), Env);
-        auto parameterFunc = Env.InternName(TStringBuf("Parameter")); 
-        auto mapParameterFunc = Env.InternName(TStringBuf("MapParameter")); 
-        auto flatMapParameterFunc = Env.InternName(TStringBuf("FlatMapParameter")); 
-        auto arg = Env.InternName(TStringBuf("Arg")); 
+        auto parameterFunc = Env.InternName(TStringBuf("Parameter"));
+        auto mapParameterFunc = Env.InternName(TStringBuf("MapParameter"));
+        auto flatMapParameterFunc = Env.InternName(TStringBuf("FlatMapParameter"));
+        auto arg = Env.InternName(TStringBuf("Arg"));
         for (auto node : explorer.GetNodes()) {
             if (node->GetType()->GetKind() != TType::EKind::Callable)
                 continue;

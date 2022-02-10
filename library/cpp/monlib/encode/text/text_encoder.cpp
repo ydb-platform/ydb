@@ -30,7 +30,7 @@ namespace NMonitoring {
                 State_.Expect(TEncoderState::EState::ROOT);
                 CommonTime_ = time;
                 if (time != TInstant::Zero()) {
-                    Out_->Write(TStringBuf("common time: ")); 
+                    Out_->Write(TStringBuf("common time: "));
                     WriteTime(time);
                     Out_->Write('\n');
                 }
@@ -62,7 +62,7 @@ namespace NMonitoring {
                     State_ = TEncoderState::EState::METRIC;
                 } else if (State_ == TEncoderState::EState::COMMON_LABELS) {
                     State_ = TEncoderState::EState::ROOT;
-                    Out_->Write(TStringBuf("common labels: ")); 
+                    Out_->Write(TStringBuf("common labels: "));
                     WriteLabels();
                     Out_->Write('\n');
                 } else {
@@ -149,11 +149,11 @@ namespace NMonitoring {
 
                 out << '{';
                 for (auto&& l : Labels_) {
-                    out << l.Name() << TStringBuf("='") << l.Value() << '\''; 
+                    out << l.Name() << TStringBuf("='") << l.Value() << '\'';
 
                     ++i;
                     if (i < size) {
-                        out << TStringBuf(", "); 
+                        out << TStringBuf(", ");
                     }
                 };
 
@@ -166,7 +166,7 @@ namespace NMonitoring {
                 (*Out_) << LeftPad(typeStr, MaxMetricTypeNameLength) << ' ';
 
                 // (2) name and labels
-                auto name = Labels_.Extract(TStringBuf("sensor")); 
+                auto name = Labels_.Extract(TStringBuf("sensor"));
                 if (name) {
                     if (name->Value().find(' ') != TString::npos) {
                         (*Out_) << '"' << name->Value() << '"';
@@ -179,10 +179,10 @@ namespace NMonitoring {
                 // (3) values
                 if (!TimeSeries_.Empty()) {
                     TimeSeries_.SortByTs();
-                    Out_->Write(TStringBuf(" [")); 
+                    Out_->Write(TStringBuf(" ["));
                     for (size_t i = 0; i < TimeSeries_.Size(); i++) {
                         if (i > 0) {
-                            Out_->Write(TStringBuf(", ")); 
+                            Out_->Write(TStringBuf(", "));
                         }
 
                         const auto& point = TimeSeries_[i];
@@ -191,7 +191,7 @@ namespace NMonitoring {
                         } else {
                             Out_->Write('(');
                             WriteTime(point.GetTime());
-                            Out_->Write(TStringBuf(", ")); 
+                            Out_->Write(TStringBuf(", "));
                             WriteValue(TimeSeries_.GetValueType(), point.GetValue());
                             Out_->Write(')');
                         }

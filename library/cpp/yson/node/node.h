@@ -73,9 +73,9 @@ public:
 
     TNode();
     TNode(const char* s);
-    TNode(TStringBuf s); 
-    explicit TNode(std::string_view s); 
-    explicit TNode(const std::string& s); 
+    TNode(TStringBuf s);
+    explicit TNode(std::string_view s);
+    explicit TNode(const std::string& s);
     TNode(TString s);
     TNode(int i);
 

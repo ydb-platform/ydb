@@ -190,7 +190,7 @@ namespace NUri {
             // ... and the scheme requires a path...
             if (GetSchemeInfo().FldReq & FlagPath)
                 // ... set path
-                FldSetNoDirty(FieldPath, TStringBuf("/")); 
+                FldSetNoDirty(FieldPath, TStringBuf("/"));
     }
 
     /********************************************************/
@@ -210,7 +210,7 @@ namespace NUri {
 
         const ui32 cleanFields = ~FieldsDirty;
         do {
-            static constexpr TStringBuf rootPath = "/"; 
+            static constexpr TStringBuf rootPath = "/";
 
             if (noscheme) {
                 if (!basescheme.empty()) {
@@ -408,7 +408,7 @@ namespace NUri {
             v = Fields[FieldPath];
             // for relative, empty path is not the same as missing
             if (v.empty() && 0 == (flags & FlagHost))
-                v = TStringBuf("."); 
+                v = TStringBuf(".");
             out << v;
         }
 

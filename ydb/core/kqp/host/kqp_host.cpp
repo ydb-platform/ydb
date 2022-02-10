@@ -380,9 +380,9 @@ public:
 
         TStringBuilder builder;
 
-        if (evaluateNode->Content() == "EvaluateAtom"sv) 
+        if (evaluateNode->Content() == "EvaluateAtom"sv)
             builder << "ATOM evaluation";
-        else if (evaluateNode->Content() == "EvaluateIf!"sv) 
+        else if (evaluateNode->Content() == "EvaluateIf!"sv)
             builder << "EVALUATE IF";
         else
             builder << "EVALUATE";

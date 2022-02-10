@@ -70,7 +70,7 @@ namespace NSc {
         NImpl::TSelfLoopContext::TGuard loopCheck(loopCtx, core);
 
         if (!loopCheck.Ok) {
-            out << TStringBuf("null"); // a loop encountered (and asserted), skip the back reference 
+            out << TStringBuf("null"); // a loop encountered (and asserted), skip the back reference
             return;
         }
 
@@ -80,11 +80,11 @@ namespace NSc {
                 [[fallthrough]]; /* no break */
             }
             case EType::Null: {
-                out << TStringBuf("null"); 
+                out << TStringBuf("null");
                 break;
             }
             case EType::Bool: {
-                out << (core.IntNumber ? TStringBuf("true") : TStringBuf("false")); 
+                out << (core.IntNumber ? TStringBuf("true") : TStringBuf("false"));
                 break;
             }
             case EType::IntNumber: {
@@ -96,7 +96,7 @@ namespace NSc {
                 if (!jopts.NumberPolicy || jopts.NumberPolicy(d)) {
                     out << d;
                 } else {
-                    out << TStringBuf("null"); 
+                    out << TStringBuf("null");
                 }
                 break;
             }
@@ -105,7 +105,7 @@ namespace NSc {
                 if (!jopts.StringPolicy || jopts.StringPolicy(s)) {
                     WriteString(out, s);
                 } else {
-                    out << TStringBuf("null"); 
+                    out << TStringBuf("null");
                 }
                 break;
             }

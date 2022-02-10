@@ -15,15 +15,15 @@ enum EJsonPart : ui8 {
 };
 
 constexpr std::array<TStringBuf, 3> JSON_PARTS = {
-    TStringBuf(R"("metrics": [{ 
+    TStringBuf(R"("metrics": [{
         "labels": { "key": "value" },
         "type": "GAUGE",
         "value": 123
     }])"),
 
-    TStringBuf(R"("ts": 1)"), 
+    TStringBuf(R"("ts": 1)"),
 
-    TStringBuf(R"("commonLabels": { 
+    TStringBuf(R"("commonLabels": {
         "key1": "value1",
         "key2": "value2"
     })"),
@@ -52,10 +52,10 @@ void ValidateCommonParts(TCommonParts&& commonParts, bool checkLabels, bool chec
     if (checkLabels) {
         auto& labels = commonParts.CommonLabels;
         UNIT_ASSERT_VALUES_EQUAL(labels.Size(), 2);
-        UNIT_ASSERT(labels.Has(TStringBuf("key1"))); 
-        UNIT_ASSERT(labels.Has(TStringBuf("key2"))); 
-        UNIT_ASSERT_VALUES_EQUAL(labels.Get(TStringBuf("key1")).value()->Value(), "value1"); 
-        UNIT_ASSERT_VALUES_EQUAL(labels.Get(TStringBuf("key2")).value()->Value(), "value2"); 
+        UNIT_ASSERT(labels.Has(TStringBuf("key1")));
+        UNIT_ASSERT(labels.Has(TStringBuf("key2")));
+        UNIT_ASSERT_VALUES_EQUAL(labels.Get(TStringBuf("key1")).value()->Value(), "value1");
+        UNIT_ASSERT_VALUES_EQUAL(labels.Get(TStringBuf("key2")).value()->Value(), "value2");
     }
 }
 

@@ -156,9 +156,9 @@ namespace NMonitoring {
 
                 Y_ENSURE(suffix.size() >= 3 && suffix.size() <= 5, "Disallowed suffix value: " << suffix);
 
-                if (suffix == TStringBuf("summ") || suffix == TStringBuf("hgram")) { 
+                if (suffix == TStringBuf("summ") || suffix == TStringBuf("hgram")) {
                     return true;
-                } else if (suffix == TStringBuf("max")) { 
+                } else if (suffix == TStringBuf("max")) {
                     return false;
                 }
 

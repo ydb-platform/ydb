@@ -69,7 +69,7 @@ namespace NTypeAnnImpl {
             isValid = NKikimr::NMiniKQL::IsValidStringValue(slot, atomNode.Content());
             if (!isValid) {
                 if (slot == NKikimr::NUdf::EDataSlot::Bool) {
-                    isValid = (atomNode.Content() == TStringBuf("0")) || (atomNode.Content() == TStringBuf("1")); 
+                    isValid = (atomNode.Content() == TStringBuf("0")) || (atomNode.Content() == TStringBuf("1"));
                 } else if (NKikimr::NUdf::GetDataTypeInfo(slot).Features &
                     (NKikimr::NUdf::EDataTypeFeatures::DateType | NKikimr::NUdf::EDataTypeFeatures::TimeIntervalType)) {
                     T data;
@@ -751,7 +751,7 @@ namespace NTypeAnnImpl {
             }
 
             if (child->ChildrenSize() == 2) {
-                if (child->Head().Content() == TStringBuf("epoch") || child->Head().Content() == TStringBuf("commitEpoch")) { 
+                if (child->Head().Content() == TStringBuf("epoch") || child->Head().Content() == TStringBuf("commitEpoch")) {
                     if (!EnsureAtom(*child->Child(1), ctx.Expr)) {
                         return IGraphTransformer::TStatus::Error;
                     }

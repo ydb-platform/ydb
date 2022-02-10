@@ -203,7 +203,7 @@ class TGRpcClientLow::TContextImpl final
     using TContextPtr = std::shared_ptr<TContextImpl>;
 
 public:
-    ~TContextImpl() override { 
+    ~TContextImpl() override {
         Y_VERIFY(CountChildren() == 0,
                 "Destructor called with non-empty children");
 

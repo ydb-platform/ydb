@@ -528,9 +528,9 @@ public:
     void PrintStat(IOutputStream& out) const {
         size_t usedPages = 0;
         if (std::is_same<TPrimary, TSecondary>::value) {
-            usedPages = Pools[0].PrintStat(TStringBuf(""), out); 
+            usedPages = Pools[0].PrintStat(TStringBuf(""), out);
         } else {
-            usedPages = Pools[0].PrintStat(TStringBuf("Primary: "), out) + Pools[1].PrintStat(TStringBuf("Secondary: "), out); 
+            usedPages = Pools[0].PrintStat(TStringBuf("Primary: "), out) + Pools[1].PrintStat(TStringBuf("Secondary: "), out);
         }
         GetPagePool().PrintStat(usedPages, out);
     }

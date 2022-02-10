@@ -11,14 +11,14 @@ namespace NHtml {
             TStringBuf Entity;
         };
 
-        TReplace Escapable[] = { 
-            {'"', false, TStringBuf("&quot;")}, 
-            {'&', true, TStringBuf("&amp;")}, 
-            {'<', true, TStringBuf("&lt;")}, 
-            {'>', true, TStringBuf("&gt;")}, 
+        TReplace Escapable[] = {
+            {'"', false, TStringBuf("&quot;")},
+            {'&', true, TStringBuf("&amp;")},
+            {'<', true, TStringBuf("&lt;")},
+            {'>', true, TStringBuf("&gt;")},
         };
 
-        TString EscapeImpl(const TString& value, bool isText) { 
+        TString EscapeImpl(const TString& value, bool isText) {
             auto ci = value.begin();
             // Looking for escapable characters.
             for (; ci != value.end(); ++ci) {

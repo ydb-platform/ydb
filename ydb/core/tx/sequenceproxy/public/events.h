@@ -12,7 +12,7 @@ namespace NKikimr {
 namespace NSequenceProxy {
 
     inline TActorId MakeSequenceProxyServiceID(ui32 nodeId = 0) {
-        return TActorId(nodeId, TStringBuf("seqproxy_svc")); 
+        return TActorId(nodeId, TStringBuf("seqproxy_svc"));
     }
 
     struct TEvSequenceProxy {

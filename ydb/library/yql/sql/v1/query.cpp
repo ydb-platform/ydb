@@ -1808,21 +1808,21 @@ public:
 
         Node = Y();
         Node = L(Node, AstNode(TString(ConfigureName)));
-        Node = L(Node, AstNode(TString(TStringBuf("world")))); 
+        Node = L(Node, AstNode(TString(TStringBuf("world"))));
         Node = L(Node, datasource);
 
-        if (Name == TStringBuf("flags")) { 
+        if (Name == TStringBuf("flags")) {
             for (ui32 i = 0; i < Values.size(); ++i) {
                 Node = L(Node, Values[i].Build());
             }
         }
-        else if (Name == TStringBuf("AddFileByUrl") || Name == TStringBuf("AddFolderByUrl") || Name == TStringBuf("ImportUdfs") || Name == TStringBuf("SetPackageVersion")) { 
+        else if (Name == TStringBuf("AddFileByUrl") || Name == TStringBuf("AddFolderByUrl") || Name == TStringBuf("ImportUdfs") || Name == TStringBuf("SetPackageVersion")) {
             Node = L(Node, BuildQuotedAtom(Pos, Name));
             for (ui32 i = 0; i < Values.size(); ++i) {
                 Node = L(Node, Values[i].Build());
             }
         }
-        else if (Name == TStringBuf("auth")) { 
+        else if (Name == TStringBuf("auth")) {
             Node = L(Node, BuildQuotedAtom(Pos, "Auth"));
             Node = L(Node, Values.empty() ? BuildQuotedAtom(Pos, TString()) : Values.front().Build());
         }

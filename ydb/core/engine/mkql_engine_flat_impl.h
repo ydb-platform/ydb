@@ -8,17 +8,17 @@ namespace NMiniKQL {
 
     struct TBuiltinStrings {
         TBuiltinStrings(const TTypeEnvironment& env)
-            : Filter(env.InternName(TStringBuf("Filter"))) 
-            , FilterNullMembers(env.InternName(TStringBuf("FilterNullMembers"))) 
-            , SkipNullMembers(env.InternName(TStringBuf("SkipNullMembers"))) 
-            , FlatMap(env.InternName(TStringBuf("FlatMap"))) 
-            , Map(env.InternName(TStringBuf("Map"))) 
-            , Member(env.InternName(TStringBuf("Member"))) 
-            , ToHashedDict(env.InternName(TStringBuf("ToHashedDict"))) 
-            , DictItems(env.InternName(TStringBuf("DictItems"))) 
-            , Take(env.InternName(TStringBuf("Take"))) 
-            , Length(env.InternName(TStringBuf("Length"))) 
-            , Arg(env.InternName(TStringBuf("Arg"))) 
+            : Filter(env.InternName(TStringBuf("Filter")))
+            , FilterNullMembers(env.InternName(TStringBuf("FilterNullMembers")))
+            , SkipNullMembers(env.InternName(TStringBuf("SkipNullMembers")))
+            , FlatMap(env.InternName(TStringBuf("FlatMap")))
+            , Map(env.InternName(TStringBuf("Map")))
+            , Member(env.InternName(TStringBuf("Member")))
+            , ToHashedDict(env.InternName(TStringBuf("ToHashedDict")))
+            , DictItems(env.InternName(TStringBuf("DictItems")))
+            , Take(env.InternName(TStringBuf("Take")))
+            , Length(env.InternName(TStringBuf("Length")))
+            , Arg(env.InternName(TStringBuf("Arg")))
         {
             All.reserve(20);
             All.insert(Filter);
@@ -53,14 +53,14 @@ namespace NMiniKQL {
         TFlatEngineStrings(const TTypeEnvironment& env)
             : TTableStrings(env)
             , Builtins(env)
-            , SetResult(env.InternName(TStringBuf("SetResult"))) 
-            , Abort(env.InternName(TStringBuf("Abort"))) 
-            , StepTxId(env.InternName(TStringBuf("StepTxId"))) 
-            , AcquireLocks(env.InternName(TStringBuf("AcquireLocks"))) 
-            , CombineByKeyMerge(env.InternName(TStringBuf("CombineByKeyMerge"))) 
-            , Diagnostics(env.InternName(TStringBuf("Diagnostics"))) 
-            , PartialTake(env.InternName(TStringBuf("PartialTake"))) 
-            , PartialSort(env.InternName(TStringBuf("PartialSort"))) 
+            , SetResult(env.InternName(TStringBuf("SetResult")))
+            , Abort(env.InternName(TStringBuf("Abort")))
+            , StepTxId(env.InternName(TStringBuf("StepTxId")))
+            , AcquireLocks(env.InternName(TStringBuf("AcquireLocks")))
+            , CombineByKeyMerge(env.InternName(TStringBuf("CombineByKeyMerge")))
+            , Diagnostics(env.InternName(TStringBuf("Diagnostics")))
+            , PartialTake(env.InternName(TStringBuf("PartialTake")))
+            , PartialSort(env.InternName(TStringBuf("PartialSort")))
         {
             All.insert(SetResult);
             All.insert(Abort);

@@ -93,9 +93,9 @@ Y_UNIT_TEST_SUITE(TLabelsTest) {
 
     Y_UNIT_TEST(Labels) {
         TLabels labels;
-        UNIT_ASSERT(labels.Add(TStringBuf("name1"), TStringBuf("value1"))); 
+        UNIT_ASSERT(labels.Add(TStringBuf("name1"), TStringBuf("value1")));
         UNIT_ASSERT(labels.Size() == 1);
-        UNIT_ASSERT(labels.Has(TStringBuf("name1"))); 
+        UNIT_ASSERT(labels.Has(TStringBuf("name1")));
         {
             auto l = labels.Find("name1");
             UNIT_ASSERT(l.Defined());
@@ -108,12 +108,12 @@ Y_UNIT_TEST_SUITE(TLabelsTest) {
         }
 
         // duplicated name
-        UNIT_ASSERT(!labels.Add(TStringBuf("name1"), TStringBuf("value2"))); 
+        UNIT_ASSERT(!labels.Add(TStringBuf("name1"), TStringBuf("value2")));
         UNIT_ASSERT(labels.Size() == 1);
 
-        UNIT_ASSERT(labels.Add(TStringBuf("name2"), TStringBuf("value2"))); 
+        UNIT_ASSERT(labels.Add(TStringBuf("name2"), TStringBuf("value2")));
         UNIT_ASSERT(labels.Size() == 2);
-        UNIT_ASSERT(labels.Has(TStringBuf("name2"))); 
+        UNIT_ASSERT(labels.Has(TStringBuf("name2")));
         {
             auto l = labels.Find("name2");
             UNIT_ASSERT(l.Defined());

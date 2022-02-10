@@ -18,7 +18,7 @@
     #include <netinet/tcp.h>
     #include <arpa/inet.h>
 
-using SOCKET = int; 
+using SOCKET = int;
 
     #define closesocket(s) close(s)
     #define SOCKET_ERROR -1
@@ -30,7 +30,7 @@ using SOCKET = int;
     #include <winsock2.h>
     #include <ws2tcpip.h>
 
-using nfds_t = ULONG; 
+using nfds_t = ULONG;
 
     #undef Yield
 

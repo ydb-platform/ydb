@@ -25,15 +25,15 @@ namespace {
         }
     };
 
-    int GetLastSslError() noexcept { 
+    int GetLastSslError() noexcept {
         return ERR_peek_last_error();
     }
 
-    const char* SslErrorText(int error) noexcept { 
+    const char* SslErrorText(int error) noexcept {
         return ERR_error_string(error, nullptr);
     }
 
-    inline TStringBuf SslLastError() noexcept { 
+    inline TStringBuf SslLastError() noexcept {
         return SslErrorText(GetLastSslError());
     }
 
@@ -69,7 +69,7 @@ namespace {
     using TBioPtr = TSslHolderPtr<bio_st>;
     using TX509Ptr = TSslHolderPtr<x509_st>;
 
-    inline TSslContextPtr CreateSslCtx(const ssl_method_st* method) { 
+    inline TSslContextPtr CreateSslCtx(const ssl_method_st* method) {
         TSslContextPtr ctx(SSL_CTX_new(method));
 
         if (!ctx) {

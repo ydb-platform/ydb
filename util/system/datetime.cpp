@@ -5,8 +5,8 @@
 
 #include <util/datetime/systime.h>
 
-#include <ctime> 
-#include <cerrno> 
+#include <ctime>
+#include <cerrno>
 
 #ifdef _darwin_
     #include <AvailabilityMacros.h>

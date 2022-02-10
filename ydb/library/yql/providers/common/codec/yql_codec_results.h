@@ -13,7 +13,7 @@ namespace NCommon {
 // write null as entity
 class TYsonResultWriter {
 public:
-    static constexpr TStringBuf VoidString = "Void"; 
+    static constexpr TStringBuf VoidString = "Void";
 
 public:
     explicit TYsonResultWriter(NYson::TYsonConsumerBase& writer)

@@ -39,7 +39,7 @@ namespace NMonitoring {
                 LabelValuesPool_.SetSorted(true);
             }
 
-            ~TEncoderSpackV1() override { 
+            ~TEncoderSpackV1() override {
                 Close();
             }
 

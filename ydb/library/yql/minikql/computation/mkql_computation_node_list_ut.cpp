@@ -7,7 +7,7 @@ namespace NKikimr {
 namespace NMiniKQL {
 Y_UNIT_TEST_SUITE(TestListRepresentation) {
     Y_UNIT_TEST(Test) {
-        TMemoryUsageInfo memInfo(TStringBuf("test")); 
+        TMemoryUsageInfo memInfo(TStringBuf("test"));
         TScopedAlloc alloc;
         using TListType = TListRepresentation<ui32, 256>;
         TListType list1;

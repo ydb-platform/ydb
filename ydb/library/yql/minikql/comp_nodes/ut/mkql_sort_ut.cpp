@@ -24,8 +24,8 @@ TRuntimeNode MakeStream(TSetup<LLVM>& setup) {
     TCallableBuilder callableBuilder(*setup.Env, "TestYieldStream",
         pgmBuilder.NewStreamType(
             pgmBuilder.NewStructType({
-                {TStringBuf("a"), pgmBuilder.NewDataType(NUdf::EDataSlot::Uint64)}, 
-                {TStringBuf("b"), pgmBuilder.NewDataType(NUdf::EDataSlot::String)} 
+                {TStringBuf("a"), pgmBuilder.NewDataType(NUdf::EDataSlot::Uint64)},
+                {TStringBuf("b"), pgmBuilder.NewDataType(NUdf::EDataSlot::String)}
             })
         )
     );

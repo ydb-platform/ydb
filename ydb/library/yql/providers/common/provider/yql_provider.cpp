@@ -492,8 +492,8 @@ bool FillUsedFilesImpl(
             }
         }
 
-        if (moduleName == TStringBuf("Geo")) { 
-            const auto geobase = TUserDataKey::File(TStringBuf("/home/geodata6.bin")); 
+        if (moduleName == TStringBuf("Geo")) {
+            const auto geobase = TUserDataKey::File(TStringBuf("/home/geodata6.bin"));
             if (const auto block = types.UserDataStorage->FindUserDataBlock(geobase)) {
                 files.emplace(geobase, *block).first->second.Usage.Set(EUserDataBlockUsage::Path);
             } else {

@@ -815,10 +815,10 @@ void EscapeHtmlChars(TUtf16String& str);
 //! returns number of characters in range. Handle surrogate pairs as one character.
 inline size_t CountWideChars(const wchar16* b, const wchar16* e) {
     size_t count = 0;
-    Y_ENSURE(b <= e, TStringBuf("invalid iterators")); 
+    Y_ENSURE(b <= e, TStringBuf("invalid iterators"));
     while (b < e) {
         b = SkipSymbol(b, e);
-        ++count; 
+        ++count;
     }
     return count;
 }
@@ -829,7 +829,7 @@ inline size_t CountWideChars(const TWtringBuf str) {
 
 //! checks whether the range is valid UTF-16 sequence
 inline bool IsValidUTF16(const wchar16* b, const wchar16* e) {
-    Y_ENSURE(b <= e, TStringBuf("invalid iterators")); 
+    Y_ENSURE(b <= e, TStringBuf("invalid iterators"));
     while (b < e) {
         wchar32 symbol = ReadSymbolAndAdvance(b, e);
         if (symbol == BROKEN_RUNE)

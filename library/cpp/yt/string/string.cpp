@@ -191,13 +191,13 @@ char* WriteUnsignedIntToBufferBackwardsImpl(char* ptr, T value)
 template <>
 char* WriteIntToBufferBackwards(char* ptr, i32 value)
 {
-    return WriteSignedIntToBufferBackwardsImpl(ptr, value, TStringBuf("-2147483647")); 
+    return WriteSignedIntToBufferBackwardsImpl(ptr, value, TStringBuf("-2147483647"));
 }
 
 template <>
 char* WriteIntToBufferBackwards(char* ptr, i64 value)
 {
-    return WriteSignedIntToBufferBackwardsImpl(ptr, value, TStringBuf("-9223372036854775808")); 
+    return WriteSignedIntToBufferBackwardsImpl(ptr, value, TStringBuf("-9223372036854775808"));
 }
 
 template <>

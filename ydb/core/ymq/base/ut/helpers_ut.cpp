@@ -113,7 +113,7 @@ Y_UNIT_TEST_SUITE(MessageBodyValidationTest) {
         UNIT_ASSERT(ValidateMessageBody("\uD7FF", desc));
         UNIT_ASSERT(ValidateMessageBody("\u00FF", desc));
 
-        UNIT_ASSERT(!ValidateMessageBody(TStringBuf("\0", 1), desc)); 
+        UNIT_ASSERT(!ValidateMessageBody(TStringBuf("\0", 1), desc));
         UNIT_ASSERT(!ValidateMessageBody("\u0002", desc));
         UNIT_ASSERT(!ValidateMessageBody("\u0019", desc));
         UNIT_ASSERT(!ValidateMessageBody("\uFFFF", desc));

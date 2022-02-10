@@ -13,16 +13,16 @@ namespace NPrometheus {
     // and https://github.com/prometheus/common/blob/master/expfmt/text_parse.go
     //
 
-    inline constexpr TStringBuf BUCKET_SUFFIX = "_bucket"; 
-    inline constexpr TStringBuf COUNT_SUFFIX = "_count"; 
-    inline constexpr TStringBuf SUM_SUFFIX = "_sum"; 
-    inline constexpr TStringBuf MIN_SUFFIX = "_min"; 
-    inline constexpr TStringBuf MAX_SUFFIX = "_max"; 
-    inline constexpr TStringBuf LAST_SUFFIX = "_last"; 
+    inline constexpr TStringBuf BUCKET_SUFFIX = "_bucket";
+    inline constexpr TStringBuf COUNT_SUFFIX = "_count";
+    inline constexpr TStringBuf SUM_SUFFIX = "_sum";
+    inline constexpr TStringBuf MIN_SUFFIX = "_min";
+    inline constexpr TStringBuf MAX_SUFFIX = "_max";
+    inline constexpr TStringBuf LAST_SUFFIX = "_last";
 
     // Used for the label that defines the upper bound of a bucket of a
     // histogram ("le" -> "less or equal").
-    inline constexpr TStringBuf BUCKET_LABEL = "le"; 
+    inline constexpr TStringBuf BUCKET_LABEL = "le";
 
 
     inline bool IsValidLabelNameStart(char ch) {

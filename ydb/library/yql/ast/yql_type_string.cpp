@@ -96,51 +96,51 @@ bool IsTypeKeyword(int token)
 EToken TokenTypeFromStr(TStringBuf str)
 {
     static const THashMap<TStringBuf, EToken> map = {
-        { TStringBuf("String"), TOKEN_STRING }, 
-        { TStringBuf("Bool"), TOKEN_BOOL }, 
-        { TStringBuf("Int32"), TOKEN_INT32 }, 
-        { TStringBuf("Uint32"), TOKEN_UINT32 }, 
-        { TStringBuf("Int64"), TOKEN_INT64 }, 
-        { TStringBuf("Uint64"), TOKEN_UINT64 }, 
-        { TStringBuf("Float"), TOKEN_FLOAT }, 
-        { TStringBuf("Double"), TOKEN_DOUBLE }, 
-        { TStringBuf("List"), TOKEN_LIST }, 
-        { TStringBuf("Optional"), TOKEN_OPTIONAL }, 
-        { TStringBuf("Dict"), TOKEN_DICT }, 
-        { TStringBuf("Tuple"), TOKEN_TUPLE }, 
-        { TStringBuf("Struct"), TOKEN_STRUCT }, 
-        { TStringBuf("Resource"), TOKEN_RESOURCE }, 
-        { TStringBuf("Void"), TOKEN_VOID }, 
-        { TStringBuf("Callable"), TOKEN_CALLABLE }, 
-        { TStringBuf("Tagged"), TOKEN_TAGGED }, 
-        { TStringBuf("Yson"), TOKEN_YSON }, 
-        { TStringBuf("Utf8"), TOKEN_UTF8 }, 
-        { TStringBuf("Variant"), TOKEN_VARIANT }, 
-        { TStringBuf("Unit"), TOKEN_UNIT }, 
-        { TStringBuf("Stream"), TOKEN_STREAM }, 
-        { TStringBuf("Generic"), TOKEN_GENERIC }, 
-        { TStringBuf("Json"), TOKEN_JSON }, 
-        { TStringBuf("Date"), TOKEN_DATE }, 
-        { TStringBuf("Datetime"), TOKEN_DATETIME }, 
-        { TStringBuf("Timestamp"), TOKEN_TIMESTAMP }, 
-        { TStringBuf("Interval"), TOKEN_INTERVAL }, 
-        { TStringBuf("Null"), TOKEN_NULL }, 
-        { TStringBuf("Decimal"), TOKEN_DECIMAL }, 
-        { TStringBuf("Int8"), TOKEN_INT8 }, 
-        { TStringBuf("Uint8"), TOKEN_UINT8 }, 
-        { TStringBuf("Int16"), TOKEN_INT16 }, 
-        { TStringBuf("Uint16"), TOKEN_UINT16 }, 
-        { TStringBuf("TzDate"), TOKEN_TZDATE }, 
-        { TStringBuf("TzDatetime"), TOKEN_TZDATETIME }, 
-        { TStringBuf("TzTimestamp"), TOKEN_TZTIMESTAMP }, 
-        { TStringBuf("Uuid"), TOKEN_UUID }, 
-        { TStringBuf("Flow"), TOKEN_FLOW }, 
-        { TStringBuf("Set"), TOKEN_SET }, 
-        { TStringBuf("Enum"), TOKEN_ENUM }, 
-        { TStringBuf("EmptyList"), TOKEN_EMPTYLIST }, 
-        { TStringBuf("EmptyDict"), TOKEN_EMPTYDICT }, 
-        { TStringBuf("JsonDocument"), TOKEN_JSON_DOCUMENT }, 
-        { TStringBuf("DyNumber"), TOKEN_DYNUMBER }, 
+        { TStringBuf("String"), TOKEN_STRING },
+        { TStringBuf("Bool"), TOKEN_BOOL },
+        { TStringBuf("Int32"), TOKEN_INT32 },
+        { TStringBuf("Uint32"), TOKEN_UINT32 },
+        { TStringBuf("Int64"), TOKEN_INT64 },
+        { TStringBuf("Uint64"), TOKEN_UINT64 },
+        { TStringBuf("Float"), TOKEN_FLOAT },
+        { TStringBuf("Double"), TOKEN_DOUBLE },
+        { TStringBuf("List"), TOKEN_LIST },
+        { TStringBuf("Optional"), TOKEN_OPTIONAL },
+        { TStringBuf("Dict"), TOKEN_DICT },
+        { TStringBuf("Tuple"), TOKEN_TUPLE },
+        { TStringBuf("Struct"), TOKEN_STRUCT },
+        { TStringBuf("Resource"), TOKEN_RESOURCE },
+        { TStringBuf("Void"), TOKEN_VOID },
+        { TStringBuf("Callable"), TOKEN_CALLABLE },
+        { TStringBuf("Tagged"), TOKEN_TAGGED },
+        { TStringBuf("Yson"), TOKEN_YSON },
+        { TStringBuf("Utf8"), TOKEN_UTF8 },
+        { TStringBuf("Variant"), TOKEN_VARIANT },
+        { TStringBuf("Unit"), TOKEN_UNIT },
+        { TStringBuf("Stream"), TOKEN_STREAM },
+        { TStringBuf("Generic"), TOKEN_GENERIC },
+        { TStringBuf("Json"), TOKEN_JSON },
+        { TStringBuf("Date"), TOKEN_DATE },
+        { TStringBuf("Datetime"), TOKEN_DATETIME },
+        { TStringBuf("Timestamp"), TOKEN_TIMESTAMP },
+        { TStringBuf("Interval"), TOKEN_INTERVAL },
+        { TStringBuf("Null"), TOKEN_NULL },
+        { TStringBuf("Decimal"), TOKEN_DECIMAL },
+        { TStringBuf("Int8"), TOKEN_INT8 },
+        { TStringBuf("Uint8"), TOKEN_UINT8 },
+        { TStringBuf("Int16"), TOKEN_INT16 },
+        { TStringBuf("Uint16"), TOKEN_UINT16 },
+        { TStringBuf("TzDate"), TOKEN_TZDATE },
+        { TStringBuf("TzDatetime"), TOKEN_TZDATETIME },
+        { TStringBuf("TzTimestamp"), TOKEN_TZTIMESTAMP },
+        { TStringBuf("Uuid"), TOKEN_UUID },
+        { TStringBuf("Flow"), TOKEN_FLOW },
+        { TStringBuf("Set"), TOKEN_SET },
+        { TStringBuf("Enum"), TOKEN_ENUM },
+        { TStringBuf("EmptyList"), TOKEN_EMPTYLIST },
+        { TStringBuf("EmptyDict"), TOKEN_EMPTYDICT },
+        { TStringBuf("JsonDocument"), TOKEN_JSON_DOCUMENT },
+        { TStringBuf("DyNumber"), TOKEN_DYNUMBER },
     };
 
     auto it = map.find(str);
@@ -459,7 +459,7 @@ private:
                 if (optArgsStarted) {
                     if (!argType->IsList() || argType->GetChildrenCount() == 0 ||
                         !argType->GetChild(0)->IsAtom() ||
-                        argType->GetChild(0)->GetContent() != TStringBuf("OptionalType")) 
+                        argType->GetChild(0)->GetContent() != TStringBuf("OptionalType"))
                     {
                         return AddError("Optionals are only allowed in the optional arguments");
                     }
@@ -478,7 +478,7 @@ private:
                 }
                 if (argFlags) {
                     if (argName.empty()) {
-                        auto atom = MakeQuotedLiteralAtom(TStringBuf(""), TNodeFlags::ArbitraryContent); 
+                        auto atom = MakeQuotedLiteralAtom(TStringBuf(""), TNodeFlags::ArbitraryContent);
                         argSettings.push_back(atom);
                     }
                     argSettings.push_back(MakeQuotedAtom(ToString(argFlags)));
@@ -519,7 +519,7 @@ private:
     bool ParseCallableArgFlags(ui32& argFlags) {
         GetNextToken(); // eat '{'
 
-        if (Token != TOKEN_IDENTIFIER || Identifier != TStringBuf("Flags")) { 
+        if (Token != TOKEN_IDENTIFIER || Identifier != TStringBuf("Flags")) {
             AddError("Expected Flags field");
             return false;
         }
@@ -529,7 +529,7 @@ private:
 
         for (;;) {
             if (Token == TOKEN_IDENTIFIER) {
-                if (Identifier == TStringBuf("AutoMap")) { 
+                if (Identifier == TStringBuf("AutoMap")) {
                     argFlags |= TArgumentFlags::AutoMap;
                 } else {
                     AddError(TString("Unknown flag name: ") + Identifier);
@@ -557,7 +557,7 @@ private:
     bool ParseCallablePayload(TStringBuf& payload) {
         GetNextToken(); // eat '{'
 
-        if (Token != TOKEN_IDENTIFIER && Identifier != TStringBuf("Payload")) { 
+        if (Token != TOKEN_IDENTIFIER && Identifier != TStringBuf("Payload")) {
             AddError("Expected Payload field");
             return false;
         }
@@ -821,12 +821,12 @@ private:
             TSmallVec<TAstNode*>& args, size_t optionalArgsCount,
             TAstNode* returnType, TStringBuf payload)
     {
-        args[0] = MakeLiteralAtom(TStringBuf("CallableType")); 
+        args[0] = MakeLiteralAtom(TStringBuf("CallableType"));
         TSmallVec<TAstNode*> mainSettings;
         if (optionalArgsCount || !payload.empty()) {
             mainSettings.push_back(optionalArgsCount
                 ? MakeQuotedAtom(ToString(optionalArgsCount))
-                : MakeQuotedLiteralAtom(TStringBuf("0"))); 
+                : MakeQuotedLiteralAtom(TStringBuf("0")));
         }
 
         if (!payload.empty()) {
@@ -844,7 +844,7 @@ private:
 
     TAstNode* MakeListType(TAstNode* itemType) {
         TAstNode* items[] = {
-            MakeLiteralAtom(TStringBuf("ListType")), 
+            MakeLiteralAtom(TStringBuf("ListType")),
             itemType,
         };
         return MakeList(items, Y_ARRAY_SIZE(items));
@@ -852,7 +852,7 @@ private:
 
     TAstNode* MakeStreamType(TAstNode* itemType) {
         TAstNode* items[] = {
-            MakeLiteralAtom(TStringBuf("StreamType")), 
+            MakeLiteralAtom(TStringBuf("StreamType")),
             itemType,
         };
         return MakeList(items, Y_ARRAY_SIZE(items));
@@ -860,7 +860,7 @@ private:
 
     TAstNode* MakeFlowType(TAstNode* itemType) {
         TAstNode* items[] = {
-            MakeLiteralAtom(TStringBuf("FlowType")), 
+            MakeLiteralAtom(TStringBuf("FlowType")),
             itemType,
         };
         return MakeList(items, Y_ARRAY_SIZE(items));
@@ -868,7 +868,7 @@ private:
 
     TAstNode* MakeVariantType(TAstNode* underlyingType) {
         TAstNode* items[] = {
-            MakeLiteralAtom(TStringBuf("VariantType")), 
+            MakeLiteralAtom(TStringBuf("VariantType")),
             underlyingType,
         };
         return MakeList(items, Y_ARRAY_SIZE(items));
@@ -876,7 +876,7 @@ private:
 
     TAstNode* MakeDictType(TAstNode* keyType, TAstNode* valueType) {
         TAstNode* items[] = {
-            MakeLiteralAtom(TStringBuf("DictType")), 
+            MakeLiteralAtom(TStringBuf("DictType")),
             keyType,
             valueType,
         };
@@ -884,13 +884,13 @@ private:
     }
 
     TAstNode* MakeTupleType(TSmallVec<TAstNode*>& items) {
-        items[0] = MakeLiteralAtom(TStringBuf("TupleType")); 
+        items[0] = MakeLiteralAtom(TStringBuf("TupleType"));
         return MakeList(items.data(), items.size());
     }
 
     TAstNode* MakeStructType(const TMap<TString, TAstNode*>& members) {
         TSmallVec<TAstNode*> items;
-        items.push_back(MakeLiteralAtom(TStringBuf("StructType"))); 
+        items.push_back(MakeLiteralAtom(TStringBuf("StructType")));
 
         for (const auto& member: members) {
             TAstNode* memberType[] = {
@@ -946,7 +946,7 @@ private:
 
     TAstNode* MakeResourceType(TStringBuf tag) {
         TAstNode* items[] = {
-            MakeLiteralAtom(TStringBuf("ResourceType")), 
+            MakeLiteralAtom(TStringBuf("ResourceType")),
             MakeQuotedAtom(tag),
         };
         return MakeList(items, Y_ARRAY_SIZE(items));
@@ -954,49 +954,49 @@ private:
 
     TAstNode* MakeVoidType() {
         TAstNode* items[] = {
-            MakeLiteralAtom(TStringBuf("VoidType")) 
+            MakeLiteralAtom(TStringBuf("VoidType"))
         };
         return MakeList(items, Y_ARRAY_SIZE(items));
     }
 
     TAstNode* MakeNullType() {
         TAstNode* items[] = {
-            MakeLiteralAtom(TStringBuf("NullType")) 
+            MakeLiteralAtom(TStringBuf("NullType"))
         };
         return MakeList(items, Y_ARRAY_SIZE(items));
     }
 
     TAstNode* MakeEmptyListType() {
         TAstNode* items[] = {
-            MakeLiteralAtom(TStringBuf("EmptyListType")) 
+            MakeLiteralAtom(TStringBuf("EmptyListType"))
         };
         return MakeList(items, Y_ARRAY_SIZE(items));
     }
 
     TAstNode* MakeEmptyDictType() {
         TAstNode* items[] = {
-            MakeLiteralAtom(TStringBuf("EmptyDictType")) 
+            MakeLiteralAtom(TStringBuf("EmptyDictType"))
         };
         return MakeList(items, Y_ARRAY_SIZE(items));
     }
 
     TAstNode* MakeUnitType() {
         TAstNode* items[] = {
-            MakeLiteralAtom(TStringBuf("UnitType")) 
+            MakeLiteralAtom(TStringBuf("UnitType"))
         };
         return MakeList(items, Y_ARRAY_SIZE(items));
     }
 
     TAstNode* MakeGenericType() {
         TAstNode* items[] = {
-            MakeLiteralAtom(TStringBuf("GenericType")) 
+            MakeLiteralAtom(TStringBuf("GenericType"))
         };
         return MakeList(items, Y_ARRAY_SIZE(items));
     }
 
     TAstNode* MakeTaggedType(TAstNode* baseType, TStringBuf tag) {
         TAstNode* items[] = {
-            MakeLiteralAtom(TStringBuf("TaggedType")), 
+            MakeLiteralAtom(TStringBuf("TaggedType")),
             baseType,
             MakeQuotedAtom(tag)
         };
@@ -1006,7 +1006,7 @@ private:
 
     TAstNode* MakeDataType(TStringBuf type) {
         TAstNode* items[] = {
-            MakeLiteralAtom(TStringBuf("DataType")), 
+            MakeLiteralAtom(TStringBuf("DataType")),
             MakeQuotedAtom(type),
         };
         return MakeList(items, Y_ARRAY_SIZE(items));
@@ -1014,8 +1014,8 @@ private:
 
     TAstNode* MakeDecimalType(TStringBuf precision, TStringBuf scale) {
         TAstNode* items[] = {
-            MakeLiteralAtom(TStringBuf("DataType")), 
-            MakeQuotedAtom(TStringBuf("Decimal")), 
+            MakeLiteralAtom(TStringBuf("DataType")),
+            MakeQuotedAtom(TStringBuf("Decimal")),
             MakeQuotedAtom(precision),
             MakeQuotedAtom(scale),
         };
@@ -1024,7 +1024,7 @@ private:
 
     TAstNode* MakeOptionalType(TAstNode* type) {
         TAstNode* items[] = {
-            MakeLiteralAtom(TStringBuf("OptionalType")), 
+            MakeLiteralAtom(TStringBuf("OptionalType")),
             type,
         };
         return MakeList(items, Y_ARRAY_SIZE(items));
@@ -1108,11 +1108,11 @@ public:
 private:
     void Visit(const TUnitExprType& type) final {
         Y_UNUSED(type);
-        Out_ << TStringBuf("Unit"); 
+        Out_ << TStringBuf("Unit");
     }
 
     void Visit(const TMultiExprType& type) final {
-        Out_ << TStringBuf("Multi<"); 
+        Out_ << TStringBuf("Multi<");
         const auto& items = type.GetItems();
         for (ui32 i = 0; i < items.size(); ++i) {
             if (i) {
@@ -1124,7 +1124,7 @@ private:
     }
 
     void Visit(const TTupleExprType& type) final {
-        Out_ << TStringBuf("Tuple<"); 
+        Out_ << TStringBuf("Tuple<");
         const auto& items = type.GetItems();
         for (ui32 i = 0; i < items.size(); ++i) {
             if (i) {
@@ -1136,7 +1136,7 @@ private:
     }
 
     void Visit(const TStructExprType& type) final {
-        Out_ << TStringBuf("Struct<"); 
+        Out_ << TStringBuf("Struct<");
         const auto& items = type.GetItems();
         for (ui32 i = 0; i < items.size(); ++i) {
             if (i) {
@@ -1154,19 +1154,19 @@ private:
     }
 
     void Visit(const TListExprType& type) final {
-        Out_ << TStringBuf("List<"); 
+        Out_ << TStringBuf("List<");
         type.GetItemType()->Accept(*this);
         Out_ << '>';
     }
 
     void Visit(const TStreamExprType& type) final {
-        Out_ << TStringBuf("Stream<"); 
+        Out_ << TStringBuf("Stream<");
         type.GetItemType()->Accept(*this);
         Out_ << '>';
     }
 
     void Visit(const TFlowExprType& type) final {
-        Out_ << TStringBuf("Flow<"); 
+        Out_ << TStringBuf("Flow<");
         type.GetItemType()->Accept(*this);
         Out_ << '>';
     }
@@ -1180,13 +1180,13 @@ private:
 
     void Visit(const TWorldExprType& type) final {
         Y_UNUSED(type);
-        Out_ << TStringBuf("World"); 
+        Out_ << TStringBuf("World");
     }
 
     void Visit(const TOptionalExprType& type) final {
         const TTypeAnnotationNode* itemType = type.GetItemType();
         if (itemType->GetKind() == ETypeAnnotationKind::Callable) {
-            Out_ << TStringBuf("Optional<"); 
+            Out_ << TStringBuf("Optional<");
             itemType->Accept(*this);
             Out_ << '>';
         } else {
@@ -1201,7 +1201,7 @@ private:
         ui32 optArgsCount =
                 Min<ui32>(type.GetOptionalArgumentsCount(), argsCount);
 
-        Out_ << TStringBuf("Callable<("); 
+        Out_ << TStringBuf("Callable<(");
         for (ui32 i = 0; i < argsCount; ++i) {
             if (i) {
                 Out_ << ',';
@@ -1216,9 +1216,9 @@ private:
             }
             argInfo.Type->Accept(*this);
             if (argInfo.Flags) {
-                Out_ << TStringBuf("{Flags:"); 
+                Out_ << TStringBuf("{Flags:");
                 if (argInfo.Flags & TArgumentFlags::AutoMap) {
-                    Out_ << TStringBuf("AutoMap"); 
+                    Out_ << TStringBuf("AutoMap");
                 }
                 Out_ << '}';
             }
@@ -1228,33 +1228,33 @@ private:
             Out_ << ']';
         }
 
-        Out_ << TStringBuf(")->"); 
+        Out_ << TStringBuf(")->");
         type.GetReturnType()->Accept(*this);
         if (!type.GetPayload().empty()) {
-            Out_ << TStringBuf("{Payload:") << type.GetPayload() << '}'; 
+            Out_ << TStringBuf("{Payload:") << type.GetPayload() << '}';
         }
         Out_ << '>';
     }
 
     void Visit(const TResourceExprType& type) final {
-        Out_ << TStringBuf("Resource<"); 
+        Out_ << TStringBuf("Resource<");
         EscapeArbitraryAtom(type.GetTag(), '\'', &Out_);
         Out_ << '>';
     }
 
     void Visit(const TTypeExprType& type) final {
-        Out_ << TStringBuf("Type<"); 
+        Out_ << TStringBuf("Type<");
         type.GetType()->Accept(*this);
         Out_ << '>';
     }
 
     void Visit(const TDictExprType& type) final {
         if (type.GetPayloadType()->GetKind() == ETypeAnnotationKind::Void) {
-            Out_ << TStringBuf("Set<"); 
+            Out_ << TStringBuf("Set<");
             type.GetKeyType()->Accept(*this);
             Out_ << '>';
         } else {
-            Out_ << TStringBuf("Dict<"); 
+            Out_ << TStringBuf("Dict<");
             type.GetKeyType()->Accept(*this);
             Out_ << ',';
             type.GetPayloadType()->Accept(*this);
@@ -1264,31 +1264,31 @@ private:
 
     void Visit(const TVoidExprType& type) final {
         Y_UNUSED(type);
-        Out_ << TStringBuf("Void"); 
+        Out_ << TStringBuf("Void");
     }
 
     void Visit(const TNullExprType& type) final {
         Y_UNUSED(type);
-        Out_ << TStringBuf("Null"); 
+        Out_ << TStringBuf("Null");
     }
 
     void Visit(const TEmptyListExprType& type) final {
         Y_UNUSED(type);
-        Out_ << TStringBuf("EmptyList"); 
+        Out_ << TStringBuf("EmptyList");
     }
 
     void Visit(const TEmptyDictExprType& type) final {
         Y_UNUSED(type);
-        Out_ << TStringBuf("EmptyDict"); 
+        Out_ << TStringBuf("EmptyDict");
     }
 
     void Visit(const TGenericExprType& type) final {
         Y_UNUSED(type);
-        Out_ << TStringBuf("Generic"); 
+        Out_ << TStringBuf("Generic");
     }
 
     void Visit(const TTaggedExprType& type) final {
-        Out_ << TStringBuf("Tagged<"); 
+        Out_ << TStringBuf("Tagged<");
         type.GetBaseType()->Accept(*this);
         Out_ << ',';
         EscapeArbitraryAtom(type.GetTag(), '\'', &Out_);
@@ -1296,7 +1296,7 @@ private:
     }
 
     void Visit(const TErrorExprType& type) final {
-        Out_ << TStringBuf("Error<"); 
+        Out_ << TStringBuf("Error<");
         auto pos = type.GetError().Position;
         EscapeArbitraryAtom(pos.File.empty() ? "<main>" : pos.File, '\'', &Out_);
         Out_ << ':';
@@ -1311,7 +1311,7 @@ private:
     void Visit(const TVariantExprType& type) final {
         auto underlyingType = type.GetUnderlyingType();
         if (underlyingType->GetKind() == ETypeAnnotationKind::Tuple) {
-            Out_ << TStringBuf("Variant<"); 
+            Out_ << TStringBuf("Variant<");
             auto tupleType = underlyingType->Cast<TTupleExprType>();
             const auto& items = tupleType->GetItems();
             for (ui32 i = 0; i < items.size(); ++i) {
@@ -1328,7 +1328,7 @@ private:
                  allVoid = allVoid && (items[i]->GetItemType()->GetKind() == ETypeAnnotationKind::Void);
             }
 
-            Out_ << (allVoid ? TStringBuf("Enum<") : TStringBuf("Variant<")); 
+            Out_ << (allVoid ? TStringBuf("Enum<") : TStringBuf("Variant<"));
             for (ui32 i = 0; i < items.size(); ++i) {
                 if (i) {
                     Out_ << ',';

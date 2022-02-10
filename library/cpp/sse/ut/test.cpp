@@ -60,15 +60,15 @@ struct T_mm_CallWrapper {
     T_mm_CallWrapper<__m128, decltype(_mm_func), _mm_func>
 #define WrapD(_mm_func) \
     T_mm_CallWrapper<__m128d, decltype(_mm_func), _mm_func>
-using int8x16_t = std::array<i8, 16>; 
-using int16x8_t = std::array<i16, 8>; 
-using int32x4_t = std::array<i32, 4>; 
-using int64x2_t = std::array<i64, 2>; 
-using uint8x16_t = std::array<ui8, 16>; 
-using uint16x8_t = std::array<ui16, 8>; 
-using uint32x4_t = std::array<ui32, 4>; 
-using uint64x2_t = std::array<ui64, 2>; 
-using float32x4_t = std::array<float, 4>; 
+using int8x16_t = std::array<i8, 16>;
+using int16x8_t = std::array<i16, 8>;
+using int32x4_t = std::array<i32, 4>;
+using int64x2_t = std::array<i64, 2>;
+using uint8x16_t = std::array<ui8, 16>;
+using uint16x8_t = std::array<ui16, 8>;
+using uint32x4_t = std::array<ui32, 4>;
+using uint64x2_t = std::array<ui64, 2>;
+using float32x4_t = std::array<float, 4>;
 using float64x2_t = std::array<double, 2>;
 
 template <typename TVectorType>

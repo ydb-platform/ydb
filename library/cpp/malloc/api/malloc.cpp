@@ -4,15 +4,15 @@
 #include "malloc.h"
 
 namespace {
-    bool SetEmptyParam(const char*, const char*) { 
+    bool SetEmptyParam(const char*, const char*) {
         return false;
     }
 
-    const char* GetEmptyParam(const char*) { 
+    const char* GetEmptyParam(const char*) {
         return nullptr;
     }
 
-    bool CheckEmptyParam(const char*, bool defaultValue) { 
+    bool CheckEmptyParam(const char*, bool defaultValue) {
         return defaultValue;
     }
 }

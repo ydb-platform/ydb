@@ -10,11 +10,11 @@ namespace {
     TStringBuf TypeToString(TIpv6Address::TIpType type) {
         switch (type) {
             case TIpv6Address::Ipv4:
-                return TStringBuf("IPv4"); 
+                return TStringBuf("IPv4");
             case TIpv6Address::Ipv6:
-                return TStringBuf("IPv6"); 
+                return TStringBuf("IPv6");
             default:
-                return TStringBuf("UNKNOWN"); 
+                return TStringBuf("UNKNOWN");
         }
     }
 

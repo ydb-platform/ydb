@@ -16,7 +16,7 @@ protected:
         }
 
         *static_cast<unsigned char*>(buf) = static_cast<unsigned char>(Pos_);
-        ++Pos_; 
+        ++Pos_;
         return 1;
     }
 
@@ -25,7 +25,7 @@ protected:
             return 0;
         }
 
-        ++Pos_; 
+        ++Pos_;
         return 1;
     }
 

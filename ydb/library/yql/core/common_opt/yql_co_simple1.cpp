@@ -1435,10 +1435,10 @@ bool ShouldConvertSqlInToJoin(const TCoSqlIn& sqlIn, bool /* negated */) {
     bool tableSource = false;
 
     for (const auto& hint : sqlIn.Options()) {
-        if (hint.Name().Value() == TStringBuf("isCompact")) { 
+        if (hint.Name().Value() == TStringBuf("isCompact")) {
             return false;
         }
-        if (hint.Name().Value() == TStringBuf("tableSource")) { 
+        if (hint.Name().Value() == TStringBuf("tableSource")) {
             tableSource = true;
         }
     }

@@ -21,10 +21,10 @@ class TTaskSchedulerTest: public TTestBase {
                     AtomicIncrement(ScheduledTaskCounter_);
                 }
 
-                ~TCheckTask() override { 
+                ~TCheckTask() override {
                 }
 
-                bool Process() override { 
+                bool Process() override {
                     const TDuration delay = Now() - Start_;
 
                     if (delay < Delay_) {

@@ -75,15 +75,15 @@ namespace {
 
 Y_UNIT_TEST_SUITE(Reader) {
     Y_UNIT_TEST(ScalarEntity) {
-        test_scalar(TStringBuf("#"), NYsonPull::TScalar{}); 
+        test_scalar(TStringBuf("#"), NYsonPull::TScalar{});
     }
 
     Y_UNIT_TEST(ScalarBoolean) {
-        test_scalar(TStringBuf("%true"), true); 
-        test_scalar(TStringBuf("%false"), false); 
+        test_scalar(TStringBuf("%true"), true);
+        test_scalar(TStringBuf("%false"), false);
 
-        test_scalar(TStringBuf("\x05"sv), true); 
-        test_scalar(TStringBuf("\x04"sv), false); 
+        test_scalar(TStringBuf("\x05"sv), true);
+        test_scalar(TStringBuf("\x04"sv), false);
 
         REJECT("%");
         REJECT("%trueth");
@@ -94,18 +94,18 @@ Y_UNIT_TEST_SUITE(Reader) {
     }
 
     Y_UNIT_TEST(ScalarInt64) {
-        test_scalar(TStringBuf("1"), i64{1}); 
-        test_scalar(TStringBuf("+1"), i64{1}); 
-        test_scalar(TStringBuf("100000"), i64{100000}); 
-        test_scalar(TStringBuf("+100000"), i64{100000}); 
-        test_scalar(TStringBuf("-100000"), i64{-100000}); 
-        test_scalar(TStringBuf("9223372036854775807"), i64{9223372036854775807}); 
-        test_scalar(TStringBuf("+9223372036854775807"), i64{9223372036854775807}); 
+        test_scalar(TStringBuf("1"), i64{1});
+        test_scalar(TStringBuf("+1"), i64{1});
+        test_scalar(TStringBuf("100000"), i64{100000});
+        test_scalar(TStringBuf("+100000"), i64{100000});
+        test_scalar(TStringBuf("-100000"), i64{-100000});
+        test_scalar(TStringBuf("9223372036854775807"), i64{9223372036854775807});
+        test_scalar(TStringBuf("+9223372036854775807"), i64{9223372036854775807});
 
-        test_scalar(TStringBuf("\x02\x02"sv), i64{1}); 
-        test_scalar(TStringBuf("\x02\xc0\x9a\x0c"sv), i64{100000}); 
-        test_scalar(TStringBuf("\x02\xbf\x9a\x0c"sv), i64{-100000}); 
-        test_scalar(TStringBuf("\x02\xfe\xff\xff\xff\xff\xff\xff\xff\xff\x01"sv), i64{9223372036854775807}); 
+        test_scalar(TStringBuf("\x02\x02"sv), i64{1});
+        test_scalar(TStringBuf("\x02\xc0\x9a\x0c"sv), i64{100000});
+        test_scalar(TStringBuf("\x02\xbf\x9a\x0c"sv), i64{-100000});
+        test_scalar(TStringBuf("\x02\xfe\xff\xff\xff\xff\xff\xff\xff\xff\x01"sv), i64{9223372036854775807});
 
         REJECT("1a2");
         REJECT("1-1-1-1");
@@ -113,14 +113,14 @@ Y_UNIT_TEST_SUITE(Reader) {
     }
 
     Y_UNIT_TEST(SclarUInt64) {
-        test_scalar(TStringBuf("1u"), ui64{1}); 
-        test_scalar(TStringBuf("+1u"), ui64{1}); 
-        test_scalar(TStringBuf("100000u"), ui64{100000}); 
-        test_scalar(TStringBuf("+100000u"), ui64{100000}); 
-        test_scalar(TStringBuf("9223372036854775807u"), ui64{9223372036854775807u}); 
-        test_scalar(TStringBuf("+9223372036854775807u"), ui64{9223372036854775807u}); 
-        test_scalar(TStringBuf("18446744073709551615u"), ui64{18446744073709551615u}); 
-        test_scalar(TStringBuf("+18446744073709551615u"), ui64{18446744073709551615u}); 
+        test_scalar(TStringBuf("1u"), ui64{1});
+        test_scalar(TStringBuf("+1u"), ui64{1});
+        test_scalar(TStringBuf("100000u"), ui64{100000});
+        test_scalar(TStringBuf("+100000u"), ui64{100000});
+        test_scalar(TStringBuf("9223372036854775807u"), ui64{9223372036854775807u});
+        test_scalar(TStringBuf("+9223372036854775807u"), ui64{9223372036854775807u});
+        test_scalar(TStringBuf("18446744073709551615u"), ui64{18446744073709551615u});
+        test_scalar(TStringBuf("+18446744073709551615u"), ui64{18446744073709551615u});
 
         REJECT("1a2u");
         REJECT("1-1-1-1u");
@@ -130,45 +130,45 @@ Y_UNIT_TEST_SUITE(Reader) {
     }
 
     Y_UNIT_TEST(ScalarFloat64) {
-        test_scalar(TStringBuf("0.0"), double{0.0}); 
-        test_scalar(TStringBuf("+0.0"), double{0.0}); 
-        test_scalar(TStringBuf("+.0"), double{0.0}); 
-        test_scalar(TStringBuf("+.5"), double{0.5}); 
-        test_scalar(TStringBuf("-.5"), double{-0.5}); 
-        test_scalar(TStringBuf("1.0"), double{1.0}); 
-        test_scalar(TStringBuf("+1.0"), double{1.0}); 
-        test_scalar(TStringBuf("-1.0"), double{-1.0}); 
-        test_scalar(TStringBuf("1000.0"), double{1000.0}); 
-        test_scalar(TStringBuf("+1000.0"), double{1000.0}); 
-        test_scalar(TStringBuf("-1000.0"), double{-1000.0}); 
-        test_scalar(TStringBuf("1e12"), double{1e12}); 
-        test_scalar(TStringBuf("1e+12"), double{1e12}); 
-        test_scalar(TStringBuf("+1e+12"), double{1e12}); 
-        test_scalar(TStringBuf("-1e+12"), double{-1e12}); 
-        test_scalar(TStringBuf("1e-12"), double{1e-12}); 
-        test_scalar(TStringBuf("+1e-12"), double{1e-12}); 
-        test_scalar(TStringBuf("-1e-12"), double{-1e-12}); 
+        test_scalar(TStringBuf("0.0"), double{0.0});
+        test_scalar(TStringBuf("+0.0"), double{0.0});
+        test_scalar(TStringBuf("+.0"), double{0.0});
+        test_scalar(TStringBuf("+.5"), double{0.5});
+        test_scalar(TStringBuf("-.5"), double{-0.5});
+        test_scalar(TStringBuf("1.0"), double{1.0});
+        test_scalar(TStringBuf("+1.0"), double{1.0});
+        test_scalar(TStringBuf("-1.0"), double{-1.0});
+        test_scalar(TStringBuf("1000.0"), double{1000.0});
+        test_scalar(TStringBuf("+1000.0"), double{1000.0});
+        test_scalar(TStringBuf("-1000.0"), double{-1000.0});
+        test_scalar(TStringBuf("1e12"), double{1e12});
+        test_scalar(TStringBuf("1e+12"), double{1e12});
+        test_scalar(TStringBuf("+1e+12"), double{1e12});
+        test_scalar(TStringBuf("-1e+12"), double{-1e12});
+        test_scalar(TStringBuf("1e-12"), double{1e-12});
+        test_scalar(TStringBuf("+1e-12"), double{1e-12});
+        test_scalar(TStringBuf("-1e-12"), double{-1e-12});
 
-        test_scalar(TStringBuf("\x03\x00\x00\x00\x00\x00\x00\x00\x00"sv), double{0.0}); 
+        test_scalar(TStringBuf("\x03\x00\x00\x00\x00\x00\x00\x00\x00"sv), double{0.0});
 
         test_scalar(
-            TStringBuf("\x03\x00\x00\x00\x00\x00\x00\xf8\x7f"sv), 
+            TStringBuf("\x03\x00\x00\x00\x00\x00\x00\xf8\x7f"sv),
             double{std::numeric_limits<double>::quiet_NaN()});
         test_scalar(
-            TStringBuf("\x03\x00\x00\x00\x00\x00\x00\xf0\x7f"sv), 
+            TStringBuf("\x03\x00\x00\x00\x00\x00\x00\xf0\x7f"sv),
             double{std::numeric_limits<double>::infinity()});
         test_scalar(
-            TStringBuf("\x03\x00\x00\x00\x00\x00\x00\xf0\xff"sv), 
+            TStringBuf("\x03\x00\x00\x00\x00\x00\x00\xf0\xff"sv),
             double{-std::numeric_limits<double>::infinity()});
 
         test_scalar(
-            TStringBuf("%nan"), 
+            TStringBuf("%nan"),
             double{std::numeric_limits<double>::quiet_NaN()});
         test_scalar(
-            TStringBuf("%inf"), 
+            TStringBuf("%inf"),
             double{std::numeric_limits<double>::infinity()});
         test_scalar(
-            TStringBuf("%-inf"), 
+            TStringBuf("%-inf"),
             double{-std::numeric_limits<double>::infinity()});
 
         REJECT("++0.0");
@@ -176,7 +176,7 @@ Y_UNIT_TEST_SUITE(Reader) {
         REJECT("++.1");
         REJECT("1.0.0");
         //REJECT("1e+10000");
-        REJECT(TStringBuf("\x03\x00\x00\x00\x00\x00\x00\x00"sv)); 
+        REJECT(TStringBuf("\x03\x00\x00\x00\x00\x00\x00\x00"sv));
 
         // XXX: Questionable behaviour?
         ACCEPT("+.0");
@@ -194,16 +194,16 @@ Y_UNIT_TEST_SUITE(Reader) {
     }
 
     Y_UNIT_TEST(ScalarString) {
-        test_scalar(TStringBuf(R"(foobar)"), TStringBuf("foobar")); 
-        test_scalar(TStringBuf(R"(foobar11)"), TStringBuf("foobar11")); 
-        test_scalar(TStringBuf(R"("foobar")"), TStringBuf("foobar")); 
+        test_scalar(TStringBuf(R"(foobar)"), TStringBuf("foobar"));
+        test_scalar(TStringBuf(R"(foobar11)"), TStringBuf("foobar11"));
+        test_scalar(TStringBuf(R"("foobar")"), TStringBuf("foobar"));
         // wat? "\x0cf" parsed as a single char? no way!
-        test_scalar("\x01\x0c" "foobar"sv, 
-                    TStringBuf("foobar")); 
+        test_scalar("\x01\x0c" "foobar"sv,
+                    TStringBuf("foobar"));
 
         REJECT(R"("foobar)");
-        REJECT("\x01\x0c" "fooba"sv); 
-        REJECT("\x01\x0d" "foobar"sv); // negative length 
+        REJECT("\x01\x0c" "fooba"sv);
+        REJECT("\x01\x0d" "foobar"sv); // negative length
     }
 
     Y_UNIT_TEST(EmptyList) {
@@ -241,7 +241,7 @@ Y_UNIT_TEST_SUITE(Reader) {
         {
             auto& e = reader.NextEvent();
             UNIT_ASSERT_VALUES_EQUAL(NYsonPull::EEventType::Key, e.Type());
-            UNIT_ASSERT_VALUES_EQUAL(TStringBuf("11"), e.AsString()); 
+            UNIT_ASSERT_VALUES_EQUAL(TStringBuf("11"), e.AsString());
         }
         {
             auto& e = reader.NextEvent();
@@ -252,7 +252,7 @@ Y_UNIT_TEST_SUITE(Reader) {
         {
             auto& e = reader.NextEvent();
             UNIT_ASSERT_VALUES_EQUAL(NYsonPull::EEventType::Key, e.Type());
-            UNIT_ASSERT_VALUES_EQUAL(TStringBuf("nothing"), e.AsString()); 
+            UNIT_ASSERT_VALUES_EQUAL(TStringBuf("nothing"), e.AsString());
         }
         {
             auto& e = reader.NextEvent();
@@ -263,7 +263,7 @@ Y_UNIT_TEST_SUITE(Reader) {
         {
             auto& e = reader.NextEvent();
             UNIT_ASSERT_VALUES_EQUAL(NYsonPull::EEventType::Key, e.Type());
-            UNIT_ASSERT_VALUES_EQUAL(TStringBuf("zero"), e.AsString()); 
+            UNIT_ASSERT_VALUES_EQUAL(TStringBuf("zero"), e.AsString());
         }
         {
             auto& e = reader.NextEvent();
@@ -274,18 +274,18 @@ Y_UNIT_TEST_SUITE(Reader) {
         {
             auto& e = reader.NextEvent();
             UNIT_ASSERT_VALUES_EQUAL(NYsonPull::EEventType::Key, e.Type());
-            UNIT_ASSERT_VALUES_EQUAL(TStringBuf("foo"), e.AsString()); 
+            UNIT_ASSERT_VALUES_EQUAL(TStringBuf("foo"), e.AsString());
         }
         {
             auto& e = reader.NextEvent();
             UNIT_ASSERT_VALUES_EQUAL(NYsonPull::EEventType::Scalar, e.Type());
-            UNIT_ASSERT_VALUES_EQUAL(NYsonPull::TScalar{TStringBuf("bar")}, e.AsScalar()); 
+            UNIT_ASSERT_VALUES_EQUAL(NYsonPull::TScalar{TStringBuf("bar")}, e.AsScalar());
         }
 
         {
             auto& e = reader.NextEvent();
             UNIT_ASSERT_VALUES_EQUAL(NYsonPull::EEventType::Key, e.Type());
-            UNIT_ASSERT_VALUES_EQUAL(TStringBuf("list"), e.AsString()); 
+            UNIT_ASSERT_VALUES_EQUAL(TStringBuf("list"), e.AsString());
         }
         UNIT_ASSERT_VALUES_EQUAL(NYsonPull::EEventType::BeginList, reader.NextEvent().Type());
         {

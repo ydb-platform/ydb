@@ -130,7 +130,7 @@ bool CanBePunycodeHostName(const TStringBuf& host) {
     if (!IsStringASCII(host.begin(), host.end()))
         return false;
 
-    static constexpr TStringBuf ACE = "xn--"; 
+    static constexpr TStringBuf ACE = "xn--";
 
     TStringBuf tail(host);
     while (tail) {

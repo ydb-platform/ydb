@@ -63,10 +63,10 @@ public:
     /**
      * Constructs a null blob (data array points to nullptr).
      */
-    TBlob() noexcept 
-        : S_(nullptr, 0, nullptr) 
-    { 
-    } 
+    TBlob() noexcept
+        : S_(nullptr, 0, nullptr)
+    {
+    }
 
     inline TBlob(const TBlob& r) noexcept
         : S_(r.S_)
@@ -308,15 +308,15 @@ public:
 
 private:
     inline void Ref() noexcept {
-        if (S_.Base) { 
-            S_.Base->Ref(); 
-        } 
+        if (S_.Base) {
+            S_.Base->Ref();
+        }
     }
 
     inline void UnRef() noexcept {
-        if (S_.Base) { 
-            S_.Base->UnRef(); 
-        } 
+        if (S_.Base) {
+            S_.Base->UnRef();
+        }
     }
 
 private:

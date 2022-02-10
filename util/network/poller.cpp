@@ -16,7 +16,7 @@ public:
 
         for (size_t i = 0; i < ret; ++i) {
             ev[i] = ExtractEvent(&events[i]);
-        } 
+        }
 
         return ret;
     }

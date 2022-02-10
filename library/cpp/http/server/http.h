@@ -13,7 +13,7 @@
 class IThreadFactory;
 class TClientRequest;
 class TClientConnection;
- 
+
 class THttpServer {
     friend class TClientRequest;
     friend class TClientConnection;

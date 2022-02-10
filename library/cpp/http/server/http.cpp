@@ -396,7 +396,7 @@ public:
         Options_.MaxQueueSize = maxQS;
         Requests->Start(Options_.nThreads, Options_.MaxQueueSize);
     }
- 
+
     TImpl(THttpServer* parent, ICallBack* cb, TMtpQueueRef mainWorkers, TMtpQueueRef failWorkers, const TOptions& options_)
         : Requests(mainWorkers)
         , FailRequests(failWorkers)
@@ -481,7 +481,7 @@ private:
         return pool;
     }
 };
- 
+
 THttpServer::THttpServer(ICallBack* cb, const TOptions& options, IThreadFactory* pool)
     : Impl_(new TImpl(this, cb, options, pool))
 {

@@ -9,7 +9,7 @@ namespace NKikimr {
     ////////////////////////////////////////////////////////////////////////////
     // TPDiskParams
     ////////////////////////////////////////////////////////////////////////////
-    TPDiskParams::TPDiskParams(NPDisk::TOwner owner, ui64 ownerRound, ui32 chunkSize, ui32 appendBlockSize,
+    TPDiskParams::TPDiskParams(NPDisk::TOwner owner, ui64 ownerRound, ui32 chunkSize, ui32 appendBlockSize, 
                                ui64 seekTimeUs, ui64 readSpeedBps, ui64 writeSpeedBps, ui64 readBlockSize,
                                ui64 writeBlockSize, ui64 bulkWriteBlockSize)
         : Owner(owner)
@@ -55,7 +55,7 @@ namespace NKikimr {
 
     TString TPDiskParams::ToString() const {
         TStringStream str;
-        str << "{TPDiskParams ownerId# " << Owner;
+        str << "{TPDiskParams ownerId# " << Owner; 
         str << " ownerRound# " << OwnerRound;
         str << " ChunkSize# " << ChunkSize;
         str << " AppendBlockSize# " << AppendBlockSize;
@@ -84,7 +84,7 @@ namespace NKikimr {
                 TABLEBODY() {
                     TABLER() {
                         TABLED() {str << "Owner";}
-                        TABLED() {str << Owner;}
+                        TABLED() {str << Owner;} 
                     }
                     TABLER() {
                         TABLED() {str << "ChunkSize";}

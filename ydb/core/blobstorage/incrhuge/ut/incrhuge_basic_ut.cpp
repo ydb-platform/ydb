@@ -34,7 +34,7 @@ public:
     std::unique_ptr<TActorSystem> ActorSystem;
     TTempDir TempDir;
     std::unique_ptr<TAppData> AppData;
-    std::shared_ptr<NPDisk::IIoContextFactory> IoContext;
+    std::shared_ptr<NPDisk::IIoContextFactory> IoContext; 
 
     void Setup(bool format = true, ui32 counter = 0, TManualEvent *event = nullptr, ui32 numChunks = 1000,
             ui32 chunkSize = 16 << 20) {
@@ -115,8 +115,8 @@ public:
         NActors::TActorSetupCmd loggerActorCmd{loggerActor, NActors::TMailboxType::Simple, 2};
         setup->LocalServices.emplace_back(loggerActorId, loggerActorCmd);
         AppData.reset(new TAppData(0, 1, 2, 1, TMap<TString, ui32>(), nullptr, nullptr, nullptr, nullptr));
-        IoContext = std::make_shared<NPDisk::TIoContextFactoryOSS>();
-        AppData->IoContextFactory = IoContext.get();
+        IoContext = std::make_shared<NPDisk::TIoContextFactoryOSS>(); 
+        AppData->IoContextFactory = IoContext.get(); 
 
         ActorSystem.reset(new TActorSystem{setup, AppData.get(), logSettings});
     }

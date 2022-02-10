@@ -39,7 +39,7 @@ void TestPutMaxPartCountOnHandoff(TErasureType::EErasureSpecies erasureSpecies) 
     TIntrusivePtr<TGroupQueues> groupQueues = group.MakeGroupQueues();
 
     TIntrusivePtr<NMonitoring::TDynamicCounters> counters(new NMonitoring::TDynamicCounters());
-    TIntrusivePtr<TDsProxyNodeMon> nodeMon(new TDsProxyNodeMon(counters, true));
+    TIntrusivePtr<TDsProxyNodeMon> nodeMon(new TDsProxyNodeMon(counters, true)); 
     TIntrusivePtr<TBlobStorageGroupProxyMon> mon(new TBlobStorageGroupProxyMon(counters, counters, counters,
                 group.GetInfo(), nodeMon, false));
 

@@ -1515,10 +1515,10 @@ public:
                 double avail = (double)pDiskInfo.GetAvailableSize() / pDiskInfo.GetTotalSize();
                 if (avail < 0.06) {
                     context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, "Available size is less than 6%", "pdisk-space");
-                } else if (avail < 0.09) {
-                    context.ReportStatus(Ydb::Monitoring::StatusFlag::ORANGE, "Available size is less than 9%", "pdisk-space");
-                } else if (avail < 0.12) {
-                    context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "Available size is less than 12%", "pdisk-space");
+                } else if (avail < 0.09) { 
+                    context.ReportStatus(Ydb::Monitoring::StatusFlag::ORANGE, "Available size is less than 9%", "pdisk-space"); 
+                } else if (avail < 0.12) { 
+                    context.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "Available size is less than 12%", "pdisk-space"); 
                 }
             }
         } else {

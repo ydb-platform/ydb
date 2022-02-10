@@ -369,7 +369,7 @@ namespace NKikimr {
                         VDISKP(VCtx->VDiskLogPrefix,
                             "KEEPER: we've got disk overflow for SyncLog:"
                             " numCurChunks# %" PRIu32 " numChunksToAdd# %" PRIu32
-                            " MaxDiskChunks# %" PRIu32, numCurChunks, numChunksToAdd, MaxDiskChunks));
+                            " MaxDiskChunks# %" PRIu32, numCurChunks, numChunksToAdd, MaxDiskChunks)); 
             }
 
             // trim SyncLog in case of disk overflow

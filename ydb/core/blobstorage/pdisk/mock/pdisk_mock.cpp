@@ -22,7 +22,7 @@ struct TPDiskMockState::TImpl {
         NPDisk::TOwnerRound OwnerRound = 0;
         TActorId CutLogId;
         std::deque<NPDisk::TLogRecord> Log;
-        TMap<TLogSignature, NPDisk::TLogRecord> StartingPoints;
+        TMap<TLogSignature, NPDisk::TLogRecord> StartingPoints; 
         ui64 LogDataSize = 0;
         bool Slain = false;
         ui64 LastLsn = 0;
@@ -404,7 +404,7 @@ public:
 
                 // process the log entry
                 bool isStartingPoint = false;
-                if (msg->Signature.HasCommitRecord()) {
+                if (msg->Signature.HasCommitRecord()) { 
                     const auto& cr = msg->CommitRecord;
                     if (cr.FirstLsnToKeep) { // trim log
                         std::deque<NPDisk::TLogRecord>::iterator it;
@@ -425,10 +425,10 @@ public:
                     }
                     isStartingPoint = cr.IsStartingPoint;
                 }
-                owner.Log.emplace_back(msg->Signature.GetUnmasked(), msg->Data, msg->Lsn);
+                owner.Log.emplace_back(msg->Signature.GetUnmasked(), msg->Data, msg->Lsn); 
                 owner.LogDataSize += msg->Data.size();
                 if (isStartingPoint) {
-                    owner.StartingPoints[msg->Signature.GetUnmasked()] = owner.Log.back();
+                    owner.StartingPoints[msg->Signature.GetUnmasked()] = owner.Log.back(); 
                 }
             }
             Y_VERIFY(res);

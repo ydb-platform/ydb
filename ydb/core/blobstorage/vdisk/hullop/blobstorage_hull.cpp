@@ -312,7 +312,7 @@ namespace NKikimr {
                 // value -- this is not tolerable
                 LOG_CRIT(ctx, NKikimrServices::BS_HULLRECS,
                     VDISKP(HullDs->HullCtx->VCtx->VDiskLogPrefix,
-                           "Db# Barriers ValidateGCCmd: incorrect collect cmd: tabletID# %" PRIu64
+                           "Db# Barriers ValidateGCCmd: incorrect collect cmd: tabletID# %" PRIu64 
                             " key# %s existing barrier# %" PRIu32 ":%" PRIu32 " new barrier# %"
                             PRIu32 ":%" PRIu32, tabletID, newKey.ToString().data(), memRec.CollectGen, memRec.CollectStep,
                             collectGeneration, collectStep));

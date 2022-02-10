@@ -77,8 +77,8 @@ protected:
 
     void InitializeMonitoring(const TKikimrRunConfig& runConfig, bool includeHostName = true);
 
-    void InitializeControlBoard(const TKikimrRunConfig& runConfig);
-
+    void InitializeControlBoard(const TKikimrRunConfig& runConfig); 
+ 
     void InitializeMonitoringLogin(const TKikimrRunConfig& runConfig);
 
     void InitializeMessageBus(

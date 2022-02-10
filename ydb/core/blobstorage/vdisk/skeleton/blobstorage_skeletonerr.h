@@ -9,8 +9,8 @@
 #include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_response.h>
 
-LWTRACE_USING(BLOBSTORAGE_PROVIDER);
-
+LWTRACE_USING(BLOBSTORAGE_PROVIDER); 
+ 
 namespace NKikimr {
 
     ////////////////////////////////////////////////////////////////////////////////////////////
@@ -266,7 +266,7 @@ namespace NKikimr {
                    ev->Get()->GetBufferBytes());
             const ui64 vcookie = record.GetCookie();
             const ui64 *cookie = record.HasCookie() ? &vcookie : nullptr;
-            const ui64 bufferSizeBytes = ev->Get()->GetBufferBytes();
+            const ui64 bufferSizeBytes = ev->Get()->GetBufferBytes(); 
             const auto handleClass = record.GetHandleClass();
             const NVDiskMon::TLtcHistoPtr &histoPtr = vctx->Histograms.GetHistogram(handleClass);
             const NMonitoring::TDynamicCounters::TCounterPtr &counterPtr = ResultingCounterForEvent(vctx, ev);

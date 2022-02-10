@@ -25,9 +25,9 @@ struct TColumn {
     void Out(IOutputStream& o) const;
 };
 
-bool operator==(const TColumn& col1, const TColumn& col2);
-bool operator!=(const TColumn& col1, const TColumn& col2);
-
+bool operator==(const TColumn& col1, const TColumn& col2); 
+bool operator!=(const TColumn& col1, const TColumn& col2); 
+ 
 //! Collection of rows, represents result of query or part of the result in case of stream operations
 class TResultSet {
     friend class TResultSetParser;

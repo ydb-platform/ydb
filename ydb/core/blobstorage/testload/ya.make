@@ -28,7 +28,7 @@ SRCS(
     test_load_memory.cpp
     test_load_pdisk_read.cpp
     test_load_pdisk_write.cpp
-    test_load_pdisk_log.cpp
+    test_load_pdisk_log.cpp 
     test_load_quantile.h
     test_load_size_gen.h
     test_load_speed.h

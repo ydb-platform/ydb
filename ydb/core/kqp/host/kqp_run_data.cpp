@@ -106,8 +106,8 @@ protected:
         if (execResult.HasLocks()) {
             YQL_ENSURE(!commit);
 
-            if (!MergeLocks(execResult.GetLocks().GetType(), execResult.GetLocks().GetValue(), TxState->Tx(), ctx)) {
-                return false;
+            if (!MergeLocks(execResult.GetLocks().GetType(), execResult.GetLocks().GetValue(), TxState->Tx(), ctx)) { 
+                return false; 
             }
         }
 

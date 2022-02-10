@@ -158,7 +158,7 @@ namespace NKikimr {
         // combine two sets and return the result
         friend TDerived operator |(const TDerived& x, const TDerived& y) {
             TDerived res(x);
-            return res |= y;
+            return res |= y; 
         }
 
         // union of two nonintersecting subsets

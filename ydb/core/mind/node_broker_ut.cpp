@@ -94,7 +94,7 @@ void SetupServices(TTestActorRuntime &runtime,
 
         TIntrusivePtr<TNodeWardenConfig> existingNodeWardenConfig = NodeWardenConfigs[nodeIndex];
         if (existingNodeWardenConfig != nullptr) {
-            //std::swap(nodeWardenConfig->SectorMaps, existingNodeWardenConfig->SectorMaps);
+            //std::swap(nodeWardenConfig->SectorMaps, existingNodeWardenConfig->SectorMaps); 
         }
 
         if (nodeIndex == 0) {

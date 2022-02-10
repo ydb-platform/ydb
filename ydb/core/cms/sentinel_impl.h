@@ -30,8 +30,8 @@ private:
     const ui32& DefaultStateLimit;
     const TLimitsMap& StateLimits;
 
-    EPDiskState State = NKikimrBlobStorage::TPDiskState::Unknown;
-    mutable EPDiskState PrevState = State;
+    EPDiskState State = NKikimrBlobStorage::TPDiskState::Unknown; 
+    mutable EPDiskState PrevState = State; 
     ui64 StateCounter;
 
 }; // TPDiskStatusComputer
@@ -46,7 +46,7 @@ public:
     void ApplyChanges(TString& reason);
     void ApplyChanges();
     EPDiskStatus GetStatus() const;
-    bool IsNewStatusGood() const;
+    bool IsNewStatusGood() const; 
 
     bool IsChangingAllowed() const;
     void AllowChanging();
@@ -74,22 +74,22 @@ private:
 
 }; // TPDiskInfo
 
-class TClusterMap {
-public:
+class TClusterMap { 
+public: 
     using TPDiskIDSet = THashSet<TPDiskID, TPDiskIDHash>;
     using TDistribution = THashMap<TString, TPDiskIDSet>;
 
-    TCmsStatePtr State;
-    TDistribution ByDataCenter;
-    TDistribution ByRoom;
-    TDistribution ByRack;
-
-    TClusterMap(TCmsStatePtr state);
-
-    void AddPDisk(const TPDiskID& id);
-}; // TClusterMap
-
-class TGuardian : public TClusterMap {
+    TCmsStatePtr State; 
+    TDistribution ByDataCenter; 
+    TDistribution ByRoom; 
+    TDistribution ByRack; 
+ 
+    TClusterMap(TCmsStatePtr state); 
+ 
+    void AddPDisk(const TPDiskID& id); 
+}; // TClusterMap 
+ 
+class TGuardian : public TClusterMap { 
     static bool CheckRatio(ui32 check, ui32 base, ui32 ratio) {
         return (check * 100) <= (base * ratio);
     }
@@ -101,7 +101,7 @@ class TGuardian : public TClusterMap {
 public:
     explicit TGuardian(TCmsStatePtr state, ui32 dataCenterRatio = 100, ui32 roomRatio = 100, ui32 rackRatio = 100);
 
-    TPDiskIDSet GetAllowedPDisks(const TClusterMap& all, TString& issues, TPDiskIDSet& disallowed) const;
+    TPDiskIDSet GetAllowedPDisks(const TClusterMap& all, TString& issues, TPDiskIDSet& disallowed) const; 
 
 private:
     const ui32 DataCenterRatio;

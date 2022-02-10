@@ -1,50 +1,50 @@
-#pragma once
-
-#include "defs.h"
-#include <util/generic/string.h>
-
-namespace NKikimr {
-
+#pragma once 
+ 
+#include "defs.h" 
+#include <util/generic/string.h> 
+ 
+namespace NKikimr { 
+ 
 inline TActorId MakeBlobStorageProxyID(ui32 blobStorageGroup) {
-    char x[12] = {'b', 's', 'p', 'r', 'o', 'x', 'y' };
-    x[7] = (char)blobStorageGroup;
-    x[8] = (char)(blobStorageGroup >> 8);
-    x[9] = (char)(blobStorageGroup >> 16);
-    x[10] = (char)(blobStorageGroup >> 24);
+    char x[12] = {'b', 's', 'p', 'r', 'o', 'x', 'y' }; 
+    x[7] = (char)blobStorageGroup; 
+    x[8] = (char)(blobStorageGroup >> 8); 
+    x[9] = (char)(blobStorageGroup >> 16); 
+    x[10] = (char)(blobStorageGroup >> 24); 
     return TActorId(0, TStringBuf(x, 12));
-}
-
+} 
+ 
 inline TActorId MakeBlobStorageLoadID(ui32 nodeId) {
-    char x[12] = {'b', 's', 'l', 'o', 'a', 'd', 'd', 0};
-    x[8] = (char)(nodeId >> 24);
-    x[9] = (char)(nodeId >> 16);
-    x[10] = (char)(nodeId >> 8);
-    x[11] = (char)nodeId;
+    char x[12] = {'b', 's', 'l', 'o', 'a', 'd', 'd', 0}; 
+    x[8] = (char)(nodeId >> 24); 
+    x[9] = (char)(nodeId >> 16); 
+    x[10] = (char)(nodeId >> 8); 
+    x[11] = (char)nodeId; 
     return TActorId(nodeId, TStringBuf(x, 12));
-}
-
+} 
+ 
 inline TActorId MakeBlobStorageFailureInjectionID(ui32 nodeId) {
-    char x[12] = {'b', 's', 'F', 'a', 'i', 'l', 'I', 'n'};
-    x[8] = (char)(nodeId >> 24);
-    x[9] = (char)(nodeId >> 16);
-    x[10] = (char)(nodeId >> 8);
-    x[11] = (char)nodeId;
+    char x[12] = {'b', 's', 'F', 'a', 'i', 'l', 'I', 'n'}; 
+    x[8] = (char)(nodeId >> 24); 
+    x[9] = (char)(nodeId >> 16); 
+    x[10] = (char)(nodeId >> 8); 
+    x[11] = (char)nodeId; 
     return TActorId(nodeId, TStringBuf(x, 12));
-}
-
+} 
+ 
 inline TActorId MakeBlobStorageVDiskID(ui32 node, ui32 pDiskID, ui32 vDiskSlotID) {
-    char x[12] = {'b','s','v','d'};
-    x[4] = (char)pDiskID;
-    x[5] = (char)(pDiskID >> 8);
-    x[6] = (char)(pDiskID >> 16);
-    x[7] = (char)(pDiskID >> 24);
-    x[8] = (char)vDiskSlotID;
-    x[9] = (char)(vDiskSlotID >> 8);
-    x[10] = (char)(vDiskSlotID >> 16);
-    x[11] = (char)(vDiskSlotID >> 24);
+    char x[12] = {'b','s','v','d'}; 
+    x[4] = (char)pDiskID; 
+    x[5] = (char)(pDiskID >> 8); 
+    x[6] = (char)(pDiskID >> 16); 
+    x[7] = (char)(pDiskID >> 24); 
+    x[8] = (char)vDiskSlotID; 
+    x[9] = (char)(vDiskSlotID >> 8); 
+    x[10] = (char)(vDiskSlotID >> 16); 
+    x[11] = (char)(vDiskSlotID >> 24); 
     return TActorId(node, TStringBuf(x, 12));
-}
-
+} 
+ 
 inline std::tuple<ui32, ui32, ui32> DecomposeVDiskServiceId(const TActorId& actorId) {
     Y_VERIFY(actorId.IsService());
     const TStringBuf serviceId = actorId.ServiceId();
@@ -59,22 +59,22 @@ inline std::tuple<ui32, ui32, ui32> DecomposeVDiskServiceId(const TActorId& acto
 }
 
 inline TActorId MakeBlobStoragePDiskID(ui32 node, ui32 pDiskID) {
-    char x[12] = {'b','s','p','d','i','s','k', 0};
-    x[8] = (char)pDiskID;
-    x[9] = (char)(pDiskID >> 8);
-    x[10] = (char)(pDiskID >> 16);
-    x[11] = (char)(pDiskID >> 24);
+    char x[12] = {'b','s','p','d','i','s','k', 0}; 
+    x[8] = (char)pDiskID; 
+    x[9] = (char)(pDiskID >> 8); 
+    x[10] = (char)(pDiskID >> 16); 
+    x[11] = (char)(pDiskID >> 24); 
     return TActorId(node, TStringBuf(x, 12));
-}
-
+} 
+ 
 inline TActorId MakeBlobStorageReplBrokerID() {
-    char x[12] = {'b', 's', 'r', 'e', 'p', 'l', 'b', 'r', 'o', 'k', 'e', 'r'};
+    char x[12] = {'b', 's', 'r', 'e', 'p', 'l', 'b', 'r', 'o', 'k', 'e', 'r'}; 
     return TActorId(0, TStringBuf(x, 12));
-}
-
+} 
+ 
 inline TActorId MakeBlobStorageNodeWardenID(ui32 node) {
-    char x[12] = {'b','s','n','o','d','e','c','n','t','r','l','r'};
+    char x[12] = {'b','s','n','o','d','e','c','n','t','r','l','r'}; 
     return TActorId(node, TStringBuf(x, 12));
-}
-
-} // namespace NKikimr
+} 
+ 
+} // namespace NKikimr 

@@ -41,7 +41,7 @@ namespace NKikimr {
                     LOG_INFO(*HullCtx->VCtx->ActorSystem, NKikimrServices::BS_HULLCOMP,
                             VDISKP(HullCtx->VCtx->VDiskLogPrefix,
                                 "%s: DelSst: action# %s timeSpent# %s sstsToDelete# %" PRIu32,
-                                PDiskSignatureForHullDbKey<TKey>().ToString().data(),
+                                PDiskSignatureForHullDbKey<TKey>().ToString().data(), 
                                 ActionToStr(action), (finishTime - startTime).ToString().data(),
                                 SstToDelete));
                 }

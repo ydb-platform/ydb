@@ -357,7 +357,7 @@ namespace NKikimr {
                 const NVDiskMon::TLtcHistoPtr &histoPtr, NWilson::TTraceId traceId)
             : TVDiskNonlocalResultBase(channel)
             , Start(now)
-            , Size(0)
+            , Size(0) 
             , CounterPtr(counterPtr)
             , HistoPtr(histoPtr)
             , TraceId(std::move(traceId))
@@ -376,20 +376,20 @@ namespace NKikimr {
             }
 
             if (HistoPtr) {
-                HistoPtr->Collect(TAppData::TimeProvider->Now() - Start, Size);
+                HistoPtr->Collect(TAppData::TimeProvider->Now() - Start, Size); 
             }
 
             TActivationContext::Send(ev.release());
         }
 
-    protected:
-        void IncrementSize(ui64 size) {
-            Size += size;
-        }
-
+    protected: 
+        void IncrementSize(ui64 size) { 
+            Size += size; 
+        } 
+ 
     private:
         const TInstant Start;
-        ui64 Size;
+        ui64 Size; 
         NMonitoring::TDynamicCounters::TCounterPtr CounterPtr;
         NVDiskMon::TLtcHistoPtr HistoPtr;
         bool Finalized = false;
@@ -473,7 +473,7 @@ namespace NKikimr {
             }
 
             size_t byteSize = TBase::Record.ByteSize();
-            Y_VERIFY(byteSize <= NActors::EventMaxByteSize,
+            Y_VERIFY(byteSize <= NActors::EventMaxByteSize, 
                 "event suspiciously large: %zu\n%s",
                 byteSize, this->ToString().data());
 
@@ -497,10 +497,10 @@ namespace NKikimr {
 
     struct TEvBlobStorage::TEvVPut
             : public TEventPB<TEvBlobStorage::TEvVPut, NKikimrBlobStorage::TEvVPut, TEvBlobStorage::EvVPut> {
-        // In current realization it is intentionaly lost on event serialization since
-        // LWTrace doesn't support distributed shuttels yet
-        mutable NLWTrace::TOrbit Orbit;
-
+        // In current realization it is intentionaly lost on event serialization since 
+        // LWTrace doesn't support distributed shuttels yet 
+        mutable NLWTrace::TOrbit Orbit; 
+ 
         TEvVPut()
         {}
 
@@ -559,19 +559,19 @@ namespace NKikimr {
 
         void StorePayload(TRope&& buffer);
 
-        ui64 GetBufferBytes() const {
-            if (KIKIMR_USE_PROTOBUF_WITH_PAYLOAD) {
-                ui64 sizeBytes = 0;
-                const ui32 size = GetPayloadCount();
-                for (ui32 i = 0; i < size; ++i) {
-                    sizeBytes += GetPayload(i).GetSize();
-                }
-                return sizeBytes;
-            } else {
-                return Record.GetBuffer().size();
-            }
-        }
-
+        ui64 GetBufferBytes() const { 
+            if (KIKIMR_USE_PROTOBUF_WITH_PAYLOAD) { 
+                ui64 sizeBytes = 0; 
+                const ui32 size = GetPayloadCount(); 
+                for (ui32 i = 0; i < size; ++i) { 
+                    sizeBytes += GetPayload(i).GetSize(); 
+                } 
+                return sizeBytes; 
+            } else { 
+                return Record.GetBuffer().size(); 
+            } 
+        } 
+ 
         bool Validate(TString& errorReason) {
             if (!Record.HasBlobID()) {
                 errorReason = "TEvVPut rejected by VDisk. It has no query";
@@ -591,7 +591,7 @@ namespace NKikimr {
 
             return false;
         }
-
+ 
         TString ToString() const override {
             return ToString(Record);
         }
@@ -694,11 +694,11 @@ namespace NKikimr {
     struct TEvBlobStorage::TEvVPutResult
             : public TEvVResultBaseWithQoSPB<TEvBlobStorage::TEvVPutResult,
                 NKikimrBlobStorage::TEvVPutResult, TEvBlobStorage::EvVPutResult> {
-
-        // In current realization it is intentionaly lost on event serialization since
-        // LWTrace doesn't support distributed shuttels yet
-        mutable NLWTrace::TOrbit Orbit;
-
+ 
+        // In current realization it is intentionaly lost on event serialization since 
+        // LWTrace doesn't support distributed shuttels yet 
+        mutable NLWTrace::TOrbit Orbit; 
+ 
         TEvVPutResult();
 
         TEvVPutResult(const NKikimrProto::EReplyStatus status, const TLogoBlobID &logoBlobId, const TVDiskID &vdisk,
@@ -752,9 +752,9 @@ namespace NKikimr {
             if (request.HasCookie()) {
                 Record.SetCookie(request.GetCookie());
             }
-            if (request.HasTimestamps()) {
-                Record.MutableTimestamps()->CopyFrom(request.GetTimestamps());
-            }
+            if (request.HasTimestamps()) { 
+                Record.MutableTimestamps()->CopyFrom(request.GetTimestamps()); 
+            } 
         }
     };
 
@@ -798,7 +798,7 @@ namespace NKikimr {
         ui64 GetBufferBytes() const {
             ui64 bytes = 0;
             if (KIKIMR_USE_PROTOBUF_WITH_PAYLOAD) {
-                ui32 size = GetPayloadCount();
+                ui32 size = GetPayloadCount(); 
                 for (ui32 i = 0; i < size; ++i) {
                     bytes += GetPayload(i).GetSize();
                 }
@@ -913,7 +913,7 @@ namespace NKikimr {
             : TEvVResultBaseWithQoSPB(now, counterPtr, histoPtr, std::move(traceId),
                     TInterconnectChannels::IC_BLOBSTORAGE_SMALL_MSG, recByteSize, record, skeletonFrontIDPtr)
         {
-            IncrementSize(bufferSizeBytes);
+            IncrementSize(bufferSizeBytes); 
             Record.SetStatus(status);
             VDiskIDFromVDiskID(vdisk, Record.MutableVDiskID());
             if (cookie) {
@@ -1249,9 +1249,9 @@ namespace NKikimr {
         {
             Record.SetStatus(status);
             VDiskIDFromVDiskID(vdisk, Record.MutableVDiskID());
-            if (queryRecord && queryRecord->HasTimestamps()) {
-                Record.MutableTimestamps()->CopyFrom(queryRecord->GetTimestamps());
-            }
+            if (queryRecord && queryRecord->HasTimestamps()) { 
+                Record.MutableTimestamps()->CopyFrom(queryRecord->GetTimestamps()); 
+            } 
 
             // copy cookie if it was set in initial query
             if (cookie)
@@ -1268,7 +1268,7 @@ namespace NKikimr {
 
         void AddResult(NKikimrProto::EReplyStatus status, const TLogoBlobID &logoBlobId, ui64 sh,
                        const char *data, size_t size, const ui64 *cookie = nullptr, const ui64 *ingress = nullptr) {
-            IncrementSize(size);
+            IncrementSize(size); 
             NKikimrBlobStorage::TQueryResult *r = Record.AddResult();
             r->SetStatus(status);
             LogoBlobIDFromLogoBlobID(logoBlobId, r->MutableBlobID());
@@ -1377,9 +1377,9 @@ namespace NKikimr {
             if (request.HasCookie()) {
                 Record.SetCookie(request.GetCookie());
             }
-            if (request.HasTimestamps()) {
-                Record.MutableTimestamps()->CopyFrom(request.GetTimestamps());
-            }
+            if (request.HasTimestamps()) { 
+                Record.MutableTimestamps()->CopyFrom(request.GetTimestamps()); 
+            } 
         }
     };
 

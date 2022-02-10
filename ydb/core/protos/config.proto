@@ -72,7 +72,7 @@ message TActorSystemConfig {
         optional uint64 SpinThreshold = 2;
         optional uint64 ProgressThreshold = 3;
         optional TAffinity Affinity = 4;
-        optional bool UseSchedulerActor = 5;
+        optional bool UseSchedulerActor = 5; 
     }
 
     repeated TExecutor Executor = 1;
@@ -230,7 +230,7 @@ message TDomainsConfig {
 
 message TBlobStorageConfig {
     optional NKikimrBlobStorage.TNodeWardenServiceSet ServiceSet = 1;
-    optional bool EnableOverseerLsnReporting = 2 [default = false]; // deprecated
+    optional bool EnableOverseerLsnReporting = 2 [default = false]; // deprecated 
     optional string CacheFilePath = 3;
     optional bool CachePDisks = 4 [default = true];
     optional bool CacheVDisks = 5 [default = true];
@@ -606,19 +606,19 @@ message TDynamicNodeConfig {
     optional string NodeHost = 6; //DEPRECATED
 }
 
-message TFeatureFlags {
+message TFeatureFlags { 
     enum Tribool {
         UNSET = 0;
         VALUE_TRUE = 1;
         VALUE_FALSE = 2;
     }
 
-    optional bool EnableSeparateSolomonShardForPDisk = 1 [default = true];
+    optional bool EnableSeparateSolomonShardForPDisk = 1 [default = true]; 
     optional bool UseForsetiSchedulerByDefaultForPDisk = 2 [default = true];
     optional bool EnableSeparateTrimThreadForPDisk = 3 [default = true];
     optional bool EnableSeparateSubmitThreadForPDisk = 4 [default = true];
     optional bool EnablePerOwnerChunkLimitForPDisk = 5 [default = false];
-    optional bool TrimEntireDeviceOnStartup = 6 [default = false];
+    optional bool TrimEntireDeviceOnStartup = 6 [default = false]; 
     optional bool EnableChunkGraceForPDisk = 7 [default = true];
     optional bool AllowConsistentOperationsForSchemeShard = 8 [default = true];
     optional bool EnableSchemeBoard = 9 [default = true]; // deprecated: always true
@@ -670,14 +670,14 @@ message TFeatureFlags {
     optional bool EnableTtlOnAsyncIndexedTables = 55 [default = false];
     optional bool EnableBulkUpsertToAsyncIndexedTables = 56 [default = false];
     optional bool EnableNodeBrokerSingleDomainMode = 57 [default = false];
-    optional bool EnableKqpSessionActor = 58 [default = false];
+    optional bool EnableKqpSessionActor = 58 [default = false]; 
     // Dangerous settings we don't want in the public api unless required
     optional bool EnablePublicApiExternalBlobs = 59 [default = false];
     optional bool EnablePublicApiKeepInMemory = 60 [default = false];
     optional bool EnableImplicitScanQueryInScripts = 61 [default = true];
     optional bool EnablePredicateExtractForScanQueries = 62 [default = true];
-}
-
+} 
+ 
 message TSqsConfig {
     optional bool EnableSqs = 5;
     optional string Root = 1 [default = "/Root/SQS"];
@@ -1355,7 +1355,7 @@ message TAppConfig {
     //optional TLocalConfig LocalConfig = 23; DEPRECATED
     optional TDynamicNodeConfig DynamicNodeConfig = 24;
     optional NKikimrCms.TCmsConfig CmsConfig = 25;
-    optional TFeatureFlags FeatureFlags = 26;
+    optional TFeatureFlags FeatureFlags = 26; 
     optional TSqsConfig SqsConfig = 27;
     optional NKikimrPQ.TPQConfig PQConfig = 28;
     optional NKikimrTenantPool.TTenantPoolConfig TenantPoolConfig = 29;
@@ -1364,7 +1364,7 @@ message TAppConfig {
     optional TConfigsDispatcherConfig ConfigsDispatcherConfig = 33;
     optional TTableProfilesConfig TableProfilesConfig = 34;
     optional NKikimrProto.TKeyConfig KeyConfig = 35;
-    optional NKikimrProto.TKeyConfig PDiskKeyConfig = 51;
+    optional NKikimrProto.TKeyConfig PDiskKeyConfig = 51; 
     optional NKikimrNodeBroker.TConfig NodeBrokerConfig = 36;
     optional TTableServiceConfig TableServiceConfig = 37;
     optional NKikimrSharedCache.TSharedCacheConfig SharedCacheConfig = 38; // dynamic configuration via cms

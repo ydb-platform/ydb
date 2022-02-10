@@ -241,16 +241,16 @@ struct TErasureType {
         ErasureMirror3Plus2 = 8,
         ErasureMirror3dc = 9,
 
-        Erasure4Plus3Block = 10,
-        Erasure4Plus3Stripe = 11,
-        Erasure3Plus3Block = 12,
-        Erasure3Plus3Stripe = 13,
-        Erasure2Plus3Block = 14,
-        Erasure2Plus3Stripe = 15,
-
-        Erasure2Plus2Block = 16,
-        Erasure2Plus2Stripe = 17,
-
+        Erasure4Plus3Block = 10, 
+        Erasure4Plus3Stripe = 11, 
+        Erasure3Plus3Block = 12, 
+        Erasure3Plus3Stripe = 13, 
+        Erasure2Plus3Block = 14, 
+        Erasure2Plus3Stripe = 15, 
+ 
+        Erasure2Plus2Block = 16, 
+        Erasure2Plus2Stripe = 17, 
+ 
         ErasureMirror3of4 = 18,
 
         ErasureSpeciesCount = 19
@@ -349,7 +349,7 @@ protected:
     ui32 ColumnSize() const;
 };
 
-bool CheckCrcAtTheEnd(TErasureType::ECrcMode crcMode, const TString& buf);
-
+bool CheckCrcAtTheEnd(TErasureType::ECrcMode crcMode, const TString& buf); 
+ 
 }
 

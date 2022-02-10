@@ -77,30 +77,30 @@ private:
     }
 };
 
-class TFailCounterGenerator {
-
-};
-
-ui32 GenerateFailCounter(bool frequentFails) {
-    TReallyFastRng32 rng(Now().GetValue());
-
-    double p = (rng() % (1000 * 1000 * 1000)) / 1e9;
-
-    if (frequentFails) {
-        return p < 0.05 ? rng() % 10 + 1
-            : p < 0.10 ? rng() % 1000 + 1000 :
-            rng() % 5000 + 5000;
-    } else {
-        return p < 0.9 ? rng() % 10 + 1
-            : p < 0.99 ? rng() % 100 + 100 :
-            rng() % 1000 + 1000;
-    }
-}
-
+class TFailCounterGenerator { 
+ 
+}; 
+ 
+ui32 GenerateFailCounter(bool frequentFails) { 
+    TReallyFastRng32 rng(Now().GetValue()); 
+ 
+    double p = (rng() % (1000 * 1000 * 1000)) / 1e9; 
+ 
+    if (frequentFails) { 
+        return p < 0.05 ? rng() % 10 + 1 
+            : p < 0.10 ? rng() % 1000 + 1000 : 
+            rng() % 5000 + 5000; 
+    } else { 
+        return p < 0.9 ? rng() % 10 + 1 
+            : p < 0.99 ? rng() % 100 + 100 : 
+            rng() % 1000 + 1000; 
+    } 
+} 
+ 
 struct TPDiskFailureInjectionTest {
     // default values for unit test
     ui32 NumIterations = 10; // 0 = unlimited
-    ui32 NumFailsInIteration = 1000; // 0 = unlimited
+    ui32 NumFailsInIteration = 1000; // 0 = unlimited 
     TTempDir TempDir;
     TString PDiskFilePath;
     ui64 DiskSize = 16ULL << 30; // 10 GB
@@ -113,7 +113,7 @@ struct TPDiskFailureInjectionTest {
 
     TProgramShouldContinue KikimrShouldContinue;
     std::unique_ptr<NKikimr::TAppData> AppData;
-    std::shared_ptr<NKikimr::NPDisk::IIoContextFactory> IoContext;
+    std::shared_ptr<NKikimr::NPDisk::IIoContextFactory> IoContext; 
     std::unique_ptr<NActors::TActorSystem> ActorSystem;
 
     TAutoEvent StopEvent;
@@ -170,8 +170,8 @@ struct TPDiskFailureInjectionTest {
 
         // initialize app data with pool ids and registries
         AppData.reset(new NKikimr::TAppData(0u, 1u, 2u, 3u, {}, nullptr, nullptr, nullptr, &KikimrShouldContinue));
-        IoContext = std::make_shared<NKikimr::NPDisk::TIoContextFactoryOSS>();
-        AppData->IoContextFactory = IoContext.get();
+        IoContext = std::make_shared<NKikimr::NPDisk::TIoContextFactoryOSS>(); 
+        AppData->IoContextFactory = IoContext.get(); 
 
         // create actor system setup environment
         auto setup = MakeHolder<TActorSystemSetup>();
@@ -202,10 +202,10 @@ struct TPDiskFailureInjectionTest {
             NKikimrServices::EServiceKikimr_Name
         );
 
-        TString explanation;
-        loggerSettings->SetLevel(NActors::NLog::PRI_INFO, NKikimrServices::BS_PDISK, explanation);
-        loggerSettings->SetLevel(NActors::NLog::PRI_DEBUG, NKikimrServices::BS_PDISK_TEST, explanation);
-
+        TString explanation; 
+        loggerSettings->SetLevel(NActors::NLog::PRI_INFO, NKikimrServices::BS_PDISK, explanation); 
+        loggerSettings->SetLevel(NActors::NLog::PRI_DEBUG, NKikimrServices::BS_PDISK_TEST, explanation); 
+ 
         // create/register logger actor
         auto logger = std::make_unique<TLoggerActor>(loggerSettings, CreateStderrBackend(),
                 Counters->GetSubgroup("logger", "counters"));
@@ -224,9 +224,9 @@ struct TPDiskFailureInjectionTest {
         test->Run(this, &StopEvent, stateManager);
     }
 
-    //template<bool FREQUENT_FAILS, typename TTest, typename... TArgs>
+    //template<bool FREQUENT_FAILS, typename TTest, typename... TArgs> 
     template<typename TTest, typename... TArgs>
-    void RunCycle(bool frequentFails, TArgs&&... args) {
+    void RunCycle(bool frequentFails, TArgs&&... args) { 
         TInstant startTime = TInstant::Now();
 
         for (ui32 iteration = 0; NumIterations == 0 || iteration < NumIterations; ++iteration) {
@@ -259,7 +259,7 @@ struct TPDiskFailureInjectionTest {
 
                     TReallyFastRng32 rng(Now().GetValue());
 
-                    ui32 failCounter = GenerateFailCounter(frequentFails);
+                    ui32 failCounter = GenerateFailCounter(frequentFails); 
                     injector.SetFailCounter(failCounter);
                     Cerr << "failCounter# " << failCounter << Endl;
 

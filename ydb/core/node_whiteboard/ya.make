@@ -1,12 +1,12 @@
-LIBRARY()
-
-OWNER(g:kikimr)
-
-SRCS(
-    node_whiteboard.h
-)
-
-PEERDIR(
+LIBRARY() 
+ 
+OWNER(g:kikimr) 
+ 
+SRCS( 
+    node_whiteboard.h 
+) 
+ 
+PEERDIR( 
     library/cpp/actors/core
     library/cpp/actors/helpers
     library/cpp/actors/interconnect
@@ -23,6 +23,6 @@ PEERDIR(
     ydb/core/debug
     ydb/core/erasure
     ydb/core/protos
-)
-
-END()
+) 
+ 
+END() 

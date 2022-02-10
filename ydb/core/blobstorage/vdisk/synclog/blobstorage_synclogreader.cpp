@@ -163,7 +163,7 @@ namespace NKikimr {
                 LOG_DEBUG(ctx, BS_SYNCLOG,
                           VDISKP(SlCtx->VCtx->VDiskLogPrefix,
                                 "SYNCLOG REPLY: SourceVDisk# %s guid# %" PRIu64 " lsn# %" PRIu64,
-                                SourceVDisk.ToString().data(), static_cast<ui64>(VDiskIncarnationGuid), lsn));
+                                SourceVDisk.ToString().data(), static_cast<ui64>(VDiskIncarnationGuid), lsn)); 
 
                 auto result = std::make_unique<TEvBlobStorage::TEvVSyncResult>(status, SelfVDiskId,
                     TSyncState(VDiskIncarnationGuid, lsn), finished, SlCtx->VCtx->GetOutOfSpaceState().GetLocalStatusFlags(),

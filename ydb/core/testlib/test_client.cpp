@@ -396,9 +396,9 @@ namespace Tests {
 
         NKikimrBlobStorage::TDefineHostConfig hostConfig;
         hostConfig.SetHostConfigId(nodeId);
-        TString path = TStringBuilder() << Runtime->GetTempDir() << "pdisk_1.dat";
-        hostConfig.AddDrive()->SetPath(path);
-        Cerr << "test_client.cpp: SetPath # " << path << Endl;
+        TString path = TStringBuilder() << Runtime->GetTempDir() << "pdisk_1.dat"; 
+        hostConfig.AddDrive()->SetPath(path); 
+        Cerr << "test_client.cpp: SetPath # " << path << Endl; 
         bsConfigureRequest->Record.MutableRequest()->AddCommand()->MutableDefineHostConfig()->CopyFrom(hostConfig);
 
         auto& host = *boxConfig.AddHost();

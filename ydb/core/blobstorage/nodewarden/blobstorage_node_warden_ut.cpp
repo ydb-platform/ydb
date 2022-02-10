@@ -83,7 +83,7 @@ void FormatPDiskRandomKeys(TString path, ui32 diskSize, ui32 chunkSize, ui64 gui
     NKikimr::FormatPDisk(path, diskSize, 4 << 10, chunkSize,
             guid, chunkKey, logKey,
             sysLogKey, NPDisk::YdbDefaultPDiskSequence, "Test",
-            false, false, sectorMap);
+            false, false, sectorMap); 
 }
 
 void SetupLogging(TTestActorRuntime& runtime) {
@@ -216,7 +216,7 @@ void SetupServices(TTestActorRuntime &runtime, TString extraPath, TIntrusivePtr<
             sectorMap->ForceSize(64ull << 30ull);
 
 
-            TString pDiskPath0 = TStringBuilder() << "SectorMap:" << baseDir << "pdisk_map";
+            TString pDiskPath0 = TStringBuilder() << "SectorMap:" << baseDir << "pdisk_map"; 
             nodeWardenConfig->ServiceSet.MutablePDisks(0)->SetPath(pDiskPath0);
             nodeWardenConfig->SectorMaps[pDiskPath0] = sectorMap;
 
@@ -228,7 +228,7 @@ void SetupServices(TTestActorRuntime &runtime, TString extraPath, TIntrusivePtr<
                 NPDisk::YdbDefaultPDiskSequence, "", false, false, sectorMap);
 
 
-            // Magic path from testlib, do not change it
+            // Magic path from testlib, do not change it 
             TString pDiskPath1 = TStringBuilder() << baseDir << "pdisk_1.dat";
             TIntrusivePtr<NPDisk::TSectorMap> sectorMap1(new NPDisk::TSectorMap());
             sectorMap1->ForceSize(64ull << 30ull);
@@ -645,7 +645,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
         TTempDir tempDir;
         TTestBasicRuntime runtime(2, false);
         TIntrusivePtr<NPDisk::TSectorMap> sectorMap(new NPDisk::TSectorMap(32ull << 30ull));
-        Setup(runtime, "SectorMap:new_pdisk", sectorMap);
+        Setup(runtime, "SectorMap:new_pdisk", sectorMap); 
         TActorId sender0 = runtime.AllocateEdgeActor(0);
 //        TActorId sender1 = runtime.AllocateEdgeActor(1);
 
@@ -673,32 +673,32 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
             TAutoPtr<IEventHandle> handle;
             if (auto initResult = runtime.GrabEdgeEventRethrow<NPDisk::TEvYardInitResult>(handle, TDuration::Seconds(1))) {
                 UNIT_ASSERT(initResult);
-                UNIT_ASSERT(initResult->Status == NKikimrProto::CORRUPTED);
+                UNIT_ASSERT(initResult->Status == NKikimrProto::CORRUPTED); 
                 break;
             }
         }
     }
 
-    void TestHttpMonForPath(const TString& path) {
-        TTestBasicRuntime runtime(1, false);
-        Setup(runtime, "", nullptr);
-        auto edge = runtime.AllocateEdgeActor(0);
-        TActorId nodeWarden = MakeBlobStorageNodeWardenID(edge.NodeId());
-        THttpRequest HttpRequest;
-        NMonitoring::TMonService2HttpRequest monService2HttpRequest(nullptr, &HttpRequest, nullptr, nullptr, path,
-                nullptr);
-        runtime.Send(new IEventHandle(nodeWarden, edge, new NMon::TEvHttpInfo(monService2HttpRequest)), 0);
-        auto httpInfoRes = runtime.GrabEdgeEventRethrow<NMon::TEvHttpInfoRes>(edge, TDuration::Seconds(1));
-        UNIT_ASSERT(httpInfoRes && httpInfoRes->Get());
-        TStringStream out;
-        httpInfoRes->Get()->Output(out);
-        UNIT_ASSERT(out.Size());
-    }
-
-    CUSTOM_UNIT_TEST(TestHttpMonPage) {
-        TestHttpMonForPath("");
-        TestHttpMonForPath("/json/groups");
-    }
+    void TestHttpMonForPath(const TString& path) { 
+        TTestBasicRuntime runtime(1, false); 
+        Setup(runtime, "", nullptr); 
+        auto edge = runtime.AllocateEdgeActor(0); 
+        TActorId nodeWarden = MakeBlobStorageNodeWardenID(edge.NodeId()); 
+        THttpRequest HttpRequest; 
+        NMonitoring::TMonService2HttpRequest monService2HttpRequest(nullptr, &HttpRequest, nullptr, nullptr, path, 
+                nullptr); 
+        runtime.Send(new IEventHandle(nodeWarden, edge, new NMon::TEvHttpInfo(monService2HttpRequest)), 0); 
+        auto httpInfoRes = runtime.GrabEdgeEventRethrow<NMon::TEvHttpInfoRes>(edge, TDuration::Seconds(1)); 
+        UNIT_ASSERT(httpInfoRes && httpInfoRes->Get()); 
+        TStringStream out; 
+        httpInfoRes->Get()->Output(out); 
+        UNIT_ASSERT(out.Size()); 
+    } 
+ 
+    CUSTOM_UNIT_TEST(TestHttpMonPage) { 
+        TestHttpMonForPath(""); 
+        TestHttpMonForPath("/json/groups"); 
+    } 
 }
 
 } // namespace NBlobStorageNodeWardenTest

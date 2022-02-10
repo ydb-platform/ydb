@@ -13,7 +13,7 @@ namespace NKikimr {
     // to recovery log
     /////////////////////////////////////////////////////////////////////////////////////////
     std::unique_ptr<NPDisk::TEvLog> CreateHullUpdate(const std::shared_ptr<THullLogCtx> &hullLogCtx,
-                                             TLogSignature signature,
+                                             TLogSignature signature, 
                                              const TString &data,
                                              TLsnSeg seg,
                                              void *cookie,
@@ -21,7 +21,7 @@ namespace NKikimr {
                                              std::unique_ptr<TEvHullHugeBlobLogged> hugeKeeperNotice);
 
     std::unique_ptr<NPDisk::TEvLog> CreateHullUpdate(const std::shared_ptr<THullLogCtx> &hullLogCtx,
-                                             TLogSignature signature,
+                                             TLogSignature signature, 
                                              const NPDisk::TCommitRecord &commitRecord,
                                              const TString &data,
                                              TLsnSeg seg,

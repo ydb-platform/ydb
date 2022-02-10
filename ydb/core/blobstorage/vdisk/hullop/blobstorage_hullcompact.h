@@ -96,7 +96,7 @@ namespace NKikimr {
             LOG_INFO(ctx, NKikimrServices::BS_HULLCOMP,
                        VDISKP(HullCtx->VCtx->VDiskLogPrefix,
                              "%s: Compaction job (%" PRIu64 ") started: fresh# %s freedHugeBlobs# %s",
-                             PDiskSignatureForHullDbKey<TKey>().ToString().data(), CompactionID,
+                             PDiskSignatureForHullDbKey<TKey>().ToString().data(), CompactionID, 
                              (FreshSegment ? "true" : "false"), Worker.GetFreedHugeBlobs().ToString().data()));
 
             // bool debug output of brs
@@ -277,7 +277,7 @@ namespace NKikimr {
             LOG_LOG(ctx, IsAborting ? NLog::PRI_ERROR : NLog::PRI_INFO, NKikimrServices::BS_HULLCOMP,
                        VDISKP(HullCtx->VCtx->VDiskLogPrefix,
                             "%s: Compaction job (%" PRIu64 ") finished (freedHugeBlobs): fresh# %s freedHugeBlobs# %s",
-                            PDiskSignatureForHullDbKey<TKey>().ToString().data(), CompactionID,
+                            PDiskSignatureForHullDbKey<TKey>().ToString().data(), CompactionID, 
                             (FreshSegment ? "true" : "false"), Worker.GetFreedHugeBlobs().ToString().data()));
             msg->FreedHugeBlobs = IsAborting ? TDiskPartVec() : Worker.GetFreedHugeBlobs();
 
@@ -295,7 +295,7 @@ namespace NKikimr {
                        VDISKP(HullCtx->VCtx->VDiskLogPrefix,
                              "%s: Compaction job (%" PRIu64 ") finished: fresh# %s chunks# %" PRIu32 " stat# %s "
                              "gcmpStat# %s IsAborting# %s",
-                             PDiskSignatureForHullDbKey<TKey>().ToString().data(),
+                             PDiskSignatureForHullDbKey<TKey>().ToString().data(), 
                              CompactionID, (FreshSegment ? "true" : "false"), ui32(msg->CommitChunks.size()),
                              Worker.Statistics.ToString().data(), Gcmp->GetStat().ToString().data(),
                              IsAborting ? "true" : "false"));

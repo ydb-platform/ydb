@@ -26,7 +26,7 @@ namespace NKikimr {
             ui32 VDiskSlotId = 0;
             EKind Kind = NKikimrBlobStorage::TVDiskKind::Default;
             // name of the storage pool this VDisk belongs to
-            TString StoragePoolName;
+            TString StoragePoolName; 
             // is the donor mode enabled for this disk? (no communication with group, actually, no group -- only reads)
             const bool DonorMode = false;
             // a set of donor disks for this one
@@ -49,7 +49,7 @@ namespace NKikimr {
                     ui32 vdiskSlotId,
                     EKind kind,
                     ui64 initOwnerRound,
-                    TString storagePoolName,
+                    TString storagePoolName, 
                     const bool donorMode = false,
                     std::vector<std::pair<TVDiskID, TActorId>> donorDiskIds = {},
                     ui64 scrubCookie = 0,
@@ -62,7 +62,7 @@ namespace NKikimr {
                 , DeviceType(deviceType)
                 , VDiskSlotId(vdiskSlotId)
                 , Kind(kind)
-                , StoragePoolName(storagePoolName)
+                , StoragePoolName(storagePoolName) 
                 , DonorMode(donorMode)
                 , DonorDiskIds(std::move(donorDiskIds))
                 , ScrubCookie(scrubCookie)

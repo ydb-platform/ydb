@@ -6,7 +6,7 @@
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_factory.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/library/pdisk_io/sector_map.h>
-
+ 
 #include <util/folder/path.h>
 
 namespace NKikimr {
@@ -28,7 +28,7 @@ namespace NKikimr {
         std::unique_ptr<ICacheAccessor> CacheAccessor;
         TEncryptionKey TenantKey;
         TEncryptionKey StaticKey;
-        TEncryptionKey PDiskKey;
+        TEncryptionKey PDiskKey; 
         bool CachePDisks = false;
         bool CacheVDisks = false;
         bool EnableVDiskCooldownTimeout = false;
@@ -41,17 +41,17 @@ namespace NKikimr {
             , AllVDiskKinds(new TAllVDiskKinds)
             , AllDriveModels(new NPDisk::TDriveModelDb)
         {}
-
-        NPDisk::TKey CreatePDiskKey() const {
-             if (PDiskKey) {
-                 const ui8 *key;
-                 ui32 keySize;
-                 PDiskKey.Key.GetKeyBytes(&key, &keySize);
-                 return *(ui64*)key;
-             } else {
+ 
+        NPDisk::TKey CreatePDiskKey() const { 
+             if (PDiskKey) { 
+                 const ui8 *key; 
+                 ui32 keySize; 
+                 PDiskKey.Key.GetKeyBytes(&key, &keySize); 
+                 return *(ui64*)key; 
+             } else { 
                  return NPDisk::YdbDefaultPDiskSequence;
-             }
-        }
+             } 
+        } 
 
         bool IsCacheEnabled() const {
             return static_cast<bool>(CacheAccessor);
@@ -62,7 +62,7 @@ namespace NKikimr {
 
     bool ObtainTenantKey(TEncryptionKey *key, const NKikimrProto::TKeyConfig& keyConfig);
     bool ObtainStaticKey(TEncryptionKey *key);
-    bool ObtainPDiskKey(TEncryptionKey *key, const NKikimrProto::TKeyConfig& keyConfig);
+    bool ObtainPDiskKey(TEncryptionKey *key, const NKikimrProto::TKeyConfig& keyConfig); 
 
     std::unique_ptr<ICacheAccessor> CreateFileCacheAccessor(const TFsPath& cacheFilePath);
 

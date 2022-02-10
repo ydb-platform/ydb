@@ -722,9 +722,9 @@ namespace NKikimr {
 
         NKikimrBlobStorage::TDefineHostConfig hostConfig;
         hostConfig.SetHostConfigId(nodeId);
-        TString path = TStringBuilder() << runtime.GetTempDir() << "pdisk_1.dat";
-        hostConfig.AddDrive()->SetPath(path);
-        Cerr << "tablet_helpers.cpp: SetPath # " << path << Endl;
+        TString path = TStringBuilder() << runtime.GetTempDir() << "pdisk_1.dat"; 
+        hostConfig.AddDrive()->SetPath(path); 
+        Cerr << "tablet_helpers.cpp: SetPath # " << path << Endl; 
         bsConfigureRequest->Record.MutableRequest()->AddCommand()->MutableDefineHostConfig()->CopyFrom(hostConfig);
 
         auto &host = *boxConfig.AddHost();

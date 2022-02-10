@@ -14,9 +14,9 @@ namespace NKikimr {
     // Log Prefix
     ////////////////////////////////////////////////////////////////////////////
     class TVDiskContext;
-    Y_PRINTF_FORMAT(2, 3)
+    Y_PRINTF_FORMAT(2, 3) 
     TString AppendVDiskLogPrefix(const TIntrusivePtr<TVDiskContext> &vctx, const char *c, ...);
-    Y_PRINTF_FORMAT(2, 3)
+    Y_PRINTF_FORMAT(2, 3) 
     TString AppendVDiskLogPrefix(const TString &prefix, const char *c, ...);
 
     struct TVDiskID;

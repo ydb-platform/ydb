@@ -1,19 +1,19 @@
 #include "blobstorage_pdisk_impl.h"
 
-#include "blobstorage_pdisk_blockdevice.h"
+#include "blobstorage_pdisk_blockdevice.h" 
 #include <ydb/library/pdisk_io/buffers.h>
 #include "blobstorage_pdisk_completion_impl.h"
 #include "blobstorage_pdisk_crypto.h"
 #include "blobstorage_pdisk_data.h"
-#include "blobstorage_pdisk_actorsystem_creator.h"
+#include "blobstorage_pdisk_actorsystem_creator.h" 
 #include "blobstorage_pdisk_mon.h"
 #include "blobstorage_pdisk_requestimpl.h"
 #include "blobstorage_pdisk_state.h"
 #include "blobstorage_pdisk_thread.h"
 #include "blobstorage_pdisk_tools.h"
 #include "blobstorage_pdisk_util_countedqueueoneone.h"
-#include "blobstorage_pdisk_writer.h"
-
+#include "blobstorage_pdisk_writer.h" 
+ 
 #include <ydb/core/blobstorage/base/wilson_events.h>
 #include <ydb/core/blobstorage/lwtrace_probes/blobstorage_probes.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
@@ -21,11 +21,11 @@
 #include <ydb/library/pdisk_io/aio.h>
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
-#include <library/cpp/actors/core/executor_pool_io.h>
-#include <library/cpp/actors/core/executor_pool_basic.h>
+#include <library/cpp/actors/core/executor_pool_io.h> 
+#include <library/cpp/actors/core/executor_pool_basic.h> 
 #include <library/cpp/actors/core/hfunc.h>
 #include <library/cpp/actors/core/mon.h>
-#include <library/cpp/actors/core/scheduler_basic.h>
+#include <library/cpp/actors/core/scheduler_basic.h> 
 #include <library/cpp/monlib/service/pages/templates.h>
 
 #include <util/generic/algorithm.h>
@@ -52,45 +52,45 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
 void FormatPDisk(TString path, ui64 diskSizeBytes, ui32 sectorSizeBytes, ui32 userAccessibleChunkSizeBytes,
     const ui64 &diskGuid, const NPDisk::TKey &chunkKey, const NPDisk::TKey &logKey, const NPDisk::TKey &sysLogKey,
     const NPDisk::TKey &mainKey, TString textMessage, const bool isErasureEncodeUserLog, bool trimEntireDevice,
-    TIntrusivePtr<NPDisk::TSectorMap> sectorMap)
+    TIntrusivePtr<NPDisk::TSectorMap> sectorMap) 
 {
-    TActorSystemCreator creator;
-
+    TActorSystemCreator creator; 
+ 
     bool isBlockDevice = false;
-    TPDiskCategory::EDeviceType deviceType = TPDiskCategory::DEVICE_TYPE_ROT;
-    if (sectorMap) {
-        if (diskSizeBytes) {
-            sectorMap->ForceSize(diskSizeBytes);
-        } else {
-            if (sectorMap->DeviceSize == 0) {
-                ythrow yexception() << "Can't create in-memory fake disk map with 0 size, path# " << path.Quote();
-            }
-            diskSizeBytes = sectorMap->DeviceSize;
-        }
-    } else {
-        if (path.StartsWith("PCIe:")) {
-            deviceType = TPDiskCategory::DEVICE_TYPE_NVME;
-        }
-        if (diskSizeBytes == 0) {
-            creator.GetActorSystem()->AppData<TAppData>()->IoContextFactory
-                ->DetectFileParameters(path, diskSizeBytes, isBlockDevice);
-        }
+    TPDiskCategory::EDeviceType deviceType = TPDiskCategory::DEVICE_TYPE_ROT; 
+    if (sectorMap) { 
+        if (diskSizeBytes) { 
+            sectorMap->ForceSize(diskSizeBytes); 
+        } else { 
+            if (sectorMap->DeviceSize == 0) { 
+                ythrow yexception() << "Can't create in-memory fake disk map with 0 size, path# " << path.Quote(); 
+            } 
+            diskSizeBytes = sectorMap->DeviceSize; 
+        } 
+    } else { 
+        if (path.StartsWith("PCIe:")) { 
+            deviceType = TPDiskCategory::DEVICE_TYPE_NVME; 
+        } 
+        if (diskSizeBytes == 0) { 
+            creator.GetActorSystem()->AppData<TAppData>()->IoContextFactory 
+                ->DetectFileParameters(path, diskSizeBytes, isBlockDevice); 
+        } 
     }
-    Y_VERIFY_S(diskSizeBytes > 0 && diskSizeBytes / userAccessibleChunkSizeBytes > 200,
-            " diskSizeBytes# " << diskSizeBytes <<
-            " userAccessibleChunkSizeBytes# " << userAccessibleChunkSizeBytes <<
-            " bool(sectorMap)# " << bool(sectorMap) <<
-            " sectorMap->DeviceSize# " << (sectorMap ? sectorMap->DeviceSize : 0)
-        );
+    Y_VERIFY_S(diskSizeBytes > 0 && diskSizeBytes / userAccessibleChunkSizeBytes > 200, 
+            " diskSizeBytes# " << diskSizeBytes << 
+            " userAccessibleChunkSizeBytes# " << userAccessibleChunkSizeBytes << 
+            " bool(sectorMap)# " << bool(sectorMap) << 
+            " sectorMap->DeviceSize# " << (sectorMap ? sectorMap->DeviceSize : 0) 
+        ); 
 
-    TIntrusivePtr<TPDiskConfig> cfg(new TPDiskConfig(path, diskGuid, 0xffffffffull,
-                TPDiskCategory(deviceType, 0).GetRaw()));
+    TIntrusivePtr<TPDiskConfig> cfg(new TPDiskConfig(path, diskGuid, 0xffffffffull, 
+                TPDiskCategory(deviceType, 0).GetRaw())); 
     cfg->SectorMap = sectorMap;
-    // Disable encryption for SectorMap
-    cfg->EnableSectorEncryption = !cfg->SectorMap;
+    // Disable encryption for SectorMap 
+    cfg->EnableSectorEncryption = !cfg->SectorMap; 
 
-    if (!isBlockDevice && !cfg->UseSpdkNvmeDriver && !sectorMap) {
-        // path is a regular file
+    if (!isBlockDevice && !cfg->UseSpdkNvmeDriver && !sectorMap) { 
+        // path is a regular file 
         if (diskSizeBytes == 0) {
             ythrow yexception() << "Can't create file with 0 size, path# " << path;
         }
@@ -102,34 +102,34 @@ void FormatPDisk(TString path, ui64 diskSizeBytes, ui32 sectorSizeBytes, ui32 us
 
     const TIntrusivePtr<NMonitoring::TDynamicCounters> counters(new NMonitoring::TDynamicCounters);
 
-    THolder<NPDisk::TPDisk> pDisk(new NPDisk::TPDisk(cfg, counters));
+    THolder<NPDisk::TPDisk> pDisk(new NPDisk::TPDisk(cfg, counters)); 
 
-    pDisk->Initialize(creator.GetActorSystem(), TActorId());
-
+    pDisk->Initialize(creator.GetActorSystem(), TActorId()); 
+ 
     if (!pDisk->BlockDevice->IsGood()) {
-        ythrow yexception() << "Device with path# " << path << " is not good, info# " << pDisk->BlockDevice->DebugInfo();
+        ythrow yexception() << "Device with path# " << path << " is not good, info# " << pDisk->BlockDevice->DebugInfo(); 
     }
-    pDisk->WriteDiskFormat(diskSizeBytes, sectorSizeBytes, userAccessibleChunkSizeBytes, diskGuid,
+    pDisk->WriteDiskFormat(diskSizeBytes, sectorSizeBytes, userAccessibleChunkSizeBytes, diskGuid, 
         chunkKey, logKey, sysLogKey, mainKey, textMessage, isErasureEncodeUserLog, trimEntireDevice);
 }
 
 bool ReadPDiskFormatInfo(const TString &path, const NPDisk::TKey &mainKey, TPDiskInfo &outInfo,
-        const bool doLock, TIntrusivePtr<NPDisk::TSectorMap> sectorMap) {
+        const bool doLock, TIntrusivePtr<NPDisk::TSectorMap> sectorMap) { 
     const TIntrusivePtr<NMonitoring::TDynamicCounters> counters(new NMonitoring::TDynamicCounters);
-    auto mon = std::make_unique<TPDiskMon>(counters, 0, nullptr);
+    auto mon = std::make_unique<TPDiskMon>(counters, 0, nullptr); 
 
     bool useSdpkNvmeDriver = path.StartsWith("PCIe:");
-    NPDisk::TDeviceMode::TFlags deviceFlags = 0;
+    NPDisk::TDeviceMode::TFlags deviceFlags = 0; 
     if (useSdpkNvmeDriver) {
-        deviceFlags |= NPDisk::TDeviceMode::UseSpdk;
+        deviceFlags |= NPDisk::TDeviceMode::UseSpdk; 
     }
     if (doLock) {
-        deviceFlags |= NPDisk::TDeviceMode::LockFile;
+        deviceFlags |= NPDisk::TDeviceMode::LockFile; 
     }
 
-    TActorSystemCreator creator;
-    THolder<NPDisk::IBlockDevice> blockDevice(
-        NPDisk::CreateRealBlockDeviceWithDefaults(path, *mon, deviceFlags, sectorMap, creator.GetActorSystem()));
+    TActorSystemCreator creator; 
+    THolder<NPDisk::IBlockDevice> blockDevice( 
+        NPDisk::CreateRealBlockDeviceWithDefaults(path, *mon, deviceFlags, sectorMap, creator.GetActorSystem())); 
     if (!blockDevice->IsGood()) {
         TStringStream str;
         str << "Can't lock file, make sure you have access rights, file exists and is not locked by another process.";
@@ -147,7 +147,7 @@ bool ReadPDiskFormatInfo(const TString &path, const NPDisk::TKey &mainKey, TPDis
     blockDevice->PreadSync(formatRaw->Data(), formatSectorsSize, 0,
             NPDisk::TReqId(NPDisk::TReqId::ReadFormatInfo, 0), {});
 
-    NPDisk::TPDiskStreamCypher cypher(true); // Format record is always encrypted
+    NPDisk::TPDiskStreamCypher cypher(true); // Format record is always encrypted 
     cypher.SetKey(mainKey);
     bool isOk = false;
     alignas(16) NPDisk::TDiskFormat format;
@@ -207,8 +207,8 @@ bool ReadPDiskFormatInfo(const TString &path, const NPDisk::TKey &mainKey, TPDis
                 (sector + format.SectorSize - sizeof(NPDisk::TDataSectorFooter));
 
             ui64 sectorOffset = sysLogOffset + (ui64)((idx / 3) * 3) * (ui64)format.SectorSize;
-            bool isCrcOk = NPDisk::TPDiskHashCalculator(KIKIMR_PDISK_ENABLE_T1HA_HASH_WRITING).CheckSectorHash(
-                    sectorOffset, format.MagicSysLogChunk, sector, format.SectorSize, logFooter->Hash);
+            bool isCrcOk = NPDisk::TPDiskHashCalculator(KIKIMR_PDISK_ENABLE_T1HA_HASH_WRITING).CheckSectorHash( 
+                    sectorOffset, format.MagicSysLogChunk, sector, format.SectorSize, logFooter->Hash); 
             outInfo.SectorInfo.push_back(TPDiskInfo::TSectorInfo(logFooter->Nonce, logFooter->Version, isCrcOk));
         }
 
@@ -221,13 +221,13 @@ bool ReadPDiskFormatInfo(const TString &path, const NPDisk::TKey &mainKey, TPDis
     return false;
 }
 
-void ObliterateDisk(TString path) {
-    TFile f(path, OpenAlways | RdWr);
-    f.Flock(LOCK_EX | LOCK_NB);
+void ObliterateDisk(TString path) { 
+    TFile f(path, OpenAlways | RdWr); 
+    f.Flock(LOCK_EX | LOCK_NB); 
 
-    TVector<ui8> zeros(NPDisk::FormatSectorSize * NPDisk::ReplicationFactor, 0);
-    f.Pwrite(zeros.data(), zeros.size(), 0);
-    f.Flush();
-}
-
+    TVector<ui8> zeros(NPDisk::FormatSectorSize * NPDisk::ReplicationFactor, 0); 
+    f.Pwrite(zeros.data(), zeros.size(), 0); 
+    f.Flush(); 
+} 
+ 
 } // NKikimr

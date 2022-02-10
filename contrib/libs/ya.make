@@ -50,7 +50,7 @@ RECURSE(
     cxxsupp/libcxxabi-parts
     djvulibre
     dlib
-    dpdk
+    dpdk 
     dr_wav
     dwarflib
     earcut
@@ -241,7 +241,7 @@ RECURSE(
     nodejs_12
     node_nan
     nsync
-    numa
+    numa 
     nvidia
     odpi
     onnx
@@ -304,7 +304,7 @@ RECURSE(
     sophos
     sparrowhawk
     sparsehash
-    spdk
+    spdk 
     speex
     spirv_cross
     spirv_headers
@@ -321,7 +321,7 @@ RECURSE(
     svt-hevc
     svt-vp9
     szip
-    t1ha
+    t1ha 
     taocrypt
     tbb
     tcmalloc
@@ -384,7 +384,7 @@ IF (OS_DARWIN)
         gperftools
         osxfuse
         macfuse-headers
-        uuid
+        uuid 
     )
 ENDIF()
 
@@ -404,7 +404,7 @@ IF (OS_LINUX)
         openmpi
         sdbus-cpp
         systemd
-        uuid
+        uuid 
         virtiofsd
     )
 ENDIF()

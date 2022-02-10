@@ -10,16 +10,16 @@
 #include <ydb/core/testlib/basics/helpers.h>
 #include <ydb/core/testlib/basics/runtime.h>
 #include <ydb/core/testlib/tablet_helpers.h>
-
-#include <library/cpp/testing/unittest/registar.h>
-#include <library/cpp/actors/core/interconnect.h>
-#include <library/cpp/actors/interconnect/interconnect.h>
-
+ 
+#include <library/cpp/testing/unittest/registar.h> 
+#include <library/cpp/actors/core/interconnect.h> 
+#include <library/cpp/actors/interconnect/interconnect.h> 
+ 
 #include <util/datetime/cputimer.h>
 #include <util/random/random.h>
 
-#include <google/protobuf/text_format.h>
-
+#include <google/protobuf/text_format.h> 
+ 
 using namespace NActors;
 using namespace NKikimr;
 using namespace NKikimr::NBsController;
@@ -99,16 +99,16 @@ struct TEnvironmentSetup {
         return response->Get()->Record.GetResponse();
     }
 
-    void RegisterNode() {
-        for (ui32 i = 1; i <= NodeCount; ++i) {
-            const TActorId self = Runtime->AllocateEdgeActor();
-            auto ev = MakeHolder<TEvBlobStorage::TEvControllerRegisterNode>(i, TVector<ui32>{}, TVector<ui32>{}, TVector<NPDisk::TDriveData>{});
-            Runtime->SendToPipe(TabletId, self, ev.Release(), NodeId, GetPipeConfigWithRetries());
-            auto response = Runtime->GrabEdgeEventRethrow<TEvBlobStorage::TEvControllerNodeServiceSetUpdate>(self);
-        }
-    }
-
-
+    void RegisterNode() { 
+        for (ui32 i = 1; i <= NodeCount; ++i) { 
+            const TActorId self = Runtime->AllocateEdgeActor(); 
+            auto ev = MakeHolder<TEvBlobStorage::TEvControllerRegisterNode>(i, TVector<ui32>{}, TVector<ui32>{}, TVector<NPDisk::TDriveData>{}); 
+            Runtime->SendToPipe(TabletId, self, ev.Release(), NodeId, GetPipeConfigWithRetries()); 
+            auto response = Runtime->GrabEdgeEventRethrow<TEvBlobStorage::TEvControllerNodeServiceSetUpdate>(self); 
+        } 
+    } 
+ 
+ 
     NKikimrBlobStorage::TEvControllerSelectGroupsResult SelectGroups(const NKikimrBlobStorage::TEvControllerSelectGroups& request) {
         const TActorId self = Runtime->AllocateEdgeActor();
         auto ev = MakeHolder<TEvBlobStorage::TEvControllerSelectGroups>();
@@ -293,37 +293,37 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
                 UNIT_ASSERT(env.ParsePDisks(response.GetStatus(baseConfigIndex).GetBaseConfig()) == env.ExpectedPDisks); });
     }
 
-    Y_UNIT_TEST(ManyPDisksRestarts) {
-        int nodes = 100;
-        TEnvironmentSetup env(nodes, 1);
-        RunTestWithReboots(env.TabletIds, [&] { return env.PrepareInitialEventsFilter(); }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& outActiveZone) {
-                TFinalizer finalizer(env);
-                env.Prepare(dispatchName, setup, outActiveZone);
-
-                NKikimrBlobStorage::TConfigRequest request;
-                TVector<TEnvironmentSetup::TPDiskDefinition> disks;
-
-                int numRotDisks = 8;
-                int numSsdDisks = 8;
-                for (int i = 0; i < numRotDisks + numSsdDisks; ++i) {
-                    TString path = TStringBuilder() << "/dev/disk" << i;
-                    disks.emplace_back(path, i < numRotDisks ? NKikimrBlobStorage::ROT : NKikimrBlobStorage::SSD, false, false, 0);
-                }
-                env.DefineBox(1, "test box", disks, env.GetNodes(), request);
-
-                env.DefineStoragePool(1, 1, "first storage pool", nodes * numRotDisks, NKikimrBlobStorage::ROT, {}, request);
-                env.DefineStoragePool(1, 2, "first storage pool", nodes * numSsdDisks, NKikimrBlobStorage::SSD, {}, request);
-
-                size_t baseConfigIndex = request.CommandSize();
-                request.AddCommand()->MutableQueryBaseConfig();
-
-                NKikimrBlobStorage::TConfigResponse response = env.Invoke(request);
-                UNIT_ASSERT(response.GetSuccess());
-                UNIT_ASSERT(env.ParsePDisks(response.GetStatus(baseConfigIndex).GetBaseConfig()) == env.ExpectedPDisks);
-                env.RegisterNode();
-        });
-    }
-
+    Y_UNIT_TEST(ManyPDisksRestarts) { 
+        int nodes = 100; 
+        TEnvironmentSetup env(nodes, 1); 
+        RunTestWithReboots(env.TabletIds, [&] { return env.PrepareInitialEventsFilter(); }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& outActiveZone) { 
+                TFinalizer finalizer(env); 
+                env.Prepare(dispatchName, setup, outActiveZone); 
+ 
+                NKikimrBlobStorage::TConfigRequest request; 
+                TVector<TEnvironmentSetup::TPDiskDefinition> disks; 
+ 
+                int numRotDisks = 8; 
+                int numSsdDisks = 8; 
+                for (int i = 0; i < numRotDisks + numSsdDisks; ++i) { 
+                    TString path = TStringBuilder() << "/dev/disk" << i; 
+                    disks.emplace_back(path, i < numRotDisks ? NKikimrBlobStorage::ROT : NKikimrBlobStorage::SSD, false, false, 0); 
+                } 
+                env.DefineBox(1, "test box", disks, env.GetNodes(), request); 
+ 
+                env.DefineStoragePool(1, 1, "first storage pool", nodes * numRotDisks, NKikimrBlobStorage::ROT, {}, request); 
+                env.DefineStoragePool(1, 2, "first storage pool", nodes * numSsdDisks, NKikimrBlobStorage::SSD, {}, request); 
+ 
+                size_t baseConfigIndex = request.CommandSize(); 
+                request.AddCommand()->MutableQueryBaseConfig(); 
+ 
+                NKikimrBlobStorage::TConfigResponse response = env.Invoke(request); 
+                UNIT_ASSERT(response.GetSuccess()); 
+                UNIT_ASSERT(env.ParsePDisks(response.GetStatus(baseConfigIndex).GetBaseConfig()) == env.ExpectedPDisks); 
+                env.RegisterNode(); 
+        }); 
+    } 
+ 
     Y_UNIT_TEST(ExtendByCreatingSeparateBox) {
         const ui32 numNodes = 50;
         const ui32 numNodes1 = 20;
@@ -826,64 +826,64 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
         }
     }
 
-    Y_UNIT_TEST(AddDriveSerial) {
-        TEnvironmentSetup env(10, 1);
-        auto test = [&] (const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& outActiveZone) {
-            TFinalizer finalizer(env);
-            env.Prepare(dispatchName, setup, outActiveZone);
-
-            for (int i = 0; i < 3; ++i) {
-                NKikimrBlobStorage::TConfigRequest request;
-                auto pb = request.AddCommand()->MutableAddDriveSerial();
-                pb->SetSerial("SN_123");
-                pb->SetBoxId(1);
-                NKikimrBlobStorage::TConfigResponse response = env.Invoke(request);
-                if (i == 0) {
-                    UNIT_ASSERT(response.GetSuccess());
-                    UNIT_ASSERT(response.StatusSize() == 1);
-                    UNIT_ASSERT(response.GetStatus(0).GetSuccess());
-                } else {
-                    UNIT_ASSERT(!response.GetSuccess());
-                    UNIT_ASSERT(response.StatusSize() == 1);
-                    UNIT_ASSERT(!response.GetStatus(0).GetSuccess());
-                    UNIT_ASSERT(response.GetStatus(0).GetFailReason()
-                                    == NKikimrBlobStorage::TConfigResponse::TStatus::kAlready);
-                }
-            }
-        };
-        RunTestWithReboots(env.TabletIds, [&] { return env.PrepareInitialEventsFilter(); }, test);
-    }
-
-    Y_UNIT_TEST(AddDriveSerialMassive) {
-        TEnvironmentSetup env(10, 1);
-        auto test = [&] (const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& outActiveZone) {
-            TFinalizer finalizer(env);
-            env.Prepare(dispatchName, setup, outActiveZone);
-
-            const size_t disksCount = 10;
-            for (size_t i = 0; i < disksCount; ++i) {
-                NKikimrBlobStorage::TConfigRequest request;
-                auto pb = request.AddCommand()->MutableAddDriveSerial();
-                pb->SetSerial(TStringBuilder() << "SN_" << i);
-                pb->SetBoxId(1);
-                NKikimrBlobStorage::TConfigResponse response = env.Invoke(request);
-                UNIT_ASSERT(response.GetSuccess());
-                UNIT_ASSERT(response.StatusSize() == 1);
-                UNIT_ASSERT(response.GetStatus(0).GetSuccess());
-            }
-            for (size_t i = 0; i < disksCount; ++i) {
-                NKikimrBlobStorage::TConfigRequest request;
-                auto pb = request.AddCommand()->MutableRemoveDriveSerial();
-                pb->SetSerial(TStringBuilder() << "SN_" << i);
-                NKikimrBlobStorage::TConfigResponse response = env.Invoke(request);
-                UNIT_ASSERT(response.GetSuccess());
-                UNIT_ASSERT(response.StatusSize() == 1);
-                UNIT_ASSERT(response.GetStatus(0).GetSuccess());
-            }
-        };
-        RunTestWithReboots(env.TabletIds, [&] { return env.PrepareInitialEventsFilter(); }, test);
-    }
-
+    Y_UNIT_TEST(AddDriveSerial) { 
+        TEnvironmentSetup env(10, 1); 
+        auto test = [&] (const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& outActiveZone) { 
+            TFinalizer finalizer(env); 
+            env.Prepare(dispatchName, setup, outActiveZone); 
+ 
+            for (int i = 0; i < 3; ++i) { 
+                NKikimrBlobStorage::TConfigRequest request; 
+                auto pb = request.AddCommand()->MutableAddDriveSerial(); 
+                pb->SetSerial("SN_123"); 
+                pb->SetBoxId(1); 
+                NKikimrBlobStorage::TConfigResponse response = env.Invoke(request); 
+                if (i == 0) { 
+                    UNIT_ASSERT(response.GetSuccess()); 
+                    UNIT_ASSERT(response.StatusSize() == 1); 
+                    UNIT_ASSERT(response.GetStatus(0).GetSuccess()); 
+                } else { 
+                    UNIT_ASSERT(!response.GetSuccess()); 
+                    UNIT_ASSERT(response.StatusSize() == 1); 
+                    UNIT_ASSERT(!response.GetStatus(0).GetSuccess()); 
+                    UNIT_ASSERT(response.GetStatus(0).GetFailReason() 
+                                    == NKikimrBlobStorage::TConfigResponse::TStatus::kAlready); 
+                } 
+            } 
+        }; 
+        RunTestWithReboots(env.TabletIds, [&] { return env.PrepareInitialEventsFilter(); }, test); 
+    } 
+ 
+    Y_UNIT_TEST(AddDriveSerialMassive) { 
+        TEnvironmentSetup env(10, 1); 
+        auto test = [&] (const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& outActiveZone) { 
+            TFinalizer finalizer(env); 
+            env.Prepare(dispatchName, setup, outActiveZone); 
+ 
+            const size_t disksCount = 10; 
+            for (size_t i = 0; i < disksCount; ++i) { 
+                NKikimrBlobStorage::TConfigRequest request; 
+                auto pb = request.AddCommand()->MutableAddDriveSerial(); 
+                pb->SetSerial(TStringBuilder() << "SN_" << i); 
+                pb->SetBoxId(1); 
+                NKikimrBlobStorage::TConfigResponse response = env.Invoke(request); 
+                UNIT_ASSERT(response.GetSuccess()); 
+                UNIT_ASSERT(response.StatusSize() == 1); 
+                UNIT_ASSERT(response.GetStatus(0).GetSuccess()); 
+            } 
+            for (size_t i = 0; i < disksCount; ++i) { 
+                NKikimrBlobStorage::TConfigRequest request; 
+                auto pb = request.AddCommand()->MutableRemoveDriveSerial(); 
+                pb->SetSerial(TStringBuilder() << "SN_" << i); 
+                NKikimrBlobStorage::TConfigResponse response = env.Invoke(request); 
+                UNIT_ASSERT(response.GetSuccess()); 
+                UNIT_ASSERT(response.StatusSize() == 1); 
+                UNIT_ASSERT(response.GetStatus(0).GetSuccess()); 
+            } 
+        }; 
+        RunTestWithReboots(env.TabletIds, [&] { return env.PrepareInitialEventsFilter(); }, test); 
+    } 
+ 
     Y_UNIT_TEST(OverlayMap) {
         for (ui32 iter = 0; iter < 100; ++iter) {
             struct TItem {
@@ -912,7 +912,7 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
                 ui32 index = RandomNumber<ui32>(1000);
                 base[index] = MakeHolder<TItem>(i);
                 reference[index] = MakeHolder<TItem>(i);
-                Ctest << "initial " << index << " -> " << i << Endl;
+                Ctest << "initial " << index << " -> " << i << Endl; 
             }
 
             TOverlayMap<ui32, TItem> overlay(base);
@@ -923,19 +923,19 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
                     const ui32 index = RandomNumber(reference.size());
                     auto it = reference.begin();
                     std::advance(it, index);
-                    Ctest << "deleting " << it->first << Endl;
+                    Ctest << "deleting " << it->first << Endl; 
                     overlay.DeleteExistingEntry(it->first);
                     reference.erase(it);
                 } else {
                     const ui32 index = RandomNumber<ui32>(1000);
                     const ui32 value = RandomNumber<ui32>();
                     if (reference.count(index)) {
-                        Ctest << "updating " << index << " -> " << value << Endl;
+                        Ctest << "updating " << index << " -> " << value << Endl; 
                         TItem *valp = overlay.FindForUpdate(index);
                         Y_VERIFY(valp);
                         valp->Value = value;
                     } else {
-                        Ctest << "inserting " << index << " -> " << value << Endl;
+                        Ctest << "inserting " << index << " -> " << value << Endl; 
                         overlay.ConstructInplaceNewEntry(index, value);
                     }
                     reference[index] = MakeHolder<TItem>(value);
@@ -1013,15 +1013,15 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
         };
 
         for (int iter = 0; iter < 100; ++iter) {
-            Ctest << "Next iteration\n";
+            Ctest << "Next iteration\n"; 
             const unsigned num = 1000;
             TMap<unsigned, THolder<TAlpha>> alphas;
             TMap<unsigned, THolder<TBeta>> betas;
             for (unsigned key = 0; key < num; ++key) {
                 alphas.emplace(key, MakeHolder<TAlpha>(key));
                 betas.emplace(key, MakeHolder<TBeta>(key));
-                Ctest << Sprintf("Alpha[%u]# %p\n", key, alphas[key].Get());
-                Ctest << Sprintf("Beta[%u]# %p\n", key, alphas[key].Get());
+                Ctest << Sprintf("Alpha[%u]# %p\n", key, alphas[key].Get()); 
+                Ctest << Sprintf("Beta[%u]# %p\n", key, alphas[key].Get()); 
             }
             for (int i = 0; i < 1000; ++i) {
                 const unsigned a = RandomNumber(num);
@@ -1039,11 +1039,11 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
             }
 
             for (unsigned key : alphaKeys) {
-                Ctest << Sprintf("Alphas.FindForUpdate Key# %u\n", key);
+                Ctest << Sprintf("Alphas.FindForUpdate Key# %u\n", key); 
                 ++state.Alphas.FindForUpdate(key)->Value;
             }
             for (unsigned key : betaKeys) {
-                Ctest << Sprintf("Betas.FindForUpdate Key# %u\n", key);
+                Ctest << Sprintf("Betas.FindForUpdate Key# %u\n", key); 
                 ++state.Betas.FindForUpdate(key)->Value;
             }
 

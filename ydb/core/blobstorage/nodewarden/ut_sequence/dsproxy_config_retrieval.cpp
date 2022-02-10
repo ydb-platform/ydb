@@ -25,7 +25,7 @@ void SetupServices(TTestBasicRuntime& runtime) {
     app.AddDomain(dom.Release());
 
     TTempDir temp;
-    TString path = "SectorMap:" + temp() + "static.dat";
+    TString path = "SectorMap:" + temp() + "static.dat"; 
     ui64 pdiskSize = 32ULL << 30;
     ui64 chunkSize = 32ULL << 20;
     ui64 guid = RandomNumber<ui64>();

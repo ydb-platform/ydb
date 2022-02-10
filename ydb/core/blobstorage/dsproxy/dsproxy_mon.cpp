@@ -204,6 +204,6 @@ void TBlobStorageGroupProxyMon::ThroughputUpdate() {
     }
 }
 
-
+ 
 } // NKikimr
 

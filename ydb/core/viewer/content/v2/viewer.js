@@ -147,8 +147,8 @@ ViewerNodes.prototype.refreshNodeInfo = function() {
 ViewerNodes.prototype.refreshOverall = function() {
     this.refreshSysInfo();
     //this.refreshNodeInfo();
-    //this.refreshPDiskInfo();
-    //this.refreshVDiskInfo();
+    //this.refreshPDiskInfo(); 
+    //this.refreshVDiskInfo(); 
 }
 
 ViewerNodes.prototype.onNodeGroupChange = function(obj) {

@@ -213,8 +213,8 @@ protected:
         config.Opts->AddLongOption("netclassifier-file", "NetClassifier config file").OptionalArgument("PATH");
         config.Opts->AddLongOption("auth-file", "authorization configuration").OptionalArgument("PATH");
         config.Opts->AddLongOption("auth-token-file", "authorization token configuration").OptionalArgument("PATH");
-        config.Opts->AddLongOption("key-file", "tanant encryption key configuration").OptionalArgument("PATH");
-        config.Opts->AddLongOption("pdisk-key-file", "pdisk encryption key configuration").OptionalArgument("PATH");
+        config.Opts->AddLongOption("key-file", "tanant encryption key configuration").OptionalArgument("PATH"); 
+        config.Opts->AddLongOption("pdisk-key-file", "pdisk encryption key configuration").OptionalArgument("PATH"); 
         config.Opts->AddLongOption("sqs-file", "SQS config file").OptionalArgument("PATH");
         config.Opts->AddLongOption("bootstrap-file", "Bootstrap config file").OptionalArgument("PATH");
         config.Opts->AddLongOption("dyn-nodes-file", "Dynamic nodes config file").OptionalArgument("PATH");
@@ -222,7 +222,7 @@ protected:
         config.Opts->AddLongOption("alloc-file", "Allocator config file").OptionalArgument("PATH");
         config.Opts->AddLongOption("yql-file", "Yql Analytics config file").OptionalArgument("PATH");
         config.Opts->AddLongOption("yq-file", "Yandex Query config file").OptionalArgument("PATH");
-        config.Opts->AddLongOption("feature-flags-file", "File with feature flags to turn new features on/off").OptionalArgument("PATH");
+        config.Opts->AddLongOption("feature-flags-file", "File with feature flags to turn new features on/off").OptionalArgument("PATH"); 
         config.Opts->AddLongOption("rb-file", "File with resource broker customizations").OptionalArgument("PATH");
         config.Opts->AddLongOption("metering-file", "File with metering config").OptionalArgument("PATH");
         config.Opts->AddLongOption('r', "restarts-count-file", "State for restarts monitoring counter,\nuse empty string to disable\n")
@@ -427,7 +427,7 @@ protected:
         OPTION("auth-file", AuthConfig);
         OPTION_MERGE("auth-token-file", AuthConfig);
         OPTION("key-file", KeyConfig);
-        OPTION("pdisk-key-file", PDiskKeyConfig);
+        OPTION("pdisk-key-file", PDiskKeyConfig); 
         OPTION("sqs-file", SqsConfig);
         OPTION("feature-flags-file", FeatureFlags);
         OPTION("rb-file", ResourceBrokerConfig);

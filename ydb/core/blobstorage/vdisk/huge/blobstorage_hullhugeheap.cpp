@@ -158,7 +158,7 @@ namespace NKikimr {
             } else if ((it = LockedChunks.find(chunkId)) != LockedChunks.end()) {
                 return freeFoundSlot(LockedChunks, "LockedChunks");
             } else {
-                // chunk is neither in FreeSpace nor in LockedChunks
+                // chunk is neither in FreeSpace nor in LockedChunks 
                 TDynBitMap mask;
                 mask.Reserve(SlotsInChunk);
                 mask.Reset(0, SlotsInChunk);
@@ -194,11 +194,11 @@ namespace NKikimr {
             ui32 fullyFilledChunks = slotsToChunks(AllocatedSlots - usedSlotsInFreeSpace, SlotsInChunk);
             ui32 currentlyUsedChunks = usedChunksInFreeSpace + fullyFilledChunks;
 
-            std::vector<ui32> lockedChunks;
-            for (auto& x : LockedChunks) {
-                lockedChunks.push_back(x.first);
-            }
-            return THeapStat(currentlyUsedChunks, canBeFreedChunks, std::move(lockedChunks));
+            std::vector<ui32> lockedChunks; 
+            for (auto& x : LockedChunks) { 
+                lockedChunks.push_back(x.first); 
+            } 
+            return THeapStat(currentlyUsedChunks, canBeFreedChunks, std::move(lockedChunks)); 
         }
 
         bool TChain::RecoveryModeAllocate(const NPrivate::TChunkSlot &id) {
@@ -258,9 +258,9 @@ namespace NKikimr {
             ::Load(s, FreeSpace);
             FreeSlotsInFreeSpace = 0;
             for (const auto &[chunkId, mask] : FreeSpace) {
-                // all 1 in mask -- free slots
-                // 0 - slot is in use
-                FreeSlotsInFreeSpace += mask.Count();
+                // all 1 in mask -- free slots 
+                // 0 - slot is in use 
+                FreeSlotsInFreeSpace += mask.Count(); 
             }
         }
 
@@ -289,14 +289,14 @@ namespace NKikimr {
         void TChain::RenderHtml(IOutputStream &str) const {
             auto output = [&str] (const TFreeSpace &c) {
                 for (const auto &x : c) {
-                    size_t freeSlots = 0;
+                    size_t freeSlots = 0; 
                     for (size_t i = 0; i < x.second.Size(); i++) {
                         if (x.second.Test(i))
-                            ++freeSlots;
+                            ++freeSlots; 
                     }
-                    if (freeSlots) {
-                        str << " [" << x.first << " " << freeSlots << "]";
-                    }
+                    if (freeSlots) { 
+                        str << " [" << x.first << " " << freeSlots << "]"; 
+                    } 
                 }
             };
 
@@ -565,7 +565,7 @@ namespace NKikimr {
                     TABLEHEAD() {
                         TABLER() {
                             TABLEH() {str << "Chain";}
-                            TABLEH() {str << "Reserved: [ChunkIdx, FreeSlotsInChunk]";}
+                            TABLEH() {str << "Reserved: [ChunkIdx, FreeSlotsInChunk]";} 
                         }
                     }
                     TABLEBODY() {

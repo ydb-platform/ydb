@@ -457,21 +457,21 @@ IBlobToDiskMapper *TBlobStorageGroupInfo::TTopology::CreateMapper(TBlobStorageGr
         case TBlobStorageGroupType::Erasure4Plus2Stripe:
         case TBlobStorageGroupType::Erasure3Plus2Stripe:
         case TBlobStorageGroupType::ErasureMirror3Plus2:
-        case TBlobStorageGroupType::Erasure4Plus3Block:
-        case TBlobStorageGroupType::Erasure4Plus3Stripe:
-        case TBlobStorageGroupType::Erasure3Plus3Block:
-        case TBlobStorageGroupType::Erasure3Plus3Stripe:
-        case TBlobStorageGroupType::Erasure2Plus3Block:
-        case TBlobStorageGroupType::Erasure2Plus3Stripe:
-        case TBlobStorageGroupType::Erasure2Plus2Block:
-        case TBlobStorageGroupType::Erasure2Plus2Stripe:
+        case TBlobStorageGroupType::Erasure4Plus3Block: 
+        case TBlobStorageGroupType::Erasure4Plus3Stripe: 
+        case TBlobStorageGroupType::Erasure3Plus3Block: 
+        case TBlobStorageGroupType::Erasure3Plus3Stripe: 
+        case TBlobStorageGroupType::Erasure2Plus3Block: 
+        case TBlobStorageGroupType::Erasure2Plus3Stripe: 
+        case TBlobStorageGroupType::Erasure2Plus2Block: 
+        case TBlobStorageGroupType::Erasure2Plus2Stripe: 
         case TBlobStorageGroupType::ErasureMirror3of4:
             return IBlobToDiskMapper::CreateBasicMapper(topology);
 
         case TBlobStorageGroupType::ErasureMirror3dc:
             return IBlobToDiskMapper::CreateMirror3dcMapper(topology);
 
-        default:
+        default: 
             Y_FAIL("unexpected erasure type 0x%08" PRIx32, static_cast<ui32>(gtype.GetErasure()));
     }
 
@@ -489,14 +489,14 @@ TBlobStorageGroupInfo::IQuorumChecker *TBlobStorageGroupInfo::TTopology::CreateQ
         case TBlobStorageGroupType::Erasure4Plus2Stripe:
         case TBlobStorageGroupType::Erasure3Plus2Stripe:
         case TBlobStorageGroupType::ErasureMirror3Plus2:
-        case TBlobStorageGroupType::Erasure4Plus3Block:
-        case TBlobStorageGroupType::Erasure4Plus3Stripe:
-        case TBlobStorageGroupType::Erasure3Plus3Block:
-        case TBlobStorageGroupType::Erasure3Plus3Stripe:
-        case TBlobStorageGroupType::Erasure2Plus3Block:
-        case TBlobStorageGroupType::Erasure2Plus3Stripe:
-        case TBlobStorageGroupType::Erasure2Plus2Block:
-        case TBlobStorageGroupType::Erasure2Plus2Stripe:
+        case TBlobStorageGroupType::Erasure4Plus3Block: 
+        case TBlobStorageGroupType::Erasure4Plus3Stripe: 
+        case TBlobStorageGroupType::Erasure3Plus3Block: 
+        case TBlobStorageGroupType::Erasure3Plus3Stripe: 
+        case TBlobStorageGroupType::Erasure2Plus3Block: 
+        case TBlobStorageGroupType::Erasure2Plus3Stripe: 
+        case TBlobStorageGroupType::Erasure2Plus2Block: 
+        case TBlobStorageGroupType::Erasure2Plus2Stripe: 
             return new TQuorumCheckerOrdinary(topology);
 
         case TBlobStorageGroupType::ErasureMirror3dc:
@@ -505,7 +505,7 @@ TBlobStorageGroupInfo::IQuorumChecker *TBlobStorageGroupInfo::TTopology::CreateQ
         case TBlobStorageGroupType::ErasureMirror3of4:
             return new TQuorumCheckerMirror3of4(topology);
 
-        default:
+        default: 
             Y_FAIL("unexpected erasure type 0x%08" PRIx32,
                    static_cast<ui32>(topology->GType.GetErasure()));
     }
@@ -593,7 +593,7 @@ TBlobStorageGroupInfo::TBlobStorageGroupInfo(std::shared_ptr<TTopology> topology
     , Dynamic(std::move(dyn))
     , AcceptedScope(acceptedScope)
     , StoragePoolName(std::move(storagePoolName))
-    , DeviceType(deviceType)
+    , DeviceType(deviceType) 
 {}
 
 TBlobStorageGroupInfo::TBlobStorageGroupInfo(TTopology&& topology, TDynamicInfo&& dyn, TString storagePoolName,
@@ -748,10 +748,10 @@ const TBlobStorageGroupInfo::IQuorumChecker& TBlobStorageGroupInfo::GetQuorumChe
     return Topology->GetQuorumChecker();
 }
 
-TVDiskID TBlobStorageGroupInfo::CreateVDiskID(const TVDiskIdShort &id) const {
-    return TVDiskID(GroupID, GroupGeneration, id.FailRealm, id.FailDomain, id.VDisk);
-}
-
+TVDiskID TBlobStorageGroupInfo::CreateVDiskID(const TVDiskIdShort &id) const { 
+    return TVDiskID(GroupID, GroupGeneration, id.FailRealm, id.FailDomain, id.VDisk); 
+} 
+ 
 TString TBlobStorageGroupInfo::BlobStateToString(EBlobState state) {
     switch (state) {
         case EBS_DISINTEGRATED:

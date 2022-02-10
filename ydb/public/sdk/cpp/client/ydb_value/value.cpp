@@ -66,7 +66,7 @@ static TTypeParser::ETypeKind GetKind(const Ydb::Type& type) {
     return ETypeKind::Void;
 }
 
-bool TypesEqual(const TType& t1, const TType& t2) {
+bool TypesEqual(const TType& t1, const TType& t2) { 
     return TypesEqual(TProtoAccessor::GetProto(t1), TProtoAccessor::GetProto(t2));
 }
 

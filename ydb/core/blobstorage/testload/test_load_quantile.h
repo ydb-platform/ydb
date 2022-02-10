@@ -4,7 +4,7 @@
 #include "test_load_time_series.h"
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
-
+ 
 namespace NKikimr {
 
     template<typename T>
@@ -13,13 +13,13 @@ namespace NKikimr {
         using TItem = typename TTimeSeries<T>::TItem;
         using TTimeSeries<T>::Items;
 
-        using TPercentile = std::pair<float, NMonitoring::TDynamicCounters::TCounterPtr>;
-        using TPercentiles = TVector<TPercentile>;
-
-        TPercentiles Percentiles;
-        TIntrusivePtr<NMonitoring::TDynamicCounters> Counters;
-        NMonitoring::TDynamicCounters::TCounterPtr Samples;
-
+        using TPercentile = std::pair<float, NMonitoring::TDynamicCounters::TCounterPtr>; 
+        using TPercentiles = TVector<TPercentile>; 
+ 
+        TPercentiles Percentiles; 
+        TIntrusivePtr<NMonitoring::TDynamicCounters> Counters; 
+        NMonitoring::TDynamicCounters::TCounterPtr Samples; 
+ 
         struct TCompareTimestamp {
             bool operator ()(const TItem& x, TInstant y) {
                 return x.Timestamp < y;
@@ -29,47 +29,47 @@ namespace NKikimr {
     public:
         using TTimeSeries<T>::TTimeSeries;
 
-        TQuantileTracker(TDuration lifetime, TIntrusivePtr<NMonitoring::TDynamicCounters> counters,
-                const TString& metric, const TVector<float>& percentiles)
-            : TTimeSeries<T>(lifetime)
-            , Counters(counters)
-        {
-            Y_VERIFY(Counters);
-            Samples = Counters->GetCounter("samples", false);
-            for (auto perc : percentiles) {
-                auto subgroup = Counters->GetSubgroup("percentile", Sprintf("%.1f", perc * 100.f));
-                Percentiles.emplace_back(perc, subgroup->GetCounter(metric, false));
-            }
-        }
-
-        void CalculateQuantiles() const {
-            Y_VERIFY(Counters);
-
-            *Samples = Items.size();
-
-            if (Items.empty()) {
-                for (auto& perc : Percentiles) {
-                    *perc.second = T();
-                }
-                return;
-            }
-
-            // create a vector of values matching time criterion
-            TVector<T> values;
-            values.reserve(Items.size());
-            for (const TItem &item : Items) {
-                values.push_back(item.Value);
-            }
-
-            // sort and calculate quantiles
-            std::sort(values.begin(), values.end());
-            const size_t maxIndex = values.size() - 1;
-            for (auto& perc : Percentiles) {
-                const size_t index = Min<size_t>(maxIndex, maxIndex  * perc.first);
-                *perc.second = values[index];
-            }
-        }
-
+        TQuantileTracker(TDuration lifetime, TIntrusivePtr<NMonitoring::TDynamicCounters> counters, 
+                const TString& metric, const TVector<float>& percentiles) 
+            : TTimeSeries<T>(lifetime) 
+            , Counters(counters) 
+        { 
+            Y_VERIFY(Counters); 
+            Samples = Counters->GetCounter("samples", false); 
+            for (auto perc : percentiles) { 
+                auto subgroup = Counters->GetSubgroup("percentile", Sprintf("%.1f", perc * 100.f)); 
+                Percentiles.emplace_back(perc, subgroup->GetCounter(metric, false)); 
+            } 
+        } 
+ 
+        void CalculateQuantiles() const { 
+            Y_VERIFY(Counters); 
+ 
+            *Samples = Items.size(); 
+ 
+            if (Items.empty()) { 
+                for (auto& perc : Percentiles) { 
+                    *perc.second = T(); 
+                } 
+                return; 
+            } 
+ 
+            // create a vector of values matching time criterion 
+            TVector<T> values; 
+            values.reserve(Items.size()); 
+            for (const TItem &item : Items) { 
+                values.push_back(item.Value); 
+            } 
+ 
+            // sort and calculate quantiles 
+            std::sort(values.begin(), values.end()); 
+            const size_t maxIndex = values.size() - 1; 
+            for (auto& perc : Percentiles) { 
+                const size_t index = Min<size_t>(maxIndex, maxIndex  * perc.first); 
+                *perc.second = values[index]; 
+            } 
+        } 
+ 
         bool CalculateQuantiles(size_t count, const size_t *numerators, size_t denominator, T *res,
                 size_t *numSamples = nullptr, TDuration *interval = nullptr) const {
             if (numSamples) {

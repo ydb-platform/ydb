@@ -47,14 +47,14 @@ static const std::array<TBlobStorageErasureParameters, TErasureType::ErasureSpec
     ,{2} // 7 = ErasureSpicies::Erasure3Plus2Stipe
     ,{2} // 8 = ErasureSpicies::ErasureMirror3Plus2
     ,{6} // 9 = ErasureSpicies::ErasireMirror3dc
-    ,{3} // 10 = ErasureSpicies::Erasure4Plus3Block
-    ,{3} // 11 = ErasureSpicies::Erasure4Plus3Stripe
-    ,{3} // 12 = ErasureSpicies::Erasure3Plus3Block
-    ,{3} // 13 = ErasureSpicies::Erasure3Plus3Stripe
-    ,{3} // 14 = ErasureSpicies::Erasure2Plus3Block
-    ,{3} // 15 = ErasureSpicies::Erasure2Plus3Stripe
-    ,{2} // 16 = ErasureSpicies::Erasure2Plus2Block
-    ,{2} // 17 = ErasureSpicies::Erasure2Plus2Stripe
+    ,{3} // 10 = ErasureSpicies::Erasure4Plus3Block 
+    ,{3} // 11 = ErasureSpicies::Erasure4Plus3Stripe 
+    ,{3} // 12 = ErasureSpicies::Erasure3Plus3Block 
+    ,{3} // 13 = ErasureSpicies::Erasure3Plus3Stripe 
+    ,{3} // 14 = ErasureSpicies::Erasure2Plus3Block 
+    ,{3} // 15 = ErasureSpicies::Erasure2Plus3Stripe 
+    ,{2} // 16 = ErasureSpicies::Erasure2Plus2Block 
+    ,{2} // 17 = ErasureSpicies::Erasure2Plus2Stripe 
     ,{5} // 18 = ErasureSpicies::ErasureMirror3of4
 }};
 

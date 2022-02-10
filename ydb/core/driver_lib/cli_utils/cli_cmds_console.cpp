@@ -122,7 +122,7 @@ public:
         ConfigFiles["PQClusterDiscoveryConfig"] = "pqcd.txt";
         ConfigFiles["NetClassifierConfig"] = "netclassifier.txt";
         ConfigFiles["KeyConfig"] = "key.txt";
-        ConfigFiles["PDiskKeyConfig"] = "pdisk_key.txt";
+        ConfigFiles["PDiskKeyConfig"] = "pdisk_key.txt"; 
         ConfigFiles["ClusterYamlConfig"] = "cluster.yaml";
     }
 

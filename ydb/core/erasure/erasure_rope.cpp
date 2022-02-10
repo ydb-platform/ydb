@@ -42,7 +42,7 @@ static TString DebugFormatBits(ui64 value) {
 #endif
 
 namespace NKikimr {
-namespace NErasureRope {
+namespace NErasureRope { 
 
 static void Refurbish(TRope &str, ui64 size) {
     if (str.GetSize() != size) {
@@ -2635,7 +2635,7 @@ static void VerifyPartSizes(TDataPartSet& partSet, size_t definedPartEndIdx) {
     for (size_t idx = 0; idx < partSet.Parts.size(); ++idx) {
         Y_VERIFY(partSet.Parts[idx].size() == partSize);
         if (partSize && idx < definedPartEndIdx) {
-            CHECK_ROPE_IS_DEFINED(partSet.Parts[idx].FastViewer.GetCurrent(partSet.Parts[idx].Offset),
+            CHECK_ROPE_IS_DEFINED(partSet.Parts[idx].FastViewer.GetCurrent(partSet.Parts[idx].Offset), 
                     partSet.Parts[idx].Size);
         }
     }
@@ -2801,8 +2801,8 @@ void TRopeErasureType::RestoreData(ECrcMode crcMode, TDataPartSet& partSet, bool
 }
 
 } // NKikimr
-} // NErasureRope
+} // NErasureRope 
 
-Y_DECLARE_OUT_SPEC(, NKikimr::NErasureRope::TRopeErasureType::EErasureSpecies, stream, value) {
-    stream << NKikimr::NErasureRope::TRopeErasureType::ErasureSpeciesToStr(value);
+Y_DECLARE_OUT_SPEC(, NKikimr::NErasureRope::TRopeErasureType::EErasureSpecies, stream, value) { 
+    stream << NKikimr::NErasureRope::TRopeErasureType::ErasureSpeciesToStr(value); 
 }

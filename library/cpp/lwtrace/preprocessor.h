@@ -264,8 +264,8 @@ namespace NLWTrace {
         }                                                           \
     } while (false) /**/
 
-#define LWPROBE_ENABLED_I(probe) ((probe).Probe.GetExecutorsCount() > 0)
-
+#define LWPROBE_ENABLED_I(probe) ((probe).Probe.GetExecutorsCount() > 0) 
+ 
 #define LWPROBE_DURATION_I(probetype, uniqid, probe, ...) probetype ::TScopedDuration uniqid(probe, 0 /* fake P0 - used for duration */, ##__VA_ARGS__);
 
 #define LWTRACK_I(probe, orbit, ...)                                    \

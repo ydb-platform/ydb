@@ -37,7 +37,7 @@ namespace NKikimr {
         class TStat;
         mutable std::unique_ptr<TStat> Stat;
 
-        bool DefaultAllow(ESpaceColor color) const;
+        bool DefaultAllow(ESpaceColor color) const; 
 
         template <typename TEvPtr>
         friend bool AllowImpl(const TOutOfSpaceLogic &logic, const TActorContext &ctx, TEvPtr &ev);

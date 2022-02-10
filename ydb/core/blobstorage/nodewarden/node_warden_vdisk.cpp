@@ -149,7 +149,7 @@ namespace NKikimr::NStorage {
             donorDiskIds.emplace_back(VDiskIDFromVDiskID(donor.GetVDiskId()), donorSlot.GetVDiskServiceId());
         }
 
-        TVDiskConfig::TBaseInfo baseInfo(vdiskId, pdiskServiceId, pdiskGuid, vslotId.PDiskId, deviceType,
+        TVDiskConfig::TBaseInfo baseInfo(vdiskId, pdiskServiceId, pdiskGuid, vslotId.PDiskId, deviceType, 
             vslotId.VDiskSlotId, kind, NextLocalPDiskInitOwnerRound(), groupInfo->GetStoragePoolName(), donorMode,
             donorDiskIds, scrubCookie, whiteboardInstanceGuid);
 

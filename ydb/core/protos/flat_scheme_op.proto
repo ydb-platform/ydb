@@ -1420,7 +1420,7 @@ message TBackupProgress {
     repeated TShardError Errors = 5;
     optional TYTSettings YTSettings = 6;
     optional uint64 DataTotalSize = 7;
-    optional uint64 TxId = 8;
+    optional uint64 TxId = 8; 
 }
 
 message TLastBackupResult {
@@ -1430,7 +1430,7 @@ message TLastBackupResult {
     repeated TShardError Errors = 4;
     optional TYTSettings YTSettings = 5;
     optional uint64 DataTotalSize = 6;
-    optional uint64 TxId = 7;
+    optional uint64 TxId = 7; 
 };
 
 // Result for TDescribePath request

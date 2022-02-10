@@ -26,7 +26,7 @@ public:
     virtual void Shutdown() const = 0;
 };
 
-class IExportFactory {
+class IExportFactory { 
 public:
     virtual ~IExportFactory() = default;
 

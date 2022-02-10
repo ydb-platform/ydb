@@ -25,7 +25,7 @@ Y_UNIT_TEST_SUITE(TYardTestRestore) {
             VERBOSE_COUT("TestRestore15 i=" << i);
             DestroySectors(&tc, dataAfter, dataSize, i, 15);
 
-            Run<TTestCheckLog>(&tc, 1, chunkSize, false, true);
+            Run<TTestCheckLog>(&tc, 1, chunkSize, false, true); 
             //Can't use resutlts for the next test because we don't wait for the restoration before shutting down.
         }
     }

@@ -57,7 +57,7 @@ void TPDiskStatusComputer::AddState(EPDiskState state) {
             ++StateCounter;
         }
     } else {
-        PrevState = std::exchange(State, state);
+        PrevState = std::exchange(State, state); 
         StateCounter = 1;
     }
 }
@@ -72,27 +72,27 @@ EPDiskStatus TPDiskStatusComputer::Compute(EPDiskStatus current, TString& reason
     const ui32 stateLimit = (it != StateLimits.end()) ? it->second : DefaultStateLimit;
 
     if (!stateLimit || StateCounter < stateLimit) {
-        reason = TStringBuilder()
-            << " PrevState# " << PrevState
-            << " State# " << State
-            << " StateCounter# " << StateCounter
-            << " current# " << current;
-        switch (PrevState) {
-        case  NKikimrBlobStorage::TPDiskState::Unknown:
-            return current;
-        default:
-            return EPDiskStatus::INACTIVE;
-        }
+        reason = TStringBuilder() 
+            << " PrevState# " << PrevState 
+            << " State# " << State 
+            << " StateCounter# " << StateCounter 
+            << " current# " << current; 
+        switch (PrevState) { 
+        case  NKikimrBlobStorage::TPDiskState::Unknown: 
+            return current; 
+        default: 
+            return EPDiskStatus::INACTIVE; 
+        } 
     }
 
     reason = TStringBuilder()
-        << " PrevState# " << PrevState
+        << " PrevState# " << PrevState 
         << " State# " << State
         << " StateCounter# " << StateCounter
         << " StateLimit# " << stateLimit;
 
-    PrevState = State;
-
+    PrevState = State; 
+ 
     switch (State) {
     case NKikimrBlobStorage::TPDiskState::Normal:
         return EPDiskStatus::ACTIVE;
@@ -140,24 +140,24 @@ EPDiskStatus TPDiskStatus::GetStatus() const {
     return Current;
 }
 
-bool TPDiskStatus::IsNewStatusGood() const {
-    TString unused;
-    switch (Compute(Current, unused)) {
-        case EPDiskStatus::INACTIVE:
-        case EPDiskStatus::ACTIVE:
-        case EPDiskStatus::SPARE:
-            return true;
-
-        case EPDiskStatus::UNKNOWN:
-        case EPDiskStatus::FAULTY:
-        case EPDiskStatus::BROKEN:
-        case EPDiskStatus::TO_BE_REMOVED:
-        case EPDiskStatus::EDriveStatus_INT_MIN_SENTINEL_DO_NOT_USE_:
-        case EPDiskStatus::EDriveStatus_INT_MAX_SENTINEL_DO_NOT_USE_:
-            return false;
-    }
-}
-
+bool TPDiskStatus::IsNewStatusGood() const { 
+    TString unused; 
+    switch (Compute(Current, unused)) { 
+        case EPDiskStatus::INACTIVE: 
+        case EPDiskStatus::ACTIVE: 
+        case EPDiskStatus::SPARE: 
+            return true; 
+ 
+        case EPDiskStatus::UNKNOWN: 
+        case EPDiskStatus::FAULTY: 
+        case EPDiskStatus::BROKEN: 
+        case EPDiskStatus::TO_BE_REMOVED: 
+        case EPDiskStatus::EDriveStatus_INT_MIN_SENTINEL_DO_NOT_USE_: 
+        case EPDiskStatus::EDriveStatus_INT_MAX_SENTINEL_DO_NOT_USE_: 
+            return false; 
+    } 
+} 
+ 
 bool TPDiskStatus::IsChangingAllowed() const {
     return ChangingAllowed;
 }
@@ -187,13 +187,13 @@ void TPDiskInfo::AddState(EPDiskState state) {
     Touch();
 }
 
-/// TClusterMap
+/// TClusterMap 
 
-TClusterMap::TClusterMap(TCmsStatePtr state)
+TClusterMap::TClusterMap(TCmsStatePtr state) 
     : State(state)
-{}
+{} 
 
-void TClusterMap::AddPDisk(const TPDiskID& id) {
+void TClusterMap::AddPDisk(const TPDiskID& id) { 
     Y_VERIFY(State->ClusterInfo->HasNode(id.NodeId));
     Y_VERIFY(State->ClusterInfo->HasPDisk(id));
     const auto& location = State->ClusterInfo->Node(id.NodeId).Location;
@@ -203,18 +203,18 @@ void TClusterMap::AddPDisk(const TPDiskID& id) {
     ByRack[location.HasKey(TNodeLocation::TKeys::Rack) ? location.GetRackId() : ""].insert(id);
 }
 
-/// TGuardian
-
-TGuardian::TGuardian(TCmsStatePtr state, ui32 dataCenterRatio, ui32 roomRatio, ui32 rackRatio)
-    : TClusterMap(state)
-    , DataCenterRatio(dataCenterRatio)
-    , RoomRatio(roomRatio)
-    , RackRatio(rackRatio)
-{
-}
-
-TClusterMap::TPDiskIDSet TGuardian::GetAllowedPDisks(const TClusterMap& all, TString& issues,
-        TPDiskIDSet& disallowed) const {
+/// TGuardian 
+ 
+TGuardian::TGuardian(TCmsStatePtr state, ui32 dataCenterRatio, ui32 roomRatio, ui32 rackRatio) 
+    : TClusterMap(state) 
+    , DataCenterRatio(dataCenterRatio) 
+    , RoomRatio(roomRatio) 
+    , RackRatio(rackRatio) 
+{ 
+} 
+ 
+TClusterMap::TPDiskIDSet TGuardian::GetAllowedPDisks(const TClusterMap& all, TString& issues, 
+        TPDiskIDSet& disallowed) const { 
     TPDiskIDSet result;
     TStringBuilder issuesBuilder;
 
@@ -251,10 +251,10 @@ TClusterMap::TPDiskIDSet TGuardian::GetAllowedPDisks(const TClusterMap& all, TSt
 
     for (const auto& kv : ByRack) {
         Y_VERIFY(all.ByRack.contains(kv.first));
-        // ignore check if there is only one node in a rack
-        if (kv.second.size() == 1) {
-            continue;
-        }
+        // ignore check if there is only one node in a rack 
+        if (kv.second.size() == 1) { 
+            continue; 
+        } 
         if (kv.first && !CheckRatio(kv, all.ByRack, RackRatio)) {
             LOG_IGNORED(Rack);
             disallowed.insert(kv.second.begin(), kv.second.end());
@@ -871,9 +871,9 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
             return;
         }
 
-        TClusterMap all(CmsState);
+        TClusterMap all(CmsState); 
         TGuardian changed(CmsState, Config.DataCenterRatio, Config.RoomRatio, Config.RackRatio);
-        TClusterMap::TPDiskIDSet alwaysAllowed;
+        TClusterMap::TPDiskIDSet alwaysAllowed; 
 
         for (auto& pdisk : SentinelState->PDisks) {
             const TPDiskID& id = pdisk.first;
@@ -893,11 +893,11 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
 
             all.AddPDisk(id);
             if (info.IsChanged()) {
-                if (info.IsNewStatusGood()) {
-                    alwaysAllowed.insert(id);
-                } else {
-                    changed.AddPDisk(id);
-                }
+                if (info.IsNewStatusGood()) { 
+                    alwaysAllowed.insert(id); 
+                } else { 
+                    changed.AddPDisk(id); 
+                } 
             } else {
                 info.AllowChanging();
             }
@@ -906,9 +906,9 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
         TString issues;
         THashSet<TPDiskID, TPDiskIDHash> disallowed;
 
-        TClusterMap::TPDiskIDSet allowed = changed.GetAllowedPDisks(all, issues, disallowed);
-        Copy(alwaysAllowed.begin(), alwaysAllowed.end(), std::inserter(allowed, allowed.begin()));
-        for (const TPDiskID& id : allowed) {
+        TClusterMap::TPDiskIDSet allowed = changed.GetAllowedPDisks(all, issues, disallowed); 
+        Copy(alwaysAllowed.begin(), alwaysAllowed.end(), std::inserter(allowed, allowed.begin())); 
+        for (const TPDiskID& id : allowed) { 
             Y_VERIFY(SentinelState->PDisks.contains(id));
             TPDiskInfo& info = SentinelState->PDisks.at(id);
 

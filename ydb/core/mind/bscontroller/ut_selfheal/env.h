@@ -198,7 +198,7 @@ struct TEnvironmentSetup {
         for (TActorId edge : edges) {
             WaitForEdgeActorEvent<TEvDone>(edge);
         }
-        Ctest << "All node wardens are connected to BSC" << Endl;
+        Ctest << "All node wardens are connected to BSC" << Endl; 
     }
 
     void Wait(TDuration timeout) {

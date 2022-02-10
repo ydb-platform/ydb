@@ -3,14 +3,14 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/random/entropy.h>
 #include <util/random/mersenne64.h>
-#include <util/stream/null.h>
+#include <util/stream/null.h> 
 #include <util/string/printf.h>
 
-IOutputStream& Ctest = Cnull;
+IOutputStream& Ctest = Cnull; 
 
-#define VERBOSE_COUT(a) Ctest << a
+#define VERBOSE_COUT(a) Ctest << a 
 
-inline TString PrintArr(ui32 *arr, ui32 n) {
+inline TString PrintArr(ui32 *arr, ui32 n) { 
     TStringStream out;
     if (n == 0) {
         out << "-";
@@ -22,7 +22,7 @@ inline TString PrintArr(ui32 *arr, ui32 n) {
     return out.Str();
 }
 
-inline const char *BoolToStr(bool val) {
+inline const char *BoolToStr(bool val) { 
     return val ? "true " : "false";
 }
 

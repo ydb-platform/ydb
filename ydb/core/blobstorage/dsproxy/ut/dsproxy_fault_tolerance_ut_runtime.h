@@ -82,7 +82,7 @@ public:
                         TActorSetupCmd(CreateVDiskMockActor(pair.first, shared, GroupInfo->PickTopology()),
                         TMailboxType::Simple, 0));
         }
-        TIntrusivePtr<TDsProxyNodeMon> nodeMon(new TDsProxyNodeMon(Counters, true));
+        TIntrusivePtr<TDsProxyNodeMon> nodeMon(new TDsProxyNodeMon(Counters, true)); 
         TDsProxyPerPoolCounters perPoolCounters(Counters);
         TIntrusivePtr<TStoragePoolCounters> storagePoolCounters = perPoolCounters.GetPoolCounters("pool_name");
         TControlWrapper enablePutBatching(DefaultEnablePutBatching, false, true);

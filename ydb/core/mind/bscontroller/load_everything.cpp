@@ -36,7 +36,7 @@ public:
             auto groupStoragePool = db.Table<Schema::GroupStoragePool>().Range().Select();
             auto groupLatencies = db.Table<Schema::GroupLatencies>().Select();
             auto scrubState = db.Table<Schema::ScrubState>().Select();
-            auto pdiskSerial = db.Table<Schema::DriveSerial>().Select();
+            auto pdiskSerial = db.Table<Schema::DriveSerial>().Select(); 
             if (!state.IsReady()
                     || !nodes.IsReady()
                     || !disk.IsReady()
@@ -54,8 +54,8 @@ public:
                     || !boxStoragePoolPDiskFilter.IsReady()
                     || !groupStoragePool.IsReady()
                     || !groupLatencies.IsReady()
-                    || !scrubState.IsReady()
-                    || !pdiskSerial.IsReady()) {
+                    || !scrubState.IsReady() 
+                    || !pdiskSerial.IsReady()) { 
                 return false;
             }
         }
@@ -77,12 +77,12 @@ public:
                 Self->SelfHealEnable = state.GetValue<T::SelfHealEnable>();
                 Self->DonorMode = state.GetValue<T::DonorModeEnable>();
                 Self->ScrubPeriodicity = TDuration::Seconds(state.GetValue<T::ScrubPeriodicity>());
-                Self->SerialManagementStage = state.GetValue<T::SerialManagementStage>();
+                Self->SerialManagementStage = state.GetValue<T::SerialManagementStage>(); 
                 Self->PDiskSpaceMarginPromille = state.GetValue<T::PDiskSpaceMarginPromille>();
                 Self->GroupReserveMin = state.GetValue<T::GroupReserveMin>();
                 Self->GroupReservePart = state.GetValue<T::GroupReservePart>();
                 Self->MaxScrubbedDisksAtOnce = state.GetValue<T::MaxScrubbedDisksAtOnce>();
-                Self->PDiskSpaceColorBorder = state.GetValue<T::PDiskSpaceColorBorder>();
+                Self->PDiskSpaceColorBorder = state.GetValue<T::PDiskSpaceColorBorder>(); 
                 Self->SysViewChangedSettings = true;
             }
         }
@@ -205,8 +205,8 @@ public:
         // HostConfig, Box, BoxStoragePool
         if (!NTableAdapter::FetchTable<Schema::HostConfig>(db, Self, Self->HostConfigs)
                 || !NTableAdapter::FetchTable<Schema::Box>(db, Self, Self->Boxes)
-                || !NTableAdapter::FetchTable<Schema::BoxStoragePool>(db, Self, Self->StoragePools)
-                || !NTableAdapter::FetchTable<Schema::DriveSerial>(db, Self, Self->DrivesSerials)) {
+                || !NTableAdapter::FetchTable<Schema::BoxStoragePool>(db, Self, Self->StoragePools) 
+                || !NTableAdapter::FetchTable<Schema::DriveSerial>(db, Self, Self->DrivesSerials)) { 
             return false;
         }
         for (const auto& [storagePoolId, storagePool] : Self->StoragePools) {
@@ -230,14 +230,14 @@ public:
             }
         }
 
-        for (const auto& [serial, info] : Self->DrivesSerials) {
+        for (const auto& [serial, info] : Self->DrivesSerials) { 
             if (info->NodeId && info->PDiskId) {
                 const auto hostId = Self->HostRecords->GetHostId(*info->NodeId);
                 const bool inserted = driveToBox.emplace(std::make_tuple(*hostId, serial.Serial), info->BoxId).second;
-                Y_VERIFY(inserted, "duplicate Serial-generated drive");
-            }
-        }
-
+                Y_VERIFY(inserted, "duplicate Serial-generated drive"); 
+            } 
+        } 
+ 
         // PDisks
         Self->PDisks.clear();
         {
@@ -257,10 +257,10 @@ public:
 
                 THostId hostId;
                 TBoxId boxId;
-                TString path = disks.GetValue<T::Path>();
-                TString pathOrSerial = path ? path : disks.GetValue<T::ExpectedSerial>();
-                Y_VERIFY_S(pathOrSerial, "For pdiskId# " << disks.GetValue<T::PDiskID>()
-                        << " not found neither pathOrSerial nor serial");
+                TString path = disks.GetValue<T::Path>(); 
+                TString pathOrSerial = path ? path : disks.GetValue<T::ExpectedSerial>(); 
+                Y_VERIFY_S(pathOrSerial, "For pdiskId# " << disks.GetValue<T::PDiskID>() 
+                        << " not found neither pathOrSerial nor serial"); 
 
                 if (const auto& x = Self->HostRecords->GetHostId(disks.GetValue<T::NodeID>())) {
                     hostId = *x;
@@ -269,7 +269,7 @@ public:
                 }
 
                 // find the owning box
-                if (const auto it = driveToBox.find(std::make_tuple(hostId, pathOrSerial)); it != driveToBox.end()) {
+                if (const auto it = driveToBox.find(std::make_tuple(hostId, pathOrSerial)); it != driveToBox.end()) { 
                     boxId = it->second;
                     driveToBox.erase(it);
                 } else {
@@ -281,11 +281,11 @@ public:
                 const ui32 staticSlotUsage = it != Self->StaticPDisks.end() ? it->second.StaticSlotUsage : 0;
 
                 // construct PDisk item
-                Self->AddPDisk(disks.GetKey(), hostId, disks.GetValue<T::Path>(), disks.GetValue<T::Category>(),
-                    disks.GetValue<T::Guid>(), getOpt(T::SharedWithOs()), getOpt(T::ReadCentric()),
-                    disks.GetValueOrDefault<T::NextVSlotId>(), disks.GetValue<T::PDiskConfig>(), boxId,
-                    Self->DefaultMaxSlots, disks.GetValue<T::Status>(), disks.GetValue<T::Timestamp>(),
-                    disks.GetValue<T::ExpectedSerial>(), disks.GetValue<T::LastSeenSerial>(),
+                Self->AddPDisk(disks.GetKey(), hostId, disks.GetValue<T::Path>(), disks.GetValue<T::Category>(), 
+                    disks.GetValue<T::Guid>(), getOpt(T::SharedWithOs()), getOpt(T::ReadCentric()), 
+                    disks.GetValueOrDefault<T::NextVSlotId>(), disks.GetValue<T::PDiskConfig>(), boxId, 
+                    Self->DefaultMaxSlots, disks.GetValue<T::Status>(), disks.GetValue<T::Timestamp>(), 
+                    disks.GetValue<T::ExpectedSerial>(), disks.GetValue<T::LastSeenSerial>(), 
                     disks.GetValue<T::LastSeenPath>(), staticSlotUsage);
 
                 if (!disks.Next())

@@ -412,7 +412,7 @@ private:
     }
 
     void StartVDisk(TTestActorSystem& runtime, TDiskRecord& disk) {
-        TVDiskConfig::TBaseInfo baseInfo(disk.VDiskId, disk.PDiskActorId, disk.PDiskGuid, disk.PDiskId,
+        TVDiskConfig::TBaseInfo baseInfo(disk.VDiskId, disk.PDiskActorId, disk.PDiskGuid, disk.PDiskId, 
             TPDiskCategory::DEVICE_TYPE_SSD, disk.VDiskSlotId, NKikimrBlobStorage::TVDiskKind::Default, ++Round,
             TString());
         auto vdiskConfig = AllVDiskKinds->MakeVDiskConfig(baseInfo);

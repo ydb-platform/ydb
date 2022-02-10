@@ -18,7 +18,7 @@ SRCS(
     kqp_impl.h
     kqp_response.cpp
     kqp_worker_actor.cpp
-    kqp_session_actor.cpp
+    kqp_session_actor.cpp 
     kqp.h
 )
 

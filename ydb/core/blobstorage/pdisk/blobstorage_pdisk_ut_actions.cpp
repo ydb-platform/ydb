@@ -2,7 +2,7 @@
 
 namespace NKikimr {
 
-void TTestInitCorruptedError::TestFSM(const TActorContext &ctx) {
+void TTestInitCorruptedError::TestFSM(const TActorContext &ctx) { 
     VERBOSE_COUT("Test step " << TestStep);
     switch (TestStep) {
     case 0:
@@ -13,18 +13,18 @@ void TTestInitCorruptedError::TestFSM(const TActorContext &ctx) {
         ctx.Send(Yard, new NPDisk::TEvYardInit(3, VDiskID, *PDiskGuid));
         break;
     case 10:
-        TEST_RESPONSE(EvYardInitResult, CORRUPTED);
+        TEST_RESPONSE(EvYardInitResult, CORRUPTED); 
         VERBOSE_COUT(" Sending TEvInit again");
         ctx.Send(Yard, new NPDisk::TEvYardInit(4, VDiskID, *PDiskGuid));
         break;
     case 20:
-        TEST_RESPONSE(EvYardInitResult, CORRUPTED);
+        TEST_RESPONSE(EvYardInitResult, CORRUPTED); 
         break;
     case 30:
-        TEST_RESPONSE(EvYardInitResult, CORRUPTED);
+        TEST_RESPONSE(EvYardInitResult, CORRUPTED); 
         break;
     case 40:
-        TEST_RESPONSE(EvYardInitResult, CORRUPTED);
+        TEST_RESPONSE(EvYardInitResult, CORRUPTED); 
 
         VERBOSE_COUT("Done");
         SignalDoneEvent();
@@ -126,7 +126,7 @@ void TTestIncorrectRequests::TestFSM(const TActorContext &ctx) {
     case 20:
         TEST_RESPONSE(EvLogResult, INVALID_OWNER);
         VERBOSE_COUT(" Sending TEvLogRead");
-        ctx.Send(Yard, new NPDisk::TEvReadLog(Owner, OwnerRound, NPDisk::TLogPosition{0, 100500}));
+        ctx.Send(Yard, new NPDisk::TEvReadLog(Owner, OwnerRound, NPDisk::TLogPosition{0, 100500})); 
         break;
     case 30:
     {
@@ -307,13 +307,13 @@ void TTestEmptyLogRead::TestFSM(const TActorContext &ctx) {
         Owner = LastResponse.Owner;
         OwnerRound = LastResponse.OwnerRound;
         VERBOSE_COUT(" Sending TEvLogRead");
-        ctx.Send(Yard, new NPDisk::TEvReadLog(Owner, OwnerRound));
+        ctx.Send(Yard, new NPDisk::TEvReadLog(Owner, OwnerRound)); 
         break;
     case 20:
         TEST_RESPONSE(EvReadLogResult, OK);
         ASSERT_YTHROW(LastResponse.LogRecords.size() == 0,
             "Unexpected LogRecords size == " << LastResponse.LogRecords.size());
-        ASSERT_YTHROW(LastResponse.IsEndOfLog,
+        ASSERT_YTHROW(LastResponse.IsEndOfLog, 
             "Unexpected IsEndOfLog = " << (int)LastResponse.IsEndOfLog);
 
         VERBOSE_COUT("Done");
@@ -342,25 +342,25 @@ void TTestChunkWriteReadWhole::TestFSM(const TActorContext &ctx) {
         Owner = LastResponse.Owner;
         OwnerRound = LastResponse.OwnerRound;
         ChunkSize = LastResponse.ChunkSize;
-        ctx.Send(Yard, new NPDisk::TEvChunkReserve(Owner, OwnerRound, 1));
-        break;
-    }
-    case 20:
-    {
-        TEST_RESPONSE(EvChunkReserveResult, OK);
-        ASSERT_YTHROW(LastResponse.ChunkIds.size() == 1,
-            "Unexpected ChunkIds.size() == " << LastResponse.ChunkIds.size());
-        ChunkIdx = LastResponse.ChunkIds[0];
+        ctx.Send(Yard, new NPDisk::TEvChunkReserve(Owner, OwnerRound, 1)); 
+        break; 
+    } 
+    case 20: 
+    { 
+        TEST_RESPONSE(EvChunkReserveResult, OK); 
+        ASSERT_YTHROW(LastResponse.ChunkIds.size() == 1, 
+            "Unexpected ChunkIds.size() == " << LastResponse.ChunkIds.size()); 
+        ChunkIdx = LastResponse.ChunkIds[0]; 
         VERBOSE_COUT(" Sending TEvChunkWrite");
         ChunkWriteParts.Reset(new NPDisk::TEvChunkWrite::TPart[1]);
         ChunkWriteData = PrepareData(ChunkSize);
         ChunkWriteParts[0].Data = ChunkWriteData.data();
         ChunkWriteParts[0].Size = (ui32)ChunkWriteData.size();
-        ctx.Send(Yard, new NPDisk::TEvChunkWrite(Owner, OwnerRound, ChunkIdx, 0,
+        ctx.Send(Yard, new NPDisk::TEvChunkWrite(Owner, OwnerRound, ChunkIdx, 0, 
             new NPDisk::TEvChunkWrite::TNonOwningParts(ChunkWriteParts.Get(), 1), (void*)42, false, 1));
         break;
     }
-    case 30:
+    case 30: 
     {
         TEST_RESPONSE(EvChunkWriteResult, OK);
         ASSERT_YTHROW(LastResponse.Cookie == (void*)42, "Unexpected cookie=" << LastResponse.Cookie);
@@ -370,12 +370,12 @@ void TTestChunkWriteReadWhole::TestFSM(const TActorContext &ctx) {
         ctx.Send(Yard, new NPDisk::TEvLog(Owner, OwnerRound, 0, commitRecord, data2, TLsnSeg(1, 1), (void*)43));
         break;
     }
-    case 40:
+    case 40: 
         TEST_RESPONSE(EvLogResult, OK);
         VERBOSE_COUT(" Sending TEvChunkRead");
         ctx.Send(Yard, new NPDisk::TEvChunkRead(Owner, OwnerRound, ChunkIdx, 0, ChunkSize, 1, nullptr));
         break;
-    case 50:
+    case 50: 
     {
         TEST_RESPONSE(EvChunkReadResult, OK);
         TString expectedData = ChunkWriteData;
@@ -516,16 +516,16 @@ void TTestChunkRecommit::TestFSM(const TActorContext &ctx) {
         Owner = LastResponse.Owner;
         OwnerRound = LastResponse.OwnerRound;
         BlockSize = LastResponse.AppendBlockSize;
-        ctx.Send(Yard, new NPDisk::TEvChunkReserve(Owner, OwnerRound, 1));
-        break;
-    }
-    case 20:
-    {
-        TEST_RESPONSE(EvChunkReserveResult, OK);
-        ASSERT_YTHROW(LastResponse.ChunkIds.size() == 1,
-            "Unexpected ChunkIds.size() == " << LastResponse.ChunkIds.size());
-        ChunkIdx = LastResponse.ChunkIds[0];
-        VERBOSE_COUT(" Sending TEvChunkWrite");
+        ctx.Send(Yard, new NPDisk::TEvChunkReserve(Owner, OwnerRound, 1)); 
+        break; 
+    } 
+    case 20: 
+    { 
+        TEST_RESPONSE(EvChunkReserveResult, OK); 
+        ASSERT_YTHROW(LastResponse.ChunkIds.size() == 1, 
+            "Unexpected ChunkIds.size() == " << LastResponse.ChunkIds.size()); 
+        ChunkIdx = LastResponse.ChunkIds[0]; 
+        VERBOSE_COUT(" Sending TEvChunkWrite"); 
         ChunkWriteData1 = PrepareData(BlockSize * 2);
         ChunkWriteData2 = PrepareData(BlockSize);
         Commit1Data = PrepareData(5030);
@@ -534,11 +534,11 @@ void TTestChunkRecommit::TestFSM(const TActorContext &ctx) {
         ChunkWriteParts.Reset(new NPDisk::TEvChunkWrite::TPart[1]);
         ChunkWriteParts[0].Data = ChunkWriteData1.data();
         ChunkWriteParts[0].Size = (ui32)ChunkWriteData1.size();
-        ctx.Send(Yard, new NPDisk::TEvChunkWrite(Owner, OwnerRound, ChunkIdx, 0,
+        ctx.Send(Yard, new NPDisk::TEvChunkWrite(Owner, OwnerRound, ChunkIdx, 0, 
             new NPDisk::TEvChunkWrite::TNonOwningParts(ChunkWriteParts.Get(), 1), (void*)42, false, 1));
         break;
     }
-    case 30:
+    case 30: 
     {
         TEST_RESPONSE(EvChunkWriteResult, OK);
         ASSERT_YTHROW(LastResponse.Cookie == (void*)42, "Unexpected cookie=" << LastResponse.Cookie);
@@ -550,7 +550,7 @@ void TTestChunkRecommit::TestFSM(const TActorContext &ctx) {
                     (void*)43));
         break;
     }
-    case 40:
+    case 40: 
         TEST_RESPONSE(EvLogResult, OK);
         ChunkWriteParts.Reset(new NPDisk::TEvChunkWrite::TPart[1]);
         ChunkWriteParts[0].Data = ChunkWriteData2.data();
@@ -559,7 +559,7 @@ void TTestChunkRecommit::TestFSM(const TActorContext &ctx) {
         ctx.Send(Yard, new NPDisk::TEvChunkWrite(Owner, OwnerRound, ChunkIdx, (ui32)ChunkWriteData1.size(),
             new NPDisk::TEvChunkWrite::TNonOwningParts(ChunkWriteParts.Get(), 1), (void*)42, false, 1));
         break;
-    case 50:
+    case 50: 
     {
         TEST_RESPONSE(EvChunkWriteResult, OK);
         ASSERT_YTHROW(LastResponse.Cookie == (void*)42, "Unexpected cookie=" << LastResponse.Cookie);
@@ -570,13 +570,13 @@ void TTestChunkRecommit::TestFSM(const TActorContext &ctx) {
                     (void*)43));
         break;
     }
-    case 60:
+    case 60: 
         TEST_RESPONSE(EvLogResult, OK);
         VERBOSE_COUT(" Sending TEvChunkRead");
         ctx.Send(Yard, new NPDisk::TEvChunkRead(Owner, OwnerRound, ChunkIdx, 0, (ui32)ChunkData.size(), 1,
                     nullptr));
         break;
-    case 70:
+    case 70: 
         TEST_RESPONSE(EvChunkReadResult, OK);
         TEST_DATA_EQUALS(LastResponse.Data.ToString(), ChunkData);
         VERBOSE_COUT("Done");
@@ -604,24 +604,24 @@ void TTestChunkRestartRecommit1::TestFSM(const TActorContext &ctx) {
         Owner = LastResponse.Owner;
         OwnerRound = LastResponse.OwnerRound;
         ChunkWriteData1 = PrepareData(LastResponse.AppendBlockSize);
-        ctx.Send(Yard, new NPDisk::TEvChunkReserve(Owner, OwnerRound, 1));
-        break;
-    case 20:
-    {
-        TEST_RESPONSE(EvChunkReserveResult, OK);
-        ASSERT_YTHROW(LastResponse.ChunkIds.size() == 1,
-            "Unexpected ChunkIds.size() == " << LastResponse.ChunkIds.size());
-        ChunkIdx = LastResponse.ChunkIds[0];
+        ctx.Send(Yard, new NPDisk::TEvChunkReserve(Owner, OwnerRound, 1)); 
+        break; 
+    case 20: 
+    { 
+        TEST_RESPONSE(EvChunkReserveResult, OK); 
+        ASSERT_YTHROW(LastResponse.ChunkIds.size() == 1, 
+            "Unexpected ChunkIds.size() == " << LastResponse.ChunkIds.size()); 
+        ChunkIdx = LastResponse.ChunkIds[0]; 
         Commit1Data = PrepareData(5030);
         VERBOSE_COUT(" Sending TEvChunkWrite");
         ChunkWriteParts.Reset(new NPDisk::TEvChunkWrite::TPart[1]);
         ChunkWriteParts[0].Data = ChunkWriteData1.data();
         ChunkWriteParts[0].Size = (ui32)ChunkWriteData1.size();
-        ctx.Send(Yard, new NPDisk::TEvChunkWrite(Owner, OwnerRound, ChunkIdx, 0,
+        ctx.Send(Yard, new NPDisk::TEvChunkWrite(Owner, OwnerRound, ChunkIdx, 0, 
             new NPDisk::TEvChunkWrite::TNonOwningParts(ChunkWriteParts.Get(), 1), (void*)42, true, 1));
         break;
     }
-    case 30:
+    case 30: 
     {
         TEST_RESPONSE(EvChunkWriteResult, OK);
         ASSERT_YTHROW(LastResponse.Cookie == (void*)42, "Unexpected cookie=" << LastResponse.Cookie);
@@ -635,7 +635,7 @@ void TTestChunkRestartRecommit1::TestFSM(const TActorContext &ctx) {
             (void*)43));
         break;
     }
-    case 40:
+    case 40: 
         TEST_RESPONSE(EvLogResult, OK);
         VERBOSE_COUT("Done");
         SignalDoneEvent();
@@ -804,7 +804,7 @@ void TTestChunkDelete2::TestFSM(const TActorContext &ctx) {
         ctx.Send(Yard, new NPDisk::TEvChunkReserve(Owner, OwnerRound, 1000));
         break;
     case 30:
-        TEST_RESPONSE(EvChunkReserveResult, OUT_OF_SPACE);
+        TEST_RESPONSE(EvChunkReserveResult, OUT_OF_SPACE); 
         VERBOSE_COUT("Done");
         SignalDoneEvent();
         break;
@@ -998,7 +998,7 @@ void TTestChunksLockUnlockReserve::TestFSM(const TActorContext &ctx) {
         ctx.Send(Yard, new NPDisk::TEvChunkReserve(Owner, OwnerRound, 1));
         break;
     case 50:
-        TEST_RESPONSE(EvChunkReserveResult, OUT_OF_SPACE);
+        TEST_RESPONSE(EvChunkReserveResult, OUT_OF_SPACE); 
         ctx.Send(Yard, new NPDisk::TEvChunksUnlock());
         break;
     case 60:
@@ -1057,8 +1057,8 @@ void TTestHttpInfoFileDoesntExist::TestFSM(const TActorContext &ctx) {
         ctx.Send(Yard, new NPDisk::TEvYardInit(2, VDiskID, *PDiskGuid));
         break;
     case 10:
-        TEST_RESPONSE(EvYardInitResult, CORRUPTED);
-        ASSERT_YTHROW(LastResponse.Status == NKikimrProto::CORRUPTED, StatusToString(LastResponse.Status));
+        TEST_RESPONSE(EvYardInitResult, CORRUPTED); 
+        ASSERT_YTHROW(LastResponse.Status == NKikimrProto::CORRUPTED, StatusToString(LastResponse.Status)); 
         VERBOSE_COUT("Sending TEvHttpInfo");
         ctx.Send(Yard, new NMon::TEvHttpInfo(MonService2HttpRequest));
         break;
@@ -1110,11 +1110,11 @@ void TTestBootingState::TestFSM(const TActorContext &ctx) {
         } else {
             ASSERT_YTHROW(false, "Unexpecter response type");
         }
-        VERBOSE_COUT("EvYardAnswered# " << EvYardAnswered << " EvHttpInfo, answered " << AnsweredRequests
-                << " of " << HttpRequestsCount << " requests answered: "
-                << BootingAnsweredRequests << " requests answered in Booting state "
-                << OKAnsweredRequests << " requests answered in OK state "
-                << ErrorAnsweredRequests << " requests answered in Error state" << Endl);
+        VERBOSE_COUT("EvYardAnswered# " << EvYardAnswered << " EvHttpInfo, answered " << AnsweredRequests 
+                << " of " << HttpRequestsCount << " requests answered: " 
+                << BootingAnsweredRequests << " requests answered in Booting state " 
+                << OKAnsweredRequests << " requests answered in OK state " 
+                << ErrorAnsweredRequests << " requests answered in Error state" << Endl); 
         if (AnsweredRequests == HttpRequestsCount && EvYardAnswered) {
             VERBOSE_COUT("Done");
             SignalDoneEvent();
@@ -1132,19 +1132,19 @@ void TTestWhiteboard::TestFSM(const TActorContext &ctx) {
     case 0:
     {
         ASSERT_YTHROW(LastResponse.Status == NKikimrProto::OK, StatusToString(LastResponse.Status));
-        TActorId whiteboardID = NNodeWhiteboard::MakeNodeWhiteboardServiceId(SelfId().NodeId());
-        ctx.ExecutorThread.ActorSystem->RegisterLocalService(whiteboardID, SelfId());
-        TActorId nodeWardenId = MakeBlobStorageNodeWardenID(SelfId().NodeId());
-        ctx.ExecutorThread.ActorSystem->RegisterLocalService(nodeWardenId, SelfId());
+        TActorId whiteboardID = NNodeWhiteboard::MakeNodeWhiteboardServiceId(SelfId().NodeId()); 
+        ctx.ExecutorThread.ActorSystem->RegisterLocalService(whiteboardID, SelfId()); 
+        TActorId nodeWardenId = MakeBlobStorageNodeWardenID(SelfId().NodeId()); 
+        ctx.ExecutorThread.ActorSystem->RegisterLocalService(nodeWardenId, SelfId()); 
         for (int owner = 0; owner < ExpectedOwnerCount; ++owner) {
-            ctx.Send(Yard, new NPDisk::TEvYardInit(2, TVDiskID(0, 0, 0, 0, owner), *PDiskGuid, TActorId(), SelfId()));
+            ctx.Send(Yard, new NPDisk::TEvYardInit(2, TVDiskID(0, 0, 0, 0, owner), *PDiskGuid, TActorId(), SelfId())); 
         }
         TestStep += 10;
         break;
     }
     case 10:
         ReceiveEvent();
-        if (IsPDiskResultReceived && RemainingVDiskResults == 0
+        if (IsPDiskResultReceived && RemainingVDiskResults == 0 
             && IsDiskMetricsResultReceived && IsPDiskLightsResultReceived) {
             LastResponse.Status = NKikimrProto::OK;
             SignalDoneEvent();
@@ -1163,33 +1163,33 @@ void TTestWhiteboard::TestFSM(const TActorContext &ctx) {
 void TTestWhiteboard::ReceiveEvent() {
     if (LastResponse.whiteboardPDiskResult) {
         ASSERT_YTHROW(LastResponse.whiteboardPDiskResult->Type() ==
-                NNodeWhiteboard::TEvWhiteboard::EvPDiskStateUpdate, "Unexpected message");
+                NNodeWhiteboard::TEvWhiteboard::EvPDiskStateUpdate, "Unexpected message"); 
         if (LastResponse.whiteboardPDiskResult->Record.HasPDiskId()
-                && LastResponse.whiteboardPDiskResult->Record.HasAvailableSize()
-                && LastResponse.whiteboardPDiskResult->Record.HasTotalSize()
-                && LastResponse.whiteboardPDiskResult->Record.HasState()) {
+                && LastResponse.whiteboardPDiskResult->Record.HasAvailableSize() 
+                && LastResponse.whiteboardPDiskResult->Record.HasTotalSize() 
+                && LastResponse.whiteboardPDiskResult->Record.HasState()) { 
             IsPDiskResultReceived = true;
             VERBOSE_COUT("Received PDiskResult");
         } else if (LastResponse.whiteboardPDiskResult->Record.HasPDiskId()
-                && LastResponse.whiteboardPDiskResult->Record.HasRealtime()
-                && LastResponse.whiteboardPDiskResult->Record.HasDevice()) {
+                && LastResponse.whiteboardPDiskResult->Record.HasRealtime() 
+                && LastResponse.whiteboardPDiskResult->Record.HasDevice()) { 
             IsPDiskLightsResultReceived = true;
             VERBOSE_COUT("Received PDiskLightsResult");
         }
-    }
-
-    if (LastResponse.whiteboardVDiskResult && LastResponse.whiteboardVDiskResult->Record.HasAllocatedSize()) {
+    } 
+ 
+    if (LastResponse.whiteboardVDiskResult && LastResponse.whiteboardVDiskResult->Record.HasAllocatedSize()) { 
         ASSERT_YTHROW(LastResponse.whiteboardVDiskResult->Type() ==
-                NNodeWhiteboard::TEvWhiteboard::EvVDiskStateUpdate, "Unexpected message");
+                NNodeWhiteboard::TEvWhiteboard::EvVDiskStateUpdate, "Unexpected message"); 
         const TVDiskID vDiskID = VDiskIDFromVDiskID(LastResponse.whiteboardVDiskResult->Record.GetVDiskId());
 
         ui32 vDisk = vDiskID.VDisk;
-        VERBOSE_COUT("VDiskResult received, VDiskId# " << vDiskID << " vDisk#" << vDisk);
-        if (--RemainingVDiskResults == 0) {
+        VERBOSE_COUT("VDiskResult received, VDiskId# " << vDiskID << " vDisk#" << vDisk); 
+        if (--RemainingVDiskResults == 0) { 
             VERBOSE_COUT("Received all VDiskResults");
         }
-    }
-    if (LastResponse.whiteboardDiskMetricsResult) {
+    } 
+    if (LastResponse.whiteboardDiskMetricsResult) { 
         ASSERT_YTHROW(LastResponse.whiteboardDiskMetricsResult->Type() ==
             TEvBlobStorage::EvControllerUpdateDiskStatus, "Unexpected message");
         IsDiskMetricsResultReceived = true;
@@ -1249,7 +1249,7 @@ void TTestFirstRecordToKeepReadB::TestFSM(const TActorContext &ctx) {
         Owner = LastResponse.Owner;
         OwnerRound = LastResponse.OwnerRound;
         VERBOSE_COUT(" Sending TEvLogRead");
-        ctx.Send(Yard, new NPDisk::TEvReadLog(Owner, OwnerRound));
+        ctx.Send(Yard, new NPDisk::TEvReadLog(Owner, OwnerRound)); 
         break;
     case 20:
         Data = PrepareData(100500);
@@ -1467,15 +1467,15 @@ void TTestHugeChunkAndLotsOfTinyAsyncLogOrder::TestFSM(const TActorContext &ctx)
         Owner = LastResponse.Owner;
         OwnerRound = LastResponse.OwnerRound;
         BlockSize = LastResponse.AppendBlockSize;
-        ctx.Send(Yard, new NPDisk::TEvChunkReserve(Owner, OwnerRound, 1));
-        break;
-    }
-    case 20:
-    {
-        TEST_RESPONSE(EvChunkReserveResult, OK);
-        ASSERT_YTHROW(LastResponse.ChunkIds.size() == 1,
-            "Unexpected ChunkIds.size() == " << LastResponse.ChunkIds.size());
-        ChunkIdx = LastResponse.ChunkIds[0];
+        ctx.Send(Yard, new NPDisk::TEvChunkReserve(Owner, OwnerRound, 1)); 
+        break; 
+    } 
+    case 20: 
+    { 
+        TEST_RESPONSE(EvChunkReserveResult, OK); 
+        ASSERT_YTHROW(LastResponse.ChunkIds.size() == 1, 
+            "Unexpected ChunkIds.size() == " << LastResponse.ChunkIds.size()); 
+        ChunkIdx = LastResponse.ChunkIds[0]; 
         VERBOSE_COUT(" Sending TEvYardControl Pause");
         ctx.Send(Yard, new NPDisk::TEvYardControl(NPDisk::TEvYardControl::ActionPause, nullptr));
         VERBOSE_COUT(" Sending TEvChunkWrite");
@@ -1484,7 +1484,7 @@ void TTestHugeChunkAndLotsOfTinyAsyncLogOrder::TestFSM(const TActorContext &ctx)
         ChunkWriteData = PrepareData(TotalDataSize);
         ChunkWriteParts[0].Data = ChunkWriteData.data();
         ChunkWriteParts[0].Size = (ui32)ChunkWriteData.size();
-        ctx.Send(Yard, new NPDisk::TEvChunkWrite(Owner, OwnerRound, ChunkIdx, 0,
+        ctx.Send(Yard, new NPDisk::TEvChunkWrite(Owner, OwnerRound, ChunkIdx, 0, 
             new NPDisk::TEvChunkWrite::TNonOwningParts(ChunkWriteParts.Get(), 1), (void*)42, false, 6));
         VERBOSE_COUT(" Sending TEvLog messages");
         MessagesToSend = TotalDataSize / Data.size();
@@ -1501,14 +1501,14 @@ void TTestHugeChunkAndLotsOfTinyAsyncLogOrder::TestFSM(const TActorContext &ctx)
         Responses = 0;
         break;
     }
-    case 30:
+    case 30: 
         TEST_RESPONSE(EvYardControlResult, OK);
         break;
-    case 40:
+    case 40: 
         TEST_RESPONSE(EvYardControlResult, OK);
         break;
     case 50:
-    case 60:
+    case 60: 
         if (LastResponse.EventType == TEvBlobStorage::EvLogResult) {
             TEST_RESPONSE(EvLogResult, OK);
             TInstant currentTime = Now();
@@ -1577,13 +1577,13 @@ void TTestHugeChunkAndLotsOfTinyAsyncLogOrder::TestFSM(const TActorContext &ctx)
             break;
         }
         [[fallthrough]];
-    case 70:
+    case 70: 
         TEST_RESPONSE(EvLogResult, OK);
         VERBOSE_COUT(" Sending TEvChunkRead");
         ctx.Send(Yard, new NPDisk::TEvChunkRead(Owner, OwnerRound, ChunkIdx, 0, (ui32)ChunkWriteData.size(), 1,
                     nullptr));
         break;
-    case 80:
+    case 80: 
         TEST_RESPONSE(EvChunkReadResult, OK);
         ASSERT_YTHROW(LastResponse.ChunkIdx == ChunkIdx, "Unexpected chunkIdx=" << LastResponse.ChunkIdx);
         TEST_DATA_EQUALS(LastResponse.Data.ToString(), ChunkWriteData);
@@ -1613,13 +1613,13 @@ void TTestChunkPriorityBlock::TestFSM(const TActorContext &ctx) {
         SafeSize = ((ENABLE_VALGRIND_REQUESTS | IS_SLOW_MACHINE) ? (8 << 20) :
             (128 << 20)) / LastResponse.AppendBlockSize * LastResponse.AppendBlockSize;
         ChunkWriteData = PrepareData(SafeSize);
-        ctx.Send(Yard, new NPDisk::TEvChunkReserve(Owner, OwnerRound, 5));
-        break;
-    case 20:
-        TEST_RESPONSE(EvChunkReserveResult, OK);
-        ASSERT_YTHROW(LastResponse.ChunkIds.size() == PausedChunkWrites,
-            "Unexpected ChunkIds.size() == " << LastResponse.ChunkIds.size());
-        ChunkIds = LastResponse.ChunkIds;
+        ctx.Send(Yard, new NPDisk::TEvChunkReserve(Owner, OwnerRound, 5)); 
+        break; 
+    case 20: 
+        TEST_RESPONSE(EvChunkReserveResult, OK); 
+        ASSERT_YTHROW(LastResponse.ChunkIds.size() == PausedChunkWrites, 
+            "Unexpected ChunkIds.size() == " << LastResponse.ChunkIds.size()); 
+        ChunkIds = LastResponse.ChunkIds; 
 
         ChunkWriteParts.Reset(new NPDisk::TEvChunkWrite::TPart[1]);
         ChunkWriteParts[0].Data = ChunkWriteData.data();
@@ -1628,23 +1628,23 @@ void TTestChunkPriorityBlock::TestFSM(const TActorContext &ctx) {
         VERBOSE_COUT(" Sending TEvYardControl Pause");
         ctx.Send(Yard, new NPDisk::TEvYardControl(NPDisk::TEvYardControl::ActionPause, nullptr));
 
-        for (ui32 i = 0; i < PausedChunkWrites; ++i) {
-            bool last = i == PausedChunkWrites - 1;
-            ui8 priority = last ? 6 : 5;
-            ui64 cookie = last ? 1 : 2;
-            VERBOSE_COUT(" Sending TEvChunkWrite cookie# " << cookie << " priority# " << (int)priority);
-            ctx.Send(Yard, new NPDisk::TEvChunkWrite(Owner, OwnerRound, ChunkIds[i], 0,
-                new NPDisk::TEvChunkWrite::TNonOwningParts(ChunkWriteParts.Get(), 1), (void*)cookie, true, priority));
-        }
+        for (ui32 i = 0; i < PausedChunkWrites; ++i) { 
+            bool last = i == PausedChunkWrites - 1; 
+            ui8 priority = last ? 6 : 5; 
+            ui64 cookie = last ? 1 : 2; 
+            VERBOSE_COUT(" Sending TEvChunkWrite cookie# " << cookie << " priority# " << (int)priority); 
+            ctx.Send(Yard, new NPDisk::TEvChunkWrite(Owner, OwnerRound, ChunkIds[i], 0, 
+                new NPDisk::TEvChunkWrite::TNonOwningParts(ChunkWriteParts.Get(), 1), (void*)cookie, true, priority)); 
+        } 
 
         VERBOSE_COUT(" Sending TEvYardControl Resume");
         ctx.Send(Yard, new NPDisk::TEvYardControl(NPDisk::TEvYardControl::ActionResume, nullptr));
         break;
     case 30:
-    case 40:
+    case 40: 
         TEST_RESPONSE(EvYardControlResult, OK);
         break;
-    case 50:
+    case 50: 
         if (LastResponse.EventType == TEvBlobStorage::EvChunkWriteResult) {
 
             TEST_RESPONSE(EvChunkWriteResult, OK);
@@ -1656,9 +1656,9 @@ void TTestChunkPriorityBlock::TestFSM(const TActorContext &ctx) {
             ++Iteration;
 
             ASSERT_YTHROW(Iteration < 30, "ERROR: Low priority write is blocked.");
-            ctx.Send(Yard, new NPDisk::TEvChunkWrite(Owner, OwnerRound, ChunkIds[0], 0,
+            ctx.Send(Yard, new NPDisk::TEvChunkWrite(Owner, OwnerRound, ChunkIds[0], 0, 
                 new NPDisk::TEvChunkWrite::TNonOwningParts(ChunkWriteParts.Get(), 1), (void*)2, true, 1));
-            VERBOSE_COUT(" Sending TEvChunkWrite cookie# 2 priority# 1");
+            VERBOSE_COUT(" Sending TEvChunkWrite cookie# 2 priority# 1"); 
         }
         return;
     default:
@@ -1723,7 +1723,7 @@ void TTestLogDamageSector3Append1::TestFSM(const TActorContext &ctx) {
         Owner = LastResponse.Owner;
         OwnerRound = LastResponse.OwnerRound;
         VERBOSE_COUT(" Sending TEvReadLog");
-        ctx.Send(Yard, new NPDisk::TEvReadLog(Owner, OwnerRound));
+        ctx.Send(Yard, new NPDisk::TEvReadLog(Owner, OwnerRound)); 
         break;
     case 20:
     {
@@ -1761,7 +1761,7 @@ void TTestLogRead2Sectors::TestFSM(const TActorContext &ctx) {
         Owner = LastResponse.Owner;
         OwnerRound = LastResponse.OwnerRound;
         VERBOSE_COUT(" Sending TEvReadLog");
-        ctx.Send(Yard, new NPDisk::TEvReadLog(Owner, OwnerRound));
+        ctx.Send(Yard, new NPDisk::TEvReadLog(Owner, OwnerRound)); 
         break;
     case 20:
     {
@@ -1856,7 +1856,7 @@ void TTestLogKeep5Plus1::TestFSM(const TActorContext &ctx) {
         ChunkSize = LastResponse.ChunkSize;
         VERBOSE_COUT(" Owner=" << (int)Owner << " ChunkSize=" << ChunkSize);
         VERBOSE_COUT(" Sending TEvReadLog");
-        ctx.Send(Yard, new NPDisk::TEvReadLog(Owner, OwnerRound, NPDisk::TLogPosition{0, 0}, ChunkSize * 2));
+        ctx.Send(Yard, new NPDisk::TEvReadLog(Owner, OwnerRound, NPDisk::TLogPosition{0, 0}, ChunkSize * 2)); 
         break;
     }
     case 20:
@@ -1923,7 +1923,7 @@ void TTestLogReadRecords2To5::TestFSM(const TActorContext &ctx) {
             "Expected 1 starting point, got " << LastResponse.StartingPoints.size());
 
         VERBOSE_COUT(" Sending TEvReadLog");
-        ctx.Send(Yard, new NPDisk::TEvReadLog(Owner, OwnerRound, NPDisk::TLogPosition{0, 0}, ChunkSize * 2));
+        ctx.Send(Yard, new NPDisk::TEvReadLog(Owner, OwnerRound, NPDisk::TLogPosition{0, 0}, ChunkSize * 2)); 
         break;
     case 20:
     {
@@ -1947,9 +1947,9 @@ void TTestLogReadRecords2To5::TestFSM(const TActorContext &ctx) {
     TestStep += 10;
 }
 
-std::atomic<ui32> TTestSysLogReordering::VDiskNum = 0;
-std::atomic<ui32> TTestSysLogReorderingLogCheck::VDiskNum = 0;
-
+std::atomic<ui32> TTestSysLogReordering::VDiskNum = 0; 
+std::atomic<ui32> TTestSysLogReorderingLogCheck::VDiskNum = 0; 
+ 
 void TTestWriteAndReleaseChunk2A::TestFSM(const TActorContext &ctx) {
     VERBOSE_COUT("Test step " << TestStep);
     switch (TestStep) {
@@ -1964,14 +1964,14 @@ void TTestWriteAndReleaseChunk2A::TestFSM(const TActorContext &ctx) {
         Owner = LastResponse.Owner;
         OwnerRound = LastResponse.OwnerRound;
         AppendBlockSize = LastResponse.AppendBlockSize;
-        ctx.Send(Yard, new NPDisk::TEvChunkReserve(Owner, OwnerRound, 1));
-        break;
-    }
-    case 20:
-        TEST_RESPONSE(EvChunkReserveResult, OK);
-        ASSERT_YTHROW(LastResponse.ChunkIds.size() == 1,
-            "Unexpected ChunkIds.size() == " << LastResponse.ChunkIds.size());
-        ChunkIdx = LastResponse.ChunkIds[0];
+        ctx.Send(Yard, new NPDisk::TEvChunkReserve(Owner, OwnerRound, 1)); 
+        break; 
+    } 
+    case 20: 
+        TEST_RESPONSE(EvChunkReserveResult, OK); 
+        ASSERT_YTHROW(LastResponse.ChunkIds.size() == 1, 
+            "Unexpected ChunkIds.size() == " << LastResponse.ChunkIds.size()); 
+        ChunkIdx = LastResponse.ChunkIds[0]; 
         VERBOSE_COUT(" Sending TEvChunkWrite");
         ChunkWriteParts.Reset(new NPDisk::TEvChunkWrite::TPart[2]);
         ChunkWriteData = PrepareData(AppendBlockSize, 1);
@@ -1979,10 +1979,10 @@ void TTestWriteAndReleaseChunk2A::TestFSM(const TActorContext &ctx) {
         ChunkWriteParts[0].Size = (ui32)ChunkWriteData.size();
         ChunkWriteParts[1].Data = ChunkWriteData.data();
         ChunkWriteParts[1].Size = (ui32)ChunkWriteData.size();
-        ctx.Send(Yard, new NPDisk::TEvChunkWrite(Owner, OwnerRound, ChunkIdx, 0,
+        ctx.Send(Yard, new NPDisk::TEvChunkWrite(Owner, OwnerRound, ChunkIdx, 0, 
             new NPDisk::TEvChunkWrite::TNonOwningParts(ChunkWriteParts.Get(), 2), (void*)42, false, 1));
         break;
-    case 30:
+    case 30: 
     {
         TEST_RESPONSE(EvChunkWriteResult, OK);
         ASSERT_YTHROW(LastResponse.Cookie == (void*)42, "Unexpected cookie=" << LastResponse.Cookie);
@@ -1996,12 +1996,12 @@ void TTestWriteAndReleaseChunk2A::TestFSM(const TActorContext &ctx) {
             (void*)43));
         break;
     }
-    case 40:
+    case 40: 
         TEST_RESPONSE(EvLogResult, OK);
         VERBOSE_COUT(" Sending TEvChunkRead");
         ctx.Send(Yard, new NPDisk::TEvChunkRead(Owner, OwnerRound, ChunkIdx, 0, ChunkWriteData.size(), 1, nullptr));
         break;
-    case 50:
+    case 50: 
     {
         TEST_RESPONSE(EvChunkReadResult, OK);
         TEST_DATA_EQUALS(LastResponse.Data.ToString(), ChunkWriteData);
@@ -2014,7 +2014,7 @@ void TTestWriteAndReleaseChunk2A::TestFSM(const TActorContext &ctx) {
             (void*)43));
         break;
     }
-    case 60:
+    case 60: 
         TEST_RESPONSE(EvLogResult, OK);
         VERBOSE_COUT("Done");
         SignalDoneEvent();
@@ -2040,16 +2040,16 @@ void TTestWriteAndCheckChunk2B::TestFSM(const TActorContext &ctx) {
         Owner = LastResponse.Owner;
         OwnerRound = LastResponse.OwnerRound;
         AppendBlockSize = LastResponse.AppendBlockSize;
-        ctx.Send(Yard, new NPDisk::TEvChunkReserve(Owner, OwnerRound, 1));
-        break;
-    }
-    case 20:
-    {
-        TEST_RESPONSE(EvChunkReserveResult, OK);
-        ASSERT_YTHROW(LastResponse.ChunkIds.size() == 1,
-            "Unexpected ChunkIds.size() == " << LastResponse.ChunkIds.size());
-        ChunkIdx = LastResponse.ChunkIds[0];
-        ASSERT_YTHROW(ChunkIdx == 2, "This test is designed to work with chunk 2, but got chunk " << ChunkIdx);
+        ctx.Send(Yard, new NPDisk::TEvChunkReserve(Owner, OwnerRound, 1)); 
+        break; 
+    } 
+    case 20: 
+    { 
+        TEST_RESPONSE(EvChunkReserveResult, OK); 
+        ASSERT_YTHROW(LastResponse.ChunkIds.size() == 1, 
+            "Unexpected ChunkIds.size() == " << LastResponse.ChunkIds.size()); 
+        ChunkIdx = LastResponse.ChunkIds[0]; 
+        ASSERT_YTHROW(ChunkIdx == 2, "This test is designed to work with chunk 2, but got chunk " << ChunkIdx); 
         VERBOSE_COUT(" Sending TEvChunkWrite");
         ChunkWriteParts.Reset(new NPDisk::TEvChunkWrite::TPart[2]);
         ChunkWriteData = PrepareData(AppendBlockSize, 2);
@@ -2057,11 +2057,11 @@ void TTestWriteAndCheckChunk2B::TestFSM(const TActorContext &ctx) {
         ChunkWriteParts[0].Size = (ui32)ChunkWriteData.size();
         ChunkWriteParts[1].Data = ChunkWriteData.data();
         ChunkWriteParts[1].Size = (ui32)ChunkWriteData.size();
-        ctx.Send(Yard, new NPDisk::TEvChunkWrite(Owner, OwnerRound, ChunkIdx, 0,
+        ctx.Send(Yard, new NPDisk::TEvChunkWrite(Owner, OwnerRound, ChunkIdx, 0, 
             new NPDisk::TEvChunkWrite::TNonOwningParts(ChunkWriteParts.Get(), 2), (void*)42, false, 1));
         break;
     }
-    case 30:
+    case 30: 
     {
         TEST_RESPONSE(EvChunkWriteResult, OK);
         ASSERT_YTHROW(LastResponse.Cookie == (void*)42, "Unexpected cookie=" << LastResponse.Cookie);
@@ -2072,19 +2072,19 @@ void TTestWriteAndCheckChunk2B::TestFSM(const TActorContext &ctx) {
         ctx.Send(Yard, new NPDisk::TEvLog(Owner, OwnerRound, 0, commitRecord, Data, TLsnSeg(3, 3), (void*)43));
         break;
     }
-    case 40:
+    case 40: 
         TEST_RESPONSE(EvLogResult, OK);
         VERBOSE_COUT(" Sending TEvChunkRead");
         ctx.Send(Yard, new NPDisk::TEvChunkRead(Owner, OwnerRound, ChunkIdx, 0, AppendBlockSize, 1, nullptr));
         break;
-    case 50:
+    case 50: 
         TEST_RESPONSE(EvChunkReadResult, OK);
         TEST_DATA_EQUALS(LastResponse.Data.ToString(), ChunkWriteData);
         VERBOSE_COUT(" Sending TEvChunkRead");
         ctx.Send(Yard, new NPDisk::TEvChunkRead(Owner, OwnerRound, ChunkIdx, AppendBlockSize, AppendBlockSize, 1,
                     nullptr));
         break;
-    case 60:
+    case 60: 
         TEST_RESPONSE(EvChunkReadResult, OK);
         TEST_DATA_EQUALS(LastResponse.Data.ToString(), ChunkWriteData);
         VERBOSE_COUT("Done");
@@ -2379,7 +2379,7 @@ void TTestLastLsn::TestFSM(const TActorContext &ctx) {
 }
 
 
-void TTestCheckLog::TestFSM(const TActorContext &ctx) {
+void TTestCheckLog::TestFSM(const TActorContext &ctx) { 
     VERBOSE_COUT("Test step " << TestStep);
     switch (TestStep) {
     case 0:
@@ -2395,10 +2395,10 @@ void TTestCheckLog::TestFSM(const TActorContext &ctx) {
         AppendBlockSize = LastResponse.AppendBlockSize;
         ChunkSize = LastResponse.ChunkSize;
         VERBOSE_COUT(" Sending TEvReadLog");
-        ctx.Send(Yard, new NPDisk::TEvReadLog(Owner, OwnerRound, NPDisk::TLogPosition{0, 0}, 16 << 20));
+        ctx.Send(Yard, new NPDisk::TEvReadLog(Owner, OwnerRound, NPDisk::TLogPosition{0, 0}, 16 << 20)); 
         break;
     }
-    case 20:
+    case 20: 
     {
         TEST_RESPONSE(EvReadLogResult, OK);
         ASSERT_YTHROW(LastResponse.LogRecords.size() == 9 || LastResponse.LogRecords.size() == 10,
@@ -2445,24 +2445,24 @@ void TTestChunkFlush::TestFSM(const TActorContext &ctx) {
         Owner = LastResponse.Owner;
         OwnerRound = LastResponse.OwnerRound;
         AppendBlockSize = LastResponse.AppendBlockSize;
-        ctx.Send(Yard, new NPDisk::TEvChunkReserve(Owner, OwnerRound, 1));
-        break;
-    }
-    case 20:
-        TEST_RESPONSE(EvChunkReserveResult, OK);
-        ASSERT_YTHROW(LastResponse.ChunkIds.size() == 1,
-            "Unexpected ChunkIds.size() == " << LastResponse.ChunkIds.size());
-        ChunkIdx = LastResponse.ChunkIds[0];
-        ASSERT_YTHROW(ChunkIdx == 2, "This test is designed to work with chunk 2, but got " << ChunkIdx);
+        ctx.Send(Yard, new NPDisk::TEvChunkReserve(Owner, OwnerRound, 1)); 
+        break; 
+    } 
+    case 20: 
+        TEST_RESPONSE(EvChunkReserveResult, OK); 
+        ASSERT_YTHROW(LastResponse.ChunkIds.size() == 1, 
+            "Unexpected ChunkIds.size() == " << LastResponse.ChunkIds.size()); 
+        ChunkIdx = LastResponse.ChunkIds[0]; 
+        ASSERT_YTHROW(ChunkIdx == 2, "This test is designed to work with chunk 2, but got " << ChunkIdx); 
         VERBOSE_COUT(" Sending TEvChunkWrite");
         ChunkWriteParts.Reset(new NPDisk::TEvChunkWrite::TPart[1]);
         ChunkWriteData = PrepareData(AppendBlockSize, 1);
         ChunkWriteParts[0].Data = ChunkWriteData.data();
         ChunkWriteParts[0].Size = (ui32)ChunkWriteData.size();
-        ctx.Send(Yard, new NPDisk::TEvChunkWrite(Owner, OwnerRound, ChunkIdx, 0,
+        ctx.Send(Yard, new NPDisk::TEvChunkWrite(Owner, OwnerRound, ChunkIdx, 0, 
             new NPDisk::TEvChunkWrite::TNonOwningParts(ChunkWriteParts.Get(), 1), (void*)42, true, 1));
         break;
-    case 30:
+    case 30: 
     {
         TEST_RESPONSE(EvChunkWriteResult, OK);
         ASSERT_YTHROW(LastResponse.Cookie == (void*)42, "Unexpected cookie=" << LastResponse.Cookie);
@@ -2475,7 +2475,7 @@ void TTestChunkFlush::TestFSM(const TActorContext &ctx) {
                     (void*)43));
         break;
     }
-    case 40:
+    case 40: 
         TEST_RESPONSE(EvLogResult, OK);
         VERBOSE_COUT("Done");
         SignalDoneEvent();
@@ -2784,7 +2784,7 @@ void TTestHarakiri::TestFSM(const TActorContext &ctx) {
     case 20:
         TEST_RESPONSE(EvHarakiriResult, OK);
         VERBOSE_COUT(" Sending TEvReadLog");
-        ctx.Send(Yard, new NPDisk::TEvReadLog(Owner, OwnerRound));
+        ctx.Send(Yard, new NPDisk::TEvReadLog(Owner, OwnerRound)); 
         break;
     case 30:
         TEST_RESPONSE(EvReadLogResult, INVALID_OWNER);
@@ -2879,7 +2879,7 @@ void TTestSlay::TestFSM(const TActorContext &ctx) {
     case 20:
         TEST_RESPONSE(EvSlayResult, OK);
         VERBOSE_COUT(" Sending TEvReadLog");
-        ctx.Send(Yard, new NPDisk::TEvReadLog(Owner, OwnerRound));
+        ctx.Send(Yard, new NPDisk::TEvReadLog(Owner, OwnerRound)); 
         break;
     case 30:
         TEST_RESPONSE(EvReadLogResult, INVALID_OWNER);
@@ -2893,7 +2893,7 @@ void TTestSlay::TestFSM(const TActorContext &ctx) {
         ChunkWriteData = PrepareData(300);
         ChunkWriteParts[0].Data = ChunkWriteData.data();
         ChunkWriteParts[0].Size = (ui32)ChunkWriteData.size();
-        ctx.Send(Yard, new NPDisk::TEvChunkWrite(Owner, OwnerRound, 42, 0,
+        ctx.Send(Yard, new NPDisk::TEvChunkWrite(Owner, OwnerRound, 42, 0, 
             new NPDisk::TEvChunkWrite::TNonOwningParts(ChunkWriteParts.Get(), 1), (void*)42, false, 1));
         break;
     case 50:
@@ -2927,7 +2927,7 @@ void TTestSlayRace::TestFSM(const TActorContext &ctx) {
     case 20:
         TEST_RESPONSE(EvSlayResult, RACE);
         VERBOSE_COUT(" Sending TEvReadLog");
-        ctx.Send(Yard, new NPDisk::TEvReadLog(Owner, OwnerRound));
+        ctx.Send(Yard, new NPDisk::TEvReadLog(Owner, OwnerRound)); 
         break;
     case 30:
         TEST_RESPONSE(EvReadLogResult, OK);
@@ -2936,24 +2936,24 @@ void TTestSlayRace::TestFSM(const TActorContext &ctx) {
         break;
     case 40:
         TEST_RESPONSE(EvLogResult, OK);
-        ctx.Send(Yard, new NPDisk::TEvChunkReserve(Owner, OwnerRound, 1));
-        break;
-    case 50:
-    {
-        TEST_RESPONSE(EvChunkReserveResult, OK);
-        ASSERT_YTHROW(LastResponse.ChunkIds.size() == 1,
-            "Unexpected ChunkIds.size() == " << LastResponse.ChunkIds.size());
-        ui32 chunkIdx = LastResponse.ChunkIds[0];
+        ctx.Send(Yard, new NPDisk::TEvChunkReserve(Owner, OwnerRound, 1)); 
+        break; 
+    case 50: 
+    { 
+        TEST_RESPONSE(EvChunkReserveResult, OK); 
+        ASSERT_YTHROW(LastResponse.ChunkIds.size() == 1, 
+            "Unexpected ChunkIds.size() == " << LastResponse.ChunkIds.size()); 
+        ui32 chunkIdx = LastResponse.ChunkIds[0]; 
         VERBOSE_COUT(" Sending TEvChunkWrite");
         ChunkWriteParts.Reset(new NPDisk::TEvChunkWrite::TPart[1]);
         ChunkWriteData = PrepareData(300);
         ChunkWriteParts[0].Data = ChunkWriteData.data();
         ChunkWriteParts[0].Size = (ui32)ChunkWriteData.size();
-        ctx.Send(Yard, new NPDisk::TEvChunkWrite(Owner, OwnerRound, chunkIdx, 0,
+        ctx.Send(Yard, new NPDisk::TEvChunkWrite(Owner, OwnerRound, chunkIdx, 0, 
             new NPDisk::TEvChunkWrite::TNonOwningParts(ChunkWriteParts.Get(), 1), (void*)42, false, 1));
         break;
-    }
-    case 60:
+    } 
+    case 60: 
         TEST_RESPONSE(EvChunkWriteResult, OK);
         VERBOSE_COUT("Done");
         SignalDoneEvent();
@@ -2989,12 +2989,12 @@ void TTestSlayRecreate::TestFSM(const TActorContext &ctx) {
         break;
     case 30:
         TEST_RESPONSE(EvYardInitResult, OK);
-        // There is no guarantee that unknown VDisk will recieve same OwnerId on evere TEvYardInit
-        // UNIT_ASSERT_VALUES_EQUAL(Owner, LastResponse.Owner);
-        Owner = LastResponse.Owner;
+        // There is no guarantee that unknown VDisk will recieve same OwnerId on evere TEvYardInit 
+        // UNIT_ASSERT_VALUES_EQUAL(Owner, LastResponse.Owner); 
+        Owner = LastResponse.Owner; 
         UNIT_ASSERT(OwnerRound != LastResponse.OwnerRound);
         VERBOSE_COUT(" Sending TEvReadLog");
-        ctx.Send(Yard, new NPDisk::TEvReadLog(Owner, OwnerRound));
+        ctx.Send(Yard, new NPDisk::TEvReadLog(Owner, OwnerRound)); 
         break;
     case 40:
         TEST_RESPONSE(EvReadLogResult, INVALID_ROUND);
@@ -3073,25 +3073,25 @@ void TTestDestructionWhileReadingChunk::TestFSM(const TActorContext &ctx) {
         Owner = LastResponse.Owner;
         OwnerRound = LastResponse.OwnerRound;
         ChunkSize = LastResponse.ChunkSize;
-        ctx.Send(Yard, new NPDisk::TEvChunkReserve(Owner, OwnerRound, 1));
-        break;
-    }
-    case 20:
-    {
-        TEST_RESPONSE(EvChunkReserveResult, OK);
-        ASSERT_YTHROW(LastResponse.ChunkIds.size() == 1,
-            "Unexpected ChunkIds.size() == " << LastResponse.ChunkIds.size());
-        ChunkIdx = LastResponse.ChunkIds[0];
+        ctx.Send(Yard, new NPDisk::TEvChunkReserve(Owner, OwnerRound, 1)); 
+        break; 
+    } 
+    case 20: 
+    { 
+        TEST_RESPONSE(EvChunkReserveResult, OK); 
+        ASSERT_YTHROW(LastResponse.ChunkIds.size() == 1, 
+            "Unexpected ChunkIds.size() == " << LastResponse.ChunkIds.size()); 
+        ChunkIdx = LastResponse.ChunkIds[0]; 
         VERBOSE_COUT(" Sending TEvChunkWrite");
         ChunkWriteParts.Reset(new NPDisk::TEvChunkWrite::TPart[1]);
         ChunkWriteData = PrepareData(ChunkSize);
         ChunkWriteParts[0].Data = ChunkWriteData.data();
         ChunkWriteParts[0].Size = (ui32)ChunkWriteData.size();
-        ctx.Send(Yard, new NPDisk::TEvChunkWrite(Owner, OwnerRound, ChunkIdx, 0,
+        ctx.Send(Yard, new NPDisk::TEvChunkWrite(Owner, OwnerRound, ChunkIdx, 0, 
             new NPDisk::TEvChunkWrite::TNonOwningParts(ChunkWriteParts.Get(), 1), (void*)42, false, 1));
         break;
     }
-    case 30:
+    case 30: 
     {
         TEST_RESPONSE(EvChunkWriteResult, OK);
         ASSERT_YTHROW(LastResponse.Cookie == (void*)42, "Unexpected cookie=" << LastResponse.Cookie);
@@ -3101,14 +3101,14 @@ void TTestDestructionWhileReadingChunk::TestFSM(const TActorContext &ctx) {
         ctx.Send(Yard, new NPDisk::TEvLog(Owner, OwnerRound, 0, commitRecord, data2, TLsnSeg(1, 1), (void*)43));
         break;
     }
-    case 40:
+    case 40: 
         TEST_RESPONSE(EvLogResult, OK);
         VERBOSE_COUT(" Sending TEvChunkRead");
         ctx.Send(Yard, new NPDisk::TEvChunkRead(Owner, OwnerRound, ChunkIdx, 0, ChunkSize, 1, nullptr));
         VERBOSE_COUT("Done");
         SignalDoneEvent();
         break;
-    case 50:
+    case 50: 
         break;
     default:
         ythrow TWithBackTrace<yexception>() << "Unexpected TestStep " << TestStep << Endl;
@@ -3166,7 +3166,7 @@ void TTestDestructionWhileReadingLog::TestFSM(const TActorContext &ctx) {
         break;
     case 20:
         TEST_RESPONSE(EvLogResult, OK);
-        ctx.Send(Yard, new NPDisk::TEvReadLog(Owner, OwnerRound));
+        ctx.Send(Yard, new NPDisk::TEvReadLog(Owner, OwnerRound)); 
         VERBOSE_COUT("Done");
         SignalDoneEvent();
         break;
@@ -3194,25 +3194,25 @@ void TTestChunkDeletionWhileWritingIt::TestFSM(const TActorContext &ctx) {
         Owner = LastResponse.Owner;
         OwnerRound = LastResponse.OwnerRound;
         ChunkSize = LastResponse.ChunkSize;
-        ctx.Send(Yard, new NPDisk::TEvChunkReserve(Owner, OwnerRound, 1));
-        break;
-    }
-    case 20:
-    {
-        TEST_RESPONSE(EvChunkReserveResult, OK);
-        ASSERT_YTHROW(LastResponse.ChunkIds.size() == 1,
-            "Unexpected ChunkIds.size() == " << LastResponse.ChunkIds.size());
-        ChunkIdx = LastResponse.ChunkIds[0];
+        ctx.Send(Yard, new NPDisk::TEvChunkReserve(Owner, OwnerRound, 1)); 
+        break; 
+    } 
+    case 20: 
+    { 
+        TEST_RESPONSE(EvChunkReserveResult, OK); 
+        ASSERT_YTHROW(LastResponse.ChunkIds.size() == 1, 
+            "Unexpected ChunkIds.size() == " << LastResponse.ChunkIds.size()); 
+        ChunkIdx = LastResponse.ChunkIds[0]; 
         VERBOSE_COUT(" Sending TEvChunkWrite");
         ChunkWriteParts.Reset(new NPDisk::TEvChunkWrite::TPart[1]);
         ChunkWriteData = PrepareData(1);
         ChunkWriteParts[0].Data = ChunkWriteData.data();
         ChunkWriteParts[0].Size = (ui32)ChunkWriteData.size();
-        ctx.Send(Yard, new NPDisk::TEvChunkWrite(Owner, OwnerRound, ChunkIdx, 0,
+        ctx.Send(Yard, new NPDisk::TEvChunkWrite(Owner, OwnerRound, ChunkIdx, 0, 
             new NPDisk::TEvChunkWrite::TNonOwningParts(ChunkWriteParts.Get(), 1), (void*)42, false, 1));
         break;
     }
-    case 30:
+    case 30: 
     {
         TEST_RESPONSE(EvChunkWriteResult, OK);
         ASSERT_YTHROW(LastResponse.Cookie == (void*)42, "Unexpected cookie=" << LastResponse.Cookie);
@@ -3230,7 +3230,7 @@ void TTestChunkDeletionWhileWritingIt::TestFSM(const TActorContext &ctx) {
         ctx.Send(Yard, new NPDisk::TEvLog(Owner, OwnerRound, 0, commitRecord, data2, TLsnSeg(1, 1), (void*)43));
         break;
     }
-    case 40:
+    case 40: 
         if (LastResponse.EventType == TEvBlobStorage::EvLogResult) {
             //TEST_RESPONSE(EvLogResult, ERROR);
             IsOk = false;
@@ -3239,7 +3239,7 @@ void TTestChunkDeletionWhileWritingIt::TestFSM(const TActorContext &ctx) {
             IsOk = true;
         }
         break;
-    case 50:
+    case 50: 
         if (IsOk) {
             //TEST_RESPONSE(EvLogResult, OK);
         } else {
@@ -3632,14 +3632,14 @@ void TTestStartingPointRebootsIteration::TestFSM(const TActorContext &ctx) {
         NextLsn = StartingPointLsn + 1000000;
 
         VERBOSE_COUT(" Sending TEvLogRead");
-        ctx.Send(Yard, new NPDisk::TEvReadLog(Owner, OwnerRound, NPDisk::TLogPosition{0, 0}, 128 << 20));
+        ctx.Send(Yard, new NPDisk::TEvReadLog(Owner, OwnerRound, NPDisk::TLogPosition{0, 0}, 128 << 20)); 
         break;
     case 20:
         TEST_RESPONSE(EvReadLogResult, OK);
         if (StartingPointLsn) {
             ASSERT_YTHROW(LastResponse.LogRecords.size() != 0,
                 "Unexpected LogRecords size == " << LastResponse.LogRecords.size());
-            ASSERT_YTHROW(LastResponse.IsEndOfLog,
+            ASSERT_YTHROW(LastResponse.IsEndOfLog, 
                 "Unexpected IsEndOfLog = " << (int)LastResponse.IsEndOfLog);
             NextLsn = LastResponse.LogRecords.back().Lsn + 1000000;
             FirstLsn = LastResponse.LogRecords[0].Lsn;
@@ -3651,7 +3651,7 @@ void TTestStartingPointRebootsIteration::TestFSM(const TActorContext &ctx) {
         } else {
             ASSERT_YTHROW(LastResponse.LogRecords.size() == 0,
                 "Unexpected LogRecords size == " << LastResponse.LogRecords.size());
-            ASSERT_YTHROW(LastResponse.IsEndOfLog,
+            ASSERT_YTHROW(LastResponse.IsEndOfLog, 
                 "Unexpected IsEndOfLog = " << (int)LastResponse.IsEndOfLog);
             VERBOSE_COUT(" Sending TEvChunkReserve");
             ctx.Send(Yard, new NPDisk::TEvChunkReserve(Owner, OwnerRound, 1));

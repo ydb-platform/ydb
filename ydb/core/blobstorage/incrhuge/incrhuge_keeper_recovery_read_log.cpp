@@ -37,7 +37,7 @@ namespace NKikimr {
 
             void Handle(TEvents::TEvBootstrap::TPtr& ev, const TActorContext& ctx) {
                 KeeperActorId = ev->Sender;
-                ctx.Send(PDiskActorId, new NPDisk::TEvReadLog(Owner, OwnerRound));
+                ctx.Send(PDiskActorId, new NPDisk::TEvReadLog(Owner, OwnerRound)); 
             }
 
             void Handle(NPDisk::TEvReadLogResult::TPtr& ev, const TActorContext& ctx) {
@@ -61,7 +61,7 @@ namespace NKikimr {
                     maxLsn = item.Lsn;
 
                     switch (item.Signature) {
-                        case TLogSignature::SignatureIncrHugeChunks:
+                        case TLogSignature::SignatureIncrHugeChunks: 
                             if (!ChunksEntrypointLsn || item.Lsn >= *ChunksEntrypointLsn) {
                                 NKikimrVDiskData::TIncrHugeChunks record;
                                 bool status = record.ParseFromString(item.Data);
@@ -70,7 +70,7 @@ namespace NKikimr {
                             }
                             break;
 
-                        case TLogSignature::SignatureIncrHugeDeletes:
+                        case TLogSignature::SignatureIncrHugeDeletes: 
                             if (!DeletesEntrypointLsn || item.Lsn >= *DeletesEntrypointLsn) {
                                 NKikimrVDiskData::TIncrHugeDelete record;
                                 bool status = record.ParseFromString(item.Data);
@@ -104,7 +104,7 @@ namespace NKikimr {
                             break;
 
                         default:
-                            Y_FAIL_S("unexpected log record " << item.Signature.ToString());
+                            Y_FAIL_S("unexpected log record " << item.Signature.ToString()); 
                     }
                 }
 

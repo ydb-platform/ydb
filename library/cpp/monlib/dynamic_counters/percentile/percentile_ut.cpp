@@ -5,58 +5,58 @@ using namespace NMonitoring;
 
 Y_UNIT_TEST_SUITE(PercentileTest) {
 
-template<size_t A, size_t B, size_t B_BEGIN>
-void printSizeAndLimit() {
-    using TPerc = TPercentileTrackerLg<A, B, 15>;
-    Cout << "TPercentileTrackerLg<" << A << ", " << B << ", 15>"
-        << "; sizeof# " << LeftPad(HumanReadableSize(sizeof(TPerc), SF_BYTES), 7)
-        << "; max_granularity# " << LeftPad(HumanReadableSize(TPerc::MAX_GRANULARITY, SF_QUANTITY), 5)
-        << "; limit# " << LeftPad(HumanReadableSize(TPerc::TRACKER_LIMIT , SF_QUANTITY), 5) << Endl;
-    if constexpr (B > 1) {
-        printSizeAndLimit<A, B - 1, B_BEGIN>();
-    } else if constexpr (A > 1) {
-        Cout << Endl;
-        printSizeAndLimit<A - 1, B_BEGIN, B_BEGIN>();
-    }
-}
-
-    Y_UNIT_TEST(PrintTrackerLgSizeAndLimits) {
-        printSizeAndLimit<10, 5, 5>();
-    }
-
-    Y_UNIT_TEST(TrackerLimitTest) {
-        {
-            using TPerc = TPercentileTrackerLg<1, 0, 1>;
-            TPerc tracker;
-            tracker.Increment(Max<size_t>());
-            UNIT_ASSERT_EQUAL(TPerc::TRACKER_LIMIT, tracker.GetPercentile(1.0));
-        }
-        {
-            using TPerc = TPercentileTrackerLg<1, 1, 1>;
-            TPerc tracker;
-            tracker.Increment(Max<size_t>());
-            UNIT_ASSERT_EQUAL(TPerc::TRACKER_LIMIT, tracker.GetPercentile(1.0));
-        }
-        {
-            using TPerc = TPercentileTrackerLg<1, 5, 1>;
-            TPerc tracker;
-            tracker.Increment(Max<size_t>());
-            UNIT_ASSERT_EQUAL(TPerc::TRACKER_LIMIT, tracker.GetPercentile(1.0));
-        }
-        {
-            using TPerc = TPercentileTrackerLg<2, 1, 1>;
-            TPerc tracker;
-            tracker.Increment(Max<size_t>());
-            UNIT_ASSERT_EQUAL(TPerc::TRACKER_LIMIT, tracker.GetPercentile(1.0));
-        }
-        {
-            using TPerc = TPercentileTrackerLg<5, 4, 1>;
-            TPerc tracker;
-            tracker.Increment(Max<size_t>());
-            UNIT_ASSERT_EQUAL(TPerc::TRACKER_LIMIT, tracker.GetPercentile(1.0));
-        }
-    }
-
+template<size_t A, size_t B, size_t B_BEGIN> 
+void printSizeAndLimit() { 
+    using TPerc = TPercentileTrackerLg<A, B, 15>; 
+    Cout << "TPercentileTrackerLg<" << A << ", " << B << ", 15>" 
+        << "; sizeof# " << LeftPad(HumanReadableSize(sizeof(TPerc), SF_BYTES), 7) 
+        << "; max_granularity# " << LeftPad(HumanReadableSize(TPerc::MAX_GRANULARITY, SF_QUANTITY), 5) 
+        << "; limit# " << LeftPad(HumanReadableSize(TPerc::TRACKER_LIMIT , SF_QUANTITY), 5) << Endl; 
+    if constexpr (B > 1) { 
+        printSizeAndLimit<A, B - 1, B_BEGIN>(); 
+    } else if constexpr (A > 1) { 
+        Cout << Endl; 
+        printSizeAndLimit<A - 1, B_BEGIN, B_BEGIN>(); 
+    } 
+} 
+ 
+    Y_UNIT_TEST(PrintTrackerLgSizeAndLimits) { 
+        printSizeAndLimit<10, 5, 5>(); 
+    } 
+ 
+    Y_UNIT_TEST(TrackerLimitTest) { 
+        { 
+            using TPerc = TPercentileTrackerLg<1, 0, 1>; 
+            TPerc tracker; 
+            tracker.Increment(Max<size_t>()); 
+            UNIT_ASSERT_EQUAL(TPerc::TRACKER_LIMIT, tracker.GetPercentile(1.0)); 
+        } 
+        { 
+            using TPerc = TPercentileTrackerLg<1, 1, 1>; 
+            TPerc tracker; 
+            tracker.Increment(Max<size_t>()); 
+            UNIT_ASSERT_EQUAL(TPerc::TRACKER_LIMIT, tracker.GetPercentile(1.0)); 
+        } 
+        { 
+            using TPerc = TPercentileTrackerLg<1, 5, 1>; 
+            TPerc tracker; 
+            tracker.Increment(Max<size_t>()); 
+            UNIT_ASSERT_EQUAL(TPerc::TRACKER_LIMIT, tracker.GetPercentile(1.0)); 
+        } 
+        { 
+            using TPerc = TPercentileTrackerLg<2, 1, 1>; 
+            TPerc tracker; 
+            tracker.Increment(Max<size_t>()); 
+            UNIT_ASSERT_EQUAL(TPerc::TRACKER_LIMIT, tracker.GetPercentile(1.0)); 
+        } 
+        { 
+            using TPerc = TPercentileTrackerLg<5, 4, 1>; 
+            TPerc tracker; 
+            tracker.Increment(Max<size_t>()); 
+            UNIT_ASSERT_EQUAL(TPerc::TRACKER_LIMIT, tracker.GetPercentile(1.0)); 
+        } 
+    } 
+ 
     Y_UNIT_TEST(BucketIdxIfvsBucketIdxBinarySearch) {
         for (size_t var = 0; var < 5; var++) {
             if (var == 0) {

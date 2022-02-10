@@ -2164,7 +2164,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
 
         const TActorId followerId = runtime.GrabEdgeEvent<TEvTablet::TEvRestored>(edge)->Get()->UserTabletActor;
         Y_UNUSED(followerId);
-
+ 
         {
             NTabletPipe::TClientConfig pipeClientConfig;
             pipeClientConfig.AllowFollower = true;

@@ -213,7 +213,7 @@ public:
                     result.ReportIssues(ctx.IssueManager);
 
                     if (!locksOk) {
-                        ctx.AddError(GetLocksInvalidatedIssue(TxState->Tx(), invalidatedLock));
+                        ctx.AddError(GetLocksInvalidatedIssue(TxState->Tx(), invalidatedLock)); 
                     }
                 } else {
                     result.ReportIssues(ctx.IssueManager);

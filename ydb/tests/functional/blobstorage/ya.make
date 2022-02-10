@@ -4,9 +4,9 @@ PY3TEST()
 
 ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
 TEST_SRCS(
-    pdisk_format_info.py
+    pdisk_format_info.py 
     replication.py
-    self_heal.py
+    self_heal.py 
     tablet_channel_migration.py
 )
 

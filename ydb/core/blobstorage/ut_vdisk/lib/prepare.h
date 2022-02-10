@@ -24,21 +24,21 @@ struct TAllPDisksConfiguration {
     const ui64 DiskSize;
     const TString Dir;
     const TString Device;
-    const TString DeviceType;
+    const TString DeviceType; 
 
     static TAllPDisksConfiguration MkDevice(const TString &devicePath, ui32 chunkSize,
-                                            TString deviceType);
-    static TAllPDisksConfiguration MkOneTmp(ui32 chunkSize, ui64 diskSize,
-                                            TString deviceType);
+                                            TString deviceType); 
+    static TAllPDisksConfiguration MkOneTmp(ui32 chunkSize, ui64 diskSize, 
+                                            TString deviceType); 
     static TAllPDisksConfiguration MkManyTmp(ui32 pDisksNum, ui32 chunkSize, ui64 diskSize,
-                                            TString deviceType);
+                                            TString deviceType); 
 
     TAllPDisksConfiguration(const TAllPDisksConfiguration &) = default;
 
 private:
     TAllPDisksConfiguration(ui32 num, ui32 chunkSize, ui64 diskSize,
-                            const TString &dir, const TString &device,
-                            TString deviceType);
+                            const TString &dir, const TString &device, 
+                            TString deviceType); 
 };
 
 //////////////////////////////////////////////////////////////////////////////////////
@@ -156,7 +156,7 @@ struct TConfiguration {
     TIntrusivePtr<NMonitoring::TDynamicCounters> Counters;
     std::unique_ptr<NActors::TMon> Monitoring;
     std::unique_ptr<NKikimr::TAppData> AppData;
-    std::shared_ptr<NKikimr::NPDisk::IIoContextFactory> IoContext;
+    std::shared_ptr<NKikimr::NPDisk::IIoContextFactory> IoContext; 
     std::unique_ptr<NActors::TActorSystem> ActorSystem1;
     std::unique_ptr<TAllPDisks> PDisks;
     std::unique_ptr<TAllVDisks> VDisks;
@@ -173,7 +173,7 @@ struct TConfiguration {
     TCondVar TimeoutCallbacksCV;
 
     TConfiguration(const TAllPDisksConfiguration &pcfg =
-                      TAllPDisksConfiguration::MkOneTmp(512u << 10u, 16ull << 30ull, "ROT"),
+                      TAllPDisksConfiguration::MkOneTmp(512u << 10u, 16ull << 30ull, "ROT"), 
                    ui32 domainsNum = 4u,
                    ui32 disksInDomain = 2u,
                    NKikimr::TErasureType::EErasureSpecies erasure =

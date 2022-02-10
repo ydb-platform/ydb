@@ -45,22 +45,22 @@ namespace NKikimr {
     // that can be freed to number of chunks used by VDisk
     ////////////////////////////////////////////////////////////////////////////
     bool HugeHeapDefragmentationRequired(
-            const TOutOfSpaceState& oos,
-            ui32 hugeCanBeFreedChunks,
-            ui32 hugeTotalChunks) {
+            const TOutOfSpaceState& oos, 
+            ui32 hugeCanBeFreedChunks, 
+            ui32 hugeTotalChunks) { 
 
         if (hugeCanBeFreedChunks < 10)
             return false;
 
-        double percentOfGarbage = static_cast<double>(hugeCanBeFreedChunks) / hugeTotalChunks;
+        double percentOfGarbage = static_cast<double>(hugeCanBeFreedChunks) / hugeTotalChunks; 
 
-        if (oos.GetLocalColor() > TSpaceColor::CYAN) {
-            return percentOfGarbage >= 0.02;
-        } else if (oos.GetLocalColor() > TSpaceColor::GREEN) {
-            return percentOfGarbage >= 0.15;
-        } else {
-            return percentOfGarbage >= 0.30;
-        }
+        if (oos.GetLocalColor() > TSpaceColor::CYAN) { 
+            return percentOfGarbage >= 0.02; 
+        } else if (oos.GetLocalColor() > TSpaceColor::GREEN) { 
+            return percentOfGarbage >= 0.15; 
+        } else { 
+            return percentOfGarbage >= 0.30; 
+        } 
     }
 
     ////////////////////////////////////////////////////////////////////////////
@@ -208,7 +208,7 @@ namespace NKikimr {
 
         std::shared_ptr<TDefragCtx> DCtx;
         TIntrusivePtr<TBlobStorageGroupInfo> GInfo;
-        ui64 TotalDefragRuns = 0;
+        ui64 TotalDefragRuns = 0; 
         bool InProgress = false;
         std::deque<TTask> WaitQueue;
         TActiveActors ActiveActors;
@@ -232,7 +232,7 @@ namespace NKikimr {
             }
 
             Sublog.Log() << "Defrag quantum started\n";
-            ++TotalDefragRuns;
+            ++TotalDefragRuns; 
             InProgress = true;
             ActiveActors.Insert(RunInBatchPool(ctx, CreateDefragQuantumActor(DCtx,
                 GInfo->GetVDiskId(DCtx->VCtx->ShortSelfVDisk),
@@ -350,16 +350,16 @@ namespace NKikimr {
                                     TABLED() {str << WaitQueue.size(); }
                                 }
                                 TABLER() {
-                                    TABLED() {str << "DCtx->RunDefragBySchedule";}
-                                    TABLED() {str << DCtx->RunDefragBySchedule;}
-                                }
-                                TABLER() {
-                                    TABLED() {str << "TotalDefragRuns";}
-                                    TABLED() {str << TotalDefragRuns;}
-                                }
-                                TABLER() {
+                                    TABLED() {str << "DCtx->RunDefragBySchedule";} 
+                                    TABLED() {str << DCtx->RunDefragBySchedule;} 
+                                } 
+                                TABLER() { 
+                                    TABLED() {str << "TotalDefragRuns";} 
+                                    TABLED() {str << TotalDefragRuns;} 
+                                } 
+                                TABLER() { 
                                     TABLED() {str << "FreeSpaceShare/Threshold";}
-                                    TABLED() {str << DCtx->VCtx->GetOutOfSpaceState().GetFreeSpaceShare();}
+                                    TABLED() {str << DCtx->VCtx->GetOutOfSpaceState().GetFreeSpaceShare();} 
                                 }
                                 TABLER() {
                                     TABLED() {str << "CanBeFreed/Used Huge Heap Chunks";}
@@ -371,7 +371,7 @@ namespace NKikimr {
                                 TABLER() {
                                     TABLED() {str << "VDisk Used Chunks";}
                                     TABLED() {
-                                        str << DCtx->VCtx->GetOutOfSpaceState().GetLocalUsedChunks();
+                                        str << DCtx->VCtx->GetOutOfSpaceState().GetLocalUsedChunks(); 
                                     }
                                 }
                             }

@@ -299,8 +299,8 @@ public:
         PutThroughput->Count(size);
     }
 
-    void CountPutPesponseTime(TPDiskCategory::EDeviceType type, NKikimrBlobStorage::EPutHandleClass cls, ui32 size,
-            TDuration duration) {
+    void CountPutPesponseTime(TPDiskCategory::EDeviceType type, NKikimrBlobStorage::EPutHandleClass cls, ui32 size, 
+            TDuration duration) { 
         const ui32 durationMs = duration.MilliSeconds();
         PutResponseTime.Increment(durationMs);
         switch (cls) {
@@ -321,14 +321,14 @@ public:
             default:
                 Y_FAIL("Unexpected case, HandleClass# %" PRIu64, (ui64)cls);
         }
-        NodeMon->CountPutPesponseTime(type, cls, size, duration);
+        NodeMon->CountPutPesponseTime(type, cls, size, duration); 
     }
 
-    void CountGetResponseTime(TPDiskCategory::EDeviceType type, NKikimrBlobStorage::EGetHandleClass cls, ui32 size,
-            TDuration duration) {
+    void CountGetResponseTime(TPDiskCategory::EDeviceType type, NKikimrBlobStorage::EGetHandleClass cls, ui32 size, 
+            TDuration duration) { 
         *EventGetResBytes += size;
         GetResponseTime.Increment(duration.MilliSeconds());
-        NodeMon->CountGetResponseTime(type, cls, size, duration);
+        NodeMon->CountGetResponseTime(type, cls, size, duration); 
     }
 
     void CountBlockResponseTime(TDuration duration) {

@@ -50,18 +50,18 @@ VDisk.prototype.colorSeverity = {
     Red: 5
 };
 
-VDisk.prototype.getStateSeverity = function() {
-    var sev = this.stateSeverity[this.VDiskState];
+VDisk.prototype.getStateSeverity = function() { 
+    var sev = this.stateSeverity[this.VDiskState]; 
     if (sev === undefined) {
         sev = 0;
     }
     return sev;
 }
 
-VDisk.prototype.isErrorState = function() {
-    return this.getStateSeverity() === 5;
-}
-
+VDisk.prototype.isErrorState = function() { 
+    return this.getStateSeverity() === 5; 
+} 
+ 
 VDisk.prototype.getColorSeverity = function(color) {
     var sev = this.colorSeverity[color];
     if (sev === undefined) {
@@ -93,7 +93,7 @@ VDisk.prototype.updateVDiskInfo = function(update) {
     state = '<table class="tooltip-table"><tr><td>VDisk</td><td>' + this.Id + '</td></tr>';
     if (this.VDiskState) {
         state += '<tr><td>State</td><td>' + this.VDiskState + '</td></tr>';
-        severity = this.getStateSeverity();
+        severity = this.getStateSeverity(); 
     } else {
         state += '<tr><td>State</td><td>not available</td></tr>';
     }
@@ -124,11 +124,11 @@ VDisk.prototype.updateVDiskInfo = function(update) {
     }
     if (this.DiskSpace && this.DiskSpace !== 'Green') {
         state += '<tr><td>Space</td><td>' + this.DiskSpace + '</td></tr>';
-        severity = Math.max(severity, this.getColorSeverity(this.DiskSpace));
+        severity = Math.max(severity, this.getColorSeverity(this.DiskSpace)); 
     }
     if (this.FrontQueues && this.FrontQueues !== 'Green') {
         state += '<tr><td>FronQueues</td><td>' + this.FrontQueues + '</td></tr>';
-        severity = Math.max(severity, Math.min(4, this.getColorSeverity(this.FrontQueues)));
+        severity = Math.max(severity, Math.min(4, this.getColorSeverity(this.FrontQueues))); 
     }
     dash = false;
     if (this.DonorMode === true) {

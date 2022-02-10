@@ -458,8 +458,8 @@ namespace NKikimr::NBsController {
             x->SetType(PDiskTypeToPDiskType(pdisk.Category.Type()));
             x->SetKind(pdisk.Category.Kind());
             if (pdisk.PDiskConfig) {
-                bool success = x->MutablePDiskConfig()->ParseFromString(pdisk.PDiskConfig);
-                Y_VERIFY(success);
+                bool success = x->MutablePDiskConfig()->ParseFromString(pdisk.PDiskConfig); 
+                Y_VERIFY(success); 
             }
             x->SetGuid(pdisk.Guid);
             x->SetNumStaticSlots(pdisk.StaticSlotUsage);

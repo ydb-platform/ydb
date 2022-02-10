@@ -774,7 +774,7 @@ namespace NActors {
     }
 
     void TTestActorRuntimeBase::SetLogBackend(const TAutoPtr<TLogBackend> logBackend) {
-        Y_VERIFY(!IsInitialized);
+        Y_VERIFY(!IsInitialized); 
         TGuard<TMutex> guard(Mutex);
         LogBackend = logBackend;
     }

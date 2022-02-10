@@ -6,7 +6,7 @@
 #include <ydb/core/base/group_stat.h>
 #include <ydb/core/blobstorage/base/common_latency_hist_bounds.h>
 #include <ydb/core/mon/mon.h>
-
+ 
 #include <util/generic/bitops.h>
 #include <util/generic/ptr.h>
 
@@ -22,22 +22,22 @@ struct TRequestMonItem {
     NMonitoring::TDynamicCounters::TCounterPtr GeneratedSubrequestBytes;
     NMonitoring::THistogramPtr ResponseTime;
 
-    void Init(TIntrusivePtr<NMonitoring::TDynamicCounters> counters, TPDiskCategory::EDeviceType type) {
+    void Init(TIntrusivePtr<NMonitoring::TDynamicCounters> counters, TPDiskCategory::EDeviceType type) { 
         RequestBytes = counters->GetCounter("requestBytes", true);
         GeneratedSubrequests = counters->GetCounter("generatedSubrequests", true);
         GeneratedSubrequestBytes = counters->GetCounter("generatedSubrequestBytes", true);
 
-        NMonitoring::TBucketBounds bounds = GetCommonLatencyHistBounds(type);
+        NMonitoring::TBucketBounds bounds = GetCommonLatencyHistBounds(type); 
 
-        ResponseTime = counters->GetNamedHistogram("sensor", "responseTimeMs",
-                NMonitoring::ExplicitHistogram(std::move(bounds)));
+        ResponseTime = counters->GetNamedHistogram("sensor", "responseTimeMs", 
+                NMonitoring::ExplicitHistogram(std::move(bounds))); 
     }
 
     void Register(ui32 requestBytes, ui32 generatedSubrequests, ui32 generatedSubrequestBytes, double durationSeconds) {
         *RequestBytes += requestBytes;
         *GeneratedSubrequests += generatedSubrequests;
         *GeneratedSubrequestBytes += generatedSubrequestBytes;
-        ResponseTime->Collect(durationSeconds * 1000.0);
+        ResponseTime->Collect(durationSeconds * 1000.0); 
     }
 };
 
@@ -46,10 +46,10 @@ public:
     enum EHandleClass {
         HcPutTabletLog = 0,
         HcPutUserData = 1,
-        HcPutAsync = 2,
+        HcPutAsync = 2, 
         HcGetFast = 3,
-        HcGetAsync = 4,
-        HcGetDiscover = 5,
+        HcGetAsync = 4, 
+        HcGetDiscover = 5, 
         HcGetLow = 6,
         HcCount = 7
     };
@@ -60,14 +60,14 @@ public:
                 return "PutTabletLog";
             case HcPutUserData:
                 return "PutUserData";
-            case HcPutAsync:
-                return "PutAsync";
+            case HcPutAsync: 
+                return "PutAsync"; 
             case HcGetFast:
                 return "GetFast";
-            case HcGetAsync:
-                return "GetAsync";
-            case HcGetDiscover:
-                return "GetDiscover";
+            case HcGetAsync: 
+                return "GetAsync"; 
+            case HcGetDiscover: 
+                return "GetDiscover"; 
             case HcGetLow:
                 return "GetLow";
             case HcCount:
@@ -119,8 +119,8 @@ public:
         return RequestMon[(ui32)handleClass][sizeClassIdx];
     }
 
-    TStoragePoolCounters(TIntrusivePtr<NMonitoring::TDynamicCounters> &counters, const TString &storagePoolName,
-            TPDiskCategory::EDeviceType type) {
+    TStoragePoolCounters(TIntrusivePtr<NMonitoring::TDynamicCounters> &counters, const TString &storagePoolName, 
+            TPDiskCategory::EDeviceType type) { 
         StoragePoolName = storagePoolName;
         TIntrusivePtr<NMonitoring::TDynamicCounters> poolGroup = counters->GetSubgroup("storagePool", storagePoolName);
         for (ui32 handleClass = 0; handleClass < (ui32)HcCount; ++handleClass) {
@@ -128,7 +128,7 @@ public:
             TIntrusivePtr<NMonitoring::TDynamicCounters> hcGroup = poolGroup->GetSubgroup("handleClass", handleClassName);
             for (ui32 sizeClassIdx = 0; sizeClassIdx <= MaxSizeClassBucketIdx; ++sizeClassIdx) {
                 TString sizeClassName = SizeClassName(sizeClassIdx);
-                RequestMon[handleClass][sizeClassIdx].Init(hcGroup->GetSubgroup("sizeClass", sizeClassName), type);
+                RequestMon[handleClass][sizeClassIdx].Init(hcGroup->GetSubgroup("sizeClass", sizeClassName), type); 
             }
         }
     }
@@ -146,13 +146,13 @@ public:
       Counters = group->GetSubgroup("subsystem", "request");
     };
 
-    TIntrusivePtr<TStoragePoolCounters> GetPoolCounters(const TString &storagePoolName,
-            TPDiskCategory::EDeviceType type = TPDiskCategory::DEVICE_TYPE_UNKNOWN) {
+    TIntrusivePtr<TStoragePoolCounters> GetPoolCounters(const TString &storagePoolName, 
+            TPDiskCategory::EDeviceType type = TPDiskCategory::DEVICE_TYPE_UNKNOWN) { 
         auto it = StoragePoolCounters.find(storagePoolName);
         if (it != StoragePoolCounters.end()) {
             return it->second;
         }
-        TIntrusivePtr<TStoragePoolCounters> spc = MakeIntrusive<TStoragePoolCounters>(Counters, storagePoolName, type);
+        TIntrusivePtr<TStoragePoolCounters> spc = MakeIntrusive<TStoragePoolCounters>(Counters, storagePoolName, type); 
         StoragePoolCounters.emplace(storagePoolName, spc);
         return spc;
     }

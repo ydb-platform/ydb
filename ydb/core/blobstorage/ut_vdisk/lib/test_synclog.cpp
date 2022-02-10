@@ -68,7 +68,7 @@ class TDataWriterActor : public TActorBootstrapped<TDataWriterActor> {
             TIntrusivePtr<TEventSerializedData> buffers = serializer.Release(logCmd.IsExtendedFormat());
             ctx.Send(TestCtx->LoggerId,
                      new NPDisk::TEvLog(TestCtx->PDiskCtx->Dsk->Owner, TestCtx->PDiskCtx->Dsk->OwnerRound,
-                                        TLogSignature::SignatureBlock, buffers->GetString(), seg, nullptr));
+                                        TLogSignature::SignatureBlock, buffers->GetString(), seg, nullptr)); 
             // FIXME: problems on reboot
             ctx.Send(TestCtx->SyncLogId, new NSyncLog::TEvSyncLogPut(seg.Point(), tabletId, Generation, 0));
         }
@@ -166,7 +166,7 @@ class TSyncLogTestWriteActor : public TActorBootstrapped<TSyncLogTestWriteActor>
         auto &vDiskInstance = Conf->VDisks->Get(0);
         auto &groupInfo = Conf->GroupInfo;
         VCtx = MakeIntrusive<TVDiskContext>(ctx.SelfID, groupInfo->PickTopology(), counters, vDiskInstance.VDiskID,
-            ctx.ExecutorThread.ActorSystem, TPDiskCategory::DEVICE_TYPE_UNKNOWN);
+            ctx.ExecutorThread.ActorSystem, TPDiskCategory::DEVICE_TYPE_UNKNOWN); 
         VDiskConfig = vDiskInstance.Cfg;
         TestCtx->SelfVDiskId = groupInfo->GetVDiskId(VCtx->ShortSelfVDisk);
 

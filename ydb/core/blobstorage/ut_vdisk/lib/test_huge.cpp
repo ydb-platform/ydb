@@ -113,7 +113,7 @@ struct THugeModuleContext {
 // THugeModuleRecoveryActor
 /////////////////////////////////////////////////////////////////////////////////////////////////////////
 class THugeModuleRecoveryActor : public TActorBootstrapped<THugeModuleRecoveryActor> {
-    using TStartingPoints = TMap<TLogSignature, NPDisk::TLogRecord>;
+    using TStartingPoints = TMap<TLogSignature, NPDisk::TLogRecord>; 
 
     std::shared_ptr<THugeModuleContext> HmCtx;
     ui64 Lsn = 0;
@@ -125,7 +125,7 @@ class THugeModuleRecoveryActor : public TActorBootstrapped<THugeModuleRecoveryAc
         auto &vDiskInstance = HmCtx->Conf->VDisks->Get(0);
         HmCtx->Config = vDiskInstance.Cfg;
         HmCtx->VCtx.Reset(new TVDiskContext(ctx.SelfID, HmCtx->Conf->GroupInfo->PickTopology(), HmCtx->Counters,
-                vDiskInstance.VDiskID, ctx.ExecutorThread.ActorSystem, TPDiskCategory::DEVICE_TYPE_UNKNOWN));
+                vDiskInstance.VDiskID, ctx.ExecutorThread.ActorSystem, TPDiskCategory::DEVICE_TYPE_UNKNOWN)); 
 
         TVDiskID selfVDiskID = HmCtx->Conf->GroupInfo->GetVDiskId(HmCtx->VCtx->ShortSelfVDisk);
         ctx.Send(HmCtx->Config->BaseInfo.PDiskActorID,
@@ -142,7 +142,7 @@ class THugeModuleRecoveryActor : public TActorBootstrapped<THugeModuleRecoveryAc
         auto logFunc = [] (const TString) { /* empty */ };
 
         TStartingPoints::const_iterator it;
-        it = startingPoints.find(TLogSignature::SignatureHugeBlobEntryPoint);
+        it = startingPoints.find(TLogSignature::SignatureHugeBlobEntryPoint); 
         if (it == startingPoints.end()) {
             RepairedHuge = std::make_shared<THullHugeKeeperPersState>(
                         HmCtx->VCtx,

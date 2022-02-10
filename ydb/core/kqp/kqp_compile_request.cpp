@@ -262,7 +262,7 @@ private:
             << ", at state:" << state, ctx);
     }
 
-    void InternalError(const TString& message, const TActorContext &ctx) {
+    void InternalError(const TString& message, const TActorContext &ctx) { 
         LOG_ERROR_S(ctx, NKikimrServices::KQP_COMPILE_REQUEST, "Internal error"
             << ", self: " << ctx.SelfID
             << ", message: " << message);

@@ -199,7 +199,7 @@ namespace NKikimr::NStorage {
         STLOG(PRI_NOTICE, BS_NODE, NW69, "RestartLocalPDisk is started", (PDiskId, pdiskId));
     }
 
-    void TNodeWarden::RestartLocalPDiskFinish(ui32 pdiskId, NKikimrProto::EReplyStatus status) {
+    void TNodeWarden::RestartLocalPDiskFinish(ui32 pdiskId, NKikimrProto::EReplyStatus status) { 
         const TPDiskKey pdiskKey(LocalNodeId, pdiskId);
 
         size_t erasedCount = InFlightRestartedPDisks.erase(pdiskKey);
@@ -208,27 +208,27 @@ namespace NKikimr::NStorage {
         const TVSlotId from(pdiskKey.NodeId, pdiskKey.PDiskId, 0);
         const TVSlotId to(pdiskKey.NodeId, pdiskKey.PDiskId, Max<ui32>());
 
-        if (status == NKikimrProto::EReplyStatus::OK) {
-            TStringStream vdisks;
-            bool first = true;
-            vdisks << "{";
+        if (status == NKikimrProto::EReplyStatus::OK) { 
+            TStringStream vdisks; 
+            bool first = true; 
+            vdisks << "{"; 
             for (auto it = LocalVDisks.lower_bound(from); it != LocalVDisks.end() && it->first <= to; ++it) {
-                auto& [key, value] = *it;
+                auto& [key, value] = *it; 
 
-                PoisonLocalVDisk(value);
-                vdisks << (std::exchange(first, false) ? "" : ", ") << value.GetVDiskId().ToString();
-                if (value.SlayInFlight) {
-                    Send(MakeBlobStoragePDiskID(key.NodeId, key.PDiskId), new NPDisk::TEvSlay(value.GetVDiskId(),
-                                NextLocalPDiskInitOwnerRound(), key.PDiskId, key.VDiskSlotId));
-                } else {
-                    StartLocalVDiskActor(value, TDuration::Zero());
-                }
+                PoisonLocalVDisk(value); 
+                vdisks << (std::exchange(first, false) ? "" : ", ") << value.GetVDiskId().ToString(); 
+                if (value.SlayInFlight) { 
+                    Send(MakeBlobStoragePDiskID(key.NodeId, key.PDiskId), new NPDisk::TEvSlay(value.GetVDiskId(), 
+                                NextLocalPDiskInitOwnerRound(), key.PDiskId, key.VDiskSlotId)); 
+                } else { 
+                    StartLocalVDiskActor(value, TDuration::Zero()); 
+                } 
             }
-            SendDiskMetrics(false);
-
-            vdisks << "}";
-            STLOG(PRI_NOTICE, BS_NODE, NW74, "RestartLocalPDisk has finished",
-                    (PDiskId, pdiskId), (VDiskIds, vdisks.Str()));
+            SendDiskMetrics(false); 
+ 
+            vdisks << "}"; 
+            STLOG(PRI_NOTICE, BS_NODE, NW74, "RestartLocalPDisk has finished", 
+                    (PDiskId, pdiskId), (VDiskIds, vdisks.Str())); 
         } else {
             for (auto it = LocalVDisks.lower_bound(from); it != LocalVDisks.end() && it->first <= to; ++it) {
                 auto& [key, value] = *it;

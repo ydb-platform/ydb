@@ -1,12 +1,12 @@
 #pragma once
 #include "defs.h"
 
-#include "blobstorage_pdisk_defs.h"
-#include "blobstorage_pdisk_config.h"
-#include "blobstorage_pdisk_chunk_tracker.h"
-#include "blobstorage_pdisk_free_chunks.h"
-#include "blobstorage_pdisk_keeper_params.h"
-#include "blobstorage_pdisk_mon.h"
+#include "blobstorage_pdisk_defs.h" 
+#include "blobstorage_pdisk_config.h" 
+#include "blobstorage_pdisk_chunk_tracker.h" 
+#include "blobstorage_pdisk_free_chunks.h" 
+#include "blobstorage_pdisk_keeper_params.h" 
+#include "blobstorage_pdisk_mon.h" 
 
 namespace NKikimr {
 namespace NPDisk {
@@ -33,8 +33,8 @@ public:
         , Cfg(cfg)
         , UntrimmedFreeChunks(Mon.UntrimmedFreeChunks, cfg->SortFreeChunksPerItems)
         , TrimmedFreeChunks(Mon.FreeChunks, cfg->SortFreeChunksPerItems)
-        , ChunkTracker()
-    {}
+        , ChunkTracker() 
+    {} 
 
     //
     // Initialization
@@ -56,8 +56,8 @@ public:
     // Add/remove owner
     //
 
-    void AddOwner(TOwner owner, TVDiskID vdiskId) {
-        ChunkTracker.AddOwner(owner, vdiskId);
+    void AddOwner(TOwner owner, TVDiskID vdiskId) { 
+        ChunkTracker.AddOwner(owner, vdiskId); 
     }
 
     void RemoveOwner(TOwner owner) {
@@ -75,18 +75,18 @@ public:
         return TrimmedFreeChunks.Size();
     }
 
-    i64 GetOwnerHardLimit(TOwner owner) const {
+    i64 GetOwnerHardLimit(TOwner owner) const { 
         return ChunkTracker.GetOwnerHardLimit(owner);
     }
 
-    i64 GetOwnerFree(TOwner owner) const {
+    i64 GetOwnerFree(TOwner owner) const { 
         return ChunkTracker.GetOwnerFree(owner);
     }
 
-    i64 GetOwnerUsed(TOwner owner) const {
-        return ChunkTracker.GetOwnerUsed(owner);
-    }
-
+    i64 GetOwnerUsed(TOwner owner) const { 
+        return ChunkTracker.GetOwnerUsed(owner); 
+    } 
+ 
     TChunkIdx PopOwnerFreeChunk(TOwner owner, TString &outErrorReason) {
         if (ChunkTracker.TryAllocate(owner, 1, outErrorReason)) {
             TChunkIdx idx = PopFree(outErrorReason);
@@ -99,23 +99,23 @@ public:
         }
     }
 
-    TVector<TChunkIdx> PopOwnerFreeChunks(TOwner owner, ui32 chunkCount, TString &outErrorReason) {
-        TVector<TChunkIdx> chunks;
+    TVector<TChunkIdx> PopOwnerFreeChunks(TOwner owner, ui32 chunkCount, TString &outErrorReason) { 
+        TVector<TChunkIdx> chunks; 
         if (ChunkTracker.TryAllocate(owner, chunkCount, outErrorReason)) {
-            chunks.resize(chunkCount);
+            chunks.resize(chunkCount); 
             for (ui32 i = 0; i < chunkCount; ++i) {
                 TChunkIdx idx = PopFree(outErrorReason);
                 if (idx == 0) {
                     for (ui32 f = 0; f < i; ++f) {
-                        UntrimmedFreeChunks.Push(chunks[f]);
+                        UntrimmedFreeChunks.Push(chunks[f]); 
                     }
                     ChunkTracker.Release(owner, chunkCount);
-                    return {};
+                    return {}; 
                 }
-                chunks[i] = idx;
+                chunks[i] = idx; 
             }
         }
-        return chunks;
+        return chunks; 
     }
 
     void PushFreeOwnerChunk(TOwner owner, TChunkIdx chunkIdx) {
@@ -124,12 +124,12 @@ public:
         ChunkTracker.Release(owner, 1);
     }
 
-    TStatusFlags GetSpaceStatusFlags(TOwner owner) const {
+    TStatusFlags GetSpaceStatusFlags(TOwner owner) const { 
         return ChunkTracker.GetSpaceStatusFlags(owner);
     }
 
-    NKikimrBlobStorage::TPDiskSpaceColor::E EstimateSpaceColor(TOwner owner, i64 allocationSize) const {
-        return ChunkTracker.EstimateSpaceColor(owner, allocationSize);
+    NKikimrBlobStorage::TPDiskSpaceColor::E EstimateSpaceColor(TOwner owner, i64 allocationSize) const { 
+        return ChunkTracker.EstimateSpaceColor(owner, allocationSize); 
     }
 
     //
@@ -157,8 +157,8 @@ public:
     //
     // GUI
     //
-    void PrintHTML(IOutputStream &str) {
-        ChunkTracker.PrintHTML(str);
+    void PrintHTML(IOutputStream &str) { 
+        ChunkTracker.PrintHTML(str); 
     }
 
 protected:

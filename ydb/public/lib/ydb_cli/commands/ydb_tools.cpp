@@ -1,44 +1,44 @@
-#include "ydb_tools.h"
-
+#include "ydb_tools.h" 
+ 
 #include <ydb/public/lib/ydb_cli/common/normalize_path.h>
 #include <ydb/public/lib/ydb_cli/dump/dump.h>
 #include <ydb/library/backup/backup.h>
 #include <ydb/library/backup/util.h>
-
+ 
 #include <util/stream/format.h>
-#include <util/string/split.h>
-
-namespace NYdb::NConsoleClient {
-
-TCommandTools::TCommandTools()
-    : TClientCommandTree("tools", {}, "YDB tools service")
-{
+#include <util/string/split.h> 
+ 
+namespace NYdb::NConsoleClient { 
+ 
+TCommandTools::TCommandTools() 
+    : TClientCommandTree("tools", {}, "YDB tools service") 
+{ 
     AddCommand(std::make_unique<TCommandDump>());
     AddCommand(std::make_unique<TCommandRestore>());
     AddCommand(std::make_unique<TCommandCopy>());
     AddCommand(std::make_unique<TCommandRename>());
-}
-
-TToolsCommand::TToolsCommand(const TString& name, const std::initializer_list<TString>& aliases, const TString& description)
-    : TYdbCommand(name, aliases, description)
-{}
-
-void TToolsCommand::Config(TConfig& config) {
-    TYdbCommand::Config(config);
-}
-
-////////////////////////////////////////////////////////////////////////////////
-//  Dump
-////////////////////////////////////////////////////////////////////////////////
-TCommandDump::TCommandDump()
+} 
+ 
+TToolsCommand::TToolsCommand(const TString& name, const std::initializer_list<TString>& aliases, const TString& description) 
+    : TYdbCommand(name, aliases, description) 
+{} 
+ 
+void TToolsCommand::Config(TConfig& config) { 
+    TYdbCommand::Config(config); 
+} 
+ 
+//////////////////////////////////////////////////////////////////////////////// 
+//  Dump 
+//////////////////////////////////////////////////////////////////////////////// 
+TCommandDump::TCommandDump() 
     : TToolsCommand("dump", {}, "Dump specified database directory or table into local directory")
-{}
-
-void TCommandDump::Config(TConfig& config) {
-    TToolsCommand::Config(config);
-
-    config.SetFreeArgsNum(0);
-
+{} 
+ 
+void TCommandDump::Config(TConfig& config) { 
+    TToolsCommand::Config(config); 
+ 
+    config.SetFreeArgsNum(0); 
+ 
     config.Opts->AddLongOption('p', "path", "Database path to a directory or a table to be dumped.")
         .DefaultValue(".").StoreResult(&Path);
     config.Opts->AddLongOption("exclude", "Pattern(s) (PCRE) for paths excluded from dump."
@@ -48,9 +48,9 @@ void TCommandDump::Config(TConfig& config) {
         });
     config.Opts->AddLongOption('o', "output", "[Required] Path in a local filesystem to a directory to place dump into."
             " Directory should either not exist or be empty.")
-        .StoreResult(&FilePath);
+        .StoreResult(&FilePath); 
     config.Opts->AddLongOption("scheme-only", "Dump only scheme")
-        .StoreTrue(&IsSchemeOnly);
+        .StoreTrue(&IsSchemeOnly); 
     config.Opts->AddLongOption("avoid-copy", "Avoid copying."
             " By default, YDB makes a copy of a table before dumping it to reduce impact on workload and ensure consistency.\n"
             "In some cases (e.g. for tables with external blobs) copying should be disabled.")
@@ -68,65 +68,65 @@ void TCommandDump::Config(TConfig& config) {
             "database - take one consistent snapshot of all tables specified for dump."
             " Takes more time and is more likely to impact workload;\n"
             "table - take consistent snapshot per each table independently.")
-        .DefaultValue("database").StoreResult(&ConsistencyLevel);
-}
-
-void TCommandDump::Parse(TConfig& config) {
-    TClientCommand::Parse(config);
+        .DefaultValue("database").StoreResult(&ConsistencyLevel); 
+} 
+ 
+void TCommandDump::Parse(TConfig& config) { 
+    TClientCommand::Parse(config); 
     AdjustPath(config);
-}
-
-int TCommandDump::Run(TConfig& config) {
-
-    bool useConsistentCopyTable;
-    if (ConsistencyLevel == "database") {
-        useConsistentCopyTable = true;
-    } else if (ConsistencyLevel == "table") {
-        useConsistentCopyTable = false;
-    } else {
+} 
+ 
+int TCommandDump::Run(TConfig& config) { 
+ 
+    bool useConsistentCopyTable; 
+    if (ConsistencyLevel == "database") { 
+        useConsistentCopyTable = true; 
+    } else if (ConsistencyLevel == "table") { 
+        useConsistentCopyTable = false; 
+    } else { 
         throw yexception() << "Incorrect consistency level. Available options: \"database\", \"table\"" << Endl;
-    }
-
-    NYdb::SetVerbosity(config.IsVerbose);
-
-    try {
-        TString relPath = NYdb::RelPathFromAbsolute(config.Database, Path);
+    } 
+ 
+    NYdb::SetVerbosity(config.IsVerbose); 
+ 
+    try { 
+        TString relPath = NYdb::RelPathFromAbsolute(config.Database, Path); 
         NYdb::NBackup::BackupFolder(CreateDriver(config), config.Database, relPath, FilePath, ExclusionPatterns,
             IsSchemeOnly, useConsistentCopyTable, AvoidCopy, SavePartialResult, PreservePoolKinds);
-    } catch (const NYdb::NBackup::TYdbErrorException& e) {
-        e.LogToStderr();
-        return EXIT_FAILURE;
-    } catch (const yexception& e) {
-        Cerr << "General error, what# " << e.what() << Endl;
-        return EXIT_FAILURE;
-    }
-    return EXIT_SUCCESS;
-}
-
-////////////////////////////////////////////////////////////////////////////////
-//  Restore
-////////////////////////////////////////////////////////////////////////////////
-TCommandRestore::TCommandRestore()
-    : TToolsCommand("restore", {}, "Restore database from local dump into specified directory")
-{}
-
-void TCommandRestore::Config(TConfig& config) {
-    TToolsCommand::Config(config);
-
-    config.SetFreeArgsNum(0);
-
-    config.Opts->AddLongOption('p', "path",
+    } catch (const NYdb::NBackup::TYdbErrorException& e) { 
+        e.LogToStderr(); 
+        return EXIT_FAILURE; 
+    } catch (const yexception& e) { 
+        Cerr << "General error, what# " << e.what() << Endl; 
+        return EXIT_FAILURE; 
+    } 
+    return EXIT_SUCCESS; 
+} 
+ 
+//////////////////////////////////////////////////////////////////////////////// 
+//  Restore 
+//////////////////////////////////////////////////////////////////////////////// 
+TCommandRestore::TCommandRestore() 
+    : TToolsCommand("restore", {}, "Restore database from local dump into specified directory") 
+{} 
+ 
+void TCommandRestore::Config(TConfig& config) { 
+    TToolsCommand::Config(config); 
+ 
+    config.SetFreeArgsNum(0); 
+ 
+    config.Opts->AddLongOption('p', "path", 
             "[Required] Database path to a destination directory where restored directory or table will be placed.")
-        .StoreResult(&Path);
+        .StoreResult(&Path); 
     config.Opts->AddLongOption('i', "input",
             "[Required] Path in a local filesystem to a directory with dump.")
-        .StoreResult(&FilePath);
-
+        .StoreResult(&FilePath); 
+ 
     config.Opts->AddLongOption("dry-run", TStringBuilder()
             << "Do not restore tables, only check that:" << Endl
             << "  - all dumped tables exist in database;" << Endl
             << "  - all dumped table schemes are the same as in database.")
-        .StoreTrue(&IsDryRun);
+        .StoreTrue(&IsDryRun); 
 
     NDump::TRestoreSettings defaults;
 
@@ -148,7 +148,7 @@ void TCommandRestore::Config(TConfig& config) {
         .StoreTrue(&SavePartialResult);
 
     config.Opts->AddLongOption("bandwidth", "Limit data upload bandwidth, bytes per second (example: 2MiB)")
-        .DefaultValue("0").StoreResult(&UploadBandwidth);
+        .DefaultValue("0").StoreResult(&UploadBandwidth); 
 
     config.Opts->AddLongOption("rps", "Limit requests per second (example: 100)")
         .DefaultValue(defaults.RateLimiterSettings_.GetRps()).StoreResult(&UploadRps);
@@ -176,16 +176,16 @@ void TCommandRestore::Config(TConfig& config) {
 
     config.Opts->MutuallyExclusive("bandwidth", "rps");
     config.Opts->MutuallyExclusive("import-data", "bulk-upsert");
-}
-
-void TCommandRestore::Parse(TConfig& config) {
-    TClientCommand::Parse(config);
+} 
+ 
+void TCommandRestore::Parse(TConfig& config) { 
+    TClientCommand::Parse(config); 
     AdjustPath(config);
-}
-
-int TCommandRestore::Run(TConfig& config) {
-    NYdb::SetVerbosity(config.IsVerbose);
-
+} 
+ 
+int TCommandRestore::Run(TConfig& config) { 
+    NYdb::SetVerbosity(config.IsVerbose); 
+ 
     auto settings = NDump::TRestoreSettings()
         .DryRun(IsDryRun)
         .RestoreData(RestoreData)
@@ -194,7 +194,7 @@ int TCommandRestore::Run(TConfig& config) {
         .SavePartialResult(SavePartialResult)
         .RowsPerRequest(NYdb::SizeFromString(RowsPerRequest))
         .InFly(InFly);
-
+ 
     if (auto bytesPerRequest = NYdb::SizeFromString(BytesPerRequest)) {
         if (bytesPerRequest > NDump::TRestoreSettings::MaxBytesPerRequest) {
             throw TMissUseException()
@@ -203,7 +203,7 @@ int TCommandRestore::Run(TConfig& config) {
         }
 
         settings.BytesPerRequest(bytesPerRequest);
-    }
+    } 
 
     if (RequestUnitsPerRequest) {
         settings.RequestUnitsPerRequest(NYdb::SizeFromString(RequestUnitsPerRequest));
@@ -224,9 +224,9 @@ int TCommandRestore::Run(TConfig& config) {
     NDump::TClient client(CreateDriver(config));
     ThrowOnError(client.Restore(FilePath, Path, settings));
 
-    return EXIT_SUCCESS;
-}
-
+    return EXIT_SUCCESS; 
+} 
+ 
 ////////////////////////////////////////////////////////////////////////////////
 //  Copy
 ////////////////////////////////////////////////////////////////////////////////
@@ -375,4 +375,4 @@ int TCommandRename::Run(TConfig& config) {
     return EXIT_SUCCESS;
 }
 
-} // NYdb::NConsoleClient
+} // NYdb::NConsoleClient 

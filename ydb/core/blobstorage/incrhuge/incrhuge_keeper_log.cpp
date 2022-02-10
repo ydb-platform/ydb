@@ -442,7 +442,7 @@ namespace NKikimr {
             // issue log record
             TLsnSeg seg(item.Lsn, item.Lsn);
             ctx.Send(Keeper.State.Settings.PDiskActorId, new NPDisk::TEvLog(Keeper.State.PDiskParams->Owner,
-                    Keeper.State.PDiskParams->OwnerRound, TLogSignature::SignatureIncrHugeChunks, commit, data,
+                    Keeper.State.PDiskParams->OwnerRound, TLogSignature::SignatureIncrHugeChunks, commit, data, 
                     seg, Keeper.RegisterYardCallback(MakeCallback(std::move(callback)))));
 
             if (item.Entrypoint) {
@@ -660,7 +660,7 @@ namespace NKikimr {
             // send record to logger
             TLsnSeg seg(item.Lsn, item.Lsn);
             ctx.Send(Keeper.State.Settings.PDiskActorId, new NPDisk::TEvLog(Keeper.State.PDiskParams->Owner,
-                    Keeper.State.PDiskParams->OwnerRound, TLogSignature::SignatureIncrHugeDeletes, commit, data,
+                    Keeper.State.PDiskParams->OwnerRound, TLogSignature::SignatureIncrHugeDeletes, commit, data, 
                     seg, Keeper.RegisterYardCallback(MakeCallback(std::move(callback)))));
         }
 

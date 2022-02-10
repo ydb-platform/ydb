@@ -7,11 +7,11 @@
 class TWatchdogThread : public ISimpleThread {
     TMutex Mutex;
     TCondVar Stop;
-    TAtomic QuitFlag = 0;
+    TAtomic QuitFlag = 0; 
 
 public:
     ~TWatchdogThread() {
-        AtomicSet(QuitFlag, 1);
+        AtomicSet(QuitFlag, 1); 
         with_lock (Mutex) {
             Stop.Signal();
         }
@@ -23,7 +23,7 @@ public:
         with_lock (Mutex) {
             do {
                 Cerr << Sprintf("Watchdog# %s\n", TInstant::Now().ToString().data());
-            } while (!AtomicGet(QuitFlag) && !Stop.WaitT(Mutex, TDuration::Seconds(5)));
+            } while (!AtomicGet(QuitFlag) && !Stop.WaitT(Mutex, TDuration::Seconds(5))); 
         }
 
         return nullptr;
@@ -35,23 +35,23 @@ Y_UNIT_TEST_SUITE(TPDiskFIT) {
         TWatchdogThread watchdog;
         watchdog.Start();
         TPDiskFailureInjectionTest test;
-        test.TestDuration = NSan::PlainOrUnderSanitizer(TDuration::Minutes(4), TDuration::Minutes(3));
-        test.RunCycle<TBasicTest>(false, 8, false);
+        test.TestDuration = NSan::PlainOrUnderSanitizer(TDuration::Minutes(4), TDuration::Minutes(3)); 
+        test.RunCycle<TBasicTest>(false, 8, false); 
     }
-
-    Y_UNIT_TEST(FailTest) {
-        TWatchdogThread watchdog;
-        watchdog.Start();
-        TPDiskFailureInjectionTest test;
-        test.TestDuration = NSan::PlainOrUnderSanitizer(TDuration::Minutes(4), TDuration::Minutes(3));
-        test.RunCycle<TBasicTest>(true, 8, false);
-    }
-
-    Y_UNIT_TEST(LogSpliceError) {
-        TWatchdogThread watchdog;
-        watchdog.Start();
-        TPDiskFailureInjectionTest test;
-        test.TestDuration = NSan::PlainOrUnderSanitizer(TDuration::Minutes(4), TDuration::Minutes(3));
-        test.RunCycle<TBasicTest>(true, 8, true);
-    }
+ 
+    Y_UNIT_TEST(FailTest) { 
+        TWatchdogThread watchdog; 
+        watchdog.Start(); 
+        TPDiskFailureInjectionTest test; 
+        test.TestDuration = NSan::PlainOrUnderSanitizer(TDuration::Minutes(4), TDuration::Minutes(3)); 
+        test.RunCycle<TBasicTest>(true, 8, false); 
+    } 
+ 
+    Y_UNIT_TEST(LogSpliceError) { 
+        TWatchdogThread watchdog; 
+        watchdog.Start(); 
+        TPDiskFailureInjectionTest test; 
+        test.TestDuration = NSan::PlainOrUnderSanitizer(TDuration::Minutes(4), TDuration::Minutes(3)); 
+        test.RunCycle<TBasicTest>(true, 8, true); 
+    } 
 }

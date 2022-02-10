@@ -13,21 +13,21 @@ using namespace NKikimr;
 
 class TStateManager;
 
-struct TFakeVDiskParams {
-    // 0 means no limit
-    ui32 LogsToBeSent = 0;
-
-    // LogRecord size distribution
-    ui32 SizeMin = 1000;
-    ui32 SizeMax = 2000;
-
-    ui32 LsnToKeepCount = 1000;
-    double LogCutProbability = 1.0 / 30000;
-};
-
-
+struct TFakeVDiskParams { 
+    // 0 means no limit 
+    ui32 LogsToBeSent = 0; 
+ 
+    // LogRecord size distribution 
+    ui32 SizeMin = 1000; 
+    ui32 SizeMax = 2000; 
+ 
+    ui32 LsnToKeepCount = 1000; 
+    double LogCutProbability = 1.0 / 30000; 
+}; 
+ 
+ 
 IActor *CreateFakeVDisk(const TVDiskID& vdiskId, const TActorId& pdiskServiceId, ui64 pdiskGuid,
-        TStateManager *stateManager, TFakeVDiskParams params);
+        TStateManager *stateManager, TFakeVDiskParams params); 
 
 class TBasicTest : public TActorBootstrapped<TBasicTest> {
     TAutoEvent *StopEvent = nullptr;
@@ -36,12 +36,12 @@ class TBasicTest : public TActorBootstrapped<TBasicTest> {
     TIntrusivePtr<TPDiskConfig> PDiskConfig;
     TActorId PDiskServiceId;
     const ui32 NumVDisks;
-    bool InduceLogSplicing;
+    bool InduceLogSplicing; 
 
 public:
-    TBasicTest(ui32 numVDisks, bool induceLogSplicing)
+    TBasicTest(ui32 numVDisks, bool induceLogSplicing) 
         : NumVDisks(numVDisks)
-        , InduceLogSplicing(induceLogSplicing)
+        , InduceLogSplicing(induceLogSplicing) 
     {}
 
     template<typename TEnv>
@@ -49,8 +49,8 @@ public:
         StopEvent = stopEvent;
         StateManager = stateManager;
         Counters = env->Counters;
-        PDiskConfig = new TPDiskConfig(env->PDiskFilePath, env->PDiskGuid, 1,
-                TPDiskCategory(TPDiskCategory::DEVICE_TYPE_ROT, 0).GetRaw());
+        PDiskConfig = new TPDiskConfig(env->PDiskFilePath, env->PDiskGuid, 1, 
+                TPDiskCategory(TPDiskCategory::DEVICE_TYPE_ROT, 0).GetRaw()); 
         PDiskConfig->GetDriveDataSwitch = NKikimrBlobStorage::TPDiskConfig::DoNotTouch;
         PDiskConfig->WriteCacheSwitch = NKikimrBlobStorage::TPDiskConfig::DoNotTouch;
         env->ActorSystem->Register(this);
@@ -61,17 +61,17 @@ public:
         TVector<TActorId> actors;
         for (ui32 i = 0; i < NumVDisks; ++i) {
             TVDiskID vdiskId(i, 0, 0, 0, 0);
-            TFakeVDiskParams params;
-            if (InduceLogSplicing) {
-                params.LogCutProbability = 1e-3;
-                params.SizeMin = 4000;
-                params.SizeMax = 4000;
-                if (i == 0) {
-                    params.LogsToBeSent = 100;
-                }
-            }
+            TFakeVDiskParams params; 
+            if (InduceLogSplicing) { 
+                params.LogCutProbability = 1e-3; 
+                params.SizeMin = 4000; 
+                params.SizeMax = 4000; 
+                if (i == 0) { 
+                    params.LogsToBeSent = 100; 
+                } 
+            } 
             TActorId actorId = ctx.ExecutorThread.ActorSystem->Register(CreateFakeVDisk(vdiskId, PDiskServiceId,
-                    PDiskConfig->PDiskGuid, StateManager, params));
+                    PDiskConfig->PDiskGuid, StateManager, params)); 
             actors.push_back(actorId);
         }
         for (const TActorId& actor : actors) {

@@ -3,44 +3,44 @@
 namespace NKikimr {
     namespace NBsController {
 
-        TPDiskId FindFirstEmptyPDiskId(const TOverlayMap<TPDiskId, TBlobStorageController::TPDiskInfo>& pdisks,
-                TNodeId nodeId) {
-            Schema::PDisk::PDiskID::Type nextPDiskID = 1000; // start allocation from this number
-            // generate PDisk id; skip generated one if it already exists (e.g. user has added
-            // such PDisk by hand)
-            TPDiskId pdiskId;
-            do {
-                pdiskId = TPDiskId(nodeId, nextPDiskID++); // postincrement this number
-            } while (pdisks.Find(pdiskId));
-
-            return pdiskId;
-        }
-
-        Schema::PDisk::Guid::Type TBlobStorageController::CheckStaticPDisk(TConfigState &state, TPDiskId pdiskId,
+        TPDiskId FindFirstEmptyPDiskId(const TOverlayMap<TPDiskId, TBlobStorageController::TPDiskInfo>& pdisks, 
+                TNodeId nodeId) { 
+            Schema::PDisk::PDiskID::Type nextPDiskID = 1000; // start allocation from this number 
+            // generate PDisk id; skip generated one if it already exists (e.g. user has added 
+            // such PDisk by hand) 
+            TPDiskId pdiskId; 
+            do { 
+                pdiskId = TPDiskId(nodeId, nextPDiskID++); // postincrement this number 
+            } while (pdisks.Find(pdiskId)); 
+ 
+            return pdiskId; 
+        } 
+ 
+        Schema::PDisk::Guid::Type TBlobStorageController::CheckStaticPDisk(TConfigState &state, TPDiskId pdiskId, 
                 const TPDiskCategory& category, const TMaybe<Schema::PDisk::PDiskConfig::Type>& pdiskConfig,
                 ui32 *staticSlotUsage) {
-            const TStaticPDiskInfo& info = state.StaticPDisks.at(pdiskId);
-
-            // create new disk entry; the PDisk with this number MUST NOT exist, otherwise we can
-            // have a collision
-            if (state.PDisks.Find(pdiskId)) {
-                throw TExError() << "PDisk from static config collides with dynamic one"
-                    << " PDiskId# " << pdiskId;
-            }
-
-            // validate fields
-            if (pdiskConfig.GetOrElse(TString()) != info.PDiskConfig) {
-                throw TExError() << "PDiskConfig field doesn't match static one"
-                    << " pdiskConfig# " << (pdiskConfig ? *pdiskConfig : "(empty)")
-                    << " info.PDiskConfig# " << info.PDiskConfig;
-            } else if (category != info.Category) {
-                throw TExError() << "Type/Kind fields do not match static one";
-            }
-
+            const TStaticPDiskInfo& info = state.StaticPDisks.at(pdiskId); 
+ 
+            // create new disk entry; the PDisk with this number MUST NOT exist, otherwise we can 
+            // have a collision 
+            if (state.PDisks.Find(pdiskId)) { 
+                throw TExError() << "PDisk from static config collides with dynamic one" 
+                    << " PDiskId# " << pdiskId; 
+            } 
+ 
+            // validate fields 
+            if (pdiskConfig.GetOrElse(TString()) != info.PDiskConfig) { 
+                throw TExError() << "PDiskConfig field doesn't match static one" 
+                    << " pdiskConfig# " << (pdiskConfig ? *pdiskConfig : "(empty)") 
+                    << " info.PDiskConfig# " << info.PDiskConfig; 
+            } else if (category != info.Category) { 
+                throw TExError() << "Type/Kind fields do not match static one"; 
+            } 
+ 
             *staticSlotUsage = info.StaticSlotUsage;
-            return info.Guid;
-        }
-
+            return info.Guid; 
+        } 
+ 
         void TBlobStorageController::AllocatePDiskWithSerial(TConfigState& state, ui32 nodeId, const TSerial& serial,
                 TDriveSerialInfo *driveInfo) {
             TPDiskId pdiskId = FindFirstEmptyPDiskId(state.PDisks, nodeId);
@@ -144,25 +144,25 @@ namespace NKikimr {
                 return true;
             });
 
-            // Create new pdisks from DriveSerial table
-
-            // Iterate over initial DrivesSerials map since every call to Unshare will invalidate iterators
+            // Create new pdisks from DriveSerial table 
+ 
+            // Iterate over initial DrivesSerials map since every call to Unshare will invalidate iterators 
             state.DrivesSerials.ScanRange({}, {}, [&](const auto& serial, const auto& driveInfo, const auto& getMutableItem) {
-                if (driveInfo.LifeStage == NKikimrBlobStorage::TDriveLifeStage::NOT_SEEN) {
-                    // Try to find drive in currently online nodes and create new PDisk
-                    if (auto nodeIt = NodeForSerial.find(serial.Serial); nodeIt != NodeForSerial.end()) {
+                if (driveInfo.LifeStage == NKikimrBlobStorage::TDriveLifeStage::NOT_SEEN) { 
+                    // Try to find drive in currently online nodes and create new PDisk 
+                    if (auto nodeIt = NodeForSerial.find(serial.Serial); nodeIt != NodeForSerial.end()) { 
                         AllocatePDiskWithSerial(state, nodeIt->second, serial, getMutableItem());
-                    }
-                } else if (driveInfo.LifeStage == NKikimrBlobStorage::TDriveLifeStage::ALLOCATED
-                        || driveInfo.LifeStage == NKikimrBlobStorage::TDriveLifeStage::ERROR) {
+                    } 
+                } else if (driveInfo.LifeStage == NKikimrBlobStorage::TDriveLifeStage::ALLOCATED 
+                        || driveInfo.LifeStage == NKikimrBlobStorage::TDriveLifeStage::ERROR) { 
                     const auto it = NodeForSerial.find(serial.Serial);
                     const ui32 nodeId = it != NodeForSerial.end() ? it->second : 0;
                     // TODO(alexvru): check where no entry in NodeForSerial is a valid case
                     ValidatePDiskWithSerial(state, nodeId, serial, driveInfo, getMutableItem);
-                }
+                } 
                 return true;
             });
-
+ 
             const auto &hostConfigs = state.HostConfigs.Get();
             for (const auto &kvBox : state.Boxes.Get()) {
                 const TBoxId &boxId = kvBox.first;
@@ -196,7 +196,7 @@ namespace NKikimr {
                             // update PDisk configuration if needed
                             if (pdisk->Kind != category || pdisk->SharedWithOs != driveInfo.SharedWithOs ||
                                     pdisk->ReadCentric != driveInfo.ReadCentric || pdisk->BoxId != boxId ||
-                                    pdisk->PDiskConfig != driveInfo.PDiskConfig.GetOrElse(TString())) {
+                                    pdisk->PDiskConfig != driveInfo.PDiskConfig.GetOrElse(TString())) { 
                                 TPDiskInfo *pdisk = state.PDisks.FindForUpdate(pdiskId);
                                 pdisk->Kind = category;
                                 pdisk->SharedWithOs = driveInfo.SharedWithOs;
@@ -215,41 +215,41 @@ namespace NKikimr {
                                 pdiskId = pdiskIt->second;
                                 guid = CheckStaticPDisk(state, pdiskId, category, driveInfo.PDiskConfig, &staticSlotUsage);
                             } else {
-                                pdiskId = FindFirstEmptyPDiskId(state.PDisks, *nodeId);
+                                pdiskId = FindFirstEmptyPDiskId(state.PDisks, *nodeId); 
                                 guid = RandomNumber<Schema::PDisk::Guid::Type>();
                             }
-                            TString path = drive.Path;
-                            // try find current serial number for device
-                            TString currentSerial;
-                            if (auto nodeIt = state.Nodes.Get().find(*nodeId); nodeIt != state.Nodes.Get().end()) {
-                                for (const auto& [serial, driveData] : nodeIt->second.KnownDrives) {
-                                    if (driveData.Path == path) {
-                                        currentSerial = serial;
-                                        break;
-                                    }
-                                }
-                            }
-
-                            // emplace PDisk into set
-                            state.PDisks.ConstructInplaceNewEntry(pdiskId, hostId, path, category.GetRaw(),
-                                guid, driveInfo.SharedWithOs, driveInfo.ReadCentric, 1000,
-                                driveInfo.PDiskConfig.GetOrElse(TString()), boxId, DefaultMaxSlots,
-                                NKikimrBlobStorage::EDriveStatus::ACTIVE, TInstant::Zero(), currentSerial, currentSerial,
+                            TString path = drive.Path; 
+                            // try find current serial number for device 
+                            TString currentSerial; 
+                            if (auto nodeIt = state.Nodes.Get().find(*nodeId); nodeIt != state.Nodes.Get().end()) { 
+                                for (const auto& [serial, driveData] : nodeIt->second.KnownDrives) { 
+                                    if (driveData.Path == path) { 
+                                        currentSerial = serial; 
+                                        break; 
+                                    } 
+                                } 
+                            } 
+ 
+                            // emplace PDisk into set 
+                            state.PDisks.ConstructInplaceNewEntry(pdiskId, hostId, path, category.GetRaw(), 
+                                guid, driveInfo.SharedWithOs, driveInfo.ReadCentric, 1000, 
+                                driveInfo.PDiskConfig.GetOrElse(TString()), boxId, DefaultMaxSlots, 
+                                NKikimrBlobStorage::EDriveStatus::ACTIVE, TInstant::Zero(), currentSerial, currentSerial, 
                                 TString(), staticSlotUsage);
 
                             // insert PDisk into location map
                             state.PDiskLocationMap.emplace(location, pdiskId);
-                            STLOG(PRI_NOTICE, BS_CONTROLLER, BSCFP02, "Create new pdisk", (PDiskId, pdiskId),
-                                    (Location, location));
+                            STLOG(PRI_NOTICE, BS_CONTROLLER, BSCFP02, "Create new pdisk", (PDiskId, pdiskId), 
+                                    (Location, location)); 
                         }
 
                         state.PDisksToRemove.erase(pdiskId);
                     }
                 }
             }
-            for (const auto& pdiskId : state.PDisksToRemove) {
-                STLOG(PRI_NOTICE, BS_CONTROLLER, BSCFP03, "PDisk to remove:", (PDiskId, pdiskId));
-            }
+            for (const auto& pdiskId : state.PDisksToRemove) { 
+                STLOG(PRI_NOTICE, BS_CONTROLLER, BSCFP03, "PDisk to remove:", (PDiskId, pdiskId)); 
+            } 
         }
 
         void TBlobStorageController::FitPDisksForNode(TConfigState& state, ui32 nodeId, const std::vector<TSerial>& serials) {

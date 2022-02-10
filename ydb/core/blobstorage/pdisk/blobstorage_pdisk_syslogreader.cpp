@@ -1,10 +1,10 @@
-#include "blobstorage_pdisk_blockdevice.h"
-#include "blobstorage_pdisk_completion_impl.h"
+#include "blobstorage_pdisk_blockdevice.h" 
+#include "blobstorage_pdisk_completion_impl.h" 
 #include "blobstorage_pdisk_data.h"
 #include "blobstorage_pdisk_drivemodel.h"
-#include "blobstorage_pdisk_impl.h"
-#include "blobstorage_pdisk_sectorrestorator.h"
-#include "blobstorage_pdisk_syslogreader.h"
+#include "blobstorage_pdisk_impl.h" 
+#include "blobstorage_pdisk_sectorrestorator.h" 
+#include "blobstorage_pdisk_syslogreader.h" 
 
 namespace NKikimr {
 namespace NPDisk {
@@ -35,42 +35,42 @@ public:
 // Public interface
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-class TSysLogReadCompletionPart : public TCompletionPart {
-    TAlignedData *CommonData;
-    ui32 SizeToReadPart;
-    ui32 Offset;
-    TBuffer::TPtr DataPart;
-
-public:
-    TSysLogReadCompletionPart(TCumulativeCompletionHolder *cumulativeCompletionHolder, TAlignedData *data,
-            TBuffer *buffer, ui32 sizeToReadPart, ui32 offset)
-        : TCompletionPart(cumulativeCompletionHolder)
-        , CommonData(data)
-        , SizeToReadPart(sizeToReadPart)
-        , Offset(offset)
-        , DataPart(buffer)
-    {}
-
-    void Exec(TActorSystem *actorSystem) override {
-        memcpy(CommonData->Get() + Offset, DataPart->Data(), SizeToReadPart);
-        DataPart.Reset();
-        TCompletionPart::Exec(actorSystem);
-    }
-
-    virtual ~TSysLogReadCompletionPart() {
-    }
-};
-
-TSysLogReader::TSysLogReader(TPDisk *pDisk, TActorSystem *const actorSystem, const TActorId &replyTo, TReqId reqId)
+class TSysLogReadCompletionPart : public TCompletionPart { 
+    TAlignedData *CommonData; 
+    ui32 SizeToReadPart; 
+    ui32 Offset; 
+    TBuffer::TPtr DataPart; 
+ 
+public: 
+    TSysLogReadCompletionPart(TCumulativeCompletionHolder *cumulativeCompletionHolder, TAlignedData *data, 
+            TBuffer *buffer, ui32 sizeToReadPart, ui32 offset) 
+        : TCompletionPart(cumulativeCompletionHolder) 
+        , CommonData(data) 
+        , SizeToReadPart(sizeToReadPart) 
+        , Offset(offset) 
+        , DataPart(buffer) 
+    {} 
+ 
+    void Exec(TActorSystem *actorSystem) override { 
+        memcpy(CommonData->Get() + Offset, DataPart->Data(), SizeToReadPart); 
+        DataPart.Reset(); 
+        TCompletionPart::Exec(actorSystem); 
+    } 
+ 
+    virtual ~TSysLogReadCompletionPart() { 
+    } 
+}; 
+ 
+TSysLogReader::TSysLogReader(TPDisk *pDisk, TActorSystem *const actorSystem, const TActorId &replyTo, TReqId reqId) 
     : PDisk(pDisk)
     , ActorSystem(actorSystem)
     , ReplyTo(replyTo)
     , ReqId(reqId)
-    , Result(new TEvReadLogResult(NKikimrProto::ERROR, TLogPosition{0, 0}, TLogPosition::Invalid(),
-                true, 0, nullptr, 0))
-    , Cypher(pDisk->Cfg->EnableSectorEncryption)
-    , SizeToRead(PDisk->Format.SysLogSectorCount * ReplicationFactor * PDisk->Format.SectorSize)
-    , Data(SizeToRead)
+    , Result(new TEvReadLogResult(NKikimrProto::ERROR, TLogPosition{0, 0}, TLogPosition::Invalid(), 
+                true, 0, nullptr, 0)) 
+    , Cypher(pDisk->Cfg->EnableSectorEncryption) 
+    , SizeToRead(PDisk->Format.SysLogSectorCount * ReplicationFactor * PDisk->Format.SectorSize) 
+    , Data(SizeToRead) 
 {
     Cypher.SetKey(PDisk->Format.SysLogKey);
     AtomicIncrement(PDisk->InFlightLogRead);
@@ -90,30 +90,30 @@ TSysLogReader::~TSysLogReader() {
 
 void TSysLogReader::Start() {
     TDiskFormat &format = PDisk->Format;
-    auto *finalCompletion = new TCompletionSysLogRead(this);
-    finalCompletion->CostNs = PDisk->DriveModel.TimeForSizeNs(SizeToRead, 0, TDriveModel::EOperationType::OP_TYPE_READ);
-    const ui32 bufferSize = PDisk->BufferPool->GetBufferSize();
-    const ui32 partsToRead = (SizeToRead + bufferSize - 1) / bufferSize;
+    auto *finalCompletion = new TCompletionSysLogRead(this); 
+    finalCompletion->CostNs = PDisk->DriveModel.TimeForSizeNs(SizeToRead, 0, TDriveModel::EOperationType::OP_TYPE_READ); 
+    const ui32 bufferSize = PDisk->BufferPool->GetBufferSize(); 
+    const ui32 partsToRead = (SizeToRead + bufferSize - 1) / bufferSize; 
     Y_VERIFY(partsToRead > 0);
-    TVector<TCompletionAction *> completionParts;
-    TVector<TBuffer *> bufferParts;
-    completionParts.reserve(partsToRead);
-    bufferParts.reserve(partsToRead);
-    auto *cumulativeCompletion = new TCumulativeCompletionHolder();
-    for (ui32 idx = 0; idx < partsToRead; ++idx) {
-        const ui32 offset = idx * bufferSize;
-        const ui32 sizeToReadPart = Min(bufferSize, SizeToRead - offset);
-        bufferParts.push_back(PDisk->BufferPool->Pop());
-        completionParts.push_back(new TSysLogReadCompletionPart(cumulativeCompletion, &Data,
-                bufferParts[idx], sizeToReadPart, offset));
-    }
-    cumulativeCompletion->SetCompletionAction(finalCompletion);
-    for (ui32 idx = 0; idx < partsToRead; ++idx) {
-        const ui32 offset = idx * bufferSize;
-        const ui32 sizeToReadPart = Min(bufferSize, SizeToRead - offset);
-        PDisk->BlockDevice->PreadAsync(bufferParts[idx]->Data(), sizeToReadPart, BeginSectorIdx * format.SectorSize + offset,
-                completionParts[idx], ReqId, {});
-    }
+    TVector<TCompletionAction *> completionParts; 
+    TVector<TBuffer *> bufferParts; 
+    completionParts.reserve(partsToRead); 
+    bufferParts.reserve(partsToRead); 
+    auto *cumulativeCompletion = new TCumulativeCompletionHolder(); 
+    for (ui32 idx = 0; idx < partsToRead; ++idx) { 
+        const ui32 offset = idx * bufferSize; 
+        const ui32 sizeToReadPart = Min(bufferSize, SizeToRead - offset); 
+        bufferParts.push_back(PDisk->BufferPool->Pop()); 
+        completionParts.push_back(new TSysLogReadCompletionPart(cumulativeCompletion, &Data, 
+                bufferParts[idx], sizeToReadPart, offset)); 
+    } 
+    cumulativeCompletion->SetCompletionAction(finalCompletion); 
+    for (ui32 idx = 0; idx < partsToRead; ++idx) { 
+        const ui32 offset = idx * bufferSize; 
+        const ui32 sizeToReadPart = Min(bufferSize, SizeToRead - offset); 
+        PDisk->BlockDevice->PreadAsync(bufferParts[idx]->Data(), sizeToReadPart, BeginSectorIdx * format.SectorSize + offset, 
+                completionParts[idx], ReqId, {}); 
+    } 
 }
 
 void TSysLogReader::Exec() {
@@ -157,9 +157,9 @@ void TSysLogReader::RestoreSectorSets() {
 
         const ui64 magic = format.MagicSysLogChunk;
         const bool isErasureEncode = format.IsErasureEncodeSysLog();
-        TSectorRestorator restorator(true, LogErasureDataParts, isErasureEncode, format,
-            PDisk->ActorSystem, PDisk->PDiskActor, PDisk->PDiskId, &PDisk->Mon, PDisk->BufferPool.Get());
-        restorator.Restore(sectorSetData, sectorIdx * format.SectorSize, magic, 0, PDisk->Cfg->UseT1ha0HashInFooter);
+        TSectorRestorator restorator(true, LogErasureDataParts, isErasureEncode, format, 
+            PDisk->ActorSystem, PDisk->PDiskActor, PDisk->PDiskId, &PDisk->Mon, PDisk->BufferPool.Get()); 
+        restorator.Restore(sectorSetData, sectorIdx * format.SectorSize, magic, 0, PDisk->Cfg->UseT1ha0HashInFooter); 
 
         if (!restorator.GoodSectorFlags) {
             continue;
@@ -221,7 +221,7 @@ void TSysLogReader::FindLoopOffset() {
     }
     bool hasAnotherStart = false;
     for (ui32 idx = loopOffset + 1; idx < SectorSetInfo.size(); ++idx) {
-        if (SectorSetInfo[idx].HasStart) {
+        if (SectorSetInfo[idx].HasStart) { 
             hasAnotherStart = true;
         }
     }
@@ -357,7 +357,7 @@ void TSysLogReader::FindMaxNonce() {
 
 void TSysLogReader::PrepareResult() {
     TSectorSetInfo &info = SectorSetInfo[BestRecordFirstOffset % SectorSetInfo.size()];
-    TString payload(TString::Uninitialized(info.FullPayloadSize));
+    TString payload(TString::Uninitialized(info.FullPayloadSize)); 
     VerboseCheck(info.FullPayloadSize >= info.PayloadPartSize, "First payload part too large. Marker# BPS04");
     if (IsReplied) {
         return;
@@ -384,7 +384,7 @@ void TSysLogReader::PrepareResult() {
     }
     ui32 sectorIdx = JunkBeginOffset * ReplicationFactor + BeginSectorIdx;
     if (!IsReplied) {
-        Result->Results.push_back(TLogRecord(info.PayloadSignature, payload, info.PayloadLsn));
+        Result->Results.push_back(TLogRecord(info.PayloadSignature, payload, info.PayloadLsn)); 
         Result->NextPosition = PDisk->LogPosition(0, sectorIdx, 0);
         Result->Status = NKikimrProto::OK;
     }

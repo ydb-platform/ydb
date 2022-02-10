@@ -71,9 +71,9 @@
     PROBE(SlowICDropConfirmed, GROUPS("ActorLibSlowIC"),                                                                              \
           TYPES(ui32, double),                                                                                                        \
           NAMES("peerId", "icDropConfirmedMs"))                                                                                       \
-    PROBE(ActorsystemScheduler, GROUPS("Durations"),                                                                                  \
-          TYPES(ui64, ui64, ui32, ui32, ui64, ui64),                                                                                  \
-          NAMES("timeUs", "timerfd_expirations", "eventsGottenFromQueues", "eventsSent",                                              \
+    PROBE(ActorsystemScheduler, GROUPS("Durations"),                                                                                  \ 
+          TYPES(ui64, ui64, ui32, ui32, ui64, ui64),                                                                                  \ 
+          NAMES("timeUs", "timerfd_expirations", "eventsGottenFromQueues", "eventsSent",                                              \ 
                 "eventsInSendQueue", "eventSchedulingErrorUs"))                                                                       \
     PROBE(ForwardEvent, GROUPS("Orbit", "InterconnectSessionTCP"),                                                                    \
           TYPES(ui32, ui32, ui32, LWTYPE_ACTORID, LWTYPE_ACTORID, ui64, ui32),                                                        \

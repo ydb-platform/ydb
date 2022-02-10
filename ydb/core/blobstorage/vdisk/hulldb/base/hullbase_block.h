@@ -72,8 +72,8 @@ namespace NKikimr {
     // PDiskSignatureForHullDbKey
     /////////////////////////////////////////////////////////////////////////
     template <>
-    inline TLogSignature PDiskSignatureForHullDbKey<TKeyBlock>() {
-        return TLogSignature::SignatureHullBlocksDB;
+    inline TLogSignature PDiskSignatureForHullDbKey<TKeyBlock>() { 
+        return TLogSignature::SignatureHullBlocksDB; 
     }
 
     /////////////////////////////////////////////////////////////////////////

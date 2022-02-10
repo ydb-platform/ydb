@@ -43,9 +43,9 @@ namespace NKikimr {
     // Making decision to start compaction
     ////////////////////////////////////////////////////////////////////////////
     bool HugeHeapDefragmentationRequired(
-            const TOutOfSpaceState& oos,
-            ui32 hugeCanBeFreedChunks,
-            ui32 hugeTotalChunks);
+            const TOutOfSpaceState& oos, 
+            ui32 hugeCanBeFreedChunks, 
+            ui32 hugeTotalChunks); 
 
     ////////////////////////////////////////////////////////////////////////////
     // VDISK DEFRAG ACTOR CREATOR

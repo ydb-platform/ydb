@@ -12,14 +12,14 @@ enum ESimpleCounters {
     COUNTER_SLOTS_ON_FAULTY_DISKS = 2 [(CounterOpts) = {Name: "SlotsOnFaultyDisks"}];
     COUNTER_BYTES_ON_FAULTY_DISKS = 3 [(CounterOpts) = {Name: "BytesOnFaultyDisks"}];
     COUNTER_PDISKS_WITHOUT_EXPECTED_SLOT_COUNT = 4 [(CounterOpts) = {Name: "PDisksWithoutExpectedSlotCount"}];
-    COUNTER_TO_BE_REMOVED_DISKS = 5 [(CounterOpts) = {Name: "ToBeRemovedDisks"}];
-    COUNTER_GROUPS_WITH_SLOTS_ON_TO_BE_REMOVED_DISKS = 6 [(CounterOpts) = {Name: "GroupsWithSlotsOnToBeRemovedDisks"}];
-    COUNTER_SLOTS_ON_TO_BE_REMOVED_DISKS = 7 [(CounterOpts) = {Name: "SlotsOnToBeRemovedDisks"}];
-    COUNTER_BYTES_ON_TO_BE_REMOVED_DISKS = 8 [(CounterOpts) = {Name: "BytesOnToBeRemovedDisks"}];
-    COUNTER_PDISKS_WITHOUT_EXPECTED_SERIAL = 9 [(CounterOpts) = {Name: "PDisksWithoutExpectedSerial"}];
-    COUNTER_DRIVE_SERIAL_NOT_SEEN = 10 [(CounterOpts) = {Name: "DriveSerialNotSeen"}];
-    COUNTER_DRIVE_SERIAL_REMOVED = 11 [(CounterOpts) = {Name: "DriveSerialRemoved"}];
-    COUNTER_DRIVE_SERIAL_ERROR = 12 [(CounterOpts) = {Name: "DriveSerialError"}];
+    COUNTER_TO_BE_REMOVED_DISKS = 5 [(CounterOpts) = {Name: "ToBeRemovedDisks"}]; 
+    COUNTER_GROUPS_WITH_SLOTS_ON_TO_BE_REMOVED_DISKS = 6 [(CounterOpts) = {Name: "GroupsWithSlotsOnToBeRemovedDisks"}]; 
+    COUNTER_SLOTS_ON_TO_BE_REMOVED_DISKS = 7 [(CounterOpts) = {Name: "SlotsOnToBeRemovedDisks"}]; 
+    COUNTER_BYTES_ON_TO_BE_REMOVED_DISKS = 8 [(CounterOpts) = {Name: "BytesOnToBeRemovedDisks"}]; 
+    COUNTER_PDISKS_WITHOUT_EXPECTED_SERIAL = 9 [(CounterOpts) = {Name: "PDisksWithoutExpectedSerial"}]; 
+    COUNTER_DRIVE_SERIAL_NOT_SEEN = 10 [(CounterOpts) = {Name: "DriveSerialNotSeen"}]; 
+    COUNTER_DRIVE_SERIAL_REMOVED = 11 [(CounterOpts) = {Name: "DriveSerialRemoved"}]; 
+    COUNTER_DRIVE_SERIAL_ERROR = 12 [(CounterOpts) = {Name: "DriveSerialError"}]; 
     COUNTER_DISK_SCRUB_WAITING_FOR_START = 13 [(CounterOpts) = {Name: "DiskScrubWaitingForStart"}];
     COUNTER_DISK_SCRUB_RUNNING = 14 [(CounterOpts) = {Name: "DiskScrubRunning"}];
     COUNTER_DISK_SCRUB_IN_PROGRESS = 15 [(CounterOpts) = {Name: "DiskScrubInProgress"}];
@@ -132,40 +132,40 @@ enum EPercentileCounters {
         Ranges { Value: 21600 Name: "21600" }
         Ranges { Value: 86400 Name: "inf"   }
     }];
-
-    COUNTER_TO_BE_REMOVED_USETTLED_PDISKS = 2 [(CounterOpts) = {
-        Name: "ToBeRemovedUnsettledPDisks"
-        Integral: true
-        Ranges { Value: 0     Name: "0"     }
-        Ranges { Value: 10    Name: "10"    }
-        Ranges { Value: 20    Name: "20"    }
-        Ranges { Value: 30    Name: "30"    }
-        Ranges { Value: 40    Name: "40"    }
-        Ranges { Value: 50    Name: "50"    }
-        Ranges { Value: 60    Name: "60"    }
-        Ranges { Value: 120   Name: "120"   }
-        Ranges { Value: 180   Name: "180"   }
-        Ranges { Value: 240   Name: "240"   }
-        Ranges { Value: 300   Name: "300"   }
-        Ranges { Value: 360   Name: "360"   }
-        Ranges { Value: 420   Name: "420"   }
-        Ranges { Value: 480   Name: "480"   }
-        Ranges { Value: 540   Name: "540"   }
-        Ranges { Value: 600   Name: "600"   }
-        Ranges { Value: 1200  Name: "1200"  }
-        Ranges { Value: 1800  Name: "1800"  }
-        Ranges { Value: 2400  Name: "2400"  }
-        Ranges { Value: 3000  Name: "3000"  }
-        Ranges { Value: 3600  Name: "3600"  }
-        Ranges { Value: 5400  Name: "5400"  }
-        Ranges { Value: 7200  Name: "7200"  }
-        Ranges { Value: 9000  Name: "9000"  }
-        Ranges { Value: 10800 Name: "10800" }
-        Ranges { Value: 14400 Name: "14400" }
-        Ranges { Value: 18000 Name: "18000" }
-        Ranges { Value: 21600 Name: "21600" }
-        Ranges { Value: 86400 Name: "inf"   }
-    }];
+ 
+    COUNTER_TO_BE_REMOVED_USETTLED_PDISKS = 2 [(CounterOpts) = { 
+        Name: "ToBeRemovedUnsettledPDisks" 
+        Integral: true 
+        Ranges { Value: 0     Name: "0"     } 
+        Ranges { Value: 10    Name: "10"    } 
+        Ranges { Value: 20    Name: "20"    } 
+        Ranges { Value: 30    Name: "30"    } 
+        Ranges { Value: 40    Name: "40"    } 
+        Ranges { Value: 50    Name: "50"    } 
+        Ranges { Value: 60    Name: "60"    } 
+        Ranges { Value: 120   Name: "120"   } 
+        Ranges { Value: 180   Name: "180"   } 
+        Ranges { Value: 240   Name: "240"   } 
+        Ranges { Value: 300   Name: "300"   } 
+        Ranges { Value: 360   Name: "360"   } 
+        Ranges { Value: 420   Name: "420"   } 
+        Ranges { Value: 480   Name: "480"   } 
+        Ranges { Value: 540   Name: "540"   } 
+        Ranges { Value: 600   Name: "600"   } 
+        Ranges { Value: 1200  Name: "1200"  } 
+        Ranges { Value: 1800  Name: "1800"  } 
+        Ranges { Value: 2400  Name: "2400"  } 
+        Ranges { Value: 3000  Name: "3000"  } 
+        Ranges { Value: 3600  Name: "3600"  } 
+        Ranges { Value: 5400  Name: "5400"  } 
+        Ranges { Value: 7200  Name: "7200"  } 
+        Ranges { Value: 9000  Name: "9000"  } 
+        Ranges { Value: 10800 Name: "10800" } 
+        Ranges { Value: 14400 Name: "14400" } 
+        Ranges { Value: 18000 Name: "18000" } 
+        Ranges { Value: 21600 Name: "21600" } 
+        Ranges { Value: 86400 Name: "inf"   } 
+    }]; 
 
     COUNTER_NUM_NOT_READY_VDISKS = 3 [(CounterOpts) = {
         Name: "NumNotReadyVDisks"
@@ -213,5 +213,5 @@ enum ETxTypes {
     TXTYPE_SCRUB_START = 19 [(TxTypeOpts) = {Name: "TTxScrubStart"}];
     TXTYPE_SCRUB_QUANTUM_FINISHED = 20 [(TxTypeOpts) = {Name: "TTxScrubQuantumFinished"}];
     TXTYPE_UPDATE_LAST_SEEN_READY = 21 [(TxTypeOpts) = {Name: "TTxUpdateLastSeenReady"}];
-    TXTYPE_UPDATE_NODE_DRIVES = 22 [(TxTypeOpts) = {Name: "TTxUpdateNodeDrives"}];
+    TXTYPE_UPDATE_NODE_DRIVES = 22 [(TxTypeOpts) = {Name: "TTxUpdateNodeDrives"}]; 
 }

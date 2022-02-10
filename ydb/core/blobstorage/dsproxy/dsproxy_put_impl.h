@@ -38,7 +38,7 @@ private:
     ui32 VPutResponses = 0;
     ui32 VMultiPutRequests = 0;
     ui32 VMultiPutResponses = 0;
-    bool AtLeastOneResponseWasNotOk = false;
+    bool AtLeastOneResponseWasNotOk = false; 
     bool EnableRequestMod3x3ForMinLatecy = false;
 
     ui64 DoneBlobs = 0;

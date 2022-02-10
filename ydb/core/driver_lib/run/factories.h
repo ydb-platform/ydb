@@ -38,9 +38,9 @@ struct TModuleFactories {
     // Can be nullptr. In that case there would be no ability to work with Yandex Logbroker in Yandex Query.
     NPq::NConfigurationManager::IConnections::TPtr PqCmConnections;
     // Export implementation for Data Shards
-    std::shared_ptr<NDataShard::IExportFactory> DataShardExportFactory;
+    std::shared_ptr<NDataShard::IExportFactory> DataShardExportFactory; 
     // Factory for Simple queue services implementation details
-    std::shared_ptr<NSQS::IEventsWriterFactory> SqsEventsWriterFactory;
+    std::shared_ptr<NSQS::IEventsWriterFactory> SqsEventsWriterFactory; 
 
     IActor*(*CreateTicketParser)(const NKikimrProto::TAuthConfig&);
     IActor*(*FolderServiceFactory)(const NKikimrProto::NFolderService::TFolderServiceConfig&);
@@ -51,8 +51,8 @@ struct TModuleFactories {
     TGrpcServiceFactory GrpcServiceFactory;
 
     std::shared_ptr<NPQ::IPersQueueMirrorReaderFactory> PersQueueMirrorReaderFactory;
-    /// Factory for pdisk's aio engines
-    std::shared_ptr<NPDisk::IIoContextFactory> IoContextFactory;
+    /// Factory for pdisk's aio engines 
+    std::shared_ptr<NPDisk::IIoContextFactory> IoContextFactory; 
 
     std::function<NActors::TMon* (NActors::TMon::TConfig)> MonitoringFactory;
     std::shared_ptr<NSQS::IAuthFactory> SqsAuthFactory;

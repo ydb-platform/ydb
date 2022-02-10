@@ -5,7 +5,7 @@ function StorageView(options) {
                   }, options);
     this.storage = {};
     this.storagePools = {};
-    this.observer = new IntersectionObserver(this.onVisibilityChange.bind(this), {rootMargin: '50%'});
+    this.observer = new IntersectionObserver(this.onVisibilityChange.bind(this), {rootMargin: '50%'}); 
     this.getStorageGroupName = function(storage) { return storage.StoragePool.Name; }
     this.getStorageGroupHeader = function(storageGroup) { return bytesToGB0(storageGroup.allocatedSizeBytes) + ' / ' + storageGroup.storageTotal + ' groups'; }
     this.groupOrder = function(prev, next) { return prev < next; }

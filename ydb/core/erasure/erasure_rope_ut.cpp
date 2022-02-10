@@ -3,7 +3,7 @@
 
 
 namespace NKikimr {
-namespace NErasureRope {
+namespace NErasureRope { 
 
 TRope GenerateRandomRope(size_t dataSize) {
     NPrivate::TMersenne64 randGen(Seed());
@@ -952,4 +952,4 @@ Y_UNIT_TEST_SUITE(TErasureTypeTest) {
 }
 
 } // namespace NKikimr
-} // NErasureRope
+} // NErasureRope 

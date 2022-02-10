@@ -16,9 +16,9 @@ Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoTest) {
                     continue;
                 }
 
-                const auto erasureType = TErasureType::EErasureSpecies(species);
-                const ui32 numFailDomains = TBlobStorageGroupType(erasureType).BlobSubgroupSize();
-                TBlobStorageGroupInfo info(erasureType, disks, numFailDomains);
+                const auto erasureType = TErasureType::EErasureSpecies(species); 
+                const ui32 numFailDomains = TBlobStorageGroupType(erasureType).BlobSubgroupSize(); 
+                TBlobStorageGroupInfo info(erasureType, disks, numFailDomains); 
 
                 for (ui32 hashIdx = 0; hashIdx < 1000; ++hashIdx) {
                     ui32 hash = 640480 + 13 * hashIdx;
@@ -70,9 +70,9 @@ Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoTest) {
                 continue;
             }
 
-            const auto erasureType = TErasureType::EErasureSpecies(species);
-            const ui32 numFailDomains = TBlobStorageGroupType(erasureType).BlobSubgroupSize();
-            TBlobStorageGroupInfo info(erasureType, 1, numFailDomains);
+            const auto erasureType = TErasureType::EErasureSpecies(species); 
+            const ui32 numFailDomains = TBlobStorageGroupType(erasureType).BlobSubgroupSize(); 
+            TBlobStorageGroupInfo info(erasureType, 1, numFailDomains); 
 
             TBlobStorageGroupInfo::TVDiskIds ids;
             info.PickSubgroup(id.Hash(), &ids, nullptr);

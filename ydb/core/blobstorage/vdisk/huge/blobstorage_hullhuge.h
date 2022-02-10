@@ -118,10 +118,10 @@ namespace NKikimr {
     public:
         const TDiskPartVec HugeBlobs;
         const ui64 DeletionLsn;
-        const TLogSignature Signature; // identifies database we send update for
+        const TLogSignature Signature; // identifies database we send update for 
 
         TEvHullFreeHugeSlots(TDiskPartVec &&hugeBlobs, ui64 deletionLsn,
-                             TLogSignature signature)
+                             TLogSignature signature) 
             : HugeBlobs(std::move(hugeBlobs))
             , DeletionLsn(deletionLsn)
             , Signature(signature)
@@ -129,7 +129,7 @@ namespace NKikimr {
 
         TString ToString() const {
             TStringStream str;
-            str << "{" << Signature.ToString()
+            str << "{" << Signature.ToString() 
                 << " DelLsn# " << DeletionLsn << " Slots# "
                 << HugeBlobs.ToString() << "}";
             return str.Str();

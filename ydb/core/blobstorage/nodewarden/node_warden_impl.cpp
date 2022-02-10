@@ -1,33 +1,33 @@
 #include "node_warden_impl.h"
 
 #include <ydb/library/pdisk_io/file_params.h>
-
+ 
 using namespace NKikimr;
 using namespace NStorage;
 
-TVector<NPDisk::TDriveData> TNodeWarden::ListLocalDrives() {
-    TVector<NPDisk::TDriveData> drives = ListDevicesWithPartlabel();
-
-    try {
-        TString raw = TFileInput(MockDevicesPath).ReadAll();
-        if (google::protobuf::TextFormat::ParseFromString(raw, &MockDevicesConfig)) {
-            for (const auto& device : MockDevicesConfig.GetDevices()) {
-                drives.emplace_back(device);
-            }
-        } else {
+TVector<NPDisk::TDriveData> TNodeWarden::ListLocalDrives() { 
+    TVector<NPDisk::TDriveData> drives = ListDevicesWithPartlabel(); 
+ 
+    try { 
+        TString raw = TFileInput(MockDevicesPath).ReadAll(); 
+        if (google::protobuf::TextFormat::ParseFromString(raw, &MockDevicesConfig)) { 
+            for (const auto& device : MockDevicesConfig.GetDevices()) { 
+                drives.emplace_back(device); 
+            } 
+        } else { 
             STLOG(PRI_WARN, BS_NODE, NW01, "Error parsing mock devices protobuf from file", (Path, MockDevicesPath));
-        }
-    } catch (...) {
-        STLOG(PRI_INFO, BS_NODE, NW90, "Unable to find mock devices file", (Path, MockDevicesPath));
-    }
-
-    std::sort(drives.begin(), drives.end(), [] (const auto& lhs, const auto& rhs) {
-        return lhs.Path < rhs.Path;
-    });
-
-    return drives;
-}
-
+        } 
+    } catch (...) { 
+        STLOG(PRI_INFO, BS_NODE, NW90, "Unable to find mock devices file", (Path, MockDevicesPath)); 
+    } 
+ 
+    std::sort(drives.begin(), drives.end(), [] (const auto& lhs, const auto& rhs) { 
+        return lhs.Path < rhs.Path; 
+    }); 
+ 
+    return drives; 
+} 
+ 
 void TNodeWarden::StartInvalidGroupProxy() {
     const ui32 groupId = Max<ui32>();
     STLOG(PRI_DEBUG, BS_NODE, NW11, "StartInvalidGroupProxy", (GroupId, groupId));
@@ -56,20 +56,20 @@ void TNodeWarden::Bootstrap() {
     WhiteboardId = NNodeWhiteboard::MakeNodeWhiteboardServiceId(LocalNodeId);
 
     Become(&TThis::StateOnline, TDuration::Seconds(10), new TEvPrivate::TEvSendDiskMetrics());
-    Schedule(TDuration::Seconds(10), new TEvPrivate::TEvUpdateNodeDrives());
+    Schedule(TDuration::Seconds(10), new TEvPrivate::TEvUpdateNodeDrives()); 
 
     NLwTraceMonPage::ProbeRegistry().AddProbesList(LWTRACE_GET_PROBES(BLOBSTORAGE_PROVIDER));
 
-    TActorSystem *actorSystem = TlsActivationContext->ExecutorThread.ActorSystem;
-    if (auto mon = AppData()->Mon) {
-
-        TString name = "NodeWarden";
-        TString path = ::to_lower(name);
-        NMonitoring::TIndexMonPage *actorsMonPage = mon->RegisterIndexPage("actors", "Actors");
-
-        mon->RegisterActorPage(actorsMonPage, path, name, false, actorSystem, SelfId());
-    }
-
+    TActorSystem *actorSystem = TlsActivationContext->ExecutorThread.ActorSystem; 
+    if (auto mon = AppData()->Mon) { 
+ 
+        TString name = "NodeWarden"; 
+        TString path = ::to_lower(name); 
+        NMonitoring::TIndexMonPage *actorsMonPage = mon->RegisterIndexPage("actors", "Actors"); 
+ 
+        mon->RegisterActorPage(actorsMonPage, path, name, false, actorSystem, SelfId()); 
+    } 
+ 
     DsProxyNodeMon = new TDsProxyNodeMon(AppData()->Counters, true);
     DsProxyNodeMonActor = Register(CreateDsProxyNodeMon(DsProxyNodeMon));
     DsProxyPerPoolCounters = new TDsProxyPerPoolCounters(AppData()->Counters);
@@ -268,17 +268,17 @@ void TNodeWarden::SendVDiskReport(TVSlotId vslotId, const TVDiskID &vDiskId, NKi
     SendToController(std::move(report));
 }
 
-void TNodeWarden::Handle(TEvBlobStorage::TEvAskRestartPDisk::TPtr ev) {
-    const auto id = ev->Get()->PDiskId;
+void TNodeWarden::Handle(TEvBlobStorage::TEvAskRestartPDisk::TPtr ev) { 
+    const auto id = ev->Get()->PDiskId; 
     if (auto it = LocalPDisks.find(TPDiskKey{LocalNodeId, id}); it != LocalPDisks.end()) {
-        RestartLocalPDiskStart(id, CreatePDiskConfig(it->second.Record));
-    }
-}
-
-void TNodeWarden::Handle(TEvBlobStorage::TEvRestartPDiskResult::TPtr ev) {
-    RestartLocalPDiskFinish(ev->Get()->PDiskId, ev->Get()->Status);
-}
-
+        RestartLocalPDiskStart(id, CreatePDiskConfig(it->second.Record)); 
+    } 
+} 
+ 
+void TNodeWarden::Handle(TEvBlobStorage::TEvRestartPDiskResult::TPtr ev) { 
+    RestartLocalPDiskFinish(ev->Get()->PDiskId, ev->Get()->Status); 
+} 
+ 
 void TNodeWarden::Handle(TEvBlobStorage::TEvControllerUpdateDiskStatus::TPtr ev) {
     STLOG(PRI_TRACE, BS_NODE, NW38, "Handle(TEvBlobStorage::TEvControllerUpdateDiskStatus)");
 
@@ -310,7 +310,7 @@ void TNodeWarden::Handle(TEvBlobStorage::TEvControllerUpdateDiskStatus::TPtr ev)
                 vdisk.VDiskMetrics.emplace(m);
                 VDisksWithUnreportedMetrics.PushBack(&vdisk);
             }
-        }
+        } 
     }
 
     for (const NKikimrBlobStorage::TPDiskMetrics& m : record.GetPDisksMetrics()) {
@@ -327,7 +327,7 @@ void TNodeWarden::Handle(TEvBlobStorage::TEvControllerUpdateDiskStatus::TPtr ev)
                 pdisk.PDiskMetrics.emplace(m);
                 PDisksWithUnreportedMetrics.PushBack(&pdisk);
             }
-        }
+        } 
     }
 }
 
@@ -338,22 +338,22 @@ void TNodeWarden::Handle(TEvPrivate::TEvSendDiskMetrics::TPtr&) {
     Schedule(TDuration::Seconds(10), new TEvPrivate::TEvSendDiskMetrics());
 }
 
-void TNodeWarden::Handle(TEvPrivate::TEvUpdateNodeDrives::TPtr&) {
+void TNodeWarden::Handle(TEvPrivate::TEvUpdateNodeDrives::TPtr&) { 
     STLOG(PRI_TRACE, BS_NODE, NW88, "Handle(TEvPrivate::UpdateNodeDrives)");
-    EnqueueSyncOp([this] (const TActorContext&) {
-        auto drives = ListLocalDrives();
-
-        return [this, drives = std::move(drives)] () {
-            if (drives != WorkingLocalDrives) {
+    EnqueueSyncOp([this] (const TActorContext&) { 
+        auto drives = ListLocalDrives(); 
+ 
+        return [this, drives = std::move(drives)] () { 
+            if (drives != WorkingLocalDrives) { 
                 SendToController(std::make_unique<TEvBlobStorage::TEvControllerUpdateNodeDrives>(LocalNodeId, drives));
                 WorkingLocalDrives = std::move(drives);
-            }
-        };
-    });
-    Schedule(TDuration::Seconds(10), new TEvPrivate::TEvUpdateNodeDrives());
-}
-
-
+            } 
+        }; 
+    }); 
+    Schedule(TDuration::Seconds(10), new TEvPrivate::TEvUpdateNodeDrives()); 
+} 
+ 
+ 
 void TNodeWarden::SendDiskMetrics(bool reportMetrics) {
     STLOG(PRI_TRACE, BS_NODE, NW45, "SendDiskMetrics", (ReportMetrics, reportMetrics));
 
@@ -406,79 +406,79 @@ void TNodeWarden::FillInVDiskStatus(google::protobuf::RepeatedPtrField<NKikimrBl
     }
 }
 
-bool ObtainKey(TEncryptionKey *key, const NKikimrProto::TKeyRecord& record) {
-    TString containerPath = record.GetContainerPath();
-    TString pin = record.GetPin();
-    TString keyId = record.GetId();
-    ui64 version = record.GetVersion();
-
-    TFileHandle containerFile(containerPath, OpenExisting | RdOnly);
-    if (!containerFile.IsOpen()) {
-        Cerr << "Can't open key container file# \"" << EscapeC(containerPath) << "\", make sure the file actually exists." << Endl;
-        return false;
-    }
-    ui64 length = containerFile.GetLength();
-    if (length == 0) {
-        Cerr << "Key container file# \"" << EscapeC(containerPath) << "\" size is 0, make sure the file actually contains the key!" << Endl;
-        return false;
-    }
-    TString data = TString::Uninitialized(length);
-    size_t bytesRead = containerFile.Read(data.Detach(), length);
-    if (bytesRead != length) {
-        Cerr << "Key container file# \"" << EscapeC(containerPath) << "\" could not be read! Expected length# " << length
-            << " bytesRead# " << bytesRead << ", make sure the file stays put!" << Endl;
-        return false;
-    }
-    THashCalculator hasher;
-    if (pin.size() == 0) {
-        pin = "EmptyPin";
-    }
-
-    ui8 *keyBytes = 0;
-    ui32 keySize = 0;
-    key->Key.MutableKeyBytes(&keyBytes, &keySize);
-    Y_VERIFY(keySize == 4 * sizeof(ui64));
-    ui64 *p = (ui64*)keyBytes;
-
-    hasher.SetKey((const ui8*)pin.data(), pin.size());
-    hasher.Hash(data.Detach(), data.size());
-    p[0] = hasher.GetHashResult(&p[1]);
-    hasher.Clear();
-    hasher.SetKey((const ui8*)pin.data(), pin.size());
-    TString saltBefore = "SaltBefore";
-    TString saltAfter = "SaltAfter";
-    hasher.Hash(saltBefore.data(), saltBefore.size());
-    hasher.Hash(data.Detach(), data.size());
-    hasher.Hash(saltAfter.data(), saltAfter.size());
-    p[2] = hasher.GetHashResult(&p[3]);
-
-    key->Version = version;
-    key->Id = keyId;
-    return true;
-}
-
+bool ObtainKey(TEncryptionKey *key, const NKikimrProto::TKeyRecord& record) { 
+    TString containerPath = record.GetContainerPath(); 
+    TString pin = record.GetPin(); 
+    TString keyId = record.GetId(); 
+    ui64 version = record.GetVersion(); 
+ 
+    TFileHandle containerFile(containerPath, OpenExisting | RdOnly); 
+    if (!containerFile.IsOpen()) { 
+        Cerr << "Can't open key container file# \"" << EscapeC(containerPath) << "\", make sure the file actually exists." << Endl; 
+        return false; 
+    } 
+    ui64 length = containerFile.GetLength(); 
+    if (length == 0) { 
+        Cerr << "Key container file# \"" << EscapeC(containerPath) << "\" size is 0, make sure the file actually contains the key!" << Endl; 
+        return false; 
+    } 
+    TString data = TString::Uninitialized(length); 
+    size_t bytesRead = containerFile.Read(data.Detach(), length); 
+    if (bytesRead != length) { 
+        Cerr << "Key container file# \"" << EscapeC(containerPath) << "\" could not be read! Expected length# " << length 
+            << " bytesRead# " << bytesRead << ", make sure the file stays put!" << Endl; 
+        return false; 
+    } 
+    THashCalculator hasher; 
+    if (pin.size() == 0) { 
+        pin = "EmptyPin"; 
+    } 
+ 
+    ui8 *keyBytes = 0; 
+    ui32 keySize = 0; 
+    key->Key.MutableKeyBytes(&keyBytes, &keySize); 
+    Y_VERIFY(keySize == 4 * sizeof(ui64)); 
+    ui64 *p = (ui64*)keyBytes; 
+ 
+    hasher.SetKey((const ui8*)pin.data(), pin.size()); 
+    hasher.Hash(data.Detach(), data.size()); 
+    p[0] = hasher.GetHashResult(&p[1]); 
+    hasher.Clear(); 
+    hasher.SetKey((const ui8*)pin.data(), pin.size()); 
+    TString saltBefore = "SaltBefore"; 
+    TString saltAfter = "SaltAfter"; 
+    hasher.Hash(saltBefore.data(), saltBefore.size()); 
+    hasher.Hash(data.Detach(), data.size()); 
+    hasher.Hash(saltAfter.data(), saltAfter.size()); 
+    p[2] = hasher.GetHashResult(&p[3]); 
+ 
+    key->Version = version; 
+    key->Id = keyId; 
+    return true; 
+} 
+ 
 bool NKikimr::ObtainTenantKey(TEncryptionKey *key, const NKikimrProto::TKeyConfig& keyConfig) {
     if (keyConfig.KeysSize()) {
         // TODO(cthulhu): process muliple keys here.
         auto &record = keyConfig.GetKeys(0);
-        return ObtainKey(key, record);
+        return ObtainKey(key, record); 
+    } else { 
+        Cerr << "No Keys in KeyConfig! Encrypted group DsProxies will not start" << Endl; 
+        return false; 
+    } 
+} 
+
+bool NKikimr::ObtainPDiskKey(TEncryptionKey *key, const NKikimrProto::TKeyConfig& keyConfig) { 
+    if (keyConfig.KeysSize()) { 
+        auto &record = keyConfig.GetKeys(0); 
+        return ObtainKey(key, record); 
     } else {
-        Cerr << "No Keys in KeyConfig! Encrypted group DsProxies will not start" << Endl;
+        Cerr << "No Keys in PDiskKeyConfig! Encrypted pdisks will not start" << Endl; 
         return false;
     }
 }
 
-bool NKikimr::ObtainPDiskKey(TEncryptionKey *key, const NKikimrProto::TKeyConfig& keyConfig) {
-    if (keyConfig.KeysSize()) {
-        auto &record = keyConfig.GetKeys(0);
-        return ObtainKey(key, record);
-    } else {
-        Cerr << "No Keys in PDiskKeyConfig! Encrypted pdisks will not start" << Endl;
-        return false;
-    }
-}
-
-
+ 
 bool NKikimr::ObtainStaticKey(TEncryptionKey *key) {
     // TODO(cthulhu): Replace this with real data
     key->Key.SetKey((ui8*)"TestStaticKey", 13);

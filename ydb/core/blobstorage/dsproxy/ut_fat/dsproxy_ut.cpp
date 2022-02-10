@@ -4179,13 +4179,13 @@ public:
 
         TAppData appData(0, 0, 0, 0, TMap<TString, ui32>(), nullptr, nullptr, nullptr, nullptr);
         appData.Counters = counters;
-        auto ioContext = std::make_shared<NKikimr::NPDisk::TIoContextFactoryOSS>();
-        appData.IoContextFactory = ioContext.get();
+        auto ioContext = std::make_shared<NKikimr::NPDisk::TIoContextFactoryOSS>(); 
+        appData.IoContextFactory = ioContext.get(); 
 
         THolder<TActorSystemSetup> setup1 = BuildActorSystemSetup(1, *counters, nameserverTable, interconnect);
         THolder<TActorSystemSetup> setup2 = BuildActorSystemSetup(2, *counters, nameserverTable, interconnect);
 
-        TIntrusivePtr<TDsProxyNodeMon> dsProxyNodeMon(new TDsProxyNodeMon(counters, true));
+        TIntrusivePtr<TDsProxyNodeMon> dsProxyNodeMon(new TDsProxyNodeMon(counters, true)); 
         TDsProxyPerPoolCounters perPoolCounters(counters);
         TIntrusivePtr<TStoragePoolCounters> storagePoolCounters = perPoolCounters.GetPoolCounters("pool_name");
         std::unique_ptr<IActor> proxyActor{CreateBlobStorageGroupProxyConfigured(TIntrusivePtr(bsInfo), false,
@@ -4225,7 +4225,7 @@ public:
                 pDiskConfig->GetDriveDataSwitch = NKikimrBlobStorage::TPDiskConfig::DoNotTouch;
                 pDiskConfig->WriteCacheSwitch = NKikimrBlobStorage::TPDiskConfig::DoNotTouch;
                 pDiskConfig->SectorMap = SectorMapByPath[filePath];
-                pDiskConfig->EnableSectorEncryption = !pDiskConfig->SectorMap;
+                pDiskConfig->EnableSectorEncryption = !pDiskConfig->SectorMap; 
 
                 TActorSetupCmd pDiskSetup(
                     CreatePDisk(pDiskConfig.Get(), mainKey, counters),

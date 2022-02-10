@@ -384,7 +384,7 @@ void TMirrorer::CreateConsumer(TEvPQ::TEvCreateConsumer::TPtr&, const TActorCont
     PartitionStream.Reset();
 
     auto factory = AppData(ctx)->PersQueueMirrorReaderFactory;
-    Y_VERIFY(factory);
+    Y_VERIFY(factory); 
 
     ReadSession = factory->GetReadSession(Config, Partition, CredentialsProvider, MAX_BYTES_IN_FLIGHT);
 

@@ -23,7 +23,7 @@ public:
         LockDevice = false;
         MainKey = 0;
         config.SetFreeArgsNum(1);
-        SetFreeArgTitle(0, "<PATH>", "Disk path");
+        SetFreeArgTitle(0, "<PATH>", "Disk path"); 
         config.Opts->AddLongOption('k', "main-key", "encryption main-key to use while reading").RequiredArgument("NUM")
             .Optional().StoreResult(&MainKey); // TODO: make required
         config.Opts->AddLongOption("master-key", "obsolete: use main-key").RequiredArgument("NUM")
@@ -121,7 +121,7 @@ public:
         Guid = 0;
         IsErasureEncode = false;
         config.SetFreeArgsNum(1);
-        SetFreeArgTitle(0, "<PATH>", "Disk path");
+        SetFreeArgTitle(0, "<PATH>", "Disk path"); 
         config.Opts->AddLongOption('d', "disk-size", "disk size to set (supports K/M/G/T suffixes, 0 to autodetect, default = 0)\n"
             "kikimr needs disk of at least 16 GiB, disk must be large enough to contain at least 100 chunks")
             .OptionalArgument("BYTES").StoreResult(&DiskSize);
@@ -174,36 +174,36 @@ public:
     }
 };
 
-class TClientCommandDiskObliterate : public TClientCommand {
-public:
-    TClientCommandDiskObliterate()
-        : TClientCommand("obliterate", {}, "Obliterate local disk, so it will be self-formatted on startup")
-    {}
-
-    TString Path;
-
-    virtual void Config(TConfig& config) override {
-        TClientCommand::Config(config);
-        config.SetFreeArgsNum(1);
-        SetFreeArgTitle(0, "<PATH>", "Disk path");
-    }
-
-    virtual void Parse(TConfig& config) override {
-        TClientCommand::Parse(config);
-        Path = config.ParseResult->GetFreeArgs()[0];
-    }
-
-    virtual int Run(TConfig&) override {
-        try {
-            ObliterateDisk(Path);
-        } catch (TFileError& e) {
-            Cerr << "Error, what# " << e.what() << Endl;
-            return 1;
-        }
-        return 0;
-    }
-};
-
+class TClientCommandDiskObliterate : public TClientCommand { 
+public: 
+    TClientCommandDiskObliterate() 
+        : TClientCommand("obliterate", {}, "Obliterate local disk, so it will be self-formatted on startup") 
+    {} 
+ 
+    TString Path; 
+ 
+    virtual void Config(TConfig& config) override { 
+        TClientCommand::Config(config); 
+        config.SetFreeArgsNum(1); 
+        SetFreeArgTitle(0, "<PATH>", "Disk path"); 
+    } 
+ 
+    virtual void Parse(TConfig& config) override { 
+        TClientCommand::Parse(config); 
+        Path = config.ParseResult->GetFreeArgs()[0]; 
+    } 
+ 
+    virtual int Run(TConfig&) override { 
+        try { 
+            ObliterateDisk(Path); 
+        } catch (TFileError& e) { 
+            Cerr << "Error, what# " << e.what() << Endl; 
+            return 1; 
+        } 
+        return 0; 
+    } 
+}; 
+ 
 class TClientCommandDisk : public TClientCommandTree {
 public:
     TClientCommandDisk()

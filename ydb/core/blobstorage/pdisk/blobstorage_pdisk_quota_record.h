@@ -22,8 +22,8 @@ namespace NPDisk {
     //
 
 class TQuotaRecord {
-    friend class TPerOwnerQuotaTracker;
-
+    friend class TPerOwnerQuotaTracker; 
+ 
     TAtomic HardLimit = 0;
     TAtomic Free = 0;
 
@@ -32,16 +32,16 @@ class TQuotaRecord {
 #undef DEFINE_DISK_SPACE_COLOR
 
     TString Name;
-    std::optional<TVDiskID> VDiskId;
+    std::optional<TVDiskID> VDiskId; 
 public:
-    void SetName(const TString& name) {
+    void SetName(const TString& name) { 
         Name = name;
     }
 
-    void SetVDiskId(const TVDiskID& v) {
-        VDiskId = v;
-    }
-
+    void SetVDiskId(const TVDiskID& v) { 
+        VDiskId = v; 
+    } 
+ 
     i64 GetUsed() const {
         return AtomicGet(HardLimit) - AtomicGet(Free);
     }
@@ -54,22 +54,22 @@ public:
         return AtomicGet(Free);
     }
 
-    TString Print() const {
-        TStringStream str;
-        Print(str);
-        return str.Str();
-    }
-
-    void Print(IOutputStream &str) const {
-        str << "\nName# \"" << Name << "\"";
-        if (VDiskId) {
-            str << " VDiskId# " << *VDiskId;
-        }
-        str << "\n";
+    TString Print() const { 
+        TStringStream str; 
+        Print(str); 
+        return str.Str(); 
+    } 
+ 
+    void Print(IOutputStream &str) const { 
+        str << "\nName# \"" << Name << "\""; 
+        if (VDiskId) { 
+            str << " VDiskId# " << *VDiskId; 
+        } 
+        str << "\n"; 
         str << " HardLimit# " << HardLimit;
-        str << " Free# " << Free;
-        str << " Used# " << GetUsed();
-        str << " CurrentColor# " << NKikimrBlobStorage::TPDiskSpaceColor::E_Name(EstimateSpaceColor(0)) << "\n";
+        str << " Free# " << Free; 
+        str << " Used# " << GetUsed(); 
+        str << " CurrentColor# " << NKikimrBlobStorage::TPDiskSpaceColor::E_Name(EstimateSpaceColor(0)) << "\n"; 
 #define PRINT_DISK_SPACE_COLOR(NAME) str << " " #NAME "# " << NAME;
         DISK_SPACE_COLORS(PRINT_DISK_SPACE_COLOR)
 #undef PRINT_DISK_SPACE_COLOR
@@ -78,7 +78,7 @@ public:
     // Called only from the main trhead
     // Returns number of chunks released (negative for chunks acquired)
     i64 ForceHardLimit(i64 hardLimit, const TColorLimits &limits) {
-        i64 oldHardLimit = AtomicGet(HardLimit);
+        i64 oldHardLimit = AtomicGet(HardLimit); 
         i64 increment = hardLimit - oldHardLimit;
         AtomicAdd(HardLimit, increment);
         AtomicAdd(Free, increment);
@@ -94,21 +94,21 @@ public:
         return -increment;
     }
 
-    bool ForceAllocate(i64 count) {
-        return AtomicSub(Free, count) > AtomicGet(Black);
-    }
-
+    bool ForceAllocate(i64 count) { 
+        return AtomicSub(Free, count) > AtomicGet(Black); 
+    } 
+ 
     // Called only from the main thread
     bool TryAllocate(i64 count, TString &outErrorReason) {
         Y_VERIFY(count > 0);
-        if (AtomicSub(Free, count) > AtomicGet(Black)) {
+        if (AtomicSub(Free, count) > AtomicGet(Black)) { 
             return true;
         }
-        AtomicAdd(Free, count);
+        AtomicAdd(Free, count); 
         outErrorReason = (TStringBuilder() << "Allocation of count# " << count
-                << " chunks falls into the black zone, free# " << AtomicGet(Free)
+                << " chunks falls into the black zone, free# " << AtomicGet(Free) 
                 << " black# " << AtomicGet(Black)
-                << " hardLimit# " << AtomicGet(HardLimit)
+                << " hardLimit# " << AtomicGet(HardLimit) 
                 << " Name# \"" << Name << "\""
                 << " Marker# BPQ10");
         return false;
@@ -116,43 +116,43 @@ public:
 
     bool InitialAllocate(i64 count) {
         Y_VERIFY(count >= 0);
-        if (AtomicSub(Free, count) >= 0) {
+        if (AtomicSub(Free, count) >= 0) { 
             return true;
-        } else {
-            AtomicAdd(Free, count);
-            return false;
+        } else { 
+            AtomicAdd(Free, count); 
+            return false; 
         }
     }
 
     void Release(i64 count) {
         Y_VERIFY(count > 0);
-        TAtomicBase newFree = AtomicAdd(Free, count);
-        Y_VERIFY_S(newFree <= AtomicGet(HardLimit), Print());
+        TAtomicBase newFree = AtomicAdd(Free, count); 
+        Y_VERIFY_S(newFree <= AtomicGet(HardLimit), Print()); 
     }
 
     // Called from any thread
     // TODO(cthulhu): Profile and consider caching
-    NKikimrBlobStorage::TPDiskSpaceColor::E EstimateSpaceColor(i64 count) const {
-        using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
-        const i64 newFree = AtomicGet(Free) - count;
-
-        if (newFree > AtomicGet(Cyan)) {
-            return TColor::GREEN;
+    NKikimrBlobStorage::TPDiskSpaceColor::E EstimateSpaceColor(i64 count) const { 
+        using TColor = NKikimrBlobStorage::TPDiskSpaceColor; 
+        const i64 newFree = AtomicGet(Free) - count; 
+ 
+        if (newFree > AtomicGet(Cyan)) { 
+            return TColor::GREEN; 
         } else if (newFree > AtomicGet(LightYellow)) {
             return TColor::CYAN;
-        } else if (newFree > AtomicGet(Yellow)) {
+        } else if (newFree > AtomicGet(Yellow)) { 
             return TColor::LIGHT_YELLOW;
-        } else if (newFree > AtomicGet(LightOrange)) {
-            return TColor::YELLOW;
-        } else if (newFree > AtomicGet(Orange)) {
-            return TColor::LIGHT_ORANGE;
-        } else if (newFree > AtomicGet(Red)) {
-            return TColor::ORANGE;
-        } else if (newFree > AtomicGet(Black)) {
-            return TColor::RED;
-        } else {
-            return TColor::BLACK;
-        }
+        } else if (newFree > AtomicGet(LightOrange)) { 
+            return TColor::YELLOW; 
+        } else if (newFree > AtomicGet(Orange)) { 
+            return TColor::LIGHT_ORANGE; 
+        } else if (newFree > AtomicGet(Red)) { 
+            return TColor::ORANGE; 
+        } else if (newFree > AtomicGet(Black)) { 
+            return TColor::RED; 
+        } else { 
+            return TColor::BLACK; 
+        } 
     }
 };
 

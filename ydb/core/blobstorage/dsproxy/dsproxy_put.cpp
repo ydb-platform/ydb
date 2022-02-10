@@ -8,10 +8,10 @@
 #include <ydb/core/blobstorage/base/wilson_events.h>
 
 #include <util/generic/ymath.h>
-#include <util/system/datetime.h>
+#include <util/system/datetime.h> 
 #include <util/system/hp_timer.h>
 
-LWTRACE_USING(BLOBSTORAGE_PROVIDER);
+LWTRACE_USING(BLOBSTORAGE_PROVIDER); 
 
 namespace NKikimr {
 
@@ -146,7 +146,7 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor<TBlobSt
         WILSON_TRACE_FROM_ACTOR(*TlsActivationContext, *this, &TraceId, EvVPutResultReceived, MergedNode = std::move(ev->TraceId));
         ResponsesReceived++;
 
-        const ui64 cyclesPerUs = NHPTimer::GetCyclesPerSecond() / 1000000;
+        const ui64 cyclesPerUs = NHPTimer::GetCyclesPerSecond() / 1000000; 
         ev->Get()->Record.MutableTimestamps()->SetReceivedByDSProxyUs(GetCycleCountFast() / cyclesPerUs);
         const NKikimrBlobStorage::TEvVPutResult &record = ev->Get()->Record;
         const TLogoBlobID blob = LogoBlobIDFromLogoBlobID(record.GetBlobID());
@@ -169,24 +169,24 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor<TBlobSt
             TimeStats.ApplyPut(ItemsInfo[idx].BufferSize, record.GetMsgQoS().GetExecTimeStats());
         }
 
-        Y_VERIFY(record.HasVDiskID());
-        TVDiskID vDiskId = VDiskIDFromVDiskID(record.GetVDiskID());
+        Y_VERIFY(record.HasVDiskID()); 
+        TVDiskID vDiskId = VDiskIDFromVDiskID(record.GetVDiskID()); 
         const TVDiskIdShort shortId(vDiskId);
-
-        LWPROBE(DSProxyVDiskRequestDuration, TEvBlobStorage::EvVPut, blob.BlobSize(), blob.TabletID(),
+ 
+        LWPROBE(DSProxyVDiskRequestDuration, TEvBlobStorage::EvVPut, blob.BlobSize(), blob.TabletID(), 
                 Info->GroupID, blob.Channel(), Info->GetFailDomainOrderNumber(shortId),
                 GetStartTime(record.GetTimestamps()),
                 GetTotalTimeMs(record.GetTimestamps()),
                 GetVDiskTimeMs(record.GetTimestamps()),
                 GetTotalTimeMs(record.GetTimestamps()) - GetVDiskTimeMs(record.GetTimestamps()),
                 NKikimrBlobStorage::EPutHandleClass_Name(PutImpl.GetPutHandleClass()),
-                NKikimrProto::EReplyStatus_Name(status));
+                NKikimrProto::EReplyStatus_Name(status)); 
         if (RootCauseTrack.IsOn) {
             RootCauseTrack.OnReply(cookie.GetCauseIdx(),
                 GetTotalTimeMs(record.GetTimestamps()) - GetVDiskTimeMs(record.GetTimestamps()),
                 GetVDiskTimeMs(record.GetTimestamps()));
         }
-
+ 
         TDeque<std::unique_ptr<TEvBlobStorage::TEvVPut>> vPuts;
         TPutImpl::TPutResultVec putResults;
         PutImpl.OnVPutEventResult(LogCtx, ev->Sender, *ev->Get(), vPuts, putResults);
@@ -446,7 +446,7 @@ public:
             const TIntrusivePtr<TGroupQueues> &state, const TActorId &source,
             const TIntrusivePtr<TBlobStorageGroupProxyMon> &mon, TEvBlobStorage::TEvPut *ev,
             ui64 cookie, NWilson::TTraceId traceId, bool timeStatsEnabled,
-            TDiskResponsivenessTracker::TPerDiskStatsPtr stats,
+            TDiskResponsivenessTracker::TPerDiskStatsPtr stats, 
             TMaybe<TGroupStat::EKind> latencyQueueKind, TInstant now,
             TIntrusivePtr<TStoragePoolCounters> &storagePoolCounters,
             bool enableRequestMod3x3ForMinLatecy)
@@ -475,7 +475,7 @@ public:
         ReportBytes(ItemsInfo[0].Buffer.capacity() + sizeof(*this));
 
         RequestBytes = ev->Buffer.size();
-        RequestHandleClass = HandleClassToHandleClass(HandleClass);
+        RequestHandleClass = HandleClassToHandleClass(HandleClass); 
         MaxSaneRequests = info->Type.TotalPartCount() * (1ull + info->Type.Handoff()) * 2;
     }
 
@@ -724,7 +724,7 @@ IActor* CreateBlobStorageGroupPutRequest(const TIntrusivePtr<TBlobStorageGroupIn
         const TIntrusivePtr<TGroupQueues> &state, const TActorId &source,
         const TIntrusivePtr<TBlobStorageGroupProxyMon> &mon, TEvBlobStorage::TEvPut *ev,
         ui64 cookie, NWilson::TTraceId traceId, bool timeStatsEnabled,
-        TDiskResponsivenessTracker::TPerDiskStatsPtr stats,
+        TDiskResponsivenessTracker::TPerDiskStatsPtr stats, 
         TMaybe<TGroupStat::EKind> latencyQueueKind, TInstant now,
         TIntrusivePtr<TStoragePoolCounters> &storagePoolCounters,
         bool enableRequestMod3x3ForMinLatecy) {

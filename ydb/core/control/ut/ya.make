@@ -4,14 +4,14 @@ OWNER(
 )
 
 UNITTEST_FOR(ydb/core/control)
-
-FORK_SUBTESTS()
-
+ 
+FORK_SUBTESTS() 
+ 
 TIMEOUT(600)
 
 SIZE(MEDIUM)
-
-PEERDIR(
+ 
+PEERDIR( 
     library/cpp/actors/core
     library/cpp/actors/interconnect
     library/cpp/testing/unittest
@@ -19,11 +19,11 @@ PEERDIR(
     ydb/core/base
     ydb/core/mind
     ydb/core/mon
-)
-
-SRCS(
-    immediate_control_board_ut.cpp
-    immediate_control_board_actor_ut.cpp
-)
-
-END()
+) 
+ 
+SRCS( 
+    immediate_control_board_ut.cpp 
+    immediate_control_board_actor_ut.cpp 
+) 
+ 
+END() 

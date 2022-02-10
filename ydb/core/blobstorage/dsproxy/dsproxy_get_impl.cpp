@@ -164,7 +164,7 @@ ui64 TGetImpl::GetTimeToAccelerateNs(TLogContext &logCtx, NKikimrBlobStorage::EV
                 *Info, *Blackboard.GroupQueues, queueId,
                 &worstPredictedNs, &nextToWorstPredictedNs, &worstOrderNumber);
     }
-    return nextToWorstPredictedNs * 1;
+    return nextToWorstPredictedNs * 1; 
 }
 
 ui64 TGetImpl::GetTimeToAccelerateGetNs(TLogContext &logCtx) {

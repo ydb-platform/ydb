@@ -97,14 +97,14 @@ public:
         return ReplyBytes;
     }
 
-    NKikimrBlobStorage::EGetHandleClass GetHandleClass() const {
+    NKikimrBlobStorage::EGetHandleClass GetHandleClass() const { 
         return Blackboard.GetHandleClass;
-    }
-
-    NKikimrBlobStorage::EPutHandleClass GetPutHandleClass() const {
+    } 
+ 
+    NKikimrBlobStorage::EPutHandleClass GetPutHandleClass() const { 
         return Blackboard.PutHandleClass;
-    }
-
+    } 
+ 
     void ReportBytes(i64 bytes) {
         BytesToReport += bytes;
     }

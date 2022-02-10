@@ -83,20 +83,20 @@ namespace NPDisk {
 //
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-class TPDisk;
-
+class TPDisk; 
+ 
 class TSysLogReader : public TThrRefBase {
     TPDisk *const PDisk;
     TActorSystem *const ActorSystem;
     const TActorId ReplyTo;
     const TReqId ReqId;
 
-    THolder<TEvReadLogResult> Result;
+    THolder<TEvReadLogResult> Result; 
 
-    TPDiskStreamCypher Cypher;
+    TPDiskStreamCypher Cypher; 
     TVector<ui64> BadOffsets;
-
-    ui32 SizeToRead;
+ 
+    ui32 SizeToRead; 
     TAlignedData Data;
 
     struct TSectorSetInfo {
@@ -108,7 +108,7 @@ class TSysLogReader : public TThrRefBase {
         ui64 PayloadLsn = 0;
         ui32 FirstSectorIdx = 0;
         ui32 GoodSectorFlags = 0;
-        TLogSignature PayloadSignature = 0;
+        TLogSignature PayloadSignature = 0; 
         bool IsIdeal = false;
         bool HasStart = false;
         bool HasMiddle = false;
@@ -134,7 +134,7 @@ class TSysLogReader : public TThrRefBase {
     bool IsReplied = false;
 
 public:
-    TSysLogReader(TPDisk *pDisk, TActorSystem *const actorSystem, const TActorId &replyTo, TReqId reqId);
+    TSysLogReader(TPDisk *pDisk, TActorSystem *const actorSystem, const TActorId &replyTo, TReqId reqId); 
     virtual ~TSysLogReader();
 
     void Start();

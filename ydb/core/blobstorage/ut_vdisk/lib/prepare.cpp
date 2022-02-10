@@ -24,33 +24,33 @@ using namespace NKikimr;
 //////////////////////////////////////////////////////////////////////////////////////
 TAllPDisksConfiguration TAllPDisksConfiguration::MkDevice(const TString &devicePath,
                                                           ui32 chunkSize,
-                                                          TString deviceType) {
-    return TAllPDisksConfiguration(1, chunkSize, 0, TString(), devicePath, deviceType);
+                                                          TString deviceType) { 
+    return TAllPDisksConfiguration(1, chunkSize, 0, TString(), devicePath, deviceType); 
 }
 
 TAllPDisksConfiguration TAllPDisksConfiguration::MkOneTmp(ui32 chunkSize,
                                                           ui64 diskSize,
-                                                          TString deviceType) {
-    return TAllPDisksConfiguration(1, chunkSize, diskSize, TString(), TString(), deviceType);
+                                                          TString deviceType) { 
+    return TAllPDisksConfiguration(1, chunkSize, diskSize, TString(), TString(), deviceType); 
 }
 
 TAllPDisksConfiguration TAllPDisksConfiguration::MkManyTmp(ui32 pDisksNum,
                                                            ui32 chunkSize,
                                                            ui64 diskSize,
-                                                           TString deviceType) {
+                                                           TString deviceType) { 
     Y_ASSERT(pDisksNum > 0);
-    return TAllPDisksConfiguration(pDisksNum, chunkSize, diskSize, TString(), TString(), deviceType);
+    return TAllPDisksConfiguration(pDisksNum, chunkSize, diskSize, TString(), TString(), deviceType); 
 }
 
 TAllPDisksConfiguration::TAllPDisksConfiguration(ui32 num, ui32 chunkSize, ui64 diskSize,
                                                  const TString &dir, const TString &device,
-                                                 TString deviceType)
+                                                 TString deviceType) 
     : PDisksNum(num)
     , ChunkSize(chunkSize)
     , DiskSize(diskSize)
     , Dir(dir)
     , Device(device)
-    , DeviceType(deviceType)
+    , DeviceType(deviceType) 
 {}
 
 
@@ -82,7 +82,7 @@ void TOnePDisk::FormatDisk(bool force) {
                     sysLogKey,      // sysLogKey
                     NPDisk::YdbDefaultPDiskSequence,          // mainKey
                     "",             // textMessage
-                    false           // isErasureEncode
+                    false           // isErasureEncode 
                     );
     }
 }
@@ -151,9 +151,9 @@ void TAllPDisks::ActorSetupCmd(NActors::TActorSystemSetup *setup, ui32 node,
         TOnePDisk &inst = PDisks[i];
         inst.PDiskActorID = MakeBlobStoragePDiskID(node, i);
         TIntrusivePtr<TPDiskConfig> pDiskConfig;
-        TPDiskCategory::EDeviceType deviceType = TPDiskCategory::DeviceTypeFromStr(Cfg.DeviceType);
+        TPDiskCategory::EDeviceType deviceType = TPDiskCategory::DeviceTypeFromStr(Cfg.DeviceType); 
         pDiskConfig.Reset(new TPDiskConfig(inst.Filename, inst.PDiskGuid, inst.PDiskID,
-                                           TPDiskCategory(deviceType, 0).GetRaw()));
+                                           TPDiskCategory(deviceType, 0).GetRaw())); 
         pDiskConfig->GetDriveDataSwitch = NKikimrBlobStorage::TPDiskConfig::DoNotTouch;
         pDiskConfig->WriteCacheSwitch = NKikimrBlobStorage::TPDiskConfig::DoNotTouch;
         TActorSetupCmd pDiskSetup(CreatePDisk(pDiskConfig.Get(),
@@ -241,7 +241,7 @@ bool TDefaultVDiskSetup::SetUp(TAllVDisks::TVDiskInstance &vdisk, TAllPDisks *pd
     vdisk.ActorID = MakeBlobStorageVDiskID(1, id + 1, 0);
     vdisk.VDiskID = TVDiskID(0, 1, 0, d, j);
 
-    NKikimr::TVDiskConfig::TBaseInfo baseInfo(vdisk.VDiskID, pdisk.PDiskActorID, pdisk.PDiskGuid,
+    NKikimr::TVDiskConfig::TBaseInfo baseInfo(vdisk.VDiskID, pdisk.PDiskActorID, pdisk.PDiskGuid, 
             pdisk.PDiskID, NKikimr::TPDiskCategory::DEVICE_TYPE_ROT, slotId,
             NKikimrBlobStorage::TVDiskKind::Default, initOwnerRound, {});
     vdisk.Cfg = MakeIntrusive<NKikimr::TVDiskConfig>(baseInfo);
@@ -374,9 +374,9 @@ void TConfiguration::Prepare(IVDiskSetup *vdiskSetup, bool newPDisks, bool runRe
                                         nullptr, nullptr, &KikimrShouldContinue));
     AppData->Counters = Counters;
     AppData->Mon = Monitoring.get();
-    IoContext = std::make_shared<NKikimr::NPDisk::TIoContextFactoryOSS>();
-    AppData->IoContextFactory = IoContext.get();
-
+    IoContext = std::make_shared<NKikimr::NPDisk::TIoContextFactoryOSS>(); 
+    AppData->IoContextFactory = IoContext.get(); 
+ 
     ActorSystem1.reset(new TActorSystem(setup1, AppData.get(), logSettings));
     Monitoring->RegisterActorPage(actorsMonPage, "logger", "Logger", false, ActorSystem1.get(), loggerActorId);
     loggerActor->Log(Now(), NKikimr::NLog::PRI_NOTICE, NActorsServices::TEST, "Actor system created");

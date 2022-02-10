@@ -154,16 +154,16 @@ bool AddDeferredEffect(NYql::NNodes::TExprBase effect, const TVector<NKikimrKqp:
 bool AddDeferredEffect(NYql::NNodes::TExprBase effect, NYql::TExprContext& ctx, TKqpTransactionState& txState,
     TKqlTransformContext& transformCtx, bool preserveParamValues);
 
-NYql::TIssue GetLocksInvalidatedIssue(const TKqpTransactionContext& txCtx, const TMaybe<TKqpTxLock>& invalidatedLock);
+NYql::TIssue GetLocksInvalidatedIssue(const TKqpTransactionContext& txCtx, const TMaybe<TKqpTxLock>& invalidatedLock); 
 
-bool MergeLocks(const NKikimrMiniKQL::TType& type, const NKikimrMiniKQL::TValue& value, TKqpTransactionContext& txCtx,
-        NYql::TExprContext& ctx);
+bool MergeLocks(const NKikimrMiniKQL::TType& type, const NKikimrMiniKQL::TValue& value, TKqpTransactionContext& txCtx, 
+        NYql::TExprContext& ctx); 
 
-std::pair<bool, std::vector<NYql::TIssue>> MergeLocks(const NKikimrMiniKQL::TType& type, const NKikimrMiniKQL::TValue& value,
-        TKqpTransactionContext& txCtx);
+std::pair<bool, std::vector<NYql::TIssue>> MergeLocks(const NKikimrMiniKQL::TType& type, const NKikimrMiniKQL::TValue& value, 
+        TKqpTransactionContext& txCtx); 
 
-bool UnpackMergeLocks(const NKikimrMiniKQL::TResult& result, TKqpTransactionContext& txCtx, NYql::TExprContext& ctx);
-
+bool UnpackMergeLocks(const NKikimrMiniKQL::TResult& result, TKqpTransactionContext& txCtx, NYql::TExprContext& ctx); 
+ 
 TKqpParamsMap BuildParamsMap(const TVector<NKikimrKqp::TParameterBinding>& bindings,
     TIntrusivePtr<TKqpTransactionState> txState, TIntrusivePtr<TKqlTransformContext> transformCtx, bool acquireLocks);
 

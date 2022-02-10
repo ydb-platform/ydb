@@ -11,8 +11,8 @@ package NKikimrBlobStorage;
 enum EPDiskType {
     ROT = 0; // rotational drives (HDD)
     SSD = 1; // solid state drives (SSD)
-    NVME = 2; // PCIe-connected solid state drives (NVMe SSD)
-    UNKNOWN_TYPE = 3; // used if device type is unknown or if group consists of different PDisk device types
+    NVME = 2; // PCIe-connected solid state drives (NVMe SSD) 
+    UNKNOWN_TYPE = 3; // used if device type is unknown or if group consists of different PDisk device types 
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -188,43 +188,43 @@ enum EDriveStatus {
     BROKEN = 3; // drive is not working, groups are automatically moved out of this drive upon reception of this status
     SPARE = 4; // spare drive -- groups are created only when being moved from BROKEN drives
     FAULTY = 5; // drive is expected to become BROKEN soon, new groups are not created, old groups are asynchronously moved out from this drive
-    TO_BE_REMOVED = 6; // same as INACTIVE, but drive is counted in fault model as not working
+    TO_BE_REMOVED = 6; // same as INACTIVE, but drive is counted in fault model as not working 
 }
 
-message TGroupStatus {
-    enum E {
-        UNKNOWN = 0; // group status is unknown (default value)
-        FULL = 1; // all VDisks of the group are READY for specific period of time
-        PARTIAL = 2; // some of VDisks are operational, but group is not yet DEGRADED
-        DEGRADED = 3; // group is DEGRADED -- one random failure may lead to group loss (but may not lead too)
-        DISINTEGRATED = 4; // group is not available for operation
-    }
+message TGroupStatus { 
+    enum E { 
+        UNKNOWN = 0; // group status is unknown (default value) 
+        FULL = 1; // all VDisks of the group are READY for specific period of time 
+        PARTIAL = 2; // some of VDisks are operational, but group is not yet DEGRADED 
+        DEGRADED = 3; // group is DEGRADED -- one random failure may lead to group loss (but may not lead too) 
+        DISINTEGRATED = 4; // group is not available for operation 
+    } 
 }
 
-message TDriveLifeStage {
-    enum E {
-        UNKNOWN = 0; // life stage is unknown (default)
-        NOT_SEEN = 1; // info about drive is located in BSC db, but drive is not seen in any node
-        ALLOCATED = 2; // PDisk is created
-        REMOVED = 3; // drive marked as removed
-        ERROR = 4; // drive was moved between nodes with allocated VDisks
-    }
-}
-
-message TSerialManagementStage {
-    enum E {
-        DISCOVER_SERIAL = 0;
-        CHECK_SERIAL = 1;
-        ONLY_SERIAL = 2;
-    }
-}
-
+message TDriveLifeStage { 
+    enum E { 
+        UNKNOWN = 0; // life stage is unknown (default) 
+        NOT_SEEN = 1; // info about drive is located in BSC db, but drive is not seen in any node 
+        ALLOCATED = 2; // PDisk is created 
+        REMOVED = 3; // drive marked as removed 
+        ERROR = 4; // drive was moved between nodes with allocated VDisks 
+    } 
+} 
+ 
+message TSerialManagementStage { 
+    enum E { 
+        DISCOVER_SERIAL = 0; 
+        CHECK_SERIAL = 1; 
+        ONLY_SERIAL = 2; 
+    } 
+} 
+ 
 message TUpdateDriveStatus {
     THostKey HostKey = 1; // host on which we are looking for the drive
     string Path = 2; // absolute path to the device as enlisted in PDisk configuration
     EDriveStatus Status = 3; // new status
     uint32 PDiskId = 4; // may be set instead of path to identify PDisk
-    string Serial = 5; // may be set instead of path and PDiskId to identify PDisk
+    string Serial = 5; // may be set instead of path and PDiskId to identify PDisk 
     uint64 StatusChangeTimestamp = 6; // used only in return of ReadDriveStatus
 }
 
@@ -387,28 +387,28 @@ message TSetScrubPeriodicity {
     uint32 ScrubPeriodicity = 1; // in seconds; 0 = disable
 }
 
-message TAddDriveSerial {
-    string Serial = 1;
-    uint64 BoxId = 2;
-    uint64 Kind = 3;
-    EPDiskType PDiskType = 4; // default UNKNOWN type implies auto-detection of drive type
-    NKikimrBlobStorage.TPDiskConfig PDiskConfig = 5;
-}
-
-// Remove drive if empty and delete PDisk, but leave row in table with LifeStage == REMOVED
-message TRemoveDriveSerial {
-    string Serial = 1;
-}
-
-// Remove drive if empty and delete PDisk, but totaly erase all drive-related info from BSC's internal database
-message TForgetDriveSerial {
-    string Serial = 1;
-}
-
-message TMigrateToSerial {
-    TSerialManagementStage.E Stage = 1;
-}
-
+message TAddDriveSerial { 
+    string Serial = 1; 
+    uint64 BoxId = 2; 
+    uint64 Kind = 3; 
+    EPDiskType PDiskType = 4; // default UNKNOWN type implies auto-detection of drive type 
+    NKikimrBlobStorage.TPDiskConfig PDiskConfig = 5; 
+} 
+ 
+// Remove drive if empty and delete PDisk, but leave row in table with LifeStage == REMOVED 
+message TRemoveDriveSerial { 
+    string Serial = 1; 
+} 
+ 
+// Remove drive if empty and delete PDisk, but totaly erase all drive-related info from BSC's internal database 
+message TForgetDriveSerial { 
+    string Serial = 1; 
+} 
+ 
+message TMigrateToSerial { 
+    TSerialManagementStage.E Stage = 1; 
+} 
+ 
 message TSetPDiskSpaceMarginPromille {
     uint32 PDiskSpaceMarginPromille = 1;
 }
@@ -458,10 +458,10 @@ message TConfigRequest {
             TEnableSelfHeal EnableDonorMode = 30;
             TDropDonorDisk DropDonorDisk = 31;
             TSetScrubPeriodicity SetScrubPeriodicity = 32;
-            TAddDriveSerial AddDriveSerial = 33;
-            TRemoveDriveSerial RemoveDriveSerial = 34;
-            TForgetDriveSerial ForgetDriveSerial  = 36;
-            TMigrateToSerial MigrateToSerial = 35;
+            TAddDriveSerial AddDriveSerial = 33; 
+            TRemoveDriveSerial RemoveDriveSerial = 34; 
+            TForgetDriveSerial ForgetDriveSerial  = 36; 
+            TMigrateToSerial MigrateToSerial = 35; 
             TSetPDiskSpaceMarginPromille SetPDiskSpaceMarginPromille = 37;
             TUpdateSettings UpdateSettings = 38;
 
@@ -555,8 +555,8 @@ message TBaseConfig {
         uint64 BoxId = 5;
         uint64 StoragePoolId = 6;
         bool SeenOperational = 7;
-        TGroupStatus.E OperatingStatus = 8; // group status based on latest VDisk reports only
-        TGroupStatus.E ExpectedStatus = 9; // status based not only on operational report, but on PDisk status and plans too
+        TGroupStatus.E OperatingStatus = 8; // group status based on latest VDisk reports only 
+        TGroupStatus.E ExpectedStatus = 9; // status based not only on operational report, but on PDisk status and plans too 
     }
     message TNode {
         uint32 NodeId = 1;
@@ -611,7 +611,7 @@ message TConfigResponse {
             kVDiskIdIncorrect = 6;
             kVSlotNotFound = 7;
             kDiskIsNotDonor = 8;
-            kAlready = 9;
+            kAlready = 9; 
             kMayGetDegraded = 10;
         }
 

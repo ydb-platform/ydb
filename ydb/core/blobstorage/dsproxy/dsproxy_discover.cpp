@@ -7,8 +7,8 @@
 
 namespace NKikimr {
 
-LWTRACE_USING(BLOBSTORAGE_PROVIDER);
-
+LWTRACE_USING(BLOBSTORAGE_PROVIDER); 
+ 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // DISCOVER request
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -301,7 +301,7 @@ class TBlobStorageGroupDiscoverRequest : public TBlobStorageGroupRequestActor<TB
         const bool success = result->Status == NKikimrProto::OK;
         WILSON_TRACE_FROM_ACTOR(*TlsActivationContext, *this, &TraceId, EvDiscoverResultSent);
         LWPROBE(DSProxyRequestDuration, TEvBlobStorage::EvDiscover, 0, duration.SecondsFloat() * 1000.0,
-                TabletId, Info->GroupID, TLogoBlobID::MaxChannel, "", success);
+                TabletId, Info->GroupID, TLogoBlobID::MaxChannel, "", success); 
         SendResponseAndDie(std::move(result));
     }
 
@@ -541,7 +541,7 @@ class TBlobStorageGroupDiscoverRequest : public TBlobStorageGroupRequestActor<TB
                         if (id >= stepToId || isAllRead) {
                             // Y_VERIFY(id.PartId() == 0);
                             const TLogoBlobID fullid = id.FullID();
-                            TVDiskID vDiskId(Info->CreateVDiskID(vId));
+                            TVDiskID vDiskId(Info->CreateVDiskID(vId)); 
                             TIngress ingress = curVDisk.Blobs[blobIdx].Ingress;
                             TEntryInfo &entry = GroupResponseTracker.EntryInfo[fullid];
                             entry.RegisterBlob(ingress, Info.Get(), vDiskId, fullid);
@@ -704,7 +704,7 @@ class TBlobStorageGroupDiscoverRequest : public TBlobStorageGroupRequestActor<TB
             for (TVDiskInfoContainer::iterator vDiskIt = VDiskInfo.begin(); vDiskIt != VDiskInfo.end(); ++vDiskIt) {
                 TVDiskIdShort vId(vDiskIt->first);
                 TVDiskInfo &curVDisk = vDiskIt->second;
-                TVDiskID vDiskId = Info->CreateVDiskID(vId);
+                TVDiskID vDiskId = Info->CreateVDiskID(vId); 
 
                 if (!curVDisk.IsError && !curVDisk.IsAllRead && !curVDisk.IsMoreRequested) {
                     const TActorId &vdisk = Info->GetActorId(vDiskId);

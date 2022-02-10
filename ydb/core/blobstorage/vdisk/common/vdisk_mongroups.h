@@ -3,7 +3,7 @@
 #include "defs.h"
 
 #include <ydb/core/protos/node_whiteboard.pb.h>
-
+ 
 namespace NKikimr {
     namespace NMonGroup {
 
@@ -145,7 +145,7 @@ public:                                                                         
                 COUNTER_INIT(DskUsedBytes, false);
                 COUNTER_INIT(HugeUsedChunks, false);
                 COUNTER_INIT(HugeCanBeFreedChunks, false);
-                COUNTER_INIT(HugeLockedChunks, false);
+                COUNTER_INIT(HugeLockedChunks, false); 
             }
 
             COUNTER_DEF(DskOutOfSpace);
@@ -155,7 +155,7 @@ public:                                                                         
             // huge heap chunks
             COUNTER_DEF(HugeUsedChunks);       // chunks used by huge heap
             COUNTER_DEF(HugeCanBeFreedChunks); // number of chunks that can be freed after defragmentation
-            COUNTER_DEF(HugeLockedChunks);
+            COUNTER_DEF(HugeLockedChunks); 
         };
 
         ///////////////////////////////////////////////////////////////////////////////////
@@ -339,33 +339,33 @@ public:                                                                         
         // TVDiskStateGroup
         ///////////////////////////////////////////////////////////////////////////////////
         class TVDiskStateGroup: public TBase {
-            std::array<NMonitoring::TDynamicCounters::TCounterPtr, NKikimrWhiteboard::EVDiskState_MAX + 1> VDiskStates;
-            NMonitoring::TDynamicCounters::TCounterPtr CurrentState;
-
+            std::array<NMonitoring::TDynamicCounters::TCounterPtr, NKikimrWhiteboard::EVDiskState_MAX + 1> VDiskStates; 
+            NMonitoring::TDynamicCounters::TCounterPtr CurrentState; 
+ 
         public:
             GROUP_CONSTRUCTOR(TVDiskStateGroup)
             {
-                // depracated, only for compatibility
-                TString name = "VDiskState";
-                CurrentState = GroupCounters->GetCounter(name, false);
-                *CurrentState = NKikimrWhiteboard::Initial;
-
-                for (size_t i = NKikimrWhiteboard::EVDiskState_MIN; i <= NKikimrWhiteboard::EVDiskState_MAX; ++i) {
-                    VDiskStates[i] = GroupCounters->GetCounter(name + "_" + NKikimrWhiteboard::EVDiskState_Name(i), false);
-                }
+                // depracated, only for compatibility 
+                TString name = "VDiskState"; 
+                CurrentState = GroupCounters->GetCounter(name, false); 
+                *CurrentState = NKikimrWhiteboard::Initial; 
+ 
+                for (size_t i = NKikimrWhiteboard::EVDiskState_MIN; i <= NKikimrWhiteboard::EVDiskState_MAX; ++i) { 
+                    VDiskStates[i] = GroupCounters->GetCounter(name + "_" + NKikimrWhiteboard::EVDiskState_Name(i), false); 
+                } 
                 COUNTER_INIT(VDiskLocalRecoveryState, false);
             }
 
-            void VDiskState(NKikimrWhiteboard::EVDiskState s) {
-                *VDiskStates[*CurrentState] = 0;
-                *CurrentState = s;
-                *VDiskStates[s] = 1;
-            }
-
-            NKikimrWhiteboard::EVDiskState VDiskState() const {
-                return static_cast<NKikimrWhiteboard::EVDiskState>(CurrentState->Val());
-            }
-
+            void VDiskState(NKikimrWhiteboard::EVDiskState s) { 
+                *VDiskStates[*CurrentState] = 0; 
+                *CurrentState = s; 
+                *VDiskStates[s] = 1; 
+            } 
+ 
+            NKikimrWhiteboard::EVDiskState VDiskState() const { 
+                return static_cast<NKikimrWhiteboard::EVDiskState>(CurrentState->Val()); 
+            } 
+ 
             COUNTER_DEF(VDiskLocalRecoveryState);
         };
 

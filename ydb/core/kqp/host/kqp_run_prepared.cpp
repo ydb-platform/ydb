@@ -75,8 +75,8 @@ public:
         mkqlResult->Swap(&result.Result);
 
         if (AcquireLocks) {
-            if (!UnpackMergeLocks(*mkqlResult, TxState->Tx(), ctx)) {
-                return TStatus::Error;
+            if (!UnpackMergeLocks(*mkqlResult, TxState->Tx(), ctx)) { 
+                return TStatus::Error; 
             }
         }
 

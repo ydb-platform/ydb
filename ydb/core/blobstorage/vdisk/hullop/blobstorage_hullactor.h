@@ -103,25 +103,25 @@ namespace NKikimr {
     ////////////////////////////////////////////////////////////////////////////
     // Run an actor for every database
     ////////////////////////////////////////////////////////////////////////////
-    NActors::IActor* CreateLogoBlobsActor(
+    NActors::IActor* CreateLogoBlobsActor( 
             TIntrusivePtr<TVDiskConfig> config,
-            TIntrusivePtr<THullDs> hullDs,
+            TIntrusivePtr<THullDs> hullDs, 
             std::shared_ptr<THullLogCtx> hullLogCtx,
             TActorId loggerId,
             std::shared_ptr<TLevelIndexRunTimeCtx<TKeyLogoBlob, TMemRecLogoBlob>> rtCtx,
             std::shared_ptr<NSyncLog::TSyncLogFirstLsnToKeep> syncLogFirstLsnToKeep);
 
-    NActors::IActor* CreateBlocksActor(
+    NActors::IActor* CreateBlocksActor( 
             TIntrusivePtr<TVDiskConfig> config,
-            TIntrusivePtr<THullDs> hullDs,
+            TIntrusivePtr<THullDs> hullDs, 
             std::shared_ptr<THullLogCtx> hullLogCtx,
             TActorId loggerId,
             std::shared_ptr<TLevelIndexRunTimeCtx<TKeyBlock, TMemRecBlock>> rtCtx,
             std::shared_ptr<NSyncLog::TSyncLogFirstLsnToKeep> syncLogFirstLsnToKeep);
 
-    NActors::IActor* CreateBarriersActor(
+    NActors::IActor* CreateBarriersActor( 
             TIntrusivePtr<TVDiskConfig> config,
-            TIntrusivePtr<THullDs> hullDs,
+            TIntrusivePtr<THullDs> hullDs, 
             std::shared_ptr<THullLogCtx> hullLogCtx,
             TActorId loggerId,
             std::shared_ptr<TLevelIndexRunTimeCtx<TKeyBarrier, TMemRecBarrier>> rtCtx,

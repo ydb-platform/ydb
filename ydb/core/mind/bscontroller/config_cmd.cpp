@@ -122,10 +122,10 @@ namespace NKikimr::NBsController {
                             db.Table<T>().Key(true).Update<T::MaxScrubbedDisksAtOnce>(Self->MaxScrubbedDisksAtOnce);
                             Self->ScrubState.OnMaxScrubbedDisksAtOnceChange();
                         }
-                        for (auto value : settings.GetPDiskSpaceColorBorder()) {
-                            Self->PDiskSpaceColorBorder = static_cast<T::PDiskSpaceColorBorder::Type>(value);
-                            db.Table<T>().Key(true).Update<T::PDiskSpaceColorBorder>(Self->PDiskSpaceColorBorder);
-                        }
+                        for (auto value : settings.GetPDiskSpaceColorBorder()) { 
+                            Self->PDiskSpaceColorBorder = static_cast<T::PDiskSpaceColorBorder::Type>(value); 
+                            db.Table<T>().Key(true).Update<T::PDiskSpaceColorBorder>(Self->PDiskSpaceColorBorder); 
+                        } 
                         return true;
                     }
 
@@ -239,7 +239,7 @@ namespace NKikimr::NBsController {
                 const bool doLogCommand = Success && State->Changed();
                 Success = Success && Self->CommitConfigUpdates(*State, Cmd.GetIgnoreGroupFailModelChecks(),
                     Cmd.GetIgnoreDegradedGroupsChecks(), txc, &Error);
-
+ 
                 Finish();
                 if (doLogCommand) {
                     LogCommand(txc, TDuration::Seconds(timer.Passed()));
@@ -311,10 +311,10 @@ namespace NKikimr::NBsController {
                     HANDLE_COMMAND(MergeBoxes,          false, false)
                     HANDLE_COMMAND(MoveGroups,          false, false)
                     HANDLE_COMMAND(DropDonorDisk,       false, false)
-                    HANDLE_COMMAND(AddDriveSerial,      true,  false)
-                    HANDLE_COMMAND(RemoveDriveSerial,   true,  false)
-                    HANDLE_COMMAND(ForgetDriveSerial,   false, false)
-                    HANDLE_COMMAND(MigrateToSerial,     false, false)
+                    HANDLE_COMMAND(AddDriveSerial,      true,  false) 
+                    HANDLE_COMMAND(RemoveDriveSerial,   true,  false) 
+                    HANDLE_COMMAND(ForgetDriveSerial,   false, false) 
+                    HANDLE_COMMAND(MigrateToSerial,     false, false) 
 
                     default:
                         throw TExError() << "unsupported command";
@@ -326,7 +326,7 @@ namespace NKikimr::NBsController {
                     state->ApplyConfigUpdates();
                 }
                 TActivationContext::Send(new IEventHandle(NotifyId, Self->SelfId(), Ev.Release(), 0, Cookie));
-                Self->UpdatePDisksCounters();
+                Self->UpdatePDisksCounters(); 
             }
         };
 

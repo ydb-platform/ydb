@@ -45,19 +45,19 @@ namespace NKikimr {
         struct THeapStat {
             ui32 CurrentlyUsedChunks = 0;
             ui32 CanBeFreedChunks = 0;
-            std::vector<ui32> LockedChunks;
+            std::vector<ui32> LockedChunks; 
 
             THeapStat() = default;
-            THeapStat(ui32 currentlyUsedChunks, ui32 canBeFreedChunks, std::vector<ui32> lockedChunks)
+            THeapStat(ui32 currentlyUsedChunks, ui32 canBeFreedChunks, std::vector<ui32> lockedChunks) 
                 : CurrentlyUsedChunks(currentlyUsedChunks)
                 , CanBeFreedChunks(canBeFreedChunks)
-                , LockedChunks(std::move(lockedChunks))
+                , LockedChunks(std::move(lockedChunks)) 
             {}
 
             THeapStat &operator+=(const THeapStat &s) {
                 CurrentlyUsedChunks += s.CurrentlyUsedChunks;
                 CanBeFreedChunks += s.CanBeFreedChunks;
-                LockedChunks.insert(LockedChunks.end(), s.LockedChunks.begin(), s.LockedChunks.end());
+                LockedChunks.insert(LockedChunks.end(), s.LockedChunks.begin(), s.LockedChunks.end()); 
                 return *this;
             }
 

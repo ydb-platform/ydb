@@ -41,7 +41,7 @@ void TAtomicBlockCounter::Unblock(ui64 flag, TResult& res) noexcept {
 }
 
 ui64 TAtomicBlockCounter::Add(ui64 value) noexcept {
-    Y_VERIFY_S(value > 0, "zero value# " << value);
+    Y_VERIFY_S(value > 0, "zero value# " << value); 
     while (true) {
         ui64 prevData = AtomicGet(Data);
         if (GetBlocked(prevData)) {
@@ -55,7 +55,7 @@ ui64 TAtomicBlockCounter::Add(ui64 value) noexcept {
 }
 
 ui64 TAtomicBlockCounter::Sub(ui64 value) noexcept {
-    Y_VERIFY_S(value > 0, "zero value# " << value);
+    Y_VERIFY_S(value > 0, "zero value# " << value); 
     while (true) {
         ui64 prevData = AtomicGet(Data);
         ui64 data = NextSeqno(CheckedSubCounter(prevData, value));
@@ -66,7 +66,7 @@ ui64 TAtomicBlockCounter::Sub(ui64 value) noexcept {
 }
 
 ui64 TAtomicBlockCounter::ThresholdAdd(ui64 value, ui64 threshold, TAtomicBlockCounter::TResult& res) noexcept {
-    Y_VERIFY_S(value > 0, "zero value# " << value);
+    Y_VERIFY_S(value > 0, "zero value# " << value); 
     while (true) {
         ui64 prevData = AtomicGet(Data);
         if (GetBlocked(prevData)) { // Add is forbidden iff blocked
@@ -82,7 +82,7 @@ ui64 TAtomicBlockCounter::ThresholdAdd(ui64 value, ui64 threshold, TAtomicBlockC
 }
 
 ui64 TAtomicBlockCounter::ThresholdSub(ui64 value, ui64 threshold, TAtomicBlockCounter::TResult& res) noexcept {
-    Y_VERIFY_S(value > 0, "zero value# " << value);
+    Y_VERIFY_S(value > 0, "zero value# " << value); 
     while (true) {
         ui64 prevData = AtomicGet(Data);
         ui64 data = NextSeqno(ThresholdBlock(CheckedSubCounter(prevData, value), threshold));
@@ -109,16 +109,16 @@ ui64 TAtomicBlockCounter::Get() const noexcept {
 }
 
 ui64 TAtomicBlockCounter::CheckedAddCounter(ui64 prevData, ui64 value) noexcept {
-    Y_VERIFY_S(!(value & ~CounterMask), "invalid value# " << value);
-    Y_VERIFY_S(!((GetCounter(prevData) + value) & ~CounterMask),
-             "overflow value# " << value << " prevData# " << GetCounter(prevData));
+    Y_VERIFY_S(!(value & ~CounterMask), "invalid value# " << value); 
+    Y_VERIFY_S(!((GetCounter(prevData) + value) & ~CounterMask), 
+             "overflow value# " << value << " prevData# " << GetCounter(prevData)); 
     return prevData + value; // No overflow, so higher bits are untouched
 }
 
 ui64 TAtomicBlockCounter::CheckedSubCounter(ui64 prevData, ui64 value) noexcept {
-    Y_VERIFY_S(!(value & ~CounterMask), "invalid value# " << value);
-    Y_VERIFY_S(!((GetCounter(prevData) - value) & ~CounterMask),
-             "underflow value# " << value << " prevData# " << GetCounter(prevData));
+    Y_VERIFY_S(!(value & ~CounterMask), "invalid value# " << value); 
+    Y_VERIFY_S(!((GetCounter(prevData) - value) & ~CounterMask), 
+             "underflow value# " << value << " prevData# " << GetCounter(prevData)); 
     return prevData - value; // No underflow, so higher bits are untouched
 }
 

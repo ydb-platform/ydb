@@ -341,7 +341,7 @@ namespace NKikimr {
                 CreateLoggedRec(seg, confirmSyncLogAlso, id, ingress, std::move(buffer), std::move(result), sender, cookie));
             void *loggedRecCookie = reinterpret_cast<void *>(loggedRecId);
             // create log msg
-            auto logMsg = CreateHullUpdate(HullLogCtx, TLogSignature::SignatureLogoBlobOpt, dataToWrite,
+            auto logMsg = CreateHullUpdate(HullLogCtx, TLogSignature::SignatureLogoBlobOpt, dataToWrite, 
                     seg, loggedRecCookie, std::move(syncLogMsg), nullptr);
             // send prepared message to recovery log
             logMsg->Orbit = std::move(orbit);
@@ -755,7 +755,7 @@ namespace NKikimr {
                     Db->HugeKeeperID, ev));
             void *loggedRecCookie = reinterpret_cast<void *>(loggedRecId);
             // create log msg
-            auto logMsg = CreateHullUpdate(HullLogCtx, TLogSignature::SignatureHugeLogoBlob, dataToWrite, seg,
+            auto logMsg = CreateHullUpdate(HullLogCtx, TLogSignature::SignatureHugeLogoBlob, dataToWrite, seg, 
                     loggedRecCookie, std::move(syncLogMsg), nullptr);
             // send prepared message to recovery log
             ctx.Send(Db->LoggerID, logMsg.release());
@@ -787,7 +787,7 @@ namespace NKikimr {
                     new TLoggedRecDelLogoBlobDataSyncLog(seg, confirmSyncLogAlso, std::move(result), ev->Sender, ev->Cookie));
             void *loggedRecCookie = reinterpret_cast<void *>(loggedRecId);
             // create log msg
-            auto logMsg = CreateHullUpdate(HullLogCtx, TLogSignature::SignatureHandoffDelLogoBlob,
+            auto logMsg = CreateHullUpdate(HullLogCtx, TLogSignature::SignatureHandoffDelLogoBlob, 
                     serializedLogRecord, seg, loggedRecCookie, std::move(syncLogMsg), nullptr);
             // send prepared message to recovery log
             ctx.Send(Db->LoggerID, logMsg.release());
@@ -943,7 +943,7 @@ namespace NKikimr {
                 issuerGuid, std::move(result), ev->Sender, ev->Cookie));
             void *loggedRecCookie = reinterpret_cast<void *>(loggedRecId);
             // create log msg
-            auto logMsg = CreateHullUpdate(HullLogCtx, TLogSignature::SignatureBlock,
+            auto logMsg = CreateHullUpdate(HullLogCtx, TLogSignature::SignatureBlock, 
                     ev->GetChainBuffer()->GetString(), seg, loggedRecCookie, std::move(syncLogMsg), nullptr);
             // send prepared message to recovery log
             ctx.Send(Db->LoggerID, logMsg.release());
@@ -1044,7 +1044,7 @@ namespace NKikimr {
             intptr_t loggedRecId = LoggedRecsVault.Put(new TLoggedRecVCollectGarbage(seg, true, ingress, std::move(result), ev));
             void *loggedRecCookie = reinterpret_cast<void *>(loggedRecId);
             // create log msg
-            auto logMsg = CreateHullUpdate(HullLogCtx, TLogSignature::SignatureGC, data, seg, loggedRecCookie,
+            auto logMsg = CreateHullUpdate(HullLogCtx, TLogSignature::SignatureGC, data, seg, loggedRecCookie, 
                     std::move(syncLogMsg), nullptr);
             // send prepared message to recovery log
             ctx.Send(Db->LoggerID, logMsg.release());
@@ -1362,7 +1362,7 @@ namespace NKikimr {
             intptr_t loggedRecId = LoggedRecsVault.Put(new TLoggedRecLocalSyncData(seg, false, std::move(result), ev));
             void *loggedRecCookie = reinterpret_cast<void *>(loggedRecId);
             // create log msg
-            auto logMsg = CreateHullUpdate(HullLogCtx, TLogSignature::SignatureLocalSyncData, data, seg,
+            auto logMsg = CreateHullUpdate(HullLogCtx, TLogSignature::SignatureLocalSyncData, data, seg, 
                     loggedRecCookie, nullptr, nullptr);
             // send prepared message to recovery log
             ctx.Send(Db->LoggerID, logMsg.release());
@@ -1433,7 +1433,7 @@ namespace NKikimr {
             intptr_t loggedRecId = LoggedRecsVault.Put(new TLoggedRecAnubisOsirisPut(seg, true, insert, std::move(result), ev));
             void *loggedRecCookie = reinterpret_cast<void *>(loggedRecId);
             // create log msg
-            auto logMsg = CreateHullUpdate(HullLogCtx, TLogSignature::SignatureAnubisOsirisPut, data, seg,
+            auto logMsg = CreateHullUpdate(HullLogCtx, TLogSignature::SignatureAnubisOsirisPut, data, seg, 
                     loggedRecCookie, std::move(syncLogMsg), nullptr);
             // send prepared message to recovery log
             ctx.Send(Db->LoggerID, logMsg.release());
@@ -1503,9 +1503,9 @@ namespace NKikimr {
                     << " Marker# BSVS26");
 
             TRope buf = std::move(msg->Data);
-            const ui64 bufSize = buf.GetSize();
+            const ui64 bufSize = buf.GetSize(); 
             Y_VERIFY(bufSize <= Config->MaxLogoBlobDataSize && HugeBlobCtx->IsHugeBlob(VCtx->Top->GType, id.FullID()),
-                    "TEvRecoveredHugeBlob: blob is too small/huge bufSize# %zu", bufSize);
+                    "TEvRecoveredHugeBlob: blob is too small/huge bufSize# %zu", bufSize); 
             UpdatePDiskWriteBytes(bufSize);
 
             auto oosStatus = VCtx->GetOutOfSpaceState().GetGlobalStatusFlags();
@@ -1549,7 +1549,7 @@ namespace NKikimr {
             intptr_t loggedRecId = LoggedRecsVault.Put(new TLoggedRecPhantoms(seg, true, ev));
             void *loggedRecCookie = reinterpret_cast<void *>(loggedRecId);
             // create log msg
-            auto logMsg = CreateHullUpdate(HullLogCtx, TLogSignature::SignaturePhantomBlobs, data, seg,
+            auto logMsg = CreateHullUpdate(HullLogCtx, TLogSignature::SignaturePhantomBlobs, data, seg, 
                     loggedRecCookie, std::move(syncLogMsg), nullptr);
             // send prepared message to recovery log
             ctx.Send(Db->LoggerID, logMsg.release());
@@ -1582,7 +1582,7 @@ namespace NKikimr {
 
         void SkeletonIsUpAndRunning(const TActorContext &ctx, bool runRepl = false) {
             Become(&TThis::StateNormal);
-            VDiskMonGroup.VDiskState(NKikimrWhiteboard::EVDiskState::OK);
+            VDiskMonGroup.VDiskState(NKikimrWhiteboard::EVDiskState::OK); 
             LOG_INFO_S(ctx, BS_SKELETON, VCtx->VDiskLogPrefix << "SKELETON IS UP AND RUNNING"
                     << " Marker# BSVS28");
             // notify SkeletonFront
@@ -1604,7 +1604,7 @@ namespace NKikimr {
                                 NKikimrWhiteboard::EVDiskState state)
         {
             Become(&TThis::StateDatabaseError);
-            VDiskMonGroup.VDiskState(state);
+            VDiskMonGroup.VDiskState(state); 
             // notify SkeletonFront
             auto msg = std::make_unique<TEvFrontRecoveryStatus>(phase,
                                                           NKikimrProto::ERROR,
@@ -1767,7 +1767,7 @@ namespace NKikimr {
 
                 if (Config->RunDefrag) {
                     auto defragCtx = std::make_shared<TDefragCtx>(VCtx, HugeBlobCtx, PDiskCtx, ctx.SelfID,
-                            Db->HugeKeeperID, true);
+                            Db->HugeKeeperID, true); 
                     DefragId = ctx.Register(CreateDefragActor(defragCtx, GInfo));
                     ActiveActors.Insert(DefragId); // keep forever
                 }
@@ -1794,7 +1794,7 @@ namespace NKikimr {
                 if (Config->RunSyncer && !Config->BaseInfo.DonorMode) {
                     // switch to syncronization step
                     Become(&TThis::StateSyncGuidRecovery);
-                    VDiskMonGroup.VDiskState(NKikimrWhiteboard::EVDiskState::SyncGuidRecovery);
+                    VDiskMonGroup.VDiskState(NKikimrWhiteboard::EVDiskState::SyncGuidRecovery); 
                     // create syncer context
                     auto sc = MakeIntrusive<TSyncerContext>(VCtx,
                         Db->LsnMngr,
@@ -2043,13 +2043,13 @@ namespace NKikimr {
                 Y_VERIFY_DEBUG(msg->Owner == PDiskCtx->Dsk->Owner);
                 Y_VERIFY(!CutLogDelayedMsg);
                 LOG_DEBUG_S(ctx, BS_LOGCUTTER, VCtx->VDiskLogPrefix
-                        << "Handle " << msg->ToString()
+                        << "Handle " << msg->ToString() 
                         << " actorid# " << ctx.SelfID.ToString()
                         << " Marker# BSVS33");
                 SpreadCutLog(std::move(msg), ctx);
             } else {
                 LOG_DEBUG_S(ctx, BS_LOGCUTTER, VCtx->VDiskLogPrefix
-                        << "Handle " << msg->ToString()
+                        << "Handle " << msg->ToString() 
                         << " DELAYED actorid# " << ctx.SelfID.ToString()
                         << " Marker# BSVS34");
                 CutLogDelayedMsg = std::move(msg);
@@ -2089,8 +2089,8 @@ namespace NKikimr {
             }
 
             LOG_DEBUG_S(ctx, BS_LOGCUTTER, VCtx->VDiskLogPrefix
-                    << "SpreadCutLog: Handle " << msg->ToString()
-                    << " DELAYED; counter# " << counter
+                    << "SpreadCutLog: Handle " << msg->ToString() 
+                    << " DELAYED; counter# " << counter 
                     << " actorid# " << ctx.SelfID.ToString()
                     << " Marker# BSVS35");
         }
@@ -2100,7 +2100,7 @@ namespace NKikimr {
         // completion local recovery
         void DeliverDelayedCutLogIfAny(const TActorContext &ctx) {
             LOG_DEBUG_S(ctx, BS_LOGCUTTER, VCtx->VDiskLogPrefix
-                    << "DeliverDelayedCutLogIfAny: hasMsg# " << (CutLogDelayedMsg ? "true" : "false")
+                    << "DeliverDelayedCutLogIfAny: hasMsg# " << (CutLogDelayedMsg ? "true" : "false") 
                     << " actorid# " << ctx.SelfID.ToString()
                     << " Marker# BSVS36");
 

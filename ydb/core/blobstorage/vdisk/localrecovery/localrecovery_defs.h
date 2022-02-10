@@ -103,7 +103,7 @@ namespace NKikimr {
         // lsn we starting with after local recovery and lsn shift
         ui64 RecoveredLogStartLsn = 0;
         // found starting points
-        using TSignatureToLsn = TMap<TLogSignature, ui64>;
+        using TSignatureToLsn = TMap<TLogSignature, ui64>; 
         TSignatureToLsn StartingPoints;
 
         TInstant LocalRecoveryStartTime;
@@ -268,7 +268,7 @@ namespace NKikimr {
         void Output(IOutputStream &str) const;
         void OutputHtml(IOutputStream &str) const;
         TString ToString() const;
-        void SetStartingPoint(TLogSignature signature, ui64 lsn);
+        void SetStartingPoint(TLogSignature signature, ui64 lsn); 
         void HandleReadLogResult(const NPDisk::TEvReadLogResult::TResults &results);
         void SetRecoveredLogStartLsn(ui64 lsn);
         void CheckConsistency();

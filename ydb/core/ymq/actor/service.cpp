@@ -1297,12 +1297,12 @@ void TSqsService::MakeAndRegisterYcEventsProcessor() {
 
     auto root = YcSearchEventsConfig.TenantMode ? TString() : Cfg().GetRoot();
 
-    auto factory = AppData()->SqsEventsWriterFactory;
-    Y_VERIFY(factory);
+    auto factory = AppData()->SqsEventsWriterFactory; 
+    Y_VERIFY(factory); 
     Register(new TSearchEventsProcessor(
             root, YcSearchEventsConfig.ReindexInterval, YcSearchEventsConfig.RescanInterval,
             MakeSimpleShared<NYdb::NTable::TTableClient>(*YcSearchEventsConfig.Driver),
-            factory->CreateEventsWriter(Cfg(), GetSqsServiceCounters(AppData()->Counters, "yc_unified_agent"))
+            factory->CreateEventsWriter(Cfg(), GetSqsServiceCounters(AppData()->Counters, "yc_unified_agent")) 
     ));
 }
 //

@@ -1,13 +1,13 @@
 #include "crypto.h"
 #include "secured_block.h"
 
-// ifunc is broken at least under msan and tsan, so disable it
-// There is no need to use fastest resolved function since specific
-// function is used in performance critical code
-#define T1HA0_RUNTIME_SELECT 0
-#define T1HA_USE_INDIRECT_FUNCTIONS 0
-#include <contrib/libs/t1ha/t1ha.h>
-
+// ifunc is broken at least under msan and tsan, so disable it 
+// There is no need to use fastest resolved function since specific 
+// function is used in performance critical code 
+#define T1HA0_RUNTIME_SELECT 0 
+#define T1HA_USE_INDIRECT_FUNCTIONS 0 
+#include <contrib/libs/t1ha/t1ha.h> 
+ 
 namespace NKikimr {
 ////////////////////////////////////////////////////////////////////////////
 // KeyContainer
@@ -126,39 +126,39 @@ THashCalculator::~THashCalculator() {
 }
 
 ////////////////////////////////////////////////////////////////////////////
-// T1haHasher
-////////////////////////////////////////////////////////////////////////////
-
-template<ET1haFunc func_type>
-void TT1ha0HasherBase<func_type>::SetKey(const ui64 key) {
-    T1haSeed = key;
-}
-
-template<ET1haFunc func_type>
-ui64 TT1ha0HasherBase<func_type>::Hash(const void* data, ui64 size) const {
+// T1haHasher 
+//////////////////////////////////////////////////////////////////////////// 
+ 
+template<ET1haFunc func_type> 
+void TT1ha0HasherBase<func_type>::SetKey(const ui64 key) { 
+    T1haSeed = key; 
+} 
+ 
+template<ET1haFunc func_type> 
+ui64 TT1ha0HasherBase<func_type>::Hash(const void* data, ui64 size) const { 
 #if !defined(_arm64_)
-    if constexpr (func_type == ET1haFunc::T1HA0_NO_AVX) {
-        return t1ha0_ia32aes_noavx(data, size, T1haSeed);
-    } else if constexpr (func_type == ET1haFunc::T1HA0_AVX) {
-        return t1ha0_ia32aes_avx(data, size, T1haSeed);
-    } else if constexpr (func_type == ET1haFunc::T1HA0_AVX2) {
-        return t1ha0_ia32aes_avx2(data, size, T1haSeed);
-    }
+    if constexpr (func_type == ET1haFunc::T1HA0_NO_AVX) { 
+        return t1ha0_ia32aes_noavx(data, size, T1haSeed); 
+    } else if constexpr (func_type == ET1haFunc::T1HA0_AVX) { 
+        return t1ha0_ia32aes_avx(data, size, T1haSeed); 
+    } else if constexpr (func_type == ET1haFunc::T1HA0_AVX2) { 
+        return t1ha0_ia32aes_avx2(data, size, T1haSeed); 
+    } 
 #else
     return t1ha0(data, size, T1haSeed);
 #endif
-}
-
-template<ET1haFunc func_type>
-TT1ha0HasherBase<func_type>::~TT1ha0HasherBase() {
-    SecureWipeBuffer((ui8*)&T1haSeed, sizeof T1haSeed);
-}
-
-template class TT1ha0HasherBase<ET1haFunc::T1HA0_NO_AVX>;
-template class TT1ha0HasherBase<ET1haFunc::T1HA0_AVX>;
-template class TT1ha0HasherBase<ET1haFunc::T1HA0_AVX2>;
-
-////////////////////////////////////////////////////////////////////////////
+} 
+ 
+template<ET1haFunc func_type> 
+TT1ha0HasherBase<func_type>::~TT1ha0HasherBase() { 
+    SecureWipeBuffer((ui8*)&T1haSeed, sizeof T1haSeed); 
+} 
+ 
+template class TT1ha0HasherBase<ET1haFunc::T1HA0_NO_AVX>; 
+template class TT1ha0HasherBase<ET1haFunc::T1HA0_AVX>; 
+template class TT1ha0HasherBase<ET1haFunc::T1HA0_AVX2>; 
+ 
+//////////////////////////////////////////////////////////////////////////// 
 // StreamCypher
 ////////////////////////////////////////////////////////////////////////////
 #define CYPHER_ROUNDS 8
@@ -203,7 +203,7 @@ void TStreamCypher::SetKey(const ui8 *key, ui32 sizeBytes) {
     }
 #else
     Y_UNUSED(key);
-    Y_UNUSED(sizeBytes);
+    Y_UNUSED(sizeBytes); 
 #endif
 }
 
@@ -319,7 +319,7 @@ void TStreamCypher::Encrypt(void* destination, const void* source, ui32 size) {
     ui32 tail = size % BLOCK_BYTES;
     ui32 largePart = size - tail;
     if (largePart) {
-        if ((intptr_t)(const ui8*)source % 8 == 0) {
+        if ((intptr_t)(const ui8*)source % 8 == 0) { 
             if ((intptr_t)(ui8*)destination % 16 == 0) {
                 Cypher->Encipher((const ui8*)source, (ui8*)destination, largePart);
                 destination = (ui8*)destination + largePart;
@@ -333,7 +333,7 @@ void TStreamCypher::Encrypt(void* destination, const void* source, ui32 size) {
                     source = (ui8*)source + BLOCK_BYTES;
                     size -= BLOCK_BYTES;
                 }
-                SecureWipeBuffer(data, BLOCK_BYTES);
+                SecureWipeBuffer(data, BLOCK_BYTES); 
             }
         } else {
             if ((intptr_t)(ui8*)destination % 16 == 0) {
@@ -345,7 +345,7 @@ void TStreamCypher::Encrypt(void* destination, const void* source, ui32 size) {
                     source = (ui8*)source + BLOCK_BYTES;
                     size -= BLOCK_BYTES;
                 }
-                SecureWipeBuffer(data, BLOCK_BYTES);
+                SecureWipeBuffer(data, BLOCK_BYTES); 
             } else {
                 alignas(16) ui8 data[BLOCK_BYTES] = {0};
                 while (size >= BLOCK_BYTES) {
@@ -356,7 +356,7 @@ void TStreamCypher::Encrypt(void* destination, const void* source, ui32 size) {
                     source = (ui8*)source + BLOCK_BYTES;
                     size -= BLOCK_BYTES;
                 }
-                SecureWipeBuffer(data, BLOCK_BYTES);
+                SecureWipeBuffer(data, BLOCK_BYTES); 
             }
         }
     }
@@ -365,7 +365,7 @@ void TStreamCypher::Encrypt(void* destination, const void* source, ui32 size) {
         Cypher->Encipher((const ui8*)zero, (ui8*)Leftover, BLOCK_BYTES);
         Xor(destination, source, Leftover, tail);
         UnusedBytes = BLOCK_BYTES - tail;
-        SecureWipeBuffer(zero, BLOCK_BYTES);
+        SecureWipeBuffer(zero, BLOCK_BYTES); 
     }
 #else
     memcpy(destination, source, size);

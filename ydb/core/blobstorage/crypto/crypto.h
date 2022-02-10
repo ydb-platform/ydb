@@ -66,28 +66,28 @@ public:
     ~THashCalculator();
 };
 
-enum class ET1haFunc {
-    T1HA0_NO_AVX,
-    T1HA0_AVX,
-    T1HA0_AVX2,
-};
-
-template<ET1haFunc func_type>
-class TT1ha0HasherBase {
-    ui64 T1haSeed = 0;
-
-public:
-    void SetKey(const ui64 key);
-
-    ui64 Hash(const void* data, ui64 size) const;
-
-    ~TT1ha0HasherBase();
-};
-
-using TT1ha0NoAvxHasher = TT1ha0HasherBase<ET1haFunc::T1HA0_NO_AVX>;
-using TT1ha0AvxHasher = TT1ha0HasherBase<ET1haFunc::T1HA0_AVX>;
-using TT1ha0Avx2Hasher = TT1ha0HasherBase<ET1haFunc::T1HA0_AVX2>;
-
+enum class ET1haFunc { 
+    T1HA0_NO_AVX, 
+    T1HA0_AVX, 
+    T1HA0_AVX2, 
+}; 
+ 
+template<ET1haFunc func_type> 
+class TT1ha0HasherBase { 
+    ui64 T1haSeed = 0; 
+ 
+public: 
+    void SetKey(const ui64 key); 
+ 
+    ui64 Hash(const void* data, ui64 size) const; 
+ 
+    ~TT1ha0HasherBase(); 
+}; 
+ 
+using TT1ha0NoAvxHasher = TT1ha0HasherBase<ET1haFunc::T1HA0_NO_AVX>; 
+using TT1ha0AvxHasher = TT1ha0HasherBase<ET1haFunc::T1HA0_AVX>; 
+using TT1ha0Avx2Hasher = TT1ha0HasherBase<ET1haFunc::T1HA0_AVX2>; 
+ 
 ////////////////////////////////////////////////////////////////////////////
 // StreamCypher
 ////////////////////////////////////////////////////////////////////////////

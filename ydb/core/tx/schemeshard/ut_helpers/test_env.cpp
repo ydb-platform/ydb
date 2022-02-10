@@ -481,7 +481,7 @@ private:
     bool PrevVal;
 };
 
-NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTestEnvOptions& opts, TSchemeShardFactory ssFactory, std::shared_ptr<NKikimr::NDataShard::IExportFactory> dsExportFactory)
+NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTestEnvOptions& opts, TSchemeShardFactory ssFactory, std::shared_ptr<NKikimr::NDataShard::IExportFactory> dsExportFactory) 
     : SchemeShardFactory(ssFactory)
     , HiveState(new TFakeHiveState)
     , CoordinatorState(new TFakeCoordinator::TState)
@@ -492,7 +492,7 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
     ui64 coordinator = TTestTxConfig::Coordinator;
     ui64 txAllocator = TTestTxConfig::TxAllocator;
 
-    TAppPrepare app(dsExportFactory ? dsExportFactory : static_cast<std::shared_ptr<NKikimr::NDataShard::IExportFactory>>(std::make_shared<TDataShardExportFactory>()));
+    TAppPrepare app(dsExportFactory ? dsExportFactory : static_cast<std::shared_ptr<NKikimr::NDataShard::IExportFactory>>(std::make_shared<TDataShardExportFactory>())); 
 
     app.SetEnableDataColumnForIndexTable(true);
     app.SetEnableSystemViews(opts.EnableSystemViews_);

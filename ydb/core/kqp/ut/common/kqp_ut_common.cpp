@@ -289,8 +289,8 @@ void TKikimrRunner::CreateSampleTables() {
     )").GetValueSync());
 
     AssertSuccessResult(session.ExecuteDataQuery(R"(
-        PRAGMA kikimr.UseNewEngine = "true";
-
+        PRAGMA kikimr.UseNewEngine = "true"; 
+ 
         REPLACE INTO `TwoShard` (Key, Value1, Value2) VALUES
             (1u, "One", -1),
             (2u, "Two", 0),
@@ -387,7 +387,7 @@ void TKikimrRunner::Initialize(const TKikimrSettings& settings) {
     // Server->GetRuntime()->SetLogPriority(NKikimrServices::TX_PROXY_SCHEME_CACHE, NActors::NLog::PRI_DEBUG);
     // Server->GetRuntime()->SetLogPriority(NKikimrServices::SCHEME_BOARD_REPLICA, NActors::NLog::PRI_DEBUG);
     // Server->GetRuntime()->SetLogPriority(NKikimrServices::KQP_WORKER, NActors::NLog::PRI_DEBUG);
-    // Server->GetRuntime()->SetLogPriority(NKikimrServices::KQP_SESSION, NActors::NLog::PRI_DEBUG);
+    // Server->GetRuntime()->SetLogPriority(NKikimrServices::KQP_SESSION, NActors::NLog::PRI_DEBUG); 
     // Server->GetRuntime()->SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_DEBUG);
     // Server->GetRuntime()->SetLogPriority(NKikimrServices::KQP_SLOW_LOG, NActors::NLog::PRI_TRACE);
     // Server->GetRuntime()->SetLogPriority(NKikimrServices::KQP_PROXY, NActors::NLog::PRI_DEBUG);
@@ -818,8 +818,8 @@ void CreateSampleTablesWithIndex(TSession& session) {
     UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
 
     auto result = session.ExecuteDataQuery(R"(
-        PRAGMA kikimr.UseNewEngine = "true";
-
+        PRAGMA kikimr.UseNewEngine = "true"; 
+ 
         REPLACE INTO `KeyValue` (Key, Value) VALUES
             (3u,   "Three"),
             (4u,   "Four"),
@@ -861,11 +861,11 @@ void WaitForKqpProxyInit(const NYdb::TDriver& driver) {
     NYdb::NTable::TTableClient client(driver);
 
     while (true) {
-        auto it = client.RetryOperationSync([=](TSession session) {
-            return session.ExecuteDataQuery(R"(
-                        PRAGMA kikimr.UseNewEngine = "true";
-                        SELECT 1;
-                    )",
+        auto it = client.RetryOperationSync([=](TSession session) { 
+            return session.ExecuteDataQuery(R"( 
+                        PRAGMA kikimr.UseNewEngine = "true"; 
+                        SELECT 1; 
+                    )", 
                     TTxControl::BeginTx().CommitTx()
                 ).GetValueSync();
         });

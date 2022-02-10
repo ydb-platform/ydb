@@ -42,7 +42,7 @@ namespace NActors {
         , StopFlag(false)
         , ScheduleMap(3600)
     {
-        Y_VERIFY(!Config.UseSchedulerActor, "Cannot create scheduler thread because Config.UseSchedulerActor# true");
+        Y_VERIFY(!Config.UseSchedulerActor, "Cannot create scheduler thread because Config.UseSchedulerActor# true"); 
     }
 
     TBasicSchedulerThread::~TBasicSchedulerThread() {
@@ -247,28 +247,28 @@ namespace NActors {
         MainCycle->Get();
         MainCycle.Destroy();
     }
-
+ 
 }
-
-#ifdef __linux__
-
-namespace NActors {
+ 
+#ifdef __linux__ 
+ 
+namespace NActors { 
+    ISchedulerThread* CreateSchedulerThread(const TSchedulerConfig& config) { 
+        if (config.UseSchedulerActor) { 
+            return new TMockSchedulerThread(); 
+        } else { 
+            return new TBasicSchedulerThread(config); 
+        } 
+    } 
+ 
+}
+ 
+#else //  __linux__ 
+ 
+namespace NActors { 
     ISchedulerThread* CreateSchedulerThread(const TSchedulerConfig& config) {
-        if (config.UseSchedulerActor) {
-            return new TMockSchedulerThread();
-        } else {
-            return new TBasicSchedulerThread(config);
-        }
-    }
-
+        return new TBasicSchedulerThread(config); 
+    } 
 }
-
-#else //  __linux__
-
-namespace NActors {
-    ISchedulerThread* CreateSchedulerThread(const TSchedulerConfig& config) {
-        return new TBasicSchedulerThread(config);
-    }
-}
-
-#endif // __linux__
+ 
+#endif // __linux__ 

@@ -1,49 +1,49 @@
-#include "blobstorage.h"
-
-namespace NKikimr {
-
-NKikimrBlobStorage::EPDiskType PDiskTypeToPDiskType(const TPDiskCategory::EDeviceType type) {
-    switch (type) {
-        case TPDiskCategory::DEVICE_TYPE_ROT:
-            return NKikimrBlobStorage::EPDiskType::ROT;
-        case TPDiskCategory::DEVICE_TYPE_SSD:
-            return NKikimrBlobStorage::EPDiskType::SSD;
-        case TPDiskCategory::DEVICE_TYPE_NVME:
-            return NKikimrBlobStorage::EPDiskType::NVME;
-        case TPDiskCategory::DEVICE_TYPE_UNKNOWN:
-            return NKikimrBlobStorage::EPDiskType::UNKNOWN_TYPE;
-        default:
-            Y_FAIL("Device type is unknown; type# %" PRIu64, (ui64)type);
-    }
-}
-
-TPDiskCategory::EDeviceType PDiskTypeToPDiskType(const NKikimrBlobStorage::EPDiskType type) {
-    switch (type) {
-        case NKikimrBlobStorage::EPDiskType::ROT:
-            return TPDiskCategory::DEVICE_TYPE_ROT;
-        case NKikimrBlobStorage::EPDiskType::SSD:
-            return TPDiskCategory::DEVICE_TYPE_SSD;
-        case NKikimrBlobStorage::EPDiskType::NVME:
-            return TPDiskCategory::DEVICE_TYPE_NVME;
-        case NKikimrBlobStorage::EPDiskType::UNKNOWN_TYPE:
-            return TPDiskCategory::DEVICE_TYPE_UNKNOWN;
-        default:
-            Y_FAIL("Device type is unknown; type# %" PRIu64, (ui64)type);
-    }
-}
-
-bool operator==(const TPDiskCategory x, const TPDiskCategory y) {
-    return x.Kind() == y.Kind() && x.Type() == y.Type();
-}
-
-bool operator!=(const TPDiskCategory x, const TPDiskCategory y) {
-    return !(x == y);
-}
-
-bool operator<(const TPDiskCategory x, const TPDiskCategory y) {
-    return std::make_tuple(x.Type(), x.Kind()) < std::make_tuple(y.Type(), y.Kind());
-}
-
+#include "blobstorage.h" 
+ 
+namespace NKikimr { 
+ 
+NKikimrBlobStorage::EPDiskType PDiskTypeToPDiskType(const TPDiskCategory::EDeviceType type) { 
+    switch (type) { 
+        case TPDiskCategory::DEVICE_TYPE_ROT: 
+            return NKikimrBlobStorage::EPDiskType::ROT; 
+        case TPDiskCategory::DEVICE_TYPE_SSD: 
+            return NKikimrBlobStorage::EPDiskType::SSD; 
+        case TPDiskCategory::DEVICE_TYPE_NVME: 
+            return NKikimrBlobStorage::EPDiskType::NVME; 
+        case TPDiskCategory::DEVICE_TYPE_UNKNOWN: 
+            return NKikimrBlobStorage::EPDiskType::UNKNOWN_TYPE; 
+        default: 
+            Y_FAIL("Device type is unknown; type# %" PRIu64, (ui64)type); 
+    } 
+} 
+ 
+TPDiskCategory::EDeviceType PDiskTypeToPDiskType(const NKikimrBlobStorage::EPDiskType type) { 
+    switch (type) { 
+        case NKikimrBlobStorage::EPDiskType::ROT: 
+            return TPDiskCategory::DEVICE_TYPE_ROT; 
+        case NKikimrBlobStorage::EPDiskType::SSD: 
+            return TPDiskCategory::DEVICE_TYPE_SSD; 
+        case NKikimrBlobStorage::EPDiskType::NVME: 
+            return TPDiskCategory::DEVICE_TYPE_NVME; 
+        case NKikimrBlobStorage::EPDiskType::UNKNOWN_TYPE: 
+            return TPDiskCategory::DEVICE_TYPE_UNKNOWN; 
+        default: 
+            Y_FAIL("Device type is unknown; type# %" PRIu64, (ui64)type); 
+    } 
+} 
+ 
+bool operator==(const TPDiskCategory x, const TPDiskCategory y) { 
+    return x.Kind() == y.Kind() && x.Type() == y.Type(); 
+} 
+ 
+bool operator!=(const TPDiskCategory x, const TPDiskCategory y) { 
+    return !(x == y); 
+} 
+ 
+bool operator<(const TPDiskCategory x, const TPDiskCategory y) { 
+    return std::make_tuple(x.Type(), x.Kind()) < std::make_tuple(y.Type(), y.Kind()); 
+} 
+ 
 std::unique_ptr<TEvBlobStorage::TEvPutResult> TEvBlobStorage::TEvPut::MakeErrorResponse(
         NKikimrProto::EReplyStatus status, const TString& errorReason, ui32 groupId) {
     auto res = std::make_unique<TEvPutResult>(status, Id, TStorageStatusFlags(), groupId, 0.0f);
@@ -115,15 +115,15 @@ std::unique_ptr<TEvBlobStorage::TEvStatusResult> TEvBlobStorage::TEvStatus::Make
     return res;
 }
 
-};
-
-template<>
-void Out<NKikimr::TStorageStatusFlags>(IOutputStream& o,
-        typename TTypeTraits<NKikimr::TStorageStatusFlags>::TFuncParam x) {
-    return x.Output(o);
-}
-
-template<>
-void Out<NKikimr::TPDiskCategory>(IOutputStream &str, const NKikimr::TPDiskCategory &value) {
-    str << value.ToString();
-}
+}; 
+ 
+template<> 
+void Out<NKikimr::TStorageStatusFlags>(IOutputStream& o, 
+        typename TTypeTraits<NKikimr::TStorageStatusFlags>::TFuncParam x) { 
+    return x.Output(o); 
+} 
+ 
+template<> 
+void Out<NKikimr::TPDiskCategory>(IOutputStream &str, const NKikimr::TPDiskCategory &value) { 
+    str << value.ToString(); 
+} 

@@ -351,7 +351,7 @@ protected:
             HFunc(TEvWhiteboard::TEvNodeStateRequest, Handle);
             HFunc(TEvWhiteboard::TEvPDiskStateUpdate, Handle);
             HFunc(TEvWhiteboard::TEvPDiskStateRequest, Handle);
-            HFunc(TEvWhiteboard::TEvPDiskStateDelete, Handle);
+            HFunc(TEvWhiteboard::TEvPDiskStateDelete, Handle); 
             HFunc(TEvWhiteboard::TEvVDiskStateUpdate, Handle);
             HFunc(TEvWhiteboard::TEvVDiskStateGenerationChange, Handle);
             HFunc(TEvWhiteboard::TEvVDiskStateDelete, Handle);
@@ -504,7 +504,7 @@ protected:
         NKikimrWhiteboard::EFlag eFlag = NKikimrWhiteboard::EFlag::Green;
         NKikimrWhiteboard::EFlag pDiskFlag = NKikimrWhiteboard::EFlag::Green;
         ui32 yellowFlags = 0;
-        double maxDiskUsage = 0;
+        double maxDiskUsage = 0; 
         for (const auto& pr : PDiskStateInfo) {
             if (!pr.second.HasState()) {
                 pDiskFlag = std::max(pDiskFlag, NKikimrWhiteboard::EFlag::Yellow);
@@ -537,10 +537,10 @@ protected:
                     pDiskFlag = std::max(pDiskFlag, NKikimrWhiteboard::EFlag::Yellow);
                     ++yellowFlags;
                 }
-                maxDiskUsage = std::max(maxDiskUsage, 1.0 - avail);
+                maxDiskUsage = std::max(maxDiskUsage, 1.0 - avail); 
             }
         }
-        SystemStateInfo.SetMaxDiskUsage(maxDiskUsage);
+        SystemStateInfo.SetMaxDiskUsage(maxDiskUsage); 
         if (pDiskFlag == NKikimrWhiteboard::EFlag::Yellow) {
             switch (yellowFlags) {
             case 1:
@@ -646,16 +646,16 @@ protected:
         ctx.Send(ev->Sender, response.Release(), 0, ev->Cookie);
     }
 
-    void Handle(TEvWhiteboard::TEvPDiskStateDelete::TPtr &ev, const TActorContext &ctx) {
-        auto pdiskId = ev->Get()->Record.GetPDiskId();
-
-        auto it = PDiskStateInfo.find(pdiskId);
-        if (it != PDiskStateInfo.end()) {
-            PDiskStateInfo.erase(it);
-            UpdateSystemState(ctx);
-        }
-    }
-
+    void Handle(TEvWhiteboard::TEvPDiskStateDelete::TPtr &ev, const TActorContext &ctx) { 
+        auto pdiskId = ev->Get()->Record.GetPDiskId(); 
+ 
+        auto it = PDiskStateInfo.find(pdiskId); 
+        if (it != PDiskStateInfo.end()) { 
+            PDiskStateInfo.erase(it); 
+            UpdateSystemState(ctx); 
+        } 
+    } 
+ 
     void Handle(TEvWhiteboard::TEvVDiskStateRequest::TPtr &ev, const TActorContext &ctx) {
         const auto& request = ev->Get()->Record;
         ui64 changedSince = request.HasChangedSince() ? request.GetChangedSince() : 0;

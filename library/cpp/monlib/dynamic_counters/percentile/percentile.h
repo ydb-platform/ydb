@@ -1,6 +1,6 @@
 #pragma once
 
-#include "percentile_base.h"
+#include "percentile_base.h" 
 
 namespace NMonitoring {
 
@@ -9,7 +9,7 @@ namespace NMonitoring {
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 template <size_t BUCKET_SIZE, size_t BUCKET_COUNT, size_t FRAME_COUNT>
-struct TPercentileTracker : public TPercentileBase {
+struct TPercentileTracker : public TPercentileBase { 
     TAtomic Items[BUCKET_COUNT];
     TAtomicBase Frame[FRAME_COUNT][BUCKET_COUNT];
     size_t CurrentFrame;

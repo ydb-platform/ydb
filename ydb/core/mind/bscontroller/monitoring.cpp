@@ -15,15 +15,15 @@ static void RenderBytesCell(IOutputStream& out, ui64 bytes) {
     }
 }
 
-template<typename T>
-static TString PrintMaybe(const TMaybe<T>& m) {
-    if (m) {
-        return TStringBuilder() << *m;
-    } else {
-        return "&lt;<i>null</i>&gt;";
-    }
-}
-
+template<typename T> 
+static TString PrintMaybe(const TMaybe<T>& m) { 
+    if (m) { 
+        return TStringBuilder() << *m; 
+    } else { 
+        return "&lt;<i>null</i>&gt;"; 
+    } 
+} 
+ 
 class TBlobStorageController::TTxMonEvent_OperationLog : public TTransactionBase<TBlobStorageController> {
     const TActorId RespondTo;
     const TCgiParameters Params;
@@ -112,7 +112,7 @@ public:
             H3() {
                 out << "Operation Log";
             }
-            TABLE_CLASS("table") {
+            TABLE_CLASS("table") { 
                 TABLEHEAD() {
                     TABLER() {
                         TABLEH() { out << "Index"; }
@@ -402,7 +402,7 @@ public:
             H3() {
                 s << "Health-related operations since " << Since.ToRfc822StringLocal();
             }
-            TABLE_CLASS("table") {
+            TABLE_CLASS("table") { 
                 TABLEHEAD() {
                     TABLER() {
                         TABLEH() { s << "UTC ts"; }
@@ -661,9 +661,9 @@ bool TBlobStorageController::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr e
             RenderGroupDetail(str, groupId);
         } else if (page == "Scrub") {
             ScrubState.Render(str);
-        } else if (page == "InternalTables") {
-            const TString table = cgi.Has("table") ? cgi.Get("table") : "pdisks";
-            RenderInternalTables(str, table);
+        } else if (page == "InternalTables") { 
+            const TString table = cgi.Has("table") ? cgi.Get("table") : "pdisks"; 
+            RenderInternalTables(str, table); 
         } else if (page == "StopGivingGroups") {
             StopGivingGroups = true;
             str << "OK";
@@ -710,13 +710,13 @@ void TBlobStorageController::RenderFooter(IOutputStream& out) {
 void TBlobStorageController::RenderMonPage(IOutputStream& out) {
     RenderHeader(out);
 
-    out << "<a href='app?TabletID=" << TabletID() << "&page=OperationLog'>Operation Log</a><br>";
-    out << "<a href='app?TabletID=" << TabletID() << "&page=SelfHeal'>Self Heal Status</a> (" <<
+    out << "<a href='app?TabletID=" << TabletID() << "&page=OperationLog'>Operation Log</a><br>"; 
+    out << "<a href='app?TabletID=" << TabletID() << "&page=SelfHeal'>Self Heal Status</a> (" << 
         (SelfHealEnable ? "enabled" : "disabled") << ")<br>";
-    out << "<a href='app?TabletID=" << TabletID() << "&page=HealthEvents'>Health events</a><br>";
-    out << "<a href='app?TabletID=" << TabletID() << "&page=Scrub'>Scrub state</a><br>";
-    out << "<a href='app?TabletID=" << TabletID() << "&page=InternalTables'>Internal tables</a><br>";
-
+    out << "<a href='app?TabletID=" << TabletID() << "&page=HealthEvents'>Health events</a><br>"; 
+    out << "<a href='app?TabletID=" << TabletID() << "&page=Scrub'>Scrub state</a><br>"; 
+    out << "<a href='app?TabletID=" << TabletID() << "&page=InternalTables'>Internal tables</a><br>"; 
+ 
     HTML(out) {
         DIV_CLASS("panel panel-info") {
             DIV_CLASS("panel-heading") {
@@ -751,40 +751,40 @@ void TBlobStorageController::RenderMonPage(IOutputStream& out) {
                             TABLED() { out << "PDisk space margin (&#8240;)"; }
                             TABLED() { out << PDiskSpaceMarginPromille; }
                         }
-                        TABLER() {
-                            TABLED() { out << "PDisk space color border"; }
-                            TABLED() { out << NKikimrBlobStorage::TPDiskSpaceColor::E_Name(PDiskSpaceColorBorder); }
-                        }
+                        TABLER() { 
+                            TABLED() { out << "PDisk space color border"; } 
+                            TABLED() { out << NKikimrBlobStorage::TPDiskSpaceColor::E_Name(PDiskSpaceColorBorder); } 
+                        } 
                     }
                 }
             }
         }
     }
 
-    RenderFooter(out);
-}
-
-void TBlobStorageController::RenderInternalTables(IOutputStream& out, const TString& table) {
-    RenderHeader(out);
-
-    auto gen_li = [&](const TString& component) {
-        out << "<li" << (component == table ? " class='active'" : "") << ">";
-        out << "<a href='app?TabletID=" << TabletID() << "&page=InternalTables&table=" << component << "'>";
-        out << component << "</a>";
-        out << "</li>";
-    };
-
+    RenderFooter(out); 
+} 
+ 
+void TBlobStorageController::RenderInternalTables(IOutputStream& out, const TString& table) { 
+    RenderHeader(out); 
+ 
+    auto gen_li = [&](const TString& component) { 
+        out << "<li" << (component == table ? " class='active'" : "") << ">"; 
+        out << "<a href='app?TabletID=" << TabletID() << "&page=InternalTables&table=" << component << "'>"; 
+        out << component << "</a>"; 
+        out << "</li>"; 
+    }; 
+ 
     out << "<ul class='nav nav-tabs'>";
-    gen_li("pdisks");
-    gen_li("vdisks");
-    gen_li("groups");
-    gen_li("boxes");
-    gen_li("serials");
+    gen_li("pdisks"); 
+    gen_li("vdisks"); 
+    gen_li("groups"); 
+    gen_li("boxes"); 
+    gen_li("serials"); 
     out << "</ul>";
 
     HTML(out) {
-        if (table == "pdisks") {
-            TABLE_CLASS("table") {
+        if (table == "pdisks") { 
+            TABLE_CLASS("table") { 
                 TABLEHEAD() {
                     TABLER() {
                         TAG_ATTRS(TTableH, {{"title", "NodeId:PDiskId"}}) { out << "Id"; }
@@ -793,12 +793,12 @@ void TBlobStorageController::RenderInternalTables(IOutputStream& out, const TStr
                         TABLEH() { out << "Path"; }
                         TABLEH() { out << "Guid"; }
                         TABLEH() { out << "BoxId"; }
-                        TABLEH() { out << "Total Size"; }
+                        TABLEH() { out << "Total Size"; } 
                         TABLEH() { out << "Status"; }
                         TABLEH() { out << "State"; }
-                        TABLEH() { out << "ExpectedSerial"; }
-                        TABLEH() { out << "LastSeenSerial"; }
-                        TABLEH() { out << "LastSeenPath"; }
+                        TABLEH() { out << "ExpectedSerial"; } 
+                        TABLEH() { out << "LastSeenSerial"; } 
+                        TABLEH() { out << "LastSeenPath"; } 
                     }
                 }
                 TABLEBODY() {
@@ -819,30 +819,30 @@ void TBlobStorageController::RenderInternalTables(IOutputStream& out, const TStr
                                     out << NKikimrBlobStorage::TPDiskState::E_Name(m.GetState());
                                 }
                             }
-                            TABLED() { out << pdisk->ExpectedSerial.Quote(); }
-                            TABLED() {
-                                TString color = pdisk->ExpectedSerial == pdisk->LastSeenSerial ? "green" : "red";
-                                out << "<font color='" << color << "'>" << pdisk->LastSeenSerial.Quote() << "</font>";
-                            }
-                            TABLED() { out << pdisk->LastSeenPath; }
+                            TABLED() { out << pdisk->ExpectedSerial.Quote(); } 
+                            TABLED() { 
+                                TString color = pdisk->ExpectedSerial == pdisk->LastSeenSerial ? "green" : "red"; 
+                                out << "<font color='" << color << "'>" << pdisk->LastSeenSerial.Quote() << "</font>"; 
+                            } 
+                            TABLED() { out << pdisk->LastSeenPath; } 
                         }
                     }
                 }
             }
-        } else if (table == "vdisks") {
+        } else if (table == "vdisks") { 
             RenderVSlotTable(out, [&] {
                 for (const auto& [key, value] : VSlots) {
                     RenderVSlotRow(out, *value);
                 }
             });
-        } else if (table == "groups") {
+        } else if (table == "groups") { 
             RenderGroupTable(out, [&] {
                 for (const auto& [key, value] : GroupMap) {
                     RenderGroupRow(out, *value);
                 }
             });
-        } else if (table == "boxes") {
-            TABLE_CLASS("table") {
+        } else if (table == "boxes") { 
+            TABLE_CLASS("table") { 
                 TABLEHEAD() {
                     TABLER() {
                         TAG_ATTRS(TTableH, {{"colspan", "3"}}) { out << "Box attributes"; }
@@ -901,33 +901,33 @@ void TBlobStorageController::RenderInternalTables(IOutputStream& out, const TStr
                     }
                 }
             }
-        } else if (table == "serials") {
-            TABLE_CLASS("table") {
-                TABLEHEAD() {
-                    TABLER() {
-                        TABLEH() { out << "Serial"; }
-                        TAG_ATTRS(TTableH, {{"title", "NodeId:PDiskId"}}) { out << "PDisk id"; }
-                        TABLEH() { out << "BoxId"; }
-                        TABLEH() { out << "Guid"; }
-                        TABLEH() { out << "LifeStage"; }
-                        TABLEH() { out << "Kind"; }
-                        TABLEH() { out << "PDiskType"; }
-                    }
-                }
-                TABLEBODY() {
-                    for (const auto& [serial, info] : DrivesSerials) {
-                        TABLER() {
-                            TABLED() { out << serial.Serial.Quote(); }
+        } else if (table == "serials") { 
+            TABLE_CLASS("table") { 
+                TABLEHEAD() { 
+                    TABLER() { 
+                        TABLEH() { out << "Serial"; } 
+                        TAG_ATTRS(TTableH, {{"title", "NodeId:PDiskId"}}) { out << "PDisk id"; } 
+                        TABLEH() { out << "BoxId"; } 
+                        TABLEH() { out << "Guid"; } 
+                        TABLEH() { out << "LifeStage"; } 
+                        TABLEH() { out << "Kind"; } 
+                        TABLEH() { out << "PDiskType"; } 
+                    } 
+                } 
+                TABLEBODY() { 
+                    for (const auto& [serial, info] : DrivesSerials) { 
+                        TABLER() { 
+                            TABLED() { out << serial.Serial.Quote(); } 
                             TABLED() { out << "(" << PrintMaybe(info->NodeId) << ":" << PrintMaybe(info->PDiskId) << ")"; }
                             TABLED() { out << info->BoxId; }
                             TABLED() { out << PrintMaybe(info->Guid); }
                             TABLED() { out << info->LifeStage; }
                             TABLED() { out << info->Kind; }
                             TABLED() { out << info->PDiskType; }
-                        }
-                    }
-                }
-            }
+                        } 
+                    } 
+                } 
+            } 
         }
     }
 
@@ -976,7 +976,7 @@ void TBlobStorageController::RenderGroupsInStoragePool(IOutputStream &out, const
 
 void TBlobStorageController::RenderVSlotTable(IOutputStream& out, std::function<void()> callback) {
     HTML(out) {
-        TABLE_CLASS("table") {
+        TABLE_CLASS("table") { 
             TABLEHEAD() {
                 TABLER() {
                     TAG_ATTRS(TTableH, {{"colspan", "8"}}) { out << "VDisk attributes"; }
@@ -993,10 +993,10 @@ void TBlobStorageController::RenderVSlotTable(IOutputStream& out, std::function<
                     TABLEH() { out << "Status"; }
                     TABLEH() { out << "IsReady"; }
                     TABLEH() { out << "LastSeenReady"; }
-
-                    TABLEH() { out << "Data Size"; }
-
-                    TABLEH() { out << "Data Size"; }
+ 
+                    TABLEH() { out << "Data Size"; } 
+ 
+                    TABLEH() { out << "Data Size"; } 
                 }
             }
             TABLEBODY() {
@@ -1038,7 +1038,7 @@ void TBlobStorageController::RenderVSlotRow(IOutputStream& out, const TVSlotInfo
 
 void TBlobStorageController::RenderGroupTable(IOutputStream& out, std::function<void()> callback) {
     HTML(out) {
-        TABLE_CLASS("table") {
+        TABLE_CLASS("table") { 
             TABLEHEAD() {
                 TABLER() {
                     TAG_ATTRS(TTableH, {{"title", "GroupId:Gen"}}) { out << "ID"; }
@@ -1048,10 +1048,10 @@ void TBlobStorageController::RenderGroupTable(IOutputStream& out, std::function<
                     TABLEH() { out << "Life cycle phase"; }
                     TABLEH() { out << "Allocated size"; }
                     TABLEH() { out << "Available size"; }
-                    TAG_ATTRS(TTableH, {{"title", "Data Size"}}) { out << "Data<br/>Size"; }
-                    TAG_ATTRS(TTableH, {{"title", "PutTabletLog Latency"}}) { out << "PutTabletLog<br/>Latency"; }
-                    TAG_ATTRS(TTableH, {{"title", "PutUserData Latency"}}) { out << "PutUserData<br/>Latency"; }
-                    TAG_ATTRS(TTableH, {{"title", "GetFast Latency"}}) { out << "GetFast<br/>Latency"; }
+                    TAG_ATTRS(TTableH, {{"title", "Data Size"}}) { out << "Data<br/>Size"; } 
+                    TAG_ATTRS(TTableH, {{"title", "PutTabletLog Latency"}}) { out << "PutTabletLog<br/>Latency"; } 
+                    TAG_ATTRS(TTableH, {{"title", "PutUserData Latency"}}) { out << "PutUserData<br/>Latency"; } 
+                    TAG_ATTRS(TTableH, {{"title", "GetFast Latency"}}) { out << "GetFast<br/>Latency"; } 
                     TABLEH() { out << "Seen operational"; }
                     TABLEH() { out << "Operating<br/>status"; }
                     TABLEH() { out << "Expected<br/>status"; }
@@ -1114,8 +1114,8 @@ void TBlobStorageController::RenderGroupRow(IOutputStream& out, const TGroupInfo
             TABLED() { out << (group.SeenOperational ? "YES" : ""); }
 
             const auto& status = group.Status;
-            TABLED() { out << NKikimrBlobStorage::TGroupStatus::E_Name(status.OperatingStatus); }
-            TABLED() { out << NKikimrBlobStorage::TGroupStatus::E_Name(status.ExpectedStatus); }
+            TABLED() { out << NKikimrBlobStorage::TGroupStatus::E_Name(status.OperatingStatus); } 
+            TABLED() { out << NKikimrBlobStorage::TGroupStatus::E_Name(status.ExpectedStatus); } 
         }
     }
 }

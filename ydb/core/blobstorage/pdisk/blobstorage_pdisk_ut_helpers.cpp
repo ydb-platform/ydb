@@ -1,6 +1,6 @@
 #include <ydb/library/pdisk_io/buffers.h>
-#include "blobstorage_pdisk_actorsystem_creator.h"
-#include "blobstorage_pdisk_ut.h"
+#include "blobstorage_pdisk_actorsystem_creator.h" 
+#include "blobstorage_pdisk_ut.h" 
 #include "blobstorage_pdisk_ut_helpers.h"
 
 #include <ydb/core/blobstorage/crypto/default.h>
@@ -12,9 +12,9 @@
 namespace NKikimr {
 
 TString PrepareData(ui32 size, ui32 flavor) {
-    TString data = TString::Uninitialized(size);
-    for (ui32 i = 0; i < size; ++i) {
-        data[i] = '0' + (i + size + flavor) % 8;
+    TString data = TString::Uninitialized(size); 
+    for (ui32 i = 0; i < size; ++i) { 
+        data[i] = '0' + (i + size + flavor) % 8; 
     }
     return data;
 }
@@ -37,8 +37,8 @@ TString MakePDiskPath(const char *dir) {
     }
 }
 
-void FormatPDiskForTest(TString path, ui64 guid, ui32 chunkSize, ui64 diskSize, bool isErasureEncodeUserLog,
-        TIntrusivePtr<NPDisk::TSectorMap> sectorMap) {
+void FormatPDiskForTest(TString path, ui64 guid, ui32 chunkSize, ui64 diskSize, bool isErasureEncodeUserLog, 
+        TIntrusivePtr<NPDisk::TSectorMap> sectorMap) { 
     NPDisk::TKey chunkKey;
     NPDisk::TKey logKey;
     NPDisk::TKey sysLogKey;
@@ -50,10 +50,10 @@ void FormatPDiskForTest(TString path, ui64 guid, ui32 chunkSize, ui64 diskSize, 
             NPDisk::YdbDefaultPDiskSequence, "Info", isErasureEncodeUserLog, false, sectorMap);
 }
 
-void FormatPDiskForTest(TString path, ui64 guid, ui32 chunkSize, bool isErasureEncodeUserLog,
+void FormatPDiskForTest(TString path, ui64 guid, ui32 chunkSize, bool isErasureEncodeUserLog, 
         TIntrusivePtr<NPDisk::TSectorMap> sectorMap) {
     ui64 diskSizeHeuristic = (ui64)chunkSize * 1000;
-    FormatPDiskForTest(path, guid, chunkSize, diskSizeHeuristic, isErasureEncodeUserLog, sectorMap);
+    FormatPDiskForTest(path, guid, chunkSize, diskSizeHeuristic, isErasureEncodeUserLog, sectorMap); 
 }
 
 void ReadPdiskFile(TTestContext *tc, ui32 dataSize, NPDisk::TAlignedData &outData) {
@@ -62,9 +62,9 @@ void ReadPdiskFile(TTestContext *tc, ui32 dataSize, NPDisk::TAlignedData &outDat
     {
         TIntrusivePtr<NMonitoring::TDynamicCounters> counters = new NMonitoring::TDynamicCounters;
         THolder<TPDiskMon> mon(new TPDiskMon(counters, 0, nullptr));
-        TActorSystemCreator creator;
+        TActorSystemCreator creator; 
         THolder<NPDisk::IBlockDevice> device(NPDisk::CreateRealBlockDeviceWithDefaults(path, *mon,
-                    NPDisk::TDeviceMode::LockFile, tc->SectorMap, creator.GetActorSystem()));
+                    NPDisk::TDeviceMode::LockFile, tc->SectorMap, creator.GetActorSystem())); 
         VERBOSE_COUT("  Performing Pread of " << dataSize);
         device->PreadSync(outData.Get(), dataSize, 0, NPDisk::TReqId(NPDisk::TReqId::Test4, 0), {});
     }
@@ -99,9 +99,9 @@ ui64 DestroyLastSectors(TTestContext *tc, NPDisk::TAlignedData &dataBefore, NPDi
         THolder<TPDiskMon> mon(new TPDiskMon(counters, 0, nullptr));
         NPDisk::TAlignedData buffer(sectorSize * count);
         memset(buffer.Get(), 0xf, sectorSize * count);
-        TActorSystemCreator creator;
+        TActorSystemCreator creator; 
         THolder<NPDisk::IBlockDevice> device(NPDisk::CreateRealBlockDeviceWithDefaults(path, *mon,
-                    NPDisk::TDeviceMode::LockFile, tc->SectorMap, creator.GetActorSystem()));
+                    NPDisk::TDeviceMode::LockFile, tc->SectorMap, creator.GetActorSystem())); 
         REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(buffer.Get(), sectorSize * count);
         device->PwriteSync(buffer.Get(), sectorSize * count, offset, NPDisk::TReqId(NPDisk::TReqId::Test4, 0), {});
     }
@@ -136,9 +136,9 @@ ui64 RestoreLastSectors(TTestContext *tc, NPDisk::TAlignedData &dataBefore, NPDi
     {
         TIntrusivePtr<NMonitoring::TDynamicCounters> counters = new NMonitoring::TDynamicCounters;
         THolder<TPDiskMon> mon(new TPDiskMon(counters, 0, nullptr));
-        TActorSystemCreator creator;
+        TActorSystemCreator creator; 
         THolder<NPDisk::IBlockDevice> device(NPDisk::CreateRealBlockDeviceWithDefaults(path, *mon,
-                    NPDisk::TDeviceMode::LockFile, tc->SectorMap, creator.GetActorSystem()));
+                    NPDisk::TDeviceMode::LockFile, tc->SectorMap, creator.GetActorSystem())); 
         VERBOSE_COUT("Offset = " << offset << " sectorIdx = " << offset/sectorSize);
         REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(dataBefore.Get() + offset, sectorSize * count);
         device->PwriteSync(dataBefore.Get() + offset, sectorSize * count, offset, NPDisk::TReqId(NPDisk::TReqId::Test4, 0), {});
@@ -166,18 +166,18 @@ void FillDeviceWithPattern(TTestContext *tc, ui64 chunkSize, ui64 pattern) {
     }
 
     const ui32 formatSectorsSize = NPDisk::FormatSectorSize * NPDisk::ReplicationFactor;
-    NPDisk::TAlignedData data(formatSectorsSize);
+    NPDisk::TAlignedData data(formatSectorsSize); 
 
-    Y_VERIFY(data.Size() % sizeof(ui64) == 0);
-    Fill((ui64*)data.Get(), (ui64*)(data.Get() + data.Size()), pattern);
-
+    Y_VERIFY(data.Size() % sizeof(ui64) == 0); 
+    Fill((ui64*)data.Get(), (ui64*)(data.Get() + data.Size()), pattern); 
+ 
     {
         TIntrusivePtr<NMonitoring::TDynamicCounters> counters = new NMonitoring::TDynamicCounters;
         THolder<TPDiskMon> mon(new TPDiskMon(counters, 0, nullptr));
-        TActorSystemCreator creator;
+        TActorSystemCreator creator; 
         THolder<NPDisk::IBlockDevice> device(NPDisk::CreateRealBlockDeviceWithDefaults(path, *mon,
-                    NPDisk::TDeviceMode::LockFile, tc->SectorMap, creator.GetActorSystem()));
-        VERBOSE_COUT("Filling first " << data.Size() << "bytes of device with data");
+                    NPDisk::TDeviceMode::LockFile, tc->SectorMap, creator.GetActorSystem())); 
+        VERBOSE_COUT("Filling first " << data.Size() << "bytes of device with data"); 
         device->PwriteSync(data.Get(), data.Size(), 0, NPDisk::TReqId(NPDisk::TReqId::Test4, 0), {});
     }
     VERBOSE_COUT("Done");
@@ -186,8 +186,8 @@ void FillDeviceWithPattern(TTestContext *tc, ui64 chunkSize, ui64 pattern) {
 
 void FillDeviceWithZeroes(TTestContext *tc, ui64 chunkSize) {
     FillDeviceWithPattern(tc, chunkSize, 0);
-}
-
+} 
+ 
 void WriteSectors(TTestContext *tc, NPDisk::TAlignedData &dataAfter, ui64 firstSector, ui32 count) {
     VERBOSE_COUT("WriteSectors: restoring " << count << " sectors.");
     TString path = EnsurePDiskExists(tc);
@@ -197,9 +197,9 @@ void WriteSectors(TTestContext *tc, NPDisk::TAlignedData &dataAfter, ui64 firstS
     {
         TIntrusivePtr<NMonitoring::TDynamicCounters> counters = new NMonitoring::TDynamicCounters;
         THolder<TPDiskMon> mon(new TPDiskMon(counters, 0, nullptr));
-        TActorSystemCreator creator;
+        TActorSystemCreator creator; 
         THolder<NPDisk::IBlockDevice> device(NPDisk::CreateRealBlockDeviceWithDefaults(path, *mon,
-                    NPDisk::TDeviceMode::LockFile, tc->SectorMap, creator.GetActorSystem()));
+                    NPDisk::TDeviceMode::LockFile, tc->SectorMap, creator.GetActorSystem())); 
         VERBOSE_COUT("Offset = " << offset << " sectorIdx = " << offset/sectorSize);
         device->PwriteSync(dataAfter.Get() + offset, sectorSize * count, offset, NPDisk::TReqId(NPDisk::TReqId::Test4, 0), {});
     }
@@ -207,7 +207,7 @@ void WriteSectors(TTestContext *tc, NPDisk::TAlignedData &dataAfter, ui64 firstS
     return;
 }
 
-void DestroySectors(TTestContext *tc, const NPDisk::TAlignedData &dataAfter,
+void DestroySectors(TTestContext *tc, const NPDisk::TAlignedData &dataAfter, 
         ui32 dataSize, ui64 firstSector, ui32 period) {
     VERBOSE_COUT("DestroySectors: destroying " << firstSector << " + k * " << period << " sectors.");
     TString path = EnsurePDiskExists(tc);
@@ -221,9 +221,9 @@ void DestroySectors(TTestContext *tc, const NPDisk::TAlignedData &dataAfter,
         for (ui64 i = firstSector; i < dataSize / sectorSize; i += period) {
             memset(buffer.Get() + i * sectorSize, 0xf, sectorSize);
         }
-        TActorSystemCreator creator;
+        TActorSystemCreator creator; 
         THolder<NPDisk::IBlockDevice> device(NPDisk::CreateRealBlockDeviceWithDefaults(path, *mon,
-                    NPDisk::TDeviceMode::LockFile, tc->SectorMap, creator.GetActorSystem()));
+                    NPDisk::TDeviceMode::LockFile, tc->SectorMap, creator.GetActorSystem())); 
         REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(buffer.Get(), buffer.Size());
         device->PwriteSync(buffer.Get(), buffer.Size(), 0, NPDisk::TReqId(NPDisk::TReqId::Test4, 0), {});
     }

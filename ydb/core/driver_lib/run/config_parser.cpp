@@ -133,10 +133,10 @@ void TRunCommandConfigParser::ParseConfigFiles(const NLastGetopt::TOptsParseResu
         Y_VERIFY(ParsePBFromFile(res.Get("grpc-file"), Config.AppConfig.MutableGRpcConfig()));
     }
 
-    if (res.Has("feature-flags-file")) {
+    if (res.Has("feature-flags-file")) { 
         Y_VERIFY(ParsePBFromFile(res.Get("feature-flags-file"), Config.AppConfig.MutableFeatureFlags(), true));
-    }
-
+    } 
+ 
     if (res.Has("sqs-file")) {
         Y_VERIFY(ParsePBFromFile(res.Get("sqs-file"), Config.AppConfig.MutableSqsConfig()));
     }
@@ -192,10 +192,10 @@ void TRunCommandConfigParser::ParseConfigFiles(const NLastGetopt::TOptsParseResu
         Y_VERIFY(ParsePBFromFile(res.Get("key-file"), Config.AppConfig.MutableKeyConfig()));
     }
 
-    if (res.Has("pdisk-key-file")) {
-        Y_VERIFY(ParsePBFromFile(res.Get("pdisk-key-file"), Config.AppConfig.MutablePDiskKeyConfig()));
-    }
-
+    if (res.Has("pdisk-key-file")) { 
+        Y_VERIFY(ParsePBFromFile(res.Get("pdisk-key-file"), Config.AppConfig.MutablePDiskKeyConfig())); 
+    } 
+ 
     if (res.Has("alloc-file")) {
         Y_VERIFY(ParsePBFromFile(res.Get("alloc-file"), Config.AppConfig.MutableAllocatorConfig()));
     } else {
@@ -249,7 +249,7 @@ void TRunCommandConfigParser::ParseRunOpts(int argc, char **argv) {
 
     SetupLastGetOptForConfigFiles(opts);
     opts.AddLongOption("bootstrap-file", "Bootstrap config file").OptionalArgument("PATH");
-    opts.AddLongOption("feature-flags-file", "File with feature flags to turn new features on/off").OptionalArgument("PATH");
+    opts.AddLongOption("feature-flags-file", "File with feature flags to turn new features on/off").OptionalArgument("PATH"); 
     opts.AddLongOption('r', "restarts-count-file", "State for restarts monitoring counter,\nuse empty string to disable\n")
             .OptionalArgument("PATH").DefaultValue(RunOpts.RestartsCountFile).StoreResult(&RunOpts.RestartsCountFile);
     opts.AddLongOption("compile-inflight-limit", "Limit on parallel programs compilation").OptionalArgument("NUM").StoreResult(&RunOpts.CompileInflightLimit);

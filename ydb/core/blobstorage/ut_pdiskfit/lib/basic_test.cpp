@@ -15,15 +15,15 @@ class TFakeVDisk
     const ui64 PDiskGuid;
     TStateManager *StateManager;
     TIntrusivePtr<TPDiskParams> PDiskParams;
-    TFakeVDiskParams Params;
+    TFakeVDiskParams Params; 
 
-    NKikimr::NPDisk::TLogPosition ReadLogPosition{0, 0};
+    NKikimr::NPDisk::TLogPosition ReadLogPosition{0, 0}; 
 
     ui64 Lsn = 0;
 
     struct TLogRecord {
         ui64 Lsn;
-        TLogSignature Signature;
+        TLogSignature Signature; 
         ui32 DataLen;
         ui32 Checksum;
         TVector<TChunkIdx> CommitChunks;
@@ -142,7 +142,7 @@ class TFakeVDisk
                 } else {
                     str << " ";
                 }
-                str << x.Lsn << ":" << x.Signature.ToString() << ":" << x.DataLen;
+                str << x.Lsn << ":" << x.Signature.ToString() << ":" << x.DataLen; 
             }
             str << "] InFlight# [";
             first = true;
@@ -152,7 +152,7 @@ class TFakeVDisk
                 } else {
                     str << " ";
                 }
-                str << x.Lsn << ":" << x.Signature.ToString() << ":" << x.DataLen;
+                str << x.Lsn << ":" << x.Signature.ToString() << ":" << x.DataLen; 
             }
             str << "] FirstLsnToKeep# " << FirstLsnToKeep << "}";
             return str.Str();
@@ -265,8 +265,8 @@ class TFakeVDisk
 
     ui32 InFlightLog = 0;
 
-    ui32 LogsSent = 0;
-
+    ui32 LogsSent = 0; 
+ 
     ui64 NextWriteCookie = 1;
 
     ui32 ReadMsgPending = 0;
@@ -274,15 +274,15 @@ class TFakeVDisk
     bool StateVerified = false;
 
 public:
-    TFakeVDisk(const TVDiskID& vdiskId, const TActorId& pdiskServiceId, ui64 pdiskGuid, TStateManager *stateManager,
-            TFakeVDiskParams params)
+    TFakeVDisk(const TVDiskID& vdiskId, const TActorId& pdiskServiceId, ui64 pdiskGuid, TStateManager *stateManager, 
+            TFakeVDiskParams params) 
         : TActor<TFakeVDisk>(&TFakeVDisk::StateFunc)
         , TObjectWithState(Sprintf("vdisk[%s]", vdiskId.ToString().data()))
         , VDiskId(vdiskId)
         , PDiskServiceId(pdiskServiceId)
         , PDiskGuid(pdiskGuid)
         , StateManager(stateManager)
-        , Params(params)
+        , Params(params) 
         , Recovered(DeserializeRecoveredState())
     {
 //        TStringStream str;
@@ -320,10 +320,10 @@ public:
         });
     }
 
-    TString SelfInfo() const {
-        return TStringBuilder() << " VDiskId# " << VDiskId.ToStringWOGeneration() << " Owner# " << PDiskParams->Owner;
-    }
-
+    TString SelfInfo() const { 
+        return TStringBuilder() << " VDiskId# " << VDiskId.ToStringWOGeneration() << " Owner# " << PDiskParams->Owner; 
+    } 
+ 
     void Bootstrap(const TActorContext& ctx) {
         Become(&TFakeVDisk::StateFunc);
         SendPDiskRequest(ctx, new NPDisk::TEvYardInit(2, VDiskId, PDiskGuid), [] {});
@@ -335,26 +335,26 @@ public:
         PDiskParams = msg->PDiskParams;
         State.BlocksInChunk = PDiskParams->ChunkSize / PDiskParams->AppendBlockSize;
 
-        THashSet<TChunkIdx> owned(msg->OwnedChunks.begin(), msg->OwnedChunks.end());
-        for (const auto& [idx, info] : Recovered.Chunks) {
-            if (info.GetCommitState() == ECommitState::COMMITTED) {
-                Y_VERIFY_S(owned.count(idx), SelfInfo() << " has commited chunk# " << idx << " from Recovered.Chunks,"
-                        << " but can't find it in OwnedChunks list from PDisk");
-                owned.erase(idx);
-            }
-        }
-        for (auto idx : owned) {
-            auto it = Recovered.Chunks.find(idx);
-            Y_VERIFY_S(it != Recovered.Chunks.end(), SelfInfo() << " has owned chunk# " << idx
-                    << " from PDisks's OwnedChunks, but can't find it in Recovered list");
-
-            auto& info = it->second;
-            Y_VERIFY(info.GetCommitState() == ECommitState::COMMIT_IN_PROGRESS ||
-                info.GetCommitState() == ECommitState::DELETE_IN_PROGRESS);
-        }
-
+        THashSet<TChunkIdx> owned(msg->OwnedChunks.begin(), msg->OwnedChunks.end()); 
+        for (const auto& [idx, info] : Recovered.Chunks) { 
+            if (info.GetCommitState() == ECommitState::COMMITTED) { 
+                Y_VERIFY_S(owned.count(idx), SelfInfo() << " has commited chunk# " << idx << " from Recovered.Chunks," 
+                        << " but can't find it in OwnedChunks list from PDisk"); 
+                owned.erase(idx); 
+            } 
+        } 
+        for (auto idx : owned) { 
+            auto it = Recovered.Chunks.find(idx); 
+            Y_VERIFY_S(it != Recovered.Chunks.end(), SelfInfo() << " has owned chunk# " << idx 
+                    << " from PDisks's OwnedChunks, but can't find it in Recovered list"); 
+ 
+            auto& info = it->second; 
+            Y_VERIFY(info.GetCommitState() == ECommitState::COMMIT_IN_PROGRESS || 
+                info.GetCommitState() == ECommitState::DELETE_IN_PROGRESS); 
+        } 
+ 
         TStringStream str;
-        str << SelfInfo() << " starting, owned chunks# " << FormatList(msg->OwnedChunks) << Endl;
+        str << SelfInfo() << " starting, owned chunks# " << FormatList(msg->OwnedChunks) << Endl; 
         Cerr << str.Str();
 
         IssueReadLogRequest(ctx);
@@ -374,9 +374,9 @@ public:
             Lsn = item.Lsn;
 
             TStringStream str;
-            str << "TEvReadLogResult " << SelfInfo() << " Lsn# " << item.Lsn << " Len# " << item.Data.size()
-                << " ChunkCommitSignature# " << (item.Signature.HasCommitRecord() ? "true" : "false")
-                << Endl;
+            str << "TEvReadLogResult " << SelfInfo() << " Lsn# " << item.Lsn << " Len# " << item.Data.size() 
+                << " ChunkCommitSignature# " << (item.Signature.HasCommitRecord() ? "true" : "false") 
+                << Endl; 
             Cerr << str.Str();
 
             State.Confirmed.insert(TLogRecord{item.Lsn, item.Signature, (ui32)item.Data.size(),
@@ -401,15 +401,15 @@ public:
             // there is a record in current set (recovered from PDisk), but not in previous set (stored state); there
             // may be an item in flight?
             auto it = Recovered.InFlight.find(*current);
-            Y_VERIFY_S(it != Recovered.InFlight.end(), "unexpected log record " << SelfInfo() << " Lsn# " << current->Lsn
-                    << " Signature# " << current->Signature.ToString());
-            Y_VERIFY_S(it->DataLen == current->DataLen && it->Checksum == current->Checksum &&
-                    it->Signature == current->Signature, SelfInfo() << "Lsn# " << it->Lsn
-                    << " InFlightData# " << it->DataLen << " StoredData# " << current->DataLen);
+            Y_VERIFY_S(it != Recovered.InFlight.end(), "unexpected log record " << SelfInfo() << " Lsn# " << current->Lsn 
+                    << " Signature# " << current->Signature.ToString()); 
+            Y_VERIFY_S(it->DataLen == current->DataLen && it->Checksum == current->Checksum && 
+                    it->Signature == current->Signature, SelfInfo() << "Lsn# " << it->Lsn 
+                    << " InFlightData# " << it->DataLen << " StoredData# " << current->DataLen); 
         } else if (prev) {
             // lost item
             if (prev->Lsn >= Recovered.FirstLsnToKeep) {
-                Y_FAIL_S("lost item Owner# " << PDiskParams->Owner << " Lsn# " << prev->Lsn);
+                Y_FAIL_S("lost item Owner# " << PDiskParams->Owner << " Lsn# " << prev->Lsn); 
             }
         }
     }
@@ -473,7 +473,7 @@ public:
     void Activity(const TActorContext& ctx) {
         while (InFlightLog < 10) {
             ui64 writeLogScore = 100;
-            ui64 allocateScore = State.Chunks.size() < 20 ? 10 : 0;
+            ui64 allocateScore = State.Chunks.size() < 20 ? 10 : 0; 
             ui64 writeScore = State.Chunks.empty() ? 0 : 5;
 
             ui64 totalScore = writeLogScore + allocateScore + writeScore;
@@ -483,10 +483,10 @@ public:
             }
 
             ui64 option = RandomNumber<ui64>(totalScore);
-            if (Params.LogsToBeSent && LogsSent >= Params.LogsToBeSent) {
-                break;
-            } else if (option < writeLogScore) {
-                IssueLogMessage(1, ctx);
+            if (Params.LogsToBeSent && LogsSent >= Params.LogsToBeSent) { 
+                break; 
+            } else if (option < writeLogScore) { 
+                IssueLogMessage(1, ctx); 
             } else if ((option -= writeLogScore) < allocateScore) {
                 IssueAllocateRequest(ctx);
             } else if ((option -= allocateScore) < writeScore) {
@@ -497,8 +497,8 @@ public:
         }
     }
 
-    void IssueLogMessage(TLogSignature signature, const TActorContext& ctx) {
-        ui32 size = Params.SizeMin + RandomNumber<ui32>(Params.SizeMax - Params.SizeMin + 1);
+    void IssueLogMessage(TLogSignature signature, const TActorContext& ctx) { 
+        ui32 size = Params.SizeMin + RandomNumber<ui32>(Params.SizeMax - Params.SizeMin + 1); 
         TString data = GenerateRandomDataBuffer(size);
 
         auto *info = new TLogRecord;
@@ -513,16 +513,16 @@ public:
             TState::TChunkInfo& chunk = pair.second;
             switch (chunk.GetCommitState()) {
                 case ECommitState::RESERVED:
-                    // reserved chunk is a subject for commit; 1% chance to commit chunk
-                    if (RandomNumber<double>() < 0.01) {
+                    // reserved chunk is a subject for commit; 1% chance to commit chunk 
+                    if (RandomNumber<double>() < 0.01) { 
                         info->CommitChunks.push_back(chunkIdx);
                         chunk.SetCommitState(ECommitState::COMMIT_IN_PROGRESS);
                     }
                     break;
 
                 case ECommitState::COMMITTED:
-                    // committed chunk is a subject for deletion; 0.5% change to delete chunk
-                    if (RandomNumber<double>() < 0.005) {
+                    // committed chunk is a subject for deletion; 0.5% change to delete chunk 
+                    if (RandomNumber<double>() < 0.005) { 
                         bool hasWrites = false;
                         for (const TWriteRecord& w : State.WritesInFlight) {
                             if (w.ChunkIdx == chunkIdx) {
@@ -546,8 +546,8 @@ public:
         NPDisk::TCommitRecord cr;
 
         // advance LSN every 30000 items avg
-        if (Lsn > Params.LsnToKeepCount && RandomNumber<double>() < Params.LogCutProbability) {
-            cr.FirstLsnToKeep = Lsn - Params.LsnToKeepCount;
+        if (Lsn > Params.LsnToKeepCount && RandomNumber<double>() < Params.LogCutProbability) { 
+            cr.FirstLsnToKeep = Lsn - Params.LsnToKeepCount; 
             cr.IsStartingPoint = true; // make starting point if we cut log
         }
 
@@ -558,24 +558,24 @@ public:
 
         if (cr.FirstLsnToKeep) {
             TStringStream str;
-            str << SelfInfo() << " FirstLsnToKeep# " << cr.FirstLsnToKeep << Endl;
+            str << SelfInfo() << " FirstLsnToKeep# " << cr.FirstLsnToKeep << Endl; 
             Cerr << str.Str();
         }
 
         TStringStream msg;
-        msg << "TEvLog " << SelfInfo() << " Lsn# " << Lsn << " Size# " << info->DataLen;
-        auto printChunks = [] (TVector<TChunkIdx> chunks) {
-            bool first = true;
-            TStringStream str;
-            for (TChunkIdx chunk : chunks) {
-                str << (first ? first = false, "" : " ") << chunk;
-            }
-            return str.Str();
-        };
-        msg << " Commit# " << printChunks(cr.CommitChunks) << " Delete# " << printChunks(cr.DeleteChunks)
-            << " IsStartingPoint# " << (cr.IsStartingPoint ? "true" : "false") << Endl;
-        if (cr.IsStartingPoint || cr.CommitChunks || cr.DeleteChunks) {
-            Cerr << msg.Str();
+        msg << "TEvLog " << SelfInfo() << " Lsn# " << Lsn << " Size# " << info->DataLen; 
+        auto printChunks = [] (TVector<TChunkIdx> chunks) { 
+            bool first = true; 
+            TStringStream str; 
+            for (TChunkIdx chunk : chunks) { 
+                str << (first ? first = false, "" : " ") << chunk; 
+            } 
+            return str.Str(); 
+        }; 
+        msg << " Commit# " << printChunks(cr.CommitChunks) << " Delete# " << printChunks(cr.DeleteChunks) 
+            << " IsStartingPoint# " << (cr.IsStartingPoint ? "true" : "false") << Endl; 
+        if (cr.IsStartingPoint || cr.CommitChunks || cr.DeleteChunks) { 
+            Cerr << msg.Str(); 
         }
 
         auto lsn = Lsn++;
@@ -588,7 +588,7 @@ public:
                 }
             });
 
-        ++LogsSent;
+        ++LogsSent; 
         ++InFlightLog;
     }
 
@@ -631,7 +631,7 @@ public:
             });
 
             TStringStream str;
-            str << "TEvLogResult " << SelfInfo() << " Lsn# " << result.Lsn <<
+            str << "TEvLogResult " << SelfInfo() << " Lsn# " << result.Lsn << 
                 " Status# " << NKikimrProto::EReplyStatus_Name(msg->Status) << Endl;
             Cerr << str.Str();
         }
@@ -903,7 +903,7 @@ public:
     }
 };
 
-IActor *CreateFakeVDisk(const TVDiskID& vdiskId, const TActorId& pdiskServiceId, ui64 pdiskGuid,
-        TStateManager *stateManager, TFakeVDiskParams params) {
-    return new TFakeVDisk(vdiskId, pdiskServiceId, pdiskGuid, stateManager, params);
+IActor *CreateFakeVDisk(const TVDiskID& vdiskId, const TActorId& pdiskServiceId, ui64 pdiskGuid, 
+        TStateManager *stateManager, TFakeVDiskParams params) { 
+    return new TFakeVDisk(vdiskId, pdiskServiceId, pdiskGuid, stateManager, params); 
 }

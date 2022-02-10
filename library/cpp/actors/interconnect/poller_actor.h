@@ -1,6 +1,6 @@
 #pragma once
 
-#include "events_local.h"
+#include "events_local.h" 
 #include "poller.h"
 #include <library/cpp/actors/core/actor.h>
 
@@ -56,8 +56,8 @@ namespace NActors {
     IActor* CreatePollerActor();
 
     inline TActorId MakePollerActorId() {
-        char x[12] = {'I', 'C', 'P', 'o', 'l', 'l', 'e', 'r', '\xDE', '\xAD', '\xBE', '\xEF'};
+        char x[12] = {'I', 'C', 'P', 'o', 'l', 'l', 'e', 'r', '\xDE', '\xAD', '\xBE', '\xEF'}; 
         return TActorId(0, TStringBuf(std::begin(x), std::end(x)));
-    }
-
+    } 
+ 
 }

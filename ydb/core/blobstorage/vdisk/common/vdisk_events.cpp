@@ -14,7 +14,7 @@ namespace NKikimr {
         : TEvVResultBaseWithQoSPB(now, counterPtr, histoPtr, std::move(traceId),
                 TInterconnectChannels::IC_BLOBSTORAGE_SMALL_MSG, recByteSize, record, skeletonFrontIDPtr)
     {
-        IncrementSize(bufferSizeBytes);
+        IncrementSize(bufferSizeBytes); 
         Record.SetStatus(status);
         LogoBlobIDFromLogoBlobID(logoBlobId, Record.MutableBlobID());
         VDiskIDFromVDiskID(vdisk, Record.MutableVDiskID());
@@ -23,9 +23,9 @@ namespace NKikimr {
         }
         Record.SetStatusFlags(oosStatus.Flags);
         Record.SetApproximateFreeSpaceShare(oosStatus.ApproximateFreeSpaceShare);
-        if (record && record->HasTimestamps()) {
-            Record.MutableTimestamps()->CopyFrom(record->GetTimestamps());
-        }
+        if (record && record->HasTimestamps()) { 
+            Record.MutableTimestamps()->CopyFrom(record->GetTimestamps()); 
+        } 
         if (status == NKikimrProto::OK) {
             Record.SetIncarnationGuid(incarnationGuid);
         }
@@ -50,7 +50,7 @@ namespace NKikimr {
     void TEvBlobStorage::TEvVMultiPut::StorePayload(NKikimrBlobStorage::TVMultiPutItem &item, const TString& buffer) {
         if (KIKIMR_USE_PROTOBUF_WITH_PAYLOAD) {
             AddPayload(TRope(buffer));
-            Y_VERIFY_DEBUG(Record.ItemsSize() == GetPayloadCount());
+            Y_VERIFY_DEBUG(Record.ItemsSize() == GetPayloadCount()); 
         } else {
             item.SetBuffer(buffer);
         }

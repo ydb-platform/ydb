@@ -21,7 +21,7 @@ message TVDiskConfig {
     optional uint32 ReplInterconnectChannel = 50;
 
     optional bool BarrierValidation = 60;
-    optional bool EnableOverseerLsnReporting = 61; // deprecated
+    optional bool EnableOverseerLsnReporting = 61; // deprecated 
 };
 
 // organizes hierarchy of VDisk configs: VDisk config may have a base config,

@@ -5,7 +5,7 @@
 namespace NKikimr {
 
 TPDiskMon::TPDiskMon(const TIntrusivePtr<NMonitoring::TDynamicCounters>& counters, ui32 pDiskId,
-        TPDiskConfig *cfg)
+        TPDiskConfig *cfg) 
     : Counters(counters)
     , PDiskId(pDiskId)
     , ChunksGroup(Counters->GetSubgroup("subsystem", "chunks"))
@@ -22,9 +22,9 @@ TPDiskMon::TPDiskMon(const TIntrusivePtr<NMonitoring::TDynamicCounters>& counter
     LogChunks = ChunksGroup->GetCounter("LogChunks");
     UncommitedDataChunks = ChunksGroup->GetCounter("UncommitedDataChunks");
     CommitedDataChunks = ChunksGroup->GetCounter("CommitedDataChunks");
-    LockedChunks = ChunksGroup->GetCounter("LockedChunks");
-    QuarantineChunks = ChunksGroup->GetCounter("QuarantineChunks");
-    QuarantineOwners = ChunksGroup->GetCounter("QuarantineOwners");
+    LockedChunks = ChunksGroup->GetCounter("LockedChunks"); 
+    QuarantineChunks = ChunksGroup->GetCounter("QuarantineChunks"); 
+    QuarantineOwners = ChunksGroup->GetCounter("QuarantineOwners"); 
 
     // stats subgroup
     StatsGroup = (cfg && cfg->PDiskCategory.IsSolidState())
@@ -34,31 +34,31 @@ TPDiskMon::TPDiskMon(const TIntrusivePtr<NMonitoring::TDynamicCounters>& counter
 
     FreeSpacePerMile = StatsGroup->GetCounter("FreeSpacePerMile");
     UsedSpacePerMile = StatsGroup->GetCounter("UsedSpacePerMile");
-    SplicedLogChunks = StatsGroup->GetCounter("SplicedLogChunks", true);
+    SplicedLogChunks = StatsGroup->GetCounter("SplicedLogChunks", true); 
 
-    TotalSpaceBytes = StatsGroup->GetCounter("TotalSpaceBytes");
-    FreeSpaceBytes = StatsGroup->GetCounter("FreeSpaceBytes");
-    UsedSpaceBytes = StatsGroup->GetCounter("UsedSpaceBytes");
-    SectorMapAllocatedBytes = StatsGroup->GetCounter("SectorMapAllocatedBytes");
-
+    TotalSpaceBytes = StatsGroup->GetCounter("TotalSpaceBytes"); 
+    FreeSpaceBytes = StatsGroup->GetCounter("FreeSpaceBytes"); 
+    UsedSpaceBytes = StatsGroup->GetCounter("UsedSpaceBytes"); 
+    SectorMapAllocatedBytes = StatsGroup->GetCounter("SectorMapAllocatedBytes"); 
+ 
     // states subgroup
     PDiskState = StateGroup->GetCounter("PDiskState");
-    PDiskBriefState = StateGroup->GetCounter("PDiskBriefState");
-    PDiskDetailedState = StateGroup->GetCounter("PDiskDetailedState");
-    AtLeastOneVDiskNotLogged = StateGroup->GetCounter("AtLeastOneVDiskNotLogged");
-    TooMuchLogChunks = StateGroup->GetCounter("TooMuchLogChunks");
-    SerialNumberMismatched = StateGroup->GetCounter("SerialNumberMismatched");
+    PDiskBriefState = StateGroup->GetCounter("PDiskBriefState"); 
+    PDiskDetailedState = StateGroup->GetCounter("PDiskDetailedState"); 
+    AtLeastOneVDiskNotLogged = StateGroup->GetCounter("AtLeastOneVDiskNotLogged"); 
+    TooMuchLogChunks = StateGroup->GetCounter("TooMuchLogChunks"); 
+    SerialNumberMismatched = StateGroup->GetCounter("SerialNumberMismatched"); 
     L6. Initialize(StateGroup, "L6");
-    L7. Initialize(StateGroup, "L7");
-    IdleLight.Initialize(StateGroup, "DeviceBusyPeriods", "DeviceIdleTimeMsPerSec", "DeviceBusyTimeMsPerSec");
+    L7. Initialize(StateGroup, "L7"); 
+    IdleLight.Initialize(StateGroup, "DeviceBusyPeriods", "DeviceIdleTimeMsPerSec", "DeviceBusyTimeMsPerSec"); 
 
-    OwnerIdsIssued = StateGroup->GetCounter("OwnerIdsIssued");
-    LastOwnerId = StateGroup->GetCounter("LastOwnerId");
-    PendingYardInits = StateGroup->GetCounter("PendingYardInits");
-
-    SeqnoL6 = 0;
-    LastDoneOperationTimestamp = 0;
-
+    OwnerIdsIssued = StateGroup->GetCounter("OwnerIdsIssued"); 
+    LastOwnerId = StateGroup->GetCounter("LastOwnerId"); 
+    PendingYardInits = StateGroup->GetCounter("PendingYardInits"); 
+ 
+    SeqnoL6 = 0; 
+    LastDoneOperationTimestamp = 0; 
+ 
     // device subgroup
     DeviceBytesRead = DeviceGroup->GetCounter("DeviceBytesRead", true);
     DeviceBytesWritten = DeviceGroup->GetCounter("DeviceBytesWritten", true);
@@ -69,33 +69,33 @@ TPDiskMon::TPDiskMon(const TIntrusivePtr<NMonitoring::TDynamicCounters>& counter
     DeviceInFlightReads = DeviceGroup->GetCounter("DeviceInFlightReads");
     DeviceInFlightWrites = DeviceGroup->GetCounter("DeviceInFlightWrites");
     DeviceTakeoffs = DeviceGroup->GetCounter("DeviceTakeoffs");
-    DeviceLandings = DeviceGroup->GetCounter("DeviceLandings");
+    DeviceLandings = DeviceGroup->GetCounter("DeviceLandings"); 
     DeviceHaltDetected = DeviceGroup->GetCounter("DeviceHaltDetected");
     DeviceExpectedSeeks = DeviceGroup->GetCounter("DeviceExpectedSeeks", true);
     DeviceReadCacheHits = DeviceGroup->GetCounter("DeviceReadCacheHits", true);
     DeviceReadCacheMisses = DeviceGroup->GetCounter("DeviceReadCacheMisses", true);
     DeviceWriteCacheIsValid = DeviceGroup->GetCounter("DeviceWriteCacheIsValid");
     DeviceWriteCacheIsEnabled = DeviceGroup->GetCounter("DeviceWriteCacheIsEnabled");
-    DeviceOperationPoolTotalAllocations = DeviceGroup->GetCounter("DeviceOperationPoolTotalAllocations");
-    DeviceOperationPoolFreeObjectsMin = DeviceGroup->GetCounter("DeviceOperationPoolFreeObjectsMin");
-    DeviceBufferPoolFailedAllocations = DeviceGroup->GetCounter("DeviceBufferPoolFailedAllocations");
-    DeviceErasureSectorRestorations = DeviceGroup->GetCounter("DeviceErasureSectorRestorations");
+    DeviceOperationPoolTotalAllocations = DeviceGroup->GetCounter("DeviceOperationPoolTotalAllocations"); 
+    DeviceOperationPoolFreeObjectsMin = DeviceGroup->GetCounter("DeviceOperationPoolFreeObjectsMin"); 
+    DeviceBufferPoolFailedAllocations = DeviceGroup->GetCounter("DeviceBufferPoolFailedAllocations"); 
+    DeviceErasureSectorRestorations = DeviceGroup->GetCounter("DeviceErasureSectorRestorations"); 
     DeviceEstimatedCostNs = DeviceGroup->GetCounter("DeviceEstimatedCostNs", true);
     DeviceActualCostNs = DeviceGroup->GetCounter("DeviceActualCostNs", true);
     DeviceOverestimationRatio = DeviceGroup->GetCounter("DeviceOverestimationRatio");
     DeviceNonperformanceMs = DeviceGroup->GetCounter("DeviceNonperformanceMs");
     DeviceInterruptedSystemCalls = DeviceGroup->GetCounter("DeviceInterruptedSystemCalls", true);
-    DeviceSubmitThreadBusyTimeNs = DeviceGroup->GetCounter("DeviceSubmitThreadBusyTimeNs", true);
-    DeviceCompletionThreadBusyTimeNs = DeviceGroup->GetCounter("DeviceCompletionThreadBusyTimeNs", true);
-    DeviceIoErrors = DeviceGroup->GetCounter("DeviceIoErrors", true);
+    DeviceSubmitThreadBusyTimeNs = DeviceGroup->GetCounter("DeviceSubmitThreadBusyTimeNs", true); 
+    DeviceCompletionThreadBusyTimeNs = DeviceGroup->GetCounter("DeviceCompletionThreadBusyTimeNs", true); 
+    DeviceIoErrors = DeviceGroup->GetCounter("DeviceIoErrors", true); 
 
-    UpdateDurationTracker.SetCounter(DeviceGroup->GetCounter("PDiskThreadBusyTimeNs", true));
-
+    UpdateDurationTracker.SetCounter(DeviceGroup->GetCounter("PDiskThreadBusyTimeNs", true)); 
+ 
     // queue subgroup
     QueueRequests = QueueGroup->GetCounter("QueueRequests", true);
     QueueBytes = QueueGroup->GetCounter("QueueBytes", true);
 
-    auto deviceType = cfg ? cfg->PDiskCategory.Type() : TPDiskCategory::DEVICE_TYPE_UNKNOWN;
+    auto deviceType = cfg ? cfg->PDiskCategory.Type() : TPDiskCategory::DEVICE_TYPE_UNKNOWN; 
 
     // scheduler subgroup
     ForsetiCbsNotFound = SchedulerGroup->GetCounter("ForsetiCbsNotFound");
@@ -106,11 +106,11 @@ TPDiskMon::TPDiskMon(const TIntrusivePtr<NMonitoring::TDynamicCounters>& counter
     percentiles.push_back(0.99f);
     percentiles.push_back(1.00f);
 
-    UpdateDurationTracker.UpdateCycleTime.Initialize(counters, "subsystem", "updateCycle", "Time in millisec", percentiles);
+    UpdateDurationTracker.UpdateCycleTime.Initialize(counters, "subsystem", "updateCycle", "Time in millisec", percentiles); 
 
-    DeviceReadDuration.Initialize(counters, "deviceReadDuration", deviceType);
-    DeviceWriteDuration.Initialize(counters, "deviceWriteDuration", deviceType);
-    DeviceTrimDuration.Initialize(counters, "deviceTrimDuration", deviceType);
+    DeviceReadDuration.Initialize(counters, "deviceReadDuration", deviceType); 
+    DeviceWriteDuration.Initialize(counters, "deviceWriteDuration", deviceType); 
+    DeviceTrimDuration.Initialize(counters, "deviceTrimDuration", deviceType); 
 
     LogQueueTime.Initialize(counters, "subsystem", "logQueueTime", "Time in millisec", percentiles);
     GetQueueSyncLog.Initialize(counters, "subsystem", "getQueueSyncLog", "Time in millisec", percentiles);
@@ -146,19 +146,19 @@ TPDiskMon::TPDiskMon(const TIntrusivePtr<NMonitoring::TDynamicCounters>& counter
     WriteHullHugeSizeBytes.Initialize(counters, "subsystem", "writeHullHugeSize", "Size in bytes", percentiles);
     WriteHullCompSizeBytes.Initialize(counters, "subsystem", "writeHullCompSize", "Size in bytes", percentiles);
 
-    LogResponseTime.Initialize(counters, "logresponse", deviceType);
-    GetResponseSyncLog.Initialize(counters, "getResponseSyncLog", deviceType);
+    LogResponseTime.Initialize(counters, "logresponse", deviceType); 
+    GetResponseSyncLog.Initialize(counters, "getResponseSyncLog", deviceType); 
 
-    GetResponseHullComp.Initialize(counters, "getResponseHullComp", deviceType);
-    GetResponseHullOnlineRt.Initialize(counters, "getResponseHullOnlineRt", deviceType);
-    GetResponseHullOnlineOther.Initialize(counters, "getResponseHullOnlineOther", deviceType);
-    GetResponseHullLoad.Initialize(counters, "getResponseHullLoad", deviceType);
-    GetResponseHullLow.Initialize(counters, "getResponseHullLow", deviceType);
+    GetResponseHullComp.Initialize(counters, "getResponseHullComp", deviceType); 
+    GetResponseHullOnlineRt.Initialize(counters, "getResponseHullOnlineRt", deviceType); 
+    GetResponseHullOnlineOther.Initialize(counters, "getResponseHullOnlineOther", deviceType); 
+    GetResponseHullLoad.Initialize(counters, "getResponseHullLoad", deviceType); 
+    GetResponseHullLow.Initialize(counters, "getResponseHullLow", deviceType); 
 
-    WriteResponseSyncLog.Initialize(counters, "writeResponseSyncLog", deviceType);
-    WriteResponseHullFresh.Initialize(counters, "writeResponseHullFresh", deviceType);
-    WriteResponseHullHuge.Initialize(counters, "writeResponseHullHuge", deviceType);
-    WriteResponseHullComp.Initialize(counters, "writeResponseHullComp", deviceType);
+    WriteResponseSyncLog.Initialize(counters, "writeResponseSyncLog", deviceType); 
+    WriteResponseHullFresh.Initialize(counters, "writeResponseHullFresh", deviceType); 
+    WriteResponseHullHuge.Initialize(counters, "writeResponseHullHuge", deviceType); 
+    WriteResponseHullComp.Initialize(counters, "writeResponseHullComp", deviceType); 
 
     // bandwidth
     BandwidthPLogPayload = BandwidthGroup->GetCounter("Bandwidth/PDisk/Log/Payload", true);
@@ -185,10 +185,10 @@ TPDiskMon::TPDiskMon(const TIntrusivePtr<NMonitoring::TDynamicCounters>& counter
 
     // pdisk (interface)
     YardInit.Setup(PDiskGroup, "YardInit");
-    CheckSpace.Setup(PDiskGroup, "YardCheckSpace");
+    CheckSpace.Setup(PDiskGroup, "YardCheckSpace"); 
     YardConfigureScheduler.Setup(PDiskGroup, "YardConfigureScheduler");
-    ChunkReserve.Setup(PDiskGroup, "YardChunkReserve");
-    Harakiri.Setup(PDiskGroup, "YardHarakiri");
+    ChunkReserve.Setup(PDiskGroup, "YardChunkReserve"); 
+    Harakiri.Setup(PDiskGroup, "YardHarakiri"); 
     YardSlay.Setup(PDiskGroup, "YardSlay");
     YardControl.Setup(PDiskGroup, "YardControl");
 
@@ -209,13 +209,13 @@ TPDiskMon::TPDiskMon(const TIntrusivePtr<NMonitoring::TDynamicCounters>& counter
 
     WriteLog.Setup(PDiskGroup, "WriteLog");
     WriteHugeLog.Setup(PDiskGroup, "WriteHugeLog");
-    LogRead.Setup(PDiskGroup, "ReadLog");
-
-    PDiskThreadCPU = PDiskGroup->GetCounter("PDiskThreadCPU", true);
-    SubmitThreadCPU = PDiskGroup->GetCounter("SubmitThreadCPU", true);
-    GetThreadCPU = PDiskGroup->GetCounter("GetThreadCPU", true);
-    TrimThreadCPU = PDiskGroup->GetCounter("TrimThreadCPU", true);
-    CompletionThreadCPU = PDiskGroup->GetCounter("CompletionThreadCPU", true);
+    LogRead.Setup(PDiskGroup, "ReadLog"); 
+ 
+    PDiskThreadCPU = PDiskGroup->GetCounter("PDiskThreadCPU", true); 
+    SubmitThreadCPU = PDiskGroup->GetCounter("SubmitThreadCPU", true); 
+    GetThreadCPU = PDiskGroup->GetCounter("GetThreadCPU", true); 
+    TrimThreadCPU = PDiskGroup->GetCounter("TrimThreadCPU", true); 
+    CompletionThreadCPU = PDiskGroup->GetCounter("CompletionThreadCPU", true); 
 }
 
 NMonitoring::TDynamicCounters::TCounterPtr TPDiskMon::GetBusyPeriod(const TString& owner, const TString& queue) {
@@ -262,7 +262,7 @@ void TPDiskMon::IncrementQueueTime(ui8 priorityClass, size_t timeMs) {
     }
 }
 
-void TPDiskMon::IncrementResponseTime(ui8 priorityClass, double timeMs, size_t sizeBytes) {
+void TPDiskMon::IncrementResponseTime(ui8 priorityClass, double timeMs, size_t sizeBytes) { 
     switch (priorityClass) {
         case NPriRead::SyncLog:
             GetResponseSyncLog.Increment(timeMs);
@@ -314,7 +314,7 @@ void TPDiskMon::IncrementResponseTime(ui8 priorityClass, double timeMs, size_t s
 
 void TPDiskMon::UpdatePercentileTrackers() {
 
-    UpdateDurationTracker.UpdateCycleTime.Update();
+    UpdateDurationTracker.UpdateCycleTime.Update(); 
 
     LogOperationSizeBytes.Update();
 
@@ -352,22 +352,22 @@ void TPDiskMon::UpdatePercentileTrackers() {
 }
 
 void TPDiskMon::UpdateLights() {
-    if (HPSecondsFloat(std::abs(HPNow() - AtomicGet(LastDoneOperationTimestamp))) > 15.0) {
-        auto seqnoL6 = AtomicGetAndIncrement(SeqnoL6);
-        L6.Set(false, seqnoL6);
-    }
-
+    if (HPSecondsFloat(std::abs(HPNow() - AtomicGet(LastDoneOperationTimestamp))) > 15.0) { 
+        auto seqnoL6 = AtomicGetAndIncrement(SeqnoL6); 
+        L6.Set(false, seqnoL6); 
+    } 
+ 
     L6. Update();
-    L7. Update();
-    IdleLight.Update();
-}
+    L7. Update(); 
+    IdleLight.Update(); 
+} 
 
-bool TPDiskMon::UpdateDeviceHaltCounters() {
-    NHPTimer::STime hpNow = HPNow();
-    if (*DeviceTakeoffs != *DeviceLandings) {
+bool TPDiskMon::UpdateDeviceHaltCounters() { 
+    NHPTimer::STime hpNow = HPNow(); 
+    if (*DeviceTakeoffs != *DeviceLandings) { 
         // Halt?
         if (*DeviceTakeoffs == LastHaltDeviceTakeoffs &&
-                *DeviceLandings == LastHaltDeviceLandings &&
+                *DeviceLandings == LastHaltDeviceLandings && 
                 LastHaltDeviceLandings != LastHaltDeviceTakeoffs) {
             // Halt!
             if (hpNow > LastHaltTimestamp) {
@@ -375,19 +375,19 @@ bool TPDiskMon::UpdateDeviceHaltCounters() {
                 if (haltDuration > 7.5) {
                     *DeviceHaltDetected = 1;
                 }
-                if (haltDuration >= 60.0) {
-                    return true;
-                }
+                if (haltDuration >= 60.0) { 
+                    return true; 
+                } 
             } else {
                 LastHaltTimestamp = hpNow;
             }
         } else {
             LastHaltDeviceTakeoffs = *DeviceTakeoffs;
-            LastHaltDeviceLandings = *DeviceLandings;
+            LastHaltDeviceLandings = *DeviceLandings; 
             LastHaltTimestamp = hpNow;
         }
     }
-    return false;
+    return false; 
 }
 
 void TPDiskMon::UpdateStats() {

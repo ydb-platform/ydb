@@ -19,7 +19,7 @@ Y_UNIT_TEST_SUITE(TBase64DecodeUneven) {
 
         UNIT_ASSERT_VALUES_EQUAL(encoded, Base64Encode(wikipedia_slogan));
         UNIT_ASSERT_VALUES_EQUAL(wikipedia_slogan, Base64DecodeUneven(encoded));
-
+ 
         const TString encoded_url1 =
             "TWFuIGlzIGRpc3Rpbmd1aXNoZWQsIG5vdCBvbmx5IGJ5IGhpcyByZWFzb24sIGJ1dCBieSB0"
             "aGlzIHNpbmd1bGFyIHBhc3Npb24gZnJvbSBvdGhlciBhbmltYWxzLCB3aGljaCBpcyBhIGx1"
@@ -34,7 +34,7 @@ Y_UNIT_TEST_SUITE(TBase64DecodeUneven) {
             "LCBleGNlZWRzIHRoZSBzaG9ydCB2ZWhlbWVuY2Ugb2YgYW55IGNhcm5hbCBwbGVhc3VyZS4";
         UNIT_ASSERT_VALUES_EQUAL(wikipedia_slogan, Base64DecodeUneven(encoded_url1));
         UNIT_ASSERT_VALUES_EQUAL(wikipedia_slogan, Base64DecodeUneven(encoded_url2));
-
+ 
         const TString lp = "Linkin Park";
         UNIT_ASSERT_VALUES_EQUAL(lp, Base64DecodeUneven(Base64Encode(lp)));
         UNIT_ASSERT_VALUES_EQUAL(lp, Base64DecodeUneven(Base64EncodeUrl(lp)));
@@ -43,4 +43,4 @@ Y_UNIT_TEST_SUITE(TBase64DecodeUneven) {
         UNIT_ASSERT_VALUES_EQUAL(dp, Base64DecodeUneven(Base64Encode(dp)));
         UNIT_ASSERT_VALUES_EQUAL(dp, Base64DecodeUneven(Base64EncodeUrl(dp)));
     }
-}
+} 

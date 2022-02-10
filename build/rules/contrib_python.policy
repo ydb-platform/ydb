@@ -1,5 +1,5 @@
 # django-1.11 deprecation
-ALLOW contrib/python/.*/tests? -> contrib/python/django/django-1.11
+ALLOW contrib/python/.*/tests? -> contrib/python/django/django-1.11 
 ALLOW contrib/deprecated/python/.*/tests? -> contrib/python/django/django-1.11
 ALLOW ads/yacontext/apps/procontext -> contrib/python/django/django-1.11
 ALLOW devtools/dummy_arcadia/django_settings -> contrib/python/django/django-1.11

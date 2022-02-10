@@ -97,7 +97,7 @@ namespace boost { namespace spirit { namespace lex
     template <typename Iterator, typename Lexer, typename ParserExpr
       , typename Skipper, BOOST_PP_ENUM_PARAMS(N, typename A)>
     inline bool
-    tokenize_and_phrase_parse(Iterator& first, Iterator last, Lexer const&
+    tokenize_and_phrase_parse(Iterator& first, Iterator last, Lexer const& 
       , ParserExpr const& expr, Skipper const& skipper
       , BOOST_PP_ENUM_BINARY_PARAMS(N, A, & attr))
     {

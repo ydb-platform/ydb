@@ -827,7 +827,7 @@ RECURSE(
     pyketama
     pylev
     pylint
-    pylxd
+    pylxd 
     pylzma
     pymaven-patch
     PyMeeus

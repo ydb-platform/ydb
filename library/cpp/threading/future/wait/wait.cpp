@@ -1,40 +1,40 @@
 #include "wait.h"
 
-#include "wait_group.h"
-#include "wait_policy.h"
-
+#include "wait_group.h" 
+#include "wait_policy.h" 
+ 
 namespace NThreading {
     namespace {
-        template <class WaitPolicy>
+        template <class WaitPolicy> 
         TFuture<void> WaitGeneric(const TFuture<void>& f1) {
-            return f1;
-        }
+            return f1; 
+        } 
 
-        template <class WaitPolicy>
+        template <class WaitPolicy> 
         TFuture<void> WaitGeneric(const TFuture<void>& f1, const TFuture<void>& f2) {
-            TWaitGroup<WaitPolicy> wg;
+            TWaitGroup<WaitPolicy> wg; 
 
-            wg.Add(f1).Add(f2);
+            wg.Add(f1).Add(f2); 
 
-            return std::move(wg).Finish();
-        }
+            return std::move(wg).Finish(); 
+        } 
 
         template <class WaitPolicy>
         TFuture<void> WaitGeneric(TArrayRef<const TFuture<void>> futures) {
-            if (futures.empty()) {
-                return MakeFuture();
+            if (futures.empty()) { 
+                return MakeFuture(); 
             }
-            if (futures.size() == 1) {
+            if (futures.size() == 1) { 
                 return futures.front();
             }
 
-            TWaitGroup<WaitPolicy> wg;
-            for (const auto& fut : futures) {
-                wg.Add(fut);
+            TWaitGroup<WaitPolicy> wg; 
+            for (const auto& fut : futures) { 
+                wg.Add(fut); 
             }
 
-            return std::move(wg).Finish();
-        }
+            return std::move(wg).Finish(); 
+        } 
     }
 
     ////////////////////////////////////////////////////////////////////////////////

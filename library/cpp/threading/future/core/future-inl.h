@@ -58,7 +58,7 @@ namespace NThreading {
                     state = AtomicGet(State);
                 }
 
-                TryRethrowWithState(state);
+                TryRethrowWithState(state); 
 
                 switch (AtomicGetAndCas(&State, acquireState, ValueSet)) {
                     case ValueSet:
@@ -106,11 +106,11 @@ namespace NThreading {
                 return AtomicGet(State) >= ValueMoved; // ValueMoved, ValueSet, ValueRead
             }
 
-            void TryRethrow() const {
-                int state = AtomicGet(State);
-                TryRethrowWithState(state);
-            }
-
+            void TryRethrow() const { 
+                int state = AtomicGet(State); 
+                TryRethrowWithState(state); 
+            } 
+ 
             bool HasException() const {
                 return AtomicGet(State) == ExceptionSet;
             }
@@ -243,13 +243,13 @@ namespace NThreading {
                 Y_ASSERT(readyEvent);
                 return readyEvent->WaitD(deadline);
             }
-
-            void TryRethrowWithState(int state) const {
-                if (Y_UNLIKELY(state == ExceptionSet)) {
-                    Y_ASSERT(Exception);
-                    std::rethrow_exception(Exception);
-                }
-            }
+ 
+            void TryRethrowWithState(int state) const { 
+                if (Y_UNLIKELY(state == ExceptionSet)) { 
+                    Y_ASSERT(Exception); 
+                    std::rethrow_exception(Exception); 
+                } 
+            } 
         };
 
         ////////////////////////////////////////////////////////////////////////////////
@@ -287,11 +287,11 @@ namespace NThreading {
                 return AtomicGet(State) == ValueSet;
             }
 
-            void TryRethrow() const {
-                int state = AtomicGet(State);
-                TryRethrowWithState(state);
-            }
-
+            void TryRethrow() const { 
+                int state = AtomicGet(State); 
+                TryRethrowWithState(state); 
+            } 
+ 
             bool HasException() const {
                 return AtomicGet(State) == ExceptionSet;
             }
@@ -310,7 +310,7 @@ namespace NThreading {
                     state = AtomicGet(State);
                 }
 
-                TryRethrowWithState(state);
+                TryRethrowWithState(state); 
 
                 Y_ASSERT(state == ValueSet);
             }
@@ -429,13 +429,13 @@ namespace NThreading {
                 Y_ASSERT(readyEvent);
                 return readyEvent->WaitD(deadline);
             }
-
-            void TryRethrowWithState(int state) const {
-                if (Y_UNLIKELY(state == ExceptionSet)) {
-                    Y_ASSERT(Exception);
-                    std::rethrow_exception(Exception);
-                }
-            }
+ 
+            void TryRethrowWithState(int state) const { 
+                if (Y_UNLIKELY(state == ExceptionSet)) { 
+                    Y_ASSERT(Exception); 
+                    std::rethrow_exception(Exception); 
+                } 
+            } 
         };
 
         ////////////////////////////////////////////////////////////////////////////////
@@ -469,7 +469,7 @@ namespace NThreading {
         inline void SetValueImpl(TPromise<void>& promise, const TFuture<T>& future) {
             future.Subscribe([=](const TFuture<T>& f) mutable {
                 try {
-                    f.TryRethrow();
+                    f.TryRethrow(); 
                 } catch (...) {
                     promise.SetException(std::current_exception());
                     return;
@@ -571,13 +571,13 @@ namespace NThreading {
     }
 
     template <typename T>
-    inline void TFuture<T>::TryRethrow() const {
-        if (State) {
-            State->TryRethrow();
-        }
-    }
-
-    template <typename T>
+    inline void TFuture<T>::TryRethrow() const { 
+        if (State) { 
+            State->TryRethrow(); 
+        } 
+    } 
+ 
+    template <typename T> 
     inline bool TFuture<T>::HasException() const {
         return State && State->HasException();
     }
@@ -612,13 +612,13 @@ namespace NThreading {
 
     template <typename T>
     template <typename F>
-    inline const TFuture<T>& TFuture<T>::NoexceptSubscribe(F&& func) const noexcept {
-        return Subscribe(std::forward<F>(func));
-    }
-
-
-    template <typename T>
-    template <typename F>
+    inline const TFuture<T>& TFuture<T>::NoexceptSubscribe(F&& func) const noexcept { 
+        return Subscribe(std::forward<F>(func)); 
+    } 
+ 
+ 
+    template <typename T> 
+    template <typename F> 
     inline TFuture<TFutureType<TFutureCallResult<F, T>>> TFuture<T>::Apply(F&& func) const {
         auto promise = NewPromise<TFutureType<TFutureCallResult<F, T>>>();
         Subscribe([promise, func = std::forward<F>(func)](const TFuture<T>& future) mutable {
@@ -677,12 +677,12 @@ namespace NThreading {
         GetValue(TDuration::Max());
     }
 
-    inline void TFuture<void>::TryRethrow() const {
-        if (State) {
-            State->TryRethrow();
-        }
-    }
-
+    inline void TFuture<void>::TryRethrow() const { 
+        if (State) { 
+            State->TryRethrow(); 
+        } 
+    } 
+ 
     inline bool TFuture<void>::HasException() const {
         return State && State->HasException();
     }
@@ -712,12 +712,12 @@ namespace NThreading {
     }
 
     template <typename F>
-    inline const TFuture<void>& TFuture<void>::NoexceptSubscribe(F&& func) const noexcept {
-        return Subscribe(std::forward<F>(func));
-    }
-
-
-    template <typename F>
+    inline const TFuture<void>& TFuture<void>::NoexceptSubscribe(F&& func) const noexcept { 
+        return Subscribe(std::forward<F>(func)); 
+    } 
+ 
+ 
+    template <typename F> 
     inline TFuture<TFutureType<TFutureCallResult<F, void>>> TFuture<void>::Apply(F&& func) const {
         auto promise = NewPromise<TFutureType<TFutureCallResult<F, void>>>();
         Subscribe([promise, func = std::forward<F>(func)](const TFuture<void>& future) mutable {
@@ -731,7 +731,7 @@ namespace NThreading {
         auto promise = NewPromise<R>();
         Subscribe([=](const TFuture<void>& future) mutable {
             try {
-                future.TryRethrow();
+                future.TryRethrow(); 
             } catch (...) {
                 promise.SetException(std::current_exception());
                 return;
@@ -810,13 +810,13 @@ namespace NThreading {
     }
 
     template <typename T>
-    inline void TPromise<T>::TryRethrow() const {
-        if (State) {
-            State->TryRethrow();
-        }
-    }
-
-    template <typename T>
+    inline void TPromise<T>::TryRethrow() const { 
+        if (State) { 
+            State->TryRethrow(); 
+        } 
+    } 
+ 
+    template <typename T> 
     inline bool TPromise<T>::HasException() const {
         return State && State->HasException();
     }
@@ -892,12 +892,12 @@ namespace NThreading {
         return State->TrySetValue();
     }
 
-    inline void TPromise<void>::TryRethrow() const {
-        if(State) {
-            State->TryRethrow();
-        }
-    }
-
+    inline void TPromise<void>::TryRethrow() const { 
+        if(State) { 
+            State->TryRethrow(); 
+        } 
+    } 
+ 
     inline bool TPromise<void>::HasException() const {
         return State && State->HasException();
     }

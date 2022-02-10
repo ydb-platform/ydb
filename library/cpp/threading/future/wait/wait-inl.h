@@ -1,7 +1,7 @@
 #pragma once
 
 #if !defined(INCLUDE_FUTURE_INL_H)
-#error "you should never include wait-inl.h directly"
+#error "you should never include wait-inl.h directly" 
 #endif // INCLUDE_FUTURE_INL_H
 
 namespace NThreading {
@@ -16,7 +16,7 @@ namespace NThreading {
             }
 
             return voidFutures;
-        }
+        } 
     }
 
     template <typename TContainer>

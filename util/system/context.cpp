@@ -115,16 +115,16 @@ namespace {
     }
 
     #if defined(_x86_64_)
-    // not sure if Y_NO_SANITIZE is needed
+    // not sure if Y_NO_SANITIZE is needed 
     Y_NO_SANITIZE("address")
     Y_NO_SANITIZE("memory") extern "C" void ContextTrampoLine(void*, void*, void*, void*, void*, void*, // register arguments, no defined value
                                                               /* first argument passed through the stack */ void* t1,
                                                               /* second argument passed through the stack */ void* t2) {
-        Y_ASSERT(t1 == t2);
-        Run(t1);
-    }
+        Y_ASSERT(t1 == t2); 
+        Run(t1); 
+    } 
     #else
-    Y_NO_SANITIZE("address")
+    Y_NO_SANITIZE("address") 
     Y_NO_SANITIZE("memory") static void ContextTrampoLine() {
         void** argPtr = (void**)((char*)AlignUp(&argPtr + EXTRA_PUSH_ARGS, STACK_ALIGN) + STACK_ALIGN);
         Y_ASSERT(*(argPtr - 1) == *(argPtr - 2));
@@ -169,12 +169,12 @@ TContMachineContext::TContMachineContext(const TContClosure& c)
     #endif
 
     #if defined(_x86_64_)
-    stack.ReAlign();
-    // push twice to preserve alignment by 16
-    stack.Push(trampoline); // second stack argument
-    stack.Push(trampoline); // first stack argument
-
-    stack.Push(nullptr); // fake return address
+    stack.ReAlign(); 
+    // push twice to preserve alignment by 16 
+    stack.Push(trampoline); // second stack argument 
+    stack.Push(trampoline); // first stack argument 
+ 
+    stack.Push(nullptr); // fake return address 
     #else
     stack.Push(trampoline);
     stack.Push(trampoline);

@@ -2,8 +2,8 @@
 
 #include "fwd.h"
 
-#include <library/cpp/threading/future/core/future.h>
-#include <library/cpp/threading/future/wait/wait_group.h>
+#include <library/cpp/threading/future/core/future.h> 
+#include <library/cpp/threading/future/wait/wait_group.h> 
 
 #include <util/generic/array_ref.h>
 
@@ -37,5 +37,5 @@ namespace NThreading {
 }
 
 #define INCLUDE_FUTURE_INL_H
-#include "wait-inl.h"
+#include "wait-inl.h" 
 #undef INCLUDE_FUTURE_INL_H

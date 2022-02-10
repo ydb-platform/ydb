@@ -54,8 +54,8 @@ static inline void ReleaseSpinLock(TAtomic* l) {
  */
 class TSpinLock: public TSpinLockBase {
 public:
-    using TSpinLockBase::TSpinLockBase;
-
+    using TSpinLockBase::TSpinLockBase; 
+ 
     inline void Release() noexcept {
         ReleaseSpinLock(&Val_);
     }
@@ -89,8 +89,8 @@ static inline void ReleaseAdaptiveLock(TAtomic* l) {
 
 class TAdaptiveLock: public TSpinLockBase {
 public:
-    using TSpinLockBase::TSpinLockBase;
-
+    using TSpinLockBase::TSpinLockBase; 
+ 
     inline void Release() noexcept {
         ReleaseAdaptiveLock(&Val_);
     }

@@ -4,12 +4,12 @@
 
 #include <util/generic/ptr.h>
 
-#include <functional>
-
+#include <functional> 
+ 
 class TThreadedLogBackend: public TLogBackend {
 public:
     TThreadedLogBackend(TLogBackend* slave);
-    TThreadedLogBackend(TLogBackend* slave, size_t queuelen, std::function<void()> queueOverflowCallback = {});
+    TThreadedLogBackend(TLogBackend* slave, size_t queuelen, std::function<void()> queueOverflowCallback = {}); 
     ~TThreadedLogBackend() override;
 
     void WriteData(const TLogRecord& rec) override;
@@ -29,6 +29,6 @@ private:
 class TOwningThreadedLogBackend: private THolder<TLogBackend>, public TThreadedLogBackend {
 public:
     TOwningThreadedLogBackend(TLogBackend* slave);
-    TOwningThreadedLogBackend(TLogBackend* slave, size_t queuelen, std::function<void()> queueOverflowCallback = {});
+    TOwningThreadedLogBackend(TLogBackend* slave, size_t queuelen, std::function<void()> queueOverflowCallback = {}); 
     ~TOwningThreadedLogBackend() override;
 };

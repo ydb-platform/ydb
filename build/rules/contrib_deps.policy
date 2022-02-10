@@ -65,8 +65,8 @@ ALLOW contrib/tests/subvertpy -> devtools/ya/yalibrary/svn/testing
 ALLOW contrib/tests/subvertpy -> library/python/windows
 ALLOW contrib/tests/subvertpy -> vcs/svn/wc/client
 
-ALLOW contrib/tools/unbound -> infra/libs
-ALLOW contrib/tools/unbound -> library/cpp/proto_config
+ALLOW contrib/tools/unbound -> infra/libs 
+ALLOW contrib/tools/unbound -> library/cpp/proto_config 
 
 ALLOW contrib/python/marshmallow-mongoengine/py[23]/tests -> library/python/pytest-mongodb
 

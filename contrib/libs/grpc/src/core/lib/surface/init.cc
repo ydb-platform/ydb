@@ -30,12 +30,12 @@
 #include <grpc/support/time.h>
 
 #include "src/core/lib/channel/channel_stack.h"
-#include "src/core/lib/channel/channelz_registry.h" 
+#include "src/core/lib/channel/channelz_registry.h"
 #include "src/core/lib/channel/connected_channel.h"
 #include "src/core/lib/channel/handshaker_registry.h"
 #include "src/core/lib/debug/stats.h"
 #include "src/core/lib/debug/trace.h"
-#include "src/core/lib/gprpp/fork.h" 
+#include "src/core/lib/gprpp/fork.h"
 #include "src/core/lib/gprpp/sync.h"
 #include "src/core/lib/http/parser.h"
 #include "src/core/lib/iomgr/call_combiner.h"
@@ -135,20 +135,20 @@ void grpc_init(void) {
       g_shutting_down = false;
       gpr_cv_broadcast(g_shutting_down_cv);
     }
-    grpc_core::Fork::GlobalInit(); 
-    grpc_fork_handlers_auto_register(); 
+    grpc_core::Fork::GlobalInit();
+    grpc_fork_handlers_auto_register();
     grpc_stats_init();
     grpc_init_static_metadata_ctx();
     grpc_slice_intern_init();
     grpc_mdctx_global_init();
     grpc_channel_init_init();
-    grpc_core::channelz::ChannelzRegistry::Init(); 
+    grpc_core::channelz::ChannelzRegistry::Init();
     grpc_security_pre_init();
-    grpc_core::ApplicationCallbackExecCtx::GlobalInit(); 
+    grpc_core::ApplicationCallbackExecCtx::GlobalInit();
     grpc_core::ExecCtx::GlobalInit();
     grpc_iomgr_init();
     gpr_timers_global_init();
-    grpc_core::HandshakerRegistry::Init(); 
+    grpc_core::HandshakerRegistry::Init();
     grpc_security_init();
     for (i = 0; i < g_number_of_plugins; i++) {
       if (g_all_of_the_plugins[i].init != nullptr) {

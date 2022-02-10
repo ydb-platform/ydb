@@ -19,7 +19,7 @@ import threading
 from grpc.framework.foundation import stream
 
 _NO_VALUE = object()
-_LOGGER = logging.getLogger(__name__) 
+_LOGGER = logging.getLogger(__name__)
 
 
 class TransformingConsumer(stream.Consumer):
@@ -47,10 +47,10 @@ class IterableConsumer(stream.Consumer):
         self._values = []
         self._active = True
 
-    def consume(self, value): 
+    def consume(self, value):
         with self._condition:
             if self._active:
-                self._values.append(value) 
+                self._values.append(value)
                 self._condition.notify()
 
     def terminate(self):
@@ -58,10 +58,10 @@ class IterableConsumer(stream.Consumer):
             self._active = False
             self._condition.notify()
 
-    def consume_and_terminate(self, value): 
+    def consume_and_terminate(self, value):
         with self._condition:
             if self._active:
-                self._values.append(value) 
+                self._values.append(value)
                 self._active = False
                 self._condition.notify()
 
@@ -104,7 +104,7 @@ class ThreadSwitchingConsumer(stream.Consumer):
                 else:
                     sink.consume(value)
             except Exception as e:  # pylint:disable=broad-except
-                _LOGGER.exception(e) 
+                _LOGGER.exception(e)
 
             with self._lock:
                 if terminate:

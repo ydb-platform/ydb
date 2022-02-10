@@ -46,7 +46,7 @@ class CliCall final {
   typedef std::multimap<grpc::string_ref, grpc::string_ref>
       IncomingMetadataContainer;
 
-  CliCall(const std::shared_ptr<grpc::Channel>& channel, 
+  CliCall(const std::shared_ptr<grpc::Channel>& channel,
           const TString& method, const OutgoingMetadataContainer& metadata,
           CliArgs args);
   CliCall(const std::shared_ptr<grpc::Channel>& channel,

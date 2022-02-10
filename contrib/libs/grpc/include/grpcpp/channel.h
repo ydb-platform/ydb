@@ -43,13 +43,13 @@ std::shared_ptr<Channel> CreateChannelInternal(
         std::unique_ptr<experimental::ClientInterceptorFactoryInterface>>
         interceptor_creators);
 
-namespace experimental { 
-/// Resets the channel's connection backoff. 
-/// TODO(roth): Once we see whether this proves useful, either create a gRFC 
-/// and change this to be a method of the Channel class, or remove it. 
-void ChannelResetConnectionBackoff(Channel* channel); 
-}  // namespace experimental 
- 
+namespace experimental {
+/// Resets the channel's connection backoff.
+/// TODO(roth): Once we see whether this proves useful, either create a gRFC
+/// and change this to be a method of the Channel class, or remove it.
+void ChannelResetConnectionBackoff(Channel* channel);
+}  // namespace experimental
+
 /// Channels represent a connection to an endpoint. Created by \a CreateChannel.
 class Channel final : public ::grpc::ChannelInterface,
                       public ::grpc::internal::CallHook,

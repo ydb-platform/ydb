@@ -1,27 +1,27 @@
-/* 
- * 
+/*
+ *
  * Copyright 2019 gRPC authors.
- * 
- * Licensed under the Apache License, Version 2.0 (the "License"); 
- * you may not use this file except in compliance with the License. 
- * You may obtain a copy of the License at 
- * 
- *     http://www.apache.org/licenses/LICENSE-2.0 
- * 
- * Unless required by applicable law or agreed to in writing, software 
- * distributed under the License is distributed on an "AS IS" BASIS, 
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
- * See the License for the specific language governing permissions and 
- * limitations under the License. 
- */ 
- 
-#ifndef GRPCPP_IMPL_CODEGEN_SERVER_CALLBACK_H 
-#define GRPCPP_IMPL_CODEGEN_SERVER_CALLBACK_H 
- 
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef GRPCPP_IMPL_CODEGEN_SERVER_CALLBACK_H
+#define GRPCPP_IMPL_CODEGEN_SERVER_CALLBACK_H
+
 #include <atomic>
 #include <functional>
 #include <type_traits>
- 
+
 #include <grpcpp/impl/codegen/call.h>
 #include <grpcpp/impl/codegen/call_op_set.h>
 #include <grpcpp/impl/codegen/callback_common.h>
@@ -30,7 +30,7 @@
 #include <grpcpp/impl/codegen/message_allocator.h>
 #include <grpcpp/impl/codegen/status.h>
 
-namespace grpc { 
+namespace grpc {
 
 // Declare base class of all reactors as internal
 namespace internal {
@@ -774,21 +774,21 @@ using UnimplementedBidiReactor =
 }  // namespace internal
 
 // TODO(vjpai): Remove namespace experimental when de-experimentalized fully.
-namespace experimental { 
+namespace experimental {
 
-template <class Request> 
+template <class Request>
 using ServerReadReactor = ::grpc::ServerReadReactor<Request>;
- 
-template <class Response> 
-using ServerWriteReactor = ::grpc::ServerWriteReactor<Response>;
- 
-template <class Request, class Response> 
-using ServerBidiReactor = ::grpc::ServerBidiReactor<Request, Response>;
- 
-using ServerUnaryReactor = ::grpc::ServerUnaryReactor;
- 
-}  // namespace experimental 
 
-}  // namespace grpc 
- 
-#endif  // GRPCPP_IMPL_CODEGEN_SERVER_CALLBACK_H 
+template <class Response>
+using ServerWriteReactor = ::grpc::ServerWriteReactor<Response>;
+
+template <class Request, class Response>
+using ServerBidiReactor = ::grpc::ServerBidiReactor<Request, Response>;
+
+using ServerUnaryReactor = ::grpc::ServerUnaryReactor;
+
+}  // namespace experimental
+
+}  // namespace grpc
+
+#endif  // GRPCPP_IMPL_CODEGEN_SERVER_CALLBACK_H

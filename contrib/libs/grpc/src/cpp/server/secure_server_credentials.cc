@@ -44,10 +44,10 @@ void AuthMetadataProcessorAyncWrapper::Process(
     return;
   }
   if (w->processor_->IsBlocking()) {
-    w->thread_pool_->Add([w, context, md, num_md, cb, user_data] { 
-      w->AuthMetadataProcessorAyncWrapper::InvokeProcessor(context, md, num_md, 
-                                                           cb, user_data); 
-    }); 
+    w->thread_pool_->Add([w, context, md, num_md, cb, user_data] {
+      w->AuthMetadataProcessorAyncWrapper::InvokeProcessor(context, md, num_md,
+                                                           cb, user_data);
+    });
   } else {
     // invoke directly.
     w->InvokeProcessor(context, md, num_md, cb, user_data);
@@ -62,7 +62,7 @@ void AuthMetadataProcessorAyncWrapper::InvokeProcessor(
     metadata.insert(std::make_pair(StringRefFromSlice(&md[i].key),
                                    StringRefFromSlice(&md[i].value)));
   }
-  SecureAuthContext context(ctx); 
+  SecureAuthContext context(ctx);
   AuthMetadataProcessor::OutputMetadata consumed_metadata;
   AuthMetadataProcessor::OutputMetadata response_metadata;
 
@@ -138,12 +138,12 @@ std::shared_ptr<ServerCredentials> AltsServerCredentials(
       new SecureServerCredentials(c_creds));
 }
 
-std::shared_ptr<ServerCredentials> LocalServerCredentials( 
-    grpc_local_connect_type type) { 
-  return std::shared_ptr<ServerCredentials>( 
-      new SecureServerCredentials(grpc_local_server_credentials_create(type))); 
-} 
- 
+std::shared_ptr<ServerCredentials> LocalServerCredentials(
+    grpc_local_connect_type type) {
+  return std::shared_ptr<ServerCredentials>(
+      new SecureServerCredentials(grpc_local_server_credentials_create(type)));
+}
+
 std::shared_ptr<ServerCredentials> TlsServerCredentials(
     const grpc::experimental::TlsCredentialsOptions& options) {
   grpc::GrpcLibraryCodegen init;

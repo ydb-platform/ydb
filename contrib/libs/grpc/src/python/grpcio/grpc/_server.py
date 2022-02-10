@@ -28,8 +28,8 @@ from grpc import _compression
 from grpc import _interceptor
 from grpc._cython import cygrpc
 
-_LOGGER = logging.getLogger(__name__) 
- 
+_LOGGER = logging.getLogger(__name__)
+
 _SHUTDOWN_TAG = 'shutdown'
 _REQUEST_CALL_TAG = 'request_call'
 
@@ -49,7 +49,7 @@ _CANCELLED = 'cancelled'
 
 _EMPTY_FLAGS = 0
 
-_DEALLOCATED_SERVER_CHECK_PERIOD_S = 1.0 
+_DEALLOCATED_SERVER_CHECK_PERIOD_S = 1.0
 _INF_TIMEOUT = 1e9
 
 
@@ -104,7 +104,7 @@ class _RPCState(object):
         self.statused = False
         self.rpc_errors = []
         self.callbacks = []
-        self.aborted = False 
+        self.aborted = False
 
 
 def _raise_rpc_error(state):
@@ -308,20 +308,20 @@ class _Context(grpc.ServicerContext):
     def abort(self, code, details):
         # treat OK like other invalid arguments: fail the RPC
         if code == grpc.StatusCode.OK:
-            _LOGGER.error( 
+            _LOGGER.error(
                 'abort() called with StatusCode.OK; returning UNKNOWN')
             code = grpc.StatusCode.UNKNOWN
             details = ''
         with self._state.condition:
             self._state.code = code
             self._state.details = _common.encode(details)
-            self._state.aborted = True 
-            raise Exception() 
+            self._state.aborted = True
+            raise Exception()
 
-    def abort_with_status(self, status): 
-        self._state.trailing_metadata = status.trailing_metadata 
-        self.abort(status.code, status.details) 
- 
+    def abort_with_status(self, status):
+        self._state.trailing_metadata = status.trailing_metadata
+        self.abort(status.code, status.details)
+
     def set_code(self, code):
         with self._state.condition:
             self._state.code = code
@@ -364,8 +364,8 @@ class _RequestIterator(object):
             self._state.request = None
             return request
 
-        raise AssertionError()  # should never run 
- 
+        raise AssertionError()  # should never run
+
     def _next(self):
         with self._state.condition:
             self._raise_or_start_receive_message()
@@ -455,12 +455,12 @@ def _take_response_from_response_iterator(rpc_event, state, response_iterator):
         return None, True
     except Exception as exception:  # pylint: disable=broad-except
         with state.condition:
-            if state.aborted: 
+            if state.aborted:
                 _abort(state, rpc_event.call, cygrpc.StatusCode.unknown,
                        b'RPC Aborted')
             elif exception not in state.rpc_errors:
                 details = 'Exception iterating responses: {}'.format(exception)
-                _LOGGER.exception(details) 
+                _LOGGER.exception(details)
                 _abort(state, rpc_event.call, cygrpc.StatusCode.unknown,
                        _common.encode(details))
         return None, False
@@ -546,18 +546,18 @@ def _status(rpc_event, state, serialized_response):
 def _unary_response_in_pool(rpc_event, state, behavior, argument_thunk,
                             request_deserializer, response_serializer):
     cygrpc.install_context_from_request_call_event(rpc_event)
-    try: 
-        argument = argument_thunk() 
-        if argument is not None: 
-            response, proceed = _call_behavior(rpc_event, state, behavior, 
-                                               argument, request_deserializer) 
-            if proceed: 
-                serialized_response = _serialize_response( 
-                    rpc_event, state, response, response_serializer) 
-                if serialized_response is not None: 
-                    _status(rpc_event, state, serialized_response) 
-    finally: 
-        cygrpc.uninstall_context() 
+    try:
+        argument = argument_thunk()
+        if argument is not None:
+            response, proceed = _call_behavior(rpc_event, state, behavior,
+                                               argument, request_deserializer)
+            if proceed:
+                serialized_response = _serialize_response(
+                    rpc_event, state, response, response_serializer)
+                if serialized_response is not None:
+                    _status(rpc_event, state, serialized_response)
+    finally:
+        cygrpc.uninstall_context()
 
 
 def _stream_response_in_pool(rpc_event, state, behavior, argument_thunk,
@@ -574,9 +574,9 @@ def _stream_response_in_pool(rpc_event, state, behavior, argument_thunk,
             if serialized_response is not None:
                 _send_response(rpc_event, state, serialized_response)
 
-    try: 
-        argument = argument_thunk() 
-        if argument is not None: 
+    try:
+        argument = argument_thunk()
+        if argument is not None:
             if hasattr(behavior, 'experimental_non_blocking'
                       ) and behavior.experimental_non_blocking:
                 _call_behavior(rpc_event,
@@ -591,8 +591,8 @@ def _stream_response_in_pool(rpc_event, state, behavior, argument_thunk,
                 if proceed:
                     _send_message_callback_to_blocking_iterator_adapter(
                         rpc_event, state, send_response, response_iterator)
-    finally: 
-        cygrpc.uninstall_context() 
+    finally:
+        cygrpc.uninstall_context()
 
 
 def _is_rpc_state_active(state):
@@ -736,7 +736,7 @@ def _handle_call(rpc_event, generic_handlers, interceptor_pipeline, thread_pool,
                                                   interceptor_pipeline)
         except Exception as exception:  # pylint: disable=broad-except
             details = 'Exception servicing handler: {}'.format(exception)
-            _LOGGER.exception(details) 
+            _LOGGER.exception(details)
             return _reject_rpc(rpc_event, cygrpc.StatusCode.unknown,
                                b'Error in service handler!'), None
         if method_handler is None:
@@ -780,10 +780,10 @@ class _ServerState(object):
         self.rpc_states = set()
         self.due = set()
 
-        # A "volatile" flag to interrupt the daemon serving thread 
-        self.server_deallocated = False 
+        # A "volatile" flag to interrupt the daemon serving thread
+        self.server_deallocated = False
 
- 
+
 def _add_generic_handlers(state, generic_handlers):
     with state.lock:
         state.generic_handlers.extend(generic_handlers)
@@ -809,7 +809,7 @@ def _request_call(state):
 # TODO(https://github.com/grpc/grpc/issues/6597): delete this function.
 def _stop_serving(state):
     if not state.rpc_states and not state.due:
-        state.server.destroy() 
+        state.server.destroy()
         for shutdown_event in state.shutdown_events:
             shutdown_event.set()
         state.stage = _ServerStage.STOPPED
@@ -823,71 +823,71 @@ def _on_call_completed(state):
         state.active_rpc_count -= 1
 
 
-def _process_event_and_continue(state, event): 
-    should_continue = True 
-    if event.tag is _SHUTDOWN_TAG: 
-        with state.lock: 
-            state.due.remove(_SHUTDOWN_TAG) 
-            if _stop_serving(state): 
-                should_continue = False 
-    elif event.tag is _REQUEST_CALL_TAG: 
-        with state.lock: 
-            state.due.remove(_REQUEST_CALL_TAG) 
-            concurrency_exceeded = ( 
-                state.maximum_concurrent_rpcs is not None and 
-                state.active_rpc_count >= state.maximum_concurrent_rpcs) 
+def _process_event_and_continue(state, event):
+    should_continue = True
+    if event.tag is _SHUTDOWN_TAG:
+        with state.lock:
+            state.due.remove(_SHUTDOWN_TAG)
+            if _stop_serving(state):
+                should_continue = False
+    elif event.tag is _REQUEST_CALL_TAG:
+        with state.lock:
+            state.due.remove(_REQUEST_CALL_TAG)
+            concurrency_exceeded = (
+                state.maximum_concurrent_rpcs is not None and
+                state.active_rpc_count >= state.maximum_concurrent_rpcs)
             rpc_state, rpc_future = _handle_call(event, state.generic_handlers,
                                                  state.interceptor_pipeline,
                                                  state.thread_pool,
                                                  concurrency_exceeded)
-            if rpc_state is not None: 
-                state.rpc_states.add(rpc_state) 
-            if rpc_future is not None: 
-                state.active_rpc_count += 1 
-                rpc_future.add_done_callback( 
-                    lambda unused_future: _on_call_completed(state)) 
-            if state.stage is _ServerStage.STARTED: 
-                _request_call(state) 
-            elif _stop_serving(state): 
-                should_continue = False 
-    else: 
-        rpc_state, callbacks = event.tag(event) 
-        for callback in callbacks: 
-            try: 
-                callback() 
-            except Exception:  # pylint: disable=broad-except 
-                _LOGGER.exception('Exception calling callback!') 
-        if rpc_state is not None: 
-            with state.lock: 
-                state.rpc_states.remove(rpc_state) 
-                if _stop_serving(state): 
-                    should_continue = False 
-    return should_continue 
- 
- 
+            if rpc_state is not None:
+                state.rpc_states.add(rpc_state)
+            if rpc_future is not None:
+                state.active_rpc_count += 1
+                rpc_future.add_done_callback(
+                    lambda unused_future: _on_call_completed(state))
+            if state.stage is _ServerStage.STARTED:
+                _request_call(state)
+            elif _stop_serving(state):
+                should_continue = False
+    else:
+        rpc_state, callbacks = event.tag(event)
+        for callback in callbacks:
+            try:
+                callback()
+            except Exception:  # pylint: disable=broad-except
+                _LOGGER.exception('Exception calling callback!')
+        if rpc_state is not None:
+            with state.lock:
+                state.rpc_states.remove(rpc_state)
+                if _stop_serving(state):
+                    should_continue = False
+    return should_continue
+
+
 def _serve(state):
     while True:
-        timeout = time.time() + _DEALLOCATED_SERVER_CHECK_PERIOD_S 
-        event = state.completion_queue.poll(timeout) 
-        if state.server_deallocated: 
-            _begin_shutdown_once(state) 
-        if event.completion_type != cygrpc.CompletionType.queue_timeout: 
-            if not _process_event_and_continue(state, event): 
-                return 
+        timeout = time.time() + _DEALLOCATED_SERVER_CHECK_PERIOD_S
+        event = state.completion_queue.poll(timeout)
+        if state.server_deallocated:
+            _begin_shutdown_once(state)
+        if event.completion_type != cygrpc.CompletionType.queue_timeout:
+            if not _process_event_and_continue(state, event):
+                return
         # We want to force the deletion of the previous event
         # ~before~ we poll again; if the event has a reference
         # to a shutdown Call object, this can induce spinlock.
         event = None
 
 
-def _begin_shutdown_once(state): 
-    with state.lock: 
-        if state.stage is _ServerStage.STARTED: 
-            state.server.shutdown(state.completion_queue, _SHUTDOWN_TAG) 
-            state.stage = _ServerStage.GRACE 
-            state.due.add(_SHUTDOWN_TAG) 
- 
- 
+def _begin_shutdown_once(state):
+    with state.lock:
+        if state.stage is _ServerStage.STARTED:
+            state.server.shutdown(state.completion_queue, _SHUTDOWN_TAG)
+            state.stage = _ServerStage.GRACE
+            state.due.add(_SHUTDOWN_TAG)
+
+
 def _stop(state, grace):
     with state.lock:
         if state.stage is _ServerStage.STOPPED:
@@ -895,7 +895,7 @@ def _stop(state, grace):
             shutdown_event.set()
             return shutdown_event
         else:
-            _begin_shutdown_once(state) 
+            _begin_shutdown_once(state)
             shutdown_event = threading.Event()
             state.shutdown_events.append(shutdown_event)
             if grace is None:
@@ -922,27 +922,27 @@ def _start(state):
         state.stage = _ServerStage.STARTED
         _request_call(state)
 
-        thread = threading.Thread(target=_serve, args=(state,)) 
-        thread.daemon = True 
+        thread = threading.Thread(target=_serve, args=(state,))
+        thread.daemon = True
         thread.start()
 
 
-def _validate_generic_rpc_handlers(generic_rpc_handlers): 
-    for generic_rpc_handler in generic_rpc_handlers: 
-        service_attribute = getattr(generic_rpc_handler, 'service', None) 
-        if service_attribute is None: 
-            raise AttributeError( 
-                '"{}" must conform to grpc.GenericRpcHandler type but does ' 
-                'not have "service" method!'.format(generic_rpc_handler)) 
+def _validate_generic_rpc_handlers(generic_rpc_handlers):
+    for generic_rpc_handler in generic_rpc_handlers:
+        service_attribute = getattr(generic_rpc_handler, 'service', None)
+        if service_attribute is None:
+            raise AttributeError(
+                '"{}" must conform to grpc.GenericRpcHandler type but does '
+                'not have "service" method!'.format(generic_rpc_handler))
 
- 
+
 def _augment_options(base_options, compression):
     compression_option = _compression.create_channel_option(compression)
     return tuple(base_options) + compression_option
 
 
-class _Server(grpc.Server): 
- 
+class _Server(grpc.Server):
+
     # pylint: disable=too-many-arguments
     def __init__(self, thread_pool, generic_handlers, interceptors, options,
                  maximum_concurrent_rpcs, compression):
@@ -954,7 +954,7 @@ class _Server(grpc.Server):
                                    thread_pool, maximum_concurrent_rpcs)
 
     def add_generic_rpc_handlers(self, generic_rpc_handlers):
-        _validate_generic_rpc_handlers(generic_rpc_handlers) 
+        _validate_generic_rpc_handlers(generic_rpc_handlers)
         _add_generic_handlers(self._state, generic_rpc_handlers)
 
     def add_insecure_port(self, address):
@@ -982,14 +982,14 @@ class _Server(grpc.Server):
         return _stop(self._state, grace)
 
     def __del__(self):
-        if hasattr(self, '_state'): 
-            # We can not grab a lock in __del__(), so set a flag to signal the 
-            # serving daemon thread (if it exists) to initiate shutdown. 
-            self._state.server_deallocated = True 
- 
- 
-def create_server(thread_pool, generic_rpc_handlers, interceptors, options, 
+        if hasattr(self, '_state'):
+            # We can not grab a lock in __del__(), so set a flag to signal the
+            # serving daemon thread (if it exists) to initiate shutdown.
+            self._state.server_deallocated = True
+
+
+def create_server(thread_pool, generic_rpc_handlers, interceptors, options,
                   maximum_concurrent_rpcs, compression):
-    _validate_generic_rpc_handlers(generic_rpc_handlers) 
-    return _Server(thread_pool, generic_rpc_handlers, interceptors, options, 
+    _validate_generic_rpc_handlers(generic_rpc_handlers)
+    return _Server(thread_pool, generic_rpc_handlers, interceptors, options,
                    maximum_concurrent_rpcs, compression)

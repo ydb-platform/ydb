@@ -36,16 +36,16 @@
 #include "src/core/lib/gpr/string.h"
 #include "src/core/lib/gprpp/host_port.h"
 #include "src/core/lib/slice/b64.h"
-#include "src/core/lib/uri/uri_parser.h" 
+#include "src/core/lib/uri/uri_parser.h"
 
 namespace grpc_core {
 namespace {
 
 /**
- * Parses the 'https_proxy' env var (fallback on 'http_proxy') and returns the 
- * proxy hostname to resolve or nullptr on error. Also sets 'user_cred' to user 
- * credentials if present in the 'http_proxy' env var, otherwise leaves it 
- * unchanged. It is caller's responsibility to gpr_free user_cred. 
+ * Parses the 'https_proxy' env var (fallback on 'http_proxy') and returns the
+ * proxy hostname to resolve or nullptr on error. Also sets 'user_cred' to user
+ * credentials if present in the 'http_proxy' env var, otherwise leaves it
+ * unchanged. It is caller's responsibility to gpr_free user_cred.
  */
 char* GetHttpProxyServer(const grpc_channel_args* args, char** user_cred) {
   GPR_ASSERT(user_cred != nullptr);
@@ -60,12 +60,12 @@ char* GetHttpProxyServer(const grpc_channel_args* args, char** user_cred) {
    * 3. https_proxy environment variable
    * 4. http_proxy environment variable
    * If none of the above are set, then no HTTP proxy will be used.
-   */ 
+   */
   char* uri_str =
       gpr_strdup(grpc_channel_args_find_string(args, GRPC_ARG_HTTP_PROXY));
   if (uri_str == nullptr) uri_str = gpr_getenv("grpc_proxy");
   if (uri_str == nullptr) uri_str = gpr_getenv("https_proxy");
-  if (uri_str == nullptr) uri_str = gpr_getenv("http_proxy"); 
+  if (uri_str == nullptr) uri_str = gpr_getenv("http_proxy");
   if (uri_str == nullptr) return nullptr;
   // an emtpy value means "don't use proxy"
   if (uri_str[0] == '\0') goto done;

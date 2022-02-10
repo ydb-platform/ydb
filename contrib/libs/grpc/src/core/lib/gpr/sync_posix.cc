@@ -114,8 +114,8 @@ void gpr_cv_destroy(gpr_cv* cv) {
 #else
   GPR_ASSERT(pthread_cond_destroy(cv) == 0);
 #endif
-} 
- 
+}
+
 int gpr_cv_wait(gpr_cv* cv, gpr_mu* mu, gpr_timespec abs_deadline) {
   int err = 0;
   if (gpr_time_cmp(abs_deadline, gpr_inf_future(abs_deadline.clock_type)) ==
@@ -138,7 +138,7 @@ int gpr_cv_wait(gpr_cv* cv, gpr_mu* mu, gpr_timespec abs_deadline) {
     err = pthread_cond_timedwait(&cv->cond_var, &mu->mutex, &abs_deadline_ts);
 #else
     err = pthread_cond_timedwait(cv, mu, &abs_deadline_ts);
-#endif 
+#endif
   }
   GPR_ASSERT(err == 0 || err == ETIMEDOUT || err == EAGAIN);
   return err == ETIMEDOUT;

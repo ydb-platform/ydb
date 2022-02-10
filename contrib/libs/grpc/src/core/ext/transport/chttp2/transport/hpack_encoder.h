@@ -28,9 +28,9 @@
 #include "src/core/lib/transport/metadata_batch.h"
 #include "src/core/lib/transport/transport.h"
 
-// This should be <= 8. We use 6 to save space. 
-#define GRPC_CHTTP2_HPACKC_NUM_VALUES_BITS 6 
-#define GRPC_CHTTP2_HPACKC_NUM_VALUES (1 << GRPC_CHTTP2_HPACKC_NUM_VALUES_BITS) 
+// This should be <= 8. We use 6 to save space.
+#define GRPC_CHTTP2_HPACKC_NUM_VALUES_BITS 6
+#define GRPC_CHTTP2_HPACKC_NUM_VALUES (1 << GRPC_CHTTP2_HPACKC_NUM_VALUES_BITS)
 /* initial table size, per spec */
 #define GRPC_CHTTP2_HPACKC_INITIAL_TABLE_SIZE 4096
 /* maximum table size we'll actually use */
@@ -60,7 +60,7 @@ struct grpc_chttp2_hpack_compressor {
      They track a single integer that counts how often a particular value has
      been seen. When that count reaches max (255), all values are halved. */
   uint32_t filter_elems_sum;
-  uint8_t filter_elems[GRPC_CHTTP2_HPACKC_NUM_VALUES]; 
+  uint8_t filter_elems[GRPC_CHTTP2_HPACKC_NUM_VALUES];
 
   /* entry tables for keys & elems: these tables track values that have been
      seen and *may* be in the decompressor table */

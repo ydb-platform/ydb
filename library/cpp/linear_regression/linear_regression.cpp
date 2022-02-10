@@ -10,7 +10,7 @@
 
 #include <algorithm>
 #include <functional>
- 
+
 namespace {
     inline void AddFeaturesProduct(const double weight, const TVector<double>& features, TVector<double>& linearizedOLSTriangleMatrix);
 

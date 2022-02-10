@@ -38,20 +38,20 @@ static grpc_error* clr_init_channel_elem(grpc_channel_element* /*elem*/,
 static void clr_destroy_channel_elem(grpc_channel_element* /*elem*/) {}
 
 namespace {
- 
+
 struct call_data {
   // Stats object to update.
-  grpc_core::RefCountedPtr<grpc_core::GrpcLbClientStats> client_stats; 
+  grpc_core::RefCountedPtr<grpc_core::GrpcLbClientStats> client_stats;
   // State for intercepting send_initial_metadata.
   grpc_closure on_complete_for_send;
   grpc_closure* original_on_complete_for_send;
-  bool send_initial_metadata_succeeded = false; 
+  bool send_initial_metadata_succeeded = false;
   // State for intercepting recv_initial_metadata.
   grpc_closure recv_initial_metadata_ready;
   grpc_closure* original_recv_initial_metadata_ready;
-  bool recv_initial_metadata_succeeded = false; 
+  bool recv_initial_metadata_succeeded = false;
 };
- 
+
 }  // namespace
 
 static void on_complete_for_send(void* arg, grpc_error* error) {
@@ -87,11 +87,11 @@ static void clr_destroy_call_elem(grpc_call_element* elem,
   if (calld->client_stats != nullptr) {
     // Record call finished, optionally setting client_failed_to_send and
     // received.
-    calld->client_stats->AddCallFinished( 
+    calld->client_stats->AddCallFinished(
         !calld->send_initial_metadata_succeeded /* client_failed_to_send */,
-        calld->recv_initial_metadata_succeeded /* known_received */); 
+        calld->recv_initial_metadata_succeeded /* known_received */);
   }
-  calld->~call_data(); 
+  calld->~call_data();
 }
 
 static void clr_start_transport_stream_op_batch(

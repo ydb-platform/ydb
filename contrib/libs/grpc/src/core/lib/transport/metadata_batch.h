@@ -31,11 +31,11 @@
 #include "src/core/lib/transport/static_metadata.h"
 
 typedef struct grpc_linked_mdelem {
-  grpc_linked_mdelem() {} 
- 
+  grpc_linked_mdelem() {}
+
   grpc_mdelem md;
-  struct grpc_linked_mdelem* next = nullptr; 
-  struct grpc_linked_mdelem* prev = nullptr; 
+  struct grpc_linked_mdelem* next = nullptr;
+  struct grpc_linked_mdelem* prev = nullptr;
   void* reserved;
 } grpc_linked_mdelem;
 
@@ -89,7 +89,7 @@ grpc_error* grpc_metadata_batch_link_head(grpc_metadata_batch* batch,
 grpc_error* grpc_metadata_batch_link_head(
     grpc_metadata_batch* batch, grpc_linked_mdelem* storage,
     grpc_metadata_batch_callouts_index idx) GRPC_MUST_USE_RESULT;
- 
+
 /** Add \a storage to the end of \a batch. storage->md is
     assumed to be valid.
     \a storage is owned by the caller and must survive for the
@@ -111,7 +111,7 @@ grpc_error* grpc_metadata_batch_link_tail(
 grpc_error* grpc_metadata_batch_add_head(
     grpc_metadata_batch* batch, grpc_linked_mdelem* storage,
     grpc_mdelem elem_to_add) GRPC_MUST_USE_RESULT;
- 
+
 // TODO(arjunroy, roth): Remove redundant methods.
 // add/link_head/tail are almost identical.
 inline grpc_error* GRPC_MUST_USE_RESULT grpc_metadata_batch_add_head(

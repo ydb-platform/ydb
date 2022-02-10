@@ -27,11 +27,11 @@
 #include <grpc/support/log.h>
 #include <grpc/support/sync.h>
 
-#include "src/core/lib/gpr/alloc.h" 
+#include "src/core/lib/gpr/alloc.h"
 #include "src/core/lib/gpr/string.h"
 #include "src/core/lib/gprpp/memory.h"
 #include "src/core/lib/iomgr/executor.h"
-#include "src/core/lib/iomgr/iomgr.h" 
+#include "src/core/lib/iomgr/iomgr.h"
 #include "src/core/lib/slice/slice_internal.h"
 #include "src/core/lib/slice/slice_string_helpers.h"
 #include "src/core/lib/transport/transport_impl.h"
@@ -116,7 +116,7 @@ void grpc_transport_move_stats(grpc_transport_stream_stats* from,
 }
 
 size_t grpc_transport_stream_size(grpc_transport* transport) {
-  return GPR_ROUND_UP_TO_ALIGNMENT_SIZE(transport->vtable->sizeof_stream); 
+  return GPR_ROUND_UP_TO_ALIGNMENT_SIZE(transport->vtable->sizeof_stream);
 }
 
 void grpc_transport_destroy(grpc_transport* transport) {
@@ -152,8 +152,8 @@ void grpc_transport_set_pops(grpc_transport* transport, grpc_stream* stream,
              nullptr) {
     transport->vtable->set_pollset_set(transport, stream, pollset_set);
   } else {
-    // No-op for empty pollset. Empty pollset is possible when using 
-    // non-fd-based event engines such as CFStream. 
+    // No-op for empty pollset. Empty pollset is possible when using
+    // non-fd-based event engines such as CFStream.
   }
 }
 
@@ -180,32 +180,32 @@ void grpc_transport_stream_op_batch_finish_with_failure(
   if (batch->send_message) {
     batch->payload->send_message.send_message.reset();
   }
-  if (batch->cancel_stream) { 
-    GRPC_ERROR_UNREF(batch->payload->cancel_stream.cancel_error); 
+  if (batch->cancel_stream) {
+    GRPC_ERROR_UNREF(batch->payload->cancel_stream.cancel_error);
   }
-  // Construct a list of closures to execute. 
-  grpc_core::CallCombinerClosureList closures; 
+  // Construct a list of closures to execute.
+  grpc_core::CallCombinerClosureList closures;
   if (batch->recv_initial_metadata) {
-    closures.Add( 
+    closures.Add(
         batch->payload->recv_initial_metadata.recv_initial_metadata_ready,
         GRPC_ERROR_REF(error), "failing recv_initial_metadata_ready");
   }
-  if (batch->recv_message) { 
-    closures.Add(batch->payload->recv_message.recv_message_ready, 
-                 GRPC_ERROR_REF(error), "failing recv_message_ready"); 
+  if (batch->recv_message) {
+    closures.Add(batch->payload->recv_message.recv_message_ready,
+                 GRPC_ERROR_REF(error), "failing recv_message_ready");
   }
-  if (batch->recv_trailing_metadata) { 
-    closures.Add( 
-        batch->payload->recv_trailing_metadata.recv_trailing_metadata_ready, 
-        GRPC_ERROR_REF(error), "failing recv_trailing_metadata_ready"); 
-  } 
-  if (batch->on_complete != nullptr) { 
-    closures.Add(batch->on_complete, GRPC_ERROR_REF(error), 
-                 "failing on_complete"); 
-  } 
-  // Execute closures. 
-  closures.RunClosures(call_combiner); 
-  GRPC_ERROR_UNREF(error); 
+  if (batch->recv_trailing_metadata) {
+    closures.Add(
+        batch->payload->recv_trailing_metadata.recv_trailing_metadata_ready,
+        GRPC_ERROR_REF(error), "failing recv_trailing_metadata_ready");
+  }
+  if (batch->on_complete != nullptr) {
+    closures.Add(batch->on_complete, GRPC_ERROR_REF(error),
+                 "failing on_complete");
+  }
+  // Execute closures.
+  closures.RunClosures(call_combiner);
+  GRPC_ERROR_UNREF(error);
 }
 
 struct made_transport_op {

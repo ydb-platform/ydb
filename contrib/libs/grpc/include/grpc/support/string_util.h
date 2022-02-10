@@ -21,8 +21,8 @@
 
 #include <grpc/support/port_platform.h>
 
-#include <grpc/impl/codegen/gpr_types.h> 
- 
+#include <grpc/impl/codegen/gpr_types.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif

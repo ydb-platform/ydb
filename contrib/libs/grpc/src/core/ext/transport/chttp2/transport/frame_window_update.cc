@@ -88,9 +88,9 @@ grpc_error* grpc_chttp2_window_update_parser_parse(void* parser,
   }
 
   if (p->byte == 4) {
-    // top bit is reserved and must be ignored. 
-    uint32_t received_update = p->amount & 0x7fffffffu; 
-    if (received_update == 0) { 
+    // top bit is reserved and must be ignored.
+    uint32_t received_update = p->amount & 0x7fffffffu;
+    if (received_update == 0) {
       return GRPC_ERROR_CREATE_FROM_COPIED_STRING(
           y_absl::StrCat("invalid window update bytes: ", p->amount).c_str());
     }

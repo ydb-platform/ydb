@@ -19,8 +19,8 @@
 #include <grpc/support/port_platform.h>
 
 #include "src/core/lib/gprpp/sync.h"
-#include "src/core/lib/slice/slice_internal.h" 
-#include "src/core/tsi/ssl/session_cache/ssl_session.h" 
+#include "src/core/lib/slice/slice_internal.h"
+#include "src/core/tsi/ssl/session_cache/ssl_session.h"
 #include "src/core/tsi/ssl/session_cache/ssl_session_cache.h"
 
 #include <grpc/support/log.h>
@@ -56,7 +56,7 @@ class SslSessionLRUCache::Node {
     SetSession(std::move(session));
   }
 
-  ~Node() { grpc_slice_unref_internal(key_); } 
+  ~Node() { grpc_slice_unref_internal(key_); }
 
   // Not copyable nor movable.
   Node(const Node&) = delete;
@@ -100,7 +100,7 @@ SslSessionLRUCache::~SslSessionLRUCache() {
 }
 
 size_t SslSessionLRUCache::Size() {
-  grpc_core::MutexLock lock(&lock_); 
+  grpc_core::MutexLock lock(&lock_);
   return use_order_list_size_;
 }
 
@@ -120,7 +120,7 @@ SslSessionLRUCache::Node* SslSessionLRUCache::FindLocked(
 }
 
 void SslSessionLRUCache::Put(const char* key, SslSessionPtr session) {
-  grpc_core::MutexLock lock(&lock_); 
+  grpc_core::MutexLock lock(&lock_);
   Node* node = FindLocked(grpc_slice_from_static_string(key));
   if (node != nullptr) {
     node->SetSession(std::move(session));
@@ -143,7 +143,7 @@ void SslSessionLRUCache::Put(const char* key, SslSessionPtr session) {
 }
 
 SslSessionPtr SslSessionLRUCache::Get(const char* key) {
-  grpc_core::MutexLock lock(&lock_); 
+  grpc_core::MutexLock lock(&lock_);
   // Key is only used for lookups.
   grpc_slice key_slice = grpc_slice_from_static_string(key);
   Node* node = FindLocked(key_slice);

@@ -19,10 +19,10 @@
 #ifndef GRPCPP_SECURITY_CREDENTIALS_H
 #define GRPCPP_SECURITY_CREDENTIALS_H
 
-#if defined(__GNUC__) 
-#pragma GCC system_header 
-#endif 
- 
+#if defined(__GNUC__)
+#pragma GCC system_header
+#endif
+
 #include <map>
 #include <memory>
 #include <vector>
@@ -49,7 +49,7 @@ std::shared_ptr<Channel> CreateCustomChannel(
     const grpc::string& target,
     const std::shared_ptr<grpc::ChannelCredentials>& creds,
     const grpc::ChannelArguments& args);
- 
+
 namespace experimental {
 std::shared_ptr<grpc::Channel> CreateCustomChannelWithInterceptors(
     const grpc::string& target,
@@ -59,7 +59,7 @@ std::shared_ptr<grpc::Channel> CreateCustomChannelWithInterceptors(
         std::unique_ptr<grpc::experimental::ClientInterceptorFactoryInterface>>
         interceptor_creators);
 }
- 
+
 /// A channel credentials object encapsulates all the state needed by a client
 /// to authenticate with a server for a given channel.
 /// It can make various assertions, e.g., about the client’s identity, role
@@ -310,7 +310,7 @@ struct AltsCredentialsOptions {
 /// Builds ALTS Credentials given ALTS specific options
 std::shared_ptr<ChannelCredentials> AltsCredentials(
     const AltsCredentialsOptions& options);
- 
+
 /// Builds Local Credentials.
 std::shared_ptr<ChannelCredentials> LocalCredentials(
     grpc_local_connect_type type);

@@ -1,7 +1,7 @@
-PROGRAM(pire_inline) 
+PROGRAM(pire_inline)
 
-CFLAGS(-DPIRE_NO_CONFIG) 
- 
+CFLAGS(-DPIRE_NO_CONFIG)
+
 OWNER(
     g:util
     davenger

@@ -8,8 +8,8 @@
 
 #include "comptable.h"
 
-#include <cstdlib> 
- 
+#include <cstdlib>
+
 namespace NCompTable {
     static const ui32 magicHashMul = 0xd077cd1f;
     static const size_t hashSizeLog = 18;

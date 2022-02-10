@@ -32,9 +32,9 @@
 #include "src/core/lib/profiling/timers.h"
 
 static grpc_error* eventfd_create(grpc_wakeup_fd* fd_info) {
-  fd_info->read_fd = eventfd(0, EFD_NONBLOCK | EFD_CLOEXEC); 
-  fd_info->write_fd = -1; 
-  if (fd_info->read_fd < 0) { 
+  fd_info->read_fd = eventfd(0, EFD_NONBLOCK | EFD_CLOEXEC);
+  fd_info->write_fd = -1;
+  if (fd_info->read_fd < 0) {
     return GRPC_OS_ERROR(errno, "eventfd");
   }
   return GRPC_ERROR_NONE;

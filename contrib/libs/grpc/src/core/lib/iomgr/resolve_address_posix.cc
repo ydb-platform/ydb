@@ -19,7 +19,7 @@
 #include <grpc/support/port_platform.h>
 
 #include "src/core/lib/iomgr/port.h"
-#ifdef GRPC_POSIX_SOCKET_RESOLVE_ADDRESS 
+#ifdef GRPC_POSIX_SOCKET_RESOLVE_ADDRESS
 
 #include "src/core/lib/iomgr/sockaddr.h"
 
@@ -105,7 +105,7 @@ static grpc_error* posix_blocking_resolve_address(
         grpc_error_set_str(
             grpc_error_set_str(
                 grpc_error_set_int(
-                    GRPC_ERROR_CREATE_FROM_STATIC_STRING(gai_strerror(s)), 
+                    GRPC_ERROR_CREATE_FROM_STATIC_STRING(gai_strerror(s)),
                     GRPC_ERROR_INT_ERRNO, s),
                 GRPC_ERROR_STR_OS_ERROR,
                 grpc_slice_from_static_string(gai_strerror(s))),
@@ -147,7 +147,7 @@ struct request {
   grpc_closure request_closure;
   void* arg;
 };
-/* Callback to be passed to grpc Executor to asynch-ify 
+/* Callback to be passed to grpc Executor to asynch-ify
  * grpc_blocking_resolve_address */
 static void do_request_thread(void* rp, grpc_error* /*error*/) {
   request* r = static_cast<request*>(rp);

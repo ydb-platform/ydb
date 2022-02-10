@@ -1,6 +1,6 @@
 OWNER(g:contrib)
 
-PROGRAM() 
+PROGRAM()
 
 LICENSE(
     GPL-3.0-or-later AND

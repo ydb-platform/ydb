@@ -46,7 +46,7 @@ namespace grpc_core {
 ///
 /// Note: All methods with a "Locked" suffix must be called from the
 /// work_serializer passed to the constructor.
-class Resolver : public InternallyRefCounted<Resolver> { 
+class Resolver : public InternallyRefCounted<Resolver> {
  public:
   /// Results returned by the resolver.
   struct Result {
@@ -105,16 +105,16 @@ class Resolver : public InternallyRefCounted<Resolver> {
   ///
   /// Note: Implementations must not invoke any method on the
   /// ResultHandler from within this call.
-  virtual void RequestReresolutionLocked() {} 
+  virtual void RequestReresolutionLocked() {}
 
-  /// Resets the re-resolution backoff, if any. 
-  /// This needs to be implemented only by pull-based implementations; 
-  /// for push-based implementations, it will be a no-op. 
-  /// TODO(roth): Pull the backoff code out of resolver and into 
-  /// client_channel, so that it can be shared across resolver 
-  /// implementations.  At that point, this method can go away. 
-  virtual void ResetBackoffLocked() {} 
- 
+  /// Resets the re-resolution backoff, if any.
+  /// This needs to be implemented only by pull-based implementations;
+  /// for push-based implementations, it will be a no-op.
+  /// TODO(roth): Pull the backoff code out of resolver and into
+  /// client_channel, so that it can be shared across resolver
+  /// implementations.  At that point, this method can go away.
+  virtual void ResetBackoffLocked() {}
+
   // Note: This must be invoked while holding the work_serializer.
   void Orphan() override {
     ShutdownLocked();

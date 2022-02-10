@@ -30,7 +30,7 @@ PEERDIR(
 )
 
 ADDINCL(
-    GLOBAL contrib/libs/libevent/include 
+    GLOBAL contrib/libs/libevent/include
     contrib/libs/libevent
 )
 

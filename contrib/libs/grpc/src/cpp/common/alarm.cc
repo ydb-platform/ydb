@@ -35,25 +35,25 @@
 namespace grpc {
 
 namespace internal {
-class AlarmImpl : public ::grpc::internal::CompletionQueueTag { 
+class AlarmImpl : public ::grpc::internal::CompletionQueueTag {
  public:
   AlarmImpl() : cq_(nullptr), tag_(nullptr) {
     gpr_ref_init(&refs_, 1);
     grpc_timer_init_unset(&timer_);
-  } 
-  ~AlarmImpl() {} 
+  }
+  ~AlarmImpl() {}
   bool FinalizeResult(void** tag, bool* /*status*/) override {
-    *tag = tag_; 
-    Unref(); 
-    return true; 
-  } 
-  void Set(::grpc::CompletionQueue* cq, gpr_timespec deadline, void* tag) { 
-    grpc_core::ApplicationCallbackExecCtx callback_exec_ctx; 
-    grpc_core::ExecCtx exec_ctx; 
-    GRPC_CQ_INTERNAL_REF(cq->cq(), "alarm"); 
-    cq_ = cq->cq(); 
-    tag_ = tag; 
-    GPR_ASSERT(grpc_cq_begin_op(cq_, this)); 
+    *tag = tag_;
+    Unref();
+    return true;
+  }
+  void Set(::grpc::CompletionQueue* cq, gpr_timespec deadline, void* tag) {
+    grpc_core::ApplicationCallbackExecCtx callback_exec_ctx;
+    grpc_core::ExecCtx exec_ctx;
+    GRPC_CQ_INTERNAL_REF(cq->cq(), "alarm");
+    cq_ = cq->cq();
+    tag_ = tag;
+    GPR_ASSERT(grpc_cq_begin_op(cq_, this));
     GRPC_CLOSURE_INIT(
         &on_alarm_,
         [](void* arg, grpc_error* error) {
@@ -71,17 +71,17 @@ class AlarmImpl : public ::grpc::internal::CompletionQueueTag {
           GRPC_CQ_INTERNAL_UNREF(cq, "alarm");
         },
         this, grpc_schedule_on_exec_ctx);
-    grpc_timer_init(&timer_, grpc_timespec_to_millis_round_up(deadline), 
-                    &on_alarm_); 
+    grpc_timer_init(&timer_, grpc_timespec_to_millis_round_up(deadline),
+                    &on_alarm_);
   }
-  void Set(gpr_timespec deadline, std::function<void(bool)> f) { 
-    grpc_core::ApplicationCallbackExecCtx callback_exec_ctx; 
+  void Set(gpr_timespec deadline, std::function<void(bool)> f) {
+    grpc_core::ApplicationCallbackExecCtx callback_exec_ctx;
     grpc_core::ExecCtx exec_ctx;
-    // Don't use any CQ at all. Instead just use the timer to fire the function 
-    callback_ = std::move(f); 
-    Ref(); 
-    GRPC_CLOSURE_INIT(&on_alarm_, 
-                      [](void* arg, grpc_error* error) { 
+    // Don't use any CQ at all. Instead just use the timer to fire the function
+    callback_ = std::move(f);
+    Ref();
+    GRPC_CLOSURE_INIT(&on_alarm_,
+                      [](void* arg, grpc_error* error) {
                         grpc_core::Executor::Run(
                             GRPC_CLOSURE_CREATE(
                                 [](void* arg, grpc_error* error) {
@@ -92,13 +92,13 @@ class AlarmImpl : public ::grpc::internal::CompletionQueueTag {
                                 },
                                 arg, nullptr),
                             error);
-                      }, 
-                      this, grpc_schedule_on_exec_ctx); 
+                      },
+                      this, grpc_schedule_on_exec_ctx);
     grpc_timer_init(&timer_, grpc_timespec_to_millis_round_up(deadline),
                     &on_alarm_);
   }
   void Cancel() {
-    grpc_core::ApplicationCallbackExecCtx callback_exec_ctx; 
+    grpc_core::ApplicationCallbackExecCtx callback_exec_ctx;
     grpc_core::ExecCtx exec_ctx;
     grpc_timer_cancel(&timer_);
   }
@@ -122,18 +122,18 @@ class AlarmImpl : public ::grpc::internal::CompletionQueueTag {
   // completion queue where events about this alarm will be posted
   grpc_completion_queue* cq_;
   void* tag_;
-  std::function<void(bool)> callback_; 
+  std::function<void(bool)> callback_;
 };
 }  // namespace internal
 
-static ::grpc::internal::GrpcLibraryInitializer g_gli_initializer; 
+static ::grpc::internal::GrpcLibraryInitializer g_gli_initializer;
 
 Alarm::Alarm() : alarm_(new internal::AlarmImpl()) {
   g_gli_initializer.summon();
 }
 
-void Alarm::SetInternal(::grpc::CompletionQueue* cq, gpr_timespec deadline, 
-                        void* tag) { 
+void Alarm::SetInternal(::grpc::CompletionQueue* cq, gpr_timespec deadline,
+                        void* tag) {
   // Note that we know that alarm_ is actually an internal::AlarmImpl
   // but we declared it as the base pointer to avoid a forward declaration
   // or exposing core data structures in the C++ public headers.
@@ -142,15 +142,15 @@ void Alarm::SetInternal(::grpc::CompletionQueue* cq, gpr_timespec deadline,
   static_cast<internal::AlarmImpl*>(alarm_)->Set(cq, deadline, tag);
 }
 
-void Alarm::SetInternal(gpr_timespec deadline, std::function<void(bool)> f) { 
-  // Note that we know that alarm_ is actually an internal::AlarmImpl 
-  // but we declared it as the base pointer to avoid a forward declaration 
-  // or exposing core data structures in the C++ public headers. 
-  // Thus it is safe to use a static_cast to the subclass here, and the 
-  // C++ style guide allows us to do so in this case 
-  static_cast<internal::AlarmImpl*>(alarm_)->Set(deadline, std::move(f)); 
-} 
- 
+void Alarm::SetInternal(gpr_timespec deadline, std::function<void(bool)> f) {
+  // Note that we know that alarm_ is actually an internal::AlarmImpl
+  // but we declared it as the base pointer to avoid a forward declaration
+  // or exposing core data structures in the C++ public headers.
+  // Thus it is safe to use a static_cast to the subclass here, and the
+  // C++ style guide allows us to do so in this case
+  static_cast<internal::AlarmImpl*>(alarm_)->Set(deadline, std::move(f));
+}
+
 Alarm::~Alarm() {
   if (alarm_ != nullptr) {
     static_cast<internal::AlarmImpl*>(alarm_)->Destroy();

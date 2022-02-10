@@ -1,8 +1,8 @@
 UNITTEST_FOR(util)
- 
+
 OWNER(g:util)
 SUBSCRIBER(g:util-subscribers)
- 
+
 FORK_TESTS()
 
 FORK_SUBTESTS()
@@ -23,7 +23,7 @@ PEERDIR(
     library/cpp/testing/benchmark
 )
 
-SRCS( 
+SRCS(
     system/align_ut.cpp
     system/atexit_ut.cpp
     system/atomic_ut.cpp
@@ -75,8 +75,8 @@ SRCS(
     system/user_ut.cpp
     system/unaligned_mem_ut.cpp
     system/yassert_ut.cpp
-) 
- 
+)
+
 IF (OS_WINDOWS)
     DEPENDS(
         util/system/ut/stdin_osfhandle
@@ -85,4 +85,4 @@ ENDIF()
 
 REQUIREMENTS(ram:12)
 
-END() 
+END()

@@ -1,53 +1,53 @@
 // © 2016 and later: Unicode, Inc. and others.
-// License & terms of use: http://www.unicode.org/copyright.html 
-/* 
-******************************************************************************* 
-* Copyright (C) 2009-2015, International Business Machines Corporation and    * 
-* others. All Rights Reserved.                                                * 
-******************************************************************************* 
-*/ 
- 
-#ifndef FPHDLIMP_H 
-#define FPHDLIMP_H 
- 
+// License & terms of use: http://www.unicode.org/copyright.html
+/*
+*******************************************************************************
+* Copyright (C) 2009-2015, International Business Machines Corporation and    *
+* others. All Rights Reserved.                                                *
+*******************************************************************************
+*/
+
+#ifndef FPHDLIMP_H
+#define FPHDLIMP_H
+
 #include "unicode/utypes.h"
 
-#if !UCONFIG_NO_FORMATTING 
- 
-#include "unicode/fieldpos.h" 
-#include "unicode/fpositer.h" 
+#if !UCONFIG_NO_FORMATTING
+
+#include "unicode/fieldpos.h"
+#include "unicode/fpositer.h"
 #include "unicode/formattedvalue.h"
- 
-U_NAMESPACE_BEGIN 
- 
-// utility FieldPositionHandler 
-// base class, null implementation 
- 
-class U_I18N_API FieldPositionHandler: public UMemory { 
+
+U_NAMESPACE_BEGIN
+
+// utility FieldPositionHandler
+// base class, null implementation
+
+class U_I18N_API FieldPositionHandler: public UMemory {
  protected:
   int32_t fShift = 0;
 
- public: 
-  virtual ~FieldPositionHandler(); 
+ public:
+  virtual ~FieldPositionHandler();
   virtual void addAttribute(int32_t id, int32_t start, int32_t limit) = 0;
   virtual void shiftLast(int32_t delta) = 0;
   virtual UBool isRecording(void) const = 0;
 
   void setShift(int32_t delta);
-}; 
- 
- 
-// utility subclass FieldPositionOnlyHandler 
- 
-class FieldPositionOnlyHandler : public FieldPositionHandler { 
-  FieldPosition& pos; 
+};
+
+
+// utility subclass FieldPositionOnlyHandler
+
+class FieldPositionOnlyHandler : public FieldPositionHandler {
+  FieldPosition& pos;
   UBool acceptFirstOnly = FALSE;
   UBool seenFirst = FALSE;
- 
- public: 
-  FieldPositionOnlyHandler(FieldPosition& pos); 
-  virtual ~FieldPositionOnlyHandler(); 
- 
+
+ public:
+  FieldPositionOnlyHandler(FieldPosition& pos);
+  virtual ~FieldPositionOnlyHandler();
+
   void addAttribute(int32_t id, int32_t start, int32_t limit) U_OVERRIDE;
   void shiftLast(int32_t delta) U_OVERRIDE;
   UBool isRecording(void) const U_OVERRIDE;
@@ -58,34 +58,34 @@ class FieldPositionOnlyHandler : public FieldPositionHandler {
    * occurrence.
    */
   void setAcceptFirstOnly(UBool acceptFirstOnly);
-}; 
- 
- 
-// utility subclass FieldPositionIteratorHandler 
+};
+
+
+// utility subclass FieldPositionIteratorHandler
 // exported as U_I18N_API for tests
- 
+
 class U_I18N_API FieldPositionIteratorHandler : public FieldPositionHandler {
-  FieldPositionIterator* iter; // can be NULL 
-  UVector32* vec; 
-  UErrorCode status; 
+  FieldPositionIterator* iter; // can be NULL
+  UVector32* vec;
+  UErrorCode status;
   UFieldCategory fCategory;
- 
-  // Note, we keep a reference to status, so if status is on the stack, we have 
-  // to be destroyed before status goes out of scope.  Easiest thing is to 
-  // allocate us on the stack in the same (or narrower) scope as status has. 
-  // This attempts to encourage that by blocking heap allocation. 
+
+  // Note, we keep a reference to status, so if status is on the stack, we have
+  // to be destroyed before status goes out of scope.  Easiest thing is to
+  // allocate us on the stack in the same (or narrower) scope as status has.
+  // This attempts to encourage that by blocking heap allocation.
   static void* U_EXPORT2 operator new(size_t) U_NOEXCEPT = delete;
   static void* U_EXPORT2 operator new[](size_t) U_NOEXCEPT = delete;
 #if U_HAVE_PLACEMENT_NEW
   static void* U_EXPORT2 operator new(size_t, void*) U_NOEXCEPT = delete;
 #endif
- 
- public: 
-  FieldPositionIteratorHandler(FieldPositionIterator* posIter, UErrorCode& status); 
+
+ public:
+  FieldPositionIteratorHandler(FieldPositionIterator* posIter, UErrorCode& status);
   /** If using this constructor, you must call getError() when done formatting! */
   FieldPositionIteratorHandler(UVector32* vec, UErrorCode& status);
-  ~FieldPositionIteratorHandler(); 
- 
+  ~FieldPositionIteratorHandler();
+
   void addAttribute(int32_t id, int32_t start, int32_t limit) U_OVERRIDE;
   void shiftLast(int32_t delta) U_OVERRIDE;
   UBool isRecording(void) const U_OVERRIDE;
@@ -100,10 +100,10 @@ class U_I18N_API FieldPositionIteratorHandler : public FieldPositionHandler {
   inline void setCategory(UFieldCategory category) {
     fCategory = category;
   }
-}; 
- 
-U_NAMESPACE_END 
- 
-#endif /* !UCONFIG_NO_FORMATTING */ 
- 
-#endif /* FPHDLIMP_H */ 
+};
+
+U_NAMESPACE_END
+
+#endif /* !UCONFIG_NO_FORMATTING */
+
+#endif /* FPHDLIMP_H */

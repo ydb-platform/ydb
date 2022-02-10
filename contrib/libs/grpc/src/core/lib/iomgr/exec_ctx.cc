@@ -58,8 +58,8 @@ static grpc_millis timespan_to_millis_round_down(gpr_timespec ts) {
   double x = GPR_MS_PER_SEC * static_cast<double>(ts.tv_sec) +
              static_cast<double>(ts.tv_nsec) / GPR_NS_PER_MS;
   if (x < 0) return 0;
-  if (x > GRPC_MILLIS_INF_FUTURE) return GRPC_MILLIS_INF_FUTURE; 
-  return static_cast<grpc_millis>(x); 
+  if (x > GRPC_MILLIS_INF_FUTURE) return GRPC_MILLIS_INF_FUTURE;
+  return static_cast<grpc_millis>(x);
 }
 
 static grpc_millis timespec_to_millis_round_down(gpr_timespec ts) {
@@ -72,8 +72,8 @@ static grpc_millis timespan_to_millis_round_up(gpr_timespec ts) {
              static_cast<double>(GPR_NS_PER_SEC - 1) /
                  static_cast<double>(GPR_NS_PER_SEC);
   if (x < 0) return 0;
-  if (x > GRPC_MILLIS_INF_FUTURE) return GRPC_MILLIS_INF_FUTURE; 
-  return static_cast<grpc_millis>(x); 
+  if (x > GRPC_MILLIS_INF_FUTURE) return GRPC_MILLIS_INF_FUTURE;
+  return static_cast<grpc_millis>(x);
 }
 
 static grpc_millis timespec_to_millis_round_up(gpr_timespec ts) {
@@ -99,12 +99,12 @@ gpr_timespec grpc_millis_to_timespec(grpc_millis millis,
 }
 
 grpc_millis grpc_timespec_to_millis_round_down(gpr_timespec ts) {
-  return timespec_to_millis_round_down( 
+  return timespec_to_millis_round_down(
       gpr_convert_clock_type(ts, g_start_time.clock_type));
 }
 
 grpc_millis grpc_timespec_to_millis_round_up(gpr_timespec ts) {
-  return timespec_to_millis_round_up( 
+  return timespec_to_millis_round_up(
       gpr_convert_clock_type(ts, g_start_time.clock_type));
 }
 
@@ -120,14 +120,14 @@ grpc_millis grpc_cycle_counter_to_millis_round_up(gpr_cycle_counter cycles) {
 
 namespace grpc_core {
 GPR_TLS_CLASS_DEF(ExecCtx::exec_ctx_);
-GPR_TLS_CLASS_DEF(ApplicationCallbackExecCtx::callback_exec_ctx_); 
+GPR_TLS_CLASS_DEF(ApplicationCallbackExecCtx::callback_exec_ctx_);
 
-// WARNING: for testing purposes only! 
-void ExecCtx::TestOnlyGlobalInit(gpr_timespec new_val) { 
-  g_start_time = new_val; 
-  gpr_tls_init(&exec_ctx_); 
-} 
- 
+// WARNING: for testing purposes only!
+void ExecCtx::TestOnlyGlobalInit(gpr_timespec new_val) {
+  g_start_time = new_val;
+  gpr_tls_init(&exec_ctx_);
+}
+
 void ExecCtx::GlobalInit(void) {
   // gpr_now(GPR_CLOCK_MONOTONIC) incurs a syscall. We don't actually know the
   // exact cycle the time was captured, so we use the average of cycles before
@@ -163,7 +163,7 @@ bool ExecCtx::Flush() {
 
 grpc_millis ExecCtx::Now() {
   if (!now_is_valid_) {
-    now_ = timespec_to_millis_round_down(gpr_now(GPR_CLOCK_MONOTONIC)); 
+    now_ = timespec_to_millis_round_down(gpr_now(GPR_CLOCK_MONOTONIC));
     now_is_valid_ = true;
   }
   return now_;

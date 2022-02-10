@@ -1,4 +1,4 @@
-#include "simple_proto.h" 
+#include "simple_proto.h"
 
 #include <library/cpp/messagebus/test/perftest/messages.pb.h>
 
@@ -16,22 +16,22 @@
 #include <library/cpp/sighandler/async_signals_handler.h>
 #include <library/cpp/threading/future/legacy_future.h>
 
-#include <util/generic/ptr.h> 
+#include <util/generic/ptr.h>
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
-#include <util/generic/yexception.h> 
+#include <util/generic/yexception.h>
 #include <util/random/random.h>
-#include <util/stream/file.h> 
-#include <util/stream/output.h> 
-#include <util/stream/str.h> 
-#include <util/string/split.h> 
-#include <util/system/event.h> 
-#include <util/system/sysstat.h> 
-#include <util/system/thread.h> 
-#include <util/thread/lfqueue.h> 
+#include <util/stream/file.h>
+#include <util/stream/output.h>
+#include <util/stream/str.h>
+#include <util/string/split.h>
+#include <util/system/event.h>
+#include <util/system/sysstat.h>
+#include <util/system/thread.h>
+#include <util/thread/lfqueue.h>
 
-#include <signal.h> 
-#include <stdlib.h> 
+#include <signal.h>
+#include <stdlib.h>
 
 using namespace NBus;
 

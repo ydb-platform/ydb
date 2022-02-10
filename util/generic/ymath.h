@@ -5,7 +5,7 @@
 
 #include <cmath>
 #include <cfloat>
-#include <cstdlib> 
+#include <cstdlib>
 
 #include "typetraits.h"
 #include "utility.h"

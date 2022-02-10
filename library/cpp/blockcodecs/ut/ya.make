@@ -1,7 +1,7 @@
 UNITTEST_FOR(library/cpp/blockcodecs)
- 
-OWNER(pg) 
- 
+
+OWNER(pg)
+
 FORK_TESTS()
 
 FORK_SUBTESTS()
@@ -12,8 +12,8 @@ TIMEOUT(300)
 
 SIZE(MEDIUM)
 
-SRCS( 
-    codecs_ut.cpp 
-) 
- 
-END() 
+SRCS(
+    codecs_ut.cpp
+)
+
+END()

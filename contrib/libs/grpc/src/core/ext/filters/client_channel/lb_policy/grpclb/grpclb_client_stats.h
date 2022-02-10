@@ -21,31 +21,31 @@
 
 #include <grpc/support/port_platform.h>
 
-#include <grpc/support/atm.h> 
+#include <grpc/support/atm.h>
 
 #include "y_absl/container/inlined_vector.h"
 
-#include "src/core/lib/gprpp/memory.h" 
-#include "src/core/lib/gprpp/ref_counted.h" 
+#include "src/core/lib/gprpp/memory.h"
+#include "src/core/lib/gprpp/ref_counted.h"
 #include "src/core/lib/gprpp/sync.h"
 
-namespace grpc_core { 
+namespace grpc_core {
 
-class GrpcLbClientStats : public RefCounted<GrpcLbClientStats> { 
- public: 
-  struct DropTokenCount { 
+class GrpcLbClientStats : public RefCounted<GrpcLbClientStats> {
+ public:
+  struct DropTokenCount {
     grpc_core::UniquePtr<char> token;
-    int64_t count; 
+    int64_t count;
 
     DropTokenCount(grpc_core::UniquePtr<char> token, int64_t count)
-        : token(std::move(token)), count(count) {} 
-  }; 
+        : token(std::move(token)), count(count) {}
+  };
 
   typedef y_absl::InlinedVector<DropTokenCount, 10> DroppedCallCounts;
 
-  void AddCallStarted(); 
-  void AddCallFinished(bool finished_with_client_failed_to_send, 
-                       bool finished_known_received); 
+  void AddCallStarted();
+  void AddCallFinished(bool finished_with_client_failed_to_send,
+                       bool finished_known_received);
 
   void AddCallDropped(const char* token);
 
@@ -60,16 +60,16 @@ class GrpcLbClientStats : public RefCounted<GrpcLbClientStats> {
     static_cast<GrpcLbClientStats*>(arg)->Unref();
   }
 
- private: 
-  gpr_atm num_calls_started_ = 0; 
-  gpr_atm num_calls_finished_ = 0; 
-  gpr_atm num_calls_finished_with_client_failed_to_send_ = 0; 
-  gpr_atm num_calls_finished_known_received_ = 0; 
+ private:
+  gpr_atm num_calls_started_ = 0;
+  gpr_atm num_calls_finished_ = 0;
+  gpr_atm num_calls_finished_with_client_failed_to_send_ = 0;
+  gpr_atm num_calls_finished_known_received_ = 0;
   Mutex drop_count_mu_;  // Guards drop_token_counts_.
   std::unique_ptr<DroppedCallCounts> drop_token_counts_;
-}; 
- 
-}  // namespace grpc_core 
- 
+};
+
+}  // namespace grpc_core
+
 #endif /* GRPC_CORE_EXT_FILTERS_CLIENT_CHANNEL_LB_POLICY_GRPCLB_GRPCLB_CLIENT_STATS_H \
         */

@@ -35,7 +35,7 @@ cdef class _RequestCallTag(_Tag):
     self.call = None
     self.call_details = None
 
-  cdef void prepare(self) except *: 
+  cdef void prepare(self) except *:
     self.call = Call()
     self.call_details = CallDetails()
     grpc_metadata_array_init(&self.c_invocation_metadata)
@@ -55,7 +55,7 @@ cdef class _BatchOperationTag:
     self._operations = operations
     self._retained_call = call
 
-  cdef void prepare(self) except *: 
+  cdef void prepare(self) except *:
     cdef Operation operation
     self.c_nops = 0 if self._operations is None else len(self._operations)
     if 0 < self.c_nops:

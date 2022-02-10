@@ -2,8 +2,8 @@
 
 #include <util/network/address.h>
 
-#include <cstdlib> 
- 
+#include <cstdlib>
+
 namespace NBus {
     const char* ToCString(EIpVersion ipVersion) {
         switch (ipVersion) {

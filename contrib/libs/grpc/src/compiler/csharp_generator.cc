@@ -200,25 +200,25 @@ TString GetCSharpMethodType(MethodType method_type) {
 }
 
 TString GetCSharpServerMethodType(MethodType method_type) {
-  switch (method_type) { 
-    case METHODTYPE_NO_STREAMING: 
-      return "grpc::UnaryServerMethod"; 
-    case METHODTYPE_CLIENT_STREAMING: 
-      return "grpc::ClientStreamingServerMethod"; 
-    case METHODTYPE_SERVER_STREAMING: 
-      return "grpc::ServerStreamingServerMethod"; 
-    case METHODTYPE_BIDI_STREAMING: 
-      return "grpc::DuplexStreamingServerMethod"; 
-  } 
-  GOOGLE_LOG(FATAL) << "Can't get here."; 
-  return ""; 
-} 
- 
+  switch (method_type) {
+    case METHODTYPE_NO_STREAMING:
+      return "grpc::UnaryServerMethod";
+    case METHODTYPE_CLIENT_STREAMING:
+      return "grpc::ClientStreamingServerMethod";
+    case METHODTYPE_SERVER_STREAMING:
+      return "grpc::ServerStreamingServerMethod";
+    case METHODTYPE_BIDI_STREAMING:
+      return "grpc::DuplexStreamingServerMethod";
+  }
+  GOOGLE_LOG(FATAL) << "Can't get here.";
+  return "";
+}
+
 TString GetServiceNameFieldName() { return "__ServiceName"; }
 
 TString GetMarshallerFieldName(const Descriptor* message) {
-  return "__Marshaller_" + 
-         grpc_generator::StringReplace(message->full_name(), ".", "_", true); 
+  return "__Marshaller_" +
+         grpc_generator::StringReplace(message->full_name(), ".", "_", true);
 }
 
 TString GetMethodFieldName(const MethodDescriptor* method) {
@@ -673,16 +673,16 @@ void GenerateBindServiceMethod(Printer* out, const ServiceDescriptor* service) {
   out->Print("{\n");
   out->Indent();
 
-  out->Print("return grpc::ServerServiceDefinition.CreateBuilder()"); 
+  out->Print("return grpc::ServerServiceDefinition.CreateBuilder()");
   out->Indent();
   out->Indent();
   for (int i = 0; i < service->method_count(); i++) {
     const MethodDescriptor* method = service->method(i);
-    out->Print("\n.AddMethod($methodfield$, serviceImpl.$methodname$)", 
+    out->Print("\n.AddMethod($methodfield$, serviceImpl.$methodname$)",
                "methodfield", GetMethodFieldName(method), "methodname",
                method->name());
   }
-  out->Print(".Build();\n"); 
+  out->Print(".Build();\n");
   out->Outdent();
   out->Outdent();
 
@@ -691,47 +691,47 @@ void GenerateBindServiceMethod(Printer* out, const ServiceDescriptor* service) {
   out->Print("\n");
 }
 
-void GenerateBindServiceWithBinderMethod(Printer* out, 
-                                         const ServiceDescriptor* service) { 
-  out->Print( 
-      "/// <summary>Register service method with a service " 
-      "binder with or without implementation. Useful when customizing the  " 
-      "service binding logic.\n" 
-      "/// Note: this method is part of an experimental API that can change or " 
-      "be " 
-      "removed without any prior notice.</summary>\n"); 
-  out->Print( 
-      "/// <param name=\"serviceBinder\">Service methods will be bound by " 
-      "calling <c>AddMethod</c> on this object." 
-      "</param>\n"); 
-  out->Print( 
-      "/// <param name=\"serviceImpl\">An object implementing the server-side" 
-      " handling logic.</param>\n"); 
-  out->Print( 
-      "public static void BindService(grpc::ServiceBinderBase serviceBinder, " 
-      "$implclass$ " 
-      "serviceImpl)\n", 
-      "implclass", GetServerClassName(service)); 
-  out->Print("{\n"); 
-  out->Indent(); 
- 
-  for (int i = 0; i < service->method_count(); i++) { 
-    const MethodDescriptor* method = service->method(i); 
-    out->Print( 
-        "serviceBinder.AddMethod($methodfield$, serviceImpl == null ? null : " 
-        "new $servermethodtype$<$inputtype$, $outputtype$>(" 
-        "serviceImpl.$methodname$));\n", 
-        "methodfield", GetMethodFieldName(method), "servermethodtype", 
-        GetCSharpServerMethodType(GetMethodType(method)), "inputtype", 
-        GetClassName(method->input_type()), "outputtype", 
-        GetClassName(method->output_type()), "methodname", method->name()); 
-  } 
- 
-  out->Outdent(); 
-  out->Print("}\n"); 
-  out->Print("\n"); 
-} 
- 
+void GenerateBindServiceWithBinderMethod(Printer* out,
+                                         const ServiceDescriptor* service) {
+  out->Print(
+      "/// <summary>Register service method with a service "
+      "binder with or without implementation. Useful when customizing the  "
+      "service binding logic.\n"
+      "/// Note: this method is part of an experimental API that can change or "
+      "be "
+      "removed without any prior notice.</summary>\n");
+  out->Print(
+      "/// <param name=\"serviceBinder\">Service methods will be bound by "
+      "calling <c>AddMethod</c> on this object."
+      "</param>\n");
+  out->Print(
+      "/// <param name=\"serviceImpl\">An object implementing the server-side"
+      " handling logic.</param>\n");
+  out->Print(
+      "public static void BindService(grpc::ServiceBinderBase serviceBinder, "
+      "$implclass$ "
+      "serviceImpl)\n",
+      "implclass", GetServerClassName(service));
+  out->Print("{\n");
+  out->Indent();
+
+  for (int i = 0; i < service->method_count(); i++) {
+    const MethodDescriptor* method = service->method(i);
+    out->Print(
+        "serviceBinder.AddMethod($methodfield$, serviceImpl == null ? null : "
+        "new $servermethodtype$<$inputtype$, $outputtype$>("
+        "serviceImpl.$methodname$));\n",
+        "methodfield", GetMethodFieldName(method), "servermethodtype",
+        GetCSharpServerMethodType(GetMethodType(method)), "inputtype",
+        GetClassName(method->input_type()), "outputtype",
+        GetClassName(method->output_type()), "methodname", method->name());
+  }
+
+  out->Outdent();
+  out->Print("}\n");
+  out->Print("\n");
+}
+
 void GenerateService(Printer* out, const ServiceDescriptor* service,
                      bool generate_client, bool generate_server,
                      bool internal_access) {
@@ -760,7 +760,7 @@ void GenerateService(Printer* out, const ServiceDescriptor* service,
   }
   if (generate_server) {
     GenerateBindServiceMethod(out, service);
-    GenerateBindServiceWithBinderMethod(out, service); 
+    GenerateBindServiceWithBinderMethod(out, service);
   }
 
   out->Outdent();
@@ -798,26 +798,26 @@ TString GetServices(const FileDescriptor* file, bool generate_client,
       out.PrintRaw(leading_comments.c_str());
     }
 
-    out.Print("#pragma warning disable 0414, 1591\n"); 
- 
+    out.Print("#pragma warning disable 0414, 1591\n");
+
     out.Print("#region Designer generated code\n");
     out.Print("\n");
     out.Print("using grpc = global::Grpc.Core;\n");
     out.Print("\n");
 
     TString file_namespace = GetFileNamespace(file);
-    if (file_namespace != "") { 
-      out.Print("namespace $namespace$ {\n", "namespace", file_namespace); 
-      out.Indent(); 
-    } 
+    if (file_namespace != "") {
+      out.Print("namespace $namespace$ {\n", "namespace", file_namespace);
+      out.Indent();
+    }
     for (int i = 0; i < file->service_count(); i++) {
       GenerateService(&out, file->service(i), generate_client, generate_server,
                       internal_access);
     }
-    if (file_namespace != "") { 
-      out.Outdent(); 
-      out.Print("}\n"); 
-    } 
+    if (file_namespace != "") {
+      out.Outdent();
+      out.Print("}\n");
+    }
     out.Print("#endregion\n");
   }
   return output;

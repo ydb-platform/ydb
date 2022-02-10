@@ -33,71 +33,71 @@
 #include "src/core/lib/iomgr/load_file.h"
 #include "src/core/lib/security/context/security_context.h"
 #include "src/core/lib/security/credentials/credentials.h"
-#include "src/core/lib/security/security_connector/load_system_roots.h" 
-#include "src/core/lib/security/security_connector/security_connector.h" 
+#include "src/core/lib/security/security_connector/load_system_roots.h"
+#include "src/core/lib/security/security_connector/security_connector.h"
 #include "src/core/lib/security/transport/security_handshaker.h"
 
 grpc_core::DebugOnlyTraceFlag grpc_trace_security_connector_refcount(
     false, "security_connector_refcount");
 
-grpc_server_security_connector::grpc_server_security_connector( 
-    const char* url_scheme, 
-    grpc_core::RefCountedPtr<grpc_server_credentials> server_creds) 
-    : grpc_security_connector(url_scheme), 
-      server_creds_(std::move(server_creds)) {} 
+grpc_server_security_connector::grpc_server_security_connector(
+    const char* url_scheme,
+    grpc_core::RefCountedPtr<grpc_server_credentials> server_creds)
+    : grpc_security_connector(url_scheme),
+      server_creds_(std::move(server_creds)) {}
 
 grpc_server_security_connector::~grpc_server_security_connector() = default;
 
-grpc_channel_security_connector::grpc_channel_security_connector( 
-    const char* url_scheme, 
-    grpc_core::RefCountedPtr<grpc_channel_credentials> channel_creds, 
-    grpc_core::RefCountedPtr<grpc_call_credentials> request_metadata_creds) 
-    : grpc_security_connector(url_scheme), 
-      channel_creds_(std::move(channel_creds)), 
-      request_metadata_creds_(std::move(request_metadata_creds)) {} 
+grpc_channel_security_connector::grpc_channel_security_connector(
+    const char* url_scheme,
+    grpc_core::RefCountedPtr<grpc_channel_credentials> channel_creds,
+    grpc_core::RefCountedPtr<grpc_call_credentials> request_metadata_creds)
+    : grpc_security_connector(url_scheme),
+      channel_creds_(std::move(channel_creds)),
+      request_metadata_creds_(std::move(request_metadata_creds)) {}
 
-grpc_channel_security_connector::~grpc_channel_security_connector() {} 
+grpc_channel_security_connector::~grpc_channel_security_connector() {}
 
-int grpc_security_connector_cmp(const grpc_security_connector* sc, 
-                                const grpc_security_connector* other) { 
+int grpc_security_connector_cmp(const grpc_security_connector* sc,
+                                const grpc_security_connector* other) {
   if (sc == nullptr || other == nullptr) return GPR_ICMP(sc, other);
-  return sc->cmp(other); 
+  return sc->cmp(other);
 }
 
-int grpc_channel_security_connector::channel_security_connector_cmp( 
-    const grpc_channel_security_connector* other) const { 
-  const grpc_channel_security_connector* other_sc = 
-      static_cast<const grpc_channel_security_connector*>(other); 
-  GPR_ASSERT(channel_creds() != nullptr); 
-  GPR_ASSERT(other_sc->channel_creds() != nullptr); 
-  int c = GPR_ICMP(channel_creds(), other_sc->channel_creds()); 
+int grpc_channel_security_connector::channel_security_connector_cmp(
+    const grpc_channel_security_connector* other) const {
+  const grpc_channel_security_connector* other_sc =
+      static_cast<const grpc_channel_security_connector*>(other);
+  GPR_ASSERT(channel_creds() != nullptr);
+  GPR_ASSERT(other_sc->channel_creds() != nullptr);
+  int c = GPR_ICMP(channel_creds(), other_sc->channel_creds());
   if (c != 0) return c;
-  return GPR_ICMP(request_metadata_creds(), other_sc->request_metadata_creds()); 
+  return GPR_ICMP(request_metadata_creds(), other_sc->request_metadata_creds());
 }
 
-int grpc_server_security_connector::server_security_connector_cmp( 
-    const grpc_server_security_connector* other) const { 
-  const grpc_server_security_connector* other_sc = 
-      static_cast<const grpc_server_security_connector*>(other); 
-  GPR_ASSERT(server_creds() != nullptr); 
-  GPR_ASSERT(other_sc->server_creds() != nullptr); 
-  return GPR_ICMP(server_creds(), other_sc->server_creds()); 
+int grpc_server_security_connector::server_security_connector_cmp(
+    const grpc_server_security_connector* other) const {
+  const grpc_server_security_connector* other_sc =
+      static_cast<const grpc_server_security_connector*>(other);
+  GPR_ASSERT(server_creds() != nullptr);
+  GPR_ASSERT(other_sc->server_creds() != nullptr);
+  return GPR_ICMP(server_creds(), other_sc->server_creds());
 }
 
 static void connector_arg_destroy(void* p) {
-  static_cast<grpc_security_connector*>(p)->Unref(DEBUG_LOCATION, 
-                                                  "connector_arg_destroy"); 
+  static_cast<grpc_security_connector*>(p)->Unref(DEBUG_LOCATION,
+                                                  "connector_arg_destroy");
 }
 
 static void* connector_arg_copy(void* p) {
-  return static_cast<grpc_security_connector*>(p) 
-      ->Ref(DEBUG_LOCATION, "connector_arg_copy") 
-      .release(); 
+  return static_cast<grpc_security_connector*>(p)
+      ->Ref(DEBUG_LOCATION, "connector_arg_copy")
+      .release();
 }
 
 static int connector_cmp(void* a, void* b) {
-  return static_cast<grpc_security_connector*>(a)->cmp( 
-      static_cast<grpc_security_connector*>(b)); 
+  return static_cast<grpc_security_connector*>(a)->cmp(
+      static_cast<grpc_security_connector*>(b));
 }
 
 static const grpc_arg_pointer_vtable connector_arg_vtable = {

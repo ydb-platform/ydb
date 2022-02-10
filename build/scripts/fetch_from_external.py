@@ -1,11 +1,11 @@
-import sys 
-import json 
+import sys
+import json
 import os.path
 import fetch_from
 import argparse
 import logging
- 
- 
+
+
 def parse_args():
     parser = argparse.ArgumentParser()
     fetch_from.add_common_arguments(parser)
@@ -13,8 +13,8 @@ def parse_args():
     parser.add_argument('--custom-fetcher')
     parser.add_argument('--resource-file')
     return parser.parse_args()
- 
- 
+
+
 def main(args):
     external_file = args.external_file.rstrip('.external')
     if os.path.isfile(args.resource_file):
@@ -25,7 +25,7 @@ def main(args):
     try:
         with open(args.external_file) as f:
             js = json.load(f)
- 
+
             if js['storage'] == 'SANDBOX':
                 import fetch_from_sandbox as ffsb
                 del args.external_file
@@ -45,7 +45,7 @@ def main(args):
         raise Exception(error)
 
 
-if __name__ == '__main__': 
+if __name__ == '__main__':
     args = parse_args()
     fetch_from.setup_logging(args, os.path.basename(__file__))
 

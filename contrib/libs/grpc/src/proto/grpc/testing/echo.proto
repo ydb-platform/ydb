@@ -18,7 +18,7 @@ syntax = "proto3";
 package grpc.testing;
 
 import "src/proto/grpc/testing/echo_messages.proto";
-import "src/proto/grpc/testing/simple_messages.proto"; 
+import "src/proto/grpc/testing/simple_messages.proto";
 
 service EchoTestService {
   rpc Echo(EchoRequest) returns (EchoResponse);
@@ -26,8 +26,8 @@ service EchoTestService {
   rpc Echo2(EchoRequest) returns (EchoResponse);
   rpc CheckDeadlineUpperBound(SimpleRequest42) returns (StringValue);
   rpc CheckDeadlineSet(SimpleRequest42) returns (StringValue);
-  // A service which checks that the initial metadata sent over contains some 
-  // expected key value pair 
+  // A service which checks that the initial metadata sent over contains some
+  // expected key value pair
   rpc CheckClientInitialMetadata(SimpleRequest42) returns (SimpleResponse42);
   rpc RequestStream(stream EchoRequest) returns (EchoResponse);
   rpc ResponseStream(EchoRequest) returns (stream EchoResponse);

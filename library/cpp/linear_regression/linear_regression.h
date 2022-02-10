@@ -7,7 +7,7 @@
 
 #include <util/generic/vector.h>
 #include <util/generic/hash.h>
-#include <util/generic/ymath.h> 
+#include <util/generic/ymath.h>
 
 class TFastLinearRegressionSolver {
 private:

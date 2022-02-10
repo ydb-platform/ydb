@@ -44,7 +44,7 @@
 #include "src/core/lib/gprpp/ref_counted_ptr.h"
 #include "src/core/lib/iomgr/endpoint.h"
 #include "src/core/lib/iomgr/resolve_address.h"
-#include "src/core/lib/iomgr/resource_quota.h" 
+#include "src/core/lib/iomgr/resource_quota.h"
 #include "src/core/lib/iomgr/tcp_server.h"
 #include "src/core/lib/slice/slice_internal.h"
 #include "src/core/lib/surface/api_trace.h"
@@ -198,10 +198,10 @@ void Chttp2ServerListener::ConnectionState::OnHandshakeDone(void* arg,
     if (error != GRPC_ERROR_NONE || self->listener_->shutdown_) {
       const char* error_str = grpc_error_string(error);
       gpr_log(GPR_DEBUG, "Handshaking failed: %s", error_str);
-      if (resource_user != nullptr) { 
-        grpc_resource_user_free(resource_user, 
-                                GRPC_RESOURCE_QUOTA_CHANNEL_SIZE); 
-      } 
+      if (resource_user != nullptr) {
+        grpc_resource_user_free(resource_user,
+                                GRPC_RESOURCE_QUOTA_CHANNEL_SIZE);
+      }
       if (error == GRPC_ERROR_NONE && args->endpoint != nullptr) {
         // We were shut down after handshaking completed successfully, so
         // destroy the endpoint here.
@@ -396,9 +396,9 @@ RefCountedPtr<HandshakeManager> Chttp2ServerListener::CreateHandshakeManager() {
   MutexLock lock(&mu_);
   if (shutdown_) return nullptr;
   grpc_resource_user* resource_user = server_->default_resource_user();
-  if (resource_user != nullptr && 
-      !grpc_resource_user_safe_alloc(resource_user, 
-                                     GRPC_RESOURCE_QUOTA_CHANNEL_SIZE)) { 
+  if (resource_user != nullptr &&
+      !grpc_resource_user_safe_alloc(resource_user,
+                                     GRPC_RESOURCE_QUOTA_CHANNEL_SIZE)) {
     gpr_log(GPR_ERROR,
             "Memory quota exhausted, rejecting connection, no handshaking.");
     return nullptr;
@@ -416,11 +416,11 @@ void Chttp2ServerListener::OnAccept(void* arg, grpc_endpoint* tcp,
   RefCountedPtr<HandshakeManager> handshake_mgr =
       self->CreateHandshakeManager();
   if (handshake_mgr == nullptr) {
-    grpc_endpoint_shutdown(tcp, GRPC_ERROR_NONE); 
-    grpc_endpoint_destroy(tcp); 
-    gpr_free(acceptor); 
-    return; 
-  } 
+    grpc_endpoint_shutdown(tcp, GRPC_ERROR_NONE);
+    grpc_endpoint_destroy(tcp);
+    gpr_free(acceptor);
+    return;
+  }
   // Deletes itself when done.
   new ConnectionState(self, accepting_pollset, acceptor,
                       std::move(handshake_mgr), self->args_, tcp);
@@ -439,7 +439,7 @@ void Chttp2ServerListener::TcpServerShutdownComplete(void* arg,
       self->pending_handshake_mgrs_->ShutdownAllPending(GRPC_ERROR_REF(error));
     }
     self->channelz_listen_socket_.reset();
-  } 
+  }
   // Flush queued work before destroying handshaker factory, since that
   // may do a synchronous unref.
   ExecCtx::Get()->Flush();

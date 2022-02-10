@@ -35,8 +35,8 @@ typedef struct grpc_iomgr_platform_vtable {
   void (*init)(void);
   void (*flush)(void);
   void (*shutdown)(void);
-  void (*shutdown_background_closure)(void); 
-  bool (*is_any_background_poller_thread)(void); 
+  void (*shutdown_background_closure)(void);
+  bool (*is_any_background_poller_thread)(void);
   bool (*add_closure_to_background_poller)(grpc_closure* closure,
                                            grpc_error* error);
 } grpc_iomgr_platform_vtable;
@@ -56,12 +56,12 @@ void grpc_iomgr_platform_flush(void);
 /** tear down all platform specific global iomgr structures */
 void grpc_iomgr_platform_shutdown(void);
 
-/** shut down all the closures registered in the background poller */ 
-void grpc_iomgr_platform_shutdown_background_closure(void); 
- 
+/** shut down all the closures registered in the background poller */
+void grpc_iomgr_platform_shutdown_background_closure(void);
+
 /** return true if the caller is a worker thread for any background poller */
-bool grpc_iomgr_platform_is_any_background_poller_thread(void); 
- 
+bool grpc_iomgr_platform_is_any_background_poller_thread(void);
+
 /** Return true if the closure is registered into the background poller. Note
  * that the closure may or may not run yet when this function returns, and the
  * closure should not be blocking or long-running. */

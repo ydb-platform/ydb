@@ -78,7 +78,7 @@ namespace NPlugins {
                 printer->Print("{\n");
                 printer->Indent();
                 printer->Print("const char* separator = \"\";\n");
-                printer->Print(Variables_, "for (size_t _index = 0; _index < $rname$Size(); ++_index) {\n"); 
+                printer->Print(Variables_, "for (size_t _index = 0; _index < $rname$Size(); ++_index) {\n");
                 printer->Indent();
                 printer->Print("out << separator;\n");
                 printer->Print(Variables_, itemPrinter);
@@ -232,7 +232,7 @@ namespace NPlugins {
             }
 
             void GenerateJSONPrinting(io::Printer* printer) override {
-                GenerateRepeatedJSONPrinting(printer, "Get$rname$(_index).PrintJSON(out)"); 
+                GenerateRepeatedJSONPrinting(printer, "Get$rname$(_index).PrintJSON(out)");
             }
     };
 
@@ -352,7 +352,7 @@ namespace NPlugins {
             void GenerateJSONPrinting(io::Printer* printer) override {
                 GenerateRepeatedJSONPrinting(
                     printer,
-                    "::google::protobuf::io::PrintJSONString(out, Get$rname$(_index))" 
+                    "::google::protobuf::io::PrintJSONString(out, Get$rname$(_index))"
                 );
             }
     };
@@ -412,7 +412,7 @@ namespace NPlugins {
             }
 
             void GenerateJSONPrinting(io::Printer* printer) override {
-                GenerateRepeatedJSONPrinting(printer, "out << (int)Get$rname$(_index)"); 
+                GenerateRepeatedJSONPrinting(printer, "out << (int)Get$rname$(_index)");
             }
     };
 
@@ -475,7 +475,7 @@ namespace NPlugins {
             }
 
             void GenerateJSONPrinting(io::Printer* printer) override {
-                GenerateRepeatedJSONPrinting(printer, "out << Get$rname$(_index)"); 
+                GenerateRepeatedJSONPrinting(printer, "out << Get$rname$(_index)");
             }
     };
 
@@ -499,7 +499,7 @@ namespace NPlugins {
             }
 
             void GenerateJSONPrinting(io::Printer* printer) override {
-                GenerateRepeatedJSONPrinting(printer, "out << (Get$rname$(_index) ? \"true\" : \"false\")"); 
+                GenerateRepeatedJSONPrinting(printer, "out << (Get$rname$(_index) ? \"true\" : \"false\")");
             }
     };
 
@@ -523,7 +523,7 @@ namespace NPlugins {
             }
 
             void GenerateJSONPrinting(io::Printer* printer) override {
-                GenerateRepeatedJSONPrinting(printer, "out << double(Get$rname$(_index))"); 
+                GenerateRepeatedJSONPrinting(printer, "out << double(Get$rname$(_index))");
             }
     };
 

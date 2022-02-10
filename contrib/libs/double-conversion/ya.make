@@ -12,8 +12,8 @@ OWNER(
     g:cpp-contrib
 )
 
-NO_COMPILER_WARNINGS() 
- 
+NO_COMPILER_WARNINGS()
+
 NO_UTIL()
 
 ADDINCL(GLOBAL contrib/libs/double-conversion/include)

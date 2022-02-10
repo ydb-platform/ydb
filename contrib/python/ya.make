@@ -78,7 +78,7 @@ RECURSE(
     asyncmc
     asyncpg
     asyncssh
-    asynctest 
+    asynctest
     asyncwhois
     atomicwrites
     atpublic
@@ -86,7 +86,7 @@ RECURSE(
     attrs
     Authlib
     autobahn
-    Automat 
+    Automat
     awscli
     Babel
     backcall
@@ -117,7 +117,7 @@ RECURSE(
     bokeh
     boltons
     boolean.py
-    bootstrapped 
+    bootstrapped
     boto
     boto3
     botocore
@@ -170,7 +170,7 @@ RECURSE(
     configobj
     configparser
     confluent-kafka
-    constantly 
+    constantly
     contextdecorator
     contextlib2
     convertdate
@@ -407,7 +407,7 @@ RECURSE(
     flask-restx
     Flask-Script
     flask-shell-ipython
-    Flask-Shelve 
+    Flask-Shelve
     Flask-SQLAlchemy
     Flask-SSLify
     flask-swagger
@@ -457,7 +457,7 @@ RECURSE(
     GPyOpt
     grafanalib
     graphene
-    graphene-django 
+    graphene-django
     graphene-sqlalchemy
     graphql-core
     graphql-relay
@@ -498,7 +498,7 @@ RECURSE(
     Hydra
     hypercorn
     hyperframe
-    hyperlink 
+    hyperlink
     hyperopt
     hypothesis
     ibm-db
@@ -512,7 +512,7 @@ RECURSE(
     implicit
     importlib-metadata
     importlib-resources
-    incremental 
+    incremental
     infi.clickhouse-orm
     inflect
     inflection
@@ -523,7 +523,7 @@ RECURSE(
     inlinestyler
     intbitset
     intspan
-    invoke 
+    invoke
     ipaddr
     ipaddress
     ipadic
@@ -572,7 +572,7 @@ RECURSE(
     kaitaistruct
     kazoo
     Keras-Preprocessing
-    kiwisolver 
+    kiwisolver
     kombu
     korean-lunar-calendar
     kubernetes
@@ -582,7 +582,7 @@ RECURSE(
     lazy-object-proxy
     lcov_cobertura
     lcov_cobertura/bin
-    legacycontour 
+    legacycontour
     license-expression
     line_profiler
     linecache2
@@ -958,7 +958,7 @@ RECURSE(
     rstr
     ruamel.std.pathlib
     ruamel.yaml
-    Rx 
+    Rx
     s3-tests
     s3transfer
     sacrebleu

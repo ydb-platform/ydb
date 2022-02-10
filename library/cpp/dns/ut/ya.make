@@ -1,10 +1,10 @@
 UNITTEST()
 
-OWNER( 
-    and42 
-    pg 
-) 
- 
+OWNER(
+    and42
+    pg
+)
+
 PEERDIR(
     library/cpp/dns
 )

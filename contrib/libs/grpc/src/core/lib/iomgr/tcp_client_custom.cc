@@ -80,8 +80,8 @@ static void on_alarm(void* acp, grpc_error* error) {
   }
 }
 
-static void custom_connect_callback_internal(grpc_custom_socket* socket, 
-                                             grpc_error* error) { 
+static void custom_connect_callback_internal(grpc_custom_socket* socket,
+                                             grpc_error* error) {
   grpc_custom_tcp_connect* connect = socket->connector;
   int done;
   grpc_closure* closure = connect->closure;
@@ -98,19 +98,19 @@ static void custom_connect_callback_internal(grpc_custom_socket* socket,
   grpc_core::ExecCtx::Run(DEBUG_LOCATION, closure, error);
 }
 
-static void custom_connect_callback(grpc_custom_socket* socket, 
-                                    grpc_error* error) { 
+static void custom_connect_callback(grpc_custom_socket* socket,
+                                    grpc_error* error) {
   grpc_core::ApplicationCallbackExecCtx callback_exec_ctx;
-  if (grpc_core::ExecCtx::Get() == nullptr) { 
-    /* If we are being run on a thread which does not have an exec_ctx created 
-     * yet, we should create one. */ 
-    grpc_core::ExecCtx exec_ctx; 
-    custom_connect_callback_internal(socket, error); 
-  } else { 
-    custom_connect_callback_internal(socket, error); 
-  } 
-} 
- 
+  if (grpc_core::ExecCtx::Get() == nullptr) {
+    /* If we are being run on a thread which does not have an exec_ctx created
+     * yet, we should create one. */
+    grpc_core::ExecCtx exec_ctx;
+    custom_connect_callback_internal(socket, error);
+  } else {
+    custom_connect_callback_internal(socket, error);
+  }
+}
+
 static void tcp_connect(grpc_closure* closure, grpc_endpoint** ep,
                         grpc_pollset_set* interested_parties,
                         const grpc_channel_args* channel_args,
@@ -149,9 +149,9 @@ static void tcp_connect(grpc_closure* closure, grpc_endpoint** ep,
             socket, connect->addr_name.c_str());
   }
 
-  GRPC_CLOSURE_INIT(&connect->on_alarm, on_alarm, socket, 
-                    grpc_schedule_on_exec_ctx); 
-  grpc_timer_init(&connect->alarm, deadline, &connect->on_alarm); 
+  GRPC_CLOSURE_INIT(&connect->on_alarm, on_alarm, socket,
+                    grpc_schedule_on_exec_ctx);
+  grpc_timer_init(&connect->alarm, deadline, &connect->on_alarm);
   grpc_custom_socket_vtable->connect(
       socket, (const grpc_sockaddr*)resolved_addr->addr, resolved_addr->len,
       custom_connect_callback);

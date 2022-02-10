@@ -6,7 +6,7 @@
 #include <util/system/thread.h>
 
 namespace {
-#ifdef _linux_ 
+#ifdef _linux_
     TString GetExecName() {
         TString execPath = GetExecPath();
         size_t lastSlash = execPath.find_last_of('/');
@@ -16,7 +16,7 @@ namespace {
             return execPath.substr(lastSlash + 1);
         }
     }
-#endif 
+#endif
 }
 
 void SetCurrentThreadName(const char* name) {

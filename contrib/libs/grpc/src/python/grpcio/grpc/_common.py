@@ -20,8 +20,8 @@ import six
 import grpc
 from grpc._cython import cygrpc
 
-_LOGGER = logging.getLogger(__name__) 
- 
+_LOGGER = logging.getLogger(__name__)
+
 CYGRPC_CONNECTIVITY_STATE_TO_CHANNEL_CONNECTIVITY = {
     cygrpc.ConnectivityState.idle:
         grpc.ChannelConnectivity.IDLE,
@@ -69,13 +69,13 @@ def encode(s):
     if isinstance(s, bytes):
         return s
     else:
-        return s.encode('utf8') 
+        return s.encode('utf8')
 
 
 def decode(b):
-    if isinstance(b, bytes): 
-        return b.decode('utf-8', 'replace') 
-    return b 
+    if isinstance(b, bytes):
+        return b.decode('utf-8', 'replace')
+    return b
 
 
 def _transform(message, transformer, exception_message):
@@ -85,7 +85,7 @@ def _transform(message, transformer, exception_message):
         try:
             return transformer(message)
         except Exception:  # pylint: disable=broad-except
-            _LOGGER.exception(exception_message) 
+            _LOGGER.exception(exception_message)
             return None
 
 

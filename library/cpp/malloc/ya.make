@@ -1,14 +1,14 @@
 RECURSE(
-    api 
-    api/helpers 
-    api/ut 
+    api
+    api/helpers
+    api/ut
     tcmalloc
-    galloc 
-    jemalloc 
+    galloc
+    jemalloc
     lockless
     nalf
-    sample-client 
-    system 
+    sample-client
+    system
     mimalloc
     mimalloc/link_test
     hu

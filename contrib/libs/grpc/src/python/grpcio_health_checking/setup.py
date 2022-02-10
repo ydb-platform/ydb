@@ -63,7 +63,7 @@ PACKAGE_DIRECTORIES = {
 }
 
 INSTALL_REQUIRES = (
-    'protobuf>=3.6.0', 
+    'protobuf>=3.6.0',
     'grpcio>={version}'.format(version=grpc_version.VERSION),
 )
 
@@ -74,7 +74,7 @@ try:
         version=grpc_version.VERSION),)
     COMMAND_CLASS = {
         # Run preprocess from the repository *before* doing any packaging!
-        'preprocess': _health_commands.Preprocess, 
+        'preprocess': _health_commands.Preprocess,
         'build_package_protos': _health_commands.BuildPackageProtos,
     }
 except ImportError:

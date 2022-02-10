@@ -41,45 +41,45 @@ std::shared_ptr<grpc::Channel> CreateCustomChannel(
       init_lib;  // We need to call init in case of bad creds.
   return creds ? creds->CreateChannelImpl(target, args)
                : grpc::CreateChannelInternal(
-                     "", 
-                     grpc_lame_client_channel_create( 
-                         nullptr, GRPC_STATUS_INVALID_ARGUMENT, 
-                         "Invalid credentials."), 
-                     std::vector<std::unique_ptr< 
+                     "",
+                     grpc_lame_client_channel_create(
+                         nullptr, GRPC_STATUS_INVALID_ARGUMENT,
+                         "Invalid credentials."),
+                     std::vector<std::unique_ptr<
                          grpc::experimental::
                              ClientInterceptorFactoryInterface>>());
 }
 
-namespace experimental { 
-/// Create a new \em custom \a Channel pointing to \a target with \a 
-/// interceptors being invoked per call. 
-/// 
-/// \warning For advanced use and testing ONLY. Override default channel 
-/// arguments only if necessary. 
-/// 
-/// \param target The URI of the endpoint to connect to. 
-/// \param creds Credentials to use for the created channel. If it does not 
-/// hold an object or is invalid, a lame channel (one on which all operations 
-/// fail) is returned. 
-/// \param args Options for channel creation. 
+namespace experimental {
+/// Create a new \em custom \a Channel pointing to \a target with \a
+/// interceptors being invoked per call.
+///
+/// \warning For advanced use and testing ONLY. Override default channel
+/// arguments only if necessary.
+///
+/// \param target The URI of the endpoint to connect to.
+/// \param creds Credentials to use for the created channel. If it does not
+/// hold an object or is invalid, a lame channel (one on which all operations
+/// fail) is returned.
+/// \param args Options for channel creation.
 std::shared_ptr<grpc::Channel> CreateCustomChannelWithInterceptors(
     const TString& target,
     const std::shared_ptr<grpc::ChannelCredentials>& creds,
     const grpc::ChannelArguments& args,
-    std::vector< 
+    std::vector<
         std::unique_ptr<grpc::experimental::ClientInterceptorFactoryInterface>>
-        interceptor_creators) { 
+        interceptor_creators) {
   grpc::GrpcLibraryCodegen
       init_lib;  // We need to call init in case of bad creds.
-  return creds ? creds->CreateChannelWithInterceptors( 
-                     target, args, std::move(interceptor_creators)) 
+  return creds ? creds->CreateChannelWithInterceptors(
+                     target, args, std::move(interceptor_creators))
                : grpc::CreateChannelInternal(
-                     "", 
-                     grpc_lame_client_channel_create( 
-                         nullptr, GRPC_STATUS_INVALID_ARGUMENT, 
-                         "Invalid credentials."), 
+                     "",
+                     grpc_lame_client_channel_create(
+                         nullptr, GRPC_STATUS_INVALID_ARGUMENT,
+                         "Invalid credentials."),
                      std::move(interceptor_creators));
-} 
-}  // namespace experimental 
- 
+}
+}  // namespace experimental
+
 }  // namespace grpc

@@ -144,7 +144,7 @@ cdef extern from "grpc/grpc.h":
   const char *GRPC_ARG_PRIMARY_USER_AGENT_STRING
   const char *GRPC_ARG_SECONDARY_USER_AGENT_STRING
   const char *GRPC_SSL_TARGET_NAME_OVERRIDE_ARG
-  const char *GRPC_SSL_SESSION_CACHE_ARG 
+  const char *GRPC_SSL_SESSION_CACHE_ARG
   const char *_GRPC_COMPRESSION_CHANNEL_DEFAULT_ALGORITHM \
     "GRPC_COMPRESSION_CHANNEL_DEFAULT_ALGORITHM"
   const char *GRPC_COMPRESSION_CHANNEL_DEFAULT_LEVEL
@@ -154,10 +154,10 @@ cdef extern from "grpc/grpc.h":
   const int GRPC_WRITE_NO_COMPRESS
   const int GRPC_WRITE_USED_MASK
 
-  const int GRPC_INITIAL_METADATA_WAIT_FOR_READY 
-  const int GRPC_INITIAL_METADATA_WAIT_FOR_READY_EXPLICITLY_SET 
-  const int GRPC_INITIAL_METADATA_USED_MASK 
- 
+  const int GRPC_INITIAL_METADATA_WAIT_FOR_READY
+  const int GRPC_INITIAL_METADATA_WAIT_FOR_READY_EXPLICITLY_SET
+  const int GRPC_INITIAL_METADATA_USED_MASK
+
   const int GRPC_MAX_COMPLETION_QUEUE_PLUCKERS
 
   ctypedef struct grpc_completion_queue:
@@ -304,7 +304,7 @@ cdef extern from "grpc/grpc.h":
     grpc_metadata_array *trailing_metadata
     grpc_status_code *status
     grpc_slice *status_details
-    char** error_string 
+    char** error_string
 
   ctypedef struct grpc_op_data_recv_close_on_server:
     int *cancelled
@@ -336,7 +336,7 @@ cdef extern from "grpc/grpc.h":
   void grpc_dont_init_openssl() nogil
   void grpc_init() nogil
   void grpc_shutdown_blocking() nogil
-  int grpc_is_initialized() nogil 
+  int grpc_is_initialized() nogil
 
   ctypedef struct grpc_completion_queue_factory:
     pass
@@ -405,17 +405,17 @@ cdef extern from "grpc/grpc.h":
   void grpc_server_cancel_all_calls(grpc_server *server) nogil
   void grpc_server_destroy(grpc_server *server) nogil
 
-  char* grpc_channelz_get_top_channels(intptr_t start_channel_id) 
-  char* grpc_channelz_get_servers(intptr_t start_server_id) 
-  char* grpc_channelz_get_server(intptr_t server_id) 
-  char* grpc_channelz_get_server_sockets(intptr_t server_id, 
-                                         intptr_t start_socket_id, 
-                                         intptr_t max_results) 
-  char* grpc_channelz_get_channel(intptr_t channel_id) 
-  char* grpc_channelz_get_subchannel(intptr_t subchannel_id) 
-  char* grpc_channelz_get_socket(intptr_t socket_id) 
+  char* grpc_channelz_get_top_channels(intptr_t start_channel_id)
+  char* grpc_channelz_get_servers(intptr_t start_server_id)
+  char* grpc_channelz_get_server(intptr_t server_id)
+  char* grpc_channelz_get_server_sockets(intptr_t server_id,
+                                         intptr_t start_socket_id,
+                                         intptr_t max_results)
+  char* grpc_channelz_get_channel(intptr_t channel_id)
+  char* grpc_channelz_get_subchannel(intptr_t subchannel_id)
+  char* grpc_channelz_get_socket(intptr_t socket_id)
 
- 
+
 cdef extern from "grpc/grpc_security.h":
 
   # Declare this as an enum, this is the only way to make it a const in
@@ -489,26 +489,26 @@ cdef extern from "grpc/grpc_security.h":
     # We don't care about the internals (and in fact don't know them)
     pass
 
-  ctypedef struct grpc_ssl_session_cache: 
-    # We don't care about the internals (and in fact don't know them) 
-    pass 
- 
-  ctypedef struct verify_peer_options: 
-    # We don't care about the internals (and in fact don't know them) 
-    pass 
- 
+  ctypedef struct grpc_ssl_session_cache:
+    # We don't care about the internals (and in fact don't know them)
+    pass
+
+  ctypedef struct verify_peer_options:
+    # We don't care about the internals (and in fact don't know them)
+    pass
+
   ctypedef void (*grpc_ssl_roots_override_callback)(char **pem_root_certs)
 
-  grpc_ssl_session_cache *grpc_ssl_session_cache_create_lru(size_t capacity) 
-  void grpc_ssl_session_cache_destroy(grpc_ssl_session_cache* cache) 
- 
+  grpc_ssl_session_cache *grpc_ssl_session_cache_create_lru(size_t capacity)
+  void grpc_ssl_session_cache_destroy(grpc_ssl_session_cache* cache)
+
   void grpc_set_ssl_roots_override_callback(
       grpc_ssl_roots_override_callback cb) nogil
 
   grpc_channel_credentials *grpc_google_default_credentials_create(grpc_call_credentials* call_credentials) nogil
   grpc_channel_credentials *grpc_ssl_credentials_create(
       const char *pem_root_certs, grpc_ssl_pem_key_cert_pair *pem_key_cert_pair,
-      verify_peer_options *verify_options, void *reserved) nogil 
+      verify_peer_options *verify_options, void *reserved) nogil
   grpc_channel_credentials *grpc_composite_channel_credentials_create(
       grpc_channel_credentials *creds1, grpc_call_credentials *creds2,
       void *reserved) nogil

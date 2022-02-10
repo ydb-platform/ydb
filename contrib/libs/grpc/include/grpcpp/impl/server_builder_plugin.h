@@ -41,9 +41,9 @@ class ServerBuilderPlugin {
   virtual ~ServerBuilderPlugin() {}
   virtual TString name() = 0;
 
-  /// UpdateServerBuilder will be called at an early stage in 
-  /// ServerBuilder::BuildAndStart(), right after the ServerBuilderOptions have 
-  /// done their updates. 
+  /// UpdateServerBuilder will be called at an early stage in
+  /// ServerBuilder::BuildAndStart(), right after the ServerBuilderOptions have
+  /// done their updates.
   virtual void UpdateServerBuilder(ServerBuilder* /*builder*/) {}
 
   /// InitServer will be called in ServerBuilder::BuildAndStart(), after the

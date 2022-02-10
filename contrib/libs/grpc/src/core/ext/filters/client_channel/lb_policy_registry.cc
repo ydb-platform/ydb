@@ -91,19 +91,19 @@ void LoadBalancingPolicyRegistry::Builder::RegisterLoadBalancingPolicyFactory(
 
 OrphanablePtr<LoadBalancingPolicy>
 LoadBalancingPolicyRegistry::CreateLoadBalancingPolicy(
-    const char* name, LoadBalancingPolicy::Args args) { 
+    const char* name, LoadBalancingPolicy::Args args) {
   GPR_ASSERT(g_state != nullptr);
   // Find factory.
   LoadBalancingPolicyFactory* factory =
       g_state->GetLoadBalancingPolicyFactory(name);
   if (factory == nullptr) return nullptr;  // Specified name not found.
   // Create policy via factory.
-  return factory->CreateLoadBalancingPolicy(std::move(args)); 
+  return factory->CreateLoadBalancingPolicy(std::move(args));
 }
 
 bool LoadBalancingPolicyRegistry::LoadBalancingPolicyExists(
     const char* name, bool* requires_config) {
-  GPR_ASSERT(g_state != nullptr); 
+  GPR_ASSERT(g_state != nullptr);
   auto* factory = g_state->GetLoadBalancingPolicyFactory(name);
   if (factory == nullptr) {
     return false;
@@ -116,8 +116,8 @@ bool LoadBalancingPolicyRegistry::LoadBalancingPolicyExists(
     GRPC_ERROR_UNREF(error);
   }
   return true;
-} 
- 
+}
+
 namespace {
 
 // Returns the JSON node of policy (with both policy name and config content)

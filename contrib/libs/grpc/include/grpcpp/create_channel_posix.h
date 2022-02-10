@@ -45,8 +45,8 @@ std::shared_ptr<grpc::Channel> CreateInsecureChannelFromFd(
 std::shared_ptr<grpc::Channel> CreateCustomInsecureChannelFromFd(
     const TString& target, int fd, const grpc::ChannelArguments& args);
 
-namespace experimental { 
- 
+namespace experimental {
+
 /// Create a new \a Channel communicating over given file descriptor with custom
 /// channel arguments.
 ///
@@ -57,12 +57,12 @@ namespace experimental {
 std::shared_ptr<grpc::Channel>
 CreateCustomInsecureChannelWithInterceptorsFromFd(
     const TString& target, int fd, const grpc::ChannelArguments& args,
-    std::unique_ptr<std::vector< 
+    std::unique_ptr<std::vector<
         std::unique_ptr<grpc::experimental::ClientInterceptorFactoryInterface>>>
         interceptor_creators);
- 
-}  // namespace experimental 
- 
+
+}  // namespace experimental
+
 #endif  // GPR_SUPPORT_CHANNELS_FROM_FD
 
 }  // namespace grpc

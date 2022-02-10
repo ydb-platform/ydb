@@ -61,7 +61,7 @@ TraceFlag grpc_server_channel_trace(false, "server_channel");
 //
 // Server::RequestedCall
 //
- 
+
 struct Server::RequestedCall {
   enum class Type { BATCH_CALL, REGISTERED_CALL };
 
@@ -948,7 +948,7 @@ class Server::ChannelData::ConnectivityWatcher
     // Shut down channel.
     MutexLock lock(&chand_->server_->mu_global_);
     chand_->Destroy();
-  } 
+  }
 
   ChannelData* chand_;
 };
@@ -983,7 +983,7 @@ Server::ChannelData::~ChannelData() {
       }
       server_->MaybeFinishShutdown();
     }
-  } 
+  }
 }
 
 void Server::ChannelData::InitTransport(RefCountedPtr<Server> server,
@@ -1092,13 +1092,13 @@ void Server::ChannelData::AcceptStream(void* arg, grpc_transport* /*transport*/,
   grpc_call_create_args args;
   args.channel = chand->channel_;
   args.server = chand->server_.get();
-  args.parent = nullptr; 
-  args.propagation_mask = 0; 
-  args.cq = nullptr; 
-  args.pollset_set_alternative = nullptr; 
+  args.parent = nullptr;
+  args.propagation_mask = 0;
+  args.cq = nullptr;
+  args.pollset_set_alternative = nullptr;
   args.server_transport_data = transport_server_data;
-  args.add_initial_metadata = nullptr; 
-  args.add_initial_metadata_count = 0; 
+  args.add_initial_metadata = nullptr;
+  args.add_initial_metadata_count = 0;
   args.send_deadline = GRPC_MILLIS_INF_FUTURE;
   grpc_call* call;
   grpc_error* error = grpc_call_create(&args, &call);
@@ -1459,12 +1459,12 @@ void grpc_server_register_completion_queue(grpc_server* server,
       "grpc_server_register_completion_queue(server=%p, cq=%p, reserved=%p)", 3,
       (server, cq, reserved));
   GPR_ASSERT(!reserved);
-  auto cq_type = grpc_get_cq_completion_type(cq); 
-  if (cq_type != GRPC_CQ_NEXT && cq_type != GRPC_CQ_CALLBACK) { 
+  auto cq_type = grpc_get_cq_completion_type(cq);
+  if (cq_type != GRPC_CQ_NEXT && cq_type != GRPC_CQ_CALLBACK) {
     gpr_log(GPR_INFO,
-            "Completion queue of type %d is being registered as a " 
-            "server-completion-queue", 
-            static_cast<int>(cq_type)); 
+            "Completion queue of type %d is being registered as a "
+            "server-completion-queue",
+            static_cast<int>(cq_type));
     /* Ideally we should log an error and abort but ruby-wrapped-language API
        calls grpc_completion_queue_pluck() on server completion queues */
   }
@@ -1491,7 +1491,7 @@ void grpc_server_start(grpc_server* server) {
 
 void grpc_server_shutdown_and_notify(grpc_server* server,
                                      grpc_completion_queue* cq, void* tag) {
-  grpc_core::ApplicationCallbackExecCtx callback_exec_ctx; 
+  grpc_core::ApplicationCallbackExecCtx callback_exec_ctx;
   grpc_core::ExecCtx exec_ctx;
   GRPC_API_TRACE("grpc_server_shutdown_and_notify(server=%p, cq=%p, tag=%p)", 3,
                  (server, cq, tag));
@@ -1499,14 +1499,14 @@ void grpc_server_shutdown_and_notify(grpc_server* server,
 }
 
 void grpc_server_cancel_all_calls(grpc_server* server) {
-  grpc_core::ApplicationCallbackExecCtx callback_exec_ctx; 
+  grpc_core::ApplicationCallbackExecCtx callback_exec_ctx;
   grpc_core::ExecCtx exec_ctx;
   GRPC_API_TRACE("grpc_server_cancel_all_calls(server=%p)", 1, (server));
   server->core_server->CancelAllCalls();
 }
 
 void grpc_server_destroy(grpc_server* server) {
-  grpc_core::ApplicationCallbackExecCtx callback_exec_ctx; 
+  grpc_core::ApplicationCallbackExecCtx callback_exec_ctx;
   grpc_core::ExecCtx exec_ctx;
   GRPC_API_TRACE("grpc_server_destroy(server=%p)", 1, (server));
   delete server;
@@ -1517,7 +1517,7 @@ grpc_call_error grpc_server_request_call(
     grpc_metadata_array* request_metadata,
     grpc_completion_queue* cq_bound_to_call,
     grpc_completion_queue* cq_for_notification, void* tag) {
-  grpc_core::ApplicationCallbackExecCtx callback_exec_ctx; 
+  grpc_core::ApplicationCallbackExecCtx callback_exec_ctx;
   grpc_core::ExecCtx exec_ctx;
   GRPC_STATS_INC_SERVER_REQUESTED_CALLS();
   GRPC_API_TRACE(
@@ -1537,9 +1537,9 @@ grpc_call_error grpc_server_request_registered_call(
     grpc_metadata_array* request_metadata, grpc_byte_buffer** optional_payload,
     grpc_completion_queue* cq_bound_to_call,
     grpc_completion_queue* cq_for_notification, void* tag_new) {
-  grpc_core::ApplicationCallbackExecCtx callback_exec_ctx; 
+  grpc_core::ApplicationCallbackExecCtx callback_exec_ctx;
   grpc_core::ExecCtx exec_ctx;
-  GRPC_STATS_INC_SERVER_REQUESTED_CALLS(); 
+  GRPC_STATS_INC_SERVER_REQUESTED_CALLS();
   auto* rm = static_cast<grpc_core::Server::RegisteredMethod*>(rmp);
   GRPC_API_TRACE(
       "grpc_server_request_registered_call("

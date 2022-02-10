@@ -95,29 +95,29 @@ static void start_timer_thread_and_unlock(void) {
 
 void grpc_timer_manager_tick() {
   grpc_core::ExecCtx exec_ctx;
-  grpc_timer_check(nullptr); 
+  grpc_timer_check(nullptr);
 }
 
 static void run_some_timers() {
-  // In the case of timers, the ExecCtx for the thread is declared 
-  // in the timer thread itself, but this is the point where we 
-  // could start seeing application-level callbacks. No need to 
-  // create a new ExecCtx, though, since there already is one and it is 
-  // flushed (but not destructed) in this function itself 
-  grpc_core::ApplicationCallbackExecCtx callback_exec_ctx( 
-      GRPC_APP_CALLBACK_EXEC_CTX_FLAG_IS_INTERNAL_THREAD); 
- 
+  // In the case of timers, the ExecCtx for the thread is declared
+  // in the timer thread itself, but this is the point where we
+  // could start seeing application-level callbacks. No need to
+  // create a new ExecCtx, though, since there already is one and it is
+  // flushed (but not destructed) in this function itself
+  grpc_core::ApplicationCallbackExecCtx callback_exec_ctx(
+      GRPC_APP_CALLBACK_EXEC_CTX_FLAG_IS_INTERNAL_THREAD);
+
   // if there's something to execute...
   gpr_mu_lock(&g_mu);
   // remove a waiter from the pool, and start another thread if necessary
   --g_waiter_count;
   if (g_waiter_count == 0 && g_threaded) {
-    // The number of timer threads is always increasing until all the threads 
-    // are stopped. In rare cases, if a large number of timers fire 
-    // simultaneously, we may end up using a large number of threads. 
+    // The number of timer threads is always increasing until all the threads
+    // are stopped. In rare cases, if a large number of timers fire
+    // simultaneously, we may end up using a large number of threads.
     start_timer_thread_and_unlock();
   } else {
-    // if there's no thread waiting with a timeout, kick an existing untimed 
+    // if there's no thread waiting with a timeout, kick an existing untimed
     // waiter so that the next deadline is not missed
     if (!g_has_timed_waiter) {
       if (GRPC_TRACE_FLAG_ENABLED(grpc_timer_check_trace)) {
@@ -185,7 +185,7 @@ static bool wait_until(grpc_millis next) {
 
         if (GRPC_TRACE_FLAG_ENABLED(grpc_timer_check_trace)) {
           grpc_millis wait_time = next - grpc_core::ExecCtx::Get()->Now();
-          gpr_log(GPR_INFO, "sleep for a %" PRId64 " milliseconds", wait_time); 
+          gpr_log(GPR_INFO, "sleep for a %" PRId64 " milliseconds", wait_time);
         }
       } else {  // g_timed_waiter == true && next >= g_timed_waiter_deadline
         next = GRPC_MILLIS_INF_FUTURE;
@@ -250,7 +250,7 @@ static void timer_main_loop() {
           gpr_log(GPR_INFO, "timers not checked: expect another thread to");
         }
         next = GRPC_MILLIS_INF_FUTURE;
-      // fallthrough 
+      // fallthrough
       case GRPC_TIMERS_CHECKED_AND_EMPTY:
         if (!wait_until(next)) {
           return;
@@ -280,7 +280,7 @@ static void timer_thread_cleanup(completed_thread* ct) {
 static void timer_thread(void* completed_thread_ptr) {
   // this threads exec_ctx: we try to run things through to completion here
   // since it's easy to spin up new threads
-  grpc_core::ExecCtx exec_ctx(GRPC_EXEC_CTX_FLAG_IS_INTERNAL_THREAD); 
+  grpc_core::ExecCtx exec_ctx(GRPC_EXEC_CTX_FLAG_IS_INTERNAL_THREAD);
   timer_main_loop();
 
   timer_thread_cleanup(static_cast<completed_thread*>(completed_thread_ptr));

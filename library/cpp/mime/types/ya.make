@@ -1,5 +1,5 @@
 LIBRARY()
- 
+
 OWNER(stanly)
 
 SRCS(

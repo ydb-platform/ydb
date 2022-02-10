@@ -5,7 +5,7 @@ OWNER(
     snowball
     heretic
 )
- 
+
 DEFAULT(SANDBOX_TASK_ID 0)
 DEFAULT(KOSHER_SVN_VERSION "")
 

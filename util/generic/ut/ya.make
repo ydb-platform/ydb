@@ -1,11 +1,11 @@
 UNITTEST_FOR(util)
- 
+
 OWNER(g:util)
 SUBSCRIBER(g:util-subscribers)
- 
+
 FORK_TESTS()
 
-SRCS( 
+SRCS(
     generic/adaptor_ut.cpp
     generic/algorithm_ut.cpp
     generic/array_ref_ut.cpp
@@ -54,8 +54,8 @@ SRCS(
     generic/ylimits_ut.cpp
     generic/ymath_ut.cpp
     generic/scope_ut.cpp
-) 
- 
+)
+
 INCLUDE(${ARCADIA_ROOT}/util/tests/ya_util_tests.inc)
 
 IF (NOT OS_IOS AND NOT ARCH_PPC64LE)
@@ -70,4 +70,4 @@ IF (NOT OS_IOS AND NOT ARCH_PPC64LE)
     )
 ENDIF()
 
-END() 
+END()

@@ -27,9 +27,9 @@
 
 static grpc_error* recursively_find_error_with_field(grpc_error* error,
                                                      grpc_error_ints which) {
-  intptr_t unused; 
+  intptr_t unused;
   // If the error itself has a status code, return it.
-  if (grpc_error_get_int(error, which, &unused)) { 
+  if (grpc_error_get_int(error, which, &unused)) {
     return error;
   }
   if (grpc_error_is_special(error)) return nullptr;
@@ -137,8 +137,8 @@ y_absl::Status grpc_error_to_absl_status(grpc_error* error) {
 }
 
 bool grpc_error_has_clear_grpc_status(grpc_error* error) {
-  intptr_t unused; 
-  if (grpc_error_get_int(error, GRPC_ERROR_INT_GRPC_STATUS, &unused)) { 
+  intptr_t unused;
+  if (grpc_error_get_int(error, GRPC_ERROR_INT_GRPC_STATUS, &unused)) {
     return true;
   }
   uint8_t slot = error->first_err;

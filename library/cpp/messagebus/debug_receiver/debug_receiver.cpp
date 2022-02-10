@@ -1,8 +1,8 @@
-#include "debug_receiver_handler.h" 
-#include "debug_receiver_proto.h" 
+#include "debug_receiver_handler.h"
+#include "debug_receiver_proto.h"
 
 #include <library/cpp/messagebus/ybus.h>
- 
+
 #include <library/cpp/getopt/last_getopt.h>
 #include <library/cpp/lwtrace/all.h>
 

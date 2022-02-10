@@ -28,56 +28,56 @@
 #include <grpc/support/string_util.h>
 
 #include "src/core/lib/security/credentials/alts/check_gcp_environment.h"
-#include "src/core/lib/security/security_connector/alts/alts_security_connector.h" 
+#include "src/core/lib/security/security_connector/alts/alts_security_connector.h"
 
 #define GRPC_CREDENTIALS_TYPE_ALTS "Alts"
-#define GRPC_ALTS_HANDSHAKER_SERVICE_URL "metadata.google.internal.:8080" 
+#define GRPC_ALTS_HANDSHAKER_SERVICE_URL "metadata.google.internal.:8080"
 
-grpc_alts_credentials::grpc_alts_credentials( 
-    const grpc_alts_credentials_options* options, 
-    const char* handshaker_service_url) 
-    : grpc_channel_credentials(GRPC_CREDENTIALS_TYPE_ALTS), 
-      options_(grpc_alts_credentials_options_copy(options)), 
-      handshaker_service_url_(handshaker_service_url == nullptr 
-                                  ? gpr_strdup(GRPC_ALTS_HANDSHAKER_SERVICE_URL) 
+grpc_alts_credentials::grpc_alts_credentials(
+    const grpc_alts_credentials_options* options,
+    const char* handshaker_service_url)
+    : grpc_channel_credentials(GRPC_CREDENTIALS_TYPE_ALTS),
+      options_(grpc_alts_credentials_options_copy(options)),
+      handshaker_service_url_(handshaker_service_url == nullptr
+                                  ? gpr_strdup(GRPC_ALTS_HANDSHAKER_SERVICE_URL)
                                   : gpr_strdup(handshaker_service_url)) {
   grpc_alts_set_rpc_protocol_versions(&options_->rpc_versions);
 }
 
-grpc_alts_credentials::~grpc_alts_credentials() { 
-  grpc_alts_credentials_options_destroy(options_); 
-  gpr_free(handshaker_service_url_); 
+grpc_alts_credentials::~grpc_alts_credentials() {
+  grpc_alts_credentials_options_destroy(options_);
+  gpr_free(handshaker_service_url_);
 }
 
-grpc_core::RefCountedPtr<grpc_channel_security_connector> 
-grpc_alts_credentials::create_security_connector( 
-    grpc_core::RefCountedPtr<grpc_call_credentials> call_creds, 
+grpc_core::RefCountedPtr<grpc_channel_security_connector>
+grpc_alts_credentials::create_security_connector(
+    grpc_core::RefCountedPtr<grpc_call_credentials> call_creds,
     const char* target_name, const grpc_channel_args* /*args*/,
     grpc_channel_args** /*new_args*/) {
   return grpc_alts_channel_security_connector_create(
-      this->Ref(), std::move(call_creds), target_name); 
+      this->Ref(), std::move(call_creds), target_name);
 }
 
-grpc_alts_server_credentials::grpc_alts_server_credentials( 
-    const grpc_alts_credentials_options* options, 
-    const char* handshaker_service_url) 
-    : grpc_server_credentials(GRPC_CREDENTIALS_TYPE_ALTS), 
-      options_(grpc_alts_credentials_options_copy(options)), 
-      handshaker_service_url_(handshaker_service_url == nullptr 
-                                  ? gpr_strdup(GRPC_ALTS_HANDSHAKER_SERVICE_URL) 
+grpc_alts_server_credentials::grpc_alts_server_credentials(
+    const grpc_alts_credentials_options* options,
+    const char* handshaker_service_url)
+    : grpc_server_credentials(GRPC_CREDENTIALS_TYPE_ALTS),
+      options_(grpc_alts_credentials_options_copy(options)),
+      handshaker_service_url_(handshaker_service_url == nullptr
+                                  ? gpr_strdup(GRPC_ALTS_HANDSHAKER_SERVICE_URL)
                                   : gpr_strdup(handshaker_service_url)) {
   grpc_alts_set_rpc_protocol_versions(&options_->rpc_versions);
 }
- 
-grpc_core::RefCountedPtr<grpc_server_security_connector> 
-grpc_alts_server_credentials::create_security_connector() { 
-  return grpc_alts_server_security_connector_create(this->Ref()); 
+
+grpc_core::RefCountedPtr<grpc_server_security_connector>
+grpc_alts_server_credentials::create_security_connector() {
+  return grpc_alts_server_security_connector_create(this->Ref());
 }
 
-grpc_alts_server_credentials::~grpc_alts_server_credentials() { 
-  grpc_alts_credentials_options_destroy(options_); 
-  gpr_free(handshaker_service_url_); 
-} 
+grpc_alts_server_credentials::~grpc_alts_server_credentials() {
+  grpc_alts_credentials_options_destroy(options_);
+  gpr_free(handshaker_service_url_);
+}
 
 grpc_channel_credentials* grpc_alts_credentials_create_customized(
     const grpc_alts_credentials_options* options,

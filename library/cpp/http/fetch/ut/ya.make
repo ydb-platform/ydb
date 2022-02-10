@@ -1,12 +1,12 @@
 UNITTEST_FOR(library/cpp/http/fetch)
- 
-OWNER( 
+
+OWNER(
     g:zora
-) 
- 
-SRCS( 
-    httpfsm_ut.cpp 
+)
+
+SRCS(
+    httpfsm_ut.cpp
     httpparser_ut.cpp
-) 
- 
-END() 
+)
+
+END()

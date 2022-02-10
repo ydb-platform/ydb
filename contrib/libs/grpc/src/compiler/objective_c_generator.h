@@ -36,15 +36,15 @@ using ::TString;
 string GetAllMessageClasses(const FileDescriptor* file);
 
 // Returns the content to be included defining the @protocol segment at the
-// insertion point of the generated implementation file. This interface is 
-// legacy and for backwards compatibility. 
+// insertion point of the generated implementation file. This interface is
+// legacy and for backwards compatibility.
 string GetProtocol(const ServiceDescriptor* service,
                    const Parameters& generator_params);
 
-// Returns the content to be included defining the @protocol segment at the 
-// insertion point of the generated implementation file. 
-string GetV2Protocol(const ServiceDescriptor* service); 
- 
+// Returns the content to be included defining the @protocol segment at the
+// insertion point of the generated implementation file.
+string GetV2Protocol(const ServiceDescriptor* service);
+
 // Returns the content to be included defining the @interface segment at the
 // insertion point of the generated implementation file.
 string GetInterface(const ServiceDescriptor* service,

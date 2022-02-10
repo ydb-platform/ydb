@@ -48,7 +48,7 @@ gpr_atm EncodeCancelStateError(grpc_error* error) {
 CallCombiner::CallCombiner() {
   gpr_atm_no_barrier_store(&cancel_state_, 0);
   gpr_atm_no_barrier_store(&size_, 0);
-#ifdef GRPC_TSAN_ENABLED 
+#ifdef GRPC_TSAN_ENABLED
   GRPC_CLOSURE_INIT(&tsan_closure_, TsanClosure, this,
                     grpc_schedule_on_exec_ctx);
 #endif
@@ -61,44 +61,44 @@ CallCombiner::~CallCombiner() {
 #ifdef GRPC_TSAN_ENABLED
 void CallCombiner::TsanClosure(void* arg, grpc_error* error) {
   CallCombiner* self = static_cast<CallCombiner*>(arg);
-  // We ref-count the lock, and check if it's already taken. 
-  // If it was taken, we should do nothing. Otherwise, we will mark it as 
-  // locked. Note that if two different threads try to do this, only one of 
-  // them will be able to mark the lock as acquired, while they both run their 
-  // callbacks. In such cases (which should never happen for call_combiner), 
-  // TSAN will correctly produce an error. 
-  // 
-  // TODO(soheil): This only covers the callbacks scheduled by 
+  // We ref-count the lock, and check if it's already taken.
+  // If it was taken, we should do nothing. Otherwise, we will mark it as
+  // locked. Note that if two different threads try to do this, only one of
+  // them will be able to mark the lock as acquired, while they both run their
+  // callbacks. In such cases (which should never happen for call_combiner),
+  // TSAN will correctly produce an error.
+  //
+  // TODO(soheil): This only covers the callbacks scheduled by
   //               CallCombiner::Start() and CallCombiner::Stop().
   //               If in the future, a callback gets scheduled using other
   //               mechanisms, we will need to add APIs to externally lock
   //               call combiners.
   RefCountedPtr<TsanLock> lock = self->tsan_lock_;
-  bool prev = false; 
-  if (lock->taken.compare_exchange_strong(prev, true)) { 
-    TSAN_ANNOTATE_RWLOCK_ACQUIRED(&lock->taken, true); 
-  } else { 
-    lock.reset(); 
-  } 
+  bool prev = false;
+  if (lock->taken.compare_exchange_strong(prev, true)) {
+    TSAN_ANNOTATE_RWLOCK_ACQUIRED(&lock->taken, true);
+  } else {
+    lock.reset();
+  }
   grpc_core::Closure::Run(DEBUG_LOCATION, self->original_closure_,
                           GRPC_ERROR_REF(error));
-  if (lock != nullptr) { 
-    TSAN_ANNOTATE_RWLOCK_RELEASED(&lock->taken, true); 
-    bool prev = true; 
-    GPR_ASSERT(lock->taken.compare_exchange_strong(prev, false)); 
-  } 
-} 
-#endif 
- 
+  if (lock != nullptr) {
+    TSAN_ANNOTATE_RWLOCK_RELEASED(&lock->taken, true);
+    bool prev = true;
+    GPR_ASSERT(lock->taken.compare_exchange_strong(prev, false));
+  }
+}
+#endif
+
 void CallCombiner::ScheduleClosure(grpc_closure* closure, grpc_error* error) {
-#ifdef GRPC_TSAN_ENABLED 
+#ifdef GRPC_TSAN_ENABLED
   original_closure_ = closure;
   ExecCtx::Run(DEBUG_LOCATION, &tsan_closure_, error);
-#else 
+#else
   ExecCtx::Run(DEBUG_LOCATION, closure, error);
-#endif 
-} 
- 
+#endif
+}
+
 #ifndef NDEBUG
 #define DEBUG_ARGS const char *file, int line,
 #define DEBUG_FMT_STR "%s:%d: "

@@ -25,7 +25,7 @@
 
 #include "src/core/lib/iomgr/port.h"
 
-#ifdef GRPC_POSIX_SOCKET_TCP_SERVER 
+#ifdef GRPC_POSIX_SOCKET_TCP_SERVER
 
 #include <errno.h>
 #include <fcntl.h>
@@ -158,7 +158,7 @@ static void deactivated_all_ports(grpc_tcp_server* s) {
       GRPC_CLOSURE_INIT(&sp->destroyed_closure, destroyed_port, s,
                         grpc_schedule_on_exec_ctx);
       grpc_fd_orphan(sp->emfd, &sp->destroyed_closure, nullptr,
-                     "tcp_listener_shutdown"); 
+                     "tcp_listener_shutdown");
     }
     gpr_mu_unlock(&s->mu);
   } else {
@@ -251,7 +251,7 @@ static void on_read(void* arg, grpc_error* err) {
         [static_cast<size_t>(gpr_atm_no_barrier_fetch_add(
              &sp->server->next_pollset_to_assign, 1)) %
          sp->server->pollsets->size()];
- 
+
     grpc_pollset_add_fd(read_notifier_pollset, fdobj);
 
     // Create acceptor.
@@ -362,8 +362,8 @@ static grpc_error* clone_port(grpc_tcp_listener* listener, unsigned count) {
     err = grpc_create_dualstack_socket(&listener->addr, SOCK_STREAM, 0, &dsmode,
                                        &fd);
     if (err != GRPC_ERROR_NONE) return err;
-    err = grpc_tcp_server_prepare_socket(listener->server, fd, &listener->addr, 
-                                         true, &port); 
+    err = grpc_tcp_server_prepare_socket(listener->server, fd, &listener->addr,
+                                         true, &port);
     if (err != GRPC_ERROR_NONE) return err;
     listener->server->nports++;
     addr_str = grpc_sockaddr_to_string(&listener->addr, true);
@@ -628,4 +628,4 @@ grpc_tcp_server_vtable grpc_posix_tcp_server_vtable = {
     tcp_server_ref,           tcp_server_shutdown_starting_add,
     tcp_server_unref,         tcp_server_shutdown_listeners};
 
-#endif /* GRPC_POSIX_SOCKET_TCP_SERVER */ 
+#endif /* GRPC_POSIX_SOCKET_TCP_SERVER */

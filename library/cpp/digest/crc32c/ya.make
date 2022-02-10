@@ -1,16 +1,16 @@
 LIBRARY()
 
 #!!!
-OWNER( 
-    ddoarn 
-    a-romanov 
+OWNER(
+    ddoarn
+    a-romanov
     pg
     gulin
     dcherednik
     g:yamr
     g:rtmr
-) 
- 
+)
+
 PEERDIR(
     contrib/libs/crcutil
 )

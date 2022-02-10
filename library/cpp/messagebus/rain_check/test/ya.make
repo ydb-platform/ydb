@@ -1,6 +1,6 @@
 OWNER(g:messagebus)
 
 RECURSE(
-    perftest 
-    ut 
+    perftest
+    ut
 )

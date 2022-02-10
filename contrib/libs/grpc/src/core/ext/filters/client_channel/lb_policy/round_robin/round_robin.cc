@@ -53,16 +53,16 @@ namespace {
 // round_robin LB policy
 //
 
-constexpr char kRoundRobin[] = "round_robin"; 
- 
+constexpr char kRoundRobin[] = "round_robin";
+
 class RoundRobin : public LoadBalancingPolicy {
  public:
-  explicit RoundRobin(Args args); 
+  explicit RoundRobin(Args args);
 
-  const char* name() const override { return kRoundRobin; } 
- 
+  const char* name() const override { return kRoundRobin; }
+
   void UpdateLocked(UpdateArgs args) override;
-  void ResetBackoffLocked() override; 
+  void ResetBackoffLocked() override;
 
  private:
   ~RoundRobin();
@@ -78,9 +78,9 @@ class RoundRobin : public LoadBalancingPolicy {
       : public SubchannelData<RoundRobinSubchannelList,
                               RoundRobinSubchannelData> {
    public:
-    RoundRobinSubchannelData( 
-        SubchannelList<RoundRobinSubchannelList, RoundRobinSubchannelData>* 
-            subchannel_list, 
+    RoundRobinSubchannelData(
+        SubchannelList<RoundRobinSubchannelList, RoundRobinSubchannelData>*
+            subchannel_list,
         const ServerAddress& address,
         RefCountedPtr<SubchannelInterface> subchannel)
         : SubchannelData(subchannel_list, address, std::move(subchannel)) {}
@@ -151,19 +151,19 @@ class RoundRobin : public LoadBalancingPolicy {
   };
 
   class Picker : public SubchannelPicker {
-   public: 
+   public:
     Picker(RoundRobin* parent, RoundRobinSubchannelList* subchannel_list);
- 
+
     PickResult Pick(PickArgs args) override;
 
-   private: 
+   private:
     // Using pointer value only, no ref held -- do not dereference!
     RoundRobin* parent_;
 
     size_t last_picked_index_;
     y_absl::InlinedVector<RefCountedPtr<SubchannelInterface>, 10> subchannels_;
-  }; 
- 
+  };
+
   void ShutdownLocked() override;
 
   /** list of subchannels */
@@ -223,7 +223,7 @@ RoundRobin::PickResult RoundRobin::Picker::Pick(PickArgs /*args*/) {
 // RoundRobin
 //
 
-RoundRobin::RoundRobin(Args args) : LoadBalancingPolicy(std::move(args)) { 
+RoundRobin::RoundRobin(Args args) : LoadBalancingPolicy(std::move(args)) {
   if (GRPC_TRACE_FLAG_ENABLED(grpc_lb_round_robin_trace)) {
     gpr_log(GPR_INFO, "[RR %p] Created", this);
   }
@@ -246,13 +246,13 @@ void RoundRobin::ShutdownLocked() {
   latest_pending_subchannel_list_.reset();
 }
 
-void RoundRobin::ResetBackoffLocked() { 
-  subchannel_list_->ResetBackoffLocked(); 
-  if (latest_pending_subchannel_list_ != nullptr) { 
-    latest_pending_subchannel_list_->ResetBackoffLocked(); 
-  } 
-} 
- 
+void RoundRobin::ResetBackoffLocked() {
+  subchannel_list_->ResetBackoffLocked();
+  if (latest_pending_subchannel_list_ != nullptr) {
+    latest_pending_subchannel_list_->ResetBackoffLocked();
+  }
+}
+
 void RoundRobin::RoundRobinSubchannelList::StartWatchingLocked() {
   if (num_subchannels() == 0) return;
   // Check current state of each subchannel synchronously, since any
@@ -480,11 +480,11 @@ class RoundRobinConfig : public LoadBalancingPolicy::Config {
 class RoundRobinFactory : public LoadBalancingPolicyFactory {
  public:
   OrphanablePtr<LoadBalancingPolicy> CreateLoadBalancingPolicy(
-      LoadBalancingPolicy::Args args) const override { 
+      LoadBalancingPolicy::Args args) const override {
     return MakeOrphanable<RoundRobin>(std::move(args));
   }
 
-  const char* name() const override { return kRoundRobin; } 
+  const char* name() const override { return kRoundRobin; }
 
   RefCountedPtr<LoadBalancingPolicy::Config> ParseLoadBalancingConfig(
       const Json& /*json*/, grpc_error** /*error*/) const override {

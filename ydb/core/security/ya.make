@@ -1,10 +1,10 @@
 LIBRARY()
 
-OWNER( 
+OWNER(
     xenoxeno
     g:kikimr
-) 
- 
+)
+
 SRCS(
     login_page.cpp
     login_page.h

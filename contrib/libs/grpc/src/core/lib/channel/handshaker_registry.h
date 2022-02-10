@@ -25,30 +25,30 @@
 
 #include "src/core/lib/channel/handshaker_factory.h"
 
-namespace grpc_core { 
- 
+namespace grpc_core {
+
 typedef enum {
   HANDSHAKER_CLIENT = 0,
   HANDSHAKER_SERVER,
   NUM_HANDSHAKER_TYPES,  // Must be last.
-} HandshakerType; 
+} HandshakerType;
 
-class HandshakerRegistry { 
- public: 
-  /// Registers a new handshaker factory.  Takes ownership. 
-  /// If \a at_start is true, the new handshaker will be at the beginning of 
-  /// the list.  Otherwise, it will be added to the end. 
+class HandshakerRegistry {
+ public:
+  /// Registers a new handshaker factory.  Takes ownership.
+  /// If \a at_start is true, the new handshaker will be at the beginning of
+  /// the list.  Otherwise, it will be added to the end.
   static void RegisterHandshakerFactory(
       bool at_start, HandshakerType handshaker_type,
       std::unique_ptr<HandshakerFactory> factory);
-  static void AddHandshakers(HandshakerType handshaker_type, 
-                             const grpc_channel_args* args, 
-                             grpc_pollset_set* interested_parties, 
-                             HandshakeManager* handshake_mgr); 
-  static void Init(); 
-  static void Shutdown(); 
-}; 
+  static void AddHandshakers(HandshakerType handshaker_type,
+                             const grpc_channel_args* args,
+                             grpc_pollset_set* interested_parties,
+                             HandshakeManager* handshake_mgr);
+  static void Init();
+  static void Shutdown();
+};
 
-}  // namespace grpc_core 
+}  // namespace grpc_core
 
 #endif /* GRPC_CORE_LIB_CHANNEL_HANDSHAKER_REGISTRY_H */

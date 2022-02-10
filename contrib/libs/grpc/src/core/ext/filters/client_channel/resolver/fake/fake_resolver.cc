@@ -29,10 +29,10 @@
 #include <grpc/support/string_util.h>
 
 #include "src/core/ext/filters/client_channel/resolver_registry.h"
-#include "src/core/ext/filters/client_channel/server_address.h" 
+#include "src/core/ext/filters/client_channel/server_address.h"
 #include "src/core/lib/channel/channel_args.h"
 #include "src/core/lib/gpr/string.h"
-#include "src/core/lib/gpr/useful.h" 
+#include "src/core/lib/gpr/useful.h"
 #include "src/core/lib/iomgr/closure.h"
 #include "src/core/lib/iomgr/parse_address.h"
 #include "src/core/lib/iomgr/resolve_address.h"
@@ -280,7 +280,7 @@ void FakeResolverResponseGenerator::SetFailure() {
                                    DEBUG_LOCATION);
 }
 
-void FakeResolverResponseGenerator::SetFailureOnReresolution() { 
+void FakeResolverResponseGenerator::SetFailureOnReresolution() {
   RefCountedPtr<FakeResolver> resolver;
   {
     MutexLock lock(&mu_);
@@ -292,8 +292,8 @@ void FakeResolverResponseGenerator::SetFailureOnReresolution() {
       false /* immediate */);
   resolver->work_serializer()->Run([arg]() { arg->SetFailureLocked(); },
                                    DEBUG_LOCATION);
-} 
- 
+}
+
 void FakeResolverResponseGenerator::SetFakeResolver(
     RefCountedPtr<FakeResolver> resolver) {
   MutexLock lock(&mu_);

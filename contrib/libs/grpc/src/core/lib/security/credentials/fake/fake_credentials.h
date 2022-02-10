@@ -57,31 +57,31 @@ const char* grpc_fake_transport_get_expected_targets(
 
 /* --  Metadata-only Test credentials. -- */
 
-class grpc_md_only_test_credentials : public grpc_call_credentials { 
- public: 
-  grpc_md_only_test_credentials(const char* md_key, const char* md_value, 
-                                bool is_async) 
+class grpc_md_only_test_credentials : public grpc_call_credentials {
+ public:
+  grpc_md_only_test_credentials(const char* md_key, const char* md_value,
+                                bool is_async)
       : grpc_call_credentials(GRPC_CALL_CREDENTIALS_TYPE_OAUTH2,
                               GRPC_SECURITY_NONE),
-        md_(grpc_mdelem_from_slices(grpc_slice_from_copied_string(md_key), 
-                                    grpc_slice_from_copied_string(md_value))), 
-        is_async_(is_async) {} 
-  ~grpc_md_only_test_credentials() override { GRPC_MDELEM_UNREF(md_); } 
+        md_(grpc_mdelem_from_slices(grpc_slice_from_copied_string(md_key),
+                                    grpc_slice_from_copied_string(md_value))),
+        is_async_(is_async) {}
+  ~grpc_md_only_test_credentials() override { GRPC_MDELEM_UNREF(md_); }
 
-  bool get_request_metadata(grpc_polling_entity* pollent, 
-                            grpc_auth_metadata_context context, 
-                            grpc_credentials_mdelem_array* md_array, 
-                            grpc_closure* on_request_metadata, 
-                            grpc_error** error) override; 
- 
-  void cancel_get_request_metadata(grpc_credentials_mdelem_array* md_array, 
-                                   grpc_error* error) override; 
- 
+  bool get_request_metadata(grpc_polling_entity* pollent,
+                            grpc_auth_metadata_context context,
+                            grpc_credentials_mdelem_array* md_array,
+                            grpc_closure* on_request_metadata,
+                            grpc_error** error) override;
+
+  void cancel_get_request_metadata(grpc_credentials_mdelem_array* md_array,
+                                   grpc_error* error) override;
+
   TString debug_string() override { return "MD only Test Credentials"; };
 
- private: 
-  grpc_mdelem md_; 
-  bool is_async_; 
-}; 
- 
+ private:
+  grpc_mdelem md_;
+  bool is_async_;
+};
+
 #endif /* GRPC_CORE_LIB_SECURITY_CREDENTIALS_FAKE_FAKE_CREDENTIALS_H */

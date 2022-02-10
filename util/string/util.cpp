@@ -4,7 +4,7 @@
 
 #include <cstdio>
 #include <cstdarg>
-#include <cstdlib> 
+#include <cstdlib>
 
 int a2i(const TString& s) {
     return atoi(s.c_str());

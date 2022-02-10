@@ -33,7 +33,7 @@
  *  -------------------------------------------------  *
  *  |  96 | 100 | 104 | 108 | 112 | 116 | 120 | 124 |  *
  *  -------------------------------------------------  *
- *  |       ABI ARGS        |  GP | FCTX| DATA|     |  * 
+ *  |       ABI ARGS        |  GP | FCTX| DATA|     |  *
  *  -------------------------------------------------  *
  *                                                     *
  * *****************************************************/
@@ -93,25 +93,25 @@ ontop_fcontext:
     lw  $s6, 72($sp)  # restore S6
     lw  $s7, 76($sp)  # restore S7
     lw  $fp, 80($sp)  # restore FP
-    lw  $v0, 84($sp)  # restore hidden, address of returned transfer_t 
+    lw  $v0, 84($sp)  # restore hidden, address of returned transfer_t
     lw  $ra, 88($sp)  # restore RA
 
     # load PC
-    move $t9, $a3 
+    move $t9, $a3
 
     # adjust stack
     addiu $sp, $sp, 96
     
     # return transfer_t from jump
-    sw  $a0, ($v0)  # fctx of transfer_t 
-    sw  $a2, 4($v0) # data of transfer_t 
+    sw  $a0, ($v0)  # fctx of transfer_t
+    sw  $a2, 4($v0) # data of transfer_t
     # pass transfer_t as first arg in context function
     # A0 == hidden, A1 == fctx, A2 == data
     move  $a1, $a0 
-    move  $a0, $v0 
+    move  $a0, $v0
 
     # jump to context
-    jr  $t9 
+    jr  $t9
 .end ontop_fcontext
 .size ontop_fcontext, .-ontop_fcontext
 

@@ -237,10 +237,10 @@ def main(source_root, output, gcno_archive, gcda_archive, gcov_tool, prefix_filt
     init_all_coverage_files(gcno_archive, fname2gcno, fname2info, geninfo_executable, gcov_tool, gen_info, prefix_filter, exclude_files)
     process_all_coverage_files(gcda_archive, fname2gcno, fname2info, geninfo_executable, gcov_tool, gen_info)
 
-    if coverage_report_path: 
-        output_dir = coverage_report_path 
-    else: 
-        output_dir = output + '.dir' 
+    if coverage_report_path:
+        output_dir = coverage_report_path
+    else:
+        output_dir = output + '.dir'
 
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
@@ -274,7 +274,7 @@ if __name__ == '__main__':
     parser.add_argument('--prefix-filter', action='store')
     parser.add_argument('--exclude-regexp', action='store')
     parser.add_argument('--teamcity-stat-output', action='store_const', const=True)
-    parser.add_argument('--coverage-report-path', action='store') 
+    parser.add_argument('--coverage-report-path', action='store')
     parser.add_argument('--gcov-report', action='store')
     parser.add_argument('--lcov-cobertura', action='store')
 

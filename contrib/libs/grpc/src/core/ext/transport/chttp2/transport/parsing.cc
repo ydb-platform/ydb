@@ -372,7 +372,7 @@ static grpc_error* init_data_frame_parser(grpc_chttp2_transport* t) {
         &s->data_parser, t->incoming_frame_flags, s->id, s);
   }
 error_handler:
-  intptr_t unused; 
+  intptr_t unused;
   if (err == GRPC_ERROR_NONE) {
     t->incoming_stream = s;
     /* t->parser = grpc_chttp2_data_parser_parse;*/
@@ -380,7 +380,7 @@ error_handler:
     t->parser_data = &s->data_parser;
     t->ping_state.last_ping_sent_time = GRPC_MILLIS_INF_PAST;
     return GRPC_ERROR_NONE;
-  } else if (grpc_error_get_int(err, GRPC_ERROR_INT_STREAM_ID, &unused)) { 
+  } else if (grpc_error_get_int(err, GRPC_ERROR_INT_STREAM_ID, &unused)) {
     /* handle stream errors by closing the stream */
     if (s != nullptr) {
       grpc_chttp2_mark_stream_closed(t, s, true, false, err);
@@ -485,18 +485,18 @@ static grpc_error* on_initial_header(void* tp, grpc_mdelem md) {
 
   if (md_key_cmp(md, GRPC_MDSTR_GRPC_TIMEOUT)) {
     return handle_timeout(s, md);
-  } 
- 
-  const size_t new_size = s->metadata_buffer[0].size + GRPC_MDELEM_LENGTH(md); 
-  const size_t metadata_size_limit = 
-      t->settings[GRPC_ACKED_SETTINGS] 
-                 [GRPC_CHTTP2_SETTINGS_MAX_HEADER_LIST_SIZE]; 
+  }
+
+  const size_t new_size = s->metadata_buffer[0].size + GRPC_MDELEM_LENGTH(md);
+  const size_t metadata_size_limit =
+      t->settings[GRPC_ACKED_SETTINGS]
+                 [GRPC_CHTTP2_SETTINGS_MAX_HEADER_LIST_SIZE];
   if (GPR_UNLIKELY(new_size > metadata_size_limit)) {
     return handle_metadata_size_limit_exceeded(t, s, md, new_size,
                                                metadata_size_limit);
   } else {
-    grpc_error* error = 
-        grpc_chttp2_incoming_metadata_buffer_add(&s->metadata_buffer[0], md); 
+    grpc_error* error =
+        grpc_chttp2_incoming_metadata_buffer_add(&s->metadata_buffer[0], md);
     if (GPR_UNLIKELY(error != GRPC_ERROR_NONE)) {
       return handle_metadata_add_failure(t, s, md, error);
     }
@@ -580,15 +580,15 @@ static grpc_error* init_header_frame_parser(grpc_chttp2_transport* t,
   /* could be a new grpc_chttp2_stream or an existing grpc_chttp2_stream */
   s = grpc_chttp2_parsing_lookup_stream(t, t->incoming_stream_id);
   if (s == nullptr) {
-    if (GPR_UNLIKELY(is_continuation)) { 
+    if (GPR_UNLIKELY(is_continuation)) {
       GRPC_CHTTP2_IF_TRACING(
           gpr_log(GPR_ERROR,
                   "grpc_chttp2_stream disbanded before CONTINUATION received"));
       return init_skip_frame_parser(t, 1);
     }
     if (t->is_client) {
-      if (GPR_LIKELY((t->incoming_stream_id & 1) && 
-                     t->incoming_stream_id < t->next_stream_id)) { 
+      if (GPR_LIKELY((t->incoming_stream_id & 1) &&
+                     t->incoming_stream_id < t->next_stream_id)) {
         /* this is an old (probably cancelled) grpc_chttp2_stream */
       } else {
         GRPC_CHTTP2_IF_TRACING(gpr_log(
@@ -599,7 +599,7 @@ static grpc_error* init_header_frame_parser(grpc_chttp2_transport* t,
         grpc_chttp2_hpack_parser_set_has_priority(&t->hpack_parser);
       }
       return err;
-    } else if (GPR_UNLIKELY(t->last_new_stream_id >= t->incoming_stream_id)) { 
+    } else if (GPR_UNLIKELY(t->last_new_stream_id >= t->incoming_stream_id)) {
       GRPC_CHTTP2_IF_TRACING(gpr_log(
           GPR_ERROR,
           "ignoring out of order new grpc_chttp2_stream request on server; "
@@ -607,35 +607,35 @@ static grpc_error* init_header_frame_parser(grpc_chttp2_transport* t,
           "id=%d, new grpc_chttp2_stream id=%d",
           t->last_new_stream_id, t->incoming_stream_id));
       return init_skip_frame_parser(t, 1);
-    } else if (GPR_UNLIKELY((t->incoming_stream_id & 1) == 0)) { 
+    } else if (GPR_UNLIKELY((t->incoming_stream_id & 1) == 0)) {
       GRPC_CHTTP2_IF_TRACING(gpr_log(
           GPR_ERROR,
           "ignoring grpc_chttp2_stream with non-client generated index %d",
           t->incoming_stream_id));
       return init_skip_frame_parser(t, 1);
-    } else if (GPR_UNLIKELY( 
-                   grpc_chttp2_stream_map_size(&t->stream_map) >= 
-                   t->settings[GRPC_ACKED_SETTINGS] 
-                              [GRPC_CHTTP2_SETTINGS_MAX_CONCURRENT_STREAMS])) { 
+    } else if (GPR_UNLIKELY(
+                   grpc_chttp2_stream_map_size(&t->stream_map) >=
+                   t->settings[GRPC_ACKED_SETTINGS]
+                              [GRPC_CHTTP2_SETTINGS_MAX_CONCURRENT_STREAMS])) {
       return GRPC_ERROR_CREATE_FROM_STATIC_STRING("Max stream count exceeded");
     }
     t->last_new_stream_id = t->incoming_stream_id;
     s = t->incoming_stream =
         grpc_chttp2_parsing_accept_stream(t, t->incoming_stream_id);
-    if (GPR_UNLIKELY(s == nullptr)) { 
+    if (GPR_UNLIKELY(s == nullptr)) {
       GRPC_CHTTP2_IF_TRACING(
           gpr_log(GPR_ERROR, "grpc_chttp2_stream not accepted"));
       return init_skip_frame_parser(t, 1);
     }
-    if (t->channelz_socket != nullptr) { 
-      t->channelz_socket->RecordStreamStartedFromRemote(); 
-    } 
+    if (t->channelz_socket != nullptr) {
+      t->channelz_socket->RecordStreamStartedFromRemote();
+    }
   } else {
     t->incoming_stream = s;
   }
   GPR_DEBUG_ASSERT(s != nullptr);
   s->stats.incoming.framing_bytes += 9;
-  if (GPR_UNLIKELY(s->read_closed)) { 
+  if (GPR_UNLIKELY(s->read_closed)) {
     GRPC_CHTTP2_IF_TRACING(gpr_log(
         GPR_ERROR, "skipping already closed grpc_chttp2_stream header"));
     t->incoming_stream = nullptr;
@@ -643,9 +643,9 @@ static grpc_error* init_header_frame_parser(grpc_chttp2_transport* t,
   }
   t->parser = grpc_chttp2_header_parser_parse;
   t->parser_data = &t->hpack_parser;
-  if (t->header_eof) { 
-    s->eos_received = true; 
-  } 
+  if (t->header_eof) {
+    s->eos_received = true;
+  }
   switch (s->header_frames_received) {
     case 0:
       if (t->is_client && t->header_eof) {
@@ -758,10 +758,10 @@ static grpc_error* parse_frame_slice(grpc_chttp2_transport* t,
                                      const grpc_slice& slice, int is_last) {
   grpc_chttp2_stream* s = t->incoming_stream;
   grpc_error* err = t->parser(t->parser_data, t, s, slice, is_last);
-  intptr_t unused; 
-  if (GPR_LIKELY(err == GRPC_ERROR_NONE)) { 
+  intptr_t unused;
+  if (GPR_LIKELY(err == GRPC_ERROR_NONE)) {
     return err;
-  } else if (grpc_error_get_int(err, GRPC_ERROR_INT_STREAM_ID, &unused)) { 
+  } else if (grpc_error_get_int(err, GRPC_ERROR_INT_STREAM_ID, &unused)) {
     if (GRPC_TRACE_FLAG_ENABLED(grpc_http_trace)) {
       const char* msg = grpc_error_string(err);
       gpr_log(GPR_ERROR, "%s", msg);

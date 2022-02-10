@@ -29,9 +29,9 @@
 #include <grpc/support/sync.h>
 
 extern "C" {
-#include <openssl/bn.h> 
+#include <openssl/bn.h>
 #include <openssl/pem.h>
-#include <openssl/rsa.h> 
+#include <openssl/rsa.h>
 }
 
 #include "src/core/lib/gpr/string.h"
@@ -352,7 +352,7 @@ static verifier_cb_ctx* verifier_cb_ctx_create(
     grpc_jwt_claims* claims, const char* audience, const grpc_slice& signature,
     const char* signed_jwt, size_t signed_jwt_len, void* user_data,
     grpc_jwt_verification_done_cb cb) {
-  grpc_core::ApplicationCallbackExecCtx callback_exec_ctx; 
+  grpc_core::ApplicationCallbackExecCtx callback_exec_ctx;
   grpc_core::ExecCtx exec_ctx;
   verifier_cb_ctx* ctx =
       static_cast<verifier_cb_ctx*>(gpr_zalloc(sizeof(verifier_cb_ctx)));

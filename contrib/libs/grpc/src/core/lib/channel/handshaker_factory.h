@@ -27,16 +27,16 @@
 
 // A handshaker factory is used to create handshakers.
 
-namespace grpc_core { 
+namespace grpc_core {
 
-class HandshakerFactory { 
- public: 
-  virtual void AddHandshakers(const grpc_channel_args* args, 
-                              grpc_pollset_set* interested_parties, 
+class HandshakerFactory {
+ public:
+  virtual void AddHandshakers(const grpc_channel_args* args,
+                              grpc_pollset_set* interested_parties,
                               HandshakeManager* handshake_mgr) = 0;
-  virtual ~HandshakerFactory() = default; 
+  virtual ~HandshakerFactory() = default;
 };
 
-}  // namespace grpc_core 
+}  // namespace grpc_core
 
 #endif /* GRPC_CORE_LIB_CHANNEL_HANDSHAKER_FACTORY_H */

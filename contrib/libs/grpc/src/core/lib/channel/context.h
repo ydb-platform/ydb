@@ -41,9 +41,9 @@ typedef enum {
   GRPC_CONTEXT_COUNT
 } grpc_context_index;
 
-struct grpc_call_context_element { 
-  void* value = nullptr; 
-  void (*destroy)(void*) = nullptr; 
-}; 
+struct grpc_call_context_element {
+  void* value = nullptr;
+  void (*destroy)(void*) = nullptr;
+};
 
 #endif /* GRPC_CORE_LIB_CHANNEL_CONTEXT_H */

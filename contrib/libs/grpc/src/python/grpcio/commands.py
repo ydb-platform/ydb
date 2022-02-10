@@ -96,14 +96,14 @@ class SphinxDocumentation(setuptools.Command):
     def run(self):
         # We import here to ensure that setup.py has had a chance to install the
         # relevant package eggs first.
-        import sphinx.cmd.build 
-        source_dir = os.path.join(GRPC_STEM, 'doc', 'python', 'sphinx') 
-        target_dir = os.path.join(GRPC_STEM, 'doc', 'build') 
-        exit_code = sphinx.cmd.build.build_main( 
-            ['-b', 'html', '-W', '--keep-going', source_dir, target_dir]) 
+        import sphinx.cmd.build
+        source_dir = os.path.join(GRPC_STEM, 'doc', 'python', 'sphinx')
+        target_dir = os.path.join(GRPC_STEM, 'doc', 'build')
+        exit_code = sphinx.cmd.build.build_main(
+            ['-b', 'html', '-W', '--keep-going', source_dir, target_dir])
         if exit_code != 0:
-            raise CommandError( 
-                "Documentation generation has warnings or errors") 
+            raise CommandError(
+                "Documentation generation has warnings or errors")
 
 
 class BuildProjectMetadata(setuptools.Command):
@@ -227,10 +227,10 @@ class BuildExt(build_ext.build_ext):
             _, cc_err = cc_test.communicate(input=b'int main(){return 0;}')
             return not 'invalid argument' in str(cc_err)
 
-        # This special conditioning is here due to difference of compiler 
-        #   behavior in gcc and clang. The clang doesn't take --stdc++11 
-        #   flags but gcc does. Since the setuptools of Python only support 
-        #   all C or all C++ compilation, the mix of C and C++ will crash. 
+        # This special conditioning is here due to difference of compiler
+        #   behavior in gcc and clang. The clang doesn't take --stdc++11
+        #   flags but gcc does. Since the setuptools of Python only support
+        #   all C or all C++ compilation, the mix of C and C++ will crash.
         #   *By default*, macOS and FreBSD use clang and Linux use gcc
         #
         #   If we are not using a permissive compiler that's OK with being

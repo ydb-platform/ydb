@@ -22,8 +22,8 @@
    headers. Therefore, sockaddr.h must always be included first */
 #include <grpc/support/port_platform.h>
 
-#include <new> 
- 
+#include <new>
+
 #include "src/core/lib/iomgr/sockaddr.h"
 
 #include <grpc/slice.h>
@@ -33,7 +33,7 @@
 #include <grpc/support/sync.h>
 #include "src/core/lib/debug/trace.h"
 #include "src/core/lib/gpr/string.h"
-#include "src/core/lib/gprpp/memory.h" 
+#include "src/core/lib/gprpp/memory.h"
 #include "src/core/lib/profiling/timers.h"
 #include "src/core/lib/security/transport/secure_endpoint.h"
 #include "src/core/lib/security/transport/tsi_error.h"
@@ -43,64 +43,64 @@
 
 #define STAGING_BUFFER_SIZE 8192
 
-static void on_read(void* user_data, grpc_error* error); 
- 
-namespace { 
-struct secure_endpoint { 
-  secure_endpoint(const grpc_endpoint_vtable* vtable, 
-                  tsi_frame_protector* protector, 
-                  tsi_zero_copy_grpc_protector* zero_copy_protector, 
-                  grpc_endpoint* transport, grpc_slice* leftover_slices, 
-                  size_t leftover_nslices) 
-      : wrapped_ep(transport), 
-        protector(protector), 
-        zero_copy_protector(zero_copy_protector) { 
-    base.vtable = vtable; 
-    gpr_mu_init(&protector_mu); 
-    GRPC_CLOSURE_INIT(&on_read, ::on_read, this, grpc_schedule_on_exec_ctx); 
-    grpc_slice_buffer_init(&source_buffer); 
-    grpc_slice_buffer_init(&leftover_bytes); 
-    for (size_t i = 0; i < leftover_nslices; i++) { 
-      grpc_slice_buffer_add(&leftover_bytes, 
-                            grpc_slice_ref_internal(leftover_slices[i])); 
-    } 
-    grpc_slice_buffer_init(&output_buffer); 
-    gpr_ref_init(&ref, 1); 
-  } 
- 
-  ~secure_endpoint() { 
-    grpc_endpoint_destroy(wrapped_ep); 
-    tsi_frame_protector_destroy(protector); 
-    tsi_zero_copy_grpc_protector_destroy(zero_copy_protector); 
-    grpc_slice_buffer_destroy_internal(&source_buffer); 
-    grpc_slice_buffer_destroy_internal(&leftover_bytes); 
-    grpc_slice_unref_internal(read_staging_buffer); 
-    grpc_slice_unref_internal(write_staging_buffer); 
-    grpc_slice_buffer_destroy_internal(&output_buffer); 
-    gpr_mu_destroy(&protector_mu); 
-  } 
- 
+static void on_read(void* user_data, grpc_error* error);
+
+namespace {
+struct secure_endpoint {
+  secure_endpoint(const grpc_endpoint_vtable* vtable,
+                  tsi_frame_protector* protector,
+                  tsi_zero_copy_grpc_protector* zero_copy_protector,
+                  grpc_endpoint* transport, grpc_slice* leftover_slices,
+                  size_t leftover_nslices)
+      : wrapped_ep(transport),
+        protector(protector),
+        zero_copy_protector(zero_copy_protector) {
+    base.vtable = vtable;
+    gpr_mu_init(&protector_mu);
+    GRPC_CLOSURE_INIT(&on_read, ::on_read, this, grpc_schedule_on_exec_ctx);
+    grpc_slice_buffer_init(&source_buffer);
+    grpc_slice_buffer_init(&leftover_bytes);
+    for (size_t i = 0; i < leftover_nslices; i++) {
+      grpc_slice_buffer_add(&leftover_bytes,
+                            grpc_slice_ref_internal(leftover_slices[i]));
+    }
+    grpc_slice_buffer_init(&output_buffer);
+    gpr_ref_init(&ref, 1);
+  }
+
+  ~secure_endpoint() {
+    grpc_endpoint_destroy(wrapped_ep);
+    tsi_frame_protector_destroy(protector);
+    tsi_zero_copy_grpc_protector_destroy(zero_copy_protector);
+    grpc_slice_buffer_destroy_internal(&source_buffer);
+    grpc_slice_buffer_destroy_internal(&leftover_bytes);
+    grpc_slice_unref_internal(read_staging_buffer);
+    grpc_slice_unref_internal(write_staging_buffer);
+    grpc_slice_buffer_destroy_internal(&output_buffer);
+    gpr_mu_destroy(&protector_mu);
+  }
+
   grpc_endpoint base;
   grpc_endpoint* wrapped_ep;
   struct tsi_frame_protector* protector;
   struct tsi_zero_copy_grpc_protector* zero_copy_protector;
   gpr_mu protector_mu;
   /* saved upper level callbacks and user_data. */
-  grpc_closure* read_cb = nullptr; 
-  grpc_closure* write_cb = nullptr; 
+  grpc_closure* read_cb = nullptr;
+  grpc_closure* write_cb = nullptr;
   grpc_closure on_read;
-  grpc_slice_buffer* read_buffer = nullptr; 
+  grpc_slice_buffer* read_buffer = nullptr;
   grpc_slice_buffer source_buffer;
   /* saved handshaker leftover data to unprotect. */
   grpc_slice_buffer leftover_bytes;
   /* buffers for read and write */
-  grpc_slice read_staging_buffer = GRPC_SLICE_MALLOC(STAGING_BUFFER_SIZE); 
-  grpc_slice write_staging_buffer = GRPC_SLICE_MALLOC(STAGING_BUFFER_SIZE); 
+  grpc_slice read_staging_buffer = GRPC_SLICE_MALLOC(STAGING_BUFFER_SIZE);
+  grpc_slice write_staging_buffer = GRPC_SLICE_MALLOC(STAGING_BUFFER_SIZE);
   grpc_slice_buffer output_buffer;
 
   gpr_refcount ref;
-}; 
-}  // namespace 
+};
+}  // namespace
 
 grpc_core::TraceFlag grpc_trace_secure_endpoint(false, "secure_endpoint");
 
@@ -281,7 +281,7 @@ static void flush_write_staging_buffer(secure_endpoint* ep, uint8_t** cur,
 }
 
 static void endpoint_write(grpc_endpoint* secure_ep, grpc_slice_buffer* slices,
-                           grpc_closure* cb, void* arg) { 
+                           grpc_closure* cb, void* arg) {
   GPR_TIMER_SCOPE("secure_endpoint.endpoint_write", 0);
 
   unsigned i;
@@ -370,7 +370,7 @@ static void endpoint_write(grpc_endpoint* secure_ep, grpc_slice_buffer* slices,
     return;
   }
 
-  grpc_endpoint_write(ep->wrapped_ep, &ep->output_buffer, cb, arg); 
+  grpc_endpoint_write(ep->wrapped_ep, &ep->output_buffer, cb, arg);
 }
 
 static void endpoint_shutdown(grpc_endpoint* secure_ep, grpc_error* why) {
@@ -422,11 +422,11 @@ static grpc_resource_user* endpoint_get_resource_user(
   return grpc_endpoint_get_resource_user(ep->wrapped_ep);
 }
 
-static bool endpoint_can_track_err(grpc_endpoint* secure_ep) { 
-  secure_endpoint* ep = reinterpret_cast<secure_endpoint*>(secure_ep); 
-  return grpc_endpoint_can_track_err(ep->wrapped_ep); 
-} 
- 
+static bool endpoint_can_track_err(grpc_endpoint* secure_ep) {
+  secure_endpoint* ep = reinterpret_cast<secure_endpoint*>(secure_ep);
+  return grpc_endpoint_can_track_err(ep->wrapped_ep);
+}
+
 static const grpc_endpoint_vtable vtable = {endpoint_read,
                                             endpoint_write,
                                             endpoint_add_to_pollset,
@@ -437,8 +437,8 @@ static const grpc_endpoint_vtable vtable = {endpoint_read,
                                             endpoint_get_resource_user,
                                             endpoint_get_peer,
                                             endpoint_get_local_address,
-                                            endpoint_get_fd, 
-                                            endpoint_can_track_err}; 
+                                            endpoint_get_fd,
+                                            endpoint_can_track_err};
 
 grpc_endpoint* grpc_secure_endpoint_create(
     struct tsi_frame_protector* protector,

@@ -39,44 +39,44 @@
 #include "src/core/lib/transport/error_utils.h"
 
 namespace grpc_core {
-namespace channelz { 
+namespace channelz {
 
 ChannelTrace::TraceEvent::TraceEvent(Severity severity, const grpc_slice& data,
-                                     RefCountedPtr<BaseNode> referenced_entity) 
+                                     RefCountedPtr<BaseNode> referenced_entity)
     : severity_(severity),
       data_(data),
       timestamp_(grpc_millis_to_timespec(grpc_core::ExecCtx::Get()->Now(),
                                          GPR_CLOCK_REALTIME)),
       next_(nullptr),
-      referenced_entity_(std::move(referenced_entity)), 
-      memory_usage_(sizeof(TraceEvent) + grpc_slice_memory_usage(data)) {} 
+      referenced_entity_(std::move(referenced_entity)),
+      memory_usage_(sizeof(TraceEvent) + grpc_slice_memory_usage(data)) {}
 
 ChannelTrace::TraceEvent::TraceEvent(Severity severity, const grpc_slice& data)
     : severity_(severity),
       data_(data),
       timestamp_(grpc_millis_to_timespec(grpc_core::ExecCtx::Get()->Now(),
                                          GPR_CLOCK_REALTIME)),
-      next_(nullptr), 
-      memory_usage_(sizeof(TraceEvent) + grpc_slice_memory_usage(data)) {} 
+      next_(nullptr),
+      memory_usage_(sizeof(TraceEvent) + grpc_slice_memory_usage(data)) {}
 
 ChannelTrace::TraceEvent::~TraceEvent() { grpc_slice_unref_internal(data_); }
 
-ChannelTrace::ChannelTrace(size_t max_event_memory) 
-    : num_events_logged_(0), 
-      event_list_memory_usage_(0), 
-      max_event_memory_(max_event_memory), 
+ChannelTrace::ChannelTrace(size_t max_event_memory)
+    : num_events_logged_(0),
+      event_list_memory_usage_(0),
+      max_event_memory_(max_event_memory),
       head_trace_(nullptr),
       tail_trace_(nullptr) {
-  if (max_event_memory_ == 0) 
-    return;  // tracing is disabled if max_event_memory_ == 0 
+  if (max_event_memory_ == 0)
+    return;  // tracing is disabled if max_event_memory_ == 0
   gpr_mu_init(&tracer_mu_);
   time_created_ = grpc_millis_to_timespec(grpc_core::ExecCtx::Get()->Now(),
                                           GPR_CLOCK_REALTIME);
 }
 
 ChannelTrace::~ChannelTrace() {
-  if (max_event_memory_ == 0) 
-    return;  // tracing is disabled if max_event_memory_ == 0 
+  if (max_event_memory_ == 0)
+    return;  // tracing is disabled if max_event_memory_ == 0
   TraceEvent* it = head_trace_;
   while (it != nullptr) {
     TraceEvent* to_free = it;
@@ -97,31 +97,31 @@ void ChannelTrace::AddTraceEventHelper(TraceEvent* new_trace_event) {
     tail_trace_->set_next(new_trace_event);
     tail_trace_ = tail_trace_->next();
   }
-  event_list_memory_usage_ += new_trace_event->memory_usage(); 
-  // maybe garbage collect the tail until we are under the memory limit. 
-  while (event_list_memory_usage_ > max_event_memory_) { 
+  event_list_memory_usage_ += new_trace_event->memory_usage();
+  // maybe garbage collect the tail until we are under the memory limit.
+  while (event_list_memory_usage_ > max_event_memory_) {
     TraceEvent* to_free = head_trace_;
-    event_list_memory_usage_ -= to_free->memory_usage(); 
+    event_list_memory_usage_ -= to_free->memory_usage();
     head_trace_ = head_trace_->next();
     delete to_free;
   }
 }
 
 void ChannelTrace::AddTraceEvent(Severity severity, const grpc_slice& data) {
-  if (max_event_memory_ == 0) { 
-    grpc_slice_unref_internal(data); 
-    return;  // tracing is disabled if max_event_memory_ == 0 
-  } 
+  if (max_event_memory_ == 0) {
+    grpc_slice_unref_internal(data);
+    return;  // tracing is disabled if max_event_memory_ == 0
+  }
   AddTraceEventHelper(new TraceEvent(severity, data));
 }
 
-void ChannelTrace::AddTraceEventWithReference( 
+void ChannelTrace::AddTraceEventWithReference(
     Severity severity, const grpc_slice& data,
-    RefCountedPtr<BaseNode> referenced_entity) { 
-  if (max_event_memory_ == 0) { 
-    grpc_slice_unref_internal(data); 
-    return;  // tracing is disabled if max_event_memory_ == 0 
-  } 
+    RefCountedPtr<BaseNode> referenced_entity) {
+  if (max_event_memory_ == 0) {
+    grpc_slice_unref_internal(data);
+    return;  // tracing is disabled if max_event_memory_ == 0
+  }
   // create and fill up the new event
   AddTraceEventHelper(
       new TraceEvent(severity, data, std::move(referenced_entity)));
@@ -152,10 +152,10 @@ Json ChannelTrace::TraceEvent::RenderTraceEvent() const {
       {"timestamp", gpr_format_timespec(timestamp_)},
   };
   gpr_free(description);
-  if (referenced_entity_ != nullptr) { 
-    const bool is_channel = 
-        (referenced_entity_->type() == BaseNode::EntityType::kTopLevelChannel || 
-         referenced_entity_->type() == BaseNode::EntityType::kInternalChannel); 
+  if (referenced_entity_ != nullptr) {
+    const bool is_channel =
+        (referenced_entity_->type() == BaseNode::EntityType::kTopLevelChannel ||
+         referenced_entity_->type() == BaseNode::EntityType::kInternalChannel);
     object[is_channel ? "channelRef" : "subchannelRef"] = Json::Object{
         {(is_channel ? "channelId" : "subchannelId"),
          ToString(referenced_entity_->uuid())},
@@ -172,19 +172,19 @@ Json ChannelTrace::RenderJson() const {
   Json::Object object = {
       {"creationTimestamp", gpr_format_timespec(time_created_)},
   };
-  if (num_events_logged_ > 0) { 
+  if (num_events_logged_ > 0) {
     object["numEventsLogged"] = ToString(num_events_logged_);
   }
   // Only add in the event list if it is non-empty.
-  if (head_trace_ != nullptr) { 
+  if (head_trace_ != nullptr) {
     Json::Array array;
     for (TraceEvent* it = head_trace_; it != nullptr; it = it->next()) {
       array.emplace_back(it->RenderTraceEvent());
-    } 
+    }
     object["events"] = std::move(array);
-  } 
+  }
   return object;
 }
 
-}  // namespace channelz 
+}  // namespace channelz
 }  // namespace grpc_core

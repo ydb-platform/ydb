@@ -84,7 +84,7 @@ class Json {
     string_value_ = string;
     return *this;
   }
- 
+
   // Same thing for C-style strings, both const and mutable.
   Json(const char* string, bool is_number = false)
       : Json(TString(string), is_number) {}

@@ -22,7 +22,7 @@
 #include "src/core/ext/filters/client_channel/resolver.h"
 #include "src/core/lib/channel/channel_args.h"
 #include "src/core/lib/gprpp/ref_counted.h"
-#include "src/core/lib/iomgr/error.h" 
+#include "src/core/lib/iomgr/error.h"
 
 #define GRPC_ARG_FAKE_RESOLVER_RESPONSE_GENERATOR \
   "grpc.fake_resolver.response_generator"
@@ -64,10 +64,10 @@ class FakeResolverResponseGenerator
   // Tells the resolver to return a transient failure.
   void SetFailure();
 
-  // Same as SetFailure(), but instead of returning the error 
-  // immediately, waits for the next call to RequestReresolutionLocked(). 
-  void SetFailureOnReresolution(); 
- 
+  // Same as SetFailure(), but instead of returning the error
+  // immediately, waits for the next call to RequestReresolutionLocked().
+  void SetFailureOnReresolution();
+
   // Returns a channel arg containing \a generator.
   static grpc_arg MakeChannelArg(FakeResolverResponseGenerator* generator);
 

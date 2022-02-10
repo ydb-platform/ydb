@@ -30,10 +30,10 @@
 #include "src/core/lib/debug/stats.h"
 #include "src/core/lib/gprpp/mpscq.h"
 #include "src/core/lib/iomgr/executor.h"
-#include "src/core/lib/iomgr/iomgr.h" 
+#include "src/core/lib/iomgr/iomgr.h"
 #include "src/core/lib/profiling/timers.h"
 
-grpc_core::DebugOnlyTraceFlag grpc_combiner_trace(false, "combiner"); 
+grpc_core::DebugOnlyTraceFlag grpc_combiner_trace(false, "combiner");
 
 #define GRPC_COMBINER_TRACE(fn)          \
   do {                                   \
@@ -198,9 +198,9 @@ bool grpc_combiner_continue_exec_ctx() {
                               grpc_core::ExecCtx::Get()->IsReadyToFinish(),
                               lock->time_to_execute_final_list));
 
-  // offload only if all the following conditions are true: 
-  // 1. the combiner is contended and has more than one closure to execute 
-  // 2. the current execution context needs to finish as soon as possible 
+  // offload only if all the following conditions are true:
+  // 1. the combiner is contended and has more than one closure to execute
+  // 2. the current execution context needs to finish as soon as possible
   // 3. the current thread is not a worker for any background poller
   // 4. the DEFAULT executor is threaded
   if (contended && grpc_core::ExecCtx::Get()->IsReadyToFinish() &&

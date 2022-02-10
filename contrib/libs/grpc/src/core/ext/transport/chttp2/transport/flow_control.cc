@@ -46,7 +46,7 @@ TestOnlyTransportTargetWindowEstimatesMocker*
 namespace {
 
 static constexpr const int kTracePadding = 30;
-static constexpr const uint32_t kMaxWindowUpdateSize = (1u << 31) - 1; 
+static constexpr const uint32_t kMaxWindowUpdateSize = (1u << 31) - 1;
 
 static char* fmt_int64_diff_str(int64_t old_val, int64_t new_val) {
   TString str;
@@ -60,7 +60,7 @@ static char* fmt_int64_diff_str(int64_t old_val, int64_t new_val) {
 
 static char* fmt_uint32_diff_str(uint32_t old_val, uint32_t new_val) {
   TString str;
-  if (old_val != new_val) { 
+  if (old_val != new_val) {
     str = y_absl::StrFormat("%" PRIu32 " -> %" PRIu32 "", old_val, new_val);
   } else {
     str = y_absl::StrFormat("%" PRIu32 "", old_val);
@@ -101,19 +101,19 @@ void FlowControlTrace::Finish() {
   if (sfc_ != nullptr) {
     srw_str = fmt_int64_diff_str(remote_window_delta_ + remote_window,
                                  sfc_->remote_window_delta() + remote_window);
-    slw_str = 
-        fmt_int64_diff_str(local_window_delta_ + acked_local_window, 
-                           sfc_->local_window_delta() + acked_local_window); 
-    saw_str = 
-        fmt_int64_diff_str(announced_window_delta_ + acked_local_window, 
-                           sfc_->announced_window_delta() + acked_local_window); 
+    slw_str =
+        fmt_int64_diff_str(local_window_delta_ + acked_local_window,
+                           sfc_->local_window_delta() + acked_local_window);
+    saw_str =
+        fmt_int64_diff_str(announced_window_delta_ + acked_local_window,
+                           sfc_->announced_window_delta() + acked_local_window);
   } else {
     srw_str = gpr_leftpad("", ' ', kTracePadding);
     slw_str = gpr_leftpad("", ' ', kTracePadding);
     saw_str = gpr_leftpad("", ' ', kTracePadding);
   }
   gpr_log(GPR_DEBUG,
-          "%p[%u][%s] | %s | trw:%s, tlw:%s, taw:%s, srw:%s, slw:%s, saw:%s", 
+          "%p[%u][%s] | %s | trw:%s, tlw:%s, taw:%s, srw:%s, slw:%s, saw:%s",
           tfc_, sfc_ != nullptr ? sfc_->stream()->id : 0,
           tfc_->transport()->is_client ? "cli" : "svr", reason_, trw_str,
           tlw_str, taw_str, srw_str, slw_str, saw_str);
@@ -196,7 +196,7 @@ uint32_t TransportFlowControl::MaybeSendUpdate(bool writing_anyway) {
   if ((writing_anyway || announced_window_ <= target_announced_window / 2) &&
       announced_window_ != target_announced_window) {
     const uint32_t announce = static_cast<uint32_t> GPR_CLAMP(
-        target_announced_window - announced_window_, 0, kMaxWindowUpdateSize); 
+        target_announced_window - announced_window_, 0, kMaxWindowUpdateSize);
     announced_window_ += announce;
     return announce;
   }
@@ -259,7 +259,7 @@ uint32_t StreamFlowControl::MaybeSendUpdate() {
   FlowControlTrace trace("s updt sent", tfc_, this);
   if (local_window_delta_ > announced_window_delta_) {
     uint32_t announce = static_cast<uint32_t> GPR_CLAMP(
-        local_window_delta_ - announced_window_delta_, 0, kMaxWindowUpdateSize); 
+        local_window_delta_ - announced_window_delta_, 0, kMaxWindowUpdateSize);
     UpdateAnnouncedWindowDelta(tfc_, announce);
     return announce;
   }

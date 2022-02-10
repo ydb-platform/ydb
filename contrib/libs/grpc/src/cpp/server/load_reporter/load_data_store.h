@@ -28,8 +28,8 @@
 #include <grpc/support/log.h>
 #include <grpcpp/impl/codegen/config.h>
 
-#include "src/cpp/server/load_reporter/constants.h" 
- 
+#include "src/cpp/server/load_reporter/constants.h"
+
 #include <util/string/cast.h>
 
 namespace grpc {
@@ -76,9 +76,9 @@ class LoadRecordKey {
         user_id_(std::move(user_id)),
         client_ip_hex_(std::move(client_ip_hex)) {}
 
-  // Parses the input client_ip_and_token to set client IP, LB ID, and LB tag. 
+  // Parses the input client_ip_and_token to set client IP, LB ID, and LB tag.
   LoadRecordKey(const TString& client_ip_and_token, TString user_id);
- 
+
   TString ToString() const {
     return "[lb_id_=" + lb_id_ + ", lb_tag_=" + lb_tag_ +
            ", user_id_=" + user_id_ + ", client_ip_hex_=" + client_ip_hex_ +
@@ -90,9 +90,9 @@ class LoadRecordKey {
            user_id_ == other.user_id_ && client_ip_hex_ == other.client_ip_hex_;
   }
 
-  // Gets the client IP bytes in network order (i.e., big-endian). 
+  // Gets the client IP bytes in network order (i.e., big-endian).
   TString GetClientIpBytes() const;
- 
+
   // Getters.
   const TString& lb_id() const { return lb_id_; }
   const TString& lb_tag() const { return lb_tag_; }
@@ -126,8 +126,8 @@ class LoadRecordKey {
 class LoadRecordValue {
  public:
   explicit LoadRecordValue(uint64_t start_count = 0, uint64_t ok_count = 0,
-                           uint64_t error_count = 0, uint64_t bytes_sent = 0, 
-                           uint64_t bytes_recv = 0, uint64_t latency_ms = 0) 
+                           uint64_t error_count = 0, uint64_t bytes_sent = 0,
+                           uint64_t bytes_recv = 0, uint64_t latency_ms = 0)
       : start_count_(start_count),
         ok_count_(ok_count),
         error_count_(error_count),
@@ -136,8 +136,8 @@ class LoadRecordValue {
         latency_ms_(latency_ms) {}
 
   LoadRecordValue(TString metric_name, uint64_t num_calls,
-                  double total_metric_value); 
- 
+                  double total_metric_value);
+
   void MergeFrom(const LoadRecordValue& other) {
     start_count_ += other.start_count_;
     ok_count_ += other.ok_count_;
@@ -175,9 +175,9 @@ class LoadRecordValue {
   uint64_t start_count() const { return start_count_; }
   uint64_t ok_count() const { return ok_count_; }
   uint64_t error_count() const { return error_count_; }
-  uint64_t bytes_sent() const { return bytes_sent_; } 
-  uint64_t bytes_recv() const { return bytes_recv_; } 
-  uint64_t latency_ms() const { return latency_ms_; } 
+  uint64_t bytes_sent() const { return bytes_sent_; }
+  uint64_t bytes_recv() const { return bytes_recv_; }
+  uint64_t latency_ms() const { return latency_ms_; }
   const std::unordered_map<TString, CallMetricValue>& call_metrics() const {
     return call_metrics_;
   }
@@ -186,9 +186,9 @@ class LoadRecordValue {
   uint64_t start_count_ = 0;
   uint64_t ok_count_ = 0;
   uint64_t error_count_ = 0;
-  uint64_t bytes_sent_ = 0; 
-  uint64_t bytes_recv_ = 0; 
-  uint64_t latency_ms_ = 0; 
+  uint64_t bytes_sent_ = 0;
+  uint64_t bytes_recv_ = 0;
+  uint64_t latency_ms_ = 0;
   std::unordered_map<TString, CallMetricValue> call_metrics_;
 };
 

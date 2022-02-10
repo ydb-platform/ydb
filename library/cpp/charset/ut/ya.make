@@ -1,12 +1,12 @@
 UNITTEST_FOR(library/cpp/charset)
- 
+
 OWNER(alzobnin)
- 
-SRCS( 
+
+SRCS(
     ci_string_ut.cpp
-    codepage_ut.cpp 
-    iconv_ut.cpp 
-    wide_ut.cpp 
-) 
- 
-END() 
+    codepage_ut.cpp
+    iconv_ut.cpp
+    wide_ut.cpp
+)
+
+END()

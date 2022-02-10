@@ -1,7 +1,7 @@
-OWNER(snowball) 
- 
-RECURSE( 
-    lib 
-    prog 
-    test 
-) 
+OWNER(snowball)
+
+RECURSE(
+    lib
+    prog
+    test
+)

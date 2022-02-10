@@ -6,7 +6,7 @@
 #include <util/stream/output.h>
 #include <util/system/yassert.h>
 
-#include <cstdlib> 
+#include <cstdlib>
 
 // vector that is 8 bytes when empty (TVector is 24 bytes)
 

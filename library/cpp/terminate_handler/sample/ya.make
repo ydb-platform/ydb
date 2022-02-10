@@ -1,6 +1,6 @@
 RECURSE(
-    exception 
-    pure-virtual 
+    exception
+    pure-virtual
     rethrow
     segv
 )

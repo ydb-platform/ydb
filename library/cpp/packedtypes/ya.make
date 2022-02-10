@@ -1,10 +1,10 @@
 LIBRARY()
 
-OWNER( 
-    akhropov 
-    velavokr 
-) 
- 
+OWNER(
+    akhropov
+    velavokr
+)
+
 PEERDIR(
     library/cpp/streams/zc_memory_input
 )

@@ -94,7 +94,7 @@ def call_wine_cmd_once(wine, cmd, env, mode):
         'Could not load wine-gecko',
         'wine: configuration in',
         'wine: created the configuration directory',
-        'libpng warning:' 
+        'libpng warning:'
     ]
 
     suffixes = [
@@ -106,13 +106,13 @@ def call_wine_cmd_once(wine, cmd, env, mode):
     ]
 
     substrs = [
-        'Creating library Z:', 
-        'err:heap', 
-        'err:menubuilder:', 
-        'err:msvcrt', 
-        'err:ole:', 
-        'err:wincodecs:', 
-        'err:winediag:', 
+        'Creating library Z:',
+        'err:heap',
+        'err:menubuilder:',
+        'err:msvcrt',
+        'err:ole:',
+        'err:wincodecs:',
+        'err:winediag:',
     ]
 
     def good_line(l):
@@ -318,47 +318,47 @@ def colorize(out):
     return '\n'.join(colorize_line(l) for l in out.split('\n'))
 
 
-def trim_path(path, winepath): 
+def trim_path(path, winepath):
     p1 = run_subprocess([winepath, '-w', path], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     p1_stdout, p1_stderr = p1.communicate()
     win_path = p1_stdout.strip()
- 
+
     if p1.returncode != 0 or not win_path:
         # Fall back to only winepath -s
         win_path = path
- 
+
     p2 = run_subprocess([winepath, '-s', win_path], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     p2_stdout, p2_stderr = p2.communicate()
     short_path = p2_stdout.strip()
- 
+
     check_path = short_path
     if check_path.startswith(('Z:', 'z:')):
         check_path = check_path[2:]
- 
+
     if not check_path[1:].startswith((path[1:4], path[1:4].upper())):
         raise Exception('Cannot trim path {}; 1st winepath exit code: {}, stdout:\n{}\n  stderr:\n{}\n 2nd winepath exit code: {}, stdout:\n{}\n  stderr:\n{}'.format(path, p1.returncode, p1_stdout, p1_stderr, p2.returncode, p2_stdout, p2_stderr))
 
     return short_path
 
 
-def downsize_path(path, short_names): 
-    flag = '' 
-    if path.startswith('/Fo'): 
-        flag = '/Fo' 
-        path = path[3:] 
- 
-    for full_name, short_name in short_names.items(): 
-        if path.startswith(full_name): 
-            path = path.replace(full_name, short_name) 
- 
-    return flag + path 
- 
- 
-def make_full_path_arg(arg, bld_root, short_root): 
-    if arg[0] != '/' and len(os.path.join(bld_root, arg)) > 250: 
-        return os.path.join(short_root, arg) 
-    return arg 
- 
+def downsize_path(path, short_names):
+    flag = ''
+    if path.startswith('/Fo'):
+        flag = '/Fo'
+        path = path[3:]
+
+    for full_name, short_name in short_names.items():
+        if path.startswith(full_name):
+            path = path.replace(full_name, short_name)
+
+    return flag + path
+
+
+def make_full_path_arg(arg, bld_root, short_root):
+    if arg[0] != '/' and len(os.path.join(bld_root, arg)) > 250:
+        return os.path.join(short_root, arg)
+    return arg
+
 def fix_path(p):
     topdirs = ['/%s/' % d for d in os.listdir('/')]
     def abs_path_start(path, pos):
@@ -414,8 +414,8 @@ def run_main():
     parser.add_argument('-v', action='store', dest='version', default='120')
     parser.add_argument('-I', action='append', dest='incl_paths')
     parser.add_argument('mode', action='store')
-    parser.add_argument('arcadia_root', action='store') 
-    parser.add_argument('arcadia_build_root', action='store') 
+    parser.add_argument('arcadia_root', action='store')
+    parser.add_argument('arcadia_build_root', action='store')
     parser.add_argument('binary', action='store')
     parser.add_argument('free_args', nargs=argparse.REMAINDER)
     # By now just unpack. Ideally we should fix path and pack arguments back into command file
@@ -426,10 +426,10 @@ def run_main():
     binary = args.binary
     version = args.version
     incl_paths = args.incl_paths
-    bld_root = args.arcadia_build_root 
+    bld_root = args.arcadia_build_root
     free_args = args.free_args
 
-    wine_dir = os.path.dirname(os.path.dirname(wine)) 
+    wine_dir = os.path.dirname(os.path.dirname(wine))
     bin_dir = os.path.dirname(binary)
     tc_dir = os.path.dirname(os.path.dirname(os.path.dirname(bin_dir)))
     if not incl_paths:
@@ -449,10 +449,10 @@ def run_main():
     env['WindowsSdkDir'] = fix_path(tc_dir)
     env['LIBPATH'] = fix_path(tc_dir + '/VC/lib/amd64')
     env['LIB'] = fix_path(tc_dir + '/VC/lib/amd64')
-    env['LD_LIBRARY_PATH'] = ':'.join(wine_dir + d for d in ['/lib', '/lib64', '/lib64/wine']) 
+    env['LD_LIBRARY_PATH'] = ':'.join(wine_dir + d for d in ['/lib', '/lib64', '/lib64/wine'])
 
     cmd = [binary] + process_free_args(free_args, wine, bld_root, mode)
- 
+
     for x in ('/NOLOGO', '/nologo', '/FD'):
         try:
             cmd.remove(x)

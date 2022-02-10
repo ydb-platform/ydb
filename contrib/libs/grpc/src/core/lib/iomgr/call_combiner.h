@@ -28,10 +28,10 @@
 #include <grpc/support/atm.h>
 
 #include "src/core/lib/gprpp/mpscq.h"
-#include "src/core/lib/gprpp/ref_counted.h" 
-#include "src/core/lib/gprpp/ref_counted_ptr.h" 
+#include "src/core/lib/gprpp/ref_counted.h"
+#include "src/core/lib/gprpp/ref_counted_ptr.h"
 #include "src/core/lib/iomgr/closure.h"
-#include "src/core/lib/iomgr/dynamic_annotations.h" 
+#include "src/core/lib/iomgr/dynamic_annotations.h"
 #include "src/core/lib/iomgr/exec_ctx.h"
 
 // A simple, lock-free mechanism for serializing activity related to a
@@ -115,103 +115,103 @@ class CallCombiner {
   // a grpc_closure* (if the lowest bit is 0),
   // or a grpc_error* (if the lowest bit is 1).
   gpr_atm cancel_state_ = 0;
-#ifdef GRPC_TSAN_ENABLED 
-  // A fake ref-counted lock that is kept alive after the destruction of 
-  // grpc_call_combiner, when we are running the original closure. 
-  // 
-  // Ideally we want to lock and unlock the call combiner as a pointer, when the 
-  // callback is called. However, original_closure is free to trigger 
-  // anything on the call combiner (including destruction of grpc_call). 
-  // Thus, we need a ref-counted structure that can outlive the call combiner. 
+#ifdef GRPC_TSAN_ENABLED
+  // A fake ref-counted lock that is kept alive after the destruction of
+  // grpc_call_combiner, when we are running the original closure.
+  //
+  // Ideally we want to lock and unlock the call combiner as a pointer, when the
+  // callback is called. However, original_closure is free to trigger
+  // anything on the call combiner (including destruction of grpc_call).
+  // Thus, we need a ref-counted structure that can outlive the call combiner.
   struct TsanLock : public RefCounted<TsanLock, NonPolymorphicRefCount> {
-    TsanLock() { TSAN_ANNOTATE_RWLOCK_CREATE(&taken); } 
-    ~TsanLock() { TSAN_ANNOTATE_RWLOCK_DESTROY(&taken); } 
-    // To avoid double-locking by the same thread, we should acquire/release 
-    // the lock only when taken is false. On each acquire taken must be set to 
-    // true. 
-    std::atomic<bool> taken{false}; 
-  }; 
+    TsanLock() { TSAN_ANNOTATE_RWLOCK_CREATE(&taken); }
+    ~TsanLock() { TSAN_ANNOTATE_RWLOCK_DESTROY(&taken); }
+    // To avoid double-locking by the same thread, we should acquire/release
+    // the lock only when taken is false. On each acquire taken must be set to
+    // true.
+    std::atomic<bool> taken{false};
+  };
   RefCountedPtr<TsanLock> tsan_lock_ = MakeRefCounted<TsanLock>();
   grpc_closure tsan_closure_;
   grpc_closure* original_closure_;
-#endif 
-}; 
- 
-// Helper for running a list of closures in a call combiner. 
-// 
-// Each callback running in the call combiner will eventually be 
-// returned to the surface, at which point the surface will yield the 
-// call combiner.  So when we are running in the call combiner and have 
-// more than one callback to return to the surface, we need to re-enter 
-// the call combiner for all but one of those callbacks. 
-class CallCombinerClosureList { 
- public: 
-  CallCombinerClosureList() {} 
- 
-  // Adds a closure to the list.  The closure must eventually result in 
-  // the call combiner being yielded. 
-  void Add(grpc_closure* closure, grpc_error* error, const char* reason) { 
-    closures_.emplace_back(closure, error, reason); 
-  } 
- 
-  // Runs all closures in the call combiner and yields the call combiner. 
-  // 
-  // All but one of the closures in the list will be scheduled via 
-  // GRPC_CALL_COMBINER_START(), and the remaining closure will be 
+#endif
+};
+
+// Helper for running a list of closures in a call combiner.
+//
+// Each callback running in the call combiner will eventually be
+// returned to the surface, at which point the surface will yield the
+// call combiner.  So when we are running in the call combiner and have
+// more than one callback to return to the surface, we need to re-enter
+// the call combiner for all but one of those callbacks.
+class CallCombinerClosureList {
+ public:
+  CallCombinerClosureList() {}
+
+  // Adds a closure to the list.  The closure must eventually result in
+  // the call combiner being yielded.
+  void Add(grpc_closure* closure, grpc_error* error, const char* reason) {
+    closures_.emplace_back(closure, error, reason);
+  }
+
+  // Runs all closures in the call combiner and yields the call combiner.
+  //
+  // All but one of the closures in the list will be scheduled via
+  // GRPC_CALL_COMBINER_START(), and the remaining closure will be
   // scheduled via ExecCtx::Run(), which will eventually result
   // in yielding the call combiner.  If the list is empty, then the call
-  // combiner will be yielded immediately. 
+  // combiner will be yielded immediately.
   void RunClosures(CallCombiner* call_combiner) {
-    if (closures_.empty()) { 
-      GRPC_CALL_COMBINER_STOP(call_combiner, "no closures to schedule"); 
-      return; 
-    } 
-    for (size_t i = 1; i < closures_.size(); ++i) { 
-      auto& closure = closures_[i]; 
-      GRPC_CALL_COMBINER_START(call_combiner, closure.closure, closure.error, 
-                               closure.reason); 
-    } 
+    if (closures_.empty()) {
+      GRPC_CALL_COMBINER_STOP(call_combiner, "no closures to schedule");
+      return;
+    }
+    for (size_t i = 1; i < closures_.size(); ++i) {
+      auto& closure = closures_[i];
+      GRPC_CALL_COMBINER_START(call_combiner, closure.closure, closure.error,
+                               closure.reason);
+    }
     if (GRPC_TRACE_FLAG_ENABLED(grpc_call_combiner_trace)) {
-      gpr_log(GPR_INFO, 
-              "CallCombinerClosureList executing closure while already " 
-              "holding call_combiner %p: closure=%p error=%s reason=%s", 
-              call_combiner, closures_[0].closure, 
-              grpc_error_string(closures_[0].error), closures_[0].reason); 
-    } 
-    // This will release the call combiner. 
+      gpr_log(GPR_INFO,
+              "CallCombinerClosureList executing closure while already "
+              "holding call_combiner %p: closure=%p error=%s reason=%s",
+              call_combiner, closures_[0].closure,
+              grpc_error_string(closures_[0].error), closures_[0].reason);
+    }
+    // This will release the call combiner.
     ExecCtx::Run(DEBUG_LOCATION, closures_[0].closure, closures_[0].error);
-    closures_.clear(); 
-  } 
- 
-  // Runs all closures in the call combiner, but does NOT yield the call 
-  // combiner.  All closures will be scheduled via GRPC_CALL_COMBINER_START(). 
+    closures_.clear();
+  }
+
+  // Runs all closures in the call combiner, but does NOT yield the call
+  // combiner.  All closures will be scheduled via GRPC_CALL_COMBINER_START().
   void RunClosuresWithoutYielding(CallCombiner* call_combiner) {
-    for (size_t i = 0; i < closures_.size(); ++i) { 
-      auto& closure = closures_[i]; 
-      GRPC_CALL_COMBINER_START(call_combiner, closure.closure, closure.error, 
-                               closure.reason); 
-    } 
-    closures_.clear(); 
-  } 
- 
-  size_t size() const { return closures_.size(); } 
- 
- private: 
-  struct CallCombinerClosure { 
-    grpc_closure* closure; 
-    grpc_error* error; 
-    const char* reason; 
- 
-    CallCombinerClosure(grpc_closure* closure, grpc_error* error, 
-                        const char* reason) 
-        : closure(closure), error(error), reason(reason) {} 
-  }; 
- 
-  // There are generally a maximum of 6 closures to run in the call 
-  // combiner, one for each pending op. 
+    for (size_t i = 0; i < closures_.size(); ++i) {
+      auto& closure = closures_[i];
+      GRPC_CALL_COMBINER_START(call_combiner, closure.closure, closure.error,
+                               closure.reason);
+    }
+    closures_.clear();
+  }
+
+  size_t size() const { return closures_.size(); }
+
+ private:
+  struct CallCombinerClosure {
+    grpc_closure* closure;
+    grpc_error* error;
+    const char* reason;
+
+    CallCombinerClosure(grpc_closure* closure, grpc_error* error,
+                        const char* reason)
+        : closure(closure), error(error), reason(reason) {}
+  };
+
+  // There are generally a maximum of 6 closures to run in the call
+  // combiner, one for each pending op.
   y_absl::InlinedVector<CallCombinerClosure, 6> closures_;
-}; 
- 
-}  // namespace grpc_core 
- 
+};
+
+}  // namespace grpc_core
+
 #endif /* GRPC_CORE_LIB_IOMGR_CALL_COMBINER_H */

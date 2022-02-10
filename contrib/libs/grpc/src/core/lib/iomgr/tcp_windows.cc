@@ -41,7 +41,7 @@
 #include "src/core/lib/iomgr/tcp_windows.h"
 #include "src/core/lib/iomgr/timer.h"
 #include "src/core/lib/slice/slice_internal.h"
-#include "src/core/lib/slice/slice_string_helpers.h" 
+#include "src/core/lib/slice/slice_string_helpers.h"
 
 #if defined(__MSYS__) && defined(GPR_ARCH_64)
 /* Nasty workaround for nasty bug when using the 64 bits msys compiler
@@ -53,7 +53,7 @@
 
 extern grpc_core::TraceFlag grpc_tcp_trace;
 
-grpc_error* grpc_tcp_set_non_block(SOCKET sock) { 
+grpc_error* grpc_tcp_set_non_block(SOCKET sock) {
   int status;
   uint32_t param = 1;
   DWORD ret;
@@ -88,7 +88,7 @@ static grpc_error* enable_socket_low_latency(SOCKET sock) {
 
 grpc_error* grpc_tcp_prepare_socket(SOCKET sock) {
   grpc_error* err;
-  err = grpc_tcp_set_non_block(sock); 
+  err = grpc_tcp_set_non_block(sock);
   if (err != GRPC_ERROR_NONE) return err;
   err = set_dualstack(sock);
   if (err != GRPC_ERROR_NONE) return err;
@@ -110,10 +110,10 @@ typedef struct grpc_tcp {
 
   grpc_closure* read_cb;
   grpc_closure* write_cb;
- 
-  /* garbage after the last read */ 
-  grpc_slice_buffer last_read_buffer; 
- 
+
+  /* garbage after the last read */
+  grpc_slice_buffer last_read_buffer;
+
   grpc_slice_buffer* write_slices;
   grpc_slice_buffer* read_slices;
 
@@ -132,7 +132,7 @@ typedef struct grpc_tcp {
 static void tcp_free(grpc_tcp* tcp) {
   grpc_winsocket_destroy(tcp->socket);
   gpr_mu_destroy(&tcp->mu);
-  grpc_slice_buffer_destroy_internal(&tcp->last_read_buffer); 
+  grpc_slice_buffer_destroy_internal(&tcp->last_read_buffer);
   grpc_resource_user_unref(tcp->resource_user);
   if (tcp->shutting_down) GRPC_ERROR_UNREF(tcp->shutdown_error);
   delete tcp;
@@ -183,10 +183,10 @@ static void on_read(void* tcpp, grpc_error* error) {
   grpc_winsocket* socket = tcp->socket;
   grpc_winsocket_callback_info* info = &socket->read_info;
 
-  if (grpc_tcp_trace.enabled()) { 
-    gpr_log(GPR_INFO, "TCP:%p on_read", tcp); 
-  } 
- 
+  if (grpc_tcp_trace.enabled()) {
+    gpr_log(GPR_INFO, "TCP:%p on_read", tcp);
+  }
+
   GRPC_ERROR_REF(error);
 
   if (error == GRPC_ERROR_NONE) {
@@ -194,35 +194,35 @@ static void on_read(void* tcpp, grpc_error* error) {
       char* utf8_message = gpr_format_message(info->wsa_error);
       error = GRPC_ERROR_CREATE_FROM_COPIED_STRING(utf8_message);
       gpr_free(utf8_message);
-      grpc_slice_buffer_reset_and_unref_internal(tcp->read_slices); 
+      grpc_slice_buffer_reset_and_unref_internal(tcp->read_slices);
     } else {
       if (info->bytes_transferred != 0 && !tcp->shutting_down) {
         GPR_ASSERT((size_t)info->bytes_transferred <= tcp->read_slices->length);
         if (static_cast<size_t>(info->bytes_transferred) !=
-            tcp->read_slices->length) { 
-          grpc_slice_buffer_trim_end( 
-              tcp->read_slices, 
-              tcp->read_slices->length - 
+            tcp->read_slices->length) {
+          grpc_slice_buffer_trim_end(
+              tcp->read_slices,
+              tcp->read_slices->length -
                   static_cast<size_t>(info->bytes_transferred),
-              &tcp->last_read_buffer); 
-        } 
+              &tcp->last_read_buffer);
+        }
         GPR_ASSERT((size_t)info->bytes_transferred == tcp->read_slices->length);
- 
-        if (grpc_tcp_trace.enabled()) { 
-          size_t i; 
-          for (i = 0; i < tcp->read_slices->count; i++) { 
-            char* dump = grpc_dump_slice(tcp->read_slices->slices[i], 
-                                         GPR_DUMP_HEX | GPR_DUMP_ASCII); 
+
+        if (grpc_tcp_trace.enabled()) {
+          size_t i;
+          for (i = 0; i < tcp->read_slices->count; i++) {
+            char* dump = grpc_dump_slice(tcp->read_slices->slices[i],
+                                         GPR_DUMP_HEX | GPR_DUMP_ASCII);
             gpr_log(GPR_INFO, "READ %p (peer=%s): %s", tcp,
                     tcp->peer_string.c_str(), dump);
-            gpr_free(dump); 
-          } 
-        } 
+            gpr_free(dump);
+          }
+        }
       } else {
-        if (grpc_tcp_trace.enabled()) { 
-          gpr_log(GPR_INFO, "TCP:%p unref read_slice", tcp); 
-        } 
-        grpc_slice_buffer_reset_and_unref_internal(tcp->read_slices); 
+        if (grpc_tcp_trace.enabled()) {
+          gpr_log(GPR_INFO, "TCP:%p unref read_slice", tcp);
+        }
+        grpc_slice_buffer_reset_and_unref_internal(tcp->read_slices);
         error = tcp->shutting_down
                     ? GRPC_ERROR_CREATE_REFERENCING_FROM_STATIC_STRING(
                           "TCP stream shutting down", &tcp->shutdown_error, 1)
@@ -236,8 +236,8 @@ static void on_read(void* tcpp, grpc_error* error) {
   grpc_core::ExecCtx::Run(DEBUG_LOCATION, cb, error);
 }
 
-#define DEFAULT_TARGET_READ_SIZE 8192 
-#define MAX_WSABUF_COUNT 16 
+#define DEFAULT_TARGET_READ_SIZE 8192
+#define MAX_WSABUF_COUNT 16
 static void win_read(grpc_endpoint* ep, grpc_slice_buffer* read_slices,
                      grpc_closure* cb, bool urgent) {
   grpc_tcp* tcp = (grpc_tcp*)ep;
@@ -246,13 +246,13 @@ static void win_read(grpc_endpoint* ep, grpc_slice_buffer* read_slices,
   int status;
   DWORD bytes_read = 0;
   DWORD flags = 0;
-  WSABUF buffers[MAX_WSABUF_COUNT]; 
-  size_t i; 
+  WSABUF buffers[MAX_WSABUF_COUNT];
+  size_t i;
 
-  if (grpc_tcp_trace.enabled()) { 
-    gpr_log(GPR_INFO, "TCP:%p win_read", tcp); 
-  } 
- 
+  if (grpc_tcp_trace.enabled()) {
+    gpr_log(GPR_INFO, "TCP:%p win_read", tcp);
+  }
+
   if (tcp->shutting_down) {
     grpc_core::ExecCtx::Run(
         DEBUG_LOCATION, cb,
@@ -264,27 +264,27 @@ static void win_read(grpc_endpoint* ep, grpc_slice_buffer* read_slices,
   tcp->read_cb = cb;
   tcp->read_slices = read_slices;
   grpc_slice_buffer_reset_and_unref_internal(read_slices);
-  grpc_slice_buffer_swap(read_slices, &tcp->last_read_buffer); 
+  grpc_slice_buffer_swap(read_slices, &tcp->last_read_buffer);
 
-  if (tcp->read_slices->length < DEFAULT_TARGET_READ_SIZE / 2 && 
-      tcp->read_slices->count < MAX_WSABUF_COUNT) { 
-    // TODO(jtattermusch): slice should be allocated using resource quota 
-    grpc_slice_buffer_add(tcp->read_slices, 
-                          GRPC_SLICE_MALLOC(DEFAULT_TARGET_READ_SIZE)); 
-  } 
+  if (tcp->read_slices->length < DEFAULT_TARGET_READ_SIZE / 2 &&
+      tcp->read_slices->count < MAX_WSABUF_COUNT) {
+    // TODO(jtattermusch): slice should be allocated using resource quota
+    grpc_slice_buffer_add(tcp->read_slices,
+                          GRPC_SLICE_MALLOC(DEFAULT_TARGET_READ_SIZE));
+  }
 
-  GPR_ASSERT(tcp->read_slices->count <= MAX_WSABUF_COUNT); 
-  for (i = 0; i < tcp->read_slices->count; i++) { 
-    buffers[i].len = (ULONG)GRPC_SLICE_LENGTH( 
-        tcp->read_slices->slices[i]);  // we know slice size fits in 32bit. 
-    buffers[i].buf = (char*)GRPC_SLICE_START_PTR(tcp->read_slices->slices[i]); 
-  } 
+  GPR_ASSERT(tcp->read_slices->count <= MAX_WSABUF_COUNT);
+  for (i = 0; i < tcp->read_slices->count; i++) {
+    buffers[i].len = (ULONG)GRPC_SLICE_LENGTH(
+        tcp->read_slices->slices[i]);  // we know slice size fits in 32bit.
+    buffers[i].buf = (char*)GRPC_SLICE_START_PTR(tcp->read_slices->slices[i]);
+  }
 
   TCP_REF(tcp, "read");
 
   /* First let's try a synchronous, non-blocking read. */
-  status = WSARecv(tcp->socket->socket, buffers, (DWORD)tcp->read_slices->count, 
-                   &bytes_read, &flags, NULL, NULL); 
+  status = WSARecv(tcp->socket->socket, buffers, (DWORD)tcp->read_slices->count,
+                   &bytes_read, &flags, NULL, NULL);
   info->wsa_error = status == 0 ? 0 : WSAGetLastError();
 
   /* Did we get data immediately ? Yay. */
@@ -296,8 +296,8 @@ static void win_read(grpc_endpoint* ep, grpc_slice_buffer* read_slices,
 
   /* Otherwise, let's retry, by queuing a read. */
   memset(&tcp->socket->read_info.overlapped, 0, sizeof(OVERLAPPED));
-  status = WSARecv(tcp->socket->socket, buffers, (DWORD)tcp->read_slices->count, 
-                   &bytes_read, &flags, &info->overlapped, NULL); 
+  status = WSARecv(tcp->socket->socket, buffers, (DWORD)tcp->read_slices->count,
+                   &bytes_read, &flags, &info->overlapped, NULL);
 
   if (status != 0) {
     int wsa_error = WSAGetLastError();
@@ -319,10 +319,10 @@ static void on_write(void* tcpp, grpc_error* error) {
   grpc_winsocket_callback_info* info = &handle->write_info;
   grpc_closure* cb;
 
-  if (grpc_tcp_trace.enabled()) { 
-    gpr_log(GPR_INFO, "TCP:%p on_write", tcp); 
-  } 
- 
+  if (grpc_tcp_trace.enabled()) {
+    gpr_log(GPR_INFO, "TCP:%p on_write", tcp);
+  }
+
   GRPC_ERROR_REF(error);
 
   gpr_mu_lock(&tcp->mu);
@@ -344,29 +344,29 @@ static void on_write(void* tcpp, grpc_error* error) {
 
 /* Initiates a write. */
 static void win_write(grpc_endpoint* ep, grpc_slice_buffer* slices,
-                      grpc_closure* cb, void* arg) { 
+                      grpc_closure* cb, void* arg) {
   grpc_tcp* tcp = (grpc_tcp*)ep;
   grpc_winsocket* socket = tcp->socket;
   grpc_winsocket_callback_info* info = &socket->write_info;
   unsigned i;
   DWORD bytes_sent;
   int status;
-  WSABUF local_buffers[MAX_WSABUF_COUNT]; 
+  WSABUF local_buffers[MAX_WSABUF_COUNT];
   WSABUF* allocated = NULL;
   WSABUF* buffers = local_buffers;
   size_t len;
 
-  if (grpc_tcp_trace.enabled()) { 
-    size_t i; 
-    for (i = 0; i < slices->count; i++) { 
-      char* data = 
-          grpc_dump_slice(slices->slices[i], GPR_DUMP_HEX | GPR_DUMP_ASCII); 
+  if (grpc_tcp_trace.enabled()) {
+    size_t i;
+    for (i = 0; i < slices->count; i++) {
+      char* data =
+          grpc_dump_slice(slices->slices[i], GPR_DUMP_HEX | GPR_DUMP_ASCII);
       gpr_log(GPR_INFO, "WRITE %p (peer=%s): %s", tcp, tcp->peer_string.c_str(),
               data);
-      gpr_free(data); 
-    } 
-  } 
- 
+      gpr_free(data);
+    }
+  }
+
   if (tcp->shutting_down) {
     grpc_core::ExecCtx::Run(
         DEBUG_LOCATION, cb,
@@ -472,7 +472,7 @@ static void win_shutdown(grpc_endpoint* ep, grpc_error* why) {
 
 static void win_destroy(grpc_endpoint* ep) {
   grpc_tcp* tcp = (grpc_tcp*)ep;
-  grpc_slice_buffer_reset_and_unref_internal(&tcp->last_read_buffer); 
+  grpc_slice_buffer_reset_and_unref_internal(&tcp->last_read_buffer);
   TCP_UNREF(tcp, "destroy");
 }
 
@@ -493,8 +493,8 @@ static grpc_resource_user* win_get_resource_user(grpc_endpoint* ep) {
 
 static int win_get_fd(grpc_endpoint* ep) { return -1; }
 
-static bool win_can_track_err(grpc_endpoint* ep) { return false; } 
- 
+static bool win_can_track_err(grpc_endpoint* ep) { return false; }
+
 static grpc_endpoint_vtable vtable = {win_read,
                                       win_write,
                                       win_add_to_pollset,
@@ -505,8 +505,8 @@ static grpc_endpoint_vtable vtable = {win_read,
                                       win_get_resource_user,
                                       win_get_peer,
                                       win_get_local_address,
-                                      win_get_fd, 
-                                      win_can_track_err}; 
+                                      win_get_fd,
+                                      win_can_track_err};
 
 grpc_endpoint* grpc_tcp_create(grpc_winsocket* socket,
                                grpc_channel_args* channel_args,
@@ -539,7 +539,7 @@ grpc_endpoint* grpc_tcp_create(grpc_winsocket* socket,
     tcp->local_address = grpc_sockaddr_to_uri(&resolved_local_addr);
   }
   tcp->peer_string = peer_string;
-  grpc_slice_buffer_init(&tcp->last_read_buffer); 
+  grpc_slice_buffer_init(&tcp->last_read_buffer);
   tcp->resource_user = grpc_resource_user_create(resource_quota, peer_string);
   grpc_resource_quota_unref_internal(resource_quota);
 

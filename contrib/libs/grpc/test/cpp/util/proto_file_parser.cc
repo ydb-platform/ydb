@@ -63,7 +63,7 @@ class ErrorPrinter : public protobuf::compiler::MultiFileErrorCollector {
   ProtoFileParser* parser_;  // not owned
 };
 
-ProtoFileParser::ProtoFileParser(const std::shared_ptr<grpc::Channel>& channel, 
+ProtoFileParser::ProtoFileParser(const std::shared_ptr<grpc::Channel>& channel,
                                  const TString& proto_path,
                                  const TString& protofiles)
     : has_error_(false),
@@ -217,31 +217,31 @@ bool ProtoFileParser::IsStreaming(const TString& method, bool is_request) {
 
 TString ProtoFileParser::GetSerializedProtoFromMethod(
     const TString& method, const TString& formatted_proto,
-    bool is_request, bool is_json_format) { 
+    bool is_request, bool is_json_format) {
   has_error_ = false;
   TString message_type_name = GetMessageTypeFromMethod(method, is_request);
   if (has_error_) {
     return "";
   }
-  return GetSerializedProtoFromMessageType(message_type_name, formatted_proto, 
-                                           is_json_format); 
+  return GetSerializedProtoFromMessageType(message_type_name, formatted_proto,
+                                           is_json_format);
 }
 
 TString ProtoFileParser::GetFormattedStringFromMethod(
     const TString& method, const TString& serialized_proto,
-    bool is_request, bool is_json_format) { 
+    bool is_request, bool is_json_format) {
   has_error_ = false;
   TString message_type_name = GetMessageTypeFromMethod(method, is_request);
   if (has_error_) {
     return "";
   }
-  return GetFormattedStringFromMessageType(message_type_name, serialized_proto, 
-                                           is_json_format); 
+  return GetFormattedStringFromMessageType(message_type_name, serialized_proto,
+                                           is_json_format);
 }
 
 TString ProtoFileParser::GetSerializedProtoFromMessageType(
     const TString& message_type_name, const TString& formatted_proto,
-    bool is_json_format) { 
+    bool is_json_format) {
   has_error_ = false;
   google::protobuf::string serialized;
   const protobuf::Descriptor* desc =
@@ -252,22 +252,22 @@ TString ProtoFileParser::GetSerializedProtoFromMessageType(
   }
   std::unique_ptr<grpc::protobuf::Message> msg(
       dynamic_factory_->GetPrototype(desc)->New());
-  bool ok; 
-  if (is_json_format) { 
-    ok = grpc::protobuf::json::JsonStringToMessage(google::protobuf::string(formatted_proto), msg.get()) 
-             .ok(); 
-    if (!ok) { 
-      LogError("Failed to convert json format to proto."); 
-      return ""; 
-    } 
-  } else { 
-    ok = protobuf::TextFormat::ParseFromString(google::protobuf::string(formatted_proto), msg.get()); 
-    if (!ok) { 
-      LogError("Failed to convert text format to proto."); 
-      return ""; 
-    } 
+  bool ok;
+  if (is_json_format) {
+    ok = grpc::protobuf::json::JsonStringToMessage(google::protobuf::string(formatted_proto), msg.get())
+             .ok();
+    if (!ok) {
+      LogError("Failed to convert json format to proto.");
+      return "";
+    }
+  } else {
+    ok = protobuf::TextFormat::ParseFromString(google::protobuf::string(formatted_proto), msg.get());
+    if (!ok) {
+      LogError("Failed to convert text format to proto.");
+      return "";
+    }
   }
- 
+
   ok = msg->SerializeToString(&serialized);
   if (!ok) {
     LogError("Failed to serialize proto.");
@@ -278,7 +278,7 @@ TString ProtoFileParser::GetSerializedProtoFromMessageType(
 
 TString ProtoFileParser::GetFormattedStringFromMessageType(
     const TString& message_type_name, const TString& serialized_proto,
-    bool is_json_format) { 
+    bool is_json_format) {
   has_error_ = false;
   const protobuf::Descriptor* desc =
       desc_pool_->FindMessageTypeByName(google::protobuf::string(message_type_name));
@@ -292,24 +292,24 @@ TString ProtoFileParser::GetFormattedStringFromMessageType(
     LogError("Failed to deserialize proto.");
     return "";
   }
-  google::protobuf::string formatted_string; 
- 
-  if (is_json_format) { 
-    grpc::protobuf::json::JsonPrintOptions jsonPrintOptions; 
-    jsonPrintOptions.add_whitespace = true; 
-    if (!grpc::protobuf::json::MessageToJsonString( 
-             *msg.get(), &formatted_string, jsonPrintOptions) 
-             .ok()) { 
-      LogError("Failed to print proto message to json format"); 
-      return ""; 
-    } 
-  } else { 
-    if (!protobuf::TextFormat::PrintToString(*msg.get(), &formatted_string)) { 
-      LogError("Failed to print proto message to text format"); 
-      return ""; 
-    } 
+  google::protobuf::string formatted_string;
+
+  if (is_json_format) {
+    grpc::protobuf::json::JsonPrintOptions jsonPrintOptions;
+    jsonPrintOptions.add_whitespace = true;
+    if (!grpc::protobuf::json::MessageToJsonString(
+             *msg.get(), &formatted_string, jsonPrintOptions)
+             .ok()) {
+      LogError("Failed to print proto message to json format");
+      return "";
+    }
+  } else {
+    if (!protobuf::TextFormat::PrintToString(*msg.get(), &formatted_string)) {
+      LogError("Failed to print proto message to text format");
+      return "";
+    }
   }
-  return formatted_string; 
+  return formatted_string;
 }
 
 void ProtoFileParser::LogError(const TString& error_msg) {

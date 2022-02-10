@@ -30,7 +30,7 @@
 
 #include "src/core/ext/filters/client_channel/client_channel.h"
 #include "src/core/ext/filters/client_channel/lb_policy/grpclb/grpclb_balancer_addresses.h"
-#include "src/core/ext/filters/client_channel/server_address.h" 
+#include "src/core/ext/filters/client_channel/server_address.h"
 #include "src/core/lib/channel/channel_args.h"
 #include "src/core/lib/gpr/string.h"
 #include "src/core/lib/iomgr/sockaddr_utils.h"
@@ -51,7 +51,7 @@ grpc_channel_args* ModifyGrpclbBalancerChannelArgs(
   RefCountedPtr<grpc_channel_credentials> creds_sans_call_creds;
   if (channel_credentials != nullptr) {
     creds_sans_call_creds =
-        channel_credentials->duplicate_without_call_credentials(); 
+        channel_credentials->duplicate_without_call_credentials();
     GPR_ASSERT(creds_sans_call_creds != nullptr);
     args_to_remove.emplace_back(GRPC_ARG_CHANNEL_CREDENTIALS);
     args_to_add.emplace_back(

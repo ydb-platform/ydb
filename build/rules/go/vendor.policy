@@ -395,9 +395,9 @@ ALLOW .* -> vendor/golang.org/x/sync
 # golang.org/x/text
 ALLOW .* -> vendor/golang.org/x/text
 
-# golang.org/x/time
-ALLOW .* -> vendor/golang.org/x/time
-
+# golang.org/x/time 
+ALLOW .* -> vendor/golang.org/x/time 
+ 
 # golang.org/x/image/webp
 ALLOW .* -> vendor/golang.org/x/image/webp
 

@@ -244,7 +244,7 @@ namespace NUri {
          *    host contains only scheme-legal characters.
          */
             FEATURE_NAME(NoRelPath),
- 
+
             // standard prefers that all hex escapes were using uppercase A-F
             FEATURE_NAME(UpperEncoded),
 

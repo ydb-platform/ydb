@@ -306,11 +306,11 @@ namespace NJson {
             case JSON_UINTEGER:
             case JSON_DOUBLE:
                 break;
-        } 
+        }
         Zero(Value);
         Type = JSON_UNDEFINED;
-    } 
- 
+    }
+
     TJsonValue& TJsonValue::operator[](const size_t idx) {
         SetType(JSON_ARRAY);
         if (Value.Array->size() <= idx)

@@ -1,5 +1,5 @@
 LIBRARY()
- 
+
 PROVIDES(test_framework)
 
 OWNER(
@@ -24,7 +24,7 @@ SRCS(
     tests_data.cpp
     utmain.cpp
 )
- 
+
 END()
 
 RECURSE_FOR_TESTS(

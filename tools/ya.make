@@ -180,7 +180,7 @@ RECURSE(
     yson_pp
     zk_client
     idx_print
-) 
+)
 
 IF (NOT OS_WINDOWS)
     RECURSE(

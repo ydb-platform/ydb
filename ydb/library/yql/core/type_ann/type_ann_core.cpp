@@ -8448,122 +8448,122 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         return IGraphTransformer::TStatus::Repeat;
     }
 
-    // 0 - function kind 
-    // 1 - function name 
-    // 2 - list of pair, settings ("key", value) 
-    IGraphTransformer::TStatus SqlExternalFunctionWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) { 
-        Y_UNUSED(output); 
-        if (!EnsureArgsCount(*input, 3, ctx.Expr)) { 
-            return IGraphTransformer::TStatus::Error; 
-        } 
- 
-        if (!EnsureStringOrUtf8Type(*input->Child(0), ctx.Expr)) { 
-            return IGraphTransformer::TStatus::Error; 
-        } 
- 
-        if (!EnsureStringOrUtf8Type(*input->Child(1), ctx.Expr)) { 
-            return IGraphTransformer::TStatus::Error; 
-        } 
- 
-        if (!EnsureTupleMinSize(*input->Child(2), 1, ctx.Expr)) { 
-            return IGraphTransformer::TStatus::Error; 
-        } 
- 
-        const TTypeAnnotationNode* outputType = nullptr; 
-        const TTypeAnnotationNode* inputType = nullptr; 
-        TSet<TString> usedParams; 
-        for (const auto &tuple: input->Child(2)->Children()) { 
-            if (!EnsureTupleSize(*tuple, 2, ctx.Expr)) { 
-                return IGraphTransformer::TStatus::Error; 
-            } 
-            if (!EnsureAtom(tuple->Head(), ctx.Expr)) { 
-                return IGraphTransformer::TStatus::Error; 
-            } 
- 
-            auto paramName = ToString(tuple->Head().Content()); 
-            if (!usedParams.insert(paramName).second) { 
-                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(tuple->Pos()), 
-                                         TStringBuilder() << "WITH " << to_upper(paramName).Quote() 
-                                         << " clause should be specified only once")); 
-                return IGraphTransformer::TStatus::Error; 
-            } else if (paramName == "input_type" || paramName == "output_type") { 
-                if (!EnsureTypeWithStructType(*tuple->Child(1), ctx.Expr)) { 
-                    return IGraphTransformer::TStatus::Error; 
-                } 
-                if (paramName == "output_type") { 
-                    outputType = tuple->Child(1)->GetTypeAnn()->Cast<TTypeExprType>()->GetType(); 
-                } else if (paramName == "input_type") { 
-                    inputType = tuple->Child(1)->GetTypeAnn()->Cast<TTypeExprType>()->GetType(); 
-                } 
-            } else if (paramName == "concurrency" || paramName == "batch_size") { 
-                if (!EnsureSpecificDataType(*tuple->Child(1), EDataSlot::Int32, ctx.Expr)) { 
-                    return IGraphTransformer::TStatus::Error; 
-                } 
-                /* 
-                ui64 number = 0; 
-                if (!TryFromString(tuple->Child(1)->Content(), number)) { 
-                    ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(tuple->Pos()), 
-                                             TStringBuilder() << "Failed to convert to integer: " << tuple->Child(1)->Content())); 
-                    return IGraphTransformer::TStatus::Error; 
-                }*/ 
-            } else if (paramName == "optimize_for") { 
-                if (!EnsureStringOrUtf8Type(*tuple->Child(1), ctx.Expr)) { 
-                    return IGraphTransformer::TStatus::Error; 
-                } 
-                /* 
-                if (const auto optimize = tuple->Child(1)->Content(); optimize != "call" && optimize != "latency") { 
-                    ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(tuple->Child(1)->Pos()), TStringBuilder() << 
-                        "Unknown OPTIMIZE_FOR value, expected call or latency, but got: " << optimize)); 
-                    return IGraphTransformer::TStatus::Error; 
-                }*/ 
-            } else if (paramName == "connection") { 
-                // FindCredential 
-                if (!EnsureStringOrUtf8Type(*tuple->Child(1), ctx.Expr)) { 
-                    return IGraphTransformer::TStatus::Error; 
-                } 
-            } else if (paramName == "init") { 
-                if (!EnsureComputable(*tuple->Child(1), ctx.Expr)) { 
-                    return IGraphTransformer::TStatus::Error; 
-                } 
-            } else { 
-                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(tuple->Pos()), TStringBuilder() << 
-                    "Unknown param name: " << paramName.Quote())); 
-                return IGraphTransformer::TStatus::Error; 
-            } 
-        } 
- 
-        if (inputType == nullptr && outputType == nullptr) { 
-            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Child(2)->Pos()), TStringBuilder() << 
-                    "EXTERNAL FUNCTION should have INPUT_TYPE/OUTPUT_TYPE parameter")); 
-            return IGraphTransformer::TStatus::Error; 
-        } 
- 
-        const TTypeAnnotationNode* nodeType; 
-        if (outputType != nullptr && inputType != nullptr) { 
-            // as transformation 
-            TCallableExprType::TArgumentInfo inputArgument; 
-            inputArgument.Flags = NKikimr::NUdf::ICallablePayload::TArgumentFlags::AutoMap; 
-            inputArgument.Name = "input"; 
-            inputArgument.Type = ctx.Expr.MakeType<TListExprType>(inputType); 
-            TVector<TCallableExprType::TArgumentInfo> args(1, inputArgument); 
-            nodeType = ctx.Expr.MakeType<TCallableExprType>( 
-                    ctx.Expr.MakeType<TListExprType>(outputType), 
-                    args, 0, TStringBuf("")); 
-        } else if (outputType != nullptr) { 
-            // as source 
-            TVector<TCallableExprType::TArgumentInfo> args; 
-            nodeType = ctx.Expr.MakeType<TCallableExprType>( 
-                    ctx.Expr.MakeType<TListExprType>(outputType), 
-                    args, 0, TStringBuf("")); 
-        } else { 
-            // as writer 
-            nodeType = ctx.Expr.MakeType<TListExprType>(inputType); 
-        } 
- 
-        input->SetTypeAnn(nodeType); 
-        return IGraphTransformer::TStatus::Ok; 
-    } 
- 
+    // 0 - function kind
+    // 1 - function name
+    // 2 - list of pair, settings ("key", value)
+    IGraphTransformer::TStatus SqlExternalFunctionWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+        Y_UNUSED(output);
+        if (!EnsureArgsCount(*input, 3, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!EnsureStringOrUtf8Type(*input->Child(0), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!EnsureStringOrUtf8Type(*input->Child(1), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!EnsureTupleMinSize(*input->Child(2), 1, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        const TTypeAnnotationNode* outputType = nullptr;
+        const TTypeAnnotationNode* inputType = nullptr;
+        TSet<TString> usedParams;
+        for (const auto &tuple: input->Child(2)->Children()) {
+            if (!EnsureTupleSize(*tuple, 2, ctx.Expr)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+            if (!EnsureAtom(tuple->Head(), ctx.Expr)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            auto paramName = ToString(tuple->Head().Content());
+            if (!usedParams.insert(paramName).second) {
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(tuple->Pos()),
+                                         TStringBuilder() << "WITH " << to_upper(paramName).Quote()
+                                         << " clause should be specified only once"));
+                return IGraphTransformer::TStatus::Error;
+            } else if (paramName == "input_type" || paramName == "output_type") {
+                if (!EnsureTypeWithStructType(*tuple->Child(1), ctx.Expr)) {
+                    return IGraphTransformer::TStatus::Error;
+                }
+                if (paramName == "output_type") {
+                    outputType = tuple->Child(1)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+                } else if (paramName == "input_type") {
+                    inputType = tuple->Child(1)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+                }
+            } else if (paramName == "concurrency" || paramName == "batch_size") {
+                if (!EnsureSpecificDataType(*tuple->Child(1), EDataSlot::Int32, ctx.Expr)) {
+                    return IGraphTransformer::TStatus::Error;
+                }
+                /*
+                ui64 number = 0;
+                if (!TryFromString(tuple->Child(1)->Content(), number)) {
+                    ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(tuple->Pos()),
+                                             TStringBuilder() << "Failed to convert to integer: " << tuple->Child(1)->Content()));
+                    return IGraphTransformer::TStatus::Error;
+                }*/
+            } else if (paramName == "optimize_for") {
+                if (!EnsureStringOrUtf8Type(*tuple->Child(1), ctx.Expr)) {
+                    return IGraphTransformer::TStatus::Error;
+                }
+                /*
+                if (const auto optimize = tuple->Child(1)->Content(); optimize != "call" && optimize != "latency") {
+                    ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(tuple->Child(1)->Pos()), TStringBuilder() <<
+                        "Unknown OPTIMIZE_FOR value, expected call or latency, but got: " << optimize));
+                    return IGraphTransformer::TStatus::Error;
+                }*/
+            } else if (paramName == "connection") {
+                // FindCredential
+                if (!EnsureStringOrUtf8Type(*tuple->Child(1), ctx.Expr)) {
+                    return IGraphTransformer::TStatus::Error;
+                }
+            } else if (paramName == "init") {
+                if (!EnsureComputable(*tuple->Child(1), ctx.Expr)) {
+                    return IGraphTransformer::TStatus::Error;
+                }
+            } else {
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(tuple->Pos()), TStringBuilder() <<
+                    "Unknown param name: " << paramName.Quote()));
+                return IGraphTransformer::TStatus::Error;
+            }
+        }
+
+        if (inputType == nullptr && outputType == nullptr) {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Child(2)->Pos()), TStringBuilder() <<
+                    "EXTERNAL FUNCTION should have INPUT_TYPE/OUTPUT_TYPE parameter"));
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        const TTypeAnnotationNode* nodeType;
+        if (outputType != nullptr && inputType != nullptr) {
+            // as transformation
+            TCallableExprType::TArgumentInfo inputArgument;
+            inputArgument.Flags = NKikimr::NUdf::ICallablePayload::TArgumentFlags::AutoMap;
+            inputArgument.Name = "input";
+            inputArgument.Type = ctx.Expr.MakeType<TListExprType>(inputType);
+            TVector<TCallableExprType::TArgumentInfo> args(1, inputArgument);
+            nodeType = ctx.Expr.MakeType<TCallableExprType>(
+                    ctx.Expr.MakeType<TListExprType>(outputType),
+                    args, 0, TStringBuf(""));
+        } else if (outputType != nullptr) {
+            // as source
+            TVector<TCallableExprType::TArgumentInfo> args;
+            nodeType = ctx.Expr.MakeType<TCallableExprType>(
+                    ctx.Expr.MakeType<TListExprType>(outputType),
+                    args, 0, TStringBuf(""));
+        } else {
+            // as writer
+            nodeType = ctx.Expr.MakeType<TListExprType>(inputType);
+        }
+
+        input->SetTypeAnn(nodeType);
+        return IGraphTransformer::TStatus::Ok;
+    }
+
     IGraphTransformer::TStatus SqlExtractKeyWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
         if (!EnsureArgsCount(*input, 2, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
@@ -13054,7 +13054,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["SqlAccess"] = &SqlAccessWrapper;
         Functions["SqlProcess"] = &SqlProcessWrapper;
         Functions["SqlReduce"] = &SqlReduceWrapper;
-        Functions["SqlExternalFunction"] = &SqlExternalFunctionWrapper; 
+        Functions["SqlExternalFunction"] = &SqlExternalFunctionWrapper;
         Functions["SqlExtractKey"] = &SqlExtractKeyWrapper;
         Functions["SqlReduceUdf"] = &SqlReduceUdfWrapper;
         Functions["SqlProject"] = &SqlProjectWrapper;

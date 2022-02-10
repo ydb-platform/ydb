@@ -9,7 +9,7 @@ YQL_ABI_VERSION(
 OWNER(g:yql g:yql_ydb_core)
 
 SRCS(
-    unicode_base.cpp 
+    unicode_base.cpp
 )
 
 PEERDIR(

@@ -88,7 +88,7 @@ bool EnsureStringOrUtf8Type(const TExprNode& node, TExprContext& ctx);
 bool EnsureStringOrUtf8Type(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx);
 bool EnsureStructType(const TExprNode& node, TExprContext& ctx);
 bool EnsureStructType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx);
-bool EnsureTypeWithStructType(const TExprNode& node, TExprContext& ctx); 
+bool EnsureTypeWithStructType(const TExprNode& node, TExprContext& ctx);
 bool EnsureComposable(const TExprNode& node, TExprContext& ctx);
 bool EnsureComposableType(const TExprNode& node, TExprContext& ctx);
 bool EnsureWorldType(const TExprNode& node, TExprContext& ctx);

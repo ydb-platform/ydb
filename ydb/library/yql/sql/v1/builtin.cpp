@@ -3203,8 +3203,8 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
                 BuildTuple(pos, {BuildQuotedAtom(pos, ""), args[1]}),
             };
             return new TCallNodeImpl(pos, "FlattenMembers", 2, 2, flattenMembersArgs);
-        } else if (normalizedName == "sqlexternalfunction") { 
-            return new TCallNodeImpl(pos, "SqlExternalFunction", args); 
+        } else if (normalizedName == "sqlexternalfunction") {
+            return new TCallNodeImpl(pos, "SqlExternalFunction", args);
         } else {
             return new TInvalidBuiltin(pos, TStringBuilder() << "Unknown builtin: " << name);
         }

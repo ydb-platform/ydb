@@ -11,7 +11,7 @@ template <class TStageInfoMeta, class TTaskMeta, class TInputMeta, class TOutput
 void CommonBuildTasks(TDqTasksGraph<TStageInfoMeta, TTaskMeta, TInputMeta, TOutputMeta>& graph, const NNodes::TDqPhyStage& stage) {
     ui32 partitionsCount = 1;
 
-    const auto stageSettings = NDq::TDqStageSettings::Parse(stage); 
+    const auto stageSettings = NDq::TDqStageSettings::Parse(stage);
     auto& stageInfo = graph.GetStageInfo(stage);
     for (ui32 inputIndex = 0; inputIndex < stage.Inputs().Size(); ++inputIndex) {
         const auto& input = stage.Inputs().Item(inputIndex);
@@ -32,12 +32,12 @@ void CommonBuildTasks(TDqTasksGraph<TStageInfoMeta, TTaskMeta, TInputMeta, TOutp
         if (auto maybeCnShuffle = input.Maybe<NNodes::TDqCnHashShuffle>()) {
             auto shuffle = maybeCnShuffle.Cast();
             auto& originStageInfo = graph.GetStageInfo(shuffle.Output().Stage());
-            if (stageSettings.IsExternalFunction) { 
-                partitionsCount = stageSettings.MaxTransformConcurrency(); 
-            } else { 
-                partitionsCount = std::max(partitionsCount, (ui32)originStageInfo.Tasks.size() / 2); 
-                partitionsCount = std::min(partitionsCount, 24u); 
-            } 
+            if (stageSettings.IsExternalFunction) {
+                partitionsCount = stageSettings.MaxTransformConcurrency();
+            } else {
+                partitionsCount = std::max(partitionsCount, (ui32)originStageInfo.Tasks.size() / 2);
+                partitionsCount = std::min(partitionsCount, 24u);
+            }
         } else if (auto maybeCnMap = input.Maybe<NNodes::TDqCnMap>()) {
             auto cnMap = maybeCnMap.Cast();
             auto& originStageInfo = graph.GetStageInfo(cnMap.Output().Stage());
@@ -46,10 +46,10 @@ void CommonBuildTasks(TDqTasksGraph<TStageInfoMeta, TTaskMeta, TInputMeta, TOutp
     }
 
     for (ui32 i = 0; i < partitionsCount; ++i) {
-        auto& task = graph.AddTask(stageInfo); 
-        auto& transform = task.OutputTransform; 
-        transform.Type = stageSettings.TransformType; 
-        transform.FunctionName = stageSettings.TransformName; 
+        auto& task = graph.AddTask(stageInfo);
+        auto& transform = task.OutputTransform;
+        transform.Type = stageSettings.TransformType;
+        transform.FunctionName = stageSettings.TransformName;
     }
 }
 

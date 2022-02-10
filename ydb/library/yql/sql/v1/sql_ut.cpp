@@ -1604,55 +1604,55 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
     }
 }
 
-Y_UNIT_TEST_SUITE(ExternalFunction) { 
-    Y_UNIT_TEST(ValidUseFunctions) { 
+Y_UNIT_TEST_SUITE(ExternalFunction) {
+    Y_UNIT_TEST(ValidUseFunctions) {
 
-        UNIT_ASSERT(SqlToYql( 
-                "PROCESS plato.Input" 
-                " USING EXTERNAL FUNCTION('YANDEX-CLOUD', 'foo', <|a: 123, b: a + 641|>)" 
-                " WITH INPUT_TYPE=Struct<a:Int32>, OUTPUT_TYPE=Struct<b:Int32>," 
-                " CONCURRENCY=3, OPTIMIZE_FOR='CALLS'").IsOk()); 
- 
-        // use CALLS without quotes, as keyword 
-        UNIT_ASSERT(SqlToYql( 
-                "PROCESS plato.Input" 
-                " USING EXTERNAL FUNCTION('YANDEX-CLOUD', 'foo')" 
-                " WITH INPUT_TYPE=Struct<a:Int32>, OUTPUT_TYPE=Struct<b:Int32>," 
-                " OPTIMIZE_FOR=CALLS").IsOk()); 
- 
-        UNIT_ASSERT(SqlToYql( 
-                "PROCESS plato.Input" 
-                " USING EXTERNAL FUNCTION('YANDEX-CLOUD', 'foo', TableRow())" 
-                " WITH INPUT_TYPE=Struct<a:Int32>, OUTPUT_TYPE=Struct<b:Int32>," 
-                " CONCURRENCY=3").IsOk()); 
- 
-        UNIT_ASSERT(SqlToYql( 
-                "PROCESS plato.Input" 
-                " USING EXTERNAL FUNCTION('YANDEX-CLOUD', 'foo')" 
-                " WITH INPUT_TYPE=Struct<a:Int32>, OUTPUT_TYPE=Struct<b:Int32>," 
-                " CONCURRENCY=3, BATCH_SIZE=1000000, CONNECTION='yc-folder34fse-con'," 
-                " INIT=[0, 900]").IsOk()); 
- 
-        UNIT_ASSERT(SqlToYql( 
-                "PROCESS plato.Input" 
-                " USING EXTERNAL FUNCTION('YANDEX-CLOUD', 'bar', TableRow())" 
-                " WITH UNKNOWN_PARAM_1='837747712', UNKNOWN_PARAM_2=Tuple<Uint16, Utf8>," 
-                " INPUT_TYPE=Struct<a:Int32>, OUTPUT_TYPE=Struct<b:Int32>").IsOk()); 
-    } 
- 
- 
-    Y_UNIT_TEST(InValidUseFunctions) { 
-        ExpectFailWithError("PROCESS plato.Input USING some::udf(*) WITH INPUT_TYPE=Struct<a:Int32>", 
-                            "<main>:1:33: Error: PROCESS without USING EXTERNAL FUNCTION doesn't allow WITH block\n"); 
- 
-        ExpectFailWithError("PROCESS plato.Input USING EXTERNAL FUNCTION('YANDEX-CLOUD', 'jhhjfh88134d')" 
-                            " WITH INPUT_TYPE=Struct<a:Int32>, OUTPUT_TYPE=Struct<b:Int32>" 
-                            " ASSUME ORDER BY key", 
-                            "<main>:1:129: Error: PROCESS with USING EXTERNAL FUNCTION doesn't allow ASSUME block\n"); 
- 
-        ExpectFailWithError("PROCESS plato.Input USING EXTERNAL FUNCTION('YANDEX-CLOUD', 'foo', 'bar', 'baz')", 
-                            "<main>:1:15: Error: EXTERNAL FUNCTION requires from 2 to 3 arguments, but got: 4\n"); 
- 
+        UNIT_ASSERT(SqlToYql(
+                "PROCESS plato.Input"
+                " USING EXTERNAL FUNCTION('YANDEX-CLOUD', 'foo', <|a: 123, b: a + 641|>)"
+                " WITH INPUT_TYPE=Struct<a:Int32>, OUTPUT_TYPE=Struct<b:Int32>,"
+                " CONCURRENCY=3, OPTIMIZE_FOR='CALLS'").IsOk());
+
+        // use CALLS without quotes, as keyword
+        UNIT_ASSERT(SqlToYql(
+                "PROCESS plato.Input"
+                " USING EXTERNAL FUNCTION('YANDEX-CLOUD', 'foo')"
+                " WITH INPUT_TYPE=Struct<a:Int32>, OUTPUT_TYPE=Struct<b:Int32>,"
+                " OPTIMIZE_FOR=CALLS").IsOk());
+
+        UNIT_ASSERT(SqlToYql(
+                "PROCESS plato.Input"
+                " USING EXTERNAL FUNCTION('YANDEX-CLOUD', 'foo', TableRow())"
+                " WITH INPUT_TYPE=Struct<a:Int32>, OUTPUT_TYPE=Struct<b:Int32>,"
+                " CONCURRENCY=3").IsOk());
+
+        UNIT_ASSERT(SqlToYql(
+                "PROCESS plato.Input"
+                " USING EXTERNAL FUNCTION('YANDEX-CLOUD', 'foo')"
+                " WITH INPUT_TYPE=Struct<a:Int32>, OUTPUT_TYPE=Struct<b:Int32>,"
+                " CONCURRENCY=3, BATCH_SIZE=1000000, CONNECTION='yc-folder34fse-con',"
+                " INIT=[0, 900]").IsOk());
+
+        UNIT_ASSERT(SqlToYql(
+                "PROCESS plato.Input"
+                " USING EXTERNAL FUNCTION('YANDEX-CLOUD', 'bar', TableRow())"
+                " WITH UNKNOWN_PARAM_1='837747712', UNKNOWN_PARAM_2=Tuple<Uint16, Utf8>,"
+                " INPUT_TYPE=Struct<a:Int32>, OUTPUT_TYPE=Struct<b:Int32>").IsOk());
+    }
+
+
+    Y_UNIT_TEST(InValidUseFunctions) {
+        ExpectFailWithError("PROCESS plato.Input USING some::udf(*) WITH INPUT_TYPE=Struct<a:Int32>",
+                            "<main>:1:33: Error: PROCESS without USING EXTERNAL FUNCTION doesn't allow WITH block\n");
+
+        ExpectFailWithError("PROCESS plato.Input USING EXTERNAL FUNCTION('YANDEX-CLOUD', 'jhhjfh88134d')"
+                            " WITH INPUT_TYPE=Struct<a:Int32>, OUTPUT_TYPE=Struct<b:Int32>"
+                            " ASSUME ORDER BY key",
+                            "<main>:1:129: Error: PROCESS with USING EXTERNAL FUNCTION doesn't allow ASSUME block\n");
+
+        ExpectFailWithError("PROCESS plato.Input USING EXTERNAL FUNCTION('YANDEX-CLOUD', 'foo', 'bar', 'baz')",
+                            "<main>:1:15: Error: EXTERNAL FUNCTION requires from 2 to 3 arguments, but got: 4\n");
+
         ExpectFailWithError("PROCESS plato.Input\n"
                             " USING EXTERNAL FUNCTION('YANDEX-CLOUD', 'foo', <|field_1: a1, field_b: b1|>)\n"
                             " WITH INPUT_TYPE=Struct<a:Int32>, OUTPUT_TYPE=Struct<b:Int32>,\n"
@@ -1661,9 +1661,9 @@ Y_UNIT_TEST_SUITE(ExternalFunction) {
                             " INIT=[0, 900]\n",
                             "<main>:5:2: Error: WITH \"CONCURRENCY\" clause should be specified only once\n"
                             "<main>:5:17: Error: WITH \"INPUT_TYPE\" clause should be specified only once\n");
-    } 
-} 
- 
+    }
+}
+
 Y_UNIT_TEST_SUITE(SqlToYQLErrors) {
     Y_UNIT_TEST(StrayUTF8) {
         /// 'c' in plato is russian here

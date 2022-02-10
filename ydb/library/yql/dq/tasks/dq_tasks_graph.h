@@ -152,12 +152,12 @@ struct TTaskOutput {
     TOutputMeta Meta;
 };
 
-struct TTransform { 
-    NDqProto::ETransformType Type; 
-    TString FunctionName; 
-    TString ConnectionName; 
-}; 
- 
+struct TTransform {
+    NDqProto::ETransformType Type;
+    TString FunctionName;
+    TString ConnectionName;
+};
+
 template <class TStageInfoMeta, class TTaskMeta, class TInputMeta, class TOutputMeta>
 struct TTask {
     using TInputType = TTaskInput<TInputMeta>;
@@ -176,7 +176,7 @@ struct TTask {
     NActors::TActorId ComputeActorId;
     TTaskMeta Meta;
     NDqProto::ECheckpointingMode CheckpointingMode = NDqProto::CHECKPOINTING_MODE_DEFAULT;
-    TTransform OutputTransform; 
+    TTransform OutputTransform;
 };
 
 template <class TStageInfoMeta, class TTaskMeta, class TInputMeta, class TOutputMeta>

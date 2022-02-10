@@ -430,123 +430,123 @@ TExprBase DqPushLMapToStage(TExprBase node, TExprContext& ctx, IOptimizationCont
     return DqPushBaseLMapToStage<TCoLMap>(node, ctx, optCtx, parentsMap, allowStageMultiUsage);
 }
 
-TExprBase DqBuildExtFunctionStage(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, 
-                            const TParentsMap& parentsMap, bool allowStageMultiUsage) 
-{ 
-    Y_UNUSED(optCtx); 
-    Y_UNUSED(allowStageMultiUsage); 
-    Y_UNUSED(parentsMap); 
- 
-    auto apply = node.Cast<TCoApply>(); 
-    auto callable = apply.Callable().Maybe<TDqSqlExternalFunction>(); 
-    if (!callable 
-        || apply.Args().Count() != 2 
-        || !apply.Arg(1).Maybe<TDqCnUnionAll>()) { 
- 
-        return node; 
-    } 
-    callable = callable.Cast(); 
-    TDqCnUnionAll nodeInput {apply.Arg(1).Cast<TDqCnUnionAll>()}; 
- 
-    if (!IsSingleConsumerConnection(nodeInput, parentsMap, allowStageMultiUsage)) { 
-        return node; 
-    } 
- 
-    const auto shuffleColumn = Build<TCoAtom>(ctx, node.Pos()) 
-            .Value("_yql_transform_shuffle") 
-            .Done(); 
-    auto addShuffleColumn = Build<TCoLambda>(ctx, node.Pos()) 
-            .Args({"stream"}) 
-            .Body<TCoMap>() 
-                .Input("stream") 
-                .Lambda() 
-                    .Args({"row"}) 
-                    .Body<TCoAddMember>() 
-                        .Struct("row") 
-                        .Name(shuffleColumn) 
-                        .Item<TCoRandom>().Add<TCoDependsOn>().Input("row").Build().Build() 
-                        .Build() 
-                    .Build() 
-                .Build() 
-            .Done(); 
-    auto removeShuffleColumn = Build<TCoLambda>(ctx, node.Pos()) 
-            .Args({"row"}) 
-            .Body<TCoForceRemoveMember>() 
-                    .Struct("row") 
-                    .Name(shuffleColumn) 
-            .Build() 
-            .Done(); 
- 
-    TVector<TCoNameValueTuple> settings; 
-    auto isExtFunction = Build<TCoNameValueTuple>(ctx, node.Pos()) 
-            .Name().Build(TDqStageSettings::IsExternalSetting) 
-            .Value<TCoBool>().Literal().Build("true").Build() 
-            .Done(); 
-    settings.push_back(isExtFunction); 
- 
-    auto transformType = callable.TransformType().Cast<TCoString>().Literal().StringValue(); 
-    settings.push_back( 
-        Build<TCoNameValueTuple>(ctx, node.Pos()) 
-            .Name().Build(TDqStageSettings::TransformTypeSetting) 
-            .Value<TCoAtom>().Build(transformType) 
-            .Done()); 
- 
-    auto transformName = callable.TransformName().Cast<TCoString>().Literal().StringValue(); 
-    settings.push_back( 
-        Build<TCoNameValueTuple>(ctx, node.Pos()) 
-            .Name().Build(TDqStageSettings::TransformNameSetting) 
-            .Value<TCoAtom>().Build(transformName) 
-            .Done()); 
- 
-    for (const auto &tuple: callable.Settings().Ref().Children()) { 
-        const auto paramName = tuple->Head().Content(); 
-        auto setting = Build<TCoNameValueTuple>(ctx, node.Pos()) 
-                .Name().Build(paramName) 
-                .Value(tuple->TailPtr()) 
-                .Done(); 
-        settings.push_back(setting); 
-    } 
- 
-    auto settingsBuilder = Build<TCoNameValueTupleList>(ctx, node.Pos()) 
-            .Add(settings) 
-            .Done(); 
- 
-    auto stage = nodeInput.Output().Stage().Cast<TDqStage>(); 
-    auto dutyColumn = DqPushLambdaToStage(stage, nodeInput.Output().Index(), addShuffleColumn, {}, ctx, optCtx); 
-    YQL_ENSURE(dutyColumn); 
- 
-    auto transformStage = Build<TDqStage>(ctx, node.Pos()) 
-            .Inputs() 
-                .Add<TDqCnHashShuffle>() 
-                    .KeyColumns() 
-                        .Add({shuffleColumn}) 
-                        .Build() 
-                    .Output() 
-                        .Stage(dutyColumn.Cast()) 
-                        .Index(nodeInput.Output().Index()) 
-                        .Build() 
-                    .Build() 
-                .Build() 
-            .Program() 
-                .Args({"row"}) 
-                .Body<TCoMap>() 
-                    .Lambda(removeShuffleColumn) 
-                    .Input("row") 
-                    .Build() 
-                .Build() 
-            .Settings(settingsBuilder) 
-            .Done(); 
- 
-    auto externalStage = Build<TDqCnUnionAll>(ctx, node.Pos()) 
-        .Output() 
-            .Stage(transformStage) 
-            .Index().Build("0") 
-            .Build() 
-        .Done(); 
- 
-    return externalStage; 
-} 
- 
+TExprBase DqBuildExtFunctionStage(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx,
+                            const TParentsMap& parentsMap, bool allowStageMultiUsage)
+{
+    Y_UNUSED(optCtx);
+    Y_UNUSED(allowStageMultiUsage);
+    Y_UNUSED(parentsMap);
+
+    auto apply = node.Cast<TCoApply>();
+    auto callable = apply.Callable().Maybe<TDqSqlExternalFunction>();
+    if (!callable
+        || apply.Args().Count() != 2
+        || !apply.Arg(1).Maybe<TDqCnUnionAll>()) {
+
+        return node;
+    }
+    callable = callable.Cast();
+    TDqCnUnionAll nodeInput {apply.Arg(1).Cast<TDqCnUnionAll>()};
+
+    if (!IsSingleConsumerConnection(nodeInput, parentsMap, allowStageMultiUsage)) {
+        return node;
+    }
+
+    const auto shuffleColumn = Build<TCoAtom>(ctx, node.Pos())
+            .Value("_yql_transform_shuffle")
+            .Done();
+    auto addShuffleColumn = Build<TCoLambda>(ctx, node.Pos())
+            .Args({"stream"})
+            .Body<TCoMap>()
+                .Input("stream")
+                .Lambda()
+                    .Args({"row"})
+                    .Body<TCoAddMember>()
+                        .Struct("row")
+                        .Name(shuffleColumn)
+                        .Item<TCoRandom>().Add<TCoDependsOn>().Input("row").Build().Build()
+                        .Build()
+                    .Build()
+                .Build()
+            .Done();
+    auto removeShuffleColumn = Build<TCoLambda>(ctx, node.Pos())
+            .Args({"row"})
+            .Body<TCoForceRemoveMember>()
+                    .Struct("row")
+                    .Name(shuffleColumn)
+            .Build()
+            .Done();
+
+    TVector<TCoNameValueTuple> settings;
+    auto isExtFunction = Build<TCoNameValueTuple>(ctx, node.Pos())
+            .Name().Build(TDqStageSettings::IsExternalSetting)
+            .Value<TCoBool>().Literal().Build("true").Build()
+            .Done();
+    settings.push_back(isExtFunction);
+
+    auto transformType = callable.TransformType().Cast<TCoString>().Literal().StringValue();
+    settings.push_back(
+        Build<TCoNameValueTuple>(ctx, node.Pos())
+            .Name().Build(TDqStageSettings::TransformTypeSetting)
+            .Value<TCoAtom>().Build(transformType)
+            .Done());
+
+    auto transformName = callable.TransformName().Cast<TCoString>().Literal().StringValue();
+    settings.push_back(
+        Build<TCoNameValueTuple>(ctx, node.Pos())
+            .Name().Build(TDqStageSettings::TransformNameSetting)
+            .Value<TCoAtom>().Build(transformName)
+            .Done());
+
+    for (const auto &tuple: callable.Settings().Ref().Children()) {
+        const auto paramName = tuple->Head().Content();
+        auto setting = Build<TCoNameValueTuple>(ctx, node.Pos())
+                .Name().Build(paramName)
+                .Value(tuple->TailPtr())
+                .Done();
+        settings.push_back(setting);
+    }
+
+    auto settingsBuilder = Build<TCoNameValueTupleList>(ctx, node.Pos())
+            .Add(settings)
+            .Done();
+
+    auto stage = nodeInput.Output().Stage().Cast<TDqStage>();
+    auto dutyColumn = DqPushLambdaToStage(stage, nodeInput.Output().Index(), addShuffleColumn, {}, ctx, optCtx);
+    YQL_ENSURE(dutyColumn);
+
+    auto transformStage = Build<TDqStage>(ctx, node.Pos())
+            .Inputs()
+                .Add<TDqCnHashShuffle>()
+                    .KeyColumns()
+                        .Add({shuffleColumn})
+                        .Build()
+                    .Output()
+                        .Stage(dutyColumn.Cast())
+                        .Index(nodeInput.Output().Index())
+                        .Build()
+                    .Build()
+                .Build()
+            .Program()
+                .Args({"row"})
+                .Body<TCoMap>()
+                    .Lambda(removeShuffleColumn)
+                    .Input("row")
+                    .Build()
+                .Build()
+            .Settings(settingsBuilder)
+            .Done();
+
+    auto externalStage = Build<TDqCnUnionAll>(ctx, node.Pos())
+        .Output()
+            .Stage(transformStage)
+            .Index().Build("0")
+            .Build()
+        .Done();
+
+    return externalStage;
+}
+
 TExprBase DqPushCombineToStage(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx,
     const TParentsMap& parentsMap, bool allowStageMultiUsage)
 {

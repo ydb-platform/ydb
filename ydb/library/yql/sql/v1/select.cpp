@@ -2102,7 +2102,7 @@ public:
         TPosition pos,
         TSourcePtr source,
         TNodePtr with,
-        bool withExtFunction, 
+        bool withExtFunction,
         TVector<TNodePtr>&& terms,
         bool listCall,
         bool processStream,
@@ -2112,7 +2112,7 @@ public:
         : IRealSource(pos)
         , Source(std::move(source))
         , With(with)
-        , WithExtFunction(withExtFunction) 
+        , WithExtFunction(withExtFunction)
         , Terms(std::move(terms))
         , ListCall(listCall)
         , ProcessStream(processStream)
@@ -2153,13 +2153,13 @@ public:
             return false;
         }
 
-        TSourcePtr fakeSource = nullptr; 
-        if (ListCall && !WithExtFunction) { 
+        TSourcePtr fakeSource = nullptr;
+        if (ListCall && !WithExtFunction) {
             fakeSource = BuildFakeSource(src->GetPos());
             src->AllColumns();
         }
 
-        auto processSource = fakeSource != nullptr ? fakeSource.Get() : src; 
+        auto processSource = fakeSource != nullptr ? fakeSource.Get() : src;
         Y_VERIFY_DEBUG(processSource != nullptr);
         if (!With->Init(ctx, processSource)) {
             return false;
@@ -2174,15 +2174,15 @@ public:
             Columns.Add(&With->GetLabel(), false);
         }
 
-        bool hasError = false; 
+        bool hasError = false;
 
-        TNodePtr produce; 
-        if (WithExtFunction) { 
-            produce = Y(); 
-        } else { 
-            TString processCall = (ListCall ? "SqlProcess" : "Apply"); 
-            produce = Y(processCall, With); 
-        } 
+        TNodePtr produce;
+        if (WithExtFunction) {
+            produce = Y();
+        } else {
+            TString processCall = (ListCall ? "SqlProcess" : "Apply");
+            produce = Y(processCall, With);
+        }
         TMaybe<ui32> listPosIndex;
         ui32 termIndex = 0;
         for (auto& term: Terms) {
@@ -2211,7 +2211,7 @@ public:
             return false;
         }
 
-        if (ListCall && !WithExtFunction) { 
+        if (ListCall && !WithExtFunction) {
             YQL_ENSURE(listPosIndex.Defined());
             produce = L(produce, Q(ToString(*listPosIndex)));
         }
@@ -2220,9 +2220,9 @@ public:
             hasError = true;
         }
 
-        if (!(WithExtFunction && Terms.empty())) { 
-            TVector<TNodePtr>(1, produce).swap(Terms); 
-        } 
+        if (!(WithExtFunction && Terms.empty())) {
+            TVector<TNodePtr>(1, produce).swap(Terms);
+        }
 
         src->FinishColumns();
 
@@ -2268,15 +2268,15 @@ public:
             block = L(block, Y("let", inputLabel, filter));
         }
 
-        if (WithExtFunction) { 
-            auto preTransform = Y("RemoveSystemMembers", inputLabel); 
-            if (Terms.size() > 0) { 
-                preTransform = Y("Map", preTransform, BuildLambda(Pos, Y("row"), Q(Terms[0]))); 
-            } 
-            block = L(block, Y("let", inputLabel, preTransform)); 
-            block = L(block, Y("let", "transform", With)); 
-            block = L(block, Y("let", "core", Y("Apply", "transform", inputLabel))); 
-        } else if (ListCall) { 
+        if (WithExtFunction) {
+            auto preTransform = Y("RemoveSystemMembers", inputLabel);
+            if (Terms.size() > 0) {
+                preTransform = Y("Map", preTransform, BuildLambda(Pos, Y("row"), Q(Terms[0])));
+            }
+            block = L(block, Y("let", inputLabel, preTransform));
+            block = L(block, Y("let", "transform", With));
+            block = L(block, Y("let", "core", Y("Apply", "transform", inputLabel)));
+        } else if (ListCall) {
             block = L(block, Y("let", "core", Terms[0]));
         } else {
             auto terms = BuildColumnsTerms(ctx);
@@ -2315,7 +2315,7 @@ public:
     }
 
     TNodePtr DoClone() const final {
-        return new TProcessSource(Pos, Source->CloneSource(), SafeClone(With), WithExtFunction, 
+        return new TProcessSource(Pos, Source->CloneSource(), SafeClone(With), WithExtFunction,
             CloneContainer(Terms), ListCall, ProcessStream, Settings, CloneContainer(AssumeOrderBy));
     }
 
@@ -2338,7 +2338,7 @@ private:
 private:
     TSourcePtr Source;
     TNodePtr With;
-    const bool WithExtFunction; 
+    const bool WithExtFunction;
     TVector<TNodePtr> Terms;
     const bool ListCall;
     const bool ProcessStream;
@@ -2350,14 +2350,14 @@ TSourcePtr BuildProcess(
     TPosition pos,
     TSourcePtr source,
     TNodePtr with,
-    bool withExtFunction, 
+    bool withExtFunction,
     TVector<TNodePtr>&& terms,
     bool listCall,
     bool processStream,
     const TWriteSettings& settings,
     const TVector<TSortSpecificationPtr>& assumeOrderBy
 ) {
-    return new TProcessSource(pos, std::move(source), with, withExtFunction, std::move(terms), listCall, processStream, settings, assumeOrderBy); 
+    return new TProcessSource(pos, std::move(source), with, withExtFunction, std::move(terms), listCall, processStream, settings, assumeOrderBy);
 }
 
 class TNestedProxySource: public IProxySource {

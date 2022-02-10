@@ -118,7 +118,7 @@ RECURSE(
     messagebus
     metrics_framework
     mime_types
-    monitoring 
+    monitoring
     monlib
     monlib/examples
     monlib/so

@@ -849,7 +849,7 @@ RECURSE(
     pyrepl
     pyresample
     pyrsistent
-    pysctp 
+    pysctp
     pysendfile
     pyserial
     PySocks

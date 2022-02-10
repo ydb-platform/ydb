@@ -406,7 +406,7 @@ RECURSE(
     flask-restplus
     flask-restx
     Flask-Script
-    flask-shell-ipython
+    flask-shell-ipython 
     Flask-Shelve
     Flask-SQLAlchemy
     Flask-SSLify
@@ -935,7 +935,7 @@ RECURSE(
     rdflib
     readabilipy
     redis
-    redis-cache-lock
+    redis-cache-lock 
     regex
     reportlab
     repoze.lru
@@ -1170,7 +1170,7 @@ RECURSE(
     xlwt
     xmlsec
     xmltodict
-    xxhash
+    xxhash 
     yandex-pgmigrate
     yappi
     yarl

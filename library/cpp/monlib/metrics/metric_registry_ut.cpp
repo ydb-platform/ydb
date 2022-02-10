@@ -57,24 +57,24 @@ Y_UNIT_TEST_SUITE(TMetricRegistryTest) {
         UNIT_ASSERT_DOUBLES_EQUAL(g->Get(), val, 1E-6);
     }
 
-    Y_UNIT_TEST(LazyGauge) { 
-        TMetricRegistry registry(TLabels{{"common", "label"}}); 
-        double val = 0.0; 
-        TLazyGauge* g = registry.LazyGauge({{"my", "lazyGauge"}}, [&val](){return val;}); 
- 
-        UNIT_ASSERT_DOUBLES_EQUAL(g->Get(), 0.0, 1E-6); 
-        val = 12.34; 
-        UNIT_ASSERT_DOUBLES_EQUAL(g->Get(), 12.34, 1E-6); 
- 
-        val += 1.2; 
-        UNIT_ASSERT_DOUBLES_EQUAL(g->Get(), 13.54, 1E-6); 
-        UNIT_ASSERT_DOUBLES_EQUAL(g->Get(), val, 1E-6); 
- 
-        val += -3.47; 
-        UNIT_ASSERT_DOUBLES_EQUAL(g->Get(), 10.07, 1E-6); 
-        UNIT_ASSERT_DOUBLES_EQUAL(g->Get(), val, 1E-6); 
-    } 
- 
+    Y_UNIT_TEST(LazyGauge) {
+        TMetricRegistry registry(TLabels{{"common", "label"}});
+        double val = 0.0;
+        TLazyGauge* g = registry.LazyGauge({{"my", "lazyGauge"}}, [&val](){return val;});
+
+        UNIT_ASSERT_DOUBLES_EQUAL(g->Get(), 0.0, 1E-6);
+        val = 12.34;
+        UNIT_ASSERT_DOUBLES_EQUAL(g->Get(), 12.34, 1E-6);
+
+        val += 1.2;
+        UNIT_ASSERT_DOUBLES_EQUAL(g->Get(), 13.54, 1E-6);
+        UNIT_ASSERT_DOUBLES_EQUAL(g->Get(), val, 1E-6);
+
+        val += -3.47;
+        UNIT_ASSERT_DOUBLES_EQUAL(g->Get(), 10.07, 1E-6);
+        UNIT_ASSERT_DOUBLES_EQUAL(g->Get(), val, 1E-6);
+    }
+
     Y_UNIT_TEST(IntGauge) {
         TMetricRegistry registry(TLabels{{"common", "label"}});
         TIntGauge* g = registry.IntGauge({{"my", "gauge"}});
@@ -104,24 +104,24 @@ Y_UNIT_TEST_SUITE(TMetricRegistryTest) {
         UNIT_ASSERT_VALUES_EQUAL(g->Get(), val);
     }
 
-    Y_UNIT_TEST(LazyIntGauge) { 
-        TMetricRegistry registry(TLabels{{"common", "label"}}); 
-        i64 val = 0; 
-        TLazyIntGauge* g = registry.LazyIntGauge({{"my", "gauge"}}, [&val](){return val;}); 
- 
-        UNIT_ASSERT_VALUES_EQUAL(g->Get(), 0); 
-        val += 1; 
-        UNIT_ASSERT_VALUES_EQUAL(g->Get(), 1); 
-        UNIT_ASSERT_VALUES_EQUAL(g->Get(), val); 
- 
-        val -= 1; 
-        UNIT_ASSERT_VALUES_EQUAL(g->Get(), 0); 
-        UNIT_ASSERT_VALUES_EQUAL(g->Get(), val); 
- 
-        val = 42; 
-        UNIT_ASSERT_VALUES_EQUAL(g->Get(), val); 
-    } 
- 
+    Y_UNIT_TEST(LazyIntGauge) {
+        TMetricRegistry registry(TLabels{{"common", "label"}});
+        i64 val = 0;
+        TLazyIntGauge* g = registry.LazyIntGauge({{"my", "gauge"}}, [&val](){return val;});
+
+        UNIT_ASSERT_VALUES_EQUAL(g->Get(), 0);
+        val += 1;
+        UNIT_ASSERT_VALUES_EQUAL(g->Get(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(g->Get(), val);
+
+        val -= 1;
+        UNIT_ASSERT_VALUES_EQUAL(g->Get(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(g->Get(), val);
+
+        val = 42;
+        UNIT_ASSERT_VALUES_EQUAL(g->Get(), val);
+    }
+
     Y_UNIT_TEST(Counter) {
         TMetricRegistry registry(TLabels{{"common", "label"}});
         TCounter* c = registry.Counter({{"my", "counter"}});
@@ -133,28 +133,28 @@ Y_UNIT_TEST_SUITE(TMetricRegistryTest) {
         UNIT_ASSERT_VALUES_EQUAL(c->Get(), 11);
     }
 
-    Y_UNIT_TEST(LazyCounter) { 
-        TMetricRegistry registry(TLabels{{"common", "label"}}); 
-        ui64 val = 0; 
- 
-        TLazyCounter* c = registry.LazyCounter({{"my", "counter"}}, [&val](){return val;}); 
- 
-        UNIT_ASSERT_VALUES_EQUAL(c->Get(), 0); 
-        val = 42; 
-        UNIT_ASSERT_VALUES_EQUAL(c->Get(), 42); 
-    } 
- 
-    Y_UNIT_TEST(LazyRate) { 
-        TMetricRegistry registry(TLabels{{"common", "label"}}); 
-        ui64 val = 0; 
- 
-        TLazyRate* r = registry.LazyRate({{"my", "rate"}}, [&val](){return val;}); 
- 
-        UNIT_ASSERT_VALUES_EQUAL(r->Get(), 0); 
-        val = 42; 
-        UNIT_ASSERT_VALUES_EQUAL(r->Get(), 42); 
-    } 
- 
+    Y_UNIT_TEST(LazyCounter) {
+        TMetricRegistry registry(TLabels{{"common", "label"}});
+        ui64 val = 0;
+
+        TLazyCounter* c = registry.LazyCounter({{"my", "counter"}}, [&val](){return val;});
+
+        UNIT_ASSERT_VALUES_EQUAL(c->Get(), 0);
+        val = 42;
+        UNIT_ASSERT_VALUES_EQUAL(c->Get(), 42);
+    }
+
+    Y_UNIT_TEST(LazyRate) {
+        TMetricRegistry registry(TLabels{{"common", "label"}});
+        ui64 val = 0;
+
+        TLazyRate* r = registry.LazyRate({{"my", "rate"}}, [&val](){return val;});
+
+        UNIT_ASSERT_VALUES_EQUAL(r->Get(), 0);
+        val = 42;
+        UNIT_ASSERT_VALUES_EQUAL(r->Get(), 42);
+    }
+
     Y_UNIT_TEST(DoubleCounter) {
         TMetricRegistry registry(TLabels{{"common", "label"}});
 

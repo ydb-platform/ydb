@@ -33,14 +33,14 @@ namespace NMonitoring {
         }
     };
 
-    class ILazyGauge: public IMetric { 
-    public: 
-        EMetricType Type() const noexcept final { 
-            return  EMetricType::GAUGE; 
-        } 
-        virtual double Get() const noexcept = 0; 
-    }; 
- 
+    class ILazyGauge: public IMetric {
+    public:
+        EMetricType Type() const noexcept final {
+            return  EMetricType::GAUGE;
+        }
+        virtual double Get() const noexcept = 0;
+    };
+
     class IIntGauge: public IMetric {
     public:
         EMetricType Type() const noexcept final {
@@ -63,15 +63,15 @@ namespace NMonitoring {
         }
     };
 
-    class ILazyIntGauge: public IMetric { 
-    public: 
-        EMetricType Type() const noexcept final { 
-            return EMetricType::IGAUGE; 
-        } 
- 
-        virtual i64 Get() const noexcept = 0; 
-    }; 
- 
+    class ILazyIntGauge: public IMetric {
+    public:
+        EMetricType Type() const noexcept final {
+            return EMetricType::IGAUGE;
+        }
+
+        virtual i64 Get() const noexcept = 0;
+    };
+
     class ICounter: public IMetric {
     public:
         EMetricType Type() const noexcept final {
@@ -87,15 +87,15 @@ namespace NMonitoring {
         virtual void Reset() noexcept = 0;
     };
 
-    class ILazyCounter: public IMetric { 
-    public: 
-        EMetricType Type() const noexcept final { 
-            return EMetricType::COUNTER; 
-        } 
- 
-        virtual ui64 Get() const noexcept = 0; 
-    }; 
- 
+    class ILazyCounter: public IMetric {
+    public:
+        EMetricType Type() const noexcept final {
+            return EMetricType::COUNTER;
+        }
+
+        virtual ui64 Get() const noexcept = 0;
+    };
+
     class IRate: public IMetric {
     public:
         EMetricType Type() const noexcept final {
@@ -111,15 +111,15 @@ namespace NMonitoring {
         virtual void Reset() noexcept = 0;
     };
 
-    class ILazyRate: public IMetric { 
-    public: 
-        EMetricType Type() const noexcept final { 
-            return EMetricType::RATE; 
-        } 
- 
-        virtual ui64 Get() const noexcept = 0; 
-    }; 
- 
+    class ILazyRate: public IMetric {
+    public:
+        EMetricType Type() const noexcept final {
+            return EMetricType::RATE;
+        }
+
+        virtual ui64 Get() const noexcept = 0;
+    };
+
     class IHistogram: public IMetric {
     public:
         explicit IHistogram(bool isRate)
@@ -177,28 +177,28 @@ namespace NMonitoring {
     };
 
     ///////////////////////////////////////////////////////////////////////////////
-    // TLazyGauge 
-    /////////////////////////////////////////////////////////////////////////////// 
-    class TLazyGauge final: public ILazyGauge { 
-    public: 
-        explicit TLazyGauge(std::function<double()> supplier) 
-            : Supplier_(std::move(supplier)) 
-        { 
-        } 
- 
-        double Get() const noexcept override { 
-            return Supplier_(); 
-        } 
- 
-        void Accept(TInstant time, IMetricConsumer* consumer) const override { 
-            consumer->OnDouble(time, Get()); 
-        } 
- 
-    private: 
-        std::function<double()> Supplier_; 
-    }; 
- 
-    /////////////////////////////////////////////////////////////////////////////// 
+    // TLazyGauge
+    ///////////////////////////////////////////////////////////////////////////////
+    class TLazyGauge final: public ILazyGauge {
+    public:
+        explicit TLazyGauge(std::function<double()> supplier)
+            : Supplier_(std::move(supplier))
+        {
+        }
+
+        double Get() const noexcept override {
+            return Supplier_();
+        }
+
+        void Accept(TInstant time, IMetricConsumer* consumer) const override {
+            consumer->OnDouble(time, Get());
+        }
+
+    private:
+        std::function<double()> Supplier_;
+    };
+
+    ///////////////////////////////////////////////////////////////////////////////
     // TIntGauge
     ///////////////////////////////////////////////////////////////////////////////
     class TIntGauge final: public IIntGauge {
@@ -228,28 +228,28 @@ namespace NMonitoring {
     };
 
     ///////////////////////////////////////////////////////////////////////////////
-    // TLazyIntGauge 
-    /////////////////////////////////////////////////////////////////////////////// 
-    class TLazyIntGauge final: public ILazyIntGauge { 
-    public: 
-        explicit TLazyIntGauge(std::function<i64()> supplier) 
-            : Supplier_(std::move(supplier)) 
-        { 
-        } 
- 
-        i64 Get() const noexcept override { 
-            return Supplier_(); 
-        } 
- 
-        void Accept(TInstant time, IMetricConsumer* consumer) const override { 
-            consumer->OnInt64(time, Get()); 
-        } 
- 
-    private: 
-        std::function<i64()> Supplier_; 
-    }; 
- 
-    /////////////////////////////////////////////////////////////////////////////// 
+    // TLazyIntGauge
+    ///////////////////////////////////////////////////////////////////////////////
+    class TLazyIntGauge final: public ILazyIntGauge {
+    public:
+        explicit TLazyIntGauge(std::function<i64()> supplier)
+            : Supplier_(std::move(supplier))
+        {
+        }
+
+        i64 Get() const noexcept override {
+            return Supplier_();
+        }
+
+        void Accept(TInstant time, IMetricConsumer* consumer) const override {
+            consumer->OnInt64(time, Get());
+        }
+
+    private:
+        std::function<i64()> Supplier_;
+    };
+
+    ///////////////////////////////////////////////////////////////////////////////
     // TCounter
     ///////////////////////////////////////////////////////////////////////////////
     class TCounter final: public ICounter {
@@ -279,28 +279,28 @@ namespace NMonitoring {
     };
 
     ///////////////////////////////////////////////////////////////////////////////
-    // TLazyCounter 
-    /////////////////////////////////////////////////////////////////////////////// 
-    class TLazyCounter final: public ILazyCounter { 
-    public: 
-        explicit TLazyCounter(std::function<ui64()> supplier) 
-            : Supplier_(std::move(supplier)) 
-        { 
-        } 
- 
-        ui64 Get() const noexcept override { 
-            return Supplier_(); 
-        } 
- 
-        void Accept(TInstant time, IMetricConsumer* consumer) const override { 
-            consumer->OnUint64(time, Get()); 
-        } 
- 
-    private: 
-        std::function<ui64()> Supplier_; 
-    }; 
- 
-    /////////////////////////////////////////////////////////////////////////////// 
+    // TLazyCounter
+    ///////////////////////////////////////////////////////////////////////////////
+    class TLazyCounter final: public ILazyCounter {
+    public:
+        explicit TLazyCounter(std::function<ui64()> supplier)
+            : Supplier_(std::move(supplier))
+        {
+        }
+
+        ui64 Get() const noexcept override {
+            return Supplier_();
+        }
+
+        void Accept(TInstant time, IMetricConsumer* consumer) const override {
+            consumer->OnUint64(time, Get());
+        }
+
+    private:
+        std::function<ui64()> Supplier_;
+    };
+
+    ///////////////////////////////////////////////////////////////////////////////
     // TRate
     ///////////////////////////////////////////////////////////////////////////////
     class TRate final: public IRate {
@@ -330,28 +330,28 @@ namespace NMonitoring {
     };
 
     ///////////////////////////////////////////////////////////////////////////////
-    // TLazyRate 
-    /////////////////////////////////////////////////////////////////////////////// 
-    class TLazyRate final: public ILazyRate { 
-    public: 
-        explicit TLazyRate(std::function<ui64()> supplier) 
-            : Supplier_(std::move(supplier)) 
-        { 
-        } 
- 
-        ui64 Get() const noexcept override { 
-            return Supplier_(); 
-        } 
- 
-        void Accept(TInstant time, IMetricConsumer* consumer) const override { 
-            consumer->OnUint64(time, Get()); 
-        } 
- 
-    private: 
-        std::function<ui64()> Supplier_; 
-    }; 
- 
-    /////////////////////////////////////////////////////////////////////////////// 
+    // TLazyRate
+    ///////////////////////////////////////////////////////////////////////////////
+    class TLazyRate final: public ILazyRate {
+    public:
+        explicit TLazyRate(std::function<ui64()> supplier)
+            : Supplier_(std::move(supplier))
+        {
+        }
+
+        ui64 Get() const noexcept override {
+            return Supplier_();
+        }
+
+        void Accept(TInstant time, IMetricConsumer* consumer) const override {
+            consumer->OnUint64(time, Get());
+        }
+
+    private:
+        std::function<ui64()> Supplier_;
+    };
+
+    ///////////////////////////////////////////////////////////////////////////////
     // THistogram
     ///////////////////////////////////////////////////////////////////////////////
     class THistogram final: public IHistogram {

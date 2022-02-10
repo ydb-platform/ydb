@@ -19,24 +19,24 @@ namespace NGrpc {
 
 using NThreading::TFuture;
 
-static void PullEvents(grpc::ServerCompletionQueue* cq) { 
-    TThread::SetCurrentThreadName("grpc_server"); 
-    while (true) { 
-        void* tag; // uniquely identifies a request. 
-        bool ok; 
- 
-        if (cq->Next(&tag, &ok)) { 
-            IQueueEvent* const ev(static_cast<IQueueEvent*>(tag)); 
- 
-            if (!ev->Execute(ok)) { 
-                ev->DestroyRequest(); 
-            } 
-        } else { 
-            break; 
-        } 
-    } 
-} 
- 
+static void PullEvents(grpc::ServerCompletionQueue* cq) {
+    TThread::SetCurrentThreadName("grpc_server");
+    while (true) {
+        void* tag; // uniquely identifies a request.
+        bool ok;
+
+        if (cq->Next(&tag, &ok)) {
+            IQueueEvent* const ev(static_cast<IQueueEvent*>(tag));
+
+            if (!ev->Execute(ok)) {
+                ev->DestroyRequest();
+            }
+        } else {
+            break;
+        }
+    }
+}
+
 TGRpcServer::TGRpcServer(const TServerOptions& opts)
     : Options_(opts)
     , Limiter_(Options_.MaxGlobalRequestInFlight)
@@ -124,14 +124,14 @@ void TGRpcServer::Start() {
         builder.SetOption(std::make_unique<TKeepAliveOption>());
     }
 
-    if (Options_.UseCompletionQueuePerThread) { 
-        for (size_t i = 0; i < Options_.WorkerThreads; ++i) { 
-            CQS_.push_back(builder.AddCompletionQueue()); 
-        } 
-    } else { 
-        CQS_.push_back(builder.AddCompletionQueue()); 
-    } 
- 
+    if (Options_.UseCompletionQueuePerThread) {
+        for (size_t i = 0; i < Options_.WorkerThreads; ++i) {
+            CQS_.push_back(builder.AddCompletionQueue());
+        }
+    } else {
+        CQS_.push_back(builder.AddCompletionQueue());
+    }
+
     if (Options_.GRpcMemoryQuotaBytes) {
         // See details KIKIMR-6932
         /*
@@ -149,27 +149,27 @@ void TGRpcServer::Start() {
     if (!Server_) {
         ythrow yexception() << "can't start grpc server on " << server_address;
     }
- 
-    size_t index = 0; 
+
+    size_t index = 0;
     for (IGRpcServicePtr service : Services_) {
-        // TODO: provide something else for services instead of ServerCompletionQueue 
+        // TODO: provide something else for services instead of ServerCompletionQueue
         service->InitService(CQS_[index++ % CQS_.size()].get(), Options_.Logger);
     }
 
-    if (Options_.UseCompletionQueuePerThread) { 
-        for (size_t i = 0; i < Options_.WorkerThreads; ++i) { 
-            auto* cq = &CQS_[i]; 
-            Ts.push_back(SystemThreadFactory()->Run([cq] { 
-                PullEvents(cq->get()); 
-            })); 
-        } 
-    } else { 
-        for (size_t i = 0; i < Options_.WorkerThreads; ++i) { 
-            auto* cq = &CQS_[0]; 
-            Ts.push_back(SystemThreadFactory()->Run([cq] { 
-                PullEvents(cq->get()); 
-            })); 
-        } 
+    if (Options_.UseCompletionQueuePerThread) {
+        for (size_t i = 0; i < Options_.WorkerThreads; ++i) {
+            auto* cq = &CQS_[i];
+            Ts.push_back(SystemThreadFactory()->Run([cq] {
+                PullEvents(cq->get());
+            }));
+        }
+    } else {
+        for (size_t i = 0; i < Options_.WorkerThreads; ++i) {
+            auto* cq = &CQS_[0];
+            Ts.push_back(SystemThreadFactory()->Run([cq] {
+                PullEvents(cq->get());
+            }));
+        }
     }
 
     if (Options_.ExternalListener) {
@@ -214,8 +214,8 @@ void TGRpcServer::Stop() {
     }
 
     // Always shutdown the completion queue after the server.
-    for (auto& cq : CQS_) { 
-        cq->Shutdown(); 
+    for (auto& cq : CQS_) {
+        cq->Shutdown();
     }
 
     for (auto ti = Ts.begin(); ti != Ts.end(); ++ti) {

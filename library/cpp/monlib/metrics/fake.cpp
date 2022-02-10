@@ -6,38 +6,38 @@ namespace NMonitoring {
         return Metric<TFakeGauge, EMetricType::GAUGE>(std::move(labels));
     }
 
-    ILazyGauge* TFakeMetricRegistry::LazyGauge(ILabelsPtr labels, std::function<double()> supplier) { 
-        Y_UNUSED(supplier); 
-        return Metric<TFakeLazyGauge, EMetricType::GAUGE>(std::move(labels)); 
-    } 
- 
+    ILazyGauge* TFakeMetricRegistry::LazyGauge(ILabelsPtr labels, std::function<double()> supplier) {
+        Y_UNUSED(supplier);
+        return Metric<TFakeLazyGauge, EMetricType::GAUGE>(std::move(labels));
+    }
+
     IIntGauge* TFakeMetricRegistry::IntGauge(ILabelsPtr labels) {
         return Metric<TFakeIntGauge, EMetricType::IGAUGE>(std::move(labels));
     }
 
-    ILazyIntGauge* TFakeMetricRegistry::LazyIntGauge(ILabelsPtr labels, std::function<i64()> supplier) { 
-        Y_UNUSED(supplier); 
-        return Metric<TFakeLazyIntGauge, EMetricType::IGAUGE>(std::move(labels)); 
-    } 
- 
+    ILazyIntGauge* TFakeMetricRegistry::LazyIntGauge(ILabelsPtr labels, std::function<i64()> supplier) {
+        Y_UNUSED(supplier);
+        return Metric<TFakeLazyIntGauge, EMetricType::IGAUGE>(std::move(labels));
+    }
+
     ICounter* TFakeMetricRegistry::Counter(ILabelsPtr labels) {
         return Metric<TFakeCounter, EMetricType::COUNTER>(std::move(labels));
     }
 
-    ILazyCounter* TFakeMetricRegistry::LazyCounter(ILabelsPtr labels, std::function<ui64()> supplier) { 
-        Y_UNUSED(supplier); 
-        return Metric<TFakeLazyCounter, EMetricType::COUNTER>(std::move(labels)); 
-    } 
- 
+    ILazyCounter* TFakeMetricRegistry::LazyCounter(ILabelsPtr labels, std::function<ui64()> supplier) {
+        Y_UNUSED(supplier);
+        return Metric<TFakeLazyCounter, EMetricType::COUNTER>(std::move(labels));
+    }
+
     IRate* TFakeMetricRegistry::Rate(ILabelsPtr labels) {
         return Metric<TFakeRate, EMetricType::RATE>(std::move(labels));
     }
 
-    ILazyRate* TFakeMetricRegistry::LazyRate(ILabelsPtr labels, std::function<ui64()> supplier) { 
-        Y_UNUSED(supplier); 
-        return Metric<TFakeLazyRate, EMetricType::RATE>(std::move(labels)); 
-    } 
- 
+    ILazyRate* TFakeMetricRegistry::LazyRate(ILabelsPtr labels, std::function<ui64()> supplier) {
+        Y_UNUSED(supplier);
+        return Metric<TFakeLazyRate, EMetricType::RATE>(std::move(labels));
+    }
+
     IHistogram* TFakeMetricRegistry::HistogramCounter(ILabelsPtr labels, IHistogramCollectorPtr collector) {
         Y_UNUSED(collector);
         return Metric<TFakeHistogram, EMetricType::HIST>(std::move(labels), false);

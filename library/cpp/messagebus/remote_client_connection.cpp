@@ -67,7 +67,7 @@ void TRemoteClientConnection::TryConnect() {
 
     if (!WriterData.Channel) {
         if ((now - LastConnectAttempt) < TDuration::MilliSeconds(Config.RetryInterval)) {
-            DropEnqueuedData(MESSAGE_CONNECT_FAILED, MESSAGE_CONNECT_FAILED); 
+            DropEnqueuedData(MESSAGE_CONNECT_FAILED, MESSAGE_CONNECT_FAILED);
             return;
         }
         LastConnectAttempt = now;
@@ -77,11 +77,11 @@ void TRemoteClientConnection::TryConnect() {
     }
 
     if (BeforeSendQueue.IsEmpty() && WriterData.SendQueue.Empty() && !Config.ReconnectWhenIdle) {
-        // TryConnect is called from Writer::Act, which is called in cycle 
-        // from session's ScheduleTimeoutMessages via Cron. This prevent these excessive connects. 
-        return; 
-    } 
- 
+        // TryConnect is called from Writer::Act, which is called in cycle
+        // from session's ScheduleTimeoutMessages via Cron. This prevent these excessive connects.
+        return;
+    }
+
     ++WriterData.Status.ConnectSyscalls;
 
     int ret = connect(WriterData.Channel->GetSocket(), PeerAddr.Addr(), PeerAddr.Len());
@@ -113,7 +113,7 @@ void TRemoteClientConnection::TryConnect() {
             WriterData.Status.Connected = false;
             WriterData.Status.ConnectError = err;
 
-            DropEnqueuedData(MESSAGE_CONNECT_FAILED, MESSAGE_CONNECT_FAILED); 
+            DropEnqueuedData(MESSAGE_CONNECT_FAILED, MESSAGE_CONNECT_FAILED);
         }
     }
 }

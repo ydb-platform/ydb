@@ -572,9 +572,9 @@ namespace NBus {
             BeforeTryWrite();
 
             WriterFillInFlight();
- 
+
             WriterGetReconnectQueue()->DequeueAllLikelyEmpty();
- 
+
             if (!WriterData.Status.Connected) {
                 TryConnect();
             } else {
@@ -584,7 +584,7 @@ namespace NBus {
                         GetWriterActor()->AddTaskFromActorLoop();
                         break;
                     }
- 
+
                     if (WriterData.State == WRITER_FILLING) {
                         WriterFillBuffer();
 

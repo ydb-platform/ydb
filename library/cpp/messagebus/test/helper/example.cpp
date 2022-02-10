@@ -166,24 +166,24 @@ void TExampleClient::WaitReplies() {
     ResetCounters();
 }
 
-EMessageStatus TExampleClient::WaitForError() { 
+EMessageStatus TExampleClient::WaitForError() {
     WorkDone.WaitT(TDuration::Seconds(60));
 
     UNIT_ASSERT_VALUES_EQUAL(1, MessageCount);
     UNIT_ASSERT_VALUES_EQUAL(0, AtomicGet(RepliesCount));
     UNIT_ASSERT_VALUES_EQUAL(0, Session->GetInFlight());
     UNIT_ASSERT_VALUES_EQUAL(1, Errors);
-    EMessageStatus result = LastError; 
+    EMessageStatus result = LastError;
 
     ResetCounters();
-    return result; 
+    return result;
 }
 
-void TExampleClient::WaitForError(EMessageStatus status) { 
-    EMessageStatus error = WaitForError(); 
-    UNIT_ASSERT_VALUES_EQUAL(status, error); 
-} 
- 
+void TExampleClient::WaitForError(EMessageStatus status) {
+    EMessageStatus error = WaitForError();
+    UNIT_ASSERT_VALUES_EQUAL(status, error);
+}
+
 void TExampleClient::SendMessagesWaitReplies(size_t count, const TNetAddr* addr) {
     SendMessages(count, addr);
     WaitReplies();

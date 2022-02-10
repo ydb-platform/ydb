@@ -59,7 +59,7 @@ namespace NBus {
                 // '[]' and '[<address>' are errors.
                 return false;
             }
- 
+
             *hostName = host.substr(1, pos - 1);
 
             pos++;

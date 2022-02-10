@@ -177,12 +177,12 @@ using TBacktraceProvider = int(*)(void** frames, int maxFrames, int skipFrames);
 void SetBacktraceProvider(TBacktraceProvider provider);
 
 using TBacktraceFormatter = TString(*)(const void* const* frames, int frameCount);
-
-// Sets the callback used for formatting backtraces during large arena mmap calls
-// to help detect memory leaks. Can be called multiple times (but calls to the
-// previous incarnations of the provider are racy).
-void SetBacktraceFormatter(TBacktraceFormatter provider);
-
+ 
+// Sets the callback used for formatting backtraces during large arena mmap calls 
+// to help detect memory leaks. Can be called multiple times (but calls to the 
+// previous incarnations of the provider are racy). 
+void SetBacktraceFormatter(TBacktraceFormatter provider); 
+ 
 ////////////////////////////////////////////////////////////////////////////////
 // Misc
 

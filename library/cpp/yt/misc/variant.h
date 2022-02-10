@@ -20,7 +20,7 @@ template <class T, class... Ts>
 struct TVariantIndex<T, std::variant<Ts...>>
     : std::integral_constant<size_t, NDetail::TIndexOf<T, Ts...>::Value>
 { };
-
+ 
 template <class T, class V>
 constexpr size_t VariantIndexV = TVariantIndex<T, V>::value;
 

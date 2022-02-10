@@ -74,33 +74,33 @@ TString TrimLeadingWhitespaces(const TString& str)
 }
 
 TString Trim(const TString& str, const TString& whitespaces)
-{
-    size_t end = str.size();
-    while (end > 0) {
-        size_t i = end - 1;
-        bool isWhitespace = false;
-        for (auto c : whitespaces) {
-            if (str[i] == c) {
-                isWhitespace = true;
-                break;
-            }
-        }
-        if (!isWhitespace) {
-            break;
-        }
-        --end;
-    }
-
-    if (end == 0) {
-        return "";
-    }
-
-    size_t begin = str.find_first_not_of(whitespaces);
+{ 
+    size_t end = str.size(); 
+    while (end > 0) { 
+        size_t i = end - 1; 
+        bool isWhitespace = false; 
+        for (auto c : whitespaces) { 
+            if (str[i] == c) { 
+                isWhitespace = true; 
+                break; 
+            } 
+        } 
+        if (!isWhitespace) { 
+            break; 
+        } 
+        --end; 
+    } 
+ 
+    if (end == 0) { 
+        return ""; 
+    } 
+ 
+    size_t begin = str.find_first_not_of(whitespaces); 
     YT_VERIFY(begin != TString::npos);
     YT_VERIFY(begin < end);
-    return str.substr(begin, end - begin);
-}
-
+    return str.substr(begin, end - begin); 
+} 
+ 
 ////////////////////////////////////////////////////////////////////////////////
 
 namespace {

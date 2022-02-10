@@ -102,7 +102,7 @@ bool TCompactFlatMap<K, V, N>::contains(const K& k) const
 }
 
 template <class K, class V, unsigned N>
-auto TCompactFlatMap<K, V, N>::insert(const value_type& value) -> std::pair<iterator, bool>
+auto TCompactFlatMap<K, V, N>::insert(const value_type& value) -> std::pair<iterator, bool> 
 {
     auto [rangeBegin, rangeEnd] = EqualRange(value.first);
     if (rangeBegin != rangeEnd) {
@@ -123,13 +123,13 @@ void TCompactFlatMap<K, V, N>::insert(TInputIterator begin, TInputIterator end)
 }
 
 template <class K, class V, unsigned N>
-template <class... TArgs>
-auto TCompactFlatMap<K, V, N>::emplace(TArgs&&... args) -> std::pair<iterator, bool>
-{
-    return insert(value_type(std::forward<TArgs>(args)...));
-}
-
-template <class K, class V, unsigned N>
+template <class... TArgs> 
+auto TCompactFlatMap<K, V, N>::emplace(TArgs&&... args) -> std::pair<iterator, bool> 
+{ 
+    return insert(value_type(std::forward<TArgs>(args)...)); 
+} 
+ 
+template <class K, class V, unsigned N> 
 V& TCompactFlatMap<K, V, N>::operator[](const K& k)
 {
     auto [it, inserted] = insert({k, V()});

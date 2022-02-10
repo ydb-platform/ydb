@@ -19,17 +19,17 @@ struct TRetryOptions {
     TDuration SleepIncrement;
     TDuration SleepExponentialMultiplier;
 
-    std::function<void(TDuration)> SleepFunction;
-
+    std::function<void(TDuration)> SleepFunction; 
+ 
     TRetryOptions(ui32 retryCount = 3, TDuration sleepDuration = TDuration::Seconds(1), TDuration sleepRandomDelta = TDuration::Zero(),
-                  TDuration sleepIncrement = TDuration::Zero(), TDuration sleepExponentialMultiplier = TDuration::Zero(),
-                  std::function<void(TDuration)> sleepFunction = [](TDuration d) { Sleep(d); }) // can't use Sleep itself due to Win compilation error
+                  TDuration sleepIncrement = TDuration::Zero(), TDuration sleepExponentialMultiplier = TDuration::Zero(), 
+                  std::function<void(TDuration)> sleepFunction = [](TDuration d) { Sleep(d); }) // can't use Sleep itself due to Win compilation error 
         : RetryCount(retryCount)
         , SleepDuration(sleepDuration)
         , SleepRandomDelta(sleepRandomDelta)
         , SleepIncrement(sleepIncrement)
         , SleepExponentialMultiplier(sleepExponentialMultiplier)
-        , SleepFunction(sleepFunction)
+        , SleepFunction(sleepFunction) 
     {
     }
 
@@ -58,11 +58,11 @@ struct TRetryOptions {
         return *this;
     }
 
-    TRetryOptions& WithSleepFunction(std::function<void(TDuration)> sleepFunction) {
-        SleepFunction = sleepFunction;
-        return *this;
-    }
-
+    TRetryOptions& WithSleepFunction(std::function<void(TDuration)> sleepFunction) { 
+        SleepFunction = sleepFunction; 
+        return *this; 
+    } 
+ 
     // for compatibility attempt == 0 by default
     TDuration GetTimeToSleep(ui32 attempt = 0) const {
         return SleepDuration + NRetryPrivate::AddRandomDelta(SleepRandomDelta) + NRetryPrivate::AddIncrement(attempt, SleepIncrement) + NRetryPrivate::AddExponentialMultiplier(attempt, SleepExponentialMultiplier);
@@ -93,8 +93,8 @@ TMaybe<TResult> DoWithRetry(std::function<TResult()> func, std::function<void(co
                     throw;
                 }
             } else {
-                auto sleep = retryOptions.SleepFunction;
-                sleep(retryOptions.GetTimeToSleep(attempt));
+                auto sleep = retryOptions.SleepFunction; 
+                sleep(retryOptions.GetTimeToSleep(attempt)); 
             }
         }
     }

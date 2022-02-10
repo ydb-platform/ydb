@@ -29,7 +29,7 @@ RECURSE(
     omni/usage
     omni/ut
     prog_options
-    prog_options/ut
+    prog_options/ut 
     sgi_hash
     threadable
     transgene

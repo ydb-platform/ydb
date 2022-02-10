@@ -14,7 +14,7 @@
 /// @{
 int a2i(const TString& s);
 
-/// Removes the last character if it is equal to c.
+/// Removes the last character if it is equal to c. 
 template <class T>
 inline void RemoveIfLast(T& s, int c) {
     const size_t length = s.length();
@@ -22,7 +22,7 @@ inline void RemoveIfLast(T& s, int c) {
         s.remove(length - 1);
 }
 
-/// Adds lastCh symbol to the the of the string if it is not already there.
+/// Adds lastCh symbol to the the of the string if it is not already there. 
 inline void addIfNotLast(TString& s, int lastCh) {
     size_t len = s.length();
     if (!len || s[len - 1] != lastCh) {
@@ -30,9 +30,9 @@ inline void addIfNotLast(TString& s, int lastCh) {
     }
 }
 
-/// @details Finishes the string with lastCh1 if lastCh2 is not present in the string and lastCh1 is not already at the end of the string.
-/// Else, if lastCh2 is not equal to the symbol before the last, it finishes the string with lastCh2.
-/// @todo ?? Define, when to apply the function. Is in use several times for URLs parsing.
+/// @details Finishes the string with lastCh1 if lastCh2 is not present in the string and lastCh1 is not already at the end of the string. 
+/// Else, if lastCh2 is not equal to the symbol before the last, it finishes the string with lastCh2. 
+/// @todo ?? Define, when to apply the function. Is in use several times for URLs parsing. 
 inline void addIfAbsent(TString& s, char lastCh1, char lastCh2) {
     size_t pos = s.find(lastCh2);
     if (pos == TString::npos) {

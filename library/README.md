@@ -36,11 +36,11 @@ library
 12. All language specific aspects are defined by `<language>` committee: see `library/<language>/README.md`.
 
 13. The library **MUST** satisfy `<language>` style-guide.
-
+ 
 14. The existing library **SHOULD** be improved instead of creating a new one - if it is possible.
 
     Please do not create yet another library for the same thing: just improve existing one.
-
+ 
 Contacts
 ===
 If you have any language-specific questions, please contact `<language>` [committee](https://wiki.yandex-team.ru/devrules/#profilnyekomitety).

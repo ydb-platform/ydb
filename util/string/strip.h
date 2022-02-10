@@ -177,18 +177,18 @@ static inline T StripStringRight(const T& from, TStripCriterion&& criterion) {
     return TStripImpl<false, true>::StripString(from, criterion);
 }
 
-/// Copies the given string removing leading and trailing spaces.
+/// Copies the given string removing leading and trailing spaces. 
 static inline bool Strip(const TString& from, TString& to) {
     return StripString(from, to);
 }
 
-/// Removes leading and trailing spaces from the string.
+/// Removes leading and trailing spaces from the string. 
 inline TString& StripInPlace(TString& s) {
     Strip(s, s);
     return s;
 }
 
-/// Returns a copy of the given string with removed leading and trailing spaces.
+/// Returns a copy of the given string with removed leading and trailing spaces. 
 inline TString Strip(const TString& s) Y_WARN_UNUSED_RESULT;
 inline TString Strip(const TString& s) {
     TString ret = s;
@@ -232,13 +232,13 @@ bool CollapseImpl(const TStringType& from, TStringType& to, size_t maxLen, const
 
 bool Collapse(const TString& from, TString& to, size_t maxLen = 0);
 
-/// Replaces several consequtive space symbols with one (processing is limited to maxLen bytes)
+/// Replaces several consequtive space symbols with one (processing is limited to maxLen bytes) 
 inline TString& CollapseInPlace(TString& s, size_t maxLen = 0) {
     Collapse(s, s, maxLen);
     return s;
 }
 
-/// Replaces several consequtive space symbols with one (processing is limited to maxLen bytes)
+/// Replaces several consequtive space symbols with one (processing is limited to maxLen bytes) 
 inline TString Collapse(const TString& s, size_t maxLen = 0) Y_WARN_UNUSED_RESULT;
 inline TString Collapse(const TString& s, size_t maxLen) {
     TString ret;
@@ -248,8 +248,8 @@ inline TString Collapse(const TString& s, size_t maxLen) {
 
 void CollapseText(const TString& from, TString& to, size_t maxLen);
 
-/// The same as Collapse() + truncates the string to maxLen.
-/// @details An ellipsis is inserted at the end of the truncated line.
+/// The same as Collapse() + truncates the string to maxLen. 
+/// @details An ellipsis is inserted at the end of the truncated line. 
 inline void CollapseText(TString& s, size_t maxLen) {
     TString to;
     CollapseText(s, to, maxLen);

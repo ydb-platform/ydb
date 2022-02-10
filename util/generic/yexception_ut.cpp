@@ -59,7 +59,7 @@ private:
     inline void TestRethrowAppend() {
         try {
             try {
-                ythrow yexception() << "it";
+                ythrow yexception() << "it"; 
             } catch (yexception& e) {
                 e << "happens";
 

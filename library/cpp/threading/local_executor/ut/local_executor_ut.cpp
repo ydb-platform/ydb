@@ -2,23 +2,23 @@
 #include <library/cpp/threading/future/future.h>
 
 #include <library/cpp/testing/unittest/registar.h>
-#include <util/system/mutex.h>
-#include <util/system/rwlock.h>
+#include <util/system/mutex.h> 
+#include <util/system/rwlock.h> 
 #include <util/generic/algorithm.h>
-
-using namespace NPar;
-
-class TTestException: public yexception {
-};
-
-static const int DefaultThreadsCount = 41;
-static const int DefaultRangeSize = 999;
-
+ 
+using namespace NPar; 
+ 
+class TTestException: public yexception { 
+}; 
+ 
+static const int DefaultThreadsCount = 41; 
+static const int DefaultRangeSize = 999; 
+ 
 Y_UNIT_TEST_SUITE(ExecRangeWithFutures){
     bool AllOf(const TVector<int>& vec, int value){
-        return AllOf(vec, [value](int element) { return value == element; });
+        return AllOf(vec, [value](int element) { return value == element; }); 
 }
-
+ 
 void AsyncRunAndWaitFuturesReady(int rangeSize, int threads) {
     TLocalExecutor localExecutor;
     localExecutor.RunAdditionalThreads(threads);
@@ -37,26 +37,26 @@ void AsyncRunAndWaitFuturesReady(int rangeSize, int threads) {
     AtomicSet(signal, 1);
     for (auto& future : futures) {
         future.GetValueSync();
-    }
+    } 
     UNIT_ASSERT(AllOf(data, 1));
 }
-
+ 
 Y_UNIT_TEST(AsyncRunRangeAndWaitFuturesReady) {
     AsyncRunAndWaitFuturesReady(DefaultRangeSize, DefaultThreadsCount);
 }
-
+ 
 Y_UNIT_TEST(AsyncRunOneTaskAndWaitFuturesReady) {
     AsyncRunAndWaitFuturesReady(1, DefaultThreadsCount);
 }
-
+ 
 Y_UNIT_TEST(AsyncRunRangeAndWaitFuturesReadyOneExtraThread) {
     AsyncRunAndWaitFuturesReady(DefaultRangeSize, 1);
 }
-
+ 
 Y_UNIT_TEST(AsyncRunOneThreadAndWaitFuturesReadyOneExtraThread) {
     AsyncRunAndWaitFuturesReady(1, 1);
 }
-
+ 
 Y_UNIT_TEST(AsyncRunTwoRangesAndWaitFuturesReady) {
     TLocalExecutor localExecutor;
     localExecutor.RunAdditionalThreads(DefaultThreadsCount);
@@ -83,11 +83,11 @@ Y_UNIT_TEST(AsyncRunTwoRangesAndWaitFuturesReady) {
     for (int i = 0; i < DefaultRangeSize; ++i) {
         futures1[i].GetValueSync();
         futures2[i].GetValueSync();
-    }
+    } 
     UNIT_ASSERT(AllOf(data1, 1));
     UNIT_ASSERT(AllOf(data2, 2));
 }
-
+ 
 void AsyncRunRangeAndWaitExceptions(int rangeSize, int threadsCount) {
     TLocalExecutor localExecutor;
     localExecutor.RunAdditionalThreads(threadsCount);
@@ -111,29 +111,29 @@ void AsyncRunRangeAndWaitExceptions(int rangeSize, int threadsCount) {
         } catch (int& e) {
             if (e == 10000 + i) {
                 ++exceptionsCaught;
-            }
-        }
-    }
+            } 
+        } 
+    } 
     UNIT_ASSERT(exceptionsCaught == rangeSize);
     UNIT_ASSERT(AllOf(data, 1));
 }
-
+ 
 Y_UNIT_TEST(AsyncRunRangeAndWaitExceptions) {
     AsyncRunRangeAndWaitExceptions(DefaultRangeSize, DefaultThreadsCount);
 }
-
+ 
 Y_UNIT_TEST(AsyncRunOneTaskAndWaitExceptions) {
     AsyncRunRangeAndWaitExceptions(1, DefaultThreadsCount);
 }
-
+ 
 Y_UNIT_TEST(AsyncRunRangeAndWaitExceptionsOneExtraThread) {
     AsyncRunRangeAndWaitExceptions(DefaultRangeSize, 1);
 }
-
+ 
 Y_UNIT_TEST(AsyncRunOneTaskAndWaitExceptionsOneExtraThread) {
     AsyncRunRangeAndWaitExceptions(1, 1);
 }
-
+ 
 Y_UNIT_TEST(AsyncRunTwoRangesAndWaitExceptions) {
     TLocalExecutor localExecutor;
     localExecutor.RunAdditionalThreads(DefaultThreadsCount);
@@ -156,7 +156,7 @@ Y_UNIT_TEST(AsyncRunTwoRangesAndWaitExceptions) {
         throw 16000 + i;
     },
                                                                                      0, DefaultRangeSize, TLocalExecutor::HIGH_PRIORITY);
-
+ 
     UNIT_ASSERT(AllOf(data1, 0));
     UNIT_ASSERT(AllOf(data2, 0));
     UNIT_ASSERT(futures1.size() == DefaultRangeSize);
@@ -169,21 +169,21 @@ Y_UNIT_TEST(AsyncRunTwoRangesAndWaitExceptions) {
         } catch (int& e) {
             if (e == 15000 + i) {
                 ++exceptionsCaught;
-            }
+            } 
         }
         try {
             futures2[i].GetValueSync();
         } catch (int& e) {
             if (e == 16000 + i) {
                 ++exceptionsCaught;
-            }
-        }
-    }
+            } 
+        } 
+    } 
     UNIT_ASSERT(exceptionsCaught == 2 * DefaultRangeSize);
     UNIT_ASSERT(AllOf(data1, 1));
     UNIT_ASSERT(AllOf(data2, 2));
 }
-
+ 
 void RunRangeAndCheckExceptionsWithWaitComplete(int rangeSize, int threadsCount) {
     TLocalExecutor localExecutor;
     localExecutor.RunAdditionalThreads(threadsCount);
@@ -202,39 +202,39 @@ void RunRangeAndCheckExceptionsWithWaitComplete(int rangeSize, int threadsCount)
         } catch (int& e) {
             if (e == 30000 + i) {
                 ++exceptionsCaught;
-            }
-        }
-    }
+            } 
+        } 
+    } 
     UNIT_ASSERT(exceptionsCaught == rangeSize);
     UNIT_ASSERT(AllOf(data, 1));
 }
-
+ 
 Y_UNIT_TEST(RunRangeAndCheckExceptionsWithWaitComplete) {
     RunRangeAndCheckExceptionsWithWaitComplete(DefaultRangeSize, DefaultThreadsCount);
 }
-
+ 
 Y_UNIT_TEST(RunOneAndCheckExceptionsWithWaitComplete) {
     RunRangeAndCheckExceptionsWithWaitComplete(1, DefaultThreadsCount);
 }
-
+ 
 Y_UNIT_TEST(RunRangeAndCheckExceptionsWithWaitCompleteOneExtraThread) {
     RunRangeAndCheckExceptionsWithWaitComplete(DefaultRangeSize, 1);
 }
-
+ 
 Y_UNIT_TEST(RunOneAndCheckExceptionsWithWaitCompleteOneExtraThread) {
     RunRangeAndCheckExceptionsWithWaitComplete(1, 1);
 }
-
+ 
 Y_UNIT_TEST(RunRangeAndCheckExceptionsWithWaitCompleteZeroExtraThreads) {
     RunRangeAndCheckExceptionsWithWaitComplete(DefaultRangeSize, 0);
 }
-
+ 
 Y_UNIT_TEST(RunOneAndCheckExceptionsWithWaitCompleteZeroExtraThreads) {
     RunRangeAndCheckExceptionsWithWaitComplete(1, 0);
 }
 }
 ;
-
+ 
 Y_UNIT_TEST_SUITE(ExecRangeWithThrow){
     void RunParallelWhichThrowsTTestException(int rangeStart, int rangeSize, int threadsCount, int flags, TAtomic& processed){
         AtomicSet(processed, 0);
@@ -246,7 +246,7 @@ localExecutor.ExecRangeWithThrow([&processed](int) {
 },
                                  rangeStart, rangeStart + rangeSize, flags);
 }
-
+ 
 Y_UNIT_TEST(RunParallelWhichThrowsTTestException) {
     TAtomic processed = 0;
     UNIT_ASSERT_EXCEPTION(
@@ -255,7 +255,7 @@ Y_UNIT_TEST(RunParallelWhichThrowsTTestException) {
         TTestException);
     UNIT_ASSERT(AtomicGet(processed) == 40);
 }
-
+ 
 void ThrowAndCatchTTestException(int rangeSize, int threadsCount, int flags) {
     TAtomic processed = 0;
     UNIT_ASSERT_EXCEPTION(
@@ -263,44 +263,44 @@ void ThrowAndCatchTTestException(int rangeSize, int threadsCount, int flags) {
         TTestException);
     UNIT_ASSERT(AtomicGet(processed) == rangeSize);
 }
-
+ 
 Y_UNIT_TEST(ThrowAndCatchTTestExceptionLowPriority) {
     ThrowAndCatchTTestException(DefaultRangeSize, DefaultThreadsCount,
                                 TLocalExecutor::EFlags::WAIT_COMPLETE | TLocalExecutor::EFlags::LOW_PRIORITY);
 }
-
+ 
 Y_UNIT_TEST(ThrowAndCatchTTestExceptionMedPriority) {
     ThrowAndCatchTTestException(DefaultRangeSize, DefaultThreadsCount,
                                 TLocalExecutor::EFlags::WAIT_COMPLETE | TLocalExecutor::EFlags::MED_PRIORITY);
 }
-
+ 
 Y_UNIT_TEST(ThrowAndCatchTTestExceptionHighPriority) {
     ThrowAndCatchTTestException(DefaultRangeSize, DefaultThreadsCount,
                                 TLocalExecutor::EFlags::WAIT_COMPLETE | TLocalExecutor::EFlags::HIGH_PRIORITY);
 }
-
+ 
 Y_UNIT_TEST(ThrowAndCatchTTestExceptionWaitComplete) {
     ThrowAndCatchTTestException(DefaultRangeSize, DefaultThreadsCount,
                                 TLocalExecutor::EFlags::WAIT_COMPLETE);
 }
-
+ 
 Y_UNIT_TEST(RethrowExeptionSequentialWaitComplete) {
     ThrowAndCatchTTestException(DefaultRangeSize, 0,
                                 TLocalExecutor::EFlags::WAIT_COMPLETE);
 }
-
+ 
 Y_UNIT_TEST(RethrowExeptionOneExtraThreadWaitComplete) {
     ThrowAndCatchTTestException(DefaultRangeSize, 1,
                                 TLocalExecutor::EFlags::WAIT_COMPLETE);
 }
-
+ 
 void ThrowsTTestExceptionFromNested(TLocalExecutor& localExecutor) {
     localExecutor.ExecRangeWithThrow([](int) {
         throw TTestException();
     },
                                      0, 10, TLocalExecutor::EFlags::WAIT_COMPLETE);
 }
-
+ 
 void CatchTTestExceptionFromNested(TAtomic& processed1, TAtomic& processed2) {
     TLocalExecutor localExecutor;
     localExecutor.RunAdditionalThreads(DefaultThreadsCount);
@@ -313,7 +313,7 @@ void CatchTTestExceptionFromNested(TAtomic& processed1, TAtomic& processed2) {
     },
                                      0, DefaultRangeSize, TLocalExecutor::EFlags::WAIT_COMPLETE);
 }
-
+ 
 Y_UNIT_TEST(NestedParallelExceptionsDoNotLeak) {
     TAtomic processed1 = 0;
     TAtomic processed2 = 0;

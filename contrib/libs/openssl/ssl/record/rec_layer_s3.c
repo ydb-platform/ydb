@@ -10,15 +10,15 @@
 #include <stdio.h>
 #include <limits.h>
 #include <errno.h>
-#include "../ssl_local.h"
+#include "../ssl_local.h" 
 #include <openssl/evp.h>
 #include <openssl/buffer.h>
 #include <openssl/rand.h>
-#include "record_local.h"
-#include "../packet_local.h"
+#include "record_local.h" 
+#include "../packet_local.h" 
 
 #if     defined(OPENSSL_SMALL_FOOTPRINT) || \
-        !(      defined(AESNI_ASM) &&   ( \
+        !(      defined(AESNI_ASM) &&   ( \ 
                 defined(__x86_64)       || defined(__x86_64__)  || \
                 defined(_M_AMD64)       || defined(_M_X64)      ) \
         )

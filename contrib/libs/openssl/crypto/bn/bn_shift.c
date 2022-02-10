@@ -9,7 +9,7 @@
 
 #include <assert.h>
 #include "internal/cryptlib.h"
-#include "bn_local.h"
+#include "bn_local.h" 
 
 int BN_lshift1(BIGNUM *r, const BIGNUM *a)
 {
@@ -34,10 +34,10 @@ int BN_lshift1(BIGNUM *r, const BIGNUM *a)
     for (i = 0; i < a->top; i++) {
         t = *(ap++);
         *(rp++) = ((t << 1) | c) & BN_MASK2;
-        c = t >> (BN_BITS2 - 1);
+        c = t >> (BN_BITS2 - 1); 
     }
-    *rp = c;
-    r->top += c;
+    *rp = c; 
+    r->top += c; 
     bn_check_top(r);
     return 1;
 }
@@ -45,7 +45,7 @@ int BN_lshift1(BIGNUM *r, const BIGNUM *a)
 int BN_rshift1(BIGNUM *r, const BIGNUM *a)
 {
     BN_ULONG *ap, *rp, t, c;
-    int i;
+    int i; 
 
     bn_check_top(r);
     bn_check_top(a);
@@ -57,20 +57,20 @@ int BN_rshift1(BIGNUM *r, const BIGNUM *a)
     i = a->top;
     ap = a->d;
     if (a != r) {
-        if (bn_wexpand(r, i) == NULL)
+        if (bn_wexpand(r, i) == NULL) 
             return 0;
         r->neg = a->neg;
     }
     rp = r->d;
-    r->top = i;
+    r->top = i; 
     t = ap[--i];
-    rp[i] = t >> 1;
-    c = t << (BN_BITS2 - 1);
-    r->top -= (t == 1);
+    rp[i] = t >> 1; 
+    c = t << (BN_BITS2 - 1); 
+    r->top -= (t == 1); 
     while (i > 0) {
         t = ap[--i];
         rp[i] = ((t >> 1) & BN_MASK2) | c;
-        c = t << (BN_BITS2 - 1);
+        c = t << (BN_BITS2 - 1); 
     }
     if (!r->top)
         r->neg = 0; /* don't allow negative zero */
@@ -149,19 +149,19 @@ int bn_lshift_fixed_top(BIGNUM *r, const BIGNUM *a, int n)
 
 int BN_rshift(BIGNUM *r, const BIGNUM *a, int n)
 {
-    int ret = 0;
+    int ret = 0; 
 
     if (n < 0) {
         BNerr(BN_F_BN_RSHIFT, BN_R_INVALID_SHIFT);
         return 0;
     }
 
-    ret = bn_rshift_fixed_top(r, a, n);
+    ret = bn_rshift_fixed_top(r, a, n); 
 
-    bn_correct_top(r);
-    bn_check_top(r);
+    bn_correct_top(r); 
+    bn_check_top(r); 
 
-    return ret;
+    return ret; 
 }
 
 /*

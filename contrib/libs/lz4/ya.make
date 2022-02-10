@@ -26,7 +26,7 @@ ADDINCL(
     contrib/libs/xxhash
 )
 
-NO_RUNTIME()
+NO_RUNTIME() 
 
 SRCS(
     lz4.c

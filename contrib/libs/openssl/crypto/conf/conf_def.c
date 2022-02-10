@@ -719,9 +719,9 @@ static BIO *process_include(char *include, OPENSSL_DIR_CTX **dirctx,
 static BIO *get_next_file(const char *path, OPENSSL_DIR_CTX **dirctx)
 {
     const char *filename;
-    size_t pathlen;
+    size_t pathlen; 
 
-    pathlen = strlen(path);
+    pathlen = strlen(path); 
     while ((filename = OPENSSL_DIR_read(dirctx, path)) != NULL) {
         size_t namelen;
 
@@ -734,7 +734,7 @@ static BIO *get_next_file(const char *path, OPENSSL_DIR_CTX **dirctx)
             char *newpath;
             BIO *bio;
 
-            newlen = pathlen + namelen + 2;
+            newlen = pathlen + namelen + 2; 
             newpath = OPENSSL_zalloc(newlen);
             if (newpath == NULL) {
                 CONFerr(CONF_F_GET_NEXT_FILE, ERR_R_MALLOC_FAILURE);
@@ -745,11 +745,11 @@ static BIO *get_next_file(const char *path, OPENSSL_DIR_CTX **dirctx)
              * If the given path isn't clear VMS syntax,
              * we treat it as on Unix.
              */
-            if (path[pathlen - 1] == ']'
-                || path[pathlen - 1] == '>'
-                || path[pathlen - 1] == ':') {
-                /* Clear VMS directory syntax, just copy as is */
-                OPENSSL_strlcpy(newpath, path, newlen);
+            if (path[pathlen - 1] == ']' 
+                || path[pathlen - 1] == '>' 
+                || path[pathlen - 1] == ':') { 
+                /* Clear VMS directory syntax, just copy as is */ 
+                OPENSSL_strlcpy(newpath, path, newlen); 
             }
 #endif
             if (newpath[0] == '\0') {

@@ -13,7 +13,7 @@
 #include <openssl/objects.h>
 #include <openssl/x509.h>
 #include <openssl/x509v3.h>
-#include "crypto/x509.h"
+#include "crypto/x509.h" 
 
 int X509_issuer_and_serial_cmp(const X509 *a, const X509 *b)
 {
@@ -136,7 +136,7 @@ unsigned long X509_subject_name_hash_old(X509 *x)
 int X509_cmp(const X509 *a, const X509 *b)
 {
     int rv = 0;
-
+ 
     if (a == b) /* for efficiency */
         return 0;
 

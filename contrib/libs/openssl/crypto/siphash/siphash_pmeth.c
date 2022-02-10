@@ -13,9 +13,9 @@
 #include <openssl/x509v3.h>
 #include <openssl/evp.h>
 #include <openssl/err.h>
-#include "crypto/siphash.h"
+#include "crypto/siphash.h" 
 #include "siphash_local.h"
-#include "crypto/evp.h"
+#include "crypto/evp.h" 
 
 /* SIPHASH pkey context structure */
 

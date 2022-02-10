@@ -24,7 +24,7 @@ PEERDIR(
 )
 
 ADDINCL(
-    GLOBAL contrib/libs/openssl/include
+    GLOBAL contrib/libs/openssl/include 
     contrib/libs/openssl
 )
 
@@ -70,12 +70,12 @@ IF (OS_WINDOWS)
     ENDIF()
 ENDIF()
 
-NO_COMPILER_WARNINGS()
-
-NO_RUNTIME()
-
+NO_COMPILER_WARNINGS() 
+ 
+NO_RUNTIME() 
+ 
 CFLAGS(
-    -DAESNI_ASM
+    -DAESNI_ASM 
     -DOPENSSL_BN_ASM_MONT
     -DOPENSSL_CPUID_OBJ
     -DSHA1_ASM

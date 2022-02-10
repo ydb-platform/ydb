@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2020 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 2002-2020 The OpenSSL Project Authors. All Rights Reserved. 
  * Copyright (c) 2002, Oracle and/or its affiliates. All rights reserved
  *
  * Licensed under the OpenSSL license (the "License").  You may not use
@@ -9,18 +9,18 @@
  */
 
 #include <openssl/opensslconf.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <time.h>
-#include <string.h>
-#include "apps.h"
-#include "progs.h"
-#include <openssl/bio.h>
-#include <openssl/err.h>
-#include <openssl/bn.h>
-#include <openssl/ec.h>
-#include <openssl/x509.h>
-#include <openssl/pem.h>
+#include <stdio.h> 
+#include <stdlib.h> 
+#include <time.h> 
+#include <string.h> 
+#include "apps.h" 
+#include "progs.h" 
+#include <openssl/bio.h> 
+#include <openssl/err.h> 
+#include <openssl/bn.h> 
+#include <openssl/ec.h> 
+#include <openssl/x509.h> 
+#include <openssl/pem.h> 
 
 typedef enum OPTION_choice {
     OPT_ERR = -1, OPT_EOF = 0, OPT_HELP,
@@ -51,9 +51,9 @@ const OPTIONS ecparam_options[] = {
      "Specifies the way the ec parameters are encoded"},
     {"genkey", OPT_GENKEY, '-', "Generate ec key"},
     OPT_R_OPTIONS,
-#ifndef OPENSSL_NO_ENGINE
+#ifndef OPENSSL_NO_ENGINE 
     {"engine", OPT_ENGINE, 's', "Use engine, possibly a hardware device"},
-#endif
+#endif 
     {NULL}
 };
 

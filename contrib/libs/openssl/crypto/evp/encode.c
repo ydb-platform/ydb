@@ -11,8 +11,8 @@
 #include <limits.h>
 #include "internal/cryptlib.h"
 #include <openssl/evp.h>
-#include "evp_local.h"
-#include "crypto/evp.h"
+#include "evp_local.h" 
+#include "crypto/evp.h" 
 
 static unsigned char conv_ascii2bin(unsigned char a,
                                     const unsigned char *table);

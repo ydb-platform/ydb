@@ -227,8 +227,8 @@ RECURSE(
     django-cachalot
     django-cache-memoize
     django-celery-beat
-    django-celery-email
-    django-celery-results
+    django-celery-email 
+    django-celery-results 
     django-closuretree
     django-constance
     django-cors-headers
@@ -240,12 +240,12 @@ RECURSE(
     django-datetime-widget
     django-db-geventpool
     django-dbtemplates
-    django-debug-panel
+    django-debug-panel 
     django-debug-toolbar
-    django-dirtyfields
+    django-dirtyfields 
     django-dynamic-raw-id
     django-enumfields
-    django-environ
+    django-environ 
     django-etc
     django-export-action-py3
     django-extensions
@@ -259,14 +259,14 @@ RECURSE(
     django-http-proxy
     django-import-export
     django-introspection
-    django-jinja
+    django-jinja 
     django-js-asset
     django-json-widget
     django-markwhat
     django-model-choices
     django-model-utils
-    django-modeladmin-reorder
-    django-modeltranslation
+    django-modeladmin-reorder 
+    django-modeltranslation 
     django-moderation
     django-mptt
     django-mptt-admin
@@ -275,16 +275,16 @@ RECURSE(
     django-ninja
     django-object-actions
     django-opentracing
-    django-partial-index
-    django-pdb
+    django-partial-index 
+    django-pdb 
     django-phonenumbers
     django-picklefield
     django-post-office
     django-postgrespool2
-    django-proxy-storage
+    django-proxy-storage 
     django-query-exchange
     django-redis
-    django-redis-cache
+    django-redis-cache 
     django-replicated
     django-rest-framework-docs
     django-rest-multiple-models
@@ -305,7 +305,7 @@ RECURSE(
     django-webpack-loader
     django-webtest
     django-whatever
-    django-widget-tweaks
+    django-widget-tweaks 
     djangorestframework
     djangorestframework-camel-case
     djangorestframework-csv
@@ -493,7 +493,7 @@ RECURSE(
     httpx
     humanfriendly
     humanize
-    humongous
+    humongous 
     hurry.filesize
     Hydra
     hypercorn
@@ -611,14 +611,14 @@ RECURSE(
     marshmallow-enum
     marshmallow-mongoengine
     marshmallow-oneofschema
-    marshmallow-sqlalchemy
+    marshmallow-sqlalchemy 
     marshmallow-union
     matplotlib
     matplotlib-inline
     mccabe
     mecab-python3
     meld3
-    memory-profiler
+    memory-profiler 
     mercurial
     mistune
     mitmproxy
@@ -1059,7 +1059,7 @@ RECURSE(
     terminaltables
     testpath
     text-unidecode
-    textdata
+    textdata 
     texttable
     textwrap3
     thinc

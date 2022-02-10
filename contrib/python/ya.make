@@ -890,7 +890,7 @@ RECURSE(
     python-crfsuite
     python-crontab
     python-daemon
-    python-datemath 
+    python-datemath
     python-debian
     python-decouple
     python-docx

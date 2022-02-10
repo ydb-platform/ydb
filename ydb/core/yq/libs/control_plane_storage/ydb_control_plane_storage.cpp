@@ -1,120 +1,120 @@
-#include "schema.h" 
-#include "validators.h" 
-#include "ydb_control_plane_storage_impl.h" 
- 
+#include "schema.h"
+#include "validators.h"
+#include "ydb_control_plane_storage_impl.h"
+
 #include <ydb/library/security/ydb_credentials_provider_factory.h>
 
-namespace NYq { 
- 
-namespace { 
- 
-void CollectDebugInfo(const TString& query, const TParams& params, TSession session, TDebugInfoPtr debugInfo) { 
-    if (debugInfo) { 
-        try { 
-            auto explainResult = session.ExplainDataQuery(query).GetValue(TDuration::Minutes(1)); 
-            debugInfo->push_back({query, params, explainResult.GetPlan(), explainResult.GetAst(), {}}); 
-        } catch (...) { 
-            debugInfo->push_back({query, params, {}, {}, CurrentExceptionMessage()}); 
-        } 
-    } 
-} 
- 
-inline YandexQuery::ConnectionSetting::ConnectionCase GetConnectionType(const TString& typeStr) { 
-    YandexQuery::ConnectionSetting::ConnectionType type = YandexQuery::ConnectionSetting::CONNECTION_TYPE_UNSPECIFIED; 
-    YandexQuery::ConnectionSetting::ConnectionType_Parse(typeStr, &type); 
-    return static_cast<YandexQuery::ConnectionSetting::ConnectionCase>(type); 
-} 
- 
-inline YandexQuery::BindingSetting::BindingCase GetBindingType(const TString& typeStr) { 
-    YandexQuery::BindingSetting::BindingType type = YandexQuery::BindingSetting::BINDING_TYPE_UNSPECIFIED; 
-    YandexQuery::BindingSetting::BindingType_Parse(typeStr, &type); 
-    return static_cast<YandexQuery::BindingSetting::BindingCase>(type); 
-} 
- 
-} // namespace 
- 
-void TYdbControlPlaneStorageActor::Bootstrap() { 
-    CPS_LOG_I("Starting ydb control plane storage service. Actor id: " << SelfId()); 
-    NLwTraceMonPage::ProbeRegistry().AddProbesList(LWTRACE_GET_PROBES(YQ_CONTROL_PLANE_STORAGE_PROVIDER)); 
- 
+namespace NYq {
+
+namespace {
+
+void CollectDebugInfo(const TString& query, const TParams& params, TSession session, TDebugInfoPtr debugInfo) {
+    if (debugInfo) {
+        try {
+            auto explainResult = session.ExplainDataQuery(query).GetValue(TDuration::Minutes(1));
+            debugInfo->push_back({query, params, explainResult.GetPlan(), explainResult.GetAst(), {}});
+        } catch (...) {
+            debugInfo->push_back({query, params, {}, {}, CurrentExceptionMessage()});
+        }
+    }
+}
+
+inline YandexQuery::ConnectionSetting::ConnectionCase GetConnectionType(const TString& typeStr) {
+    YandexQuery::ConnectionSetting::ConnectionType type = YandexQuery::ConnectionSetting::CONNECTION_TYPE_UNSPECIFIED;
+    YandexQuery::ConnectionSetting::ConnectionType_Parse(typeStr, &type);
+    return static_cast<YandexQuery::ConnectionSetting::ConnectionCase>(type);
+}
+
+inline YandexQuery::BindingSetting::BindingCase GetBindingType(const TString& typeStr) {
+    YandexQuery::BindingSetting::BindingType type = YandexQuery::BindingSetting::BINDING_TYPE_UNSPECIFIED;
+    YandexQuery::BindingSetting::BindingType_Parse(typeStr, &type);
+    return static_cast<YandexQuery::BindingSetting::BindingCase>(type);
+}
+
+} // namespace
+
+void TYdbControlPlaneStorageActor::Bootstrap() {
+    CPS_LOG_I("Starting ydb control plane storage service. Actor id: " << SelfId());
+    NLwTraceMonPage::ProbeRegistry().AddProbesList(LWTRACE_GET_PROBES(YQ_CONTROL_PLANE_STORAGE_PROVIDER));
+
     DbPool = YqSharedResources->DbPoolHolder->GetOrCreate(EDbPoolId::MAIN, 10);
-    YdbConnection = NewYdbConnection(Config.Proto.GetStorage(), CredProviderFactory); 
-    auto as = NActors::TActivationContext::ActorSystem(); 
-    CreateDirectory(as); 
-    CreateQueriesTable(as); 
+    YdbConnection = NewYdbConnection(Config.Proto.GetStorage(), CredProviderFactory);
+    auto as = NActors::TActivationContext::ActorSystem();
+    CreateDirectory(as);
+    CreateQueriesTable(as);
     CreatePendingSmallTable(as);
-    CreateConnectionsTable(as); 
-    CreateBindingsTable(as); 
-    CreateIdempotencyKeysTable(as); 
-    CreateResultSetsTable(as); 
-    CreateJobsTable(as); 
+    CreateConnectionsTable(as);
+    CreateBindingsTable(as);
+    CreateIdempotencyKeysTable(as);
+    CreateResultSetsTable(as);
+    CreateJobsTable(as);
     CreateNodesTable(as);
-    Become(&TThis::StateFunc); 
-} 
- 
-TYdbControlPlaneStorageActor::TConfig::TConfig(const NConfig::TControlPlaneStorageConfig& config, const NConfig::TCommonConfig& common) 
-    : Proto(FillDefaultParameters(config)) 
-    , IdsPrefix(common.GetIdsPrefix()) 
-    , IdempotencyKeyTtl(GetDuration(Proto.GetIdempotencyKeysTtl(), TDuration::Minutes(10))) 
-    , AutomaticQueriesTtl(GetDuration(Proto.GetAutomaticQueriesTtl(), TDuration::Days(1))) 
+    Become(&TThis::StateFunc);
+}
+
+TYdbControlPlaneStorageActor::TConfig::TConfig(const NConfig::TControlPlaneStorageConfig& config, const NConfig::TCommonConfig& common)
+    : Proto(FillDefaultParameters(config))
+    , IdsPrefix(common.GetIdsPrefix())
+    , IdempotencyKeyTtl(GetDuration(Proto.GetIdempotencyKeysTtl(), TDuration::Minutes(10)))
+    , AutomaticQueriesTtl(GetDuration(Proto.GetAutomaticQueriesTtl(), TDuration::Days(1)))
     , ResultSetsTtl(GetDuration(Proto.GetResultSetsTtl(), TDuration::Days(1)))
-    , AnalyticsRetryCounterUpdateTime(GetDuration(Proto.GetAnalyticsRetryCounterUpdateTime(), TDuration::Days(1))) 
-    , StreamingRetryCounterUpdateTime(GetDuration(Proto.GetAnalyticsRetryCounterUpdateTime(), TDuration::Days(1))) 
-    , TaskLeaseTtl(GetDuration(Proto.GetTaskLeaseTtl(), TDuration::Seconds(30))) 
-{ 
-    for (const auto& availableConnection: Proto.GetAvailableConnection()) { 
-        AvailableConnections.insert(GetConnectionType(availableConnection)); 
-    } 
- 
-    for (const auto& availableBinding: Proto.GetAvailableBinding()) { 
-        AvailableBindings.insert(GetBindingType(availableBinding)); 
-    } 
-} 
- 
-/* 
-* Creating tables 
-*/ 
-TAsyncStatus TYdbControlPlaneStorageActor::CreateQueriesTable(TActorSystem* as) 
-{ 
+    , AnalyticsRetryCounterUpdateTime(GetDuration(Proto.GetAnalyticsRetryCounterUpdateTime(), TDuration::Days(1)))
+    , StreamingRetryCounterUpdateTime(GetDuration(Proto.GetAnalyticsRetryCounterUpdateTime(), TDuration::Days(1)))
+    , TaskLeaseTtl(GetDuration(Proto.GetTaskLeaseTtl(), TDuration::Seconds(30)))
+{
+    for (const auto& availableConnection: Proto.GetAvailableConnection()) {
+        AvailableConnections.insert(GetConnectionType(availableConnection));
+    }
+
+    for (const auto& availableBinding: Proto.GetAvailableBinding()) {
+        AvailableBindings.insert(GetBindingType(availableBinding));
+    }
+}
+
+/*
+* Creating tables
+*/
+TAsyncStatus TYdbControlPlaneStorageActor::CreateQueriesTable(TActorSystem* as)
+{
     auto tablePath = JoinPath(YdbConnection->TablePathPrefix, QUERIES_TABLE_NAME);
- 
-    auto description = TTableBuilder() 
-        .AddNullableColumn(SCOPE_COLUMN_NAME, EPrimitiveType::String) 
-        .AddNullableColumn(QUERY_ID_COLUMN_NAME, EPrimitiveType::String) 
+
+    auto description = TTableBuilder()
+        .AddNullableColumn(SCOPE_COLUMN_NAME, EPrimitiveType::String)
+        .AddNullableColumn(QUERY_ID_COLUMN_NAME, EPrimitiveType::String)
         .AddNullableColumn(RESULT_ID_COLUMN_NAME, EPrimitiveType::String)
         .AddNullableColumn(GENERATION_COLUMN_NAME, EPrimitiveType::Uint64)
-        .AddNullableColumn(NAME_COLUMN_NAME, EPrimitiveType::String) 
-        .AddNullableColumn(USER_COLUMN_NAME, EPrimitiveType::String) 
-        .AddNullableColumn(VISIBILITY_COLUMN_NAME, EPrimitiveType::Int64) 
+        .AddNullableColumn(NAME_COLUMN_NAME, EPrimitiveType::String)
+        .AddNullableColumn(USER_COLUMN_NAME, EPrimitiveType::String)
+        .AddNullableColumn(VISIBILITY_COLUMN_NAME, EPrimitiveType::Int64)
         .AddNullableColumn(AUTOMATIC_COLUMN_NAME, EPrimitiveType::Bool)
-        .AddNullableColumn(STATUS_COLUMN_NAME, EPrimitiveType::Int64) 
-        .AddNullableColumn(QUERY_TYPE_COLUMN_NAME, EPrimitiveType::Int64) 
-        .AddNullableColumn(EXECUTE_MODE_COLUMN_NAME, EPrimitiveType::Int64) 
-        .AddNullableColumn(QUERY_COLUMN_NAME, EPrimitiveType::String) 
-        .AddNullableColumn(REVISION_COLUMN_NAME, EPrimitiveType::Int64) 
-        .AddNullableColumn(INTERNAL_COLUMN_NAME, EPrimitiveType::String) 
-        .AddNullableColumn(LAST_JOB_ID_COLUMN_NAME, EPrimitiveType::String) 
+        .AddNullableColumn(STATUS_COLUMN_NAME, EPrimitiveType::Int64)
+        .AddNullableColumn(QUERY_TYPE_COLUMN_NAME, EPrimitiveType::Int64)
+        .AddNullableColumn(EXECUTE_MODE_COLUMN_NAME, EPrimitiveType::Int64)
+        .AddNullableColumn(QUERY_COLUMN_NAME, EPrimitiveType::String)
+        .AddNullableColumn(REVISION_COLUMN_NAME, EPrimitiveType::Int64)
+        .AddNullableColumn(INTERNAL_COLUMN_NAME, EPrimitiveType::String)
+        .AddNullableColumn(LAST_JOB_ID_COLUMN_NAME, EPrimitiveType::String)
         .AddNullableColumn(EXPIRE_AT_COLUMN_NAME, EPrimitiveType::Timestamp)
         .AddNullableColumn(RESULT_SETS_EXPIRE_AT_COLUMN_NAME, EPrimitiveType::Timestamp)
         .AddNullableColumn(META_REVISION_COLUMN_NAME, EPrimitiveType::Int64)
-        .SetPrimaryKeyColumns({SCOPE_COLUMN_NAME, QUERY_ID_COLUMN_NAME}) 
+        .SetPrimaryKeyColumns({SCOPE_COLUMN_NAME, QUERY_ID_COLUMN_NAME})
         .SetTtlSettings(EXPIRE_AT_COLUMN_NAME)
-        .Build(); 
- 
-    return YdbConnection->Client.RetryOperation( 
-        [tablePath = std::move(tablePath), description = std::move(description)] (TSession session) mutable { 
-            return session.CreateTable(tablePath, TTableDescription(description)); 
-        }) 
-        .Apply([=](const auto& future) { 
-            auto status = future.GetValue(); 
+        .Build();
+
+    return YdbConnection->Client.RetryOperation(
+        [tablePath = std::move(tablePath), description = std::move(description)] (TSession session) mutable {
+            return session.CreateTable(tablePath, TTableDescription(description));
+        })
+        .Apply([=](const auto& future) {
+            auto status = future.GetValue();
             if (!IsTableCreated(status)) {
-                CPS_LOG_AS_E(*as, "create quries table error: " << status.GetIssues().ToString()); 
-                return CreateQueriesTable(as); 
-            } 
-            return future; 
-        }); 
-} 
- 
+                CPS_LOG_AS_E(*as, "create quries table error: " << status.GetIssues().ToString());
+                return CreateQueriesTable(as);
+            }
+            return future;
+        });
+}
+
 TAsyncStatus TYdbControlPlaneStorageActor::CreatePendingSmallTable(TActorSystem* as)
 {
     auto tablePath = JoinPath(YdbConnection->TablePathPrefix, PENDING_SMALL_TABLE_NAME);
@@ -122,104 +122,104 @@ TAsyncStatus TYdbControlPlaneStorageActor::CreatePendingSmallTable(TActorSystem*
     auto description = TTableBuilder()
         .AddNullableColumn(SCOPE_COLUMN_NAME, EPrimitiveType::String)
         .AddNullableColumn(QUERY_ID_COLUMN_NAME, EPrimitiveType::String)
-        .AddNullableColumn(LAST_SEEN_AT_COLUMN_NAME, EPrimitiveType::Timestamp) 
+        .AddNullableColumn(LAST_SEEN_AT_COLUMN_NAME, EPrimitiveType::Timestamp)
         .AddNullableColumn(RETRY_COUNTER_COLUMN_NAME, EPrimitiveType::Uint64)
         .AddNullableColumn(RETRY_COUNTER_UPDATE_COLUMN_NAME, EPrimitiveType::Timestamp)
         .AddNullableColumn(QUERY_TYPE_COLUMN_NAME, EPrimitiveType::Int64)
         .AddNullableColumn(IS_RESIGN_QUERY_COLUMN_NAME, EPrimitiveType::Bool)
         .AddNullableColumn(HOST_NAME_COLUMN_NAME, EPrimitiveType::String)
         .AddNullableColumn(OWNER_COLUMN_NAME, EPrimitiveType::String)
-        .SetPrimaryKeyColumns({SCOPE_COLUMN_NAME, QUERY_ID_COLUMN_NAME}) 
-        .Build(); 
- 
-    return YdbConnection->Client.RetryOperation( 
-        [tablePath = std::move(tablePath), description = std::move(description)] (TSession session) mutable { 
-            return session.CreateTable(tablePath, TTableDescription(description)); 
-        }) 
-        .Apply([=](const auto& future) { 
-            auto status = future.GetValue(); 
+        .SetPrimaryKeyColumns({SCOPE_COLUMN_NAME, QUERY_ID_COLUMN_NAME})
+        .Build();
+
+    return YdbConnection->Client.RetryOperation(
+        [tablePath = std::move(tablePath), description = std::move(description)] (TSession session) mutable {
+            return session.CreateTable(tablePath, TTableDescription(description));
+        })
+        .Apply([=](const auto& future) {
+            auto status = future.GetValue();
             if (!IsTableCreated(status)) {
-                CPS_LOG_AS_E(*as, "create pending table error: " << status.GetIssues().ToString()); 
+                CPS_LOG_AS_E(*as, "create pending table error: " << status.GetIssues().ToString());
                 return CreatePendingSmallTable(as);
-            } 
-            return future; 
-        }); 
-} 
- 
-TAsyncStatus TYdbControlPlaneStorageActor::CreateConnectionsTable(TActorSystem* as) 
-{ 
+            }
+            return future;
+        });
+}
+
+TAsyncStatus TYdbControlPlaneStorageActor::CreateConnectionsTable(TActorSystem* as)
+{
     auto tablePath = JoinPath(YdbConnection->TablePathPrefix, CONNECTIONS_TABLE_NAME);
- 
-    auto description = TTableBuilder() 
-        .AddNullableColumn(SCOPE_COLUMN_NAME, EPrimitiveType::String) 
-        .AddNullableColumn(CONNECTION_ID_COLUMN_NAME, EPrimitiveType::String) 
-        .AddNullableColumn(NAME_COLUMN_NAME, EPrimitiveType::String) 
+
+    auto description = TTableBuilder()
+        .AddNullableColumn(SCOPE_COLUMN_NAME, EPrimitiveType::String)
+        .AddNullableColumn(CONNECTION_ID_COLUMN_NAME, EPrimitiveType::String)
+        .AddNullableColumn(NAME_COLUMN_NAME, EPrimitiveType::String)
         .AddNullableColumn(CONNECTION_TYPE_COLUMN_NAME, EPrimitiveType::Int64)
-        .AddNullableColumn(USER_COLUMN_NAME, EPrimitiveType::String) 
-        .AddNullableColumn(VISIBILITY_COLUMN_NAME, EPrimitiveType::Int64) 
-        .AddNullableColumn(CONNECTION_COLUMN_NAME, EPrimitiveType::String) 
-        .AddNullableColumn(REVISION_COLUMN_NAME, EPrimitiveType::Int64) 
-        .AddNullableColumn(INTERNAL_COLUMN_NAME, EPrimitiveType::String) 
-        .SetPrimaryKeyColumns({SCOPE_COLUMN_NAME, CONNECTION_ID_COLUMN_NAME}) 
-        .Build(); 
- 
-    return YdbConnection->Client.RetryOperation( 
-        [tablePath = std::move(tablePath), description = std::move(description)] (TSession session) mutable { 
-            return session.CreateTable(tablePath, TTableDescription(description)); 
-        }) 
-        .Apply([=](const auto& future) { 
-            auto status = future.GetValue(); 
+        .AddNullableColumn(USER_COLUMN_NAME, EPrimitiveType::String)
+        .AddNullableColumn(VISIBILITY_COLUMN_NAME, EPrimitiveType::Int64)
+        .AddNullableColumn(CONNECTION_COLUMN_NAME, EPrimitiveType::String)
+        .AddNullableColumn(REVISION_COLUMN_NAME, EPrimitiveType::Int64)
+        .AddNullableColumn(INTERNAL_COLUMN_NAME, EPrimitiveType::String)
+        .SetPrimaryKeyColumns({SCOPE_COLUMN_NAME, CONNECTION_ID_COLUMN_NAME})
+        .Build();
+
+    return YdbConnection->Client.RetryOperation(
+        [tablePath = std::move(tablePath), description = std::move(description)] (TSession session) mutable {
+            return session.CreateTable(tablePath, TTableDescription(description));
+        })
+        .Apply([=](const auto& future) {
+            auto status = future.GetValue();
             if (!IsTableCreated(status)) {
-                CPS_LOG_AS_E(*as, "create connections table error: " << status.GetIssues().ToString()); 
-                return CreateConnectionsTable(as); 
-            } 
-            return future; 
-        }); 
-} 
- 
-TAsyncStatus TYdbControlPlaneStorageActor::CreateDirectory(TActorSystem* as) 
-{ 
-    auto schemeClient = NYdb::NScheme::TSchemeClient(YdbConnection->Driver); 
-    return schemeClient.MakeDirectory(YdbConnection->TablePathPrefix).Apply([=](const auto& future) { 
-        auto status = future.GetValue(); 
+                CPS_LOG_AS_E(*as, "create connections table error: " << status.GetIssues().ToString());
+                return CreateConnectionsTable(as);
+            }
+            return future;
+        });
+}
+
+TAsyncStatus TYdbControlPlaneStorageActor::CreateDirectory(TActorSystem* as)
+{
+    auto schemeClient = NYdb::NScheme::TSchemeClient(YdbConnection->Driver);
+    return schemeClient.MakeDirectory(YdbConnection->TablePathPrefix).Apply([=](const auto& future) {
+        auto status = future.GetValue();
         if (!IsTableCreated(status)) {
-            CPS_LOG_AS_E(*as, "create directory error: " << status.GetIssues().ToString()); 
-            return CreateDirectory(as); 
-        } 
-        return future; 
-    }); 
-} 
- 
-TAsyncStatus TYdbControlPlaneStorageActor::CreateJobsTable(TActorSystem* as) 
-{ 
+            CPS_LOG_AS_E(*as, "create directory error: " << status.GetIssues().ToString());
+            return CreateDirectory(as);
+        }
+        return future;
+    });
+}
+
+TAsyncStatus TYdbControlPlaneStorageActor::CreateJobsTable(TActorSystem* as)
+{
     auto tablePath = JoinPath(YdbConnection->TablePathPrefix, JOBS_TABLE_NAME);
- 
-    auto description = TTableBuilder() 
-        .AddNullableColumn(SCOPE_COLUMN_NAME, EPrimitiveType::String) 
-        .AddNullableColumn(JOB_ID_COLUMN_NAME, EPrimitiveType::String) 
-        .AddNullableColumn(QUERY_ID_COLUMN_NAME, EPrimitiveType::String) 
-        .AddNullableColumn(JOB_COLUMN_NAME, EPrimitiveType::String) 
-        .AddNullableColumn(USER_COLUMN_NAME, EPrimitiveType::String) 
-        .AddNullableColumn(VISIBILITY_COLUMN_NAME, EPrimitiveType::Int64) 
+
+    auto description = TTableBuilder()
+        .AddNullableColumn(SCOPE_COLUMN_NAME, EPrimitiveType::String)
+        .AddNullableColumn(JOB_ID_COLUMN_NAME, EPrimitiveType::String)
+        .AddNullableColumn(QUERY_ID_COLUMN_NAME, EPrimitiveType::String)
+        .AddNullableColumn(JOB_COLUMN_NAME, EPrimitiveType::String)
+        .AddNullableColumn(USER_COLUMN_NAME, EPrimitiveType::String)
+        .AddNullableColumn(VISIBILITY_COLUMN_NAME, EPrimitiveType::Int64)
         .AddNullableColumn(EXPIRE_AT_COLUMN_NAME, EPrimitiveType::Timestamp)
         .SetPrimaryKeyColumns({SCOPE_COLUMN_NAME, QUERY_ID_COLUMN_NAME, JOB_ID_COLUMN_NAME})
         .SetTtlSettings(EXPIRE_AT_COLUMN_NAME)
-        .Build(); 
- 
-    return YdbConnection->Client.RetryOperation( 
-        [tablePath = std::move(tablePath), description = std::move(description)] (TSession session) mutable { 
-            return session.CreateTable(tablePath, TTableDescription(description)); 
-        }) 
-        .Apply([=](const auto& future) { 
-            auto status = future.GetValue(); 
+        .Build();
+
+    return YdbConnection->Client.RetryOperation(
+        [tablePath = std::move(tablePath), description = std::move(description)] (TSession session) mutable {
+            return session.CreateTable(tablePath, TTableDescription(description));
+        })
+        .Apply([=](const auto& future) {
+            auto status = future.GetValue();
             if (!IsTableCreated(status)) {
-                CPS_LOG_AS_E(*as, "create jobs table error: " << status.GetIssues().ToString()); 
-                return CreateJobsTable(as); 
-            } 
-            return future; 
-        }); 
-} 
- 
+                CPS_LOG_AS_E(*as, "create jobs table error: " << status.GetIssues().ToString());
+                return CreateJobsTable(as);
+            }
+            return future;
+        });
+}
+
 TAsyncStatus TYdbControlPlaneStorageActor::CreateNodesTable(TActorSystem* as)
 {
     auto tablePath = JoinPath(YdbConnection->TablePathPrefix, NODES_TABLE_NAME);
@@ -253,163 +253,163 @@ TAsyncStatus TYdbControlPlaneStorageActor::CreateNodesTable(TActorSystem* as)
         });
 }
 
-TAsyncStatus TYdbControlPlaneStorageActor::CreateBindingsTable(TActorSystem* as) 
-{ 
+TAsyncStatus TYdbControlPlaneStorageActor::CreateBindingsTable(TActorSystem* as)
+{
     auto tablePath = JoinPath(YdbConnection->TablePathPrefix, BINDINGS_TABLE_NAME);
- 
-    auto description = TTableBuilder() 
-        .AddNullableColumn(SCOPE_COLUMN_NAME, EPrimitiveType::String) 
-        .AddNullableColumn(BINDING_ID_COLUMN_NAME, EPrimitiveType::String) 
-        .AddNullableColumn(CONNECTION_ID_COLUMN_NAME, EPrimitiveType::String) 
-        .AddNullableColumn(NAME_COLUMN_NAME, EPrimitiveType::String) 
-        .AddNullableColumn(USER_COLUMN_NAME, EPrimitiveType::String) 
-        .AddNullableColumn(VISIBILITY_COLUMN_NAME, EPrimitiveType::Int64) 
-        .AddNullableColumn(BINDING_COLUMN_NAME, EPrimitiveType::String) 
-        .AddNullableColumn(REVISION_COLUMN_NAME, EPrimitiveType::Int64) 
-        .AddNullableColumn(INTERNAL_COLUMN_NAME, EPrimitiveType::String) 
-        .SetPrimaryKeyColumns({SCOPE_COLUMN_NAME, BINDING_ID_COLUMN_NAME}) 
-        .Build(); 
- 
-    return YdbConnection->Client.RetryOperation( 
-        [tablePath = std::move(tablePath), description = std::move(description)] (TSession session) mutable { 
-            return session.CreateTable(tablePath, TTableDescription(description)); 
-        }) 
-        .Apply([=](const auto& future) { 
-            auto status = future.GetValue(); 
+
+    auto description = TTableBuilder()
+        .AddNullableColumn(SCOPE_COLUMN_NAME, EPrimitiveType::String)
+        .AddNullableColumn(BINDING_ID_COLUMN_NAME, EPrimitiveType::String)
+        .AddNullableColumn(CONNECTION_ID_COLUMN_NAME, EPrimitiveType::String)
+        .AddNullableColumn(NAME_COLUMN_NAME, EPrimitiveType::String)
+        .AddNullableColumn(USER_COLUMN_NAME, EPrimitiveType::String)
+        .AddNullableColumn(VISIBILITY_COLUMN_NAME, EPrimitiveType::Int64)
+        .AddNullableColumn(BINDING_COLUMN_NAME, EPrimitiveType::String)
+        .AddNullableColumn(REVISION_COLUMN_NAME, EPrimitiveType::Int64)
+        .AddNullableColumn(INTERNAL_COLUMN_NAME, EPrimitiveType::String)
+        .SetPrimaryKeyColumns({SCOPE_COLUMN_NAME, BINDING_ID_COLUMN_NAME})
+        .Build();
+
+    return YdbConnection->Client.RetryOperation(
+        [tablePath = std::move(tablePath), description = std::move(description)] (TSession session) mutable {
+            return session.CreateTable(tablePath, TTableDescription(description));
+        })
+        .Apply([=](const auto& future) {
+            auto status = future.GetValue();
             if (!IsTableCreated(status)) {
-                CPS_LOG_AS_E(*as, "create bindings table error: " << status.GetIssues().ToString()); 
-                return CreateBindingsTable(as); 
-            } 
-            return future; 
-        }); 
-} 
- 
-TAsyncStatus TYdbControlPlaneStorageActor::CreateIdempotencyKeysTable(TActorSystem* as) 
-{ 
+                CPS_LOG_AS_E(*as, "create bindings table error: " << status.GetIssues().ToString());
+                return CreateBindingsTable(as);
+            }
+            return future;
+        });
+}
+
+TAsyncStatus TYdbControlPlaneStorageActor::CreateIdempotencyKeysTable(TActorSystem* as)
+{
 
     auto tablePath = JoinPath(YdbConnection->TablePathPrefix, IDEMPOTENCY_KEYS_TABLE_NAME);
- 
-    auto description = TTableBuilder() 
-        .AddNullableColumn(SCOPE_COLUMN_NAME, EPrimitiveType::String) 
-        .AddNullableColumn(IDEMPOTENCY_KEY_COLUMN_NAME, EPrimitiveType::String) 
-        .AddNullableColumn(RESPONSE_COLUMN_NAME, EPrimitiveType::String) 
-        .AddNullableColumn(EXPIRE_AT_COLUMN_NAME, EPrimitiveType::Timestamp) 
-        .SetTtlSettings(EXPIRE_AT_COLUMN_NAME) 
-        .SetPrimaryKeyColumns({SCOPE_COLUMN_NAME, IDEMPOTENCY_KEY_COLUMN_NAME}) 
-        .Build(); 
- 
-    return YdbConnection->Client.RetryOperation( 
-        [tablePath = std::move(tablePath), description = std::move(description)] (TSession session) mutable { 
-            return session.CreateTable(tablePath, TTableDescription(description)); 
-        }) 
-        .Apply([=](const auto& future) { 
-            auto status = future.GetValue(); 
+
+    auto description = TTableBuilder()
+        .AddNullableColumn(SCOPE_COLUMN_NAME, EPrimitiveType::String)
+        .AddNullableColumn(IDEMPOTENCY_KEY_COLUMN_NAME, EPrimitiveType::String)
+        .AddNullableColumn(RESPONSE_COLUMN_NAME, EPrimitiveType::String)
+        .AddNullableColumn(EXPIRE_AT_COLUMN_NAME, EPrimitiveType::Timestamp)
+        .SetTtlSettings(EXPIRE_AT_COLUMN_NAME)
+        .SetPrimaryKeyColumns({SCOPE_COLUMN_NAME, IDEMPOTENCY_KEY_COLUMN_NAME})
+        .Build();
+
+    return YdbConnection->Client.RetryOperation(
+        [tablePath = std::move(tablePath), description = std::move(description)] (TSession session) mutable {
+            return session.CreateTable(tablePath, TTableDescription(description));
+        })
+        .Apply([=](const auto& future) {
+            auto status = future.GetValue();
             if (!IsTableCreated(status)) {
-                CPS_LOG_AS_E(*as, "create idempotency keys table error: " << status.GetIssues().ToString()); 
-                return CreateIdempotencyKeysTable(as); 
-            } 
-            return future; 
-        }); 
-} 
- 
-TAsyncStatus TYdbControlPlaneStorageActor::CreateResultSetsTable(TActorSystem* as) 
-{ 
+                CPS_LOG_AS_E(*as, "create idempotency keys table error: " << status.GetIssues().ToString());
+                return CreateIdempotencyKeysTable(as);
+            }
+            return future;
+        });
+}
+
+TAsyncStatus TYdbControlPlaneStorageActor::CreateResultSetsTable(TActorSystem* as)
+{
     auto tablePath = JoinPath(YdbConnection->TablePathPrefix, RESULT_SETS_TABLE_NAME);
- 
-    auto description = TTableBuilder() 
+
+    auto description = TTableBuilder()
         .AddNullableColumn(RESULT_ID_COLUMN_NAME, EPrimitiveType::String)
-        .AddNullableColumn(RESULT_SET_ID_COLUMN_NAME, EPrimitiveType::Int32) 
-        .AddNullableColumn(ROW_ID_COLUMN_NAME, EPrimitiveType::Int64) 
-        .AddNullableColumn(RESULT_SET_COLUMN_NAME, EPrimitiveType::String) 
-        .AddNullableColumn(EXPIRE_AT_COLUMN_NAME, EPrimitiveType::Timestamp) 
-        .SetTtlSettings(EXPIRE_AT_COLUMN_NAME) 
+        .AddNullableColumn(RESULT_SET_ID_COLUMN_NAME, EPrimitiveType::Int32)
+        .AddNullableColumn(ROW_ID_COLUMN_NAME, EPrimitiveType::Int64)
+        .AddNullableColumn(RESULT_SET_COLUMN_NAME, EPrimitiveType::String)
+        .AddNullableColumn(EXPIRE_AT_COLUMN_NAME, EPrimitiveType::Timestamp)
+        .SetTtlSettings(EXPIRE_AT_COLUMN_NAME)
         .SetPrimaryKeyColumns({RESULT_ID_COLUMN_NAME, RESULT_SET_ID_COLUMN_NAME, ROW_ID_COLUMN_NAME})
-        .Build(); 
- 
-    return YdbConnection->Client.RetryOperation( 
-        [tablePath = std::move(tablePath), description = std::move(description)] (TSession session) mutable { 
-            return session.CreateTable(tablePath, TTableDescription(description)); 
-        }) 
-        .Apply([=](const auto& future) { 
-            auto status = future.GetValue(); 
+        .Build();
+
+    return YdbConnection->Client.RetryOperation(
+        [tablePath = std::move(tablePath), description = std::move(description)] (TSession session) mutable {
+            return session.CreateTable(tablePath, TTableDescription(description));
+        })
+        .Apply([=](const auto& future) {
+            auto status = future.GetValue();
             if (!IsTableCreated(status)) {
-                CPS_LOG_AS_E(*as, "create result sets table error: " << status.GetIssues().ToString()); 
-                return CreateResultSetsTable(as); 
-            } 
-            return future; 
-        }); 
-} 
- 
-bool TYdbControlPlaneStorageActor::IsSuperUser(const TString& user) 
-{ 
-    return AnyOf(Config.Proto.GetSuperUsers(), [&user](const auto& superUser) { 
-        return superUser == user; 
-    }); 
-} 
- 
-void TYdbControlPlaneStorageActor::InsertIdempotencyKey(TSqlQueryBuilder& builder, const TString& scope, const TString& idempotencyKey, const TString& response, const TInstant& expireAt) { 
-    if (idempotencyKey) { 
-        builder.AddString("scope", scope); 
-        builder.AddString("idempotency_key", idempotencyKey); 
-        builder.AddString("response", response); 
-        builder.AddTimestamp("expire_at", expireAt); 
-        builder.AddText( 
-            "INSERT INTO `" IDEMPOTENCY_KEYS_TABLE_NAME "` (`" SCOPE_COLUMN_NAME "`, `" IDEMPOTENCY_KEY_COLUMN_NAME "`, `" RESPONSE_COLUMN_NAME "`, `" EXPIRE_AT_COLUMN_NAME "`)\n" 
-            "VALUES ($scope, $idempotency_key, $response, $expire_at);\n" 
-        ); 
-    } 
-} 
- 
-void TYdbControlPlaneStorageActor::ReadIdempotencyKeyQuery(TSqlQueryBuilder& builder, const TString& scope, const TString& idempotencyKey) { 
-    if (idempotencyKey) { 
-        builder.AddString("scope", scope); 
-        builder.AddString("idempotency_key", idempotencyKey); 
-        builder.AddText( 
-            "SELECT `" RESPONSE_COLUMN_NAME "` FROM `" IDEMPOTENCY_KEYS_TABLE_NAME "`\n" 
-            "WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" IDEMPOTENCY_KEY_COLUMN_NAME "` = $idempotency_key;\n" 
-        ); 
-    } 
-} 
- 
-class TDbRequest: public NActors::TActorBootstrapped<TDbRequest> { 
-    using TFunction = std::function<NYdb::TAsyncStatus(NYdb::NTable::TSession&)>; 
+                CPS_LOG_AS_E(*as, "create result sets table error: " << status.GetIssues().ToString());
+                return CreateResultSetsTable(as);
+            }
+            return future;
+        });
+}
+
+bool TYdbControlPlaneStorageActor::IsSuperUser(const TString& user)
+{
+    return AnyOf(Config.Proto.GetSuperUsers(), [&user](const auto& superUser) {
+        return superUser == user;
+    });
+}
+
+void TYdbControlPlaneStorageActor::InsertIdempotencyKey(TSqlQueryBuilder& builder, const TString& scope, const TString& idempotencyKey, const TString& response, const TInstant& expireAt) {
+    if (idempotencyKey) {
+        builder.AddString("scope", scope);
+        builder.AddString("idempotency_key", idempotencyKey);
+        builder.AddString("response", response);
+        builder.AddTimestamp("expire_at", expireAt);
+        builder.AddText(
+            "INSERT INTO `" IDEMPOTENCY_KEYS_TABLE_NAME "` (`" SCOPE_COLUMN_NAME "`, `" IDEMPOTENCY_KEY_COLUMN_NAME "`, `" RESPONSE_COLUMN_NAME "`, `" EXPIRE_AT_COLUMN_NAME "`)\n"
+            "VALUES ($scope, $idempotency_key, $response, $expire_at);\n"
+        );
+    }
+}
+
+void TYdbControlPlaneStorageActor::ReadIdempotencyKeyQuery(TSqlQueryBuilder& builder, const TString& scope, const TString& idempotencyKey) {
+    if (idempotencyKey) {
+        builder.AddString("scope", scope);
+        builder.AddString("idempotency_key", idempotencyKey);
+        builder.AddText(
+            "SELECT `" RESPONSE_COLUMN_NAME "` FROM `" IDEMPOTENCY_KEYS_TABLE_NAME "`\n"
+            "WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" IDEMPOTENCY_KEY_COLUMN_NAME "` = $idempotency_key;\n"
+        );
+    }
+}
+
+class TDbRequest: public NActors::TActorBootstrapped<TDbRequest> {
+    using TFunction = std::function<NYdb::TAsyncStatus(NYdb::NTable::TSession&)>;
     TDbPool::TPtr DbPool;
-    TPromise<NYdb::TStatus> Promise; 
-    TFunction Handler; 
- 
-public: 
+    TPromise<NYdb::TStatus> Promise;
+    TFunction Handler;
+
+public:
     TDbRequest(const TDbPool::TPtr& dbPool, const TPromise<NYdb::TStatus>& promise, const TFunction& handler)
-        : DbPool(dbPool) 
-        , Promise(promise) 
-        , Handler(handler) 
-    {} 
- 
+        : DbPool(dbPool)
+        , Promise(promise)
+        , Handler(handler)
+    {}
+
     static constexpr char ActorName[] = "YQ_CONTROL_PLANE_STORAGE_DB_REQUEST";
 
-    void Bootstrap() { 
-        CPS_LOG_T("DbRequest actor request. Actor id: " << SelfId()); 
-        Become(&TDbRequest::StateFunc); 
+    void Bootstrap() {
+        CPS_LOG_T("DbRequest actor request. Actor id: " << SelfId());
+        Become(&TDbRequest::StateFunc);
         Send(DbPool->GetNextActor(), new TEvents::TEvDbFunctionRequest(Handler), IEventHandle::FlagTrackDelivery);
-    } 
- 
-    STRICT_STFUNC(StateFunc, 
+    }
+
+    STRICT_STFUNC(StateFunc,
         hFunc(TEvents::TEvDbFunctionResponse, Handle);
-        hFunc(NActors::TEvents::TEvUndelivered, OnUndelivered) 
-    ) 
- 
+        hFunc(NActors::TEvents::TEvUndelivered, OnUndelivered)
+    )
+
     void Handle(TEvents::TEvDbFunctionResponse::TPtr& ev) {
-        CPS_LOG_T("DbRequest actor response. Actor id: " << SelfId()); 
-        Promise.SetValue(ev->Get()->Status); 
-        PassAway(); 
-    } 
- 
-    void OnUndelivered(NActors::TEvents::TEvUndelivered::TPtr&) { 
-        CPS_LOG_E("On delivered. Actor id: " << SelfId()); 
+        CPS_LOG_T("DbRequest actor response. Actor id: " << SelfId());
+        Promise.SetValue(ev->Get()->Status);
+        PassAway();
+    }
+
+    void OnUndelivered(NActors::TEvents::TEvUndelivered::TPtr&) {
+        CPS_LOG_E("On delivered. Actor id: " << SelfId());
         Send(DbPool->GetNextActor(), new TEvents::TEvDbFunctionRequest(Handler), IEventHandle::FlagTrackDelivery);
-    } 
-}; 
- 
- 
+    }
+};
+
+
 std::pair<TAsyncStatus, std::shared_ptr<TVector<NYdb::TResultSet>>> TYdbControlPlaneStorageActor::Read(
     const TString& query,
     const NYdb::TParams& params,
@@ -417,36 +417,36 @@ std::pair<TAsyncStatus, std::shared_ptr<TVector<NYdb::TResultSet>>> TYdbControlP
     TDebugInfoPtr debugInfo,
     TTxSettings transactionMode,
     bool retryOnTli)
-{ 
-    auto resultSet = std::make_shared<TVector<NYdb::TResultSet>>(); 
+{
+    auto resultSet = std::make_shared<TVector<NYdb::TResultSet>>();
 
-    std::shared_ptr<int> retryCount = std::make_shared<int>(); 
-    auto handler = [=](TSession& session) { 
-        if (*retryCount != 0) { 
-            requestCounters->Retry->Inc(); 
-        } 
-        ++(*retryCount); 
-        CollectDebugInfo(query, params, session, debugInfo); 
+    std::shared_ptr<int> retryCount = std::make_shared<int>();
+    auto handler = [=](TSession& session) {
+        if (*retryCount != 0) {
+            requestCounters->Retry->Inc();
+        }
+        ++(*retryCount);
+        CollectDebugInfo(query, params, session, debugInfo);
         auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx(transactionMode).CommitTx(), params, NYdb::NTable::TExecDataQuerySettings().KeepInQueryCache(true));
         return result.Apply([retryOnTli, resultSet] (const TFuture<TDataQueryResult>& future) {
-            NYdb::NTable::TDataQueryResult result = future.GetValue(); 
-            *resultSet = result.GetResultSets(); 
-            auto status = static_cast<TStatus>(result); 
-            if (status.GetStatus() == EStatus::SCHEME_ERROR) { // retry if table does not exist 
-                return TStatus{EStatus::UNAVAILABLE, NYql::TIssues{status.GetIssues()}}; 
-            } 
+            NYdb::NTable::TDataQueryResult result = future.GetValue();
+            *resultSet = result.GetResultSets();
+            auto status = static_cast<TStatus>(result);
+            if (status.GetStatus() == EStatus::SCHEME_ERROR) { // retry if table does not exist
+                return TStatus{EStatus::UNAVAILABLE, NYql::TIssues{status.GetIssues()}};
+            }
             if (!retryOnTli && status.GetStatus() == EStatus::ABORTED) {
                 return TStatus{EStatus::GENERIC_ERROR, NYql::TIssues{status.GetIssues()}};
             }
-            return status; 
-        }); 
-    }; 
- 
-    TPromise<NYdb::TStatus> promise = NewPromise<NYdb::TStatus>(); 
-    Register(new TDbRequest(DbPool, promise, handler)); 
-    return {promise.GetFuture(), resultSet}; 
-} 
- 
+            return status;
+        });
+    };
+
+    TPromise<NYdb::TStatus> promise = NewPromise<NYdb::TStatus>();
+    Register(new TDbRequest(DbPool, promise, handler));
+    return {promise.GetFuture(), resultSet};
+}
+
 TAsyncStatus TYdbControlPlaneStorageActor::Validate(
     std::shared_ptr<TMaybe<TTransaction>> transaction,
     size_t item,
@@ -456,31 +456,31 @@ TAsyncStatus TYdbControlPlaneStorageActor::Validate(
     TDebugInfoPtr debugInfo,
     TTxSettings transactionMode)
 {
-    if (item >= validators.size()) { 
-        return MakeFuture(TStatus{EStatus::SUCCESS, NYql::TIssues{}}); 
-    } 
- 
-    const TValidationQuery& validatonItem = validators[item]; 
-    CollectDebugInfo(validatonItem.Query, validatonItem.Params, session, debugInfo); 
-    auto result = session.ExecuteDataQuery(validatonItem.Query, item == 0 ? TTxControl::BeginTx(transactionMode) : TTxControl::Tx(**transaction), validatonItem.Params, NYdb::NTable::TExecDataQuerySettings().KeepInQueryCache(true)); 
-    return result.Apply([=, validator=validatonItem.Validator] (const TFuture<TDataQueryResult>& future) { 
-        NYdb::NTable::TDataQueryResult result = future.GetValue(); 
-        *transaction = result.GetTransaction(); 
-        auto status = static_cast<TStatus>(result); 
-        if (status.GetStatus() == EStatus::SCHEME_ERROR) { // retry if table does not exist 
-            return MakeFuture(TStatus{EStatus::UNAVAILABLE, NYql::TIssues{status.GetIssues()}}); 
-        } 
-        if (!status.IsSuccess()) { 
-            return MakeFuture(status); 
-        } 
-        *successFinish = validator(result); 
-        if (*successFinish) { 
-            return MakeFuture(TStatus{EStatus::SUCCESS, NYql::TIssues{}}); 
-        } 
-        return Validate(transaction, item + 1, validators, session, successFinish, debugInfo); 
-    }); 
-} 
- 
+    if (item >= validators.size()) {
+        return MakeFuture(TStatus{EStatus::SUCCESS, NYql::TIssues{}});
+    }
+
+    const TValidationQuery& validatonItem = validators[item];
+    CollectDebugInfo(validatonItem.Query, validatonItem.Params, session, debugInfo);
+    auto result = session.ExecuteDataQuery(validatonItem.Query, item == 0 ? TTxControl::BeginTx(transactionMode) : TTxControl::Tx(**transaction), validatonItem.Params, NYdb::NTable::TExecDataQuerySettings().KeepInQueryCache(true));
+    return result.Apply([=, validator=validatonItem.Validator] (const TFuture<TDataQueryResult>& future) {
+        NYdb::NTable::TDataQueryResult result = future.GetValue();
+        *transaction = result.GetTransaction();
+        auto status = static_cast<TStatus>(result);
+        if (status.GetStatus() == EStatus::SCHEME_ERROR) { // retry if table does not exist
+            return MakeFuture(TStatus{EStatus::UNAVAILABLE, NYql::TIssues{status.GetIssues()}});
+        }
+        if (!status.IsSuccess()) {
+            return MakeFuture(status);
+        }
+        *successFinish = validator(result);
+        if (*successFinish) {
+            return MakeFuture(TStatus{EStatus::SUCCESS, NYql::TIssues{}});
+        }
+        return Validate(transaction, item + 1, validators, session, successFinish, debugInfo);
+    });
+}
+
 TAsyncStatus TYdbControlPlaneStorageActor::Write(
     NActors::TActorSystem* actorSystem,
     const TString& query,
@@ -490,58 +490,58 @@ TAsyncStatus TYdbControlPlaneStorageActor::Write(
     const TVector<TValidationQuery>& validators,
     TTxSettings transactionMode,
     bool retryOnTli)
-{ 
-    std::shared_ptr<int> retryCount = std::make_shared<int>(); 
-    auto transaction = std::make_shared<TMaybe<TTransaction>>(); 
+{
+    std::shared_ptr<int> retryCount = std::make_shared<int>();
+    auto transaction = std::make_shared<TMaybe<TTransaction>>();
     auto writeHandler = [=, retryOnTli=retryOnTli] (TSession session) {
-        CollectDebugInfo(query, params, session, debugInfo); 
+        CollectDebugInfo(query, params, session, debugInfo);
         auto result = session.ExecuteDataQuery(query, validators ? TTxControl::Tx(**transaction).CommitTx() : TTxControl::BeginTx(transactionMode).CommitTx(), params, NYdb::NTable::TExecDataQuerySettings().KeepInQueryCache(true));
         return result.Apply([=] (const TFuture<TDataQueryResult>& future) {
-            NYdb::NTable::TDataQueryResult result = future.GetValue(); 
-            auto status = static_cast<TStatus>(result); 
-            if (status.GetStatus() == EStatus::SCHEME_ERROR) { // retry if table does not exist 
-                return TStatus{EStatus::UNAVAILABLE, NYql::TIssues{status.GetIssues()}}; 
-            } 
+            NYdb::NTable::TDataQueryResult result = future.GetValue();
+            auto status = static_cast<TStatus>(result);
+            if (status.GetStatus() == EStatus::SCHEME_ERROR) { // retry if table does not exist
+                return TStatus{EStatus::UNAVAILABLE, NYql::TIssues{status.GetIssues()}};
+            }
             if (!retryOnTli && status.GetStatus() == EStatus::ABORTED) {
                 return TStatus{EStatus::GENERIC_ERROR, NYql::TIssues{status.GetIssues()}};
             }
-            return status; 
-        }); 
-    }; 
- 
-    auto handler = [=] (TSession session) { 
-        if (*retryCount != 0) { 
-            requestCounters->Retry->Inc(); 
-        } 
-        ++(*retryCount); 
-        std::shared_ptr<bool> successFinish = std::make_shared<bool>(); 
-        return Validate(transaction, 0, validators, session, successFinish, debugInfo).Apply([=](const auto& future) { 
-            try { 
-                auto status = future.GetValue(); 
-                if (!status.IsSuccess()) { 
-                    return future; 
-                } 
-                if (*successFinish) { 
-                    return future; 
-                } 
-                return writeHandler(session); 
-            } catch (const TControlPlaneStorageException& exception) { 
-                CPS_LOG_AS_D(*actorSystem, "Validation: " << CurrentExceptionMessage()); 
-                return MakeFuture(TStatus{EStatus::GENERIC_ERROR, NYql::TIssues{MakeErrorIssue(exception.Code, exception.GetRawMessage())}}); 
-            } catch (const std::exception& exception) { 
-                CPS_LOG_AS_D(*actorSystem, "Validation: " << CurrentExceptionMessage()); 
-                return MakeFuture(TStatus{EStatus::GENERIC_ERROR, NYql::TIssues{NYql::TIssue{exception.what()}}}); 
-            } catch (...) { 
-                CPS_LOG_AS_D(*actorSystem, "Validation: " << CurrentExceptionMessage()); 
-                return MakeFuture(TStatus{EStatus::GENERIC_ERROR, NYql::TIssues{NYql::TIssue{CurrentExceptionMessage()}}}); 
-            } 
-        }); 
-    }; 
-    TPromise<NYdb::TStatus> promise = NewPromise<NYdb::TStatus>(); 
-    Register(new TDbRequest(DbPool, promise, handler)); 
-    return promise.GetFuture(); 
-} 
- 
+            return status;
+        });
+    };
+
+    auto handler = [=] (TSession session) {
+        if (*retryCount != 0) {
+            requestCounters->Retry->Inc();
+        }
+        ++(*retryCount);
+        std::shared_ptr<bool> successFinish = std::make_shared<bool>();
+        return Validate(transaction, 0, validators, session, successFinish, debugInfo).Apply([=](const auto& future) {
+            try {
+                auto status = future.GetValue();
+                if (!status.IsSuccess()) {
+                    return future;
+                }
+                if (*successFinish) {
+                    return future;
+                }
+                return writeHandler(session);
+            } catch (const TControlPlaneStorageException& exception) {
+                CPS_LOG_AS_D(*actorSystem, "Validation: " << CurrentExceptionMessage());
+                return MakeFuture(TStatus{EStatus::GENERIC_ERROR, NYql::TIssues{MakeErrorIssue(exception.Code, exception.GetRawMessage())}});
+            } catch (const std::exception& exception) {
+                CPS_LOG_AS_D(*actorSystem, "Validation: " << CurrentExceptionMessage());
+                return MakeFuture(TStatus{EStatus::GENERIC_ERROR, NYql::TIssues{NYql::TIssue{exception.what()}}});
+            } catch (...) {
+                CPS_LOG_AS_D(*actorSystem, "Validation: " << CurrentExceptionMessage());
+                return MakeFuture(TStatus{EStatus::GENERIC_ERROR, NYql::TIssues{NYql::TIssue{CurrentExceptionMessage()}}});
+            }
+        });
+    };
+    TPromise<NYdb::TStatus> promise = NewPromise<NYdb::TStatus>();
+    Register(new TDbRequest(DbPool, promise, handler));
+    return promise.GetFuture();
+}
+
 NThreading::TFuture<void> TYdbControlPlaneStorageActor::PickTask(
     const TPickTaskParams& taskParams,
     const TRequestCountersPtr& requestCounters,
@@ -549,7 +549,7 @@ NThreading::TFuture<void> TYdbControlPlaneStorageActor::PickTask(
     std::shared_ptr<TResponseTasks> responseTasks,
     const TVector<TValidationQuery>& validators,
     TTxSettings transactionMode)
-{ 
+{
     return ReadModifyWrite(NActors::TActivationContext::ActorSystem(), taskParams.ReadQuery, taskParams.ReadParams,
         taskParams.PrepareParams, requestCounters, debugInfo, validators, transactionMode, taskParams.RetryOnTli)
             .Apply([=, responseTasks=responseTasks, queryId = taskParams.QueryId](const auto& future) {
@@ -571,112 +571,112 @@ TAsyncStatus TYdbControlPlaneStorageActor::ReadModifyWrite(
     TTxSettings transactionMode,
     bool retryOnTli)
 {
-    std::shared_ptr<int> retryCount = std::make_shared<int>(); 
-    auto resultSets = std::make_shared<TVector<NYdb::TResultSet>>(); 
-    auto transaction = std::make_shared<TMaybe<TTransaction>>(); 
- 
-    auto readModifyWriteHandler = [=](TSession session) { 
-        CollectDebugInfo(readQuery, readParams, session, debugInfo); 
-        auto readResult = session.ExecuteDataQuery(readQuery, validators ? TTxControl::Tx(**transaction) : TTxControl::BeginTx(transactionMode), readParams, NYdb::NTable::TExecDataQuerySettings().KeepInQueryCache(true));
-        auto readResultStatus = readResult.Apply([resultSets, transaction] (const TFuture<TDataQueryResult>& future) { 
-            NYdb::NTable::TDataQueryResult result = future.GetValue(); 
-            *resultSets = result.GetResultSets(); 
-            *transaction = result.GetTransaction(); 
-            auto status = static_cast<TStatus>(result); 
-            if (status.GetStatus() == EStatus::SCHEME_ERROR) { // retry if table does not exist 
-                return TStatus{EStatus::UNAVAILABLE, NYql::TIssues{status.GetIssues()}}; 
-            } 
-            return status; 
-        }); 
- 
-        TFuture<std::pair<TString, NYdb::TParams>> resultPrepare = readResultStatus.Apply([=](const auto& future) { 
-            return future.GetValue().IsSuccess() ? prepare(*resultSets) : make_pair(TString(""), NYdb::TParamsBuilder{}.Build()); 
-        }); 
- 
-        return resultPrepare.Apply([=](const auto& future) mutable { 
-            if (!readResultStatus.GetValue().IsSuccess()) { 
-                return readResultStatus; 
-            } 
+    std::shared_ptr<int> retryCount = std::make_shared<int>();
+    auto resultSets = std::make_shared<TVector<NYdb::TResultSet>>();
+    auto transaction = std::make_shared<TMaybe<TTransaction>>();
 
-            try { 
-                auto [writeQuery, params] = future.GetValue(); 
-                if (!writeQuery) { 
-                    return transaction->Get()->Commit().Apply([] (const auto& future) { 
-                        auto result = future.GetValue(); 
-                        auto status = static_cast<TStatus>(result); 
-                        if (status.GetStatus() == EStatus::SCHEME_ERROR) { // retry if table does not exist 
-                            return TStatus{EStatus::UNAVAILABLE, NYql::TIssues{status.GetIssues()}}; 
-                        } 
-                        return status; 
-                    }); 
-                } 
-                CollectDebugInfo(writeQuery, params, session, debugInfo); 
-                auto writeResult = session.ExecuteDataQuery(writeQuery, TTxControl::Tx(**transaction).CommitTx(), params, NYdb::NTable::TExecDataQuerySettings().KeepInQueryCache(true)); 
+    auto readModifyWriteHandler = [=](TSession session) {
+        CollectDebugInfo(readQuery, readParams, session, debugInfo);
+        auto readResult = session.ExecuteDataQuery(readQuery, validators ? TTxControl::Tx(**transaction) : TTxControl::BeginTx(transactionMode), readParams, NYdb::NTable::TExecDataQuerySettings().KeepInQueryCache(true));
+        auto readResultStatus = readResult.Apply([resultSets, transaction] (const TFuture<TDataQueryResult>& future) {
+            NYdb::NTable::TDataQueryResult result = future.GetValue();
+            *resultSets = result.GetResultSets();
+            *transaction = result.GetTransaction();
+            auto status = static_cast<TStatus>(result);
+            if (status.GetStatus() == EStatus::SCHEME_ERROR) { // retry if table does not exist
+                return TStatus{EStatus::UNAVAILABLE, NYql::TIssues{status.GetIssues()}};
+            }
+            return status;
+        });
+
+        TFuture<std::pair<TString, NYdb::TParams>> resultPrepare = readResultStatus.Apply([=](const auto& future) {
+            return future.GetValue().IsSuccess() ? prepare(*resultSets) : make_pair(TString(""), NYdb::TParamsBuilder{}.Build());
+        });
+
+        return resultPrepare.Apply([=](const auto& future) mutable {
+            if (!readResultStatus.GetValue().IsSuccess()) {
+                return readResultStatus;
+            }
+
+            try {
+                auto [writeQuery, params] = future.GetValue();
+                if (!writeQuery) {
+                    return transaction->Get()->Commit().Apply([] (const auto& future) {
+                        auto result = future.GetValue();
+                        auto status = static_cast<TStatus>(result);
+                        if (status.GetStatus() == EStatus::SCHEME_ERROR) { // retry if table does not exist
+                            return TStatus{EStatus::UNAVAILABLE, NYql::TIssues{status.GetIssues()}};
+                        }
+                        return status;
+                    });
+                }
+                CollectDebugInfo(writeQuery, params, session, debugInfo);
+                auto writeResult = session.ExecuteDataQuery(writeQuery, TTxControl::Tx(**transaction).CommitTx(), params, NYdb::NTable::TExecDataQuerySettings().KeepInQueryCache(true));
                 return writeResult.Apply([retryOnTli] (const TFuture<TDataQueryResult>& future) {
-                    NYdb::NTable::TDataQueryResult result = future.GetValue(); 
-                    auto status = static_cast<TStatus>(result); 
-                    if (status.GetStatus() == EStatus::SCHEME_ERROR) { // retry if table does not exist 
-                        return TStatus{EStatus::UNAVAILABLE, NYql::TIssues{status.GetIssues()}}; 
-                    } 
+                    NYdb::NTable::TDataQueryResult result = future.GetValue();
+                    auto status = static_cast<TStatus>(result);
+                    if (status.GetStatus() == EStatus::SCHEME_ERROR) { // retry if table does not exist
+                        return TStatus{EStatus::UNAVAILABLE, NYql::TIssues{status.GetIssues()}};
+                    }
                     if (!retryOnTli && status.GetStatus() == EStatus::ABORTED) {
                         return TStatus{EStatus::GENERIC_ERROR, NYql::TIssues{status.GetIssues()}};
                     }
-                    return status; 
-                }); 
-            } catch (const TControlPlaneStorageException& exception) { 
-                CPS_LOG_AS_D(*actorSystem, "Validation: " << CurrentExceptionMessage()); 
-                return MakeFuture(TStatus{EStatus::GENERIC_ERROR, NYql::TIssues{MakeErrorIssue(exception.Code, exception.GetRawMessage())}}); 
-            } catch (const std::exception& exception) { 
-                CPS_LOG_AS_D(*actorSystem, "Validation: " << CurrentExceptionMessage()); 
-                return MakeFuture(TStatus{EStatus::GENERIC_ERROR, NYql::TIssues{NYql::TIssue{exception.what()}}}); 
-            } catch (...) { 
-                CPS_LOG_AS_D(*actorSystem, "Validation: " << CurrentExceptionMessage()); 
-                return MakeFuture(TStatus{EStatus::GENERIC_ERROR, NYql::TIssues{NYql::TIssue{CurrentExceptionMessage()}}}); 
-            } 
-        }); 
+                    return status;
+                });
+            } catch (const TControlPlaneStorageException& exception) {
+                CPS_LOG_AS_D(*actorSystem, "Validation: " << CurrentExceptionMessage());
+                return MakeFuture(TStatus{EStatus::GENERIC_ERROR, NYql::TIssues{MakeErrorIssue(exception.Code, exception.GetRawMessage())}});
+            } catch (const std::exception& exception) {
+                CPS_LOG_AS_D(*actorSystem, "Validation: " << CurrentExceptionMessage());
+                return MakeFuture(TStatus{EStatus::GENERIC_ERROR, NYql::TIssues{NYql::TIssue{exception.what()}}});
+            } catch (...) {
+                CPS_LOG_AS_D(*actorSystem, "Validation: " << CurrentExceptionMessage());
+                return MakeFuture(TStatus{EStatus::GENERIC_ERROR, NYql::TIssues{NYql::TIssue{CurrentExceptionMessage()}}});
+            }
+        });
     };
- 
-    auto handler = [=] (TSession session) { 
-        if (*retryCount != 0) { 
-            requestCounters->Retry->Inc(); 
-        } 
-        ++(*retryCount); 
- 
-        std::shared_ptr<bool> successFinish = std::make_shared<bool>(); 
-        return Validate(transaction, 0, validators, session, successFinish, debugInfo).Apply([=](const auto& future) { 
-            try { 
-                auto status = future.GetValue(); 
-                if (!status.IsSuccess()) { 
-                    return future; 
-                } 
-                if (*successFinish) { 
-                    return future; 
-                } 
-                return readModifyWriteHandler(session); 
-            } catch (const TControlPlaneStorageException& exception) { 
-                CPS_LOG_AS_D(*actorSystem, "Validation: " << CurrentExceptionMessage()); 
-                return MakeFuture(TStatus{EStatus::GENERIC_ERROR, NYql::TIssues{MakeErrorIssue(exception.Code, exception.GetRawMessage())}}); 
-            } catch (const std::exception& exception) { 
-                CPS_LOG_AS_D(*actorSystem, "Validation: " << CurrentExceptionMessage()); 
-                return MakeFuture(TStatus{EStatus::GENERIC_ERROR, NYql::TIssues{NYql::TIssue{exception.what()}}}); 
-            } catch (...) { 
-                CPS_LOG_AS_D(*actorSystem, "Validation: " << CurrentExceptionMessage()); 
-                return MakeFuture(TStatus{EStatus::GENERIC_ERROR, NYql::TIssues{NYql::TIssue{CurrentExceptionMessage()}}}); 
-            } 
-        }); 
-    }; 
-    TPromise<NYdb::TStatus> promise = NewPromise<NYdb::TStatus>(); 
-    Register(new TDbRequest(DbPool, promise, handler)); 
-    return promise.GetFuture(); 
-} 
- 
+
+    auto handler = [=] (TSession session) {
+        if (*retryCount != 0) {
+            requestCounters->Retry->Inc();
+        }
+        ++(*retryCount);
+
+        std::shared_ptr<bool> successFinish = std::make_shared<bool>();
+        return Validate(transaction, 0, validators, session, successFinish, debugInfo).Apply([=](const auto& future) {
+            try {
+                auto status = future.GetValue();
+                if (!status.IsSuccess()) {
+                    return future;
+                }
+                if (*successFinish) {
+                    return future;
+                }
+                return readModifyWriteHandler(session);
+            } catch (const TControlPlaneStorageException& exception) {
+                CPS_LOG_AS_D(*actorSystem, "Validation: " << CurrentExceptionMessage());
+                return MakeFuture(TStatus{EStatus::GENERIC_ERROR, NYql::TIssues{MakeErrorIssue(exception.Code, exception.GetRawMessage())}});
+            } catch (const std::exception& exception) {
+                CPS_LOG_AS_D(*actorSystem, "Validation: " << CurrentExceptionMessage());
+                return MakeFuture(TStatus{EStatus::GENERIC_ERROR, NYql::TIssues{NYql::TIssue{exception.what()}}});
+            } catch (...) {
+                CPS_LOG_AS_D(*actorSystem, "Validation: " << CurrentExceptionMessage());
+                return MakeFuture(TStatus{EStatus::GENERIC_ERROR, NYql::TIssues{NYql::TIssue{CurrentExceptionMessage()}}});
+            }
+        });
+    };
+    TPromise<NYdb::TStatus> promise = NewPromise<NYdb::TStatus>();
+    Register(new TDbRequest(DbPool, promise, handler));
+    return promise.GetFuture();
+}
+
 NActors::IActor* CreateYdbControlPlaneStorageServiceActor(
-    const NConfig::TControlPlaneStorageConfig& config, 
-    const NConfig::TCommonConfig& common, 
+    const NConfig::TControlPlaneStorageConfig& config,
+    const NConfig::TCommonConfig& common,
     const NMonitoring::TDynamicCounterPtr& counters,
     const ::NYq::TYqSharedResources::TPtr& yqSharedResources,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory) {
-    return new TYdbControlPlaneStorageActor(config, common, counters, yqSharedResources, credentialsProviderFactory); 
-} 
- 
+    return new TYdbControlPlaneStorageActor(config, common, counters, yqSharedResources, credentialsProviderFactory);
+}
+
 } // NYq

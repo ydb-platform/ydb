@@ -1,9 +1,9 @@
-syntax = "proto3"; 
-option cc_enable_arenas = true; 
- 
-package NYq.NConfig; 
-option java_package = "ru.yandex.kikimr.proto"; 
- 
+syntax = "proto3";
+option cc_enable_arenas = true;
+
+package NYq.NConfig;
+option java_package = "ru.yandex.kikimr.proto";
+
 import "ydb/core/yq/libs/config/protos/audit.proto";
 import "ydb/core/yq/libs/config/protos/checkpoint_coordinator.proto";
 import "ydb/core/yq/libs/config/protos/common.proto";
@@ -18,30 +18,30 @@ import "ydb/core/yq/libs/config/protos/private_api.proto";
 import "ydb/core/yq/libs/config/protos/private_proxy.proto";
 import "ydb/core/yq/libs/config/protos/read_actors_factory.proto";
 import "ydb/core/yq/libs/config/protos/resource_manager.proto";
-import "ydb/core/yq/libs/config/protos/test_connection.proto"; 
+import "ydb/core/yq/libs/config/protos/test_connection.proto";
 import "ydb/core/yq/libs/config/protos/token_accessor.proto";
-import "ydb/library/folder_service/proto/config.proto"; 
- 
-//////////////////////////////////////////////////////////// 
- 
-message TConfig { 
-    bool Enabled = 1; 
-    TCommonConfig Common = 2; 
-    TControlPlaneStorageConfig ControlPlaneStorage = 3; 
-    TControlPlaneProxyConfig ControlPlaneProxy = 4; 
+import "ydb/library/folder_service/proto/config.proto";
+
+////////////////////////////////////////////////////////////
+
+message TConfig {
+    bool Enabled = 1;
+    TCommonConfig Common = 2;
+    TControlPlaneStorageConfig ControlPlaneStorage = 3;
+    TControlPlaneProxyConfig ControlPlaneProxy = 4;
     NKikimrProto.NFolderService.TFolderServiceConfig FolderService = 5;
-    TPrivateApiConfig PrivateApi = 6; 
-    TTokenAccessorConfig TokenAccessor = 7; 
-    TDbPoolConfig DbPool = 8; 
-    TGatewaysConfig Gateways = 9; 
-    TCheckpointCoordinatorConfig CheckpointCoordinator = 10; 
-    TAuditConfig Audit = 11; 
-    TResourceManagerConfig ResourceManager = 12; 
-    TPrivateProxyConfig PrivateProxy = 13; 
-    TNodesManagerConfig NodesManager = 14; 
-    TPendingFetcherConfig PendingFetcher = 15; 
-    TPingerConfig Pinger = 16; 
+    TPrivateApiConfig PrivateApi = 6;
+    TTokenAccessorConfig TokenAccessor = 7;
+    TDbPoolConfig DbPool = 8;
+    TGatewaysConfig Gateways = 9;
+    TCheckpointCoordinatorConfig CheckpointCoordinator = 10;
+    TAuditConfig Audit = 11;
+    TResourceManagerConfig ResourceManager = 12;
+    TPrivateProxyConfig PrivateProxy = 13;
+    TNodesManagerConfig NodesManager = 14;
+    TPendingFetcherConfig PendingFetcher = 15;
+    TPingerConfig Pinger = 16;
     bool EnableDynamicNameservice = 17;
-    TTestConnectionConfig TestConnection = 18; 
+    TTestConnectionConfig TestConnection = 18;
     TReadActorsFactoryConfig ReadActorsFactoryConfig = 19;
-} 
+}

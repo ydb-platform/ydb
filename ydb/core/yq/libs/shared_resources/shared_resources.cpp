@@ -85,10 +85,10 @@ struct TActorSystemPtrMixin {
 
 struct TYqSharedResourcesImpl : public TActorSystemPtrMixin, public TYqSharedResources {
     explicit TYqSharedResourcesImpl(
-        const NYq::NConfig::TConfig& config, 
+        const NYq::NConfig::TConfig& config,
         const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
         const NMonitoring::TDynamicCounterPtr& counters)
-        : TYqSharedResources(NYdb::TDriver(GetYdbDriverConfig(config.GetCommon().GetYdbDriverConfig()))) 
+        : TYqSharedResources(NYdb::TDriver(GetYdbDriverConfig(config.GetCommon().GetYdbDriverConfig())))
     {
         CreateDbPoolHolder(config.GetDbPool(), credentialsProviderFactory, counters);
     }
@@ -102,16 +102,16 @@ struct TYqSharedResourcesImpl : public TActorSystemPtrMixin, public TYqSharedRes
         YdbDriver.Stop(true);
     }
 
-    NYdb::TDriverConfig GetYdbDriverConfig(const NYq::NConfig::TYdbDriverConfig& config) { 
+    NYdb::TDriverConfig GetYdbDriverConfig(const NYq::NConfig::TYdbDriverConfig& config) {
         NYdb::TDriverConfig cfg;
-        if (config.GetNetworkThreadsNum()) { 
-            cfg.SetNetworkThreadsNum(config.GetNetworkThreadsNum()); 
+        if (config.GetNetworkThreadsNum()) {
+            cfg.SetNetworkThreadsNum(config.GetNetworkThreadsNum());
         }
-        if (config.GetClientThreadsNum()) { 
-            cfg.SetClientThreadsNum(config.GetClientThreadsNum()); 
+        if (config.GetClientThreadsNum()) {
+            cfg.SetClientThreadsNum(config.GetClientThreadsNum());
         }
-        if (config.GetGrpcMemoryQuota()) { 
-            cfg.SetGrpcMemoryQuota(config.GetGrpcMemoryQuota()); 
+        if (config.GetGrpcMemoryQuota()) {
+            cfg.SetGrpcMemoryQuota(config.GetGrpcMemoryQuota());
         }
         cfg.SetDiscoveryMode(NYdb::EDiscoveryMode::Async); // We are in actor system!
         cfg.SetLog(MakeHolder<TDeferredActorSystemPtrInitActorLogBackend>(ActorSystemPtr, NKikimrServices::EServiceKikimr::YDB_SDK));
@@ -119,7 +119,7 @@ struct TYqSharedResourcesImpl : public TActorSystemPtrMixin, public TYqSharedRes
     }
 
     void CreateDbPoolHolder(
-        const NYq::NConfig::TDbPoolConfig& config, 
+        const NYq::NConfig::TDbPoolConfig& config,
         const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
         const NMonitoring::TDynamicCounterPtr& counters) {
         DbPoolHolder = MakeIntrusive<NYq::TDbPoolHolder>(config, YdbDriver, credentialsProviderFactory, counters);
@@ -129,7 +129,7 @@ struct TYqSharedResourcesImpl : public TActorSystemPtrMixin, public TYqSharedRes
 } // namespace
 
 TYqSharedResources::TPtr CreateYqSharedResourcesImpl(
-        const NYq::NConfig::TConfig& config, 
+        const NYq::NConfig::TConfig& config,
         const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
         const NMonitoring::TDynamicCounterPtr& counters) {
     return MakeIntrusive<TYqSharedResourcesImpl>(config, credentialsProviderFactory, counters);

@@ -20,7 +20,7 @@ PEERDIR(
     ydb/core/yq/libs/events
     ydb/core/yq/libs/gateway
     ydb/core/yq/libs/shared_resources
-    ydb/core/yq/libs/test_connection 
+    ydb/core/yq/libs/test_connection
     ydb/library/folder_service
     ydb/library/folder_service/proto
     ydb/library/yql/minikql/comp_nodes

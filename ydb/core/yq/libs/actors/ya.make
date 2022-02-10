@@ -25,12 +25,12 @@ SRCS(
 PEERDIR(
     library/cpp/actors/core
     library/cpp/actors/interconnect
-    library/cpp/json/yson 
-    library/cpp/monlib/dynamic_counters 
-    library/cpp/random_provider 
-    library/cpp/time_provider 
-    library/cpp/yson 
-    library/cpp/yson/node 
+    library/cpp/json/yson
+    library/cpp/monlib/dynamic_counters
+    library/cpp/random_provider
+    library/cpp/time_provider
+    library/cpp/yson
+    library/cpp/yson/node
     ydb/core/base
     ydb/core/protos
     ydb/core/yq/libs/actors/logging

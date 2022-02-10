@@ -13,8 +13,8 @@
 #include <ydb/core/security/secure_request.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 
-#include <util/string/split.h> 
- 
+#include <util/string/split.h>
+
 namespace NKikimr {
 namespace NGRpcService {
 
@@ -422,14 +422,14 @@ const TVector<TString>& TGrpcRequestCheckActor<TEvent>::GetPermissions() {
 
 // yds behavior
 template <>
-inline const TVector<TString>& TGrpcRequestCheckActor<TEvDataStreamsPutRecordRequest>::GetPermissions() { 
+inline const TVector<TString>& TGrpcRequestCheckActor<TEvDataStreamsPutRecordRequest>::GetPermissions() {
     //full list of permissions for compatility. remove old permissions later.
     static const TVector<TString> permissions = {"yds.streams.write", "ydb.databases.list", "ydb.databases.create", "ydb.databases.connect"};
     return permissions;
 }
 // yds behavior
 template <>
-inline const TVector<TString>& TGrpcRequestCheckActor<TEvDataStreamsPutRecordsRequest>::GetPermissions() { 
+inline const TVector<TString>& TGrpcRequestCheckActor<TEvDataStreamsPutRecordsRequest>::GetPermissions() {
     //full list of permissions for compatility. remove old permissions later.
     static const TVector<TString> permissions = {"yds.streams.write", "ydb.databases.list", "ydb.databases.create", "ydb.databases.connect"};
     return permissions;

@@ -22,10 +22,10 @@ struct TYqEventSubspace {
         CheckpointStorage,
         MetastorageProxy,
         ConfigUpdater,
-        ControlPlaneStorage, 
-        ControlPlaneProxy, 
+        ControlPlaneStorage,
+        ControlPlaneProxy,
         AuditService,
-        TestConnection, 
+        TestConnection,
 
         SubspacesEnd,
     };

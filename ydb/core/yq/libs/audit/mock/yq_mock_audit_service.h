@@ -9,6 +9,6 @@
 
 namespace NYq {
 
-NActors::IActor* CreateMockYqAuditServiceActor(const NConfig::TAuditConfig& config); 
+NActors::IActor* CreateMockYqAuditServiceActor(const NConfig::TAuditConfig& config);
 
 } // namespace NYq

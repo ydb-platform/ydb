@@ -202,8 +202,8 @@ public:
                     meta.Aux.push_back({YDB_SDK_BUILD_INFO_HEADER, CreateSDKBuildInfo()});
                 }
 
-                meta.Aux.insert(meta.Aux.end(), requestSettings.Header.begin(), requestSettings.Header.end()); 
- 
+                meta.Aux.insert(meta.Aux.end(), requestSettings.Header.begin(), requestSettings.Header.end());
+
                 dbState->StatCollector.IncGRpcInFlight();
                 dbState->StatCollector.IncGRpcInFlightByHost(endpoint);
 

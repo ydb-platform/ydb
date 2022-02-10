@@ -26,7 +26,7 @@ NActors::IActor* CreateYqlAnalyticsPrivateProxy(
     TIntrusivePtr<ITimeProvider> timeProvider,
     TIntrusivePtr<IRandomProvider> randomProvider,
     NMonitoring::TDynamicCounterPtr counters,
-    const NConfig::TTokenAccessorConfig& tockenAccessorConfig 
+    const NConfig::TTokenAccessorConfig& tockenAccessorConfig
 );
 
 NActors::IActor* CreatePingTaskRequestActor(
@@ -38,7 +38,7 @@ NActors::IActor* CreatePingTaskRequestActor(
 
 NActors::IActor* CreateGetTaskRequestActor(
     const NActors::TActorId& sender,
-    const NConfig::TTokenAccessorConfig& tockenAccessorConfig, 
+    const NConfig::TTokenAccessorConfig& tockenAccessorConfig,
     TIntrusivePtr<ITimeProvider> timeProvider,
     TAutoPtr<TEvents::TEvGetTaskRequest> ev,
     NMonitoring::TDynamicCounterPtr counters

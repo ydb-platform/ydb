@@ -4,19 +4,19 @@
 
 #include <util/datetime/base.h>
 
-#include <vector> 
-#include <utility> 
- 
+#include <vector>
+#include <utility>
+
 namespace NYdb {
 
 template<typename TDerived>
 struct TRequestSettings {
     using TSelf = TDerived;
-    using THeader = std::vector<std::pair<TString, TString>>; 
+    using THeader = std::vector<std::pair<TString, TString>>;
 
     FLUENT_SETTING(TString, TraceId);
     FLUENT_SETTING(TString, RequestType);
-    FLUENT_SETTING(THeader, Header); 
+    FLUENT_SETTING(THeader, Header);
 
     TRequestSettings() = default;
 
@@ -24,7 +24,7 @@ struct TRequestSettings {
     explicit TRequestSettings(const TRequestSettings<T>& other)
         : TraceId_(other.TraceId_)
         , RequestType_(other.RequestType_)
-        , Header_(other.Header_) 
+        , Header_(other.Header_)
     {}
 };
 

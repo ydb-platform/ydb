@@ -48,7 +48,7 @@ static const TString ELAPSED_MICROSEC_WHEN_RESOURCE_ACTIVE_COUNTER_NAME = "Elaps
 bool ValidResourcePathSymbols[256] = {};
 
 bool MakeValidResourcePathSymbols() {
-    char symbols[] = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._-/:#"; 
+    char symbols[] = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._-/:#";
     for (size_t i = 0; i < Y_ARRAY_SIZE(symbols) - 1; ++i) {
         ValidResourcePathSymbols[static_cast<unsigned char>(symbols[i])] = true;
     }

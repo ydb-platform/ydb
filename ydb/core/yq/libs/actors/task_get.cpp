@@ -34,11 +34,11 @@ class TGetTaskRequestActor
 public:
     TGetTaskRequestActor(
         const NActors::TActorId& sender,
-        const NConfig::TTokenAccessorConfig& tokenAccessorConfig, 
+        const NConfig::TTokenAccessorConfig& tokenAccessorConfig,
         TIntrusivePtr<ITimeProvider> timeProvider,
         TAutoPtr<TEvents::TEvGetTaskRequest> ev,
         TDynamicCounterPtr counters)
-        : TokenAccessorConfig(tokenAccessorConfig) 
+        : TokenAccessorConfig(tokenAccessorConfig)
         , Sender(sender)
         , TimeProvider(timeProvider)
         , Ev(std::move(ev))
@@ -47,8 +47,8 @@ public:
         , RequestedMBytes(Counters->GetHistogram("RequestedMB",  ExponentialHistogram(6, 2, 3)))
         , StartTime(TInstant::Now())
     {
-        if (TokenAccessorConfig.GetHmacSecretFile()) { 
-            Signer = ::NYq::CreateSignerFromFile(TokenAccessorConfig.GetHmacSecretFile()); 
+        if (TokenAccessorConfig.GetHmacSecretFile()) {
+            Signer = ::NYq::CreateSignerFromFile(TokenAccessorConfig.GetHmacSecretFile());
         }
     }
 
@@ -92,32 +92,32 @@ public:
             new NYq::TEvControlPlaneStorage::TEvGetTaskRequest(OwnerId, Host));
     }
 
-    static TString GetServiceAccountId(const YandexQuery::IamAuth& auth) { 
-        return auth.has_service_account() 
-                ? auth.service_account().id() 
-                : TString{}; 
-    } 
- 
+    static TString GetServiceAccountId(const YandexQuery::IamAuth& auth) {
+        return auth.has_service_account()
+                ? auth.service_account().id()
+                : TString{};
+    }
+
     static TString ExtractServiceAccountId(const YandexQuery::Connection& c) {
         switch (c.content().setting().connection_case()) {
         case YandexQuery::ConnectionSetting::kYdbDatabase: {
-            return GetServiceAccountId(c.content().setting().ydb_database().auth()); 
+            return GetServiceAccountId(c.content().setting().ydb_database().auth());
         }
         case YandexQuery::ConnectionSetting::kDataStreams: {
-            return GetServiceAccountId(c.content().setting().data_streams().auth()); 
+            return GetServiceAccountId(c.content().setting().data_streams().auth());
         }
         case YandexQuery::ConnectionSetting::kObjectStorage: {
-            return GetServiceAccountId(c.content().setting().object_storage().auth()); 
+            return GetServiceAccountId(c.content().setting().object_storage().auth());
         }
         case YandexQuery::ConnectionSetting::kMonitoring: {
-            return GetServiceAccountId(c.content().setting().monitoring().auth()); 
+            return GetServiceAccountId(c.content().setting().monitoring().auth());
         }
         case YandexQuery::ConnectionSetting::kClickhouseCluster: {
             return GetServiceAccountId(c.content().setting().clickhouse_cluster().auth());
         }
-        // Do not replace with default. Adding a new connection should cause a compilation error 
-        case YandexQuery::ConnectionSetting::CONNECTION_NOT_SET: 
-        break; 
+        // Do not replace with default. Adding a new connection should cause a compilation error
+        case YandexQuery::ConnectionSetting::CONNECTION_NOT_SET:
+        break;
         }
         return {};
     }
@@ -203,7 +203,7 @@ private:
         HFunc(NYq::TEvControlPlaneStorage::TEvGetTaskResponse, HandleResponse)
     )
 
-    const NConfig::TTokenAccessorConfig TokenAccessorConfig; 
+    const NConfig::TTokenAccessorConfig TokenAccessorConfig;
     const TActorId Sender;
     TIntrusivePtr<ITimeProvider> TimeProvider;
     TAutoPtr<TEvents::TEvGetTaskRequest> Ev;
@@ -223,13 +223,13 @@ private:
 
 IActor* CreateGetTaskRequestActor(
     const NActors::TActorId& sender,
-    const NConfig::TTokenAccessorConfig& tokenAccessorConfig, 
+    const NConfig::TTokenAccessorConfig& tokenAccessorConfig,
     TIntrusivePtr<ITimeProvider> timeProvider,
     TAutoPtr<TEvents::TEvGetTaskRequest> ev,
     TDynamicCounterPtr counters) {
     return new TGetTaskRequestActor(
         sender,
-        tokenAccessorConfig, 
+        tokenAccessorConfig,
         timeProvider,
         std::move(ev),
         counters);

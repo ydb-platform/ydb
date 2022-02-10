@@ -127,36 +127,36 @@ class TPingerActor : public NActors::TActorBootstrapped<TPingerActor> {
         TRetryState RetryState;
     };
 
-    struct TConfig { 
-        NConfig::TPingerConfig Proto; 
-        TDuration PingPeriod = TDuration::Seconds(15); 
- 
-        TConfig(const NConfig::TPingerConfig& config) 
-            : Proto(config) 
-        { 
+    struct TConfig {
+        NConfig::TPingerConfig Proto;
+        TDuration PingPeriod = TDuration::Seconds(15);
+
+        TConfig(const NConfig::TPingerConfig& config)
+            : Proto(config)
+        {
             if (Proto.GetPingPeriod()) {
                 Y_VERIFY(TDuration::TryParse(Proto.GetPingPeriod(), PingPeriod));
             }
-        } 
-    }; 
- 
+        }
+    };
+
 public:
     TPingerActor(
         const TScope& scope,
         const TString& userId,
         const TString& id,
         const TString& ownerId,
-        const TPrivateClient& client, 
-        const TActorId parent, 
+        const TPrivateClient& client,
+        const TActorId parent,
         const NConfig::TPingerConfig& config,
         const TInstant& deadline)
-        : Config(config) 
-        , Scope(scope) 
+        : Config(config)
+        , Scope(scope)
         , UserId(userId)
         , Id(id)
         , OwnerId(ownerId)
         , Client(client)
-        , Parent(parent) 
+        , Parent(parent)
         , Deadline(deadline)
     {
     }
@@ -177,7 +177,7 @@ private:
         hFunc(NActors::TEvents::TEvWakeup, Wakeup)
         hFunc(TEvPingResponse, Handle)
         hFunc(TEvents::TEvForwardPingRequest, Handle)
-    ) 
+    )
 
     void PassAway() override {
         LOG_D("Stop Pinger");
@@ -313,11 +313,11 @@ private:
         if (success) {
             LOG_D("Ping response success: " << ev->Get()->Result.GetResult());
             StartLeaseTime = now;
-            auto action = ev->Get()->Action; 
+            auto action = ev->Get()->Action;
             if (action != YandexQuery::QUERY_ACTION_UNSPECIFIED && !Finishing) {
                 LOG_D("Query action: " << YandexQuery::QueryAction_Name(action));
                 SendQueryAction(action);
-            } 
+            }
 
             if (continueLeaseRequest) {
                 ScheduleNextPing();
@@ -357,7 +357,7 @@ private:
             reqInfo.Requested = true;
             Y_VERIFY(!retry || reqInfo.RetryState);
             if (!retry && !reqInfo.RetryState) {
-                reqInfo.RetryState.Init(TActivationContext::Now(), StartLeaseTime, Config.PingPeriod); 
+                reqInfo.RetryState.Init(TActivationContext::Now(), StartLeaseTime, Config.PingPeriod);
             }
             LOG_D((retry ? "Retry forward" : "Forward") << " request Private::PingTask");
 
@@ -372,7 +372,7 @@ private:
         Requested = true;
 
         if (!retry) {
-            RetryState.Init(TActivationContext::Now(), StartLeaseTime, Config.PingPeriod); 
+            RetryState.Init(TActivationContext::Now(), StartLeaseTime, Config.PingPeriod);
         }
         Ping(Yq::Private::PingTaskRequest(), ContinueLeaseRequestCookie);
     }
@@ -412,8 +412,8 @@ private:
         RetryForwardPingRequestWakeupTag,
     };
 
-    TConfig Config; 
- 
+    TConfig Config;
+
     const TScope Scope;
     const TString UserId;
     const TString Id;
@@ -423,7 +423,7 @@ private:
     bool Requested = false;
     TInstant StartLeaseTime;
     TRetryState RetryState;
-    const TActorId Parent; 
+    const TActorId Parent;
     const TInstant Deadline;
 
     std::deque<TForwardPingReqInfo> ForwardRequests;
@@ -438,8 +438,8 @@ IActor* CreatePingerActor(
     const TString& userId,
     const TString& id,
     const TString& ownerId,
-    const TPrivateClient& client, 
-    const TActorId parent, 
+    const TPrivateClient& client,
+    const TActorId parent,
     const NConfig::TPingerConfig& config,
     const TInstant& deadline)
 {
@@ -448,8 +448,8 @@ IActor* CreatePingerActor(
         userId,
         id,
         ownerId,
-        client, 
-        parent, 
+        client,
+        parent,
         config,
         deadline);
 }

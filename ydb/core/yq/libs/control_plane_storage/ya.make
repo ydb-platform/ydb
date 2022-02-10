@@ -1,22 +1,22 @@
 OWNER(g:yq)
- 
-LIBRARY() 
- 
-SRCS( 
+
+LIBRARY()
+
+SRCS(
     control_plane_storage_counters.cpp
-    exceptions.cpp 
-    in_memory_control_plane_storage.cpp 
-    probes.cpp 
-    util.cpp 
-    validators.cpp 
-    ydb_control_plane_storage.cpp 
-    ydb_control_plane_storage_bindings.cpp 
-    ydb_control_plane_storage_connections.cpp 
-    ydb_control_plane_storage_queries.cpp 
-) 
- 
-PEERDIR( 
-    library/cpp/lwtrace 
+    exceptions.cpp
+    in_memory_control_plane_storage.cpp
+    probes.cpp
+    util.cpp
+    validators.cpp
+    ydb_control_plane_storage.cpp
+    ydb_control_plane_storage_bindings.cpp
+    ydb_control_plane_storage_connections.cpp
+    ydb_control_plane_storage_queries.cpp
+)
+
+PEERDIR(
+    library/cpp/lwtrace
     library/cpp/protobuf/interop
     ydb/core/base
     ydb/core/mon
@@ -36,14 +36,14 @@ PEERDIR(
     ydb/public/sdk/cpp/client/ydb_scheme
     ydb/public/sdk/cpp/client/ydb_table
     ydb/library/yql/public/issue
-) 
- 
-YQL_LAST_ABI_VERSION() 
- 
-END() 
- 
-RECURSE( 
-    events 
+)
+
+YQL_LAST_ABI_VERSION()
+
+END()
+
+RECURSE(
+    events
     internal
-    proto 
-) 
+    proto
+)

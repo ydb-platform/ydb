@@ -34,7 +34,7 @@ public:
         TIntrusivePtr<ITimeProvider> timeProvider,
         TAutoPtr<TEvents::TEvWriteTaskResultRequest> ev,
         TDynamicCounterPtr counters)
-        : Sender(sender) 
+        : Sender(sender)
         , TimeProvider(timeProvider)
         , Ev(std::move(ev))
         , Counters(std::move(counters->GetSubgroup("subsystem", "private_api")->GetSubgroup("subcomponent", "WriteTaskResult")))

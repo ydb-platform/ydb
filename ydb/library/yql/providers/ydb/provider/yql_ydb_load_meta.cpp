@@ -217,7 +217,7 @@ public:
             } else {
                 failed = true;
                 const auto& config = State_->Configuration->Clusters[TString(client.first)];
-                ctx.AddError(TIssue({}, TStringBuilder() << "Failed to take snapshot for: `" << client.first << "`, endpoint: " << config.Endpoint << ", status: " << snapshot.GetStatus())); 
+                ctx.AddError(TIssue({}, TStringBuilder() << "Failed to take snapshot for: `" << client.first << "`, endpoint: " << config.Endpoint << ", status: " << snapshot.GetStatus()));
                 for (const auto& issue : snapshot.GetIssues())
                     ctx.AddError(issue);
             }
@@ -254,7 +254,7 @@ public:
                 meta.Partitions.back().back().clear();
             } else {
                 failed = true;
-                ctx.AddError(TIssue({}, TStringBuilder() << "Failed to load table metadata for: `" << pair.first.second << ", status: " << result.GetStatus() << "`\n")); 
+                ctx.AddError(TIssue({}, TStringBuilder() << "Failed to load table metadata for: `" << pair.first.second << ", status: " << result.GetStatus() << "`\n"));
                 for (const auto& issue : result.GetIssues())
                     ctx.AddError(issue);
             }

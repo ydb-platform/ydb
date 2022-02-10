@@ -27,7 +27,7 @@ public:
                            const TActorId& taskControllerId,
                            const TActorId& storageProxy,
                            const TActorId& runActorId,
-                           const TCheckpointCoordinatorConfig& settings, 
+                           const TCheckpointCoordinatorConfig& settings,
                            const NMonitoring::TDynamicCounterPtr& counters,
                            const NProto::TGraphParams& graphParams,
                            const YandexQuery::StateLoadMode& stateLoadMode,

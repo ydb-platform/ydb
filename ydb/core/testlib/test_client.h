@@ -112,7 +112,7 @@ namespace Tests {
         bool EnableConfigsDispatcher = true;
         bool UseRealThreads = true;
         bool EnableKqpSpilling = false;
-        bool EnableYq = false; 
+        bool EnableYq = false;
         TDuration KeepSnapshotTimeout = TDuration::Zero();
         ui64 ChangesQueueItemsLimit = 0;
         ui64 ChangesQueueBytesLimit = 0;
@@ -154,7 +154,7 @@ namespace Tests {
         TServerSettings& SetFeatureFlags(const NKikimrConfig::TFeatureFlags& value) { FeatureFlags = value; return *this; }
         TServerSettings& SetCompactionConfig(const NKikimrConfig::TCompactionConfig& value) { CompactionConfig = value; return *this; }
         TServerSettings& SetEnableDbCounters(bool value) { FeatureFlags.SetEnableDbCounters(value); return *this; }
-        TServerSettings& SetEnableYq(bool value) { EnableYq = value; return *this; } 
+        TServerSettings& SetEnableYq(bool value) { EnableYq = value; return *this; }
         TServerSettings& SetKeepSnapshotTimeout(TDuration value) { KeepSnapshotTimeout = value; return *this; }
         TServerSettings& SetChangesQueueItemsLimit(ui64 value) { ChangesQueueItemsLimit = value; return *this; }
         TServerSettings& SetChangesQueueBytesLimit(ui64 value) { ChangesQueueBytesLimit = value; return *this; }

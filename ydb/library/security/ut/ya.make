@@ -1,16 +1,16 @@
-UNITTEST() 
- 
+UNITTEST()
+
 OWNER(
     hcpp
     g:kikimr
 )
- 
-PEERDIR( 
+
+PEERDIR(
     ydb/library/security
-) 
- 
-SRCS( 
-    util_ut.cpp 
-) 
- 
-END() 
+)
+
+SRCS(
+    util_ut.cpp
+)
+
+END()

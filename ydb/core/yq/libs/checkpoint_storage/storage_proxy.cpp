@@ -17,10 +17,10 @@
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/hfunc.h>
 
-#include <util/stream/file.h> 
+#include <util/stream/file.h>
 #include <util/string/join.h>
-#include <util/string/strip.h> 
- 
+#include <util/string/strip.h>
+
 #define LOG_STORAGE_ASYNC_DEBUG(actorContext, stream) LOG_LOG_S(actorContext, ::NActors::NLog::PRI_DEBUG, ::NKikimrServices::STREAMS_STORAGE_SERVICE, stream);
 #define LOG_STORAGE_ASYNC_INFO(actorContext, stream) LOG_LOG_S(actorContext, ::NActors::NLog::PRI_INFO, ::NKikimrServices::STREAMS_STORAGE_SERVICE, stream);
 #define LOG_STORAGE_ASYNC_WARN(actorContext, stream) LOG_LOG_S(actorContext, ::NActors::NLog::PRI_WARN, ::NKikimrServices::STREAMS_STORAGE_SERVICE, stream);
@@ -34,9 +34,9 @@ namespace {
 ////////////////////////////////////////////////////////////////////////////////
 
 class TStorageProxy : public TActorBootstrapped<TStorageProxy> {
-    NConfig::TCheckpointCoordinatorConfig Config; 
+    NConfig::TCheckpointCoordinatorConfig Config;
     NConfig::TCommonConfig CommonConfig;
-    NConfig::TYdbStorageConfig StorageConfig; 
+    NConfig::TYdbStorageConfig StorageConfig;
     TCheckpointStoragePtr CheckpointStorage;
     TStateStoragePtr StateStorage;
     TActorId ActorGC;
@@ -44,7 +44,7 @@ class TStorageProxy : public TActorBootstrapped<TStorageProxy> {
 
 public:
     explicit TStorageProxy(
-        const NConfig::TCheckpointCoordinatorConfig& config, 
+        const NConfig::TCheckpointCoordinatorConfig& config,
         const NConfig::TCommonConfig& commonConfig,
         const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory);
 
@@ -78,34 +78,34 @@ private:
     void Handle(NYql::NDq::TEvDqCompute::TEvGetTaskState::TPtr& ev);
 };
 
-static void FillDefaultParameters(NConfig::TCheckpointCoordinatorConfig& checkpointCoordinatorConfig, NConfig::TYdbStorageConfig& ydbStorageConfig) { 
-    auto& limits = *checkpointCoordinatorConfig.MutableStateStorageLimits(); 
-    if (!limits.GetMaxGraphCheckpointsSizeBytes()) { 
-        limits.SetMaxGraphCheckpointsSizeBytes(1099511627776); 
-    } 
- 
-    if (!limits.GetMaxTaskStateSizeBytes()) { 
-        limits.SetMaxTaskStateSizeBytes(1099511627776); 
-    } 
- 
-    if (!checkpointCoordinatorConfig.GetStorage().GetToken() && checkpointCoordinatorConfig.GetStorage().GetOAuthFile()) { 
-        checkpointCoordinatorConfig.MutableStorage()->SetToken(StripString(TFileInput(checkpointCoordinatorConfig.GetStorage().GetOAuthFile()).ReadAll())); 
-    } 
- 
-    if (!ydbStorageConfig.GetToken() && ydbStorageConfig.GetOAuthFile()) { 
-        ydbStorageConfig.SetToken(StripString(TFileInput(ydbStorageConfig.GetOAuthFile()).ReadAll())); 
-    } 
-} 
- 
+static void FillDefaultParameters(NConfig::TCheckpointCoordinatorConfig& checkpointCoordinatorConfig, NConfig::TYdbStorageConfig& ydbStorageConfig) {
+    auto& limits = *checkpointCoordinatorConfig.MutableStateStorageLimits();
+    if (!limits.GetMaxGraphCheckpointsSizeBytes()) {
+        limits.SetMaxGraphCheckpointsSizeBytes(1099511627776);
+    }
+
+    if (!limits.GetMaxTaskStateSizeBytes()) {
+        limits.SetMaxTaskStateSizeBytes(1099511627776);
+    }
+
+    if (!checkpointCoordinatorConfig.GetStorage().GetToken() && checkpointCoordinatorConfig.GetStorage().GetOAuthFile()) {
+        checkpointCoordinatorConfig.MutableStorage()->SetToken(StripString(TFileInput(checkpointCoordinatorConfig.GetStorage().GetOAuthFile()).ReadAll()));
+    }
+
+    if (!ydbStorageConfig.GetToken() && ydbStorageConfig.GetOAuthFile()) {
+        ydbStorageConfig.SetToken(StripString(TFileInput(ydbStorageConfig.GetOAuthFile()).ReadAll()));
+    }
+}
+
 TStorageProxy::TStorageProxy(
-    const NConfig::TCheckpointCoordinatorConfig& config, 
+    const NConfig::TCheckpointCoordinatorConfig& config,
     const NConfig::TCommonConfig& commonConfig,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory)
     : Config(config)
     , CommonConfig(commonConfig)
-    , StorageConfig(Config.GetStorage()) 
-    , CredentialsProviderFactory(credentialsProviderFactory) { 
-    FillDefaultParameters(Config, StorageConfig); 
+    , StorageConfig(Config.GetStorage())
+    , CredentialsProviderFactory(credentialsProviderFactory) {
+    FillDefaultParameters(Config, StorageConfig);
 }
 
 void TStorageProxy::Bootstrap() {
@@ -115,22 +115,22 @@ void TStorageProxy::Bootstrap() {
         LOG_STREAMS_STORAGE_SERVICE_ERROR("Failed to init checkpoint storage: " << issues.ToOneLineString());
     }
 
-    StateStorage = NewYdbStateStorage(StorageConfig, CredentialsProviderFactory); 
+    StateStorage = NewYdbStateStorage(StorageConfig, CredentialsProviderFactory);
     issues = StateStorage->Init().GetValueSync();
     if (!issues.Empty()) {
         LOG_STREAMS_STORAGE_SERVICE_ERROR("Failed to init checkpoint state storage: " << issues.ToOneLineString());
     }
 
-    if (Config.GetCheckpointGarbageConfig().GetEnabled()) { 
-        const auto& gcConfig = Config.GetCheckpointGarbageConfig(); 
+    if (Config.GetCheckpointGarbageConfig().GetEnabled()) {
+        const auto& gcConfig = Config.GetCheckpointGarbageConfig();
         ActorGC = Register(NewGC(gcConfig, CheckpointStorage, StateStorage).release());
     }
 
     Become(&TStorageProxy::StateFunc);
 
     LOG_STREAMS_STORAGE_SERVICE_INFO("Successfully bootstrapped TStorageProxy " << SelfId() << " with connection to "
-        << StorageConfig.GetEndpoint().data() 
-        << ":" << StorageConfig.GetDatabase().data()) 
+        << StorageConfig.GetEndpoint().data()
+        << ":" << StorageConfig.GetDatabase().data())
 }
 
 void TStorageProxy::Handle(TEvCheckpointStorage::TEvRegisterCoordinatorRequest::TPtr& ev) {
@@ -163,7 +163,7 @@ void TStorageProxy::Handle(TEvCheckpointStorage::TEvCreateCheckpointRequest::TPt
                 coordinatorId = event->CoordinatorId,
                 cookie = ev->Cookie,
                 sender = ev->Sender,
-                totalGraphCheckpointsSizeLimit = Config.GetStateStorageLimits().GetMaxGraphCheckpointsSizeBytes(), 
+                totalGraphCheckpointsSizeLimit = Config.GetStateStorageLimits().GetMaxGraphCheckpointsSizeBytes(),
                 context = TActivationContext::AsActorContext()]
                (const NThreading::TFuture<ICheckpointStorage::TGetTotalCheckpointsStateSizeResult>& resultFuture) {
             auto result = resultFuture.GetValue();
@@ -257,7 +257,7 @@ void TStorageProxy::Handle(TEvCheckpointStorage::TEvCompleteCheckpointRequest::T
                 coordinatorId = event->CoordinatorId,
                 cookie = ev->Cookie,
                 sender = ev->Sender,
-                gcEnabled = Config.GetCheckpointGarbageConfig().GetEnabled(), 
+                gcEnabled = Config.GetCheckpointGarbageConfig().GetEnabled(),
                 actorGC = ActorGC,
                 context = TActivationContext::AsActorContext()]
                (const NThreading::TFuture<NYql::TIssues>& issuesFuture) {
@@ -323,9 +323,9 @@ void TStorageProxy::Handle(NYql::NDq::TEvDqCompute::TEvSaveTaskState::TPtr& ev) 
     LOG_STREAMS_STORAGE_SERVICE_DEBUG("[" << checkpointId << "] Got TEvSaveTaskState: task " << event->TaskId);
 
     const size_t stateSize = event->State.ByteSizeLong();
-    if (stateSize > Config.GetStateStorageLimits().GetMaxTaskStateSizeBytes()) { 
+    if (stateSize > Config.GetStateStorageLimits().GetMaxTaskStateSizeBytes()) {
         LOG_STREAMS_STORAGE_SERVICE_WARN("[" << checkpointId << "] Won't save task state because it's too big: task: " << event->TaskId
-            << ", state size: " << stateSize << "/" << Config.GetStateStorageLimits().GetMaxTaskStateSizeBytes()); 
+            << ", state size: " << stateSize << "/" << Config.GetStateStorageLimits().GetMaxTaskStateSizeBytes());
         auto response = std::make_unique<NYql::NDq::TEvDqCompute::TEvSaveTaskStateResult>();
         response->Record.MutableCheckpoint()->SetGeneration(checkpointId.CoordinatorGeneration);
         response->Record.MutableCheckpoint()->SetId(checkpointId.SeqNo);
@@ -391,7 +391,7 @@ void TStorageProxy::Handle(NYql::NDq::TEvDqCompute::TEvGetTaskState::TPtr& ev) {
 ////////////////////////////////////////////////////////////////////////////////
 
 std::unique_ptr<NActors::IActor> NewStorageProxy(
-    const NConfig::TCheckpointCoordinatorConfig& config, 
+    const NConfig::TCheckpointCoordinatorConfig& config,
     const NConfig::TCommonConfig& commonConfig,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory)
 {

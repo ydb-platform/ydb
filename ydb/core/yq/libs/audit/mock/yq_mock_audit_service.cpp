@@ -67,7 +67,7 @@ private:
     }
 };
 
-NActors::IActor* CreateMockYqAuditServiceActor(const NConfig::TAuditConfig& config) { 
+NActors::IActor* CreateMockYqAuditServiceActor(const NConfig::TAuditConfig& config) {
     Y_UNUSED(config);
     return new TYqMockAuditServiceActor();
 }

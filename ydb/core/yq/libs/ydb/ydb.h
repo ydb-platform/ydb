@@ -95,7 +95,7 @@ using TGenerationContextPtr = TIntrusivePtr<TGenerationContext>;
 ////////////////////////////////////////////////////////////////////////////////
 
 NYdb::TDriverConfig GetDriverConfig(const NConfig::TYdbStorageConfig& config, const NKikimr::TYdbCredentialsProviderFactory& credProviderFactory);
- 
+
 TYdbConnectionPtr NewYdbConnection(const NConfig::TYdbStorageConfig& config, const NKikimr::TYdbCredentialsProviderFactory& credProviderFactory);
 
 NYdb::TStatus MakeErrorStatus(

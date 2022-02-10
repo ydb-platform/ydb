@@ -12,7 +12,7 @@ SIZE(MEDIUM)
 
 SRCS(
     ut_utils.cpp
-    yq_ut.cpp 
+    yq_ut.cpp
 )
 
 PEERDIR(

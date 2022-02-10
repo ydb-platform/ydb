@@ -37,13 +37,13 @@ public:
 IStreamAdaptor::TPtr CreateStreamAdaptor();
 
 ///////////////////////////////////////////////////////////////////////////////
-template<typename TIn, typename TOut, typename TService, typename TInProtoPrinter, typename TOutProtoPrinter> 
+template<typename TIn, typename TOut, typename TService, typename TInProtoPrinter, typename TOutProtoPrinter>
 class TGRpcRequestImpl
     : public TBaseAsyncContext<TService>
     , public IQueueEvent
     , public IRequestContextBase
 {
-    using TThis = TGRpcRequestImpl<TIn, TOut, TService, TInProtoPrinter, TOutProtoPrinter>; 
+    using TThis = TGRpcRequestImpl<TIn, TOut, TService, TInProtoPrinter, TOutProtoPrinter>;
 
 public:
     using TOnRequest = std::function<void (IRequestContextBase* ctx)>;
@@ -244,7 +244,7 @@ private:
     void WriteDataOk(NProtoBuf::Message* resp) {
         auto makeResponseString = [&] {
             TString x;
-            TOutProtoPrinter printer; 
+            TOutProtoPrinter printer;
             printer.SetSingleLineMode(true);
             printer.PrintToString(*resp, &x);
             return x;
@@ -334,7 +334,7 @@ private:
         auto makeRequestString = [&] {
             TString resp;
             if (ok) {
-                TInProtoPrinter printer; 
+                TInProtoPrinter printer;
                 printer.SetSingleLineMode(true);
                 printer.PrintToString(*Request_, &resp);
             } else {
@@ -510,9 +510,9 @@ private:
     IStreamAdaptor::TPtr StreamAdaptor_;
 };
 
-template<typename TIn, typename TOut, typename TService, typename TInProtoPrinter=google::protobuf::TextFormat::Printer, typename TOutProtoPrinter=google::protobuf::TextFormat::Printer> 
-class TGRpcRequest: public TGRpcRequestImpl<TIn, TOut, TService, TInProtoPrinter, TOutProtoPrinter> { 
-    using TBase = TGRpcRequestImpl<TIn, TOut, TService, TInProtoPrinter, TOutProtoPrinter>; 
+template<typename TIn, typename TOut, typename TService, typename TInProtoPrinter=google::protobuf::TextFormat::Printer, typename TOutProtoPrinter=google::protobuf::TextFormat::Printer>
+class TGRpcRequest: public TGRpcRequestImpl<TIn, TOut, TService, TInProtoPrinter, TOutProtoPrinter> {
+    using TBase = TGRpcRequestImpl<TIn, TOut, TService, TInProtoPrinter, TOutProtoPrinter>;
 public:
     TGRpcRequest(TService* server,
                  typename TService::TCurrentGRpcService::AsyncService* service,

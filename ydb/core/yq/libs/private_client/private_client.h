@@ -75,7 +75,7 @@ public:
         const TNodesHealthCheckSettings& settings = TNodesHealthCheckSettings());
 
 private:
-    std::shared_ptr<TImpl> Impl; 
+    std::shared_ptr<TImpl> Impl;
 };
 
 } // namespace NYq

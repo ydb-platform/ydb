@@ -3,7 +3,7 @@ syntax = "proto3";
 package NTestProto;
 
 import "ydb/public/api/protos/annotations/sensitive.proto";
- 
+
 message TTestSubProto {
     uint64 i = 1;
 }
@@ -14,33 +14,33 @@ message TTestProto {
     string token = 3;
     TTestSubProto msg = 4;
 }
- 
-message TConnection1 { 
-    string database_id = 1; 
-    string token = 2 [(Ydb.sensitive) = true]; 
-} 
- 
-message TConnection2 { 
-    string database_id = 1; 
-    string login = 2 [(Ydb.sensitive) = true]; 
-    string password = 3 [(Ydb.sensitive) = true]; 
-} 
- 
-message TConnectionSetting { 
-    oneof connection { 
-        TConnection1 connection1 = 1; 
-        TConnection2 connection2 = 2; 
-    } 
-} 
- 
-message TConnectionContent { 
-    string name = 1; 
-    TConnectionSetting setting = 2; 
-    string description = 3; 
-} 
- 
-message TRecursiveType { 
-    string name = 1; 
-    string login = 2 [(Ydb.sensitive) = true]; 
-    repeated TRecursiveType types = 3; 
-} 
+
+message TConnection1 {
+    string database_id = 1;
+    string token = 2 [(Ydb.sensitive) = true];
+}
+
+message TConnection2 {
+    string database_id = 1;
+    string login = 2 [(Ydb.sensitive) = true];
+    string password = 3 [(Ydb.sensitive) = true];
+}
+
+message TConnectionSetting {
+    oneof connection {
+        TConnection1 connection1 = 1;
+        TConnection2 connection2 = 2;
+    }
+}
+
+message TConnectionContent {
+    string name = 1;
+    TConnectionSetting setting = 2;
+    string description = 3;
+}
+
+message TRecursiveType {
+    string name = 1;
+    string login = 2 [(Ydb.sensitive) = true];
+    repeated TRecursiveType types = 3;
+}

@@ -168,27 +168,27 @@ struct TRpcServices {
         EvDataStreamsSplitShard,
         EvDataStreamsStartStreamEncryption,
         EvDataStreamsStopStreamEncryption,
-        EvStreamExecuteYqlScript, 
-        EvYandexQueryCreateQuery, 
-        EvYandexQueryListQueries, 
-        EvYandexQueryDescribeQuery, 
+        EvStreamExecuteYqlScript,
+        EvYandexQueryCreateQuery,
+        EvYandexQueryListQueries,
+        EvYandexQueryDescribeQuery,
         EvYandexQueryGetQueryStatus,
-        EvYandexQueryModifyQuery, 
-        EvYandexQueryDeleteQuery, 
-        EvYandexQueryControlQuery, 
-        EvYandexQueryGetResultData, 
-        EvYandexQueryListJobs, 
+        EvYandexQueryModifyQuery,
+        EvYandexQueryDeleteQuery,
+        EvYandexQueryControlQuery,
+        EvYandexQueryGetResultData,
+        EvYandexQueryListJobs,
         EvYandexQueryDescribeJob,
-        EvYandexQueryCreateConnection, 
-        EvYandexQueryListConnections, 
-        EvYandexQueryDescribeConnection, 
-        EvYandexQueryModifyConnection, 
-        EvYandexQueryDeleteConnection, 
-        EvYandexQueryTestConnection, 
-        EvYandexQueryCreateBinding, 
-        EvYandexQueryListBindings, 
-        EvYandexQueryDescribeBinding, 
-        EvYandexQueryModifyBinding, 
+        EvYandexQueryCreateConnection,
+        EvYandexQueryListConnections,
+        EvYandexQueryDescribeConnection,
+        EvYandexQueryModifyConnection,
+        EvYandexQueryDeleteConnection,
+        EvYandexQueryTestConnection,
+        EvYandexQueryCreateBinding,
+        EvYandexQueryListBindings,
+        EvYandexQueryDescribeBinding,
+        EvYandexQueryModifyBinding,
         EvYandexQueryDeleteBinding,
         EvCreateLogStore,
         EvDescribeLogStore,
@@ -251,8 +251,8 @@ public:
     virtual TString GetPeerName() const = 0;
     // Return deadile of request execution, calculated from client timeout by grpc
     virtual TInstant GetDeadline() const = 0;
-    // Meta value from request 
-    virtual const TMaybe<TString> GetPeerMetaValues(const TString&) const = 0; 
+    // Meta value from request
+    virtual const TMaybe<TString> GetPeerMetaValues(const TString&) const = 0;
     // Returns path and resource for rate limiter
     virtual TMaybe<NRpcService::TRlPath> GetRlPath() const = 0;
     // Raise issue on the context
@@ -452,11 +452,11 @@ public:
         return Nothing();
     }
 
-    const TMaybe<TString> GetPeerMetaValues(const TString&) const override { 
-        Y_FAIL("Unimplemented"); 
-        return TMaybe<TString>{}; 
-    } 
- 
+    const TMaybe<TString> GetPeerMetaValues(const TString&) const override {
+        Y_FAIL("Unimplemented");
+        return TMaybe<TString>{};
+    }
+
     void ReplyWithRpcStatus(grpc::StatusCode, const TString&) override {
         Y_FAIL("Unimplemented");
     }
@@ -651,15 +651,15 @@ public:
     }
 
     TMaybe<TString> GetTraceId() const override {
-        return GetPeerMetaValues(NYdb::YDB_TRACE_ID_HEADER); 
+        return GetPeerMetaValues(NYdb::YDB_TRACE_ID_HEADER);
     }
 
     const TMaybe<TString> GetSdkBuildInfo() const {
-        return GetPeerMetaValues(NYdb::YDB_SDK_BUILD_INFO_HEADER); 
+        return GetPeerMetaValues(NYdb::YDB_SDK_BUILD_INFO_HEADER);
     }
 
     const TMaybe<TString> GetRequestType() const {
-        return GetPeerMetaValues(NYdb::YDB_REQUEST_TYPE_HEADER); 
+        return GetPeerMetaValues(NYdb::YDB_REQUEST_TYPE_HEADER);
     }
 
     TInstant GetDeadline() const override {
@@ -667,13 +667,13 @@ public:
     }
 
     const TMaybe<TString> GetGrpcUserAgent() const {
-        return GetPeerMetaValues(NGrpc::GRPC_USER_AGENT_HEADER); 
+        return GetPeerMetaValues(NGrpc::GRPC_USER_AGENT_HEADER);
     }
 
     const TMaybe<TString> GetPeerMetaValues(const TString& key) const override {
-        return ToMaybe(Ctx_->GetPeerMetaValues(key)); 
-    } 
- 
+        return ToMaybe(Ctx_->GetPeerMetaValues(key));
+    }
+
     void RefreshToken(const TString& token, const TActorContext& ctx, TActorId id) {
         NGRpcService::RefreshToken(token, GetDatabaseName().GetOrElse(""), ctx, id);
     }
@@ -855,10 +855,10 @@ public:
         return InternalToken_;
     }
 
-    const TMaybe<TString> GetPeerMetaValues(const TString& key) const override { 
-        return ToMaybe(Ctx_->GetPeerMetaValues(key)); 
-    } 
- 
+    const TMaybe<TString> GetPeerMetaValues(const TString& key) const override {
+        return ToMaybe(Ctx_->GetPeerMetaValues(key));
+    }
+
     bool Validate(TString&) override {
         return true;
     }
@@ -899,11 +899,11 @@ public:
     }
 
     TMaybe<TString> GetTraceId() const override {
-        return GetPeerMetaValues(NYdb::YDB_TRACE_ID_HEADER); 
+        return GetPeerMetaValues(NYdb::YDB_TRACE_ID_HEADER);
     }
 
     const TMaybe<TString> GetSdkBuildInfo() const {
-        return GetPeerMetaValues(NYdb::YDB_SDK_BUILD_INFO_HEADER); 
+        return GetPeerMetaValues(NYdb::YDB_SDK_BUILD_INFO_HEADER);
     }
 
     TInstant GetDeadline() const override {
@@ -911,7 +911,7 @@ public:
     }
 
     const TMaybe<TString> GetRequestType() const override {
-        return GetPeerMetaValues(NYdb::YDB_REQUEST_TYPE_HEADER); 
+        return GetPeerMetaValues(NYdb::YDB_REQUEST_TYPE_HEADER);
     }
 
     void SendSerializedResult(TString&& in, Ydb::StatusIds::StatusCode status) {

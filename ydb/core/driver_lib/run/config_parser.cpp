@@ -74,7 +74,7 @@ void TRunCommandConfigParser::SetupLastGetOptForConfigFiles(NLastGetopt::TOpts& 
     opts.AddLongOption("sqs-file", "SQS config file").OptionalArgument("PATH");
     opts.AddLongOption("alloc-file", "Allocator config file").OptionalArgument("PATH");
     opts.AddLongOption("yql-file", "Yql Analytics config file").OptionalArgument("PATH");
-    opts.AddLongOption("yq-file", "Yandex Query config file").OptionalArgument("PATH"); 
+    opts.AddLongOption("yq-file", "Yandex Query config file").OptionalArgument("PATH");
 }
 
 void TRunCommandConfigParser::ParseConfigFiles(const NLastGetopt::TOptsParseResult& res) {
@@ -203,9 +203,9 @@ void TRunCommandConfigParser::ParseConfigFiles(const NLastGetopt::TOptsParseResu
         Config.AppConfig.MutableAllocatorConfig()->CopyFrom(*allocConfig);
     }
 
-    if (res.Has("yq-file")) { 
-        Y_VERIFY(ParsePBFromFile(res.Get("yq-file"), Config.AppConfig.MutableYandexQueryConfig())); 
-    } 
+    if (res.Has("yq-file")) {
+        Y_VERIFY(ParsePBFromFile(res.Get("yq-file"), Config.AppConfig.MutableYandexQueryConfig()));
+    }
 }
 
 void TRunCommandConfigParser::SetupGlobalOpts(NLastGetopt::TOpts& opts) {

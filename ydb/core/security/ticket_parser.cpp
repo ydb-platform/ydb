@@ -125,18 +125,18 @@ class TTicketParser : public TActorBootstrapped<TTicketParser> {
             key << ':';
         }
         for (const auto& entry : request->Entries) {
-            for (auto it = entry.Attributes.begin(); it != entry.Attributes.end(); ++it) { 
-                if (it != entry.Attributes.begin()) { 
-                    key << '-'; 
-                } 
-                key << it->second; 
+            for (auto it = entry.Attributes.begin(); it != entry.Attributes.end(); ++it) {
+                if (it != entry.Attributes.begin()) {
+                    key << '-';
+                }
+                key << it->second;
             }
-            key << ':'; 
-            for (auto it = entry.Permissions.begin(); it != entry.Permissions.end(); ++it) { 
-                if (it != entry.Permissions.begin()) { 
-                    key << '-'; 
-                } 
-                key << *it; 
+            key << ':';
+            for (auto it = entry.Permissions.begin(); it != entry.Permissions.end(); ++it) {
+                if (it != entry.Permissions.begin()) {
+                    key << '-';
+                }
+                key << *it;
             }
         }
         return key.Str();

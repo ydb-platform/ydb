@@ -7,7 +7,7 @@ RECURSE(
     checkpointing
     checkpointing_common
     common
-    config 
+    config
     control_plane_proxy
     control_plane_storage
     db_resolver
@@ -17,7 +17,7 @@ RECURSE(
     graph_params
     hmac
     init
-    logs 
+    logs
     mock
     pretty_printers
     private_client
@@ -26,6 +26,6 @@ RECURSE(
     shared_resources
     signer
     tasks_packer
-    test_connection 
-    ydb 
+    test_connection
+    ydb
 )

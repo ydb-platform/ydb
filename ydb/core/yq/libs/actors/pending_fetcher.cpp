@@ -48,11 +48,11 @@
 #include <ydb/core/yq/libs/control_plane_storage/control_plane_storage.h>
 #include <ydb/core/yq/libs/control_plane_storage/events/events.h>
 #include <ydb/core/yq/libs/private_client/private_client.h>
- 
+
 #include <library/cpp/actors/core/log.h>
 
 #include <ydb/library/security/util.h>
- 
+
 #include <util/generic/deque.h>
 #include <util/generic/guid.h>
 #include <util/system/hostname.h>
@@ -96,11 +96,11 @@ class TYqlPendingFetcher : public NActors::TActorBootstrapped<TYqlPendingFetcher
 public:
     TYqlPendingFetcher(
         const NYq::TYqSharedResources::TPtr& yqSharedResources,
-        const ::NYq::NConfig::TCommonConfig& commonConfig, 
-        const ::NYq::NConfig::TCheckpointCoordinatorConfig& checkpointCoordinatorConfig, 
-        const ::NYq::NConfig::TPrivateApiConfig& privateApiConfig, 
-        const ::NYq::NConfig::TGatewaysConfig& gatewaysConfig, 
-        const ::NYq::NConfig::TPingerConfig& pingerConfig, 
+        const ::NYq::NConfig::TCommonConfig& commonConfig,
+        const ::NYq::NConfig::TCheckpointCoordinatorConfig& checkpointCoordinatorConfig,
+        const ::NYq::NConfig::TPrivateApiConfig& privateApiConfig,
+        const ::NYq::NConfig::TGatewaysConfig& gatewaysConfig,
+        const ::NYq::NConfig::TPingerConfig& pingerConfig,
         const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
         TIntrusivePtr<ITimeProvider> timeProvider,
         TIntrusivePtr<IRandomProvider> randomProvider,
@@ -112,11 +112,11 @@ public:
         const NMonitoring::TDynamicCounterPtr& clientCounters
         )
         : YqSharedResources(yqSharedResources)
-        , CommonConfig(commonConfig) 
-        , CheckpointCoordinatorConfig(checkpointCoordinatorConfig) 
-        , PrivateApiConfig(privateApiConfig) 
-        , GatewaysConfig(gatewaysConfig) 
-        , PingerConfig(pingerConfig) 
+        , CommonConfig(commonConfig)
+        , CheckpointCoordinatorConfig(checkpointCoordinatorConfig)
+        , PrivateApiConfig(privateApiConfig)
+        , GatewaysConfig(gatewaysConfig)
+        , PingerConfig(pingerConfig)
         , FunctionRegistry(functionRegistry)
         , TimeProvider(timeProvider)
         , RandomProvider(randomProvider)
@@ -130,7 +130,7 @@ public:
         , Client(
             YqSharedResources->YdbDriver,
             NYdb::TCommonClientSettings()
-                .DiscoveryEndpoint(PrivateApiConfig.GetTaskServiceEndpoint()) 
+                .DiscoveryEndpoint(PrivateApiConfig.GetTaskServiceEndpoint())
                 .Database(PrivateApiConfig.GetTaskServiceDatabase() ? PrivateApiConfig.GetTaskServiceDatabase() : TMaybe<TString>()),
             ClientCounters)
     {
@@ -206,14 +206,14 @@ private:
                     actorSystem->Send(selfId, new TEvGetTaskInternalResponse(
                         wrappedResult.IsSuccess(), wrappedResult.GetIssues(), wrappedResult.GetResult())
                     );
-                } else { 
-                    actorSystem->Send(selfId, new TEvGetTaskInternalResponse( 
+                } else {
+                    actorSystem->Send(selfId, new TEvGetTaskInternalResponse(
                         false, TIssues{{TIssue{"grpc private api result is not set for get task call"}}}, Yq::Private::GetTaskResult{})
-                    ); 
-                } 
+                    );
+                }
             });
-    } 
- 
+    }
+
     void ProcessTask(const Yq::Private::GetTaskResult& result) {
         for (const auto& task : result.tasks()) {
             RunTask(task);
@@ -238,8 +238,8 @@ private:
             FunctionRegistry, RandomProvider,
             ModuleResolver, ModuleResolver->GetNextUniqueId(),
             DqCompFactory, PqCmConnections,
-            CommonConfig, CheckpointCoordinatorConfig, 
-            PrivateApiConfig, GatewaysConfig, PingerConfig, 
+            CommonConfig, CheckpointCoordinatorConfig,
+            PrivateApiConfig, GatewaysConfig, PingerConfig,
             task.text(), task.scope(), task.user_token(),
             DatabaseResolver, task.query_id().value(),
             task.user_id(), Guid, task.generation(),
@@ -249,7 +249,7 @@ private:
             serviceAccounts,
             task.query_type(),
             task.execute_mode(),
-            GetEntityIdAsString(CommonConfig.GetIdsPrefix(), EEntityType::RESULT), 
+            GetEntityIdAsString(CommonConfig.GetIdsPrefix(), EEntityType::RESULT),
             task.state_load_mode(),
             task.disposition(),
             task.status(),
@@ -276,11 +276,11 @@ private:
         );
 
     NYq::TYqSharedResources::TPtr YqSharedResources;
-    NYq::NConfig::TCommonConfig CommonConfig; 
-    NYq::NConfig::TCheckpointCoordinatorConfig CheckpointCoordinatorConfig; 
-    NYq::NConfig::TPrivateApiConfig PrivateApiConfig; 
-    NYq::NConfig::TGatewaysConfig GatewaysConfig; 
-    NYq::NConfig::TPingerConfig PingerConfig; 
+    NYq::NConfig::TCommonConfig CommonConfig;
+    NYq::NConfig::TCheckpointCoordinatorConfig CheckpointCoordinatorConfig;
+    NYq::NConfig::TPrivateApiConfig PrivateApiConfig;
+    NYq::NConfig::TGatewaysConfig GatewaysConfig;
+    NYq::NConfig::TPingerConfig PingerConfig;
 
     const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry;
     TIntrusivePtr<ITimeProvider> TimeProvider;
@@ -310,11 +310,11 @@ private:
 
 NActors::IActor* CreatePendingFetcher(
     const NYq::TYqSharedResources::TPtr& yqSharedResources,
-    const ::NYq::NConfig::TCommonConfig& commonConfig, 
-    const ::NYq::NConfig::TCheckpointCoordinatorConfig& checkpointCoordinatorConfig, 
-    const ::NYq::NConfig::TPrivateApiConfig& privateApiConfig, 
-    const ::NYq::NConfig::TGatewaysConfig& gatewaysConfig, 
-    const ::NYq::NConfig::TPingerConfig& pingerConfig, 
+    const ::NYq::NConfig::TCommonConfig& commonConfig,
+    const ::NYq::NConfig::TCheckpointCoordinatorConfig& checkpointCoordinatorConfig,
+    const ::NYq::NConfig::TPrivateApiConfig& privateApiConfig,
+    const ::NYq::NConfig::TGatewaysConfig& gatewaysConfig,
+    const ::NYq::NConfig::TPingerConfig& pingerConfig,
     const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
     TIntrusivePtr<ITimeProvider> timeProvider,
     TIntrusivePtr<IRandomProvider> randomProvider,
@@ -327,11 +327,11 @@ NActors::IActor* CreatePendingFetcher(
 {
     return new TYqlPendingFetcher(
         yqSharedResources,
-        commonConfig, 
-        checkpointCoordinatorConfig, 
-        privateApiConfig, 
-        gatewaysConfig, 
-        pingerConfig, 
+        commonConfig,
+        checkpointCoordinatorConfig,
+        privateApiConfig,
+        gatewaysConfig,
+        pingerConfig,
         functionRegistry,
         timeProvider,
         randomProvider,

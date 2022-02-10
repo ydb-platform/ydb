@@ -12,7 +12,7 @@
 namespace NYq {
 
 std::unique_ptr<NActors::IActor> NewStorageProxy(
-    const NConfig::TCheckpointCoordinatorConfig& config, 
+    const NConfig::TCheckpointCoordinatorConfig& config,
     const NConfig::TCommonConfig& commonConfig,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory);
 

@@ -39,7 +39,7 @@ void TGRpcYqPrivateTaskService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) 
 #error ADD_REQUEST macro already defined
 #endif
 #define ADD_REQUEST(NAME, CB)                                                                                  \
-MakeIntrusive<TGRpcRequest<Yq::Private::NAME##Request, Yq::Private::NAME##Response, TGRpcYqPrivateTaskService, TSecurityTextFormatPrinter<Yq::Private::NAME##Request>, TSecurityTextFormatPrinter<Yq::Private::NAME##Response>>>( \ 
+MakeIntrusive<TGRpcRequest<Yq::Private::NAME##Request, Yq::Private::NAME##Response, TGRpcYqPrivateTaskService, TSecurityTextFormatPrinter<Yq::Private::NAME##Request>, TSecurityTextFormatPrinter<Yq::Private::NAME##Response>>>( \
     this, &Service_, CQ_,                                                                                      \
     [this](NGrpc::IRequestContextBase *ctx) {                                                                  \
         NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer());                                       \

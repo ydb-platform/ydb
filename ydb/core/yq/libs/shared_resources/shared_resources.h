@@ -24,7 +24,7 @@ protected:
 };
 
 TYqSharedResources::TPtr CreateYqSharedResourcesImpl(
-    const NYq::NConfig::TConfig& config, 
+    const NYq::NConfig::TConfig& config,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
     const NMonitoring::TDynamicCounterPtr& counters);
 

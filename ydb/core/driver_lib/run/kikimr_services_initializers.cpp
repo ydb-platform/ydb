@@ -2251,51 +2251,51 @@ void THealthCheckInitializer::InitializeServices(TActorSystemSetup* setup, const
 }
 
 TYandexQueryInitializer::TYandexQueryInitializer(const TKikimrRunConfig& runConfig, std::shared_ptr<TModuleFactories> factories, NYq::IYqSharedResources::TPtr yqSharedResources)
-    : IKikimrServicesInitializer(runConfig) 
+    : IKikimrServicesInitializer(runConfig)
     , Factories(std::move(factories))
     , YqSharedResources(std::move(yqSharedResources))
-{ 
-} 
- 
+{
+}
+
 void TYandexQueryInitializer::SetIcPort(ui32 icPort) {
     IcPort = icPort;
 }
 
-void TYandexQueryInitializer::InitializeServices(TActorSystemSetup* setup, const TAppData* appData) { 
-    const auto& protoConfig = Config.GetYandexQueryConfig(); 
-    if (!protoConfig.GetEnabled()) { 
-        return; 
-    } 
- 
-    TString tenant = "default_yq_tenant_name"; 
-    for (const auto& slot : Config.GetTenantPoolConfig().GetSlots()) { 
-        if (slot.GetTenantName()) { 
-            tenant = slot.GetTenantName(); 
-            break; 
-        } 
-    } 
- 
-    auto actorRegistrator = [&](NActors::TActorId serviceActorId, NActors::IActor* actor) { 
-        setup->LocalServices.push_back( 
-            std::pair<TActorId, TActorSetupCmd>( 
-                serviceActorId, 
-                TActorSetupCmd(actor, TMailboxType::HTSwap, appData->UserPoolId))); 
-    }; 
- 
-    NYq::Init( 
-        protoConfig, 
-        NodeId, 
-        actorRegistrator, 
-        appData, 
-        tenant, 
-        Factories->PqCmConnections, 
-        YqSharedResources, 
-        Factories->FolderServiceFactory, 
-        Factories->YqAuditServiceFactory, 
+void TYandexQueryInitializer::InitializeServices(TActorSystemSetup* setup, const TAppData* appData) {
+    const auto& protoConfig = Config.GetYandexQueryConfig();
+    if (!protoConfig.GetEnabled()) {
+        return;
+    }
+
+    TString tenant = "default_yq_tenant_name";
+    for (const auto& slot : Config.GetTenantPoolConfig().GetSlots()) {
+        if (slot.GetTenantName()) {
+            tenant = slot.GetTenantName();
+            break;
+        }
+    }
+
+    auto actorRegistrator = [&](NActors::TActorId serviceActorId, NActors::IActor* actor) {
+        setup->LocalServices.push_back(
+            std::pair<TActorId, TActorSetupCmd>(
+                serviceActorId,
+                TActorSetupCmd(actor, TMailboxType::HTSwap, appData->UserPoolId)));
+    };
+
+    NYq::Init(
+        protoConfig,
+        NodeId,
+        actorRegistrator,
+        appData,
+        tenant,
+        Factories->PqCmConnections,
+        YqSharedResources,
+        Factories->FolderServiceFactory,
+        Factories->YqAuditServiceFactory,
         Factories->YdbCredentialProviderFactory,
         IcPort
-        ); 
-} 
- 
+        );
+}
+
 } // namespace NKikimrServicesInitializers
 } // namespace NKikimr

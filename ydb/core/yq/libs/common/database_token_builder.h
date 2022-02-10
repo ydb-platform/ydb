@@ -21,4 +21,4 @@ using namespace NYql;
         const THashMap<TString, TString>& accountIdSignatures,
         THashMap<std::pair<TString, DatabaseType>, TEvents::TDatabaseAuth>& databaseIds);
 
-} // NYq 
+} // NYq

@@ -1,20 +1,20 @@
-syntax = "proto3"; 
- 
-package NYq; 
- 
-message TIssuesIds { 
-    enum EIssueCode { 
-        DEFAULT_ERROR = 0; 
-        UNEXPECTED = 1; 
-        INFO = 2; 
-        WARNING = 3; 
-        SUCCESS = 4; 
- 
-        ACCESS_DENIED = 1000; 
-        INTERNAL_ERROR = 1001; 
-        TIMEOUT = 1002; 
-        BAD_REQUEST = 1003; 
+syntax = "proto3";
+
+package NYq;
+
+message TIssuesIds {
+    enum EIssueCode {
+        DEFAULT_ERROR = 0;
+        UNEXPECTED = 1;
+        INFO = 2;
+        WARNING = 3;
+        SUCCESS = 4;
+
+        ACCESS_DENIED = 1000;
+        INTERNAL_ERROR = 1001;
+        TIMEOUT = 1002;
+        BAD_REQUEST = 1003;
         EXPIRED = 1004;
         UNSUPPORTED = 1005;
-    } 
+    }
 }

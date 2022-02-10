@@ -33,7 +33,7 @@ public:
         TIntrusivePtr<ITimeProvider> timeProvider,
         TAutoPtr<TEvents::TEvNodesHealthCheckRequest> ev,
         TDynamicCounterPtr counters)
-        : Sender(sender) 
+        : Sender(sender)
         , TimeProvider(timeProvider)
         , Ev(std::move(ev))
         , Counters(std::move(counters))

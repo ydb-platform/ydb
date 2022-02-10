@@ -97,7 +97,7 @@ public:
         bool UseMetadataCredentials = false;
         TString SaKeyFile;
         TString IamEndpoint;
-        TString YScope; 
+        TString YScope;
 
         TString YdbDir;
         bool UseOAuthToken = true;

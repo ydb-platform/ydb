@@ -203,7 +203,7 @@ class time_zone {
                        civil_transition* trans) const {
     return prev_transition(detail::split_seconds(tp).first, trans);
   }
- 
+
   // version() and description() provide additional information about the
   // time zone. The content of each of the returned strings is unspecified,
   // however, when the IANA Time Zone Database is the underlying data source
@@ -373,10 +373,10 @@ inline bool parse(const std::string& fmt, const std::string& input,
   return b;
 }
 
-// Access to convert functions which are placed in time_zone_if.h 
+// Access to convert functions which are placed in time_zone_if.h
 time_point<seconds> UnixSecondsToTimePoint(std::int_fast64_t);
 std::int_fast64_t TimePointToUnixSeconds(const time_point<seconds>& tp);
- 
+
 }  // namespace cctz
 
 #endif  // CCTZ_TIME_ZONE_H_

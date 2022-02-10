@@ -82,12 +82,12 @@ Y_UNIT_TEST_SUITE(TCgiParametersTest) {
     }
 
     Y_UNIT_TEST(TestScanAddAll4) {
-        TCgiParameters c; 
-        c.ScanAddAll("ccc=1&aaa=1&ccc=3&bbb&ccc=2"); 
- 
-        UNIT_ASSERT_VALUES_EQUAL(c.Print(), "aaa=1&bbb=&ccc=1&ccc=3&ccc=2"); 
-    } 
- 
+        TCgiParameters c;
+        c.ScanAddAll("ccc=1&aaa=1&ccc=3&bbb&ccc=2");
+
+        UNIT_ASSERT_VALUES_EQUAL(c.Print(), "aaa=1&bbb=&ccc=1&ccc=3&ccc=2");
+    }
+
     Y_UNIT_TEST(TestScanAddAllUnescaped1) {
         TCgiParameters c;
         c.ScanAddAllUnescaped("ccc=1&aaa=1&ccc=3&bbb&ccc=2");
@@ -112,13 +112,13 @@ Y_UNIT_TEST_SUITE(TCgiParametersTest) {
     }
 
     Y_UNIT_TEST(TestEraseAll) {
-        TCgiParameters c; 
-        c.ScanAddAll("par=1&aaa=1&par=2&bbb&par=3"); 
-        c.EraseAll("par"); 
- 
-        UNIT_ASSERT_VALUES_EQUAL(c.Print(), "aaa=1&bbb="); 
-    } 
- 
+        TCgiParameters c;
+        c.ScanAddAll("par=1&aaa=1&par=2&bbb&par=3");
+        c.EraseAll("par");
+
+        UNIT_ASSERT_VALUES_EQUAL(c.Print(), "aaa=1&bbb=");
+    }
+
     Y_UNIT_TEST(TestErase) {
         TCgiParameters c;
         c.ScanAddAll("par=1&aaa=1&par=2&bbb&par=3&par=1");
@@ -131,7 +131,7 @@ Y_UNIT_TEST_SUITE(TCgiParametersTest) {
     }
 
     Y_UNIT_TEST(TestReplaceUnescaped1) {
-        TCgiParameters c; 
+        TCgiParameters c;
         c.ScanAddAll("many_keys=1&aaa=1&many_keys=2&bbb&many_keys=3");
         c.ReplaceUnescaped("many_keys", "new_value");
 
@@ -148,9 +148,9 @@ Y_UNIT_TEST_SUITE(TCgiParametersTest) {
 
     Y_UNIT_TEST(TestReplaceUnescaped3) {
         TCgiParameters c;
-        c.ScanAddAll("par=1&aaa=1&par=2&bbb&par=3"); 
+        c.ScanAddAll("par=1&aaa=1&par=2&bbb&par=3");
         c.ReplaceUnescaped("no_such_key", "new_value");
- 
+
         UNIT_ASSERT_VALUES_EQUAL(c.Print(), "aaa=1&bbb=&no_such_key=new_value&par=1&par=2&par=3");
     }
 
@@ -183,8 +183,8 @@ Y_UNIT_TEST_SUITE(TCgiParametersTest) {
         c.ScanAddAll("par=1&aaa=1&par=2&bbb&par=3");
 
         UNIT_ASSERT_VALUES_EQUAL(c.NumOfValues("par"), 3u);
-    } 
- 
+    }
+
     Y_UNIT_TEST(TestUnscape) {
         TCgiParameters c("f=1&t=%84R%84%7C%84%80%84%7E&reqenc=SHIFT_JIS&p=0");
         UNIT_ASSERT_VALUES_EQUAL(c.Get("t"), "\x84R\x84\x7C\x84\x80\x84\x7E");

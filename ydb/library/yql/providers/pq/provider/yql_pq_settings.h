@@ -9,7 +9,7 @@
 #include <ydb/core/yq/libs/events/events.h>
 #include <ydb/core/yq/libs/db_resolver/db_async_resolver_with_meta.h>
 #include <ydb/core/yq/libs/common/database_token_builder.h>
-
+ 
 namespace NYql {
 
 struct TPqSettings {
@@ -39,18 +39,18 @@ struct TPqConfiguration : public TPqSettings, public NCommon::TSettingDispatcher
     TPqConfiguration();
     TPqConfiguration(const TPqConfiguration&) = delete;
 
-    void Init(
-        const TPqGatewayConfig& config,
-        TIntrusivePtr<TTypeAnnotationContext> typeCtx,
-        const std::shared_ptr<NYq::TDatabaseAsyncResolverWithMeta> dbResolver,
-        THashMap<std::pair<TString, NYq::DatabaseType>, NYq::TEvents::TDatabaseAuth>& databaseIds);
+    void Init( 
+        const TPqGatewayConfig& config, 
+        TIntrusivePtr<TTypeAnnotationContext> typeCtx, 
+        const std::shared_ptr<NYq::TDatabaseAsyncResolverWithMeta> dbResolver, 
+        THashMap<std::pair<TString, NYq::DatabaseType>, NYq::TEvents::TDatabaseAuth>& databaseIds); 
 
-    TString GetDatabaseForTopic(const TString& cluster) const;
+    TString GetDatabaseForTopic(const TString& cluster) const; 
 
     TPqSettings::TConstPtr Snapshot() const;
     THashMap<TString, TPqClusterConfigurationSettings> ClustersConfigurationSettings;
     THashMap<TString, TString> Tokens;
-    THashMap<TString, TVector<TString>> DbId2Clusters; // DatabaseId -> ClusterNames
+    THashMap<TString, TVector<TString>> DbId2Clusters; // DatabaseId -> ClusterNames 
 };
 
 } // NYql

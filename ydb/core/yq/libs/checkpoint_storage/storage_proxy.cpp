@@ -51,7 +51,7 @@ public:
     void Bootstrap();
 
     static constexpr char ActorName[] = "YQ_STORAGE_PROXY";
-
+ 
 private:
     STRICT_STFUNC(StateFunc,
         hFunc(TEvCheckpointStorage::TEvRegisterCoordinatorRequest, Handle);

@@ -64,7 +64,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateBindi
     response->second.After.ConstructInPlace().CopyFrom(binding);
     response->second.CloudId = cloudId;
 
-    TSqlQueryBuilder queryBuilder(YdbConnection->TablePathPrefix, "CreateBinding");
+    TSqlQueryBuilder queryBuilder(YdbConnection->TablePathPrefix, "CreateBinding"); 
     queryBuilder.AddString("scope", scope);
     queryBuilder.AddString("binding_id", bindingId);
     queryBuilder.AddString("connection_id", connectionId);
@@ -172,7 +172,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvListBinding
         return;
     }
 
-    TSqlQueryBuilder queryBuilder(YdbConnection->TablePathPrefix, "ListBindings");
+    TSqlQueryBuilder queryBuilder(YdbConnection->TablePathPrefix, "ListBindings"); 
     queryBuilder.AddString("scope", scope);
     queryBuilder.AddString("last_binding", pageToken);
     queryBuilder.AddUint64("limit", limit + 1);
@@ -307,7 +307,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDescribeBin
         return;
     }
 
-    TSqlQueryBuilder queryBuilder(YdbConnection->TablePathPrefix, "DescribeBinding");
+    TSqlQueryBuilder queryBuilder(YdbConnection->TablePathPrefix, "DescribeBinding"); 
     queryBuilder.AddString("scope", scope);
     queryBuilder.AddString("binding_id", bindingId);
     queryBuilder.AddText(
@@ -395,7 +395,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyBindi
         return;
     }
 
-    TSqlQueryBuilder readQueryBuilder(YdbConnection->TablePathPrefix, "ModifyBinding(read)");
+    TSqlQueryBuilder readQueryBuilder(YdbConnection->TablePathPrefix, "ModifyBinding(read)"); 
     readQueryBuilder.AddString("scope", scope);
     readQueryBuilder.AddString("binding_id", bindingId);
     readQueryBuilder.AddText(
@@ -451,7 +451,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyBindi
         response->second.After.ConstructInPlace().CopyFrom(binding);
         response->second.CloudId = bindingInternal.cloud_id();
 
-        TSqlQueryBuilder writeQueryBuilder(YdbConnection->TablePathPrefix, "ModifyBinding(write)");
+        TSqlQueryBuilder writeQueryBuilder(YdbConnection->TablePathPrefix, "ModifyBinding(write)"); 
         writeQueryBuilder.AddString("scope", scope);
         writeQueryBuilder.AddString("binding_id", bindingId);
         writeQueryBuilder.AddInt64("visibility", YandexQuery::Acl::SCOPE); // TODO: fix me
@@ -572,7 +572,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDeleteBindi
 
     std::shared_ptr<std::pair<YandexQuery::DeleteBindingResult, TAuditDetails<YandexQuery::Binding>>> response = std::make_shared<std::pair<YandexQuery::DeleteBindingResult, TAuditDetails<YandexQuery::Binding>>>();
 
-    TSqlQueryBuilder queryBuilder(YdbConnection->TablePathPrefix, "DeleteBinding");
+    TSqlQueryBuilder queryBuilder(YdbConnection->TablePathPrefix, "DeleteBinding"); 
     queryBuilder.AddString("scope", scope);
     queryBuilder.AddString("binding_id", bindingId);
 

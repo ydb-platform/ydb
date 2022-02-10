@@ -12,7 +12,7 @@
 
 namespace NYql {
 
-THolder<IGraphTransformer> CreateYdbIODiscoveryTransformer(TYdbState::TPtr state);
+THolder<IGraphTransformer> CreateYdbIODiscoveryTransformer(TYdbState::TPtr state); 
 THolder<IGraphTransformer> CreateYdbLoadTableMetadataTransformer(TYdbState::TPtr state, NYdb::TDriver driver);
 
 THolder<TVisitorTransformerBase> CreateYdbDataSourceTypeAnnotationTransformer(TYdbState::TPtr state);

@@ -76,8 +76,8 @@ public:
 
     void Bootstrap();
 
-    static constexpr char ActorName[] = "YQ_CHECKPOINT_COORDINATOR";
-
+    static constexpr char ActorName[] = "YQ_CHECKPOINT_COORDINATOR"; 
+ 
 private:
     void InitCheckpoint();
     void InjectCheckpoint(const TCheckpointId& checkpointId);

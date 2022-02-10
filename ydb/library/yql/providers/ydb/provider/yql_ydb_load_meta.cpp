@@ -56,10 +56,10 @@ NUdf::TDataTypeId GetYqlTypeId(NYdb::TTypeParser&& type, TExprContext& ctx) {
 }
 
 class TYdbLoadTableMetadataTransformer : public TGraphTransformerBase {
-
-using TCluster2ClientPerSnapshotHandle = std::unordered_map<std::string_view, std::pair<TMetaClient, std::optional<TCreateSnapshotHandleResult>>>;
-using TTableKey2DescribeTableResult = std::unordered_map<std::pair<TString, TString>, std::optional<TDescribeTableResult>, THash<std::pair<TString, TString>>>;
-
+ 
+using TCluster2ClientPerSnapshotHandle = std::unordered_map<std::string_view, std::pair<TMetaClient, std::optional<TCreateSnapshotHandleResult>>>; 
+using TTableKey2DescribeTableResult = std::unordered_map<std::pair<TString, TString>, std::optional<TDescribeTableResult>, THash<std::pair<TString, TString>>>; 
+ 
 public:
     TYdbLoadTableMetadataTransformer(TYdbState::TPtr state, NYdb::TDriver driver)
         : Driver_(std::move(driver)), State_(std::move(state))
@@ -72,9 +72,9 @@ public:
             return TStatus::Ok;
         }
 
-        Y_VERIFY(Clients_, "Clients_ was destroyed");
-        Y_VERIFY(PendingTables_, "PendingTables_ was destroyed");
-
+        Y_VERIFY(Clients_, "Clients_ was destroyed"); 
+        Y_VERIFY(PendingTables_, "PendingTables_ was destroyed"); 
+ 
         std::unordered_map<TString, std::unordered_set<TString>> tablesFromCluster;
 
         TOptimizeExprSettings settings{ nullptr };
@@ -113,8 +113,8 @@ public:
                 table = database + '/' + table;
             const auto& tableKey = std::make_pair(cluster, table);
             if (State_->Tables.cend() == State_->Tables.find(tableKey)) {
-                PendingTables_->emplace(tableKey, std::nullopt);
-                tablesFromCluster[tableKey.first].emplace(tableKey.second);
+                PendingTables_->emplace(tableKey, std::nullopt); 
+                tablesFromCluster[tableKey.first].emplace(tableKey.second); 
             }
 
             switch (key.GetKeyType()) {
@@ -137,21 +137,21 @@ public:
             }
         }, ctx, settings);
 
-        if (status == TStatus::Error || PendingTables_->empty()) {
+        if (status == TStatus::Error || PendingTables_->empty()) { 
             return status;
         }
 
         std::vector<NThreading::TFuture<void>> handles;
-        handles.reserve(PendingTables_->size() + tablesFromCluster.size());
+        handles.reserve(PendingTables_->size() + tablesFromCluster.size()); 
 
         for (const auto& item : tablesFromCluster) {
             const auto& cluster = item.first;
             TString token = State_->Configuration->Tokens.at(cluster);
 
             const auto& config = State_->Configuration->Clusters[cluster];
-
+ 
             std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory = CreateCredentialsProviderFactoryForStructuredToken(State_->CredentialsFactory, token, config.AddBearerToToken);
-            const auto ins = Clients_->emplace(cluster, std::pair<TMetaClient, std::optional<TCreateSnapshotHandleResult>>{{Driver_, NYdb::TCommonClientSettings()
+            const auto ins = Clients_->emplace(cluster, std::pair<TMetaClient, std::optional<TCreateSnapshotHandleResult>>{{Driver_, NYdb::TCommonClientSettings() 
                 .Database(config.Database)
                 .DiscoveryEndpoint(config.Endpoint)
                 .EnableSsl(config.Secure)
@@ -160,32 +160,32 @@ public:
 
             YQL_CLOG(INFO, ProviderYdb) << "Take snapshot for: `" << cluster << "` from " << config.Endpoint;
 
-            std::optional<TCreateSnapshotHandleResult>& snapshot = ins.first->second.second;
-            std::weak_ptr<TCluster2ClientPerSnapshotHandle> clients = Clients_;
-            handles.emplace_back(ins.first->second.first.CreateSnapshotHandle(TVector<TString>(item.second.cbegin(), item.second.cend())).Apply([clients, &snapshot]
+            std::optional<TCreateSnapshotHandleResult>& snapshot = ins.first->second.second; 
+            std::weak_ptr<TCluster2ClientPerSnapshotHandle> clients = Clients_; 
+            handles.emplace_back(ins.first->second.first.CreateSnapshotHandle(TVector<TString>(item.second.cbegin(), item.second.cend())).Apply([clients, &snapshot] 
                 (const NThreading::TFuture<TCreateSnapshotHandleResult>& future) {
-                    if (future.HasException()) {
-                        const_cast<NThreading::TFuture<TCreateSnapshotHandleResult>&>(future).ExtractValue();
-                    } else if (clients.lock()) {
-                        snapshot.emplace(const_cast<NThreading::TFuture<TCreateSnapshotHandleResult>&>(future).ExtractValue());
-                    }
+                    if (future.HasException()) { 
+                        const_cast<NThreading::TFuture<TCreateSnapshotHandleResult>&>(future).ExtractValue(); 
+                    } else if (clients.lock()) { 
+                        snapshot.emplace(const_cast<NThreading::TFuture<TCreateSnapshotHandleResult>&>(future).ExtractValue()); 
+                    } 
                 }));
         }
 
-        for (auto& pair : *PendingTables_) {
-            const auto find = Clients_->find(pair.first.first);
+        for (auto& pair : *PendingTables_) { 
+            const auto find = Clients_->find(pair.first.first); 
             const auto& table = pair.first.second;
             YQL_CLOG(INFO, ProviderYdb) << "Load table meta for: `" << table << "`";
 
-            std::optional<TDescribeTableResult>& meta = pair.second;
-            std::weak_ptr<TTableKey2DescribeTableResult> pendingTables = PendingTables_;
-            handles.emplace_back(find->second.first.GetTableDescription(table, true).Apply([pendingTables, &meta]
+            std::optional<TDescribeTableResult>& meta = pair.second; 
+            std::weak_ptr<TTableKey2DescribeTableResult> pendingTables = PendingTables_; 
+            handles.emplace_back(find->second.first.GetTableDescription(table, true).Apply([pendingTables, &meta] 
                 (const NThreading::TFuture<TDescribeTableResult>& future) {
-                    if (future.HasException()) {
-                        const_cast<NThreading::TFuture<TDescribeTableResult>&>(future).ExtractValue();
-                    } else if (pendingTables.lock()) {
-                        meta.emplace(const_cast<NThreading::TFuture<TDescribeTableResult>&>(future).ExtractValue());
-                    }
+                    if (future.HasException()) { 
+                        const_cast<NThreading::TFuture<TDescribeTableResult>&>(future).ExtractValue(); 
+                    } else if (pendingTables.lock()) { 
+                        meta.emplace(const_cast<NThreading::TFuture<TDescribeTableResult>&>(future).ExtractValue()); 
+                    } 
                 }));
         }
 
@@ -205,12 +205,12 @@ public:
         YQL_ENSURE(AsyncFuture_.HasValue());
         output = input;
 
-        Y_VERIFY(Clients_, "Clients_ was destroyed");
-        Y_VERIFY(PendingTables_, "PendingTables_ was destroyed");
-
+        Y_VERIFY(Clients_, "Clients_ was destroyed"); 
+        Y_VERIFY(PendingTables_, "PendingTables_ was destroyed"); 
+ 
         bool failed = false;
-        std::unordered_map<std::string_view, TSnapshotHandle> snapshots(Clients_->size());
-        for (auto& client : *Clients_) {
+        std::unordered_map<std::string_view, TSnapshotHandle> snapshots(Clients_->size()); 
+        for (auto& client : *Clients_) { 
             auto& snapshot = *client.second.second;
             if (snapshot.IsSuccess()) {
                 snapshots.emplace(client.first, snapshot.ExtractResult());
@@ -223,7 +223,7 @@ public:
             }
         }
 
-        for (auto& pair : *PendingTables_) {
+        for (auto& pair : *PendingTables_) { 
             const auto& result = *pair.second;
             auto& meta = State_->Tables[pair.first];
             meta.Snapshot = snapshots[pair.first.first];
@@ -260,16 +260,16 @@ public:
             }
         }
 
-        Clients_->clear();
-        PendingTables_->clear();
+        Clients_->clear(); 
+        PendingTables_->clear(); 
         return failed ? TStatus::Error : TStatus::Ok;
     }
 
 private:
     const NYdb::TDriver Driver_;
     const TYdbState::TPtr State_;
-    std::shared_ptr<TCluster2ClientPerSnapshotHandle> Clients_ = std::make_shared<TCluster2ClientPerSnapshotHandle>();
-    std::shared_ptr<TTableKey2DescribeTableResult > PendingTables_ = std::make_shared<TTableKey2DescribeTableResult>();
+    std::shared_ptr<TCluster2ClientPerSnapshotHandle> Clients_ = std::make_shared<TCluster2ClientPerSnapshotHandle>(); 
+    std::shared_ptr<TTableKey2DescribeTableResult > PendingTables_ = std::make_shared<TTableKey2DescribeTableResult>(); 
     NThreading::TFuture<void> AsyncFuture_;
 };
 

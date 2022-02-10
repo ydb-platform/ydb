@@ -7,11 +7,11 @@
 #include <ydb/library/security/ydb_credentials_provider_factory.h>
 
 #include <library/cpp/actors/core/actor.h>
-#include <library/cpp/monlib/dynamic_counters/counters.h>
+#include <library/cpp/monlib/dynamic_counters/counters.h> 
 
 #include <util/system/mutex.h>
 
-namespace NYq {
+namespace NYq { 
 
 class TDbPool: public TThrRefBase {
 public:
@@ -24,12 +24,12 @@ public:
 private:
     friend class TDbPoolMap;
 
-    TDbPool(ui32 sessionsCount, const NYdb::NTable::TTableClient& tableClient, const NMonitoring::TDynamicCounterPtr& counters);
+    TDbPool(ui32 sessionsCount, const NYdb::NTable::TTableClient& tableClient, const NMonitoring::TDynamicCounterPtr& counters); 
 
     TMutex Mutex;
     TVector<NActors::TActorId> Actors;
     ui32 Index = 0;
-    const NMonitoring::TDynamicCounterPtr Counters;
+    const NMonitoring::TDynamicCounterPtr Counters; 
 };
 
 enum class EDbPoolId {
@@ -48,9 +48,9 @@ private:
 
     TDbPoolMap(const NYq::NConfig::TDbPoolConfig& config,
                NYdb::TDriver driver,
-               const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
-               const NMonitoring::TDynamicCounterPtr& counters);
-
+               const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory, 
+               const NMonitoring::TDynamicCounterPtr& counters); 
+ 
     void Reset(const NYq::NConfig::TDbPoolConfig& config);
     TMutex Mutex;
     NYq::NConfig::TDbPoolConfig Config;
@@ -58,7 +58,7 @@ private:
     THashMap<EDbPoolId, TDbPool::TPtr> Pools;
     THolder<NYdb::NTable::TTableClient> TableClient;
     NKikimr::TYdbCredentialsProviderFactory CredentialsProviderFactory;
-    const NMonitoring::TDynamicCounterPtr Counters;
+    const NMonitoring::TDynamicCounterPtr Counters; 
 };
 
 class TDbPoolHolder: public TThrRefBase {
@@ -67,9 +67,9 @@ public:
     TDbPoolHolder(
         const NYq::NConfig::TDbPoolConfig& config,
         const NYdb::TDriver& driver,
-        const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
-        const NMonitoring::TDynamicCounterPtr& counters);
-
+        const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory, 
+        const NMonitoring::TDynamicCounterPtr& counters); 
+ 
     ~TDbPoolHolder();
 
     void Reset(const NYq::NConfig::TDbPoolConfig& config);
@@ -82,4 +82,4 @@ public:
     TDbPoolMap::TPtr Pools;
 };
 
-} /* NYq */
+} /* NYq */ 

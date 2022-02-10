@@ -172,14 +172,14 @@ private:
             Handle(event, ctx);
             return;
         }
-
+ 
         auto state = requestBaseCtx->GetAuthState();
 
         if (state.State == NGrpc::TAuthState::AS_FAIL) {
             requestBaseCtx->ReplyUnauthenticated();
             return;
         }
-
+ 
         if (state.State == NGrpc::TAuthState::AS_UNAVAILABLE) {
             Counters->IncDatabaseUnavailableCounter();
             const TString error = "Unable to resolve token";
@@ -317,7 +317,7 @@ void TGRpcRequestProxyImpl::Bootstrap(const TActorContext& ctx) {
     }
 
     Counters = MakeIntrusive<TGrpcProxyCounters>(AppData()->Counters);
-
+ 
     RootDatabase = DatabaseFromDomain();
     TDatabaseInfo& database = Databases[RootDatabase];
     database.DatabaseType = TDatabaseInfo::TDatabaseType::Root;
@@ -334,7 +334,7 @@ void TGRpcRequestProxyImpl::ReplayEvents(const TString& databaseName, const TAct
         std::deque<TEventReqHolder> deferredEvents;
         std::swap(deferredEvents, queue); // we can put back event to DeferredEvents queue in StateFunc KIKIMR-12851
         while (!deferredEvents.empty()) {
-            StateFunc(deferredEvents.front().Ev, ctx);
+            StateFunc(deferredEvents.front().Ev, ctx); 
             deferredEvents.pop_front();
         }
         if (queue.empty()) {
@@ -552,7 +552,7 @@ void TGRpcRequestProxyImpl::StateFunc(TAutoPtr<IEventHandle>& ev, const TActorCo
         hFunc(TEvents::TEvUndelivered, HandleUndelivery);
         HFunc(TSchemeBoardEvents::TEvNotifyUpdate, HandleSchemeBoard);
         hFunc(TSchemeBoardEvents::TEvNotifyDelete, HandleSchemeBoard);
-
+ 
         default:
             handled = false;
             break;

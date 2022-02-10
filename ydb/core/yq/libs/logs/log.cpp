@@ -13,8 +13,8 @@ using namespace NActors;
 
 class TYqlLogsUpdater : public TActorBootstrapped<TYqlLogsUpdater> {
 public:
-    static constexpr char ActorName[] = "YQ_LOGS_UPDATER";
-
+    static constexpr char ActorName[] = "YQ_LOGS_UPDATER"; 
+ 
     TYqlLogsUpdater(const NKikimrConfig::TLogConfig& logConfig)
         : YqlLoggerScope(new NYql::NLog::TTlsLogBackend(new TNullLogBackend()))
         , LogConfig(logConfig)

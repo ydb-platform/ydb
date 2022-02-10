@@ -36,12 +36,12 @@ public:
 
     NPq::NConfigurationManager::TAsyncDescribePathResult DescribePath(const TString& sessionId, const TString& cluster, const TString& database, const TString& path, const TString& token) override;
 
-    void UpdateClusterConfigs(
-        const TString& clusterName,
-        const TString& endpoint,
-        const TString& database,
-        bool secure) override;
-
+    void UpdateClusterConfigs( 
+        const TString& clusterName, 
+        const TString& endpoint, 
+        const TString& database, 
+        bool secure) override; 
+ 
 private:
     mutable TMutex Mutex;
     THashMap<std::pair<TString, TString>, TDummyTopic> Topics;

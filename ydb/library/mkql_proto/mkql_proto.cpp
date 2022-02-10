@@ -425,8 +425,8 @@ Y_FORCE_INLINE void HandleKindDataExport(const TType* type, const NUdf::TUnboxed
 void ExportValueToProtoImpl(TType* type, const NUdf::TUnboxedValuePod& value, NKikimrMiniKQL::TValue& res, const TVector<ui32>* columnOrder = nullptr) {
     switch (type->GetKind()) {
         case TType::EKind::Void:
-        case TType::EKind::EmptyList:
-        case TType::EKind::EmptyDict:
+        case TType::EKind::EmptyList: 
+        case TType::EKind::EmptyDict: 
             break;
 
         case TType::EKind::Null: {
@@ -507,12 +507,12 @@ void ExportValueToProtoImpl(TType* type, const NUdf::TUnboxedValuePod& value, NK
             break;
         }
 
-        case TType::EKind::Tagged: {
-            auto taggedType = static_cast<TTaggedType*>(type);
-            ExportValueToProtoImpl(taggedType->GetBaseType(), value, res);
-            break;
-        }
-
+        case TType::EKind::Tagged: { 
+            auto taggedType = static_cast<TTaggedType*>(type); 
+            ExportValueToProtoImpl(taggedType->GetBaseType(), value, res); 
+            break; 
+        } 
+ 
         default:
             MKQL_ENSURE(false, TStringBuilder() << "Unknown kind: " << type->GetKindAsStr());
     }
@@ -521,9 +521,9 @@ void ExportValueToProtoImpl(TType* type, const NUdf::TUnboxedValuePod& value, NK
 void ExportValueToProtoImpl(TType* type, const NUdf::TUnboxedValuePod& value, Ydb::Value& res, const TVector<ui32>* columnOrder = nullptr) {
     switch (type->GetKind()) {
         case TType::EKind::Void:
-        case TType::EKind::EmptyList:
-        case TType::EKind::EmptyDict:
-	    break;
+        case TType::EKind::EmptyList: 
+        case TType::EKind::EmptyDict: 
+	    break; 
 
         case TType::EKind::Null: {
             res.set_null_flag_value(::google::protobuf::NULL_VALUE);

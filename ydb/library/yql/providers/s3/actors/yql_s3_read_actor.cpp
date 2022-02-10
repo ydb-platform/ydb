@@ -25,7 +25,7 @@ struct TEvPrivate {
 
         EvReadResult = EvBegin,
         EvReadError,
-        EvRetry,
+        EvRetry, 
 
         EvEnd
     };
@@ -39,51 +39,51 @@ struct TEvPrivate {
     };
 
     struct TEvReadError : public TEventLocal<TEvReadError, EvReadError> {
-        TEvReadError(TIssues&& error, size_t pathInd): Error(std::move(error)), PathIndex(pathInd) {}
+        TEvReadError(TIssues&& error, size_t pathInd): Error(std::move(error)), PathIndex(pathInd) {} 
         TIssues Error;
-        size_t PathIndex = 0;
+        size_t PathIndex = 0; 
     };
-
-    struct TEvRetryEvent : public NActors::TEventLocal<TEvRetryEvent, EvRetry> {
-        explicit TEvRetryEvent(size_t pathIndex) : PathIndex(pathIndex) {}
-        size_t PathIndex = 0;
-    };
+ 
+    struct TEvRetryEvent : public NActors::TEventLocal<TEvRetryEvent, EvRetry> { 
+        explicit TEvRetryEvent(size_t pathIndex) : PathIndex(pathIndex) {} 
+        size_t PathIndex = 0; 
+    }; 
 };
 
 } // namespace
 
 class TS3ReadActor : public TActorBootstrapped<TS3ReadActor>, public IDqSourceActor {
-private:
-    class TRetryParams {
-    public:
-        TRetryParams(const std::shared_ptr<NS3::TRetryConfig>& retryConfig) {
-            if (retryConfig) {
-                DelayMs = retryConfig->GetInitialDelayMs() ? TDuration::MilliSeconds(retryConfig->GetInitialDelayMs()) : DelayMs;
-                Epsilon = retryConfig->GetEpsilon() ? retryConfig->GetEpsilon() : Epsilon;
-                Y_VERIFY(0.0 < Epsilon && Epsilon < 1.0);
-            }
-        }
-
-        TDuration GetNextDelay(ui32 maxRetries) {
-            if (Retries > maxRetries) return TDuration::Zero();
-            return DelayMs = GenerateNextDelay();
-        };
-
-        void IncRetries() {
-            ++Retries;
-        }
-
-    private:
-        TDuration GenerateNextDelay() {
-            double low = 1 - Epsilon;
-            auto jitter = low + std::rand() / (RAND_MAX / (2 * Epsilon));
-            return DelayMs * jitter;
-        }
-
-        ui32 Retries = 0;
-        TDuration DelayMs = TDuration::MilliSeconds(100);
-        double Epsilon = 0.1;
-    };
+private: 
+    class TRetryParams { 
+    public: 
+        TRetryParams(const std::shared_ptr<NS3::TRetryConfig>& retryConfig) { 
+            if (retryConfig) { 
+                DelayMs = retryConfig->GetInitialDelayMs() ? TDuration::MilliSeconds(retryConfig->GetInitialDelayMs()) : DelayMs; 
+                Epsilon = retryConfig->GetEpsilon() ? retryConfig->GetEpsilon() : Epsilon; 
+                Y_VERIFY(0.0 < Epsilon && Epsilon < 1.0); 
+            } 
+        } 
+ 
+        TDuration GetNextDelay(ui32 maxRetries) { 
+            if (Retries > maxRetries) return TDuration::Zero(); 
+            return DelayMs = GenerateNextDelay(); 
+        }; 
+ 
+        void IncRetries() { 
+            ++Retries; 
+        } 
+ 
+    private: 
+        TDuration GenerateNextDelay() { 
+            double low = 1 - Epsilon; 
+            auto jitter = low + std::rand() / (RAND_MAX / (2 * Epsilon)); 
+            return DelayMs * jitter; 
+        } 
+ 
+        ui32 Retries = 0; 
+        TDuration DelayMs = TDuration::MilliSeconds(100); 
+        double Epsilon = 0.1; 
+    }; 
 public:
 using TPath = std::tuple<TString, size_t>;
 using TPathList = std::vector<TPath>;
@@ -93,8 +93,8 @@ using TPathList = std::vector<TPath>;
         const TString& url,
         const TString& token,
         TPathList&& paths,
-        ICallbacks* callbacks,
-        const std::shared_ptr<NS3::TRetryConfig>& retryConfig
+        ICallbacks* callbacks, 
+        const std::shared_ptr<NS3::TRetryConfig>& retryConfig 
     )   : Gateway(std::move(gateway))
         , InputIndex(inputIndex)
         , Callbacks(callbacks)
@@ -102,26 +102,26 @@ using TPathList = std::vector<TPath>;
         , Url(url)
         , Headers(MakeHeader(token))
         , Paths(std::move(paths))
-        , RetryConfig(retryConfig)
-    {
-        if (RetryConfig) {
-            MaxRetriesPerPath = RetryConfig->GetMaxRetriesPerPath() ? RetryConfig->GetMaxRetriesPerPath() : MaxRetriesPerPath;
-        }
-    }
+        , RetryConfig(retryConfig) 
+    { 
+        if (RetryConfig) { 
+            MaxRetriesPerPath = RetryConfig->GetMaxRetriesPerPath() ? RetryConfig->GetMaxRetriesPerPath() : MaxRetriesPerPath; 
+        } 
+    } 
 
     void Bootstrap() {
         Become(&TS3ReadActor::StateFunc);
-        RetriesPerPath.resize(Paths.size(), TRetryParams(RetryConfig));
-        for (size_t pathInd = 0; pathInd < Paths.size(); ++pathInd) {
-            const TPath& path = Paths[pathInd];
-            Gateway->Download(Url + std::get<TString>(path),
-                Headers, std::get<size_t>(path),
-                std::bind(&TS3ReadActor::OnDownloadFinished, ActorSystem, SelfId(), std::placeholders::_1, pathInd));
-        };
+        RetriesPerPath.resize(Paths.size(), TRetryParams(RetryConfig)); 
+        for (size_t pathInd = 0; pathInd < Paths.size(); ++pathInd) { 
+            const TPath& path = Paths[pathInd]; 
+            Gateway->Download(Url + std::get<TString>(path), 
+                Headers, std::get<size_t>(path), 
+                std::bind(&TS3ReadActor::OnDownloadFinished, ActorSystem, SelfId(), std::placeholders::_1, pathInd)); 
+        }; 
     }
-
-    static constexpr char ActorName[] = "S3_READ_ACTOR";
-
+ 
+    static constexpr char ActorName[] = "S3_READ_ACTOR"; 
+ 
 private:
     void SaveState(const NDqProto::TCheckpoint&, NDqProto::TSourceState&) final {}
     void LoadState(const NDqProto::TSourceState&) final {}
@@ -131,16 +131,16 @@ private:
     STRICT_STFUNC(StateFunc,
         hFunc(TEvPrivate::TEvReadResult, Handle);
         hFunc(TEvPrivate::TEvReadError, Handle);
-        hFunc(TEvPrivate::TEvRetryEvent, HandleRetry);
+        hFunc(TEvPrivate::TEvRetryEvent, HandleRetry); 
     )
 
-    static void OnDownloadFinished(TActorSystem* actorSystem, TActorId selfId, IHTTPGateway::TResult&& result, size_t pathInd) {
+    static void OnDownloadFinished(TActorSystem* actorSystem, TActorId selfId, IHTTPGateway::TResult&& result, size_t pathInd) { 
         switch (result.index()) {
         case 0U:
             actorSystem->Send(new IEventHandle(selfId, TActorId(), new TEvPrivate::TEvReadResult(std::get<IHTTPGateway::TContent>(std::move(result)))));
             return;
         case 1U:
-            actorSystem->Send(new IEventHandle(selfId, TActorId(), new TEvPrivate::TEvReadError(std::get<TIssues>(std::move(result)), pathInd)));
+            actorSystem->Send(new IEventHandle(selfId, TActorId(), new TEvPrivate::TEvReadError(std::get<TIssues>(std::move(result)), pathInd))); 
             return;
         default:
             break;
@@ -174,21 +174,21 @@ private:
         Callbacks->OnNewSourceDataArrived(InputIndex);
     }
 
-    void HandleRetry(TEvPrivate::TEvRetryEvent::TPtr& ev) {
-        const auto pathInd = ev->Get()->PathIndex;
-        RetriesPerPath[pathInd].IncRetries();
-        Gateway->Download(Url + std::get<TString>(Paths[pathInd]),
-            Headers, std::get<size_t>(Paths[pathInd]),
-            std::bind(&TS3ReadActor::OnDownloadFinished, ActorSystem, SelfId(), std::placeholders::_1, pathInd));
-    }
-
+    void HandleRetry(TEvPrivate::TEvRetryEvent::TPtr& ev) { 
+        const auto pathInd = ev->Get()->PathIndex; 
+        RetriesPerPath[pathInd].IncRetries(); 
+        Gateway->Download(Url + std::get<TString>(Paths[pathInd]), 
+            Headers, std::get<size_t>(Paths[pathInd]), 
+            std::bind(&TS3ReadActor::OnDownloadFinished, ActorSystem, SelfId(), std::placeholders::_1, pathInd)); 
+    } 
+ 
     void Handle(TEvPrivate::TEvReadError::TPtr& result) {
-        const auto pathInd = result->Get()->PathIndex;
-        Y_VERIFY(pathInd < RetriesPerPath.size());
-        if (auto nextDelayMs = RetriesPerPath[pathInd].GetNextDelay(MaxRetriesPerPath)) {
-            Schedule(nextDelayMs, new TEvPrivate::TEvRetryEvent(pathInd));
-            return;
-        }
+        const auto pathInd = result->Get()->PathIndex; 
+        Y_VERIFY(pathInd < RetriesPerPath.size()); 
+        if (auto nextDelayMs = RetriesPerPath[pathInd].GetNextDelay(MaxRetriesPerPath)) { 
+            Schedule(nextDelayMs, new TEvPrivate::TEvRetryEvent(pathInd)); 
+            return; 
+        } 
         ++IsDoneCounter;
         Callbacks->OnSourceError(InputIndex, result->Get()->Error, true);
     }
@@ -202,7 +202,7 @@ private:
         return token.empty() ? IHTTPGateway::THeaders() : IHTTPGateway::THeaders{TString("X-YaCloud-SubjectToken:") += token};
     }
 
-private:
+private: 
     size_t IsDoneCounter = 0U;
 
     const IHTTPGateway::TPtr Gateway;
@@ -217,10 +217,10 @@ private:
     const TPathList Paths;
 
     std::queue<IHTTPGateway::TContent> Blocks;
-
-    std::vector<TRetryParams> RetriesPerPath;
-    const std::shared_ptr<NS3::TRetryConfig> RetryConfig;
-    ui32 MaxRetriesPerPath = 3;
+ 
+    std::vector<TRetryParams> RetriesPerPath; 
+    const std::shared_ptr<NS3::TRetryConfig> RetryConfig; 
+    ui32 MaxRetriesPerPath = 3; 
 };
 
 std::pair<NYql::NDq::IDqSourceActor*, IActor*> CreateS3ReadActor(
@@ -230,8 +230,8 @@ std::pair<NYql::NDq::IDqSourceActor*, IActor*> CreateS3ReadActor(
     const THashMap<TString, TString>& secureParams,
     const THashMap<TString, TString>& taskParams,
     NYql::NDq::IDqSourceActor::ICallbacks* callback,
-    ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
-    const std::shared_ptr<NS3::TRetryConfig>& retryConfig)
+    ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory, 
+    const std::shared_ptr<NS3::TRetryConfig>& retryConfig) 
 {
     std::unordered_map<TString, size_t> map(params.GetPath().size());
     for (auto i = 0; i < params.GetPath().size(); ++i)
@@ -254,7 +254,7 @@ std::pair<NYql::NDq::IDqSourceActor*, IActor*> CreateS3ReadActor(
     const auto token = secureParams.Value(params.GetToken(), TString{});
     const auto credentialsProviderFactory = CreateCredentialsProviderFactoryForStructuredToken(credentialsFactory, token);
     const auto authToken = credentialsProviderFactory->CreateProvider()->GetAuthInfo();
-    const auto actor = new TS3ReadActor(inputIndex, std::move(gateway), params.GetUrl(), authToken, std::move(paths), callback, retryConfig);
+    const auto actor = new TS3ReadActor(inputIndex, std::move(gateway), params.GetUrl(), authToken, std::move(paths), callback, retryConfig); 
     return {actor, actor};
 }
 

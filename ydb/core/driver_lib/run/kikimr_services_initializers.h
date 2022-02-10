@@ -491,12 +491,12 @@ public:
     TYandexQueryInitializer(const TKikimrRunConfig& runConfig, std::shared_ptr<TModuleFactories> factories, NYq::IYqSharedResources::TPtr yqSharedResources);
 
     void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
-
-    static void SetIcPort(ui32 icPort);
+ 
+    static void SetIcPort(ui32 icPort); 
 private:
     std::shared_ptr<TModuleFactories> Factories;
     NYq::IYqSharedResources::TPtr YqSharedResources;
-    static ui32 IcPort;
+    static ui32 IcPort; 
 };
 
 } // namespace NKikimrServicesInitializers

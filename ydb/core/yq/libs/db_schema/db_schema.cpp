@@ -3,13 +3,13 @@
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
 #include <util/string/printf.h>
 
-namespace NYq {
+namespace NYq { 
 
 using namespace NYdb;
 
-TSqlQueryBuilder::TSqlQueryBuilder(const TString& tablePrefix, const TString& queryName)
+TSqlQueryBuilder::TSqlQueryBuilder(const TString& tablePrefix, const TString& queryName) 
     : TablePrefix(tablePrefix)
-    , QueryName(queryName)
+    , QueryName(queryName) 
 { }
 
 TSqlQueryBuilder& TSqlQueryBuilder::PushPk() {
@@ -65,12 +65,12 @@ TSqlQueryBuilder& TSqlQueryBuilder::AddValue(const TString& name, const TValue& 
     return *this;
 }
 
-TSqlQueryBuilder& TSqlQueryBuilder::AddColNames(TVector<TString>&& colNames)
-{
-    ColNames = colNames;
-    return *this;
-}
-
+TSqlQueryBuilder& TSqlQueryBuilder::AddColNames(TVector<TString>&& colNames) 
+{ 
+    ColNames = colNames; 
+    return *this; 
+} 
+ 
 TSqlQueryBuilder& TSqlQueryBuilder::MaybeAddValue(const TString& name, const TMaybe<TValue>& value) {
     if (value) {
         return AddValue(name, *value, "==");
@@ -89,28 +89,28 @@ TSqlQueryBuilder& TSqlQueryBuilder::AddText(const TString& sql, const TString& t
     return *this;
 }
 
-TSqlQueryBuilder& TSqlQueryBuilder::AddBeforeQuery(const TString& sql, const TString& tableName ) {
-    if (tableName) {
+TSqlQueryBuilder& TSqlQueryBuilder::AddBeforeQuery(const TString& sql, const TString& tableName ) { 
+    if (tableName) { 
         BeforeQuery << SubstGlobalCopy(sql, TString("{TABLENAME}"), tableName);
-    } else {
-        BeforeQuery << sql;
-    }
-    return *this;
-
-}
-
+    } else { 
+        BeforeQuery << sql; 
+    } 
+    return *this; 
+ 
+} 
+ 
 TSqlQueryBuilder& TSqlQueryBuilder::Upsert(const TString& tableName) {
     Op = "UPSERT";
     Table = tableName;
     return *this;
 }
 
-TSqlQueryBuilder& TSqlQueryBuilder::Update(const TString& tableName) {
-    Op = "UPDATE";
-    Table = tableName;
-    return *this;
-}
-
+TSqlQueryBuilder& TSqlQueryBuilder::Update(const TString& tableName) { 
+    Op = "UPDATE"; 
+    Table = tableName; 
+    return *this; 
+} 
+ 
 TSqlQueryBuilder& TSqlQueryBuilder::Insert(const TString& tableName) {
     Op = "INSERT";
     Table = tableName;
@@ -125,47 +125,47 @@ TSqlQueryBuilder& TSqlQueryBuilder::Delete(const TString& tableName, int limit) 
 }
 
 TSqlQueryBuilder& TSqlQueryBuilder::Get(const TString& tableName, int limit) {
-    Op = "SELECT";
-    Table = tableName;
+    Op = "SELECT"; 
+    Table = tableName; 
     Limit = limit;
-    return *this;
-}
-
-TSqlQueryBuilder& TSqlQueryBuilder::GetCount(const TString& tableName) {
-    Op = "SELECT COUNT(*)";
-    Table = tableName;
-    return *this;
-}
-
+    return *this; 
+} 
+ 
+TSqlQueryBuilder& TSqlQueryBuilder::GetCount(const TString& tableName) { 
+    Op = "SELECT COUNT(*)"; 
+    Table = tableName; 
+    return *this; 
+} 
+ 
 TSqlQueryBuilder& TSqlQueryBuilder::GetLastDeleted() {
     Op = "SELECT LAST DELETED";
     return *this;
 }
 
-void TSqlQueryBuilder::ConstructWhereFilter(TStringBuilder& text) {
-    text << "WHERE ";
-    size_t i = 0;
-    for (const auto& pk : Pk) {
-        text << "`" << pk << "` == " << "$" << pk;
-        ++i;
-        if (Fields || i != Pk.size()) {
-            text << " and ";
-        }
-    }
-    i = 0;
+void TSqlQueryBuilder::ConstructWhereFilter(TStringBuilder& text) { 
+    text << "WHERE "; 
+    size_t i = 0; 
+    for (const auto& pk : Pk) { 
+        text << "`" << pk << "` == " << "$" << pk; 
+        ++i; 
+        if (Fields || i != Pk.size()) { 
+            text << " and "; 
+        } 
+    } 
+    i = 0; 
     for (const auto& t : Fields) {
         auto k = std::get<0>(t); // structured capture don't work on win32
         auto v = std::get<1>(t); // structured capture don't work on win32
         auto p = std::get<2>(t); // structured capture don't work on win32
 
         text << "`" << k << "` " << p << " " << "$" << v;
-        ++i;
-        if (i != Fields.size()) {
-            text << " and ";
-        }
-    }
-}
-
+        ++i; 
+        if (i != Fields.size()) { 
+            text << " and "; 
+        } 
+    } 
+} 
+ 
 TSqlQueryBuilder& TSqlQueryBuilder::End()
 {
     if (!Op) {
@@ -191,22 +191,22 @@ TSqlQueryBuilder& TSqlQueryBuilder::End()
 
         text << "DELETE FROM `" << Table << "`\n";
         text << "ON (SELECT * from $todelete" << Counter << ");\n";
-    } else if (Op == "SELECT") {
-        text << Op << ' ';
-        size_t i = 0;
-        for (const auto& name : ColNames) {
-            text << '`' << name << '`';
-            ++i;
-            if (i != ColNames.size()) {
-                text << ", ";
-            }
-        }
+    } else if (Op == "SELECT") { 
+        text << Op << ' '; 
+        size_t i = 0; 
+        for (const auto& name : ColNames) { 
+            text << '`' << name << '`'; 
+            ++i; 
+            if (i != ColNames.size()) { 
+                text << ", "; 
+            } 
+        } 
         text << "\nFROM `" << Table << "`\n";
-        ConstructWhereFilter(text);
+        ConstructWhereFilter(text); 
         if (Limit > 0) {
             text << " LIMIT " << Limit;
         }
-        text << ";\n";
+        text << ";\n"; 
     } else if (Op == "SELECT LAST DELETED") {
         text << "SELECT ";
         size_t i = 0;
@@ -218,48 +218,48 @@ TSqlQueryBuilder& TSqlQueryBuilder::End()
             }
         }
         text << "\n FROM $todelete" << (Counter-1) << ";\n";
-    } else if (Op == "SELECT COUNT(*)") {
-        text << Op ;
+    } else if (Op == "SELECT COUNT(*)") { 
+        text << Op ; 
         text << "\nFROM `" << Table << "`\n";
-        ConstructWhereFilter(text);
-        text << ";\n";
-    } else if (Op == "UPDATE") {
+        ConstructWhereFilter(text); 
+        text << ";\n"; 
+    } else if (Op == "UPDATE") { 
         text << Op << " `" << Table << "`\n";
-        if (Pk.empty() && Fields.empty()) {
-            ythrow yexception() << "dangerous sql query";
-        }
-        text << "SET\n";
-        size_t i = 0;
-        for (const auto& t : Fields) {
-            auto k = std::get<0>(t); // structured capture don't work on win32
-            auto v = std::get<1>(t); // structured capture don't work on win32
-            auto p = std::get<2>(t); // structured capture don't work on win32
-
-            text << "`" << k << "` " << " = " << "$" << v;
-            ++i;
-            if (i != Fields.size()) {
-                text << ", ";
-            }
-        }
-        text << "\nWHERE\n";
-        for (const auto& pk : Pk) {
-            text << "$" << pk << " == " << "`" << pk << "` and ";
-        }
-        text << " $count != 0;\n";
-        BeforeQuery << text;
-        text.clear();
+        if (Pk.empty() && Fields.empty()) { 
+            ythrow yexception() << "dangerous sql query"; 
+        } 
+        text << "SET\n"; 
+        size_t i = 0; 
+        for (const auto& t : Fields) { 
+            auto k = std::get<0>(t); // structured capture don't work on win32 
+            auto v = std::get<1>(t); // structured capture don't work on win32 
+            auto p = std::get<2>(t); // structured capture don't work on win32 
+ 
+            text << "`" << k << "` " << " = " << "$" << v; 
+            ++i; 
+            if (i != Fields.size()) { 
+                text << ", "; 
+            } 
+        } 
+        text << "\nWHERE\n"; 
+        for (const auto& pk : Pk) { 
+            text << "$" << pk << " == " << "`" << pk << "` and "; 
+        } 
+        text << " $count != 0;\n"; 
+        BeforeQuery << text; 
+        text.clear(); 
     } else {
         text << Op << " INTO `" << Table << "`\n";
         text << "(\n" << "  ";
         for (const auto& pk : Pk) {
             text << "`" << pk << "`" << ",";
         }
-        size_t i = 0;
+        size_t i = 0; 
         for (const auto& t : Fields) {
             auto field = std::get<0>(t); // structured capture don't work on win32
             text << "`" << field << "`";
             i++;
-            if (i != Fields.size()) {
+            if (i != Fields.size()) { 
                 text << ",";
             }
         }
@@ -274,7 +274,7 @@ TSqlQueryBuilder& TSqlQueryBuilder::End()
             auto field = std::get<1>(t); // structured capture don't work on win32
             text << "$" << field;
             i++;
-            if (i != Fields.size()) {
+            if (i != Fields.size()) { 
                 text << ", ";
             }
         }
@@ -290,7 +290,7 @@ TSqlQueryBuilder::TResult TSqlQueryBuilder::Build()
 {
     TStringBuilder declr;
     declr << "--!syntax_v1\n";
-    declr << "-- Query name: " << QueryName << "\n";
+    declr << "-- Query name: " << QueryName << "\n"; 
     declr << "PRAGMA TablePathPrefix(\"" << TablePrefix << "\");\n";
     for (const auto& [k, v] : ParametersOrdered) {
         declr << "DECLARE $" << k << " as " << v << ";\n";
@@ -301,4 +301,4 @@ TSqlQueryBuilder::TResult TSqlQueryBuilder::Build()
     return {declr, ParamsBuilder.Build()};
 }
 
-} // namespace NYq
+} // namespace NYq 

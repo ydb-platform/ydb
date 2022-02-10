@@ -3,7 +3,7 @@
 #include <util/generic/string.h>
 #include <util/datetime/base.h>
 
-namespace NYq {
+namespace NYq { 
 
 enum class EEntityType : char {
     UNDEFINED = 'u',
@@ -26,4 +26,4 @@ struct IEntityIdGenerator : public TThrRefBase {
 
 IEntityIdGenerator::TPtr CreateEntityIdGenerator(const TString& prefix);
 
-} // namespace NYq
+} // namespace NYq 

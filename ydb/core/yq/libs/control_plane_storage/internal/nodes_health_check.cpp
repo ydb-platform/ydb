@@ -1,17 +1,17 @@
-#include "utils.h"
-
+#include "utils.h" 
+ 
 #include <ydb/core/yq/libs/db_schema/db_schema.h>
 
-namespace NYq {
-
-void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvNodesHealthCheckRequest::TPtr& ev)
-{
-    TInstant startTime = TInstant::Now();
-    TRequestCountersPtr requestCounters = Counters.Requests[RT_NODES_HEALTH_CHECK];
-    requestCounters->InFly->Inc();
-
-    const auto& request = ev->Get()->Request;
-    const TString tenant = request.tenant();
+namespace NYq { 
+ 
+void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvNodesHealthCheckRequest::TPtr& ev) 
+{ 
+    TInstant startTime = TInstant::Now(); 
+    TRequestCountersPtr requestCounters = Counters.Requests[RT_NODES_HEALTH_CHECK]; 
+    requestCounters->InFly->Inc(); 
+ 
+    const auto& request = ev->Get()->Request; 
+    const TString tenant = request.tenant(); 
     const auto& node = request.node();
     const ui32 nodeId = node.node_id();
     const TString instanceId = node.instance_id();
@@ -19,23 +19,23 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvNodesHealth
     const ui64 activeWorkers = node.active_workers();
     const ui64 memoryLimit = node.memory_limit();
     const ui64 memoryAllocated = node.memory_allocated();
-    const ui32 icPort = node.interconnect_port();
-    const TString nodeAddress = node.node_address();
-    const auto ttl = TDuration::Seconds(5);
-    const auto deadline = startTime + ttl * 3;
-
-    CPS_LOG_T("NodesHealthCheck: " << tenant << " " << nodeId << " " << instanceId << " " << hostName << " " << node.node_address() << ":" << node.interconnect_port());
-
-    NYql::TIssues issues = ValidateNodesHealthCheck(tenant, instanceId, hostName);
-    if (issues) {
-        CPS_LOG_D("NodesHealthCheckRequest, validation failed: " << issues.ToString());
-        const TDuration delta = TInstant::Now() - startTime;
-        SendResponseIssues<TEvControlPlaneStorage::TEvNodesHealthCheckResponse>(ev->Sender, issues, ev->Cookie, delta, requestCounters);
-        LWPROBE(NodesHealthCheckRequest, "", 0, "", "", delta, false);
-        return;
-    }
-
-    std::shared_ptr<Yq::Private::NodesHealthCheckResult> response = std::make_shared<Yq::Private::NodesHealthCheckResult>();
+    const ui32 icPort = node.interconnect_port(); 
+    const TString nodeAddress = node.node_address(); 
+    const auto ttl = TDuration::Seconds(5); 
+    const auto deadline = startTime + ttl * 3; 
+ 
+    CPS_LOG_T("NodesHealthCheck: " << tenant << " " << nodeId << " " << instanceId << " " << hostName << " " << node.node_address() << ":" << node.interconnect_port()); 
+ 
+    NYql::TIssues issues = ValidateNodesHealthCheck(tenant, instanceId, hostName); 
+    if (issues) { 
+        CPS_LOG_D("NodesHealthCheckRequest, validation failed: " << issues.ToString()); 
+        const TDuration delta = TInstant::Now() - startTime; 
+        SendResponseIssues<TEvControlPlaneStorage::TEvNodesHealthCheckResponse>(ev->Sender, issues, ev->Cookie, delta, requestCounters); 
+        LWPROBE(NodesHealthCheckRequest, "", 0, "", "", delta, false); 
+        return; 
+    } 
+ 
+    std::shared_ptr<Yq::Private::NodesHealthCheckResult> response = std::make_shared<Yq::Private::NodesHealthCheckResult>(); 
     {
         auto* node = response->add_nodes();
         node->set_node_id(nodeId);
@@ -44,22 +44,22 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvNodesHealth
         node->set_active_workers(activeWorkers);
         node->set_memory_limit(memoryLimit);
         node->set_memory_allocated(memoryAllocated);
-        node->set_node_address(nodeAddress);
+        node->set_node_address(nodeAddress); 
     }
-
-    TSqlQueryBuilder readQueryBuilder(YdbConnection->TablePathPrefix, "NodesHealthCheck(read)");
+ 
+    TSqlQueryBuilder readQueryBuilder(YdbConnection->TablePathPrefix, "NodesHealthCheck(read)"); 
     readQueryBuilder.AddTimestamp("now", TInstant::Now());
     readQueryBuilder.AddString("tenant", tenant);
     readQueryBuilder.AddText(
-        "SELECT `" NODE_ID_COLUMN_NAME "`, `" INSTANCE_ID_COLUMN_NAME "`, `" HOST_NAME_COLUMN_NAME "`, `" ACTIVE_WORKERS_COLUMN_NAME"`, `" MEMORY_LIMIT_COLUMN_NAME"`, "
-        "`" MEMORY_ALLOCATED_COLUMN_NAME"`, `" INTERCONNECT_PORT_COLUMN_NAME "`, `" NODE_ADDRESS_COLUMN_NAME "` FROM `" NODES_TABLE_NAME "`\n"
-        "WHERE `" TENANT_COLUMN_NAME"` = $tenant AND `" EXPIRE_AT_COLUMN_NAME "` >= $now;\n"
+        "SELECT `" NODE_ID_COLUMN_NAME "`, `" INSTANCE_ID_COLUMN_NAME "`, `" HOST_NAME_COLUMN_NAME "`, `" ACTIVE_WORKERS_COLUMN_NAME"`, `" MEMORY_LIMIT_COLUMN_NAME"`, " 
+        "`" MEMORY_ALLOCATED_COLUMN_NAME"`, `" INTERCONNECT_PORT_COLUMN_NAME "`, `" NODE_ADDRESS_COLUMN_NAME "` FROM `" NODES_TABLE_NAME "`\n" 
+        "WHERE `" TENANT_COLUMN_NAME"` = $tenant AND `" EXPIRE_AT_COLUMN_NAME "` >= $now;\n" 
     );
-
-    auto prepareParams = [=](const TVector<TResultSet>& resultSets) {
-        for (const auto& resultSet : resultSets) {
-            TResultSetParser parser(resultSet);
-            while (parser.TryNextRow()) {
+ 
+    auto prepareParams = [=](const TVector<TResultSet>& resultSets) { 
+        for (const auto& resultSet : resultSets) { 
+            TResultSetParser parser(resultSet); 
+            while (parser.TryNextRow()) { 
                 auto nid = *parser.ColumnParser(NODE_ID_COLUMN_NAME).GetOptionalUint32();
                 if (nid != nodeId) {
                     auto* node = response->add_nodes();
@@ -69,13 +69,13 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvNodesHealth
                     node->set_active_workers(*parser.ColumnParser(ACTIVE_WORKERS_COLUMN_NAME).GetOptionalUint64());
                     node->set_memory_limit(*parser.ColumnParser(MEMORY_LIMIT_COLUMN_NAME).GetOptionalUint64());
                     node->set_memory_allocated(*parser.ColumnParser(MEMORY_ALLOCATED_COLUMN_NAME).GetOptionalUint64());
-                    node->set_interconnect_port(parser.ColumnParser(INTERCONNECT_PORT_COLUMN_NAME).GetOptionalUint32().GetOrElse(0));
-                    node->set_node_address(*parser.ColumnParser(NODE_ADDRESS_COLUMN_NAME).GetOptionalString());
+                    node->set_interconnect_port(parser.ColumnParser(INTERCONNECT_PORT_COLUMN_NAME).GetOptionalUint32().GetOrElse(0)); 
+                    node->set_node_address(*parser.ColumnParser(NODE_ADDRESS_COLUMN_NAME).GetOptionalString()); 
                 }
-            }
-        }
+            } 
+        } 
 
-        TSqlQueryBuilder writeQueryBuilder(YdbConnection->TablePathPrefix, "NodesHealthCheck(write)");
+        TSqlQueryBuilder writeQueryBuilder(YdbConnection->TablePathPrefix, "NodesHealthCheck(write)"); 
         writeQueryBuilder.AddString("tenant", tenant);
         writeQueryBuilder.AddUint32("node_id", nodeId);
         writeQueryBuilder.AddString("instance_id", instanceId);
@@ -94,27 +94,27 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvNodesHealth
         );
         const auto writeQuery = writeQueryBuilder.Build();
         return std::make_pair(writeQuery.Sql, writeQuery.Params);
-    };
-
+    }; 
+ 
     const auto readQuery = readQueryBuilder.Build();
     auto debugInfo = Config.Proto.GetEnableDebugMode() ? std::make_shared<TDebugInfo>() : TDebugInfoPtr{};
     TAsyncStatus status = ReadModifyWrite(NActors::TActivationContext::ActorSystem(), readQuery.Sql, readQuery.Params, prepareParams, requestCounters, debugInfo);
-    auto prepare = [response] { return *response; };
-    auto success = SendResponse<TEvControlPlaneStorage::TEvNodesHealthCheckResponse, Yq::Private::NodesHealthCheckResult>(
-        "NodesHealthCheckRequest",
-        NActors::TActivationContext::ActorSystem(),
-        status,
-        SelfId(),
-        ev,
-        startTime,
-        requestCounters,
-        prepare,
-        debugInfo);
-
-    success.Apply([=](const auto& future) {
-            TDuration delta = TInstant::Now() - startTime;
-            LWPROBE(NodesHealthCheckRequest, tenant, nodeId, instanceId, hostName, delta, future.GetValue());
-        });
-}
-
-} // NYq
+    auto prepare = [response] { return *response; }; 
+    auto success = SendResponse<TEvControlPlaneStorage::TEvNodesHealthCheckResponse, Yq::Private::NodesHealthCheckResult>( 
+        "NodesHealthCheckRequest", 
+        NActors::TActivationContext::ActorSystem(), 
+        status, 
+        SelfId(), 
+        ev, 
+        startTime, 
+        requestCounters, 
+        prepare, 
+        debugInfo); 
+ 
+    success.Apply([=](const auto& future) { 
+            TDuration delta = TInstant::Now() - startTime; 
+            LWPROBE(NodesHealthCheckRequest, tenant, nodeId, instanceId, hostName, delta, future.GetValue()); 
+        }); 
+} 
+ 
+} // NYq 

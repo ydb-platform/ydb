@@ -26,12 +26,12 @@ public:
         const TString& path,
         const TString& token) override;
 
-    void UpdateClusterConfigs(
-        const TString& clusterName,
-        const TString& endpoint,
-        const TString& database,
-        bool secure) override;
-
+    void UpdateClusterConfigs( 
+        const TString& clusterName, 
+        const TString& endpoint, 
+        const TString& database, 
+        bool secure) override; 
+ 
 private:
     void InitClusterConfigs();
     TPqSession::TPtr GetExistingSession(const TString& sessionId) const;
@@ -68,22 +68,22 @@ void TPqNativeGateway::InitClusterConfigs() {
     }
 }
 
-void TPqNativeGateway::UpdateClusterConfigs(
-    const TString& clusterName,
-    const TString& endpoint,
-    const TString& database,
-    bool secure)
-{
-    with_lock (Mutex) {
-        const auto foundCluster = ClusterConfigs->find(clusterName);
-        Y_VERIFY(foundCluster != ClusterConfigs->end());
-        auto& cluster = foundCluster->second;
-        cluster.SetEndpoint(endpoint);
-        cluster.SetDatabase(database);
-        cluster.SetUseSsl(secure);
-    }
-}
-
+void TPqNativeGateway::UpdateClusterConfigs( 
+    const TString& clusterName, 
+    const TString& endpoint, 
+    const TString& database, 
+    bool secure) 
+{ 
+    with_lock (Mutex) { 
+        const auto foundCluster = ClusterConfigs->find(clusterName); 
+        Y_VERIFY(foundCluster != ClusterConfigs->end()); 
+        auto& cluster = foundCluster->second; 
+        cluster.SetEndpoint(endpoint); 
+        cluster.SetDatabase(database); 
+        cluster.SetUseSsl(secure); 
+    } 
+} 
+ 
 NThreading::TFuture<void> TPqNativeGateway::OpenSession(const TString& sessionId, const TString& username) {
     with_lock (Mutex) {
         auto [sessionIt, isNewSession] = Sessions.emplace(sessionId,

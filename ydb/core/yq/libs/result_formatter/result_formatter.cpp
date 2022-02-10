@@ -13,10 +13,10 @@
 
 #include <library/cpp/json/yson/json2yson.h>
 
-namespace NYq {
+namespace NYq { 
 
 using namespace NKikimr::NMiniKQL;
-using NYql::NUdf::TUnboxedValuePod;
+using NYql::NUdf::TUnboxedValuePod; 
 
 namespace {
 
@@ -154,7 +154,7 @@ NKikimr::NMiniKQL::TType* MakeEmptyDictType(NKikimr::NMiniKQL::TTypeEnvironment&
     return env.GetTypeOfEmptyDict();
 }
 
-const NYql::TTypeAnnotationNode* MakeVariantType(const NYql::TTypeAnnotationNode* underlyingType, NYql::TExprContext& ctx)
+const NYql::TTypeAnnotationNode* MakeVariantType(const NYql::TTypeAnnotationNode* underlyingType, NYql::TExprContext& ctx) 
 {
     return ctx.MakeType<NYql::TVariantExprType>(underlyingType);
 }
@@ -164,7 +164,7 @@ NKikimr::NMiniKQL::TType* MakeVariantType(NKikimr::NMiniKQL::TType* underlyingTy
     return TVariantType::Create(underlyingType, env);
 }
 
-const NYql::TTypeAnnotationNode* MakeTaggedType(const TString& tag, const NYql::TTypeAnnotationNode* underlyingType, NYql::TExprContext& ctx)
+const NYql::TTypeAnnotationNode* MakeTaggedType(const TString& tag, const NYql::TTypeAnnotationNode* underlyingType, NYql::TExprContext& ctx) 
 {
     return ctx.MakeType<NYql::TTaggedExprType>(underlyingType, tag);
 }
@@ -323,7 +323,7 @@ void FormatColumnValue(
 {
     const Ydb::Value& rawProtoValue = NYdb::TProtoAccessor::GetProto(value);
 
-    NYql::NUdf::TUnboxedValue unboxed = ImportValueFromProto(
+    NYql::NUdf::TUnboxedValue unboxed = ImportValueFromProto( 
         type,
         rawProtoValue,
         holderFactory);
@@ -389,4 +389,4 @@ void FormatResultSet(NJson::TJsonValue& root, const NYdb::TResultSet& resultSet)
     }
 }
 
-} // namespace NYq
+} // namespace NYq 

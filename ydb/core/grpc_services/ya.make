@@ -72,7 +72,7 @@ SRCS(
     rpc_yq.cpp
     table_profiles.cpp
     table_settings.cpp
-    rpc_analytics_internal.cpp
+    rpc_analytics_internal.cpp 
 )
 
 PEERDIR(

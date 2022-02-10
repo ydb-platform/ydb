@@ -3,10 +3,10 @@
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
 #include <util/generic/hash.h>
 
-namespace NYq {
+namespace NYq { 
 
-using namespace NYql;
-
+using namespace NYql; 
+ 
 void AddSystemClusters(TGatewaysConfig& gatewaysConfig, THashMap<TString, TString>& clusters, const TString& authToken) {
     {
         const auto clusterCfg = gatewaysConfig.MutablePq()->AddClusterMapping();
@@ -117,5 +117,5 @@ void AddSystemClusters(TGatewaysConfig& gatewaysConfig, THashMap<TString, TStrin
         clusters.emplace(clusterCfg->GetName(), SolomonProviderName);
     }
 }
-
-} //NYq
+ 
+} //NYq 

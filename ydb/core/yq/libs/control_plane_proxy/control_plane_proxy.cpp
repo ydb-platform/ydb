@@ -104,7 +104,7 @@ class TRequestActor : public NActors::TActorBootstrapped<TRequestActor<TRequestP
 
 public:
     static constexpr char ActorName[] = "YQ_CONTROL_PLANE_PROXY_REQUEST_ACTOR";
-
+ 
     explicit TRequestActor(const NConfig::TControlPlaneProxyConfig& config,
                            TActorId sender, ui32 cookie,
                            const TString& scope, const TString& folderId, TRequestProto&& requestProto,
@@ -331,7 +331,7 @@ public:
     {
     }
 
-    static constexpr char ActorName[] = "YQ_CONTROL_PLANE_PROXY";
+    static constexpr char ActorName[] = "YQ_CONTROL_PLANE_PROXY"; 
 
     void Bootstrap() {
         CPP_LOG_D("Starting yandex query control plane proxy. Actor id: " << SelfId());

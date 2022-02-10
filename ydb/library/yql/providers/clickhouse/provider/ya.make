@@ -9,7 +9,7 @@ SRCS(
     yql_clickhouse_datasource.cpp
     yql_clickhouse_datasource_type_ann.cpp
     yql_clickhouse_dq_integration.cpp
-    yql_clickhouse_io_discovery.cpp
+    yql_clickhouse_io_discovery.cpp 
     yql_clickhouse_load_meta.cpp
     yql_clickhouse_logical_opt.cpp
     yql_clickhouse_mkql_compiler.cpp
@@ -27,8 +27,8 @@ YQL_LAST_ABI_VERSION()
 
 PEERDIR(
     library/cpp/json
-    library/cpp/random_provider
-    library/cpp/time_provider
+    library/cpp/random_provider 
+    library/cpp/time_provider 
     ydb/core/yq/libs/common
     ydb/core/yq/libs/db_resolver
     ydb/library/yql/ast

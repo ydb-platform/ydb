@@ -1,6 +1,6 @@
 #pragma once
 #include <ydb/core/yq/libs/config/protos/pinger.pb.h>
-#include "run_actor_params.h"
+#include "run_actor_params.h" 
 #include <util/datetime/base.h>
 
 #include <ydb/core/yq/libs/events/events.h>
@@ -28,7 +28,7 @@ namespace NKikimr  {
     }
 }
 
-namespace NYq {
+namespace NYq { 
 
 NActors::TActorId MakeYqlAnalyticsHttpProxyId();
 NActors::TActorId MakeYqlAnalyticsFetcherId(ui32 nodeId);
@@ -45,10 +45,10 @@ NActors::IActor* CreatePendingFetcher(
     TIntrusivePtr<IRandomProvider> randomProvider,
     NKikimr::NMiniKQL::TComputationNodeFactory dqCompFactory,
     const ::NYq::NCommon::TServiceCounters& serviceCounters,
-    NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
+    NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory, 
     NYql::IHTTPGateway::TPtr s3Gateway,
-    ::NPq::NConfigurationManager::IConnections::TPtr pqCmConnections,
-    const NMonitoring::TDynamicCounterPtr& clientCounters
+    ::NPq::NConfigurationManager::IConnections::TPtr pqCmConnections, 
+    const NMonitoring::TDynamicCounterPtr& clientCounters 
     );
 
 NActors::IActor* CreateRunActor(
@@ -59,8 +59,8 @@ NActors::IActor* CreateRunActor(
 struct TResultId {
     TString Id;
     int SetId;
-    TString HistoryId;
-    TString Owner;
+    TString HistoryId; 
+    TString Owner; 
     TString CloudId;
 };
 
@@ -72,20 +72,20 @@ NActors::IActor* CreateResultWriter(
     const TResultId& resultId,
     const TVector<TString>& columns,
     const TString& traceId,
-    const TInstant& deadline,
-    const NMonitoring::TDynamicCounterPtr& clientCounters
-    );
+    const TInstant& deadline, 
+    const NMonitoring::TDynamicCounterPtr& clientCounters 
+    ); 
 
-NActors::IActor* CreatePingerActor(
+NActors::IActor* CreatePingerActor( 
     const TScope& scope,
     const TString& userId,
     const TString& id,
     const TString& owner,
-    const NYq::TPrivateClient& client,
+    const NYq::TPrivateClient& client, 
     const NActors::TActorId parent,
     const NConfig::TPingerConfig& config,
     const TInstant& deadline);
 
 TString MakeInternalError(const TString& text);
 
-} /* NYq */
+} /* NYq */ 

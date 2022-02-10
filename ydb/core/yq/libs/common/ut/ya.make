@@ -14,7 +14,7 @@ ENDIF()
 SRCS(
     cache_ut.cpp
     entity_id_ut.cpp
-    rows_proto_splitter_ut.cpp
+    rows_proto_splitter_ut.cpp 
 )
 
 PEERDIR(

@@ -26,7 +26,7 @@ message QueryInternal {
     ExecuteMode execute_mode = 9;
     StateLoadMode state_load_mode = 10;
     string cloud_id = 11;
-    repeated Yq.Private.TopicConsumer created_topic_consumers = 12;
+    repeated Yq.Private.TopicConsumer created_topic_consumers = 12; 
     repeated bytes dq_graph = 13;
     int32 dq_graph_index = 14;
     StreamingDisposition disposition = 15;

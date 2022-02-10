@@ -17,12 +17,12 @@ struct IPqGateway : public TThrRefBase {
 
     // CM API.
     virtual ::NPq::NConfigurationManager::TAsyncDescribePathResult DescribePath(const TString& sessionId, const TString& cluster, const TString& database, const TString& path, const TString& token) = 0;
-
-    virtual void UpdateClusterConfigs(
-        const TString& clusterName,
-        const TString& endpoint,
-        const TString& database,
-        bool secure) = 0;
+ 
+    virtual void UpdateClusterConfigs( 
+        const TString& clusterName, 
+        const TString& endpoint, 
+        const TString& database, 
+        bool secure) = 0; 
 };
 
 } // namespace NYql

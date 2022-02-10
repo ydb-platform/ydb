@@ -131,24 +131,24 @@ public:
     using TPtr = std::shared_ptr<THTTPMultiGateway>;
     using TWeakPtr = std::weak_ptr<THTTPMultiGateway>;
 
-    explicit THTTPMultiGateway(
-        const THttpGatewayConfig* httpGatewaysCfg,
-        NMonitoring::TDynamicCounterPtr counters)
-        : Counters(std::move(counters))
-        , Rps(Counters->GetCounter("RPS", true))
-        , InFlight(Counters->GetCounter("InFlight"))
-        , AllocatedMemory(Counters->GetCounter("AllocatedMemory"))
-    {
-        if (!httpGatewaysCfg) {
-            return;
-        }
-        if (httpGatewaysCfg->HasMaxInFlightCount()) {
-            MaxHandlers = httpGatewaysCfg->GetMaxInFlightCount();
-        }
-        if (httpGatewaysCfg->HasMaxSimulatenousDownloadsSize()) {
-            MaxSimulatenousDownloadsSize  = httpGatewaysCfg->GetMaxSimulatenousDownloadsSize();
-        }
-    }
+    explicit THTTPMultiGateway( 
+        const THttpGatewayConfig* httpGatewaysCfg, 
+        NMonitoring::TDynamicCounterPtr counters) 
+        : Counters(std::move(counters)) 
+        , Rps(Counters->GetCounter("RPS", true)) 
+        , InFlight(Counters->GetCounter("InFlight")) 
+        , AllocatedMemory(Counters->GetCounter("AllocatedMemory")) 
+    { 
+        if (!httpGatewaysCfg) { 
+            return; 
+        } 
+        if (httpGatewaysCfg->HasMaxInFlightCount()) { 
+            MaxHandlers = httpGatewaysCfg->GetMaxInFlightCount(); 
+        } 
+        if (httpGatewaysCfg->HasMaxSimulatenousDownloadsSize()) { 
+            MaxSimulatenousDownloadsSize  = httpGatewaysCfg->GetMaxSimulatenousDownloadsSize(); 
+        } 
+    } 
 
     ~THTTPMultiGateway() {
         if (Handle)
@@ -156,17 +156,17 @@ public:
         Thread.join();
     }
 private:
-    std::size_t MaxHandlers = 1024U;
-    std::size_t MaxSimulatenousDownloadsSize = 8_GB;
+    std::size_t MaxHandlers = 1024U; 
+    std::size_t MaxSimulatenousDownloadsSize = 8_GB; 
 
     static void Perform(const TWeakPtr& weak) {
         OutputSize.store(0ULL);
         curl_global_init(CURL_GLOBAL_ALL);
 
         if (const auto handle = curl_multi_init()) {
-            if (const auto& initHandle = weak.lock()) {
-                initHandle->Handle = handle;
-            }
+            if (const auto& initHandle = weak.lock()) { 
+                initHandle->Handle = handle; 
+            } 
 
             for (size_t handlers = 0U;;) {
                 if (const auto& self = weak.lock())
@@ -218,7 +218,7 @@ private:
             curl_multi_add_handle(Handle, handle);
         }
 
-        AllocatedMemory->Set(AllocatedSize);
+        AllocatedMemory->Set(AllocatedSize); 
         return Allocated.size();
     }
 
@@ -235,10 +235,10 @@ private:
             if (Await.empty() && Allocated.empty())
                 Requests.clear();
         }
-        if (easy) {
-            InFlight->Dec();
+        if (easy) { 
+            InFlight->Dec(); 
             easy->Done(result);
-        }
+        } 
     }
 
     void Fail(CURLMcode result) {
@@ -258,7 +258,7 @@ private:
         }
 
         const TIssue error(curl_multi_strerror(result));
-        InFlight->Sub(works.size());
+        InFlight->Sub(works.size()); 
         while (!works.empty()) {
             works.top()->Fail(error);
             works.pop();
@@ -266,9 +266,9 @@ private:
     }
 
     void Download(TString url, THeaders headers, std::size_t expectedSize, TOnResult callback, TString data) final {
-        Rps->Inc();
-        InFlight->Inc();
-
+        Rps->Inc(); 
+        InFlight->Inc(); 
+ 
         const std::unique_lock lock(Sync);
         auto& entry = Requests[TKeyType(url, headers, data)];
         if (const auto& easy = entry.lock())
@@ -298,11 +298,11 @@ private:
 
     static std::mutex CreateSync;
     static TWeakPtr Singleton;
-
-    const NMonitoring::TDynamicCounterPtr Counters;
-    const NMonitoring::TDynamicCounters::TCounterPtr Rps;
-    const NMonitoring::TDynamicCounters::TCounterPtr InFlight;
-    const NMonitoring::TDynamicCounters::TCounterPtr AllocatedMemory;
+ 
+    const NMonitoring::TDynamicCounterPtr Counters; 
+    const NMonitoring::TDynamicCounters::TCounterPtr Rps; 
+    const NMonitoring::TDynamicCounters::TCounterPtr InFlight; 
+    const NMonitoring::TDynamicCounters::TCounterPtr AllocatedMemory; 
 };
 
 std::atomic_size_t THTTPMultiGateway::OutputSize = 0ULL;
@@ -386,12 +386,12 @@ IHTTPGateway::TContent::~TContent()
 
 template<>
 IHTTPGateway::TPtr
-IHTTPGateway::Make<true>(const THttpGatewayConfig* httpGatewaysCfg, NMonitoring::TDynamicCounterPtr counters) {
+IHTTPGateway::Make<true>(const THttpGatewayConfig* httpGatewaysCfg, NMonitoring::TDynamicCounterPtr counters) { 
     const std::unique_lock lock(THTTPMultiGateway::CreateSync);
     if (const auto g = THTTPMultiGateway::Singleton.lock())
         return g;
 
-    const auto gateway = std::make_shared<THTTPMultiGateway>(httpGatewaysCfg, std::move(counters));
+    const auto gateway = std::make_shared<THTTPMultiGateway>(httpGatewaysCfg, std::move(counters)); 
     THTTPMultiGateway::Singleton = gateway;
     gateway->Thread = std::thread(std::bind(&THTTPMultiGateway::Perform, THTTPMultiGateway::Singleton));
     return gateway;
@@ -399,7 +399,7 @@ IHTTPGateway::Make<true>(const THttpGatewayConfig* httpGatewaysCfg, NMonitoring:
 
 template<>
 IHTTPGateway::TPtr
-IHTTPGateway::Make<false>(const THttpGatewayConfig*, NMonitoring::TDynamicCounterPtr) {
+IHTTPGateway::Make<false>(const THttpGatewayConfig*, NMonitoring::TDynamicCounterPtr) { 
     return std::make_shared<THTTPEasyGateway>();
 }
 

@@ -89,7 +89,7 @@ public:
     }
 
     static constexpr char ActorName[] = "YQ_SINGLE_READ_RULE_CREATOR";
-
+ 
     TString GetTopicPath() const {
         TStringBuilder ret;
         ret << Topic.GetDatabase();
@@ -146,13 +146,13 @@ public:
                 PassAway();
             } else {
                 if (!CheckFinish()) {
-                    Schedule(*nextRetryDelay, new NActors::TEvents::TEvWakeup());
+                    Schedule(*nextRetryDelay, new NActors::TEvents::TEvWakeup()); 
                 }
             }
         }
     }
 
-    void Handle(NActors::TEvents::TEvWakeup::TPtr&) {
+    void Handle(NActors::TEvents::TEvWakeup::TPtr&) { 
         if (!CheckFinish()) {
             StartRequest();
         }
@@ -175,7 +175,7 @@ public:
 
     STRICT_STFUNC(StateFunc,
         hFunc(TEvPrivate::TEvAddReadRuleStatus, Handle);
-        hFunc(NActors::TEvents::TEvWakeup, Handle);
+        hFunc(NActors::TEvents::TEvWakeup, Handle); 
         hFunc(NActors::TEvents::TEvPoison, Handle);
     )
 
@@ -223,7 +223,7 @@ public:
     }
 
     static constexpr char ActorName[] = "YQ_READ_RULE_CREATOR";
-
+ 
     void Bootstrap() {
         Become(&TReadRuleCreator::StateFunc);
 
@@ -266,7 +266,7 @@ public:
                 }
                 issues.AddIssue(std::move(mainIssue));
             }
-            Send(Owner, MakeHolder<NYq::TEvents::TEvDataStreamsReadRulesCreationResult>(std::move(issues)));
+            Send(Owner, MakeHolder<NYq::TEvents::TEvDataStreamsReadRulesCreationResult>(std::move(issues))); 
             PassAway();
         }
     }

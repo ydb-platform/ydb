@@ -11,31 +11,31 @@ namespace NDq {
 
 class TActorYqlLogBackend : public TLogBackend {
 public:
-    TActorYqlLogBackend(
-        const NActors::TActorContext& actorCtx,
-        int component,
-        const TString& sessionId,
-        const TString& traceId)
-        : ActorCtxOrSystem(&actorCtx)
+    TActorYqlLogBackend( 
+        const NActors::TActorContext& actorCtx, 
+        int component, 
+        const TString& sessionId, 
+        const TString& traceId) 
+        : ActorCtxOrSystem(&actorCtx) 
         , Component(component)
         , SessionId(sessionId)
         , TraceId(traceId) {}
 
-    TActorYqlLogBackend(
-        const NActors::TActorSystem* actorSystem,
-        int component,
-        const TString& sessionId,
-        const TString& traceId)
-        : ActorCtxOrSystem(actorSystem)
-        , Component(component)
-        , SessionId(sessionId)
-        , TraceId(traceId) {}
-
+    TActorYqlLogBackend( 
+        const NActors::TActorSystem* actorSystem, 
+        int component, 
+        const TString& sessionId, 
+        const TString& traceId) 
+        : ActorCtxOrSystem(actorSystem) 
+        , Component(component) 
+        , SessionId(sessionId) 
+        , TraceId(traceId) {} 
+ 
     void WriteData(const TLogRecord& rec) override;
     void ReopenLog() override {}
 
 private:
-    std::variant<const NActors::TActorContext*, const NActors::TActorSystem*> ActorCtxOrSystem;
+    std::variant<const NActors::TActorContext*, const NActors::TActorSystem*> ActorCtxOrSystem; 
     int Component;
     TString SessionId;
     TString TraceId;
@@ -43,11 +43,11 @@ private:
 
 class TYqlLogScope : public NYql::NLog::TScopedBackend<TActorYqlLogBackend> {
 public:
-    TYqlLogScope(const NActors::TActorContext& actorCtx, int component, const TString& sessionId, const TString& traceId = "")
+    TYqlLogScope(const NActors::TActorContext& actorCtx, int component, const TString& sessionId, const TString& traceId = "") 
         : NYql::NLog::TScopedBackend<TActorYqlLogBackend>(actorCtx, component, sessionId, traceId) {};
-
-    TYqlLogScope(const NActors::TActorSystem* actorSystem, int component, const TString& sessionId, const TString& traceId = "")
-        : NYql::NLog::TScopedBackend<TActorYqlLogBackend>(actorSystem, component, sessionId, traceId) {};
+ 
+    TYqlLogScope(const NActors::TActorSystem* actorSystem, int component, const TString& sessionId, const TString& traceId = "") 
+        : NYql::NLog::TScopedBackend<TActorYqlLogBackend>(actorSystem, component, sessionId, traceId) {}; 
 };
 
 class TLogWrapReceive: public NActors::TDecorator {

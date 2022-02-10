@@ -31,23 +31,23 @@ std::array<TExprNode::TPtr, 2U> GetSchema(const TExprNode& settings) {
 using TItemsMap = std::map<TString, std::size_t>;
 using TPendingBuckets = std::unordered_map<std::tuple<TString, TString, TString>, std::tuple<TNodeSet, TItemsMap, TIssues>, THash<std::tuple<TString, TString, TString>>>;
 
-void OnDiscovery(
-    IHTTPGateway::TWeakPtr gateway,
-    TPosition pos,
-    IHTTPGateway::TResult&& result,
-    const TPendingBuckets::key_type& keys,
-    TPendingBuckets::mapped_type& output,
-    NThreading::TPromise<void> promise,
-    std::weak_ptr<TPendingBuckets> pendingBucketsWPtr,
-    int promiseInd) {
-    auto pendingBuckets = pendingBucketsWPtr.lock(); // keys and output could be used only when TPendingBuckets is alive
-    if (!pendingBuckets) {
-        return;
-    }
-    TString logMsg = TStringBuilder() << "promise #" << promiseInd << ": ";
+void OnDiscovery( 
+    IHTTPGateway::TWeakPtr gateway, 
+    TPosition pos, 
+    IHTTPGateway::TResult&& result, 
+    const TPendingBuckets::key_type& keys, 
+    TPendingBuckets::mapped_type& output, 
+    NThreading::TPromise<void> promise, 
+    std::weak_ptr<TPendingBuckets> pendingBucketsWPtr, 
+    int promiseInd) { 
+    auto pendingBuckets = pendingBucketsWPtr.lock(); // keys and output could be used only when TPendingBuckets is alive 
+    if (!pendingBuckets) { 
+        return; 
+    } 
+    TString logMsg = TStringBuilder() << "promise #" << promiseInd << ": "; 
     switch (result.index()) {
     case 0U: try {
-        logMsg += "Result received";
+        logMsg += "Result received"; 
         const NXml::TDocument xml(std::get<IHTTPGateway::TContent>(std::move(result)).Extract(), NXml::TDocument::String);
         if (const auto& root = xml.Root(); root.Name() == "Error") {
             const auto& code = root.Node("Code", true).Value<TString>();
@@ -80,30 +80,30 @@ void OnDiscovery(
                     if (const auto& token = std::get<2U>(keys); !token.empty())
                         headers.emplace_back(token);
                     return g->Download(std::get<0U>(keys) + "?list-type=2&prefix=" + prefix + "&continuation-token=" + next + "&max-keys=" + maxKeys, std::move(headers), 0U,
-                        std::bind(&OnDiscovery, gateway, pos, std::placeholders::_1, std::cref(keys), std::ref(output), std::move(promise), pendingBucketsWPtr, promiseInd));
+                        std::bind(&OnDiscovery, gateway, pos, std::placeholders::_1, std::cref(keys), std::ref(output), std::move(promise), pendingBucketsWPtr, promiseInd)); 
                 }
-                YQL_CLOG(INFO, ProviderS3) << "Gateway disappeared.";
+                YQL_CLOG(INFO, ProviderS3) << "Gateway disappeared."; 
             }
         }
 
         break;
     } catch (const std::exception& ex) {
-        logMsg += TStringBuilder() << "Exception occurred: " << ex.what();
+        logMsg += TStringBuilder() << "Exception occurred: " << ex.what(); 
         std::get<TIssues>(output) = {TIssue(pos, TStringBuilder() << "Error '" << ex.what() << "' on parse discovery response.")};
         break;
     }
     case 1U:
-        logMsg += TStringBuilder() << "Issues occurred: " << std::get<TIssues>(result).ToString();
+        logMsg += TStringBuilder() << "Issues occurred: " << std::get<TIssues>(result).ToString(); 
         std::get<TIssues>(output) = std::get<TIssues>(std::move(result));
         break;
     default:
-        logMsg += TStringBuilder() << "Undefined variant index: " << result.index();
+        logMsg += TStringBuilder() << "Undefined variant index: " << result.index(); 
         std::get<TIssues>(output) = {TIssue(pos, TStringBuilder() << "Unexpected variant index " << result.index() << " on discovery.")};
         break;
     }
 
-    YQL_CLOG(DEBUG, ProviderS3) << "Set promise with log message: " << logMsg;
-    promise.SetValue();
+    YQL_CLOG(DEBUG, ProviderS3) << "Set promise with log message: " << logMsg; 
+    promise.SetValue(); 
 }
 
 
@@ -187,15 +187,15 @@ public:
                 const auto credentialsProviderFactory = CreateCredentialsProviderFactoryForStructuredToken(State_->CredentialsFactory, token);
                 const auto authToken = credentialsProviderFactory->CreateProvider()->GetAuthInfo();
 
-                std::get<TNodeSet>((*PendingBuckets_)[std::make_tuple(connect.Url, TString(prefix), authToken.empty() ? TString() : TString("X-YaCloud-SubjectToken:") += authToken)]).emplace(read.Raw());
+                std::get<TNodeSet>((*PendingBuckets_)[std::make_tuple(connect.Url, TString(prefix), authToken.empty() ? TString() : TString("X-YaCloud-SubjectToken:") += authToken)]).emplace(read.Raw()); 
             }
         }
 
         std::vector<NThreading::TFuture<void>> handles;
-        handles.reserve(PendingBuckets_->size());
+        handles.reserve(PendingBuckets_->size()); 
 
-        int i = 0;
-        for (auto& bucket : *PendingBuckets_) {
+        int i = 0; 
+        for (auto& bucket : *PendingBuckets_) { 
             auto promise = NThreading::NewPromise();
             handles.emplace_back(promise.GetFuture());
             TString prefix(std::get<1U>(bucket.first));
@@ -203,10 +203,10 @@ public:
             IHTTPGateway::THeaders headers;
             if (const auto& token = std::get<2U>(bucket.first); !token.empty())
                 headers.emplace_back(token);
-            std::weak_ptr<TPendingBuckets> pendingBucketsWPtr = PendingBuckets_;
+            std::weak_ptr<TPendingBuckets> pendingBucketsWPtr = PendingBuckets_; 
             Gateway_->Download(std::get<0U>(bucket.first) + "?list-type=2&prefix=" + prefix, headers, 0U, std::bind(&OnDiscovery,
-                IHTTPGateway::TWeakPtr(Gateway_), ctx.GetPosition((*std::get<TNodeSet>(bucket.second).cbegin())->Pos()), std::placeholders::_1,
-                std::cref(bucket.first), std::ref(bucket.second), std::move(promise), pendingBucketsWPtr, i++));
+                IHTTPGateway::TWeakPtr(Gateway_), ctx.GetPosition((*std::get<TNodeSet>(bucket.second).cbegin())->Pos()), std::placeholders::_1, 
+                std::cref(bucket.first), std::ref(bucket.second), std::move(promise), pendingBucketsWPtr, i++)); 
             YQL_CLOG(INFO, ProviderS3) << "Enumerate items in " << std::get<0U>(bucket.first) << std::get<1U>(bucket.first);
         }
 
@@ -226,8 +226,8 @@ public:
         // Raise errors if any
         AllFuture_.GetValue();
 
-        TNodeOnNodeOwnedMap replaces(PendingBuckets_->size());
-        auto buckets = std::move(*PendingBuckets_);
+        TNodeOnNodeOwnedMap replaces(PendingBuckets_->size()); 
+        auto buckets = std::move(*PendingBuckets_); 
         auto count = 0ULL;
         auto readSize = 0ULL;
         for (auto& bucket : buckets) {
@@ -337,7 +337,7 @@ private:
     const TS3State::TPtr State_;
     const IHTTPGateway::TPtr Gateway_;
 
-    const std::shared_ptr<TPendingBuckets> PendingBuckets_ = std::make_shared<TPendingBuckets>();
+    const std::shared_ptr<TPendingBuckets> PendingBuckets_ = std::make_shared<TPendingBuckets>(); 
 
     NThreading::TFuture<void> AllFuture_;
 };

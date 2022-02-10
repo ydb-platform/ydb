@@ -17,11 +17,11 @@ namespace {
 
 class TYdbDataSourceProvider : public TDataProviderBase {
 public:
-    TYdbDataSourceProvider(
-        TYdbState::TPtr state,
-        NYdb::TDriver driver)
+    TYdbDataSourceProvider( 
+        TYdbState::TPtr state, 
+        NYdb::TDriver driver) 
         : State_(state)
-        , IODiscoveryTransformer_(CreateYdbIODiscoveryTransformer(State_))
+        , IODiscoveryTransformer_(CreateYdbIODiscoveryTransformer(State_)) 
         , LoadMetaDataTransformer_(CreateYdbLoadTableMetadataTransformer(State_, driver))
         , CallableExecutionTransformer_(CreateYdbSourceCallableExecutionTransformer(State_))
         , TypeAnnotationTransformer_(CreateYdbDataSourceTypeAnnotationTransformer(State_))
@@ -56,10 +56,10 @@ public:
         return TypeAnnotationTransformer_->CanParse(node);
     }
 
-    IGraphTransformer& GetIODiscoveryTransformer() override {
-        return *IODiscoveryTransformer_;
-    }
-
+    IGraphTransformer& GetIODiscoveryTransformer() override { 
+        return *IODiscoveryTransformer_; 
+    } 
+ 
     IGraphTransformer& GetLoadTableMetadataTransformer() override {
         return *LoadMetaDataTransformer_;
     }
@@ -138,7 +138,7 @@ public:
 
 private:
     const TYdbState::TPtr State_;
-    const THolder<IGraphTransformer> IODiscoveryTransformer_;
+    const THolder<IGraphTransformer> IODiscoveryTransformer_; 
     const THolder<IGraphTransformer> LoadMetaDataTransformer_;
     const THolder<IGraphTransformer> CallableExecutionTransformer_;
     const THolder<TVisitorTransformerBase> TypeAnnotationTransformer_;
@@ -147,9 +147,9 @@ private:
 
 }
 
-TIntrusivePtr<IDataProvider> CreateYdbDataSource(
-    TYdbState::TPtr state,
-    NYdb::TDriver driver) {
+TIntrusivePtr<IDataProvider> CreateYdbDataSource( 
+    TYdbState::TPtr state, 
+    NYdb::TDriver driver) { 
     return new TYdbDataSourceProvider(state, driver);
 }
 

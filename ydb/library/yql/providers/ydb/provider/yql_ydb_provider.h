@@ -33,21 +33,21 @@ struct TYdbState : public TThrRefBase
     TYdbConfiguration::TPtr Configuration = MakeIntrusive<TYdbConfiguration>();
     const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry = nullptr;
     ISecuredServiceAccountCredentialsFactory::TPtr CredentialsFactory;
-    THashMap<std::pair<TString, NYq::DatabaseType>, NYq::TEvents::TDatabaseAuth> DatabaseIds;
-    std::shared_ptr<NYq::TDatabaseAsyncResolverWithMeta> DbResolver;
+    THashMap<std::pair<TString, NYq::DatabaseType>, NYq::TEvents::TDatabaseAuth> DatabaseIds; 
+    std::shared_ptr<NYq::TDatabaseAsyncResolverWithMeta> DbResolver; 
 };
 
-TDataProviderInitializer GetYdbDataProviderInitializer(
-    NYdb::TDriver driver,
-    ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory = nullptr,
-    const std::shared_ptr<NYq::TDatabaseAsyncResolverWithMeta> dbResolverWithMeta = nullptr
-);
+TDataProviderInitializer GetYdbDataProviderInitializer( 
+    NYdb::TDriver driver, 
+    ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory = nullptr, 
+    const std::shared_ptr<NYq::TDatabaseAsyncResolverWithMeta> dbResolverWithMeta = nullptr 
+); 
 
-TIntrusivePtr<IDataProvider> CreateYdbDataSource(
-    TYdbState::TPtr state,
-    NYdb::TDriver driver
-);
-
+TIntrusivePtr<IDataProvider> CreateYdbDataSource( 
+    TYdbState::TPtr state, 
+    NYdb::TDriver driver 
+); 
+ 
 TIntrusivePtr<IDataProvider> CreateYdbDataSink(TYdbState::TPtr state);
 
 } // namespace NYql

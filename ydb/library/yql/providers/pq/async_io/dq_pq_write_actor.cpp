@@ -109,8 +109,8 @@ public:
         , PersQueueClient(Driver, GetPersQueueClientSettings())
     { }
 
-    static constexpr char ActorName[] = "DQ_PQ_WRITE_ACTOR";
-
+    static constexpr char ActorName[] = "DQ_PQ_WRITE_ACTOR"; 
+ 
 public:
     void SendData(
         NKikimr::NMiniKQL::TUnboxedValueVector&& batch,

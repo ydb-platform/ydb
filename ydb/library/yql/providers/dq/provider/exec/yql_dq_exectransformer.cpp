@@ -764,10 +764,10 @@ private:
                 }
                 auto raw = NYT::NodeToYsonString(item);
 
-                const bool truncated = res.Truncated;
-                const ui64 rowsCount = res.RowsCount;
+                const bool truncated = res.Truncated; 
+                const ui64 rowsCount = res.RowsCount; 
 
-               if (truncated && item.IsList()) {
+               if (truncated && item.IsList()) { 
                     ui64 bytes = 0;
                     ui64 rows = 0;
                     writer.OnBeginList();
@@ -804,11 +804,11 @@ private:
                     writer.OnRaw(raw);
                 }
 
-                if (rowsCount) {
-                    writer.OnKeyedItem("RowsCount");
-                    writer.OnUint64Scalar(rowsCount);
-                }
-
+                if (rowsCount) { 
+                    writer.OnKeyedItem("RowsCount"); 
+                    writer.OnUint64Scalar(rowsCount); 
+                } 
+ 
                 writer.OnEndMap();
 
                 input->SetResult(ctx.NewAtom(input->Pos(), out.Str()));
@@ -1100,8 +1100,8 @@ private:
             auto raw = NYT::NodeToYsonString(item);
 
             TString trStr = "";
-            const bool truncated = res.Truncated;
-            const ui64 rowsCount = res.RowsCount;
+            const bool truncated = res.Truncated; 
+            const ui64 rowsCount = res.RowsCount; 
 
             if (truncated && !state->TypeCtx->ForceDq && !enableFullResultWrite) {
                 auto issue = TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() << "DQ cannot execute the query. Cause: " << "too big result " <<  trStr).SetCode(TIssuesIds::DQ_GATEWAY_NEED_FALLBACK_ERROR, TSeverityIds::S_INFO);
@@ -1158,11 +1158,11 @@ private:
                 writer.OnRaw(raw);
             }
 
-            if (rowsCount) {
-                writer.OnKeyedItem("RowsCount");
-                writer.OnUint64Scalar(rowsCount);
-            }
-
+            if (rowsCount) { 
+                writer.OnKeyedItem("RowsCount"); 
+                writer.OnUint64Scalar(rowsCount); 
+            } 
+ 
             writer.OnEndMap();
 
             ctx.IssueManager.RaiseIssues(res.Issues);

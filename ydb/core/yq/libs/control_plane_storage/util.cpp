@@ -43,47 +43,47 @@ NConfig::TControlPlaneStorageConfig FillDefaultParameters(NConfig::TControlPlane
     if (!config.GetMaxCountJobs()) {
         config.SetMaxCountJobs(20);
     }
-
-    if (!config.GetTasksBatchSize()) {
-        config.SetTasksBatchSize(100);
-    }
-
-    if (!config.GetNumTasksProportion()) {
-        config.SetNumTasksProportion(4);
-    }
-
-    if (!config.GetNumTasksProportion()) {
-        config.SetNumTasksProportion(4);
-    }
-
-    if (!config.GetAnalyticsRetryCounterLimit()) {
-        config.SetAnalyticsRetryCounterLimit(20);
-    }
-
-    if (!config.GetStreamingRetryCounterLimit()) {
-        config.SetStreamingRetryCounterLimit(20);
-    }
-
+ 
+    if (!config.GetTasksBatchSize()) { 
+        config.SetTasksBatchSize(100); 
+    } 
+ 
+    if (!config.GetNumTasksProportion()) { 
+        config.SetNumTasksProportion(4); 
+    } 
+ 
+    if (!config.GetNumTasksProportion()) { 
+        config.SetNumTasksProportion(4); 
+    } 
+ 
+    if (!config.GetAnalyticsRetryCounterLimit()) { 
+        config.SetAnalyticsRetryCounterLimit(20); 
+    } 
+ 
+    if (!config.GetStreamingRetryCounterLimit()) { 
+        config.SetStreamingRetryCounterLimit(20); 
+    } 
+ 
     if (!config.GetAnalyticsRetryCounterUpdateTime()) {
         config.SetAnalyticsRetryCounterUpdateTime("1d");
-    }
-
+    } 
+ 
     if (!config.GetStreamingRetryCounterUpdateTime()) {
         config.SetStreamingRetryCounterUpdateTime("1d");
-    }
-
+    } 
+ 
     if (!config.GetAutomaticQueriesTtl()) {
         config.SetAutomaticQueriesTtl("1d");
     }
-
+ 
     if (!config.GetTaskLeaseTtl()) {
         config.SetTaskLeaseTtl("30s");
-    }
+    } 
 
     if (!config.GetStorage().GetToken() && config.GetStorage().GetOAuthFile()) {
         config.MutableStorage()->SetToken(StripString(TFileInput(config.GetStorage().GetOAuthFile()).ReadAll()));
     }
-
+ 
     if (!config.GetResultSetsTtl()) {
         config.SetResultSetsTtl("1d");
     }
@@ -92,39 +92,39 @@ NConfig::TControlPlaneStorageConfig FillDefaultParameters(NConfig::TControlPlane
 }
 
 bool DoesPingTaskUpdateQueriesTable(const TEvControlPlaneStorage::TEvPingTaskRequest* request) {
-    if (!request) {
-        return false;
-    }
-    return request->Status ||
-        request->Issues ||
-        request->TransientIssues ||
-        request->Statistics ||
+    if (!request) { 
+        return false; 
+    } 
+    return request->Status || 
+        request->Issues || 
+        request->TransientIssues || 
+        request->Statistics || 
         request->ResultSetMetas ||
-        request->Ast ||
-        request->Plan ||
-        request->StartedAt ||
+        request->Ast || 
+        request->Plan || 
+        request->StartedAt || 
         request->FinishedAt ||
         !request->CreatedTopicConsumers.empty() ||
         !request->DqGraphs.empty() ||
         request->DqGraphIndex ||
         request->StateLoadMode ||
         request->StreamingDisposition;
-}
-
-NYdb::TValue PackItemsToList(const TVector<NYdb::TValue>& items) {
-    NYdb::TValueBuilder itemsAsList;
-    itemsAsList.BeginList();
-    for (const NYdb::TValue& item: items) {
-        itemsAsList.AddListItem(item);
-    }
-    itemsAsList.EndList();
-    return itemsAsList.Build();
-}
-
-std::pair<TString, TString> SplitId(const TString& id, char delim) {
-    auto it = std::find(id.begin(), id.end(), delim);
-    return std::make_pair(id.substr(0, it - id.begin()),
-        (it != id.end() ? id.substr(it - id.begin() + 1) : TString{""}));
-}
-
+} 
+ 
+NYdb::TValue PackItemsToList(const TVector<NYdb::TValue>& items) { 
+    NYdb::TValueBuilder itemsAsList; 
+    itemsAsList.BeginList(); 
+    for (const NYdb::TValue& item: items) { 
+        itemsAsList.AddListItem(item); 
+    } 
+    itemsAsList.EndList(); 
+    return itemsAsList.Build(); 
+} 
+ 
+std::pair<TString, TString> SplitId(const TString& id, char delim) { 
+    auto it = std::find(id.begin(), id.end(), delim); 
+    return std::make_pair(id.substr(0, it - id.begin()), 
+        (it != id.end() ? id.substr(it - id.begin() + 1) : TString{""})); 
+} 
+ 
 } //namespace NYq

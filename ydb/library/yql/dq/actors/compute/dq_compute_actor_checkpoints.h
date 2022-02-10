@@ -64,8 +64,8 @@ class TDqComputeActorCheckpoints : public NActors::TActor<TDqComputeActorCheckpo
     };
 
 public:
-    static constexpr char ActorName[] = "DQ_COMPUTE_ACTOR_CHECKPOINTS";
-
+    static constexpr char ActorName[] = "DQ_COMPUTE_ACTOR_CHECKPOINTS"; 
+ 
     struct ICallbacks {
         [[nodiscard]]
         virtual bool ReadyToCheckpoint() const = 0;

@@ -50,13 +50,13 @@ enum ETokenType {
     CREDENTIALS = 3;
 };
 
-/////////////////////////////// HTTP GATEWAY //////////////////////
-
-message THttpGatewayConfig {
-    optional uint32 MaxInFlightCount = 1;
-    optional uint64 MaxSimulatenousDownloadsSize = 2;
-}
-
+/////////////////////////////// HTTP GATEWAY ////////////////////// 
+ 
+message THttpGatewayConfig { 
+    optional uint32 MaxInFlightCount = 1; 
+    optional uint64 MaxSimulatenousDownloadsSize = 2; 
+} 
+ 
 /////////////////////////////// YT ///////////////////////////////
 
 message TYtClusterConfig {
@@ -179,7 +179,7 @@ message TClickHouseClusterConfig {
     optional NYql.NProto.TClickHouseRunnerConfig Runner = 10;
     optional uint32 NativeHostPort = 11 [default = 9000];
     optional bool NativeSecure = 12 [default = false];
-    optional string Id = 13;
+    optional string Id = 13; 
 }
 
 message TClickHouseGatewayConfig {
@@ -453,5 +453,5 @@ message TGatewaysConfig {
     optional TYdbGatewayConfig Ydb = 15;
     optional TPqGatewayConfig Pq = 16;
     optional TS3GatewayConfig S3 = 17;
-    optional THttpGatewayConfig HttpGateway = 18;
+    optional THttpGatewayConfig HttpGateway = 18; 
 }

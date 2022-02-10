@@ -4,12 +4,12 @@
 #include <ydb/core/yq/libs/result_formatter/result_formatter.h>
 #include <util/generic/vector.h>
 
-namespace NYq {
+namespace NYq { 
 
-using namespace NYql;
-
+using namespace NYql; 
+ 
 namespace {
-
+ 
 void FillBinding(NSQLTranslation::TTranslationSettings& sqlSettings, const YandexQuery::Binding& binding, const THashMap<TString, YandexQuery::Connection>& connections) {
     TString clusterType;
     TString path;
@@ -67,12 +67,12 @@ void FillBinding(NSQLTranslation::TTranslationSettings& sqlSettings, const Yande
     sqlSettings.PrivateBindings[binding.content().name()] = std::move(bindSettings);
 }
 
-} //namespace
+} //namespace 
 
 void AddTableBindingsFromBindings(const TVector<YandexQuery::Binding>& bindings, const THashMap<TString, YandexQuery::Connection>& connections, NSQLTranslation::TTranslationSettings& sqlSettings) {
     for (const auto& binding : bindings) {
         FillBinding(sqlSettings, binding, connections);
     }
 }
-
-} //NYq
+ 
+} //NYq 

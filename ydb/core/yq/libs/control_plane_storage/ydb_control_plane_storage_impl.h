@@ -1,7 +1,7 @@
 #pragma once
 
 #include "control_plane_storage.h"
-#include "control_plane_storage_counters.h"
+#include "control_plane_storage_counters.h" 
 #include "exceptions.h"
 #include "extractors.h"
 #include <ydb/core/yq/libs/control_plane_storage/internal/response_tasks.h>
@@ -113,7 +113,7 @@ class TYdbControlPlaneStorageActor : public NActors::TActorBootstrapped<TYdbCont
         RT_WRITE_RESULT_DATA,
         RT_GET_TASK,
         RT_PING_TASK,
-        RT_NODES_HEALTH_CHECK,
+        RT_NODES_HEALTH_CHECK, 
         RT_MAX,
     };
 
@@ -142,7 +142,7 @@ class TYdbControlPlaneStorageActor : public NActors::TActorBootstrapped<TYdbCont
             { MakeIntrusive<TRequestCounters>("WriteResultData") },
             { MakeIntrusive<TRequestCounters>("GetTask") },
             { MakeIntrusive<TRequestCounters>("PingTask") },
-            { MakeIntrusive<TRequestCounters>("NodesHealthCheck") },
+            { MakeIntrusive<TRequestCounters>("NodesHealthCheck") }, 
         });
 
         NMonitoring::TDynamicCounterPtr Counters;
@@ -172,17 +172,17 @@ class TYdbControlPlaneStorageActor : public NActors::TActorBootstrapped<TYdbCont
     };
 
     TCounters Counters;
-    TFinalStatusCounters FinalStatusCounters;
+    TFinalStatusCounters FinalStatusCounters; 
 
     TConfig Config;
 
     TYdbConnectionPtr YdbConnection;
 
     ::NYq::TYqSharedResources::TPtr YqSharedResources;
-    TDbPool::TPtr DbPool;
+    TDbPool::TPtr DbPool; 
 
     static constexpr int64_t InitialRevision = 1;
-
+ 
     NKikimr::TYdbCredentialsProviderFactory CredProviderFactory;
 
 public:
@@ -193,15 +193,15 @@ public:
         const ::NYq::TYqSharedResources::TPtr& yqSharedResources,
         const NKikimr::TYdbCredentialsProviderFactory& credProviderFactory)
         : Counters(counters)
-        , FinalStatusCounters(counters)
+        , FinalStatusCounters(counters) 
         , Config(config, common)
         , YqSharedResources(yqSharedResources)
         , CredProviderFactory(credProviderFactory)
     {
     }
 
-    static constexpr char ActorName[] = "YQ_CONTROL_PLANE_STORAGE";
-
+    static constexpr char ActorName[] = "YQ_CONTROL_PLANE_STORAGE"; 
+ 
     void Bootstrap();
 
     STRICT_STFUNC(StateFunc,
@@ -228,7 +228,7 @@ public:
         hFunc(TEvControlPlaneStorage::TEvWriteResultDataRequest, Handle);
         hFunc(TEvControlPlaneStorage::TEvGetTaskRequest, Handle);
         hFunc(TEvControlPlaneStorage::TEvPingTaskRequest, Handle);
-        hFunc(TEvControlPlaneStorage::TEvNodesHealthCheckRequest, Handle);
+        hFunc(TEvControlPlaneStorage::TEvNodesHealthCheckRequest, Handle); 
         hFunc(NMon::TEvHttpInfo, Handle);
     )
 
@@ -259,8 +259,8 @@ public:
     void Handle(TEvControlPlaneStorage::TEvGetTaskRequest::TPtr& ev);
     void Handle(TEvControlPlaneStorage::TEvPingTaskRequest::TPtr& ev);
 
-    void Handle(TEvControlPlaneStorage::TEvNodesHealthCheckRequest::TPtr& ev);
-
+    void Handle(TEvControlPlaneStorage::TEvNodesHealthCheckRequest::TPtr& ev); 
+ 
     template<typename T>
     NYql::TIssues ValidateConnection(T& ev, bool clickHousePasswordRequire = true)
     {
@@ -512,10 +512,10 @@ public:
     TAsyncStatus CreateDirectory(TActorSystem* as);
     TAsyncStatus CreateQueriesTable(TActorSystem* as);
     TAsyncStatus CreatePendingTable(TActorSystem* as);
-    TAsyncStatus CreatePendingSmallTable(TActorSystem* as);
+    TAsyncStatus CreatePendingSmallTable(TActorSystem* as); 
     TAsyncStatus CreateConnectionsTable(TActorSystem* as);
     TAsyncStatus CreateJobsTable(TActorSystem* as);
-    TAsyncStatus CreateNodesTable(TActorSystem* as);
+    TAsyncStatus CreateNodesTable(TActorSystem* as); 
     TAsyncStatus CreateBindingsTable(TActorSystem* as);
     TAsyncStatus CreateIdempotencyKeysTable(TActorSystem* as);
     TAsyncStatus CreateResultSetsTable(TActorSystem* as);
@@ -530,42 +530,42 @@ private:
 
     void ReadIdempotencyKeyQuery(TSqlQueryBuilder& builder, const TString& scope, const TString& idempotencyKey);
 
-    std::pair<TAsyncStatus, std::shared_ptr<TVector<NYdb::TResultSet>>> Read(
-        const TString& query,
-        const NYdb::TParams& params,
-        const TRequestCountersPtr& requestCounters,
-        TDebugInfoPtr debugInfo,
-        TTxSettings transactionMode = TTxSettings::SerializableRW(),
-        bool retryOnTli = true);
+    std::pair<TAsyncStatus, std::shared_ptr<TVector<NYdb::TResultSet>>> Read( 
+        const TString& query, 
+        const NYdb::TParams& params, 
+        const TRequestCountersPtr& requestCounters, 
+        TDebugInfoPtr debugInfo, 
+        TTxSettings transactionMode = TTxSettings::SerializableRW(), 
+        bool retryOnTli = true); 
 
-    TAsyncStatus Validate(
-        std::shared_ptr<TMaybe<TTransaction>> transaction,
-        size_t item, const TVector<TValidationQuery>& validators,
-        TSession session,
-        std::shared_ptr<bool> successFinish,
-        TDebugInfoPtr debugInfo,
-        TTxSettings transactionMode = TTxSettings::SerializableRW());
+    TAsyncStatus Validate( 
+        std::shared_ptr<TMaybe<TTransaction>> transaction, 
+        size_t item, const TVector<TValidationQuery>& validators, 
+        TSession session, 
+        std::shared_ptr<bool> successFinish, 
+        TDebugInfoPtr debugInfo, 
+        TTxSettings transactionMode = TTxSettings::SerializableRW()); 
 
-    TAsyncStatus Write(
-        NActors::TActorSystem* actorSystem,
-        const TString& query,
-        const NYdb::TParams& params,
-        const TRequestCountersPtr& requestCounters,
-        TDebugInfoPtr debugInfo,
-        const TVector<TValidationQuery>& validators = {},
-        TTxSettings transactionMode = TTxSettings::SerializableRW(),
-        bool retryTli = true);
+    TAsyncStatus Write( 
+        NActors::TActorSystem* actorSystem, 
+        const TString& query, 
+        const NYdb::TParams& params, 
+        const TRequestCountersPtr& requestCounters, 
+        TDebugInfoPtr debugInfo, 
+        const TVector<TValidationQuery>& validators = {}, 
+        TTxSettings transactionMode = TTxSettings::SerializableRW(), 
+        bool retryTli = true); 
 
-    TAsyncStatus ReadModifyWrite(
-        NActors::TActorSystem* actorSystem,
-        const TString& readQuery,
-        const NYdb::TParams& readParams,
-        const std::function<std::pair<TString, NYdb::TParams>(const TVector<NYdb::TResultSet>&)>& prepare,
-        const TRequestCountersPtr& requestCounters,
-        TDebugInfoPtr debugInfo = {},
-        const TVector<TValidationQuery>& validators = {},
-        TTxSettings transactionMode = TTxSettings::SerializableRW(),
-        bool retryOnTli = true);
+    TAsyncStatus ReadModifyWrite( 
+        NActors::TActorSystem* actorSystem, 
+        const TString& readQuery, 
+        const NYdb::TParams& readParams, 
+        const std::function<std::pair<TString, NYdb::TParams>(const TVector<NYdb::TResultSet>&)>& prepare, 
+        const TRequestCountersPtr& requestCounters, 
+        TDebugInfoPtr debugInfo = {}, 
+        const TVector<TValidationQuery>& validators = {}, 
+        TTxSettings transactionMode = TTxSettings::SerializableRW(), 
+        bool retryOnTli = true); 
 
     template<typename T>
     THashMap<TString, T> GetEntitiesWithVisibilityPriority(const TResultSet& resultSet, const TString& columnName)
@@ -821,22 +821,22 @@ private:
     static TString MakeLogPrefix(const TString& scope, const TString& user, const TString& id = "") {
         return "[" + scope + ", " + user + (id ? ", " + id : "") + "] ";
     }
-
-    struct TPickTaskParams {
-        TString ReadQuery;
-        TParams ReadParams;
-        std::function<std::pair<TString, NYdb::TParams>(const TVector<NYdb::TResultSet>&)> PrepareParams;
-        TString QueryId;
-        bool RetryOnTli = false;
-    };
-
-    NThreading::TFuture<void> PickTask(
-        const TPickTaskParams& taskParams,
-        const TRequestCountersPtr& requestCounters,
-        TDebugInfoPtr debugInfo,
-        std::shared_ptr<TResponseTasks> responseTasks,
-        const TVector<TValidationQuery>& validators = {},
-        TTxSettings transactionMode = TTxSettings::SerializableRW());
+ 
+    struct TPickTaskParams { 
+        TString ReadQuery; 
+        TParams ReadParams; 
+        std::function<std::pair<TString, NYdb::TParams>(const TVector<NYdb::TResultSet>&)> PrepareParams; 
+        TString QueryId; 
+        bool RetryOnTli = false; 
+    }; 
+ 
+    NThreading::TFuture<void> PickTask( 
+        const TPickTaskParams& taskParams, 
+        const TRequestCountersPtr& requestCounters, 
+        TDebugInfoPtr debugInfo, 
+        std::shared_ptr<TResponseTasks> responseTasks, 
+        const TVector<TValidationQuery>& validators = {}, 
+        TTxSettings transactionMode = TTxSettings::SerializableRW()); 
 };
 
 }

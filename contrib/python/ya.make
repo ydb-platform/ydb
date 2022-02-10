@@ -466,7 +466,7 @@ RECURSE(
     greenlet
     grequests
     grpcio-opentracing
-    gspread
+    gspread 
     gunicorn
     h11
     h2
@@ -603,7 +603,7 @@ RECURSE(
     m3u8
     Mako
     marisa_trie
-    markdown2
+    markdown2 
     Markdown
     MarkupSafe
     marshmallow
@@ -646,7 +646,7 @@ RECURSE(
     multitasking
     munch
     murmurhash
-    mutablerecords
+    mutablerecords 
     mypy
     mypy-extensions
     mypy-protobuf
@@ -671,7 +671,7 @@ RECURSE(
     notebook
     num2words
     numpy
-    oauth2client
+    oauth2client 
     oauthlib
     objgraph
     observable
@@ -978,7 +978,7 @@ RECURSE(
     scikit-learn
     scipy
     scour
-    scp
+    scp 
     Scrapy
     seaborn
     selectors2
@@ -1009,7 +1009,7 @@ RECURSE(
     sniffio
     snowballstemmer
     sobol-seq
-    sockjs
+    sockjs 
     soft-webauthn
     sortedcontainers
     soupsieve
@@ -1019,7 +1019,7 @@ RECURSE(
     sparse-dot-topn
     spdx-tools
     spidev
-    spintop-openhtf
+    spintop-openhtf 
     splunk-sdk-python
     sqlalchemy
     SQLAlchemy-Continuum

@@ -7,7 +7,7 @@ namespace NProtobufJson {
         jsonConfig.SortKeys = false;
         jsonConfig.ValidateUtf8 = false;
         jsonConfig.DontEscapeStrings = false;
-        jsonConfig.WriteNanAsString = config.WriteNanAsString; 
+        jsonConfig.WriteNanAsString = config.WriteNanAsString;
 
         for (size_t i = 0; i < config.StringTransforms.size(); ++i) {
             Y_ASSERT(config.StringTransforms[i]);

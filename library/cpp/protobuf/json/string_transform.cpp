@@ -31,10 +31,10 @@ namespace NProtobufJson {
         if (str.empty()) {
             return str;
         }
- 
+
         TString result;
         result.reserve(str.size());
- 
+
         char prev = str[0];
         bool doneOutput = true;
         for (const char* it = str.c_str() + 1; *it; ++it) {
@@ -46,14 +46,14 @@ namespace NProtobufJson {
             }
             prev = *it;
         }
- 
+
         if ((doneOutput && prev != '\\') || !doneOutput) {
-            result += prev; 
-        } 
- 
+            result += prev;
+        }
+
         return result;
-    } 
- 
+    }
+
     void TBase64EncodeBytesTransform::TransformBytes(TString &str) const {
         str = Base64Encode(str);
     }
@@ -61,4 +61,4 @@ namespace NProtobufJson {
     void TBase64DecodeBytesTransform::TransformBytes(TString &str) const {
         str = Base64Decode(str);
     }
-} 
+}

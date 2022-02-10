@@ -2,10 +2,10 @@
 
 LIBRARY()
 
-OWNER(
-    g:cpp-contrib
-    g:yandex_io
-)
+OWNER( 
+    g:cpp-contrib 
+    g:yandex_io 
+) 
 
 VERSION(2.9.10)
 
@@ -84,17 +84,17 @@ SRCS(
     xzlib.c
 )
 
-IF (ARCADIA_LIBXML_DISABLE_EXTRA_ENCODINGS)
-    CFLAGS(
-        -DARCADIA_LIBXML_DISABLE_EXTRA_ENCODINGS
-    )
-ELSE()
-    PEERDIR(
-        library/cpp/charset
-    )
-    SRCS(
-        yencoding.cpp
-    )
-ENDIF()
-
+IF (ARCADIA_LIBXML_DISABLE_EXTRA_ENCODINGS) 
+    CFLAGS( 
+        -DARCADIA_LIBXML_DISABLE_EXTRA_ENCODINGS 
+    ) 
+ELSE() 
+    PEERDIR( 
+        library/cpp/charset 
+    ) 
+    SRCS( 
+        yencoding.cpp 
+    ) 
+ENDIF() 
+ 
 END()

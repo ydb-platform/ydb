@@ -44,10 +44,10 @@
 #endif
 #include <libxml/globals.h>
 #include <libxml/xmlerror.h>
-
-#ifndef ARCADIA_LIBXML_DISABLE_EXTRA_ENCODINGS
+ 
+#ifndef ARCADIA_LIBXML_DISABLE_EXTRA_ENCODINGS 
 #include "yencoding.h"
-#endif
+#endif 
 
 #include "buf.h"
 #include "enc.h"
@@ -1428,12 +1428,12 @@ xmlInitCharEncodingHandlers(void) {
     xmlNewCharEncodingHandler("ISO-8859-1", isolat1ToUTF8, UTF8Toisolat1);
     xmlNewCharEncodingHandler("ASCII", asciiToUTF8, UTF8Toascii);
     xmlNewCharEncodingHandler("US-ASCII", asciiToUTF8, UTF8Toascii);
-
-#ifndef ARCADIA_LIBXML_DISABLE_EXTRA_ENCODINGS
+ 
+#ifndef ARCADIA_LIBXML_DISABLE_EXTRA_ENCODINGS 
     xmlNewCharEncodingHandler("windows-1251", win1251ToUTF8, UTF8Towin1251);
     xmlNewCharEncodingHandler("koi8-r", koi8ToUTF8, UTF8Tokoi8);
-#endif
-
+#endif 
+ 
 #ifdef LIBXML_HTML_ENABLED
     xmlNewCharEncodingHandler("HTML", NULL, UTF8ToHtml);
 #endif

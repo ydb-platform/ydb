@@ -17,20 +17,20 @@ NO_UTIL()
 
 NO_RUNTIME()
 
-IF (NOT OS_WINDOWS)
+IF (NOT OS_WINDOWS) 
     SRCS(
-        string.c
+        string.c 
     )
-ENDIF()
-
+ENDIF() 
+ 
 # Android libc function appearance is documented here:
 # https://android.googlesource.com/platform/bionic/+/master/docs/status.md
 #
 # NB: nested IF's are needed due to the lack of lazy evaluation of logical statements: DEVTOOLS-7837
-IF (OS_ANDROID)
+IF (OS_ANDROID) 
     SRCS(
-        strlcat.c
-        strlcpy.c
+        strlcat.c 
+        strlcpy.c 
     )
     IF (ANDROID_API < 28)
         SRCS(
@@ -46,11 +46,11 @@ IF (OS_ANDROID)
             GLOBAL contrib/libs/libc_compat/include/ifaddrs
         )
     ENDIF()
-    IF (ANDROID_API < 21)
-        SRCS(
-            stpcpy.c
-        )
-    ENDIF()
+    IF (ANDROID_API < 21) 
+        SRCS( 
+            stpcpy.c 
+        ) 
+    ENDIF() 
 ENDIF()
 
 IF (OS_WINDOWS OR OS_DARWIN OR OS_IOS)
@@ -71,9 +71,9 @@ IF (OS_WINDOWS)
     )
     SRCS(
         reallocarray.c
-        stpcpy.c
-        strlcat.c
-        strlcpy.c
+        stpcpy.c 
+        strlcat.c 
+        strlcpy.c 
         strcasestr.c
         strsep.c
         src/windows/sys/uio.c

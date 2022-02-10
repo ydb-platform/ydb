@@ -31,7 +31,7 @@ namespace NCompactTrie {
 
     void ShowProgress(size_t n) {
         if (n % 1000000 == 0)
-            Cerr << n << ", RSS=" << (TRusage::Get().MaxRss >> 20) << "mb" << Endl; 
+            Cerr << n << ", RSS=" << (TRusage::Get().MaxRss >> 20) << "mb" << Endl;
         else if (n % 20000 == 0)
             Cerr << ".";
     }

@@ -1638,7 +1638,7 @@ class BaseSession(ISession):
         return TxContext(self._driver, self._state, self, tx_mode)
 
     def has_prepared(self, query):
-        return query in self._state 
+        return query in self._state
 
     def prepare(self, query, settings=None):
         data_query, _ = self._state.lookup(query)

@@ -46,9 +46,9 @@ extern "C" {
     void verrx(int status, const char* format, va_list ap);
 #else
     #include <err.h>
-#endif 
+#endif
 }
- 
+
 #ifdef _MSC_VER
     #define popen _popen
     #define pclose _pclose

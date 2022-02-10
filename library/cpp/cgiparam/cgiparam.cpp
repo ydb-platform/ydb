@@ -28,8 +28,8 @@ bool TCgiParameters::Erase(const TStringBuf name, size_t pos) {
     }
 
     return false;
-} 
- 
+}
+
 bool TCgiParameters::Erase(const TStringBuf name, const TStringBuf val) {
     const auto pair = equal_range(name);
 
@@ -82,17 +82,17 @@ void TCgiParameters::JoinUnescaped(const TStringBuf key, char sep, TStringBuf va
 
 static inline TString DoUnescape(const TStringBuf s) {
     TString res;
- 
+
     res.reserve(CgiUnescapeBufLen(s.size()));
     res.ReserveAndResize(CgiUnescape(res.begin(), s).size());
 
     return res;
 }
- 
+
 void TCgiParameters::InsertEscaped(const TStringBuf name, const TStringBuf value) {
     InsertUnescaped(DoUnescape(name), DoUnescape(value));
 }
- 
+
 template <bool addAll, class F>
 static inline void DoScan(const TStringBuf s, F& f) {
     ScanKeyValue<addAll, '&', '='>(s, f);
@@ -115,8 +115,8 @@ void TCgiParameters::ScanAdd(const TStringBuf query) {
     TAddEscaped f = {this};
 
     DoScan<false>(query, f);
-} 
- 
+}
+
 void TCgiParameters::ScanAddUnescaped(const TStringBuf query) {
     auto f = [this](const TStringBuf key, const TStringBuf val) {
         this->InsertUnescaped(key, val);
@@ -147,8 +147,8 @@ TString TCgiParameters::Print() const {
     res.ReserveAndResize(end - res.data());
 
     return res;
-} 
- 
+}
+
 char* TCgiParameters::Print(char* res) const {
     if (empty()) {
         return res;
@@ -214,8 +214,8 @@ TCgiParameters::const_iterator TCgiParameters::Find(const TStringBuf name, size_
     }
 
     return end();
-} 
- 
+}
+
 bool TCgiParameters::Has(const TStringBuf name, const TStringBuf value) const noexcept {
     const auto pair = equal_range(name);
 
@@ -226,7 +226,7 @@ bool TCgiParameters::Has(const TStringBuf name, const TStringBuf value) const no
     }
 
     return false;
-} 
+}
 
 TQuickCgiParam::TQuickCgiParam(const TStringBuf cgiParamStr) {
     UnescapeBuf.reserve(CgiUnescapeBufLen(cgiParamStr.size()));

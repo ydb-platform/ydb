@@ -442,12 +442,12 @@ namespace NUri {
 
 #define FEATURE_NAME(f) _BitFeature##f
 #define FEATURE_FLAG_NAME(f) Feature##f
-#define FEATURE_FLAG(f) FEATURE_FLAG_NAME(f) = 1UL << FEATURE_NAME(f) 
- 
+#define FEATURE_FLAG(f) FEATURE_FLAG_NAME(f) = 1UL << FEATURE_NAME(f)
+
     struct TQueryArg {
         TStringBuf Name;
         TStringBuf Value;
- 
+
     private:
         enum EBit {
             FEATURE_NAME(Filter),
@@ -456,7 +456,7 @@ namespace NUri {
             FEATURE_NAME(RewriteDirty),
             _FeatureMAX
         };
- 
+
     public:
         enum EPublic : ui32 {
             FeatureMAX = _FeatureMAX,
@@ -465,25 +465,25 @@ namespace NUri {
             FEATURE_FLAG(RemoveEmptyQuery),
             FEATURE_FLAG(RewriteDirty),
         };
- 
+
         enum EProcessed {
             // OK and clean.
             ProcessedOK = 0,
- 
+
             // OK, but query stored in internal buffer and TUri::Rewrite() is required.
             ProcessedDirty = 1,
- 
+
             ProcessedMalformed = 2,
             ProcessedTooMany = 3,
         };
     };
- 
+
     typedef bool (*TQueryArgFilter)(const TQueryArg& arg, void* filterData);
- 
-#undef FEATURE_NAME 
-#undef FEATURE_FLAG_NAME 
-#undef FEATURE_FLAG 
- 
+
+#undef FEATURE_NAME
+#undef FEATURE_FLAG_NAME
+#undef FEATURE_FLAG
+
     const char* FieldToString(const TField::EField& t);
     const char* ParsedStateToString(const TState::EParsed& t);
     const char* SchemeKindToString(const TScheme::EKind& t);

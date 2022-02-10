@@ -4,7 +4,7 @@ import sys
 import json
 import copy
 import base64
-import shlex
+import shlex 
 import _common
 import lib._metric_resolvers as mr
 import _test_const as consts
@@ -50,17 +50,17 @@ def save_in_file(filepath, data):
             print >> file_handler, data
 
 
-def prepare_recipes(data):
-    data = data.replace('"USE_RECIPE_DELIM"', "\n")
-    data = data.replace("$TEST_RECIPES_VALUE", "")
-    return base64.b64encode(data or "")
-
-
-def prepare_env(data):
-    data = data.replace("$TEST_ENV_VALUE", "")
-    return serialize_list(shlex.split(data))
-
-
+def prepare_recipes(data): 
+    data = data.replace('"USE_RECIPE_DELIM"', "\n") 
+    data = data.replace("$TEST_RECIPES_VALUE", "") 
+    return base64.b64encode(data or "") 
+ 
+ 
+def prepare_env(data): 
+    data = data.replace("$TEST_ENV_VALUE", "") 
+    return serialize_list(shlex.split(data)) 
+ 
+ 
 def is_yt_spec_contain_pool_info(filename):  # XXX switch to yson in ymake + perf test for configure
     pool_re = re.compile(r"""['"]*pool['"]*\s*?=""")
     cypress_root_re = re.compile(r"""['"]*cypress_root['"]*\s*=""")
@@ -484,9 +484,9 @@ def onadd_ytest(unit, *args):
         'BINARY-PATH': "{}/{}".format(unit_path, unit.filename()),
         'GLOBAL-LIBRARY-PATH': unit.global_filename(),
         'CUSTOM-DEPENDENCIES': ' '.join(spec_args.get('DEPENDS', []) + get_values_list(unit, 'TEST_DEPENDS_VALUE')),
-        'TEST-RECIPES': prepare_recipes(unit.get("TEST_RECIPES_VALUE")),
-        'TEST-ENV': prepare_env(unit.get("TEST_ENV_VALUE")),
-        #  'TEST-PRESERVE-ENV': 'da',
+        'TEST-RECIPES': prepare_recipes(unit.get("TEST_RECIPES_VALUE")), 
+        'TEST-ENV': prepare_env(unit.get("TEST_ENV_VALUE")), 
+        #  'TEST-PRESERVE-ENV': 'da', 
         'TEST-DATA': serialize_list(test_data),
         'TEST-TIMEOUT': test_timeout,
         'FORK-MODE': fork_mode,
@@ -553,11 +553,11 @@ def onadd_check(unit, *args):
     test_dir = get_norm_unit_path(unit)
 
     test_timeout = ''
-    fork_mode = ''
+    fork_mode = '' 
     extra_test_data = ''
     extra_test_dart_data = {}
     ymake_java_test = unit.get('YMAKE_JAVA_TEST') == 'yes'
-
+ 
     if check_type in ["flake8.py2", "flake8.py3"]:
         script_rel_path = check_type
         fork_mode = unit.get('TEST_FORK_MODE') or ''
@@ -580,7 +580,7 @@ def onadd_check(unit, *args):
             return
         script_rel_path = "java.style"
         test_timeout = '120'
-        fork_mode = unit.get('TEST_FORK_MODE') or ''
+        fork_mode = unit.get('TEST_FORK_MODE') or '' 
         if ymake_java_test:
             extra_test_data = java_srcdirs_to_data(unit, 'ALL_SRCDIRS')
         extra_test_dart_data['JDK_RESOURCE'] = 'JDK' + (unit.get('JDK_VERSION') or '_DEFAULT')
@@ -594,10 +594,10 @@ def onadd_check(unit, *args):
 
     use_arcadia_python = unit.get('USE_ARCADIA_PYTHON')
     uid_ext = ''
-    if check_type in ("check.data", "check.resource"):
+    if check_type in ("check.data", "check.resource"): 
         if unit.get("VALIDATE_DATA") == "no":
             return
-    if check_type == "check.data":
+    if check_type == "check.data": 
         uid_ext = unit.get("SBR_UID_EXT").split(" ", 1)[-1]  # strip variable name
         data_re = re.compile(r"sbr:/?/?(\d+)=?.*")
         data = flat_args[1:]
@@ -624,7 +624,7 @@ def onadd_check(unit, *args):
         "SBR-UID-EXT": uid_ext,
         'SPLIT-FACTOR': '',
         'TEST_PARTITION': 'SEQUENTIAL',
-        'FORK-MODE': fork_mode,
+        'FORK-MODE': fork_mode, 
         'FORK-TEST-FILES': '',
         'SIZE': 'SMALL',
         'TAG': '',
@@ -638,7 +638,7 @@ def onadd_check(unit, *args):
         'NO_JBUILD': 'yes' if ymake_java_test else 'no',
     }
     test_record.update(extra_test_dart_data)
-
+ 
     data = dump_test(unit, test_record)
     if data:
         unit.set_property(["DART_DATA", data])
@@ -657,7 +657,7 @@ def onadd_check_py_imports(unit, *args):
         return
     if unit.get('NO_CHECK_IMPORTS_FOR_VALUE').strip() == "":
         return
-    unit.onpeerdir(['library/python/testing/import_test'])
+    unit.onpeerdir(['library/python/testing/import_test']) 
     check_type = "py.imports"
     test_dir = get_norm_unit_path(unit)
 
@@ -832,27 +832,27 @@ def onjava_test(unit, *args):
     test_cwd = unit.get('TEST_CWD_VALUE') or ''  # TODO: validate test_cwd value
 
     if unit.get('MODULE_TYPE') == 'JUNIT5':
-        script_rel_path = 'junit5.test'
-    else:
-        script_rel_path = 'junit.test'
-
+        script_rel_path = 'junit5.test' 
+    else: 
+        script_rel_path = 'junit.test' 
+ 
     ymake_java_test = unit.get('YMAKE_JAVA_TEST') == 'yes'
     test_record = {
         'SOURCE-FOLDER-PATH': path,
         'TEST-NAME': '-'.join([os.path.basename(os.path.dirname(path)), os.path.basename(path)]),
-        'SCRIPT-REL-PATH': script_rel_path,
+        'SCRIPT-REL-PATH': script_rel_path, 
         'TEST-TIMEOUT': unit.get('TEST_TIMEOUT') or '',
         'TESTED-PROJECT-NAME': path,
-        'TEST-ENV': prepare_env(unit.get("TEST_ENV_VALUE")),
-        #  'TEST-PRESERVE-ENV': 'da',
+        'TEST-ENV': prepare_env(unit.get("TEST_ENV_VALUE")), 
+        #  'TEST-PRESERVE-ENV': 'da', 
         'TEST-DATA': serialize_list(sorted(_common.filter_out_by_keyword(test_data, 'AUTOUPDATED'))),
         'FORK-MODE': unit.get('TEST_FORK_MODE') or '',
         'SPLIT-FACTOR': unit.get('TEST_SPLIT_FACTOR') or '',
         'CUSTOM-DEPENDENCIES': ' '.join(get_values_list(unit, 'TEST_DEPENDS_VALUE')),
         'TAG': serialize_list(_get_test_tags(unit)),
         'SIZE': unit.get('TEST_SIZE_NAME') or '',
-        'REQUIREMENTS': serialize_list(get_values_list(unit, 'TEST_REQUIREMENTS_VALUE')),
-        'TEST-RECIPES': prepare_recipes(unit.get("TEST_RECIPES_VALUE")),
+        'REQUIREMENTS': serialize_list(get_values_list(unit, 'TEST_REQUIREMENTS_VALUE')), 
+        'TEST-RECIPES': prepare_recipes(unit.get("TEST_RECIPES_VALUE")), 
 
         # JTEST/JTEST_FOR only
         'MODULE_TYPE': unit.get('MODULE_TYPE'),

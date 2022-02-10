@@ -3,8 +3,8 @@ import sys
 from six import reraise
 
 import py
-
-import pytest  # noqa
+ 
+import pytest  # noqa 
 import _pytest.python
 import _pytest.doctest
 import json

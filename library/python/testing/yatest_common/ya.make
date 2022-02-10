@@ -1,6 +1,6 @@
 OWNER(g:yatest)
 
-PY23_LIBRARY()
+PY23_LIBRARY() 
 
 OWNER(g:yatest)
 
@@ -27,7 +27,7 @@ PY_SRCS(
 PEERDIR(
     contrib/python/six
     library/python/cores
-    library/python/filelock
+    library/python/filelock 
     library/python/fs
 )
 

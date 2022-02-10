@@ -1,8 +1,8 @@
-jstyle:
-    NoLint:
-        ignore:
-            - '*'
-        prefixes: []
+jstyle: 
+    NoLint: 
+        ignore: 
+            - '*' 
+        prefixes: [] 
     NoParameterNumber:
         ignore:
             - 'ParameterNumber'

@@ -35,7 +35,7 @@ RECURSE(
     clang12-rt
     clapack
     cld2
-    cnpy
+    cnpy 
     cookiemy
     coreml
     coturn
@@ -90,7 +90,7 @@ RECURSE(
     giflib
     glslang
     google-compute-engine-oslogin
-    googleapis-common-protos
+    googleapis-common-protos 
     gost-engine
     gpsd
     grpc

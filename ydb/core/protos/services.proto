@@ -112,7 +112,7 @@ enum EServiceKikimr {
     JOBRUNNER_PROXY = 351;
     JOBRUNNER_CONTRACTOR = 352;
     JOB_POOL_MANAGER = 353;
-    FLAT_JOBRUNNER_POOL_MANAGER = 354;
+    FLAT_JOBRUNNER_POOL_MANAGER = 354; 
 
     // EXECUTION_SERVICE section
     EXECUTION_SERVICE = 360; // deprecated, left for compatibility reasons

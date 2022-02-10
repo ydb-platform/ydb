@@ -1,7 +1,7 @@
 import pytest
 import threading
 
-import library.python.func as func
+import library.python.func as func 
 
 
 def test_map0():

@@ -68,8 +68,8 @@ RECURSE(
     dump_dict
     edit_distance
     errorboosterclient
-    filelock
-    filelock/ut
+    filelock 
+    filelock/ut 
     filesys
     filesys/ut
     find_root
@@ -79,8 +79,8 @@ RECURSE(
     fnvhash/test
     framing
     framing/ut
-    func
-    func/ut
+    func 
+    func/ut 
     fs
     geolocation
     geolocation/ut
@@ -142,7 +142,7 @@ RECURSE(
     pyscopg2
     pytest
     pytest-mongodb
-    pytest/allure
+    pytest/allure 
     pytest/empty
     pytest/plugins
     python-blackboxer
@@ -178,8 +178,8 @@ RECURSE(
     startrek_python_client/tests_int
     statface_client
     step
-    strings
-    strings/ut
+    strings 
+    strings/ut 
     svn_ssh
     svn_version
     svn_version/ut
@@ -204,8 +204,8 @@ RECURSE(
     watch_dog
     watch_dog/example
     wiki
-    windows
-    windows/ut
+    windows 
+    windows/ut 
     yandex_tracker_client
     yenv
     yt

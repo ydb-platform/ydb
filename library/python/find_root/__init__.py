@@ -2,7 +2,7 @@ import os
 
 
 def is_root(path):
-    return os.path.exists(os.path.join(path, ".arcadia.root")) or os.path.exists(os.path.join(path, 'devtools', 'ya', 'ya.conf.json'))
+    return os.path.exists(os.path.join(path, ".arcadia.root")) or os.path.exists(os.path.join(path, 'devtools', 'ya', 'ya.conf.json')) 
 
 
 def detect_root(path, detector=is_root):

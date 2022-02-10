@@ -1,6 +1,6 @@
 OWNER(g:yatest)
 
-PY23_LIBRARY()
+PY23_LIBRARY() 
 
 PY_SRCS(
     NAMESPACE
@@ -8,7 +8,7 @@ PY_SRCS(
     external.py
     test_splitter.py
     tools.py
-    ya.py
+    ya.py 
 )
 
 PEERDIR(

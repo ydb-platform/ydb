@@ -3,19 +3,19 @@ import logging
 import os
 import sys
 
-import library.python.windows
+import library.python.windows 
 
 logger = logging.getLogger(__name__)
 
 
-def set_close_on_exec(stream):
-    if library.python.windows.on_win():
-        library.python.windows.set_handle_information(stream, inherit=False)
-    else:
-        import fcntl
-        fcntl.fcntl(stream, fcntl.F_SETFD, fcntl.FD_CLOEXEC)
-
-
+def set_close_on_exec(stream): 
+    if library.python.windows.on_win(): 
+        library.python.windows.set_handle_information(stream, inherit=False) 
+    else: 
+        import fcntl 
+        fcntl.fcntl(stream, fcntl.F_SETFD, fcntl.FD_CLOEXEC) 
+ 
+ 
 class AbstractFileLock(object):
 
     def __init__(self, path):
@@ -83,12 +83,12 @@ class _WinFileLock(AbstractFileLock):
 
     def acquire(self, blocking=True):
         self._lock = open(self.path)
-        set_close_on_exec(self._lock)
+        set_close_on_exec(self._lock) 
 
         import time
         locked = False
         while not locked:
-            locked = library.python.windows.lock_file(self._lock, 0, self._LOCKED_BYTES_NUM, raises=False)
+            locked = library.python.windows.lock_file(self._lock, 0, self._LOCKED_BYTES_NUM, raises=False) 
             if locked:
                 return True
             if blocking:
@@ -98,7 +98,7 @@ class _WinFileLock(AbstractFileLock):
 
     def release(self):
         if self._lock:
-            library.python.windows.unlock_file(self._lock, 0, self._LOCKED_BYTES_NUM, raises=False)
+            library.python.windows.unlock_file(self._lock, 0, self._LOCKED_BYTES_NUM, raises=False) 
             self._lock.close()
             self._lock = None
 

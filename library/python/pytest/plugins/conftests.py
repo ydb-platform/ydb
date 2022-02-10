@@ -5,7 +5,7 @@ import inspect
 
 from pytest import hookimpl
 
-from .fixtures import metrics, links  # noqa
+from .fixtures import metrics, links  # noqa 
 
 orig_getfile = inspect.getfile
 

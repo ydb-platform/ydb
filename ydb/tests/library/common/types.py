@@ -273,7 +273,7 @@ class PType(AbstractTypeEnum):
     LargeBoundedString = _ptype_from(4114, string_with_length(500), str)
 
     Utf8 = _ptype_from(4608, string_with_length(500), from_bytes)
-
+ 
     ActorID = _ptype_from(8193, actor_id(), str)
 
     def __init__(self, idn, generator, to_obj_converter, proto_field, min_value, max_value):

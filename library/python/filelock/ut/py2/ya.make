@@ -1,9 +1,9 @@
-OWNER(g:yatool)
-
+OWNER(g:yatool) 
+ 
 PY2TEST()
-
-PEERDIR(
+ 
+PEERDIR( 
     library/python/filelock/ut/lib
-)
-
-END()
+) 
+ 
+END() 

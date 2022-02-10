@@ -629,7 +629,7 @@ class Build(object):
         swiftc.print_compiler()
 
         if host.is_linux or host.is_macos or host.is_cygwin:
-            if is_negative('USE_ARCADIA_PYTHON'):
+            if is_negative('USE_ARCADIA_PYTHON'): 
                 python = Python(self.tc)
                 python.configure_posix()
                 python.print_variables()
@@ -2040,7 +2040,7 @@ class LD(Linker):
             '$C_FLAGS_PLATFORM', '$BEFORE_PEERS', self.start_group, '${rootrel:PEERS}', self.end_group, '$AFTER_PEERS',
             '$EXPORTS_VALUE $LINKER_SCRIPT_VALUE $LDFLAGS $LDFLAGS_GLOBAL $OBJADDE $OBJADDE_LIB',
             '$C_LIBRARY_PATH $C_SYSTEM_LIBRARIES_INTERCEPT $C_SYSTEM_LIBRARIES $STRIP_FLAG $DCE_FLAG $ICF_FLAG $LINKER_TIME_TRACE_FLAG']
-
+ 
         arch_flag = '--arch={arch}'.format(arch=self.target.os_compat)
         soname_flag = '-Wl,{option},${{_SONAME}}'.format(option=self.soname_option)
         shared_flag = '-shared'
@@ -2050,9 +2050,9 @@ class LD(Linker):
             + ' ${rootrel;ext=.o:SRCS_GLOBAL} ${rootrel;ext=.supp:SRCS_GLOBAL}'
         else:
             srcs_globals = '--start-wa ${rootrel;ext=.a:SRCS_GLOBAL} --end-wa ${rootrel;ext=.o:SRCS_GLOBAL} ${rootrel;ext=.supp:SRCS_GLOBAL}'
-
+ 
         ld_env_style = '${cwd:ARCADIA_BUILD_ROOT} $TOOLCHAIN_ENV ${kv;hide:"p LD"} ${requirements;hide:LD_REQUIREMENTS} ${kv;hide:"pc light-blue"} ${kv;hide:"show_out"}'
-
+ 
         # Program
         emit(
             "GENERATE_MF_CMD",
@@ -2153,7 +2153,7 @@ class LD(Linker):
             # Static Library
             emit('LINK_LIB', '$GENERATE_MF &&', archiver, '$TARGET', tail_link_lib)
         emit('GLOBAL_LINK_LIB', archiver, '$GLOBAL_TARGET', tail_link_lib)
-
+ 
         # "Fat Object" : pre-linked global objects and static library with all dependencies
         def emit_link_fat_obj(cmd_name, need_wa_option, *extended_flags):
             prefix = ['$GENERATE_MF && $GENERATE_VCS_C_INFO_NODEP &&',
@@ -2164,7 +2164,7 @@ class LD(Linker):
                       '-Ya,linker $CXX_COMPILER $LDFLAGS_GLOBAL $C_FLAGS_PLATFORM', self.ld_sdk, '-Ya,archiver', archiver,
                       '$TOOLCHAIN_ENV ${kv;hide:"p LD"} ${requirements;hide:LD_REQUIREMENTS} ${kv;hide:"pc light-blue"} ${kv;hide:"show_out"}']
             emit(cmd_name, *(prefix + list(extended_flags) + suffix))
-
+ 
         # TODO(somov): Проверить, не нужны ли здесь все остальные флаги компоновки (LDFLAGS и т. д.).
         emit_link_fat_obj('LINK_FAT_OBJECT', True, '--obj=$TARGET', '--lib=${output:REALPRJNAME.a}')
         emit_link_fat_obj('LINK_RECURSIVE_LIBRARY', False, '--lib=$TARGET', '--with-own-obj', '--with-global-srcs')
@@ -3095,9 +3095,9 @@ class Cuda(object):
         if self.use_arcadia_cuda.value:
             return '10.1'
 
-        if not self.have_cuda.value:
-            return None
-
+        if not self.have_cuda.value: 
+            return None 
+ 
         nvcc_exe = self.build.host.exe(os.path.expanduser(self.cuda_root.value), 'bin', 'nvcc')
 
         def error():

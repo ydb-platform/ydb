@@ -1573,13 +1573,13 @@ CommandLineInterface::ParseArgumentStatus CommandLineInterface::ParseArguments(
               << std::endl;
     return PARSE_ARGUMENT_FAIL;
   }
-  if (mode_ != MODE_DECODE && mode_ != MODE_ENCODE &&
-      (!encode_decode_input_.empty() || !encode_decode_output_.empty())) {
-    std::cerr << "--encode-decode-input and --encode-decode-output are used "
-              << "only together with --encode or --decode modes."
-              << std::endl;
-    return PARSE_ARGUMENT_FAIL;
-  }
+  if (mode_ != MODE_DECODE && mode_ != MODE_ENCODE && 
+      (!encode_decode_input_.empty() || !encode_decode_output_.empty())) { 
+    std::cerr << "--encode-decode-input and --encode-decode-output are used " 
+              << "only together with --encode or --decode modes." 
+              << std::endl; 
+    return PARSE_ARGUMENT_FAIL; 
+  } 
   if (!dependency_out_name_.empty() && input_files_.size() > 1) {
     std::cerr
         << "Can only process one input file when using --dependency_out=FILE."
@@ -1889,35 +1889,35 @@ CommandLineInterface::InterpretArgument(const TProtoStringType& name,
 
     codec_type_ = value;
 
-  } else if (name == "--encode-decode-input") {
-    if (!encode_decode_input_.empty()) {
-      std::cerr << name << " may only be passed once." << std::endl;
-      return PARSE_ARGUMENT_FAIL;
-    }
-    if (value.empty()) {
-      std::cerr << name << " requires a non-empty value." << std::endl;
-      return PARSE_ARGUMENT_FAIL;
-    }
-    if (access(value.c_str(), F_OK) < 0) {
-      std::cerr << value << ": encode/decode input file does not exist."
-                << std::endl;
-      return PARSE_ARGUMENT_FAIL;
-    }
-
-    encode_decode_input_ = value;
-
-  } else if (name == "--encode-decode-output") {
-    if (!encode_decode_output_.empty()) {
-      std::cerr << name << " may only be passed once." << std::endl;
-      return PARSE_ARGUMENT_FAIL;
-    }
-    if (value.empty()) {
-      std::cerr << name << " requires a non-empty value." << std::endl;
-      return PARSE_ARGUMENT_FAIL;
-    }
-
-    encode_decode_output_ = value;
-
+  } else if (name == "--encode-decode-input") { 
+    if (!encode_decode_input_.empty()) { 
+      std::cerr << name << " may only be passed once." << std::endl; 
+      return PARSE_ARGUMENT_FAIL; 
+    } 
+    if (value.empty()) { 
+      std::cerr << name << " requires a non-empty value." << std::endl; 
+      return PARSE_ARGUMENT_FAIL; 
+    } 
+    if (access(value.c_str(), F_OK) < 0) { 
+      std::cerr << value << ": encode/decode input file does not exist." 
+                << std::endl; 
+      return PARSE_ARGUMENT_FAIL; 
+    } 
+ 
+    encode_decode_input_ = value; 
+ 
+  } else if (name == "--encode-decode-output") { 
+    if (!encode_decode_output_.empty()) { 
+      std::cerr << name << " may only be passed once." << std::endl; 
+      return PARSE_ARGUMENT_FAIL; 
+    } 
+    if (value.empty()) { 
+      std::cerr << name << " requires a non-empty value." << std::endl; 
+      return PARSE_ARGUMENT_FAIL; 
+    } 
+ 
+    encode_decode_output_ = value; 
+ 
   } else if (name == "--deterministic_output") {
     deterministic_output_ = true;
 
@@ -2395,40 +2395,40 @@ bool CommandLineInterface::EncodeOrDecode(const DescriptorPool* pool) {
   DynamicMessageFactory dynamic_factory(pool);
   std::unique_ptr<Message> message(dynamic_factory.GetPrototype(type)->New());
 
-  int in_fd = STDIN_FILENO;
-  if (!encode_decode_input_.empty()) {
-    do {
-      in_fd = open(encode_decode_input_.c_str(), O_RDONLY | O_BINARY);
-    } while (in_fd < 0 && errno == EINTR);
-    if (in_fd < 0) {
-      int error = errno;
-      std::cerr << encode_decode_input_ << ": " << strerror(error) << std::endl;
-      return false;
-    }
-  }
-
-  int out_fd = STDOUT_FILENO;
-  if (!encode_decode_output_.empty()) {
-    do {
-      out_fd = open(encode_decode_output_.c_str(), O_WRONLY | O_CREAT | O_TRUNC | O_BINARY, 0666);
-    } while (out_fd < 0 && errno == EINTR);
-    if (out_fd < 0) {
-      int error = errno;
-      std::cerr << encode_decode_output_ << ": " << strerror(error) << std::endl;;
-      return false;
-    }
-  }
-
+  int in_fd = STDIN_FILENO; 
+  if (!encode_decode_input_.empty()) { 
+    do { 
+      in_fd = open(encode_decode_input_.c_str(), O_RDONLY | O_BINARY); 
+    } while (in_fd < 0 && errno == EINTR); 
+    if (in_fd < 0) { 
+      int error = errno; 
+      std::cerr << encode_decode_input_ << ": " << strerror(error) << std::endl; 
+      return false; 
+    } 
+  } 
+ 
+  int out_fd = STDOUT_FILENO; 
+  if (!encode_decode_output_.empty()) { 
+    do { 
+      out_fd = open(encode_decode_output_.c_str(), O_WRONLY | O_CREAT | O_TRUNC | O_BINARY, 0666); 
+    } while (out_fd < 0 && errno == EINTR); 
+    if (out_fd < 0) { 
+      int error = errno; 
+      std::cerr << encode_decode_output_ << ": " << strerror(error) << std::endl;; 
+      return false; 
+    } 
+  } 
+ 
   if (mode_ == MODE_ENCODE) {
-    SetFdToTextMode(in_fd);
-    SetFdToBinaryMode(out_fd);
+    SetFdToTextMode(in_fd); 
+    SetFdToBinaryMode(out_fd); 
   } else {
-    SetFdToBinaryMode(in_fd);
-    SetFdToTextMode(out_fd);
+    SetFdToBinaryMode(in_fd); 
+    SetFdToTextMode(out_fd); 
   }
 
-  io::FileInputStream in(in_fd);
-  io::FileOutputStream out(out_fd);
+  io::FileInputStream in(in_fd); 
+  io::FileOutputStream out(out_fd); 
 
   if (mode_ == MODE_ENCODE) {
     // Input is text.

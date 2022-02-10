@@ -19,14 +19,14 @@ import glob
 
 from botocore.exceptions import ClientError
 
-from __tests__ import StreamWithError
-from __tests__ import FileSizeProvider
-from __tests__ import RecordingSubscriber
-from __tests__ import RecordingOSUtils
-from __tests__ import NonSeekableWriter
-from __tests__ import BaseGeneralInterfaceTest
-from __tests__ import skip_if_windows
-from __tests__ import skip_if_using_serial_implementation
+from __tests__ import StreamWithError 
+from __tests__ import FileSizeProvider 
+from __tests__ import RecordingSubscriber 
+from __tests__ import RecordingOSUtils 
+from __tests__ import NonSeekableWriter 
+from __tests__ import BaseGeneralInterfaceTest 
+from __tests__ import skip_if_windows 
+from __tests__ import skip_if_using_serial_implementation 
 from s3transfer.compat import six
 from s3transfer.compat import SOCKET_ERROR
 from s3transfer.exceptions import RetriesExceededError

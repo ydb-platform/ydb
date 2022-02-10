@@ -18,13 +18,13 @@ import math
 
 from botocore.stub import ANY
 
-from __tests__ import unittest
-from __tests__ import BaseTaskTest
-from __tests__ import BaseSubmissionTaskTest
-from __tests__ import FileSizeProvider
-from __tests__ import RecordingSubscriber
-from __tests__ import RecordingExecutor
-from __tests__ import NonSeekableReader
+from __tests__ import unittest 
+from __tests__ import BaseTaskTest 
+from __tests__ import BaseSubmissionTaskTest 
+from __tests__ import FileSizeProvider 
+from __tests__ import RecordingSubscriber 
+from __tests__ import RecordingExecutor 
+from __tests__ import NonSeekableReader 
 from s3transfer.compat import six
 from s3transfer.futures import IN_MEMORY_UPLOAD_TAG
 from s3transfer.manager import TransferConfig

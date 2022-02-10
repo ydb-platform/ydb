@@ -15,8 +15,8 @@ import shutil
 import socket
 import tempfile
 
-from __tests__ import unittest
-from __tests__ import skip_if_windows
+from __tests__ import unittest 
+from __tests__ import skip_if_windows 
 from s3transfer.utils import OSUtils
 
 

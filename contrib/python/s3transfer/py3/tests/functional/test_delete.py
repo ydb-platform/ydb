@@ -11,7 +11,7 @@
 # ANY KIND, either express or implied. See the License for the specific
 # language governing permissions and limitations under the License.
 from s3transfer.manager import TransferManager
-from __tests__ import BaseGeneralInterfaceTest
+from __tests__ import BaseGeneralInterfaceTest 
 
 
 class TestDeleteObject(BaseGeneralInterfaceTest):

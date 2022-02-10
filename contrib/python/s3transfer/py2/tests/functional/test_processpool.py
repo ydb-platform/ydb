@@ -19,8 +19,8 @@ import botocore.exceptions
 import botocore.session
 from botocore.stub import Stubber
 
-from __tests__ import unittest
-from __tests__ import FileCreator
+from __tests__ import unittest 
+from __tests__ import FileCreator 
 from s3transfer.compat import six
 from s3transfer.exceptions import CancelledError
 from s3transfer.processpool import ProcessTransferConfig

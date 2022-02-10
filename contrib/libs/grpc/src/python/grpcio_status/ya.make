@@ -12,7 +12,7 @@ OWNER(
 )
 
 PEERDIR(
-    contrib/python/google-api-core 
+    contrib/python/google-api-core
     contrib/libs/grpc/grpc
     contrib/python/six
 )
@@ -43,7 +43,7 @@ PY_SRCS(
     TOP_LEVEL
     grpc_status/__init__.py
     grpc_status/_common.py
-    grpc_status/rpc_status.py 
+    grpc_status/rpc_status.py
 )
 
 IF (PYTHON3)

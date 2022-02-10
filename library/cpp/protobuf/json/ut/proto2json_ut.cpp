@@ -465,52 +465,52 @@ Y_UNIT_TEST(TestMissingSingleKeyConfig) {
         UNIT_ASSERT_NO_EXCEPTION(Proto2Json(proto, json, config));
         UNIT_ASSERT_JSONS_EQUAL(json, modelJson);
     }
-    { 
-        // Test MissingKeyExplicitDefaultThrowRequired for non explicit default values. 
-        TFlatOptional proto; 
-        NJson::TJsonValue modelJson(NJson::JSON_MAP); 
-        NJson::TJsonValue json; 
-        TProto2JsonConfig config; 
-        config.MissingSingleKeyMode = TProto2JsonConfig::MissingKeyExplicitDefaultThrowRequired; 
- 
-        UNIT_ASSERT_NO_EXCEPTION(Proto2Json(proto, json, config)); 
-        UNIT_ASSERT_JSONS_EQUAL(json, modelJson); 
-    } 
-    { 
-        // Test MissingKeyExplicitDefaultThrowRequired for explicit default values. 
-        NJson::TJsonValue modelJson; 
-        modelJson["String"] = "value"; 
- 
-        TSingleDefaultString proto; 
-        NJson::TJsonValue json; 
-        TProto2JsonConfig config; 
-        config.MissingSingleKeyMode = TProto2JsonConfig::MissingKeyExplicitDefaultThrowRequired; 
-        UNIT_ASSERT_NO_EXCEPTION(Proto2Json(proto, json, config)); 
-        UNIT_ASSERT_JSONS_EQUAL(json, modelJson); 
-    } 
-    { 
-        // Test MissingKeyExplicitDefaultThrowRequired for empty required values. 
-        TFlatRequired proto; 
-        NJson::TJsonValue json; 
-        TProto2JsonConfig config; 
-        config.MissingSingleKeyMode = TProto2JsonConfig::MissingKeyExplicitDefaultThrowRequired; 
-        UNIT_ASSERT_EXCEPTION_CONTAINS(Proto2Json(proto, json, config), yexception, "Empty required protobuf field"); 
-    } 
-    { 
-        // Test MissingKeyExplicitDefaultThrowRequired for required value. 
-        TSingleRequiredString proto; 
-        NJson::TJsonValue json; 
-        TProto2JsonConfig config; 
-        config.MissingSingleKeyMode = TProto2JsonConfig::MissingKeyExplicitDefaultThrowRequired; 
- 
-        UNIT_ASSERT_EXCEPTION_CONTAINS(Proto2Json(proto, json, config), yexception, "Empty required protobuf field"); 
- 
-        NJson::TJsonValue modelJson; 
-        modelJson["String"] = "value"; 
-        proto.SetString("value"); 
-        UNIT_ASSERT_NO_EXCEPTION(Proto2Json(proto, json, config)); 
-        UNIT_ASSERT_JSONS_EQUAL(json, modelJson); 
-    } 
+    {
+        // Test MissingKeyExplicitDefaultThrowRequired for non explicit default values.
+        TFlatOptional proto;
+        NJson::TJsonValue modelJson(NJson::JSON_MAP);
+        NJson::TJsonValue json;
+        TProto2JsonConfig config;
+        config.MissingSingleKeyMode = TProto2JsonConfig::MissingKeyExplicitDefaultThrowRequired;
+
+        UNIT_ASSERT_NO_EXCEPTION(Proto2Json(proto, json, config));
+        UNIT_ASSERT_JSONS_EQUAL(json, modelJson);
+    }
+    {
+        // Test MissingKeyExplicitDefaultThrowRequired for explicit default values.
+        NJson::TJsonValue modelJson;
+        modelJson["String"] = "value";
+
+        TSingleDefaultString proto;
+        NJson::TJsonValue json;
+        TProto2JsonConfig config;
+        config.MissingSingleKeyMode = TProto2JsonConfig::MissingKeyExplicitDefaultThrowRequired;
+        UNIT_ASSERT_NO_EXCEPTION(Proto2Json(proto, json, config));
+        UNIT_ASSERT_JSONS_EQUAL(json, modelJson);
+    }
+    {
+        // Test MissingKeyExplicitDefaultThrowRequired for empty required values.
+        TFlatRequired proto;
+        NJson::TJsonValue json;
+        TProto2JsonConfig config;
+        config.MissingSingleKeyMode = TProto2JsonConfig::MissingKeyExplicitDefaultThrowRequired;
+        UNIT_ASSERT_EXCEPTION_CONTAINS(Proto2Json(proto, json, config), yexception, "Empty required protobuf field");
+    }
+    {
+        // Test MissingKeyExplicitDefaultThrowRequired for required value.
+        TSingleRequiredString proto;
+        NJson::TJsonValue json;
+        TProto2JsonConfig config;
+        config.MissingSingleKeyMode = TProto2JsonConfig::MissingKeyExplicitDefaultThrowRequired;
+
+        UNIT_ASSERT_EXCEPTION_CONTAINS(Proto2Json(proto, json, config), yexception, "Empty required protobuf field");
+
+        NJson::TJsonValue modelJson;
+        modelJson["String"] = "value";
+        proto.SetString("value");
+        UNIT_ASSERT_NO_EXCEPTION(Proto2Json(proto, json, config));
+        UNIT_ASSERT_JSONS_EQUAL(json, modelJson);
+    }
 } // TestMissingSingleKeyConfig
 
 Y_UNIT_TEST(TestMissingRepeatedKeyNoConfig) {
@@ -551,17 +551,17 @@ Y_UNIT_TEST(TestMissingRepeatedKeyConfig) {
         UNIT_ASSERT_NO_EXCEPTION(Proto2Json(proto, json, config));
         UNIT_ASSERT_JSONS_EQUAL(json, modelJson);
     }
-    { 
-        TFlatRepeated proto; 
-        NJson::TJsonValue modelJson(NJson::JSON_MAP); 
-        NJson::TJsonValue json; 
-        TProto2JsonConfig config; 
-        config.MissingRepeatedKeyMode = TProto2JsonConfig::MissingKeyExplicitDefaultThrowRequired; 
- 
-        // SHould be same as MissingKeySkip 
-        UNIT_ASSERT_NO_EXCEPTION(Proto2Json(proto, json, config)); 
-        UNIT_ASSERT_JSONS_EQUAL(json, modelJson); 
-    } 
+    {
+        TFlatRepeated proto;
+        NJson::TJsonValue modelJson(NJson::JSON_MAP);
+        NJson::TJsonValue json;
+        TProto2JsonConfig config;
+        config.MissingRepeatedKeyMode = TProto2JsonConfig::MissingKeyExplicitDefaultThrowRequired;
+
+        // SHould be same as MissingKeySkip
+        UNIT_ASSERT_NO_EXCEPTION(Proto2Json(proto, json, config));
+        UNIT_ASSERT_JSONS_EQUAL(json, modelJson);
+    }
 } // TestMissingRepeatedKeyConfig
 
 Y_UNIT_TEST(TestEscaping) {

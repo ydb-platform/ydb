@@ -15,20 +15,20 @@ namespace NProtobufJson {
         bool FormatOutput = false;
 
         enum MissingKeyMode {
-            // Skip missing keys 
+            // Skip missing keys
             MissingKeySkip = 0,
-            // Fill missing keys with json null value. 
+            // Fill missing keys with json null value.
             MissingKeyNull,
-            // Use default value in any case. 
-            // If default value is not explicitly defined, use default type value: 
-            //     i.e. 0 for integers, "" for strings 
-            // For repeated keys, means [] 
-            MissingKeyDefault, 
-            // Use default value if it is explicitly specified for optional fields. 
-            // Skip if no explicitly defined default value for optional fields. 
-            // Throw exception if required field is empty. 
-            // For repeated keys, same as MissingKeySkip 
-            MissingKeyExplicitDefaultThrowRequired 
+            // Use default value in any case.
+            // If default value is not explicitly defined, use default type value:
+            //     i.e. 0 for integers, "" for strings
+            // For repeated keys, means []
+            MissingKeyDefault,
+            // Use default value if it is explicitly specified for optional fields.
+            // Skip if no explicitly defined default value for optional fields.
+            // Throw exception if required field is empty.
+            // For repeated keys, same as MissingKeySkip
+            MissingKeyExplicitDefaultThrowRequired
         };
         MissingKeyMode MissingSingleKeyMode = MissingKeySkip;
         MissingKeyMode MissingRepeatedKeyMode = MissingKeySkip;

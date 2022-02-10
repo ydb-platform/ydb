@@ -19,7 +19,7 @@ namespace google {
 namespace NProtobufJson {
     struct TJson2ProtoConfig {
         using TSelf = TJson2ProtoConfig;
-        using TValueVectorizer = std::function<NJson::TJsonValue::TArray(const NJson::TJsonValue& jsonValue)>; 
+        using TValueVectorizer = std::function<NJson::TJsonValue::TArray(const NJson::TJsonValue& jsonValue)>;
 
         enum FldNameMode {
             FieldNameOriginalCase = 0, // default
@@ -58,11 +58,11 @@ namespace NProtobufJson {
             return *this;
         }
 
-        TSelf& SetDoNotCastEmptyStrings(bool cast) { 
-            DoNotCastEmptyStrings = cast; 
-            return *this; 
-        } 
- 
+        TSelf& SetDoNotCastEmptyStrings(bool cast) {
+            DoNotCastEmptyStrings = cast;
+            return *this;
+        }
+
         TSelf& SetCastRobust(bool cast) {
             CastRobust = cast;
             return *this;
@@ -115,9 +115,9 @@ namespace NProtobufJson {
 
         /// Cast string json values to protobuf field type
         bool CastFromString = false;
-        /// Skip empty strings, instead casting from string into scalar types. 
-        /// I.e. empty string like default value for scalar types. 
-        bool DoNotCastEmptyStrings = false; 
+        /// Skip empty strings, instead casting from string into scalar types.
+        /// I.e. empty string like default value for scalar types.
+        bool DoNotCastEmptyStrings = false;
         /// Cast all json values to protobuf field types
         bool CastRobust = false;
 
@@ -138,9 +138,9 @@ namespace NProtobufJson {
 
         /// Append scalars to repeated fields
         bool VectorizeScalars = false;
- 
-        /// Custom spliter non array value to repeated fields. 
-        TValueVectorizer ValueVectorizer; 
+
+        /// Custom spliter non array value to repeated fields.
+        TValueVectorizer ValueVectorizer;
 
         /// Allow js-style comments (both // and /**/)
         bool AllowComments = false;

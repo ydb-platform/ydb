@@ -19,10 +19,10 @@
         }                                                                           \
         if (!json.JsonCheckType()) {                                                \
             if (config.CastFromString && json.IsString()) {                         \
-                if (config.DoNotCastEmptyStrings && json.GetString().empty()) {     \ 
-                    /* Empty string is same as "no value" for scalar types.*/   \ 
-                    break;                                                          \ 
-                }                                                                   \ 
+                if (config.DoNotCastEmptyStrings && json.GetString().empty()) {     \
+                    /* Empty string is same as "no value" for scalar types.*/   \
+                    break;                                                          \
+                }                                                                   \
                 reflection->ProtoSet(&proto, &field, FromString(json.GetString())); \
                 break;                                                              \
             }                                                                       \
@@ -335,7 +335,7 @@ Json2RepeatedField(const NJson::TJsonValue& json,
         }
     }
 
-    if (fieldJson.GetType() != NJson::JSON_ARRAY && !config.MapAsObject && !config.VectorizeScalars && !config.ValueVectorizer) { 
+    if (fieldJson.GetType() != NJson::JSON_ARRAY && !config.MapAsObject && !config.VectorizeScalars && !config.ValueVectorizer) {
         ythrow yexception() << "JSON field doesn't represent an array for "
                             << name
                             << "(actual type is "
@@ -361,10 +361,10 @@ Json2RepeatedField(const NJson::TJsonValue& json,
             for (const NJson::TJsonValue& jsonValue : jsonArray) {
                 Json2RepeatedFieldValue(jsonValue, proto, field, config, reflection);
             }
-        } else if (config.ValueVectorizer) { 
-            for (const NJson::TJsonValue& jsonValue : config.ValueVectorizer(fieldJson)) { 
-                Json2RepeatedFieldValue(jsonValue, proto, field, config, reflection); 
-            } 
+        } else if (config.ValueVectorizer) {
+            for (const NJson::TJsonValue& jsonValue : config.ValueVectorizer(fieldJson)) {
+                Json2RepeatedFieldValue(jsonValue, proto, field, config, reflection);
+            }
         } else if (config.VectorizeScalars) {
             Json2RepeatedFieldValue(fieldJson, proto, field, config, reflection);
         }

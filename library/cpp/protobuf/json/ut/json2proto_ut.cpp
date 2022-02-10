@@ -690,57 +690,57 @@ Y_UNIT_TEST(TestVectorizeScalars) {
 #undef DEFINE_FIELD
 }
 
-Y_UNIT_TEST(TestValueVectorizer) { 
-    { 
-        // No ValueVectorizer 
-        NJson::TJsonValue json; 
-        json["RepeatedString"] = "123"; 
-        TJson2ProtoConfig config; 
-        TSingleRepeatedString expected; 
-        UNIT_ASSERT_EXCEPTION(Json2Proto(json, expected, config), yexception); 
-    } 
-    { 
-        // ValueVectorizer replace original value by array 
-        NJson::TJsonValue json; 
-        json["RepeatedString"] = "123"; 
-        TJson2ProtoConfig config; 
- 
-        TSingleRepeatedString expected; 
-        expected.AddRepeatedString("4"); 
-        expected.AddRepeatedString("5"); 
-        expected.AddRepeatedString("6"); 
- 
-        config.ValueVectorizer = [](const NJson::TJsonValue& val) -> NJson::TJsonValue::TArray { 
-            Y_UNUSED(val); 
-            return {NJson::TJsonValue("4"), NJson::TJsonValue("5"), NJson::TJsonValue("6")}; 
-        }; 
-        TSingleRepeatedString actual; 
-        Json2Proto(json, actual, config); 
-        UNIT_ASSERT_PROTOS_EQUAL(expected, actual); 
-    } 
-    { 
-        // ValueVectorizer replace original value by array and cast 
-        NJson::TJsonValue json; 
-        json["RepeatedInt"] = 123; 
-        TJson2ProtoConfig config; 
- 
-        TSingleRepeatedInt expected; 
-        expected.AddRepeatedInt(4); 
-        expected.AddRepeatedInt(5); 
-        expected.AddRepeatedInt(6); 
- 
-        config.ValueVectorizer = [](const NJson::TJsonValue& val) -> NJson::TJsonValue::TArray { 
-            Y_UNUSED(val); 
-            return {NJson::TJsonValue("4"), NJson::TJsonValue(5), NJson::TJsonValue("6")}; 
-        }; 
-        config.CastFromString = true; 
- 
-        TSingleRepeatedInt actual; 
-        Json2Proto(json, actual, config); 
-        UNIT_ASSERT_PROTOS_EQUAL(expected, actual); 
-    } 
-} 
- 
+Y_UNIT_TEST(TestValueVectorizer) {
+    {
+        // No ValueVectorizer
+        NJson::TJsonValue json;
+        json["RepeatedString"] = "123";
+        TJson2ProtoConfig config;
+        TSingleRepeatedString expected;
+        UNIT_ASSERT_EXCEPTION(Json2Proto(json, expected, config), yexception);
+    }
+    {
+        // ValueVectorizer replace original value by array
+        NJson::TJsonValue json;
+        json["RepeatedString"] = "123";
+        TJson2ProtoConfig config;
+
+        TSingleRepeatedString expected;
+        expected.AddRepeatedString("4");
+        expected.AddRepeatedString("5");
+        expected.AddRepeatedString("6");
+
+        config.ValueVectorizer = [](const NJson::TJsonValue& val) -> NJson::TJsonValue::TArray {
+            Y_UNUSED(val);
+            return {NJson::TJsonValue("4"), NJson::TJsonValue("5"), NJson::TJsonValue("6")};
+        };
+        TSingleRepeatedString actual;
+        Json2Proto(json, actual, config);
+        UNIT_ASSERT_PROTOS_EQUAL(expected, actual);
+    }
+    {
+        // ValueVectorizer replace original value by array and cast
+        NJson::TJsonValue json;
+        json["RepeatedInt"] = 123;
+        TJson2ProtoConfig config;
+
+        TSingleRepeatedInt expected;
+        expected.AddRepeatedInt(4);
+        expected.AddRepeatedInt(5);
+        expected.AddRepeatedInt(6);
+
+        config.ValueVectorizer = [](const NJson::TJsonValue& val) -> NJson::TJsonValue::TArray {
+            Y_UNUSED(val);
+            return {NJson::TJsonValue("4"), NJson::TJsonValue(5), NJson::TJsonValue("6")};
+        };
+        config.CastFromString = true;
+
+        TSingleRepeatedInt actual;
+        Json2Proto(json, actual, config);
+        UNIT_ASSERT_PROTOS_EQUAL(expected, actual);
+    }
+}
+
 Y_UNIT_TEST(TestMapAsObject) {
     TMapType modelProto;
 
@@ -1103,23 +1103,23 @@ Y_UNIT_TEST(TestMergeRepeatedAppend) {
     UNIT_ASSERT_PROTOS_EQUAL(proto, modelProto);
 } // TestMergeRepeatedAppend
 
-Y_UNIT_TEST(TestEmptyStringForCastFromString) { 
-    NJson::TJsonValue json; 
-    json["I32"] = ""; 
-    json["Bool"] = ""; 
-    json["OneString"] = ""; 
- 
-    TJson2ProtoConfig config; 
-    config.SetCastFromString(true); 
-    config.SetDoNotCastEmptyStrings(true); 
-    TFlatOptional proto; 
-    UNIT_ASSERT_NO_EXCEPTION(Json2Proto(json, proto, config)); 
-    UNIT_ASSERT(!proto.HasBool()); 
-    UNIT_ASSERT(!proto.HasI32()); 
-    UNIT_ASSERT(proto.HasOneString()); 
-    UNIT_ASSERT_EQUAL("", proto.GetOneString()); 
-} // TestEmptyStringForCastFromString 
- 
+Y_UNIT_TEST(TestEmptyStringForCastFromString) {
+    NJson::TJsonValue json;
+    json["I32"] = "";
+    json["Bool"] = "";
+    json["OneString"] = "";
+
+    TJson2ProtoConfig config;
+    config.SetCastFromString(true);
+    config.SetDoNotCastEmptyStrings(true);
+    TFlatOptional proto;
+    UNIT_ASSERT_NO_EXCEPTION(Json2Proto(json, proto, config));
+    UNIT_ASSERT(!proto.HasBool());
+    UNIT_ASSERT(!proto.HasI32());
+    UNIT_ASSERT(proto.HasOneString());
+    UNIT_ASSERT_EQUAL("", proto.GetOneString());
+} // TestEmptyStringForCastFromString
+
 Y_UNIT_TEST(TestAllowComments) {
     constexpr TStringBuf json = R"(
 {

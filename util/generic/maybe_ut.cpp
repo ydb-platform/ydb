@@ -808,162 +808,162 @@ Y_UNIT_TEST_SUITE(TMaybeTest) {
         output << TMaybe<int>(42);
         UNIT_ASSERT_EQUAL("42", s);
     }
- 
+
     Y_UNIT_TEST(TestMaybeCovarianceImplicit) {
-        struct TestStruct { 
-            TestStruct(int value) 
-                : Value_(value) 
+        struct TestStruct {
+            TestStruct(int value)
+                : Value_(value)
             {
             }
- 
-            operator int() const { 
-                return Value_; 
-            } 
- 
-            static TMaybe<int> Unwrap(TMaybe<TestStruct> testStructMaybe) { 
-                return testStructMaybe; 
-            } 
- 
-            int Value_; 
-        }; 
- 
-        TMaybe<int> testMaybeFull = TestStruct::Unwrap(TMaybe<int>(42)); 
-        UNIT_ASSERT(testMaybeFull.Defined()); 
-        UNIT_ASSERT_EQUAL(testMaybeFull.GetRef(), 42); 
- 
-        TMaybe<int> testMaybeEmpty = TestStruct::Unwrap(TMaybe<int>()); 
-        UNIT_ASSERT(!testMaybeEmpty.Defined()); 
-    } 
- 
+
+            operator int() const {
+                return Value_;
+            }
+
+            static TMaybe<int> Unwrap(TMaybe<TestStruct> testStructMaybe) {
+                return testStructMaybe;
+            }
+
+            int Value_;
+        };
+
+        TMaybe<int> testMaybeFull = TestStruct::Unwrap(TMaybe<int>(42));
+        UNIT_ASSERT(testMaybeFull.Defined());
+        UNIT_ASSERT_EQUAL(testMaybeFull.GetRef(), 42);
+
+        TMaybe<int> testMaybeEmpty = TestStruct::Unwrap(TMaybe<int>());
+        UNIT_ASSERT(!testMaybeEmpty.Defined());
+    }
+
     Y_UNIT_TEST(TestMaybeCovarianceExplicit) {
-        struct TestStruct { 
-            explicit TestStruct(int value) 
-                : Value_(value) 
+        struct TestStruct {
+            explicit TestStruct(int value)
+                : Value_(value)
             {
             }
-            int Value_; 
-        }; 
- 
-        TMaybe<TestStruct> testStructMaybeFull(TMaybe<int>(42)); 
-        UNIT_ASSERT(testStructMaybeFull.Defined()); 
-        UNIT_ASSERT_EQUAL(testStructMaybeFull.GetRef().Value_, 42); 
- 
-        TMaybe<int> empty; 
-        TMaybe<TestStruct> testStructMaybeEmpty(empty); 
-        UNIT_ASSERT(!testStructMaybeEmpty.Defined()); 
-    } 
- 
+            int Value_;
+        };
+
+        TMaybe<TestStruct> testStructMaybeFull(TMaybe<int>(42));
+        UNIT_ASSERT(testStructMaybeFull.Defined());
+        UNIT_ASSERT_EQUAL(testStructMaybeFull.GetRef().Value_, 42);
+
+        TMaybe<int> empty;
+        TMaybe<TestStruct> testStructMaybeEmpty(empty);
+        UNIT_ASSERT(!testStructMaybeEmpty.Defined());
+    }
+
     Y_UNIT_TEST(TestMaybeCovarianceAssign) {
-        struct TestStruct { 
-            explicit TestStruct(int value) 
-                : Value_(value) 
+        struct TestStruct {
+            explicit TestStruct(int value)
+                : Value_(value)
             {
             }
-            TestStruct& operator=(int value) { 
-                Value_ = value; 
-                return *this; 
-            } 
-            int Value_; 
-        }; 
- 
-        TMaybe<TestStruct> testStructMaybe(Nothing()); 
-        UNIT_ASSERT(!testStructMaybe.Defined()); 
- 
-        testStructMaybe = TMaybe<int>(42); 
-        UNIT_ASSERT(testStructMaybe.Defined()); 
-        UNIT_ASSERT_EQUAL(testStructMaybe.GetRef().Value_, 42); 
- 
-        testStructMaybe = TMaybe<int>(23); 
-        UNIT_ASSERT(testStructMaybe.Defined()); 
-        UNIT_ASSERT_EQUAL(testStructMaybe.GetRef().Value_, 23); 
- 
-        testStructMaybe = TMaybe<int>(); 
-        UNIT_ASSERT(!testStructMaybe.Defined()); 
-    } 
- 
+            TestStruct& operator=(int value) {
+                Value_ = value;
+                return *this;
+            }
+            int Value_;
+        };
+
+        TMaybe<TestStruct> testStructMaybe(Nothing());
+        UNIT_ASSERT(!testStructMaybe.Defined());
+
+        testStructMaybe = TMaybe<int>(42);
+        UNIT_ASSERT(testStructMaybe.Defined());
+        UNIT_ASSERT_EQUAL(testStructMaybe.GetRef().Value_, 42);
+
+        testStructMaybe = TMaybe<int>(23);
+        UNIT_ASSERT(testStructMaybe.Defined());
+        UNIT_ASSERT_EQUAL(testStructMaybe.GetRef().Value_, 23);
+
+        testStructMaybe = TMaybe<int>();
+        UNIT_ASSERT(!testStructMaybe.Defined());
+    }
+
     Y_UNIT_TEST(TestMaybeCovarianceNonTrivial) {
-        struct TestStruct { 
-            enum { 
-                FromValue, 
-                FromMaybe, 
-            }; 
-            TestStruct(int value) 
-                : Value_(value) 
-                , From_(FromValue) 
+        struct TestStruct {
+            enum {
+                FromValue,
+                FromMaybe,
+            };
+            TestStruct(int value)
+                : Value_(value)
+                , From_(FromValue)
             {
             }
-            TestStruct(TMaybe<int> value) 
-                : Value_(value.Defined() ? value.GetRef() : 0) 
-                , From_(FromMaybe) 
+            TestStruct(TMaybe<int> value)
+                : Value_(value.Defined() ? value.GetRef() : 0)
+                , From_(FromMaybe)
             {
             }
-            int Value_; 
-            int From_; 
-        }; 
- 
-        TMaybe<TestStruct> testStructFromMaybe(TMaybe<int>(42)); 
-        UNIT_ASSERT(testStructFromMaybe.Defined()); 
-        UNIT_ASSERT_EQUAL(testStructFromMaybe.GetRef().From_, TestStruct::FromMaybe); 
-        UNIT_ASSERT_EQUAL(testStructFromMaybe.GetRef().Value_, 42); 
- 
-        TMaybe<int> empty; 
-        TMaybe<TestStruct> testStructFromEmptyMaybe(empty); 
-        UNIT_ASSERT(testStructFromEmptyMaybe.Defined()); 
-        UNIT_ASSERT_EQUAL(testStructFromEmptyMaybe.GetRef().From_, TestStruct::FromMaybe); 
-        UNIT_ASSERT_EQUAL(testStructFromEmptyMaybe.GetRef().Value_, 0); 
- 
-        TMaybe<TestStruct> testStructFromValue(23); 
-        UNIT_ASSERT(testStructFromValue.Defined()); 
-        UNIT_ASSERT_EQUAL(testStructFromValue.GetRef().From_, TestStruct::FromValue); 
-        UNIT_ASSERT_EQUAL(testStructFromValue.GetRef().Value_, 23); 
-    } 
- 
+            int Value_;
+            int From_;
+        };
+
+        TMaybe<TestStruct> testStructFromMaybe(TMaybe<int>(42));
+        UNIT_ASSERT(testStructFromMaybe.Defined());
+        UNIT_ASSERT_EQUAL(testStructFromMaybe.GetRef().From_, TestStruct::FromMaybe);
+        UNIT_ASSERT_EQUAL(testStructFromMaybe.GetRef().Value_, 42);
+
+        TMaybe<int> empty;
+        TMaybe<TestStruct> testStructFromEmptyMaybe(empty);
+        UNIT_ASSERT(testStructFromEmptyMaybe.Defined());
+        UNIT_ASSERT_EQUAL(testStructFromEmptyMaybe.GetRef().From_, TestStruct::FromMaybe);
+        UNIT_ASSERT_EQUAL(testStructFromEmptyMaybe.GetRef().Value_, 0);
+
+        TMaybe<TestStruct> testStructFromValue(23);
+        UNIT_ASSERT(testStructFromValue.Defined());
+        UNIT_ASSERT_EQUAL(testStructFromValue.GetRef().From_, TestStruct::FromValue);
+        UNIT_ASSERT_EQUAL(testStructFromValue.GetRef().Value_, 23);
+    }
+
     Y_UNIT_TEST(TestMaybeCovarianceNonTrivialAssign) {
-        struct TestStruct { 
-            enum { 
-                FromValue, 
-                FromMaybe, 
-            }; 
-            TestStruct(int value) 
-                : Value_(value) 
-                , From_(FromValue) 
+        struct TestStruct {
+            enum {
+                FromValue,
+                FromMaybe,
+            };
+            TestStruct(int value)
+                : Value_(value)
+                , From_(FromValue)
             {
             }
-            TestStruct(TMaybe<int> value) 
-                : Value_(value.Defined() ? value.GetRef() : 0) 
-                , From_(FromMaybe) 
+            TestStruct(TMaybe<int> value)
+                : Value_(value.Defined() ? value.GetRef() : 0)
+                , From_(FromMaybe)
             {
             }
-            TestStruct& operator=(int value) { 
-                Value_ = value; 
-                From_ = FromValue; 
-                return *this; 
-            } 
-            TestStruct& operator=(TMaybe<int> value) { 
-                Value_ = value.Defined() ? value.GetRef() : 0; 
-                From_ = FromMaybe; 
-                return *this; 
-            } 
-            int Value_; 
-            int From_; 
-        }; 
- 
-        TMaybe<TestStruct> testStructMaybe(Nothing()); 
-        testStructMaybe = TMaybe<int>(42); 
-        UNIT_ASSERT(testStructMaybe.Defined()); 
-        UNIT_ASSERT_EQUAL(testStructMaybe.GetRef().From_, TestStruct::FromMaybe); 
-        UNIT_ASSERT_EQUAL(testStructMaybe.GetRef().Value_, 42); 
- 
-        testStructMaybe = TMaybe<int>(); 
-        UNIT_ASSERT(testStructMaybe.Defined()); 
-        UNIT_ASSERT_EQUAL(testStructMaybe.GetRef().From_, TestStruct::FromMaybe); 
-        UNIT_ASSERT_EQUAL(testStructMaybe.GetRef().Value_, 0); 
- 
-        testStructMaybe = 23; 
-        UNIT_ASSERT(testStructMaybe.Defined()); 
-        UNIT_ASSERT_EQUAL(testStructMaybe.GetRef().From_, TestStruct::FromValue); 
-        UNIT_ASSERT_EQUAL(testStructMaybe.GetRef().Value_, 23); 
-    } 
+            TestStruct& operator=(int value) {
+                Value_ = value;
+                From_ = FromValue;
+                return *this;
+            }
+            TestStruct& operator=(TMaybe<int> value) {
+                Value_ = value.Defined() ? value.GetRef() : 0;
+                From_ = FromMaybe;
+                return *this;
+            }
+            int Value_;
+            int From_;
+        };
+
+        TMaybe<TestStruct> testStructMaybe(Nothing());
+        testStructMaybe = TMaybe<int>(42);
+        UNIT_ASSERT(testStructMaybe.Defined());
+        UNIT_ASSERT_EQUAL(testStructMaybe.GetRef().From_, TestStruct::FromMaybe);
+        UNIT_ASSERT_EQUAL(testStructMaybe.GetRef().Value_, 42);
+
+        testStructMaybe = TMaybe<int>();
+        UNIT_ASSERT(testStructMaybe.Defined());
+        UNIT_ASSERT_EQUAL(testStructMaybe.GetRef().From_, TestStruct::FromMaybe);
+        UNIT_ASSERT_EQUAL(testStructMaybe.GetRef().Value_, 0);
+
+        testStructMaybe = 23;
+        UNIT_ASSERT(testStructMaybe.Defined());
+        UNIT_ASSERT_EQUAL(testStructMaybe.GetRef().From_, TestStruct::FromValue);
+        UNIT_ASSERT_EQUAL(testStructMaybe.GetRef().Value_, 23);
+    }
 
     Y_UNIT_TEST(TestMaybeConvertion) {
         struct TSrc {};

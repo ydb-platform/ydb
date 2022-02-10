@@ -49,7 +49,7 @@ private:
     static_assert(std::is_destructible<T>::value,
                   "Instantiation of TMaybe with non-destructible type is ill-formed");
 
-    template <class U> 
+    template <class U>
     struct TConstructibleFromMaybeSomehow {
     public:
         static constexpr bool value = std::is_constructible<T, TMaybe<U, Policy>&>::value ||
@@ -61,8 +61,8 @@ private:
                                       std::is_convertible<TMaybe<U, Policy>&&, T>::value ||
                                       std::is_convertible<const TMaybe<U, Policy>&&, T>::value;
     };
- 
-    template <class U> 
+
+    template <class U>
     struct TAssignableFromMaybeSomehow {
     public:
         static constexpr bool value = TConstructibleFromMaybeSomehow<U>::value ||
@@ -71,7 +71,7 @@ private:
                                       std::is_assignable<T&, TMaybe<U, Policy>&&>::value ||
                                       std::is_assignable<T&, const TMaybe<U, Policy>&&>::value;
     };
- 
+
     template <class U>
     struct TImplicitCopyCtor {
     public:
@@ -180,35 +180,35 @@ public:
     template <class U, class = std::enable_if_t<TImplicitCopyCtor<U>::value>>
     TMaybe(const TMaybe<U, Policy>& right) {
         if (right.Defined()) {
-            new (Data()) T(right.GetRef()); 
+            new (Data()) T(right.GetRef());
             this->Defined_ = true;
-        } 
-    } 
- 
+        }
+    }
+
     template <class U, std::enable_if_t<TExplicitCopyCtor<U>::value, bool> = false>
     explicit TMaybe(const TMaybe<U, Policy>& right) {
         if (right.Defined()) {
-            new (Data()) T(right.GetRef()); 
+            new (Data()) T(right.GetRef());
             this->Defined_ = true;
-        } 
-    } 
- 
+        }
+    }
+
     template <class U, class = std::enable_if_t<TImplicitMoveCtor<U>::value>>
     TMaybe(TMaybe<U, Policy>&& right) noexcept(std::is_nothrow_constructible<T, U&&>::value) {
         if (right.Defined()) {
-            new (Data()) T(std::move(right.GetRef())); 
+            new (Data()) T(std::move(right.GetRef()));
             this->Defined_ = true;
-        } 
-    } 
- 
+        }
+    }
+
     template <class U, std::enable_if_t<TExplicitMoveCtor<U>::value, bool> = false>
     explicit TMaybe(TMaybe<U, Policy>&& right) noexcept(std::is_nothrow_constructible<T, U&&>::value) {
         if (right.Defined()) {
-            new (Data()) T(std::move(right.GetRef())); 
+            new (Data()) T(std::move(right.GetRef()));
             this->Defined_ = true;
-        } 
-    } 
- 
+        }
+    }
+
     template <class U = T, class = std::enable_if_t<TImplicitAnyCtor<U>::value>>
     constexpr TMaybe(U&& right)
         : TBase(TInPlace{}, std::forward<U>(right))
@@ -246,37 +246,37 @@ public:
                      TMaybe&>
     operator=(const TMaybe<U, Policy>& right) {
         if (right.Defined()) {
-            if (Defined()) { 
+            if (Defined()) {
                 *Data() = right.GetRef();
-            } else { 
-                Init(right.GetRef()); 
-            } 
-        } else { 
-            Clear(); 
-        } 
- 
-        return *this; 
-    } 
- 
+            } else {
+                Init(right.GetRef());
+            }
+        } else {
+            Clear();
+        }
+
+        return *this;
+    }
+
     template <class U>
     std::enable_if_t<TMoveAssignable<U>::value,
                      TMaybe&>
     operator=(TMaybe<U, Policy>&& right) noexcept(
         std::is_nothrow_assignable<T&, U&&>::value&& std::is_nothrow_constructible<T, U&&>::value)
     {
-        if (right.Defined()) { 
-            if (Defined()) { 
+        if (right.Defined()) {
+            if (Defined()) {
                 *Data() = std::move(right.GetRef());
-            } else { 
-                Init(std::move(right.GetRef())); 
-            } 
-        } else { 
-            Clear(); 
-        } 
- 
-        return *this; 
-    } 
- 
+            } else {
+                Init(std::move(right.GetRef()));
+            }
+        } else {
+            Clear();
+        }
+
+        return *this;
+    }
+
     template <typename... Args>
     T& ConstructInPlace(Args&&... args) {
         Clear();

@@ -160,9 +160,9 @@ ALLOW .* -> vendor/go.etcd.io/etcd/pkg/stringutil
 ALLOW .* -> vendor/go.etcd.io/etcd/pkg/transport
 ALLOW .* -> vendor/go.etcd.io/etcd/pkg/types
 
-# logging to systemd
-ALLOW .* -> vendor/github.com/coreos/go-systemd/journal
-
+# logging to systemd 
+ALLOW .* -> vendor/github.com/coreos/go-systemd/journal 
+ 
 # CONTRIB-2336 logging to systemd v22
 ALLOW .* -> vendor/github.com/coreos/go-systemd/v22/journal
 

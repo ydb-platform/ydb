@@ -323,7 +323,7 @@ def run(endpoint, database, path):
             upsert_simple(pool, full_path)
 
             bulk_upsert(driver.table_client, full_path)
- 
+
             select_prepared(pool, full_path, 2, 3, 7)
             select_prepared(pool, full_path, 2, 3, 8)
 

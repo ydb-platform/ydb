@@ -47,7 +47,7 @@ RECURSE(
     amqp
     aniso8601
     annoy
-    antlr4 
+    antlr4
     ansiwrap
     anyconfig
     anyio
@@ -456,7 +456,7 @@ RECURSE(
     GPy
     GPyOpt
     grafanalib
-    graphene 
+    graphene
     graphene-django
     graphene-sqlalchemy
     graphql-core
@@ -1066,7 +1066,7 @@ RECURSE(
     threadloop
     thrift
     timelib
-    timeout-decorator 
+    timeout-decorator
     tinycss2
     tinyrpc
     tldextract
@@ -1085,7 +1085,7 @@ RECURSE(
     transfer_manager_client
     transitions
     transliterate
-    trollius 
+    trollius
     trollsift
     Twiggy
     twiggy-goodies

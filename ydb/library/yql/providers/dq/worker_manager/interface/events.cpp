@@ -36,15 +36,15 @@ namespace NYql::NDqs {
         }
     }
 
-    TEvAllocateWorkersResponse::TEvAllocateWorkersResponse(ui64 resourceId, const TVector<ui32>& nodes) {
-        auto& group = *Record.MutableNodes();
-        group.SetResourceId(resourceId);
-        for (const auto& node : nodes) {
-            auto* worker = group.AddWorker();
-            worker->SetNodeId(node);
-        }
-    }
-
+    TEvAllocateWorkersResponse::TEvAllocateWorkersResponse(ui64 resourceId, const TVector<ui32>& nodes) { 
+        auto& group = *Record.MutableNodes(); 
+        group.SetResourceId(resourceId); 
+        for (const auto& node : nodes) { 
+            auto* worker = group.AddWorker(); 
+            worker->SetNodeId(node); 
+        } 
+    } 
+ 
     TEvAllocateWorkersResponse::TEvAllocateWorkersResponse(ui64 resourceId, const TVector<TWorkerInfo::TPtr>& infos) {
         auto& group = *Record.MutableNodes();
         group.SetResourceId(resourceId);

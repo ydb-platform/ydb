@@ -6,10 +6,10 @@ OWNER(
 )
 
 PEERDIR(
-    ydb/library/yql/ast
-    ydb/library/yql/core
-    ydb/library/yql/dq/expr_nodes
-    ydb/library/yql/dq/proto
+    ydb/library/yql/ast 
+    ydb/library/yql/core 
+    ydb/library/yql/dq/expr_nodes 
+    ydb/library/yql/dq/proto 
 )
 
 SRCS(
@@ -17,5 +17,5 @@ SRCS(
 )
 
 YQL_LAST_ABI_VERSION()
-
+ 
 END()

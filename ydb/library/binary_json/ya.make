@@ -10,7 +10,7 @@ YQL_ABI_VERSION(
     21
     0
 )
-
+ 
 PEERDIR(
     library/cpp/json
     ydb/library/yql/minikql/dom
@@ -24,7 +24,7 @@ SRCS(
 
 GENERATE_ENUM_SERIALIZATION(format.h)
 
-END()
+END() 
 
 RECURSE_FOR_TESTS(
     ut

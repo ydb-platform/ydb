@@ -112,9 +112,9 @@ PEERDIR(
 )
 
 YQL_LAST_ABI_VERSION()
-
+ 
 END()
-
+ 
 RECURSE(
     base
     counters
@@ -124,7 +124,7 @@ RECURSE(
     validation/ut/protos
     ut
 )
-
+ 
 RECURSE_FOR_TESTS(
     ut
 )

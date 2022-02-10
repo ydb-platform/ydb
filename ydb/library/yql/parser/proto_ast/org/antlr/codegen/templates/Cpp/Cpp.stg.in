@@ -338,7 +338,7 @@ headerFile( LEXER,
 <recognizer.grammar.delegators: {g|class <g.recognizerName>; }; separator="\n">
 <endif>
 
-#include \<ydb/library/yql/parser/proto_ast/proto_ast.h>
+#include \<ydb/library/yql/parser/proto_ast/proto_ast.h> 
 
 namespace @LEXER_PARSER_NAMESPACE@ {
 

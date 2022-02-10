@@ -1,25 +1,25 @@
 #include "mkql_iterator.h"
 
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
-#include <ydb/library/yql/minikql/mkql_node_cast.h>
-
-namespace NKikimr {
-namespace NMiniKQL {
-
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h> 
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h> 
+#include <ydb/library/yql/minikql/mkql_node_cast.h> 
+ 
+namespace NKikimr { 
+namespace NMiniKQL { 
+ 
 namespace {
 
 class TIteratorWrapper : public TMutableCodegeneratorNode<TIteratorWrapper> {
     typedef TMutableCodegeneratorNode<TIteratorWrapper> TBaseComputation;
-public:
+public: 
     TIteratorWrapper(TComputationMutables& mutables, IComputationNode* list, TComputationNodePtrVector&& dependentNodes)
         : TBaseComputation(mutables, EValueRepresentation::Boxed), List(list), DependentNodes(std::move(dependentNodes))
     {}
-
+ 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         return ctx.HolderFactory.CreateIteratorOverList(List->GetValue(ctx).Release());
-    }
-
+    } 
+ 
 #ifndef MKQL_DISABLE_CODEGEN
     Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
         auto& context = ctx.Codegen->GetContext();
@@ -49,23 +49,23 @@ private:
     void RegisterDependencies() const final {
         DependsOn(List);
         std::for_each(DependentNodes.cbegin(), DependentNodes.cend(),std::bind(&TIteratorWrapper::DependsOn, this, std::placeholders::_1));
-    }
-
+    } 
+ 
     IComputationNode *const List;
     const TComputationNodePtrVector DependentNodes;
-};
-
+}; 
+ 
 class TForwardListWrapper : public TMutableCodegeneratorNode<TForwardListWrapper> {
     typedef TMutableCodegeneratorNode<TForwardListWrapper> TBaseComputation;
 public:
     TForwardListWrapper(TComputationMutables& mutables, IComputationNode* stream)
         : TBaseComputation(mutables, EValueRepresentation::Boxed), Stream(stream)
     {}
-
+ 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         return ctx.HolderFactory.CreateForwardList(Stream->GetValue(ctx).Release());
-    }
-
+    } 
+ 
 #ifndef MKQL_DISABLE_CODEGEN
     Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
         auto& context = ctx.Codegen->GetContext();
@@ -94,11 +94,11 @@ public:
 private:
     void RegisterDependencies() const final {
         DependsOn(Stream);
-    }
-
+    } 
+ 
     IComputationNode *const Stream;
-};
-
+}; 
+ 
 class TFlowForwardListWrapper : public TCustomValueCodegeneratorNode<TFlowForwardListWrapper> {
     typedef TCustomValueCodegeneratorNode<TFlowForwardListWrapper> TBaseComputation;
 public:
@@ -206,7 +206,7 @@ private:
         const auto funcType = FunctionType::get(Type::getInt1Ty(context), {PointerType::getUnqual(contextType), PointerType::getUnqual(valueType)}, false);
 
         TCodegenContext ctx(codegen);
-        ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee());
+        ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee()); 
 
         auto args = ctx.Func->arg_begin();
 
@@ -247,8 +247,8 @@ private:
 
 }
 
-IComputationNode* WrapEmptyIterator(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
-    MKQL_ENSURE(callable.GetInputsCount() == 0, "Expected 0 arg");
+IComputationNode* WrapEmptyIterator(TCallable& callable, const TComputationNodeFactoryContext& ctx) { 
+    MKQL_ENSURE(callable.GetInputsCount() == 0, "Expected 0 arg"); 
     const auto type = callable.GetType()->GetReturnType();
     if (type->IsFlow()) {
         return ctx.NodeFactory.CreateImmutableNode(NUdf::TUnboxedValuePod::MakeFinish());
@@ -256,23 +256,23 @@ IComputationNode* WrapEmptyIterator(TCallable& callable, const TComputationNodeF
         return ctx.NodeFactory.CreateEmptyNode();
     }
     THROW yexception() << "Expected flow or stream.";
-}
-
-IComputationNode* WrapIterator(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
-    MKQL_ENSURE(callable.GetInputsCount() >= 1, "Expected at least 1 arg");
+} 
+ 
+IComputationNode* WrapIterator(TCallable& callable, const TComputationNodeFactoryContext& ctx) { 
+    MKQL_ENSURE(callable.GetInputsCount() >= 1, "Expected at least 1 arg"); 
     const auto type = callable.GetInput(0).GetStaticType();
-    MKQL_ENSURE(type->IsList(), "Requires list");
-
-    TComputationNodePtrVector dependentNodes(callable.GetInputsCount() - 1);
-    for (ui32 i = 1; i < callable.GetInputsCount(); ++i) {
-        dependentNodes[i - 1] = LocateNode(ctx.NodeLocator, callable, i);
-    }
-
+    MKQL_ENSURE(type->IsList(), "Requires list"); 
+ 
+    TComputationNodePtrVector dependentNodes(callable.GetInputsCount() - 1); 
+    for (ui32 i = 1; i < callable.GetInputsCount(); ++i) { 
+        dependentNodes[i - 1] = LocateNode(ctx.NodeLocator, callable, i); 
+    } 
+ 
     return new TIteratorWrapper(ctx.Mutables, LocateNode(ctx.NodeLocator, callable, 0), std::move(dependentNodes));
-}
-
-IComputationNode* WrapForwardList(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
-    MKQL_ENSURE(callable.GetInputsCount() == 1, "Expected 1 arg");
+} 
+ 
+IComputationNode* WrapForwardList(TCallable& callable, const TComputationNodeFactoryContext& ctx) { 
+    MKQL_ENSURE(callable.GetInputsCount() == 1, "Expected 1 arg"); 
     const auto type = callable.GetInput(0).GetStaticType();
     if (type->IsFlow()) {
         return new TFlowForwardListWrapper(ctx.Mutables, LocateNode(ctx.NodeLocator, callable, 0));
@@ -280,7 +280,7 @@ IComputationNode* WrapForwardList(TCallable& callable, const TComputationNodeFac
         return new TForwardListWrapper(ctx.Mutables, LocateNode(ctx.NodeLocator, callable, 0));
     }
     THROW yexception() << "Expected flow or stream.";
-}
-
-}
-}
+} 
+ 
+} 
+} 

@@ -13,7 +13,7 @@ PEERDIR(
     library/cpp/json
     library/cpp/yson_pull
     ydb/library/yql/public/udf
-    ydb/library/yql/utils
+    ydb/library/yql/utils 
 )
 
 SRCS(
@@ -26,7 +26,7 @@ SRCS(
 )
 
 END()
-
-RECURSE_FOR_TESTS(
-    ut
-)
+ 
+RECURSE_FOR_TESTS( 
+    ut 
+) 

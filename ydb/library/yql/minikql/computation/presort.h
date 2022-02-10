@@ -1,7 +1,7 @@
 #pragma once
 
-#include <ydb/library/yql/minikql/mkql_node.h>
-
+#include <ydb/library/yql/minikql/mkql_node.h> 
+ 
 #include <ydb/library/yql/public/udf/udf_value.h>
 
 #include <util/generic/vector.h>
@@ -52,18 +52,18 @@ private:
     TStringBuf Input;
 };
 
-class THolderFactory;
-
-class TGenericPresortEncoder {
-public:
-    TGenericPresortEncoder(TType* type);
-    TStringBuf Encode(const NUdf::TUnboxedValue& value, bool desc); // user must copy
-    NUdf::TUnboxedValue Decode(TStringBuf buf, bool desc, const THolderFactory& factory);
-private:
-    TType* Type;
-    TVector<ui8> Output;
-    TVector<ui8> Buffer;
-};
-
+class THolderFactory; 
+ 
+class TGenericPresortEncoder { 
+public: 
+    TGenericPresortEncoder(TType* type); 
+    TStringBuf Encode(const NUdf::TUnboxedValue& value, bool desc); // user must copy 
+    NUdf::TUnboxedValue Decode(TStringBuf buf, bool desc, const THolderFactory& factory); 
+private: 
+    TType* Type; 
+    TVector<ui8> Output; 
+    TVector<ui8> Buffer; 
+}; 
+ 
 } // NMiniKQL
 } // NKikimr

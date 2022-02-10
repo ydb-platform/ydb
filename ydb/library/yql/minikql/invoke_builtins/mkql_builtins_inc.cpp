@@ -1,10 +1,10 @@
 #include "mkql_builtins_decimal.h"
-
-namespace NKikimr {
-namespace NMiniKQL {
-
-namespace {
-
+ 
+namespace NKikimr { 
+namespace NMiniKQL { 
+ 
+namespace { 
+ 
 template<typename TInput, typename TOutput>
 struct TIncrement : public TSimpleArithmeticUnary<TInput, TOutput, TIncrement<TInput, TOutput>> {
     static TOutput Do(TInput val)
@@ -12,7 +12,7 @@ struct TIncrement : public TSimpleArithmeticUnary<TInput, TOutput, TIncrement<TI
         return ++val;
     }
 
-#ifndef MKQL_DISABLE_CODEGEN
+#ifndef MKQL_DISABLE_CODEGEN 
     static Value* Gen(Value* arg, const TCodegenContext&, BasicBlock*& block)
     {
         return std::is_integral<TOutput>() ?
@@ -21,7 +21,7 @@ struct TIncrement : public TSimpleArithmeticUnary<TInput, TOutput, TIncrement<TI
     }
 #endif
 };
-
+ 
 template <ui8 Precision>
 struct TDecimalInc {
     static NUdf::TUnboxedValuePod Execute(const NUdf::TUnboxedValuePod& arg) {
@@ -37,7 +37,7 @@ struct TDecimalInc {
         return NUdf::TUnboxedValuePod(IsNan(v) ? Nan() : (v > 0 ? +Inf() : -Inf()));
     }
 
-#ifndef MKQL_DISABLE_CODEGEN
+#ifndef MKQL_DISABLE_CODEGEN 
     static Value* Generate(Value* arg, const TCodegenContext& ctx, BasicBlock*& block)
     {
         auto& context = ctx.Codegen->GetContext();
@@ -62,12 +62,12 @@ struct TDecimalInc {
     static_assert(Precision <= NYql::NDecimal::MaxPrecision, "Too large precision!");
 };
 
-}
-
+} 
+ 
 void RegisterIncrement(IBuiltinFunctionRegistry& registry) {
     RegisterUnaryNumericFunctionOpt<TIncrement, TUnaryArgsOpt>(registry, "Increment");
     NDecimal::RegisterUnaryFunctionForAllPrecisions<TDecimalInc, TUnaryArgsOpt>(registry, "Inc_");
-}
-
-} // namespace NMiniKQL
-} // namespace NKikimr
+} 
+ 
+} // namespace NMiniKQL 
+} // namespace NKikimr 

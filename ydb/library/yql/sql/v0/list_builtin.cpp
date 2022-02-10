@@ -15,14 +15,14 @@ TNodePtr TListBuiltin::GetIdentityLambda() {
 }
 
 TNodePtr TListBuiltin::SkipEmpty(TNodePtr arg) {
-    auto sameArgLambda = BuildLambda(Pos, Y(), AstNode("item"));
-    auto handleNotSkippableType = BuildLambda(Pos, Y(), Y("Just", "item"));
-    auto checkOptional = Y("MatchType", "item", Q("Optional"),
-                           sameArgLambda, handleNotSkippableType);
-    auto checkOptionalLambda = BuildLambda(Pos, Y(), checkOptional);
+    auto sameArgLambda = BuildLambda(Pos, Y(), AstNode("item")); 
+    auto handleNotSkippableType = BuildLambda(Pos, Y(), Y("Just", "item")); 
+    auto checkOptional = Y("MatchType", "item", Q("Optional"), 
+                           sameArgLambda, handleNotSkippableType); 
+    auto checkOptionalLambda = BuildLambda(Pos, Y(), checkOptional); 
     auto checkList = Y("MatchType", "item", Q("List"),
-        sameArgLambda, checkOptionalLambda);
-    return Y("OrderedFlatMap", arg, BuildLambda(Pos, Y("item"), checkList));
+        sameArgLambda, checkOptionalLambda); 
+    return Y("OrderedFlatMap", arg, BuildLambda(Pos, Y("item"), checkList)); 
 }
 
 bool TListSortBuiltin::DoInit(TContext& ctx, ISource* src) {
@@ -54,13 +54,13 @@ bool TListExtractBuiltin::DoInit(TContext& ctx, ISource* src) {
     if (!Args[0]->Init(ctx, src)) {
         return false;
     }
-
-    if (!Args[1]->Init(ctx, src)) {
+ 
+    if (!Args[1]->Init(ctx, src)) { 
         return false;
     }
-
-    Args[1] = MakeAtomFromExpression(ctx, Args[1]).Build();
-    Node = Y(OpName, SkipEmpty(Args[0]), Args[1]);
+ 
+    Args[1] = MakeAtomFromExpression(ctx, Args[1]).Build(); 
+    Node = Y(OpName, SkipEmpty(Args[0]), Args[1]); 
     return true;
 }
 
@@ -113,9 +113,9 @@ bool TListMapBuiltin::DoInit(TContext& ctx, ISource* src) {
         return false;
     };
     auto prepare = PrepareResult();
-    auto just = BuildLambda(Pos, Y(), Y("Just", prepare));
-    auto sameArgLambda = BuildLambda(Pos, Y(), prepare);
-    auto match = Y("MatchType", prepare, Q("Data"), just, sameArgLambda);
+    auto just = BuildLambda(Pos, Y(), Y("Just", prepare)); 
+    auto sameArgLambda = BuildLambda(Pos, Y(), prepare); 
+    auto match = Y("MatchType", prepare, Q("Data"), just, sameArgLambda); 
     auto lambda = Flat ? BuildLambda(Pos, Y("item"), match) : GetMapLambda();
     Node = Y(OpName,
              Flat ? SkipEmpty(Args[0]) : Args[0],
@@ -134,7 +134,7 @@ bool TListFilterBuiltin::DoInit(TContext& ctx, ISource* src) {
     if (!CheckArgs(ctx, src)) {
         return false;
     };
-    Node = Y("OrderedFlatMap",
+    Node = Y("OrderedFlatMap", 
              SkipEmpty(Args[0]),
              GetFilterLambda()
            );
@@ -142,7 +142,7 @@ bool TListFilterBuiltin::DoInit(TContext& ctx, ISource* src) {
 }
 
 TNodePtr TListFilterBuiltin::GetFilterLambda() {
-    return BuildLambda(Pos, Y("item"), Y("OptionalIf", Y("Coalesce", PrepareResult(), Y("Bool", Q("false"))), "item"));
+    return BuildLambda(Pos, Y("item"), Y("OptionalIf", Y("Coalesce", PrepareResult(), Y("Bool", Q("false"))), "item")); 
 }
 
 
@@ -202,7 +202,7 @@ TNodePtr TListAvgBuiltin::GetUpdateLambda() {
 
 TNodePtr TListHasBuiltin::GetUpdateLambda() {
     return BuildLambda(Pos, Y("item", "state"), Y("Or", "state",
-                            Y("Coalesce", Y(OpName, "item", Args[1]), Y("Bool", Q("false")))));
+                            Y("Coalesce", Y(OpName, "item", Args[1]), Y("Bool", Q("false"))))); 
 }
 
 bool TListFold1Builtin::DoInit(TContext& ctx, ISource* src) {
@@ -262,30 +262,30 @@ bool TListCreateBuiltin::DoInit(TContext& ctx, ISource* src) {
     return true;
 }
 
-bool TDictCreateBuiltin::DoInit(TContext& ctx, ISource* src) {
-    if (Args.size() != 2) {
-        ctx.Error(Pos) << OpName << " requires two parameters";
-        return false;
-    }
-
-    TNodePtr types[2];
-    for (ui32 i = 0; i < 2; ++i) {
-        if (!Args[i]->Init(ctx, src)) {
-            return false;
-        }
-
-        auto literal = Args[i]->GetLiteral("String");
-        if (literal) {
-            types[i] = Y("ParseType", Q(*literal));
-        } else {
-            types[i] = Args[i];
-        }
-    }
-
-    Node = Y("Dict",
-             Y("DictType", types[0], types[1]));
-
-    return true;
-}
-
+bool TDictCreateBuiltin::DoInit(TContext& ctx, ISource* src) { 
+    if (Args.size() != 2) { 
+        ctx.Error(Pos) << OpName << " requires two parameters"; 
+        return false; 
+    } 
+ 
+    TNodePtr types[2]; 
+    for (ui32 i = 0; i < 2; ++i) { 
+        if (!Args[i]->Init(ctx, src)) { 
+            return false; 
+        } 
+ 
+        auto literal = Args[i]->GetLiteral("String"); 
+        if (literal) { 
+            types[i] = Y("ParseType", Q(*literal)); 
+        } else { 
+            types[i] = Args[i]; 
+        } 
+    } 
+ 
+    Node = Y("Dict", 
+             Y("DictType", types[0], types[1])); 
+ 
+    return true; 
+} 
+ 
 } // namespace NSQLTranslationV0

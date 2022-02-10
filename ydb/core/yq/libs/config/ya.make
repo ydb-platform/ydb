@@ -8,7 +8,7 @@ SRCS(
 
 PEERDIR(
     ydb/core/yq/libs/config/protos
-    ydb/library/yql/public/issue/protos
+    ydb/library/yql/public/issue/protos 
 )
 
 END()

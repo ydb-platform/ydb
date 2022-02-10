@@ -1,10 +1,10 @@
 #include "presort.h"
-#include "mkql_computation_node_holders.h"
-#include <ydb/library/yql/minikql/defs.h>
-#include <ydb/library/yql/minikql/mkql_string_util.h>
+#include "mkql_computation_node_holders.h" 
+#include <ydb/library/yql/minikql/defs.h> 
+#include <ydb/library/yql/minikql/mkql_string_util.h> 
 
-#include <ydb/library/yql/utils/swap_bytes.h>
-#include <ydb/library/yql/public/decimal/yql_decimal_serialize.h>
+#include <ydb/library/yql/utils/swap_bytes.h> 
+#include <ydb/library/yql/public/decimal/yql_decimal_serialize.h> 
 
 #include <util/system/unaligned_mem.h>
 #include <util/string/builder.h>
@@ -14,8 +14,8 @@ namespace NMiniKQL {
 
 namespace NDetail {
 
-using NYql::SwapBytes;
-
+using NYql::SwapBytes; 
+ 
 Y_FORCE_INLINE
 void EnsureInputSize(TStringBuf& input, size_t size) {
     MKQL_ENSURE(input.size() >= size, "premature end of input");
@@ -505,217 +505,217 @@ NUdf::TUnboxedValue Decode(TStringBuf& input, NUdf::EDataSlot slot, TVector<ui8>
     }
 }
 
-struct TDictItem {
-    TString KeyBuffer;
-    NUdf::TUnboxedValue Payload;
-
-    TDictItem(const TString& keyBuffer, const NUdf::TUnboxedValue& payload)
-        : KeyBuffer(keyBuffer)
-        , Payload(payload)
-    {}
-
-    bool operator<(const TDictItem& other) const {
-        return KeyBuffer < other.KeyBuffer;
-    }
-};
-
-void EncodeValue(TType* type, const NUdf::TUnboxedValue& value, TVector<ui8>& output) {
-    switch (type->GetKind()) {
-    case TType::EKind::Void:
-    case TType::EKind::Null:
-    case TType::EKind::EmptyList:
-    case TType::EKind::EmptyDict:
-        break;
-    case TType::EKind::Data: {
-        auto slot = *static_cast<TDataType*>(type)->GetDataSlot();
-        Encode<false>(output, slot, value);
-        break;
-    }
-    case TType::EKind::Optional: {
-        auto itemType = static_cast<TOptionalType*>(type)->GetItemType();
-        auto hasValue = (bool)value;
-        EncodeBool<false>(output, hasValue);
-        if (hasValue) {
+struct TDictItem { 
+    TString KeyBuffer; 
+    NUdf::TUnboxedValue Payload; 
+ 
+    TDictItem(const TString& keyBuffer, const NUdf::TUnboxedValue& payload) 
+        : KeyBuffer(keyBuffer) 
+        , Payload(payload) 
+    {} 
+ 
+    bool operator<(const TDictItem& other) const { 
+        return KeyBuffer < other.KeyBuffer; 
+    } 
+}; 
+ 
+void EncodeValue(TType* type, const NUdf::TUnboxedValue& value, TVector<ui8>& output) { 
+    switch (type->GetKind()) { 
+    case TType::EKind::Void: 
+    case TType::EKind::Null: 
+    case TType::EKind::EmptyList: 
+    case TType::EKind::EmptyDict: 
+        break; 
+    case TType::EKind::Data: { 
+        auto slot = *static_cast<TDataType*>(type)->GetDataSlot(); 
+        Encode<false>(output, slot, value); 
+        break; 
+    } 
+    case TType::EKind::Optional: { 
+        auto itemType = static_cast<TOptionalType*>(type)->GetItemType(); 
+        auto hasValue = (bool)value; 
+        EncodeBool<false>(output, hasValue); 
+        if (hasValue) { 
             EncodeValue(itemType, value.GetOptionalValue(), output);
-        }
-
-        break;
-    }
-
-    case TType::EKind::List: {
-        auto itemType = static_cast<TListType*>(type)->GetItemType();
-        auto iterator = value.GetListIterator();
-        NUdf::TUnboxedValue item;
-        while (iterator.Next(item)) {
-            EncodeBool<false>(output, true);
-            EncodeValue(itemType, item, output);
-        }
-
-        EncodeBool<false>(output, false);
-        break;
-    }
-
-    case TType::EKind::Tuple: {
-        auto tupleType = static_cast<TTupleType*>(type);
-        for (ui32 i = 0; i < tupleType->GetElementsCount(); ++i) {
-            EncodeValue(tupleType->GetElementType(i), value.GetElement(i), output);
-        }
-
-        break;
-    }
-
-    case TType::EKind::Struct: {
-        auto structType = static_cast<TStructType*>(type);
-        for (ui32 i = 0; i < structType->GetMembersCount(); ++i) {
-            EncodeValue(structType->GetMemberType(i), value.GetElement(i), output);
-        }
-
-        break;
-    }
-
-    case TType::EKind::Variant: {
-        auto underlyingType = static_cast<TVariantType*>(type)->GetUnderlyingType();
-        auto alt = value.GetVariantIndex();
-        TType* altType;
-        ui32 altCount;
-        if (underlyingType->IsStruct()) {
-            auto structType = static_cast<TStructType*>(underlyingType);
-            altType = structType->GetMemberType(alt);
-            altCount = structType->GetMembersCount();
-        } else {
-            auto tupleType = static_cast<TTupleType*>(underlyingType);
-            altType = tupleType->GetElementType(alt);
-            altCount = tupleType->GetElementsCount();
-        }
-
-        if (altCount < 256) {
-            EncodeUnsigned<ui8, false>(output, alt);
-        } else if (altCount < 256 * 256) {
-            EncodeUnsigned<ui16, false>(output, alt);
-        } else {
-            EncodeUnsigned<ui32, false>(output, alt);
-        }
-
-        EncodeValue(altType, value.GetVariantItem(), output);
-        break;
-    }
-
-    case TType::EKind::Dict: {
-        auto dictType = static_cast<TDictType*>(type);
-        auto iter = value.GetDictIterator();
-        if (value.IsSortedDict()) {
-            NUdf::TUnboxedValue key, payload;
-            while (iter.NextPair(key, payload)) {
-                EncodeBool<false>(output, true);
-                EncodeValue(dictType->GetKeyType(), key, output);
-                EncodeValue(dictType->GetPayloadType(), payload, output);
-            }
-        } else {
-            // canonize keys
-            TVector<TDictItem> items;
-            items.reserve(value.GetDictLength());
-            NUdf::TUnboxedValue key, payload;
-            TVector<ui8> buffer;
-            while (iter.NextPair(key, payload)) {
-                buffer.clear();
-                EncodeValue(dictType->GetKeyType(), key, buffer);
-                TString keyBuffer((const char*)buffer.begin(), buffer.size());
-                items.emplace_back(keyBuffer, payload);
-            }
-            Sort(items.begin(), items.end());
-            // output values
-            for (const auto& x : items) {
-                EncodeBool<false>(output, true);
-                output.insert(output.end(), x.KeyBuffer.begin(), x.KeyBuffer.end());
-                EncodeValue(dictType->GetPayloadType(), x.Payload, output);
-            }
-        }
-
-        EncodeBool<false>(output, false);
-        break;
-    }
-
-    default:
-        MKQL_ENSURE(false, "Unsupported type: " << type->GetKindAsStr());
-    }
-}
-
-NUdf::TUnboxedValue DecodeImpl(TType* type, TStringBuf& input, const THolderFactory& factory, TVector<ui8>& buffer) {
-    Y_UNUSED(factory);
-    switch (type->GetKind()) {
-    case TType::EKind::Void:
-        return NUdf::TUnboxedValue::Void();
-    case TType::EKind::Null:
-        return NUdf::TUnboxedValue();
-    case TType::EKind::EmptyList:
-        return factory.GetEmptyContainer();
-    case TType::EKind::EmptyDict:
-        return factory.GetEmptyContainer();
-    case TType::EKind::Data: {
-        auto slot = *static_cast<TDataType*>(type)->GetDataSlot();
-        return Decode<false>(input, slot, buffer);
-    }
-    case TType::EKind::Optional: {
-        auto itemType = static_cast<TOptionalType*>(type)->GetItemType();
-        auto hasValue = DecodeBool<false>(input);
-        if (!hasValue) {
-            return NUdf::TUnboxedValue();
-        }
-
-        auto value = DecodeImpl(itemType, input, factory, buffer);
-        return value.Release().MakeOptional();
-    }
-    case TType::EKind::List: {
-        auto itemType = static_cast<TListType*>(type)->GetItemType();
-        TUnboxedValueVector values;
-        while (DecodeBool<false>(input)) {
-            auto value = DecodeImpl(itemType, input, factory, buffer);
-            values.emplace_back(value);
-        }
-
-        return factory.VectorAsArray(values);
-    }
-
-    case TType::EKind::Tuple: {
-        auto tupleType = static_cast<TTupleType*>(type);
-        NUdf::TUnboxedValue* items;
-        auto array = factory.CreateDirectArrayHolder(tupleType->GetElementsCount(), items);
-        for (ui32 i = 0; i < tupleType->GetElementsCount(); ++i) {
-            items[i] = DecodeImpl(tupleType->GetElementType(i), input, factory, buffer);
-        }
-
-        return array;
-    }
-
-    case TType::EKind::Variant: {
-        auto underlyingType = static_cast<TVariantType*>(type)->GetUnderlyingType();
-        ui32 altCount;
-        MKQL_ENSURE(underlyingType->IsTuple(), "Expcted variant over tuple");
-        auto tupleType = static_cast<TTupleType*>(underlyingType);
-        altCount = tupleType->GetElementsCount();
-
-        ui32 alt;
-        if (altCount < 256) {
-            alt = DecodeUnsigned<ui8, false>(input);
-        } else if (altCount < 256 * 256) {
-            alt = DecodeUnsigned<ui16, false>(input);
-        } else {
-            alt = DecodeUnsigned<ui32, false>(input);
-        }
-
-        TType* altType = tupleType->GetElementType(alt);
-        auto value = DecodeImpl(altType, input, factory, buffer);
+        } 
+ 
+        break; 
+    } 
+ 
+    case TType::EKind::List: { 
+        auto itemType = static_cast<TListType*>(type)->GetItemType(); 
+        auto iterator = value.GetListIterator(); 
+        NUdf::TUnboxedValue item; 
+        while (iterator.Next(item)) { 
+            EncodeBool<false>(output, true); 
+            EncodeValue(itemType, item, output); 
+        } 
+ 
+        EncodeBool<false>(output, false); 
+        break; 
+    } 
+ 
+    case TType::EKind::Tuple: { 
+        auto tupleType = static_cast<TTupleType*>(type); 
+        for (ui32 i = 0; i < tupleType->GetElementsCount(); ++i) { 
+            EncodeValue(tupleType->GetElementType(i), value.GetElement(i), output); 
+        } 
+ 
+        break; 
+    } 
+ 
+    case TType::EKind::Struct: { 
+        auto structType = static_cast<TStructType*>(type); 
+        for (ui32 i = 0; i < structType->GetMembersCount(); ++i) { 
+            EncodeValue(structType->GetMemberType(i), value.GetElement(i), output); 
+        } 
+ 
+        break; 
+    } 
+ 
+    case TType::EKind::Variant: { 
+        auto underlyingType = static_cast<TVariantType*>(type)->GetUnderlyingType(); 
+        auto alt = value.GetVariantIndex(); 
+        TType* altType; 
+        ui32 altCount; 
+        if (underlyingType->IsStruct()) { 
+            auto structType = static_cast<TStructType*>(underlyingType); 
+            altType = structType->GetMemberType(alt); 
+            altCount = structType->GetMembersCount(); 
+        } else { 
+            auto tupleType = static_cast<TTupleType*>(underlyingType); 
+            altType = tupleType->GetElementType(alt); 
+            altCount = tupleType->GetElementsCount(); 
+        } 
+ 
+        if (altCount < 256) { 
+            EncodeUnsigned<ui8, false>(output, alt); 
+        } else if (altCount < 256 * 256) { 
+            EncodeUnsigned<ui16, false>(output, alt); 
+        } else { 
+            EncodeUnsigned<ui32, false>(output, alt); 
+        } 
+ 
+        EncodeValue(altType, value.GetVariantItem(), output); 
+        break; 
+    } 
+ 
+    case TType::EKind::Dict: { 
+        auto dictType = static_cast<TDictType*>(type); 
+        auto iter = value.GetDictIterator(); 
+        if (value.IsSortedDict()) { 
+            NUdf::TUnboxedValue key, payload; 
+            while (iter.NextPair(key, payload)) { 
+                EncodeBool<false>(output, true); 
+                EncodeValue(dictType->GetKeyType(), key, output); 
+                EncodeValue(dictType->GetPayloadType(), payload, output); 
+            } 
+        } else { 
+            // canonize keys 
+            TVector<TDictItem> items; 
+            items.reserve(value.GetDictLength()); 
+            NUdf::TUnboxedValue key, payload; 
+            TVector<ui8> buffer; 
+            while (iter.NextPair(key, payload)) { 
+                buffer.clear(); 
+                EncodeValue(dictType->GetKeyType(), key, buffer); 
+                TString keyBuffer((const char*)buffer.begin(), buffer.size()); 
+                items.emplace_back(keyBuffer, payload); 
+            } 
+            Sort(items.begin(), items.end()); 
+            // output values 
+            for (const auto& x : items) { 
+                EncodeBool<false>(output, true); 
+                output.insert(output.end(), x.KeyBuffer.begin(), x.KeyBuffer.end()); 
+                EncodeValue(dictType->GetPayloadType(), x.Payload, output); 
+            } 
+        } 
+ 
+        EncodeBool<false>(output, false); 
+        break; 
+    } 
+ 
+    default: 
+        MKQL_ENSURE(false, "Unsupported type: " << type->GetKindAsStr()); 
+    } 
+} 
+ 
+NUdf::TUnboxedValue DecodeImpl(TType* type, TStringBuf& input, const THolderFactory& factory, TVector<ui8>& buffer) { 
+    Y_UNUSED(factory); 
+    switch (type->GetKind()) { 
+    case TType::EKind::Void: 
+        return NUdf::TUnboxedValue::Void(); 
+    case TType::EKind::Null: 
+        return NUdf::TUnboxedValue(); 
+    case TType::EKind::EmptyList: 
+        return factory.GetEmptyContainer(); 
+    case TType::EKind::EmptyDict: 
+        return factory.GetEmptyContainer(); 
+    case TType::EKind::Data: { 
+        auto slot = *static_cast<TDataType*>(type)->GetDataSlot(); 
+        return Decode<false>(input, slot, buffer); 
+    } 
+    case TType::EKind::Optional: { 
+        auto itemType = static_cast<TOptionalType*>(type)->GetItemType(); 
+        auto hasValue = DecodeBool<false>(input); 
+        if (!hasValue) { 
+            return NUdf::TUnboxedValue(); 
+        } 
+ 
+        auto value = DecodeImpl(itemType, input, factory, buffer); 
+        return value.Release().MakeOptional(); 
+    } 
+    case TType::EKind::List: { 
+        auto itemType = static_cast<TListType*>(type)->GetItemType(); 
+        TUnboxedValueVector values; 
+        while (DecodeBool<false>(input)) { 
+            auto value = DecodeImpl(itemType, input, factory, buffer); 
+            values.emplace_back(value); 
+        } 
+ 
+        return factory.VectorAsArray(values); 
+    } 
+ 
+    case TType::EKind::Tuple: { 
+        auto tupleType = static_cast<TTupleType*>(type); 
+        NUdf::TUnboxedValue* items; 
+        auto array = factory.CreateDirectArrayHolder(tupleType->GetElementsCount(), items); 
+        for (ui32 i = 0; i < tupleType->GetElementsCount(); ++i) { 
+            items[i] = DecodeImpl(tupleType->GetElementType(i), input, factory, buffer); 
+        } 
+ 
+        return array; 
+    } 
+ 
+    case TType::EKind::Variant: { 
+        auto underlyingType = static_cast<TVariantType*>(type)->GetUnderlyingType(); 
+        ui32 altCount; 
+        MKQL_ENSURE(underlyingType->IsTuple(), "Expcted variant over tuple"); 
+        auto tupleType = static_cast<TTupleType*>(underlyingType); 
+        altCount = tupleType->GetElementsCount(); 
+ 
+        ui32 alt; 
+        if (altCount < 256) { 
+            alt = DecodeUnsigned<ui8, false>(input); 
+        } else if (altCount < 256 * 256) { 
+            alt = DecodeUnsigned<ui16, false>(input); 
+        } else { 
+            alt = DecodeUnsigned<ui32, false>(input); 
+        } 
+ 
+        TType* altType = tupleType->GetElementType(alt); 
+        auto value = DecodeImpl(altType, input, factory, buffer); 
         return factory.CreateVariantHolder(value.Release(), alt);
-    }
-
-    // Struct and Dict may be encoded into a presort form only to canonize dict keys. No need to decode them.
-    case TType::EKind::Struct:
-    case TType::EKind::Dict:
-    default:
-        MKQL_ENSURE(false, "Unsupported type: " << type->GetKindAsStr());
-    }
-}
-
+    } 
+ 
+    // Struct and Dict may be encoded into a presort form only to canonize dict keys. No need to decode them. 
+    case TType::EKind::Struct: 
+    case TType::EKind::Dict: 
+    default: 
+        MKQL_ENSURE(false, "Unsupported type: " << type->GetKindAsStr()); 
+    } 
+} 
+ 
 } // NDetail
 
 void TPresortCodec::AddType(NUdf::EDataSlot slot, bool isOptional, bool isDesc) {
@@ -790,40 +790,40 @@ void TPresortDecoder::Finish() {
     MKQL_ENSURE(Input.empty(), "buffer is not empty");
 }
 
-TGenericPresortEncoder::TGenericPresortEncoder(TType* type)
-    : Type(type)
-{}
-
-TStringBuf TGenericPresortEncoder::Encode(const NUdf::TUnboxedValue& value, bool desc) {
-    Output.clear();
-    NDetail::EncodeValue(Type, value, Output);
-    if (desc) {
-        for (auto& x : Output) {
-            x = ~x;
-        }
-    }
-
-    return TStringBuf((const char*)Output.data(), Output.size());
-}
-
-NUdf::TUnboxedValue TGenericPresortEncoder::Decode(TStringBuf buf, bool desc, const THolderFactory& factory) {
-    if (desc) {
-        Output.assign(buf.begin(), buf.end());
-        for (auto& x : Output) {
-            x = ~x;
-        }
-
-        auto newBuf = TStringBuf(reinterpret_cast<const char*>(Output.data()), Output.size());
-        auto ret = NDetail::DecodeImpl(Type, newBuf, factory, Buffer);
-        Output.clear();
-        MKQL_ENSURE(newBuf.empty(), "buffer must be empty");
-        return ret;
-    } else {
-        auto ret = NDetail::DecodeImpl(Type, buf, factory, Buffer);
-        MKQL_ENSURE(buf.empty(), "buffer is not empty");
-        return ret;
-    }
-}
-
+TGenericPresortEncoder::TGenericPresortEncoder(TType* type) 
+    : Type(type) 
+{} 
+ 
+TStringBuf TGenericPresortEncoder::Encode(const NUdf::TUnboxedValue& value, bool desc) { 
+    Output.clear(); 
+    NDetail::EncodeValue(Type, value, Output); 
+    if (desc) { 
+        for (auto& x : Output) { 
+            x = ~x; 
+        } 
+    } 
+ 
+    return TStringBuf((const char*)Output.data(), Output.size()); 
+} 
+ 
+NUdf::TUnboxedValue TGenericPresortEncoder::Decode(TStringBuf buf, bool desc, const THolderFactory& factory) { 
+    if (desc) { 
+        Output.assign(buf.begin(), buf.end()); 
+        for (auto& x : Output) { 
+            x = ~x; 
+        } 
+ 
+        auto newBuf = TStringBuf(reinterpret_cast<const char*>(Output.data()), Output.size()); 
+        auto ret = NDetail::DecodeImpl(Type, newBuf, factory, Buffer); 
+        Output.clear(); 
+        MKQL_ENSURE(newBuf.empty(), "buffer must be empty"); 
+        return ret; 
+    } else { 
+        auto ret = NDetail::DecodeImpl(Type, buf, factory, Buffer); 
+        MKQL_ENSURE(buf.empty(), "buffer is not empty"); 
+        return ret; 
+    } 
+} 
+ 
 } // NMiniKQL
 } // NKikimr

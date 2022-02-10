@@ -1,7 +1,7 @@
 #include "dq_output_channel.h"
 #include "dq_transport.h"
 
-#include <ydb/library/yql/utils/yql_panic.h>
+#include <ydb/library/yql/utils/yql_panic.h> 
 
 #include <util/generic/buffer.h>
 #include <util/generic/size_literals.h>

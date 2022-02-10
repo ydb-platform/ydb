@@ -27,7 +27,7 @@ namespace NKikimr {
         }
 
         TResult Generate() const {
-            const double x = AccumWeight * TAppData::RandomProvider->GenRandReal2();
+            const double x = AccumWeight * TAppData::RandomProvider->GenRandReal2(); 
             auto it = Items.lower_bound(x); // min Key >= x
             if (it == Items.end()) {
                 return TResult(); // no items in distribution

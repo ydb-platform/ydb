@@ -3,22 +3,22 @@
 
 #include "execution_helpers.h"
 
-#include <ydb/library/yql/providers/dq/actors/events.h>
-#include <ydb/library/yql/providers/dq/actors/actor_helpers.h>
+#include <ydb/library/yql/providers/dq/actors/events.h> 
+#include <ydb/library/yql/providers/dq/actors/actor_helpers.h> 
 
-#include <ydb/library/yql/providers/dq/planner/execution_planner.h>
-#include <ydb/library/yql/providers/dq/worker_manager/interface/events.h>
+#include <ydb/library/yql/providers/dq/planner/execution_planner.h> 
+#include <ydb/library/yql/providers/dq/worker_manager/interface/events.h> 
 
 #include <ydb/library/yql/utils/actor_log/log.h>
 #include <ydb/library/yql/utils/log/log.h>
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
+#include <ydb/library/yql/public/issue/yql_issue_message.h> 
 
 #include <library/cpp/actors/core/hfunc.h>
 #include <library/cpp/protobuf/util/pb_io.h>
 
-#include <ydb/library/yql/utils/failure_injector/failure_injector.h>
-#include <ydb/library/yql/providers/dq/counters/counters.h>
-#include <ydb/library/yql/providers/dq/api/protos/service.pb.h>
+#include <ydb/library/yql/utils/failure_injector/failure_injector.h> 
+#include <ydb/library/yql/providers/dq/counters/counters.h> 
+#include <ydb/library/yql/providers/dq/api/protos/service.pb.h> 
 
 #include <util/string/split.h>
 #include <util/system/env.h>
@@ -370,7 +370,7 @@ private:
                 // }
                 auto workerEv = MakeHolder<TEvDqTask>(std::move(tasks[i]));
                 Send(workers[i], workerEv.Release());
-            }
+            } 
         } else {
             for (size_t i = 0; i < tasks.size(); i++) {
                 *res->Record.AddTask() = tasks[i];

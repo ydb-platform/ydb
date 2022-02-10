@@ -6,7 +6,7 @@
 namespace NYql {
 
 Y_UNIT_TEST_SUITE(TCompileYqlExpr) {
-
+ 
     static TAstParseResult ParseAstWithCheck(const TStringBuf& s) {
         TAstParseResult res = ParseAst(s);
         res.Issues.PrintTo(Cout);
@@ -79,7 +79,7 @@ Y_UNIT_TEST_SUITE(TCompileYqlExpr) {
         TExprContext exprCtx;
         TExprNode::TPtr exprRoot;
         CompileExprWithCheck(*astRes.Root, exprRoot, exprCtx);
-        UNIT_ASSERT_VALUES_EQUAL(exprRoot->Type(), TExprNode::World);
+        UNIT_ASSERT_VALUES_EQUAL(exprRoot->Type(), TExprNode::World); 
     }
 
     Y_UNIT_TEST(TestExport) {
@@ -116,7 +116,7 @@ Y_UNIT_TEST_SUITE(TCompileYqlExpr) {
 
     Y_UNIT_TEST(TestArbitraryAtom) {
         auto s = "(\n"
-            "(let x '\"\\x01\\x23\\x45\\x67\\x89\\xAB\\xCD\\xEF\")"
+            "(let x '\"\\x01\\x23\\x45\\x67\\x89\\xAB\\xCD\\xEF\")" 
             "(return x)\n"
             ")\n";
 
@@ -124,9 +124,9 @@ Y_UNIT_TEST_SUITE(TCompileYqlExpr) {
         TExprContext exprCtx;
         TExprNode::TPtr exprRoot;
         CompileExprWithCheck(*astRes.Root, exprRoot, exprCtx);
-        UNIT_ASSERT_VALUES_EQUAL(exprRoot->Type(), TExprNode::Atom);
-        UNIT_ASSERT_STRINGS_EQUAL(HexEncode(exprRoot->Content()), "0123456789ABCDEF");
-        UNIT_ASSERT(exprRoot->Flags() & TNodeFlags::ArbitraryContent);
+        UNIT_ASSERT_VALUES_EQUAL(exprRoot->Type(), TExprNode::Atom); 
+        UNIT_ASSERT_STRINGS_EQUAL(HexEncode(exprRoot->Content()), "0123456789ABCDEF"); 
+        UNIT_ASSERT(exprRoot->Flags() & TNodeFlags::ArbitraryContent); 
 
         auto ast = ConvertToAst(*exprRoot, exprCtx, TExprAnnotationFlags::None, true);
         TAstNode* xValue = ast.Root->GetChild(0)->GetChild(1)->GetChild(1);
@@ -144,9 +144,9 @@ Y_UNIT_TEST_SUITE(TCompileYqlExpr) {
         TExprContext exprCtx;
         TExprNode::TPtr exprRoot;
         CompileExprWithCheck(*astRes.Root, exprRoot, exprCtx);
-        UNIT_ASSERT_VALUES_EQUAL(exprRoot->Type(), TExprNode::Atom);
-        UNIT_ASSERT_STRINGS_EQUAL(HexEncode(exprRoot->Content()), "FEDCBA9876543210");
-        UNIT_ASSERT(exprRoot->Flags() & TNodeFlags::BinaryContent);
+        UNIT_ASSERT_VALUES_EQUAL(exprRoot->Type(), TExprNode::Atom); 
+        UNIT_ASSERT_STRINGS_EQUAL(HexEncode(exprRoot->Content()), "FEDCBA9876543210"); 
+        UNIT_ASSERT(exprRoot->Flags() & TNodeFlags::BinaryContent); 
 
         auto ast = ConvertToAst(*exprRoot, exprCtx, TExprAnnotationFlags::None, true);
         TAstNode* xValue = ast.Root->GetChild(0)->GetChild(2)->GetChild(1);
@@ -164,8 +164,8 @@ Y_UNIT_TEST_SUITE(TCompileYqlExpr) {
         TExprContext exprCtx;
         TExprNode::TPtr exprRoot;
         CompileExprWithCheck(*astRes.Root, exprRoot, exprCtx);
-        UNIT_ASSERT_VALUES_EQUAL(exprRoot->Type(), TExprNode::Atom);
-        UNIT_ASSERT_VALUES_EQUAL(exprRoot->Content(), "y");
+        UNIT_ASSERT_VALUES_EQUAL(exprRoot->Type(), TExprNode::Atom); 
+        UNIT_ASSERT_VALUES_EQUAL(exprRoot->Content(), "y"); 
     }
 
     Y_UNIT_TEST(TestComplexQuote) {
@@ -180,12 +180,12 @@ Y_UNIT_TEST_SUITE(TCompileYqlExpr) {
         TExprContext exprCtx;
         TExprNode::TPtr exprRoot;
         CompileExprWithCheck(*astRes.Root, exprRoot, exprCtx);
-        UNIT_ASSERT_VALUES_EQUAL(exprRoot->Type(), TExprNode::List);
-        UNIT_ASSERT_VALUES_EQUAL(exprRoot->ChildrenSize(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(exprRoot->Child(0)->Type(), TExprNode::Atom);
-        UNIT_ASSERT_VALUES_EQUAL(exprRoot->Child(0)->Content(), "a");
-        UNIT_ASSERT_VALUES_EQUAL(exprRoot->Child(1)->Type(), TExprNode::Atom);
-        UNIT_ASSERT_VALUES_EQUAL(exprRoot->Child(1)->Content(), "b");
+        UNIT_ASSERT_VALUES_EQUAL(exprRoot->Type(), TExprNode::List); 
+        UNIT_ASSERT_VALUES_EQUAL(exprRoot->ChildrenSize(), 2); 
+        UNIT_ASSERT_VALUES_EQUAL(exprRoot->Child(0)->Type(), TExprNode::Atom); 
+        UNIT_ASSERT_VALUES_EQUAL(exprRoot->Child(0)->Content(), "a"); 
+        UNIT_ASSERT_VALUES_EQUAL(exprRoot->Child(1)->Type(), TExprNode::Atom); 
+        UNIT_ASSERT_VALUES_EQUAL(exprRoot->Child(1)->Content(), "b"); 
     }
 
     Y_UNIT_TEST(TestEmptyReturn) {
@@ -213,13 +213,13 @@ Y_UNIT_TEST_SUITE(TCompileYqlExpr) {
         TExprContext exprCtx;
         TExprNode::TPtr exprRoot;
         CompileExprWithCheck(*astRes.Root, exprRoot, exprCtx);
-        UNIT_ASSERT_VALUES_EQUAL(exprRoot->Type(), TExprNode::Callable);
-        UNIT_ASSERT_VALUES_EQUAL(exprRoot->Content(), "+");
-        UNIT_ASSERT_VALUES_EQUAL(exprRoot->ChildrenSize(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(exprRoot->Child(0)->Type(), TExprNode::Atom);
-        UNIT_ASSERT_VALUES_EQUAL(exprRoot->Child(0)->Content(), "2");
-        UNIT_ASSERT_VALUES_EQUAL(exprRoot->Child(1)->Type(), TExprNode::Atom);
-        UNIT_ASSERT_VALUES_EQUAL(exprRoot->Child(1)->Content(), "3");
+        UNIT_ASSERT_VALUES_EQUAL(exprRoot->Type(), TExprNode::Callable); 
+        UNIT_ASSERT_VALUES_EQUAL(exprRoot->Content(), "+"); 
+        UNIT_ASSERT_VALUES_EQUAL(exprRoot->ChildrenSize(), 2); 
+        UNIT_ASSERT_VALUES_EQUAL(exprRoot->Child(0)->Type(), TExprNode::Atom); 
+        UNIT_ASSERT_VALUES_EQUAL(exprRoot->Child(0)->Content(), "2"); 
+        UNIT_ASSERT_VALUES_EQUAL(exprRoot->Child(1)->Type(), TExprNode::Atom); 
+        UNIT_ASSERT_VALUES_EQUAL(exprRoot->Child(1)->Content(), "3"); 
     }
 
     Y_UNIT_TEST(TestReturnTwice) {
@@ -433,8 +433,8 @@ Y_UNIT_TEST_SUITE(TCompareExprTrees) {
             (let $198 (AsList $197))
             (return $198)
             ))))
-         )"
-         R"(
+         )" 
+         R"( 
             (let $16 (FlatMap $14 $15))
             (let $17 '('"client_type" '"week"))
             (let $18 (lambda '($199 $200) (block '(

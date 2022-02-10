@@ -3,7 +3,7 @@ LIBRARY()
 OWNER(
     spuchin
     g:yql
-    g:yql_ydb_core
+    g:yql_ydb_core 
 )
 
 SRCS(
@@ -12,7 +12,7 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/library/yql/ast
+    ydb/library/yql/ast 
     ydb/library/yql/public/udf
 )
 

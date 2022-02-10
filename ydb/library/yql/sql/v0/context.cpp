@@ -1,39 +1,39 @@
 #include "context.h"
 
-#include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
-#include <ydb/library/yql/utils/yql_panic.h>
+#include <ydb/library/yql/providers/common/provider/yql_provider_names.h> 
+#include <ydb/library/yql/utils/yql_panic.h> 
 
 #include <util/folder/pathsplit.h>
 #include <util/string/join.h>
-#include <util/stream/null.h>
+#include <util/stream/null.h> 
 
-#ifdef GetMessage
-#undef GetMessage
-#endif
-
+#ifdef GetMessage 
+#undef GetMessage 
+#endif 
+ 
 using namespace NYql;
 
 namespace NSQLTranslationV0 {
 
 namespace {
 
-TNodePtr AddTablePathPrefix(TContext &ctx, TStringBuf prefixPath, const TDeferredAtom& path) {
+TNodePtr AddTablePathPrefix(TContext &ctx, TStringBuf prefixPath, const TDeferredAtom& path) { 
     Y_UNUSED(ctx);
     if (prefixPath.empty()) {
-        return path.Build();
+        return path.Build(); 
     }
 
-    YQL_ENSURE(path.GetLiteral(), "TODO support prefix for deferred atoms");
+    YQL_ENSURE(path.GetLiteral(), "TODO support prefix for deferred atoms"); 
     prefixPath.SkipPrefix("//");
 
     TPathSplitUnix prefixPathSplit(prefixPath);
-    TPathSplitUnix pathSplit(*path.GetLiteral());
+    TPathSplitUnix pathSplit(*path.GetLiteral()); 
 
     if (pathSplit.IsAbsolute) {
-        return path.Build();
+        return path.Build(); 
     }
 
-    return BuildQuotedAtom(path.Build()->GetPos(), prefixPathSplit.AppendMany(pathSplit.begin(), pathSplit.end()).Reconstruct());
+    return BuildQuotedAtom(path.Build()->GetPos(), prefixPathSplit.AppendMany(pathSplit.begin(), pathSplit.end()).Reconstruct()); 
 }
 
 typedef bool TContext::*TPragmaField;
@@ -57,8 +57,8 @@ TContext::TContext(const NSQLTranslation::TTranslationSettings& settings,
     , HasPendingErrors(false)
     , Libraries(settings.Libraries)
 {
-    Position.File = settings.File;
-
+    Position.File = settings.File; 
+ 
     for (auto& flag: settings.Flags) {
         bool value = true;
         TStringBuf key = flag;
@@ -110,31 +110,31 @@ IOutputStream& TContext::Info(NYql::TPosition pos) {
 }
 
 IOutputStream& TContext::MakeIssue(ESeverity severity, TIssueCode code, NYql::TPosition pos) {
-    if (severity == TSeverityIds::S_WARNING) {
+    if (severity == TSeverityIds::S_WARNING) { 
         auto action = WarningPolicy.GetAction(code);
         if (action == EWarningAction::ERROR) {
             severity = TSeverityIds::S_ERROR;
             HasPendingErrors = true;
         } else if (action == EWarningAction::DISABLE) {
             return Cnull;
-        }
+        } 
     }
 
-    // we have the last cell for issue, let's fill it with our internal error
-    if (severity >= TSeverityIds::S_WARNING) {
-        const bool aboveHalf = Issues.Size() > Settings.MaxErrors / 2;
-        if (aboveHalf) {
-            return Cnull;
-        }
-    } else {
-        if (Settings.MaxErrors == Issues.Size() + 1) {
-            Issues.AddIssue(TIssue(NYql::TPosition(), TString(TStringBuf("Too many issues"))));
-            Issues.back().SetCode(UNEXPECTED_ERROR, TSeverityIds::S_ERROR);
-        }
-
-        if (Settings.MaxErrors <= Issues.Size()) {
-            ythrow NProtoAST::TTooManyErrors() << "Too many issues";
-        }
+    // we have the last cell for issue, let's fill it with our internal error 
+    if (severity >= TSeverityIds::S_WARNING) { 
+        const bool aboveHalf = Issues.Size() > Settings.MaxErrors / 2; 
+        if (aboveHalf) { 
+            return Cnull; 
+        } 
+    } else { 
+        if (Settings.MaxErrors == Issues.Size() + 1) { 
+            Issues.AddIssue(TIssue(NYql::TPosition(), TString(TStringBuf("Too many issues")))); 
+            Issues.back().SetCode(UNEXPECTED_ERROR, TSeverityIds::S_ERROR); 
+        } 
+ 
+        if (Settings.MaxErrors <= Issues.Size()) { 
+            ythrow NProtoAST::TTooManyErrors() << "Too many issues"; 
+        } 
     }
 
     Issues.AddIssue(TIssue(pos, TString()));
@@ -171,13 +171,13 @@ bool TContext::SetPathPrefix(const TString& value, TMaybe<TString> arg) {
     return true;
 }
 
-TNodePtr TContext::GetPrefixedPath(const TString& cluster, const TDeferredAtom& path) {
+TNodePtr TContext::GetPrefixedPath(const TString& cluster, const TDeferredAtom& path) { 
     auto* clusterPrefix = ClusterPathPrefixes.FindPtr(cluster);
     if (clusterPrefix && !clusterPrefix->empty()) {
         return AddTablePathPrefix(*this, *clusterPrefix, path);
     } else {
         auto provider = GetClusterProvider(cluster);
-        YQL_ENSURE(provider.Defined());
+        YQL_ENSURE(provider.Defined()); 
 
         auto* providerPrefix = ProviderPathPrefixes.FindPtr(*provider);
         if (providerPrefix && !providerPrefix->empty()) {
@@ -186,7 +186,7 @@ TNodePtr TContext::GetPrefixedPath(const TString& cluster, const TDeferredAtom& 
             return AddTablePathPrefix(*this, PathPrefix, path);
         }
 
-        return path.Build();
+        return path.Build(); 
     }
 }
 
@@ -300,19 +300,19 @@ TString TContext::AddImport(const TVector<TString>& modulePath) {
     return iter->second;
 }
 
-TString TContext::AddSimpleUdf(const TString& udf) {
-    auto& name = SimpleUdfs[udf];
+TString TContext::AddSimpleUdf(const TString& udf) { 
+    auto& name = SimpleUdfs[udf]; 
     if (name.empty()) {
-        name = TStringBuilder() << "Udf" << SimpleUdfs.size();
-    }
-
-    return name;
-}
-
+        name = TStringBuilder() << "Udf" << SimpleUdfs.size(); 
+    } 
+ 
+    return name; 
+} 
+ 
 TString TContext::GetServiceName(const ISource& source) const {
     TTableList tableList;
     source.GetInputTables(tableList);
-
+ 
     TSet<TString> clusters;
     for (auto& it: tableList) {
         if (auto provider = GetClusterProvider(it.Cluster)) {

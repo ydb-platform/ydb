@@ -1,5 +1,5 @@
-#include <ydb/library/yql/public/decimal/yql_decimal.h>
-#include <ydb/library/yql/public/decimal/yql_decimal_serialize.h>
+#include <ydb/library/yql/public/decimal/yql_decimal.h> 
+#include <ydb/library/yql/public/decimal/yql_decimal_serialize.h> 
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -124,19 +124,19 @@ Y_UNIT_TEST_SUITE(TYqlDecimalTest) {
     Y_UNIT_TEST(TestHugeNumberFormat) {
         TInt128 max120 = Inf() - 1;
         const char max120String[] = "99999999999999999999999999999999999"; // 35 digits
-        static_assert(sizeof(max120String) == 36, "sizeof(max120String) == 36");
+        static_assert(sizeof(max120String) == 36, "sizeof(max120String) == 36"); 
         SimplePositiveTest(max120, MaxPrecision, 0, max120String);
         SimplePositiveTest(max120 + 1, MaxPrecision, 0, "inf");
 
         TInt128 min120 = -Inf() + 1;
         const char min120String[] = "-99999999999999999999999999999999999";
-        static_assert(sizeof(min120String) == 37, "sizeof(min120String) == 37");
+        static_assert(sizeof(min120String) == 37, "sizeof(min120String) == 37"); 
         SimplePositiveTest(min120, MaxPrecision, 0, min120String);
         SimplePositiveTest(min120 - 1, MaxPrecision, 0, "-inf");
 
         // take spot for sign and zero before dot
         const char min120StringAfterDot[] = "-0.99999999999999999999999999999999999"; // 35 by nine + leading zero
-        static_assert(sizeof(min120StringAfterDot) == 39, "sizeof(min120StringAfterDot) == 39");
+        static_assert(sizeof(min120StringAfterDot) == 39, "sizeof(min120StringAfterDot) == 39"); 
         SimplePositiveTest(min120, MaxPrecision, MaxPrecision, min120StringAfterDot);
 
         SimpleNegativeFormatTest(1, MaxPrecision + 1, MaxPrecision + 1);

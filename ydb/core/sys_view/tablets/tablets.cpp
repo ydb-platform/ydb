@@ -7,7 +7,7 @@
 #include <ydb/core/mind/hive/hive.h>
 #include <ydb/core/mind/hive/tablet_info.h>
 
-#include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
+#include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h> 
 
 #include <library/cpp/actors/core/hfunc.h>
 

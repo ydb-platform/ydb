@@ -12,8 +12,8 @@ void TUserData::UserDataToLibraries(
         if (item.Type_ == EType::LIBRARY) {
             if (item.Disposition_ == EDisposition::RESOURCE) { // TODO: support other disposition options
                 modules[to_lower(item.Name_)] = item.Content_;
-            } else if (item.Disposition_ == EDisposition::RESOURCE_FILE) {
-                modules[to_lower(item.Name_)] = item.Name_;
+            } else if (item.Disposition_ == EDisposition::RESOURCE_FILE) { 
+                modules[to_lower(item.Name_)] = item.Name_; 
             }
         }
     }

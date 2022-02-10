@@ -1,47 +1,47 @@
-#include <ydb/library/yql/providers/dq/provider/yql_dq_datasource.h>
-#include <ydb/library/yql/providers/dq/provider/yql_dq_state.h>
+#include <ydb/library/yql/providers/dq/provider/yql_dq_datasource.h> 
+#include <ydb/library/yql/providers/dq/provider/yql_dq_state.h> 
 
-#include <ydb/library/yql/providers/common/provider/yql_data_provider_impl.h>
-#include <ydb/library/yql/providers/common/provider/yql_provider.h>
-#include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
-#include <ydb/library/yql/providers/common/transform/yql_exec.h>
-#include <ydb/library/yql/providers/common/transform/yql_lazy_init.h>
-#include <ydb/library/yql/providers/common/schema/expr/yql_expr_schema.h>
-#include <ydb/library/yql/providers/result/expr_nodes/yql_res_expr_nodes.h>
+#include <ydb/library/yql/providers/common/provider/yql_data_provider_impl.h> 
+#include <ydb/library/yql/providers/common/provider/yql_provider.h> 
+#include <ydb/library/yql/providers/common/provider/yql_provider_names.h> 
+#include <ydb/library/yql/providers/common/transform/yql_exec.h> 
+#include <ydb/library/yql/providers/common/transform/yql_lazy_init.h> 
+#include <ydb/library/yql/providers/common/schema/expr/yql_expr_schema.h> 
+#include <ydb/library/yql/providers/result/expr_nodes/yql_res_expr_nodes.h> 
 
-#include <ydb/library/yql/providers/dq/opt/dqs_opt.h>
-#include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
-#include <ydb/library/yql/providers/dq/actors/proto_builder.h>
-#include <ydb/library/yql/providers/dq/counters/counters.h>
-#include <ydb/library/yql/providers/dq/common/yql_dq_common.h>
-#include <ydb/library/yql/providers/dq/interface/yql_dq_integration.h>
-#include <ydb/library/yql/providers/dq/planner/execution_planner.h>
-#include <ydb/library/yql/providers/dq/provider/yql_dq_gateway.h>
-#include <ydb/library/yql/providers/dq/provider/yql_dq_control.h>
+#include <ydb/library/yql/providers/dq/opt/dqs_opt.h> 
+#include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h> 
+#include <ydb/library/yql/providers/dq/actors/proto_builder.h> 
+#include <ydb/library/yql/providers/dq/counters/counters.h> 
+#include <ydb/library/yql/providers/dq/common/yql_dq_common.h> 
+#include <ydb/library/yql/providers/dq/interface/yql_dq_integration.h> 
+#include <ydb/library/yql/providers/dq/planner/execution_planner.h> 
+#include <ydb/library/yql/providers/dq/provider/yql_dq_gateway.h> 
+#include <ydb/library/yql/providers/dq/provider/yql_dq_control.h> 
 
-#include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
-#include <ydb/library/yql/dq/runtime/dq_tasks_runner.h>
-#include <ydb/library/yql/dq/tasks/dq_task_program.h>
-#include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
-#include <ydb/library/yql/dq/opt/dq_opt_build.h>
-#include <ydb/library/yql/dq/opt/dq_opt.h>
+#include <ydb/library/yql/dq/type_ann/dq_type_ann.h> 
+#include <ydb/library/yql/dq/runtime/dq_tasks_runner.h> 
+#include <ydb/library/yql/dq/tasks/dq_task_program.h> 
+#include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h> 
+#include <ydb/library/yql/dq/opt/dq_opt_build.h> 
+#include <ydb/library/yql/dq/opt/dq_opt.h> 
 
 #include <ydb/library/yql/utils/log/log.h>
 #include <ydb/library/yql/core/services/yql_transform_pipeline.h>
 #include <ydb/library/yql/core/services/yql_out_transformers.h>
 
-#include <ydb/library/yql/minikql/mkql_alloc.h>
-#include <ydb/library/yql/minikql/mkql_node.h>
-#include <ydb/library/yql/minikql/mkql_node_cast.h>
-#include <ydb/library/yql/minikql/mkql_function_registry.h>
-#include <ydb/library/yql/minikql/mkql_node_serialization.h>
-#include <ydb/library/yql/minikql/aligned_page_pool.h>
+#include <ydb/library/yql/minikql/mkql_alloc.h> 
+#include <ydb/library/yql/minikql/mkql_node.h> 
+#include <ydb/library/yql/minikql/mkql_node_cast.h> 
+#include <ydb/library/yql/minikql/mkql_function_registry.h> 
+#include <ydb/library/yql/minikql/mkql_node_serialization.h> 
+#include <ydb/library/yql/minikql/aligned_page_pool.h> 
 
-#include <ydb/library/yql/core/type_ann/type_ann_expr.h>
-#include <ydb/library/yql/core/yql_type_annotation.h>
-#include <ydb/library/yql/core/yql_graph_transformer.h>
-#include <ydb/library/yql/core/yql_opt_utils.h>
-#include <ydb/library/yql/core/peephole_opt/yql_opt_peephole_physical.h>
+#include <ydb/library/yql/core/type_ann/type_ann_expr.h> 
+#include <ydb/library/yql/core/yql_type_annotation.h> 
+#include <ydb/library/yql/core/yql_graph_transformer.h> 
+#include <ydb/library/yql/core/yql_opt_utils.h> 
+#include <ydb/library/yql/core/peephole_opt/yql_opt_peephole_physical.h> 
 
 #include <library/cpp/yson/node/node_io.h>
 #include <library/cpp/svnversion/svnversion.h>
@@ -70,7 +70,7 @@ public:
         : State(state)
     { }
 
-    NThreading::TFuture<IDqGateway::TResult> Execute(TPosition pos, const TString& lambda, const TVector<TString>& columns,
+    NThreading::TFuture<IDqGateway::TResult> Execute(TPosition pos, const TString& lambda, const TVector<TString>& columns, 
         const THashMap<TString, TString>& secureParams, const IDataProvider::TFillSettings& fillSettings)
     {
         try {
@@ -88,7 +88,7 @@ public:
         }
     }
 
-    NThreading::TFuture<IDqGateway::TResult> ExecuteUnsafe(const TString& lambda, const TVector<TString>& columns,
+    NThreading::TFuture<IDqGateway::TResult> ExecuteUnsafe(const TString& lambda, const TVector<TString>& columns, 
         const THashMap<TString, TString>& secureParams, const IDataProvider::TFillSettings& fillSettings)
     {
         auto t = TInstant::Now();
@@ -129,9 +129,9 @@ public:
         limits.ChannelBufferSize = 10_MB;
         limits.OutputChunkMaxSize = 2_MB;
 
-        NDq::TDqTaskRunnerSettings settings;
+        NDq::TDqTaskRunnerSettings settings; 
         settings.OptLLVM = "OFF"; // Don't use LLVM for local execution
-        settings.SecureParams = secureParams;
+        settings.SecureParams = secureParams; 
         settings.CollectBasicStats = true;
         settings.CollectProfileStats = true;
         settings.AllowGeneratorsInUnboxedValues = true;
@@ -655,7 +655,7 @@ private:
             if (lambdaResult.first.Level != TStatus::Ok) {
                 return lambdaResult;
             }
-
+ 
             THashMap<ui32, ui32> allPublicIds;
             bool hasStageError = false;
             VisitExpr(result.Ptr(), [&](const TExprNode::TPtr& node) {

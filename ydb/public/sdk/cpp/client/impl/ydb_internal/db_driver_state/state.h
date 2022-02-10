@@ -30,7 +30,7 @@ public:
         const TStringType& database,
         const TStringType& discoveryEndpoint,
         EDiscoveryMode discoveryMode,
-        bool enableSsl,
+        bool enableSsl, 
         IInternalClient* client
     );
 
@@ -47,7 +47,7 @@ public:
     const TStringType Database;
     const TStringType DiscoveryEndpoint;
     const EDiscoveryMode DiscoveryMode;
-    const bool EnableSsl;
+    const bool EnableSsl; 
     std::shared_ptr<ICredentialsProvider> CredentialsProvider;
     IInternalClient* Client;
     TEndpointPool EndpointPool;
@@ -83,7 +83,7 @@ public:
         TStringType database,
         TStringType DiscoveryEndpoint,
         EDiscoveryMode discoveryMode,
-        bool enableSsl,
+        bool enableSsl, 
         std::shared_ptr<ICredentialsProviderFactory> credentialsProviderFactory
     );
     NThreading::TFuture<void> SendNotification(

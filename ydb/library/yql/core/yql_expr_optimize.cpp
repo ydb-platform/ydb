@@ -1,25 +1,25 @@
-#include "yql_expr_optimize.h"
+#include "yql_expr_optimize.h" 
 
-#include <util/generic/hash.h>
-#include "yql_expr_type_annotation.h"
-
-namespace NYql {
-
-namespace {
+#include <util/generic/hash.h> 
+#include "yql_expr_type_annotation.h" 
+ 
+namespace NYql { 
+ 
+namespace { 
     template<typename TOptimizer>
     struct TOptimizationContext : IOptimizationContext {
         TOptimizer Optimizer;
-        TExprContext& Expr;
-        const TOptimizeExprSettings& Settings;
+        TExprContext& Expr; 
+        const TOptimizeExprSettings& Settings; 
         TNodeOnNodeOwnedMap Memoization;
         const TNodeOnNodeOwnedMap* Replaces;
         ui64 LastNodeId;
         bool HasRemaps;
-
+ 
         TOptimizationContext(TOptimizer optimizer, const TNodeOnNodeOwnedMap* replaces, TExprContext& expr, const TOptimizeExprSettings& settings)
-            : Optimizer(optimizer)
-            , Expr(expr)
-            , Settings(settings)
+            : Optimizer(optimizer) 
+            , Expr(expr) 
+            , Settings(settings) 
             , Replaces(replaces)
             , LastNodeId(expr.NextUniqueId)
             , HasRemaps(false)
@@ -35,8 +35,8 @@ namespace {
                 Settings.ProcessedNodes->erase(fromNode.UniqueId());
             }
         }
-    };
-
+    }; 
+ 
     TExprNode::TPtr RunOptimizer(TOptimizationContext<TCallableOptimizer>& ctx, const TExprNode::TPtr& node) {
         return (!ctx.Settings.VisitChanges && ctx.HasRemaps) ? node : ctx.Optimizer(node, ctx.Expr);
     }
@@ -74,45 +74,45 @@ namespace {
 
     void AddExpected(const TExprNode& src, const TExprNode& dst, const TOptimizeExprSettings& settings) {
         if (!src.GetTypeAnn() || dst.GetTypeAnn() || !settings.Types) {
-            return;
-        }
-
-        if (src.Type() == TExprNode::Argument || src.Type() == TExprNode::Arguments) {
-            return;
-        }
-
+            return; 
+        } 
+ 
+        if (src.Type() == TExprNode::Argument || src.Type() == TExprNode::Arguments) { 
+            return; 
+        } 
+ 
         settings.Types->ExpectedTypes.emplace(dst.UniqueId(), src.GetTypeAnn());
         settings.Types->ExpectedConstraints.emplace(dst.UniqueId(), src.GetAllConstraints());
         auto columnOrder = settings.Types->LookupColumnOrder(src);
         if (columnOrder) {
             settings.Types->ExpectedColumnOrders.emplace(dst.UniqueId(), *columnOrder);
         }
-    }
-
+    } 
+ 
     template<typename TContext>
     TExprNode::TPtr OptimizeNode(const TExprNode::TPtr& node, TContext& ctx, size_t level) {
         if (node->Type() == TExprNode::Atom || node->Type() == TExprNode::Argument ||
             node->Type() == TExprNode::Arguments || node->Type() == TExprNode::World) {
             return node;
-        }
-
+        } 
+ 
         if (!ctx.Settings.VisitStarted && node->StartsExecution()) {
             return node;
-        }
-
+        } 
+ 
         YQL_ENSURE(level < 3000U, "Too deep graph!");
 
-        if (ctx.Settings.ProcessedNodes) {
+        if (ctx.Settings.ProcessedNodes) { 
             if (ctx.Settings.ProcessedNodes->find(node->UniqueId()) != ctx.Settings.ProcessedNodes->cend()) {
                 return node;
-            }
-        }
-
+            } 
+        } 
+ 
         const auto it = ctx.Memoization.find(node.Get());
         if (it != ctx.Memoization.cend()) {
             return it->second ? it->second : node;
-        }
-
+        } 
+ 
         TExprNode::TPtr current = node;
         if (ctx.Replaces) {
             const auto it = ctx.Replaces->find(node.Get());
@@ -146,67 +146,67 @@ namespace {
                     ret = ctx.Expr.DeepCopyLambda(*current, std::move(newBody));
                     AddExpected(*node, *ret, ctx.Settings);
                 }
-            }
-        } else {
+            } 
+        } else { 
             TExprNode::TListType newChildren;
             newChildren.reserve(current->ChildrenSize());
-            bool hasRenames = false;
+            bool hasRenames = false; 
             for (auto& child : current->Children()) {
-                auto newChild = OptimizeNode(child, ctx, level + 1);
-                if (!newChild)
-                    return nullptr;
-
-                if (newChild != child) {
-                    hasRenames = true;
-                }
-
+                auto newChild = OptimizeNode(child, ctx, level + 1); 
+                if (!newChild) 
+                    return nullptr; 
+ 
+                if (newChild != child) { 
+                    hasRenames = true; 
+                } 
+ 
                 if (newChild->ForDisclosing()) {
                     auto list = newChild->ChildrenList();
                     std::move(list.begin(), list.end(), std::back_inserter(newChildren));
                 } else {
                     newChildren.emplace_back(std::move(newChild));
                 }
-            }
-
+            } 
+ 
             auto renamedNode = hasRenames ? ctx.Expr.ChangeChildren(*current, std::move(newChildren)) : TExprNode::TPtr();
             newChildren.clear();
-
-            if (!ctx.Settings.VisitChanges && hasRenames && ctx.Settings.CustomInstantTypeTransformer) {
+ 
+            if (!ctx.Settings.VisitChanges && hasRenames && ctx.Settings.CustomInstantTypeTransformer) { 
                 auto root = renamedNode ? renamedNode : current;
-                ctx.Settings.CustomInstantTypeTransformer->Rewind();
-                auto status = InstantTransform(*ctx.Settings.CustomInstantTypeTransformer, root, ctx.Expr);
-                if (status.Level == IGraphTransformer::TStatus::Error) {
-                    return nullptr;
-                }
-
+                ctx.Settings.CustomInstantTypeTransformer->Rewind(); 
+                auto status = InstantTransform(*ctx.Settings.CustomInstantTypeTransformer, root, ctx.Expr); 
+                if (status.Level == IGraphTransformer::TStatus::Error) { 
+                    return nullptr; 
+                } 
+ 
                 YQL_ENSURE(root->GetTypeAnn());
-                if (status.HasRestart) {
+                if (status.HasRestart) { 
                     ret = std::move(root);
-                } else {
+                } else { 
                     renamedNode = std::move(root);
-                    hasRenames = false;
-                }
-            }
-
-            if (!ret) {
+                    hasRenames = false; 
+                } 
+            } 
+ 
+            if (!ret) { 
                 const auto& nextNode = renamedNode ? renamedNode : current;
                 const bool visitTuples = ctx.Settings.VisitTuples && nextNode->Type() == TExprNode::List;
                 if ((nextNode->Type() != TExprNode::Callable && !visitTuples) || (hasRenames && !ctx.Settings.VisitChanges) || !ctx.Optimizer) {
                     ret = nextNode;
-                } else {
+                } else { 
                     ret = RunOptimizer(ctx, nextNode);
-                    if (!ret)
-                        return nullptr;
-                }
-            }
-
+                    if (!ret) 
+                        return nullptr; 
+                } 
+            } 
+ 
             AddExpected(*node, *ret, ctx.Settings);
-        }
-
+        } 
+ 
         if (node == ret && ctx.Settings.ProcessedNodes) {
             ctx.Settings.ProcessedNodes->insert(node->UniqueId());
-        }
-
+        } 
+ 
         if (node == ret) {
             YQL_ENSURE(ctx.Memoization.emplace(node.Get(), TExprNode::TPtr()).second);
         } else {
@@ -217,8 +217,8 @@ namespace {
                 ctx.Memoization.emplace(current.Get(), ret);
             }
         }
-        return ret;
-    }
+        return ret; 
+    } 
 
     TExprNode::TPtr OptimizeNode(const TExprNode::TPtr& node, bool& changed, TOptimizationContext<TCallableOptimizerFast>& ctx, size_t level) {
         if (node->Type() == TExprNode::Atom || node->Type() == TExprNode::Argument ||
@@ -280,7 +280,7 @@ namespace {
                 }
             }
 
-            auto renamedNode = hasRenames ? ctx.Expr.ChangeChildren(*node, std::move(newChildren)) : TExprNode::TPtr();
+            auto renamedNode = hasRenames ? ctx.Expr.ChangeChildren(*node, std::move(newChildren)) : TExprNode::TPtr(); 
             newChildren.clear();
 
             changed = changed || hasRenames;
@@ -320,7 +320,7 @@ namespace {
             postFunc(node);
         }
     }
-
+ 
     void VisitExprInternal(const TExprNode& node, const TExprVisitRefFunc& preFunc,
         const TExprVisitRefFunc& postFunc, TNodeSet& visitedNodes)
     {
@@ -437,7 +437,7 @@ namespace {
     } catch (const std::exception& e) {
         ctx.AddError(ExceptionToIssue(e, ctx.GetPosition(input->Pos())));
         return IGraphTransformer::TStatus::Error;
-    }
+    } 
 
     IGraphTransformer::TStatus OptimizeExprInternal(TExprNode::TPtr input, TExprNode::TPtr& output, const TCallableOptimizerFast& optimizer,
         TExprContext& ctx, const TOptimizeExprSettings& settings) try
@@ -458,8 +458,8 @@ namespace {
         ctx.AddError(ExceptionToIssue(e, ctx.GetPosition(input->Pos())));
         return IGraphTransformer::TStatus::Error;
     }
-}
-
+} 
+ 
 IGraphTransformer::TStatus OptimizeExpr(const TExprNode::TPtr& input, TExprNode::TPtr& output, TCallableOptimizer optimizer,
     TExprContext& ctx, const TOptimizeExprSettings& settings)
 {
@@ -488,149 +488,149 @@ IGraphTransformer::TStatus ExpandApply(const TExprNode::TPtr& input, TExprNode::
     if (ctx.Step.IsDone(TExprStep::ExpandApplyForLambdas))
         return IGraphTransformer::TStatus::Ok;
 
-    TOptimizeExprSettings settings(nullptr);
+    TOptimizeExprSettings settings(nullptr); 
     auto ret = OptimizeExpr(input, output, [&](const TExprNode::TPtr& node, bool& changed, TExprContext& ctx) -> TExprNode::TPtr {
-        if (node->Content() == "WithOptionalArgs") {
-            if (!EnsureArgsCount(*node, 2, ctx)) {
-                return nullptr;
-            }
-
-            if (!EnsureLambda(*node->Child(0), ctx)) {
-                return nullptr;
-            }
-
-            if (!EnsureAtom(*node->Child(1), ctx)) {
-                return nullptr;
-            }
-
-            ui32 count = 0;
-            if (!TryFromString(node->Child(1)->Content(), count)) {
-                ctx.AddError(TIssue(ctx.GetPosition(node->Child(1)->Pos()),
-                    TStringBuilder() << "Failed to convert to integer: " << node->Child(1)->Content()));
-                return nullptr;
-            }
-
-            if (count > node->Child(0)->Child(0)->ChildrenSize()) {
-                ctx.AddError(TIssue(ctx.GetPosition(node->Child(1)->Pos()),
-                    TStringBuilder() << "Too many optional arguments: " << count
-                    << ", lambda has only: " << node->Child(0)->Child(0)->ChildrenSize()));
-                return nullptr;
-            }
-
-            return node;
-        }
-
+        if (node->Content() == "WithOptionalArgs") { 
+            if (!EnsureArgsCount(*node, 2, ctx)) { 
+                return nullptr; 
+            } 
+ 
+            if (!EnsureLambda(*node->Child(0), ctx)) { 
+                return nullptr; 
+            } 
+ 
+            if (!EnsureAtom(*node->Child(1), ctx)) { 
+                return nullptr; 
+            } 
+ 
+            ui32 count = 0; 
+            if (!TryFromString(node->Child(1)->Content(), count)) { 
+                ctx.AddError(TIssue(ctx.GetPosition(node->Child(1)->Pos()), 
+                    TStringBuilder() << "Failed to convert to integer: " << node->Child(1)->Content())); 
+                return nullptr; 
+            } 
+ 
+            if (count > node->Child(0)->Child(0)->ChildrenSize()) { 
+                ctx.AddError(TIssue(ctx.GetPosition(node->Child(1)->Pos()), 
+                    TStringBuilder() << "Too many optional arguments: " << count 
+                    << ", lambda has only: " << node->Child(0)->Child(0)->ChildrenSize())); 
+                return nullptr; 
+            } 
+ 
+            return node; 
+        } 
+ 
         if (node->Content() != "Apply" && node->Content() != "NamedApply")
             return node;
 
-        ui32 optionalArgsCount = 0;
-        auto lambdaNode = node;
-        if (lambdaNode->ChildrenSize() > 0 && lambdaNode->Head().IsCallable("WithOptionalArgs")) {
-            lambdaNode = lambdaNode->Child(0);
-            optionalArgsCount = FromString<ui32>(lambdaNode->Child(1)->Content());
+        ui32 optionalArgsCount = 0; 
+        auto lambdaNode = node; 
+        if (lambdaNode->ChildrenSize() > 0 && lambdaNode->Head().IsCallable("WithOptionalArgs")) { 
+            lambdaNode = lambdaNode->Child(0); 
+            optionalArgsCount = FromString<ui32>(lambdaNode->Child(1)->Content()); 
+        } 
+ 
+        if (lambdaNode->ChildrenSize() == 0) { 
+            ctx.AddError(TIssue(ctx.GetPosition(lambdaNode->Pos()), "Expected at least one argument - lambda or callable")); 
+            return nullptr; 
         }
 
-        if (lambdaNode->ChildrenSize() == 0) {
-            ctx.AddError(TIssue(ctx.GetPosition(lambdaNode->Pos()), "Expected at least one argument - lambda or callable"));
-            return nullptr;
-        }
-
-        if (lambdaNode->Head().Type() != TExprNode::Lambda) {
+        if (lambdaNode->Head().Type() != TExprNode::Lambda) { 
             return node;
         }
 
-        auto nullNode = ctx.NewCallable(input->Pos(), "Null", {});
-        const auto& lambda = lambdaNode->Head();
+        auto nullNode = ctx.NewCallable(input->Pos(), "Null", {}); 
+        const auto& lambda = lambdaNode->Head(); 
         const auto& args = lambda.Head();
         TExprNode::TPtr ret;
         if (node->Content() == "Apply") {
-            const ui32 maxArgs = args.ChildrenSize();
-            const ui32 minArgs = args.ChildrenSize() - optionalArgsCount;
-            const ui32 providedArgs = node->ChildrenSize() - 1;
-
-            if (providedArgs < minArgs || providedArgs > maxArgs) {
-                ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), TStringBuilder() << "Minimum arguments count: "
-                    << minArgs << ", maximum arguments count: " << maxArgs << ", but provided " << providedArgs));
-                return nullptr;
-            }
-
+            const ui32 maxArgs = args.ChildrenSize(); 
+            const ui32 minArgs = args.ChildrenSize() - optionalArgsCount; 
+            const ui32 providedArgs = node->ChildrenSize() - 1; 
+ 
+            if (providedArgs < minArgs || providedArgs > maxArgs) { 
+                ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), TStringBuilder() << "Minimum arguments count: " 
+                    << minArgs << ", maximum arguments count: " << maxArgs << ", but provided " << providedArgs)); 
+                return nullptr; 
+            } 
+ 
             TNodeOnNodeOwnedMap replaces;
             replaces.reserve(args.ChildrenSize());
             ui32 i = 0U;
             args.ForEachChild([&](const TExprNode& arg) {
-                auto value = nullNode;
-                if (i < providedArgs) {
-                    value = node->ChildPtr(++i);
-                }
-
-                replaces.emplace(&arg, value);
+                auto value = nullNode; 
+                if (i < providedArgs) { 
+                    value = node->ChildPtr(++i); 
+                } 
+ 
+                replaces.emplace(&arg, value); 
             });
             if (lambda.ChildrenSize() != 2U) {
                 ret = ctx.NewList(node->Pos(), ctx.ReplaceNodes(GetLambdaBody(lambda), replaces));
                 ret->SetDisclosing();
             } else {
                 ret = ctx.ReplaceNodes(lambda.TailPtr(), replaces);
-            }
+            } 
             changed = true;
         }  else if (node->Content() == "NamedApply") {
-            if (!EnsureMinArgsCount(*node, 3, ctx)) {
-                return nullptr;
-            }
+            if (!EnsureMinArgsCount(*node, 3, ctx)) { 
+                return nullptr; 
+            } 
 
             if (!EnsureTuple(*node->Child(1), ctx)) {
-                return nullptr;
-            }
-
-            if (!EnsureCallable(*node->Child(2), ctx)) {
-                return nullptr;
-            }
-
-            if (!node->Child(2)->IsCallable("AsStruct") || node->Child(2)->ChildrenSize() != 0) {
+                return nullptr; 
+            } 
+ 
+            if (!EnsureCallable(*node->Child(2), ctx)) { 
+                return nullptr; 
+            } 
+ 
+            if (!node->Child(2)->IsCallable("AsStruct") || node->Child(2)->ChildrenSize() != 0) { 
                 ctx.AddError(TIssue(ctx.GetPosition(node->Child(2)->Pos()), "Expected empty AsStruct in NamedApply"));
-                return nullptr;
-            }
-
-            for (ui32 i = 3; i < node->ChildrenSize(); ++i) {
-                if (!EnsureCallable(*node->Child(i), ctx)) {
-                    return nullptr;
-                }
-
-                if (!node->Child(i)->IsCallable("DependsOn")) {
+                return nullptr; 
+            } 
+ 
+            for (ui32 i = 3; i < node->ChildrenSize(); ++i) { 
+                if (!EnsureCallable(*node->Child(i), ctx)) { 
+                    return nullptr; 
+                } 
+ 
+                if (!node->Child(i)->IsCallable("DependsOn")) { 
                     ctx.AddError(TIssue(ctx.GetPosition(node->Child(i)->Pos()), "Expected DependsOn"));
-                    return nullptr;
-                }
-            }
-
+                    return nullptr; 
+                } 
+            } 
+ 
             const auto depArgs = node->ChildrenSize() - 3U;
             const auto totalArgs = depArgs + node->Child(1)->ChildrenSize();
-            if (totalArgs < args.ChildrenSize() - optionalArgsCount) {
-                ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), TStringBuilder() << "Too few arguments, lambda has "
-                    << args.ChildrenSize() << " arguments with optional "<< optionalArgsCount << " arguments, but got: " << totalArgs));
-                return nullptr;
-            }
-
-            ui32 posArgs = Min(args.ChildrenSize(), node->Child(1)->ChildrenSize());
+            if (totalArgs < args.ChildrenSize() - optionalArgsCount) { 
+                ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), TStringBuilder() << "Too few arguments, lambda has " 
+                    << args.ChildrenSize() << " arguments with optional "<< optionalArgsCount << " arguments, but got: " << totalArgs)); 
+                return nullptr; 
+            } 
+ 
+            ui32 posArgs = Min(args.ChildrenSize(), node->Child(1)->ChildrenSize()); 
             TNodeOnNodeOwnedMap replaces;
-            replaces.reserve(args.ChildrenSize());
-            for (ui32 i = 0; i < posArgs; ++i) {
+            replaces.reserve(args.ChildrenSize()); 
+            for (ui32 i = 0; i < posArgs; ++i) { 
                 replaces.emplace(args.Child(i), node->Child(1)->ChildPtr(i));
             }
 
-            if (posArgs == node->Child(1)->ChildrenSize()) {
-                for (ui32 i = 3; i < node->ChildrenSize(); ++i) {
-                    auto index = i - 3 + node->Child(1)->ChildrenSize();
-                    if (index >= args.ChildrenSize()) {
-                        break;
-                    }
-
-                    replaces.emplace(args.Child(index), node->ChildPtr(i));
-                }
-            }
-
-            for (ui32 i = replaces.size(); i < args.ChildrenSize(); ++i) {
-                replaces.emplace(args.Child(i), nullNode);
-            }
-
+            if (posArgs == node->Child(1)->ChildrenSize()) { 
+                for (ui32 i = 3; i < node->ChildrenSize(); ++i) { 
+                    auto index = i - 3 + node->Child(1)->ChildrenSize(); 
+                    if (index >= args.ChildrenSize()) { 
+                        break; 
+                    } 
+ 
+                    replaces.emplace(args.Child(index), node->ChildPtr(i)); 
+                } 
+            } 
+ 
+            for (ui32 i = replaces.size(); i < args.ChildrenSize(); ++i) { 
+                replaces.emplace(args.Child(i), nullNode); 
+            } 
+ 
             if (lambda.ChildrenSize() > 2U) {
                 ret = ctx.NewList(node->Pos(), ctx.ReplaceNodes(GetLambdaBody(lambda), replaces));
                 ret->SetDisclosing();
@@ -641,7 +641,7 @@ IGraphTransformer::TStatus ExpandApply(const TExprNode::TPtr& input, TExprNode::
         }
 
         return ret;
-    }, ctx, settings);
+    }, ctx, settings); 
 
     if (ret.Level == IGraphTransformer::TStatus::Ok) {
         ret = ret.Combine(OptimizeExpr(output, output, [&](const TExprNode::TPtr& node, bool& changed, TExprContext& ctx) -> TExprNode::TPtr {
@@ -676,7 +676,7 @@ IGraphTransformer::TStatus ExpandApply(const TExprNode::TPtr& input, TExprNode::
                 }
 
                 if (!node->Tail().IsAtom()) {
-                    return node;
+                    return node; 
                 }
 
                 if (node->Head().Type() != TExprNode::List) {
@@ -710,9 +710,9 @@ IGraphTransformer::TStatus ExpandApply(const TExprNode::TPtr& input, TExprNode::
                 }
 
                 if (node->Tail().IsCallable("Apply")) {
-                    return node;
-                }
-
+                    return node; 
+                } 
+ 
                 ui32 index = 0U;
                 if (const auto& indexValue = node->Head().Content(); !TryFromString(indexValue, index)) {
                     ctx.AddError(TIssue(ctx.GetPosition(node->Head().Pos()), TStringBuilder() << "Index '" << indexValue << "' isn't UI32."));
@@ -726,87 +726,87 @@ IGraphTransformer::TStatus ExpandApply(const TExprNode::TPtr& input, TExprNode::
 
                 changed = true;
                 return node->Tail().ChildPtr(index);
-            }
-            else if (node->Content() == "Seq!") {
-                if (!EnsureMinArgsCount(*node, 1, ctx)) {
-                    return nullptr;
-                }
-
+            } 
+            else if (node->Content() == "Seq!") { 
+                if (!EnsureMinArgsCount(*node, 1, ctx)) { 
+                    return nullptr; 
+                } 
+ 
                 auto world = node->HeadPtr();
-                for (ui32 i = 1; i < node->ChildrenSize(); ++i) {
+                for (ui32 i = 1; i < node->ChildrenSize(); ++i) { 
                     const auto lambda = node->Child(i);
-                    if (!EnsureLambda(*lambda, ctx)) {
-                        return nullptr;
-                    }
-
+                    if (!EnsureLambda(*lambda, ctx)) { 
+                        return nullptr; 
+                    } 
+ 
                     const auto& lambdaArgs = lambda->Head();
                     if (!EnsureArgsCount(lambdaArgs, 1, ctx)) {
-                        return nullptr;
-                    }
-
+                        return nullptr; 
+                    } 
+ 
                     world = ctx.ReplaceNode(lambda->TailPtr(), lambdaArgs.Head(), std::move(world));
-                }
-
-                changed = true;
-                return world;
-            } else if (node->Content() == "SubqueryExtend" || node->Content() == "SubqueryUnionAll" ||
-                node->Content() == "SubqueryMerge" || node->Content() == "SubqueryUnionMerge") {
-                if (!EnsureMinArgsCount(*node, 1, ctx)) {
-                    return nullptr;
-                }
-
-                TMaybe<ui32> commonArgs;
-                for (ui32 i = 0; i < node->ChildrenSize(); ++i) {
-                    const auto lambda = node->Child(i);
-                    if (lambda->IsArgument()) {
-                        return node;
-                    }
-
-                    if (!EnsureLambda(*lambda, ctx)) {
-                        return nullptr;
-                    }
-
-                    const auto& lambdaArgs = lambda->Head();
-                    if (!EnsureMinArgsCount(lambdaArgs, 1, ctx)) {
-                        return nullptr;
-                    }
-
-                    if (!commonArgs) {
-                        commonArgs = lambdaArgs.ChildrenSize();
-                    } else if (*commonArgs != lambdaArgs.ChildrenSize()) {
-                        ctx.AddError(TIssue(ctx.GetPosition(lambda->Pos()),
-                            TStringBuilder() << "Mismatch of arguments count in subquery, got: "
-                                << (lambdaArgs.ChildrenSize() - 1) << ", but expected: " << (*commonArgs - 1)));
-                        return nullptr;
-                    }
-                }
-
-                TExprNodeList argItems;
-                for (ui32 i = 0; i < *commonArgs; ++i) {
-                    argItems.push_back(ctx.NewArgument(node->Pos(), "arg" + ToString(i)));
-                }
-
-                TExprNodeList inputs;
-                for (ui32 i = 0; i < node->ChildrenSize(); ++i) {
-                    const auto lambda = node->Child(i);
-                    const auto& lambdaArgs = lambda->Head();
-                    TNodeOnNodeOwnedMap replaces;
-                    for (ui32 j = 0; j < argItems.size(); ++j) {
-                        replaces[lambdaArgs.Child(j)] = argItems[j];
-                    }
-
-                    inputs.push_back(ctx.ReplaceNodes(lambda->TailPtr(), replaces));
-                }
-
-                auto body = ctx.NewCallable(node->Pos(), node->Content().substr(8), std::move(inputs) );
-                auto args = ctx.NewArguments(node->Pos(), std::move(argItems));
-                auto merged = ctx.NewLambda(node->Pos(), std::move(args), std::move(body));
-                changed = true;
-                return merged;
-            } else {
+                } 
+ 
+                changed = true; 
+                return world; 
+            } else if (node->Content() == "SubqueryExtend" || node->Content() == "SubqueryUnionAll" || 
+                node->Content() == "SubqueryMerge" || node->Content() == "SubqueryUnionMerge") { 
+                if (!EnsureMinArgsCount(*node, 1, ctx)) { 
+                    return nullptr; 
+                } 
+ 
+                TMaybe<ui32> commonArgs; 
+                for (ui32 i = 0; i < node->ChildrenSize(); ++i) { 
+                    const auto lambda = node->Child(i); 
+                    if (lambda->IsArgument()) { 
+                        return node; 
+                    } 
+ 
+                    if (!EnsureLambda(*lambda, ctx)) { 
+                        return nullptr; 
+                    } 
+ 
+                    const auto& lambdaArgs = lambda->Head(); 
+                    if (!EnsureMinArgsCount(lambdaArgs, 1, ctx)) { 
+                        return nullptr; 
+                    } 
+ 
+                    if (!commonArgs) { 
+                        commonArgs = lambdaArgs.ChildrenSize(); 
+                    } else if (*commonArgs != lambdaArgs.ChildrenSize()) { 
+                        ctx.AddError(TIssue(ctx.GetPosition(lambda->Pos()), 
+                            TStringBuilder() << "Mismatch of arguments count in subquery, got: " 
+                                << (lambdaArgs.ChildrenSize() - 1) << ", but expected: " << (*commonArgs - 1))); 
+                        return nullptr; 
+                    } 
+                } 
+ 
+                TExprNodeList argItems; 
+                for (ui32 i = 0; i < *commonArgs; ++i) { 
+                    argItems.push_back(ctx.NewArgument(node->Pos(), "arg" + ToString(i))); 
+                } 
+ 
+                TExprNodeList inputs; 
+                for (ui32 i = 0; i < node->ChildrenSize(); ++i) { 
+                    const auto lambda = node->Child(i); 
+                    const auto& lambdaArgs = lambda->Head(); 
+                    TNodeOnNodeOwnedMap replaces; 
+                    for (ui32 j = 0; j < argItems.size(); ++j) { 
+                        replaces[lambdaArgs.Child(j)] = argItems[j]; 
+                    } 
+ 
+                    inputs.push_back(ctx.ReplaceNodes(lambda->TailPtr(), replaces)); 
+                } 
+ 
+                auto body = ctx.NewCallable(node->Pos(), node->Content().substr(8), std::move(inputs) ); 
+                auto args = ctx.NewArguments(node->Pos(), std::move(argItems)); 
+                auto merged = ctx.NewLambda(node->Pos(), std::move(args), std::move(body)); 
+                changed = true; 
+                return merged; 
+            } else { 
                 return node;
-            }
-        }, ctx, settings));
+            } 
+        }, ctx, settings)); 
     }
 
     if (ret.Level == IGraphTransformer::TStatus::Ok) {
@@ -814,7 +814,7 @@ IGraphTransformer::TStatus ExpandApply(const TExprNode::TPtr& input, TExprNode::
     }
 
     return ret;
-}
+} 
 
 TExprNode::TPtr ApplySyncListToWorld(const TExprNode::TPtr& main, const TSyncMap& syncList, TExprContext& ctx) {
     if (syncList.empty()) {
@@ -824,17 +824,17 @@ TExprNode::TPtr ApplySyncListToWorld(const TExprNode::TPtr& main, const TSyncMap
     using TPair = std::pair<TExprNode::TPtr, ui64>;
     TVector<TPair> sortedList(syncList.cbegin(), syncList.cend());
     TExprNode::TListType syncChildren;
-    syncChildren.push_back(main);
+    syncChildren.push_back(main); 
     Sort(sortedList, [](const TPair& x, const TPair& y) { return x.second < y.second; });
     for (auto x : sortedList) {
         if (x.first->IsCallable(RightName)) {
             auto world = ctx.NewCallable(main->Pos(), LeftName, { x.first->HeadPtr() });
-            syncChildren.push_back(world);
+            syncChildren.push_back(world); 
         } else if (x.first->GetTypeAnn()->GetKind() == ETypeAnnotationKind::World) {
-            syncChildren.push_back(x.first);
+            syncChildren.push_back(x.first); 
         } else {
             auto world = ctx.NewCallable(main->Pos(), LeftName, { x.first });
-            syncChildren.push_back(world);
+            syncChildren.push_back(world); 
         }
     }
 

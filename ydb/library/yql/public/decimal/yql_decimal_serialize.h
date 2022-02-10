@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/library/yql/public/decimal/yql_decimal.h>
+#include <ydb/library/yql/public/decimal/yql_decimal.h> 
 
 namespace NYql {
 namespace NDecimal {

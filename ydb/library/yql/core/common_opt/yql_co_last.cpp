@@ -1,8 +1,8 @@
-#include "yql_co.h"
-#include <ydb/library/yql/core/yql_opt_utils.h>
-
-namespace NYql {
-
+#include "yql_co.h" 
+#include <ydb/library/yql/core/yql_opt_utils.h> 
+ 
+namespace NYql { 
+ 
 void RegisterCoFinalCallables(TCallableOptimizerMap& map) {
     map["UnorderedSubquery"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
         Y_UNUSED(optCtx);
@@ -13,6 +13,6 @@ void RegisterCoFinalCallables(TCallableOptimizerMap& map) {
         }
         return ctx.RenameNode(*node, "Unordered");
     };
-}
+} 
 
 }

@@ -763,16 +763,16 @@ extern int fdatasync(int);
 #       define HAVE_DECLSPEC_DLL
 #endif
 
-/*
- * GCC visibility support, introduced in GCC 4.0. Only matters when
- * compiling with gcc's -fvisibility=hidden argument.  This applies to all
- * binaries and when embedding, not just libpython.so.  See
- * http://gcc.gnu.org/wiki/Visibility for more information.
- */
-#if defined(__GNUC__) && __GNUC__ >= 4
-#       define HAVE_ATTRIBUTE_VISIBILITY
-#endif
-
+/* 
+ * GCC visibility support, introduced in GCC 4.0. Only matters when 
+ * compiling with gcc's -fvisibility=hidden argument.  This applies to all 
+ * binaries and when embedding, not just libpython.so.  See 
+ * http://gcc.gnu.org/wiki/Visibility for more information. 
+ */ 
+#if defined(__GNUC__) && __GNUC__ >= 4 
+#       define HAVE_ATTRIBUTE_VISIBILITY 
+#endif 
+ 
 /* only get special linkage if built as shared or platform is Cygwin */
 #if defined(Py_ENABLE_SHARED)
 #       if defined(HAVE_DECLSPEC_DLL)
@@ -804,16 +804,16 @@ extern int fdatasync(int);
 #                       endif /* __cplusplus */
 #               endif /* Py_BUILD_CORE */
 #       endif /* HAVE_DECLSPEC */
-#elif defined(HAVE_ATTRIBUTE_VISIBILITY)
-#       define PyAPI_FUNC(RTYPE) __attribute__((visibility("default"))) RTYPE
-#       define PyAPI_DATA(RTYPE) extern __attribute__((visibility("default"))) RTYPE
-#       ifdef Py_BUILD_CORE
-#               define PyMODINIT_FUNC void
-#       elif defined(__cplusplus)
-#               define PyMODINIT_FUNC extern "C" __attribute__((visibility("default"))) void
-#       else /* __cplusplus */
-#               define PyMODINIT_FUNC __attribute__((visibility("default"))) void
-#       endif /* Py_BUILD_CORE */
+#elif defined(HAVE_ATTRIBUTE_VISIBILITY) 
+#       define PyAPI_FUNC(RTYPE) __attribute__((visibility("default"))) RTYPE 
+#       define PyAPI_DATA(RTYPE) extern __attribute__((visibility("default"))) RTYPE 
+#       ifdef Py_BUILD_CORE 
+#               define PyMODINIT_FUNC void 
+#       elif defined(__cplusplus) 
+#               define PyMODINIT_FUNC extern "C" __attribute__((visibility("default"))) void 
+#       else /* __cplusplus */ 
+#               define PyMODINIT_FUNC __attribute__((visibility("default"))) void 
+#       endif /* Py_BUILD_CORE */ 
 #endif /* Py_ENABLE_SHARED */
 
 /* If no external linkage macros defined by now, create defaults */

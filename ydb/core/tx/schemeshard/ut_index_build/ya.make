@@ -22,7 +22,7 @@ PEERDIR(
 )
 
 YQL_LAST_ABI_VERSION()
-
+ 
 SRCS(
     ut_index_build.cpp
 )

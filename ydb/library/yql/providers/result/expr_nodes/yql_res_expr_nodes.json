@@ -84,7 +84,7 @@
                 {"Index": 3, "Name": "FormatDetails", "Type": "TCoAtom"},
                 {"Index": 4, "Name": "Settings", "Type": "TCoNameValueTupleList"},
                 {"Index": 5, "Name": "Format", "Type": "TCoAtom"},
-                {"Index": 6, "Name": "PublicId", "Type": "TCoAtom"},
+                {"Index": 6, "Name": "PublicId", "Type": "TCoAtom"}, 
                 {"Index": 7, "Name": "Discard", "Type": "TCoAtom"},
                 {"Index": 8, "Name": "Origin", "Type": "TExprBase"}
             ]
@@ -98,21 +98,21 @@
             "Name": "TPull",
             "Base": "TResOrPullBase",
             "Match": {"Type": "Callable", "Name": "Pull"}
-        },
-        {
-            "Name": "TResFor",
-            "Base": "TResBase",
-            "Match": {"Type": "Callable", "Name": "ResFor!"},
-            "Children": [
-                {"Index": 2, "Name": "Items", "Type": "TExprBase"},
-                {"Index": 3, "Name": "Iter", "Type": "TCoLambda"},
-                {"Index": 4, "Name": "Else", "Type": "TCoLambda"},
-                {"Index": 5, "Name": "DelegatedSource", "Type": "TCoAtom"},
-                {"Index": 6, "Name": "Settings", "Type": "TCoNameValueTupleList"},
-                {"Index": 7, "Name": "Total", "Type": "TCoAtom"},
-                {"Index": 8, "Name": "Current", "Type": "TCoAtom"},
-                {"Index": 9, "Name": "Active", "Type": "TExprBase"}
-            ]
+        }, 
+        { 
+            "Name": "TResFor", 
+            "Base": "TResBase", 
+            "Match": {"Type": "Callable", "Name": "ResFor!"}, 
+            "Children": [ 
+                {"Index": 2, "Name": "Items", "Type": "TExprBase"}, 
+                {"Index": 3, "Name": "Iter", "Type": "TCoLambda"}, 
+                {"Index": 4, "Name": "Else", "Type": "TCoLambda"}, 
+                {"Index": 5, "Name": "DelegatedSource", "Type": "TCoAtom"}, 
+                {"Index": 6, "Name": "Settings", "Type": "TCoNameValueTupleList"}, 
+                {"Index": 7, "Name": "Total", "Type": "TCoAtom"}, 
+                {"Index": 8, "Name": "Current", "Type": "TCoAtom"}, 
+                {"Index": 9, "Name": "Active", "Type": "TExprBase"} 
+            ] 
         }
     ]
 }

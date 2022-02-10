@@ -1,28 +1,28 @@
 #include "mkql_builtins.h"
-
+ 
 #include <ydb/library/yql/public/udf/udf_value.h>
 
 #include <library/cpp/testing/unittest/registar.h>
-
+ 
 #include <array>
 
-namespace NKikimr {
+namespace NKikimr { 
 namespace NMiniKQL {
-
+ 
 static TFunctionParamMetadata AddUi32Metadata[] = {
-    { NUdf::TDataType<ui32>::Id, 0 }, // result
-    { NUdf::TDataType<ui32>::Id, 0 }, // first arg
-    { NUdf::TDataType<ui32>::Id, 0 }, // second arg
-    { 0, 0 }
-};
-
+    { NUdf::TDataType<ui32>::Id, 0 }, // result 
+    { NUdf::TDataType<ui32>::Id, 0 }, // first arg 
+    { NUdf::TDataType<ui32>::Id, 0 }, // second arg 
+    { 0, 0 } 
+}; 
+ 
 static NUdf::TUnboxedValuePod AddUi32(const NUdf::TUnboxedValuePod* args)
 {
     const ui32 first = args[0].Get<ui32>();
     const ui32 second = args[1].Get<ui32>();
     return NUdf::TUnboxedValuePod(first + second);
-}
-
+} 
+ 
 Y_UNIT_TEST_SUITE(TFunctionRegistryTest) {
     Y_UNIT_TEST(TestRegistration) {
         const auto functionRegistry = CreateBuiltinRegistry();
@@ -43,9 +43,9 @@ Y_UNIT_TEST_SUITE(TFunctionRegistryTest) {
 
         auto result = op.Function(&args[0]);
         UNIT_ASSERT_EQUAL(result.Get<ui32>(), 5);
-    }
-}
-
+    } 
+} 
+ 
 } // namespace NMiniKQL
 
 } // namespace NKikimr

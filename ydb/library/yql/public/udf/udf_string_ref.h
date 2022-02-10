@@ -108,28 +108,28 @@ public:
 
     inline constexpr bool operator!=(const TStringRef& rhs) const noexcept {
         return Compare(*this, rhs) != 0;
-    }
-
+    } 
+ 
     inline constexpr bool operator<(const TStringRef& rhs) const noexcept {
         return Compare(*this, rhs) < 0;
     }
 
     inline constexpr bool operator<=(const TStringRef& rhs) const noexcept {
-        return Compare(*this, rhs) <= 0;
-    }
-
+        return Compare(*this, rhs) <= 0; 
+    } 
+ 
     inline constexpr bool operator>(const TStringRef& rhs) const noexcept {
-        return Compare(*this, rhs) > 0;
-    }
-
+        return Compare(*this, rhs) > 0; 
+    } 
+ 
     inline constexpr bool operator>=(const TStringRef& rhs) const noexcept {
-        return Compare(*this, rhs) >= 0;
-    }
-
+        return Compare(*this, rhs) >= 0; 
+    } 
+ 
 private:
     inline static constexpr int Compare(const TStringRef& s1, const TStringRef& s2) noexcept {
-        auto minSize = std::min(s1.Size(), s2.Size());
-        if (const auto result = minSize > 0 ? std::memcmp(s1.Data(), s2.Data(), minSize) : 0)
+        auto minSize = std::min(s1.Size(), s2.Size()); 
+        if (const auto result = minSize > 0 ? std::memcmp(s1.Data(), s2.Data(), minSize) : 0) 
             return result;
         return int(s1.Size()) - int(s2.Size());
     }

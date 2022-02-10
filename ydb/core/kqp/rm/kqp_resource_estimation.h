@@ -3,7 +3,7 @@
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/kqp/runtime/kqp_scan_data.h>
 
-#include <ydb/library/yql/dq/proto/dq_tasks.pb.h>
+#include <ydb/library/yql/dq/proto/dq_tasks.pb.h> 
 
 
 namespace NKikimr::NKqp {

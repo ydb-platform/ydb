@@ -1,12 +1,12 @@
 #include "dq_type_ann.h"
 
-#include <ydb/library/yql/core/yql_expr_type_annotation.h>
-#include <ydb/library/yql/core/yql_join.h>
-#include <ydb/library/yql/core/yql_opt_utils.h>
-#include <ydb/library/yql/core/type_ann/type_ann_core.h>
+#include <ydb/library/yql/core/yql_expr_type_annotation.h> 
+#include <ydb/library/yql/core/yql_join.h> 
+#include <ydb/library/yql/core/yql_opt_utils.h> 
+#include <ydb/library/yql/core/type_ann/type_ann_core.h> 
 #include <ydb/library/yql/utils/log/log.h>
 
-#include <ydb/library/yql/providers/common/provider/yql_provider.h>
+#include <ydb/library/yql/providers/common/provider/yql_provider.h> 
 
 namespace NYql::NDq {
 

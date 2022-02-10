@@ -26,12 +26,12 @@ import "ydb/public/api/protos/ydb_operation.proto";
 import "ydb/public/api/protos/draft/persqueue_error_codes.proto";
 import "ydb/public/api/protos/ydb_issue_message.proto";
 import "ydb/library/mkql_proto/protos/minikql.proto";
-
+ 
 import "google/protobuf/descriptor.proto";
 
 package NKikimrClient;
-option java_package = "ru.yandex.kikimr.proto";
-
+option java_package = "ru.yandex.kikimr.proto"; 
+ 
 message TEnumValueHint {
     message TEntry {
         optional uint64 Value = 1;
@@ -51,13 +51,13 @@ message TMsgBusRequestBase {
     optional uint32 ServerTimeoutMs = 1;
 }
 
-message TRequest {
-    optional NKikimrTxUserProxy.TTransaction Transaction = 1;
-    optional uint64 ProxyFlags = 2;
+message TRequest { 
+    optional NKikimrTxUserProxy.TTransaction Transaction = 1; 
+    optional uint64 ProxyFlags = 2; 
     optional uint64 ExecTimeoutPeriod = 4;
     optional string SecurityToken = 5;
-}
-
+} 
+ 
 message TFlatTxId {
     optional fixed64 TxId = 1;
     optional fixed64 SchemeShardTabletId = 2;
@@ -69,8 +69,8 @@ message TResolveNodeResponse {
     optional uint32 NodeId = 2;
 };
 
-// must start from TResponseBase
-message TResponse {
+// must start from TResponseBase 
+message TResponse { 
     optional uint32 Status = 1 [
         (CommonDescription) = "Generic msgbus status",
         (EnumValueHint) = { Hints : [
@@ -87,10 +87,10 @@ message TResponse {
     ]; // EResponseStatus from ydb/core/client/base/msgbus.h
 
     optional string ErrorReason = 400; // When present contains human-readable error description  (aka ProtobufError)
-
-    optional fixed64 TxId = 2;
-    optional fixed64 Step = 3;
-    optional fixed64 TabletId = 4;
+ 
+    optional fixed64 TxId = 2; 
+    optional fixed64 Step = 3; 
+    optional fixed64 TabletId = 4; 
 
     optional uint32 ProxyErrorCode = 5 [
         (CommonDescription) = "Transaction proxy processing status",
@@ -126,8 +126,8 @@ message TResponse {
         ]}
     ]; // see tx_proxy.h - TResultStatus::EStatus
 
-    optional bytes ProxyErrors = 6;
-
+    optional bytes ProxyErrors = 6; 
+ 
     optional NKikimrIssues.TStatusIds.EStatusCode StatusCode = 7;
     repeated Ydb.Issue.IssueMessage Issues = 8;
 
@@ -159,23 +159,23 @@ message TResponse {
 
     optional NKikimrMiniKQL.TResult ExecutionEngineEvaluatedResponse = 103;
 
-    optional bytes MiniKQLErrors = 104;
-    optional bytes DataShardErrors = 105;
-    repeated fixed64 ComplainingDataShards = 106;
-    repeated bytes UnresolvedKeys = 107; // text for each key
+    optional bytes MiniKQLErrors = 104; 
+    optional bytes DataShardErrors = 105; 
+    repeated fixed64 ComplainingDataShards = 106; 
+    repeated bytes UnresolvedKeys = 107; // text for each key 
     optional NKikimrQueryStats.TTxStats TxStats = 111;
-
+ 
     optional NKikimrTxUserProxy.TMiniKQLCompileResults MiniKQLCompileResults = 108;
     optional bool HadFollowerReads = 109;
     optional bytes SerializedReadTableResponse = 110; // Serialized Ydb.Db.TResultSet
 
-    optional uint32 BSAssignedID = 40;
-
+    optional uint32 BSAssignedID = 40; 
+ 
     optional NKikimrTxUserProxy.TTxProxyTimings ProxyTimings = 50;
-
+ 
     optional int32 SchemeStatus = 300; // for enum definition see flat_tx_scheme.proto - enum EStatus
-    optional uint32 SchemeTagId = 301;
-    optional bytes SchemePrefix = 302;
+    optional uint32 SchemeTagId = 301; 
+    optional bytes SchemePrefix = 302; 
 
     // TTabletStateRequest
     repeated NKikimrWhiteboard.TTabletStateInfo TabletStateInfo = 500;
@@ -246,12 +246,12 @@ message TResponse {
     // TWhoAmI
     optional string UserName = 1100;
     repeated string Groups = 1101;
-}
-
-message TFakeConfigDummy {
-    optional uint64 DataShardID = 1;
-}
-
+} 
+ 
+message TFakeConfigDummy { 
+    optional uint64 DataShardID = 1; 
+} 
+ 
 message TTabletCountersRequest {
     optional uint64 TabletID = 1;
     optional bool ConnectToFollower = 2;
@@ -292,23 +292,23 @@ message TLocalSchemeTx {
     optional uint64 Timeout = 11;
 }
 
-message TSchemeNavigate {
-    optional bytes Path = 1;
-    optional uint32 ReadMaterializedFamily = 2;
-    optional bytes TextPath = 3;
-    optional uint64 SchemeShardHint = 4;
-}
-
-message TSchemeInitRoot {
-    optional uint64 ShardId = 1;
-    optional uint32 TagId = 2;
-    optional bytes TagName = 3;
-    optional NKikimrTxScheme.TConfig GlobalConfig = 4;
+message TSchemeNavigate { 
+    optional bytes Path = 1; 
+    optional uint32 ReadMaterializedFamily = 2; 
+    optional bytes TextPath = 3; 
+    optional uint64 SchemeShardHint = 4; 
+} 
+ 
+message TSchemeInitRoot { 
+    optional uint64 ShardId = 1; 
+    optional uint32 TagId = 2; 
+    optional bytes TagName = 3; 
+    optional NKikimrTxScheme.TConfig GlobalConfig = 4; 
     optional string SecurityToken = 5;
     repeated NKikimrStoragePool.TStoragePool StoragePools = 6;
-}
-
-message TBSAdm {
+} 
+ 
+message TBSAdm { 
     message TVDiskLocation {
         optional uint32 NodeId = 1;
         optional uint32 PDiskId = 2;
@@ -319,12 +319,12 @@ message TBSAdm {
         optional TVDiskLocation Location = 1;
     }
 
-    optional uint32 Domain = 1;
-
+    optional uint32 Domain = 1; 
+ 
     optional TGroupReconfigureWipe GroupReconfigureWipe = 6;
     optional string SecurityToken = 7;
-}
-
+} 
+ 
 message THiveCreateTablet {
     message TCmdCreateTablet {
         optional uint64 OwnerId = 1; // mandatory, senders TabletId (use 0 for human/external system)
@@ -386,20 +386,20 @@ message TLocalEnumerateTabletsResult {
     optional string ErrorReason = 3; // When present contains human-readable error description
 }
 
-message TTypeMetadataRequest {
-    optional uint64 ETag = 1;
-}
-
-// must start from TResponseBase
-message TTypeMetadataResponse {
+message TTypeMetadataRequest { 
+    optional uint64 ETag = 1; 
+} 
+ 
+// must start from TResponseBase 
+message TTypeMetadataResponse { 
     optional uint32 Status = 1; // EResponseStatus from ydb/core/client/base/msgbus.h
     optional bytes ProtobufError = 400;
-
-    optional uint64 ETag = 2;
-    optional bytes TypeMetadata = 3;
+ 
+    optional uint64 ETag = 2; 
+    optional bytes TypeMetadata = 3; 
     optional bytes FunctionMetadata = 4;
-}
-
+} 
+ 
 message TMessageBusTraceRequest {
     enum ECommand {
         START = 0;

@@ -21,9 +21,9 @@ PEERDIR(
     ydb/library/yql/public/issue
     ydb/library/yql/public/udf
     ydb/library/yql/utils
-    ydb/library/yql/core/issue/protos
-    ydb/library/yql/parser/proto_ast
-    ydb/library/yql/parser/proto_ast/gen/jsonpath
+    ydb/library/yql/core/issue/protos 
+    ydb/library/yql/parser/proto_ast 
+    ydb/library/yql/parser/proto_ast/gen/jsonpath 
 )
 
 SRCS(
@@ -39,8 +39,8 @@ SRCS(
 
 GENERATE_ENUM_SERIALIZATION(ast_nodes.h)
 
-END()
-
-RECURSE_FOR_TESTS(
-    ut
-)
+END() 
+ 
+RECURSE_FOR_TESTS( 
+    ut 
+) 

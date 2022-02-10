@@ -2,7 +2,7 @@
 
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
 
-#include <ydb/library/yql/core/yql_expr_optimize.h>
+#include <ydb/library/yql/core/yql_expr_optimize.h> 
 
 namespace NKikimr {
 namespace NKqp {
@@ -298,7 +298,7 @@ public:
             return TStatus::Ok;
         }
 
-        TOptimizeExprSettings optSettings(nullptr);
+        TOptimizeExprSettings optSettings(nullptr); 
         optSettings.VisitChanges = false;
         TStatus status = OptimizeExpr(input, output,
             [](const TExprNode::TPtr& input, TExprContext& ctx) {

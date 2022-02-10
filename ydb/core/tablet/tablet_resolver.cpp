@@ -158,13 +158,13 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
         }
     };
 
-    typedef NCache::TUnboundedCacheOnMap<ui64, TAutoPtr<TEntry>> TUnresolvedTablets;
-    typedef NCache::T2QCache<ui64, TAutoPtr<TEntry>> TResolvedTablets;
+    typedef NCache::TUnboundedCacheOnMap<ui64, TAutoPtr<TEntry>> TUnresolvedTablets; 
+    typedef NCache::T2QCache<ui64, TAutoPtr<TEntry>> TResolvedTablets; 
 
-    TIntrusivePtr<TTabletResolverConfig> Config;
-    TActorSystem* ActorSystem;
-    TUnresolvedTablets UnresolvedTablets;
-    TResolvedTablets ResolvedTablets;
+    TIntrusivePtr<TTabletResolverConfig> Config; 
+    TActorSystem* ActorSystem; 
+    TUnresolvedTablets UnresolvedTablets; 
+    TResolvedTablets ResolvedTablets; 
     THashSet<ui64> TabletsOnStopList;
     THashMap<ui32, TString> NodeToDcMapping;
 
@@ -352,7 +352,7 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
         SendQueued(msg.TabletID, entry, ctx);
     }
 
-    void DropEntry(ui64 tabletId, TEntry& entry, const TActorContext &ctx) {
+    void DropEntry(ui64 tabletId, TEntry& entry, const TActorContext &ctx) { 
         LOG_DEBUG(ctx, NKikimrServices::TABLET_RESOLVER,
                   "DropEntry tabletId: %" PRIu64 " followers: %" PRIu64,
                   tabletId, entry.KnownFollowers.size());
@@ -361,8 +361,8 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
                 ctx.Send(x->Ev->Sender, new TEvTabletResolver::TEvForwardResult(NKikimrProto::ERROR, tabletId));
             }
         }
-        ResolvedTablets.Erase(tabletId);
-        UnresolvedTablets.Erase(tabletId);
+        ResolvedTablets.Erase(tabletId); 
+        UnresolvedTablets.Erase(tabletId); 
 
         if (TabletResolverNegativeCacheTimeout) {
             if (TabletsOnStopList.emplace(tabletId).second)
@@ -370,41 +370,41 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
         }
     }
 
-    TAutoPtr<TEntry>& GetEntry(ui64 tabletId, const TActorContext &ctx) {
-        TAutoPtr<TEntry>* entryPtr;
-        if (!ResolvedTablets.Find(tabletId, entryPtr)) {
-            if (!UnresolvedTablets.Find(tabletId, entryPtr)) {
-                ActorSystem = ctx.ExecutorThread.ActorSystem;
-                UnresolvedTablets.Insert(tabletId, TAutoPtr<TEntry>(new TEntry()), entryPtr);
-            }
-        }
-
-        return *entryPtr;
-    }
-
-    TAutoPtr<TEntry>* FindEntry(ui64 tabletId) {
-        TAutoPtr<TEntry>* entryPtr;
-        if (!ResolvedTablets.Find(tabletId, entryPtr)) {
-            if (!UnresolvedTablets.Find(tabletId, entryPtr)) {
-                return nullptr;
-            }
-        }
-
-        return entryPtr;
-    }
-
-    void MoveEntryToResolved(ui64 tabletId, TAutoPtr<TEntry>& entry) {
-        TAutoPtr<TEntry>* resolvedEntryPtr;
+    TAutoPtr<TEntry>& GetEntry(ui64 tabletId, const TActorContext &ctx) { 
+        TAutoPtr<TEntry>* entryPtr; 
+        if (!ResolvedTablets.Find(tabletId, entryPtr)) { 
+            if (!UnresolvedTablets.Find(tabletId, entryPtr)) { 
+                ActorSystem = ctx.ExecutorThread.ActorSystem; 
+                UnresolvedTablets.Insert(tabletId, TAutoPtr<TEntry>(new TEntry()), entryPtr); 
+            } 
+        } 
+ 
+        return *entryPtr; 
+    } 
+ 
+    TAutoPtr<TEntry>* FindEntry(ui64 tabletId) { 
+        TAutoPtr<TEntry>* entryPtr; 
+        if (!ResolvedTablets.Find(tabletId, entryPtr)) { 
+            if (!UnresolvedTablets.Find(tabletId, entryPtr)) { 
+                return nullptr; 
+            } 
+        } 
+ 
+        return entryPtr; 
+    } 
+ 
+    void MoveEntryToResolved(ui64 tabletId, TAutoPtr<TEntry>& entry) { 
+        TAutoPtr<TEntry>* resolvedEntryPtr; 
         Y_VERIFY(ResolvedTablets.Insert(tabletId, entry, resolvedEntryPtr));
         Y_VERIFY(UnresolvedTablets.Erase(tabletId));
-    }
-
-    void MoveEntryToUnresolved(ui64 tabletId, TAutoPtr<TEntry>& entry) {
-        TAutoPtr<TEntry>* unresolvedEntryPtr;
+    } 
+ 
+    void MoveEntryToUnresolved(ui64 tabletId, TAutoPtr<TEntry>& entry) { 
+        TAutoPtr<TEntry>* unresolvedEntryPtr; 
         Y_VERIFY(UnresolvedTablets.Insert(tabletId, entry, unresolvedEntryPtr));
         Y_VERIFY(ResolvedTablets.Erase(tabletId));
-    }
-
+    } 
+ 
     void CheckDelayedNodeProblem(ui64 tabletId, const TActorContext &ctx) {
         TAutoPtr<TEntry>* entryHolder = FindEntry(tabletId);
         if (!entryHolder) {
@@ -473,8 +473,8 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
 
         CheckDelayedNodeProblem(tabletId, ctx);
 
-        TAutoPtr<TEntry> &entryHolder = GetEntry(tabletId, ctx);
-        TEntry& entry = *entryHolder.Get();
+        TAutoPtr<TEntry> &entryHolder = GetEntry(tabletId, ctx); 
+        TEntry& entry = *entryHolder.Get(); 
 
         LOG_DEBUG(ctx, NKikimrServices::TABLET_RESOLVER,
                   "Handle TEvForward tabletId: %" PRIu64 " entry.State: %s ev: %s",
@@ -521,13 +521,13 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
         TEvTabletResolver::TEvTabletProblem *msg = ev->Get();
         const ui64 tabletId = msg->TabletID;
 
-        TAutoPtr<TEntry>* entryHolder = FindEntry(tabletId);
+        TAutoPtr<TEntry>* entryHolder = FindEntry(tabletId); 
         if (!entryHolder) {
             LOG_DEBUG(ctx, NKikimrServices::TABLET_RESOLVER, "Handle TEvTabletProblem tabletId: %" PRIu64
                 " no entyHolder", tabletId);
             return;
         }
-        TEntry &entry = *entryHolder->Get();
+        TEntry &entry = *entryHolder->Get(); 
 
         LOG_DEBUG(ctx, NKikimrServices::TABLET_RESOLVER, "Handle TEvTabletProblem tabletId: %" PRIu64
             " entry.State: %s", tabletId, TEntry::StateToString(entry.State));
@@ -540,7 +540,7 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
             if (!msg->TabletActor || entry.KnownLeaderTablet == msg->TabletActor) {
                 ResolveRequest(tabletId, ctx);
                 entry.State = TEntry::StProblemResolve;
-                MoveEntryToUnresolved(tabletId, *entryHolder);
+                MoveEntryToUnresolved(tabletId, *entryHolder); 
             } else {
                 // find in follower list
                 for (auto it = entry.KnownFollowers.begin(), end = entry.KnownFollowers.end(); it != end; ++it) {
@@ -552,7 +552,7 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
                     }
                 }
             }
-
+ 
             break;
         case TEntry::StProblemResolve:
         case TEntry::StProblemPing:
@@ -594,13 +594,13 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
         const ui64 tabletId = msg->TabletID;
         const bool success = (msg->Status == NKikimrProto::OK); // todo: handle 'locked' state
 
-        TAutoPtr<TEntry>* entryHolder = FindEntry(tabletId);
+        TAutoPtr<TEntry>* entryHolder = FindEntry(tabletId); 
         if (!entryHolder) {
             LOG_DEBUG(ctx, NKikimrServices::TABLET_RESOLVER, "Handle TEvInfo tabletId: %" PRIu64 " no entryHolder",
                 tabletId);
             return;
         }
-        TEntry &entry = *entryHolder->Get();
+        TEntry &entry = *entryHolder->Get(); 
 
         LOG_DEBUG(ctx, NKikimrServices::TABLET_RESOLVER, "Handle TEvInfo tabletId: %" PRIu64
             " entry.State: %s success: %s ev: %s", tabletId, TEntry::StateToString(entry.State),
@@ -614,15 +614,15 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
                 if (msg->CurrentLeaderTablet) {
                     entry.State = TEntry::StNormal;
                     ApplyEntryInfo(*msg, entry, ctx);
-                    MoveEntryToResolved(tabletId, *entryHolder);
+                    MoveEntryToResolved(tabletId, *entryHolder); 
                 } else {
                     // HACK: Don't cache invalid CurrentLeaderTablet
                     // FIXME: Use subscription + cache here to reduce the workload
                     ApplyEntryInfo(*msg, entry, ctx);
-                    DropEntry(tabletId, entry, ctx);
+                    DropEntry(tabletId, entry, ctx); 
                 }
             } else {
-                DropEntry(tabletId, entry, ctx);
+                DropEntry(tabletId, entry, ctx); 
             }
             break;
         case TEntry::StFollowerUpdate:
@@ -661,11 +661,11 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
                     }
                 }
             } else {
-                DropEntry(tabletId, entry, ctx);
+                DropEntry(tabletId, entry, ctx); 
             }
             break;
         case TEntry::StProblemPing:
-        case TEntry::StNormal:
+        case TEntry::StNormal: 
             break;
         default:
             Y_FAIL();
@@ -676,13 +676,13 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
         NKikimrTabletBase::TEvPong &record = ev->Get()->Record;
         const ui64 tabletId = record.GetTabletID();
 
-        TAutoPtr<TEntry>* entryHolder = FindEntry(tabletId);
+        TAutoPtr<TEntry>* entryHolder = FindEntry(tabletId); 
         if (!entryHolder) {
             LOG_DEBUG(ctx, NKikimrServices::TABLET_RESOLVER, "Handle TEvPong tabletId: %" PRIu64 " no entryHolder",
                 tabletId);
             return;
         }
-        TEntry &entry = *entryHolder->Get();
+        TEntry &entry = *entryHolder->Get(); 
 
         LOG_DEBUG(ctx, NKikimrServices::TABLET_RESOLVER, "Handle TEvPong tabletId: %" PRIu64 " entry.State: %s",
             tabletId, TEntry::StateToString(entry.State));
@@ -698,7 +698,7 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
                 entry.Cookie.Detach();
                 entry.State = TEntry::StNormal;
                 SendQueued(tabletId, entry, ctx);
-                MoveEntryToResolved(tabletId, *entryHolder);
+                MoveEntryToResolved(tabletId, *entryHolder); 
             }
             break;
         default:
@@ -741,13 +741,13 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
         TEvPrivate::TEvPingTimeout *msg = ev->Get();
         const ui64 tabletId = msg->TabletID;
 
-        TAutoPtr<TEntry>* entryHolder = FindEntry(tabletId);
+        TAutoPtr<TEntry>* entryHolder = FindEntry(tabletId); 
         if (!entryHolder) {
             LOG_DEBUG(ctx, NKikimrServices::TABLET_RESOLVER, "Handle TEvPingTimeout tabletId: %" PRIu64
                 " no entryHolder", tabletId);
             return;
         }
-        TEntry &entry = *entryHolder->Get();
+        TEntry &entry = *entryHolder->Get(); 
 
         LOG_DEBUG(ctx, NKikimrServices::TABLET_RESOLVER, "Handle TEvPingTimeout tabletId: %" PRIu64 " entry.State: %s",
             tabletId, TEntry::StateToString(entry.State));
@@ -761,7 +761,7 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
             break;
         case TEntry::StProblemPing:
             if (msg->Cookie.DetachEvent()) {
-                DropEntry(tabletId, entry, ctx);
+                DropEntry(tabletId, entry, ctx); 
             }
             break;
         default:
@@ -806,31 +806,31 @@ public:
 
     TTabletResolver(const TIntrusivePtr<TTabletResolverConfig> &config)
         : Config(config)
-        , ActorSystem(nullptr)
-        , ResolvedTablets(new NCache::T2QCacheConfig())
-    {
-        ResolvedTablets.SetOverflowCallback([=](const NCache::ICache<ui64, TAutoPtr<TEntry>>& cache) {
-            return cache.GetUsedSize() >= Config->TabletCacheLimit;
-        });
-
-        ResolvedTablets.SetEvictionCallback([&](const ui64& key, TAutoPtr<TEntry>& value, ui64 size) {
+        , ActorSystem(nullptr) 
+        , ResolvedTablets(new NCache::T2QCacheConfig()) 
+    { 
+        ResolvedTablets.SetOverflowCallback([=](const NCache::ICache<ui64, TAutoPtr<TEntry>>& cache) { 
+            return cache.GetUsedSize() >= Config->TabletCacheLimit; 
+        }); 
+ 
+        ResolvedTablets.SetEvictionCallback([&](const ui64& key, TAutoPtr<TEntry>& value, ui64 size) { 
             Y_UNUSED(size);
-
-            if (!value)
-                return;
-
+ 
+            if (!value) 
+                return; 
+ 
             if (TEntry::TQueueType *queue = value->Queue.Get()) {
-                for (TAutoPtr<TEntry::TQueueEntry> x = queue->Pop(); !!x; x.Reset(queue->Pop())) {
+                for (TAutoPtr<TEntry::TQueueEntry> x = queue->Pop(); !!x; x.Reset(queue->Pop())) { 
                     ActorSystem->Send(x->Ev->Sender, new TEvTabletResolver::TEvForwardResult(NKikimrProto::RACE, key));
-                }
-            }
-        });
-    }
+                } 
+            } 
+        }); 
+    } 
 
-    ~TTabletResolver() {
-        ResolvedTablets.SetEvictionCallback(&TResolvedTablets::DefaultEvictionCallback);
-    }
-
+    ~TTabletResolver() { 
+        ResolvedTablets.SetEvictionCallback(&TResolvedTablets::DefaultEvictionCallback); 
+    } 
+ 
     void Bootstrap(const TActorContext &ctx) {
         RefreshNodes(ctx);
         Become(&TThis::StateWork);
@@ -869,7 +869,7 @@ public:
 };
 
 IActor* CreateTabletResolver(const TIntrusivePtr<TTabletResolverConfig> &config) {
-    return new TTabletResolver(config);
+    return new TTabletResolver(config); 
 }
 
 TActorId MakeTabletResolverID() {

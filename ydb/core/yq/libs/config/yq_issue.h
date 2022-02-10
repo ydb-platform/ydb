@@ -2,7 +2,7 @@
 
 #include <ydb/core/yq/libs/config/protos/issue_id.pb.h>
 
-#include <ydb/library/yql/public/issue/yql_issue.h>
+#include <ydb/library/yql/public/issue/yql_issue.h> 
 
 namespace NYq {
 

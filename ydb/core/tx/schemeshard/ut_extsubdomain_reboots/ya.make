@@ -26,12 +26,12 @@ IF (NOT WITH_VALGRIND)
         ydb/core/tx/schemeshard/ut_helpers
         ydb/library/yql/public/udf/service/exception_policy
     )
-
+ 
     YQL_LAST_ABI_VERSION()
-
+ 
     SRCS(
         ut_extsubdomain_reboots.cpp
     )
-
+ 
     END()
 ENDIF()

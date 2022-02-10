@@ -2,8 +2,8 @@
 
 #include <util/generic/strbuf.h>
 #include <util/generic/intrlist.h>
-#include <util/system/datetime.h>
-#include <util/system/hp_timer.h>
+#include <util/system/datetime.h> 
+#include <util/system/hp_timer.h> 
 
 namespace NKikimr {
 namespace NMiniKQL {
@@ -103,36 +103,36 @@ IStatsRegistryPtr CreateDefaultStatsRegistry();
 #define MKQL_INC_STAT(statRegistry, key) MKQL_ADD_STAT(statRegistry, key, 1)
 #define MKQL_DEC_STAT(statRegistry, key) MKQL_ADD_STAT(statRegistry, key, -1)
 
-class TStatTimer {
-public:
-    TStatTimer(const TStatKey& key)
-        : Key_(key)
-        , Total_(0)
-        , Start_(0)
-    {}
-
-    void Acquire() {
-        Start_ = GetCycleCount();
-    }
-
-    void Release() {
-        Total_ += GetCycleCount() - Start_;
-    }
-
-    void Reset() {
-        Total_ = 0;
-    }
-
-    void Report(IStatsRegistry* statRegistry) const {
-        auto value = (i64)(1e3 * Total_ / NHPTimer::GetClockRate());
-        MKQL_ADD_STAT(statRegistry, Key_, value);
-    }
-
-private:
-    const TStatKey& Key_;
-    i64 Total_;
-    i64 Start_;
-};
-
+class TStatTimer { 
+public: 
+    TStatTimer(const TStatKey& key) 
+        : Key_(key) 
+        , Total_(0) 
+        , Start_(0) 
+    {} 
+ 
+    void Acquire() { 
+        Start_ = GetCycleCount(); 
+    } 
+ 
+    void Release() { 
+        Total_ += GetCycleCount() - Start_; 
+    } 
+ 
+    void Reset() { 
+        Total_ = 0; 
+    } 
+ 
+    void Report(IStatsRegistry* statRegistry) const { 
+        auto value = (i64)(1e3 * Total_ / NHPTimer::GetClockRate()); 
+        MKQL_ADD_STAT(statRegistry, Key_, value); 
+    } 
+ 
+private: 
+    const TStatKey& Key_; 
+    i64 Total_; 
+    i64 Start_; 
+}; 
+ 
 } // namespace NMiniKQL
 } // namespace NKikimr

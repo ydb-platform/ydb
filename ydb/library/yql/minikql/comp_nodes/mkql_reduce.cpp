@@ -1,50 +1,50 @@
-#include "mkql_reduce.h"
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h>
-#include <ydb/library/yql/minikql/mkql_node_cast.h>
-
-namespace NKikimr {
-namespace NMiniKQL {
-
+#include "mkql_reduce.h" 
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h> 
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h> 
+#include <ydb/library/yql/minikql/mkql_node_cast.h> 
+ 
+namespace NKikimr { 
+namespace NMiniKQL { 
+ 
 namespace {
 
 template<bool IsStream>
 class TReduceWrapper : public TMutableCodegeneratorRootNode<TReduceWrapper<IsStream>> {
     typedef TMutableCodegeneratorRootNode<TReduceWrapper<IsStream>> TBaseComputation;
-public:
+public: 
     TReduceWrapper(TComputationMutables& mutables, EValueRepresentation kind, IComputationNode* list, IComputationExternalNode* item, IComputationExternalNode* state1,
-        IComputationNode* newState1, IComputationNode* newState2,
+        IComputationNode* newState1, IComputationNode* newState2, 
         IComputationNode* initialState1, IComputationExternalNode* itemState2, IComputationExternalNode* state3,
-        IComputationNode* newState3, IComputationNode* initialState3)
+        IComputationNode* newState3, IComputationNode* initialState3) 
         : TBaseComputation(mutables, kind)
         , List(list)
-        , Item(item)
-        , State1(state1)
-        , NewState1(newState1)
-        , NewState2(newState2)
-        , InitialState1(initialState1)
-        , ItemState2(itemState2)
-        , State3(state3)
-        , NewState3(newState3)
-        , InitialState3(initialState3)
-    {
-    }
-
+        , Item(item) 
+        , State1(state1) 
+        , NewState1(newState1) 
+        , NewState2(newState2) 
+        , InitialState1(initialState1) 
+        , ItemState2(itemState2) 
+        , State3(state3) 
+        , NewState3(newState3) 
+        , InitialState3(initialState3) 
+    { 
+    } 
+ 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& compCtx) const {
         State1->SetValue(compCtx, InitialState1->GetValue(compCtx));
         State3->SetValue(compCtx, InitialState3->GetValue(compCtx));
-
+ 
         TThresher<IsStream>::DoForEachItem(List->GetValue(compCtx),
             [this, &compCtx] (NUdf::TUnboxedValue&& item) {
                 Item->SetValue(compCtx, std::move(item));
                 State1->SetValue(compCtx, NewState1->GetValue(compCtx));
             }
         );
-
+ 
         ItemState2->SetValue(compCtx, NewState2->GetValue(compCtx));
         return NewState3->GetValue(compCtx).Release();
-    }
-
+    } 
+ 
 #ifndef MKQL_DISABLE_CODEGEN
     Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
         auto &context = ctx.Codegen->GetContext();
@@ -145,35 +145,35 @@ private:
         this->DependsOn(NewState1);
         this->DependsOn(NewState2);
         this->DependsOn(NewState3);
-        this->Own(Item);
-        this->Own(State1);
-        this->Own(ItemState2);
-        this->Own(State3);
-    }
-
-    IComputationNode* const List;
+        this->Own(Item); 
+        this->Own(State1); 
+        this->Own(ItemState2); 
+        this->Own(State3); 
+    } 
+ 
+    IComputationNode* const List; 
     IComputationExternalNode* const Item;
     IComputationExternalNode* const State1;
-    IComputationNode* const NewState1;
-    IComputationNode* const NewState2;
-    IComputationNode* const InitialState1;
+    IComputationNode* const NewState1; 
+    IComputationNode* const NewState2; 
+    IComputationNode* const InitialState1; 
     IComputationExternalNode* const ItemState2;
     IComputationExternalNode* const State3;
-    IComputationNode* const NewState3;
-    IComputationNode* const InitialState3;
-};
-
+    IComputationNode* const NewState3; 
+    IComputationNode* const InitialState3; 
+}; 
+ 
 }
 
-IComputationNode* WrapReduce(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
-    MKQL_ENSURE(callable.GetInputsCount() == 10, "Expected 10 args");
-
-    auto list = LocateNode(ctx.NodeLocator, callable, 0);
-    auto initialState1 = LocateNode(ctx.NodeLocator, callable, 1);
-    auto initialState3 = LocateNode(ctx.NodeLocator, callable, 2);
-    auto newState1 = LocateNode(ctx.NodeLocator, callable, 5);
-    auto newState2 = LocateNode(ctx.NodeLocator, callable, 6);
-    auto newState3 = LocateNode(ctx.NodeLocator, callable, 9);
+IComputationNode* WrapReduce(TCallable& callable, const TComputationNodeFactoryContext& ctx) { 
+    MKQL_ENSURE(callable.GetInputsCount() == 10, "Expected 10 args"); 
+ 
+    auto list = LocateNode(ctx.NodeLocator, callable, 0); 
+    auto initialState1 = LocateNode(ctx.NodeLocator, callable, 1); 
+    auto initialState3 = LocateNode(ctx.NodeLocator, callable, 2); 
+    auto newState1 = LocateNode(ctx.NodeLocator, callable, 5); 
+    auto newState2 = LocateNode(ctx.NodeLocator, callable, 6); 
+    auto newState3 = LocateNode(ctx.NodeLocator, callable, 9); 
     auto itemArg = LocateExternalNode(ctx.NodeLocator, callable, 3);
     auto state1NodeArg = LocateExternalNode(ctx.NodeLocator, callable, 4);
     auto itemState2Arg = LocateExternalNode(ctx.NodeLocator, callable, 7);
@@ -186,7 +186,7 @@ IComputationNode* WrapReduce(TCallable& callable, const TComputationNodeFactoryC
         return new TReduceWrapper<false>(ctx.Mutables, kind, list, itemArg, state1NodeArg, newState1, newState2,
             initialState1, itemState2Arg, state3NodeArg, newState3, initialState3);
     }
-}
-
-}
-}
+} 
+ 
+} 
+} 

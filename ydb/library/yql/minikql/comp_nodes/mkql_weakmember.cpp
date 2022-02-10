@@ -1,11 +1,11 @@
 #include "mkql_fromyson.h"
 #include <library/cpp/yson/varint.h>
 #include <library/cpp/yson/detail.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
-#include <ydb/library/yql/minikql/mkql_node_cast.h>
-#include <ydb/library/yql/minikql/mkql_node_builder.h>
-#include <ydb/library/yql/minikql/mkql_string_util.h>
-#include <ydb/library/yql/minikql/mkql_unboxed_value_stream.h>
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h> 
+#include <ydb/library/yql/minikql/mkql_node_cast.h> 
+#include <ydb/library/yql/minikql/mkql_node_builder.h> 
+#include <ydb/library/yql/minikql/mkql_string_util.h> 
+#include <ydb/library/yql/minikql/mkql_unboxed_value_stream.h> 
 
 namespace NKikimr {
 namespace NMiniKQL {
@@ -33,23 +33,23 @@ public:
         }
 
         if (const auto& otherDict = OtherDict->GetValue(ctx)) {
-            if (auto tryMember = otherDict.Lookup(MemberName)) {
-                const bool isString = otherDict.Contains(OtherIsStringMemberName);
-                if (isString) {
-                    if (SchemeType == NUdf::EDataSlot::Yson) {
-                        const auto& ref = tryMember.AsStringRef();
-                        const auto size = ref.Size();
-                        MKQL_ENSURE(size <= std::numeric_limits<i32>::max(), "TryWeakMemberFromDict: Unable to fit string to i32");
-                        TUnboxedValueStream stringStream;
+            if (auto tryMember = otherDict.Lookup(MemberName)) { 
+                const bool isString = otherDict.Contains(OtherIsStringMemberName); 
+                if (isString) { 
+                    if (SchemeType == NUdf::EDataSlot::Yson) { 
+                        const auto& ref = tryMember.AsStringRef(); 
+                        const auto size = ref.Size(); 
+                        MKQL_ENSURE(size <= std::numeric_limits<i32>::max(), "TryWeakMemberFromDict: Unable to fit string to i32"); 
+                        TUnboxedValueStream stringStream; 
                         stringStream.DoWrite(&NYson::NDetail::StringMarker, 1);
                         NYson::WriteVarInt32(&stringStream, size);
-                        stringStream.DoWrite(ref.Data(), size);
-                        return stringStream.Value();
-                    } else if (SchemeType == NUdf::EDataSlot::String) {
-                        return tryMember.Release();
-                    } else {
-                        return {};
-                    }
+                        stringStream.DoWrite(ref.Data(), size); 
+                        return stringStream.Value(); 
+                    } else if (SchemeType == NUdf::EDataSlot::String) { 
+                        return tryMember.Release(); 
+                    } else { 
+                        return {}; 
+                    } 
                 } else {
                     return SimpleValueFromYson(SchemeType, tryMember.AsStringRef());
                 }

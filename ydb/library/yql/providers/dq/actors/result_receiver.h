@@ -1,7 +1,7 @@
 #pragma once
 
-#include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
-#include <ydb/library/yql/providers/dq/api/protos/service.pb.h>
+#include <ydb/library/yql/providers/dq/common/yql_dq_settings.h> 
+#include <ydb/library/yql/providers/dq/api/protos/service.pb.h> 
 
 #include <library/cpp/actors/core/actor.h>
 
@@ -14,8 +14,8 @@ THolder<NActors::IActor> MakeResultReceiver(
     const TDqConfiguration::TPtr& settings,
 //    const Yql::DqsProto::TFullResultTable& resultTable,
     const THashMap<TString, TString>& secureParams,
-    const TString& resultBuilder,
-    bool discard
-);
+    const TString& resultBuilder, 
+    bool discard 
+); 
 
 } // namespace NYql

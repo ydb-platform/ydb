@@ -1,13 +1,13 @@
 #pragma once
 
-#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_sources.h>
-#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_sinks.h>
-#include <ydb/library/yql/dq/actors/dq_events_ids.h>
-#include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
-#include <ydb/library/yql/dq/common/dq_common.h>
-#include <ydb/library/yql/dq/proto/dq_checkpoint.pb.h>
-#include <ydb/library/yql/dq/runtime/dq_tasks_runner.h>
-#include <ydb/library/yql/dq/runtime/dq_transport.h>
+#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_sources.h> 
+#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_sinks.h> 
+#include <ydb/library/yql/dq/actors/dq_events_ids.h> 
+#include <ydb/library/yql/dq/actors/protos/dq_events.pb.h> 
+#include <ydb/library/yql/dq/common/dq_common.h> 
+#include <ydb/library/yql/dq/proto/dq_checkpoint.pb.h> 
+#include <ydb/library/yql/dq/runtime/dq_tasks_runner.h> 
+#include <ydb/library/yql/dq/runtime/dq_transport.h> 
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/hfunc.h>

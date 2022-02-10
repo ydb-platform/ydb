@@ -13,9 +13,9 @@
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/public/lib/deprecated/kicli/kicli.h>
 
-#include <ydb/library/yql/minikql/mkql_node.h>
-#include <ydb/library/yql/minikql/mkql_node_serialization.h>
-#include <ydb/library/yql/minikql/mkql_function_registry.h>
+#include <ydb/library/yql/minikql/mkql_node.h> 
+#include <ydb/library/yql/minikql/mkql_node_serialization.h> 
+#include <ydb/library/yql/minikql/mkql_function_registry.h> 
 
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/json_value.h>
@@ -362,14 +362,14 @@ public:
             return builder.NewDataLiteral<ui32>(jsonValue.GetUInteger());
         case NScheme::NTypeIds::Uint64:
             return builder.NewDataLiteral<ui64>(jsonValue.GetUInteger());
-        case NScheme::NTypeIds::Utf8:
-            return builder.NewDataLiteral<NUdf::EDataSlot::Utf8>(jsonValue.GetString());
-        case NScheme::NTypeIds::String:
-            return builder.NewDataLiteral<NUdf::EDataSlot::String>(jsonValue.GetString());
-        case NScheme::NTypeIds::Yson:
-            return pgmBuilder.NewDataLiteral<NUdf::EDataSlot::Yson>(jsonValue.GetString());
+        case NScheme::NTypeIds::Utf8: 
+            return builder.NewDataLiteral<NUdf::EDataSlot::Utf8>(jsonValue.GetString()); 
+        case NScheme::NTypeIds::String: 
+            return builder.NewDataLiteral<NUdf::EDataSlot::String>(jsonValue.GetString()); 
+        case NScheme::NTypeIds::Yson: 
+            return pgmBuilder.NewDataLiteral<NUdf::EDataSlot::Yson>(jsonValue.GetString()); 
         case NScheme::NTypeIds::Json:
-            return pgmBuilder.NewDataLiteral<NUdf::EDataSlot::Json>(jsonValue.GetString());
+            return pgmBuilder.NewDataLiteral<NUdf::EDataSlot::Json>(jsonValue.GetString()); 
         case NScheme::NTypeIds::JsonDocument:
             return pgmBuilder.NewDataLiteral<NUdf::EDataSlot::JsonDocument>(jsonValue.GetString());
         case NScheme::NTypeIds::DyNumber:
@@ -492,9 +492,9 @@ public:
         try {
             const NMiniKQL::IFunctionRegistry& functionRegistry = *AppData(ctx)->FunctionRegistry;
             TAlignedPagePoolCounters counters(AppData(ctx)->Counters, "build");
-            NMiniKQL::TScopedAlloc alloc(counters, functionRegistry.SupportsSizedAllocators());
-            NMiniKQL::TTypeEnvironment env(alloc);
-            NMiniKQL::TKikimrProgramBuilder pgmBuilder(env, functionRegistry);
+            NMiniKQL::TScopedAlloc alloc(counters, functionRegistry.SupportsSizedAllocators()); 
+            NMiniKQL::TTypeEnvironment env(alloc); 
+            NMiniKQL::TKikimrProgramBuilder pgmBuilder(env, functionRegistry); 
             NMiniKQL::TRuntimeNode pgmReturn = pgmBuilder.NewEmptyListOfVoid();
             const NSchemeCache::TSchemeCacheNavigate::TEntry& tableInfo = CacheNavigate->ResultSet.front();
             TVector<const NTxProxy::TTableColumnInfo*> keys;

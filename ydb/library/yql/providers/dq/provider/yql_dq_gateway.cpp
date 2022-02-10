@@ -1,10 +1,10 @@
 #include "yql_dq_gateway.h"
 
-#include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
-#include <ydb/library/yql/providers/dq/api/grpc/api.grpc.pb.h>
-#include <ydb/library/yql/providers/dq/backtrace/backtrace.h>
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
-#include <ydb/library/yql/providers/dq/config/config.pb.h>
+#include <ydb/library/yql/providers/common/provider/yql_provider_names.h> 
+#include <ydb/library/yql/providers/dq/api/grpc/api.grpc.pb.h> 
+#include <ydb/library/yql/providers/dq/backtrace/backtrace.h> 
+#include <ydb/library/yql/public/issue/yql_issue_message.h> 
+#include <ydb/library/yql/providers/dq/config/config.pb.h> 
 #include <ydb/library/yql/utils/log/log.h>
 
 #include <ydb/public/lib/yson_value/ydb_yson_value.h>
@@ -263,7 +263,7 @@ public:
             for (const auto&[k, v] : secureParams) {
                 secParams[k] = v;
             }
-        }
+        } 
 
         {
             auto& gParams = *queryPB.MutableGraphParams();
@@ -272,7 +272,7 @@ public:
             }
         }
 
-        queryPB.SetDiscard(discard);
+        queryPB.SetDiscard(discard); 
 
         int retry = settings->MaxRetries.Get().GetOrElse(5);
 

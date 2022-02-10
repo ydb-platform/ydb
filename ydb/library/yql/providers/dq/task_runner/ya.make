@@ -13,16 +13,16 @@ PEERDIR(
     ydb/library/yql/utils
     ydb/library/yql/utils/backtrace
     ydb/library/yql/utils/log
-    ydb/library/yql/dq/proto
-    ydb/library/yql/dq/runtime
-    ydb/library/yql/providers/common/proto
-    ydb/library/yql/providers/dq/api/protos
-    ydb/library/yql/providers/dq/counters
-    ydb/library/yql/providers/dq/interface
+    ydb/library/yql/dq/proto 
+    ydb/library/yql/dq/runtime 
+    ydb/library/yql/providers/common/proto 
+    ydb/library/yql/providers/dq/api/protos 
+    ydb/library/yql/providers/dq/counters 
+    ydb/library/yql/providers/dq/interface 
 )
 
 YQL_LAST_ABI_VERSION()
-
+ 
 SRCS(
     file_cache.cpp
     tasks_runner_local.cpp

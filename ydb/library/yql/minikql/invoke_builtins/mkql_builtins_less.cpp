@@ -1,8 +1,8 @@
 #include "mkql_builtins_compare.h"
-#include "mkql_builtins_datetime.h"
+#include "mkql_builtins_datetime.h" 
 #include "mkql_builtins_decimal.h"
 
-#include <ydb/library/yql/minikql/mkql_type_ops.h>
+#include <ydb/library/yql/minikql/mkql_type_ops.h> 
 
 namespace NKikimr {
 namespace NMiniKQL {
@@ -155,19 +155,19 @@ struct TDiffDateLess : public TCompareArithmeticBinary<TLeft, TRight, TDiffDateL
         return std::is_same<TLeft, TRight>::value ?
             Less<TLeft, TRight, Aggr>(left, right):
             Less<TScaledDate, TScaledDate, Aggr>(ToScaledDate<TLeft>(left), ToScaledDate<TRight>(right));
-    }
-
-#ifndef MKQL_DISABLE_CODEGEN
+    } 
+ 
+#ifndef MKQL_DISABLE_CODEGEN 
     static Value* Gen(Value* left, Value* right, const TCodegenContext& ctx, BasicBlock*& block)
-    {
+    { 
         auto& context = ctx.Codegen->GetContext();
         return std::is_same<TLeft, TRight>::value ?
             GenLess<TLeft, TRight, Aggr>(left, right, context, block):
             GenLess<TScaledDate, TScaledDate, Aggr>(GenToScaledDate<TLeft>(left, context, block), GenToScaledDate<TRight>(right, context, block), context, block);
-    }
-#endif
-};
-
+    } 
+#endif 
+}; 
+ 
 template<typename TLeft, typename TRight, bool Aggr>
 struct TAggrTzDateLess : public TCompareArithmeticBinaryWithTimezone<TLeft, TRight, TAggrTzDateLess<TLeft, TRight, Aggr>>, public TAggrLess {
     static bool Do(TLeft left, TRight right)
@@ -259,7 +259,7 @@ void RegisterLess(IBuiltinFunctionRegistry& registry) {
     const auto name = "Less";
 
     RegisterComparePrimitive<TLess, TCompareArgsOpt>(registry, name);
-    RegisterCompareDatetime<TDiffDateLess, TCompareArgsOpt>(registry, name);
+    RegisterCompareDatetime<TDiffDateLess, TCompareArgsOpt>(registry, name); 
 
     RegisterCompareStrings<TCustomLess, TCompareArgsOpt>(registry, name);
     RegisterCompareCustomOpt<NUdf::TDataType<NUdf::TDecimal>, NUdf::TDataType<NUdf::TDecimal>, TDecimalLess, TCompareArgsOpt>(registry, name);

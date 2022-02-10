@@ -1,7 +1,7 @@
 #pragma once
 
-#include <ydb/library/yql/dq/common/dq_common.h>
-#include <ydb/library/yql/dq/runtime/dq_channel_storage.h>
+#include <ydb/library/yql/dq/common/dq_common.h> 
+#include <ydb/library/yql/dq/runtime/dq_channel_storage.h> 
 #include <library/cpp/actors/core/actor.h>
 
 namespace NKikimr::NKqp {

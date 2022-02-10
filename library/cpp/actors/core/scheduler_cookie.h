@@ -44,12 +44,12 @@ namespace NActors {
             return Cookie;
         }
 
-        ISchedulerCookie* Release() {
-            ISchedulerCookie* result = Cookie;
-            Cookie = nullptr;
-            return result;
-        }
-
+        ISchedulerCookie* Release() { 
+            ISchedulerCookie* result = Cookie; 
+            Cookie = nullptr; 
+            return result; 
+        } 
+ 
         void Reset(ISchedulerCookie* cookie) {
             Detach();
             Cookie = cookie;

@@ -10,9 +10,9 @@
 #include <ydb/core/yq/libs/config/protos/checkpoint_coordinator.pb.h>
 #include <ydb/public/api/protos/yq.pb.h>
 
-#include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
-#include <ydb/library/yql/dq/actors/compute/retry_queue.h>
-#include <ydb/library/yql/providers/dq/actors/events.h>
+#include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h> 
+#include <ydb/library/yql/dq/actors/compute/retry_queue.h> 
+#include <ydb/library/yql/providers/dq/actors/events.h> 
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 

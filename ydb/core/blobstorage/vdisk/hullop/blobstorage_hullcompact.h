@@ -344,7 +344,7 @@ namespace NKikimr {
             , It(it)
             , Worker(HullCtx, PDiskCtx, rtCtx->LevelIndex, it, (bool)FreshSegment, firstLsn, lastLsn, restoreDeadline,
                     partitionKey)
-            , CompactionID(TAppData::RandomProvider->GenRand64())
+            , CompactionID(TAppData::RandomProvider->GenRand64()) 
             , SkeletonId(rtCtx->SkeletonId)
         {}
     };

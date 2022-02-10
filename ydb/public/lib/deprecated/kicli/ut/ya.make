@@ -17,8 +17,8 @@ PEERDIR(
     ydb/public/lib/deprecated/kicli
 )
 
-YQL_LAST_ABI_VERSION()
-
+YQL_LAST_ABI_VERSION() 
+ 
 SRCS(
     cpp_ut.cpp
 )

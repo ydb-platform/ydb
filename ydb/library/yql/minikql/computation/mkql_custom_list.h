@@ -1,63 +1,63 @@
-#pragma once
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_impl.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
-
-namespace NKikimr {
-namespace NMiniKQL {
-
-class TCustomListValue : public TComputationValue<TCustomListValue> {
-public:
-    TCustomListValue(TMemoryUsageInfo* memInfo)
-        : TComputationValue(memInfo)
-    {
-    }
-
+#pragma once 
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_impl.h> 
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h> 
+ 
+namespace NKikimr { 
+namespace NMiniKQL { 
+ 
+class TCustomListValue : public TComputationValue<TCustomListValue> { 
+public: 
+    TCustomListValue(TMemoryUsageInfo* memInfo) 
+        : TComputationValue(memInfo) 
+    { 
+    } 
+ 
 private:
-    bool HasFastListLength() const override {
+    bool HasFastListLength() const override { 
         return bool(Length);
-    }
-
-    ui64 GetListLength() const override {
-        if (!Length) {
+    } 
+ 
+    ui64 GetListLength() const override { 
+        if (!Length) { 
             ui64 length = Iterator ? 1ULL : 0ULL;
             for (const auto it = Iterator ? std::move(Iterator) : NUdf::TBoxedValueAccessor::GetListIterator(*this); it.Skip();) {
-                ++length;
-            }
-
-            Length = length;
-        }
-
+                ++length; 
+            } 
+ 
+            Length = length; 
+        } 
+ 
         return *Length;
-    }
-
-    ui64 GetEstimatedListLength() const override {
-        return GetListLength();
-    }
-
-    bool HasListItems() const override {
-        if (HasItems) {
-            return *HasItems;
-        }
-
-        if (Length) {
-            HasItems = (*Length != 0);
-            return *HasItems;
-        }
-
+    } 
+ 
+    ui64 GetEstimatedListLength() const override { 
+        return GetListLength(); 
+    } 
+ 
+    bool HasListItems() const override { 
+        if (HasItems) { 
+            return *HasItems; 
+        } 
+ 
+        if (Length) { 
+            HasItems = (*Length != 0); 
+            return *HasItems; 
+        } 
+ 
         auto iter = NUdf::TBoxedValueAccessor::GetListIterator(*this);
         HasItems = iter.Skip();
         if (*HasItems) {
             Iterator = std::move(iter);
         }
-        return *HasItems;
-    }
-
-protected:
+        return *HasItems; 
+    } 
+ 
+protected: 
     mutable std::optional<ui64> Length;
     mutable std::optional<bool> HasItems;
     mutable NUdf::TUnboxedValue Iterator;
-};
-
+}; 
+ 
 class TForwardListValue : public TCustomListValue {
 public:
     class TIterator : public TComputationValue<TIterator> {
@@ -120,5 +120,5 @@ private:
     ui32 Index = 0;
 };
 
-}
-}
+} 
+} 

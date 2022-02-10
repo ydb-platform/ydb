@@ -1,21 +1,21 @@
-#include "mkql_proto.h"
+#include "mkql_proto.h" 
 
 #include <ydb/library/mkql_proto/ut/helpers/helpers.h>
 
-#include <ydb/library/yql/minikql/mkql_program_builder.h>
-#include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_node.h>
-#include <ydb/library/yql/minikql/comp_nodes/mkql_factories.h>
-
+#include <ydb/library/yql/minikql/mkql_program_builder.h> 
+#include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h> 
+#include <ydb/library/yql/minikql/computation/mkql_computation_node.h> 
+#include <ydb/library/yql/minikql/comp_nodes/mkql_factories.h> 
+ 
 #include <ydb/core/scheme_types/scheme_types_defs.h>
 #include <google/protobuf/text_format.h>
 #include <library/cpp/testing/unittest/registar.h>
-
+ 
 using namespace std::string_view_literals;
 
-namespace NKikimr {
-namespace NMiniKQL {
-
+namespace NKikimr { 
+namespace NMiniKQL { 
+ 
 Y_UNIT_TEST_SUITE(TMiniKQLProtoTestYdb) {
     Y_UNIT_TEST(TestExportVoidTypeYdb) {
         TestExportType<Ydb::Type>([](TProgramBuilder& pgmBuilder) {
@@ -35,10 +35,10 @@ Y_UNIT_TEST_SUITE(TMiniKQLProtoTestYdb) {
     Y_UNIT_TEST(TestExportDecimalTypeYdb) {
         TestExportType<Ydb::Type>([](TProgramBuilder& pgmBuilder) {
             NYql::NDecimal::TInt128 x;
-            ui64* p = (ui64*)&x;
-            p[0] = 1;
-            p[1] = 0;
-            auto pgmReturn = pgmBuilder.NewDecimalLiteral(x, 21, 8);
+            ui64* p = (ui64*)&x; 
+            p[0] = 1; 
+            p[1] = 0; 
+            auto pgmReturn = pgmBuilder.NewDecimalLiteral(x, 21, 8); 
             return pgmReturn;
         },
         "decimal_type {\n"
@@ -245,10 +245,10 @@ Y_UNIT_TEST(TestExportVariantStructTypeYdb) {
     Y_UNIT_TEST(TestExportDecimalYdb) {
         TestExportValue<Ydb::Value>([](TProgramBuilder& pgmBuilder) {
             NYql::NDecimal::TInt128 x;
-            ui64* p = (ui64*)&x;
-            p[0] = 1;
-            p[1] = 0;
-            auto pgmReturn = pgmBuilder.NewDecimalLiteral(x, 21, 8);
+            ui64* p = (ui64*)&x; 
+            p[0] = 1; 
+            p[1] = 0; 
+            auto pgmReturn = pgmBuilder.NewDecimalLiteral(x, 21, 8); 
             return pgmReturn;
         }, "low_128: 1\n");
     }
@@ -256,10 +256,10 @@ Y_UNIT_TEST(TestExportVariantStructTypeYdb) {
     Y_UNIT_TEST(TestExportDecimalNegativeYdb) {
         TestExportValue<Ydb::Value>([](TProgramBuilder& pgmBuilder) {
             NYql::NDecimal::TInt128 x;
-            ui64* p = (ui64*)&x;
-            p[0] = Max<ui64>();
-            p[1] = Max<ui64>();
-            auto pgmReturn = pgmBuilder.NewDecimalLiteral(x, 21, 8);
+            ui64* p = (ui64*)&x; 
+            p[0] = Max<ui64>(); 
+            p[1] = Max<ui64>(); 
+            auto pgmReturn = pgmBuilder.NewDecimalLiteral(x, 21, 8); 
             return pgmReturn;
         }, "low_128: 18446744073709551615\n"
            "high_128: 18446744073709551615\n");
@@ -268,10 +268,10 @@ Y_UNIT_TEST(TestExportVariantStructTypeYdb) {
     Y_UNIT_TEST(TestExportDecimalHugeYdb) {
         TestExportValue<Ydb::Value>([](TProgramBuilder& pgmBuilder) {
             NYql::NDecimal::TInt128 x;
-            ui64* p = (ui64*)&x;
-            p[0] = 0;
-            p[1] = 1;
-            auto pgmReturn = pgmBuilder.NewDecimalLiteral(x, 21, 8);
+            ui64* p = (ui64*)&x; 
+            p[0] = 0; 
+            p[1] = 1; 
+            auto pgmReturn = pgmBuilder.NewDecimalLiteral(x, 21, 8); 
             return pgmReturn;
         }, "low_128: 0\n"
            "high_128: 1\n");
@@ -597,7 +597,7 @@ Y_UNIT_TEST(TestExportVariantStructTypeYdb) {
             )
         );
     }
-}
-
-}
-}
+} 
+ 
+} 
+} 

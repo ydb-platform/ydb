@@ -1,12 +1,12 @@
-#include "mkql_builtins_impl.h"
-
+#include "mkql_builtins_impl.h" 
+ 
 #include <cmath>
 
-namespace NKikimr {
-namespace NMiniKQL {
-
-namespace {
-
+namespace NKikimr { 
+namespace NMiniKQL { 
+ 
+namespace { 
+ 
 template<typename TLeft, typename TRight, typename TOutput>
 struct TMod : public TSimpleArithmeticBinary<TLeft, TRight, TOutput, TMod<TLeft, TRight, TOutput>> {
     static_assert(std::is_floating_point<TOutput>::value, "expected floating point");
@@ -17,10 +17,10 @@ struct TMod : public TSimpleArithmeticBinary<TLeft, TRight, TOutput, TMod<TLeft,
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
-    static Value* Gen(Value* left, Value* right, const TCodegenContext& ctx, BasicBlock*& block)
+    static Value* Gen(Value* left, Value* right, const TCodegenContext& ctx, BasicBlock*& block) 
     {
-        ctx.Codegen->AddGlobalMapping("fmod", reinterpret_cast<const void*>(static_cast<double(*)(double, double)>(&std::fmod)));
-        ctx.Codegen->AddGlobalMapping("fmodf", reinterpret_cast<const void*>(static_cast<float(*)(float, float)>(&std::fmod)));
+        ctx.Codegen->AddGlobalMapping("fmod", reinterpret_cast<const void*>(static_cast<double(*)(double, double)>(&std::fmod))); 
+        ctx.Codegen->AddGlobalMapping("fmodf", reinterpret_cast<const void*>(static_cast<float(*)(float, float)>(&std::fmod))); 
         return BinaryOperator::CreateFRem(left, right, "frem", block);
     }
 #endif
@@ -29,12 +29,12 @@ struct TMod : public TSimpleArithmeticBinary<TLeft, TRight, TOutput, TMod<TLeft,
 template <typename TLeft, typename TRight, typename TOutput>
 struct TIntegralMod {
     static_assert(std::is_integral<TOutput>::value, "integral type expected");
-
+ 
     static NUdf::TUnboxedValuePod Execute(const NUdf::TUnboxedValuePod& left, const NUdf::TUnboxedValuePod& right)
     {
         const auto lv = static_cast<TOutput>(left.template Get<TLeft>());
         const auto rv = static_cast<TOutput>(right.template Get<TRight>());
-
+ 
         if (rv == 0 ||
             (std::is_signed<TOutput>::value && sizeof(TOutput) <= sizeof(TLeft) && rv == TOutput(-1) && lv == Min<TOutput>()))
         {
@@ -42,9 +42,9 @@ struct TIntegralMod {
         }
 
         return NUdf::TUnboxedValuePod(lv % rv);
-    }
+    } 
 
-#ifndef MKQL_DISABLE_CODEGEN
+#ifndef MKQL_DISABLE_CODEGEN 
     static Value* Generate(Value* left, Value* right, const TCodegenContext& ctx, BasicBlock*& block)
     {
         auto& context = ctx.Codegen->GetContext();
@@ -80,13 +80,13 @@ struct TIntegralMod {
     }
 #endif
 };
-
-}
-
+ 
+} 
+ 
 void RegisterMod(IBuiltinFunctionRegistry& registry) {
     RegisterBinaryRealFunctionOpt<TMod, TBinaryArgsOpt>(registry, "Mod");
     RegisterBinaryIntegralFunctionOpt<TIntegralMod, TBinaryArgsOptWithNullableResult>(registry, "Mod");
-}
-
-} // namespace NMiniKQL
-} // namespace NKikimr
+} 
+ 
+} // namespace NMiniKQL 
+} // namespace NKikimr 

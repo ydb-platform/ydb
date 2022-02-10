@@ -52,40 +52,40 @@ enum EToken
     TOKEN_TAGGED = -20,
     TOKEN_YSON = -21,
     TOKEN_UTF8 = -22,
-    TOKEN_VARIANT = -23,
-    TOKEN_UNIT = -24,
-    TOKEN_STREAM = -25,
-    TOKEN_GENERIC = -26,
-    TOKEN_JSON = -27,
-    TOKEN_NULL = -28,
-    TOKEN_DATE = -29,
-    TOKEN_DATETIME = -30,
-    TOKEN_TIMESTAMP = -31,
-    TOKEN_INTERVAL = -32,
+    TOKEN_VARIANT = -23, 
+    TOKEN_UNIT = -24, 
+    TOKEN_STREAM = -25, 
+    TOKEN_GENERIC = -26, 
+    TOKEN_JSON = -27, 
+    TOKEN_NULL = -28, 
+    TOKEN_DATE = -29, 
+    TOKEN_DATETIME = -30, 
+    TOKEN_TIMESTAMP = -31, 
+    TOKEN_INTERVAL = -32, 
     TOKEN_DECIMAL = -33,
-    TOKEN_INT8 = -34,
-    TOKEN_UINT8 = -35,
-    TOKEN_INT16 = -36,
-    TOKEN_UINT16 = -37,
-    TOKEN_TZDATE = -38,
-    TOKEN_TZDATETIME = -39,
-    TOKEN_TZTIMESTAMP = -40,
-    TOKEN_UUID = -41,
-    TOKEN_FLOW = -42,
-    TOKEN_SET = -43,
-    TOKEN_ENUM = -44,
-    TOKEN_EMPTYLIST = -45,
-    TOKEN_EMPTYDICT = -46,
-    TOKEN_TYPE_MAX = -47,
+    TOKEN_INT8 = -34, 
+    TOKEN_UINT8 = -35, 
+    TOKEN_INT16 = -36, 
+    TOKEN_UINT16 = -37, 
+    TOKEN_TZDATE = -38, 
+    TOKEN_TZDATETIME = -39, 
+    TOKEN_TZTIMESTAMP = -40, 
+    TOKEN_UUID = -41, 
+    TOKEN_FLOW = -42, 
+    TOKEN_SET = -43, 
+    TOKEN_ENUM = -44, 
+    TOKEN_EMPTYLIST = -45, 
+    TOKEN_EMPTYDICT = -46, 
+    TOKEN_TYPE_MAX = -47, 
     TOKEN_JSON_DOCUMENT = -48,
     TOKEN_DYNUMBER = -49,
 
     // identifiers
-    TOKEN_IDENTIFIER = -100,
-    TOKEN_ESCAPED_IDENTIFIER = -101,
+    TOKEN_IDENTIFIER = -100, 
+    TOKEN_ESCAPED_IDENTIFIER = -101, 
 
     // special
-    TOKEN_ARROW = -200,
+    TOKEN_ARROW = -200, 
 };
 
 bool IsTypeKeyword(int token)
@@ -188,10 +188,10 @@ private:
 
         case TOKEN_STRING:
         case TOKEN_BOOL:
-        case TOKEN_INT8:
-        case TOKEN_UINT8:
-        case TOKEN_INT16:
-        case TOKEN_UINT16:
+        case TOKEN_INT8: 
+        case TOKEN_UINT8: 
+        case TOKEN_INT16: 
+        case TOKEN_UINT16: 
         case TOKEN_INT32:
         case TOKEN_UINT32:
         case TOKEN_INT64:
@@ -200,15 +200,15 @@ private:
         case TOKEN_DOUBLE:
         case TOKEN_YSON:
         case TOKEN_UTF8:
-        case TOKEN_JSON:
-        case TOKEN_DATE:
-        case TOKEN_DATETIME:
-        case TOKEN_TIMESTAMP:
-        case TOKEN_INTERVAL:
-        case TOKEN_TZDATE:
-        case TOKEN_TZDATETIME:
-        case TOKEN_TZTIMESTAMP:
-        case TOKEN_UUID:
+        case TOKEN_JSON: 
+        case TOKEN_DATE: 
+        case TOKEN_DATETIME: 
+        case TOKEN_TIMESTAMP: 
+        case TOKEN_INTERVAL: 
+        case TOKEN_TZDATE: 
+        case TOKEN_TZDATETIME: 
+        case TOKEN_TZTIMESTAMP: 
+        case TOKEN_UUID: 
         case TOKEN_JSON_DOCUMENT:
         case TOKEN_DYNUMBER:
             type = MakeDataType(Identifier);
@@ -248,21 +248,21 @@ private:
             GetNextToken();
             break;
 
-        case TOKEN_NULL:
-            type = MakeNullType();
-            GetNextToken();
-            break;
-
-        case TOKEN_EMPTYLIST:
-            type = MakeEmptyListType();
-            GetNextToken();
-            break;
-
-        case TOKEN_EMPTYDICT:
-            type = MakeEmptyDictType();
-            GetNextToken();
-            break;
-
+        case TOKEN_NULL: 
+            type = MakeNullType(); 
+            GetNextToken(); 
+            break; 
+ 
+        case TOKEN_EMPTYLIST: 
+            type = MakeEmptyListType(); 
+            GetNextToken(); 
+            break; 
+ 
+        case TOKEN_EMPTYDICT: 
+            type = MakeEmptyDictType(); 
+            GetNextToken(); 
+            break; 
+ 
         case TOKEN_CALLABLE:
             type = ParseCallableTypeWithKeyword();
             break;
@@ -271,36 +271,36 @@ private:
             type = ParseTaggedType();
             break;
 
-        case TOKEN_VARIANT:
-            type = ParseVariantType();
-            break;
-
-        case TOKEN_UNIT:
-            type = MakeUnitType();
-            GetNextToken();
-            break;
-
-        case TOKEN_STREAM:
-            type = ParseStreamType();
-            break;
-
-        case TOKEN_FLOW:
-            type = ParseFlowType();
-            break;
-
-        case TOKEN_GENERIC:
-            type = MakeGenericType();
-            GetNextToken();
-            break;
-
-        case TOKEN_SET:
-            type = ParseSetType();
-            break;
-
-        case TOKEN_ENUM:
-            type = ParseEnumType();
-            break;
-
+        case TOKEN_VARIANT: 
+            type = ParseVariantType(); 
+            break; 
+ 
+        case TOKEN_UNIT: 
+            type = MakeUnitType(); 
+            GetNextToken(); 
+            break; 
+ 
+        case TOKEN_STREAM: 
+            type = ParseStreamType(); 
+            break; 
+ 
+        case TOKEN_FLOW: 
+            type = ParseFlowType(); 
+            break; 
+ 
+        case TOKEN_GENERIC: 
+            type = MakeGenericType(); 
+            GetNextToken(); 
+            break; 
+ 
+        case TOKEN_SET: 
+            type = ParseSetType(); 
+            break; 
+ 
+        case TOKEN_ENUM: 
+            type = ParseEnumType(); 
+            break; 
+ 
         default:
             if (Identifier.empty()) {
                 return AddError("Expected type");
@@ -391,7 +391,7 @@ private:
         EXPECT_AND_SKIP_TOKEN('(', nullptr);
 
         TSmallVec<TAstNode*> args;
-        args.push_back(nullptr); // CallableType Atom + settings + return type
+        args.push_back(nullptr); // CallableType Atom + settings + return type 
         args.push_back(nullptr);
         args.push_back(nullptr);
         bool optArgsStarted = false;
@@ -599,28 +599,28 @@ private:
         return MakeListType(itemType);
     }
 
-    TAstNode* ParseStreamType() {
-        GetNextToken(); // eat keyword
-        EXPECT_AND_SKIP_TOKEN('<', nullptr);
-
-        auto itemType = ParseType();
-        if (!itemType) return nullptr;
-
-        EXPECT_AND_SKIP_TOKEN('>', nullptr);
-        return MakeStreamType(itemType);
-    }
-
-    TAstNode* ParseFlowType() {
-        GetNextToken(); // eat keyword
-        EXPECT_AND_SKIP_TOKEN('<', nullptr);
-
-        auto itemType = ParseType();
-        if (!itemType) return nullptr;
-
-        EXPECT_AND_SKIP_TOKEN('>', nullptr);
-        return MakeFlowType(itemType);
-    }
-
+    TAstNode* ParseStreamType() { 
+        GetNextToken(); // eat keyword 
+        EXPECT_AND_SKIP_TOKEN('<', nullptr); 
+ 
+        auto itemType = ParseType(); 
+        if (!itemType) return nullptr; 
+ 
+        EXPECT_AND_SKIP_TOKEN('>', nullptr); 
+        return MakeStreamType(itemType); 
+    } 
+ 
+    TAstNode* ParseFlowType() { 
+        GetNextToken(); // eat keyword 
+        EXPECT_AND_SKIP_TOKEN('<', nullptr); 
+ 
+        auto itemType = ParseType(); 
+        if (!itemType) return nullptr; 
+ 
+        EXPECT_AND_SKIP_TOKEN('>', nullptr); 
+        return MakeFlowType(itemType); 
+    } 
+ 
     TAstNode* ParseDecimalType() {
         GetNextToken(); // eat keyword
         EXPECT_AND_SKIP_TOKEN('(', nullptr);
@@ -665,38 +665,38 @@ private:
         return MakeDictType(keyType, valueType);
     }
 
-    TAstNode* ParseSetType() {
-        GetNextToken(); // eat keyword
-        EXPECT_AND_SKIP_TOKEN('<', nullptr);
-
-        auto keyType = ParseType();
-        if (!keyType) return nullptr;
-
-        EXPECT_AND_SKIP_TOKEN('>', nullptr);
-        return MakeDictType(keyType, MakeVoidType());
-    }
-
+    TAstNode* ParseSetType() { 
+        GetNextToken(); // eat keyword 
+        EXPECT_AND_SKIP_TOKEN('<', nullptr); 
+ 
+        auto keyType = ParseType(); 
+        if (!keyType) return nullptr; 
+ 
+        EXPECT_AND_SKIP_TOKEN('>', nullptr); 
+        return MakeDictType(keyType, MakeVoidType()); 
+    } 
+ 
     TAstNode* ParseTupleTypeImpl() {
         TSmallVec<TAstNode*> items;
         items.push_back(nullptr);  // reserve for TupleType
 
-        if (Token != '>') {
-            for (;;) {
-                auto itemType = ParseType();
-                if (!itemType) return nullptr;
+        if (Token != '>') { 
+            for (;;) { 
+                auto itemType = ParseType(); 
+                if (!itemType) return nullptr; 
 
-                items.push_back(itemType);
+                items.push_back(itemType); 
 
-                if (Token == '>') {
-                    break;
-                } else if (Token == ',') {
-                    GetNextToken();
-                } else {
-                    return AddError("Expected '>' or ','");
-                }
+                if (Token == '>') { 
+                    break; 
+                } else if (Token == ',') { 
+                    GetNextToken(); 
+                } else { 
+                    return AddError("Expected '>' or ','"); 
+                } 
             }
         }
-
+ 
         return MakeTupleType(items);
     }
 
@@ -712,41 +712,41 @@ private:
 
     TAstNode* ParseStructTypeImpl() {
         TMap<TString, TAstNode*> members;
-        if (Token != '>') {
-            for (;;) {
-                TString name;
-                if (Token == TOKEN_IDENTIFIER ||
-                    Token == TOKEN_ESCAPED_IDENTIFIER)
-                {
-                    name = Identifier;
-                } else {
-                    return AddError("Expected struct member name");
-                }
+        if (Token != '>') { 
+            for (;;) { 
+                TString name; 
+                if (Token == TOKEN_IDENTIFIER || 
+                    Token == TOKEN_ESCAPED_IDENTIFIER) 
+                { 
+                    name = Identifier; 
+                } else { 
+                    return AddError("Expected struct member name"); 
+                } 
 
                 if (name.empty()) {
-                    return AddError("Empty name is not allowed");
+                    return AddError("Empty name is not allowed"); 
                 } else if (members.contains(name)) {
-                    return AddError("Member name duplication");
-                }
+                    return AddError("Member name duplication"); 
+                } 
 
-                GetNextToken(); // eat member name
-                EXPECT_AND_SKIP_TOKEN(':', nullptr);
+                GetNextToken(); // eat member name 
+                EXPECT_AND_SKIP_TOKEN(':', nullptr); 
 
-                auto type = ParseType();
-                if (!type) return nullptr;
+                auto type = ParseType(); 
+                if (!type) return nullptr; 
 
-                members.emplace(std::move(name), type);
+                members.emplace(std::move(name), type); 
 
-                if (Token == '>') {
-                    break;
-                } else if (Token == ',') {
-                    GetNextToken();
-                } else {
-                    return AddError("Expected '>' or ','");
-                }
+                if (Token == '>') { 
+                    break; 
+                } else if (Token == ',') { 
+                    GetNextToken(); 
+                } else { 
+                    return AddError("Expected '>' or ','"); 
+                } 
             }
         }
-
+ 
         return MakeStructType(members);
     }
 
@@ -779,66 +779,66 @@ private:
         return MakeVariantType(underlyingType);
     }
 
-    TAstNode* ParseEnumType() {
-        GetNextToken(); // eat keyword
-        EXPECT_AND_SKIP_TOKEN('<', nullptr);
-
-        TMap<TString, TAstNode*> members;
-        for (;;) {
-            TString name;
-            if (Token == TOKEN_IDENTIFIER ||
-                Token == TOKEN_ESCAPED_IDENTIFIER)
-            {
-                name = Identifier;
-            } else {
-                return AddError("Expected name");
-            }
-
-            if (name.empty()) {
-                return AddError("Empty name is not allowed");
-            } else if (members.contains(name)) {
-                return AddError("Member name duplication");
-            }
-
-            GetNextToken(); // eat member name
-            members.emplace(std::move(name), MakeVoidType());
-
-            if (Token == '>') {
-                break;
-            } else if (Token == ',') {
-                GetNextToken();
-            } else {
-                return AddError("Expected '>' or ','");
-            }
-        }
-
-        auto underlyingType = MakeStructType(members);
-        EXPECT_AND_SKIP_TOKEN('>', nullptr);
-        return MakeVariantType(underlyingType);
-    }
-
+    TAstNode* ParseEnumType() { 
+        GetNextToken(); // eat keyword 
+        EXPECT_AND_SKIP_TOKEN('<', nullptr); 
+ 
+        TMap<TString, TAstNode*> members; 
+        for (;;) { 
+            TString name; 
+            if (Token == TOKEN_IDENTIFIER || 
+                Token == TOKEN_ESCAPED_IDENTIFIER) 
+            { 
+                name = Identifier; 
+            } else { 
+                return AddError("Expected name"); 
+            } 
+ 
+            if (name.empty()) { 
+                return AddError("Empty name is not allowed"); 
+            } else if (members.contains(name)) { 
+                return AddError("Member name duplication"); 
+            } 
+ 
+            GetNextToken(); // eat member name 
+            members.emplace(std::move(name), MakeVoidType()); 
+ 
+            if (Token == '>') { 
+                break; 
+            } else if (Token == ',') { 
+                GetNextToken(); 
+            } else { 
+                return AddError("Expected '>' or ','"); 
+            } 
+        } 
+ 
+        auto underlyingType = MakeStructType(members); 
+        EXPECT_AND_SKIP_TOKEN('>', nullptr); 
+        return MakeVariantType(underlyingType); 
+    } 
+ 
     TAstNode* MakeCallableType(
             TSmallVec<TAstNode*>& args, size_t optionalArgsCount,
             TAstNode* returnType, TStringBuf payload)
     {
         args[0] = MakeLiteralAtom(TStringBuf("CallableType"));
-        TSmallVec<TAstNode*> mainSettings;
+        TSmallVec<TAstNode*> mainSettings; 
         if (optionalArgsCount || !payload.empty()) {
-            mainSettings.push_back(optionalArgsCount
+            mainSettings.push_back(optionalArgsCount 
                 ? MakeQuotedAtom(ToString(optionalArgsCount))
                 : MakeQuotedLiteralAtom(TStringBuf("0")));
-        }
-
+        } 
+ 
         if (!payload.empty()) {
-            mainSettings.push_back(MakeQuotedAtom(payload, TNodeFlags::ArbitraryContent));
-        }
-
-        args[1] = MakeQuote(MakeList(mainSettings.data(), mainSettings.size()));
-
-        TSmallVec<TAstNode*> returnSettings;
-        returnSettings.push_back(returnType);
-        args[2] = MakeQuote(MakeList(returnSettings.data(), returnSettings.size()));
-
+            mainSettings.push_back(MakeQuotedAtom(payload, TNodeFlags::ArbitraryContent)); 
+        } 
+ 
+        args[1] = MakeQuote(MakeList(mainSettings.data(), mainSettings.size())); 
+ 
+        TSmallVec<TAstNode*> returnSettings; 
+        returnSettings.push_back(returnType); 
+        args[2] = MakeQuote(MakeList(returnSettings.data(), returnSettings.size())); 
+ 
         return MakeList(args.data(), args.size());
     }
 
@@ -850,30 +850,30 @@ private:
         return MakeList(items, Y_ARRAY_SIZE(items));
     }
 
-    TAstNode* MakeStreamType(TAstNode* itemType) {
-        TAstNode* items[] = {
+    TAstNode* MakeStreamType(TAstNode* itemType) { 
+        TAstNode* items[] = { 
             MakeLiteralAtom(TStringBuf("StreamType")),
-            itemType,
-        };
-        return MakeList(items, Y_ARRAY_SIZE(items));
-    }
-
-    TAstNode* MakeFlowType(TAstNode* itemType) {
-        TAstNode* items[] = {
+            itemType, 
+        }; 
+        return MakeList(items, Y_ARRAY_SIZE(items)); 
+    } 
+ 
+    TAstNode* MakeFlowType(TAstNode* itemType) { 
+        TAstNode* items[] = { 
             MakeLiteralAtom(TStringBuf("FlowType")),
-            itemType,
-        };
-        return MakeList(items, Y_ARRAY_SIZE(items));
-    }
-
-    TAstNode* MakeVariantType(TAstNode* underlyingType) {
-        TAstNode* items[] = {
+            itemType, 
+        }; 
+        return MakeList(items, Y_ARRAY_SIZE(items)); 
+    } 
+ 
+    TAstNode* MakeVariantType(TAstNode* underlyingType) { 
+        TAstNode* items[] = { 
             MakeLiteralAtom(TStringBuf("VariantType")),
-            underlyingType,
-        };
-        return MakeList(items, Y_ARRAY_SIZE(items));
-    }
-
+            underlyingType, 
+        }; 
+        return MakeList(items, Y_ARRAY_SIZE(items)); 
+    } 
+ 
     TAstNode* MakeDictType(TAstNode* keyType, TAstNode* valueType) {
         TAstNode* items[] = {
             MakeLiteralAtom(TStringBuf("DictType")),
@@ -903,14 +903,14 @@ private:
         return MakeList(items.data(), items.size());
     }
 
-    TAstNode* ParseResourceType() {
+    TAstNode* ParseResourceType() { 
         GetNextToken(); // eat keyword
         EXPECT_AND_SKIP_TOKEN('<', nullptr);
-
+ 
         if (Token != TOKEN_IDENTIFIER && Token != TOKEN_ESCAPED_IDENTIFIER) {
             return AddError("Expected resource tag");
         }
-
+ 
         TStringBuf tag = Identifier;
         if (tag.empty()) {
             return AddError("Expected non empty resource tag");
@@ -919,8 +919,8 @@ private:
         GetNextToken(); // eat tag
         EXPECT_AND_SKIP_TOKEN('>', nullptr);
         return MakeResourceType(tag);
-    }
-
+    } 
+ 
     TAstNode* ParseTaggedType() {
         GetNextToken(); // eat keyword
         EXPECT_AND_SKIP_TOKEN('<', nullptr);
@@ -947,53 +947,53 @@ private:
     TAstNode* MakeResourceType(TStringBuf tag) {
         TAstNode* items[] = {
             MakeLiteralAtom(TStringBuf("ResourceType")),
-            MakeQuotedAtom(tag),
+            MakeQuotedAtom(tag), 
         };
         return MakeList(items, Y_ARRAY_SIZE(items));
     }
 
-    TAstNode* MakeVoidType() {
-        TAstNode* items[] = {
+    TAstNode* MakeVoidType() { 
+        TAstNode* items[] = { 
             MakeLiteralAtom(TStringBuf("VoidType"))
-        };
-        return MakeList(items, Y_ARRAY_SIZE(items));
-    }
-
-    TAstNode* MakeNullType() {
-        TAstNode* items[] = {
+        }; 
+        return MakeList(items, Y_ARRAY_SIZE(items)); 
+    } 
+ 
+    TAstNode* MakeNullType() { 
+        TAstNode* items[] = { 
             MakeLiteralAtom(TStringBuf("NullType"))
-        };
-        return MakeList(items, Y_ARRAY_SIZE(items));
-    }
-
-    TAstNode* MakeEmptyListType() {
-        TAstNode* items[] = {
+        }; 
+        return MakeList(items, Y_ARRAY_SIZE(items)); 
+    } 
+ 
+    TAstNode* MakeEmptyListType() { 
+        TAstNode* items[] = { 
             MakeLiteralAtom(TStringBuf("EmptyListType"))
-        };
-        return MakeList(items, Y_ARRAY_SIZE(items));
-    }
-
-    TAstNode* MakeEmptyDictType() {
-        TAstNode* items[] = {
+        }; 
+        return MakeList(items, Y_ARRAY_SIZE(items)); 
+    } 
+ 
+    TAstNode* MakeEmptyDictType() { 
+        TAstNode* items[] = { 
             MakeLiteralAtom(TStringBuf("EmptyDictType"))
-        };
-        return MakeList(items, Y_ARRAY_SIZE(items));
-    }
-
-    TAstNode* MakeUnitType() {
-        TAstNode* items[] = {
+        }; 
+        return MakeList(items, Y_ARRAY_SIZE(items)); 
+    } 
+ 
+    TAstNode* MakeUnitType() { 
+        TAstNode* items[] = { 
             MakeLiteralAtom(TStringBuf("UnitType"))
-        };
-        return MakeList(items, Y_ARRAY_SIZE(items));
-    }
-
-    TAstNode* MakeGenericType() {
-        TAstNode* items[] = {
+        }; 
+        return MakeList(items, Y_ARRAY_SIZE(items)); 
+    } 
+ 
+    TAstNode* MakeGenericType() { 
+        TAstNode* items[] = { 
             MakeLiteralAtom(TStringBuf("GenericType"))
-        };
-        return MakeList(items, Y_ARRAY_SIZE(items));
-    }
-
+        }; 
+        return MakeList(items, Y_ARRAY_SIZE(items)); 
+    } 
+ 
     TAstNode* MakeTaggedType(TAstNode* baseType, TStringBuf tag) {
         TAstNode* items[] = {
             MakeLiteralAtom(TStringBuf("TaggedType")),
@@ -1161,10 +1161,10 @@ private:
 
     void Visit(const TStreamExprType& type) final {
         Out_ << TStringBuf("Stream<");
-        type.GetItemType()->Accept(*this);
-        Out_ << '>';
-    }
-
+        type.GetItemType()->Accept(*this); 
+        Out_ << '>'; 
+    } 
+ 
     void Visit(const TFlowExprType& type) final {
         Out_ << TStringBuf("Flow<");
         type.GetItemType()->Accept(*this);
@@ -1172,7 +1172,7 @@ private:
     }
 
     void Visit(const TDataExprType& type) final {
-        Out_ << type.GetName();
+        Out_ << type.GetName(); 
         if (const auto dataExprParamsType = dynamic_cast<const TDataExprParamsType*>(&type)) {
             Out_ << '(' << dataExprParamsType->GetParamOne() << ',' << dataExprParamsType->GetParamTwo() << ')';
         }
@@ -1249,17 +1249,17 @@ private:
     }
 
     void Visit(const TDictExprType& type) final {
-        if (type.GetPayloadType()->GetKind() == ETypeAnnotationKind::Void) {
+        if (type.GetPayloadType()->GetKind() == ETypeAnnotationKind::Void) { 
             Out_ << TStringBuf("Set<");
-            type.GetKeyType()->Accept(*this);
-            Out_ << '>';
-        } else {
+            type.GetKeyType()->Accept(*this); 
+            Out_ << '>'; 
+        } else { 
             Out_ << TStringBuf("Dict<");
-            type.GetKeyType()->Accept(*this);
-            Out_ << ',';
-            type.GetPayloadType()->Accept(*this);
-            Out_ << '>';
-       }
+            type.GetKeyType()->Accept(*this); 
+            Out_ << ','; 
+            type.GetPayloadType()->Accept(*this); 
+            Out_ << '>'; 
+       } 
     }
 
     void Visit(const TVoidExprType& type) final {
@@ -1268,20 +1268,20 @@ private:
     }
 
     void Visit(const TNullExprType& type) final {
-        Y_UNUSED(type);
+        Y_UNUSED(type); 
         Out_ << TStringBuf("Null");
-    }
-
+    } 
+ 
     void Visit(const TEmptyListExprType& type) final {
-        Y_UNUSED(type);
+        Y_UNUSED(type); 
         Out_ << TStringBuf("EmptyList");
-    }
-
+    } 
+ 
     void Visit(const TEmptyDictExprType& type) final {
-        Y_UNUSED(type);
+        Y_UNUSED(type); 
         Out_ << TStringBuf("EmptyDict");
-    }
-
+    } 
+ 
     void Visit(const TGenericExprType& type) final {
         Y_UNUSED(type);
         Out_ << TStringBuf("Generic");
@@ -1299,52 +1299,52 @@ private:
         Out_ << TStringBuf("Error<");
         auto pos = type.GetError().Position;
         EscapeArbitraryAtom(pos.File.empty() ? "<main>" : pos.File, '\'', &Out_);
-        Out_ << ':';
-        if (pos) {
-            Out_ << pos.Row << ':' << pos.Column << ':';
-        }
-
-        EscapeArbitraryAtom(type.GetError().Message, '\'', &Out_);
-        Out_ << '>';
-    }
-
+        Out_ << ':'; 
+        if (pos) { 
+            Out_ << pos.Row << ':' << pos.Column << ':'; 
+        } 
+ 
+        EscapeArbitraryAtom(type.GetError().Message, '\'', &Out_); 
+        Out_ << '>'; 
+    } 
+ 
     void Visit(const TVariantExprType& type) final {
-        auto underlyingType = type.GetUnderlyingType();
-        if (underlyingType->GetKind() == ETypeAnnotationKind::Tuple) {
+        auto underlyingType = type.GetUnderlyingType(); 
+        if (underlyingType->GetKind() == ETypeAnnotationKind::Tuple) { 
             Out_ << TStringBuf("Variant<");
-            auto tupleType = underlyingType->Cast<TTupleExprType>();
-            const auto& items = tupleType->GetItems();
-            for (ui32 i = 0; i < items.size(); ++i) {
-                if (i) {
-                    Out_ << ',';
-                }
-                items[i]->Accept(*this);
-            }
-        } else {
-            auto srtuctType = underlyingType->Cast<TStructExprType>();
-            const auto& items = srtuctType->GetItems();
-            bool allVoid = true;
-            for (ui32 i = 0; i < items.size(); ++i) {
-                 allVoid = allVoid && (items[i]->GetItemType()->GetKind() == ETypeAnnotationKind::Void);
-            }
-
+            auto tupleType = underlyingType->Cast<TTupleExprType>(); 
+            const auto& items = tupleType->GetItems(); 
+            for (ui32 i = 0; i < items.size(); ++i) { 
+                if (i) { 
+                    Out_ << ','; 
+                } 
+                items[i]->Accept(*this); 
+            } 
+        } else { 
+            auto srtuctType = underlyingType->Cast<TStructExprType>(); 
+            const auto& items = srtuctType->GetItems(); 
+            bool allVoid = true; 
+            for (ui32 i = 0; i < items.size(); ++i) { 
+                 allVoid = allVoid && (items[i]->GetItemType()->GetKind() == ETypeAnnotationKind::Void); 
+            } 
+ 
             Out_ << (allVoid ? TStringBuf("Enum<") : TStringBuf("Variant<"));
-            for (ui32 i = 0; i < items.size(); ++i) {
-                if (i) {
-                    Out_ << ',';
-                }
-
-                if (allVoid) {
-                    EscapeArbitraryAtom(items[i]->GetName(), '\'', &Out_);
-                } else {
-                    items[i]->Accept(*this);
-                }
-            }
-        }
-
-        Out_ << '>';
-    }
-
+            for (ui32 i = 0; i < items.size(); ++i) { 
+                if (i) { 
+                    Out_ << ','; 
+                } 
+ 
+                if (allVoid) { 
+                    EscapeArbitraryAtom(items[i]->GetName(), '\'', &Out_); 
+                } else { 
+                    items[i]->Accept(*this); 
+                } 
+            } 
+        } 
+ 
+        Out_ << '>'; 
+    } 
+ 
 private:
     IOutputStream& Out_;
 };

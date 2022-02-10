@@ -1,8 +1,8 @@
 #pragma once
 
-#include <ydb/library/yql/utils/yql_panic.h>
+#include <ydb/library/yql/utils/yql_panic.h> 
 
-#include <ydb/library/yql/ast/yql_expr.h>
+#include <ydb/library/yql/ast/yql_expr.h> 
 
 #include <util/generic/vector.h>
 #include <util/generic/strbuf.h>
@@ -133,8 +133,8 @@ public:
     }
 
     TChildIterator(const TExprBase &node, size_t startIndex = 0)
-        : CurIt(node.Ref().Children().begin() + startIndex)
-        , EndIt(node.Ref().Children().end())
+        : CurIt(node.Ref().Children().begin() + startIndex) 
+        , EndIt(node.Ref().Children().end()) 
     {
         if (CurIt != EndIt) {
             CurNode = *CurIt;
@@ -220,11 +220,11 @@ public:
     TMaybeNode(const TExprNode::TPtr& node)
         : TMaybeNode<TExprBase>(node && TListBase<TItem>::Match(node.Get()) ? node : TExprNode::TPtr()) {}
 
-    TListBase<TItem> Cast() const {
+    TListBase<TItem> Cast() const { 
         YQL_ENSURE(IsValid());
         return TMaybeNode<TExprBase>::Cast().template Cast<TListBase<TItem>>();
-    }
-
+    } 
+ 
     TMaybeNode<TItem> Item(size_t index) const {
         if (!IsValid()) {
             return TMaybeNode<TItem>();
@@ -300,7 +300,7 @@ public:
     size_t ArgCount() const {
         return Ref().ChildrenSize();
     }
-    TExprNode::TChildrenType Args() const {
+    TExprNode::TChildrenType Args() const { 
         return Ref().Children();
     }
 
@@ -565,7 +565,7 @@ TNodeBuilder<TBuildValueHolder<TNode>, TNode> Build(TExprContext& ctx, TPosition
             return holder;
         },
         [] (const TStringBuf& argName) -> TExprBase {
-            YQL_ENSURE(false, "Argument not found: " << ToString(argName));
+            YQL_ENSURE(false, "Argument not found: " << ToString(argName)); 
         });
 
     return builder;

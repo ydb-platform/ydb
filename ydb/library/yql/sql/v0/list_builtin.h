@@ -3,7 +3,7 @@
 #include "node.h"
 #include "context.h"
 
-#include <ydb/library/yql/ast/yql_type_string.h>
+#include <ydb/library/yql/ast/yql_type_string.h> 
 
 #include <library/cpp/charset/ci_string.h>
 #include <util/string/builder.h>
@@ -62,7 +62,7 @@ private:
 class TListExtractBuiltin final: public TListBuiltin {
 public:
     TListExtractBuiltin(TPosition pos, const TVector<TNodePtr>& args)
-        : TListBuiltin(pos, "OrderedExtract", args)
+        : TListBuiltin(pos, "OrderedExtract", args) 
     {}
 
     bool DoInit(TContext& ctx, ISource* src) override;
@@ -112,7 +112,7 @@ class TListFilterBuiltin final: public TListProcessBuiltin {
 public:
     TListFilterBuiltin(TPosition pos,
                        const TVector<TNodePtr>& args)
-        : TListProcessBuiltin(pos, "OrderedFilter", args)
+        : TListProcessBuiltin(pos, "OrderedFilter", args) 
     {}
 
 
@@ -269,18 +269,18 @@ public:
     }
 };
 
-class TDictCreateBuiltin final: public TListBuiltin {
-public:
-    TDictCreateBuiltin(TPosition pos,
-                     const TVector<TNodePtr>& args)
-        : TListBuiltin(pos, "DictCreate", args)
-    {}
-
-    bool DoInit(TContext& ctx, ISource* src) override;
-
-    TNodePtr DoClone() const final {
-        return new TDictCreateBuiltin(Pos, CloneContainer(Args));
-    }
-};
-
+class TDictCreateBuiltin final: public TListBuiltin { 
+public: 
+    TDictCreateBuiltin(TPosition pos, 
+                     const TVector<TNodePtr>& args) 
+        : TListBuiltin(pos, "DictCreate", args) 
+    {} 
+ 
+    bool DoInit(TContext& ctx, ISource* src) override; 
+ 
+    TNodePtr DoClone() const final { 
+        return new TDictCreateBuiltin(Pos, CloneContainer(Args)); 
+    } 
+}; 
+ 
 } // namespace NSQLTranslationV0

@@ -9,9 +9,9 @@
 #include <ydb/core/tx/schemeshard/schemeshard_utils.h>
 #include <ydb/library/mkql_proto/mkql_proto.h>
 
-#include <ydb/library/yql/dq/opt/dq_opt.h>
-#include <ydb/library/yql/dq/tasks/dq_task_program.h>
-#include <ydb/library/yql/providers/common/mkql/yql_type_mkql.h>
+#include <ydb/library/yql/dq/opt/dq_opt.h> 
+#include <ydb/library/yql/dq/tasks/dq_task_program.h> 
+#include <ydb/library/yql/providers/common/mkql/yql_type_mkql.h> 
 
 namespace NKikimr {
 namespace NKqp {

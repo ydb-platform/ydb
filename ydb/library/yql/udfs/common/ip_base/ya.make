@@ -13,7 +13,7 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/library/yql/udfs/common/ip_base/lib
+    ydb/library/yql/udfs/common/ip_base/lib 
 )
 
 END()

@@ -1,10 +1,10 @@
 #include "yql_schema_utils.h"
+ 
+#include <ydb/library/yql/utils/yql_panic.h> 
 
-#include <ydb/library/yql/utils/yql_panic.h>
-
-namespace NYql {
-namespace NCommon {
-
+namespace NYql { 
+namespace NCommon { 
+ 
 TVector<TString> ExtractColumnOrderFromYsonStructType(const NYT::TNode& node) {
     if (!node.IsList() || node.Size() < 1 || !node[0].IsString()) {
         YQL_ENSURE(!"Invalid type scheme");
@@ -130,5 +130,5 @@ bool EqualsYsonTypesIgnoreStructOrder(const NYT::TNode& left, const NYT::TNode& 
     return false;
 }
 
-} // namespace NCommon
-} // namespace NYql
+} // namespace NCommon 
+} // namespace NYql 

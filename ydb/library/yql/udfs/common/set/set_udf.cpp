@@ -14,7 +14,7 @@ class TSetBase {
 private:
     std::unordered_set<TUnboxedValue, THash, TEquals, TUnboxedValue::TAllocator> Set;
     ui32 MaxSize = 0;
-    bool WasChanged = false;
+    bool WasChanged = false; 
 
 protected:
     TSetBase(THash hash, TEquals equals)
@@ -47,14 +47,14 @@ protected:
     }
 
 public:
-    void ResetChanged() {
-        WasChanged = false;
-    }
-
-    bool Changed() const {
-        return WasChanged;
-    }
-
+    void ResetChanged() { 
+        WasChanged = false; 
+    } 
+ 
+    bool Changed() const { 
+        return WasChanged; 
+    } 
+ 
     TUnboxedValue Serialize(const IValueBuilder* builder) {
         TUnboxedValue* values = nullptr;
         auto list = builder->NewArray(Set.size(), values);
@@ -83,7 +83,7 @@ public:
 
     void AddValue(const TUnboxedValuePod& value) {
         if (Set.size() < MaxSize) {
-            WasChanged = Set.insert(TUnboxedValuePod(value)).second;
+            WasChanged = Set.insert(TUnboxedValuePod(value)).second; 
         }
     }
 };
@@ -214,7 +214,7 @@ class TSetAddValueData: public TBoxedValue {
 private:
     TUnboxedValue Run(const IValueBuilder*, const TUnboxedValuePod* args) const override {
         auto resource = GetSetResourceData<Slot>(args[0]);
-        resource->Get()->ResetChanged();
+        resource->Get()->ResetChanged(); 
         resource->Get()->AddValue(args[1]);
         return TUnboxedValuePod(resource);
     }
@@ -224,30 +224,30 @@ class TSetAddValue: public TBoxedValue {
 private:
     TUnboxedValue Run(const IValueBuilder*, const TUnboxedValuePod* args) const override {
         auto resource = GetSetResource(args[0]);
-        resource->Get()->ResetChanged();
+        resource->Get()->ResetChanged(); 
         resource->Get()->AddValue(args[1]);
         return TUnboxedValuePod(resource);
     }
 };
 
 template <EDataSlot Slot>
-class TSetWasChangedData: public TBoxedValue {
-private:
+class TSetWasChangedData: public TBoxedValue { 
+private: 
     TUnboxedValue Run(const IValueBuilder*, const TUnboxedValuePod* args) const override {
-        auto resource = GetSetResourceData<Slot>(args[0]);
-        return TUnboxedValuePod(resource->Get()->Changed());
-    }
-};
-
-class TSetWasChanged: public TBoxedValue {
-private:
+        auto resource = GetSetResourceData<Slot>(args[0]); 
+        return TUnboxedValuePod(resource->Get()->Changed()); 
+    } 
+}; 
+ 
+class TSetWasChanged: public TBoxedValue { 
+private: 
     TUnboxedValue Run(const IValueBuilder*, const TUnboxedValuePod* args) const override {
-        auto resource = GetSetResource(args[0]);
-        return TUnboxedValuePod(resource->Get()->Changed());
-    }
-};
-
-template <EDataSlot Slot>
+        auto resource = GetSetResource(args[0]); 
+        return TUnboxedValuePod(resource->Get()->Changed()); 
+    } 
+}; 
+ 
+template <EDataSlot Slot> 
 class TSetSerializeData: public TBoxedValue {
 private:
     TUnboxedValue Run(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const override {
@@ -354,7 +354,7 @@ case EDataSlot::slot:                                       \
 
 #define MAKE_CREATE(slot, ...) MAKE_IMPL(TSetCreateData, slot)
 #define MAKE_ADD_VALUE(slot, ...) MAKE_IMPL(TSetAddValueData, slot)
-#define MAKE_WAS_CHANGED(slot, ...) MAKE_IMPL(TSetWasChangedData, slot)
+#define MAKE_WAS_CHANGED(slot, ...) MAKE_IMPL(TSetWasChangedData, slot) 
 #define MAKE_SERIALIZE(slot, ...) MAKE_IMPL(TSetSerializeData, slot)
 #define MAKE_DESERIALIZE(slot, ...) MAKE_IMPL(TSetDeserializeData, slot)
 #define MAKE_MERGE(slot, ...) MAKE_IMPL(TSetMergeData, slot)
@@ -368,7 +368,7 @@ case EDataSlot::slot:                                  \
 
 static const auto CreateName = TStringRef::Of("Create");
 static const auto AddValueName = TStringRef::Of("AddValue");
-static const auto WasChangedName = TStringRef::Of("WasChanged"); // must be used right after AddValue
+static const auto WasChangedName = TStringRef::Of("WasChanged"); // must be used right after AddValue 
 static const auto SerializeName = TStringRef::Of("Serialize");
 static const auto DeserializeName = TStringRef::Of("Deserialize");
 static const auto MergeName = TStringRef::Of("Merge");
@@ -386,7 +386,7 @@ public:
     void GetAllFunctions(IFunctionsSink& sink) const final {
         sink.Add(CreateName)->SetTypeAwareness();
         sink.Add(AddValueName)->SetTypeAwareness();
-        sink.Add(WasChangedName)->SetTypeAwareness();
+        sink.Add(WasChangedName)->SetTypeAwareness(); 
         sink.Add(SerializeName)->SetTypeAwareness();
         sink.Add(DeserializeName)->SetTypeAwareness();
         sink.Add(MergeName)->SetTypeAwareness();
@@ -481,20 +481,20 @@ public:
                 }
             }
 
-            if (name == WasChangedName) {
-                builder.Args()->Add(setType).Done().Returns<bool>();
-
-                if (!typesOnly) {
-                    if (isGeneric) {
-                        builder.Implementation(new TSetWasChanged);
-                    } else {
-                        switch (*slot) {
-                        UDF_TYPE_ID_MAP(MAKE_WAS_CHANGED)
-                        }
-                    }
-                }
-            }
-
+            if (name == WasChangedName) { 
+                builder.Args()->Add(setType).Done().Returns<bool>(); 
+ 
+                if (!typesOnly) { 
+                    if (isGeneric) { 
+                        builder.Implementation(new TSetWasChanged); 
+                    } else { 
+                        switch (*slot) { 
+                        UDF_TYPE_ID_MAP(MAKE_WAS_CHANGED) 
+                        } 
+                    } 
+                } 
+            } 
+ 
             if (name == MergeName) {
                 builder.Args()->Add(setType).Add(setType).Done().Returns(setType);
 

@@ -21,43 +21,43 @@ using NKikimr::TTagDetails;
 
 class IDbSchemeResolver {
 public:
-    struct TTable {
+    struct TTable { 
         TString TableName;
         TSet<TString> ColumnNames;
         ui64 RefreshAgainst = 0;
-    };
-
-    struct TTableResult {
+    }; 
+ 
+    struct TTableResult { 
         enum EStatus {
-            Ok = 0,
+            Ok = 0, 
             Error = 1,
             LookupError = 2
         };
-
+ 
         TTableResult(EStatus status, const TString& reason = TString())
-            : Status(status)
-            , Reason(reason)
-        {}
-
-        struct TColumn {
-            ui32 Column;
-            i32 KeyPosition;
-            ui32 Type;
-            ui32 AllowInplaceMode;
-        };
-
+            : Status(status) 
+            , Reason(reason) 
+        {} 
+ 
+        struct TColumn { 
+            ui32 Column; 
+            i32 KeyPosition; 
+            ui32 Type; 
+            ui32 AllowInplaceMode; 
+        }; 
+ 
         EStatus Status;
         TString Reason;
-        TTable Table;
-        TAutoPtr<NKikimr::TTableId> TableId;
-        ui32 KeyColumnCount = 0;
+        TTable Table; 
+        TAutoPtr<NKikimr::TTableId> TableId; 
+        ui32 KeyColumnCount = 0; 
         TMap<TString, TColumn> Columns;
         ui64 CacheGeneration = 0;
     };
 
     using TTableResults = TVector<TTableResult>;
 
-    virtual ~IDbSchemeResolver() {}
+    virtual ~IDbSchemeResolver() {} 
 
     // Future-based API.
     virtual NThreading::TFuture<TTableResults> ResolveTables(const TVector<TTable>& tables) = 0;
@@ -65,16 +65,16 @@ public:
     // MessagePassing-based API.
     struct TEvents {
         enum {
-            EvResolveTablesResult = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
+            EvResolveTablesResult = EventSpaceBegin(NActors::TEvents::ES_PRIVATE), 
             End
         };
         static_assert(End < EventSpaceEnd(NActors::TEvents::ES_PRIVATE), "expect End < EventSpaceEnd(TEvents::ES_PRIVATE)");
-
+ 
         struct TEvResolveTablesResult : public NActors::TEventLocal<TEvResolveTablesResult, EvResolveTablesResult> {
-            TEvResolveTablesResult(TTableResults&& result);
+            TEvResolveTablesResult(TTableResults&& result); 
 
-            TTableResults Result;
-        };
+            TTableResults Result; 
+        }; 
     };
 
     virtual void ResolveTables(const TVector<TTable>& tables, NActors::TActorId responseTo) = 0; // TEvResolveTablesResult.

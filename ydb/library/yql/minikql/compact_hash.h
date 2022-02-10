@@ -1,7 +1,7 @@
 #pragma once
 
-#include <ydb/library/yql/utils/hash.h>
-
+#include <ydb/library/yql/utils/hash.h> 
+ 
 #include "aligned_page_pool.h"
 #include "primes.h"
 
@@ -29,7 +29,7 @@ namespace NKikimr {
 
 namespace NCHash {
 
-class TListPoolBase {
+class TListPoolBase { 
 public:
     enum {
         SMALL_MARK = 1,
@@ -272,29 +272,29 @@ protected:
     };
 
 public:
-    TListPoolBase(TAlignedPagePool& pagePool)
-        : PagePool_(pagePool)
-    {}
+    TListPoolBase(TAlignedPagePool& pagePool) 
+        : PagePool_(pagePool) 
+    {} 
     TListPoolBase(const TListPoolBase&) = delete;
     TListPoolBase(TListPoolBase&& other)
-        : PagePool_(other.PagePool_)
+        : PagePool_(other.PagePool_) 
     {
     }
 
     TListPoolBase& operator =(const TListPoolBase& other) = delete;
     TListPoolBase& operator =(TListPoolBase&& other) {
-        PagePool_.Swap(other.PagePool_);
+        PagePool_.Swap(other.PagePool_); 
         return *this;
     }
 
-    void Swap(TListPoolBase& other) {
-        PagePool_.Swap(other.PagePool_);
-    }
-
-    TAlignedPagePool& GetPagePool() const {
-        return PagePool_;
-    }
-
+    void Swap(TListPoolBase& other) { 
+        PagePool_.Swap(other.PagePool_); 
+    } 
+ 
+    TAlignedPagePool& GetPagePool() const { 
+        return PagePool_; 
+    } 
+ 
     // Returns full list size for short and medium lists. Returns size of last page for a large list
     static size_t GetPartListSize(const void* list) {
         switch (GetMark(list)) {
@@ -365,9 +365,9 @@ public:
 
 protected:
     void FreeListPage(TListHeader* p);
-
-private:
-    TAlignedPagePool& PagePool_;
+ 
+private: 
+    TAlignedPagePool& PagePool_; 
 };
 
 template <typename TPrimary, typename TSecondary = TPrimary>
@@ -376,9 +376,9 @@ private:
     static constexpr size_t PoolCount = 1 + !std::is_same<TPrimary, TSecondary>::value;
 
 public:
-    TListPool(TAlignedPagePool& pagePool)
-        : TListPoolBase(pagePool)
-    {}
+    TListPool(TAlignedPagePool& pagePool) 
+        : TListPoolBase(pagePool) 
+    {} 
     TListPool(const TListPool&) = delete;
     TListPool(TListPool&& other)
         : TListPoolBase(std::move(other))
@@ -532,7 +532,7 @@ public:
         } else {
             usedPages = Pools[0].PrintStat(TStringBuf("Primary: "), out) + Pools[1].PrintStat(TStringBuf("Secondary: "), out);
         }
-        GetPagePool().PrintStat(usedPages, out);
+        GetPagePool().PrintStat(usedPages, out); 
     }
 
     TString DebugInfo() const {
@@ -563,7 +563,7 @@ private:
         }
         ui16 listCount = GetSmallPageCapacity<T>(size);
         Y_ASSERT(listCount >= 2);
-        TListHeader* header = new (GetPagePool().GetPage()) TListHeader(SMALL_MARK, size, listCount);
+        TListHeader* header = new (GetPagePool().GetPage()) TListHeader(SMALL_MARK, size, listCount); 
         pages.PushFront(&header->ListItem);
         return header;
     }
@@ -580,14 +580,14 @@ private:
         ui16 listCapacity = FastClp2(size);
         ui16 listCount = GetMediumPageCapacity<T>(listCapacity);
         Y_ASSERT(listCount >= 2);
-        TListHeader* header = new (GetPagePool().GetPage()) TListHeader(MEDIUM_MARK, listCapacity, listCount);
+        TListHeader* header = new (GetPagePool().GetPage()) TListHeader(MEDIUM_MARK, listCapacity, listCount); 
         pages.PushFront(&header->ListItem);
         return header;
     }
 
     template <typename T>
     TLargeListHeader* GetLargeListPage() {
-        TLargeListHeader* const header = new (GetPagePool().GetPage()) TLargeListHeader(GetLargePageCapacity<T>());
+        TLargeListHeader* const header = new (GetPagePool().GetPage()) TLargeListHeader(GetLargePageCapacity<T>()); 
         return header;
     }
 
@@ -694,11 +694,11 @@ private:
             DestroyRange(next->GetList<T>(), next->GetList<T>() + next->Size);
             next->ListItem.Unlink();
             next->~TLargeListHeader();
-            GetPagePool().ReturnPage(next);
+            GetPagePool().ReturnPage(next); 
         }
         DestroyRange(header->GetList<T>(), header->GetList<T>() + header->Size);
         header->~TLargeListHeader();
-        GetPagePool().ReturnPage(header);
+        GetPagePool().ReturnPage(header); 
     }
 protected:
     std::array<TUsedPages, PoolCount> Pools;
@@ -871,7 +871,7 @@ public:
         TIteratorImpl(const TCompactHashBase* hash)
             : Hash(hash)
             , Bucket(0)
-            , EndBucket(Hash->BucketsCount_)
+            , EndBucket(Hash->BucketsCount_) 
             , Pos()
         {
             for (; Bucket < EndBucket; ++Bucket) {
@@ -956,7 +956,7 @@ public:
         TIteratorImpl(const TCompactHashBase* hash)
             : Hash(hash)
             , Bucket(0)
-            , EndBucket(Hash->BucketsCount_)
+            , EndBucket(Hash->BucketsCount_) 
         {
             for (; Bucket < EndBucket; ++Bucket) {
                 if (!Hash->IsEmptyBucket(Bucket)) {
@@ -1062,28 +1062,28 @@ public:
     using TBucketIterator = TListPoolBase::TListIterator<TItemType, TListPoolBase::TLargeListHeader>;
     using TConstBucketIterator = TListPoolBase::TListIterator<const TItemType, const TListPoolBase::TLargeListHeader>;
 
-    TCompactHashBase(TAlignedPagePool& pagePool, size_t size = 0, const TKeyExtractor& keyExtractor = TKeyExtractor(),
+    TCompactHashBase(TAlignedPagePool& pagePool, size_t size = 0, const TKeyExtractor& keyExtractor = TKeyExtractor(), 
         const TKeyHash& keyHash = TKeyHash(), const TKeyEqual& keyEqual = TKeyEqual())
-        : ListPool_(pagePool)
-        , KeyExtractor_(keyExtractor)
+        : ListPool_(pagePool) 
+        , KeyExtractor_(keyExtractor) 
         , KeyHash_(keyHash)
         , KeyEqual_(keyEqual)
     {
-        AllocateBuckets(FindNearestPrime(size));
+        AllocateBuckets(FindNearestPrime(size)); 
     }
 
     TCompactHashBase(const TCompactHashBase& other)
         : Size_(other.Size_)
         , UniqSize_(other.UniqSize_)
         , MaxLoadFactor_(other.MaxLoadFactor_)
-        , ListPool_(other.ListPool_.GetPagePool())
+        , ListPool_(other.ListPool_.GetPagePool()) 
         , KeyExtractor_(other.KeyExtractor_)
         , KeyHash_(other.KeyHash_)
         , KeyEqual_(other.KeyEqual_)
     {
-        AllocateBuckets(other.BucketsCount_);
-        for (size_t i = 0; i < other.BucketsCount_; ++i) {
-            auto& b = other.Buckets_[i];
+        AllocateBuckets(other.BucketsCount_); 
+        for (size_t i = 0; i < other.BucketsCount_; ++i) { 
+            auto& b = other.Buckets_[i]; 
             if (TItemNode::FlagSingle == b.Flag) {
                 TItemType item = b.Get();
                 UnconditionalInsert(KeyExtractor_(item)).Set(CloneItem(item));
@@ -1100,23 +1100,23 @@ public:
         , UniqSize_(std::move(other.UniqSize_))
         , MaxLoadFactor_(std::move(other.MaxLoadFactor_))
         , Buckets_(std::move(other.Buckets_))
-        , BucketsCount_(std::move(other.BucketsCount_))
-        , BucketsMemory_(std::move(other.BucketsMemory_))
+        , BucketsCount_(std::move(other.BucketsCount_)) 
+        , BucketsMemory_(std::move(other.BucketsMemory_)) 
         , ListPool_(std::move(other.ListPool_))
         , KeyExtractor_(std::move(other.KeyExtractor_))
         , KeyHash_(std::move(other.KeyHash_))
         , KeyEqual_(std::move(other.KeyEqual_))
     {
-        other.Buckets_ = nullptr;
-        other.BucketsMemory_ = 0;
-        other.BucketsCount_ = 0;
+        other.Buckets_ = nullptr; 
+        other.BucketsMemory_ = 0; 
+        other.BucketsCount_ = 0; 
         other.Size_ = 0;
         other.UniqSize_ = 0;
         other.MaxLoadFactor_ = 1.f;
     }
 
     ~TCompactHashBase() {
-        ClearImpl(true);
+        ClearImpl(true); 
     }
 
     TCompactHashBase& operator= (const TCompactHashBase& other) {
@@ -1130,7 +1130,7 @@ public:
     }
 
     void Clear() {
-        ClearImpl(false);
+        ClearImpl(false); 
     }
 
     bool Has(const TKeyType& key) const {
@@ -1173,7 +1173,7 @@ public:
     }
 
     float GetLoadFactor() const {
-        return float(UniqSize_) / float(BucketsCount_);
+        return float(UniqSize_) / float(BucketsCount_); 
     }
 
     TAlignedPagePool& GetPagePool() const {
@@ -1185,8 +1185,8 @@ public:
         DoSwap(UniqSize_, other.UniqSize_);
         DoSwap(MaxLoadFactor_, other.MaxLoadFactor_);
         DoSwap(Buckets_, other.Buckets_);
-        DoSwap(BucketsCount_, other.BucketsCount_);
-        DoSwap(BucketsMemory_, other.BucketsMemory_);
+        DoSwap(BucketsCount_, other.BucketsCount_); 
+        DoSwap(BucketsMemory_, other.BucketsMemory_); 
         DoSwap(ListPool_, other.ListPool_);
         DoSwap(KeyExtractor_, other.KeyExtractor_);
         DoSwap(KeyHash_, other.KeyHash_);
@@ -1220,38 +1220,38 @@ public:
     }
 
     size_t GetBucketCount() const {
-        return BucketsCount_;
+        return BucketsCount_; 
     }
 
     size_t GetBucket(const TKeyType& key) const {
-        return NYql::VaryingHash(KeyHash_(key)) % BucketsCount_;
+        return NYql::VaryingHash(KeyHash_(key)) % BucketsCount_; 
     }
 
     bool IsEmptyBucket(size_t bucket) const {
-        Y_ASSERT(bucket < BucketsCount_);
+        Y_ASSERT(bucket < BucketsCount_); 
         return TItemNode::FlagEmpty == Buckets_[bucket].Flag;
     }
 
     size_t GetBucketSize(size_t bucket) const {
-        Y_ASSERT(bucket < BucketsCount_);
+        Y_ASSERT(bucket < BucketsCount_); 
         return Buckets_[bucket].Size();
     }
 
     TConstBucketIterator GetBucketIter(size_t bucket) const {
-        Y_ASSERT(bucket < BucketsCount_);
-        const TItemNode& b = Buckets_[bucket];
-        return b.Iter();
+        Y_ASSERT(bucket < BucketsCount_); 
+        const TItemNode& b = Buckets_[bucket]; 
+        return b.Iter(); 
     }
 
     bool Rehash(size_t size) {
-        if (double(size) / BucketsCount_ <= MaxLoadFactor_) {
+        if (double(size) / BucketsCount_ <= MaxLoadFactor_) { 
             return false;
         }
 
-        TItemNode* oldBuckets = Buckets_;
-        size_t oldBucketsCount = BucketsCount_;
-        size_t oldBucketsMemory = BucketsMemory_;
-        AllocateBuckets(FindNearestPrime(ceil(double(size) / MaxLoadFactor_)));
+        TItemNode* oldBuckets = Buckets_; 
+        size_t oldBucketsCount = BucketsCount_; 
+        size_t oldBucketsMemory = BucketsMemory_; 
+        AllocateBuckets(FindNearestPrime(ceil(double(size) / MaxLoadFactor_))); 
 
         Y_DEFER {
             for (size_t i = 0; i < oldBucketsCount; ++i) {
@@ -1281,7 +1281,7 @@ public:
             DoSwap(oldBucketsMemory, BucketsMemory_);
             throw;
         }
-
+ 
         return true;
     }
 
@@ -1289,8 +1289,8 @@ public:
         size_t empty = 0;
         size_t single = 0;
         size_t list = 0;
-        for (size_t i = 0; i < BucketsCount_; ++i) {
-            auto& b = Buckets_[i];
+        for (size_t i = 0; i < BucketsCount_; ++i) { 
+            auto& b = Buckets_[i]; 
             if (TItemNode::FlagEmpty == b.Flag) {
                 ++empty;
             } else if (TItemNode::FlagSingle == b.Flag) {
@@ -1306,40 +1306,40 @@ public:
     }
 
 protected:
-    void ClearImpl(bool fromDtor) {
-        for (size_t i = 0; i < BucketsCount_; ++i) {
-            ClearNode(Buckets_[i]);
-        }
-        FreeBuckets(Buckets_, BucketsMemory_);
-        Buckets_ = nullptr;
-        BucketsCount_ = 0;
-        BucketsMemory_ = 0;
-        if (!fromDtor) {
-            AllocateBuckets(FindNearestPrime(0));
-        }
-
-        Size_ = 0;
-        UniqSize_ = 0;
-    }
-
-    void AllocateBuckets(size_t count) {
+    void ClearImpl(bool fromDtor) { 
+        for (size_t i = 0; i < BucketsCount_; ++i) { 
+            ClearNode(Buckets_[i]); 
+        } 
+        FreeBuckets(Buckets_, BucketsMemory_); 
+        Buckets_ = nullptr; 
+        BucketsCount_ = 0; 
+        BucketsMemory_ = 0; 
+        if (!fromDtor) { 
+            AllocateBuckets(FindNearestPrime(0)); 
+        } 
+ 
+        Size_ = 0; 
+        UniqSize_ = 0; 
+    } 
+ 
+    void AllocateBuckets(size_t count) { 
         auto bucketsMemory = Max(sizeof(TItemNode) * count, (size_t)TAlignedPagePool::POOL_PAGE_SIZE);
-        Buckets_ = (TItemNode*)GetPagePool().GetBlock(bucketsMemory);
-        BucketsCount_ = count;
-        BucketsMemory_ = bucketsMemory;
-        for (size_t i = 0; i < count; ++i) {
-            new (&Buckets_[i]) TItemNode();
-        }
-    }
-
-    void FreeBuckets(TItemNode* buckets, size_t memory) {
-        if (!buckets) {
-            return;
-        }
-
-        GetPagePool().ReturnBlock(buckets, memory);
-    }
-
+        Buckets_ = (TItemNode*)GetPagePool().GetBlock(bucketsMemory); 
+        BucketsCount_ = count; 
+        BucketsMemory_ = bucketsMemory; 
+        for (size_t i = 0; i < count; ++i) { 
+            new (&Buckets_[i]) TItemNode(); 
+        } 
+    } 
+ 
+    void FreeBuckets(TItemNode* buckets, size_t memory) { 
+        if (!buckets) { 
+            return; 
+        } 
+ 
+        GetPagePool().ReturnBlock(buckets, memory); 
+    } 
+ 
     TConstBucketIterator FindPos(const TNode<TItemType>& b, const TKeyType& key) const {
         if (TItemNode::FlagEmpty != b.Flag) {
             for (TConstBucketIterator it = b.Iter(); it.Ok(); ++it) {
@@ -1460,9 +1460,9 @@ protected:
     size_t Size_ = 0;
     size_t UniqSize_ = 0;
     float MaxLoadFactor_ = 1.f;
-    TItemNode* Buckets_ = nullptr;
-    size_t BucketsCount_ = 0;
-    size_t BucketsMemory_ = 0;
+    TItemNode* Buckets_ = nullptr; 
+    size_t BucketsCount_ = 0; 
+    size_t BucketsMemory_ = 0; 
     TListPool<TItemType, TSubItemType> ListPool_;
 
     TKeyExtractor KeyExtractor_;
@@ -1492,8 +1492,8 @@ private:
     using TItem = TKeyValuePair<TKey, TValue>;
     using TBase = TCompactHashBase<TItem, TKey, TSelect1st, TKeyHash, TKeyEqual>;
 public:
-    TCompactHash(TAlignedPagePool& pagePool, size_t size = 0, const TKeyHash& keyHash = TKeyHash(), const TKeyEqual& keyEqual = TKeyEqual())
-        : TBase(pagePool, size, TSelect1st(), keyHash, keyEqual)
+    TCompactHash(TAlignedPagePool& pagePool, size_t size = 0, const TKeyHash& keyHash = TKeyHash(), const TKeyEqual& keyEqual = TKeyEqual()) 
+        : TBase(pagePool, size, TSelect1st(), keyHash, keyEqual) 
     {
     }
 
@@ -1571,8 +1571,8 @@ private:
     static_assert(sizeof(TStoreItem) == sizeof(TKey) + sizeof(TNode<TValue>), "Unexpected size");
 
 public:
-    TCompactMultiHash(TAlignedPagePool& pagePool, size_t size = 0, const TKeyHash& keyHash = TKeyHash(), const TKeyEqual& keyEqual = TKeyEqual())
-        : TBase(pagePool, size, TSelect1st(), keyHash, keyEqual)
+    TCompactMultiHash(TAlignedPagePool& pagePool, size_t size = 0, const TKeyHash& keyHash = TKeyHash(), const TKeyEqual& keyEqual = TKeyEqual()) 
+        : TBase(pagePool, size, TSelect1st(), keyHash, keyEqual) 
     {
     }
     TCompactMultiHash(const TCompactMultiHash& other)
@@ -1632,8 +1632,8 @@ private:
     using TBase = TCompactHashBase<TKey, TKey, TIdentity, TKeyHash, TKeyEqual>;
 
 public:
-    TCompactHashSet(TAlignedPagePool& pagePool, size_t size = 0, const TKeyHash& keyHash = TKeyHash(), const TKeyEqual& keyEqual = TKeyEqual())
-        : TBase(pagePool, size, TIdentity(), keyHash, keyEqual)
+    TCompactHashSet(TAlignedPagePool& pagePool, size_t size = 0, const TKeyHash& keyHash = TKeyHash(), const TKeyEqual& keyEqual = TKeyEqual()) 
+        : TBase(pagePool, size, TIdentity(), keyHash, keyEqual) 
     {
     }
     TCompactHashSet(const TCompactHashSet& other)

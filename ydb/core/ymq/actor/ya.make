@@ -89,11 +89,11 @@ PEERDIR(
     ydb/public/lib/scheme_types
     ydb/public/lib/value
     ydb/public/sdk/cpp/client/ydb_types/credentials
-    ydb/library/yql/minikql
+    ydb/library/yql/minikql 
 )
 
 YQL_LAST_ABI_VERSION()
-
+ 
 GENERATE_ENUM_SERIALIZATION(events.h)
 
 GENERATE_ENUM_SERIALIZATION(metering.h)

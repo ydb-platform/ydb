@@ -1,7 +1,7 @@
 import sys
 
 TEMPLATE="""
-#include <yql/udfs/common/python/python_udf/python_udf.h>
+#include <yql/udfs/common/python/python_udf/python_udf.h> 
 
 #include <ydb/library/yql/public/udf/udf_registrator.h>
 
@@ -27,7 +27,7 @@ extern "C" UDF_API void Register(IRegistrator& registrator, ui32 flags) {
 extern "C" UDF_API ui32 AbiVersion() {
     return CurrentAbiVersion();
 }
-
+ 
 extern "C" UDF_API void SetBackTraceCallback(TBackTraceCallback callback) {
     SetBackTraceCallbackImpl(callback);
 }

@@ -16,7 +16,7 @@ PEERDIR(
 )
 
 YQL_LAST_ABI_VERSION()
-
+ 
 SRCS(
     ticket_parser_ut.cpp
 )

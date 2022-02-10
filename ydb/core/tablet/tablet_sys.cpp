@@ -10,7 +10,7 @@
 
 #include <util/generic/deque.h>
 #include <util/generic/hash.h>
-#include <util/generic/queue.h>
+#include <util/generic/queue.h> 
 #include <util/generic/set.h>
 #include <util/stream/str.h>
 
@@ -1456,7 +1456,7 @@ void TTablet::ProgressFollowerQueue() {
         }
 
         Graph.PostponedFollowerUpdates.pop_front();
-    }
+    } 
 
     if (Graph.PostponedFollowerUpdates && Graph.Queue.empty() && Graph.SyncCommit.SyncStep == 0) {
         Graph.SyncCommit.SyncStep = Graph.NextEntry - 1;
@@ -1484,7 +1484,7 @@ void TTablet::ProgressFollowerQueue() {
         );
     }
 }
-
+ 
 void TTablet::Handle(TEvTabletPipe::TEvConnect::TPtr& ev) {
     if (PipeConnectAcceptor->IsStopped()) {
         PipeConnectAcceptor->Reject(ev, SelfId(), NKikimrProto::TRYLATER, Leader);
@@ -1492,9 +1492,9 @@ void TTablet::Handle(TEvTabletPipe::TEvConnect::TPtr& ev) {
         PipeConnectAcceptor->Accept(ev, SelfId(), UserTablet, Leader);
     } else {
         PipeConnectAcceptor->Enqueue(ev, SelfId());
-    }
+    } 
 }
-
+ 
 void TTablet::Handle(TEvTabletPipe::TEvServerDestroyed::TPtr& ev) {
     PipeConnectAcceptor->Erase(ev);
 }

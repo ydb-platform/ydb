@@ -1,8 +1,8 @@
-#include "mkql_builtins_impl.h"
+#include "mkql_builtins_impl.h" 
 #include "mkql_builtins_compare.h"
 
 #include <util/digest/murmur.h>
-#include <util/generic/yexception.h>
+#include <util/generic/yexception.h> 
 #include <util/generic/maybe.h>
 
 #include <algorithm>
@@ -13,35 +13,35 @@ namespace NMiniKQL {
 namespace {
 
 void RegisterDefaultOperations(IBuiltinFunctionRegistry& registry) {
-    RegisterAdd(registry);
-    RegisterAggrAdd(registry);
-    RegisterSub(registry);
-    RegisterMul(registry);
-    RegisterDiv(registry);
-    RegisterMod(registry);
-    RegisterIncrement(registry);
-    RegisterDecrement(registry);
-    RegisterBitAnd(registry);
-    RegisterBitOr(registry);
-    RegisterBitXor(registry);
-    RegisterShiftLeft(registry);
-    RegisterShiftRight(registry);
-    RegisterRotLeft(registry);
-    RegisterRotRight(registry);
-    RegisterPlus(registry);
-    RegisterMinus(registry);
-    RegisterBitNot(registry);
-    RegisterCountBits(registry);
-    RegisterAbs(registry);
-    RegisterConvert(registry);
-    RegisterConcat(registry);
-    RegisterSubstring(registry);
+    RegisterAdd(registry); 
+    RegisterAggrAdd(registry); 
+    RegisterSub(registry); 
+    RegisterMul(registry); 
+    RegisterDiv(registry); 
+    RegisterMod(registry); 
+    RegisterIncrement(registry); 
+    RegisterDecrement(registry); 
+    RegisterBitAnd(registry); 
+    RegisterBitOr(registry); 
+    RegisterBitXor(registry); 
+    RegisterShiftLeft(registry); 
+    RegisterShiftRight(registry); 
+    RegisterRotLeft(registry); 
+    RegisterRotRight(registry); 
+    RegisterPlus(registry); 
+    RegisterMinus(registry); 
+    RegisterBitNot(registry); 
+    RegisterCountBits(registry); 
+    RegisterAbs(registry); 
+    RegisterConvert(registry); 
+    RegisterConcat(registry); 
+    RegisterSubstring(registry); 
     RegisterFind(registry);
     RegisterWith(registry);
-    RegisterInversePresortString(registry);
-    RegisterInverseString(registry);
-    RegisterNanvl(registry);
-    RegisterByteAt(registry);
+    RegisterInversePresortString(registry); 
+    RegisterInverseString(registry); 
+    RegisterNanvl(registry); 
+    RegisterByteAt(registry); 
     RegisterMax(registry);
     RegisterMin(registry);
     RegisterAggrMax(registry);
@@ -57,10 +57,10 @@ void RegisterDefaultOperations(IBuiltinFunctionRegistry& registry) {
 void PrintType(NUdf::TDataTypeId schemeType, bool isOptional, IOutputStream& out)
 {
     const auto slot = NUdf::FindDataSlot(schemeType);
-    out << (slot ? NUdf::GetDataTypeInfo(*slot).Name : "unknown");
+    out << (slot ? NUdf::GetDataTypeInfo(*slot).Name : "unknown"); 
 
     if (isOptional) {
-        out << '?';
+        out << '?'; 
     }
 }
 
@@ -73,13 +73,13 @@ void PrintFunctionSignature(
     out << '\t';
 
     // print results type
-    PrintType(param->SchemeType, param->IsNullable(), out);
+    PrintType(param->SchemeType, param->IsNullable(), out); 
     ++param;
 
     // print function name and args types
     out << ' ' << funcName << '(';
     while (param->SchemeType != 0) {
-        PrintType(param->SchemeType, param->IsNullable(), out);
+        PrintType(param->SchemeType, param->IsNullable(), out); 
         ++param;
         if (param->SchemeType != 0) {
             out << ", ";
@@ -90,7 +90,7 @@ void PrintFunctionSignature(
 
 bool IsArgumentsMatch(
         const TFunctionParamMetadata* paramsMetadata,
-        const std::pair<NUdf::TDataTypeId, bool>* argTypes, size_t argTypesCount)
+        const std::pair<NUdf::TDataTypeId, bool>* argTypes, size_t argTypesCount) 
 {
     size_t index = 0;
 
@@ -99,14 +99,14 @@ bool IsArgumentsMatch(
             return false;
         }
 
-        if (argTypes[index].first != paramsMetadata->SchemeType) {
+        if (argTypes[index].first != paramsMetadata->SchemeType) { 
             return false;
         }
 
-        if (argTypes[index].second != paramsMetadata->IsNullable()) {
-            return false;
-        }
-
+        if (argTypes[index].second != paramsMetadata->IsNullable()) { 
+            return false; 
+        } 
+ 
         ++paramsMetadata;
         ++index;
     }
@@ -149,7 +149,7 @@ private:
     std::optional<ui64> MetadataEtag;
 };
 
-TBuiltinFunctionRegistry::TBuiltinFunctionRegistry()
+TBuiltinFunctionRegistry::TBuiltinFunctionRegistry() 
 {
     RegisterDefaultOperations(*this);
     CalculateMetadataEtag();
@@ -191,7 +191,7 @@ std::optional<TFunctionDescriptor> TBuiltinFunctionRegistry::FindBuiltin(const s
 }
 
 TFunctionDescriptor TBuiltinFunctionRegistry::GetBuiltin(const std::string_view& name,
-        const std::pair<NUdf::TDataTypeId, bool>* argTypes, size_t argTypesCount) const
+        const std::pair<NUdf::TDataTypeId, bool>* argTypes, size_t argTypesCount) const 
 {
     if (const auto desc = FindBuiltin(name, argTypes, argTypesCount)) {
         return *desc;
@@ -202,23 +202,23 @@ TFunctionDescriptor TBuiltinFunctionRegistry::GetBuiltin(const std::string_view&
     ss << ' ' << name << '(';
     for (size_t i = 1U; i < argTypesCount; i++) {
         if (i > 1U) {
-            ss << ", ";
-        }
-        PrintType(argTypes[i].first, argTypes[i].second, ss);
+            ss << ", "; 
+        } 
+        PrintType(argTypes[i].first, argTypes[i].second, ss); 
     }
     ss << ").\nCandidates are: [\n";
-    ui32 i = 0;
+    ui32 i = 0; 
     for (const TFunctionDescriptor& desc: FindCandidates(name)) {
-        PrintFunctionSignature(name, desc, ss);
+        PrintFunctionSignature(name, desc, ss); 
         ss << '\n';
         if (++i > 32) {
-            ss << "\t...\n";
-            break;
-        }
+            ss << "\t...\n"; 
+            break; 
+        } 
     }
     ss << ']';
 
-    ythrow yexception() << "Unsupported builtin function: " << ss.Str();
+    ythrow yexception() << "Unsupported builtin function: " << ss.Str(); 
 }
 
 bool TBuiltinFunctionRegistry::HasBuiltin(const std::string_view& name) const
@@ -268,7 +268,7 @@ void TBuiltinFunctionRegistry::PrintInfoTo(IOutputStream& out) const
          out << f.first << ": [\n";
 
          for (const TFunctionDescriptor& desc: f.second) {
-            PrintFunctionSignature(f.first, desc, out);
+            PrintFunctionSignature(f.first, desc, out); 
             out << '\n';
          }
 

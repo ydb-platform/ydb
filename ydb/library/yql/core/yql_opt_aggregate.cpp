@@ -5,7 +5,7 @@
 
 namespace NYql {
 
-TExprNode::TPtr ExpandAggregate(const TExprNode::TPtr& node, TExprContext& ctx, bool forceCompact) {
+TExprNode::TPtr ExpandAggregate(const TExprNode::TPtr& node, TExprContext& ctx, bool forceCompact) { 
     auto list = node->HeadPtr();
     auto keyColumns = node->ChildPtr(1);
     auto aggregatedColumns = node->Child(2);
@@ -25,7 +25,7 @@ TExprNode::TPtr ExpandAggregate(const TExprNode::TPtr& node, TExprContext& ctx, 
     TExprNode::TPtr sortKey = voidNode;
     TExprNode::TPtr sortOrder = voidNode;
 
-    bool effectiveCompact = forceCompact || HasSetting(*settings, "compact");
+    bool effectiveCompact = forceCompact || HasSetting(*settings, "compact"); 
 
     const TStructExprType* originalRowType = GetSeqItemType(node->Head().GetTypeAnn())->Cast<TStructExprType>();
     TVector<const TItemExprType*> rowItems = originalRowType->GetItems();

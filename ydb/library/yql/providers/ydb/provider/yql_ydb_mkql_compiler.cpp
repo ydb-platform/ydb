@@ -1,11 +1,11 @@
 #include "yql_ydb_mkql_compiler.h"
 
-#include <ydb/library/yql/providers/ydb/expr_nodes/yql_ydb_expr_nodes.h>
-#include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
-#include <ydb/library/yql/providers/common/mkql/yql_type_mkql.h>
-#include <ydb/library/yql/minikql/mkql_node_cast.h>
-#include <ydb/library/yql/minikql/mkql_node.h>
-#include <ydb/library/yql/core/yql_opt_utils.h>
+#include <ydb/library/yql/providers/ydb/expr_nodes/yql_ydb_expr_nodes.h> 
+#include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h> 
+#include <ydb/library/yql/providers/common/mkql/yql_type_mkql.h> 
+#include <ydb/library/yql/minikql/mkql_node_cast.h> 
+#include <ydb/library/yql/minikql/mkql_node.h> 
+#include <ydb/library/yql/core/yql_opt_utils.h> 
 
 #include <library/cpp/yson/node/node.h>
 #include <library/cpp/yson/node/node_io.h>
@@ -37,7 +37,7 @@ template<bool Async>
 TRuntimeNode BuildYdbInputCall(
     const TType* outputType,
     TType* itemType,
-    const std::string_view& database,
+    const std::string_view& database, 
     const std::string_view& endpoint,
     bool secure,
     const std::string_view& token,
@@ -62,7 +62,7 @@ TRuntimeNode BuildYdbInputCall(
     TCallableBuilder scan(ctx.ProgramBuilder.GetTypeEnvironment(), Async ? "KikScanAsync" :  "KikScan", streamType);
 
     scan.Add(ctx.ProgramBuilder.NewDataLiteral<NUdf::EDataSlot::String>(table));
-    scan.Add(ctx.ProgramBuilder.NewDataLiteral<NUdf::EDataSlot::String>(database));
+    scan.Add(ctx.ProgramBuilder.NewDataLiteral<NUdf::EDataSlot::String>(database)); 
     scan.Add(ctx.ProgramBuilder.NewDataLiteral<NUdf::EDataSlot::String>(endpoint));
     scan.Add(ctx.ProgramBuilder.NewDataLiteral<NUdf::EDataSlot::String>(token));
     scan.Add(ctx.ProgramBuilder.NewDataLiteral<NUdf::EDataSlot::String>(snapshot));

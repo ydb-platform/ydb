@@ -1,6 +1,6 @@
 #include "yql_udf_index_package_set.h"
 
-#include <ydb/library/yql/utils/yql_panic.h>
+#include <ydb/library/yql/utils/yql_panic.h> 
 
 using namespace NYql;
 

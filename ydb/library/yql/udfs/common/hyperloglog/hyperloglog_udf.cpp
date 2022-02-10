@@ -131,10 +131,10 @@ namespace {
 
     class THyperLogLog_Create: public TBoxedValue {
     public:
-        THyperLogLog_Create(TSourcePosition pos)
-            : Pos_(pos)
-        {}
-
+        THyperLogLog_Create(TSourcePosition pos) 
+            : Pos_(pos) 
+        {} 
+ 
         static const TStringRef& Name() {
             static auto nameRef = TStringRef::Of("Create");
             return nameRef;
@@ -163,24 +163,24 @@ namespace {
             if (Name() == name) {
                 builder.SimpleSignature<TResource<HyperLogLogResourceName>(ui64, ui32)>();
                 if (!typesOnly) {
-                    builder.Implementation(new THyperLogLog_Create(builder.GetSourcePosition()));
+                    builder.Implementation(new THyperLogLog_Create(builder.GetSourcePosition())); 
                 }
                 return true;
             } else {
                 return false;
             }
         }
-
-    private:
-        TSourcePosition Pos_;
+ 
+    private: 
+        TSourcePosition Pos_; 
     };
 
     class THyperLogLog_AddValue: public TBoxedValue {
     public:
-        THyperLogLog_AddValue(TSourcePosition pos)
-            : Pos_(pos)
-        {}
-
+        THyperLogLog_AddValue(TSourcePosition pos) 
+            : Pos_(pos) 
+        {} 
+ 
         static const TStringRef& Name() {
             static auto nameRef = TStringRef::Of("AddValue");
             return nameRef;
@@ -210,25 +210,25 @@ namespace {
             if (Name() == name) {
                 builder.SimpleSignature<TResource<HyperLogLogResourceName>(TResource<HyperLogLogResourceName>, ui64)>();
                 if (!typesOnly) {
-                    builder.Implementation(new THyperLogLog_AddValue(builder.GetSourcePosition()));
+                    builder.Implementation(new THyperLogLog_AddValue(builder.GetSourcePosition())); 
                 }
                 return true;
             } else {
                 return false;
             }
         }
-
-    private:
-        TSourcePosition Pos_;
+ 
+    private: 
+        TSourcePosition Pos_; 
     };
 
     class THyperLogLog_Serialize: public TBoxedValue {
     public:
-        THyperLogLog_Serialize(TSourcePosition pos)
-            : Pos_(pos)
-        {}
-
-    public:
+        THyperLogLog_Serialize(TSourcePosition pos) 
+            : Pos_(pos) 
+        {} 
+ 
+    public: 
         static const TStringRef& Name() {
             static auto nameRef = TStringRef::Of("Serialize");
             return nameRef;
@@ -257,24 +257,24 @@ namespace {
             if (Name() == name) {
                 builder.SimpleSignature<char*(TResource<HyperLogLogResourceName>)>();
                 if (!typesOnly) {
-                    builder.Implementation(new THyperLogLog_Serialize(builder.GetSourcePosition()));
+                    builder.Implementation(new THyperLogLog_Serialize(builder.GetSourcePosition())); 
                 }
                 return true;
             } else {
                 return false;
             }
         }
-
-    private:
-        TSourcePosition Pos_;
+ 
+    private: 
+        TSourcePosition Pos_; 
     };
 
     class THyperLogLog_Deserialize: public TBoxedValue {
     public:
-        THyperLogLog_Deserialize(TSourcePosition pos)
-            : Pos_(pos)
-        {}
-
+        THyperLogLog_Deserialize(TSourcePosition pos) 
+            : Pos_(pos) 
+        {} 
+ 
         static const TStringRef& Name() {
             static auto nameRef = TStringRef::Of("Deserialize");
             return nameRef;
@@ -305,24 +305,24 @@ namespace {
             if (Name() == name) {
                 builder.SimpleSignature<TResource<HyperLogLogResourceName>(char*)>();
                 if (!typesOnly) {
-                    builder.Implementation(new THyperLogLog_Deserialize(builder.GetSourcePosition()));
+                    builder.Implementation(new THyperLogLog_Deserialize(builder.GetSourcePosition())); 
                 }
                 return true;
             } else {
                 return false;
             }
         }
-
-    private:
-        TSourcePosition Pos_;
+ 
+    private: 
+        TSourcePosition Pos_; 
     };
 
     class THyperLogLog_Merge: public TBoxedValue {
     public:
-        THyperLogLog_Merge(TSourcePosition pos)
-            : Pos_(pos)
-        {}
-
+        THyperLogLog_Merge(TSourcePosition pos) 
+            : Pos_(pos) 
+        {} 
+ 
         static const TStringRef& Name() {
             static auto nameRef = TStringRef::Of("Merge");
             return nameRef;
@@ -352,24 +352,24 @@ namespace {
             if (Name() == name) {
                 builder.SimpleSignature<TResource<HyperLogLogResourceName>(TResource<HyperLogLogResourceName>, TResource<HyperLogLogResourceName>)>();
                 if (!typesOnly) {
-                    builder.Implementation(new THyperLogLog_Merge(builder.GetSourcePosition()));
+                    builder.Implementation(new THyperLogLog_Merge(builder.GetSourcePosition())); 
                 }
                 return true;
             } else {
                 return false;
             }
         }
-
-    private:
-        TSourcePosition Pos_;
+ 
+    private: 
+        TSourcePosition Pos_; 
     };
 
     class THyperLogLog_GetResult: public TBoxedValue {
     public:
-        THyperLogLog_GetResult(TSourcePosition pos)
-            : Pos_(pos)
-        {}
-
+        THyperLogLog_GetResult(TSourcePosition pos) 
+            : Pos_(pos) 
+        {} 
+ 
         static const TStringRef& Name() {
             static auto nameRef = TStringRef::Of("GetResult");
             return nameRef;
@@ -396,16 +396,16 @@ namespace {
                 builder.Args()->Add(resource).Done().Returns<ui64>();
 
                 if (!typesOnly) {
-                    builder.Implementation(new THyperLogLog_GetResult(builder.GetSourcePosition()));
+                    builder.Implementation(new THyperLogLog_GetResult(builder.GetSourcePosition())); 
                 }
                 return true;
             } else {
                 return false;
             }
         }
-
-    private:
-        TSourcePosition Pos_;
+ 
+    private: 
+        TSourcePosition Pos_; 
     };
 
     SIMPLE_MODULE(THyperLogLogModule,

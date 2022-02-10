@@ -296,7 +296,7 @@ namespace NActors {
     ////////////////////////////////////////////////////////////////////////////////
     TAutoPtr<TLogBackend> CreateSysLogBackend(const TString& ident,
                                               bool logPError, bool logCons);
-    TAutoPtr<TLogBackend> CreateStderrBackend();
+    TAutoPtr<TLogBackend> CreateStderrBackend(); 
     TAutoPtr<TLogBackend> CreateFileBackend(const TString& fileName);
     TAutoPtr<TLogBackend> CreateNullBackend();
     TAutoPtr<TLogBackend> CreateCompositeLogBackend(TVector<TAutoPtr<TLogBackend>>&& underlyingBackends);

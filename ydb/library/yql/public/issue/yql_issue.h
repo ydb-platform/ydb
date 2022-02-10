@@ -2,7 +2,7 @@
 
 #include <util/system/types.h>
 #include <util/generic/hash.h>
-#include <util/generic/maybe.h>
+#include <util/generic/maybe.h> 
 #include <util/generic/vector.h>
 #include <util/generic/string.h>
 #include <util/generic/strbuf.h>
@@ -17,21 +17,21 @@
 namespace NYql {
 
 void SanitizeNonAscii(TString& s);
-
+ 
 ///////////////////////////////////////////////////////////////////////////////
 // TPosition
 ///////////////////////////////////////////////////////////////////////////////
 struct TPosition {
     ui32 Column = 0U;
     ui32 Row = 0U;
-    TString File;
+    TString File; 
 
     TPosition() = default;
 
-    TPosition(ui32 column, ui32 row, const TString& file = {})
+    TPosition(ui32 column, ui32 row, const TString& file = {}) 
         : Column(column)
         , Row(row)
-        , File(file)
+        , File(file) 
     {
         SanitizeNonAscii(File);
     }
@@ -45,11 +45,11 @@ struct TPosition {
     }
 
     inline bool operator==(const TPosition& other) const {
-        return Column == other.Column && Row == other.Row && File == other.File;
+        return Column == other.Column && Row == other.Row && File == other.File; 
     }
 
     inline bool operator<(const TPosition& other) const {
-        return std::tie(Row, Column, File) < std::tie(other.Row, other.Column, other.File);
+        return std::tie(Row, Column, File) < std::tie(other.Row, other.Column, other.File); 
     }
 };
 
@@ -113,8 +113,8 @@ public:
     TPosition Position;
     TPosition EndPosition;
     TString Message;
-    TIssueCode IssueCode = 0U;
-    ESeverity Severity = TSeverityIds::S_ERROR;
+    TIssueCode IssueCode = 0U; 
+    ESeverity Severity = TSeverityIds::S_ERROR; 
 
     TIssue() = default;
 
@@ -156,10 +156,10 @@ public:
 
     ui64 Hash() const noexcept {
         return CombineHashes(
-            CombineHashes(
-                (size_t)CombineHashes(IntHash(Position.Row), IntHash(Position.Column)),
+            CombineHashes( 
+                (size_t)CombineHashes(IntHash(Position.Row), IntHash(Position.Column)), 
                 ComputeHash(Position.File)
-            ),
+            ), 
             (size_t)CombineHashes((size_t)IntHash(static_cast<int>(IssueCode)), ComputeHash(Message)));
     }
 
@@ -178,7 +178,7 @@ public:
     }
 
     TIssue& AddSubIssue(TIntrusivePtr<TIssue> issue) {
-        Severity = (ESeverity)Min((ui32)issue->GetSeverity(), (ui32)Severity);
+        Severity = (ESeverity)Min((ui32)issue->GetSeverity(), (ui32)Severity); 
         Children_.push_back(issue);
         return *this;
     }
@@ -317,8 +317,8 @@ public:
     }
 };
 
-TIssue ExceptionToIssue(const std::exception& e, const TPosition& pos = TPosition());
-TMaybe<TPosition> TryParseTerminationMessage(TStringBuf& message);
+TIssue ExceptionToIssue(const std::exception& e, const TPosition& pos = TPosition()); 
+TMaybe<TPosition> TryParseTerminationMessage(TStringBuf& message); 
 
 } // namespace NYql
 

@@ -5,7 +5,7 @@ namespace NMiniKQL {
 
 Y_UNIT_TEST_SUITE(TMiniKQLJoinDictNodeTest) {
     Y_UNIT_TEST_LLVM(TestInner) {
-        for (ui32 pass = 0; pass < 1; ++pass) {
+        for (ui32 pass = 0; pass < 1; ++pass) { 
             TSetup<LLVM> setup;
             TProgramBuilder& pb = *setup.PgmBuilder;
 
@@ -19,7 +19,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLJoinDictNodeTest) {
             const auto payload4 = pb.NewDataLiteral<NUdf::EDataSlot::String>("X");
             const auto payload5 = pb.NewDataLiteral<NUdf::EDataSlot::String>("Y");
             const auto payload6 = pb.NewDataLiteral<NUdf::EDataSlot::String>("Z");
-
+ 
             const auto structType = pb.NewStructType({
                 {"Key", pb.NewDataType(NUdf::TDataType<ui32>::Id)},
                 {"Payload", pb.NewDataType(NUdf::TDataType<char*>::Id)}
@@ -31,26 +31,26 @@ Y_UNIT_TEST_SUITE(TMiniKQLJoinDictNodeTest) {
                 pb.AddMember(pb.AddMember(pb.NewEmptyStruct(), "Key", key3), "Payload", payload3)
             });
             const auto dict1 = pb.ToSortedDict(list1, true,
-                [&](TRuntimeNode item) {
+                [&](TRuntimeNode item) { 
                 return pb.Member(item, "Key");
-            },
-                [&](TRuntimeNode item) {
+            }, 
+                [&](TRuntimeNode item) { 
                 return pb.Member(item, "Payload");
-            });
-
+            }); 
+ 
             const auto list2 = pb.NewList(structType, {
                 pb.AddMember(pb.AddMember(pb.NewEmptyStruct(), "Key", key2), "Payload", payload4),
                 pb.AddMember(pb.AddMember(pb.NewEmptyStruct(), "Key", key3), "Payload", payload5),
                 pb.AddMember(pb.AddMember(pb.NewEmptyStruct(), "Key", key4), "Payload", payload6)
             });
             const auto dict2 = pb.ToSortedDict(list2, true,
-                [&](TRuntimeNode item) {
+                [&](TRuntimeNode item) { 
                 return pb.Member(item, "Key");
-            },
-                [&](TRuntimeNode item) {
+            }, 
+                [&](TRuntimeNode item) { 
                 return pb.Member(item, "Payload");
-            });
-
+            }); 
+ 
             const auto pgmReturn = pb.JoinDict(dict1, true, dict2, true, EJoinKind::Inner);
             const auto graph = setup.BuildGraph(pgmReturn);
             const auto iterator = graph->GetValue().GetListIterator();
@@ -70,11 +70,11 @@ Y_UNIT_TEST_SUITE(TMiniKQLJoinDictNodeTest) {
             UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(1), "Y");
             UNIT_ASSERT(!iterator.Next(tuple));
             UNIT_ASSERT(!iterator.Next(tuple));
-        }
-    }
-
+        } 
+    } 
+ 
     Y_UNIT_TEST_LLVM(TestLeft) {
-        for (ui32 pass = 0; pass < 1; ++pass) {
+        for (ui32 pass = 0; pass < 1; ++pass) { 
             TSetup<LLVM> setup;
             TProgramBuilder& pb = *setup.PgmBuilder;
 
@@ -88,7 +88,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLJoinDictNodeTest) {
             const auto payload4 = pb.NewDataLiteral<NUdf::EDataSlot::String>("X");
             const auto payload5 = pb.NewDataLiteral<NUdf::EDataSlot::String>("Y");
             const auto payload6 = pb.NewDataLiteral<NUdf::EDataSlot::String>("Z");
-
+ 
             const auto structType = pb.NewStructType({
                 {"Key", pb.NewDataType(NUdf::TDataType<ui32>::Id)},
                 {"Payload", pb.NewDataType(NUdf::TDataType<char*>::Id)}
@@ -100,26 +100,26 @@ Y_UNIT_TEST_SUITE(TMiniKQLJoinDictNodeTest) {
                 pb.AddMember(pb.AddMember(pb.NewEmptyStruct(), "Key", key3), "Payload", payload3)
             });
             const auto dict1 = pb.ToSortedDict(list1, true,
-                [&](TRuntimeNode item) {
+                [&](TRuntimeNode item) { 
                 return pb.Member(item, "Key");
-            },
-                [&](TRuntimeNode item) {
+            }, 
+                [&](TRuntimeNode item) { 
                 return pb.Member(item, "Payload");
-            });
-
+            }); 
+ 
             const auto list2 = pb.NewList(structType, {
                 pb.AddMember(pb.AddMember(pb.NewEmptyStruct(), "Key", key2), "Payload", payload4),
                 pb.AddMember(pb.AddMember(pb.NewEmptyStruct(), "Key", key3), "Payload", payload5),
                 pb.AddMember(pb.AddMember(pb.NewEmptyStruct(), "Key", key4), "Payload", payload6)
             });
             const auto dict2 = pb.ToSortedDict(list2, true,
-                [&](TRuntimeNode item) {
+                [&](TRuntimeNode item) { 
                 return pb.Member(item, "Key");
-            },
-                [&](TRuntimeNode item) {
+            }, 
+                [&](TRuntimeNode item) { 
                 return pb.Member(item, "Payload");
-            });
-
+            }); 
+ 
             const auto pgmReturn = pb.JoinDict(dict1, true, dict2, true, EJoinKind::Left);
             const auto graph = setup.BuildGraph(pgmReturn);
             const auto iterator = graph->GetValue().GetListIterator();
@@ -146,11 +146,11 @@ Y_UNIT_TEST_SUITE(TMiniKQLJoinDictNodeTest) {
             UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(1), "Y");
             UNIT_ASSERT(!iterator.Next(tuple));
             UNIT_ASSERT(!iterator.Next(tuple));
-        }
-    }
-
+        } 
+    } 
+ 
     Y_UNIT_TEST_LLVM(TestRight) {
-        for (ui32 pass = 0; pass < 1; ++pass) {
+        for (ui32 pass = 0; pass < 1; ++pass) { 
             TSetup<LLVM> setup;
             TProgramBuilder& pb = *setup.PgmBuilder;
 
@@ -164,7 +164,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLJoinDictNodeTest) {
             const auto payload4 = pb.NewDataLiteral<NUdf::EDataSlot::String>("X");
             const auto payload5 = pb.NewDataLiteral<NUdf::EDataSlot::String>("Y");
             const auto payload6 = pb.NewDataLiteral<NUdf::EDataSlot::String>("Z");
-
+ 
             const auto structType = pb.NewStructType({
                 {"Key", pb.NewDataType(NUdf::TDataType<ui32>::Id)},
                 {"Payload", pb.NewDataType(NUdf::TDataType<char*>::Id)}
@@ -176,26 +176,26 @@ Y_UNIT_TEST_SUITE(TMiniKQLJoinDictNodeTest) {
                 pb.AddMember(pb.AddMember(pb.NewEmptyStruct(), "Key", key3), "Payload", payload3)
             });
             const auto dict1 = pb.ToSortedDict(list1, true,
-                [&](TRuntimeNode item) {
+                [&](TRuntimeNode item) { 
                 return pb.Member(item, "Key");
-            },
-                [&](TRuntimeNode item) {
+            }, 
+                [&](TRuntimeNode item) { 
                 return pb.Member(item, "Payload");
-            });
-
+            }); 
+ 
             const auto list2 = pb.NewList(structType, {
                 pb.AddMember(pb.AddMember(pb.NewEmptyStruct(), "Key", key2), "Payload", payload4),
                 pb.AddMember(pb.AddMember(pb.NewEmptyStruct(), "Key", key3), "Payload", payload5),
                 pb.AddMember(pb.AddMember(pb.NewEmptyStruct(), "Key", key4), "Payload", payload6)
             });
             const auto dict2 = pb.ToSortedDict(list2, true,
-                [&](TRuntimeNode item) {
+                [&](TRuntimeNode item) { 
                 return pb.Member(item, "Key");
-            },
-                [&](TRuntimeNode item) {
+            }, 
+                [&](TRuntimeNode item) { 
                 return pb.Member(item, "Payload");
-            });
-
+            }); 
+ 
             const auto pgmReturn = pb.JoinDict(dict1, true, dict2, true, EJoinKind::Right);
             const auto graph = setup.BuildGraph(pgmReturn);
             const auto iterator = graph->GetValue().GetListIterator();
@@ -222,9 +222,9 @@ Y_UNIT_TEST_SUITE(TMiniKQLJoinDictNodeTest) {
             UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(1), "Z");
             UNIT_ASSERT(!iterator.Next(tuple));
             UNIT_ASSERT(!iterator.Next(tuple));
-        }
-    }
-
+        } 
+    } 
+ 
     Y_UNIT_TEST_LLVM(TestFull) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
@@ -239,7 +239,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLJoinDictNodeTest) {
         const auto payload4 = pb.NewDataLiteral<NUdf::EDataSlot::String>("X");
         const auto payload5 = pb.NewDataLiteral<NUdf::EDataSlot::String>("Y");
         const auto payload6 = pb.NewDataLiteral<NUdf::EDataSlot::String>("Z");
-
+ 
         const auto structType = pb.NewStructType({
             {"Key", pb.NewDataType(NUdf::TDataType<ui32>::Id)},
             {"Payload", pb.NewDataType(NUdf::TDataType<char*>::Id)}
@@ -251,26 +251,26 @@ Y_UNIT_TEST_SUITE(TMiniKQLJoinDictNodeTest) {
             pb.AddMember(pb.AddMember(pb.NewEmptyStruct(), "Key", key3), "Payload", payload3)
         });
         const auto dict1 = pb.ToSortedDict(list1, true,
-            [&](TRuntimeNode item) {
+            [&](TRuntimeNode item) { 
             return pb.Member(item, "Key");
-        },
-            [&](TRuntimeNode item) {
+        }, 
+            [&](TRuntimeNode item) { 
             return pb.Member(item, "Payload");
-        });
-
+        }); 
+ 
         const auto list2 = pb.NewList(structType, {
             pb.AddMember(pb.AddMember(pb.NewEmptyStruct(), "Key", key2), "Payload", payload4),
             pb.AddMember(pb.AddMember(pb.NewEmptyStruct(), "Key", key3), "Payload", payload5),
             pb.AddMember(pb.AddMember(pb.NewEmptyStruct(), "Key", key4), "Payload", payload6)
         });
         const auto dict2 = pb.ToSortedDict(list2, true,
-            [&](TRuntimeNode item) {
+            [&](TRuntimeNode item) { 
             return pb.Member(item, "Key");
-        },
-            [&](TRuntimeNode item) {
+        }, 
+            [&](TRuntimeNode item) { 
             return pb.Member(item, "Payload");
-        });
-
+        }); 
+ 
         const auto pgmReturn = pb.JoinDict(dict1, true, dict2, true, EJoinKind::Full);
         const auto graph = setup.BuildGraph(pgmReturn);
         const auto iterator = graph->GetValue().GetListIterator();
@@ -306,8 +306,8 @@ Y_UNIT_TEST_SUITE(TMiniKQLJoinDictNodeTest) {
         UNBOXED_VALUE_STR_EQUAL(tuple.GetElement(1), "Z");
         UNIT_ASSERT(!iterator.Next(tuple));
         UNIT_ASSERT(!iterator.Next(tuple));
-    }
-
+    } 
+ 
     Y_UNIT_TEST_LLVM(TestInnerFlat) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
@@ -325,12 +325,12 @@ Y_UNIT_TEST_SUITE(TMiniKQLJoinDictNodeTest) {
         const auto payload6 = pb.NewDataLiteral<NUdf::EDataSlot::String>("F");
         const auto payload7 = pb.NewDataLiteral<NUdf::EDataSlot::String>("G");
         const auto payload8 = pb.NewDataLiteral<NUdf::EDataSlot::String>("H");
-
+ 
         const auto structType = pb.NewStructType({
             {"Key", pb.NewDataType(NUdf::TDataType<ui32>::Id)},
             {"Payload", pb.NewDataType(NUdf::TDataType<char*>::Id)}
         });
-
+ 
         const auto list1 = pb.NewList(structType, {
             pb.NewStruct(structType, {{"Key", key1}, {"Payload", payload1}}),
             pb.NewStruct(structType, {{"Key", key2}, {"Payload", payload2}}),
@@ -344,9 +344,9 @@ Y_UNIT_TEST_SUITE(TMiniKQLJoinDictNodeTest) {
             pb.NewStruct(structType, {{"Key", key4}, {"Payload", payload6}}),
             pb.NewStruct(structType, {{"Key", key5}, {"Payload", payload5}})
         });
-
+ 
         const auto listList = pb.NewList(pb.NewListType(structType), {list1, list2});
-
+ 
         const auto pgmReturn = pb.FlatMap(listList,
             [&](TRuntimeNode left) {
             const auto dict1 = pb.ToSortedDict(left, false,
@@ -368,7 +368,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLJoinDictNodeTest) {
                 return pb.JoinDict(dict1, false, dict2, false, EJoinKind::Inner);
             });
         });
-
+ 
         const auto graph = setup.BuildGraph(pgmReturn);
         const auto list = graph->GetValue();
         UNIT_ASSERT_VALUES_EQUAL(list.GetListLength(), 14U);
@@ -425,7 +425,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLJoinDictNodeTest) {
         UNIT_ASSERT(!iterator.Next(item));
         UNIT_ASSERT(!iterator.Next(item));
     }
-}
-
-}
-}
+} 
+ 
+} 
+} 

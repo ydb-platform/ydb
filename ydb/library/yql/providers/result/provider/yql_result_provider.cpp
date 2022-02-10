@@ -1,28 +1,28 @@
-#include "yql_result_provider.h"
+#include "yql_result_provider.h" 
 
-#include <ydb/library/yql/providers/result/expr_nodes/yql_res_expr_nodes.h>
-#include <ydb/library/yql/providers/common/provider/yql_provider.h>
-#include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
-#include <ydb/library/yql/providers/common/provider/yql_data_provider_impl.h>
-#include <ydb/library/yql/providers/common/mkql/yql_type_mkql.h>
-#include <ydb/library/yql/providers/common/codec/yql_codec.h>
-#include <ydb/library/yql/core/yql_execution.h>
-#include <ydb/library/yql/core/yql_expr_optimize.h>
-#include <ydb/library/yql/core/yql_expr_type_annotation.h>
-#include <ydb/library/yql/core/yql_opt_utils.h>
-#include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
-#include <ydb/library/yql/ast/yql_gc_nodes.h>
+#include <ydb/library/yql/providers/result/expr_nodes/yql_res_expr_nodes.h> 
+#include <ydb/library/yql/providers/common/provider/yql_provider.h> 
+#include <ydb/library/yql/providers/common/provider/yql_provider_names.h> 
+#include <ydb/library/yql/providers/common/provider/yql_data_provider_impl.h> 
+#include <ydb/library/yql/providers/common/mkql/yql_type_mkql.h> 
+#include <ydb/library/yql/providers/common/codec/yql_codec.h> 
+#include <ydb/library/yql/core/yql_execution.h> 
+#include <ydb/library/yql/core/yql_expr_optimize.h> 
+#include <ydb/library/yql/core/yql_expr_type_annotation.h> 
+#include <ydb/library/yql/core/yql_opt_utils.h> 
+#include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h> 
+#include <ydb/library/yql/ast/yql_gc_nodes.h> 
 #include <ydb/library/yql/utils/log/log.h>
 
 #include <library/cpp/yson/node/node_io.h>
 
-#include <util/string/cast.h>
-
-namespace NYql {
-
-namespace {
-    using namespace NKikimr;
-    using namespace NKikimr::NMiniKQL;
+#include <util/string/cast.h> 
+ 
+namespace NYql { 
+ 
+namespace { 
+    using namespace NKikimr; 
+    using namespace NKikimr::NMiniKQL; 
     using namespace NNodes;
 
     class TYsonResultWriter : public IResultWriter
@@ -30,56 +30,56 @@ namespace {
     public:
         TYsonResultWriter(NYson::EYsonFormat format)
             : Writer(new NYson::TYsonWriter(&PartialStream, format, ::NYson::EYsonType::Node, true))
-        {}
+        {} 
 
-        void Init(bool discard, const TString& label, TMaybe<TPosition> pos) override {
-            Discard = discard;
-            if (!Discard) {
-                Writer->OnBeginMap();
-                if (label) {
-                    Writer->OnKeyedItem("Label");
-                    Writer->OnStringScalar(label);
-                }
-
-                if (pos) {
-                    Writer->OnKeyedItem("Position");
-                    Writer->OnBeginMap();
-                    Writer->OnKeyedItem("File");
-                    Writer->OnStringScalar(pos->File ? pos->File : "<main>");
-                    Writer->OnKeyedItem("Row");
-                    Writer->OnInt64Scalar(pos->Row);
-                    Writer->OnKeyedItem("Column");
-                    Writer->OnInt64Scalar(pos->Column);
-                    Writer->OnEndMap();
-                }
-
-                Writer->OnKeyedItem("Write");
-                Writer->OnBeginList();
-            }
+        void Init(bool discard, const TString& label, TMaybe<TPosition> pos) override { 
+            Discard = discard; 
+            if (!Discard) { 
+                Writer->OnBeginMap(); 
+                if (label) { 
+                    Writer->OnKeyedItem("Label"); 
+                    Writer->OnStringScalar(label); 
+                } 
+ 
+                if (pos) { 
+                    Writer->OnKeyedItem("Position"); 
+                    Writer->OnBeginMap(); 
+                    Writer->OnKeyedItem("File"); 
+                    Writer->OnStringScalar(pos->File ? pos->File : "<main>"); 
+                    Writer->OnKeyedItem("Row"); 
+                    Writer->OnInt64Scalar(pos->Row); 
+                    Writer->OnKeyedItem("Column"); 
+                    Writer->OnInt64Scalar(pos->Column); 
+                    Writer->OnEndMap(); 
+                } 
+ 
+                Writer->OnKeyedItem("Write"); 
+                Writer->OnBeginList(); 
+            } 
         }
 
         void Write(const TStringBuf& resultData) override {
-            if (!Discard) {
-                Writer->OnListItem();
-                Writer->OnRaw(resultData);
-            }
+            if (!Discard) { 
+                Writer->OnListItem(); 
+                Writer->OnRaw(resultData); 
+            } 
         }
 
         void Commit(bool overflow) override {
-            if (!Discard) {
-                Writer->OnEndList();
-                if (overflow) {
-                    Writer->OnKeyedItem("Truncated");
-                    Writer->OnBooleanScalar(true);
-                }
-                Writer->OnEndMap();
+            if (!Discard) { 
+                Writer->OnEndList(); 
+                if (overflow) { 
+                    Writer->OnKeyedItem("Truncated"); 
+                    Writer->OnBooleanScalar(true); 
+                } 
+                Writer->OnEndMap(); 
             }
         }
 
-        bool IsDiscard() const override {
-            return Discard;
-        }
-
+        bool IsDiscard() const override { 
+            return Discard; 
+        } 
+ 
         TStringBuf Str() override {
             return PartialStream.Str();
         }
@@ -91,115 +91,115 @@ namespace {
     private:
         TStringStream PartialStream;
         TAutoPtr<NYson::TYsonWriter> Writer;
-        bool Discard = false;
+        bool Discard = false; 
     };
 
-    IGraphTransformer::TStatus ValidateColumns(TExprNode::TPtr& columns, const TTypeAnnotationNode* listType, TExprContext& ctx) {
-        bool hasPrefixes = false;
-        for (auto& child : columns->Children()) {
+    IGraphTransformer::TStatus ValidateColumns(TExprNode::TPtr& columns, const TTypeAnnotationNode* listType, TExprContext& ctx) { 
+        bool hasPrefixes = false; 
+        for (auto& child : columns->Children()) { 
             if (HasError(child->GetTypeAnn(), ctx)) {
-                return IGraphTransformer::TStatus::Error;
-            }
-
-            if (!child->IsAtom() && !child->IsList()) {
+                return IGraphTransformer::TStatus::Error; 
+            } 
+ 
+            if (!child->IsAtom() && !child->IsList()) { 
                 ctx.AddError(TIssue(ctx.GetPosition(child->Pos()), "either atom or tuple with prefix is expected"));
-                return IGraphTransformer::TStatus::Error;
-            }
-
-            if (child->IsList()) {
-                if (!EnsureTupleSize(*child, 2, ctx)) {
-                    return IGraphTransformer::TStatus::Error;
-                }
-
-                if (!EnsureAtom(*child->Child(0), ctx)) {
-                    return IGraphTransformer::TStatus::Error;
-                }
-
-                if (!EnsureAtom(*child->Child(1), ctx)) {
-                    return IGraphTransformer::TStatus::Error;
-                }
-
-                if (child->Child(0)->Content() != "prefix") {
+                return IGraphTransformer::TStatus::Error; 
+            } 
+ 
+            if (child->IsList()) { 
+                if (!EnsureTupleSize(*child, 2, ctx)) { 
+                    return IGraphTransformer::TStatus::Error; 
+                } 
+ 
+                if (!EnsureAtom(*child->Child(0), ctx)) { 
+                    return IGraphTransformer::TStatus::Error; 
+                } 
+ 
+                if (!EnsureAtom(*child->Child(1), ctx)) { 
+                    return IGraphTransformer::TStatus::Error; 
+                } 
+ 
+                if (child->Child(0)->Content() != "prefix") { 
                     ctx.AddError(TIssue(ctx.GetPosition(child->Pos()), TStringBuilder() <<
-                        "Expected 'prefix', but got: " << child->Child(0)->Content()));
-                    return IGraphTransformer::TStatus::Error;
-                }
-
-                hasPrefixes = true;
-            }
-        }
-
-        if (listType->GetKind() == ETypeAnnotationKind::EmptyList) {
-            return IGraphTransformer::TStatus::Ok;
-        }
-
-        if (listType->GetKind() != ETypeAnnotationKind::List) {
+                        "Expected 'prefix', but got: " << child->Child(0)->Content())); 
+                    return IGraphTransformer::TStatus::Error; 
+                } 
+ 
+                hasPrefixes = true; 
+            } 
+        } 
+ 
+        if (listType->GetKind() == ETypeAnnotationKind::EmptyList) { 
+            return IGraphTransformer::TStatus::Ok; 
+        } 
+ 
+        if (listType->GetKind() != ETypeAnnotationKind::List) { 
             ctx.AddError(TIssue(ctx.GetPosition(columns->Pos()), "columns requires list of struct"));
-            return IGraphTransformer::TStatus::Error;
-        }
-
-        auto itemType = listType->Cast<TListExprType>()->GetItemType();
-        if (itemType->GetKind() != ETypeAnnotationKind::Struct) {
+            return IGraphTransformer::TStatus::Error; 
+        } 
+ 
+        auto itemType = listType->Cast<TListExprType>()->GetItemType(); 
+        if (itemType->GetKind() != ETypeAnnotationKind::Struct) { 
             ctx.AddError(TIssue(ctx.GetPosition(columns->Pos()), "columns requires list of struct"));
-            return IGraphTransformer::TStatus::Error;
-        }
-
-        auto structType = itemType->Cast<TStructExprType>();
+            return IGraphTransformer::TStatus::Error; 
+        } 
+ 
+        auto structType = itemType->Cast<TStructExprType>(); 
         TSet<TString> usedFields;
         TExprNode::TListType orderedFields;
-        for (auto& child : columns->Children()) {
+        for (auto& child : columns->Children()) { 
             TVector<TStringBuf> names;
-            if (child->IsAtom()) {
-                orderedFields.push_back(child);
-                if (!structType->FindItem(child->Content())) {
+            if (child->IsAtom()) { 
+                orderedFields.push_back(child); 
+                if (!structType->FindItem(child->Content())) { 
                     ctx.AddError(TIssue(ctx.GetPosition(child->Pos()), TStringBuilder() <<
-                        "Unknown field in hint: " << child->Content()));
-                    return IGraphTransformer::TStatus::Error;
-                }
-
+                        "Unknown field in hint: " << child->Content())); 
+                    return IGraphTransformer::TStatus::Error; 
+                } 
+ 
                 if (!usedFields.insert(TString(child->Content())).second) {
                     ctx.AddError(TIssue(ctx.GetPosition(child->Pos()), TStringBuilder() <<
-                        "Duplicate field in hint: " << child->Content()));
-                    return IGraphTransformer::TStatus::Error;
-                }
-            } else {
-                auto prefix = child->Child(1)->Content();
-                for (auto& x : structType->GetItems()) {
-                    if (x->GetName().StartsWith(prefix)) {
-                        orderedFields.push_back(ctx.NewAtom(child->Pos(), x->GetName()));
+                        "Duplicate field in hint: " << child->Content())); 
+                    return IGraphTransformer::TStatus::Error; 
+                } 
+            } else { 
+                auto prefix = child->Child(1)->Content(); 
+                for (auto& x : structType->GetItems()) { 
+                    if (x->GetName().StartsWith(prefix)) { 
+                        orderedFields.push_back(ctx.NewAtom(child->Pos(), x->GetName())); 
                         if (!usedFields.insert(TString(x->GetName())).second) {
                             ctx.AddError(TIssue(ctx.GetPosition(child->Pos()), TStringBuilder() <<
-                                "Duplicate field in hint: " << x->GetName()));
-                            return IGraphTransformer::TStatus::Error;
-                        }
-                    }
-                }
-            }
-        }
-
-        if (usedFields.size() != structType->GetSize()) {
+                                "Duplicate field in hint: " << x->GetName())); 
+                            return IGraphTransformer::TStatus::Error; 
+                        } 
+                    } 
+                } 
+            } 
+        } 
+ 
+        if (usedFields.size() != structType->GetSize()) { 
             ctx.AddError(TIssue(ctx.GetPosition(columns->Pos()), TStringBuilder() <<
-                "Mismatch of fields in hint and in the struct, columns fields: " << usedFields.size()
-                << ", struct fields:" << structType->GetSize()));
-            return IGraphTransformer::TStatus::Error;
-        }
-
-        if (hasPrefixes) {
-            columns = ctx.NewList(columns->Pos(), std::move(orderedFields));
-            return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, true);
-        }
-
-        return IGraphTransformer::TStatus::Ok;
-    }
-
+                "Mismatch of fields in hint and in the struct, columns fields: " << usedFields.size() 
+                << ", struct fields:" << structType->GetSize())); 
+            return IGraphTransformer::TStatus::Error; 
+        } 
+ 
+        if (hasPrefixes) { 
+            columns = ctx.NewList(columns->Pos(), std::move(orderedFields)); 
+            return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, true); 
+        } 
+ 
+        return IGraphTransformer::TStatus::Ok; 
+    } 
+ 
     class TResultCallableExecutionTransformer : public TGraphTransformerBase {
-    public:
+    public: 
         TResultCallableExecutionTransformer(const TIntrusivePtr<TResultProviderConfig>& config)
-            : Config(config)
-        {
-            YQL_ENSURE(!Config->Types.AvailablePureResultDataSources.empty());
-        }
-
+            : Config(config) 
+        { 
+            YQL_ENSURE(!Config->Types.AvailablePureResultDataSources.empty()); 
+        } 
+ 
         TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final {
             output = input;
 
@@ -208,16 +208,16 @@ namespace {
 
             YQL_ENSURE(input->Type() == TExprNode::Callable);
             TExprBase node(input);
-            if (node.Maybe<TResFill>() || node.Maybe<TResPull>() || node.Maybe<TResIf>() || node.Maybe<TResFor>()) {
+            if (node.Maybe<TResFill>() || node.Maybe<TResPull>() || node.Maybe<TResIf>() || node.Maybe<TResFor>()) { 
                 auto provider = Config->Types.DataSourceMap.FindPtr(input->Child(5)->Content());
                 Y_ENSURE(provider, "DataSource not exist: " << input->Child(5)->Content());
                 if (node.Maybe<TResPull>()) {
-                    return HandleFillOrPull<TPull>(node, output, ctx, *(*provider));
+                    return HandleFillOrPull<TPull>(node, output, ctx, *(*provider)); 
                 } else {
-                    return HandleFillOrPull<TResult>(node, output, ctx, *(*provider));
+                    return HandleFillOrPull<TResult>(node, output, ctx, *(*provider)); 
                 }
-            }
-
+            } 
+ 
             if (input->Content() == CommitName) {
                 if (ResultWriter) {
                     TExprBase commitChild(input->ChildPtr(0));
@@ -225,303 +225,303 @@ namespace {
                     bool overflow = commitChild.Maybe<TResPull>() ? PullOverflow : FillOverflow;
                     ui64& committedSize = commitChild.Maybe<TResPull>() ? CommittedPullSize : CommittedFillSize;
 
-                    if (!ResultWriter->IsDiscard()) {
+                    if (!ResultWriter->IsDiscard()) { 
                         ResultWriter->Commit(overflow);
-                        Config->CommittedResults.push_back(TString(ResultWriter->Str()));
+                        Config->CommittedResults.push_back(TString(ResultWriter->Str())); 
                         committedSize += Config->CommittedResults.back().size();
-                    }
-
+                    } 
+ 
                     ResultWriter.Reset();
-                }
-
+                } 
+ 
                 input->SetState(TExprNode::EState::ExecutionComplete);
                 input->SetResult(ctx.NewWorld (input->Pos()));
-                return TStatus::Ok;
-            }
-
-            if (input->Content() == ConfigureName) {
+                return TStatus::Ok; 
+            } 
+ 
+            if (input->Content() == ConfigureName) { 
                 input->SetState(TExprNode::EState::ExecutionComplete);
-                input->SetResult(ctx.NewWorld(input->Pos()));
-                return TStatus::Ok;
-            }
-
+                input->SetResult(ctx.NewWorld(input->Pos())); 
+                return TStatus::Ok; 
+            } 
+ 
             ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() << "Failed to execute node: " << input->Content()));
-            return TStatus::Ok;
-        }
-
+            return TStatus::Ok; 
+        } 
+ 
         NThreading::TFuture<void> DoGetAsyncFuture(const TExprNode& input) final {
             Y_UNUSED(input);
-            return DelegatedProvider->GetCallableExecutionTransformer()
-                .GetAsyncFuture(*DelegatedNode);
-        }
-
+            return DelegatedProvider->GetCallableExecutionTransformer() 
+                .GetAsyncFuture(*DelegatedNode); 
+        } 
+ 
         TStatus DoApplyAsyncChanges(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final {
             output = input;
-            auto status = DelegatedProvider->GetCallableExecutionTransformer()
+            auto status = DelegatedProvider->GetCallableExecutionTransformer() 
                 .ApplyAsyncChanges(DelegatedNode, DelegatedNodeOutput, ctx);
             if (status == TStatus::Repeat && input != DelegatedNodeOutput->TailPtr()) {
                 output = DelegatedNodeOutput->TailPtr();
             } else {
                 FinishNode(*input, ctx, status);
             }
-            return status;
-        }
-
-    private:
+            return status; 
+        } 
+ 
+    private: 
         template <class TTarget>
         bool& GetOverflowFlagAndCommitedSize(ui64& committed);
 
         template <class TTarget>
-        TStatus HandleFillOrPull(TExprBase input, TExprNode::TPtr& output, TExprContext& ctx, IDataProvider& provider) {
+        TStatus HandleFillOrPull(TExprBase input, TExprNode::TPtr& output, TExprContext& ctx, IDataProvider& provider) { 
             auto requireWorld = RequireChild(input.Ref(), TResBase::idx_World);
             auto requireData = input.Maybe<TResPull>() ? RequireChild(input.Ref(), TResPull::idx_Data) : IGraphTransformer::TStatus::Ok;
-            auto requireStatus = requireWorld.Combine(requireData);
-            if (requireStatus.Level != IGraphTransformer::TStatus::Ok) {
-                return requireStatus;
-            }
-
-            bool needWriter = true;
+            auto requireStatus = requireWorld.Combine(requireData); 
+            if (requireStatus.Level != IGraphTransformer::TStatus::Ok) { 
+                return requireStatus; 
+            } 
+ 
+            bool needWriter = true; 
             TMaybeNode<TExprBase> dataNode;
             TMaybeNode<TCoNameValueTupleList> options;
             if (input.Maybe<TResIf>()) {
                 if (input.Ref().HasResult()) {
                     auto resultYsonString = input.Ref().GetResult().Content();
                     auto resultNode = NYT::NodeFromYsonString(TString(resultYsonString), ::NYson::EYsonType::Node);
-                    YQL_ENSURE(resultNode.IsMap());
+                    YQL_ENSURE(resultNode.IsMap()); 
                     auto resultBoolNode = resultNode.AsMap()["Data"];
-                    YQL_ENSURE(resultBoolNode.IsBool());
+                    YQL_ENSURE(resultBoolNode.IsBool()); 
                     const bool predicate = resultBoolNode.AsBool();
 
                     auto branchStatus = RequireChild(input.Ref(), predicate ? TResIf::idx_Then : TResIf::idx_Else);
-                    if (branchStatus.Level != IGraphTransformer::TStatus::Ok) {
-                        return branchStatus;
-                    }
-
+                    if (branchStatus.Level != IGraphTransformer::TStatus::Ok) { 
+                        return branchStatus; 
+                    } 
+ 
                     input.Ptr()->SetResult(ctx.NewWorld(input.Pos()));
                     input.Ptr()->SetState(TExprNode::EState::ExecutionComplete);
-                    return TStatus::Ok;
-                }
-
-                needWriter = false;
+                    return TStatus::Ok; 
+                } 
+ 
+                needWriter = false; 
                 dataNode = input.Cast<TResIf>().Condition();
                 options = input.Cast<TResIf>().Settings();
-            } else if (input.Maybe<TResFor>()) {
-                const auto& forNode = input.Cast<TResFor>();
-                if (forNode.Total().Value()) {
-                    // has total, run active node if any
-                    const auto& items = forNode.Items();
-                    auto total = FromString<ui32>(forNode.Total().Value());
-                    auto current = FromString<ui32>(forNode.Current().Value());
-                    if ((current > total) || (total && current >= total)) {
+            } else if (input.Maybe<TResFor>()) { 
+                const auto& forNode = input.Cast<TResFor>(); 
+                if (forNode.Total().Value()) { 
+                    // has total, run active node if any 
+                    const auto& items = forNode.Items(); 
+                    auto total = FromString<ui32>(forNode.Total().Value()); 
+                    auto current = FromString<ui32>(forNode.Current().Value()); 
+                    if ((current > total) || (total && current >= total)) { 
                         auto zero = ctx.NewAtom(TPositionHandle(), "0", TNodeFlags::Default);
-                        zero->SetTypeAnn(ctx.MakeType<TUnitExprType>());
+                        zero->SetTypeAnn(ctx.MakeType<TUnitExprType>()); 
                         zero->SetState(TExprNode::EState::ConstrComplete);
                         zero->SetDependencyScope(nullptr, nullptr); // HOTFIX for CSEE
                         input.Ptr()->ChildRef(TResFor::idx_Current) = std::move(zero); //FIXME: Don't use ChilfRef
-                        input.Ptr()->SetResult(ctx.NewWorld(input.Pos()));
+                        input.Ptr()->SetResult(ctx.NewWorld(input.Pos())); 
                         input.Ptr()->SetState(TExprNode::EState::ExecutionComplete);
-                        return TStatus::Ok;
-                    }
-
-                    const auto& active = forNode.Active();
-                    if (active.Ref().IsCallable("Void")) {
-                        // select new active node
-                        TExprNode::TPtr active;
-                        if (total == 0) {
-                            // use else block
-                            const auto& elseLambda = forNode.Else();
+                        return TStatus::Ok; 
+                    } 
+ 
+                    const auto& active = forNode.Active(); 
+                    if (active.Ref().IsCallable("Void")) { 
+                        // select new active node 
+                        TExprNode::TPtr active; 
+                        if (total == 0) { 
+                            // use else block 
+                            const auto& elseLambda = forNode.Else(); 
                             active = ctx.ReplaceNode(elseLambda.Body().Ptr(), elseLambda.Args().Arg(0).Ref(), forNode.World().Ptr());
-                        } else {
-                            // use some list item
-                            auto listNode = items.Raw();
-                            if (listNode->IsCallable("Just")) {
-                                listNode = listNode->Child(0);
-                            }
-
-                            ui32 index = current;
-                            if (listNode->IsCallable("List")) {
-                                ++index;
-                            }
-
-                            auto listElem = listNode->Child(index);
-                            const auto& iterLambda = forNode.Iter();
+                        } else { 
+                            // use some list item 
+                            auto listNode = items.Raw(); 
+                            if (listNode->IsCallable("Just")) { 
+                                listNode = listNode->Child(0); 
+                            } 
+ 
+                            ui32 index = current; 
+                            if (listNode->IsCallable("List")) { 
+                                ++index; 
+                            } 
+ 
+                            auto listElem = listNode->Child(index); 
+                            const auto& iterLambda = forNode.Iter(); 
                             active = ctx.ReplaceNodes(iterLambda.Body().Ptr(), { {
-                                iterLambda.Args().Arg(0).Raw(), forNode.World().Ptr()
+                                iterLambda.Args().Arg(0).Raw(), forNode.World().Ptr() 
                                 }, { iterLambda.Args().Arg(1).Raw(), listElem } });
-                        }
-
-                        output = Build<TResFor>(ctx, forNode.Pos())
-                            .World(forNode.World())
-                            .DataSink(forNode.DataSink())
-                            .Items(forNode.Items())
-                            .Iter(forNode.Iter())
-                            .Else(forNode.Else())
-                            .DelegatedSource(forNode.DelegatedSource())
-                            .Settings(forNode.Settings())
-                            .Total(forNode.Total())
-                            .Current()
-                                .Value(ToString(current))
-                            .Build()
-                            .Active(active)
-                            .Done().Ptr();
-
-                        return IGraphTransformer::TStatus(TStatus::Repeat, true);
-                    } else {
-                        auto status = RequireChild(input.Ref(), TResFor::idx_Active);
-                        if (status.Level != IGraphTransformer::TStatus::Ok) {
-                            return status;
-                        }
-
-                        ++current;
-                        // active node complete, drop it
-                        output = Build<TResFor>(ctx, forNode.Pos())
-                            .World(forNode.World())
-                            .DataSink(forNode.DataSink())
-                            .Items(forNode.Items())
-                            .Iter(forNode.Iter())
-                            .Else(forNode.Else())
-                            .DelegatedSource(forNode.DelegatedSource())
-                            .Settings(forNode.Settings())
-                            .Total(forNode.Total())
-                            .Current()
-                                .Value(ToString(current))
-                            .Build()
-                            .template Active<TCoVoid>()
-                            .Build()
-                            .Done().Ptr();
-
-                        return IGraphTransformer::TStatus(TStatus::Repeat, true);
-                    }
-                } else if (input.Ref().HasResult()) {
-                    // parse list
-                    auto resultYsonString = input.Ref().GetResult().Content();
+                        } 
+ 
+                        output = Build<TResFor>(ctx, forNode.Pos()) 
+                            .World(forNode.World()) 
+                            .DataSink(forNode.DataSink()) 
+                            .Items(forNode.Items()) 
+                            .Iter(forNode.Iter()) 
+                            .Else(forNode.Else()) 
+                            .DelegatedSource(forNode.DelegatedSource()) 
+                            .Settings(forNode.Settings()) 
+                            .Total(forNode.Total()) 
+                            .Current() 
+                                .Value(ToString(current)) 
+                            .Build() 
+                            .Active(active) 
+                            .Done().Ptr(); 
+ 
+                        return IGraphTransformer::TStatus(TStatus::Repeat, true); 
+                    } else { 
+                        auto status = RequireChild(input.Ref(), TResFor::idx_Active); 
+                        if (status.Level != IGraphTransformer::TStatus::Ok) { 
+                            return status; 
+                        } 
+ 
+                        ++current; 
+                        // active node complete, drop it 
+                        output = Build<TResFor>(ctx, forNode.Pos()) 
+                            .World(forNode.World()) 
+                            .DataSink(forNode.DataSink()) 
+                            .Items(forNode.Items()) 
+                            .Iter(forNode.Iter()) 
+                            .Else(forNode.Else()) 
+                            .DelegatedSource(forNode.DelegatedSource()) 
+                            .Settings(forNode.Settings()) 
+                            .Total(forNode.Total()) 
+                            .Current() 
+                                .Value(ToString(current)) 
+                            .Build() 
+                            .template Active<TCoVoid>() 
+                            .Build() 
+                            .Done().Ptr(); 
+ 
+                        return IGraphTransformer::TStatus(TStatus::Repeat, true); 
+                    } 
+                } else if (input.Ref().HasResult()) { 
+                    // parse list 
+                    auto resultYsonString = input.Ref().GetResult().Content(); 
                     auto resultNode = NYT::NodeFromYsonString(TString(resultYsonString), ::NYson::EYsonType::Node);
-                    YQL_ENSURE(resultNode.IsMap());
-                    auto resultDataNode = resultNode.AsMap()["Data"];
-
-                    const auto& itemsNode = forNode.Items().Ref();
-
-                    TScopedAlloc alloc;
-                    TTypeEnvironment env(alloc);
-                    TStringStream err;
-                    TProgramBuilder pgmBuilder(env, Config->FunctionRegistry);
-                    TType* mkqlType = NCommon::BuildType(*itemsNode.GetTypeAnn(), pgmBuilder, err);
-                    if (!mkqlType) {
+                    YQL_ENSURE(resultNode.IsMap()); 
+                    auto resultDataNode = resultNode.AsMap()["Data"]; 
+ 
+                    const auto& itemsNode = forNode.Items().Ref(); 
+ 
+                    TScopedAlloc alloc; 
+                    TTypeEnvironment env(alloc); 
+                    TStringStream err; 
+                    TProgramBuilder pgmBuilder(env, Config->FunctionRegistry); 
+                    TType* mkqlType = NCommon::BuildType(*itemsNode.GetTypeAnn(), pgmBuilder, err); 
+                    if (!mkqlType) { 
                         ctx.AddError(TIssue(ctx.GetPosition(itemsNode.Pos()), TStringBuilder() << "Failed to process type: " << err.Str()));
-                        return TStatus::Error;
-                    }
-
-                    TMemoryUsageInfo memInfo("Eval");
-                    THolderFactory holderFactory(alloc.Ref(), memInfo);
-                    auto value = NCommon::ParseYsonNodeInResultFormat(holderFactory, resultDataNode, mkqlType, &err);
-                    if (!value) {
+                        return TStatus::Error; 
+                    } 
+ 
+                    TMemoryUsageInfo memInfo("Eval"); 
+                    THolderFactory holderFactory(alloc.Ref(), memInfo); 
+                    auto value = NCommon::ParseYsonNodeInResultFormat(holderFactory, resultDataNode, mkqlType, &err); 
+                    if (!value) { 
                         ctx.AddError(TIssue(ctx.GetPosition(itemsNode.Pos()), TStringBuilder() << "Failed to parse data: " << err.Str()));
-                        return TStatus::Error;
-                    }
-
-                    // build expr literal & total/active
-                    auto itemsLiteral = NCommon::ValueToExprLiteral(itemsNode.GetTypeAnn(), *value, ctx, itemsNode.Pos());
-                    ui32 totalItems = 0;
-                    auto listNode = itemsLiteral;
-                    if (listNode->IsCallable("Just")) {
-                        listNode = listNode->Child(0);
-                    }
-
-                    if (listNode->IsCallable("AsList")) {
-                        totalItems = listNode->ChildrenSize();
-                    } else if (listNode->IsCallable("List")) {
-                        totalItems = listNode->ChildrenSize() - 1;
-                    }
-
-                    output = Build<TResFor>(ctx, forNode.Pos())
-                        .World(forNode.World())
-                        .DataSink(forNode.DataSink())
-                        .Items(itemsLiteral)
-                        .Iter(forNode.Iter())
-                        .Else(forNode.Else())
-                        .DelegatedSource(forNode.DelegatedSource())
-                        .Settings(forNode.Settings())
-                        .Total()
-                            .Value(ToString(totalItems))
-                        .Build()
-                        .Current()
-                            .Value("0")
-                        .Build()
-                        .Active<TCoVoid>()
-                        .Build()
-                        .Done().Ptr();
-
-                    return IGraphTransformer::TStatus(TStatus::Repeat, true);
-                }
-
-                needWriter = false;
-                dataNode = forNode.Items();
-                options = forNode.Settings();
+                        return TStatus::Error; 
+                    } 
+ 
+                    // build expr literal & total/active 
+                    auto itemsLiteral = NCommon::ValueToExprLiteral(itemsNode.GetTypeAnn(), *value, ctx, itemsNode.Pos()); 
+                    ui32 totalItems = 0; 
+                    auto listNode = itemsLiteral; 
+                    if (listNode->IsCallable("Just")) { 
+                        listNode = listNode->Child(0); 
+                    } 
+ 
+                    if (listNode->IsCallable("AsList")) { 
+                        totalItems = listNode->ChildrenSize(); 
+                    } else if (listNode->IsCallable("List")) { 
+                        totalItems = listNode->ChildrenSize() - 1; 
+                    } 
+ 
+                    output = Build<TResFor>(ctx, forNode.Pos()) 
+                        .World(forNode.World()) 
+                        .DataSink(forNode.DataSink()) 
+                        .Items(itemsLiteral) 
+                        .Iter(forNode.Iter()) 
+                        .Else(forNode.Else()) 
+                        .DelegatedSource(forNode.DelegatedSource()) 
+                        .Settings(forNode.Settings()) 
+                        .Total() 
+                            .Value(ToString(totalItems)) 
+                        .Build() 
+                        .Current() 
+                            .Value("0") 
+                        .Build() 
+                        .Active<TCoVoid>() 
+                        .Build() 
+                        .Done().Ptr(); 
+ 
+                    return IGraphTransformer::TStatus(TStatus::Repeat, true); 
+                } 
+ 
+                needWriter = false; 
+                dataNode = forNode.Items(); 
+                options = forNode.Settings(); 
             } else {
                 dataNode = input.Cast<TResWriteBase>().Data();
                 options = input.Cast<TResWriteBase>().Settings();
-            }
-
-            DelegatedProvider = &provider;
-            auto fillSettings = Config->FillSettings;
-            auto resultSize = ResultWriter ? ResultWriter->Size() : 0;
+            } 
+ 
+            DelegatedProvider = &provider; 
+            auto fillSettings = Config->FillSettings; 
+            auto resultSize = ResultWriter ? ResultWriter->Size() : 0; 
 
             ui64 committedSize;
             bool& overflow = GetOverflowFlagAndCommitedSize<TTarget>(committedSize);
 
             if (fillSettings.AllResultsBytesLimit && committedSize + resultSize >= *fillSettings.AllResultsBytesLimit) {
                 overflow = true;
-            }
-
-            if (fillSettings.AllResultsBytesLimit) {
+            } 
+ 
+            if (fillSettings.AllResultsBytesLimit) { 
                 if (!overflow && committedSize <= *fillSettings.AllResultsBytesLimit) {
                     *fillSettings.AllResultsBytesLimit -= committedSize;
-                } else {
-                    *fillSettings.AllResultsBytesLimit = 0;
-                }
-            }
-
-            auto atomType = ctx.MakeType<TUnitExprType>();
-            auto rowsLimit = fillSettings.RowsLimitPerWrite;
-            bool discard = false;
-            TString label;
+                } else { 
+                    *fillSettings.AllResultsBytesLimit = 0; 
+                } 
+            } 
+ 
+            auto atomType = ctx.MakeType<TUnitExprType>(); 
+            auto rowsLimit = fillSettings.RowsLimitPerWrite; 
+            bool discard = false; 
+            TString label; 
             for (auto setting : options.Cast()) {
                 if (setting.Name().Value() == "take") {
                     auto value = FromString<ui64>(setting.Value().Cast<TCoAtom>().Value());
-                    if (rowsLimit) {
-                        rowsLimit = Min(*rowsLimit, value);
-                    } else {
-                        rowsLimit = value;
-                    }
-                } else if (setting.Name().Value() == "discard") {
-                    discard = true;
-                } else if (setting.Name().Value() == "label") {
-                    label = TString(setting.Value().Cast<TCoAtom>().Value());
-                }
-            }
-
-            TString publicId;
+                    if (rowsLimit) { 
+                        rowsLimit = Min(*rowsLimit, value); 
+                    } else { 
+                        rowsLimit = value; 
+                    } 
+                } else if (setting.Name().Value() == "discard") { 
+                    discard = true; 
+                } else if (setting.Name().Value() == "label") { 
+                    label = TString(setting.Value().Cast<TCoAtom>().Value()); 
+                } 
+            } 
+ 
+            TString publicId; 
             if (auto id = Config->Types.TranslateOperationId(input.Ref().UniqueId())) {
                 publicId = ToString(*id);
-            }
+            } 
 
-            if (needWriter && !ResultWriter) {
-                YQL_ENSURE(Config->WriterFactory);
-                ResultWriter = Config->WriterFactory();
-                ResultWriter->Init(discard, label, Config->SupportsResultPosition ?
+            if (needWriter && !ResultWriter) { 
+                YQL_ENSURE(Config->WriterFactory); 
+                ResultWriter = Config->WriterFactory(); 
+                ResultWriter->Init(discard, label, Config->SupportsResultPosition ? 
                     TMaybe<TPosition>(ctx.GetPosition(input.Pos())) : Nothing());
-            }
-
-            if (input.Maybe<TResIf>() || input.Maybe<TResFor>()) {
-                fillSettings = IDataProvider::TFillSettings();
-                fillSettings.AllResultsBytesLimit.Clear();
-                discard = fillSettings.Discard = false;
-                fillSettings.Format = IDataProvider::EResultFormat::Yson;
+            } 
+ 
+            if (input.Maybe<TResIf>() || input.Maybe<TResFor>()) { 
+                fillSettings = IDataProvider::TFillSettings(); 
+                fillSettings.AllResultsBytesLimit.Clear(); 
+                discard = fillSettings.Discard = false; 
+                fillSettings.Format = IDataProvider::EResultFormat::Yson; 
                 fillSettings.FormatDetails = ToString((ui32)NYson::EYsonFormat::Binary);
-                fillSettings.RowsLimitPerWrite.Clear();
-                rowsLimit.Clear();
-            }
-
+                fillSettings.RowsLimitPerWrite.Clear(); 
+                rowsLimit.Clear(); 
+            } 
+ 
             DelegatedNode = Build<TTarget>(ctx, input.Pos())
                 .Input(dataNode.Cast())
                 .BytesLimit()
@@ -540,14 +540,14 @@ namespace {
                 .PublicId()
                     .Value(publicId)
                 .Build()
-                .Discard()
-                    .Value(ToString(discard))
-                .Build()
+                .Discard() 
+                    .Value(ToString(discard)) 
+                .Build() 
                 .Origin(input)
                 .Done().Ptr();
 
-            for (auto idx: {TResOrPullBase::idx_BytesLimit, TResOrPullBase::idx_RowsLimit, TResOrPullBase::idx_FormatDetails,
-                TResOrPullBase::idx_Format, TResOrPullBase::idx_PublicId, TResOrPullBase::idx_Discard }) {
+            for (auto idx: {TResOrPullBase::idx_BytesLimit, TResOrPullBase::idx_RowsLimit, TResOrPullBase::idx_FormatDetails, 
+                TResOrPullBase::idx_Format, TResOrPullBase::idx_PublicId, TResOrPullBase::idx_Discard }) { 
                 DelegatedNode->Child(idx)->SetTypeAnn(atomType);
                 DelegatedNode->Child(idx)->SetState(TExprNode::EState::ConstrComplete);
             }
@@ -555,44 +555,44 @@ namespace {
             DelegatedNode->SetTypeAnn(input.Ref().GetTypeAnn());
             DelegatedNode->SetState(TExprNode::EState::ConstrComplete);
             input.Ptr()->SetState(TExprNode::EState::ExecutionInProgress);
-            auto status = DelegatedProvider->GetCallableExecutionTransformer().Transform(DelegatedNode, DelegatedNodeOutput, ctx);
-            if (status.Level != TStatus::Async) {
+            auto status = DelegatedProvider->GetCallableExecutionTransformer().Transform(DelegatedNode, DelegatedNodeOutput, ctx); 
+            if (status.Level != TStatus::Async) { 
                 FinishNode(*input.Ptr(), ctx, status);
-            }
-
-            return status;
-        }
-
-        void FinishNode(TExprNode& input, TExprContext& ctx, IGraphTransformer::TStatus status) {
-            if (status.Level == TStatus::Ok) {
+            } 
+ 
+            return status; 
+        } 
+ 
+        void FinishNode(TExprNode& input, TExprContext& ctx, IGraphTransformer::TStatus status) { 
+            if (status.Level == TStatus::Ok) { 
                 auto data = DelegatedNode->GetResult().Content();
-                const bool needWriter = input.Content() != TResIf::CallableName()
-                    && input.Content() != TResFor::CallableName();
-                if (needWriter) {
+                const bool needWriter = input.Content() != TResIf::CallableName() 
+                    && input.Content() != TResFor::CallableName(); 
+                if (needWriter) { 
                     ResultWriter->Write(data);
 
-                    input.SetResult(ctx.NewAtom(input.Pos(), ""));
+                    input.SetResult(ctx.NewAtom(input.Pos(), "")); 
                     input.SetState(TExprNode::EState::ExecutionComplete);
-                } else {
-                    input.SetResult(ctx.NewAtom(input.Pos(), data));
+                } else { 
+                    input.SetResult(ctx.NewAtom(input.Pos(), data)); 
                     input.SetState(TExprNode::EState::ExecutionRequired);
-                }
+                } 
             } else if (status.Level == TStatus::Error) {
                 if (const auto issies = ctx.AssociativeIssues.extract(DelegatedNode.Get())) {
                     ctx.IssueManager.RaiseIssues(issies.mapped());
                 }
             } else {
                 input.SetState(TExprNode::EState::ExecutionRequired);
-            }
-
-            DelegatedProvider = nullptr;
-            DelegatedNode = nullptr;
-            DelegatedNodeOutput = nullptr;
-        }
-
-    private:
-        const TIntrusivePtr<TResultProviderConfig> Config;
-        IDataProvider* DelegatedProvider = nullptr;
+            } 
+ 
+            DelegatedProvider = nullptr; 
+            DelegatedNode = nullptr; 
+            DelegatedNodeOutput = nullptr; 
+        } 
+ 
+    private: 
+        const TIntrusivePtr<TResultProviderConfig> Config; 
+        IDataProvider* DelegatedProvider = nullptr; 
         TExprNode::TPtr DelegatedNode;
         TExprNode::TPtr DelegatedNodeOutput;
 
@@ -603,8 +603,8 @@ namespace {
         bool FillOverflow = false;
 
         TIntrusivePtr<IResultWriter> ResultWriter;
-    };
-
+    }; 
+ 
     template <class TTarget>
     bool& TResultCallableExecutionTransformer::GetOverflowFlagAndCommitedSize(ui64& committed) {
         committed = CommittedFillSize;
@@ -625,8 +625,8 @@ namespace {
 
         void GetUsedNodes(const TExprNode& input, TVector<TString>& usedNodeIds) override {
             usedNodeIds.clear();
-            if (TMaybeNode<TResFill>(&input) || TMaybeNode<TResPull>(&input) || TMaybeNode<TResIf>(&input)
-                || TMaybeNode<TResFor>(&input)) {
+            if (TMaybeNode<TResFill>(&input) || TMaybeNode<TResPull>(&input) || TMaybeNode<TResIf>(&input) 
+                || TMaybeNode<TResFor>(&input)) { 
                 auto provider = Config->Types.DataSourceMap.FindPtr(input.Child(5)->Content());
                 Y_ENSURE(provider, "DataSource not exist: " << input.Child(5)->Content());
                 (*provider)->GetTrackableNodeProcessor().GetUsedNodes(input, usedNodeIds);
@@ -860,209 +860,209 @@ namespace {
     };
 
     class TResultProvider : public TDataProviderBase {
-    public:
-        struct TFunctions {
+    public: 
+        struct TFunctions { 
             THashSet<TStringBuf> Names;
-
-            TFunctions() {
+ 
+            TFunctions() { 
                 Names.insert(TResWrite::CallableName());
                 Names.insert(TResFill::CallableName());
                 Names.insert(TResPull::CallableName());
                 Names.insert(TResIf::CallableName());
-                Names.insert(TResFor::CallableName());
-            }
-        };
-
+                Names.insert(TResFor::CallableName()); 
+            } 
+        }; 
+ 
         TResultProvider(const TIntrusivePtr<TResultProviderConfig>& config)
-            : Config(config)
+            : Config(config) 
             , TrackableNodeProcessor(config)
-        {}
-
-        TStringBuf GetName() const override {
-            return ResultProviderName;
-        }
-
+        {} 
+ 
+        TStringBuf GetName() const override { 
+            return ResultProviderName; 
+        } 
+ 
         bool ValidateParameters(TExprNode& node, TExprContext& ctx, TMaybe<TString>& cluster) override {
-            if (!EnsureArgsCount(node, 1, ctx)) {
-                return false;
-            }
-
+            if (!EnsureArgsCount(node, 1, ctx)) { 
+                return false; 
+            } 
+ 
             cluster = Nothing();
-            return true;
-        }
-
+            return true; 
+        } 
+ 
         bool CanParse(const TExprNode& node) override {
             return ResultProviderFunctions().contains(node.Content()) || node.Content() == ConfigureName;
-        }
-
+        } 
+ 
         void FillModifyCallables(THashSet<TStringBuf>& callables) override {
             callables.insert(TResWrite::CallableName());
         }
 
-        IGraphTransformer& GetTypeAnnotationTransformer(bool instantOnly) override {
-            Y_UNUSED(instantOnly);
-            if (!TypeAnnotationTransformer) {
+        IGraphTransformer& GetTypeAnnotationTransformer(bool instantOnly) override { 
+            Y_UNUSED(instantOnly); 
+            if (!TypeAnnotationTransformer) { 
                 TypeAnnotationTransformer = CreateFunctorTransformer(
-                    [&](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx)->IGraphTransformer::TStatus {
+                    [&](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx)->IGraphTransformer::TStatus { 
                     output = input;
 
                     if (auto maybeRes = TMaybeNode<TResWriteBase>(input)) {
                         auto res = maybeRes.Cast();
                         if (!EnsureArgsCount(*input, res.Maybe<TResWrite>() ? 5 : 6, ctx)) {
-                            return IGraphTransformer::TStatus::Error;
-                        }
-
+                            return IGraphTransformer::TStatus::Error; 
+                        } 
+ 
                         if (!EnsureWorldType(*res.Ref().Child(TResWriteBase::idx_World), ctx)) {
-                            return IGraphTransformer::TStatus::Error;
-                        }
-
+                            return IGraphTransformer::TStatus::Error; 
+                        } 
+ 
                         if (!EnsureSpecificDataSink(*res.Ref().Child(TResWriteBase::idx_DataSink), ResultProviderName, ctx)) {
-                            return IGraphTransformer::TStatus::Error;
-                        }
-
+                            return IGraphTransformer::TStatus::Error; 
+                        } 
+ 
                         if (!res.Ref().Child(TResWriteBase::idx_Key)->IsCallable("Key") || res.Ref().Child(TResWriteBase::idx_Key)->ChildrenSize() > 0) {
                             ctx.AddError(TIssue(ctx.GetPosition(res.Ref().Child(TResWriteBase::idx_Key)->Pos()), "Expected empty key"));
-                            return IGraphTransformer::TStatus::Error;
-                        }
-
+                            return IGraphTransformer::TStatus::Error; 
+                        } 
+ 
                         if (!EnsurePersistable(res.Data().Ref(), ctx)) {
-                            return IGraphTransformer::TStatus::Error;
-                        }
-
+                            return IGraphTransformer::TStatus::Error; 
+                        } 
+ 
                         auto settings = res.Ref().Child(TResWriteBase::idx_Settings);
-                        if (!EnsureTuple(*settings, ctx)) {
-                            return IGraphTransformer::TStatus::Error;
-                        }
-
+                        if (!EnsureTuple(*settings, ctx)) { 
+                            return IGraphTransformer::TStatus::Error; 
+                        } 
+ 
                         TExprNode::TPtr columns;
-                        bool hasRef = false;
-                        bool hasAutoRef = false;
-                        ui32 settingPos = 0;
-                        for (auto& setting : settings->Children()) {
-                            if (!EnsureTupleMinSize(*setting, 1, ctx)) {
-                                return IGraphTransformer::TStatus::Error;
-                            }
-
-                            if (!EnsureAtom(*setting->Child(0), ctx)) {
-                                return IGraphTransformer::TStatus::Error;
-                            }
-
-                            auto content = setting->Child(0)->Content();
-                            if (content == "ref") {
-                                hasRef = true;
-                                if (!EnsureTupleMaxSize(*setting, 1, ctx)) {
-                                    return IGraphTransformer::TStatus::Error;
-                                }
-                            } else if (content == "autoref") {
-                                hasAutoRef = true;
-                                if (!EnsureTupleMaxSize(*setting, 1, ctx)) {
-                                    return IGraphTransformer::TStatus::Error;
-                                }
-                            } else if (content == "type") {
-                                if (!EnsureTupleMaxSize(*setting, 1, ctx)) {
-                                    return IGraphTransformer::TStatus::Error;
-                                }
-                            } else if (content == "take") {
-                                if (!EnsureTupleMaxSize(*setting, 2, ctx)) {
-                                    return IGraphTransformer::TStatus::Error;
-                                }
-
-                                if (!EnsureAtom(*setting->Child(1), ctx)) {
-                                    return IGraphTransformer::TStatus::Error;
-                                }
-
-                                ui64 limit = 0;
-                                if (!TryFromString(setting->Child(1)->Content(), limit)) {
+                        bool hasRef = false; 
+                        bool hasAutoRef = false; 
+                        ui32 settingPos = 0; 
+                        for (auto& setting : settings->Children()) { 
+                            if (!EnsureTupleMinSize(*setting, 1, ctx)) { 
+                                return IGraphTransformer::TStatus::Error; 
+                            } 
+ 
+                            if (!EnsureAtom(*setting->Child(0), ctx)) { 
+                                return IGraphTransformer::TStatus::Error; 
+                            } 
+ 
+                            auto content = setting->Child(0)->Content(); 
+                            if (content == "ref") { 
+                                hasRef = true; 
+                                if (!EnsureTupleMaxSize(*setting, 1, ctx)) { 
+                                    return IGraphTransformer::TStatus::Error; 
+                                } 
+                            } else if (content == "autoref") { 
+                                hasAutoRef = true; 
+                                if (!EnsureTupleMaxSize(*setting, 1, ctx)) { 
+                                    return IGraphTransformer::TStatus::Error; 
+                                } 
+                            } else if (content == "type") { 
+                                if (!EnsureTupleMaxSize(*setting, 1, ctx)) { 
+                                    return IGraphTransformer::TStatus::Error; 
+                                } 
+                            } else if (content == "take") { 
+                                if (!EnsureTupleMaxSize(*setting, 2, ctx)) { 
+                                    return IGraphTransformer::TStatus::Error; 
+                                } 
+ 
+                                if (!EnsureAtom(*setting->Child(1), ctx)) { 
+                                    return IGraphTransformer::TStatus::Error; 
+                                } 
+ 
+                                ui64 limit = 0; 
+                                if (!TryFromString(setting->Child(1)->Content(), limit)) { 
                                     ctx.AddError(TIssue(ctx.GetPosition(setting->Child(1)->Pos()), "Expected unsigned integer"));
-                                    return IGraphTransformer::TStatus::Error;
-                                }
-                            } else if (content == "columns") {
-                                if (columns) {
+                                    return IGraphTransformer::TStatus::Error; 
+                                } 
+                            } else if (content == "columns") { 
+                                if (columns) { 
                                     ctx.AddError(TIssue(ctx.GetPosition(setting->Pos()), "columns is already used"));
-                                    return IGraphTransformer::TStatus::Error;
-                                }
-
-                                if (!EnsureTupleMaxSize(*setting, 2, ctx)) {
-                                    return IGraphTransformer::TStatus::Error;
-                                }
-
+                                    return IGraphTransformer::TStatus::Error; 
+                                } 
+ 
+                                if (!EnsureTupleMaxSize(*setting, 2, ctx)) { 
+                                    return IGraphTransformer::TStatus::Error; 
+                                } 
+ 
                                 columns = setting->ChildPtr(1);
                                 auto status = ValidateColumns(columns, res.Data().Ref().GetTypeAnn(), ctx);
-                                if (status.Level != IGraphTransformer::TStatus::Ok) {
-                                    if (status.Level == IGraphTransformer::TStatus::Repeat) {
-                                        auto newSetting = ctx.ChangeChild(*setting, 1, std::move(columns));
-                                        auto newSettings = ctx.ChangeChild(*settings, settingPos, std::move(newSetting));
-                                        output = ctx.ChangeChild(*input, 4, std::move(newSettings));
-                                    }
-
-                                    return status;
-                                }
+                                if (status.Level != IGraphTransformer::TStatus::Ok) { 
+                                    if (status.Level == IGraphTransformer::TStatus::Repeat) { 
+                                        auto newSetting = ctx.ChangeChild(*setting, 1, std::move(columns)); 
+                                        auto newSettings = ctx.ChangeChild(*settings, settingPos, std::move(newSetting)); 
+                                        output = ctx.ChangeChild(*input, 4, std::move(newSettings)); 
+                                    } 
+ 
+                                    return status; 
+                                } 
                             } else if (content == "freezeColumns") {
                                 if (!EnsureTupleMaxSize(*setting, 1, ctx)) {
                                     return IGraphTransformer::TStatus::Error;
                                 }
-                            } else if (content == "discard") {
-                                if (!EnsureTupleMaxSize(*setting, 1, ctx)) {
-                                    return IGraphTransformer::TStatus::Error;
-                                }
-                            } else if (content == "label") {
-                                if (!EnsureTupleMaxSize(*setting, 2, ctx)) {
-                                    return IGraphTransformer::TStatus::Error;
-                                }
-
-                                if (!EnsureAtom(*setting->Child(1), ctx)) {
-                                    return IGraphTransformer::TStatus::Error;
-                                }
-                            } else {
+                            } else if (content == "discard") { 
+                                if (!EnsureTupleMaxSize(*setting, 1, ctx)) { 
+                                    return IGraphTransformer::TStatus::Error; 
+                                } 
+                            } else if (content == "label") { 
+                                if (!EnsureTupleMaxSize(*setting, 2, ctx)) { 
+                                    return IGraphTransformer::TStatus::Error; 
+                                } 
+ 
+                                if (!EnsureAtom(*setting->Child(1), ctx)) { 
+                                    return IGraphTransformer::TStatus::Error; 
+                                } 
+                            } else { 
                                 ctx.AddError(TIssue(ctx.GetPosition(setting->Pos()), "Expected label,discard,ref,autoref,type,take or columns atom"));
-                                return IGraphTransformer::TStatus::Error;
-                            }
-
-                            if (hasRef && hasAutoRef) {
+                                return IGraphTransformer::TStatus::Error; 
+                            } 
+ 
+                            if (hasRef && hasAutoRef) { 
                                 ctx.AddError(TIssue(ctx.GetPosition(setting->Pos()), "Either ref or autoref may be specified, not both"));
-                                return IGraphTransformer::TStatus::Error;
-                            }
-
-                            ++settingPos;
-                        }
-
+                                return IGraphTransformer::TStatus::Error; 
+                            } 
+ 
+                            ++settingPos; 
+                        } 
+ 
                         if (auto right = res.Data().Maybe<TCoRight>()) {
                             auto source = right.Cast().Input();
                             const TIntrusivePtr<IDataProvider>* provider = nullptr;
 
                             if (source.Ref().Type() == TExprNode::Callable || source.Ref().ChildrenSize() >= 2) {
-                                if (source.Ref().Child(1)->IsCallable("DataSource")) {
-                                    auto name = source.Ref().Child(1)->Child(0)->Content();
+                                if (source.Ref().Child(1)->IsCallable("DataSource")) { 
+                                    auto name = source.Ref().Child(1)->Child(0)->Content(); 
                                     provider = Config->Types.DataSourceMap.FindPtr(name);
-                                    Y_ENSURE(provider, "DataSource doesn't exist: " << name);
+                                    Y_ENSURE(provider, "DataSource doesn't exist: " << name); 
                                 }
-
-                                if (source.Ref().Child(1)->IsCallable("DataSink")) {
-                                    auto name = source.Ref().Child(1)->Child(0)->Content();
+ 
+                                if (source.Ref().Child(1)->IsCallable("DataSink")) { 
+                                    auto name = source.Ref().Child(1)->Child(0)->Content(); 
                                     provider = Config->Types.DataSinkMap.FindPtr(name);
-                                    Y_ENSURE(provider, "DataSink doesn't exist: " << name);
-                                }
+                                    Y_ENSURE(provider, "DataSink doesn't exist: " << name); 
+                                } 
                             }
 
                             if (!provider) {
                                 ctx.AddError(TIssue(ctx.GetPosition(res.Data().Pos()), "Expected Right! over Datasource or Datasink"));
-                                return IGraphTransformer::TStatus::Error;
-                            }
-                        }
-
+                                return IGraphTransformer::TStatus::Error; 
+                            } 
+                        } 
+ 
                         if (res.Maybe<TResTransientBase>()) {
                             auto resTransient = res.Cast<TResTransientBase>();
                             if (!EnsureAtom(*resTransient.Ref().Child(TResTransientBase::idx_DelegatedSource), ctx)) {
-                                return IGraphTransformer::TStatus::Error;
-                            }
-
+                                return IGraphTransformer::TStatus::Error; 
+                            } 
+ 
                             if (!Config->Types.DataSourceMap.FindPtr(resTransient.DelegatedSource().Value())) {
                                 ctx.AddError(TIssue(ctx.GetPosition(resTransient.DelegatedSource().Pos()),
                                     TStringBuilder() << "DataSource is not found: " << resTransient.DelegatedSource().Value()));
-                                return IGraphTransformer::TStatus::Error;
-                            }
-                        }
-
+                                return IGraphTransformer::TStatus::Error; 
+                            } 
+                        } 
+ 
                         if (res.Data().Ref().IsCallable("AssumeColumnOrder")) {
                             if (!HasSetting(res.Settings().Ref(), "freezeColumns")) {
                                 auto dataOrder = Config->Types.LookupColumnOrder(res.Data().Ref());
@@ -1083,169 +1083,169 @@ namespace {
                         }
 
                         input->SetTypeAnn(res.World().Ref().GetTypeAnn());
-                        return IGraphTransformer::TStatus::Ok;
-                    }
+                        return IGraphTransformer::TStatus::Ok; 
+                    } 
                     else if (auto maybeIf = TMaybeNode<TResIf>(input)) {
                         if (!EnsureArgsCount(*input, 7, ctx)) {
-                            return IGraphTransformer::TStatus::Error;
-                        }
-
-                        if (!EnsureWorldType(*input->Child(TResIf::idx_World), ctx)) {
-                            return IGraphTransformer::TStatus::Error;
-                        }
-
-                        if (!EnsureSpecificDataSink(*input->Child(TResIf::idx_DataSink), ResultProviderName, ctx)) {
-                            return IGraphTransformer::TStatus::Error;
-                        }
-
-                        if (!EnsureSpecificDataType(*input->Child(TResIf::idx_Condition), EDataSlot::Bool, ctx)) {
-                            return IGraphTransformer::TStatus::Error;
-                        }
-
-                        if (!EnsureWorldType(*input->Child(TResIf::idx_Then), ctx)) {
-                            return IGraphTransformer::TStatus::Error;
-                        }
-
-                        if (!EnsureWorldType(*input->Child(TResIf::idx_Else), ctx)) {
-                            return IGraphTransformer::TStatus::Error;
-                        }
-
-                        if (!EnsureAtom(*input->Child(TResIf::idx_DelegatedSource), ctx)) {
-                            return IGraphTransformer::TStatus::Error;
-                        }
-
-                        if (!Config->Types.DataSourceMap.FindPtr(input->Child(TResIf::idx_DelegatedSource)->Content())) {
+                            return IGraphTransformer::TStatus::Error; 
+                        } 
+ 
+                        if (!EnsureWorldType(*input->Child(TResIf::idx_World), ctx)) { 
+                            return IGraphTransformer::TStatus::Error; 
+                        } 
+ 
+                        if (!EnsureSpecificDataSink(*input->Child(TResIf::idx_DataSink), ResultProviderName, ctx)) { 
+                            return IGraphTransformer::TStatus::Error; 
+                        } 
+ 
+                        if (!EnsureSpecificDataType(*input->Child(TResIf::idx_Condition), EDataSlot::Bool, ctx)) { 
+                            return IGraphTransformer::TStatus::Error; 
+                        } 
+ 
+                        if (!EnsureWorldType(*input->Child(TResIf::idx_Then), ctx)) { 
+                            return IGraphTransformer::TStatus::Error; 
+                        } 
+ 
+                        if (!EnsureWorldType(*input->Child(TResIf::idx_Else), ctx)) { 
+                            return IGraphTransformer::TStatus::Error; 
+                        } 
+ 
+                        if (!EnsureAtom(*input->Child(TResIf::idx_DelegatedSource), ctx)) { 
+                            return IGraphTransformer::TStatus::Error; 
+                        } 
+ 
+                        if (!Config->Types.DataSourceMap.FindPtr(input->Child(TResIf::idx_DelegatedSource)->Content())) { 
                             ctx.AddError(TIssue(ctx.GetPosition(input->Child(TResIf::idx_DelegatedSource)->Pos()),
-                                TStringBuilder() << "DataSource is not found: " << input->Child(TResIf::idx_DelegatedSource)->Content()));
-                            return IGraphTransformer::TStatus::Error;
-                        }
-
-                        auto settings = input->Child(TResIf::idx_Settings);
-                        if (!EnsureTupleSize(*settings, 0, ctx)) {
-                            return IGraphTransformer::TStatus::Error;
-                        }
-
-                        input->SetTypeAnn(input->Child(TResIf::idx_World)->GetTypeAnn());
-                        return IGraphTransformer::TStatus::Ok;
-                    }
-                    else if (auto maybeFor = TMaybeNode<TResFor>(input)) {
-                        if (!EnsureArgsCount(*input, 10, ctx)) {
-                            return IGraphTransformer::TStatus::Error;
-                        }
-
-                        if (!EnsureWorldType(*input->Child(TResFor::idx_World), ctx)) {
-                            return IGraphTransformer::TStatus::Error;
-                        }
-
-                        if (!EnsureSpecificDataSink(*input->Child(TResFor::idx_DataSink), ResultProviderName, ctx)) {
-                            return IGraphTransformer::TStatus::Error;
-                        }
-
-                        if (!EnsurePersistable(*input->Child(TResFor::idx_Items), ctx)) {
-                            return IGraphTransformer::TStatus::Error;
-                        }
-
-                        auto listType = RemoveOptionalType(input->Child(TResFor::idx_Items)->GetTypeAnn());
-                        if (!EnsureListType(input->Child(TResFor::idx_Items)->Pos(), *listType, ctx)) {
-                            return IGraphTransformer::TStatus::Error;
-                        }
-
-                        auto itemType = listType->Cast<TListExprType>()->GetItemType();
-                        auto status = ConvertToLambda(input->ChildRef(TResFor::idx_Iter), ctx, 2);
-                        if (status.Level != IGraphTransformer::TStatus::Ok) {
-                            return status;
-                        }
-
-                        auto& lambda1 = input->ChildRef(TResFor::idx_Iter);
-                        if (!UpdateLambdaAllArgumentsTypes(lambda1, { ctx.MakeType<TWorldExprType>(), itemType }, ctx)) {
-                            return IGraphTransformer::TStatus::Error;
-                        }
-
-                        if (!lambda1->GetTypeAnn()) {
-                            return IGraphTransformer::TStatus::Repeat;
-                        }
-
-                        if (!EnsureWorldType(*lambda1->Child(1), ctx)) {
-                            return IGraphTransformer::TStatus::Error;
-                        }
-
-                        status = ConvertToLambda(input->ChildRef(TResFor::idx_Else), ctx, 1);
-                        if (status.Level != IGraphTransformer::TStatus::Ok) {
-                            return status;
-                        }
-
-                        auto& lambda2 = input->ChildRef(TResFor::idx_Else);
-                        if (!UpdateLambdaAllArgumentsTypes(lambda2, { ctx.MakeType<TWorldExprType>() }, ctx)) {
-                            return IGraphTransformer::TStatus::Error;
-                        }
-
-                        if (!lambda2->GetTypeAnn()) {
-                            return IGraphTransformer::TStatus::Repeat;
-                        }
-
-                        if (!EnsureWorldType(*lambda2->Child(1), ctx)) {
-                            return IGraphTransformer::TStatus::Error;
-                        }
-
-                        if (!EnsureAtom(*input->Child(TResFor::idx_DelegatedSource), ctx)) {
-                            return IGraphTransformer::TStatus::Error;
-                        }
-
-                        if (!Config->Types.DataSourceMap.FindPtr(input->Child(TResFor::idx_DelegatedSource)->Content())) {
+                                TStringBuilder() << "DataSource is not found: " << input->Child(TResIf::idx_DelegatedSource)->Content())); 
+                            return IGraphTransformer::TStatus::Error; 
+                        } 
+ 
+                        auto settings = input->Child(TResIf::idx_Settings); 
+                        if (!EnsureTupleSize(*settings, 0, ctx)) { 
+                            return IGraphTransformer::TStatus::Error; 
+                        } 
+ 
+                        input->SetTypeAnn(input->Child(TResIf::idx_World)->GetTypeAnn()); 
+                        return IGraphTransformer::TStatus::Ok; 
+                    } 
+                    else if (auto maybeFor = TMaybeNode<TResFor>(input)) { 
+                        if (!EnsureArgsCount(*input, 10, ctx)) { 
+                            return IGraphTransformer::TStatus::Error; 
+                        } 
+ 
+                        if (!EnsureWorldType(*input->Child(TResFor::idx_World), ctx)) { 
+                            return IGraphTransformer::TStatus::Error; 
+                        } 
+ 
+                        if (!EnsureSpecificDataSink(*input->Child(TResFor::idx_DataSink), ResultProviderName, ctx)) { 
+                            return IGraphTransformer::TStatus::Error; 
+                        } 
+ 
+                        if (!EnsurePersistable(*input->Child(TResFor::idx_Items), ctx)) { 
+                            return IGraphTransformer::TStatus::Error; 
+                        } 
+ 
+                        auto listType = RemoveOptionalType(input->Child(TResFor::idx_Items)->GetTypeAnn()); 
+                        if (!EnsureListType(input->Child(TResFor::idx_Items)->Pos(), *listType, ctx)) { 
+                            return IGraphTransformer::TStatus::Error; 
+                        } 
+ 
+                        auto itemType = listType->Cast<TListExprType>()->GetItemType(); 
+                        auto status = ConvertToLambda(input->ChildRef(TResFor::idx_Iter), ctx, 2); 
+                        if (status.Level != IGraphTransformer::TStatus::Ok) { 
+                            return status; 
+                        } 
+ 
+                        auto& lambda1 = input->ChildRef(TResFor::idx_Iter); 
+                        if (!UpdateLambdaAllArgumentsTypes(lambda1, { ctx.MakeType<TWorldExprType>(), itemType }, ctx)) { 
+                            return IGraphTransformer::TStatus::Error; 
+                        } 
+ 
+                        if (!lambda1->GetTypeAnn()) { 
+                            return IGraphTransformer::TStatus::Repeat; 
+                        } 
+ 
+                        if (!EnsureWorldType(*lambda1->Child(1), ctx)) { 
+                            return IGraphTransformer::TStatus::Error; 
+                        } 
+ 
+                        status = ConvertToLambda(input->ChildRef(TResFor::idx_Else), ctx, 1); 
+                        if (status.Level != IGraphTransformer::TStatus::Ok) { 
+                            return status; 
+                        } 
+ 
+                        auto& lambda2 = input->ChildRef(TResFor::idx_Else); 
+                        if (!UpdateLambdaAllArgumentsTypes(lambda2, { ctx.MakeType<TWorldExprType>() }, ctx)) { 
+                            return IGraphTransformer::TStatus::Error; 
+                        } 
+ 
+                        if (!lambda2->GetTypeAnn()) { 
+                            return IGraphTransformer::TStatus::Repeat; 
+                        } 
+ 
+                        if (!EnsureWorldType(*lambda2->Child(1), ctx)) { 
+                            return IGraphTransformer::TStatus::Error; 
+                        } 
+ 
+                        if (!EnsureAtom(*input->Child(TResFor::idx_DelegatedSource), ctx)) { 
+                            return IGraphTransformer::TStatus::Error; 
+                        } 
+ 
+                        if (!Config->Types.DataSourceMap.FindPtr(input->Child(TResFor::idx_DelegatedSource)->Content())) { 
                             ctx.AddError(TIssue(ctx.GetPosition(input->Child(TResFor::idx_DelegatedSource)->Pos()),
-                                TStringBuilder() << "DataSource is not found: " << input->Child(TResFor::idx_DelegatedSource)->Content()));
-                            return IGraphTransformer::TStatus::Error;
-                        }
-
-                        auto settings = input->Child(TResFor::idx_Settings);
-                        if (!EnsureTupleSize(*settings, 0, ctx)) {
-                            return IGraphTransformer::TStatus::Error;
-                        }
-
-                        if (!EnsureAtom(*input->Child(TResFor::idx_Total), ctx)) {
-                            return IGraphTransformer::TStatus::Error;
-                        }
-
-                        auto total = input->Child(TResFor::idx_Total)->Content();
-                        ui32 totalValue = 0;
-                        if (total && !TryFromString(total, totalValue)) {
+                                TStringBuilder() << "DataSource is not found: " << input->Child(TResFor::idx_DelegatedSource)->Content())); 
+                            return IGraphTransformer::TStatus::Error; 
+                        } 
+ 
+                        auto settings = input->Child(TResFor::idx_Settings); 
+                        if (!EnsureTupleSize(*settings, 0, ctx)) { 
+                            return IGraphTransformer::TStatus::Error; 
+                        } 
+ 
+                        if (!EnsureAtom(*input->Child(TResFor::idx_Total), ctx)) { 
+                            return IGraphTransformer::TStatus::Error; 
+                        } 
+ 
+                        auto total = input->Child(TResFor::idx_Total)->Content(); 
+                        ui32 totalValue = 0; 
+                        if (total && !TryFromString(total, totalValue)) { 
                             ctx.AddError(TIssue(ctx.GetPosition(input->Child(TResFor::idx_Total)->Pos()),
-                                TStringBuilder() << "Expected number, but got: " << total));
-                            return IGraphTransformer::TStatus::Error;
-                        }
-
-                        if (!EnsureAtom(*input->Child(TResFor::idx_Current), ctx)) {
-                            return IGraphTransformer::TStatus::Error;
-                        }
-
-                        auto current = input->Child(TResFor::idx_Current)->Content();
-                        ui32 currentValue = 0;
-                        if (current && !TryFromString(current, currentValue)) {
+                                TStringBuilder() << "Expected number, but got: " << total)); 
+                            return IGraphTransformer::TStatus::Error; 
+                        } 
+ 
+                        if (!EnsureAtom(*input->Child(TResFor::idx_Current), ctx)) { 
+                            return IGraphTransformer::TStatus::Error; 
+                        } 
+ 
+                        auto current = input->Child(TResFor::idx_Current)->Content(); 
+                        ui32 currentValue = 0; 
+                        if (current && !TryFromString(current, currentValue)) { 
                             ctx.AddError(TIssue(ctx.GetPosition(input->Child(TResFor::idx_Current)->Pos()),
-                                TStringBuilder() << "Expected number, but got: " << current));
-                            return IGraphTransformer::TStatus::Error;
-                        }
-
-                        if (!total != !current) {
+                                TStringBuilder() << "Expected number, but got: " << current)); 
+                            return IGraphTransformer::TStatus::Error; 
+                        } 
+ 
+                        if (!total != !current) { 
                             ctx.AddError(TIssue(ctx.GetPosition(input->Child(TResFor::idx_Current)->Pos()),
-                                TStringBuilder() << "Current value should be set simultaneously with total value"));
-                            return IGraphTransformer::TStatus::Error;
-                        }
-
-                        const auto& active = *input->Child(TResFor::idx_Active);
-                        if (!active.IsCallable("Void")) {
-                            if (!EnsureWorldType(active, ctx)) {
-                                return IGraphTransformer::TStatus::Error;
-                            }
-                        }
-
-                        input->SetTypeAnn(input->Child(TResIf::idx_World)->GetTypeAnn());
-                        return IGraphTransformer::TStatus::Ok;
-                    }
+                                TStringBuilder() << "Current value should be set simultaneously with total value")); 
+                            return IGraphTransformer::TStatus::Error; 
+                        } 
+ 
+                        const auto& active = *input->Child(TResFor::idx_Active); 
+                        if (!active.IsCallable("Void")) { 
+                            if (!EnsureWorldType(active, ctx)) { 
+                                return IGraphTransformer::TStatus::Error; 
+                            } 
+                        } 
+ 
+                        input->SetTypeAnn(input->Child(TResIf::idx_World)->GetTypeAnn()); 
+                        return IGraphTransformer::TStatus::Ok; 
+                    } 
                     else if (auto maybeCommit = TMaybeNode<TCoCommit>(input)) {
                         auto commit = maybeCommit.Cast();
                         auto settings = NCommon::ParseCommitSettings(commit, ctx);
-
+ 
                         if (!settings.EnsureModeEmpty(ctx)) {
                             return IGraphTransformer::TStatus::Error;
                         }
@@ -1259,63 +1259,63 @@ namespace {
                         input->SetTypeAnn(commit.World().Ref().GetTypeAnn());
                         return IGraphTransformer::TStatus::Ok;
                     }
-                    else if (input->Content() == ConfigureName) {
-                        if (!EnsureMinArgsCount(*input, 3, ctx)) {
-                            return IGraphTransformer::TStatus::Error;
-                        }
+                    else if (input->Content() == ConfigureName) { 
+                        if (!EnsureMinArgsCount(*input, 3, ctx)) { 
+                            return IGraphTransformer::TStatus::Error; 
+                        } 
 
-                        if (!EnsureWorldType(*input->Child(0), ctx)) {
-                            return IGraphTransformer::TStatus::Error;
-                        }
-
-                        if (!EnsureSpecificDataSink(*input->Child(1), ResultProviderName, ctx)) {
-                            return IGraphTransformer::TStatus::Error;
-                        }
-
-                        if (!EnsureAtom(*input->Child(2), ctx)) {
-                            return IGraphTransformer::TStatus::Error;
-                        }
-
-                        auto command = input->Child(2)->Content();
-                        if (command == "SizeLimit") {
-                            if (!EnsureArgsCount(*input, 4, ctx)) {
-                                return IGraphTransformer::TStatus::Error;
-                            }
-
-                            if (!EnsureAtom(*input->Child(3), ctx)) {
-                                return IGraphTransformer::TStatus::Error;
-                            }
-
-                            const auto limitStr = input->Child(3)->Content();
-                            ui64 limit;
-                            if (!TryFromString(limitStr, limit)) {
+                        if (!EnsureWorldType(*input->Child(0), ctx)) { 
+                            return IGraphTransformer::TStatus::Error; 
+                        } 
+ 
+                        if (!EnsureSpecificDataSink(*input->Child(1), ResultProviderName, ctx)) { 
+                            return IGraphTransformer::TStatus::Error; 
+                        } 
+ 
+                        if (!EnsureAtom(*input->Child(2), ctx)) { 
+                            return IGraphTransformer::TStatus::Error; 
+                        } 
+ 
+                        auto command = input->Child(2)->Content(); 
+                        if (command == "SizeLimit") { 
+                            if (!EnsureArgsCount(*input, 4, ctx)) { 
+                                return IGraphTransformer::TStatus::Error; 
+                            } 
+ 
+                            if (!EnsureAtom(*input->Child(3), ctx)) { 
+                                return IGraphTransformer::TStatus::Error; 
+                            } 
+ 
+                            const auto limitStr = input->Child(3)->Content(); 
+                            ui64 limit; 
+                            if (!TryFromString(limitStr, limit)) { 
                                 ctx.AddError(TIssue(ctx.GetPosition(input->Child(3)->Pos()), TStringBuilder() << "expected integer, but got: " << limitStr));
-                                return IGraphTransformer::TStatus::Error;
-                            }
-
-                            if (Config->FillSettings.AllResultsBytesLimit) {
-                                Config->FillSettings.AllResultsBytesLimit = Min(*Config->FillSettings.AllResultsBytesLimit, limit);
-                            } else {
-                                Config->FillSettings.AllResultsBytesLimit = limit;
-                            }
-
-                        } else {
+                                return IGraphTransformer::TStatus::Error; 
+                            } 
+ 
+                            if (Config->FillSettings.AllResultsBytesLimit) { 
+                                Config->FillSettings.AllResultsBytesLimit = Min(*Config->FillSettings.AllResultsBytesLimit, limit); 
+                            } else { 
+                                Config->FillSettings.AllResultsBytesLimit = limit; 
+                            } 
+ 
+                        } else { 
                             ctx.AddError(TIssue(ctx.GetPosition(input->Child(2)->Pos()), TStringBuilder() << "Unsupported command: " << command));
-                            return IGraphTransformer::TStatus::Error;
-                        }
-
+                            return IGraphTransformer::TStatus::Error; 
+                        } 
+ 
                         input->SetTypeAnn(input->Child(0)->GetTypeAnn());
-                        return IGraphTransformer::TStatus::Ok;
-                    }
-
+                        return IGraphTransformer::TStatus::Ok; 
+                    } 
+ 
                     ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() << "(Result) Unsupported function: " << input->Content()));
-                    return IGraphTransformer::TStatus::Error;
-                });
-            }
-
-            return *TypeAnnotationTransformer;
-        }
-
+                    return IGraphTransformer::TStatus::Error; 
+                }); 
+            } 
+ 
+            return *TypeAnnotationTransformer; 
+        } 
+ 
         TExprNode::TPtr RewriteIO(const TExprNode::TPtr& node, TExprContext& ctx) override {
             auto ret = node;
             if (node->Content() == WriteName) {
@@ -1330,55 +1330,55 @@ namespace {
                         .Seal()
                         .Build()
                     );
-            }
-            else {
-                YQL_ENSURE(false, "Expected Write!");
-            }
-
+            } 
+            else { 
+                YQL_ENSURE(false, "Expected Write!"); 
+            } 
+ 
             YQL_CLOG(INFO, ProviderResult) << "RewriteIO";
-            return ret;
-        }
-
-        IGraphTransformer& GetPhysicalFinalizingTransformer() override {
-            if (!PhysicalFinalizingTransformer) {
+            return ret; 
+        } 
+ 
+        IGraphTransformer& GetPhysicalFinalizingTransformer() override { 
+            if (!PhysicalFinalizingTransformer) { 
                 PhysicalFinalizingTransformer = new TPhysicalFinalizingTransformer(Config);
-            }
-
-            return *PhysicalFinalizingTransformer;
-        }
-
-        bool CanExecute(const TExprNode& node) override {
+            } 
+ 
+            return *PhysicalFinalizingTransformer; 
+        } 
+ 
+        bool CanExecute(const TExprNode& node) override { 
             if (node.Content() == TResFill::CallableName()) {
-                return true;
-            }
-
+                return true; 
+            } 
+ 
             if (node.Content() == TResPull::CallableName()) {
-                return true;
-            }
-
+                return true; 
+            } 
+ 
             if (node.Content() == TResIf::CallableName()) {
-                return true;
-            }
-
-            if (node.Content() == TResFor::CallableName()) {
-                return true;
-            }
-
-            if (node.Content() == ConfigureName) {
-                return true;
-            }
-
-            return false;
-        }
-
-        IGraphTransformer& GetCallableExecutionTransformer() override {
-            if (!CallableExecutionTransformer) {
+                return true; 
+            } 
+ 
+            if (node.Content() == TResFor::CallableName()) { 
+                return true; 
+            } 
+ 
+            if (node.Content() == ConfigureName) { 
+                return true; 
+            } 
+ 
+            return false; 
+        } 
+ 
+        IGraphTransformer& GetCallableExecutionTransformer() override { 
+            if (!CallableExecutionTransformer) { 
                 CallableExecutionTransformer = new TResultCallableExecutionTransformer(Config);
-            }
-
-            return *CallableExecutionTransformer;
-        }
-
+            } 
+ 
+            return *CallableExecutionTransformer; 
+        } 
+ 
         void Reset() final {
             TDataProviderBase::Reset();
             if (CallableExecutionTransformer) {
@@ -1388,89 +1388,89 @@ namespace {
         }
 
         bool GetDependencies(const TExprNode& node, TExprNode::TListType& children, bool compact) override {
-            if (CanExecute(node)) {
+            if (CanExecute(node)) { 
                 children.push_back(node.ChildPtr(0));
                 if (auto resPull = TMaybeNode<TResPull>(&node)) {
                     children.push_back(resPull.Cast().Data().Ptr());
                 } else if (auto resIf = TMaybeNode<TResIf>(&node)) {
                     children.push_back(resIf.Cast().Then().Ptr());
                     children.push_back(resIf.Cast().Else().Ptr());
-                } else if (auto resFor = TMaybeNode<TResFor>(&node)) {
-                    auto active = resFor.Cast().Active().Ptr();
-                    if (!active->IsCallable("Void")) {
-                        children.push_back(active);
-                    }
+                } else if (auto resFor = TMaybeNode<TResFor>(&node)) { 
+                    auto active = resFor.Cast().Active().Ptr(); 
+                    if (!active->IsCallable("Void")) { 
+                        children.push_back(active); 
+                    } 
                 } else if (auto resFill = TMaybeNode<TResFill>(&node)) {
                     const auto provider = Config->Types.DataSourceMap.FindPtr(resFill.Cast().DelegatedSource().Value());
                     Y_ENSURE(provider, "DataSource not exist: " << resFill.Cast().DelegatedSource().Value());
                     (*provider)->GetPlanFormatter().GetResultDependencies(resFill.Cast().Data().Ptr(), children, compact);
-                }
-
-                return true;
-            }
-
-            return false;
-        }
-
+                } 
+ 
+                return true; 
+            } 
+ 
+            return false; 
+        } 
+ 
         void WritePlanDetails(const TExprNode& node, NYson::TYsonWriter& writer) override {
             if (auto resPull = TMaybeNode<TResPull>(&node)) {
                 auto dataSourceName = resPull.Cast().DelegatedSource().Value();
                 auto dataSource = Config->Types.DataSourceMap.FindPtr(dataSourceName);
-                YQL_ENSURE(dataSource);
+                YQL_ENSURE(dataSource); 
 
                 (*dataSource)->GetPlanFormatter().WritePullDetails(resPull.Cast().Data().Ref(), writer);
-            }
-        }
-
+            } 
+        } 
+ 
         TString GetProviderPath(const TExprNode& node) override {
             Y_UNUSED(node);
-            return "result";
-        }
-
+            return "result"; 
+        } 
+ 
         TString GetOperationDisplayName(const TExprNode& node) override {
             if (node.Content() == CommitName) {
                 return TString::Join(node.Content(), " on result");
-            }
-
-            if (auto maybeResFor = TMaybeNode<TResFor>(&node)) {
-                auto resFor = maybeResFor.Cast();
-
-                TStringBuilder res;
-                res << node.Content();
+            } 
+ 
+            if (auto maybeResFor = TMaybeNode<TResFor>(&node)) { 
+                auto resFor = maybeResFor.Cast(); 
+ 
+                TStringBuilder res; 
+                res << node.Content(); 
                 if (resFor.Total().Value() && resFor.Total().Value() != "0") {
                     res << ", " << (node.GetState() == TExprNode::EState::ExecutionComplete ?
-                        resFor.Total().Value() : resFor.Current().Value()) << "/" << resFor.Total().Value();
-                }
-
-                return res;
-            }
-
+                        resFor.Total().Value() : resFor.Current().Value()) << "/" << resFor.Total().Value(); 
+                } 
+ 
+                return res; 
+            } 
+ 
             return TString(node.Content());
-        }
-
+        } 
+ 
         ITrackableNodeProcessor& GetTrackableNodeProcessor() override {
             return TrackableNodeProcessor;
         }
-
-    private:
-        const TIntrusivePtr<TResultProviderConfig> Config;
+ 
+    private: 
+        const TIntrusivePtr<TResultProviderConfig> Config; 
         TResultTrackableNodeProcessor TrackableNodeProcessor;
-        TAutoPtr<IGraphTransformer> TypeAnnotationTransformer;
-        TAutoPtr<IGraphTransformer> PhysicalFinalizingTransformer;
-        TAutoPtr<IGraphTransformer> CallableExecutionTransformer;
-    };
-}
-
+        TAutoPtr<IGraphTransformer> TypeAnnotationTransformer; 
+        TAutoPtr<IGraphTransformer> PhysicalFinalizingTransformer; 
+        TAutoPtr<IGraphTransformer> CallableExecutionTransformer; 
+    }; 
+} 
+ 
 TIntrusivePtr<IResultWriter> CreateYsonResultWriter(NYson::EYsonFormat format) {
     return MakeIntrusive<TYsonResultWriter>(format);
 }
 
 TIntrusivePtr<IDataProvider> CreateResultProvider(const TIntrusivePtr<TResultProviderConfig>& config) {
     return new TResultProvider(config);
-}
-
+} 
+ 
 const THashSet<TStringBuf>& ResultProviderFunctions() {
     return Singleton<TResultProvider::TFunctions>()->Names;
-}
+} 
 
 }

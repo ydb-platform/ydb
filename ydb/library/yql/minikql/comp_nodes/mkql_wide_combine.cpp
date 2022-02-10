@@ -1,11 +1,11 @@
 #include "mkql_wide_combine.h"
 
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h>
-#include <ydb/library/yql/minikql/mkql_node_builder.h>
-#include <ydb/library/yql/minikql/mkql_node_cast.h>
-#include <ydb/library/yql/minikql/mkql_stats_registry.h>
-#include <ydb/library/yql/minikql/defs.h>
-#include <ydb/library/yql/utils/cast.h>
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h> 
+#include <ydb/library/yql/minikql/mkql_node_builder.h> 
+#include <ydb/library/yql/minikql/mkql_node_cast.h> 
+#include <ydb/library/yql/minikql/mkql_stats_registry.h> 
+#include <ydb/library/yql/minikql/defs.h> 
+#include <ydb/library/yql/utils/cast.h> 
 
 #include <util/string/cast.h>
 
@@ -14,9 +14,9 @@ namespace NMiniKQL {
 
 using NYql::EnsureDynamicCast;
 
-extern TStatKey Combine_FlushesCount;
-extern TStatKey Combine_MaxRowsCount;
-
+extern TStatKey Combine_FlushesCount; 
+extern TStatKey Combine_MaxRowsCount; 
+ 
 namespace {
 
 struct TMyValueEqual {

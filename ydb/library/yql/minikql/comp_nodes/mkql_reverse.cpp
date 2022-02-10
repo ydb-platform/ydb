@@ -1,26 +1,26 @@
-#include "mkql_reverse.h"
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h>
-#include <ydb/library/yql/minikql/mkql_node_cast.h>
-
-namespace NKikimr {
-namespace NMiniKQL {
-
+#include "mkql_reverse.h" 
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h> 
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h> 
+#include <ydb/library/yql/minikql/mkql_node_cast.h> 
+ 
+namespace NKikimr { 
+namespace NMiniKQL { 
+ 
 namespace {
 
 class TReverseWrapper : public TMutableCodegeneratorNode<TReverseWrapper> {
     typedef TMutableCodegeneratorNode<TReverseWrapper> TBaseComputation;
-public:
+public: 
     TReverseWrapper(TComputationMutables& mutables, IComputationNode* list)
         : TBaseComputation(mutables, list->GetRepresentation())
         , List(list)
-    {
-    }
-
+    { 
+    } 
+ 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         return ctx.HolderFactory.ReverseList(ctx.Builder, List->GetValue(ctx).Release());
-    }
-
+    } 
+ 
 #ifndef MKQL_DISABLE_CODEGEN
     Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
         auto& context = ctx.Codegen->GetContext();
@@ -56,18 +56,18 @@ public:
 private:
     void RegisterDependencies() const final {
         DependsOn(List);
-    }
-
-    IComputationNode* const List;
-};
-
+    } 
+ 
+    IComputationNode* const List; 
+}; 
+ 
 }
 
-IComputationNode* WrapReverse(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
-    MKQL_ENSURE(callable.GetInputsCount() == 1, "Expected 1 arg");
-
+IComputationNode* WrapReverse(TCallable& callable, const TComputationNodeFactoryContext& ctx) { 
+    MKQL_ENSURE(callable.GetInputsCount() == 1, "Expected 1 arg"); 
+ 
     return new TReverseWrapper(ctx.Mutables, LocateNode(ctx.NodeLocator, callable, 0));
-}
-
-}
-}
+} 
+ 
+} 
+} 

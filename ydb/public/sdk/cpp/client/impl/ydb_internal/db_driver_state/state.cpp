@@ -19,13 +19,13 @@ TDbDriverState::TDbDriverState(
     const TStringType& database,
     const TStringType& discoveryEndpoint,
     EDiscoveryMode discoveryMode,
-    bool enableSsl,
+    bool enableSsl, 
     IInternalClient* client
 )
     : Database(database)
     , DiscoveryEndpoint(discoveryEndpoint)
     , DiscoveryMode(discoveryMode)
-    , EnableSsl(enableSsl)
+    , EnableSsl(enableSsl) 
     , Client(client)
     , EndpointPool([this, client]() mutable {
         // this callback will be called just after shared_ptr initialization
@@ -125,7 +125,7 @@ TDbDriverStatePtr TDbDriverStateTracker::GetDriverState(
     TStringType database,
     TStringType discoveryEndpoint,
     EDiscoveryMode discoveryMode,
-    bool enableSsl,
+    bool enableSsl, 
     std::shared_ptr<ICredentialsProviderFactory> credentialsProviderFactory
 ) {
     TStringType clientIdentity;
@@ -179,7 +179,7 @@ TDbDriverStatePtr TDbDriverStateTracker::GetDriverState(
                     database,
                     discoveryEndpoint,
                     discoveryMode,
-                    enableSsl,
+                    enableSsl, 
                     DiscoveryClient_),
                 deleter);
 

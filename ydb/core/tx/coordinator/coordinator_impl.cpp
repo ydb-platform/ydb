@@ -178,7 +178,7 @@ void TTxCoordinator::Handle(TEvPrivate::TEvPlanTick::TPtr &ev, const TActorConte
 
     // do work
     const ui64 resolution = Config.Resolution;
-    const ui64 now = TAppData::TimeProvider->Now().MilliSeconds();
+    const ui64 now = TAppData::TimeProvider->Now().MilliSeconds(); 
     const ui64 dirty = now + Config.PlanAhead;
     const ui64 next = (dirty + resolution - 1) / resolution * resolution;
 
@@ -348,12 +348,12 @@ void TTxCoordinator::SendMediatorStep(TMediator &mediator, const TActorContext &
             return;
 
         TAutoPtr<TMediatorStep> extracted = mediator.Queue->Pop();
-        for (const auto& tx: extracted->Transactions) {
+        for (const auto& tx: extracted->Transactions) { 
             LOG_DEBUG_S(ctx, NKikimrServices::TX_COORDINATOR, "Send from# " << TabletID()
                 << " to mediator# " << extracted->MediatorId << ", step# " << extracted->Step
                 << ", txid# " << tx.TxId << " marker# C2");
-        }
-
+        } 
+ 
         VolatileState.LastSentStep = Max(VolatileState.LastSentStep, extracted->Step);
         ctx.Send(mediator.QueueActor, new TEvTxCoordinator::TEvMediatorQueueStep(mediator.GenCookie, extracted));
     }

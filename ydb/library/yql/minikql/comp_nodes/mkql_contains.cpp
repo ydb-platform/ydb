@@ -1,26 +1,26 @@
-#include "mkql_contains.h"
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h>
-#include <ydb/library/yql/minikql/mkql_node_cast.h>
-
-namespace NKikimr {
-namespace NMiniKQL {
-
+#include "mkql_contains.h" 
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h> 
+#include <ydb/library/yql/minikql/mkql_node_cast.h> 
+ 
+namespace NKikimr { 
+namespace NMiniKQL { 
+ 
 namespace {
 
 class TContainsWrapper : public TMutableCodegeneratorNode<TContainsWrapper> {
     typedef TMutableCodegeneratorNode<TContainsWrapper> TBaseComputation;
-public:
+public: 
     TContainsWrapper(TComputationMutables& mutables, IComputationNode* dict, IComputationNode* key)
         : TBaseComputation(mutables, EValueRepresentation::Embedded)
         , Dict(dict)
-        , Key(key)
-    {
-    }
-
+        , Key(key) 
+    { 
+    } 
+ 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& compCtx) const {
         return NUdf::TUnboxedValuePod(Dict->GetValue(compCtx).Contains(Key->GetValue(compCtx)));
-    }
-
+    } 
+ 
 #ifndef MKQL_DISABLE_CODEGEN
     Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
         auto& context = ctx.Codegen->GetContext();
@@ -44,21 +44,21 @@ private:
     void RegisterDependencies() const final {
         DependsOn(Dict);
         DependsOn(Key);
-    }
-
-    IComputationNode* const Dict;
-    IComputationNode* const Key;
-};
-
+    } 
+ 
+    IComputationNode* const Dict; 
+    IComputationNode* const Key; 
+}; 
+ 
 }
 
-IComputationNode* WrapContains(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
-    MKQL_ENSURE(callable.GetInputsCount() == 2, "Expected 2 args");
-
+IComputationNode* WrapContains(TCallable& callable, const TComputationNodeFactoryContext& ctx) { 
+    MKQL_ENSURE(callable.GetInputsCount() == 2, "Expected 2 args"); 
+ 
     const auto dict = LocateNode(ctx.NodeLocator, callable, 0);
     const auto key = LocateNode(ctx.NodeLocator, callable, 1);
     return new TContainsWrapper(ctx.Mutables, dict, key);
-}
-
-}
-}
+} 
+ 
+} 
+} 

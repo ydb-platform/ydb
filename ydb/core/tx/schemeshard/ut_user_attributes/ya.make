@@ -29,11 +29,11 @@ PEERDIR(
     ydb/core/tx/schemeshard
     ydb/core/tx/schemeshard/ut_helpers
     ydb/core/util
-    ydb/library/yql/public/issue
+    ydb/library/yql/public/issue 
 )
 
 YQL_LAST_ABI_VERSION()
-
+ 
 SRCS(
     ut_user_attributes.cpp
 )

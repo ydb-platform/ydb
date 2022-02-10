@@ -119,10 +119,10 @@ void TMsgBusClient::Init() {
 
 void TMsgBusClient::Shutdown() {
     if (Bus) {
-        if (Session) {
-            Session->Shutdown();
-        }
-
+        if (Session) { 
+            Session->Shutdown(); 
+        } 
+ 
         Session.Drop();
         Bus.Drop();
     }

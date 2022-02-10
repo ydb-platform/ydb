@@ -1,11 +1,11 @@
 #include "mkql_computation_node_ut.h"
 
-#include <ydb/library/yql/minikql/mkql_node_cast.h>
-#include <ydb/library/yql/minikql/mkql_string_util.h>
+#include <ydb/library/yql/minikql/mkql_node_cast.h> 
+#include <ydb/library/yql/minikql/mkql_string_util.h> 
 
-namespace NKikimr {
-namespace NMiniKQL {
-
+namespace NKikimr { 
+namespace NMiniKQL { 
+ 
 Y_UNIT_TEST_SUITE(TMiniKQLCondenseNodeTest) {
     Y_UNIT_TEST_LLVM(TestSqueeze) {
         TSetup<LLVM> setup;
@@ -28,10 +28,10 @@ Y_UNIT_TEST_SUITE(TMiniKQLCondenseNodeTest) {
         const auto graph = setup.BuildGraph(pgmReturn);
         const auto iterator = graph->GetValue();
         NUdf::TUnboxedValue item;
-        UNIT_ASSERT_VALUES_EQUAL(NUdf::EFetchStatus::Ok, iterator.Fetch(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<double>(), -53.2);
-        UNIT_ASSERT_VALUES_EQUAL(NUdf::EFetchStatus::Finish, iterator.Fetch(item));
-        UNIT_ASSERT_VALUES_EQUAL(NUdf::EFetchStatus::Finish, iterator.Fetch(item));
+        UNIT_ASSERT_VALUES_EQUAL(NUdf::EFetchStatus::Ok, iterator.Fetch(item)); 
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<double>(), -53.2); 
+        UNIT_ASSERT_VALUES_EQUAL(NUdf::EFetchStatus::Finish, iterator.Fetch(item)); 
+        UNIT_ASSERT_VALUES_EQUAL(NUdf::EFetchStatus::Finish, iterator.Fetch(item)); 
     }
 
     Y_UNIT_TEST_LLVM(TestSqueezeOnEmpty) {
@@ -51,10 +51,10 @@ Y_UNIT_TEST_SUITE(TMiniKQLCondenseNodeTest) {
         const auto graph = setup.BuildGraph(pgmReturn);
         const auto iterator = graph->GetValue();
         NUdf::TUnboxedValue item;
-        UNIT_ASSERT_VALUES_EQUAL(NUdf::EFetchStatus::Ok, iterator.Fetch(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<double>(), HUGE_VAL);
-        UNIT_ASSERT_VALUES_EQUAL(NUdf::EFetchStatus::Finish, iterator.Fetch(item));
-        UNIT_ASSERT_VALUES_EQUAL(NUdf::EFetchStatus::Finish, iterator.Fetch(item));
+        UNIT_ASSERT_VALUES_EQUAL(NUdf::EFetchStatus::Ok, iterator.Fetch(item)); 
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<double>(), HUGE_VAL); 
+        UNIT_ASSERT_VALUES_EQUAL(NUdf::EFetchStatus::Finish, iterator.Fetch(item)); 
+        UNIT_ASSERT_VALUES_EQUAL(NUdf::EFetchStatus::Finish, iterator.Fetch(item)); 
     }
 
     Y_UNIT_TEST_LLVM(TestSqueeze1OverEmpty) {
@@ -75,8 +75,8 @@ Y_UNIT_TEST_SUITE(TMiniKQLCondenseNodeTest) {
         const auto graph = setup.BuildGraph(pgmReturn);
         const auto iterator = graph->GetValue();
         NUdf::TUnboxedValue item;
-        UNIT_ASSERT_VALUES_EQUAL(NUdf::EFetchStatus::Finish, iterator.Fetch(item));
-        UNIT_ASSERT_VALUES_EQUAL(NUdf::EFetchStatus::Finish, iterator.Fetch(item));
+        UNIT_ASSERT_VALUES_EQUAL(NUdf::EFetchStatus::Finish, iterator.Fetch(item)); 
+        UNIT_ASSERT_VALUES_EQUAL(NUdf::EFetchStatus::Finish, iterator.Fetch(item)); 
     }
 
     Y_UNIT_TEST_LLVM(TestSqueeze1OverSingle) {
@@ -98,11 +98,11 @@ Y_UNIT_TEST_SUITE(TMiniKQLCondenseNodeTest) {
         const auto graph = setup.BuildGraph(pgmReturn);
         const auto iterator = graph->GetValue();
         NUdf::TUnboxedValue item;
-        UNIT_ASSERT_VALUES_EQUAL(NUdf::EFetchStatus::Ok, iterator.Fetch(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<i32>(), -1);
+        UNIT_ASSERT_VALUES_EQUAL(NUdf::EFetchStatus::Ok, iterator.Fetch(item)); 
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<i32>(), -1); 
 
-        UNIT_ASSERT_VALUES_EQUAL(NUdf::EFetchStatus::Finish, iterator.Fetch(item));
-        UNIT_ASSERT_VALUES_EQUAL(NUdf::EFetchStatus::Finish, iterator.Fetch(item));
+        UNIT_ASSERT_VALUES_EQUAL(NUdf::EFetchStatus::Finish, iterator.Fetch(item)); 
+        UNIT_ASSERT_VALUES_EQUAL(NUdf::EFetchStatus::Finish, iterator.Fetch(item)); 
     }
 
     Y_UNIT_TEST_LLVM(TestSqueeze1OverMany) {
@@ -126,11 +126,11 @@ Y_UNIT_TEST_SUITE(TMiniKQLCondenseNodeTest) {
         const auto graph = setup.BuildGraph(pgmReturn);
         const auto iterator = graph->GetValue();
         NUdf::TUnboxedValue item;
-        UNIT_ASSERT_VALUES_EQUAL(NUdf::EFetchStatus::Ok, iterator.Fetch(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<i32>(), -14);
+        UNIT_ASSERT_VALUES_EQUAL(NUdf::EFetchStatus::Ok, iterator.Fetch(item)); 
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<i32>(), -14); 
 
-        UNIT_ASSERT_VALUES_EQUAL(NUdf::EFetchStatus::Finish, iterator.Fetch(item));
-        UNIT_ASSERT_VALUES_EQUAL(NUdf::EFetchStatus::Finish, iterator.Fetch(item));
+        UNIT_ASSERT_VALUES_EQUAL(NUdf::EFetchStatus::Finish, iterator.Fetch(item)); 
+        UNIT_ASSERT_VALUES_EQUAL(NUdf::EFetchStatus::Finish, iterator.Fetch(item)); 
     }
 
     Y_UNIT_TEST_LLVM(TestCondense) {
@@ -490,7 +490,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLCondenseNodeTest) {
         UNIT_ASSERT(!iterator.Next(item));
         UNIT_ASSERT(!iterator.Next(item));
     }
-}
-
-}
-}
+} 
+ 
+} 
+} 

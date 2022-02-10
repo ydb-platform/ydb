@@ -70,39 +70,39 @@ namespace NActors {
         // first step - find good enough mailbox
         ui32 hint = 0;
         TMailboxHeader* mailbox = nullptr;
-
+ 
         if (revolvingWriteCounter == 0)
             revolvingWriteCounter = AtomicIncrement(RegisterRevolvingCounter);
 
         {
             ui32 hintBackoff = 0;
-
+ 
             while (hint == 0) {
                 hint = MailboxTable->AllocateMailbox(mailboxType, ++revolvingWriteCounter);
                 mailbox = MailboxTable->Get(hint);
-
+ 
                 if (!mailbox->LockFromFree()) {
                     MailboxTable->ReclaimMailbox(mailboxType, hintBackoff, ++revolvingWriteCounter);
                     hintBackoff = hint;
                     hint = 0;
                 }
-            }
+            } 
 
             MailboxTable->ReclaimMailbox(mailboxType, hintBackoff, ++revolvingWriteCounter);
-        }
-
+        } 
+ 
         const ui64 localActorId = AllocateID();
-
+ 
         // ok, got mailbox
         mailbox->AttachActor(localActorId, actor);
-
+ 
         // do init
         const TActorId actorId(ActorSystem->NodeId, PoolId, localActorId, hint);
         DoActorInit(ActorSystem, actor, actorId, parentId);
-
+ 
         // Once we unlock the mailbox the actor starts running and we cannot use the pointer any more
         actor = nullptr;
-
+ 
         switch (mailboxType) {
             case TMailboxType::Simple:
                 UnlockFromExecution((TMailboxTable::TSimpleMailbox*)mailbox, this, false, hint, MaxWorkers, ++revolvingWriteCounter);
@@ -127,7 +127,7 @@ namespace NActors {
         if (elapsed > 1000000) {
             LWPROBE(SlowRegisterNew, PoolId, NHPTimer::GetSeconds(elapsed) * 1000.0);
         }
-
+ 
         return actorId;
     }
 
@@ -143,7 +143,7 @@ namespace NActors {
 
         const ui64 localActorId = AllocateID();
         mailbox->AttachActor(localActorId, actor);
-
+ 
         const TActorId actorId(ActorSystem->NodeId, PoolId, localActorId, hint);
         DoActorInit(ActorSystem, actor, actorId, parentId);
         NHPTimer::STime elapsed = GetCycleCountFast() - hpstart;
@@ -157,7 +157,7 @@ namespace NActors {
     TAffinity* TExecutorPoolBase::Affinity() const {
         return ThreadsAffinity.Get();
     }
-
+ 
     bool TExecutorPoolBaseMailboxed::Cleanup() {
         return MailboxTable->Cleanup();
     }

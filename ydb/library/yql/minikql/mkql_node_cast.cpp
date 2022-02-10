@@ -15,13 +15,13 @@
 #define MKQL_AS_TYPE(name)                                               \
     template <>                                                          \
     T##name##Type*                                                       \
-    AsType(TType* type, const TSourceLocation& location) {               \
+    AsType(TType* type, const TSourceLocation& location) {               \ 
         MKQL_ENSURE_WITH_LOC(                                            \
                 location,                                                \
-                type->Is##name(),                                        \
+                type->Is##name(),                                        \ 
                    "Expected type of T" #name "Type"                     \
-                   " but got " << type->GetKindAsStr());                 \
-        return static_cast<T##name##Type*>(type);                        \
+                   " but got " << type->GetKindAsStr());                 \ 
+        return static_cast<T##name##Type*>(type);                        \ 
     }                                                                    \
     template <>                                                          \
     const T##name##Type*                                                 \
@@ -47,9 +47,9 @@ MKQL_AS_TYPE(Struct)
 MKQL_AS_TYPE(Tuple)
 MKQL_AS_TYPE(Type)
 MKQL_AS_TYPE(Void)
-MKQL_AS_TYPE(Resource)
-MKQL_AS_TYPE(Variant)
-MKQL_AS_TYPE(Stream)
+MKQL_AS_TYPE(Resource) 
+MKQL_AS_TYPE(Variant) 
+MKQL_AS_TYPE(Stream) 
 MKQL_AS_TYPE(Flow)
 MKQL_AS_TYPE(Tagged)
 MKQL_AS_TYPE(Block)
@@ -64,8 +64,8 @@ MKQL_AS_VALUE(Struct, Type)
 MKQL_AS_VALUE(Tuple, Type)
 MKQL_AS_VALUE(Type, Type)
 MKQL_AS_VALUE(Void, Type)
-MKQL_AS_VALUE(Variant, Type)
-MKQL_AS_VALUE(Stream, Type)
+MKQL_AS_VALUE(Variant, Type) 
+MKQL_AS_VALUE(Stream, Type) 
 MKQL_AS_VALUE(Flow, Type)
 
 MKQL_AS_VALUE(Data, Literal)
@@ -74,7 +74,7 @@ MKQL_AS_VALUE(List, Literal)
 MKQL_AS_VALUE(Optional, Literal)
 MKQL_AS_VALUE(Struct, Literal)
 MKQL_AS_VALUE(Tuple, Literal)
-MKQL_AS_VALUE(Variant, Literal)
+MKQL_AS_VALUE(Variant, Literal) 
 
 TCallable* AsCallable(
         const TStringBuf& name,

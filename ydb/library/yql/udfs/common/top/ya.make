@@ -6,7 +6,7 @@ YQL_ABI_VERSION(
     0
 )
 
-OWNER(g:yql g:yql_ydb_core)
+OWNER(g:yql g:yql_ydb_core) 
 
 SRCS(
     top_udf.cpp

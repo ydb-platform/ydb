@@ -2,7 +2,7 @@
 
 #include "dq_columns_resolve.h"
 
-#include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
+#include <ydb/library/yql/dq/type_ann/dq_type_ann.h> 
 
 namespace NYql::NDq {
 

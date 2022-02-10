@@ -1,16 +1,16 @@
 #include "mkql_builtins_decimal.h"
-
+ 
 #include <cmath>
 
-namespace NKikimr {
-namespace NMiniKQL {
-
-namespace {
+namespace NKikimr { 
+namespace NMiniKQL { 
+ 
+namespace { 
 template <typename T, std::enable_if_t<std::is_unsigned<T>::value>* = nullptr>
 inline T Abs(T v) {
     return v;
 }
-
+ 
 template <typename T, std::enable_if_t<std::is_floating_point<T>::value>* = nullptr>
 inline T Abs(T v) {
     return std::fabs(v);
@@ -28,7 +28,7 @@ struct TAbs : public TSimpleArithmeticUnary<TInput, TOutput, TAbs<TInput, TOutpu
         return Abs<TInput>(val);
     }
 
-#ifndef MKQL_DISABLE_CODEGEN
+#ifndef MKQL_DISABLE_CODEGEN 
     static Value* Gen(Value* arg, const TCodegenContext& ctx, BasicBlock*& block)
     {
         if (std::is_unsigned<TInput>())
@@ -38,7 +38,7 @@ struct TAbs : public TSimpleArithmeticUnary<TInput, TOutput, TAbs<TInput, TOutpu
             auto& module = ctx.Codegen->GetModule();
             const auto fnType = FunctionType::get(arg->getType(), {arg->getType()}, false);
             const auto& name = GetFuncNameForType<TInput>("llvm.fabs");
-            const auto func = module.getOrInsertFunction(name, fnType).getCallee();
+            const auto func = module.getOrInsertFunction(name, fnType).getCallee(); 
             const auto res = CallInst::Create(func, {arg}, "fabs", block);
             return res;
         } else {
@@ -51,14 +51,14 @@ struct TAbs : public TSimpleArithmeticUnary<TInput, TOutput, TAbs<TInput, TOutpu
     }
 #endif
 };
-
+ 
 struct TDecimalAbs {
     static NUdf::TUnboxedValuePod Execute(const NUdf::TUnboxedValuePod& arg) {
         const auto a = arg.GetInt128();
         return a < 0 ? NUdf::TUnboxedValuePod(-a) : arg;
     }
 
-#ifndef MKQL_DISABLE_CODEGEN
+#ifndef MKQL_DISABLE_CODEGEN 
     static Value* Generate(Value* arg, const TCodegenContext&, BasicBlock*& block)
     {
         const auto val = GetterForInt128(arg, block);
@@ -71,13 +71,13 @@ struct TDecimalAbs {
 #endif
 };
 
-}
-
+} 
+ 
 void RegisterAbs(IBuiltinFunctionRegistry& registry) {
     RegisterUnaryNumericFunctionOpt<TAbs, TUnaryArgsOpt>(registry, "Abs");
-    RegisterFunctionUnOpt<NUdf::TDataType<NUdf::TInterval>, NUdf::TDataType<NUdf::TInterval>, TAbs, TUnaryArgsOpt>(registry, "Abs");
+    RegisterFunctionUnOpt<NUdf::TDataType<NUdf::TInterval>, NUdf::TDataType<NUdf::TInterval>, TAbs, TUnaryArgsOpt>(registry, "Abs"); 
     NDecimal::RegisterUnaryFunction<TDecimalAbs, TUnaryArgsOpt>(registry, "Abs");
-}
-
-} // namespace NMiniKQL
-} // namespace NKikimr
+} 
+ 
+} // namespace NMiniKQL 
+} // namespace NKikimr 

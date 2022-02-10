@@ -12,7 +12,7 @@
 
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 
-#include <ydb/library/yql/public/decimal/yql_decimal.h>
+#include <ydb/library/yql/public/decimal/yql_decimal.h> 
 
 #include <util/generic/bitmap.h>
 #include <util/generic/map.h>

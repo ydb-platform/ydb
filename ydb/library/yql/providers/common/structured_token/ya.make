@@ -12,7 +12,7 @@ SRCS(
 PEERDIR(
     library/cpp/json
     library/cpp/string_utils/base64
-    ydb/library/yql/utils
+    ydb/library/yql/utils 
 )
 
 END()

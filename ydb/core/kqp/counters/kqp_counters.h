@@ -12,7 +12,7 @@
 #include <ydb/core/sys_view/common/events.h>
 #include <ydb/core/tx/tx_proxy/mon.h>
 
-#include <ydb/library/yql/minikql/aligned_page_pool.h>
+#include <ydb/library/yql/minikql/aligned_page_pool.h> 
 
 #include <util/system/spinlock.h>
 

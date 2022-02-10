@@ -441,7 +441,7 @@ class TDataShard
     struct Schema : NIceDb::Schema {
         struct Sys : Table<1> {
             struct Id :             Column<1, NScheme::NTypeIds::Uint64> {};
-            struct Bytes :          Column<2, NScheme::NTypeIds::String> {};
+            struct Bytes :          Column<2, NScheme::NTypeIds::String> {}; 
             struct Uint64 :         Column<3, NScheme::NTypeIds::Uint64> {};
 
             using TKey = TableKey<Id>;
@@ -452,9 +452,9 @@ class TDataShard
         struct UserTables : Table<2> {
             struct Tid :            Column<1, NScheme::NTypeIds::Uint64> {};
             struct LocalTid :       Column<2, NScheme::NTypeIds::Uint32> {};
-            struct Path :           Column<3, NScheme::NTypeIds::String> {};
-            struct Name :           Column<4, NScheme::NTypeIds::String> {};
-            struct Schema :         Column<5, NScheme::NTypeIds::String> { using Type = TString; };
+            struct Path :           Column<3, NScheme::NTypeIds::String> {}; 
+            struct Name :           Column<4, NScheme::NTypeIds::String> {}; 
+            struct Schema :         Column<5, NScheme::NTypeIds::String> { using Type = TString; }; 
             struct ShadowTid :      Column<6, NScheme::NTypeIds::Uint32> { static constexpr ui32 Default = 0; };
 
             using TKey = TableKey<Tid>;
@@ -481,7 +481,7 @@ class TDataShard
             struct TxId :           Column<1, NScheme::NTypeIds::Uint64> {};
             struct Origin :         Column<2, NScheme::NTypeIds::Uint64> {};
             struct InReadSetState : Column<3, NScheme::NTypeIds::Uint64> {}; // Not used
-            struct Body :           Column<4, NScheme::NTypeIds::String> { using Type = TString; };
+            struct Body :           Column<4, NScheme::NTypeIds::String> { using Type = TString; }; 
             struct Source :         Column<5, NScheme::NTypeIds::ActorId> {};
 
             using TKey = TableKey<TxId, Origin>;
@@ -493,8 +493,8 @@ class TDataShard
             struct Origin :         Column<2, NScheme::NTypeIds::Uint64> {};
             struct From :           Column<3, NScheme::NTypeIds::Uint64> {};
             struct To :             Column<4, NScheme::NTypeIds::Uint64> {};
-            struct Body :           Column<5, NScheme::NTypeIds::String> { using Type = TString; };
-            struct BalanceTrackList :      Column<6, NScheme::NTypeIds::String> { using Type = TString; };
+            struct Body :           Column<5, NScheme::NTypeIds::String> { using Type = TString; }; 
+            struct BalanceTrackList :      Column<6, NScheme::NTypeIds::String> { using Type = TString; }; 
 
             using TKey = TableKey<TxId, Origin, From, To>;
             using TColumns = TableColumns<TxId, Origin, From, To, Body, BalanceTrackList>;
@@ -507,8 +507,8 @@ class TDataShard
             struct Origin :         Column<4, NScheme::NTypeIds::Uint64> {};
             struct From :           Column<5, NScheme::NTypeIds::Uint64> {};
             struct To :             Column<6, NScheme::NTypeIds::Uint64> {};
-            struct Body :           Column<7, NScheme::NTypeIds::String> { using Type = TString; };
-            struct SplitTraj :      Column<8, NScheme::NTypeIds::String> { using Type = TString; };
+            struct Body :           Column<7, NScheme::NTypeIds::String> { using Type = TString; }; 
+            struct SplitTraj :      Column<8, NScheme::NTypeIds::String> { using Type = TString; }; 
 
             using TKey = TableKey<Seqno>;
             using TColumns = TableColumns<Seqno, Step, TxId, Origin, From, To, Body, SplitTraj>;
@@ -553,7 +553,7 @@ class TDataShard
         // Here we persist snapshots metadata to preserve it across Src datashard restarts
         struct SplitSrcSnapshots : Table<10> {
             struct DstTabletId :    Column<1, NScheme::NTypeIds::Uint64> {};
-            struct SnapshotMeta :   Column<2, NScheme::NTypeIds::String> { using Type = TString; };
+            struct SnapshotMeta :   Column<2, NScheme::NTypeIds::String> { using Type = TString; }; 
 
             using TKey = TableKey<DstTabletId>;
             using TColumns = TableColumns<DstTabletId, SnapshotMeta>;

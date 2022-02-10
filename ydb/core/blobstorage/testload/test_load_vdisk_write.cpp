@@ -131,7 +131,7 @@ namespace NKikimr {
                     queueId,
                     counters,
                     MakeIntrusive<TBSProxyContext>(counters),
-                    TQueueClientId(EQueueClientType::VDiskLoad, TAppData::RandomProvider->GenRand64()),
+                    TQueueClientId(EQueueClientType::VDiskLoad, TAppData::RandomProvider->GenRand64()), 
                     "",
                     TInterconnectChannels::IC_BLOBSTORAGE,
                     ctx.ExecutorThread.ActorSystem->NodeId == VDiskActorId.NodeId(),
@@ -156,8 +156,8 @@ namespace NKikimr {
                         InFlightPutBytes < InFlightPutBytesMax) {
                     TLogoBlobID logoBlobId;
 
-                    if (WrittenBlobs && TAppData::RandomProvider->GenRandReal2() < 0.25) {
-                        size_t index = TAppData::RandomProvider->GenRand64() % WrittenBlobs.size();
+                    if (WrittenBlobs && TAppData::RandomProvider->GenRandReal2() < 0.25) { 
+                        size_t index = TAppData::RandomProvider->GenRand64() % WrittenBlobs.size(); 
                         logoBlobId = WrittenBlobs[index];
                     } else {
                         const ui32 size = PutSizeGenerator.Generate();
@@ -166,7 +166,7 @@ namespace NKikimr {
                         WrittenBlobs.push_back(logoBlobId);
                     }
 
-                    logoBlobId = TLogoBlobID(logoBlobId, 1 + TAppData::RandomProvider->GenRand64() % GType.TotalPartCount());
+                    logoBlobId = TLogoBlobID(logoBlobId, 1 + TAppData::RandomProvider->GenRand64() % GType.TotalPartCount()); 
 
                     IssuePutRequest(logoBlobId, PutCookie, ctx);
                     NextWriteRequestTimestamp = now + PutIntervalGenerator.Generate();

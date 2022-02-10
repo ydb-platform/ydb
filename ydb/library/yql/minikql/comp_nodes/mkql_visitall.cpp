@@ -1,23 +1,23 @@
-#include "mkql_visitall.h"
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h>
-#include <ydb/library/yql/minikql/mkql_node_cast.h>
+#include "mkql_visitall.h" 
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h> 
+#include <ydb/library/yql/minikql/mkql_node_cast.h> 
 #include <util/string/cast.h>
-
-namespace NKikimr {
-namespace NMiniKQL {
-
+ 
+namespace NKikimr { 
+namespace NMiniKQL { 
+ 
 namespace {
 
 class TVisitAllWrapper: public TMutableCodegeneratorNode<TVisitAllWrapper> {
 using TBaseComputation = TMutableCodegeneratorNode<TVisitAllWrapper>;
-public:
+public: 
     TVisitAllWrapper(TComputationMutables& mutables, EValueRepresentation kind, IComputationNode* varNode, TComputationExternalNodePtrVector&& args, TComputationNodePtrVector&& newNodes)
         : TBaseComputation(mutables, kind)
         , VarNode(varNode)
-        , Args(std::move(args))
-        , NewNodes(std::move(newNodes))
+        , Args(std::move(args)) 
+        , NewNodes(std::move(newNodes)) 
     {}
-
+ 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         const auto& var = VarNode->GetValue(ctx);
         const auto currentIndex = var.GetVariantIndex();
@@ -25,7 +25,7 @@ public:
             return NUdf::TUnboxedValuePod();
         Args[currentIndex]->SetValue(ctx, var.GetVariantItem());
         return NewNodes[currentIndex]->GetValue(ctx).Release();
-    }
+    } 
 #ifndef MKQL_DISABLE_CODEGEN
     Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
         auto& context = ctx.Codegen->GetContext();
@@ -64,7 +64,7 @@ private:
         std::for_each(Args.cbegin(), Args.cend(), std::bind(&TVisitAllWrapper::Own, this, std::placeholders::_1));
         std::for_each(NewNodes.cbegin(), NewNodes.cend(), std::bind(&TVisitAllWrapper::DependsOn, this, std::placeholders::_1));
     }
-
+ 
     IComputationNode *const VarNode;
     const TComputationExternalNodePtrVector Args;
     const TComputationNodePtrVector NewNodes;
@@ -88,15 +88,15 @@ public:
             if (index < Args.size()) {
                 Args[index]->SetValue(ctx, var.GetVariantItem());
             }
-        }
+        } 
 
         const auto index = state.Get<ui32>();
         return index < NewNodes.size() ? NewNodes[index]->GetValue(ctx).Release() : NUdf::TUnboxedValuePod::MakeFinish();
-    }
+    } 
 #ifndef MKQL_DISABLE_CODEGEN
     Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
         auto& context = ctx.Codegen->GetContext();
-
+ 
         const auto init = BasicBlock::Create(context, "init", ctx.Func);
         const auto work = BasicBlock::Create(context, "work", ctx.Func);
         const auto done = BasicBlock::Create(context, "done", ctx.Func);
@@ -162,8 +162,8 @@ private:
     IComputationNode *const VarNode;
     const TComputationExternalNodePtrVector Args;
     const TComputationNodePtrVector NewNodes;
-};
-
+}; 
+ 
 class TWideVisitAllWrapper: public TStatefulWideFlowCodegeneratorNode<TWideVisitAllWrapper> {
 using TBaseComputation = TStatefulWideFlowCodegeneratorNode<TWideVisitAllWrapper>;
 public:
@@ -303,19 +303,19 @@ private:
 
 }
 
-IComputationNode* WrapVisitAll(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
-    MKQL_ENSURE(callable.GetInputsCount() >= 3, "Expected at least 3 arguments");
+IComputationNode* WrapVisitAll(TCallable& callable, const TComputationNodeFactoryContext& ctx) { 
+    MKQL_ENSURE(callable.GetInputsCount() >= 3, "Expected at least 3 arguments"); 
     const auto varType = AS_TYPE(TVariantType, callable.GetInput(0));
-    MKQL_ENSURE(callable.GetInputsCount() == varType->GetAlternativesCount() * 2 + 1, "Mismatch handlers count");
+    MKQL_ENSURE(callable.GetInputsCount() == varType->GetAlternativesCount() * 2 + 1, "Mismatch handlers count"); 
 
     const auto variant = LocateNode(ctx.NodeLocator, callable, 0U);
 
-    TComputationNodePtrVector newNodes;
+    TComputationNodePtrVector newNodes; 
     newNodes.reserve(varType->GetAlternativesCount());
     for (auto i = 1U; i <= varType->GetAlternativesCount() << 1U; ++i) {
         newNodes.emplace_back(LocateNode(ctx.NodeLocator, callable, ++i));
-    }
-
+    } 
+ 
     TComputationExternalNodePtrVector args;
     args.reserve(varType->GetAlternativesCount());
     for (auto i = 0U; i < varType->GetAlternativesCount() << 1U; ++i) {
@@ -335,7 +335,7 @@ IComputationNode* WrapVisitAll(TCallable& callable, const TComputationNodeFactor
         return new TVisitAllWrapper(ctx.Mutables, GetValueRepresentation(callable.GetType()->GetReturnType()), variant, std::move(args), std::move(newNodes));
 
     THROW yexception() << "Wrong signature.";
-}
-
-}
-}
+} 
+ 
+} 
+} 

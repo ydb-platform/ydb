@@ -17,7 +17,7 @@ SRCS(
 
 PEERDIR(
     util/draft
-    ydb/library/yql/minikql
+    ydb/library/yql/minikql 
     ydb/library/yql/public/udf/tz
 )
 

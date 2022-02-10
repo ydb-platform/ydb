@@ -14,16 +14,16 @@ TSimpleDbFlat::TSimpleDbFlat(NTable::TDatabase &db)
 
 void TSimpleDbFlat::Erase(const TString &key, const TActorContext &ctx) {
     Y_UNUSED(ctx);
-    const auto keyStr = NScheme::TSmallBoundedString::TInstance(key);
+    const auto keyStr = NScheme::TSmallBoundedString::TInstance(key); 
     const TRawTypeValue rawTypeValue = (TRawTypeValue)keyStr;
     Db.Update(TABLE_ID, NTable::ERowOp::Erase, {&rawTypeValue, 1}, { });
 }
 
 void TSimpleDbFlat::Update(const TString &key, const TString &value, const TActorContext &ctx) {
     Y_UNUSED(ctx);
-    const auto keyStr = NScheme::TSmallBoundedString::TInstance(key);
+    const auto keyStr = NScheme::TSmallBoundedString::TInstance(key); 
     const TRawTypeValue rawTypeValue = (TRawTypeValue)keyStr;
-    const auto valueStr = NScheme::TString::TInstance(value);
+    const auto valueStr = NScheme::TString::TInstance(value); 
     NTable::TUpdateOp ops(VALUE_TAG, NTable::ECellOp::Set, valueStr);
     Db.Update(TABLE_ID, NTable::ERowOp::Upsert, { rawTypeValue }, { ops });
 }

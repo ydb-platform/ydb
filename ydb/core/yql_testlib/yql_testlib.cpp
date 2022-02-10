@@ -7,8 +7,8 @@
 #include <ydb/core/protos/services.pb.h>
 #include <ydb/core/mind/local.h>
 #include <ydb/core/engine/mkql_engine_flat.h>
-#include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
-#include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
+#include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h> 
+#include <ydb/library/yql/providers/common/provider/yql_provider_names.h> 
 
 #include <ydb/core/testlib/actors/test_runtime.h>
 #include <ydb/core/testlib/basics/appdata.h>
@@ -144,13 +144,13 @@ public:
     }
 };
 
-} // unnamed namespace
-
-
-namespace NKikimr {
-
-namespace Tests {
-
+} // unnamed namespace 
+ 
+ 
+namespace NKikimr { 
+ 
+namespace Tests { 
+ 
 void TYqlServer::Initialize() {
     ResumeYqlExecutionPromise = NThreading::NewPromise<void>();
 
@@ -166,7 +166,7 @@ void TYqlServer::Initialize() {
 
     app.AddHive(Settings->Domain, ChangeStateStorage(Hive, Settings->Domain));
     app.SetFnRegistry([this](const NKikimr::NScheme::TTypeRegistry& typeRegistry) -> NKikimr::NMiniKQL::IFunctionRegistry* {
-            Y_UNUSED(typeRegistry);
+            Y_UNUSED(typeRegistry); 
             // register test UDFs
             auto freg = NKikimr::NMiniKQL::CreateFunctionRegistry(NKikimr::NMiniKQL::CreateBuiltinRegistry())->Clone();
             freg->AddModule("", "TestUDFs", new TTestUDFs(GetRuntime(), ResumeYqlExecutionPromise.GetFuture()));
@@ -190,21 +190,21 @@ void TYqlServer::Initialize() {
 
 
 void MakeGatewaysConfig(const THashMap<TString, TString>& clusterMapping, NYql::TGatewaysConfig& gatewaysConfig) {
-    for (auto& x : clusterMapping) {
+    for (auto& x : clusterMapping) { 
         if (x.second == NYql::YtProviderName) {
-            auto cluster = gatewaysConfig.MutableYt()->AddClusterMapping();
-            cluster->SetName(x.first);
-        }
-        else if (x.second == NYql::KikimrProviderName) {
-            auto cluster = gatewaysConfig.MutableKikimr()->AddClusterMapping();
-            cluster->SetName(x.first);
-        }
-        else {
-            ythrow yexception() << "Unknown system: " << x.second << " for cluster " << x.first;
-        }
-    }
-}
-
+            auto cluster = gatewaysConfig.MutableYt()->AddClusterMapping(); 
+            cluster->SetName(x.first); 
+        } 
+        else if (x.second == NYql::KikimrProviderName) { 
+            auto cluster = gatewaysConfig.MutableKikimr()->AddClusterMapping(); 
+            cluster->SetName(x.first); 
+        } 
+        else { 
+            ythrow yexception() << "Unknown system: " << x.second << " for cluster " << x.first; 
+        } 
+    } 
+} 
+ 
 void TYqlServer::ResumeYqlExecutionActor() {
     ResumeYqlExecutionPromise.SetValue();
 }

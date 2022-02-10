@@ -1,13 +1,13 @@
-#include "mkql_invoke.h"
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h>
-#include <ydb/library/yql/minikql/mkql_node_cast.h>
-#include <ydb/library/yql/minikql/mkql_node_builder.h>
-#include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
-
-namespace NKikimr {
-namespace NMiniKQL {
-
+#include "mkql_invoke.h" 
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h> 
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h> 
+#include <ydb/library/yql/minikql/mkql_node_cast.h> 
+#include <ydb/library/yql/minikql/mkql_node_builder.h> 
+#include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h> 
+ 
+namespace NKikimr { 
+namespace NMiniKQL { 
+ 
 namespace {
 
 template<bool IsOptional>
@@ -140,23 +140,23 @@ private:
 template<size_t Size>
 class TInvokeWrapper : public TMutableCodegeneratorNode<TInvokeWrapper<Size>> {
     typedef TMutableCodegeneratorNode<TInvokeWrapper<Size>> TBaseComputation;
-public:
+public: 
     TInvokeWrapper(TComputationMutables& mutables, EValueRepresentation kind, TStringBuf name, const TFunctionDescriptor& descr, TComputationNodePtrVector&& argNodes)
         : TBaseComputation(mutables, kind)
         , Name(name), Descriptor(descr)
-        , ArgNodes(std::move(argNodes))
-    {
-    }
-
+        , ArgNodes(std::move(argNodes)) 
+    { 
+    } 
+ 
     NUdf::TUnboxedValue DoCalculate(TComputationContext& ctx) const {
         std::array<NUdf::TUnboxedValue, Size> values;
         std::transform(ArgNodes.cbegin(), ArgNodes.cend(), values.begin(),
             std::bind(&IComputationNode::GetValue, std::placeholders::_1, std::ref(ctx))
         );
         return Descriptor.Function(values.data());
-    }
-
-#ifndef MKQL_DISABLE_CODEGEN
+    } 
+ 
+#ifndef MKQL_DISABLE_CODEGEN 
     Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
         std::array<Value*, Size> values;
         std::transform(ArgNodes.cbegin(), ArgNodes.cend(), values.begin(),
@@ -169,8 +169,8 @@ public:
 private:
     void RegisterDependencies() const final {
         std::for_each(ArgNodes.cbegin(), ArgNodes.cend(), std::bind(&TInvokeWrapper::DependsOn, this, std::placeholders::_1));
-    }
-
+    } 
+ 
     TString DebugString() const final {
         return TBaseComputation::DebugString() + "(" + Name + ")" ;
     }
@@ -178,14 +178,14 @@ private:
     const TStringBuf Name;
     const TFunctionDescriptor Descriptor;
     const TComputationNodePtrVector ArgNodes;
-};
-
+}; 
+ 
 }
 
-IComputationNode* WrapInvoke(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
+IComputationNode* WrapInvoke(TCallable& callable, const TComputationNodeFactoryContext& ctx) { 
     MKQL_ENSURE(callable.GetInputsCount() >= 2U && callable.GetInputsCount() <= 4U, "Expected from one to three arguments.");
     const auto returnType = callable.GetType()->GetReturnType();
-
+ 
     const auto inputsCount = callable.GetInputsCount();
     std::array<TArgType, 4U> argsTypes;
     TComputationNodePtrVector argNodes;
@@ -194,11 +194,11 @@ IComputationNode* WrapInvoke(TCallable& callable, const TComputationNodeFactoryC
     for (ui32 i = 1U; i < inputsCount; ++i) {
         argsTypes[i].first = UnpackOptionalData(callable.GetInput(i), argsTypes[i].second)->GetSchemeType();
         argNodes.emplace_back(LocateNode(ctx.NodeLocator, callable, i));
-    }
-
+    } 
+ 
     const auto funcName = AS_VALUE(TDataLiteral, callable.GetInput(0))->AsValue().AsStringRef();
     const auto funcDesc = ctx.FunctionRegistry.GetBuiltins()->GetBuiltin(funcName, argsTypes.data(), inputsCount);
-
+ 
     const auto returnKind = GetValueRepresentation(returnType);
     switch (argNodes.size()) {
     case 1U:
@@ -217,7 +217,7 @@ IComputationNode* WrapInvoke(TCallable& callable, const TComputationNodeFactoryC
     default:
         Y_FAIL("Too wide invoke.");
     }
-}
-
-}
-}
+} 
+ 
+} 
+} 

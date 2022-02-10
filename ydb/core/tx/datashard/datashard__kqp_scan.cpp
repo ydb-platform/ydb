@@ -7,7 +7,7 @@
 #include <ydb/core/kqp/kqp_compute.h>
 #include <ydb/core/tablet_flat/flat_row_celled.h>
 
-#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_impl.h>
+#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_impl.h> 
 
 namespace NKikimr {
 namespace NDataShard {

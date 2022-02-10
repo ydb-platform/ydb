@@ -4,7 +4,7 @@ option cc_enable_arenas = true;
 package NKqpProto;
 option java_package = "ru.yandex.kikimr.proto";
 
-import "ydb/library/yql/dq/actors/protos/dq_stats.proto";
+import "ydb/library/yql/dq/actors/protos/dq_stats.proto"; 
 
 message TKqpStatsCompile {
     bool FromCache = 1;

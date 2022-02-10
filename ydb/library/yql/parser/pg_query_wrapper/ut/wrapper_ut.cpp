@@ -1,46 +1,46 @@
-#include <ydb/library/yql/parser/pg_query_wrapper/wrapper.h>
-
-#include <util/stream/str.h>
-#include <library/cpp/testing/unittest/registar.h>
-
-using namespace NYql;
-
-class TEvents : public IPGParseEvents {
-public:
-    void OnResult(const List* raw) override {
-        Result = PrintPGTree(raw);
-    }
-
-    void OnError(const TIssue& issue) override {
-        Issue = issue;
-    }
-
-    TMaybe<TIssue> Issue;
-    TMaybe<TString> Result;
-};
-
-Y_UNIT_TEST_SUITE(TWrapperTests) {
-    Y_UNIT_TEST(TestOk) {
-        TEvents events;
-        PGParse(TString("SELECT 1"), events);
-        UNIT_ASSERT(events.Result);
-        UNIT_ASSERT(!events.Issue);
-        const auto expected = "({RAWSTMT :stmt {SELECT :distinctClause <> :intoClause <> :targetList "
-        "({RESTARGET :name <> :indirection <> :val {A_CONST :val 1 :location 7} :location 7}) :fromClause <> "
-        ":whereClause <> :groupClause <> :havingClause <> :windowClause <> :valuesLists <> :sortClause <> "
-        ":limitOffset <> :limitCount <> :limitOption 0 :lockingClause <> :withClause <> :op 0 :all false :larg <> "
-        ":rarg <>} :stmt_location 0 :stmt_len 0})";
-        UNIT_ASSERT_NO_DIFF(*events.Result, expected);
-    }
-
-    Y_UNIT_TEST(TestFail) {
-        TEvents events;
-        PGParse(TString(" \n  SELECT1"), events);
-        UNIT_ASSERT(!events.Result);
-        UNIT_ASSERT(events.Issue);
-        auto msg = events.Issue->Message;
-        UNIT_ASSERT_NO_DIFF(msg, "syntax error at or near \"SELECT1\"");
-        UNIT_ASSERT_VALUES_EQUAL(events.Issue->Position.Row, 2);
-        UNIT_ASSERT_VALUES_EQUAL(events.Issue->Position.Column, 3);
-    }
-}
+#include <ydb/library/yql/parser/pg_query_wrapper/wrapper.h> 
+ 
+#include <util/stream/str.h> 
+#include <library/cpp/testing/unittest/registar.h> 
+ 
+using namespace NYql; 
+ 
+class TEvents : public IPGParseEvents { 
+public: 
+    void OnResult(const List* raw) override { 
+        Result = PrintPGTree(raw); 
+    } 
+ 
+    void OnError(const TIssue& issue) override { 
+        Issue = issue; 
+    } 
+ 
+    TMaybe<TIssue> Issue; 
+    TMaybe<TString> Result; 
+}; 
+ 
+Y_UNIT_TEST_SUITE(TWrapperTests) { 
+    Y_UNIT_TEST(TestOk) { 
+        TEvents events; 
+        PGParse(TString("SELECT 1"), events); 
+        UNIT_ASSERT(events.Result); 
+        UNIT_ASSERT(!events.Issue); 
+        const auto expected = "({RAWSTMT :stmt {SELECT :distinctClause <> :intoClause <> :targetList " 
+        "({RESTARGET :name <> :indirection <> :val {A_CONST :val 1 :location 7} :location 7}) :fromClause <> " 
+        ":whereClause <> :groupClause <> :havingClause <> :windowClause <> :valuesLists <> :sortClause <> " 
+        ":limitOffset <> :limitCount <> :limitOption 0 :lockingClause <> :withClause <> :op 0 :all false :larg <> " 
+        ":rarg <>} :stmt_location 0 :stmt_len 0})"; 
+        UNIT_ASSERT_NO_DIFF(*events.Result, expected); 
+    } 
+ 
+    Y_UNIT_TEST(TestFail) { 
+        TEvents events; 
+        PGParse(TString(" \n  SELECT1"), events); 
+        UNIT_ASSERT(!events.Result); 
+        UNIT_ASSERT(events.Issue); 
+        auto msg = events.Issue->Message; 
+        UNIT_ASSERT_NO_DIFF(msg, "syntax error at or near \"SELECT1\""); 
+        UNIT_ASSERT_VALUES_EQUAL(events.Issue->Position.Row, 2); 
+        UNIT_ASSERT_VALUES_EQUAL(events.Issue->Position.Column, 3); 
+    } 
+} 

@@ -6,7 +6,7 @@ namespace NKikimr {
 namespace NMsgBusProxy {
 
 namespace {
-    const ui64 DefaultTimeout = 90000;
+    const ui64 DefaultTimeout = 90000; 
 }
 
 class TMessageBusBSAdmGroupReconfigureWipe : public TMessageBusSecureRequest<

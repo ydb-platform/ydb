@@ -3,7 +3,7 @@ LIBRARY()
 OWNER(
     vvvv
     g:yql
-    g:yql_ydb_core
+    g:yql_ydb_core 
 )
 
 SRCS(
@@ -12,11 +12,11 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/library/yql/core
-    ydb/library/yql/core/common_opt
-    ydb/library/yql/core/type_ann
+    ydb/library/yql/core 
+    ydb/library/yql/core/common_opt 
+    ydb/library/yql/core/type_ann 
 )
 
 YQL_LAST_ABI_VERSION()
-
+ 
 END()

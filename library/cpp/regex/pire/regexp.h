@@ -4,7 +4,7 @@
 
 #include <library/cpp/charset/doccodes.h>
 #include <library/cpp/charset/recyr.hh>
-#include <util/generic/maybe.h>
+#include <util/generic/maybe.h> 
 #include <util/generic/strbuf.h>
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
@@ -42,7 +42,7 @@ namespace NRegExp {
 
             bool CaseInsensitive = false;
             bool Surround = false;
-            TMaybe<size_t> CapturePos;
+            TMaybe<size_t> CapturePos; 
             ECharset Charset = CODES_UNKNOWN;
             bool AndNotSupport = false;
         };
@@ -70,8 +70,8 @@ namespace NRegExp {
                 lexer.AddFeature(NPire::NFeatures::CaseInsensitive());
             }
 
-            if (opts.CapturePos) {
-                lexer.AddFeature(NPire::NFeatures::Capture(*opts.CapturePos));
+            if (opts.CapturePos) { 
+                lexer.AddFeature(NPire::NFeatures::Capture(*opts.CapturePos)); 
             }
 
             if (opts.AndNotSupport) {

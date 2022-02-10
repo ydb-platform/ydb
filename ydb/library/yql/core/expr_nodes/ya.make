@@ -3,7 +3,7 @@ LIBRARY()
 OWNER(
     spuchin
     g:yql
-    g:yql_ydb_core
+    g:yql_ydb_core 
 )
 
 SRCS(
@@ -14,7 +14,7 @@ SRCS(
 PEERDIR(
     ydb/library/yql/core/expr_nodes_gen
     ydb/library/yql/public/udf
-    ydb/library/yql/core/issue
+    ydb/library/yql/core/issue 
 )
 
 SRCDIR(ydb/library/yql/core/expr_nodes_gen)
@@ -31,7 +31,7 @@ RUN_PROGRAM(
     OUT yql_expr_nodes.gen.h
     OUT yql_expr_nodes.decl.inl.h
     OUT yql_expr_nodes.defs.inl.h
-    OUTPUT_INCLUDES
+    OUTPUT_INCLUDES 
     ${ARCADIA_ROOT}/ydb/library/yql/core/expr_nodes_gen/yql_expr_nodes_gen.h
     ${ARCADIA_ROOT}/util/generic/hash_set.h
 )

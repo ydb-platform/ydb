@@ -1,7 +1,7 @@
 #include "mkql_computation_node_ut.h"
 
-#include <ydb/library/yql/minikql/mkql_node_cast.h>
-#include <ydb/library/yql/minikql/mkql_string_util.h>
+#include <ydb/library/yql/minikql/mkql_node_cast.h> 
+#include <ydb/library/yql/minikql/mkql_string_util.h> 
 
 namespace NKikimr {
 namespace NMiniKQL {
@@ -23,21 +23,21 @@ Y_UNIT_TEST_SUITE(TMiniKQLVariantTest) {
         tupleItems.push_back(pb.Guess(var2, 0));
         tupleItems.push_back(pb.Guess(var2, 1));
         const auto pgmReturn = pb.NewTuple(tupleItems);
-
+ 
         const auto graph = setup.BuildGraph(pgmReturn);
         const auto res = graph->GetValue();
         UNIT_ASSERT(res.GetElement(0));
-        UNIT_ASSERT_VALUES_EQUAL(res.GetElement(0).template Get<ui32>(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(res.GetElement(0).template Get<ui32>(), 1); 
         UNIT_ASSERT(!res.GetElement(1));
         UNIT_ASSERT(!res.GetElement(2));
         UNIT_ASSERT(res.GetElement(3));
         UNBOXED_VALUE_STR_EQUAL(res.GetElement(3), "abc");
-    }
-
+    } 
+ 
     Y_UNIT_TEST_LLVM(TestGuessTupleOpt) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
-
+ 
         const auto data1 = pb.NewDataLiteral<ui32>(1);
         const auto data2 = pb.NewDataLiteral<NUdf::EDataSlot::String>("abc");
         const auto tupleType = pb.NewTupleType({pb.NewDataType(NUdf::TDataType<ui32>::Id), pb.NewDataType(NUdf::TDataType<char*>::Id)});
@@ -47,7 +47,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLVariantTest) {
         const auto jvar1 = pb.NewOptional(var1);
         const auto jvar2 = pb.NewOptional(var2);
         const auto nothing = pb.NewEmptyOptional(pb.NewOptionalType(varType));
-
+ 
         std::vector<TRuntimeNode> tupleItems;
         tupleItems.push_back(pb.Guess(jvar1, 0));
         tupleItems.push_back(pb.Guess(jvar1, 1));
@@ -56,23 +56,23 @@ Y_UNIT_TEST_SUITE(TMiniKQLVariantTest) {
         tupleItems.push_back(pb.Guess(nothing, 0));
         tupleItems.push_back(pb.Guess(nothing, 1));
         const auto pgmReturn = pb.NewTuple(tupleItems);
-
+ 
         const auto graph = setup.BuildGraph(pgmReturn);
         const auto res = graph->GetValue();
         UNIT_ASSERT(res.GetElement(0));
-        UNIT_ASSERT_VALUES_EQUAL(res.GetElement(0).template Get<ui32>(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(res.GetElement(0).template Get<ui32>(), 1); 
         UNIT_ASSERT(!res.GetElement(1));
         UNIT_ASSERT(!res.GetElement(2));
         UNIT_ASSERT(res.GetElement(3));
         UNBOXED_VALUE_STR_EQUAL(res.GetElement(3), "abc");
         UNIT_ASSERT(!res.GetElement(4));
         UNIT_ASSERT(!res.GetElement(5));
-    }
-
+    } 
+ 
     Y_UNIT_TEST_LLVM(TestGuessStruct) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
-
+ 
         const auto data1 = pb.NewDataLiteral<ui32>(1);
         const auto data2 = pb.NewDataLiteral<NUdf::EDataSlot::String>("abc");
         const auto structType = pb.NewStructType({{"x", pb.NewDataType(NUdf::TDataType<ui32>::Id)}, {"y", pb.NewDataType(NUdf::TDataType<char*>::Id)}});
@@ -85,21 +85,21 @@ Y_UNIT_TEST_SUITE(TMiniKQLVariantTest) {
         tupleItems.push_back(pb.Guess(var2, "x"));
         tupleItems.push_back(pb.Guess(var2, "y"));
         const auto pgmReturn = pb.NewTuple(tupleItems);
-
+ 
         const auto graph = setup.BuildGraph(pgmReturn);
         const auto res = graph->GetValue();
         UNIT_ASSERT(res.GetElement(0));
-        UNIT_ASSERT_VALUES_EQUAL(res.GetElement(0).template Get<ui32>(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(res.GetElement(0).template Get<ui32>(), 1); 
         UNIT_ASSERT(!res.GetElement(1));
         UNIT_ASSERT(!res.GetElement(2));
         UNIT_ASSERT(res.GetElement(3));
         UNBOXED_VALUE_STR_EQUAL(res.GetElement(3), "abc");
-    }
-
+    } 
+ 
     Y_UNIT_TEST_LLVM(TestGuessStructOpt) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
-
+ 
         const auto data1 = pb.NewDataLiteral<ui32>(1);
         const auto data2 = pb.NewDataLiteral<NUdf::EDataSlot::String>("abc");
         const auto structType = pb.NewStructType({{"x", pb.NewDataType(NUdf::TDataType<ui32>::Id)}, {"y", pb.NewDataType(NUdf::TDataType<char*>::Id)}});
@@ -109,7 +109,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLVariantTest) {
         const auto jvar1 = pb.NewOptional(var1);
         const auto jvar2 = pb.NewOptional(var2);
         const auto nothing = pb.NewEmptyOptional(pb.NewOptionalType(varType));
-
+ 
         std::vector<TRuntimeNode> tupleItems;
         tupleItems.push_back(pb.Guess(jvar1, "x"));
         tupleItems.push_back(pb.Guess(jvar1, "y"));
@@ -118,23 +118,23 @@ Y_UNIT_TEST_SUITE(TMiniKQLVariantTest) {
         tupleItems.push_back(pb.Guess(nothing, "x"));
         tupleItems.push_back(pb.Guess(nothing, "y"));
         const auto pgmReturn = pb.NewTuple(tupleItems);
-
+ 
         const auto graph = setup.BuildGraph(pgmReturn);
         const auto res = graph->GetValue();
         UNIT_ASSERT(res.GetElement(0));
-        UNIT_ASSERT_VALUES_EQUAL(res.GetElement(0).template Get<ui32>(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(res.GetElement(0).template Get<ui32>(), 1); 
         UNIT_ASSERT(!res.GetElement(1));
         UNIT_ASSERT(!res.GetElement(2));
         UNIT_ASSERT(res.GetElement(3));
         UNBOXED_VALUE_STR_EQUAL(res.GetElement(3), "abc");
         UNIT_ASSERT(!res.GetElement(4));
         UNIT_ASSERT(!res.GetElement(5));
-    }
-
+    } 
+ 
     Y_UNIT_TEST_LLVM(TestVisitAllTuple) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
-
+ 
         const auto data1 = pb.NewDataLiteral<ui32>(1);
         const auto data2 = pb.NewDataLiteral<NUdf::EDataSlot::String>("abc");
         const auto at = pb.NewDataLiteral<NUdf::EDataSlot::String>("@");
@@ -152,17 +152,17 @@ Y_UNIT_TEST_SUITE(TMiniKQLVariantTest) {
                 }
             });
         });
-
+ 
         const auto graph = setup.BuildGraph(pgmReturn);
         const auto res = graph->GetValue();
         UNBOXED_VALUE_STR_EQUAL(res.GetElement(0), "@1");
         UNBOXED_VALUE_STR_EQUAL(res.GetElement(1), "@abc");
-    }
-
+    } 
+ 
     Y_UNIT_TEST_LLVM(TestVisitAllStruct) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
-
+ 
         const auto at = pb.NewDataLiteral<NUdf::EDataSlot::String>("@");
         const auto data1 = pb.NewDataLiteral<ui32>(1);
         const auto data2 = pb.NewDataLiteral<NUdf::EDataSlot::String>("abc");
@@ -182,13 +182,13 @@ Y_UNIT_TEST_SUITE(TMiniKQLVariantTest) {
                 }
             });
         });
-
+ 
         const auto graph = setup.BuildGraph(pgmReturn);
         const auto res = graph->GetValue();
         UNBOXED_VALUE_STR_EQUAL(res.GetElement(0), "@1");
         UNBOXED_VALUE_STR_EQUAL(res.GetElement(1), "@abc");
-    }
-
+    } 
+ 
     Y_UNIT_TEST_LLVM(TestVisitAllTupleFlow) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
@@ -521,7 +521,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLVariantTest) {
         UNIT_ASSERT(!iterator.Next(item));
         UNIT_ASSERT(!iterator.Next(item));
     }
-}
-
-}
-}
+} 
+ 
+} 
+} 

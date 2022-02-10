@@ -9,6 +9,6 @@ message TSeverityIds {
         S_FATAL = 0;
         S_ERROR = 1;
         S_WARNING = 2;
-        S_INFO = 3;
+        S_INFO = 3; 
     }
 }

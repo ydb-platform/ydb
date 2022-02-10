@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/library/yql/providers/common/proto/gateways_config.pb.h>
+#include <ydb/library/yql/providers/common/proto/gateways_config.pb.h> 
 #include <ydb/public/api/protos/yq.pb.h>
 
 namespace NYq {

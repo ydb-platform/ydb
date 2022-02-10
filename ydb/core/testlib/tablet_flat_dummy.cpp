@@ -24,7 +24,7 @@ class TDummyFlatTablet : public TActor<TDummyFlatTablet>, public NTabletFlatExec
 
         struct t_by_ui64 : Table<32> {
             struct key : Column<32, NScheme::NTypeIds::Uint64> {};
-            struct v_bytes : Column<33, NScheme::NTypeIds::String4k> {};
+            struct v_bytes : Column<33, NScheme::NTypeIds::String4k> {}; 
             struct v_ui64 : Column<34, NScheme::NTypeIds::Uint64> {};
 
             using TKey = TableKey<key>;
@@ -32,8 +32,8 @@ class TDummyFlatTablet : public TActor<TDummyFlatTablet>, public NTabletFlatExec
         };
 
         struct t_by_bytes : Table<33> {
-            struct key : Column<32, NScheme::NTypeIds::String4k> {};
-            struct v_bytes : Column<33, NScheme::NTypeIds::String4k> {};
+            struct key : Column<32, NScheme::NTypeIds::String4k> {}; 
+            struct v_bytes : Column<33, NScheme::NTypeIds::String4k> {}; 
             struct v_ui64 : Column<34, NScheme::NTypeIds::Uint64> {};
 
             using TKey = TableKey<key>;

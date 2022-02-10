@@ -188,7 +188,7 @@ struct TEvTabletResolver {
             : Status(NKikimrProto::OK)
             , TabletID(tabletId)
             , TabletActor(tabletActor)
-            , Tablet(tablet)
+            , Tablet(tablet) 
             , CacheEpoch(cacheEpoch)
         {}
 
@@ -205,14 +205,14 @@ struct TEvTabletResolver {
     };
 };
 
-struct TTabletResolverConfig : public TThrRefBase {
-    ui64 TabletCacheLimit;
-
-    TTabletResolverConfig()
+struct TTabletResolverConfig : public TThrRefBase { 
+    ui64 TabletCacheLimit; 
+ 
+    TTabletResolverConfig() 
         : TabletCacheLimit(500000)
-    {}
-};
-
+    {} 
+}; 
+ 
 IActor* CreateTabletResolver(const TIntrusivePtr<TTabletResolverConfig> &config);
 TActorId MakeTabletResolverID();
 

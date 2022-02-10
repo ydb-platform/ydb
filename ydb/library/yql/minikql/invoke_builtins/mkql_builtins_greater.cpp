@@ -1,8 +1,8 @@
 #include "mkql_builtins_compare.h"
-#include "mkql_builtins_datetime.h"
+#include "mkql_builtins_datetime.h" 
 #include "mkql_builtins_decimal.h"
 
-#include <ydb/library/yql/minikql/mkql_type_ops.h>
+#include <ydb/library/yql/minikql/mkql_type_ops.h> 
 
 namespace NKikimr {
 namespace NMiniKQL {
@@ -155,19 +155,19 @@ struct TDiffDateGreater : public TCompareArithmeticBinary<TLeft, TRight, TDiffDa
         return std::is_same<TLeft, TRight>::value ?
             Greater<TLeft, TRight, Aggr>(left, right):
             Greater<TScaledDate, TScaledDate, Aggr>(ToScaledDate<TLeft>(left), ToScaledDate<TRight>(right));
-    }
-
-#ifndef MKQL_DISABLE_CODEGEN
+    } 
+ 
+#ifndef MKQL_DISABLE_CODEGEN 
     static Value* Gen(Value* left, Value* right, const TCodegenContext& ctx, BasicBlock*& block)
-    {
+    { 
         auto& context = ctx.Codegen->GetContext();
         return std::is_same<TLeft, TRight>::value ?
             GenGreater<TLeft, TRight, Aggr>(left, right, context, block):
             GenGreater<TScaledDate, TScaledDate, Aggr>(GenToScaledDate<TLeft>(left, context, block), GenToScaledDate<TRight>(right, context, block), context, block);
-    }
-#endif
-};
-
+    } 
+#endif 
+}; 
+ 
 template<typename TLeft, typename TRight, bool Aggr>
 struct TAggrTzDateGreater : public TCompareArithmeticBinaryWithTimezone<TLeft, TRight, TAggrTzDateGreater<TLeft, TRight, Aggr>>, public TAggrGreater {
     static bool Do(TLeft left, TRight right)
@@ -259,7 +259,7 @@ void RegisterGreater(IBuiltinFunctionRegistry& registry) {
     const auto name = "Greater";
 
     RegisterComparePrimitive<TGreater, TCompareArgsOpt>(registry, name);
-    RegisterCompareDatetime<TDiffDateGreater, TCompareArgsOpt>(registry, name);
+    RegisterCompareDatetime<TDiffDateGreater, TCompareArgsOpt>(registry, name); 
 
     RegisterCompareStrings<TCustomGreater, TCompareArgsOpt>(registry, name);
     RegisterCompareCustomOpt<NUdf::TDataType<NUdf::TDecimal>, NUdf::TDataType<NUdf::TDecimal>, TDecimalGreater, TCompareArgsOpt>(registry, name);

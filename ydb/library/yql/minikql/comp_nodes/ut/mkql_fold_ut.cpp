@@ -1,16 +1,16 @@
 #include "mkql_computation_node_ut.h"
 
-#include <ydb/library/yql/minikql/mkql_node_cast.h>
-#include <ydb/library/yql/minikql/mkql_string_util.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
+#include <ydb/library/yql/minikql/mkql_node_cast.h> 
+#include <ydb/library/yql/minikql/mkql_string_util.h> 
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h> 
 
 #include <random>
 #include <ctime>
 #include <algorithm>
-
-namespace NKikimr {
-namespace NMiniKQL {
-
+ 
+namespace NKikimr { 
+namespace NMiniKQL { 
+ 
 Y_UNIT_TEST_SUITE(TMiniKQLFoldNodeTest) {
     Y_UNIT_TEST_LLVM(TestFoldOverList) {
         TSetup<LLVM> setup;
@@ -22,15 +22,15 @@ Y_UNIT_TEST_SUITE(TMiniKQLFoldNodeTest) {
         auto dataType = pb.NewDataType(NUdf::TDataType<ui32>::Id);
         auto list = pb.NewList(dataType, {data1, data2, data3});
         auto pgmReturn = pb.Fold(list, pb.NewDataLiteral<ui32>(0),
-            [&](TRuntimeNode item, TRuntimeNode state) {
+            [&](TRuntimeNode item, TRuntimeNode state) { 
                 return pb.Add(item, state);
-            });
-
-        auto graph = setup.BuildGraph(pgmReturn);
+            }); 
+ 
+        auto graph = setup.BuildGraph(pgmReturn); 
         auto res = graph->GetValue().template Get<ui32>();
-        UNIT_ASSERT_VALUES_EQUAL(res, 6);
-    }
-
+        UNIT_ASSERT_VALUES_EQUAL(res, 6); 
+    } 
+ 
     Y_UNIT_TEST_LLVM(TestFold1OverEmptyList) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
@@ -40,16 +40,16 @@ Y_UNIT_TEST_SUITE(TMiniKQLFoldNodeTest) {
         auto data2 = pb.NewDataLiteral<ui32>(2);
         auto pgmReturn = pb.Fold1(list, [&](TRuntimeNode item) {
                 return pb.Mul(item, data2);
-            },
-            [&](TRuntimeNode item, TRuntimeNode state) {
+            }, 
+            [&](TRuntimeNode item, TRuntimeNode state) { 
                 return pb.Add(item, state);
-            });
-
-        auto graph = setup.BuildGraph(pgmReturn);
+            }); 
+ 
+        auto graph = setup.BuildGraph(pgmReturn); 
         auto value = graph->GetValue();
         UNIT_ASSERT(!value);
-    }
-
+    } 
+ 
     Y_UNIT_TEST_LLVM(TestFold1OverSingleElementList) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
@@ -61,17 +61,17 @@ Y_UNIT_TEST_SUITE(TMiniKQLFoldNodeTest) {
         auto pgmReturn = pb.Fold1(list,
             [&](TRuntimeNode item) {
                 return pb.Mul(item, data2);
-            },
-            [&](TRuntimeNode item, TRuntimeNode state) {
+            }, 
+            [&](TRuntimeNode item, TRuntimeNode state) { 
                 return pb.Add(item, state);
-            });
-
-        auto graph = setup.BuildGraph(pgmReturn);
+            }); 
+ 
+        auto graph = setup.BuildGraph(pgmReturn); 
         auto value = graph->GetValue();
         UNIT_ASSERT(value);
-        UNIT_ASSERT_VALUES_EQUAL(value.template Get<ui32>(), 2);
-    }
-
+        UNIT_ASSERT_VALUES_EQUAL(value.template Get<ui32>(), 2); 
+    } 
+ 
     Y_UNIT_TEST_LLVM(TestFold1OverManyElementList) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
@@ -83,17 +83,17 @@ Y_UNIT_TEST_SUITE(TMiniKQLFoldNodeTest) {
         auto pgmReturn = pb.Fold1(list,
             [&](TRuntimeNode item) {
                 return pb.Mul(item, data2);
-            },
-            [&](TRuntimeNode item, TRuntimeNode state) {
+            }, 
+            [&](TRuntimeNode item, TRuntimeNode state) { 
                 return pb.Add(item, state);
-            });
-
-        auto graph = setup.BuildGraph(pgmReturn);
+            }); 
+ 
+        auto graph = setup.BuildGraph(pgmReturn); 
         auto value = graph->GetValue();
         UNIT_ASSERT(value);
-        UNIT_ASSERT_VALUES_EQUAL(value.template Get<ui32>(), 4);
-    }
-
+        UNIT_ASSERT_VALUES_EQUAL(value.template Get<ui32>(), 4); 
+    } 
+ 
     Y_UNIT_TEST_LLVM(TestFoldWithAggrAdd) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
@@ -113,7 +113,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLFoldNodeTest) {
 
         auto graph = setup.BuildGraph(pgmReturn);
         auto res = graph->GetValue().template Get<float>();
-        UNIT_ASSERT_VALUES_EQUAL(res, 47);
+        UNIT_ASSERT_VALUES_EQUAL(res, 47); 
     }
 
     Y_UNIT_TEST_LLVM(TestNestedApply) {
@@ -138,7 +138,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLFoldNodeTest) {
 
         auto graph = setup.BuildGraph(pgmReturn);
         auto res = graph->GetValue().template Get<i32>();
-        UNIT_ASSERT_VALUES_EQUAL(res, 94);
+        UNIT_ASSERT_VALUES_EQUAL(res, 94); 
     }
 
     Y_UNIT_TEST_LLVM(TestLogicalOpts) {
@@ -203,9 +203,9 @@ Y_UNIT_TEST_SUITE(TMiniKQLFoldNodeTest) {
 
         // or
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), true);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), true); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), true);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), true); 
 
         // xor
         UNIT_ASSERT(iterator.Next(item));
@@ -215,9 +215,9 @@ Y_UNIT_TEST_SUITE(TMiniKQLFoldNodeTest) {
 
         // and
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), false);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), false); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), false);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), false); 
 
         // or
         UNIT_ASSERT(iterator.Next(item));
@@ -249,7 +249,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLFoldNodeTest) {
 
         // or
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), true);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), true); 
 
         // xor
         UNIT_ASSERT(iterator.Next(item));
@@ -257,7 +257,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLFoldNodeTest) {
 
         // and
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), false);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), false); 
 
         // or
         UNIT_ASSERT(iterator.Next(item));
@@ -271,43 +271,43 @@ Y_UNIT_TEST_SUITE(TMiniKQLFoldNodeTest) {
         /// true
         // not
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), false);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), false); 
 
         // and
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), true);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), true); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), true);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), true); 
 
         // or
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), true);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), true); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), true);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), true); 
 
         // xor
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), false);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), false); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), false);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), false); 
 
         // and
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), false);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), false); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), false);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), false); 
 
         // or
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), true);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), true); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), true);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), true); 
 
         // xor
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), true);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), true); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), true);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), true); 
 
         // and
         UNIT_ASSERT(iterator.Next(item));
@@ -315,7 +315,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLFoldNodeTest) {
 
         // or
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), true);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), true); 
 
         // xor
         UNIT_ASSERT(iterator.Next(item));
@@ -323,72 +323,72 @@ Y_UNIT_TEST_SUITE(TMiniKQLFoldNodeTest) {
 
         // and
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), true);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), true); 
 
         // or
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), true);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), true); 
 
         // xor
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), false);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), false); 
 
         // and
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), false);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), false); 
 
         // or
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), true);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), true); 
 
         // xor
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), true);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), true); 
 
         /// false
         // not
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), true);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), true); 
 
         // and
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), false);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), false); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), false);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), false); 
 
         // or
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), true);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), true); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), true);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), true); 
 
         // xor
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), true);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), true); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), true);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), true); 
 
         // and
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), false);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), false); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), false);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), false); 
 
         // or
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), false);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), false); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), false);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), false); 
 
         // xor
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), false);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), false); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), false);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), false); 
 
         // and
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), false);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), false); 
 
         // or
         UNIT_ASSERT(iterator.Next(item));
@@ -400,27 +400,27 @@ Y_UNIT_TEST_SUITE(TMiniKQLFoldNodeTest) {
 
         // and
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), false);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), false); 
 
         // or
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), true);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), true); 
 
         // xor
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), true);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), true); 
 
         // and
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), false);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), false); 
 
         // or
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), false);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), false); 
 
         // xor
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), false);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), false); 
 
         UNIT_ASSERT(!iterator.Next(item));
         UNIT_ASSERT(!iterator.Next(item));
@@ -439,126 +439,126 @@ Y_UNIT_TEST_SUITE(TMiniKQLFoldNodeTest) {
         auto empty = pb.AddMember(pb.AddMember(
             pb.NewEmptyStruct(), "Max", pb.NewEmptyOptional(optType)),
             "List", pb.NewEmptyList(dataType));
-
+ 
         auto pgmReturn = pb.Fold(list, empty,
-            [&](TRuntimeNode item, TRuntimeNode state) {
+            [&](TRuntimeNode item, TRuntimeNode state) { 
                 return pb.AddMember(pb.AddMember(pb.NewEmptyStruct(), "Max",
                     pb.IfPresent({pb.Member(state, "Max")},
                     [&](TRuntimeNode::TList oldMax) {
                         return pb.NewOptional(pb.Max(oldMax.front(), item));
                     }, pb.NewOptional(item))),
                     "List", pb.Append(pb.Member(state, "List"), item)
-                );
-            });
-
-        auto graph = setup.BuildGraph(pgmReturn);
+                ); 
+            }); 
+ 
+        auto graph = setup.BuildGraph(pgmReturn); 
         auto iterator = graph->GetValue().GetElement(0).GetListIterator();
         NUdf::TUnboxedValue item;
 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 1); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 2); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 3); 
         UNIT_ASSERT(!iterator.Next(item));
         UNIT_ASSERT(!iterator.Next(item));
 
-        UNIT_ASSERT_VALUES_EQUAL(graph->GetValue().GetElement(1).template Get<ui32>(), 3);
-    }
-
+        UNIT_ASSERT_VALUES_EQUAL(graph->GetValue().GetElement(1).template Get<ui32>(), 3); 
+    } 
+ 
     Y_UNIT_TEST_LLVM(TestManyAppend) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
         auto zeroList = pb.NewEmptyList(pb.NewDataType(NUdf::TDataType<ui32>::Id));
         zeroList = pb.Append(zeroList, pb.NewDataLiteral<ui32>(0));
-        const ui32 n = 13;
-        for (ui32 i = 0; i < n; ++i)
+        const ui32 n = 13; 
+        for (ui32 i = 0; i < n; ++i) 
             zeroList = pb.Extend(zeroList, zeroList);
-
+ 
         auto state = pb.AddMember(pb.AddMember(pb.NewEmptyStruct(), "Counter",
             pb.NewDataLiteral<ui32>(0)), "NewList",
             pb.NewEmptyList(pb.NewDataType(NUdf::TDataType<ui32>::Id)));
-
+ 
         auto fold = pb.Fold(zeroList, state,
-            [&](TRuntimeNode item, TRuntimeNode state) {
+            [&](TRuntimeNode item, TRuntimeNode state) { 
                 Y_UNUSED(item);
         auto oldList = pb.Member(state, "NewList");
         auto oldCounter = pb.Member(state, "Counter");
                 return pb.AddMember(pb.AddMember(pb.NewEmptyStruct(), "Counter",
                     pb.Add(oldCounter, pb.NewDataLiteral<ui32>(1))),
                     "NewList", pb.Append(oldList, oldCounter));
-            });
-
+            }); 
+ 
         auto pgmReturn = pb.Member(fold, "NewList");
-
-        auto graph = setup.BuildGraph(pgmReturn);
-        UNIT_ASSERT_VALUES_EQUAL(graph->GetValue().GetListLength(), 1 << n);
-
-        auto iterator = graph->GetValue().GetListIterator();
-        ui32 i = 0;
+ 
+        auto graph = setup.BuildGraph(pgmReturn); 
+        UNIT_ASSERT_VALUES_EQUAL(graph->GetValue().GetListLength(), 1 << n); 
+ 
+        auto iterator = graph->GetValue().GetListIterator(); 
+        ui32 i = 0; 
         for (NUdf::TUnboxedValue item; iterator.Next(item); ++i) {
-            UNIT_ASSERT_VALUES_EQUAL(i, item.template Get<ui32>());
+            UNIT_ASSERT_VALUES_EQUAL(i, item.template Get<ui32>()); 
         }
         UNIT_ASSERT(!iterator.Skip());
-        UNIT_ASSERT_VALUES_EQUAL(i, 1 << n);
-    }
-
+        UNIT_ASSERT_VALUES_EQUAL(i, 1 << n); 
+    } 
+ 
     Y_UNIT_TEST_LLVM(TestManyPrepend) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
         auto zeroList = pb.NewEmptyList(pb.NewDataType(NUdf::TDataType<ui32>::Id));
         zeroList = pb.Append(zeroList, pb.NewDataLiteral<ui32>(0));
-        const ui32 n = 13;
-        for (ui32 i = 0; i < n; ++i)
+        const ui32 n = 13; 
+        for (ui32 i = 0; i < n; ++i) 
             zeroList = pb.Extend(zeroList, zeroList);
-
+ 
         auto state = pb.AddMember(pb.AddMember(pb.NewEmptyStruct(), "Counter",
             pb.NewDataLiteral<ui32>(0)), "NewList",
             pb.NewEmptyList(pb.NewDataType(NUdf::TDataType<ui32>::Id)));
-
+ 
         auto fold = pb.Fold(zeroList, state,
-            [&](TRuntimeNode item, TRuntimeNode state) {
+            [&](TRuntimeNode item, TRuntimeNode state) { 
             Y_UNUSED(item);
             auto oldList = pb.Member(state, "NewList");
             auto oldCounter = pb.Member(state, "Counter");
             return pb.AddMember(pb.AddMember(pb.NewEmptyStruct(), "Counter",
                 pb.Add(oldCounter, pb.NewDataLiteral<ui32>(1))),
                 "NewList", pb.Prepend(oldCounter, oldList));
-        });
-
+        }); 
+ 
         auto pgmReturn = pb.Member(fold, "NewList");
-
-        auto graph = setup.BuildGraph(pgmReturn);
-        UNIT_ASSERT_VALUES_EQUAL(graph->GetValue().GetListLength(), 1 << n);
-
-        auto iterator = graph->GetValue().GetListIterator();
-        ui32 i = 1 << n;
+ 
+        auto graph = setup.BuildGraph(pgmReturn); 
+        UNIT_ASSERT_VALUES_EQUAL(graph->GetValue().GetListLength(), 1 << n); 
+ 
+        auto iterator = graph->GetValue().GetListIterator(); 
+        ui32 i = 1 << n; 
         for (NUdf::TUnboxedValue item; iterator.Next(item);) {
-            UNIT_ASSERT_VALUES_EQUAL(--i, item.template Get<ui32>());
+            UNIT_ASSERT_VALUES_EQUAL(--i, item.template Get<ui32>()); 
         }
         UNIT_ASSERT(!iterator.Skip());
-        UNIT_ASSERT_VALUES_EQUAL(i, 0);
-    }
-
+        UNIT_ASSERT_VALUES_EQUAL(i, 0); 
+    } 
+ 
     Y_UNIT_TEST_LLVM(TestManyExtend) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
         auto zeroList = pb.NewEmptyList(pb.NewDataType(NUdf::TDataType<ui32>::Id));
         zeroList = pb.Append(zeroList, pb.NewDataLiteral<ui32>(0));
-        const ui32 n = 13;
-        for (ui32 i = 0; i < n; ++i)
+        const ui32 n = 13; 
+        for (ui32 i = 0; i < n; ++i) 
             zeroList = pb.Extend(zeroList, zeroList);
-
+ 
         auto state = pb.AddMember(pb.AddMember(pb.NewEmptyStruct(), "Counter",
             pb.NewDataLiteral<ui32>(0)), "NewList",
             pb.NewEmptyList(pb.NewDataType(NUdf::TDataType<ui32>::Id)));
-
+ 
         auto fold = pb.Fold(zeroList, state,
-            [&](TRuntimeNode item, TRuntimeNode state) {
+            [&](TRuntimeNode item, TRuntimeNode state) { 
             Y_UNUSED(item);
             auto oldList = pb.Member(state, "NewList");
             auto oldCounter = pb.Member(state, "Counter");
@@ -569,22 +569,22 @@ Y_UNIT_TEST_SUITE(TMiniKQLFoldNodeTest) {
             return pb.AddMember(pb.AddMember(pb.NewEmptyStruct(), "Counter",
                 pb.Add(oldCounter, pb.NewDataLiteral<ui32>(1))),
                 "NewList", pb.Extend(oldList, extList));
-        });
-
+        }); 
+ 
         auto pgmReturn = pb.Member(fold, "NewList");
-
-        auto graph = setup.BuildGraph(pgmReturn);
-        UNIT_ASSERT_VALUES_EQUAL(graph->GetValue().GetListLength(), 1 << (n+1));
-
-        auto iterator = graph->GetValue().GetListIterator();
-        ui32 i = 0;
+ 
+        auto graph = setup.BuildGraph(pgmReturn); 
+        UNIT_ASSERT_VALUES_EQUAL(graph->GetValue().GetListLength(), 1 << (n+1)); 
+ 
+        auto iterator = graph->GetValue().GetListIterator(); 
+        ui32 i = 0; 
         for (NUdf::TUnboxedValue item; iterator.Next(item); ++i) {
-            UNIT_ASSERT_VALUES_EQUAL(i, item.template Get<ui32>());
+            UNIT_ASSERT_VALUES_EQUAL(i, item.template Get<ui32>()); 
         }
         UNIT_ASSERT(!iterator.Skip());
-        UNIT_ASSERT_VALUES_EQUAL(i, 1 << (n + 1));
-    }
-
+        UNIT_ASSERT_VALUES_EQUAL(i, 1 << (n + 1)); 
+    } 
+ 
     Y_UNIT_TEST_LLVM(TestFoldSingular) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
@@ -595,56 +595,56 @@ Y_UNIT_TEST_SUITE(TMiniKQLFoldNodeTest) {
         auto dataType = pb.NewDataType(NUdf::TDataType<ui32>::Id);
         auto list = pb.NewList(dataType, {data1, data2, data3});
         auto fold1 = pb.Fold(list, pb.NewDataLiteral<ui32>(0),
-            [&](TRuntimeNode item, TRuntimeNode state) {
+            [&](TRuntimeNode item, TRuntimeNode state) { 
             Y_UNUSED(state);
-            return item;
-        });
-
+            return item; 
+        }); 
+ 
         auto fold2 = pb.Fold(list, pb.NewDataLiteral<ui32>(0),
-            [&](TRuntimeNode item, TRuntimeNode state) {
+            [&](TRuntimeNode item, TRuntimeNode state) { 
             Y_UNUSED(item);
-            return state;
-        });
-
+            return state; 
+        }); 
+ 
         auto pgmReturn = pb.NewList(dataType, {fold1, fold2});
-
-        auto graph = setup.BuildGraph(pgmReturn);
-        auto iterator = graph->GetValue().GetListIterator();
+ 
+        auto graph = setup.BuildGraph(pgmReturn); 
+        auto iterator = graph->GetValue().GetListIterator(); 
         NUdf::TUnboxedValue item;
 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 3); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 0); 
         UNIT_ASSERT(!iterator.Next(item));
         UNIT_ASSERT(!iterator.Next(item));
-    }
-
+    } 
+ 
     Y_UNIT_TEST_LLVM(TestSumListSizes) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
         auto itemType = pb.NewDataType(NUdf::TDataType<float>::Id);
         auto item = pb.NewDataLiteral<float>(0.f);
-
+ 
         auto listType = pb.NewListType(itemType);
-
+ 
         auto data0 = pb.NewEmptyList(itemType);
         auto data1 = pb.NewList(itemType, {item});
         auto data2 = pb.NewList(itemType, {item, item, item});
         auto data3 = pb.NewList(itemType, {item, item, item, item, item});
 
         auto list = pb.NewList(listType, {data0, data1, data2, data3});
-
+ 
         auto pgmReturn = pb.Fold1(list,
             [&](TRuntimeNode item) { return pb.Length(item); },
             [&](TRuntimeNode item, TRuntimeNode state) { return pb.AggrAdd(state, pb.Length(item)); }
         );
 
-        auto graph = setup.BuildGraph(pgmReturn);
+        auto graph = setup.BuildGraph(pgmReturn); 
         UNIT_ASSERT_VALUES_EQUAL(9ULL, graph->GetValue().template Get<ui64>());
-    }
-
+    } 
+ 
     Y_UNIT_TEST_LLVM(TestHasListsItems) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
@@ -682,12 +682,12 @@ Y_UNIT_TEST_SUITE(TMiniKQLFoldNodeTest) {
         [&](TRuntimeNode item, TRuntimeNode state) {
             return pb.Concat(state, item);
         });
-
-        auto graph = setup.BuildGraph(pgmReturn);
+ 
+        auto graph = setup.BuildGraph(pgmReturn); 
         auto res = graph->GetValue();
         UNBOXED_VALUE_STR_EQUAL(res, "Xaabbbzzzz");
-    }
-
+    } 
+ 
     Y_UNIT_TEST_LLVM(TestConcatOpt) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
@@ -730,42 +730,42 @@ Y_UNIT_TEST_SUITE(TMiniKQLFoldNodeTest) {
     }
 
     Y_UNIT_TEST_LLVM(TestLongFold) {
-        for (ui32 i = 0; i < 10; ++i) {
+        for (ui32 i = 0; i < 10; ++i) { 
             TSetup<LLVM> setup;
             TProgramBuilder& pb = *setup.PgmBuilder;
-            const ui32 n = 1000;
+            const ui32 n = 1000; 
 
             auto firstList = pb.Replicate(pb.NewDataLiteral<ui32>(0),
-                pb.NewDataLiteral<ui64>(n), "", 0, 0);
+                pb.NewDataLiteral<ui64>(n), "", 0, 0); 
 
-            auto secondList = pb.Replicate(firstList, pb.NewDataLiteral<ui64>(n), "", 0, 0);
+            auto secondList = pb.Replicate(firstList, pb.NewDataLiteral<ui64>(n), "", 0, 0); 
 
             auto pgmReturn = pb.Fold(secondList, pb.NewDataLiteral<ui32>(0),
-                [&](TRuntimeNode item, TRuntimeNode state) {
+                [&](TRuntimeNode item, TRuntimeNode state) { 
             auto partialSum = pb.Fold(item, pb.NewDataLiteral<ui32>(0),
-                    [&](TRuntimeNode item, TRuntimeNode state) {
-                        Y_UNUSED(item);
+                    [&](TRuntimeNode item, TRuntimeNode state) { 
+                        Y_UNUSED(item); 
                         return pb.AggrAdd(state, pb.NewDataLiteral<ui32>(1));
-                    });
-
+                    }); 
+ 
                     return pb.AggrAdd(state, partialSum);
-                });
-
-
-            auto graph = setup.BuildGraph(pgmReturn);
+                }); 
+ 
+ 
+            auto graph = setup.BuildGraph(pgmReturn); 
             auto value = graph->GetValue().template Get<ui32>();
-            UNIT_ASSERT_VALUES_EQUAL(value, n * n);
-        }
-    }
-
+            UNIT_ASSERT_VALUES_EQUAL(value, n * n); 
+        } 
+    } 
+ 
     Y_UNIT_TEST_LLVM(TestFoldFoldPerf) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
         const ui32 n = 3333U;
 
-        const auto firstList = pb.Replicate(pb.NewDataLiteral<ui32>(1), pb.NewDataLiteral<ui64>(n), "", 0, 0);
+        const auto firstList = pb.Replicate(pb.NewDataLiteral<ui32>(1), pb.NewDataLiteral<ui64>(n), "", 0, 0); 
 
-        const auto secondList = pb.Replicate(firstList, pb.NewDataLiteral<ui64>(n), "", 0, 0);
+        const auto secondList = pb.Replicate(firstList, pb.NewDataLiteral<ui64>(n), "", 0, 0); 
 
         const auto pgmReturn = pb.Fold(secondList, pb.NewDataLiteral<ui32>(0),
             [&](TRuntimeNode item, TRuntimeNode state) {
@@ -790,25 +790,25 @@ Y_UNIT_TEST_SUITE(TMiniKQLFoldNodeTest) {
     std::vector<double> MakeSamples() {
         std::default_random_engine eng;
         std::uniform_real_distribution<double> unif(-999.0, +999.0);
-
+ 
         std::vector<double> samples(3333333U);
 
         eng.seed(std::time(nullptr));
         std::generate(samples.begin(), samples.end(), std::bind(std::move(unif), std::move(eng)));
         return samples;
-    }
-
+    } 
+ 
     static const auto Samples = MakeSamples();
-
+ 
     Y_UNIT_TEST_LLVM(TestSumDoubleArrayListPerf) {
         TSetup<LLVM> setup;
-
+ 
         const auto t = TInstant::Now();
         const double sum = std::accumulate(Samples.cbegin(), Samples.cend(), 0.0);
         const auto cppTime = TInstant::Now() - t;
-
+ 
         TProgramBuilder& pb = *setup.PgmBuilder;
-
+ 
         const auto listType = pb.NewListType(pb.NewDataType(NUdf::TDataType<double>::Id));
         const auto list = TCallableBuilder(pb.GetTypeEnvironment(), "TestList", listType).Build();
 
@@ -835,17 +835,17 @@ Y_UNIT_TEST_SUITE(TMiniKQLFoldNodeTest) {
         const auto t = TInstant::Now();
         const double sum = std::accumulate(Samples.cbegin(), Samples.cend(), 0.0);
         const auto cppTime = TInstant::Now() - t;
-
+ 
         TProgramBuilder& pb = *setup.PgmBuilder;
 
         const auto listType = pb.NewListType(pb.NewDataType(NUdf::TDataType<double>::Id));
         const auto list = TCallableBuilder(pb.GetTypeEnvironment(), "TestList", listType).Build();
-
+ 
         const auto pgmReturn = pb.Fold1(pb.LazyList(TRuntimeNode(list, false)),
             [&](TRuntimeNode item) { return item; },
             [&](TRuntimeNode item, TRuntimeNode state) { return pb.AggrAdd(state, item); }
         );
-
+ 
         const auto t1 = TInstant::Now();
         const auto graph = setup.BuildGraph(pgmReturn, {list});
         NUdf::TUnboxedValue* items = nullptr;
@@ -856,8 +856,8 @@ Y_UNIT_TEST_SUITE(TMiniKQLFoldNodeTest) {
         const auto t3 = TInstant::Now();
         Cerr << "Time is " << t3 - t1 << " (" << t2 - t1 << " + " << t3 - t2 << ") vs C++ " << cppTime << Endl;
         UNIT_ASSERT_VALUES_EQUAL(value.template Get<double>(), sum);
-    }
-
+    } 
+ 
     Y_UNIT_TEST_LLVM(TestSumDoubleFilteredArrayListPerf) {
         TSetup<LLVM> setup;
 
@@ -932,14 +932,14 @@ Y_UNIT_TEST_SUITE(TMiniKQLFoldNodeTest) {
             min = std::fmin(min, v);
             max = std::fmax(max, v);
             sum += v;
-        }
+        } 
         const auto cppTime = TInstant::Now() - t;
 
         TProgramBuilder& pb = *setup.PgmBuilder;
 
         const auto listType = pb.NewListType(pb.NewDataType(NUdf::TDataType<double>::Id));
         const auto list = TCallableBuilder(pb.GetTypeEnvironment(), "TestList", listType).Build();
-
+ 
         const auto pgmReturn = pb.Fold1(pb.Collect(TRuntimeNode(list, false)),
             [&](TRuntimeNode item) { return pb.NewTuple({item, item, item}); },
             [&](TRuntimeNode item, TRuntimeNode state) {
@@ -983,7 +983,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLFoldNodeTest) {
             [&](TRuntimeNode item, TRuntimeNode state) {
                 return pb.NewTuple({pb.AggrMin(pb.Nth(state, 0U), item), pb.AggrMax(pb.Nth(state, 1U), item), pb.AggrAdd(pb.Nth(state, 2U), item)});
             });
-
+ 
         const auto t1 = TInstant::Now();
         const auto graph = setup.BuildGraph(pgmReturn, {list});
         NUdf::TUnboxedValue* items = nullptr;
@@ -996,7 +996,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLFoldNodeTest) {
         UNIT_ASSERT_VALUES_EQUAL(value.GetElement(0U).template Get<double>(), min);
         UNIT_ASSERT_VALUES_EQUAL(value.GetElement(1U).template Get<double>(), max);
         UNIT_ASSERT_VALUES_EQUAL(value.GetElement(2U).template Get<double>(), sum);
-    }
+    } 
 
     Y_UNIT_TEST_LLVM(TestMinMaxSumDoubleFilteredArrayListPerf) {
         TSetup<LLVM> setup;
@@ -1179,7 +1179,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLFoldNodeTest) {
         Cerr << "Time is " << t3 - t1 << " (" << t2 - t1 << " + " << t3 - t2 << ") vs C++ " << cppTime << Endl;
         UNIT_ASSERT_VALUES_EQUAL(value.template Get<double>(), avg);
     }
-}
-
-}
-}
+} 
+ 
+} 
+} 

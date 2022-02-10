@@ -29,8 +29,8 @@ struct TCommonClientSettings {
     FLUENT_SETTING_OPTIONAL(std::shared_ptr<ICredentialsProviderFactory>, CredentialsProviderFactory);
     //! Allows to override discovery mode
     FLUENT_SETTING_OPTIONAL(EDiscoveryMode, DiscoveryMode);
-    //! Allows to override current Ssl mode
-    FLUENT_SETTING_OPTIONAL(bool, EnableSsl);
+    //! Allows to override current Ssl mode 
+    FLUENT_SETTING_OPTIONAL(bool, EnableSsl); 
 };
 
 template<class TDerived>
@@ -47,7 +47,7 @@ struct TCommonClientSettingsBase : public TCommonClientSettings {
     COMMON_CLIENT_SETTINGS_TO_DERIVED(TMaybe<TStringType>, AuthToken);
     COMMON_CLIENT_SETTINGS_TO_DERIVED(std::shared_ptr<ICredentialsProviderFactory>, CredentialsProviderFactory);
     COMMON_CLIENT_SETTINGS_TO_DERIVED(EDiscoveryMode, DiscoveryMode);
-    COMMON_CLIENT_SETTINGS_TO_DERIVED(bool, EnableSsl);
+    COMMON_CLIENT_SETTINGS_TO_DERIVED(bool, EnableSsl); 
 
 #undef COMMON_CLIENT_SETTINGS_TO_DERIVED
 

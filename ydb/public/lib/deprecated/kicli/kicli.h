@@ -59,10 +59,10 @@ public:
     static const TType Double;
     static const TType Float;
     static const TType Bool;
-    static const TType Utf8;
-    static const TType String;
-    static const TType String4k;
-    static const TType String2m;
+    static const TType Utf8; 
+    static const TType String; 
+    static const TType String4k; 
+    static const TType String2m; 
     static const TType Yson;
     static const TType Json;
     static const TType JsonDocument;
@@ -704,21 +704,21 @@ private:
 };
 
 struct TRetryPolicy {
-    ui32 RetryLimitCount;
-    TDuration MinRetryTime;
-    TDuration MaxRetryTime;
-    ui32 BackoffMultiplier;
-    bool DoFirstRetryInstantly;
-
-    TRetryPolicy(ui32 retryLimitCount = 0, TDuration minRetryTime = TDuration::MilliSeconds(10), TDuration maxRetryTime = TDuration::Minutes(10), ui32 backoffMultiplier = 2, bool doFirstRetryInstantly = true)
-        : RetryLimitCount(retryLimitCount)
-        , MinRetryTime(minRetryTime)
-        , MaxRetryTime(maxRetryTime)
-        , BackoffMultiplier(backoffMultiplier)
-        , DoFirstRetryInstantly(doFirstRetryInstantly)
-    {}
-};
-
+    ui32 RetryLimitCount; 
+    TDuration MinRetryTime; 
+    TDuration MaxRetryTime; 
+    ui32 BackoffMultiplier; 
+    bool DoFirstRetryInstantly; 
+ 
+    TRetryPolicy(ui32 retryLimitCount = 0, TDuration minRetryTime = TDuration::MilliSeconds(10), TDuration maxRetryTime = TDuration::Minutes(10), ui32 backoffMultiplier = 2, bool doFirstRetryInstantly = true) 
+        : RetryLimitCount(retryLimitCount) 
+        , MinRetryTime(minRetryTime) 
+        , MaxRetryTime(maxRetryTime) 
+        , BackoffMultiplier(backoffMultiplier) 
+        , DoFirstRetryInstantly(doFirstRetryInstantly) 
+    {} 
+}; 
+ 
 struct TConnectionPolicy {
     TRetryPolicy RetryPolicy;
     bool ChooseProxy; // use to switch from primary connection endpoint to any available proxy upon first connection (balancer strategy)

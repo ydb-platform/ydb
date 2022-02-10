@@ -1,11 +1,11 @@
 #pragma once
 
-#include <ydb/library/yql/ast/yql_expr.h>
-#include <ydb/library/yql/core/yql_data_provider.h>
-#include <ydb/library/yql/core/yql_graph_transformer.h>
-#include <ydb/library/yql/core/yql_expr_optimize.h>
-#include <ydb/library/yql/core/yql_expr_type_annotation.h>
-#include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
+#include <ydb/library/yql/ast/yql_expr.h> 
+#include <ydb/library/yql/core/yql_data_provider.h> 
+#include <ydb/library/yql/core/yql_graph_transformer.h> 
+#include <ydb/library/yql/core/yql_expr_optimize.h> 
+#include <ydb/library/yql/core/yql_expr_type_annotation.h> 
+#include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h> 
 
 #include <library/cpp/yson/writer.h>
 
@@ -16,9 +16,9 @@
 #include <utility>
 
 namespace NYson {
-    class TYsonWriter;
-}
-
+    class TYsonWriter; 
+} 
+ 
 namespace NKikimr {
     namespace NMiniKQL {
         class IFunctionRegistry;
@@ -97,7 +97,7 @@ IDataProvider::TFillSettings GetFillSettings(const TExprNode& node);
 NYson::EYsonFormat GetYsonFormat(const IDataProvider::TFillSettings& fillSettings);
 
 TVector<TString> GetStructFields(const TTypeAnnotationNode* type);
-
+ 
 void TransformerStatsToYson(const TString& name, const IGraphTransformer::TStatistics& stats, NYson::TYsonWriter& writer);
 
 void FillSecureParams(const TExprNode::TPtr& node, const TTypeAnnotationContext& types, THashMap<TString, TString>& secureParams);
@@ -115,7 +115,7 @@ TString ExprToPrettyString(TExprContext& ctx, const TExprNode& expr);
 
 void WriteStream(NYson::TYsonWriter& writer, const TExprNode* node, const TExprNode* source);
 void WriteStreams(NYson::TYsonWriter& writer, TStringBuf name, const NNodes::TCoLambda& lambda);
-
+ 
 double GetDataReplicationFactor(const TExprNode& lambda, TExprContext& ctx);
 
 void WriteStatistics(NYson::TYsonWriter& writer, bool totalOnly, const THashMap<ui32, TOperationStatistics>& statistics);

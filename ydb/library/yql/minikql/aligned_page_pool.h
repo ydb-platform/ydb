@@ -62,8 +62,8 @@ public:
 
     inline size_t GetUsed() const noexcept {
         return TotalAllocated - GetFreePageCount() * POOL_PAGE_SIZE;
-    }
-
+    } 
+ 
     inline size_t GetFreePageCount() const noexcept {
         return FreePages.size();
     }
@@ -79,12 +79,12 @@ public:
     void* GetPage();
 
     void ReturnPage(void* addr) noexcept;
-
-    void Swap(TAlignedPagePool& other) {
-        DoSwap(FreePages, other.FreePages);
+ 
+    void Swap(TAlignedPagePool& other) { 
+        DoSwap(FreePages, other.FreePages); 
         DoSwap(AllPages, other.AllPages);
         DoSwap(ActiveBlocks, other.ActiveBlocks);
-        DoSwap(TotalAllocated, other.TotalAllocated);
+        DoSwap(TotalAllocated, other.TotalAllocated); 
         DoSwap(PeakAllocated, other.PeakAllocated);
         DoSwap(PeakUsed, other.PeakUsed);
         DoSwap(Limit, other.Limit);
@@ -93,60 +93,60 @@ public:
         DoSwap(PageHitCount, other.PageHitCount);
         DoSwap(PageGlobalHitCount, other.PageGlobalHitCount);
         DoSwap(PageMissCount, other.PageMissCount);
-        DoSwap(OffloadedAllocCount, other.OffloadedAllocCount);
-        DoSwap(OffloadedBytes, other.OffloadedBytes);
-        DoSwap(OffloadedActiveBytes, other.OffloadedActiveBytes);
+        DoSwap(OffloadedAllocCount, other.OffloadedAllocCount); 
+        DoSwap(OffloadedBytes, other.OffloadedBytes); 
+        DoSwap(OffloadedActiveBytes, other.OffloadedActiveBytes); 
         DoSwap(Counters, other.Counters);
         DoSwap(CheckLostMem, other.CheckLostMem);
         DoSwap(AllocNotifyCallback, other.AllocNotifyCallback);
         DoSwap(IncreaseMemoryLimitCallback, other.IncreaseMemoryLimitCallback);
-    }
-
+    } 
+ 
     void PrintStat(size_t usedPages, IOutputStream& out) const;
 
     void* GetBlock(size_t size);
-
+ 
     void ReturnBlock(void* ptr, size_t size) noexcept;
-
+ 
     size_t GetPeakAllocated() const noexcept {
-        return PeakAllocated;
-    }
-
+        return PeakAllocated; 
+    } 
+ 
     size_t GetPeakUsed() const noexcept {
-        return PeakUsed;
-    }
-
+        return PeakUsed; 
+    } 
+ 
     ui64 GetAllocCount() const noexcept {
-        return AllocCount;
-    }
-
+        return AllocCount; 
+    } 
+ 
     ui64 GetPageAllocCount() const noexcept {
-        return PageAllocCount;
-    }
-
+        return PageAllocCount; 
+    } 
+ 
     ui64 GetPageHitCount() const noexcept {
-        return PageHitCount;
-    }
-
+        return PageHitCount; 
+    } 
+ 
     ui64 GetPageGlobalHitCount() const noexcept {
         return PageGlobalHitCount;
     }
 
     ui64 GetPageMissCount() const noexcept {
-        return PageMissCount;
-    }
-
+        return PageMissCount; 
+    } 
+ 
     ui64 GetOffloadedAllocCount() const noexcept {
-        return OffloadedAllocCount;
-    }
-
+        return OffloadedAllocCount; 
+    } 
+ 
     ui64 GetOffloadedBytes() const noexcept {
-        return OffloadedBytes;
-    }
-
-    void OffloadAlloc(ui64 size);
+        return OffloadedBytes; 
+    } 
+ 
+    void OffloadAlloc(ui64 size); 
     void OffloadFree(ui64 size) noexcept;
-
+ 
     static ui64 GetGlobalPagePoolSize();
 
     ui64 GetLimit() const noexcept {
@@ -180,11 +180,11 @@ protected:
     void* Alloc(size_t size);
     void Free(void* ptr, size_t size) noexcept;
 
-    void UpdatePeaks() {
-        PeakAllocated = Max(PeakAllocated, GetAllocated());
-        PeakUsed = Max(PeakUsed, GetUsed());
-    }
-
+    void UpdatePeaks() { 
+        PeakAllocated = Max(PeakAllocated, GetAllocated()); 
+        PeakUsed = Max(PeakUsed, GetUsed()); 
+    } 
+ 
     bool TryIncreaseLimit(ui64 required);
 
 protected:
@@ -192,20 +192,20 @@ protected:
     std::unordered_set<void*> AllPages;
     std::unordered_map<void*, size_t> ActiveBlocks;
     size_t TotalAllocated = 0;
-    size_t PeakAllocated = 0;
-    size_t PeakUsed = 0;
+    size_t PeakAllocated = 0; 
+    size_t PeakUsed = 0; 
     size_t Limit = 0;
 
-    ui64 AllocCount = 0;
-    ui64 PageAllocCount = 0;
-    ui64 PageHitCount = 0;
+    ui64 AllocCount = 0; 
+    ui64 PageAllocCount = 0; 
+    ui64 PageHitCount = 0; 
     ui64 PageGlobalHitCount = 0;
-    ui64 PageMissCount = 0;
+    ui64 PageMissCount = 0; 
 
-    ui64 OffloadedAllocCount = 0;
-    ui64 OffloadedBytes = 0;
-    ui64 OffloadedActiveBytes = 0;
-
+    ui64 OffloadedAllocCount = 0; 
+    ui64 OffloadedBytes = 0; 
+    ui64 OffloadedActiveBytes = 0; 
+ 
     TAlignedPagePoolCounters Counters;
     bool CheckLostMem = true;
 

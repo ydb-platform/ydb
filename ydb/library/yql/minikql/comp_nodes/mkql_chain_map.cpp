@@ -1,8 +1,8 @@
 #include "mkql_chain_map.h"
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h>
-#include <ydb/library/yql/minikql/computation/mkql_custom_list.h>
-#include <ydb/library/yql/minikql/mkql_node_cast.h>
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h> 
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h> 
+#include <ydb/library/yql/minikql/computation/mkql_custom_list.h> 
+#include <ydb/library/yql/minikql/mkql_node_cast.h> 
 
 namespace NKikimr {
 namespace NMiniKQL {
@@ -103,7 +103,7 @@ private:
     const TComputationNodes ComputationNodes;
 };
 
-template <bool IsStream>
+template <bool IsStream> 
 class TBaseChainMapWrapper {
 public:
     class TListValue : public TCustomListValue {
@@ -144,7 +144,7 @@ public:
         TListValue(TMemoryUsageInfo* memInfo, TComputationContext& compCtx, NUdf::TUnboxedValue&& list, NUdf::TUnboxedValue&& init, const TComputationNodes& computationNodes)
             : TCustomListValue(memInfo)
             , CompCtx(compCtx)
-            , List(std::move(list))
+            , List(std::move(list)) 
             , Init(std::move(init))
             , ComputationNodes(computationNodes)
         {}
@@ -176,18 +176,18 @@ public:
         const TComputationNodes& ComputationNodes;
     };
 
-    class TStreamValue : public TComputationValue<TStreamValue> {
-    public:
-        using TBase = TComputationValue<TStreamValue>;
-
+    class TStreamValue : public TComputationValue<TStreamValue> { 
+    public: 
+        using TBase = TComputationValue<TStreamValue>; 
+ 
         TStreamValue(TMemoryUsageInfo* memInfo, TComputationContext& compCtx, NUdf::TUnboxedValue&& list, NUdf::TUnboxedValue&& init, const TComputationNodes& computationNodes)
-            : TBase(memInfo)
+            : TBase(memInfo) 
             , CompCtx(compCtx)
             , ComputationNodes(computationNodes)
-            , List(std::move(list))
+            , List(std::move(list)) 
             , Init(std::move(init))
         {}
-
+ 
     private:
         NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& value) final {
             if (!Init.IsInvalid()) {
@@ -196,21 +196,21 @@ public:
             }
 
             const auto status = List.Fetch(ComputationNodes.ItemArg->RefValue(CompCtx));
-            if (status != NUdf::EFetchStatus::Ok) {
-                return status;
-            }
-
+            if (status != NUdf::EFetchStatus::Ok) { 
+                return status; 
+            } 
+ 
             value = ComputationNodes.NewItem->GetValue(CompCtx);
             ComputationNodes.StateArg->SetValue(CompCtx, ComputationNodes.NewState->GetValue(CompCtx));
-            return NUdf::EFetchStatus::Ok;
-        }
-
+            return NUdf::EFetchStatus::Ok; 
+        } 
+ 
         TComputationContext& CompCtx;
         const TComputationNodes& ComputationNodes;
         const NUdf::TUnboxedValue List;
         NUdf::TUnboxedValue Init;
-    };
-
+    }; 
+ 
     TBaseChainMapWrapper(IComputationNode* list, IComputationNode* init, IComputationExternalNode* itemArg, IComputationExternalNode* stateArg, IComputationNode* newItem, IComputationNode* newState)
         : List(list), Init(init), ComputationNodes({itemArg, stateArg, newItem, newState})
     {}
@@ -236,7 +236,7 @@ public:
         const auto funcType = FunctionType::get(statusType, {PointerType::getUnqual(contextType), containerType, PointerType::getUnqual(valueType), PointerType::getUnqual(valueType)}, false);
 
         TCodegenContext ctx(codegen);
-        ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee());
+        ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee()); 
 
         auto args = ctx.Func->arg_begin();
 

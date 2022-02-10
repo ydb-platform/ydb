@@ -10,15 +10,15 @@
 
 #include <stdarg.h>
 
-#ifdef _win_
-#  ifdef BUILD_UDF
-#    define UDF_API __declspec(dllexport)
-#  else
-#    define UDF_API __declspec(dllimport)
-#  endif
-#else
-#  define UDF_API __attribute__ ((visibility("default")))
-#endif
+#ifdef _win_ 
+#  ifdef BUILD_UDF 
+#    define UDF_API __declspec(dllexport) 
+#  else 
+#    define UDF_API __declspec(dllimport) 
+#  endif 
+#else 
+#  define UDF_API __attribute__ ((visibility("default"))) 
+#endif 
 
 #ifdef BUILD_UDF
 #define REGISTER_MODULES(...) \
@@ -29,7 +29,7 @@
     } \
     extern "C" UDF_API ui32 AbiVersion() { \
         return ::NYql::NUdf::CurrentAbiVersion(); \
-    }\
+    }\ 
     extern "C" UDF_API void SetBackTraceCallback(::NYql::NUdf::TBackTraceCallback callback) { \
         ::NYql::NUdf::SetBackTraceCallbackImpl(callback); \
     }
@@ -49,25 +49,25 @@ namespace NUdf {
 
 class IFunctionTypeInfoBuilder;
 
-struct TStaticSymbols {
-    void* (*UdfAllocateFunc)(ui64 size);
+struct TStaticSymbols { 
+    void* (*UdfAllocateFunc)(ui64 size); 
     void (*UdfFreeFunc)(const void* mem);
     void (*UdfTerminate)(const char* message);
     void (*UdfRegisterObject)(TBoxedValue* object);
     void (*UdfUnregisterObject)(TBoxedValue* object);
-#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 8)
-    void* (*UdfAllocateWithSizeFunc)(ui64 size);
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 8) 
+    void* (*UdfAllocateWithSizeFunc)(ui64 size); 
     void (*UdfFreeWithSizeFunc)(const void* mem, ui64 size);
-#endif
-};
-
-#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 8)
-UDF_ASSERT_TYPE_SIZE(TStaticSymbols, 56);
-#else
+#endif 
+}; 
+ 
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 8) 
+UDF_ASSERT_TYPE_SIZE(TStaticSymbols, 56); 
+#else 
 UDF_ASSERT_TYPE_SIZE(TStaticSymbols, 40);
-#endif
+#endif 
 
-inline TStaticSymbols GetStaticSymbols();
+inline TStaticSymbols GetStaticSymbols(); 
 
 //////////////////////////////////////////////////////////////////////////////
 // IFunctionNamesSink
@@ -107,7 +107,7 @@ class IUdfModule
 public:
     struct TFlags {
         enum {
-            TypesOnly = 0x01
+            TypesOnly = 0x01 
         };
     };
 
@@ -118,12 +118,12 @@ public:
 
     virtual void BuildFunctionTypeInfo(
             const TStringRef& name,
-            TType* userType,
+            TType* userType, 
             const TStringRef& typeConfig,
             ui32 flags,
             IFunctionTypeInfoBuilder& builder) const = 0;
-
-    virtual void CleanupOnTerminate() const = 0;
+ 
+    virtual void CleanupOnTerminate() const = 0; 
 };
 
 UDF_ASSERT_TYPE_SIZE(IUdfModule, 8);
@@ -150,12 +150,12 @@ public:
 
 UDF_ASSERT_TYPE_SIZE(IRegistrator, 8);
 
-typedef void(*TBackTraceCallback)();
-
+typedef void(*TBackTraceCallback)(); 
+ 
 using TRegisterFunctionPtr = void (*)(IRegistrator& registrator, ui32 flags);
 using TAbiVersionFunctionPtr = ui32 (*)();
-using TBindSymbolsFunctionPtr = void (*)(const TStaticSymbols& symbols);
-using TSetBackTraceCallbackPtr = void(*)(TBackTraceCallback callback);
+using TBindSymbolsFunctionPtr = void (*)(const TStaticSymbols& symbols); 
+using TSetBackTraceCallbackPtr = void(*)(TBackTraceCallback callback); 
 
 template<typename TModule>
 static inline void RegisterHelper(IRegistrator& registrator) {
@@ -170,8 +170,8 @@ static inline void RegisterHelper(IRegistrator& registrator) {
     RegisterHelper<THead2, TTail...>(registrator);
 }
 
-void SetBackTraceCallbackImpl(TBackTraceCallback callback);
-
+void SetBackTraceCallbackImpl(TBackTraceCallback callback); 
+ 
 
 using TUdfModuleWrapper = std::function<std::pair<TStringRef, TUniquePtr<IUdfModule>>()>;
 
@@ -195,33 +195,33 @@ static inline void AddToStaticUdfRegistry() {
 
 } // namspace NUdf
 } // namspace NYql
-
+ 
 extern "C" UDF_API void Register(NYql::NUdf::IRegistrator& registrator, ui32 flags);
 extern "C" UDF_API ui32 AbiVersion();
-#if defined(_win_) || defined(_darwin_)
+#if defined(_win_) || defined(_darwin_) 
 extern "C" UDF_API void BindSymbols(const NYql::NUdf::TStaticSymbols& symbols);
-#endif
+#endif 
 extern "C" UDF_API void SetBackTraceCallback(NYql::NUdf::TBackTraceCallback callback);
-
+ 
 namespace NYql {
-namespace NUdf {
-
-#ifndef BUILD_UDF
-
-Y_PRAGMA_DIAGNOSTIC_PUSH
-Y_PRAGMA_NO_DEPRECATED
-
-inline TStaticSymbols GetStaticSymbols() {
-    return {&UdfAllocate, &UdfFree, &UdfTerminate, &UdfRegisterObject, &UdfUnregisterObject
-#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 8)
-        ,&UdfAllocateWithSize, &UdfFreeWithSize
-#endif
-    };
-}
-
-Y_PRAGMA_DIAGNOSTIC_POP
-
-#endif
-
-}
-}
+namespace NUdf { 
+ 
+#ifndef BUILD_UDF 
+ 
+Y_PRAGMA_DIAGNOSTIC_PUSH 
+Y_PRAGMA_NO_DEPRECATED 
+ 
+inline TStaticSymbols GetStaticSymbols() { 
+    return {&UdfAllocate, &UdfFree, &UdfTerminate, &UdfRegisterObject, &UdfUnregisterObject 
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 8) 
+        ,&UdfAllocateWithSize, &UdfFreeWithSize 
+#endif 
+    }; 
+} 
+ 
+Y_PRAGMA_DIAGNOSTIC_POP 
+ 
+#endif 
+ 
+} 
+} 

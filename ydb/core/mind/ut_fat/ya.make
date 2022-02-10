@@ -26,7 +26,7 @@ PEERDIR(
 )
 
 YQL_LAST_ABI_VERSION()
-
+ 
 SRCS(
     blobstorage_node_warden_ut_fat.cpp
 )

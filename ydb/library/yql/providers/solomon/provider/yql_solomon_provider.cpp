@@ -1,8 +1,8 @@
 #include "yql_solomon_provider.h"
 
-#include <ydb/library/yql/providers/common/proto/gateways_config.pb.h>
-#include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
-#include <ydb/library/yql/providers/solomon/provider/yql_solomon_dq_integration.h>
+#include <ydb/library/yql/providers/common/proto/gateways_config.pb.h> 
+#include <ydb/library/yql/providers/common/provider/yql_provider_names.h> 
+#include <ydb/library/yql/providers/solomon/provider/yql_solomon_dq_integration.h> 
 
 namespace NYql {
 

@@ -12,7 +12,7 @@ PEERDIR(
     ydb/core/yq/libs/checkpointing_common
     ydb/core/yq/libs/events
     ydb/core/yq/libs/checkpoint_storage/proto
-    ydb/library/yql/public/issue
+    ydb/library/yql/public/issue 
 )
 
 END()

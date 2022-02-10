@@ -11,7 +11,7 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/library/yql/providers/pq/provider
+    ydb/library/yql/providers/pq/provider 
 )
 
 END()

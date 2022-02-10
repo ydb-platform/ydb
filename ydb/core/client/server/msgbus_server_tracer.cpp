@@ -148,7 +148,7 @@ TEvMessageBusTracer::TEvTraceStatus::TEvTraceStatus(bool traceActive, const TStr
 
 
 namespace {
-    const ui32 DefaultTimeout = 90000;
+    const ui32 DefaultTimeout = 90000; 
 }
 
 template <typename TDerived>

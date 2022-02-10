@@ -1,10 +1,10 @@
 #include "mkql_builtins_decimal.h"
-
-namespace NKikimr {
-namespace NMiniKQL {
-
-namespace {
-
+ 
+namespace NKikimr { 
+namespace NMiniKQL { 
+ 
+namespace { 
+ 
 template<typename TInput, typename TOutput>
 struct TMinus : public TSimpleArithmeticUnary<TInput, TOutput, TMinus<TInput, TOutput>> {
     static TOutput Do(TInput val)
@@ -12,21 +12,21 @@ struct TMinus : public TSimpleArithmeticUnary<TInput, TOutput, TMinus<TInput, TO
         return -val;
     }
 
-#ifndef MKQL_DISABLE_CODEGEN
+#ifndef MKQL_DISABLE_CODEGEN 
     static Value* Gen(Value* arg, const TCodegenContext&, BasicBlock*& block)
     {
         return std::is_integral<TInput>() ? BinaryOperator::CreateNeg(arg, "neg", block) : BinaryOperator::CreateFNeg(arg, "neg", block);
     }
 #endif
 };
-
+ 
 struct TDecimalMinus {
     static NUdf::TUnboxedValuePod Execute(const NUdf::TUnboxedValuePod& arg) {
         const auto v = arg.GetInt128();
         return NYql::NDecimal::IsComparable(v) ? NUdf::TUnboxedValuePod(-v) : arg;
     }
 
-#ifndef MKQL_DISABLE_CODEGEN
+#ifndef MKQL_DISABLE_CODEGEN 
     static Value* Generate(Value* arg, const TCodegenContext& ctx, BasicBlock*& block)
     {
         const auto val = GetterForInt128(arg, block);
@@ -37,13 +37,13 @@ struct TDecimalMinus {
     }
 #endif
 };
-}
-
+} 
+ 
 void RegisterMinus(IBuiltinFunctionRegistry& registry) {
     RegisterUnaryNumericFunctionOpt<TMinus, TUnaryArgsOpt>(registry, "Minus");
     NDecimal::RegisterUnaryFunction<TDecimalMinus, TUnaryArgsOpt>(registry, "Minus");
-    RegisterFunctionUnOpt<NUdf::TDataType<NUdf::TInterval>, NUdf::TDataType<NUdf::TInterval>, TMinus, TUnaryArgsOpt>(registry, "Minus");
-}
-
-} // namespace NMiniKQL
-} // namespace NKikimr
+    RegisterFunctionUnOpt<NUdf::TDataType<NUdf::TInterval>, NUdf::TDataType<NUdf::TInterval>, TMinus, TUnaryArgsOpt>(registry, "Minus"); 
+} 
+ 
+} // namespace NMiniKQL 
+} // namespace NKikimr 

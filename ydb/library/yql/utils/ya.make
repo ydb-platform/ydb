@@ -6,15 +6,15 @@ OWNER(
 )
 
 SRCS(
-    bind_in_range.cpp
-    bind_in_range.h
+    bind_in_range.cpp 
+    bind_in_range.h 
     cast.h
     debug_info.cpp
-    debug_info.h
+    debug_info.h 
     future_action.cpp
     future_action.h
-    hash.h
-    hash.cpp
+    hash.h 
+    hash.cpp 
     md5_stream.cpp
     md5_stream.h
     multi_resource_lock.cpp
@@ -28,8 +28,8 @@ SRCS(
     resetable_setting.h
     retry.cpp
     retry.h
-    swap_bytes.cpp
-    swap_bytes.h
+    swap_bytes.cpp 
+    swap_bytes.h 
     yql_panic.cpp
     yql_panic.h
     yql_paths.cpp
@@ -40,21 +40,21 @@ SRCS(
 PEERDIR(
     library/cpp/digest/md5
     library/cpp/threading/future
-    library/cpp/messagebus
+    library/cpp/messagebus 
 )
 
 END()
-
-RECURSE(
+ 
+RECURSE( 
     actors
     actor_log
     backtrace
-    failure_injector
+    failure_injector 
     fetch
     log
     threading
-)
-
-RECURSE_FOR_TESTS(
-    ut
-)
+) 
+ 
+RECURSE_FOR_TESTS( 
+    ut 
+) 

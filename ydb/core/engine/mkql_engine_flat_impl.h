@@ -1,11 +1,11 @@
-#pragma once
-#include "mkql_engine_flat.h"
-#include <ydb/library/yql/minikql/computation/mkql_computation_node.h>
-
-namespace NKikimr {
-namespace NMiniKQL {
+#pragma once 
+#include "mkql_engine_flat.h" 
+#include <ydb/library/yql/minikql/computation/mkql_computation_node.h> 
+ 
+namespace NKikimr { 
+namespace NMiniKQL { 
     typedef THashMap<ui32, TVector<TString>> TIncomingResults;
-
+ 
     struct TBuiltinStrings {
         TBuiltinStrings(const TTypeEnvironment& env)
             : Filter(env.InternName(TStringBuf("Filter")))
@@ -23,7 +23,7 @@ namespace NMiniKQL {
             All.reserve(20);
             All.insert(Filter);
             All.insert(FilterNullMembers);
-            All.insert(SkipNullMembers);
+            All.insert(SkipNullMembers); 
             All.insert(FlatMap);
             All.insert(Map);
             All.insert(Member);
@@ -36,7 +36,7 @@ namespace NMiniKQL {
 
         const TInternName Filter;
         const TInternName FilterNullMembers;
-        const TInternName SkipNullMembers;
+        const TInternName SkipNullMembers; 
         const TInternName FlatMap;
         const TInternName Map;
         const TInternName Member;
@@ -49,9 +49,9 @@ namespace NMiniKQL {
         THashSet<TInternName> All;
     };
 
-    struct TFlatEngineStrings : public TTableStrings {
-        TFlatEngineStrings(const TTypeEnvironment& env)
-            : TTableStrings(env)
+    struct TFlatEngineStrings : public TTableStrings { 
+        TFlatEngineStrings(const TTypeEnvironment& env) 
+            : TTableStrings(env) 
             , Builtins(env)
             , SetResult(env.InternName(TStringBuf("SetResult")))
             , Abort(env.InternName(TStringBuf("Abort")))
@@ -69,7 +69,7 @@ namespace NMiniKQL {
             All.insert(CombineByKeyMerge);
             All.insert(Diagnostics);
         }
-
+ 
         TBuiltinStrings Builtins;
 
         const TInternName SetResult;
@@ -80,8 +80,8 @@ namespace NMiniKQL {
         const TInternName Diagnostics;
         const TInternName PartialTake;
         const TInternName PartialSort;
-    };
-
+    }; 
+ 
     struct TShardExecData {
         TShardExecData(const TEngineFlatSettings& settings, const TFlatEngineStrings& strings,
                        const std::pair<ui64, ui64>& stepTxId)
@@ -96,7 +96,7 @@ namespace NMiniKQL {
         THashSet<ui32> LocalReadCallables;
         TIncomingResults Results;
     };
-
+ 
     struct TProxyExecData {
         TProxyExecData(const TEngineFlatSettings& settings, const TFlatEngineStrings& strings,
                      const std::pair<ui64, ui64>& stepTxId, const TVector<IEngineFlat::TTabletInfo>& tabletInfos,
@@ -123,17 +123,17 @@ namespace NMiniKQL {
         const THolderFactory& holderFactory, const TTypeEnvironment& env);
     NUdf::TUnboxedValue PerformLocalSelectRange(TCallable& callable, IEngineFlatHost& engineHost,
         const THolderFactory& holderFactory, const TTypeEnvironment& env);
-
+ 
     struct TEngineFlatApplyContext : public NUdf::IApplyContext {
-        bool IsAborted = false;
-        IEngineFlatHost* Host = nullptr;
+        bool IsAborted = false; 
+        IEngineFlatHost* Host = nullptr; 
         THashMap<TString, NUdf::TUnboxedValue>* ResultValues = nullptr;
         const TTypeEnvironment* Env = nullptr;
-    };
+    }; 
 
     TStructType* GetTxLockType(const TTypeEnvironment& env, bool v2);
     TStructType* GetDiagnosticsType(const TTypeEnvironment& env);
     TType* GetActualReturnType(const TCallable& callable, const TTypeEnvironment& env,
         const TFlatEngineStrings& strings);
-}
-}
+} 
+} 

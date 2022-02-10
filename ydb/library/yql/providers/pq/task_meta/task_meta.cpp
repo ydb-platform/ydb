@@ -1,7 +1,7 @@
 #include "task_meta.h"
 
-#include <ydb/library/yql/providers/dq/api/protos/service.pb.h>
-#include <ydb/library/yql/providers/pq/proto/dq_task_params.pb.h>
+#include <ydb/library/yql/providers/dq/api/protos/service.pb.h> 
+#include <ydb/library/yql/providers/pq/proto/dq_task_params.pb.h> 
 
 namespace NYql::NPq {
 

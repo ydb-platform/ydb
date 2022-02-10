@@ -25,7 +25,7 @@ SRCS(
 )
 
 YQL_LAST_ABI_VERSION()
-
+ 
 REQUIREMENTS(ram:14)
 
 END()

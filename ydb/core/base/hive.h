@@ -205,7 +205,7 @@ namespace NKikimr {
             TEvCreateTabletReply(NKikimrProto::EReplyStatus status, ui64 ownerId, ui64 ownerIdx, ui64 tabletId, ui64 origin)
                 : TEvCreateTabletReply(status, ownerId, ownerIdx, tabletId)
             {
-                Record.SetOrigin(origin);
+                Record.SetOrigin(origin); 
             }
 
             TEvCreateTabletReply(

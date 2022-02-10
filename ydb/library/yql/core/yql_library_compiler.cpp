@@ -1,5 +1,5 @@
 #include "yql_library_compiler.h"
-#include "yql_expr_optimize.h"
+#include "yql_expr_optimize.h" 
 
 #include <util/system/file.h>
 
@@ -60,37 +60,37 @@ TString Load(const TString& path)
 
 }
 
-bool OptimizeLibrary(TLibraryCohesion& cohesion, TExprContext& ctx) {
-    TExprNode::TListType tupleItems;
+bool OptimizeLibrary(TLibraryCohesion& cohesion, TExprContext& ctx) { 
+    TExprNode::TListType tupleItems; 
     for (const auto& x : cohesion.Exports.Symbols()) {
-        tupleItems.push_back(x.second);
-    }
-
+        tupleItems.push_back(x.second); 
+    } 
+ 
     auto root = ctx.NewList(TPositionHandle(), std::move(tupleItems));
-    for (;;) {
-        auto status = ExpandApply(root, root, ctx);
-        if (status == IGraphTransformer::TStatus::Error) {
-            return false;
-        }
-
-        if (status == IGraphTransformer::TStatus::Ok) {
-            ctx.Step.Repeat(TExprStep::ExpandApplyForLambdas);
-            break;
-        }
-    }
-
-    ui32 index = 0;
+    for (;;) { 
+        auto status = ExpandApply(root, root, ctx); 
+        if (status == IGraphTransformer::TStatus::Error) { 
+            return false; 
+        } 
+ 
+        if (status == IGraphTransformer::TStatus::Ok) { 
+            ctx.Step.Repeat(TExprStep::ExpandApplyForLambdas); 
+            break; 
+        } 
+    } 
+ 
+    ui32 index = 0; 
     for (auto& x : cohesion.Exports.Symbols(ctx)) {
-        x.second = root->ChildPtr(index++);
-    }
-
-    return true;
-}
-
-bool CompileLibrary(const TString& alias, const TString& script, TExprContext& ctx, TLibraryCohesion& cohesion, bool optimize)
+        x.second = root->ChildPtr(index++); 
+    } 
+ 
+    return true; 
+} 
+ 
+bool CompileLibrary(const TString& alias, const TString& script, TExprContext& ctx, TLibraryCohesion& cohesion, bool optimize) 
 {
-    const auto& res = ParseAst(script, nullptr, alias);
-    if (!res.IsOk()) {
+    const auto& res = ParseAst(script, nullptr, alias); 
+    if (!res.IsOk()) { 
         for (const auto& originalError : res.Issues) {
             TIssue error(originalError);
             TStringBuilder message;
@@ -99,16 +99,16 @@ bool CompileLibrary(const TString& alias, const TString& script, TExprContext& c
             ctx.AddError(error);
         }
         return false;
-    }
+    } 
 
     if (!CompileExpr(*res.Root, cohesion, ctx))
         return false;
 
-    if (!optimize) {
-        return true;
-    }
-
-    return OptimizeLibrary(cohesion, ctx);
+    if (!optimize) { 
+        return true; 
+    } 
+ 
+    return OptimizeLibrary(cohesion, ctx); 
 }
 
 bool LinkLibraries(THashMap<TString, TLibraryCohesion>& libs, TExprContext& ctx, TExprContext& ctxToClone, const TModulesTable* loadedModules) {
@@ -140,14 +140,14 @@ bool LinkLibraries(THashMap<TString, TLibraryCohesion>& libs, TExprContext& ctx,
 
             const auto* exportTable = module2ExportTable(TModuleResolver::NormalizeModuleName(import.second.first));
             const bool externalModule = exportTable;
-
-            if (!exportTable) {
+ 
+            if (!exportTable) { 
                 if (const auto it = libs.find(import.second.first); libs.cend() != it) {
-                    exportTable = &it->second.Exports;
-                }
-            }
-
-            if (!exportTable) {
+                    exportTable = &it->second.Exports; 
+                } 
+            } 
+ 
+            if (!exportTable) { 
                 ctx.AddError(TIssue(ctxToClone.GetPosition(import.first->Pos()),
                     TStringBuilder() << "Library '" << lib.first << "' has unresolved dependency from '" << import.second.first << "'."));
                 return false;
@@ -188,7 +188,7 @@ bool LinkLibraries(THashMap<TString, TLibraryCohesion>& libs, TExprContext& ctx,
     return true;
 }
 
-bool CompileLibraries(const TUserDataTable& userData, TExprContext& ctx, TModulesTable& modules, bool optimize)
+bool CompileLibraries(const TUserDataTable& userData, TExprContext& ctx, TModulesTable& modules, bool optimize) 
 {
     THashMap<TString, TLibraryCohesion> libs;
     for (const auto& data : userData) {
@@ -202,15 +202,15 @@ bool CompileLibraries(const TUserDataTable& userData, TExprContext& ctx, TModule
             }
 
             if (!libraryData.empty()) {
-                if (CompileLibrary(alias, libraryData, ctx, libs[alias], optimize))
-                    modules[TModuleResolver::NormalizeModuleName(alias)] = libs[alias].Exports;
+                if (CompileLibrary(alias, libraryData, ctx, libs[alias], optimize)) 
+                    modules[TModuleResolver::NormalizeModuleName(alias)] = libs[alias].Exports; 
                 else
                     return false;
             }
         }
     }
 
-    return LinkLibraries(libs, ctx, ctx);
+    return LinkLibraries(libs, ctx, ctx); 
 }
 
 }

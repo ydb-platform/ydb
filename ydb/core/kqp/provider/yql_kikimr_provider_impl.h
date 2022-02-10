@@ -5,8 +5,8 @@
 #include <ydb/core/kqp/provider/yql_kikimr_expr_nodes.h>
 #include <ydb/core/kqp/provider/yql_kikimr_results.h>
 
-#include <ydb/library/yql/providers/common/provider/yql_provider.h>
-#include <ydb/library/yql/providers/common/provider/yql_table_lookup.h>
+#include <ydb/library/yql/providers/common/provider/yql_provider.h> 
+#include <ydb/library/yql/providers/common/provider/yql_table_lookup.h> 
 
 
 namespace NYql {

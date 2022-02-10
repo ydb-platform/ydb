@@ -7,10 +7,10 @@ ids {
   severity: S_ERROR
 }
 ids {
-  code: INFO
-  severity: S_INFO
-}
-ids {
+  code: INFO 
+  severity: S_INFO 
+} 
+ids { 
   code: SUCCESS
   severity: S_INFO
 }
@@ -20,20 +20,20 @@ ids {
 }
 ids {
   code: CORE
-  severity: S_INFO
+  severity: S_INFO 
 }
 ids {
   code: CORE_GC
-  severity: S_INFO
+  severity: S_INFO 
 }
 ids {
   code: CORE_PRE_TYPE_ANN
-  severity: S_INFO
+  severity: S_INFO 
   format: "Pre type annotation"
 }
 ids {
   code: CORE_TYPE_ANN
-  severity: S_INFO
+  severity: S_INFO 
   format: "Type annotation"
 }
 ids {
@@ -43,47 +43,47 @@ ids {
 }
 ids {
   code: CORE_INTENT
-  severity: S_INFO
+  severity: S_INFO 
   format: "Table intent determination"
 }
 ids {
   code: CORE_TABLE_METADATA_LOADER
-  severity: S_INFO
+  severity: S_INFO 
   format: "Table metadata loading"
 }
 ids {
   code: CORE_EXEC
-  severity: S_INFO
+  severity: S_INFO 
   format: "Execution"
 }
 ids {
   code: CORE_OPTIMIZATION
-  severity: S_INFO
+  severity: S_INFO 
   format: "Optimization"
 }
 ids {
-  code: CORE_PARAM_EVALUATION
-  severity: S_INFO
-  format: "Parameters evaluation"
-}
-ids {
-  code: CORE_EXPR_EVALUATION
-  severity: S_INFO
-  format: "Expression evaluation"
-}
-ids {
-  code: CORE_CAST_YSON_JSON_BYTES
-  severity: S_WARNING
-}
-ids {
-  code: CORE_FREE_TABLE_PATH_RECORD
-  severity: S_WARNING
-}
-ids {
-  code: CORE_CAST_INTEGRAL_TO_TIMESTAMP_UNSAFE
-  severity: S_WARNING
-}
-ids {
+  code: CORE_PARAM_EVALUATION 
+  severity: S_INFO 
+  format: "Parameters evaluation" 
+} 
+ids { 
+  code: CORE_EXPR_EVALUATION 
+  severity: S_INFO 
+  format: "Expression evaluation" 
+} 
+ids { 
+  code: CORE_CAST_YSON_JSON_BYTES 
+  severity: S_WARNING 
+} 
+ids { 
+  code: CORE_FREE_TABLE_PATH_RECORD 
+  severity: S_WARNING 
+} 
+ids { 
+  code: CORE_CAST_INTEGRAL_TO_TIMESTAMP_UNSAFE 
+  severity: S_WARNING 
+} 
+ids { 
   code: CORE_FREE_KEY_SWITCH
   severity: S_WARNING
 }
@@ -96,14 +96,14 @@ ids {
   severity: S_WARNING
 }
 ids {
-  code: CORE_FLATTEN_BY_OPT
-  severity: S_WARNING
-}
-ids {
-  code: CORE_IMPLICIT_BITCAST
-  severity: S_WARNING
-}
-ids {
+  code: CORE_FLATTEN_BY_OPT 
+  severity: S_WARNING 
+} 
+ids { 
+  code: CORE_IMPLICIT_BITCAST 
+  severity: S_WARNING 
+} 
+ids { 
   code: CORE_LEGACY_IN_FOR_EMPTY_OR_NULLABLE
   severity: S_WARNING
 }
@@ -132,7 +132,7 @@ ids {
   severity: S_ERROR
   format: "Transaction locks invalidated."
 }
-ids {
+ids { 
   code: KIKIMR_LOCKS_ACQUIRE_FAILURE
   severity: S_ERROR
   format: "Failed to acquire transaction locks."
@@ -304,14 +304,14 @@ ids {
   code: YQL_AGGREGATE_BY_WIN_FUNC_WITHOUT_ORDER_BY
   severity: S_WARNING
 }
-ids {
-  code: YQL_DEPRECATED_INFERSCHEME
-  severity: S_WARNING
-}
-ids {
-  code: YQL_ORDER_BY_WITHOUT_LIMIT_IN_SUBQUERY
-  severity: S_WARNING
-}
+ids { 
+  code: YQL_DEPRECATED_INFERSCHEME 
+  severity: S_WARNING 
+} 
+ids { 
+  code: YQL_ORDER_BY_WITHOUT_LIMIT_IN_SUBQUERY 
+  severity: S_WARNING 
+} 
 ids {
   code: YQL_DEPRECATED_DOUBLE_QUOTE_IN_BRACKETS
   severity: S_WARNING
@@ -571,10 +571,10 @@ ids {
 ids {
   code: YQL_UNUSED_SYMBOL
   severity: S_WARNING
-}
-ids {
-  code: YQL_MIXED_TZ
-  severity: S_WARNING
+} 
+ids { 
+  code: YQL_MIXED_TZ 
+  severity: S_WARNING 
 }
 ids {
   code: YQL_OPERATION_WILL_RETURN_NULL
@@ -585,10 +585,10 @@ ids {
   severity: S_WARNING
 }
 ids {
-  code: YQL_DEPRECATED_LIST_FLATMAP_OPTIONAL
-  severity: S_WARNING
-}
-ids {
+  code: YQL_DEPRECATED_LIST_FLATMAP_OPTIONAL 
+  severity: S_WARNING 
+} 
+ids { 
   code: YQL_PROJECTION_ALIAS_IS_REFERENCED_IN_GROUP_BY
   severity: S_WARNING
 }

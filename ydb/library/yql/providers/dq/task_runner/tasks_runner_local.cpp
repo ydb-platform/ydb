@@ -1,17 +1,17 @@
 #include "tasks_runner_local.h"
 #include "file_cache.h"
 
-#include <ydb/library/yql/providers/dq/counters/counters.h>
-#include <ydb/library/yql/dq/runtime/dq_input_channel.h>
-#include <ydb/library/yql/dq/runtime/dq_output_channel.h>
-#include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
-#include <ydb/library/yql/minikql/mkql_node_serialization.h>
-#include <ydb/library/yql/minikql/mkql_node_cast.h>
-#include <ydb/library/yql/minikql/mkql_program_builder.h>
-#include <ydb/library/yql/minikql/aligned_page_pool.h>
+#include <ydb/library/yql/providers/dq/counters/counters.h> 
+#include <ydb/library/yql/dq/runtime/dq_input_channel.h> 
+#include <ydb/library/yql/dq/runtime/dq_output_channel.h> 
+#include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h> 
+#include <ydb/library/yql/minikql/mkql_node_serialization.h> 
+#include <ydb/library/yql/minikql/mkql_node_cast.h> 
+#include <ydb/library/yql/minikql/mkql_program_builder.h> 
+#include <ydb/library/yql/minikql/aligned_page_pool.h> 
 #include <ydb/library/yql/utils/log/log.h>
 #include <ydb/library/yql/utils/backtrace/backtrace.h>
-#include <ydb/library/yql/utils/yql_panic.h>
+#include <ydb/library/yql/utils/yql_panic.h> 
 
 #include <library/cpp/yson/node/node.h>
 #include <library/cpp/yson/node/node_io.h>
@@ -239,12 +239,12 @@ protected:
 
 class TLocalFactory: public TAbstractFactory {
 public:
-    TLocalFactory(const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
-        NKikimr::NMiniKQL::TComputationNodeFactory compFactory,
-        TTaskTransformFactory taskTransformFactory,
-        bool terminateOnError)
+    TLocalFactory(const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry, 
+        NKikimr::NMiniKQL::TComputationNodeFactory compFactory, 
+        TTaskTransformFactory taskTransformFactory, 
+        bool terminateOnError) 
         : TAbstractFactory(functionRegistry, compFactory, taskTransformFactory)
-        , TerminateOnError(terminateOnError)
+        , TerminateOnError(terminateOnError) 
     { }
 
     ITaskRunner::TPtr GetOld(const NDqProto::TDqTask& task, const TString& traceId) override {
@@ -254,7 +254,7 @@ public:
     TIntrusivePtr<NDq::IDqTaskRunner> Get(const NDqProto::TDqTask& task, const TString& traceId) override {
         Y_UNUSED(traceId);
         NDq::TDqTaskRunnerSettings settings;
-        settings.TerminateOnError = TerminateOnError;
+        settings.TerminateOnError = TerminateOnError; 
         settings.CollectBasicStats = true;
         settings.CollectProfileStats = true;
         settings.AllowGeneratorsInUnboxedValues = true;
@@ -277,16 +277,16 @@ public:
         ctx.FuncProvider = TaskTransformFactory(settings.TaskParams, ctx.FuncRegistry);
         return MakeDqTaskRunner(ctx, settings, { });
     }
-
-private:
-    const bool TerminateOnError;
+ 
+private: 
+    const bool TerminateOnError; 
 };
 
 IProxyFactory::TPtr CreateFactory(const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
     NKikimr::NMiniKQL::TComputationNodeFactory compFactory,
-    TTaskTransformFactory taskTransformFactory, bool terminateOnError)
+    TTaskTransformFactory taskTransformFactory, bool terminateOnError) 
 {
-    return new TLocalFactory(functionRegistry, compFactory, taskTransformFactory, terminateOnError);
+    return new TLocalFactory(functionRegistry, compFactory, taskTransformFactory, terminateOnError); 
 }
 
 } // namespace NYql::NTaskRunnerProxy

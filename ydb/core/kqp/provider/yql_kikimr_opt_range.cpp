@@ -1,10 +1,10 @@
 #include "yql_kikimr_provider_impl.h"
 #include "yql_kikimr_opt_utils.h"
 
-#include <ydb/library/yql/core/common_opt/yql_co_sqlin.h>
-#include <ydb/library/yql/core/yql_opt_utils.h>
+#include <ydb/library/yql/core/common_opt/yql_co_sqlin.h> 
+#include <ydb/library/yql/core/yql_opt_utils.h> 
 #include <ydb/library/yql/utils/log/log.h>
-#include <ydb/library/yql/utils/utf8.h>
+#include <ydb/library/yql/utils/utf8.h> 
 
 namespace NYql {
 namespace {
@@ -179,7 +179,7 @@ TMaybeNode<TExprBase> KiTableLookupGetValue(TExprBase node, const TTypeAnnotatio
         return TMaybeNode<TExprBase>();
     }
 
-    const auto& dataTypeName = targetType->Cast<TDataExprType>()->GetName();
+    const auto& dataTypeName = targetType->Cast<TDataExprType>()->GetName(); 
 
     TExprBase valueNode = node;
     if (isTargetOptional) {
@@ -201,7 +201,7 @@ TMaybeNode<TExprBase> KiTableLookupGetValue(TExprBase node, const TTypeAnnotatio
             return valueNode;
         }
 
-        if (AllowIntegralConversion(maybeInt.Cast(), false, NKikimr::NUdf::GetDataSlot(dataTypeName))) {
+        if (AllowIntegralConversion(maybeInt.Cast(), false, NKikimr::NUdf::GetDataSlot(dataTypeName))) { 
             literal = maybeInt.Cast().Literal().Ptr();
         }
     }
@@ -250,7 +250,7 @@ TMaybeNode<TExprBase> KiTableLookupGetValue(TExprBase node, const TTypeAnnotatio
     }
 
     if (valueType->GetKind() == ETypeAnnotationKind::Data &&
-        valueType->Cast<TDataExprType>()->GetName() == dataTypeName)
+        valueType->Cast<TDataExprType>()->GetName() == dataTypeName) 
     {
         return node;
     }

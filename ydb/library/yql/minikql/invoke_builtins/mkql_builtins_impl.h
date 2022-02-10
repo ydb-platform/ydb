@@ -1,11 +1,11 @@
-#pragma once
-
-#include <ydb/library/yql/minikql/defs.h>
+#pragma once 
+ 
+#include <ydb/library/yql/minikql/defs.h> 
 #include <ydb/library/yql/public/udf/udf_value.h>
 #include <ydb/library/yql/public/udf/udf_types.h>
-#include <ydb/library/yql/minikql/mkql_function_metadata.h>
-#include <util/string/cast.h>
-
+#include <ydb/library/yql/minikql/mkql_function_metadata.h> 
+#include <util/string/cast.h> 
+ 
 #include "mkql_builtins_codegen.h"
 
 namespace NKikimr {
@@ -17,7 +17,7 @@ struct TUnaryStub {
         return TFunc::Execute(*args);
     }
 
-#ifndef MKQL_DISABLE_CODEGEN
+#ifndef MKQL_DISABLE_CODEGEN 
     template<typename TFunc>
     static Value* Generate(Value *const * args, const TCodegenContext& ctx, BasicBlock*& block) {
         return GenerateUnaryWithoutCheck(*args, ctx, block, &TFunc::Generate);
@@ -50,7 +50,7 @@ struct TBinaryWrap {
         return TFunc::Execute(args[0], args[1]);
     }
 
-#ifndef MKQL_DISABLE_CODEGEN
+#ifndef MKQL_DISABLE_CODEGEN 
     template<typename TFunc>
     static Value* Generate(Value *const * args, const TCodegenContext& ctx, BasicBlock*& block) {
         return GenerateBinary<CheckLeft, CheckRight>(args[0], args[1], ctx, block, &TFunc::Generate);
@@ -68,7 +68,7 @@ struct TAggregateWrap {
         return TFunc::Execute(args[0], args[1]);
     }
 
-#ifndef MKQL_DISABLE_CODEGEN
+#ifndef MKQL_DISABLE_CODEGEN 
     template<typename TFunc>
     static Value* Generate(Value *const * args, const TCodegenContext& ctx, BasicBlock*& block) {
         return GenerateAggregate(args[0], args[1], ctx, block, &TFunc::Generate);
@@ -134,7 +134,7 @@ struct TSimpleArithmeticUnary : public TArithmeticConstraintsSame<TInput, TOutpu
         return NUdf::TUnboxedValuePod(TImpl::Do(arg.template Get<TInput>()));
     }
 
-#ifndef MKQL_DISABLE_CODEGEN
+#ifndef MKQL_DISABLE_CODEGEN 
     static Value* Generate(Value* arg, const TCodegenContext& ctx, BasicBlock*& block)
     {
         auto& context = ctx.Codegen->GetContext();
@@ -152,7 +152,7 @@ struct TSimpleArithmeticBinary : public TArithmeticConstraintsBinary<TLeft, TRig
         return NUdf::TUnboxedValuePod(TImpl::Do(left.template Get<TLeft>(), right.template Get<TRight>()));
     }
 
-#ifndef MKQL_DISABLE_CODEGEN
+#ifndef MKQL_DISABLE_CODEGEN 
     static Value* Generate(Value* left, Value* right, const TCodegenContext& ctx, BasicBlock*& block)
     {
         auto& context = ctx.Codegen->GetContext();
@@ -171,7 +171,7 @@ struct TShiftArithmeticBinary : public TArithmeticConstraintsSame<TInput, TOutpu
         return NUdf::TUnboxedValuePod(TImpl::Do(left.template Get<TInput>(), right.Get<ui8>()));
     }
 
-#ifndef MKQL_DISABLE_CODEGEN
+#ifndef MKQL_DISABLE_CODEGEN 
     static Value* Generate(Value* left, Value* right, const TCodegenContext& ctx, BasicBlock*& block)
     {
         auto& context = ctx.Codegen->GetContext();
@@ -184,93 +184,93 @@ struct TShiftArithmeticBinary : public TArithmeticConstraintsSame<TInput, TOutpu
 #endif
 };
 
-template <typename TInput, typename TOutput>
-struct TUnaryArgs {
-    static const TFunctionParamMetadata Value[3];
-};
-
-template <typename TInput, typename TOutput>
-const TFunctionParamMetadata TUnaryArgs<TInput, TOutput>::Value[3] = {
-    { TOutput::Id, 0 },
-    { TInput::Id, 0 },
-    { 0, 0 }
-};
-
-template <typename TInput, typename TOutput, bool IsOptional>
-struct TUnaryArgsOpt {
-    static const TFunctionParamMetadata Value[3];
-};
-
-template <typename TInput, typename TOutput, bool IsOptional>
-const TFunctionParamMetadata TUnaryArgsOpt<TInput, TOutput, IsOptional>::Value[3] = {
-    { TOutput::Id, IsOptional ? TFunctionParamMetadata::FlagIsNullable : 0 },
-    { TInput::Id, IsOptional ? TFunctionParamMetadata::FlagIsNullable : 0 },
-    { 0, 0 }
-};
-
-template <typename TInput, typename TOutput>
-struct TUnaryArgsWithNullableResult {
-    static const TFunctionParamMetadata Value[3];
-};
-
-template <typename TInput, typename TOutput>
-const TFunctionParamMetadata TUnaryArgsWithNullableResult<TInput, TOutput>::Value[3] = {
-    { TOutput::Id, TFunctionParamMetadata::FlagIsNullable },
-    { TInput::Id, 0 },
-    { 0, 0 }
-};
-
-template <typename TInput, typename TOutput, bool IsOptional>
-struct TUnaryArgsWithNullableResultOpt {
-    static const TFunctionParamMetadata Value[3];
-};
-
-template <typename TInput, typename TOutput, bool IsOptional>
-const TFunctionParamMetadata TUnaryArgsWithNullableResultOpt<TInput, TOutput, IsOptional>::Value[3] = {
-    { TOutput::Id, TFunctionParamMetadata::FlagIsNullable },
-    { TInput::Id, IsOptional ? TFunctionParamMetadata::FlagIsNullable : 0 },
-    { 0, 0 }
-};
-
-template <typename TInput, typename TOutput>
-struct TBinaryArgs {
-    static const TFunctionParamMetadata Value[4];
-};
-
-template <typename TInput, typename TOutput>
-const TFunctionParamMetadata TBinaryArgs<TInput, TOutput>::Value[4] = {
-    { TOutput::Id, 0 },
-    { TInput::Id, 0 },
-    { TInput::Id, 0 },
-    { 0, 0 }
-};
-
-template <typename TInput1, typename TInput2, typename TOutput, bool IsLeftOptional, bool IsRightOptional>
-struct TBinaryArgsOpt {
-    static const TFunctionParamMetadata Value[4];
-};
-
-template <typename TInput1, typename TInput2, typename TOutput, bool IsLeftOptional, bool IsRightOptional>
-const TFunctionParamMetadata TBinaryArgsOpt<TInput1, TInput2, TOutput, IsLeftOptional, IsRightOptional>::Value[4] = {
-    { TOutput::Id, (IsLeftOptional || IsRightOptional) ? TFunctionParamMetadata::FlagIsNullable : 0 },
-    { TInput1::Id, IsLeftOptional ? TFunctionParamMetadata::FlagIsNullable : 0 },
-    { TInput2::Id, IsRightOptional ? TFunctionParamMetadata::FlagIsNullable : 0 },
-    { 0, 0 }
-};
-
-template <typename TInput, typename TOutput, bool IsOptional>
-struct TBinaryArgsSameOpt {
-    static const TFunctionParamMetadata Value[4];
-};
-
-template <typename TInput, typename TOutput, bool IsOptional>
-const TFunctionParamMetadata TBinaryArgsSameOpt<TInput, TOutput, IsOptional>::Value[4] = {
-    { TOutput::Id, IsOptional ? TFunctionParamMetadata::FlagIsNullable : 0 },
-    { TInput::Id, IsOptional ? TFunctionParamMetadata::FlagIsNullable : 0 },
-    { TInput::Id, IsOptional ? TFunctionParamMetadata::FlagIsNullable : 0 },
-    { 0, 0 }
-};
-
+template <typename TInput, typename TOutput> 
+struct TUnaryArgs { 
+    static const TFunctionParamMetadata Value[3]; 
+}; 
+ 
+template <typename TInput, typename TOutput> 
+const TFunctionParamMetadata TUnaryArgs<TInput, TOutput>::Value[3] = { 
+    { TOutput::Id, 0 }, 
+    { TInput::Id, 0 }, 
+    { 0, 0 } 
+}; 
+ 
+template <typename TInput, typename TOutput, bool IsOptional> 
+struct TUnaryArgsOpt { 
+    static const TFunctionParamMetadata Value[3]; 
+}; 
+ 
+template <typename TInput, typename TOutput, bool IsOptional> 
+const TFunctionParamMetadata TUnaryArgsOpt<TInput, TOutput, IsOptional>::Value[3] = { 
+    { TOutput::Id, IsOptional ? TFunctionParamMetadata::FlagIsNullable : 0 }, 
+    { TInput::Id, IsOptional ? TFunctionParamMetadata::FlagIsNullable : 0 }, 
+    { 0, 0 } 
+}; 
+ 
+template <typename TInput, typename TOutput> 
+struct TUnaryArgsWithNullableResult { 
+    static const TFunctionParamMetadata Value[3]; 
+}; 
+ 
+template <typename TInput, typename TOutput> 
+const TFunctionParamMetadata TUnaryArgsWithNullableResult<TInput, TOutput>::Value[3] = { 
+    { TOutput::Id, TFunctionParamMetadata::FlagIsNullable }, 
+    { TInput::Id, 0 }, 
+    { 0, 0 } 
+}; 
+ 
+template <typename TInput, typename TOutput, bool IsOptional> 
+struct TUnaryArgsWithNullableResultOpt { 
+    static const TFunctionParamMetadata Value[3]; 
+}; 
+ 
+template <typename TInput, typename TOutput, bool IsOptional> 
+const TFunctionParamMetadata TUnaryArgsWithNullableResultOpt<TInput, TOutput, IsOptional>::Value[3] = { 
+    { TOutput::Id, TFunctionParamMetadata::FlagIsNullable }, 
+    { TInput::Id, IsOptional ? TFunctionParamMetadata::FlagIsNullable : 0 }, 
+    { 0, 0 } 
+}; 
+ 
+template <typename TInput, typename TOutput> 
+struct TBinaryArgs { 
+    static const TFunctionParamMetadata Value[4]; 
+}; 
+ 
+template <typename TInput, typename TOutput> 
+const TFunctionParamMetadata TBinaryArgs<TInput, TOutput>::Value[4] = { 
+    { TOutput::Id, 0 }, 
+    { TInput::Id, 0 }, 
+    { TInput::Id, 0 }, 
+    { 0, 0 } 
+}; 
+ 
+template <typename TInput1, typename TInput2, typename TOutput, bool IsLeftOptional, bool IsRightOptional> 
+struct TBinaryArgsOpt { 
+    static const TFunctionParamMetadata Value[4]; 
+}; 
+ 
+template <typename TInput1, typename TInput2, typename TOutput, bool IsLeftOptional, bool IsRightOptional> 
+const TFunctionParamMetadata TBinaryArgsOpt<TInput1, TInput2, TOutput, IsLeftOptional, IsRightOptional>::Value[4] = { 
+    { TOutput::Id, (IsLeftOptional || IsRightOptional) ? TFunctionParamMetadata::FlagIsNullable : 0 }, 
+    { TInput1::Id, IsLeftOptional ? TFunctionParamMetadata::FlagIsNullable : 0 }, 
+    { TInput2::Id, IsRightOptional ? TFunctionParamMetadata::FlagIsNullable : 0 }, 
+    { 0, 0 } 
+}; 
+ 
+template <typename TInput, typename TOutput, bool IsOptional> 
+struct TBinaryArgsSameOpt { 
+    static const TFunctionParamMetadata Value[4]; 
+}; 
+ 
+template <typename TInput, typename TOutput, bool IsOptional> 
+const TFunctionParamMetadata TBinaryArgsSameOpt<TInput, TOutput, IsOptional>::Value[4] = { 
+    { TOutput::Id, IsOptional ? TFunctionParamMetadata::FlagIsNullable : 0 }, 
+    { TInput::Id, IsOptional ? TFunctionParamMetadata::FlagIsNullable : 0 }, 
+    { TInput::Id, IsOptional ? TFunctionParamMetadata::FlagIsNullable : 0 }, 
+    { 0, 0 } 
+}; 
+ 
 template <typename TInput, typename TOutput, bool IsOptional>
 struct TBinaryArgsSameOptArgsWithNullableResult {
     static const TFunctionParamMetadata Value[4];
@@ -284,45 +284,45 @@ const TFunctionParamMetadata TBinaryArgsSameOptArgsWithNullableResult<TInput, TO
     { 0, 0 }
 };
 
-template <typename TInput, typename TOutput>
-struct TBinaryShiftArgs {
-    static const TFunctionParamMetadata Value[4];
-};
-
-template <typename TInput, typename TOutput>
-const TFunctionParamMetadata TBinaryShiftArgs<TInput, TOutput>::Value[4] = {
-    { TOutput::Id, 0 },
-    { TInput::Id, 0 },
-    { NUdf::TDataType<ui8>::Id, 0 },
-    { 0, 0 }
-};
-
-template <typename TInput, typename TOutput, bool IsOptional>
-struct TBinaryShiftArgsOpt {
-    static const TFunctionParamMetadata Value[4];
-};
-
-template <typename TInput, typename TOutput, bool IsOptional>
-const TFunctionParamMetadata TBinaryShiftArgsOpt<TInput, TOutput, IsOptional>::Value[4] = {
-    { TOutput::Id, IsOptional ? TFunctionParamMetadata::FlagIsNullable : 0 },
-    { TInput::Id, IsOptional ? TFunctionParamMetadata::FlagIsNullable : 0 },
-    { NUdf::TDataType<ui8>::Id, 0 },
-    { 0, 0 }
-};
-
-template <typename TInput, typename TOutput>
-struct TBinaryArgsWithNullableResult {
-    static const TFunctionParamMetadata Value[4];
-};
-
-template <typename TInput, typename TOutput>
-const TFunctionParamMetadata TBinaryArgsWithNullableResult<TInput, TOutput>::Value[4] = {
-    { TOutput::Id, TFunctionParamMetadata::FlagIsNullable },
-    { TInput::Id, 0 },
-    { TInput::Id, 0 },
-    { 0, 0 }
-};
-
+template <typename TInput, typename TOutput> 
+struct TBinaryShiftArgs { 
+    static const TFunctionParamMetadata Value[4]; 
+}; 
+ 
+template <typename TInput, typename TOutput> 
+const TFunctionParamMetadata TBinaryShiftArgs<TInput, TOutput>::Value[4] = { 
+    { TOutput::Id, 0 }, 
+    { TInput::Id, 0 }, 
+    { NUdf::TDataType<ui8>::Id, 0 }, 
+    { 0, 0 } 
+}; 
+ 
+template <typename TInput, typename TOutput, bool IsOptional> 
+struct TBinaryShiftArgsOpt { 
+    static const TFunctionParamMetadata Value[4]; 
+}; 
+ 
+template <typename TInput, typename TOutput, bool IsOptional> 
+const TFunctionParamMetadata TBinaryShiftArgsOpt<TInput, TOutput, IsOptional>::Value[4] = { 
+    { TOutput::Id, IsOptional ? TFunctionParamMetadata::FlagIsNullable : 0 }, 
+    { TInput::Id, IsOptional ? TFunctionParamMetadata::FlagIsNullable : 0 }, 
+    { NUdf::TDataType<ui8>::Id, 0 }, 
+    { 0, 0 } 
+}; 
+ 
+template <typename TInput, typename TOutput> 
+struct TBinaryArgsWithNullableResult { 
+    static const TFunctionParamMetadata Value[4]; 
+}; 
+ 
+template <typename TInput, typename TOutput> 
+const TFunctionParamMetadata TBinaryArgsWithNullableResult<TInput, TOutput>::Value[4] = { 
+    { TOutput::Id, TFunctionParamMetadata::FlagIsNullable }, 
+    { TInput::Id, 0 }, 
+    { TInput::Id, 0 }, 
+    { 0, 0 } 
+}; 
+ 
 template <typename TOutput, typename TInput1, typename TInput2, typename TInput3, bool IsFirstOptional, bool IsSecondOptional, bool IsThirdOptional, bool IsResultOptional = IsFirstOptional>
 struct TTernaryArgs {
     static const TFunctionParamMetadata Value[5];
@@ -337,59 +337,59 @@ const TFunctionParamMetadata TTernaryArgs<TOutput, TInput1, TInput2, TInput3, Is
     { 0, 0 }
 };
 
-template <typename TInput1, typename TInput2, typename TOutput, bool IsLeftOptional, bool IsRightOptional>
-struct TBinaryArgsOptWithNullableResult {
-    static const TFunctionParamMetadata Value[4];
-};
-
-template <typename TInput1, typename TInput2, typename TOutput, bool IsLeftOptional, bool IsRightOptional>
-const TFunctionParamMetadata TBinaryArgsOptWithNullableResult<TInput1, TInput2, TOutput, IsLeftOptional, IsRightOptional>::Value[4] = {
-    { TOutput::Id, TFunctionParamMetadata::FlagIsNullable },
-    { TInput1::Id, IsLeftOptional ? TFunctionParamMetadata::FlagIsNullable : 0 },
-    { TInput2::Id, IsRightOptional ? TFunctionParamMetadata::FlagIsNullable : 0 },
-    { 0, 0 }
-};
-
+template <typename TInput1, typename TInput2, typename TOutput, bool IsLeftOptional, bool IsRightOptional> 
+struct TBinaryArgsOptWithNullableResult { 
+    static const TFunctionParamMetadata Value[4]; 
+}; 
+ 
+template <typename TInput1, typename TInput2, typename TOutput, bool IsLeftOptional, bool IsRightOptional> 
+const TFunctionParamMetadata TBinaryArgsOptWithNullableResult<TInput1, TInput2, TOutput, IsLeftOptional, IsRightOptional>::Value[4] = { 
+    { TOutput::Id, TFunctionParamMetadata::FlagIsNullable }, 
+    { TInput1::Id, IsLeftOptional ? TFunctionParamMetadata::FlagIsNullable : 0 }, 
+    { TInput2::Id, IsRightOptional ? TFunctionParamMetadata::FlagIsNullable : 0 }, 
+    { 0, 0 } 
+}; 
+ 
 template <typename TFunc, typename TArgs, typename TWrap>
 void RegisterFunctionImpl(IBuiltinFunctionRegistry& registry, const std::string_view& name) {
-#ifndef MKQL_DISABLE_CODEGEN
+#ifndef MKQL_DISABLE_CODEGEN 
     const TFunctionDescriptor description(TArgs::Value, &TWrap::template Execute<TFunc>, reinterpret_cast<void*>(&TWrap::template Generate<TFunc>));
 #else
     const TFunctionDescriptor description(TArgs::Value, &TWrap::template Execute<TFunc>);
 #endif
     registry.Register(name, description);
-}
-
-template <
-    typename TInput, typename TOutput,
-    template<typename, typename> class TFunc,
-    template<typename, typename> class TArgs
->
+} 
+ 
+template < 
+    typename TInput, typename TOutput, 
+    template<typename, typename> class TFunc, 
+    template<typename, typename> class TArgs 
+> 
 void RegisterFunction(IBuiltinFunctionRegistry& registry, const std::string_view& name) {
     RegisterFunctionImpl<TFunc<TInput, TOutput>, TArgs<TInput, TOutput>, TUnaryStub>(registry, name);
-}
-
-template <
-    typename TInput, typename TOutput,
+} 
+ 
+template < 
+    typename TInput, typename TOutput, 
     class TFunc,
-    template<typename, typename, bool> class TArgs
->
+    template<typename, typename, bool> class TArgs 
+> 
 void RegisterFunctionOpt(IBuiltinFunctionRegistry& registry, const std::string_view& name) {
     RegisterFunctionImpl<TFunc, TArgs<TInput, TOutput, false>, TUnaryStub>(registry, name);
     RegisterFunctionImpl<TFunc, TArgs<TInput, TOutput, true>, TUnaryWrap>(registry, name);
-}
-
-template <
+} 
+ 
+template < 
     typename TType,
     template<NUdf::EDataSlot> class TFunc,
     template<typename, typename, bool> class TArgs
->
+> 
 void RegisterCustomAggregateFunction(IBuiltinFunctionRegistry& registry, const std::string_view& name) {
     RegisterFunctionImpl<TFunc<TType::Slot>, TArgs<TType, TType, false>, TBinaryWrap<false, false>>(registry, name);
     RegisterFunctionImpl<TFunc<TType::Slot>, TArgs<TType, TType, true>, TAggregateWrap>(registry, name);
-}
-
-template <
+} 
+ 
+template < 
     typename TType,
     template<NUdf::EDataSlot> class TFunc,
     template<typename, typename, typename, bool, bool> class TArgs
@@ -424,118 +424,118 @@ void RegisterSameTypesFunction(IBuiltinFunctionRegistry& registry, const std::st
 }
 
 template <
-    typename TInput, typename TOutput,
+    typename TInput, typename TOutput, 
     template<typename, typename> class TFunc,
-    template<typename, typename, bool> class TArgs
->
+    template<typename, typename, bool> class TArgs 
+> 
 void RegisterFunctionUnOpt(IBuiltinFunctionRegistry& registry, const std::string_view& name) {
     RegisterFunctionImpl<TFunc<typename TInput::TLayout, typename TOutput::TLayout>, TArgs<TInput, TOutput, false>, TUnaryStub>(registry, name);
     RegisterFunctionImpl<TFunc<typename TInput::TLayout, typename TOutput::TLayout>, TArgs<TInput, TOutput, true>, TUnaryWrap>(registry, name);
-}
-
-template <
-    typename TInput1, typename TInput2, typename TOutput,
+} 
+ 
+template < 
+    typename TInput1, typename TInput2, typename TOutput, 
     template<typename, typename, typename> class TFunc,
-    template<typename, typename, typename, bool, bool> class TArgs
->
+    template<typename, typename, typename, bool, bool> class TArgs 
+> 
 void RegisterFunctionBinOpt(IBuiltinFunctionRegistry& registry, const std::string_view& name) {
     RegisterFunctionImpl<TFunc<typename TInput1::TLayout, typename TInput2::TLayout, typename TOutput::TLayout>, TArgs<TInput1, TInput2, TOutput, false, false>, TBinaryWrap<false, false>>(registry, name);
     RegisterFunctionImpl<TFunc<typename TInput1::TLayout, typename TInput2::TLayout, typename TOutput::TLayout>, TArgs<TInput1, TInput2, TOutput, false, true>, TBinaryWrap<false, true>>(registry, name);
     RegisterFunctionImpl<TFunc<typename TInput1::TLayout, typename TInput2::TLayout, typename TOutput::TLayout>, TArgs<TInput1, TInput2, TOutput, true, false>, TBinaryWrap<true, false>>(registry, name);
     RegisterFunctionImpl<TFunc<typename TInput1::TLayout, typename TInput2::TLayout, typename TOutput::TLayout>, TArgs<TInput1, TInput2, TOutput, true, true>, TBinaryWrap<true, true>>(registry, name);
-}
-
-template <
+} 
+ 
+template < 
     template<typename, typename, typename> class TFunc,
     template<typename, typename, typename, bool, bool> class TArgs
 >
 void RegisterBinaryUnsignedFunctionOpt(IBuiltinFunctionRegistry& registry, const std::string_view& name) {
     RegisterFunctionBinOpt<NUdf::TDataType<ui8>, NUdf::TDataType<ui8>, NUdf::TDataType<ui8>, TFunc, TArgs>(registry, name);
-    RegisterFunctionBinOpt<NUdf::TDataType<ui8>, NUdf::TDataType<ui16>, NUdf::TDataType<ui16>, TFunc, TArgs>(registry, name);
+    RegisterFunctionBinOpt<NUdf::TDataType<ui8>, NUdf::TDataType<ui16>, NUdf::TDataType<ui16>, TFunc, TArgs>(registry, name); 
     RegisterFunctionBinOpt<NUdf::TDataType<ui8>, NUdf::TDataType<ui32>, NUdf::TDataType<ui32>, TFunc, TArgs>(registry, name);
     RegisterFunctionBinOpt<NUdf::TDataType<ui8>, NUdf::TDataType<ui64>, NUdf::TDataType<ui64>, TFunc, TArgs>(registry, name);
-
-    RegisterFunctionBinOpt<NUdf::TDataType<ui16>, NUdf::TDataType<ui8>, NUdf::TDataType<ui16>, TFunc, TArgs>(registry, name);
-    RegisterFunctionBinOpt<NUdf::TDataType<ui16>, NUdf::TDataType<ui16>, NUdf::TDataType<ui16>, TFunc, TArgs>(registry, name);
-    RegisterFunctionBinOpt<NUdf::TDataType<ui16>, NUdf::TDataType<ui32>, NUdf::TDataType<ui32>, TFunc, TArgs>(registry, name);
-    RegisterFunctionBinOpt<NUdf::TDataType<ui16>, NUdf::TDataType<ui64>, NUdf::TDataType<ui64>, TFunc, TArgs>(registry, name);
-
+ 
+    RegisterFunctionBinOpt<NUdf::TDataType<ui16>, NUdf::TDataType<ui8>, NUdf::TDataType<ui16>, TFunc, TArgs>(registry, name); 
+    RegisterFunctionBinOpt<NUdf::TDataType<ui16>, NUdf::TDataType<ui16>, NUdf::TDataType<ui16>, TFunc, TArgs>(registry, name); 
+    RegisterFunctionBinOpt<NUdf::TDataType<ui16>, NUdf::TDataType<ui32>, NUdf::TDataType<ui32>, TFunc, TArgs>(registry, name); 
+    RegisterFunctionBinOpt<NUdf::TDataType<ui16>, NUdf::TDataType<ui64>, NUdf::TDataType<ui64>, TFunc, TArgs>(registry, name); 
+ 
     RegisterFunctionBinOpt<NUdf::TDataType<ui32>, NUdf::TDataType<ui8>, NUdf::TDataType<ui32>, TFunc, TArgs>(registry, name);
-    RegisterFunctionBinOpt<NUdf::TDataType<ui32>, NUdf::TDataType<ui16>, NUdf::TDataType<ui32>, TFunc, TArgs>(registry, name);
+    RegisterFunctionBinOpt<NUdf::TDataType<ui32>, NUdf::TDataType<ui16>, NUdf::TDataType<ui32>, TFunc, TArgs>(registry, name); 
     RegisterFunctionBinOpt<NUdf::TDataType<ui32>, NUdf::TDataType<ui32>, NUdf::TDataType<ui32>, TFunc, TArgs>(registry, name);
     RegisterFunctionBinOpt<NUdf::TDataType<ui32>, NUdf::TDataType<ui64>, NUdf::TDataType<ui64>, TFunc, TArgs>(registry, name);
 
     RegisterFunctionBinOpt<NUdf::TDataType<ui64>, NUdf::TDataType<ui8>, NUdf::TDataType<ui64>, TFunc, TArgs>(registry, name);
-    RegisterFunctionBinOpt<NUdf::TDataType<ui64>, NUdf::TDataType<ui16>, NUdf::TDataType<ui64>, TFunc, TArgs>(registry, name);
+    RegisterFunctionBinOpt<NUdf::TDataType<ui64>, NUdf::TDataType<ui16>, NUdf::TDataType<ui64>, TFunc, TArgs>(registry, name); 
     RegisterFunctionBinOpt<NUdf::TDataType<ui64>, NUdf::TDataType<ui32>, NUdf::TDataType<ui64>, TFunc, TArgs>(registry, name);
     RegisterFunctionBinOpt<NUdf::TDataType<ui64>, NUdf::TDataType<ui64>, NUdf::TDataType<ui64>, TFunc, TArgs>(registry, name);
-}
-
-template <
-    typename TInput, typename TOutput,
+} 
+ 
+template < 
+    typename TInput, typename TOutput, 
     template<typename, typename> class TFunc,
-    template<typename, typename, bool> class TArgs
->
+    template<typename, typename, bool> class TArgs 
+> 
 void RegisterShiftFunctionOpt(IBuiltinFunctionRegistry& registry, const std::string_view& name) {
     RegisterFunctionImpl<TFunc<typename TInput::TLayout, typename TOutput::TLayout>, TArgs<TInput, TOutput, false>, TBinaryWrap<false, false>>(registry, name);
     RegisterFunctionImpl<TFunc<typename TInput::TLayout, typename TOutput::TLayout>, TArgs<TInput, TOutput, true>, TBinaryWrap<true, false>>(registry, name);
-}
-
-template <
+} 
+ 
+template < 
     template<typename, typename> class TFunc,
-    template<typename, typename, bool> class TArgs
->
+    template<typename, typename, bool> class TArgs 
+> 
 void RegisterUnsignedShiftFunctionOpt(IBuiltinFunctionRegistry& registry, const std::string_view& name) {
     RegisterShiftFunctionOpt<NUdf::TDataType<ui8>, NUdf::TDataType<ui8>, TFunc, TArgs>(registry, name);
-    RegisterShiftFunctionOpt<NUdf::TDataType<ui16>, NUdf::TDataType<ui16>, TFunc, TArgs>(registry, name);
+    RegisterShiftFunctionOpt<NUdf::TDataType<ui16>, NUdf::TDataType<ui16>, TFunc, TArgs>(registry, name); 
     RegisterShiftFunctionOpt<NUdf::TDataType<ui32>, NUdf::TDataType<ui32>, TFunc, TArgs>(registry, name);
     RegisterShiftFunctionOpt<NUdf::TDataType<ui64>, NUdf::TDataType<ui64>, TFunc, TArgs>(registry, name);
-}
-
-template <
+} 
+ 
+template < 
     template<typename, typename> class TFunc,
-    template<typename, typename, bool> class TArgs
->
+    template<typename, typename, bool> class TArgs 
+> 
 void RegisterUnaryUnsignedFunctionOpt(IBuiltinFunctionRegistry& registry, const std::string_view& name) {
     RegisterFunctionUnOpt<NUdf::TDataType<ui8>, NUdf::TDataType<ui8>, TFunc, TArgs>(registry, name);
-    RegisterFunctionUnOpt<NUdf::TDataType<ui16>, NUdf::TDataType<ui16>, TFunc, TArgs>(registry, name);
+    RegisterFunctionUnOpt<NUdf::TDataType<ui16>, NUdf::TDataType<ui16>, TFunc, TArgs>(registry, name); 
     RegisterFunctionUnOpt<NUdf::TDataType<ui32>, NUdf::TDataType<ui32>, TFunc, TArgs>(registry, name);
     RegisterFunctionUnOpt<NUdf::TDataType<ui64>, NUdf::TDataType<ui64>, TFunc, TArgs>(registry, name);
-}
-
-template <
+} 
+ 
+template < 
     template<typename, typename> class TFunc,
-    template<typename, typename, bool> class TArgs
->
+    template<typename, typename, bool> class TArgs 
+> 
 void RegisterUnaryIntegralFunctionOpt(IBuiltinFunctionRegistry& registry, const std::string_view& name) {
     RegisterUnaryUnsignedFunctionOpt<TFunc, TArgs>(registry, name);
-
-    RegisterFunctionUnOpt<NUdf::TDataType<i8>, NUdf::TDataType<i8>, TFunc, TArgs>(registry, name);
-    RegisterFunctionUnOpt<NUdf::TDataType<i16>, NUdf::TDataType<i16>, TFunc, TArgs>(registry, name);
+ 
+    RegisterFunctionUnOpt<NUdf::TDataType<i8>, NUdf::TDataType<i8>, TFunc, TArgs>(registry, name); 
+    RegisterFunctionUnOpt<NUdf::TDataType<i16>, NUdf::TDataType<i16>, TFunc, TArgs>(registry, name); 
     RegisterFunctionUnOpt<NUdf::TDataType<i32>, NUdf::TDataType<i32>, TFunc, TArgs>(registry, name);
     RegisterFunctionUnOpt<NUdf::TDataType<i64>, NUdf::TDataType<i64>, TFunc, TArgs>(registry, name);
-}
-
-template <
+} 
+ 
+template < 
     template<typename, typename> class TFunc,
     template<typename, typename, bool> class TArgs
->
+> 
 void RegisterUnaryNumericFunctionOpt(IBuiltinFunctionRegistry& registry, const std::string_view& name) {
     RegisterUnaryIntegralFunctionOpt<TFunc, TArgs>(registry, name);
-
+ 
     RegisterFunctionUnOpt<NUdf::TDataType<float>, NUdf::TDataType<float>, TFunc, TArgs>(registry, name);
     RegisterFunctionUnOpt<NUdf::TDataType<double>, NUdf::TDataType<double>, TFunc, TArgs>(registry, name);
-}
-
-template <
+} 
+ 
+template < 
     template<typename, typename, typename> class TFunc,
-    template<typename, typename, typename, bool, bool> class TArgs
->
+    template<typename, typename, typename, bool, bool> class TArgs 
+> 
 void RegisterBinaryIntegralToUnsignedFunctionOpt(IBuiltinFunctionRegistry& registry, const std::string_view& name) {
     RegisterFunctionBinOpt<NUdf::TDataType<i8>, NUdf::TDataType<ui16>, NUdf::TDataType<ui16>, TFunc, TArgs>(registry, name);
     RegisterFunctionBinOpt<NUdf::TDataType<i8>, NUdf::TDataType<ui32>, NUdf::TDataType<ui32>, TFunc, TArgs>(registry, name);
     RegisterFunctionBinOpt<NUdf::TDataType<i8>, NUdf::TDataType<ui64>, NUdf::TDataType<ui64>, TFunc, TArgs>(registry, name);
-
+ 
     RegisterFunctionBinOpt<NUdf::TDataType<ui16>, NUdf::TDataType<i8>, NUdf::TDataType<ui16>, TFunc, TArgs>(registry, name);
 
     RegisterFunctionBinOpt<NUdf::TDataType<i16>, NUdf::TDataType<ui32>, NUdf::TDataType<ui32>, TFunc, TArgs>(registry, name);
@@ -556,78 +556,78 @@ template <
     template<typename, typename, typename, bool, bool> class TArgs
 >
 void RegisterBinaryIntegralToSignedFunctionOpt(IBuiltinFunctionRegistry& registry, const std::string_view& name) {
-    RegisterFunctionBinOpt<NUdf::TDataType<ui8>, NUdf::TDataType<i8>, NUdf::TDataType<i8>, TFunc, TArgs>(registry, name);
-    RegisterFunctionBinOpt<NUdf::TDataType<ui8>, NUdf::TDataType<i16>, NUdf::TDataType<i16>, TFunc, TArgs>(registry, name);
+    RegisterFunctionBinOpt<NUdf::TDataType<ui8>, NUdf::TDataType<i8>, NUdf::TDataType<i8>, TFunc, TArgs>(registry, name); 
+    RegisterFunctionBinOpt<NUdf::TDataType<ui8>, NUdf::TDataType<i16>, NUdf::TDataType<i16>, TFunc, TArgs>(registry, name); 
     RegisterFunctionBinOpt<NUdf::TDataType<ui8>, NUdf::TDataType<i32>, NUdf::TDataType<i32>, TFunc, TArgs>(registry, name);
     RegisterFunctionBinOpt<NUdf::TDataType<ui8>, NUdf::TDataType<i64>, NUdf::TDataType<i64>, TFunc, TArgs>(registry, name);
-
-    RegisterFunctionBinOpt<NUdf::TDataType<i8>, NUdf::TDataType<i8>, NUdf::TDataType<i8>, TFunc, TArgs>(registry, name);
-    RegisterFunctionBinOpt<NUdf::TDataType<i8>, NUdf::TDataType<ui8>, NUdf::TDataType<i8>, TFunc, TArgs>(registry, name);
-    RegisterFunctionBinOpt<NUdf::TDataType<i8>, NUdf::TDataType<i16>, NUdf::TDataType<i16>, TFunc, TArgs>(registry, name);
-    RegisterFunctionBinOpt<NUdf::TDataType<i8>, NUdf::TDataType<i32>, NUdf::TDataType<i32>, TFunc, TArgs>(registry, name);
-    RegisterFunctionBinOpt<NUdf::TDataType<i8>, NUdf::TDataType<i64>, NUdf::TDataType<i64>, TFunc, TArgs>(registry, name);
-
-    RegisterFunctionBinOpt<NUdf::TDataType<ui16>, NUdf::TDataType<i16>, NUdf::TDataType<i16>, TFunc, TArgs>(registry, name);
-    RegisterFunctionBinOpt<NUdf::TDataType<ui16>, NUdf::TDataType<i32>, NUdf::TDataType<i32>, TFunc, TArgs>(registry, name);
-    RegisterFunctionBinOpt<NUdf::TDataType<ui16>, NUdf::TDataType<i64>, NUdf::TDataType<i64>, TFunc, TArgs>(registry, name);
-
-    RegisterFunctionBinOpt<NUdf::TDataType<i16>, NUdf::TDataType<i8>, NUdf::TDataType<i16>, TFunc, TArgs>(registry, name);
-    RegisterFunctionBinOpt<NUdf::TDataType<i16>, NUdf::TDataType<ui8>, NUdf::TDataType<i16>, TFunc, TArgs>(registry, name);
-    RegisterFunctionBinOpt<NUdf::TDataType<i16>, NUdf::TDataType<i16>, NUdf::TDataType<i16>, TFunc, TArgs>(registry, name);
-    RegisterFunctionBinOpt<NUdf::TDataType<i16>, NUdf::TDataType<ui16>, NUdf::TDataType<i16>, TFunc, TArgs>(registry, name);
-    RegisterFunctionBinOpt<NUdf::TDataType<i16>, NUdf::TDataType<i32>, NUdf::TDataType<i32>, TFunc, TArgs>(registry, name);
-    RegisterFunctionBinOpt<NUdf::TDataType<i16>, NUdf::TDataType<i64>, NUdf::TDataType<i64>, TFunc, TArgs>(registry, name);
-
-    RegisterFunctionBinOpt<NUdf::TDataType<ui32>, NUdf::TDataType<i32>, NUdf::TDataType<i32>, TFunc, TArgs>(registry, name);
-    RegisterFunctionBinOpt<NUdf::TDataType<ui32>, NUdf::TDataType<i64>, NUdf::TDataType<i64>, TFunc, TArgs>(registry, name);
-
-    RegisterFunctionBinOpt<NUdf::TDataType<i32>, NUdf::TDataType<i8>, NUdf::TDataType<i32>, TFunc, TArgs>(registry, name);
+ 
+    RegisterFunctionBinOpt<NUdf::TDataType<i8>, NUdf::TDataType<i8>, NUdf::TDataType<i8>, TFunc, TArgs>(registry, name); 
+    RegisterFunctionBinOpt<NUdf::TDataType<i8>, NUdf::TDataType<ui8>, NUdf::TDataType<i8>, TFunc, TArgs>(registry, name); 
+    RegisterFunctionBinOpt<NUdf::TDataType<i8>, NUdf::TDataType<i16>, NUdf::TDataType<i16>, TFunc, TArgs>(registry, name); 
+    RegisterFunctionBinOpt<NUdf::TDataType<i8>, NUdf::TDataType<i32>, NUdf::TDataType<i32>, TFunc, TArgs>(registry, name); 
+    RegisterFunctionBinOpt<NUdf::TDataType<i8>, NUdf::TDataType<i64>, NUdf::TDataType<i64>, TFunc, TArgs>(registry, name); 
+ 
+    RegisterFunctionBinOpt<NUdf::TDataType<ui16>, NUdf::TDataType<i16>, NUdf::TDataType<i16>, TFunc, TArgs>(registry, name); 
+    RegisterFunctionBinOpt<NUdf::TDataType<ui16>, NUdf::TDataType<i32>, NUdf::TDataType<i32>, TFunc, TArgs>(registry, name); 
+    RegisterFunctionBinOpt<NUdf::TDataType<ui16>, NUdf::TDataType<i64>, NUdf::TDataType<i64>, TFunc, TArgs>(registry, name); 
+ 
+    RegisterFunctionBinOpt<NUdf::TDataType<i16>, NUdf::TDataType<i8>, NUdf::TDataType<i16>, TFunc, TArgs>(registry, name); 
+    RegisterFunctionBinOpt<NUdf::TDataType<i16>, NUdf::TDataType<ui8>, NUdf::TDataType<i16>, TFunc, TArgs>(registry, name); 
+    RegisterFunctionBinOpt<NUdf::TDataType<i16>, NUdf::TDataType<i16>, NUdf::TDataType<i16>, TFunc, TArgs>(registry, name); 
+    RegisterFunctionBinOpt<NUdf::TDataType<i16>, NUdf::TDataType<ui16>, NUdf::TDataType<i16>, TFunc, TArgs>(registry, name); 
+    RegisterFunctionBinOpt<NUdf::TDataType<i16>, NUdf::TDataType<i32>, NUdf::TDataType<i32>, TFunc, TArgs>(registry, name); 
+    RegisterFunctionBinOpt<NUdf::TDataType<i16>, NUdf::TDataType<i64>, NUdf::TDataType<i64>, TFunc, TArgs>(registry, name); 
+ 
+    RegisterFunctionBinOpt<NUdf::TDataType<ui32>, NUdf::TDataType<i32>, NUdf::TDataType<i32>, TFunc, TArgs>(registry, name); 
+    RegisterFunctionBinOpt<NUdf::TDataType<ui32>, NUdf::TDataType<i64>, NUdf::TDataType<i64>, TFunc, TArgs>(registry, name); 
+ 
+    RegisterFunctionBinOpt<NUdf::TDataType<i32>, NUdf::TDataType<i8>, NUdf::TDataType<i32>, TFunc, TArgs>(registry, name); 
     RegisterFunctionBinOpt<NUdf::TDataType<i32>, NUdf::TDataType<ui8>, NUdf::TDataType<i32>, TFunc, TArgs>(registry, name);
-    RegisterFunctionBinOpt<NUdf::TDataType<i32>, NUdf::TDataType<i16>, NUdf::TDataType<i32>, TFunc, TArgs>(registry, name);
-    RegisterFunctionBinOpt<NUdf::TDataType<i32>, NUdf::TDataType<ui16>, NUdf::TDataType<i32>, TFunc, TArgs>(registry, name);
+    RegisterFunctionBinOpt<NUdf::TDataType<i32>, NUdf::TDataType<i16>, NUdf::TDataType<i32>, TFunc, TArgs>(registry, name); 
+    RegisterFunctionBinOpt<NUdf::TDataType<i32>, NUdf::TDataType<ui16>, NUdf::TDataType<i32>, TFunc, TArgs>(registry, name); 
     RegisterFunctionBinOpt<NUdf::TDataType<i32>, NUdf::TDataType<i32>, NUdf::TDataType<i32>, TFunc, TArgs>(registry, name);
     RegisterFunctionBinOpt<NUdf::TDataType<i32>, NUdf::TDataType<ui32>, NUdf::TDataType<i32>, TFunc, TArgs>(registry, name);
     RegisterFunctionBinOpt<NUdf::TDataType<i32>, NUdf::TDataType<i64>, NUdf::TDataType<i64>, TFunc, TArgs>(registry, name);
-
-    RegisterFunctionBinOpt<NUdf::TDataType<ui64>, NUdf::TDataType<i64>, NUdf::TDataType<i64>, TFunc, TArgs>(registry, name);
-
-    RegisterFunctionBinOpt<NUdf::TDataType<i64>, NUdf::TDataType<i8>, NUdf::TDataType<i64>, TFunc, TArgs>(registry, name);
+ 
+    RegisterFunctionBinOpt<NUdf::TDataType<ui64>, NUdf::TDataType<i64>, NUdf::TDataType<i64>, TFunc, TArgs>(registry, name); 
+ 
+    RegisterFunctionBinOpt<NUdf::TDataType<i64>, NUdf::TDataType<i8>, NUdf::TDataType<i64>, TFunc, TArgs>(registry, name); 
     RegisterFunctionBinOpt<NUdf::TDataType<i64>, NUdf::TDataType<ui8>, NUdf::TDataType<i64>, TFunc, TArgs>(registry, name);
-    RegisterFunctionBinOpt<NUdf::TDataType<i64>, NUdf::TDataType<i16>, NUdf::TDataType<i64>, TFunc, TArgs>(registry, name);
-    RegisterFunctionBinOpt<NUdf::TDataType<i64>, NUdf::TDataType<ui16>, NUdf::TDataType<i64>, TFunc, TArgs>(registry, name);
+    RegisterFunctionBinOpt<NUdf::TDataType<i64>, NUdf::TDataType<i16>, NUdf::TDataType<i64>, TFunc, TArgs>(registry, name); 
+    RegisterFunctionBinOpt<NUdf::TDataType<i64>, NUdf::TDataType<ui16>, NUdf::TDataType<i64>, TFunc, TArgs>(registry, name); 
     RegisterFunctionBinOpt<NUdf::TDataType<i64>, NUdf::TDataType<i32>, NUdf::TDataType<i64>, TFunc, TArgs>(registry, name);
     RegisterFunctionBinOpt<NUdf::TDataType<i64>, NUdf::TDataType<ui32>, NUdf::TDataType<i64>, TFunc, TArgs>(registry, name);
     RegisterFunctionBinOpt<NUdf::TDataType<i64>, NUdf::TDataType<i64>, NUdf::TDataType<i64>, TFunc, TArgs>(registry, name);
     RegisterFunctionBinOpt<NUdf::TDataType<i64>, NUdf::TDataType<ui64>, NUdf::TDataType<i64>, TFunc, TArgs>(registry, name);
-}
-
-template <
+} 
+ 
+template < 
     template<typename, typename, typename> class TFunc,
     template<typename, typename, typename, bool, bool> class TArgs
->
+> 
 void RegisterBinaryIntegralFunctionOpt(IBuiltinFunctionRegistry& registry, const std::string_view& name) {
     RegisterBinaryUnsignedFunctionOpt<TFunc, TArgs>(registry, name);
     RegisterBinaryIntegralToUnsignedFunctionOpt<TFunc, TArgs>(registry, name);
     RegisterBinaryIntegralToSignedFunctionOpt<TFunc, TArgs>(registry, name);
-}
-
-template <
+} 
+ 
+template < 
     template<typename, typename, typename> class TFunc,
     template<typename, typename, typename, bool, bool> class TArgs
->
+> 
 void RegisterBinaryRealFunctionOpt(IBuiltinFunctionRegistry& registry, const std::string_view& name) {
-    RegisterFunctionBinOpt<NUdf::TDataType<i8>, NUdf::TDataType<float>, NUdf::TDataType<float>, TFunc, TArgs>(registry, name);
-    RegisterFunctionBinOpt<NUdf::TDataType<i8>, NUdf::TDataType<double>, NUdf::TDataType<double>, TFunc, TArgs>(registry, name);
-
+    RegisterFunctionBinOpt<NUdf::TDataType<i8>, NUdf::TDataType<float>, NUdf::TDataType<float>, TFunc, TArgs>(registry, name); 
+    RegisterFunctionBinOpt<NUdf::TDataType<i8>, NUdf::TDataType<double>, NUdf::TDataType<double>, TFunc, TArgs>(registry, name); 
+ 
     RegisterFunctionBinOpt<NUdf::TDataType<ui8>, NUdf::TDataType<float>, NUdf::TDataType<float>, TFunc, TArgs>(registry, name);
     RegisterFunctionBinOpt<NUdf::TDataType<ui8>, NUdf::TDataType<double>, NUdf::TDataType<double>, TFunc, TArgs>(registry, name);
 
-    RegisterFunctionBinOpt<NUdf::TDataType<i16>, NUdf::TDataType<float>, NUdf::TDataType<float>, TFunc, TArgs>(registry, name);
-    RegisterFunctionBinOpt<NUdf::TDataType<i16>, NUdf::TDataType<double>, NUdf::TDataType<double>, TFunc, TArgs>(registry, name);
-
-    RegisterFunctionBinOpt<NUdf::TDataType<ui16>, NUdf::TDataType<float>, NUdf::TDataType<float>, TFunc, TArgs>(registry, name);
-    RegisterFunctionBinOpt<NUdf::TDataType<ui16>, NUdf::TDataType<double>, NUdf::TDataType<double>, TFunc, TArgs>(registry, name);
-
+    RegisterFunctionBinOpt<NUdf::TDataType<i16>, NUdf::TDataType<float>, NUdf::TDataType<float>, TFunc, TArgs>(registry, name); 
+    RegisterFunctionBinOpt<NUdf::TDataType<i16>, NUdf::TDataType<double>, NUdf::TDataType<double>, TFunc, TArgs>(registry, name); 
+ 
+    RegisterFunctionBinOpt<NUdf::TDataType<ui16>, NUdf::TDataType<float>, NUdf::TDataType<float>, TFunc, TArgs>(registry, name); 
+    RegisterFunctionBinOpt<NUdf::TDataType<ui16>, NUdf::TDataType<double>, NUdf::TDataType<double>, TFunc, TArgs>(registry, name); 
+ 
     RegisterFunctionBinOpt<NUdf::TDataType<i32>, NUdf::TDataType<float>, NUdf::TDataType<float>, TFunc, TArgs>(registry, name);
     RegisterFunctionBinOpt<NUdf::TDataType<i32>, NUdf::TDataType<double>, NUdf::TDataType<double>, TFunc, TArgs>(registry, name);
 
@@ -640,10 +640,10 @@ void RegisterBinaryRealFunctionOpt(IBuiltinFunctionRegistry& registry, const std
     RegisterFunctionBinOpt<NUdf::TDataType<ui64>, NUdf::TDataType<float>, NUdf::TDataType<float>, TFunc, TArgs>(registry, name);
     RegisterFunctionBinOpt<NUdf::TDataType<ui64>, NUdf::TDataType<double>, NUdf::TDataType<double>, TFunc, TArgs>(registry, name);
 
-    RegisterFunctionBinOpt<NUdf::TDataType<float>, NUdf::TDataType<i8>, NUdf::TDataType<float>, TFunc, TArgs>(registry, name);
+    RegisterFunctionBinOpt<NUdf::TDataType<float>, NUdf::TDataType<i8>, NUdf::TDataType<float>, TFunc, TArgs>(registry, name); 
     RegisterFunctionBinOpt<NUdf::TDataType<float>, NUdf::TDataType<ui8>, NUdf::TDataType<float>, TFunc, TArgs>(registry, name);
-    RegisterFunctionBinOpt<NUdf::TDataType<float>, NUdf::TDataType<i16>, NUdf::TDataType<float>, TFunc, TArgs>(registry, name);
-    RegisterFunctionBinOpt<NUdf::TDataType<float>, NUdf::TDataType<ui16>, NUdf::TDataType<float>, TFunc, TArgs>(registry, name);
+    RegisterFunctionBinOpt<NUdf::TDataType<float>, NUdf::TDataType<i16>, NUdf::TDataType<float>, TFunc, TArgs>(registry, name); 
+    RegisterFunctionBinOpt<NUdf::TDataType<float>, NUdf::TDataType<ui16>, NUdf::TDataType<float>, TFunc, TArgs>(registry, name); 
     RegisterFunctionBinOpt<NUdf::TDataType<float>, NUdf::TDataType<i32>, NUdf::TDataType<float>, TFunc, TArgs>(registry, name);
     RegisterFunctionBinOpt<NUdf::TDataType<float>, NUdf::TDataType<ui32>, NUdf::TDataType<float>, TFunc, TArgs>(registry, name);
     RegisterFunctionBinOpt<NUdf::TDataType<float>, NUdf::TDataType<i64>, NUdf::TDataType<float>, TFunc, TArgs>(registry, name);
@@ -651,19 +651,19 @@ void RegisterBinaryRealFunctionOpt(IBuiltinFunctionRegistry& registry, const std
     RegisterFunctionBinOpt<NUdf::TDataType<float>, NUdf::TDataType<float>, NUdf::TDataType<float>, TFunc, TArgs>(registry, name);
     RegisterFunctionBinOpt<NUdf::TDataType<float>, NUdf::TDataType<double>, NUdf::TDataType<double>, TFunc, TArgs>(registry, name);
 
-    RegisterFunctionBinOpt<NUdf::TDataType<double>, NUdf::TDataType<i8>, NUdf::TDataType<double>, TFunc, TArgs>(registry, name);
+    RegisterFunctionBinOpt<NUdf::TDataType<double>, NUdf::TDataType<i8>, NUdf::TDataType<double>, TFunc, TArgs>(registry, name); 
     RegisterFunctionBinOpt<NUdf::TDataType<double>, NUdf::TDataType<ui8>, NUdf::TDataType<double>, TFunc, TArgs>(registry, name);
-    RegisterFunctionBinOpt<NUdf::TDataType<double>, NUdf::TDataType<i16>, NUdf::TDataType<double>, TFunc, TArgs>(registry, name);
-    RegisterFunctionBinOpt<NUdf::TDataType<double>, NUdf::TDataType<ui16>, NUdf::TDataType<double>, TFunc, TArgs>(registry, name);
+    RegisterFunctionBinOpt<NUdf::TDataType<double>, NUdf::TDataType<i16>, NUdf::TDataType<double>, TFunc, TArgs>(registry, name); 
+    RegisterFunctionBinOpt<NUdf::TDataType<double>, NUdf::TDataType<ui16>, NUdf::TDataType<double>, TFunc, TArgs>(registry, name); 
     RegisterFunctionBinOpt<NUdf::TDataType<double>, NUdf::TDataType<i32>, NUdf::TDataType<double>, TFunc, TArgs>(registry, name);
     RegisterFunctionBinOpt<NUdf::TDataType<double>, NUdf::TDataType<ui32>, NUdf::TDataType<double>, TFunc, TArgs>(registry, name);
     RegisterFunctionBinOpt<NUdf::TDataType<double>, NUdf::TDataType<i64>, NUdf::TDataType<double>, TFunc, TArgs>(registry, name);
     RegisterFunctionBinOpt<NUdf::TDataType<double>, NUdf::TDataType<ui64>, NUdf::TDataType<double>, TFunc, TArgs>(registry, name);
     RegisterFunctionBinOpt<NUdf::TDataType<double>, NUdf::TDataType<float>, NUdf::TDataType<double>, TFunc, TArgs>(registry, name);
     RegisterFunctionBinOpt<NUdf::TDataType<double>, NUdf::TDataType<double>, NUdf::TDataType<double>, TFunc, TArgs>(registry, name);
-}
-
-template <
+} 
+ 
+template < 
     template<typename, typename, typename> class TFunc,
     template<typename, typename, typename, bool, bool> class TArgs
 >
@@ -675,7 +675,7 @@ void RegisterBinaryNumericFunctionOpt(IBuiltinFunctionRegistry& registry, const 
 template <
     template<typename> class TFunc,
     template<typename, typename, bool> class TArgs
->
+> 
 void RegisterNumericAggregateFunction(IBuiltinFunctionRegistry& registry, const std::string_view& name) {
     RegisterAggregateFunction<NUdf::TDataType<i8>, TFunc, TArgs>(registry, name);
     RegisterAggregateFunction<NUdf::TDataType<ui8>, TFunc, TArgs>(registry, name);
@@ -687,9 +687,9 @@ void RegisterNumericAggregateFunction(IBuiltinFunctionRegistry& registry, const 
     RegisterAggregateFunction<NUdf::TDataType<ui64>, TFunc, TArgs>(registry, name);
     RegisterAggregateFunction<NUdf::TDataType<float>, TFunc, TArgs>(registry, name);
     RegisterAggregateFunction<NUdf::TDataType<double>, TFunc, TArgs>(registry, name);
-}
-
-template <
+} 
+ 
+template < 
     template<typename> class TFunc,
     template<typename, typename, bool> class TArgs
 >
@@ -751,14 +751,14 @@ void RegisterBooleanSameTypesFunction(IBuiltinFunctionRegistry& registry, const 
 template <
     template<typename, typename, typename, bool, bool> class TFunc,
     template<typename, typename, typename, bool, bool> class TArgs
->
+> 
 void RegisterBinaryRealFunction(IBuiltinFunctionRegistry& registry, const std::string_view& name) {
     RegisterFunctionBinOpt<NUdf::TDataType<float>, NUdf::TDataType<float>, NUdf::TDataType<float>, TFunc, TArgs>(registry, name);
     RegisterFunctionBinOpt<NUdf::TDataType<float>, NUdf::TDataType<double>, NUdf::TDataType<double>, TFunc, TArgs>(registry, name);
     RegisterFunctionBinOpt<NUdf::TDataType<double>, NUdf::TDataType<float>, NUdf::TDataType<double>, TFunc, TArgs>(registry, name);
     RegisterFunctionBinOpt<NUdf::TDataType<double>, NUdf::TDataType<double>, NUdf::TDataType<double>, TFunc, TArgs>(registry, name);
-}
-
+} 
+ 
 void RegisterAdd(IBuiltinFunctionRegistry& registry);
 void RegisterAggrAdd(IBuiltinFunctionRegistry& registry);
 void RegisterSub(IBuiltinFunctionRegistry& registry);
@@ -784,7 +784,7 @@ void RegisterConcat(IBuiltinFunctionRegistry& registry);
 void RegisterSubstring(IBuiltinFunctionRegistry& registry);
 void RegisterFind(IBuiltinFunctionRegistry& registry);
 void RegisterInversePresortString(IBuiltinFunctionRegistry& registry);
-void RegisterInverseString(IBuiltinFunctionRegistry& registry);
+void RegisterInverseString(IBuiltinFunctionRegistry& registry); 
 void RegisterNanvl(IBuiltinFunctionRegistry& registry);
 void RegisterByteAt(IBuiltinFunctionRegistry& registry);
 void RegisterMax(IBuiltinFunctionRegistry& registry);
@@ -792,6 +792,6 @@ void RegisterMin(IBuiltinFunctionRegistry& registry);
 void RegisterAggrMax(IBuiltinFunctionRegistry& registry);
 void RegisterAggrMin(IBuiltinFunctionRegistry& registry);
 void RegisterWith(IBuiltinFunctionRegistry& registry);
-
-}
-}
+ 
+} 
+} 

@@ -1,19 +1,19 @@
 import "library/cpp/actors/protos/actors.proto";
 import "google/protobuf/descriptor.proto";
 
-package NActorsInterconnect;
-option java_package = "ru.yandex.kikimr.proto";
-
-message TEvResolveNode {
-    optional uint32 NodeId = 1;
+package NActorsInterconnect; 
+option java_package = "ru.yandex.kikimr.proto"; 
+ 
+message TEvResolveNode { 
+    optional uint32 NodeId = 1; 
     optional uint64 Deadline = 2;
-}
-
-message TEvNodeInfo {
-    optional uint32 NodeId = 1;
-    optional string Address = 2;
-    optional uint32 Port = 3;
-}
+} 
+ 
+message TEvNodeInfo { 
+    optional uint32 NodeId = 1; 
+    optional string Address = 2; 
+    optional uint32 Port = 3; 
+} 
 
 extend google.protobuf.FieldOptions {
     optional string PrintName = 50376;

@@ -1,6 +1,6 @@
 #include "metrics_registry.h"
 
-#include <ydb/library/yql/providers/common/metrics/protos/metrics_registry.pb.h>
+#include <ydb/library/yql/providers/common/metrics/protos/metrics_registry.pb.h> 
 
 #include <util/generic/hash.h>
 #include <util/generic/maybe.h>

@@ -69,9 +69,9 @@
 #include <ydb/core/mind/tenant_node_enumeration.h>
 #include <ydb/core/kesus/tablet/events.h>
 #include <ydb/core/sys_view/service/sysview_service.h>
-#include <ydb/library/yql/minikql/mkql_function_registry.h>
-#include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
+#include <ydb/library/yql/minikql/mkql_function_registry.h> 
+#include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h> 
+#include <ydb/library/yql/public/issue/yql_issue_message.h> 
 #include <ydb/core/engine/mkql_engine_flat.h>
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -86,7 +86,7 @@
 #include <ydb/core/yq/libs/init/init.h>
 #include <ydb/core/yq/libs/mock/yql_mock.h>
 #include <ydb/library/folder_service/mock/mock_folder_service.h>
-
+ 
 #include <ydb/core/client/server/msgbus_server_tracer.h>
 
 #include <library/cpp/actors/interconnect/interconnect.h>
@@ -110,8 +110,8 @@ namespace Tests {
         return *this;
     }
 
-    const char* ServerRedirectEnvVar = "KIKIMR_SERVER";
-    const char* DomainRedirectEnvVar = "KIKIMR_TEST_DOMAIN";
+    const char* ServerRedirectEnvVar = "KIKIMR_SERVER"; 
+    const char* DomainRedirectEnvVar = "KIKIMR_TEST_DOMAIN"; 
     const TDuration TIMEOUT = NSan::PlainOrUnderSanitizer(
         NValgrind::PlainOrUnderValgrind(TDuration::Seconds(3), TDuration::Seconds(60)),
         TDuration::Seconds(15)
@@ -122,17 +122,17 @@ namespace Tests {
     ).MilliSeconds();
 
     NMiniKQL::IFunctionRegistry* DefaultFrFactory(const NScheme::TTypeRegistry& typeRegistry) {
-        Y_UNUSED(typeRegistry);
+        Y_UNUSED(typeRegistry); 
         // register test UDFs
         auto freg = NKikimr::NMiniKQL::CreateFunctionRegistry(NKikimr::NMiniKQL::CreateBuiltinRegistry())->Clone();
         NKikimr::NMiniKQL::FillStaticModules(*freg);
         return freg.Release();
     }
 
-    ui64 ChangeDomain(ui64 tabletId, ui32 domainUid) {
+    ui64 ChangeDomain(ui64 tabletId, ui32 domainUid) { 
         return MakeTabletID(StateStorageGroupFromTabletID(tabletId), domainUid, UniqPartFromTabletID(tabletId));
-    }
-
+    } 
+ 
     ui64 ChangeStateStorage(ui64 tabletId, ui32 ssUid) {
         return MakeTabletID(ssUid, HiveUidFromTabletID(tabletId), UniqPartFromTabletID(tabletId));
     }
@@ -221,7 +221,7 @@ namespace Tests {
             SetupProxies(nodeIdx);
         }
     }
-
+ 
     void TServer::SetupMessageBus(ui16 port, const TString &tracePath) {
         if (port) {
             Bus = NBus::CreateMessageQueue(NBus::TBusQueueConfig());
@@ -491,7 +491,7 @@ namespace Tests {
         TActorId local = MakeLocalID(Runtime->GetNodeId(nodeIdx)); // MakeTenantPoolRootID?
         Runtime->Send(new IEventHandle(local, TActorId(), new TEvents::TEvPoisonPill()));
     }
-
+ 
     void TServer::SetupLocalConfig(TLocalConfig &localConfig, const NKikimr::TAppData &appData) {
         localConfig.TabletClassInfo[appData.DefaultTabletTypes.Dummy] =
             TLocalConfig::TTabletClassInfo(new TTabletSetupInfo(
@@ -550,7 +550,7 @@ namespace Tests {
                 &NReplication::CreateController, TMailboxType::Revolving, appData.UserPoolId,
                 TMailboxType::Revolving, appData.SystemPoolId));
     }
-
+ 
     void TServer::SetupLocalService(ui32 nodeIdx, const TString &domainName) {
         TLocalConfig::TPtr localConfig = new TLocalConfig();
         auto &appData = Runtime->GetAppData(nodeIdx);
@@ -851,13 +851,13 @@ namespace Tests {
     }
 
     void TServer::StartDummyTablets() {
-        if (!Runtime)
-            ythrow TWithBackTrace<yexception>() << "Server is redirected";
-
+        if (!Runtime) 
+            ythrow TWithBackTrace<yexception>() << "Server is redirected"; 
+ 
         CreateTestBootstrapper(*Runtime, CreateTestTabletInfo(ChangeStateStorage(DummyTablet1, Settings->Domain), TTabletTypes::TX_DUMMY), &CreateFlatDummyTablet);
         CreateTestBootstrapper(*Runtime, CreateTestTabletInfo(ChangeStateStorage(DummyTablet2, Settings->Domain), TTabletTypes::TX_DUMMY), &CreateFlatDummyTablet);
-    }
-
+    } 
+ 
     TTestActorRuntime* TServer::GetRuntime() const {
         return Runtime.Get();
     }
@@ -873,7 +873,7 @@ namespace Tests {
     const NMiniKQL::IFunctionRegistry* TServer::GetFunctionRegistry() {
         return Runtime->GetAppData().FunctionRegistry;
     }
-
+ 
     TServer::~TServer() {
         if (Runtime->GetAppData().Mon) {
             Runtime->GetAppData().Mon->Stop();
@@ -886,11 +886,11 @@ namespace Tests {
         if (Runtime) {
             Runtime.Destroy();
         }
-
-        if (Bus) {
-            Bus->Stop();
-            Bus.Drop();
-        }
+ 
+        if (Bus) { 
+            Bus->Stop(); 
+            Bus.Drop(); 
+        } 
     }
 
 
@@ -901,15 +901,15 @@ namespace Tests {
         , StoragePoolTypes(settings.StoragePoolTypes)
         , FunctionRegistry(NKikimr::NMiniKQL::CreateFunctionRegistry(NKikimr::NMiniKQL::CreateBuiltinRegistry()))
         , LoadedFunctionRegistry(NKikimr::NMiniKQL::CreateFunctionRegistry(NKikimr::NMiniKQL::CreateBuiltinRegistry()))
-    {
-        TServerSetup serverSetup;
+    { 
+        TServerSetup serverSetup; 
         if (SupportsRedirect && Tests::IsServerRedirected()) {
             serverSetup = GetServerSetup();
-        } else {
+        } else { 
             serverSetup = TServerSetup("localhost", settings.Port);
-        }
-
-        ClientConfig.Ip = serverSetup.IpAddress;
+        } 
+ 
+        ClientConfig.Ip = serverSetup.IpAddress; 
         ClientConfig.Port = serverSetup.Port;
         ClientConfig.BusSessionConfig.TotalTimeout = Max<int>() / 2;
         ClientConfig.BusSessionConfig.ConnectTimeout = ConnectTimeoutMilliSeconds;
@@ -931,54 +931,54 @@ namespace Tests {
         return Client;
     }
 
-    const NScheme::TTypeRegistry& TClient::GetTypeRegistry() const {
+    const NScheme::TTypeRegistry& TClient::GetTypeRegistry() const { 
         return TypeRegistry;
     }
 
-    bool TClient::LoadTypes() {
+    bool TClient::LoadTypes() { 
         TAutoPtr<NMsgBusProxy::TBusTypesRequest> request(new NMsgBusProxy::TBusTypesRequest());
-        if (TypesEtag.Defined()) {
-            request->Record.SetETag(*TypesEtag.Get());
-        }
-
-        TAutoPtr<NBus::TBusMessage> reply;
-        UNIT_ASSERT_VALUES_EQUAL(SyncCall(request, reply), NBus::MESSAGE_OK);
+        if (TypesEtag.Defined()) { 
+            request->Record.SetETag(*TypesEtag.Get()); 
+        } 
+ 
+        TAutoPtr<NBus::TBusMessage> reply; 
+        UNIT_ASSERT_VALUES_EQUAL(SyncCall(request, reply), NBus::MESSAGE_OK); 
         const NKikimrClient::TTypeMetadataResponse &response = static_cast<NMsgBusProxy::TBusTypesResponse*>(reply.Get())->Record;
-        UNIT_ASSERT_VALUES_EQUAL((ui32)NMsgBusProxy::MSTATUS_OK, response.GetStatus());
-        if (!response.HasETag()) {
-            UNIT_ASSERT(TypesEtag.Defined());
-            return false;
-        }
-
+        UNIT_ASSERT_VALUES_EQUAL((ui32)NMsgBusProxy::MSTATUS_OK, response.GetStatus()); 
+        if (!response.HasETag()) { 
+            UNIT_ASSERT(TypesEtag.Defined()); 
+            return false; 
+        } 
+ 
         UNIT_ASSERT(response.HasTypeMetadata() && response.HasFunctionMetadata());
         DeserializeMetadata(response.GetTypeMetadata(), &LoadedTypeMetadataRegistry);
         DeserializeMetadata(response.GetFunctionMetadata(), *LoadedFunctionRegistry->GetBuiltins());
-        TypesEtag = response.GetETag();
-        return true;
-    }
-
-    const NScheme::TTypeMetadataRegistry& TClient::GetTypeMetadataRegistry() const {
-        if (TypesEtag.Defined())
-            return LoadedTypeMetadataRegistry;
-
-        return TypeRegistry.GetTypeMetadataRegistry();
-    }
-
+        TypesEtag = response.GetETag(); 
+        return true; 
+    } 
+ 
+    const NScheme::TTypeMetadataRegistry& TClient::GetTypeMetadataRegistry() const { 
+        if (TypesEtag.Defined()) 
+            return LoadedTypeMetadataRegistry; 
+ 
+        return TypeRegistry.GetTypeMetadataRegistry(); 
+    } 
+ 
     const NMiniKQL::IFunctionRegistry& TClient::GetFunctionRegistry() const {
-        if (TypesEtag.Defined())
+        if (TypesEtag.Defined()) 
             return *LoadedFunctionRegistry;
-
+ 
         return *FunctionRegistry;
-    }
-
+    } 
+ 
     ui64 TClient::GetPatchedSchemeRoot(ui64 schemeRoot, ui32 domain, bool supportsRedirect) {
         if (!supportsRedirect || !IsServerRedirected())
             return ChangeStateStorage(schemeRoot, domain);
-
+ 
         TString domainRedirect = GetEnv(DomainRedirectEnvVar);
         if (!domainRedirect)
             ythrow TWithBackTrace<yexception>() << "Please set domain redirect, format: KIKIMR_TEST_DOMAIN=domain/RootShardTabletId";
-
+ 
         TStringBuf domainUidStr;
         TStringBuf tabletIdStr;
         TStringBuf(domainRedirect).Split('/', domainUidStr, tabletIdStr);
@@ -986,8 +986,8 @@ namespace Tests {
         if (domainUid != domain) {
             ythrow TWithBackTrace<yexception>() << "Mismatch domain redirect, expected domain: " << domain
                 << ", redirected domain: " << domainUid;
-        }
-
+        } 
+ 
         return FromString<ui64>(tabletIdStr);
     }
 
@@ -1017,16 +1017,16 @@ namespace Tests {
             p->SetKind(kind);
             p->SetName(pool.GetName());
         }
-
-        TAutoPtr<NBus::TBusMessage> reply;
+ 
+        TAutoPtr<NBus::TBusMessage> reply; 
         SendAndWaitCompletion(request, reply);
 
 #ifndef NDEBUG
         Cout << PrintResult<NMsgBusProxy::TBusResponse>(reply.Get()) << Endl;
 #endif
         return reply;
-    }
-
+    } 
+ 
     void TClient::InitRootScheme() {
         InitRootScheme(DomainName);
     }
@@ -1827,7 +1827,7 @@ namespace Tests {
         if (response.HasExecutionEngineEvaluatedResponse())
             result.CopyFrom(response.GetExecutionEngineEvaluatedResponse());
 
-        return response.GetExecutionEngineResponseStatus() == ui32(NMiniKQL::IEngineFlat::EStatus::Complete);
+        return response.GetExecutionEngineResponseStatus() == ui32(NMiniKQL::IEngineFlat::EStatus::Complete); 
     }
 
     bool TClient::LocalSchemeTx(const ui64 tabletId, const NTabletFlatScheme::TSchemeChanges& changes, bool dryRun,
@@ -1977,14 +1977,14 @@ namespace Tests {
             return false;
 
         UNIT_ASSERT(response.HasTxId());
-        UNIT_ASSERT(response.GetExecutionEngineResponseStatus() == ui32(NMiniKQL::IEngineFlat::EStatus::Complete)
-            || response.GetExecutionEngineResponseStatus() == ui32(NMiniKQL::IEngineFlat::EStatus::Aborted));
+        UNIT_ASSERT(response.GetExecutionEngineResponseStatus() == ui32(NMiniKQL::IEngineFlat::EStatus::Complete) 
+            || response.GetExecutionEngineResponseStatus() == ui32(NMiniKQL::IEngineFlat::EStatus::Aborted)); 
 
         if (response.HasExecutionEngineEvaluatedResponse()) {
             result.Swap(response.MutableExecutionEngineEvaluatedResponse());
         }
 
-        return response.GetExecutionEngineResponseStatus() == ui32(NMiniKQL::IEngineFlat::EStatus::Complete);
+        return response.GetExecutionEngineResponseStatus() == ui32(NMiniKQL::IEngineFlat::EStatus::Complete); 
     }
 
     bool TClient::FlatQuery(const TString &query, TFlatQueryOptions& opts, NKikimrMiniKQL::TResult &result, ui32 expectedStatus) {
@@ -2262,25 +2262,25 @@ namespace Tests {
         return handle->Release<NKesus::TEvKesus::TEvGetConfigResult>();
     }
 
-    bool IsServerRedirected() {
+    bool IsServerRedirected() { 
         return !!GetEnv(ServerRedirectEnvVar);
-    }
-
-    TServerSetup GetServerSetup() {
+    } 
+ 
+    TServerSetup GetServerSetup() { 
         if (!IsServerRedirected()) {
             return TServerSetup("localhost", 0);
         }
 
         TStringBuf str(GetEnv(ServerRedirectEnvVar));
-        TStringBuf address;
-        TStringBuf port;
-        str.Split('/', address, port);
-        ui64 portValue = 0;
+        TStringBuf address; 
+        TStringBuf port; 
+        str.Split('/', address, port); 
+        ui64 portValue = 0; 
         if (address.empty() || !TryFromString(port, portValue))
-            ythrow TWithBackTrace<yexception>() << "Incorrect server redirect, expected 'IpAddress/Port'";
-
+            ythrow TWithBackTrace<yexception>() << "Incorrect server redirect, expected 'IpAddress/Port'"; 
+ 
         return TServerSetup(TString(address), portValue);
-    }
+    } 
 
     TTenants::TTenants(TServer::TPtr server)
         : Server(server)

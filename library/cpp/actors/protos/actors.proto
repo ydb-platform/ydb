@@ -1,11 +1,11 @@
-package NActorsProto;
-option java_package = "ru.yandex.kikimr.proto";
-option java_outer_classname = "NActorsBaseProto";
-
+package NActorsProto; 
+option java_package = "ru.yandex.kikimr.proto"; 
+option java_outer_classname = "NActorsBaseProto"; 
+ 
 message TActorId {
-    required fixed64 RawX1 = 1;
-    required fixed64 RawX2 = 2;
-}
+    required fixed64 RawX1 = 1; 
+    required fixed64 RawX2 = 2; 
+} 
 
 message TCallbackException {
     required TActorId ActorId = 1;

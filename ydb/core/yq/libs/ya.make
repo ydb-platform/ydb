@@ -1,7 +1,7 @@
 OWNER(g:yq)
 
-RECURSE(
-    actors
+RECURSE( 
+    actors 
     audit
     checkpoint_storage
     checkpointing
@@ -28,4 +28,4 @@ RECURSE(
     tasks_packer
     test_connection
     ydb
-)
+) 

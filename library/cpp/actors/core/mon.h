@@ -10,8 +10,8 @@ namespace NActors {
         enum {
             HttpInfo = EventSpaceBegin(NActors::TEvents::ES_MON),
             HttpInfoRes,
-            RemoteHttpInfo,
-            RemoteHttpInfoRes,
+            RemoteHttpInfo, 
+            RemoteHttpInfoRes, 
             RemoteJsonInfoRes,
             RemoteBinaryInfoRes,
             End
@@ -82,12 +82,12 @@ namespace NActors {
         struct TEvRemoteHttpInfo: public NActors::TEventBase<TEvRemoteHttpInfo, RemoteHttpInfo> {
             TEvRemoteHttpInfo() {
             }
-
+ 
             TEvRemoteHttpInfo(const TString& query)
-                : Query(query)
+                : Query(query) 
             {
             }
-
+ 
             TEvRemoteHttpInfo(const TString& query, HTTP_METHOD method)
                 : Query(query)
                 , Method(method)
@@ -96,25 +96,25 @@ namespace NActors {
 
             TString Query;
             HTTP_METHOD Method;
-
+ 
             TString PathInfo() const {
-                const size_t pos = Query.find('?');
+                const size_t pos = Query.find('?'); 
                 return (pos == TString::npos) ? TString() : Query.substr(0, pos);
-            }
-
-            TCgiParameters Cgi() const {
-                const size_t pos = Query.find('?');
+            } 
+ 
+            TCgiParameters Cgi() const { 
+                const size_t pos = Query.find('?'); 
                 return TCgiParameters((pos == TString::npos) ? TString() : Query.substr(pos + 1));
-            }
-
+            } 
+ 
             TString ToStringHeader() const override {
-                return "TEvRemoteHttpInfo";
-            }
-
+                return "TEvRemoteHttpInfo"; 
+            } 
+ 
             bool SerializeToArcadiaStream(TChunkSerializer *serializer) const override {
                 return serializer->WriteString(&Query);
-            }
-
+            } 
+ 
             ui32 CalculateSerializedSize() const override {
                 return Query.size();
             }
@@ -125,33 +125,33 @@ namespace NActors {
 
             static IEventBase* Load(TEventSerializedData* bufs) {
                 return new TEvRemoteHttpInfo(bufs->GetString());
-            }
+            } 
 
             HTTP_METHOD GetMethod() const
             {
                 return Method;
             }
-        };
-
+        }; 
+ 
         struct TEvRemoteHttpInfoRes: public NActors::TEventBase<TEvRemoteHttpInfoRes, RemoteHttpInfoRes> {
             TEvRemoteHttpInfoRes() {
             }
-
+ 
             TEvRemoteHttpInfoRes(const TString& html)
-                : Html(html)
+                : Html(html) 
             {
             }
-
+ 
             TString Html;
-
+ 
             TString ToStringHeader() const override {
-                return "TEvRemoteHttpInfoRes";
-            }
-
+                return "TEvRemoteHttpInfoRes"; 
+            } 
+ 
             bool SerializeToArcadiaStream(TChunkSerializer *serializer) const override {
                 return serializer->WriteString(&Html);
-            }
-
+            } 
+ 
             ui32 CalculateSerializedSize() const override {
                 return Html.size();
             }
@@ -162,9 +162,9 @@ namespace NActors {
 
             static IEventBase* Load(TEventSerializedData* bufs) {
                 return new TEvRemoteHttpInfoRes(bufs->GetString());
-            }
-        };
-
+            } 
+        }; 
+ 
         struct TEvRemoteJsonInfoRes: public NActors::TEventBase<TEvRemoteJsonInfoRes, RemoteJsonInfoRes> {
             TEvRemoteJsonInfoRes() {
             }

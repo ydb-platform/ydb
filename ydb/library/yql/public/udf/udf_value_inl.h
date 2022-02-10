@@ -4,7 +4,7 @@
 #error "you should never include udf_value_inl.h directly"
 #endif  // INCLUDE_UDF_VALUE_INL_H
 
-#ifdef LLVM_BC
+#ifdef LLVM_BC 
 
 #define UDF_VERIFY(expr, ...)                     \
     do {                                          \
@@ -16,17 +16,17 @@
 
 #define UDF_ALWAYS_INLINE   __attribute__((always_inline))
 
-#else
+#else 
 
 #define UDF_VERIFY Y_VERIFY_DEBUG
 #define UDF_ALWAYS_INLINE   Y_FORCE_INLINE
 
-#endif
+#endif 
 
 //////////////////////////////////////////////////////////////////////////////
 // IBoxedValue
 //////////////////////////////////////////////////////////////////////////////
-inline void IBoxedValue1::Ref() noexcept
+inline void IBoxedValue1::Ref() noexcept 
 {
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 4)
     if (Refs_ < 0)
@@ -35,7 +35,7 @@ inline void IBoxedValue1::Ref() noexcept
     ++Refs_;
 }
 
-inline void IBoxedValue1::UnRef() noexcept
+inline void IBoxedValue1::UnRef() noexcept 
 {
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 4)
     if (Refs_ < 0)
@@ -46,7 +46,7 @@ inline void IBoxedValue1::UnRef() noexcept
         delete this;
 }
 
-inline void IBoxedValue1::ReleaseRef() noexcept
+inline void IBoxedValue1::ReleaseRef() noexcept 
 {
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 4)
     if (Refs_ < 0)
@@ -56,65 +56,65 @@ inline void IBoxedValue1::ReleaseRef() noexcept
     --Refs_;
 }
 
-inline void IBoxedValue1::DeleteUnreferenced() noexcept
+inline void IBoxedValue1::DeleteUnreferenced() noexcept 
 {
     if (!Refs_)
         delete this;
 }
 
-inline i32 IBoxedValue1::RefCount() const noexcept
+inline i32 IBoxedValue1::RefCount() const noexcept 
 {
     return Refs_;
 }
 
-inline void IBoxedValue1::SetUserMark(ui8 mark) noexcept {
-    UserMark_ = mark;
-}
-
-inline ui8 IBoxedValue1::UserMark() const noexcept {
-    return UserMark_;
-}
-
-inline i32 IBoxedValue1::LockRef() noexcept {
-   Y_VERIFY_DEBUG(Refs_ != -1);
-   auto ret = Refs_;
-   Refs_ = -1;
-   return ret;
-}
-
-inline void IBoxedValue1::UnlockRef(i32 prev) noexcept {
-   Y_VERIFY_DEBUG(Refs_ == -1);
-   Y_VERIFY_DEBUG(prev != -1);
-   Refs_ = prev;
-}
-
-#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 19)
+inline void IBoxedValue1::SetUserMark(ui8 mark) noexcept { 
+    UserMark_ = mark; 
+} 
+ 
+inline ui8 IBoxedValue1::UserMark() const noexcept { 
+    return UserMark_; 
+} 
+ 
+inline i32 IBoxedValue1::LockRef() noexcept { 
+   Y_VERIFY_DEBUG(Refs_ != -1); 
+   auto ret = Refs_; 
+   Refs_ = -1; 
+   return ret; 
+} 
+ 
+inline void IBoxedValue1::UnlockRef(i32 prev) noexcept { 
+   Y_VERIFY_DEBUG(Refs_ == -1); 
+   Y_VERIFY_DEBUG(prev != -1); 
+   Refs_ = prev; 
+} 
+ 
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 19) 
 //////////////////////////////////////////////////////////////////////////////
-// TFlatArrayBlock
-//////////////////////////////////////////////////////////////////////////////
-
-inline TFlatArrayBlock::TFlatArrayBlock(ui32 count)
-    : TBlock(EBlockType::Flat)
-    , Items_(count ? reinterpret_cast<TBlockPtr*>(UdfAllocateWithSize(count * sizeof(TBlockPtr))) : nullptr)
-    , Count_(count)
-{
-    Y_UNUSED(Reserved_);
-    for (ui32 i = 0; i < count; ++i) {
-        ::new(Items_ + i)TBlockPtr();
-    }
-}
-
-inline TFlatArrayBlock::~TFlatArrayBlock() {
-    for (ui32 i = 0; i < Count_; ++i) {
-        Items_[i] = nullptr;
-    }
-
-    UdfFreeWithSize(Items_, Count_ * sizeof(TBlockPtr));
-}
-
-#endif
-
-//////////////////////////////////////////////////////////////////////////////
+// TFlatArrayBlock 
+////////////////////////////////////////////////////////////////////////////// 
+ 
+inline TFlatArrayBlock::TFlatArrayBlock(ui32 count) 
+    : TBlock(EBlockType::Flat) 
+    , Items_(count ? reinterpret_cast<TBlockPtr*>(UdfAllocateWithSize(count * sizeof(TBlockPtr))) : nullptr) 
+    , Count_(count) 
+{ 
+    Y_UNUSED(Reserved_); 
+    for (ui32 i = 0; i < count; ++i) { 
+        ::new(Items_ + i)TBlockPtr(); 
+    } 
+} 
+ 
+inline TFlatArrayBlock::~TFlatArrayBlock() { 
+    for (ui32 i = 0; i < Count_; ++i) { 
+        Items_[i] = nullptr; 
+    } 
+ 
+    UdfFreeWithSize(Items_, Count_ * sizeof(TBlockPtr)); 
+} 
+ 
+#endif 
+ 
+////////////////////////////////////////////////////////////////////////////// 
 // TBoxedValueAccessor
 //////////////////////////////////////////////////////////////////////////////
 
@@ -143,22 +143,22 @@ inline const TOpaqueListRepresentation* TBoxedValueAccessor::GetListRepresentati
    return value.GetListRepresentation();
 }
 
-inline IBoxedValuePtr TBoxedValueAccessor::ReverseListImpl(const IBoxedValue& value, const IValueBuilder& builder) {
+inline IBoxedValuePtr TBoxedValueAccessor::ReverseListImpl(const IBoxedValue& value, const IValueBuilder& builder) { 
    Y_VERIFY_DEBUG(value.IsCompatibleTo(MakeAbiCompatibilityVersion(2, 0)));
    return value.ReverseListImpl(builder);
 }
 
-inline IBoxedValuePtr TBoxedValueAccessor::SkipListImpl(const IBoxedValue& value, const IValueBuilder& builder, ui64 count) {
+inline IBoxedValuePtr TBoxedValueAccessor::SkipListImpl(const IBoxedValue& value, const IValueBuilder& builder, ui64 count) { 
    Y_VERIFY_DEBUG(value.IsCompatibleTo(MakeAbiCompatibilityVersion(2, 0)));
    return value.SkipListImpl(builder, count);
 }
 
-inline IBoxedValuePtr TBoxedValueAccessor::TakeListImpl(const IBoxedValue& value, const IValueBuilder& builder, ui64 count) {
+inline IBoxedValuePtr TBoxedValueAccessor::TakeListImpl(const IBoxedValue& value, const IValueBuilder& builder, ui64 count) { 
    Y_VERIFY_DEBUG(value.IsCompatibleTo(MakeAbiCompatibilityVersion(2, 0)));
    return value.TakeListImpl(builder, count);
 }
 
-inline IBoxedValuePtr TBoxedValueAccessor::ToIndexDictImpl(const IBoxedValue& value, const IValueBuilder& builder) {
+inline IBoxedValuePtr TBoxedValueAccessor::ToIndexDictImpl(const IBoxedValue& value, const IValueBuilder& builder) { 
    Y_VERIFY_DEBUG(value.IsCompatibleTo(MakeAbiCompatibilityVersion(2, 0)));
    return value.ToIndexDictImpl(builder);
 }
@@ -285,56 +285,56 @@ inline void TBoxedValueAccessor::Load(IBoxedValue& value, const TStringRef& stat
 }
 #endif
 
-#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 11)
-inline void TBoxedValueAccessor::Push(IBoxedValue& value, const TUnboxedValuePod& data) {
-    Y_VERIFY_DEBUG(value.IsCompatibleTo(MakeAbiCompatibilityVersion(2, 11)));
-    return value.Push(data);
-}
-#endif
-
-#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 12)
-inline bool TBoxedValueAccessor::IsSortedDict(IBoxedValue& value) {
-    if (!value.IsCompatibleTo(MakeAbiCompatibilityVersion(2, 12))) {
-        return false;
-    }
-
-    return value.IsSortedDict();
-}
-#endif
-
-#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 19)
-inline TBlock* TBoxedValueAccessor::AsBlock(IBoxedValue& value) {
-    Y_VERIFY_DEBUG(value.IsCompatibleTo(MakeAbiCompatibilityVersion(2, 19)));
-    return value.AsBlock();
-}
-
-inline TFlatArrayBlock* TBoxedValueAccessor::AsFlatArrayBlock(IBoxedValue& value) {
-    Y_VERIFY_DEBUG(value.IsCompatibleTo(MakeAbiCompatibilityVersion(2, 19)));
-    return value.AsFlatArrayBlock();
-}
-
-inline TFlatDataBlock* TBoxedValueAccessor::AsFlatDataBlock(IBoxedValue& value) {
-    Y_VERIFY_DEBUG(value.IsCompatibleTo(MakeAbiCompatibilityVersion(2, 19)));
-    return value.AsFlatDataBlock();
-}
-
-inline TSingleBlock* TBoxedValueAccessor::AsSingleBlock(IBoxedValue& value) {
-    Y_VERIFY_DEBUG(value.IsCompatibleTo(MakeAbiCompatibilityVersion(2, 19)));
-    return value.AsSingleBlock();
-}
-
-inline EFetchStatus TBoxedValueAccessor::FetchBlock(IBoxedValue& value, TUnboxedValue& result, ui32 rowsLimitHint) {
-    Y_VERIFY_DEBUG(value.IsCompatibleTo(MakeAbiCompatibilityVersion(2, 19)));
-    return value.FetchBlock(result, rowsLimitHint);
-}
-
-inline bool TBoxedValueAccessor::VisitBlocks(IBoxedValue& value, TBlockCallback callback, void* context) {
-    Y_VERIFY_DEBUG(value.IsCompatibleTo(MakeAbiCompatibilityVersion(2, 19)));
-    return value.VisitBlocks(callback, context);
-}
-
-#endif
-
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 11) 
+inline void TBoxedValueAccessor::Push(IBoxedValue& value, const TUnboxedValuePod& data) { 
+    Y_VERIFY_DEBUG(value.IsCompatibleTo(MakeAbiCompatibilityVersion(2, 11))); 
+    return value.Push(data); 
+} 
+#endif 
+ 
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 12) 
+inline bool TBoxedValueAccessor::IsSortedDict(IBoxedValue& value) { 
+    if (!value.IsCompatibleTo(MakeAbiCompatibilityVersion(2, 12))) { 
+        return false; 
+    } 
+ 
+    return value.IsSortedDict(); 
+} 
+#endif 
+ 
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 19) 
+inline TBlock* TBoxedValueAccessor::AsBlock(IBoxedValue& value) { 
+    Y_VERIFY_DEBUG(value.IsCompatibleTo(MakeAbiCompatibilityVersion(2, 19))); 
+    return value.AsBlock(); 
+} 
+ 
+inline TFlatArrayBlock* TBoxedValueAccessor::AsFlatArrayBlock(IBoxedValue& value) { 
+    Y_VERIFY_DEBUG(value.IsCompatibleTo(MakeAbiCompatibilityVersion(2, 19))); 
+    return value.AsFlatArrayBlock(); 
+} 
+ 
+inline TFlatDataBlock* TBoxedValueAccessor::AsFlatDataBlock(IBoxedValue& value) { 
+    Y_VERIFY_DEBUG(value.IsCompatibleTo(MakeAbiCompatibilityVersion(2, 19))); 
+    return value.AsFlatDataBlock(); 
+} 
+ 
+inline TSingleBlock* TBoxedValueAccessor::AsSingleBlock(IBoxedValue& value) { 
+    Y_VERIFY_DEBUG(value.IsCompatibleTo(MakeAbiCompatibilityVersion(2, 19))); 
+    return value.AsSingleBlock(); 
+} 
+ 
+inline EFetchStatus TBoxedValueAccessor::FetchBlock(IBoxedValue& value, TUnboxedValue& result, ui32 rowsLimitHint) { 
+    Y_VERIFY_DEBUG(value.IsCompatibleTo(MakeAbiCompatibilityVersion(2, 19))); 
+    return value.FetchBlock(result, rowsLimitHint); 
+} 
+ 
+inline bool TBoxedValueAccessor::VisitBlocks(IBoxedValue& value, TBlockCallback callback, void* context) { 
+    Y_VERIFY_DEBUG(value.IsCompatibleTo(MakeAbiCompatibilityVersion(2, 19))); 
+    return value.VisitBlocks(callback, context); 
+} 
+ 
+#endif 
+ 
 //////////////////////////////////////////////////////////////////////////////
 // TUnboxedValue
 //////////////////////////////////////////////////////////////////////////////
@@ -403,7 +403,7 @@ Y_FORCE_INLINE TUnboxedValue::~TUnboxedValue() noexcept
 //////////////////////////////////////////////////////////////////////////////
 // TUnboxedValuePod
 //////////////////////////////////////////////////////////////////////////////
-Y_FORCE_INLINE TUnboxedValuePod::TUnboxedValuePod(IBoxedValuePtr&& value)
+Y_FORCE_INLINE TUnboxedValuePod::TUnboxedValuePod(IBoxedValuePtr&& value) 
 {
     Raw.Boxed.Meta = static_cast<ui8>(EMarkers::Boxed);
     Raw.Boxed.Value = value.Release();
@@ -426,10 +426,10 @@ inline TStringValue TUnboxedValuePod::AsStringValue() const
     return TStringValue(Raw.String.Value);
 }
 
-inline IBoxedValuePtr TUnboxedValuePod::AsBoxed() const
+inline IBoxedValuePtr TUnboxedValuePod::AsBoxed() const 
 {
     UDF_VERIFY(IsBoxed(), "Value is not boxed");
-    return IBoxedValuePtr(Raw.Boxed.Value);
+    return IBoxedValuePtr(Raw.Boxed.Value); 
 }
 
 inline bool TUnboxedValuePod::UniqueBoxed() const
@@ -589,16 +589,16 @@ inline bool TUnboxedValuePod::TryMakeVariant(ui32 index) {
     return true;
 }
 
-inline void TUnboxedValuePod::SetTimezoneId(ui16 id) {
-    UDF_VERIFY(IsEmbedded(), "Value is not a datetime");
-    Raw.Simple.TimezoneId = id;
-}
-
-inline ui16 TUnboxedValuePod::GetTimezoneId() const {
-    UDF_VERIFY(IsEmbedded(), "Value is not a datetime");
-    return Raw.Simple.TimezoneId;
-}
-
+inline void TUnboxedValuePod::SetTimezoneId(ui16 id) { 
+    UDF_VERIFY(IsEmbedded(), "Value is not a datetime"); 
+    Raw.Simple.TimezoneId = id; 
+} 
+ 
+inline ui16 TUnboxedValuePod::GetTimezoneId() const { 
+    UDF_VERIFY(IsEmbedded(), "Value is not a datetime"); 
+    return Raw.Simple.TimezoneId; 
+} 
+ 
 inline EFetchStatus TUnboxedValuePod::Fetch(TUnboxedValue& result) const {
     UDF_VERIFY(IsBoxed(), "Value is not a stream");
     return TBoxedValueAccessor::Fetch(*Raw.Boxed.Value, result);
@@ -646,45 +646,45 @@ inline void TUnboxedValuePod::Load(const TStringRef& state) {
 }
 #endif
 
-#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 12)
-inline bool TUnboxedValuePod::IsSortedDict() const {
-    UDF_VERIFY(IsBoxed(), "Value is not boxed");
-    return TBoxedValueAccessor::IsSortedDict(*Raw.Boxed.Value);
-}
-#endif
-
-#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 19)
-inline TBlock* TUnboxedValuePod::AsBlock() {
-    UDF_VERIFY(IsBoxed(), "Value is not boxed");
-    return TBoxedValueAccessor::AsBlock(*Raw.Boxed.Value);
-}
-
-inline TFlatArrayBlock* TUnboxedValuePod::AsFlatArrayBlock() {
-    UDF_VERIFY(IsBoxed(), "Value is not boxed");
-    return TBoxedValueAccessor::AsFlatArrayBlock(*Raw.Boxed.Value);
-}
-
-inline TFlatDataBlock* TUnboxedValuePod::AsFlatDataBlock() {
-    UDF_VERIFY(IsBoxed(), "Value is not boxed");
-    return TBoxedValueAccessor::AsFlatDataBlock(*Raw.Boxed.Value);
-}
-
-inline TSingleBlock* TUnboxedValuePod::AsSingleBlock() {
-    UDF_VERIFY(IsBoxed(), "Value is not boxed");
-    return TBoxedValueAccessor::AsSingleBlock(*Raw.Boxed.Value);
-}
-
-inline EFetchStatus TUnboxedValuePod::FetchBlock(TUnboxedValue& result, ui32 rowsLimitHint) {
-    UDF_VERIFY(IsBoxed(), "Value is not boxed");
-    return TBoxedValueAccessor::FetchBlock(*Raw.Boxed.Value, result, rowsLimitHint);
-}
-
-inline bool TUnboxedValuePod::VisitBlocks(TBlockCallback callback, void* context) {
-    UDF_VERIFY(IsBoxed(), "Value is not boxed");
-    return TBoxedValueAccessor::VisitBlocks(*Raw.Boxed.Value, callback, context);
-}
-#endif
-
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 12) 
+inline bool TUnboxedValuePod::IsSortedDict() const { 
+    UDF_VERIFY(IsBoxed(), "Value is not boxed"); 
+    return TBoxedValueAccessor::IsSortedDict(*Raw.Boxed.Value); 
+} 
+#endif 
+ 
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 19) 
+inline TBlock* TUnboxedValuePod::AsBlock() { 
+    UDF_VERIFY(IsBoxed(), "Value is not boxed"); 
+    return TBoxedValueAccessor::AsBlock(*Raw.Boxed.Value); 
+} 
+ 
+inline TFlatArrayBlock* TUnboxedValuePod::AsFlatArrayBlock() { 
+    UDF_VERIFY(IsBoxed(), "Value is not boxed"); 
+    return TBoxedValueAccessor::AsFlatArrayBlock(*Raw.Boxed.Value); 
+} 
+ 
+inline TFlatDataBlock* TUnboxedValuePod::AsFlatDataBlock() { 
+    UDF_VERIFY(IsBoxed(), "Value is not boxed"); 
+    return TBoxedValueAccessor::AsFlatDataBlock(*Raw.Boxed.Value); 
+} 
+ 
+inline TSingleBlock* TUnboxedValuePod::AsSingleBlock() { 
+    UDF_VERIFY(IsBoxed(), "Value is not boxed"); 
+    return TBoxedValueAccessor::AsSingleBlock(*Raw.Boxed.Value); 
+} 
+ 
+inline EFetchStatus TUnboxedValuePod::FetchBlock(TUnboxedValue& result, ui32 rowsLimitHint) { 
+    UDF_VERIFY(IsBoxed(), "Value is not boxed"); 
+    return TBoxedValueAccessor::FetchBlock(*Raw.Boxed.Value, result, rowsLimitHint); 
+} 
+ 
+inline bool TUnboxedValuePod::VisitBlocks(TBlockCallback callback, void* context) { 
+    UDF_VERIFY(IsBoxed(), "Value is not boxed"); 
+    return TBoxedValueAccessor::VisitBlocks(*Raw.Boxed.Value, callback, context); 
+} 
+#endif 
+ 
 Y_FORCE_INLINE void TUnboxedValuePod::Ref() const noexcept
 {
     switch (Raw.GetMarkers()) {
@@ -721,24 +721,24 @@ Y_FORCE_INLINE void TUnboxedValuePod::DeleteUnreferenced() const noexcept
     }
 }
 
-Y_FORCE_INLINE i32 TUnboxedValuePod::LockRef() const noexcept
-{
-    switch (Raw.GetMarkers()) {
-    case EMarkers::String: return Raw.String.Value->LockRef();
-    case EMarkers::Boxed: return Raw.Boxed.Value->LockRef();
-    default: return -1;
-    }
-}
-
-Y_FORCE_INLINE void TUnboxedValuePod::UnlockRef(i32 prev) const noexcept
-{
-    switch (Raw.GetMarkers()) {
-    case EMarkers::String: return Raw.String.Value->UnlockRef(prev);
-    case EMarkers::Boxed: return Raw.Boxed.Value->UnlockRef(prev);
-    default: return;
-    }
-}
-
+Y_FORCE_INLINE i32 TUnboxedValuePod::LockRef() const noexcept 
+{ 
+    switch (Raw.GetMarkers()) { 
+    case EMarkers::String: return Raw.String.Value->LockRef(); 
+    case EMarkers::Boxed: return Raw.Boxed.Value->LockRef(); 
+    default: return -1; 
+    } 
+} 
+ 
+Y_FORCE_INLINE void TUnboxedValuePod::UnlockRef(i32 prev) const noexcept 
+{ 
+    switch (Raw.GetMarkers()) { 
+    case EMarkers::String: return Raw.String.Value->UnlockRef(prev); 
+    case EMarkers::Boxed: return Raw.Boxed.Value->UnlockRef(prev); 
+    default: return; 
+    } 
+} 
+ 
 #define VALUE_GET(xType) \
     template <> \
     inline xType TUnboxedValuePod::Get<xType>() const \
@@ -855,20 +855,20 @@ inline TUnboxedValuePod TUnboxedValuePod::Embedded(const TStringRef& value) {
     TUnboxedValuePod v;
     v.Raw.Embedded.Size = value.Size();
     v.Raw.Embedded.Meta = static_cast<ui8>(EMarkers::Embedded);
-    if (v.Raw.Embedded.Size) {
-        std::memcpy(v.Raw.Embedded.Buffer, value.Data(), v.Raw.Embedded.Size);
-    }
-
+    if (v.Raw.Embedded.Size) { 
+        std::memcpy(v.Raw.Embedded.Buffer, value.Data(), v.Raw.Embedded.Size); 
+    } 
+ 
     return v;
 }
 
-inline TUnboxedValuePod TUnboxedValuePod::Invalid()
-{
-    TUnboxedValuePod v;
+inline TUnboxedValuePod TUnboxedValuePod::Invalid() 
+{ 
+    TUnboxedValuePod v; 
     v.Raw.Simple.Count = std::numeric_limits<ui64>::max();
-    return v;
-}
-
+    return v; 
+} 
+ 
 inline TUnboxedValuePod TUnboxedValuePod::MakeFinish()
 {
     TUnboxedValuePod v;
@@ -881,11 +881,11 @@ inline TUnboxedValuePod TUnboxedValuePod::MakeYield()
     return Invalid();
 }
 
-inline bool TUnboxedValuePod::IsInvalid() const
-{
+inline bool TUnboxedValuePod::IsInvalid() const 
+{ 
     return Raw.Simple.Count == std::numeric_limits<ui64>::max() && Raw.Simple.FullMeta == 0;
-}
-
+} 
+ 
 inline bool TUnboxedValuePod::IsFinish() const
 {
     return Raw.Simple.Count == std::numeric_limits<ui64>::max() - 1U && Raw.Simple.FullMeta == 0;

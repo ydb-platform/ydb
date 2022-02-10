@@ -272,15 +272,15 @@ struct TLocksTestOptions {
 
     void SetTableC() {
         Table = "/dc-1/Dir/C";
-        BreakPoint = "(String '\"42\")";
-        BreakKey = "'('key (String '\"42\"))";
-        NoBreakKey0 = "'('key (String '\"\"))"; // breaks (no partitions for String key)
-        NoBreakKey1 = "'('key (String '\"\"))"; // breaks (no partitions for String key)
-        UpdateKey = "'('key (String '\"0\"))";
-        UpdateValue = "(String '\"100\")";
+        BreakPoint = "(String '\"42\")"; 
+        BreakKey = "'('key (String '\"42\"))"; 
+        NoBreakKey0 = "'('key (String '\"\"))"; // breaks (no partitions for String key) 
+        NoBreakKey1 = "'('key (String '\"\"))"; // breaks (no partitions for String key) 
+        UpdateKey = "'('key (String '\"0\"))"; 
+        UpdateValue = "(String '\"100\")"; 
 
         Range0Inc = "'IncFrom 'IncTo";
-        Range0Begin = "(String '\"0\")";
+        Range0Begin = "(String '\"0\")"; 
         Range0End = BreakPoint;
         Range0OptKey = "";
         Range1Inc = "'ExcFrom 'ExcTo";
@@ -1022,7 +1022,7 @@ Y_UNIT_TEST(Range_EmptyKey) {
     //opts.TestErase = true;
     opts.TestRange = true;
     opts.Range0Inc = "'IncFrom 'ExcTo";
-    opts.Range0Begin = "(String '\"\")";
+    opts.Range0Begin = "(String '\"\")"; 
     opts.Range0End = "(Void)";
     TestLock<TLocksV1>(opts);
     TestLock<TLocksV2>(opts);

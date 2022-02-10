@@ -30,7 +30,7 @@ static TLogRow ParseLogRow(const TString& str) {
                 "([A-Z ]{5}) "                                                         // (2) level
                 "([a-zA-Z0-9_\\.-]+)"                                                  // (3) process name
                 ".pid=([0-9]+),"                                                       // (4) process id
-                " tid=(0?x?[0-9a-fA-F]+). "                                            // (5) thread id
+                " tid=(0?x?[0-9a-fA-F]+). "                                            // (5) thread id 
                 ".([a-zA-Z0-9_\\. ]+). "                                               // (6) component name
                 "([a-z0-9_\\.]+):"                                                     // (7) file name
                 "([0-9]+): "                                                           // (8) line number
@@ -48,9 +48,9 @@ static TLogRow ParseLogRow(const TString& str) {
     logRow.Level = ELevelHelpers::FromString(match[2].str());
     logRow.ProcName = match[3].str();
     logRow.ProcId = FromString<pid_t>(match[4].str());
-    logRow.ThreadId = match[5].str().substr(0, 2) == "0x" ?
-        IntFromString<ui64, 16, TStringBuf>(match[5].str().substr(2)) :
-        IntFromString<ui64, 10, TStringBuf>(match[5].str());
+    logRow.ThreadId = match[5].str().substr(0, 2) == "0x" ? 
+        IntFromString<ui64, 16, TStringBuf>(match[5].str().substr(2)) : 
+        IntFromString<ui64, 10, TStringBuf>(match[5].str()); 
     logRow.Component = EComponentHelpers::FromString(match[6].str());
     logRow.FileName = match[7].str();
     logRow.LineNumber = FromString<ui32>(match[8].str());

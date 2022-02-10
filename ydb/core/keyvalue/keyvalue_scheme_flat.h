@@ -5,7 +5,7 @@
 namespace NKikimr {
 namespace NKeyValue {
 
-constexpr ui32 TABLE_ID = 0; // Table 0: [TSmallBoundedString key KEY, TString value]
+constexpr ui32 TABLE_ID = 0; // Table 0: [TSmallBoundedString key KEY, TString value] 
 constexpr ui32 KEY_TAG = 1;
 constexpr ui32 VALUE_TAG = 2;
 constexpr ui32 KEY_COLUMN_IDX = 0;

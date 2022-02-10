@@ -1,18 +1,18 @@
 #pragma once
 
-#include <ydb/library/yql/dq/common/dq_common.h>
-#include <ydb/library/yql/dq/proto/dq_tasks.pb.h>
-#include <ydb/library/yql/dq/runtime/dq_compute.h>
-#include <ydb/library/yql/dq/runtime/dq_input_channel.h>
-#include <ydb/library/yql/dq/runtime/dq_output_channel.h>
-#include <ydb/library/yql/dq/runtime/dq_output_consumer.h>
-#include <ydb/library/yql/dq/runtime/dq_source.h>
-#include <ydb/library/yql/dq/runtime/dq_sink.h>
+#include <ydb/library/yql/dq/common/dq_common.h> 
+#include <ydb/library/yql/dq/proto/dq_tasks.pb.h> 
+#include <ydb/library/yql/dq/runtime/dq_compute.h> 
+#include <ydb/library/yql/dq/runtime/dq_input_channel.h> 
+#include <ydb/library/yql/dq/runtime/dq_output_channel.h> 
+#include <ydb/library/yql/dq/runtime/dq_output_consumer.h> 
+#include <ydb/library/yql/dq/runtime/dq_source.h> 
+#include <ydb/library/yql/dq/runtime/dq_sink.h> 
 
-#include <ydb/library/yql/minikql/mkql_alloc.h>
-#include <ydb/library/yql/minikql/mkql_function_registry.h>
-#include <ydb/library/yql/minikql/mkql_node.h>
-#include <ydb/library/yql/minikql/mkql_node_visitor.h>
+#include <ydb/library/yql/minikql/mkql_alloc.h> 
+#include <ydb/library/yql/minikql/mkql_function_registry.h> 
+#include <ydb/library/yql/minikql/mkql_node.h> 
+#include <ydb/library/yql/minikql/mkql_node_visitor.h> 
 
 #include <library/cpp/monlib/metrics/histogram_collector.h>
 
@@ -125,7 +125,7 @@ struct TDqTaskRunnerSettings {
     bool TerminateOnError = false;
     bool AllowGeneratorsInUnboxedValues = true;
     TString OptLLVM = "";
-    THashMap<TString, TString> SecureParams;
+    THashMap<TString, TString> SecureParams; 
     THashMap<TString, TString> TaskParams;
 };
 

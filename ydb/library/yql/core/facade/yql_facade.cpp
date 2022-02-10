@@ -1,27 +1,27 @@
 #include "yql_facade.h"
 
-#include <ydb/library/yql/core/yql_execution.h>
-#include <ydb/library/yql/core/yql_expr_csee.h>
-#include <ydb/library/yql/core/yql_expr_optimize.h>
-#include <ydb/library/yql/core/yql_expr_type_annotation.h>
-#include <ydb/library/yql/core/yql_opt_rewrite_io.h>
-#include <ydb/library/yql/core/yql_opt_proposed_by_data.h>
-#include <ydb/library/yql/core/yql_gc_transformer.h>
-#include <ydb/library/yql/core/type_ann/type_ann_expr.h>
+#include <ydb/library/yql/core/yql_execution.h> 
+#include <ydb/library/yql/core/yql_expr_csee.h> 
+#include <ydb/library/yql/core/yql_expr_optimize.h> 
+#include <ydb/library/yql/core/yql_expr_type_annotation.h> 
+#include <ydb/library/yql/core/yql_opt_rewrite_io.h> 
+#include <ydb/library/yql/core/yql_opt_proposed_by_data.h> 
+#include <ydb/library/yql/core/yql_gc_transformer.h> 
+#include <ydb/library/yql/core/type_ann/type_ann_expr.h> 
 #include <ydb/library/yql/core/services/yql_plan.h>
 #include <ydb/library/yql/core/services/yql_eval_params.h>
 #include <ydb/library/yql/utils/log/context.h>
 #include <ydb/library/yql/utils/log/profile.h>
 #include <ydb/library/yql/core/services/yql_out_transformers.h>
 #include <ydb/library/yql/core/extract_predicate/extract_predicate_dbg.h>
-#include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
-#include <ydb/library/yql/providers/common/provider/yql_provider.h>
-#include <ydb/library/yql/providers/common/udf_resolve/yql_simple_udf_resolver.h>
-#include <ydb/library/yql/providers/common/udf_resolve/yql_outproc_udf_resolver.h>
-#include <ydb/library/yql/providers/common/udf_resolve/yql_udf_resolver_with_index.h>
-#include <ydb/library/yql/providers/common/proto/gateways_config.pb.h>
-#include <ydb/library/yql/providers/common/config/yql_setting.h>
-#include <ydb/library/yql/public/issue/yql_issue.h>
+#include <ydb/library/yql/providers/common/provider/yql_provider_names.h> 
+#include <ydb/library/yql/providers/common/provider/yql_provider.h> 
+#include <ydb/library/yql/providers/common/udf_resolve/yql_simple_udf_resolver.h> 
+#include <ydb/library/yql/providers/common/udf_resolve/yql_outproc_udf_resolver.h> 
+#include <ydb/library/yql/providers/common/udf_resolve/yql_udf_resolver_with_index.h> 
+#include <ydb/library/yql/providers/common/proto/gateways_config.pb.h> 
+#include <ydb/library/yql/providers/common/config/yql_setting.h> 
+#include <ydb/library/yql/public/issue/yql_issue.h> 
 
 #include <library/cpp/yson/node/node_io.h>
 #include <library/cpp/deprecated/split/split_iterator.h>
@@ -29,7 +29,7 @@
 #include <library/cpp/string_utils/base64/base64.h>
 
 #include <util/stream/file.h>
-#include <util/stream/null.h>
+#include <util/stream/null.h> 
 #include <util/string/split.h>
 #include <util/generic/guid.h>
 #include <util/system/rusage.h>
@@ -45,37 +45,37 @@ namespace {
 const size_t DEFAULT_AST_BUF_SIZE = 1024;
 const size_t DEFAULT_PLAN_BUF_SIZE = 1024;
 
-class TUrlLoader : public IUrlLoader {
-public:
-    TUrlLoader(TFileStoragePtr storage)
-        : Storage_(storage)
-    {}
-
+class TUrlLoader : public IUrlLoader { 
+public: 
+    TUrlLoader(TFileStoragePtr storage) 
+        : Storage_(storage) 
+    {} 
+ 
     TString Load(const TString& url, const TString& token) override {
         auto file = Storage_->PutUrl(url, token);
-        return TFileInput(file->GetPath()).ReadAll();
-    }
-
-private:
-    TFileStoragePtr Storage_;
-};
-
+        return TFileInput(file->GetPath()).ReadAll(); 
+    } 
+ 
+private: 
+    TFileStoragePtr Storage_; 
+}; 
+ 
 template <typename... Params1, typename... Params2>
 TProgram::TStatus SyncExecution(
         TProgram* program,
         TProgram::TFutureStatus (TProgram::*method)(Params1...),
-        Params2&&... params) {
+        Params2&&... params) { 
     TProgram::TFutureStatus future =
             (program->*method)(std::forward<Params2>(params)...);
-    YQL_ENSURE(future.Initialized());
+    YQL_ENSURE(future.Initialized()); 
     future.Wait();
-    YQL_ENSURE(!future.HasException());
+    YQL_ENSURE(!future.HasException()); 
 
     TProgram::TStatus status = future.GetValue();
     while (status == TProgram::TStatus::Async) {
         auto continueFuture = program->ContinueAsync();
         continueFuture.Wait();
-        YQL_ENSURE(!continueFuture.HasException());
+        YQL_ENSURE(!continueFuture.HasException()); 
         status = continueFuture.GetValue();
     }
 
@@ -111,17 +111,17 @@ std::function<TMaybe<TString>(const TString&)> BuildCompositeTokenResolver(TVect
 ///////////////////////////////////////////////////////////////////////////////
 // TProgramFactory
 ///////////////////////////////////////////////////////////////////////////////
-TProgramFactory::TProgramFactory(
-    bool useRepeatableRandomAndTimeProviders,
+TProgramFactory::TProgramFactory( 
+    bool useRepeatableRandomAndTimeProviders, 
     const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
     ui64 nextUniqueId,
     const TVector<TDataProviderInitializer>& dataProvidersInit,
     const TString& runner)
-    : UseRepeatableRandomAndTimeProviders_(useRepeatableRandomAndTimeProviders)
-    , FunctionRegistry_(functionRegistry)
+    : UseRepeatableRandomAndTimeProviders_(useRepeatableRandomAndTimeProviders) 
+    , FunctionRegistry_(functionRegistry) 
     , NextUniqueId_(nextUniqueId)
-    , DataProvidersInit_(dataProvidersInit)
-    , GatewaysConfig_(nullptr)
+    , DataProvidersInit_(dataProvidersInit) 
+    , GatewaysConfig_(nullptr) 
     , Runner_(runner)
 {
     AddCredentialsTable(std::make_shared<TCredentialTable>());
@@ -141,20 +141,20 @@ void TProgramFactory::AddUserDataTable(const TUserDataTable& userDataTable) {
             ythrow yexception() << "UserDataTable already has user data block with key " << p.first;
         }
     }
-}
-
-void TProgramFactory::AddCredentialsTable(TCredentialTablePtr credentialTable) {
-    CredentialTables_.push_back(credentialTable);
-}
-
+} 
+ 
+void TProgramFactory::AddCredentialsTable(TCredentialTablePtr credentialTable) { 
+    CredentialTables_.push_back(credentialTable); 
+} 
+ 
 void TProgramFactory::SetUserCredentials(const TUserCredentials& userCredentials) {
     UserCredentials_ = userCredentials;
 }
 
-void TProgramFactory::SetGatewaysConfig(const TGatewaysConfig* gatewaysConfig) {
-    GatewaysConfig_ = gatewaysConfig;
-}
-
+void TProgramFactory::SetGatewaysConfig(const TGatewaysConfig* gatewaysConfig) { 
+    GatewaysConfig_ = gatewaysConfig; 
+} 
+ 
 void TProgramFactory::SetModules(IModuleResolver::TPtr modules) {
     Modules_ = modules;
 }
@@ -168,10 +168,10 @@ void TProgramFactory::SetUdfIndex(TUdfIndex::TPtr udfIndex, TUdfIndexPackageSet:
     UdfIndexPackageSet_ = std::move(udfIndexPackageSet);
 }
 
-void TProgramFactory::SetFileStorage(TFileStoragePtr fileStorage) {
-    FileStorage_ = fileStorage;
-}
-
+void TProgramFactory::SetFileStorage(TFileStoragePtr fileStorage) { 
+    FileStorage_ = fileStorage; 
+} 
+ 
 TProgramPtr TProgramFactory::Create(
         const TFile& file,
         const TString& sessionId)
@@ -186,9 +186,9 @@ TProgramPtr TProgramFactory::Create(
         const TString& sessionId)
 {
     auto randomProvider = UseRepeatableRandomAndTimeProviders_ && !UseUnrepeatableRandom ?
-        CreateDeterministicRandomProvider(1) : CreateDefaultRandomProvider();
-    auto timeProvider = UseRepeatableRandomAndTimeProviders_ ?
-        CreateDeterministicTimeProvider(10000000) : CreateDefaultTimeProvider();
+        CreateDeterministicRandomProvider(1) : CreateDefaultRandomProvider(); 
+    auto timeProvider = UseRepeatableRandomAndTimeProviders_ ? 
+        CreateDeterministicTimeProvider(10000000) : CreateDefaultTimeProvider(); 
 
     TUdfIndex::TPtr udfIndex = UdfIndex_ ? UdfIndex_->Clone() : nullptr;
     TUdfIndexPackageSet::TPtr udfIndexPackageSet = UdfIndexPackageSet_ ? UdfIndexPackageSet_->Clone() : nullptr;
@@ -206,8 +206,8 @@ TProgramPtr TProgramFactory::Create(
 ///////////////////////////////////////////////////////////////////////////////
 TProgram::TProgram(
         const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
-        const TIntrusivePtr<IRandomProvider> randomProvider,
-        const TIntrusivePtr<ITimeProvider> timeProvider,
+        const TIntrusivePtr<IRandomProvider> randomProvider, 
+        const TIntrusivePtr<ITimeProvider> timeProvider, 
         ui64 nextUniqueId,
         const TVector<TDataProviderInitializer>& dataProvidersInit,
         const TUserDataTable& userDataTable,
@@ -217,32 +217,32 @@ TProgram::TProgram(
         const IUdfResolver::TPtr& udfResolver,
         const TUdfIndex::TPtr& udfIndex,
         const TUdfIndexPackageSet::TPtr& udfIndexPackageSet,
-        const TFileStoragePtr& fileStorage,
-        const TGatewaysConfig* gatewaysConfig,
+        const TFileStoragePtr& fileStorage, 
+        const TGatewaysConfig* gatewaysConfig, 
         const TString& filename,
         const TString& sourceCode,
         const TString& sessionId,
         const TString& runner,
         bool enableRangeComputeFor
-    )
-    : FunctionRegistry_(functionRegistry)
-    , RandomProvider_(randomProvider)
-    , TimeProvider_(timeProvider)
+    ) 
+    : FunctionRegistry_(functionRegistry) 
+    , RandomProvider_(randomProvider) 
+    , TimeProvider_(timeProvider) 
     , NextUniqueId_(nextUniqueId)
-    , DataProvidersInit_(dataProvidersInit)
-    , CredentialTables_(credentialTables)
+    , DataProvidersInit_(dataProvidersInit) 
+    , CredentialTables_(credentialTables) 
     , UserCredentials_(userCredentials)
     , UdfResolver_(udfResolver)
     , UdfIndex_(udfIndex)
     , UdfIndexPackageSet_(udfIndexPackageSet)
-    , FileStorage_(fileStorage)
+    , FileStorage_(fileStorage) 
     , UserDataStorage_(MakeIntrusive<TUserDataStorage>(fileStorage, userDataTable, udfResolver, udfIndex))
-    , GatewaysConfig_(gatewaysConfig)
+    , GatewaysConfig_(gatewaysConfig) 
     , Filename_(filename)
     , SourceCode_(sourceCode)
     , SourceSyntax_(ESourceSyntax::Unknown)
-    , SyntaxVersion_(0)
-    , AstRoot_(nullptr)
+    , SyntaxVersion_(0) 
+    , AstRoot_(nullptr) 
     , Modules_(modules)
     , ExprRoot_(nullptr)
     , SessionId_(sessionId)
@@ -254,31 +254,31 @@ TProgram::TProgram(
         SessionId_ = CreateGuidAsString();
     }
 
-    if (auto modules = dynamic_cast<TModuleResolver*>(Modules_.get())) {
+    if (auto modules = dynamic_cast<TModuleResolver*>(Modules_.get())) { 
         modules->AttachUserData(UserDataStorage_);
-        modules->SetUrlLoader(new TUrlLoader(FileStorage_));
-    }
+        modules->SetUrlLoader(new TUrlLoader(FileStorage_)); 
+    } 
     OperationOptions_.Runner = runner;
 }
 
-TProgram::~TProgram() {
+TProgram::~TProgram() { 
     try {
         CloseLastSession();
         // stop all non complete execution before deleting TExprCtx
-        DataProviders_.clear();
+        DataProviders_.clear(); 
     } catch (...) {
         Cerr << CurrentExceptionMessage() << Endl;
     }
 }
 
 void TProgram::ConfigureYsonResultFormat(NYson::EYsonFormat format) {
-    ResultFormat_ = format;
-    OutputFormat_ = format;
-}
-
-void TProgram::SetValidateOptions(NUdf::EValidateMode validateMode) {
+    ResultFormat_ = format; 
+    OutputFormat_ = format; 
+} 
+ 
+void TProgram::SetValidateOptions(NUdf::EValidateMode validateMode) { 
     Y_ENSURE(!TypeCtx_, "TypeCtx_ already created");
-    ValidateMode_ = validateMode;
+    ValidateMode_ = validateMode; 
 }
 
 void TProgram::SetDisableNativeUdfSupport(bool disable) {
@@ -297,41 +297,41 @@ TTypeAnnotationContextPtr TProgram::GetAnnotationContext() const {
 }
 
 TTypeAnnotationContextPtr TProgram::ProvideAnnotationContext(const TString& username) {
-    if (!TypeCtx_) {
+    if (!TypeCtx_) { 
         TypeCtx_ = BuildTypeAnnotationContext(username);
         TypeCtx_->OperationOptions = OperationOptions_;
-        TypeCtx_->ValidateMode = ValidateMode_;
+        TypeCtx_->ValidateMode = ValidateMode_; 
         TypeCtx_->DisableNativeUdfSupport = DisableNativeUdfSupport_;
         TypeCtx_->UseTableMetaFromGraph = UseTableMetaFromGraph_;
-    }
-
-    return TypeCtx_;
-}
-
-IPlanBuilder& TProgram::GetPlanBuilder() {
-    if (!PlanBuilder_) {
-        PlanBuilder_ = CreatePlanBuilder(*GetAnnotationContext());
-    }
-
-    return *PlanBuilder_;
-}
-
+    } 
+ 
+    return TypeCtx_; 
+} 
+ 
+IPlanBuilder& TProgram::GetPlanBuilder() { 
+    if (!PlanBuilder_) { 
+        PlanBuilder_ = CreatePlanBuilder(*GetAnnotationContext()); 
+    } 
+ 
+    return *PlanBuilder_; 
+} 
+ 
 void TProgram::SetParametersYson(const TString& parameters) {
     Y_ENSURE(!TypeCtx_, "TypeCtx_ already created");
     auto node = NYT::NodeFromYsonString(parameters);
-    YQL_ENSURE(node.IsMap());
-    for (const auto& x : node.AsMap()) {
-        YQL_ENSURE(x.second.IsMap());
-        YQL_ENSURE(x.second.HasKey("Data"));
+    YQL_ENSURE(node.IsMap()); 
+    for (const auto& x : node.AsMap()) { 
+        YQL_ENSURE(x.second.IsMap()); 
+        YQL_ENSURE(x.second.HasKey("Data")); 
         YQL_ENSURE(x.second.Size() == 1);
-    }
-
-    OperationOptions_.ParametersYson = node;
-    if (auto modules = dynamic_cast<TModuleResolver*>(Modules_.get())) {
-        modules->SetParameters(node);
-    }
-}
-
+    } 
+ 
+    OperationOptions_.ParametersYson = node; 
+    if (auto modules = dynamic_cast<TModuleResolver*>(Modules_.get())) { 
+        modules->SetParameters(node); 
+    } 
+} 
+ 
 bool TProgram::ExtractQueryParametersMetadata() {
     auto& types = *GetAnnotationContext();
     NYT::TNode params = NYT::TNode::CreateMap();
@@ -395,24 +395,24 @@ bool TProgram::ParseYql() {
     return FillParseResult(ParseAst(SourceCode_));
 }
 
-bool TProgram::ParseSql() {
+bool TProgram::ParseSql() { 
     YQL_PROFILE_FUNC(TRACE);
 
     static const THashMap<TString, TString> clusters = {
         { "plato", TString(YtProviderName) }
     };
-
-    NSQLTranslation::TTranslationSettings settings;
-    settings.ClusterMapping = clusters;
-    return ParseSql(settings);
+ 
+    NSQLTranslation::TTranslationSettings settings; 
+    settings.ClusterMapping = clusters; 
+    return ParseSql(settings); 
 }
 
-bool TProgram::ParseSql(const NSQLTranslation::TTranslationSettings& settings)
+bool TProgram::ParseSql(const NSQLTranslation::TTranslationSettings& settings) 
 {
     YQL_PROFILE_FUNC(TRACE);
     YQL_ENSURE(SourceSyntax_ == ESourceSyntax::Unknown);
     SourceSyntax_ = ESourceSyntax::Sql;
-    SyntaxVersion_ = settings.SyntaxVersion;
+    SyntaxVersion_ = settings.SyntaxVersion; 
     NYql::TWarningRules warningRules;
     return FillParseResult(SqlToYql(SourceCode_, settings, &warningRules), &warningRules);
 }
@@ -429,16 +429,16 @@ bool TProgram::Compile(const TString& username) {
         return false;
     }
     TypeCtx_->IsReadOnly = true;
-    if (Modules_.get()) {
-        auto libs = UserDataStorage_->GetLibraries();
-        for (auto lib : libs) {
-            if (!Modules_->AddFromFile(lib, *ExprCtx_, SyntaxVersion_, 0)) {
-                return false;
-            }
-        }
-    }
+    if (Modules_.get()) { 
+        auto libs = UserDataStorage_->GetLibraries(); 
+        for (auto lib : libs) { 
+            if (!Modules_->AddFromFile(lib, *ExprCtx_, SyntaxVersion_, 0)) { 
+                return false; 
+            } 
+        } 
+    } 
 
-    if (!CompileExpr(*AstRoot_, ExprRoot_, *ExprCtx_, Modules_.get(), 0, SyntaxVersion_)) {
+    if (!CompileExpr(*AstRoot_, ExprRoot_, *ExprCtx_, Modules_.get(), 0, SyntaxVersion_)) { 
         return false;
     }
 
@@ -544,34 +544,34 @@ TProgram::TFutureStatus TProgram::DiscoverAsync(const TString& username) {
     });
 }
 
-TProgram::TStatus TProgram::Validate(const TString& username, IOutputStream* exprOut, bool withTypes) {
+TProgram::TStatus TProgram::Validate(const TString& username, IOutputStream* exprOut, bool withTypes) { 
     YQL_PROFILE_FUNC(TRACE);
     auto m = &TProgram::ValidateAsync;
-    return SyncExecution(this, m, username, exprOut, withTypes);
+    return SyncExecution(this, m, username, exprOut, withTypes); 
 }
 
-TProgram::TFutureStatus TProgram::ValidateAsync(const TString& username, IOutputStream* exprOut, bool withTypes) {
+TProgram::TFutureStatus TProgram::ValidateAsync(const TString& username, IOutputStream* exprOut, bool withTypes) { 
     if (!ProvideAnnotationContext(username)->Initialize(*ExprCtx_) || !CollectUsedClusters()) {
         return NThreading::MakeFuture<TStatus>(IGraphTransformer::TStatus::Error);
     }
     TypeCtx_->IsReadOnly = true;
 
-    for (const auto& dp : DataProviders_) {
-        if (!dp.RemoteClusterProvider || !dp.RemoteValidate) {
-            continue;
-        }
-
-        if (auto cluster = dp.RemoteClusterProvider(UsedClusters_, UsedProviders_, SourceSyntax_)) {
+    for (const auto& dp : DataProviders_) { 
+        if (!dp.RemoteClusterProvider || !dp.RemoteValidate) { 
+            continue; 
+        } 
+ 
+        if (auto cluster = dp.RemoteClusterProvider(UsedClusters_, UsedProviders_, SourceSyntax_)) { 
             return dp.RemoteValidate(*cluster, SourceSyntax_, SourceCode_, *ExprCtx_);
-        }
+        } 
     }
 
     Y_ENSURE(ExprRoot_, "Program not compiled yet");
 
-    ExprStream_ = exprOut;
-    Transformer_ = TTransformationPipeline(TypeCtx_)
+    ExprStream_ = exprOut; 
+    Transformer_ = TTransformationPipeline(TypeCtx_) 
             .AddServiceTransformers()
-            .AddParametersEvaluation(*FunctionRegistry_)
+            .AddParametersEvaluation(*FunctionRegistry_) 
             .AddPreTypeAnnotation()
             .AddExpressionEvaluation(*FunctionRegistry_)
             .AddIOAnnotation()
@@ -580,9 +580,9 @@ TProgram::TFutureStatus TProgram::ValidateAsync(const TString& username, IOutput
             .Build();
 
     TFuture<void> openSession = OpenSession(username);
-    if (!openSession.Initialized()) {
-        return NThreading::MakeFuture<TStatus>(IGraphTransformer::TStatus::Error);
-    }
+    if (!openSession.Initialized()) { 
+        return NThreading::MakeFuture<TStatus>(IGraphTransformer::TStatus::Error); 
+    } 
 
     return openSession.Apply([this](const TFuture<void>& f) {
         YQL_LOG_CTX_ROOT_SCOPE(GetSessionId());
@@ -606,7 +606,7 @@ TProgram::TStatus TProgram::Optimize(
 {
     YQL_PROFILE_FUNC(TRACE);
     auto m = &TProgram::OptimizeAsync;
-    return SyncExecution(this, m, username, traceOut, tracePlan, exprOut, withTypes);
+    return SyncExecution(this, m, username, traceOut, tracePlan, exprOut, withTypes); 
 }
 
 TProgram::TFutureStatus TProgram::OptimizeAsync(
@@ -621,25 +621,25 @@ TProgram::TFutureStatus TProgram::OptimizeAsync(
     }
     TypeCtx_->IsReadOnly = true;
 
-    for (const auto& dp : DataProviders_) {
-        if (!dp.RemoteClusterProvider || !dp.RemoteOptimize) {
-            continue;
-        }
-
-        if (auto cluster = dp.RemoteClusterProvider(UsedClusters_, UsedProviders_, SourceSyntax_)) {
-            return dp.RemoteOptimize(*cluster,
+    for (const auto& dp : DataProviders_) { 
+        if (!dp.RemoteClusterProvider || !dp.RemoteOptimize) { 
+            continue; 
+        } 
+ 
+        if (auto cluster = dp.RemoteClusterProvider(UsedClusters_, UsedProviders_, SourceSyntax_)) { 
+            return dp.RemoteOptimize(*cluster, 
                 SourceSyntax_, SourceCode_, nullptr,
-                TypeCtx_, ExprRoot_, *ExprCtx_, ExternalQueryAst_, ExternalQueryPlan_);
-        }
+                TypeCtx_, ExprRoot_, *ExprCtx_, ExternalQueryAst_, ExternalQueryPlan_); 
+        } 
     }
 
     Y_ENSURE(ExprRoot_, "Program not compiled yet");
 
-    ExprStream_ = exprOut;
-    PlanStream_ = tracePlan;
-    Transformer_ = TTransformationPipeline(TypeCtx_)
+    ExprStream_ = exprOut; 
+    PlanStream_ = tracePlan; 
+    Transformer_ = TTransformationPipeline(TypeCtx_) 
         .AddServiceTransformers()
-        .AddParametersEvaluation(*FunctionRegistry_)
+        .AddParametersEvaluation(*FunctionRegistry_) 
         .AddPreTypeAnnotation()
         .AddExpressionEvaluation(*FunctionRegistry_)
         .AddIOAnnotation()
@@ -654,7 +654,7 @@ TProgram::TFutureStatus TProgram::OptimizeAsync(
 
     TFuture<void> openSession = OpenSession(username);
     if (!openSession.Initialized())
-        return NThreading::MakeFuture<TStatus>(IGraphTransformer::TStatus::Error);
+        return NThreading::MakeFuture<TStatus>(IGraphTransformer::TStatus::Error); 
 
     return openSession.Apply([this](const TFuture<void>& f) {
         YQL_LOG_CTX_ROOT_SCOPE(GetSessionId());
@@ -685,24 +685,24 @@ TProgram::TFutureStatus TProgram::OptimizeAsyncWithConfig(
     }
     TypeCtx_->IsReadOnly = true;
 
-    for (const auto& dp : DataProviders_) {
-        if (!dp.RemoteClusterProvider || !dp.RemoteOptimize) {
-            continue;
-        }
-
-        if (auto cluster = dp.RemoteClusterProvider(UsedClusters_, UsedProviders_, SourceSyntax_)) {
-            return dp.RemoteOptimize(*cluster,
+    for (const auto& dp : DataProviders_) { 
+        if (!dp.RemoteClusterProvider || !dp.RemoteOptimize) { 
+            continue; 
+        } 
+ 
+        if (auto cluster = dp.RemoteClusterProvider(UsedClusters_, UsedProviders_, SourceSyntax_)) { 
+            return dp.RemoteOptimize(*cluster, 
                 SourceSyntax_, SourceCode_, &pipelineConf,
-                TypeCtx_, ExprRoot_, *ExprCtx_, ExternalQueryAst_, ExternalQueryPlan_);
-        }
+                TypeCtx_, ExprRoot_, *ExprCtx_, ExternalQueryAst_, ExternalQueryPlan_); 
+        } 
     }
 
     Y_ENSURE(ExprRoot_, "Program not compiled yet");
 
-    TTransformationPipeline pipeline(TypeCtx_);
+    TTransformationPipeline pipeline(TypeCtx_); 
     pipelineConf.AfterCreate(&pipeline);
     pipeline.AddServiceTransformers();
-    pipeline.AddParametersEvaluation(*FunctionRegistry_);
+    pipeline.AddParametersEvaluation(*FunctionRegistry_); 
     pipeline.AddPreTypeAnnotation();
     pipeline.AddExpressionEvaluation(*FunctionRegistry_);
     pipeline.AddIOAnnotation();
@@ -747,7 +747,7 @@ TProgram::TStatus TProgram::Run(
 {
     YQL_PROFILE_FUNC(TRACE);
     auto m = &TProgram::RunAsync;
-    return SyncExecution(this, m, username, traceOut, tracePlan, exprOut, withTypes);
+    return SyncExecution(this, m, username, traceOut, tracePlan, exprOut, withTypes); 
 }
 
 TProgram::TFutureStatus TProgram::RunAsync(
@@ -762,23 +762,23 @@ TProgram::TFutureStatus TProgram::RunAsync(
     }
     TypeCtx_->IsReadOnly = false;
 
-    for (const auto& dp : DataProviders_) {
-        if (!dp.RemoteClusterProvider || !dp.RemoteRun) {
-            continue;
-        }
-
-        if (auto cluster = dp.RemoteClusterProvider(UsedClusters_, UsedProviders_, SourceSyntax_)) {
+    for (const auto& dp : DataProviders_) { 
+        if (!dp.RemoteClusterProvider || !dp.RemoteRun) { 
+            continue; 
+        } 
+ 
+        if (auto cluster = dp.RemoteClusterProvider(UsedClusters_, UsedProviders_, SourceSyntax_)) { 
             return dp.RemoteRun(*cluster, SourceSyntax_, SourceCode_,
-                OutputFormat_, ResultFormat_, nullptr,
-                TypeCtx_, ExprRoot_, *ExprCtx_, ExternalQueryAst_, ExternalQueryPlan_, ExternalDiagnostics_,
-                ResultProviderConfig_);
-        }
+                OutputFormat_, ResultFormat_, nullptr, 
+                TypeCtx_, ExprRoot_, *ExprCtx_, ExternalQueryAst_, ExternalQueryPlan_, ExternalDiagnostics_, 
+                ResultProviderConfig_); 
+        } 
     }
 
     Y_ENSURE(ExprRoot_, "Program not compiled yet");
 
-    ExprStream_ = exprOut;
-    PlanStream_ = tracePlan;
+    ExprStream_ = exprOut; 
+    PlanStream_ = tracePlan; 
 
     TTransformationPipeline pipeline(TypeCtx_);
     pipeline.AddServiceTransformers();
@@ -801,10 +801,10 @@ TProgram::TFutureStatus TProgram::RunAsync(
     Transformer_ = pipeline.Build();
 
     TFuture<void> openSession = OpenSession(username);
-    if (!openSession.Initialized()) {
-        return NThreading::MakeFuture<TStatus>(IGraphTransformer::TStatus::Error);
-    }
-
+    if (!openSession.Initialized()) { 
+        return NThreading::MakeFuture<TStatus>(IGraphTransformer::TStatus::Error); 
+    } 
+ 
     SavedExprRoot_ = ExprRoot_;
 
     return openSession.Apply([this](const TFuture<void>& f) {
@@ -836,25 +836,25 @@ TProgram::TFutureStatus TProgram::RunAsyncWithConfig(
     }
     TypeCtx_->IsReadOnly = false;
 
-    for (const auto& dp : DataProviders_) {
-        if (!dp.RemoteClusterProvider || !dp.RemoteRun) {
-            continue;
-        }
-
-        if (auto cluster = dp.RemoteClusterProvider(UsedClusters_, UsedProviders_, SourceSyntax_)) {
+    for (const auto& dp : DataProviders_) { 
+        if (!dp.RemoteClusterProvider || !dp.RemoteRun) { 
+            continue; 
+        } 
+ 
+        if (auto cluster = dp.RemoteClusterProvider(UsedClusters_, UsedProviders_, SourceSyntax_)) { 
             return dp.RemoteRun(*cluster, SourceSyntax_, SourceCode_,
-                OutputFormat_, ResultFormat_, &pipelineConf,
-                TypeCtx_, ExprRoot_, *ExprCtx_, ExternalQueryAst_, ExternalQueryPlan_, ExternalDiagnostics_,
-                ResultProviderConfig_);
-        }
+                OutputFormat_, ResultFormat_, &pipelineConf, 
+                TypeCtx_, ExprRoot_, *ExprCtx_, ExternalQueryAst_, ExternalQueryPlan_, ExternalDiagnostics_, 
+                ResultProviderConfig_); 
+        } 
     }
 
     Y_ENSURE(ExprRoot_, "Program not compiled yet");
 
-    TTransformationPipeline pipeline(TypeCtx_);
+    TTransformationPipeline pipeline(TypeCtx_); 
     pipelineConf.AfterCreate(&pipeline);
     pipeline.AddServiceTransformers();
-    pipeline.AddParametersEvaluation(*FunctionRegistry_);
+    pipeline.AddParametersEvaluation(*FunctionRegistry_); 
     pipeline.AddPreTypeAnnotation();
     pipeline.AddExpressionEvaluation(*FunctionRegistry_);
     pipeline.AddIOAnnotation();
@@ -1189,7 +1189,7 @@ TMaybe<TString> TProgram::GetDiscoveredData() {
     return out.Str();
 }
 
-TProgram::TFutureStatus TProgram::ContinueAsync() {
+TProgram::TFutureStatus TProgram::ContinueAsync() { 
     YQL_LOG_CTX_ROOT_SCOPE(GetSessionId());
     return AsyncTransformWithFallback(true);
 }
@@ -1214,7 +1214,7 @@ void TProgram::CleanupLastSession() {
     }
 }
 
-void TProgram::CloseLastSession() {
+void TProgram::CloseLastSession() { 
     YQL_LOG_CTX_ROOT_SCOPE(GetSessionId());
 
     TString sessionId = TakeSessionId();
@@ -1222,10 +1222,10 @@ void TProgram::CloseLastSession() {
         return;
     }
 
-    for (const auto& dp : DataProviders_) {
-        if (dp.CloseSession) {
-            dp.CloseSession(sessionId);
-        }
+    for (const auto& dp : DataProviders_) { 
+        if (dp.CloseSession) { 
+            dp.CloseSession(sessionId); 
+        } 
     }
 }
 
@@ -1248,47 +1248,47 @@ TTypeAnnotationContextPtr TProgram::BuildTypeAnnotationContext(const TString& us
     auto typeAnnotationContext = MakeIntrusive<TTypeAnnotationContext>();
 
     typeAnnotationContext->UserDataStorage = UserDataStorage_;
-    typeAnnotationContext->Credentials = CredentialTables_;
+    typeAnnotationContext->Credentials = CredentialTables_; 
     typeAnnotationContext->UserCredentials = UserCredentials_;
     typeAnnotationContext->Modules = Modules_;
     typeAnnotationContext->UdfResolver = UdfResolver_;
     typeAnnotationContext->UdfIndex = UdfIndex_;
     typeAnnotationContext->UdfIndexPackageSet = UdfIndexPackageSet_;
-    typeAnnotationContext->RandomProvider = RandomProvider_;
-    typeAnnotationContext->TimeProvider = TimeProvider_;
-    if (DiagnosticFormat_) {
-        typeAnnotationContext->Diagnostics = true;
-    }
-
+    typeAnnotationContext->RandomProvider = RandomProvider_; 
+    typeAnnotationContext->TimeProvider = TimeProvider_; 
+    if (DiagnosticFormat_) { 
+        typeAnnotationContext->Diagnostics = true; 
+    } 
+ 
     if (UdfIndex_ && UdfIndexPackageSet_) {
         // setup default versions at the beginning
         // could be overridden by pragma later
         UdfIndexPackageSet_->AddResourcesTo(UdfIndex_);
     }
 
-    PlanBuilder_ = CreatePlanBuilder(*typeAnnotationContext);
+    PlanBuilder_ = CreatePlanBuilder(*typeAnnotationContext); 
     THashSet<TString> providerNames;
     TVector<TString> fullResultDataSinks;
     TVector<std::function<TMaybe<TString>(const TString& url)>> tokenResolvers;
-    for (const auto& dpi : DataProvidersInit_) {
-        auto dp = dpi(
+    for (const auto& dpi : DataProvidersInit_) { 
+        auto dp = dpi( 
             username,
-            SessionId_,
-            GatewaysConfig_,
-            FunctionRegistry_,
-            RandomProvider_,
-            typeAnnotationContext,
-            ProgressWriter_,
-            OperationOptions_
-        );
+            SessionId_, 
+            GatewaysConfig_, 
+            FunctionRegistry_, 
+            RandomProvider_, 
+            typeAnnotationContext, 
+            ProgressWriter_, 
+            OperationOptions_ 
+        ); 
 
         providerNames.insert(dp.Names.begin(), dp.Names.end());
-        DataProviders_.emplace_back(dp);
-        if (dp.Source) {
+        DataProviders_.emplace_back(dp); 
+        if (dp.Source) { 
             typeAnnotationContext->AddDataSource(dp.Names, dp.Source);
-        }
-
-        if (dp.Sink) {
+        } 
+ 
+        if (dp.Sink) { 
             typeAnnotationContext->AddDataSink(dp.Names, dp.Sink);
         }
 
@@ -1299,8 +1299,8 @@ TTypeAnnotationContextPtr TProgram::BuildTypeAnnotationContext(const TString& us
         if (dp.SupportFullResultDataSink) {
             fullResultDataSinks.insert(fullResultDataSinks.end(), dp.Names.begin(), dp.Names.end());
         }
-    }
-
+    } 
+ 
     TVector<TString> resultProviderDataSources;
     if (providerNames.contains(YtProviderName)) {
         resultProviderDataSources.push_back(TString(YtProviderName));
@@ -1322,27 +1322,27 @@ TTypeAnnotationContextPtr TProgram::BuildTypeAnnotationContext(const TString& us
         resultProviderDataSources.push_back(TString(DqProviderName));
     }
 
-    if (!resultProviderDataSources.empty())
-    {
+    if (!resultProviderDataSources.empty()) 
+    { 
         auto resultFormat = ResultFormat_;
         auto writerFactory = [resultFormat] () { return CreateYsonResultWriter(resultFormat); };
-        ResultProviderConfig_ = MakeIntrusive<TResultProviderConfig>(*typeAnnotationContext,
-            *FunctionRegistry_, IDataProvider::EResultFormat::Yson, ToString((ui32)resultFormat), writerFactory);
-        ResultProviderConfig_->SupportsResultPosition = SupportsResultPosition_;
+        ResultProviderConfig_ = MakeIntrusive<TResultProviderConfig>(*typeAnnotationContext, 
+            *FunctionRegistry_, IDataProvider::EResultFormat::Yson, ToString((ui32)resultFormat), writerFactory); 
+        ResultProviderConfig_->SupportsResultPosition = SupportsResultPosition_; 
         auto resultProvider = CreateResultProvider(ResultProviderConfig_);
         typeAnnotationContext->AddDataSink(ResultProviderName, resultProvider);
-        typeAnnotationContext->AvailablePureResultDataSources = resultProviderDataSources;
+        typeAnnotationContext->AvailablePureResultDataSources = resultProviderDataSources; 
     }
 
     if (!fullResultDataSinks.empty()) {
         typeAnnotationContext->FullResultDataSink = fullResultDataSinks.front();
     }
 
-    {
+    { 
         auto configProvider = CreateConfigProvider(*typeAnnotationContext, GatewaysConfig_);
         typeAnnotationContext->AddDataSource(ConfigProviderName, configProvider);
-    }
-
+    } 
+ 
     typeAnnotationContext->UserDataStorage->SetTokenResolver(BuildCompositeTokenResolver(std::move(tokenResolvers)));
     return typeAnnotationContext;
 }
@@ -1350,12 +1350,12 @@ TTypeAnnotationContextPtr TProgram::BuildTypeAnnotationContext(const TString& us
 TFuture<void> TProgram::OpenSession(const TString& username)
 {
     TVector<TFuture<void>> openFutures;
-    for (const auto& dp : DataProviders_) {
-        if (dp.OpenSession) {
-            auto future = dp.OpenSession(SessionId_, username, ProgressWriter_, OperationOptions_,
+    for (const auto& dp : DataProviders_) { 
+        if (dp.OpenSession) { 
+            auto future = dp.OpenSession(SessionId_, username, ProgressWriter_, OperationOptions_, 
                 RandomProvider_, TimeProvider_);
-            openFutures.push_back(future);
-        }
+            openFutures.push_back(future); 
+        } 
     }
 
     return WaitExceptionOrAll(openFutures);

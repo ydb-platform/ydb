@@ -4,8 +4,8 @@
 
 #include <ydb/core/kqp/common/kqp_resolve.h>
 
-#include <ydb/library/yql/dq/runtime/dq_columns_resolve.h>
-#include <ydb/library/yql/dq/runtime/dq_tasks_runner.h>
+#include <ydb/library/yql/dq/runtime/dq_columns_resolve.h> 
+#include <ydb/library/yql/dq/runtime/dq_tasks_runner.h> 
 
 #include <util/generic/vector.h>
 

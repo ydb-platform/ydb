@@ -67,8 +67,8 @@ struct TEvTablet {
         EvTabletStop, // from local to sys tablet, from sys tablet to user tablet
         EvTabletStopped, // from user tablet to sys tablet, ready to die now
 
-        EvReadLocalBase = EvBoot + 1536,
-        EvReadLocalBaseResult,
+        EvReadLocalBase = EvBoot + 1536, 
+        EvReadLocalBaseResult, 
         EvLocalMKQL,
         EvLocalMKQLResponse,
         EvLocalSchemeTx,
@@ -77,7 +77,7 @@ struct TEvTablet {
         EvGetCountersResponse,
         EvLocalReadColumns,
         EvLocalReadColumnsResponse,
-
+ 
         // from outside to leader
         EvFollowerAttach = EvBoot + 2048,
         EvFollowerDetach,
@@ -429,22 +429,22 @@ struct TEvTablet {
             Record.SetFlags(flags);
         }
     };
-
+ 
     struct TEvReadLocalBase : public TEventPB<TEvReadLocalBase, NKikimrTabletBase::TEvReadLocalBase, EvReadLocalBase> {
         TEvReadLocalBase()
         {}
-
+ 
         TEvReadLocalBase(const TString& rootKey, bool saveScheme)
-        {
+        { 
             if (!rootKey.empty())
                 Record.SetRootKey(rootKey);
             if (saveScheme)
                 Record.SetSaveScheme(true);
-        }
-    };
-
+        } 
+    }; 
+ 
     struct TEvReadLocalBaseResult : public TEventPB<TEvReadLocalBaseResult, NKikimrTabletBase::TEvReadLocalBaseResult, TEvTablet::EvReadLocalBaseResult> {
-
+ 
         ui64 Origin() const { return Record.GetOrigin(); }
         bool IsError() const { return Record.HasIsError() && Record.GetIsError(); }
         TStringBuf DocBuffer() const { return Record.HasDocBuffer() ? Record.GetDocBuffer() : TStringBuf(); }
@@ -453,15 +453,15 @@ struct TEvTablet {
         {}
 
         TEvReadLocalBaseResult(ui64 origin, const TString& rootKey, bool isError, const TString& docBuffer, const TString* schemeBuffer)
-        {
+        { 
             Record.SetOrigin(origin);
             Record.SetRootKey(rootKey);
             Record.SetIsError(isError);
             Record.SetDocBuffer(docBuffer);
             if (schemeBuffer)
                 Record.SetScheme(*schemeBuffer);
-        }
-    };
+        } 
+    }; 
 
     struct TEvLocalMKQL : public TEventPB<TEvLocalMKQL, NKikimrTabletTxBase::TEvLocalMKQL, TEvTablet::EvLocalMKQL> {
         TEvLocalMKQL()

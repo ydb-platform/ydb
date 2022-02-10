@@ -2,9 +2,9 @@
 
 #include <ydb/core/protos/services.pb.h>
 
-#include <ydb/library/yql/dq/actors/task_runner/task_runner_actor.h>
+#include <ydb/library/yql/dq/actors/task_runner/task_runner_actor.h> 
 
-#include <ydb/library/yql/dq/runtime/dq_tasks_runner.h>
+#include <ydb/library/yql/dq/runtime/dq_tasks_runner.h> 
 
 #include <library/cpp/actors/core/hfunc.h>
 

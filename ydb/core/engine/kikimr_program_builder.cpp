@@ -2,10 +2,10 @@
 
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
 
-#include <ydb/library/yql/minikql/mkql_node_cast.h>
-#include <ydb/library/yql/minikql/mkql_node_visitor.h>
-#include <ydb/library/yql/minikql/mkql_node_printer.h>
-#include <ydb/library/yql/minikql/mkql_opt_literal.h>
+#include <ydb/library/yql/minikql/mkql_node_cast.h> 
+#include <ydb/library/yql/minikql/mkql_node_visitor.h> 
+#include <ydb/library/yql/minikql/mkql_node_printer.h> 
+#include <ydb/library/yql/minikql/mkql_opt_literal.h> 
 
 #include <array>
 
@@ -44,19 +44,19 @@ TType* ValidateColumns(
 } // namespace
 
 TReadRangeOptions::TReadRangeOptions(ui32 valueType, const TTypeEnvironment& env)
-        : ItemsLimit(BuildDataLiteral(NUdf::TUnboxedValuePod((ui64)0), NUdf::EDataSlot::Uint64, env), true)
-    , BytesLimit(BuildDataLiteral(NUdf::TUnboxedValuePod((ui64)0), NUdf::EDataSlot::Uint64, env), true)
+        : ItemsLimit(BuildDataLiteral(NUdf::TUnboxedValuePod((ui64)0), NUdf::EDataSlot::Uint64, env), true) 
+    , BytesLimit(BuildDataLiteral(NUdf::TUnboxedValuePod((ui64)0), NUdf::EDataSlot::Uint64, env), true) 
     , InitValue(BuildEmptyOptionalDataLiteral(valueType, env), true)
     , TermValue(BuildEmptyOptionalDataLiteral(valueType, env), true)
     , PayloadStruct(env.GetEmptyStruct(), true)
-    , Flags(BuildDataLiteral(NUdf::TUnboxedValuePod((ui32)TFlags::Default), NUdf::EDataSlot::Uint32, env), true)
+    , Flags(BuildDataLiteral(NUdf::TUnboxedValuePod((ui32)TFlags::Default), NUdf::EDataSlot::Uint32, env), true) 
 {
 }
 
 TTableRangeOptions::TTableRangeOptions(const TTypeEnvironment& env)
-        : ItemsLimit(BuildDataLiteral(NUdf::TUnboxedValuePod((ui64)0), NUdf::EDataSlot::Uint64, env), true)
-    , BytesLimit(BuildDataLiteral(NUdf::TUnboxedValuePod((ui64)0), NUdf::EDataSlot::Uint64, env), true)
-    , Flags(BuildDataLiteral(NUdf::TUnboxedValuePod((ui32)TReadRangeOptions::TFlags::Default), NUdf::EDataSlot::Uint32, env), true)
+        : ItemsLimit(BuildDataLiteral(NUdf::TUnboxedValuePod((ui64)0), NUdf::EDataSlot::Uint64, env), true) 
+    , BytesLimit(BuildDataLiteral(NUdf::TUnboxedValuePod((ui64)0), NUdf::EDataSlot::Uint64, env), true) 
+    , Flags(BuildDataLiteral(NUdf::TUnboxedValuePod((ui32)TReadRangeOptions::TFlags::Default), NUdf::EDataSlot::Uint32, env), true) 
     , Reverse(BuildDataLiteral(NUdf::TUnboxedValuePod(false), NUdf::EDataSlot::Bool, env), true)
 {
 }
@@ -77,7 +77,7 @@ TRuntimeNode TParametersBuilder::Build() {
 
 static TRuntimeNode DoRewriteNullType(
     TRuntimeNode value,
-    NUdf::TDataTypeId expectedType,
+    NUdf::TDataTypeId expectedType, 
     const TInternName& nullInternName,
     const TTypeEnvironment& env)
 {
@@ -118,13 +118,13 @@ void TUpdateRowBuilder::InplaceUpdateColumn(
 {
     MKQL_ENSURE(AS_TYPE(TDataType, value)->GetSchemeType() == expectedType,
             "Mismatch of column type");
-    TDataType* byteType = TDataType::Create(NUdf::TDataType<ui8>::Id, Env);
+    TDataType* byteType = TDataType::Create(NUdf::TDataType<ui8>::Id, Env); 
     std::array<TType*, 2> elements;
     elements[0] = byteType;
     elements[1] = value.GetStaticType();
     TTupleType* tupleType = TTupleType::Create(elements.size(), elements.data(), Env);
     std::array<TRuntimeNode, 2> items;
-    items[0] = TRuntimeNode(BuildDataLiteral(NUdf::TUnboxedValuePod((ui8)mode), NUdf::TDataType<ui8>::Id, Env), true);
+    items[0] = TRuntimeNode(BuildDataLiteral(NUdf::TUnboxedValuePod((ui8)mode), NUdf::TDataType<ui8>::Id, Env), true); 
     items[1] = value;
     TTupleLiteral* tuple = TTupleLiteral::Create(
             items.size(), items.data(), tupleType, Env);
@@ -177,7 +177,7 @@ TKikimrProgramBuilder::TKikimrProgramBuilder(
         const IFunctionRegistry& functionRegistry)
     : TProgramBuilder(env, functionRegistry, true)
 {
-    UseNullType = false;
+    UseNullType = false; 
     NullInternName = Env.InternName(TStringBuf("Null"));
 
     std::array<TType*, 3> tupleTypes;
@@ -189,7 +189,7 @@ TKikimrProgramBuilder::TKikimrProgramBuilder(
 
 TRuntimeNode TKikimrProgramBuilder::RewriteNullType(
         TRuntimeNode value,
-        NUdf::TDataTypeId expectedType) const
+        NUdf::TDataTypeId expectedType) const 
 {
     return DoRewriteNullType(value, expectedType, NullInternName, Env);
 }
@@ -286,9 +286,9 @@ TRuntimeNode TKikimrProgramBuilder::SelectRange(
         TRuntimeNode readTarget)
 {
     MKQL_ENSURE(AS_TYPE(TDataType, readTarget)->GetSchemeType() == NUdf::TDataType<ui32>::Id, "Read target must be ui32");
-    MKQL_ENSURE(AS_TYPE(TDataType, options.Flags)->GetSchemeType() == NUdf::TDataType<ui32>::Id, "Flags must be ui32");
-    MKQL_ENSURE(AS_TYPE(TDataType, options.ItemsLimit)->GetSchemeType() == NUdf::TDataType<ui64>::Id, "ItemsLimit must be ui64");
-    MKQL_ENSURE(AS_TYPE(TDataType, options.BytesLimit)->GetSchemeType() == NUdf::TDataType<ui64>::Id, "BytesLimit must be ui64");
+    MKQL_ENSURE(AS_TYPE(TDataType, options.Flags)->GetSchemeType() == NUdf::TDataType<ui32>::Id, "Flags must be ui32"); 
+    MKQL_ENSURE(AS_TYPE(TDataType, options.ItemsLimit)->GetSchemeType() == NUdf::TDataType<ui64>::Id, "ItemsLimit must be ui64"); 
+    MKQL_ENSURE(AS_TYPE(TDataType, options.BytesLimit)->GetSchemeType() == NUdf::TDataType<ui64>::Id, "BytesLimit must be ui64"); 
 
     if (options.Reverse) {
         MKQL_ENSURE(AS_TYPE(TDataType, options.Reverse)->GetSchemeType() == NUdf::TDataType<bool>::Id, "Reverse must be bool");
@@ -320,20 +320,20 @@ TRuntimeNode TKikimrProgramBuilder::SelectRange(
 
         if (dataFrom && dataTo) {
             MKQL_ENSURE(dataFrom->IsSameType(*dataTo), "Data types for key column " << i
-                << " don't match From: " << NUdf::GetDataTypeInfo(*dataFrom->GetDataSlot()).Name
-                << " To: " << NUdf::GetDataTypeInfo(*dataTo->GetDataSlot()).Name);
+                << " don't match From: " << NUdf::GetDataTypeInfo(*dataFrom->GetDataSlot()).Name 
+                << " To: " << NUdf::GetDataTypeInfo(*dataTo->GetDataSlot()).Name); 
         }
 
         ui32 dataType = dataFrom ? dataFrom->GetSchemeType() : dataTo->GetSchemeType();
         MKQL_ENSURE(keyTypes[i] == dataType, "Mismatch of key column " << i
-            << " type, expected: " << NUdf::GetDataTypeInfo(NUdf::GetDataSlot(keyTypes[i])).Name
-            << ", but got: " << NUdf::GetDataTypeInfo(NUdf::GetDataSlot(dataType)).Name);
+            << " type, expected: " << NUdf::GetDataTypeInfo(NUdf::GetDataSlot(keyTypes[i])).Name 
+            << ", but got: " << NUdf::GetDataTypeInfo(NUdf::GetDataSlot(dataType)).Name); 
     }
 
     TRuntimeNode tags;
     auto rowType = ValidateColumns(columns, tags, this);
     TType* listType = NewListType(rowType);
-    TDataType* boolType = TDataType::Create(NUdf::TDataType<bool>::Id, Env);
+    TDataType* boolType = TDataType::Create(NUdf::TDataType<bool>::Id, Env); 
 
     TRuntimeNode skipNullKeys = BuildOptionList(options.SkipNullKeys, *this);
     TRuntimeNode forbidNullArgsFrom = BuildOptionList(options.ForbidNullArgsFrom, *this);
@@ -435,7 +435,7 @@ TRuntimeNode TKikimrProgramBuilder::MapParameter(
     auto itemType = listDetailedType.GetItemType();
     ThrowIfListOfVoid(itemType);
 
-    TRuntimeNode itemArg = Arg(itemType);
+    TRuntimeNode itemArg = Arg(itemType); 
     auto newItem = handler(itemArg);
 
     auto resultListType = TListType::Create(newItem.GetStaticType(), Env);
@@ -461,7 +461,7 @@ TRuntimeNode TKikimrProgramBuilder::FlatMapParameter(
     auto itemType = listDetailedType.GetItemType();
     ThrowIfListOfVoid(itemType);
 
-    TRuntimeNode itemArg = Arg(itemType);
+    TRuntimeNode itemArg = Arg(itemType); 
     auto newItem = handler(itemArg);
     auto outputListType = AS_TYPE(TListType, newItem);
 
@@ -473,7 +473,7 @@ TRuntimeNode TKikimrProgramBuilder::FlatMapParameter(
 }
 
 TRuntimeNode TKikimrProgramBuilder::AcquireLocks(TRuntimeNode lockTxId) {
-    MKQL_ENSURE(AS_TYPE(TDataType, lockTxId)->GetSchemeType() == NUdf::TDataType<ui64>::Id, "LockTxId must be ui64");
+    MKQL_ENSURE(AS_TYPE(TDataType, lockTxId)->GetSchemeType() == NUdf::TDataType<ui64>::Id, "LockTxId must be ui64"); 
 
     TCallableBuilder callableBuilder(Env, "AcquireLocks", Env.GetTypeOfVoid());
     callableBuilder.Add(lockTxId);
@@ -545,8 +545,8 @@ TRuntimeNode TKikimrProgramBuilder::Bind(TRuntimeNode program, TRuntimeNode para
 
                 MKQL_ENSURE(value.GetStaticType()->IsSameType(*callable.GetType()->GetReturnType()),
                     "Incorrect type for parameter " << parameterName
-                    << ", expected: " << PrintNode(callable.GetType()->GetReturnType(), true)
-                    << ", actual: " << PrintNode(value.GetStaticType(), true));
+                    << ", expected: " << PrintNode(callable.GetType()->GetReturnType(), true) 
+                    << ", actual: " << PrintNode(value.GetStaticType(), true)); 
 
                 callable.SetResult(value, Env);
             } else if (callableName == mapParameterFunc || callableName == flatMapParameterFunc) {
@@ -567,8 +567,8 @@ TRuntimeNode TKikimrProgramBuilder::Bind(TRuntimeNode program, TRuntimeNode para
                 auto lambdaArgNode = callable.GetInput(1).GetNode();
                 auto lambdaRootNode = callable.GetInput(2);
                 explorer.Walk(lambdaRootNode.GetNode(), Env);
-                for (ui32 i = 0; i < list->GetItemsCount(); ++i) {
-                    auto itemValue = list->GetItems()[i];
+                for (ui32 i = 0; i < list->GetItemsCount(); ++i) { 
+                    auto itemValue = list->GetItems()[i]; 
                     bool wereChanges;
                     auto newValue = SinglePassVisitCallables(lambdaRootNode, explorer,
                         [&](TInternName name) {
@@ -629,33 +629,33 @@ TRuntimeNode TKikimrProgramBuilder::Build(TRuntimeNode listOfVoid, ui32 bindFlag
     return Bind(program, parametersBuilder.Build(), bindFlags);
 }
 
-TRuntimeNode TKikimrProgramBuilder::Abort() {
-    TCallableBuilder callableBuilder(Env, "Abort", Env.GetVoid()->GetGenericType());
-    return TRuntimeNode(callableBuilder.Build(), false);
-}
+TRuntimeNode TKikimrProgramBuilder::Abort() { 
+    TCallableBuilder callableBuilder(Env, "Abort", Env.GetVoid()->GetGenericType()); 
+    return TRuntimeNode(callableBuilder.Build(), false); 
+} 
+ 
+TRuntimeNode TKikimrProgramBuilder::StepTxId() { 
+    std::array<TType*, 2> tupleTypes; 
+    tupleTypes[0] = NewDataType(NUdf::TDataType<ui64>::Id); 
+    tupleTypes[1] = NewDataType(NUdf::TDataType<ui64>::Id); 
+    auto returnType = NewTupleType(tupleTypes); 
+ 
+    TCallableBuilder callableBuilder(Env, "StepTxId", returnType); 
+    return TRuntimeNode(callableBuilder.Build(), false); 
+} 
 
-TRuntimeNode TKikimrProgramBuilder::StepTxId() {
-    std::array<TType*, 2> tupleTypes;
-    tupleTypes[0] = NewDataType(NUdf::TDataType<ui64>::Id);
-    tupleTypes[1] = NewDataType(NUdf::TDataType<ui64>::Id);
-    auto returnType = NewTupleType(tupleTypes);
-
-    TCallableBuilder callableBuilder(Env, "StepTxId", returnType);
-    return TRuntimeNode(callableBuilder.Build(), false);
-}
-
-TRuntimeNode TKikimrProgramBuilder::SetResult(const TStringBuf& label, TRuntimeNode payload) {
+TRuntimeNode TKikimrProgramBuilder::SetResult(const TStringBuf& label, TRuntimeNode payload) { 
     MKQL_ENSURE(!label.empty(), "label must not be empty");
-    MKQL_ENSURE(CanExportType(payload.GetStaticType(), Env),
-        TStringBuilder() << "Failed to export type:" << *payload.GetStaticType());
-    TCallableBuilder builder(Env, "SetResult", Env.GetTypeOfVoid());
-    builder.Add(TProgramBuilder::NewDataLiteral<NUdf::EDataSlot::String>(label));
-    builder.Add(payload);
-    return TRuntimeNode(builder.Build(), false);
-}
-
-TRuntimeNode TKikimrProgramBuilder::NewDataLiteral(const std::pair<ui64, ui64>& data) const {
-    return TRuntimeNode(BuildDataLiteral(NUdf::TStringRef(reinterpret_cast<const char*>(&data), sizeof(data)), LegacyPairUi64Ui64, Env), true);
+    MKQL_ENSURE(CanExportType(payload.GetStaticType(), Env), 
+        TStringBuilder() << "Failed to export type:" << *payload.GetStaticType()); 
+    TCallableBuilder builder(Env, "SetResult", Env.GetTypeOfVoid()); 
+    builder.Add(TProgramBuilder::NewDataLiteral<NUdf::EDataSlot::String>(label)); 
+    builder.Add(payload); 
+    return TRuntimeNode(builder.Build(), false); 
+} 
+ 
+TRuntimeNode TKikimrProgramBuilder::NewDataLiteral(const std::pair<ui64, ui64>& data) const { 
+    return TRuntimeNode(BuildDataLiteral(NUdf::TStringRef(reinterpret_cast<const char*>(&data), sizeof(data)), LegacyPairUi64Ui64, Env), true); 
 }
 
 TRuntimeNode TKikimrProgramBuilder::BuildTableId(const TTableId& tableId) const {

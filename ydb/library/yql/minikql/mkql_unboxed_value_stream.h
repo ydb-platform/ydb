@@ -1,9 +1,9 @@
-#pragma once
+#pragma once 
 #include <ydb/library/yql/public/udf/udf_value.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
-
+namespace NKikimr { 
+namespace NMiniKQL { 
+ 
 struct TUnboxedValueStream : public IOutputStream {
     NUdf::TUnboxedValue Value_;
 
@@ -13,6 +13,6 @@ struct TUnboxedValueStream : public IOutputStream {
 
     void DoWrite(const void* buf, size_t len) override;
 };
-
-}
-}
+ 
+} 
+} 

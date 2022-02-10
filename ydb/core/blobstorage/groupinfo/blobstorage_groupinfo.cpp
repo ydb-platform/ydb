@@ -16,7 +16,7 @@
 #include <util/string/escape.h>
 #include <util/stream/input.h>
 #include <util/random/fast.h>
-#include <util/system/unaligned_mem.h>
+#include <util/system/unaligned_mem.h> 
 
 namespace NKikimr {
 
@@ -959,7 +959,7 @@ TFailDomain::TFailDomain() {
 TFailDomain::TFailDomain(const TString &data) {
     ui8 *end = (ui8*)const_cast<char*>(data.data()) + (data.size() / RecordSize) * RecordSize;
     for (ui8 *cursor = (ui8*)const_cast<char*>(data.data()); cursor < end; cursor += RecordSize) {
-        Levels[*cursor] = ReadUnaligned<ui32>((ui32*)(cursor + 1));
+        Levels[*cursor] = ReadUnaligned<ui32>((ui32*)(cursor + 1)); 
     }
 }
 

@@ -1,11 +1,11 @@
 #include "mkql_computation_node_ut.h"
 
-#include <ydb/library/yql/minikql/mkql_node_printer.h>
-#include <ydb/library/yql/minikql/mkql_node_cast.h>
-#include <ydb/library/yql/minikql/mkql_string_util.h>
+#include <ydb/library/yql/minikql/mkql_node_printer.h> 
+#include <ydb/library/yql/minikql/mkql_node_cast.h> 
+#include <ydb/library/yql/minikql/mkql_string_util.h> 
 
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_impl.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_impl.h> 
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h> 
 
 #include <cfloat>
 #include <utility>
@@ -48,24 +48,24 @@ public:
         ui64 Index = 0;
         const ui64 Count;
     };
-
+ 
     TTestStreamWrapper(TComputationMutables& mutables, ui64 count)
         : TBaseComputation(mutables)
         , Count(Min<ui64>(count, Y_ARRAY_SIZE(g_TestStreamData)))
     {
     }
-
+ 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         return ctx.HolderFactory.Create<TStreamValue>(Count);
-    }
+    } 
 
 private:
     void RegisterDependencies() const final {}
-
+ 
 private:
     const ui64 Count;
 };
-
+ 
 class TTestYieldStreamWrapper: public TMutableComputationNode<TTestYieldStreamWrapper> {
     typedef TMutableComputationNode<TTestYieldStreamWrapper> TBaseComputation;
 public:
@@ -119,7 +119,7 @@ IComputationNode* WrapTestStream(TCallable& callable, const TComputationNodeFact
     const ui64 count = AS_VALUE(TDataLiteral, callable.GetInput(0))->AsValue().Get<ui64>();
     return new TTestStreamWrapper(ctx.Mutables, count);
 }
-
+ 
 
 IComputationNode* WrapTestYieldStream(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(!callable.GetInputsCount(), "Expected no args");
@@ -195,20 +195,20 @@ TComputationNodeFactory GetTestFactory() {
     return [](TCallable& callable, const TComputationNodeFactoryContext& ctx) -> IComputationNode* {
         if (callable.GetType()->GetName() == "TestList") {
             return new TExternalComputationNode(ctx.Mutables);
-        }
-
+        } 
+ 
         if (callable.GetType()->GetName() == "TestStream") {
             return WrapTestStream(callable, ctx);
-        }
-
+        } 
+ 
         if (callable.GetType()->GetName() == "TestYieldStream") {
             return WrapTestYieldStream(callable, ctx);
         }
 
         return GetBuiltinFactory()(callable, ctx);
-    };
-}
-
+    }; 
+} 
+ 
 Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
     Y_UNIT_TEST_LLVM(TestEmbeddedByteAt) {
         TSetup<LLVM> setup;
@@ -233,11 +233,11 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         const auto iterator = graph->GetValue().GetListIterator();
         NUdf::TUnboxedValue item;
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui8>(), 0x30);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui8>(), 0x30); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui8>(), 0x33);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui8>(), 0x33); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui8>(), 0x39);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui8>(), 0x39); 
         UNIT_ASSERT(iterator.Next(item));
         UNIT_ASSERT(!item);
         UNIT_ASSERT(iterator.Next(item));
@@ -269,11 +269,11 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         const auto iterator = graph->GetValue().GetListIterator();
         NUdf::TUnboxedValue item;
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui8>(), 0x30);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui8>(), 0x30); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui8>(), 0x33);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui8>(), 0x33); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui8>(), 0x4C);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui8>(), 0x4C); 
         UNIT_ASSERT(iterator.Next(item));
         UNIT_ASSERT(!item);
         UNIT_ASSERT(iterator.Next(item));
@@ -308,25 +308,25 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         const auto iterator = graph->GetValue().GetListIterator();
         NUdf::TUnboxedValue item;
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui8>(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui8>(), 0); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui8>(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui8>(), 1); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui8>(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui8>(), 1); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui8>(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui8>(), 3); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui8>(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui8>(), 4); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui8>(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui8>(), 4); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui8>(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui8>(), 4); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui8>(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui8>(), 4); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui8>(), 7);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui8>(), 7); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui8>(), 8);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui8>(), 8); 
         UNIT_ASSERT(!iterator.Next(item));
         UNIT_ASSERT(!iterator.Next(item));
     }
@@ -357,25 +357,25 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         const auto iterator = graph->GetValue().GetListIterator();
         NUdf::TUnboxedValue item;
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui8>(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui8>(), 0); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui8>(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui8>(), 1); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui8>(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui8>(), 1); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui8>(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui8>(), 3); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui8>(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui8>(), 4); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui8>(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui8>(), 4); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui8>(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui8>(), 4); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui8>(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui8>(), 4); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui8>(), 7);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui8>(), 7); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui8>(), 8);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui8>(), 8); 
         UNIT_ASSERT(!iterator.Next(item));
         UNIT_ASSERT(!iterator.Next(item));
     }
@@ -406,25 +406,25 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         const auto iterator = graph->GetValue().GetListIterator();
         NUdf::TUnboxedValue item;
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 0x830500F1U);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 0x830500F1U); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 0x060A01E2U);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 0x060A01E2U); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 0x82807880U);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 0x82807880U); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 0x1403C400U);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 0x1403C400U); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 0x40000000U);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 0x40000000U); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 0U);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 0U); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 0U);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 0U); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 0U);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 0U); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 0U);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 0U); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 0U);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 0U); 
         UNIT_ASSERT(!iterator.Next(item));
         UNIT_ASSERT(!iterator.Next(item));
     }
@@ -455,25 +455,25 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         const auto iterator = graph->GetValue().GetListIterator();
         NUdf::TUnboxedValue item;
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 0x830500F1U);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 0x830500F1U); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 0x41828078U);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 0x41828078U); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 0x01060A01U);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 0x01060A01U); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 0x20C140U);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 0x20C140U); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 0x2U);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 0x2U); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 0U);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 0U); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 0U);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 0U); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 0U);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 0U); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 0U);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 0U); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 0U);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 0U); 
         UNIT_ASSERT(!iterator.Next(item));
         UNIT_ASSERT(!iterator.Next(item));
     }
@@ -504,25 +504,25 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         const auto iterator = graph->GetValue().GetListIterator();
         NUdf::TUnboxedValue item;
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui16>(), 0x87F5U);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui16>(), 0x87F5U); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui16>(), 0x0FEBU);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui16>(), 0x0FEBU); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui16>(), 0xFAC3U);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui16>(), 0xFAC3U); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui16>(), 0xD61FU);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui16>(), 0xD61FU); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui16>(), 0x61FDU);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui16>(), 0x61FDU); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui16>(), 0x87F5U);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui16>(), 0x87F5U); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui16>(), 0xF587U);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui16>(), 0xF587U); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui16>(), 0xEB0FU);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui16>(), 0xEB0FU); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui16>(), 0xF587U);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui16>(), 0xF587U); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui16>(), 0xC3FAU);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui16>(), 0xC3FAU); 
         UNIT_ASSERT(!iterator.Next(item));
         UNIT_ASSERT(!iterator.Next(item));
     }
@@ -553,25 +553,25 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         const auto iterator = graph->GetValue().GetListIterator();
         NUdf::TUnboxedValue item;
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui16>(), 0x87F5U);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui16>(), 0x87F5U); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui16>(), 0xC3FAU);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui16>(), 0xC3FAU); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui16>(), 0xEB0FU);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui16>(), 0xEB0FU); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui16>(), 0xFD61U);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui16>(), 0xFD61U); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui16>(), 0x1FD6U);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui16>(), 0x1FD6U); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui16>(), 0x87F5U);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui16>(), 0x87F5U); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui16>(), 0xF587U);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui16>(), 0xF587U); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui16>(), 0xFAC3U);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui16>(), 0xFAC3U); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui16>(), 0xF587U);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui16>(), 0xF587U); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui16>(), 0x0FEBU);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui16>(), 0x0FEBU); 
         UNIT_ASSERT(!iterator.Next(item));
         UNIT_ASSERT(!iterator.Next(item));
     }
@@ -630,13 +630,13 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         const auto iterator = graph->GetValue().GetListIterator();
         NUdf::TUnboxedValue item;
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<float>(), 11.433f);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<float>(), 11.433f); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<float>(), 3.14f);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<float>(), 3.14f); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<float>(), 0.0f);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<float>(), 0.0f); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<float>(), HUGE_VALF);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<float>(), HUGE_VALF); 
         UNIT_ASSERT(!iterator.Next(item));
         UNIT_ASSERT(!iterator.Next(item));
     }
@@ -661,13 +661,13 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         const auto iterator = graph->GetValue().GetListIterator();
         NUdf::TUnboxedValue item;
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<i32>(), 1334);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<i32>(), 1334); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<i32>(), 4378);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<i32>(), 4378); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<i32>(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<i32>(), 0); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<i32>(), std::numeric_limits<i32>::min());
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<i32>(), std::numeric_limits<i32>::min()); 
         UNIT_ASSERT(!iterator.Next(item));
         UNIT_ASSERT(!iterator.Next(item));
     }
@@ -681,8 +681,8 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         const auto pgmReturn = pb.NewTuple({ten, two});
 
         const auto graph = setup.BuildGraph(pgmReturn);
-        UNIT_ASSERT_VALUES_EQUAL(graph->GetValue().GetElement(0).template Get<i32>(), 10);
-        UNIT_ASSERT_VALUES_EQUAL(graph->GetValue().GetElement(1).template Get<ui32>(), 2U);
+        UNIT_ASSERT_VALUES_EQUAL(graph->GetValue().GetElement(0).template Get<i32>(), 10); 
+        UNIT_ASSERT_VALUES_EQUAL(graph->GetValue().GetElement(1).template Get<ui32>(), 2U); 
     }
 
     Y_UNIT_TEST_LLVM(TestFloatToI16) {
@@ -711,25 +711,25 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         const auto iterator = graph->GetValue().GetListIterator();
         NUdf::TUnboxedValue item;
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<i16>(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<i16>(), 0); 
         UNIT_ASSERT(iterator.Next(item));
         UNIT_ASSERT(!item);
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<i16>(), -3);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<i16>(), -3); 
         UNIT_ASSERT(iterator.Next(item));
         UNIT_ASSERT(!item);
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<i16>(), -7898);
-        UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT(!item);
-        UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT(!item);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<i16>(), -7898); 
         UNIT_ASSERT(iterator.Next(item));
         UNIT_ASSERT(!item);
         UNIT_ASSERT(iterator.Next(item));
         UNIT_ASSERT(!item);
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<i16>(), 0);
+        UNIT_ASSERT(!item);
+        UNIT_ASSERT(iterator.Next(item));
+        UNIT_ASSERT(!item);
+        UNIT_ASSERT(iterator.Next(item));
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<i16>(), 0); 
         UNIT_ASSERT(!iterator.Next(item));
         UNIT_ASSERT(!iterator.Next(item));
     }
@@ -760,25 +760,25 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         const auto iterator = graph->GetValue().GetListIterator();
         NUdf::TUnboxedValue item;
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), false);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), false); 
         UNIT_ASSERT(iterator.Next(item));
         UNIT_ASSERT(!item);
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), true);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), true); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), true);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), true); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), true);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), true); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), true);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), true); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), true);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), true); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), true);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), true); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), true);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), true); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), false);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), false); 
         UNIT_ASSERT(!iterator.Next(item));
         UNIT_ASSERT(!iterator.Next(item));
     }
@@ -809,17 +809,17 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         const auto iterator = graph->GetValue().GetListIterator();
         NUdf::TUnboxedValue item;
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 0U);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 0U); 
         UNIT_ASSERT(iterator.Next(item));
         UNIT_ASSERT(!item);
         UNIT_ASSERT(iterator.Next(item));
         UNIT_ASSERT(!item);
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 12121324U);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 12121324U); 
         UNIT_ASSERT(iterator.Next(item));
         UNIT_ASSERT(!item);
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 210000U);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 210000U); 
         UNIT_ASSERT(iterator.Next(item));
         UNIT_ASSERT(!item);
         UNIT_ASSERT(iterator.Next(item));
@@ -827,7 +827,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         UNIT_ASSERT(iterator.Next(item));
         UNIT_ASSERT(!item);
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 0U);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 0U); 
         UNIT_ASSERT(!iterator.Next(item));
         UNIT_ASSERT(!iterator.Next(item));
     }
@@ -1457,21 +1457,21 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         const auto iterator = graph->GetValue().GetListIterator();
         NUdf::TUnboxedValue item;
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<double>(), 0.0);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<double>(), 0.0); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<double>(), 3.14);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<double>(), 3.14); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<double>(), HUGE_VAL);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<double>(), HUGE_VAL); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<double>(), -HUGE_VAL);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<double>(), -HUGE_VAL); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<double>(), FLT_MIN/2.0f);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<double>(), FLT_MIN/2.0f); 
         UNIT_ASSERT(iterator.Next(item));
         UNIT_ASSERT(!item);
         UNIT_ASSERT(!iterator.Next(item));
         UNIT_ASSERT(!iterator.Next(item));
     }
-
+ 
     Y_UNIT_TEST_LLVM(TestConvertToFloat) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
@@ -1479,7 +1479,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         const auto seven = pb.NewDataLiteral(i32(7));
         const auto pgmReturn = pb.Convert(seven, pb.NewDataType(NUdf::TDataType<float>::Id));
         const auto graph = setup.BuildGraph(pgmReturn);
-        UNIT_ASSERT_VALUES_EQUAL(graph->GetValue().template Get<float>(), 7.0f);
+        UNIT_ASSERT_VALUES_EQUAL(graph->GetValue().template Get<float>(), 7.0f); 
     }
 
     Y_UNIT_TEST_LLVM(TestAppend) {
@@ -1488,20 +1488,20 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         auto pgmReturn = pb.NewEmptyList(pb.NewDataType(NUdf::TDataType<ui32>::Id));
         pgmReturn = pb.Append(pgmReturn, pb.NewDataLiteral<ui32>(34));
         pgmReturn = pb.Append(pgmReturn, pb.NewDataLiteral<ui32>(56));
-
+ 
         const auto graph = setup.BuildGraph(pgmReturn);
-        UNIT_ASSERT_VALUES_EQUAL(graph->GetValue().GetListLength(), 2);
-
+        UNIT_ASSERT_VALUES_EQUAL(graph->GetValue().GetListLength(), 2); 
+ 
         const auto iterator = graph->GetValue().GetListIterator();
         NUdf::TUnboxedValue item;
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 34);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 34); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 56);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 56); 
         UNIT_ASSERT(!iterator.Next(item));
         UNIT_ASSERT(!iterator.Next(item));
-    }
-
+    } 
+ 
     Y_UNIT_TEST_LLVM(TestForkedAppend) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
@@ -1509,46 +1509,46 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         const auto list2 = pb.Append(list1, pb.NewDataLiteral<ui32>(56));
         const auto list3 = pb.Append(list1, pb.NewDataLiteral<ui32>(78));
         const auto pgmReturn = pb.NewTuple({list2, list3});
-
+ 
         const auto graph = setup.BuildGraph(pgmReturn);
         const auto iterator1 = graph->GetValue().GetElement(0).GetListIterator();
         NUdf::TUnboxedValue item;
         UNIT_ASSERT(iterator1.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 34);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 34); 
         UNIT_ASSERT(iterator1.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 56);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 56); 
         UNIT_ASSERT(!iterator1.Next(item));
         UNIT_ASSERT(!iterator1.Next(item));
-
+ 
         const auto iterator2 = graph->GetValue().GetElement(1).GetListIterator();
         UNIT_ASSERT(iterator2.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 34);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 34); 
         UNIT_ASSERT(iterator2.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 78);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 78); 
         UNIT_ASSERT(!iterator2.Next(item));
         UNIT_ASSERT(!iterator2.Next(item));
-    }
-
+    } 
+ 
     Y_UNIT_TEST_LLVM(TestPrepend) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
         auto pgmReturn = pb.NewEmptyList(pb.NewDataType(NUdf::TDataType<ui32>::Id));
         pgmReturn = pb.Prepend(pb.NewDataLiteral<ui32>(34), pgmReturn);
         pgmReturn = pb.Prepend(pb.NewDataLiteral<ui32>(56), pgmReturn);
-
+ 
         const auto graph = setup.BuildGraph(pgmReturn);
-        UNIT_ASSERT_VALUES_EQUAL(graph->GetValue().GetListLength(), 2);
-
+        UNIT_ASSERT_VALUES_EQUAL(graph->GetValue().GetListLength(), 2); 
+ 
         const auto iterator = graph->GetValue().GetListIterator();
         NUdf::TUnboxedValue item;
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 56);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 56); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 34);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 34); 
         UNIT_ASSERT(!iterator.Next(item));
         UNIT_ASSERT(!iterator.Next(item));
-    }
-
+    } 
+ 
     Y_UNIT_TEST_LLVM(TestPrependOfVoid) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
@@ -1557,7 +1557,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         pgmReturn = pb.Prepend(pb.NewVoid(), pgmReturn);
 
         const auto graph = setup.BuildGraph(pgmReturn);
-        UNIT_ASSERT_VALUES_EQUAL(graph->GetValue().GetListLength(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(graph->GetValue().GetListLength(), 0); 
 
         const auto iterator = graph->GetValue().GetListIterator();
         UNIT_ASSERT(!iterator.Skip());
@@ -1572,41 +1572,41 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         const auto list2 = pb.Prepend(pb.NewDataLiteral<ui32>(56), list1);
         const auto list3 = pb.Prepend(pb.NewDataLiteral<ui32>(78), list1);
         const auto pgmReturn = pb.NewTuple({list2, list3});
-
+ 
         const auto graph = setup.BuildGraph(pgmReturn);
         const auto iterator1 = graph->GetValue().GetElement(0).GetListIterator();
         NUdf::TUnboxedValue item;
         UNIT_ASSERT(iterator1.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 56);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 56); 
         UNIT_ASSERT(iterator1.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 34);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 34); 
         UNIT_ASSERT(!iterator1.Next(item));
         UNIT_ASSERT(!iterator1.Next(item));
-
+ 
         const auto iterator2 = graph->GetValue().GetElement(1).GetListIterator();
         UNIT_ASSERT(iterator2.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 78);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 78); 
         UNIT_ASSERT(iterator2.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 34);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 34); 
         UNIT_ASSERT(!iterator2.Next(item));
         UNIT_ASSERT(!iterator2.Next(item));
-    }
-
+    } 
+ 
     Y_UNIT_TEST_LLVM(TestAppendOfVoid) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
         auto pgmReturn = pb.NewEmptyListOfVoid();
         pgmReturn = pb.Append(pgmReturn, pb.NewVoid());
         pgmReturn = pb.Append(pgmReturn, pb.NewVoid());
-
+ 
         const auto graph = setup.BuildGraph(pgmReturn);
-        UNIT_ASSERT_VALUES_EQUAL(graph->GetValue().GetListLength(), 0);
-
+        UNIT_ASSERT_VALUES_EQUAL(graph->GetValue().GetListLength(), 0); 
+ 
         const auto iterator = graph->GetValue().GetListIterator();
         UNIT_ASSERT(!iterator.Skip());
         UNIT_ASSERT(!iterator.Skip());
-    }
-
+    } 
+ 
     Y_UNIT_TEST_LLVM(TestExtend) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
@@ -1614,20 +1614,20 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         const auto list1 = pb.Append(emptyList, pb.NewDataLiteral<ui32>(34));
         const auto list2 = pb.Append(emptyList, pb.NewDataLiteral<ui32>(56));
         const auto pgmReturn = pb.Extend(list1, list2);
-
+ 
         const auto graph = setup.BuildGraph(pgmReturn);
-        UNIT_ASSERT_VALUES_EQUAL(graph->GetValue().GetListLength(), 2);
-
+        UNIT_ASSERT_VALUES_EQUAL(graph->GetValue().GetListLength(), 2); 
+ 
         const auto iterator = graph->GetValue().GetListIterator();
         NUdf::TUnboxedValue item;
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 34);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 34); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 56);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 56); 
         UNIT_ASSERT(!iterator.Next(item));
         UNIT_ASSERT(!iterator.Next(item));
-    }
-
+    } 
+ 
     Y_UNIT_TEST_LLVM(TestExtend3) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
@@ -1637,24 +1637,24 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         const auto list3 = pb.Append(emptyList, pb.NewDataLiteral<ui32>(7));
         const auto list4 = pb.Append(list3, pb.NewDataLiteral<ui32>(12));
         const auto pgmReturn = pb.Extend({ list1, emptyList, list2, list4 });
-
+ 
         const auto graph = setup.BuildGraph(pgmReturn);
-        UNIT_ASSERT_VALUES_EQUAL(graph->GetValue().GetListLength(), 4);
-
+        UNIT_ASSERT_VALUES_EQUAL(graph->GetValue().GetListLength(), 4); 
+ 
         const auto iterator = graph->GetValue().GetListIterator();
         NUdf::TUnboxedValue item;
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 34);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 34); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 56);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 56); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 7);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 7); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 12);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 12); 
         UNIT_ASSERT(!iterator.Next(item));
         UNIT_ASSERT(!iterator.Next(item));
-    }
-
+    } 
+ 
     Y_UNIT_TEST_LLVM(TestExtendOverFlows) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
@@ -1802,12 +1802,12 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         const auto data1 = pb.NewDataLiteral<ui32>(1);
         const auto data2 = pb.NewDataLiteral<ui32>(2);
         const auto pgmReturn = pb.Add(data1, data2);
-
+ 
         const auto graph = setup.BuildGraph(pgmReturn);
         const auto res = graph->GetValue().template Get<ui32>();
-        UNIT_ASSERT_VALUES_EQUAL(res, 3);
-    }
-
+        UNIT_ASSERT_VALUES_EQUAL(res, 3); 
+    } 
+ 
     Y_UNIT_TEST_LLVM(TestSub) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
@@ -1815,12 +1815,12 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         const auto data1 = pb.NewDataLiteral<ui32>(7);
         const auto data2 = pb.NewDataLiteral<ui32>(2);
         const auto pgmReturn = pb.Sub(data1, data2);
-
+ 
         const auto graph = setup.BuildGraph(pgmReturn);
         const auto res = graph->GetValue().template Get<ui32>();
-        UNIT_ASSERT_VALUES_EQUAL(res, 5);
-    }
-
+        UNIT_ASSERT_VALUES_EQUAL(res, 5); 
+    } 
+ 
     Y_UNIT_TEST_LLVM(TestMul) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
@@ -1828,12 +1828,12 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         const auto data1 = pb.NewDataLiteral<ui32>(3);
         const auto data2 = pb.NewDataLiteral<ui32>(2);
         const auto pgmReturn = pb.Mul(data1, data2);
-
+ 
         const auto graph = setup.BuildGraph(pgmReturn);
         const auto res = graph->GetValue().template Get<ui32>();
-        UNIT_ASSERT_VALUES_EQUAL(res, 6);
-    }
-
+        UNIT_ASSERT_VALUES_EQUAL(res, 6); 
+    } 
+ 
     Y_UNIT_TEST_LLVM(TestDiv) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
@@ -1841,13 +1841,13 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         const auto data1 = pb.NewDataLiteral<ui32>(17);
         const auto data2 = pb.NewDataLiteral<ui32>(3);
         const auto pgmReturn = pb.Div(data1, data2);
-
+ 
         const auto graph = setup.BuildGraph(pgmReturn);
         const auto value = graph->GetValue();
         UNIT_ASSERT(value);
-        UNIT_ASSERT_VALUES_EQUAL(value.template Get<ui32>(), 5);
-    }
-
+        UNIT_ASSERT_VALUES_EQUAL(value.template Get<ui32>(), 5); 
+    } 
+ 
     Y_UNIT_TEST_LLVM(TestDivZero) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
@@ -1855,12 +1855,12 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         const auto data1 = pb.NewDataLiteral<ui32>(17);
         const auto data2 = pb.NewDataLiteral<ui32>(0);
         const auto pgmReturn = pb.Div(data1, data2);
-
+ 
         const auto graph = setup.BuildGraph(pgmReturn);
         const auto value = graph->GetValue();
         UNIT_ASSERT(!value);
-    }
-
+    } 
+ 
     Y_UNIT_TEST_LLVM(TestIDivOverflow) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
@@ -1868,12 +1868,12 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         const auto data1 = pb.NewDataLiteral<i32>(Min<i32>());
         const auto data2 = pb.NewDataLiteral<i32>(-1);
         const auto pgmReturn = pb.Div(data1, data2);
-
+ 
         const auto graph = setup.BuildGraph(pgmReturn);
         const auto value = graph->GetValue();
         UNIT_ASSERT(!value);
-    }
-
+    } 
+ 
     Y_UNIT_TEST_LLVM(TestMod) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
@@ -1881,13 +1881,13 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         const auto data1 = pb.NewDataLiteral<ui32>(17);
         const auto data2 = pb.NewDataLiteral<ui32>(3);
         const auto pgmReturn = pb.Mod(data1, data2);
-
+ 
         const auto graph = setup.BuildGraph(pgmReturn);
         const auto value = graph->GetValue();
         UNIT_ASSERT(value);
-        UNIT_ASSERT_VALUES_EQUAL(value.template Get<ui32>(), 2);
-    }
-
+        UNIT_ASSERT_VALUES_EQUAL(value.template Get<ui32>(), 2); 
+    } 
+ 
     Y_UNIT_TEST_LLVM(TestModZero) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
@@ -1895,12 +1895,12 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         const auto data1 = pb.NewDataLiteral<ui32>(17);
         const auto data2 = pb.NewDataLiteral<ui32>(0);
         const auto pgmReturn = pb.Mod(data1, data2);
-
+ 
         const auto graph = setup.BuildGraph(pgmReturn);
         const auto value = graph->GetValue();
         UNIT_ASSERT(!value);
-    }
-
+    } 
+ 
     Y_UNIT_TEST_LLVM(TestIModOverflow) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
@@ -1908,12 +1908,12 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         const auto data1 = pb.NewDataLiteral<i32>(Min<i32>());
         const auto data2 = pb.NewDataLiteral<i32>(-1);
         const auto pgmReturn = pb.Mod(data1, data2);
-
+ 
         const auto graph = setup.BuildGraph(pgmReturn);
         const auto value = graph->GetValue();
         UNIT_ASSERT(!value);
-    }
-
+    } 
+ 
     Y_UNIT_TEST_LLVM(TestStruct) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
@@ -1931,20 +1931,20 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
             pb.Member(structObj, "y"),
             pb.Member(structObj, "z")
         });
-
+ 
         const auto graph = setup.BuildGraph(pgmReturn);
         const auto iterator = graph->GetValue().GetListIterator();
         NUdf::TUnboxedValue item;
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 2); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 3); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 1); 
         UNIT_ASSERT(!iterator.Next(item));
         UNIT_ASSERT(!iterator.Next(item));
-    }
-
+    } 
+ 
     Y_UNIT_TEST_LLVM(TestMapOverList) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
@@ -1957,25 +1957,25 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         const auto list = pb.NewList(dataType, {data1, data2, data3, data4});
 
         const auto pgmReturn = pb.Map(list,
-            [&](TRuntimeNode item) {
+            [&](TRuntimeNode item) { 
             return pb.Sub(pb.Mul(item, data2), data1);
-        });
-
+        }); 
+ 
         const auto graph = setup.BuildGraph(pgmReturn);
         const auto iterator = graph->GetValue().GetListIterator();
         NUdf::TUnboxedValue item;
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<i32>(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<i32>(), 1); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<i32>(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<i32>(), 3); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<i32>(), 5);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<i32>(), 5); 
         UNIT_ASSERT(iterator.Next(item));
         UNIT_ASSERT(!item);
         UNIT_ASSERT(!iterator.Next(item));
         UNIT_ASSERT(!iterator.Next(item));
-    }
-
+    } 
+ 
     Y_UNIT_TEST_LLVM(TestMapOverStream) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
@@ -1997,20 +1997,20 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         const auto graph = setup.BuildGraph(pgmReturn);
         const auto iterator = graph->GetValue();
         NUdf::TUnboxedValue item;
-        UNIT_ASSERT_VALUES_EQUAL(NUdf::EFetchStatus::Ok, iterator.Fetch(item));
+        UNIT_ASSERT_VALUES_EQUAL(NUdf::EFetchStatus::Ok, iterator.Fetch(item)); 
         UNIT_ASSERT(!item);
-        UNIT_ASSERT_VALUES_EQUAL(NUdf::EFetchStatus::Ok, iterator.Fetch(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<i16>(), -7);
-        UNIT_ASSERT_VALUES_EQUAL(NUdf::EFetchStatus::Ok, iterator.Fetch(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<i16>(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(NUdf::EFetchStatus::Ok, iterator.Fetch(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<i16>(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(NUdf::EFetchStatus::Ok, iterator.Fetch(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<i16>(), 0);
-        UNIT_ASSERT_VALUES_EQUAL(NUdf::EFetchStatus::Ok, iterator.Fetch(item));
+        UNIT_ASSERT_VALUES_EQUAL(NUdf::EFetchStatus::Ok, iterator.Fetch(item)); 
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<i16>(), -7); 
+        UNIT_ASSERT_VALUES_EQUAL(NUdf::EFetchStatus::Ok, iterator.Fetch(item)); 
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<i16>(), 2); 
+        UNIT_ASSERT_VALUES_EQUAL(NUdf::EFetchStatus::Ok, iterator.Fetch(item)); 
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<i16>(), 1); 
+        UNIT_ASSERT_VALUES_EQUAL(NUdf::EFetchStatus::Ok, iterator.Fetch(item)); 
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<i16>(), 0); 
+        UNIT_ASSERT_VALUES_EQUAL(NUdf::EFetchStatus::Ok, iterator.Fetch(item)); 
         UNIT_ASSERT(!item);
-        UNIT_ASSERT_VALUES_EQUAL(NUdf::EFetchStatus::Finish, iterator.Fetch(item));
-        UNIT_ASSERT_VALUES_EQUAL(NUdf::EFetchStatus::Finish, iterator.Fetch(item));
+        UNIT_ASSERT_VALUES_EQUAL(NUdf::EFetchStatus::Finish, iterator.Fetch(item)); 
+        UNIT_ASSERT_VALUES_EQUAL(NUdf::EFetchStatus::Finish, iterator.Fetch(item)); 
     }
 
     Y_UNIT_TEST_LLVM(TestMapOverFlow) {
@@ -2062,8 +2062,8 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         const auto iterator = graph->GetValue().GetListIterator();
         NUdf::TUnboxedValue item;
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<i8>(), 6);
-        UNIT_ASSERT_EXCEPTION(iterator.Next(item), yexception);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<i8>(), 6); 
+        UNIT_ASSERT_EXCEPTION(iterator.Next(item), yexception); 
     }
 
     Y_UNIT_TEST_LLVM(TestMapUnwrapThrowMessage) {
@@ -2136,13 +2136,13 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         const auto iterator = graph->GetValue().GetListIterator();
         NUdf::TUnboxedValue item;
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<i16>(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<i16>(), 1); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<i16>(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<i16>(), 2); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<i16>(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<i16>(), 3); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<i16>(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<i16>(), 0); 
         UNIT_ASSERT(!iterator.Next(item));
     }
 
@@ -2229,13 +2229,13 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         const auto iterator = graph->GetValue().GetListIterator();
         NUdf::TUnboxedValue item;
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui16>(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui16>(), 2); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui16>(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui16>(), 3); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui16>(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui16>(), 4); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui16>(), 666);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui16>(), 666); 
         UNIT_ASSERT(!iterator.Next(item));
     }
 
@@ -2248,27 +2248,27 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         const auto data3 = pb.NewDataLiteral<ui32>(3U);
         const auto dataType = pb.NewDataType(NUdf::TDataType<ui32>::Id);
         const auto list = pb.NewList(dataType, {data1, data2, data3});
-
+ 
         const auto pgmReturn = pb.Map(pb.LazyList(list),
-            [&](TRuntimeNode item) {
+            [&](TRuntimeNode item) { 
                 return pb.Add(pb.Mul(item, data2), data1);
             }
         );
-
+ 
         const auto graph = setup.BuildGraph(pgmReturn);
-
+ 
         const auto iterator = graph->GetValue().GetListIterator();
         NUdf::TUnboxedValue item;
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 3); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 5);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 5); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 7);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 7); 
         UNIT_ASSERT(!iterator.Next(item));
         UNIT_ASSERT(!iterator.Next(item));
-    }
-
+    } 
+ 
     Y_UNIT_TEST_LLVM(TestMapOverOptional) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
@@ -2277,16 +2277,16 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         const auto data2 = pb.NewDataLiteral<ui32>(2);
         const auto list = pb.NewOptional(data1);
         const auto pgmReturn = pb.Map(list,
-            [&](TRuntimeNode item) {
+            [&](TRuntimeNode item) { 
             return pb.Add(pb.Mul(item, data2), data1);
-        });
-
+        }); 
+ 
         const auto graph = setup.BuildGraph(pgmReturn);
         const auto value = graph->GetValue();
         UNIT_ASSERT(value);
-        UNIT_ASSERT_VALUES_EQUAL(value.template Get<ui32>(), 3);
-    }
-
+        UNIT_ASSERT_VALUES_EQUAL(value.template Get<ui32>(), 3); 
+    } 
+ 
     Y_UNIT_TEST_LLVM(TestFloatMinMax) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
@@ -2315,100 +2315,100 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         UNIT_ASSERT(std::isnan(item.GetElement(1).template Get<float>()));
 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<float>(), HUGE_VALF);
-        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).template Get<float>(), HUGE_VALF);
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<float>(), HUGE_VALF); 
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).template Get<float>(), HUGE_VALF); 
 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<float>(), 3.14f);
-        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).template Get<float>(), 3.14f);
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<float>(), 3.14f); 
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).template Get<float>(), 3.14f); 
 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<float>(), -2.13f);
-        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).template Get<float>(), -2.13f);
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<float>(), -2.13f); 
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).template Get<float>(), -2.13f); 
 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<float>(), -HUGE_VALF);
-        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).template Get<float>(), -HUGE_VALF);
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<float>(), -HUGE_VALF); 
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).template Get<float>(), -HUGE_VALF); 
 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<float>(), HUGE_VALF);
-        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).template Get<float>(), HUGE_VALF);
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<float>(), HUGE_VALF); 
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).template Get<float>(), HUGE_VALF); 
 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<float>(), HUGE_VALF);
-        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).template Get<float>(), HUGE_VALF);
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<float>(), HUGE_VALF); 
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).template Get<float>(), HUGE_VALF); 
 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<float>(), 3.14f);
-        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).template Get<float>(), HUGE_VALF);
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<float>(), 3.14f); 
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).template Get<float>(), HUGE_VALF); 
 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<float>(), -2.13f);
-        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).template Get<float>(), HUGE_VALF);
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<float>(), -2.13f); 
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).template Get<float>(), HUGE_VALF); 
 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<float>(), -HUGE_VALF);
-        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).template Get<float>(), HUGE_VALF);
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<float>(), -HUGE_VALF); 
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).template Get<float>(), HUGE_VALF); 
 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<float>(), 3.14f);
-        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).template Get<float>(), 3.14f);
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<float>(), 3.14f); 
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).template Get<float>(), 3.14f); 
 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<float>(), 3.14f);
-        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).template Get<float>(), HUGE_VALF);
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<float>(), 3.14f); 
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).template Get<float>(), HUGE_VALF); 
 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<float>(), 3.14f);
-        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).template Get<float>(), 3.14f);
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<float>(), 3.14f); 
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).template Get<float>(), 3.14f); 
 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<float>(), -2.13f);
-        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).template Get<float>(), 3.14f);
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<float>(), -2.13f); 
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).template Get<float>(), 3.14f); 
 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<float>(), -HUGE_VALF);
-        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).template Get<float>(), 3.14f);
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<float>(), -HUGE_VALF); 
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).template Get<float>(), 3.14f); 
 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<float>(), -2.13f);
-        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).template Get<float>(), -2.13f);
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<float>(), -2.13f); 
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).template Get<float>(), -2.13f); 
 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<float>(), -2.13f);
-        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).template Get<float>(), HUGE_VALF);
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<float>(), -2.13f); 
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).template Get<float>(), HUGE_VALF); 
 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<float>(), -2.13f);
-        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).template Get<float>(), 3.14f);
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<float>(), -2.13f); 
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).template Get<float>(), 3.14f); 
 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<float>(), -2.13f);
-        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).template Get<float>(), -2.13f);
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<float>(), -2.13f); 
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).template Get<float>(), -2.13f); 
 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<float>(), -HUGE_VALF);
-        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).template Get<float>(), -2.13f);
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<float>(), -HUGE_VALF); 
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).template Get<float>(), -2.13f); 
 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<float>(), -HUGE_VALF);
-        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).template Get<float>(), -HUGE_VALF);
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<float>(), -HUGE_VALF); 
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).template Get<float>(), -HUGE_VALF); 
 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<float>(), -HUGE_VALF);
-        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).template Get<float>(), HUGE_VALF);
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<float>(), -HUGE_VALF); 
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).template Get<float>(), HUGE_VALF); 
 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<float>(), -HUGE_VALF);
-        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).template Get<float>(), 3.14f);
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<float>(), -HUGE_VALF); 
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).template Get<float>(), 3.14f); 
 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<float>(), -HUGE_VALF);
-        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).template Get<float>(), -2.13f);
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<float>(), -HUGE_VALF); 
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).template Get<float>(), -2.13f); 
 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<float>(), -HUGE_VALF);
-        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).template Get<float>(), -HUGE_VALF);
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<float>(), -HUGE_VALF); 
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).template Get<float>(), -HUGE_VALF); 
 
         UNIT_ASSERT(!iterator.Next(item));
         UNIT_ASSERT(!iterator.Next(item));
@@ -2433,13 +2433,13 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         const auto iterator = graph->GetValue().GetListIterator();
         NUdf::TUnboxedValue item;
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<float>(), -1.75f);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<float>(), -1.75f); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<float>(), 0.0f);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<float>(), 0.0f); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<float>(), 0.0f);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<float>(), 0.0f); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<float>(), 1.0f);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<float>(), 1.0f); 
         UNIT_ASSERT(!iterator.Next(item));
         UNIT_ASSERT(!iterator.Next(item));
     }
@@ -2463,17 +2463,17 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         const auto iterator = graph->GetValue().GetListIterator();
         NUdf::TUnboxedValue item;
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<double>(), -1.75);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<double>(), -1.75); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<double>(), 0.0);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<double>(), 0.0); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<double>(), 0.0);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<double>(), 0.0); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<double>(), 1.0);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<double>(), 1.0); 
         UNIT_ASSERT(!iterator.Next(item));
         UNIT_ASSERT(!iterator.Next(item));
     }
-
+ 
     Y_UNIT_TEST_LLVM(TestDiscardOverFlow) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
@@ -2585,18 +2585,18 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
             pb.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui32>::Id), pb.NewOptional(data3)));
         pgmReturn = pb.AddMember(pgmReturn, "E", pb.Coalesce(
             pb.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui32>::Id), pb.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui32>::Id)));
-
+ 
         const auto graph = setup.BuildGraph(pgmReturn);
         const auto value = graph->GetValue();
-        UNIT_ASSERT_VALUES_EQUAL(value.GetElement(0).template Get<ui32>(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(value.GetElement(1).template Get<ui32>(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(value.GetElement(0).template Get<ui32>(), 1); 
+        UNIT_ASSERT_VALUES_EQUAL(value.GetElement(1).template Get<ui32>(), 2); 
         UNIT_ASSERT(value.GetElement(2));
-        UNIT_ASSERT_VALUES_EQUAL(value.GetElement(2).template Get<ui32>(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(value.GetElement(2).template Get<ui32>(), 2); 
         UNIT_ASSERT(value.GetElement(3));
-        UNIT_ASSERT_VALUES_EQUAL(value.GetElement(3).template Get<ui32>(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(value.GetElement(3).template Get<ui32>(), 3); 
         UNIT_ASSERT(!value.GetElement(4));
-    }
-
+    } 
+ 
     Y_UNIT_TEST_LLVM(TestExists) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
@@ -2604,7 +2604,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         const auto data1 = pb.NewDataLiteral<ui64>(1);
         const auto optionalType = pb.NewOptionalType(pb.NewDataType(NUdf::TDataType<ui64>::Id));
         const auto list = pb.NewList(optionalType, {pb.NewOptional(data1), pb.NewEmptyOptional(optionalType)});
-
+ 
         const auto pgmReturn = pb.Map(list,
         [&](TRuntimeNode item) {
             return pb.Exists(item);
@@ -2614,13 +2614,13 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         const auto iterator = graph->GetValue().GetListIterator();
         NUdf::TUnboxedValue item;
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), true);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), true); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), false);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), false); 
         UNIT_ASSERT(!iterator.Next(item));
         UNIT_ASSERT(!iterator.Next(item));
-    }
-
+    } 
+ 
     Y_UNIT_TEST_LLVM(TestIf) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
@@ -2634,18 +2634,18 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         [&](TRuntimeNode item) {
             return pb.If(item, data1, data2);
         });
-
+ 
         const auto graph = setup.BuildGraph(pgmReturn);
         const auto iterator = graph->GetValue().GetListIterator();
         NUdf::TUnboxedValue item;
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 1); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 2); 
         UNIT_ASSERT(!iterator.Next(item));
         UNIT_ASSERT(!iterator.Next(item));
-    }
-
+    } 
+ 
     Y_UNIT_TEST_LLVM(TestIfPresent) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
@@ -2662,18 +2662,18 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
                 return unpacked.front();
             }, data2);
         });
-
+ 
         const auto graph = setup.BuildGraph(pgmReturn);
         const auto iterator = graph->GetValue().GetListIterator();
         NUdf::TUnboxedValue item;
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 1); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 2); 
         UNIT_ASSERT(!iterator.Next(item));
         UNIT_ASSERT(!iterator.Next(item));
-    }
-
+    } 
+ 
     Y_UNIT_TEST_LLVM(TestIfPresentTwo) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
@@ -2825,18 +2825,18 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         auto pgmReturn = pb.NewEmptyList(pb.NewDataType(NUdf::TDataType<ui32>::Id));
         pgmReturn = pb.Append(pgmReturn, pb.Increment(data1));
         pgmReturn = pb.Append(pgmReturn, pb.Decrement(data1));
-
+ 
         const auto graph = setup.BuildGraph(pgmReturn);
         const auto iterator = graph->GetValue().GetListIterator();
         NUdf::TUnboxedValue item;
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 8);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 8); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 6);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 6); 
         UNIT_ASSERT(!iterator.Next(item));
         UNIT_ASSERT(!iterator.Next(item));
-    }
-
+    } 
+ 
     Y_UNIT_TEST_LLVM(TestLogical) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
@@ -2844,70 +2844,70 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         const auto truth = pb.NewDataLiteral(true);
         const auto falsehood = pb.NewDataLiteral(false);
         auto pgmReturn = pb.NewEmptyList(pb.NewDataType(NUdf::TDataType<bool>::Id));
-
+ 
         pgmReturn = pb.Append(pgmReturn, pb.And({truth, truth}));
         pgmReturn = pb.Append(pgmReturn, pb.And({truth, falsehood}));
         pgmReturn = pb.Append(pgmReturn, pb.And({falsehood, truth}));
         pgmReturn = pb.Append(pgmReturn, pb.And({falsehood, falsehood}));
-
+ 
         pgmReturn = pb.Append(pgmReturn, pb.Or({truth, truth}));
         pgmReturn = pb.Append(pgmReturn, pb.Or({falsehood, truth}));
         pgmReturn = pb.Append(pgmReturn, pb.Or({truth, falsehood}));
         pgmReturn = pb.Append(pgmReturn, pb.Or({falsehood, falsehood}));
-
+ 
         pgmReturn = pb.Append(pgmReturn, pb.Xor({truth, truth}));
         pgmReturn = pb.Append(pgmReturn, pb.Xor({falsehood, truth}));
         pgmReturn = pb.Append(pgmReturn, pb.Xor({truth, falsehood}));
         pgmReturn = pb.Append(pgmReturn, pb.Xor({falsehood, falsehood}));
-
+ 
         pgmReturn = pb.Append(pgmReturn, pb.Not(truth));
         pgmReturn = pb.Append(pgmReturn, pb.Not(falsehood));
-
+ 
         const auto graph = setup.BuildGraph(pgmReturn);
         const auto iterator = graph->GetValue().GetListIterator();
-
+ 
         NUdf::TUnboxedValue item;
 
-        // and
+        // and 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), true);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), true); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), false);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), false); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), false);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), false); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), false);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), false); 
 
         // or
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), true);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), true); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), true);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), true); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), true);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), true); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), false);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), false); 
 
         // xor
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), false);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), false); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), true);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), true); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), true);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), true); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), false);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), false); 
 
         // not
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), false);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), false); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), true);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), true); 
 
         UNIT_ASSERT(!iterator.Next(item));
         UNIT_ASSERT(!iterator.Next(item));
-    }
-
+    } 
+ 
     Y_UNIT_TEST_LLVM(TestZip) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
@@ -2921,7 +2921,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
             pb.NewDataLiteral<NUdf::EDataSlot::String>("E"),
             pb.NewDataLiteral<NUdf::EDataSlot::String>("W")
         });
-
+ 
         const auto pgmReturn = pb.Zip({list1, list2});
 
         const auto graph = setup.BuildGraph(pgmReturn);
@@ -2932,8 +2932,8 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         UNBOXED_VALUE_STR_EQUAL(list.GetElement(0).GetElement(1), "Q");
         UNIT_ASSERT_VALUES_EQUAL(list.GetElement(1).GetElement(0).template Get<ui32>(), 56);
         UNBOXED_VALUE_STR_EQUAL(list.GetElement(1).GetElement(1), "E");
-    }
-
+    } 
+ 
     Y_UNIT_TEST_LLVM(TestZipLazy) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
@@ -2947,23 +2947,23 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
             pb.NewDataLiteral<NUdf::EDataSlot::String>("E"),
             pb.NewDataLiteral<NUdf::EDataSlot::String>("W")
         });
-
+ 
         const auto pgmReturn = pb.Zip({pb.LazyList(list1), list2});
-
+ 
         const auto graph = setup.BuildGraph(pgmReturn);
         const auto iterator = graph->GetValue().GetListIterator();
         NUdf::TUnboxedValue item;
 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<ui32>(), 34);
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<ui32>(), 34); 
         UNBOXED_VALUE_STR_EQUAL(item.GetElement(1), "Q");
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<ui32>(), 56);
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<ui32>(), 56); 
         UNBOXED_VALUE_STR_EQUAL(item.GetElement(1), "E");
         UNIT_ASSERT(!iterator.Next(item));
         UNIT_ASSERT(!iterator.Next(item));
-    }
-
+    } 
+ 
     Y_UNIT_TEST_LLVM(TestZipAll) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
@@ -2977,7 +2977,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
             pb.NewDataLiteral<NUdf::EDataSlot::String>("E"),
             pb.NewDataLiteral<NUdf::EDataSlot::String>("W")
         });
-
+ 
         const auto pgmReturn = pb.ZipAll({list1, list2});
 
         const auto graph = setup.BuildGraph(pgmReturn);
@@ -2990,8 +2990,8 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         UNBOXED_VALUE_STR_EQUAL(list.GetElement(1).GetElement(1), "E");
         UNIT_ASSERT(!list.GetElement(2).GetElement(0));
         UNBOXED_VALUE_STR_EQUAL(list.GetElement(2).GetElement(1), "W");
-    }
-
+    } 
+ 
     Y_UNIT_TEST_LLVM(TestZipAllLazy) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
@@ -3005,27 +3005,27 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
             pb.NewDataLiteral<NUdf::EDataSlot::String>("E"),
             pb.NewDataLiteral<NUdf::EDataSlot::String>("W")
         });
-
+ 
         const auto pgmReturn = pb.ZipAll({list1, pb.LazyList(list2)});
-
+ 
         const auto graph = setup.BuildGraph(pgmReturn);
-
+ 
         const auto iterator = graph->GetValue().GetListIterator();
         NUdf::TUnboxedValue item;
 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<ui32>(), 34);
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<ui32>(), 34); 
         UNBOXED_VALUE_STR_EQUAL(item.GetElement(1), "Q");
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<ui32>(), 56);
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<ui32>(), 56); 
         UNBOXED_VALUE_STR_EQUAL(item.GetElement(1), "E");
         UNIT_ASSERT(iterator.Next(item));
         UNIT_ASSERT(!item.GetElement(0));
         UNBOXED_VALUE_STR_EQUAL(item.GetElement(1), "W");
         UNIT_ASSERT(!iterator.Next(item));
         UNIT_ASSERT(!iterator.Next(item));
-    }
-
+    } 
+ 
     Y_UNIT_TEST_LLVM(TestReduce) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
@@ -3039,28 +3039,28 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
             pb.NewEmptyStruct(), "Min", pb.NewEmptyOptional(dataType)),
             "Max", pb.NewEmptyOptional(dataType));
         const auto pgmReturn = pb.Reduce(list, empty,
-            [&](TRuntimeNode item, TRuntimeNode state1) {
+            [&](TRuntimeNode item, TRuntimeNode state1) { 
                 return pb.AddMember(
                         pb.AddMember(pb.NewEmptyStruct(), "Min", pb.AggrMin(pb.Member(state1, "Min"), item)),
                         "Max", pb.AggrMax(pb.Member(state1, "Max"), item)
                     );
-                },
-            [&](TRuntimeNode state) {
-                return state;
-            }, empty,
+                }, 
+            [&](TRuntimeNode state) { 
+                return state; 
+            }, empty, 
             [&](TRuntimeNode state1, TRuntimeNode state2) {
                 return pb.AddMember(
                     pb.AddMember(pb.NewEmptyStruct(), "Min", pb.AggrMin(pb.Member(state1, "Min"), pb.Member(state2, "Min")))
                     , "Max", pb.AggrMax(pb.Member(state1, "Max"), pb.Member(state2, "Max"))
                 );
             });
-
+ 
         const auto graph = setup.BuildGraph(pgmReturn);
         const auto value = graph->GetValue();
-        UNIT_ASSERT_VALUES_EQUAL(value.GetElement(1).template Get<ui32>(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(value.GetElement(0).template Get<ui32>(), 3);
-    }
-
+        UNIT_ASSERT_VALUES_EQUAL(value.GetElement(1).template Get<ui32>(), 1); 
+        UNIT_ASSERT_VALUES_EQUAL(value.GetElement(0).template Get<ui32>(), 3); 
+    } 
+ 
     Y_UNIT_TEST_LLVM(TestReduceOverStream) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
@@ -3092,8 +3092,8 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
 
         const auto graph = setup.BuildGraph(pgmReturn);
         const auto value = graph->GetValue();
-        UNIT_ASSERT_VALUES_EQUAL(value.GetElement(1).template Get<ui32>(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(value.GetElement(0).template Get<ui32>(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(value.GetElement(1).template Get<ui32>(), 1); 
+        UNIT_ASSERT_VALUES_EQUAL(value.GetElement(0).template Get<ui32>(), 3); 
     }
 
     Y_UNIT_TEST_LLVM(TestListLength) {
@@ -3103,11 +3103,11 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         const auto list = pb.NewList(pb.NewDataType(NUdf::TDataType<ui32>::Id),
             {pb.NewDataLiteral<ui32>(34), pb.NewDataLiteral<ui32>(56)});
         const auto pgmReturn = pb.Length(list);
-
+ 
         const auto graph = setup.BuildGraph(pgmReturn);
-        UNIT_ASSERT_VALUES_EQUAL(graph->GetValue().template Get<ui64>(), 2);
-    }
-
+        UNIT_ASSERT_VALUES_EQUAL(graph->GetValue().template Get<ui64>(), 2); 
+    } 
+ 
     Y_UNIT_TEST_LLVM(TestReverse) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
@@ -3115,41 +3115,41 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         const auto list = pb.NewList(pb.NewDataType(NUdf::TDataType<ui32>::Id),
             {pb.NewDataLiteral<ui32>(34), pb.NewDataLiteral<ui32>(56)});
         const auto pgmReturn = pb.Reverse(list);
-
+ 
         const auto graph = setup.BuildGraph(pgmReturn);
         const auto iterator = graph->GetValue().GetListIterator();
         NUdf::TUnboxedValue item;
 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 56);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 56); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 34);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 34); 
         UNIT_ASSERT(!iterator.Next(item));
         UNIT_ASSERT(!iterator.Next(item));
-    }
-
+    } 
+ 
     Y_UNIT_TEST_LLVM(TestSkipForAppend) {
-        const ui32 n = 100;
+        const ui32 n = 100; 
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
-        for (ui32 i = 0; i < n; ++i) {
+        for (ui32 i = 0; i < n; ++i) { 
             auto list = pb.NewEmptyList(pb.NewDataType(NUdf::TDataType<ui32>::Id));
-            for (ui32 j = 0; j < n; ++j) {
+            for (ui32 j = 0; j < n; ++j) { 
                 list = pb.Append(list, pb.NewDataLiteral(j));
-            }
-
+            } 
+ 
             const auto skippedList = pb.Skip(list, pb.NewDataLiteral<ui64>(i));
-            auto changedList = skippedList;
-            for (ui32 j = 0; j < n; ++j) {
+            auto changedList = skippedList; 
+            for (ui32 j = 0; j < n; ++j) { 
                 changedList = pb.Prepend(pb.NewDataLiteral(n + n - 1 - j), changedList);
-            }
-
+            } 
+ 
             auto pgmReturn = pb.NewEmptyList(list.GetStaticType());
             pgmReturn = pb.Append(pgmReturn, list);
             pgmReturn = pb.Append(pgmReturn, skippedList);
             pgmReturn = pb.Append(pgmReturn, changedList);
-
+ 
             const auto graph = setup.BuildGraph(pgmReturn);
             const auto iteratorLists = graph->GetValue().GetListIterator();
             NUdf::TUnboxedValue test, item;
@@ -3158,7 +3158,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
             auto iterator = test.GetListIterator();
             for (ui32 j = 0; j < n; ++j) {
                 UNIT_ASSERT(iterator.Next(item));
-                UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), j);
+                UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), j); 
             }
 
             UNIT_ASSERT(!iterator.Next(item));
@@ -3168,7 +3168,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
             iterator = test.GetListIterator();
             for (ui32 j = i; j < n; ++j) {
                 UNIT_ASSERT(iterator.Next(item));
-                UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), j);
+                UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), j); 
             }
 
             UNIT_ASSERT(!iterator.Next(item));
@@ -3178,40 +3178,40 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
             iterator = test.GetListIterator();
             for (ui32 j = 0; j < n; ++j) {
                 UNIT_ASSERT(iterator.Next(item));
-                UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), j + n);
+                UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), j + n); 
             }
 
             for (ui32 j = i; j < n; ++j) {
                 UNIT_ASSERT(iterator.Next(item));
-                UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), j);
+                UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), j); 
             }
 
             UNIT_ASSERT(!iterator.Next(item));
             UNIT_ASSERT(!iterator.Next(item));
             UNIT_ASSERT(!iteratorLists.Next(test));
             UNIT_ASSERT(!iteratorLists.Next(test));
-        }
-    }
-
+        } 
+    } 
+ 
     Y_UNIT_TEST_LLVM(TestSkipForPrepend) {
-        const ui32 n = 100;
+        const ui32 n = 100; 
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
-        for (ui32 i = 0; i < n; ++i) {
+        for (ui32 i = 0; i < n; ++i) { 
             auto list = pb.NewEmptyList(pb.NewDataType(NUdf::TDataType<ui32>::Id));
-            for (ui32 j = 0; j < n; ++j) {
+            for (ui32 j = 0; j < n; ++j) { 
                 list = pb.Prepend(pb.NewDataLiteral(n - 1 - j), list);
-            }
-
+            } 
+ 
             const auto skippedList = pb.Skip(list, pb.NewDataLiteral<ui64>(i));
-            auto changedList = skippedList;
-            for (ui32 j = 0; j < n; ++j) {
+            auto changedList = skippedList; 
+            for (ui32 j = 0; j < n; ++j) { 
                 changedList = pb.Prepend(pb.NewDataLiteral(n + n - 1 - j), changedList);
-            }
-
+            } 
+ 
             const auto pgmReturn = pb.NewList(list.GetStaticType(), {list, skippedList, changedList});
-
+ 
             const auto graph = setup.BuildGraph(pgmReturn);
             const auto iteratorLists = graph->GetValue().GetListIterator();
             NUdf::TUnboxedValue test, item;
@@ -3220,7 +3220,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
             auto iterator = test.GetListIterator();
             for (ui32 j = 0; j < n; ++j) {
                 UNIT_ASSERT(iterator.Next(item));
-                UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), j);
+                UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), j); 
             }
 
             UNIT_ASSERT(!iterator.Next(item));
@@ -3230,7 +3230,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
             iterator = test.GetListIterator();
             for (ui32 j = i; j < n; ++j) {
                 UNIT_ASSERT(iterator.Next(item));
-                UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), j);
+                UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), j); 
             }
 
             UNIT_ASSERT(!iterator.Next(item));
@@ -3240,40 +3240,40 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
             iterator = test.GetListIterator();
             for (ui32 j = 0; j < n; ++j) {
                 UNIT_ASSERT(iterator.Next(item));
-                UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), j + n);
+                UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), j + n); 
             }
 
             for (ui32 j = i; j < n; ++j) {
                 UNIT_ASSERT(iterator.Next(item));
-                UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), j);
+                UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), j); 
             }
 
             UNIT_ASSERT(!iterator.Next(item));
             UNIT_ASSERT(!iterator.Next(item));
             UNIT_ASSERT(!iteratorLists.Next(test));
             UNIT_ASSERT(!iteratorLists.Next(test));
-        }
-    }
-
+        } 
+    } 
+ 
     Y_UNIT_TEST_LLVM(TestTakeForAppend) {
-        const ui32 n = 100;
+        const ui32 n = 100; 
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
-        for (ui32 i = 0; i < n; ++i) {
+        for (ui32 i = 0; i < n; ++i) { 
             auto list = pb.NewEmptyList(pb.NewDataType(NUdf::TDataType<ui32>::Id));
-            for (ui32 j = 0; j < n; ++j) {
+            for (ui32 j = 0; j < n; ++j) { 
                 list = pb.Append(list, pb.NewDataLiteral(j));
-            }
-
+            } 
+ 
             const auto skippedList = pb.Take(list, pb.NewDataLiteral<ui64>(i));
-            auto changedList = skippedList;
-            for (ui32 j = 0; j < n; ++j) {
+            auto changedList = skippedList; 
+            for (ui32 j = 0; j < n; ++j) { 
                 changedList = pb.Append(changedList, pb.NewDataLiteral(n + j));
-            }
-
+            } 
+ 
             const auto pgmReturn = pb.NewList(list.GetStaticType(), {list, skippedList, changedList});
-
+ 
             const auto graph = setup.BuildGraph(pgmReturn);
             const auto iteratorLists = graph->GetValue().GetListIterator();
             NUdf::TUnboxedValue test, item;
@@ -3282,7 +3282,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
             auto iterator = test.GetListIterator();
             for (ui32 j = 0; j < n; ++j) {
                 UNIT_ASSERT(iterator.Next(item));
-                UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), j);
+                UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), j); 
             }
 
             UNIT_ASSERT(!iterator.Next(item));
@@ -3292,7 +3292,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
             iterator = test.GetListIterator();
             for (ui32 j = 0; j < i; ++j) {
                 UNIT_ASSERT(iterator.Next(item));
-                UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), j);
+                UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), j); 
             }
 
             UNIT_ASSERT(!iterator.Next(item));
@@ -3302,40 +3302,40 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
             iterator = test.GetListIterator();
             for (ui32 j = 0; j < i; ++j) {
                 UNIT_ASSERT(iterator.Next(item));
-                UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), j);
+                UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), j); 
             }
 
             for (ui32 j = 0; j < n; ++j) {
                 UNIT_ASSERT(iterator.Next(item));
-                UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), j + n);
+                UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), j + n); 
             }
 
             UNIT_ASSERT(!iterator.Next(item));
             UNIT_ASSERT(!iterator.Next(item));
             UNIT_ASSERT(!iteratorLists.Next(test));
             UNIT_ASSERT(!iteratorLists.Next(test));
-        }
-    }
-
+        } 
+    } 
+ 
     Y_UNIT_TEST_LLVM(TestTakeForPrepend) {
-        const ui32 n = 100;
+        const ui32 n = 100; 
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
-        for (ui32 i = 0; i < n; ++i) {
+        for (ui32 i = 0; i < n; ++i) { 
             auto list = pb.NewEmptyList(pb.NewDataType(NUdf::TDataType<ui32>::Id));
-            for (ui32 j = 0; j < n; ++j) {
+            for (ui32 j = 0; j < n; ++j) { 
                 list = pb.Prepend(pb.NewDataLiteral(n - 1- j), list);
-            }
-
+            } 
+ 
             const auto skippedList = pb.Take(list, pb.NewDataLiteral<ui64>(i));
-            auto changedList = skippedList;
-            for (ui32 j = 0; j < n; ++j) {
+            auto changedList = skippedList; 
+            for (ui32 j = 0; j < n; ++j) { 
                 changedList = pb.Append(changedList, pb.NewDataLiteral(n + j));
-            }
-
+            } 
+ 
             const auto pgmReturn = pb.NewList(list.GetStaticType(), {list, skippedList, changedList});
-
+ 
             const auto graph = setup.BuildGraph(pgmReturn);
             const auto iteratorLists = graph->GetValue().GetListIterator();
             NUdf::TUnboxedValue test, item;
@@ -3344,7 +3344,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
             auto iterator = test.GetListIterator();
             for (ui32 j = 0; j < n; ++j) {
                 UNIT_ASSERT(iterator.Next(item));
-                UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), j);
+                UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), j); 
             }
 
             UNIT_ASSERT(!iterator.Next(item));
@@ -3354,7 +3354,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
             iterator = test.GetListIterator();
             for (ui32 j = 0; j < i; ++j) {
                 UNIT_ASSERT(iterator.Next(item));
-                UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), j);
+                UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), j); 
             }
 
             UNIT_ASSERT(!iterator.Next(item));
@@ -3364,53 +3364,53 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
             iterator = test.GetListIterator();
             for (ui32 j = 0; j < i; ++j) {
                 UNIT_ASSERT(iterator.Next(item));
-                UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), j);
+                UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), j); 
             }
 
             for (ui32 j = 0; j < n; ++j) {
                 UNIT_ASSERT(iterator.Next(item));
-                UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), j + n);
+                UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), j + n); 
             }
 
             UNIT_ASSERT(!iterator.Next(item));
             UNIT_ASSERT(!iterator.Next(item));
             UNIT_ASSERT(!iteratorLists.Next(test));
             UNIT_ASSERT(!iteratorLists.Next(test));
-        }
-    }
-
+        } 
+    } 
+ 
     Y_UNIT_TEST_LLVM(TestReplicate) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
         const auto pgmReturn = pb.Replicate(pb.NewDataLiteral<ui32>(34),
-            pb.NewDataLiteral<ui64>(4), "", 0, 0);
-
+            pb.NewDataLiteral<ui64>(4), "", 0, 0); 
+ 
         const auto graph = setup.BuildGraph(pgmReturn);
         const auto iterator = graph->GetValue().GetListIterator();
         NUdf::TUnboxedValue item;
 
-        for (ui32 i = 0; i < 4; ++i) {
+        for (ui32 i = 0; i < 4; ++i) { 
             UNIT_ASSERT(iterator.Next(item));
-            UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 34);
+            UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 34); 
         }
 
         UNIT_ASSERT(!iterator.Next(item));
         UNIT_ASSERT(!iterator.Next(item));
-    }
-
+    } 
+ 
     Y_UNIT_TEST_LLVM(TestIntegralCasts) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
         const auto data1 = pb.NewDataLiteral<ui32>(258);
         const auto pgmReturn = pb.Convert(data1, pb.NewDataType(NUdf::TDataType<ui8>::Id));
-
+ 
         const auto graph = setup.BuildGraph(pgmReturn);
         const auto res = graph->GetValue().template Get<ui8>();
-        UNIT_ASSERT_VALUES_EQUAL(res, 2);
-    }
-
+        UNIT_ASSERT_VALUES_EQUAL(res, 2); 
+    } 
+ 
     Y_UNIT_TEST_LLVM(TestCastFourIntoTrue) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
@@ -3436,7 +3436,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         const auto count3 = pb.NewDataLiteral<ui32>(1);
         const auto start4 = pb.NewDataLiteral<ui32>(0);
         const auto count4 = pb.NewDataLiteral<ui32>(3);
-
+ 
         const auto dataType = pb.NewTupleType({pb.NewDataType(NUdf::TDataType<ui32>::Id), pb.NewDataType(NUdf::TDataType<ui32>::Id)});
         const auto list = pb.NewList(dataType, {
             pb.NewTuple({start1, count1}),
@@ -3464,8 +3464,8 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         UNBOXED_VALUE_STR_EQUAL(item, "aab");
         UNIT_ASSERT(!iterator.Next(item));
         UNIT_ASSERT(!iterator.Next(item));
-    }
-
+    } 
+ 
     Y_UNIT_TEST_LLVM(TestSubstringOptionalArgs) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
@@ -3782,23 +3782,23 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         const auto data4 = pb.NewDataLiteral<NUdf::EDataSlot::String>("qqqqq");
         const auto pgmReturn = pb.NewList(pb.NewDataType(NUdf::TDataType<ui32>::Id),
             {pb.Size(data1), pb.Size(data2), pb.Size(data3), pb.Size(data4)});
-
+ 
         const auto graph = setup.BuildGraph(pgmReturn);
         const auto iterator = graph->GetValue().GetListIterator();
         NUdf::TUnboxedValue item;
 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 3); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 4); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 8);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 8); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 5);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 5); 
         UNIT_ASSERT(!iterator.Next(item));
         UNIT_ASSERT(!iterator.Next(item));
-    }
-
+    } 
+ 
     Y_UNIT_TEST_LLVM(TestEnumerate) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
@@ -3806,21 +3806,21 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         const auto list1 = pb.NewList(pb.NewDataType(NUdf::TDataType<ui32>::Id),
             {pb.NewDataLiteral<ui32>(34), pb.NewDataLiteral<ui32>(56)});
         const auto pgmReturn = pb.Enumerate(list1);
-
+ 
         const auto graph = setup.BuildGraph(pgmReturn);
         const auto iterator = graph->GetValue().GetListIterator();
         NUdf::TUnboxedValue item;
 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<ui64>(), 0);
-        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).template Get<ui32>(), 34);
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<ui64>(), 0); 
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).template Get<ui32>(), 34); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<ui64>(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).template Get<ui32>(), 56);
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<ui64>(), 1); 
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).template Get<ui32>(), 56); 
         UNIT_ASSERT(!iterator.Next(item));
         UNIT_ASSERT(!iterator.Next(item));
-    }
-
+    } 
+ 
     Y_UNIT_TEST_LLVM(TestEnumerateLazy) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
@@ -3828,22 +3828,22 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         const auto list1 = pb.NewList(pb.NewDataType(NUdf::TDataType<ui32>::Id),
             {pb.NewDataLiteral<ui32>(34), pb.NewDataLiteral<ui32>(56)});
         const auto pgmReturn = pb.Enumerate(pb.LazyList(list1));
-
+ 
         const auto graph = setup.BuildGraph(pgmReturn);
-
+ 
         const auto iterator = graph->GetValue().GetListIterator();
         NUdf::TUnboxedValue item;
 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<ui64>(), 0);
-        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).template Get<ui32>(), 34);
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<ui64>(), 0); 
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).template Get<ui32>(), 34); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<ui64>(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).template Get<ui32>(), 56);
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<ui64>(), 1); 
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).template Get<ui32>(), 56); 
         UNIT_ASSERT(!iterator.Next(item));
         UNIT_ASSERT(!iterator.Next(item));
-    }
-
+    } 
+ 
     Y_UNIT_TEST_LLVM(TestEnumerateLazyThenReverse) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
@@ -3851,22 +3851,22 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         const auto list1 = pb.NewList(pb.NewDataType(NUdf::TDataType<ui32>::Id),
             {pb.NewDataLiteral<ui32>(34), pb.NewDataLiteral<ui32>(56)});
         const auto pgmReturn = pb.Reverse(pb.Enumerate(pb.LazyList(list1)));
-
+ 
         const auto graph = setup.BuildGraph(pgmReturn);
-
+ 
         const auto iterator = graph->GetValue().GetListIterator();
         NUdf::TUnboxedValue item;
 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<ui64>(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).template Get<ui32>(), 56);
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<ui64>(), 1); 
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).template Get<ui32>(), 56); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<ui64>(), 0);
-        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).template Get<ui32>(), 34);
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<ui64>(), 0); 
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).template Get<ui32>(), 34); 
         UNIT_ASSERT(!iterator.Next(item));
         UNIT_ASSERT(!iterator.Next(item));
-    }
-
+    } 
+ 
     Y_UNIT_TEST_LLVM(TestEnumerateLazyThenSkip) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
@@ -3877,21 +3877,21 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         const auto list = pb.Enumerate(pb.LazyList(list1));
         const auto skip = pb.Skip(list, one);
         const auto pgmReturn = pb.NewTuple({skip, pb.Length(list), pb.Length(skip)});
-
+ 
         const auto graph = setup.BuildGraph(pgmReturn);
-
+ 
         const auto iterator = graph->GetValue().GetElement(0).GetListIterator();
         NUdf::TUnboxedValue item;
 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<ui64>(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).template Get<ui32>(), 56);
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<ui64>(), 1); 
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).template Get<ui32>(), 56); 
         UNIT_ASSERT(!iterator.Next(item));
         UNIT_ASSERT(!iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(graph->GetValue().GetElement(1).template Get<ui64>(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(graph->GetValue().GetElement(2).template Get<ui64>(), 1);
-    }
-
+        UNIT_ASSERT_VALUES_EQUAL(graph->GetValue().GetElement(1).template Get<ui64>(), 2); 
+        UNIT_ASSERT_VALUES_EQUAL(graph->GetValue().GetElement(2).template Get<ui64>(), 1); 
+    } 
+ 
     Y_UNIT_TEST_LLVM(TestEnumerateLazyThenTake) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
@@ -3902,111 +3902,111 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         const auto list = pb.Enumerate(pb.LazyList(list1));
         const auto take = pb.Take(list, one);
         const auto pgmReturn = pb.NewTuple({take, pb.Length(list), pb.Length(take)});
-
+ 
         const auto graph = setup.BuildGraph(pgmReturn);
-
+ 
         const auto iterator = graph->GetValue().GetElement(0).GetListIterator();
         NUdf::TUnboxedValue item;
 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<ui64>(), 0);
-        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).template Get<ui32>(), 34);
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<ui64>(), 0); 
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).template Get<ui32>(), 34); 
         UNIT_ASSERT(!iterator.Next(item));
         UNIT_ASSERT(!iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(graph->GetValue().GetElement(1).template Get<ui64>(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(graph->GetValue().GetElement(2).template Get<ui64>(), 1);
-    }
-
+        UNIT_ASSERT_VALUES_EQUAL(graph->GetValue().GetElement(1).template Get<ui64>(), 2); 
+        UNIT_ASSERT_VALUES_EQUAL(graph->GetValue().GetElement(2).template Get<ui64>(), 1); 
+    } 
+ 
     template<bool LLVM>
-    void TestSortImpl(bool asc) {
+    void TestSortImpl(bool asc) { 
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
         const auto key1 = pb.NewDataLiteral<ui32>(1);
         const auto key2 = pb.NewDataLiteral<ui32>(2);
         const auto key3 = pb.NewDataLiteral<ui32>(3);
-
+ 
         const auto payload1 = pb.NewDataLiteral<NUdf::EDataSlot::String>("aaa");
         const auto payload2 = pb.NewDataLiteral<NUdf::EDataSlot::String>("");
         const auto payload3 = pb.NewDataLiteral<NUdf::EDataSlot::String>("qqq");
-
+ 
         const auto keyType = pb.NewDataType(NUdf::TDataType<ui32>::Id);
         const auto payloadType = pb.NewDataType(NUdf::TDataType<char*>::Id);
         auto structType = pb.NewEmptyStructType();
         structType = pb.NewStructType(structType, "payload", payloadType);
         structType = pb.NewStructType(structType, "key", keyType);
-
+ 
         std::vector<std::pair<std::string_view, TRuntimeNode>> map1 = {
-            { "key", key1 },
-            { "payload", payload1 }
-        };
-
+            { "key", key1 }, 
+            { "payload", payload1 } 
+        }; 
+ 
         std::vector<std::pair<std::string_view, TRuntimeNode>> map2 = {
-            { "key", key2 },
-            { "payload", payload2 }
-        };
-
+            { "key", key2 }, 
+            { "payload", payload2 } 
+        }; 
+ 
         std::vector<std::pair<std::string_view, TRuntimeNode>> map3 = {
-            { "key", key3 },
-            { "payload", payload3 }
-        };
-
+            { "key", key3 }, 
+            { "payload", payload3 } 
+        }; 
+ 
         const auto list = pb.NewList(structType, {
             pb.NewStruct(map2),
             pb.NewStruct(map1),
             pb.NewStruct(map3)
         });
-
+ 
         {
             const auto pgmReturn = pb.Sort(list, pb.NewDataLiteral(asc),
                 [&](TRuntimeNode item) {
                 return pb.Member(item, "key");
-            });
+            }); 
 
-            if (asc) {
-                // ascending sort
+            if (asc) { 
+                // ascending sort 
                 const auto graph = setup.BuildGraph(pgmReturn);
                 const auto iterator = graph->GetValue().GetListIterator();
                 NUdf::TUnboxedValue item;
 
                 UNIT_ASSERT(iterator.Next(item));
-                UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<ui32>(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<ui32>(), 1); 
                 UNBOXED_VALUE_STR_EQUAL(item.GetElement(1), "aaa");
                 UNIT_ASSERT(iterator.Next(item));
-                UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<ui32>(), 2);
+                UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<ui32>(), 2); 
                 UNBOXED_VALUE_STR_EQUAL(item.GetElement(1), "");
                 UNIT_ASSERT(iterator.Next(item));
-                UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<ui32>(), 3);
+                UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<ui32>(), 3); 
                 UNBOXED_VALUE_STR_EQUAL(item.GetElement(1), "qqq");
                 UNIT_ASSERT(!iterator.Next(item));
                 UNIT_ASSERT(!iterator.Next(item));
-            } else {
-                // descending  sort
+            } else { 
+                // descending  sort 
                 const auto graph = setup.BuildGraph(pgmReturn);
                 const auto iterator = graph->GetValue().GetListIterator();
                 NUdf::TUnboxedValue item;
 
                 UNIT_ASSERT(iterator.Next(item));
-                UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<ui32>(), 3);
+                UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<ui32>(), 3); 
                 UNBOXED_VALUE_STR_EQUAL(item.GetElement(1), "qqq");
                 UNIT_ASSERT(iterator.Next(item));
-                UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<ui32>(), 2);
+                UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<ui32>(), 2); 
                 UNBOXED_VALUE_STR_EQUAL(item.GetElement(1), "");
                 UNIT_ASSERT(iterator.Next(item));
-                UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<ui32>(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<ui32>(), 1); 
                 UNBOXED_VALUE_STR_EQUAL(item.GetElement(1), "aaa");
                 UNIT_ASSERT(!iterator.Next(item));
                 UNIT_ASSERT(!iterator.Next(item));
-            }
+            } 
         }
-    }
+    } 
 
     Y_UNIT_TEST_LLVM(TestSort) {
         TestSortImpl<LLVM>(true);
         TestSortImpl<LLVM>(false);
-    }
-
-    using TTriple = std::tuple<ui32, ui32, ui32>;
+    } 
+ 
+    using TTriple = std::tuple<ui32, ui32, ui32>; 
 
     TRuntimeNode TupleOrder(TProgramBuilder& pb, bool asc1, bool asc2, bool asc3) {
         TVector<TRuntimeNode> ascending(3);
@@ -4071,7 +4071,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
             tupleTypes[2] = pb.NewDataType(NUdf::TDataType<ui32>::Id);
 
             return pb.NewList(pb.NewTupleType(tupleTypes), tuplesList);
-        };
+        }; 
 
         {
             TRuntimeNode order = TupleOrder(pb, true, true, true);
@@ -4083,7 +4083,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
                 { 2, 0, 1 },
                 { 2, 1, 0 },
             };
-            TVector<TTriple> expected(expectedData, expectedData + sizeof(expectedData) / sizeof(*expectedData));
+            TVector<TTriple> expected(expectedData, expectedData + sizeof(expectedData) / sizeof(*expectedData)); 
             TVector<TTriple> result = SortTuples<LLVM>(setup, listMaker(), order);
             UNIT_ASSERT_EQUAL(result, expected);
         }
@@ -4098,7 +4098,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
                 { 1, 1, 2 },
                 { 1, 1, 1 },
             };
-            TVector<TTriple> expected(expectedData, expectedData + sizeof(expectedData) / sizeof(*expectedData));
+            TVector<TTriple> expected(expectedData, expectedData + sizeof(expectedData) / sizeof(*expectedData)); 
             TVector<TTriple> result = SortTuples<LLVM>(setup, listMaker(), order);
             UNIT_ASSERT_EQUAL(result, expected);
         }
@@ -4113,7 +4113,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
                 { 2, 1, 0 },
                 { 2, 0, 1 },
             };
-            TVector<TTriple> expected(expectedData, expectedData + sizeof(expectedData) / sizeof(*expectedData));
+            TVector<TTriple> expected(expectedData, expectedData + sizeof(expectedData) / sizeof(*expectedData)); 
             TVector<TTriple> result = SortTuples<LLVM>(setup, listMaker(), order);
             UNIT_ASSERT_EQUAL(result, expected);
         }
@@ -4128,7 +4128,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
                 { 1, 2, 3 },
                 { 1, 3, 0 },
             };
-            TVector<TTriple> expected(expectedData, expectedData + sizeof(expectedData) / sizeof(*expectedData));
+            TVector<TTriple> expected(expectedData, expectedData + sizeof(expectedData) / sizeof(*expectedData)); 
             TVector<TTriple> result = SortTuples<LLVM>(setup, listMaker(), order);
             UNIT_ASSERT_EQUAL(result, expected);
         }
@@ -4138,45 +4138,45 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
         const auto pgmReturn = pb.AsList(pb.NewDataLiteral<ui32>(34));
-
+ 
         const auto graph = setup.BuildGraph(pgmReturn);
         const auto iterator = graph->GetValue().GetListIterator();
         NUdf::TUnboxedValue item;
 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 34);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 34); 
         UNIT_ASSERT(!iterator.Next(item));
         UNIT_ASSERT(!iterator.Next(item));
-    }
-
+    } 
+ 
     Y_UNIT_TEST_LLVM(TestListIfTrue) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
         const auto pgmReturn = pb.ListIf(pb.NewDataLiteral(true),
             pb.NewDataLiteral<ui32>(34));
-
+ 
         const auto graph = setup.BuildGraph(pgmReturn);
         const auto iterator = graph->GetValue().GetListIterator();
         NUdf::TUnboxedValue item;
 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 34);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 34); 
         UNIT_ASSERT(!iterator.Next(item));
         UNIT_ASSERT(!iterator.Next(item));
-    }
-
+    } 
+ 
     Y_UNIT_TEST_LLVM(TestListIfFalse) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
         const auto pgmReturn = pb.ListIf(pb.NewDataLiteral(false),
             pb.NewDataLiteral<ui32>(34));
-
+ 
         const auto graph = setup.BuildGraph(pgmReturn);
         const auto iterator = graph->GetValue().GetListIterator();
         UNIT_ASSERT(!iterator.Skip());
         UNIT_ASSERT(!iterator.Skip());
-    }
-
+    } 
+ 
     Y_UNIT_TEST_LLVM(TestNth) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
@@ -4184,11 +4184,11 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         const auto element1 = pb.NewDataLiteral<ui32>(56);
         const auto tuple = pb.NewTuple({element0, element1});
         const auto pgmReturn = pb.Nth(tuple, 1);
-
+ 
         const auto graph = setup.BuildGraph(pgmReturn);
         const auto res = graph->GetValue().template Get<ui32>();
-        UNIT_ASSERT_VALUES_EQUAL(res, 56);
-    }
+        UNIT_ASSERT_VALUES_EQUAL(res, 56); 
+    } 
 
     Y_UNIT_TEST_LLVM(NonDeterministicEnv) {
         TSetup<LLVM> setup;
@@ -4233,21 +4233,21 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         const auto pgmReturn = pb.Map(keys,
             [&](TRuntimeNode key) { return pb.Contains(dict, key); }
         );
-
+ 
         const auto graph = setup.BuildGraph(pgmReturn);
         const auto iterator = graph->GetValue().GetListIterator();
         NUdf::TUnboxedValue item;
 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), true);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), true); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), true);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), true); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), false);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), false); 
         UNIT_ASSERT(!iterator.Next(item));
         UNIT_ASSERT(!iterator.Next(item));
-    }
-
+    } 
+ 
     Y_UNIT_TEST_LLVM(TestIndexDictLookup) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
@@ -4264,23 +4264,23 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         const auto pgmReturn = pb.Map(keys,
             [&](TRuntimeNode key) { return pb.Lookup(dict, key); }
         );
-
+ 
         const auto graph = setup.BuildGraph(pgmReturn);
         const auto iterator = graph->GetValue().GetListIterator();
         NUdf::TUnboxedValue item;
 
         UNIT_ASSERT(iterator.Next(item));
         UNIT_ASSERT(item);
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<i32>(), 7);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<i32>(), 7); 
         UNIT_ASSERT(iterator.Next(item));
         UNIT_ASSERT(item);
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<i32>(), 16);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<i32>(), 16); 
         UNIT_ASSERT(iterator.Next(item));
         UNIT_ASSERT(!item);
         UNIT_ASSERT(!iterator.Next(item));
         UNIT_ASSERT(!iterator.Next(item));
-    }
-
+    } 
+ 
     Y_UNIT_TEST_LLVM(TestIndexDictContainsLazy) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
@@ -4297,22 +4297,22 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         const auto pgmReturn = pb.Map(keys,
             [&](TRuntimeNode key) { return pb.Contains(dict, key); }
         );
-
+ 
         const auto graph = setup.BuildGraph(pgmReturn);
-
+ 
         const auto iterator = graph->GetValue().GetListIterator();
         NUdf::TUnboxedValue item;
 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), true);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), true); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), true);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), true); 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), false);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), false); 
         UNIT_ASSERT(!iterator.Next(item));
         UNIT_ASSERT(!iterator.Next(item));
-    }
-
+    } 
+ 
     Y_UNIT_TEST_LLVM(TestIndexDictLookupLazy) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
@@ -4329,24 +4329,24 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         const auto pgmReturn = pb.Map(keys,
             [&](TRuntimeNode key) { return pb.Lookup(dict, key); }
         );
-
+ 
         const auto graph = setup.BuildGraph(pgmReturn);
-
+ 
         const auto iterator = graph->GetValue().GetListIterator();
         NUdf::TUnboxedValue item;
 
         UNIT_ASSERT(iterator.Next(item));
         UNIT_ASSERT(item);
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 7);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 7); 
         UNIT_ASSERT(iterator.Next(item));
         UNIT_ASSERT(item);
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 16);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 16); 
         UNIT_ASSERT(iterator.Next(item));
         UNIT_ASSERT(!item);
         UNIT_ASSERT(!iterator.Next(item));
         UNIT_ASSERT(!iterator.Next(item));
-    }
-
+    } 
+ 
     Y_UNIT_TEST_LLVM(TestToBytes) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
@@ -4361,11 +4361,11 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
             [&](TRuntimeNode item) {
                 return pb.ToBytes(item);
             });
-
+ 
         const auto graph = setup.BuildGraph(pgmReturn);
         const auto iterator = graph->GetValue().GetListIterator();
         NUdf::TUnboxedValue item;
-
+ 
         UNIT_ASSERT(iterator.Next(item));
         UNBOXED_VALUE_STR_EQUAL(item, "\x00\x00\x00\x00");
         UNIT_ASSERT(iterator.Next(item));
@@ -4376,8 +4376,8 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         UNBOXED_VALUE_STR_EQUAL(item, "\x00\x00\x80\x7f");
         UNIT_ASSERT(!iterator.Next(item));
         UNIT_ASSERT(!iterator.Next(item));
-    }
-
+    } 
+ 
     Y_UNIT_TEST_LLVM(TestToBytesOpt) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
@@ -4450,19 +4450,19 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
             [&](TRuntimeNode item) {
                 return pb.FromString(item, pb.NewDataType(NUdf::TDataType<ui32>::Id));
             });
-
+ 
         const auto graph = setup.BuildGraph(pgmReturn);
         const auto iterator = graph->GetValue().GetListIterator();
         NUdf::TUnboxedValue item;
 
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 234);
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 234); 
         UNIT_ASSERT(iterator.Next(item));
         UNIT_ASSERT(!item);
         UNIT_ASSERT(!iterator.Next(item));
         UNIT_ASSERT(!iterator.Next(item));
-    }
-
+    } 
+ 
     Y_UNIT_TEST_LLVM(TestStrictFromString) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
@@ -4476,28 +4476,28 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         tupleItems.push_back(pb.StrictFromString(data3, pb.NewDataType(NUdf::TDataType<double>::Id)));
         const auto pgmReturn = pb.NewTuple(tupleItems);
 
-        {
+        { 
             const auto graph = setup.BuildGraph(pgmReturn);
             const auto res = graph->GetValue();
-            UNIT_ASSERT_VALUES_EQUAL(res.GetElement(0).template Get<ui32>(), 234);
-            UNIT_ASSERT_VALUES_EQUAL(res.GetElement(1).template Get<i32>(), -1);
-            UNIT_ASSERT_VALUES_EQUAL(res.GetElement(2).template Get<double>(), 3.1415926);
-        }
+            UNIT_ASSERT_VALUES_EQUAL(res.GetElement(0).template Get<ui32>(), 234); 
+            UNIT_ASSERT_VALUES_EQUAL(res.GetElement(1).template Get<i32>(), -1); 
+            UNIT_ASSERT_VALUES_EQUAL(res.GetElement(2).template Get<double>(), 3.1415926); 
+        } 
 
-        {
+        { 
             const auto wrongData = pb.NewDataLiteral<NUdf::EDataSlot::String>("vgfsbhj");
             const auto fail = pb.StrictFromString(wrongData, pb.NewDataType(NUdf::TDataType<ui32>::Id));
             const auto failgraph = setup.BuildGraph(fail, {});
-            UNIT_ASSERT_EXCEPTION(failgraph->GetValue(), yexception);
-        }
+            UNIT_ASSERT_EXCEPTION(failgraph->GetValue(), yexception); 
+        } 
 
-        {
+        { 
             const auto wrongData = pb.NewDataLiteral<NUdf::EDataSlot::String>("");
             const auto fail = pb.StrictFromString(wrongData, pb.NewDataType(NUdf::TDataType<double>::Id));
             const auto failgraph = setup.BuildGraph(fail, {});
-            UNIT_ASSERT_EXCEPTION(failgraph->GetValue(), yexception);
+            UNIT_ASSERT_EXCEPTION(failgraph->GetValue(), yexception); 
         }
-    }
+    } 
 
     Y_UNIT_TEST_LLVM(TestFromBytes) {
         TSetup<LLVM> setup;
@@ -4509,14 +4509,14 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         const auto data2 = pb.NewEmptyOptionalDataLiteral(NUdf::TDataType<const char*>::Id);
         tupleItems.push_back(pb.FromBytes(data2, NUdf::TDataType<ui32>::Id));
         const auto pgmReturn = pb.NewTuple(tupleItems);
-
+ 
         const auto graph = setup.BuildGraph(pgmReturn);
         const auto res = graph->GetValue();
         UNIT_ASSERT(res.GetElement(0));
-        UNIT_ASSERT_VALUES_EQUAL(res.GetElement(0).template Get<ui32>(), 234);
+        UNIT_ASSERT_VALUES_EQUAL(res.GetElement(0).template Get<ui32>(), 234); 
         UNIT_ASSERT(!res.GetElement(1));
-    }
-
+    } 
+ 
     Y_UNIT_TEST_LLVM(TestMTRand) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
@@ -4524,60 +4524,60 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         const auto seed = pb.NewDataLiteral<ui64>(42);
         auto pgmReturn = pb.NewEmptyList(pb.NewDataType(NUdf::TDataType<ui64>::Id));
         auto rnd = pb.NewMTRand(seed);
-        const ui32 n = 5;
-        const ui64 expectedValues[n] = {
-            13930160852258120406ull,
-            11788048577503494824ull,
-            13874630024467741450ull,
-            2513787319205155662ull,
-            16662371453428439381ull,
-        };
-        for (ui32 i = 0; i < n; ++i) {
+        const ui32 n = 5; 
+        const ui64 expectedValues[n] = { 
+            13930160852258120406ull, 
+            11788048577503494824ull, 
+            13874630024467741450ull, 
+            2513787319205155662ull, 
+            16662371453428439381ull, 
+        }; 
+        for (ui32 i = 0; i < n; ++i) { 
             const auto pair = pb.NextMTRand(rnd);
             pgmReturn = pb.Append(pgmReturn, pb.Nth(pair, 0));
             rnd = pb.Nth(pair, 1);
-        }
-
+        } 
+ 
         const auto graph = setup.BuildGraph(pgmReturn);
         const auto iterator = graph->GetValue().GetListIterator();
         NUdf::TUnboxedValue item;
 
-        for (ui32 i = 0; i < n; ++i) {
+        for (ui32 i = 0; i < n; ++i) { 
             UNIT_ASSERT(iterator.Next(item));
             const ui64 value = item.template Get<ui64>();
             //Cout << value << Endl;
-            UNIT_ASSERT_VALUES_EQUAL(value, expectedValues[i]);
+            UNIT_ASSERT_VALUES_EQUAL(value, expectedValues[i]); 
         }
 
         UNIT_ASSERT(!iterator.Next(item));
         UNIT_ASSERT(!iterator.Next(item));
-    }
-
+    } 
+ 
     Y_UNIT_TEST_LLVM(TestRandom) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
-        const double expectedValue1 = 0.13387664401253274;
-        const ui64 expectedValue2 = 2516265689700432462;
-
+        const double expectedValue1 = 0.13387664401253274; 
+        const ui64 expectedValue2 = 2516265689700432462; 
+ 
         const auto rnd1 = pb.Random({});
         const auto rnd2 = pb.RandomNumber({});
         TVector<TRuntimeNode> args;
-        args.push_back(rnd1);
-        args.push_back(rnd2);
+        args.push_back(rnd1); 
+        args.push_back(rnd2); 
         const auto pgmReturn = pb.NewTuple(args);
-
+ 
         const auto graph = setup.BuildGraph(pgmReturn);
         const auto tuple = graph->GetValue();
         UNIT_ASSERT_DOUBLES_EQUAL(tuple.GetElement(0).template Get<double>(), expectedValue1, 1e-3);
-        UNIT_ASSERT_VALUES_EQUAL(tuple.GetElement(1).template Get<ui64>(), expectedValue2);
-    }
+        UNIT_ASSERT_VALUES_EQUAL(tuple.GetElement(1).template Get<ui64>(), expectedValue2); 
+    } 
 
     Y_UNIT_TEST_LLVM(TestNow) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
-        const ui64 expectedValue = 10000000000000;
+        const ui64 expectedValue = 10000000000000; 
 
         const auto ts = pb.Now({});
         TVector<TRuntimeNode> args;
@@ -4586,9 +4586,9 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
 
         const auto graph = setup.BuildGraph(pgmReturn);
         const auto tuple = graph->GetValue();
-        UNIT_ASSERT_VALUES_EQUAL(tuple.GetElement(0).template Get<ui64>(), expectedValue);
+        UNIT_ASSERT_VALUES_EQUAL(tuple.GetElement(0).template Get<ui64>(), expectedValue); 
     }
-
+ 
     Y_UNIT_TEST_LLVM(TestSkipAndTakeOverStream) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
@@ -4813,58 +4813,58 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
     Y_UNIT_TEST_LLVM(TestPerfHolders) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
-
+ 
         const auto ui32Type = pb.NewDataType(NUdf::TDataType<ui32>::Id);
         const auto strType = pb.NewDataType(NUdf::TDataType<char*>::Id);
         const auto structType = pb.NewStructType({{"key", ui32Type}, {"value", strType}});
         const auto mark = pb.NewDataLiteral<NUdf::EDataSlot::String>("!");
-
+ 
         const auto listType = pb.NewListType(structType);
         TCallableBuilder listRet(pb.GetTypeEnvironment(), "TestList", listType);
         const auto listNode = listRet.Build();
-
+ 
         const auto pgmReturn = pb.Map(pb.LazyList(TRuntimeNode(listNode, false)),
-            [&](TRuntimeNode item) {
+            [&](TRuntimeNode item) { 
             return pb.NewStruct({
                 {"key", pb.Member(item, "key")},
                 {"value", pb.AggrConcat(mark, pb.Member(item, "value"))}
             });
-        });
-
+        }); 
+ 
         std::vector<ui32> src(10000U);
         std::iota(src.begin(), src.end(), 0U);
-
+ 
         const auto myStructFactory = [](const THolderFactory& factory, ui32 i) {
             NUdf::TUnboxedValue* itemsPtr = nullptr;
             const auto structObj = factory.CreateDirectArrayHolder(2U, itemsPtr);
             itemsPtr[0] = NUdf::TUnboxedValuePod(ui32(i));
             itemsPtr[1] = MakeString("ABCDEFGHIJKL");
-            return structObj;
-        };
-
+            return structObj; 
+        }; 
+ 
         const auto t1 = TInstant::Now();
-        {
+        { 
             const auto graph = setup.BuildGraph(pgmReturn, {listNode});
             NUdf::TUnboxedValue* items = nullptr;
             graph->GetEntryPoint(0, true)->SetValue(graph->GetContext(), graph->GetHolderFactory().CreateDirectArrayHolder(src.size(), items));
             std::transform(src.cbegin(), src.cend(), items, std::bind(myStructFactory, std::ref(graph->GetHolderFactory()), std::placeholders::_1));
-
+ 
             const auto iterator = graph->GetValue().GetListIterator();
             ui32 i = 0U;
             for (NUdf::TUnboxedValue current; iterator.Next(current); ++i) {
-                UNIT_ASSERT_VALUES_EQUAL(current.GetElement(0).template Get<ui32>(), i);
+                UNIT_ASSERT_VALUES_EQUAL(current.GetElement(0).template Get<ui32>(), i); 
                 UNBOXED_VALUE_STR_EQUAL(current.GetElement(1), "!ABCDEFGHIJKL");
-            }
-        }
-
+            } 
+        } 
+ 
         const auto t2 = TInstant::Now();
-        Cout << t2 - t1 << Endl;
-    }
-
+        Cout << t2 - t1 << Endl; 
+    } 
+ 
     Y_UNIT_TEST_LLVM(TestPerfGrep) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
-
+ 
         const auto ui32Type = pb.NewDataType(NUdf::TDataType<ui32>::Id);
         const auto strType = pb.NewDataType(NUdf::TDataType<char*>::Id);
         auto structType = pb.NewEmptyStructType();
@@ -4872,56 +4872,56 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         structType = pb.NewStructType(structType, "value", strType);
         const auto keyIndex = AS_TYPE(TStructType, structType)->GetMemberIndex("key");
         const auto valueIndex = AS_TYPE(TStructType, structType)->GetMemberIndex("value");
-
+ 
         TRuntimeNode rowArg = pb.Arg(structType);
-
+ 
         const auto pgmReturn = pb.Equals(pb.Member(rowArg, "value"),
             pb.NewDataLiteral<NUdf::EDataSlot::String>("ABCDE"));
-
+ 
         const auto t1 = TInstant::Now();
-        {
+        { 
             const auto graph = setup.BuildGraph(pgmReturn, {rowArg.GetNode()});
             const auto row = graph->GetEntryPoint(0, true);
-
+ 
             NUdf::TUnboxedValue* items = nullptr;
             const auto structObj = graph->GetHolderFactory().CreateDirectArrayHolder(2, items);
-            graph->Prepare();
-            const ui32 n = 10000;
-            for (ui32 i = 0; i < n; ++i) {
+            graph->Prepare(); 
+            const ui32 n = 10000; 
+            for (ui32 i = 0; i < n; ++i) { 
                 items[keyIndex] = NUdf::TUnboxedValuePod(i);
                 items[valueIndex] = NUdf::TUnboxedValuePod::Embedded("ABCDF");
                 row->SetValue(graph->GetContext(), NUdf::TUnboxedValuePod(structObj));
                 const bool keep = graph->GetValue().template Get<bool>();
-                UNIT_ASSERT(!keep);
-            }
-        }
-
+                UNIT_ASSERT(!keep); 
+            } 
+        } 
+ 
         const auto t2 = TInstant::Now();
-        Cout << t2 - t1 << Endl;
-    }
-
+        Cout << t2 - t1 << Endl; 
+    } 
+ 
     Y_NO_INLINE NUdf::TUnboxedValuePod SpecialFunc(const NUdf::TUnboxedValuePod* args) {
         const auto stringRef = args[1].AsStringRef();
         return NUdf::TUnboxedValuePod(stringRef.Size() == 5 && std::memcmp(stringRef.Data(), "ABCDE", 5) == 0);
-    }
-
+    } 
+ 
     Y_UNIT_TEST_LLVM(TestPerfGrepSpecialFunc) {
         const auto t1 = TInstant::Now();
-        {
+        { 
             NUdf::TUnboxedValuePod items[2];
-            const ui32 n = 10000;
-            for (ui32 i = 0; i < n; ++i) {
+            const ui32 n = 10000; 
+            for (ui32 i = 0; i < n; ++i) { 
                 items[0] = NUdf::TUnboxedValuePod(i);
                 items[1] = NUdf::TUnboxedValuePod::Embedded("ABCDF");
                 bool keep = SpecialFunc(items).template Get<bool>();
-                UNIT_ASSERT(!keep);
-            }
-        }
-
+                UNIT_ASSERT(!keep); 
+            } 
+        } 
+ 
         const auto t2 = TInstant::Now();
-        Cout << t2 - t1 << Endl;
-    }
-}
-
-}
-}
+        Cout << t2 - t1 << Endl; 
+    } 
+} 
+ 
+} 
+} 

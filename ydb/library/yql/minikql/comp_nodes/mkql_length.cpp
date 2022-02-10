@@ -1,23 +1,23 @@
-#include "mkql_length.h"
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h>
-#include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins_codegen.h>
-#include <ydb/library/yql/minikql/mkql_node_cast.h>
-#include <ydb/library/yql/minikql/mkql_node_builder.h>
-
-namespace NKikimr {
-namespace NMiniKQL {
-
+#include "mkql_length.h" 
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h> 
+#include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins_codegen.h> 
+#include <ydb/library/yql/minikql/mkql_node_cast.h> 
+#include <ydb/library/yql/minikql/mkql_node_builder.h> 
+ 
+namespace NKikimr { 
+namespace NMiniKQL { 
+ 
 namespace {
 
 template <bool IsDict, bool IsOptional>
 class TLengthWrapper : public TMutableCodegeneratorNode<TLengthWrapper<IsDict, IsOptional>> {
     typedef TMutableCodegeneratorNode<TLengthWrapper<IsDict, IsOptional>> TBaseComputation;
-public:
+public: 
     TLengthWrapper(TComputationMutables& mutables, IComputationNode* collection)
         : TBaseComputation(mutables, EValueRepresentation::Embedded)
         , Collection(collection)
     {}
-
+ 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& compCtx) const {
         const auto& collection = Collection->GetValue(compCtx);
         if (IsOptional && !collection) {
@@ -25,8 +25,8 @@ public:
         }
         const auto length = IsDict ? collection.GetDictLength() : collection.GetListLength();
         return NUdf::TUnboxedValuePod(length);
-    }
-
+    } 
+ 
 #ifndef MKQL_DISABLE_CODEGEN
     Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
         auto& context = ctx.Codegen->GetContext();
@@ -60,31 +60,31 @@ public:
 private:
     void RegisterDependencies() const final {
         this->DependsOn(Collection);
-    }
-
-    IComputationNode* const Collection;
-};
-
+    } 
+ 
+    IComputationNode* const Collection; 
+}; 
+ 
 }
 
-IComputationNode* WrapLength(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
-    MKQL_ENSURE(callable.GetInputsCount() == 1, "Expected 1 arg");
+IComputationNode* WrapLength(TCallable& callable, const TComputationNodeFactoryContext& ctx) { 
+    MKQL_ENSURE(callable.GetInputsCount() == 1, "Expected 1 arg"); 
     bool isOptional;
     const auto type = UnpackOptional(callable.GetInput(0).GetStaticType(), isOptional);
-    if (type->IsDict() || type->IsEmptyDict()) {
+    if (type->IsDict() || type->IsEmptyDict()) { 
         if (isOptional)
             return new TLengthWrapper<true, true>(ctx.Mutables, LocateNode(ctx.NodeLocator, callable, 0));
         else
             return new TLengthWrapper<true, false>(ctx.Mutables, LocateNode(ctx.NodeLocator, callable, 0));
-    } else if (type->IsList() || type->IsEmptyList()) {
+    } else if (type->IsList() || type->IsEmptyList()) { 
         if (isOptional)
             return new TLengthWrapper<false, true>(ctx.Mutables, LocateNode(ctx.NodeLocator, callable, 0));
         else
             return new TLengthWrapper<false, false>(ctx.Mutables, LocateNode(ctx.NodeLocator, callable, 0));
-    }
+    } 
 
     THROW yexception() << "Expected list or dict.";
-}
-
-}
-}
+} 
+ 
+} 
+} 

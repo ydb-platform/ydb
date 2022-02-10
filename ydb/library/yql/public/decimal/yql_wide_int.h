@@ -212,10 +212,10 @@ public:
         if (const auto shift = size_t(rhs.Lo) % FullBitSize) {
             if (shift < PartBitSize) {
                 Hi = TPart(Hi) << shift;
-                Hi |= Lo >> (PartBitSize - shift);
+                Hi |= Lo >> (PartBitSize - shift); 
                 Lo <<= shift;
             } else {
-                Hi = Lo << (shift - PartBitSize);
+                Hi = Lo << (shift - PartBitSize); 
                 Lo = 0;
             }
         }
@@ -227,10 +227,10 @@ public:
         if (const auto shift = size_t(rhs.Lo) % FullBitSize) {
             if (shift < PartBitSize) {
                 Lo >>= shift;
-                Lo |= TPart(Hi) << (PartBitSize - shift);
+                Lo |= TPart(Hi) << (PartBitSize - shift); 
                 Hi >>= shift;
             } else {
-                Lo = Hi >> (shift - PartBitSize);
+                Lo = Hi >> (shift - PartBitSize); 
                 Hi = TIsSigned::value && Hi < 0 ? ~0 : 0;
             }
         }

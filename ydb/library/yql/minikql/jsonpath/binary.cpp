@@ -1,6 +1,6 @@
 #include "binary.h"
 
-#include <ydb/library/yql/utils/yql_panic.h>
+#include <ydb/library/yql/utils/yql_panic.h> 
 
 namespace NYql::NJsonPath {
 
@@ -602,4 +602,4 @@ TUint TJsonPathBuilder::CurrentEndPos() const {
 }
 
 
-}
+} 

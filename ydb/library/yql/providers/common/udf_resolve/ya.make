@@ -24,12 +24,12 @@ PEERDIR(
     ydb/library/yql/public/udf
     ydb/library/yql/utils
     ydb/library/yql/utils/log
-    ydb/library/yql/core
-    ydb/library/yql/providers/common/mkql
-    ydb/library/yql/providers/common/proto
-    ydb/library/yql/providers/common/schema/expr
+    ydb/library/yql/core 
+    ydb/library/yql/providers/common/mkql 
+    ydb/library/yql/providers/common/proto 
+    ydb/library/yql/providers/common/schema/expr 
 )
 
 YQL_LAST_ABI_VERSION()
-
+ 
 END()

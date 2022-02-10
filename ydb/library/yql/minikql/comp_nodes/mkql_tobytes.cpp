@@ -1,12 +1,12 @@
-#include "mkql_tobytes.h"
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h>
-#include <ydb/library/yql/minikql/mkql_node_cast.h>
-#include <ydb/library/yql/minikql/mkql_node_builder.h>
-#include <ydb/library/yql/utils/swap_bytes.h>
-
-namespace NKikimr {
-namespace NMiniKQL {
-
+#include "mkql_tobytes.h" 
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h> 
+#include <ydb/library/yql/minikql/mkql_node_cast.h> 
+#include <ydb/library/yql/minikql/mkql_node_builder.h> 
+#include <ydb/library/yql/utils/swap_bytes.h> 
+ 
+namespace NKikimr { 
+namespace NMiniKQL { 
+ 
 namespace {
 
 template<bool IsOptional, typename Type>
@@ -38,45 +38,45 @@ public:
 #endif
 };
 
-template<bool IsOptional, typename Type>
+template<bool IsOptional, typename Type> 
 class TToBytesTzTypeWrapper : public TDecoratorComputationNode<TToBytesTzTypeWrapper<IsOptional, Type>> {
 using TBaseComputation = TDecoratorComputationNode<TToBytesTzTypeWrapper<IsOptional, Type>>;
-public:
+public: 
     TToBytesTzTypeWrapper(IComputationNode* data)
         : TBaseComputation(data)
-    {}
-
+    {} 
+ 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& compCtx, const NUdf::TUnboxedValuePod& value) const {
-        if (IsOptional && !value)
-            return NUdf::TUnboxedValuePod();
-
+        if (IsOptional && !value) 
+            return NUdf::TUnboxedValuePod(); 
+ 
         const auto v = NYql::SwapBytes(value.Get<Type>());
         const auto tzId = NYql::SwapBytes(value.GetTimezoneId());
-        char buf[sizeof(Type) + sizeof(ui16)];
+        char buf[sizeof(Type) + sizeof(ui16)]; 
         std::memcpy(buf, &v, sizeof(v));
         std::memcpy(buf + sizeof(Type), &tzId, sizeof(tzId));
-        return NUdf::TUnboxedValuePod::Embedded(NUdf::TStringRef(buf, sizeof(buf)));
-    }
-};
+        return NUdf::TUnboxedValuePod::Embedded(NUdf::TStringRef(buf, sizeof(buf))); 
+    } 
+}; 
 
 class TToBytesWrapper : public TDecoratorCodegeneratorNode<TToBytesWrapper> {
 using TBaseComputation = TDecoratorCodegeneratorNode<TToBytesWrapper>;
-public:
+public: 
     TToBytesWrapper(IComputationNode* optional)
         : TBaseComputation(optional)
     {}
-
+ 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext&, const NUdf::TUnboxedValuePod& value) const { return value; }
 #ifndef MKQL_DISABLE_CODEGEN
     Value* DoGenerateGetValue(const TCodegenContext&, Value* value, BasicBlock*&) const { return value; }
 #endif
-};
-
+}; 
+ 
 }
 
-IComputationNode* WrapToBytes(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
-    MKQL_ENSURE(callable.GetInputsCount() == 1, "Expected 1 arg");
-
+IComputationNode* WrapToBytes(TCallable& callable, const TComputationNodeFactoryContext& ctx) { 
+    MKQL_ENSURE(callable.GetInputsCount() == 1, "Expected 1 arg"); 
+ 
     bool isOptional;
     const auto dataType = UnpackOptionalData(callable.GetInput(0), isOptional);
     const auto data = LocateNode(ctx.NodeLocator, callable, 0);
@@ -90,23 +90,23 @@ IComputationNode* WrapToBytes(TCallable& callable, const TComputationNodeFactory
 
         KNOWN_FIXED_VALUE_TYPES(MAKE_PRIMITIVE_TYPE_BYTES)
 #undef MAKE_PRIMITIVE_TYPE_BYTES
-#define MAKE_TZ_TYPE_BYTES(type, layout) \
-        case NUdf::TDataType<type>::Id: \
-            if (isOptional) \
+#define MAKE_TZ_TYPE_BYTES(type, layout) \ 
+        case NUdf::TDataType<type>::Id: \ 
+            if (isOptional) \ 
                 return new TToBytesTzTypeWrapper<true, layout>(data); \
-            else \
+            else \ 
                 return new TToBytesTzTypeWrapper<false, layout>(data);
-
-        MAKE_TZ_TYPE_BYTES(NUdf::TTzDate, ui16);
-        MAKE_TZ_TYPE_BYTES(NUdf::TTzDatetime, ui32);
-        MAKE_TZ_TYPE_BYTES(NUdf::TTzTimestamp, ui64);
-#undef MAKE_TZ_TYPE_BYTES
+ 
+        MAKE_TZ_TYPE_BYTES(NUdf::TTzDate, ui16); 
+        MAKE_TZ_TYPE_BYTES(NUdf::TTzDatetime, ui32); 
+        MAKE_TZ_TYPE_BYTES(NUdf::TTzTimestamp, ui64); 
+#undef MAKE_TZ_TYPE_BYTES 
         default:
             break;
     }
 
     return new TToBytesWrapper(data);
-}
-
-}
-}
+} 
+ 
+} 
+} 

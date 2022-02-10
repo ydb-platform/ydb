@@ -1,20 +1,20 @@
-#include "mkql_proto.h"
+#include "mkql_proto.h" 
 
-#include <ydb/library/yql/minikql/defs.h>
-#include <ydb/library/yql/minikql/mkql_node_visitor.h>
-#include <ydb/library/yql/minikql/mkql_string_util.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_node.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
-#include <ydb/library/yql/public/decimal/yql_decimal.h>
+#include <ydb/library/yql/minikql/defs.h> 
+#include <ydb/library/yql/minikql/mkql_node_visitor.h> 
+#include <ydb/library/yql/minikql/mkql_string_util.h> 
+#include <ydb/library/yql/minikql/computation/mkql_computation_node.h> 
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h> 
+#include <ydb/library/yql/public/decimal/yql_decimal.h> 
 
 #include <ydb/core/scheme_types/scheme_types_defs.h>
 
-namespace NKikimr {
-
-namespace NMiniKQL {
-
-namespace {
-
+namespace NKikimr { 
+ 
+namespace NMiniKQL { 
+ 
+namespace { 
+ 
     Y_FORCE_INLINE NUdf::TUnboxedValue HandleKindDataImport(TType* type, const Ydb::Value& value) {
         auto dataType = static_cast<TDataType*>(type);
         switch (dataType->GetSchemeType()) {
@@ -60,8 +60,8 @@ namespace {
         }
     }
 
-}
-
+} 
+ 
 NUdf::TUnboxedValue ImportValueFromProto(TType* type, const Ydb::Value& value, const THolderFactory& factory) {
     switch (type->GetKind()) {
     case TType::EKind::Void:
@@ -163,7 +163,7 @@ NUdf::TUnboxedValue ImportValueFromProto(TType* type, const Ydb::Value& value, c
 template <typename ValType>
 class TAlmostDoneTypeValue : public TRawTypeValue {
 public:
-    TAlmostDoneTypeValue(NUdf::TDataTypeId schemeType, ValType value)
+    TAlmostDoneTypeValue(NUdf::TDataTypeId schemeType, ValType value) 
         : TRawTypeValue(&Value, sizeof(Value), schemeType)
         , Value(value)
     {}
@@ -175,7 +175,7 @@ protected:
 template <>
 class TAlmostDoneTypeValue<TString> : public TRawTypeValue {
 public:
-    TAlmostDoneTypeValue(NUdf::TDataTypeId schemeType, const TString& value)
+    TAlmostDoneTypeValue(NUdf::TDataTypeId schemeType, const TString& value) 
         : TRawTypeValue(value.data(), value.size(), schemeType)
     {}
 };
@@ -426,5 +426,5 @@ bool CellToValue(NScheme::TTypeId typeId, const TCell& c, NKikimrMiniKQL::TValue
 }
 
 
-} // namspace NMiniKQL
-} // namspace NKikimr
+} // namspace NMiniKQL 
+} // namspace NKikimr 

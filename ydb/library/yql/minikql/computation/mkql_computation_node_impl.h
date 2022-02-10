@@ -1,59 +1,59 @@
-#pragma once
+#pragma once 
 
-#include "mkql_computation_node.h"
+#include "mkql_computation_node.h" 
 
-#include <ydb/library/yql/minikql/mkql_alloc.h>
+#include <ydb/library/yql/minikql/mkql_alloc.h> 
 #include <ydb/library/yql/public/udf/udf_value.h>
 
 #include <util/system/type_name.h>
-
-namespace NKikimr {
-namespace NMiniKQL {
-
-enum class EDictType {
-    Sorted,
-    Hashed
-};
-
-enum class EContainerOptMode {
-    NoOpt,
-    OptNoAdd,
-    OptAdd
-};
-
+ 
+namespace NKikimr { 
+namespace NMiniKQL { 
+ 
+enum class EDictType { 
+    Sorted, 
+    Hashed 
+}; 
+ 
+enum class EContainerOptMode { 
+    NoOpt, 
+    OptNoAdd, 
+    OptAdd 
+}; 
+ 
 template <class IComputationNodeInterface>
 class TRefCountedComputationNode : public IComputationNodeInterface {
 private:
     void Ref() final;
-
+ 
     void UnRef() final;
-
+ 
     ui32 RefCount() const final;
-
-private:
-    ui32 Refs_ = 0;
-};
-
+ 
+private: 
+    ui32 Refs_ = 0; 
+}; 
+ 
 class TUnboxedImmutableComputationNode: public TRefCountedComputationNode<IComputationNode>
 {
-public:
+public: 
     TUnboxedImmutableComputationNode(TMemoryUsageInfo* memInfo, NUdf::TUnboxedValue&& value);
-
+ 
     ~TUnboxedImmutableComputationNode();
 
 private:
     void InitNode(TComputationContext&) const override {}
 
     NUdf::TUnboxedValue GetValue(TComputationContext& compCtx) const final;
-
+ 
     const IComputationNode* GetSource() const final;
 
     IComputationNode* AddDependence(const IComputationNode*) final;
 
     void RegisterDependencies() const final;
-
+ 
     ui32 GetIndex() const final;
-
+ 
     void CollectDependentIndexes(const IComputationNode* owner, TIndexesMap&) const final;
 
     ui32 GetDependencyWeight() const final;
@@ -66,22 +66,22 @@ private:
     void PrepareStageTwo() final;
 
     TString DebugString() const final;
-
+ 
     EValueRepresentation GetRepresentation() const final;
-
+ 
     TMemoryUsageInfo *const MemInfo;
 protected:
     const NUdf::TUnboxedValue UnboxedValue;
     const EValueRepresentation RepresentationKind;
-};
-
+}; 
+ 
 template <class IComputationNodeInterface, bool SerializableState = false>
 class TStatefulComputationNode: public TRefCountedComputationNode<IComputationNodeInterface>
 {
 protected:
     TStatefulComputationNode(TComputationMutables& mutables, EValueRepresentation kind);
 
-protected:
+protected: 
     void InitNode(TComputationContext&) const override {}
 
     IComputationNode* AddDependence(const IComputationNode* node) final;
@@ -94,8 +94,8 @@ protected:
 
     ui32 GetIndex() const final;
 
-    TConstComputationNodePtrVector Dependencies;
-
+    TConstComputationNodePtrVector Dependencies; 
+ 
     const ui32 ValueIndex;
     const EValueRepresentation RepresentationKind;
 private:
@@ -104,16 +104,16 @@ private:
 
 class TExternalComputationNode: public TStatefulComputationNode<IComputationExternalNode>
 {
-public:
+public: 
     TExternalComputationNode(TComputationMutables& mutables, EValueRepresentation kind = EValueRepresentation::Any);
 
 protected:
-
+ 
     NUdf::TUnboxedValue GetValue(TComputationContext& compCtx) const override;
-
+ 
     NUdf::TUnboxedValue& RefValue(TComputationContext& compCtx) const override;
     void SetValue(TComputationContext& compCtx, NUdf::TUnboxedValue&& value) const override;
-
+ 
     TString DebugString() const final;
 private:
     ui32 GetDependencyWeight() const final;
@@ -139,8 +139,8 @@ private:
 protected:
     std::vector<std::pair<ui32, EValueRepresentation>> InvalidationSet;
     TGetter Getter;
-};
-
+}; 
+ 
 template <typename TDerived, bool SerializableState = false>
 class TStatefulSourceComputationNode: public TStatefulComputationNode<IComputationNode, SerializableState>
 {
@@ -181,29 +181,29 @@ protected:
     TStatefulSourceComputationNode(TComputationMutables& mutables, EValueRepresentation kind = EValueRepresentation::Any)
         : TStatefulComputationNode(mutables, kind)
     {}
-
+ 
     void DependsOn(IComputationNode* node) const {
         if (node) {
             if (const auto source = node->AddDependence(this)) {
                 Sources.emplace(source);
             }
-        }
+        } 
     }
 
     void Own(IComputationExternalNode* node) const {
-        if (node) {
-            node->SetOwner(this);
-        }
-    }
-
+        if (node) { 
+            node->SetOwner(this); 
+        } 
+    } 
+ 
     TString DebugString() const override {
         return TypeName<TDerived>();
-    }
+    } 
 
     mutable std::unordered_set<const IComputationNode*> Sources; // TODO: remove const and mutable.
     std::optional<bool> Stateless;
-};
-
+}; 
+ 
 template <typename TDerived>
 class TMutableComputationNode: public TStatefulSourceComputationNode<TDerived> {
 protected:
@@ -789,80 +789,80 @@ protected:
     const EValueRepresentation Kind;
 };
 
-template <typename TDerived, typename TBase = NUdf::IBoxedValue>
-class TComputationValue: public TBase, public TWithMiniKQLAlloc
+template <typename TDerived, typename TBase = NUdf::IBoxedValue> 
+class TComputationValue: public TBase, public TWithMiniKQLAlloc 
 {
-public:
-    template <typename... Args>
-    TComputationValue(TMemoryUsageInfo* memInfo, Args&&... args)
-        : TBase(std::forward<Args>(args)...)
-    {
+public: 
+    template <typename... Args> 
+    TComputationValue(TMemoryUsageInfo* memInfo, Args&&... args) 
+        : TBase(std::forward<Args>(args)...) 
+    { 
         M_.MemInfo = memInfo;
         MKQL_MEM_TAKE(memInfo, this, sizeof(TDerived),
                 "TDerived: " << DebugString());
     }
 
     ~TComputationValue() {
-        MKQL_MEM_RETURN(GetMemInfo(), this, sizeof(TDerived));
+        MKQL_MEM_RETURN(GetMemInfo(), this, sizeof(TDerived)); 
     }
 
 private:
-    bool HasFastListLength() const override {
+    bool HasFastListLength() const override { 
         ThrowNotSupported(__func__);
-        return false;
-    }
-
-    ui64 GetListLength() const override {
-        ThrowNotSupported(__func__);
-        return 0;
-    }
-
-    ui64 GetEstimatedListLength() const override {
+        return false; 
+    } 
+ 
+    ui64 GetListLength() const override { 
         ThrowNotSupported(__func__);
         return 0;
-    }
-
-    bool HasListItems() const override {
+    } 
+ 
+    ui64 GetEstimatedListLength() const override { 
         ThrowNotSupported(__func__);
-        return false;
-    }
-
-    const NUdf::TOpaqueListRepresentation* GetListRepresentation() const override {
+        return 0; 
+    } 
+ 
+    bool HasListItems() const override { 
+        ThrowNotSupported(__func__);
+        return false; 
+    } 
+ 
+    const NUdf::TOpaqueListRepresentation* GetListRepresentation() const override { 
         return nullptr;
-    }
-
-    NUdf::IBoxedValuePtr ReverseListImpl(const NUdf::IValueBuilder& builder) const override {
+    } 
+ 
+    NUdf::IBoxedValuePtr ReverseListImpl(const NUdf::IValueBuilder& builder) const override { 
         Y_UNUSED(builder);
-        return nullptr;
-    }
-
-    NUdf::IBoxedValuePtr SkipListImpl(const NUdf::IValueBuilder& builder, ui64 count) const override {
+        return nullptr; 
+    } 
+ 
+    NUdf::IBoxedValuePtr SkipListImpl(const NUdf::IValueBuilder& builder, ui64 count) const override { 
         Y_UNUSED(builder);
         Y_UNUSED(count);
-        return nullptr;
-    }
-
-    NUdf::IBoxedValuePtr TakeListImpl(const NUdf::IValueBuilder& builder, ui64 count) const override {
+        return nullptr; 
+    } 
+ 
+    NUdf::IBoxedValuePtr TakeListImpl(const NUdf::IValueBuilder& builder, ui64 count) const override { 
         Y_UNUSED(builder);
         Y_UNUSED(count);
-        return nullptr;
-    }
-
-    NUdf::IBoxedValuePtr ToIndexDictImpl(const NUdf::IValueBuilder& builder) const override {
+        return nullptr; 
+    } 
+ 
+    NUdf::IBoxedValuePtr ToIndexDictImpl(const NUdf::IValueBuilder& builder) const override { 
         Y_UNUSED(builder);
-        return nullptr;
-    }
-
-    ui64 GetDictLength() const override {
+        return nullptr; 
+    } 
+ 
+    ui64 GetDictLength() const override { 
         ThrowNotSupported(__func__);
         return 0;
-    }
-
+    } 
+ 
     bool HasDictItems() const override {
         ThrowNotSupported(__func__);
         return false;
-    }
-
+    } 
+ 
     NUdf::TStringRef GetResourceTag() const override {
         ThrowNotSupported(__func__);
         return NUdf::TStringRef();
@@ -907,18 +907,18 @@ private:
         Y_UNUSED(key);
         ThrowNotSupported(__func__);
         return NUdf::TUnboxedValuePod();
-    }
-
+    } 
+ 
     NUdf::TUnboxedValue GetElement(ui32 index) const override {
         Y_UNUSED(index);
         ThrowNotSupported(__func__);
         return {};
-    }
-
+    } 
+ 
     const NUdf::TUnboxedValue* GetElements() const override {
         return nullptr;
-    }
-
+    } 
+ 
     NUdf::TUnboxedValue Run(
             const NUdf::IValueBuilder* valueBuilder,
             const NUdf::TUnboxedValuePod* args) const override
@@ -949,16 +949,16 @@ private:
         return 0;
     }
 
-    NUdf::TUnboxedValue GetVariantItem() const override {
+    NUdf::TUnboxedValue GetVariantItem() const override { 
         ThrowNotSupported(__func__);
-        return {};
-    }
-
-    NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) override {
-        Y_UNUSED(result);
+        return {}; 
+    } 
+ 
+    NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) override { 
+        Y_UNUSED(result); 
         ThrowNotSupported(__func__);
-        return NUdf::EFetchStatus::Finish;
-    }
+        return NUdf::EFetchStatus::Finish; 
+    } 
 
     ui32 GetTraverseCount() const override {
         ThrowNotSupported(__func__);
@@ -981,44 +981,44 @@ private:
         ThrowNotSupported(__func__);
     }
 
-    void Push(const NUdf::TUnboxedValuePod& value) override {
-        Y_UNUSED(value);
+    void Push(const NUdf::TUnboxedValuePod& value) override { 
+        Y_UNUSED(value); 
         ThrowNotSupported(__func__);
-    }
-
-    bool IsSortedDict() const override {
+    } 
+ 
+    bool IsSortedDict() const override { 
         ThrowNotSupported(__func__);
-        return false;
-    }
-
-    NUdf::TBlock* AsBlock() override {
-        return nullptr;
-    }
-
-    NUdf::TFlatArrayBlock* AsFlatArrayBlock() override {
-        return nullptr;
-    }
-
-    NUdf::TFlatDataBlock* AsFlatDataBlock() override {
-        return nullptr;
-    }
-
-    NUdf::TSingleBlock* AsSingleBlock() override {
-        return nullptr;
-    }
-
+        return false; 
+    } 
+ 
+    NUdf::TBlock* AsBlock() override { 
+        return nullptr; 
+    } 
+ 
+    NUdf::TFlatArrayBlock* AsFlatArrayBlock() override { 
+        return nullptr; 
+    } 
+ 
+    NUdf::TFlatDataBlock* AsFlatDataBlock() override { 
+        return nullptr; 
+    } 
+ 
+    NUdf::TSingleBlock* AsSingleBlock() override { 
+        return nullptr; 
+    } 
+ 
     NUdf::EFetchStatus FetchBlock(NUdf::TUnboxedValue& result, ui32 rowsLimitHint) override {
-        Y_UNUSED(result);
-        Y_UNUSED(rowsLimitHint);
-        ThrowNotSupported(__func__);
-    }
-
+        Y_UNUSED(result); 
+        Y_UNUSED(rowsLimitHint); 
+        ThrowNotSupported(__func__); 
+    } 
+ 
     bool VisitBlocks(NUdf::TBlockCallback callback, void* context) override {
-        Y_UNUSED(callback);
-        Y_UNUSED(context);
-        ThrowNotSupported(__func__);
-    }
-
+        Y_UNUSED(callback); 
+        Y_UNUSED(context); 
+        ThrowNotSupported(__func__); 
+    } 
+ 
 public:
     TString DebugString() const {
         return TypeName<TDerived>();
@@ -1031,14 +1031,14 @@ protected:
 
     [[noreturn]] void ThrowNotSupported(const char* func) const {
         THROW yexception() << "Unsupported access to '" << func << "' method of: " << TypeName(*this);
-    }
+    } 
 
-private:
+private: 
     struct {
         void* MemInfo; // used for tracking memory usage during execution
     } M_;
-};
-
+}; 
+ 
 template<bool IsStream>
 struct TThresher;
 
@@ -1070,10 +1070,10 @@ struct TThresher<false> {
     }
 };
 
-IComputationNode* LocateNode(const TNodeLocator& nodeLocator, TCallable& callable, ui32 index, bool pop = false);
-IComputationNode* LocateNode(const TNodeLocator& nodeLocator, TNode& node, bool pop = false);
+IComputationNode* LocateNode(const TNodeLocator& nodeLocator, TCallable& callable, ui32 index, bool pop = false); 
+IComputationNode* LocateNode(const TNodeLocator& nodeLocator, TNode& node, bool pop = false); 
 IComputationExternalNode* LocateExternalNode(const TNodeLocator& nodeLocator, TCallable& callable, ui32 index, bool pop = true);
-
+ 
 using TPasstroughtMap = std::vector<std::optional<size_t>>;
 
 TPasstroughtMap GetPasstroughtMap(const TComputationExternalNodePtrVector& args, const TComputationNodePtrVector& roots);
@@ -1084,6 +1084,6 @@ std::optional<size_t> IsPasstrought(const IComputationNode* root, const TComputa
 TPasstroughtMap MergePasstroughtMaps(const TPasstroughtMap& lhs, const TPasstroughtMap& rhs);
 
 void ApplyChanges(const NUdf::TUnboxedValue& value, NUdf::IApplyContext& applyCtx);
-
-}
-}
+ 
+} 
+} 

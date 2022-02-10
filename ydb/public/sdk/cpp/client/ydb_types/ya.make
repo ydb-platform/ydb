@@ -5,7 +5,7 @@ OWNER(g:kikimr)
 PEERDIR(
     contrib/libs/protobuf
     library/cpp/grpc/client
-    ydb/library/yql/public/issue
+    ydb/library/yql/public/issue 
 )
 
 GENERATE_ENUM_SERIALIZATION(s3_settings.h)

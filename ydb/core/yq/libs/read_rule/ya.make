@@ -14,9 +14,9 @@ PEERDIR(
     ydb/public/api/protos
     ydb/public/lib/operation_id/protos
     ydb/public/sdk/cpp/client/ydb_persqueue_core
-    ydb/library/yql/providers/common/proto
-    ydb/library/yql/providers/dq/api/protos
-    ydb/library/yql/providers/pq/proto
+    ydb/library/yql/providers/common/proto 
+    ydb/library/yql/providers/dq/api/protos 
+    ydb/library/yql/providers/pq/proto 
 )
 
 YQL_LAST_ABI_VERSION()

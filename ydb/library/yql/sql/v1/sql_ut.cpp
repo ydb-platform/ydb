@@ -1,7 +1,7 @@
 
-#include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
-#include <ydb/library/yql/sql/sql.h>
-#include <util/generic/map.h>
+#include <ydb/library/yql/providers/common/provider/yql_provider_names.h> 
+#include <ydb/library/yql/sql/sql.h> 
+#include <util/generic/map.h> 
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -27,17 +27,17 @@ TString Err2Str(NYql::TAstParseResult& res, EDebugOutput debug = EDebugOutput::N
 NYql::TAstParseResult SqlToYqlWithMode(const TString& query, NSQLTranslation::ESqlMode mode = NSQLTranslation::ESqlMode::QUERY, size_t maxErrors = 10, const TString& provider = {},
     EDebugOutput debug = EDebugOutput::None, bool ansiLexer = false, NSQLTranslation::TTranslationSettings settings = {})
 {
-    google::protobuf::Arena arena;
+    google::protobuf::Arena arena; 
     const auto service = provider ? provider : TString(NYql::YtProviderName);
     const TString cluster = "plato";
-    settings.ClusterMapping[cluster] = service;
+    settings.ClusterMapping[cluster] = service; 
     settings.ClusterMapping["hahn"] = NYql::YtProviderName;
     settings.MaxErrors = maxErrors;
     settings.Mode = mode;
-    settings.Arena = &arena;
+    settings.Arena = &arena; 
     settings.AnsiLexer = ansiLexer;
     settings.SyntaxVersion = 1;
-    auto res = SqlToYql(query, settings);
+    auto res = SqlToYql(query, settings); 
     if (debug == EDebugOutput::ToCerr) {
         Err2Str(res, debug);
     }
@@ -147,12 +147,12 @@ void VerifySqlInHints(const TString& query, const THashSet<TString>& expectedHin
     VerifySqlInHints(query, expectedHints, true);
 }
 
-Y_UNIT_TEST_SUITE(AnsiMode) {
-    Y_UNIT_TEST(PragmaAnsi) {
-        UNIT_ASSERT(SqlToYql("PRAGMA ANSI 2016;").IsOk());
-    }
-}
-
+Y_UNIT_TEST_SUITE(AnsiMode) { 
+    Y_UNIT_TEST(PragmaAnsi) { 
+        UNIT_ASSERT(SqlToYql("PRAGMA ANSI 2016;").IsOk()); 
+    } 
+} 
+ 
 Y_UNIT_TEST_SUITE(SqlParsingOnly) {
     Y_UNIT_TEST(CoverColumnName) {
         UNIT_ASSERT(SqlToYql("SELECT cover FROM plato.Input").IsOk());
@@ -219,7 +219,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
     }
 
     Y_UNIT_TEST(Jubilee) {
-        NYql::TAstParseResult res = SqlToYql("USE plato; INSERT INTO Arcadia (r2000000) VALUES (\"2M GET!!!\");");
+        NYql::TAstParseResult res = SqlToYql("USE plato; INSERT INTO Arcadia (r2000000) VALUES (\"2M GET!!!\");"); 
         UNIT_ASSERT(res.Root);
     }
 
@@ -274,7 +274,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
     }
 
     Y_UNIT_TEST(QualifiedMembers) {
-        NYql::TAstParseResult res = SqlToYql("select interested_table.key, interested_table.value from plato.Input as interested_table;");
+        NYql::TAstParseResult res = SqlToYql("select interested_table.key, interested_table.value from plato.Input as interested_table;"); 
         UNIT_ASSERT(res.Root);
 
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
@@ -299,8 +299,8 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         NYql::TAstParseResult res = SqlToYql(
             "PRAGMA DisableSimpleColumns;"
             " SELECT table_bb.*, table_aa.key as megakey"
-            " FROM plato.Input AS table_aa"
-            " JOIN plato.Input AS table_bb"
+            " FROM plato.Input AS table_aa" 
+            " JOIN plato.Input AS table_bb" 
             " ON table_aa.value == table_bb.value;"
         );
         UNIT_ASSERT(res.Root);
@@ -328,9 +328,9 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         NYql::TAstParseResult res = SqlToYql(
             " PRAGMA DisableSimpleColumns;"
             " SELECT table_bb.*, table_aa.key as gigakey, table_cc.* "
-            " FROM plato.Input AS table_aa"
-            " JOIN plato.Input AS table_bb ON table_aa.key == table_bb.key"
-            " JOIN plato.Input AS table_cc ON table_aa.subkey == table_cc.subkey;"
+            " FROM plato.Input AS table_aa" 
+            " JOIN plato.Input AS table_bb ON table_aa.key == table_bb.key" 
+            " JOIN plato.Input AS table_cc ON table_aa.subkey == table_cc.subkey;" 
         );
         Err2Str(res);
         UNIT_ASSERT(res.Root);
@@ -358,7 +358,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
 
     Y_UNIT_TEST(JoinWithoutConcreteColumns) {
         NYql::TAstParseResult res = SqlToYql(
-            " use plato;"
+            " use plato;" 
             " SELECT a.v, b.value"
             "     FROM `Input1` VIEW `ksv` AS a"
             "     JOIN `Input2` AS b"
@@ -388,7 +388,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
     }
 
     Y_UNIT_TEST(JoinWithSameValues) {
-        NYql::TAstParseResult res = SqlToYql("SELECT a.value, b.value FROM plato.Input AS a JOIN plato.Input as b ON a.key == b.key;");
+        NYql::TAstParseResult res = SqlToYql("SELECT a.value, b.value FROM plato.Input AS a JOIN plato.Input as b ON a.key == b.key;"); 
         UNIT_ASSERT(res.Root);
 
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
@@ -409,32 +409,32 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
     }
 
     Y_UNIT_TEST(SameColumnsForDifferentTables) {
-        NYql::TAstParseResult res = SqlToYql("SELECT a.key, b.key FROM plato.Input as a JOIN plato.Input as b on a.key==b.key;");
+        NYql::TAstParseResult res = SqlToYql("SELECT a.key, b.key FROM plato.Input as a JOIN plato.Input as b on a.key==b.key;"); 
         UNIT_ASSERT(res.Root);
     }
 
     Y_UNIT_TEST(SameColumnsForDifferentTablesFullJoin) {
-        NYql::TAstParseResult res = SqlToYql("SELECT a.key, b.key, a.value, b.value FROM plato.Input AS a FULL JOIN plato.Input AS b USING(key);");
+        NYql::TAstParseResult res = SqlToYql("SELECT a.key, b.key, a.value, b.value FROM plato.Input AS a FULL JOIN plato.Input AS b USING(key);"); 
         UNIT_ASSERT(res.Root);
     }
 
     Y_UNIT_TEST(ReverseLabels) {
-        NYql::TAstParseResult res = SqlToYql("select in.key as subkey, subkey as key from plato.Input as in;");
+        NYql::TAstParseResult res = SqlToYql("select in.key as subkey, subkey as key from plato.Input as in;"); 
         UNIT_ASSERT(res.Root);
     }
 
     Y_UNIT_TEST(AutogenerationAliasWithoutCollisionConflict1) {
-        NYql::TAstParseResult res = SqlToYql("select LENGTH(Value), key as column1 from plato.Input;");
+        NYql::TAstParseResult res = SqlToYql("select LENGTH(Value), key as column1 from plato.Input;"); 
         UNIT_ASSERT(res.Root);
     }
 
     Y_UNIT_TEST(AutogenerationAliasWithoutCollision2Conflict2) {
-        NYql::TAstParseResult res = SqlToYql("select key as column0, LENGTH(Value) from plato.Input;");
+        NYql::TAstParseResult res = SqlToYql("select key as column0, LENGTH(Value) from plato.Input;"); 
         UNIT_ASSERT(res.Root);
     }
 
     Y_UNIT_TEST(InputAliasForQualifiedAsterisk) {
-        NYql::TAstParseResult res = SqlToYql("use plato; select zyuzya.*, key from plato.Input as zyuzya;");
+        NYql::TAstParseResult res = SqlToYql("use plato; select zyuzya.*, key from plato.Input as zyuzya;"); 
         UNIT_ASSERT(res.Root);
     }
 
@@ -465,17 +465,17 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
     }
 
     Y_UNIT_TEST(SelectOrderBySimpleExpr) {
-        NYql::TAstParseResult res = SqlToYql("select a from plato.Input order by a + a");
+        NYql::TAstParseResult res = SqlToYql("select a from plato.Input order by a + a"); 
         UNIT_ASSERT(res.Root);
     }
 
     Y_UNIT_TEST(SelectOrderByDuplicateLabels) {
-        NYql::TAstParseResult res = SqlToYql("select a from plato.Input order by a, a");
+        NYql::TAstParseResult res = SqlToYql("select a from plato.Input order by a, a"); 
         UNIT_ASSERT(res.Root);
     }
 
     Y_UNIT_TEST(SelectOrderByExpression) {
-        NYql::TAstParseResult res = SqlToYql("select * from plato.Input as i order by cast(key as uint32) + cast(subkey as uint32)");
+        NYql::TAstParseResult res = SqlToYql("select * from plato.Input as i order by cast(key as uint32) + cast(subkey as uint32)"); 
         UNIT_ASSERT(res.Root);
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
             if (word == "Sort") {
@@ -517,7 +517,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
     }
 
     Y_UNIT_TEST(SelectOrderByExpressionAsc) {
-        NYql::TAstParseResult res = SqlToYql("select i.key, i.subkey from plato.Input as i order by cast(key as uint32) % cast(i.subkey as uint32) asc");
+        NYql::TAstParseResult res = SqlToYql("select i.key, i.subkey from plato.Input as i order by cast(key as uint32) % cast(i.subkey as uint32) asc"); 
         UNIT_ASSERT(res.Root);
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
             if (word == "Sort") {
@@ -539,17 +539,17 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
     }
 
     Y_UNIT_TEST(ReferenceToKeyInSubselect) {
-        NYql::TAstParseResult res = SqlToYql("select b.key from (select a.key from plato.Input as a) as b;");
+        NYql::TAstParseResult res = SqlToYql("select b.key from (select a.key from plato.Input as a) as b;"); 
         UNIT_ASSERT(res.Root);
     }
 
     Y_UNIT_TEST(OrderByCastValue) {
-        NYql::TAstParseResult res = SqlToYql("select i.key, i.subkey from plato.Input as i order by cast(key as uint32) desc;");
+        NYql::TAstParseResult res = SqlToYql("select i.key, i.subkey from plato.Input as i order by cast(key as uint32) desc;"); 
         UNIT_ASSERT(res.Root);
     }
 
     Y_UNIT_TEST(GroupByCastValue) {
-        NYql::TAstParseResult res = SqlToYql("select count(1) from plato.Input as i group by cast(key as uint8);");
+        NYql::TAstParseResult res = SqlToYql("select count(1) from plato.Input as i group by cast(key as uint8);"); 
         UNIT_ASSERT(res.Root);
     }
 
@@ -559,12 +559,12 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
     }
 
     Y_UNIT_TEST(SelectAllGroupBy) {
-        NYql::TAstParseResult res = SqlToYql("select * from plato.Input group by subkey;");
+        NYql::TAstParseResult res = SqlToYql("select * from plato.Input group by subkey;"); 
         UNIT_ASSERT(res.Root);
     }
 
     Y_UNIT_TEST(PrimaryKeyParseCorrect) {
-        NYql::TAstParseResult res = SqlToYql("USE plato; CREATE TABLE tableName (Key Uint32, Subkey Int64, Value String, PRIMARY KEY (Key, Subkey));");
+        NYql::TAstParseResult res = SqlToYql("USE plato; CREATE TABLE tableName (Key Uint32, Subkey Int64, Value String, PRIMARY KEY (Key, Subkey));"); 
         UNIT_ASSERT(res.Root);
 
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
@@ -582,7 +582,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
     }
 
     Y_UNIT_TEST(DeleteFromTableByKey) {
-        NYql::TAstParseResult res = SqlToYql("delete from plato.Input where key = 200;", 10, "kikimr");
+        NYql::TAstParseResult res = SqlToYql("delete from plato.Input where key = 200;", 10, "kikimr"); 
         UNIT_ASSERT(res.Root);
 
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
@@ -598,7 +598,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
     }
 
     Y_UNIT_TEST(DeleteFromTable) {
-        NYql::TAstParseResult res = SqlToYql("delete from plato.Input;", 10, "kikimr");
+        NYql::TAstParseResult res = SqlToYql("delete from plato.Input;", 10, "kikimr"); 
         UNIT_ASSERT(res.Root);
 
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
@@ -648,13 +648,13 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
     }
 
     Y_UNIT_TEST(UpdateByValues) {
-        NYql::TAstParseResult res = SqlToYql("update plato.Input set key = 777, value = 'cool' where key = 200;", 10, "kikimr");
+        NYql::TAstParseResult res = SqlToYql("update plato.Input set key = 777, value = 'cool' where key = 200;", 10, "kikimr"); 
         UNIT_ASSERT(res.Root);
 
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
             if (word == "Write") {
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("('mode 'update)"));
-            } else if (word == "AsStruct") {
+            } else if (word == "AsStruct") { 
                 const bool isKey = line.find("key") != TString::npos;
                 const bool isValue = line.find("value") != TString::npos;
                 UNIT_ASSERT(isKey || isValue);
@@ -670,17 +670,17 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         VerifyProgram(res, elementStat, verifyLine);
 
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
-        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["AsStruct"]);
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["AsStruct"]); 
     }
 
     Y_UNIT_TEST(UpdateByMultiValues) {
-        NYql::TAstParseResult res = SqlToYql("update plato.Input set (key, value, subkey) = ('2','ddd',':') where key = 200;", 10, "kikimr");
+        NYql::TAstParseResult res = SqlToYql("update plato.Input set (key, value, subkey) = ('2','ddd',':') where key = 200;", 10, "kikimr"); 
         UNIT_ASSERT(res.Root);
 
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
             if (word == "Write") {
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("('mode 'update)"));
-            } else if (word == "AsStruct") {
+            } else if (word == "AsStruct") { 
                 const bool isKey = line.find("key") != TString::npos;
                 const bool isSubkey = line.find("subkey") != TString::npos;
                 const bool isValue = line.find("value") != TString::npos;
@@ -699,11 +699,11 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         VerifyProgram(res, elementStat, verifyLine);
 
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
-        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["AsStruct"]);
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["AsStruct"]); 
     }
 
     Y_UNIT_TEST(UpdateBySelect) {
-        NYql::TAstParseResult res = SqlToYql("update plato.Input set (key, value, subkey) = (select key, value, subkey from plato.Input where key = 911) where key = 200;", 10, "kikimr");
+        NYql::TAstParseResult res = SqlToYql("update plato.Input set (key, value, subkey) = (select key, value, subkey from plato.Input where key = 911) where key = 200;", 10, "kikimr"); 
         UNIT_ASSERT(res.Root);
 
         int lineIndex = 0;
@@ -729,13 +729,13 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
     }
 
     Y_UNIT_TEST(UpdateSelfModifyAll) {
-        NYql::TAstParseResult res = SqlToYql("update plato.Input set subkey = subkey + 's';", 10, "kikimr");
+        NYql::TAstParseResult res = SqlToYql("update plato.Input set subkey = subkey + 's';", 10, "kikimr"); 
         UNIT_ASSERT(res.Root);
 
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
             if (word == "Write") {
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("('mode 'update)"));
-            } else if (word == "AsStruct") {
+            } else if (word == "AsStruct") { 
                 const bool isSubkey = line.find("subkey") != TString::npos;
                 UNIT_ASSERT(isSubkey);
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(Quote("subkey")));
@@ -747,7 +747,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         VerifyProgram(res, elementStat, verifyLine);
 
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
-        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["AsStruct"]);
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["AsStruct"]); 
     }
 
     Y_UNIT_TEST(UpdateOnValues) {
@@ -784,7 +784,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
     }
 
     Y_UNIT_TEST(UnionAllTest) {
-        NYql::TAstParseResult res = SqlToYql("SELECT key FROM plato.Input UNION ALL select subkey FROM plato.Input;");
+        NYql::TAstParseResult res = SqlToYql("SELECT key FROM plato.Input UNION ALL select subkey FROM plato.Input;"); 
         UNIT_ASSERT(res.Root);
 
         TWordCountHive elementStat = {{TString("UnionAll"), 0}};
@@ -798,19 +798,19 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
     }
 
     Y_UNIT_TEST(SimpleGroupBy) {
-        NYql::TAstParseResult res = SqlToYql("select count(1),z from plato.Input group by key as z order by z;");
+        NYql::TAstParseResult res = SqlToYql("select count(1),z from plato.Input group by key as z order by z;"); 
         UNIT_ASSERT(res.Root);
     }
 
     Y_UNIT_TEST(EmptyColumnName0) {
-        /// Now it's parsed well and error occur on validate step like "4:31:Empty struct member name is not allowed" in "4:31:Function: AddMember"
+        /// Now it's parsed well and error occur on validate step like "4:31:Empty struct member name is not allowed" in "4:31:Function: AddMember" 
         NYql::TAstParseResult res = SqlToYql("insert into plato.Output (``, list1) values (0, AsList(0, 1, 2));");
         /// Verify that parsed well without crash
         UNIT_ASSERT(res.Root);
     }
 
     Y_UNIT_TEST(KikimrRollback) {
-        NYql::TAstParseResult res = SqlToYql("use plato; select * from Input; rollback;", 10, "kikimr");
+        NYql::TAstParseResult res = SqlToYql("use plato; select * from Input; rollback;", 10, "kikimr"); 
         UNIT_ASSERT(res.Root);
 
         TWordCountHive elementStat = {{TString("rollback"), 0}};
@@ -834,7 +834,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
 
     Y_UNIT_TEST(PragmasFileAndUdfOrder) {
         NYql::TAstParseResult res = SqlToYql(R"(
-            PRAGMA file("libvideoplayers_udf.so", "https://proxy.sandbox.yandex-team.ru/235185290");
+            PRAGMA file("libvideoplayers_udf.so", "https://proxy.sandbox.yandex-team.ru/235185290"); 
             PRAGMA udf("libvideoplayers_udf.so");
         )");
         UNIT_ASSERT(res.Root);
@@ -1666,14 +1666,14 @@ Y_UNIT_TEST_SUITE(ExternalFunction) {
 
 Y_UNIT_TEST_SUITE(SqlToYQLErrors) {
     Y_UNIT_TEST(StrayUTF8) {
-        /// 'c' in plato is russian here
+        /// 'c' in plato is russian here 
         NYql::TAstParseResult res = SqlToYql("select * from сedar.Input");
         UNIT_ASSERT(!res.Root);
 
         TString a1 = Err2Str(res);
         TString a2(R"foo(<main>:1:14: Error: Unexpected character 'с' (Unicode character <1089>) : cannot match to any predicted input...
 
-<main>:1:15: Error: Unexpected character : cannot match to any predicted input...
+<main>:1:15: Error: Unexpected character : cannot match to any predicted input... 
 
 )foo");
 
@@ -1726,13 +1726,13 @@ Y_UNIT_TEST_SUITE(SqlToYQLErrors) {
     }
 
     Y_UNIT_TEST(InvalidStringFromTable) {
-        NYql::TAstParseResult res = SqlToYql("select \"FOO\"\"BAR from plato.foo");
+        NYql::TAstParseResult res = SqlToYql("select \"FOO\"\"BAR from plato.foo"); 
         UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:31: Error: Unexpected character : syntax error...\n\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:31: Error: Unexpected character : syntax error...\n\n"); 
     }
 
     Y_UNIT_TEST(InvalidDoubleAtStringFromTable) {
-        NYql::TAstParseResult res = SqlToYql("select @@@@@@ from plato.foo");
+        NYql::TAstParseResult res = SqlToYql("select @@@@@@ from plato.foo"); 
         UNIT_ASSERT(!res.Root);
         UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:28: Error: Unexpected character : syntax error...\n\n"
                                           "<main>:1:0: Error: Unexpected token absence : cannot match to any predicted input...\n\n");
@@ -1747,56 +1747,56 @@ Y_UNIT_TEST_SUITE(SqlToYQLErrors) {
     Y_UNIT_TEST(SelectNoCluster) {
         NYql::TAstParseResult res = SqlToYql("select foo from bar");
         UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:1: Error: No cluster name given and no default cluster is selected\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:1: Error: No cluster name given and no default cluster is selected\n"); 
     }
 
     Y_UNIT_TEST(SelectDuplicateColumns) {
-        NYql::TAstParseResult res = SqlToYql("select a, a from plato.Input");
+        NYql::TAstParseResult res = SqlToYql("select a, a from plato.Input"); 
         UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:11: Error: Unable to use duplicate column names. Collision in name: a\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:11: Error: Unable to use duplicate column names. Collision in name: a\n"); 
     }
 
     Y_UNIT_TEST(SelectDuplicateLabels) {
-        NYql::TAstParseResult res = SqlToYql("select a as foo, b as foo from plato.Input");
+        NYql::TAstParseResult res = SqlToYql("select a as foo, b as foo from plato.Input"); 
         UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:18: Error: Unable to use duplicate column names. Collision in name: foo\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:18: Error: Unable to use duplicate column names. Collision in name: foo\n"); 
     }
 
     Y_UNIT_TEST(SelectCaseWithoutThen) {
         NYql::TAstParseResult res = SqlToYql("select case when true 1;");
         UNIT_ASSERT(!res.Root);
         UNIT_ASSERT_NO_DIFF(Err2Str(res),
-            "<main>:1:22: Error: Unexpected token absence : Missing THEN \n\n"
-            "<main>:1:23: Error: Unexpected token absence : Missing END \n\n"
+            "<main>:1:22: Error: Unexpected token absence : Missing THEN \n\n" 
+            "<main>:1:23: Error: Unexpected token absence : Missing END \n\n" 
         );
     }
 
     Y_UNIT_TEST(SelectComplexCaseWithoutThen) {
         NYql::TAstParseResult res = SqlToYql(
             "SELECT *\n"
-            "FROM plato.Input AS a\n"
+            "FROM plato.Input AS a\n" 
             "WHERE CASE WHEN a.key = \"foo\" a.subkey ELSE a.value END\n"
         );
         UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:3:30: Error: Unexpected token absence : Missing THEN \n\n");
     }
 
     Y_UNIT_TEST(SelectCaseWithoutEnd) {
-        NYql::TAstParseResult res = SqlToYql("select case a when b then c end from plato.Input");
+        NYql::TAstParseResult res = SqlToYql("select case a when b then c end from plato.Input"); 
         UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:8: Error: ELSE is required\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:8: Error: ELSE is required\n"); 
     }
 
     Y_UNIT_TEST(SelectWithBadAggregationNoInput) {
         NYql::TAstParseResult res = SqlToYql("select a, Min(b), c");
         UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res),
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), 
            "<main>:1:1: Error: Column references are not allowed without FROM\n"
-           "<main>:1:8: Error: Column reference 'a'\n"
+           "<main>:1:8: Error: Column reference 'a'\n" 
            "<main>:1:1: Error: Column references are not allowed without FROM\n"
-           "<main>:1:15: Error: Column reference 'b'\n"
+           "<main>:1:15: Error: Column reference 'b'\n" 
            "<main>:1:1: Error: Column references are not allowed without FROM\n"
-           "<main>:1:19: Error: Column reference 'c'\n"
-        );
+           "<main>:1:19: Error: Column reference 'c'\n" 
+        ); 
     }
 
     Y_UNIT_TEST(SelectWithBadAggregation) {
@@ -1929,9 +1929,9 @@ Y_UNIT_TEST_SUITE(SqlToYQLErrors) {
     }
 
     Y_UNIT_TEST(SelectWithDuplicateGroupingColumns) {
-        NYql::TAstParseResult res = SqlToYql("select c from plato.Input group by c, c");
+        NYql::TAstParseResult res = SqlToYql("select c from plato.Input group by c, c"); 
         UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:8: Error: Duplicate grouping column: c\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:8: Error: Duplicate grouping column: c\n"); 
     }
 
     Y_UNIT_TEST(SelectWithBadAggregationInGrouping) {
@@ -1947,51 +1947,51 @@ Y_UNIT_TEST_SUITE(SqlToYQLErrors) {
     }
 
     Y_UNIT_TEST(SelectOrderByConstantNum) {
-        NYql::TAstParseResult res = SqlToYql("select a from plato.Input order by 1");
+        NYql::TAstParseResult res = SqlToYql("select a from plato.Input order by 1"); 
         UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:36: Error: Unable to ORDER BY constant expression\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:36: Error: Unable to ORDER BY constant expression\n"); 
     }
 
     Y_UNIT_TEST(SelectOrderByConstantExpr) {
-        NYql::TAstParseResult res = SqlToYql("select a from plato.Input order by 1 * 42");
+        NYql::TAstParseResult res = SqlToYql("select a from plato.Input order by 1 * 42"); 
         UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:38: Error: Unable to ORDER BY constant expression\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:38: Error: Unable to ORDER BY constant expression\n"); 
     }
 
     Y_UNIT_TEST(SelectOrderByConstantString) {
-        NYql::TAstParseResult res = SqlToYql("select a from plato.Input order by \"nest\"");
+        NYql::TAstParseResult res = SqlToYql("select a from plato.Input order by \"nest\""); 
         UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:36: Error: Unable to ORDER BY constant expression\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:36: Error: Unable to ORDER BY constant expression\n"); 
     }
 
     Y_UNIT_TEST(SelectOrderByAggregated) {
-        NYql::TAstParseResult res = SqlToYql("select a from plato.Input order by min(a)");
+        NYql::TAstParseResult res = SqlToYql("select a from plato.Input order by min(a)"); 
         UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:36: Error: Unable to ORDER BY aggregated values\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:36: Error: Unable to ORDER BY aggregated values\n"); 
     }
 
     Y_UNIT_TEST(ErrorInOrderByExpresison) {
-        NYql::TAstParseResult res = SqlToYql("select key, value from plato.Input order by (key as zey)");
+        NYql::TAstParseResult res = SqlToYql("select key, value from plato.Input order by (key as zey)"); 
         UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:45: Error: You should use in ORDER BY column name, qualified field, callable function or expression\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:45: Error: You should use in ORDER BY column name, qualified field, callable function or expression\n"); 
     }
 
     Y_UNIT_TEST(SelectAggregatedWhere) {
-        NYql::TAstParseResult res = SqlToYql("select * from plato.Input where count(key)");
+        NYql::TAstParseResult res = SqlToYql("select * from plato.Input where count(key)"); 
         UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:33: Error: Can not use aggregated values in filtering\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:33: Error: Can not use aggregated values in filtering\n"); 
     }
 
     Y_UNIT_TEST(DoubleFrom) {
-        NYql::TAstParseResult res = SqlToYql("from plato.Input select * from plato.Input");
+        NYql::TAstParseResult res = SqlToYql("from plato.Input select * from plato.Input"); 
         UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:27: Error: Only one FROM clause is allowed\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:27: Error: Only one FROM clause is allowed\n"); 
     }
 
     Y_UNIT_TEST(SelectJoinMissingCorrName) {
-        NYql::TAstParseResult res = SqlToYql("select * from plato.Input1 as a join plato.Input2 as b on a.key == key");
+        NYql::TAstParseResult res = SqlToYql("select * from plato.Input1 as a join plato.Input2 as b on a.key == key"); 
         UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:65: Error: JOIN: column requires correlation name\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:65: Error: JOIN: column requires correlation name\n"); 
     }
 
     Y_UNIT_TEST(SelectJoinMissingCorrName1) {
@@ -2016,48 +2016,48 @@ Y_UNIT_TEST_SUITE(SqlToYQLErrors) {
 
     Y_UNIT_TEST(SelectJoinEmptyCorrNames) {
         NYql::TAstParseResult res = SqlToYql(
-            "$left = (SELECT * FROM plato.Input1 LIMIT 2);\n"
-            "$right = (SELECT * FROM plato.Input2 LIMIT 2);\n"
+            "$left = (SELECT * FROM plato.Input1 LIMIT 2);\n" 
+            "$right = (SELECT * FROM plato.Input2 LIMIT 2);\n" 
             "SELECT * FROM $left FULL JOIN $right USING (key);\n"
         );
         UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:3:45: Error: At least one correlation name is required in join\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:3:45: Error: At least one correlation name is required in join\n"); 
     }
 
     Y_UNIT_TEST(SelectJoinSameCorrNames) {
-        NYql::TAstParseResult res = SqlToYql("SELECT Input.key FROM plato.Input JOIN plato.Input1 ON Input.key == Input.subkey\n");
+        NYql::TAstParseResult res = SqlToYql("SELECT Input.key FROM plato.Input JOIN plato.Input1 ON Input.key == Input.subkey\n"); 
         UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:66: Error: JOIN: different correlation names are required for joined tables\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:66: Error: JOIN: different correlation names are required for joined tables\n"); 
     }
 
     Y_UNIT_TEST(SelectJoinConstPredicateArg) {
-        NYql::TAstParseResult res = SqlToYql("SELECT * FROM plato.Input1 as A JOIN plato.Input2 as B ON A.key == B.key AND A.subkey == \"wtf\"\n");
+        NYql::TAstParseResult res = SqlToYql("SELECT * FROM plato.Input1 as A JOIN plato.Input2 as B ON A.key == B.key AND A.subkey == \"wtf\"\n"); 
         UNIT_ASSERT(!res.Root);
         UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:87: Error: JOIN: each equality predicate argument must depend on exactly one JOIN input\n");
     }
 
     Y_UNIT_TEST(SelectJoinNonEqualityPredicate) {
-        NYql::TAstParseResult res = SqlToYql("SELECT * FROM plato.Input1 as A JOIN plato.Input2 as B ON A.key == B.key AND A.subkey > B.subkey\n");
+        NYql::TAstParseResult res = SqlToYql("SELECT * FROM plato.Input1 as A JOIN plato.Input2 as B ON A.key == B.key AND A.subkey > B.subkey\n"); 
         UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:87: Error: JOIN ON expression must be a conjunction of equality predicates\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:87: Error: JOIN ON expression must be a conjunction of equality predicates\n"); 
     }
 
     Y_UNIT_TEST(SelectEquiJoinCorrNameOutOfScope) {
         NYql::TAstParseResult res = SqlToYql(
             "PRAGMA equijoin;\n"
-            "SELECT * FROM plato.A JOIN plato.B ON A.key == C.key JOIN plato.C ON A.subkey == C.subkey;\n"
+            "SELECT * FROM plato.A JOIN plato.B ON A.key == C.key JOIN plato.C ON A.subkey == C.subkey;\n" 
         );
         UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:2:45: Error: JOIN: can not use source: C in equality predicate, it is out of current join scope\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:2:45: Error: JOIN: can not use source: C in equality predicate, it is out of current join scope\n"); 
     }
 
     Y_UNIT_TEST(SelectEquiJoinNoRightSource) {
         NYql::TAstParseResult res = SqlToYql(
             "PRAGMA equijoin;\n"
-            "SELECT * FROM plato.A JOIN plato.B ON A.key == B.key JOIN plato.C ON A.subkey == B.subkey;\n"
+            "SELECT * FROM plato.A JOIN plato.B ON A.key == B.key JOIN plato.C ON A.subkey == B.subkey;\n" 
         );
         UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:2:79: Error: JOIN ON equality predicate must have one of its arguments from the rightmost source\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:2:79: Error: JOIN ON equality predicate must have one of its arguments from the rightmost source\n"); 
     }
 
     Y_UNIT_TEST(SelectEquiJoinOuterWithoutType) {
@@ -2079,175 +2079,175 @@ Y_UNIT_TEST_SUITE(SqlToYQLErrors) {
     Y_UNIT_TEST(InsertNoCluster) {
         NYql::TAstParseResult res = SqlToYql("insert into Output (foo) values (1)");
         UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:1: Error: No cluster name given and no default cluster is selected\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:1: Error: No cluster name given and no default cluster is selected\n"); 
     }
 
     Y_UNIT_TEST(InsertValuesNoLabels) {
-        NYql::TAstParseResult res = SqlToYql("insert into plato.Output values (1)");
+        NYql::TAstParseResult res = SqlToYql("insert into plato.Output values (1)"); 
         UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:19: Error: INSERT INTO ... VALUES requires specification of table columns\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:19: Error: INSERT INTO ... VALUES requires specification of table columns\n"); 
     }
 
     Y_UNIT_TEST(UpsertValuesNoLabelsKikimr) {
         NYql::TAstParseResult res = SqlToYql("upsert into plato.Output values (1)", 10, TString(NYql::KikimrProviderName));
         UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:19: Error: UPSERT INTO ... VALUES requires specification of table columns\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:19: Error: UPSERT INTO ... VALUES requires specification of table columns\n"); 
     }
 
     Y_UNIT_TEST(ReplaceValuesNoLabelsKikimr) {
         NYql::TAstParseResult res = SqlToYql("replace into plato.Output values (1)", 10, TString(NYql::KikimrProviderName));
         UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:20: Error: REPLACE INTO ... VALUES requires specification of table columns\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:20: Error: REPLACE INTO ... VALUES requires specification of table columns\n"); 
     }
 
     Y_UNIT_TEST(InsertValuesInvalidLabels) {
-        NYql::TAstParseResult res = SqlToYql("insert into plato.Output (foo) values (1, 2)");
+        NYql::TAstParseResult res = SqlToYql("insert into plato.Output (foo) values (1, 2)"); 
         UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:27: Error: VALUES have 2 columns, INSERT INTO expects: 1\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:27: Error: VALUES have 2 columns, INSERT INTO expects: 1\n"); 
     }
 
     Y_UNIT_TEST(BuiltinFileOpNoArgs) {
         NYql::TAstParseResult res = SqlToYql("select FilePath()");
         UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:8: Error: FilePath() requires exactly 1 arguments, given: 0\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:8: Error: FilePath() requires exactly 1 arguments, given: 0\n"); 
     }
 
     Y_UNIT_TEST(ProcessWithHaving) {
-        NYql::TAstParseResult res = SqlToYql("process plato.Input using some::udf(value) having value == 1");
+        NYql::TAstParseResult res = SqlToYql("process plato.Input using some::udf(value) having value == 1"); 
         UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:15: Error: PROCESS does not allow HAVING yet! You may request it on yql@ maillist.\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:15: Error: PROCESS does not allow HAVING yet! You may request it on yql@ maillist.\n"); 
     }
 
     Y_UNIT_TEST(ReduceNoBy) {
-        NYql::TAstParseResult res = SqlToYql("reduce plato.Input using some::udf(value)");
+        NYql::TAstParseResult res = SqlToYql("reduce plato.Input using some::udf(value)"); 
         UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:19: Error: Unexpected token absence : Missing ON \n\n<main>:1:25: Error: Unexpected token absence : Missing USING \n\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:19: Error: Unexpected token absence : Missing ON \n\n<main>:1:25: Error: Unexpected token absence : Missing USING \n\n"); 
     }
 
     Y_UNIT_TEST(ReduceDistinct) {
-        NYql::TAstParseResult res = SqlToYql("reduce plato.Input on key using some::udf(distinct value)");
+        NYql::TAstParseResult res = SqlToYql("reduce plato.Input on key using some::udf(distinct value)"); 
         UNIT_ASSERT(!res.Root);
         UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:43: Error: DISTINCT can not be used in PROCESS/REDUCE\n");
     }
 
     Y_UNIT_TEST(CreateTableWithView) {
-        NYql::TAstParseResult res = SqlToYql("CREATE TABLE plato.foo:bar (key INT);");
+        NYql::TAstParseResult res = SqlToYql("CREATE TABLE plato.foo:bar (key INT);"); 
         UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:22: Error: Unexpected token ':' : syntax error...\n\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:22: Error: Unexpected token ':' : syntax error...\n\n"); 
     }
 
     Y_UNIT_TEST(AsteriskWithSomethingAfter) {
-        NYql::TAstParseResult res = SqlToYql("select *, LENGTH(value) from plato.Input;");
+        NYql::TAstParseResult res = SqlToYql("select *, LENGTH(value) from plato.Input;"); 
         UNIT_ASSERT(!res.Root);
         UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:8: Error: Unable to use plain '*' with other projection items. Please use qualified asterisk instead: '<table>.*' (<table> can be either table name or table alias).\n");
     }
 
     Y_UNIT_TEST(AsteriskWithSomethingBefore) {
-        NYql::TAstParseResult res = SqlToYql("select LENGTH(value), * from plato.Input;");
+        NYql::TAstParseResult res = SqlToYql("select LENGTH(value), * from plato.Input;"); 
         UNIT_ASSERT(!res.Root);
         UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:23: Error: Unable to use plain '*' with other projection items. Please use qualified asterisk instead: '<table>.*' (<table> can be either table name or table alias).\n");
     }
 
     Y_UNIT_TEST(DuplicatedQualifiedAsterisk) {
-        NYql::TAstParseResult res = SqlToYql("select in.*, key, in.* from plato.Input as in;");
+        NYql::TAstParseResult res = SqlToYql("select in.*, key, in.* from plato.Input as in;"); 
         UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:19: Error: Unable to use twice same quialified asterisk. Invalid source: in\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:19: Error: Unable to use twice same quialified asterisk. Invalid source: in\n"); 
     }
 
     Y_UNIT_TEST(BrokenLabel) {
         NYql::TAstParseResult res = SqlToYql("select in.*, key as `funny.label` from plato.Input as in;");
         UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:14: Error: Unable to use '.' in column name. Invalid column name: funny.label\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:14: Error: Unable to use '.' in column name. Invalid column name: funny.label\n"); 
     }
 
     Y_UNIT_TEST(KeyConflictDetect0) {
-        NYql::TAstParseResult res = SqlToYql("select key, in.key as key from plato.Input as in;");
+        NYql::TAstParseResult res = SqlToYql("select key, in.key as key from plato.Input as in;"); 
         UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:13: Error: Unable to use duplicate column names. Collision in name: key\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:13: Error: Unable to use duplicate column names. Collision in name: key\n"); 
     }
 
     Y_UNIT_TEST(KeyConflictDetect1) {
-        NYql::TAstParseResult res = SqlToYql("select length(key) as key, key from plato.Input;");
+        NYql::TAstParseResult res = SqlToYql("select length(key) as key, key from plato.Input;"); 
         UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:28: Error: Unable to use duplicate column names. Collision in name: key\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:28: Error: Unable to use duplicate column names. Collision in name: key\n"); 
     }
 
     Y_UNIT_TEST(KeyConflictDetect2) {
-        NYql::TAstParseResult res = SqlToYql("select key, in.key from plato.Input as in;");
+        NYql::TAstParseResult res = SqlToYql("select key, in.key from plato.Input as in;"); 
         UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:1: Error: Duplicate column: key\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:1: Error: Duplicate column: key\n"); 
     }
 
     Y_UNIT_TEST(AutogenerationAliasWithCollisionConflict1) {
-        NYql::TAstParseResult res = SqlToYql("select LENGTH(Value), key as column0 from plato.Input;");
+        NYql::TAstParseResult res = SqlToYql("select LENGTH(Value), key as column0 from plato.Input;"); 
         UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:1: Error: Duplicate column: column0\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:1: Error: Duplicate column: column0\n"); 
     }
 
     Y_UNIT_TEST(AutogenerationAliasWithCollisionConflict2) {
-        NYql::TAstParseResult res = SqlToYql("select key as column1, LENGTH(Value) from plato.Input;");
+        NYql::TAstParseResult res = SqlToYql("select key as column1, LENGTH(Value) from plato.Input;"); 
         UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:1: Error: Duplicate column: column1\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:1: Error: Duplicate column: column1\n"); 
     }
 
     Y_UNIT_TEST(MissedSourceTableForQualifiedAsteriskOnSimpleSelect) {
-        NYql::TAstParseResult res = SqlToYql("use plato; select Intop.*, Input.key from plato.Input;");
+        NYql::TAstParseResult res = SqlToYql("use plato; select Intop.*, Input.key from plato.Input;"); 
         UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:19: Error: Unknown correlation name: Intop\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:19: Error: Unknown correlation name: Intop\n"); 
     }
 
     Y_UNIT_TEST(MissedSourceTableForQualifiedAsteriskOnJoin) {
-        NYql::TAstParseResult res = SqlToYql("use plato; select tmissed.*, t2.*, t1.key from plato.Input as t1 join plato.Input as t2 on t1.key==t2.key;");
+        NYql::TAstParseResult res = SqlToYql("use plato; select tmissed.*, t2.*, t1.key from plato.Input as t1 join plato.Input as t2 on t1.key==t2.key;"); 
         UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:19: Error: Unknown correlation name for asterisk: tmissed\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:19: Error: Unknown correlation name for asterisk: tmissed\n"); 
     }
 
     Y_UNIT_TEST(UnableToReferenceOnNotExistSubcolumn) {
-        NYql::TAstParseResult res = SqlToYql("select b.subkey from (select key from plato.Input as a) as b;");
+        NYql::TAstParseResult res = SqlToYql("select b.subkey from (select key from plato.Input as a) as b;"); 
         UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:8: Error: Column subkey is not in source column set\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:8: Error: Column subkey is not in source column set\n"); 
     }
 
     Y_UNIT_TEST(ConflictOnSameNameWithQualify0) {
-        NYql::TAstParseResult res = SqlToYql("select in.key, in.key as key from plato.Input as in;");
+        NYql::TAstParseResult res = SqlToYql("select in.key, in.key as key from plato.Input as in;"); 
         UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:1: Error: Duplicate column: key\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:1: Error: Duplicate column: key\n"); 
     }
 
     Y_UNIT_TEST(ConflictOnSameNameWithQualify1) {
-        NYql::TAstParseResult res = SqlToYql("select in.key, length(key) as key from plato.Input as in;");
+        NYql::TAstParseResult res = SqlToYql("select in.key, length(key) as key from plato.Input as in;"); 
         UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:1: Error: Duplicate column: key\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:1: Error: Duplicate column: key\n"); 
     }
 
     Y_UNIT_TEST(ConflictOnSameNameWithQualify2) {
-        NYql::TAstParseResult res = SqlToYql("select key, in.key from plato.Input as in;");
+        NYql::TAstParseResult res = SqlToYql("select key, in.key from plato.Input as in;"); 
         UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:1: Error: Duplicate column: key\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:1: Error: Duplicate column: key\n"); 
     }
 
     Y_UNIT_TEST(ConflictOnSameNameWithQualify3) {
-        NYql::TAstParseResult res = SqlToYql("select in.key, subkey as key from plato.Input as in;");
+        NYql::TAstParseResult res = SqlToYql("select in.key, subkey as key from plato.Input as in;"); 
         UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:1: Error: Duplicate column: key\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:1: Error: Duplicate column: key\n"); 
     }
 
     Y_UNIT_TEST(SelectOrderByUnknownLabel) {
-        NYql::TAstParseResult res = SqlToYql("select a from plato.Input order by b");
+        NYql::TAstParseResult res = SqlToYql("select a from plato.Input order by b"); 
         UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:36: Error: Column b is not in source column set. Did you mean a?\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:36: Error: Column b is not in source column set. Did you mean a?\n"); 
     }
 
     Y_UNIT_TEST(SelectFlattenBySameColumns) {
-        NYql::TAstParseResult res = SqlToYql("select key from plato.Input flatten by (key, key as kk)");
+        NYql::TAstParseResult res = SqlToYql("select key from plato.Input flatten by (key, key as kk)"); 
         UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:46: Error: Duplicate column name found: key in FlattenBy section\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:46: Error: Duplicate column name found: key in FlattenBy section\n"); 
     }
 
     Y_UNIT_TEST(SelectFlattenBySameAliases) {
-        NYql::TAstParseResult res = SqlToYql("select key from plato.Input flatten by (key as kk, subkey as kk);");
+        NYql::TAstParseResult res = SqlToYql("select key from plato.Input flatten by (key as kk, subkey as kk);"); 
         UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:52: Error: Duplicate alias found: kk in FlattenBy section\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:52: Error: Duplicate alias found: kk in FlattenBy section\n"); 
     }
 
     Y_UNIT_TEST(SelectFlattenByExprSameAliases) {
@@ -2257,15 +2257,15 @@ Y_UNIT_TEST_SUITE(SqlToYQLErrors) {
     }
 
     Y_UNIT_TEST(SelectFlattenByConflictNameAndAlias0) {
-        NYql::TAstParseResult res = SqlToYql("select key from plato.Input flatten by (key, subkey as key);");
+        NYql::TAstParseResult res = SqlToYql("select key from plato.Input flatten by (key, subkey as key);"); 
         UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:46: Error: Collision between alias and column name: key in FlattenBy section\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:46: Error: Collision between alias and column name: key in FlattenBy section\n"); 
     }
 
     Y_UNIT_TEST(SelectFlattenByConflictNameAndAlias1) {
-        NYql::TAstParseResult res = SqlToYql("select key from plato.Input flatten by (key as kk, subkey as key);");
+        NYql::TAstParseResult res = SqlToYql("select key from plato.Input flatten by (key as kk, subkey as key);"); 
         UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:52: Error: Collision between alias and column name: key in FlattenBy section\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:52: Error: Collision between alias and column name: key in FlattenBy section\n"); 
     }
 
     Y_UNIT_TEST(SelectFlattenByExprConflictNameAndAlias1) {
@@ -2281,7 +2281,7 @@ Y_UNIT_TEST_SUITE(SqlToYQLErrors) {
     }
 
     Y_UNIT_TEST(UseInOnStrings) {
-        NYql::TAstParseResult res = SqlToYql("select * from plato.Input where \"foo\" in \"foovalue\";");
+        NYql::TAstParseResult res = SqlToYql("select * from plato.Input where \"foo\" in \"foovalue\";"); 
         UNIT_ASSERT(!res.Root);
         UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:42: Error: Unable to use IN predicate with string argument, it won't search substring - "
                                           "expecting tuple, list, dict or single column table source\n");
@@ -2303,14 +2303,14 @@ Y_UNIT_TEST_SUITE(SqlToYQLErrors) {
 
     Y_UNIT_TEST(ErrorColumnPosition) {
         NYql::TAstParseResult res = SqlToYql(
-            "USE plato;\n"
+            "USE plato;\n" 
             "SELECT \n"
             "value FROM (\n"
             "select key from Input\n"
             ");\n"
         );
         UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:3:1: Error: Column value is not in source column set\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:3:1: Error: Column value is not in source column set\n"); 
     }
 
     Y_UNIT_TEST(InsertAbortMapReduce) {
@@ -2320,67 +2320,67 @@ Y_UNIT_TEST_SUITE(SqlToYQLErrors) {
     }
 
     Y_UNIT_TEST(ReplaceIntoMapReduce) {
-        NYql::TAstParseResult res = SqlToYql("REPLACE INTO plato.Output SELECT key FROM plato.Input");
+        NYql::TAstParseResult res = SqlToYql("REPLACE INTO plato.Output SELECT key FROM plato.Input"); 
         UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:0: Error: Meaning of REPLACE INTO has been changed, now you should use INSERT INTO <table> WITH TRUNCATE ... for yt\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:0: Error: Meaning of REPLACE INTO has been changed, now you should use INSERT INTO <table> WITH TRUNCATE ... for yt\n"); 
     }
 
     Y_UNIT_TEST(UpsertIntoMapReduce) {
-        NYql::TAstParseResult res = SqlToYql("UPSERT INTO plato.Output SELECT key FROM plato.Input");
+        NYql::TAstParseResult res = SqlToYql("UPSERT INTO plato.Output SELECT key FROM plato.Input"); 
         UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:0: Error: UPSERT INTO is not supported for yt tables\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:0: Error: UPSERT INTO is not supported for yt tables\n"); 
     }
 
     Y_UNIT_TEST(UpdateMapReduce) {
-        NYql::TAstParseResult res = SqlToYql("UPDATE plato.Output SET value = value + 1 WHERE key < 1");
-        UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:0: Error: UPDATE is unsupported for yt\n");
-    }
-
+        NYql::TAstParseResult res = SqlToYql("UPDATE plato.Output SET value = value + 1 WHERE key < 1"); 
+        UNIT_ASSERT(!res.Root); 
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:0: Error: UPDATE is unsupported for yt\n"); 
+    } 
+ 
     Y_UNIT_TEST(DeleteMapReduce) {
-        NYql::TAstParseResult res = SqlToYql("DELETE FROM plato.Output WHERE key < 1");
-        UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:0: Error: DELETE is unsupported for yt\n");
-    }
-
+        NYql::TAstParseResult res = SqlToYql("DELETE FROM plato.Output WHERE key < 1"); 
+        UNIT_ASSERT(!res.Root); 
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:0: Error: DELETE is unsupported for yt\n"); 
+    } 
+ 
     Y_UNIT_TEST(ReplaceIntoWithTruncate) {
-        NYql::TAstParseResult res = SqlToYql("REPLACE INTO plato.Output WITH TRUNCATE SELECT key FROM plato.Input");
+        NYql::TAstParseResult res = SqlToYql("REPLACE INTO plato.Output WITH TRUNCATE SELECT key FROM plato.Input"); 
         UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:32: Error: Unable REPLACE INTO with truncate mode\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:32: Error: Unable REPLACE INTO with truncate mode\n"); 
     }
 
     Y_UNIT_TEST(UpsertIntoWithTruncate) {
-        NYql::TAstParseResult res = SqlToYql("UPSERT INTO plato.Output WITH TRUNCATE SELECT key FROM plato.Input");
+        NYql::TAstParseResult res = SqlToYql("UPSERT INTO plato.Output WITH TRUNCATE SELECT key FROM plato.Input"); 
         UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:31: Error: Unable UPSERT INTO with truncate mode\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:31: Error: Unable UPSERT INTO with truncate mode\n"); 
     }
 
     Y_UNIT_TEST(InsertIntoWithTruncateKikimr) {
         NYql::TAstParseResult res = SqlToYql("INSERT INTO plato.Output WITH TRUNCATE SELECT key FROM plato.Input", 10, TString(NYql::KikimrProviderName));
         UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:0: Error: INSERT INTO WITH TRUNCATE is not supported for kikimr tables\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:0: Error: INSERT INTO WITH TRUNCATE is not supported for kikimr tables\n"); 
     }
 
     Y_UNIT_TEST(InsertIntoWithWrongArgumentCount) {
-        NYql::TAstParseResult res = SqlToYql("insert into plato.Output with truncate (key, value, subkey) values (5, '1', '2', '3');");
+        NYql::TAstParseResult res = SqlToYql("insert into plato.Output with truncate (key, value, subkey) values (5, '1', '2', '3');"); 
         UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:53: Error: VALUES have 4 columns, INSERT INTO ... WITH TRUNCATE expects: 3\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:53: Error: VALUES have 4 columns, INSERT INTO ... WITH TRUNCATE expects: 3\n"); 
     }
 
     Y_UNIT_TEST(UpsertWithWrongArgumentCount) {
         NYql::TAstParseResult res = SqlToYql("upsert into plato.Output (key, value, subkey) values (2, '3');", 10, TString(NYql::KikimrProviderName));
         UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:39: Error: VALUES have 2 columns, UPSERT INTO expects: 3\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:39: Error: VALUES have 2 columns, UPSERT INTO expects: 3\n"); 
     }
 
     Y_UNIT_TEST(UnionNotSupported) {
-        NYql::TAstParseResult res = SqlToYql("SELECT key FROM plato.Input UNION select subkey FROM plato.Input;");
+        NYql::TAstParseResult res = SqlToYql("SELECT key FROM plato.Input UNION select subkey FROM plato.Input;"); 
         UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:29: Error: UNION without quantifier ALL is not supported yet. Did you mean UNION ALL?\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:29: Error: UNION without quantifier ALL is not supported yet. Did you mean UNION ALL?\n"); 
     }
 
     Y_UNIT_TEST(GroupingSetByExprWithoutAlias) {
-        NYql::TAstParseResult res = SqlToYql("SELECT key FROM plato.Input GROUP BY GROUPING SETS (cast(key as uint32), subkey);");
+        NYql::TAstParseResult res = SqlToYql("SELECT key FROM plato.Input GROUP BY GROUPING SETS (cast(key as uint32), subkey);"); 
         UNIT_ASSERT(!res.Root);
         UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:53: Error: Unnamed expressions are not supported in GROUPING SETS. Please use '<expr> AS <name>'.\n");
     }
@@ -2393,13 +2393,13 @@ Y_UNIT_TEST_SUITE(SqlToYQLErrors) {
     }
 
     Y_UNIT_TEST(CubeByExprWithoutAlias) {
-        NYql::TAstParseResult res = SqlToYql("SELECT key FROM plato.Input GROUP BY CUBE (key, subkey / key);");
+        NYql::TAstParseResult res = SqlToYql("SELECT key FROM plato.Input GROUP BY CUBE (key, subkey / key);"); 
         UNIT_ASSERT(!res.Root);
         UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:56: Error: Unnamed expressions are not supported in CUBE. Please use '<expr> AS <name>'.\n");
     }
 
     Y_UNIT_TEST(RollupByExprWithoutAlias) {
-        NYql::TAstParseResult res = SqlToYql("SELECT key FROM plato.Input GROUP BY ROLLUP (subkey / key);");
+        NYql::TAstParseResult res = SqlToYql("SELECT key FROM plato.Input GROUP BY ROLLUP (subkey / key);"); 
         UNIT_ASSERT(!res.Root);
         UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:53: Error: Unnamed expressions are not supported in ROLLUP. Please use '<expr> AS <name>'.\n");
     }
@@ -2407,7 +2407,7 @@ Y_UNIT_TEST_SUITE(SqlToYQLErrors) {
     Y_UNIT_TEST(GroupByHugeCubeDeniedNoPragma) {
         NYql::TAstParseResult res = SqlToYql("SELECT key FROM plato.Input GROUP BY CUBE (key, subkey, value, key + subkey as sum, key - subkey as sub, key + val as keyval);");
         UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:119: Error: GROUP BY CUBE is allowed only for 5 columns, but you use 6\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:119: Error: GROUP BY CUBE is allowed only for 5 columns, but you use 6\n"); 
     }
 
     Y_UNIT_TEST(GroupByInvalidPragma) {
@@ -2419,31 +2419,31 @@ Y_UNIT_TEST_SUITE(SqlToYQLErrors) {
     Y_UNIT_TEST(GroupByHugeCubeDeniedPragme) {
         NYql::TAstParseResult res = SqlToYql("PRAGMA GroupByCubeLimit = '4'; SELECT key FROM plato.Input GROUP BY CUBE (key, subkey, value, key + subkey as sum, key - subkey as sub);");
         UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:132: Error: GROUP BY CUBE is allowed only for 4 columns, but you use 5\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:132: Error: GROUP BY CUBE is allowed only for 4 columns, but you use 5\n"); 
     }
 
     Y_UNIT_TEST(GroupByFewBigCubes) {
-        NYql::TAstParseResult res = SqlToYql("SELECT key FROM plato.Input GROUP BY CUBE(key, subkey, key + subkey as sum), CUBE(value, value + key + subkey as total);");
+        NYql::TAstParseResult res = SqlToYql("SELECT key FROM plato.Input GROUP BY CUBE(key, subkey, key + subkey as sum), CUBE(value, value + key + subkey as total);"); 
         UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:1: Error: Unable to GROUP BY more than 32 groups, you try use 80 groups\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:1: Error: Unable to GROUP BY more than 32 groups, you try use 80 groups\n"); 
     }
 
     Y_UNIT_TEST(GroupByFewBigCubesWithPragmaLimit) {
         NYql::TAstParseResult res = SqlToYql("PRAGMA GroupByLimit = '16'; SELECT key FROM plato.Input GROUP BY GROUPING SETS(key, subkey, key + subkey as sum), ROLLUP(value, value + key + subkey as total);");
         UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:29: Error: Unable to GROUP BY more than 16 groups, you try use 18 groups\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:29: Error: Unable to GROUP BY more than 16 groups, you try use 18 groups\n"); 
     }
 
     Y_UNIT_TEST(NoGroupingColumn0) {
         NYql::TAstParseResult res = SqlToYql(
             "select count(1), key_first, val_first, grouping(key_first, val_first, nomind) as group\n"
-            "from plato.Input group by grouping sets (cast(key as uint32) /100 as key_first, Substring(value, 1, 1) as val_first);");
+            "from plato.Input group by grouping sets (cast(key as uint32) /100 as key_first, Substring(value, 1, 1) as val_first);"); 
         UNIT_ASSERT(!res.Root);
         UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:71: Error: Column 'nomind' is not a grouping column\n");
     }
 
     Y_UNIT_TEST(NoGroupingColumn1) {
-        NYql::TAstParseResult res = SqlToYql("select count(1), grouping(key, value) as group_duo from plato.Input group by cube (key, subkey);");
+        NYql::TAstParseResult res = SqlToYql("select count(1), grouping(key, value) as group_duo from plato.Input group by cube (key, subkey);"); 
         UNIT_ASSERT(!res.Root);
         UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:32: Error: Column 'value' is not a grouping column\n");
     }
@@ -2469,13 +2469,13 @@ Y_UNIT_TEST_SUITE(SqlToYQLErrors) {
     Y_UNIT_TEST(GroupByEmptyColumn) {
         NYql::TAstParseResult res = SqlToYql("select count(1) from plato.Input group by ``;");
         UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:43: Error: Column name can not be empty\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:43: Error: Column name can not be empty\n"); 
     }
 
     Y_UNIT_TEST(ConvertNumberOutOfBase) {
         NYql::TAstParseResult res = SqlToYql("select 0o80l;");
         UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:8: Error: Failed to parse number from string: 0o80l, char: '8' is out of base: 8\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:8: Error: Failed to parse number from string: 0o80l, char: '8' is out of base: 8\n"); 
     }
 
     Y_UNIT_TEST(ConvertNumberOutOfRangeForInt64ButFitsInUint64) {
@@ -2487,7 +2487,7 @@ Y_UNIT_TEST_SUITE(SqlToYQLErrors) {
     Y_UNIT_TEST(ConvertNumberOutOfRangeUint64) {
         NYql::TAstParseResult res = SqlToYql("select 0xc0000000000000000l;");
         UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:8: Error: Failed to parse number from string: 0xc0000000000000000l, number limit overflow\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:8: Error: Failed to parse number from string: 0xc0000000000000000l, number limit overflow\n"); 
 
         res = SqlToYql("select 1234234543563435151456;\n");
         UNIT_ASSERT(!res.Root);
@@ -2504,13 +2504,13 @@ Y_UNIT_TEST_SUITE(SqlToYQLErrors) {
     Y_UNIT_TEST(InvaildUsageReal0) {
         NYql::TAstParseResult res = SqlToYql("select .0;");
         UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:7: Error: Unexpected token '.' : cannot match to any predicted input...\n\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:7: Error: Unexpected token '.' : cannot match to any predicted input...\n\n"); 
     }
 
     Y_UNIT_TEST(InvaildUsageReal1) {
         NYql::TAstParseResult res = SqlToYql("select .0f;");
         UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:7: Error: Unexpected token '.' : cannot match to any predicted input...\n\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:7: Error: Unexpected token '.' : cannot match to any predicted input...\n\n"); 
     }
 
     Y_UNIT_TEST(InvaildUsageWinFunctionWithoutWindow) {
@@ -2522,7 +2522,7 @@ Y_UNIT_TEST_SUITE(SqlToYQLErrors) {
     Y_UNIT_TEST(DropTableWithIfExists) {
         NYql::TAstParseResult res = SqlToYql("DROP TABLE IF EXISTS plato.foo;");
         UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:0: Error: IF EXISTS in DROP TABLE is not supported.\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:0: Error: IF EXISTS in DROP TABLE is not supported.\n"); 
     }
 
     Y_UNIT_TEST(TooManyErrors) {
@@ -2543,28 +2543,28 @@ Y_UNIT_TEST_SUITE(SqlToYQLErrors) {
 <main>:3:34: Error: Column G is not in source column set. Did you mean b?
 <main>:3:37: Error: Column H is not in source column set. Did you mean b?
 <main>:3:40: Error: Column I is not in source column set. Did you mean b?
-<main>: Error: Too many issues, code: 1
+<main>: Error: Too many issues, code: 1 
 )");
     };
-
+ 
     Y_UNIT_TEST(ShouldCloneBindingForNamedParameter) {
         NYql::TAstParseResult res = SqlToYql(R"($f = () -> {
-    $value_type = TypeOf(1);
-    $pair_type = StructType(
-        TypeOf("2") AS key,
-        $value_type AS value
-    );
-
-    RETURN TupleType(
-        ListType($value_type),
-        $pair_type);
-};
-
-select FormatType($f());
-)");
-        UNIT_ASSERT(res.Root);
-    }
-
+    $value_type = TypeOf(1); 
+    $pair_type = StructType( 
+        TypeOf("2") AS key, 
+        $value_type AS value 
+    ); 
+ 
+    RETURN TupleType( 
+        ListType($value_type), 
+        $pair_type); 
+}; 
+ 
+select FormatType($f()); 
+)"); 
+        UNIT_ASSERT(res.Root); 
+    } 
+ 
     Y_UNIT_TEST(BlockedInvalidFrameBounds) {
         auto check = [](const TString& frame, const TString& err) {
             const TString prefix = "SELECT SUM(x) OVER w FROM plato.Input WINDOW w AS (PARTITION BY key ORDER BY subkey\n";
@@ -2614,24 +2614,24 @@ select FormatType($f());
         UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:28: Error: Unexpected token ';' : syntax error...\n\n");
     }
 
-    Y_UNIT_TEST(IncorrectOrderOfLambdaOptionalArgs) {
-        NYql::TAstParseResult res = SqlToYql("$f = ($x?, $y)->($x + $y); select $f(1);");
-        UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:12: Error: Non-optional argument can not follow optional one\n");
-    }
-
-    Y_UNIT_TEST(IncorrectOrderOfActionOptionalArgs) {
-        NYql::TAstParseResult res = SqlToYql("define action $f($x?, $y) as select $x,$y; end define; do $f(1);");
-        UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:23: Error: Non-optional argument can not follow optional one\n");
-    }
-
-    Y_UNIT_TEST(NotAllowedQuestionOnNamedNode) {
-        NYql::TAstParseResult res = SqlToYql("$f = 1; select $f?;");
-        UNIT_ASSERT(!res.Root);
+    Y_UNIT_TEST(IncorrectOrderOfLambdaOptionalArgs) { 
+        NYql::TAstParseResult res = SqlToYql("$f = ($x?, $y)->($x + $y); select $f(1);"); 
+        UNIT_ASSERT(!res.Root); 
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:12: Error: Non-optional argument can not follow optional one\n"); 
+    } 
+ 
+    Y_UNIT_TEST(IncorrectOrderOfActionOptionalArgs) { 
+        NYql::TAstParseResult res = SqlToYql("define action $f($x?, $y) as select $x,$y; end define; do $f(1);"); 
+        UNIT_ASSERT(!res.Root); 
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:23: Error: Non-optional argument can not follow optional one\n"); 
+    } 
+ 
+    Y_UNIT_TEST(NotAllowedQuestionOnNamedNode) { 
+        NYql::TAstParseResult res = SqlToYql("$f = 1; select $f?;"); 
+        UNIT_ASSERT(!res.Root); 
         UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:18: Error: Unexpected token '?' at the end of expression\n");
-    }
-
+    } 
+ 
     Y_UNIT_TEST(AnyAndCrossJoin) {
         NYql::TAstParseResult res = SqlToYql("use plato; select * from any Input1 cross join Input2");
         UNIT_ASSERT(!res.Root);

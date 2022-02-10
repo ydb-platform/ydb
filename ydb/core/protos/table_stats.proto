@@ -1,6 +1,6 @@
 package NKikimrTableStats;
-option java_package = "ru.yandex.kikimr.proto";
-
+option java_package = "ru.yandex.kikimr.proto"; 
+ 
 message THistogramBucket {
     optional bytes Key = 1;
     optional uint64 Value = 2;

@@ -1,7 +1,7 @@
-#include "translation_settings.h"
-
-#include <ydb/library/yql/core/issue/yql_issue.h>
-#include <ydb/library/yql/utils/utf8.h>
+#include "translation_settings.h" 
+ 
+#include <ydb/library/yql/core/issue/yql_issue.h> 
+#include <ydb/library/yql/utils/utf8.h> 
 
 #include <library/cpp/deprecated/split/split_iterator.h>
 
@@ -23,29 +23,29 @@ namespace {
     };
 }
 
-namespace NSQLTranslation {
+namespace NSQLTranslation { 
     ISqlFeaturePolicy::TPtr ISqlFeaturePolicy::MakeAlwaysDisallow() {
         return new TAlwaysDiallowPolicy;
     }
-
-    TTranslationSettings::TTranslationSettings()
-        : ModuleMapping({{"core", "/lib/yql/core.yql"}})
-        , Mode(ESqlMode::QUERY)
-        , MaxErrors(SQL_MAX_PARSER_ERRORS)
-        , EndOfQueryCommit(true)
-        , EnableGenericUdfs(true)
-        , SyntaxVersion(0)
+ 
+    TTranslationSettings::TTranslationSettings() 
+        : ModuleMapping({{"core", "/lib/yql/core.yql"}}) 
+        , Mode(ESqlMode::QUERY) 
+        , MaxErrors(SQL_MAX_PARSER_ERRORS) 
+        , EndOfQueryCommit(true) 
+        , EnableGenericUdfs(true) 
+        , SyntaxVersion(0) 
         , AnsiLexer(false)
-        , PgParser(false)
-        , InferSyntaxVersion(false)
+        , PgParser(false) 
+        , InferSyntaxVersion(false) 
         , V0Behavior(EV0Behavior::Silent)
         , V0ForceDisable(InTestEnvironment())
         , WarnOnV0(true)
         , V0WarnAsError(ISqlFeaturePolicy::MakeAlwaysDisallow())
         , DqDefaultAuto(ISqlFeaturePolicy::MakeAlwaysDisallow())
         , AssumeYdbOnClusterWithSlash(false)
-    {}
-
+    {} 
+ 
 
     bool ParseTranslationSettings(const TString& query, TTranslationSettings& settings, NYql::TIssues& issues) {
         if (!NYql::IsUtf8(query)) {
@@ -115,4 +115,4 @@ namespace NSQLTranslation {
         return true;
     }
 
-}  // namespace NSQLTranslation
+}  // namespace NSQLTranslation 

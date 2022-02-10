@@ -1,9 +1,9 @@
 #include "yql_kikimr_provider_impl.h"
 
-#include <ydb/library/yql/providers/common/proto/gateways_config.pb.h>
+#include <ydb/library/yql/providers/common/proto/gateways_config.pb.h> 
 #include <ydb/core/base/path.h>
-#include <ydb/library/yql/providers/result/provider/yql_result_provider.h>
-#include <ydb/library/yql/providers/common/schema/expr/yql_expr_schema.h>
+#include <ydb/library/yql/providers/result/provider/yql_result_provider.h> 
+#include <ydb/library/yql/providers/common/schema/expr/yql_expr_schema.h> 
 
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
 
@@ -178,11 +178,11 @@ bool TKikimrTableDescription::Load(TExprContext& ctx, bool withSystemColumns) {
         const TTypeAnnotationNode *type;
         if (to_lower(column.Type) == "decimal")
             type = ctx.MakeType<TDataExprParamsType>(
-                NKikimr::NUdf::GetDataSlot(column.Type),
+                NKikimr::NUdf::GetDataSlot(column.Type), 
                 ToString(NKikimr::NScheme::DECIMAL_PRECISION),
                 ToString(NKikimr::NScheme::DECIMAL_SCALE));
         else
-            type = ctx.MakeType<TDataExprType>(NKikimr::NUdf::GetDataSlot(column.Type));
+            type = ctx.MakeType<TDataExprType>(NKikimr::NUdf::GetDataSlot(column.Type)); 
 
         if (!column.NotNull) {
             type = ctx.MakeType<TOptionalExprType>(type);
@@ -191,7 +191,7 @@ bool TKikimrTableDescription::Load(TExprContext& ctx, bool withSystemColumns) {
         items.push_back(ctx.MakeType<TItemExprType>(column.Name, type));
 
         auto insertResult = ColumnTypes.insert(std::make_pair(column.Name, type));
-        YQL_ENSURE(insertResult.second);
+        YQL_ENSURE(insertResult.second); 
     }
 
     if (withSystemColumns) {
@@ -204,7 +204,7 @@ bool TKikimrTableDescription::Load(TExprContext& ctx, bool withSystemColumns) {
         }
     }
 
-    SchemeNode = ctx.MakeType<TStructExprType>(items);
+    SchemeNode = ctx.MakeType<TStructExprType>(items); 
     return true;
 }
 
@@ -246,9 +246,9 @@ void TKikimrTableDescription::ToYson(NYson::TYsonWriter& writer) const {
     writer.OnKeyedItem(TStringBuf("IsSorted"));
     writer.OnBooleanScalar(true);
     writer.OnKeyedItem(TStringBuf("IsDynamic"));
-    writer.OnBooleanScalar(true);
+    writer.OnBooleanScalar(true); 
     writer.OnKeyedItem(TStringBuf("UniqueKeys"));
-    writer.OnBooleanScalar(true);
+    writer.OnBooleanScalar(true); 
     writer.OnKeyedItem(TStringBuf("CanWrite"));
     writer.OnBooleanScalar(true);
     writer.OnKeyedItem(TStringBuf("IsRealData"));
@@ -273,17 +273,17 @@ void TKikimrTableDescription::ToYson(NYson::TYsonWriter& writer) const {
     writer.OnKeyedItem("Fields");
     writer.OnBeginList();
     {
-        for (auto& item: SchemeNode->GetItems()) {
+        for (auto& item: SchemeNode->GetItems()) { 
             writer.OnListItem();
 
-            auto name = item->GetName();
+            auto name = item->GetName(); 
             writer.OnBeginMap();
 
             writer.OnKeyedItem("Name");
             writer.OnStringScalar(name);
 
             writer.OnKeyedItem("Type");
-            NCommon::WriteTypeToYson(writer, item->GetItemType());
+            NCommon::WriteTypeToYson(writer, item->GetItemType()); 
 
             TMaybe<ui32> keyIndex = GetKeyColumnIndex(TString(name));
 
@@ -309,7 +309,7 @@ void TKikimrTableDescription::ToYson(NYson::TYsonWriter& writer) const {
     writer.OnEndList();
 
     writer.OnKeyedItem("RowType");
-    NCommon::WriteTypeToYson(writer, SchemeNode);
+    NCommon::WriteTypeToYson(writer, SchemeNode); 
 
     writer.OnEndMap();
 }
@@ -325,7 +325,7 @@ bool TKikimrKey::Extract(const TExprNode& key) {
         return false;
     }
 
-    const auto& tagName = key.Child(0)->Child(0)->Content();
+    const auto& tagName = key.Child(0)->Child(0)->Content(); 
     if (tagName == "table") {
         KeyType = Type::Table;
         const TExprNode* nameNode = key.Child(0)->Child(1);

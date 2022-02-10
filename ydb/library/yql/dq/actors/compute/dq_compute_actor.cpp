@@ -1,7 +1,7 @@
 #include "dq_compute_actor_impl.h"
 #include "dq_compute_actor.h"
 
-#include <ydb/library/yql/dq/common/dq_common.h>
+#include <ydb/library/yql/dq/common/dq_common.h> 
 
 namespace NYql {
 namespace NDq {

@@ -1,7 +1,7 @@
 # library
 (
 
-(let empty_list (lambda '(list_type) (MatchType list_type 'Null (lambda '() (EmptyList)) (lambda '() (List list_type)))))
+(let empty_list (lambda '(list_type) (MatchType list_type 'Null (lambda '() (EmptyList)) (lambda '() (List list_type))))) 
 
 # list_type:type function:lambda
 # doesn't support optional values
@@ -25,17 +25,17 @@
   (return (WindowTraits (ListItemType list_type) init update shift current (Null)))
 ))))
 
-# list_type:type function:lambda
-# doesn't support optional values
-# easy function with update/shift
-(let easy_traits_factory_map (lambda '(list_type function_update function_shift function_map) (block '(
-  (let init (lambda '(value) (Apply function_map value)))
-  (let update (lambda '(value state) (Apply function_update (Apply function_map value) state)))
-  (let shift (lambda '(value state) (Apply function_shift (Apply function_map value) state)))
-  (let current (lambda '(state) state))
+# list_type:type function:lambda 
+# doesn't support optional values 
+# easy function with update/shift 
+(let easy_traits_factory_map (lambda '(list_type function_update function_shift function_map) (block '( 
+  (let init (lambda '(value) (Apply function_map value))) 
+  (let update (lambda '(value state) (Apply function_update (Apply function_map value) state))) 
+  (let shift (lambda '(value state) (Apply function_shift (Apply function_map value) state))) 
+  (let current (lambda '(state) state)) 
   (return (WindowTraits (ListItemType list_type) init update shift current (Null)))
-))))
-
+)))) 
+ 
 # list_type:type, factory:lambda, extractor:lambda
 (let extractor_traits_factory (lambda '(list_type extractor factory) (block '(
   (let traits (Apply factory (ListType (TypeOf (Apply extractor (InstanceOf (ListItemType list_type)))))))
@@ -126,43 +126,43 @@
 # list_type:type
 # support optional values
 (let list_traits_factory_opt_gen (lambda '(limit defval) (block '(
-(return (lambda '(list_type) (block '(
+(return (lambda '(list_type) (block '( 
     (let item_type (ListItemType list_type))
     (let init (lambda '(value) (MatchType item_type
         'Optional (lambda '() (ToList value))
         'Null (lambda '() (EmptyList))
         (lambda '() (AsList value)))))
-    (let update (lambda '(value state) (block '(
+    (let update (lambda '(value state) (block '( 
        (let x (MatchType item_type
         'Optional (lambda '() (IfPresent value (lambda '(value) (Insert state value)) state))
         'Null (lambda '() (EmptyList))
         (lambda '() (Insert state value))))
-       (return (If (== limit (Uint64 '0)) x (Take x limit)))))))
+       (return (If (== limit (Uint64 '0)) x (Take x limit))))))) 
     (let shift (lambda '(value state) (Void)))
     (let current (lambda '(state) state))
     (return (WindowTraits item_type init update shift current defval))
-))))))))
+)))))))) 
 
 # list_type:type stddev:bool sample:bool
 # doesn't support optional values
 (let variance_traits_factory_raw (lambda '(list_type stddev sample) (block '(
-    (let init (lambda '(value) '(
-        (Convert value 'Double)
-        (Double '1)
-        (Double '0))))
-    (let update (lambda '(value state) (block '(
-        (let delta (- (Convert value 'Double) (Nth state '0)))
-        (let next_n (+ (Nth state '1) (Double '1)))
-        (return '(
-            (+ (Nth state '0) (/ delta next_n))
-            next_n
-            (+ (Nth state '2) (/ (* (* delta delta) (Nth state '1)) next_n))
-         ))))))
+    (let init (lambda '(value) '( 
+        (Convert value 'Double) 
+        (Double '1) 
+        (Double '0)))) 
+    (let update (lambda '(value state) (block '( 
+        (let delta (- (Convert value 'Double) (Nth state '0))) 
+        (let next_n (+ (Nth state '1) (Double '1))) 
+        (return '( 
+            (+ (Nth state '0) (/ delta next_n)) 
+            next_n 
+            (+ (Nth state '2) (/ (* (* delta delta) (Nth state '1)) next_n)) 
+         )))))) 
     (let shift (lambda '(value state) (Void)))
-    (let current (lambda '(state) (block '(
-                 (let count (Nth state '1))
-                 (let result (/ (Nth state '2) (If sample (- count (Double '1)) count)))
-                 (return (If stddev (Apply (Udf 'Math.Sqrt) result) result))))))
+    (let current (lambda '(state) (block '( 
+                 (let count (Nth state '1)) 
+                 (let result (/ (Nth state '2) (If sample (- count (Double '1)) count))) 
+                 (return (If stddev (Apply (Udf 'Math.Sqrt) result) result)))))) 
     (return (WindowTraits (ListItemType list_type) init update shift current (Null)))
 ))))
 
@@ -215,8 +215,8 @@
 # list_type:type histogram:atom value:lamba weight:lambda intervals:integer
 # doesn't support optional values
 (let histogram_traits_factory_raw (lambda '(list_type histogram value weight intervals) (block '(
-    (let init (lambda '(row parent) (NamedApply (Udf (Combine histogram '_Create)) '((Apply value row) (Apply weight row) intervals) (AsStruct) (DependsOn parent))))
-    (let update (lambda '(row state parent) (NamedApply (Udf (Combine histogram '_AddValue)) '(state (Apply value row) (Apply weight row)) (AsStruct) (DependsOn parent))))
+    (let init (lambda '(row parent) (NamedApply (Udf (Combine histogram '_Create)) '((Apply value row) (Apply weight row) intervals) (AsStruct) (DependsOn parent)))) 
+    (let update (lambda '(row state parent) (NamedApply (Udf (Combine histogram '_AddValue)) '(state (Apply value row) (Apply weight row)) (AsStruct) (DependsOn parent)))) 
     (let shift (lambda '(value state) (Void)))
     (let current (lambda '(state) (Apply (Udf (Combine histogram '_GetResult)) state)))
     (return (WindowTraits (ListItemType list_type) init update shift current (Null)))
@@ -370,7 +370,7 @@
 # support optional values
 (let optional_traits_factory (lambda '(list_type factory) (block '(
     (let item_type (ListItemType list_type))
-    (let traits (Apply factory (MatchType item_type 'Optional (lambda '() (ListType (OptionalItemType item_type))) (lambda '() (ListType item_type)))))
+    (let traits (Apply factory (MatchType item_type 'Optional (lambda '() (ListType (OptionalItemType item_type))) (lambda '() (ListType item_type))))) 
     (let init (NthArg '1 traits))
     (let update (NthArg '2 traits))
     (let shift (NthArg '3 traits))
@@ -423,7 +423,7 @@
 # support optional values, init and update with parent
 (let optional_traits_factory_parent (lambda '(list_type factory) (block '(
     (let item_type (ListItemType list_type))
-    (let traits (Apply factory (MatchType item_type 'Optional (lambda '() (ListType (OptionalItemType item_type))) (lambda '() (ListType item_type)))))
+    (let traits (Apply factory (MatchType item_type 'Optional (lambda '() (ListType (OptionalItemType item_type))) (lambda '() (ListType item_type))))) 
     (let init (NthArg '1 traits))
     (let update (NthArg '2 traits))
     (let shift (NthArg '3 traits))
@@ -527,7 +527,7 @@
 # support optional values
 (let min_traits_factory_opt (lambda '(list_type) (Apply simple_traits_factory list_type (lambda '(one two) (AggrMin one two)))))
 (let max_traits_factory_opt (lambda '(list_type) (Apply simple_traits_factory list_type (lambda '(one two) (AggrMax one two)))))
-(let sum_traits_factory_opt (lambda '(list_type) (Apply easy_traits_factory_map list_type (lambda '(val state) (AggrAdd val state)) (lambda '(val state) (AggrAdd state (Minus val))) (lambda '(x) (WidenIntegral x))  )))
+(let sum_traits_factory_opt (lambda '(list_type) (Apply easy_traits_factory_map list_type (lambda '(val state) (AggrAdd val state)) (lambda '(val state) (AggrAdd state (Minus val))) (lambda '(x) (WidenIntegral x))  ))) 
 (let bit_and_traits_factory_opt (lambda '(list_type) (Apply optional_traits_factory list_type bit_and_traits_factory_raw)))
 (let bit_or_traits_factory_opt (lambda '(list_type) (Apply optional_traits_factory list_type bit_or_traits_factory_raw)))
 (let bit_xor_traits_factory_opt (lambda '(list_type) (Apply optional_traits_factory list_type bit_xor_traits_factory_raw)))
@@ -673,8 +673,8 @@
 (let double_traits_factory_opt (lambda '(factory list_type first second) (block '(
     (let item_type (ListItemType list_type))
     (let key_type (TypeOf (Apply first (InstanceOf item_type))))
-    (let test_type (MatchType item_type 'Optional (lambda '() item_type) (lambda '() key_type)))
-    (let traits (Apply factory (ListType (MatchType item_type 'Optional (lambda '() (OptionalItemType item_type)) (lambda '() item_type)))
+    (let test_type (MatchType item_type 'Optional (lambda '() item_type) (lambda '() key_type))) 
+    (let traits (Apply factory (ListType (MatchType item_type 'Optional (lambda '() (OptionalItemType item_type)) (lambda '() item_type))) 
         (lambda '(row) (MatchType key_type 'Optional
             (lambda '() (Unwrap (Apply first row)))
             (lambda '() (Apply first row))
@@ -713,8 +713,8 @@
 (let double_traits_factory_opt_parent (lambda '(factory list_type first second) (block '(
     (let item_type (ListItemType list_type))
     (let key_type (TypeOf (Apply first (InstanceOf item_type))))
-    (let test_type (MatchType item_type 'Optional (lambda '() item_type) (lambda '() key_type)))
-    (let traits (Apply factory (ListType (MatchType item_type 'Optional (lambda '() (OptionalItemType item_type)) (lambda '() item_type)))
+    (let test_type (MatchType item_type 'Optional (lambda '() item_type) (lambda '() key_type))) 
+    (let traits (Apply factory (ListType (MatchType item_type 'Optional (lambda '() (OptionalItemType item_type)) (lambda '() item_type))) 
         (lambda '(row) (MatchType key_type 'Optional
             (lambda '() (Unwrap (Apply first row)))
             (lambda '() (Apply first row))
@@ -801,22 +801,22 @@
 (let compare_by_traits_factory_opt (lambda '(list_type compare first second limit) (Apply double_traits_factory_opt (lambda '(list_type first second) (Apply compare_traits_factory_raw list_type compare first second limit)) list_type first second)))
 (let list_compare_by_traits_factory_opt (lambda '(list_type compare first second limit) (Apply double_traits_factory_opt (lambda '(list_type first second) (Apply compare_traits_factory_list_raw list_type compare first second limit)) list_type first second)))
 
-#deprecated
+#deprecated 
 (let compare_by_traits_factory (lambda '(list_type compare first second limit) (IfType limit (VoidType)
     (lambda '() (Apply compare_by_traits_factory_opt list_type compare first second limit))
     (lambda '() (Apply list_compare_by_traits_factory_opt list_type compare first second limit))
 )))
 
-#deprecated
+#deprecated 
 (let min_by_traits_factory (lambda '(list_type first second limit) (Apply compare_by_traits_factory list_type (lambda '(one two) (AggrLess one two)) first second limit)))
 (let max_by_traits_factory (lambda '(list_type first second limit) (Apply compare_by_traits_factory list_type (lambda '(one two) (AggrLess two one)) first second limit)))
 
-(let min_by_traits_factory1 (lambda '(list_type first second) (Apply compare_by_traits_factory_opt list_type (lambda '(one two) (AggrLess one two)) first second (Void))))
-(let max_by_traits_factory1 (lambda '(list_type first second) (Apply compare_by_traits_factory_opt list_type (lambda '(one two) (AggrLess two one)) first second (Void))))
-
-(let min_by_traits_factory2 (lambda '(list_type first second limit) (Apply list_compare_by_traits_factory_opt list_type (lambda '(one two) (AggrLess one two)) first second limit)))
-(let max_by_traits_factory2 (lambda '(list_type first second limit) (Apply list_compare_by_traits_factory_opt list_type (lambda '(one two) (AggrLess two one)) first second limit)))
-
+(let min_by_traits_factory1 (lambda '(list_type first second) (Apply compare_by_traits_factory_opt list_type (lambda '(one two) (AggrLess one two)) first second (Void)))) 
+(let max_by_traits_factory1 (lambda '(list_type first second) (Apply compare_by_traits_factory_opt list_type (lambda '(one two) (AggrLess two one)) first second (Void)))) 
+ 
+(let min_by_traits_factory2 (lambda '(list_type first second limit) (Apply list_compare_by_traits_factory_opt list_type (lambda '(one two) (AggrLess one two)) first second limit))) 
+(let max_by_traits_factory2 (lambda '(list_type first second limit) (Apply list_compare_by_traits_factory_opt list_type (lambda '(one two) (AggrLess two one)) first second limit))) 
+ 
 (let avg_if_traits_factory (lambda '(list_type payload predicate)
 (Apply avg_traits_factory list_type (lambda '(value) (FlatOptionalIf (Coalesce (Apply predicate value) (Bool '0)) (block '(
     (let pl (Apply payload value))
@@ -826,12 +826,12 @@
     (let pl (Apply payload value))
     (return (MatchType pl 'Optional (lambda '() pl) (lambda '() (Just pl)))))))))))
 
-# list_type:type init:lambda update:lambda finish:lambda
-# support optional values
+# list_type:type init:lambda update:lambda finish:lambda 
+# support optional values 
 (let udaf_traits_factory_opt (lambda '(list_type init update finish defval) (Apply optional_traits_factory_parent list_type (lambda '(list_type) (WindowTraits (ListItemType list_type) init update (lambda '(value state) (Void)) finish defval)))))
-
+ 
 (let udaf_traits_factory (lambda '(list_type extractor init update merge finish save load defval) (Apply extractor_traits_factory_parent list_type extractor (lambda '(list_type) (Apply udaf_traits_factory_opt list_type init update finish defval)))))
-
+ 
 (let top_bottom_traits_factory (lambda '(list_type extractor count is_top)
     (Apply extractor_traits_factory_parent list_type extractor (lambda '(list_type)
         (Apply flatten_traits_factory_parent list_type (lambda '(list_type)
@@ -870,13 +870,13 @@
 (export avg_traits_factory)
 (export avg_if_traits_factory)
 (export list_traits_factory)
-(export list2_traits_factory)
+(export list2_traits_factory) 
 (export min_by_traits_factory)
 (export max_by_traits_factory)
-(export min_by_traits_factory1)
-(export max_by_traits_factory1)
-(export min_by_traits_factory2)
-(export max_by_traits_factory2)
+(export min_by_traits_factory1) 
+(export max_by_traits_factory1) 
+(export min_by_traits_factory2) 
+(export max_by_traits_factory2) 
 (export variance_0_0_traits_factory)
 (export variance_1_0_traits_factory)
 (export variance_0_1_traits_factory)
@@ -902,7 +902,7 @@
 (export last_value_traits_factory)
 (export first_value_ignore_nulls_traits_factory)
 (export last_value_ignore_nulls_traits_factory)
-(export udaf_traits_factory)
+(export udaf_traits_factory) 
 (export top_traits_factory)
 (export bottom_traits_factory)
 (export top_by_traits_factory)

@@ -6,10 +6,10 @@ import "ydb/core/protos/blobstorage_pdisk_config.proto";
 import "ydb/core/protos/blobstorage_config.proto";
 import "ydb/core/protos/blobstorage_disk.proto";
 import "ydb/core/protos/blobstorage_disk_color.proto";
-
-package NKikimrBlobStorage;
-option java_package = "ru.yandex.kikimr.proto";
-
+ 
+package NKikimrBlobStorage; 
+option java_package = "ru.yandex.kikimr.proto"; 
+ 
 // VDisk handle and store LogoBlobs in different ways, below we define several classes of these blobs
 enum EPutHandleClass {
     TabletLog = 1;      // usually small size, requires low latency, rarely read sequentially (RT/TMP)
@@ -354,28 +354,28 @@ message TEvVInplacePatchResult {
     optional TGroupInfo RecentGroup = 100; // filled in by VDisk on RACE when VDisk has newer generation
 }
 
-message TEvVPut {
-    optional NKikimrProto.TLogoBlobID BlobID = 1;
-    optional bytes Buffer = 2;
-
+message TEvVPut { 
+    optional NKikimrProto.TLogoBlobID BlobID = 1; 
+    optional bytes Buffer = 2; 
+ 
     optional NKikimrBlobStorage.TVDiskID VDiskID = 3;
-
+ 
     optional uint64 FullDataSize = 4;
-    optional bool IgnoreBlock = 5;
-    optional bool NotifyIfNotReady = 6;
-    optional uint64 Cookie = 7;
+    optional bool IgnoreBlock = 5; 
+    optional bool NotifyIfNotReady = 6; 
+    optional uint64 Cookie = 7; 
     optional EPutHandleClass HandleClass = 9;
     optional TMsgQoS MsgQoS = 10;
     optional TTimestamps Timestamps = 23;
-}
-
-message TEvVPutResult {
-    optional NKikimrProto.EReplyStatus Status = 1;
+} 
+ 
+message TEvVPutResult { 
+    optional NKikimrProto.EReplyStatus Status = 1; 
     optional string ErrorReason = 200; // textual description of error
-    optional NKikimrProto.TLogoBlobID BlobID = 2;
-
+    optional NKikimrProto.TLogoBlobID BlobID = 2; 
+ 
     optional NKikimrBlobStorage.TVDiskID VDiskID = 3;
-    optional uint64 Cookie = 4;
+    optional uint64 Cookie = 4; 
     optional uint32 StatusFlags = 5;
     optional TMsgQoS MsgQoS = 10;
     optional TTimestamps Timestamps = 23;
@@ -384,8 +384,8 @@ message TEvVPutResult {
     optional fixed64 IncarnationGuid = 30;
 
     optional TGroupInfo RecentGroup = 100; // filled in by VDisk on RACE when VDisk has newer generation
-}
-
+} 
+ 
 message TVMultiPutItem {
     optional NKikimrProto.TLogoBlobID BlobID = 1;
     optional bytes Buffer = 2;
@@ -433,32 +433,32 @@ message TEvVMultiPutResult {
     optional TGroupInfo RecentGroup = 100; // filled in by VDisk on RACE when VDisk has newer generation
 }
 
-message TRangeQuery {
-    optional NKikimrProto.TLogoBlobID From = 1;
-    optional NKikimrProto.TLogoBlobID To = 2;
-
-    optional uint64 Cookie = 6;
-
-    optional uint32 MaxResults = 7;
-}
-
-message TExtremeQuery {
-    optional NKikimrProto.TLogoBlobID Id = 1;
-
-    optional uint64 Shift = 2;
-    optional uint64 Size = 3;
-
-    optional uint64 Cookie = 4;
-}
-
-message TEvVGet {
-    optional TRangeQuery RangeQuery = 5;
-    repeated TExtremeQuery ExtremeQueries = 6;
-
+message TRangeQuery { 
+    optional NKikimrProto.TLogoBlobID From = 1; 
+    optional NKikimrProto.TLogoBlobID To = 2; 
+ 
+    optional uint64 Cookie = 6; 
+ 
+    optional uint32 MaxResults = 7; 
+} 
+ 
+message TExtremeQuery { 
+    optional NKikimrProto.TLogoBlobID Id = 1; 
+ 
+    optional uint64 Shift = 2; 
+    optional uint64 Size = 3; 
+ 
+    optional uint64 Cookie = 4; 
+} 
+ 
+message TEvVGet { 
+    optional TRangeQuery RangeQuery = 5; 
+    repeated TExtremeQuery ExtremeQueries = 6; 
+ 
     optional NKikimrBlobStorage.TVDiskID VDiskID = 2;
-    optional bool NotifyIfNotReady = 3;
-    optional bool ShowInternals = 4;
-    optional uint64 Cookie = 9;
+    optional bool NotifyIfNotReady = 3; 
+    optional bool ShowInternals = 4; 
+    optional uint64 Cookie = 9; 
     optional TMsgQoS MsgQoS = 10;
     optional bool IndexOnly = 12 [default = false];
     optional EGetHandleClass HandleClass = 13;
@@ -469,30 +469,30 @@ message TEvVGet {
     optional bool AcquireBlockedGeneration = 22 [default = false]; // set to true to get the blocked generation
     optional TTimestamps Timestamps = 23;
     optional uint32 ForceBlockedGeneration = 24 [default = 0]; // non-zero means a successfull block must be done first
-}
-
-message TQueryResult {
-    optional NKikimrProto.EReplyStatus Status = 1;
-    optional NKikimrProto.TLogoBlobID BlobID = 2;
-
-    optional uint64 Shift = 3;
-    optional uint64 Size = 4;
-
-    optional bytes Buffer = 5;
-    optional uint64 Cookie = 6;
-
-    optional uint64 FullDataSize = 7;
-    optional uint64 Ingress = 8;
+} 
+ 
+message TQueryResult { 
+    optional NKikimrProto.EReplyStatus Status = 1; 
+    optional NKikimrProto.TLogoBlobID BlobID = 2; 
+ 
+    optional uint64 Shift = 3; 
+    optional uint64 Size = 4; 
+ 
+    optional bytes Buffer = 5; 
+    optional uint64 Cookie = 6; 
+ 
+    optional uint64 FullDataSize = 7; 
+    optional uint64 Ingress = 8; 
 
     repeated uint32 Parts = 9; // part id's (>0) residing on this disk; returned only through index range queries
-}
-
-message TEvVGetResult {
-    optional NKikimrProto.EReplyStatus Status = 1;
-    repeated TQueryResult Result = 2;
+} 
+ 
+message TEvVGetResult { 
+    optional NKikimrProto.EReplyStatus Status = 1; 
+    repeated TQueryResult Result = 2; 
     optional NKikimrBlobStorage.TVDiskID VDiskID = 3;
-
-    optional uint64 Cookie = 5;
+ 
+    optional uint64 Cookie = 5; 
     optional TMsgQoS MsgQoS = 10;
 
     optional uint32 BlockedGeneration = 11 [default = 0];
@@ -502,119 +502,119 @@ message TEvVGetResult {
     optional fixed64 IncarnationGuid = 30;
 
     optional TGroupInfo RecentGroup = 100; // filled in by VDisk on RACE when VDisk has newer generation
-}
-
-message TEvVBlock {
-    optional uint64 TabletId = 1;
-    optional uint32 Generation = 2;
+} 
+ 
+message TEvVBlock { 
+    optional uint64 TabletId = 1; 
+    optional uint32 Generation = 2; 
     optional uint64 IssuerGuid = 5;
-
+ 
     optional NKikimrBlobStorage.TVDiskID VDiskID = 3;
-    optional bool NotifyIfNotReady = 4;
+    optional bool NotifyIfNotReady = 4; 
     optional TMsgQoS MsgQoS = 10;
-}
-
-message TEvVBlockResult {
-    optional NKikimrProto.EReplyStatus Status = 1;
-    optional uint64 TabletId = 2;
-    optional uint32 Generation = 3;
-
+} 
+ 
+message TEvVBlockResult { 
+    optional NKikimrProto.EReplyStatus Status = 1; 
+    optional uint64 TabletId = 2; 
+    optional uint32 Generation = 3; 
+ 
     optional NKikimrBlobStorage.TVDiskID VDiskID = 4;
     optional TMsgQoS MsgQoS = 10;
 
     optional fixed64 IncarnationGuid = 30;
 
     optional TGroupInfo RecentGroup = 100; // filled in by VDisk on RACE when VDisk has newer generation
-}
-
-message TEvVGetBlock {
-    optional uint64 TabletId = 1;
+} 
+ 
+message TEvVGetBlock { 
+    optional uint64 TabletId = 1; 
     optional NKikimrBlobStorage.TVDiskID VDiskID = 2;
-
-    optional bool NotifyIfNotReady = 3;
+ 
+    optional bool NotifyIfNotReady = 3; 
     optional TMsgQoS MsgQoS = 10;
-}
-
-message TEvVGetBlockResult {
-    optional NKikimrProto.EReplyStatus Status = 1;
-    optional uint64 TabletId = 2;
-    optional uint32 Generation = 3;
-
+} 
+ 
+message TEvVGetBlockResult { 
+    optional NKikimrProto.EReplyStatus Status = 1; 
+    optional uint64 TabletId = 2; 
+    optional uint32 Generation = 3; 
+ 
     optional NKikimrBlobStorage.TVDiskID VDiskID = 4;
     optional TMsgQoS MsgQoS = 10;
 
     optional TGroupInfo RecentGroup = 100; // filled in by VDisk on RACE when VDisk has newer generation
-}
-
-message TEvVCollectGarbage {
-    optional uint64 TabletId = 1;
-    optional uint32 RecordGeneration = 2;
+} 
+ 
+message TEvVCollectGarbage { 
+    optional uint64 TabletId = 1; 
+    optional uint32 RecordGeneration = 2; 
     optional uint32 PerGenerationCounter = 11; // monotone increasing cmd counter for RecordGeneration
-    optional uint32 Channel = 3;
-    optional uint32 CollectGeneration = 4;
-    optional uint32 CollectStep = 5;
+    optional uint32 Channel = 3; 
+    optional uint32 CollectGeneration = 4; 
+    optional uint32 CollectStep = 5; 
     optional bool Hard = 12 [default = false];
-
-    repeated NKikimrProto.TLogoBlobID Keep = 6;
-    repeated NKikimrProto.TLogoBlobID DoNotKeep = 7;
-
+ 
+    repeated NKikimrProto.TLogoBlobID Keep = 6; 
+    repeated NKikimrProto.TLogoBlobID DoNotKeep = 7; 
+ 
     optional NKikimrBlobStorage.TVDiskID VDiskID = 8;
-    optional bool NotifyIfNotReady = 9;
+    optional bool NotifyIfNotReady = 9; 
     optional TMsgQoS MsgQoS = 10;
-}
-
-message TEvVCollectGarbageResult {
-    optional NKikimrProto.EReplyStatus Status = 1;
-    optional uint64 TabletId = 2;
-    optional uint32 RecordGeneration = 3;
-    optional uint32 Channel = 4;
-
+} 
+ 
+message TEvVCollectGarbageResult { 
+    optional NKikimrProto.EReplyStatus Status = 1; 
+    optional uint64 TabletId = 2; 
+    optional uint32 RecordGeneration = 3; 
+    optional uint32 Channel = 4; 
+ 
     optional NKikimrBlobStorage.TVDiskID VDiskID = 5;
     optional TMsgQoS MsgQoS = 10;
 
     optional fixed64 IncarnationGuid = 30;
 
     optional TGroupInfo RecentGroup = 100; // filled in by VDisk on RACE when VDisk has newer generation
-}
-
+} 
+ 
 message TBarrierKey {
-    optional uint64 TabletId = 1;
-    optional uint32 Channel = 2;
+    optional uint64 TabletId = 1; 
+    optional uint32 Channel = 2; 
     optional uint32 RecordGeneration = 3;
     optional uint32 PerGenerationCounter = 4;
     optional bool Hard = 5;
 }
-
+ 
 message TBarrierVal {
     optional uint32 CollectGen = 1;
     optional uint32 CollectStep = 2;
 
-    // Ingress is filled in by vdisk only when ShowInternals option is specified;
-    // when making a request to vdisk keep Ingress clear
-    optional uint32 Ingress = 5;
-}
-
-message TEvVGetBarrier {
+    // Ingress is filled in by vdisk only when ShowInternals option is specified; 
+    // when making a request to vdisk keep Ingress clear 
+    optional uint32 Ingress = 5; 
+} 
+ 
+message TEvVGetBarrier { 
     optional TBarrierKey From = 1;
     optional TBarrierKey To = 2;
-    optional uint32 MaxResults = 3;
-
+    optional uint32 MaxResults = 3; 
+ 
     optional NKikimrBlobStorage.TVDiskID VDiskID = 4;
-    optional bool NotifyIfNotReady = 5;
-    optional bool ShowInternals = 6;
+    optional bool NotifyIfNotReady = 5; 
+    optional bool ShowInternals = 6; 
     optional TMsgQoS MsgQoS = 10;
-}
-
-message TEvVGetBarrierResult {
-    optional NKikimrProto.EReplyStatus Status = 1;
+} 
+ 
+message TEvVGetBarrierResult { 
+    optional NKikimrProto.EReplyStatus Status = 1; 
     repeated TBarrierKey Keys = 2;
     repeated TBarrierVal Values = 4;
     optional NKikimrBlobStorage.TVDiskID VDiskID = 3;
     optional TMsgQoS MsgQoS = 10;
 
     optional TGroupInfo RecentGroup = 100; // filled in by VDisk on RACE when VDisk has newer generation
-}
-
+} 
+ 
 // check if disk is ready or not (i.e. will return NOTREADY in reply to next request)
 message TEvVCheckReadiness {
     optional bool NotifyIfNotReady = 1;
@@ -632,14 +632,14 @@ message TEvVCheckReadinessResult {
     optional TGroupInfo RecentGroup = 100; // filled in by VDisk on RACE when VDisk has newer generation
 }
 
-message TEvVReadyNotify {
-}
-
-message TSyncState {
-    optional uint64 Guid = 1;
-    optional uint64 SyncedLsn = 2;
-}
-
+message TEvVReadyNotify { 
+} 
+ 
+message TSyncState { 
+    optional uint64 Guid = 1; 
+    optional uint64 SyncedLsn = 2; 
+} 
+ 
 // Every VDisk saves information about guid to every VDisk in Blobstorage Group;
 // this message represents this info
 message TSyncGuidInfo {
@@ -694,76 +694,76 @@ message TEvVSyncGuidResult {
     optional TSyncGuidInfo ReadInfo = 7;
 }
 
-message TEvVSync {
-    optional TSyncState SyncState = 1;
-
+message TEvVSync { 
+    optional TSyncState SyncState = 1; 
+ 
     optional NKikimrBlobStorage.TVDiskID SourceVDiskID = 2; // sync this vdisk with ...
     optional NKikimrBlobStorage.TVDiskID TargetVDiskID = 3; // ... this vdisk
     optional bool NotifyIfNotReady = 4;
-}
-
-message TEvVSyncResult {
-    optional NKikimrProto.EReplyStatus Status = 1;
+} 
+ 
+message TEvVSyncResult { 
+    optional NKikimrProto.EReplyStatus Status = 1; 
     optional TSyncState OldSyncState = 2; // depricated, doesn't used
-    optional TSyncState NewSyncState = 3;
-    optional bool Finished = 4;
-
-    optional bytes Data = 5;
+    optional TSyncState NewSyncState = 3; 
+    optional bool Finished = 4; 
+ 
+    optional bytes Data = 5; 
     optional NKikimrBlobStorage.TVDiskID VDiskID = 6;
-
-    message TStat {
-        optional uint32 DiskReads = 1;
-    }
-    optional TStat Stat = 7;
+ 
+    message TStat { 
+        optional uint32 DiskReads = 1; 
+    } 
+    optional TStat Stat = 7; 
     optional uint32 StatusFlags = 8;
-}
-
-enum ESyncFullStage {
-    LogoBlobs = 1;
-    Blocks = 2;
-    Barriers = 3;
-}
-
-message TEvVSyncFull {
-    optional TSyncState SyncState = 1;
-
+} 
+ 
+enum ESyncFullStage { 
+    LogoBlobs = 1; 
+    Blocks = 2; 
+    Barriers = 3; 
+} 
+ 
+message TEvVSyncFull { 
+    optional TSyncState SyncState = 1; 
+ 
     optional NKikimrBlobStorage.TVDiskID SourceVDiskID = 2; // sync this vdisk with ...
     optional NKikimrBlobStorage.TVDiskID TargetVDiskID = 3; // ... this vdisk
     optional bool NotifyIfNotReady = 4;
-
+ 
     optional uint64 Cookie = 5;
 
-    optional ESyncFullStage Stage = 11;
-    optional NKikimrProto.TLogoBlobID LogoBlobFrom = 12;
-    optional uint64 BlockTabletFrom = 13;
+    optional ESyncFullStage Stage = 11; 
+    optional NKikimrProto.TLogoBlobID LogoBlobFrom = 12; 
+    optional uint64 BlockTabletFrom = 13; 
     optional TBarrierKey BarrierFrom = 14;
-}
-
-message TEvVSyncFullResult {
-    optional NKikimrProto.EReplyStatus Status = 1;
-    optional TSyncState SyncState = 2;
-    optional bool Finished = 4;
-
-    optional bytes Data = 5;
+} 
+ 
+message TEvVSyncFullResult { 
+    optional NKikimrProto.EReplyStatus Status = 1; 
+    optional TSyncState SyncState = 2; 
+    optional bool Finished = 4; 
+ 
+    optional bytes Data = 5; 
     optional NKikimrBlobStorage.TVDiskID VDiskID = 6;
     optional uint64 Cookie = 7;
-
-    optional ESyncFullStage Stage = 11;
-    optional NKikimrProto.TLogoBlobID LogoBlobFrom = 12;
-    optional uint64 BlockTabletFrom = 13;
+ 
+    optional ESyncFullStage Stage = 11; 
+    optional NKikimrProto.TLogoBlobID LogoBlobFrom = 12; 
+    optional uint64 BlockTabletFrom = 13; 
     optional TBarrierKey BarrierFrom = 14;
-}
-
-message THandoffDelLogoBlob {
-    optional NKikimrProto.TLogoBlobID BlobID = 1;
-    optional uint64 Ingress = 2;
-}
-
-message THullDbStatus {
-    optional bool Compacted = 1;
-}
-
-message TSyncerStatus {
+} 
+ 
+message THandoffDelLogoBlob { 
+    optional NKikimrProto.TLogoBlobID BlobID = 1; 
+    optional uint64 Ingress = 2; 
+} 
+ 
+message THullDbStatus { 
+    optional bool Compacted = 1; 
+} 
+ 
+message TSyncerStatus { 
     enum EPhase {
         PhaseNone = 1;
         PhaseSyncGuid = 2;
@@ -772,45 +772,45 @@ message TSyncerStatus {
         PhaseInconsistency = 5;
     };
     optional EPhase Phase = 2;
-    repeated TSyncState SyncState = 1;
-}
-
-message TSyncLogStatus {
-    optional uint64 LogStartLsn = 1;
-    optional bool   MemLogEmpty = 2;
-    optional bool   DiskLogEmpty = 3;
-    optional uint64 FirstMemLsn = 4;
-    optional uint64 LastMemLsn = 5;
-    optional uint64 FirstDiskLsn = 6;
-    optional uint64 LastDiskLsn = 7;
-}
-
+    repeated TSyncState SyncState = 1; 
+} 
+ 
+message TSyncLogStatus { 
+    optional uint64 LogStartLsn = 1; 
+    optional bool   MemLogEmpty = 2; 
+    optional bool   DiskLogEmpty = 3; 
+    optional uint64 FirstMemLsn = 4; 
+    optional uint64 LastMemLsn = 5; 
+    optional uint64 FirstDiskLsn = 6; 
+    optional uint64 LastDiskLsn = 7; 
+} 
+ 
 message TLocalRecoveryInfo {
-    optional uint64 StartLsn = 1;
-    optional bool   SuccessfulRecovery = 5;
-    optional bool   EmptyLogoBlobsDb = 11;
-    optional bool   EmptyBlocksDb = 12;
-    optional bool   EmptyBarriersDb = 13;
-    optional bool   EmptySyncLog = 14;
-    optional bool   EmptySyncer = 15;
+    optional uint64 StartLsn = 1; 
+    optional bool   SuccessfulRecovery = 5; 
+    optional bool   EmptyLogoBlobsDb = 11; 
+    optional bool   EmptyBlocksDb = 12; 
+    optional bool   EmptyBarriersDb = 13; 
+    optional bool   EmptySyncLog = 14; 
+    optional bool   EmptySyncer = 15; 
     optional bool   EmptyHuge = 16;
-
+ 
     optional uint64 RecoveryLogFirstLsn = 41;
     optional uint64 RecoveryLogLastLsn = 42;
-}
-
-message TEvVStatus {
+} 
+ 
+message TEvVStatus { 
     optional NKikimrBlobStorage.TVDiskID VDiskID = 1;
-    optional bool NotifyIfNotReady = 2;
-}
-
-message TEvVStatusResult {
-    optional NKikimrProto.EReplyStatus Status = 1;
-    optional THullDbStatus LogoBlobs = 2;
-    optional THullDbStatus Blocks = 3;
-    optional THullDbStatus Barriers = 4;
-    optional TSyncerStatus SyncerStatus = 5;
-    optional TSyncLogStatus SyncLogStatus = 6;
+    optional bool NotifyIfNotReady = 2; 
+} 
+ 
+message TEvVStatusResult { 
+    optional NKikimrProto.EReplyStatus Status = 1; 
+    optional THullDbStatus LogoBlobs = 2; 
+    optional THullDbStatus Blocks = 3; 
+    optional THullDbStatus Barriers = 4; 
+    optional TSyncerStatus SyncerStatus = 5; 
+    optional TSyncLogStatus SyncLogStatus = 6; 
     optional TLocalRecoveryInfo LocalRecoveryInfo = 7;
     optional NKikimrBlobStorage.TVDiskID VDiskID = 8;
     optional uint32 StatusFlags = 9; // flags from EStatusFlags
@@ -818,8 +818,8 @@ message TEvVStatusResult {
     optional bool Replicated = 11 [default = false];
     optional fixed64 IncarnationGuid = 30;
     optional TGroupInfo RecentGroup = 100; // filled in by VDisk on RACE when VDisk has newer generation
-}
-
+} 
+ 
 // what db we address our query to
 enum EDbStatType {
     StatLogoBlobs = 1;
@@ -929,11 +929,11 @@ message TVDiskLocation {
 }
 
 message TNodeWardenServiceSet {
-    message TPDisk {
-        optional uint32 NodeID = 1; // optional parameter for static configuration
-        optional uint32 PDiskID = 2;
-        optional string Path = 3;
-        optional uint64 PDiskGuid = 5;
+    message TPDisk { 
+        optional uint32 NodeID = 1; // optional parameter for static configuration 
+        optional uint32 PDiskID = 2; 
+        optional string Path = 3; 
+        optional uint64 PDiskGuid = 5; 
         optional uint64 PDiskCategory = 6;
 
         optional TPDiskConfig PDiskConfig = 7; // optional, pdisk will use the default config if not set
@@ -945,9 +945,9 @@ message TNodeWardenServiceSet {
 
         optional TSerialManagementStage.E ManagementStage = 12;
         optional TPDiskSpaceColor.E SpaceColorBorder = 13;
-    }
-
-    message TVDisk {
+    } 
+ 
+    message TVDisk { 
         message TDonor {
             optional NKikimrBlobStorage.TVDiskID VDiskId = 1;
             optional TVDiskLocation VDiskLocation = 2;
@@ -959,7 +959,7 @@ message TNodeWardenServiceSet {
             optional uint32 ErasureSpecies = 4;
         }
         optional NKikimrBlobStorage.TVDiskID VDiskID = 1;
-        optional TVDiskLocation VDiskLocation = 2;
+        optional TVDiskLocation VDiskLocation = 2; 
         optional TVDiskKind.EVDiskKind VDiskKind = 3;
         optional bool DoDestroy = 4 [default = false];
         optional bool DoWipe = 5 [default = false];
@@ -967,8 +967,8 @@ message TNodeWardenServiceSet {
         optional string StoragePoolName = 8;
         optional TDonorMode DonorMode = 9; // vdisk runs in read-only limited mode without interaction with other disks of group
         repeated TDonor Donors = 10; // a set of donor disks used to accelerate replication
-    }
-
+    } 
+ 
     message TReplBrokerConfig {
         message TMediaTypeQuota {
             optional EPDiskType Type = 1;
@@ -984,15 +984,15 @@ message TNodeWardenServiceSet {
         optional uint64 TotalResponseBytesPerSecond = 6; // quota for generated responses at network layer
     }
 
-    repeated TPDisk PDisks = 1;
-    repeated TVDisk VDisks = 2;
+    repeated TPDisk PDisks = 1; 
+    repeated TVDisk VDisks = 2; 
     repeated TGroupInfo Groups = 3;
-    repeated uint64 AvailabilityDomains = 4;
+    repeated uint64 AvailabilityDomains = 4; 
     optional TReplBrokerConfig ReplBrokerConfig = 5;
     // optional NActorsInterconnect.TNodeLocation PhysicalLocation = 6; // DEPRECATED
     optional bool EnableProxyMock = 7;
-}
-
+} 
+ 
 message TNodeWardenCache {
     optional uint64 AvailDomain = 1;
     optional string InstanceId = 2;
@@ -1013,15 +1013,15 @@ message TDriveData {
     optional EPDiskType DeviceType = 5;
 }
 
-message TEvControllerRegisterNode {
+message TEvControllerRegisterNode { 
     reserved 1;
     optional uint32 NodeID = 2;
     repeated uint32 Groups = 4;
     repeated uint32 GroupGenerations = 5; // must be zero entries (for old nodes) and the same number as in Groups for new ones
     repeated TVDiskStatus VDiskStatus = 6; // actual status for currently operating VDisks
     repeated TDriveData DrivesData = 7;
-}
-
+} 
+ 
 message TEvControllerUpdateNodeDrives {
     optional uint32 NodeId = 1;
     repeated TDriveData DrivesData = 2;
@@ -1033,15 +1033,15 @@ message TEvControllerNodeServiceSetUpdate {
         optional uint32 CurrentGeneration = 2; // current state in the database
     }
 
-    optional NKikimrProto.EReplyStatus Status = 1;
-    optional uint32 NodeID = 2;
+    optional NKikimrProto.EReplyStatus Status = 1; 
+    optional uint32 NodeID = 2; 
     optional TNodeWardenServiceSet ServiceSet = 3;
     repeated TGroupMetadata GroupMetadata = 4;
     optional string InstanceId = 5;
     optional bool Comprehensive = 6; // if this flag is set to true, then there will be no any other entities than elisted in the ServiceSet
     optional uint64 AvailDomain = 7; // availability domain of the controller
-}
-
+} 
+ 
 message TEvControllerGroupReconfigureWipe {
     reserved 1;
     optional NKikimrBlobStorage.TVSlotId VSlotId = 2;
@@ -1063,11 +1063,11 @@ message TEvControllerConfigResponse {
     reserved 2;
 }
 
-message TEvControllerGetGroup {
-    optional uint32 NodeID = 1;
-    repeated uint32 GroupIDs = 2;
-}
-
+message TEvControllerGetGroup { 
+    optional uint32 NodeID = 1; 
+    repeated uint32 GroupIDs = 2; 
+} 
+ 
 message TEvControllerProposeGroupKey {
     optional uint32 NodeId = 1 [default = 0];
     optional uint32 GroupId = 2 [default = 0];
@@ -1091,31 +1091,31 @@ message TStorageOwnerInfo {
     optional uint64 DataSize = 3;
 }
 
-message TEvControllerSelectGroups {
+message TEvControllerSelectGroups { 
     message TStoragePoolSpecifier {
         optional string Name = 1; // filter by name if set
         optional string Kind = 2; // filter by kind if set
     }
-    message TGroupParameters {
-        optional uint32 ErasureSpecies = 1;
-        optional uint64 DesiredPDiskCategory = 2;
+    message TGroupParameters { 
+        optional uint32 ErasureSpecies = 1; 
+        optional uint64 DesiredPDiskCategory = 2; 
         optional uint64 DesiredVDiskCategory = 3;
         optional float RequiredIOPS = 4;
         optional uint64 RequiredThroughput = 5;
         optional uint64 RequiredDataSize = 6;
         optional TStoragePoolSpecifier StoragePoolSpecifier = 7;
 
-    }
+    } 
     reserved 1;
     reserved 2;
-    repeated TGroupParameters GroupParameters = 3;
+    repeated TGroupParameters GroupParameters = 3; 
     optional TStorageOwnerInfo StorageOwnerInfo = 4;
     optional uint64 ObjectId = 5; // scheme object id
     optional bool ReturnAllMatchingGroups = 6; // when true, then all matching groups are returned
     optional bool BlockUntilAllResourcesAreComplete = 7; // do not respond unless resources for all groups are filled up
     optional bool OnlySeenOperational = 8; // report only those groups which were seen working at any time
-}
-
+} 
+ 
 // VDiskStatus ordering is assumed to be lower for bad statuses and higher for good ones
 enum EVDiskStatus {
     ERROR = 0; // the disk is not operational at all
@@ -1157,10 +1157,10 @@ message TEvControllerUpdateGroupStat {
     repeated TEvGroupStatReport PerGroupReport = 1;
 }
 
-message TEvControllerSelectGroupsResult {
-    message TGroupParameters {
-        optional uint32 ErasureSpecies = 1;
-        optional uint32 GroupID = 2;
+message TEvControllerSelectGroupsResult { 
+    message TGroupParameters { 
+        optional uint32 ErasureSpecies = 1; 
+        optional uint32 GroupID = 2; 
         optional string StoragePoolName = 3; // if it was selected from the storage pool
 
         reserved 4;
@@ -1185,16 +1185,16 @@ message TEvControllerSelectGroupsResult {
         optional uint64 AvailableSize = 9; // bytes as reported by VDisk metrics (pessimistic case)
         optional uint64 AllocatedSize = 10; // the same basis
         optional NKikimrBlobStorage.TPDiskSpaceColor.E SpaceColor = 11;
-    }
+    } 
     message TMatchingGroupList {
         repeated TGroupParameters Groups = 1;
     }
-    optional NKikimrProto.EReplyStatus Status = 1;
-    optional uint64 Cookie = 2;
+    optional NKikimrProto.EReplyStatus Status = 1; 
+    optional uint64 Cookie = 2; 
     //repeated TGroupParameters Groups = 3; // deprecated
     optional bool NewStyleQuerySupported = 4; // must be set to true
     repeated TMatchingGroupList MatchingGroups = 5; // when ReturnAllMatchingGroups is set to true
-}
+} 
 
 message TEvControllerScrubQueryStartQuantum {
     optional NKikimrBlobStorage.TVSlotId VSlotId = 1;

@@ -2,7 +2,7 @@
 
 #include "dq_output.h"
 
-#include <ydb/library/yql/minikql/mkql_alloc.h>
+#include <ydb/library/yql/minikql/mkql_alloc.h> 
 
 namespace NKikimr::NMiniKQL {
 class TTypeEnvironment;

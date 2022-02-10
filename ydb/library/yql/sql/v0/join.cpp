@@ -1,32 +1,32 @@
 #include "node.h"
 #include "context.h"
 
-#include <ydb/library/yql/utils/yql_panic.h>
+#include <ydb/library/yql/utils/yql_panic.h> 
 
 #include <library/cpp/charset/ci_string.h>
 #include <util/generic/hash_set.h>
 #include <util/string/cast.h>
-#include <util/string/split.h>
-#include <util/string/join.h>
+#include <util/string/split.h> 
+#include <util/string/join.h> 
 
 using namespace NYql;
 
 namespace NSQLTranslationV0 {
 
-namespace {
-
-}
-
+namespace { 
+ 
+} 
+ 
 TString NormalizeJoinOp(const TString& joinOp) {
     TVector<TString> joinOpsParts;
-    Split(joinOp, " ", joinOpsParts);
-    for (auto&x : joinOpsParts) {
-        x.to_title();
-    }
-
-    return JoinSeq("", joinOpsParts);
-}
-
+    Split(joinOp, " ", joinOpsParts); 
+    for (auto&x : joinOpsParts) { 
+        x.to_title(); 
+    } 
+ 
+    return JoinSeq("", joinOpsParts); 
+} 
+ 
 struct TJoinDescr {
     TString Op;
 
@@ -75,14 +75,14 @@ public:
         }
 
         if (column.IsAsterisk()) {
-            if (!column.GetCountHint()) {
+            if (!column.GetCountHint()) { 
                 if (srcByName) {
                     srcByName->AllColumns();
-                } else {
+                } else { 
                     for (auto& source: Sources) {
                         source->AllColumns();
                     }
-                }
+                } 
             }
             return true;
         }
@@ -130,15 +130,15 @@ public:
         return &JoinedColumns;
     }
 
-    void GetInputTables(TTableList& tableList) const override {
+    void GetInputTables(TTableList& tableList) const override { 
         for (auto& src: Sources) {
-            src->GetInputTables(tableList);
+            src->GetInputTables(tableList); 
         }
-        ISource::GetInputTables(tableList);
+        ISource::GetInputTables(tableList); 
     }
 
-    TNodePtr BuildJoinKeys(TContext& ctx, const TVector<TDeferredAtom>& names) override {
-        const size_t n = JoinOps.size();
+    TNodePtr BuildJoinKeys(TContext& ctx, const TVector<TDeferredAtom>& names) override { 
+        const size_t n = JoinOps.size(); 
         TString what(Sources[n]->GetLabel());
         static const TSet<TString> noRightSourceJoinOps = {"LeftOnly", "LeftSemi"};
         for (size_t nn = n; nn > 0 && noRightSourceJoinOps.contains(JoinOps[nn-1]); --nn) {
@@ -198,15 +198,15 @@ protected:
 
     bool InitKeysOrFilters(TContext& ctx, ui32 joinIdx, TNodePtr expr) {
         const TString joinOp(JoinOps[joinIdx]);
-        const TCallNode* op = nullptr;
-        if (expr) {
+        const TCallNode* op = nullptr; 
+        if (expr) { 
             const TString opName(expr->GetOpName());
-            if (opName != "==") {
-                ctx.Error(expr->GetPos()) << "JOIN ON expression must be a conjunction of equality predicates";
-                return false;
-            }
-
-            op = dynamic_cast<const TCallNode*>(expr.Get());
+            if (opName != "==") { 
+                ctx.Error(expr->GetPos()) << "JOIN ON expression must be a conjunction of equality predicates"; 
+                return false; 
+            } 
+ 
+            op = dynamic_cast<const TCallNode*>(expr.Get()); 
             YQL_ENSURE(op, "Invalid JOIN equal operation node");
             YQL_ENSURE(op->GetArgs().size() == 2, "Invalid JOIN equal operation arguments");
         }
@@ -218,7 +218,7 @@ protected:
             ++idx;
         }
         if (sources.size() != Sources.size()) {
-            ctx.Error(expr ? expr->GetPos() : Pos) << "JOIN: all correlation names must be different";
+            ctx.Error(expr ? expr->GetPos() : Pos) << "JOIN: all correlation names must be different"; 
             return false;
         }
 
@@ -231,41 +231,41 @@ protected:
         const TString* rightSource = nullptr;
         const TString* sameColumnNamePtr = nullptr;
         TSet<TString> joinedSources;
-        if (op) {
+        if (op) { 
             const TString* columnNamePtr = nullptr;
-            for (auto& arg : op->GetArgs()) {
+            for (auto& arg : op->GetArgs()) { 
                 const auto sourceNamePtr = arg->GetSourceName();
                 if (!sourceNamePtr) {
-                    ctx.Error(expr->GetPos()) << "JOIN: equality predicate arguments must not be constant";
-                    return false;
-                }
+                    ctx.Error(expr->GetPos()) << "JOIN: equality predicate arguments must not be constant"; 
+                    return false; 
+                } 
                 const auto sourceName = *sourceNamePtr;
                 if (sourceName.empty()) {
-                    ctx.Error(expr->GetPos()) << "JOIN: column requires correlation name";
-                    return false;
-                }
+                    ctx.Error(expr->GetPos()) << "JOIN: column requires correlation name"; 
+                    return false; 
+                } 
                 auto it = sources.find(sourceName);
-                if (it != sources.end()) {
+                if (it != sources.end()) { 
                     joinedSources.insert(sourceName);
-                    if (it->second == joinIdx + 1) {
-                        rightArg = pos;
+                    if (it->second == joinIdx + 1) { 
+                        rightArg = pos; 
                         rightSource = sourceNamePtr;
-                        rightSourceIdx = it->second;
-                    }
-                    else if (it->second > joinIdx + 1) {
+                        rightSourceIdx = it->second; 
+                    } 
+                    else if (it->second > joinIdx + 1) { 
                         ctx.Error(expr->GetPos()) << "JOIN: can not use source: " << sourceName << " in equality predicate, it is out of current join scope";
-                        return false;
-                    }
-                    else {
-                        leftArg = pos;
+                        return false; 
+                    } 
+                    else { 
+                        leftArg = pos; 
                         leftSource = sourceNamePtr;
-                        leftSourceIdx = it->second;
-                    }
-                }
-                else {
+                        leftSourceIdx = it->second; 
+                    } 
+                } 
+                else { 
                     ctx.Error(expr->GetPos()) << "JOIN: unknown corellation name: " << sourceName;
-                    return false;
-                }
+                    return false; 
+                } 
                 if (!columnNamePtr) {
                     columnNamePtr = arg->GetColumnName();
                 } else {
@@ -274,62 +274,62 @@ protected:
                         sameColumnNamePtr = columnNamePtr;
                     }
                 }
-                ++pos;
+                ++pos; 
             }
         } else {
-            for (auto& x : sources) {
-                if (x.second == joinIdx) {
+            for (auto& x : sources) { 
+                if (x.second == joinIdx) { 
                     leftArg = pos;
-                    leftSourceIdx = x.second;
-                    joinedSources.insert(x.first);
+                    leftSourceIdx = x.second; 
+                    joinedSources.insert(x.first); 
                 }
-                else if (x.second = joinIdx + 1) {
-                    rightArg = pos;
-                    rightSourceIdx = x.second;
-                    joinedSources.insert(x.first);
-                }
+                else if (x.second = joinIdx + 1) { 
+                    rightArg = pos; 
+                    rightSourceIdx = x.second; 
+                    joinedSources.insert(x.first); 
+                } 
             }
         }
-
+ 
         if (joinedSources.size() == 1) {
-            ctx.Error(expr ? expr->GetPos() : Pos) << "JOIN: different correlation names are required for joined tables";
+            ctx.Error(expr ? expr->GetPos() : Pos) << "JOIN: different correlation names are required for joined tables"; 
             return false;
         }
-
-        if (op) {
-            if (joinedSources.size() != 2) {
-                ctx.Error(expr->GetPos()) << "JOIN ON expression must be a conjunction of equality predicates over at most two sources";
-                return false;
-            }
-            if (!rightSource) {
-                ctx.Error(expr->GetPos()) << "JOIN ON equality predicate must have one of its arguments from the rightmost source";
-                return false;
-            }
+ 
+        if (op) { 
+            if (joinedSources.size() != 2) { 
+                ctx.Error(expr->GetPos()) << "JOIN ON expression must be a conjunction of equality predicates over at most two sources"; 
+                return false; 
+            } 
+            if (!rightSource) { 
+                ctx.Error(expr->GetPos()) << "JOIN ON equality predicate must have one of its arguments from the rightmost source"; 
+                return false; 
+            } 
         }
 
         KeysInitializing = true;
-        if (op) {
+        if (op) { 
             ctx.PushBlockShortcuts();
-            for (auto& arg : op->GetArgs()) {
-                if (!arg->Init(ctx, this)) {
-                    return false;
-                }
+            for (auto& arg : op->GetArgs()) { 
+                if (!arg->Init(ctx, this)) { 
+                    return false; 
+                } 
             }
             KeysGround = ctx.GroundBlockShortcuts(GetPos(), KeysGround);
-
-            Y_VERIFY_DEBUG(leftSource);
+ 
+            Y_VERIFY_DEBUG(leftSource); 
             if (sameColumnNamePtr) {
                 SameKeyMap[*sameColumnNamePtr].insert(*leftSource);
                 SameKeyMap[*sameColumnNamePtr].insert(*rightSource);
             }
         }
 
-        if (joinIdx == JoinDescrs.size()) {
-            JoinDescrs.push_back(TJoinDescr(joinOp));
+        if (joinIdx == JoinDescrs.size()) { 
+            JoinDescrs.push_back(TJoinDescr(joinOp)); 
         }
-
-        JoinDescrs.back().Keys.push_back({ { leftSourceIdx, op ? op->GetArgs()[leftArg] : nullptr},
-            { rightSourceIdx, op ? op->GetArgs()[rightArg] : nullptr } });
+ 
+        JoinDescrs.back().Keys.push_back({ { leftSourceIdx, op ? op->GetArgs()[leftArg] : nullptr}, 
+            { rightSourceIdx, op ? op->GetArgs()[rightArg] : nullptr } }); 
         KeysInitializing = false;
         return true;
     }
@@ -394,7 +394,7 @@ bool TJoinBase::DoInit(TContext& ctx, ISource* src) {
         }
     }
 
-    YQL_ENSURE(JoinOps.size() == JoinExprs.size(), "Invalid join exprs number");
+    YQL_ENSURE(JoinOps.size() == JoinExprs.size(), "Invalid join exprs number"); 
 
     const TSet<TString> allowedJoinOps = {"Inner", "Left", "Right", "Full", "LeftOnly", "RightOnly", "Exclusion", "LeftSemi", "RightSemi", "Cross"};
     for (auto& opName: JoinOps) {
@@ -406,7 +406,7 @@ bool TJoinBase::DoInit(TContext& ctx, ISource* src) {
 
     ui32 idx = 0;
     for (auto expr: JoinExprs) {
-        if (expr) {
+        if (expr) { 
             TDeque<TNodePtr> conjQueue;
             conjQueue.push_back(expr);
             while (!conjQueue.empty()) {
@@ -417,8 +417,8 @@ bool TJoinBase::DoInit(TContext& ctx, ISource* src) {
                     YQL_ENSURE(conj, "Invalid And operation node");
                     conjQueue.insert(conjQueue.begin(), conj->GetArgs().begin(), conj->GetArgs().end());
                 } else if (!InitKeysOrFilters(ctx, idx, cur)) {
-                    return false;
-                }
+                    return false; 
+                } 
             }
         } else {
             if (!InitKeysOrFilters(ctx, idx, nullptr)) {
@@ -430,10 +430,10 @@ bool TJoinBase::DoInit(TContext& ctx, ISource* src) {
 
     TSet<ui32> joinedSources;
     for (auto& descr: JoinDescrs) {
-        for (auto& key : descr.Keys) {
-            joinedSources.insert(key.first.Source);
-            joinedSources.insert(key.second.Source);
-        }
+        for (auto& key : descr.Keys) { 
+            joinedSources.insert(key.first.Source); 
+            joinedSources.insert(key.second.Source); 
+        } 
     }
     for (idx = 0; idx < Sources.size(); ++idx) {
         if (!joinedSources.contains(idx)) {
@@ -458,7 +458,7 @@ public:
         for (auto& descr: JoinDescrs) {
             auto leftBranch = joinTree;
             if (!leftBranch) {
-                leftBranch = BuildQuotedAtom(Pos, Sources[descr.Keys[0].first.Source]->GetLabel());
+                leftBranch = BuildQuotedAtom(Pos, Sources[descr.Keys[0].first.Source]->GetLabel()); 
             }
             auto leftKeys = GetColumnNames(ctx, extraColumns, descr.Keys, true);
             auto rightKeys = GetColumnNames(ctx, extraColumns, descr.Keys, false);
@@ -467,12 +467,12 @@ public:
             }
 
             joinTree = Q(Y(
-                Q(descr.Op),
+                Q(descr.Op), 
                 leftBranch,
-                BuildQuotedAtom(Pos, Sources[descr.Keys[0].second.Source]->GetLabel()),
+                BuildQuotedAtom(Pos, Sources[descr.Keys[0].second.Source]->GetLabel()), 
                 leftKeys,
-                rightKeys,
-                Q(Y())
+                rightKeys, 
+                Q(Y()) 
             ));
         }
 
@@ -485,12 +485,12 @@ public:
             }
             const bool useOrderedForSource = ctx.UseUnordered(*source);
             ordered = ordered || useOrderedForSource;
-            if (source->IsFlattenByColumns() || source->IsFlattenColumns()) {
-                auto flatten = source->IsFlattenByColumns() ?
-                    source->BuildFlattenByColumns("row") :
-                    source->BuildFlattenColumns("row");
-
-                if (!flatten) {
+            if (source->IsFlattenByColumns() || source->IsFlattenColumns()) { 
+                auto flatten = source->IsFlattenByColumns() ? 
+                    source->BuildFlattenByColumns("row") : 
+                    source->BuildFlattenColumns("row"); 
+ 
+                if (!flatten) { 
                     return nullptr;
                 }
                 auto block = Y(Y("let", "flatten", sourceNode));
@@ -569,15 +569,15 @@ private:
         bool left
     ) {
         Y_UNUSED(ctx);
-        auto res = Y();
+        auto res = Y(); 
         for (auto& it: keys) {
-            auto tableName = Sources[left ? it.first.Source : it.second.Source]->GetLabel();
+            auto tableName = Sources[left ? it.first.Source : it.second.Source]->GetLabel(); 
             TString columnName;
             auto column = left ? it.first.Column : it.second.Column;
-            if (!column) {
-                continue;
-            }
-
+            if (!column) { 
+                continue; 
+            } 
+ 
             if (column->GetColumnName()) {
                 columnName = *column->GetColumnName();
             } else {
@@ -586,12 +586,12 @@ private:
                 columnName = str.Str();
                 extraColumns.insert({ std::make_pair(tableName, columnName), column });
             }
-
-            res = L(res, BuildQuotedAtom(Pos, tableName));
+ 
+            res = L(res, BuildQuotedAtom(Pos, tableName)); 
             res = L(res, BuildQuotedAtom(Pos, columnName));
         }
-
-        return Q(res);
+ 
+        return Q(res); 
     }
 };
 

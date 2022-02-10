@@ -26,7 +26,7 @@ SRCS(
 
 PEERDIR(
     ydb/library/folder_service/proto
-    ydb/library/yql/providers/common/proto
+    ydb/library/yql/providers/common/proto 
     ydb/library/yql/providers/s3/proto
 )
 

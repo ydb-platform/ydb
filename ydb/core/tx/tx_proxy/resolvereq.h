@@ -1,8 +1,8 @@
-#pragma once
+#pragma once 
 #include "proxy.h"
 
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
-#include <ydb/library/yql/public/issue/yql_issue_manager.h>
+#include <ydb/library/yql/public/issue/yql_issue_message.h> 
+#include <ydb/library/yql/public/issue/yql_issue_manager.h> 
 
 namespace NKikimr {
 namespace NTxProxy {

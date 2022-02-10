@@ -57,8 +57,8 @@ PEERDIR(
     ydb/services/ydb
 )
 
-YQL_LAST_ABI_VERSION()
-
+YQL_LAST_ABI_VERSION() 
+ 
 REQUIREMENTS(ram:14)
 
 END()

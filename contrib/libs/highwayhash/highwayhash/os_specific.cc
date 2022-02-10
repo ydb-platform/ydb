@@ -40,7 +40,7 @@
 #define OS_LINUX 0
 #endif
 
-#if defined(__MACH__) || defined(__APPLE__)
+#if defined(__MACH__) || defined(__APPLE__) 
 #define OS_MAC 1
 #include <mach/mach.h>
 #include <mach/mach_time.h>
@@ -102,7 +102,7 @@ void RaiseThreadPriority() {
   // omit: SCHED_RR and SCHED_FIFO with sched_priority max, max-1 and max/2
   // lead to 2-3x runtime and higher variability!
 #elif OS_FREEBSD
-#elif OS_MAC
+#elif OS_MAC 
 #else
 #error "port"
 #endif
@@ -166,7 +166,7 @@ void SetThreadAffinity(ThreadAffinity* affinity) {
   const int err = cpuset_setaffinity(CPU_LEVEL_WHICH, CPU_WHICH_PID, pid,
                                      sizeof(cpuset_t), &affinity->set);
   CHECK(err == 0);
-#elif OS_MAC
+#elif OS_MAC 
 #else
 #error "port"
 #endif
@@ -194,7 +194,7 @@ std::vector<int> AvailableCPUs() {
       cpus.push_back(cpu);
     }
   }
-#elif OS_MAC
+#elif OS_MAC 
 #else
 #error "port"
 #endif
@@ -211,7 +211,7 @@ void PinThreadToCPU(const int cpu) {
 #elif OS_FREEBSD
   CPU_ZERO(&affinity.set);
   CPU_SET(cpu, &affinity.set);
-#elif OS_MAC
+#elif OS_MAC 
 #else
 #error "port"
 #endif

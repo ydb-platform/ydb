@@ -6,7 +6,7 @@
 #include <ydb/public/sdk/cpp/client/ydb_result/result.h>
 #include <ydb/public/lib/yson_value/ydb_yson_value.h>
 
-#include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
+#include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h> 
 
 
 using namespace NKikimr;

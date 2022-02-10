@@ -8,7 +8,7 @@ namespace NNodes {
 TString TKiReadTable::GetTable(TExprContext& ctx) const {
     TKikimrKey key(ctx);
     YQL_ENSURE(key.Extract(TableKey().Ref()));
-    YQL_ENSURE(key.GetKeyType() == TKikimrKey::Type::Table);
+    YQL_ENSURE(key.GetKeyType() == TKikimrKey::Type::Table); 
 
     return key.GetTablePath();
 }

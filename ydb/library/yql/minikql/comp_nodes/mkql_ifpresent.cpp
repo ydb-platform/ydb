@@ -1,25 +1,25 @@
-#include "mkql_ifpresent.h"
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h>
-#include <ydb/library/yql/minikql/mkql_node_cast.h>
-
-namespace NKikimr {
-namespace NMiniKQL {
-
+#include "mkql_ifpresent.h" 
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h> 
+#include <ydb/library/yql/minikql/mkql_node_cast.h> 
+ 
+namespace NKikimr { 
+namespace NMiniKQL { 
+ 
 namespace {
 
 template<bool IsMultiOptional>
 class TIfPresentWrapper : public TMutableCodegeneratorNode<TIfPresentWrapper<IsMultiOptional>> {
 using TBaseComputation = TMutableCodegeneratorNode<TIfPresentWrapper<IsMultiOptional>>;
-public:
+public: 
     TIfPresentWrapper(TComputationMutables& mutables, EValueRepresentation kind, IComputationNode* optional, IComputationExternalNode* item, IComputationNode* presentBranch,
-        IComputationNode* missingBranch)
+        IComputationNode* missingBranch) 
         : TBaseComputation(mutables, kind)
         , Optional(optional)
-        , Item(item)
-        , PresentBranch(presentBranch)
-        , MissingBranch(missingBranch)
+        , Item(item) 
+        , PresentBranch(presentBranch) 
+        , MissingBranch(missingBranch) 
     {}
-
+ 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         if (const auto& previous = Item->GetValue(ctx); previous.IsInvalid()) {
             const auto optional = Optional->GetValue(ctx);
@@ -163,14 +163,14 @@ private:
             this->Own(flow, Item);
         }
         Optional->AddDependence(Item);
-    }
-
-    IComputationNode* const Optional;
+    } 
+ 
+    IComputationNode* const Optional; 
     IComputationExternalNode* const Item;
-    IComputationNode* const PresentBranch;
-    IComputationNode* const MissingBranch;
-};
-
+    IComputationNode* const PresentBranch; 
+    IComputationNode* const MissingBranch; 
+}; 
+ 
 template<bool IsMultiOptional>
 class TWideIfPresentWrapper : public TStatelessWideFlowCodegeneratorNode<TWideIfPresentWrapper<IsMultiOptional>> {
 using TBaseComputation = TStatelessWideFlowCodegeneratorNode<TWideIfPresentWrapper<IsMultiOptional>>;
@@ -290,9 +290,9 @@ private:
 
 }
 
-IComputationNode* WrapIfPresent(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
-    MKQL_ENSURE(callable.GetInputsCount() == 4, "Expected 4 args");
-
+IComputationNode* WrapIfPresent(TCallable& callable, const TComputationNodeFactoryContext& ctx) { 
+    MKQL_ENSURE(callable.GetInputsCount() == 4, "Expected 4 args"); 
+ 
     const auto optional = LocateNode(ctx.NodeLocator, callable, 0);
     const auto presentBranch = LocateNode(ctx.NodeLocator, callable, 2);
     const auto missingBranch = LocateNode(ctx.NodeLocator, callable, 3);
@@ -320,7 +320,7 @@ IComputationNode* WrapIfPresent(TCallable& callable, const TComputationNodeFacto
     }
 
     THROW yexception() << "Wrong signature.";
-}
-
-}
-}
+} 
+ 
+} 
+} 

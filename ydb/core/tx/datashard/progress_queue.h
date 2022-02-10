@@ -37,70 +37,70 @@ public:
     }
 };
 
-template <typename TEvent>
-class TTxProgressCountedScalarQueue {
-    ui32 InFly;
-public:
-    TTxProgressCountedScalarQueue()
-        : InFly(0)
-    {}
-
-    void Progress(const TActorContext &ctx) {
-        if (++InFly == 1) {
-            ctx.Send(ctx.SelfID, new TEvent());
-        }
-    }
-
-    void Reset(const TActorContext &ctx) {
+template <typename TEvent> 
+class TTxProgressCountedScalarQueue { 
+    ui32 InFly; 
+public: 
+    TTxProgressCountedScalarQueue() 
+        : InFly(0) 
+    {} 
+ 
+    void Progress(const TActorContext &ctx) { 
+        if (++InFly == 1) { 
+            ctx.Send(ctx.SelfID, new TEvent()); 
+        } 
+    } 
+ 
+    void Reset(const TActorContext &ctx) { 
         Y_VERIFY_DEBUG(InFly);
-        if (--InFly) {
-            ctx.Send(ctx.SelfID, new TEvent());
-        }
-    }
-};
-
-template <typename TEvent>
-class TTxProgressIdempotentScalarQueue {
-    bool HasInFly;
-public:
-    TTxProgressIdempotentScalarQueue()
-        : HasInFly(false)
-    {}
-
-    void Progress(const TActorContext &ctx) {
-        if (!HasInFly) {
-            ctx.Send(ctx.SelfID, new TEvent());
-            HasInFly = true;
-        }
-    }
-
-    void Reset(const TActorContext &ctx) {
+        if (--InFly) { 
+            ctx.Send(ctx.SelfID, new TEvent()); 
+        } 
+    } 
+}; 
+ 
+template <typename TEvent> 
+class TTxProgressIdempotentScalarQueue { 
+    bool HasInFly; 
+public: 
+    TTxProgressIdempotentScalarQueue() 
+        : HasInFly(false) 
+    {} 
+ 
+    void Progress(const TActorContext &ctx) { 
+        if (!HasInFly) { 
+            ctx.Send(ctx.SelfID, new TEvent()); 
+            HasInFly = true; 
+        } 
+    } 
+ 
+    void Reset(const TActorContext &ctx) { 
         Y_UNUSED(ctx);
         Y_VERIFY_DEBUG(HasInFly);
-        HasInFly = false;
-    }
-};
-
-template <typename TDelayedEvent>
-class TTxProgressIdempotentScalarScheduleQueue {
-    bool HasSchedule;
-public:
-    TTxProgressIdempotentScalarScheduleQueue()
-        : HasSchedule(false)
-    {}
-
-    void Schedule(const TActorContext& ctx, TDuration delta) {
-        if (!HasSchedule) {
-            ctx.Schedule(delta, new TDelayedEvent());
-            HasSchedule = true;
-        }
-    }
-
-    void Reset(const TActorContext &ctx) {
+        HasInFly = false; 
+    } 
+}; 
+ 
+template <typename TDelayedEvent> 
+class TTxProgressIdempotentScalarScheduleQueue { 
+    bool HasSchedule; 
+public: 
+    TTxProgressIdempotentScalarScheduleQueue() 
+        : HasSchedule(false) 
+    {} 
+ 
+    void Schedule(const TActorContext& ctx, TDuration delta) { 
+        if (!HasSchedule) { 
+            ctx.Schedule(delta, new TDelayedEvent()); 
+            HasSchedule = true; 
+        } 
+    } 
+ 
+    void Reset(const TActorContext &ctx) { 
         Y_UNUSED(ctx);
         Y_VERIFY_DEBUG(HasSchedule);
-        HasSchedule = false;
-    }
-};
-
+        HasSchedule = false; 
+    } 
+}; 
+ 
 }

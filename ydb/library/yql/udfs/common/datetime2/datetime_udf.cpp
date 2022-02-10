@@ -1,6 +1,6 @@
 #include <ydb/library/yql/public/udf/udf_helpers.h>
 #include <ydb/library/yql/public/udf/tz/udf_tz.h>
-#include <ydb/library/yql/minikql/mkql_type_ops.h>
+#include <ydb/library/yql/minikql/mkql_type_ops.h> 
 
 #include <util/datetime/base.h>
 
@@ -66,10 +66,10 @@ namespace {
             DayOfWeek = dayOfWeek;
         }
 
-        inline ui16 ToDate(const IDateBuilder& builder, bool local) const {
+        inline ui16 ToDate(const IDateBuilder& builder, bool local) const { 
             if (!IsUniversal(TimezoneId)) {
                 ui32 datetime;
-                if (!builder.MakeDatetime(Year, Month, Day, local ? 0 : Hour, local ? 0 : Minute, local ? 0 : Second, datetime, TimezoneId)) {
+                if (!builder.MakeDatetime(Year, Month, Day, local ? 0 : Hour, local ? 0 : Minute, local ? 0 : Second, datetime, TimezoneId)) { 
                     ythrow yexception() << "Error in MakeDatetime";
                 }
                 return datetime / 86400u;
@@ -433,7 +433,7 @@ namespace {
     SIMPLE_UDF(TMakeDate, TDate(TAutoMap<TResource<TMResourceName>>)) {
         auto& builder = valueBuilder->GetDateBuilder();
         auto& storage = TTMStorage::Reference(args[0]);
-        return TUnboxedValuePod(storage.ToDate(builder, false));
+        return TUnboxedValuePod(storage.ToDate(builder, false)); 
     }
 
     SIMPLE_UDF(TMakeDatetime, TDatetime(TAutoMap<TResource<TMResourceName>>)) {
@@ -451,7 +451,7 @@ namespace {
     SIMPLE_UDF(TMakeTzDate, TTzDate(TAutoMap<TResource<TMResourceName>>)) {
         auto& builder = valueBuilder->GetDateBuilder();
         auto& storage = TTMStorage::Reference(args[0]);
-        TUnboxedValuePod result(storage.ToDate(builder, true));
+        TUnboxedValuePod result(storage.ToDate(builder, true)); 
         result.SetTimezoneId(storage.TimezoneId);
         return result;
     }
@@ -703,9 +703,9 @@ namespace {
         return TUnboxedValuePod(res);
     }
 
-    SIMPLE_UDF(TIntervalFromDays, TOptional<TInterval>(TAutoMap<i32>)) {
+    SIMPLE_UDF(TIntervalFromDays, TOptional<TInterval>(TAutoMap<i32>)) { 
         Y_UNUSED(valueBuilder);
-        const i64 res = i64(args[0].Get<i32>()) * 86400000000ll;
+        const i64 res = i64(args[0].Get<i32>()) * 86400000000ll; 
         return ValidateInterval(res) ? TUnboxedValuePod(res) : TUnboxedValuePod();
     }
 
@@ -741,9 +741,9 @@ namespace {
 
     // To*
 
-    SIMPLE_UDF(TToDays, i32(TAutoMap<TInterval>)) {
+    SIMPLE_UDF(TToDays, i32(TAutoMap<TInterval>)) { 
         Y_UNUSED(valueBuilder);
-        return TUnboxedValuePod(i32(args[0].Get<i64>() / 86400000000ll));
+        return TUnboxedValuePod(i32(args[0].Get<i64>() / 86400000000ll)); 
     }
 
     SIMPLE_UDF(TToHours, i32(TAutoMap<TInterval>)) {
@@ -910,7 +910,7 @@ namespace {
         return result;
     }
 
-    SIMPLE_UDF(TStartOf, TOptional<TResource<TMResourceName>>(TAutoMap<TResource<TMResourceName>>, TAutoMap<TInterval>)) {
+    SIMPLE_UDF(TStartOf, TOptional<TResource<TMResourceName>>(TAutoMap<TResource<TMResourceName>>, TAutoMap<TInterval>)) { 
         auto result = args[0];
         ui64 interval = std::abs(args[1].Get<i64>());
         if (interval == 0) {
@@ -1137,7 +1137,7 @@ namespace {
 
                 switch (*ptr) {
                 case '%': {
-                    static constexpr size_t size = 1;
+                    static constexpr size_t size = 1; 
                     Printers_.emplace_back([](char* out, const TUnboxedValuePod&, const IDateBuilder&) {
                         *out = '%';
                         return size;
@@ -1146,7 +1146,7 @@ namespace {
                     break;
                 }
                 case 'Y': {
-                    static constexpr size_t size = 4;
+                    static constexpr size_t size = 4; 
                     Printers_.emplace_back([](char* out, const TUnboxedValuePod& value, const IDateBuilder&) {
                         return PrintNDigits<size>::Do(GetYear(value), out);
                     });
@@ -1154,7 +1154,7 @@ namespace {
                     break;
                 }
                 case 'm': {
-                    static constexpr size_t size = 2;
+                    static constexpr size_t size = 2; 
                     Printers_.emplace_back([](char* out, const TUnboxedValuePod& value, const IDateBuilder&) {
                         return PrintNDigits<size>::Do(GetMonth(value), out);
                     });
@@ -1162,7 +1162,7 @@ namespace {
                     break;
                 }
                 case 'd': {
-                    static constexpr size_t size = 2;
+                    static constexpr size_t size = 2; 
                     Printers_.emplace_back([](char* out, const TUnboxedValuePod& value, const IDateBuilder&) {
                         return PrintNDigits<size>::Do(GetDay(value), out);
                     });
@@ -1170,7 +1170,7 @@ namespace {
                     break;
                 }
                 case 'H': {
-                    static constexpr size_t size = 2;
+                    static constexpr size_t size = 2; 
                     Printers_.emplace_back([](char* out, const TUnboxedValuePod& value, const IDateBuilder&) {
                         return PrintNDigits<size>::Do(GetHour(value), out);
                     });
@@ -1178,7 +1178,7 @@ namespace {
                     break;
                 }
                 case 'M': {
-                    static constexpr size_t size = 2;
+                    static constexpr size_t size = 2; 
                     Printers_.emplace_back([](char* out, const TUnboxedValuePod& value, const IDateBuilder&) {
                         return PrintNDigits<size>::Do(GetMinute(value), out);
                     });
@@ -1200,7 +1200,7 @@ namespace {
                     break;
 
                 case 'z': {
-                    static constexpr size_t size = 5;
+                    static constexpr size_t size = 5; 
                     Printers_.emplace_back([](char* out, const TUnboxedValuePod& value, const IDateBuilder& builder) {
                         auto timezoneId = GetTimezoneId(value);
                         if (TTMStorage::IsUniversal(timezoneId)) {
@@ -1453,7 +1453,7 @@ namespace {
                     break;
 
                 case 'Y': {
-                    static constexpr size_t size = 4;
+                    static constexpr size_t size = 4; 
                     Scanners_.emplace_back([](std::string_view::const_iterator& it, size_t limit, TUnboxedValuePod& result, const IDateBuilder&) {
                         ui32 year = 0U;
                         if (limit < size || !ParseExaclyNDigits<size>::Do(it, year) || !ValidateYear(year)) {
@@ -1465,7 +1465,7 @@ namespace {
                     break;
                 }
                 case 'm': {
-                    static constexpr size_t size = 2;
+                    static constexpr size_t size = 2; 
                     Scanners_.emplace_back([](std::string_view::const_iterator& it, size_t limit, TUnboxedValuePod& result, const IDateBuilder&) {
                         ui32 month = 0U;
                         if (limit < size || !ParseExaclyNDigits<size>::Do(it, month) || !ValidateMonth(month)) {
@@ -1477,7 +1477,7 @@ namespace {
                     break;
                 }
                 case 'd': {
-                    static constexpr size_t size = 2;
+                    static constexpr size_t size = 2; 
                     Scanners_.emplace_back([](std::string_view::const_iterator& it, size_t limit, TUnboxedValuePod& result, const IDateBuilder&) {
                         ui32 day = 0U;
                         if (limit < size || !ParseExaclyNDigits<size>::Do(it, day) || !ValidateDay(day)) {
@@ -1489,7 +1489,7 @@ namespace {
                     break;
                 }
                 case 'H': {
-                    static constexpr size_t size = 2;
+                    static constexpr size_t size = 2; 
                     Scanners_.emplace_back([](std::string_view::const_iterator& it, size_t limit, TUnboxedValuePod& result, const IDateBuilder&) {
                         ui32 hour = 0U;
                         if (limit < size || !ParseExaclyNDigits<size>::Do(it, hour) || !ValidateHour(hour)) {
@@ -1501,7 +1501,7 @@ namespace {
                     break;
                 }
                 case 'M': {
-                    static constexpr size_t size = 2;
+                    static constexpr size_t size = 2; 
                     Scanners_.emplace_back([](std::string_view::const_iterator& it, size_t limit, TUnboxedValuePod& result, const IDateBuilder&) {
                         ui32 minute = 0U;
                         if (limit < size || !ParseExaclyNDigits<size>::Do(it, minute) || !ValidateMinute(minute)) {
@@ -1513,7 +1513,7 @@ namespace {
                     break;
                 }
                 case 'S': {
-                    static constexpr size_t size = 2;
+                    static constexpr size_t size = 2; 
                     Scanners_.emplace_back([](std::string_view::const_iterator& it, size_t limit, TUnboxedValuePod& result, const IDateBuilder&) {
                         ui32 second = 0U;
                         if (limit < size || !ParseExaclyNDigits<size>::Do(it, second) || !ValidateSecond(second)) {

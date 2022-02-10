@@ -2,16 +2,16 @@
 
 #include <ydb/core/base/domain.h>
 #include <ydb/core/engine/kikimr_program_builder.h>
-#include <ydb/library/yql/minikql/mkql_type_builder.h>
+#include <ydb/library/yql/minikql/mkql_type_builder.h> 
 
 namespace NYql {
 
-TContext::TContext(const IFunctionRegistry* funcRegistry,
+TContext::TContext(const IFunctionRegistry* funcRegistry, 
                    const TTypeEnvironment* typeEnv)
-    : FuncRegistry(funcRegistry)
+    : FuncRegistry(funcRegistry) 
     , TypeEnv(typeEnv)
-    , TypeInfoHelper(new NKikimr::NMiniKQL::TTypeInfoHelper)
-    , PgmBuilder(new TKikimrProgramBuilder(*typeEnv, *funcRegistry))
+    , TypeInfoHelper(new NKikimr::NMiniKQL::TTypeInfoHelper) 
+    , PgmBuilder(new TKikimrProgramBuilder(*typeEnv, *funcRegistry)) 
     , WasParams(false)
 {
 }
@@ -36,31 +36,31 @@ void TContext::AddTableLookup(const IDbSchemeResolver::TTable& request) {
     } else {
         Tables.insert({request.TableName, TTableState{request, TMaybe<IDbSchemeResolver::TTableResult>()}});
     }
-}
-
+} 
+ 
 template<typename TStringType>
 IDbSchemeResolver::TTableResult* TContext::GetTableLookup(const TExprNode& node, const TStringType& tableName) {
     auto entry = Tables.FindPtr(tableName);
-    if (!entry) {
+    if (!entry) { 
         ythrow TNodeException(node) << "Table is not found: " << tableName;
-    }
-
-    if (!entry->Response.Defined()) {
+    } 
+ 
+    if (!entry->Response.Defined()) { 
         ythrow TNodeException(node) << "Table is not resolved: " << tableName;
-    }
-
-    return entry->Response.Get();
-}
-
+    } 
+ 
+    return entry->Response.Get(); 
+} 
+ 
 template
 typename IDbSchemeResolver::TTableResult* TContext::GetTableLookup(const TExprNode& node, const TString& tableName);
 template
 typename IDbSchemeResolver::TTableResult* TContext::GetTableLookup(const TExprNode& node, const TStringBuf& tableName);
 
-TContext::TTableMap& TContext::GetTablesToResolve() {
-    return Tables;
-}
-
+TContext::TTableMap& TContext::GetTablesToResolve() { 
+    return Tables; 
+} 
+ 
 TConvertResult TContext::Finish(TRuntimeNode convertedNode) {
     TConvertResult convRes;
 

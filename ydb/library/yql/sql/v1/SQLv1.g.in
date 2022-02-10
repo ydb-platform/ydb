@@ -6,7 +6,7 @@ options {
 }
 
 // Input is a list of statements.
-sql_query: sql_stmt_list | (PRAGMA ANSI DIGITS ansi_sql_stmt_list);
+sql_query: sql_stmt_list | (PRAGMA ANSI DIGITS ansi_sql_stmt_list); 
 sql_stmt_list: SEMICOLON* sql_stmt (SEMICOLON+ sql_stmt)* SEMICOLON* EOF;
 ansi_sql_stmt_list: SEMICOLON* EOF;
 
@@ -34,10 +34,10 @@ sql_stmt_core:
   | import_stmt
   | export_stmt
   | alter_table_stmt
-  | do_stmt
-  | define_action_or_subquery_stmt
-  | if_stmt
-  | for_stmt
+  | do_stmt 
+  | define_action_or_subquery_stmt 
+  | if_stmt 
+  | for_stmt 
   | values_stmt
   | create_user_stmt
   | alter_user_stmt
@@ -89,26 +89,26 @@ con_subexpr: unary_subexpr | unary_op unary_subexpr;
 
 unary_op: PLUS | MINUS | TILDA | NOT;
 
-unary_subexpr_suffix: (key_expr | invoke_expr |(DOT (bind_parameter | DIGITS | an_id_or_type)))* (COLLATE an_id)?;
+unary_subexpr_suffix: (key_expr | invoke_expr |(DOT (bind_parameter | DIGITS | an_id_or_type)))* (COLLATE an_id)?; 
 
 unary_casual_subexpr: (id_expr | atom_expr) unary_subexpr_suffix;
 
 in_unary_casual_subexpr: (id_expr_in | in_atom_expr) unary_subexpr_suffix;
-
+ 
 unary_subexpr:    unary_casual_subexpr | json_api_expr;
 
 in_unary_subexpr: in_unary_casual_subexpr | json_api_expr;
 
-list_literal: LBRACE_SQUARE expr_list? COMMA? RBRACE_SQUARE;
-
-expr_dict_list: expr (COLON expr)? (COMMA expr (COLON expr)?)*;
-
-dict_literal: LBRACE_CURLY expr_dict_list? COMMA? RBRACE_CURLY;
-
-expr_struct_list: expr COLON expr (COMMA expr COLON expr)*;
-
-struct_literal: STRUCT_OPEN expr_struct_list? COMMA? STRUCT_CLOSE;
-
+list_literal: LBRACE_SQUARE expr_list? COMMA? RBRACE_SQUARE; 
+ 
+expr_dict_list: expr (COLON expr)? (COMMA expr (COLON expr)?)*; 
+ 
+dict_literal: LBRACE_CURLY expr_dict_list? COMMA? RBRACE_CURLY; 
+ 
+expr_struct_list: expr COLON expr (COMMA expr COLON expr)*; 
+ 
+struct_literal: STRUCT_OPEN expr_struct_list? COMMA? STRUCT_CLOSE; 
+ 
 atom_expr:
     literal_value
   | bind_parameter
@@ -119,15 +119,15 @@ atom_expr:
   | an_id_or_type NAMESPACE (id_or_type | STRING_VALUE)
   | value_constructor
   | bitcast_expr
-  | list_literal
-  | dict_literal
-  | struct_literal
+  | list_literal 
+  | dict_literal 
+  | struct_literal 
 ;
 
 in_atom_expr:
     literal_value
   | bind_parameter
-  | lambda
+  | lambda 
   | cast_expr
   | case_expr
   | an_id_or_type NAMESPACE (id_or_type | STRING_VALUE)
@@ -136,12 +136,12 @@ in_atom_expr:
 //  | LPAREN values_stmt RPAREN
   | value_constructor
   | bitcast_expr
-  | list_literal
-  | dict_literal
-  | struct_literal
+  | list_literal 
+  | dict_literal 
+  | struct_literal 
 ;
 
-cast_expr: CAST LPAREN expr AS type_name_or_bind RPAREN;
+cast_expr: CAST LPAREN expr AS type_name_or_bind RPAREN; 
 
 bitcast_expr: BITCAST LPAREN expr AS type_name_simple RPAREN;
 
@@ -149,7 +149,7 @@ exists_expr: EXISTS LPAREN (select_stmt | values_stmt) RPAREN;
 
 case_expr: CASE expr? when_expr+ (ELSE expr)? END;
 
-lambda: smart_parenthesis (ARROW ((LPAREN expr RPAREN) | (LBRACE_CURLY lambda_body RBRACE_CURLY)) )?;
+lambda: smart_parenthesis (ARROW ((LPAREN expr RPAREN) | (LBRACE_CURLY lambda_body RBRACE_CURLY)) )?; 
 
 in_expr: in_unary_subexpr;
 
@@ -199,8 +199,8 @@ expr_list: expr (COMMA expr)*;
 pure_column_list: LPAREN an_id (COMMA an_id)* RPAREN;
 
 pure_column_or_named: bind_parameter | an_id;
-pure_column_or_named_list: LPAREN pure_column_or_named (COMMA pure_column_or_named)* RPAREN;
-
+pure_column_or_named_list: LPAREN pure_column_or_named (COMMA pure_column_or_named)* RPAREN; 
+ 
 column_name: opt_id_prefix an_id;
 without_column_name: (an_id DOT an_id) | an_id_without;
 
@@ -235,7 +235,7 @@ literal_value:
   | CURRENT_DATE // it's unused right now
   | CURRENT_TIMESTAMP // it's unused right now
   | bool_value
-  | EMPTY_ACTION
+  | EMPTY_ACTION 
 ;
 
 bind_parameter: DOLLAR an_id_or_type;
@@ -298,9 +298,9 @@ type_name_or_bind: type_name | bind_parameter;
 value_constructor_literal: STRING_VALUE;
 value_constructor:
     VARIANT LPAREN expr COMMA expr COMMA expr RPAREN
-  | ENUM LPAREN expr COMMA expr RPAREN
-  | CALLABLE LPAREN expr COMMA expr RPAREN
-;
+  | ENUM LPAREN expr COMMA expr RPAREN 
+  | CALLABLE LPAREN expr COMMA expr RPAREN 
+; 
 
 declare_stmt: DECLARE bind_parameter AS type_name (EQUALS literal_value)?;
 
@@ -308,9 +308,9 @@ module_path: DOT? an_id (DOT an_id)*;
 import_stmt: IMPORT module_path SYMBOLS named_bind_parameter_list;
 export_stmt: EXPORT bind_parameter_list;
 
-call_action: (bind_parameter | EMPTY_ACTION) LPAREN expr_list? RPAREN;
+call_action: (bind_parameter | EMPTY_ACTION) LPAREN expr_list? RPAREN; 
 inline_action: BEGIN define_action_or_subquery_body END DO;
-do_stmt: DO (call_action | inline_action);
+do_stmt: DO (call_action | inline_action); 
 pragma_stmt: PRAGMA opt_id_prefix_or_type an_id (EQUALS pragma_value | LPAREN pragma_value (COMMA pragma_value)* RPAREN)?;
 
 pragma_value:
@@ -318,7 +318,7 @@ pragma_value:
   | id
   | STRING_VALUE
   | bool_value
-  | bind_parameter
+  | bind_parameter 
 ;
 
 /// TODO: NULLS FIRST\LAST?
@@ -335,10 +335,10 @@ select_kind_parenthesis: select_kind_partial | LPAREN select_kind_partial RPAREN
 select_op: UNION (ALL)? | INTERSECT | EXCEPT;
 
 select_kind_partial: select_kind
-  (LIMIT expr ((OFFSET | COMMA) expr)?)?
+  (LIMIT expr ((OFFSET | COMMA) expr)?)? 
   ;
 
-select_kind: (DISCARD)? (process_core | reduce_core | select_core) (INTO RESULT pure_column_or_named)?;
+select_kind: (DISCARD)? (process_core | reduce_core | select_core) (INTO RESULT pure_column_or_named)?; 
 
 process_core:
   PROCESS STREAM? named_single_source (COMMA named_single_source)* (USING using_call_expr (AS an_id)?
@@ -393,7 +393,7 @@ hopping_window_specification: HOP LPAREN expr COMMA expr COMMA expr COMMA expr R
 
 result_column:
     opt_id_prefix ASTERISK
-  | expr ((AS an_id_or_type) | an_id_pure)?
+  | expr ((AS an_id_or_type) | an_id_pure)? 
 ;
 
 join_source: ANY? flatten_source (join_op ANY? flatten_source join_constraint?)*;
@@ -430,7 +430,7 @@ join_op:
 
 join_constraint:
     ON expr
-  | USING pure_column_or_named_list
+  | USING pure_column_or_named_list 
 ;
 
 into_table_stmt: (INSERT | INSERT OR ABORT | INSERT OR REVERT | INSERT OR IGNORE | UPSERT | REPLACE) INTO into_simple_table_ref into_values_source;
@@ -548,7 +548,7 @@ split_boundaries:
 
 literal_value_list: LPAREN literal_value (COMMA literal_value)* RPAREN;
 
-drop_table_stmt: DROP TABLE (IF EXISTS)? simple_table_ref;
+drop_table_stmt: DROP TABLE (IF EXISTS)? simple_table_ref; 
 
 create_user_stmt: CREATE USER role_name create_user_option?;
 alter_user_stmt: ALTER USER role_name (WITH? create_user_option | RENAME TO role_name);
@@ -566,26 +566,26 @@ action_or_subquery_args: opt_bind_parameter (COMMA opt_bind_parameter)*;
 define_action_or_subquery_stmt: DEFINE (ACTION|SUBQUERY) bind_parameter LPAREN action_or_subquery_args? RPAREN AS define_action_or_subquery_body END DEFINE;
 define_action_or_subquery_body: SEMICOLON* (sql_stmt_core (SEMICOLON+ sql_stmt_core)* SEMICOLON*)?;
 
-if_stmt: EVALUATE? IF expr do_stmt (ELSE do_stmt)?;
-for_stmt: EVALUATE? FOR bind_parameter IN expr do_stmt (ELSE do_stmt)?;
-
+if_stmt: EVALUATE? IF expr do_stmt (ELSE do_stmt)?; 
+for_stmt: EVALUATE? FOR bind_parameter IN expr do_stmt (ELSE do_stmt)?; 
+ 
 table_ref: (cluster_expr DOT)? AT? (table_key | an_id_expr LPAREN (table_arg (COMMA table_arg)* COMMA?)? RPAREN | bind_parameter (LPAREN expr_list? RPAREN)? (VIEW an_id)?) table_hints?;
-
-table_key: id_table_or_type (VIEW an_id)?;
+ 
+table_key: id_table_or_type (VIEW an_id)?; 
 table_arg: AT? named_expr (VIEW an_id)?;
-table_hints: WITH (table_hint | LPAREN table_hint (COMMA table_hint)* RPAREN);
+table_hints: WITH (table_hint | LPAREN table_hint (COMMA table_hint)* RPAREN); 
 table_hint:
       an_id_hint
     | (SCHEMA | COLUMNS) type_name_or_bind
     | SCHEMA LPAREN (struct_arg_as (COMMA struct_arg_as)*)? COMMA? RPAREN
 ;
 
-simple_table_ref: (((cluster_expr DOT)? id_or_at) | AT? bind_parameter) table_hints?;
+simple_table_ref: (((cluster_expr DOT)? id_or_at) | AT? bind_parameter) table_hints?; 
 into_simple_table_ref: simple_table_ref (ERASE BY pure_column_list)?;
 
 delete_stmt: DELETE FROM simple_table_ref (WHERE expr | ON into_values_source)?;
 update_stmt: UPDATE simple_table_ref (SET set_clause_choice (WHERE expr)? | ON into_values_source);
-
+ 
 /// out of 2003 standart
 set_clause_choice: set_clause_list | multiple_column_assignment;
 
@@ -641,7 +641,7 @@ window_frame_bound:
 window_frame_exclusion: EXCLUDE CURRENT ROW | EXCLUDE GROUP | EXCLUDE TIES | EXCLUDE NO OTHERS;
 
 // EXTRAS
-use_stmt: USE cluster_expr;
+use_stmt: USE cluster_expr; 
 
 subselect_stmt: (LPAREN select_stmt RPAREN | select_unparenthesized_stmt);
 
@@ -790,7 +790,7 @@ keyword_expr_uncompat:
   | CURRENT_DATE
   | CURRENT_TIME
   | CURRENT_TIMESTAMP
-  | EMPTY_ACTION
+  | EMPTY_ACTION 
   | EXISTS
   | FROM
   | FULL
@@ -856,13 +856,13 @@ keyword_schema_uncompat:
 
 keyword_compat: (
     ABORT
-  | ACTION
+  | ACTION 
   | ADD
   | AFTER
   | ALTER
   | ANALYZE
   | AND
-  | ANSI
+  | ANSI 
   | ARRAY
   | ASC
   | ASYNC
@@ -890,13 +890,13 @@ keyword_compat: (
   | DEFAULT
   | DEFERRABLE
   | DEFERRED
-  | DEFINE
+  | DEFINE 
   | DELETE
   | DESC
   | DETACH
   | DISABLE
-  | DISCARD
-  | DO
+  | DISCARD 
+  | DO 
   | DROP
   | EACH
   | ELSE
@@ -905,7 +905,7 @@ keyword_compat: (
   | END
   | ERROR
   | ESCAPE
-  | EVALUATE
+  | EVALUATE 
   | EXCLUDE
   | EXCLUSION
   | EXCLUSIVE
@@ -950,7 +950,7 @@ keyword_compat: (
   | OF
   | OFFSET
   | ON
-  | ONLY
+  | ONLY 
   | OR
   | ORDER
   | OTHERS
@@ -975,7 +975,7 @@ keyword_compat: (
   | RESET
   | RESPECT
   | RESTRICT
-  | RESULT
+  | RESULT 
   | RETURNING
   | REVERT
   | RIGHT
@@ -987,7 +987,7 @@ keyword_compat: (
   | SEMI
   | SETS
   | SORTED
-  | SUBQUERY
+  | SUBQUERY 
   | SYMBOLS
   | SYNC
   | SYSTEM
@@ -1053,8 +1053,8 @@ ROT_LEFT:      '|<<';
 AMPERSAND:     '&';
 PIPE:          '|';
 DOUBLE_PIPE:   '||';
-STRUCT_OPEN:   '<|';
-STRUCT_CLOSE:  '|>';
+STRUCT_OPEN:   '<|'; 
+STRUCT_CLOSE:  '|>'; 
 PLUS:          '+';
 MINUS:         '-';
 TILDA:         '~';
@@ -1112,14 +1112,14 @@ fragment Y:('y'|'Y');
 fragment Z:('z'|'Z');
 
 ABORT: A B O R T;
-ACTION: A C T I O N;
+ACTION: A C T I O N; 
 ADD: A D D;
 AFTER: A F T E R;
 ALL: A L L;
 ALTER: A L T E R;
 ANALYZE: A N A L Y Z E;
 AND: A N D;
-ANSI: A N S I;
+ANSI: A N S I; 
 ANY: A N Y;
 ARRAY: A R R A Y;
 AS: A S;
@@ -1143,7 +1143,7 @@ CHANGEFEED: C H A N G E F E E D;
 CHECK: C H E C K;
 COLLATE: C O L L A T E;
 COLUMN: C O L U M N;
-COLUMNS: C O L U M N S;
+COLUMNS: C O L U M N S; 
 COMMIT: C O M M I T;
 COMPACT: C O M P A C T;
 CONDITIONAL: C O N D I T I O N A L;
@@ -1163,31 +1163,31 @@ DECLARE: D E C L A R E;
 DEFAULT: D E F A U L T;
 DEFERRABLE: D E F E R R A B L E;
 DEFERRED: D E F E R R E D;
-DEFINE: D E F I N E;
+DEFINE: D E F I N E; 
 DELETE: D E L E T E;
 DESC: D E S C;
 DETACH: D E T A C H;
-DICT: D I C T;
+DICT: D I C T; 
 DISABLE: D I S A B L E;
-DISCARD: D I S C A R D;
+DISCARD: D I S C A R D; 
 DISTINCT: D I S T I N C T;
-DO: D O;
+DO: D O; 
 DROP: D R O P;
 EACH: E A C H;
 ELSE: E L S E;
 ERROR: E R R O R;
 EMPTY: E M P T Y;
-EMPTY_ACTION: E M P T Y '_' A C T I O N;
+EMPTY_ACTION: E M P T Y '_' A C T I O N; 
 ENCRYPTED: E N C R Y P T E D;
 END: E N D;
 ENUM: E N U M;
 ERASE: E R A S E;
 ESCAPE: E S C A P E;
-EVALUATE: E V A L U A T E;
+EVALUATE: E V A L U A T E; 
 EXCEPT: E X C E P T;
 EXCLUDE: E X C L U D E;
 EXCLUSIVE: E X C L U S I V E;
-EXCLUSION: E X C L U S I O N;
+EXCLUSION: E X C L U S I O N; 
 EXISTS: E X I S T S;
 EXPLAIN: E X P L A I N;
 EXPORT: E X P O R T;
@@ -1234,7 +1234,7 @@ KEY: K E Y;
 LEFT: L E F T;
 LIKE: L I K E;
 LIMIT: L I M I T;
-LIST: L I S T;
+LIST: L I S T; 
 LOCAL: L O C A L;
 MATCH: M A T C H;
 NATURAL: N A T U R A L;
@@ -1247,8 +1247,8 @@ OBJECT: O B J E C T;
 OF: O F;
 OFFSET: O F F S E T;
 ON: O N;
-ONLY: O N L Y;
-OPTIONAL: O P T I O N A L;
+ONLY: O N L Y; 
+OPTIONAL: O P T I O N A L; 
 OR: O R;
 ORDER: O R D E R;
 OTHERS: O T H E R S;
@@ -1278,7 +1278,7 @@ RESET: R E S E T;
 RESOURCE: R E S O U R C E;
 RESPECT: R E S P E C T;
 RESTRICT: R E S T R I C T;
-RESULT: R E S U L T;
+RESULT: R E S U L T; 
 RETURN: R E T U R N;
 RETURNING: R E T U R N I N G;
 REVERT: R E V E R T;
@@ -1290,7 +1290,7 @@ ROW: R O W;
 ROWS: R O W S;
 SAMPLE: S A M P L E;
 SAVEPOINT: S A V E P O I N T;
-SCHEMA: S C H E M A;
+SCHEMA: S C H E M A; 
 SELECT: S E L E C T;
 SEMI: S E M I;
 SET: S E T;
@@ -1353,7 +1353,7 @@ fragment STRING_SINGLE: (QUOTE_SINGLE STRING_CORE_SINGLE* QUOTE_SINGLE);
 fragment STRING_DOUBLE: (QUOTE_DOUBLE STRING_CORE_DOUBLE* QUOTE_DOUBLE);
 fragment STRING_MULTILINE: (DOUBLE_AT .* DOUBLE_AT)+ AT?;
 
-STRING_VALUE: ((STRING_SINGLE | STRING_DOUBLE | STRING_MULTILINE) (U | Y | J)?);
+STRING_VALUE: ((STRING_SINGLE | STRING_DOUBLE | STRING_MULTILINE) (U | Y | J)?); 
 
 ID_PLAIN: ('a'..'z' | 'A'..'Z' | '_') ('a'..'z' | 'A'..'Z' | '_' | DIGIT)*;
 

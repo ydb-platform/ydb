@@ -1,28 +1,28 @@
 #include "mkql_computation_node_impl.h"
 
-#include "ydb/library/yql/minikql/mkql_string_util.h"
+#include "ydb/library/yql/minikql/mkql_string_util.h" 
 
-namespace NKikimr {
-namespace NMiniKQL {
-
+namespace NKikimr { 
+namespace NMiniKQL { 
+ 
 template <class IComputationNodeInterface>
 void TRefCountedComputationNode<IComputationNodeInterface>::Ref() {
     ++Refs_;
 }
-
+ 
 template <class IComputationNodeInterface>
 void TRefCountedComputationNode<IComputationNodeInterface>::UnRef() {
     Y_VERIFY(Refs_ > 0);
     if (--Refs_ == 0) {
         delete this;
-    }
+    } 
 }
-
+ 
 template <class IComputationNodeInterface>
 ui32 TRefCountedComputationNode<IComputationNodeInterface>::RefCount() const {
     return Refs_;
 }
-
+ 
 template class TRefCountedComputationNode<IComputationWideFlowNode>;
 template class TRefCountedComputationNode<IComputationWideFlowProxyNode>;
 
@@ -33,7 +33,7 @@ TUnboxedImmutableComputationNode::TUnboxedImmutableComputationNode(TMemoryUsageI
 {
     MKQL_MEM_TAKE(MemInfo, this, sizeof(*this), "TOwnerType: " << DebugString());
 }
-
+ 
 TUnboxedImmutableComputationNode::~TUnboxedImmutableComputationNode() {
     MKQL_MEM_RETURN(MemInfo, this, sizeof(*this));
 }
@@ -46,13 +46,13 @@ NUdf::TUnboxedValue TUnboxedImmutableComputationNode::GetValue(TComputationConte
     }
     return UnboxedValue;
 }
-
+ 
 const IComputationNode* TUnboxedImmutableComputationNode::GetSource() const { return nullptr; }
 
 IComputationNode* TUnboxedImmutableComputationNode::AddDependence(const IComputationNode*) { return nullptr; }
 
 void TUnboxedImmutableComputationNode::RegisterDependencies() const {}
-
+ 
 ui32 TUnboxedImmutableComputationNode::GetIndex() const {
     THROW yexception() << "Failed to get index.";
 }
@@ -77,7 +77,7 @@ void TUnboxedImmutableComputationNode::PrepareStageTwo() {}
 TString TUnboxedImmutableComputationNode::DebugString() const {
     return UnboxedValue ? (UnboxedValue.IsBoxed() ? "Boxed" : "Literal") : "Empty";
 }
-
+ 
 EValueRepresentation TUnboxedImmutableComputationNode::GetRepresentation() const {
     return RepresentationKind;
 }
@@ -90,7 +90,7 @@ TStatefulComputationNode<IComputationNodeInterface, SerializableState>::TStatefu
         mutables.SerializableValues.push_back(ValueIndex);
     }
 }
-
+ 
 template <class IComputationNodeInterface, bool SerializableState>
 IComputationNode* TStatefulComputationNode<IComputationNodeInterface, SerializableState>::AddDependence(const IComputationNode* node) {
     Dependencies.emplace_back(node);
@@ -124,7 +124,7 @@ TExternalComputationNode::TExternalComputationNode(TComputationMutables& mutable
 NUdf::TUnboxedValue TExternalComputationNode::GetValue(TComputationContext& ctx) const {
     return Getter ? Getter(ctx) : ValueRef(ctx);
 }
-
+ 
 NUdf::TUnboxedValue& TExternalComputationNode::RefValue(TComputationContext& ctx) const {
     InvalidateValue(ctx);
     return ValueRef(ctx);
@@ -134,11 +134,11 @@ void TExternalComputationNode::SetValue(TComputationContext& ctx, NUdf::TUnboxed
     ValueRef(ctx) = std::move(value);
     InvalidateValue(ctx);
 }
-
+ 
 TString TExternalComputationNode::DebugString() const {
     return "External";
 }
-
+ 
 void TExternalComputationNode::RegisterDependencies() const {}
 
 void TExternalComputationNode::SetOwner(const IComputationNode* owner) {
@@ -248,11 +248,11 @@ EFetchResult TWideFlowProxyComputationNode::FetchValues(TComputationContext& ctx
 IComputationNode* LocateNode(const TNodeLocator& nodeLocator, TCallable& callable, ui32 index, bool pop) {
     return nodeLocator(callable.GetInput(index).GetNode(), pop);
 }
-
+ 
 IComputationNode* LocateNode(const TNodeLocator& nodeLocator, TNode& node, bool pop) {
     return nodeLocator(&node, pop);
 }
-
+ 
 IComputationExternalNode* LocateExternalNode(const TNodeLocator& nodeLocator, TCallable& callable, ui32 index, bool pop) {
     return dynamic_cast<IComputationExternalNode*>(LocateNode(nodeLocator, callable, index, pop));
 }
@@ -322,7 +322,7 @@ const IComputationNode* GetCommonSource(const IComputationNode* first, const ICo
         return s;
     }
     return common;
-}
+} 
 
-}
+} 
 }

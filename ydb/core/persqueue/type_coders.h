@@ -16,12 +16,12 @@ namespace NScheme {
 template <ui16 Type, bool IsNullable>
 class TChunkCoderBase : public IChunkCoder {
 public:
-    static inline TCodecSig Sig() {
-        return TCodecSig(TCodecType(Type), IsNullable);
-    }
+    static inline TCodecSig Sig() { 
+        return TCodecSig(TCodecType(Type), IsNullable); 
+    } 
 
 public:
-    TCodecSig Signature() const override { return Sig(); }
+    TCodecSig Signature() const override { return Sig(); } 
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -68,7 +68,7 @@ public:
         : DataSize(0)
         , Output(output)
     {
-        output->WritePOD(TFixedLenCoder::Sig());
+        output->WritePOD(TFixedLenCoder::Sig()); 
     }
 
     size_t GetEstimatedSize() const override {
@@ -109,7 +109,7 @@ public:
         : DataSize(0)
         , Output(output)
     {
-        output->WritePOD(TVarLenCoder::Sig());
+        output->WritePOD(TVarLenCoder::Sig()); 
     }
 
     size_t GetEstimatedSize() const override {
@@ -197,7 +197,7 @@ public:
         : DataSize(0)
         , Output(output)
     {
-        output->WritePOD(TByteAlignedIntCoder::Sig());
+        output->WritePOD(TByteAlignedIntCoder::Sig()); 
     }
 
     size_t GetEstimatedSize() const override {
@@ -274,7 +274,7 @@ public:
     TBoolCoder(TFlatBlobDataOutputStream* output)
         : Output(output)
     {
-        output->WritePOD(TBoolCoder::Sig());
+        output->WritePOD(TBoolCoder::Sig()); 
     }
 
     size_t GetEstimatedSize() const override {

@@ -15,11 +15,11 @@ PEERDIR(
     ydb/core/testlib
     ydb/core/tx
     ydb/core/tx/schemeshard/ut_helpers
-    ydb/core/yql_testlib
+    ydb/core/yql_testlib 
 )
 
 YQL_LAST_ABI_VERSION()
-
+ 
 SRCS(
     ut_serverless.cpp
 )

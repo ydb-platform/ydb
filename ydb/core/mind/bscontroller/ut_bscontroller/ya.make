@@ -37,7 +37,7 @@ PEERDIR(
 )
 
 YQL_LAST_ABI_VERSION()
-
+ 
 REQUIREMENTS(network:full)
 
 END()

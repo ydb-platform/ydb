@@ -38,7 +38,7 @@ public:
     {
         Y_UNUSED(progressWriter);
         Y_UNUSED(modulesMapping); // TODO: support.
-        Y_UNUSED(discard);
+        Y_UNUSED(discard); 
         Y_UNUSED(queryParams);
 
         NProto::TGraphParams params;

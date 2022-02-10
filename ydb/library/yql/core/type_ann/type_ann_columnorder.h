@@ -2,13 +2,13 @@
 
 #include "type_ann_impl.h"
 
-#include <ydb/library/yql/ast/yql_expr.h>
-#include <ydb/library/yql/core/yql_graph_transformer.h>
+#include <ydb/library/yql/ast/yql_expr.h> 
+#include <ydb/library/yql/core/yql_graph_transformer.h> 
 
 namespace NYql {
 namespace NTypeAnnImpl {
 
-IGraphTransformer::TStatus OrderForPgSetItem(const TExprNode::TPtr& node, TExprNode::TPtr& output, TExtContext& ctx);
+IGraphTransformer::TStatus OrderForPgSetItem(const TExprNode::TPtr& node, TExprNode::TPtr& output, TExtContext& ctx); 
 IGraphTransformer::TStatus OrderForAssumeColumnOrder(const TExprNode::TPtr& node, TExprNode::TPtr& output, TExtContext& ctx);
 IGraphTransformer::TStatus OrderForSqlProject(const TExprNode::TPtr& node, TExprNode::TPtr& output, TExtContext& ctx);
 IGraphTransformer::TStatus OrderForMergeExtend(const TExprNode::TPtr& node, TExprNode::TPtr& output, TExtContext& ctx);

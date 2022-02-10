@@ -1,16 +1,16 @@
-#include "mkql_size.h"
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
-#include <ydb/library/yql/minikql/mkql_node_cast.h>
-#include <ydb/library/yql/minikql/mkql_node_builder.h>
-
-namespace NKikimr {
-namespace NMiniKQL {
-
+#include "mkql_size.h" 
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h> 
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h> 
+#include <ydb/library/yql/minikql/mkql_node_cast.h> 
+#include <ydb/library/yql/minikql/mkql_node_builder.h> 
+ 
+namespace NKikimr { 
+namespace NMiniKQL { 
+ 
 namespace {
 
-extern "C" void DeleteString(void* strData);
-
+extern "C" void DeleteString(void* strData); 
+ 
 template<size_t Size>
 class TSizePrimitiveTypeWrapper : public TDecoratorCodegeneratorNode<TSizePrimitiveTypeWrapper<Size>> {
     typedef TDecoratorCodegeneratorNode<TSizePrimitiveTypeWrapper<Size>> TBaseComputation;
@@ -35,22 +35,22 @@ public:
 template<bool IsOptional>
 class TSizeWrapper : public TMutableCodegeneratorNode<TSizeWrapper<IsOptional>> {
     typedef TMutableCodegeneratorNode<TSizeWrapper<IsOptional>> TBaseComputation;
-public:
+public: 
     TSizeWrapper(TComputationMutables& mutables, IComputationNode* data)
         : TBaseComputation(mutables, EValueRepresentation::Embedded)
         , Data(data)
     {}
-
+ 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         const auto& data = Data->GetValue(ctx);
         if (IsOptional && !data) {
             return NUdf::TUnboxedValuePod();
         }
 
-        const ui32 size = data.AsStringRef().Size();
+        const ui32 size = data.AsStringRef().Size(); 
         return NUdf::TUnboxedValuePod(size);
-    }
-
+    } 
+ 
 #ifndef MKQL_DISABLE_CODEGEN
     Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
         auto& context = ctx.Codegen->GetContext();
@@ -107,9 +107,9 @@ public:
             block = free;
 
             const auto fnType = FunctionType::get(Type::getVoidTy(context), {strptr->getType()}, false);
-            const auto name = "DeleteString";
-            ctx.Codegen->AddGlobalMapping(name, reinterpret_cast<const void*>(&DeleteString));
-            const auto func = ctx.Codegen->GetModule().getOrInsertFunction(name, fnType).getCallee();
+            const auto name = "DeleteString"; 
+            ctx.Codegen->AddGlobalMapping(name, reinterpret_cast<const void*>(&DeleteString)); 
+            const auto func = ctx.Codegen->GetModule().getOrInsertFunction(name, fnType).getCallee(); 
             CallInst::Create(func, {strptr}, "", block);
             result->addIncoming(full, block);
             BranchInst::Create(done, block);
@@ -122,18 +122,18 @@ public:
 private:
     void RegisterDependencies() const final {
         this->DependsOn(Data);
-    }
-
-    IComputationNode* const Data;
-};
-
+    } 
+ 
+    IComputationNode* const Data; 
+}; 
+ 
 }
 
-IComputationNode* WrapSize(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
-    MKQL_ENSURE(callable.GetInputsCount() == 1, "Expected 1 arg");
+IComputationNode* WrapSize(TCallable& callable, const TComputationNodeFactoryContext& ctx) { 
+    MKQL_ENSURE(callable.GetInputsCount() == 1, "Expected 1 arg"); 
     bool isOptional;
     const auto dataType = UnpackOptionalData(callable.GetInput(0), isOptional);
-
+ 
     const auto data = LocateNode(ctx.NodeLocator, callable, 0);
 
     switch(dataType->GetSchemeType()) {
@@ -151,7 +151,7 @@ IComputationNode* WrapSize(TCallable& callable, const TComputationNodeFactoryCon
         return new TSizeWrapper<true>(ctx.Mutables, data);
     else
         return new TSizeWrapper<false>(ctx.Mutables, data);
-}
-
-}
-}
+} 
+ 
+} 
+} 

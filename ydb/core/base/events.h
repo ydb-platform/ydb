@@ -3,7 +3,7 @@
 #include <library/cpp/actors/core/events.h>
 #include <library/cpp/actors/core/event_local.h>
 #include <library/cpp/actors/core/event_pb.h>
-#include <ydb/library/yql/dq/actors/dq_events_ids.h>
+#include <ydb/library/yql/dq/actors/dq_events_ids.h> 
 
 #include <ydb/core/yq/libs/events/event_ids.h>
 
@@ -38,7 +38,7 @@ struct TKikimrEvents : TEvents {
         ES_TX_USERPROXY, // user proxy interface
         ES_SCHEME_CACHE,
         ES_TX_PROXY_REQ,
-        ES_TABLET_PIPE,
+        ES_TABLET_PIPE, 
         ES_DEPRECATED_4118,
         ES_TABLET_COUNTERS_AGGREGATOR,
         ES_DEPRECATED_4121,

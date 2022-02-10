@@ -1,7 +1,7 @@
 #pragma once
 
-#include <ydb/library/yql/core/issue/yql_issue.h>
-#include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.gen.h>
+#include <ydb/library/yql/core/issue/yql_issue.h> 
+#include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.gen.h> 
 
 #include <util/generic/map.h>
 #include <util/string/cast.h>
@@ -9,7 +9,7 @@
 namespace NYql {
 namespace NNodes {
 
-#include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.decl.inl.h>
+#include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.decl.inl.h> 
 
 class TCoAtom : public NGenerated::TCoAtomStub<TExprBase> {
 public:
@@ -19,7 +19,7 @@ public:
     explicit TCoAtom(const TExprNode::TPtr& node)
         : TCoAtomStub(node) {}
 
-    operator TStringBuf() const {
+    operator TStringBuf() const { 
         return Value();
     }
 
@@ -47,7 +47,7 @@ public:
     TChildIterator<TCoArgument> end() const { return TChildIterator<TCoArgument>(); }
 };
 
-#include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.defs.inl.h>
+#include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.defs.inl.h> 
 
 template<typename TParent>
 class TNodeBuilder<TParent, TCoWorld> : public NGenerated::TCoWorldBuilder<TParent>
@@ -59,7 +59,7 @@ public:
         : NGenerated::TCoWorldBuilder<TParent>(ctx, pos, buildFunc, getArgFunc) {}
 
     TCoWorld DoBuild() {
-        auto node = this->Ctx.NewWorld(this->Pos);
+        auto node = this->Ctx.NewWorld(this->Pos); 
         return TCoWorld(node);
     }
 };
@@ -79,8 +79,8 @@ public:
     }
 
     TCoArgument DoBuild() {
-        YQL_ENSURE(!NameHolder.empty());
-        auto node = this->Ctx.NewArgument(this->Pos, NameHolder);
+        YQL_ENSURE(!NameHolder.empty()); 
+        auto node = this->Ctx.NewArgument(this->Pos, NameHolder); 
         return TCoArgument(node);
     }
 
@@ -133,17 +133,17 @@ class TNodeBuilder<TParent, TCoLambda> : public NGenerated::TCoLambdaBuilder<TPa
 public:
     TNodeBuilder(TExprContext& ctx, TPositionHandle pos,
         typename NGenerated::TCoLambdaBuilder<TParent>::BuildFuncType buildFunc,
-        typename NGenerated::TCoLambdaBuilder<TParent>::GetArgFuncType getArgFunc,
+        typename NGenerated::TCoLambdaBuilder<TParent>::GetArgFuncType getArgFunc, 
         std::shared_ptr<TMap<TStringBuf, TExprBase>> argsStore = std::make_shared<TMap<TStringBuf, TExprBase>>())
-        : NGenerated::TCoLambdaBuilder<TParent>(ctx, pos, buildFunc, [argsStore, getArgFunc] (const TStringBuf& argName) {
-            if (auto res = argsStore->FindPtr(argName)) {
+        : NGenerated::TCoLambdaBuilder<TParent>(ctx, pos, buildFunc, [argsStore, getArgFunc] (const TStringBuf& argName) { 
+            if (auto res = argsStore->FindPtr(argName)) { 
                 return *res;
             }
 
             return getArgFunc(argName);
-        })
-        , ArgsMap(argsStore)
-        {}
+        }) 
+        , ArgsMap(argsStore) 
+        {} 
 
     TNodeBuilder<TParent, TCoLambda>& Args(const TCoArgument& node) {
         Y_VERIFY_DEBUG(!this->ArgsHolder.IsValid());
@@ -169,9 +169,9 @@ public:
         for (auto name : list) {
             auto argName = this->Ctx.AppendString(name);
             auto argNode = this->Ctx.NewArgument(this->Pos, argName);
-            argNodes.push_back(argNode);
+            argNodes.push_back(argNode); 
 
-            ArgsMap->emplace(argName, TExprBase(argNode));
+            ArgsMap->emplace(argName, TExprBase(argNode)); 
         }
 
         auto argsNode = this->Ctx.NewArguments(this->Pos, std::move(argNodes));
@@ -255,7 +255,7 @@ public:
         , BuildFunc(buildFunc) {}
 
     TParent& Build() {
-        YQL_ENSURE(Body);
+        YQL_ENSURE(Body); 
         return BuildFunc(TExprApplier(Body.Cast().Ptr()));
     }
 
@@ -265,7 +265,7 @@ public:
     }
 
     TNodeBuilder<TParent, TExprApplier>& Apply(TCoLambda lambda) {
-        YQL_ENSURE(!Body);
+        YQL_ENSURE(!Body); 
 
         Body = lambda.Body();
         Args = lambda.Args();
@@ -274,7 +274,7 @@ public:
     }
 
     TNodeBuilder<TParent, TExprApplier>& Apply(TExprBase node) {
-        YQL_ENSURE(!Body);
+        YQL_ENSURE(!Body); 
 
         Body = node;
 
@@ -282,7 +282,7 @@ public:
     }
 
     TNodeBuilder<TParent, TExprApplier>& With(TExprBase from, TExprBase to) {
-        YQL_ENSURE(Body);
+        YQL_ENSURE(Body); 
 
         DoApply(from, to);
 
@@ -298,8 +298,8 @@ public:
     }
 
     TNodeBuilder<TParent, TExprApplier>& With(ui32 argIndex, const TStringBuf& argName) {
-        YQL_ENSURE(Body);
-        YQL_ENSURE(Args);
+        YQL_ENSURE(Body); 
+        YQL_ENSURE(Args); 
 
         DoApply(Args.Cast().Arg(argIndex), GetArgFunc(argName));
 
@@ -316,8 +316,8 @@ public:
 
     template<typename TNode>
     TNodeBuilder<TNodeBuilder<TParent, TExprApplier>, TNode> With(ui32 argIndex) {
-        YQL_ENSURE(Body);
-        YQL_ENSURE(Args);
+        YQL_ENSURE(Body); 
+        YQL_ENSURE(Args); 
 
         auto buildFunc = [argIndex, this] (const TNode& node) mutable -> TNodeBuilder<TParent, TExprApplier>& {
             DoApply(Args.Cast().Arg(argIndex), node);

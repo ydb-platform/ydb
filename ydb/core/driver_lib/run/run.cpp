@@ -34,7 +34,7 @@
 #include <ydb/core/mon/mon.h>
 #include <ydb/core/mon/crossref.h>
 #include <ydb/core/mon_alloc/profiler.h>
-
+ 
 #include <library/cpp/actors/util/affinity.h>
 
 #include <ydb/core/base/appdata.h>
@@ -46,7 +46,7 @@
 #include <ydb/core/mind/local.h>
 #include <ydb/core/mind/tenant_pool.h>
 #include <ydb/core/base/hive.h>
-
+ 
 #include <ydb/core/base/tablet_resolver.h>
 #include <ydb/core/security/login_page.h>
 #include <ydb/core/tablet/bootstrapper.h>
@@ -116,7 +116,7 @@
 
 #include <library/cpp/actors/core/memory_track.h>
 #include <library/cpp/actors/prof/tag.h>
-#include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
+#include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h> 
 
 #include <util/folder/dirut.h>
 #include <util/system/file.h>
@@ -529,7 +529,7 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
         names["export"] = &hasExport;
         bool hasImport = services.empty();
         names["import"] = &hasImport;
-        bool hasAnalytics = false;
+        bool hasAnalytics = false; 
         names["analytics"] = &hasAnalytics;
         bool hasDataStreams = false;
         names["datastreams"] = &hasDataStreams;
@@ -704,7 +704,7 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
         if (hasMonitoring) {
             server.AddService(new NGRpcService::TGRpcMonitoringService(ActorSystem.Get(), Counters, grpcRequestProxyId));
         }
-
+ 
         if (hasAuth) {
             server.AddService(new NGRpcService::TGRpcAuthService(ActorSystem.Get(), Counters, grpcRequestProxyId));
         }

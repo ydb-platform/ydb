@@ -3,10 +3,10 @@
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
 
-namespace google::protobuf {
-    class Arena;
-}
-
+namespace google::protobuf { 
+    class Arena; 
+} 
+ 
 namespace NYql {
     class TIssues;
 }
@@ -17,8 +17,8 @@ namespace NSQLTranslation {
     enum class ESqlMode {
         QUERY = 0,
         LIMITED_VIEW = 1,
-        LIBRARY = 2,
-        SUBQUERY = 3,
+        LIBRARY = 2, 
+        SUBQUERY = 3, 
         DISCOVERY = 4,
     };
 
@@ -51,8 +51,8 @@ namespace NSQLTranslation {
 
     struct TTranslationSettings
     {
-        TTranslationSettings();
-        google::protobuf::Arena* Arena = nullptr;
+        TTranslationSettings(); 
+        google::protobuf::Arena* Arena = nullptr; 
 
         THashMap<TString, TString> ClusterMapping;
         TString PathPrefix;
@@ -74,8 +74,8 @@ namespace NSQLTranslation {
         bool EnableGenericUdfs;
         ui16 SyntaxVersion;
         bool AnsiLexer;
-        bool PgParser;
-        bool InferSyntaxVersion;
+        bool PgParser; 
+        bool InferSyntaxVersion; 
         EV0Behavior V0Behavior;
         bool V0ForceDisable;
         bool WarnOnV0;

@@ -9,7 +9,7 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/library/yql/core/expr_nodes
+    ydb/library/yql/core/expr_nodes 
 )
 
 SRCDIR(

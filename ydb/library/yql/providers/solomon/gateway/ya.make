@@ -10,8 +10,8 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/library/yql/providers/common/gateway
-    ydb/library/yql/providers/solomon/provider
+    ydb/library/yql/providers/common/gateway 
+    ydb/library/yql/providers/solomon/provider 
 )
 
 END()

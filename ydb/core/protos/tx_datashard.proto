@@ -13,14 +13,14 @@ import "ydb/core/protos/subdomains.proto";
 import "ydb/core/protos/query_stats.proto";
 import "ydb/public/api/protos/ydb_issue_message.proto";
 import "ydb/public/api/protos/ydb_status_codes.proto";
-import "ydb/library/yql/dq/actors/protos/dq_events.proto";
-import "ydb/library/yql/dq/actors/protos/dq_stats.proto";
-import "ydb/library/yql/dq/proto/dq_tasks.proto";
+import "ydb/library/yql/dq/actors/protos/dq_events.proto"; 
+import "ydb/library/yql/dq/actors/protos/dq_stats.proto"; 
+import "ydb/library/yql/dq/proto/dq_tasks.proto"; 
 import "google/protobuf/empty.proto";
-
-package NKikimrTxDataShard;
-option java_package = "ru.yandex.kikimr.proto";
-
+ 
+package NKikimrTxDataShard; 
+option java_package = "ru.yandex.kikimr.proto"; 
+ 
 enum EDatashardState {
     Uninitialized = 0;
     WaitScheme = 1;
@@ -42,16 +42,16 @@ enum EDatashardState {
     Unknown = 0xFFFF;
 }
 
-message TEvGetShardState {
+message TEvGetShardState { 
    optional NActorsProto.TActorId Source = 1;
-}
-
-message TEvGetShardStateResult {
-    optional uint64 Origin = 1;
-    optional uint32 State = 2;
+} 
+ 
+message TEvGetShardStateResult { 
+    optional uint64 Origin = 1; 
+    optional uint32 State = 2; 
     optional uint64 DropTxId = 3;
-}
-
+} 
+ 
 message TShardOpResult {
     optional bool Success = 1;
     optional string Explain = 2;
@@ -85,12 +85,12 @@ message TEvStateChangedResult {
     optional uint64 TabletId = 1;
     optional uint32 State = 2;  // EDatashardState
 }
-message TRWTransaction {
-}
-
-message TROTransaction {
-}
-
+message TRWTransaction { 
+} 
+ 
+message TROTransaction { 
+} 
+ 
 message TTableId {
     optional uint64 OwnerId = 1;
     optional uint64 TableId = 2;
@@ -240,11 +240,11 @@ message TKqpReadset {
     optional TKqpValidateLocksResult ValidateLocksResult = 2;
 }
 
-message TDataTransaction {
+message TDataTransaction { 
     optional TRWTransaction RWTransaction = 1;  // DEPRECATED
     optional TROTransaction ROTransaction = 2;  // DEPRECATED
-    optional bytes MiniKQL = 3;
-    optional bool Immediate = 4;
+    optional bytes MiniKQL = 3; 
+    optional bool Immediate = 4; 
     optional fixed64 LockTxId = 5;
     optional bool NeedDiagnostics = 6;
     optional bool ReadOnly = 7;
@@ -257,8 +257,8 @@ message TDataTransaction {
     optional uint64 CancelDeadlineMs = 14; // Wallclock timestamp from datareq (not duration)
     optional uint64 CancelAfterMs = 15; // Duration from tx start local to datashard
     optional bool CollectStats = 16;
-}
-
+} 
+ 
 message TCreateVolatileSnapshot {
     optional uint64 OwnerId = 1;
     optional uint64 PathId = 2;
@@ -449,10 +449,10 @@ message TCommitWritesTransaction {
     optional uint64 WriteTxId = 2;
 }
 
-enum ETransactionKind {
+enum ETransactionKind { 
     TX_KIND_NONE = 0;
-    TX_KIND_DATA = 1;
-    TX_KIND_SCHEME = 2;
+    TX_KIND_DATA = 1; 
+    TX_KIND_SCHEME = 2; 
     DEPRECATED_3 = 3; //TX_KIND_BALANCE
     DEPRECATED_4 = 4; //TX_KIND_SNAPSHOT_POLICY
     TX_KIND_SCAN = 5;
@@ -462,59 +462,59 @@ enum ETransactionKind {
 
     // Values [100, inf) are used for internal datashard operation
     // kinds. See NKikimr::NDataShard::EOperationKind.
-}
-
+} 
+ 
 message TMvccSnapshot {
     optional uint64 Step = 10;
     optional uint64 TxId = 11;
 }
 
-message TEvProposeTransaction {
-    optional ETransactionKind TxKind = 1;
+message TEvProposeTransaction { 
+    optional ETransactionKind TxKind = 1; 
     optional NActorsProto.TActorId Source = 2;
-    optional bytes TxBody = 3;
-    optional uint64 TxId = 4;
-    optional uint32 ExecLevel = 5;
-    optional uint32 Flags = 6;
+    optional bytes TxBody = 3; 
+    optional uint64 TxId = 4; 
+    optional uint32 ExecLevel = 5; 
+    optional uint32 Flags = 6; 
     optional uint64 SchemeShardId = 7;
     optional NKikimrSubDomains.TProcessingParams ProcessingParams = 8;
     optional uint64 SubDomainPathId = 9; // LocalPathId (SchemeShardId is the OwnerId)
     optional TMvccSnapshot MvccSnapshot = 10;
-}
-
+} 
+ 
 message TEvCancelTransactionProposal {
     optional uint64 TxId = 1;
 }
 
-message TError {
-    enum EKind {
+message TError { 
+    enum EKind { 
         OK = 0;
-        BAD_TX_KIND = 1;
-        BAD_ARGUMENT = 2;
-        SCHEME_ERROR = 3;
-        WRONG_PAYLOAD_TYPE = 4;
-        LEAF_REQUIRED = 5;
-        READONLY = 6;
-        WRONG_SHARD_STATE = 7;
-        SNAPSHOT_NOT_EXIST = 8;
-        SNAPSHOT_NOT_READY_YET = 9;
-        SCHEME_CHANGED = 10;
-        DUPLICATED_SNAPSHOT_POLICY = 11;
-        MISSING_SNAPSHOT_POLICY = 12;
-        PROGRAM_ERROR = 13;
+        BAD_TX_KIND = 1; 
+        BAD_ARGUMENT = 2; 
+        SCHEME_ERROR = 3; 
+        WRONG_PAYLOAD_TYPE = 4; 
+        LEAF_REQUIRED = 5; 
+        READONLY = 6; 
+        WRONG_SHARD_STATE = 7; 
+        SNAPSHOT_NOT_EXIST = 8; 
+        SNAPSHOT_NOT_READY_YET = 9; 
+        SCHEME_CHANGED = 10; 
+        DUPLICATED_SNAPSHOT_POLICY = 11; 
+        MISSING_SNAPSHOT_POLICY = 12; 
+        PROGRAM_ERROR = 13; 
         OUT_OF_SPACE = 14;
         READ_SIZE_EXECEEDED = 15;
         SHARD_IS_BLOCKED = 16;
         UNKNOWN = 17;
         REPLY_SIZE_EXECEEDED = 18;
         EXECUTION_CANCELLED = 19;
-    }
-
-    optional EKind Kind = 1;
-    optional bytes Key = 2;
-    optional bytes Reason = 3;
-}
-
+    } 
+ 
+    optional EKind Kind = 1; 
+    optional bytes Key = 2; 
+    optional bytes Reason = 3; 
+} 
+ 
 message TLock {
     optional fixed64 LockId = 1;
     optional fixed64 DataShard = 2;
@@ -532,41 +532,41 @@ message TTabletInfo {
     optional bool IsFollower = 5;
 }
 
-message TEvProposeTransactionResult {
-    enum EStatus {
-        PREPARED = 1;
-        COMPLETE = 2;
-        ABORTED = 3;
-        ERROR = 4;
-        TRY_LATER = 5;
-        OVERLOADED = 6;
+message TEvProposeTransactionResult { 
+    enum EStatus { 
+        PREPARED = 1; 
+        COMPLETE = 2; 
+        ABORTED = 3; 
+        ERROR = 4; 
+        TRY_LATER = 5; 
+        OVERLOADED = 6; 
         RESPONSE_DATA = 7;
         EXEC_ERROR = 8;
         RESULT_UNAVAILABLE = 9;
         LOCKS_BROKEN = 10;
         CANCELLED = 11;
         BAD_REQUEST = 12;
-    };
-
+    }; 
+ 
     message TReadSetInfo {
         optional uint64 ShardId = 1;
         optional uint64 Size = 2;
     };
 
-    optional ETransactionKind TxKind = 1;
-    optional uint64 Origin = 2;
-    optional EStatus Status = 3;
-    repeated TError Error = 4;
-    optional uint64 TxId = 5;
-    optional uint64 MinStep = 6;
-    optional uint64 MaxStep = 7;
-    optional bytes TxResult = 8;
-    optional uint64 Step = 9;
-    optional uint64 OrderId = 10;
-    optional NKikimrTx.TBalanceTrackList BalanceTrackList = 11;
-    optional uint64 PrepareArriveTime = 12;
-    optional uint64 ExecLatency = 13;
-    optional uint64 ProposeLatency = 14;
+    optional ETransactionKind TxKind = 1; 
+    optional uint64 Origin = 2; 
+    optional EStatus Status = 3; 
+    repeated TError Error = 4; 
+    optional uint64 TxId = 5; 
+    optional uint64 MinStep = 6; 
+    optional uint64 MaxStep = 7; 
+    optional bytes TxResult = 8; 
+    optional uint64 Step = 9; 
+    optional uint64 OrderId = 10; 
+    optional NKikimrTx.TBalanceTrackList BalanceTrackList = 11; 
+    optional uint64 PrepareArriveTime = 12; 
+    optional uint64 ExecLatency = 13; 
+    optional uint64 ProposeLatency = 14; 
     repeated TLock TxLocks = 15;
     optional uint64 ReadSize = 16;
     optional uint64 ReplySize = 17;
@@ -581,8 +581,8 @@ message TEvProposeTransactionResult {
     optional bytes DataLastKey = 25; // Response data last key (for retries)
     reserved 26; // optional NKqpProto.TKqpStatsRun KqpRunStats = 26;
     optional NYql.NDqProto.TDqComputeActorStats ComputeActorStats = 27; // overall time + per-task statistics
-}
-
+} 
+ 
 message TEvProposeTransactionRestart {
     optional uint64 TabletId = 1;
     optional uint64 TxId = 2;
@@ -599,12 +599,12 @@ message TEvProposeTransactionAttachResult {
     optional NKikimrProto.EReplyStatus Status = 3;
 }
 
-message TAddSnapshotPolicyTransaction {
-    optional uint32 SnapshotCountLimit = 1;
-    optional uint64 StartStep = 2;
-    optional uint64 DeltaStep = 3;
-}
-
+message TAddSnapshotPolicyTransaction { 
+    optional uint32 SnapshotCountLimit = 1; 
+    optional uint64 StartStep = 2; 
+    optional uint64 DeltaStep = 3; 
+} 
+ 
 message TEvReturnBorrowedPart {
     optional uint64 FromTabletId = 1;
     repeated NKikimrProto.TLogoBlobID PartMetadata = 2;

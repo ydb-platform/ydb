@@ -2,8 +2,8 @@
 #include <ydb/core/scheme/scheme_types_auto.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
 
-#include <util/system/unaligned_mem.h>
-
+#include <util/system/unaligned_mem.h> 
+ 
 namespace NKikimr {
 
 struct TSysTables {
@@ -147,7 +147,7 @@ struct TSysTables {
                 return false;
 
             Y_VERIFY(cell.Size() == sizeof(ui64));
-            value = ReadUnaligned<ui64>(reinterpret_cast<const ui64*>(cell.Data()));
+            value = ReadUnaligned<ui64>(reinterpret_cast<const ui64*>(cell.Data())); 
             return true;
         }
     };

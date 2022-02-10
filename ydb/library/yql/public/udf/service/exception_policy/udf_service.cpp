@@ -1,13 +1,13 @@
 #include <ydb/library/yql/public/udf/udf_value.h>
-#include <ydb/library/yql/minikql/mkql_alloc.h>
-#include <ydb/library/yql/minikql/mkql_terminator.h>
+#include <ydb/library/yql/minikql/mkql_alloc.h> 
+#include <ydb/library/yql/minikql/mkql_terminator.h> 
 
 extern "C" void* UdfAllocate(ui64 size) {
-    return ::NKikimr::NMiniKQL::MKQLAllocDeprecated(size);
+    return ::NKikimr::NMiniKQL::MKQLAllocDeprecated(size); 
 }
 
 extern "C" void UdfFree(const void* mem) {
-    return ::NKikimr::NMiniKQL::MKQLFreeDeprecated(mem);
+    return ::NKikimr::NMiniKQL::MKQLFreeDeprecated(mem); 
 }
 
 extern "C" [[noreturn]] void UdfTerminate(const char* message) {
@@ -21,11 +21,11 @@ extern "C" void UdfRegisterObject(::NYql::NUdf::TBoxedValue* object) {
 extern "C" void UdfUnregisterObject(::NYql::NUdf::TBoxedValue* object) {
     return ::NKikimr::NMiniKQL::MKQLUnregisterObject(object);
 }
-
-extern "C" void* UdfAllocateWithSize(ui64 size) {
-    return ::NKikimr::NMiniKQL::MKQLAllocWithSize(size);
-}
-
+ 
+extern "C" void* UdfAllocateWithSize(ui64 size) { 
+    return ::NKikimr::NMiniKQL::MKQLAllocWithSize(size); 
+} 
+ 
 extern "C" void UdfFreeWithSize(const void* mem, ui64 size) {
-    return ::NKikimr::NMiniKQL::MKQLFreeWithSize(mem, size);
-}
+    return ::NKikimr::NMiniKQL::MKQLFreeWithSize(mem, size); 
+} 

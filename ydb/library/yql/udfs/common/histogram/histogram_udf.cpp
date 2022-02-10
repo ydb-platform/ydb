@@ -114,10 +114,10 @@ namespace {
     template <typename THistogramType, const char* ResourceName>
     class THistogram_Create: public TBoxedValue {
     public:
-        THistogram_Create(TSourcePosition pos)
-            : Pos_(pos)
-        {}
-
+        THistogram_Create(TSourcePosition pos) 
+            : Pos_(pos) 
+        {} 
+ 
         typedef TBoxedResource<THistogramType, ResourceName> THistogramResource;
 
         static const TStringRef& Name() {
@@ -150,25 +150,25 @@ namespace {
             if (Name() == name) {
                 builder.SimpleSignature<TResource<ResourceName>(double, double, ui32)>();
                 if (!typesOnly) {
-                    builder.Implementation(new THistogram_Create<THistogramType, ResourceName>(builder.GetSourcePosition()));
+                    builder.Implementation(new THistogram_Create<THistogramType, ResourceName>(builder.GetSourcePosition())); 
                 }
                 return true;
             } else {
                 return false;
             }
         }
-
-    private:
-        TSourcePosition Pos_;
+ 
+    private: 
+        TSourcePosition Pos_; 
     };
 
     template <typename THistogramType, const char* ResourceName>
     class THistogram_AddValue: public TBoxedValue {
     public:
-        THistogram_AddValue(TSourcePosition pos)
-            : Pos_(pos)
-        {}
-
+        THistogram_AddValue(TSourcePosition pos) 
+            : Pos_(pos) 
+        {} 
+ 
         typedef TBoxedResource<THistogramType, ResourceName> THistogramResource;
 
         static const TStringRef& Name() {
@@ -201,25 +201,25 @@ namespace {
             if (Name() == name) {
                 builder.SimpleSignature<TResource<ResourceName>(TResource<ResourceName>, double, double)>();
                 if (!typesOnly) {
-                    builder.Implementation(new THistogram_AddValue<THistogramType, ResourceName>(builder.GetSourcePosition()));
+                    builder.Implementation(new THistogram_AddValue<THistogramType, ResourceName>(builder.GetSourcePosition())); 
                 }
                 return true;
             } else {
                 return false;
             }
         }
-
-    private:
-        TSourcePosition Pos_;
+ 
+    private: 
+        TSourcePosition Pos_; 
     };
 
     template <typename THistogramType, const char* ResourceName>
     class THistogram_Serialize: public TBoxedValue {
     public:
-        THistogram_Serialize(TSourcePosition pos)
-            : Pos_(pos)
-        {}
-
+        THistogram_Serialize(TSourcePosition pos) 
+            : Pos_(pos) 
+        {} 
+ 
         typedef TBoxedResource<THistogramType, ResourceName> THistogramResource;
 
         static const TStringRef& Name() {
@@ -253,25 +253,25 @@ namespace {
             if (Name() == name) {
                 builder.SimpleSignature<char*(TResource<ResourceName>)>();
                 if (!typesOnly) {
-                    builder.Implementation(new THistogram_Serialize<THistogramType, ResourceName>(builder.GetSourcePosition()));
+                    builder.Implementation(new THistogram_Serialize<THistogramType, ResourceName>(builder.GetSourcePosition())); 
                 }
                 return true;
             } else {
                 return false;
             }
         }
-
-    private:
-        TSourcePosition Pos_;
+ 
+    private: 
+        TSourcePosition Pos_; 
     };
 
     template <typename THistogramType, const char* ResourceName>
     class THistogram_Deserialize: public TBoxedValue {
     public:
-        THistogram_Deserialize(TSourcePosition pos)
-            : Pos_(pos)
-        {}
-
+        THistogram_Deserialize(TSourcePosition pos) 
+            : Pos_(pos) 
+        {} 
+ 
         typedef TBoxedResource<THistogramType, ResourceName> THistogramResource;
 
         static const TStringRef& Name() {
@@ -306,25 +306,25 @@ namespace {
             if (Name() == name) {
                 builder.SimpleSignature<TResource<ResourceName>(char*, ui32)>();
                 if (!typesOnly) {
-                    builder.Implementation(new THistogram_Deserialize<THistogramType, ResourceName>(builder.GetSourcePosition()));
+                    builder.Implementation(new THistogram_Deserialize<THistogramType, ResourceName>(builder.GetSourcePosition())); 
                 }
                 return true;
             } else {
                 return false;
             }
         }
-
-    private:
-        TSourcePosition Pos_;
+ 
+    private: 
+        TSourcePosition Pos_; 
     };
 
     template <typename THistogramType, const char* ResourceName>
     class THistogram_Merge: public TBoxedValue {
     public:
-        THistogram_Merge(TSourcePosition pos)
-            : Pos_(pos)
-        {}
-
+        THistogram_Merge(TSourcePosition pos) 
+            : Pos_(pos) 
+        {} 
+ 
         typedef TBoxedResource<THistogramType, ResourceName> THistogramResource;
 
         static const TStringRef& Name() {
@@ -358,16 +358,16 @@ namespace {
             if (Name() == name) {
                 builder.SimpleSignature<TResource<ResourceName>(TResource<ResourceName>, TResource<ResourceName>)>();
                 if (!typesOnly) {
-                    builder.Implementation(new THistogram_Merge<THistogramType, ResourceName>(builder.GetSourcePosition()));
+                    builder.Implementation(new THistogram_Merge<THistogramType, ResourceName>(builder.GetSourcePosition())); 
                 }
                 return true;
             } else {
                 return false;
             }
         }
-
-    private:
-        TSourcePosition Pos_;
+ 
+    private: 
+        TSourcePosition Pos_; 
     };
 
     struct THistogramIndexes {
@@ -396,9 +396,9 @@ namespace {
     public:
         typedef TBoxedResource<THistogramType, ResourceName> THistogramResource;
 
-        THistogram_GetResult(const THistogramIndexes& histogramIndexes, TSourcePosition pos)
+        THistogram_GetResult(const THistogramIndexes& histogramIndexes, TSourcePosition pos) 
             : HistogramIndexes(histogramIndexes)
-            , Pos_(pos)
+            , Pos_(pos) 
         {
         }
 
@@ -456,7 +456,7 @@ namespace {
                 builder.Args()->Add(resource).Done().Returns(histogramIndexes.ResultStructType);
 
                 if (!typesOnly) {
-                    builder.Implementation(new THistogram_GetResult<THistogramType, ResourceName>(histogramIndexes, builder.GetSourcePosition()));
+                    builder.Implementation(new THistogram_GetResult<THistogramType, ResourceName>(histogramIndexes, builder.GetSourcePosition())); 
                 }
                 return true;
             } else {
@@ -466,7 +466,7 @@ namespace {
 
     private:
         const THistogramIndexes HistogramIndexes;
-        TSourcePosition Pos_;
+        TSourcePosition Pos_; 
     };
 
     template <>
@@ -495,7 +495,7 @@ namespace {
         if (Name() == name) {
             builder.SimpleSignature<TResource<LinearHistogramResourceName>(double, double, double, double)>();
             if (!typesOnly) {
-                builder.Implementation(new THistogram_Create<TLinearHistogram, LinearHistogramResourceName>(builder.GetSourcePosition()));
+                builder.Implementation(new THistogram_Create<TLinearHistogram, LinearHistogramResourceName>(builder.GetSourcePosition())); 
             }
             return true;
         } else {
@@ -531,7 +531,7 @@ namespace {
         if (Name() == name) {
             builder.SimpleSignature<TResource<LinearHistogramResourceName>(char*, double, double, double)>();
             if (!typesOnly) {
-                builder.Implementation(new THistogram_Deserialize<TLinearHistogram, LinearHistogramResourceName>(builder.GetSourcePosition()));
+                builder.Implementation(new THistogram_Deserialize<TLinearHistogram, LinearHistogramResourceName>(builder.GetSourcePosition())); 
             }
             return true;
         } else {
@@ -565,7 +565,7 @@ namespace {
         if (Name() == name) {
             builder.SimpleSignature<TResource<LogarithmicHistogramResourceName>(double, double, double, double)>();
             if (!typesOnly) {
-                builder.Implementation(new THistogram_Create<TLogarithmicHistogram, LogarithmicHistogramResourceName>(builder.GetSourcePosition()));
+                builder.Implementation(new THistogram_Create<TLogarithmicHistogram, LogarithmicHistogramResourceName>(builder.GetSourcePosition())); 
             }
             return true;
         } else {
@@ -601,7 +601,7 @@ namespace {
         if (Name() == name) {
             builder.SimpleSignature<TResource<LogarithmicHistogramResourceName>(char*, double, double, double)>();
             if (!typesOnly) {
-                builder.Implementation(new THistogram_Deserialize<TLogarithmicHistogram, LogarithmicHistogramResourceName>(builder.GetSourcePosition()));
+                builder.Implementation(new THistogram_Deserialize<TLogarithmicHistogram, LogarithmicHistogramResourceName>(builder.GetSourcePosition())); 
             }
             return true;
         } else {
@@ -855,9 +855,9 @@ namespace {
     template <bool twoArgs>
     class THistogramMethodBase: public TBoxedValue {
     public:
-        THistogramMethodBase(const THistogramIndexes& histogramIndexes, TSourcePosition pos)
+        THistogramMethodBase(const THistogramIndexes& histogramIndexes, TSourcePosition pos) 
             : HistogramIndexes(histogramIndexes)
-            , Pos_(pos)
+            , Pos_(pos) 
         {
         }
 
@@ -904,14 +904,14 @@ namespace {
 
     protected:
         const THistogramIndexes HistogramIndexes;
-        TSourcePosition Pos_;
+        TSourcePosition Pos_; 
     };
 
 #define DECLARE_ONE_DOUBLE_ARG_METHOD_UDF(name)                               \
     class T##name: public THistogramMethodBase<false> {                       \
     public:                                                                   \
-        T##name(const THistogramIndexes& histogramIndexes, TSourcePosition pos) \
-            : THistogramMethodBase<false>(histogramIndexes, pos) {            \
+        T##name(const THistogramIndexes& histogramIndexes, TSourcePosition pos) \ 
+            : THistogramMethodBase<false>(histogramIndexes, pos) {            \ 
         }                                                                     \
         static const TStringRef& Name() {                                     \
             static auto name = TStringRef::Of(#name);                         \
@@ -926,8 +926,8 @@ namespace {
             if (Name() == name) {                                             \
                 const auto& histogramIndexes = DeclareSignatureBase(builder); \
                 if (!typesOnly) {                                             \
-                    builder.Implementation(new T##name(histogramIndexes,      \
-                        builder.GetSourcePosition()));                        \
+                    builder.Implementation(new T##name(histogramIndexes,      \ 
+                        builder.GetSourcePosition()));                        \ 
                 }                                                             \
                 return true;                                                  \
             } else {                                                          \
@@ -946,8 +946,8 @@ namespace {
 #define DECLARE_TWO_DOUBLE_ARG_METHOD_UDF(name)                                       \
     class T##name: public THistogramMethodBase<true> {                                \
     public:                                                                           \
-        T##name(const THistogramIndexes& histogramIndexes, TSourcePosition pos)       \
-            : THistogramMethodBase<true>(histogramIndexes, pos) {                     \
+        T##name(const THistogramIndexes& histogramIndexes, TSourcePosition pos)       \ 
+            : THistogramMethodBase<true>(histogramIndexes, pos) {                     \ 
         }                                                                             \
         static const TStringRef& Name() {                                             \
             static auto name = TStringRef::Of(#name);                                 \
@@ -962,8 +962,8 @@ namespace {
             if (Name() == name) {                                                     \
                 const auto& histogramIndexes = DeclareSignatureBase(builder);         \
                 if (!typesOnly) {                                                     \
-                    builder.Implementation(new T##name(histogramIndexes,              \
-                        builder.GetSourcePosition()));                                \
+                    builder.Implementation(new T##name(histogramIndexes,              \ 
+                        builder.GetSourcePosition()));                                \ 
                 }                                                                     \
                 return true;                                                          \
             } else {                                                                  \

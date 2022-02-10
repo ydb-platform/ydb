@@ -1,7 +1,7 @@
 OWNER(g:yql)
 
 IF (OS_LINUX OR OS_DARWIN)
-    UNITTEST_FOR(ydb/library/yql/utils/failure_injector)
+    UNITTEST_FOR(ydb/library/yql/utils/failure_injector) 
 
     SIZE(SMALL)
 

@@ -18,9 +18,9 @@ PEERDIR(
     ydb/public/sdk/cpp/client/ydb_proto
     ydb/public/sdk/cpp/client/ydb_result
     ydb/public/sdk/cpp/client/ydb_value
-    ydb/library/yql/providers/common/codec
-    ydb/library/yql/providers/common/schema/expr
-    ydb/library/yql/providers/common/schema/mkql
+    ydb/library/yql/providers/common/codec 
+    ydb/library/yql/providers/common/schema/expr 
+    ydb/library/yql/providers/common/schema/mkql 
 )
 
 YQL_LAST_ABI_VERSION()

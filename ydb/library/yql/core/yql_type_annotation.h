@@ -1,54 +1,54 @@
-#pragma once
-
+#pragma once 
+ 
 #include "yql_data_provider.h"
 #include "yql_udf_index_package_set.h"
 #include "yql_udf_resolver.h"
 #include "yql_user_data_storage.h"
-
+ 
 #include <ydb/library/yql/public/udf/udf_validate.h>
-
-#include <ydb/library/yql/ast/yql_expr.h>
+ 
+#include <ydb/library/yql/ast/yql_expr.h> 
 
 #include <library/cpp/yson/node/node.h>
-#include <library/cpp/time_provider/time_provider.h>
-#include <library/cpp/random_provider/random_provider.h>
+#include <library/cpp/time_provider/time_provider.h> 
+#include <library/cpp/random_provider/random_provider.h> 
 #include <library/cpp/enumbitset/enumbitset.h>
 
-#include <util/generic/hash.h>
-#include <util/generic/hash_set.h>
-#include <util/generic/set.h>
+#include <util/generic/hash.h> 
+#include <util/generic/hash_set.h> 
+#include <util/generic/set.h> 
 #include <util/generic/vector.h>
-#include <util/digest/city.h>
-
+#include <util/digest/city.h> 
+ 
 #include <vector>
 
-namespace NYql {
-
-class IUrlLoader : public TThrRefBase {
-public:
-    ~IUrlLoader() = default;
-
+namespace NYql { 
+ 
+class IUrlLoader : public TThrRefBase { 
+public: 
+    ~IUrlLoader() = default; 
+ 
     virtual TString Load(const TString& url, const TString& token) = 0;
-
-    using TPtr = TIntrusivePtr<IUrlLoader>;
-};
-
-class TModuleResolver : public IModuleResolver {
-public:
+ 
+    using TPtr = TIntrusivePtr<IUrlLoader>; 
+}; 
+ 
+class TModuleResolver : public IModuleResolver { 
+public: 
     TModuleResolver(TModulesTable&& modules, ui64 nextUniqueId, const THashMap<TString, TString>& clusterMapping,
-        const THashSet<TString>& sqlFlags, bool optimizeLibraries = true, THolder<TExprContext> ownedCtx = {})
-        : OwnedCtx(std::move(ownedCtx))
-        , LibsContext(nextUniqueId)
-        , Modules(std::move(modules))
-        , ClusterMapping(clusterMapping)
+        const THashSet<TString>& sqlFlags, bool optimizeLibraries = true, THolder<TExprContext> ownedCtx = {}) 
+        : OwnedCtx(std::move(ownedCtx)) 
+        , LibsContext(nextUniqueId) 
+        , Modules(std::move(modules)) 
+        , ClusterMapping(clusterMapping) 
         , SqlFlags(sqlFlags)
-        , OptimizeLibraries(optimizeLibraries)
-    {
-        if (OwnedCtx) {
-            FreezeGuard = MakeHolder<TExprContext::TFreezeGuard>(*OwnedCtx);
-        }
-    }
-
+        , OptimizeLibraries(optimizeLibraries) 
+    { 
+        if (OwnedCtx) { 
+            FreezeGuard = MakeHolder<TExprContext::TFreezeGuard>(*OwnedCtx); 
+        } 
+    } 
+ 
     TModuleResolver(const TModulesTable* parentModules, ui64 nextUniqueId, const THashMap<TString, TString>& clusterMapping,
         const THashSet<TString>& sqlFlags, bool optimizeLibraries, const TSet<TString>& knownPackages, const THashMap<TString, THashMap<int, TLibraryCohesion>>& libs)
         : ParentModules(parentModules)
@@ -61,91 +61,91 @@ public:
     {
     }
 
-    static TString NormalizeModuleName(const TString& path);
-
+    static TString NormalizeModuleName(const TString& path); 
+ 
     void AttachUserData(TUserDataStorage::TPtr userData) {
         UserData = userData;
-    }
-
-    void SetUrlLoader(IUrlLoader::TPtr loader) {
-        UrlLoader = loader;
-    }
-
-    void SetParameters(const NYT::TNode& node) {
-        Parameters = node;
-    }
-
+    } 
+ 
+    void SetUrlLoader(IUrlLoader::TPtr loader) { 
+        UrlLoader = loader; 
+    } 
+ 
+    void SetParameters(const NYT::TNode& node) { 
+        Parameters = node; 
+    } 
+ 
     void RegisterPackage(const TString& package) override;
     bool SetPackageDefaultVersion(const TString& package, ui32 version) override;
-    const TExportTable* GetModule(const TString& module) const override;
+    const TExportTable* GetModule(const TString& module) const override; 
     bool AddFromFile(const TStringBuf& file, TExprContext& ctx, ui16 syntaxVersion, ui32 packageVersion) override;
-    bool AddFromUrl(const TStringBuf& file, const TStringBuf& url, TExprContext& ctx, ui16 syntaxVersion, ui32 packageVersion) override;
+    bool AddFromUrl(const TStringBuf& file, const TStringBuf& url, TExprContext& ctx, ui16 syntaxVersion, ui32 packageVersion) override; 
     bool AddFromMemory(const TStringBuf& file, const TString& body, TExprContext& ctx, ui16 syntaxVersion, ui32 packageVersion) override;
     bool AddFromMemory(const TStringBuf& file, const TString& body, TExprContext& ctx, ui16 syntaxVersion, ui32 packageVersion, TString& moduleName, std::vector<TString>* exports = nullptr, std::vector<TString>* imports = nullptr) override;
-    bool Link(TExprContext& ctx) override;
-    void UpdateNextUniqueId(TExprContext& ctx) const override;
-    ui64 GetNextUniqueId() const override;
+    bool Link(TExprContext& ctx) override; 
+    void UpdateNextUniqueId(TExprContext& ctx) const override; 
+    ui64 GetNextUniqueId() const override; 
     IModuleResolver::TPtr CreateMutableChild() const override;
-
+ 
 private:
     bool AddFromMemory(const TString& fullName, const TString& moduleName, bool isYql, const TString& body, TExprContext& ctx, ui16 syntaxVersion, ui32 packageVersion, std::vector<TString>* exports = nullptr, std::vector<TString>* imports = nullptr);
     THashMap<TString, TLibraryCohesion> FilterLibsByVersion() const;
     static TString ExtractPackageNameFromModule(TStringBuf moduleName);
-    TString SubstParameters(const TString& str);
+    TString SubstParameters(const TString& str); 
 
 private:
-    THolder<TExprContext> OwnedCtx;
+    THolder<TExprContext> OwnedCtx; 
     const TModulesTable* ParentModules = nullptr;
     TUserDataStorage::TPtr UserData;
-    IUrlLoader::TPtr UrlLoader;
-    TMaybe<NYT::TNode> Parameters;
-    TExprContext LibsContext;
+    IUrlLoader::TPtr UrlLoader; 
+    TMaybe<NYT::TNode> Parameters; 
+    TExprContext LibsContext; 
     TSet<TString> KnownPackages;
     THashMap<TString, ui32> PackageVersions;
     THashMap<TString, THashMap<int, TLibraryCohesion>> Libs;
-    TModulesTable Modules;
-    const THashMap<TString, TString> ClusterMapping;
+    TModulesTable Modules; 
+    const THashMap<TString, TString> ClusterMapping; 
     const THashSet<TString> SqlFlags;
-    const bool OptimizeLibraries;
-    THolder<TExprContext::TFreezeGuard> FreezeGuard;
-};
-
-// -- credentials --
-struct TCredential {
+    const bool OptimizeLibraries; 
+    THolder<TExprContext::TFreezeGuard> FreezeGuard; 
+}; 
+ 
+// -- credentials -- 
+struct TCredential { 
     const TString Category;
     const TString Subcategory;
     const TString Content;
-
+ 
     TCredential(const TString& category, const TString& subcategory, const TString& content)
-        : Category(category)
-        , Subcategory(subcategory)
-        , Content(content)
-    {
-    }
-};
-
+        : Category(category) 
+        , Subcategory(subcategory) 
+        , Content(content) 
+    { 
+    } 
+}; 
+ 
 using TCredentialTable = THashMap<TString, TCredential>;
 using TCredentialTablePtr = std::shared_ptr<TCredentialTable>;
-
+ 
 struct TUserCredentials {
     TString OauthToken;
     TString BlackboxSessionIdCookie;
 };
 
-bool SplitUdfName(TStringBuf name, TStringBuf& moduleName, TStringBuf& funcName);
-
+bool SplitUdfName(TStringBuf name, TStringBuf& moduleName, TStringBuf& funcName); 
+ 
 using TUdfModulesTable = THashMap<TString, TString>; // external module name -> alias of file
-
+ 
 struct TYqlOperationOptions {
     TString Runner;
-    TMaybe<TString> AuthenticatedUser;
+    TMaybe<TString> AuthenticatedUser; 
     TMaybe<TString> Id;
-    TMaybe<TString> SharedId;
+    TMaybe<TString> SharedId; 
     TMaybe<TString> QueryName;
     TMaybe<TString> Title;
     TMaybe<TString> Url;
     TMaybe<TString> AttrsYson;
-    TMaybe<NYT::TNode> ParametersYson;
+    TMaybe<NYT::TNode> ParametersYson; 
 };
 
 using TColumnOrder = TVector<TString>;
@@ -172,18 +172,18 @@ private:
     THashMap<ui64, TColumnOrder> Storage;
 };
 
-struct TTypeAnnotationContext: public TThrRefBase {
-    TIntrusivePtr<ITimeProvider> TimeProvider;
-    TIntrusivePtr<IRandomProvider> RandomProvider;
+struct TTypeAnnotationContext: public TThrRefBase { 
+    TIntrusivePtr<ITimeProvider> TimeProvider; 
+    TIntrusivePtr<IRandomProvider> RandomProvider; 
     THashMap<TString, TIntrusivePtr<IDataProvider>> DataSourceMap;
     THashMap<TString, TIntrusivePtr<IDataProvider>> DataSinkMap;
     TVector<TIntrusivePtr<IDataProvider>> DataSources;
     TVector<TIntrusivePtr<IDataProvider>> DataSinks;
     TUdfIndex::TPtr UdfIndex;
     TUdfIndexPackageSet::TPtr UdfIndexPackageSet;
-    IUdfResolver::TPtr UdfResolver;
+    IUdfResolver::TPtr UdfResolver; 
     THashMap<TString, IUdfResolver::TImport> UdfImports; // aliases of files that was imported => list of module names
-    TUdfModulesTable UdfModules;
+    TUdfModulesTable UdfModules; 
     TString PureResultDataSource;
     TVector<TString> AvailablePureResultDataSources;
     TString FullResultDataSink;
@@ -193,26 +193,26 @@ struct TTypeAnnotationContext: public TThrRefBase {
     TVector<TCredentialTablePtr> Credentials;
     TUserCredentials UserCredentials;
     IModuleResolver::TPtr Modules;
-    NUdf::EValidateMode ValidateMode = NUdf::EValidateMode::None;
+    NUdf::EValidateMode ValidateMode = NUdf::EValidateMode::None; 
     bool DisableNativeUdfSupport = false;
     TMaybe<TString> OptLLVM;
-    bool IsReadOnly = false;
-    TAutoPtr<IGraphTransformer> CustomInstantTypeTransformer;
+    bool IsReadOnly = false; 
+    TAutoPtr<IGraphTransformer> CustomInstantTypeTransformer; 
     bool Diagnostics = false;
     THashMap<ui64, ui32> NodeToOperationId; // UniqueId->PublicId translation
-    bool EvaluationInProgress = false;
-    THashMap<ui64, const TTypeAnnotationNode*> ExpectedTypes;
+    bool EvaluationInProgress = false; 
+    THashMap<ui64, const TTypeAnnotationNode*> ExpectedTypes; 
     THashMap<ui64, std::vector<const TConstraintNode*>> ExpectedConstraints;
     THashMap<ui64, TColumnOrder> ExpectedColumnOrders;
     THashSet<TString> DisableConstraintCheck;
     bool UdfSupportsYield = false;
-    ui32 EvaluateForLimit = 500;
-    ui32 EvaluateOrderByColumnLimit = 100;
+    ui32 EvaluateForLimit = 500; 
+    ui32 EvaluateOrderByColumnLimit = 100; 
     bool PullUpFlatMapOverJoin = true;
     bool DeprecatedSQL = false;
-    THashMap<std::tuple<TString, TString, const TTypeAnnotationNode*>,
-        std::tuple<const TTypeAnnotationNode*, const TTypeAnnotationNode*, const TTypeAnnotationNode*>>
-        UdfTypeCache; // (name,typecfg,type)->(type,run config type,new user type)
+    THashMap<std::tuple<TString, TString, const TTypeAnnotationNode*>, 
+        std::tuple<const TTypeAnnotationNode*, const TTypeAnnotationNode*, const TTypeAnnotationNode*>> 
+        UdfTypeCache; // (name,typecfg,type)->(type,run config type,new user type) 
     bool UseTableMetaFromGraph = false;
     bool DiscoveryMode = false;
     bool ForceDq = false;
@@ -221,7 +221,7 @@ struct TTypeAnnotationContext: public TThrRefBase {
     bool StrictTableProps = true;
     bool JsonQueryReturnsJsonDocument = false;
     ui32 FolderSubDirsLimit = 1000;
-
+ 
     // compatibility with v0 or raw s-expression code
     bool OrderedColumns = false;
     TColumnOrderStorage::TPtr ColumnOrderStorage = new TColumnOrderStorage;
@@ -229,10 +229,10 @@ struct TTypeAnnotationContext: public TThrRefBase {
     TMaybe<TColumnOrder> LookupColumnOrder(const TExprNode& node) const;
     IGraphTransformer::TStatus SetColumnOrder(const TExprNode& node, const TColumnOrder& columnOrder, TExprContext& ctx);
 
-    // cached constants
+    // cached constants 
     std::optional<ui64> CachedNow;
     std::tuple<std::optional<ui64>, std::optional<double>, std::optional<TGUID>> CachedRandom;
-
+ 
     std::optional<bool> InitializeResult;
 
     template <typename T>
@@ -278,12 +278,12 @@ struct TTypeAnnotationContext: public TThrRefBase {
         DataSinks.push_back(std::move(provider));
     }
 
-    bool Initialize(TExprContext& ctx);
+    bool Initialize(TExprContext& ctx); 
     bool DoInitialize(TExprContext& ctx);
 
-    const TCredential* FindCredential(const TStringBuf& name) const;
+    const TCredential* FindCredential(const TStringBuf& name) const; 
     TString FindCredentialContent(const TStringBuf& name1, const TStringBuf& name2, const TString& defaultContent) const;
-    TString GetDefaultDataSource() const;
+    TString GetDefaultDataSource() const; 
 
     TMaybe<ui32> TranslateOperationId(ui64 id) const {
         auto it = NodeToOperationId.find(id);
@@ -298,8 +298,8 @@ struct TTypeAnnotationContext: public TThrRefBase {
     bool IsConstraintCheckEnabled() const {
         return DisableConstraintCheck.find(TConstraint::Name()) == DisableConstraintCheck.end();
     }
-};
-
+}; 
+ 
 template <> inline
 double TTypeAnnotationContext::GetRandom<double>() const noexcept {
     return RandomProvider->GenRandReal2();
@@ -315,6 +315,6 @@ TGUID TTypeAnnotationContext::GetRandom<TGUID>() const noexcept {
     return RandomProvider->GenUuid4();
 }
 
-using TTypeAnnotationContextPtr = TIntrusivePtr<TTypeAnnotationContext>;
-
-} // namespace NYql
+using TTypeAnnotationContextPtr = TIntrusivePtr<TTypeAnnotationContext>; 
+ 
+} // namespace NYql 

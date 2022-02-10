@@ -1,12 +1,12 @@
-#pragma once
-
+#pragma once 
+ 
 #include <util/generic/ptr.h>
 
 #include <functional>
 #include <utility>
 
-namespace NYql {
-
+namespace NYql { 
+ 
 template <class T>
 class TLazyInitHolder
     : public TPointerBase<TLazyInitHolder<T>, T>

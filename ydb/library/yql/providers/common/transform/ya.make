@@ -13,11 +13,11 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/library/yql/ast
+    ydb/library/yql/ast 
     ydb/library/yql/utils
     ydb/library/yql/utils/log
-    ydb/library/yql/core
-    ydb/library/yql/core/expr_nodes
+    ydb/library/yql/core 
+    ydb/library/yql/core/expr_nodes 
 )
 
 END()

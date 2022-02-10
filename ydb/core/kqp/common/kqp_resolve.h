@@ -5,7 +5,7 @@
 #include <ydb/core/protos/kqp_physical.pb.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
 
-#include <ydb/library/yql/minikql/mkql_node.h>
+#include <ydb/library/yql/minikql/mkql_node.h> 
 
 #include <util/generic/map.h>
 

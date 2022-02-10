@@ -10,7 +10,7 @@ SRCS(
 
 PEERDIR(
     library/cpp/grpc/client
-    ydb/library/yql/public/issue
+    ydb/library/yql/public/issue 
 )
 
 END()

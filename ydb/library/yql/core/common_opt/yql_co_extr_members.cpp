@@ -1,9 +1,9 @@
 #include "yql_co_extr_members.h"
 
-#include <ydb/library/yql/core/yql_expr_type_annotation.h>
-#include <ydb/library/yql/core/yql_join.h>
-#include <ydb/library/yql/core/yql_opt_utils.h>
-#include <ydb/library/yql/core/yql_opt_window.h>
+#include <ydb/library/yql/core/yql_expr_type_annotation.h> 
+#include <ydb/library/yql/core/yql_join.h> 
+#include <ydb/library/yql/core/yql_opt_utils.h> 
+#include <ydb/library/yql/core/yql_opt_window.h> 
 
 #include <ydb/library/yql/utils/log/log.h>
 
@@ -725,20 +725,20 @@ TExprNode::TPtr ApplyExtractMembersToAggregate(const TExprNode::TPtr& node, cons
         }
     }
 
-    auto settings = aggr.Settings();
-    auto hoppingSetting = GetSetting(settings.Ref(), "hopping");
-    if (hoppingSetting) {
-        auto traits = TCoHoppingTraits(hoppingSetting->Child(1));
-        auto timeExtractor = traits.TimeExtractor();
+    auto settings = aggr.Settings(); 
+    auto hoppingSetting = GetSetting(settings.Ref(), "hopping"); 
+    if (hoppingSetting) { 
+        auto traits = TCoHoppingTraits(hoppingSetting->Child(1)); 
+        auto timeExtractor = traits.TimeExtractor(); 
 
         auto usedType = traits.ItemType().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
         for (const auto& usedField : usedType->GetItems()) {
             usedFields.insert(usedField->GetName());
         }
 
-        TSet<TStringBuf> lambdaSubset;
-        if (HaveFieldsSubset(timeExtractor.Body().Ptr(), *timeExtractor.Args().Arg(0).Raw(), lambdaSubset, parentsMap)) {
-            usedFields.insert(lambdaSubset.cbegin(), lambdaSubset.cend());
+        TSet<TStringBuf> lambdaSubset; 
+        if (HaveFieldsSubset(timeExtractor.Body().Ptr(), *timeExtractor.Args().Arg(0).Raw(), lambdaSubset, parentsMap)) { 
+            usedFields.insert(lambdaSubset.cbegin(), lambdaSubset.cend()); 
         }
     }
 

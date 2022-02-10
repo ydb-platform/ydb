@@ -4,10 +4,10 @@
 #include <library/cpp/actors/core/events.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/thread/factory.h>
-
-namespace NKikimr {
-    using namespace NActors;
-
+ 
+namespace NKikimr { 
+    using namespace NActors; 
+ 
 Y_UNIT_TEST_SUITE(TActorTest) {
     TTestActorRuntime::TEgg MakeEgg()
     {
@@ -16,116 +16,116 @@ Y_UNIT_TEST_SUITE(TActorTest) {
     }
 
     Y_UNIT_TEST(TestHandleEvent) {
-        class TMyActor : public TActor<TMyActor> {
-        public:
+        class TMyActor : public TActor<TMyActor> { 
+        public: 
             TMyActor(const TActorId& sender)
-                : TActor(&TMyActor::StateFunc)
-                , Sender(sender)
-            {
-            }
-
-            STFUNC(StateFunc)
-            {
+                : TActor(&TMyActor::StateFunc) 
+                , Sender(sender) 
+            { 
+            } 
+ 
+            STFUNC(StateFunc) 
+            { 
                 Y_UNUSED(ctx);
-                UNIT_ASSERT_EQUAL_C(ev->Sender, Sender, "sender check");
-                UNIT_ASSERT_EQUAL_C(ev->Type, TEvents::TSystem::Wakeup, "ev. type check");
-            }
-
-        private:
+                UNIT_ASSERT_EQUAL_C(ev->Sender, Sender, "sender check"); 
+                UNIT_ASSERT_EQUAL_C(ev->Type, TEvents::TSystem::Wakeup, "ev. type check"); 
+            } 
+ 
+        private: 
             const TActorId Sender;
-        };
-
-        TTestActorRuntime runtime;
+        }; 
+ 
+        TTestActorRuntime runtime; 
         runtime.Initialize(MakeEgg());
         TActorId sender = runtime.AllocateEdgeActor();
         TActorId actorId = runtime.Register(new TMyActor(sender));
-        runtime.Send(new IEventHandle(actorId, sender, new TEvents::TEvWakeup));
-    }
-
+        runtime.Send(new IEventHandle(actorId, sender, new TEvents::TEvWakeup)); 
+    } 
+ 
     Y_UNIT_TEST(TestDie) {
-        class TMyActor : public TActor<TMyActor> {
-        public:
-            TMyActor()
-                : TActor(&TMyActor::StateFunc)
-            {
-            }
-
-            STFUNC(StateFunc)
-            {
-                UNIT_ASSERT_EQUAL_C(ev->Type, TEvents::TSystem::PoisonPill, "ev. type check");
-                Die(ctx);
-            }
-        };
-
-        TTestActorRuntime runtime;
+        class TMyActor : public TActor<TMyActor> { 
+        public: 
+            TMyActor() 
+                : TActor(&TMyActor::StateFunc) 
+            { 
+            } 
+ 
+            STFUNC(StateFunc) 
+            { 
+                UNIT_ASSERT_EQUAL_C(ev->Type, TEvents::TSystem::PoisonPill, "ev. type check"); 
+                Die(ctx); 
+            } 
+        }; 
+ 
+        TTestActorRuntime runtime; 
         runtime.Initialize(MakeEgg());
         TActorId sender = runtime.AllocateEdgeActor();
         TActorId actorId = runtime.Register(new TMyActor);
-        runtime.Send(new IEventHandle(actorId, sender, new TEvents::TEvPoisonPill));
-    }
-
+        runtime.Send(new IEventHandle(actorId, sender, new TEvents::TEvPoisonPill)); 
+    } 
+ 
     Y_UNIT_TEST(TestStateSwitch) {
-        class TMyActor : public TActor<TMyActor> {
-        public:
-            TMyActor()
-                : TActor(&TMyActor::OldStateFunc)
-                , StateChanged(false)
-            {
-            }
-
-            STFUNC(OldStateFunc)
-            {
+        class TMyActor : public TActor<TMyActor> { 
+        public: 
+            TMyActor() 
+                : TActor(&TMyActor::OldStateFunc) 
+                , StateChanged(false) 
+            { 
+            } 
+ 
+            STFUNC(OldStateFunc) 
+            { 
                 Y_UNUSED(ctx);
-                UNIT_ASSERT_EQUAL_C(ev->Type, TEvents::THelloWorld::Ping, "ev. type check");
-                Become(&TMyActor::NewStateFunc);
-            }
-
-            STFUNC(NewStateFunc)
-            {
+                UNIT_ASSERT_EQUAL_C(ev->Type, TEvents::THelloWorld::Ping, "ev. type check"); 
+                Become(&TMyActor::NewStateFunc); 
+            } 
+ 
+            STFUNC(NewStateFunc) 
+            { 
                 Y_UNUSED(ctx);
-                UNIT_ASSERT_EQUAL_C(ev->Type, TEvents::THelloWorld::Pong, "ev. type check");
-                StateChanged = true;
-            }
-
-            bool IsStateChanged() {
-                return StateChanged;
-            }
-
-        private:
-            bool StateChanged;
-        };
-
-        TTestActorRuntime runtime;
+                UNIT_ASSERT_EQUAL_C(ev->Type, TEvents::THelloWorld::Pong, "ev. type check"); 
+                StateChanged = true; 
+            } 
+ 
+            bool IsStateChanged() { 
+                return StateChanged; 
+            } 
+ 
+        private: 
+            bool StateChanged; 
+        }; 
+ 
+        TTestActorRuntime runtime; 
         runtime.Initialize(MakeEgg());
         TActorId sender = runtime.AllocateEdgeActor();
-        auto actor = new TMyActor;
+        auto actor = new TMyActor; 
         TActorId actorId = runtime.Register(actor);
-        runtime.Send(new IEventHandle(actorId, sender, new TEvents::TEvPing));
-        UNIT_ASSERT_EQUAL(actor->IsStateChanged(), false);
-        runtime.Send(new IEventHandle(actorId, sender, new TEvents::TEvPong));
-        UNIT_ASSERT_EQUAL(actor->IsStateChanged(), true);
-    }
-
+        runtime.Send(new IEventHandle(actorId, sender, new TEvents::TEvPing)); 
+        UNIT_ASSERT_EQUAL(actor->IsStateChanged(), false); 
+        runtime.Send(new IEventHandle(actorId, sender, new TEvents::TEvPong)); 
+        UNIT_ASSERT_EQUAL(actor->IsStateChanged(), true); 
+    } 
+ 
     Y_UNIT_TEST(TestSendEvent) {
-        class TMyActor : public TActor<TMyActor> {
-        public:
-            TMyActor()
-                : TActor(&TMyActor::StateFunc)
-            {
-            }
-
-            STFUNC(StateFunc)
-            {
-                ctx.Send(ev->Sender, new TEvents::TEvPong());
-            }
-        };
-
-        TTestActorRuntime runtime;
+        class TMyActor : public TActor<TMyActor> { 
+        public: 
+            TMyActor() 
+                : TActor(&TMyActor::StateFunc) 
+            { 
+            } 
+ 
+            STFUNC(StateFunc) 
+            { 
+                ctx.Send(ev->Sender, new TEvents::TEvPong()); 
+            } 
+        }; 
+ 
+        TTestActorRuntime runtime; 
         runtime.Initialize(MakeEgg());
         TActorId sender = runtime.AllocateEdgeActor();
         TActorId actorId = runtime.Register(new TMyActor);
-        runtime.Send(new IEventHandle(actorId, sender, new TEvents::TEvPing));
-        auto events = runtime.CaptureEvents();
+        runtime.Send(new IEventHandle(actorId, sender, new TEvents::TEvPing)); 
+        auto events = runtime.CaptureEvents(); 
         bool passed = false;
         for (const auto& event : events) {
             if (event->GetRecipientRewrite() == sender) {
@@ -135,85 +135,85 @@ Y_UNIT_TEST_SUITE(TActorTest) {
             }
         }
         UNIT_ASSERT(passed);
-        runtime.PushEventsFront(events);
-    }
-
+        runtime.PushEventsFront(events); 
+    } 
+ 
     Y_UNIT_TEST(TestScheduleEvent) {
-        class TMyActor : public TActor<TMyActor> {
-        public:
-            TMyActor()
-                : TActor(&TMyActor::StateFunc)
-            {
-            }
-
-            STFUNC(StateFunc)
-            {
+        class TMyActor : public TActor<TMyActor> { 
+        public: 
+            TMyActor() 
+                : TActor(&TMyActor::StateFunc) 
+            { 
+            } 
+ 
+            STFUNC(StateFunc) 
+            { 
                 Y_UNUSED(ev);
-                ctx.Schedule(TDuration::Seconds(1), new TEvents::TEvWakeup);
-            }
-        };
-
-        TTestActorRuntime runtime;
+                ctx.Schedule(TDuration::Seconds(1), new TEvents::TEvWakeup); 
+            } 
+        }; 
+ 
+        TTestActorRuntime runtime; 
         runtime.Initialize(MakeEgg());
         runtime.SetScheduledEventFilter([](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event, TDuration delay, TInstant& deadline) {
             Y_UNUSED(event);
-            deadline = runtime.GetCurrentTime() + delay;
-            return false;
-        });
-
+            deadline = runtime.GetCurrentTime() + delay; 
+            return false; 
+        }); 
+ 
         TActorId sender = runtime.AllocateEdgeActor();
         TActorId actorId = runtime.Register(new TMyActor);
-        runtime.Send(new IEventHandle(actorId, sender, new TEvents::TEvPing));
-        auto scheduledEvents = runtime.CaptureScheduledEvents();
-        UNIT_ASSERT_EQUAL_C(scheduledEvents.size(), 1, "check scheduled count");
-        UNIT_ASSERT_C(scheduledEvents.begin()->Deadline == (runtime.GetCurrentTime() + TDuration::Seconds(1)), "scheduled delay check");
-        UNIT_ASSERT_EQUAL_C(scheduledEvents.begin()->Event->Type, TEvents::TSystem::Wakeup, "scheduled ev. type check");
-    }
-
+        runtime.Send(new IEventHandle(actorId, sender, new TEvents::TEvPing)); 
+        auto scheduledEvents = runtime.CaptureScheduledEvents(); 
+        UNIT_ASSERT_EQUAL_C(scheduledEvents.size(), 1, "check scheduled count"); 
+        UNIT_ASSERT_C(scheduledEvents.begin()->Deadline == (runtime.GetCurrentTime() + TDuration::Seconds(1)), "scheduled delay check"); 
+        UNIT_ASSERT_EQUAL_C(scheduledEvents.begin()->Event->Type, TEvents::TSystem::Wakeup, "scheduled ev. type check"); 
+    } 
+ 
     Y_UNIT_TEST(TestCreateChildActor) {
-        class TChildActor : public TActor<TChildActor> {
-        public:
-            TChildActor()
-                : TActor(&TChildActor::StateFunc)
-            {
-            }
-
-            STFUNC(StateFunc)
-            {
+        class TChildActor : public TActor<TChildActor> { 
+        public: 
+            TChildActor() 
+                : TActor(&TChildActor::StateFunc) 
+            { 
+            } 
+ 
+            STFUNC(StateFunc) 
+            { 
                 Y_UNUSED(ctx);
                 Y_UNUSED(ev);
-            }
-        };
-
-        class TMyActor : public TActor<TMyActor> {
-        public:
-            TMyActor()
-                : TActor(&TMyActor::StateFunc)
-            {
-            }
-
-            STFUNC(StateFunc)
-            {
+            } 
+        }; 
+ 
+        class TMyActor : public TActor<TMyActor> { 
+        public: 
+            TMyActor() 
+                : TActor(&TMyActor::StateFunc) 
+            { 
+            } 
+ 
+            STFUNC(StateFunc) 
+            { 
                 Y_UNUSED(ev);
                 ChildId = ctx.RegisterWithSameMailbox(new TChildActor());
-                ctx.Send(ChildId, new TEvents::TEvPing());
-            }
-
+                ctx.Send(ChildId, new TEvents::TEvPing()); 
+            } 
+ 
             TActorId GetChildId() const {
-                return ChildId;
-            }
-
-        private:
+                return ChildId; 
+            } 
+ 
+        private: 
             TActorId ChildId;
-        };
-
-        TTestActorRuntime runtime;
+        }; 
+ 
+        TTestActorRuntime runtime; 
         runtime.Initialize(MakeEgg());
         TActorId sender = runtime.AllocateEdgeActor();
-        auto actor = new TMyActor;
+        auto actor = new TMyActor; 
         TActorId actorId = runtime.Register(actor);
-        runtime.Send(new IEventHandle(actorId, sender, new TEvents::TEvWakeup));
-        auto events = runtime.CaptureEvents();
+        runtime.Send(new IEventHandle(actorId, sender, new TEvents::TEvWakeup)); 
+        auto events = runtime.CaptureEvents(); 
         bool passed = false;
         for (const auto& event : events) {
             if (event->Recipient == actor->GetChildId()) {
@@ -223,32 +223,32 @@ Y_UNIT_TEST_SUITE(TActorTest) {
             }
         }
         UNIT_ASSERT(passed);
-        runtime.PushEventsFront(events);
-    }
-
+        runtime.PushEventsFront(events); 
+    } 
+ 
     Y_UNIT_TEST(TestSendAfterDelay) {
         TMutex syncMutex;
 
-        class TMyActor : public TActor<TMyActor> {
-        public:
+        class TMyActor : public TActor<TMyActor> { 
+        public: 
             TMyActor(TMutex *syncMutex)
-                : TActor(&TMyActor::StateFunc)
+                : TActor(&TMyActor::StateFunc) 
                 , CurrentTime(TInstant::MicroSeconds(0))
                 , SyncMutex(syncMutex)
-            {
-            }
-
-            TInstant GetCurrentTime() const {
-                return CurrentTime;
-            }
-
-            STFUNC(StateFunc)
-            {
+            { 
+            } 
+ 
+            TInstant GetCurrentTime() const { 
+                return CurrentTime; 
+            } 
+ 
+            STFUNC(StateFunc) 
+            { 
                 Y_VERIFY(SyncMutex);
 
-                auto sender = ev->Sender;
-                auto selfID = ctx.SelfID;
-                auto actorSystem = ctx.ExecutorThread.ActorSystem;
+                auto sender = ev->Sender; 
+                auto selfID = ctx.SelfID; 
+                auto actorSystem = ctx.ExecutorThread.ActorSystem; 
                 TMutex *syncMutex = SyncMutex;
 
                 SystemThreadFactory()->Run([=](){
@@ -257,226 +257,226 @@ Y_UNIT_TEST_SUITE(TActorTest) {
                         CurrentTime = actorSystem->Timestamp();
                         actorSystem->Send(new IEventHandle(sender, selfID, new TEvents::TEvPong()));
                     }
-                });
+                }); 
 
                 SyncMutex = nullptr;
-            }
-
-        private:
-            TInstant CurrentTime;
+            } 
+ 
+        private: 
+            TInstant CurrentTime; 
             TMutex *SyncMutex;
-        };
-
-        TTestActorRuntime runtime;
+        }; 
+ 
+        TTestActorRuntime runtime; 
         runtime.Initialize(MakeEgg());
-        try {
+        try { 
             TActorId sender = runtime.AllocateEdgeActor();
             auto myActor = new TMyActor(&syncMutex);
             TActorId actorId = runtime.Register(myActor);
-            runtime.Send(new IEventHandle(actorId, sender, new TEvents::TEvPing));
-            runtime.DispatchEvents();
-            auto events = runtime.CaptureEvents();
-            UNIT_ASSERT_EQUAL_C(events.size(), 1, "check sent count");
-            UNIT_ASSERT_EQUAL_C(events[0]->GetRecipientRewrite(), sender, "check recipent");
-            UNIT_ASSERT_EQUAL_C(events[0]->Type, TEvents::THelloWorld::Pong, "reply ev. type check");
-            UNIT_ASSERT_C(myActor->GetCurrentTime().MilliSeconds() == 0, "check actor system time");
-            runtime.PushEventsFront(events);
-        }
-        catch (...) {
-            // small delay to avoid crash when ActorSystem was destroyed
-            Sleep(TDuration::MilliSeconds(1000));
-            throw;
-        }
+            runtime.Send(new IEventHandle(actorId, sender, new TEvents::TEvPing)); 
+            runtime.DispatchEvents(); 
+            auto events = runtime.CaptureEvents(); 
+            UNIT_ASSERT_EQUAL_C(events.size(), 1, "check sent count"); 
+            UNIT_ASSERT_EQUAL_C(events[0]->GetRecipientRewrite(), sender, "check recipent"); 
+            UNIT_ASSERT_EQUAL_C(events[0]->Type, TEvents::THelloWorld::Pong, "reply ev. type check"); 
+            UNIT_ASSERT_C(myActor->GetCurrentTime().MilliSeconds() == 0, "check actor system time"); 
+            runtime.PushEventsFront(events); 
+        } 
+        catch (...) { 
+            // small delay to avoid crash when ActorSystem was destroyed 
+            Sleep(TDuration::MilliSeconds(1000)); 
+            throw; 
+        } 
 
         with_lock(syncMutex) {}
-    }
-
+    } 
+ 
     Y_UNIT_TEST(TestGetCtxTime) {
-        class TMyActor : public TActor<TMyActor> {
-        public:
-            TMyActor()
-                : TActor(&TThis::StateInit)
+        class TMyActor : public TActor<TMyActor> { 
+        public: 
+            TMyActor() 
+                : TActor(&TThis::StateInit) 
                 , CurrentTime(TInstant::MicroSeconds(0))
-            {
-            }
-
-            TInstant GetCurrentTime() const {
-                return CurrentTime;
-            }
-
-            STFUNC(StateInit)
-            {
-                switch (ev->GetTypeRewrite()) {
-                case TEvents::THelloWorld::Ping:
-                    ctx.Schedule(TDuration::MilliSeconds(1000), new TEvents::TEvWakeup);
-                    Sender = ev->Sender;
-                    break;
-                case TEvents::TSystem::Wakeup:
-                    CurrentTime = ctx.Now();
-                    ctx.Send(Sender, new TEvents::TEvPong());
-                };
-            }
-
-        private:
+            { 
+            } 
+ 
+            TInstant GetCurrentTime() const { 
+                return CurrentTime; 
+            } 
+ 
+            STFUNC(StateInit) 
+            { 
+                switch (ev->GetTypeRewrite()) { 
+                case TEvents::THelloWorld::Ping: 
+                    ctx.Schedule(TDuration::MilliSeconds(1000), new TEvents::TEvWakeup); 
+                    Sender = ev->Sender; 
+                    break; 
+                case TEvents::TSystem::Wakeup: 
+                    CurrentTime = ctx.Now(); 
+                    ctx.Send(Sender, new TEvents::TEvPong()); 
+                }; 
+            } 
+ 
+        private: 
             TActorId Sender;
-            TInstant CurrentTime;
-        };
-
-        TTestActorRuntime runtime;
+            TInstant CurrentTime; 
+        }; 
+ 
+        TTestActorRuntime runtime; 
         runtime.Initialize(MakeEgg());
         runtime.SetScheduledEventFilter([](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event, TDuration delay, TInstant& deadline) {
-            if (event->GetTypeRewrite() != TEvents::TSystem::Wakeup)
-                return true;
-
-            deadline = runtime.GetCurrentTime() + delay;
-            return false;
-        });
-
+            if (event->GetTypeRewrite() != TEvents::TSystem::Wakeup) 
+                return true; 
+ 
+            deadline = runtime.GetCurrentTime() + delay; 
+            return false; 
+        }); 
+ 
         runtime.SetScheduledEventsSelectorFunc(&TTestActorRuntimeBase::CollapsedTimeScheduledEventsSelector);
         TActorId sender = runtime.AllocateEdgeActor();
-        auto myActor = new TMyActor;
+        auto myActor = new TMyActor; 
         TActorId actorId = runtime.Register(myActor);
-        runtime.Send(new IEventHandle(actorId, sender, new TEvents::TEvPing));
-        runtime.DispatchEvents();
-        auto events = runtime.CaptureEvents();
-        UNIT_ASSERT_EQUAL_C(events.size(), 1, "check sent count");
-        UNIT_ASSERT_EQUAL_C(events[0]->GetRecipientRewrite(), sender, "check recipent");
-        UNIT_ASSERT_EQUAL_C(events[0]->Type, TEvents::THelloWorld::Pong, "reply ev. type check");
-        UNIT_ASSERT_C(myActor->GetCurrentTime().MilliSeconds() >= 1000, "check ctx time");
-        runtime.PushEventsFront(events);
-    }
-
+        runtime.Send(new IEventHandle(actorId, sender, new TEvents::TEvPing)); 
+        runtime.DispatchEvents(); 
+        auto events = runtime.CaptureEvents(); 
+        UNIT_ASSERT_EQUAL_C(events.size(), 1, "check sent count"); 
+        UNIT_ASSERT_EQUAL_C(events[0]->GetRecipientRewrite(), sender, "check recipent"); 
+        UNIT_ASSERT_EQUAL_C(events[0]->Type, TEvents::THelloWorld::Pong, "reply ev. type check"); 
+        UNIT_ASSERT_C(myActor->GetCurrentTime().MilliSeconds() >= 1000, "check ctx time"); 
+        runtime.PushEventsFront(events); 
+    } 
+ 
     Y_UNIT_TEST(TestSendFromAnotherThread) {
-        enum {
-            EvCounter = EventSpaceBegin(TEvents::ES_PRIVATE)
-        };
-
-        struct TEvCounter : public TEventLocal<TEvCounter, EvCounter> {
-            TEvCounter(ui32 counter)
-                : Counter(counter)
-            {}
-
-            const ui32 Counter;
-        };
-
-        class TConsumerActor : public TActor<TConsumerActor> {
-        public:
-            TConsumerActor(ui32 count)
-                : TActor(&TConsumerActor::StateFunc)
-                , Count(count)
-                , ExpectedCounter(0)
-            {
-            }
-
-            bool IsComplete() const {
-                return ExpectedCounter == Count;
-            }
-
-            STFUNC(StateFunc)
-            {
+        enum { 
+            EvCounter = EventSpaceBegin(TEvents::ES_PRIVATE) 
+        }; 
+ 
+        struct TEvCounter : public TEventLocal<TEvCounter, EvCounter> { 
+            TEvCounter(ui32 counter) 
+                : Counter(counter) 
+            {} 
+ 
+            const ui32 Counter; 
+        }; 
+ 
+        class TConsumerActor : public TActor<TConsumerActor> { 
+        public: 
+            TConsumerActor(ui32 count) 
+                : TActor(&TConsumerActor::StateFunc) 
+                , Count(count) 
+                , ExpectedCounter(0) 
+            { 
+            } 
+ 
+            bool IsComplete() const { 
+                return ExpectedCounter == Count; 
+            } 
+ 
+            STFUNC(StateFunc) 
+            { 
                 Y_UNUSED(ctx);
-                switch (ev->GetTypeRewrite()) {
-                case EvCounter:
-                    ui32 eventCounter = reinterpret_cast<TEvCounter*>(ev->GetBase())->Counter;
-                    UNIT_ASSERT_EQUAL_C(ExpectedCounter, eventCounter, "check counter");
-                    ExpectedCounter = eventCounter + 1;
-                    break;
-                }
-            }
-
-        private:
-            const ui32 Count;
-            ui32 ExpectedCounter;
-        };
-
-        class TProducerActor : public TActor<TProducerActor> {
-        public:
+                switch (ev->GetTypeRewrite()) { 
+                case EvCounter: 
+                    ui32 eventCounter = reinterpret_cast<TEvCounter*>(ev->GetBase())->Counter; 
+                    UNIT_ASSERT_EQUAL_C(ExpectedCounter, eventCounter, "check counter"); 
+                    ExpectedCounter = eventCounter + 1; 
+                    break; 
+                } 
+            } 
+ 
+        private: 
+            const ui32 Count; 
+            ui32 ExpectedCounter; 
+        }; 
+ 
+        class TProducerActor : public TActor<TProducerActor> { 
+        public: 
             TProducerActor(ui32 count, const TVector<TActorId>& recipents)
-                : TActor(&TProducerActor::StateFunc)
-                , Count(count)
-                , Recipents(recipents)
-            {
-            }
-
-            ~TProducerActor() {
-                if (Thread)
-                    Thread->Join();
-            }
-
-            STFUNC(StateFunc)
-            {
+                : TActor(&TProducerActor::StateFunc) 
+                , Count(count) 
+                , Recipents(recipents) 
+            { 
+            } 
+ 
+            ~TProducerActor() { 
+                if (Thread) 
+                    Thread->Join(); 
+            } 
+ 
+            STFUNC(StateFunc) 
+            { 
                 Y_UNUSED(ev);
-                SelfId = ctx.SelfID;
-                ActorSystem = ctx.ExecutorThread.ActorSystem;
-                Thread.Reset(new TThread(&TProducerActor::ThreadProc, this));
-                Thread->Start();
-            }
-
-            static void* ThreadProc(void* param) {
-                TProducerActor* actor = (TProducerActor*)(param);
-                for (ui32 i = 0; i < actor->Count; ++i) {
-                    for (const auto& recip : actor->Recipents) {
-                        actor->ActorSystem->Send(new IEventHandle(recip, actor->SelfId, new TEvCounter(i)));
-                        if ((i % (1 + rand() % 100)) == 0) {
-                            Sleep(TDuration::MilliSeconds(1 + rand() % 10));
-                        }
-                    }
-                }
-
-                return nullptr;
-            }
-
-        private:
-            const ui32 Count;
+                SelfId = ctx.SelfID; 
+                ActorSystem = ctx.ExecutorThread.ActorSystem; 
+                Thread.Reset(new TThread(&TProducerActor::ThreadProc, this)); 
+                Thread->Start(); 
+            } 
+ 
+            static void* ThreadProc(void* param) { 
+                TProducerActor* actor = (TProducerActor*)(param); 
+                for (ui32 i = 0; i < actor->Count; ++i) { 
+                    for (const auto& recip : actor->Recipents) { 
+                        actor->ActorSystem->Send(new IEventHandle(recip, actor->SelfId, new TEvCounter(i))); 
+                        if ((i % (1 + rand() % 100)) == 0) { 
+                            Sleep(TDuration::MilliSeconds(1 + rand() % 10)); 
+                        } 
+                    } 
+                } 
+ 
+                return nullptr; 
+            } 
+ 
+        private: 
+            const ui32 Count; 
             const TVector<TActorId> Recipents;
-            TAutoPtr<TThread> Thread;
-            TActorSystem* ActorSystem = nullptr;
+            TAutoPtr<TThread> Thread; 
+            TActorSystem* ActorSystem = nullptr; 
             TActorId SelfId;
-        };
-
-        TTestActorRuntime runtime;
+        }; 
+ 
+        TTestActorRuntime runtime; 
         runtime.Initialize(MakeEgg());
-
-        try {
+ 
+        try { 
             TActorId sender = runtime.AllocateEdgeActor();
-            ui32 count = 1000;
-            ui32 consumersCount = 4;
+            ui32 count = 1000; 
+            ui32 consumersCount = 4; 
             TVector<TConsumerActor*> consumers;
             TVector<TActorId> consumerIds;
-            for (ui32 i = 0; i < consumersCount; ++i) {
-                auto consumerActor = new TConsumerActor(count);
+            for (ui32 i = 0; i < consumersCount; ++i) { 
+                auto consumerActor = new TConsumerActor(count); 
                 TActorId consumerId = runtime.Register(consumerActor);
-                consumers.push_back(consumerActor);
-                consumerIds.push_back(consumerId);
-            }
-
-            auto producerActor = new TProducerActor(count, consumerIds);
+                consumers.push_back(consumerActor); 
+                consumerIds.push_back(consumerId); 
+            } 
+ 
+            auto producerActor = new TProducerActor(count, consumerIds); 
             TActorId producerId = runtime.Register(producerActor);
-            runtime.Send(new IEventHandle(producerId, sender, new TEvents::TEvPing));
+            runtime.Send(new IEventHandle(producerId, sender, new TEvents::TEvPing)); 
             runtime.SetObserverFunc([](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) {
                 Y_UNUSED(runtime);
                 Y_UNUSED(event);
-                return TTestActorRuntime::EEventAction::PROCESS;
-            });
-
-            for (;;) {
-                TDispatchOptions options;
-                options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition((ui32)EvCounter));
-                runtime.DispatchEvents(options);
-                bool hasAlive = false;
-                for (auto consumer : consumers) {
-                    if (!consumer->IsComplete())
-                        hasAlive = true;
-                }
-
-                if (!hasAlive)
-                    break;
-            }
-        }
-        catch (...) {
-            throw;
-        }
-    }
+                return TTestActorRuntime::EEventAction::PROCESS; 
+            }); 
+ 
+            for (;;) { 
+                TDispatchOptions options; 
+                options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition((ui32)EvCounter)); 
+                runtime.DispatchEvents(options); 
+                bool hasAlive = false; 
+                for (auto consumer : consumers) { 
+                    if (!consumer->IsComplete()) 
+                        hasAlive = true; 
+                } 
+ 
+                if (!hasAlive) 
+                    break; 
+            } 
+        } 
+        catch (...) { 
+            throw; 
+        } 
+    } 
 
     Y_UNIT_TEST(TestScheduleReaction) {
         class TMyActor : public TActor<TMyActor> {
@@ -630,6 +630,6 @@ Y_UNIT_TEST_SUITE(TActorTest) {
             UNIT_ASSERT_VALUES_EQUAL(event->Get()->Index, 12u);
         }
     }
-};
-
-}
+}; 
+ 
+} 

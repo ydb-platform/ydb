@@ -1,6 +1,6 @@
 #include "dq_fake_ca.h"
 
-#include <ydb/library/yql/minikql/mkql_string_util.h>
+#include <ydb/library/yql/minikql/mkql_string_util.h> 
 
 #include <ydb/core/testlib/basics/appdata.h>
 

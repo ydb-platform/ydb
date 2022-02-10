@@ -7,10 +7,10 @@ OWNER(
 
 PEERDIR(
     ydb/library/yql/public/issue
-    ydb/library/yql/core/issue/protos
-    ydb/library/yql/dq/proto
-    ydb/library/yql/providers/pq/proto
-    ydb/library/yql/providers/pq/task_meta
+    ydb/library/yql/core/issue/protos 
+    ydb/library/yql/dq/proto 
+    ydb/library/yql/providers/pq/proto 
+    ydb/library/yql/providers/pq/task_meta 
 )
 
 SRCS(

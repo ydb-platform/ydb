@@ -1,7 +1,7 @@
 #pragma once
 
 #include "scheme_types.h"
-#include "scheme_type_metadata.h"
+#include "scheme_type_metadata.h" 
 
 #include <util/generic/map.h>
 #include <util/generic/maybe.h>
@@ -35,13 +35,13 @@ public:
         Y_VERIFY(TypeByIdMap.insert({ typeId, type }).second);
         Y_VERIFY(TypeByNameMap.insert({ type->GetName(), type }).second);
 
-        TypeMetadataRegistry.Register(type);
+        TypeMetadataRegistry.Register(type); 
     }
 
     //
     ITypeSP GetType(TTypeId typeId) const {
         if (typeId) {
-            auto iter = TypeByIdMap.find(typeId);
+            auto iter = TypeByIdMap.find(typeId); 
             if (iter != TypeByIdMap.end()) {
                 Y_VERIFY_DEBUG(iter->second);
                 return iter->second;
@@ -50,7 +50,7 @@ public:
         return typeId;
     }
 
-    ::TString GetTypeName(TTypeId typeId) const {
+    ::TString GetTypeName(TTypeId typeId) const { 
         if (!typeId) {
             return "Null";
         }
@@ -69,17 +69,17 @@ public:
     }
 
     const IType* GetType(const TStringBuf& name) const {
-        auto iter = TypeByNameMap.find(name);
+        auto iter = TypeByNameMap.find(name); 
         return iter != TypeByNameMap.end() ? iter->second : nullptr;
     }
-
+ 
     const IType* GetKnownType(const TStringBuf& name) const {
         auto type = GetType(name);
         if (Y_LIKELY(type))
             return type;
         ythrow yexception() << "Unknown type: " << name;
-    }
-
+    } 
+ 
     TVector<const IType*> GetTypes() const {
         TVector<const IType*> types;
         types.reserve(TypeByIdMap.size());
@@ -88,29 +88,29 @@ public:
         return types;
     }
 
-    TTypeMetadataRegistry& GetTypeMetadataRegistry() {
-        return TypeMetadataRegistry;
-    }
+    TTypeMetadataRegistry& GetTypeMetadataRegistry() { 
+        return TypeMetadataRegistry; 
+    } 
+ 
+    const TTypeMetadataRegistry& GetTypeMetadataRegistry() const { 
+        return TypeMetadataRegistry; 
+    } 
+ 
+    void CalculateMetadataEtag(); 
 
-    const TTypeMetadataRegistry& GetTypeMetadataRegistry() const {
-        return TypeMetadataRegistry;
-    }
-
-    void CalculateMetadataEtag();
-
-    ui64 GetMetadataEtag() const {
-        return MetadataEtag;
-    }
-
+    ui64 GetMetadataEtag() const { 
+        return MetadataEtag; 
+    } 
+ 
 private:
     //
     typedef TMap<ui32, const IType *> TTypeByIdMap;
     typedef TMap<::TString, const IType *> TTypeByNameMap;
 
-    TTypeByIdMap TypeByIdMap;
-    TTypeByNameMap TypeByNameMap;
-    TTypeMetadataRegistry TypeMetadataRegistry;
-    ui64 MetadataEtag = 0;
+    TTypeByIdMap TypeByIdMap; 
+    TTypeByNameMap TypeByNameMap; 
+    TTypeMetadataRegistry TypeMetadataRegistry; 
+    ui64 MetadataEtag = 0; 
 };
 
 } // namespace NScheme

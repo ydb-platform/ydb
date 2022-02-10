@@ -5,22 +5,22 @@
 
 #include <util/charset/utf8.h>
 #include <util/string/cast.h>
-
+ 
 using namespace re2;
 using namespace NKikimr;
 using namespace NUdf;
 
 namespace {
 
-    template <typename T>
-    T Id(T x) {
-        return x;
-    }
-
-    re2::RE2::Options::Encoding EncodingFromBool(bool x) {
-        return x ? re2::RE2::Options::Encoding::EncodingUTF8 : re2::RE2::Options::Encoding::EncodingLatin1;
-    }
-
+    template <typename T> 
+    T Id(T x) { 
+        return x; 
+    } 
+ 
+    re2::RE2::Options::Encoding EncodingFromBool(bool x) { 
+        return x ? re2::RE2::Options::Encoding::EncodingUTF8 : re2::RE2::Options::Encoding::EncodingLatin1; 
+    } 
+ 
 #define OPTIONS_MAP(xx)                                                                                  \
     xx(Utf8, 0, bool, true, set_encoding, EncodingFromBool)                                              \
         xx(PosixSyntax, 1, bool, false, set_posix_syntax, Id)                                            \
@@ -35,17 +35,17 @@ namespace {
                                             xx(PerlClasses, 10, bool, false, set_perl_classes, Id)       \
                                                 xx(WordBoundary, 11, bool, false, set_word_boundary, Id) \
                                                     xx(OneLine, 12, bool, false, set_one_line, Id)
-
-    enum EOptionsField : ui32 {
-        OPTIONS_MAP(ENUM_VALUE_GEN)
+ 
+    enum EOptionsField : ui32 { 
+        OPTIONS_MAP(ENUM_VALUE_GEN) 
             Count
-    };
-
-    struct TOptionsSchema {
-        TType* StructType;
-        ui32 Indices[EOptionsField::Count];
-    };
-
+    }; 
+ 
+    struct TOptionsSchema { 
+        TType* StructType; 
+        ui32 Indices[EOptionsField::Count]; 
+    }; 
+ 
     struct TRegexpGroups {
         TVector<TString> Names;
         TVector<ui32> Indexes;
@@ -67,12 +67,12 @@ namespace {
         public:
             TFactory(
                 EMode mode,
-                const TOptionsSchema& optionsSchema,
-                TSourcePosition pos,
+                const TOptionsSchema& optionsSchema, 
+                TSourcePosition pos, 
                 const TRegexpGroups& regexpGroups = TRegexpGroups())
                 : Mode(mode)
-                , OptionsSchema(optionsSchema)
-                , Pos_(pos)
+                , OptionsSchema(optionsSchema) 
+                , Pos_(pos) 
                 , RegexpGroups(regexpGroups)
             {
             }
@@ -87,14 +87,14 @@ namespace {
                         args[0],
                         RegexpGroups,
                         Mode,
-                        posix,
-                        OptionsSchema,
-                        Pos_));
+                        posix, 
+                        OptionsSchema, 
+                        Pos_)); 
             }
 
             EMode Mode;
-            const TOptionsSchema OptionsSchema;
-            TSourcePosition Pos_;
+            const TOptionsSchema OptionsSchema; 
+            TSourcePosition Pos_; 
             const TRegexpGroups RegexpGroups;
         };
 
@@ -128,14 +128,14 @@ namespace {
             const TUnboxedValuePod& runConfig,
             const TRegexpGroups regexpGroups,
             EMode mode,
-            bool posix,
-            const TOptionsSchema& optionsSchema,
-            TSourcePosition pos)
+            bool posix, 
+            const TOptionsSchema& optionsSchema, 
+            TSourcePosition pos) 
             : RegexpGroups(regexpGroups)
             , Mode(mode)
             , Captured()
-            , OptionsSchema(optionsSchema)
-            , Pos_(pos)
+            , OptionsSchema(optionsSchema) 
+            , Pos_(pos) 
         {
             try {
                 auto patternValue = runConfig.GetElement(0);
@@ -152,9 +152,9 @@ namespace {
                 );
                 if (optionsValue) {
 #define FIELD_HANDLE(name, index, type, defVal, setter, conv) options.setter(conv(optionsValue.GetElement(OptionsSchema.Indices[index]).Get<type>()));
-                    OPTIONS_MAP(FIELD_HANDLE)
-#undef FIELD_HANDLE
-                }
+                    OPTIONS_MAP(FIELD_HANDLE) 
+#undef FIELD_HANDLE 
+                } 
 
                 Regexp = std::make_unique<RE2>(StringPiece(pattern.data(), pattern.size()), options);
 
@@ -247,8 +247,8 @@ namespace {
         const TRegexpGroups RegexpGroups;
         EMode Mode;
         std::unique_ptr<StringPiece[]> Captured;
-        const TOptionsSchema OptionsSchema;
-        TSourcePosition Pos_;
+        const TOptionsSchema OptionsSchema; 
+        TSourcePosition Pos_; 
 
         TUnboxedValue BuildEmptyStruct(const IValueBuilder* valueBuilder) const {
             TUnboxedValue* items = nullptr;
@@ -262,31 +262,31 @@ namespace {
         return input == result ? TUnboxedValue(args[0]) : valueBuilder->NewString(result);
     }
 
-    TOptionsSchema MakeOptionsSchema(::NKikimr::NUdf::IFunctionTypeInfoBuilder& builder) {
-        TOptionsSchema ret;
-        auto structBuilder = builder.Struct(EOptionsField::Count);
-#define FIELD_HANDLE(name, index, type, ...) structBuilder->AddField<type>(TStringRef::Of(#name), &ret.Indices[index]);
+    TOptionsSchema MakeOptionsSchema(::NKikimr::NUdf::IFunctionTypeInfoBuilder& builder) { 
+        TOptionsSchema ret; 
+        auto structBuilder = builder.Struct(EOptionsField::Count); 
+#define FIELD_HANDLE(name, index, type, ...) structBuilder->AddField<type>(TStringRef::Of(#name), &ret.Indices[index]); 
         OPTIONS_MAP(FIELD_HANDLE)
-#undef FIELD_HANDLE
-
-        ret.StructType = structBuilder->Build();
-        return ret;
-    }
-
+#undef FIELD_HANDLE 
+ 
+        ret.StructType = structBuilder->Build(); 
+        return ret; 
+    } 
+ 
     class TOptions: public TBoxedValue {
-    private:
-        const TOptionsSchema Schema_;
-
-    public:
-        TOptions(const TOptionsSchema& schema)
-            : Schema_(schema)
+    private: 
+        const TOptionsSchema Schema_; 
+ 
+    public: 
+        TOptions(const TOptionsSchema& schema) 
+            : Schema_(schema) 
         {
         }
-
-        TUnboxedValue Run(
-            const IValueBuilder* valueBuilder,
+ 
+        TUnboxedValue Run( 
+            const IValueBuilder* valueBuilder, 
             const TUnboxedValuePod* args) const override {
-            TUnboxedValue* items = nullptr;
+            TUnboxedValue* items = nullptr; 
             const auto result = valueBuilder->NewArray(EOptionsField::Count, items);
 #define FIELD_HANDLE(name, index, type, defVal, ...)                          \
     {                                                                         \
@@ -297,42 +297,42 @@ namespace {
             items[structIndex] = args[index].GetOptionalValue();              \
         }                                                                     \
     }
-
-            OPTIONS_MAP(FIELD_HANDLE)
-#undef FIELD_HANDLE
-            return result;
-        }
-
-        static const ::NKikimr::NUdf::TStringRef& Name() {
-            static auto name = ::NKikimr::NUdf::TStringRef::Of("Options");
-            return name;
-        }
-
-        static bool DeclareSignature(
-            const ::NKikimr::NUdf::TStringRef& name,
-            ::NKikimr::NUdf::TType* userType,
-            ::NKikimr::NUdf::IFunctionTypeInfoBuilder& builder,
+ 
+            OPTIONS_MAP(FIELD_HANDLE) 
+#undef FIELD_HANDLE 
+            return result; 
+        } 
+ 
+        static const ::NKikimr::NUdf::TStringRef& Name() { 
+            static auto name = ::NKikimr::NUdf::TStringRef::Of("Options"); 
+            return name; 
+        } 
+ 
+        static bool DeclareSignature( 
+            const ::NKikimr::NUdf::TStringRef& name, 
+            ::NKikimr::NUdf::TType* userType, 
+            ::NKikimr::NUdf::IFunctionTypeInfoBuilder& builder, 
             bool typesOnly) {
-            Y_UNUSED(userType);
-            if (Name() == name) {
-                auto argsBuilder = builder.Args();
-#define FIELD_HANDLE(name, index, type, ...) argsBuilder->Add<TOptional<type>>().Name(TStringRef::Of(#name));
-                OPTIONS_MAP(FIELD_HANDLE)
-#undef FIELD_HANDLE
-                auto optionsSchema = MakeOptionsSchema(builder);
-                builder.Returns(optionsSchema.StructType);
-                builder.OptionalArgs(EOptionsField::Count);
-                if (!typesOnly) {
-                    builder.Implementation(new TOptions(optionsSchema));
-                }
-
-                return true;
-            } else {
-                return false;
-            }
-        }
-    };
-
+            Y_UNUSED(userType); 
+            if (Name() == name) { 
+                auto argsBuilder = builder.Args(); 
+#define FIELD_HANDLE(name, index, type, ...) argsBuilder->Add<TOptional<type>>().Name(TStringRef::Of(#name)); 
+                OPTIONS_MAP(FIELD_HANDLE) 
+#undef FIELD_HANDLE 
+                auto optionsSchema = MakeOptionsSchema(builder); 
+                builder.Returns(optionsSchema.StructType); 
+                builder.OptionalArgs(EOptionsField::Count); 
+                if (!typesOnly) { 
+                    builder.Implementation(new TOptions(optionsSchema)); 
+                } 
+ 
+                return true; 
+            } else { 
+                return false; 
+            } 
+        } 
+    }; 
+ 
     SIMPLE_UDF_OPTIONS(TPatternFromLike, char*(char*, TOptional<char*>), builder.OptionalArgs(1)) {
         const std::string_view input(args[0].AsStringRef());
         const bool hasEscape = bool(args[1]);
@@ -395,10 +395,10 @@ namespace {
         return valueBuilder->NewString(result);
     }
 
-    TType* MakeRunConfigType(IFunctionTypeInfoBuilder& builder, TType* optOptionsStructType) {
-        return builder.Tuple()->Add<char*>().Add(optOptionsStructType).Build();
-    }
-
+    TType* MakeRunConfigType(IFunctionTypeInfoBuilder& builder, TType* optOptionsStructType) { 
+        return builder.Tuple()->Add<char*>().Add(optOptionsStructType).Build(); 
+    } 
+ 
     template <bool posix>
     class TRe2Module: public IUdfModule {
     public:
@@ -408,7 +408,7 @@ namespace {
 
         void CleanupOnTerminate() const final {
         }
-
+ 
         void GetAllFunctions(IFunctionsSink& sink) const final {
             sink.Add(TRe2Udf::Name(TRe2Udf::EMode::MATCH));
             sink.Add(TRe2Udf::Name(TRe2Udf::EMode::GREP));
@@ -423,7 +423,7 @@ namespace {
 
         void BuildFunctionTypeInfo(
             const TStringRef& name,
-            TType* userType,
+            TType* userType, 
             const TStringRef& typeConfig,
             ui32 flags,
             IFunctionTypeInfoBuilder& builder) const final try {

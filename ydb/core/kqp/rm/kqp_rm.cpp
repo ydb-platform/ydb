@@ -11,7 +11,7 @@
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/monlib/service/pages/templates.h>
 
-#include <ydb/library/yql/utils/yql_panic.h>
+#include <ydb/library/yql/utils/yql_panic.h> 
 
 namespace NKikimr {
 namespace NKqp {

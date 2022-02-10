@@ -1,28 +1,28 @@
-#include "mkql_fold1.h"
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h>
-
-namespace NKikimr {
-namespace NMiniKQL {
-
+#include "mkql_fold1.h" 
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h> 
+ 
+namespace NKikimr { 
+namespace NMiniKQL { 
+ 
 namespace {
 
-class TFold1Wrapper : public TMutableCodegeneratorRootNode<TFold1Wrapper> {
-    typedef TMutableCodegeneratorRootNode<TFold1Wrapper> TBaseComputation;
-public:
+class TFold1Wrapper : public TMutableCodegeneratorRootNode<TFold1Wrapper> { 
+    typedef TMutableCodegeneratorRootNode<TFold1Wrapper> TBaseComputation; 
+public: 
     TFold1Wrapper(TComputationMutables& mutables, EValueRepresentation kind, IComputationNode* list, IComputationExternalNode* item, IComputationExternalNode* state,
-        IComputationNode* newState, IComputationNode* initialState)
+        IComputationNode* newState, IComputationNode* initialState) 
         : TBaseComputation(mutables, kind)
         , List(list)
-        , Item(item)
-        , State(state)
-        , NewState(newState)
-        , InitialState(initialState)
-    {
-    }
-
+        , Item(item) 
+        , State(state) 
+        , NewState(newState) 
+        , InitialState(initialState) 
+    { 
+    } 
+ 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& compCtx) const {
         ui64 length = 0ULL;
-
+ 
         TThresher<false>::DoForEachItem(List->GetValue(compCtx),
             [this, &length, &compCtx] (NUdf::TUnboxedValue&& item) {
                 Item->SetValue(compCtx, std::move(item));
@@ -31,8 +31,8 @@ public:
         );
 
         return length ? State->GetValue(compCtx).Release().MakeOptional() : NUdf::TUnboxedValuePod();
-    }
-
+    } 
+ 
 #ifndef MKQL_DISABLE_CODEGEN
     Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
         auto &context = ctx.Codegen->GetContext();
@@ -188,25 +188,25 @@ public:
 private:
     void RegisterDependencies() const final {
         this->DependsOn(List);
-        this->DependsOn(InitialState);
-        this->Own(Item);
-        this->Own(State);
+        this->DependsOn(InitialState); 
+        this->Own(Item); 
+        this->Own(State); 
         this->DependsOn(NewState);
-    }
-
-    IComputationNode* const List;
+    } 
+ 
+    IComputationNode* const List; 
     IComputationExternalNode* const Item;
     IComputationExternalNode* const State;
-    IComputationNode* const NewState;
-    IComputationNode* const InitialState;
-};
-
+    IComputationNode* const NewState; 
+    IComputationNode* const InitialState; 
+}; 
+ 
 }
 
-IComputationNode* WrapFold1(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
+IComputationNode* WrapFold1(TCallable& callable, const TComputationNodeFactoryContext& ctx) { 
     MKQL_ENSURE(callable.GetInputsCount() == 5, "Expected 5 args");
-    MKQL_ENSURE(callable.GetInput(0).GetStaticType()->IsList(), "Expected List");
-
+    MKQL_ENSURE(callable.GetInput(0).GetStaticType()->IsList(), "Expected List"); 
+ 
     const auto list = LocateNode(ctx.NodeLocator, callable, 0);
     const auto initialState = LocateNode(ctx.NodeLocator, callable, 2);
     const auto newState = LocateNode(ctx.NodeLocator, callable, 4);
@@ -215,8 +215,8 @@ IComputationNode* WrapFold1(TCallable& callable, const TComputationNodeFactoryCo
 
     const auto kind = GetValueRepresentation(callable.GetType()->GetReturnType());
 
-    return new TFold1Wrapper(ctx.Mutables, kind, list, item, state, newState, initialState);
-}
-
-}
-}
+    return new TFold1Wrapper(ctx.Mutables, kind, list, item, state, newState, initialState); 
+} 
+ 
+} 
+} 

@@ -1,23 +1,23 @@
-#include "mkql_join.h"
+#include "mkql_join.h" 
 
-#include <ydb/library/yql/minikql/computation/mkql_custom_list.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_pack.h>
-#include <ydb/library/yql/minikql/mkql_node_cast.h>
-#include <ydb/library/yql/minikql/mkql_program_builder.h>
+#include <ydb/library/yql/minikql/computation/mkql_custom_list.h> 
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h> 
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_pack.h> 
+#include <ydb/library/yql/minikql/mkql_node_cast.h> 
+#include <ydb/library/yql/minikql/mkql_program_builder.h> 
 
-#include <util/system/tempfile.h>
-#include <util/stream/file.h>
-#include <util/system/fstat.h>
+#include <util/system/tempfile.h> 
+#include <util/stream/file.h> 
+#include <util/system/fstat.h> 
 #include <util/generic/ylimits.h>
-
-namespace NKikimr {
-namespace NMiniKQL {
-
+ 
+namespace NKikimr { 
+namespace NMiniKQL { 
+ 
 namespace {
 
-const ui64 DEFAULT_STACK_ITEMS = 16;
-
+const ui64 DEFAULT_STACK_ITEMS = 16; 
+ 
 static const TStatKey Join_Spill_Count("Join_Spill_Count", true);
 static const TStatKey Join_Spill_MaxFileSize("Join_Spill_MaxFileSize", false);
 static const TStatKey Join_Spill_MaxRowsCount("Join_Spill_MaxRowsCount", false);
@@ -50,8 +50,8 @@ namespace NFlow {
 using TFetcher = std::function<EFetchResult(TComputationContext&, NUdf::TUnboxedValue*const*)>;
 using TLiveFetcher = std::function<EFetchResult(TComputationContext&, NUdf::TUnboxedValue*)>;
 
-class TSpillList {
-public:
+class TSpillList { 
+public: 
     TSpillList(TValuePacker& itemPacker, bool singleShot, size_t width = 0ULL)
         : Width(width)
         , ItemPacker(itemPacker)
@@ -1307,7 +1307,7 @@ private:
         const auto indexType = Type::getInt32Ty(context);
 
         TCodegenContext ctx(codegen);
-        ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee());
+        ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee()); 
 
         auto args = ctx.Func->arg_begin();
 
@@ -1366,282 +1366,282 @@ class TSpillList {
 public:
     TSpillList(TValuePacker& itemPacker, bool singleShot)
         : ItemPacker(itemPacker)
-        , Ctx(nullptr)
-        , Count(0)
-#ifndef NDEBUG
-        , IsSealed(false)
-#endif
-        , Index(ui64(-1))
+        , Ctx(nullptr) 
+        , Count(0) 
+#ifndef NDEBUG 
+        , IsSealed(false) 
+#endif 
+        , Index(ui64(-1)) 
         , SingleShot(singleShot)
-    {}
-
-    TSpillList(TSpillList&& rhs) = delete;
-    TSpillList(const TSpillList& rhs) = delete;
-    void operator=(const TSpillList& rhs) = delete;
-
-    void Init(TComputationContext& ctx) {
-        Ctx = &ctx;
-        Count = 0;
-#ifndef NDEBUG
-        IsSealed = false;
-#endif
-        Index = ui64(-1);
-        FileState = nullptr;
-        Heap.clear();
-        LiveStream = NUdf::TUnboxedValue();
-        LiveValue = NUdf::TUnboxedValue();
-    }
-
-    TComputationContext& GetCtx() const {
-        return *Ctx;
-    }
-
+    {} 
+ 
+    TSpillList(TSpillList&& rhs) = delete; 
+    TSpillList(const TSpillList& rhs) = delete; 
+    void operator=(const TSpillList& rhs) = delete; 
+ 
+    void Init(TComputationContext& ctx) { 
+        Ctx = &ctx; 
+        Count = 0; 
+#ifndef NDEBUG 
+        IsSealed = false; 
+#endif 
+        Index = ui64(-1); 
+        FileState = nullptr; 
+        Heap.clear(); 
+        LiveStream = NUdf::TUnboxedValue(); 
+        LiveValue = NUdf::TUnboxedValue(); 
+    } 
+ 
+    TComputationContext& GetCtx() const { 
+        return *Ctx; 
+    } 
+ 
     bool Spill() {
-        if (FileState) {
-            return false;
-        }
-
+        if (FileState) { 
+            return false; 
+        } 
+ 
         FileState.reset(new TFileState);
-        OpenWrite();
-        for (ui32 i = 0; i < Count; ++i) {
-            Write(std::move(InMemory(i)));
-        }
-
-        Heap.clear();
-        return true;
-    }
-
-    void Live(NUdf::TUnboxedValue& stream, NUdf::TUnboxedValue&& liveValue) {
-        Y_VERIFY_DEBUG(!IsLive());
-        Y_VERIFY_DEBUG(Count == 0);
-        LiveStream = stream;
-        LiveValue = std::move(liveValue);
-    }
-
+        OpenWrite(); 
+        for (ui32 i = 0; i < Count; ++i) { 
+            Write(std::move(InMemory(i))); 
+        } 
+ 
+        Heap.clear(); 
+        return true; 
+    } 
+ 
+    void Live(NUdf::TUnboxedValue& stream, NUdf::TUnboxedValue&& liveValue) { 
+        Y_VERIFY_DEBUG(!IsLive()); 
+        Y_VERIFY_DEBUG(Count == 0); 
+        LiveStream = stream; 
+        LiveValue = std::move(liveValue); 
+    } 
+ 
     void Add(NUdf::TUnboxedValue&& value) {
-#ifndef NDEBUG
-        Y_VERIFY_DEBUG(!IsSealed);
-#endif
+#ifndef NDEBUG 
+        Y_VERIFY_DEBUG(!IsSealed); 
+#endif 
         if (SingleShot && Count > 0) {
             MKQL_ENSURE(Count == 1, "Counter inconsistent");
             return;
         }
 
-        if (FileState) {
-            Write(std::move(value));
-        } else {
-            if (Count < DEFAULT_STACK_ITEMS) {
-                Stack[Count] = std::move(value);
-            }
-            else {
-                if (Count == DEFAULT_STACK_ITEMS) {
-                    Y_VERIFY_DEBUG(Heap.empty());
-                    Heap.assign(Stack, Stack + DEFAULT_STACK_ITEMS);
-                }
-
-                Heap.push_back(std::move(value));
-            }
-        }
-
-        ++Count;
-    }
-
-    void Seal() {
-#ifndef NDEBUG
-        IsSealed = true;
-#endif
-        if (FileState) {
-            FileState->Output->Finish();
-            Cerr << "Spill finished at " << Count << " items" << Endl;
+        if (FileState) { 
+            Write(std::move(value)); 
+        } else { 
+            if (Count < DEFAULT_STACK_ITEMS) { 
+                Stack[Count] = std::move(value); 
+            } 
+            else { 
+                if (Count == DEFAULT_STACK_ITEMS) { 
+                    Y_VERIFY_DEBUG(Heap.empty()); 
+                    Heap.assign(Stack, Stack + DEFAULT_STACK_ITEMS); 
+                } 
+ 
+                Heap.push_back(std::move(value)); 
+            } 
+        } 
+ 
+        ++Count; 
+    } 
+ 
+    void Seal() { 
+#ifndef NDEBUG 
+        IsSealed = true; 
+#endif 
+        if (FileState) { 
+            FileState->Output->Finish(); 
+            Cerr << "Spill finished at " << Count << " items" << Endl; 
             FileState->Output.reset();
-            Cerr << "File size: " << GetFileLength(FileState->File.GetName()) << ", expected: " << FileState->TotalSize << Endl;
+            Cerr << "File size: " << GetFileLength(FileState->File.GetName()) << ", expected: " << FileState->TotalSize << Endl; 
 
             MKQL_INC_STAT(Ctx->Stats, Join_Spill_Count);
             MKQL_SET_MAX_STAT(Ctx->Stats, Join_Spill_MaxFileSize, static_cast<i64>(FileState->TotalSize));
             MKQL_SET_MAX_STAT(Ctx->Stats, Join_Spill_MaxRowsCount, static_cast<i64>(Count));
-        }
-    }
-
-    bool IsLive() const {
+        } 
+    } 
+ 
+    bool IsLive() const { 
         return bool(LiveStream);
-    }
-
-    ui64 GetCount() const {
-        Y_VERIFY_DEBUG(!IsLive());
-        return Count;
-    }
-
-    bool Empty() const {
-        return !IsLive() && (Count == 0);
-    }
-
-    NUdf::EFetchStatus Next(NUdf::TUnboxedValue& result) {
-#ifndef NDEBUG
-        Y_VERIFY_DEBUG(IsSealed);
-#endif
-        if (IsLive()) {
+    } 
+ 
+    ui64 GetCount() const { 
+        Y_VERIFY_DEBUG(!IsLive()); 
+        return Count; 
+    } 
+ 
+    bool Empty() const { 
+        return !IsLive() && (Count == 0); 
+    } 
+ 
+    NUdf::EFetchStatus Next(NUdf::TUnboxedValue& result) { 
+#ifndef NDEBUG 
+        Y_VERIFY_DEBUG(IsSealed); 
+#endif 
+        if (IsLive()) { 
             auto status = NUdf::EFetchStatus::Ok;
-            NUdf::TUnboxedValue value;
-            if ((Index + 1) == 0) {
-                value = std::move(LiveValue);
-            } else {
+            NUdf::TUnboxedValue value; 
+            if ((Index + 1) == 0) { 
+                value = std::move(LiveValue); 
+            } else { 
                 status = LiveStream.Fetch(value);
                 while (SingleShot && status == NUdf::EFetchStatus::Ok) {
                     // skip all remaining values
                     status = LiveStream.Fetch(value);
-                }
-            }
-
+                } 
+            } 
+ 
             if (status == NUdf::EFetchStatus::Ok) {
                 result = std::move(value);
                 ++Index;
             }
             return status;
-        }
-
-        if ((Index + 1) == Count) {
-            return NUdf::EFetchStatus::Finish;
-        }
-
-        ++Index;
-        if (FileState) {
-            if (Index == 0) {
-                OpenRead();
-            }
-
-            result = Read();
-            return NUdf::EFetchStatus::Ok;
-        }
-
-        result = InMemory(Index);
-        return NUdf::EFetchStatus::Ok;
-    }
-
-    void Rewind() {
+        } 
+ 
+        if ((Index + 1) == Count) { 
+            return NUdf::EFetchStatus::Finish; 
+        } 
+ 
+        ++Index; 
+        if (FileState) { 
+            if (Index == 0) { 
+                OpenRead(); 
+            } 
+ 
+            result = Read(); 
+            return NUdf::EFetchStatus::Ok; 
+        } 
+ 
+        result = InMemory(Index); 
+        return NUdf::EFetchStatus::Ok; 
+    } 
+ 
+    void Rewind() { 
         Y_VERIFY_DEBUG(!IsLive());
-#ifndef NDEBUG
-        Y_VERIFY_DEBUG(IsSealed);
-#endif
-        Index = ui64(-1);
-        if (FileState) {
-            OpenRead();
-        }
-    }
-
-private:
-    NUdf::TUnboxedValue& InMemory(ui32 index) {
-        return !Heap.empty() ? Heap[index] : Stack[index];
-    }
-
-    const NUdf::TUnboxedValue& InMemory(ui32 index) const {
-        return !Heap.empty() ? Heap[index] : Stack[index];
-    }
-
-    void OpenWrite() {
-        Cerr << "Spill started at " << Count << " items to " << FileState->File.GetName() << Endl;
+#ifndef NDEBUG 
+        Y_VERIFY_DEBUG(IsSealed); 
+#endif 
+        Index = ui64(-1); 
+        if (FileState) { 
+            OpenRead(); 
+        } 
+    } 
+ 
+private: 
+    NUdf::TUnboxedValue& InMemory(ui32 index) { 
+        return !Heap.empty() ? Heap[index] : Stack[index]; 
+    } 
+ 
+    const NUdf::TUnboxedValue& InMemory(ui32 index) const { 
+        return !Heap.empty() ? Heap[index] : Stack[index]; 
+    } 
+ 
+    void OpenWrite() { 
+        Cerr << "Spill started at " << Count << " items to " << FileState->File.GetName() << Endl; 
         FileState->Output.reset(new TFixedBufferFileOutput(FileState->File.GetName()));
-        FileState->Output->SetFlushPropagateMode(false);
-        FileState->Output->SetFinishPropagateMode(false);
-    }
-
-    void Write(NUdf::TUnboxedValue&& value) {
-        Y_VERIFY_DEBUG(FileState->Output);
-        TStringBuf serialized = ItemPacker.Pack(value);
+        FileState->Output->SetFlushPropagateMode(false); 
+        FileState->Output->SetFinishPropagateMode(false); 
+    } 
+ 
+    void Write(NUdf::TUnboxedValue&& value) { 
+        Y_VERIFY_DEBUG(FileState->Output); 
+        TStringBuf serialized = ItemPacker.Pack(value); 
         ui32 length = serialized.size();
-        FileState->Output->Write(&length, sizeof(length));
+        FileState->Output->Write(&length, sizeof(length)); 
         FileState->Output->Write(serialized.data(), length);
-        FileState->TotalSize += sizeof(length);
-        FileState->TotalSize += length;
-    }
-
-    void OpenRead() {
+        FileState->TotalSize += sizeof(length); 
+        FileState->TotalSize += length; 
+    } 
+ 
+    void OpenRead() { 
         FileState->Input.reset();
         FileState->Input.reset(new TFileInput(FileState->File.GetName()));
-    }
-
-    NUdf::TUnboxedValue Read() {
-        ui32 length = 0;
-        auto wasRead = FileState->Input->Load(&length, sizeof(length));
-        Y_VERIFY(wasRead == sizeof(length));
-        FileState->Buffer.Reserve(length);
-        wasRead = FileState->Input->Load((void*)FileState->Buffer.Data(), length);
-        Y_VERIFY(wasRead == length);
+    } 
+ 
+    NUdf::TUnboxedValue Read() { 
+        ui32 length = 0; 
+        auto wasRead = FileState->Input->Load(&length, sizeof(length)); 
+        Y_VERIFY(wasRead == sizeof(length)); 
+        FileState->Buffer.Reserve(length); 
+        wasRead = FileState->Input->Load((void*)FileState->Buffer.Data(), length); 
+        Y_VERIFY(wasRead == length); 
         return ItemPacker.Unpack(TStringBuf(FileState->Buffer.Data(), length), Ctx->HolderFactory);
-    }
-
-private:
-    TValuePacker& ItemPacker;
-    TComputationContext* Ctx;
-    ui64 Count;
-    NUdf::TUnboxedValue Stack[DEFAULT_STACK_ITEMS];
-    TUnboxedValueVector Heap;
-#ifndef NDEBUG
-    bool IsSealed;
-#endif
-    ui64 Index;
+    } 
+ 
+private: 
+    TValuePacker& ItemPacker; 
+    TComputationContext* Ctx; 
+    ui64 Count; 
+    NUdf::TUnboxedValue Stack[DEFAULT_STACK_ITEMS]; 
+    TUnboxedValueVector Heap; 
+#ifndef NDEBUG 
+    bool IsSealed; 
+#endif 
+    ui64 Index; 
     const bool SingleShot;
-    struct TFileState {
-        TFileState()
+    struct TFileState { 
+        TFileState() 
             : File(TTempFileHandle::InCurrentDir())
-            , TotalSize(0)
-        {}
-
-        TTempFileHandle File;
-        ui64 TotalSize;
+            , TotalSize(0) 
+        {} 
+ 
+        TTempFileHandle File; 
+        ui64 TotalSize; 
         std::unique_ptr<TFileInput> Input;
         std::unique_ptr<TFixedBufferFileOutput> Output;
-        TBuffer Buffer;
-    };
-
+        TBuffer Buffer; 
+    }; 
+ 
     std::unique_ptr<TFileState> FileState;
-    NUdf::TUnboxedValue LiveStream;
-    NUdf::TUnboxedValue LiveValue;
-};
-
+    NUdf::TUnboxedValue LiveStream; 
+    NUdf::TUnboxedValue LiveValue; 
+}; 
+ 
 template <EJoinKind Kind, bool TTrackRss>
 class TCommonJoinCoreWrapper : public TMutableComputationNode<TCommonJoinCoreWrapper<Kind, TTrackRss>> {
     using TSelf = TCommonJoinCoreWrapper<Kind, TTrackRss>;
     using TBase = TMutableComputationNode<TSelf>;
     typedef TBase TBaseComputation;
-public:
-    class TValue : public TComputationValue<TValue> {
-    public:
-        using TBase = TComputationValue<TValue>;
-
-        TValue(TMemoryUsageInfo* memInfo, NUdf::TUnboxedValue&& stream,
+public: 
+    class TValue : public TComputationValue<TValue> { 
+    public: 
+        using TBase = TComputationValue<TValue>; 
+ 
+        TValue(TMemoryUsageInfo* memInfo, NUdf::TUnboxedValue&& stream, 
             TComputationContext& ctx, const TSelf* self)
-            : TBase(memInfo)
-            , Stream(std::move(stream))
-            , Ctx(ctx)
-            , Self(self)
+            : TBase(memInfo) 
+            , Stream(std::move(stream)) 
+            , Ctx(ctx) 
+            , Self(self) 
             , List1(Self->Packer.RefMutableObject(ctx, false, Self->InputStructType), IsAnyJoinLeft(Self->AnyJoinSettings))
             , List2(Self->Packer.RefMutableObject(ctx, false, Self->InputStructType), IsAnyJoinRight(Self->AnyJoinSettings))
-        {
-            Init();
-        }
-
-        void Reset(NUdf::TUnboxedValue&& stream) {
-            Stream = std::move(stream);
-            Init();
-        }
-
-        void Init() {
+        { 
+            Init(); 
+        } 
+ 
+        void Reset(NUdf::TUnboxedValue&& stream) { 
+            Stream = std::move(stream); 
+            Init(); 
+        } 
+ 
+        void Init() { 
             List1.Init(Ctx);
             List2.Init(Ctx);
-            CrossMove1 = true;
-            EatInput = true;
-            KeyHasNulls = false;
-            OutputMode = EOutputMode::Unknown;
+            CrossMove1 = true; 
+            EatInput = true; 
+            KeyHasNulls = false; 
+            OutputMode = EOutputMode::Unknown; 
             InitialUsage = std::nullopt;
-        }
-
+        } 
+ 
     private:
-        NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) override {
+        NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) override { 
             while (EatInput) {
                 if (!InitialUsage) {
                     InitialUsage = Ctx.HolderFactory.GetPagePool().GetUsed();
-                }
-
+                } 
+ 
                 NUdf::TUnboxedValue value;
                 const auto status = Stream.Fetch(value);
                 if (status == NUdf::EFetchStatus::Yield) {
@@ -1658,90 +1658,90 @@ public:
                                 break;
                             }
                         }
-                    }
-
+                    } 
+ 
                     switch (const auto tableIndex = value.GetElement(Self->TableIndexPos).template Get<ui32>()) {
                         case LeftIndex:
                             if (Kind == EJoinKind::RightOnly || (Kind == EJoinKind::Exclusion && !List2.Empty() && !KeyHasNulls)) {
                                 EatInput = false;
                                 OutputMode = EOutputMode::None;
                                 break;
-                            }
-
+                            } 
+ 
                             if (Self->SortedTableOrder && *Self->SortedTableOrder == RightIndex) {
                                 List1.Live(Stream, std::move(value));
-                                EatInput = false;
-                            } else {
+                                EatInput = false; 
+                            } else { 
                                 List1.Add(std::move(value));
                                 if (Ctx.CheckAdjustedMemLimit<TTrackRss>(Self->MemLimit, *InitialUsage)) {
                                     List1.Spill();
-                                }
-                            }
+                                } 
+                            } 
                             break;
                         case RightIndex:
                             if (Kind == EJoinKind::LeftOnly || (Kind == EJoinKind::Exclusion && !List1.Empty() && !KeyHasNulls)) {
                                 EatInput = false;
                                 OutputMode = EOutputMode::None;
                                 break;
-                            }
-
+                            } 
+ 
                             if (Self->SortedTableOrder && *Self->SortedTableOrder == LeftIndex) {
                                 List2.Live(Stream, std::move(value));
-                                EatInput = false;
-                            } else {
+                                EatInput = false; 
+                            } else { 
                                 List2.Add(std::move(value));
                                 if (Ctx.CheckAdjustedMemLimit<TTrackRss>(Self->MemLimit, *InitialUsage)) {
                                     List2.Spill();
-                                }
-                            }
+                                } 
+                            } 
                             break;
                         default: THROW yexception() << "Bad table index: " << tableIndex;
-                    }
-                }
+                    } 
+                } 
             }
-
+ 
             while (true) {
-                switch (OutputMode) {
-                case EOutputMode::Unknown: {
+                switch (OutputMode) { 
+                case EOutputMode::Unknown: { 
                         List1.Seal();
                         List2.Seal();
-                        switch (Kind) {
-                        case EJoinKind::Cross:
-                        case EJoinKind::Inner:
+                        switch (Kind) { 
+                        case EJoinKind::Cross: 
+                        case EJoinKind::Inner: 
                             if (List1.Empty() || List2.Empty()) {
                                 OutputMode = EOutputMode::None;
-                            }
-
-                            break;
-                        case EJoinKind::Left:
+                            } 
+ 
+                            break; 
+                        case EJoinKind::Left: 
                             if (List1.Empty()) {
                                 OutputMode = EOutputMode::None;
-                            }
-                            break;
-
-                        case EJoinKind::LeftOnly:
+                            } 
+                            break; 
+ 
+                        case EJoinKind::LeftOnly: 
                             if (List1.Empty() || !List2.Empty()) {
                                 OutputMode = EOutputMode::None;
                             } else {
                                 OutputMode = EOutputMode::RightNull;
-                            }
-                            break;
-
-                        case EJoinKind::Right:
+                            } 
+                            break; 
+ 
+                        case EJoinKind::Right: 
                             if (List2.Empty()) {
                                 OutputMode = EOutputMode::None;
-                            }
-                            break;
-
-                        case EJoinKind::RightOnly:
+                            } 
+                            break; 
+ 
+                        case EJoinKind::RightOnly: 
                             if (List2.Empty() || !List1.Empty()) {
                                 OutputMode = EOutputMode::None;
                             } else {
                                 OutputMode = EOutputMode::LeftNull;
-                            }
-                            break;
-
-                        case EJoinKind::Exclusion:
+                            } 
+                            break; 
+ 
+                        case EJoinKind::Exclusion: 
                             if (!List1.Empty() && !List2.Empty() && !KeyHasNulls) {
                                 OutputMode = EOutputMode::None;
                             } else if (List1.Empty()) {
@@ -1750,70 +1750,70 @@ public:
                                 OutputMode = EOutputMode::RightNull;
                             } else {
                                 OutputMode = EOutputMode::BothNull;
-                            }
-                            break;
-
-                        case EJoinKind::Full:
-                            break;
-
-                        case EJoinKind::LeftSemi:
+                            } 
+                            break; 
+ 
+                        case EJoinKind::Full: 
+                            break; 
+ 
+                        case EJoinKind::LeftSemi: 
                             if (List1.Empty() || List2.Empty()) {
                                 OutputMode = EOutputMode::None;
                             } else {
                                 OutputMode = EOutputMode::RightNull;
-                            }
-                            break;
-
-                        case EJoinKind::RightSemi:
+                            } 
+                            break; 
+ 
+                        case EJoinKind::RightSemi: 
                             if (List1.Empty() || List2.Empty()) {
                                 OutputMode = EOutputMode::None;
                             } else {
                                 OutputMode = EOutputMode::LeftNull;
-                            }
-                            break;
-
-                        default:
-                            Y_FAIL("Unknown kind");
-                        }
-
-                        if (OutputMode == EOutputMode::Unknown) {
+                            } 
+                            break; 
+ 
+                        default: 
+                            Y_FAIL("Unknown kind"); 
+                        } 
+ 
+                        if (OutputMode == EOutputMode::Unknown) { 
                             if (List1.Empty()) {
-                                OutputMode = EOutputMode::LeftNull;
+                                OutputMode = EOutputMode::LeftNull; 
                             } else if (List2.Empty()) {
-                                OutputMode = EOutputMode::RightNull;
+                                OutputMode = EOutputMode::RightNull; 
                             } else if (List1.IsLive()) {
-                                OutputMode = EOutputMode::Cross;
+                                OutputMode = EOutputMode::Cross; 
                             } else if (List2.IsLive()) {
-                                OutputMode = EOutputMode::CrossSwap;
-                            } else {
+                                OutputMode = EOutputMode::CrossSwap; 
+                            } else { 
                                 OutputMode = List1.GetCount() >= List2.GetCount() ?
-                                    EOutputMode::Cross : EOutputMode::CrossSwap;
-                            }
-                        }
-                    }
-                    continue;
-                case EOutputMode::LeftNull: {
-                        NUdf::TUnboxedValue value;
+                                    EOutputMode::Cross : EOutputMode::CrossSwap; 
+                            } 
+                        } 
+                    } 
+                    continue; 
+                case EOutputMode::LeftNull: { 
+                        NUdf::TUnboxedValue value; 
                         auto status = List2.Next(value);
-                        if (status != NUdf::EFetchStatus::Ok) {
-                            return status;
-                        }
-
-                        result = PrepareNullItem<true>(value);
-                        return NUdf::EFetchStatus::Ok;
-                    }
-                    break;
-                case EOutputMode::RightNull: {
-                        NUdf::TUnboxedValue value;
+                        if (status != NUdf::EFetchStatus::Ok) { 
+                            return status; 
+                        } 
+ 
+                        result = PrepareNullItem<true>(value); 
+                        return NUdf::EFetchStatus::Ok; 
+                    } 
+                    break; 
+                case EOutputMode::RightNull: { 
+                        NUdf::TUnboxedValue value; 
                         auto status = List1.Next(value);
-                        if (status != NUdf::EFetchStatus::Ok) {
-                            return status;
-                        }
-
-                        result = PrepareNullItem<false>(value);
-                        return NUdf::EFetchStatus::Ok;
-                    }
-                    break;
+                        if (status != NUdf::EFetchStatus::Ok) { 
+                            return status; 
+                        } 
+ 
+                        result = PrepareNullItem<false>(value); 
+                        return NUdf::EFetchStatus::Ok; 
+                    } 
+                    break; 
                 case EOutputMode::BothNull: {
                         NUdf::TUnboxedValue value;
 
@@ -1836,145 +1836,145 @@ public:
                         }
                     }
                     break;
-                case EOutputMode::Cross:
-                    return PrepareCrossItem<false>(result);
-                case EOutputMode::CrossSwap:
-                    return PrepareCrossItem<true>(result);
+                case EOutputMode::Cross: 
+                    return PrepareCrossItem<false>(result); 
+                case EOutputMode::CrossSwap: 
+                    return PrepareCrossItem<true>(result); 
                 case EOutputMode::None:
                     return NUdf::EFetchStatus::Finish;
-                default:
+                default: 
                     Y_FAIL("Unknown output mode");
-                }
-            }
-        }
-
-        template <bool IsLeftNull>
+                } 
+            } 
+        } 
+ 
+        template <bool IsLeftNull> 
         NUdf::TUnboxedValue PrepareNullItem(const NUdf::TUnboxedValue& value) {
             const auto structObj = Self->ResStruct.NewArray(Ctx, Self->LeftInputColumns.size() + Self->RightInputColumns.size(), ResItems);
-
-            for (ui32 i = 0; i < Self->LeftInputColumns.size(); ++i) {
-                ui32 inIndex = Self->LeftInputColumns[i];
-                ui32 outIndex = Self->LeftOutputColumns[i];
-                if (IsLeftNull) {
+ 
+            for (ui32 i = 0; i < Self->LeftInputColumns.size(); ++i) { 
+                ui32 inIndex = Self->LeftInputColumns[i]; 
+                ui32 outIndex = Self->LeftOutputColumns[i]; 
+                if (IsLeftNull) { 
                     ResItems[outIndex] = NUdf::TUnboxedValuePod();
-                    continue;
-                }
-
+                    continue; 
+                } 
+ 
                 auto member = value.GetElement(inIndex);
-                if (Self->IsRequiredColumn[inIndex]) {
+                if (Self->IsRequiredColumn[inIndex]) { 
                     ResItems[outIndex] = member.Release().GetOptionalValue();
-                } else {
+                } else { 
                     ResItems[outIndex] = std::move(member);
-                }
-            }
-
-            for (ui32 i = 0; i < Self->RightInputColumns.size(); ++i) {
-                ui32 inIndex = Self->RightInputColumns[i];
-                ui32 outIndex = Self->RightOutputColumns[i];
-                if (!IsLeftNull) {
+                } 
+            } 
+ 
+            for (ui32 i = 0; i < Self->RightInputColumns.size(); ++i) { 
+                ui32 inIndex = Self->RightInputColumns[i]; 
+                ui32 outIndex = Self->RightOutputColumns[i]; 
+                if (!IsLeftNull) { 
                     ResItems[outIndex] = NUdf::TUnboxedValuePod();
-                    continue;
-                }
-
+                    continue; 
+                } 
+ 
                 auto member = value.GetElement(inIndex);
-                if (Self->IsRequiredColumn[inIndex]) {
+                if (Self->IsRequiredColumn[inIndex]) { 
                     ResItems[outIndex] = member.Release().GetOptionalValue();
-                }
-                else {
+                } 
+                else { 
                     ResItems[outIndex] = std::move(member);
-                }
-            }
-
-            return structObj;
-        }
-
-        template <bool SwapLists>
-        NUdf::EFetchStatus PrepareCrossItem(NUdf::TUnboxedValue& result) {
-            if (KeyHasNulls) {
-                for (;;) {
-                    NUdf::TUnboxedValue value;
+                } 
+            } 
+ 
+            return structObj; 
+        } 
+ 
+        template <bool SwapLists> 
+        NUdf::EFetchStatus PrepareCrossItem(NUdf::TUnboxedValue& result) { 
+            if (KeyHasNulls) { 
+                for (;;) { 
+                    NUdf::TUnboxedValue value; 
                     auto status = (CrossMove1 == SwapLists ? List2 : List1).Next(value);
-                    if (status == NUdf::EFetchStatus::Finish && CrossMove1) {
-                        CrossMove1 = false;
-                        continue;
-                    }
-
-                    if (status != NUdf::EFetchStatus::Ok) {
-                        return status;
-                    }
-
-                    result = (CrossMove1 == SwapLists) ? PrepareNullItem<true>(value) : PrepareNullItem<false>(value);
-                    return status;
-                }
-            }
-
-            for (;;) {
-                if (CrossMove1) {
+                    if (status == NUdf::EFetchStatus::Finish && CrossMove1) { 
+                        CrossMove1 = false; 
+                        continue; 
+                    } 
+ 
+                    if (status != NUdf::EFetchStatus::Ok) { 
+                        return status; 
+                    } 
+ 
+                    result = (CrossMove1 == SwapLists) ? PrepareNullItem<true>(value) : PrepareNullItem<false>(value); 
+                    return status; 
+                } 
+            } 
+ 
+            for (;;) { 
+                if (CrossMove1) { 
                     auto status = (SwapLists ? List2 : List1).Next(CrossValue1);
-                    if (status != NUdf::EFetchStatus::Ok) {
-                        return status;
-                    }
-
-                    CrossMove1 = false;
+                    if (status != NUdf::EFetchStatus::Ok) { 
+                        return status; 
+                    } 
+ 
+                    CrossMove1 = false; 
                     (SwapLists ? List1 : List2).Rewind();
-                }
-
+                } 
+ 
                 auto status = (SwapLists ? List1 : List2).Next(CrossValue2);
-                MKQL_ENSURE(status != NUdf::EFetchStatus::Yield, "Unexpected stream status");
-                if (status == NUdf::EFetchStatus::Finish) {
-                    CrossMove1 = true;
-                    continue;
-                }
-
+                MKQL_ENSURE(status != NUdf::EFetchStatus::Yield, "Unexpected stream status"); 
+                if (status == NUdf::EFetchStatus::Finish) { 
+                    CrossMove1 = true; 
+                    continue; 
+                } 
+ 
                 auto structObj = Self->ResStruct.NewArray(Ctx, Self->LeftInputColumns.size() + Self->RightInputColumns.size(), ResItems);
-
-                for (ui32 i = 0; i < Self->LeftInputColumns.size(); ++i) {
-                    ui32 inIndex = Self->LeftInputColumns[i];
-                    ui32 outIndex = Self->LeftOutputColumns[i];
+ 
+                for (ui32 i = 0; i < Self->LeftInputColumns.size(); ++i) { 
+                    ui32 inIndex = Self->LeftInputColumns[i]; 
+                    ui32 outIndex = Self->LeftOutputColumns[i]; 
                     auto member = (SwapLists ? CrossValue2 : CrossValue1).GetElement(inIndex);
-                    if (Self->IsRequiredColumn[inIndex]) {
+                    if (Self->IsRequiredColumn[inIndex]) { 
                         ResItems[outIndex] = member.Release().GetOptionalValue();
-                    } else {
+                    } else { 
                         ResItems[outIndex] = std::move(member);
-                    }
-                }
-
-                for (ui32 i = 0; i < Self->RightInputColumns.size(); ++i) {
-                    ui32 inIndex = Self->RightInputColumns[i];
-                    ui32 outIndex = Self->RightOutputColumns[i];
+                    } 
+                } 
+ 
+                for (ui32 i = 0; i < Self->RightInputColumns.size(); ++i) { 
+                    ui32 inIndex = Self->RightInputColumns[i]; 
+                    ui32 outIndex = Self->RightOutputColumns[i]; 
                     auto member = (SwapLists ? CrossValue1 : CrossValue2).GetElement(inIndex);
-                    if (Self->IsRequiredColumn[inIndex]) {
+                    if (Self->IsRequiredColumn[inIndex]) { 
                         ResItems[outIndex] = member.Release().GetOptionalValue();
-                    } else {
+                    } else { 
                         ResItems[outIndex] = std::move(member);
-                    }
-                }
-
-                result = std::move(structObj);
-                return NUdf::EFetchStatus::Ok;
-            }
-        }
-
-
-    private:
-        NUdf::TUnboxedValue Stream;
-        TComputationContext& Ctx;
+                    } 
+                } 
+ 
+                result = std::move(structObj); 
+                return NUdf::EFetchStatus::Ok; 
+            } 
+        } 
+ 
+ 
+    private: 
+        NUdf::TUnboxedValue Stream; 
+        TComputationContext& Ctx; 
         const TSelf* const Self;
-        bool EatInput;
-        bool KeyHasNulls;
+        bool EatInput; 
+        bool KeyHasNulls; 
         std::optional<ui64> InitialUsage;
-        EOutputMode OutputMode;
-
-        bool CrossMove1;
-        NUdf::TUnboxedValue CrossValue1;
-        NUdf::TUnboxedValue CrossValue2;
+        EOutputMode OutputMode; 
+ 
+        bool CrossMove1; 
+        NUdf::TUnboxedValue CrossValue1; 
+        NUdf::TUnboxedValue CrossValue2; 
 
         TSpillList List1;
         TSpillList List2;
 
         NUdf::TUnboxedValue* ResItems = nullptr;
-    };
-
+    }; 
+ 
     TCommonJoinCoreWrapper(TComputationMutables& mutables, IComputationNode* stream, const TType* inputStructType, ui32 inputWidth, ui32 tableIndexPos,
         std::vector<ui32>&& leftInputColumns, std::vector<ui32>&& rightInputColumns, std::vector<ui32>&& requiredColumns,
         std::vector<ui32>&& leftOutputColumns, std::vector<ui32>&& rightOutputColumns, ui64 memLimit,
@@ -1983,42 +1983,42 @@ public:
         , Stream(stream)
         , InputStructType(inputStructType)
         , Packer(mutables)
-        , TableIndexPos(tableIndexPos)
-        , LeftInputColumns(std::move(leftInputColumns))
-        , RightInputColumns(std::move(rightInputColumns))
-        , RequiredColumns(std::move(requiredColumns))
-        , LeftOutputColumns(std::move(leftOutputColumns))
-        , RightOutputColumns(std::move(rightOutputColumns))
+        , TableIndexPos(tableIndexPos) 
+        , LeftInputColumns(std::move(leftInputColumns)) 
+        , RightInputColumns(std::move(rightInputColumns)) 
+        , RequiredColumns(std::move(requiredColumns)) 
+        , LeftOutputColumns(std::move(leftOutputColumns)) 
+        , RightOutputColumns(std::move(rightOutputColumns)) 
         , MemLimit(memLimit)
-        , SortedTableOrder(sortedTableOrder)
-        , KeyColumns(std::move(keyColumns))
+        , SortedTableOrder(sortedTableOrder) 
+        , KeyColumns(std::move(keyColumns)) 
         , IsRequiredColumn(FillRequiredStructColumn(inputWidth, RequiredColumns))
         , ResStruct(mutables)
         , ResStreamIndex(mutables.CurValueIndex++)
         , AnyJoinSettings(anyJoinSettings)
-    {
-    }
-
+    { 
+    } 
+ 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         auto& resStream = ctx.MutableValues[ResStreamIndex];
         if (!resStream || resStream.IsInvalid() || !resStream.UniqueBoxed()) {
             resStream = ctx.HolderFactory.Create<TValue>(Stream->GetValue(ctx), ctx, this);
-        } else {
+        } else { 
             static_cast<TValue&>(*resStream.AsBoxed()).Reset(Stream->GetValue(ctx));
-        }
-
+        } 
+ 
         return static_cast<const NUdf::TUnboxedValuePod&>(resStream);
-    }
-
+    } 
+ 
 private:
     void RegisterDependencies() const final {
         this->DependsOn(Stream);
-    }
-
-    IComputationNode* const Stream;
+    } 
+ 
+    IComputationNode* const Stream; 
     const TType* const InputStructType;
     const TMutableObjectOverBoxedValue<TValuePackerBoxed> Packer;
-    const ui32 TableIndexPos;
+    const ui32 TableIndexPos; 
     const std::vector<ui32> LeftInputColumns;
     const std::vector<ui32> RightInputColumns;
     const std::vector<ui32> RequiredColumns;
@@ -2028,20 +2028,20 @@ private:
     const std::optional<ui32> SortedTableOrder;
     const std::vector<ui32> KeyColumns;
     const std::vector<bool> IsRequiredColumn;
-
+ 
     const TContainerCacheOnContext ResStruct;
     const ui32 ResStreamIndex;
     const EAnyJoinSettings AnyJoinSettings;
-};
-
+}; 
+ 
+} 
+ 
 }
 
-}
-
-IComputationNode* WrapCommonJoinCore(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
+IComputationNode* WrapCommonJoinCore(TCallable& callable, const TComputationNodeFactoryContext& ctx) { 
     MKQL_ENSURE(callable.GetInputsCount() == 11U || callable.GetInputsCount() == 12U, "Expected 12 args");
     const auto type = callable.GetType()->GetReturnType();
-
+ 
     const auto inputRowType = type->IsFlow() ?
         AS_TYPE(TFlowType, callable.GetInput(0))->GetItemType():
         AS_TYPE(TStreamType, callable.GetInput(0))->GetItemType();
@@ -2085,7 +2085,7 @@ IComputationNode* WrapCommonJoinCore(TCallable& callable, const TComputationNode
 
     const auto rawKind = AS_VALUE(TDataLiteral, callable.GetInput(1))->AsValue().Get<ui32>();
     const auto kind = GetJoinKind(rawKind);
-
+ 
     std::vector<ui32> leftInputColumns;
     std::vector<ui32> rightInputColumns;
     std::vector<ui32> requiredColumns;
@@ -2098,51 +2098,51 @@ IComputationNode* WrapCommonJoinCore(TCallable& callable, const TComputationNode
     const auto leftOutputColumnsNode = AS_VALUE(TTupleLiteral, callable.GetInput(5));
     const auto rightOutputColumnsNode = AS_VALUE(TTupleLiteral, callable.GetInput(6));
     const auto keyColumnsNode = AS_VALUE(TTupleLiteral, callable.GetInput(7));
-
+ 
     std::vector<TType*> leftTypes;
     leftTypes.reserve(leftInputColumnsNode->GetValuesCount());
-    leftInputColumns.reserve(leftInputColumnsNode->GetValuesCount());
-    for (ui32 i = 0; i < leftInputColumnsNode->GetValuesCount(); ++i) {
+    leftInputColumns.reserve(leftInputColumnsNode->GetValuesCount()); 
+    for (ui32 i = 0; i < leftInputColumnsNode->GetValuesCount(); ++i) { 
         leftInputColumns.push_back(AS_VALUE(TDataLiteral, leftInputColumnsNode->GetValue(i))->AsValue().Get<ui32>());
         leftTypes.emplace_back(fieldTypes[leftInputColumns.back()]);
-    }
-
+    } 
+ 
     std::vector<TType*> rightTypes;
     rightTypes.reserve(rightInputColumnsNode->GetValuesCount());
-    rightInputColumns.reserve(rightInputColumnsNode->GetValuesCount());
-    for (ui32 i = 0; i < rightInputColumnsNode->GetValuesCount(); ++i) {
+    rightInputColumns.reserve(rightInputColumnsNode->GetValuesCount()); 
+    for (ui32 i = 0; i < rightInputColumnsNode->GetValuesCount(); ++i) { 
         rightInputColumns.push_back(AS_VALUE(TDataLiteral, rightInputColumnsNode->GetValue(i))->AsValue().Get<ui32>());
         rightTypes.emplace_back(fieldTypes[rightInputColumns.back()]);
-    }
-
-    requiredColumns.reserve(requiredColumnsNode->GetValuesCount());
-    for (ui32 i = 0; i < requiredColumnsNode->GetValuesCount(); ++i) {
+    } 
+ 
+    requiredColumns.reserve(requiredColumnsNode->GetValuesCount()); 
+    for (ui32 i = 0; i < requiredColumnsNode->GetValuesCount(); ++i) { 
         requiredColumns.push_back(AS_VALUE(TDataLiteral, requiredColumnsNode->GetValue(i))->AsValue().Get<ui32>());
-    }
-
-    leftOutputColumns.reserve(leftOutputColumnsNode->GetValuesCount());
-    for (ui32 i = 0; i < leftOutputColumnsNode->GetValuesCount(); ++i) {
+    } 
+ 
+    leftOutputColumns.reserve(leftOutputColumnsNode->GetValuesCount()); 
+    for (ui32 i = 0; i < leftOutputColumnsNode->GetValuesCount(); ++i) { 
         leftOutputColumns.push_back(AS_VALUE(TDataLiteral, leftOutputColumnsNode->GetValue(i))->AsValue().Get<ui32>());
-    }
-
-    rightOutputColumns.reserve(rightOutputColumnsNode->GetValuesCount());
-    for (ui32 i = 0; i < rightOutputColumnsNode->GetValuesCount(); ++i) {
+    } 
+ 
+    rightOutputColumns.reserve(rightOutputColumnsNode->GetValuesCount()); 
+    for (ui32 i = 0; i < rightOutputColumnsNode->GetValuesCount(); ++i) { 
         rightOutputColumns.push_back(AS_VALUE(TDataLiteral, rightOutputColumnsNode->GetValue(i))->AsValue().Get<ui32>());
-    }
-
-    keyColumns.reserve(keyColumnsNode->GetValuesCount());
-    for (ui32 i = 0; i < keyColumnsNode->GetValuesCount(); ++i) {
-        keyColumns.push_back(AS_VALUE(TDataLiteral, keyColumnsNode->GetValue(i))->AsValue().Get<ui32>());
-    }
+    } 
+ 
+    keyColumns.reserve(keyColumnsNode->GetValuesCount()); 
+    for (ui32 i = 0; i < keyColumnsNode->GetValuesCount(); ++i) { 
+        keyColumns.push_back(AS_VALUE(TDataLiteral, keyColumnsNode->GetValue(i))->AsValue().Get<ui32>()); 
+    } 
 
     const ui64 memLimit = AS_VALUE(TDataLiteral, callable.GetInput(8))->AsValue().Get<ui64>();
-
+ 
     std::optional<ui32> sortedTableOrder;
-    if (!callable.GetInput(9).GetStaticType()->IsVoid()) {
-        sortedTableOrder = AS_VALUE(TDataLiteral, callable.GetInput(9))->AsValue().Get<ui32>();
-        MKQL_ENSURE(*sortedTableOrder < 2, "Bad sorted table order");
-    }
-
+    if (!callable.GetInput(9).GetStaticType()->IsVoid()) { 
+        sortedTableOrder = AS_VALUE(TDataLiteral, callable.GetInput(9))->AsValue().Get<ui32>(); 
+        MKQL_ENSURE(*sortedTableOrder < 2, "Bad sorted table order"); 
+    } 
+ 
     const EAnyJoinSettings anyJoinSettings = GetAnyJoinSettings(AS_VALUE(TDataLiteral, callable.GetInput(10))->AsValue().Get<ui32>());
 
     const auto tableIndexPos = 12U == callable.GetInputsCount() ?
@@ -2155,8 +2155,8 @@ IComputationNode* WrapCommonJoinCore(TCallable& callable, const TComputationNode
     const auto leftInputType = TTupleType::Create(leftTypes.size(), leftTypes.data(), ctx.Env);
     const auto rightInputType = TTupleType::Create(rightTypes.size(), rightTypes.data(), ctx.Env);
 
-#define MAKE_COMMON_JOIN_CORE_WRAPPER(KIND)\
-    case EJoinKind::KIND: \
+#define MAKE_COMMON_JOIN_CORE_WRAPPER(KIND)\ 
+    case EJoinKind::KIND: \ 
     if (type->IsFlow()) { \
         if (const auto wide = dynamic_cast<IComputationWideFlowNode*>(flow)) \
             if (trackRss) \
@@ -2186,8 +2186,8 @@ IComputationNode* WrapCommonJoinCore(TCallable& callable, const TComputationNode
                 std::move(leftInputColumns), std::move(rightInputColumns), std::move(requiredColumns), \
                 std::move(leftOutputColumns), std::move(rightOutputColumns), memLimit, sortedTableOrder, std::move(keyColumns), anyJoinSettings); \
     }
-
-    switch (kind) {
+ 
+    switch (kind) { 
         MAKE_COMMON_JOIN_CORE_WRAPPER(Inner)
         MAKE_COMMON_JOIN_CORE_WRAPPER(Left)
         MAKE_COMMON_JOIN_CORE_WRAPPER(Right)
@@ -2198,11 +2198,11 @@ IComputationNode* WrapCommonJoinCore(TCallable& callable, const TComputationNode
         MAKE_COMMON_JOIN_CORE_WRAPPER(LeftSemi)
         MAKE_COMMON_JOIN_CORE_WRAPPER(RightSemi)
         MAKE_COMMON_JOIN_CORE_WRAPPER(Cross)
-    default:
-        Y_FAIL("Unknown kind");
-    }
+    default: 
+        Y_FAIL("Unknown kind"); 
+    } 
 #undef MAKE_COMMON_JOIN_CORE_WRAPPER
-}
-
-}
-}
+} 
+ 
+} 
+} 

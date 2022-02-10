@@ -67,11 +67,11 @@ namespace NTest {
                     .Col(groups ? 0 : 0, 0,  NScheme::NTypeIds::Uint64)
                     .Col(groups ? 0 : 0, 1,  NScheme::NTypeIds::Uint32)
                     .Col(groups ? 0 : 0, 2,  NScheme::NTypeIds::Uint64)
-                    .Col(groups ? 1 : 0, 3,  NScheme::NTypeIds::String)
+                    .Col(groups ? 1 : 0, 3,  NScheme::NTypeIds::String) 
                     .Col(groups ? 1 : 0, 4,  NScheme::NTypeIds::Bool)
                     .Col(groups ? 5 : 0, 5,  NScheme::NTypeIds::Uint32)
                     .Col(groups ? 5 : 0, 6,  NScheme::NTypeIds::Uint32)
-                    .Col(groups ? 8 : 0, 7,  NScheme::NTypeIds::String)
+                    .Col(groups ? 8 : 0, 7,  NScheme::NTypeIds::String) 
                     .Col(groups ? 8 : 0, 8,  NScheme::NTypeIds::Uint64)
                     .Key({ 0, 1 });
         }

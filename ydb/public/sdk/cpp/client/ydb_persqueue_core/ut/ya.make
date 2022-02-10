@@ -28,8 +28,8 @@ PEERDIR(
     ydb/public/sdk/cpp/client/ydb_persqueue_public/codecs
 )
 
-YQL_LAST_ABI_VERSION()
-
+YQL_LAST_ABI_VERSION() 
+ 
 SRCS(
     common_ut.cpp
     read_session_ut.cpp

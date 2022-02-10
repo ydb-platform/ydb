@@ -1,16 +1,16 @@
 #include "mkql_combine.h"
 
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h>
-#include <ydb/library/yql/minikql/mkql_node_cast.h>
-#include <ydb/library/yql/minikql/mkql_stats_registry.h>
-#include <ydb/library/yql/minikql/defs.h>
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h> 
+#include <ydb/library/yql/minikql/mkql_node_cast.h> 
+#include <ydb/library/yql/minikql/mkql_stats_registry.h> 
+#include <ydb/library/yql/minikql/defs.h> 
 
 namespace NKikimr {
 namespace NMiniKQL {
 
 TStatKey Combine_FlushesCount("Combine_FlushesCount", true);
 TStatKey Combine_MaxRowsCount("Combine_MaxRowsCount", false);
-
+ 
 namespace {
 
 using TEqualsPtr = bool(*)(NUdf::TUnboxedValuePod, NUdf::TUnboxedValuePod);
@@ -711,7 +711,7 @@ private:
             FunctionType::get(statusType, {PointerType::getUnqual(contextType), containerType, statePtrType, ptrValueType}, false);
 
         TCodegenContext ctx(codegen);
-        ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee());
+        ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee()); 
 
         auto args = ctx.Func->arg_begin();
 
@@ -945,10 +945,10 @@ IComputationNode* WrapCombineCore(TCallable& callable, const TComputationNodeFac
 
     const auto keyType = callable.GetInput(2).GetStaticType();
     TKeyTypes keyTypes;
-    bool isTuple;
-    bool encoded;
-    GetDictionaryKeyTypes(keyType, keyTypes, isTuple, encoded);
-    Y_VERIFY(!encoded, "TODO");
+    bool isTuple; 
+    bool encoded; 
+    GetDictionaryKeyTypes(keyType, keyTypes, isTuple, encoded); 
+    Y_VERIFY(!encoded, "TODO"); 
     const auto memLimit = AS_VALUE(TDataLiteral, callable.GetInput(8))->AsValue().Get<ui64>();
     const bool trackRss = EGraphPerProcess::Single == ctx.GraphPerProcess;
 

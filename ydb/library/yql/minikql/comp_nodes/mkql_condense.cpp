@@ -1,14 +1,14 @@
 #include "mkql_condense.h"
 #include "mkql_squeeze_state.h"
 
-#include <ydb/library/yql/minikql/mkql_node_cast.h>
-#include <ydb/library/yql/minikql/mkql_node_builder.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h>
-
-namespace NKikimr {
-namespace NMiniKQL {
-
+#include <ydb/library/yql/minikql/mkql_node_cast.h> 
+#include <ydb/library/yql/minikql/mkql_node_builder.h> 
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h> 
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h> 
+ 
+namespace NKikimr { 
+namespace NMiniKQL { 
+ 
 namespace {
 
 template <bool Interruptable>
@@ -170,23 +170,23 @@ private:
 template <bool Interruptable>
 class TCondenseWrapper : public TCustomValueCodegeneratorNode<TCondenseWrapper<Interruptable>> {
     typedef TCustomValueCodegeneratorNode<TCondenseWrapper<Interruptable>> TBaseComputation;
-public:
-    class TValue : public TComputationValue<TValue> {
-    public:
-        using TBase = TComputationValue<TValue>;
-
+public: 
+    class TValue : public TComputationValue<TValue> { 
+    public: 
+        using TBase = TComputationValue<TValue>; 
+ 
         TValue(
             TMemoryUsageInfo* memInfo,
             NUdf::TUnboxedValue&& stream,
             const TSqueezeState& state,
             TComputationContext& ctx)
-            : TBase(memInfo)
-            , Stream(std::move(stream))
+            : TBase(memInfo) 
+            , Stream(std::move(stream)) 
             , Ctx(ctx)
             , State(state)
         {}
-
-    private:
+ 
+    private: 
         ui32 GetTraverseCount() const final {
             return 1;
         }
@@ -204,7 +204,7 @@ public:
             State.Load(Ctx, state);
         }
 
-        NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) override {
+        NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) override { 
             if (ESqueezeState::Finished == State.Stage)
                 return NUdf::EFetchStatus::Finish;
 
@@ -215,14 +215,14 @@ public:
 
             for (;;) {
                 const auto status = Stream.Fetch(State.Item->RefValue(Ctx));
-                if (status == NUdf::EFetchStatus::Yield) {
-                    return status;
-                }
-
-                if (status == NUdf::EFetchStatus::Finish) {
+                if (status == NUdf::EFetchStatus::Yield) { 
+                    return status; 
+                } 
+ 
+                if (status == NUdf::EFetchStatus::Finish) { 
                     break;
-                }
-
+                } 
+ 
                 if (State.Switch) {
                     const auto& reset = State.Switch->GetValue(Ctx);
                     if (Interruptable && !reset) {
@@ -238,18 +238,18 @@ public:
                 }
 
                 State.State->SetValue(Ctx, State.UpdateState->GetValue(Ctx));
-            }
+            } 
 
             State.Stage = ESqueezeState::Finished;
             result = State.State->GetValue(Ctx);
             return NUdf::EFetchStatus::Ok;
-        }
-
+        } 
+ 
         const NUdf::TUnboxedValue Stream;
         TComputationContext& Ctx;
         TSqueezeState State;
-    };
-
+    }; 
+ 
     TCondenseWrapper(
         TComputationMutables& mutables,
         IComputationNode* stream,
@@ -269,16 +269,16 @@ public:
     {
         this->Stateless = false;
     }
-
+ 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
 #ifndef MKQL_DISABLE_CODEGEN
         if (ctx.ExecuteLLVM && Fetch)
             return ctx.HolderFactory.Create<TSqueezeCodegenValue>(State, Fetch, ctx, Stream->GetValue(ctx));
 #endif
         return ctx.HolderFactory.Create<TValue>(Stream->GetValue(ctx), State, ctx);
-    }
-
-private:
+    } 
+ 
+private: 
     void RegisterDependencies() const final {
         this->DependsOn(Stream);
         this->Own(State.Item);
@@ -291,12 +291,12 @@ private:
         this->DependsOn(State.OutSave);
         this->Own(State.InLoad);
         this->DependsOn(State.OutLoad);
-    }
-
+    } 
+ 
 #ifndef MKQL_DISABLE_CODEGEN
     void GenerateFunctions(const NYql::NCodegen::ICodegen::TPtr& codegen) final {
         FetchFunc = GenerateFetch(codegen);
-        codegen->ExportSymbol(FetchFunc);
+        codegen->ExportSymbol(FetchFunc); 
     }
 
     void FinalizeFunctions(const NYql::NCodegen::ICodegen::TPtr& codegen) final {
@@ -327,7 +327,7 @@ private:
         const auto funcType = FunctionType::get(statusType, {PointerType::getUnqual(contextType), containerType, PointerType::getUnqual(valueType), PointerType::getUnqual(stateType)}, false);
 
         TCodegenContext ctx(codegen);
-        ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee());
+        ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee()); 
 
         auto args = ctx.Func->arg_begin();
 
@@ -437,8 +437,8 @@ private:
 
     IComputationNode* const Stream;
     TSqueezeState State;
-};
-
+}; 
+ 
 }
 
 IComputationNode* WrapCondense(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
@@ -472,7 +472,7 @@ IComputationNode* WrapCondense(TCallable& callable, const TComputationNodeFactor
     }
 }
 
-IComputationNode* WrapSqueeze(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
+IComputationNode* WrapSqueeze(TCallable& callable, const TComputationNodeFactoryContext& ctx) { 
     MKQL_ENSURE(callable.GetInputsCount() == 9, "Expected 9 args");
 
     const auto stream = LocateNode(ctx.NodeLocator, callable, 0);
@@ -496,7 +496,7 @@ IComputationNode* WrapSqueeze(TCallable& callable, const TComputationNodeFactory
     const auto stateType = hasSaveLoad ? callable.GetInput(6).GetStaticType() : nullptr;
 
     return new TCondenseWrapper<false>(ctx.Mutables, stream, item, state, nullptr, initState, updateState, inSave, outSave, inLoad, outLoad, stateType);
-}
-
-}
-}
+} 
+ 
+} 
+} 

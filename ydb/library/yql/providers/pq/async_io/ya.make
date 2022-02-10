@@ -20,8 +20,8 @@ PEERDIR(
     ydb/public/sdk/cpp/client/ydb_driver
     ydb/public/sdk/cpp/client/ydb_persqueue_core
     ydb/public/sdk/cpp/client/ydb_types/credentials
-    ydb/library/yql/dq/actors/compute
-    ydb/library/yql/providers/pq/proto
+    ydb/library/yql/dq/actors/compute 
+    ydb/library/yql/providers/pq/proto 
 )
 
 YQL_LAST_ABI_VERSION()

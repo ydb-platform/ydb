@@ -1,16 +1,16 @@
 #include <ydb/services/ydb/ydb_common_ut.h>
 #include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
-
+ 
 #include <ydb/public/lib/yq/yq.h>
 #include <ydb/core/yq/libs/db_schema/db_schema.h>
 #include <ydb/core/yq/libs/mock/yql_mock.h>
 #include <ydb/core/yq/libs/private_client/utils.h>
 #include <ydb/core/yq/libs/private_client/private_client.h>
-
+ 
 #include <ydb/core/yq/libs/control_plane_storage/message_builders.h>
 #include <ydb/core/yq/libs/actors/database_resolver.h>
 
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
+#include <ydb/library/yql/public/issue/yql_issue_message.h> 
 
 #include <library/cpp/protobuf/util/pb_io.h>
 #include <library/cpp/retry/retry.h>
@@ -23,7 +23,7 @@
 
 #include <util/string/split.h>
 
-using namespace NYdb;
+using namespace NYdb; 
 using namespace YandexQuery;;
 using namespace NYdb::NYq;
 
@@ -107,14 +107,14 @@ Y_UNIT_TEST_SUITE(Yq_1) {
     Y_UNIT_TEST(Basic) {
         TKikimrWithGrpcAndRootSchema server({}, {}, {}, true);
         ui16 grpc        = server.GetPort();
-        TString location = TStringBuilder() << "localhost:" << grpc;
+        TString location = TStringBuilder() << "localhost:" << grpc; 
         auto driver      = TDriver(TDriverConfig().SetEndpoint(location).SetAuthToken("root@builtin"));
         NYdb::NYq::TClient client(driver);
         const auto folderId = "some_folder_id";
         const auto queryId = CreateNewHistoryAndWaitFinish(folderId, client, "select 1", YandexQuery::QueryMeta::COMPLETED);
         CheckGetResultData(client, queryId, folderId, 1, 1, 1);
-
-        {
+ 
+        { 
             const auto request = ::NYq::TDescribeQueryBuilder()
                 .SetQueryId("foo")
                 .Build();
@@ -125,9 +125,9 @@ Y_UNIT_TEST_SUITE(Yq_1) {
                 return result.GetStatus() == EStatus::BAD_REQUEST;
             }, TRetryOptions(Retries));
             UNIT_ASSERT_C(result, "the execution of the query did not end within the time limit");
-        }
-
-        {
+        } 
+ 
+        { 
             auto request = ::NYq::TListQueriesBuilder{}.Build();
             auto result = DoWithRetryOnRetCode([&]() {
                 auto result = client.ListQueries(
@@ -150,9 +150,9 @@ Y_UNIT_TEST_SUITE(Yq_1) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             const auto status = result.GetResult().query().meta().status();
             UNIT_ASSERT(status == YandexQuery::QueryMeta::COMPLETED);
-        }
-
-        {
+        } 
+ 
+        { 
             const auto request = ::NYq::TModifyQueryBuilder()
                 .SetQueryId(queryId)
                 .SetName("MODIFIED_NAME")
@@ -161,9 +161,9 @@ Y_UNIT_TEST_SUITE(Yq_1) {
                 request, CreateYqSettings<TModifyQuerySettings>(folderId))
                 .ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        }
-
-        {
+        } 
+ 
+        { 
             const auto request = ::NYq::TDescribeQueryBuilder()
                 .SetQueryId(queryId)
                 .Build();
@@ -174,9 +174,9 @@ Y_UNIT_TEST_SUITE(Yq_1) {
             const auto& res = result.GetResult();
             UNIT_ASSERT_VALUES_EQUAL(res.query().content().name(), "MODIFIED_NAME");
             UNIT_ASSERT(res.query().content().acl().visibility() == static_cast<int>(Acl_Visibility_SCOPE));
-        }
-
-        {
+        } 
+ 
+        { 
             const auto request = ::NYq::TDescribeQueryBuilder()
                 .SetQueryId("")
                 .Build();
@@ -184,9 +184,9 @@ Y_UNIT_TEST_SUITE(Yq_1) {
                 request, CreateYqSettings<TDescribeQuerySettings>(""))
                 .ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
-        }
-
-        {
+        } 
+ 
+        { 
             const auto request = ::NYq::TGetResultDataBuilder()
                 .SetQueryId("")
                 .Build();
@@ -194,8 +194,8 @@ Y_UNIT_TEST_SUITE(Yq_1) {
                     request, CreateYqSettings<TGetResultDataSettings>(""))
                     .ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
-        }
-    }
+        } 
+    } 
 
     Y_UNIT_TEST(Basic_EmptyTable) {
         TKikimrWithGrpcAndRootSchema server({}, {}, {}, true);
@@ -853,7 +853,7 @@ Y_UNIT_TEST_SUITE(Yq_1) {
             UNIT_ASSERT_VALUES_EQUAL(query.content().name(), "test_query_name_1");
         }
     }
-}
+} 
 
 Y_UNIT_TEST_SUITE(Yq_2) {
     // use fork for data test due to ch initialization problem

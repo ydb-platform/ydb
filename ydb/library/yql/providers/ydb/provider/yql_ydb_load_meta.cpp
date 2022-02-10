@@ -1,15 +1,15 @@
 #include "yql_ydb_provider_impl.h"
 
-#include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
-#include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
-#include <ydb/library/yql/providers/ydb/expr_nodes/yql_ydb_expr_nodes.h>
+#include <ydb/library/yql/providers/common/provider/yql_provider_names.h> 
+#include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h> 
+#include <ydb/library/yql/providers/ydb/expr_nodes/yql_ydb_expr_nodes.h> 
 
-#include <ydb/library/yql/core/yql_expr_optimize.h>
-#include <ydb/library/yql/core/yql_graph_transformer.h>
+#include <ydb/library/yql/core/yql_expr_optimize.h> 
+#include <ydb/library/yql/core/yql_graph_transformer.h> 
 
 #include <ydb/library/yql/utils/log/log.h>
 #include <ydb/library/yql/public/udf/udf_types.h>
-#include <ydb/library/yql/ast/yql_expr.h>
+#include <ydb/library/yql/ast/yql_expr.h> 
 
 #include <ydb/public/lib/experimental/ydb_clickhouse_internal.h>
 #include <ydb/public/lib/experimental/ydb_experimental.h>
@@ -110,7 +110,7 @@ public:
             const auto& database = State_->Configuration->Clusters[cluster].Database;
             auto table = TString(key.GetTablePath());
             if (table.front() != '/')
-                table = database + '/' + table;
+                table = database + '/' + table; 
             const auto& tableKey = std::make_pair(cluster, table);
             if (State_->Tables.cend() == State_->Tables.find(tableKey)) {
                 PendingTables_->emplace(tableKey, std::nullopt);

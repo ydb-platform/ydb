@@ -191,14 +191,14 @@ TString TBatch::Serialize() {
 }
 
 template <typename TCodec>
-TAutoPtr<NScheme::IChunkCoder> MakeChunk(TAutoPtr<TFlatBlobDataOutputStream>& output)
+TAutoPtr<NScheme::IChunkCoder> MakeChunk(TAutoPtr<TFlatBlobDataOutputStream>& output) 
 {
     output.Reset(new TFlatBlobDataOutputStream);
     TCodec codec;
     return codec.MakeChunk(output.Get());
 }
 
-void OutputChunk(TAutoPtr<NScheme::IChunkCoder> chunk, TAutoPtr<TFlatBlobDataOutputStream> output, TBuffer& res)
+void OutputChunk(TAutoPtr<NScheme::IChunkCoder> chunk, TAutoPtr<TFlatBlobDataOutputStream> output, TBuffer& res) 
 {
     chunk->Seal();
     ui32 size = output->CurrentBuffer().size();
@@ -252,7 +252,7 @@ void TBatch::Pack() {
 
     //output order
     {
-        auto chunk = MakeChunk<NScheme::TVarIntCodec<ui32,false>>(output);
+        auto chunk = MakeChunk<NScheme::TVarIntCodec<ui32,false>>(output); 
         for (const auto& p : pos) {
             chunk->AddData((const char*)&p, sizeof(p));
         }
@@ -266,7 +266,7 @@ void TBatch::Pack() {
 
     //output SourceId
     {
-        auto chunk = MakeChunk<NScheme::TVarLenCodec<false>>(output);
+        auto chunk = MakeChunk<NScheme::TVarLenCodec<false>>(output); 
         for (auto it = reorderMap.begin(); it != reorderMap.end(); ++it) {
             chunk->AddData(it->first.data(), it->first.size());
         }
@@ -275,7 +275,7 @@ void TBatch::Pack() {
 
     //output SeqNo
     {
-        auto chunk = MakeChunk<NScheme::TDeltaVarIntCodec<ui64, false>>(output);
+        auto chunk = MakeChunk<NScheme::TDeltaVarIntCodec<ui64, false>>(output); 
         for (const auto& p : pos) {
             chunk->AddData((const char*)&Blobs[p].SeqNo, sizeof(ui64));
         }
@@ -284,7 +284,7 @@ void TBatch::Pack() {
 
     //output Data
     {
-        auto chunk = MakeChunk<NScheme::TVarLenCodec<false>>(output);
+        auto chunk = MakeChunk<NScheme::TVarLenCodec<false>>(output); 
         for (const auto& p : pos) {
             chunk->AddData(Blobs[p].Data.data(), Blobs[p].Data.size());
         }
@@ -293,7 +293,7 @@ void TBatch::Pack() {
 
     //output PartData::Pos + payload
     {
-        auto chunk = MakeChunk<NScheme::TVarIntCodec<ui32, false>>(output);
+        auto chunk = MakeChunk<NScheme::TVarIntCodec<ui32, false>>(output); 
         ui32 cnt = 0;
         for (ui32 i = 0; i < Blobs.size(); ++i) {
             if (Blobs[i].PartData)
@@ -315,7 +315,7 @@ void TBatch::Pack() {
 
     //output Wtime
     {
-        auto chunk = MakeChunk<NScheme::TDeltaVarIntCodec<ui64, false>>(output);
+        auto chunk = MakeChunk<NScheme::TDeltaVarIntCodec<ui64, false>>(output); 
         for (ui32 i = 0; i < Blobs.size(); ++i) {
             ui64 writeTimestampMs = Blobs[i].WriteTimestamp.MilliSeconds();
             chunk->AddData((const char*)&writeTimestampMs, sizeof(ui64));
@@ -343,7 +343,7 @@ void TBatch::Pack() {
 
     //output Ctime
     {
-        auto chunk = MakeChunk<NScheme::TDeltaVarIntCodec<ui64, false>>(output);
+        auto chunk = MakeChunk<NScheme::TDeltaVarIntCodec<ui64, false>>(output); 
         for (ui32 i = 0; i < Blobs.size(); ++i) {
             ui64 createTimestampMs = Blobs[i].CreateTimestamp.MilliSeconds();
             chunk->AddData((const char*)&createTimestampMs, sizeof(ui64));
@@ -410,12 +410,12 @@ void TBatch::UnpackTo(TVector<TClientBlob> *blobs)
     };
 }
 
-NScheme::TDataRef GetChunk(const char*& data, const char *end)
+NScheme::TDataRef GetChunk(const char*& data, const char *end) 
 {
     ui32 size = ReadUnaligned<ui32>(data);
     data += sizeof(ui32) + size;
     Y_VERIFY(data <= end);
-    return NScheme::TDataRef(data - size, size);
+    return NScheme::TDataRef(data - size, size); 
 }
 
 void TBatch::UnpackToType1(TVector<TClientBlob> *blobs) {
@@ -431,10 +431,10 @@ void TBatch::UnpackToType1(TVector<TClientBlob> *blobs) {
     ui32 sourceIdCount = 0;
     TVector<TString> sourceIds;
 
-    NScheme::TTypeCodecs ui32Codecs(NScheme::NTypeIds::Uint32), ui64Codecs(NScheme::NTypeIds::Uint64), stringCodecs(NScheme::NTypeIds::String);
+    NScheme::TTypeCodecs ui32Codecs(NScheme::NTypeIds::Uint32), ui64Codecs(NScheme::NTypeIds::Uint64), stringCodecs(NScheme::NTypeIds::String); 
     //read order
     {
-        auto chunk = NScheme::IChunkDecoder::ReadChunk(GetChunk(data, dataEnd), &ui32Codecs);
+        auto chunk = NScheme::IChunkDecoder::ReadChunk(GetChunk(data, dataEnd), &ui32Codecs); 
         auto iter = chunk->MakeIterator();
         for (ui32 i = 0; i < totalBlobs; ++i) {
             pos.push_back(*((ui32*)iter->Next().Data()));
@@ -449,7 +449,7 @@ void TBatch::UnpackToType1(TVector<TClientBlob> *blobs) {
     sourceIds.reserve(sourceIdCount);
     //read SourceId
     {
-        auto chunk = NScheme::IChunkDecoder::ReadChunk(GetChunk(data, dataEnd), &stringCodecs);
+        auto chunk = NScheme::IChunkDecoder::ReadChunk(GetChunk(data, dataEnd), &stringCodecs); 
         auto iter = chunk->MakeIterator();
         for (ui32 i = 0; i < sourceIdCount; ++i) {
             auto ref = iter->Next();
@@ -461,7 +461,7 @@ void TBatch::UnpackToType1(TVector<TClientBlob> *blobs) {
 
     //read SeqNo
     {
-        auto chunk = NScheme::IChunkDecoder::ReadChunk(GetChunk(data, dataEnd), &ui64Codecs);
+        auto chunk = NScheme::IChunkDecoder::ReadChunk(GetChunk(data, dataEnd), &ui64Codecs); 
         auto iter = chunk->MakeIterator();
         for (ui32 i = 0; i < totalBlobs; ++i) {
             seqNo.push_back(*(ui64*)iter->Next().Data());
@@ -472,7 +472,7 @@ void TBatch::UnpackToType1(TVector<TClientBlob> *blobs) {
 
     //read Data
     {
-        auto chunk = NScheme::IChunkDecoder::ReadChunk(GetChunk(data, dataEnd), &stringCodecs);
+        auto chunk = NScheme::IChunkDecoder::ReadChunk(GetChunk(data, dataEnd), &stringCodecs); 
         auto iter = chunk->MakeIterator();
         for (ui32 i = 0; i < totalBlobs; ++i) {
             auto ref = iter->Next();
@@ -483,7 +483,7 @@ void TBatch::UnpackToType1(TVector<TClientBlob> *blobs) {
 
     //read PartData
     {
-        auto chunk = NScheme::IChunkDecoder::ReadChunk(GetChunk(data, dataEnd), &ui32Codecs);
+        auto chunk = NScheme::IChunkDecoder::ReadChunk(GetChunk(data, dataEnd), &ui32Codecs); 
         auto iter = chunk->MakeIterator();
         partsSize = *(ui32*)iter->Next().Data();
         partData.reserve(partsSize);
@@ -498,7 +498,7 @@ void TBatch::UnpackToType1(TVector<TClientBlob> *blobs) {
     TVector<TInstant> wtime;
     wtime.reserve(totalBlobs);
     {
-        auto chunk = NScheme::IChunkDecoder::ReadChunk(GetChunk(data, dataEnd), &ui64Codecs);
+        auto chunk = NScheme::IChunkDecoder::ReadChunk(GetChunk(data, dataEnd), &ui64Codecs); 
         auto iter = chunk->MakeIterator();
         for (ui32 i = 0; i < totalBlobs; ++i) {
             ui64 timestampMs = *(ui64*)iter->Next().Data();
@@ -537,7 +537,7 @@ void TBatch::UnpackToType1(TVector<TClientBlob> *blobs) {
 
     if (data < dataEnd) { //old versions could not have CTime
         {
-            auto chunk = NScheme::IChunkDecoder::ReadChunk(GetChunk(data, dataEnd), &ui64Codecs);
+            auto chunk = NScheme::IChunkDecoder::ReadChunk(GetChunk(data, dataEnd), &ui64Codecs); 
             auto iter = chunk->MakeIterator();
             for (ui32 i = 0; i < totalBlobs; ++i) {
                 ui64 timestampMs = *(ui64*)iter->Next().Data();

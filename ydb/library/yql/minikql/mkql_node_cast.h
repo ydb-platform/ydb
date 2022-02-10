@@ -7,7 +7,7 @@
 
 #define AS_VALUE(type, node) ::NKikimr::NMiniKQL::AsValue<type>((node), __LOCATION__)
 #define AS_TYPE(type, node) ::NKikimr::NMiniKQL::AsType<type>((node), __LOCATION__)
-#define AS_CALLABLE(name, node) ::NKikimr::NMiniKQL::AsCallable(TStringBuf(name), node, __LOCATION__)
+#define AS_CALLABLE(name, node) ::NKikimr::NMiniKQL::AsCallable(TStringBuf(name), node, __LOCATION__) 
 
 
 namespace NKikimr {
@@ -17,17 +17,17 @@ template <typename T>
 T* AsValue(TRuntimeNode node, const TSourceLocation& location);
 
 template <typename T>
-T* AsType(TType* type, const TSourceLocation& location);
+T* AsType(TType* type, const TSourceLocation& location); 
 
-template <typename T>
+template <typename T> 
 const T* AsType(const TType* type, const TSourceLocation& location);
 
 
 template <typename T>
-T* AsType(TRuntimeNode node, const TSourceLocation& location) {
-    return AsType<T>(node.GetStaticType(), location);
-}
-
+T* AsType(TRuntimeNode node, const TSourceLocation& location) { 
+    return AsType<T>(node.GetStaticType(), location); 
+} 
+ 
 TCallable* AsCallable(
         const TStringBuf& name,
         TRuntimeNode node,

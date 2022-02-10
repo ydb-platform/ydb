@@ -5,68 +5,68 @@
 #include <ydb/core/base/tablet_resolver.h>
 #include <ydb/core/tx/tx.h>
 #include <library/cpp/testing/unittest/registar.h>
-
+ 
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <library/cpp/actors/core/hfunc.h>
 
-namespace NKikimr {
-    struct TEvProducerTablet {
-        enum EEv {
-            EvConnect = EventSpaceBegin(TKikimrEvents::ES_PRIVATE),
-            EvSend,
-            EvEnd
-        };
-
+namespace NKikimr { 
+    struct TEvProducerTablet { 
+        enum EEv { 
+            EvConnect = EventSpaceBegin(TKikimrEvents::ES_PRIVATE), 
+            EvSend, 
+            EvEnd 
+        }; 
+ 
         static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_PRIVATE)");
-
-        struct TEvConnect : public TEventLocal<TEvConnect, EvConnect> {
-            TEvConnect(bool useBadTabletId = false, bool connectToUserTablet = true, bool withRetryPolicy = false)
-                : UseBadTabletId(useBadTabletId)
-                , ConnectToUserTablet(connectToUserTablet)
-                , WithRetryPolicy(withRetryPolicy)
-            {
-            }
-
-            const bool UseBadTabletId;
-            const bool ConnectToUserTablet;
-            const bool WithRetryPolicy;
-        };
-
-        struct TEvSend : public TEventLocal<TEvSend, EvSend> {
-            TEvSend(bool useShutdown = false)
-                : UseShutdown(useShutdown)
-            {
-            }
-
-            const bool UseShutdown;
-        };
-    };
-
-    struct TEvConsumerTablet {
-        enum EEv {
-            EvConnect = EventSpaceBegin(TKikimrEvents::ES_PRIVATE),
-            EvReject,
-            EvEnd
-        };
-
+ 
+        struct TEvConnect : public TEventLocal<TEvConnect, EvConnect> { 
+            TEvConnect(bool useBadTabletId = false, bool connectToUserTablet = true, bool withRetryPolicy = false) 
+                : UseBadTabletId(useBadTabletId) 
+                , ConnectToUserTablet(connectToUserTablet) 
+                , WithRetryPolicy(withRetryPolicy) 
+            { 
+            } 
+ 
+            const bool UseBadTabletId; 
+            const bool ConnectToUserTablet; 
+            const bool WithRetryPolicy; 
+        }; 
+ 
+        struct TEvSend : public TEventLocal<TEvSend, EvSend> { 
+            TEvSend(bool useShutdown = false) 
+                : UseShutdown(useShutdown) 
+            { 
+            } 
+ 
+            const bool UseShutdown; 
+        }; 
+    }; 
+ 
+    struct TEvConsumerTablet { 
+        enum EEv { 
+            EvConnect = EventSpaceBegin(TKikimrEvents::ES_PRIVATE), 
+            EvReject, 
+            EvEnd 
+        }; 
+ 
         static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_PRIVATE)");
-
-        struct TEvReject : public TEventLocal<TEvReject, EvReject> {};
-    };
-
+ 
+        struct TEvReject : public TEventLocal<TEvReject, EvReject> {}; 
+    }; 
+ 
     class TProducerTablet : public TActor<TProducerTablet>, public NTabletFlatExecutor::TTabletExecutedFlat {
-    public:
+    public: 
         TProducerTablet(const TActorId &tablet, TTabletStorageInfo *info)
             : TActor(&TThis::StateInit)
             , TTabletExecutedFlat(info, tablet, nullptr)
-            , HasData(false)
-            , IsOpened(false)
-            , IsShutdown(false)
-        {
-            Config.ConnectToUserTablet = true;
-        }
-
-    private:
+            , HasData(false) 
+            , IsOpened(false) 
+            , IsShutdown(false) 
+        { 
+            Config.ConnectToUserTablet = true; 
+        } 
+ 
+    private: 
         using IActor::Send; // name is used by IActor API
 
         STFUNC(StateInit) {
@@ -74,116 +74,116 @@ namespace NKikimr {
         }
 
         STFUNC(StateWork) {
-            switch (ev->GetTypeRewrite()) {
+            switch (ev->GetTypeRewrite()) { 
                 HFunc(TEvTablet::TEvTabletDead, HandleTabletDead);
-                HFunc(TEvProducerTablet::TEvConnect, Handle);
-                HFunc(TEvProducerTablet::TEvSend, Handle);
-                HFunc(TEvTabletPipe::TEvClientConnected, Handle);
-                HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
-                HFunc(TEvents::TEvPong, Handle);
-                HFunc(TEvents::TEvPoisonPill, Handle);
+                HFunc(TEvProducerTablet::TEvConnect, Handle); 
+                HFunc(TEvProducerTablet::TEvSend, Handle); 
+                HFunc(TEvTabletPipe::TEvClientConnected, Handle); 
+                HFunc(TEvTabletPipe::TEvClientDestroyed, Handle); 
+                HFunc(TEvents::TEvPong, Handle); 
+                HFunc(TEvents::TEvPoisonPill, Handle); 
             default:
                 HandleDefaultEvents(ev, ctx);
-            }
-        }
-
-        void Handle(TEvProducerTablet::TEvConnect::TPtr &ev, const TActorContext &ctx) {
-            Cout << "Connect to another tablet\n";
-
-            IsOpened = false;
-            if (!!ClientId) {
-                NTabletPipe::CloseClient(ctx, ClientId);
-            }
-
-            Config.ConnectToUserTablet = ev->Get()->ConnectToUserTablet;
-            if (ev->Get()->WithRetryPolicy) {
+            } 
+        } 
+ 
+        void Handle(TEvProducerTablet::TEvConnect::TPtr &ev, const TActorContext &ctx) { 
+            Cout << "Connect to another tablet\n"; 
+ 
+            IsOpened = false; 
+            if (!!ClientId) { 
+                NTabletPipe::CloseClient(ctx, ClientId); 
+            } 
+ 
+            Config.ConnectToUserTablet = ev->Get()->ConnectToUserTablet; 
+            if (ev->Get()->WithRetryPolicy) { 
                 Config.RetryPolicy = NTabletPipe::TClientRetryPolicy::WithRetries();
-            }
-
-            auto client = NTabletPipe::CreateClient(ctx.SelfID, ev->Get()->UseBadTabletId ?
+            } 
+ 
+            auto client = NTabletPipe::CreateClient(ctx.SelfID, ev->Get()->UseBadTabletId ? 
                 TTestTxConfig::TxTablet2 : TTestTxConfig::TxTablet1, Config);
-            ClientId = ctx.ExecutorThread.RegisterActor(client, TMailboxType::Simple, Max<ui32>(), ctx.SelfID);
-        }
-
-        void Handle(TEvProducerTablet::TEvSend::TPtr &ev, const TActorContext &ctx) {
-            if (!ClientId)
-                return;
-
-            HasData = true;
-            Send(ctx);
-            if (ev->Get()->UseShutdown) {
-                HasData = false;
-                IsShutdown = true;
-                NTabletPipe::ShutdownClient(ctx, ClientId);
-            }
-        }
-
-        void Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, const TActorContext &ctx) {
+            ClientId = ctx.ExecutorThread.RegisterActor(client, TMailboxType::Simple, Max<ui32>(), ctx.SelfID); 
+        } 
+ 
+        void Handle(TEvProducerTablet::TEvSend::TPtr &ev, const TActorContext &ctx) { 
+            if (!ClientId) 
+                return; 
+ 
+            HasData = true; 
+            Send(ctx); 
+            if (ev->Get()->UseShutdown) { 
+                HasData = false; 
+                IsShutdown = true; 
+                NTabletPipe::ShutdownClient(ctx, ClientId); 
+            } 
+        } 
+ 
+        void Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, const TActorContext &ctx) { 
             Y_UNUSED(ctx);
-            Cout << "Open " << ((ev->Get()->Status == NKikimrProto::OK) ? "ok" : "ERROR") << "\n";
-            if (ev->Get()->Status == NKikimrProto::OK) {
-                IsOpened = true;
-                if (HasData) {
-                    Cout << "Send data again\n";
-                    Send(ctx);
-                }
-            } else if (ClientId == ev->Get()->ClientId) {
+            Cout << "Open " << ((ev->Get()->Status == NKikimrProto::OK) ? "ok" : "ERROR") << "\n"; 
+            if (ev->Get()->Status == NKikimrProto::OK) { 
+                IsOpened = true; 
+                if (HasData) { 
+                    Cout << "Send data again\n"; 
+                    Send(ctx); 
+                } 
+            } else if (ClientId == ev->Get()->ClientId) { 
                 ClientId = TActorId();
-            }
-        }
-
-        void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr &ev, const TActorContext &ctx) {
-            Cout << "Pipe reset on client\n";
-            if (IsOpened && ClientId == ev->Get()->ClientId && !IsShutdown) {
-                Cout << "Recreate client\n";
+            } 
+        } 
+ 
+        void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr &ev, const TActorContext &ctx) { 
+            Cout << "Pipe reset on client\n"; 
+            if (IsOpened && ClientId == ev->Get()->ClientId && !IsShutdown) { 
+                Cout << "Recreate client\n"; 
                 auto client = NTabletPipe::CreateClient(ctx.SelfID, TTestTxConfig::TxTablet1, Config);
-                ClientId = ctx.ExecutorThread.RegisterActor(client);
-            }
-        }
-
-        void Handle(TEvents::TEvPong::TPtr &ev, const TActorContext &ctx) {
+                ClientId = ctx.ExecutorThread.RegisterActor(client); 
+            } 
+        } 
+ 
+        void Handle(TEvents::TEvPong::TPtr &ev, const TActorContext &ctx) { 
             Y_UNUSED(ev);
             Y_UNUSED(ctx);
-            Cout << "Got pong\n";
-        }
-
-        void Handle(TEvents::TEvPoisonPill::TPtr &ev, const TActorContext &ctx) {
+            Cout << "Got pong\n"; 
+        } 
+ 
+        void Handle(TEvents::TEvPoisonPill::TPtr &ev, const TActorContext &ctx) { 
             Y_UNUSED(ev);
-            ctx.Send(Tablet(), new TEvents::TEvPoisonPill);
-        }
-
-        void Send(const TActorContext& ctx) {
-            Cout << "Send data to another tablet\n";
-            NTabletPipe::SendData(ctx, ClientId, new TEvents::TEvPing());
-        }
-
-        void OnDetach(const TActorContext &ctx) override {
-            Cout << "Producer dead\n";
-            NTabletPipe::CloseClient(ctx, ClientId);
-            return Die(ctx);
-        }
-
-        void OnTabletDead(TEvTablet::TEvTabletDead::TPtr &ev, const TActorContext &ctx) override {
+            ctx.Send(Tablet(), new TEvents::TEvPoisonPill); 
+        } 
+ 
+        void Send(const TActorContext& ctx) { 
+            Cout << "Send data to another tablet\n"; 
+            NTabletPipe::SendData(ctx, ClientId, new TEvents::TEvPing()); 
+        } 
+ 
+        void OnDetach(const TActorContext &ctx) override { 
+            Cout << "Producer dead\n"; 
+            NTabletPipe::CloseClient(ctx, ClientId); 
+            return Die(ctx); 
+        } 
+ 
+        void OnTabletDead(TEvTablet::TEvTabletDead::TPtr &ev, const TActorContext &ctx) override { 
             Y_UNUSED(ev);
-            Cout << "Producer dead\n";
-            NTabletPipe::CloseClient(ctx, ClientId);
-            return Die(ctx);
-        }
-
+            Cout << "Producer dead\n"; 
+            NTabletPipe::CloseClient(ctx, ClientId); 
+            return Die(ctx); 
+        } 
+ 
         void OnActivateExecutor(const TActorContext &ctx) override {
             Y_UNUSED(ctx);
             Become(&TThis::StateWork);
-            Cout << "Producer loaded\n";
-        }
-
-    private:
+            Cout << "Producer loaded\n"; 
+        } 
+ 
+    private: 
         TActorId ClientId;
-        bool HasData;
-        bool IsOpened;
-        bool IsShutdown;
-        NTabletPipe::TClientConfig Config;
-    };
-
+        bool HasData; 
+        bool IsOpened; 
+        bool IsShutdown; 
+        NTabletPipe::TClientConfig Config; 
+    }; 
+ 
     struct TEvPrivate {
         enum EEv {
             EvGetServerPipeInfo = EventSpaceBegin(TEvents::ES_PRIVATE),
@@ -207,266 +207,266 @@ namespace NKikimr {
     };
 
     class TConsumerTablet : public TActor<TConsumerTablet>, public NTabletFlatExecutor::TTabletExecutedFlat {
-    public:
+    public: 
         TConsumerTablet(const TActorId &tablet, TTabletStorageInfo *info)
             : TActor(&TThis::StateInit)
             , TTabletExecutedFlat(info, tablet, nullptr)
-            , PipeConnectAcceptor(NTabletPipe::CreateConnectAcceptor(TabletID()))
-            , RejectAll(false)
+            , PipeConnectAcceptor(NTabletPipe::CreateConnectAcceptor(TabletID())) 
+            , RejectAll(false) 
             , ServerPipesOpened(0)
             , ServerPipesClosed(0)
-        {
-        }
-
-    private:
+        { 
+        } 
+ 
+    private: 
         void OnActivateExecutor(const TActorContext&) override {
             Become(&TThis::StateWork);
-            Cout << "Consumer loaded\n";
+            Cout << "Consumer loaded\n"; 
             PipeConnectAcceptor->Activate(SelfId(), SelfId());
-        }
-
+        } 
+ 
         STFUNC(StateInit) {
             StateInitImpl(ev, ctx);
         }
 
         STFUNC(StateWork) {
-            switch (ev->GetTypeRewrite()) {
+            switch (ev->GetTypeRewrite()) { 
                 HFunc(TEvTablet::TEvTabletDead, HandleTabletDead);
-                HFunc(TEvTabletPipe::TEvConnect, Handle);
-                HFunc(TEvTabletPipe::TEvServerConnected, Handle);
-                HFunc(TEvTabletPipe::TEvServerDisconnected, Handle);
-                HFunc(TEvTabletPipe::TEvServerDestroyed, Handle);
-                HFunc(TEvents::TEvPing, Handle);
-                HFunc(TEvents::TEvPoisonPill, Handle);
-                HFunc(TEvConsumerTablet::TEvReject, Handle);
+                HFunc(TEvTabletPipe::TEvConnect, Handle); 
+                HFunc(TEvTabletPipe::TEvServerConnected, Handle); 
+                HFunc(TEvTabletPipe::TEvServerDisconnected, Handle); 
+                HFunc(TEvTabletPipe::TEvServerDestroyed, Handle); 
+                HFunc(TEvents::TEvPing, Handle); 
+                HFunc(TEvents::TEvPoisonPill, Handle); 
+                HFunc(TEvConsumerTablet::TEvReject, Handle); 
                 HFunc(TEvPrivate::TEvGetServerPipeInfo, Handle);
             default:
                 HandleDefaultEvents(ev, ctx);
-            }
-        }
-
+            } 
+        } 
+ 
         void Handle(TEvTabletPipe::TEvConnect::TPtr &ev, const TActorContext &) {
-            Cout << "Get connect request from another tablet\n";
-            if (RejectAll) {
+            Cout << "Get connect request from another tablet\n"; 
+            if (RejectAll) { 
                 PipeConnectAcceptor->Reject(ev, SelfId(), NKikimrProto::BLOCKED);
-            } else {
+            } else { 
                 LastServerId = PipeConnectAcceptor->Accept(ev, SelfId(), SelfId());
-            }
-        }
-
+            } 
+        } 
+ 
         void HandleQueued(TEvTabletPipe::TEvConnect::TPtr &ev, const TActorContext &) {
-            Cout << "Enqueue connect request from another tablet\n";
-            if (RejectAll) {
+            Cout << "Enqueue connect request from another tablet\n"; 
+            if (RejectAll) { 
                 PipeConnectAcceptor->Reject(ev, SelfId(), NKikimrProto::BLOCKED);
-            } else {
+            } else { 
                 LastServerId = PipeConnectAcceptor->Enqueue(ev, SelfId());
-            }
-        }
-
-        void Handle(TEvents::TEvPing::TPtr &ev, const TActorContext &ctx) {
-            Cout << "Got ping\n";
+            } 
+        } 
+ 
+        void Handle(TEvents::TEvPing::TPtr &ev, const TActorContext &ctx) { 
+            Cout << "Got ping\n"; 
             UNIT_ASSERT_VALUES_EQUAL(ev->GetRecipientRewrite(), ctx.SelfID);
             UNIT_ASSERT_VALUES_EQUAL(ev->Recipient, LastServerId);
-            ctx.Send(ev->Sender, new TEvents::TEvPong());
-        }
-
-        void Handle(TEvents::TEvPoisonPill::TPtr &ev, const TActorContext &ctx) {
+            ctx.Send(ev->Sender, new TEvents::TEvPong()); 
+        } 
+ 
+        void Handle(TEvents::TEvPoisonPill::TPtr &ev, const TActorContext &ctx) { 
             Y_UNUSED(ev);
-            ctx.Send(Tablet(), new TEvents::TEvPoisonPill);
-        }
-
-        void Handle(TEvTabletPipe::TEvServerConnected::TPtr &ev, const TActorContext &ctx) {
+            ctx.Send(Tablet(), new TEvents::TEvPoisonPill); 
+        } 
+ 
+        void Handle(TEvTabletPipe::TEvServerConnected::TPtr &ev, const TActorContext &ctx) { 
             Y_UNUSED(ev);
             Y_UNUSED(ctx);
-            Cout << "Server pipe is opened\n";
+            Cout << "Server pipe is opened\n"; 
             ++ServerPipesOpened;
-        }
-
-        void Handle(TEvTabletPipe::TEvServerDisconnected::TPtr &ev, const TActorContext &ctx) {
+        } 
+ 
+        void Handle(TEvTabletPipe::TEvServerDisconnected::TPtr &ev, const TActorContext &ctx) { 
             Y_UNUSED(ev);
             Y_UNUSED(ctx);
-            Cout << "Pipe reset on server\n";
+            Cout << "Pipe reset on server\n"; 
             ++ServerPipesClosed;
-        }
-
-        void Handle(TEvTabletPipe::TEvServerDestroyed::TPtr &ev, const TActorContext &ctx) {
+        } 
+ 
+        void Handle(TEvTabletPipe::TEvServerDestroyed::TPtr &ev, const TActorContext &ctx) { 
             Y_UNUSED(ctx);
-            PipeConnectAcceptor->Erase(ev);
-            Cout << "Cleanup of pipe reset on server\n";
-        }
-
+            PipeConnectAcceptor->Erase(ev); 
+            Cout << "Cleanup of pipe reset on server\n"; 
+        } 
+ 
         void Handle(TEvConsumerTablet::TEvReject::TPtr &ev, const TActorContext &) {
             Y_UNUSED(ev);
-            Cout << "Drop & reject all connects\n";
+            Cout << "Drop & reject all connects\n"; 
             PipeConnectAcceptor->Detach(SelfId());
-            RejectAll = true;
-        }
-
+            RejectAll = true; 
+        } 
+ 
         void Handle(TEvPrivate::TEvGetServerPipeInfo::TPtr &ev, const TActorContext &ctx) {
             Cout << "Server pipes opened: " << ServerPipesOpened << ", closed: " << ServerPipesClosed << "\n";
             ctx.Send(ev->Sender, new TEvPrivate::TEvServerPipeInfo(ServerPipesOpened, ServerPipesClosed));
         }
 
-        void OnDetach(const TActorContext &ctx) override {
-            Cout << "Consumer dead\n";
+        void OnDetach(const TActorContext &ctx) override { 
+            Cout << "Consumer dead\n"; 
             PipeConnectAcceptor->Detach(SelfId());
-            return Die(ctx);
-        }
-
-        void OnTabletDead(TEvTablet::TEvTabletDead::TPtr &ev, const TActorContext &ctx) override {
-            Cout << "Consumer dead\n";
+            return Die(ctx); 
+        } 
+ 
+        void OnTabletDead(TEvTablet::TEvTabletDead::TPtr &ev, const TActorContext &ctx) override { 
+            Cout << "Consumer dead\n"; 
             Y_UNUSED(ev);
             PipeConnectAcceptor->Detach(SelfId());
-            return Die(ctx);
-        }
-
-        void Enqueue(STFUNC_SIG) override {
-            switch (ev->GetTypeRewrite()) {
-                HFunc(TEvTabletPipe::TEvConnect, HandleQueued);
-            }
-        }
-
-        THolder<NTabletPipe::IConnectAcceptor> PipeConnectAcceptor;
-        bool RejectAll;
+            return Die(ctx); 
+        } 
+ 
+        void Enqueue(STFUNC_SIG) override { 
+            switch (ev->GetTypeRewrite()) { 
+                HFunc(TEvTabletPipe::TEvConnect, HandleQueued); 
+            } 
+        } 
+ 
+        THolder<NTabletPipe::IConnectAcceptor> PipeConnectAcceptor; 
+        bool RejectAll; 
         TActorId LastServerId;
         ui32 ServerPipesOpened;
         ui32 ServerPipesClosed;
-    };
-
+    }; 
+ 
     class TConsumerTabletWithoutAcceptor : public TActor<TConsumerTabletWithoutAcceptor>, public NTabletFlatExecutor::TTabletExecutedFlat {
-    public:
+    public: 
         TConsumerTabletWithoutAcceptor(const TActorId &tablet, TTabletStorageInfo *info)
             : TActor(&TThis::StateInit)
             , TTabletExecutedFlat(info, tablet, nullptr)
-        {
-        }
-
-    private:
+        { 
+        } 
+ 
+    private: 
         void OnActivateExecutor(const TActorContext& ctx) override {
             Y_UNUSED(ctx);
             Become(&TThis::StateWork);
-            Cout << "Consumer loaded\n";
-        }
-
+            Cout << "Consumer loaded\n"; 
+        } 
+ 
         STFUNC(StateInit) {
             StateInitImpl(ev, ctx);
         }
 
         STFUNC(StateWork) {
-            switch (ev->GetTypeRewrite()) {
+            switch (ev->GetTypeRewrite()) { 
                 HFunc(TEvTablet::TEvTabletDead, HandleTabletDead);
-                HFunc(TEvTabletPipe::TEvServerConnected, Handle);
-                HFunc(TEvTabletPipe::TEvServerDisconnected, Handle);
-                HFunc(TEvents::TEvPing, Handle);
-                HFunc(TEvents::TEvPoisonPill, Handle);
+                HFunc(TEvTabletPipe::TEvServerConnected, Handle); 
+                HFunc(TEvTabletPipe::TEvServerDisconnected, Handle); 
+                HFunc(TEvents::TEvPing, Handle); 
+                HFunc(TEvents::TEvPoisonPill, Handle); 
             default:
                 HandleDefaultEvents(ev, ctx);
-            }
-        }
-
-        void Handle(TEvents::TEvPing::TPtr &ev, const TActorContext &ctx) {
-            Cout << "Got ping\n";
+            } 
+        } 
+ 
+        void Handle(TEvents::TEvPing::TPtr &ev, const TActorContext &ctx) { 
+            Cout << "Got ping\n"; 
             UNIT_ASSERT_VALUES_EQUAL(ev->GetRecipientRewrite(), ctx.SelfID);
-            ctx.Send(ev->Sender, new TEvents::TEvPong());
-        }
-
-        void Handle(TEvents::TEvPoisonPill::TPtr &ev, const TActorContext &ctx) {
+            ctx.Send(ev->Sender, new TEvents::TEvPong()); 
+        } 
+ 
+        void Handle(TEvents::TEvPoisonPill::TPtr &ev, const TActorContext &ctx) { 
             Y_UNUSED(ev);
-            ctx.Send(Tablet(), new TEvents::TEvPoisonPill);
-        }
-
-        void Handle(TEvTabletPipe::TEvServerConnected::TPtr &ev, const TActorContext &ctx) {
-            Y_UNUSED(ev);
-            Y_UNUSED(ctx);
-            Cout << "Server pipe is opened\n";
-        }
-
-        void Handle(TEvTabletPipe::TEvServerDisconnected::TPtr &ev, const TActorContext &ctx) {
+            ctx.Send(Tablet(), new TEvents::TEvPoisonPill); 
+        } 
+ 
+        void Handle(TEvTabletPipe::TEvServerConnected::TPtr &ev, const TActorContext &ctx) { 
             Y_UNUSED(ev);
             Y_UNUSED(ctx);
-            Cout << "Pipe reset on server\n";
-        }
-
-        void OnDetach(const TActorContext &ctx) override {
-            Cout << "Consumer dead\n";
-            return Die(ctx);
-        }
-
-        void OnTabletDead(TEvTablet::TEvTabletDead::TPtr &ev, const TActorContext &ctx) override {
-            Cout << "Consumer dead\n";
+            Cout << "Server pipe is opened\n"; 
+        } 
+ 
+        void Handle(TEvTabletPipe::TEvServerDisconnected::TPtr &ev, const TActorContext &ctx) { 
             Y_UNUSED(ev);
-            return Die(ctx);
-        }
-    };
-
+            Y_UNUSED(ctx);
+            Cout << "Pipe reset on server\n"; 
+        } 
+ 
+        void OnDetach(const TActorContext &ctx) override { 
+            Cout << "Consumer dead\n"; 
+            return Die(ctx); 
+        } 
+ 
+        void OnTabletDead(TEvTablet::TEvTabletDead::TPtr &ev, const TActorContext &ctx) override { 
+            Cout << "Consumer dead\n"; 
+            Y_UNUSED(ev);
+            return Die(ctx); 
+        } 
+    }; 
+ 
 Y_UNIT_TEST_SUITE(TTabletPipeTest) {
     Y_UNIT_TEST(TestOpen) {
         TTestBasicRuntime runtime;
         SetupTabletServices(runtime);
-
+ 
         TActorId sender = runtime.AllocateEdgeActor();
         CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::TX_DUMMY), [](const TActorId & tablet, TTabletStorageInfo* info) {
-            return new TProducerTablet(tablet, info);
-        });
+            return new TProducerTablet(tablet, info); 
+        }); 
         CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet1, TTabletTypes::TX_DUMMY), [](const TActorId & tablet, TTabletStorageInfo* info) {
-            return new TConsumerTablet(tablet, info);
-        });
-
-        {
-            TDispatchOptions options;
+            return new TConsumerTablet(tablet, info); 
+        }); 
+ 
+        { 
+            TDispatchOptions options; 
             options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot, 2));
-            runtime.DispatchEvents(options);
-        }
-
+            runtime.DispatchEvents(options); 
+        } 
+ 
         ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, new TEvProducerTablet::TEvConnect());
-        {
-            TDispatchOptions options;
-            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTabletPipe::EvClientConnected, 1));
-            runtime.DispatchEvents(options);
-        }
-
+        { 
+            TDispatchOptions options; 
+            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTabletPipe::EvClientConnected, 1)); 
+            runtime.DispatchEvents(options); 
+        } 
+ 
         ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, new TEvProducerTablet::TEvConnect());
-        {
-            TDispatchOptions options;
-            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTabletPipe::EvClientConnected, 1));
-            runtime.DispatchEvents(options);
-        }
-
+        { 
+            TDispatchOptions options; 
+            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTabletPipe::EvClientConnected, 1)); 
+            runtime.DispatchEvents(options); 
+        } 
+ 
         ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, new TEvProducerTablet::TEvConnect(true));
-        {
-            TDispatchOptions options;
-            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTabletPipe::EvClientConnected, 1));
-            runtime.DispatchEvents(options);
-        }
-    }
-
+        { 
+            TDispatchOptions options; 
+            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTabletPipe::EvClientConnected, 1)); 
+            runtime.DispatchEvents(options); 
+        } 
+    } 
+ 
     Y_UNIT_TEST(TestSendWithoutWaitOpen) {
         TTestBasicRuntime runtime;
         SetupTabletServices(runtime);
-
+ 
         TActorId sender = runtime.AllocateEdgeActor();
         CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::TX_DUMMY), [](const TActorId & tablet, TTabletStorageInfo* info) {
-            return new TProducerTablet(tablet, info);
-        });
+            return new TProducerTablet(tablet, info); 
+        }); 
         CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet1, TTabletTypes::TX_DUMMY), [](const TActorId & tablet, TTabletStorageInfo* info) {
-            return new TConsumerTablet(tablet, info);
-        });
-
-        {
-            TDispatchOptions options;
+            return new TConsumerTablet(tablet, info); 
+        }); 
+ 
+        { 
+            TDispatchOptions options; 
             options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot, 2));
-            runtime.DispatchEvents(options);
-        }
-
+            runtime.DispatchEvents(options); 
+        } 
+ 
         ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, new TEvProducerTablet::TEvConnect());
         ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, new TEvProducerTablet::TEvSend());
-        {
-            TDispatchOptions options;
-            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvents::THelloWorld::Pong));
-            runtime.DispatchEvents(options);
-        }
-    }
-
+        { 
+            TDispatchOptions options; 
+            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvents::THelloWorld::Pong)); 
+            runtime.DispatchEvents(options); 
+        } 
+    } 
+ 
     Y_UNIT_TEST(TestKillClientBeforServerIdKnown) {
         TTestBasicRuntime runtime;
         SetupTabletServices(runtime);
@@ -514,67 +514,67 @@ Y_UNIT_TEST_SUITE(TTabletPipeTest) {
     Y_UNIT_TEST(TestSendWithoutWaitOpenToWrongTablet) {
         TTestBasicRuntime runtime;
         SetupTabletServices(runtime);
-
+ 
         TActorId sender = runtime.AllocateEdgeActor();
         CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::TX_DUMMY), [](const TActorId & tablet, TTabletStorageInfo* info) {
-            return new TProducerTablet(tablet, info);
-        });
+            return new TProducerTablet(tablet, info); 
+        }); 
         CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet1, TTabletTypes::TX_DUMMY), [](const TActorId & tablet, TTabletStorageInfo* info) {
-            return new TConsumerTablet(tablet, info);
-        });
-
-        {
-            TDispatchOptions options;
+            return new TConsumerTablet(tablet, info); 
+        }); 
+ 
+        { 
+            TDispatchOptions options; 
             options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot, 2));
-            runtime.DispatchEvents(options);
-        }
-
+            runtime.DispatchEvents(options); 
+        } 
+ 
         ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, new TEvProducerTablet::TEvConnect(true));
         ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, new TEvProducerTablet::TEvSend());
-        {
-            TDispatchOptions options;
-            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTabletPipe::EvClientConnected, 1));
-            runtime.DispatchEvents(options);
-        }
-    }
-
+        { 
+            TDispatchOptions options; 
+            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTabletPipe::EvClientConnected, 1)); 
+            runtime.DispatchEvents(options); 
+        } 
+    } 
+ 
     Y_UNIT_TEST(TestSendAfterOpen) {
         TTestBasicRuntime runtime;
         SetupTabletServices(runtime);
-
+ 
         TActorId sender = runtime.AllocateEdgeActor();
         CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::TX_DUMMY), [](const TActorId & tablet, TTabletStorageInfo* info) {
-            return new TProducerTablet(tablet, info);
-        });
+            return new TProducerTablet(tablet, info); 
+        }); 
         CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet1, TTabletTypes::TX_DUMMY), [](const TActorId & tablet, TTabletStorageInfo* info) {
-            return new TConsumerTablet(tablet, info);
-        });
-
-        {
-            TDispatchOptions options;
+            return new TConsumerTablet(tablet, info); 
+        }); 
+ 
+        { 
+            TDispatchOptions options; 
             options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot, 2));
-            runtime.DispatchEvents(options);
-        }
-
+            runtime.DispatchEvents(options); 
+        } 
+ 
         ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, new TEvProducerTablet::TEvConnect());
-        {
-            TDispatchOptions options;
-            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTabletPipe::EvClientConnected, 1));
-            runtime.DispatchEvents(options);
-        }
-
+        { 
+            TDispatchOptions options; 
+            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTabletPipe::EvClientConnected, 1)); 
+            runtime.DispatchEvents(options); 
+        } 
+ 
         ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, new TEvProducerTablet::TEvSend());
-        {
-            TDispatchOptions options;
-            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvents::THelloWorld::Pong));
-            runtime.DispatchEvents(options);
-        }
-    }
-
+        { 
+            TDispatchOptions options; 
+            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvents::THelloWorld::Pong)); 
+            runtime.DispatchEvents(options); 
+        } 
+    } 
+ 
     Y_UNIT_TEST(TestSendAfterReboot) {
         TTestBasicRuntime runtime;
         SetupTabletServices(runtime);
-
+ 
         TActorId sender = runtime.AllocateEdgeActor();
         TVector<ui64> tabletIds;
         tabletIds.push_back((ui64)TTestTxConfig::TxTablet0);
@@ -582,143 +582,143 @@ Y_UNIT_TEST_SUITE(TTabletPipeTest) {
         auto guard = CreateTabletScheduledEventsGuard(tabletIds, runtime, sender);
 
         CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::TX_DUMMY), [](const TActorId & tablet, TTabletStorageInfo* info) {
-            return new TProducerTablet(tablet, info);
-        });
+            return new TProducerTablet(tablet, info); 
+        }); 
         CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet1, TTabletTypes::TX_DUMMY), [](const TActorId & tablet, TTabletStorageInfo* info) {
-            return new TConsumerTablet(tablet, info);
-        });
-
-        {
-            TDispatchOptions options;
+            return new TConsumerTablet(tablet, info); 
+        }); 
+ 
+        { 
+            TDispatchOptions options; 
             options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot, 2));
-            runtime.DispatchEvents(options);
-        }
-
+            runtime.DispatchEvents(options); 
+        } 
+ 
         ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, new TEvProducerTablet::TEvConnect(false, true, true));
-        {
-            TDispatchOptions options;
-            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTabletPipe::EvClientConnected, 1));
-            runtime.DispatchEvents(options);
-        }
-
-        Cout << "Reboot consumer\n";
+        { 
+            TDispatchOptions options; 
+            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTabletPipe::EvClientConnected, 1)); 
+            runtime.DispatchEvents(options); 
+        } 
+ 
+        Cout << "Reboot consumer\n"; 
         RebootTablet(runtime, TTestTxConfig::TxTablet1, sender);
         ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, new TEvProducerTablet::TEvSend());
-        {
-            TDispatchOptions options;
-            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvents::THelloWorld::Pong));
-            runtime.DispatchEvents(options);
-        }
-
-        Cout << "Reboot producer\n";
+        { 
+            TDispatchOptions options; 
+            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvents::THelloWorld::Pong)); 
+            runtime.DispatchEvents(options); 
+        } 
+ 
+        Cout << "Reboot producer\n"; 
         RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
         ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, new TEvProducerTablet::TEvConnect(false, true, true));
         ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, new TEvProducerTablet::TEvSend());
-        {
-            TDispatchOptions options;
-            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvents::THelloWorld::Pong));
-            runtime.DispatchEvents(options);
-        }
-    }
-
+        { 
+            TDispatchOptions options; 
+            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvents::THelloWorld::Pong)); 
+            runtime.DispatchEvents(options); 
+        } 
+    } 
+ 
     Y_UNIT_TEST(TestConsumerSidePipeReset) {
         TTestBasicRuntime runtime;
         SetupTabletServices(runtime);
-
+ 
         TActorId sender = runtime.AllocateEdgeActor();
         CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::TX_DUMMY), [](const TActorId & tablet, TTabletStorageInfo* info) {
-            return new TProducerTablet(tablet, info);
-        });
+            return new TProducerTablet(tablet, info); 
+        }); 
         CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet1, TTabletTypes::TX_DUMMY), [](const TActorId & tablet, TTabletStorageInfo* info) {
-            return new TConsumerTablet(tablet, info);
-        });
-
-        {
-            TDispatchOptions options;
+            return new TConsumerTablet(tablet, info); 
+        }); 
+ 
+        { 
+            TDispatchOptions options; 
             options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot, 2));
-            runtime.DispatchEvents(options);
-        }
-
+            runtime.DispatchEvents(options); 
+        } 
+ 
         ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, new TEvProducerTablet::TEvConnect());
-        {
-            TDispatchOptions options;
-            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTabletPipe::EvClientConnected, 1));
-            runtime.DispatchEvents(options);
-        }
-
-
+        { 
+            TDispatchOptions options; 
+            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTabletPipe::EvClientConnected, 1)); 
+            runtime.DispatchEvents(options); 
+        } 
+ 
+ 
         ForwardToTablet(runtime, TTestTxConfig::TxTablet1, sender, new TEvConsumerTablet::TEvReject());
-        {
-            TDispatchOptions options;
-            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTabletPipe::EvClientDestroyed, 1));
-            runtime.DispatchEvents(options);
-        }
-    }
-
+        { 
+            TDispatchOptions options; 
+            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTabletPipe::EvClientDestroyed, 1)); 
+            runtime.DispatchEvents(options); 
+        } 
+    } 
+ 
     Y_UNIT_TEST(TestConnectReject) {
         TTestBasicRuntime runtime;
         SetupTabletServices(runtime);
-
+ 
         TActorId sender = runtime.AllocateEdgeActor();
         CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::TX_DUMMY), [](const TActorId & tablet, TTabletStorageInfo* info) {
-            return new TProducerTablet(tablet, info);
-        });
+            return new TProducerTablet(tablet, info); 
+        }); 
         CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet1, TTabletTypes::TX_DUMMY), [](const TActorId & tablet, TTabletStorageInfo* info) {
-            return new TConsumerTablet(tablet, info);
-        });
-
-        {
-            TDispatchOptions options;
+            return new TConsumerTablet(tablet, info); 
+        }); 
+ 
+        { 
+            TDispatchOptions options; 
             options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot, 2));
-            runtime.DispatchEvents(options);
-        }
-
+            runtime.DispatchEvents(options); 
+        } 
+ 
         ForwardToTablet(runtime, TTestTxConfig::TxTablet1, sender, new TEvConsumerTablet::TEvReject());
         ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, new TEvProducerTablet::TEvConnect());
-        {
-            TDispatchOptions options;
-            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTabletPipe::EvClientConnected, 1));
-            runtime.DispatchEvents(options);
-        }
-    }
-
+        { 
+            TDispatchOptions options; 
+            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTabletPipe::EvClientConnected, 1)); 
+            runtime.DispatchEvents(options); 
+        } 
+    } 
+ 
     Y_UNIT_TEST(TestSendAfterOpenUsingTabletWithoutAcceptor) {
         TTestBasicRuntime runtime;
         SetupTabletServices(runtime);
-
+ 
         TActorId sender = runtime.AllocateEdgeActor();
         CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::TX_DUMMY), [](const TActorId & tablet, TTabletStorageInfo* info) {
-            return new TProducerTablet(tablet, info);
-        });
+            return new TProducerTablet(tablet, info); 
+        }); 
         CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet1, TTabletTypes::TX_DUMMY), [](const TActorId & tablet, TTabletStorageInfo* info) {
-            return new TConsumerTabletWithoutAcceptor(tablet, info);
-        });
-
-        {
-            TDispatchOptions options;
+            return new TConsumerTabletWithoutAcceptor(tablet, info); 
+        }); 
+ 
+        { 
+            TDispatchOptions options; 
             options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot, 2));
-            runtime.DispatchEvents(options);
-        }
-
+            runtime.DispatchEvents(options); 
+        } 
+ 
         ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, new TEvProducerTablet::TEvConnect(false, false));
-        {
-            TDispatchOptions options;
-            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTabletPipe::EvClientConnected, 1));
-            runtime.DispatchEvents(options);
-        }
-
+        { 
+            TDispatchOptions options; 
+            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTabletPipe::EvClientConnected, 1)); 
+            runtime.DispatchEvents(options); 
+        } 
+ 
         ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, new TEvProducerTablet::TEvSend());
-        {
-            TDispatchOptions options;
-            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvents::THelloWorld::Pong));
-            runtime.DispatchEvents(options);
-        }
-    }
-
+        { 
+            TDispatchOptions options; 
+            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvents::THelloWorld::Pong)); 
+            runtime.DispatchEvents(options); 
+        } 
+    } 
+ 
     Y_UNIT_TEST(TestRebootUsingTabletWithoutAcceptor) {
         TTestBasicRuntime runtime;
         SetupTabletServices(runtime);
-
+ 
         TActorId sender = runtime.AllocateEdgeActor();
 
         TVector<ui64> tabletIds;
@@ -727,153 +727,153 @@ Y_UNIT_TEST_SUITE(TTabletPipeTest) {
         auto guard = CreateTabletScheduledEventsGuard(tabletIds, runtime, sender);
 
         CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::TX_DUMMY), [](const TActorId & tablet, TTabletStorageInfo* info) {
-            return new TProducerTablet(tablet, info);
-        });
+            return new TProducerTablet(tablet, info); 
+        }); 
         CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet1, TTabletTypes::TX_DUMMY), [](const TActorId & tablet, TTabletStorageInfo* info) {
-            return new TConsumerTabletWithoutAcceptor(tablet, info);
-        });
-
-        {
-            TDispatchOptions options;
+            return new TConsumerTabletWithoutAcceptor(tablet, info); 
+        }); 
+ 
+        { 
+            TDispatchOptions options; 
             options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot, 2));
-            runtime.DispatchEvents(options);
-        }
-
+            runtime.DispatchEvents(options); 
+        } 
+ 
         ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, new TEvProducerTablet::TEvConnect(false, false, true));
-        {
-            TDispatchOptions options;
-            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTabletPipe::EvClientConnected, 1));
-            runtime.DispatchEvents(options);
-        }
-
-        Cout << "Reboot consumer\n";
+        { 
+            TDispatchOptions options; 
+            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTabletPipe::EvClientConnected, 1)); 
+            runtime.DispatchEvents(options); 
+        } 
+ 
+        Cout << "Reboot consumer\n"; 
         RebootTablet(runtime, TTestTxConfig::TxTablet1, sender);
         ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, new TEvProducerTablet::TEvSend());
-        {
-            TDispatchOptions options;
-            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvents::THelloWorld::Pong));
-            runtime.DispatchEvents(options);
-        }
-
-        Cout << "Reboot producer\n";
+        { 
+            TDispatchOptions options; 
+            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvents::THelloWorld::Pong)); 
+            runtime.DispatchEvents(options); 
+        } 
+ 
+        Cout << "Reboot producer\n"; 
         RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
         ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, new TEvProducerTablet::TEvConnect(false, false, true));
         ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, new TEvProducerTablet::TEvSend());
-        {
-            TDispatchOptions options;
-            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvents::THelloWorld::Pong));
-            runtime.DispatchEvents(options);
-        }
-    }
-
+        { 
+            TDispatchOptions options; 
+            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvents::THelloWorld::Pong)); 
+            runtime.DispatchEvents(options); 
+        } 
+    } 
+ 
     Y_UNIT_TEST(TestShutdown) {
         TTestBasicRuntime runtime;
         SetupTabletServices(runtime);
-
+ 
         TActorId sender = runtime.AllocateEdgeActor();
         CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::TX_DUMMY), [](const TActorId & tablet, TTabletStorageInfo* info) {
-            return new TProducerTablet(tablet, info);
-        });
+            return new TProducerTablet(tablet, info); 
+        }); 
         CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet1, TTabletTypes::TX_DUMMY), [](const TActorId & tablet, TTabletStorageInfo* info) {
-            return new TConsumerTablet(tablet, info);
-        });
-
-        {
-            TDispatchOptions options;
+            return new TConsumerTablet(tablet, info); 
+        }); 
+ 
+        { 
+            TDispatchOptions options; 
             options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot, 2));
-            runtime.DispatchEvents(options);
-        }
-
+            runtime.DispatchEvents(options); 
+        } 
+ 
         ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, new TEvProducerTablet::TEvConnect(false));
         ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, new TEvProducerTablet::TEvSend(true));
-        {
-            TDispatchOptions options;
-            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvents::THelloWorld::Pong));
-            runtime.DispatchEvents(options);
-        }
-    }
-
+        { 
+            TDispatchOptions options; 
+            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvents::THelloWorld::Pong)); 
+            runtime.DispatchEvents(options); 
+        } 
+    } 
+ 
     Y_UNIT_TEST(TestTwoNodes) {
         TTestBasicRuntime runtime(2);
         SetupTabletServices(runtime);
-
+ 
         TActorId sender1 = runtime.AllocateEdgeActor(0);
         CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::TX_DUMMY), [](const TActorId & tablet, TTabletStorageInfo* info) {
-            return new TProducerTablet(tablet, info);
-        }, 0);
+            return new TProducerTablet(tablet, info); 
+        }, 0); 
         CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet1, TTabletTypes::TX_DUMMY), [](const TActorId & tablet, TTabletStorageInfo* info) {
-            return new TConsumerTablet(tablet, info);
-        }, 1);
-
-        {
-            TDispatchOptions options;
+            return new TConsumerTablet(tablet, info); 
+        }, 1); 
+ 
+        { 
+            TDispatchOptions options; 
             options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot, 2));
-            runtime.DispatchEvents(options);
-        }
-
+            runtime.DispatchEvents(options); 
+        } 
+ 
         ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender1, new TEvProducerTablet::TEvConnect(), 0);
-        {
-            TDispatchOptions options;
-            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTabletPipe::EvClientConnected, 1));
-            runtime.DispatchEvents(options);
-        }
-
+        { 
+            TDispatchOptions options; 
+            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTabletPipe::EvClientConnected, 1)); 
+            runtime.DispatchEvents(options); 
+        } 
+ 
         ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender1, new TEvProducerTablet::TEvSend(), 0);
-        {
-            TDispatchOptions options;
-            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvents::THelloWorld::Pong));
-            runtime.DispatchEvents(options);
-        }
-    }
-
+        { 
+            TDispatchOptions options; 
+            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvents::THelloWorld::Pong)); 
+            runtime.DispatchEvents(options); 
+        } 
+    } 
+ 
     Y_UNIT_TEST(TestClientDisconnectAfterPipeOpen) {
         TTestBasicRuntime runtime(2);
         SetupTabletServices(runtime);
-
+ 
         TActorId sender1 = runtime.AllocateEdgeActor(0);
         CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::TX_DUMMY), [](const TActorId & tablet, TTabletStorageInfo* info) {
-            return new TProducerTablet(tablet, info);
-        }, 0);
+            return new TProducerTablet(tablet, info); 
+        }, 0); 
         CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet1, TTabletTypes::TX_DUMMY), [](const TActorId & tablet, TTabletStorageInfo* info) {
-            return new TConsumerTablet(tablet, info);
-        }, 1);
-
-        {
-            TDispatchOptions options;
+            return new TConsumerTablet(tablet, info); 
+        }, 1); 
+ 
+        { 
+            TDispatchOptions options; 
             options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot, 2));
-            runtime.DispatchEvents(options);
-        }
-
+            runtime.DispatchEvents(options); 
+        } 
+ 
         ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender1, new TEvProducerTablet::TEvConnect(), 0);
-        {
-            TDispatchOptions options;
-            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTabletPipe::EvClientConnected, 1));
-            runtime.DispatchEvents(options);
-        }
-
+        { 
+            TDispatchOptions options; 
+            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTabletPipe::EvClientConnected, 1)); 
+            runtime.DispatchEvents(options); 
+        } 
+ 
         TActorId proxy = runtime.GetInterconnectProxy(0, 1);
         Y_VERIFY(proxy);
-        runtime.Send(new IEventHandle(proxy, sender1, new TEvInterconnect::TEvConnectNode), 0);
-        TAutoPtr<IEventHandle> handle;
-        runtime.GrabEdgeEvent<TEvInterconnect::TEvNodeConnected>(handle);
-        auto sessionId = handle->Sender;
-        Cout << "SessionId: " << sessionId << "\n";
-
-        runtime.Send(new IEventHandle(sessionId, sender1, new TEvents::TEvPoisonPill), 0);
-        {
-            TDispatchOptions options;
-            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTabletPipe::EvClientConnected, 1));
-            runtime.DispatchEvents(options);
-        }
-
+        runtime.Send(new IEventHandle(proxy, sender1, new TEvInterconnect::TEvConnectNode), 0); 
+        TAutoPtr<IEventHandle> handle; 
+        runtime.GrabEdgeEvent<TEvInterconnect::TEvNodeConnected>(handle); 
+        auto sessionId = handle->Sender; 
+        Cout << "SessionId: " << sessionId << "\n"; 
+ 
+        runtime.Send(new IEventHandle(sessionId, sender1, new TEvents::TEvPoisonPill), 0); 
+        { 
+            TDispatchOptions options; 
+            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTabletPipe::EvClientConnected, 1)); 
+            runtime.DispatchEvents(options); 
+        } 
+ 
         ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender1, new TEvProducerTablet::TEvSend(), 0);
-        {
-            TDispatchOptions options;
-            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvents::THelloWorld::Pong));
-            runtime.DispatchEvents(options);
-        }
-    }
-
+        { 
+            TDispatchOptions options; 
+            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvents::THelloWorld::Pong)); 
+            runtime.DispatchEvents(options); 
+        } 
+    } 
+ 
     Y_UNIT_TEST(TestSendBeforeBootTarget) {
         TTestBasicRuntime runtime;
         SetupTabletServices(runtime);
@@ -881,110 +881,110 @@ Y_UNIT_TEST_SUITE(TTabletPipeTest) {
         TVector<ui64> tabletIds;
         tabletIds.push_back((ui64)TTestTxConfig::TxTablet0);
         tabletIds.push_back((ui64)TTestTxConfig::TxTablet1);
-        auto scheduledEventsGuard = CreateTabletScheduledEventsGuard(tabletIds, runtime, sender);
-
+        auto scheduledEventsGuard = CreateTabletScheduledEventsGuard(tabletIds, runtime, sender); 
+ 
         CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::TX_DUMMY), [](const TActorId & tablet, TTabletStorageInfo* info) {
-            return new TProducerTablet(tablet, info);
-        });
-
-        {
-            TDispatchOptions options;
+            return new TProducerTablet(tablet, info); 
+        }); 
+ 
+        { 
+            TDispatchOptions options; 
             options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot, 1));
-            runtime.DispatchEvents(options);
-        }
-
+            runtime.DispatchEvents(options); 
+        } 
+ 
         ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, new TEvProducerTablet::TEvConnect(false, true, true));
-
-        {
-            TDispatchOptions options;
-            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTabletPipe::EvClientConnected, 1));
-            options.NonEmptyMailboxes.push_back(TEventMailboxId(sender.NodeId(), sender.Hint()));
-            runtime.DispatchEvents(options);
-            auto events = runtime.CaptureEvents();
-            TAutoPtr<IEventHandle> handle;
-            UNIT_ASSERT(GrabEvent<TEvTabletResolver::TEvForwardResult>(events, handle));
-            runtime.PushEventsFront(events);
-        }
-
-        {
-            TDispatchOptions options;
-            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTabletResolver::EvForward, 15));
-            runtime.DispatchEvents(options);
-        }
-
+ 
+        { 
+            TDispatchOptions options; 
+            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTabletPipe::EvClientConnected, 1)); 
+            options.NonEmptyMailboxes.push_back(TEventMailboxId(sender.NodeId(), sender.Hint())); 
+            runtime.DispatchEvents(options); 
+            auto events = runtime.CaptureEvents(); 
+            TAutoPtr<IEventHandle> handle; 
+            UNIT_ASSERT(GrabEvent<TEvTabletResolver::TEvForwardResult>(events, handle)); 
+            runtime.PushEventsFront(events); 
+        } 
+ 
+        { 
+            TDispatchOptions options; 
+            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTabletResolver::EvForward, 15)); 
+            runtime.DispatchEvents(options); 
+        } 
+ 
         CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet1, TTabletTypes::TX_DUMMY), [](const TActorId & tablet, TTabletStorageInfo* info) {
-            return new TConsumerTablet(tablet, info);
-        });
-
-        {
-            TDispatchOptions options;
-            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTabletPipe::EvClientConnected, 1));
-            options.NonEmptyMailboxes.push_back(TEventMailboxId(sender.NodeId(), sender.Hint()));
-            runtime.DispatchEvents(options);
-        }
-
+            return new TConsumerTablet(tablet, info); 
+        }); 
+ 
+        { 
+            TDispatchOptions options; 
+            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTabletPipe::EvClientConnected, 1)); 
+            options.NonEmptyMailboxes.push_back(TEventMailboxId(sender.NodeId(), sender.Hint())); 
+            runtime.DispatchEvents(options); 
+        } 
+ 
         ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, new TEvProducerTablet::TEvSend());
-        {
-            TDispatchOptions options;
-            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvents::THelloWorld::Pong));
-            runtime.DispatchEvents(options);
-        }
-    }
-
+        { 
+            TDispatchOptions options; 
+            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvents::THelloWorld::Pong)); 
+            runtime.DispatchEvents(options); 
+        } 
+    } 
+ 
     Y_UNIT_TEST(TestTwoNodesAndRebootOfProducer) {
         TTestBasicRuntime runtime(2);
         SetupTabletServices(runtime);
-
+ 
         TActorId sender1 = runtime.AllocateEdgeActor(0);
         CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::TX_DUMMY), [](const TActorId & tablet, TTabletStorageInfo* info) {
-            return new TProducerTablet(tablet, info);
-        }, 0);
+            return new TProducerTablet(tablet, info); 
+        }, 0); 
         CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet1, TTabletTypes::TX_DUMMY), [](const TActorId & tablet, TTabletStorageInfo* info) {
-            return new TConsumerTablet(tablet, info);
-        }, 1);
-
-        {
-            TDispatchOptions options;
+            return new TConsumerTablet(tablet, info); 
+        }, 1); 
+ 
+        { 
+            TDispatchOptions options; 
             options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot, 2));
-            runtime.DispatchEvents(options);
-        }
-
+            runtime.DispatchEvents(options); 
+        } 
+ 
         ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender1, new TEvProducerTablet::TEvConnect(), 0);
-        {
-            TDispatchOptions options;
-            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTabletPipe::EvClientConnected, 1));
-            runtime.DispatchEvents(options);
-        }
-
+        { 
+            TDispatchOptions options; 
+            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTabletPipe::EvClientConnected, 1)); 
+            runtime.DispatchEvents(options); 
+        } 
+ 
         ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender1, new TEvProducerTablet::TEvSend(), 0);
-        {
-            TDispatchOptions options;
-            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvents::THelloWorld::Pong));
-            runtime.DispatchEvents(options);
-        }
-
+        { 
+            TDispatchOptions options; 
+            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvents::THelloWorld::Pong)); 
+            runtime.DispatchEvents(options); 
+        } 
+ 
         RebootTablet(runtime, TTestTxConfig::TxTablet0, sender1);
-
+ 
         ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender1, new TEvProducerTablet::TEvConnect(), 0);
-        {
-            TDispatchOptions options;
-            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTabletPipe::EvClientConnected, 1));
-            runtime.DispatchEvents(options);
-        }
-
+        { 
+            TDispatchOptions options; 
+            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTabletPipe::EvClientConnected, 1)); 
+            runtime.DispatchEvents(options); 
+        } 
+ 
         ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender1, new TEvProducerTablet::TEvSend(), 0);
-        {
-            TDispatchOptions options;
-            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvents::THelloWorld::Pong));
-            runtime.DispatchEvents(options);
-        }
-    }
-
+        { 
+            TDispatchOptions options; 
+            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvents::THelloWorld::Pong)); 
+            runtime.DispatchEvents(options); 
+        } 
+    } 
+ 
     Y_UNIT_TEST(TestTwoNodesAndRebootOfConsumer) {
         TTestBasicRuntime runtime(2);
         SetupTabletServices(runtime);
         runtime.SetLogPriority(NActorsServices::INTERCONNECT, NActors::NLog::PRI_DEBUG);
-
+ 
         TActorId sender1 = runtime.AllocateEdgeActor(0);
         TActorId sender2 = runtime.AllocateEdgeActor(1);
 
@@ -994,48 +994,48 @@ Y_UNIT_TEST_SUITE(TTabletPipeTest) {
         auto guard = CreateTabletScheduledEventsGuard(tabletIds, runtime, sender1);
 
         CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::TX_DUMMY), [](const TActorId & tablet, TTabletStorageInfo* info) {
-            return new TProducerTablet(tablet, info);
-        }, 0);
+            return new TProducerTablet(tablet, info); 
+        }, 0); 
         CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet1, TTabletTypes::TX_DUMMY), [](const TActorId & tablet, TTabletStorageInfo* info) {
-            return new TConsumerTablet(tablet, info);
-        }, 1);
-
-        {
-            TDispatchOptions options;
+            return new TConsumerTablet(tablet, info); 
+        }, 1); 
+ 
+        { 
+            TDispatchOptions options; 
             options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot, 2));
-            runtime.DispatchEvents(options);
-        }
-
+            runtime.DispatchEvents(options); 
+        } 
+ 
         ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender1, new TEvProducerTablet::TEvConnect(false, true, true), 0);
-        {
-            TDispatchOptions options;
-            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTabletPipe::EvClientConnected, 1));
-            runtime.DispatchEvents(options);
-        }
-
+        { 
+            TDispatchOptions options; 
+            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTabletPipe::EvClientConnected, 1)); 
+            runtime.DispatchEvents(options); 
+        } 
+ 
         ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender1, new TEvProducerTablet::TEvSend(), 0);
-        {
-            TDispatchOptions options;
-            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvents::THelloWorld::Pong));
-            runtime.DispatchEvents(options);
-        }
-
+        { 
+            TDispatchOptions options; 
+            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvents::THelloWorld::Pong)); 
+            runtime.DispatchEvents(options); 
+        } 
+ 
         RebootTablet(runtime, TTestTxConfig::TxTablet1, sender2, 1);
-
+ 
         ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender1, new TEvProducerTablet::TEvConnect(false, true, true), 0);
-        {
-            TDispatchOptions options;
-            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTabletPipe::EvClientConnected, 1));
-            runtime.DispatchEvents(options);
-        }
-
+        { 
+            TDispatchOptions options; 
+            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTabletPipe::EvClientConnected, 1)); 
+            runtime.DispatchEvents(options); 
+        } 
+ 
         ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender1, new TEvProducerTablet::TEvSend(), 0);
-        {
-            TDispatchOptions options;
-            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvents::THelloWorld::Pong));
-            runtime.DispatchEvents(options);
-        }
-    }
+        { 
+            TDispatchOptions options; 
+            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvents::THelloWorld::Pong)); 
+            runtime.DispatchEvents(options); 
+        } 
+    } 
 
     Y_UNIT_TEST(TestRewriteSameNode) {
         TTestBasicRuntime runtime(2);
@@ -1158,6 +1158,6 @@ Y_UNIT_TEST_SUITE(TTabletPipeTest) {
         UNIT_ASSERT_C(handle->Recipient == sender2, "Event recipient " << handle->Recipient << " != " << sender2);
     }
 
-}
-
-}
+} 
+ 
+} 

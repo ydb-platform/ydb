@@ -44,12 +44,12 @@ public:
     }
 
     TTrackingAllocator(TTrackingAllocator&& a) noexcept
-        : std::allocator<T>(std::move(static_cast<std::allocator<T>&&>(a)))
-        , Allocated(a.Allocated)
-    {
-        a.Allocated = nullptr;
-    }
-
+        : std::allocator<T>(std::move(static_cast<std::allocator<T>&&>(a))) 
+        , Allocated(a.Allocated) 
+    { 
+        a.Allocated = nullptr; 
+    } 
+ 
     template <class U>
     TTrackingAllocator(const TTrackingAllocator<U>& a) noexcept
         : std::allocator<T>(a)
@@ -58,20 +58,20 @@ public:
     }
 
     TTrackingAllocator& operator=(const TTrackingAllocator& a) noexcept
-    {
-        Allocated = a.Allocated;
-        std::allocator<T>::operator=(a);
-        return *this;
-    }
-
+    { 
+        Allocated = a.Allocated; 
+        std::allocator<T>::operator=(a); 
+        return *this; 
+    } 
+ 
     TTrackingAllocator& operator=(TTrackingAllocator&& a) noexcept
-    {
-        Allocated = a.Allocated;
-        a.Allocated = nullptr;
-        std::allocator<T>::operator=(std::move(static_cast<std::allocator<T>&&>(a)));
-        return *this;
-    }
-
+    { 
+        Allocated = a.Allocated; 
+        a.Allocated = nullptr; 
+        std::allocator<T>::operator=(std::move(static_cast<std::allocator<T>&&>(a))); 
+        return *this; 
+    } 
+ 
     ~TTrackingAllocator() {
     }
 
@@ -90,10 +90,10 @@ public:
         return *Allocated;
     }
 
-    TSimpleSharedPtr<size_t> GetAllocatedPtr() const {
-        return Allocated;
-    }
-
+    TSimpleSharedPtr<size_t> GetAllocatedPtr() const { 
+        return Allocated; 
+    } 
+ 
 private:
     TSimpleSharedPtr<size_t> Allocated;
 };

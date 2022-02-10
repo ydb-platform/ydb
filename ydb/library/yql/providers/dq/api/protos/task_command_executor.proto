@@ -3,10 +3,10 @@ option cc_enable_arenas = true;
 
 package NYql.NDqProto;
 
-import "ydb/library/yql/dq/actors/protos/dq_stats.proto";
-import "ydb/library/yql/dq/proto/dq_transport.proto";
-import "ydb/library/yql/dq/proto/dq_tasks.proto";
-import "ydb/library/yql/providers/dq/api/protos/dqs.proto";
+import "ydb/library/yql/dq/actors/protos/dq_stats.proto"; 
+import "ydb/library/yql/dq/proto/dq_transport.proto"; 
+import "ydb/library/yql/dq/proto/dq_tasks.proto"; 
+import "ydb/library/yql/providers/dq/api/protos/dqs.proto"; 
 
 message TCommandHeader {
     enum ECommand {

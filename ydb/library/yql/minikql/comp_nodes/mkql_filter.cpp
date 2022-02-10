@@ -1,11 +1,11 @@
-#include "mkql_filter.h"
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h>
-#include <ydb/library/yql/minikql/mkql_node_cast.h>
-
-namespace NKikimr {
-namespace NMiniKQL {
-
+#include "mkql_filter.h" 
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h> 
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h> 
+#include <ydb/library/yql/minikql/mkql_node_cast.h> 
+ 
+namespace NKikimr { 
+namespace NMiniKQL { 
+ 
 namespace {
 
 class TFilterFlowWrapper : public TStatelessFlowCodegeneratorNode<TFilterFlowWrapper> {
@@ -161,45 +161,45 @@ private:
 template <bool IsStream>
 class TBaseFilterWrapper {
 protected:
-    class TListValue : public TCustomListValue {
-    public:
+    class TListValue : public TCustomListValue { 
+    public: 
         class TIterator : public TComputationValue<TIterator> {
-        public:
+        public: 
             TIterator(TMemoryUsageInfo* memInfo, TComputationContext& compCtx, NUdf::TUnboxedValue&& iter, IComputationExternalNode* item, IComputationNode* predicate)
                 : TComputationValue<TIterator>(memInfo)
                 , CompCtx(compCtx)
                 , Iter(std::move(iter))
-                , Item(item)
-                , Predicate(predicate)
-            {}
-
+                , Item(item) 
+                , Predicate(predicate) 
+            {} 
+ 
         private:
             bool Next(NUdf::TUnboxedValue& value) final {
                 while (Iter.Next(Item->RefValue(CompCtx))) {
                     if (Predicate->GetValue(CompCtx).template Get<bool>()) {
                         value = Item->GetValue(CompCtx);
                         return true;
-                    }
+                    } 
                 }
-
+ 
                 return false;
             }
 
             TComputationContext& CompCtx;
             const NUdf::TUnboxedValue Iter;
             IComputationExternalNode* const Item;
-            IComputationNode* const Predicate;
-        };
-
+            IComputationNode* const Predicate; 
+        }; 
+ 
         TListValue(TMemoryUsageInfo* memInfo, TComputationContext& compCtx, const NUdf::TUnboxedValue& list, IComputationExternalNode* item, IComputationNode* predicate)
-            : TCustomListValue(memInfo)
+            : TCustomListValue(memInfo) 
             , CompCtx(compCtx)
-            , List(list)
-            , Item(item)
-            , Predicate(predicate)
-        {
-        }
-
+            , List(list) 
+            , Item(item) 
+            , Predicate(predicate) 
+        { 
+        } 
+ 
     private:
         NUdf::TUnboxedValue GetListIterator() const final {
             return CompCtx.HolderFactory.Create<TIterator>(CompCtx, List.GetListIterator(), Item, Predicate);
@@ -208,22 +208,22 @@ protected:
         TComputationContext& CompCtx;
         const NUdf::TUnboxedValue List;
         IComputationExternalNode* const Item;
-        IComputationNode* const Predicate;
-    };
-
-    class TStreamValue : public TComputationValue<TStreamValue> {
-    public:
-        using TBase = TComputationValue<TStreamValue>;
-
+        IComputationNode* const Predicate; 
+    }; 
+ 
+    class TStreamValue : public TComputationValue<TStreamValue> { 
+    public: 
+        using TBase = TComputationValue<TStreamValue>; 
+ 
         TStreamValue(TMemoryUsageInfo* memInfo, TComputationContext& compCtx, const NUdf::TUnboxedValue& stream, IComputationExternalNode* item, IComputationNode* predicate)
-            : TBase(memInfo)
+            : TBase(memInfo) 
             , CompCtx(compCtx)
-            , Stream(stream)
-            , Item(item)
-            , Predicate(predicate)
-        {
-        }
-
+            , Stream(stream) 
+            , Item(item) 
+            , Predicate(predicate) 
+        { 
+        } 
+ 
     private:
         ui32 GetTraverseCount() const final {
             return 1;
@@ -235,37 +235,37 @@ protected:
         }
 
         NUdf::TUnboxedValue Save() const final {
-            return NUdf::TUnboxedValue::Zero();
-        }
-
+            return NUdf::TUnboxedValue::Zero(); 
+        } 
+ 
         void Load(const NUdf::TStringRef&) final {}
-
+ 
         NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) final {
             for (;;) {
                 const auto status = Stream.Fetch(Item->RefValue(CompCtx));
                 if (NUdf::EFetchStatus::Ok != status) {
                     return status;
-                }
-
+                } 
+ 
                 if (Predicate->GetValue(CompCtx).template Get<bool>()) {
                     result = Item->GetValue(CompCtx);
                     return NUdf::EFetchStatus::Ok;
-                }
-            }
-
-            return NUdf::EFetchStatus::Finish;
-        }
-
+                } 
+            } 
+ 
+            return NUdf::EFetchStatus::Finish; 
+        } 
+ 
         TComputationContext& CompCtx;
         const NUdf::TUnboxedValue Stream;
         IComputationExternalNode* const Item;
-        IComputationNode* const Predicate;
-    };
-
+        IComputationNode* const Predicate; 
+    }; 
+ 
     TBaseFilterWrapper(IComputationNode* list, IComputationExternalNode* item, IComputationNode* predicate)
         : List(list), Item(item), Predicate(predicate)
     {}
-
+ 
 #ifndef MKQL_DISABLE_CODEGEN
     Function* GenerateFilter(const NYql::NCodegen::ICodegen::TPtr& codegen, const TString& name) const {
         auto& module = codegen->GetModule();
@@ -285,7 +285,7 @@ protected:
         const auto funcType = FunctionType::get(statusType, {PointerType::getUnqual(contextType), containerType, PointerType::getUnqual(valueType)}, false);
 
         TCodegenContext ctx(codegen);
-        ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee());
+        ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee()); 
 
         auto args = ctx.Func->arg_begin();
 
@@ -337,18 +337,18 @@ protected:
     }
 
     using TCodegenValue = std::conditional_t<IsStream, TStreamCodegenValueStateless, TCustomListCodegenValue>;
-    using TFilterPtr = std::conditional_t<IsStream, TStreamCodegenValueStateless::TFetchPtr, TCustomListCodegenValue::TNextPtr>;
+    using TFilterPtr = std::conditional_t<IsStream, TStreamCodegenValueStateless::TFetchPtr, TCustomListCodegenValue::TNextPtr>; 
 
     Function* FilterFunc = nullptr;
 
     TFilterPtr Filter = nullptr;
 #endif
 
-    IComputationNode* const List;
+    IComputationNode* const List; 
     IComputationExternalNode* const Item;
-    IComputationNode* const Predicate;
-};
-
+    IComputationNode* const Predicate; 
+}; 
+ 
 template <bool IsStream>
 class TBaseFilterWithLimitWrapper {
 protected:
@@ -491,7 +491,7 @@ protected:
         const auto funcType = FunctionType::get(statusType, {PointerType::getUnqual(contextType), containerType, PointerType::getUnqual(limitType), PointerType::getUnqual(valueType)}, false);
 
         TCodegenContext ctx(codegen);
-        ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee());
+        ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee()); 
 
         auto args = ctx.Func->arg_begin();
 
@@ -780,7 +780,7 @@ public:
                 const auto fnType = FunctionType::get(bits->getType(), {shr->getType()}, false);
                 const auto name = "MyAlloc";
                 ctx.Codegen->AddGlobalMapping(name, reinterpret_cast<const void*>(&MyAlloc));
-                const auto func = ctx.Codegen->GetModule().getOrInsertFunction(name, fnType).getCallee();
+                const auto func = ctx.Codegen->GetModule().getOrInsertFunction(name, fnType).getCallee(); 
                 const auto ptr = CallInst::Create(func, {shr}, "ptr", block);
                 bits->addIncoming(ptr, block);
                 BranchInst::Create(main, block);
@@ -951,7 +951,7 @@ public:
                 const auto fnType = FunctionType::get(Type::getVoidTy(context), {bits->getType(), shr->getType()}, false);
                 const auto name = "MyFree";
                 ctx.Codegen->AddGlobalMapping(name, reinterpret_cast<const void*>(&MyFree));
-                const auto func = ctx.Codegen->GetModule().getOrInsertFunction(name, fnType).getCallee();
+                const auto func = ctx.Codegen->GetModule().getOrInsertFunction(name, fnType).getCallee(); 
                 CallInst::Create(func, {bits, shr}, "", block);
 
                 out->addIncoming(output, block);
@@ -1145,7 +1145,7 @@ public:
                 const auto fnType = FunctionType::get(bits->getType(), {shr->getType()}, false);
                 const auto name = "MyAlloc";
                 ctx.Codegen->AddGlobalMapping(name, reinterpret_cast<const void*>(&MyAlloc));
-                const auto func = ctx.Codegen->GetModule().getOrInsertFunction(name, fnType).getCallee();
+                const auto func = ctx.Codegen->GetModule().getOrInsertFunction(name, fnType).getCallee(); 
                 const auto ptr = CallInst::Create(func, {shr}, "ptr", block);
                 bits->addIncoming(ptr, block);
                 BranchInst::Create(main, block);
@@ -1320,7 +1320,7 @@ public:
                 const auto fnType = FunctionType::get(Type::getVoidTy(context), {bits->getType(), shr->getType()}, false);
                 const auto name = "MyFree";
                 ctx.Codegen->AddGlobalMapping(name, reinterpret_cast<const void*>(&MyFree));
-                const auto func = ctx.Codegen->GetModule().getOrInsertFunction(name, fnType).getCallee();
+                const auto func = ctx.Codegen->GetModule().getOrInsertFunction(name, fnType).getCallee(); 
                 CallInst::Create(func, {bits, shr}, "", block);
 
                 out->addIncoming(output, block);
@@ -1408,10 +1408,10 @@ IComputationNode* WrapFilter(TCallable& callable, const TComputationNodeFactoryC
         } else if (type->IsList()) {
             return new TListFilterWithLimitWrapper(ctx.Mutables, flow, limit, itemArg, predicate);
         }
-    }
+    } 
 
     THROW yexception() << "Expected flow, list or stream.";
-}
-
-}
-}
+} 
+ 
+} 
+} 

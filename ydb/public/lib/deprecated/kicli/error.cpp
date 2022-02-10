@@ -1,6 +1,6 @@
 #include "kicli.h"
-#include <ydb/library/yql/public/issue/yql_issue.h>
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
+#include <ydb/library/yql/public/issue/yql_issue.h> 
+#include <ydb/library/yql/public/issue/yql_issue_message.h> 
 #include <ydb/public/lib/base/defs.h>
 #include <ydb/public/lib/deprecated/client/msgbus_client.h>
 #include <ydb/core/protos/minikql_engine.pb.h>
@@ -28,8 +28,8 @@ bool TError::Success() const {
         };
         break;
     case EFacility::FacilityExecutionEngine:
-        switch (Code) {
-        case NKikimrMiniKQLEngine::Ok:
+        switch (Code) { 
+        case NKikimrMiniKQLEngine::Ok: 
             return true;
         default:
             break;
@@ -73,8 +73,8 @@ bool TError::Permanent() const {
         };
         break;
     case EFacility::FacilityExecutionEngine:
-        switch (Code) {
-        case NKikimrMiniKQLEngine::SnapshotNotReady:
+        switch (Code) { 
+        case NKikimrMiniKQLEngine::SnapshotNotReady: 
             return false;
         default:
             break;
@@ -187,28 +187,28 @@ TString TError::GetMessage() const {
     case EFacility::FacilityMessageBus:
         return NBus::MessageStatusDescription((NBus::EMessageStatus)Code);
     case EFacility::FacilityExecutionEngine:
-        switch (Code) {
-        case NKikimrMiniKQLEngine::Unknown:
+        switch (Code) { 
+        case NKikimrMiniKQLEngine::Unknown: 
             return "Status unknown, not filled probably";
-        case NKikimrMiniKQLEngine::Ok:
+        case NKikimrMiniKQLEngine::Ok: 
             return "Success";
-        case NKikimrMiniKQLEngine::SchemeChanged:
+        case NKikimrMiniKQLEngine::SchemeChanged: 
             return "Scheme or partitioning was changed b/w compilation and preparation";
-        case NKikimrMiniKQLEngine::IsReadonly:
+        case NKikimrMiniKQLEngine::IsReadonly: 
             return "Update requested in read-only operation";
-        case NKikimrMiniKQLEngine::KeyError:
+        case NKikimrMiniKQLEngine::KeyError: 
             return "Something wrong in data keys";
-        case NKikimrMiniKQLEngine::ProgramError:
+        case NKikimrMiniKQLEngine::ProgramError: 
             return "Malformed program";
-        case NKikimrMiniKQLEngine::TooManyShards:
+        case NKikimrMiniKQLEngine::TooManyShards: 
             return "Too many datashards affected by program";
-        case NKikimrMiniKQLEngine::TooManyData:
+        case NKikimrMiniKQLEngine::TooManyData: 
             return "Too much data affected by program";
-        case NKikimrMiniKQLEngine::SnapshotNotExist:
+        case NKikimrMiniKQLEngine::SnapshotNotExist: 
             return "Requested snapshot not exist";
-        case NKikimrMiniKQLEngine::SnapshotNotReady:
+        case NKikimrMiniKQLEngine::SnapshotNotReady: 
             return "Snapshot not online";
-        case NKikimrMiniKQLEngine::TooManyRS:
+        case NKikimrMiniKQLEngine::TooManyRS: 
             return "Too many data transfers between datashards in the program";
         }
         break;
@@ -290,8 +290,8 @@ TError::TError(const TResult& result)
         if (result.Reply->GetHeader()->Type == NMsgBusProxy::MTYPE_CLIENT_RESPONSE) {
             const NKikimrClient::TResponse& response = result.GetResult<NKikimrClient::TResponse>();
             if (response.HasExecutionEngineStatus()
-                    && response.GetExecutionEngineStatus() != NKikimrMiniKQLEngine::Ok
-                    && response.GetExecutionEngineStatus() != NKikimrMiniKQLEngine::Unknown) {
+                    && response.GetExecutionEngineStatus() != NKikimrMiniKQLEngine::Ok 
+                    && response.GetExecutionEngineStatus() != NKikimrMiniKQLEngine::Unknown) { 
                 Facility = EFacility::FacilityExecutionEngine;
                 Code = response.GetExecutionEngineStatus();
             } else

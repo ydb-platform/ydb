@@ -1,37 +1,37 @@
-#include "mkql_way.h"
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
-#include <ydb/library/yql/minikql/mkql_node_cast.h>
-#include <ydb/library/yql/minikql/mkql_node_builder.h>
-#include <ydb/library/yql/minikql/mkql_string_util.h>
-
+#include "mkql_way.h" 
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h> 
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h> 
+#include <ydb/library/yql/minikql/mkql_node_cast.h> 
+#include <ydb/library/yql/minikql/mkql_node_builder.h> 
+#include <ydb/library/yql/minikql/mkql_string_util.h> 
+ 
 #include <util/string/cast.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
-
+namespace NKikimr { 
+namespace NMiniKQL { 
+ 
 namespace {
 
 template <bool IsOptional>
 class TWayWrapper: public TMutableCodegeneratorNode<TWayWrapper<IsOptional>> {
     typedef TMutableCodegeneratorNode<TWayWrapper<IsOptional>> TBaseComputation;
-public:
+public: 
     TWayWrapper(TComputationMutables& mutables, IComputationNode* varNode, EValueRepresentation kind, TComputationNodePtrVector&& literals)
         : TBaseComputation(mutables, kind)
         , VarNode(varNode)
         , Literals(std::move(literals))
     {}
-
+ 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         const auto& var = VarNode->GetValue(ctx);
-        if (IsOptional && !var) {
+        if (IsOptional && !var) { 
             return NUdf::TUnboxedValuePod();
-        }
-
-        const ui32 index = var.GetVariantIndex();
+        } 
+ 
+        const ui32 index = var.GetVariantIndex(); 
         return Literals[index]->GetValue(ctx).Release();
-    }
-
+    } 
+ 
 #ifndef MKQL_DISABLE_CODEGEN
     Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
         auto& context = ctx.Codegen->GetContext();
@@ -104,22 +104,22 @@ private:
     void RegisterDependencies() const final {
         this->DependsOn(VarNode);
         std::for_each(Literals.cbegin(), Literals.cend(),std::bind(&TWayWrapper<IsOptional>::DependsOn, this, std::placeholders::_1));
-    }
-
+    } 
+ 
     IComputationNode *const VarNode;
     const TComputationNodePtrVector Literals;
-};
-
+}; 
+ 
 }
 
-IComputationNode* WrapWay(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
-    MKQL_ENSURE(callable.GetInputsCount() == 1, "Expected 1 argument");
-    bool isOptional;
+IComputationNode* WrapWay(TCallable& callable, const TComputationNodeFactoryContext& ctx) { 
+    MKQL_ENSURE(callable.GetInputsCount() == 1, "Expected 1 argument"); 
+    bool isOptional; 
     const auto unpacked = UnpackOptional(callable.GetInput(0), isOptional);
     const auto varType = AS_TYPE(TVariantType, unpacked);
     const auto structType = varType->GetUnderlyingType()->IsTuple() ? nullptr : AS_TYPE(TStructType, varType->GetUnderlyingType());
     const auto size = varType->GetAlternativesCount();
-
+ 
     TComputationNodePtrVector literals(size);
     EValueRepresentation kind = EValueRepresentation::Embedded;
 
@@ -132,12 +132,12 @@ IComputationNode* WrapWay(TCallable& callable, const TComputationNodeFactoryCont
     }
 
     const auto variant = LocateNode(ctx.NodeLocator, callable, 0);
-    if (isOptional) {
+    if (isOptional) { 
         return new TWayWrapper<true>(ctx.Mutables, variant, kind, std::move(literals));
-    } else {
+    } else { 
         return new TWayWrapper<false>(ctx.Mutables, variant, kind, std::move(literals));
-    }
-}
-
-}
-}
+    } 
+} 
+ 
+} 
+} 

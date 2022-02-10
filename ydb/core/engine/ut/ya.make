@@ -1,25 +1,25 @@
 UNITTEST_FOR(ydb/core/engine)
-
+ 
 OWNER(
     vvvv
     g:kikimr
 )
-
-ALLOCATOR(J)
-
+ 
+ALLOCATOR(J) 
+ 
 FORK_SUBTESTS()
 
 TIMEOUT(150)
 
 SIZE(MEDIUM)
 
-SRCS(
+SRCS( 
     mkql_engine_flat_host_ut.cpp
-    mkql_engine_flat_ut.cpp
+    mkql_engine_flat_ut.cpp 
     kikimr_program_builder_ut.cpp
-    mkql_proto_ut.cpp
-)
-
+    mkql_proto_ut.cpp 
+) 
+ 
 PEERDIR(
     ydb/core/engine/minikql
     ydb/core/kqp/ut/common
@@ -29,5 +29,5 @@ PEERDIR(
 )
 
 YQL_LAST_ABI_VERSION()
-
-END()
+ 
+END() 

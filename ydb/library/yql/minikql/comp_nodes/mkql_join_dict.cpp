@@ -1,38 +1,38 @@
 #include "mkql_join_dict.h"
 
-#include <ydb/library/yql/minikql/computation/mkql_custom_list.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h>
-#include <ydb/library/yql/minikql/mkql_node_cast.h>
-#include <ydb/library/yql/minikql/mkql_program_builder.h>
+#include <ydb/library/yql/minikql/computation/mkql_custom_list.h> 
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h> 
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h> 
+#include <ydb/library/yql/minikql/mkql_node_cast.h> 
+#include <ydb/library/yql/minikql/mkql_program_builder.h> 
 
-namespace NKikimr {
-namespace NMiniKQL {
-
+namespace NKikimr { 
+namespace NMiniKQL { 
+ 
 namespace {
-
-template <EJoinKind Kind>
-struct TWrapTraits {
-    static constexpr bool Wrap1 = IsLeftOptional(Kind);
-    static constexpr bool Wrap2 = IsRightOptional(Kind);
-};
-
+ 
+template <EJoinKind Kind> 
+struct TWrapTraits { 
+    static constexpr bool Wrap1 = IsLeftOptional(Kind); 
+    static constexpr bool Wrap2 = IsRightOptional(Kind); 
+}; 
+ 
 template <bool KeyTuple>
 class TJoinDictWrapper : public TMutableCodegeneratorPtrNode<TJoinDictWrapper<KeyTuple>> {
     typedef TMutableCodegeneratorPtrNode<TJoinDictWrapper<KeyTuple>> TBaseComputation;
-public:
+public: 
     TJoinDictWrapper(TComputationMutables& mutables, IComputationNode* dict1, IComputationNode* dict2,
         bool isMulti1, bool isMulti2, EJoinKind joinKind, std::vector<ui32>&& indexes = std::vector<ui32>())
         : TBaseComputation(mutables, EValueRepresentation::Boxed)
         , Dict1(dict1)
-        , Dict2(dict2)
-        , IsMulti1(isMulti1)
-        , IsMulti2(isMulti2)
-        , JoinKind(joinKind)
+        , Dict2(dict2) 
+        , IsMulti1(isMulti1) 
+        , IsMulti2(isMulti2) 
+        , JoinKind(joinKind) 
         , OptIndicies(std::move(indexes))
-    {
-    }
-
+    { 
+    } 
+ 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         const auto& dict1 = Dict1->GetValue(ctx);
         const auto& dict2 = Dict2->GetValue(ctx);
@@ -79,21 +79,21 @@ private:
     }
 
     bool HasNullInKey(const NUdf::TUnboxedValue& key) const {
-        if (!key) {
-            return true;
-        }
-
+        if (!key) { 
+            return true; 
+        } 
+ 
         if (KeyTuple) {
-            for (ui32 index : OptIndicies) {
-                if (!key.GetElement(index)) {
-                    return true;
-                }
-            }
-        }
-
-        return false;
-    }
-
+            for (ui32 index : OptIndicies) { 
+                if (!key.GetElement(index)) { 
+                    return true; 
+                } 
+            } 
+        } 
+ 
+        return false; 
+    } 
+ 
     template <EJoinKind Kind>
     void WriteValuesImpl(const NUdf::TUnboxedValuePod& payload1, const NUdf::TUnboxedValuePod& payload2,
         TDefaultListRepresentation& resList, TComputationContext& ctx) const {
@@ -139,76 +139,76 @@ private:
     }
 
     NUdf::TUnboxedValuePod JoinDicts(TComputationContext& ctx, const NUdf::TUnboxedValuePod dict1, const NUdf::TUnboxedValuePod dict2) const {
-        TDefaultListRepresentation resList;
-        switch (JoinKind) {
-        case EJoinKind::Inner:
-            if (dict1.GetDictLength() < dict2.GetDictLength()) {
-                // traverse dict1, lookup dict2
+        TDefaultListRepresentation resList; 
+        switch (JoinKind) { 
+        case EJoinKind::Inner: 
+            if (dict1.GetDictLength() < dict2.GetDictLength()) { 
+                // traverse dict1, lookup dict2 
                 const auto it = dict1.GetDictIterator();
                 for (NUdf::TUnboxedValue key1, payload1; it.NextPair(key1, payload1);) {
-                    Y_VERIFY_DEBUG(!HasNullInKey(key1));
+                    Y_VERIFY_DEBUG(!HasNullInKey(key1)); 
                     if (const auto lookup2 = dict2.Lookup(key1)) {
-                        WriteValuesImpl<EJoinKind::Inner>(payload1, lookup2, resList, ctx);
-                    }
-                }
-            } else {
-                // traverse dict2, lookup dict1
+                        WriteValuesImpl<EJoinKind::Inner>(payload1, lookup2, resList, ctx); 
+                    } 
+                } 
+            } else { 
+                // traverse dict2, lookup dict1 
                 const auto it = dict2.GetDictIterator();
                 for (NUdf::TUnboxedValue key2, payload2; it.NextPair(key2, payload2);) {
-                    Y_VERIFY_DEBUG(!HasNullInKey(key2));
+                    Y_VERIFY_DEBUG(!HasNullInKey(key2)); 
                     if (const auto lookup1 = dict1.Lookup(key2)) {
-                        WriteValuesImpl<EJoinKind::Inner>(lookup1, payload2, resList, ctx);
-                    }
-                }
-            }
+                        WriteValuesImpl<EJoinKind::Inner>(lookup1, payload2, resList, ctx); 
+                    } 
+                } 
+            } 
             break;
-
+ 
         case EJoinKind::Left: {
-            // traverse dict1, lookup dict2
+            // traverse dict1, lookup dict2 
                 const auto it = dict1.GetDictIterator();
                 for (NUdf::TUnboxedValue key1, payload1; it.NextPair(key1, payload1);) {
-                    auto lookup2 = HasNullInKey(key1) ? NUdf::TUnboxedValue() : dict2.Lookup(key1);
+                    auto lookup2 = HasNullInKey(key1) ? NUdf::TUnboxedValue() : dict2.Lookup(key1); 
                     lookup2 = lookup2 ? lookup2.Release().GetOptionalValue() : NUdf::TUnboxedValuePod();
                     WriteValuesImpl<EJoinKind::Left>(payload1, lookup2, resList, ctx);
                 }
-            }
-            break;
-
+            } 
+            break; 
+ 
         case EJoinKind::Right: {
-            // traverse dict2, lookup dict1
+            // traverse dict2, lookup dict1 
                 const auto it = dict2.GetDictIterator();
                 for (NUdf::TUnboxedValue key2, payload2; it.NextPair(key2, payload2);) {
-                    auto lookup1 = HasNullInKey(key2) ? NUdf::TUnboxedValue() : dict1.Lookup(key2);
+                    auto lookup1 = HasNullInKey(key2) ? NUdf::TUnboxedValue() : dict1.Lookup(key2); 
                     lookup1 = lookup1 ? lookup1.Release().GetOptionalValue() : NUdf::TUnboxedValuePod();
                     WriteValuesImpl<EJoinKind::Right>(lookup1, payload2, resList, ctx);
                 }
-            }
-            break;
-
+            } 
+            break; 
+ 
         case EJoinKind::Full: {
-            // traverse dict1, lookup dict2 - as Left
+            // traverse dict1, lookup dict2 - as Left 
                 const auto it = dict1.GetDictIterator();
                 for (NUdf::TUnboxedValue key1, payload1; it.NextPair(key1, payload1);) {
-                    auto lookup2 = HasNullInKey(key1) ? NUdf::TUnboxedValue() : dict2.Lookup(key1);
+                    auto lookup2 = HasNullInKey(key1) ? NUdf::TUnboxedValue() : dict2.Lookup(key1); 
                     lookup2 = lookup2 ? lookup2.Release().GetOptionalValue() : NUdf::TUnboxedValuePod();
                     WriteValuesImpl<EJoinKind::Full>(payload1, lookup2, resList, ctx);
                 }
-            }
+            } 
             {
-            // traverse dict2, lookup dict1 - avoid Inner
+            // traverse dict2, lookup dict1 - avoid Inner 
                 const auto it = dict2.GetDictIterator();
                 for (NUdf::TUnboxedValue key2, payload2; it.NextPair(key2, payload2);) {
-                    if (HasNullInKey(key2) || !dict1.Contains(key2)) {
+                    if (HasNullInKey(key2) || !dict1.Contains(key2)) { 
                         WriteValuesImpl<EJoinKind::Full>(NUdf::TUnboxedValuePod(), payload2, resList, ctx);
                     }
-                }
-            }
-            break;
-
+                } 
+            } 
+            break; 
+ 
         case EJoinKind::LeftOnly: {
                 const auto it = dict1.GetDictIterator();
                 for (NUdf::TUnboxedValue key1, payload1; it.NextPair(key1, payload1);) {
-                    if (HasNullInKey(key1) || !dict2.Contains(key1)) {
+                    if (HasNullInKey(key1) || !dict2.Contains(key1)) { 
                         if (IsMulti1) {
                             TThresher<false>::DoForEachItem(payload1,
                                 [&resList] (NUdf::TUnboxedValue&& item) {
@@ -218,15 +218,15 @@ private:
                         } else {
                             resList = resList.Append(std::move(payload1));
                         }
-                    }
+                    } 
                 }
-            }
-            break;
-
+            } 
+            break; 
+ 
         case EJoinKind::RightOnly: {
                 const auto it = dict2.GetDictIterator();
                 for (NUdf::TUnboxedValue key2, payload2; it.NextPair(key2, payload2);) {
-                    if (HasNullInKey(key2) || !dict1.Contains(key2)) {
+                    if (HasNullInKey(key2) || !dict1.Contains(key2)) { 
                         if (IsMulti2) {
                             TThresher<false>::DoForEachItem(payload2,
                                 [&resList] (NUdf::TUnboxedValue&& item) {
@@ -236,35 +236,35 @@ private:
                         } else {
                             resList = resList.Append(std::move(payload2));
                         }
-                    }
+                    } 
                 }
-            }
-            break;
-
+            } 
+            break; 
+ 
         case EJoinKind::Exclusion: {
-            // traverse dict1, lookup dict2 - avoid Inner
+            // traverse dict1, lookup dict2 - avoid Inner 
                 const auto it = dict1.GetDictIterator();
                 for (NUdf::TUnboxedValue key1, payload1; it.NextPair(key1, payload1);) {
-                    if (HasNullInKey(key1) || !dict2.Contains(key1)) {
+                    if (HasNullInKey(key1) || !dict2.Contains(key1)) { 
                         WriteValuesImpl<EJoinKind::Exclusion>(payload1, NUdf::TUnboxedValuePod(), resList, ctx);
                     }
-                }
+                } 
            }
            {
-            // traverse dict2, lookup dict1 - avoid Inner
+            // traverse dict2, lookup dict1 - avoid Inner 
                 const auto it = dict2.GetDictIterator();
                 for (NUdf::TUnboxedValue key2, payload2; it.NextPair(key2, payload2);) {
-                    if (HasNullInKey(key2) || !dict1.Contains(key2)) {
+                    if (HasNullInKey(key2) || !dict1.Contains(key2)) { 
                         WriteValuesImpl<EJoinKind::Exclusion>(NUdf::TUnboxedValuePod(), payload2, resList, ctx);
                     }
-                }
-            }
-            break;
-
+                } 
+            } 
+            break; 
+ 
         case EJoinKind::LeftSemi: {
                 const auto it = dict1.GetDictIterator();
                 for (NUdf::TUnboxedValue key1, payload1; it.NextPair(key1, payload1);) {
-                    Y_VERIFY_DEBUG(!HasNullInKey(key1));
+                    Y_VERIFY_DEBUG(!HasNullInKey(key1)); 
                     if (dict2.Contains(key1)) {
                         if (IsMulti1) {
                             TThresher<false>::DoForEachItem(payload1,
@@ -275,15 +275,15 @@ private:
                         } else {
                             resList = resList.Append(std::move(payload1));
                         }
-                    }
+                    } 
                 }
-            }
-            break;
-
+            } 
+            break; 
+ 
         case EJoinKind::RightSemi: {
                 const auto it = dict2.GetDictIterator();
                 for (NUdf::TUnboxedValue key2, payload2; it.NextPair(key2, payload2);) {
-                    Y_VERIFY_DEBUG(!HasNullInKey(key2));
+                    Y_VERIFY_DEBUG(!HasNullInKey(key2)); 
                     if (dict1.Contains(key2)) {
                         if (IsMulti2) {
                             TThresher<false>::DoForEachItem(payload2,
@@ -294,49 +294,49 @@ private:
                         } else {
                             resList = resList.Append(std::move(payload2));
                         }
-                    }
+                    } 
                 }
-            }
-            break;
-
-        default:
-            Y_FAIL("Unknown kind");
-        }
-
+            } 
+            break; 
+ 
+        default: 
+            Y_FAIL("Unknown kind"); 
+        } 
+ 
         return ctx.HolderFactory.CreateDirectListHolder(std::move(resList));
-    }
-
-    IComputationNode* const Dict1;
-    IComputationNode* const Dict2;
-    const bool IsMulti1;
-    const bool IsMulti2;
-    const EJoinKind JoinKind;
+    } 
+ 
+    IComputationNode* const Dict1; 
+    IComputationNode* const Dict2; 
+    const bool IsMulti1; 
+    const bool IsMulti2; 
+    const EJoinKind JoinKind; 
     const std::vector<ui32> OptIndicies;
-};
-
+}; 
+ 
 }
-
-IComputationNode* WrapJoinDict(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
-    MKQL_ENSURE(callable.GetInputsCount() == 5, "Expected 5 args");
-
+ 
+IComputationNode* WrapJoinDict(TCallable& callable, const TComputationNodeFactoryContext& ctx) { 
+    MKQL_ENSURE(callable.GetInputsCount() == 5, "Expected 5 args"); 
+ 
     const auto dict1node = callable.GetInput(0);
     const auto dict2node = callable.GetInput(1);
     const auto isMulti1Node = callable.GetInput(2);
     const auto isMulti2Node = callable.GetInput(3);
     const auto joinKindNode = callable.GetInput(4);
-
+ 
     const auto dict1type = AS_TYPE(TDictType, dict1node);
     const auto dict2type = AS_TYPE(TDictType, dict2node);
     const auto keyType = dict1type->GetKeyType();
     MKQL_ENSURE(keyType->IsSameType(*dict2type->GetKeyType()), "Dict key types must be the same");
-
+ 
     const bool multi1 = AS_VALUE(TDataLiteral, isMulti1Node)->AsValue().Get<bool>();
     const bool multi2 = AS_VALUE(TDataLiteral, isMulti2Node)->AsValue().Get<bool>();
     const ui32 rawKind = AS_VALUE(TDataLiteral, joinKindNode)->AsValue().Get<ui32>();
-
+ 
     const auto dict1 = LocateNode(ctx.NodeLocator, callable, 0);
     const auto dict2 = LocateNode(ctx.NodeLocator, callable, 1);
-
+ 
     if (keyType->IsTuple()) {
         const auto tupleType = AS_TYPE(TTupleType, keyType);
         std::vector<ui32> indicies;
@@ -346,12 +346,12 @@ IComputationNode* WrapJoinDict(TCallable& callable, const TComputationNodeFactor
                 indicies.emplace_back(i);
             }
         }
-
+ 
         return new TJoinDictWrapper<true>(ctx.Mutables, dict1, dict2, multi1, multi2, GetJoinKind(rawKind), std::move(indicies));
     } else {
         return new TJoinDictWrapper<false>(ctx.Mutables, dict1, dict2, multi1, multi2, GetJoinKind(rawKind));
-    }
-}
-
-}
-}
+    } 
+} 
+ 
+} 
+} 

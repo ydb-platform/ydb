@@ -1,10 +1,10 @@
-#pragma once
-#include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
-
-namespace NYql {
-
-TExprNode::TPtr ExpandCalcOverWindow(const TExprNode::TPtr& node, TExprContext& ctx);
-
+#pragma once 
+#include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h> 
+ 
+namespace NYql { 
+ 
+TExprNode::TPtr ExpandCalcOverWindow(const TExprNode::TPtr& node, TExprContext& ctx); 
+ 
 TExprNodeList ExtractCalcsOverWindow(const TExprNode::TPtr& node, TExprContext& ctx);
 TExprNode::TPtr RebuildCalcOverWindowGroup(TPositionHandle pos, const TExprNode::TPtr& input, const TExprNodeList& calcs, TExprContext& ctx);
 
@@ -29,4 +29,4 @@ TExprNode::TPtr AddSessionParamsMemberLambda(TPositionHandle pos,
     const TExprNode::TPtr& partitionKeySelector,
     const TExprNode::TPtr& sessionKeySelector, const TExprNode::TPtr& sessionInit,
     const TExprNode::TPtr& sessionUpdate, TExprContext& ctx);
-}
+} 

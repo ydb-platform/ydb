@@ -199,15 +199,15 @@ public:
                                         case NScheme::NTypeIds::PairUi64Ui64:
                                             str << "(" << ((std::pair<ui64,ui64>*)data)->first << "," << ((std::pair<ui64,ui64>*)data)->second << ")";
                                             break;
-                                        case NScheme::NTypeIds::String:
-                                        case NScheme::NTypeIds::String4k:
-                                        case NScheme::NTypeIds::String2m:
+                                        case NScheme::NTypeIds::String: 
+                                        case NScheme::NTypeIds::String4k: 
+                                        case NScheme::NTypeIds::String2m: 
                                             str << EncodeHtmlPcdata(EscapeC(TStringBuf(static_cast<const char*>(data), Min(size, (ui32)1024))));
                                             break;
                                         case NScheme::NTypeIds::ActorId:
                                             str << *(TActorId*)data;
                                             break;
-                                        case NScheme::NTypeIds::Utf8:
+                                        case NScheme::NTypeIds::Utf8: 
                                         case NScheme::NTypeIds::Json:
                                             str << EncodeHtmlPcdata(TStringBuf((const char*)data, size));
                                             break;

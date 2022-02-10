@@ -1,5 +1,5 @@
 #pragma once
-#include <ydb/library/yql/utils/yql_panic.h>
+#include <ydb/library/yql/utils/yql_panic.h> 
 
 #include <util/system/yassert.h>
 #include <util/generic/maybe.h>

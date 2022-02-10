@@ -3,11 +3,11 @@
 #include "node.h"
 #include "sql.h"
 
-#include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
-#include <ydb/library/yql/core/issue/protos/issue_id.pb.h>
-#include <ydb/library/yql/public/issue/yql_warning.h>
-#include <ydb/library/yql/sql/settings/translation_settings.h>
-#include <ydb/library/yql/sql/cluster_mapping.h>
+#include <ydb/library/yql/providers/common/provider/yql_provider_names.h> 
+#include <ydb/library/yql/core/issue/protos/issue_id.pb.h> 
+#include <ydb/library/yql/public/issue/yql_warning.h> 
+#include <ydb/library/yql/sql/settings/translation_settings.h> 
+#include <ydb/library/yql/sql/cluster_mapping.h> 
 
 #include <util/generic/hash.h>
 #include <util/generic/map.h>
@@ -41,34 +41,34 @@ namespace NSQLTranslationV1 {
     using TNodeWithUsageInfoPtr = TIntrusivePtr<TNodeWithUsageInfo>;
     using TNamedNodesMap = THashMap<TString, TDeque<TNodeWithUsageInfoPtr>>;
     using TBlocks = TVector<TNodePtr>;
-
-    struct TScopedState : public TThrRefBase {
-        TString CurrService;
-        TDeferredAtom CurrCluster;
-        bool PragmaClassicDivision = true;
+ 
+    struct TScopedState : public TThrRefBase { 
+        TString CurrService; 
+        TDeferredAtom CurrCluster; 
+        bool PragmaClassicDivision = true; 
         bool StrictJoinKeyTypes = false;
-        TNamedNodesMap NamedNodes;
-
-        struct TLocal {
-            TVector<std::pair<TString, TDeferredAtom>> UsedClusters;
-            THashSet<TString> UsedPlainClusters;
-            THashSet<INode*> UsedExprClusters;
-            THashMap<INode*, std::pair<TString, TNodePtr>> ExprClustersMap;
-            TVector<TNodePtr> ExprClusters;
-        };
-
-        TLocal Local;
-
-        void UseCluster(const TString& service, const TDeferredAtom& cluster);
-        const TVector<std::pair<TString, TDeferredAtom>>& GetUsedClusters();
-        TNodePtr WrapCluster(const TDeferredAtom& cluster, TContext& ctx);
-        void AddExprCluster(TNodePtr expr, TContext& ctx);
-        void Clear();
+        TNamedNodesMap NamedNodes; 
+ 
+        struct TLocal { 
+            TVector<std::pair<TString, TDeferredAtom>> UsedClusters; 
+            THashSet<TString> UsedPlainClusters; 
+            THashSet<INode*> UsedExprClusters; 
+            THashMap<INode*, std::pair<TString, TNodePtr>> ExprClustersMap; 
+            TVector<TNodePtr> ExprClusters; 
+        }; 
+ 
+        TLocal Local; 
+ 
+        void UseCluster(const TString& service, const TDeferredAtom& cluster); 
+        const TVector<std::pair<TString, TDeferredAtom>>& GetUsedClusters(); 
+        TNodePtr WrapCluster(const TDeferredAtom& cluster, TContext& ctx); 
+        void AddExprCluster(TNodePtr expr, TContext& ctx); 
+        void Clear(); 
         TNodePtr LookupNode(const TString& name);
-    };
-
-    using TScopedStatePtr = TIntrusivePtr<TScopedState>;
-
+    }; 
+ 
+    using TScopedStatePtr = TIntrusivePtr<TScopedState>; 
+ 
     class TColumnRefScope;
     enum class EColumnRefState {
         Deny,
@@ -102,14 +102,14 @@ namespace NSQLTranslationV1 {
             return token.GetValue();
         }
 
-        template <typename TToken>
-        TPosition TokenPosition(const TToken& token) {
-            TPosition pos = Position;
-            pos.Row = token.GetLine();
-            pos.Column = token.GetColumn() + 1;
-            return pos;
-        }
-
+        template <typename TToken> 
+        TPosition TokenPosition(const TToken& token) { 
+            TPosition pos = Position; 
+            pos.Row = token.GetLine(); 
+            pos.Column = token.GetColumn() + 1; 
+            return pos; 
+        } 
+ 
         inline void IncrementMonCounter(const TString& name, const TString& value) {
             if (IncrementMonCounterFunction) {
                 IncrementMonCounterFunction(name, value);
@@ -127,24 +127,24 @@ namespace NSQLTranslationV1 {
 
         TMaybe<TString> GetClusterProvider(const TString& cluster, TString& normalizedClusterName) const {
             auto provider = ClusterMapping.GetClusterProvider(cluster, normalizedClusterName);
-            if (!provider) {
+            if (!provider) { 
                 if (Settings.AssumeYdbOnClusterWithSlash && cluster.StartsWith('/')) {
                     normalizedClusterName = cluster;
                     return TString(NYql::KikimrProviderName);
                 }
-                return Nothing();
-            }
-
+                return Nothing(); 
+            } 
+ 
             return provider;
         }
 
-        bool HasNonYtProvider(const ISource& source) const;
+        bool HasNonYtProvider(const ISource& source) const; 
         bool UseUnordered(const ISource& source) const;
         bool UseUnordered(const TTableRef& table) const;
 
         bool SetPathPrefix(const TString& value, TMaybe<TString> arg = TMaybe<TString>());
 
-        TNodePtr GetPrefixedPath(const TString& service, const TDeferredAtom& cluster, const TDeferredAtom& path);
+        TNodePtr GetPrefixedPath(const TString& service, const TDeferredAtom& cluster, const TDeferredAtom& path); 
 
         TNodePtr UniversalAlias(const TString& baseName, TNodePtr&& node);
 
@@ -160,9 +160,9 @@ namespace NSQLTranslationV1 {
 
         bool AddExport(TPosition symbolPos, const TString& symbolName);
         TString AddImport(const TVector<TString>& modulePath);
-        TString AddSimpleUdf(const TString& udf);
+        TString AddSimpleUdf(const TString& udf); 
         void SetPackageVersion(const TString& packageName, ui32 version);
-
+ 
         bool IsStreamingService(const TStringBuf service) const;
 
         bool CheckColumnReference(TPosition pos, const TString& name) {
@@ -210,10 +210,10 @@ namespace NSQLTranslationV1 {
         THashMap<TString, TString> ImportModuleAliases;
         TMap<TString, TString> SimpleUdfs;
         NSQLTranslation::TIncrementMonCounterFunction IncrementMonCounterFunction;
-        TScopedStatePtr Scoped;
+        TScopedStatePtr Scoped; 
         int ScopeLevel = 0;
         size_t AnonymousNameIndex = 0;
-        TDeque<TScopedStatePtr> AllScopes;
+        TDeque<TScopedStatePtr> AllScopes; 
         bool HasPendingErrors;
         THashMap<TString, ui32> GenIndexes;
         using TWinSpecsRef = std::reference_wrapper<TWinSpecs>;
@@ -221,7 +221,7 @@ namespace NSQLTranslationV1 {
         bool PragmaRefSelect = false;
         bool PragmaSampleSelect = false;
         bool PragmaAllowDotInAlias = false;
-        bool PragmaInferSchema = false;
+        bool PragmaInferSchema = false; 
         bool PragmaAutoCommit = false;
         bool SimpleColumns = true;
         bool CoalesceJoinKeysOnQualifiedAll = false;
@@ -248,13 +248,13 @@ namespace NSQLTranslationV1 {
         bool UnorderedSubqueries = true;
         bool PragmaDataWatermarks = true;
         bool WarnOnAnsiAliasShadowing = true;
-        ui32 ResultRowsLimit = 0;
-        ui64 ResultSizeLimit = 0;
+        ui32 ResultRowsLimit = 0; 
+        ui64 ResultSizeLimit = 0; 
         ui32 PragmaGroupByLimit = 1 << 5;
         ui32 PragmaGroupByCubeLimit = 5;
         // if FlexibleTypes=true, emit TypeOrMember callable and resolve Type/Column uncertainty on type annotation stage, otherwise always emit Type
         bool FlexibleTypes = false;
-        THashMap<TString, TMaybe<TString>> Libraries; // alias -> optional file
+        THashMap<TString, TMaybe<TString>> Libraries; // alias -> optional file 
         THashMap<TString, ui32> PackageVersions;
         NYql::TWarningPolicy WarningPolicy;
         TString PqReadByRtmrCluster;

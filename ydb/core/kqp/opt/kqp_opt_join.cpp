@@ -2,7 +2,7 @@
 
 #include <ydb/core/kqp/common/kqp_yql.h>
 
-#include <ydb/library/yql/dq/opt/dq_opt_phy.h>
+#include <ydb/library/yql/dq/opt/dq_opt_phy.h> 
 
 namespace NKikimr::NKqp::NOpt {
 

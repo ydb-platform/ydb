@@ -35,24 +35,24 @@ PEERDIR(
     ydb/public/lib/experimental
     ydb/public/sdk/cpp/client/ydb_driver
     ydb/public/sdk/cpp/client/ydb_table
-    ydb/library/yql/core
-    ydb/library/yql/core/type_ann
-    ydb/library/yql/dq/expr_nodes
-    ydb/library/yql/providers/common/config
-    ydb/library/yql/providers/common/dq
-    ydb/library/yql/providers/common/mkql
-    ydb/library/yql/providers/common/proto
-    ydb/library/yql/providers/common/provider
-    ydb/library/yql/providers/common/schema/expr
-    ydb/library/yql/providers/common/transform
-    ydb/library/yql/providers/dq/common
-    ydb/library/yql/providers/dq/expr_nodes
-    ydb/library/yql/providers/dq/interface
-    ydb/library/yql/providers/result/expr_nodes
-    ydb/library/yql/providers/ydb/expr_nodes
-    ydb/library/yql/providers/ydb/proto
+    ydb/library/yql/core 
+    ydb/library/yql/core/type_ann 
+    ydb/library/yql/dq/expr_nodes 
+    ydb/library/yql/providers/common/config 
+    ydb/library/yql/providers/common/dq 
+    ydb/library/yql/providers/common/mkql 
+    ydb/library/yql/providers/common/proto 
+    ydb/library/yql/providers/common/provider 
+    ydb/library/yql/providers/common/schema/expr 
+    ydb/library/yql/providers/common/transform 
+    ydb/library/yql/providers/dq/common 
+    ydb/library/yql/providers/dq/expr_nodes 
+    ydb/library/yql/providers/dq/interface 
+    ydb/library/yql/providers/result/expr_nodes 
+    ydb/library/yql/providers/ydb/expr_nodes 
+    ydb/library/yql/providers/ydb/proto 
 )
 
 YQL_LAST_ABI_VERSION()
-
+ 
 END()

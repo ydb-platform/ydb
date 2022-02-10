@@ -18,4 +18,4 @@ namespace NYql {
         Error = 0,
         DefaultValue = 1,
     };
-}
+} 

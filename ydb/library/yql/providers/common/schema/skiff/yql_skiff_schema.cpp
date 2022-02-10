@@ -1,16 +1,16 @@
 #include "yql_skiff_schema.h"
-
-#include <ydb/library/yql/providers/common/schema/parser/yql_type_parser.h>
-#include <ydb/library/yql/providers/common/codec/yql_codec_type_flags.h>
+ 
+#include <ydb/library/yql/providers/common/schema/parser/yql_type_parser.h> 
+#include <ydb/library/yql/providers/common/codec/yql_codec_type_flags.h> 
 #include <ydb/library/yql/public/udf/udf_data_type.h>
 
 #include <library/cpp/yson/node/node_io.h>
-
+ 
 #include <util/generic/yexception.h>
 
-namespace NYql {
-namespace NCommon {
-
+namespace NYql { 
+namespace NCommon { 
+ 
 struct TSkiffTypeLoader {
     typedef NYT::TNode TType;
 
@@ -219,5 +219,5 @@ NYT::TNode ParseSkiffTypeFromYson(const NYT::TNode& node, ui64 nativeYTTypesFlag
     return DoLoadTypeFromYson(loader, node, 0).GetOrElse(NYT::TNode());
 }
 
-} // namespace NCommon
-} // namespace NYql
+} // namespace NCommon 
+} // namespace NYql 

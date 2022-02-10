@@ -1,27 +1,27 @@
-#include "scheme_types_defs.h"
-
+#include "scheme_types_defs.h" 
+ 
 #include <util/stream/output.h>
-
+ 
 
 namespace NKikimr {
 namespace NScheme {
 
-namespace NNames {
-    DECLARE_TYPED_TYPE_NAME(Int32);
-    DECLARE_TYPED_TYPE_NAME(Uint32);
-    DECLARE_TYPED_TYPE_NAME(Int64);
-    DECLARE_TYPED_TYPE_NAME(Uint64);
-    DECLARE_TYPED_TYPE_NAME(Uint8);
-    DECLARE_TYPED_TYPE_NAME(Bool);
+namespace NNames { 
+    DECLARE_TYPED_TYPE_NAME(Int32); 
+    DECLARE_TYPED_TYPE_NAME(Uint32); 
+    DECLARE_TYPED_TYPE_NAME(Int64); 
+    DECLARE_TYPED_TYPE_NAME(Uint64); 
+    DECLARE_TYPED_TYPE_NAME(Uint8); 
+    DECLARE_TYPED_TYPE_NAME(Bool); 
     DECLARE_TYPED_TYPE_NAME(Double);
     DECLARE_TYPED_TYPE_NAME(Float);
-    DECLARE_TYPED_TYPE_NAME(PairUi64Ui64);
-    DECLARE_TYPED_TYPE_NAME(String);
-    DECLARE_TYPED_TYPE_NAME(SmallBoundedString);
-    DECLARE_TYPED_TYPE_NAME(LargeBoundedString);
-
-    DECLARE_TYPED_TYPE_NAME(Utf8);
-    DECLARE_TYPED_TYPE_NAME(Yson);
+    DECLARE_TYPED_TYPE_NAME(PairUi64Ui64); 
+    DECLARE_TYPED_TYPE_NAME(String); 
+    DECLARE_TYPED_TYPE_NAME(SmallBoundedString); 
+    DECLARE_TYPED_TYPE_NAME(LargeBoundedString); 
+ 
+    DECLARE_TYPED_TYPE_NAME(Utf8); 
+    DECLARE_TYPED_TYPE_NAME(Yson); 
     DECLARE_TYPED_TYPE_NAME(Json);
     DECLARE_TYPED_TYPE_NAME(JsonDocument);
 
@@ -52,7 +52,7 @@ void WriteEscapedValue(IOutputStream &out, const char *data, size_t size) {
     }
     if (bufPos)
         out.Write(buffer, bufPos);
-}
-
+} 
+ 
 } // namespace NScheme
 } // namespace NKikimr

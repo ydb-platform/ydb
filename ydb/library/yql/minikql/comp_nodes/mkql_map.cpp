@@ -1,11 +1,11 @@
-#include "mkql_map.h"
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h>
-#include <ydb/library/yql/minikql/mkql_node_cast.h>
-
-namespace NKikimr {
-namespace NMiniKQL {
-
+#include "mkql_map.h" 
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h> 
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h> 
+#include <ydb/library/yql/minikql/mkql_node_cast.h> 
+ 
+namespace NKikimr { 
+namespace NMiniKQL { 
+ 
 namespace {
 
 class TFlowMapWrapper : public TStatelessFlowCodegeneratorNode<TFlowMapWrapper> {
@@ -20,7 +20,7 @@ public:
 
     NUdf::TUnboxedValue DoCalculate(TComputationContext& ctx) const {
         if (auto item = Flow->GetValue(ctx); item.IsSpecial()) {
-            return item;
+            return item; 
         } else {
             Item->SetValue(ctx, std::move(item));
         }
@@ -66,21 +66,21 @@ private:
     IComputationNode* const NewItem;
 };
 
-template <bool IsStream>
+template <bool IsStream> 
 class TBaseMapWrapper {
 protected:
-    class TListValue : public TCustomListValue {
-    public:
+    class TListValue : public TCustomListValue { 
+    public: 
         class TIterator : public TComputationValue<TIterator> {
-        public:
+        public: 
             TIterator(TMemoryUsageInfo* memInfo, TComputationContext& compCtx, NUdf::TUnboxedValue&& iter, IComputationExternalNode* item, IComputationNode* newItem)
                 : TComputationValue<TIterator>(memInfo)
                 , CompCtx(compCtx)
                 , Iter(std::move(iter))
-                , Item(item)
-                , NewItem(newItem)
-            {}
-
+                , Item(item) 
+                , NewItem(newItem) 
+            {} 
+ 
         private:
             bool Next(NUdf::TUnboxedValue& value) override {
                 if (!Iter.Next(Item->RefValue(CompCtx))) {
@@ -94,38 +94,38 @@ protected:
             TComputationContext& CompCtx;
             const NUdf::TUnboxedValue Iter;
             IComputationExternalNode* const Item;
-            IComputationNode* const NewItem;
-        };
-
+            IComputationNode* const NewItem; 
+        }; 
+ 
         TListValue(TMemoryUsageInfo* memInfo, TComputationContext& compCtx, NUdf::TUnboxedValue&& list, IComputationExternalNode* item, IComputationNode* newItem)
-            : TCustomListValue(memInfo)
+            : TCustomListValue(memInfo) 
             , CompCtx(compCtx)
             , List(std::move(list))
-            , Item(item)
-            , NewItem(newItem)
+            , Item(item) 
+            , NewItem(newItem) 
         {}
-
+ 
     private:
         NUdf::TUnboxedValue GetListIterator() const final {
             return CompCtx.HolderFactory.Create<TIterator>(CompCtx, List.GetListIterator(), Item, NewItem);
         }
 
         ui64 GetListLength() const final {
-            if (!Length) {
-                Length = List.GetListLength();
-            }
-
+            if (!Length) { 
+                Length = List.GetListLength(); 
+            } 
+ 
             return *Length;
-        }
-
+        } 
+ 
         bool HasListItems() const final {
-            if (!HasItems) {
-                HasItems = List.HasListItems();
-            }
-
-            return *HasItems;
-        }
-
+            if (!HasItems) { 
+                HasItems = List.HasListItems(); 
+            } 
+ 
+            return *HasItems; 
+        } 
+ 
         bool HasFastListLength() const final {
             return List.HasFastListLength();
         }
@@ -133,22 +133,22 @@ protected:
         TComputationContext& CompCtx;
         const NUdf::TUnboxedValue List;
         IComputationExternalNode* const Item;
-        IComputationNode* const NewItem;
-    };
-
-    class TStreamValue : public TComputationValue<TStreamValue> {
-    public:
-        using TBase = TComputationValue<TStreamValue>;
-
+        IComputationNode* const NewItem; 
+    }; 
+ 
+    class TStreamValue : public TComputationValue<TStreamValue> { 
+    public: 
+        using TBase = TComputationValue<TStreamValue>; 
+ 
         TStreamValue(TMemoryUsageInfo* memInfo, TComputationContext& compCtx, NUdf::TUnboxedValue&& stream, IComputationExternalNode* item, IComputationNode* newItem)
-            : TBase(memInfo)
+            : TBase(memInfo) 
             , CompCtx(compCtx)
             , Stream(std::move(stream))
-            , Item(item)
-            , NewItem(newItem)
-        {
-        }
-
+            , Item(item) 
+            , NewItem(newItem) 
+        { 
+        } 
+ 
     private:
         ui32 GetTraverseCount() const final {
             return 1U;
@@ -160,30 +160,30 @@ protected:
 
         NUdf::TUnboxedValue Save() const final {
             return NUdf::TUnboxedValuePod::Zero();
-        }
-
+        } 
+ 
         void Load(const NUdf::TStringRef&) final {}
-
+ 
         NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) final {
             const auto status = Stream.Fetch(Item->RefValue(CompCtx));
-            if (status != NUdf::EFetchStatus::Ok) {
-                return status;
-            }
-
+            if (status != NUdf::EFetchStatus::Ok) { 
+                return status; 
+            } 
+ 
             result = NewItem->GetValue(CompCtx);
-            return NUdf::EFetchStatus::Ok;
-        }
-
+            return NUdf::EFetchStatus::Ok; 
+        } 
+ 
         TComputationContext& CompCtx;
         const NUdf::TUnboxedValue Stream;
         IComputationExternalNode* const Item;
-        IComputationNode* const NewItem;
-    };
-
+        IComputationNode* const NewItem; 
+    }; 
+ 
     TBaseMapWrapper(IComputationNode* list, IComputationExternalNode* item, IComputationNode* newItem)
         : List(list), Item(item), NewItem(newItem)
     {}
-
+ 
 #ifndef MKQL_DISABLE_CODEGEN
     Function* GenerateMapper(const NYql::NCodegen::ICodegen::TPtr& codegen, const TString& name) const {
         auto& module = codegen->GetModule();
@@ -203,7 +203,7 @@ protected:
         const auto funcType = FunctionType::get(statusType, {PointerType::getUnqual(contextType), containerType, PointerType::getUnqual(valueType)}, false);
 
         TCodegenContext ctx(codegen);
-        ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee());
+        ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee()); 
 
         auto args = ctx.Func->arg_begin();
 
@@ -243,18 +243,18 @@ protected:
         return ctx.Func;
     }
 
-    using TMapPtr = std::conditional_t<IsStream, TStreamCodegenValueStateless::TFetchPtr, TListCodegenValue::TNextPtr>;
+    using TMapPtr = std::conditional_t<IsStream, TStreamCodegenValueStateless::TFetchPtr, TListCodegenValue::TNextPtr>; 
 
     Function* MapFunc = nullptr;
 
     TMapPtr Map = nullptr;
 #endif
 
-    IComputationNode* const List;
+    IComputationNode* const List; 
     IComputationExternalNode* const Item;
-    IComputationNode* const NewItem;
-};
-
+    IComputationNode* const NewItem; 
+}; 
+ 
 class TStreamMapWrapper : public TCustomValueCodegeneratorNode<TStreamMapWrapper>, private TBaseMapWrapper<true> {
     typedef TCustomValueCodegeneratorNode<TStreamMapWrapper> TBaseComputation;
     typedef TBaseMapWrapper<true> TBaseWrapper;
@@ -435,7 +435,7 @@ private:
 
 }
 
-IComputationNode* WrapMap(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
+IComputationNode* WrapMap(TCallable& callable, const TComputationNodeFactoryContext& ctx) { 
     MKQL_ENSURE(callable.GetInputsCount() == 3, "Expected 3 args, got " << callable.GetInputsCount());
     const auto type = callable.GetType()->GetReturnType();
     const auto flow = LocateNode(ctx.NodeLocator, callable, 0);
@@ -447,10 +447,10 @@ IComputationNode* WrapMap(TCallable& callable, const TComputationNodeFactoryCont
         return new TStreamMapWrapper(ctx.Mutables, flow, itemArg, newItem);
     } else if (type->IsList()) {
         return new TListMapWrapper(ctx.Mutables, flow, itemArg, newItem);
-    }
+    } 
 
     THROW yexception() << "Expected flow, list or stream.";
-}
-
-}
-}
+} 
+ 
+} 
+} 

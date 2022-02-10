@@ -20,8 +20,8 @@ SRCS(
 PEERDIR(
     ydb/core/kqp/common
     ydb/library/yql/core/extract_predicate
-    ydb/library/yql/dq/common
-    ydb/library/yql/dq/opt
+    ydb/library/yql/dq/common 
+    ydb/library/yql/dq/opt 
 )
 
 YQL_LAST_ABI_VERSION()

@@ -737,9 +737,9 @@ static char* finish_kvs(kv_pairs* kvs) {
   return s;
 }
 
-// Newly allocated error string is stored into err object via atomic cas, and this drives coverity crazy
-// Disable allocation checks as the code is fine.
-// coverity[-alloc]
+// Newly allocated error string is stored into err object via atomic cas, and this drives coverity crazy 
+// Disable allocation checks as the code is fine. 
+// coverity[-alloc] 
 const char* grpc_error_string(grpc_error* err) {
   GPR_TIMER_SCOPE("grpc_error_string", 0);
   if (err == GRPC_ERROR_NONE) return no_error_string;

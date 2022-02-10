@@ -110,9 +110,9 @@ void TestLoadTableMetadataCommon(TIntrusivePtr<IKikimrGateway> gateway) {
     UNIT_ASSERT_VALUES_EQUAL(metadata.Cluster, TestCluster);
     UNIT_ASSERT_VALUES_EQUAL(metadata.Name, "/Root/Test/UserTable");
     UNIT_ASSERT_VALUES_EQUAL(metadata.Columns.size(), 3);
-    UNIT_ASSERT_VALUES_EQUAL(metadata.Columns["UserKey"].Type, "Utf8");
+    UNIT_ASSERT_VALUES_EQUAL(metadata.Columns["UserKey"].Type, "Utf8"); 
     UNIT_ASSERT_VALUES_EQUAL(metadata.Columns["UserSubkey"].Type, "Uint32");
-    UNIT_ASSERT_VALUES_EQUAL(metadata.Columns["UserValue"].Type, "Utf8");
+    UNIT_ASSERT_VALUES_EQUAL(metadata.Columns["UserValue"].Type, "Utf8"); 
     UNIT_ASSERT_VALUES_EQUAL(metadata.KeyColumnNames.size(), 2);
     UNIT_ASSERT_VALUES_EQUAL(metadata.KeyColumnNames[0], "UserKey");
     UNIT_ASSERT_VALUES_EQUAL(metadata.KeyColumnNames[1], "UserSubkey");
@@ -123,7 +123,7 @@ void TestRunSimpleCommon(TIntrusivePtr<IKqpGateway> gateway) {
         (
             (let key '(
                 '('Group (Uint32 '1))
-                '('Name (String 'Paul))
+                '('Name (String 'Paul)) 
             ))
             (let row '(
                 'Group

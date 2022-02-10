@@ -5,8 +5,8 @@
 #include <ydb/core/kqp/rm/kqp_rm.h>
 #include <ydb/core/util/tuples.h>
 
-#include <ydb/library/yql/dq/proto/dq_tasks.pb.h>
-#include <ydb/library/yql/dq/runtime/dq_tasks_runner.h>
+#include <ydb/library/yql/dq/proto/dq_tasks.pb.h> 
+#include <ydb/library/yql/dq/runtime/dq_tasks_runner.h> 
 
 #include <library/cpp/actors/core/actorid.h>
 

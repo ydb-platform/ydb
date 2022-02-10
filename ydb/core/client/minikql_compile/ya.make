@@ -21,16 +21,16 @@ PEERDIR(
     ydb/core/engine
     ydb/core/kqp/provider
     ydb/core/scheme
-    ydb/library/yql/ast
-    ydb/library/yql/core
-    ydb/library/yql/minikql
-    ydb/library/yql/providers/common/mkql
+    ydb/library/yql/ast 
+    ydb/library/yql/core 
+    ydb/library/yql/minikql 
+    ydb/library/yql/providers/common/mkql 
 )
 
 YQL_LAST_ABI_VERSION()
-
+ 
 END()
-
+ 
 RECURSE_FOR_TESTS(
     ut
 )

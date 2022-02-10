@@ -1,7 +1,7 @@
 syntax = "proto3";
 option cc_enable_arenas = true;
 
-import "ydb/library/yql/providers/dq/api/protos/service.proto";
+import "ydb/library/yql/providers/dq/api/protos/service.proto"; 
 
 package Yql.DqsProto;
 

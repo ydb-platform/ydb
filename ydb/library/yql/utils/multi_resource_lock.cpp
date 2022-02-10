@@ -11,7 +11,7 @@ TMultiResourceLock::TResourceLock TMultiResourceLock::Acquire(TString resourceId
 
 TMultiResourceLock::~TMultiResourceLock() {
     with_lock(Guard_) {
-        Y_VERIFY(Locks_.empty(), "~TMultiResourceLock: we still have %lu unreleased locks", Locks_.size());
+        Y_VERIFY(Locks_.empty(), "~TMultiResourceLock: we still have %lu unreleased locks", Locks_.size()); 
     }
 }
 

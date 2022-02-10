@@ -1,18 +1,18 @@
 #include "dqs_opt.h"
 
-#include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
+#include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h> 
 
-#include <ydb/library/yql/core/yql_expr_optimize.h>
-#include <ydb/library/yql/core/peephole_opt/yql_opt_peephole_physical.h>
-#include <ydb/library/yql/core/type_ann/type_ann_core.h>
-#include <ydb/library/yql/core/yql_expr_type_annotation.h>
+#include <ydb/library/yql/core/yql_expr_optimize.h> 
+#include <ydb/library/yql/core/peephole_opt/yql_opt_peephole_physical.h> 
+#include <ydb/library/yql/core/type_ann/type_ann_core.h> 
+#include <ydb/library/yql/core/yql_expr_type_annotation.h> 
 
-#include <ydb/library/yql/dq/opt/dq_opt.h>
-#include <ydb/library/yql/dq/opt/dq_opt_phy.h>
-#include <ydb/library/yql/dq/opt/dq_opt_phy_finalizing.h>
-#include <ydb/library/yql/dq/opt/dq_opt_build.h>
-#include <ydb/library/yql/dq/opt/dq_opt_peephole.h>
-#include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
+#include <ydb/library/yql/dq/opt/dq_opt.h> 
+#include <ydb/library/yql/dq/opt/dq_opt_phy.h> 
+#include <ydb/library/yql/dq/opt/dq_opt_phy_finalizing.h> 
+#include <ydb/library/yql/dq/opt/dq_opt_build.h> 
+#include <ydb/library/yql/dq/opt/dq_opt_peephole.h> 
+#include <ydb/library/yql/dq/type_ann/dq_type_ann.h> 
 
 #include <ydb/library/yql/utils/log/log.h>
 

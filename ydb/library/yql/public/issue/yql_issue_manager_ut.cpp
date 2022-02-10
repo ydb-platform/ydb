@@ -103,12 +103,12 @@ Y_UNIT_TEST_SUITE(TIssueManagerTest) {
         UNIT_ASSERT_VALUES_EQUAL(subIssues[1]->GetSubIssues()[0]->GetSubIssues().size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(subIssues[1]->GetSubIssues()[0]->GetSubIssues()[0]->Message, "ErrorScope3");
         UNIT_ASSERT_VALUES_EQUAL(subIssues[1]->GetSubIssues()[1]->Message, "ErrorScope2");
-        auto ref = R"___(<main>: Error: A
-    <main>: Error: WarningScope1
+        auto ref = R"___(<main>: Error: A 
+    <main>: Error: WarningScope1 
     <main>:1:1: Error: B
         <main>:2:2: Error: C
-            <main>: Error: ErrorScope3
-        <main>: Error: ErrorScope2
+            <main>: Error: ErrorScope3 
+        <main>: Error: ErrorScope2 
 )___";
         UNIT_ASSERT_VALUES_EQUAL(issues.ToString(), ref);
     }

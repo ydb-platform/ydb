@@ -8,7 +8,7 @@
 #include <library/cpp/regex/pire/pcre2pire.h>
 
 #include <util/string/builder.h>
-
+ 
 using namespace NRegExp;
 using namespace NKikimr;
 using namespace NUdf;
@@ -16,10 +16,10 @@ using namespace NUdf;
 namespace {
     class TPireUdfBase: public TBoxedValue {
     protected:
-        TPireUdfBase(TSourcePosition pos)
-            : Pos_(pos)
-        {}
-
+        TPireUdfBase(TSourcePosition pos) 
+            : Pos_(pos) 
+        {} 
+ 
         void SetCommonOptions(std::string_view& regex, TFsm::TOptions& options) {
             if (regex.size() >= 4U && regex.substr(0U, 4U) == "(?i)") {
                 options.SetCaseInsensitive(true);
@@ -29,8 +29,8 @@ namespace {
                 options.SetCharset(CODES_UTF8);
             }
         }
-
-        TSourcePosition Pos_;
+ 
+        TSourcePosition Pos_; 
     };
 
     class TPireMatch: public TPireUdfBase {
@@ -40,10 +40,10 @@ namespace {
             TFactory(
                 bool surroundMode,
                 bool multiMode,
-                TSourcePosition pos,
+                TSourcePosition pos, 
                 size_t regexpsCount = 0)
-                : TPireUdfBase(pos)
-                , SurroundMode(surroundMode)
+                : TPireUdfBase(pos) 
+                , SurroundMode(surroundMode) 
                 , MultiMode(multiMode)
                 , RegexpsCount(regexpsCount)
             {
@@ -59,7 +59,7 @@ namespace {
                         args[0],
                         SurroundMode,
                         MultiMode,
-                        Pos_,
+                        Pos_, 
                         RegexpsCount));
             }
 
@@ -85,10 +85,10 @@ namespace {
             const TUnboxedValuePod& runConfig,
             bool surroundMode,
             bool multiMode,
-            TSourcePosition pos,
+            TSourcePosition pos, 
             size_t regexpsCount)
-            : TPireUdfBase(pos)
-            , MultiMode(multiMode)
+            : TPireUdfBase(pos) 
+            , MultiMode(multiMode) 
             , RegexpsCount(regexpsCount)
             , SurroundMode(surroundMode)
         {
@@ -172,12 +172,12 @@ namespace {
     class TPireCapture: public TPireUdfBase {
     public:
         class TFactory: public TPireUdfBase {
-        public:
-            TFactory(TSourcePosition pos)
-                : TPireUdfBase(pos)
-            {}
-
-        private:
+        public: 
+            TFactory(TSourcePosition pos) 
+                : TPireUdfBase(pos) 
+            {} 
+ 
+        private: 
             TUnboxedValue Run(const IValueBuilder*, const TUnboxedValuePod* args) const final try {
                 return TUnboxedValuePod(new TPireCapture(args[0], Pos_));
             } catch (const std::exception& e) {
@@ -190,13 +190,13 @@ namespace {
             return name;
         }
 
-        TPireCapture(const TUnboxedValuePod& runConfig, TSourcePosition pos)
-            : TPireUdfBase(pos)
-        {
+        TPireCapture(const TUnboxedValuePod& runConfig, TSourcePosition pos) 
+            : TPireUdfBase(pos) 
+        { 
             std::string_view regex(runConfig.AsStringRef());
             TFsm::TOptions options;
             SetCommonOptions(regex, options);
-            Fsm_.Reset(new TSlowCapturingFsm(TString(regex), options));
+            Fsm_.Reset(new TSlowCapturingFsm(TString(regex), options)); 
         }
 
     private:
@@ -206,8 +206,8 @@ namespace {
             if (args[0]) {
                 const std::string_view input = args[0].AsStringRef();
 
-                TSlowSearcher searcher(*Fsm_);
-                searcher.Search(input.data(), input.size());
+                TSlowSearcher searcher(*Fsm_); 
+                searcher.Search(input.data(), input.size()); 
 
                 if (searcher.Captured()) {
                     const auto& captured = searcher.GetCaptured();
@@ -220,18 +220,18 @@ namespace {
             UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
         }
 
-        TUniquePtr<TSlowCapturingFsm> Fsm_;
+        TUniquePtr<TSlowCapturingFsm> Fsm_; 
     };
 
     class TPireReplace: public TPireUdfBase {
     public:
         class TFactory: public TPireUdfBase {
-        public:
-            TFactory(TSourcePosition pos)
-                : TPireUdfBase(pos)
-            {}
-
-        private:
+        public: 
+            TFactory(TSourcePosition pos) 
+                : TPireUdfBase(pos) 
+            {} 
+ 
+        private: 
             TUnboxedValue Run(const IValueBuilder*, const TUnboxedValuePod* args) const final try {
                 return TUnboxedValuePod(new TPireReplace(args[0], Pos_));
             } catch (const std::exception& e) {
@@ -244,13 +244,13 @@ namespace {
             return name;
         }
 
-        TPireReplace(const TUnboxedValuePod& runConfig, TSourcePosition pos)
-            : TPireUdfBase(pos)
-        {
+        TPireReplace(const TUnboxedValuePod& runConfig, TSourcePosition pos) 
+            : TPireUdfBase(pos) 
+        { 
             std::string_view regex(runConfig.AsStringRef());
             TFsm::TOptions options;
             SetCommonOptions(regex, options);
-            Fsm_.Reset(new TSlowCapturingFsm(TString(regex), options));
+            Fsm_.Reset(new TSlowCapturingFsm(TString(regex), options)); 
         }
 
     private:
@@ -260,8 +260,8 @@ namespace {
             if (args[0]) {
                 const std::string_view input(args[0].AsStringRef());
 
-                TSlowSearcher s(*Fsm_);
-                s.Search(input.data(), input.size());
+                TSlowSearcher s(*Fsm_); 
+                s.Search(input.data(), input.size()); 
                 if (s.Captured()) {
                     const auto& captured = s.GetCaptured();
                     const TString replacement(args[1].AsStringRef());
@@ -278,7 +278,7 @@ namespace {
             UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
         }
 
-        TUniquePtr<TSlowCapturingFsm> Fsm_;
+        TUniquePtr<TSlowCapturingFsm> Fsm_; 
     };
 
     class TPireModule: public IUdfModule {
@@ -289,7 +289,7 @@ namespace {
 
         void CleanupOnTerminate() const final {
         }
-
+ 
         void GetAllFunctions(IFunctionsSink& sink) const final {
             sink.Add(TPireMatch::Name(true, true))->SetTypeAwareness();
             sink.Add(TPireMatch::Name(false, true))->SetTypeAwareness();
@@ -346,7 +346,7 @@ namespace {
 
                 if (!typesOnly) {
                     builder.Implementation(new TPireReplace::TFactory(builder.GetSourcePosition()));
-                }
+                } 
             }
         } catch (const std::exception& e) {
             builder.SetError(CurrentExceptionMessage());

@@ -1,22 +1,22 @@
-#include "yql_join.h"
-#include "yql_expr_type_annotation.h"
+#include "yql_join.h" 
+#include "yql_expr_type_annotation.h" 
 #include "yql_opt_utils.h"
-
+ 
 #include <util/string/cast.h>
 #include <util/string/join.h>
 
-namespace NYql {
-
-using namespace NNodes;
-
-namespace {
-    const TTypeAnnotationNode* AddOptionalType(const TTypeAnnotationNode* type, TExprContext& ctx) {
+namespace NYql { 
+ 
+using namespace NNodes; 
+ 
+namespace { 
+    const TTypeAnnotationNode* AddOptionalType(const TTypeAnnotationNode* type, TExprContext& ctx) { 
         if (type->IsOptionalOrNull()) {
-            return type;
-        }
-
-        return ctx.MakeType<TOptionalExprType>(type);
-    }
+            return type; 
+        } 
+ 
+        return ctx.MakeType<TOptionalExprType>(type); 
+    } 
 
     struct TJoinState {
         bool Used = false;
@@ -395,229 +395,229 @@ namespace {
 
         return true;
     }
-}
-
+} 
+ 
 TMaybe<TIssue> TJoinLabel::Parse(TExprContext& ctx, TExprNode& node, const TStructExprType* structType) {
-    Tables.clear();
-    InputType = structType;
+    Tables.clear(); 
+    InputType = structType; 
     if (auto atom = TMaybeNode<TCoAtom>(&node)) {
         if (auto err = ValidateLabel(ctx, atom.Cast())) {
-            return err;
-        }
-
-        AddLabel = true;
-        Tables.push_back(atom.Cast().Value());
-        return {};
-    }
+            return err; 
+        } 
+ 
+        AddLabel = true; 
+        Tables.push_back(atom.Cast().Value()); 
+        return {}; 
+    } 
     else if (auto tuple = TMaybeNode<TCoAtomList>(&node)) {
-        if (tuple.Cast().Size() == 0) {
+        if (tuple.Cast().Size() == 0) { 
             return TIssue(ctx.GetPosition(node.Pos()), "Empty list of correlation names are not allowed");
-        }
-
-        for (const auto& child : tuple.Cast()) {
+        } 
+ 
+        for (const auto& child : tuple.Cast()) { 
             if (auto err = ValidateLabel(ctx, child)) {
-                return err;
-            }
-
-            Tables.push_back(child.Value());
-        }
-
-        Sort(Tables);
-        auto prevLabel = Tables[0];
-        for (ui32 i = 1; i < Tables.size(); ++i) {
-            if (Tables[i] == prevLabel) {
+                return err; 
+            } 
+ 
+            Tables.push_back(child.Value()); 
+        } 
+ 
+        Sort(Tables); 
+        auto prevLabel = Tables[0]; 
+        for (ui32 i = 1; i < Tables.size(); ++i) { 
+            if (Tables[i] == prevLabel) { 
                 return TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "Duplication of correlation names: " << prevLabel);
-            }
-
-            prevLabel = Tables[i];
-        }
-
-        // all labels are unique, ensure that all columns are under one of label
-        for (auto column : InputType->GetItems()) {
-            auto name = column->GetName();
-            auto pos = name.find('.');
+            } 
+ 
+            prevLabel = Tables[i]; 
+        } 
+ 
+        // all labels are unique, ensure that all columns are under one of label 
+        for (auto column : InputType->GetItems()) { 
+            auto name = column->GetName(); 
+            auto pos = name.find('.'); 
             if (pos == TString::npos) {
                 return TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "Expected columns name as table.name, but got: " << name);
-            }
-
-            auto table = name.substr(0, pos);
-            if (!BinarySearch(Tables.begin(), Tables.end(), table)) {
+            } 
+ 
+            auto table = name.substr(0, pos); 
+            if (!BinarySearch(Tables.begin(), Tables.end(), table)) { 
                 return TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "Unknown table name: " << table);
-            }
-
-            auto columnName = name.substr(pos + 1);
+            } 
+ 
+            auto columnName = name.substr(pos + 1); 
             if (columnName.empty()) {
                 return TIssue(ctx.GetPosition(node.Pos()), "Empty correlation name is not allowed");
-            }
-        }
-
-        return {};
-    }
-    else {
+            } 
+        } 
+ 
+        return {}; 
+    } 
+    else { 
         return TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "Expected either atom or list, but got" << node.Type());
-    }
-}
-
+    } 
+} 
+ 
 TMaybe<TIssue> TJoinLabel::ValidateLabel(TExprContext& ctx, const TCoAtom& label) {
     if (label.Value().empty()) {
         return TIssue(ctx.GetPosition(label.Pos()), "Empty correlation name is not allowed");
-    }
-
-    if (label.Value().Contains('.')) {
+    } 
+ 
+    if (label.Value().Contains('.')) { 
         return TIssue(ctx.GetPosition(label.Pos()), "Dot symbol is not allowed in the correlation name");
-    }
-
-    return {};
-}
-
+    } 
+ 
+    return {}; 
+} 
+ 
 TString TJoinLabel::FullName(const TStringBuf& column) const {
-    if (AddLabel) {
-        return FullColumnName(Tables[0], column);
-    } else {
+    if (AddLabel) { 
+        return FullColumnName(Tables[0], column); 
+    } else { 
         return TString(column);
-    }
-}
-
-TStringBuf TJoinLabel::ColumnName(const TStringBuf& column) const {
-    auto pos = column.find('.');
+    } 
+} 
+ 
+TStringBuf TJoinLabel::ColumnName(const TStringBuf& column) const { 
+    auto pos = column.find('.'); 
     if (pos == TString::npos) {
-        return column;
-    }
-
-    return column.substr(pos + 1);
-}
-
-TStringBuf TJoinLabel::TableName(const TStringBuf& column) const {
-    auto pos = column.find('.');
+        return column; 
+    } 
+ 
+    return column.substr(pos + 1); 
+} 
+ 
+TStringBuf TJoinLabel::TableName(const TStringBuf& column) const { 
+    auto pos = column.find('.'); 
     if (pos == TString::npos) {
-        YQL_ENSURE(AddLabel);
-        return Tables[0];
-    }
-
-    return column.substr(0, pos);
-}
-
-bool TJoinLabel::HasTable(const TStringBuf& table) const {
-    return BinarySearch(Tables.begin(), Tables.end(), table);
-}
-
-TMaybe<const TTypeAnnotationNode*> TJoinLabel::FindColumn(const TStringBuf& table, const TStringBuf& column) const {
-    auto pos = InputType->FindItem(MemberName(table, column));
-    if (!pos) {
-        return TMaybe<const TTypeAnnotationNode*>();
-    }
-
-    return InputType->GetItems()[*pos]->GetItemType();
-}
-
+        YQL_ENSURE(AddLabel); 
+        return Tables[0]; 
+    } 
+ 
+    return column.substr(0, pos); 
+} 
+ 
+bool TJoinLabel::HasTable(const TStringBuf& table) const { 
+    return BinarySearch(Tables.begin(), Tables.end(), table); 
+} 
+ 
+TMaybe<const TTypeAnnotationNode*> TJoinLabel::FindColumn(const TStringBuf& table, const TStringBuf& column) const { 
+    auto pos = InputType->FindItem(MemberName(table, column)); 
+    if (!pos) { 
+        return TMaybe<const TTypeAnnotationNode*>(); 
+    } 
+ 
+    return InputType->GetItems()[*pos]->GetItemType(); 
+} 
+ 
 TString TJoinLabel::MemberName(const TStringBuf& table, const TStringBuf& column) const {
     return AddLabel ? TString(column) : FullColumnName(table, column);
-}
-
+} 
+ 
 TVector<TString> TJoinLabel::EnumerateAllColumns() const {
     TVector<TString> result;
-    if (AddLabel) {
-        // add label to all columns
-        for (auto& x : InputType->GetItems()) {
-            result.push_back(FullColumnName(Tables[0], x->GetName()));
-        }
-    } else {
-        for (auto& x : InputType->GetItems()) {
+    if (AddLabel) { 
+        // add label to all columns 
+        for (auto& x : InputType->GetItems()) { 
+            result.push_back(FullColumnName(Tables[0], x->GetName())); 
+        } 
+    } else { 
+        for (auto& x : InputType->GetItems()) { 
             result.push_back(TString(x->GetName()));
-        }
-    }
-
-    return result;
-}
-
+        } 
+    } 
+ 
+    return result; 
+} 
+ 
 TVector<TString> TJoinLabel::EnumerateAllMembers() const {
     TVector<TString> result;
-    for (auto& x : InputType->GetItems()) {
+    for (auto& x : InputType->GetItems()) { 
         result.push_back(TString(x->GetName()));
-    }
-
-    return result;
-}
-
+    } 
+ 
+    return result; 
+} 
+ 
 TMaybe<TIssue> TJoinLabels::Add(TExprContext& ctx, TExprNode& node, const TStructExprType* structType) {
-    ui32 index = Inputs.size();
+    ui32 index = Inputs.size(); 
     Inputs.emplace_back();
-    TJoinLabel& label = Inputs.back();
+    TJoinLabel& label = Inputs.back(); 
     if (auto err = label.Parse(ctx, node, structType)) {
-        return err;
-    }
-
-    for (auto& table : label.Tables) {
-        if (!InputByTable.insert({ table, index }).second) {
+        return err; 
+    } 
+ 
+    for (auto& table : label.Tables) { 
+        if (!InputByTable.insert({ table, index }).second) { 
             return TIssue(
                 ctx.GetPosition(node.Pos()),
-                TStringBuilder() << "Duplication of table name " << table);
-        }
-    }
-
-    return {};
-}
-
-TMaybe<const TJoinLabel*> TJoinLabels::FindInput(const TStringBuf& table) const {
-    auto inputIndex = InputByTable.FindPtr(table);
-    if (!inputIndex) {
-        return {};
-    }
-
-    return &Inputs[*inputIndex];
-}
-
-TMaybe<ui32> TJoinLabels::FindInputIndex(const TStringBuf& table) const {
-    auto inputIndex = InputByTable.FindPtr(table);
-    if (!inputIndex) {
-        return{};
-    }
-
-    return *inputIndex;
-}
-
-TMaybe<const TTypeAnnotationNode*> TJoinLabels::FindColumn(const TStringBuf& table, const TStringBuf& column) const {
-    auto tableIndex = InputByTable.FindPtr(table);
-    if (!tableIndex) {
-        return TMaybe<const TTypeAnnotationNode*>();
-    }
-
-    return Inputs[*tableIndex].FindColumn(table, column);
-}
-
-TMaybe<const TTypeAnnotationNode*> TJoinLabels::FindColumn(const TStringBuf& fullName) const {
-    TStringBuf part1;
-    TStringBuf part2;
-    SplitTableName(fullName, part1, part2);
-    return FindColumn(part1, part2);
-}
-
+                TStringBuilder() << "Duplication of table name " << table); 
+        } 
+    } 
+ 
+    return {}; 
+} 
+ 
+TMaybe<const TJoinLabel*> TJoinLabels::FindInput(const TStringBuf& table) const { 
+    auto inputIndex = InputByTable.FindPtr(table); 
+    if (!inputIndex) { 
+        return {}; 
+    } 
+ 
+    return &Inputs[*inputIndex]; 
+} 
+ 
+TMaybe<ui32> TJoinLabels::FindInputIndex(const TStringBuf& table) const { 
+    auto inputIndex = InputByTable.FindPtr(table); 
+    if (!inputIndex) { 
+        return{}; 
+    } 
+ 
+    return *inputIndex; 
+} 
+ 
+TMaybe<const TTypeAnnotationNode*> TJoinLabels::FindColumn(const TStringBuf& table, const TStringBuf& column) const { 
+    auto tableIndex = InputByTable.FindPtr(table); 
+    if (!tableIndex) { 
+        return TMaybe<const TTypeAnnotationNode*>(); 
+    } 
+ 
+    return Inputs[*tableIndex].FindColumn(table, column); 
+} 
+ 
+TMaybe<const TTypeAnnotationNode*> TJoinLabels::FindColumn(const TStringBuf& fullName) const { 
+    TStringBuf part1; 
+    TStringBuf part2; 
+    SplitTableName(fullName, part1, part2); 
+    return FindColumn(part1, part2); 
+} 
+ 
 TVector<TString> TJoinLabels::EnumerateColumns(const TStringBuf& table) const {
     TVector<TString> result;
-    auto tableIndex = InputByTable.FindPtr(table);
-    Y_ENSURE(tableIndex, "Unknown table:" << table);
-    auto& label = Inputs[*tableIndex];
-    if (label.AddLabel) {
-        // add label to all columns
-        for (auto& x : label.InputType->GetItems()) {
-            result.push_back(FullColumnName(table, x->GetName()));
-        }
-    }
-    else {
-        // filter out some columns
-        for (auto& x : label.InputType->GetItems()) {
-            TStringBuf part1;
-            TStringBuf part2;
-            SplitTableName(x->GetName(), part1, part2);
-            if (part1 == table) {
+    auto tableIndex = InputByTable.FindPtr(table); 
+    Y_ENSURE(tableIndex, "Unknown table:" << table); 
+    auto& label = Inputs[*tableIndex]; 
+    if (label.AddLabel) { 
+        // add label to all columns 
+        for (auto& x : label.InputType->GetItems()) { 
+            result.push_back(FullColumnName(table, x->GetName())); 
+        } 
+    } 
+    else { 
+        // filter out some columns 
+        for (auto& x : label.InputType->GetItems()) { 
+            TStringBuf part1; 
+            TStringBuf part2; 
+            SplitTableName(x->GetName(), part1, part2); 
+            if (part1 == table) { 
                 result.push_back(TString(x->GetName()));
-            }
-        }
-    }
-
-    return result;
-}
-
+            } 
+        } 
+    } 
+ 
+    return result; 
+} 
+ 
 IGraphTransformer::TStatus ValidateEquiJoinOptions(TPositionHandle positionHandle, const TExprNode& optionsNode,
     TJoinOptions& options, TExprContext& ctx)
 {
@@ -811,8 +811,8 @@ IGraphTransformer::TStatus EquiJoinAnnotation(
                 } else {
                     auto arg1 = ctx.NewArgument(positionHandle, "a");
                     auto arg2 = ctx.NewArgument(positionHandle, "b");
-                    if (SilentInferCommonType(arg1, *commonType, arg2, *type, ctx, commonType,
-                        TConvertFlags().Set(NConvertFlags::AllowUnsafeConvert)) == IGraphTransformer::TStatus::Error) {
+                    if (SilentInferCommonType(arg1, *commonType, arg2, *type, ctx, commonType, 
+                        TConvertFlags().Set(NConvertFlags::AllowUnsafeConvert)) == IGraphTransformer::TStatus::Error) { 
                         return IGraphTransformer::TStatus::Error;
                     }
                 }
@@ -840,60 +840,60 @@ THashMap<TStringBuf, THashSet<TStringBuf>> CollectEquiJoinKeyColumnsByLabel(cons
     return result;
 };
 
-bool IsLeftJoinSideOptional(const TStringBuf& joinType) {
-    if (joinType == "Right" || joinType == "Full" || joinType == "Exclusion") {
-        return true;
-    }
-
-    return false;
-}
-
-bool IsRightJoinSideOptional(const TStringBuf& joinType) {
-    if (joinType == "Left" || joinType == "Full" || joinType == "Exclusion") {
-        return true;
-    }
-
-    return false;
-}
-
+bool IsLeftJoinSideOptional(const TStringBuf& joinType) { 
+    if (joinType == "Right" || joinType == "Full" || joinType == "Exclusion") { 
+        return true; 
+    } 
+ 
+    return false; 
+} 
+ 
+bool IsRightJoinSideOptional(const TStringBuf& joinType) { 
+    if (joinType == "Left" || joinType == "Full" || joinType == "Exclusion") { 
+        return true; 
+    } 
+ 
+    return false; 
+} 
+ 
 TExprNode::TPtr FilterOutNullJoinColumns(TPositionHandle pos, const TExprNode::TPtr& input,
     const TJoinLabel& label, const TSet<TString>& optionalKeyColumns, TExprContext& ctx) {
-    if (optionalKeyColumns.empty()) {
-        return input;
-    }
-
+    if (optionalKeyColumns.empty()) { 
+        return input; 
+    } 
+ 
     TExprNode::TListType optColumns;
-    for (auto fullColumnName : optionalKeyColumns) {
-        TStringBuf table;
-        TStringBuf column;
-        SplitTableName(fullColumnName, table, column);
-        auto memberName = label.MemberName(table, column);
-        optColumns.push_back(ctx.NewAtom(pos, memberName));
-    }
-
+    for (auto fullColumnName : optionalKeyColumns) { 
+        TStringBuf table; 
+        TStringBuf column; 
+        SplitTableName(fullColumnName, table, column); 
+        auto memberName = label.MemberName(table, column); 
+        optColumns.push_back(ctx.NewAtom(pos, memberName)); 
+    } 
+ 
     auto optTuple = ctx.NewList(pos, std::move(optColumns));
-    return ctx.Builder(pos)
+    return ctx.Builder(pos) 
         .Callable("SkipNullMembers")
-            .Add(0, input)
-            .Add(1, optTuple)
-        .Seal()
-        .Build();
-}
-
+            .Add(0, input) 
+            .Add(1, optTuple) 
+        .Seal() 
+        .Build(); 
+} 
+ 
 TMap<TStringBuf, TVector<TStringBuf>> LoadJoinRenameMap(const TExprNode& settings) {
     TMap<TStringBuf, TVector<TStringBuf>> res;
     for (const auto& child : settings.Children()) {
-        if (child->Child(0)->Content() == "rename") {
-            auto& v = res[child->Child(1)->Content()];
+        if (child->Child(0)->Content() == "rename") { 
+            auto& v = res[child->Child(1)->Content()]; 
             if (!child->Child(2)->Content().empty()) {
-                v.push_back(child->Child(2)->Content());
-            }
-        }
-    }
-
-    return res;
-}
-
+                v.push_back(child->Child(2)->Content()); 
+            } 
+        } 
+    } 
+ 
+    return res; 
+} 
+ 
 TSet<TVector<TStringBuf>> LoadJoinSortSets(const TExprNode& settings) {
     TSet<TVector<TStringBuf>> res;
     for (const auto& child : settings.Children()) {
@@ -909,166 +909,166 @@ TSet<TVector<TStringBuf>> LoadJoinSortSets(const TExprNode& settings) {
 }
 
 THashMap<TString, const TTypeAnnotationNode*> GetJoinColumnTypes(const TExprNode& joins,
-    const TJoinLabels& labels, TExprContext& ctx) {
+    const TJoinLabels& labels, TExprContext& ctx) { 
     return GetJoinColumnTypes(joins, labels, joins.Child(0)->Content(), ctx);
-}
-
+} 
+ 
 THashMap<TString, const TTypeAnnotationNode*> GetJoinColumnTypes(const TExprNode& joins,
-    const TJoinLabels& labels, const TStringBuf& joinType, TExprContext& ctx) {
+    const TJoinLabels& labels, const TStringBuf& joinType, TExprContext& ctx) { 
     THashMap<TString, const TTypeAnnotationNode*> finalType;
     THashMap<TString, const TTypeAnnotationNode*> leftType;
     THashMap<TString, const TTypeAnnotationNode*> rightType;
-    bool isLeftOptional = IsLeftJoinSideOptional(joinType);
-    bool isRightOptional = IsRightJoinSideOptional(joinType);
+    bool isLeftOptional = IsLeftJoinSideOptional(joinType); 
+    bool isRightOptional = IsRightJoinSideOptional(joinType); 
     if (joins.Child(1)->IsAtom()) {
         auto name = joins.Child(1)->Content();
-        auto input = *labels.FindInput(name);
-        for (auto& x : input->InputType->GetItems()) {
-            leftType[input->FullName(x->GetName())] = x->GetItemType();
-        }
-    }
-    else {
+        auto input = *labels.FindInput(name); 
+        for (auto& x : input->InputType->GetItems()) { 
+            leftType[input->FullName(x->GetName())] = x->GetItemType(); 
+        } 
+    } 
+    else { 
         leftType = GetJoinColumnTypes(*joins.Child(1), labels, ctx);
-    }
-
+    } 
+ 
     if (joins.Child(2)->IsAtom()) {
         auto name = joins.Child(2)->Content();
-        auto input = *labels.FindInput(name);
-        for (auto& x : input->InputType->GetItems()) {
-            rightType[input->FullName(x->GetName())] = x->GetItemType();
-        }
-    }
-    else {
+        auto input = *labels.FindInput(name); 
+        for (auto& x : input->InputType->GetItems()) { 
+            rightType[input->FullName(x->GetName())] = x->GetItemType(); 
+        } 
+    } 
+    else { 
         rightType = GetJoinColumnTypes(*joins.Child(2), labels, ctx);
-    }
-
-    if (isLeftOptional) {
-        for (auto& x : leftType) {
-            x.second = AddOptionalType(x.second, ctx);
-        }
-    }
-
-    if (isRightOptional) {
-        for (auto& x : rightType) {
-            x.second = AddOptionalType(x.second, ctx);
-        }
-    }
-
-    if (joinType != "RightOnly" && joinType != "RightSemi") {
-        for (auto& x : leftType) {
-            finalType.insert({ x.first, x.second });
-        }
-    }
-
-    if (joinType != "LeftOnly" && joinType != "LeftSemi") {
-        for (auto& x : rightType) {
-            finalType.insert({ x.first, x.second });
-        }
-    }
-
-    return finalType;
-}
-
+    } 
+ 
+    if (isLeftOptional) { 
+        for (auto& x : leftType) { 
+            x.second = AddOptionalType(x.second, ctx); 
+        } 
+    } 
+ 
+    if (isRightOptional) { 
+        for (auto& x : rightType) { 
+            x.second = AddOptionalType(x.second, ctx); 
+        } 
+    } 
+ 
+    if (joinType != "RightOnly" && joinType != "RightSemi") { 
+        for (auto& x : leftType) { 
+            finalType.insert({ x.first, x.second }); 
+        } 
+    } 
+ 
+    if (joinType != "LeftOnly" && joinType != "LeftSemi") { 
+        for (auto& x : rightType) { 
+            finalType.insert({ x.first, x.second }); 
+        } 
+    } 
+ 
+    return finalType; 
+} 
+ 
 bool AreSameJoinKeys(const TExprNode& joins, const TStringBuf& table1, const TStringBuf& column1, const TStringBuf& table2, const TStringBuf& column2) {
     if (!joins.Child(1)->IsAtom()) {
         if (AreSameJoinKeys(*joins.Child(1), table1, column1, table2, column2)) {
-            return true;
-        }
-    }
-
+            return true; 
+        } 
+    } 
+ 
     if (!joins.Child(2)->IsAtom()) {
         if (AreSameJoinKeys(*joins.Child(2), table1, column1, table2, column2)) {
-            return true;
-        }
-    }
-
+            return true; 
+        } 
+    } 
+ 
     for (ui32 i = 0; i < joins.Child(3)->ChildrenSize(); i += 2) {
         if (joins.Child(3)->Child(i)->Content() == table1) {
             if (joins.Child(4)->Child(i)->Content() == table2 &&
                 joins.Child(3)->Child(i + 1)->Content() == column1 &&
                 joins.Child(4)->Child(i + 1)->Content() == column2) {
-                return true;
-            }
-        }
+                return true; 
+            } 
+        } 
         else if (joins.Child(3)->Child(i)->Content() == table2) {
             if (joins.Child(4)->Child(i)->Content() == table1 &&
                 joins.Child(3)->Child(i + 1)->Content() == column2 &&
                 joins.Child(4)->Child(i + 1)->Content() == column1) {
-                return true;
-            }
-        }
-    }
-
-    return false;
-}
-
-std::pair<bool, bool> IsRequiredSide(const TExprNode::TPtr& joinTree, const TJoinLabels& labels, ui32 inputIndex) {
-    auto joinType = joinTree->Child(0)->Content();
-    auto left = joinTree->ChildPtr(1);
-    auto right = joinTree->ChildPtr(2);
+                return true; 
+            } 
+        } 
+    } 
+ 
+    return false; 
+} 
+ 
+std::pair<bool, bool> IsRequiredSide(const TExprNode::TPtr& joinTree, const TJoinLabels& labels, ui32 inputIndex) { 
+    auto joinType = joinTree->Child(0)->Content(); 
+    auto left = joinTree->ChildPtr(1); 
+    auto right = joinTree->ChildPtr(2); 
     if (joinType == "Inner" || joinType == "Left" || joinType == "LeftOnly" || joinType == "LeftSemi" || joinType == "RightSemi" || joinType == "Cross") {
-        if (!left->IsAtom()) {
-            auto x = IsRequiredSide(left, labels, inputIndex);
-            if (x.first) {
-                return x;
-            }
-        }
-        else {
-            auto table = left->Content();
-            if (*labels.FindInputIndex(table) == inputIndex) {
-                return { true, joinType == "Inner" || joinType == "LeftSemi" };
-            }
-        }
-    }
-
+        if (!left->IsAtom()) { 
+            auto x = IsRequiredSide(left, labels, inputIndex); 
+            if (x.first) { 
+                return x; 
+            } 
+        } 
+        else { 
+            auto table = left->Content(); 
+            if (*labels.FindInputIndex(table) == inputIndex) { 
+                return { true, joinType == "Inner" || joinType == "LeftSemi" }; 
+            } 
+        } 
+    } 
+ 
     if (joinType == "Inner" || joinType == "Right" || joinType == "RightOnly" || joinType == "RightSemi" || joinType == "LeftSemi" || joinType == "Cross") {
-        if (!right->IsAtom()) {
-            auto x = IsRequiredSide(right, labels, inputIndex);
-            if (x.first) {
-                return x;
-            }
-        }
-        else {
-            auto table = right->Content();
-            if (*labels.FindInputIndex(table) == inputIndex) {
-                return{ true, joinType == "Inner" || joinType == "RightSemi" };
-            }
-        }
-    }
-
-    return{ false, false };
-}
-
+        if (!right->IsAtom()) { 
+            auto x = IsRequiredSide(right, labels, inputIndex); 
+            if (x.first) { 
+                return x; 
+            } 
+        } 
+        else { 
+            auto table = right->Content(); 
+            if (*labels.FindInputIndex(table) == inputIndex) { 
+                return{ true, joinType == "Inner" || joinType == "RightSemi" }; 
+            } 
+        } 
+    } 
+ 
+    return{ false, false }; 
+} 
+ 
 void AppendEquiJoinRenameMap(TPositionHandle pos, const TMap<TStringBuf, TVector<TStringBuf>>& newRenameMap,
     TExprNode::TListType& joinSettingNodes, TExprContext& ctx) {
-    for (auto& x : newRenameMap) {
-        if (x.second.empty()) {
-            joinSettingNodes.push_back(ctx.Builder(pos)
-                .List()
-                    .Atom(0, "rename")
-                    .Atom(1, x.first)
-                    .Atom(2, "")
-                .Seal()
-                .Build());
-            continue;
-        }
-
-        for (auto& y : x.second) {
-            if (x.first == y && x.second.size() == 1) {
-                continue;
-            }
-
-            joinSettingNodes.push_back(ctx.Builder(pos)
-                .List()
-                    .Atom(0, "rename")
-                    .Atom(1, x.first)
-                    .Atom(2, y)
-                .Seal()
-                .Build());
-        }
-    }
-}
-
+    for (auto& x : newRenameMap) { 
+        if (x.second.empty()) { 
+            joinSettingNodes.push_back(ctx.Builder(pos) 
+                .List() 
+                    .Atom(0, "rename") 
+                    .Atom(1, x.first) 
+                    .Atom(2, "") 
+                .Seal() 
+                .Build()); 
+            continue; 
+        } 
+ 
+        for (auto& y : x.second) { 
+            if (x.first == y && x.second.size() == 1) { 
+                continue; 
+            } 
+ 
+            joinSettingNodes.push_back(ctx.Builder(pos) 
+                .List() 
+                    .Atom(0, "rename") 
+                    .Atom(1, x.first) 
+                    .Atom(2, y) 
+                .Seal() 
+                .Build()); 
+        } 
+    } 
+} 
+ 
 void AppendEquiJoinSortSets(TPositionHandle pos, const TSet<TVector<TStringBuf>>& newSortSets,
     TExprNode::TListType& joinSettingNodes, TExprContext& ctx)
 {
@@ -1093,64 +1093,64 @@ void AppendEquiJoinSortSets(TPositionHandle pos, const TSet<TVector<TStringBuf>>
 TMap<TStringBuf, TVector<TStringBuf>> UpdateUsedFieldsInRenameMap(
     const TMap<TStringBuf, TVector<TStringBuf>>& renameMap,
     const TSet<TStringBuf>& usedFields,
-    const TStructExprType* structType
-) {
+    const TStructExprType* structType 
+) { 
     TMap<TStringBuf, TStringBuf> reversedRenameMap;
     TMap<TStringBuf, TVector<TStringBuf>> newRenameMap;
-    for (auto& x : renameMap) {
-        if (!x.second.empty()) {
-            for (auto& y : x.second) {
-                reversedRenameMap[y] = x.first;
-            }
-        }
-        else {
-            // previous drops
-            newRenameMap[x.first].clear();
-        }
-    }
-
-    for (auto& item : structType->GetItems()) {
+    for (auto& x : renameMap) { 
+        if (!x.second.empty()) { 
+            for (auto& y : x.second) { 
+                reversedRenameMap[y] = x.first; 
+            } 
+        } 
+        else { 
+            // previous drops 
+            newRenameMap[x.first].clear(); 
+        } 
+    } 
+ 
+    for (auto& item : structType->GetItems()) { 
         bool needRemove = !usedFields.contains(item->GetName());
-        if (auto renamed = reversedRenameMap.FindPtr(item->GetName())) {
-            if (needRemove) {
+        if (auto renamed = reversedRenameMap.FindPtr(item->GetName())) { 
+            if (needRemove) { 
                 if (newRenameMap[*renamed].empty()) {
                     newRenameMap[*renamed].push_back("");
                 }
-            }
-            else {
+            } 
+            else { 
                 if (!newRenameMap[*renamed].empty() && newRenameMap[*renamed][0].empty()) {
                     newRenameMap[*renamed].clear(); // Do not remove column because it will be renamed.
                 }
-                newRenameMap[*renamed].push_back(item->GetName());
-            }
-        }
-        else {
-            if (needRemove) {
-                newRenameMap[item->GetName()].push_back("");
-            }
-        }
-    }
-
-    for (auto& x : newRenameMap) {
+                newRenameMap[*renamed].push_back(item->GetName()); 
+            } 
+        } 
+        else { 
+            if (needRemove) { 
+                newRenameMap[item->GetName()].push_back(""); 
+            } 
+        } 
+    } 
+ 
+    for (auto& x : newRenameMap) { 
         if (AnyOf(x.second, [](const TStringBuf& value) { return !value.empty(); })) {
-            continue;
-        }
-
-        x.second.clear();
-    }
-
-    return newRenameMap;
-}
-
+            continue; 
+        } 
+ 
+        x.second.clear(); 
+    } 
+ 
+    return newRenameMap; 
+} 
+ 
 TVector<TEquiJoinParent> CollectEquiJoinOnlyParents(const TCoFlatMapBase& flatMap, const TParentsMap& parents)
 {
     TVector<TEquiJoinParent> result;
     if (!CollectEquiJoinOnlyParents(flatMap.Ref(), nullptr, 2, result, nullptr, parents)) {
         result.clear();
     }
-
+ 
     return result;
-}
+} 
 
 TEquiJoinLinkSettings GetEquiJoinLinkSettings(const TExprNode& linkSettings) {
     TEquiJoinLinkSettings result;

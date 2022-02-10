@@ -21,7 +21,7 @@ ENDIF()
 
 PEERDIR(
     library/cpp/actors/util
-    ydb/core/yql_testlib
+    ydb/core/yql_testlib 
 )
 
 END()

@@ -1,11 +1,11 @@
 #include "cli.h"
 
-#include <ydb/library/yql/ast/yql_ast.h>
-#include <ydb/library/yql/ast/yql_expr.h>
+#include <ydb/library/yql/ast/yql_ast.h> 
+#include <ydb/library/yql/ast/yql_expr.h> 
 #include <ydb/core/engine/mkql_engine_flat.h>
-#include <ydb/library/yql/minikql/mkql_node_serialization.h>
-#include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
+#include <ydb/library/yql/minikql/mkql_node_serialization.h> 
+#include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h> 
+#include <ydb/library/yql/public/issue/yql_issue_message.h> 
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/client/minikql_compile/yql_expr_minikql.h>
 
@@ -41,7 +41,7 @@ int CompileAndExecMiniKQL(TCommandConfig &cmdConf, int argc, char **argv) {
     auto functionRegistry = NMiniKQL::CreateFunctionRegistry(NMiniKQL::CreateBuiltinRegistry());
     TAlignedPagePoolCounters countersStub;
     NMiniKQL::TScopedAlloc alloc(countersStub);
-    NMiniKQL::TTypeEnvironment TypeEnv(alloc);
+    NMiniKQL::TTypeEnvironment TypeEnv(alloc); 
 
     TAutoPtr<NMsgBusProxy::TBusRequest> request(new NMsgBusProxy::TBusRequest());
 
@@ -62,7 +62,7 @@ int CompileAndExecMiniKQL(TCommandConfig &cmdConf, int argc, char **argv) {
         mkqlTx->MutableParams()->SetText(paramsText);
     }
 
-    mkqlTx->SetFlatMKQL(true);
+    mkqlTx->SetFlatMKQL(true); 
 
     TAutoPtr<NBus::TBusMessage> reply;
     NBus::EMessageStatus msgStatus = config.SyncCall(request, reply);
@@ -122,15 +122,15 @@ int CompileAndExecMiniKQL(TCommandConfig &cmdConf, int argc, char **argv) {
         return 1;
     }
 
-    auto execEngineStatus = static_cast<NMiniKQL::IEngineFlat::EStatus>(response.GetExecutionEngineResponseStatus());
+    auto execEngineStatus = static_cast<NMiniKQL::IEngineFlat::EStatus>(response.GetExecutionEngineResponseStatus()); 
     Cerr << "ExecutionEngineResponse status: " << (ui32) execEngineStatus << Endl;
-    if (execEngineStatus != NMiniKQL::IEngineFlat::EStatus::Complete
-        && execEngineStatus != NMiniKQL::IEngineFlat::EStatus::Aborted)
+    if (execEngineStatus != NMiniKQL::IEngineFlat::EStatus::Complete 
+        && execEngineStatus != NMiniKQL::IEngineFlat::EStatus::Aborted) 
     {
         return 1;
     }
-    const auto& evaluatedResp = response.GetExecutionEngineEvaluatedResponse();
-    Cout << evaluatedResp.DebugString() << Endl;
+    const auto& evaluatedResp = response.GetExecutionEngineEvaluatedResponse(); 
+    Cout << evaluatedResp.DebugString() << Endl; 
 
     return 0;
 }

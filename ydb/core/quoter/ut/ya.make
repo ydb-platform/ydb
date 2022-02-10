@@ -16,11 +16,11 @@ IF (NOT OS_WINDOWS)
         quoter_service_ut.cpp
         ut_helpers.cpp
     )
-
+ 
     # reserve cpu for speed test
-
+ 
     REQUIREMENTS(cpu:4)
-
+ 
     IF (WITH_VALGRIND)
         SIZE(LARGE)
         TIMEOUT(2400)

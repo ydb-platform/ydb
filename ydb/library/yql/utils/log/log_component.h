@@ -27,7 +27,7 @@ enum class EComponent {
     CoreEval,
     CorePeepHole,
     ProviderDq,
-    ProviderClickHouse,
+    ProviderClickHouse, 
     ProviderYdb,
     ProviderPq,
     ProviderS3,

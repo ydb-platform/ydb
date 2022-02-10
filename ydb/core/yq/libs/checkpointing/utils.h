@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/library/yql/dq/proto/dq_tasks.pb.h>
+#include <ydb/library/yql/dq/proto/dq_tasks.pb.h> 
 
 namespace NYq {
 

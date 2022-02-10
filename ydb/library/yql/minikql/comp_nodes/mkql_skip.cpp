@@ -1,11 +1,11 @@
-#include "mkql_skip.h"
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h>
-#include <ydb/library/yql/minikql/mkql_node_cast.h>
-
-namespace NKikimr {
-namespace NMiniKQL {
-
+#include "mkql_skip.h" 
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h> 
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h> 
+#include <ydb/library/yql/minikql/mkql_node_cast.h> 
+ 
+namespace NKikimr { 
+namespace NMiniKQL { 
+ 
 namespace {
 
 class TSkipFlowWrapper : public TStatefulFlowCodegeneratorNode<TSkipFlowWrapper> {
@@ -226,39 +226,39 @@ private:
 
 class TSkipStreamWrapper : public TMutableComputationNode<TSkipStreamWrapper> {
     typedef TMutableComputationNode<TSkipStreamWrapper> TBaseComputation;
-public:
-    class TStreamValue : public TComputationValue<TStreamValue> {
-    public:
-        using TBase = TComputationValue<TStreamValue>;
-
-        TStreamValue(TMemoryUsageInfo* memInfo, NUdf::TUnboxedValue&& input, ui64 count)
-            : TBase(memInfo)
-            , Input_(std::move(input))
-            , Count_(count)
-            , Index_(0)
-        {}
-
+public: 
+    class TStreamValue : public TComputationValue<TStreamValue> { 
+    public: 
+        using TBase = TComputationValue<TStreamValue>; 
+ 
+        TStreamValue(TMemoryUsageInfo* memInfo, NUdf::TUnboxedValue&& input, ui64 count) 
+            : TBase(memInfo) 
+            , Input_(std::move(input)) 
+            , Count_(count) 
+            , Index_(0) 
+        {} 
+ 
     private:
-        NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) override {
-            for (;;) {
-                if (Index_ >= Count_) {
-                    return Input_.Fetch(result);
-                }
-
-                auto status = Input_.Fetch(result);
-                if (status != NUdf::EFetchStatus::Ok) {
-                    return status;
-                }
-
-                ++Index_;
-            }
-        }
-
+        NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) override { 
+            for (;;) { 
+                if (Index_ >= Count_) { 
+                    return Input_.Fetch(result); 
+                } 
+ 
+                auto status = Input_.Fetch(result); 
+                if (status != NUdf::EFetchStatus::Ok) { 
+                    return status; 
+                } 
+ 
+                ++Index_; 
+            } 
+        } 
+ 
         const NUdf::TUnboxedValue Input_;
-        const ui64 Count_;
-        ui64 Index_;
-    };
-
+        const ui64 Count_; 
+        ui64 Index_; 
+    }; 
+ 
     TSkipStreamWrapper(TComputationMutables& mutables, IComputationNode* list, IComputationNode* count)
         : TBaseComputation(mutables, list->GetRepresentation())
         , List(list)
@@ -286,10 +286,10 @@ public:
     TSkipWrapper(TComputationMutables& mutables, IComputationNode* list, IComputationNode* count)
         : TBaseComputation(mutables, list->GetRepresentation())
         , List(list)
-        , Count(count)
-    {
-    }
-
+        , Count(count) 
+    { 
+    } 
+ 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         return ctx.HolderFactory.SkipList(ctx.Builder, List->GetValue(ctx).Release(), Count->GetValue(ctx).Get<ui64>());
     }
@@ -320,24 +320,24 @@ public:
             CallInst::Create(funcPtr, {factory, retPtr, builder, retPtr, count}, "", block);
             const auto result = new LoadInst(retPtr, "result", block);
             return result;
-        }
-    }
+        } 
+    } 
 #endif
-
+ 
 private:
     void RegisterDependencies() const final {
         DependsOn(List);
         DependsOn(Count);
-    }
-
-    IComputationNode* const List;
-    IComputationNode* const Count;
-};
-
+    } 
+ 
+    IComputationNode* const List; 
+    IComputationNode* const Count; 
+}; 
+ 
 }
 
-IComputationNode* WrapSkip(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
-    MKQL_ENSURE(callable.GetInputsCount() == 2, "Expected 2 args");
+IComputationNode* WrapSkip(TCallable& callable, const TComputationNodeFactoryContext& ctx) { 
+    MKQL_ENSURE(callable.GetInputsCount() == 2, "Expected 2 args"); 
     const auto type = callable.GetInput(0).GetStaticType();
     const auto flow = LocateNode(ctx.NodeLocator, callable, 0);
     const auto count = LocateNode(ctx.NodeLocator, callable, 1);
@@ -350,10 +350,10 @@ IComputationNode* WrapSkip(TCallable& callable, const TComputationNodeFactoryCon
         return new TSkipStreamWrapper(ctx.Mutables, flow, count);
     } else if (type->IsList()) {
         return new TSkipWrapper(ctx.Mutables, flow, count);
-    }
-
+    } 
+ 
     THROW yexception() << "Expected flow, list or stream.";
-}
-
-}
-}
+} 
+ 
+} 
+} 

@@ -1,6 +1,6 @@
 #include "mkql_computation_node_list.h"
 
-#include <ydb/library/yql/minikql/mkql_function_registry.h>
+#include <ydb/library/yql/minikql/mkql_function_registry.h> 
 #include <library/cpp/testing/unittest/registar.h>
 
 namespace NKikimr {

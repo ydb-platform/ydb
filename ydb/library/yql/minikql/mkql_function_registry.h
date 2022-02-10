@@ -1,5 +1,5 @@
-#pragma once
-
+#pragma once 
+ 
 #include "mkql_function_metadata.h"
 
 #include <ydb/library/yql/public/udf/udf_counter.h>
@@ -7,12 +7,12 @@
 #include <ydb/library/yql/public/udf/udf_type_builder.h>
 
 #include <util/generic/ptr.h>
-#include <util/generic/vector.h>
+#include <util/generic/vector.h> 
 #include <util/generic/maybe.h>
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
 #include <map>
-
+ 
 #ifdef _win_
 #   define MKQL_UDF_LIB_PREFIX ""
 #   define MKQL_UDF_LIB_SUFFIX ".dll"
@@ -29,13 +29,13 @@
 //////////////////////////////////////////////////////////////////////////////
 class IOutputStream;
 
-namespace NKikimr {
+namespace NKikimr { 
     namespace NMiniKQL {
         class IMutableFunctionRegistry;
         class TTypeEnvironment;
-        struct TFunctionTypeInfo;
+        struct TFunctionTypeInfo; 
         class TStatus;
-        class TType;
+        class TType; 
     }
 }
 
@@ -57,18 +57,18 @@ public:
 
     virtual const IBuiltinFunctionRegistry::TPtr& GetBuiltins() const = 0;
 
-    virtual void AllowUdfPatch() = 0;
-
+    virtual void AllowUdfPatch() = 0; 
+ 
     virtual TStatus FindFunctionTypeInfo(
             const TTypeEnvironment& env,
-            NUdf::ITypeInfoHelper::TPtr typeInfoHelper,
-            NUdf::ICountersProvider* countersProvider,
+            NUdf::ITypeInfoHelper::TPtr typeInfoHelper, 
+            NUdf::ICountersProvider* countersProvider, 
             const TStringBuf& name,
             TType* userType,
             const TStringBuf& typeConfig,
             ui32 flags,
-            const NUdf::TSourcePosition& pos,
-            const NUdf::ISecureParamsProvider* secureParamsProvider,
+            const NUdf::TSourcePosition& pos, 
+            const NUdf::ISecureParamsProvider* secureParamsProvider, 
             TFunctionTypeInfo* funcInfo) const = 0;
 
     virtual TMaybe<TString> FindUdfPath(const TStringBuf& moduleName) const = 0;
@@ -79,8 +79,8 @@ public:
 
     virtual void PrintInfoTo(IOutputStream& out) const = 0;
 
-    virtual void CleanupModulesOnTerminate() const = 0;
-
+    virtual void CleanupModulesOnTerminate() const = 0; 
+ 
     virtual TIntrusivePtr<IMutableFunctionRegistry> Clone() const = 0;
 
     struct TFunctionProperties { bool IsTypeAwareness = false; };
@@ -88,18 +88,18 @@ public:
     typedef std::map<TString, TFunctionProperties> TFunctionsMap;
 
     virtual TFunctionsMap GetModuleFunctions(const TStringBuf& moduleName) const = 0;
-
-    virtual bool SupportsSizedAllocators() const = 0;
-};
-
+ 
+    virtual bool SupportsSizedAllocators() const = 0; 
+}; 
+ 
 //////////////////////////////////////////////////////////////////////////////
 // IMutableFunctionRegistry
 //////////////////////////////////////////////////////////////////////////////
 class IMutableFunctionRegistry: public IFunctionRegistry
 {
 public:
-    virtual void SetBackTraceCallback(NUdf::TBackTraceCallback callback) = 0;
-
+    virtual void SetBackTraceCallback(NUdf::TBackTraceCallback callback) = 0; 
+ 
     virtual void LoadUdfs(
             const TString& libraryPath,
             const TUdfModuleRemappings& remmapings,
@@ -119,9 +119,9 @@ public:
 TIntrusivePtr<IFunctionRegistry> CreateFunctionRegistry(IBuiltinFunctionRegistry::TPtr&& builtins);
 
 TIntrusivePtr<IFunctionRegistry> CreateFunctionRegistry(
-        NKikimr::NUdf::TBackTraceCallback backtraceCallback,
+        NKikimr::NUdf::TBackTraceCallback backtraceCallback, 
         IBuiltinFunctionRegistry::TPtr&& builtins,
-        bool allowUdfPatch,
+        bool allowUdfPatch, 
         const TVector<TString>& udfsPaths,
         ui32 flags = 0); // see NUdf::IRegistrator::TFlags
 
@@ -143,7 +143,7 @@ inline TStringBuf ModuleName(const TStringBuf& name) {
 }
 
 const TStringBuf StaticModulePrefix(TStringBuf("<static>::"));
-
+ 
 void FillStaticModules(IMutableFunctionRegistry& registry);
 
 } // namespace NMiniKQL

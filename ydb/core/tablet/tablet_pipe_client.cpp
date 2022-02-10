@@ -9,11 +9,11 @@
 #include <ydb/core/base/hive.h>
 #include <ydb/core/base/appdata.h>
 #include <library/cpp/actors/util/queue_oneone_inplace.h>
-
+ 
 #if defined BLOG_D || defined BLOG_I || defined BLOG_ERROR
     #error log macro definition clash
 #endif
-
+ 
 #define BLOG_D(stream) LOG_DEBUG_S(ctx, NKikimrServices::PIPE_CLIENT, "TClient[" << TabletId << "] " << stream << " " << ctx.SelfID)
 
 #define BLOG_I(stream) LOG_INFO_S(ctx, NKikimrServices::PIPE_CLIENT, "TClient[" << TabletId << "] " << stream << " " << ctx.SelfID)
@@ -22,36 +22,36 @@
 
 #define BLOG_TRACE(stream) LOG_TRACE_S(ctx, NKikimrServices::PIPE_CLIENT, "TClient[" << TabletId << "] " << stream << " " << ctx.SelfID)
 
-namespace NKikimr {
-
-namespace NTabletPipe {
-
-    class TClient : public TActorBootstrapped<TClient> {
-    public:
+namespace NKikimr { 
+ 
+namespace NTabletPipe { 
+ 
+    class TClient : public TActorBootstrapped<TClient> { 
+    public: 
         static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
             return NKikimrServices::TActivity::TABLET_PIPE_CLIENT;
         }
 
         TClient(const TActorId& owner, ui64 tabletId, const TClientConfig& config)
-            : Owner(owner)
-            , TabletId(tabletId)
-            , Config(config)
-            , IsShutdown(false)
-            , PayloadQueue(new TPayloadQueue())
+            : Owner(owner) 
+            , TabletId(tabletId) 
+            , Config(config) 
+            , IsShutdown(false) 
+            , PayloadQueue(new TPayloadQueue()) 
             , Leader(true)
-        {
+        { 
             Y_VERIFY(tabletId != 0);
-        }
-
-        void Bootstrap(const TActorContext& ctx) {
+        } 
+ 
+        void Bootstrap(const TActorContext& ctx) { 
             BLOG_D("::Bootstrap");
 
-            Lookup(ctx);
-        }
-
-    private:
+            Lookup(ctx); 
+        } 
+ 
+    private: 
         void StateLookup(STFUNC_SIG) {
-            switch (ev->GetTypeRewrite()) {
+            switch (ev->GetTypeRewrite()) { 
                 FFunc(TEvTabletPipe::EvSend, HandleSendQueued);
                 FFunc(TEvTabletPipe::EvMessage, HandleSendQueued);
                 HFunc(TEvTabletPipe::TEvShutdown, HandleConnect);
@@ -114,18 +114,18 @@ namespace NTabletPipe {
 
         void StateWork(STFUNC_SIG) {
             switch (ev->GetTypeRewrite()) {
-                FFunc(TEvTabletPipe::EvSend, HandleSend);
+                FFunc(TEvTabletPipe::EvSend, HandleSend); 
                 FFunc(TEvTabletPipe::EvMessage, HandleSend);
                 HFunc(TEvTabletPipe::TEvShutdown, Handle);
                 HFunc(TEvents::TEvPoisonPill, Handle);
-                HFunc(TEvents::TEvUndelivered, Handle);
-                HFunc(TEvTabletPipe::TEvPeerClosed, Handle);
+                HFunc(TEvents::TEvUndelivered, Handle); 
+                HFunc(TEvTabletPipe::TEvPeerClosed, Handle); 
                 HFunc(TEvTabletPipe::TEvPeerShutdown, Handle);
-                HFunc(TEvInterconnect::TEvNodeDisconnected, Handle);
+                HFunc(TEvInterconnect::TEvNodeDisconnected, Handle); 
                 HFunc(TEvTabletPipe::TEvConnectResult, HandleOutdated);
-            }
-        }
-
+            } 
+        } 
+ 
         bool IsLocalNode(const TActorContext& ctx) const {
             auto leader = GetTabletLeader();
             return leader.NodeId() == 0 || ctx.ExecutorThread.ActorSystem->NodeId == leader.NodeId();
@@ -141,12 +141,12 @@ namespace NTabletPipe {
             PayloadQueue->Push(ev.Release());
         }
 
-        void HandleSend(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) {
+        void HandleSend(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) { 
             BLOG_D("send");
             Y_VERIFY(!IsShutdown);
             Push(ctx, ev);
-        }
-
+        } 
+ 
         ui32 GenerateConnectFeatures() const {
             ui32 features = 0;
             if (Config.ExpectShutdown) {
@@ -158,20 +158,20 @@ namespace NTabletPipe {
         void HandleLookup(TEvTabletResolver::TEvForwardResult::TPtr& ev, const TActorContext &ctx) {
             Y_VERIFY(ev->Get()->TabletID == TabletId);
 
-            if (ev->Get()->Status != NKikimrProto::OK || (Config.ConnectToUserTablet && !ev->Get()->TabletActor)) {
+            if (ev->Get()->Status != NKikimrProto::OK || (Config.ConnectToUserTablet && !ev->Get()->TabletActor)) { 
                 BLOG_D("forward result error, check reconnect");
                 return TryToReconnect(ctx);
-            }
-
+            } 
+ 
             LastKnownLeaderTablet = ev->Get()->TabletActor;
             LastKnownLeader = ev->Get()->Tablet;
             LastCacheEpoch = ev->Get()->CacheEpoch;
 
-            if (IsLocalNode(ctx)) {
+            if (IsLocalNode(ctx)) { 
                 BLOG_D("forward result local node, try to connect");
                 UnsubscribeNetworkSession(ctx);
                 Connect(ctx);
-            } else {
+            } else { 
                 const ui32 nodeId = GetTabletLeader().NodeId();
                 BLOG_D("forward result remote node " << nodeId);
                 if (InterconnectNodeId == nodeId) {
@@ -181,10 +181,10 @@ namespace NTabletPipe {
                 } else {
                     // Connect to a new remote node
                     ConnectNode(nodeId, ctx);
-                }
+                } 
             }
         }
-
+ 
         void ConnectNode(ui32 nodeId, const TActorContext &ctx) {
             UnsubscribeNetworkSession(ctx);
 
@@ -192,14 +192,14 @@ namespace NTabletPipe {
             if (!proxy) {
                 BLOG_ERROR("remote node on broken proxy");
                 return NotifyConnectFail(ctx);
-            }
+            } 
 
             InterconnectNodeId = nodeId;
             InterconnectProxyId = proxy;
             ctx.Send(proxy, new TEvInterconnect::TEvConnectNode(), 0, ++InterconnectCookie);
             Become(&TThis::StateConnectNode);
-        }
-
+        } 
+ 
         void HandleConnectNode(TEvInterconnect::TEvNodeConnected::TPtr& ev, const TActorContext &ctx) {
             if (ev->Cookie != InterconnectCookie) {
                 BLOG_D("ignored outdated TEvNodeConnected");
@@ -224,8 +224,8 @@ namespace NTabletPipe {
             }
             NotifyNodeProblem(ctx);
             ForgetNetworkSession();
-        }
-
+        } 
+ 
         void HandleConnect(TEvInterconnect::TEvNodeDisconnected::TPtr& ev, const TActorContext &ctx) {
             if (ev->Cookie != InterconnectCookie) {
                 BLOG_D("ignored outdated TEvNodeDisconnected");
@@ -239,8 +239,8 @@ namespace NTabletPipe {
             NotifyNodeProblem(ctx);
             ForgetNetworkSession();
             TryToReconnect(ctx);
-        }
-
+        } 
+ 
         void Handle(TEvInterconnect::TEvNodeDisconnected::TPtr& ev, const TActorContext &ctx) {
             if (ev->Cookie != InterconnectCookie) {
                 BLOG_D("ignored outdated TEvNodeDisconnected");
@@ -251,8 +251,8 @@ namespace NTabletPipe {
             NotifyNodeProblem(ctx);
             ForgetNetworkSession();
             NotifyDisconnect(ctx);
-        }
-
+        } 
+ 
         void Connect(const TActorContext &ctx) {
             SendEvent(new IEventHandle(GetTabletLeader(), ctx.SelfID, new TEvTabletPipe::TEvConnect(TabletId, ctx.SelfID, GenerateConnectFeatures()),
                 IEventHandle::FlagTrackDelivery, ++ConnectCookie), ctx);
@@ -289,10 +289,10 @@ namespace NTabletPipe {
 
             if (!ServerId) {
                 return TryToReconnect(ctx);
-            }
-
+            } 
+ 
             Become(&TThis::StateWork);
-
+ 
             BLOG_D("send queued");
             while (TAutoPtr<IEventHandle> x = PayloadQueue->Pop())
                 Push(ctx, x);
@@ -304,9 +304,9 @@ namespace NTabletPipe {
             if (IsShutdown) {
                 BLOG_D("shutdown pipe due to pending shutdown request");
                 return NotifyDisconnect(ctx);
-            }
-        }
-
+            } 
+        } 
+ 
         void HandleOutdated(TEvTabletPipe::TEvConnectResult::TPtr& ev, const TActorContext &ctx) {
             BLOG_D("ignored outdated connection result from " << ev->Sender);
             ctx.Send(ev->Sender, new TEvTabletPipe::TEvPeerClosed(TabletId, ctx.SelfID, ev->Sender));
@@ -321,15 +321,15 @@ namespace NTabletPipe {
 
             BLOG_D("connect request undelivered");
             TryToReconnect(ctx);
-        }
-
-        void Handle(TEvents::TEvUndelivered::TPtr& ev, const TActorContext& ctx) {
+        } 
+ 
+        void Handle(TEvents::TEvUndelivered::TPtr& ev, const TActorContext& ctx) { 
             Y_UNUSED(ev);
             BLOG_D("pipe event not delivered, drop pipe");
             return NotifyDisconnect(ctx);
-        }
-
-        void Handle(TEvTabletPipe::TEvPeerClosed::TPtr& ev, const TActorContext& ctx) {
+        } 
+ 
+        void Handle(TEvTabletPipe::TEvPeerClosed::TPtr& ev, const TActorContext& ctx) { 
             if (ev->InterconnectSession != InterconnectSessionId) {
                 // Ingnore TEvPeerClosed from an unexpected interconnect session
                 BLOG_D("ignore outdated peer closed from " << ev->Sender);
@@ -339,8 +339,8 @@ namespace NTabletPipe {
             Y_VERIFY(ev->Get()->Record.GetTabletId() == TabletId);
             BLOG_D("peer closed");
             return NotifyDisconnect(ctx);
-        }
-
+        } 
+ 
         void Handle(TEvTabletPipe::TEvPeerShutdown::TPtr& ev, const TActorContext& ctx) {
             Y_VERIFY(ev->Get()->Record.GetTabletId() == TabletId);
             BLOG_D("peer shutdown");
@@ -354,11 +354,11 @@ namespace NTabletPipe {
             BLOG_D("poison pill while connecting");
             Y_UNUSED(ev);
             if (ServerId)
-                ctx.Send(ServerId, new TEvTabletPipe::TEvPeerClosed(TabletId, ctx.SelfID, ServerId));
-
+                ctx.Send(ServerId, new TEvTabletPipe::TEvPeerClosed(TabletId, ctx.SelfID, ServerId)); 
+ 
             return NotifyConnectFail(ctx);
-        }
-
+        } 
+ 
         void Handle(TEvents::TEvPoisonPill::TPtr& ev, const TActorContext& ctx) {
             Y_UNUSED(ev);
             BLOG_D("received poison pill");
@@ -386,9 +386,9 @@ namespace NTabletPipe {
             LastKnownLeaderTablet = TActorId();
             LastKnownLeader = TActorId();
 
-            Lookup(ctx);
-        }
-
+            Lookup(ctx); 
+        } 
+ 
         void RequestHiveInfo(ui64 hiveTabletId) {
             static TClientConfig clientConfig({.RetryLimitCount = 3, .MinRetryTime = TDuration::MilliSeconds(300)});
             HiveClient = Register(CreateClient(SelfId(), hiveTabletId, clientConfig));
@@ -414,11 +414,11 @@ namespace NTabletPipe {
                     definitelyDead = true;
                 }
             }
-
+ 
             ctx.Send(Owner, new TEvTabletPipe::TEvClientConnected(TabletId, NKikimrProto::ERROR, SelfId(), TActorId(), Leader, definitelyDead));
             return Die(ctx);
         }
-
+ 
         void Handle(TEvTabletPipe::TEvClientCheckDelay::TPtr &ev, const TActorContext &ctx) {
             Y_UNUSED(ev);
             Y_UNUSED(ctx);
@@ -434,21 +434,21 @@ namespace NTabletPipe {
 
         void Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, const TActorContext &ctx) {
             if (HiveClient != ev->Sender)
-                return;
+                return; 
             auto *msg = ev->Get();
             if (msg->Status != NKikimrProto::OK) {
                 ctx.Send(Owner, new TEvTabletPipe::TEvClientConnected(TabletId, NKikimrProto::ERROR, SelfId(), TActorId(), Leader, false));
                 return Die(ctx);
-            }
+            } 
         }
-
+ 
         void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr &ev, const TActorContext &ctx) {
             if (HiveClient != ev->Sender)
                 return;
             ctx.Send(Owner, new TEvTabletPipe::TEvClientConnected(TabletId, NKikimrProto::ERROR, SelfId(), TActorId(), Leader, false));
             return Die(ctx);
-        }
-
+        } 
+ 
         void NotifyConnectFail(const TActorContext &ctx) {
             UnsubscribeNetworkSession(ctx);
             if (Config.CheckAliveness && !IsReservedTabletId(TabletId)) {
@@ -462,9 +462,9 @@ namespace NTabletPipe {
                 BLOG_D("connect failed");
                 ctx.Send(Owner, new TEvTabletPipe::TEvClientConnected(TabletId, NKikimrProto::ERROR, SelfId(), TActorId(), Leader, false));
                 return Die(ctx);
-            }
-        }
-
+            } 
+        } 
+ 
         void NotifyDisconnect(const TActorContext &ctx) {
             BLOG_D("notify reset");
             ctx.Send(Owner, new TEvTabletPipe::TEvClientDestroyed(TabletId, ctx.SelfID, ServerId));
@@ -486,10 +486,10 @@ namespace NTabletPipe {
             if (InterconnectNodeId) {
                 ctx.Send(InterconnectSessionId ? InterconnectSessionId : InterconnectProxyId, new TEvents::TEvUnsubscribe());
                 ForgetNetworkSession();
-            }
-        }
-
-        void Lookup(const TActorContext& ctx) {
+            } 
+        } 
+ 
+        void Lookup(const TActorContext& ctx) { 
             BLOG_D("lookup");
             TEvTabletResolver::TEvForward::TResolveFlags resolveFlags;
             resolveFlags.SetAllowFollower(Config.AllowFollower);
@@ -499,15 +499,15 @@ namespace NTabletPipe {
 
             ctx.Send(MakeTabletResolverID(), new TEvTabletResolver::TEvForward(TabletId, nullptr, resolveFlags));
             Become(&TThis::StateLookup);
-        }
-
+        } 
+ 
         void TryToReconnect(const TActorContext& ctx) {
             if (LastKnownLeaderTablet)
                 ctx.Send(MakeTabletResolverID(), new TEvTabletResolver::TEvTabletProblem(TabletId, LastKnownLeaderTablet));
-
+ 
             LastKnownLeaderTablet = TActorId();
             LastKnownLeader = TActorId();
-
+ 
             TDuration waitDuration;
             if (Config.RetryPolicy && RetryState.IsAllowedToRetry(waitDuration, Config.RetryPolicy)) {
                 if (waitDuration == TDuration::Zero()) {
@@ -520,9 +520,9 @@ namespace NTabletPipe {
                 }
             } else {
                 return NotifyConnectFail(ctx);
-            }
-        }
-
+            } 
+        } 
+ 
         struct TEventParts {
             ui32 Type;
             TActorId Sender;
@@ -598,10 +598,10 @@ namespace NTabletPipe {
             }
         };
 
-        void Push(const TActorContext& ctx, TAutoPtr<IEventHandle>& ev) {
+        void Push(const TActorContext& ctx, TAutoPtr<IEventHandle>& ev) { 
             BLOG_D("push event to server");
 
-            if (!InterconnectSessionId) {
+            if (!InterconnectSessionId) { 
                 switch (ev->GetTypeRewrite()) {
                     case TEvTabletPipe::EvMessage: {
                         // Send local self -> server message without conversions
@@ -627,21 +627,21 @@ namespace NTabletPipe {
                     }
                     default:
                         Y_UNREACHABLE();
-                }
-            } else {
+                } 
+            } else { 
                 THolder<TEvTabletPipe::TEvPush> msg = TEventParts(ev).ToRemotePush(TabletId, ev->Cookie);
-
+ 
                 // Send a remote self -> server message
                 SendEvent(new IEventHandle(ServerId, ctx.SelfID, msg.Release(),
                     IEventHandle::FlagTrackDelivery, 0, nullptr
-                ), ctx);
-            }
-        }
-
+                ), ctx); 
+            } 
+        } 
+ 
         void SendEvent(IEventHandle* ev, const TActorContext& ctx) {
             LOG_DEBUG(ctx, NKikimrServices::PIPE_CLIENT, "TClient[%" PRIu64 "]::SendEvent %s", TabletId,
                 ctx.SelfID.ToString().c_str());
-
+ 
             if (InterconnectSessionId) {
                 Y_VERIFY(ev->Recipient.NodeId() == InterconnectNodeId,
                     "Sending event to %s via remote node %" PRIu32, ev->Recipient.ToString().c_str(), InterconnectNodeId);
@@ -650,10 +650,10 @@ namespace NTabletPipe {
                 Y_VERIFY(ev->Recipient.NodeId() == ctx.SelfID.NodeId(),
                     "Sending event to %s via local node %" PRIu32, ev->Recipient.ToString().c_str(), ctx.SelfID.NodeId());
             }
-
+ 
             ctx.ExecutorThread.Send(ev);
-        }
-
+        } 
+ 
         void Die(const TActorContext& ctx) override {
             if (HiveClient)
                 CloseClient(ctx, HiveClient);
@@ -661,11 +661,11 @@ namespace NTabletPipe {
             IActor::Die(ctx);
         }
 
-    private:
+    private: 
         const TActorId Owner;
-        const ui64 TabletId;
-        const TClientConfig Config;
-        bool IsShutdown;
+        const ui64 TabletId; 
+        const TClientConfig Config; 
+        bool IsShutdown; 
         TActorId LastKnownLeader;
         TActorId LastKnownLeaderTablet;
         ui64 LastCacheEpoch = 0;
@@ -675,19 +675,19 @@ namespace NTabletPipe {
         TActorId InterconnectProxyId;
         TActorId InterconnectSessionId;
         TActorId ServerId;
-        typedef TOneOneQueueInplace<IEventHandle*, 32> TPayloadQueue;
-        TAutoPtr<TPayloadQueue, TPayloadQueue::TPtrCleanDestructor> PayloadQueue;
+        typedef TOneOneQueueInplace<IEventHandle*, 32> TPayloadQueue; 
+        TAutoPtr<TPayloadQueue, TPayloadQueue::TPtrCleanDestructor> PayloadQueue; 
         TClientRetryState RetryState;
         bool Leader;
         TActorId HiveClient;
         ui32 CurrentHiveForwards = 0;
         static constexpr ui32 MAX_HIVE_FORWARDS = 10;
-    };
-
+    }; 
+ 
     IActor* CreateClient(const TActorId& owner, ui64 tabletId, const TClientConfig& config) {
-        return new TClient(owner, tabletId, config);
-    }
-
+        return new TClient(owner, tabletId, config); 
+    } 
+ 
     void SendData(TActorId self, TActorId clientId, IEventBase *payload, ui64 cookie) {
         auto ev = new IEventHandle(clientId, self, payload, 0, cookie);
         ev->Rewrite(TEvTabletPipe::EvSend, clientId);
@@ -712,24 +712,24 @@ namespace NTabletPipe {
     }
 
     void SendData(const TActorContext& ctx, const TActorId& clientId, IEventBase* payload, ui64 cookie) {
-        auto ev = new IEventHandle(clientId, ctx.SelfID, payload, 0, cookie);
-        ev->Rewrite(TEvTabletPipe::EvSend, clientId);
-        ctx.ExecutorThread.Send(ev);
-    }
-
+        auto ev = new IEventHandle(clientId, ctx.SelfID, payload, 0, cookie); 
+        ev->Rewrite(TEvTabletPipe::EvSend, clientId); 
+        ctx.ExecutorThread.Send(ev); 
+    } 
+ 
     void SendData(const TActorContext& ctx, const TActorId& clientId, ui32 eventType, TIntrusivePtr<TEventSerializedData> buffer, ui64 cookie) {
         auto ev = new IEventHandle(eventType, 0, clientId, ctx.SelfID, buffer, cookie);
-        ev->Rewrite(TEvTabletPipe::EvSend, clientId);
-        ctx.ExecutorThread.Send(ev);
-    }
-
+        ev->Rewrite(TEvTabletPipe::EvSend, clientId); 
+        ctx.ExecutorThread.Send(ev); 
+    } 
+ 
     void ShutdownClient(const TActorContext& ctx, const TActorId& clientId) {
-        ctx.Send(clientId, new TEvTabletPipe::TEvShutdown);
-    }
-
+        ctx.Send(clientId, new TEvTabletPipe::TEvShutdown); 
+    } 
+ 
     void CloseClient(const TActorContext& ctx, const TActorId& clientId) {
-        ctx.Send(clientId, new TEvents::TEvPoisonPill);
-    }
+        ctx.Send(clientId, new TEvents::TEvPoisonPill); 
+    } 
 
     void CloseClient(TActorIdentity self, TActorId clientId) {
         self.Send(clientId, new TEvents::TEvPoisonPill());
@@ -761,6 +761,6 @@ namespace NTabletPipe {
         const ui64 randomizedRetryDuration = RetryDuration.GetValue() * AppData()->RandomProvider->Uniform(100, 133) / 100;
         return TDuration::FromValue(randomizedRetryDuration);
     }
-}
-
-}
+} 
+ 
+} 

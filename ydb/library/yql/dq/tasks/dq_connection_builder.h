@@ -1,7 +1,7 @@
 #pragma once
 
-#include <ydb/library/yql/dq/tasks/dq_tasks_graph.h>
-#include <ydb/library/yql/dq/opt/dq_opt.h>
+#include <ydb/library/yql/dq/tasks/dq_tasks_graph.h> 
+#include <ydb/library/yql/dq/opt/dq_opt.h> 
 
 namespace NYql::NDq {
 
@@ -285,7 +285,7 @@ void BuildMergeChannels(TGraph& graph, const NNodes::TDqPhyStage& stage, ui32 in
     TVector<TSortColumn> sortColumns;
     for (const auto& sortKeyColumn : cnMerge.SortColumns()) {
         auto sortDirection = sortKeyColumn.SortDirection().Value();
-        YQL_ENSURE(sortDirection == NNodes::TTopSortSettings::AscendingSort
+        YQL_ENSURE(sortDirection == NNodes::TTopSortSettings::AscendingSort 
             || sortDirection == NNodes::TTopSortSettings::DescendingSort);
         sortColumns.emplace_back(
             TSortColumn(sortKeyColumn.Column().StringValue(), sortDirection == NNodes::TTopSortSettings::AscendingSort)

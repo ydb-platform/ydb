@@ -1,8 +1,8 @@
-#pragma once
-
-#include <ydb/library/yql/core/yql_graph_transformer.h>
-#include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
-#include <ydb/library/yql/ast/yql_expr.h>
+#pragma once 
+ 
+#include <ydb/library/yql/core/yql_graph_transformer.h> 
+#include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h> 
+#include <ydb/library/yql/ast/yql_expr.h> 
 
 #include <util/generic/strbuf.h>
 #include <util/generic/hash.h>
@@ -10,8 +10,8 @@
 #include <functional>
 #include <initializer_list>
 
-namespace NYql {
-
+namespace NYql { 
+ 
 class TExecTransformerBase : public TAsyncCallbackTransformer<TExecTransformerBase> {
 public:
     using TStatusCallbackPair = std::pair<TStatus, TAsyncTransformCallbackFuture>;

@@ -1,18 +1,18 @@
 #include "dq_tasks_runner.h"
 
-#include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
-#include <ydb/library/yql/dq/runtime/dq_columns_resolve.h>
-#include <ydb/library/yql/dq/runtime/dq_input_channel.h>
-#include <ydb/library/yql/dq/runtime/dq_input_producer.h>
-#include <ydb/library/yql/dq/runtime/dq_source.h>
-#include <ydb/library/yql/dq/runtime/dq_transport.h>
+#include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h> 
+#include <ydb/library/yql/dq/runtime/dq_columns_resolve.h> 
+#include <ydb/library/yql/dq/runtime/dq_input_channel.h> 
+#include <ydb/library/yql/dq/runtime/dq_input_producer.h> 
+#include <ydb/library/yql/dq/runtime/dq_source.h> 
+#include <ydb/library/yql/dq/runtime/dq_transport.h> 
 
-#include <ydb/library/yql/minikql/computation/mkql_computation_node.h>
-
+#include <ydb/library/yql/minikql/computation/mkql_computation_node.h> 
+ 
 #include <ydb/library/yql/public/udf/udf_value.h>
 #include <ydb/library/yql/core/user_data/yql_user_data.h>
-#include <ydb/library/yql/minikql/mkql_node_serialization.h>
-#include <ydb/library/yql/minikql/mkql_node_visitor.h>
+#include <ydb/library/yql/minikql/mkql_node_serialization.h> 
+#include <ydb/library/yql/minikql/mkql_node_visitor.h> 
 
 #include <util/generic/scope.h>
 
@@ -337,12 +337,12 @@ public:
             ProgramParsed.StatsRegistry = NMiniKQL::CreateDefaultStatsRegistry();
         }
 
-        auto validatePolicy = Settings.TerminateOnError ? NUdf::EValidatePolicy::Fail : NUdf::EValidatePolicy::Exception;
+        auto validatePolicy = Settings.TerminateOnError ? NUdf::EValidatePolicy::Fail : NUdf::EValidatePolicy::Exception; 
         TComputationPatternOpts opts(Alloc().Ref(), typeEnv, Context.ComputationFactory, Context.FuncRegistry,
-            NUdf::EValidateMode::None, validatePolicy, Settings.OptLLVM,
+            NUdf::EValidateMode::None, validatePolicy, Settings.OptLLVM, 
             EGraphPerProcess::Multi, ProgramParsed.StatsRegistry.Get());
-        SecureParamsProvider = MakeSimpleSecureParamsProvider(Settings.SecureParams);
-        opts.SecureParamsProvider = SecureParamsProvider.get();
+        SecureParamsProvider = MakeSimpleSecureParamsProvider(Settings.SecureParams); 
+        opts.SecureParamsProvider = SecureParamsProvider.get(); 
         ProgramParsed.CompPattern = MakeComputationPattern(programExplorer, programRoot, ProgramParsed.EntryPoints, opts);
 
         ProgramParsed.CompGraph = ProgramParsed.CompPattern->Clone(
@@ -690,7 +690,7 @@ private:
     TDqTaskRunnerContext Context;
     TDqTaskRunnerSettings Settings;
     TLogFunc LogFunc;
-    std::unique_ptr<NUdf::ISecureParamsProvider> SecureParamsProvider;
+    std::unique_ptr<NUdf::ISecureParamsProvider> SecureParamsProvider; 
 
     std::unique_ptr<NKikimr::NMiniKQL::TScopedAlloc> SelfAlloc;       // if not set -> use Context.Alloc
     std::unique_ptr<NKikimr::NMiniKQL::TTypeEnvironment> SelfTypeEnv; // if not set -> use Context.TypeEnv

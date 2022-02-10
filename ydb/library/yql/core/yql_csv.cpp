@@ -25,13 +25,13 @@ public:
         const char* tokenStart = Cur_;
         while (Cur_ < End_ && (Prev_ == ESCAPE_CH || *Cur_ != QUOTE_CH) && *Cur_ != Delim_) Prev_ = *Cur_++;
 
-        if (Cur_ == End_) {
+        if (Cur_ == End_) { 
             token = { tokenStart, Cur_ };
             Prev_ = NULL_CH;
             Cur_++;
             return true;
-        }
-
+        } 
+ 
         if (Prev_ != ESCAPE_CH && *Cur_ == QUOTE_CH) {
             Prev_ = *Cur_++;
             tokenStart = Cur_;
@@ -89,8 +89,8 @@ TVector<TString> TCsvInputStream::ReadLine()
 
     if (Slave_.ReadLine(line)) {
         TCsvLineParser lineParser(line, Delim_);
-        TStringBuf token;
-        while (lineParser.Next(token)) {
+        TStringBuf token; 
+        while (lineParser.Next(token)) { 
             parts.push_back(UnescapeC(token.data(), token.size()));
         }
     }

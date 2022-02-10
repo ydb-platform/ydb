@@ -1,11 +1,11 @@
 #include "mkql_computation_node_ut.h"
 
-#include <ydb/library/yql/minikql/mkql_node_cast.h>
-#include <ydb/library/yql/minikql/mkql_string_util.h>
+#include <ydb/library/yql/minikql/mkql_node_cast.h> 
+#include <ydb/library/yql/minikql/mkql_string_util.h> 
 
-namespace NKikimr {
-namespace NMiniKQL {
-
+namespace NKikimr { 
+namespace NMiniKQL { 
+ 
 Y_UNIT_TEST_SUITE(TMiniKQLChainMapNodeTest) {
     Y_UNIT_TEST_LLVM(TestOverList) {
         TSetup<LLVM> setup;
@@ -45,19 +45,19 @@ Y_UNIT_TEST_SUITE(TMiniKQLChainMapNodeTest) {
         auto iterator = graph->GetValue().GetListIterator();
         NUdf::TUnboxedValue item;
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<i32>(), 7);
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<i32>(), 7); 
         UNBOXED_VALUE_STR_EQUAL(item.GetElement(1), "A");
-        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(2).template Get<i32>(), 10);
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(2).template Get<i32>(), 10); 
         UNBOXED_VALUE_STR_EQUAL(item.GetElement(3), "BA");
         UNIT_ASSERT(iterator.Next(item));
         UNIT_ASSERT(!item.GetElement(0));
         UNIT_ASSERT(!item.GetElement(1));
-        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(2).template Get<i32>(), 10);
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(2).template Get<i32>(), 10); 
         UNBOXED_VALUE_STR_EQUAL(item.GetElement(3), "BA");
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<i32>(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<i32>(), 1); 
         UNBOXED_VALUE_STR_EQUAL(item.GetElement(1), "D");
-        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(2).template Get<i32>(), 11);
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(2).template Get<i32>(), 11); 
         UNBOXED_VALUE_STR_EQUAL(item.GetElement(3), "BAD");
         UNIT_ASSERT(!iterator.Next(item));
         UNIT_ASSERT(!iterator.Next(item));
@@ -105,19 +105,19 @@ Y_UNIT_TEST_SUITE(TMiniKQLChainMapNodeTest) {
         auto iterator = graph->GetValue().GetListIterator();
         NUdf::TUnboxedValue item;
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<i32>(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<i32>(), 3); 
         UNBOXED_VALUE_STR_EQUAL(item.GetElement(1), "B");
-        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(2).template Get<i32>(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(2).template Get<i32>(), 3); 
         UNBOXED_VALUE_STR_EQUAL(item.GetElement(3), "B");
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<i32>(), 7);
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<i32>(), 7); 
         UNBOXED_VALUE_STR_EQUAL(item.GetElement(1), "A");
-        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(2).template Get<i32>(), 10);
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(2).template Get<i32>(), 10); 
         UNBOXED_VALUE_STR_EQUAL(item.GetElement(3), "BA");
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<i32>(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<i32>(), 1); 
         UNBOXED_VALUE_STR_EQUAL(item.GetElement(1), "D");
-        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(2).template Get<i32>(), 11);
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(2).template Get<i32>(), 11); 
         UNBOXED_VALUE_STR_EQUAL(item.GetElement(3), "BAD");
         UNIT_ASSERT(iterator.Next(item));
         UNIT_ASSERT(!item.GetElement(0));
@@ -248,7 +248,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLChainMapNodeTest) {
         UNIT_ASSERT_VALUES_EQUAL(NUdf::EFetchStatus::Finish, iterator.Fetch(item));
         UNIT_ASSERT_VALUES_EQUAL(NUdf::EFetchStatus::Finish, iterator.Fetch(item));
     }
-}
-
-}
-}
+} 
+ 
+} 
+} 

@@ -1,7 +1,7 @@
 #include "yql_optimize.h"
 
 #include <ydb/library/yql/utils/log/log.h>
-#include <ydb/library/yql/utils/yql_panic.h>
+#include <ydb/library/yql/utils/yql_panic.h> 
 
 #include <util/generic/hash_set.h>
 #include <util/generic/yexception.h>
@@ -54,12 +54,12 @@ private:
 
 
 TOptimizeTransformerBase::TOptimizeTransformerBase(TTypeAnnotationContext* types, NLog::EComponent logComponent, const TSet<TString>& disabledOpts)
-    : Types(types)
+    : Types(types) 
     , LogComponent(logComponent)
     , DisabledOpts(disabledOpts)
 {
 }
-
+ 
 IGraphTransformer::TStatus TOptimizeTransformerBase::DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) {
     TOptimizeExprSettings settings(Types);
     IGraphTransformer::TStatus status = IGraphTransformer::TStatus::Ok;

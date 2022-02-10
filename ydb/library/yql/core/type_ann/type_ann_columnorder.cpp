@@ -1,8 +1,8 @@
 #include "type_ann_columnorder.h"
 
-#include <ydb/library/yql/core/yql_type_helpers.h>
-#include <ydb/library/yql/core/yql_opt_utils.h>
-#include <ydb/library/yql/core/yql_join.h>
+#include <ydb/library/yql/core/yql_type_helpers.h> 
+#include <ydb/library/yql/core/yql_opt_utils.h> 
+#include <ydb/library/yql/core/yql_join.h> 
 
 namespace NYql {
 namespace NTypeAnnImpl {
@@ -39,39 +39,39 @@ void AddPrefix(TVector<TString>& columnOrder, const TString& prefix) {
 
 } // namespace
 
-IGraphTransformer::TStatus OrderForPgSetItem(const TExprNode::TPtr& node, TExprNode::TPtr& output, TExtContext& ctx) {
-    Y_UNUSED(output);
-    TVector<TString> columnOrder;
-    auto result = GetSetting(node->Tail(), "result");
-    if (result) {
-        for (auto& col : result->Tail().ChildrenList()) {
-            if (col->Head().IsAtom()) {
-                auto alias = TString(col->Head().Content());
-                YQL_ENSURE(!alias.empty());
-                columnOrder.push_back(alias);
-            }
-            else {
-                YQL_ENSURE(col->Head().IsList());
-                for (const auto& x : col->Head().Children()) {
-                    auto alias = TString(x->Content());
-                    YQL_ENSURE(!alias.empty());
-                    columnOrder.push_back(alias);
-                }
-            }
-        }
-    } else {
-        auto values = GetSetting(node->Tail(), "values");
-        YQL_ENSURE(values);
-        for (const auto& x : values->Child(1)->Children()) {
-            auto alias = TString(x->Content());
-            YQL_ENSURE(!alias.empty());
-            columnOrder.push_back(alias);
-        }
-    }
-
-    return ctx.Types.SetColumnOrder(*node, columnOrder, ctx.Expr);
-}
-
+IGraphTransformer::TStatus OrderForPgSetItem(const TExprNode::TPtr& node, TExprNode::TPtr& output, TExtContext& ctx) { 
+    Y_UNUSED(output); 
+    TVector<TString> columnOrder; 
+    auto result = GetSetting(node->Tail(), "result"); 
+    if (result) { 
+        for (auto& col : result->Tail().ChildrenList()) { 
+            if (col->Head().IsAtom()) { 
+                auto alias = TString(col->Head().Content()); 
+                YQL_ENSURE(!alias.empty()); 
+                columnOrder.push_back(alias); 
+            } 
+            else { 
+                YQL_ENSURE(col->Head().IsList()); 
+                for (const auto& x : col->Head().Children()) { 
+                    auto alias = TString(x->Content()); 
+                    YQL_ENSURE(!alias.empty()); 
+                    columnOrder.push_back(alias); 
+                } 
+            } 
+        } 
+    } else { 
+        auto values = GetSetting(node->Tail(), "values"); 
+        YQL_ENSURE(values); 
+        for (const auto& x : values->Child(1)->Children()) { 
+            auto alias = TString(x->Content()); 
+            YQL_ENSURE(!alias.empty()); 
+            columnOrder.push_back(alias); 
+        } 
+    } 
+ 
+    return ctx.Types.SetColumnOrder(*node, columnOrder, ctx.Expr); 
+} 
+ 
 IGraphTransformer::TStatus OrderForAssumeColumnOrder(const TExprNode::TPtr& node, TExprNode::TPtr& output, TExtContext& ctx) {
     Y_UNUSED(output);
     TVector<TString> columnOrder;

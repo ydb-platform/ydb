@@ -378,50 +378,50 @@ template <
     template<typename, typename, bool, bool, bool> class TArgs
 >
 void RegisterCompareDatetime(IBuiltinFunctionRegistry& registry, const std::string_view& name) {
-    RegisterCompareOpt<NUdf::TDataType<NUdf::TDate>, NUdf::TDataType<NUdf::TDate>, TFunc, TArgs>(registry, name);
-    RegisterCompareOpt<NUdf::TDataType<NUdf::TDate>, NUdf::TDataType<NUdf::TDatetime>, TFunc, TArgs>(registry, name);
-    RegisterCompareOpt<NUdf::TDataType<NUdf::TDate>, NUdf::TDataType<NUdf::TTimestamp>, TFunc, TArgs>(registry, name);
-    RegisterCompareOpt<NUdf::TDataType<NUdf::TDatetime>, NUdf::TDataType<NUdf::TDate>, TFunc, TArgs>(registry, name);
-    RegisterCompareOpt<NUdf::TDataType<NUdf::TDatetime>, NUdf::TDataType<NUdf::TDatetime>, TFunc, TArgs>(registry, name);
-    RegisterCompareOpt<NUdf::TDataType<NUdf::TDatetime>, NUdf::TDataType<NUdf::TTimestamp>, TFunc, TArgs>(registry, name);
-    RegisterCompareOpt<NUdf::TDataType<NUdf::TTimestamp>, NUdf::TDataType<NUdf::TDate>, TFunc, TArgs>(registry, name);
-    RegisterCompareOpt<NUdf::TDataType<NUdf::TTimestamp>, NUdf::TDataType<NUdf::TDatetime>, TFunc, TArgs>(registry, name);
-    RegisterCompareOpt<NUdf::TDataType<NUdf::TTimestamp>, NUdf::TDataType<NUdf::TTimestamp>, TFunc, TArgs>(registry, name);
-
-    RegisterCompareOpt<NUdf::TDataType<NUdf::TTzDate>, NUdf::TDataType<NUdf::TDate>, TFunc, TArgs>(registry, name);
+    RegisterCompareOpt<NUdf::TDataType<NUdf::TDate>, NUdf::TDataType<NUdf::TDate>, TFunc, TArgs>(registry, name); 
+    RegisterCompareOpt<NUdf::TDataType<NUdf::TDate>, NUdf::TDataType<NUdf::TDatetime>, TFunc, TArgs>(registry, name); 
+    RegisterCompareOpt<NUdf::TDataType<NUdf::TDate>, NUdf::TDataType<NUdf::TTimestamp>, TFunc, TArgs>(registry, name); 
+    RegisterCompareOpt<NUdf::TDataType<NUdf::TDatetime>, NUdf::TDataType<NUdf::TDate>, TFunc, TArgs>(registry, name); 
+    RegisterCompareOpt<NUdf::TDataType<NUdf::TDatetime>, NUdf::TDataType<NUdf::TDatetime>, TFunc, TArgs>(registry, name); 
+    RegisterCompareOpt<NUdf::TDataType<NUdf::TDatetime>, NUdf::TDataType<NUdf::TTimestamp>, TFunc, TArgs>(registry, name); 
+    RegisterCompareOpt<NUdf::TDataType<NUdf::TTimestamp>, NUdf::TDataType<NUdf::TDate>, TFunc, TArgs>(registry, name); 
+    RegisterCompareOpt<NUdf::TDataType<NUdf::TTimestamp>, NUdf::TDataType<NUdf::TDatetime>, TFunc, TArgs>(registry, name); 
+    RegisterCompareOpt<NUdf::TDataType<NUdf::TTimestamp>, NUdf::TDataType<NUdf::TTimestamp>, TFunc, TArgs>(registry, name); 
+ 
+    RegisterCompareOpt<NUdf::TDataType<NUdf::TTzDate>, NUdf::TDataType<NUdf::TDate>, TFunc, TArgs>(registry, name); 
     RegisterCompareOpt<NUdf::TDataType<NUdf::TTzDate>, NUdf::TDataType<NUdf::TDatetime>, TFunc, TArgs>(registry, name);
     RegisterCompareOpt<NUdf::TDataType<NUdf::TTzDate>, NUdf::TDataType<NUdf::TTimestamp>, TFunc, TArgs>(registry, name);
     RegisterCompareOpt<NUdf::TDataType<NUdf::TTzDatetime>, NUdf::TDataType<NUdf::TDate>, TFunc, TArgs>(registry, name);
-    RegisterCompareOpt<NUdf::TDataType<NUdf::TTzDatetime>, NUdf::TDataType<NUdf::TDatetime>, TFunc, TArgs>(registry, name);
-    RegisterCompareOpt<NUdf::TDataType<NUdf::TTzDatetime>, NUdf::TDataType<NUdf::TTimestamp>, TFunc, TArgs>(registry, name);
+    RegisterCompareOpt<NUdf::TDataType<NUdf::TTzDatetime>, NUdf::TDataType<NUdf::TDatetime>, TFunc, TArgs>(registry, name); 
+    RegisterCompareOpt<NUdf::TDataType<NUdf::TTzDatetime>, NUdf::TDataType<NUdf::TTimestamp>, TFunc, TArgs>(registry, name); 
     RegisterCompareOpt<NUdf::TDataType<NUdf::TTzTimestamp>, NUdf::TDataType<NUdf::TDate>, TFunc, TArgs>(registry, name);
-    RegisterCompareOpt<NUdf::TDataType<NUdf::TTzTimestamp>, NUdf::TDataType<NUdf::TDatetime>, TFunc, TArgs>(registry, name);
-    RegisterCompareOpt<NUdf::TDataType<NUdf::TTzTimestamp>, NUdf::TDataType<NUdf::TTimestamp>, TFunc, TArgs>(registry, name);
-
-    RegisterCompareOpt<NUdf::TDataType<NUdf::TDate>, NUdf::TDataType<NUdf::TTzDate>, TFunc, TArgs>(registry, name);
+    RegisterCompareOpt<NUdf::TDataType<NUdf::TTzTimestamp>, NUdf::TDataType<NUdf::TDatetime>, TFunc, TArgs>(registry, name); 
+    RegisterCompareOpt<NUdf::TDataType<NUdf::TTzTimestamp>, NUdf::TDataType<NUdf::TTimestamp>, TFunc, TArgs>(registry, name); 
+ 
+    RegisterCompareOpt<NUdf::TDataType<NUdf::TDate>, NUdf::TDataType<NUdf::TTzDate>, TFunc, TArgs>(registry, name); 
     RegisterCompareOpt<NUdf::TDataType<NUdf::TDate>, NUdf::TDataType<NUdf::TTzDatetime>, TFunc, TArgs>(registry, name);
     RegisterCompareOpt<NUdf::TDataType<NUdf::TDate>, NUdf::TDataType<NUdf::TTzTimestamp>, TFunc, TArgs>(registry, name);
     RegisterCompareOpt<NUdf::TDataType<NUdf::TDatetime>, NUdf::TDataType<NUdf::TTzDate>, TFunc, TArgs>(registry, name);
-    RegisterCompareOpt<NUdf::TDataType<NUdf::TDatetime>, NUdf::TDataType<NUdf::TTzDatetime>, TFunc, TArgs>(registry, name);
-    RegisterCompareOpt<NUdf::TDataType<NUdf::TDatetime>, NUdf::TDataType<NUdf::TTzTimestamp>, TFunc, TArgs>(registry, name);
+    RegisterCompareOpt<NUdf::TDataType<NUdf::TDatetime>, NUdf::TDataType<NUdf::TTzDatetime>, TFunc, TArgs>(registry, name); 
+    RegisterCompareOpt<NUdf::TDataType<NUdf::TDatetime>, NUdf::TDataType<NUdf::TTzTimestamp>, TFunc, TArgs>(registry, name); 
     RegisterCompareOpt<NUdf::TDataType<NUdf::TTimestamp>, NUdf::TDataType<NUdf::TTzDate>, TFunc, TArgs>(registry, name);
-    RegisterCompareOpt<NUdf::TDataType<NUdf::TTimestamp>, NUdf::TDataType<NUdf::TTzDatetime>, TFunc, TArgs>(registry, name);
-    RegisterCompareOpt<NUdf::TDataType<NUdf::TTimestamp>, NUdf::TDataType<NUdf::TTzTimestamp>, TFunc, TArgs>(registry, name);
-
-    RegisterCompareOpt<NUdf::TDataType<NUdf::TTzDate>, NUdf::TDataType<NUdf::TTzDate>, TFunc, TArgs>(registry, name);
+    RegisterCompareOpt<NUdf::TDataType<NUdf::TTimestamp>, NUdf::TDataType<NUdf::TTzDatetime>, TFunc, TArgs>(registry, name); 
+    RegisterCompareOpt<NUdf::TDataType<NUdf::TTimestamp>, NUdf::TDataType<NUdf::TTzTimestamp>, TFunc, TArgs>(registry, name); 
+ 
+    RegisterCompareOpt<NUdf::TDataType<NUdf::TTzDate>, NUdf::TDataType<NUdf::TTzDate>, TFunc, TArgs>(registry, name); 
     RegisterCompareOpt<NUdf::TDataType<NUdf::TTzDate>, NUdf::TDataType<NUdf::TTzDatetime>, TFunc, TArgs>(registry, name);
     RegisterCompareOpt<NUdf::TDataType<NUdf::TTzDate>, NUdf::TDataType<NUdf::TTzTimestamp>, TFunc, TArgs>(registry, name);
     RegisterCompareOpt<NUdf::TDataType<NUdf::TTzDatetime>, NUdf::TDataType<NUdf::TTzDate>, TFunc, TArgs>(registry, name);
-    RegisterCompareOpt<NUdf::TDataType<NUdf::TTzDatetime>, NUdf::TDataType<NUdf::TTzDatetime>, TFunc, TArgs>(registry, name);
-    RegisterCompareOpt<NUdf::TDataType<NUdf::TTzDatetime>, NUdf::TDataType<NUdf::TTzTimestamp>, TFunc, TArgs>(registry, name);
+    RegisterCompareOpt<NUdf::TDataType<NUdf::TTzDatetime>, NUdf::TDataType<NUdf::TTzDatetime>, TFunc, TArgs>(registry, name); 
+    RegisterCompareOpt<NUdf::TDataType<NUdf::TTzDatetime>, NUdf::TDataType<NUdf::TTzTimestamp>, TFunc, TArgs>(registry, name); 
     RegisterCompareOpt<NUdf::TDataType<NUdf::TTzTimestamp>, NUdf::TDataType<NUdf::TTzDate>, TFunc, TArgs>(registry, name);
-    RegisterCompareOpt<NUdf::TDataType<NUdf::TTzTimestamp>, NUdf::TDataType<NUdf::TTzDatetime>, TFunc, TArgs>(registry, name);
-    RegisterCompareOpt<NUdf::TDataType<NUdf::TTzTimestamp>, NUdf::TDataType<NUdf::TTzTimestamp>, TFunc, TArgs>(registry, name);
+    RegisterCompareOpt<NUdf::TDataType<NUdf::TTzTimestamp>, NUdf::TDataType<NUdf::TTzDatetime>, TFunc, TArgs>(registry, name); 
+    RegisterCompareOpt<NUdf::TDataType<NUdf::TTzTimestamp>, NUdf::TDataType<NUdf::TTzTimestamp>, TFunc, TArgs>(registry, name); 
 
     RegisterCompareOpt<NUdf::TDataType<NUdf::TInterval>, NUdf::TDataType<NUdf::TInterval>, TFunc, TArgs>(registry, name);
-}
-
-template <
+} 
+ 
+template < 
     template<typename, typename, bool> class TFunc,
     template<typename, typename, bool, bool, bool> class TArgs
 >

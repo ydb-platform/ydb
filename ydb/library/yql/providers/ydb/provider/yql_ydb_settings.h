@@ -1,9 +1,9 @@
 #pragma once
 
-#include <ydb/library/yql/providers/common/config/yql_dispatch.h>
-#include <ydb/library/yql/providers/common/config/yql_setting.h>
+#include <ydb/library/yql/providers/common/config/yql_dispatch.h> 
+#include <ydb/library/yql/providers/common/config/yql_setting.h> 
 
-#include <ydb/library/yql/providers/common/proto/gateways_config.pb.h>
+#include <ydb/library/yql/providers/common/proto/gateways_config.pb.h> 
 
 #include <ydb/core/yq/libs/events/events.h>
 #include <ydb/core/yq/libs/db_resolver/db_async_resolver_with_meta.h>

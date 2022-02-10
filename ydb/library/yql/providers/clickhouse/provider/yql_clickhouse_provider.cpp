@@ -1,47 +1,47 @@
-#include "yql_clickhouse_provider.h"
-#include <ydb/library/yql/providers/common/proto/gateways_config.pb.h>
-#include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
-
-namespace NYql {
-
+#include "yql_clickhouse_provider.h" 
+#include <ydb/library/yql/providers/common/proto/gateways_config.pb.h> 
+#include <ydb/library/yql/providers/common/provider/yql_provider_names.h> 
+ 
+namespace NYql { 
+ 
 TDataProviderInitializer GetClickHouseDataProviderInitializer(
     IHTTPGateway::TPtr gateway,
     const std::shared_ptr<NYq::TDatabaseAsyncResolverWithMeta> dbResolverWithMeta)
 {
     return [gateway, dbResolverWithMeta] (
-        const TString& userName,
-        const TString& sessionId,
-        const TGatewaysConfig* gatewaysConfig,
-        const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
-        TIntrusivePtr<IRandomProvider> randomProvider,
-        TIntrusivePtr<TTypeAnnotationContext> typeCtx,
-        const TOperationProgressWriter& progressWriter,
-        const TYqlOperationOptions& operationOptions)
-    {
-        Y_UNUSED(sessionId);
-        Y_UNUSED(userName);
-        Y_UNUSED(functionRegistry);
-        Y_UNUSED(randomProvider);
-        Y_UNUSED(progressWriter);
-        Y_UNUSED(operationOptions);
-
-        auto state = MakeIntrusive<TClickHouseState>();
-
-        state->Types = typeCtx.Get();
-        state->FunctionRegistry = functionRegistry;
+        const TString& userName, 
+        const TString& sessionId, 
+        const TGatewaysConfig* gatewaysConfig, 
+        const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry, 
+        TIntrusivePtr<IRandomProvider> randomProvider, 
+        TIntrusivePtr<TTypeAnnotationContext> typeCtx, 
+        const TOperationProgressWriter& progressWriter, 
+        const TYqlOperationOptions& operationOptions) 
+    { 
+        Y_UNUSED(sessionId); 
+        Y_UNUSED(userName); 
+        Y_UNUSED(functionRegistry); 
+        Y_UNUSED(randomProvider); 
+        Y_UNUSED(progressWriter); 
+        Y_UNUSED(operationOptions); 
+ 
+        auto state = MakeIntrusive<TClickHouseState>(); 
+ 
+        state->Types = typeCtx.Get(); 
+        state->FunctionRegistry = functionRegistry; 
         state->DbResolver = dbResolverWithMeta;
-        if (gatewaysConfig) {
+        if (gatewaysConfig) { 
             state->Configuration->Init(gatewaysConfig->GetClickHouse(), state->DbResolver, state->DatabaseIds);
-        }
-
-        TDataProviderInfo info;
-
-        info.Names.insert({TString{ClickHouseProviderName}});
+        } 
+ 
+        TDataProviderInfo info; 
+ 
+        info.Names.insert({TString{ClickHouseProviderName}}); 
         info.Source = CreateClickHouseDataSource(state, gateway);
-        info.Sink = CreateClickHouseDataSink(state);
-
-        return info;
-    };
-}
-
-} // namespace NYql
+        info.Sink = CreateClickHouseDataSink(state); 
+ 
+        return info; 
+    }; 
+} 
+ 
+} // namespace NYql 

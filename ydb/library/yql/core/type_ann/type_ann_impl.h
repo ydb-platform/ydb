@@ -2,10 +2,10 @@
 
 #include "type_ann_core.h"
 
-#include <ydb/library/yql/core/yql_expr_type_annotation.h>
+#include <ydb/library/yql/core/yql_expr_type_annotation.h> 
 
-#include <ydb/library/yql/ast/yql_expr.h>
-#include <ydb/library/yql/ast/yql_expr_types.h>
+#include <ydb/library/yql/ast/yql_expr.h> 
+#include <ydb/library/yql/ast/yql_expr_types.h> 
 
 namespace NYql {
 namespace NTypeAnnImpl {
@@ -13,13 +13,13 @@ namespace NTypeAnnImpl {
     struct TContext {
         TExprContext& Expr;
 
-        TContext(TExprContext& expr);
+        TContext(TExprContext& expr); 
     };
 
     struct TExtContext : public TContext {
-        TTypeAnnotationContext& Types;
+        TTypeAnnotationContext& Types; 
 
-        TExtContext(TExprContext& expr, TTypeAnnotationContext& types);
+        TExtContext(TExprContext& expr, TTypeAnnotationContext& types); 
         bool LoadUdfMetadata(const TVector<IUdfResolver::TFunction*>& functions);
         void RegisterResolvedImport(const IUdfResolver::TImport& import);
     };
@@ -34,7 +34,7 @@ namespace NTypeAnnImpl {
     IGraphTransformer::TStatus GroupingCoreWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
 
     TMaybe<ui32> FindOrReportMissingMember(TStringBuf memberName, TPositionHandle pos, const TStructExprType& structType, TContext& ctx);
-
+ 
     TExprNode::TPtr MakeNothingData(TExprContext& ctx, TPositionHandle pos, TStringBuf data);
 } // namespace NTypeAnnImpl
 } // namespace NYql

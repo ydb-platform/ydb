@@ -1,23 +1,23 @@
 #include "task_command_executor.h"
 
-#include <ydb/library/yql/providers/dq/task_runner/tasks_runner_proxy.h>
-#include <ydb/library/yql/providers/dq/counters/counters.h>
-#include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
-#include <ydb/library/yql/providers/dq/backtrace/backtrace.h>
-#include <ydb/library/yql/providers/dq/api/protos/dqs.pb.h>
-#include <ydb/library/yql/providers/dq/api/protos/task_command_executor.pb.h>
+#include <ydb/library/yql/providers/dq/task_runner/tasks_runner_proxy.h> 
+#include <ydb/library/yql/providers/dq/counters/counters.h> 
+#include <ydb/library/yql/providers/dq/common/yql_dq_settings.h> 
+#include <ydb/library/yql/providers/dq/backtrace/backtrace.h> 
+#include <ydb/library/yql/providers/dq/api/protos/dqs.pb.h> 
+#include <ydb/library/yql/providers/dq/api/protos/task_command_executor.pb.h> 
 #include <ydb/library/yql/utils/backtrace/backtrace.h>
 
-#include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
-#include <ydb/library/yql/minikql/mkql_node_serialization.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_node.h>
+#include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h> 
+#include <ydb/library/yql/minikql/mkql_node_serialization.h> 
+#include <ydb/library/yql/minikql/computation/mkql_computation_node.h> 
 #include <ydb/library/yql/minikql/mkql_string_util.h>
 
-#include <ydb/library/yql/minikql/aligned_page_pool.h>
-#include <ydb/library/yql/dq/runtime/dq_input_channel.h>
-#include <ydb/library/yql/dq/runtime/dq_output_channel.h>
+#include <ydb/library/yql/minikql/aligned_page_pool.h> 
+#include <ydb/library/yql/dq/runtime/dq_input_channel.h> 
+#include <ydb/library/yql/dq/runtime/dq_output_channel.h> 
 #include <ydb/library/yql/utils/log/log.h>
-#include <ydb/library/yql/utils/yql_panic.h>
+#include <ydb/library/yql/utils/yql_panic.h> 
 
 #include <util/system/thread.h>
 #include <util/system/fs.h>
@@ -92,7 +92,7 @@ public:
         : ComputationFactory(std::move(compFactory))
         , TaskTransformFactory(std::move(taskTransformFactory))
         , JobStats(std::move(jobStats))
-        , TerminateOnError(terminateOnError)
+        , TerminateOnError(terminateOnError) 
     {
     }
 
@@ -768,7 +768,7 @@ public:
     TTaskTransformFactory TaskTransformFactory;
     THashMap<TString, i64> CurrentJobStats;
     NKikimr::NMiniKQL::IStatsRegistry* JobStats;
-    bool TerminateOnError;
+    bool TerminateOnError; 
     TIntrusivePtr<NDq::IDqTaskRunner> Runner;
     TCounters QueryStat;
     TDqConfiguration::TPtr DqConfiguration = MakeIntrusive<TDqConfiguration>();

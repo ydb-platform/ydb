@@ -20,8 +20,8 @@ struct TNodeFlags {
         BinaryContent = 0x02,
         MultilineContent = 0x04,
     };
-
-    static constexpr ui32 FlagsMask = 0x07; // all flags should fit here
+ 
+    static constexpr ui32 FlagsMask = 0x07; // all flags should fit here 
 };
 
 struct TAstNode {
@@ -174,21 +174,21 @@ struct TAstNode {
 
     static TAstNode QuoteAtom;
 
-    static inline TAstNode* Quote(TPosition position, TMemoryPool& pool, TAstNode* node) {
-        return NewList(position, pool, &QuoteAtom, node);
-    }
-
+    static inline TAstNode* Quote(TPosition position, TMemoryPool& pool, TAstNode* node) { 
+        return NewList(position, pool, &QuoteAtom, node); 
+    } 
+ 
     inline ~TAstNode() {}
 
-    void Destroy() {
+    void Destroy() { 
         TString().swap(Position.File);
-    }
-
-private:
+    } 
+ 
+private: 
     inline TAstNode(TPosition position, TStringBuf content, ui32 flags)
         : Position(position)
         , Type(Atom)
-        , ListCount(0)
+        , ListCount(0) 
     {
         Data.A.Content = content.data();
         Data.A.Size = content.size();
@@ -198,7 +198,7 @@ private:
     inline TAstNode(TPosition position, TAstNode** children, ui32 childrenCount)
         : Position(position)
         , Type(List)
-        , ListCount(childrenCount)
+        , ListCount(childrenCount) 
     {
         if (childrenCount <= SmallListCount) {
             for (ui32 index = 0; index < childrenCount; ++index) {
@@ -211,7 +211,7 @@ private:
 
     TPosition Position;
     const EType Type;
-    const ui32 ListCount;
+    const ui32 ListCount; 
 
     struct TAtom {
         const char* Content;
@@ -242,16 +242,16 @@ struct TAstParseResult {
     inline bool IsOk() const {
         return !!Root;
     }
-
-    TAstParseResult() = default;
-    ~TAstParseResult();
-    TAstParseResult(const TAstParseResult&) = delete;
-    TAstParseResult& operator=(const TAstParseResult&) = delete;
-
-    TAstParseResult(TAstParseResult&&);
-    TAstParseResult& operator=(TAstParseResult&&);
-
-    void Destroy();
+ 
+    TAstParseResult() = default; 
+    ~TAstParseResult(); 
+    TAstParseResult(const TAstParseResult&) = delete; 
+    TAstParseResult& operator=(const TAstParseResult&) = delete; 
+ 
+    TAstParseResult(TAstParseResult&&); 
+    TAstParseResult& operator=(TAstParseResult&&); 
+ 
+    void Destroy(); 
 };
 
 struct TAstPrintFlags {
@@ -263,7 +263,7 @@ struct TAstPrintFlags {
     };
 };
 
-TAstParseResult ParseAst(const TStringBuf& str, TMemoryPool* externalPool = nullptr, const TString& file = {});
+TAstParseResult ParseAst(const TStringBuf& str, TMemoryPool* externalPool = nullptr, const TString& file = {}); 
 
 } // namespace NYql
 

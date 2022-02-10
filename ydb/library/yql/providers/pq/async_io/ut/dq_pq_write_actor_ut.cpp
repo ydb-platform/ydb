@@ -1,6 +1,6 @@
 #include "ut_helpers.h"
 
-#include <ydb/library/yql/utils/yql_panic.h>
+#include <ydb/library/yql/utils/yql_panic.h> 
 
 #include <library/cpp/testing/unittest/registar.h>
 

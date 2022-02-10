@@ -1,6 +1,6 @@
 #include "kqp_prepare_impl.h"
 
-#include <ydb/library/yql/core/yql_expr_optimize.h>
+#include <ydb/library/yql/core/yql_expr_optimize.h> 
 
 namespace NKikimr {
 namespace NKqp {
@@ -339,7 +339,7 @@ public:
             return TStatus::Ok;
         }
 
-        TOptimizeExprSettings optSettings(nullptr);
+        TOptimizeExprSettings optSettings(nullptr); 
         optSettings.VisitChanges = true;
         TStatus status = TStatus::Error;
 

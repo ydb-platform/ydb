@@ -16,7 +16,7 @@
 #include <contrib/libs/highwayhash/highwayhash/c_bindings.h>
 #include <contrib/libs/highwayhash/highwayhash/sip_hash.h>
 
-#include <contrib/libs/farmhash/farmhash.h>
+#include <contrib/libs/farmhash/farmhash.h> 
 #include <contrib/libs/xxhash/xxhash.h>
 
 #include <contrib/libs/openssl/include/openssl/sha.h>
@@ -221,14 +221,14 @@ namespace {
         Y_UNUSED(valueBuilder);
         const auto& inputRef = args[0].AsStringRef();
         auto hash = util::Fingerprint32(inputRef.Data(), inputRef.Size());
-        return TUnboxedValuePod(ui32(hash));
+        return TUnboxedValuePod(ui32(hash)); 
     }
 
     SIMPLE_UDF(TFarmHashFingerprint64, ui64(TAutoMap<char*>)) {
         Y_UNUSED(valueBuilder);
         const auto& inputRef = args[0].AsStringRef();
         auto hash = util::Fingerprint64(inputRef.Data(), inputRef.Size());
-        return TUnboxedValuePod(ui64(hash));
+        return TUnboxedValuePod(ui64(hash)); 
     }
 
     class TFarmHashFingerprint128: public TBoxedValue {
@@ -239,9 +239,9 @@ namespace {
         }
 
         static bool DeclareSignature(
-            const TStringRef& name,
-            TType* userType,
-            IFunctionTypeInfoBuilder& builder,
+            const TStringRef& name, 
+            TType* userType, 
+            IFunctionTypeInfoBuilder& builder, 
             bool typesOnly) {
             Y_UNUSED(userType);
             if (Name() == name) {
@@ -254,12 +254,12 @@ namespace {
                 return true;
             } else {
                 return false;
-            }
-        }
+            } 
+        } 
 
     private:
         TUnboxedValue Run(
-            const IValueBuilder* valueBuilder,
+            const IValueBuilder* valueBuilder, 
             const TUnboxedValuePod* args) const override {
             TUnboxedValue* items = nullptr;
             auto val = valueBuilder->NewArray(2U, items);
@@ -273,11 +273,11 @@ namespace {
 
     SIMPLE_UDF(TSuperFastHash, ui32(TAutoMap<char*>)) {
         Y_UNUSED(valueBuilder);
-        const auto& inputRef = args[0].AsStringRef();
+        const auto& inputRef = args[0].AsStringRef(); 
         ui32 hash = SuperFastHash(inputRef.Data(), inputRef.Size());
         return TUnboxedValuePod(hash);
-    }
-
+    } 
+ 
     SIMPLE_UDF(TSha1, char*(TAutoMap<char*>)) {
         const auto& inputRef = args[0].AsStringRef();
         SHA_CTX sha;
@@ -298,25 +298,25 @@ namespace {
         return valueBuilder->NewString(TStringRef(reinterpret_cast<char*>(hash), sizeof(hash)));
     }
 
-    SIMPLE_UDF(TIntHash64, ui64(TAutoMap<ui64>)) {
-        Y_UNUSED(valueBuilder);
-        ui64 x = args[0].Get<ui64>();
-        x ^= 0x4CF2D2BAAE6DA887ULL;
-        x ^= x >> 33;
-        x *= 0xff51afd7ed558ccdULL;
-        x ^= x >> 33;
-        x *= 0xc4ceb9fe1a85ec53ULL;
-        x ^= x >> 33;
-        return TUnboxedValuePod(x);
-    }
-
+    SIMPLE_UDF(TIntHash64, ui64(TAutoMap<ui64>)) { 
+        Y_UNUSED(valueBuilder); 
+        ui64 x = args[0].Get<ui64>(); 
+        x ^= 0x4CF2D2BAAE6DA887ULL; 
+        x ^= x >> 33; 
+        x *= 0xff51afd7ed558ccdULL; 
+        x ^= x >> 33; 
+        x *= 0xc4ceb9fe1a85ec53ULL; 
+        x ^= x >> 33; 
+        return TUnboxedValuePod(x); 
+    } 
+ 
     SIMPLE_UDF(TXXH3, ui64(TAutoMap<char*>)) {
         Y_UNUSED(valueBuilder);
         const auto& inputRef = args[0].AsStringRef();
         const ui64 hash = XXH3_64bits(inputRef.Data(), inputRef.Size());
         return TUnboxedValuePod(hash);
     }
-
+ 
     class TXXH3_128: public TBoxedValue {
     public:
         static TStringRef Name() {
@@ -374,7 +374,7 @@ namespace {
                   TFarmHashFingerprint128,
                   TSuperFastHash,
                   TSha1,
-                  TSha256,
+                  TSha256, 
                   TIntHash64,
                   TXXH3,
                   TXXH3_128

@@ -2,7 +2,7 @@
 
 #include <ydb/library/yql/utils/log/profile.h>
 
-#include <ydb/library/yql/utils/future_action.h>
+#include <ydb/library/yql/utils/future_action.h> 
 
 #include <util/folder/iterator.h>
 #include <util/string/builder.h>
@@ -368,16 +368,16 @@ NThreading::TFuture<std::function<TUserDataTable()>> FreezeUserDataTableIfNeeded
     });
 }
 
-TVector<TString> TUserDataStorage::GetLibraries() const {
-    TVector<TString> result;
-    for (const auto& x : UserData_) {
-        if (x.first.IsFile() && x.first.Alias().StartsWith(HomePath) &&
-            x.second.Usage.Test(EUserDataBlockUsage::Library)) {
-            result.push_back(x.first.Alias().substr(HomePath.size()));
-        }
-    }
-
-    return result;
+TVector<TString> TUserDataStorage::GetLibraries() const { 
+    TVector<TString> result; 
+    for (const auto& x : UserData_) { 
+        if (x.first.IsFile() && x.first.Alias().StartsWith(HomePath) && 
+            x.second.Usage.Test(EUserDataBlockUsage::Library)) { 
+            result.push_back(x.first.Alias().substr(HomePath.size())); 
+        } 
+    } 
+ 
+    return result; 
 }
-
-}
+ 
+} 

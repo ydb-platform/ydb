@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/library/yql/minikql/defs.h>
+#include <ydb/library/yql/minikql/defs.h> 
 
 #define ARROW_CHECK_STATUS(s, op, ...)                                                 \
     MKQL_ENSURE(s.ok(), "Operation failed: [" << #op << "]\n"                          \

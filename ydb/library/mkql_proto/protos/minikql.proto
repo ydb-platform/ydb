@@ -1,18 +1,18 @@
-package NKikimrMiniKQL;
-option java_package = "ru.yandex.kikimr.proto";
+package NKikimrMiniKQL; 
+option java_package = "ru.yandex.kikimr.proto"; 
 option cc_enable_arenas = true;
-
+ 
 import "google/protobuf/struct.proto";
 
-enum ETypeKind {
+enum ETypeKind { 
     Unknown = 0;
-    Void = 1;
-    Data = 2;
-    Optional = 3;
-    List = 4;
-    Tuple = 5;
-    Struct = 6;
-    Dict = 7;
+    Void = 1; 
+    Data = 2; 
+    Optional = 3; 
+    List = 4; 
+    Tuple = 5; 
+    Struct = 6; 
+    Dict = 7; 
     Variant = 8;
     Null = 9;
     Reserved_10 = 10;
@@ -20,39 +20,39 @@ enum ETypeKind {
     Reserved_12 = 12;
     Reserved_13 = 13;
     Reserved_14 = 14;
-}
-
+} 
+ 
 message TDecimalParams {
     required uint32 Precision = 1;
     required uint32 Scale = 2;
 }
 
-message TDataType {
-    required uint32 Scheme = 1;
+message TDataType { 
+    required uint32 Scheme = 1; 
     optional TDecimalParams DecimalParams = 2;
-}
-
-message TOptionalType {
-    required TType Item = 1;
-}
-
-message TListType {
-    required TType Item = 1;
-}
-
-message TTupleType {
-    repeated TType Element = 1;
-}
-
-message TMember {
+} 
+ 
+message TOptionalType { 
+    required TType Item = 1; 
+} 
+ 
+message TListType { 
+    required TType Item = 1; 
+} 
+ 
+message TTupleType { 
+    repeated TType Element = 1; 
+} 
+ 
+message TMember { 
     required string Name = 1;
-    required TType Type = 2;
-}
-
-message TStructType {
-    repeated TMember Member = 1;
-}
-
+    required TType Type = 2; 
+} 
+ 
+message TStructType { 
+    repeated TMember Member = 1; 
+} 
+ 
 message TVariantType {
     oneof type {
         TTupleType TupleItems = 1;
@@ -60,12 +60,12 @@ message TVariantType {
     }
 }
 
-message TDictType {
-    required TType Key = 1;
-    required TType Payload = 2;
-}
-
-message TType {
+message TDictType { 
+    required TType Key = 1; 
+    required TType Payload = 2; 
+} 
+ 
+message TType { 
     required ETypeKind Kind = 1;
     oneof type_type {
         TDataType Data = 2;
@@ -76,14 +76,14 @@ message TType {
         TDictType Dict = 7;
         TVariantType Variant = 8;
     }
-}
-
-message TValuePair {
-    required TValue Key = 1;
-    required TValue Payload = 2;
-}
-
-message TValue {
+} 
+ 
+message TValuePair { 
+    required TValue Key = 1; 
+    required TValue Payload = 2; 
+} 
+ 
+message TValue { 
     oneof value_value {
         bool Bool = 1;
         int32 Int32 = 2;
@@ -101,18 +101,18 @@ message TValue {
     // Logically part of oneof,
     // but protobuf does not allow repeated fields in oneof.
     // Maybe these fields should have own messages with repeated inside.
-    repeated TValue List = 11;
-    repeated TValue Tuple = 12;
-    repeated TValue Struct = 13;
-    repeated TValuePair Dict = 14;
+    repeated TValue List = 11; 
+    repeated TValue Tuple = 12; 
+    repeated TValue Struct = 13; 
+    repeated TValuePair Dict = 14; 
     optional fixed64 Hi128 = 16;
     optional uint32 VariantIndex = 17;
-}
-
-message TResult {
-    optional TType Type = 1;
-    optional TValue Value = 2;
-}
+} 
+ 
+message TResult { 
+    optional TType Type = 1; 
+    optional TValue Value = 2; 
+} 
 
 message TParams {
     optional TType Type = 1;

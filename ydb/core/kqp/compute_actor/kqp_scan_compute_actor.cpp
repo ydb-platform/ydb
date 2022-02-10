@@ -13,8 +13,8 @@
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/grpc_services/local_rate_limiter.h>
 
-#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_impl.h>
-#include <ydb/library/yql/public/issue/yql_issue.h>
+#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_impl.h> 
+#include <ydb/library/yql/public/issue/yql_issue.h> 
 
 #include <library/cpp/actors/core/interconnect.h>
 

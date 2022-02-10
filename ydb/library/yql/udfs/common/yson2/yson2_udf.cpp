@@ -9,27 +9,27 @@
 #include <ydb/library/yql/public/udf/udf_type_printer.h>
 
 #include <library/cpp/yson_pull/exceptions.h>
-
+ 
 #include <util/string/split.h>
 
 using namespace NYql::NUdf;
 using namespace NYql::NDom;
-using namespace NYsonPull;
-
+using namespace NYsonPull; 
+ 
 namespace {
 
 constexpr char OptionsResourceName[] = "Yson2.Options";
 
 using TOptionsResource = TResource<OptionsResourceName>;
-using TNodeResource = TResource<NodeResourceName>;
+using TNodeResource = TResource<NodeResourceName>; 
 
-using TDictType = TDict<char*, TNodeResource>;
+using TDictType = TDict<char*, TNodeResource>; 
 using TInt64DictType = TDict<char*, i64>;
 using TUint64DictType = TDict<char*, ui64>;
 using TBoolDictType = TDict<char*, bool>;
 using TDoubleDictType = TDict<char*, double>;
 using TStringDictType = TDict<char*, char*>;
-
+ 
 enum class EOptions : ui8 {
     Strict = 1,
     AutoConvert = 2
@@ -201,10 +201,10 @@ private:
 
 template<bool Strict, bool AutoConvert, TConverterPtr Converter = nullptr>
 TUnboxedValuePod ConvertToListImpl(TUnboxedValuePod x, const IValueBuilder* valueBuilder, const TSourcePosition& pos) {
-    if (!x) {
+    if (!x) { 
         return valueBuilder->NewEmptyList().Release();
-    }
-
+    } 
+ 
     switch (GetNodeType(x)) {
         case ENodeType::List:
             if (!x.IsBoxed())
@@ -245,11 +245,11 @@ TUnboxedValuePod ConvertToListImpl(TUnboxedValuePod x, const IValueBuilder* valu
                     UdfTerminate((TStringBuilder() << valueBuilder->WithCalleePosition(pos) << " Cannot parse list from " << TDebugPrinter(x)).c_str());
                 }
             }
-    }
-
+    } 
+ 
     return valueBuilder->NewEmptyList().Release();
-}
-
+} 
+ 
 template<bool Strict, bool AutoConvert, TConverterPtr Converter = nullptr>
 TUnboxedValuePod ConvertToDictImpl(TUnboxedValuePod x, const IValueBuilder* valueBuilder, const TSourcePosition& pos) {
     if (!x) {
@@ -275,7 +275,7 @@ TUnboxedValuePod ConvertToDictImpl(TUnboxedValuePod x, const IValueBuilder* valu
                     if (pairs.empty()) {
                         break;
                     }
-                    return TUnboxedValuePod(IBoxedValuePtr(new TMapNode(pairs.data(), pairs.size())));
+                    return TUnboxedValuePod(IBoxedValuePtr(new TMapNode(pairs.data(), pairs.size()))); 
                 }
             }
             return x;
@@ -447,8 +447,8 @@ SIMPLE_UDF_OPTIONS(TConvertToList, TListType<TNodeResource>(TOptional<TNodeResou
         return (options.AutoConvert ? &ConvertToListImpl<true, true> : &ConvertToListImpl<true, false>)(args[0], valueBuilder, Pos_);
     else
         return (options.AutoConvert ? &ConvertToListImpl<false, true> : &ConvertToListImpl<false, false>)(args[0], valueBuilder, Pos_);
-}
-
+} 
+ 
 SIMPLE_UDF_OPTIONS(TConvertToInt64List, TListType<i64>(TOptional<TNodeResource>, TOptional<TOptionsResource>), builder.OptionalArgs(1)) {
     if (const auto options = ParseOptions(args[1]); options.Strict)
         return (options.AutoConvert ? &ConvertToListImpl<true, true, &ConvertToIntegral<true, true, i64>> : &ConvertToListImpl<true, false, &ConvertToIntegral<true, false, i64>>)(args[0], valueBuilder, Pos_);
@@ -489,8 +489,8 @@ SIMPLE_UDF_OPTIONS(TConvertToDict, TDictType(TOptional<TNodeResource>, TOptional
         return (options.AutoConvert ? &ConvertToDictImpl<true, true> : &ConvertToDictImpl<true, false>)(args[0], valueBuilder, Pos_);
     else
         return (options.AutoConvert ? &ConvertToDictImpl<false, true> : &ConvertToDictImpl<false, false>)(args[0], valueBuilder, Pos_);
-}
-
+} 
+ 
 SIMPLE_UDF_OPTIONS(TConvertToInt64Dict, TInt64DictType(TOptional<TNodeResource>, TOptional<TOptionsResource>), builder.OptionalArgs(1)) {
     if (const auto options = ParseOptions(args[1]); options.Strict)
         return (options.AutoConvert ? &ConvertToDictImpl<true, true, &ConvertToIntegral<true, true, i64>> : &ConvertToDictImpl<true, false, &ConvertToIntegral<true, false, i64>>)(args[0], valueBuilder, Pos_);
@@ -529,12 +529,12 @@ SIMPLE_UDF_OPTIONS(TConvertToStringDict, TStringDictType(TOptional<TNodeResource
 SIMPLE_UDF(TAttributes, TDictType(TAutoMap<TNodeResource>)) {
     const auto x = args[0];
     if (IsNodeType<ENodeType::Attr>(x)) {
-        return x;
-    }
-
-    return valueBuilder->NewEmptyList();
-}
-
+        return x; 
+    } 
+ 
+    return valueBuilder->NewEmptyList(); 
+} 
+ 
 SIMPLE_UDF_OPTIONS(TContains, TOptional<bool>(TAutoMap<TNodeResource>, char*, TOptional<TOptionsResource>), builder.OptionalArgs(1)) {
     if (const auto options = ParseOptions(args[2]); options.Strict)
         return (options.AutoConvert ? &ContainsImpl<true, true> : &ContainsImpl<true, false>)(args[0], args[1], valueBuilder, Pos_);
@@ -551,57 +551,57 @@ SIMPLE_UDF_OPTIONS(TGetLength, TOptional<ui64>(TAutoMap<TNodeResource>, TOptiona
 
 SIMPLE_UDF_OPTIONS(TLookup, TOptional<TNodeResource>(TAutoMap<TNodeResource>, char*, TOptional<TOptionsResource>), builder.OptionalArgs(1)) {
     return LookupImpl(args[0], args[1], valueBuilder, Pos_);
-}
-
+} 
+ 
 SIMPLE_UDF_OPTIONS(TLookupBool, TOptional<bool>(TAutoMap<TNodeResource>, char*, TOptional<TOptionsResource>), builder.OptionalArgs(1)) {
     if (const auto options = ParseOptions(args[2]); options.Strict)
         return (options.AutoConvert ? &LookupImpl<&ConvertToBool<true, true>> : &LookupImpl<&ConvertToBool<true, false>>)(args[0], args[1], valueBuilder, Pos_);
     else
         return (options.AutoConvert ? &LookupImpl<&ConvertToBool<false, true>> : &LookupImpl<&ConvertToBool<false, false>>)(args[0], args[1], valueBuilder, Pos_);
-}
-
+} 
+ 
 SIMPLE_UDF_OPTIONS(TLookupInt64, TOptional<i64>(TAutoMap<TNodeResource>, char*, TOptional<TOptionsResource>), builder.OptionalArgs(1)) {
     if (const auto options = ParseOptions(args[2]); options.Strict)
         return (options.AutoConvert ? &LookupImpl<&ConvertToIntegral<true, true, i64>> : &LookupImpl<&ConvertToIntegral<true, false, i64>>)(args[0], args[1], valueBuilder, Pos_);
     else
         return (options.AutoConvert ? &LookupImpl<&ConvertToIntegral<false, true, i64>> : &LookupImpl<&ConvertToIntegral<false, false, i64>>)(args[0], args[1], valueBuilder, Pos_);
-}
-
+} 
+ 
 SIMPLE_UDF_OPTIONS(TLookupUint64, TOptional<ui64>(TAutoMap<TNodeResource>, char*, TOptional<TOptionsResource>), builder.OptionalArgs(1)) {
     if (const auto options = ParseOptions(args[2]); options.Strict)
         return (options.AutoConvert ? &LookupImpl<&ConvertToIntegral<true, true, ui64>> : &LookupImpl<&ConvertToIntegral<true, false, ui64>>)(args[0], args[1], valueBuilder, Pos_);
     else
         return (options.AutoConvert ? &LookupImpl<&ConvertToIntegral<false, true, ui64>> : &LookupImpl<&ConvertToIntegral<false, false, ui64>>)(args[0], args[1], valueBuilder, Pos_);
-}
-
+} 
+ 
 SIMPLE_UDF_OPTIONS(TLookupDouble, TOptional<double>(TAutoMap<TNodeResource>, char*, TOptional<TOptionsResource>), builder.OptionalArgs(1)) {
     if (const auto options = ParseOptions(args[2]); options.Strict)
         return (options.AutoConvert ? &LookupImpl<&ConvertToFloat<true, true, double>> : &LookupImpl<&ConvertToFloat<true, false, double>>)(args[0], args[1], valueBuilder, Pos_);
     else
         return (options.AutoConvert ? &LookupImpl<&ConvertToFloat<false, true, double>> : &LookupImpl<&ConvertToFloat<false, false, double>>)(args[0], args[1], valueBuilder, Pos_);
-}
-
+} 
+ 
 SIMPLE_UDF_OPTIONS(TLookupString, TOptional<char*>(TAutoMap<TNodeResource>, char*, TOptional<TOptionsResource>), builder.OptionalArgs(1)) {
     if (const auto options = ParseOptions(args[2]); options.Strict)
         return (options.AutoConvert ? &LookupImpl<&ConvertToString<true, true, false>> : &LookupImpl<&ConvertToString<true, false, false>>)(args[0], args[1], valueBuilder, Pos_);
     else
         return (options.AutoConvert ? &LookupImpl<&ConvertToString<false, true, false>> : &LookupImpl<&ConvertToString<false, false, false>>)(args[0], args[1], valueBuilder, Pos_);
-}
-
+} 
+ 
 SIMPLE_UDF_OPTIONS(TLookupList, TOptional<TListType<TNodeResource>>(TAutoMap<TNodeResource>, char*, TOptional<TOptionsResource>), builder.OptionalArgs(1)) {
     if (const auto options = ParseOptions(args[2]); options.Strict)
         return (options.AutoConvert ? &LookupImpl<&ConvertToListImpl<true, true>> : &LookupImpl<&ConvertToListImpl<true, false>>)(args[0], args[1], valueBuilder, Pos_);
     else
         return (options.AutoConvert ? &LookupImpl<&ConvertToListImpl<false, true>> : &LookupImpl<&ConvertToListImpl<false, false>>)(args[0], args[1], valueBuilder, Pos_);
-}
-
+} 
+ 
 SIMPLE_UDF_OPTIONS(TLookupDict, TOptional<TDictType>(TAutoMap<TNodeResource>, char*, TOptional<TOptionsResource>), builder.OptionalArgs(1)) {
     if (const auto options = ParseOptions(args[2]); options.Strict)
         return (options.AutoConvert ? &LookupImpl<&ConvertToDictImpl<true, true>> : &LookupImpl<&ConvertToDictImpl<true, false>>)(args[0], args[1], valueBuilder, Pos_);
     else
         return (options.AutoConvert ? &LookupImpl<&ConvertToDictImpl<false, true>> : &LookupImpl<&ConvertToDictImpl<false, false>>)(args[0], args[1], valueBuilder, Pos_);
-}
-
+} 
+ 
 SIMPLE_UDF_OPTIONS(TYPath, TOptional<TNodeResource>(TAutoMap<TNodeResource>, char*, TOptional<TOptionsResource>), builder.OptionalArgs(1)) {
     return YPathImpl(args[0], args[1], valueBuilder, Pos_);
 }
@@ -657,16 +657,16 @@ SIMPLE_UDF_OPTIONS(TYPathDict, TOptional<TDictType>(TAutoMap<TNodeResource>, cha
 
 SIMPLE_UDF(TSerialize, TYson(TAutoMap<TNodeResource>)) {
     return valueBuilder->NewString(SerializeYsonDomToBinary(args[0]));
-}
-
+} 
+ 
 SIMPLE_UDF(TSerializeText, TYson(TAutoMap<TNodeResource>)) {
     return valueBuilder->NewString(SerializeYsonDomToText(args[0]));
-}
-
+} 
+ 
 SIMPLE_UDF(TSerializePretty, TYson(TAutoMap<TNodeResource>)) {
     return valueBuilder->NewString(SerializeYsonDomToPrettyText(args[0]));
-}
-
+} 
+ 
 constexpr char SkipMapEntity[] = "SkipMapEntity";
 constexpr char EncodeUtf8[] = "EncodeUtf8";
 
@@ -680,22 +680,22 @@ SIMPLE_UDF_OPTIONS(TSerializeJson, TOptional<TJson>(TAutoMap<TNodeResource>, TOp
 }
 
 SIMPLE_UDF(TWithAttributes, TOptional<TNodeResource>(TAutoMap<TNodeResource>, TAutoMap<TNodeResource>)) {
-    Y_UNUSED(valueBuilder);
-    auto x = args[0];
-    auto y = args[1];
-
+    Y_UNUSED(valueBuilder); 
+    auto x = args[0]; 
+    auto y = args[1]; 
+ 
     if (!IsNodeType<ENodeType::Dict>(y)) {
         return {};
     }
 
-    if (y.IsEmbedded()) {
-        return x;
-    }
-
-    if (!y.IsBoxed()) {
-        return {};
-    }
-
+    if (y.IsEmbedded()) { 
+        return x; 
+    } 
+ 
+    if (!y.IsBoxed()) { 
+        return {}; 
+    } 
+ 
     // clone dict as attrnode
     if (const auto resource = y.GetResource()) {
         return SetNodeType<ENodeType::Attr>(TUnboxedValuePod(new TAttrNode(std::move(x), static_cast<const TPair*>(resource), y.GetDictLength())));
@@ -712,23 +712,23 @@ SIMPLE_UDF(TWithAttributes, TOptional<TNodeResource>(TAutoMap<TNodeResource>, TA
         }
 
         return SetNodeType<ENodeType::Attr>(TUnboxedValuePod(new TAttrNode(std::move(x), items.data(), items.size())));
-    }
-}
-
+    } 
+} 
+ 
 template<ENodeType Type>
 TUnboxedValuePod IsTypeImpl(TUnboxedValuePod y) {
     if (IsNodeType<ENodeType::Attr>(y)) {
         y = y.GetVariantItem().Release();
-    }
-
+    } 
+ 
     return TUnboxedValuePod(IsNodeType<Type>(y));
 }
-
+ 
 SIMPLE_UDF(TIsString, bool(TAutoMap<TNodeResource>)) {
     Y_UNUSED(valueBuilder);
     return IsTypeImpl<ENodeType::String>(*args);
-}
-
+} 
+ 
 SIMPLE_UDF(TIsInt64, bool(TAutoMap<TNodeResource>)) {
     Y_UNUSED(valueBuilder);
     return IsTypeImpl<ENodeType::Int64>(*args);
@@ -1046,13 +1046,13 @@ public:
                     dataType = optInspector.GetItemType();
                 }
 
-                if (const auto resInspector = TResourceTypeInspector(*typeHelper, dataType)) {
-                    typeId = TDataType<TYJson>::Id;
-                } else {
-                    const auto dataInspector = TDataTypeInspector(*typeHelper, dataType);
-                    typeId = dataInspector.GetTypeId();
-                }
-
+                if (const auto resInspector = TResourceTypeInspector(*typeHelper, dataType)) { 
+                    typeId = TDataType<TYJson>::Id; 
+                } else { 
+                    const auto dataInspector = TDataTypeInspector(*typeHelper, dataType); 
+                    typeId = dataInspector.GetTypeId(); 
+                } 
+ 
                 builder.UserType(userType);
             }
 
@@ -1131,39 +1131,39 @@ const TStringRef& TParse<TJson, true>::Name() {
 
 }
 
-SIMPLE_MODULE(TYson2Module,
+SIMPLE_MODULE(TYson2Module, 
     TOptions,
     TParse<TYson>,
     TParse<TJson>,
     TParse<TJson, true>,
     TConvert,
-    TConvertToBool,
-    TConvertToInt64,
-    TConvertToUint64,
-    TConvertToDouble,
-    TConvertToString,
-    TConvertToList,
+    TConvertToBool, 
+    TConvertToInt64, 
+    TConvertToUint64, 
+    TConvertToDouble, 
+    TConvertToString, 
+    TConvertToList, 
     TConvertToBoolList,
     TConvertToInt64List,
     TConvertToUint64List,
     TConvertToDoubleList,
     TConvertToStringList,
-    TConvertToDict,
+    TConvertToDict, 
     TConvertToBoolDict,
     TConvertToInt64Dict,
     TConvertToUint64Dict,
     TConvertToDoubleDict,
     TConvertToStringDict,
-    TAttributes,
-    TContains,
-    TLookup,
-    TLookupBool,
-    TLookupInt64,
-    TLookupUint64,
-    TLookupDouble,
-    TLookupString,
-    TLookupList,
-    TLookupDict,
+    TAttributes, 
+    TContains, 
+    TLookup, 
+    TLookupBool, 
+    TLookupInt64, 
+    TLookupUint64, 
+    TLookupDouble, 
+    TLookupString, 
+    TLookupList, 
+    TLookupDict, 
     TYPath,
     TYPathBool,
     TYPathInt64,
@@ -1172,11 +1172,11 @@ SIMPLE_MODULE(TYson2Module,
     TYPathString,
     TYPathList,
     TYPathDict,
-    TSerialize,
-    TSerializeText,
-    TSerializePretty,
+    TSerialize, 
+    TSerializeText, 
+    TSerializePretty, 
     TSerializeJson,
-    TWithAttributes,
+    TWithAttributes, 
     TIsString,
     TIsInt64,
     TIsUint64,
@@ -1184,11 +1184,11 @@ SIMPLE_MODULE(TYson2Module,
     TIsDouble,
     TIsList,
     TIsDict,
-    TIsEntity,
+    TIsEntity, 
     TFrom,
     TGetLength,
     TEquals,
     TGetHash
-);
-
-REGISTER_MODULES(TYson2Module);
+); 
+ 
+REGISTER_MODULES(TYson2Module); 

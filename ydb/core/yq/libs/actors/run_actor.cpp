@@ -3,44 +3,44 @@
 #include "system_clusters.h"
 #include "table_bindings_from_bindings.h"
 
-#include <ydb/library/yql/ast/yql_expr.h>
-#include <ydb/library/yql/dq/actors/compute/dq_checkpoints.h>
-#include <ydb/library/yql/dq/actors/dq.h>
+#include <ydb/library/yql/ast/yql_expr.h> 
+#include <ydb/library/yql/dq/actors/compute/dq_checkpoints.h> 
+#include <ydb/library/yql/dq/actors/dq.h> 
 #include <ydb/library/yql/utils/actor_log/log.h>
 #include <ydb/library/yql/core/services/mounts/yql_mounts.h>
 #include <ydb/library/yql/core/facade/yql_facade.h>
-#include <ydb/library/yql/minikql/mkql_function_registry.h>
-#include <ydb/library/yql/minikql/comp_nodes/mkql_factories.h>
-#include <ydb/library/yql/providers/common/udf_resolve/yql_simple_udf_resolver.h>
-#include <ydb/library/yql/providers/common/comp_nodes/yql_factory.h>
-#include <ydb/library/yql/providers/common/schema/mkql/yql_mkql_schema.h>
-#include <ydb/library/yql/providers/dq/actors/executer_actor.h>
-#include <ydb/library/yql/providers/dq/actors/proto_builder.h>
-#include <ydb/library/yql/providers/dq/actors/task_controller.h>
-#include <ydb/library/yql/providers/dq/common/yql_dq_common.h>
-#include <ydb/library/yql/providers/dq/counters/counters.h>
-#include <ydb/library/yql/providers/dq/provider/yql_dq_gateway.h>
-#include <ydb/library/yql/providers/dq/provider/yql_dq_provider.h>
-#include <ydb/library/yql/providers/dq/provider/exec/yql_dq_exectransformer.h>
-#include <ydb/library/yql/providers/dq/interface/yql_dq_task_transform.h>
-#include <ydb/library/yql/providers/pq/gateway/native/yql_pq_gateway.h>
-#include <ydb/library/yql/providers/pq/provider/yql_pq_provider.h>
-#include <ydb/library/yql/providers/pq/task_meta/task_meta.h>
-#include <ydb/library/yql/providers/s3/provider/yql_s3_provider.h>
-#include <ydb/library/yql/providers/ydb/provider/yql_ydb_provider.h>
-#include <ydb/library/yql/providers/clickhouse/provider/yql_clickhouse_provider.h>
-#include <ydb/library/yql/providers/solomon/gateway/yql_solomon_gateway.h>
-#include <ydb/library/yql/providers/solomon/provider/yql_solomon_provider.h>
-#include <ydb/library/yql/sql/settings/translation_settings.h>
-#include <ydb/library/yql/minikql/mkql_alloc.h>
-#include <ydb/library/yql/minikql/mkql_program_builder.h>
-#include <ydb/library/yql/minikql/mkql_node_cast.h>
-#include <ydb/library/yql/minikql/mkql_node_serialization.h>
-#include <ydb/library/yql/providers/common/codec/yql_codec.h>
-#include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
-#include <ydb/library/yql/providers/dq/worker_manager/interface/events.h>
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
-#include <ydb/library/yql/public/issue/protos/issue_message.pb.h>
+#include <ydb/library/yql/minikql/mkql_function_registry.h> 
+#include <ydb/library/yql/minikql/comp_nodes/mkql_factories.h> 
+#include <ydb/library/yql/providers/common/udf_resolve/yql_simple_udf_resolver.h> 
+#include <ydb/library/yql/providers/common/comp_nodes/yql_factory.h> 
+#include <ydb/library/yql/providers/common/schema/mkql/yql_mkql_schema.h> 
+#include <ydb/library/yql/providers/dq/actors/executer_actor.h> 
+#include <ydb/library/yql/providers/dq/actors/proto_builder.h> 
+#include <ydb/library/yql/providers/dq/actors/task_controller.h> 
+#include <ydb/library/yql/providers/dq/common/yql_dq_common.h> 
+#include <ydb/library/yql/providers/dq/counters/counters.h> 
+#include <ydb/library/yql/providers/dq/provider/yql_dq_gateway.h> 
+#include <ydb/library/yql/providers/dq/provider/yql_dq_provider.h> 
+#include <ydb/library/yql/providers/dq/provider/exec/yql_dq_exectransformer.h> 
+#include <ydb/library/yql/providers/dq/interface/yql_dq_task_transform.h> 
+#include <ydb/library/yql/providers/pq/gateway/native/yql_pq_gateway.h> 
+#include <ydb/library/yql/providers/pq/provider/yql_pq_provider.h> 
+#include <ydb/library/yql/providers/pq/task_meta/task_meta.h> 
+#include <ydb/library/yql/providers/s3/provider/yql_s3_provider.h> 
+#include <ydb/library/yql/providers/ydb/provider/yql_ydb_provider.h> 
+#include <ydb/library/yql/providers/clickhouse/provider/yql_clickhouse_provider.h> 
+#include <ydb/library/yql/providers/solomon/gateway/yql_solomon_gateway.h> 
+#include <ydb/library/yql/providers/solomon/provider/yql_solomon_provider.h> 
+#include <ydb/library/yql/sql/settings/translation_settings.h> 
+#include <ydb/library/yql/minikql/mkql_alloc.h> 
+#include <ydb/library/yql/minikql/mkql_program_builder.h> 
+#include <ydb/library/yql/minikql/mkql_node_cast.h> 
+#include <ydb/library/yql/minikql/mkql_node_serialization.h> 
+#include <ydb/library/yql/providers/common/codec/yql_codec.h> 
+#include <ydb/library/yql/providers/common/provider/yql_provider_names.h> 
+#include <ydb/library/yql/providers/dq/worker_manager/interface/events.h> 
+#include <ydb/library/yql/public/issue/yql_issue_message.h> 
+#include <ydb/library/yql/public/issue/protos/issue_message.pb.h> 
 
 #include <ydb/library/mkql_proto/mkql_proto.h>
 #include <ydb/core/protos/services.pb.h>
@@ -614,7 +614,7 @@ private:
             TString prefix;
             TString name;
             std::map<TString, TString> labels;
-            if (!NYql::NCommon::ParseCounterName(&prefix, &labels, &name, longName)) {
+            if (!NYql::NCommon::ParseCounterName(&prefix, &labels, &name, longName)) { 
                 prefix = "";
                 name = longName;
                 labels.clear();
@@ -1136,7 +1136,7 @@ private:
             QueryStateUpdateRequest.set_scope(Params.Scope.ToString());
             QueryStateUpdateRequest.mutable_query_id()->set_value(Params.QueryId);
             QueryStateUpdateRequest.set_owner_id(Params.Owner);
-            dataProvidersInit.push_back(GetDqDataProviderInitializer(&CreateInMemoryExecTransformer, NYq::CreateEmptyGateway(SelfId()), Params.DqCompFactory, {}, nullptr));
+            dataProvidersInit.push_back(GetDqDataProviderInitializer(&CreateInMemoryExecTransformer, NYq::CreateEmptyGateway(SelfId()), Params.DqCompFactory, {}, nullptr)); 
         }
 
         {

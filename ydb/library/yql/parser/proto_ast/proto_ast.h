@@ -69,26 +69,26 @@ namespace NProtoAST {
         typedef ANTLR_UINT8 TChar;
 
     public:
-        TProtoASTBuilder(TStringBuf data, const TString& queryName = "query", google::protobuf::Arena* arena = nullptr)
+        TProtoASTBuilder(TStringBuf data, const TString& queryName = "query", google::protobuf::Arena* arena = nullptr) 
             : QueryName(queryName)
             , InputStream((const TChar*)data.data(), antlr3::ENC_8BIT, data.length(), (TChar*)QueryName.begin())  // Why the hell antlr needs non-const ptr??
-            , Lexer(&InputStream, static_cast<google::protobuf::Arena*>(nullptr))
+            , Lexer(&InputStream, static_cast<google::protobuf::Arena*>(nullptr)) 
             , TokenStream(ANTLR_SIZE_HINT, Lexer.get_tokSource())
-            , Parser(&TokenStream, arena)
+            , Parser(&TokenStream, arena) 
         {
         }
 
-        google::protobuf::Message* BuildAST(IErrorCollector& errors) {
+        google::protobuf::Message* BuildAST(IErrorCollector& errors) { 
             // TODO: find a better way to break on lexer errors
-            try {
-                Lexer.ReportErrors(&errors);
-                return Parser.Parse(Lexer, &errors);
+            try { 
+                Lexer.ReportErrors(&errors); 
+                return Parser.Parse(Lexer, &errors); 
             } catch (const TTooManyErrors&) {
                 return nullptr;
             } catch (const yexception& e) {
-                errors.Error(0, 0, e.what());
-                return nullptr;
-            }
+                errors.Error(0, 0, e.what()); 
+                return nullptr; 
+            } 
         }
 
     private:

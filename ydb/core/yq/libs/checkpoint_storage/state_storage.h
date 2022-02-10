@@ -2,8 +2,8 @@
 
 #include <ydb/core/yq/libs/checkpointing_common/defs.h>
 
-#include <ydb/library/yql/dq/proto/dq_checkpoint.pb.h>
-#include <ydb/library/yql/public/issue/yql_issue.h>
+#include <ydb/library/yql/dq/proto/dq_checkpoint.pb.h> 
+#include <ydb/library/yql/public/issue/yql_issue.h> 
 
 #include <library/cpp/threading/future/core/future.h>
 

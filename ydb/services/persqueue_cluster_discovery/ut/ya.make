@@ -29,6 +29,6 @@ PEERDIR(
     ydb/services/persqueue_cluster_discovery
 )
 
-YQL_LAST_ABI_VERSION()
-
+YQL_LAST_ABI_VERSION() 
+ 
 END()

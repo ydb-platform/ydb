@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/library/yql/providers/pq/cm_client/interface/client.h>
+#include <ydb/library/yql/providers/pq/cm_client/interface/client.h> 
 
 namespace NPq::NConfigurationManager {
 

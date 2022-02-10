@@ -1,7 +1,7 @@
 #pragma once
 
 #include "kqp_compute.h"
-#include <ydb/library/yql/dq/runtime/dq_tasks_runner.h>
+#include <ydb/library/yql/dq/runtime/dq_tasks_runner.h> 
 
 namespace NKikimr {
 namespace NKqp {

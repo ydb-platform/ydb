@@ -242,11 +242,11 @@ PEERDIR(
     ydb/library/aclib/protos
     ydb/library/login
     ydb/library/login/protos
-    ydb/library/yql/minikql
+    ydb/library/yql/minikql 
 )
 
 YQL_LAST_ABI_VERSION()
-
+ 
 IF (OS_WINDOWS)
     SRCS(
         schemeshard_import_scheme_getter_fallback.cpp

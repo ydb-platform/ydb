@@ -1,26 +1,26 @@
-#include "mkql_callable.h"
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
-#include <ydb/library/yql/minikql/mkql_node_cast.h>
-
-namespace NKikimr {
-namespace NMiniKQL {
-
+#include "mkql_callable.h" 
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h> 
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h> 
+#include <ydb/library/yql/minikql/mkql_node_cast.h> 
+ 
+namespace NKikimr { 
+namespace NMiniKQL { 
+ 
 namespace {
 
 class TCallableWrapper : public TCustomValueCodegeneratorNode<TCallableWrapper> {
     typedef TCustomValueCodegeneratorNode<TCallableWrapper> TBaseComputation;
 private:
-    class TValue : public TComputationValue<TValue> {
-    public:
+    class TValue : public TComputationValue<TValue> { 
+    public: 
         TValue(TMemoryUsageInfo* memInfo, TComputationContext& compCtx, IComputationNode* resultNode,
             const TComputationExternalNodePtrVector& argNodes)
-            : TComputationValue(memInfo)
+            : TComputationValue(memInfo) 
             , CompCtx(compCtx)
-            , ResultNode(resultNode)
-            , ArgNodes(argNodes)
-        {}
-
+            , ResultNode(resultNode) 
+            , ArgNodes(argNodes) 
+        {} 
+ 
     private:
         NUdf::TUnboxedValue Run(const NUdf::IValueBuilder*, const NUdf::TUnboxedValuePod* args) const override
         {
@@ -30,12 +30,12 @@ private:
 
             return ResultNode->GetValue(CompCtx);
         }
-
+ 
         TComputationContext& CompCtx;
         IComputationNode *const ResultNode;
         const TComputationExternalNodePtrVector ArgNodes;
-    };
-
+    }; 
+ 
     class TCodegenValue : public TComputationValue<TCodegenValue> {
     public:
         using TBase = TComputationValue<TCodegenValue>;
@@ -60,31 +60,31 @@ public:
     TCallableWrapper(TComputationMutables& mutables, IComputationNode* resultNode, TComputationExternalNodePtrVector&& argNodes)
         : TBaseComputation(mutables)
         , ResultNode(resultNode)
-        , ArgNodes(std::move(argNodes))
-    {
-    }
-
+        , ArgNodes(std::move(argNodes)) 
+    { 
+    } 
+ 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
 #ifndef MKQL_DISABLE_CODEGEN
         if (ctx.ExecuteLLVM && Run)
             return ctx.HolderFactory.Create<TCodegenValue>(Run, &ctx);
 #endif
         return ctx.HolderFactory.Create<TValue>(ctx, ResultNode, ArgNodes);
-    }
-
+    } 
+ 
 private:
-    void RegisterDependencies() const final {
-        for (const auto& arg : ArgNodes) {
-            Own(arg);
-        }
-
-        DependsOn(ResultNode);
-    }
-
+    void RegisterDependencies() const final { 
+        for (const auto& arg : ArgNodes) { 
+            Own(arg); 
+        } 
+ 
+        DependsOn(ResultNode); 
+    } 
+ 
 #ifndef MKQL_DISABLE_CODEGEN
     void GenerateFunctions(const NYql::NCodegen::ICodegen::TPtr& codegen) final {
         RunFunc = GenerateRun(codegen);
-        codegen->ExportSymbol(RunFunc);
+        codegen->ExportSymbol(RunFunc); 
     }
 
     void FinalizeFunctions(const NYql::NCodegen::ICodegen::TPtr& codegen) final {
@@ -109,7 +109,7 @@ private:
             FunctionType::get(Type::getVoidTy(context), {PointerType::getUnqual(valueType), PointerType::getUnqual(contextType), PointerType::getUnqual(argsType)}, false);
 
         TCodegenContext ctx(codegen);
-        ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee());
+        ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee()); 
 
         auto args = ctx.Func->arg_begin();
 
@@ -155,27 +155,27 @@ private:
 
     IComputationNode *const ResultNode;
     const TComputationExternalNodePtrVector ArgNodes;
-};
-
+}; 
+ 
 }
 
-IComputationNode* WrapCallable(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
+IComputationNode* WrapCallable(TCallable& callable, const TComputationNodeFactoryContext& ctx) { 
     MKQL_ENSURE(callable.GetInputsCount() > 0U, "Expected at least one argument");
-
+ 
     const auto argsCount = callable.GetInputsCount() - 1U;
     const auto resultNode = LocateNode(ctx.NodeLocator, callable, argsCount);
 
     TComputationExternalNodePtrVector argNodes(argsCount);
     for (ui32 i = 0U; i < argsCount; ++i) {
         const auto listItem = AS_CALLABLE("Arg", callable.GetInput(i));
-        MKQL_ENSURE(listItem->GetType()->GetName() == "Arg", "Wrong Callable arguments");
-        MKQL_ENSURE(listItem->GetInputsCount() == 0, "Wrong Callable arguments");
-        MKQL_ENSURE(listItem->GetType()->IsMergeDisabled(), "Merge mode is not disabled");
-
+        MKQL_ENSURE(listItem->GetType()->GetName() == "Arg", "Wrong Callable arguments"); 
+        MKQL_ENSURE(listItem->GetInputsCount() == 0, "Wrong Callable arguments"); 
+        MKQL_ENSURE(listItem->GetType()->IsMergeDisabled(), "Merge mode is not disabled"); 
+ 
         argNodes[i] = LocateExternalNode(ctx.NodeLocator, callable, i);
-    }
+    } 
     return new TCallableWrapper(ctx.Mutables, resultNode, std::move(argNodes));
-}
-
-}
-}
+} 
+ 
+} 
+} 

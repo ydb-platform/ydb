@@ -87,7 +87,7 @@ TTypeCodecs::TTypeCodecs(TTypeId typeId) {
         AddIntCodecs<TUint64>(this);
         break;
     case NTypeIds::Byte:
-        AddFixedLen<TUint8>(this);
+        AddFixedLen<TUint8>(this); 
         break;
     case NTypeIds::Bool:
         AddFixedLen<TBool>(this, false);
@@ -107,10 +107,10 @@ TTypeCodecs::TTypeCodecs(TTypeId typeId) {
         AddFixedLen<TPairUi64Ui64>(this);
         break;
 
-    case NTypeIds::String:
-    case NTypeIds::String4k:
-    case NTypeIds::String2m:
-    case NTypeIds::Utf8:
+    case NTypeIds::String: 
+    case NTypeIds::String4k: 
+    case NTypeIds::String2m: 
+    case NTypeIds::Utf8: 
     case NTypeIds::Json:
     case NTypeIds::JsonDocument:
     case NTypeIds::DyNumber:

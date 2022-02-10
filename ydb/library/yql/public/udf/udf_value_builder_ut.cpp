@@ -21,12 +21,12 @@ Y_UNIT_TEST_SUITE(TUdfValueBuilder) {
         UNIT_ASSERT_VALUES_EQUAL(13, GetMethodIndex(&IValueBuilder::ToIndexDict));
         UNIT_ASSERT_VALUES_EQUAL(14, GetMethodIndex(&IValueBuilder::NewArray));
         UNIT_ASSERT_VALUES_EQUAL(15, GetMethodIndex(&IValueBuilder::NewVariant));
-        UNIT_ASSERT_VALUES_EQUAL(16, GetMethodIndex(&IValueBuilder::GetDateBuilder));
-        UNIT_ASSERT_VALUES_EQUAL(17, GetMethodIndex(&IValueBuilder::GetSecureParam));
-        UNIT_ASSERT_VALUES_EQUAL(18, GetMethodIndex(&IValueBuilder::CalleePosition));
-        UNIT_ASSERT_VALUES_EQUAL(19, GetMethodIndex(&IValueBuilder::Run));
-        UNIT_ASSERT_VALUES_EQUAL(20, GetMethodIndex(&IValueBuilder::NewFlatDataBlock));
-        UNIT_ASSERT_VALUES_EQUAL(21, GetMethodIndex(&IValueBuilder::NewFlatArrayBlock));
-        UNIT_ASSERT_VALUES_EQUAL(22, GetMethodIndex(&IValueBuilder::NewSingleBlock));
+        UNIT_ASSERT_VALUES_EQUAL(16, GetMethodIndex(&IValueBuilder::GetDateBuilder)); 
+        UNIT_ASSERT_VALUES_EQUAL(17, GetMethodIndex(&IValueBuilder::GetSecureParam)); 
+        UNIT_ASSERT_VALUES_EQUAL(18, GetMethodIndex(&IValueBuilder::CalleePosition)); 
+        UNIT_ASSERT_VALUES_EQUAL(19, GetMethodIndex(&IValueBuilder::Run)); 
+        UNIT_ASSERT_VALUES_EQUAL(20, GetMethodIndex(&IValueBuilder::NewFlatDataBlock)); 
+        UNIT_ASSERT_VALUES_EQUAL(21, GetMethodIndex(&IValueBuilder::NewFlatArrayBlock)); 
+        UNIT_ASSERT_VALUES_EQUAL(22, GetMethodIndex(&IValueBuilder::NewSingleBlock)); 
     }
 }

@@ -1,35 +1,35 @@
 # library
 (
 
-(let empty_list (lambda '(list_type) (MatchType list_type 'Null (lambda '() (EmptyList)) (lambda '() (List list_type)))))
-
+(let empty_list (lambda '(list_type) (MatchType list_type 'Null (lambda '() (EmptyList)) (lambda '() (List list_type))))) 
+ 
 # list_type:type function:lambda
 # doesn't support optional values
 (let simple_traits_factory (lambda '(list_type function) (block '(
   (let init (lambda '(value) value))
-  (let update (lambda '(value state) (Apply function value state)))
+  (let update (lambda '(value state) (Apply function value state))) 
   (let save (lambda '(state) state))
   (let load (lambda '(state) state))
   (let merge (lambda '(state1 state2) (Apply function state1 state2)))
   (let finish (lambda '(state) state))
-  (return (AggregationTraits (ListItemType list_type) init update save load merge finish (Null)))
+  (return (AggregationTraits (ListItemType list_type) init update save load merge finish (Null))) 
 ))))
 
-# list_type:type function:lambda
-# doesn't support optional values
-(let simple_traits_factory_map (lambda '(list_type reduce_function map_function) (block '(
-  (let init (lambda '(value) (Apply map_function value)))
-  (let update (lambda '(value state) (Apply reduce_function (Apply map_function value) state)))
-  (let save (lambda '(state) state))
-  (let load (lambda '(state) state))
-  (let merge (lambda '(state1 state2) (Apply reduce_function state1 state2)))
-  (let finish (lambda '(state) state))
-  (return (AggregationTraits (ListItemType list_type) init update save load merge finish (Null)))
-))))
-
+# list_type:type function:lambda 
+# doesn't support optional values 
+(let simple_traits_factory_map (lambda '(list_type reduce_function map_function) (block '( 
+  (let init (lambda '(value) (Apply map_function value))) 
+  (let update (lambda '(value state) (Apply reduce_function (Apply map_function value) state))) 
+  (let save (lambda '(state) state)) 
+  (let load (lambda '(state) state)) 
+  (let merge (lambda '(state1 state2) (Apply reduce_function state1 state2))) 
+  (let finish (lambda '(state) state)) 
+  (return (AggregationTraits (ListItemType list_type) init update save load merge finish (Null))) 
+)))) 
+ 
 # list_type:type
 # doesn't support optional values
-(let some_traits_factory_raw (lambda '(list_type) (Apply simple_traits_factory list_type (lambda '(one two) (Coalesce two one)))))
+(let some_traits_factory_raw (lambda '(list_type) (Apply simple_traits_factory list_type (lambda '(one two) (Coalesce two one))))) 
 (let bit_and_traits_factory_raw (lambda '(list_type) (Apply simple_traits_factory list_type (lambda '(one two) (BitAnd one two)))))
 (let bit_or_traits_factory_raw (lambda '(list_type) (Apply simple_traits_factory list_type (lambda '(one two) (BitOr one two)))))
 (let bit_xor_traits_factory_raw (lambda '(list_type) (Apply simple_traits_factory list_type (lambda '(one two) (BitXor one two)))))
@@ -48,23 +48,23 @@
   (let load (lambda '(state) state))
   (let merge (lambda '(state1 state2) (+ state1 state2)))
   (let finish (lambda '(state) state))
-  (return (AggregationTraits (ListItemType list_type) init update save load merge finish (Uint64 '0)))
+  (return (AggregationTraits (ListItemType list_type) init update save load merge finish (Uint64 '0))) 
 ))))
 
 # list_type:type
 # support optional values
-(let count_traits_factory_opt (lambda '(list_type) (block '(
-  (let init (lambda '(value) (AggrCountInit value)))
-  (let update (lambda '(value state) (AggrCountUpdate value state)))
-  (let save (lambda '(state) state))
-  (let load (lambda '(state) state))
-  (let merge (lambda '(state1 state2) (+ state1 state2)))
-  (let finish (lambda '(state) state))
-  (return (AggregationTraits (ListItemType list_type) init update save load merge finish (Uint64 '0)))
-))))
-
-# list_type:type
-# support optional values
+(let count_traits_factory_opt (lambda '(list_type) (block '( 
+  (let init (lambda '(value) (AggrCountInit value))) 
+  (let update (lambda '(value state) (AggrCountUpdate value state))) 
+  (let save (lambda '(state) state)) 
+  (let load (lambda '(state) state)) 
+  (let merge (lambda '(state1 state2) (+ state1 state2))) 
+  (let finish (lambda '(state) state)) 
+  (return (AggregationTraits (ListItemType list_type) init update save load merge finish (Uint64 '0))) 
+)))) 
+ 
+# list_type:type 
+# support optional values 
 (let count_if_traits_factory_opt (lambda '(list_type) (Apply count_traits_factory list_type (lambda '(value) (If (Coalesce value (Bool '0)) (Uint64 '1) (Uint64 '0))))))
 (let count_all_traits_factory_opt (lambda '(list_type) (Apply count_traits_factory list_type (lambda '(value) (Uint64 '1)))))
 
@@ -95,65 +95,65 @@
                            (lambda '() (Div (Nth state '0) (Nth state '1)))
                 )
   ))
-  (return (AggregationTraits (ListItemType list_type) init update save load merge finish (Null)))
+  (return (AggregationTraits (ListItemType list_type) init update save load merge finish (Null))) 
 ))))
 
 # list_type:type
-# defval
+# defval 
 # support optional values
-(let list_traits_factory_opt_gen (lambda '(limit defval) (block '(
-(return (lambda '(list_type) (block '(
+(let list_traits_factory_opt_gen (lambda '(limit defval) (block '( 
+(return (lambda '(list_type) (block '( 
     (let item_type (ListItemType list_type))
     (let init (lambda '(value) (MatchType item_type
         'Optional (lambda '() (ToList value))
         'Null (lambda '() (EmptyList))
         (lambda '() (AsList value)))))
-    (let update (lambda '(value state) (block '(
+    (let update (lambda '(value state) (block '( 
       (let x (MatchType item_type
         'Optional (lambda '() (IfPresent value (lambda '(value) (Insert state value)) state))
         'Null (lambda '() (EmptyList))
         (lambda '() (Insert state value))))
-      (return (If (== limit (Uint64 '0)) x (Take x limit)))))))
+      (return (If (== limit (Uint64 '0)) x (Take x limit))))))) 
     (let save (lambda '(state) state))
     (let load (lambda '(state) state))
-    (let merge (lambda '(state1 state2) (block '(
-      (let x (Extend state1 state2))
-      (return (If (== limit (Uint64 '0)) x (Take x limit)))))))
+    (let merge (lambda '(state1 state2) (block '( 
+      (let x (Extend state1 state2)) 
+      (return (If (== limit (Uint64 '0)) x (Take x limit))))))) 
     (let finish (lambda '(state) state))
-    (return (AggregationTraits item_type init update save load merge finish defval))
-))))))))
+    (return (AggregationTraits item_type init update save load merge finish defval)) 
+)))))))) 
 
 # list_type:type stddev:bool sample:bool
 # doesn't support optional values
 (let variance_traits_factory_raw (lambda '(list_type stddev sample) (block '(
-    (let init (lambda '(value) '(
-        (Convert value 'Double)
-        (Double '1)
-        (Double '0))))
-    (let update (lambda '(value state) (block '(
-        (let delta (- (Convert value 'Double) (Nth state '0)))
-        (let next_n (+ (Nth state '1) (Double '1)))
-        (return '(
-            (+ (Nth state '0) (/ delta next_n))
-            next_n
-            (+ (Nth state '2) (/ (* (* delta delta) (Nth state '1)) next_n))
-        ))))))
+    (let init (lambda '(value) '( 
+        (Convert value 'Double) 
+        (Double '1) 
+        (Double '0)))) 
+    (let update (lambda '(value state) (block '( 
+        (let delta (- (Convert value 'Double) (Nth state '0))) 
+        (let next_n (+ (Nth state '1) (Double '1))) 
+        (return '( 
+            (+ (Nth state '0) (/ delta next_n)) 
+            next_n 
+            (+ (Nth state '2) (/ (* (* delta delta) (Nth state '1)) next_n)) 
+        )))))) 
     (let save (lambda '(state) state))
     (let load (lambda '(state) state))
-    (let merge (lambda '(one two) (block '(
-        (let delta (- (Nth one '0) (Nth two '0)))
-        (let sum_n (+ (Nth one '1) (Nth two '1)))
-        (return '(
-            (/ (+ (* (Nth one '0) (Nth one '1)) (* (Nth two '0) (Nth two '1))) sum_n)
-            sum_n
-            (+ (+ (Nth one '2) (Nth two '2)) (/ (* (* (* delta delta) (Nth one '1)) (Nth two '1)) sum_n))
-        )
-    )))))
-    (let finish (lambda '(state) (block '(
-        (let count (Nth state '1))
-        (let result (/ (Nth state '2) (If sample (- count (Double '1)) count)))
-        (return (If stddev (Apply (Udf 'Math.Sqrt) result) result))))))
-    (return (AggregationTraits (ListItemType list_type) init update save load merge finish (Null)))
+    (let merge (lambda '(one two) (block '( 
+        (let delta (- (Nth one '0) (Nth two '0))) 
+        (let sum_n (+ (Nth one '1) (Nth two '1))) 
+        (return '( 
+            (/ (+ (* (Nth one '0) (Nth one '1)) (* (Nth two '0) (Nth two '1))) sum_n) 
+            sum_n 
+            (+ (+ (Nth one '2) (Nth two '2)) (/ (* (* (* delta delta) (Nth one '1)) (Nth two '1)) sum_n)) 
+        ) 
+    ))))) 
+    (let finish (lambda '(state) (block '( 
+        (let count (Nth state '1)) 
+        (let result (/ (Nth state '2) (If sample (- count (Double '1)) count))) 
+        (return (If stddev (Apply (Udf 'Math.Sqrt) result) result)))))) 
+    (return (AggregationTraits (ListItemType list_type) init update save load merge finish (Null))) 
 ))))
 
 # list_type:type
@@ -181,7 +181,7 @@
         (let divisor2 (- divisor2 (* (Nth state '2) (Nth state '2))))
         (return (/ dividend (Apply (Udf 'Math.Sqrt) (* divisor1 divisor2))))
     ))))
-    (return (AggregationTraits (ListItemType list_type) init update save load merge finish (Null)))
+    (return (AggregationTraits (ListItemType list_type) init update save load merge finish (Null))) 
 ))))
 
 # list_type:type sample:bool
@@ -197,7 +197,7 @@
         (let covariance_result (/ covariance_result (If sample (- (Nth state '0) (Uint64 '1)) (Nth state '0))))
         (return covariance_result)
     ))))
-    (return (AggregationTraits (ListItemType list_type) init update save load merge finish (Null)))
+    (return (AggregationTraits (ListItemType list_type) init update save load merge finish (Null))) 
 ))))
 
 # list_type:type
@@ -208,13 +208,13 @@
 # list_type:type histogram:atom value:lambda weight:lambda intervals:integer
 # doesn't support optional values
 (let histogram_traits_factory_raw (lambda '(list_type histogram value weight intervals) (block '(
-    (let init (lambda '(row parent) (NamedApply (Udf (Combine histogram '_Create)) '((Apply value row) (Apply weight row) intervals) (AsStruct) (DependsOn parent))))
-    (let update (lambda '(row state parent) (NamedApply (Udf (Combine histogram '_AddValue)) '(state (Apply value row) (Apply weight row)) (AsStruct) (DependsOn parent))))
+    (let init (lambda '(row parent) (NamedApply (Udf (Combine histogram '_Create)) '((Apply value row) (Apply weight row) intervals) (AsStruct) (DependsOn parent)))) 
+    (let update (lambda '(row state parent) (NamedApply (Udf (Combine histogram '_AddValue)) '(state (Apply value row) (Apply weight row)) (AsStruct) (DependsOn parent)))) 
     (let save (lambda '(state) (Apply (Udf (Combine histogram '_Serialize)) state)))
     (let load (lambda '(state) (Apply (Udf (Combine histogram '_Deserialize)) state intervals)))
     (let merge (lambda '(one two) (Apply (Udf (Combine histogram '_Merge)) one two)))
     (let finish (lambda '(state) (Apply (Udf (Combine histogram '_GetResult)) state)))
-    (return (AggregationTraits (ListItemType list_type) init update save load merge finish (Null)))
+    (return (AggregationTraits (ListItemType list_type) init update save load merge finish (Null))) 
 ))))
 
 # list_type:type count:ui32
@@ -352,7 +352,7 @@
     (let finish (lambda '(state) (MatchType n
                                             'Tuple (lambda '() (StaticMap n (lambda '(n) (Apply get_convert_percentile state n))))
                                             (lambda '() (Apply get_convert_percentile state n)))))
-    (return (AggregationTraits (ListItemType list_type) init update save load merge finish (Null)))
+    (return (AggregationTraits (ListItemType list_type) init update save load merge finish (Null))) 
 ))))
 
 # list_type:type
@@ -364,7 +364,7 @@
     (let load (lambda '(state) (Apply (Udf 'HyperLogLog.Deserialize) state)))
     (let merge (lambda '(one two) (Apply (Udf 'HyperLogLog.Merge) one two)))
     (let finish (lambda '(state) (Apply (Udf 'HyperLogLog.GetResult) state)))
-    (return (AggregationTraits (ListItemType list_type) init update save load merge finish (Null)))
+    (return (AggregationTraits (ListItemType list_type) init update save load merge finish (Null))) 
 ))))
 
 # list_type:type value:lambda weight:lambda intervals:integer
@@ -384,7 +384,7 @@
     (let load (lambda '(state) (Apply (Udf (Combine histogram '_Deserialize)) state binsize minimum maximum)))
     (let merge (lambda '(one two) (Apply (Udf (Combine histogram '_Merge)) one two)))
     (let finish (lambda '(state) (Apply (Udf (Combine histogram '_GetResult)) state)))
-    (return (AggregationTraits (ListItemType list_type) init update save load merge finish (Null)))
+    (return (AggregationTraits (ListItemType list_type) init update save load merge finish (Null))) 
 ))))
 
 # list_type:type value:lambda binsize:double minimum:double maximum:double
@@ -396,14 +396,14 @@
 # support optional values
 (let optional_traits_factory (lambda '(list_type factory) (block '(
     (let item_type (ListItemType list_type))
-    (let traits (Apply factory (MatchType item_type 'Optional (lambda '() (ListType (OptionalItemType item_type))) (lambda '() (ListType item_type)))))
+    (let traits (Apply factory (MatchType item_type 'Optional (lambda '() (ListType (OptionalItemType item_type))) (lambda '() (ListType item_type))))) 
     (let init (NthArg '1 traits))
     (let update (NthArg '2 traits))
     (let save (NthArg '3 traits))
     (let load (NthArg '4 traits))
     (let merge (NthArg '5 traits))
     (let finish (NthArg '6 traits))
-    (let defval (NthArg '7 traits))
+    (let defval (NthArg '7 traits)) 
 
     (let init_optional
         (lambda '(value)
@@ -444,64 +444,64 @@
     (let load_optional (lambda '(state) (MatchType item_type 'Optional (lambda '() (Map state load)) 'Null (lambda '() defval) (lambda '() (Apply load state)))))
     (let merge_optional (lambda '(one two) (MatchType item_type 'Optional (lambda '() (OptionalReduce one two merge)) 'Null (lambda '() defval) (lambda '() (Apply merge one two)))))
     (let finish_optional (lambda '(state) (MatchType item_type 'Optional (lambda '() (Map state finish)) 'Null (lambda '() defval) (lambda '() (Apply finish state)))))
-    (return (AggregationTraits item_type init_optional update_optional save_optional load_optional merge_optional finish_optional defval))
+    (return (AggregationTraits item_type init_optional update_optional save_optional load_optional merge_optional finish_optional defval)) 
 ))))
 
-# list_type:type factory:lambda
-# support optional values, init and update with parent
-(let optional_traits_factory_parent (lambda '(list_type factory) (block '(
-    (let item_type (ListItemType list_type))
-    (let traits (Apply factory (MatchType item_type 'Optional (lambda '() (ListType (OptionalItemType item_type))) (lambda '() (ListType item_type)))))
-    (let init (NthArg '1 traits))
-    (let update (NthArg '2 traits))
-    (let save (NthArg '3 traits))
-    (let load (NthArg '4 traits))
-    (let merge (NthArg '5 traits))
-    (let finish (NthArg '6 traits))
-    (let defval (NthArg '7 traits))
-
-    (let init_optional
-        (lambda '(value parent)
+# list_type:type factory:lambda 
+# support optional values, init and update with parent 
+(let optional_traits_factory_parent (lambda '(list_type factory) (block '( 
+    (let item_type (ListItemType list_type)) 
+    (let traits (Apply factory (MatchType item_type 'Optional (lambda '() (ListType (OptionalItemType item_type))) (lambda '() (ListType item_type))))) 
+    (let init (NthArg '1 traits)) 
+    (let update (NthArg '2 traits)) 
+    (let save (NthArg '3 traits)) 
+    (let load (NthArg '4 traits)) 
+    (let merge (NthArg '5 traits)) 
+    (let finish (NthArg '6 traits)) 
+    (let defval (NthArg '7 traits)) 
+ 
+    (let init_optional 
+        (lambda '(value parent) 
             (MatchType item_type
                 'Optional (lambda '()
-                    (IfPresent value
-                        (lambda '(value) (Just (Apply init value parent)))
-                        (Nothing (OptionalType (TypeOf (Apply init (InstanceOf (OptionalItemType (TypeOf value))) parent))))
-                    )
-                )
+                    (IfPresent value 
+                        (lambda '(value) (Just (Apply init value parent))) 
+                        (Nothing (OptionalType (TypeOf (Apply init (InstanceOf (OptionalItemType (TypeOf value))) parent)))) 
+                    ) 
+                ) 
                 'Null (lambda '() defval)
-                (lambda '() (Apply init value parent))
-            )
-        )
-    )
-
-    (let update_optional
-        (lambda '(value state parent)
+                (lambda '() (Apply init value parent)) 
+            ) 
+        ) 
+    ) 
+ 
+    (let update_optional 
+        (lambda '(value state parent) 
             (MatchType item_type
                 'Optional (lambda '()
-                    (IfPresent state
-                        (lambda '(state)
-                            (IfPresent value
-                                (lambda '(value) (Just (Apply update value state parent)))
-                                (Just state)
-                            )
-                        )
-                        (Apply init_optional value parent)
-                    )
-                )
+                    (IfPresent state 
+                        (lambda '(state) 
+                            (IfPresent value 
+                                (lambda '(value) (Just (Apply update value state parent))) 
+                                (Just state) 
+                            ) 
+                        ) 
+                        (Apply init_optional value parent) 
+                    ) 
+                ) 
                 'Null (lambda '() defval)
-                (lambda '() (Apply update value state parent))
-            )
-        )
-    )
-
+                (lambda '() (Apply update value state parent)) 
+            ) 
+        ) 
+    ) 
+ 
     (let save_optional (lambda '(state) (MatchType item_type 'Optional (lambda '() (Map state save)) 'Null (lambda '() defval) (lambda '() (Apply save state)))))
     (let load_optional (lambda '(state) (MatchType item_type 'Optional (lambda '() (Map state load)) 'Null (lambda '() defval) (lambda '() (Apply load state)))))
     (let merge_optional (lambda '(one two) (MatchType item_type 'Optional (lambda '() (OptionalReduce one two merge)) 'Null (lambda '() defval) (lambda '() (Apply merge one two)))))
     (let finish_optional (lambda '(state) (MatchType item_type 'Optional (lambda '() (Map state finish)) 'Null (lambda '() defval) (lambda '() (Apply finish state)))))
-    (return (AggregationTraits item_type init_optional update_optional save_optional load_optional merge_optional finish_optional defval))
-))))
-
+    (return (AggregationTraits item_type init_optional update_optional save_optional load_optional merge_optional finish_optional defval)) 
+)))) 
+ 
 # list_type:type factory:lambda
 # support optional values, init and update with parent
 (let flatten_traits_factory_parent (lambda '(list_type factory) (block '(
@@ -559,9 +559,9 @@
 
 # list_type:type
 # support optional values
-(let min_traits_factory_opt (lambda '(list_type) (Apply simple_traits_factory list_type (lambda '(one two) (AggrMin one two)))))
-(let max_traits_factory_opt (lambda '(list_type) (Apply simple_traits_factory list_type (lambda '(one two) (AggrMax one two)))))
-(let sum_traits_factory_opt (lambda '(list_type) (Apply simple_traits_factory_map list_type (lambda '(one two) (AggrAdd one two)) (lambda '(x) (WidenIntegral x)) )))
+(let min_traits_factory_opt (lambda '(list_type) (Apply simple_traits_factory list_type (lambda '(one two) (AggrMin one two))))) 
+(let max_traits_factory_opt (lambda '(list_type) (Apply simple_traits_factory list_type (lambda '(one two) (AggrMax one two))))) 
+(let sum_traits_factory_opt (lambda '(list_type) (Apply simple_traits_factory_map list_type (lambda '(one two) (AggrAdd one two)) (lambda '(x) (WidenIntegral x)) ))) 
 (let bit_and_traits_factory_opt (lambda '(list_type) (Apply optional_traits_factory list_type bit_and_traits_factory_raw)))
 (let bit_or_traits_factory_opt (lambda '(list_type) (Apply optional_traits_factory list_type bit_or_traits_factory_raw)))
 (let bit_xor_traits_factory_opt (lambda '(list_type) (Apply optional_traits_factory list_type bit_xor_traits_factory_raw)))
@@ -593,7 +593,7 @@
 # list_type:type init:lambda update:lambda merge:lambda finish:lambda save:lambda load:lambda
 # support optional values
 (let udaf_traits_factory_opt (lambda '(list_type init update merge finish save load defval) (Apply optional_traits_factory_parent list_type (lambda '(list_type)
-  (AggregationTraits (ListItemType list_type) init update save load merge finish defval)))))
+  (AggregationTraits (ListItemType list_type) init update save load merge finish defval))))) 
 
 # list_type:type, factory:lambda, extractor:lambda
 (let extractor_traits_factory (lambda '(list_type extractor factory) (block '(
@@ -604,27 +604,27 @@
   (let load (NthArg '4 traits))
   (let merge (NthArg '5 traits))
   (let finish (NthArg '6 traits))
-  (let defval (NthArg '7 traits))
+  (let defval (NthArg '7 traits)) 
   (let init_ext (lambda '(row) (Apply init (Apply extractor row))))
   (let update_ext (lambda '(row state) (Apply update (Apply extractor row) state)))
   (return (AggregationTraits (ListItemType list_type) init_ext update_ext save load merge finish defval))
 ))))
 
-# list_type:type, factory:lambda, extractor:lambda
-(let extractor_traits_factory_parent (lambda '(list_type extractor factory) (block '(
+# list_type:type, factory:lambda, extractor:lambda 
+(let extractor_traits_factory_parent (lambda '(list_type extractor factory) (block '( 
   (let traits (Apply factory (ListType (TypeOf (Apply extractor (InstanceOf (ListItemType list_type)))))))
-  (let init (NthArg '1 traits))
-  (let update (NthArg '2 traits))
-  (let save (NthArg '3 traits))
-  (let load (NthArg '4 traits))
-  (let merge (NthArg '5 traits))
-  (let finish (NthArg '6 traits))
-  (let defval (NthArg '7 traits))
-  (let init_ext (lambda '(row parent) (Apply init (Apply extractor row) parent)))
-  (let update_ext (lambda '(row state parent) (Apply update (Apply extractor row) state parent)))
+  (let init (NthArg '1 traits)) 
+  (let update (NthArg '2 traits)) 
+  (let save (NthArg '3 traits)) 
+  (let load (NthArg '4 traits)) 
+  (let merge (NthArg '5 traits)) 
+  (let finish (NthArg '6 traits)) 
+  (let defval (NthArg '7 traits)) 
+  (let init_ext (lambda '(row parent) (Apply init (Apply extractor row) parent))) 
+  (let update_ext (lambda '(row state parent) (Apply update (Apply extractor row) state parent))) 
   (return (AggregationTraits (ListItemType list_type) init_ext update_ext save load merge finish defval))
-))))
-
+)))) 
+ 
 # list_type:type, extractor:lambda
 # support optional columns
 (let min_traits_factory (lambda '(list_type extractor) (Apply extractor_traits_factory list_type extractor min_traits_factory_opt)))
@@ -641,8 +641,8 @@
 (let or_traits_factory (lambda '(list_type extractor) (Apply extractor_traits_factory list_type (lambda '(v) (SafeCast (Apply extractor v) (DataType 'Bool))) bool_or_traits_factory_opt)))
 (let xor_traits_factory (lambda '(list_type extractor) (Apply extractor_traits_factory list_type (lambda '(v) (SafeCast (Apply extractor v) (DataType 'Bool))) bool_xor_traits_factory_opt)))
 (let avg_traits_factory (lambda '(list_type extractor) (Apply extractor_traits_factory list_type extractor avg_traits_factory_opt)))
-(let list_traits_factory (lambda '(list_type extractor limit) (Apply extractor_traits_factory list_type extractor (Apply list_traits_factory_opt_gen limit (Null)))))
-(let list2_traits_factory (lambda '(list_type extractor limit) (Apply extractor_traits_factory list_type extractor (Apply list_traits_factory_opt_gen limit empty_list))))
+(let list_traits_factory (lambda '(list_type extractor limit) (Apply extractor_traits_factory list_type extractor (Apply list_traits_factory_opt_gen limit (Null))))) 
+(let list2_traits_factory (lambda '(list_type extractor limit) (Apply extractor_traits_factory list_type extractor (Apply list_traits_factory_opt_gen limit empty_list)))) 
 (let variance_0_0_traits_factory (lambda '(list_type extractor) (Apply extractor_traits_factory list_type extractor variance_0_0_traits_factory_opt)))
 (let variance_1_0_traits_factory (lambda '(list_type extractor) (Apply extractor_traits_factory list_type extractor variance_1_0_traits_factory_opt)))
 (let variance_0_1_traits_factory (lambda '(list_type extractor) (Apply extractor_traits_factory list_type extractor variance_0_1_traits_factory_opt)))
@@ -669,7 +669,7 @@
 
 # list_type:type extractor:lambda init:lambda update:lambda merge:lambda finish:lambda save:lambda load:lambda
 # support optional values
-(let udaf_traits_factory (lambda '(list_type extractor init update merge finish save load defval) (Apply extractor_traits_factory_parent list_type extractor (lambda '(list_type) (Apply udaf_traits_factory_opt list_type init update merge finish save load defval)))))
+(let udaf_traits_factory (lambda '(list_type extractor init update merge finish save load defval) (Apply extractor_traits_factory_parent list_type extractor (lambda '(list_type) (Apply udaf_traits_factory_opt list_type init update merge finish save load defval))))) 
 
 # list_type:type compare:lambda first:lambda second:lambda stub
 # doesn't support optional values
@@ -681,7 +681,7 @@
     (let load (lambda '(state) state))
     (let merge (lambda '(one two) (If (Apply compare (Nth one '1) (Nth two '1)) one two)))
     (let finish (lambda '(state) (Nth state '0)))
-    (return (AggregationTraits (ListItemType list_type) init update save load merge finish (Null)))
+    (return (AggregationTraits (ListItemType list_type) init update save load merge finish (Null))) 
 ))))
 
 # list_type:type compare:lambda first:lambda second:lambda limit:Uint64
@@ -694,7 +694,7 @@
     (let load (lambda '(state) state))
     (let merge (lambda '(one two) (If (AggrEquals (Nth one '1) (Nth two '1)) '((Take (Extend (Nth one '0) (Nth two '0)) limit) (Nth one '1)) (If (Apply compare (Nth one '1) (Nth two '1)) one two))))
     (let finish (lambda '(state) (Nth state '0)))
-    (return (AggregationTraits (ListItemType list_type) init update save load merge finish (Null)))
+    (return (AggregationTraits (ListItemType list_type) init update save load merge finish (Null))) 
 ))))
 
 # factory:lambda list_type:type first:lambda second:lambda
@@ -702,8 +702,8 @@
 (let double_traits_factory_opt (lambda '(factory list_type first second) (block '(
     (let item_type (ListItemType list_type))
     (let key_type (TypeOf (Apply first (InstanceOf item_type))))
-    (let test_type (MatchType item_type 'Optional (lambda '() item_type) (lambda '() key_type)))
-    (let traits (Apply factory (ListType (MatchType item_type 'Optional (lambda '() (OptionalItemType item_type)) (lambda '() item_type)))
+    (let test_type (MatchType item_type 'Optional (lambda '() item_type) (lambda '() key_type))) 
+    (let traits (Apply factory (ListType (MatchType item_type 'Optional (lambda '() (OptionalItemType item_type)) (lambda '() item_type))) 
         (lambda '(row) (MatchType key_type 'Optional
             (lambda '() (Unwrap (Apply first row)))
             (lambda '() (Apply first row))
@@ -716,7 +716,7 @@
     (let load (NthArg '4 traits))
     (let merge (NthArg '5 traits))
     (let finish (NthArg '6 traits))
-    (let defval (NthArg '7 traits))
+    (let defval (NthArg '7 traits)) 
 
     (let init_opt (lambda '(row) (MatchType test_type 'Optional
         (lambda '() (Map (Apply first row) (lambda '(key) (Apply init row))))
@@ -738,47 +738,47 @@
         ))
         (lambda '() (Apply finish state))
     )))
-    (return (AggregationTraits item_type init_opt update_opt save_opt load_opt merge_opt finish_opt defval))
+    (return (AggregationTraits item_type init_opt update_opt save_opt load_opt merge_opt finish_opt defval)) 
 ))))
 
-# factory:lambda list_type:type first:lambda second:lambda
-# support optional values, init and update has parent arg
-(let double_traits_factory_opt_parent (lambda '(factory list_type first second) (block '(
-    (let item_type (ListItemType list_type))
-    (let key_type (TypeOf (Apply first (InstanceOf item_type))))
-    (let test_type (MatchType item_type 'Optional (lambda '() item_type) (lambda '() key_type)))
-    (let traits (Apply factory (ListType (MatchType item_type 'Optional (lambda '() (OptionalItemType item_type)) (lambda '() item_type)))
-        (lambda '(row) (MatchType key_type 'Optional
-            (lambda '() (Unwrap (Apply first row)))
-            (lambda '() (Apply first row))
-        ))
-        second
-    ))
-    (let init (NthArg '1 traits))
-    (let update (NthArg '2 traits))
-    (let save (NthArg '3 traits))
-    (let load (NthArg '4 traits))
-    (let merge (NthArg '5 traits))
-    (let finish (NthArg '6 traits))
-    (let defval (NthArg '7 traits))
-
-    (let init_opt (lambda '(row parent) (MatchType test_type 'Optional
-        (lambda '() (Map (Apply first row) (lambda '(key) (Apply init row parent))))
-        (lambda '() (Apply init row parent))
-    )))
-    (let update_opt (lambda '(row state parent)
-        (MatchType test_type 'Optional
-            (lambda '() (IfPresent state (lambda '(state) (Just (If (Exists (Apply first row)) (Apply update row state parent) state))) (Apply init_opt row parent)))
-            (lambda '() (Apply update row state parent))
-        )
-    ))
-    (let save_opt (lambda '(state) (MatchType test_type 'Optional (lambda '() (Map state save)) (lambda '() (Apply save state)))))
-    (let load_opt (lambda '(state) (MatchType test_type 'Optional (lambda '() (Map state load)) (lambda '() (Apply load state)))))
-    (let merge_opt (lambda '(one two) (MatchType test_type 'Optional (lambda '() (OptionalReduce one two merge)) (lambda '() (Apply merge one two)))))
-    (let finish_opt (lambda '(state) (MatchType test_type 'Optional (lambda '() (Map state finish)) (lambda '() (Apply finish state)))))
-    (return (AggregationTraits item_type init_opt update_opt save_opt load_opt merge_opt finish_opt defval))
-))))
-
+# factory:lambda list_type:type first:lambda second:lambda 
+# support optional values, init and update has parent arg 
+(let double_traits_factory_opt_parent (lambda '(factory list_type first second) (block '( 
+    (let item_type (ListItemType list_type)) 
+    (let key_type (TypeOf (Apply first (InstanceOf item_type)))) 
+    (let test_type (MatchType item_type 'Optional (lambda '() item_type) (lambda '() key_type))) 
+    (let traits (Apply factory (ListType (MatchType item_type 'Optional (lambda '() (OptionalItemType item_type)) (lambda '() item_type))) 
+        (lambda '(row) (MatchType key_type 'Optional 
+            (lambda '() (Unwrap (Apply first row))) 
+            (lambda '() (Apply first row)) 
+        )) 
+        second 
+    )) 
+    (let init (NthArg '1 traits)) 
+    (let update (NthArg '2 traits)) 
+    (let save (NthArg '3 traits)) 
+    (let load (NthArg '4 traits)) 
+    (let merge (NthArg '5 traits)) 
+    (let finish (NthArg '6 traits)) 
+    (let defval (NthArg '7 traits)) 
+ 
+    (let init_opt (lambda '(row parent) (MatchType test_type 'Optional 
+        (lambda '() (Map (Apply first row) (lambda '(key) (Apply init row parent)))) 
+        (lambda '() (Apply init row parent)) 
+    ))) 
+    (let update_opt (lambda '(row state parent) 
+        (MatchType test_type 'Optional 
+            (lambda '() (IfPresent state (lambda '(state) (Just (If (Exists (Apply first row)) (Apply update row state parent) state))) (Apply init_opt row parent))) 
+            (lambda '() (Apply update row state parent)) 
+        ) 
+    )) 
+    (let save_opt (lambda '(state) (MatchType test_type 'Optional (lambda '() (Map state save)) (lambda '() (Apply save state))))) 
+    (let load_opt (lambda '(state) (MatchType test_type 'Optional (lambda '() (Map state load)) (lambda '() (Apply load state))))) 
+    (let merge_opt (lambda '(one two) (MatchType test_type 'Optional (lambda '() (OptionalReduce one two merge)) (lambda '() (Apply merge one two))))) 
+    (let finish_opt (lambda '(state) (MatchType test_type 'Optional (lambda '() (Map state finish)) (lambda '() (Apply finish state))))) 
+    (return (AggregationTraits item_type init_opt update_opt save_opt load_opt merge_opt finish_opt defval)) 
+)))) 
+ 
 # factory:lambda list_type:type first:lambda second:lambda
 # support optional values, init and update has parent arg
 (let list_by_traits_factory_opt_parent (lambda '(factory list_type first second) (block '(
@@ -828,11 +828,11 @@
 
 # list_type:type value:lambda weight:lambda intervals:integer
 # support optional values
-(let histogram_adaptive_ward_traits_factory (lambda '(list_type value weight intervals) (Apply double_traits_factory_opt_parent (lambda '(list_type value weight) (Apply histogram_adaptive_ward_traits_factory_raw list_type value weight intervals)) list_type value weight)))
-(let histogram_adaptive_weight_traits_factory (lambda '(list_type value weight intervals) (Apply double_traits_factory_opt_parent (lambda '(list_type value weight) (Apply histogram_adaptive_weight_traits_factory_raw list_type value weight intervals)) list_type value weight)))
-(let histogram_adaptive_distance_traits_factory (lambda '(list_type value weight intervals) (Apply double_traits_factory_opt_parent (lambda '(list_type value weight) (Apply histogram_adaptive_distance_traits_factory_raw list_type value weight intervals)) list_type value weight)))
-(let histogram_block_ward_traits_factory (lambda '(list_type value weight intervals) (Apply double_traits_factory_opt_parent (lambda '(list_type value weight) (Apply histogram_block_ward_traits_factory_raw list_type value weight intervals)) list_type value weight)))
-(let histogram_block_weight_traits_factory (lambda '(list_type value weight intervals) (Apply double_traits_factory_opt_parent (lambda '(list_type value weight) (Apply histogram_block_weight_traits_factory_raw list_type value weight intervals)) list_type value weight)))
+(let histogram_adaptive_ward_traits_factory (lambda '(list_type value weight intervals) (Apply double_traits_factory_opt_parent (lambda '(list_type value weight) (Apply histogram_adaptive_ward_traits_factory_raw list_type value weight intervals)) list_type value weight))) 
+(let histogram_adaptive_weight_traits_factory (lambda '(list_type value weight intervals) (Apply double_traits_factory_opt_parent (lambda '(list_type value weight) (Apply histogram_adaptive_weight_traits_factory_raw list_type value weight intervals)) list_type value weight))) 
+(let histogram_adaptive_distance_traits_factory (lambda '(list_type value weight intervals) (Apply double_traits_factory_opt_parent (lambda '(list_type value weight) (Apply histogram_adaptive_distance_traits_factory_raw list_type value weight intervals)) list_type value weight))) 
+(let histogram_block_ward_traits_factory (lambda '(list_type value weight intervals) (Apply double_traits_factory_opt_parent (lambda '(list_type value weight) (Apply histogram_block_ward_traits_factory_raw list_type value weight intervals)) list_type value weight))) 
+(let histogram_block_weight_traits_factory (lambda '(list_type value weight intervals) (Apply double_traits_factory_opt_parent (lambda '(list_type value weight) (Apply histogram_block_weight_traits_factory_raw list_type value weight intervals)) list_type value weight))) 
 
 # list_type:type value:lambda binsize:double minimum:double maximum:double
 # support optional values
@@ -842,22 +842,22 @@
 (let compare_by_traits_factory_opt (lambda '(list_type compare first second limit) (Apply double_traits_factory_opt (lambda '(list_type first second) (Apply compare_traits_factory_raw list_type compare first second limit)) list_type first second)))
 (let list_compare_by_traits_factory_opt (lambda '(list_type compare first second limit) (Apply double_traits_factory_opt (lambda '(list_type first second) (Apply compare_traits_factory_list_raw list_type compare first second limit)) list_type first second)))
 
-# deprecated
+# deprecated 
 (let compare_by_traits_factory (lambda '(list_type compare first second limit) (IfType limit (VoidType)
-    (lambda '() (Apply compare_by_traits_factory_opt list_type compare first second limit))
-    (lambda '() (Apply list_compare_by_traits_factory_opt list_type compare first second limit))
+    (lambda '() (Apply compare_by_traits_factory_opt list_type compare first second limit)) 
+    (lambda '() (Apply list_compare_by_traits_factory_opt list_type compare first second limit)) 
 )))
 
-# deprecated
+# deprecated 
 (let min_by_traits_factory (lambda '(list_type first second limit) (Apply compare_by_traits_factory list_type (lambda '(one two) (AggrLess one two)) first second limit)))
 (let max_by_traits_factory (lambda '(list_type first second limit) (Apply compare_by_traits_factory list_type (lambda '(one two) (AggrLess two one)) first second limit)))
 
-(let min_by_traits_factory1 (lambda '(list_type first second) (Apply compare_by_traits_factory_opt list_type (lambda '(one two) (AggrLess one two)) first second (Void))))
-(let max_by_traits_factory1 (lambda '(list_type first second) (Apply compare_by_traits_factory_opt list_type (lambda '(one two) (AggrLess two one)) first second (Void))))
-
-(let min_by_traits_factory2 (lambda '(list_type first second limit) (Apply list_compare_by_traits_factory_opt list_type (lambda '(one two) (AggrLess one two)) first second limit)))
-(let max_by_traits_factory2 (lambda '(list_type first second limit) (Apply list_compare_by_traits_factory_opt list_type (lambda '(one two) (AggrLess two one)) first second limit)))
-
+(let min_by_traits_factory1 (lambda '(list_type first second) (Apply compare_by_traits_factory_opt list_type (lambda '(one two) (AggrLess one two)) first second (Void)))) 
+(let max_by_traits_factory1 (lambda '(list_type first second) (Apply compare_by_traits_factory_opt list_type (lambda '(one two) (AggrLess two one)) first second (Void)))) 
+ 
+(let min_by_traits_factory2 (lambda '(list_type first second limit) (Apply list_compare_by_traits_factory_opt list_type (lambda '(one two) (AggrLess one two)) first second limit))) 
+(let max_by_traits_factory2 (lambda '(list_type first second limit) (Apply list_compare_by_traits_factory_opt list_type (lambda '(one two) (AggrLess two one)) first second limit))) 
+ 
 (let avg_if_traits_factory (lambda '(list_type payload predicate)
 (Apply avg_traits_factory list_type (lambda '(value) (FlatOptionalIf (Coalesce (Apply predicate value) (Bool '0)) (block '(
     (let pl (Apply payload value))
@@ -905,13 +905,13 @@
 (export avg_traits_factory)
 (export avg_if_traits_factory)
 (export list_traits_factory)
-(export list2_traits_factory)
+(export list2_traits_factory) 
 (export min_by_traits_factory)
 (export max_by_traits_factory)
-(export min_by_traits_factory1)
-(export max_by_traits_factory1)
-(export min_by_traits_factory2)
-(export max_by_traits_factory2)
+(export min_by_traits_factory1) 
+(export max_by_traits_factory1) 
+(export min_by_traits_factory2) 
+(export max_by_traits_factory2) 
 (export variance_0_0_traits_factory)
 (export variance_1_0_traits_factory)
 (export variance_0_1_traits_factory)

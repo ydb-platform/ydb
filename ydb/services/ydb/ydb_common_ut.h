@@ -45,7 +45,7 @@ public:
     TBasicKikimrWithGrpcAndRootSchema(
             NKikimrConfig::TAppConfig appConfig = {},
             const TVector<NKikimrKqp::TKqpSetting>& kqpSettings = {},
-            TAutoPtr<TLogBackend> logBackend = {},
+            TAutoPtr<TLogBackend> logBackend = {}, 
             bool enableYq = false,
             TAppPrepare::TFnReg udfFrFactory = nullptr,
             std::function<void(TServerSettings& settings)> builder = nullptr)
@@ -53,7 +53,7 @@ public:
         ui16 port = PortManager.GetPort(2134);
         ui16 grpc = PortManager.GetPort(2135);
         ServerSettings = new TServerSettings(port);
-        ServerSettings->SetGrpcPort(grpc);
+        ServerSettings->SetGrpcPort(grpc); 
         ServerSettings->SetLogBackend(logBackend);
         ServerSettings->SetDomainName("Root");
         ServerSettings->SetDynamicNodeCount(2);

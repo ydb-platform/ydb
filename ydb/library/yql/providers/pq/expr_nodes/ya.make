@@ -11,8 +11,8 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/library/yql/core/expr_nodes
-    ydb/library/yql/providers/common/provider
+    ydb/library/yql/core/expr_nodes 
+    ydb/library/yql/providers/common/provider 
 )
 
 SRCDIR(

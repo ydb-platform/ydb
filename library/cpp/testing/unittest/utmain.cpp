@@ -584,13 +584,13 @@ public:
             _CrtSetReportMode(_CRT_ERROR, _CRTDBG_MODE_FILE | _CRTDBG_MODE_DEBUG);
             _CrtSetReportFile(_CRT_ERROR, _CRTDBG_FILE_STDERR);
         }
-    }
-    ~TWinEnvironment() {
+    } 
+    ~TWinEnvironment() { 
         if (!IsDebuggerPresent()) {
             _CrtSetReportMode(_CRT_WARN, _CRTDBG_MODE_FILE);
             _CrtSetReportFile(_CRT_WARN, _CRTDBG_FILE_STDERR);
         }
-
+ 
         SetConsoleOutputCP(OutputCP); // restore original output CP at program exit
     }
 

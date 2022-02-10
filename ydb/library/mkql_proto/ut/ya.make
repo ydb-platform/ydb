@@ -17,9 +17,9 @@ SRCS(
 PEERDIR(
     ydb/library/mkql_proto/ut/helpers
     ydb/library/yql/public/udf/service/exception_policy
-    ydb/core/yql_testlib
+    ydb/core/yql_testlib 
 )
 
 YQL_LAST_ABI_VERSION()
-
+ 
 END()

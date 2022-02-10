@@ -1,12 +1,12 @@
-package NActorsServices;
-option java_package = "ru.yandex.kikimr.proto";
-
-// 0-255 range
-enum EServiceCommon {
+package NActorsServices; 
+option java_package = "ru.yandex.kikimr.proto"; 
+ 
+// 0-255 range 
+enum EServiceCommon { 
     // WARN: This must be the smallest value in the enumeration
 
-    GLOBAL = 0;
-    INTERCONNECT = 1;
+    GLOBAL = 0; 
+    INTERCONNECT = 1; 
     TEST = 2;
     PROTOCOLS = 3;
     INTERCONNECT_SPEED_TEST = 4;
@@ -18,4 +18,4 @@ enum EServiceCommon {
     // This value is reserved boundary. Is must not be aliased with any values
     // TODO: use reseved values upon protobuf update
     // COMMON_END = 256;
-};
+}; 

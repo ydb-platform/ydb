@@ -122,7 +122,7 @@ extern "C" int __cxa_guard_acquire(volatile guard_t *guard_object)
 	// if one is already established and we end up seeing an initialised state
 	// then it's a fast path, otherwise we'll do something more expensive than
 	// this test anyway...
-	if (INITIALISED == __atomic_load_n(INIT_PART(guard_object), __ATOMIC_RELAXED))
+	if (INITIALISED == __atomic_load_n(INIT_PART(guard_object), __ATOMIC_RELAXED)) 
 		return 0;
 	// Spin trying to do the initialisation
 	for (;;)
@@ -142,7 +142,7 @@ extern "C" int __cxa_guard_acquire(volatile guard_t *guard_object)
 
 			// No need for a memory barrier here,
 			// see first comment.
-			__atomic_store_n(LOCK_PART(guard_object), INITIAL, __ATOMIC_RELAXED);
+			__atomic_store_n(LOCK_PART(guard_object), INITIAL, __ATOMIC_RELAXED); 
 			return 0;
 		}
 		// If lock and init bit are in the same word, check again

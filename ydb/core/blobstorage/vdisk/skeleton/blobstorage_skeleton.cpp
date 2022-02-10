@@ -1871,7 +1871,7 @@ namespace NKikimr {
                     TStringStream str;
                     if (Hull) {
                         Hull->OutputHtmlForDb(str);
-                    }
+                    } 
                     ctx.Send(ev->Sender, new NMon::TEvHttpInfoRes(str.Str(), TDbMon::HullInfoId));
                     break;
                 }

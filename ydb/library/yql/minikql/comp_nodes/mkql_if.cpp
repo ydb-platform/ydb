@@ -1,24 +1,24 @@
-#include "mkql_if.h"
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h>
-#include <ydb/library/yql/minikql/mkql_node_cast.h>
-#include <ydb/library/yql/minikql/mkql_node_builder.h>
-
-namespace NKikimr {
-namespace NMiniKQL {
-
+#include "mkql_if.h" 
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h> 
+#include <ydb/library/yql/minikql/mkql_node_cast.h> 
+#include <ydb/library/yql/minikql/mkql_node_builder.h> 
+ 
+namespace NKikimr { 
+namespace NMiniKQL { 
+ 
 namespace {
 
 template<bool IsOptional>
 class TIfWrapper : public TMutableCodegeneratorNode<TIfWrapper<IsOptional>> {
 using TBaseComputation = TMutableCodegeneratorNode<TIfWrapper<IsOptional>>;
-public:
+public: 
     TIfWrapper(TComputationMutables& mutables, EValueRepresentation kind, IComputationNode* predicate, IComputationNode* thenBranch, IComputationNode* elseBranch)
         : TBaseComputation(mutables, kind)
         , Predicate(predicate)
-        , ThenBranch(thenBranch)
-        , ElseBranch(elseBranch)
+        , ThenBranch(thenBranch) 
+        , ElseBranch(elseBranch) 
     {}
-
+ 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         const auto& predicate = Predicate->GetValue(ctx);
         if (IsOptional && !predicate) {
@@ -26,7 +26,7 @@ public:
         }
 
         return (predicate.Get<bool>() ? ThenBranch : ElseBranch)->GetValue(ctx).Release();
-    }
+    } 
 #ifndef MKQL_DISABLE_CODEGEN
     Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
         auto& context = ctx.Codegen->GetContext();
@@ -159,13 +159,13 @@ private:
     void RegisterDependencies() const final {
         if (const auto flow = this->FlowDependsOnBoth(ThenBranch, ElseBranch))
             this->DependsOn(flow, Predicate);
-    }
-
-    IComputationNode* const Predicate;
-    IComputationNode* const ThenBranch;
-    IComputationNode* const ElseBranch;
-};
-
+    } 
+ 
+    IComputationNode* const Predicate; 
+    IComputationNode* const ThenBranch; 
+    IComputationNode* const ElseBranch; 
+}; 
+ 
 class TWideIfWrapper : public TStatefulWideFlowCodegeneratorNode<TWideIfWrapper> {
 using TBaseComputation = TStatefulWideFlowCodegeneratorNode<TWideIfWrapper>;
 public:
@@ -273,18 +273,18 @@ private:
 
 }
 
-IComputationNode* WrapIf(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
-    MKQL_ENSURE(callable.GetInputsCount() == 3, "Expected 3 args");
-
+IComputationNode* WrapIf(TCallable& callable, const TComputationNodeFactoryContext& ctx) { 
+    MKQL_ENSURE(callable.GetInputsCount() == 3, "Expected 3 args"); 
+ 
     bool isOptional;
     const auto predicateType = UnpackOptionalData(callable.GetInput(0), isOptional);
     MKQL_ENSURE(predicateType->GetSchemeType() == NUdf::TDataType<bool>::Id, "Expected bool or optional of bool.");
-
+ 
     const auto predicate = LocateNode(ctx.NodeLocator, callable, 0);
     const auto thenBranch = LocateNode(ctx.NodeLocator, callable, 1);
     const auto elseBranch = LocateNode(ctx.NodeLocator, callable, 2);
     const auto type = callable.GetType()->GetReturnType();
-
+ 
     if (type->IsFlow()) {
         const auto thenWide = dynamic_cast<IComputationWideFlowNode*>(thenBranch);
         const auto elseWide = dynamic_cast<IComputationWideFlowNode*>(elseBranch);
@@ -305,7 +305,7 @@ IComputationNode* WrapIf(TCallable& callable, const TComputationNodeFactoryConte
     }
 
     THROW yexception() << "Wrong signature.";
-}
-
-}
-}
+} 
+ 
+} 
+} 

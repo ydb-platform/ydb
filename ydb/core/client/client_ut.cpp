@@ -13,22 +13,22 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/diff/diff.h>
 
-#include <ydb/library/yql/ast/yql_ast.h>
-#include <ydb/library/yql/ast/yql_expr.h>
+#include <ydb/library/yql/ast/yql_ast.h> 
+#include <ydb/library/yql/ast/yql_expr.h> 
 
 #include <util/folder/path.h>
 #include <util/generic/xrange.h>
 #include <util/string/subst.h>
 #include <util/thread/pool.h>
-
-namespace NKikimr {
-
+ 
+namespace NKikimr { 
+ 
 using NClient::TValue;
 
 namespace Tests {
-    using namespace NMiniKQL;
+    using namespace NMiniKQL; 
 //    const ui32 TestDomain = 1;
-
+ 
 static const TString TablePlacement = "/dc-1/Berkanavt/tables";
 
 namespace {
@@ -333,7 +333,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         ui16 port = tp.GetPort(2134);
         auto settings = TServerSettings(port);
         settings.SetSupportsRedirect(false);
-
+ 
         TServer server(settings);
         TClient client(settings);
 
@@ -343,18 +343,18 @@ Y_UNIT_TEST_SUITE(TClientTest) {
             "(let select '('reservedIds))"
             "(return (AsList (SetResult 'reservedIds (SelectRow 'config row select))))"
         ")", res));
-
+ 
         {
             TValue value = TValue::Create(res.GetValue(), res.GetType());
             UNIT_ASSERT(value["reservedIds"].Size() <= 1);
         }
     }
-
+ 
     Y_UNIT_TEST(NoAffectedProgram) {
         using namespace NScheme;
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
-
+ 
         const auto settings = TServerSettings(port);
         TServer server(settings);
         TClient client(settings);
@@ -363,7 +363,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         UNIT_ASSERT(client.FlatQuery("("
             "(return (AsList (SetResult 'res1 (Int32 '42))))"
         ")", res));
-
+ 
         {
             TValue value = TValue::Create(res.GetValue(), res.GetType());
             TValue resOpt = value["res1"];
@@ -371,7 +371,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
             UNIT_ASSERT_EQUAL(i32(resOpt), 42);
         }
     }
-
+ 
     Y_UNIT_TEST(ReadWriteMiniKQL) {
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
@@ -426,7 +426,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
             )___";
 
         UNIT_ASSERT(client.FlatQuery(writeQuery, writeRes));
-
+ 
         NKikimrMiniKQL::TResult readRes;
         const TString readQueryTemplate = R"___(
             (
@@ -435,20 +435,20 @@ Y_UNIT_TEST_SUITE(TClientTest) {
                 (let row2 '('('key (Uint64 '2305843009213693951))))
                 (let nonExistRow2 '('('key (Uint64 '2305843009213693952))))
                 (let select '('uint))
-                (let result1 (SelectRow '/dc-1/Berkanavt/tables/Simple row1 select __HEAD__))
-                (let result2 (SelectRow '/dc-1/Berkanavt/tables/Simple row2 select __HEAD__))
+                (let result1 (SelectRow '/dc-1/Berkanavt/tables/Simple row1 select __HEAD__)) 
+                (let result2 (SelectRow '/dc-1/Berkanavt/tables/Simple row2 select __HEAD__)) 
                 (let entry1 (Coalesce (FlatMap result1 (lambda '(x) (Member x 'uint))) (Uint64 '0)))
                 (let entry2 (Coalesce (FlatMap result2 (lambda '(x) (Member x 'uint))) (Uint64 '0)))
-                (let non1 (SelectRow '/dc-1/Berkanavt/tables/Simple nonExistRow1 select __HEAD__))
-                (let non2 (SelectRow '/dc-1/Berkanavt/tables/Simple nonExistRow2 select __HEAD__))
+                (let non1 (SelectRow '/dc-1/Berkanavt/tables/Simple nonExistRow1 select __HEAD__)) 
+                (let non2 (SelectRow '/dc-1/Berkanavt/tables/Simple nonExistRow2 select __HEAD__)) 
                 (return (AsList (SetResult 'uint1 entry1) (SetResult 'uint2 entry2) (SetResult 'empty1 (Exists non1)) (SetResult 'empty2 (Exists non2)) ))
             )
         )___";
-
+ 
         TString readQuery = readQueryTemplate;
         SubstGlobal(readQuery, "__HEAD__", !useHead ? (useFollower ? "'follower" : "'online") : "'head");
         UNIT_ASSERT(client.FlatQuery(readQuery, readRes));
-
+ 
         {
             TValue value = TValue::Create(readRes.GetValue(), readRes.GetType());
             TValue resOpt1 = value["uint1"];
@@ -484,8 +484,8 @@ Y_UNIT_TEST_SUITE(TClientTest) {
             TValue list = rangeOpt["List"];
             UNIT_ASSERT_VALUES_EQUAL(list.Size(), 2);
         }
-    }
-
+    } 
+ 
     Y_UNIT_TEST(ReadWriteViaMiniKQL) {
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
@@ -632,7 +632,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
             c2->SetType("Uint64");
             auto *c3 = tableSimple.AddColumns();
             c3->SetName("bytes");
-            c3->SetType("String");
+            c3->SetType("String"); 
 
             *tableSimple.AddKeyColumnNames() = "key";
             client.CreateTable(TablePlacement, tableSimple);
@@ -678,34 +678,34 @@ Y_UNIT_TEST_SUITE(TClientTest) {
     Y_UNIT_TEST(ReadWriteViaMiniKQLShardedHead) {
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
-
+ 
         const auto settings = TServerSettings(port);
         TServer server(settings);
         TClient client(settings);
 
         client.InitRootScheme();
         TTestTables tables(client, TTestTables::Sharded_NoOpts);
-
+ 
         //server.GetRuntime()->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_DEBUG);
-        ReadWriteViaMiniKQLBody(client, true, false);
-    }
-
+        ReadWriteViaMiniKQLBody(client, true, false); 
+    } 
+ 
     Y_UNIT_TEST(ReadWriteViaMiniKQLShardedFollower) {
-        TPortManager tp;
-        ui16 port = tp.GetPort(2134);
+        TPortManager tp; 
+        ui16 port = tp.GetPort(2134); 
 
         // Currently followers cannot be started at the same node with leader
         // so we need 2 nodes
         auto settings = TServerSettings(port);
         settings.SetNodeCount(2);
-
+ 
         TServer server(settings);
         TClient client(settings);
 
         server.GetRuntime()->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_DEBUG);
 
         client.InitRootScheme();
-
+ 
         {
             TTestTables tables(client, TTestTables::Sharded_NoOpts, 1);
             ReadWriteViaMiniKQLBody(client, false, true);
@@ -720,43 +720,43 @@ Y_UNIT_TEST_SUITE(TClientTest) {
             TTestTables tables(client, TTestTables::Sharded_NoOpts, 2); //max followers is 3
             ReadWriteViaMiniKQLBody(client, false, true);
         }
-    }
-
-    void GetStepTxIdBody(TClient &client, bool useHead) {
-        NKikimrMiniKQL::TResult writeRes;
+    } 
+ 
+    void GetStepTxIdBody(TClient &client, bool useHead) { 
+        NKikimrMiniKQL::TResult writeRes; 
         const TString writeQuery = R"___(
-            (
-                (let row1 '('('key (Uint64 '2))))
-                (let row2 '('('key (Uint64 '2305843009213693951))))
-                (let update '( '('uint (Uint64 '10))))
-                (let result1 (UpdateRow '/dc-1/Berkanavt/tables/Simple row1 update))
-                (let result2 (UpdateRow '/dc-1/Berkanavt/tables/Simple row2 update))
-
-                            (return (AsList result1 result2))
-            )
-            )___";
-
-        UNIT_ASSERT(client.FlatQuery(writeQuery, writeRes));
-
-        NKikimrMiniKQL::TResult readRes;
+            ( 
+                (let row1 '('('key (Uint64 '2)))) 
+                (let row2 '('('key (Uint64 '2305843009213693951)))) 
+                (let update '( '('uint (Uint64 '10)))) 
+                (let result1 (UpdateRow '/dc-1/Berkanavt/tables/Simple row1 update)) 
+                (let result2 (UpdateRow '/dc-1/Berkanavt/tables/Simple row2 update)) 
+ 
+                            (return (AsList result1 result2)) 
+            ) 
+            )___"; 
+ 
+        UNIT_ASSERT(client.FlatQuery(writeQuery, writeRes)); 
+ 
+        NKikimrMiniKQL::TResult readRes; 
         const TString readQueryTemplate = R"___(
-            (
-                (let row1 '('('key (Uint64 '2))))
-                (let row2 '('('key (Uint64 '2305843009213693951))))
-                (let select '('uint))
-                (let result1 (SelectRow '/dc-1/Berkanavt/tables/Simple row1 select __HEAD__))
-                (let result2 (SelectRow '/dc-1/Berkanavt/tables/Simple row2 select __HEAD__))
-                (let entry1 (Coalesce (FlatMap result1 (lambda '(x) (Member x 'uint))) (Uint64 '0)))
-                (let entry2 (Coalesce (FlatMap result2 (lambda '(x) (Member x 'uint))) (Uint64 '0)))
+            ( 
+                (let row1 '('('key (Uint64 '2)))) 
+                (let row2 '('('key (Uint64 '2305843009213693951)))) 
+                (let select '('uint)) 
+                (let result1 (SelectRow '/dc-1/Berkanavt/tables/Simple row1 select __HEAD__)) 
+                (let result2 (SelectRow '/dc-1/Berkanavt/tables/Simple row2 select __HEAD__)) 
+                (let entry1 (Coalesce (FlatMap result1 (lambda '(x) (Member x 'uint))) (Uint64 '0))) 
+                (let entry2 (Coalesce (FlatMap result2 (lambda '(x) (Member x 'uint))) (Uint64 '0))) 
                 (return (AsList (SetResult 'uint1 entry1) (SetResult 'uint2 entry2)
                     (SetResult 'step (Nth (StepTxId) '0)) (SetResult 'txid (Nth (StepTxId) '1)) ))
-            )
-        )___";
-
+            ) 
+        )___"; 
+ 
         TString readQuery = readQueryTemplate;
-        SubstGlobal(readQuery, "__HEAD__", !useHead ? "'online" : "'head");
-        UNIT_ASSERT(client.FlatQuery(readQuery, readRes));
-
+        SubstGlobal(readQuery, "__HEAD__", !useHead ? "'online" : "'head"); 
+        UNIT_ASSERT(client.FlatQuery(readQuery, readRes)); 
+ 
         {
             TValue value = TValue::Create(readRes.GetValue(), readRes.GetType());
             TValue resOpt1 = value["uint1"];
@@ -772,36 +772,36 @@ Y_UNIT_TEST_SUITE(TClientTest) {
             ui64 txIdValue = resTxId;
             UNIT_ASSERT((useHead ? (stepValue == 0) : (stepValue > 0)) && (txIdValue > 0));
         }
-    }
-
+    } 
+ 
     Y_UNIT_TEST(GetStepTxId) {
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
-
+ 
         const auto settings = TServerSettings(port);
         TServer server(settings);
         TClient client(settings);
 
         client.InitRootScheme();
         TTestTables tables(client, TTestTables::Sharded_NoOpts);
-
-        GetStepTxIdBody(client, false);
-    }
-
+ 
+        GetStepTxIdBody(client, false); 
+    } 
+ 
     Y_UNIT_TEST(GetStepTxIdHead) {
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
-
+ 
         const auto settings = TServerSettings(port);
         TServer server(settings);
         TClient client(settings);
 
         client.InitRootScheme();
         TTestTables tables(client, TTestTables::Sharded_NoOpts);
-
-        GetStepTxIdBody(client, true);
-    }
-
+ 
+        GetStepTxIdBody(client, true); 
+    } 
+ 
     void CASViaMiniKQLBody(TClient &client) {
         NKikimrMiniKQL::TResult writeRes;
         const TString writeQuery = R"___(
@@ -896,7 +896,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
             TTestTables tables(client, TTestTables::OneShard_OutOfOrder);
             CASViaMiniKQLBody(client);
         }
-
+ 
         {
             TTestTables tables(client, TTestTables::OneShard_SoftUpdates);
             CASViaMiniKQLBody(client);
@@ -906,7 +906,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
             TTestTables tables(client, TTestTables::OneShard_OutOfOrder_SoftUpdates);
             CASViaMiniKQLBody(client);
         }
-
+ 
         {
             TTestTables tables(client, TTestTables::Sharded_NoOpts);
             CASViaMiniKQLBody(client);
@@ -953,7 +953,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
                 (return (AsList (EraseRow table row2)))
             )
         )___";
-
+ 
         UNIT_ASSERT(client.FlatQuery(updateQuery, updateRes));
 
         NKikimrMiniKQL::TResult readRes;
@@ -983,8 +983,8 @@ Y_UNIT_TEST_SUITE(TClientTest) {
             UNIT_ASSERT(row1Opt.HaveValue() && ui64(row1Opt) == 10);
             UNIT_ASSERT(!row2Opt.HaveValue());
         }
-    }
-
+    } 
+ 
     Y_UNIT_TEST(RowEraseViaMiniKQL) {
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
@@ -1149,9 +1149,9 @@ Y_UNIT_TEST_SUITE(TClientTest) {
                 ))
             )
             )___";
-
+ 
         UNIT_ASSERT(client.FlatQuery(writeQuery, writeRes));
-
+ 
         {
             NKikimrMiniKQL::TResult readRes;
             const TString readQuery = R"___(
@@ -1180,11 +1180,11 @@ Y_UNIT_TEST_SUITE(TClientTest) {
             )___";
 
             UNIT_ASSERT(client.FlatQueryParams(readQuery, readParams, false, readRes));
-
+ 
             {
                 TValue value = TValue::Create(readRes.GetValue(), readRes.GetType());
                 TValue list = value["list"];
-
+ 
                 UNIT_ASSERT_VALUES_EQUAL(list.Size(), 4);
                 UNIT_ASSERT_VALUES_EQUAL(ui64(list[0]["uint"]), 10);
                 UNIT_ASSERT_VALUES_EQUAL(ui64(list[0]["key"]), 2);
@@ -1196,7 +1196,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
                 UNIT_ASSERT_VALUES_EQUAL(ui64(list[3]["key"]), 2305843009213693952);
             }
         }
-
+ 
         {
             TString binQuery;
             NKikimrMiniKQL::TResult readRes;
@@ -1216,7 +1216,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
                     ))
                 )
             )___";
-
+ 
             UNIT_ASSERT(client.Compile(readQuery, binQuery));
 
             const TString readParams = R"___(
@@ -1227,13 +1227,13 @@ Y_UNIT_TEST_SUITE(TClientTest) {
                     (return params)
                 )
             )___";
-
+ 
             UNIT_ASSERT(client.FlatQueryParams(binQuery, readParams, true, readRes));
-
+ 
             {
                 TValue value = TValue::Create(readRes.GetValue(), readRes.GetType());
                 TValue list = value["list"];
-
+ 
                 UNIT_ASSERT_VALUES_EQUAL(list.Size(), 3);
                 UNIT_ASSERT_VALUES_EQUAL(ui64(list[0]["uint"]), 20);
                 UNIT_ASSERT_VALUES_EQUAL(ui64(list[0]["key"]), 3);
@@ -1243,7 +1243,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
                 UNIT_ASSERT_VALUES_EQUAL(ui64(list[2]["key"]), 2305843009213693952);
             }
         }
-
+ 
         {
             NKikimrMiniKQL::TResult readRes;
             const TString readQuery = R"___(
@@ -1261,17 +1261,17 @@ Y_UNIT_TEST_SUITE(TClientTest) {
             )___";
 
             UNIT_ASSERT(client.FlatQuery(readQuery, readRes));
-
+ 
             {
                 TValue value = TValue::Create(readRes.GetValue(), readRes.GetType());
                 TValue list = value["list"];
-
+ 
                 UNIT_ASSERT_VALUES_EQUAL(list.Size(), 1);
                 UNIT_ASSERT_VALUES_EQUAL(ui64(list[0]["uint"]), 30);
                 UNIT_ASSERT_VALUES_EQUAL(ui64(list[0]["key"]), 2305843009213693951);
             }
         }
-
+ 
         {
             NKikimrMiniKQL::TResult readRes;
             const TString readQuery = R"___(
@@ -1287,128 +1287,128 @@ Y_UNIT_TEST_SUITE(TClientTest) {
                     ))
                 )
             )___";
-
+ 
             UNIT_ASSERT(client.FlatQuery(readQuery, readRes));
-
+ 
             {
                 TValue value = TValue::Create(readRes.GetValue(), readRes.GetType());
                 TValue list = value["list"];
                 UNIT_ASSERT_VALUES_EQUAL(list.Size(), 0);
             }
         }
-    }
-
+    } 
+ 
     Y_UNIT_TEST(SelectRangeOptions) {
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
         const auto settings = TServerSettings(port);
         TServer server(settings);
         TClient client(settings);
-
+ 
         client.InitRootScheme();
-
+ 
         {
             TTestTables tables(client, TTestTables::OneShard_NoOpts);
             SelectRangeOptionsBody(client);
         }
-
+ 
         {
             TTestTables tables(client, TTestTables::Sharded_NoOpts);
             SelectRangeOptionsBody(client);
         }
-    }
-
+    } 
+ 
     void MultiSelectBody(TClient &client, bool useFlatMap = false) {
-        NKikimrMiniKQL::TResult writeRes;
+        NKikimrMiniKQL::TResult writeRes; 
         const TString writeQuery = R"___(
-            (
-                (let table '/dc-1/Berkanavt/tables/Simple)
-                (let row1 '('('key (Uint64 '2))))
-                (let row2 '('('key (Uint64 '3))))
-                (let row3 '('('key (Uint64 '2305843009213693951))))
-                (let row4 '('('key (Uint64 '2305843009213693952))))
-                (return (AsList
-                    (UpdateRow table row1 '( '('uint (Uint64 '10))))
-                    (UpdateRow table row2 '( '('uint (Uint64 '20))))
-                    (UpdateRow table row3 '( '('uint (Uint64 '30))))
-                    (UpdateRow table row4 '( '('uint (Uint64 '40))))
-                ))
-            )
-            )___";
-
-        UNIT_ASSERT(client.FlatQuery(writeQuery, writeRes));
-
-        {
-            NKikimrMiniKQL::TResult readRes;
+            ( 
+                (let table '/dc-1/Berkanavt/tables/Simple) 
+                (let row1 '('('key (Uint64 '2)))) 
+                (let row2 '('('key (Uint64 '3)))) 
+                (let row3 '('('key (Uint64 '2305843009213693951)))) 
+                (let row4 '('('key (Uint64 '2305843009213693952)))) 
+                (return (AsList 
+                    (UpdateRow table row1 '( '('uint (Uint64 '10)))) 
+                    (UpdateRow table row2 '( '('uint (Uint64 '20)))) 
+                    (UpdateRow table row3 '( '('uint (Uint64 '30)))) 
+                    (UpdateRow table row4 '( '('uint (Uint64 '40)))) 
+                )) 
+            ) 
+            )___"; 
+ 
+        UNIT_ASSERT(client.FlatQuery(writeQuery, writeRes)); 
+ 
+        { 
+            NKikimrMiniKQL::TResult readRes; 
             const TString readQuery = useFlatMap ?
-                R"___(
-                (
-                    (let list (Parameter 'LIST (ListType (DataType 'Uint64))))
-                    (let table '/dc-1/Berkanavt/tables/Simple)
-                    (let select '('uint 'key))
-                    (let results (FlatMapParameter list (lambda '(item) (block '(
-                        (let row '('('key item)))
-                        (let res (AsList (SelectRow table row select)))
-                        (return res)
-                    )))))
-                    (return (AsList (SetResult 'list (FlatMap results (lambda '(item) item)))))
-                )
-            )___" :
-            R"___(
-                (
-                    (let list (Parameter 'LIST (ListType (DataType 'Uint64))))
-                    (let table '/dc-1/Berkanavt/tables/Simple)
-                    (let select '('uint 'key))
-                    (let results (MapParameter list (lambda '(item) (block '(
-                        (let row '('('key item)))
-                        (let res (SelectRow table row select))
-                        (return res)
-                    )))))
-                    (return (AsList (SetResult 'list (FlatMap results (lambda '(item) item)))))
-                )
-            )___";
-
+                R"___( 
+                ( 
+                    (let list (Parameter 'LIST (ListType (DataType 'Uint64)))) 
+                    (let table '/dc-1/Berkanavt/tables/Simple) 
+                    (let select '('uint 'key)) 
+                    (let results (FlatMapParameter list (lambda '(item) (block '( 
+                        (let row '('('key item))) 
+                        (let res (AsList (SelectRow table row select))) 
+                        (return res) 
+                    ))))) 
+                    (return (AsList (SetResult 'list (FlatMap results (lambda '(item) item))))) 
+                ) 
+            )___" : 
+            R"___( 
+                ( 
+                    (let list (Parameter 'LIST (ListType (DataType 'Uint64)))) 
+                    (let table '/dc-1/Berkanavt/tables/Simple) 
+                    (let select '('uint 'key)) 
+                    (let results (MapParameter list (lambda '(item) (block '( 
+                        (let row '('('key item))) 
+                        (let res (SelectRow table row select)) 
+                        (return res) 
+                    ))))) 
+                    (return (AsList (SetResult 'list (FlatMap results (lambda '(item) item))))) 
+                ) 
+            )___"; 
+ 
             const TString readParams = R"___(
-                (
-                    (let params (Parameters))
-                    (let params (AddParameter params 'LIST (AsList (Uint64 '2) (Uint64 '4))))
-                    (return params)
-                )
-            )___";
-
-            UNIT_ASSERT(client.FlatQueryParams(readQuery, readParams, false, readRes));
-
+                ( 
+                    (let params (Parameters)) 
+                    (let params (AddParameter params 'LIST (AsList (Uint64 '2) (Uint64 '4)))) 
+                    (return params) 
+                ) 
+            )___"; 
+ 
+            UNIT_ASSERT(client.FlatQueryParams(readQuery, readParams, false, readRes)); 
+ 
             {
                 TValue value = TValue::Create(readRes.GetValue(), readRes.GetType());
                 TValue list = value["list"];
-
+ 
                 UNIT_ASSERT_VALUES_EQUAL(list.Size(), 1);
                 UNIT_ASSERT_VALUES_EQUAL(ui64(list[0]["uint"]), 10);
                 UNIT_ASSERT_VALUES_EQUAL(ui64(list[0]["key"]), 2);
             }
-        }
-    }
-
+        } 
+    } 
+ 
     Y_UNIT_TEST(TestMultiSelect) {
-        TPortManager tp;
-        ui16 port = tp.GetPort(2134);
-
+        TPortManager tp; 
+        ui16 port = tp.GetPort(2134); 
+ 
         const auto settings = TServerSettings(port);
         TServer server(settings);
         TClient client(settings);
 
         client.InitRootScheme();
-
+ 
         {
             TTestTables tables(client, TTestTables::OneShard_NoOpts);
             MultiSelectBody(client);
         }
-
+ 
         {
             TTestTables tables(client, TTestTables::OneShard_OutOfOrder);
             MultiSelectBody(client);
         }
-
+ 
         {
             TTestTables tables(client, TTestTables::OneShard_SoftUpdates);
             MultiSelectBody(client);
@@ -1418,17 +1418,17 @@ Y_UNIT_TEST_SUITE(TClientTest) {
             TTestTables tables(client, TTestTables::OneShard_OutOfOrder_SoftUpdates);
             MultiSelectBody(client);
         }
-
+ 
         {
             TTestTables tables(client, TTestTables::Sharded_NoOpts);
             MultiSelectBody(client);
         }
-
+ 
         {
             TTestTables tables(client, TTestTables::Sharded_OutOfOrder);
             MultiSelectBody(client);
         }
-
+ 
         {
             TTestTables tables(client, TTestTables::Sharded_SoftUpdates);
             MultiSelectBody(client);
@@ -1438,18 +1438,18 @@ Y_UNIT_TEST_SUITE(TClientTest) {
             TTestTables tables(client, TTestTables::Sharded_OutOfOrder_SoftUpdates);
             MultiSelectBody(client);
         }
-    }
-
+    } 
+ 
     Y_UNIT_TEST(TestMultiSelectFlat) {
-        TPortManager tp;
-        ui16 port = tp.GetPort(2134);
-
+        TPortManager tp; 
+        ui16 port = tp.GetPort(2134); 
+ 
         const auto settings = TServerSettings(port);
         TServer server(settings);
         TClient client(settings);
 
         client.InitRootScheme();
-
+ 
         {
             TTestTables tables(client, TTestTables::OneShard_NoOpts);
             MultiSelectBody(client, true);
@@ -2866,8 +2866,8 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         UNIT_ASSERT(maxGc1 < maxGc2);
     }
 
-}
-
+} 
+ 
 } // namespace Tests
 } // namespace NKikimr
 

@@ -366,7 +366,7 @@ namespace NKikimr {
             class TPageIterator;
 
             // iterator via elements
-            class TIterator;
+            class TIterator; 
 
             bool Empty() const {
                 return Pages.empty();

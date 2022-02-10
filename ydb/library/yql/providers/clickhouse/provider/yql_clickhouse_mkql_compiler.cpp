@@ -1,11 +1,11 @@
 #include "yql_clickhouse_mkql_compiler.h"
 #include "yql_clickhouse_util.h"
 
-#include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
-#include <ydb/library/yql/providers/common/mkql/yql_type_mkql.h>
-#include <ydb/library/yql/minikql/mkql_node_cast.h>
-#include <ydb/library/yql/minikql/mkql_node.h>
-#include <ydb/library/yql/core/yql_opt_utils.h>
+#include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h> 
+#include <ydb/library/yql/providers/common/mkql/yql_type_mkql.h> 
+#include <ydb/library/yql/minikql/mkql_node_cast.h> 
+#include <ydb/library/yql/minikql/mkql_node.h> 
+#include <ydb/library/yql/core/yql_opt_utils.h> 
 
 #include <library/cpp/json/json_writer.h>
 
@@ -49,8 +49,8 @@ TRuntimeNode BuildClickHouseInputCall(
     }
 
     auto structType = AS_TYPE(TStructType, itemType);
-    auto endpoint = state->Configuration->Endpoints.FindPtr(cluster);
-    Y_ENSURE(endpoint);
+    auto endpoint = state->Configuration->Endpoints.FindPtr(cluster); 
+    Y_ENSURE(endpoint); 
 
     const auto host = endpoint->first;
     const auto colonPos = host.rfind(':');
@@ -74,18 +74,18 @@ TRuntimeNode BuildClickHouseInputCall(
     writer.Write("token", TString("cluster:default_") + cluster);
 
     writer.OpenArray("columns");
-    for (ui32 i = 0; i < structType->GetMembersCount(); ++i) {
+    for (ui32 i = 0; i < structType->GetMembersCount(); ++i) { 
         writer.Write(structType->GetMemberName(i));
-    }
+    } 
     writer.CloseArray();
 
     writer.CloseMap();
     writer.Flush();
 
     const auto voidType = ctx.ProgramBuilder.NewVoid().GetStaticType();
-    TCallableTypeBuilder callbackTypeBuilder(ctx.ProgramBuilder.GetTypeEnvironment(), "", voidType);
+    TCallableTypeBuilder callbackTypeBuilder(ctx.ProgramBuilder.GetTypeEnvironment(), "", voidType); 
     const auto callbackType = callbackTypeBuilder.Build();
-
+ 
     const auto strType = ctx.ProgramBuilder.NewDataType(NUdf::TDataType<char*>::Id);
     const auto argsType = ctx.ProgramBuilder.NewTupleType({ strType });
     const auto userType = ctx.ProgramBuilder.NewTupleType({ argsType });
@@ -93,12 +93,12 @@ TRuntimeNode BuildClickHouseInputCall(
 
     TCallableTypeBuilder funcTypeBuilder(ctx.ProgramBuilder.GetTypeEnvironment(), "UDF", retType);
     funcTypeBuilder.Add(strType);
-
+ 
     const auto funcType = funcTypeBuilder.Build();
 
-    TCallableBuilder callbackBuilder(ctx.ProgramBuilder.GetTypeEnvironment(), "DqNotify", callbackType);
-    auto callback = TRuntimeNode(callbackBuilder.Build(), false);
-
+    TCallableBuilder callbackBuilder(ctx.ProgramBuilder.GetTypeEnvironment(), "DqNotify", callbackType); 
+    auto callback = TRuntimeNode(callbackBuilder.Build(), false); 
+ 
     auto flow = ctx.ProgramBuilder.ToFlow(
         ctx.ProgramBuilder.Apply(
             ctx.ProgramBuilder.TypedUdf("ClickHouse.remoteSource", funcType,

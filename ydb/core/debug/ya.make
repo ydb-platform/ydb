@@ -8,7 +8,7 @@ OWNER(
 
 SRCS(
     valgrind_check.h
-    valgrind_check.cpp
+    valgrind_check.cpp 
 )
 
 END()

@@ -1,16 +1,16 @@
 #include "result_receiver.h"
 #include "proto_builder.h"
 
-#include <ydb/library/yql/providers/dq/actors/execution_helpers.h>
-#include <ydb/library/yql/providers/dq/actors/events.h>
+#include <ydb/library/yql/providers/dq/actors/execution_helpers.h> 
+#include <ydb/library/yql/providers/dq/actors/events.h> 
 
-#include <ydb/library/yql/providers/dq/actors/actor_helpers.h>
-#include <ydb/library/yql/providers/dq/actors/executer_actor.h>
-#include <ydb/library/yql/providers/dq/counters/counters.h>
-#include <ydb/library/yql/providers/dq/common/yql_dq_common.h>
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
+#include <ydb/library/yql/providers/dq/actors/actor_helpers.h> 
+#include <ydb/library/yql/providers/dq/actors/executer_actor.h> 
+#include <ydb/library/yql/providers/dq/counters/counters.h> 
+#include <ydb/library/yql/providers/dq/common/yql_dq_common.h> 
+#include <ydb/library/yql/public/issue/yql_issue_message.h> 
 #include <ydb/library/yql/utils/log/log.h>
-#include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
+#include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h> 
 
 #include <ydb/public/lib/yson_value/ydb_yson_value.h>
 
@@ -38,8 +38,8 @@ class TResultReceiver: public TRichActor<TResultReceiver> {
 public:
     static constexpr char ActorName[] = "YQL_DQ_RESULT_RECEIVER";
 
-    explicit TResultReceiver(const TVector<TString>& columns, const NActors::TActorId& executerId, const TString& traceId, const TDqConfiguration::TPtr& settings,
-        const THashMap<TString, TString>& secureParams, const TString& resultType, bool discard)
+    explicit TResultReceiver(const TVector<TString>& columns, const NActors::TActorId& executerId, const TString& traceId, const TDqConfiguration::TPtr& settings, 
+        const THashMap<TString, TString>& secureParams, const TString& resultType, bool discard) 
         : TRichActor<TResultReceiver>(&TResultReceiver::Handler)
         , ExecuterId(executerId)
         , TraceId(traceId)
@@ -49,7 +49,7 @@ public:
             resultType
             ? MakeHolder<TProtoBuilder>(resultType, columns)
             : nullptr)
-        , Discard(discard)
+        , Discard(discard) 
     {
         if (Settings) {
             if (Settings->_AllResultsBytesLimit.Get()) {
@@ -77,28 +77,28 @@ private:
 
         auto res = MakeHolder<NDq::TEvDqCompute::TEvChannelDataAck>();
 
-        if (!Discard) {
-            if (!Finished && ev->Get()->Record.GetChannelData().GetData().GetRaw().size() > 0) {
-                DataParts.emplace_back(std::move(ev->Get()->Record.GetChannelData().GetData()));
-                Size += DataParts.back().GetRaw().size();
-                Rows += DataParts.back().GetRows();
-                YQL_LOG(DEBUG) << "Size: " << Size;
-                YQL_LOG(DEBUG) << "Rows: " << Rows;
-            }
+        if (!Discard) { 
+            if (!Finished && ev->Get()->Record.GetChannelData().GetData().GetRaw().size() > 0) { 
+                DataParts.emplace_back(std::move(ev->Get()->Record.GetChannelData().GetData())); 
+                Size += DataParts.back().GetRaw().size(); 
+                Rows += DataParts.back().GetRows(); 
+                YQL_LOG(DEBUG) << "Size: " << Size; 
+                YQL_LOG(DEBUG) << "Rows: " << Rows; 
+            } 
 
-            if (Size > 64000000 /* grpc limit*/) {
-                OnError("Too big result (grpc limit reached: " + ToString(Size) + " > 64000000)" , false, true);
-            } else if (Settings && Settings->_AllResultsBytesLimit.Get() && Size > *Settings->_AllResultsBytesLimit.Get()) {
-                TIssue issue("Size limit reached: " + ToString(Size) + ">" + ToString(Settings->_AllResultsBytesLimit.Get()));
-                issue.Severity = TSeverityIds::S_WARNING;
-                Issues.AddIssue(issue);
-                Finish(/*truncated = */ true);
-            } else if (Settings && Settings->_RowsLimitPerWrite.Get() && Rows > *Settings->_RowsLimitPerWrite.Get()) {
-                TIssue issue("Rows limit reached: " + ToString(Rows) + ">" + ToString(Settings->_RowsLimitPerWrite.Get()));
-                issue.Severity = TSeverityIds::S_WARNING;
-                Issues.AddIssue(issue);
-                Finish(/*truncated = */ true);
-            }
+            if (Size > 64000000 /* grpc limit*/) { 
+                OnError("Too big result (grpc limit reached: " + ToString(Size) + " > 64000000)" , false, true); 
+            } else if (Settings && Settings->_AllResultsBytesLimit.Get() && Size > *Settings->_AllResultsBytesLimit.Get()) { 
+                TIssue issue("Size limit reached: " + ToString(Size) + ">" + ToString(Settings->_AllResultsBytesLimit.Get())); 
+                issue.Severity = TSeverityIds::S_WARNING; 
+                Issues.AddIssue(issue); 
+                Finish(/*truncated = */ true); 
+            } else if (Settings && Settings->_RowsLimitPerWrite.Get() && Rows > *Settings->_RowsLimitPerWrite.Get()) { 
+                TIssue issue("Rows limit reached: " + ToString(Rows) + ">" + ToString(Settings->_RowsLimitPerWrite.Get())); 
+                issue.Severity = TSeverityIds::S_WARNING; 
+                Issues.AddIssue(issue); 
+                Finish(/*truncated = */ true); 
+            } 
         }
 
         res->Record.SetChannelId(ev->Get()->Record.GetChannelData().GetChannelId());
@@ -120,7 +120,7 @@ private:
 
         if (ResultBuilder) {
             try {
-                TString yson = Discard ? "" : ResultBuilder->BuildYson(
+                TString yson = Discard ? "" : ResultBuilder->BuildYson( 
                     DataParts,
                     Settings && Settings->_AllResultsBytesLimit.Get()
                         ? *Settings->_AllResultsBytesLimit.Get()
@@ -170,13 +170,13 @@ private:
     const THashMap<TString, TString> SecureParams;
     // THolder<IFullResultWriter> FullResultWriter;
     THolder<TProtoBuilder> ResultBuilder;
-    bool Discard = false;
+    bool Discard = false; 
 };
 
 } /* namespace */
 
-THolder<NActors::IActor> MakeResultReceiver(const TVector<TString>& columns, const NActors::TActorId& executerId, const TString& traceId, const TDqConfiguration::TPtr& settings, const THashMap<TString, TString>& secureParams, const TString& resultType, bool discard) {
-    return MakeHolder<TResultReceiver>(columns, executerId, traceId, settings, secureParams, resultType, discard);
+THolder<NActors::IActor> MakeResultReceiver(const TVector<TString>& columns, const NActors::TActorId& executerId, const TString& traceId, const TDqConfiguration::TPtr& settings, const THashMap<TString, TString>& secureParams, const TString& resultType, bool discard) { 
+    return MakeHolder<TResultReceiver>(columns, executerId, traceId, settings, secureParams, resultType, discard); 
 }
 
 } /* namespace NYql */

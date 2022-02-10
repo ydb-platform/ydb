@@ -1,14 +1,14 @@
 #include "yql_provider.h"
 
-#include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
-#include <ydb/library/yql/core/type_ann/type_ann_core.h>
-#include <ydb/library/yql/core/type_ann/type_ann_expr.h>
-#include <ydb/library/yql/core/yql_expr_type_annotation.h>
-#include <ydb/library/yql/core/yql_expr_optimize.h>
-#include <ydb/library/yql/core/yql_execution.h>
-#include <ydb/library/yql/core/yql_opt_utils.h>
-#include <ydb/library/yql/minikql/mkql_function_registry.h>
-#include <ydb/library/yql/minikql/mkql_program_builder.h>
+#include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h> 
+#include <ydb/library/yql/core/type_ann/type_ann_core.h> 
+#include <ydb/library/yql/core/type_ann/type_ann_expr.h> 
+#include <ydb/library/yql/core/yql_expr_type_annotation.h> 
+#include <ydb/library/yql/core/yql_expr_optimize.h> 
+#include <ydb/library/yql/core/yql_execution.h> 
+#include <ydb/library/yql/core/yql_opt_utils.h> 
+#include <ydb/library/yql/minikql/mkql_function_registry.h> 
+#include <ydb/library/yql/minikql/mkql_program_builder.h> 
 
 #include <util/folder/path.h>
 #include <util/generic/utility.h>
@@ -80,24 +80,24 @@ TCoNameValueTupleList TCommitSettings::BuildNode(TExprContext& ctx) const {
 
 const TStructExprType* BuildCommonTableListType(TExprContext& ctx) {
     TVector<const TItemExprType*> items;
-    auto stringType = ctx.MakeType<TDataExprType>(EDataSlot::String);
-    auto listOfString = ctx.MakeType<TListExprType>(stringType);
+    auto stringType = ctx.MakeType<TDataExprType>(EDataSlot::String); 
+    auto listOfString = ctx.MakeType<TListExprType>(stringType); 
 
-    items.push_back(ctx.MakeType<TItemExprType>("Prefix", stringType));
-    items.push_back(ctx.MakeType<TItemExprType>("Folders", listOfString));
-    items.push_back(ctx.MakeType<TItemExprType>("Tables", listOfString));
+    items.push_back(ctx.MakeType<TItemExprType>("Prefix", stringType)); 
+    items.push_back(ctx.MakeType<TItemExprType>("Folders", listOfString)); 
+    items.push_back(ctx.MakeType<TItemExprType>("Tables", listOfString)); 
 
-    return ctx.MakeType<TStructExprType>(items);
+    return ctx.MakeType<TStructExprType>(items); 
 }
 
 TExprNode::TPtr BuildTypeExpr(TPositionHandle pos, const TTypeAnnotationNode& ann, TExprContext& ctx) {
-    return ExpandType(pos, ann, ctx);
+    return ExpandType(pos, ann, ctx); 
 }
 
 bool HasResOrPullOption(const TExprNode& node, const TStringBuf& option) {
-    if (node.Content() == "Result" || node.Content() == "Pull") {
-        auto options = node.Child(4);
-        for (auto setting : options->Children()) {
+    if (node.Content() == "Result" || node.Content() == "Pull") { 
+        auto options = node.Child(4); 
+        for (auto setting : options->Children()) { 
             if (setting->Head().Content() == option) {
                 return true;
             }
@@ -108,15 +108,15 @@ bool HasResOrPullOption(const TExprNode& node, const TStringBuf& option) {
 
 TVector<TString> GetResOrPullColumnHints(const TExprNode& node) {
     TVector<TString> columns;
-    auto setting = GetSetting(*node.Child(4), "columns");
+    auto setting = GetSetting(*node.Child(4), "columns"); 
     if (setting) {
         auto type = node.Head().GetTypeAnn();
-        if (type->GetKind() != ETypeAnnotationKind::EmptyList) {
-            auto structType = type->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
-            for (ui32 i = 0; i < structType->GetSize(); ++i) {
-               auto field = setting->Child(1)->Child(i);
-               columns.push_back(TString(field->Content()));
-            }
+        if (type->GetKind() != ETypeAnnotationKind::EmptyList) { 
+            auto structType = type->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>(); 
+            for (ui32 i = 0; i < structType->GetSize(); ++i) { 
+               auto field = setting->Child(1)->Child(i); 
+               columns.push_back(TString(field->Content())); 
+            } 
         }
     }
     return columns;
@@ -131,14 +131,14 @@ IDataProvider::TFillSettings GetFillSettings(const TExprNode& node) {
     fillSettings.AllResultsBytesLimit = node.Child(1)->Content().empty()
         ? Nothing()
         : TMaybe<ui64>(FromString<ui64>(node.Child(1)->Content()));
-
+ 
     fillSettings.RowsLimitPerWrite = node.Child(2)->Content().empty()
         ? Nothing()
         : TMaybe<ui64>(FromString<ui64>(node.Child(2)->Content()));
-
+ 
     fillSettings.Format = (IDataProvider::EResultFormat)FromString<ui32>(node.Child(5)->Content());
     fillSettings.FormatDetails = node.Child(3)->Content();
-    fillSettings.Discard = FromString<bool>(node.Child(7)->Content());
+    fillSettings.Discard = FromString<bool>(node.Child(7)->Content()); 
 
     return fillSettings;
 }
@@ -353,18 +353,18 @@ TCommitSettings ParseCommitSettings(NNodes::TCoCommit node, TExprContext& ctx) {
 
 TVector<TString> GetStructFields(const TTypeAnnotationNode* type) {
     TVector<TString> fields;
-    if (type->GetKind() == ETypeAnnotationKind::List) {
-        type = type->Cast<TListExprType>()->GetItemType();
-    }
-    if (type->GetKind() == ETypeAnnotationKind::Struct) {
-        auto structType = type->Cast<TStructExprType>();
-        for (auto& member : structType->GetItems()) {
+    if (type->GetKind() == ETypeAnnotationKind::List) { 
+        type = type->Cast<TListExprType>()->GetItemType(); 
+    } 
+    if (type->GetKind() == ETypeAnnotationKind::Struct) { 
+        auto structType = type->Cast<TStructExprType>(); 
+        for (auto& member : structType->GetItems()) { 
             fields.push_back(TString(member->GetName()));
-        }
-    }
-    return fields;
-}
-
+        } 
+    } 
+    return fields; 
+} 
+ 
 
 void TransformerStatsToYson(const TString& name, const IGraphTransformer::TStatistics& stats,
     NYson::TYsonWriter& writer)
@@ -418,18 +418,18 @@ void TransformerStatsToYson(const TString& name, const IGraphTransformer::TStati
     writer.OnEndMap();
 }
 
-bool FillUsedFilesImpl(
+bool FillUsedFilesImpl( 
     const TExprNode& node,
     TUserDataTable& files,
     const TTypeAnnotationContext& types,
-    TExprContext& ctx,
+    TExprContext& ctx, 
     const TUserDataTable& crutches,
-    TNodeSet& visited)
+    TNodeSet& visited) 
 {
-    if (!visited.insert(&node).second) {
-        return true;
-    }
-
+    if (!visited.insert(&node).second) { 
+        return true; 
+    } 
+ 
     if (node.IsCallable("FilePath") || node.IsCallable("FileContent")) {
         const auto& name = node.Head().Content();
         const auto block = types.UserDataStorage->FindUserDataBlock(name);
@@ -465,9 +465,9 @@ bool FillUsedFilesImpl(
         }
 
         auto scriptType = NKikimr::NMiniKQL::ScriptTypeFromStr(moduleName);
-        if (node.IsCallable("ScriptUdf")) {
-            moduleName = NKikimr::NMiniKQL::ScriptTypeAsStr(NKikimr::NMiniKQL::CanonizeScriptType(scriptType));
-        }
+        if (node.IsCallable("ScriptUdf")) { 
+            moduleName = NKikimr::NMiniKQL::ScriptTypeAsStr(NKikimr::NMiniKQL::CanonizeScriptType(scriptType)); 
+        } 
 
         bool addSysModule = true;
         TString fileAlias;
@@ -557,23 +557,23 @@ static void GetToken(const TString& string, TString& out, const TTypeAnnotationC
         } else {
             YQL_ENSURE(false, "unexpected token id");
         }
-    } else if (p0 == "token" || p0 == "cluster") {
+    } else if (p0 == "token" || p0 == "cluster") { 
         const auto p1 = string.substr(separator + 1);
         auto cred = type.FindCredential(p1);
         if (cred == nullptr) {
-            if (p0 == "cluster") {
-                TStringBuf clusterName = p1;
-                if (clusterName.SkipPrefix("default_")) {
-                    for (auto& x : type.DataSources) {
-                        auto tokens = x->GetClusterTokens();
-                        if (tokens) {
-                            auto token = tokens->FindPtr(clusterName);
-                            if (token) {
-                                out = *token;
-                                return;
-                            }
-                        }
-                    }
+            if (p0 == "cluster") { 
+                TStringBuf clusterName = p1; 
+                if (clusterName.SkipPrefix("default_")) { 
+                    for (auto& x : type.DataSources) { 
+                        auto tokens = x->GetClusterTokens(); 
+                        if (tokens) { 
+                            auto token = tokens->FindPtr(clusterName); 
+                            if (token) { 
+                                out = *token; 
+                                return; 
+                            } 
+                        } 
+                    } 
                     for (auto& x : type.DataSinks) {
                         auto tokens = x->GetClusterTokens();
                         if (tokens) {
@@ -584,12 +584,12 @@ static void GetToken(const TString& string, TString& out, const TTypeAnnotationC
                             }
                         }
                     }
-                }
-            }
-
+                } 
+            } 
+ 
             YQL_ENSURE(false, "unexpected token id");
         }
-
+ 
         out = cred->Content;
     } else {
         YQL_ENSURE(false, "unexpected token prefix");
@@ -614,16 +614,16 @@ void FillSecureParams(
     }
 }
 
-bool FillUsedFiles(
-    const TExprNode& node,
-    TUserDataTable& files,
-    const TTypeAnnotationContext& types,
+bool FillUsedFiles( 
+    const TExprNode& node, 
+    TUserDataTable& files, 
+    const TTypeAnnotationContext& types, 
     TExprContext& ctx,
     const TUserDataTable& crutches) {
-    TNodeSet visited;
+    TNodeSet visited; 
     return FillUsedFilesImpl(node, files, types, ctx, crutches, visited);
-}
-
+} 
+ 
 std::pair<IGraphTransformer::TStatus, TAsyncTransformCallbackFuture> FreezeUsedFiles(const TExprNode& node, TUserDataTable& files, const TTypeAnnotationContext& types, TExprContext& ctx, const std::function<bool(const TString&)>& urlDownloadFilter, const TUserDataTable& crutches) {
     if (!FillUsedFiles(node, files, types, ctx, crutches)) {
         return SyncError();
@@ -692,7 +692,7 @@ void WriteColumns(NYson::TYsonWriter& writer, const TExprBase& columns) {
         writer.OnStringScalar("?");
     }
 }
-
+ 
 TString SerializeExpr(TExprContext& ctx, const TExprNode& expr, bool withTypes) {
     ui32 typeFlags = TExprAnnotationFlags::None;
     if (withTypes) {
@@ -718,16 +718,16 @@ bool IsFlowOrStream(const TExprNode* node) {
     auto kind = node->GetTypeAnn()->GetKind();
     return kind == ETypeAnnotationKind::Stream || kind == ETypeAnnotationKind::Flow;
 }
-
+ 
 void WriteStream(NYson::TYsonWriter& writer, const TExprNode* node, const TExprNode* source) {
-    if (node == source) {
-        return;
-    }
-
+    if (node == source) { 
+        return; 
+    } 
+ 
     if (!node->IsCallable()) {
-        return;
-    }
-
+        return; 
+    } 
+ 
     if (!node->GetTypeAnn()) {
         return;
     }
@@ -759,23 +759,23 @@ void WriteStream(NYson::TYsonWriter& writer, const TExprNode* node, const TExprN
         }
     }
     else if (!TCoExtendBase::Match(node) && node->ChildrenSize() > 0) {
-        WriteStream(writer, node->Child(0), source);
-    }
-
-    writer.OnListItem();
-    writer.OnBeginMap();
-    writer.OnKeyedItem("Name");
-    writer.OnStringScalar(node->Content());
+        WriteStream(writer, node->Child(0), source); 
+    } 
+ 
+    writer.OnListItem(); 
+    writer.OnBeginMap(); 
+    writer.OnKeyedItem("Name"); 
+    writer.OnStringScalar(node->Content()); 
     if (TCoFlatMapBase::Match(node) && IsFlowOrStream(node->ChildPtr(1).Get())) {
-        writer.OnKeyedItem("Children");
-        writer.OnBeginList();
-        writer.OnListItem();
-        writer.OnBeginList();
+        writer.OnKeyedItem("Children"); 
+        writer.OnBeginList(); 
+        writer.OnListItem(); 
+        writer.OnBeginList(); 
         WriteStream(writer, node->Child(1)->Child(1), node->Child(1)->Head().Child(0));
-        writer.OnEndList();
-        writer.OnEndList();
-    }
-
+        writer.OnEndList(); 
+        writer.OnEndList(); 
+    } 
+ 
     if (TCoChopper::Match(node) || node->IsCallable("WideChopper")) {
         writer.OnKeyedItem("Children");
         writer.OnBeginList();
@@ -787,31 +787,31 @@ void WriteStream(NYson::TYsonWriter& writer, const TExprNode* node, const TExprN
     }
 
     if (TCoSwitch::Match(node)) {
-        writer.OnKeyedItem("Children");
-        writer.OnBeginList();
+        writer.OnKeyedItem("Children"); 
+        writer.OnBeginList(); 
         for (size_t i = 3; i < node->ChildrenSize(); i += 2) {
-            writer.OnListItem();
-            writer.OnBeginList();
+            writer.OnListItem(); 
+            writer.OnBeginList(); 
             WriteStream(writer, node->Child(i)->Child(1), node->Child(i)->Head().Child(0));
-            writer.OnEndList();
-        }
-
-        writer.OnEndList();
-    }
-
+            writer.OnEndList(); 
+        } 
+ 
+        writer.OnEndList(); 
+    } 
+ 
     if (TCoExtendBase::Match(node) && node->ChildrenSize() > 0) {
-        writer.OnKeyedItem("Children");
-        writer.OnBeginList();
+        writer.OnKeyedItem("Children"); 
+        writer.OnBeginList(); 
         for (size_t i = 0; i < node->ChildrenSize(); ++i) {
-            writer.OnListItem();
-            writer.OnBeginList();
-            WriteStream(writer, node->Child(i), source);
-            writer.OnEndList();
-        }
-
-        writer.OnEndList();
-    }
-
+            writer.OnListItem(); 
+            writer.OnBeginList(); 
+            WriteStream(writer, node->Child(i), source); 
+            writer.OnEndList(); 
+        } 
+ 
+        writer.OnEndList(); 
+    } 
+ 
     if (TCoApply::Match(node) && applyStreamChildren.size() > 1) {
         writer.OnKeyedItem("Children");
         writer.OnBeginList();
@@ -824,16 +824,16 @@ void WriteStream(NYson::TYsonWriter& writer, const TExprNode* node, const TExprN
         writer.OnEndList();
     }
 
-    writer.OnEndMap();
-}
-
+    writer.OnEndMap(); 
+} 
+ 
 void WriteStreams(NYson::TYsonWriter& writer, TStringBuf name, const NNodes::TCoLambda& lambda) {
-    writer.OnKeyedItem(name);
-    writer.OnBeginList();
-    WriteStream(writer, lambda.Body().Raw(), lambda.Args().Size() > 0 ? lambda.Args().Arg(0).Raw() : nullptr);
-    writer.OnEndList();
-}
-
+    writer.OnKeyedItem(name); 
+    writer.OnBeginList(); 
+    WriteStream(writer, lambda.Body().Raw(), lambda.Args().Size() > 0 ? lambda.Args().Arg(0).Raw() : nullptr); 
+    writer.OnEndList(); 
+} 
+ 
 double GetDataReplicationFactor(double factor, const TExprNode* node, const TExprNode* stream, TExprContext& ctx) {
     if (node == stream) {
         return factor;

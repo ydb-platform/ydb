@@ -14,8 +14,8 @@ PEERDIR(
     library/cpp/deprecated/enum_codegen
     library/cpp/logger
     library/cpp/lwtrace/mon
-    library/cpp/random_provider
-    library/cpp/time_provider
+    library/cpp/random_provider 
+    library/cpp/time_provider 
     ydb/core/base
     ydb/core/base/services
     ydb/core/blobstorage/base

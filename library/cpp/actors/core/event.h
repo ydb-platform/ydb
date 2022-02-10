@@ -268,14 +268,14 @@ namespace NActors {
 
             return Event.Get();
         }
-
+ 
         TAutoPtr<IEventBase> ReleaseBase() {
             TAutoPtr<IEventBase> x = GetBase();
             Y_UNUSED(Event.Release());
             Buffer.Reset();
             return x;
         }
-
+ 
         TAutoPtr<IEventHandle> Forward(const TActorId& dest) {
             if (Event)
                 return new IEventHandle(dest, Sender, Event.Release(), Flags, Cookie, nullptr, std::move(TraceId));

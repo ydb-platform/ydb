@@ -1,6 +1,6 @@
 LIBRARY()
 
-OWNER(g:yql g:yql_ydb_core)
+OWNER(g:yql g:yql_ydb_core) 
 
 SRCS(
     yql_issue.cpp
@@ -9,16 +9,16 @@ SRCS(
 PEERDIR(
     library/cpp/resource
     contrib/libs/protobuf
-    ydb/library/yql/public/issue
-    ydb/library/yql/core/issue/protos
+    ydb/library/yql/public/issue 
+    ydb/library/yql/core/issue/protos 
 )
 
 RESOURCE(
-    ydb/library/yql/core/issue/yql_issue.txt yql_issue.txt
+    ydb/library/yql/core/issue/yql_issue.txt yql_issue.txt 
 )
 
 END()
-
-RECURSE_FOR_TESTS(
-    ut
-)
+ 
+RECURSE_FOR_TESTS( 
+    ut 
+) 

@@ -1,7 +1,7 @@
 LIBRARY()
 
 OWNER(
-    g:yql g:yql_ydb_core
+    g:yql g:yql_ydb_core 
 )
 
 SRCS(
@@ -9,7 +9,7 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/library/yql/core/expr_nodes
+    ydb/library/yql/core/expr_nodes 
 )
 
 SRCDIR(

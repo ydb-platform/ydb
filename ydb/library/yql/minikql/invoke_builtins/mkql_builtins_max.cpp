@@ -33,7 +33,7 @@ struct TMax : public TSimpleArithmeticBinary<TLeft, TRight, TOutput, TMax<TLeft,
             auto& module = ctx.Codegen->GetModule();
             const auto fnType = FunctionType::get(GetTypeFor<TOutput>(context), {left->getType(), right->getType()}, false);
             const auto& name = GetFuncNameForType<TOutput>("llvm.maxnum");
-            const auto func = module.getOrInsertFunction(name, fnType).getCallee();
+            const auto func = module.getOrInsertFunction(name, fnType).getCallee(); 
             const auto res = CallInst::Create(func, {left, right}, "maxnum", block);
             return res;
         } else {

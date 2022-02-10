@@ -1,26 +1,26 @@
-#include "mkql_fold.h"
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h>
-#include <ydb/library/yql/minikql/mkql_node_cast.h>
-
-namespace NKikimr {
-namespace NMiniKQL {
-
+#include "mkql_fold.h" 
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h> 
+#include <ydb/library/yql/minikql/mkql_node_cast.h> 
+ 
+namespace NKikimr { 
+namespace NMiniKQL { 
+ 
 namespace {
 
-class TFoldWrapper : public TMutableCodegeneratorRootNode<TFoldWrapper> {
-    typedef TMutableCodegeneratorRootNode<TFoldWrapper> TBaseComputation;
-public:
+class TFoldWrapper : public TMutableCodegeneratorRootNode<TFoldWrapper> { 
+    typedef TMutableCodegeneratorRootNode<TFoldWrapper> TBaseComputation; 
+public: 
     TFoldWrapper(TComputationMutables& mutables, EValueRepresentation kind, IComputationNode* list, IComputationExternalNode* item, IComputationExternalNode* state,
-        IComputationNode* newState, IComputationNode* initialState)
+        IComputationNode* newState, IComputationNode* initialState) 
         : TBaseComputation(mutables, kind)
         , List(list)
-        , Item(item)
-        , State(state)
-        , NewState(newState)
-        , InitialState(initialState)
-    {
-    }
-
+        , Item(item) 
+        , State(state) 
+        , NewState(newState) 
+        , InitialState(initialState) 
+    { 
+    } 
+ 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& compCtx) const {
         State->SetValue(compCtx, InitialState->GetValue(compCtx));
 
@@ -28,12 +28,12 @@ public:
             [this, &compCtx] (NUdf::TUnboxedValue&& item) {
                 Item->SetValue(compCtx, std::move(item));
                 State->SetValue(compCtx, NewState->GetValue(compCtx));
-            }
+            } 
         );
 
         return State->GetValue(compCtx).Release();
-    }
-
+    } 
+ 
 #ifndef MKQL_DISABLE_CODEGEN
     llvm::Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
         auto &context = ctx.Codegen->GetContext();
@@ -129,7 +129,7 @@ public:
             BranchInst::Create(done, block);
         }
 
-        block = done;
+        block = done; 
         if (List->IsTemporaryValue())
             CleanupBoxed(list, ctx, block);
         return codegenState->CreateGetValue(ctx, block);
@@ -139,25 +139,25 @@ public:
 private:
     void RegisterDependencies() const final {
         this->DependsOn(List);
-        this->DependsOn(InitialState);
-        this->Own(Item);
-        this->Own(State);
+        this->DependsOn(InitialState); 
+        this->Own(Item); 
+        this->Own(State); 
         this->DependsOn(NewState);
-    }
-
-    IComputationNode* const List;
+    } 
+ 
+    IComputationNode* const List; 
     IComputationExternalNode* const Item;
     IComputationExternalNode* const State;
-    IComputationNode* const NewState;
-    IComputationNode* const InitialState;
-};
-
+    IComputationNode* const NewState; 
+    IComputationNode* const InitialState; 
+}; 
+ 
 }
 
-IComputationNode* WrapFold(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
-    MKQL_ENSURE(callable.GetInputsCount() == 5, "Expected 5 args");
-    MKQL_ENSURE(callable.GetInput(0).GetStaticType()->IsList(), "Expected List");
-
+IComputationNode* WrapFold(TCallable& callable, const TComputationNodeFactoryContext& ctx) { 
+    MKQL_ENSURE(callable.GetInputsCount() == 5, "Expected 5 args"); 
+    MKQL_ENSURE(callable.GetInput(0).GetStaticType()->IsList(), "Expected List"); 
+ 
     const auto list = LocateNode(ctx.NodeLocator, callable, 0);
     const auto initialState = LocateNode(ctx.NodeLocator, callable, 1);
     const auto newState = LocateNode(ctx.NodeLocator, callable, 4);
@@ -166,8 +166,8 @@ IComputationNode* WrapFold(TCallable& callable, const TComputationNodeFactoryCon
 
     const auto kind = GetValueRepresentation(callable.GetType()->GetReturnType());
 
-    return new TFoldWrapper(ctx.Mutables, kind, list, item, state, newState, initialState);
-}
-
-}
-}
+    return new TFoldWrapper(ctx.Mutables, kind, list, item, state, newState, initialState); 
+} 
+ 
+} 
+} 

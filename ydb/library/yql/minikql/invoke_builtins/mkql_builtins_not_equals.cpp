@@ -1,8 +1,8 @@
 #include "mkql_builtins_compare.h"
-#include "mkql_builtins_datetime.h"
+#include "mkql_builtins_datetime.h" 
 #include "mkql_builtins_decimal.h"
 
-#include <ydb/library/yql/minikql/mkql_type_ops.h>
+#include <ydb/library/yql/minikql/mkql_type_ops.h> 
 
 namespace NKikimr {
 namespace NMiniKQL {
@@ -162,19 +162,19 @@ struct TDiffDateNotEquals : public TCompareArithmeticBinary<TLeft, TRight, TDiff
         return std::is_same<TLeft, TRight>::value ?
             NotEquals<TLeft, TRight, Aggr>(left, right):
             NotEquals<TScaledDate, TScaledDate, Aggr>(ToScaledDate<TLeft>(left), ToScaledDate<TRight>(right));
-    }
-
-#ifndef MKQL_DISABLE_CODEGEN
+    } 
+ 
+#ifndef MKQL_DISABLE_CODEGEN 
     static Value* Gen(Value* left, Value* right, const TCodegenContext& ctx, BasicBlock*& block)
-    {
+    { 
         auto& context = ctx.Codegen->GetContext();
         return std::is_same<TLeft, TRight>::value ?
             GenNotEquals<TLeft, TRight, Aggr>(left, right, context, block):
             GenNotEquals<TScaledDate, TScaledDate, Aggr>(GenToScaledDate<TLeft>(left, context, block), GenToScaledDate<TRight>(right, context, block), context, block);
-    }
-#endif
-};
-
+    } 
+#endif 
+}; 
+ 
 template <typename TLeft, typename TRight, bool Aggr>
 struct TAggrTzDateNotEquals : public TArithmeticConstraintsBinary<TLeft, TRight, bool>, public TAggrNotEquals {
     static_assert(std::is_same<TLeft, TRight>::value, "Must be same type.");
@@ -262,7 +262,7 @@ void RegisterNotEquals(IBuiltinFunctionRegistry& registry) {
     const auto name = "NotEquals";
 
     RegisterComparePrimitive<TNotEquals, TCompareArgsOpt>(registry, name);
-    RegisterCompareDatetime<TDiffDateNotEquals, TCompareArgsOpt>(registry, name);
+    RegisterCompareDatetime<TDiffDateNotEquals, TCompareArgsOpt>(registry, name); 
 
     RegisterCompareStrings<TCustomNotEquals, TCompareArgsOpt>(registry, name);
     RegisterCompareCustomOpt<NUdf::TDataType<NUdf::TDecimal>, NUdf::TDataType<NUdf::TDecimal>, TDecimalNotEquals, TCompareArgsOpt>(registry, name);

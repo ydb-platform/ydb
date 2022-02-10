@@ -1,8 +1,8 @@
 #include "yql_kikimr_provider_impl.h"
 #include "yql_kikimr_opt_utils.h"
 
-#include <ydb/library/yql/core/yql_join.h>
-#include <ydb/library/yql/core/yql_opt_utils.h>
+#include <ydb/library/yql/core/yql_join.h> 
+#include <ydb/library/yql/core/yql_opt_utils.h> 
 #include <ydb/library/yql/utils/log/log.h>
 #include <util/string/cast.h>
 
@@ -82,9 +82,9 @@ TMaybeNode<TExprBase> EquiJoinGetIdxLookupValue(const TStringBuf& leftDataName, 
     if (leftDataName != rightDataName) {
         bool canConvert = false;
 
-        if (IsDataTypeNumeric(NKikimr::NUdf::GetDataSlot(leftDataName)) && IsDataTypeNumeric(NKikimr::NUdf::GetDataSlot(rightDataName))) {
-            canConvert = GetNumericDataTypeLevel(NKikimr::NUdf::GetDataSlot(rightDataName))
-            >= GetNumericDataTypeLevel(NKikimr::NUdf::GetDataSlot(leftDataName));
+        if (IsDataTypeNumeric(NKikimr::NUdf::GetDataSlot(leftDataName)) && IsDataTypeNumeric(NKikimr::NUdf::GetDataSlot(rightDataName))) { 
+            canConvert = GetNumericDataTypeLevel(NKikimr::NUdf::GetDataSlot(rightDataName)) 
+            >= GetNumericDataTypeLevel(NKikimr::NUdf::GetDataSlot(leftDataName)); 
         }
 
         if (leftDataName == "Utf8" && rightDataName == "String") {
@@ -268,7 +268,7 @@ bool EquiJoinToIdxLookup(TGetExprFunc getLeftExpr, TCoEquiJoinTuple joinTuple, c
             return false;
         }
 
-        auto value = EquiJoinGetIdxLookupValue(leftData->GetName(), rightData->GetName(), leftRowArg,
+        auto value = EquiJoinGetIdxLookupValue(leftData->GetName(), rightData->GetName(), leftRowArg, 
             leftMemberName, joinTuple.Pos(), ctx);
         if (!value) {
             return false;

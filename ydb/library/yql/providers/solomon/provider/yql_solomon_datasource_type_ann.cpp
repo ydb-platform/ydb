@@ -1,6 +1,6 @@
 #include "yql_solomon_provider_impl.h"
 
-#include <ydb/library/yql/providers/common/provider/yql_provider.h>
+#include <ydb/library/yql/providers/common/provider/yql_provider.h> 
 
 namespace NYql {
 

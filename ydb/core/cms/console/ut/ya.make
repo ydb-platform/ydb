@@ -25,7 +25,7 @@ PEERDIR(
 )
 
 YQL_LAST_ABI_VERSION()
-
+ 
 SRCS(
     configs_cache_ut.cpp
     configs_dispatcher_ut.cpp

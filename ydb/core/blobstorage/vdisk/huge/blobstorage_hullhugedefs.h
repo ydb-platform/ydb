@@ -24,13 +24,13 @@ namespace NKikimr {
             TMask Mask;
             ui32 MaskSize = 0;
 
-            TFreeRes() = default;
-            TFreeRes(ui32 chunkId, TMask mask, ui32 maskSize)
-                : ChunkId(chunkId)
-                , Mask(mask)
-                , MaskSize(maskSize)
-            {}
-
+            TFreeRes() = default; 
+            TFreeRes(ui32 chunkId, TMask mask, ui32 maskSize) 
+                : ChunkId(chunkId) 
+                , Mask(mask) 
+                , MaskSize(maskSize) 
+            {} 
+ 
             void Output(IOutputStream &str) const;
             TString ToString() const {
                 TStringStream str;

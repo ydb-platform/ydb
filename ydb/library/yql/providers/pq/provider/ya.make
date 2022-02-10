@@ -37,24 +37,24 @@ PEERDIR(
     ydb/library/yql/providers/common/structured_token
     ydb/library/yql/public/udf
     ydb/public/sdk/cpp/client/ydb_driver
-    ydb/library/yql/core
-    ydb/library/yql/core/type_ann
-    ydb/library/yql/dq/expr_nodes
-    ydb/library/yql/dq/opt
-    ydb/library/yql/providers/common/config
-    ydb/library/yql/providers/common/dq
-    ydb/library/yql/providers/common/proto
-    ydb/library/yql/providers/common/provider
-    ydb/library/yql/providers/common/transform
-    ydb/library/yql/providers/dq/common
-    ydb/library/yql/providers/dq/expr_nodes
-    ydb/library/yql/providers/dq/interface
-    ydb/library/yql/providers/dq/provider/exec
-    ydb/library/yql/providers/pq/cm_client/interface
-    ydb/library/yql/providers/pq/common
-    ydb/library/yql/providers/pq/expr_nodes
-    ydb/library/yql/providers/pq/proto
-    ydb/library/yql/providers/result/expr_nodes
+    ydb/library/yql/core 
+    ydb/library/yql/core/type_ann 
+    ydb/library/yql/dq/expr_nodes 
+    ydb/library/yql/dq/opt 
+    ydb/library/yql/providers/common/config 
+    ydb/library/yql/providers/common/dq 
+    ydb/library/yql/providers/common/proto 
+    ydb/library/yql/providers/common/provider 
+    ydb/library/yql/providers/common/transform 
+    ydb/library/yql/providers/dq/common 
+    ydb/library/yql/providers/dq/expr_nodes 
+    ydb/library/yql/providers/dq/interface 
+    ydb/library/yql/providers/dq/provider/exec 
+    ydb/library/yql/providers/pq/cm_client/interface 
+    ydb/library/yql/providers/pq/common 
+    ydb/library/yql/providers/pq/expr_nodes 
+    ydb/library/yql/providers/pq/proto 
+    ydb/library/yql/providers/result/expr_nodes 
 )
 
 YQL_LAST_ABI_VERSION()

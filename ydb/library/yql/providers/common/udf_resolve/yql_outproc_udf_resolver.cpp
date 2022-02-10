@@ -2,17 +2,17 @@
 #include "yql_simple_udf_resolver.h"
 #include "yql_files_box.h"
 
-#include <ydb/library/yql/providers/common/proto/udf_resolver.pb.h>
-#include <ydb/library/yql/providers/common/schema/expr/yql_expr_schema.h>
-#include <ydb/library/yql/core/yql_holding_file_storage.h>
-#include <ydb/library/yql/core/yql_type_annotation.h>
+#include <ydb/library/yql/providers/common/proto/udf_resolver.pb.h> 
+#include <ydb/library/yql/providers/common/schema/expr/yql_expr_schema.h> 
+#include <ydb/library/yql/core/yql_holding_file_storage.h> 
+#include <ydb/library/yql/core/yql_type_annotation.h> 
 #include <ydb/library/yql/utils/log/log.h>
-#include <ydb/library/yql/utils/retry.h>
+#include <ydb/library/yql/utils/retry.h> 
 
-#include <ydb/library/yql/minikql/mkql_node.h>
-#include <ydb/library/yql/minikql/mkql_type_builder.h>
-#include <ydb/library/yql/minikql/mkql_program_builder.h>
-#include <ydb/library/yql/minikql/mkql_utils.h>
+#include <ydb/library/yql/minikql/mkql_node.h> 
+#include <ydb/library/yql/minikql/mkql_type_builder.h> 
+#include <ydb/library/yql/minikql/mkql_program_builder.h> 
+#include <ydb/library/yql/minikql/mkql_utils.h> 
 
 #include <library/cpp/protobuf/util/pb_io.h>
 
@@ -107,8 +107,8 @@ class TOutProcUdfResolver : public IUdfResolver {
 public:
     TOutProcUdfResolver(const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
         const TFileStoragePtr& fileStorage, const TString& resolverPath,
-        const TString& user, const TString& group, bool filterSyscalls,
-        const TString& udfDependencyStubPath, const TMap<TString, TString>& path2md5)
+        const TString& user, const TString& group, bool filterSyscalls, 
+        const TString& udfDependencyStubPath, const TMap<TString, TString>& path2md5) 
         : FunctionRegistry_(functionRegistry)
         , TypeInfoHelper_(new TTypeInfoHelper)
         , FileStorage_(fileStorage)
@@ -119,10 +119,10 @@ public:
         if (user) {
             UserGroupArgs_ = { "-U", user, "-G", group };
         }
-
-        if (filterSyscalls) {
-            UserGroupArgs_.push_back("-F");
-        }
+ 
+        if (filterSyscalls) { 
+            UserGroupArgs_.push_back("-F"); 
+        } 
     }
 
     TMaybe<TFilePathWithMd5> GetSystemModulePath(const TStringBuf& moduleName) const override {
@@ -406,10 +406,10 @@ IUdfResolver::TPtr CreateOutProcUdfResolver(
     const TString& resolverPath,
     const TString& user,
     const TString& group,
-    bool filterSyscalls,
+    bool filterSyscalls, 
     const TString& udfDependencyStubPath,
     const TMap<TString, TString>& path2md5) {
-    return new TOutProcUdfResolver(functionRegistry, fileStorage, resolverPath, user, group, filterSyscalls, udfDependencyStubPath, path2md5);
+    return new TOutProcUdfResolver(functionRegistry, fileStorage, resolverPath, user, group, filterSyscalls, udfDependencyStubPath, path2md5); 
 }
 
 } // namespace NCommon

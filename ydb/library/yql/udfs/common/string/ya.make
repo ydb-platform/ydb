@@ -1,12 +1,12 @@
-YQL_UDF(string_udf)
+YQL_UDF(string_udf) 
 
 YQL_ABI_VERSION(
     2
-    9
+    9 
     0
 )
 
-OWNER(g:yql g:yql_ydb_core)
+OWNER(g:yql g:yql_ydb_core) 
 
 SRCS(
     string_udf.cpp
@@ -21,8 +21,8 @@ PEERDIR(
     library/cpp/string_utils/quote
 )
 
-TIMEOUT(300)
+TIMEOUT(300) 
 
-SIZE(MEDIUM)
-
+SIZE(MEDIUM) 
+ 
 END()

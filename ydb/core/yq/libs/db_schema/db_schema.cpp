@@ -1,10 +1,10 @@
-#include "db_schema.h"
-
+#include "db_schema.h" 
+ 
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
-#include <util/string/printf.h>
-
+#include <util/string/printf.h> 
+ 
 namespace NYq {
-
+ 
 using namespace NYdb;
 
 TSqlQueryBuilder::TSqlQueryBuilder(const TString& tablePrefix, const TString& queryName)

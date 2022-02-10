@@ -1,5 +1,5 @@
 RECURSE(
-    codec
+    codec 
     config
     dq
     gateway
@@ -14,8 +14,8 @@ RECURSE(
     schema/mkql
     schema/parser
     schema/skiff
-    structured_token
-    token_accessor
+    structured_token 
+    token_accessor 
     transform
     udf_resolve
 )

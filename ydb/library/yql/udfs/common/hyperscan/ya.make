@@ -1,7 +1,7 @@
-OWNER(g:yql g:yql_ydb_core)
+OWNER(g:yql g:yql_ydb_core) 
 
-IF (OS_LINUX AND CLANG)
-
+IF (OS_LINUX AND CLANG) 
+ 
     YQL_UDF(hyperscan_udf)
 
     YQL_ABI_VERSION(
@@ -24,4 +24,4 @@ IF (OS_LINUX AND CLANG)
 ELSE()
     LIBRARY()
     END()
-ENDIF()
+ENDIF() 

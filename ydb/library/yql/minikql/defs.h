@@ -1,7 +1,7 @@
-#pragma once
+#pragma once 
 
-// unique tag to fix pragma once gcc glueing: ./ydb/library/yql/minikql/defs.h
-
+// unique tag to fix pragma once gcc glueing: ./ydb/library/yql/minikql/defs.h 
+ 
 #include <util/system/compiler.h>
 #include <util/generic/array_ref.h>
 #include <util/generic/yexception.h>
@@ -31,13 +31,13 @@
         }                                                             \
     } while (0)
 
-namespace NKikimr {
+namespace NKikimr { 
 
 template <typename T>
 [[noreturn]] void ThrowException(T&& e)
 {
     throw e;
-}
+} 
 
 struct TThrowable
 {

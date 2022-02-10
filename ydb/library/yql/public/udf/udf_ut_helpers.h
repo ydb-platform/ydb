@@ -9,32 +9,32 @@
 namespace NYql {
 namespace NUdf {
 
-inline size_t GetMethodPtrIndex(uintptr_t ptr)
+inline size_t GetMethodPtrIndex(uintptr_t ptr) 
 {
 #ifdef _win_
-    Y_ENSURE(memcmp((void*)ptr, "\x48\x8B\x01\xFF", 4) == 0);
+    Y_ENSURE(memcmp((void*)ptr, "\x48\x8B\x01\xFF", 4) == 0); 
     size_t offset;
-    if (*(ui8*)(ptr + 4) == 0x60) {
-        offset = *(ui8*)(ptr + 5);
-    } else if (*(ui8*)(ptr + 4) == 0xa0) {
-        offset = *(ui32*)(ptr + 5);
+    if (*(ui8*)(ptr + 4) == 0x60) { 
+        offset = *(ui8*)(ptr + 5); 
+    } else if (*(ui8*)(ptr + 4) == 0xa0) { 
+        offset = *(ui32*)(ptr + 5); 
     } else {
         ythrow yexception() << "Unsupported code";
     }
 
     return offset / 8 + 1;
 #else
-    return ptr >> 3;
+    return ptr >> 3; 
 #endif
 }
 
-template<typename Method>
-size_t GetMethodIndex(Method method) {
-    uintptr_t ptr;
-    memcpy(&ptr, &method, sizeof(uintptr_t));
-    return GetMethodPtrIndex(ptr);
-}
-
+template<typename Method> 
+size_t GetMethodIndex(Method method) { 
+    uintptr_t ptr; 
+    memcpy(&ptr, &method, sizeof(uintptr_t)); 
+    return GetMethodPtrIndex(ptr); 
+} 
+ 
 template<bool HasLength = true>
 class TLazyList: public NUdf::TBoxedValue {
     struct TIterator: public NUdf::TBoxedValue {

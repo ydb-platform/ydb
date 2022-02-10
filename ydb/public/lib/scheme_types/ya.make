@@ -7,11 +7,11 @@ OWNER(
 
 SRCS(
     scheme_type_id.h
-    scheme_type_id.cpp
+    scheme_type_id.cpp 
 )
 
-PEERDIR(
-    ydb/library/yql/public/types
-)
-
+PEERDIR( 
+    ydb/library/yql/public/types 
+) 
+ 
 END()

@@ -2,7 +2,7 @@
 #include <util/string/printf.h>
 #include <util/string/split.h>
 #include <util/string/cast.h>
-#include <util/string/builder.h>
+#include <util/string/builder.h> 
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 
 namespace NYql {
@@ -89,14 +89,14 @@ TAstNode* ApplyNodePositionAnnotations(TAstNode& node, ui32 annotationIndex, TMe
         return nullptr;
 
     auto annotation = node.GetChild(annotationIndex);
-    auto str = annotation->GetContent();
+    auto str = annotation->GetContent(); 
     TStringBuf rowPart;
     TStringBuf colPart;
-    TString filePart;
-    GetNext(str, ':', rowPart);
-    GetNext(str, ':', colPart);
-    filePart = str;
-
+    TString filePart; 
+    GetNext(str, ':', rowPart); 
+    GetNext(str, ':', colPart); 
+    filePart = str; 
+ 
     ui32 row = 0, col = 0;
     if (!TryFromString(rowPart, row) || !TryFromString(colPart, col))
         return nullptr;
@@ -109,14 +109,14 @@ TAstNode* ApplyNodePositionAnnotations(TAstNode& node, ui32 annotationIndex, TMe
     auto lastNode = node.GetChild(node.GetChildrenCount() - 1);
     TAstNode* lastResNode;
     if (lastNode->IsAtom()) {
-        lastResNode = TAstNode::NewAtom(TPosition(col, row, filePart), lastNode->GetContent(), pool, lastNode->GetFlags());
+        lastResNode = TAstNode::NewAtom(TPosition(col, row, filePart), lastNode->GetContent(), pool, lastNode->GetFlags()); 
     } else {
         TSmallVec<TAstNode*> lastNodeChildren(lastNode->GetChildrenCount());
         for (ui32 index = 0; index < lastNode->GetChildrenCount(); ++index) {
             lastNodeChildren[index] = ApplyNodePositionAnnotations(*lastNode->GetChild(index), annotationIndex, pool);
         }
 
-        lastResNode = TAstNode::NewList(TPosition(col, row, filePart), lastNodeChildren.data(), lastNodeChildren.size(), pool);
+        lastResNode = TAstNode::NewList(TPosition(col, row, filePart), lastNodeChildren.data(), lastNodeChildren.size(), pool); 
     }
 
     listChildren[node.GetChildrenCount() - 1] = lastResNode;
@@ -131,19 +131,19 @@ bool ApplyNodePositionAnnotationsInplace(TAstNode& node, ui32 annotationIndex) {
         return false;
 
     auto annotation = node.GetChild(annotationIndex);
-    TStringBuf str = annotation->GetContent();
+    TStringBuf str = annotation->GetContent(); 
     TStringBuf rowPart;
     TStringBuf colPart;
-    TString filePart;
-    GetNext(str, ':', rowPart);
-    GetNext(str, ':', colPart);
-    filePart = str;
+    TString filePart; 
+    GetNext(str, ':', rowPart); 
+    GetNext(str, ':', colPart); 
+    filePart = str; 
     ui32 row = 0, col = 0;
     if (!TryFromString(rowPart, row) || !TryFromString(colPart, col))
         return false;
 
     auto lastNode = node.GetChild(node.GetChildrenCount() - 1);
-    lastNode->SetPosition(TPosition(col, row, filePart));
+    lastNode->SetPosition(TPosition(col, row, filePart)); 
     if (lastNode->IsList()) {
         for (ui32 index = 0; index < lastNode->GetChildrenCount(); ++index) {
             if (!ApplyNodePositionAnnotationsInplace(*lastNode->GetChild(index), annotationIndex))
@@ -173,13 +173,13 @@ bool ApplyPositionAnnotationsInplace(TAstNode& root, ui32 annotationIndex) {
 }
 
 TAstNode* PositionAsNode(TPosition position, TMemoryPool& pool) {
-    TStringBuilder str;
-    str << position.Row << ':' << position.Column;
+    TStringBuilder str; 
+    str << position.Row << ':' << position.Column; 
     if (!position.File.empty()) {
-        str << ':' << position.File;
-    }
-
-    return TAstNode::NewAtom(position, str, pool);
+        str << ':' << position.File; 
+    } 
+ 
+    return TAstNode::NewAtom(position, str, pool); 
 }
 
 TAstNode* ExtractAnnotations(TAstNode& root, TAnnotationNodeMap& annotations, TMemoryPool& pool) {

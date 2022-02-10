@@ -34,7 +34,7 @@ PEERDIR(
 )
 
 YQL_LAST_ABI_VERSION()
-
+ 
 SRCS(
     encrypted_storage_ut.cpp
     proxy_ut_helpers.h

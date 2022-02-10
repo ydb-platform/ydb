@@ -5,20 +5,20 @@
 #include <ydb/core/kqp/prepare/kqp_query_plan.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
 
-#include <ydb/library/yql/core/yql_opt_proposed_by_data.h>
+#include <ydb/library/yql/core/yql_opt_proposed_by_data.h> 
 #include <ydb/library/yql/core/services/yql_plan.h>
 #include <ydb/library/yql/core/services/yql_transform_pipeline.h>
-#include <ydb/library/yql/providers/result/provider/yql_result_provider.h>
-#include <ydb/library/yql/providers/config/yql_config_provider.h>
-#include <ydb/library/yql/providers/common/codec/yql_codec.h>
-#include <ydb/library/yql/providers/common/udf_resolve/yql_simple_udf_resolver.h>
-#include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
-#include <ydb/library/yql/sql/sql.h>
+#include <ydb/library/yql/providers/result/provider/yql_result_provider.h> 
+#include <ydb/library/yql/providers/config/yql_config_provider.h> 
+#include <ydb/library/yql/providers/common/codec/yql_codec.h> 
+#include <ydb/library/yql/providers/common/udf_resolve/yql_simple_udf_resolver.h> 
+#include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h> 
+#include <ydb/library/yql/sql/sql.h> 
 
 #include <library/cpp/cache/cache.h>
-#include <library/cpp/random_provider/random_provider.h>
-#include <library/cpp/time_provider/time_provider.h>
-
+#include <library/cpp/random_provider/random_provider.h> 
+#include <library/cpp/time_provider/time_provider.h> 
+ 
 namespace NKikimr {
 namespace NKqp {
 
@@ -46,21 +46,21 @@ class TKqpResultWriter : public IResultWriter {
 public:
     TKqpResultWriter() {}
 
-    bool IsDiscard() const override {
-        return Discard;
+    bool IsDiscard() const override { 
+        return Discard; 
     }
 
-    void Init(bool discard, const TString& label, TMaybe<TPosition> pos) override {
-        Discard = discard;
-        Y_UNUSED(label);
-        Y_UNUSED(pos);
-    }
-
+    void Init(bool discard, const TString& label, TMaybe<TPosition> pos) override { 
+        Discard = discard; 
+        Y_UNUSED(label); 
+        Y_UNUSED(pos); 
+    } 
+ 
     void Write(const TStringBuf& resultData) override {
-        if (!Discard) {
+        if (!Discard) { 
             YQL_ENSURE(Result.empty());
-            Result = resultData;
-        }
+            Result = resultData; 
+        } 
     }
 
     void Commit(bool overflow) override {
@@ -76,7 +76,7 @@ public:
     }
 
 private:
-    bool Discard = false;
+    bool Discard = false; 
     TString Result;
 };
 
@@ -531,7 +531,7 @@ public:
             return IGraphTransformer::TStatus::Ok;
         }
 
-        TOptimizeExprSettings optSettings(nullptr);
+        TOptimizeExprSettings optSettings(nullptr); 
         optSettings.VisitChanges = false;
 
         auto& queryCtx = QueryCtx;
@@ -1056,7 +1056,7 @@ public:
 
         // Result provider
         auto writerFactory = [] () { return MakeIntrusive<TKqpResultWriter>(); };
-        ResultProviderConfig = MakeIntrusive<TResultProviderConfig>(*TypesCtx, *FuncRegistry, FillSettings.Format,
+        ResultProviderConfig = MakeIntrusive<TResultProviderConfig>(*TypesCtx, *FuncRegistry, FillSettings.Format, 
             FillSettings.FormatDetails, writerFactory);
         auto resultProvider = CreateResultProvider(ResultProviderConfig);
         TypesCtx->AddDataSink(ResultProviderName, resultProvider);
@@ -1426,20 +1426,20 @@ private:
                 settings.V0Behavior = NSQLTranslation::EV0Behavior::Silent;
             }
 
-            settings.InferSyntaxVersion = true;
+            settings.InferSyntaxVersion = true; 
             settings.V0ForceDisable = false;
             settings.WarnOnV0 = false;
             settings.DefaultCluster = Cluster;
-            settings.ClusterMapping = ClustersMap;
+            settings.ClusterMapping = ClustersMap; 
             auto tablePathPrefix = SessionCtx->Config()._KqpTablePathPrefix.Get().GetRef();
             if (!tablePathPrefix.empty()) {
                 settings.PathPrefix = tablePathPrefix;
             }
             settings.EndOfQueryCommit = sqlAutoCommit;
 
-            ui16 actualSyntaxVersion = 0;
-            astRes = NSQLTranslation::SqlToYql(query, settings, nullptr, &actualSyntaxVersion);
-            TypesCtx->DeprecatedSQL = (actualSyntaxVersion == 0);
+            ui16 actualSyntaxVersion = 0; 
+            astRes = NSQLTranslation::SqlToYql(query, settings, nullptr, &actualSyntaxVersion); 
+            TypesCtx->DeprecatedSQL = (actualSyntaxVersion == 0); 
             sqlVersion = actualSyntaxVersion;
         } else {
             sqlVersion = {};

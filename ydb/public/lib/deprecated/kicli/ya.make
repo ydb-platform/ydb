@@ -32,8 +32,8 @@ PEERDIR(
     ydb/public/lib/deprecated/client
     ydb/public/lib/scheme_types
     ydb/public/lib/value
-    ydb/library/yql/public/decimal
-    ydb/library/yql/public/issue
+    ydb/library/yql/public/decimal 
+    ydb/library/yql/public/issue 
 )
 
 END()

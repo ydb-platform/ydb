@@ -29,29 +29,29 @@
 
 #include <google/protobuf/text_format.h>
 
-#include <util/folder/dirut.h>
-#include <util/random/mersenne.h>
+#include <util/folder/dirut.h> 
+#include <util/random/mersenne.h> 
 #include <library/cpp/regex/pcre/regexp.h>
-#include <util/string/printf.h>
+#include <util/string/printf.h> 
 #include <util/string/subst.h>
-#include <util/system/env.h>
+#include <util/system/env.h> 
 #include <util/system/sanitizers.h>
 #include <library/cpp/actors/interconnect/interconnect.h>
-
+ 
 #include <library/cpp/testing/unittest/registar.h>
 #include <ydb/core/kesus/tablet/tablet.h>
 #include <ydb/core/keyvalue/keyvalue.h>
 #include <ydb/core/persqueue/pq.h>
 #include <ydb/core/sys_view/processor/processor.h>
-
+ 
 #include <ydb/core/testlib/basics/storage.h>
 #include <ydb/core/testlib/basics/appdata.h>
 
-const bool SUPPRESS_REBOOTS = false;
+const bool SUPPRESS_REBOOTS = false; 
 const bool ENABLE_REBOOT_DISPATCH_LOG = true;
 const bool TRACE_DELAY_TIMING = true;
-const bool SUPPRESS_DELAYS = false;
-const bool VARIATE_RANDOM_SEED = false;
+const bool SUPPRESS_DELAYS = false; 
+const bool VARIATE_RANDOM_SEED = false; 
 const ui64 PQ_CACHE_MAX_SIZE_MB = 32;
 const TDuration PQ_CACHE_KEEP_TIMEOUT = TDuration::Seconds(10);
 
@@ -64,38 +64,38 @@ static NActors::TTestActorRuntime& AsKikimrRuntime(NActors::TTestActorRuntimeBas
     }
 }
 
-namespace NKikimr {
-
-    class TFakeMediatorTimecastProxy : public TActor<TFakeMediatorTimecastProxy> {
-    public:
+namespace NKikimr { 
+ 
+    class TFakeMediatorTimecastProxy : public TActor<TFakeMediatorTimecastProxy> { 
+    public: 
         static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
             return NKikimrServices::TActivity::TX_MEDIATOR_ACTOR;
         }
 
-        TFakeMediatorTimecastProxy()
-            : TActor(&TFakeMediatorTimecastProxy::StateFunc)
-        {}
-
-        STFUNC(StateFunc) {
-            switch (ev->GetTypeRewrite()) {
-                HFunc(TEvMediatorTimecast::TEvRegisterTablet, Handle);
-            }
-        }
-
-        void Handle(TEvMediatorTimecast::TEvRegisterTablet::TPtr &ev, const TActorContext &ctx) {
-            const ui64 tabletId = ev->Get()->TabletId;
-            auto& entry = Entries[tabletId];
-            if (!entry) {
-                entry = new TMediatorTimecastEntry();
-            }
-
-            ctx.Send(ev->Sender, new TEvMediatorTimecast::TEvRegisterTabletResult(tabletId, entry));
-        }
-
-    private:
+        TFakeMediatorTimecastProxy() 
+            : TActor(&TFakeMediatorTimecastProxy::StateFunc) 
+        {} 
+ 
+        STFUNC(StateFunc) { 
+            switch (ev->GetTypeRewrite()) { 
+                HFunc(TEvMediatorTimecast::TEvRegisterTablet, Handle); 
+            } 
+        } 
+ 
+        void Handle(TEvMediatorTimecast::TEvRegisterTablet::TPtr &ev, const TActorContext &ctx) { 
+            const ui64 tabletId = ev->Get()->TabletId; 
+            auto& entry = Entries[tabletId]; 
+            if (!entry) { 
+                entry = new TMediatorTimecastEntry(); 
+            } 
+ 
+            ctx.Send(ev->Sender, new TEvMediatorTimecast::TEvRegisterTabletResult(tabletId, entry)); 
+        } 
+ 
+    private: 
         THashMap<ui64, TIntrusivePtr<TMediatorTimecastEntry>> Entries;
-    };
-
+    }; 
+ 
     void SetupMediatorTimecastProxy(TTestActorRuntime& runtime, ui32 nodeIndex, bool useFake = false)
     {
         runtime.AddLocalService(
@@ -157,18 +157,18 @@ namespace NKikimr {
         bool UseFakeTimeCast = false;
     };
 
-    class TTabletTracer : TNonCopyable {
-    public:
+    class TTabletTracer : TNonCopyable { 
+    public: 
         TTabletTracer(bool& tracingActive, const TVector<ui64>& tabletIds)
-            : TracingActive(tracingActive)
-            , TabletIds(tabletIds)
-        {}
-
+            : TracingActive(tracingActive) 
+            , TabletIds(tabletIds) 
+        {} 
+ 
         void OnEvent(TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) {
             Y_UNUSED(runtime);
-            if (event->GetTypeRewrite() == TEvStateStorage::EvInfo) {
-                auto info = static_cast<TEvStateStorage::TEvInfo*>(event->GetBase());
-                if (info->Status == NKikimrProto::OK && (Find(TabletIds.begin(), TabletIds.end(), info->TabletID) != TabletIds.end())) {
+            if (event->GetTypeRewrite() == TEvStateStorage::EvInfo) { 
+                auto info = static_cast<TEvStateStorage::TEvInfo*>(event->GetBase()); 
+                if (info->Status == NKikimrProto::OK && (Find(TabletIds.begin(), TabletIds.end(), info->TabletID) != TabletIds.end())) { 
                     if (ENABLE_REBOOT_DISPATCH_LOG) {
                         Cerr << "Leader for TabletID " << info->TabletID << " is " << info->CurrentLeaderTablet << " sender: " << event->Sender << " recipient: " << event->Recipient << Endl;
                     }
@@ -181,50 +181,50 @@ namespace NKikimr {
                     }
                     TabletRelatedActors[info->CurrentLeaderTablet] = info->TabletID;
 
-                }
+                } 
             } else if (event->GetTypeRewrite() == TEvFakeHive::EvNotifyTabletDeleted) {
                 auto notifyEv = static_cast<TEvFakeHive::TEvNotifyTabletDeleted*>(event->GetBase());
                 ui64 tabletId = notifyEv->TabletId;
                 DeletedTablets.insert(tabletId);
                 if (ENABLE_REBOOT_DISPATCH_LOG)
                     Cerr << "Forgetting tablet " << tabletId << Endl;
-            }
-        }
-
+            } 
+        } 
+ 
         void OnRegistration(TTestActorRuntime& runtime, const TActorId& parentId, const TActorId& actorId) {
             Y_UNUSED(runtime);
-            auto it = TabletRelatedActors.find(parentId);
-            if (it != TabletRelatedActors.end()) {
+            auto it = TabletRelatedActors.find(parentId); 
+            if (it != TabletRelatedActors.end()) { 
                 TabletRelatedActors.insert(std::make_pair(actorId, it->second));
-            }
-        }
-
+            } 
+        } 
+ 
         const TMap<ui64, TActorId>& GetTabletLeaders() const {
             return TabletLeaders;
-        }
-
-        bool IsTabletEvent(const TAutoPtr<IEventHandle>& event) const {
+        } 
+ 
+        bool IsTabletEvent(const TAutoPtr<IEventHandle>& event) const { 
             for (const auto& kv : TabletLeaders) {
-                if (event->GetRecipientRewrite() == kv.second) {
-                    return true;
-                }
-            }
-
-            return false;
-        }
-
-        bool IsTabletEvent(const TAutoPtr<IEventHandle>& event, ui64 tabletId) const {
+                if (event->GetRecipientRewrite() == kv.second) { 
+                    return true; 
+                } 
+            } 
+ 
+            return false; 
+        } 
+ 
+        bool IsTabletEvent(const TAutoPtr<IEventHandle>& event, ui64 tabletId) const { 
             if (DeletedTablets.contains(tabletId))
                 return false;
 
             auto it = TabletLeaders.find(tabletId);
             if (it != TabletLeaders.end() && event->GetRecipientRewrite() == it->second) {
-                return true;
-            }
-
-            return false;
-        }
-
+                return true; 
+            } 
+ 
+            return false; 
+        } 
+ 
         bool IsCommitResult(const TAutoPtr<IEventHandle>& event) const {
             // TEvCommitResult is sent to Executor actor not the Tablet actor
             if (event->GetTypeRewrite() == TEvTablet::TEvCommitResult::EventType) {
@@ -245,39 +245,39 @@ namespace NKikimr {
             return false;
         }
 
-        bool IsTabletRelatedEvent(const TAutoPtr<IEventHandle>& event) {
-            auto it = TabletRelatedActors.find(event->GetRecipientRewrite());
-            if (it != TabletRelatedActors.end()) {
-                return true;
-            }
-
-            return false;
-        }
-
-    protected:
+        bool IsTabletRelatedEvent(const TAutoPtr<IEventHandle>& event) { 
+            auto it = TabletRelatedActors.find(event->GetRecipientRewrite()); 
+            if (it != TabletRelatedActors.end()) { 
+                return true; 
+            } 
+ 
+            return false; 
+        } 
+ 
+    protected: 
         TMap<ui64, TActorId> TabletLeaders;
         TMap<TActorId, ui64> TabletRelatedActors;
         TSet<ui64> DeletedTablets;
-        bool& TracingActive;
+        bool& TracingActive; 
         const TVector<ui64> TabletIds;
-    };
-
-    class TRebootTabletObserver : public TTabletTracer {
-    public:
+    }; 
+ 
+    class TRebootTabletObserver : public TTabletTracer { 
+    public: 
         TRebootTabletObserver(ui32 tabletEventCountBeforeReboot, ui64 tabletId, bool& tracingActive, const TVector<ui64>& tabletIds,
             TTestActorRuntime::TEventFilter filter, bool killOnCommit)
-            : TTabletTracer(tracingActive, tabletIds)
-            , TabletEventCountBeforeReboot(tabletEventCountBeforeReboot)
-            , TabletId(tabletId)
-            , Filter(filter)
+            : TTabletTracer(tracingActive, tabletIds) 
+            , TabletEventCountBeforeReboot(tabletEventCountBeforeReboot) 
+            , TabletId(tabletId) 
+            , Filter(filter) 
             , KillOnCommit(killOnCommit)
-            , CurrentEventCount(0)
-            , HasReboot0(false)
-        {
-        }
-
-        TTestActorRuntime::EEventAction OnEvent(TTestActorRuntime& runtime, TAutoPtr<IEventHandle>& event) {
-            TTabletTracer::OnEvent(runtime, event);
+            , CurrentEventCount(0) 
+            , HasReboot0(false) 
+        { 
+        } 
+ 
+        TTestActorRuntime::EEventAction OnEvent(TTestActorRuntime& runtime, TAutoPtr<IEventHandle>& event) { 
+            TTabletTracer::OnEvent(runtime, event); 
 
             TActorId actor = event->Recipient;
             if (KillOnCommit && IsCommitResult(event) && HideCommitsFrom.contains(actor)) {
@@ -288,19 +288,19 @@ namespace NKikimr {
                 return TTestActorRuntime::EEventAction::DROP;
             }
 
-            if (!TracingActive)
-                return TTestActorRuntime::EEventAction::PROCESS;
-
-            if (Filter(runtime, event))
-                return TTestActorRuntime::EEventAction::PROCESS;
-
+            if (!TracingActive) 
+                return TTestActorRuntime::EEventAction::PROCESS; 
+ 
+            if (Filter(runtime, event)) 
+                return TTestActorRuntime::EEventAction::PROCESS; 
+ 
             if (!IsTabletEvent(event, TabletId) && !(KillOnCommit && IsCommitResult(event, TabletId)))
-                return TTestActorRuntime::EEventAction::PROCESS;
-
-            if (CurrentEventCount++ != TabletEventCountBeforeReboot)
-                return TTestActorRuntime::EEventAction::PROCESS;
-
-            HasReboot0 = true;
+                return TTestActorRuntime::EEventAction::PROCESS; 
+ 
+            if (CurrentEventCount++ != TabletEventCountBeforeReboot) 
+                return TTestActorRuntime::EEventAction::PROCESS; 
+ 
+            HasReboot0 = true; 
             TString eventType = (event->HasEvent() && event->GetBase()) ? TypeName(*event->GetBase()) : "nullptr";
 
             if (KillOnCommit && IsCommitResult(event)) {
@@ -322,46 +322,46 @@ namespace NKikimr {
                 return TTestActorRuntime::EEventAction::DROP;
             }
 
-            if (ENABLE_REBOOT_DISPATCH_LOG)
+            if (ENABLE_REBOOT_DISPATCH_LOG) 
                 Cerr << "!Reboot " << TabletId << " (actor " << targetActorId << ") on event " << eventType << " !\n";
 
             // Wait for the tablet to boot or to become deleted
             runtime.Send(new IEventHandle(targetActorId, TActorId(), new TEvents::TEvPoisonPill()));
-            TDispatchOptions rebootOptions;
-            rebootOptions.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvRestored, 2));
+            TDispatchOptions rebootOptions; 
+            rebootOptions.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvRestored, 2)); 
             rebootOptions.CustomFinalCondition = [this]() -> bool {
                 return DeletedTablets.contains(TabletId);
             };
-            runtime.DispatchEvents(rebootOptions);
-
+            runtime.DispatchEvents(rebootOptions); 
+ 
             if (ENABLE_REBOOT_DISPATCH_LOG)
                 Cerr << "!Reboot " << TabletId << " (actor " << targetActorId << ") rebooted!\n";
 
             InvalidateTabletResolverCache(runtime, TabletId);
-            TDispatchOptions invalidateOptions;
-            invalidateOptions.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvStateStorage::EvInfo));
-            runtime.DispatchEvents(invalidateOptions);
+            TDispatchOptions invalidateOptions; 
+            invalidateOptions.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvStateStorage::EvInfo)); 
+            runtime.DispatchEvents(invalidateOptions); 
 
             if (ENABLE_REBOOT_DISPATCH_LOG)
                 Cerr << "!Reboot " << TabletId << " (actor " << targetActorId << ") tablet resolver refreshed! new actor is" << TabletLeaders[TabletId] << " \n";
 
-            return TTestActorRuntime::EEventAction::DROP;
-        }
-
-        bool HasReboot() const {
-            return HasReboot0;
-        }
-
-    private:
-        const ui32 TabletEventCountBeforeReboot;
-        const ui64 TabletId;
-        const TTestActorRuntime::TEventFilter Filter;
+            return TTestActorRuntime::EEventAction::DROP; 
+        } 
+ 
+        bool HasReboot() const { 
+            return HasReboot0; 
+        } 
+ 
+    private: 
+        const ui32 TabletEventCountBeforeReboot; 
+        const ui64 TabletId; 
+        const TTestActorRuntime::TEventFilter Filter; 
         const bool KillOnCommit;    // Kill tablet after log is committed but before Complete() is called for Tx's
-        ui32 CurrentEventCount;
-        bool HasReboot0;
+        ui32 CurrentEventCount; 
+        bool HasReboot0; 
         TSet<TActorId> HideCommitsFrom;
-    };
-
+    }; 
+ 
     // Breaks pipe after the specified number of events
     class TPipeResetObserver : public TTabletTracer {
     public:
@@ -415,159 +415,159 @@ namespace NKikimr {
     };
 
 
-    class TDelayingObserver : public TTabletTracer {
-    public:
+    class TDelayingObserver : public TTabletTracer { 
+    public: 
         TDelayingObserver(bool& tracingActive, double delayInjectionProbability, const TVector<ui64>& tabletIds)
-            : TTabletTracer(tracingActive, tabletIds)
-            , DelayInjectionProbability(delayInjectionProbability)
-            , ExecutionCount(0)
-            , NormalStepsCount(0)
-            , Random(VARIATE_RANDOM_SEED ? TInstant::Now().GetValue() : DefaultRandomSeed)
-        {
-            Decisions.Reset(new TDecisionTreeItem());
-        }
-
-        double GetDelayInjectionProbability() const {
-            return DelayInjectionProbability;
-        }
-
-        TTestActorRuntime::EEventAction OnEvent(TTestActorRuntime& runtime, TAutoPtr<IEventHandle>& event) {
-            TTabletTracer::OnEvent(runtime, event);
-            if (!TracingActive)
-                return TTestActorRuntime::EEventAction::PROCESS;
-
-            if (!IsTabletEvent(event))
-                return TTestActorRuntime::EEventAction::PROCESS;
-
-            if (TRACE_DELAY_TIMING)
-                Cout << CurrentItems.size();
-            TDecisionTreeItem* currentItem = CurrentItems.back();
-            if (!currentItem->NormalExecution || !currentItem->NormalExecution->Complete) {
-                if (!currentItem->NormalExecution) {
-                    currentItem->NormalExecution.Reset(new TDecisionTreeItem());
-                    bool allowDelayedExecution = true;
-                    if ((ExecutionCount > 1) && (CurrentItems.size() > NormalStepsCount)) {
-                        allowDelayedExecution = false;
-                    } else {
-                        if (Random.GenRandReal1() >= DelayInjectionProbability) {
-                            allowDelayedExecution = false;
-                        }
-                    }
-
-                    if (!allowDelayedExecution) {
-                        if (TRACE_DELAY_TIMING)
-                            Cout << "= ";
-                        currentItem->DelayedExecution.Reset(new TDecisionTreeItem());
-                        currentItem->DelayedExecution->Complete = true;
-                    } else {
-                        if (TRACE_DELAY_TIMING)
-                            Cout << "+ ";
-                    }
-                } else {
-                    if (currentItem->DelayedExecution) {
-                        if (TRACE_DELAY_TIMING)
-                            Cout << "= ";
+            : TTabletTracer(tracingActive, tabletIds) 
+            , DelayInjectionProbability(delayInjectionProbability) 
+            , ExecutionCount(0) 
+            , NormalStepsCount(0) 
+            , Random(VARIATE_RANDOM_SEED ? TInstant::Now().GetValue() : DefaultRandomSeed) 
+        { 
+            Decisions.Reset(new TDecisionTreeItem()); 
+        } 
+ 
+        double GetDelayInjectionProbability() const { 
+            return DelayInjectionProbability; 
+        } 
+ 
+        TTestActorRuntime::EEventAction OnEvent(TTestActorRuntime& runtime, TAutoPtr<IEventHandle>& event) { 
+            TTabletTracer::OnEvent(runtime, event); 
+            if (!TracingActive) 
+                return TTestActorRuntime::EEventAction::PROCESS; 
+ 
+            if (!IsTabletEvent(event)) 
+                return TTestActorRuntime::EEventAction::PROCESS; 
+ 
+            if (TRACE_DELAY_TIMING) 
+                Cout << CurrentItems.size(); 
+            TDecisionTreeItem* currentItem = CurrentItems.back(); 
+            if (!currentItem->NormalExecution || !currentItem->NormalExecution->Complete) { 
+                if (!currentItem->NormalExecution) { 
+                    currentItem->NormalExecution.Reset(new TDecisionTreeItem()); 
+                    bool allowDelayedExecution = true; 
+                    if ((ExecutionCount > 1) && (CurrentItems.size() > NormalStepsCount)) { 
+                        allowDelayedExecution = false; 
+                    } else { 
+                        if (Random.GenRandReal1() >= DelayInjectionProbability) { 
+                            allowDelayedExecution = false; 
+                        } 
+                    } 
+ 
+                    if (!allowDelayedExecution) { 
+                        if (TRACE_DELAY_TIMING) 
+                            Cout << "= "; 
+                        currentItem->DelayedExecution.Reset(new TDecisionTreeItem()); 
+                        currentItem->DelayedExecution->Complete = true; 
+                    } else { 
+                        if (TRACE_DELAY_TIMING) 
+                            Cout << "+ "; 
+                    } 
+                } else { 
+                    if (currentItem->DelayedExecution) { 
+                        if (TRACE_DELAY_TIMING) 
+                            Cout << "= "; 
                         Y_VERIFY(currentItem->DelayedExecution->Complete);
-                    } else {
-                        if (TRACE_DELAY_TIMING)
-                            Cout << "+ ";
-                    }
-                }
-
-                CurrentItems.push_back(currentItem->NormalExecution.Get());
-                return TTestActorRuntime::EEventAction::PROCESS;
-            } else if (!currentItem->DelayedExecution || !currentItem->DelayedExecution->Complete) {
-                if (TRACE_DELAY_TIMING)
-                    Cout << "- ";
-                if (!currentItem->DelayedExecution) {
-                    currentItem->DelayedExecution.Reset(new TDecisionTreeItem());
-                }
-
-                CurrentItems.push_back(currentItem->DelayedExecution.Get());
-                return TTestActorRuntime::EEventAction::RESCHEDULE;
-            } else {
+                    } else { 
+                        if (TRACE_DELAY_TIMING) 
+                            Cout << "+ "; 
+                    } 
+                } 
+ 
+                CurrentItems.push_back(currentItem->NormalExecution.Get()); 
+                return TTestActorRuntime::EEventAction::PROCESS; 
+            } else if (!currentItem->DelayedExecution || !currentItem->DelayedExecution->Complete) { 
+                if (TRACE_DELAY_TIMING) 
+                    Cout << "- "; 
+                if (!currentItem->DelayedExecution) { 
+                    currentItem->DelayedExecution.Reset(new TDecisionTreeItem()); 
+                } 
+ 
+                CurrentItems.push_back(currentItem->DelayedExecution.Get()); 
+                return TTestActorRuntime::EEventAction::RESCHEDULE; 
+            } else { 
                 Y_FAIL();
-            }
-        }
-
-        void PrepareExecution() {
-            CurrentItems.clear();
-            CurrentItems.push_back(Decisions.Get());
-            ++ExecutionCount;
-        }
-
-        void FinishExecution() {
-            if (TRACE_DELAY_TIMING)
-                Cout << "\n";
-            if (ExecutionCount == 1) {
-                NormalStepsCount = CurrentItems.size();
-                Cout << "Recorded execution before applying delays has " << NormalStepsCount << " steps\n";
-            }
-
-            for (auto it = CurrentItems.rbegin(); it != CurrentItems.rend(); ++it) {
-                (*it)->Complete = true;
-                if ((it + 1) != CurrentItems.rend()) {
-                    if (!(*(it + 1))->DelayedExecution)
-                        break;
-                }
-            }
-        }
-
-        ui64 GetExecutionCount() const {
-            return ExecutionCount;
-        }
-
-        bool IsDone() const {
-            return Decisions->Complete;
-        }
-
-    private:
-        struct TDecisionTreeItem {
-            bool Complete;
-
-            TDecisionTreeItem()
-                : Complete(false)
-            {}
-
-            TAutoPtr<TDecisionTreeItem> NormalExecution;
-            TAutoPtr<TDecisionTreeItem> DelayedExecution;
-        };
-
-    private:
-        const double DelayInjectionProbability;
-        TAutoPtr<TDecisionTreeItem> Decisions;
+            } 
+        } 
+ 
+        void PrepareExecution() { 
+            CurrentItems.clear(); 
+            CurrentItems.push_back(Decisions.Get()); 
+            ++ExecutionCount; 
+        } 
+ 
+        void FinishExecution() { 
+            if (TRACE_DELAY_TIMING) 
+                Cout << "\n"; 
+            if (ExecutionCount == 1) { 
+                NormalStepsCount = CurrentItems.size(); 
+                Cout << "Recorded execution before applying delays has " << NormalStepsCount << " steps\n"; 
+            } 
+ 
+            for (auto it = CurrentItems.rbegin(); it != CurrentItems.rend(); ++it) { 
+                (*it)->Complete = true; 
+                if ((it + 1) != CurrentItems.rend()) { 
+                    if (!(*(it + 1))->DelayedExecution) 
+                        break; 
+                } 
+            } 
+        } 
+ 
+        ui64 GetExecutionCount() const { 
+            return ExecutionCount; 
+        } 
+ 
+        bool IsDone() const { 
+            return Decisions->Complete; 
+        } 
+ 
+    private: 
+        struct TDecisionTreeItem { 
+            bool Complete; 
+ 
+            TDecisionTreeItem() 
+                : Complete(false) 
+            {} 
+ 
+            TAutoPtr<TDecisionTreeItem> NormalExecution; 
+            TAutoPtr<TDecisionTreeItem> DelayedExecution; 
+        }; 
+ 
+    private: 
+        const double DelayInjectionProbability; 
+        TAutoPtr<TDecisionTreeItem> Decisions; 
         TVector<TDecisionTreeItem*> CurrentItems;
-        ui64 ExecutionCount;
-        ui32 NormalStepsCount;
-        TMersenne<ui64> Random;
-    };
-
-    class TTabletScheduledFilter : TNonCopyable {
-    public:
-        TTabletScheduledFilter(TTabletTracer& tracer)
-            : Tracer(tracer)
-        {}
-
+        ui64 ExecutionCount; 
+        ui32 NormalStepsCount; 
+        TMersenne<ui64> Random; 
+    }; 
+ 
+    class TTabletScheduledFilter : TNonCopyable { 
+    public: 
+        TTabletScheduledFilter(TTabletTracer& tracer) 
+            : Tracer(tracer) 
+        {} 
+ 
         bool operator()(TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event, TDuration delay, TInstant& deadline) {
-            if (runtime.IsScheduleForActorEnabled(event->GetRecipientRewrite()) || Tracer.IsTabletEvent(event)
-                || Tracer.IsTabletRelatedEvent(event)) {
-                deadline = runtime.GetTimeProvider()->Now() + delay;
-                return false;
-            }
-
-            ui32 nodeIndex = event->GetRecipientRewrite().NodeId() - runtime.GetNodeId(0);
-            if (event->GetRecipientRewrite() == runtime.GetLocalServiceId(MakeTabletResolverID(), nodeIndex)) {
-                deadline = runtime.GetTimeProvider()->Now() + delay;
-                return false;
-            }
-
-            return true;
-        }
-
-    private:
-        TTabletTracer& Tracer;
-    };
-
+            if (runtime.IsScheduleForActorEnabled(event->GetRecipientRewrite()) || Tracer.IsTabletEvent(event) 
+                || Tracer.IsTabletRelatedEvent(event)) { 
+                deadline = runtime.GetTimeProvider()->Now() + delay; 
+                return false; 
+            } 
+ 
+            ui32 nodeIndex = event->GetRecipientRewrite().NodeId() - runtime.GetNodeId(0); 
+            if (event->GetRecipientRewrite() == runtime.GetLocalServiceId(MakeTabletResolverID(), nodeIndex)) { 
+                deadline = runtime.GetTimeProvider()->Now() + delay; 
+                return false; 
+            } 
+ 
+            return true; 
+        } 
+ 
+    private: 
+        TTabletTracer& Tracer; 
+    }; 
+ 
     TActorId FollowerTablet(TTestActorRuntime &runtime, const TActorId &launcher, TTabletStorageInfo *info, std::function<IActor * (const TActorId &, TTabletStorageInfo *)> op) {
         return runtime.Register(CreateTabletFollower(launcher, info, new TTabletSetupInfo(op, TMailboxType::Simple, 0, TMailboxType::Simple, 0), 0, new TResourceProfiles));
     }
@@ -586,26 +586,26 @@ namespace NKikimr {
     }
 
     void ForwardToTablet(TTestActorRuntime &runtime, ui64 tabletId, const TActorId& sender, IEventBase *ev, ui32 nodeIndex, bool sysTablet) {
-        runtime.Send(new IEventHandle(MakeTabletResolverID(), sender,
+        runtime.Send(new IEventHandle(MakeTabletResolverID(), sender, 
             new TEvTabletResolver::TEvForward(tabletId, new IEventHandle(TActorId(), sender, ev), { },
                 sysTablet ? TEvTabletResolver::TEvForward::EActor::SysTablet : TEvTabletResolver::TEvForward::EActor::Tablet)), nodeIndex);
-    }
-
+    } 
+ 
     void InvalidateTabletResolverCache(TTestActorRuntime &runtime, ui64 tabletId, ui32 nodeIndex) {
         runtime.Send(new IEventHandle(MakeTabletResolverID(), TActorId(),
             new TEvTabletResolver::TEvTabletProblem(tabletId, TActorId())), nodeIndex);
-    }
-
+    } 
+ 
     void RebootTablet(TTestActorRuntime &runtime, ui64 tabletId, const TActorId& sender, ui32 nodeIndex, bool sysTablet) {
         ForwardToTablet(runtime, tabletId, sender, new TEvents::TEvPoisonPill(), nodeIndex, sysTablet);
-        TDispatchOptions rebootOptions;
+        TDispatchOptions rebootOptions; 
         rebootOptions.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot, 1));
-        runtime.DispatchEvents(rebootOptions);
-
+        runtime.DispatchEvents(rebootOptions); 
+ 
         InvalidateTabletResolverCache(runtime, tabletId, nodeIndex);
         WaitScheduledEvents(runtime, TDuration::Seconds(1), sender, nodeIndex);
-    }
-
+    } 
+ 
     void GracefulRestartTablet(TTestActorRuntime &runtime, ui64 tabletId, const TActorId &sender, ui32 nodeIndex) {
         ForwardToTablet(runtime, tabletId, sender, new TEvTablet::TEvTabletStop(tabletId, TEvTablet::TEvTabletStop::ReasonStop), nodeIndex, /* sysTablet = */ true);
         TDispatchOptions rebootOptions;
@@ -624,8 +624,8 @@ namespace NKikimr {
         }
         TUltimateNodes nodes(runtime, app);
         SetupBasicServices(runtime, *app, mockDisk, &nodes, storage, caches);
-    }
-
+    } 
+ 
     TDomainsInfo::TDomain::TStoragePoolKinds DefaultPoolKinds(ui32 count) {
         TDomainsInfo::TDomain::TStoragePoolKinds storagePoolKinds;
 
@@ -752,29 +752,29 @@ namespace NKikimr {
     void RunTestWithReboots(const TVector<ui64>& tabletIds, std::function<TTestActorRuntime::TEventFilter()> filterFactory,
         std::function<void(const TString& dispatchPass, std::function<void(TTestActorRuntime&)> setup, bool& activeZone)> testFunc,
         ui32 selectedReboot, ui64 selectedTablet, ui32 bucket, ui32 totalBuckets, bool killOnCommit) {
-        bool activeZone = false;
-
-        if (selectedReboot == Max<ui32>())
-        {
-            TTabletTracer tabletTracer(activeZone, tabletIds);
-            TTabletScheduledFilter scheduledFilter(tabletTracer);
+        bool activeZone = false; 
+ 
+        if (selectedReboot == Max<ui32>()) 
+        { 
+            TTabletTracer tabletTracer(activeZone, tabletIds); 
+            TTabletScheduledFilter scheduledFilter(tabletTracer); 
             try {
                 testFunc(INITIAL_TEST_DISPATCH_NAME, [&](TTestActorRuntimeBase& runtime) {
                     runtime.SetObserverFunc([&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) {
                         tabletTracer.OnEvent(AsKikimrRuntime(runtime), event);
                         return TTestActorRuntime::EEventAction::PROCESS;
                     });
-
+ 
                     runtime.SetRegistrationObserverFunc([&](TTestActorRuntimeBase& runtime, const TActorId& parentId, const TActorId& actorId) {
                         tabletTracer.OnRegistration(AsKikimrRuntime(runtime), parentId, actorId);
                     });
-
+ 
                     runtime.SetScheduledEventFilter([&](TTestActorRuntimeBase& r, TAutoPtr<IEventHandle>& event,
                         TDuration delay, TInstant& deadline) {
                         auto& runtime = AsKikimrRuntime(r);
                         return !(!scheduledFilter(runtime, event, delay, deadline) || !TTestActorRuntime::DefaultScheduledFilterFunc(runtime, event, delay, deadline));
                     });
-
+ 
                     runtime.SetScheduledEventsSelectorFunc(&TTestActorRuntime::CollapsedTimeScheduledEventsSelector);
                 }, activeZone);
             }
@@ -783,73 +783,73 @@ namespace NKikimr {
                           << " at dispatch " << INITIAL_TEST_DISPATCH_NAME
                           << " with exception " << e.what() << "\n");
             }
-        }
-
-        if (SUPPRESS_REBOOTS || GetEnv("FAST_UT")=="1")
-            return;
-
-        ui32 runCount = 0;
-        for (ui64 tabletId : tabletIds) {
-            if (selectedTablet != Max<ui64>() && tabletId != selectedTablet)
-                continue;
-
-            ui32 tabletEventCountBeforeReboot = 0;
-            if (selectedReboot != Max<ui32>()) {
-                tabletEventCountBeforeReboot = selectedReboot;
-            }
-
-            bool hasReboot = true;
-            while (hasReboot) {
-                if (totalBuckets && ((tabletEventCountBeforeReboot % totalBuckets) != bucket)) {
-                    ++tabletEventCountBeforeReboot;
-                    continue;
-                }
-
+        } 
+ 
+        if (SUPPRESS_REBOOTS || GetEnv("FAST_UT")=="1") 
+            return; 
+ 
+        ui32 runCount = 0; 
+        for (ui64 tabletId : tabletIds) { 
+            if (selectedTablet != Max<ui64>() && tabletId != selectedTablet) 
+                continue; 
+ 
+            ui32 tabletEventCountBeforeReboot = 0; 
+            if (selectedReboot != Max<ui32>()) { 
+                tabletEventCountBeforeReboot = selectedReboot; 
+            } 
+ 
+            bool hasReboot = true; 
+            while (hasReboot) { 
+                if (totalBuckets && ((tabletEventCountBeforeReboot % totalBuckets) != bucket)) { 
+                    ++tabletEventCountBeforeReboot; 
+                    continue; 
+                } 
+ 
                 TString dispatchName = Sprintf("Reboot tablet %" PRIu64 " (#%" PRIu32 ") run %" PRIu32 "" , tabletId, tabletEventCountBeforeReboot, runCount);
-                if (ENABLE_REBOOT_DISPATCH_LOG)
-                    Cout << "===> BEGIN dispatch: " << dispatchName << "\n";
-
-                try {
-                    ++runCount;
-                    activeZone = false;
-                    TTestActorRuntime::TEventFilter filter = filterFactory();
+                if (ENABLE_REBOOT_DISPATCH_LOG) 
+                    Cout << "===> BEGIN dispatch: " << dispatchName << "\n"; 
+ 
+                try { 
+                    ++runCount; 
+                    activeZone = false; 
+                    TTestActorRuntime::TEventFilter filter = filterFactory(); 
                     TRebootTabletObserver rebootingObserver(tabletEventCountBeforeReboot, tabletId, activeZone, tabletIds, filter, killOnCommit);
-                    TTabletScheduledFilter scheduledFilter(rebootingObserver);
-                    testFunc(dispatchName,
-                        [&](TTestActorRuntime& runtime) {
+                    TTabletScheduledFilter scheduledFilter(rebootingObserver); 
+                    testFunc(dispatchName, 
+                        [&](TTestActorRuntime& runtime) { 
                             runtime.SetObserverFunc([&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) {
                                 return rebootingObserver.OnEvent(AsKikimrRuntime(runtime), event);
                             });
-
+ 
                             runtime.SetRegistrationObserverFunc([&](TTestActorRuntimeBase& runtime, const TActorId& parentId, const TActorId& actorId) {
                                 rebootingObserver.OnRegistration(AsKikimrRuntime(runtime), parentId, actorId);
                             });
-
+ 
                             runtime.SetScheduledEventFilter([&](TTestActorRuntimeBase& r, TAutoPtr<IEventHandle>& event,
                                 TDuration delay, TInstant& deadline) {
                                 auto& runtime = AsKikimrRuntime(r);
                                 return scheduledFilter(runtime, event, delay, deadline) && TTestActorRuntime::DefaultScheduledFilterFunc(runtime, event, delay, deadline);
                             });
-
+ 
                             runtime.SetScheduledEventsSelectorFunc(&TTestActorRuntime::CollapsedTimeScheduledEventsSelector);
                         }, activeZone);
-                    hasReboot = rebootingObserver.HasReboot();
+                    hasReboot = rebootingObserver.HasReboot(); 
                 } catch (yexception& e) {
                     UNIT_FAIL("Failed"
                               << " at dispatch " << dispatchName
                               << " with exception " << e.what() << "\n");
-                }
-
-                if (ENABLE_REBOOT_DISPATCH_LOG)
-                    Cout << "===> END dispatch: " << dispatchName << "\n";
-
-                ++tabletEventCountBeforeReboot;
-                if (selectedReboot != Max<ui32>())
-                    break;
-            }
-        }
-    }
-
+                } 
+ 
+                if (ENABLE_REBOOT_DISPATCH_LOG) 
+                    Cout << "===> END dispatch: " << dispatchName << "\n"; 
+ 
+                ++tabletEventCountBeforeReboot; 
+                if (selectedReboot != Max<ui32>()) 
+                    break; 
+            } 
+        } 
+    } 
+ 
     void RunTestWithPipeResets(const TVector<ui64>& tabletIds, std::function<TTestActorRuntime::TEventFilter()> filterFactory,
         std::function<void(const TString& dispatchPass, std::function<void(TTestActorRuntime&)> setup, bool& activeZone)> testFunc,
         ui32 selectedReboot, ui32 bucket, ui32 totalBuckets) {
@@ -942,126 +942,126 @@ namespace NKikimr {
 
     void RunTestWithDelays(const TRunWithDelaysConfig& config, const TVector<ui64>& tabletIds,
         std::function<void(const TString& dispatchPass, std::function<void(TTestActorRuntime&)> setup, bool& activeZone)> testFunc) {
-        if (SUPPRESS_DELAYS || GetEnv("FAST_UT")=="1")
-            return;
-
-        bool activeZone = false;
-        TDelayingObserver delayingObserver(activeZone, config.DelayInjectionProbability, tabletIds);
-        TTabletScheduledFilter scheduledFilter(delayingObserver);
+        if (SUPPRESS_DELAYS || GetEnv("FAST_UT")=="1") 
+            return; 
+ 
+        bool activeZone = false; 
+        TDelayingObserver delayingObserver(activeZone, config.DelayInjectionProbability, tabletIds); 
+        TTabletScheduledFilter scheduledFilter(delayingObserver); 
         TString dispatchName;
-        try {
-            while (!delayingObserver.IsDone() && (delayingObserver.GetExecutionCount() < config.VariantsLimit)) {
-                delayingObserver.PrepareExecution();
-                dispatchName = Sprintf("Delayed execution branch #%" PRIu64, delayingObserver.GetExecutionCount());
-                if (TRACE_DELAY_TIMING)
-                    Cout << dispatchName << "\n";
-                testFunc(dispatchName,
-                    [&](TTestActorRuntime& runtime) {
+        try { 
+            while (!delayingObserver.IsDone() && (delayingObserver.GetExecutionCount() < config.VariantsLimit)) { 
+                delayingObserver.PrepareExecution(); 
+                dispatchName = Sprintf("Delayed execution branch #%" PRIu64, delayingObserver.GetExecutionCount()); 
+                if (TRACE_DELAY_TIMING) 
+                    Cout << dispatchName << "\n"; 
+                testFunc(dispatchName, 
+                    [&](TTestActorRuntime& runtime) { 
                     runtime.SetObserverFunc([&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) {
                         return delayingObserver.OnEvent(AsKikimrRuntime(runtime), event);
-                    });
-
+                    }); 
+ 
                     runtime.SetRegistrationObserverFunc([&](TTestActorRuntimeBase& runtime, const TActorId& parentId, const TActorId& actorId) {
                         delayingObserver.OnRegistration(AsKikimrRuntime(runtime), parentId, actorId);
-                    });
-
+                    }); 
+ 
                     runtime.SetScheduledEventFilter([&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event,
-                        TDuration delay, TInstant& deadline) {
+                        TDuration delay, TInstant& deadline) { 
                         return scheduledFilter(AsKikimrRuntime(runtime), event, delay, deadline);
-                    });
-
-                    runtime.SetScheduledEventsSelectorFunc(&TTestActorRuntime::CollapsedTimeScheduledEventsSelector);
-                    runtime.SetReschedulingDelay(config.ReschedulingDelay);
-                }, activeZone);
-
-                delayingObserver.FinishExecution();
-            }
-        } catch (yexception& e) {
-            Cout << "Fail at dispatch " << dispatchName << "\n";
-            Cout << e.what() << "\n";
-            throw;
-        }
-
-        Cout << "Processed " << delayingObserver.GetExecutionCount() << " variants using probability "
-            << delayingObserver.GetDelayInjectionProbability() << "\n";
-    }
-
-    class TTabletScheduledEventsGuard : public ITabletScheduledEventsGuard {
-    public:
+                    }); 
+ 
+                    runtime.SetScheduledEventsSelectorFunc(&TTestActorRuntime::CollapsedTimeScheduledEventsSelector); 
+                    runtime.SetReschedulingDelay(config.ReschedulingDelay); 
+                }, activeZone); 
+ 
+                delayingObserver.FinishExecution(); 
+            } 
+        } catch (yexception& e) { 
+            Cout << "Fail at dispatch " << dispatchName << "\n"; 
+            Cout << e.what() << "\n"; 
+            throw; 
+        } 
+ 
+        Cout << "Processed " << delayingObserver.GetExecutionCount() << " variants using probability " 
+            << delayingObserver.GetDelayInjectionProbability() << "\n"; 
+    } 
+ 
+    class TTabletScheduledEventsGuard : public ITabletScheduledEventsGuard { 
+    public: 
         TTabletScheduledEventsGuard(const TVector<ui64>& tabletIds, TTestActorRuntime& runtime, const TActorId& sender)
-            : Runtime(runtime)
-            , Sender(sender)
-            , TracingActive(true)
-            , TabletTracer(TracingActive, tabletIds)
-            , ScheduledFilter(TabletTracer)
-        {
+            : Runtime(runtime) 
+            , Sender(sender) 
+            , TracingActive(true) 
+            , TabletTracer(TracingActive, tabletIds) 
+            , ScheduledFilter(TabletTracer) 
+        { 
             PrevObserverFunc = Runtime.SetObserverFunc([&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) {
                 TabletTracer.OnEvent(AsKikimrRuntime(runtime), event);
-                return TTestActorRuntime::EEventAction::PROCESS;
-            });
-
-            PrevRegistrationObserverFunc = Runtime.SetRegistrationObserverFunc(
+                return TTestActorRuntime::EEventAction::PROCESS; 
+            }); 
+ 
+            PrevRegistrationObserverFunc = Runtime.SetRegistrationObserverFunc( 
                 [&](TTestActorRuntimeBase& runtime, const TActorId& parentId, const TActorId& actorId) {
                 TabletTracer.OnRegistration(AsKikimrRuntime(runtime), parentId, actorId);
-            });
-
+            }); 
+ 
             PrevScheduledFilterFunc = Runtime.SetScheduledEventFilter([&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event,
-                TDuration delay, TInstant& deadline) {
-                if (event->GetRecipientRewrite() == Sender) {
-                    deadline = runtime.GetTimeProvider()->Now() + delay;
-                    return false;
-                }
-
+                TDuration delay, TInstant& deadline) { 
+                if (event->GetRecipientRewrite() == Sender) { 
+                    deadline = runtime.GetTimeProvider()->Now() + delay; 
+                    return false; 
+                } 
+ 
                 return ScheduledFilter(AsKikimrRuntime(runtime), event, delay, deadline);
-            });
-
-            PrevScheduledEventsSelector = Runtime.SetScheduledEventsSelectorFunc(&TTestActorRuntime::CollapsedTimeScheduledEventsSelector);
-        }
-
-        virtual ~TTabletScheduledEventsGuard() {
-            Runtime.SetObserverFunc(PrevObserverFunc);
-            Runtime.SetScheduledEventFilter(PrevScheduledFilterFunc);
-            Runtime.SetScheduledEventsSelectorFunc(PrevScheduledEventsSelector);
-            Runtime.SetRegistrationObserverFunc(PrevRegistrationObserverFunc);
-        }
-
-    private:
-        TTestActorRuntime& Runtime;
+            }); 
+ 
+            PrevScheduledEventsSelector = Runtime.SetScheduledEventsSelectorFunc(&TTestActorRuntime::CollapsedTimeScheduledEventsSelector); 
+        } 
+ 
+        virtual ~TTabletScheduledEventsGuard() { 
+            Runtime.SetObserverFunc(PrevObserverFunc); 
+            Runtime.SetScheduledEventFilter(PrevScheduledFilterFunc); 
+            Runtime.SetScheduledEventsSelectorFunc(PrevScheduledEventsSelector); 
+            Runtime.SetRegistrationObserverFunc(PrevRegistrationObserverFunc); 
+        } 
+ 
+    private: 
+        TTestActorRuntime& Runtime; 
         const TActorId Sender;
-        bool TracingActive;
-        TTabletTracer TabletTracer;
-        TTabletScheduledFilter ScheduledFilter;
-
-        TTestActorRuntime::TEventObserver PrevObserverFunc;
-        TTestActorRuntime::TScheduledEventFilter PrevScheduledFilterFunc;
-        TTestActorRuntime::TScheduledEventsSelector PrevScheduledEventsSelector;
-        TTestActorRuntime::TRegistrationObserver PrevRegistrationObserverFunc;
-    };
-
+        bool TracingActive; 
+        TTabletTracer TabletTracer; 
+        TTabletScheduledFilter ScheduledFilter; 
+ 
+        TTestActorRuntime::TEventObserver PrevObserverFunc; 
+        TTestActorRuntime::TScheduledEventFilter PrevScheduledFilterFunc; 
+        TTestActorRuntime::TScheduledEventsSelector PrevScheduledEventsSelector; 
+        TTestActorRuntime::TRegistrationObserver PrevRegistrationObserverFunc; 
+    }; 
+ 
     TAutoPtr<ITabletScheduledEventsGuard> CreateTabletScheduledEventsGuard(const TVector<ui64>& tabletIds, TTestActorRuntime& runtime, const TActorId& sender) {
-        return TAutoPtr<ITabletScheduledEventsGuard>(new TTabletScheduledEventsGuard(tabletIds, runtime, sender));
-    }
-
+        return TAutoPtr<ITabletScheduledEventsGuard>(new TTabletScheduledEventsGuard(tabletIds, runtime, sender)); 
+    } 
+ 
     ui64 GetFreePDiskSize(TTestActorRuntime& runtime, const TActorId& sender) {
         TActorId pdiskServiceId = MakeBlobStoragePDiskID(runtime.GetNodeId(0), 0);
         runtime.Send(new IEventHandle(pdiskServiceId, sender, nullptr));
-        TAutoPtr<IEventHandle> handle;
-        auto event = runtime.GrabEdgeEvent<NMon::TEvHttpInfoRes>(handle);
-        UNIT_ASSERT(event);
-        //Cout << event->Answer << "\n";
-        ui64 totalFreeSize = 0;
-        for (ui32 i = 0; i < 2; ++i) {
+        TAutoPtr<IEventHandle> handle; 
+        auto event = runtime.GrabEdgeEvent<NMon::TEvHttpInfoRes>(handle); 
+        UNIT_ASSERT(event); 
+        //Cout << event->Answer << "\n"; 
+        ui64 totalFreeSize = 0; 
+        for (ui32 i = 0; i < 2; ++i) { 
             TString regex = Sprintf(".*sensor=%s:\\s(\\d+).*", i == 0 ? "FreeChunks" : "UntrimmedFreeChunks");
-            TRegExBase matcher(regex);
-            regmatch_t groups[2] = {};
+            TRegExBase matcher(regex); 
+            regmatch_t groups[2] = {}; 
             matcher.Exec(event->Answer.data(), groups, 0, 2);
             const ui64 freeSize = IntFromString<ui64, 10>(event->Answer.data() + groups[1].rm_so, groups[1].rm_eo - groups[1].rm_so);
-            totalFreeSize += freeSize;
-        }
-
-        return totalFreeSize;
-    };
-
+            totalFreeSize += freeSize; 
+        } 
+ 
+        return totalFreeSize; 
+    }; 
+ 
     NTabletPipe::TClientConfig GetPipeConfigWithRetriesAndFollowers() { // with blackjack and hookers... (c)
         NTabletPipe::TClientConfig pipeConfig;
         pipeConfig.RetryPolicy = NTabletPipe::TClientRetryPolicy::WithRetries();
@@ -1446,4 +1446,4 @@ namespace NKikimr {
         }
     }
 
-}
+} 

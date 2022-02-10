@@ -3,7 +3,7 @@
 #include "node.h"
 #include "context.h"
 
-#include <ydb/library/yql/ast/yql_type_string.h>
+#include <ydb/library/yql/ast/yql_type_string.h> 
 
 #include <library/cpp/charset/ci_string.h>
 #include <util/string/builder.h>
@@ -82,7 +82,7 @@ public:
     TListMapBuiltin(TPosition pos,
                     const TVector<TNodePtr>& args,
                     bool flat)
-        : TListProcessBuiltin(pos, flat ? "ListFlatMap" : "ListMap", args)
+        : TListProcessBuiltin(pos, flat ? "ListFlatMap" : "ListMap", args) 
         , Flat(flat)
     {}
 
@@ -141,34 +141,34 @@ public:
     }
 };
 
-class TDictCreateBuiltin final: public TListBuiltin {
-public:
-    TDictCreateBuiltin(TPosition pos,
-                     const TVector<TNodePtr>& args)
-        : TListBuiltin(pos, "DictCreate", args)
-    {}
-
-    bool DoInit(TContext& ctx, ISource* src) override;
+class TDictCreateBuiltin final: public TListBuiltin { 
+public: 
+    TDictCreateBuiltin(TPosition pos, 
+                     const TVector<TNodePtr>& args) 
+        : TListBuiltin(pos, "DictCreate", args) 
+    {} 
+ 
+    bool DoInit(TContext& ctx, ISource* src) override; 
     void DoUpdateState() const override;
-
-    TNodePtr DoClone() const final {
-        return new TDictCreateBuiltin(Pos, CloneContainer(Args));
-    }
-};
-
-class TSetCreateBuiltin final: public TListBuiltin {
-public:
-    TSetCreateBuiltin(TPosition pos,
-                     const TVector<TNodePtr>& args)
-        : TListBuiltin(pos, "SetCreate", args)
-    {}
-
-    bool DoInit(TContext& ctx, ISource* src) override;
+ 
+    TNodePtr DoClone() const final { 
+        return new TDictCreateBuiltin(Pos, CloneContainer(Args)); 
+    } 
+}; 
+ 
+class TSetCreateBuiltin final: public TListBuiltin { 
+public: 
+    TSetCreateBuiltin(TPosition pos, 
+                     const TVector<TNodePtr>& args) 
+        : TListBuiltin(pos, "SetCreate", args) 
+    {} 
+ 
+    bool DoInit(TContext& ctx, ISource* src) override; 
     void DoUpdateState() const override;
-
-    TNodePtr DoClone() const final {
-        return new TSetCreateBuiltin(Pos, CloneContainer(Args));
-    }
-};
-
+ 
+    TNodePtr DoClone() const final { 
+        return new TSetCreateBuiltin(Pos, CloneContainer(Args)); 
+    } 
+}; 
+ 
 } // namespace NSQLTranslationV1

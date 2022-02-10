@@ -1,8 +1,8 @@
 #include "yql_issue.h"
 
 #include <library/cpp/testing/unittest/registar.h>
-#include <ydb/library/yql/public/issue/protos/issue_message.pb.h>
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
+#include <ydb/library/yql/public/issue/protos/issue_message.pb.h> 
+#include <ydb/library/yql/public/issue/yql_issue_message.h> 
 #include <ydb/public/api/protos/ydb_issue_message.pb.h>
 
 #include <google/protobuf/message.h>
@@ -43,9 +43,9 @@ void ensureMessageTypesSame(const Descriptor* a, const Descriptor* b, THashSet<T
     }
 }
 
-Y_UNIT_TEST_SUITE(IssueTest) {
-    Y_UNIT_TEST(Ascii) {
-        TIssue issue1("тест abc");
+Y_UNIT_TEST_SUITE(IssueTest) { 
+    Y_UNIT_TEST(Ascii) { 
+        TIssue issue1("тест abc"); 
         UNIT_ASSERT_VALUES_EQUAL(issue1.Message, "тест abc");
         TIssue issue2("\xFF abc");
         UNIT_ASSERT_VALUES_EQUAL(issue2.Message, "? abc");
@@ -53,9 +53,9 @@ Y_UNIT_TEST_SUITE(IssueTest) {
         UNIT_ASSERT_VALUES_EQUAL(issue3.Message, "");
         TIssue issue4("abc");
         UNIT_ASSERT_VALUES_EQUAL(issue4.Message, "abc");
-    }
-}
-
+    } 
+} 
+ 
 Y_UNIT_TEST_SUITE(IssueProtoTest) {
     Y_UNIT_TEST(KikimrYqlSameLayout) {
         Ydb::Issue::IssueMessage yqlIssue;

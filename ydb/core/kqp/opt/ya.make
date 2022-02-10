@@ -21,10 +21,10 @@ PEERDIR(
     ydb/core/kqp/opt/logical
     ydb/core/kqp/opt/peephole
     ydb/core/kqp/opt/physical
-    ydb/library/yql/dq/common
-    ydb/library/yql/dq/opt
+    ydb/library/yql/dq/common 
+    ydb/library/yql/dq/opt 
 )
 
 YQL_LAST_ABI_VERSION()
-
+ 
 END()

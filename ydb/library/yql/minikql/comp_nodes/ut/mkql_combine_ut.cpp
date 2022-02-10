@@ -1,9 +1,9 @@
 #include "mkql_computation_node_ut.h"
 
-#include <ydb/library/yql/minikql/mkql_runtime_version.h>
-#include <ydb/library/yql/minikql/mkql_node_cast.h>
-#include <ydb/library/yql/minikql/mkql_string_util.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
+#include <ydb/library/yql/minikql/mkql_runtime_version.h> 
+#include <ydb/library/yql/minikql/mkql_node_cast.h> 
+#include <ydb/library/yql/minikql/mkql_string_util.h> 
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h> 
 
 #include <cstring>
 #include <random>
@@ -99,7 +99,7 @@ TIntrusivePtr<IRandomProvider> CreateRandomProvider() {
 }
 
 TIntrusivePtr<ITimeProvider> CreateTimeProvider() {
-    return CreateDeterministicTimeProvider(10000000);
+    return CreateDeterministicTimeProvider(10000000); 
 }
 
 TComputationNodeFactory GetTestFactory() {
@@ -196,9 +196,9 @@ TRuntimeNode Reduce(TProgramBuilder& pb, TRuntimeNode stream) {
 
 TRuntimeNode StreamToString(TProgramBuilder& pb, TRuntimeNode stream) {
     const auto sorted = pb.Sort(stream, pb.NewDataLiteral(true),
-        [&](TRuntimeNode item) {
-        return item;
-    });
+        [&](TRuntimeNode item) { 
+        return item; 
+    }); 
 
     return pb.Condense(sorted, pb.NewDataLiteral<NUdf::EDataSlot::String>("|"),
         [&] (TRuntimeNode, TRuntimeNode) { return pb.NewDataLiteral<bool>(false); },
@@ -851,8 +851,8 @@ Y_UNIT_TEST_SUITE(TMiniKQLCombineFlowTest) {
         const auto pgm = StreamToString(pb, Combine<true>(pb, stream, finish));
         const auto graph = setup.BuildGraph(pgm);
         const auto streamVal = graph->GetValue();
-        NUdf::TUnboxedValue result;
-        UNIT_ASSERT_EQUAL(streamVal.Fetch(result), NUdf::EFetchStatus::Ok);
+        NUdf::TUnboxedValue result; 
+        UNIT_ASSERT_EQUAL(streamVal.Fetch(result), NUdf::EFetchStatus::Ok); 
 
         UNIT_ASSERT_VALUES_EQUAL(TStringBuf(result.AsStringRef()), "|0|4|8|");
     }
@@ -873,8 +873,8 @@ Y_UNIT_TEST_SUITE(TMiniKQLCombineFlowTest) {
         const auto pgm = StreamToString(pb, Combine<true>(pb, stream, finish));
         const auto graph = setup.BuildGraph(pgm);
         const auto streamVal = graph->GetValue();
-        NUdf::TUnboxedValue result;
-        UNIT_ASSERT_EQUAL(streamVal.Fetch(result), NUdf::EFetchStatus::Ok);
+        NUdf::TUnboxedValue result; 
+        UNIT_ASSERT_EQUAL(streamVal.Fetch(result), NUdf::EFetchStatus::Ok); 
 
         UNIT_ASSERT_VALUES_EQUAL(TStringBuf(result.AsStringRef()), "|0|0|4|4|8|8|");
     }
@@ -895,8 +895,8 @@ Y_UNIT_TEST_SUITE(TMiniKQLCombineFlowTest) {
         const auto pgm = StreamToString(pb, Combine<true>(pb, stream, finish));
         const auto graph = setup.BuildGraph(pgm);
         const auto streamVal = graph->GetValue();
-        NUdf::TUnboxedValue result;
-        UNIT_ASSERT_EQUAL(streamVal.Fetch(result), NUdf::EFetchStatus::Ok);
+        NUdf::TUnboxedValue result; 
+        UNIT_ASSERT_EQUAL(streamVal.Fetch(result), NUdf::EFetchStatus::Ok); 
 
         UNIT_ASSERT_VALUES_EQUAL(TStringBuf(result.AsStringRef()), "|0|0|4|4|8|8|");
     }
@@ -984,8 +984,8 @@ Y_UNIT_TEST_SUITE(TMiniKQLCombineFlowTest) {
             const auto pgm = Reduce(pb, combine);
             const auto graph = setup.BuildGraph(pgm);
             const auto streamVal = graph->GetValue();
-            NUdf::TUnboxedValue result;
-            UNIT_ASSERT_EQUAL(streamVal.Fetch(result), NUdf::EFetchStatus::Ok);
+            NUdf::TUnboxedValue result; 
+            UNIT_ASSERT_EQUAL(streamVal.Fetch(result), NUdf::EFetchStatus::Ok); 
 
             UNIT_ASSERT_VALUES_EQUAL(result.Get<ui64>(), 12ul);
         }
@@ -993,8 +993,8 @@ Y_UNIT_TEST_SUITE(TMiniKQLCombineFlowTest) {
             const auto pgm = StreamToString(pb, combine);
             const auto graph = setup.BuildGraph(pgm);
             const auto streamVal = graph->GetValue();
-            NUdf::TUnboxedValue result;
-            UNIT_ASSERT_EQUAL(streamVal.Fetch(result), NUdf::EFetchStatus::Ok);
+            NUdf::TUnboxedValue result; 
+            UNIT_ASSERT_EQUAL(streamVal.Fetch(result), NUdf::EFetchStatus::Ok); 
 
             UNIT_ASSERT_VALUES_EQUAL(TStringBuf(result.AsStringRef()), "|0|0|2|2|4|4|");
         }
@@ -1011,8 +1011,8 @@ Y_UNIT_TEST_SUITE(TMiniKQLCombineFlowTest) {
         const auto pgm = Reduce(pb, Combine<true>(pb, stream, finish));
         const auto graph = setup.BuildGraph(pgm, EGraphPerProcess::Single);
         const auto streamVal = graph->GetValue();
-        NUdf::TUnboxedValue result;
-        UNIT_ASSERT_EQUAL(streamVal.Fetch(result), NUdf::EFetchStatus::Ok);
+        NUdf::TUnboxedValue result; 
+        UNIT_ASSERT_EQUAL(streamVal.Fetch(result), NUdf::EFetchStatus::Ok); 
 
         UNIT_ASSERT_VALUES_EQUAL(result.Get<ui64>(), 12ul);
     }
@@ -1039,8 +1039,8 @@ Y_UNIT_TEST_SUITE(TMiniKQLCombineFlowTest) {
         const auto pgm = StreamToString(pb, stream);
         const auto graph = setup.BuildGraph(pgm);
         const auto streamVal = graph->GetValue();
-        NUdf::TUnboxedValue result;
-        UNIT_ASSERT_EQUAL(streamVal.Fetch(result), NUdf::EFetchStatus::Ok);
+        NUdf::TUnboxedValue result; 
+        UNIT_ASSERT_EQUAL(streamVal.Fetch(result), NUdf::EFetchStatus::Ok); 
 
         UNIT_ASSERT_VALUES_EQUAL(TStringBuf(result.AsStringRef()), "|0|0|0|0|1|1|1|1|2|2|2|2|");
     }

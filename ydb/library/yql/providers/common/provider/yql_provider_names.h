@@ -1,10 +1,10 @@
-#pragma once
-
+#pragma once 
+ 
 #include <array>
-#include <util/generic/strbuf.h>
-
-namespace NYql {
-
+#include <util/generic/strbuf.h> 
+ 
+namespace NYql { 
+ 
 constexpr TStringBuf ConfigProviderName = "config";
 constexpr TStringBuf KikimrProviderName = "kikimr";
 constexpr TStringBuf ResultProviderName = "result";
@@ -17,11 +17,11 @@ constexpr TStringBuf ClickHouseProviderName = "clickhouse";
 constexpr TStringBuf YdbProviderName = "ydb";
 constexpr TStringBuf PqProviderName = "pq";
 constexpr TStringBuf S3ProviderName = "s3";
-
+ 
 constexpr std::array<const TStringBuf, 11> Providers = {
     {ConfigProviderName, YtProviderName, KikimrProviderName, RtmrProviderName, S3ProviderName,
      StatProviderName, SolomonProviderName, DqProviderName, ClickHouseProviderName, YdbProviderName,
      PqProviderName}
 };
 
-} // namespace NYql
+} // namespace NYql 

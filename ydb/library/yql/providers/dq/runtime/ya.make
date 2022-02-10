@@ -8,20 +8,20 @@ PEERDIR(
     ydb/library/yql/minikql/invoke_builtins
     ydb/library/yql/utils
     ydb/library/yql/utils/log
-    ydb/library/yql/core/expr_nodes
-    ydb/library/yql/dq/common
-    ydb/library/yql/dq/runtime
-    ydb/library/yql/providers/common/proto
-    ydb/library/yql/providers/dq/api/protos
-    ydb/library/yql/providers/dq/backtrace
-    ydb/library/yql/providers/dq/common
-    ydb/library/yql/providers/dq/counters
-    ydb/library/yql/providers/dq/interface
-    ydb/library/yql/providers/dq/task_runner
+    ydb/library/yql/core/expr_nodes 
+    ydb/library/yql/dq/common 
+    ydb/library/yql/dq/runtime 
+    ydb/library/yql/providers/common/proto 
+    ydb/library/yql/providers/dq/api/protos 
+    ydb/library/yql/providers/dq/backtrace 
+    ydb/library/yql/providers/dq/common 
+    ydb/library/yql/providers/dq/counters 
+    ydb/library/yql/providers/dq/interface 
+    ydb/library/yql/providers/dq/task_runner 
 )
 
 YQL_LAST_ABI_VERSION()
-
+ 
 SRCS(
     file_cache.cpp
     task_command_executor.cpp

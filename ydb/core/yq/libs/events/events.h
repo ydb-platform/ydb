@@ -1,21 +1,21 @@
-#pragma once
+#pragma once 
 #include "event_ids.h"
 
 #include <ydb/library/yql/core/facade/yql_facade.h>
-#include <ydb/library/yql/providers/dq/provider/yql_dq_gateway.h>
-#include <ydb/library/yql/public/issue/yql_issue.h>
-
+#include <ydb/library/yql/providers/dq/provider/yql_dq_gateway.h> 
+#include <ydb/library/yql/public/issue/yql_issue.h> 
+ 
 #include <ydb/core/yq/libs/graph_params/proto/graph_params.pb.h>
 #include <ydb/public/api/protos/draft/yq_private.pb.h>
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
 #include <ydb/public/lib/yq/scope.h>
-
+ 
 #include <library/cpp/actors/core/events.h>
 
 #include <util/digest/multi.h>
 
 namespace NYq {
-
+ 
 using NYdb::NYq::TScope;
 
 enum class DatabaseType {
@@ -25,20 +25,20 @@ enum class DatabaseType {
     ObjectStorage
 };
 
-struct TQueryResult {
-    TVector<Ydb::ResultSet> Sets;
-    TInstant ExpirationDeadline;
-    TMaybe<TString> StatsYson;
-};
-
-struct TEvents {
-    // Events.
+struct TQueryResult { 
+    TVector<Ydb::ResultSet> Sets; 
+    TInstant ExpirationDeadline; 
+    TMaybe<TString> StatsYson; 
+}; 
+ 
+struct TEvents { 
+    // Events. 
     struct TEvAnalyticsBase {
-        TString AuthToken;
-        TString UserId;
-        bool HasPerm = false;
-    };
-
+        TString AuthToken; 
+        TString UserId; 
+        bool HasPerm = false; 
+    }; 
+ 
     struct TEvPingTaskRequest : NActors::TEventLocal<TEvPingTaskRequest, TEventIds::EvPingTaskRequest>, TEvAnalyticsBase {
         Yq::Private::PingTaskRequest Record;
     };
@@ -81,33 +81,33 @@ struct TEvents {
 
     struct TEvAsyncContinue : NActors::TEventLocal<TEvAsyncContinue, TEventIds::EvAsyncContinue> {
         const NYql::TProgram::TFutureStatus Future;
-
+ 
         explicit TEvAsyncContinue(const NYql::TProgram::TFutureStatus& future)
-            : Future(future)
-        {}
-    };
-
+            : Future(future) 
+        {} 
+    }; 
+ 
     struct TEvDbRequest : NActors::TEventLocal<TEvDbRequest, TEventIds::EvDbRequest> {
-        TString Sql;
-        NYdb::TParams Params;
-        bool Idempotent;
-
-        TEvDbRequest(const TString& sql, NYdb::TParams&& params, bool idempotent = true)
-            : Sql(sql)
-            , Params(std::move(params))
-            , Idempotent(idempotent)
-        {}
-    };
-
+        TString Sql; 
+        NYdb::TParams Params; 
+        bool Idempotent; 
+ 
+        TEvDbRequest(const TString& sql, NYdb::TParams&& params, bool idempotent = true) 
+            : Sql(sql) 
+            , Params(std::move(params)) 
+            , Idempotent(idempotent) 
+        {} 
+    }; 
+ 
     struct TEvDbResponse : NActors::TEventLocal<TEvDbResponse, TEventIds::EvDbResponse> {
-        NYdb::TStatus Status;
-        TVector<NYdb::TResultSet> ResultSets;
-
-        TEvDbResponse(NYdb::TStatus status, const TVector<NYdb::TResultSet>& resultSets)
-            : Status(status)
-            , ResultSets(resultSets)
-        {}
-    };
+        NYdb::TStatus Status; 
+        TVector<NYdb::TResultSet> ResultSets; 
+ 
+        TEvDbResponse(NYdb::TStatus status, const TVector<NYdb::TResultSet>& resultSets) 
+            : Status(status) 
+            , ResultSets(resultSets) 
+        {} 
+    }; 
 
     struct TEvDbFunctionRequest : NActors::TEventLocal<TEvDbFunctionRequest, TEventIds::EvDbFunctionRequest> {
         using TFunction = std::function<NYdb::TAsyncStatus(NYdb::NTable::TSession&)>;
@@ -233,8 +233,8 @@ struct TEvents {
         NProto::TGraphParams GraphParams;
         NThreading::TPromise<NYql::IDqGateway::TResult> Result;
     };
-};
-
+}; 
+ 
 } // namespace NYq
 
 template<>

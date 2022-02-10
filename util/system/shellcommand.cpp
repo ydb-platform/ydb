@@ -322,12 +322,12 @@ public:
 
             delete WatchThread;
         }
-
-#if defined(_win_)
-        if (Pid) {
-            CloseHandle(Pid);
-        }
-#endif
+ 
+#if defined(_win_) 
+        if (Pid) { 
+            CloseHandle(Pid); 
+        } 
+#endif 
     }
 
     inline void AppendArgument(const TStringBuf argument) {
@@ -622,7 +622,7 @@ void TShellCommand::TImpl::StartProcess(TShellCommand::TImpl::TPipes& pipes) {
         out << "Process was not created: " << LastSystemErrorText() << " command text was: '" << GetAString(cmdcopy.Data()) << "'";
     }
     Pid = process_info.hProcess;
-    CloseHandle(process_info.hThread);
+    CloseHandle(process_info.hThread); 
     DBG(Cerr << "created process id " << Pid << " in dir: " << cwd << ", cmd: " << cmdcopy.Data() << Endl);
 }
 #endif

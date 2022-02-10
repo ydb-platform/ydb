@@ -9,7 +9,7 @@
 #include <ydb/core/ydb_convert/ydb_convert.h>
 #include <ydb/public/lib/operation_id/operation_id.h>
 
-#include <ydb/library/yql/public/issue/yql_issue.h>
+#include <ydb/library/yql/public/issue/yql_issue.h> 
 
 namespace NKikimr {
 namespace NGRpcService {

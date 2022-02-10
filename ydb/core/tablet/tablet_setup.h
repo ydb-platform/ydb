@@ -7,7 +7,7 @@
 
 namespace NKikimr {
 
-class TTabletStorageInfo;
+class TTabletStorageInfo; 
 
 class TTabletSetupInfo : public TThrRefBase {
 public:

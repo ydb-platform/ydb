@@ -6,18 +6,18 @@ YQL_ABI_VERSION(
     0
 )
 
-OWNER(g:yql g:yql_ydb_core)
+OWNER(g:yql g:yql_ydb_core) 
 
 SRCS(
     topfreq_udf.cpp
 )
 
 PEERDIR(
-    ydb/library/yql/udfs/common/topfreq/static
+    ydb/library/yql/udfs/common/topfreq/static 
 )
 
 END()
-
-RECURSE_FOR_TESTS(
-    ut
-)
+ 
+RECURSE_FOR_TESTS( 
+    ut 
+) 

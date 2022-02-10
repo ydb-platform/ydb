@@ -33,7 +33,7 @@ struct TMin : public TSimpleArithmeticBinary<TLeft, TRight, TOutput, TMin<TLeft,
             auto& module = ctx.Codegen->GetModule();
             const auto fnType = FunctionType::get(GetTypeFor<TOutput>(context), {left->getType(), right->getType()}, false);
             const auto& name = GetFuncNameForType<TOutput>("llvm.minnum");
-            const auto func = module.getOrInsertFunction(name, fnType).getCallee();
+            const auto func = module.getOrInsertFunction(name, fnType).getCallee(); 
             const auto res = CallInst::Create(func, {left, right}, "minnum", block);
             return res;
         } else {

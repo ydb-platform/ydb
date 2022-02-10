@@ -496,70 +496,70 @@ private:
     TOwnedCellVec ToKey_;
 };
 
-struct TReadTarget {
-    enum class EMode {
-        Online,
-        Snapshot,
-        Head,
-        HeadAfterSnapshot,
+struct TReadTarget { 
+    enum class EMode { 
+        Online, 
+        Snapshot, 
+        Head, 
+        HeadAfterSnapshot, 
         Follower,
         FollowerAfterSnapshot
-    };
-
-    TReadTarget()
-        : Mode(EMode::Online)
-    {}
-
-    EMode GetMode() const {
-        return Mode;
-    }
-
-    bool HasSnapshotTime() const {
+    }; 
+ 
+    TReadTarget() 
+        : Mode(EMode::Online) 
+    {} 
+ 
+    EMode GetMode() const { 
+        return Mode; 
+    } 
+ 
+    bool HasSnapshotTime() const { 
         return Mode == EMode::Snapshot || Mode == EMode::HeadAfterSnapshot || Mode == EMode::FollowerAfterSnapshot;
-    }
-
-    std::pair<ui64, ui64> GetSnapshotTime() const {
-        return SnapshotTime;
-    }
-
-    static TReadTarget Default() {
-        return TReadTarget();
-    }
-
-    static TReadTarget Online() {
-        return TReadTarget(EMode::Online);
-    }
-
-    static TReadTarget Snapshot(const std::pair<ui64, ui64>& snapshotTime) {
-        return TReadTarget(EMode::Snapshot, snapshotTime);
-    }
-
-    static TReadTarget Head() {
-        return TReadTarget(EMode::Head);
-    }
-
-    static TReadTarget HeadAfterSnapshot(const std::pair<ui64, ui64>& snapshotTime) {
-        return TReadTarget(EMode::HeadAfterSnapshot, snapshotTime);
-    }
-
+    } 
+ 
+    std::pair<ui64, ui64> GetSnapshotTime() const { 
+        return SnapshotTime; 
+    } 
+ 
+    static TReadTarget Default() { 
+        return TReadTarget(); 
+    } 
+ 
+    static TReadTarget Online() { 
+        return TReadTarget(EMode::Online); 
+    } 
+ 
+    static TReadTarget Snapshot(const std::pair<ui64, ui64>& snapshotTime) { 
+        return TReadTarget(EMode::Snapshot, snapshotTime); 
+    } 
+ 
+    static TReadTarget Head() { 
+        return TReadTarget(EMode::Head); 
+    } 
+ 
+    static TReadTarget HeadAfterSnapshot(const std::pair<ui64, ui64>& snapshotTime) { 
+        return TReadTarget(EMode::HeadAfterSnapshot, snapshotTime); 
+    } 
+ 
     static TReadTarget Follower() {
         return TReadTarget(EMode::Follower);
-    }
-
+    } 
+ 
     static TReadTarget FollowerAfterSnapshot(const std::pair<ui64, ui64>& snapshotTime) {
         return TReadTarget(EMode::FollowerAfterSnapshot, snapshotTime);
-    }
-
-private:
-    TReadTarget(EMode mode, const std::pair<ui64, ui64>& snapshotTime = std::pair<ui64, ui64>())
-        : Mode(mode)
-        , SnapshotTime(snapshotTime)
-    {}
-
-private:
-    EMode Mode;
-    std::pair<ui64, ui64> SnapshotTime;
-};
+    } 
+ 
+private: 
+    TReadTarget(EMode mode, const std::pair<ui64, ui64>& snapshotTime = std::pair<ui64, ui64>()) 
+        : Mode(mode) 
+        , SnapshotTime(snapshotTime) 
+    {} 
+ 
+private: 
+    EMode Mode; 
+    std::pair<ui64, ui64> SnapshotTime; 
+}; 
 
 struct TSecurityObject : TAtomicRefCount<TSecurityObject>, NACLib::TSecurityObject {
     using TPtr = TIntrusivePtr<TSecurityObject>;
@@ -609,9 +609,9 @@ public:
     XX(Ok, 1) \
     XX(TypeCheckFailed, 2) \
     XX(OperationNotSupported, 3) \
-    XX(NotExists, 4) \
-    XX(SnapshotNotExist, 5) \
-    XX(SnapshotNotReady, 6)
+    XX(NotExists, 4) \ 
+    XX(SnapshotNotExist, 5) \ 
+    XX(SnapshotNotReady, 6) 
 
     enum class EStatus {
         SCHEME_KEY_DESCRIPTION_STATUS_MAP(ENUM_VALUE_GEN)
@@ -624,7 +624,7 @@ public:
         ui32 Column;
         EColumnOperation Operation;
         ui32 ExpectedType;
-        ui32 InplaceUpdateMode;
+        ui32 InplaceUpdateMode; 
         ui32 ImmediateUpdateSize;
     };
 
@@ -666,11 +666,11 @@ public:
     const TTableId TableId;
     const TOwnedTableRange Range;
     const TRangeLimits RangeLimits;
-    const ERowOperation RowOperation;
+    const ERowOperation RowOperation; 
     const TVector<NScheme::TTypeId> KeyColumnTypes; // For SelectRange there can be not full key
     const TVector<TColumnOp> Columns;
     const bool Reverse;
-    TReadTarget ReadTarget; // Set for Read row operation
+    TReadTarget ReadTarget; // Set for Read row operation 
 
     // out
     EStatus Status;
@@ -687,7 +687,7 @@ public:
         : TableId(tableId)
         , Range(range.From, range.InclusiveFrom, range.To, range.InclusiveTo, range.Point)
         , RangeLimits(itemsLimit, bytesLimit)
-        , RowOperation(rowOperation)
+        , RowOperation(rowOperation) 
         , KeyColumnTypes(keyColumnTypes.begin(), keyColumnTypes.end())
         , Columns(columns.begin(), columns.end())
         , Reverse(reverse)

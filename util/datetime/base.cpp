@@ -142,13 +142,13 @@ void Out<TDuration>(IOutputStream& os, TTypeTraits<TDuration>::TFuncParam durati
 
 template <>
 void Out<TInstant>(IOutputStream& os, TTypeTraits<TInstant>::TFuncParam instant) {
-    char buf[64];
-    auto len = FormatDate8601(buf, sizeof(buf), instant.TimeT());
+    char buf[64]; 
+    auto len = FormatDate8601(buf, sizeof(buf), instant.TimeT()); 
 
-    // shouldn't happen due to current implementation of FormatDate8601() and GmTimeR()
+    // shouldn't happen due to current implementation of FormatDate8601() and GmTimeR() 
     Y_ENSURE(len, TStringBuf("Out<TInstant>: year does not fit into an integer"));
 
-    os.Write(buf, len - 1 /* 'Z' */);
+    os.Write(buf, len - 1 /* 'Z' */); 
     WriteMicroSecondsToStream(os, instant.MicroSecondsOfSecond());
     os << 'Z';
 }
@@ -186,8 +186,8 @@ TString TInstant::ToRfc822String() const {
 }
 
 TString TInstant::ToStringUpToSeconds() const {
-    char buf[64];
-    auto len = FormatDate8601(buf, sizeof(buf), TimeT());
+    char buf[64]; 
+    auto len = FormatDate8601(buf, sizeof(buf), TimeT()); 
     if (!len) {
         ythrow yexception() << "TInstant::ToStringUpToSeconds: year does not fit into an integer";
     }

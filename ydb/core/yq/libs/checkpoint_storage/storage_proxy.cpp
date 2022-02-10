@@ -12,7 +12,7 @@
 #include <ydb/core/yq/libs/actors/logging/log.h>
 #include <ydb/core/yq/libs/ydb/util.h>
 
-#include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
+#include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h> 
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/hfunc.h>

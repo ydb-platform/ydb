@@ -1,6 +1,6 @@
 #include "dq_compute_actor.h"
 
-#include <ydb/library/yql/dq/actors/protos/dq_stats.pb.h>
+#include <ydb/library/yql/dq/actors/protos/dq_stats.pb.h> 
 
 namespace NYql {
 namespace NDq {

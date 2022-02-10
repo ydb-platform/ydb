@@ -1,9 +1,9 @@
 #include "yql_kikimr_provider_impl.h"
 
 #include <ydb/library/yql/utils/log/log.h>
-#include <ydb/library/yql/core/common_opt/yql_co.h>
-#include <ydb/library/yql/core/yql_opt_utils.h>
-#include <ydb/library/yql/core/yql_opt_aggregate.h>
+#include <ydb/library/yql/core/common_opt/yql_co.h> 
+#include <ydb/library/yql/core/yql_opt_utils.h> 
+#include <ydb/library/yql/core/yql_opt_aggregate.h> 
 
 namespace NYql {
 namespace {
@@ -113,7 +113,7 @@ TExprNode::TPtr KiRewriteAggregate(TExprBase node, TExprContext& ctx) {
     for (size_t i = 0; i < agg.Handlers().Size(); ++i) {
         auto aggHandler = agg.Handlers().Item(i);
 
-        // Need to get rid of Unwraps in AggregateToPartitionByKeyWithCombine for DISTINCT case
+        // Need to get rid of Unwraps in AggregateToPartitionByKeyWithCombine for DISTINCT case 
         if (aggHandler.DistinctName().IsValid()) {
             return node.Ptr();
         }
@@ -731,7 +731,7 @@ TAutoPtr<IGraphTransformer> CreateKiLogicalOptProposalTransformer(TIntrusivePtr<
             }
 
             return ret;
-        }, ctx, TOptimizeExprSettings(nullptr));
+        }, ctx, TOptimizeExprSettings(nullptr)); 
 
         return status;
     });
@@ -775,7 +775,7 @@ TAutoPtr<IGraphTransformer> CreateKiPhysicalOptProposalTransformer(TIntrusivePtr
             }
 
             return ret;
-        }, ctx, TOptimizeExprSettings(nullptr));
+        }, ctx, TOptimizeExprSettings(nullptr)); 
 
         if (status.Level != IGraphTransformer::TStatus::Ok) {
             return status;
@@ -798,7 +798,7 @@ TAutoPtr<IGraphTransformer> CreateKiPhysicalOptProposalTransformer(TIntrusivePtr
             }
 
             return ret;
-        }, ctx, TOptimizeExprSettings(nullptr));
+        }, ctx, TOptimizeExprSettings(nullptr)); 
 
         return status;
     });

@@ -10,19 +10,19 @@ namespace NScheme {
 template <typename TCoder, typename TDecoder>
 class TCodecImpl : public ICodec {
 public:
-    static inline TCodecSig Sig() {
-        return TCoder::Sig();
-    }
+    static inline TCodecSig Sig() { 
+        return TCoder::Sig(); 
+    } 
 
 public:
     TCodecImpl() {
         Y_VERIFY(TCoder::Sig() == TDecoder::Sig(), "Codecs signatures mismatch (cd: %u, dc: %u).",
-               ui16(TCoder::Sig()), ui16(TDecoder::Sig()));
+               ui16(TCoder::Sig()), ui16(TDecoder::Sig())); 
     }
 
     TCodecSig Signature() const override {
         Y_VERIFY_DEBUG(TCoder::Sig() == TDecoder::Sig());
-        return TCoder::Sig();
+        return TCoder::Sig(); 
     }
 
     TAutoPtr<IChunkCoder> MakeChunk(TFlatBlobDataOutputStream* output) const override {

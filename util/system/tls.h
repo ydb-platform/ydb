@@ -19,109 +19,109 @@
     #define Y_DISABLE_THRKEY_OPTIMIZATION
 #endif
 
-/** 
+/**
     @def Y_THREAD(TType)
- 
-    A thread-local wrapper for a given class. Suitable for POD and classes with a constructor with a single argument. 
- 
-    The wrapper can be treated as the original class in many cases, as it has the same signature for the constructor and an implicit cast to the origianl class. 
- 
-    Has methods : 
-        - implicit caster to TType 
-        - TType& Get() 
-        - TType* GetPtr() 
- 
-    Time complexity: getting a variable takes O(number of threads where the variable has been constructed) 
- 
-    Memory usage: O(number of threads where the variable has been constructed) 
- 
-    Best practices: 
-        - storing singletons won't result in heavy memory overheads 
-        - storing pointers allows complex constructors as well as lazy constructions 
-        - storing static variables won't result in heavy memory overheads 
- 
-    Possibly bad practices: 
-        - field in a class with numerous instances and numerous threads will result in slow working and memory overheads 
- 
-    Example: 
-        @code 
-        //the field declaration in header 
+
+    A thread-local wrapper for a given class. Suitable for POD and classes with a constructor with a single argument.
+
+    The wrapper can be treated as the original class in many cases, as it has the same signature for the constructor and an implicit cast to the origianl class.
+
+    Has methods :
+        - implicit caster to TType
+        - TType& Get()
+        - TType* GetPtr()
+
+    Time complexity: getting a variable takes O(number of threads where the variable has been constructed)
+
+    Memory usage: O(number of threads where the variable has been constructed)
+
+    Best practices:
+        - storing singletons won't result in heavy memory overheads
+        - storing pointers allows complex constructors as well as lazy constructions
+        - storing static variables won't result in heavy memory overheads
+
+    Possibly bad practices:
+        - field in a class with numerous instances and numerous threads will result in slow working and memory overheads
+
+    Example:
+        @code
+        //the field declaration in header
         Y_THREAD(TBuffer) TmpBuffer;
-        //...later somewhere in cpp... 
-        TmpBuffer.Clear(); 
-        for (size_t i = 0; i < sz && TrieCursor[i].second.IsFork(); ++i) { 
-            TmpBuffer.Append(TrieCursor[i].second.Char); 
-        } 
-        @endcode 
- 
-    Example: 
-        @code 
-        //the field decalrataion in header 
+        //...later somewhere in cpp...
+        TmpBuffer.Clear();
+        for (size_t i = 0; i < sz && TrieCursor[i].second.IsFork(); ++i) {
+            TmpBuffer.Append(TrieCursor[i].second.Char);
+        }
+        @endcode
+
+    Example:
+        @code
+        //the field decalrataion in header
         Y_THREAD(TMyWriter*) ThreadLocalWriter;
-        //...later somewhere in cpp... 
-        TMyWriter*& writerRef = ThreadLocalWriter.Get(); 
+        //...later somewhere in cpp...
+        TMyWriter*& writerRef = ThreadLocalWriter.Get();
         if (writerRef == nullptr) {
             THolder<TMyWriter> threadLocalWriter( new TMyWriter(
-                *Session, 
-                MinLogError, 
-                MaxRps, 
-                LogFraction, 
-                WriteCounters, 
-                Log)); 
-            writerRef = threadLocalWriter.Get(); 
-        } 
-        @endcode 
- 
-    Example: 
-        @code 
-        //in header 
-        namespace TMorph { 
+                *Session,
+                MinLogError,
+                MaxRps,
+                LogFraction,
+                WriteCounters,
+                Log));
+            writerRef = threadLocalWriter.Get();
+        }
+        @endcode
+
+    Example:
+        @code
+        //in header
+        namespace TMorph {
             Y_THREAD(ELanguage) ThreadLocalMainLanguage;
-        } 
-        //in cpp 
+        }
+        //in cpp
         Y_THREAD(ELanguage) TMorph::ThreadLocalMainLanguage(LANG_RUS);
-        @endcode 
- 
-    Example: 
-        @code 
+        @endcode
+
+    Example:
+        @code
         Y_THREAD(TScoreCalcer*) ScoreCalcerPtr;
-        static TScoreCalcer* GetScoreCalcer(yint maxElemCount) { 
-            if (ScoreCalcerPtr == 0) { 
-                ScoreCalcerPtr = new TScoreCalcer(); 
-                ScoreCalcerPtr->Alloc(maxElemCount); 
-            } 
-            return ScoreCalcerPtr; 
-        } 
-        @endcode 
- 
-    @param TType POD or a class with a constructor taking 1 argument 
-**/ 
- 
-/** 
+        static TScoreCalcer* GetScoreCalcer(yint maxElemCount) {
+            if (ScoreCalcerPtr == 0) {
+                ScoreCalcerPtr = new TScoreCalcer();
+                ScoreCalcerPtr->Alloc(maxElemCount);
+            }
+            return ScoreCalcerPtr;
+        }
+        @endcode
+
+    @param TType POD or a class with a constructor taking 1 argument
+**/
+
+/**
     @def Y_STATIC_THREAD(TType)
- 
+
     Equivalent to "static Y_THREAD(TType)"
- 
+
     @see Y_THREAD(TType)
-**/ 
- 
-/** 
+**/
+
+/**
     @def Y_POD_THREAD(TType)
- 
+
     Same interface as Y_THREAD(TType), but TType must be a POD.
     Implemented (based on the compiler) as Y_THREAD(TType) or as native tls.
- 
+
     @see Y_THREAD(TType)
-**/ 
- 
-/** 
-    @def STATIC_POD_THREAD(TType) 
- 
+**/
+
+/**
+    @def STATIC_POD_THREAD(TType)
+
     Equivalent to "static Y_POD_THREAD(TType)"
- 
+
     @see Y_POD_THREAD(TType)
-**/ 
- 
+**/
+
 #define Y_THREAD(T) ::NTls::TValue<T>
 #define Y_STATIC_THREAD(T) static Y_THREAD(T)
 

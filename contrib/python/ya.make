@@ -247,7 +247,7 @@ RECURSE(
     django-enumfields
     django-environ
     django-etc
-    django-export-action-py3
+    django-export-action-py3 
     django-extensions
     django-fernet-fields
     django-filebrowser-no-grappelli

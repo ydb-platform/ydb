@@ -1,5 +1,5 @@
 RECURSE(
     detect
-    detect_ut 
+    detect_ut
     types
 )

@@ -145,7 +145,7 @@ namespace NCodecs {
             }
         }
 
-        bool Learn(ISequenceReader& in, bool throwOnError) { 
+        bool Learn(ISequenceReader& in, bool throwOnError) {
             TBuffer data;
             TVector<size_t> lens;
 
@@ -168,19 +168,19 @@ namespace NCodecs {
             if (!lens) {
                 Dict.Reset();
             } else {
-                size_t trainResult = ZDICT_trainFromBuffer_legacy( 
-                    Dict.data(), Dict.size(), data.Data(), const_cast<const size_t*>(&lens[0]), lens.size(), params); 
-                if (ZSTD_isError(trainResult)) { 
-                    if (!throwOnError) { 
-                        return false; 
-                    } 
-                    CheckSize(trainResult, __LOCATION__); 
-                } 
-                Dict.Resize(trainResult); 
+                size_t trainResult = ZDICT_trainFromBuffer_legacy(
+                    Dict.data(), Dict.size(), data.Data(), const_cast<const size_t*>(&lens[0]), lens.size(), params);
+                if (ZSTD_isError(trainResult)) {
+                    if (!throwOnError) {
+                        return false;
+                    }
+                    CheckSize(trainResult, __LOCATION__);
+                }
+                Dict.Resize(trainResult);
                 Dict.ShrinkToFit();
             }
             InitContexts();
-            return true; 
+            return true;
         }
 
         void Save(IOutputStream* out) const {
@@ -247,14 +247,14 @@ namespace NCodecs {
 
     void TZStdDictCodec::DoLearn(ISequenceReader& in) {
         Impl = new TImpl(Impl->GetCompressionLevel());
-        Impl->Learn(in, true/*throwOnError*/); 
+        Impl->Learn(in, true/*throwOnError*/);
     }
 
-    bool TZStdDictCodec::DoTryToLearn(ISequenceReader& in) { 
-        Impl = new TImpl(Impl->GetCompressionLevel()); 
-        return Impl->Learn(in, false/*throwOnError*/); 
-    } 
- 
+    bool TZStdDictCodec::DoTryToLearn(ISequenceReader& in) {
+        Impl = new TImpl(Impl->GetCompressionLevel());
+        return Impl->Learn(in, false/*throwOnError*/);
+    }
+
     void TZStdDictCodec::Save(IOutputStream* out) const {
         Impl->Save(out);
     }

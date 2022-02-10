@@ -178,79 +178,79 @@ MEM_STATIC size_t ZSTD_decompressLegacy(
     }
 }
 
-MEM_STATIC ZSTD_frameSizeInfo ZSTD_findFrameSizeInfoLegacy(const void *src, size_t srcSize) 
+MEM_STATIC ZSTD_frameSizeInfo ZSTD_findFrameSizeInfoLegacy(const void *src, size_t srcSize)
 {
-    ZSTD_frameSizeInfo frameSizeInfo; 
-    U32 const version = ZSTD_isLegacy(src, srcSize); 
+    ZSTD_frameSizeInfo frameSizeInfo;
+    U32 const version = ZSTD_isLegacy(src, srcSize);
     switch(version)
     {
 #if (ZSTD_LEGACY_SUPPORT <= 1)
         case 1 :
-            ZSTDv01_findFrameSizeInfoLegacy(src, srcSize, 
-                &frameSizeInfo.compressedSize, 
-                &frameSizeInfo.decompressedBound); 
-            break; 
+            ZSTDv01_findFrameSizeInfoLegacy(src, srcSize,
+                &frameSizeInfo.compressedSize,
+                &frameSizeInfo.decompressedBound);
+            break;
 #endif
 #if (ZSTD_LEGACY_SUPPORT <= 2)
         case 2 :
-            ZSTDv02_findFrameSizeInfoLegacy(src, srcSize, 
-                &frameSizeInfo.compressedSize, 
-                &frameSizeInfo.decompressedBound); 
-            break; 
+            ZSTDv02_findFrameSizeInfoLegacy(src, srcSize,
+                &frameSizeInfo.compressedSize,
+                &frameSizeInfo.decompressedBound);
+            break;
 #endif
 #if (ZSTD_LEGACY_SUPPORT <= 3)
         case 3 :
-            ZSTDv03_findFrameSizeInfoLegacy(src, srcSize, 
-                &frameSizeInfo.compressedSize, 
-                &frameSizeInfo.decompressedBound); 
-            break; 
+            ZSTDv03_findFrameSizeInfoLegacy(src, srcSize,
+                &frameSizeInfo.compressedSize,
+                &frameSizeInfo.decompressedBound);
+            break;
 #endif
 #if (ZSTD_LEGACY_SUPPORT <= 4)
         case 4 :
-            ZSTDv04_findFrameSizeInfoLegacy(src, srcSize, 
-                &frameSizeInfo.compressedSize, 
-                &frameSizeInfo.decompressedBound); 
-            break; 
+            ZSTDv04_findFrameSizeInfoLegacy(src, srcSize,
+                &frameSizeInfo.compressedSize,
+                &frameSizeInfo.decompressedBound);
+            break;
 #endif
 #if (ZSTD_LEGACY_SUPPORT <= 5)
         case 5 :
-            ZSTDv05_findFrameSizeInfoLegacy(src, srcSize, 
-                &frameSizeInfo.compressedSize, 
-                &frameSizeInfo.decompressedBound); 
-            break; 
+            ZSTDv05_findFrameSizeInfoLegacy(src, srcSize,
+                &frameSizeInfo.compressedSize,
+                &frameSizeInfo.decompressedBound);
+            break;
 #endif
 #if (ZSTD_LEGACY_SUPPORT <= 6)
         case 6 :
-            ZSTDv06_findFrameSizeInfoLegacy(src, srcSize, 
-                &frameSizeInfo.compressedSize, 
-                &frameSizeInfo.decompressedBound); 
-            break; 
+            ZSTDv06_findFrameSizeInfoLegacy(src, srcSize,
+                &frameSizeInfo.compressedSize,
+                &frameSizeInfo.decompressedBound);
+            break;
 #endif
 #if (ZSTD_LEGACY_SUPPORT <= 7)
         case 7 :
-            ZSTDv07_findFrameSizeInfoLegacy(src, srcSize, 
-                &frameSizeInfo.compressedSize, 
-                &frameSizeInfo.decompressedBound); 
-            break; 
+            ZSTDv07_findFrameSizeInfoLegacy(src, srcSize,
+                &frameSizeInfo.compressedSize,
+                &frameSizeInfo.decompressedBound);
+            break;
 #endif
         default :
-            frameSizeInfo.compressedSize = ERROR(prefix_unknown); 
-            frameSizeInfo.decompressedBound = ZSTD_CONTENTSIZE_ERROR; 
-            break; 
+            frameSizeInfo.compressedSize = ERROR(prefix_unknown);
+            frameSizeInfo.decompressedBound = ZSTD_CONTENTSIZE_ERROR;
+            break;
     }
     if (!ZSTD_isError(frameSizeInfo.compressedSize) && frameSizeInfo.compressedSize > srcSize) {
         frameSizeInfo.compressedSize = ERROR(srcSize_wrong);
         frameSizeInfo.decompressedBound = ZSTD_CONTENTSIZE_ERROR;
     }
-    return frameSizeInfo; 
+    return frameSizeInfo;
 }
 
-MEM_STATIC size_t ZSTD_findFrameCompressedSizeLegacy(const void *src, size_t srcSize) 
-{ 
-    ZSTD_frameSizeInfo frameSizeInfo = ZSTD_findFrameSizeInfoLegacy(src, srcSize); 
-    return frameSizeInfo.compressedSize; 
-} 
- 
+MEM_STATIC size_t ZSTD_findFrameCompressedSizeLegacy(const void *src, size_t srcSize)
+{
+    ZSTD_frameSizeInfo frameSizeInfo = ZSTD_findFrameSizeInfoLegacy(src, srcSize);
+    return frameSizeInfo.compressedSize;
+}
+
 MEM_STATIC size_t ZSTD_freeLegacyStreamContext(void* legacyContext, U32 version)
 {
     switch(version)

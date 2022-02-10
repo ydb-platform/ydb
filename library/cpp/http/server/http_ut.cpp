@@ -558,22 +558,22 @@ Y_UNIT_TEST_SUITE(THttpServerTest) {
 
         UNIT_ASSERT_STRINGS_EQUAL(serverImpl.ExceptionMessage, "(yexception) some error");
     };
- 
+
     THttpInput SendRequest(TSocket& socket, ui16 port) {
-        TSocketInput si(socket); 
-        TSocketOutput so(socket); 
-        THttpOutput out(&so); 
-        out.EnableKeepAlive(true); 
-        out << "GET / HTTP/1.1" << CrLf; 
-        out << "Host: localhost:" + ToString(port) << CrLf; 
-        out << CrLf; 
-        out.Flush(); 
- 
-        THttpInput input(&si); 
-        input.ReadAll(); 
+        TSocketInput si(socket);
+        TSocketOutput so(socket);
+        THttpOutput out(&so);
+        out.EnableKeepAlive(true);
+        out << "GET / HTTP/1.1" << CrLf;
+        out << "Host: localhost:" + ToString(port) << CrLf;
+        out << CrLf;
+        out.Flush();
+
+        THttpInput input(&si);
+        input.ReadAll();
         return input;
-    } 
- 
+    }
+
     THttpInput SendRequestWithBody(TSocket& socket, ui16 port, TString body) {
         TSocketInput si(socket);
         TSocketOutput so(socket);
@@ -590,32 +590,32 @@ Y_UNIT_TEST_SUITE(THttpServerTest) {
         return input;
     }
 
-    Y_UNIT_TEST(TTestExpirationTimeout) { 
-        TPortManager pm; 
-        const ui16 port = pm.GetPort(); 
- 
-        TEchoServer serverImpl("test_data"); 
-        THttpServer::TOptions options(port); 
-        options.nThreads = 1; 
-        options.MaxQueueSize = 0; 
-        options.MaxConnections = 0; 
-        options.KeepAliveEnabled = true; 
-        options.ExpirationTimeout = TDuration::Seconds(1); 
-        options.PollTimeout = TDuration::MilliSeconds(100); 
-        THttpServer server(&serverImpl, options); 
-        UNIT_ASSERT(server.Start()); 
- 
-        TSocket socket(TNetworkAddress("localhost", port), TDuration::Seconds(10)); 
- 
-        SendRequest(socket, port); 
-        SendRequest(socket, port); 
- 
-        Sleep(TDuration::Seconds(5)); 
-        UNIT_ASSERT_EXCEPTION(SendRequest(socket, port), THttpReadException); 
- 
-        server.Stop(); 
-    } 
- 
+    Y_UNIT_TEST(TTestExpirationTimeout) {
+        TPortManager pm;
+        const ui16 port = pm.GetPort();
+
+        TEchoServer serverImpl("test_data");
+        THttpServer::TOptions options(port);
+        options.nThreads = 1;
+        options.MaxQueueSize = 0;
+        options.MaxConnections = 0;
+        options.KeepAliveEnabled = true;
+        options.ExpirationTimeout = TDuration::Seconds(1);
+        options.PollTimeout = TDuration::MilliSeconds(100);
+        THttpServer server(&serverImpl, options);
+        UNIT_ASSERT(server.Start());
+
+        TSocket socket(TNetworkAddress("localhost", port), TDuration::Seconds(10));
+
+        SendRequest(socket, port);
+        SendRequest(socket, port);
+
+        Sleep(TDuration::Seconds(5));
+        UNIT_ASSERT_EXCEPTION(SendRequest(socket, port), THttpReadException);
+
+        server.Stop();
+    }
+
     Y_UNIT_TEST(TTestContentLengthTooLarge) {
         TPortManager pm;
         const ui16 port = pm.GetPort();

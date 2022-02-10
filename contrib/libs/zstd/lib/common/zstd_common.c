@@ -30,10 +30,10 @@ const char* ZSTD_versionString(void) { return ZSTD_VERSION_STRING; }
 /*-****************************************
 *  ZSTD Error Management
 ******************************************/
-#undef ZSTD_isError   /* defined within zstd_internal.h */ 
+#undef ZSTD_isError   /* defined within zstd_internal.h */
 /*! ZSTD_isError() :
- *  tells if a return value is an error code 
- *  symbol is required for external callers */ 
+ *  tells if a return value is an error code
+ *  symbol is required for external callers */
 unsigned ZSTD_isError(size_t code) { return ERR_isError(code); }
 
 /*! ZSTD_getErrorName() :

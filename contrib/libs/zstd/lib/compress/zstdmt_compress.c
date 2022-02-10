@@ -15,10 +15,10 @@
 #endif
 
 
-/* ======   Constants   ====== */ 
-#define ZSTDMT_OVERLAPLOG_DEFAULT 0 
- 
- 
+/* ======   Constants   ====== */
+#define ZSTDMT_OVERLAPLOG_DEFAULT 0
+
+
 /* ======   Dependencies   ====== */
 #include "../common/zstd_deps.h"   /* ZSTD_memcpy, ZSTD_memset, INT_MAX, UINT_MAX */
 #include "../common/mem.h"         /* MEM_STATIC */
@@ -35,9 +35,9 @@
 #define ZSTD_RESIZE_SEQPOOL 0
 
 /* ======   Debug   ====== */
-#if defined(DEBUGLEVEL) && (DEBUGLEVEL>=2) \ 
-    && !defined(_MSC_VER) \ 
-    && !defined(__MINGW32__) 
+#if defined(DEBUGLEVEL) && (DEBUGLEVEL>=2) \
+    && !defined(_MSC_VER) \
+    && !defined(__MINGW32__)
 
 #  include <stdio.h>
 #  include <unistd.h>
@@ -46,8 +46,8 @@
 #  define DEBUG_PRINTHEX(l,p,n) {            \
     unsigned debug_u;                        \
     for (debug_u=0; debug_u<(n); debug_u++)  \
-        RAWLOG(l, "%02X ", ((const unsigned char*)(p))[debug_u]); \ 
-    RAWLOG(l, " \n");                        \ 
+        RAWLOG(l, "%02X ", ((const unsigned char*)(p))[debug_u]); \
+    RAWLOG(l, " \n");                        \
 }
 
 static unsigned long long GetCurrentClockTimeMicroseconds(void)
@@ -55,13 +55,13 @@ static unsigned long long GetCurrentClockTimeMicroseconds(void)
    static clock_t _ticksPerSecond = 0;
    if (_ticksPerSecond <= 0) _ticksPerSecond = sysconf(_SC_CLK_TCK);
 
-   {   struct tms junk; clock_t newTicks = (clock_t) times(&junk); 
-       return ((((unsigned long long)newTicks)*(1000000))/_ticksPerSecond); 
-}  } 
+   {   struct tms junk; clock_t newTicks = (clock_t) times(&junk);
+       return ((((unsigned long long)newTicks)*(1000000))/_ticksPerSecond);
+}  }
 
 #define MUTEX_WAIT_TIME_DLEVEL 6
 #define ZSTD_PTHREAD_MUTEX_LOCK(mutex) {          \
-    if (DEBUGLEVEL >= MUTEX_WAIT_TIME_DLEVEL) {   \ 
+    if (DEBUGLEVEL >= MUTEX_WAIT_TIME_DLEVEL) {   \
         unsigned long long const beforeTime = GetCurrentClockTimeMicroseconds(); \
         ZSTD_pthread_mutex_lock(mutex);           \
         {   unsigned long long const afterTime = GetCurrentClockTimeMicroseconds(); \
@@ -158,24 +158,24 @@ static void ZSTDMT_setBufferSize(ZSTDMT_bufferPool* const bufPool, size_t const 
     ZSTD_pthread_mutex_unlock(&bufPool->poolMutex);
 }
 
- 
+
 static ZSTDMT_bufferPool* ZSTDMT_expandBufferPool(ZSTDMT_bufferPool* srcBufPool, unsigned maxNbBuffers)
-{ 
-    if (srcBufPool==NULL) return NULL; 
-    if (srcBufPool->totalBuffers >= maxNbBuffers) /* good enough */ 
-        return srcBufPool; 
-    /* need a larger buffer pool */ 
-    {   ZSTD_customMem const cMem = srcBufPool->cMem; 
-        size_t const bSize = srcBufPool->bufferSize;   /* forward parameters */ 
-        ZSTDMT_bufferPool* newBufPool; 
-        ZSTDMT_freeBufferPool(srcBufPool); 
+{
+    if (srcBufPool==NULL) return NULL;
+    if (srcBufPool->totalBuffers >= maxNbBuffers) /* good enough */
+        return srcBufPool;
+    /* need a larger buffer pool */
+    {   ZSTD_customMem const cMem = srcBufPool->cMem;
+        size_t const bSize = srcBufPool->bufferSize;   /* forward parameters */
+        ZSTDMT_bufferPool* newBufPool;
+        ZSTDMT_freeBufferPool(srcBufPool);
         newBufPool = ZSTDMT_createBufferPool(maxNbBuffers, cMem);
-        if (newBufPool==NULL) return newBufPool; 
-        ZSTDMT_setBufferSize(newBufPool, bSize); 
-        return newBufPool; 
-    } 
-} 
- 
+        if (newBufPool==NULL) return newBufPool;
+        ZSTDMT_setBufferSize(newBufPool, bSize);
+        return newBufPool;
+    }
+}
+
 /** ZSTDMT_getBuffer() :
  *  assumption : bufPool must be valid
  * @return : a buffer, with start pointer and size
@@ -245,7 +245,7 @@ static buffer_t ZSTDMT_resizeBuffer(ZSTDMT_bufferPool* bufPool, buffer_t buffer)
 /* store buffer for later re-use, up to pool capacity */
 static void ZSTDMT_releaseBuffer(ZSTDMT_bufferPool* bufPool, buffer_t buf)
 {
-    DEBUGLOG(5, "ZSTDMT_releaseBuffer"); 
+    DEBUGLOG(5, "ZSTDMT_releaseBuffer");
     if (buf.start == NULL) return;   /* compatible with release on NULL */
     ZSTD_pthread_mutex_lock(&bufPool->poolMutex);
     if (bufPool->nbBuffers < bufPool->totalBuffers) {
@@ -325,7 +325,7 @@ static void ZSTDMT_setNbSeq(ZSTDMT_seqPool* const seqPool, size_t const nbSeq)
 static ZSTDMT_seqPool* ZSTDMT_createSeqPool(unsigned nbWorkers, ZSTD_customMem cMem)
 {
     ZSTDMT_seqPool* const seqPool = ZSTDMT_createBufferPool(SEQ_POOL_MAX_NB_BUFFERS(nbWorkers), cMem);
-    if (seqPool == NULL) return NULL; 
+    if (seqPool == NULL) return NULL;
     ZSTDMT_setNbSeq(seqPool, 0);
     return seqPool;
 }
@@ -335,10 +335,10 @@ static void ZSTDMT_freeSeqPool(ZSTDMT_seqPool* seqPool)
     ZSTDMT_freeBufferPool(seqPool);
 }
 
-static ZSTDMT_seqPool* ZSTDMT_expandSeqPool(ZSTDMT_seqPool* pool, U32 nbWorkers) 
-{ 
+static ZSTDMT_seqPool* ZSTDMT_expandSeqPool(ZSTDMT_seqPool* pool, U32 nbWorkers)
+{
     return ZSTDMT_expandBufferPool(pool, SEQ_POOL_MAX_NB_BUFFERS(nbWorkers));
-} 
+}
 
 
 /* =====   CCtx Pool   ===== */
@@ -346,8 +346,8 @@ static ZSTDMT_seqPool* ZSTDMT_expandSeqPool(ZSTDMT_seqPool* pool, U32 nbWorkers)
 
 typedef struct {
     ZSTD_pthread_mutex_t poolMutex;
-    int totalCCtx; 
-    int availCCtx; 
+    int totalCCtx;
+    int availCCtx;
     ZSTD_customMem cMem;
     ZSTD_CCtx* cctx[1];   /* variable size */
 } ZSTDMT_CCtxPool;
@@ -355,16 +355,16 @@ typedef struct {
 /* note : all CCtx borrowed from the pool should be released back to the pool _before_ freeing the pool */
 static void ZSTDMT_freeCCtxPool(ZSTDMT_CCtxPool* pool)
 {
-    int cid; 
-    for (cid=0; cid<pool->totalCCtx; cid++) 
-        ZSTD_freeCCtx(pool->cctx[cid]);  /* note : compatible with free on NULL */ 
+    int cid;
+    for (cid=0; cid<pool->totalCCtx; cid++)
+        ZSTD_freeCCtx(pool->cctx[cid]);  /* note : compatible with free on NULL */
     ZSTD_pthread_mutex_destroy(&pool->poolMutex);
     ZSTD_customFree(pool, pool->cMem);
 }
 
 /* ZSTDMT_createCCtxPool() :
  * implies nbWorkers >= 1 , checked by caller ZSTDMT_createCCtx() */
-static ZSTDMT_CCtxPool* ZSTDMT_createCCtxPool(int nbWorkers, 
+static ZSTDMT_CCtxPool* ZSTDMT_createCCtxPool(int nbWorkers,
                                               ZSTD_customMem cMem)
 {
     ZSTDMT_CCtxPool* const cctxPool = (ZSTDMT_CCtxPool*) ZSTD_customCalloc(
@@ -384,18 +384,18 @@ static ZSTDMT_CCtxPool* ZSTDMT_createCCtxPool(int nbWorkers,
     return cctxPool;
 }
 
-static ZSTDMT_CCtxPool* ZSTDMT_expandCCtxPool(ZSTDMT_CCtxPool* srcPool, 
-                                              int nbWorkers) 
-{ 
-    if (srcPool==NULL) return NULL; 
-    if (nbWorkers <= srcPool->totalCCtx) return srcPool;   /* good enough */ 
-    /* need a larger cctx pool */ 
-    {   ZSTD_customMem const cMem = srcPool->cMem; 
-        ZSTDMT_freeCCtxPool(srcPool); 
-        return ZSTDMT_createCCtxPool(nbWorkers, cMem); 
-    } 
-} 
- 
+static ZSTDMT_CCtxPool* ZSTDMT_expandCCtxPool(ZSTDMT_CCtxPool* srcPool,
+                                              int nbWorkers)
+{
+    if (srcPool==NULL) return NULL;
+    if (nbWorkers <= srcPool->totalCCtx) return srcPool;   /* good enough */
+    /* need a larger cctx pool */
+    {   ZSTD_customMem const cMem = srcPool->cMem;
+        ZSTDMT_freeCCtxPool(srcPool);
+        return ZSTDMT_createCCtxPool(nbWorkers, cMem);
+    }
+}
+
 /* only works during initialization phase, not during compression */
 static size_t ZSTDMT_sizeof_CCtxPool(ZSTDMT_CCtxPool* cctxPool)
 {
@@ -462,7 +462,7 @@ typedef struct {
      * Must be acquired after the main mutex when acquiring both.
      */
     ZSTD_pthread_mutex_t ldmWindowMutex;
-    ZSTD_pthread_cond_t ldmWindowCond;  /* Signaled when ldmWindow is updated */ 
+    ZSTD_pthread_cond_t ldmWindowCond;  /* Signaled when ldmWindow is updated */
     ZSTD_window_t ldmWindow;  /* A thread-safe copy of ldmState.window */
 } serialState_t;
 
@@ -479,7 +479,7 @@ ZSTDMT_serialState_reset(serialState_t* serialState,
         DEBUGLOG(4, "LDM window size = %u KB", (1U << params.cParams.windowLog) >> 10);
         ZSTD_ldm_adjustParameters(&params.ldmParams, &params.cParams);
         assert(params.ldmParams.hashLog >= params.ldmParams.bucketSizeLog);
-        assert(params.ldmParams.hashRateLog < 32); 
+        assert(params.ldmParams.hashRateLog < 32);
     } else {
         ZSTD_memset(&params.ldmParams, 0, sizeof(params.ldmParams));
     }
@@ -497,7 +497,7 @@ ZSTDMT_serialState_reset(serialState_t* serialState,
             serialState->params.ldmParams.bucketSizeLog;
         size_t const numBuckets = (size_t)1 << bucketLog;
         /* Size the seq pool tables */
-        ZSTDMT_setNbSeq(seqPool, ZSTD_ldm_getMaxNbSeq(params.ldmParams, jobSize)); 
+        ZSTDMT_setNbSeq(seqPool, ZSTD_ldm_getMaxNbSeq(params.ldmParams, jobSize));
         /* Reset the window */
         ZSTD_window_init(&serialState->ldmState.window);
         /* Resize tables and output space if necessary. */
@@ -533,7 +533,7 @@ ZSTDMT_serialState_reset(serialState_t* serialState,
     }
 
     serialState->params = params;
-    serialState->params.jobSize = (U32)jobSize; 
+    serialState->params.jobSize = (U32)jobSize;
     return 0;
 }
 
@@ -566,7 +566,7 @@ static void ZSTDMT_serialState_update(serialState_t* serialState,
     /* Wait for our turn */
     ZSTD_PTHREAD_MUTEX_LOCK(&serialState->mutex);
     while (serialState->nextJobID < jobID) {
-        DEBUGLOG(5, "wait for serialState->cond"); 
+        DEBUGLOG(5, "wait for serialState->cond");
         ZSTD_pthread_cond_wait(&serialState->cond, &serialState->mutex);
     }
     /* A future job may error and skip our job */
@@ -576,7 +576,7 @@ static void ZSTDMT_serialState_update(serialState_t* serialState,
             size_t error;
             assert(seqStore.seq != NULL && seqStore.pos == 0 &&
                    seqStore.size == 0 && seqStore.capacity > 0);
-            assert(src.size <= serialState->params.jobSize); 
+            assert(src.size <= serialState->params.jobSize);
             ZSTD_window_update(&serialState->ldmState.window, src.start, src.size, /* forceNonContiguous */ 0);
             error = ZSTD_ldm_generateSequences(
                 &serialState->ldmState, &seqStore,
@@ -656,33 +656,33 @@ typedef struct {
     unsigned frameChecksumNeeded;        /* used only by mtctx */
 } ZSTDMT_jobDescription;
 
-#define JOB_ERROR(e) {                          \ 
-    ZSTD_PTHREAD_MUTEX_LOCK(&job->job_mutex);   \ 
-    job->cSize = e;                             \ 
-    ZSTD_pthread_mutex_unlock(&job->job_mutex); \ 
-    goto _endJob;                               \ 
-} 
- 
+#define JOB_ERROR(e) {                          \
+    ZSTD_PTHREAD_MUTEX_LOCK(&job->job_mutex);   \
+    job->cSize = e;                             \
+    ZSTD_pthread_mutex_unlock(&job->job_mutex); \
+    goto _endJob;                               \
+}
+
 /* ZSTDMT_compressionJob() is a POOL_function type */
-static void ZSTDMT_compressionJob(void* jobDescription) 
+static void ZSTDMT_compressionJob(void* jobDescription)
 {
     ZSTDMT_jobDescription* const job = (ZSTDMT_jobDescription*)jobDescription;
     ZSTD_CCtx_params jobParams = job->params;   /* do not modify job->params ! copy it, modify the copy */
     ZSTD_CCtx* const cctx = ZSTDMT_getCCtx(job->cctxPool);
     rawSeqStore_t rawSeqStore = ZSTDMT_getSeq(job->seqPool);
     buffer_t dstBuff = job->dstBuff;
-    size_t lastCBlockSize = 0; 
+    size_t lastCBlockSize = 0;
 
-    /* resources */ 
-    if (cctx==NULL) JOB_ERROR(ERROR(memory_allocation)); 
-    if (dstBuff.start == NULL) {   /* streaming job : doesn't provide a dstBuffer */ 
-        dstBuff = ZSTDMT_getBuffer(job->bufPool); 
-        if (dstBuff.start==NULL) JOB_ERROR(ERROR(memory_allocation)); 
-        job->dstBuff = dstBuff;   /* this value can be read in ZSTDMT_flush, when it copies the whole job */ 
-    } 
+    /* resources */
+    if (cctx==NULL) JOB_ERROR(ERROR(memory_allocation));
+    if (dstBuff.start == NULL) {   /* streaming job : doesn't provide a dstBuffer */
+        dstBuff = ZSTDMT_getBuffer(job->bufPool);
+        if (dstBuff.start==NULL) JOB_ERROR(ERROR(memory_allocation));
+        job->dstBuff = dstBuff;   /* this value can be read in ZSTDMT_flush, when it copies the whole job */
+    }
     if (jobParams.ldmParams.enableLdm == ZSTD_ps_enable && rawSeqStore.seq == NULL)
-        JOB_ERROR(ERROR(memory_allocation)); 
- 
+        JOB_ERROR(ERROR(memory_allocation));
+
     /* Don't compute the checksum for chunks, since we compute it externally,
      * but write it in the header.
      */
@@ -697,30 +697,30 @@ static void ZSTDMT_compressionJob(void* jobDescription)
     if (job->cdict) {
         size_t const initError = ZSTD_compressBegin_advanced_internal(cctx, NULL, 0, ZSTD_dct_auto, ZSTD_dtlm_fast, job->cdict, &jobParams, job->fullFrameSize);
         assert(job->firstJob);  /* only allowed for first job */
-        if (ZSTD_isError(initError)) JOB_ERROR(initError); 
+        if (ZSTD_isError(initError)) JOB_ERROR(initError);
     } else {  /* srcStart points at reloaded section */
         U64 const pledgedSrcSize = job->firstJob ? job->fullFrameSize : job->src.size;
-        {   size_t const forceWindowError = ZSTD_CCtxParams_setParameter(&jobParams, ZSTD_c_forceMaxWindow, !job->firstJob); 
-            if (ZSTD_isError(forceWindowError)) JOB_ERROR(forceWindowError); 
-        } 
+        {   size_t const forceWindowError = ZSTD_CCtxParams_setParameter(&jobParams, ZSTD_c_forceMaxWindow, !job->firstJob);
+            if (ZSTD_isError(forceWindowError)) JOB_ERROR(forceWindowError);
+        }
         if (!job->firstJob) {
             size_t const err = ZSTD_CCtxParams_setParameter(&jobParams, ZSTD_c_deterministicRefPrefix, 0);
             if (ZSTD_isError(err)) JOB_ERROR(err);
         }
         {   size_t const initError = ZSTD_compressBegin_advanced_internal(cctx,
                                         job->prefix.start, job->prefix.size, ZSTD_dct_rawContent, /* load dictionary in "content-only" mode (no header analysis) */
-                                        ZSTD_dtlm_fast, 
+                                        ZSTD_dtlm_fast,
                                         NULL, /*cdict*/
                                         &jobParams, pledgedSrcSize);
-            if (ZSTD_isError(initError)) JOB_ERROR(initError); 
-    }   } 
+            if (ZSTD_isError(initError)) JOB_ERROR(initError);
+    }   }
 
     /* Perform serial step as early as possible, but after CCtx initialization */
     ZSTDMT_serialState_update(job->serial, cctx, rawSeqStore, job->src, job->jobID);
 
     if (!job->firstJob) {  /* flush and overwrite frame header when it's not first job */
         size_t const hSize = ZSTD_compressContinue(cctx, dstBuff.start, dstBuff.capacity, job->src.start, 0);
-        if (ZSTD_isError(hSize)) JOB_ERROR(hSize); 
+        if (ZSTD_isError(hSize)) JOB_ERROR(hSize);
         DEBUGLOG(5, "ZSTDMT_compressionJob: flush and overwrite %u bytes of frame header (not first job)", (U32)hSize);
         ZSTD_invalidateRepCodes(cctx);
     }
@@ -738,7 +738,7 @@ static void ZSTDMT_compressionJob(void* jobDescription)
         assert(job->cSize == 0);
         for (chunkNb = 1; chunkNb < nbChunks; chunkNb++) {
             size_t const cSize = ZSTD_compressContinue(cctx, op, oend-op, ip, chunkSize);
-            if (ZSTD_isError(cSize)) JOB_ERROR(cSize); 
+            if (ZSTD_isError(cSize)) JOB_ERROR(cSize);
             ip += chunkSize;
             op += cSize; assert(op < oend);
             /* stats */
@@ -751,16 +751,16 @@ static void ZSTDMT_compressionJob(void* jobDescription)
             ZSTD_pthread_mutex_unlock(&job->job_mutex);
         }
         /* last block */
-        assert(chunkSize > 0); 
-        assert((chunkSize & (chunkSize - 1)) == 0);  /* chunkSize must be power of 2 for mask==(chunkSize-1) to work */ 
+        assert(chunkSize > 0);
+        assert((chunkSize & (chunkSize - 1)) == 0);  /* chunkSize must be power of 2 for mask==(chunkSize-1) to work */
         if ((nbChunks > 0) | job->lastJob /*must output a "last block" flag*/ ) {
             size_t const lastBlockSize1 = job->src.size & (chunkSize-1);
             size_t const lastBlockSize = ((lastBlockSize1==0) & (job->src.size>=chunkSize)) ? chunkSize : lastBlockSize1;
             size_t const cSize = (job->lastJob) ?
                  ZSTD_compressEnd     (cctx, op, oend-op, ip, lastBlockSize) :
                  ZSTD_compressContinue(cctx, op, oend-op, ip, lastBlockSize);
-            if (ZSTD_isError(cSize)) JOB_ERROR(cSize); 
-            lastCBlockSize = cSize; 
+            if (ZSTD_isError(cSize)) JOB_ERROR(cSize);
+            lastCBlockSize = cSize;
     }   }
     if (!job->firstJob) {
         /* Double check that we don't have an ext-dict, because then our
@@ -780,9 +780,9 @@ _endJob:
     ZSTDMT_releaseCCtx(job->cctxPool, cctx);
     /* report */
     ZSTD_PTHREAD_MUTEX_LOCK(&job->job_mutex);
-    if (ZSTD_isError(job->cSize)) assert(lastCBlockSize == 0); 
-    job->cSize += lastCBlockSize; 
-    job->consumed = job->src.size;  /* when job->consumed == job->src.size , compression job is presumed completed */ 
+    if (ZSTD_isError(job->cSize)) assert(lastCBlockSize == 0);
+    job->cSize += lastCBlockSize;
+    job->consumed = job->src.size;  /* when job->consumed == job->src.size , compression job is presumed completed */
     ZSTD_pthread_cond_signal(&job->job_cond);
     ZSTD_pthread_mutex_unlock(&job->job_mutex);
 }
@@ -814,7 +814,7 @@ typedef struct {
 
 static const roundBuff_t kNullRoundBuff = {NULL, 0, 0};
 
-#define RSYNC_LENGTH 32 
+#define RSYNC_LENGTH 32
 /* Don't create chunks smaller than the zstd block size.
  * This stops us from regressing compression ratio too much,
  * and ensures our output fits in ZSTD_compressBound().
@@ -824,13 +824,13 @@ static const roundBuff_t kNullRoundBuff = {NULL, 0, 0};
  */
 #define RSYNC_MIN_BLOCK_LOG ZSTD_BLOCKSIZELOG_MAX
 #define RSYNC_MIN_BLOCK_SIZE (1<<RSYNC_MIN_BLOCK_LOG)
- 
-typedef struct { 
-  U64 hash; 
-  U64 hitMask; 
-  U64 primePower; 
-} rsyncState_t; 
- 
+
+typedef struct {
+  U64 hash;
+  U64 hitMask;
+  U64 primePower;
+} rsyncState_t;
+
 struct ZSTDMT_CCtx_s {
     POOL_ctx* factory;
     ZSTDMT_jobDescription* jobs;
@@ -840,11 +840,11 @@ struct ZSTDMT_CCtx_s {
     ZSTD_CCtx_params params;
     size_t targetSectionSize;
     size_t targetPrefixSize;
-    int jobReady;        /* 1 => one job is already prepared, but pool has shortage of workers. Don't create a new job. */ 
-    inBuff_t inBuff; 
+    int jobReady;        /* 1 => one job is already prepared, but pool has shortage of workers. Don't create a new job. */
+    inBuff_t inBuff;
     roundBuff_t roundBuff;
     serialState_t serial;
-    rsyncState_t rsync; 
+    rsyncState_t rsync;
     unsigned jobIDMask;
     unsigned doneJobID;
     unsigned nextJobID;
@@ -894,25 +894,25 @@ static ZSTDMT_jobDescription* ZSTDMT_createJobsTable(U32* nbJobsPtr, ZSTD_custom
     return jobTable;
 }
 
-static size_t ZSTDMT_expandJobsTable (ZSTDMT_CCtx* mtctx, U32 nbWorkers) { 
-    U32 nbJobs = nbWorkers + 2; 
-    if (nbJobs > mtctx->jobIDMask+1) {  /* need more job capacity */ 
-        ZSTDMT_freeJobsTable(mtctx->jobs, mtctx->jobIDMask+1, mtctx->cMem); 
-        mtctx->jobIDMask = 0; 
-        mtctx->jobs = ZSTDMT_createJobsTable(&nbJobs, mtctx->cMem); 
-        if (mtctx->jobs==NULL) return ERROR(memory_allocation); 
-        assert((nbJobs != 0) && ((nbJobs & (nbJobs - 1)) == 0));  /* ensure nbJobs is a power of 2 */ 
-        mtctx->jobIDMask = nbJobs - 1; 
-    } 
-    return 0; 
-} 
- 
- 
+static size_t ZSTDMT_expandJobsTable (ZSTDMT_CCtx* mtctx, U32 nbWorkers) {
+    U32 nbJobs = nbWorkers + 2;
+    if (nbJobs > mtctx->jobIDMask+1) {  /* need more job capacity */
+        ZSTDMT_freeJobsTable(mtctx->jobs, mtctx->jobIDMask+1, mtctx->cMem);
+        mtctx->jobIDMask = 0;
+        mtctx->jobs = ZSTDMT_createJobsTable(&nbJobs, mtctx->cMem);
+        if (mtctx->jobs==NULL) return ERROR(memory_allocation);
+        assert((nbJobs != 0) && ((nbJobs & (nbJobs - 1)) == 0));  /* ensure nbJobs is a power of 2 */
+        mtctx->jobIDMask = nbJobs - 1;
+    }
+    return 0;
+}
+
+
 /* ZSTDMT_CCtxParam_setNbWorkers():
  * Internal use only */
 static size_t ZSTDMT_CCtxParam_setNbWorkers(ZSTD_CCtx_params* params, unsigned nbWorkers)
 {
-    return ZSTD_CCtxParams_setParameter(params, ZSTD_c_nbWorkers, (int)nbWorkers); 
+    return ZSTD_CCtxParams_setParameter(params, ZSTD_c_nbWorkers, (int)nbWorkers);
 }
 
 MEM_STATIC ZSTDMT_CCtx* ZSTDMT_createCCtx_advanced_internal(unsigned nbWorkers, ZSTD_customMem cMem, ZSTD_threadPool* pool)
@@ -958,17 +958,17 @@ MEM_STATIC ZSTDMT_CCtx* ZSTDMT_createCCtx_advanced_internal(unsigned nbWorkers, 
 }
 
 ZSTDMT_CCtx* ZSTDMT_createCCtx_advanced(unsigned nbWorkers, ZSTD_customMem cMem, ZSTD_threadPool* pool)
-{ 
-#ifdef ZSTD_MULTITHREAD 
+{
+#ifdef ZSTD_MULTITHREAD
     return ZSTDMT_createCCtx_advanced_internal(nbWorkers, cMem, pool);
-#else 
-    (void)nbWorkers; 
-    (void)cMem; 
+#else
+    (void)nbWorkers;
+    (void)cMem;
     (void)pool;
-    return NULL; 
-#endif 
-} 
- 
+    return NULL;
+#endif
+}
+
 
 /* ZSTDMT_releaseAllJobResources() :
  * note : ensure all workers are killed first ! */
@@ -1001,7 +1001,7 @@ static void ZSTDMT_waitForAllJobsCompleted(ZSTDMT_CCtx* mtctx)
         unsigned const jobID = mtctx->doneJobID & mtctx->jobIDMask;
         ZSTD_PTHREAD_MUTEX_LOCK(&mtctx->jobs[jobID].job_mutex);
         while (mtctx->jobs[jobID].consumed < mtctx->jobs[jobID].src.size) {
-            DEBUGLOG(4, "waiting for jobCompleted signal from job %u", mtctx->doneJobID);   /* we want to block when waiting for data to flush */ 
+            DEBUGLOG(4, "waiting for jobCompleted signal from job %u", mtctx->doneJobID);   /* we want to block when waiting for data to flush */
             ZSTD_pthread_cond_wait(&mtctx->jobs[jobID].job_cond, &mtctx->jobs[jobID].job_mutex);
         }
         ZSTD_pthread_mutex_unlock(&mtctx->jobs[jobID].job_mutex);
@@ -1041,25 +1041,25 @@ size_t ZSTDMT_sizeof_CCtx(ZSTDMT_CCtx* mtctx)
 }
 
 
-/* ZSTDMT_resize() : 
- * @return : error code if fails, 0 on success */ 
-static size_t ZSTDMT_resize(ZSTDMT_CCtx* mtctx, unsigned nbWorkers) 
-{ 
-    if (POOL_resize(mtctx->factory, nbWorkers)) return ERROR(memory_allocation); 
+/* ZSTDMT_resize() :
+ * @return : error code if fails, 0 on success */
+static size_t ZSTDMT_resize(ZSTDMT_CCtx* mtctx, unsigned nbWorkers)
+{
+    if (POOL_resize(mtctx->factory, nbWorkers)) return ERROR(memory_allocation);
     FORWARD_IF_ERROR( ZSTDMT_expandJobsTable(mtctx, nbWorkers) , "");
     mtctx->bufPool = ZSTDMT_expandBufferPool(mtctx->bufPool, BUF_POOL_MAX_NB_BUFFERS(nbWorkers));
-    if (mtctx->bufPool == NULL) return ERROR(memory_allocation); 
-    mtctx->cctxPool = ZSTDMT_expandCCtxPool(mtctx->cctxPool, nbWorkers); 
-    if (mtctx->cctxPool == NULL) return ERROR(memory_allocation); 
-    mtctx->seqPool = ZSTDMT_expandSeqPool(mtctx->seqPool, nbWorkers); 
-    if (mtctx->seqPool == NULL) return ERROR(memory_allocation); 
-    ZSTDMT_CCtxParam_setNbWorkers(&mtctx->params, nbWorkers); 
-    return 0; 
+    if (mtctx->bufPool == NULL) return ERROR(memory_allocation);
+    mtctx->cctxPool = ZSTDMT_expandCCtxPool(mtctx->cctxPool, nbWorkers);
+    if (mtctx->cctxPool == NULL) return ERROR(memory_allocation);
+    mtctx->seqPool = ZSTDMT_expandSeqPool(mtctx->seqPool, nbWorkers);
+    if (mtctx->seqPool == NULL) return ERROR(memory_allocation);
+    ZSTDMT_CCtxParam_setNbWorkers(&mtctx->params, nbWorkers);
+    return 0;
 }
 
- 
+
 /*! ZSTDMT_updateCParams_whileCompressing() :
- *  Updates a selected set of compression parameters, remaining compatible with currently active frame. 
+ *  Updates a selected set of compression parameters, remaining compatible with currently active frame.
  *  New parameters will be applied to next compression job. */
 void ZSTDMT_updateCParams_whileCompressing(ZSTDMT_CCtx* mtctx, const ZSTD_CCtx_params* cctxParams)
 {
@@ -1077,33 +1077,33 @@ void ZSTDMT_updateCParams_whileCompressing(ZSTDMT_CCtx* mtctx, const ZSTD_CCtx_p
 /* ZSTDMT_getFrameProgression():
  * tells how much data has been consumed (input) and produced (output) for current frame.
  * able to count progression inside worker threads.
- * Note : mutex will be acquired during statistics collection inside workers. */ 
+ * Note : mutex will be acquired during statistics collection inside workers. */
 ZSTD_frameProgression ZSTDMT_getFrameProgression(ZSTDMT_CCtx* mtctx)
 {
     ZSTD_frameProgression fps;
-    DEBUGLOG(5, "ZSTDMT_getFrameProgression"); 
-    fps.ingested = mtctx->consumed + mtctx->inBuff.filled; 
+    DEBUGLOG(5, "ZSTDMT_getFrameProgression");
+    fps.ingested = mtctx->consumed + mtctx->inBuff.filled;
     fps.consumed = mtctx->consumed;
-    fps.produced = fps.flushed = mtctx->produced; 
-    fps.currentJobID = mtctx->nextJobID; 
-    fps.nbActiveWorkers = 0; 
+    fps.produced = fps.flushed = mtctx->produced;
+    fps.currentJobID = mtctx->nextJobID;
+    fps.nbActiveWorkers = 0;
     {   unsigned jobNb;
         unsigned lastJobNb = mtctx->nextJobID + mtctx->jobReady; assert(mtctx->jobReady <= 1);
         DEBUGLOG(6, "ZSTDMT_getFrameProgression: jobs: from %u to <%u (jobReady:%u)",
                     mtctx->doneJobID, lastJobNb, mtctx->jobReady)
         for (jobNb = mtctx->doneJobID ; jobNb < lastJobNb ; jobNb++) {
             unsigned const wJobID = jobNb & mtctx->jobIDMask;
-            ZSTDMT_jobDescription* jobPtr = &mtctx->jobs[wJobID]; 
-            ZSTD_pthread_mutex_lock(&jobPtr->job_mutex); 
-            {   size_t const cResult = jobPtr->cSize; 
+            ZSTDMT_jobDescription* jobPtr = &mtctx->jobs[wJobID];
+            ZSTD_pthread_mutex_lock(&jobPtr->job_mutex);
+            {   size_t const cResult = jobPtr->cSize;
                 size_t const produced = ZSTD_isError(cResult) ? 0 : cResult;
-                size_t const flushed = ZSTD_isError(cResult) ? 0 : jobPtr->dstFlushed; 
-                assert(flushed <= produced); 
-                fps.ingested += jobPtr->src.size; 
-                fps.consumed += jobPtr->consumed; 
+                size_t const flushed = ZSTD_isError(cResult) ? 0 : jobPtr->dstFlushed;
+                assert(flushed <= produced);
+                fps.ingested += jobPtr->src.size;
+                fps.consumed += jobPtr->consumed;
                 fps.produced += produced;
-                fps.flushed  += flushed; 
-                fps.nbActiveWorkers += (jobPtr->consumed < jobPtr->src.size); 
+                fps.flushed  += flushed;
+                fps.nbActiveWorkers += (jobPtr->consumed < jobPtr->src.size);
             }
             ZSTD_pthread_mutex_unlock(&mtctx->jobs[wJobID].job_mutex);
         }
@@ -1112,39 +1112,39 @@ ZSTD_frameProgression ZSTDMT_getFrameProgression(ZSTDMT_CCtx* mtctx)
 }
 
 
-size_t ZSTDMT_toFlushNow(ZSTDMT_CCtx* mtctx) 
-{ 
-    size_t toFlush; 
-    unsigned const jobID = mtctx->doneJobID; 
-    assert(jobID <= mtctx->nextJobID); 
-    if (jobID == mtctx->nextJobID) return 0;   /* no active job => nothing to flush */ 
- 
-    /* look into oldest non-fully-flushed job */ 
-    {   unsigned const wJobID = jobID & mtctx->jobIDMask; 
-        ZSTDMT_jobDescription* const jobPtr = &mtctx->jobs[wJobID]; 
-        ZSTD_pthread_mutex_lock(&jobPtr->job_mutex); 
-        {   size_t const cResult = jobPtr->cSize; 
-            size_t const produced = ZSTD_isError(cResult) ? 0 : cResult; 
-            size_t const flushed = ZSTD_isError(cResult) ? 0 : jobPtr->dstFlushed; 
-            assert(flushed <= produced); 
+size_t ZSTDMT_toFlushNow(ZSTDMT_CCtx* mtctx)
+{
+    size_t toFlush;
+    unsigned const jobID = mtctx->doneJobID;
+    assert(jobID <= mtctx->nextJobID);
+    if (jobID == mtctx->nextJobID) return 0;   /* no active job => nothing to flush */
+
+    /* look into oldest non-fully-flushed job */
+    {   unsigned const wJobID = jobID & mtctx->jobIDMask;
+        ZSTDMT_jobDescription* const jobPtr = &mtctx->jobs[wJobID];
+        ZSTD_pthread_mutex_lock(&jobPtr->job_mutex);
+        {   size_t const cResult = jobPtr->cSize;
+            size_t const produced = ZSTD_isError(cResult) ? 0 : cResult;
+            size_t const flushed = ZSTD_isError(cResult) ? 0 : jobPtr->dstFlushed;
+            assert(flushed <= produced);
             assert(jobPtr->consumed <= jobPtr->src.size);
-            toFlush = produced - flushed; 
+            toFlush = produced - flushed;
             /* if toFlush==0, nothing is available to flush.
              * However, jobID is expected to still be active:
              * if jobID was already completed and fully flushed,
              * ZSTDMT_flushProduced() should have already moved onto next job.
              * Therefore, some input has not yet been consumed. */
             if (toFlush==0) {
-                assert(jobPtr->consumed < jobPtr->src.size); 
-            } 
-        } 
-        ZSTD_pthread_mutex_unlock(&mtctx->jobs[wJobID].job_mutex); 
-    } 
- 
-    return toFlush; 
-} 
- 
- 
+                assert(jobPtr->consumed < jobPtr->src.size);
+            }
+        }
+        ZSTD_pthread_mutex_unlock(&mtctx->jobs[wJobID].job_mutex);
+    }
+
+    return toFlush;
+}
+
+
 /* ------------------------------------------ */
 /* =====   Multi-threaded compression   ===== */
 /* ------------------------------------------ */
@@ -1153,8 +1153,8 @@ static unsigned ZSTDMT_computeTargetJobLog(const ZSTD_CCtx_params* params)
 {
     unsigned jobLog;
     if (params->ldmParams.enableLdm == ZSTD_ps_enable) {
-        /* In Long Range Mode, the windowLog is typically oversized. 
-         * In which case, it's preferable to determine the jobSize 
+        /* In Long Range Mode, the windowLog is typically oversized.
+         * In which case, it's preferable to determine the jobSize
          * based on cycleLog instead. */
         jobLog = MAX(21, ZSTD_cycleLog(params->cParams.chainLog, params->cParams.strategy) + 3);
     } else {
@@ -1163,53 +1163,53 @@ static unsigned ZSTDMT_computeTargetJobLog(const ZSTD_CCtx_params* params)
     return MIN(jobLog, (unsigned)ZSTDMT_JOBLOG_MAX);
 }
 
-static int ZSTDMT_overlapLog_default(ZSTD_strategy strat) 
+static int ZSTDMT_overlapLog_default(ZSTD_strategy strat)
 {
-    switch(strat) 
-    { 
-        case ZSTD_btultra2: 
-            return 9; 
-        case ZSTD_btultra: 
-        case ZSTD_btopt: 
-            return 8; 
-        case ZSTD_btlazy2: 
-        case ZSTD_lazy2: 
-            return 7; 
-        case ZSTD_lazy: 
-        case ZSTD_greedy: 
-        case ZSTD_dfast: 
-        case ZSTD_fast: 
-        default:; 
-    } 
-    return 6; 
+    switch(strat)
+    {
+        case ZSTD_btultra2:
+            return 9;
+        case ZSTD_btultra:
+        case ZSTD_btopt:
+            return 8;
+        case ZSTD_btlazy2:
+        case ZSTD_lazy2:
+            return 7;
+        case ZSTD_lazy:
+        case ZSTD_greedy:
+        case ZSTD_dfast:
+        case ZSTD_fast:
+        default:;
+    }
+    return 6;
 }
 
-static int ZSTDMT_overlapLog(int ovlog, ZSTD_strategy strat) 
-{ 
-    assert(0 <= ovlog && ovlog <= 9); 
-    if (ovlog == 0) return ZSTDMT_overlapLog_default(strat); 
-    return ovlog; 
-} 
- 
+static int ZSTDMT_overlapLog(int ovlog, ZSTD_strategy strat)
+{
+    assert(0 <= ovlog && ovlog <= 9);
+    if (ovlog == 0) return ZSTDMT_overlapLog_default(strat);
+    return ovlog;
+}
+
 static size_t ZSTDMT_computeOverlapSize(const ZSTD_CCtx_params* params)
-{ 
+{
     int const overlapRLog = 9 - ZSTDMT_overlapLog(params->overlapLog, params->cParams.strategy);
     int ovLog = (overlapRLog >= 8) ? 0 : (params->cParams.windowLog - overlapRLog);
-    assert(0 <= overlapRLog && overlapRLog <= 8); 
+    assert(0 <= overlapRLog && overlapRLog <= 8);
     if (params->ldmParams.enableLdm == ZSTD_ps_enable) {
-        /* In Long Range Mode, the windowLog is typically oversized. 
-         * In which case, it's preferable to determine the jobSize 
-         * based on chainLog instead. 
-         * Then, ovLog becomes a fraction of the jobSize, rather than windowSize */ 
+        /* In Long Range Mode, the windowLog is typically oversized.
+         * In which case, it's preferable to determine the jobSize
+         * based on chainLog instead.
+         * Then, ovLog becomes a fraction of the jobSize, rather than windowSize */
         ovLog = MIN(params->cParams.windowLog, ZSTDMT_computeTargetJobLog(params) - 2)
-                - overlapRLog; 
-    } 
+                - overlapRLog;
+    }
     assert(0 <= ovLog && ovLog <= ZSTD_WINDOWLOG_MAX);
     DEBUGLOG(4, "overlapLog : %i", params->overlapLog);
-    DEBUGLOG(4, "overlap size : %i", 1 << ovLog); 
-    return (ovLog==0) ? 0 : (size_t)1 << ovLog; 
-} 
- 
+    DEBUGLOG(4, "overlap size : %i", 1 << ovLog);
+    return (ovLog==0) ? 0 : (size_t)1 << ovLog;
+}
+
 /* ====================================== */
 /* =======      Streaming API     ======= */
 /* ====================================== */
@@ -1220,20 +1220,20 @@ size_t ZSTDMT_initCStream_internal(
         const ZSTD_CDict* cdict, ZSTD_CCtx_params params,
         unsigned long long pledgedSrcSize)
 {
-    DEBUGLOG(4, "ZSTDMT_initCStream_internal (pledgedSrcSize=%u, nbWorkers=%u, cctxPool=%u)", 
-                (U32)pledgedSrcSize, params.nbWorkers, mtctx->cctxPool->totalCCtx); 
- 
-    /* params supposed partially fully validated at this point */ 
+    DEBUGLOG(4, "ZSTDMT_initCStream_internal (pledgedSrcSize=%u, nbWorkers=%u, cctxPool=%u)",
+                (U32)pledgedSrcSize, params.nbWorkers, mtctx->cctxPool->totalCCtx);
+
+    /* params supposed partially fully validated at this point */
     assert(!ZSTD_isError(ZSTD_checkCParams(params.cParams)));
     assert(!((dict) && (cdict)));  /* either dict or cdict, not both */
 
     /* init */
-    if (params.nbWorkers != mtctx->params.nbWorkers) 
+    if (params.nbWorkers != mtctx->params.nbWorkers)
         FORWARD_IF_ERROR( ZSTDMT_resize(mtctx, params.nbWorkers) , "");
 
-    if (params.jobSize != 0 && params.jobSize < ZSTDMT_JOBSIZE_MIN) params.jobSize = ZSTDMT_JOBSIZE_MIN; 
+    if (params.jobSize != 0 && params.jobSize < ZSTDMT_JOBSIZE_MIN) params.jobSize = ZSTDMT_JOBSIZE_MIN;
     if (params.jobSize > (size_t)ZSTDMT_JOBSIZE_MAX) params.jobSize = (size_t)ZSTDMT_JOBSIZE_MAX;
- 
+
     DEBUGLOG(4, "ZSTDMT_initCStream_internal: %u workers", params.nbWorkers);
 
     if (mtctx->allJobsCompleted == 0) {   /* previous compression not correctly finished */
@@ -1258,27 +1258,27 @@ size_t ZSTDMT_initCStream_internal(
     }
 
     mtctx->targetPrefixSize = ZSTDMT_computeOverlapSize(&params);
-    DEBUGLOG(4, "overlapLog=%i => %u KB", params.overlapLog, (U32)(mtctx->targetPrefixSize>>10)); 
+    DEBUGLOG(4, "overlapLog=%i => %u KB", params.overlapLog, (U32)(mtctx->targetPrefixSize>>10));
     mtctx->targetSectionSize = params.jobSize;
-    if (mtctx->targetSectionSize == 0) { 
+    if (mtctx->targetSectionSize == 0) {
         mtctx->targetSectionSize = 1ULL << ZSTDMT_computeTargetJobLog(&params);
-    } 
+    }
     assert(mtctx->targetSectionSize <= (size_t)ZSTDMT_JOBSIZE_MAX);
 
-    if (params.rsyncable) { 
-        /* Aim for the targetsectionSize as the average job size. */ 
+    if (params.rsyncable) {
+        /* Aim for the targetsectionSize as the average job size. */
         U32 const jobSizeKB = (U32)(mtctx->targetSectionSize >> 10);
         U32 const rsyncBits = (assert(jobSizeKB >= 1), ZSTD_highbit32(jobSizeKB) + 10);
         /* We refuse to create jobs < RSYNC_MIN_BLOCK_SIZE bytes, so make sure our
          * expected job size is at least 4x larger. */
         assert(rsyncBits >= RSYNC_MIN_BLOCK_LOG + 2);
-        DEBUGLOG(4, "rsyncLog = %u", rsyncBits); 
-        mtctx->rsync.hash = 0; 
-        mtctx->rsync.hitMask = (1ULL << rsyncBits) - 1; 
-        mtctx->rsync.primePower = ZSTD_rollingHash_primePower(RSYNC_LENGTH); 
-    } 
+        DEBUGLOG(4, "rsyncLog = %u", rsyncBits);
+        mtctx->rsync.hash = 0;
+        mtctx->rsync.hitMask = (1ULL << rsyncBits) - 1;
+        mtctx->rsync.primePower = ZSTD_rollingHash_primePower(RSYNC_LENGTH);
+    }
     if (mtctx->targetSectionSize < mtctx->targetPrefixSize) mtctx->targetSectionSize = mtctx->targetPrefixSize;  /* job size must be >= overlap size */
-    DEBUGLOG(4, "Job Size : %u KB (note : set to %u)", (U32)(mtctx->targetSectionSize>>10), (U32)params.jobSize); 
+    DEBUGLOG(4, "Job Size : %u KB (note : set to %u)", (U32)(mtctx->targetSectionSize>>10), (U32)params.jobSize);
     DEBUGLOG(4, "inBuff Size : %u KB", (U32)(mtctx->targetSectionSize>>10));
     ZSTDMT_setBufferSize(mtctx->bufPool, ZSTD_compressBound(mtctx->targetSectionSize));
     {
@@ -1328,7 +1328,7 @@ size_t ZSTDMT_initCStream_internal(
 /* ZSTDMT_writeLastEmptyBlock()
  * Write a single empty block with an end-of-frame to finish a frame.
  * Job must be created from streaming variant.
- * This function is always successful if expected conditions are fulfilled. 
+ * This function is always successful if expected conditions are fulfilled.
  */
 static void ZSTDMT_writeLastEmptyBlock(ZSTDMT_jobDescription* job)
 {
@@ -1380,7 +1380,7 @@ static size_t ZSTDMT_createCompressionJob(ZSTDMT_CCtx* mtctx, size_t srcSize, ZS
         mtctx->jobs[jobID].jobID = mtctx->nextJobID;
         mtctx->jobs[jobID].firstJob = (mtctx->nextJobID==0);
         mtctx->jobs[jobID].lastJob = endFrame;
-        mtctx->jobs[jobID].frameChecksumNeeded = mtctx->params.fParams.checksumFlag && endFrame && (mtctx->nextJobID>0); 
+        mtctx->jobs[jobID].frameChecksumNeeded = mtctx->params.fParams.checksumFlag && endFrame && (mtctx->nextJobID>0);
         mtctx->jobs[jobID].dstFlushed = 0;
 
         /* Update the round buffer pos and clear the input buffer to be reset */
@@ -1428,8 +1428,8 @@ static size_t ZSTDMT_createCompressionJob(ZSTDMT_CCtx* mtctx, size_t srcSize, ZS
 
 
 /*! ZSTDMT_flushProduced() :
- *  flush whatever data has been produced but not yet flushed in current job. 
- *  move to next job if current one is fully flushed. 
+ *  flush whatever data has been produced but not yet flushed in current job.
+ *  move to next job if current one is fully flushed.
  * `output` : `pos` will be updated with amount of data flushed .
  * `blockToFlush` : if >0, the function will block and wait if there is no data available to flush .
  * @return : amount of data remaining within internal buffer, 0 if no more, 1 if unknown but > 0, or an error code */
@@ -1458,7 +1458,7 @@ static size_t ZSTDMT_flushProduced(ZSTDMT_CCtx* mtctx, ZSTD_outBuffer* output, u
     /* try to flush something */
     {   size_t cSize = mtctx->jobs[wJobID].cSize;                  /* shared */
         size_t const srcConsumed = mtctx->jobs[wJobID].consumed;   /* shared */
-        size_t const srcSize = mtctx->jobs[wJobID].src.size;       /* read-only, could be done after mutex lock, but no-declaration-after-statement */ 
+        size_t const srcSize = mtctx->jobs[wJobID].src.size;       /* read-only, could be done after mutex lock, but no-declaration-after-statement */
         ZSTD_pthread_mutex_unlock(&mtctx->jobs[wJobID].job_mutex);
         if (ZSTD_isError(cSize)) {
             DEBUGLOG(5, "ZSTDMT_flushProduced: job %u : compression error detected : %s",
@@ -1478,7 +1478,7 @@ static size_t ZSTDMT_flushProduced(ZSTDMT_CCtx* mtctx, ZSTD_outBuffer* output, u
             mtctx->jobs[wJobID].cSize += 4;  /* can write this shared value, as worker is no longer active */
             mtctx->jobs[wJobID].frameChecksumNeeded = 0;
         }
- 
+
         if (cSize > 0) {   /* compression is ongoing or completed */
             size_t const toFlush = MIN(cSize - mtctx->jobs[wJobID].dstFlushed, output->size - output->pos);
             DEBUGLOG(5, "ZSTDMT_flushProduced: Flushing %u bytes from job %u (completion:%u/%u, generated:%u)",
@@ -1494,12 +1494,12 @@ static size_t ZSTDMT_flushProduced(ZSTDMT_CCtx* mtctx, ZSTD_outBuffer* output, u
             output->pos += toFlush;
             mtctx->jobs[wJobID].dstFlushed += toFlush;  /* can write : this value is only used by mtctx */
 
-            if ( (srcConsumed == srcSize)    /* job is completed */ 
+            if ( (srcConsumed == srcSize)    /* job is completed */
               && (mtctx->jobs[wJobID].dstFlushed == cSize) ) {   /* output buffer fully flushed => free this job position */
                 DEBUGLOG(5, "Job %u completed (%u bytes), moving to next one",
                         mtctx->doneJobID, (U32)mtctx->jobs[wJobID].dstFlushed);
                 ZSTDMT_releaseBuffer(mtctx->bufPool, mtctx->jobs[wJobID].dstBuff);
-                DEBUGLOG(5, "dstBuffer released"); 
+                DEBUGLOG(5, "dstBuffer released");
                 mtctx->jobs[wJobID].dstBuff = g_nullBuffer;
                 mtctx->jobs[wJobID].cSize = 0;   /* ensure this job slot is considered "not started" in future check */
                 mtctx->consumed += srcSize;
@@ -1580,7 +1580,7 @@ static int ZSTDMT_doesOverlapWindow(buffer_t buffer, ZSTD_window_t window)
     range_t extDict;
     range_t prefix;
 
-    DEBUGLOG(5, "ZSTDMT_doesOverlapWindow"); 
+    DEBUGLOG(5, "ZSTDMT_doesOverlapWindow");
     extDict.start = window.dictBase + window.lowLimit;
     extDict.size = window.dictLimit - window.lowLimit;
 
@@ -1601,13 +1601,13 @@ static void ZSTDMT_waitForLdmComplete(ZSTDMT_CCtx* mtctx, buffer_t buffer)
 {
     if (mtctx->params.ldmParams.enableLdm == ZSTD_ps_enable) {
         ZSTD_pthread_mutex_t* mutex = &mtctx->serial.ldmWindowMutex;
-        DEBUGLOG(5, "ZSTDMT_waitForLdmComplete"); 
+        DEBUGLOG(5, "ZSTDMT_waitForLdmComplete");
         DEBUGLOG(5, "source  [0x%zx, 0x%zx)",
                     (size_t)buffer.start,
                     (size_t)buffer.start + buffer.capacity);
         ZSTD_PTHREAD_MUTEX_LOCK(mutex);
         while (ZSTDMT_doesOverlapWindow(buffer, mtctx->serial.ldmWindow)) {
-            DEBUGLOG(5, "Waiting for LDM to finish..."); 
+            DEBUGLOG(5, "Waiting for LDM to finish...");
             ZSTD_pthread_cond_wait(&mtctx->serial.ldmWindowCond, mutex);
         }
         DEBUGLOG(6, "Done waiting for LDM to finish");
@@ -1627,7 +1627,7 @@ static int ZSTDMT_tryGetInputRange(ZSTDMT_CCtx* mtctx)
     size_t const target = mtctx->targetSectionSize;
     buffer_t buffer;
 
-    DEBUGLOG(5, "ZSTDMT_tryGetInputRange"); 
+    DEBUGLOG(5, "ZSTDMT_tryGetInputRange");
     assert(mtctx->inBuff.buffer.start == NULL);
     assert(mtctx->roundBuff.capacity >= target);
 
@@ -1641,7 +1641,7 @@ static int ZSTDMT_tryGetInputRange(ZSTDMT_CCtx* mtctx)
         buffer.start = start;
         buffer.capacity = prefixSize;
         if (ZSTDMT_isOverlapped(buffer, inUse)) {
-            DEBUGLOG(5, "Waiting for buffer..."); 
+            DEBUGLOG(5, "Waiting for buffer...");
             return 0;
         }
         ZSTDMT_waitForLdmComplete(mtctx, buffer);
@@ -1653,7 +1653,7 @@ static int ZSTDMT_tryGetInputRange(ZSTDMT_CCtx* mtctx)
     buffer.capacity = target;
 
     if (ZSTDMT_isOverlapped(buffer, inUse)) {
-        DEBUGLOG(5, "Waiting for buffer..."); 
+        DEBUGLOG(5, "Waiting for buffer...");
         return 0;
     }
     assert(!ZSTDMT_isOverlapped(buffer, mtctx->inBuff.prefix));
@@ -1674,49 +1674,49 @@ static int ZSTDMT_tryGetInputRange(ZSTDMT_CCtx* mtctx)
     return 1;
 }
 
-typedef struct { 
-  size_t toLoad;  /* The number of bytes to load from the input. */ 
-  int flush;      /* Boolean declaring if we must flush because we found a synchronization point. */ 
-} syncPoint_t; 
+typedef struct {
+  size_t toLoad;  /* The number of bytes to load from the input. */
+  int flush;      /* Boolean declaring if we must flush because we found a synchronization point. */
+} syncPoint_t;
 
-/** 
- * Searches through the input for a synchronization point. If one is found, we 
- * will instruct the caller to flush, and return the number of bytes to load. 
- * Otherwise, we will load as many bytes as possible and instruct the caller 
- * to continue as normal. 
- */ 
-static syncPoint_t 
-findSynchronizationPoint(ZSTDMT_CCtx const* mtctx, ZSTD_inBuffer const input) 
-{ 
-    BYTE const* const istart = (BYTE const*)input.src + input.pos; 
-    U64 const primePower = mtctx->rsync.primePower; 
-    U64 const hitMask = mtctx->rsync.hitMask; 
- 
-    syncPoint_t syncPoint; 
-    U64 hash; 
-    BYTE const* prev; 
-    size_t pos; 
- 
-    syncPoint.toLoad = MIN(input.size - input.pos, mtctx->targetSectionSize - mtctx->inBuff.filled); 
-    syncPoint.flush = 0; 
-    if (!mtctx->params.rsyncable) 
-        /* Rsync is disabled. */ 
-        return syncPoint; 
+/**
+ * Searches through the input for a synchronization point. If one is found, we
+ * will instruct the caller to flush, and return the number of bytes to load.
+ * Otherwise, we will load as many bytes as possible and instruct the caller
+ * to continue as normal.
+ */
+static syncPoint_t
+findSynchronizationPoint(ZSTDMT_CCtx const* mtctx, ZSTD_inBuffer const input)
+{
+    BYTE const* const istart = (BYTE const*)input.src + input.pos;
+    U64 const primePower = mtctx->rsync.primePower;
+    U64 const hitMask = mtctx->rsync.hitMask;
+
+    syncPoint_t syncPoint;
+    U64 hash;
+    BYTE const* prev;
+    size_t pos;
+
+    syncPoint.toLoad = MIN(input.size - input.pos, mtctx->targetSectionSize - mtctx->inBuff.filled);
+    syncPoint.flush = 0;
+    if (!mtctx->params.rsyncable)
+        /* Rsync is disabled. */
+        return syncPoint;
     if (mtctx->inBuff.filled + input.size - input.pos < RSYNC_MIN_BLOCK_SIZE)
         /* We don't emit synchronization points if it would produce too small blocks.
          * We don't have enough input to find a synchronization point, so don't look.
          */
         return syncPoint;
-    if (mtctx->inBuff.filled + syncPoint.toLoad < RSYNC_LENGTH) 
-        /* Not enough to compute the hash. 
-         * We will miss any synchronization points in this RSYNC_LENGTH byte 
-         * window. However, since it depends only in the internal buffers, if the 
-         * state is already synchronized, we will remain synchronized. 
-         * Additionally, the probability that we miss a synchronization point is 
-         * low: RSYNC_LENGTH / targetSectionSize. 
-         */ 
-        return syncPoint; 
-    /* Initialize the loop variables. */ 
+    if (mtctx->inBuff.filled + syncPoint.toLoad < RSYNC_LENGTH)
+        /* Not enough to compute the hash.
+         * We will miss any synchronization points in this RSYNC_LENGTH byte
+         * window. However, since it depends only in the internal buffers, if the
+         * state is already synchronized, we will remain synchronized.
+         * Additionally, the probability that we miss a synchronization point is
+         * low: RSYNC_LENGTH / targetSectionSize.
+         */
+        return syncPoint;
+    /* Initialize the loop variables. */
     if (mtctx->inBuff.filled < RSYNC_MIN_BLOCK_SIZE) {
         /* We don't need to scan the first RSYNC_MIN_BLOCK_SIZE positions
          * because they can't possibly be a sync point. So we can start
@@ -1735,13 +1735,13 @@ findSynchronizationPoint(ZSTDMT_CCtx const* mtctx, ZSTD_inBuffer const input)
     } else {
         /* We have enough bytes buffered to initialize the hash,
          * and are have processed enough bytes to find a sync point.
-         * Start scanning at the beginning of the input. 
-         */ 
+         * Start scanning at the beginning of the input.
+         */
         assert(mtctx->inBuff.filled >= RSYNC_MIN_BLOCK_SIZE);
         assert(RSYNC_MIN_BLOCK_SIZE >= RSYNC_LENGTH);
-        pos = 0; 
-        prev = (BYTE const*)mtctx->inBuff.buffer.start + mtctx->inBuff.filled - RSYNC_LENGTH; 
-        hash = ZSTD_rollingHash_compute(prev, RSYNC_LENGTH); 
+        pos = 0;
+        prev = (BYTE const*)mtctx->inBuff.buffer.start + mtctx->inBuff.filled - RSYNC_LENGTH;
+        hash = ZSTD_rollingHash_compute(prev, RSYNC_LENGTH);
         if ((hash & hitMask) == hitMask) {
             /* We're already at a sync point so don't load any more until
              * we're able to flush this sync point.
@@ -1752,36 +1752,36 @@ findSynchronizationPoint(ZSTDMT_CCtx const* mtctx, ZSTD_inBuffer const input)
             syncPoint.flush = 1;
             return syncPoint;
         }
-    } 
-    /* Starting with the hash of the previous RSYNC_LENGTH bytes, roll 
-     * through the input. If we hit a synchronization point, then cut the 
-     * job off, and tell the compressor to flush the job. Otherwise, load 
-     * all the bytes and continue as normal. 
-     * If we go too long without a synchronization point (targetSectionSize) 
-     * then a block will be emitted anyways, but this is okay, since if we 
-     * are already synchronized we will remain synchronized. 
-     */ 
-    for (; pos < syncPoint.toLoad; ++pos) { 
-        BYTE const toRemove = pos < RSYNC_LENGTH ? prev[pos] : istart[pos - RSYNC_LENGTH]; 
+    }
+    /* Starting with the hash of the previous RSYNC_LENGTH bytes, roll
+     * through the input. If we hit a synchronization point, then cut the
+     * job off, and tell the compressor to flush the job. Otherwise, load
+     * all the bytes and continue as normal.
+     * If we go too long without a synchronization point (targetSectionSize)
+     * then a block will be emitted anyways, but this is okay, since if we
+     * are already synchronized we will remain synchronized.
+     */
+    for (; pos < syncPoint.toLoad; ++pos) {
+        BYTE const toRemove = pos < RSYNC_LENGTH ? prev[pos] : istart[pos - RSYNC_LENGTH];
         assert(pos < RSYNC_LENGTH || ZSTD_rollingHash_compute(istart + pos - RSYNC_LENGTH, RSYNC_LENGTH) == hash);
-        hash = ZSTD_rollingHash_rotate(hash, toRemove, istart[pos], primePower); 
+        hash = ZSTD_rollingHash_rotate(hash, toRemove, istart[pos], primePower);
         assert(mtctx->inBuff.filled + pos >= RSYNC_MIN_BLOCK_SIZE);
-        if ((hash & hitMask) == hitMask) { 
-            syncPoint.toLoad = pos + 1; 
-            syncPoint.flush = 1; 
-            break; 
-        } 
-    } 
-    return syncPoint; 
-} 
- 
-size_t ZSTDMT_nextInputSizeHint(const ZSTDMT_CCtx* mtctx) 
-{ 
-    size_t hintInSize = mtctx->targetSectionSize - mtctx->inBuff.filled; 
-    if (hintInSize==0) hintInSize = mtctx->targetSectionSize; 
-    return hintInSize; 
-} 
- 
+        if ((hash & hitMask) == hitMask) {
+            syncPoint.toLoad = pos + 1;
+            syncPoint.flush = 1;
+            break;
+        }
+    }
+    return syncPoint;
+}
+
+size_t ZSTDMT_nextInputSizeHint(const ZSTDMT_CCtx* mtctx)
+{
+    size_t hintInSize = mtctx->targetSectionSize - mtctx->inBuff.filled;
+    if (hintInSize==0) hintInSize = mtctx->targetSectionSize;
+    return hintInSize;
+}
+
 /** ZSTDMT_compressStream_generic() :
  *  internal use only - exposed to be invoked from zstd_compress.c
  *  assumption : output and input are valid (pos <= size)
@@ -1811,23 +1811,23 @@ size_t ZSTDMT_compressStream_generic(ZSTDMT_CCtx* mtctx,
                 /* It is only possible for this operation to fail if there are
                  * still compression jobs ongoing.
                  */
-                DEBUGLOG(5, "ZSTDMT_tryGetInputRange failed"); 
+                DEBUGLOG(5, "ZSTDMT_tryGetInputRange failed");
                 assert(mtctx->doneJobID != mtctx->nextJobID);
-            } else 
-                DEBUGLOG(5, "ZSTDMT_tryGetInputRange completed successfully : mtctx->inBuff.buffer.start = %p", mtctx->inBuff.buffer.start); 
+            } else
+                DEBUGLOG(5, "ZSTDMT_tryGetInputRange completed successfully : mtctx->inBuff.buffer.start = %p", mtctx->inBuff.buffer.start);
         }
         if (mtctx->inBuff.buffer.start != NULL) {
-            syncPoint_t const syncPoint = findSynchronizationPoint(mtctx, *input); 
-            if (syncPoint.flush && endOp == ZSTD_e_continue) { 
-                endOp = ZSTD_e_flush; 
-            } 
+            syncPoint_t const syncPoint = findSynchronizationPoint(mtctx, *input);
+            if (syncPoint.flush && endOp == ZSTD_e_continue) {
+                endOp = ZSTD_e_flush;
+            }
             assert(mtctx->inBuff.buffer.capacity >= mtctx->targetSectionSize);
             DEBUGLOG(5, "ZSTDMT_compressStream_generic: adding %u bytes on top of %u to buffer of size %u",
-                        (U32)syncPoint.toLoad, (U32)mtctx->inBuff.filled, (U32)mtctx->targetSectionSize); 
+                        (U32)syncPoint.toLoad, (U32)mtctx->inBuff.filled, (U32)mtctx->targetSectionSize);
             ZSTD_memcpy((char*)mtctx->inBuff.buffer.start + mtctx->inBuff.filled, (const char*)input->src + input->pos, syncPoint.toLoad);
-            input->pos += syncPoint.toLoad; 
-            mtctx->inBuff.filled += syncPoint.toLoad; 
-            forwardInputProgress = syncPoint.toLoad>0; 
+            input->pos += syncPoint.toLoad;
+            mtctx->inBuff.filled += syncPoint.toLoad;
+            forwardInputProgress = syncPoint.toLoad>0;
         }
     }
     if ((input->pos < input->size) && (endOp == ZSTD_e_end)) {
@@ -1853,7 +1853,7 @@ size_t ZSTDMT_compressStream_generic(ZSTDMT_CCtx* mtctx,
     /* check for potential compressed data ready to be flushed */
     {   size_t const remainingToFlush = ZSTDMT_flushProduced(mtctx, output, !forwardInputProgress, endOp); /* block if there was no forward input progress */
         if (input->pos < input->size) return MAX(remainingToFlush, 1);  /* input not consumed : do not end flush yet */
-        DEBUGLOG(5, "end of ZSTDMT_compressStream_generic: remainingToFlush = %u", (U32)remainingToFlush); 
+        DEBUGLOG(5, "end of ZSTDMT_compressStream_generic: remainingToFlush = %u", (U32)remainingToFlush);
         return remainingToFlush;
     }
 }

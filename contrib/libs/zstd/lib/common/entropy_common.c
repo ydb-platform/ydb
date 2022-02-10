@@ -86,15 +86,15 @@ size_t FSE_readNCount_body(short* normalizedCounter, unsigned* maxSVPtr, unsigne
         /* This function only works when hbSize >= 8 */
         char buffer[8] = {0};
         ZSTD_memcpy(buffer, headerBuffer, hbSize);
-        {   size_t const countSize = FSE_readNCount(normalizedCounter, maxSVPtr, tableLogPtr, 
-                                                    buffer, sizeof(buffer)); 
-            if (FSE_isError(countSize)) return countSize; 
-            if (countSize > hbSize) return ERROR(corruption_detected); 
-            return countSize; 
-    }   } 
+        {   size_t const countSize = FSE_readNCount(normalizedCounter, maxSVPtr, tableLogPtr,
+                                                    buffer, sizeof(buffer));
+            if (FSE_isError(countSize)) return countSize;
+            if (countSize > hbSize) return ERROR(corruption_detected);
+            return countSize;
+    }   }
     assert(hbSize >= 8);
- 
-    /* init */ 
+
+    /* init */
     ZSTD_memset(normalizedCounter, 0, (*maxSVPtr+1) * sizeof(normalizedCounter[0]));   /* all symbols not present in NCount have a frequency of 0 */
     bitStream = MEM_readLE32(ip);
     nbBits = (bitStream & 0xF) + FSE_MIN_TABLELOG;   /* extract tableLog */
@@ -146,7 +146,7 @@ size_t FSE_readNCount_body(short* normalizedCounter, unsigned* maxSVPtr, unsigne
              */
 
             if (LIKELY(ip <= iend-7) || (ip + (bitCount>>3) <= iend-4)) {
-                assert((bitCount >> 3) <= 3); /* For first condition to work */ 
+                assert((bitCount >> 3) <= 3); /* For first condition to work */
                 ip += bitCount>>3;
                 bitCount &= 7;
             } else {

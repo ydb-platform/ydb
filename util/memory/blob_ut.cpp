@@ -7,7 +7,7 @@
 #include <util/stream/output.h>
 #include <util/stream/file.h>
 #include <util/generic/buffer.h>
-#include <util/generic/array_ref.h> 
+#include <util/generic/array_ref.h>
 
 Y_UNIT_TEST_SUITE(TBlobTest) {
     Y_UNIT_TEST(TestSubBlob) {

@@ -14,7 +14,7 @@ def svn_version():
     return fu.bytes_to_native_str(GetProgramSvnVersion())
 
 def svn_revision():
-    return GetProgramSvnRevision()
+    return GetProgramSvnRevision() 
 
 def svn_last_revision():
     return GetArcadiaLastChangeNum()

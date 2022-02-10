@@ -46,7 +46,7 @@ THashMap<TStringBuf, TPragmaField> CTX_PRAGMA_FIELDS = {
 
 TContext::TContext(const NSQLTranslation::TTranslationSettings& settings,
                    TIssues& issues)
-    : ClusterMapping(settings.ClusterMapping)
+    : ClusterMapping(settings.ClusterMapping) 
     , PathPrefix(settings.PathPrefix)
     , ClusterPathPrefixes(settings.ClusterPathPrefixes)
     , Settings(settings)
@@ -118,8 +118,8 @@ IOutputStream& TContext::MakeIssue(ESeverity severity, TIssueCode code, NYql::TP
         } else if (action == EWarningAction::DISABLE) {
             return Cnull;
         }
-    }
-
+    } 
+ 
     // we have the last cell for issue, let's fill it with our internal error
     if (severity >= TSeverityIds::S_WARNING) {
         const bool aboveHalf = Issues.Size() > Settings.MaxErrors / 2;
@@ -135,8 +135,8 @@ IOutputStream& TContext::MakeIssue(ESeverity severity, TIssueCode code, NYql::TP
         if (Settings.MaxErrors <= Issues.Size()) {
             ythrow NProtoAST::TTooManyErrors() << "Too many issues";
         }
-    }
-
+    } 
+ 
     Issues.AddIssue(TIssue(pos, TString()));
     auto& curIssue = Issues.back();
     curIssue.Severity = severity;
@@ -156,14 +156,14 @@ bool TContext::SetPathPrefix(const TString& value, TMaybe<TString> arg) {
             return true;
         }
 
-        TString normalizedClusterName;
-        if (!GetClusterProvider(*arg, normalizedClusterName)) {
-            Error() << "Unknown cluster or provider: " << *arg;
+        TString normalizedClusterName; 
+        if (!GetClusterProvider(*arg, normalizedClusterName)) { 
+            Error() << "Unknown cluster or provider: " << *arg; 
             IncrementMonCounter("sql_errors", "BadPragmaValue");
             return false;
         }
 
-        ClusterPathPrefixes[normalizedClusterName] = value;
+        ClusterPathPrefixes[normalizedClusterName] = value; 
     } else {
         PathPrefix = value;
     }
@@ -172,11 +172,11 @@ bool TContext::SetPathPrefix(const TString& value, TMaybe<TString> arg) {
 }
 
 TNodePtr TContext::GetPrefixedPath(const TString& cluster, const TDeferredAtom& path) {
-    auto* clusterPrefix = ClusterPathPrefixes.FindPtr(cluster);
+    auto* clusterPrefix = ClusterPathPrefixes.FindPtr(cluster); 
     if (clusterPrefix && !clusterPrefix->empty()) {
         return AddTablePathPrefix(*this, *clusterPrefix, path);
     } else {
-        auto provider = GetClusterProvider(cluster);
+        auto provider = GetClusterProvider(cluster); 
         YQL_ENSURE(provider.Defined());
 
         auto* providerPrefix = ProviderPathPrefixes.FindPtr(*provider);

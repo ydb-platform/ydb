@@ -1033,7 +1033,7 @@ IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExp
 
         TMemoryUsageInfo memInfo("Eval");
         THolderFactory holderFactory(alloc.Ref(), memInfo);
-        auto value = NCommon::ParseYsonNodeInResultFormat(holderFactory, dataNode, mkqlType, &err);
+        auto value = NCommon::ParseYsonNodeInResultFormat(holderFactory, dataNode, mkqlType, &err); 
         if (!value) {
             ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), TStringBuilder() << "Failed to parse data: " << err.Str()));
             return nullptr;

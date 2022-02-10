@@ -432,26 +432,26 @@ bool FillUsedFilesImpl(
 
     if (node.IsCallable("FilePath") || node.IsCallable("FileContent")) {
         const auto& name = node.Head().Content();
-        const auto block = types.UserDataStorage->FindUserDataBlock(name);
+        const auto block = types.UserDataStorage->FindUserDataBlock(name); 
         if (!block) {
             ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "File not found: " << name));
             return false;
         }
         else {
-            auto iter = files.insert({ TUserDataStorage::ComposeUserDataKey(name), *block }).first;
+            auto iter = files.insert({ TUserDataStorage::ComposeUserDataKey(name), *block }).first; 
             iter->second.Usage.Set(node.IsCallable("FilePath") ? EUserDataBlockUsage::Path : EUserDataBlockUsage::Content);
         }
     }
 
     if (node.IsCallable("FolderPath")) {
         const auto& name = node.Head().Content();
-        auto blocks = types.UserDataStorage->FindUserDataFolder(name);
+        auto blocks = types.UserDataStorage->FindUserDataFolder(name); 
         if (!blocks) {
             ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "Folder not found: " << name));
             return false;
         } else {
             for (const auto& x : *blocks) {
-                auto iter = files.insert({ x.first, *x.second }).first;
+                auto iter = files.insert({ x.first, *x.second }).first; 
                 iter->second.Usage.Set(EUserDataBlockUsage::Path);
             }
         }
@@ -508,32 +508,32 @@ bool FillUsedFilesImpl(
         }
 
         if (addSysModule) {
-            auto pathWithMd5 = types.UdfResolver->GetSystemModulePath(moduleName);
-            YQL_ENSURE(pathWithMd5);
+            auto pathWithMd5 = types.UdfResolver->GetSystemModulePath(moduleName); 
+            YQL_ENSURE(pathWithMd5); 
             TUserDataBlock sysBlock;
             sysBlock.Type = EUserDataType::PATH;
-            sysBlock.Data = pathWithMd5->Path;
-            sysBlock.Usage.Set(EUserDataBlockUsage::Udf);
-
-            auto alias = TFsPath(sysBlock.Data).GetName();
-            auto key = TUserDataKey::Udf(alias);
-            if (const auto block = types.UserDataStorage->FindUserDataBlock(key)) {
-                files[key] = *block;
-                YQL_ENSURE(block->FrozenFile);
-            } else {
-                // Check alias clash with user files
-                if (files.contains(TUserDataStorage::ComposeUserDataKey(alias))) {
-                    ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "System module name " << alias << " clashes with one of the user's files"));
-                    return false;
-                }
-
-                if (!alias.StartsWith(NKikimr::NMiniKQL::StaticModulePrefix) && !files.contains(key)) {
-                    // CreateFakeFileLink calculates md5 for file, let's do it once
-                    sysBlock.FrozenFile = CreateFakeFileLink(sysBlock.Data, pathWithMd5->Md5);
-                    files[key] = sysBlock;
-                    types.UserDataStorage->AddUserDataBlock(key, sysBlock);
-                }
-            }
+            sysBlock.Data = pathWithMd5->Path; 
+            sysBlock.Usage.Set(EUserDataBlockUsage::Udf); 
+ 
+            auto alias = TFsPath(sysBlock.Data).GetName(); 
+            auto key = TUserDataKey::Udf(alias); 
+            if (const auto block = types.UserDataStorage->FindUserDataBlock(key)) { 
+                files[key] = *block; 
+                YQL_ENSURE(block->FrozenFile); 
+            } else { 
+                // Check alias clash with user files 
+                if (files.contains(TUserDataStorage::ComposeUserDataKey(alias))) { 
+                    ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "System module name " << alias << " clashes with one of the user's files")); 
+                    return false; 
+                } 
+ 
+                if (!alias.StartsWith(NKikimr::NMiniKQL::StaticModulePrefix) && !files.contains(key)) { 
+                    // CreateFakeFileLink calculates md5 for file, let's do it once 
+                    sysBlock.FrozenFile = CreateFakeFileLink(sysBlock.Data, pathWithMd5->Md5); 
+                    files[key] = sysBlock; 
+                    types.UserDataStorage->AddUserDataBlock(key, sysBlock); 
+                } 
+            } 
         }
     }
 
@@ -627,9 +627,9 @@ bool FillUsedFiles(
 std::pair<IGraphTransformer::TStatus, TAsyncTransformCallbackFuture> FreezeUsedFiles(const TExprNode& node, TUserDataTable& files, const TTypeAnnotationContext& types, TExprContext& ctx, const std::function<bool(const TString&)>& urlDownloadFilter, const TUserDataTable& crutches) {
     if (!FillUsedFiles(node, files, types, ctx, crutches)) {
         return SyncError();
-    }
-
-    auto future = FreezeUserDataTableIfNeeded(types.UserDataStorage, files, urlDownloadFilter);
+    } 
+ 
+    auto future = FreezeUserDataTableIfNeeded(types.UserDataStorage, files, urlDownloadFilter); 
     if (future.Wait(TDuration::Zero())) {
         files = future.GetValue()();
         return SyncOk();
@@ -666,18 +666,18 @@ std::pair<IGraphTransformer::TStatus, TAsyncTransformCallbackFuture> FreezeUsedF
                 });
             }));
     }
-}
-
-bool FreezeUsedFilesSync(const TExprNode& node, TUserDataTable& files, const TTypeAnnotationContext& types, TExprContext& ctx, const std::function<bool(const TString&)>& urlDownloadFilter) {
+} 
+ 
+bool FreezeUsedFilesSync(const TExprNode& node, TUserDataTable& files, const TTypeAnnotationContext& types, TExprContext& ctx, const std::function<bool(const TString&)>& urlDownloadFilter) { 
     if (!FillUsedFiles(node, files, types, ctx)) {
-        return false;
-    }
-
-    auto future = FreezeUserDataTableIfNeeded(types.UserDataStorage, files, urlDownloadFilter);
-    files = future.GetValueSync()();
-    return true;
-}
-
+        return false; 
+    } 
+ 
+    auto future = FreezeUserDataTableIfNeeded(types.UserDataStorage, files, urlDownloadFilter); 
+    files = future.GetValueSync()(); 
+    return true; 
+} 
+ 
 void WriteColumns(NYson::TYsonWriter& writer, const TExprBase& columns) {
     if (auto maybeList = columns.Maybe<TCoAtomList>()) {
         writer.OnBeginList();

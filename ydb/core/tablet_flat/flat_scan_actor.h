@@ -247,7 +247,7 @@ namespace NOps {
             conf.AheadLo = Args.AheadLo;
             conf.AheadHi = Args.AheadHi;
 
-            if (Conf.ReadAheadLo != Max<ui64>() && Conf.ReadAheadLo <= conf.AheadLo) {
+            if (Conf.ReadAheadLo != Max<ui64>() && Conf.ReadAheadLo <= conf.AheadLo) { 
                  conf.AheadLo = Conf.ReadAheadLo;
             }
 

@@ -78,9 +78,9 @@ public:
     TClientCommandRootLite()
         : TClientCommandRootKikimrBase("ydb")
     {
-        AddCommand(std::make_unique<TClientCommandSchemaLite>());
-        AddCommand(std::make_unique<TClientCommandWhoAmI>());
-        AddCommand(std::make_unique<TClientCommandDiscoveryLite>());
+        AddCommand(std::make_unique<TClientCommandSchemaLite>()); 
+        AddCommand(std::make_unique<TClientCommandWhoAmI>()); 
+        AddCommand(std::make_unique<TClientCommandDiscoveryLite>()); 
     }
 
     void Config(TConfig& config) override {

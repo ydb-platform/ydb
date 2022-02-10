@@ -132,7 +132,7 @@ TExprNodeBuilder& TExprNodeBuilder::Add(ui32 index, const TExprNode::TPtr& child
     Y_ENSURE(Container->ChildrenSize() == index + (Container->IsLambda() ? 1U : 0U),
         "Container position mismatch, expected: " << Container->ChildrenSize() <<
         ", actual: " << index);
-    Y_ENSURE(child, "child should not be nullptr");
+    Y_ENSURE(child, "child should not be nullptr"); 
     Container->Children_.push_back(child);
     return *this;
 }
@@ -142,7 +142,7 @@ TExprNodeBuilder& TExprNodeBuilder::Add(ui32 index, TExprNode::TPtr&& child) {
     Y_ENSURE(Container->ChildrenSize() == index + (Container->IsLambda() ? 1U : 0U),
         "Container position mismatch, expected: " << Container->ChildrenSize() <<
         ", actual: " << index);
-    Y_ENSURE(child, "child should not be nullptr");
+    Y_ENSURE(child, "child should not be nullptr"); 
     Container->Children_.push_back(std::move(child));
     return *this;
 }

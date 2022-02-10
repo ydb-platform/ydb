@@ -346,7 +346,7 @@ public:
 private:
     NKikimrClient::TConsoleRequest Request;
     NKikimrClient::TConsoleResponse Response;
-    ui32 StateStorageGroup = 0;
+    ui32 StateStorageGroup = 0; 
     TActorId ConsolePipe;
 };
 

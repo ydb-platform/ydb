@@ -104,12 +104,12 @@ namespace NActors {
         };
     };
 
-    struct IProfilerLogic {
-        virtual ~IProfilerLogic() = default;
-        virtual void Start() = 0;
+    struct IProfilerLogic { 
+        virtual ~IProfilerLogic() = default; 
+        virtual void Start() = 0; 
         virtual void Stop(IOutputStream& out, size_t limit, bool forLog) = 0;
-    };
-
+    }; 
+ 
     inline TActorId MakeProfilerID(ui32 nodeId) {
         char x[12] = {'p', 'r', 'o', 'f', 'i', 'l', 'e', 'r', 's', 'e', 'r', 'v'};
         return TActorId(nodeId, TStringBuf(x, 12));
@@ -117,6 +117,6 @@ namespace NActors {
 
     IActor* CreateProfilerActor(
         TIntrusivePtr<NMonitoring::TDynamicCounters> counters,
-        TString dir,
-        std::unique_ptr<IProfilerLogic> profiler = nullptr);
+        TString dir, 
+        std::unique_ptr<IProfilerLogic> profiler = nullptr); 
 }

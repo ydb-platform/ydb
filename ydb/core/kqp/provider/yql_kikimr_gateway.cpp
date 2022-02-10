@@ -48,7 +48,7 @@ TKikimrClusterMapping::TKikimrClusterMapping(const TKikimrGatewayConfig& config)
     for (size_t i = 0; i < config.ClusterMappingSize(); ++i) {
         const TKikimrClusterConfig& cluster = config.GetClusterMapping(i);
 
-        auto name = cluster.GetName();
+        auto name = cluster.GetName(); 
 
         if (Clusters.contains(name)) {
             ythrow yexception() << "TKikimrGatewayConfig: Duplicate cluster name: " << name;

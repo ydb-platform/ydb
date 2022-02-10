@@ -168,8 +168,8 @@ TIssues TIssueManager::GetCompletedIssues() const {
     }
     res.AddIssues(CompletedIssues_);
     return res;
-}
-
+} 
+ 
 void TIssueManager::AddIssues(const TIssues& issues) {
     for (auto& issue: issues) {
         if (auto p = CheckUniqAndLimit(issue)) {

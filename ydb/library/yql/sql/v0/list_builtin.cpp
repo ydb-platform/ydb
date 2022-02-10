@@ -207,7 +207,7 @@ TNodePtr TListHasBuiltin::GetUpdateLambda() {
 
 bool TListFold1Builtin::DoInit(TContext& ctx, ISource* src) {
     if (Args.size() != 1) {
-        ctx.Error(Pos) << "Folding list with " << OpName << " requires only one parameter";
+        ctx.Error(Pos) << "Folding list with " << OpName << " requires only one parameter"; 
         return false;
     }
     if (!Args[0]->Init(ctx, src)) {

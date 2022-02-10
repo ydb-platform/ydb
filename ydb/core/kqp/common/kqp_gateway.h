@@ -101,7 +101,7 @@ public:
     struct TKqpSnapshotHandle : public IKqpGateway::TGenericResult {
         TKqpSnapshot Snapshot;
         NActors::TActorId ManagingActor;
-        NKikimrIssues::TStatusIds::EStatusCode Status =  NKikimrIssues::TStatusIds::UNKNOWN;
+        NKikimrIssues::TStatusIds::EStatusCode Status =  NKikimrIssues::TStatusIds::UNKNOWN; 
     };
 
     struct TExecPhysicalRequest : private TMoveOnly {

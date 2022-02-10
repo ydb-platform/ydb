@@ -6,6 +6,6 @@
 
 namespace NYql {
 
-void RegisterDqPqMkqlCompilers(NCommon::TMkqlCallableCompilerBase& compiler);
+void RegisterDqPqMkqlCompilers(NCommon::TMkqlCallableCompilerBase& compiler); 
 
 }

@@ -1788,8 +1788,8 @@ void TReadSessionEventsQueue::SignalEventImpl(TIntrusivePtr<TPartitionStreamImpl
     if (Closed) {
         return;
     }
-    auto session = partitionStream->GetSession();
-    Events.emplace(std::move(partitionStream), std::move(session));
+    auto session = partitionStream->GetSession(); 
+    Events.emplace(std::move(partitionStream), std::move(session)); 
     SignalWaiterImpl(deferred);
 }
 
@@ -1855,7 +1855,7 @@ bool TReadSessionEventsQueue::ApplyCallbacksToReadyEventsImpl(TDeferredActions& 
         }
         const TIntrusivePtr<TPartitionStreamImpl> partitionStreamForSignalling = eventInfo->IsDataEvent() ? eventInfo->PartitionStream : nullptr;
         applied = true;
-        if (!ApplyHandler(*eventInfo, deferred)) { // Close session event.
+        if (!ApplyHandler(*eventInfo, deferred)) { // Close session event. 
             break;
         }
         if (partitionStreamForSignalling) {

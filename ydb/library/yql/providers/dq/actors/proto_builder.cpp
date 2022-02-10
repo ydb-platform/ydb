@@ -30,13 +30,13 @@ TVector<ui32> BuildColumnOrder(const TVector<TString>& columns, NKikimr::NMiniKQ
     for (ui32 i = 0; i < structType->GetMembersCount(); ++i) {
         const auto columnName = TString(structType->GetMemberName(i));
         column2id[columnName] = i;
-    }
+    } 
     columnOrder.resize(columns.size());
 
     int id = 0;
     for (const auto& columnName : columns) {
         columnOrder[id++] = column2id[columnName];
-    }
+    } 
     return columnOrder;
 }
 
@@ -50,10 +50,10 @@ NDqProto::EDataTransportVersion GetTransportVersion(const NYql::NDqProto::TData&
             return NDqProto::EDataTransportVersion::DATA_TRANSPORT_ARROW_1_0;
         default:
             break;
-    }
+    } 
     return NDqProto::EDataTransportVersion::DATA_TRANSPORT_VERSION_UNSPECIFIED;
 }
-
+ 
 } // unnamed
 
 TProtoBuilder::TProtoBuilder(const TString& type, const TVector<TString>& columns)

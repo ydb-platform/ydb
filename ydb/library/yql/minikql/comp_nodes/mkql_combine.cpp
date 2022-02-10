@@ -8,8 +8,8 @@
 namespace NKikimr {
 namespace NMiniKQL {
 
-TStatKey Combine_FlushesCount("Combine_FlushesCount", true);
-TStatKey Combine_MaxRowsCount("Combine_MaxRowsCount", false);
+TStatKey Combine_FlushesCount("Combine_FlushesCount", true); 
+TStatKey Combine_MaxRowsCount("Combine_MaxRowsCount", false); 
 
 namespace {
 

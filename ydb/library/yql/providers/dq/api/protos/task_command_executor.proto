@@ -29,13 +29,13 @@ message TCommandHeader {
         GET_STATS = 14;
         GET_STATS_INPUT = 15;
         GET_STATS_OUTPUT = 16;
-        GET_STATS_SOURCE = 17;
-
-        GET_FREE_SPACE_SOURCE = 18;
-        GET_STORED_BYTES_SOURCE = 19;
-        PUSH_SOURCE = 20;
-        GET_SOURCE_TYPE = 21;
-        FINISH_SOURCE = 22;
+        GET_STATS_SOURCE = 17; 
+ 
+        GET_FREE_SPACE_SOURCE = 18; 
+        GET_STORED_BYTES_SOURCE = 19; 
+        PUSH_SOURCE = 20; 
+        GET_SOURCE_TYPE = 21; 
+        FINISH_SOURCE = 22; 
 
         // Sink
         SINK_POP = 23; // TSinkPopRequest -> TSinkPopResponse
@@ -91,7 +91,7 @@ message TPrepareResponse {
     repeated TMetric Metric = 2;
 }
 
-message TGetTypeResponse {
+message TGetTypeResponse { 
     bytes Result = 1;
 }
 
@@ -118,11 +118,11 @@ message TGetStatsOutputResponse {
     NDqProto.TDqOutputChannelStats Stats = 2;
 }
 
-message TGetStatsSourceResponse {
+message TGetStatsSourceResponse { 
     reserved 1; // NKqpProto.TKqpStatsTask.TSourceStats Stats = 1;
     NDqProto.TDqSourceStats Stats = 2;
-}
-
+} 
+ 
 message TSinkStatsResponse {
     NDqProto.TDqSinkStats Stats = 1;
 }
@@ -130,13 +130,13 @@ message TSinkStatsResponse {
 message TPrepareRequest {
     NYql.NDqProto.TDqTask Task = 1;
 }
-
-message TSourcePushRequest {
-    TData Data = 1;
+ 
+message TSourcePushRequest { 
+    TData Data = 1; 
     int64 Space = 2;
     repeated bytes String = 3;
     int32 Chunks = 4;
-}
+} 
 
 message TSourcePushChunk {
     int64 Parts = 1;

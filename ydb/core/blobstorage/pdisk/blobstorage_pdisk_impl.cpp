@@ -333,7 +333,7 @@ void TPDisk::Stop() {
     JointLogWrites.clear();
     JointCommits.clear();
     for (const auto& req : FastOperationsQueue) {
-        TRequestBase::AbortDelete(req.get(), ActorSystem);
+        TRequestBase::AbortDelete(req.get(), ActorSystem); 
     }
     FastOperationsQueue.clear();
     for (TRequestBase* req : PausedQueue) {
@@ -2023,7 +2023,7 @@ void TPDisk::ProcessFastOperationsQueue() {
     for (auto& req : FastOperationsQueue) {
         switch (req->GetType()) {
             case ERequestType::RequestYardInit: {
-                std::unique_ptr<TYardInit> init{static_cast<TYardInit*>(req.release())};
+                std::unique_ptr<TYardInit> init{static_cast<TYardInit*>(req.release())}; 
                 if (YardInitStart(*init)) {
                     PendingYardInits.emplace(std::move(init));
                 }
@@ -2756,7 +2756,7 @@ void TPDisk::PushRequestToForseti(TRequestBase *request) {
             }
         }
     } else {
-        FastOperationsQueue.push_back(std::unique_ptr<TRequestBase>(request));
+        FastOperationsQueue.push_back(std::unique_ptr<TRequestBase>(request)); 
         LOG_DEBUG(*ActorSystem, NKikimrServices::BS_PDISK, "PDiskId# %" PRIu32 " ReqId# %" PRIu64
                 " PushRequestToForseti Push to FastOperationsQueue.size# %" PRIu64,
                 (ui32)PDiskId, (ui64)request->ReqId.Id, (ui64)FastOperationsQueue.size());

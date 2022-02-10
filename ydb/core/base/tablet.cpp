@@ -2,8 +2,8 @@
 
 namespace NKikimr {
 
-TIntrusivePtr<TTabletStorageInfo> TabletStorageInfoFromProto(const NKikimrTabletBase::TTabletStorageInfo &proto) {
-    auto info = MakeIntrusive<TTabletStorageInfo>();
+TIntrusivePtr<TTabletStorageInfo> TabletStorageInfoFromProto(const NKikimrTabletBase::TTabletStorageInfo &proto) { 
+    auto info = MakeIntrusive<TTabletStorageInfo>(); 
 
     info->TabletID = proto.GetTabletID();
 

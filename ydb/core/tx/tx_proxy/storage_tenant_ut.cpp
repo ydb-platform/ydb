@@ -330,7 +330,7 @@ Y_UNIT_TEST_SUITE(TStorageTenantTest) {
     void CheckThatDSProxyReturnNoGroupIfTryBlock(TTestActorRuntime* runtime,
                                                  const NKikimrHive::TEvGetTabletStorageInfoResult& storageInfo,
                                                  ui32 nodeIdx = 0) {
-        TIntrusivePtr<TTabletStorageInfo> info = TabletStorageInfoFromProto(storageInfo.GetInfo());
+        TIntrusivePtr<TTabletStorageInfo> info = TabletStorageInfoFromProto(storageInfo.GetInfo()); 
 
         TActorId edge = runtime->AllocateEdgeActor(nodeIdx);
         IActor* x = CreateTabletReqBlockBlobStorage(edge, info.Get(), Max<ui32>(), false);

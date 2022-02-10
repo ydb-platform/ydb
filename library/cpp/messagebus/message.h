@@ -120,11 +120,11 @@ namespace NBus {
     struct TBusHeader {
         friend class TBusMessage;
 
-        TBusKey Id = 0;           ///< unique message ID
-        ui32 Size = 0;            ///< total size of the message
-        TBusInstant SendTime = 0; ///< time the message was sent
-        ui16 FlagsInternal = 0;   ///< TRACE is one of the flags
-        ui16 Type = 0;            ///< to be used by TBusProtocol
+        TBusKey Id = 0;           ///< unique message ID 
+        ui32 Size = 0;            ///< total size of the message 
+        TBusInstant SendTime = 0; ///< time the message was sent 
+        ui16 FlagsInternal = 0;   ///< TRACE is one of the flags 
+        ui16 Type = 0;            ///< to be used by TBusProtocol 
 
         int GetVersionInternal() {
             return (FlagsInternal & MESSAGE_VERSION_INTERNAL) >> 4;

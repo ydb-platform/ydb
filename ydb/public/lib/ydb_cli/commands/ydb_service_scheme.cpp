@@ -13,11 +13,11 @@ namespace NConsoleClient {
 TCommandScheme::TCommandScheme()
     : TClientCommandTree("scheme", {}, "Scheme service operations")
 {
-    AddCommand(std::make_unique<TCommandMakeDirectory>());
-    AddCommand(std::make_unique<TCommandRemoveDirectory>());
-    AddCommand(std::make_unique<TCommandDescribe>());
-    AddCommand(std::make_unique<TCommandList>());
-    AddCommand(std::make_unique<TCommandPermissions>());
+    AddCommand(std::make_unique<TCommandMakeDirectory>()); 
+    AddCommand(std::make_unique<TCommandRemoveDirectory>()); 
+    AddCommand(std::make_unique<TCommandDescribe>()); 
+    AddCommand(std::make_unique<TCommandList>()); 
+    AddCommand(std::make_unique<TCommandPermissions>()); 
 }
 
 TCommandMakeDirectory::TCommandMakeDirectory()
@@ -892,11 +892,11 @@ void TCommandList::AddEntriesRecursive(
 TCommandPermissions::TCommandPermissions()
     : TClientCommandTree("permissions", {}, "Modify permissions")
 {
-    AddCommand(std::make_unique<TCommandPermissionGrant>());
-    AddCommand(std::make_unique<TCommandPermissionRevoke>());
-    AddCommand(std::make_unique<TCommandPermissionSet>());
-    AddCommand(std::make_unique<TCommandChangeOwner>());
-    AddCommand(std::make_unique<TCommandPermissionClear>());
+    AddCommand(std::make_unique<TCommandPermissionGrant>()); 
+    AddCommand(std::make_unique<TCommandPermissionRevoke>()); 
+    AddCommand(std::make_unique<TCommandPermissionSet>()); 
+    AddCommand(std::make_unique<TCommandChangeOwner>()); 
+    AddCommand(std::make_unique<TCommandPermissionClear>()); 
 }
 
 TCommandPermissionGrant::TCommandPermissionGrant()

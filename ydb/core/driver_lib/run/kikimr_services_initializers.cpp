@@ -1300,7 +1300,7 @@ void TBootstrapperInitializer::InitializeServices(
                 for (const ui32 bootstrapperNode : boot.GetNode()) {
                     if (bootstrapperNode == NodeId) {
 
-                        TIntrusivePtr<TTabletStorageInfo> info(TabletStorageInfoFromProto(boot.GetInfo()));
+                        TIntrusivePtr<TTabletStorageInfo> info(TabletStorageInfoFromProto(boot.GetInfo())); 
 
                         auto tabletType = BootstrapperTypeToTabletType(boot.GetType());
 
@@ -1351,7 +1351,7 @@ void TTabletsInitializer::InitializeServices(
     for (const auto& tabletConfig: Config.GetTabletsConfig().GetTablet()) {
         for (ui32 bootstrapperNode: tabletConfig.GetNode()) {
             if (bootstrapperNode == setup->NodeId) {
-                auto tabletInfo = TabletStorageInfoFromProto(tabletConfig.GetInfo());
+                auto tabletInfo = TabletStorageInfoFromProto(tabletConfig.GetInfo()); 
 
                 auto tabletType = tabletConfig.GetType();
                 auto tabletSetup = CreateTablet(tabletType, tabletInfo, appData, CustomTablets);

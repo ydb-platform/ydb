@@ -163,10 +163,10 @@ public:
             (size_t)CombineHashes((size_t)IntHash(static_cast<int>(IssueCode)), ComputeHash(Message)));
     }
 
-    TIssue& SetCode(TIssueCode id, ESeverity severity) {
+    TIssue& SetCode(TIssueCode id, ESeverity severity) { 
         IssueCode = id;
         Severity = severity;
-        return *this;
+        return *this; 
     }
 
     ESeverity GetSeverity() const {
@@ -177,10 +177,10 @@ public:
         return IssueCode;
     }
 
-    TIssue& AddSubIssue(TIntrusivePtr<TIssue> issue) {
+    TIssue& AddSubIssue(TIntrusivePtr<TIssue> issue) { 
         Severity = (ESeverity)Min((ui32)issue->GetSeverity(), (ui32)Severity);
         Children_.push_back(issue);
-        return *this;
+        return *this; 
     }
 
     const TVector<TIntrusivePtr<TIssue>>& GetSubIssues() const {
@@ -225,12 +225,12 @@ public:
         return *this;
     }
 
-    inline TIssues(TIssues&& rhs) : Issues_(std::move(rhs.Issues_))
+    inline TIssues(TIssues&& rhs) : Issues_(std::move(rhs.Issues_)) 
     {
     }
 
     inline TIssues& operator=(TIssues&& rhs) {
-        Issues_ = std::move(rhs.Issues_);
+        Issues_ = std::move(rhs.Issues_); 
         return *this;
     }
 

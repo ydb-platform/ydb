@@ -12,64 +12,64 @@ namespace NYql {
 using namespace NKikimr;
 using namespace NKikimr::NMiniKQL;
 
-namespace {
-
-bool BuildParameterValuesAsNodes(const THashMap<TStringBuf, const TTypeAnnotationNode*>& paramTypes,
-    const NYT::TNode& paramData, TExprContext& ctx, const IFunctionRegistry& functionRegistry,
-    THashMap<TStringBuf, TExprNode::TPtr>& paramValues) {
-
-    if (!paramData.IsMap()) {
-        ctx.AddError(TIssue({}, TStringBuilder() << "ParamData is not a map"));
-        return false;
-    }
-
-    TScopedAlloc alloc;
-    TTypeEnvironment env(alloc);
-    TMemoryUsageInfo memInfo("Parameters");
-    THolderFactory holderFactory(alloc.Ref(), memInfo);
-    bool isOk = true;
-    auto& paramDataMap = paramData.AsMap();
-    for (auto& p : paramTypes) {
-        auto name = p.first;
-
-        TStringStream err;
-        TProgramBuilder pgmBuilder(env, functionRegistry);
-        TType* mkqlType = NCommon::BuildType(*p.second, pgmBuilder, err);
-        if (!mkqlType) {
-            ctx.AddError(TIssue({}, TStringBuilder() << "Failed to process type for parameter: " << name << ", reason: " << err.Str()));
-            isOk = false;
-            continue;
-        }
-
-        const auto parameterItem = paramDataMap.FindPtr(name);
-        if (parameterItem && (!parameterItem->IsMap() || !parameterItem->HasKey("Data"))) {
-            ctx.AddError(TIssue({}, TStringBuilder() << "Parameter '" << name << "' value should be a map with key 'Data'"));
-            isOk = false;
-            continue;
-        }
-
+namespace { 
+ 
+bool BuildParameterValuesAsNodes(const THashMap<TStringBuf, const TTypeAnnotationNode*>& paramTypes, 
+    const NYT::TNode& paramData, TExprContext& ctx, const IFunctionRegistry& functionRegistry, 
+    THashMap<TStringBuf, TExprNode::TPtr>& paramValues) { 
+ 
+    if (!paramData.IsMap()) { 
+        ctx.AddError(TIssue({}, TStringBuilder() << "ParamData is not a map")); 
+        return false; 
+    } 
+ 
+    TScopedAlloc alloc; 
+    TTypeEnvironment env(alloc); 
+    TMemoryUsageInfo memInfo("Parameters"); 
+    THolderFactory holderFactory(alloc.Ref(), memInfo); 
+    bool isOk = true; 
+    auto& paramDataMap = paramData.AsMap(); 
+    for (auto& p : paramTypes) { 
+        auto name = p.first; 
+ 
+        TStringStream err; 
+        TProgramBuilder pgmBuilder(env, functionRegistry); 
+        TType* mkqlType = NCommon::BuildType(*p.second, pgmBuilder, err); 
+        if (!mkqlType) { 
+            ctx.AddError(TIssue({}, TStringBuilder() << "Failed to process type for parameter: " << name << ", reason: " << err.Str())); 
+            isOk = false; 
+            continue; 
+        } 
+ 
+        const auto parameterItem = paramDataMap.FindPtr(name); 
+        if (parameterItem && (!parameterItem->IsMap() || !parameterItem->HasKey("Data"))) { 
+            ctx.AddError(TIssue({}, TStringBuilder() << "Parameter '" << name << "' value should be a map with key 'Data'")); 
+            isOk = false; 
+            continue; 
+        } 
+ 
         if (!parameterItem && p.second->GetKind() != ETypeAnnotationKind::Optional && p.second->GetKind() != ETypeAnnotationKind::Null) {
-            ctx.AddError(TIssue({}, TStringBuilder() << "Missing value for parameter: " << name));
-            isOk = false;
-            continue;
-        }
-
-        auto value = parameterItem ? NCommon::ParseYsonNodeInResultFormat(holderFactory, (*parameterItem)["Data"], mkqlType, &err) : MakeMaybe(NUdf::TUnboxedValue());
-        if (!value) {
-            ctx.AddError(TIssue({}, TStringBuilder() << "Failed to parse data for parameter: " << name << ", reason: " << err.Str()));
-            isOk = false;
-            continue;
-        }
-
+            ctx.AddError(TIssue({}, TStringBuilder() << "Missing value for parameter: " << name)); 
+            isOk = false; 
+            continue; 
+        } 
+ 
+        auto value = parameterItem ? NCommon::ParseYsonNodeInResultFormat(holderFactory, (*parameterItem)["Data"], mkqlType, &err) : MakeMaybe(NUdf::TUnboxedValue()); 
+        if (!value) { 
+            ctx.AddError(TIssue({}, TStringBuilder() << "Failed to parse data for parameter: " << name << ", reason: " << err.Str())); 
+            isOk = false; 
+            continue; 
+        } 
+ 
         paramValues[name] = NCommon::ValueToExprLiteral(p.second, *value, ctx);
     }
 
-    return isOk;
-}
-
-bool ExtractParameterTypes(const TExprNode::TPtr& input, TTypeAnnotationContext& types,
-    TExprContext& ctx, THashMap<TStringBuf, const TTypeAnnotationNode*>& paramTypes) {
-
+    return isOk; 
+} 
+ 
+bool ExtractParameterTypes(const TExprNode::TPtr& input, TTypeAnnotationContext& types, 
+    TExprContext& ctx, THashMap<TStringBuf, const TTypeAnnotationNode*>& paramTypes) { 
+ 
     auto callableTransformer = CreateExtCallableTypeAnnotationTransformer(types);
     auto typeTransformer = CreateTypeAnnotationTransformer(callableTransformer, types);
     TVector<TTransformStage> transformers;
@@ -79,14 +79,14 @@ bool ExtractParameterTypes(const TExprNode::TPtr& input, TTypeAnnotationContext&
 
     TOptimizeExprSettings settings(nullptr);
     settings.VisitChanges = true;
-    TExprNode::TPtr output = input;
-    auto status1 = OptimizeExpr(input, output, [&](const TExprNode::TPtr& node, TExprContext& ctx)->TExprNode::TPtr {
+    TExprNode::TPtr output = input; 
+    auto status1 = OptimizeExpr(input, output, [&](const TExprNode::TPtr& node, TExprContext& ctx)->TExprNode::TPtr { 
         if (!node->IsCallable("Parameter")) {
             return node;
         }
 
         auto param = node;
-        fullTransformer->Rewind();
+        fullTransformer->Rewind(); 
         auto status = InstantTransform(*fullTransformer, param, ctx);
         if (status.Level == IGraphTransformer::TStatus::Error) {
             return nullptr;
@@ -110,59 +110,59 @@ bool ExtractParameterTypes(const TExprNode::TPtr& input, TTypeAnnotationContext&
         return param;
     }, ctx, settings);
 
-    return status1.Level == IGraphTransformer::TStatus::Ok;
-}
+    return status1.Level == IGraphTransformer::TStatus::Ok; 
+} 
 
-}
+} 
 
-bool ExtractParametersMetaAsYson(const TExprNode::TPtr& input, TTypeAnnotationContext& types,
-    TExprContext& ctx, NYT::TNode& paramsMetaMap) {
+bool ExtractParametersMetaAsYson(const TExprNode::TPtr& input, TTypeAnnotationContext& types, 
+    TExprContext& ctx, NYT::TNode& paramsMetaMap) { 
 
-    THashMap<TStringBuf, const TTypeAnnotationNode*> params;
-    if (!ExtractParameterTypes(input, types, ctx, params)) {
-        return false;
+    THashMap<TStringBuf, const TTypeAnnotationNode*> params; 
+    if (!ExtractParameterTypes(input, types, ctx, params)) { 
+        return false; 
+    } 
+
+    for (auto& p : params) { 
+        paramsMetaMap[p.first] = NCommon::TypeToYsonNode(p.second); 
+    } 
+    return true; 
+} 
+
+IGraphTransformer::TStatus EvaluateParameters(const TExprNode::TPtr& input, TExprNode::TPtr& output, 
+    TTypeAnnotationContext& types, TExprContext& ctx, const IFunctionRegistry& functionRegistry) { 
+    output = input; 
+
+    THashMap<TStringBuf, const TTypeAnnotationNode*> paramTypes; 
+    if (!ExtractParameterTypes(input, types, ctx, paramTypes)) { 
+        return IGraphTransformer::TStatus::Error; 
     }
 
-    for (auto& p : params) {
-        paramsMetaMap[p.first] = NCommon::TypeToYsonNode(p.second);
-    }
-    return true;
-}
-
-IGraphTransformer::TStatus EvaluateParameters(const TExprNode::TPtr& input, TExprNode::TPtr& output,
-    TTypeAnnotationContext& types, TExprContext& ctx, const IFunctionRegistry& functionRegistry) {
-    output = input;
-
-    THashMap<TStringBuf, const TTypeAnnotationNode*> paramTypes;
-    if (!ExtractParameterTypes(input, types, ctx, paramTypes)) {
-        return IGraphTransformer::TStatus::Error;
+    if (!paramTypes) { 
+        // no params - just exit 
+        return IGraphTransformer::TStatus::Ok; 
+    } 
+ 
+    const auto emptyMapNode = NYT::TNode::CreateMap(); 
+    const auto& paramData = types.OperationOptions.ParametersYson.GetOrElse(emptyMapNode); 
+    THashMap<TStringBuf, TExprNode::TPtr> paramValues; 
+    if (!BuildParameterValuesAsNodes(paramTypes, paramData, ctx, functionRegistry, paramValues)) { 
+        return IGraphTransformer::TStatus::Error; 
     }
 
-    if (!paramTypes) {
-        // no params - just exit
-        return IGraphTransformer::TStatus::Ok;
-    }
-
-    const auto emptyMapNode = NYT::TNode::CreateMap();
-    const auto& paramData = types.OperationOptions.ParametersYson.GetOrElse(emptyMapNode);
-    THashMap<TStringBuf, TExprNode::TPtr> paramValues;
-    if (!BuildParameterValuesAsNodes(paramTypes, paramData, ctx, functionRegistry, paramValues)) {
-        return IGraphTransformer::TStatus::Error;
-    }
-
-    // inject param values into graph
-    TOptimizeExprSettings settings(nullptr);
-    settings.VisitChanges = true;
-    auto status = OptimizeExpr(output, output, [&](const TExprNode::TPtr& node, TExprContext& ctx)->TExprNode::TPtr {
+    // inject param values into graph 
+    TOptimizeExprSettings settings(nullptr); 
+    settings.VisitChanges = true; 
+    auto status = OptimizeExpr(output, output, [&](const TExprNode::TPtr& node, TExprContext& ctx)->TExprNode::TPtr { 
         Y_UNUSED(ctx);
         if (!node->IsCallable("Parameter")) {
             return node;
         }
 
         auto name = node->Child(0)->Content();
-        auto evaluated = paramValues.FindPtr(name);
+        auto evaluated = paramValues.FindPtr(name); 
         YQL_ENSURE(evaluated, "Missing parameter value: " << name);
-        return *evaluated;
+        return *evaluated; 
     }, ctx, settings);
 
     if (status.Level == IGraphTransformer::TStatus::Error) {

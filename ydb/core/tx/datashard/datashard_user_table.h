@@ -337,9 +337,9 @@ struct TUserTable : public TThrRefBase {
         ui32 ColIdEpoch = Max<ui32>();
         ui32 ColIdUpdateNo = Max<ui32>();
 
-        ui64 Tablet = 0;
-        ui64 Epoch = 0;
-        ui64 UpdateNo = 0;
+        ui64 Tablet = 0; 
+        ui64 Epoch = 0; 
+        ui64 UpdateNo = 0; 
     };
 
     ui32 LocalTid = Max<ui32>();

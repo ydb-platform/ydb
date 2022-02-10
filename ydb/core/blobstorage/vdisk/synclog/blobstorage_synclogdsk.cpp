@@ -356,7 +356,7 @@ namespace NKikimr {
                 TIndexedChunkPtr chunkPtr = ManyIdxChunks.front();
                 if (chunkPtr->GetLastLsn() <= confirmedCutLsn) {
                     ManyIdxChunks.pop_front();
-                    chunkPtr->SetUpNotifier(notifier);
+                    chunkPtr->SetUpNotifier(notifier); 
                     chunks.push_back(chunkPtr->GetChunkIdx());
                     nchunks++;
                 } else
@@ -378,7 +378,7 @@ namespace NKikimr {
                 TIndexedChunkPtr chunkPtr = ManyIdxChunks.front();
                 ManyIdxChunks.pop_front();
                 newLogStartLsn = chunkPtr->GetLastLsn() + 1;
-                chunkPtr->SetUpNotifier(notifier);
+                chunkPtr->SetUpNotifier(notifier); 
                 chunks.push_back(chunkPtr->GetChunkIdx());
             }
 

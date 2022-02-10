@@ -1602,10 +1602,10 @@ public:
                 Add(node);
             }
 
-            for (const auto& p : ctx.PackageVersions) {
-                Add(Y("set_package_version", BuildQuotedAtom(Pos, p.first), BuildQuotedAtom(Pos, ToString(p.second))));
-            }
-
+            for (const auto& p : ctx.PackageVersions) { 
+                Add(Y("set_package_version", BuildQuotedAtom(Pos, p.first), BuildQuotedAtom(Pos, ToString(p.second)))); 
+            } 
+ 
             Add(Y("import", "aggregate_module", BuildQuotedAtom(Pos, "/lib/yql/aggregate.yql")));
             Add(Y("import", "window_module", BuildQuotedAtom(Pos, "/lib/yql/window.yql")));
             for (const auto& module : ctx.Settings.ModuleMapping) {
@@ -1661,15 +1661,15 @@ public:
                         BuildQuotedAtom(Pos, "DiscoveryMode"))));
                 }
 
-                if (ctx.DqEngineEnable) {
-                    TString mode = "auto";
-                    if (ctx.PqReadByRtmrCluster && ctx.PqReadByRtmrCluster != "dq") {
-                        mode = "disable";
-                    } else if (ctx.DqEngineForce) {
-                        mode = "force";
-                    }
+                if (ctx.DqEngineEnable) { 
+                    TString mode = "auto"; 
+                    if (ctx.PqReadByRtmrCluster && ctx.PqReadByRtmrCluster != "dq") { 
+                        mode = "disable"; 
+                    } else if (ctx.DqEngineForce) { 
+                        mode = "force"; 
+                    } 
                     Add(Y("let", "world", Y(TString(ConfigureName), "world", configSource,
-                        BuildQuotedAtom(Pos, "DqEngine"), BuildQuotedAtom(Pos, mode))));
+                        BuildQuotedAtom(Pos, "DqEngine"), BuildQuotedAtom(Pos, mode)))); 
                 }
 
                 if (ctx.JsonQueryReturnsJsonDocument.Defined()) {
@@ -1685,23 +1685,23 @@ public:
                     Add(Y("let", "world", Y(TString(ConfigureName), "world", configSource,
                         BuildQuotedAtom(Pos, "OrderedColumns"))));
                 }
-
-                if (ctx.PqReadByRtmrCluster) {
-                    auto pqSourceAll = Y("DataSource", BuildQuotedAtom(Pos, TString(PqProviderName)), BuildQuotedAtom(Pos, "$all"));
-                    Add(Y("let", "world", Y(TString(ConfigureName), "world", pqSourceAll,
-                        BuildQuotedAtom(Pos, "Attr"), BuildQuotedAtom(Pos, "PqReadByRtmrCluster_"), BuildQuotedAtom(Pos, ctx.PqReadByRtmrCluster))));
-
-                    auto rtmrSourceAll = Y("DataSource", BuildQuotedAtom(Pos, TString(RtmrProviderName)), BuildQuotedAtom(Pos, "$all"));
-                    Add(Y("let", "world", Y(TString(ConfigureName), "world", rtmrSourceAll,
-                        BuildQuotedAtom(Pos, "Attr"), BuildQuotedAtom(Pos, "PqReadByRtmrCluster_"), BuildQuotedAtom(Pos, ctx.PqReadByRtmrCluster))));
-
-                    if (ctx.PqReadByRtmrCluster != "dq") {
-                        // set any dynamic settings for particular RTMR cluster for CommitAll!
-                        auto rtmrSource = Y("DataSource", BuildQuotedAtom(Pos, TString(RtmrProviderName)), BuildQuotedAtom(Pos, ctx.PqReadByRtmrCluster));
-                        Add(Y("let", "world", Y(TString(ConfigureName), "world", rtmrSource,
-                            BuildQuotedAtom(Pos, "Attr"), BuildQuotedAtom(Pos, "Dummy_"), BuildQuotedAtom(Pos, "1"))));
-                    }
-                }
+ 
+                if (ctx.PqReadByRtmrCluster) { 
+                    auto pqSourceAll = Y("DataSource", BuildQuotedAtom(Pos, TString(PqProviderName)), BuildQuotedAtom(Pos, "$all")); 
+                    Add(Y("let", "world", Y(TString(ConfigureName), "world", pqSourceAll, 
+                        BuildQuotedAtom(Pos, "Attr"), BuildQuotedAtom(Pos, "PqReadByRtmrCluster_"), BuildQuotedAtom(Pos, ctx.PqReadByRtmrCluster)))); 
+ 
+                    auto rtmrSourceAll = Y("DataSource", BuildQuotedAtom(Pos, TString(RtmrProviderName)), BuildQuotedAtom(Pos, "$all")); 
+                    Add(Y("let", "world", Y(TString(ConfigureName), "world", rtmrSourceAll, 
+                        BuildQuotedAtom(Pos, "Attr"), BuildQuotedAtom(Pos, "PqReadByRtmrCluster_"), BuildQuotedAtom(Pos, ctx.PqReadByRtmrCluster)))); 
+ 
+                    if (ctx.PqReadByRtmrCluster != "dq") { 
+                        // set any dynamic settings for particular RTMR cluster for CommitAll! 
+                        auto rtmrSource = Y("DataSource", BuildQuotedAtom(Pos, TString(RtmrProviderName)), BuildQuotedAtom(Pos, ctx.PqReadByRtmrCluster)); 
+                        Add(Y("let", "world", Y(TString(ConfigureName), "world", rtmrSource, 
+                            BuildQuotedAtom(Pos, "Attr"), BuildQuotedAtom(Pos, "Dummy_"), BuildQuotedAtom(Pos, "1")))); 
+                    } 
+                } 
             }
         }
 
@@ -1798,7 +1798,7 @@ public:
             cluster = "$all";
             serviceName = Prefix;
         } else {
-            serviceName = *ctx.GetClusterProvider(Prefix, cluster);
+            serviceName = *ctx.GetClusterProvider(Prefix, cluster); 
         }
 
         auto datasource = Y("DataSource", BuildQuotedAtom(Pos, serviceName));

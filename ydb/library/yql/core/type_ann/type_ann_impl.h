@@ -20,8 +20,8 @@ namespace NTypeAnnImpl {
         TTypeAnnotationContext& Types;
 
         TExtContext(TExprContext& expr, TTypeAnnotationContext& types);
-        bool LoadUdfMetadata(const TVector<IUdfResolver::TFunction*>& functions);
-        void RegisterResolvedImport(const IUdfResolver::TImport& import);
+        bool LoadUdfMetadata(const TVector<IUdfResolver::TFunction*>& functions); 
+        void RegisterResolvedImport(const IUdfResolver::TImport& import); 
     };
 
     // Implemented in type_ann_join.cpp

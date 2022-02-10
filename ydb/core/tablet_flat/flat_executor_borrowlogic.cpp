@@ -454,7 +454,7 @@ void TExecutorBorrowLogic::RestoreFollowerBorrowedInfo(const TLogoBlobID &blobId
 
         if (proto.StorageInfoSize() > 0) {
             Y_VERIFY(proto.StorageInfoSize() == 1);
-            storedInfo.LoanInfo.StorageInfo = TabletStorageInfoFromProto(proto.GetStorageInfo(0));
+            storedInfo.LoanInfo.StorageInfo = TabletStorageInfoFromProto(proto.GetStorageInfo(0)); 
             UpdateStorageInfo(storedInfo.LoanInfo.StorageInfo.Get());
         }
     }
@@ -499,7 +499,7 @@ void TExecutorBorrowLogic::RestoreBorrowedInfo(const TLogoBlobID &blobId, const 
 
         if (proto.StorageInfoSize() > 0) {
             Y_VERIFY(proto.StorageInfoSize() == 1);
-            storedInfo.LoanInfo.StorageInfo = TabletStorageInfoFromProto(proto.GetStorageInfo(0));
+            storedInfo.LoanInfo.StorageInfo = TabletStorageInfoFromProto(proto.GetStorageInfo(0)); 
             UpdateStorageInfo(storedInfo.LoanInfo.StorageInfo.Get());
         }
     }

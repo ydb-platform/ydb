@@ -96,12 +96,12 @@ void KikimrBacktraceFormatImpl(IOutputStream* out) {
     void* array[300];
     const size_t s = BackTrace(array, Y_ARRAY_SIZE(array));
     KikimrBacktraceFormatImpl(out, array, s);
-}
-
+} 
+ 
 void KikimrBacktraceFormatImpl(IOutputStream* out, void* const* stack, size_t stackSize) {
-    using namespace llvm;
-    using namespace symbolize;
-
+    using namespace llvm; 
+    using namespace symbolize; 
+ 
     TRawOStreamProxy outStream(*out);
     THashMap<TString, TDllInfo> dlls;
 #ifdef _linux_
@@ -111,8 +111,8 @@ void KikimrBacktraceFormatImpl(IOutputStream* out, void* const* stack, size_t st
     DIPrinter printer(outStream, true, true, false);
     LLVMSymbolizer::Options opts;
     LLVMSymbolizer symbolyzer(opts);
-    for (const auto i : xrange(stackSize)) {
-        ui64 address = (ui64)stack[i] - 1; // last byte of the call instruction
+    for (const auto i : xrange(stackSize)) { 
+        ui64 address = (ui64)stack[i] - 1; // last byte of the call instruction 
         ui64 offset = 0;
         TString modulePath = binaryPath;
 #ifdef _linux_

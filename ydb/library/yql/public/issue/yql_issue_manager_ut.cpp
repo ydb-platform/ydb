@@ -13,8 +13,8 @@ static std::function<TIssuePtr()> CreateScopeIssueFunction(TString name, ui32 co
 Y_UNIT_TEST_SUITE(TIssueManagerTest) {
     Y_UNIT_TEST(NoErrorNoLevelTest) {
         TIssueManager issueManager;
-        auto completedIssues = issueManager.GetCompletedIssues();
-        UNIT_ASSERT_VALUES_EQUAL(completedIssues.Size(), 0);
+        auto completedIssues = issueManager.GetCompletedIssues(); 
+        UNIT_ASSERT_VALUES_EQUAL(completedIssues.Size(), 0); 
         auto issues = issueManager.GetIssues();
         UNIT_ASSERT_VALUES_EQUAL(issues.Size(), 0);
     }
@@ -22,8 +22,8 @@ Y_UNIT_TEST_SUITE(TIssueManagerTest) {
     Y_UNIT_TEST(NoErrorOneLevelTest) {
         TIssueManager issueManager;
         issueManager.AddScope(CreateScopeIssueFunction("A", 0, 0));
-        auto completedIssues = issueManager.GetCompletedIssues();
-        UNIT_ASSERT_VALUES_EQUAL(completedIssues.Size(), 0);
+        auto completedIssues = issueManager.GetCompletedIssues(); 
+        UNIT_ASSERT_VALUES_EQUAL(completedIssues.Size(), 0); 
         issueManager.LeaveScope();
         auto issues = issueManager.GetIssues();
         UNIT_ASSERT_VALUES_EQUAL(issues.Size(), 0);
@@ -34,8 +34,8 @@ Y_UNIT_TEST_SUITE(TIssueManagerTest) {
         issueManager.AddScope(CreateScopeIssueFunction("A", 0, 0));
         issueManager.AddScope(CreateScopeIssueFunction("B", 1, 1));
         issueManager.LeaveScope();
-        auto completedIssues = issueManager.GetCompletedIssues();
-        UNIT_ASSERT_VALUES_EQUAL(completedIssues.Size(), 0);
+        auto completedIssues = issueManager.GetCompletedIssues(); 
+        UNIT_ASSERT_VALUES_EQUAL(completedIssues.Size(), 0); 
         issueManager.LeaveScope();
         auto issues = issueManager.GetIssues();
         UNIT_ASSERT_VALUES_EQUAL(issues.Size(), 0);
@@ -44,15 +44,15 @@ Y_UNIT_TEST_SUITE(TIssueManagerTest) {
     Y_UNIT_TEST(OneErrorOneLevelTest) {
         TIssueManager issueManager;
         issueManager.AddScope(CreateScopeIssueFunction("A", 0, 0));
-        auto completedIssues1 = issueManager.GetCompletedIssues();
-        UNIT_ASSERT_VALUES_EQUAL(completedIssues1.Size(), 0);
+        auto completedIssues1 = issueManager.GetCompletedIssues(); 
+        UNIT_ASSERT_VALUES_EQUAL(completedIssues1.Size(), 0); 
         issueManager.RaiseIssue(TIssue(TPosition(1,2), "IssueOne"));
-        auto completedIssues2 = issueManager.GetCompletedIssues();
-        UNIT_ASSERT_VALUES_EQUAL(completedIssues2.Size(), 0);
+        auto completedIssues2 = issueManager.GetCompletedIssues(); 
+        UNIT_ASSERT_VALUES_EQUAL(completedIssues2.Size(), 0); 
         issueManager.LeaveScope();
-        auto completedIssues3 = issueManager.GetCompletedIssues();
-        UNIT_ASSERT_VALUES_EQUAL(completedIssues3.Size(), 1);
-
+        auto completedIssues3 = issueManager.GetCompletedIssues(); 
+        UNIT_ASSERT_VALUES_EQUAL(completedIssues3.Size(), 1); 
+ 
         auto issues = issueManager.GetIssues();
         UNIT_ASSERT_VALUES_EQUAL(issues.Size(), 1);
         auto scopeIssue = issues.begin();

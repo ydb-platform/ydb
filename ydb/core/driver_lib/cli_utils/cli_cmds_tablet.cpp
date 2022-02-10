@@ -77,7 +77,7 @@ public:
     TClientCommandKeyValue()
         : TClientCommandTree("keyvalue", { "kv" })
     {
-        AddCommand(std::make_unique<TClientCommandKeyValueRequest>());
+        AddCommand(std::make_unique<TClientCommandKeyValueRequest>()); 
     }
 };
 
@@ -258,10 +258,10 @@ public:
     TClientCommandTabletN()
         : TClientCommandTree("#", {}, "<tablet id>")
     {
-        AddCommand(std::make_unique<TClientCommandKeyValue>());
-        AddCommand(std::make_unique<TClientCommandTabletExec>());
-        AddCommand(std::make_unique<TClientCommandTabletKill>());
-        AddCommand(std::make_unique<TClientCommandTabletSchemeTx>());
+        AddCommand(std::make_unique<TClientCommandKeyValue>()); 
+        AddCommand(std::make_unique<TClientCommandTabletExec>()); 
+        AddCommand(std::make_unique<TClientCommandTabletKill>()); 
+        AddCommand(std::make_unique<TClientCommandTabletSchemeTx>()); 
     }
 
     virtual void Parse(TConfig& config) override {
@@ -273,9 +273,9 @@ public:
 TClientCommandTablet::TClientCommandTablet()
     : TClientCommandTree("tablet", {}, "Tablet infrastructure administration")
 {
-    AddCommand(std::make_unique<TClientCommandTabletN>());
-    AddCommand(std::make_unique<TClientCommandDrainNode>());
-    AddCommand(std::make_unique<TClientCommandFillNode>());
+    AddCommand(std::make_unique<TClientCommandTabletN>()); 
+    AddCommand(std::make_unique<TClientCommandDrainNode>()); 
+    AddCommand(std::make_unique<TClientCommandFillNode>()); 
 }
 
 }

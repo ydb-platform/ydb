@@ -705,7 +705,7 @@ public:
                 break;
         }
 
-        for (const auto& subIssue: handle.Issues()) {
+        for (const auto& subIssue: handle.Issues()) { 
             issue.AddSubIssue(MakeIntrusive<TIssue>(subIssue));
         }
         ctx.AddError(issue);

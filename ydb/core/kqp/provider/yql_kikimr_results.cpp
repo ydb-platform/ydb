@@ -26,13 +26,13 @@ bool ResultsOverflow(ui64 rows, ui64 bytes, const IDataProvider::TFillSettings& 
     return false;
 }
 
-void WriteValueToYson(const TStringStream& stream, NCommon::TYsonResultWriter& writer, const NKikimrMiniKQL::TType& type,
+void WriteValueToYson(const TStringStream& stream, NCommon::TYsonResultWriter& writer, const NKikimrMiniKQL::TType& type, 
     const NKikimrMiniKQL::TValue& value, const TVector<TString>* fieldsOrder,
     const IDataProvider::TFillSettings& fillSettings, bool& truncated, bool firstLevel = false)
 {
     switch (type.GetKind()) {
         case NKikimrMiniKQL::ETypeKind::Void:
-            writer.OnVoid();
+            writer.OnVoid(); 
             return;
 
         case NKikimrMiniKQL::ETypeKind::Data:
@@ -98,7 +98,7 @@ void WriteValueToYson(const TStringStream& stream, NCommon::TYsonResultWriter& w
             }
 
             if (value.HasFloat()) {
-                writer.OnFloatScalar(value.GetFloat());
+                writer.OnFloatScalar(value.GetFloat()); 
             }
 
             if (value.HasDouble()) {
@@ -351,8 +351,8 @@ void KikimrResultToYson(const TStringStream& stream, NYson::TYsonWriter& writer,
     const TVector<TString>& columnHints, const IDataProvider::TFillSettings& fillSettings, bool& truncated)
 {
     truncated = false;
-    NCommon::TYsonResultWriter resultWriter(writer);
-    WriteValueToYson(stream, resultWriter, result.GetType(), result.GetValue(), columnHints.empty() ? nullptr : &columnHints,
+    NCommon::TYsonResultWriter resultWriter(writer); 
+    WriteValueToYson(stream, resultWriter, result.GetType(), result.GetValue(), columnHints.empty() ? nullptr : &columnHints, 
         fillSettings, truncated, true);
 }
 

@@ -146,16 +146,16 @@ public:
 
         for (const auto& item : tablesFromCluster) {
             const auto& cluster = item.first;
-            TString token = State_->Configuration->Tokens.at(cluster);
+            TString token = State_->Configuration->Tokens.at(cluster); 
 
             const auto& config = State_->Configuration->Clusters[cluster];
 
-            std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory = CreateCredentialsProviderFactoryForStructuredToken(State_->CredentialsFactory, token, config.AddBearerToToken);
+            std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory = CreateCredentialsProviderFactoryForStructuredToken(State_->CredentialsFactory, token, config.AddBearerToToken); 
             const auto ins = Clients_->emplace(cluster, std::pair<TMetaClient, std::optional<TCreateSnapshotHandleResult>>{{Driver_, NYdb::TCommonClientSettings()
                 .Database(config.Database)
                 .DiscoveryEndpoint(config.Endpoint)
                 .EnableSsl(config.Secure)
-                .CredentialsProviderFactory(credentialsProviderFactory)
+                .CredentialsProviderFactory(credentialsProviderFactory) 
                 .DiscoveryMode(NYdb::EDiscoveryMode::Async)}, std::nullopt});
 
             YQL_CLOG(INFO, ProviderYdb) << "Take snapshot for: `" << cluster << "` from " << config.Endpoint;

@@ -500,9 +500,9 @@ public:
                                 NKikimrCms::TAction::EType type,
                                 TClientCommandWithAction::EFreeField freeArgField,
                                 bool hasDuration)
-        : TClientCommandTree(name, {}, description)
+        : TClientCommandTree(name, {}, description) 
     {
-        AddCommand(std::make_unique<TClientCommandMakeRequest>(requestDescription, type, freeArgField, hasDuration));
+        AddCommand(std::make_unique<TClientCommandMakeRequest>(requestDescription, type, freeArgField, hasDuration)); 
     }
 };
 
@@ -511,11 +511,11 @@ public:
     TClientCommandAddRequest()
         : TClientCommandTree("add", {}, "")
     {
-        AddCommand(std::make_unique<TClientCommandMakeRequest>("Ask for permission to add host",
+        AddCommand(std::make_unique<TClientCommandMakeRequest>("Ask for permission to add host", 
                                                  NKikimrCms::TAction::ADD_HOST,
                                                  TClientCommandWithAction::FF_HOST,
                                                  false));
-        AddCommand(std::make_unique<TClientCommandMakeRequest>("Ask for permission to add device",
+        AddCommand(std::make_unique<TClientCommandMakeRequest>("Ask for permission to add device", 
                                                  NKikimrCms::TAction::ADD_DEVICES,
                                                  TClientCommandWithAction::FF_DEVICE,
                                                  false));
@@ -527,15 +527,15 @@ public:
     TClientCommandRestartRequest()
         : TClientCommandTree("restart", {}, "")
     {
-        AddCommand(std::make_unique<TClientCommandMakeRequest>("Ask for permission to restart service",
+        AddCommand(std::make_unique<TClientCommandMakeRequest>("Ask for permission to restart service", 
                                                  NKikimrCms::TAction::RESTART_SERVICES,
                                                  TClientCommandWithAction::FF_SERVICE,
                                                  true));
-        AddCommand(std::make_unique<TClientCommandMakeRequest>("Ask for permission to restart host",
+        AddCommand(std::make_unique<TClientCommandMakeRequest>("Ask for permission to restart host", 
                                                  NKikimrCms::TAction::SHUTDOWN_HOST,
                                                  TClientCommandWithAction::FF_HOST,
                                                  true));
-        AddCommand(std::make_unique<TClientCommandMakeRequest>("Ask for permission to restart tenant's hosts",
+        AddCommand(std::make_unique<TClientCommandMakeRequest>("Ask for permission to restart tenant's hosts", 
                                                  NKikimrCms::TAction::SHUTDOWN_HOST,
                                                  TClientCommandWithAction::FF_TENANT,
                                                  true));
@@ -548,32 +548,32 @@ public:
     TClientCommandRequest()
         : TClientCommandTree("request", {}, "Make and manage permission requests")
     {
-        //AddCommand(std::make_unique<TClientCommandSingleRequest>("start", "", "Ask for permission to start service",
+        //AddCommand(std::make_unique<TClientCommandSingleRequest>("start", "", "Ask for permission to start service", 
         //                                           NKikimrCms::TAction::START_SERVICES,
         //                                           TClientCommandWithAction::FF_SERVICE,
         //                                           false));
-        //AddCommand(std::make_unique<TClientCommandSingleRequest>("stop", "", "Ask for permission to stop service",
+        //AddCommand(std::make_unique<TClientCommandSingleRequest>("stop", "", "Ask for permission to stop service", 
         //                                           NKikimrCms::TAction::STOP_SERVICES,
         //                                           TClientCommandWithAction::FF_SERVICE,
         //                                           false));
-        //AddCommand(std::make_unique<TClientCommandSingleRequest>("decommission", "", "Ask for permission to decommission host",
+        //AddCommand(std::make_unique<TClientCommandSingleRequest>("decommission", "", "Ask for permission to decommission host", 
         //                                           NKikimrCms::TAction::DECOMMISSION_HOST,
         //                                           TClientCommandWithAction::FF_HOST,
         //                                           false));
-        AddCommand(std::make_unique<TClientCommandSingleRequest>("replace", "", "Ask for permission to replace device",
+        AddCommand(std::make_unique<TClientCommandSingleRequest>("replace", "", "Ask for permission to replace device", 
                                                    NKikimrCms::TAction::REPLACE_DEVICES,
                                                    TClientCommandWithAction::FF_DEVICE,
                                                    true));
-        //AddCommand(std::make_unique<TClientCommandSingleRequest>("remove", "", "Ask for permission to remove device",
+        //AddCommand(std::make_unique<TClientCommandSingleRequest>("remove", "", "Ask for permission to remove device", 
         //                                           NKikimrCms::TAction::REMOVE_DEVICES,
         //                                           TClientCommandWithAction::FF_DEVICE,
         //                                           false));
-        //AddCommand(std::make_unique<TClientCommandAddRequest>());
-        AddCommand(std::make_unique<TClientCommandRestartRequest>());
-        AddCommand(std::make_unique<TClientCommandGetRequest>());
-        AddCommand(std::make_unique<TClientCommandListRequest>());
-        AddCommand(std::make_unique<TClientCommandRejectRequest>());
-        AddCommand(std::make_unique<TClientCommandCheckRequest>());
+        //AddCommand(std::make_unique<TClientCommandAddRequest>()); 
+        AddCommand(std::make_unique<TClientCommandRestartRequest>()); 
+        AddCommand(std::make_unique<TClientCommandGetRequest>()); 
+        AddCommand(std::make_unique<TClientCommandListRequest>()); 
+        AddCommand(std::make_unique<TClientCommandRejectRequest>()); 
+        AddCommand(std::make_unique<TClientCommandCheckRequest>()); 
     }
 };
 
@@ -630,9 +630,9 @@ public:
                                NKikimrCms::TAction::EType type,
                                TClientCommandWithAction::EFreeField freeArgField,
                                bool hasDuration)
-        : TClientCommandTree(name, {}, description)
+        : TClientCommandTree(name, {}, description) 
     {
-        AddCommand(std::make_unique<TClientCommandSendNotification>(requestDescription, type, freeArgField, hasDuration));
+        AddCommand(std::make_unique<TClientCommandSendNotification>(requestDescription, type, freeArgField, hasDuration)); 
     }
 };
 
@@ -641,11 +641,11 @@ public:
     TClientCommandNotifyAdd()
         : TClientCommandTree("add", {}, "")
     {
-        AddCommand(std::make_unique<TClientCommandSendNotification>("Notify about new host",
+        AddCommand(std::make_unique<TClientCommandSendNotification>("Notify about new host", 
                                                       NKikimrCms::TAction::ADD_HOST,
                                                       TClientCommandWithAction::FF_HOST,
                                                       false));
-        AddCommand(std::make_unique<TClientCommandSendNotification>("Notify about new device",
+        AddCommand(std::make_unique<TClientCommandSendNotification>("Notify about new device", 
                                                       NKikimrCms::TAction::ADD_DEVICES,
                                                       TClientCommandWithAction::FF_DEVICE,
                                                       false));
@@ -657,11 +657,11 @@ public:
     TClientCommandNotifyRestart()
         : TClientCommandTree("restart", {}, "")
     {
-        AddCommand(std::make_unique<TClientCommandSendNotification>("Notify about service restart",
+        AddCommand(std::make_unique<TClientCommandSendNotification>("Notify about service restart", 
                                                       NKikimrCms::TAction::RESTART_SERVICES,
                                                       TClientCommandWithAction::FF_SERVICE,
                                                       true));
-        AddCommand(std::make_unique<TClientCommandSendNotification>("Notify about host restart",
+        AddCommand(std::make_unique<TClientCommandSendNotification>("Notify about host restart", 
                                                       NKikimrCms::TAction::SHUTDOWN_HOST,
                                                       TClientCommandWithAction::FF_HOST,
                                                       true));
@@ -755,31 +755,31 @@ public:
     TClientCommandNotify()
         : TClientCommandTree("notify", {}, "Send and manage notifications")
     {
-        //AddCommand(std::make_unique<TClientCommandSingleNotify>("start", "", "Notify about service start",
+        //AddCommand(std::make_unique<TClientCommandSingleNotify>("start", "", "Notify about service start", 
         //                                          NKikimrCms::TAction::START_SERVICES,
         //                                          TClientCommandWithAction::FF_SERVICE,
         //                                          false));
-        //AddCommand(std::make_unique<TClientCommandSingleNotify>("stop", "", "Notify about service stop",
+        //AddCommand(std::make_unique<TClientCommandSingleNotify>("stop", "", "Notify about service stop", 
         //                                          NKikimrCms::TAction::STOP_SERVICES,
         //                                          TClientCommandWithAction::FF_SERVICE,
         //                                          false));
-        //AddCommand(std::make_unique<TClientCommandSingleNotify>("decommission", "", "Notify about host decomission",
+        //AddCommand(std::make_unique<TClientCommandSingleNotify>("decommission", "", "Notify about host decomission", 
         //                                          NKikimrCms::TAction::DECOMMISSION_HOST,
         //                                          TClientCommandWithAction::FF_HOST,
         //                                          false));
-        AddCommand(std::make_unique<TClientCommandSingleNotify>("replace", "", "Notify about device replacement",
+        AddCommand(std::make_unique<TClientCommandSingleNotify>("replace", "", "Notify about device replacement", 
                                                   NKikimrCms::TAction::REPLACE_DEVICES,
                                                   TClientCommandWithAction::FF_DEVICE,
                                                   true));
-        //AddCommand(std::make_unique<TClientCommandSingleNotify>("remove", "", "Notify about device removal",
+        //AddCommand(std::make_unique<TClientCommandSingleNotify>("remove", "", "Notify about device removal", 
         //                                          NKikimrCms::TAction::REMOVE_DEVICES,
         //                                          TClientCommandWithAction::FF_DEVICE,
         //                                          false));
-        //AddCommand(std::make_unique<TClientCommandNotifyAdd>());
-        AddCommand(std::make_unique<TClientCommandNotifyRestart>());
-        AddCommand(std::make_unique<TClientCommandGetNotification>());
-        AddCommand(std::make_unique<TClientCommandListNotification>());
-        AddCommand(std::make_unique<TClientCommandRejectNotification>());
+        //AddCommand(std::make_unique<TClientCommandNotifyAdd>()); 
+        AddCommand(std::make_unique<TClientCommandNotifyRestart>()); 
+        AddCommand(std::make_unique<TClientCommandGetNotification>()); 
+        AddCommand(std::make_unique<TClientCommandListNotification>()); 
+        AddCommand(std::make_unique<TClientCommandRejectNotification>()); 
     }
 };
 
@@ -912,11 +912,11 @@ public:
     TClientCommandPermission()
         : TClientCommandTree("permission", {}, "Manage issued permissions")
     {
-        AddCommand(std::make_unique<TClientCommandGetPermission>());
-        AddCommand(std::make_unique<TClientCommandListPermission>());
-        AddCommand(std::make_unique<TClientCommandDonePermission>());
-        //AddCommand(std::make_unique<TClientCommandExtendPermission>());
-        AddCommand(std::make_unique<TClientCommandRejectPermission>());
+        AddCommand(std::make_unique<TClientCommandGetPermission>()); 
+        AddCommand(std::make_unique<TClientCommandListPermission>()); 
+        AddCommand(std::make_unique<TClientCommandDonePermission>()); 
+        //AddCommand(std::make_unique<TClientCommandExtendPermission>()); 
+        AddCommand(std::make_unique<TClientCommandRejectPermission>()); 
     }
 };
 
@@ -965,8 +965,8 @@ public:
     TClientCommandManageConfig()
         : TClientCommandTree("config", {}, "Manage CMS config")
     {
-        AddCommand(std::make_unique<TClientCommandGetConfig>());
-        AddCommand(std::make_unique<TClientCommandSetConfig>());
+        AddCommand(std::make_unique<TClientCommandGetConfig>()); 
+        AddCommand(std::make_unique<TClientCommandSetConfig>()); 
     }
 };
 
@@ -1074,8 +1074,8 @@ public:
     TClientCommandMarker()
         : TClientCommandTree("marker", {}, "Manage markers")
     {
-        AddCommand(std::make_unique<TClientCommandSetMarker>());
-        AddCommand(std::make_unique<TClientCommandResetMarker>());
+        AddCommand(std::make_unique<TClientCommandSetMarker>()); 
+        AddCommand(std::make_unique<TClientCommandResetMarker>()); 
     }
 };
 
@@ -1158,20 +1158,20 @@ public:
     TClientCommandLog()
         : TClientCommandTree("log", {}, "Inspect log records")
     {
-        AddCommand(std::make_unique<TClientCommandLogTail>());
+        AddCommand(std::make_unique<TClientCommandLogTail>()); 
     }
 };
 
 TClientCommandCms::TClientCommandCms()
     : TClientCommandTree("cms", {}, "CMS requests")
 {
-    AddCommand(std::make_unique<TClientCommandState>());
-    AddCommand(std::make_unique<TClientCommandRequest>());
-    AddCommand(std::make_unique<TClientCommandNotify>());
-    AddCommand(std::make_unique<TClientCommandPermission>());
-    AddCommand(std::make_unique<TClientCommandManageConfig>());
-    AddCommand(std::make_unique<TClientCommandMarker>());
-    AddCommand(std::make_unique<TClientCommandLog>());
+    AddCommand(std::make_unique<TClientCommandState>()); 
+    AddCommand(std::make_unique<TClientCommandRequest>()); 
+    AddCommand(std::make_unique<TClientCommandNotify>()); 
+    AddCommand(std::make_unique<TClientCommandPermission>()); 
+    AddCommand(std::make_unique<TClientCommandManageConfig>()); 
+    AddCommand(std::make_unique<TClientCommandMarker>()); 
+    AddCommand(std::make_unique<TClientCommandLog>()); 
 }
 
 } // namespace NDriverClient

@@ -66,7 +66,7 @@ struct TPinKey {
     }
 
     struct THash {
-        size_t operator()(const TPinKey& x) const {
+        size_t operator()(const TPinKey& x) const { 
             return x.Hash();
         }
     };

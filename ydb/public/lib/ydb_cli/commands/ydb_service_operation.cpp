@@ -42,10 +42,10 @@ namespace {
 TCommandOperation::TCommandOperation()
     : TClientCommandTree("operation", {}, "Operation service operations")
 {
-    AddCommand(std::make_unique<TCommandGetOperation>());
-    AddCommand(std::make_unique<TCommandCancelOperation>());
-    AddCommand(std::make_unique<TCommandForgetOperation>());
-    AddCommand(std::make_unique<TCommandListOperations>());
+    AddCommand(std::make_unique<TCommandGetOperation>()); 
+    AddCommand(std::make_unique<TCommandCancelOperation>()); 
+    AddCommand(std::make_unique<TCommandForgetOperation>()); 
+    AddCommand(std::make_unique<TCommandListOperations>()); 
 }
 
 void TCommandWithOperationId::Config(TConfig& config) {

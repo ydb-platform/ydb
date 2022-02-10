@@ -75,9 +75,9 @@ public:
     TVector<TLogWrite*> JointCommits;
     TVector<TChunkTrim*> JointChunkTrims;
 
-    TVector<std::unique_ptr<TRequestBase>> FastOperationsQueue;
+    TVector<std::unique_ptr<TRequestBase>> FastOperationsQueue; 
     TDeque<TRequestBase*> PausedQueue;
-    std::set<std::unique_ptr<TYardInit>> PendingYardInits;
+    std::set<std::unique_ptr<TYardInit>> PendingYardInits; 
     ui64 LastFlushId = 0;
     bool IsQueuePaused = false;
     bool IsQueueStep = false;

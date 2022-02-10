@@ -9,7 +9,7 @@ enum ESolomonClusterType {
     CT_MONITORING = 2;
 }
 
-message TToken {
+message TToken { 
     string Name = 1;
 }
 
@@ -32,10 +32,10 @@ message TDqSolomonShard {
     string Service = 4;
 
     ESolomonClusterType ClusterType = 20;
-    bool UseSsl = 21;
+    bool UseSsl = 21; 
 
     TDqSolomonShardScheme Scheme = 30;
 
     string ServiceAccount = 40;
-    TToken Token = 41;
+    TToken Token = 41; 
 }

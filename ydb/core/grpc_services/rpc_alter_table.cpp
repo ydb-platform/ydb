@@ -526,8 +526,8 @@ private:
         Request_->ReplyWithYdbStatus(status);
         Die(ctx);
     }
-    ui64 TxId = 0;
-    ui64 SchemeshardId = 0;
+    ui64 TxId = 0; 
+    ui64 SchemeshardId = 0; 
     TActorId SchemeCache;
     TString DatabaseName;
     TIntrusivePtr<NTxProxy::TTxProxyMon> TxProxyMon;

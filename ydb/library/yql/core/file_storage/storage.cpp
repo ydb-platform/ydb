@@ -5,13 +5,13 @@
 #include <ydb/library/yql/utils/proc_alive.h>
 
 #include <library/cpp/digest/md5/md5.h>
-
+ 
 #include <util/folder/dirut.h>
 #include <util/generic/algorithm.h>
 #include <util/generic/vector.h>
 #include <util/generic/yexception.h>
 #include <util/generic/ptr.h>
-#include <util/generic/utility.h>
+#include <util/generic/utility.h> 
 #include <util/system/file.h>
 #include <util/system/file_lock.h>
 #include <util/system/fs.h>
@@ -52,20 +52,20 @@ TFsPath ToFilePath(const TString& path)
 
 } // namespace
 
-TFileLink::TFileLink(const TFsPath& path, const TString& storageFileName, ui64 size, const TString& md5, bool deleteOnDestroy)
+TFileLink::TFileLink(const TFsPath& path, const TString& storageFileName, ui64 size, const TString& md5, bool deleteOnDestroy) 
     : Path(path)
     , StorageFileName(storageFileName)
     , Size(size)
-    , Md5(md5)
-    , DeleteOnDestroy(deleteOnDestroy)
+    , Md5(md5) 
+    , DeleteOnDestroy(deleteOnDestroy) 
 {
 }
 
 TFileLink::~TFileLink() {
-    if (!DeleteOnDestroy) {
-        return;
-    }
-
+    if (!DeleteOnDestroy) { 
+        return; 
+    } 
+ 
     YQL_LOG(INFO) << "Destroying TFileLink for " << Path.GetPath().Quote();
     try {
         Path.ForceDelete();
@@ -75,37 +75,37 @@ TFileLink::~TFileLink() {
 }
 
 TFileLinkPtr CreateFakeFileLink(const TFsPath& path, const TString& md5, bool deleteOnDestroy) {
-    if (!path.Exists()) {
-        ythrow yexception() << "Unable to create file link for non-existent file " << path.GetPath().Quote();
-    }
-
-    TString effectiveMd5 = md5;
-    if (!effectiveMd5) {
-        effectiveMd5 = MD5::File(path);
-    }
-    const i64 size = GetFileLength(path);
-    if (size == -1) {
-        ythrow yexception() << "Unable to get size for file " << path.GetPath().Quote();
-    }
-
+    if (!path.Exists()) { 
+        ythrow yexception() << "Unable to create file link for non-existent file " << path.GetPath().Quote(); 
+    } 
+ 
+    TString effectiveMd5 = md5; 
+    if (!effectiveMd5) { 
+        effectiveMd5 = MD5::File(path); 
+    } 
+    const i64 size = GetFileLength(path); 
+    if (size == -1) { 
+        ythrow yexception() << "Unable to get size for file " << path.GetPath().Quote(); 
+    } 
+ 
     return new TFileLink(path, effectiveMd5, size, effectiveMd5, deleteOnDestroy);
-}
-
-bool SetCacheFilePermissionsNoThrow(const TString& path) {
+} 
+ 
+bool SetCacheFilePermissionsNoThrow(const TString& path) { 
     return Chmod(path.data(), MODE0755) == 0;
-}
-
-void SetCacheFilePermissions(const TString& path) {
-    SetFilePermissions(path, MODE0755);
-}
-
-void SetFilePermissions(const TString& path, int mode) {
+} 
+ 
+void SetCacheFilePermissions(const TString& path) { 
+    SetFilePermissions(path, MODE0755); 
+} 
+ 
+void SetFilePermissions(const TString& path, int mode) { 
     if (Chmod(path.data(), mode)) {
         TFileStat fstat(path.data());
-        ythrow TSystemError() << "Failed to chmod file " << path.Quote() << ", uid = " << fstat.Uid << ", mode = " << fstat.Mode << ", new mode = " << mode;
-    }
-}
-
+        ythrow TSystemError() << "Failed to chmod file " << path.Quote() << ", uid = " << fstat.Uid << ", mode = " << fstat.Mode << ", new mode = " << mode; 
+    } 
+} 
+ 
 class TStorage::TImpl: public TIntrusiveListItem<TImpl> {
 public:
     class TAtforkReinit {
@@ -135,8 +135,8 @@ public:
     private:
         void Reinit() {
             with_lock (Mutex) {
-                for (auto& v : Registered) {
-                    v.ResetRandom();
+                for (auto& v : Registered) { 
+                    v.ResetRandom(); 
                 }
             }
         }
@@ -160,8 +160,8 @@ public:
         StorageDir.PathSplit();
         ProcessTempDir.PathSplit();
 
-        StorageDir.MkDirs(MODE0711);
-        ProcessTempDir.MkDirs(MODE0711);
+        StorageDir.MkDirs(MODE0711); 
+        ProcessTempDir.MkDirs(MODE0711); 
 #ifdef _linux_
         ProcessTempDirLock.Reset(new TFileLock(ProcessTempDir / ".lockfile"));
         ProcessTempDirLock->Acquire();
@@ -198,16 +198,16 @@ public:
         return ProcessTempDir;
     }
 
-    TFileLinkPtr Put(const TString& storageFileName, const TString& outFileName, const TString& md5, const TStorage::TDataPuller& puller) {
+    TFileLinkPtr Put(const TString& storageFileName, const TString& outFileName, const TString& md5, const TStorage::TDataPuller& puller) { 
         bool newFileAdded = false;
-        TFileLinkPtr result = HardlinkFromStorage(storageFileName, md5, outFileName);
-        if (!result) {
-            TFsPath storageFile = StorageDir / storageFileName;
-            TFsPath hardlinkFile = ProcessTempDir / (outFileName ? outFileName : GetTempName());
-            Y_ENSURE(!hardlinkFile.Exists(), "FileStorage: temporary file " << hardlinkFile.GetPath().Quote() << " already exists");
+        TFileLinkPtr result = HardlinkFromStorage(storageFileName, md5, outFileName); 
+        if (!result) { 
+            TFsPath storageFile = StorageDir / storageFileName; 
+            TFsPath hardlinkFile = ProcessTempDir / (outFileName ? outFileName : GetTempName()); 
+            Y_ENSURE(!hardlinkFile.Exists(), "FileStorage: temporary file " << hardlinkFile.GetPath().Quote() << " already exists"); 
 
-            ui64 fileSize = 0;
-            TString pullerMd5; // overrides input arg 'md5'
+            ui64 fileSize = 0; 
+            TString pullerMd5; // overrides input arg 'md5' 
             try {
                 std::tie(fileSize, pullerMd5) = puller(hardlinkFile);
             } catch (...) {
@@ -215,97 +215,97 @@ public:
                 NFs::Remove(hardlinkFile);
                 throw;
             }
-            Y_ENSURE(hardlinkFile.Exists(), "FileStorage: cannot put not existing temporary path");
-            Y_ENSURE(hardlinkFile.IsFile(), "FileStorage: cannot put non-file temporary path");
+            Y_ENSURE(hardlinkFile.Exists(), "FileStorage: cannot put not existing temporary path"); 
+            Y_ENSURE(hardlinkFile.IsFile(), "FileStorage: cannot put non-file temporary path"); 
 
             SetCacheFilePermissionsNoThrow(hardlinkFile);
 
-            if (NFs::HardLink(hardlinkFile, storageFile)) {
-                AtomicIncrement(CurrentFiles);
-                AtomicAdd(CurrentSize, fileSize);
-            }
-            // Ignore HardLink fail. Another process managed to download before us
+            if (NFs::HardLink(hardlinkFile, storageFile)) { 
+                AtomicIncrement(CurrentFiles); 
+                AtomicAdd(CurrentSize, fileSize); 
+            } 
+            // Ignore HardLink fail. Another process managed to download before us 
             TouchFile(storageFile.c_str());
 
-            newFileAdded = true;
-            result = MakeIntrusive<TFileLink>(hardlinkFile, storageFileName, fileSize, pullerMd5);
+            newFileAdded = true; 
+            result = MakeIntrusive<TFileLink>(hardlinkFile, storageFileName, fileSize, pullerMd5); 
         }
 
-        YQL_LOG(INFO) << "Using " << (newFileAdded ? "new" : "existing") << " storage file " << result->GetStorageFileName().Quote()
-            << ", temp path: " << result->GetPath().GetPath().Quote()
-            << ", size: " << result->GetSize();
+        YQL_LOG(INFO) << "Using " << (newFileAdded ? "new" : "existing") << " storage file " << result->GetStorageFileName().Quote() 
+            << ", temp path: " << result->GetPath().GetPath().Quote() 
+            << ", size: " << result->GetSize(); 
 
         if (newFileAdded) {
             Cleanup();
         }
-        return result;
+        return result; 
     }
 
-    TFileLinkPtr HardlinkFromStorage(const TString& existingStorageFileName, const TString& storageFileMd5, const TString& outFileName) {
-        TFsPath storageFile = StorageDir / existingStorageFileName;
-        TFsPath hardlinkFile = ProcessTempDir / (outFileName ? outFileName : GetTempName());
-        Y_ENSURE(!hardlinkFile.Exists(), "FileStorage: temporary file " << hardlinkFile.GetPath().Quote() << " already exists");
-
-        if (!NFs::HardLink(storageFile, hardlinkFile)) {
-            return nullptr;
-        }
-
+    TFileLinkPtr HardlinkFromStorage(const TString& existingStorageFileName, const TString& storageFileMd5, const TString& outFileName) { 
+        TFsPath storageFile = StorageDir / existingStorageFileName; 
+        TFsPath hardlinkFile = ProcessTempDir / (outFileName ? outFileName : GetTempName()); 
+        Y_ENSURE(!hardlinkFile.Exists(), "FileStorage: temporary file " << hardlinkFile.GetPath().Quote() << " already exists"); 
+ 
+        if (!NFs::HardLink(storageFile, hardlinkFile)) { 
+            return nullptr; 
+        } 
+ 
         TouchFile(storageFile.c_str());
-        SetCacheFilePermissionsNoThrow(hardlinkFile);
-
+        SetCacheFilePermissionsNoThrow(hardlinkFile); 
+ 
         const i64 fileSize = GetFileLength(hardlinkFile);
         if (fileSize < 0) {
             ythrow yexception() << "Unable to get size for file " << hardlinkFile.GetPath().Quote();
         }
-        TString md5 = storageFileMd5;
-        if (!md5) {
-            // could happen rarely
-            YQL_LOG(WARN) << "Rebuilding MD5 for file " << hardlinkFile.GetPath().Quote() << ", storage file " << existingStorageFileName << ". Usually it means file was downloaded via HTTP by another process and we just hardlinked it";
-            md5 = MD5::File(hardlinkFile);
-        }
-
-        return new TFileLink(hardlinkFile, existingStorageFileName, fileSize, md5);
-    }
-
-    void MoveToStorage(const TFsPath& src, const TString& dstStorageFileName) {
-        TFsPath dstStorageFile = StorageDir / dstStorageFileName;
-        const bool prevFileExisted = dstStorageFile.Exists();
+        TString md5 = storageFileMd5; 
+        if (!md5) { 
+            // could happen rarely 
+            YQL_LOG(WARN) << "Rebuilding MD5 for file " << hardlinkFile.GetPath().Quote() << ", storage file " << existingStorageFileName << ". Usually it means file was downloaded via HTTP by another process and we just hardlinked it"; 
+            md5 = MD5::File(hardlinkFile); 
+        } 
+ 
+        return new TFileLink(hardlinkFile, existingStorageFileName, fileSize, md5); 
+    } 
+ 
+    void MoveToStorage(const TFsPath& src, const TString& dstStorageFileName) { 
+        TFsPath dstStorageFile = StorageDir / dstStorageFileName; 
+        const bool prevFileExisted = dstStorageFile.Exists(); 
         const i64 prevFileSize = Max<i64>(0, GetFileLength(dstStorageFile.c_str()));
-
-        if (!NFs::Rename(src, dstStorageFile)) {
-            ythrow yexception() << "Failed to rename file from " << src << " to " << dstStorageFile;
-        }
+ 
+        if (!NFs::Rename(src, dstStorageFile)) { 
+            ythrow yexception() << "Failed to rename file from " << src << " to " << dstStorageFile; 
+        } 
         SetCacheFilePermissionsNoThrow(dstStorageFile);
-
+ 
         const i64 newFileSize = Max<i64>(0, GetFileLength(dstStorageFile.c_str()));
-
-        if (!prevFileExisted) {
-            AtomicIncrement(CurrentFiles);
-        }
-
-        AtomicAdd(CurrentSize, newFileSize - prevFileSize);
-    }
-
-    bool RemoveFromStorage(const TString& existingStorageFileName) {
-        TFsPath storageFile = StorageDir / existingStorageFileName;
-        if (!storageFile.Exists()) {
-            // can't update statistics
-            // not sure we had this file at all
-            return false;
-        }
-
-        // file could be removed by another process, handle this situation
+ 
+        if (!prevFileExisted) { 
+            AtomicIncrement(CurrentFiles); 
+        } 
+ 
+        AtomicAdd(CurrentSize, newFileSize - prevFileSize); 
+    } 
+ 
+    bool RemoveFromStorage(const TString& existingStorageFileName) { 
+        TFsPath storageFile = StorageDir / existingStorageFileName; 
+        if (!storageFile.Exists()) { 
+            // can't update statistics 
+            // not sure we had this file at all 
+            return false; 
+        } 
+ 
+        // file could be removed by another process, handle this situation 
         const i64 prevFileSize = Max<i64>(0, GetFileLength(storageFile.c_str()));
-        const bool result = NFs::Remove(storageFile);
-
-        if (result || !storageFile.Exists()) {
-            AtomicDecrement(CurrentFiles);
-            AtomicAdd(CurrentSize, -prevFileSize);
-        }
-
-        return result;
-    }
-
+        const bool result = NFs::Remove(storageFile); 
+ 
+        if (result || !storageFile.Exists()) { 
+            AtomicDecrement(CurrentFiles); 
+            AtomicAdd(CurrentSize, -prevFileSize); 
+        } 
+ 
+        return result; 
+    } 
+ 
     ui64 GetOccupiedSize() const {
         return AtomicGet(CurrentSize);
     }
@@ -314,12 +314,12 @@ public:
         return AtomicGet(CurrentFiles);
     }
 
-    TString GetTempName() {
-        with_lock(RndLock) {
-            return Rnd.GenGuid();
-        }
-    }
-
+    TString GetTempName() { 
+        with_lock(RndLock) { 
+            return Rnd.GenGuid(); 
+        } 
+    } 
+ 
 private:
     void LoadStats() {
         TVector<TString> names;
@@ -337,7 +337,7 @@ private:
                 ++actualFiles;
                 actualSize += stat.Size;
             } else if (stat.IsDir() && TryFromString(name, oldPid)) {
-                if (!IsProcessAlive(oldPid)) {
+                if (!IsProcessAlive(oldPid)) { 
                     // cleanup of previously not cleaned hardlinks directory
                     try {
 #ifdef _linux_
@@ -427,9 +427,9 @@ private:
     }
 
     void ResetRandom() {
-        with_lock(RndLock) {
-            Rnd.ResetSeed();
-        }
+        with_lock(RndLock) { 
+            Rnd.ResetSeed(); 
+        } 
     }
 
 private:
@@ -443,7 +443,7 @@ private:
     TAtomic CurrentFiles = 0;
     TAtomic CurrentSize = 0;
     TMutex RndLock;
-    TRandGuid Rnd;
+    TRandGuid Rnd; 
 };
 
 TStorage::TStorage(size_t maxFiles, ui64 maxSize, const TString& storagePath)
@@ -465,26 +465,26 @@ TFsPath TStorage::GetTemp() const
     return Impl->GetTemp();
 }
 
-TFileLinkPtr TStorage::Put(const TString& storageFileName, const TString& outFileName, const TString& md5, const TDataPuller& puller)
+TFileLinkPtr TStorage::Put(const TString& storageFileName, const TString& outFileName, const TString& md5, const TDataPuller& puller) 
 {
-    return Impl->Put(storageFileName, outFileName, md5, puller);
+    return Impl->Put(storageFileName, outFileName, md5, puller); 
 }
 
-TFileLinkPtr TStorage::HardlinkFromStorage(const TString& existingStorageFileName, const TString& storageFileMd5, const TString& outFileName)
-{
-    return Impl->HardlinkFromStorage(existingStorageFileName, storageFileMd5, outFileName);
-}
-
-void TStorage::MoveToStorage(const TFsPath& src, const TString& dstStorageFileName)
-{
-    return Impl->MoveToStorage(src, dstStorageFileName);
-}
-
-bool TStorage::RemoveFromStorage(const TString& existingStorageFileName)
-{
-    return Impl->RemoveFromStorage(existingStorageFileName);
-}
-
+TFileLinkPtr TStorage::HardlinkFromStorage(const TString& existingStorageFileName, const TString& storageFileMd5, const TString& outFileName) 
+{ 
+    return Impl->HardlinkFromStorage(existingStorageFileName, storageFileMd5, outFileName); 
+} 
+ 
+void TStorage::MoveToStorage(const TFsPath& src, const TString& dstStorageFileName) 
+{ 
+    return Impl->MoveToStorage(src, dstStorageFileName); 
+} 
+ 
+bool TStorage::RemoveFromStorage(const TString& existingStorageFileName) 
+{ 
+    return Impl->RemoveFromStorage(existingStorageFileName); 
+} 
+ 
 ui64 TStorage::GetOccupiedSize() const
 {
     return Impl->GetOccupiedSize();
@@ -495,8 +495,8 @@ size_t TStorage::GetCount() const
     return Impl->GetCount();
 }
 
-TString TStorage::GetTempName()
-{
-    return Impl->GetTempName();
-}
+TString TStorage::GetTempName() 
+{ 
+    return Impl->GetTempName(); 
+} 
 } // NYql

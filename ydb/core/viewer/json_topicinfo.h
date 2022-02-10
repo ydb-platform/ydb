@@ -21,8 +21,8 @@ class TJsonTopicInfo : public TActorBootstrapped<TJsonTopicInfo> {
     TString Topic;
     TString Client;
     TString GroupNames;
-    bool ShowAll = false;
-    ui32 Timeout = 0;
+    bool ShowAll = false; 
+    ui32 Timeout = 0; 
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {

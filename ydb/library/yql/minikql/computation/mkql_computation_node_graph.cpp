@@ -21,34 +21,34 @@ using namespace NDetail;
 
 namespace {
 
-#ifndef MKQL_DISABLE_CODEGEN
+#ifndef MKQL_DISABLE_CODEGEN 
 constexpr ui64 TotalFunctionsLimit = 1000;
 constexpr ui64 TotalInstructionsLimit = 100000;
 constexpr ui64 MaxFunctionInstructionsLimit = 50000;
-#endif
+#endif 
 
 const ui64 IS_NODE_REACHABLE = 1;
 
-const static TStatKey PagePool_PeakAllocated("PagePool_PeakAllocated", false);
-const static TStatKey PagePool_PeakUsed("PagePool_PeakUsed", false);
-const static TStatKey PagePool_AllocCount("PagePool_AllocCount", true);
-const static TStatKey PagePool_PageAllocCount("PagePool_PageAllocCount", true);
-const static TStatKey PagePool_PageHitCount("PagePool_PageHitCount", true);
-const static TStatKey PagePool_PageMissCount("PagePool_PageMissCount", true);
-const static TStatKey PagePool_OffloadedAllocCount("PagePool_OffloadedAllocCount", true);
-const static TStatKey PagePool_OffloadedBytes("PagePool_OffloadedBytes", true);
+const static TStatKey PagePool_PeakAllocated("PagePool_PeakAllocated", false); 
+const static TStatKey PagePool_PeakUsed("PagePool_PeakUsed", false); 
+const static TStatKey PagePool_AllocCount("PagePool_AllocCount", true); 
+const static TStatKey PagePool_PageAllocCount("PagePool_PageAllocCount", true); 
+const static TStatKey PagePool_PageHitCount("PagePool_PageHitCount", true); 
+const static TStatKey PagePool_PageMissCount("PagePool_PageMissCount", true); 
+const static TStatKey PagePool_OffloadedAllocCount("PagePool_OffloadedAllocCount", true); 
+const static TStatKey PagePool_OffloadedBytes("PagePool_OffloadedBytes", true); 
 
-const static TStatKey CodeGen_FullTime("CodeGen_FullTime", true);
-const static TStatKey CodeGen_GenerateTime("CodeGen_GenerateTime", true);
-const static TStatKey CodeGen_CompileTime("CodeGen_CompileTime", true);
-const static TStatKey CodeGen_TotalFunctions("CodeGen_TotalFunctions", true);
-const static TStatKey CodeGen_TotalInstructions("CodeGen_TotalInstructions", true);
-const static TStatKey CodeGen_MaxFunctionInstructions("CodeGen_MaxFunctionInstructions", false);
-const static TStatKey CodeGen_ModulePassTime("CodeGen_ModulePassTime", true);
-const static TStatKey CodeGen_FinalizeTime("CodeGen_FinalizeTime", true);
+const static TStatKey CodeGen_FullTime("CodeGen_FullTime", true); 
+const static TStatKey CodeGen_GenerateTime("CodeGen_GenerateTime", true); 
+const static TStatKey CodeGen_CompileTime("CodeGen_CompileTime", true); 
+const static TStatKey CodeGen_TotalFunctions("CodeGen_TotalFunctions", true); 
+const static TStatKey CodeGen_TotalInstructions("CodeGen_TotalInstructions", true); 
+const static TStatKey CodeGen_MaxFunctionInstructions("CodeGen_MaxFunctionInstructions", false); 
+const static TStatKey CodeGen_ModulePassTime("CodeGen_ModulePassTime", true); 
+const static TStatKey CodeGen_FinalizeTime("CodeGen_FinalizeTime", true); 
 
-const static TStatKey Mkql_TotalNodes("Mkql_TotalNodes", true);
-const static TStatKey Mkql_CodegenFunctions("Mkql_CodegenFunctions", true);
+const static TStatKey Mkql_TotalNodes("Mkql_TotalNodes", true); 
+const static TStatKey Mkql_CodegenFunctions("Mkql_CodegenFunctions", true); 
 
 class TDependencyScanVisitor : public TEmptyNodeVisitor {
 public:
@@ -436,7 +436,7 @@ private:
         const auto computationNode = Factory(node, ctx);
 
         if (!computationNode) {
-            THROW yexception()
+            THROW yexception() 
                 << "Computation graph builder, unsupported function: " << node.GetType()->GetName() << " type: " << Factory.target_type().name() ;
         }
 

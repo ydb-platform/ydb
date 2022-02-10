@@ -43,7 +43,7 @@ namespace NActors {
             }
         };
 
-        class TLfAllocProfiler: public IProfilerLogic {
+        class TLfAllocProfiler: public IProfilerLogic { 
         public:
             void Start() override {
                 NAllocProfiler::StartAllocationSampling(true);
@@ -56,7 +56,7 @@ namespace NActors {
             }
         };
 
-        class TYtAllocProfiler: public IProfilerLogic {
+        class TYtAllocProfiler: public IProfilerLogic { 
         public:
             TYtAllocProfiler() {
                 Init();
@@ -158,7 +158,7 @@ namespace NActors {
 #endif // PROFILE_MEMORY_ALLOCATIONS
 
 #if defined(EXEC_PROFILER_ENABLED)
-        class TExecProfiler: public IProfilerLogic {
+        class TExecProfiler: public IProfilerLogic { 
         public:
             void Start() override {
                 ResetProfile();
@@ -184,7 +184,7 @@ namespace NActors {
         };
 #endif // EXEC_PROFILER_ENABLED
 
-        struct TFakeProfiler: public IProfilerLogic {
+        struct TFakeProfiler: public IProfilerLogic { 
             void Start() override {
             }
 
@@ -195,7 +195,7 @@ namespace NActors {
             }
         };
 
-        std::unique_ptr<IProfilerLogic> CreateProfiler() {
+        std::unique_ptr<IProfilerLogic> CreateProfiler() { 
             const auto& info = NMalloc::MallocInfo();
             TStringBuf name(info.Name);
 
@@ -232,7 +232,7 @@ namespace NActors {
         private:
             const TDynamicCountersPtr DynamicCounters;
             const TString Dir;
-            const std::unique_ptr<IProfilerLogic> Profiler;
+            const std::unique_ptr<IProfilerLogic> Profiler; 
 
             TCounters Counters;
             bool IsProfiling = false;
@@ -245,7 +245,7 @@ namespace NActors {
                 return ACTORLIB_STATS;
             }
 
-            TProfilerActor(TDynamicCountersPtr counters, TString dir, std::unique_ptr<IProfilerLogic> profiler)
+            TProfilerActor(TDynamicCountersPtr counters, TString dir, std::unique_ptr<IProfilerLogic> profiler) 
                 : TActor(&TThis::StateWork)
                 , DynamicCounters(std::move(counters))
                 , Dir(std::move(dir))
@@ -466,10 +466,10 @@ namespace NActors {
         }
     }
 
-    IActor* CreateProfilerActor(TDynamicCountersPtr counters, TString dir, std::unique_ptr<IProfilerLogic> profiler) {
+    IActor* CreateProfilerActor(TDynamicCountersPtr counters, TString dir, std::unique_ptr<IProfilerLogic> profiler) { 
         return new TProfilerActor(
             std::move(counters),
             std::move(dir),
-            profiler ? std::move(profiler) : CreateProfiler());
+            profiler ? std::move(profiler) : CreateProfiler()); 
     }
 }

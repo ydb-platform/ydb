@@ -224,20 +224,20 @@ struct TCounters {
         NDq::TDqSourceStats& oldStats,
         ui64 taskId, ui64 inputIndex)
     {
-        std::map<TString, TString> labels = {
-            {"Task", ToString(taskId)},
-            {"SourceIndex", ToString(inputIndex)}
-        };
-
-        ADD_COUNTER(Chunks);
-        ADD_COUNTER(Bytes);
-        ADD_COUNTER(RowsIn);
-        ADD_COUNTER(RowsOut);
-        ADD_COUNTER(RowsInMemory);
-        ADD_COUNTER(MaxMemoryUsage);
-        ADD_COUNTER(InputIndex);
-    }
-
+        std::map<TString, TString> labels = { 
+            {"Task", ToString(taskId)}, 
+            {"SourceIndex", ToString(inputIndex)} 
+        }; 
+ 
+        ADD_COUNTER(Chunks); 
+        ADD_COUNTER(Bytes); 
+        ADD_COUNTER(RowsIn); 
+        ADD_COUNTER(RowsOut); 
+        ADD_COUNTER(RowsInMemory); 
+        ADD_COUNTER(MaxMemoryUsage); 
+        ADD_COUNTER(InputIndex); 
+    } 
+ 
     void AddOutputChannelStats(
         const NDq::TDqOutputChannelStats& currentStats,
         NDq::TDqOutputChannelStats& oldStats,

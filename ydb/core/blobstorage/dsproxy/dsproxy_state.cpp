@@ -30,8 +30,8 @@ namespace NKikimr {
         EstablishingSessionStartTime = TActivationContext::Now();
         ConfigureQueryTimeoutEv = nullptr;
         ClearTimeoutCounters();
-        EstablishingSessionsTimeoutEv = new TEvEstablishingSessionTimeout();
-        Become(&TThis::StateEstablishingSessions, ProxyEstablishSessionsTimeout, EstablishingSessionsTimeoutEv);
+        EstablishingSessionsTimeoutEv = new TEvEstablishingSessionTimeout(); 
+        Become(&TThis::StateEstablishingSessions, ProxyEstablishSessionsTimeout, EstablishingSessionsTimeoutEv); 
         SwitchToWorkWhenGoodToGo();
     }
 
@@ -56,8 +56,8 @@ namespace NKikimr {
         ErrorDescription = "StateUnconfigured (DSPE9).";
         EstablishingSessionsTimeoutEv = nullptr;
         ClearTimeoutCounters();
-        ConfigureQueryTimeoutEv = new TEvConfigureQueryTimeout();
-        Become(&TThis::StateUnconfigured, ProxyConfigurationTimeout, ConfigureQueryTimeoutEv);
+        ConfigureQueryTimeoutEv = new TEvConfigureQueryTimeout(); 
+        Become(&TThis::StateUnconfigured, ProxyConfigurationTimeout, ConfigureQueryTimeoutEv); 
     }
 
     void TBlobStorageGroupProxy::SetStateUnconfiguredTimeout() {

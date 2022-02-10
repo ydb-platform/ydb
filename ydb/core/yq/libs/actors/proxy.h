@@ -53,7 +53,7 @@ NActors::IActor* CreatePendingFetcher(
 
 NActors::IActor* CreateRunActor(
     const ::NYq::NCommon::TServiceCounters& serviceCounters,
-    TRunActorParams&& params
+    TRunActorParams&& params 
     );
 
 struct TResultId {

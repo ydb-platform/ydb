@@ -23,10 +23,10 @@ std::pair<NYql::NDq::IDqSinkActor*, NActors::IActor*> CreateDqSolomonWriteActor(
     ui64 outputIndex,
     const THashMap<TString, TString>& secureParams,
     NYql::NDq::IDqSinkActor::ICallbacks* callbacks,
-    const NMonitoring::TDynamicCounterPtr& counters,
-    ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
+    const NMonitoring::TDynamicCounterPtr& counters, 
+    ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory, 
     i64 freeSpace = DqSolomonDefaultFreeSpace);
 
-void RegisterDQSolomonWriteActorFactory(TDqSinkFactory& factory, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory);
+void RegisterDQSolomonWriteActorFactory(TDqSinkFactory& factory, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory); 
 
 } // namespace NYql::NDq

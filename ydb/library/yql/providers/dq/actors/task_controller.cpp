@@ -74,7 +74,7 @@ public:
     }
 
     ~TTaskController() override {
-        SetTaskCountMetric(0);
+        SetTaskCountMetric(0); 
     }
 
 private:
@@ -214,19 +214,19 @@ private:
                 *group->GetCounter(name) = v.Count;
                 if (ServiceCounters.PublicCounters && taskId == 0) {
                     TString publicCounterName;
-                    bool isDeriv = false;
-                    if (name == "MkqlMaxMemoryUsage") {
-                        publicCounterName = "query.memory_usage_bytes";
-                    } else if (name == "ComputeCpuTimeUs") {
-                        publicCounterName = "query.cpu_usage_us";
-                        isDeriv = true;
-                    } else if (name == "Bytes") {
+                    bool isDeriv = false; 
+                    if (name == "MkqlMaxMemoryUsage") { 
+                        publicCounterName = "query.memory_usage_bytes"; 
+                    } else if (name == "ComputeCpuTimeUs") { 
+                        publicCounterName = "query.cpu_usage_us"; 
+                        isDeriv = true; 
+                    } else if (name == "Bytes") { 
                         if (labels.find("Source") != labels.end()) publicCounterName = "query.input_bytes";
                         else if (labels.find("Sink") != labels.end()) publicCounterName = "query.output_bytes";
-                        isDeriv = true;
+                        isDeriv = true; 
                     }
                     if (publicCounterName) {
-                        *ServiceCounters.PublicCounters->GetNamedCounter("name", publicCounterName, isDeriv) = v.Count;
+                        *ServiceCounters.PublicCounters->GetNamedCounter("name", publicCounterName, isDeriv) = v.Count; 
                     }
                 }
             }
@@ -387,18 +387,18 @@ private:
         }
     }
 
-    void SetTaskCountMetric(ui64 count) {
-        if (!ServiceCounters.Counters) {
-            return;
-        }
-        *ServiceCounters.Counters->GetCounter("TaskCount") = count;
-
-        if (!ServiceCounters.PublicCounters) {
-            return;
-        }
-        *ServiceCounters.PublicCounters->GetNamedCounter("name", "query.running_tasks") = count;
-    }
-
+    void SetTaskCountMetric(ui64 count) { 
+        if (!ServiceCounters.Counters) { 
+            return; 
+        } 
+        *ServiceCounters.Counters->GetCounter("TaskCount") = count; 
+ 
+        if (!ServiceCounters.PublicCounters) { 
+            return; 
+        } 
+        *ServiceCounters.PublicCounters->GetNamedCounter("name", "query.running_tasks") = count; 
+    } 
+ 
     void OnReadyState(TEvReadyState::TPtr& ev) {
         YQL_LOG_CTX_SCOPE(TraceId);
 
@@ -408,7 +408,7 @@ private:
         const auto& actorIds = ev->Get()->Record.GetActorId();
         Y_VERIFY(tasks.size() == actorIds.size());
 
-        SetTaskCountMetric(tasks.size());
+        SetTaskCountMetric(tasks.size()); 
 
         for (int i = 0; i < static_cast<int>(tasks.size()); ++i) {
             auto actorId = ActorIdFromProto(actorIds[i]);

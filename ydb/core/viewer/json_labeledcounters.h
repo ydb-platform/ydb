@@ -26,7 +26,7 @@ class TJsonLabeledCounters : public TActorBootstrapped<TJsonLabeledCounters> {
     TString DC;
     TVector<TString> Counters;
     ui32 Version = 1;
-    ui32 Timeout = 0;
+    ui32 Timeout = 0; 
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {

@@ -1,4 +1,4 @@
-RECURSE(
-    client
-    grpc
-)
+RECURSE( 
+    client 
+    grpc 
+) 

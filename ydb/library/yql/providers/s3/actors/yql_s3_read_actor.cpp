@@ -229,7 +229,7 @@ std::pair<NYql::NDq::IDqSourceActor*, IActor*> CreateS3ReadActor(
     ui64 inputIndex,
     const THashMap<TString, TString>& secureParams,
     const THashMap<TString, TString>& taskParams,
-    NYql::NDq::IDqSourceActor::ICallbacks* callback,
+    NYql::NDq::IDqSourceActor::ICallbacks* callback, 
     ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
     const std::shared_ptr<NS3::TRetryConfig>& retryConfig)
 {

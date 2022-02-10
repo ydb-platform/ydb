@@ -1,9 +1,9 @@
 #pragma once
 
 #include "yql_data_provider.h"
-#include "yql_udf_index_package_set.h"
-#include "yql_udf_resolver.h"
-#include "yql_user_data_storage.h"
+#include "yql_udf_index_package_set.h" 
+#include "yql_udf_resolver.h" 
+#include "yql_user_data_storage.h" 
 
 #include <ydb/library/yql/public/udf/udf_validate.h>
 
@@ -28,7 +28,7 @@ class IUrlLoader : public TThrRefBase {
 public:
     ~IUrlLoader() = default;
 
-    virtual TString Load(const TString& url, const TString& token) = 0;
+    virtual TString Load(const TString& url, const TString& token) = 0; 
 
     using TPtr = TIntrusivePtr<IUrlLoader>;
 };
@@ -50,21 +50,21 @@ public:
     }
 
     TModuleResolver(const TModulesTable* parentModules, ui64 nextUniqueId, const THashMap<TString, TString>& clusterMapping,
-        const THashSet<TString>& sqlFlags, bool optimizeLibraries, const TSet<TString>& knownPackages, const THashMap<TString, THashMap<int, TLibraryCohesion>>& libs)
-        : ParentModules(parentModules)
-        , LibsContext(nextUniqueId)
-        , KnownPackages(knownPackages)
-        , Libs(libs)
-        , ClusterMapping(clusterMapping)
+        const THashSet<TString>& sqlFlags, bool optimizeLibraries, const TSet<TString>& knownPackages, const THashMap<TString, THashMap<int, TLibraryCohesion>>& libs) 
+        : ParentModules(parentModules) 
+        , LibsContext(nextUniqueId) 
+        , KnownPackages(knownPackages) 
+        , Libs(libs) 
+        , ClusterMapping(clusterMapping) 
         , SqlFlags(sqlFlags)
-        , OptimizeLibraries(optimizeLibraries)
-    {
-    }
-
+        , OptimizeLibraries(optimizeLibraries) 
+    { 
+    } 
+ 
     static TString NormalizeModuleName(const TString& path);
 
-    void AttachUserData(TUserDataStorage::TPtr userData) {
-        UserData = userData;
+    void AttachUserData(TUserDataStorage::TPtr userData) { 
+        UserData = userData; 
     }
 
     void SetUrlLoader(IUrlLoader::TPtr loader) {
@@ -75,34 +75,34 @@ public:
         Parameters = node;
     }
 
-    void RegisterPackage(const TString& package) override;
-    bool SetPackageDefaultVersion(const TString& package, ui32 version) override;
+    void RegisterPackage(const TString& package) override; 
+    bool SetPackageDefaultVersion(const TString& package, ui32 version) override; 
     const TExportTable* GetModule(const TString& module) const override;
-    bool AddFromFile(const TStringBuf& file, TExprContext& ctx, ui16 syntaxVersion, ui32 packageVersion) override;
+    bool AddFromFile(const TStringBuf& file, TExprContext& ctx, ui16 syntaxVersion, ui32 packageVersion) override; 
     bool AddFromUrl(const TStringBuf& file, const TStringBuf& url, TExprContext& ctx, ui16 syntaxVersion, ui32 packageVersion) override;
-    bool AddFromMemory(const TStringBuf& file, const TString& body, TExprContext& ctx, ui16 syntaxVersion, ui32 packageVersion) override;
-    bool AddFromMemory(const TStringBuf& file, const TString& body, TExprContext& ctx, ui16 syntaxVersion, ui32 packageVersion, TString& moduleName, std::vector<TString>* exports = nullptr, std::vector<TString>* imports = nullptr) override;
+    bool AddFromMemory(const TStringBuf& file, const TString& body, TExprContext& ctx, ui16 syntaxVersion, ui32 packageVersion) override; 
+    bool AddFromMemory(const TStringBuf& file, const TString& body, TExprContext& ctx, ui16 syntaxVersion, ui32 packageVersion, TString& moduleName, std::vector<TString>* exports = nullptr, std::vector<TString>* imports = nullptr) override; 
     bool Link(TExprContext& ctx) override;
     void UpdateNextUniqueId(TExprContext& ctx) const override;
     ui64 GetNextUniqueId() const override;
-    IModuleResolver::TPtr CreateMutableChild() const override;
+    IModuleResolver::TPtr CreateMutableChild() const override; 
 
-private:
-    bool AddFromMemory(const TString& fullName, const TString& moduleName, bool isYql, const TString& body, TExprContext& ctx, ui16 syntaxVersion, ui32 packageVersion, std::vector<TString>* exports = nullptr, std::vector<TString>* imports = nullptr);
-    THashMap<TString, TLibraryCohesion> FilterLibsByVersion() const;
-    static TString ExtractPackageNameFromModule(TStringBuf moduleName);
+private: 
+    bool AddFromMemory(const TString& fullName, const TString& moduleName, bool isYql, const TString& body, TExprContext& ctx, ui16 syntaxVersion, ui32 packageVersion, std::vector<TString>* exports = nullptr, std::vector<TString>* imports = nullptr); 
+    THashMap<TString, TLibraryCohesion> FilterLibsByVersion() const; 
+    static TString ExtractPackageNameFromModule(TStringBuf moduleName); 
     TString SubstParameters(const TString& str);
-
-private:
+ 
+private: 
     THolder<TExprContext> OwnedCtx;
-    const TModulesTable* ParentModules = nullptr;
-    TUserDataStorage::TPtr UserData;
+    const TModulesTable* ParentModules = nullptr; 
+    TUserDataStorage::TPtr UserData; 
     IUrlLoader::TPtr UrlLoader;
     TMaybe<NYT::TNode> Parameters;
     TExprContext LibsContext;
-    TSet<TString> KnownPackages;
-    THashMap<TString, ui32> PackageVersions;
-    THashMap<TString, THashMap<int, TLibraryCohesion>> Libs;
+    TSet<TString> KnownPackages; 
+    THashMap<TString, ui32> PackageVersions; 
+    THashMap<TString, THashMap<int, TLibraryCohesion>> Libs; 
     TModulesTable Modules;
     const THashMap<TString, TString> ClusterMapping;
     const THashSet<TString> SqlFlags;
@@ -179,22 +179,22 @@ struct TTypeAnnotationContext: public TThrRefBase {
     THashMap<TString, TIntrusivePtr<IDataProvider>> DataSinkMap;
     TVector<TIntrusivePtr<IDataProvider>> DataSources;
     TVector<TIntrusivePtr<IDataProvider>> DataSinks;
-    TUdfIndex::TPtr UdfIndex;
-    TUdfIndexPackageSet::TPtr UdfIndexPackageSet;
+    TUdfIndex::TPtr UdfIndex; 
+    TUdfIndexPackageSet::TPtr UdfIndexPackageSet; 
     IUdfResolver::TPtr UdfResolver;
     THashMap<TString, IUdfResolver::TImport> UdfImports; // aliases of files that was imported => list of module names
     TUdfModulesTable UdfModules;
     TString PureResultDataSource;
     TVector<TString> AvailablePureResultDataSources;
     TString FullResultDataSink;
-    TUserDataStorage::TPtr UserDataStorage;
+    TUserDataStorage::TPtr UserDataStorage; 
     TUserDataTable UserDataStorageCrutches;
     TYqlOperationOptions OperationOptions;
     TVector<TCredentialTablePtr> Credentials;
     TUserCredentials UserCredentials;
     IModuleResolver::TPtr Modules;
     NUdf::EValidateMode ValidateMode = NUdf::EValidateMode::None;
-    bool DisableNativeUdfSupport = false;
+    bool DisableNativeUdfSupport = false; 
     TMaybe<TString> OptLLVM;
     bool IsReadOnly = false;
     TAutoPtr<IGraphTransformer> CustomInstantTypeTransformer;
@@ -234,7 +234,7 @@ struct TTypeAnnotationContext: public TThrRefBase {
     std::tuple<std::optional<ui64>, std::optional<double>, std::optional<TGUID>> CachedRandom;
 
     std::optional<bool> InitializeResult;
-
+ 
     template <typename T>
     T GetRandom() const noexcept;
 
@@ -279,10 +279,10 @@ struct TTypeAnnotationContext: public TThrRefBase {
     }
 
     bool Initialize(TExprContext& ctx);
-    bool DoInitialize(TExprContext& ctx);
-
+    bool DoInitialize(TExprContext& ctx); 
+ 
     const TCredential* FindCredential(const TStringBuf& name) const;
-    TString FindCredentialContent(const TStringBuf& name1, const TStringBuf& name2, const TString& defaultContent) const;
+    TString FindCredentialContent(const TStringBuf& name1, const TStringBuf& name2, const TString& defaultContent) const; 
     TString GetDefaultDataSource() const;
 
     TMaybe<ui32> TranslateOperationId(ui64 id) const {

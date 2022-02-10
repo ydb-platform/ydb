@@ -122,7 +122,7 @@ public:
         , RandomProvider(randomProvider)
         , DqCompFactory(dqCompFactory)
         , ServiceCounters(serviceCounters, "pending_fetcher")
-        , CredentialsFactory(credentialsFactory)
+        , CredentialsFactory(credentialsFactory) 
         , S3Gateway(s3Gateway)
         , PqCmConnections(std::move(pqCmConnections))
         , Guid(CreateGuidAsString())
@@ -150,7 +150,7 @@ public:
 
         Y_UNUSED(ctx);
 
-        DatabaseResolver = Register(CreateDatabaseResolver(MakeYqlAnalyticsHttpProxyId(), CredentialsFactory));
+        DatabaseResolver = Register(CreateDatabaseResolver(MakeYqlAnalyticsHttpProxyId(), CredentialsFactory)); 
         Send(SelfId(), new NActors::TEvents::TEvWakeup());
 
         LOG_I("STARTED");
@@ -182,10 +182,10 @@ private:
         }
 
         const auto& res = ev->Get()->Result;
-
+ 
         LOG_D("Tasks count: " << res.tasks().size());
         if (!res.tasks().empty()) {
-            ProcessTask(res);
+            ProcessTask(res); 
             HasRunningRequest = true;
             GetPendingTask();
         }
@@ -245,8 +245,8 @@ private:
             task.user_id(), Guid, task.generation(),
             VectorFromProto(task.connection()),
             VectorFromProto(task.binding()),
-            CredentialsFactory,
-            serviceAccounts,
+            CredentialsFactory, 
+            serviceAccounts, 
             task.query_type(),
             task.execute_mode(),
             GetEntityIdAsString(CommonConfig.GetIdsPrefix(), EEntityType::RESULT),
@@ -263,7 +263,7 @@ private:
             NProtoInterop::CastFromProto(task.deadline()),
             ClientCounters);
 
-        NDq::SetYqlLogLevels(NActors::NLog::PRI_TRACE);
+        NDq::SetYqlLogLevels(NActors::NLog::PRI_TRACE); 
         Register(CreateRunActor(ServiceCounters, std::move(params)));
     }
 
@@ -296,7 +296,7 @@ private:
 
     TActorId DatabaseResolver;
 
-    ISecuredServiceAccountCredentialsFactory::TPtr CredentialsFactory;
+    ISecuredServiceAccountCredentialsFactory::TPtr CredentialsFactory; 
     const IHTTPGateway::TPtr S3Gateway;
     const ::NPq::NConfigurationManager::IConnections::TPtr PqCmConnections;
 

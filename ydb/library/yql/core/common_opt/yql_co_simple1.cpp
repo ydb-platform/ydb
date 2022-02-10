@@ -632,21 +632,21 @@ TExprNode::TPtr ExpandExtract(const TExprNode::TPtr& node, TExprContext& ctx) {
         .Seal().Build();
 }
 
-std::vector<TExprNode::TListType> GroupNodeChildrenByType(const TExprNode::TPtr& node) {
-    std::vector<TExprNode::TListType> groups;
-    std::map<const TTypeAnnotationNode*, ui32> typeToGroup;
-    for (ui32 i = 0; i < node->ChildrenSize(); ++i) {
-        auto child = node->Child(i);
-        auto groupIndex = typeToGroup.emplace(child->GetTypeAnn(), groups.size()).first->second;
-        if (groupIndex >= groups.size()) {
-            YQL_ENSURE(groupIndex == groups.size());
-            groups.resize(groupIndex + 1);
-        }
-        groups[groupIndex].push_back(child);
-    }
-    return groups;
-}
-
+std::vector<TExprNode::TListType> GroupNodeChildrenByType(const TExprNode::TPtr& node) { 
+    std::vector<TExprNode::TListType> groups; 
+    std::map<const TTypeAnnotationNode*, ui32> typeToGroup; 
+    for (ui32 i = 0; i < node->ChildrenSize(); ++i) { 
+        auto child = node->Child(i); 
+        auto groupIndex = typeToGroup.emplace(child->GetTypeAnn(), groups.size()).first->second; 
+        if (groupIndex >= groups.size()) { 
+            YQL_ENSURE(groupIndex == groups.size()); 
+            groups.resize(groupIndex + 1); 
+        } 
+        groups[groupIndex].push_back(child); 
+    } 
+    return groups; 
+} 
+ 
 template <bool Ordered>
 TExprNode::TPtr ExpandUnionAll(const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
     YQL_CLOG(DEBUG, Core) << "Expand " << node->Content();
@@ -659,7 +659,7 @@ TExprNode::TPtr ExpandUnionAll(const TExprNode::TPtr& node, TExprContext& ctx, T
     auto remapList = [&ctx, &nulls, resultStructType](TExprNode::TPtr input, const TTypeAnnotationNode* inputType) -> TExprNode::TPtr {
         auto pos = input->Pos();
         auto arg = ctx.NewArgument(pos, "item");
-        auto inputStructType = inputType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+        auto inputStructType = inputType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>(); 
         TExprNode::TListType bodyItems;
         ui32 resultIndex = 0;
         for (auto& item : resultStructType->GetItems()) {
@@ -724,8 +724,8 @@ TExprNode::TPtr ExpandUnionAll(const TExprNode::TPtr& node, TExprContext& ctx, T
         } else {
             auto pos = group[0]->Pos();
             remapped = remapList(ctx.NewCallable(pos, Ordered ? "Merge" : "Extend", std::move(group)), typeAnn);
-        }
-
+        } 
+ 
         if (!remapped) {
             return node;
         }

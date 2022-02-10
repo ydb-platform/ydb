@@ -473,7 +473,7 @@ void TTablet::HandleByFollower(TEvTablet::TEvFollowerUpdate::TPtr &ev) {
 
         // update storage info for case of channel history upgrade
         if (record.HasTabletStorageInfo()) {
-            Info = TabletStorageInfoFromProto(record.GetTabletStorageInfo());
+            Info = TabletStorageInfoFromProto(record.GetTabletStorageInfo()); 
         }
 
         // Drop currently running graph rebuild request
@@ -1024,7 +1024,7 @@ TTablet::TLogEntry* TTablet::MakeLogEntry(TEvTablet::TCommitInfo &commitInfo, NK
     const ui32 step = Graph.NextEntry++;
 
     TLogEntry *entry = new TLogEntry(step, Graph.Confirmed, 0);
-    Graph.Queue.push_back(std::unique_ptr<TLogEntry>(entry));
+    Graph.Queue.push_back(std::unique_ptr<TLogEntry>(entry)); 
     Graph.Index[step] = entry;
     entry->IsSnapshot = commitInfo.IsSnapshot || commitInfo.IsTotalSnapshot;
     entry->IsTotalSnapshot = commitInfo.IsTotalSnapshot;
@@ -1093,9 +1093,9 @@ void TTablet::Handle(TEvTablet::TEvCommit::TPtr &ev) {
 bool TTablet::HandleNext(TEvTablet::TEvCommit::TPtr &ev) {
     TEvTablet::TEvCommit *msg = ev->Get();
 
-    std::unique_ptr<NKikimrTabletBase::TTabletLogEntry> x(new NKikimrTabletBase::TTabletLogEntry());
+    std::unique_ptr<NKikimrTabletBase::TTabletLogEntry> x(new NKikimrTabletBase::TTabletLogEntry()); 
 
-    TLogEntry *entry = msg->PreCommited ? FindLogEntry(*msg, *x) : MakeLogEntry(*msg, x.get());
+    TLogEntry *entry = msg->PreCommited ? FindLogEntry(*msg, *x) : MakeLogEntry(*msg, x.get()); 
 
     if (entry == nullptr) {
         CancelTablet(TEvTablet::TEvTabletDead::ReasonInconsistentCommit);
@@ -1178,7 +1178,7 @@ bool TTablet::HandleNext(TEvTablet::TEvCommit::TPtr &ev) {
 
     entry->StateStorageConfirmed = true; // todo: do real query against state-storage (optionally?)
     entry->Task = Register(
-        CreateTabletReqWriteLog(SelfId(), logid, x.release(), msg->References, msg->CommitTactic, Info.Get())
+        CreateTabletReqWriteLog(SelfId(), logid, x.release(), msg->References, msg->CommitTactic, Info.Get()) 
     );
 
     Graph.StepsInFlight += 1;
@@ -1345,7 +1345,7 @@ void TTablet::SendFollowerAuxUpdate(TLeaderInfo& info, const TActorId& follower,
 bool TTablet::ProgressCommitQueue() {
     const ui64 tabletId = TabletID();
     while (!Graph.Queue.empty()) {
-        TLogEntry *entry = Graph.Queue.front().get();
+        TLogEntry *entry = Graph.Queue.front().get(); 
         if (!entry->Commited)
             break;
 
@@ -1357,7 +1357,7 @@ bool TTablet::ProgressCommitQueue() {
         }
 
         if (entry->FollowerUpdate && LeaderInfo && step >= Graph.MinFollowerUpdate) {
-            Graph.PostponedFollowerUpdates.emplace_back(std::move(Graph.Queue.front()));
+            Graph.PostponedFollowerUpdates.emplace_back(std::move(Graph.Queue.front())); 
         } else if (entry->WaitFollowerGcAck) {
             Send(UserTablet, new TEvTablet::TEvFollowerGcApplied(tabletId, StateStorageInfo.KnownGeneration, step, TDuration::Max()));
         }
@@ -1379,7 +1379,7 @@ void TTablet::ProgressFollowerQueue() {
     const ui32 goodUntil = LeaderInfo ? Graph.ConfirmedCommited : Max<ui32>();
 
     while (!Graph.PostponedFollowerUpdates.empty()) {
-        TLogEntry *entry = Graph.PostponedFollowerUpdates.front().get();
+        TLogEntry *entry = Graph.PostponedFollowerUpdates.front().get(); 
         const ui32 step = entry->Step;
         if (step > goodUntil)
             break;
@@ -1635,7 +1635,7 @@ bool TTablet::CheckBlobStorageError() {
 
     if (!Graph.Queue.empty()) {
         // Check if the head entry is still waiting to be committed
-        TLogEntry *entry = Graph.Queue.front().get();
+        TLogEntry *entry = Graph.Queue.front().get(); 
         if (entry->Step < BlobStorageErrorStep && entry->Task) {
             // Commit still inflight, wait for result
             return false;

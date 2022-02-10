@@ -23,8 +23,8 @@ class TJsonPQConsumerInfo : public TActorBootstrapped<TJsonPQConsumerInfo> {
     TString Topic;
     TString Client;
     TString DC;
-    ui32 Version = 0;
-    ui32 Timeout = 0;
+    ui32 Version = 0; 
+    ui32 Timeout = 0; 
     ui32 Requests = 0;
     ui32 Responses = 0;
 

@@ -115,7 +115,7 @@ public:
 
 private:
     TOperationId OperationId;
-    ui64 RawOperationId = 0;
+    ui64 RawOperationId = 0; 
 
 }; // TCancelOperationRPC
 

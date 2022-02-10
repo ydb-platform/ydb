@@ -21,7 +21,7 @@ struct TClusterMainSettings {
     TString Database;
     TString DatabaseId;
     bool Secure = false;
-    bool AddBearerToToken = false;
+    bool AddBearerToToken = false; 
 
     TYdbClusterConfig Raw;
 };

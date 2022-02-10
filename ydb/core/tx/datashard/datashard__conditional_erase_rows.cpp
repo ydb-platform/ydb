@@ -545,7 +545,7 @@ void TDataShard::Handle(TEvDataShard::TEvConditionalEraseRowsRequest::TPtr& ev, 
             return;
         }
 
-        ui64 localTxId = 0;
+        ui64 localTxId = 0; 
         THolder<IScan> scan;
 
         switch (condition) {

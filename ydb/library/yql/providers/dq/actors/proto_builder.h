@@ -17,12 +17,12 @@ namespace NYql::NDqs {
 
 class TProtoBuilder {
 public:
-    TProtoBuilder(const TString& type, const TVector<TString>& columns);
+    TProtoBuilder(const TString& type, const TVector<TString>& columns); 
     ~TProtoBuilder();
 
-    bool CanBuildResultSet() const;
-    Ydb::ResultSet BuildResultSet(const TVector<NYql::NDqProto::TData>& data);
-    TString BuildYson(const TVector<NYql::NDqProto::TData>& data, ui64 maxBytesLimit = std::numeric_limits<ui64>::max());
+    bool CanBuildResultSet() const; 
+    Ydb::ResultSet BuildResultSet(const TVector<NYql::NDqProto::TData>& data); 
+    TString BuildYson(const TVector<NYql::NDqProto::TData>& data, ui64 maxBytesLimit = std::numeric_limits<ui64>::max()); 
     bool WriteYsonData(const NYql::NDqProto::TData& data, const std::function<bool(const TString& rawYson)>& func);
     bool WriteData(const NYql::NDqProto::TData& data, const std::function<bool(const NYql::NUdf::TUnboxedValuePod& value)>& func);
     bool WriteData(const TVector<NYql::NDqProto::TData>& data, const std::function<bool(const NYql::NUdf::TUnboxedValuePod& value)>& func);
@@ -33,7 +33,7 @@ private:
     NKikimr::NMiniKQL::TScopedAlloc Alloc;
     NKikimr::NMiniKQL::TTypeEnvironment TypeEnv;
     NKikimr::NMiniKQL::TType* ResultType;
-    const TVector<ui32> ColumnOrder;
+    const TVector<ui32> ColumnOrder; 
 };
 
 } // NYql::NDqs

@@ -1380,7 +1380,7 @@ bool ISource::AddExpressions(TContext& ctx, const TVector<TNodePtr>& expressions
             if (auto sessionWindow = dynamic_cast<TSessionWindow*>(expr.Get())) {
                 if (SessionWindow) {
                     ctx.Error(expr->GetPos()) << "Duplicate session window specification:";
-                    ctx.Error(SessionWindow->GetPos()) << "Previous session window is declared here";
+                    ctx.Error(SessionWindow->GetPos()) << "Previous session window is declared here"; 
                     return false;
                 }
                 SessionWindow = expr;
@@ -3338,7 +3338,7 @@ TSourcePtr TryMakeSourceFromExpression(TContext& ctx, const TString& currService
         TNodePtr tableKey = BuildTableKey(node->GetPos(), currService, currCluster, TDeferredAtom(node->GetPos(), *literal), view);
         TTableRef table(ctx.MakeName("table"), currService, currCluster, tableKey);
         table.Options = BuildInputOptions(node->GetPos(), GetContextHints(ctx));
-        return BuildTableSource(node->GetPos(), table);
+        return BuildTableSource(node->GetPos(), table); 
     }
 
     if (dynamic_cast<TLambdaNode*>(node.Get())) {
@@ -3350,7 +3350,7 @@ TSourcePtr TryMakeSourceFromExpression(TContext& ctx, const TString& currService
     TNodePtr tableKey = BuildTableKey(node->GetPos(), currService, currCluster, TDeferredAtom(wrappedNode, ctx), view);
     TTableRef table(ctx.MakeName("table"), currService, currCluster, tableKey);
     table.Options = BuildInputOptions(node->GetPos(), GetContextHints(ctx));
-    return BuildTableSource(node->GetPos(), table);
+    return BuildTableSource(node->GetPos(), table); 
 }
 
 void MakeTableFromExpression(TContext& ctx, TNodePtr node, TDeferredAtom& table) {

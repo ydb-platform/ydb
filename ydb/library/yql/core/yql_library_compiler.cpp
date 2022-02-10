@@ -13,25 +13,25 @@ namespace {
 bool ReplaceNodes(TExprNode& node, const TNodeOnNodeOwnedMap& replaces, bool& hasChanges, TNodeSet& visited, TNodeSet& parents)
 {
     if (!node.ChildrenSize()) {
-        return true;
-    }
+        return true; 
+    } 
 
     const auto pair = parents.emplace(&node);
-    if (!pair.second) {
+    if (!pair.second) { 
         return false;
-    }
+    } 
 
-    if (!visited.emplace(&node).second) {
-        parents.erase(pair.first);
-        return true;
-    }
-
+    if (!visited.emplace(&node).second) { 
+        parents.erase(pair.first); 
+        return true; 
+    } 
+ 
     for (ui32 i = 0U; i < node.ChildrenSize(); ++i) {
         auto& child = node.ChildRef(i);
         if (const auto it = replaces.find(node.Child(i)); replaces.cend() != it) {
             child = it->second;
             hasChanges = true;
-        }
+        } 
 
         if (!ReplaceNodes(*node.Child(i), replaces, hasChanges, visited, parents)) {
             child.Reset();
@@ -112,17 +112,17 @@ bool CompileLibrary(const TString& alias, const TString& script, TExprContext& c
 }
 
 bool LinkLibraries(THashMap<TString, TLibraryCohesion>& libs, TExprContext& ctx, TExprContext& ctxToClone, const TModulesTable* loadedModules) {
-    std::function<const TExportTable*(const TString&)> f = [loadedModules](const TString& normalizedModuleName) -> const TExportTable* {
-        if (!loadedModules) {
-            return nullptr;
-        }
-
-        return loadedModules->FindPtr(normalizedModuleName);
-    };
-
-    return LinkLibraries(libs, ctx, ctxToClone, f);
-}
-
+    std::function<const TExportTable*(const TString&)> f = [loadedModules](const TString& normalizedModuleName) -> const TExportTable* { 
+        if (!loadedModules) { 
+            return nullptr; 
+        } 
+ 
+        return loadedModules->FindPtr(normalizedModuleName); 
+    }; 
+ 
+    return LinkLibraries(libs, ctx, ctxToClone, f); 
+} 
+ 
 bool LinkLibraries(THashMap<TString, TLibraryCohesion>& libs, TExprContext& ctx, TExprContext& ctxToClone, const std::function<const TExportTable*(const TString&)>& module2ExportTable)
 {
     TNodeOnNodeOwnedMap clones, replaces;

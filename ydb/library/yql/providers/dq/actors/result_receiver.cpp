@@ -47,7 +47,7 @@ public:
         , SecureParams(std::move(secureParams))
         , ResultBuilder(
             resultType
-            ? MakeHolder<TProtoBuilder>(resultType, columns)
+            ? MakeHolder<TProtoBuilder>(resultType, columns) 
             : nullptr)
         , Discard(discard)
     {

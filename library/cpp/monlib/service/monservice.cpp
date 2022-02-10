@@ -16,9 +16,9 @@ TMonService2::TMonService2(ui16 port, const TString& host, ui32 threads, const T
     : TMonService2(HttpServerOptions(port, host, threads), title, std::move(auth))
 {
 }
-
+ 
 TMonService2::TMonService2(const THttpServerOptions& options, const TString& title, THolder<IAuthProvider> auth)
-    : NMonitoring::TMtHttpServer(options, std::bind(&TMonService2::ServeRequest, this, std::placeholders::_1, std::placeholders::_2))
+    : NMonitoring::TMtHttpServer(options, std::bind(&TMonService2::ServeRequest, this, std::placeholders::_1, std::placeholders::_2)) 
     , Title(title)
     , IndexMonPage(new TIndexMonPage("", Title))
     , AuthProvider_{std::move(auth)}

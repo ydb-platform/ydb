@@ -902,17 +902,17 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
 Y_UNIT_TEST_SUITE(SqlToYQLErrors) {
     Y_UNIT_TEST(StrayUTF8) {
         /// 'c' in plato is russian here
-        NYql::TAstParseResult res = SqlToYql("select * from сedar.Input");
+        NYql::TAstParseResult res = SqlToYql("select * from сedar.Input"); 
         UNIT_ASSERT(!res.Root);
-
-        TString a1 = Err2Str(res);
+ 
+        TString a1 = Err2Str(res); 
         TString a2(R"foo(<main>:1:14: Error: Unexpected character 'с' (Unicode character <1089>) : cannot match to any predicted input...
-
+ 
 <main>:1:15: Error: Unexpected character : cannot match to any predicted input...
-
-)foo");
-
-        UNIT_ASSERT_NO_DIFF(a1, a2);
+ 
+)foo"); 
+ 
+        UNIT_ASSERT_NO_DIFF(a1, a2); 
     }
 
     Y_UNIT_TEST(IvalidStringLiteralWithEscapedBackslash) {
@@ -999,7 +999,7 @@ Y_UNIT_TEST_SUITE(SqlToYQLErrors) {
     Y_UNIT_TEST(SelectNoCluster) {
         NYql::TAstParseResult res = SqlToYql("select foo from bar");
         UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:1: Error: No cluster name given and no default cluster is selected\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:1: Error: No cluster name given and no default cluster is selected\n"); 
     }
 
     Y_UNIT_TEST(SelectDuplicateColumns) {
@@ -1196,13 +1196,13 @@ Y_UNIT_TEST_SUITE(SqlToYQLErrors) {
     }
 
     Y_UNIT_TEST(UpsertValuesNoLabelsKikimr) {
-        NYql::TAstParseResult res = SqlToYql("upsert into plato.Output values (1)", 10, TString(NYql::KikimrProviderName));
+        NYql::TAstParseResult res = SqlToYql("upsert into plato.Output values (1)", 10, TString(NYql::KikimrProviderName)); 
         UNIT_ASSERT(!res.Root);
         UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:19: Error: UPSERT INTO ... VALUES requires specification of table columns\n");
     }
 
     Y_UNIT_TEST(ReplaceValuesNoLabelsKikimr) {
-        NYql::TAstParseResult res = SqlToYql("replace into plato.Output values (1)", 10, TString(NYql::KikimrProviderName));
+        NYql::TAstParseResult res = SqlToYql("replace into plato.Output values (1)", 10, TString(NYql::KikimrProviderName)); 
         UNIT_ASSERT(!res.Root);
         UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:20: Error: REPLACE INTO ... VALUES requires specification of table columns\n");
     }
@@ -1501,7 +1501,7 @@ Y_UNIT_TEST_SUITE(SqlToYQLErrors) {
     }
 
     Y_UNIT_TEST(InsertIntoWithTruncateKikimr) {
-        NYql::TAstParseResult res = SqlToYql("INSERT INTO plato.Output WITH TRUNCATE SELECT key FROM plato.Input", 10, TString(NYql::KikimrProviderName));
+        NYql::TAstParseResult res = SqlToYql("INSERT INTO plato.Output WITH TRUNCATE SELECT key FROM plato.Input", 10, TString(NYql::KikimrProviderName)); 
         UNIT_ASSERT(!res.Root);
         UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:0: Error: INSERT INTO WITH TRUNCATE is not supported for kikimr tables\n");
     }
@@ -1513,7 +1513,7 @@ Y_UNIT_TEST_SUITE(SqlToYQLErrors) {
     }
 
     Y_UNIT_TEST(UpsertWithWrongArgumentCount) {
-        NYql::TAstParseResult res = SqlToYql("upsert into plato.Output (key, value, subkey) values (2, '3');", 10, TString(NYql::KikimrProviderName));
+        NYql::TAstParseResult res = SqlToYql("upsert into plato.Output (key, value, subkey) values (2, '3');", 10, TString(NYql::KikimrProviderName)); 
         UNIT_ASSERT(!res.Root);
         UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:39: Error: VALUES have 2 columns, UPSERT INTO expects: 3\n");
     }
@@ -1666,23 +1666,23 @@ Y_UNIT_TEST_SUITE(SqlToYQLErrors) {
         UNIT_ASSERT(!res.Root);
         UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:0: Error: IF EXISTS in DROP TABLE is not supported.\n");
     }
-
+ 
     Y_UNIT_TEST(TooManyErrors) {
-        const char* q = R"(
-        USE plato;
-        $a1 = A;
-        $a2 = DateTime::ToDate($a1, $a1);
-        $a3 = DateTime::ToDate($a2, $a2);
-        $a4 = DateTime::ToDate($a3, $a3);
-
-        $s = (select b from plato.abc);
-
-        select $a4 from $s;
-)";
-
-        NYql::TAstParseResult res = SqlToYql(q, 10);
-        UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res),
+        const char* q = R"( 
+        USE plato; 
+        $a1 = A; 
+        $a2 = DateTime::ToDate($a1, $a1); 
+        $a3 = DateTime::ToDate($a2, $a2); 
+        $a4 = DateTime::ToDate($a3, $a3); 
+ 
+        $s = (select b from plato.abc); 
+ 
+        select $a4 from $s; 
+)"; 
+ 
+        NYql::TAstParseResult res = SqlToYql(q, 10); 
+        UNIT_ASSERT(!res.Root); 
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), 
             R"(<main>:3:15: Error: Column A is not in source column set. Did you mean b?
 <main>:3:15: Error: Column A is not in source column set. Did you mean b?
 <main>:3:15: Error: Column A is not in source column set. Did you mean b?
@@ -1693,8 +1693,8 @@ Y_UNIT_TEST_SUITE(SqlToYQLErrors) {
 <main>:3:15: Error: Column A is not in source column set. Did you mean b?
 <main>:3:15: Error: Column A is not in source column set. Did you mean b?
 <main>: Error: Too many issues, code: 1
-)");
-    }
+)"); 
+    } 
 
     Y_UNIT_TEST(ShouldCloneBindingForNamedParameter) {
         NYql::TAstParseResult res = SqlToYql(R"(
@@ -1721,24 +1721,24 @@ select FormatType($f());
         UNIT_ASSERT(res.Root);
         UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:51: Warning: Column names in SELECT don't match column specification in parenthesis. \"key\" doesn't match \"Key\". \"new_value\" doesn't match \"value\", code: 4517\n");
     }
-
-    Y_UNIT_TEST(YtCaseInsensitive) {
-        NYql::TAstParseResult res = SqlToYql("select * from PlatO.foo;");
-        UNIT_ASSERT(res.Root);
-
-        res = SqlToYql("use PlatO; select * from foo;");
-        UNIT_ASSERT(res.Root);
-    }
-
-    Y_UNIT_TEST(KikimrCaseSensitive) {
-        NYql::TAstParseResult res = SqlToYql("select * from PlatO.foo;", 10, "kikimr");
-        UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), R"(<main>:1:15: Error: Unknown cluster: PlatO
-<main>:1:15: Error: No cluster name given and no default cluster is selected
-)");
-
-        res = SqlToYql("use PlatO; select * from foo;", 10, "kikimr");
-        UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:5: Error: Unknown cluster: PlatO\n");
-    }
+ 
+    Y_UNIT_TEST(YtCaseInsensitive) { 
+        NYql::TAstParseResult res = SqlToYql("select * from PlatO.foo;"); 
+        UNIT_ASSERT(res.Root); 
+ 
+        res = SqlToYql("use PlatO; select * from foo;"); 
+        UNIT_ASSERT(res.Root); 
+    } 
+ 
+    Y_UNIT_TEST(KikimrCaseSensitive) { 
+        NYql::TAstParseResult res = SqlToYql("select * from PlatO.foo;", 10, "kikimr"); 
+        UNIT_ASSERT(!res.Root); 
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), R"(<main>:1:15: Error: Unknown cluster: PlatO 
+<main>:1:15: Error: No cluster name given and no default cluster is selected 
+)"); 
+ 
+        res = SqlToYql("use PlatO; select * from foo;", 10, "kikimr"); 
+        UNIT_ASSERT(!res.Root); 
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:5: Error: Unknown cluster: PlatO\n"); 
+    } 
 }

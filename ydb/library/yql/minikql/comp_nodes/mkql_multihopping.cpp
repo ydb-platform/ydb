@@ -17,7 +17,7 @@ namespace {
 const TStatKey Hop_NewHopsCount("MultiHop_NewHopsCount", true);
 const TStatKey Hop_ThrownEventsCount("MultiHop_ThrownEventsCount", true);
 const TStatKey Hop_EmptyTimeCount("MultiHop_EmptyTimeCount", true);
-const TStatKey Hop_KeysCount("MultiHop_KeysCount", true);
+const TStatKey Hop_KeysCount("MultiHop_KeysCount", true); 
 
 constexpr ui32 StateVersion = 1;
 
@@ -231,7 +231,7 @@ public:
                         CloseOldBuckets(*newWatermark, newHopsStat);
                     }
                 }
-                MKQL_SET_STAT(Ctx.Stats, Hop_KeysCount, StatesMap.size());
+                MKQL_SET_STAT(Ctx.Stats, Hop_KeysCount, StatesMap.size()); 
             }
         }
 

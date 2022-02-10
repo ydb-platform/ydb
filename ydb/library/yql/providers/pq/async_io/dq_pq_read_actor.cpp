@@ -98,7 +98,7 @@ public:
         NPq::NProto::TDqPqTopicSource&& sourceParams,
         NPq::NProto::TDqReadTaskParams&& readParams,
         NYdb::TDriver driver,
-        std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory,
+        std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory, 
         ICallbacks* callbacks,
         i64 bufferSize)
         : TActor<TDqPqReadActor>(&TDqPqReadActor::StateFunc)
@@ -107,13 +107,13 @@ public:
         , BufferSize(bufferSize)
         , HolderFactory(holderFactory)
         , Driver(std::move(driver))
-        , CredentialsProviderFactory(std::move(credentialsProviderFactory))
+        , CredentialsProviderFactory(std::move(credentialsProviderFactory)) 
         , SourceParams(std::move(sourceParams))
         , ReadParams(std::move(readParams))
         , StartingMessageTimestamp(TInstant::Now())
         , Callbacks(callbacks)
     {
-        Y_UNUSED(HolderFactory);
+        Y_UNUSED(HolderFactory); 
     }
 
     NYdb::NPersQueue::TPersQueueClientSettings GetPersQueueClientSettings() const {
@@ -121,7 +121,7 @@ public:
         opts.Database(SourceParams.GetDatabase())
             .DiscoveryEndpoint(SourceParams.GetEndpoint())
             .EnableSsl(SourceParams.GetUseSsl())
-            .CredentialsProviderFactory(CredentialsProviderFactory);
+            .CredentialsProviderFactory(CredentialsProviderFactory); 
 
         return opts;
     }
@@ -310,8 +310,8 @@ private:
                 LWPROBE(PqReadDataReceived, Self.TxId, Self.SourceParams.GetTopicPath(), data);
                 SINK_LOG_T("Data received: " << data);
 
-                Batch.emplace_back(NKikimr::NMiniKQL::MakeString(NUdf::TStringRef(data.Data(), data.Size())));
-                UsedSpace += data.Size();
+                Batch.emplace_back(NKikimr::NMiniKQL::MakeString(NUdf::TStringRef(data.Data(), data.Size()))); 
+                UsedSpace += data.Size(); 
             }
             Self.UpdateStateWithNewReadData(event);
             Self.CurrentDeferredCommit.Add(event);
@@ -352,7 +352,7 @@ private:
     const i64 BufferSize;
     const THolderFactory& HolderFactory;
     NYdb::TDriver Driver;
-    std::shared_ptr<NYdb::ICredentialsProviderFactory> CredentialsProviderFactory;
+    std::shared_ptr<NYdb::ICredentialsProviderFactory> CredentialsProviderFactory; 
     const NPq::NProto::TDqPqTopicSource SourceParams;
     const NPq::NProto::TDqReadTaskParams ReadParams;
     std::unique_ptr<NYdb::NPersQueue::TPersQueueClient> PersQueueClient;
@@ -360,7 +360,7 @@ private:
     NThreading::TFuture<void> EventFuture;
     THashMap<TPartitionKey, ui64> PartitionToOffset; // {cluster, partition} -> offset of next event.
     TInstant StartingMessageTimestamp;
-    ICallbacks* const Callbacks;
+    ICallbacks* const Callbacks; 
     std::queue<std::pair<ui64, NYdb::NPersQueue::TDeferredCommit>> DeferredCommits;
     NYdb::NPersQueue::TDeferredCommit CurrentDeferredCommit;
     bool SubscribedOnEvent = false;
@@ -373,11 +373,11 @@ std::pair<IDqSourceActor*, NActors::IActor*> CreateDqPqReadActor(
     const THashMap<TString, TString>& secureParams,
     const THashMap<TString, TString>& taskParams,
     NYdb::TDriver driver,
-    ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
-    IDqSourceActor::ICallbacks* callbacks,
+    ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory, 
+    IDqSourceActor::ICallbacks* callbacks, 
     const NKikimr::NMiniKQL::THolderFactory& holderFactory,
-    i64 bufferSize
-    )
+    i64 bufferSize 
+    ) 
 {
     auto taskParamsIt = taskParams.find("pq");
     YQL_ENSURE(taskParamsIt != taskParams.end(), "Failed to get pq task params");
@@ -385,22 +385,22 @@ std::pair<IDqSourceActor*, NActors::IActor*> CreateDqPqReadActor(
     NPq::NProto::TDqReadTaskParams readTaskParamsMsg;
     YQL_ENSURE(readTaskParamsMsg.ParseFromString(taskParamsIt->second), "Failed to parse DqPqRead task params");
 
-    const TString& tokenName = settings.GetToken().GetName();
-    const TString token = secureParams.Value(tokenName, TString());
+    const TString& tokenName = settings.GetToken().GetName(); 
+    const TString token = secureParams.Value(tokenName, TString()); 
     const bool addBearerToToken = settings.GetAddBearerToToken();
-
+ 
     TDqPqReadActor* actor = new TDqPqReadActor(
         inputIndex,
         std::holds_alternative<ui64>(txId) ? ToString(txId) : std::get<TString>(txId),
-        holderFactory,
+        holderFactory, 
         std::move(settings),
         std::move(readTaskParamsMsg),
-        std::move(driver),
+        std::move(driver), 
         CreateCredentialsProviderFactoryForStructuredToken(credentialsFactory, token, addBearerToToken),
-        callbacks,
-        bufferSize
-    );
-
+        callbacks, 
+        bufferSize 
+    ); 
+ 
     return {actor, actor};
 }
 
@@ -421,8 +421,8 @@ void RegisterDqPqReadActorFactory(TDqSourceFactory& factory, NYdb::TDriver drive
             credentialsFactory,
             args.Callback,
             args.HolderFactory);
-    });
-
-}
-
+    }); 
+ 
+} 
+ 
 } // namespace NYql::NDq

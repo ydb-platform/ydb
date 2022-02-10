@@ -322,7 +322,7 @@ evaluate_if_stmt: EVALUATE IF expr do_stmt (ELSE do_stmt)?;
 evaluate_for_stmt: EVALUATE FOR bind_parameter IN expr do_stmt (ELSE do_stmt)?;
 
 table_ref: opt_id_prefix (table_key | id_expr LPAREN table_arg (COMMA table_arg)* RPAREN) table_hints?;
-table_key: id_table_or_at (COLON id_or_string)?;
+table_key: id_table_or_at (COLON id_or_string)?; 
 table_arg: AT? expr (COLON id_or_string)?;
 table_hints: WITH (id_or_string | pure_column_list);
 
@@ -414,13 +414,13 @@ id: IDENTIFIER | keyword;
 id_schema: IDENTIFIER | keyword_restricted;
 id_expr: IDENTIFIER | keyword_compat | keyword_alter_uncompat | keyword_in_uncompat;
 in_id_expr: IDENTIFIER | keyword_compat | keyword_alter_uncompat;
-id_table: IDENTIFIER | keyword_restricted;
-id_table_or_at: AT? id_table;
+id_table: IDENTIFIER | keyword_restricted; 
+id_table_or_at: AT? id_table; 
 id_or_at: AT? id;
 
 opt_id_prefix: (id_or_string DOT)?;
 
-keyword: keyword_restricted | keyword_alter_uncompat | keyword_table_uncompat;
+keyword: keyword_restricted | keyword_alter_uncompat | keyword_table_uncompat; 
 keyword_restricted: keyword_compat | keyword_expr_uncompat | keyword_select_uncompat | keyword_in_uncompat;
 
 keyword_expr_uncompat:
@@ -447,11 +447,11 @@ keyword_expr_uncompat:
   | WHERE
 ;
 
-keyword_table_uncompat:
+keyword_table_uncompat: 
     ERASE
   | STREAM
-;
-
+; 
+ 
 keyword_select_uncompat:
     ALL
   | AS

@@ -1660,17 +1660,17 @@ public:
         TPosition pos,
         TSourcePtr source,
         TNodePtr with,
-        TVector<TNodePtr>&& terms,
+        TVector<TNodePtr>&& terms, 
         bool listCall,
-        bool stream,
+        bool stream, 
         const TWriteSettings& settings
     )
         : IRealSource(pos)
         , Source(std::move(source))
         , With(with)
-        , Terms(std::move(terms))
+        , Terms(std::move(terms)) 
         , ListCall(listCall)
-        , Stream(stream)
+        , Stream(stream) 
         , Settings(settings)
     {
     }
@@ -1689,16 +1689,16 @@ public:
             return false;
         }
 
-        if (Stream && !Source->IsStream()) {
-            ctx.Error(Pos) << "PROCESS STREAM is unsupported for non-streaming sources";
-            return false;
-        }
-
-        if (!Stream && Source->IsStream() && !ctx.PragmaDirectRead) {
-            ctx.Error(Pos) << "PROCESS STREAM must be used for streaming sources";
-            return false;
-        }
-
+        if (Stream && !Source->IsStream()) { 
+            ctx.Error(Pos) << "PROCESS STREAM is unsupported for non-streaming sources"; 
+            return false; 
+        } 
+ 
+        if (!Stream && Source->IsStream() && !ctx.PragmaDirectRead) { 
+            ctx.Error(Pos) << "PROCESS STREAM must be used for streaming sources"; 
+            return false; 
+        } 
+ 
         auto src = Source.Get();
         if (!With) {
             src->AllColumns();
@@ -1820,17 +1820,17 @@ public:
         return false;
     }
 
-    bool IsStream() const override {
-        return Stream;
-    }
-
+    bool IsStream() const override { 
+        return Stream; 
+    } 
+ 
     TWriteSettings GetWriteSettings() const override {
         return Settings;
     }
 
     TNodePtr DoClone() const final {
         return new TProcessSource(Pos, Source->CloneSource(), SafeClone(With),
-            CloneContainer(Terms), ListCall, Stream, Settings);
+            CloneContainer(Terms), ListCall, Stream, Settings); 
     }
 
 private:
@@ -1857,7 +1857,7 @@ private:
     TNodePtr TermsGround;
     TVector<TNodePtr> Terms;
     const bool ListCall;
-    const bool Stream;
+    const bool Stream; 
     const TWriteSettings Settings;
 };
 
@@ -1867,10 +1867,10 @@ TSourcePtr BuildProcess(
     TNodePtr with,
     TVector<TNodePtr>&& terms,
     bool listCall,
-    bool stream,
+    bool stream, 
     const TWriteSettings& settings
 ) {
-    return new TProcessSource(pos, std::move(source), with, std::move(terms), listCall, stream, settings);
+    return new TProcessSource(pos, std::move(source), with, std::move(terms), listCall, stream, settings); 
 }
 
 class TNestedProxySource: public IProxySource {

@@ -63,13 +63,13 @@ void OnDiscovery(
             auto& items = std::get<TItemsMap>(output);
             if (items.size() + contents.size() > 9000ULL) {
                 std::get<TIssues>(output) = { TIssue(pos, TStringBuilder() << "It's over nine thousand items under '" << std::get<0U>(keys) << std::get<1U>(keys) << "'!")};
-                break;
+                break; 
             }
 
             for (const auto& content : contents) {
                 items.emplace(content.Node("s3:Key", false, nss).Value<TString>(), content.Node("s3:Size", false, nss).Value<unsigned>());
             }
-
+ 
             if (root.Node("s3:IsTruncated", false, nss).Value<bool>()) {
                 if (const auto g = gateway.lock()) {
                     const auto& next = root.Node("s3:NextContinuationToken", false, nss).Value<TString>();
@@ -81,11 +81,11 @@ void OnDiscovery(
                         headers.emplace_back(token);
                     return g->Download(std::get<0U>(keys) + "?list-type=2&prefix=" + prefix + "&continuation-token=" + next + "&max-keys=" + maxKeys, std::move(headers), 0U,
                         std::bind(&OnDiscovery, gateway, pos, std::placeholders::_1, std::cref(keys), std::ref(output), std::move(promise), pendingBucketsWPtr, promiseInd));
-                }
+                } 
                 YQL_CLOG(INFO, ProviderS3) << "Gateway disappeared.";
-            }
+            } 
         }
-
+ 
         break;
     } catch (const std::exception& ex) {
         logMsg += TStringBuilder() << "Exception occurred: " << ex.what();
@@ -182,11 +182,11 @@ public:
                 const auto& object = read.Arg(2).Ref();
                 const std::string_view& path = object.Head().Content();
                 const auto& prefix = path.substr(0U, path.find_first_of("*?{"));
-                const auto& connect = State_->Configuration->Clusters.at(read.DataSource().Cluster().StringValue());
-                const auto& token = State_->Configuration->Tokens.at(read.DataSource().Cluster().StringValue());
-                const auto credentialsProviderFactory = CreateCredentialsProviderFactoryForStructuredToken(State_->CredentialsFactory, token);
-                const auto authToken = credentialsProviderFactory->CreateProvider()->GetAuthInfo();
-
+                const auto& connect = State_->Configuration->Clusters.at(read.DataSource().Cluster().StringValue()); 
+                const auto& token = State_->Configuration->Tokens.at(read.DataSource().Cluster().StringValue()); 
+                const auto credentialsProviderFactory = CreateCredentialsProviderFactoryForStructuredToken(State_->CredentialsFactory, token); 
+                const auto authToken = credentialsProviderFactory->CreateProvider()->GetAuthInfo(); 
+ 
                 std::get<TNodeSet>((*PendingBuckets_)[std::make_tuple(connect.Url, TString(prefix), authToken.empty() ? TString() : TString("X-YaCloud-SubjectToken:") += authToken)]).emplace(read.Raw());
             }
         }
@@ -223,9 +223,9 @@ public:
     }
 
     TStatus DoApplyAsyncChanges(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final {
-        // Raise errors if any
-        AllFuture_.GetValue();
-
+        // Raise errors if any 
+        AllFuture_.GetValue(); 
+ 
         TNodeOnNodeOwnedMap replaces(PendingBuckets_->size());
         auto buckets = std::move(*PendingBuckets_);
         auto count = 0ULL;
@@ -234,11 +234,11 @@ public:
             if (const auto issues = std::move(std::get<TIssues>(bucket.second))) {
                 YQL_CLOG(INFO, ProviderS3) << "Discovery " << std::get<0U>(bucket.first) << std::get<1U>(bucket.first) << " error " << issues.ToString();
                 std::for_each(issues.begin(), issues.end(), std::bind(&TExprContext::AddError, std::ref(ctx), std::placeholders::_1));
-                return TStatus::Error;
-            }
-
-            const auto nodes = std::move(std::get<TNodeSet>(bucket.second));
-            for (const auto r : nodes) {
+                return TStatus::Error; 
+            } 
+ 
+            const auto nodes = std::move(std::get<TNodeSet>(bucket.second)); 
+            for (const auto r : nodes) { 
                 const TS3Read read(r);
                 const auto& object = read.Arg(2).Ref();
                 const std::string_view& path = object.Head().Content();
@@ -278,7 +278,7 @@ public:
                     }
                     YQL_CLOG(INFO, ProviderS3) << "Object " << path << " has " << paths.size() << " items with total size " << total;
                 } else if (const auto f = items.find(TString(path)); items.cend() == f) {
-                    ctx.AddError(TIssue(ctx.GetPosition(object.Pos()), TStringBuilder() << "Object " <<  path << " doesn't exist."));
+                    ctx.AddError(TIssue(ctx.GetPosition(object.Pos()), TStringBuilder() << "Object " <<  path << " doesn't exist.")); 
                     return TStatus::Error;
                 } else if (const auto size = f->second; size > State_->Configuration->FileSizeLimit) {
                     ctx.AddError(TIssue(ctx.GetPosition(object.Pos()), TStringBuilder() << "Object " <<  path << " size " << size << " is too large."));

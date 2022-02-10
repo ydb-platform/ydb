@@ -72,7 +72,7 @@ namespace NPage {
             : Raw(std::move(raw))
             , End({ Max<TRowId>(), Max<ui16>(), 0, 0 })
         {
-            Y_VERIFY(uintptr_t(Raw.data()) % alignof(TEntry) == 0);
+            Y_VERIFY(uintptr_t(Raw.data()) % alignof(TEntry) == 0); 
 
             auto got = NPage::THello().Read(Raw, EPage::Frames);
 

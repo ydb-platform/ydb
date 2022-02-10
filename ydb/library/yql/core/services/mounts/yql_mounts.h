@@ -5,7 +5,7 @@
 
 namespace NYql {
 
-TUserDataTable GetYqlDefaultMounts();
+TUserDataTable GetYqlDefaultMounts(); 
 
 bool GetYqlDefaultModuleResolver(
         TExprContext& ctx,
@@ -18,7 +18,7 @@ bool GetYqlDefaultModuleResolverWithContext(
     const THashMap<TString, TString>& clusterMapping = {},
     bool optimizeLibraries = true);
 
-TUserDataTable GetYqlModuleResolver(
+TUserDataTable GetYqlModuleResolver( 
         TExprContext& ctx,
         IModuleResolver::TPtr& moduleResolver,
         const TVector<NUserData::TUserData>& userData,

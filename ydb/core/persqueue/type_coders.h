@@ -166,7 +166,7 @@ public:
 
     inline size_t Save(TFlatBlobDataOutputStream* output, TType value) {
         const auto zigZagged = static_cast<i64>(ZigZagEncode(value));
-        char varIntOut[sizeof(zigZagged) + 1];
+        char varIntOut[sizeof(zigZagged) + 1]; 
         auto bytes = out_long(zigZagged, varIntOut);
         output->Write(varIntOut, bytes);
         return bytes;

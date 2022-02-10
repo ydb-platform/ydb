@@ -146,7 +146,7 @@ THashMap<ui64, TShardParamValuesAndRanges> PartitionParamByKeyPrefix(const NDq::
         for (TPartitionWithRange& partitionWithRange : rangePartitions) {
             ui64 shardId = partitionWithRange.PartitionInfo->ShardId;
 
-            shardParamValues[shardId].emplace_back(paramValue);
+            shardParamValues[shardId].emplace_back(paramValue); 
 
             auto& shardData = ret[shardId];
             if (partitionWithRange.FullRange) {

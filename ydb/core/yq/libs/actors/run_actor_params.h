@@ -40,12 +40,12 @@ struct TRunActorParams { // TODO2 : Change name
         const TString& userId,
         const TString& owner,
         const int64_t previousQueryRevision,
-        TVector<YandexQuery::Connection> connections,
-        TVector<YandexQuery::Binding> bindings,
+        TVector<YandexQuery::Connection> connections, 
+        TVector<YandexQuery::Binding> bindings, 
         NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
         THashMap<TString, TString> accountIdSignatures,
         YandexQuery::QueryContent::QueryType queryType,
-        YandexQuery::ExecuteMode executeMode,
+        YandexQuery::ExecuteMode executeMode, 
         const TString& resultId,
         const YandexQuery::StateLoadMode stateLoadMode,
         const YandexQuery::StreamingDisposition& streamingDisposition,
@@ -61,8 +61,8 @@ struct TRunActorParams { // TODO2 : Change name
         const NMonitoring::TDynamicCounterPtr& clientCounters
     );
 
-    TRunActorParams(const TRunActorParams& params) = default;
-    TRunActorParams(TRunActorParams&& params) = default;
+    TRunActorParams(const TRunActorParams& params) = default; 
+    TRunActorParams(TRunActorParams&& params) = default; 
 
     NYdb::TDriver Driver;
     NYql::IHTTPGateway::TPtr S3Gateway;
@@ -87,11 +87,11 @@ struct TRunActorParams { // TODO2 : Change name
     const TString Owner;
     const int64_t PreviousQueryRevision;
     const TVector<YandexQuery::Connection> Connections;
-    const TVector<YandexQuery::Binding> Bindings;
+    const TVector<YandexQuery::Binding> Bindings; 
     const NYql::ISecuredServiceAccountCredentialsFactory::TPtr CredentialsFactory;
-    const THashMap<TString, TString> AccountIdSignatures;
+    const THashMap<TString, TString> AccountIdSignatures; 
     const YandexQuery::QueryContent::QueryType QueryType;
-    const YandexQuery::ExecuteMode ExecuteMode;
+    const YandexQuery::ExecuteMode ExecuteMode; 
     const TString ResultId;
     const YandexQuery::StateLoadMode StateLoadMode;
     const YandexQuery::StreamingDisposition StreamingDisposition;

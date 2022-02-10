@@ -577,7 +577,7 @@ public:
             firstRangeBegin = TSerializedCellVec::Serialize(firstKey);
         }
 
-        op.SplitDescription = std::make_shared<NKikimrTxDataShard::TSplitMergeDescription>();
+        op.SplitDescription = std::make_shared<NKikimrTxDataShard::TSplitMergeDescription>(); 
         // Fill src shards
         TString prevRangeEnd = firstRangeBegin;
         for (ui64 pi : srcPartitionIdxs) {
@@ -656,7 +656,7 @@ public:
         // Last dst shard ends where src shard used to end
         rangeEnds.push_back(tableInfo->GetPartitions()[srcPartitionIdx].EndOfRange);
 
-        op.SplitDescription = std::make_shared<NKikimrTxDataShard::TSplitMergeDescription>();
+        op.SplitDescription = std::make_shared<NKikimrTxDataShard::TSplitMergeDescription>(); 
         auto* srcRange = op.SplitDescription->AddSourceRanges();
         auto srcShardIdx = tableInfo->GetPartitions()[srcPartitionIdx].ShardIdx;
         srcRange->SetShardIdx(ui64(srcShardIdx.GetLocalId()));

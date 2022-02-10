@@ -24,13 +24,13 @@ namespace NBin {
         return SizeOfOne_<T>(left) + SizeOf(std::forward<Tail>(tail)...);
     }
 
-    template<typename T, typename = TStdLayoutOrVoid<T>>
+    template<typename T, typename = TStdLayoutOrVoid<T>> 
     static inline char* ToByte(T *ptr)
     {
         return static_cast<char*>(static_cast<void*>(ptr));
     }
 
-    template<typename T, typename = TStdLayoutOrVoid<T>>
+    template<typename T, typename = TStdLayoutOrVoid<T>> 
     static inline const char* ToByte(const T *ptr)
     {
         return static_cast<char*>(static_cast<void*>(ptr));

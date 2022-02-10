@@ -81,8 +81,8 @@ public:
         if (const auto& maybeYdbReadTable = TMaybeNode<TYdbReadTable>(read)) {
             const auto& ydbReadTable = maybeYdbReadTable.Cast();
             const auto& clusterName = ydbReadTable.DataSource().Cluster().Value();
-            const auto token = "cluster:default_" + TString(clusterName);
-            YQL_CLOG(INFO, ProviderYdb) << "Wrap " << read->Content() << " with token: " << token;
+            const auto token = "cluster:default_" + TString(clusterName); 
+            YQL_CLOG(INFO, ProviderYdb) << "Wrap " << read->Content() << " with token: " << token; 
 
             const auto rowType = ydbReadTable.Ref().GetTypeAnn()->Cast<TTupleExprType>()->GetItems().back()->Cast<TListExprType>()->GetItemType();
             auto columns = ydbReadTable.Columns().Ptr();
@@ -99,7 +99,7 @@ public:
                 .Input<TYdbSourceSettings>()
                     .Table(ydbReadTable.Table())
                     .Token<TCoSecureParam>()
-                        .Name().Build(token)
+                        .Name().Build(token) 
                         .Build()
                     .Columns(std::move(columns))
                     .Build()
@@ -126,7 +126,7 @@ public:
             srcDesc.SetDatabase(connect.Database);
             srcDesc.SetEndpoint(connect.Endpoint);
             srcDesc.SetSecure(connect.Secure);
-            srcDesc.SetAddBearerToToken(connect.AddBearerToToken);
+            srcDesc.SetAddBearerToToken(connect.AddBearerToToken); 
             srcDesc.SetToken(token);
 
             const auto& columns = settings.Columns();

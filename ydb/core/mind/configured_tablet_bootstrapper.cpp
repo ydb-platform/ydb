@@ -67,7 +67,7 @@ class TConfiguredTabletBootstrapper : public TActorBootstrapped<TConfiguredTable
         // not apply config
         const ui32 selfNode = SelfId().NodeId();
         if (Find(config.GetNode(), selfNode) != config.GetNode().end()) {
-            TIntrusivePtr<TTabletStorageInfo> storageInfo = TabletStorageInfoFromProto(config.GetInfo());
+            TIntrusivePtr<TTabletStorageInfo> storageInfo = TabletStorageInfoFromProto(config.GetInfo()); 
             const auto *appData = AppData();
 
             // extract from kikimr_services_initializer

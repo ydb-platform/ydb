@@ -1924,8 +1924,8 @@ private:
     ui64 DstSplitOpId;
     ui64 SrcSplitOpId;
     bool DstSplitSchemaInitialized = false;
-    std::shared_ptr<NKikimrTxDataShard::TSplitMergeDescription> DstSplitDescription;
-    std::shared_ptr<NKikimrTxDataShard::TSplitMergeDescription> SrcSplitDescription;
+    std::shared_ptr<NKikimrTxDataShard::TSplitMergeDescription> DstSplitDescription; 
+    std::shared_ptr<NKikimrTxDataShard::TSplitMergeDescription> SrcSplitDescription; 
     THashSet<TActorId> SrcAckSplitTo;
     THashMap<TActorId, THashSet<ui64>> SrcAckPartitioningChangedTo;
     const ui32 SysTablesToTransferAtSplit[4] = {

@@ -2010,7 +2010,7 @@ public:
     TNodeId NodeId = 0;
     bool Wait = true;
     TActorId WaitActorId;
-
+ 
     TTxMonEvent_DrainNode(const TActorId& source, NMon::TEvRemoteHttpInfo::TPtr& ev, TSelf* hive)
         : TBase(hive)
         , Event(ev->Release())
@@ -2035,9 +2035,9 @@ public:
 
     void Complete(const TActorContext& ctx) override {
         if (Wait) {
-            Self->Execute(Self->CreateSwitchDrainOn(NodeId, {.Persist = true, .KeepDown = true}, WaitActorId));
+            Self->Execute(Self->CreateSwitchDrainOn(NodeId, {.Persist = true, .KeepDown = true}, WaitActorId)); 
         } else {
-            Self->Execute(Self->CreateSwitchDrainOn(NodeId, {.Persist = true, .KeepDown = true}, {}));
+            Self->Execute(Self->CreateSwitchDrainOn(NodeId, {.Persist = true, .KeepDown = true}, {})); 
             ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes("{\"status\":\"SCHEDULED\"}"));
         }
     }

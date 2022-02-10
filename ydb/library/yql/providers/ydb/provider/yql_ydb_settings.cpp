@@ -34,7 +34,7 @@ void TYdbConfiguration::Init(
 
     const auto& endpoint = config.GetDefaultEndpoint();
 
-    for (const auto& cluster : config.GetClusterMapping()) {
+    for (const auto& cluster : config.GetClusterMapping()) { 
         this->Dispatch(cluster.GetName(), cluster.GetSettings());
 
         if (dbResolver) {
@@ -51,11 +51,11 @@ void TYdbConfiguration::Init(
             settings.DatabaseId = cluster.GetId();
         if (cluster.HasSecure())
             settings.Secure = cluster.GetSecure();
-        if (cluster.HasAddBearerToToken())
-            settings.AddBearerToToken = cluster.GetAddBearerToToken();
-
-        const TString authToken = typeCtx->FindCredentialContent("cluster:default_" + cluster.GetName(), "default_ydb", cluster.GetToken());
-        Tokens[cluster.GetName()] = ComposeStructuredTokenJsonForServiceAccount(cluster.GetServiceAccountId(), cluster.GetServiceAccountIdSignature(), authToken);
+        if (cluster.HasAddBearerToToken()) 
+            settings.AddBearerToToken = cluster.GetAddBearerToToken(); 
+ 
+        const TString authToken = typeCtx->FindCredentialContent("cluster:default_" + cluster.GetName(), "default_ydb", cluster.GetToken()); 
+        Tokens[cluster.GetName()] = ComposeStructuredTokenJsonForServiceAccount(cluster.GetServiceAccountId(), cluster.GetServiceAccountIdSignature(), authToken); 
         settings.Raw = cluster;
 
     }

@@ -31,7 +31,7 @@ public:
         if (Self->State == TShardState::Ready) {
             Self->SrcAckSplitTo.insert(Ev->Sender);
             Self->SrcSplitOpId = opId;
-            Self->SrcSplitDescription = std::make_shared<NKikimrTxDataShard::TSplitMergeDescription>(Ev->Get()->Record.GetSplitDescription());
+            Self->SrcSplitDescription = std::make_shared<NKikimrTxDataShard::TSplitMergeDescription>(Ev->Get()->Record.GetSplitDescription()); 
 
             // Persist split description
             TString splitDescr;

@@ -7,7 +7,7 @@
 
 namespace NYql {
 
-NThreading::TFuture<void> TDummyPqGateway::OpenSession(const TString& sessionId, const TString& username) {
+NThreading::TFuture<void> TDummyPqGateway::OpenSession(const TString& sessionId, const TString& username) { 
     with_lock (Mutex) {
         Y_ENSURE(sessionId);
         Y_ENSURE(username);
@@ -25,9 +25,9 @@ void TDummyPqGateway::CloseSession(const TString& sessionId) {
     }
 }
 
-NPq::NConfigurationManager::TAsyncDescribePathResult TDummyPqGateway::DescribePath(const TString& sessionId, const TString& cluster, const TString& database, const TString& path, const TString& token) {
+NPq::NConfigurationManager::TAsyncDescribePathResult TDummyPqGateway::DescribePath(const TString& sessionId, const TString& cluster, const TString& database, const TString& path, const TString& token) { 
     Y_UNUSED(database);
-    Y_UNUSED(token);
+    Y_UNUSED(token); 
     with_lock (Mutex) {
         Y_ENSURE(IsIn(OpenedSessions, sessionId), "Session " << sessionId << " is not opened in pq gateway");
         const auto key = std::make_pair(cluster, path);

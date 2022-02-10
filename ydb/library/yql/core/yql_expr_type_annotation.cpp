@@ -1824,23 +1824,23 @@ bool EnsureMinMaxArgsCount(const TExprNode& node, ui32 minArgs, ui32 maxArgs, TE
 }
 
 bool EnsureCallableMinArgsCount(const TPositionHandle& pos, ui32 args, ui32 expectedArgs, TExprContext& ctx) {
-    if (args < expectedArgs) {
+    if (args < expectedArgs) { 
         ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder() << "Callable expected at least " << expectedArgs << " argument(s), but got " << args));
-        return false;
-    }
-
-    return true;
-}
-
+        return false; 
+    } 
+ 
+    return true; 
+} 
+ 
 bool EnsureCallableMaxArgsCount(const TPositionHandle& pos, ui32 args, ui32 expectedArgs, TExprContext& ctx) {
-    if (args > expectedArgs) {
+    if (args > expectedArgs) { 
         ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder() << "Callable expected at most " << expectedArgs << " argument(s), but got " << args));
-        return false;
-    }
-
-    return true;
-}
-
+        return false; 
+    } 
+ 
+    return true; 
+} 
+ 
 bool EnsureAtom(const TExprNode& node, TExprContext& ctx) {
     if (HasError(node.GetTypeAnn(), ctx) || node.Type() != TExprNode::Atom) {
         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "Expected atom, but got: " << node.Type()));
@@ -4624,7 +4624,7 @@ TString GetTypeDiff(const TTypeAnnotationNode& left, const TTypeAnnotationNode& 
     return res;
 }
 
-TExprNode::TPtr ExpandTypeNoCache(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx) {
+TExprNode::TPtr ExpandTypeNoCache(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx) { 
     switch (type.GetKind()) {
     case ETypeAnnotationKind::Unit:
         return ctx.NewCallable(position, "UnitType", {});
@@ -4805,14 +4805,14 @@ TExprNode::TPtr ExpandTypeNoCache(TPositionHandle position, const TTypeAnnotatio
     }
 }
 
-TExprNode::TPtr ExpandType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx) {
-    TExprNode::TPtr& ret = ctx.TypeAsNodeCache[&type];
-    if (!ret) {
-        ret = ExpandTypeNoCache(position, type, ctx);
-    }
-    return ret;
-}
-
+TExprNode::TPtr ExpandType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx) { 
+    TExprNode::TPtr& ret = ctx.TypeAsNodeCache[&type]; 
+    if (!ret) { 
+        ret = ExpandTypeNoCache(position, type, ctx); 
+    } 
+    return ret; 
+} 
+ 
 bool IsSystemMember(const TStringBuf& memberName) {
     return memberName.StartsWith(TStringBuf("_yql_"));
 }

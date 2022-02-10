@@ -331,7 +331,7 @@ private:
     void SendEmptyResponse(TRequest& ev, std::string logText) {
         CPS_LOG_I(logText);
 
-        TResult result = {};
+        TResult result = {}; 
         auto event = std::make_unique<TEvResult>(result);
         NActors::TActivationContext::ActorSystem()->Send(new IEventHandle(ev->Sender, SelfId(), event.release(), 0, ev->Cookie));
     }

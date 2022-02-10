@@ -9,7 +9,7 @@ using namespace NMiniKQL;
 Y_UNIT_TEST_SUITE(TStatsRegistryTest) {
 
     Y_UNIT_TEST(Stats) {
-        static TStatKey key("key", false);
+        static TStatKey key("key", false); 
         auto stats = CreateDefaultStatsRegistry();
 
         stats->SetStat(key, 37);
@@ -38,9 +38,9 @@ Y_UNIT_TEST_SUITE(TStatsRegistryTest) {
     }
 
     Y_UNIT_TEST(ForEach) {
-        static TStatKey key1("key1", false), key2("key2", true);
-        UNIT_ASSERT(!key1.IsDeriv());
-        UNIT_ASSERT(key2.IsDeriv());
+        static TStatKey key1("key1", false), key2("key2", true); 
+        UNIT_ASSERT(!key1.IsDeriv()); 
+        UNIT_ASSERT(key2.IsDeriv()); 
 
         auto stats = CreateDefaultStatsRegistry();
         stats->SetStat(key1, 42);
@@ -61,7 +61,7 @@ Y_UNIT_TEST_SUITE(TStatsRegistryTest) {
     Y_UNIT_TEST(DuplicateKeys) {
         TString error;
         try {
-            static TStatKey key("my_key", false), sameKey("my_key", false);
+            static TStatKey key("my_key", false), sameKey("my_key", false); 
             // avoid variables elimitation
             Cerr << key.GetId() << ": " << key.GetName() << '\n'
                  << sameKey.GetId() << ": " << sameKey.GetName() << Endl;

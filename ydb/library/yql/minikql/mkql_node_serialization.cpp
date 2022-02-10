@@ -1045,11 +1045,11 @@ namespace {
 
     private:
         [[noreturn]] static void ThrowNoData() {
-            THROW yexception() << "No more data in buffer";
+            THROW yexception() << "No more data in buffer"; 
         }
 
         [[noreturn]] static void ThrowCorrupted() {
-            THROW yexception() << "Serialized data is corrupted";
+            THROW yexception() << "Serialized data is corrupted"; 
         }
 
         Y_FORCE_INLINE char Read() {

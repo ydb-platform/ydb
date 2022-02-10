@@ -17,7 +17,7 @@ PEERDIR(
 )
 
 SRCS(
-    cluster_mapping.cpp
+    cluster_mapping.cpp 
     sql.cpp
 )
 

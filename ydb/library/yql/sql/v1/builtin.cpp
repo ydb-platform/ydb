@@ -480,7 +480,7 @@ public:
                 return false;
             }
 
-            Args[1] = BuildQuotedAtom(Args[1]->GetPos(), *literal);
+            Args[1] = BuildQuotedAtom(Args[1]->GetPos(), *literal); 
         } else {
             if (Service.empty()) {
                 ctx.Error(GetPos()) << GetOpName() << " requires either one of \"yt\"/\"kikimr\"/\"rtmr\" as second argument or current cluster name";

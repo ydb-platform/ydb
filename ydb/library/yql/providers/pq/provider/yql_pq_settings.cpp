@@ -7,7 +7,7 @@ using namespace NCommon;
 TPqConfiguration::TPqConfiguration() {
     REGISTER_SETTING(*this, Consumer);
     REGISTER_SETTING(*this, Database);
-    REGISTER_SETTING(*this, PqReadByRtmrCluster_);
+    REGISTER_SETTING(*this, PqReadByRtmrCluster_); 
 }
 
 TPqSettings::TConstPtr TPqConfiguration::Snapshot() const {

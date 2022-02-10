@@ -17,10 +17,10 @@ struct TPqState : public TThrRefBase {
     using TPtr = TIntrusivePtr<TPqState>;
 
     struct TTopicMeta {
-        TPositionHandle Pos;
-        bool RawFormat = true;
-        TExprNode::TPtr RowSpec;
-        TExprNode::TPtr ColumnOrder;
+        TPositionHandle Pos; 
+        bool RawFormat = true; 
+        TExprNode::TPtr RowSpec; 
+        TExprNode::TPtr ColumnOrder; 
         TMaybe<::NPq::NConfigurationManager::TTopicDescription> Description;
     };
 
@@ -42,11 +42,11 @@ public:
         return Configuration->PqReadByRtmrCluster_.Get() != "dq";
     }
 
-public:
-    bool SupportRtmrMode = false;
-    const TString SessionId;
-    THashMap<std::pair<TString, TString>, TTopicMeta> Topics;
-
+public: 
+    bool SupportRtmrMode = false; 
+    const TString SessionId; 
+    THashMap<std::pair<TString, TString>, TTopicMeta> Topics; 
+ 
     TTypeAnnotationContext* Types = nullptr;
     TPqConfiguration::TPtr Configuration = MakeIntrusive<TPqConfiguration>();
     const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry = nullptr;

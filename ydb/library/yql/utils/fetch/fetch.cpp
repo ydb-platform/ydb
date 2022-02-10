@@ -67,9 +67,9 @@ public:
         Socket.Reset(new TSocket(TNetworkAddress(host, port), timeout));
         SocketInput.Reset(new TSocketInput(*Socket));
         SocketOutput.Reset(new TSocketOutput(*Socket));
-
-        Socket->SetSocketTimeout(timeout.Seconds(), timeout.MilliSeconds() % 1000);
-
+ 
+        Socket->SetSocketTimeout(timeout.Seconds(), timeout.MilliSeconds() % 1000); 
+ 
         if (https) {
             Ssl.Reset(new TOpenSslClientIO(SocketInput.Get(), SocketOutput.Get()));
         }
@@ -156,18 +156,18 @@ TFetchResultPtr Fetch(const THttpURL& url, const THttpHeaders& additionalHeaders
 
         if (responseCode >= 200 && responseCode < 300) {
             return fr;
-        }
-
-        if (responseCode == HTTP_NOT_MODIFIED) {
-            return fr;
-        }
-
-        if (IsRedirectCode(responseCode)) {
+        } 
+ 
+        if (responseCode == HTTP_NOT_MODIFIED) { 
+            return fr; 
+        } 
+ 
+        if (IsRedirectCode(responseCode)) { 
             currentUrl = fr->GetRedirectURL(currentUrl);
             YQL_LOG(INFO) << "Got redirect to " << currentUrl.PrintS();
-            continue;
+            continue; 
         }
-
+ 
         TString errorBody;
         try {
             errorBody = fr->GetStream().ReadAll();

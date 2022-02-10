@@ -33,7 +33,7 @@ class TJsonNodes : public TViewerPipeClient<TJsonNodes> {
     std::unordered_map<TString, THolder<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult>> DescribeResult;
     std::unique_ptr<TEvBlobStorage::TEvControllerConfigResponse> BaseConfig;
     TJsonSettings JsonSettings;
-    ui32 Timeout = 0;
+    ui32 Timeout = 0; 
     TString FilterTenant;
     std::vector<TNodeId> FilterNodeIds;
     std::unordered_set<TNodeId> NodeIds;
@@ -262,7 +262,7 @@ public:
             pDiskIndex.emplace(pDiskId, &pDiskInfo);
             return pDiskInfo;
         };
-
+ 
         if (BaseConfig) {
             const NKikimrBlobStorage::TEvControllerConfigResponse& pbRecord(BaseConfig->Record);
             const NKikimrBlobStorage::TConfigResponse::TStatus& pbStatus(pbRecord.GetResponse().GetStatus(0));
@@ -318,7 +318,7 @@ public:
                 }
             }
         }
-
+ 
         TStringStream json;
         TProtoToJson::ProtoToJson(json, nodesInfo, JsonSettings);
         Send(Initiator, new NMon::TEvHttpInfoRes(Viewer->GetHTTPOKJSON() + json.Str(), 0, NMon::IEvHttpInfoRes::EContentType::Custom));

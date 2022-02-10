@@ -3,21 +3,21 @@ OWNER(g:yq)
 LIBRARY()
 
 SRCS(
-    clusters_from_connections.cpp
+    clusters_from_connections.cpp 
     database_resolver.cpp
-    error.cpp
-    nodes_health_check.cpp
+    error.cpp 
+    nodes_health_check.cpp 
     nodes_manager.cpp
-    pending_fetcher.cpp
-    pinger.cpp
+    pending_fetcher.cpp 
+    pinger.cpp 
     proxy.cpp
-    proxy_private.cpp
-    result_writer.cpp
+    proxy_private.cpp 
+    result_writer.cpp 
     run_actor.cpp
     run_actor_params.cpp
-    system_clusters.cpp
-    table_bindings_from_bindings.cpp
-    task_get.cpp
+    system_clusters.cpp 
+    table_bindings_from_bindings.cpp 
+    task_get.cpp 
     task_ping.cpp
     task_result_write.cpp
 )

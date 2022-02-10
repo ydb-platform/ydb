@@ -18,6 +18,6 @@ namespace NYql {
 IGraphTransformer::TStatus EvaluateParameters(const TExprNode::TPtr& input, TExprNode::TPtr& output, TTypeAnnotationContext& types, TExprContext& ctx,
     const NKikimr::NMiniKQL::IFunctionRegistry& functionRegistry);
 
-bool ExtractParametersMetaAsYson(const TExprNode::TPtr& input, TTypeAnnotationContext& types, TExprContext& ctx, NYT::TNode& paramsMetaMap);
-
+bool ExtractParametersMetaAsYson(const TExprNode::TPtr& input, TTypeAnnotationContext& types, TExprContext& ctx, NYT::TNode& paramsMetaMap); 
+ 
 }

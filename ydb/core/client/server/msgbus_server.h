@@ -139,7 +139,7 @@ class TMessageBusServer : public IMessageBusServer, public NBus::IBusServerHandl
     std::shared_ptr<IPersQueueGetReadSessionsInfoWorkerFactory> PQReadSessionsInfoWorkerFactory;
 protected:
     TProtocol Protocol;
-    TActorSystem *ActorSystem = nullptr;
+    TActorSystem *ActorSystem = nullptr; 
     TIntrusivePtr<IMessageBusHttpServer> HttpServer;
 public:
     TMessageBusServer(

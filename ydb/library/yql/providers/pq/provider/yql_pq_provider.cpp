@@ -30,7 +30,7 @@ TDataProviderInitializer GetPqDataProviderInitializer(
             Y_UNUSED(operationOptions);
 
             auto state = MakeIntrusive<TPqState>(sessionId);
-            state->SupportRtmrMode = supportRtmrMode;
+            state->SupportRtmrMode = supportRtmrMode; 
             state->Types = typeCtx.Get();
             state->FunctionRegistry = functionRegistry;
             state->DbResolver = dbResolverWithMeta;
@@ -43,10 +43,10 @@ TDataProviderInitializer GetPqDataProviderInitializer(
             TDataProviderInfo info;
 
             info.Names.insert({TString{PqProviderName}});
-            info.Source = CreatePqDataSource(state, gateway);
-            info.Sink = CreatePqDataSink(state, gateway);
+            info.Source = CreatePqDataSource(state, gateway); 
+            info.Sink = CreatePqDataSink(state, gateway); 
 
-            info.OpenSession = [gateway](const TString& sessionId, const TString& username,
+            info.OpenSession = [gateway](const TString& sessionId, const TString& username, 
                                                   const TOperationProgressWriter& progressWriter, const TYqlOperationOptions& operationOptions,
                                                   TIntrusivePtr<IRandomProvider> randomProvider, TIntrusivePtr<ITimeProvider> timeProvider) {
                 Y_UNUSED(progressWriter);
@@ -54,7 +54,7 @@ TDataProviderInitializer GetPqDataProviderInitializer(
                 Y_UNUSED(randomProvider);
                 Y_UNUSED(timeProvider);
 
-                return gateway->OpenSession(sessionId, username);
+                return gateway->OpenSession(sessionId, username); 
             };
 
             info.CloseSession = [gateway](const TString& sessionId) {

@@ -14,15 +14,15 @@ namespace {
         Y_VERIFY(af == AF_INET || af == AF_INET6, "wrong af");
 
         SOCKET fd = ::socket(af, SOCK_STREAM, 0);
-        if (fd == INVALID_SOCKET) {
-            ythrow TSystemError() << "failed to create a socket";
-        }
+        if (fd == INVALID_SOCKET) { 
+            ythrow TSystemError() << "failed to create a socket"; 
+        } 
 
         int one = 1;
         int r1 = SetSockOpt(fd, SOL_SOCKET, SO_REUSEADDR, one);
-        if (r1 < 0) {
-            ythrow TSystemError() << "failed to setsockopt SO_REUSEADDR";
-        }
+        if (r1 < 0) { 
+            ythrow TSystemError() << "failed to setsockopt SO_REUSEADDR"; 
+        } 
 
 #ifdef SO_REUSEPORT
         if (reusePort) {
@@ -54,72 +54,72 @@ namespace {
 
         int r2 = ::bind(fd, sa, len);
         if (r2 < 0) {
-            ythrow TSystemError() << "failed to bind on port " << port;
+            ythrow TSystemError() << "failed to bind on port " << port; 
         }
 
         int rsn = ::getsockname(fd, addr->MutableAddr(), addr->LenPtr());
-        if (rsn < 0) {
-            ythrow TSystemError() << "failed to getsockname";
-        }
+        if (rsn < 0) { 
+            ythrow TSystemError() << "failed to getsockname"; 
+        } 
 
         int r3 = ::listen(fd, 50);
-        if (r3 < 0) {
-            ythrow TSystemError() << "listen failed";
-        }
+        if (r3 < 0) { 
+            ythrow TSystemError() << "listen failed"; 
+        } 
 
         TBindResult r;
         r.Socket.Reset(new TSocketHolder(fd));
         r.Addr = TNetAddr(addr.Release());
         return r;
     }
-
+ 
     TMaybe<TBindResult> TryBindOnPortProto(int port, int af, bool reusePort) {
-        try {
+        try { 
             return {BindOnPortProto(port, af, reusePort)};
-        } catch (const TSystemError&) {
-            return {};
-        }
-    }
-
-    std::pair<unsigned, TVector<TBindResult>> AggregateBindResults(TBindResult&& r1, TBindResult&& r2) {
-        Y_VERIFY(r1.Addr.GetPort() == r2.Addr.GetPort(), "internal");
-        std::pair<unsigned, TVector<TBindResult>> r;
-        r.second.reserve(2);
-
-        r.first = r1.Addr.GetPort();
-        r.second.emplace_back(std::move(r1));
-        r.second.emplace_back(std::move(r2));
-        return r;
-    }
+        } catch (const TSystemError&) { 
+            return {}; 
+        } 
+    } 
+ 
+    std::pair<unsigned, TVector<TBindResult>> AggregateBindResults(TBindResult&& r1, TBindResult&& r2) { 
+        Y_VERIFY(r1.Addr.GetPort() == r2.Addr.GetPort(), "internal"); 
+        std::pair<unsigned, TVector<TBindResult>> r; 
+        r.second.reserve(2); 
+ 
+        r.first = r1.Addr.GetPort(); 
+        r.second.emplace_back(std::move(r1)); 
+        r.second.emplace_back(std::move(r2)); 
+        return r; 
+    } 
 }
 
 std::pair<unsigned, TVector<TBindResult>> NBus::BindOnPort(int port, bool reusePort) {
     std::pair<unsigned, TVector<TBindResult>> r;
-    r.second.reserve(2);
+    r.second.reserve(2); 
 
     if (port != 0) {
         return AggregateBindResults(BindOnPortProto(port, AF_INET, reusePort),
                                     BindOnPortProto(port, AF_INET6, reusePort));
-    }
-
-    // use nothrow versions in cycle
-    for (int i = 0; i < 1000; ++i) {
+    } 
+ 
+    // use nothrow versions in cycle 
+    for (int i = 0; i < 1000; ++i) { 
         TMaybe<TBindResult> in4 = TryBindOnPortProto(0, AF_INET, reusePort);
-        if (!in4) {
-            continue;
+        if (!in4) { 
+            continue; 
         }
-
+ 
         TMaybe<TBindResult> in6 = TryBindOnPortProto(in4->Addr.GetPort(), AF_INET6, reusePort);
-        if (!in6) {
-            continue;
+        if (!in6) { 
+            continue; 
         }
-
-        return AggregateBindResults(std::move(*in4), std::move(*in6));
+ 
+        return AggregateBindResults(std::move(*in4), std::move(*in6)); 
     }
-
+ 
     TBindResult in4 = BindOnPortProto(0, AF_INET, reusePort);
     TBindResult in6 = BindOnPortProto(in4.Addr.GetPort(), AF_INET6, reusePort);
-    return AggregateBindResults(std::move(in4), std::move(in6));
+    return AggregateBindResults(std::move(in4), std::move(in6)); 
 }
 
 void NBus::NPrivate::SetSockOptTcpCork(SOCKET s, bool value) {

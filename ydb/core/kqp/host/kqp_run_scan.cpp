@@ -116,7 +116,7 @@ public:
         if (!handle.Snapshot.IsValid()) {
             YQL_CLOG(NOTICE, ProviderKqp) << "Failed to create persistent snapshot. "
                 << "Status: " << NKikimrIssues::TStatusIds_EStatusCode_Name(handle.Status)
-                << ", issues: " << handle.Issues().ToString();
+                << ", issues: " << handle.Issues().ToString(); 
 
             TIssue issue("Failed to create persistent snapshot");
             switch (handle.Status) {
@@ -135,7 +135,7 @@ public:
                     break;
             }
 
-            for (const auto& subIssue: handle.Issues()) {
+            for (const auto& subIssue: handle.Issues()) { 
                 issue.AddSubIssue(MakeIntrusive<TIssue>(subIssue));
             }
             ctx.AddError(issue);

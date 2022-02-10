@@ -1,11 +1,11 @@
-OWNER(
-    g:yq
-    g:yql
-)
-
-RECURSE(
-    actors
-    expr_nodes
-    proto
-    provider
-)
+OWNER( 
+    g:yq 
+    g:yql 
+) 
+ 
+RECURSE( 
+    actors 
+    expr_nodes 
+    proto 
+    provider 
+) 

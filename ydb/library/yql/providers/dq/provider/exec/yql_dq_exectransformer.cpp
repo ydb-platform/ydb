@@ -172,9 +172,9 @@ public:
         }
 
         auto serializedResultType = GetSerializedResultType(lambda);
-        NYql::NDqs::TProtoBuilder protoBuilder(serializedResultType, columns);
+        NYql::NDqs::TProtoBuilder protoBuilder(serializedResultType, columns); 
 
-        result.Data = protoBuilder.BuildYson(rows);
+        result.Data = protoBuilder.BuildYson(rows); 
 
         AddCounter("LocalRun", TInstant::Now() - t);
 

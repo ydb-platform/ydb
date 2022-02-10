@@ -271,7 +271,7 @@ void THive::ProcessBootQueue() {
 }
 
 void THive::PostponeProcessBootQueue(TDuration after) {
-    if (!ProcessBootQueuePostponed) {
+    if (!ProcessBootQueuePostponed) { 
         BLOG_D("PostponeProcessBootQueue (" << after << ")");
         ProcessBootQueuePostponed = true;
         Schedule(after, new TEvPrivate::TEvPostponeProcessBootQueue());
@@ -1086,7 +1086,7 @@ THive::TBestNodeResult THive::FindBestNode(const TTabletInfo& tablet) {
                     for (size_t i = 0; i < dcs.size(); ++i) {
                         dataCentersGroupsHolder[i].AddDataCenter(dcs[i]);
                         dataCentersGroupsHolder[i].AddDataCenterNum(DataCenterFromString(dcs[i]));
-                        dataCentersGroupsPointers[i] = dataCentersGroupsHolder.data() + i;
+                        dataCentersGroupsPointers[i] = dataCentersGroupsHolder.data() + i; 
                     }
                     dataCentersGroups = TArrayRef<const NKikimrHive::TDataCentersGroup*>(dataCentersGroupsPointers.data(), dcTablets.size());
                 }
@@ -1104,11 +1104,11 @@ THive::TBestNodeResult THive::FindBestNode(const TTabletInfo& tablet) {
         const NKikimrHive::TDataCentersGroup* dcGroup = dataCentersGroups[numGroup];
         if (dcGroup->DataCenterSize()) {
             for (TDataCenterId dc : dcGroup->GetDataCenter()) {
-                indexDC2Group[dc] = candidateGroups.data() + numGroup;
+                indexDC2Group[dc] = candidateGroups.data() + numGroup; 
             }
         } else {
             for (const ui64 dcId : dcGroup->GetDataCenterNum()) {
-                indexDC2Group[DataCenterToString(dcId)] = candidateGroups.data() + numGroup;
+                indexDC2Group[DataCenterToString(dcId)] = candidateGroups.data() + numGroup; 
             }
         }
     }
@@ -1137,7 +1137,7 @@ THive::TBestNodeResult THive::FindBestNode(const TTabletInfo& tablet) {
                        << " checking candidates group " << (itCandidateNodes - candidateGroups.begin() + 1)
                        << " of " << candidateGroups.size());
         }
-
+ 
         selectedNodes.clear();
         selectedNodes.reserve(candidateNodes.size());
 
@@ -1602,7 +1602,7 @@ void THive::FillTabletInfo(NKikimrHive::TEvResponseHiveInfo& response, ui64 tabl
                 if (!follower.IsRunning()) {
                     tabletInfo.SetLastAliveTimestamp(follower.Statistics.GetLastAliveTimestamp());
                 }
-                tabletInfo.SetRestartsPerPeriod(follower.Statistics.RestartTimestampSize());
+                tabletInfo.SetRestartsPerPeriod(follower.Statistics.RestartTimestampSize()); 
                 if (req.GetReturnMetrics()) {
                     tabletInfo.MutableMetrics()->CopyFrom(follower.GetResourceValues());
                 }
@@ -1820,7 +1820,7 @@ void THive::Handle(TEvHive::TEvCutTabletHistory::TPtr& ev) {
 void THive::Handle(TEvHive::TEvDrainNode::TPtr& ev) {
     Execute(CreateSwitchDrainOn(ev->Get()->Record.GetNodeID(),
     {
-        .Persist = ev->Get()->Record.GetPersist(),
+        .Persist = ev->Get()->Record.GetPersist(), 
         .KeepDown = ev->Get()->Record.GetKeepDown(),
         .DrainInFlight = ev->Get()->Record.GetDrainInFlight(),
     }, ev->Sender));
@@ -2189,7 +2189,7 @@ THive::THive(TTabletStorageInfo *info, const TActorId &tablet)
     , TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory)
     , HiveUid(Max<ui32>())
     , HiveDomain(Max<ui32>())
-    , RootHiveId()
+    , RootHiveId() 
     , HiveId(Max<ui64>())
     , HiveGeneration(0)
     , PipeClientCacheConfig(new NTabletPipe::TBoundedClientCacheConfig())

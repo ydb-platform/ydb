@@ -173,7 +173,7 @@ bool inline IsGRpcStatusGood(const TGrpcStatus& status) {
     return status.Ok();
 }
 
-// Response callback type - this callback will be called when request is finished
+// Response callback type - this callback will be called when request is finished 
 //  (or after getting each chunk in case of streaming mode)
 template<typename TResponse>
 using TResponseCallback = std::function<void (TGrpcStatus&&, TResponse&&)>;
@@ -236,8 +236,8 @@ public:
     using TPtr = TIntrusivePtr<TSimpleRequestProcessor>;
     using TAsyncRequest = TAsyncReaderPtr (TStub::*)(grpc::ClientContext*, const TRequest&, grpc::CompletionQueue*);
 
-    explicit TSimpleRequestProcessor(TResponseCallback<TResponse>&& callback)
-        : Callback_(std::move(callback))
+    explicit TSimpleRequestProcessor(TResponseCallback<TResponse>&& callback) 
+        : Callback_(std::move(callback)) 
     { }
 
     ~TSimpleRequestProcessor() {
@@ -316,8 +316,8 @@ public:
     using TPtr = TIntrusivePtr<TAdvancedRequestProcessor>;
     using TAsyncRequest = TAsyncReaderPtr (TStub::*)(grpc::ClientContext*, const TRequest&, grpc::CompletionQueue*);
 
-    explicit TAdvancedRequestProcessor(TAdvancedResponseCallback<TResponse>&& callback)
-        : Callback_(std::move(callback))
+    explicit TAdvancedRequestProcessor(TAdvancedResponseCallback<TResponse>&& callback) 
+        : Callback_(std::move(callback)) 
     { }
 
     ~TAdvancedRequestProcessor() {
@@ -1244,7 +1244,7 @@ public:
      */
     template<typename TRequest, typename TResponse>
     void DoRequest(const TRequest& request,
-                   TResponseCallback<TResponse> callback,
+                   TResponseCallback<TResponse> callback, 
                    typename TSimpleRequestProcessor<TStub, TRequest, TResponse>::TAsyncRequest asyncRequest,
                    const TCallMeta& metas = { },
                    IQueueClientContextProvider* provider = nullptr)
@@ -1259,7 +1259,7 @@ public:
      */
     template<typename TRequest, typename TResponse>
     void DoAdvancedRequest(const TRequest& request,
-                           TAdvancedResponseCallback<TResponse> callback,
+                           TAdvancedResponseCallback<TResponse> callback, 
                            typename TAdvancedRequestProcessor<TStub, TRequest, TResponse>::TAsyncRequest asyncRequest,
                            const TCallMeta& metas = { },
                            IQueueClientContextProvider* provider = nullptr)

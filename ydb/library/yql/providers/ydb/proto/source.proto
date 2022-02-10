@@ -11,5 +11,5 @@ message TSource {
     bool Secure = 6;
     repeated string Columns = 7;
     repeated uint32 KeyColumnTypes = 8;
-    bool AddBearerToToken = 9;
+    bool AddBearerToToken = 9; 
 }

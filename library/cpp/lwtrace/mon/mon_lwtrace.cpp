@@ -1798,7 +1798,7 @@ class TLogSources {
 private:
     TTraceCleaner& Cleaner;
     TInstant Now;
-    using TLogSourcePtr = std::unique_ptr<ILogSource>;
+    using TLogSourcePtr = std::unique_ptr<ILogSource>; 
     TMap<TString, TLogSourcePtr> LogSources;
 public:
     explicit TLogSources(TTraceCleaner& cleaner, TInstant now = TInstant::Now())
@@ -1809,20 +1809,20 @@ public:
     void Push(const TString& sid, const TAtomicSharedPtr<NLWTrace::TLogPb>& log)
     {
         TLogSourcePtr ls(new TSnapshotLogSource(sid, log));
-        LogSources.emplace(ls->GetId(), std::move(ls));
+        LogSources.emplace(ls->GetId(), std::move(ls)); 
     }
 
     void Push(const TString& id, const NLWTrace::TSession* trace)
     {
         TLogSourcePtr ls(new TTraceLogSource(id, trace, Cleaner));
-        LogSources.emplace(ls->GetId(), std::move(ls));
+        LogSources.emplace(ls->GetId(), std::move(ls)); 
     }
 
     template <class TFunc>
     void ForEach(TFunc& func)
     {
         for (auto& kv : LogSources) {
-            func.Push(kv.second.get());
+            func.Push(kv.second.get()); 
         }
     }
 
@@ -1830,7 +1830,7 @@ public:
     void ForEach(TFunc& func) const
     {
         for (const auto& kv : LogSources) {
-            func.Push(kv.second.get());
+            func.Push(kv.second.get()); 
         }
     }
 };

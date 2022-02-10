@@ -31,7 +31,7 @@ NYql::TAstParseResult SqlToYqlWithMode(const TString& query, NSQLTranslation::ES
     const auto service = provider ? provider : TString(NYql::YtProviderName);
     const TString cluster = "plato";
     settings.ClusterMapping[cluster] = service;
-    settings.ClusterMapping["hahn"] = NYql::YtProviderName;
+    settings.ClusterMapping["hahn"] = NYql::YtProviderName; 
     settings.MaxErrors = maxErrors;
     settings.Mode = mode;
     settings.Arena = &arena;
@@ -883,66 +883,66 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
             "USE plato; INSERT INTO Output SELECT STREAM key FROM Input;",
             10, TString(NYql::RtmrProviderName));
         UNIT_ASSERT(res.Root);
-
-        res = SqlToYql(
-            "USE plato; INSERT INTO Output SELECT key FROM Input;",
-            10, TString(NYql::RtmrProviderName));
-        UNIT_ASSERT(res.Root);
+ 
+        res = SqlToYql( 
+            "USE plato; INSERT INTO Output SELECT key FROM Input;", 
+            10, TString(NYql::RtmrProviderName)); 
+        UNIT_ASSERT(res.Root); 
     }
 
-    Y_UNIT_TEST(SelectStreamRtmrJoinWithYt) {
-        NYql::TAstParseResult res = SqlToYql(
-            "USE plato; INSERT INTO Output SELECT STREAM key FROM Input LEFT JOIN hahn.ttt as t ON Input.key = t.Name;",
-            10, TString(NYql::RtmrProviderName));
-        UNIT_ASSERT(res.Root);
-    }
-
-    Y_UNIT_TEST(SelectStreamNonRtmr) {
-        NYql::TAstParseResult res = SqlToYql(
-            "USE plato; INSERT INTO Output SELECT STREAM key FROM Input;",
-            10);
-        UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:31: Error: SELECT STREAM is unsupported for non-streaming sources\n");
-    }
-
+    Y_UNIT_TEST(SelectStreamRtmrJoinWithYt) { 
+        NYql::TAstParseResult res = SqlToYql( 
+            "USE plato; INSERT INTO Output SELECT STREAM key FROM Input LEFT JOIN hahn.ttt as t ON Input.key = t.Name;", 
+            10, TString(NYql::RtmrProviderName)); 
+        UNIT_ASSERT(res.Root); 
+    } 
+ 
+    Y_UNIT_TEST(SelectStreamNonRtmr) { 
+        NYql::TAstParseResult res = SqlToYql( 
+            "USE plato; INSERT INTO Output SELECT STREAM key FROM Input;", 
+            10); 
+        UNIT_ASSERT(!res.Root); 
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:31: Error: SELECT STREAM is unsupported for non-streaming sources\n"); 
+    } 
+ 
     Y_UNIT_TEST(GroupByHopRtmr) {
         NYql::TAstParseResult res = SqlToYql(R"(
-            USE plato; INSERT INTO Output SELECT key, SUM(value) AS value FROM Input
+            USE plato; INSERT INTO Output SELECT key, SUM(value) AS value FROM Input 
             GROUP BY key, HOP(subkey, "PT10S", "PT30S", "PT20S");
         )", 10, TString(NYql::RtmrProviderName));
         UNIT_ASSERT(res.Root);
     }
 
-    Y_UNIT_TEST(GroupByHopRtmrSubquery) {
-        // 'use plato' intentially avoided
-        NYql::TAstParseResult res = SqlToYql(R"(
-            SELECT COUNT(*) AS value FROM (SELECT * FROM plato.Input)
-            GROUP BY HOP(Data, "PT10S", "PT30S", "PT20S")
-        )", 10, TString(NYql::RtmrProviderName));
-        UNIT_ASSERT(res.Root);
-    }
-
-    Y_UNIT_TEST(GroupByHopRtmrSubqueryBinding) {
-        NYql::TAstParseResult res = SqlToYql(R"(
-            USE plato;
-            $q = SELECT * FROM Input;
-            INSERT INTO Output SELECT STREAM * FROM (
-                SELECT COUNT(*) AS value FROM $q
-                GROUP BY HOP(Data, "PT10S", "PT30S", "PT20S")
-            );
-        )", 10, TString(NYql::RtmrProviderName));
-        UNIT_ASSERT(res.Root);
-    }
-
-    Y_UNIT_TEST(GroupByNoHopRtmr) {
-        NYql::TAstParseResult res = SqlToYql(R"(
-            USE plato; INSERT INTO Output SELECT STREAM key, SUM(value) AS value FROM Input
-            GROUP BY key;
-        )", 10, TString(NYql::RtmrProviderName));
-        UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:3:22: Error: Streaming group by query must have a hopping window specification.\n");
-    }
-
+    Y_UNIT_TEST(GroupByHopRtmrSubquery) { 
+        // 'use plato' intentially avoided 
+        NYql::TAstParseResult res = SqlToYql(R"( 
+            SELECT COUNT(*) AS value FROM (SELECT * FROM plato.Input) 
+            GROUP BY HOP(Data, "PT10S", "PT30S", "PT20S") 
+        )", 10, TString(NYql::RtmrProviderName)); 
+        UNIT_ASSERT(res.Root); 
+    } 
+ 
+    Y_UNIT_TEST(GroupByHopRtmrSubqueryBinding) { 
+        NYql::TAstParseResult res = SqlToYql(R"( 
+            USE plato; 
+            $q = SELECT * FROM Input; 
+            INSERT INTO Output SELECT STREAM * FROM ( 
+                SELECT COUNT(*) AS value FROM $q 
+                GROUP BY HOP(Data, "PT10S", "PT30S", "PT20S") 
+            ); 
+        )", 10, TString(NYql::RtmrProviderName)); 
+        UNIT_ASSERT(res.Root); 
+    } 
+ 
+    Y_UNIT_TEST(GroupByNoHopRtmr) { 
+        NYql::TAstParseResult res = SqlToYql(R"( 
+            USE plato; INSERT INTO Output SELECT STREAM key, SUM(value) AS value FROM Input 
+            GROUP BY key; 
+        )", 10, TString(NYql::RtmrProviderName)); 
+        UNIT_ASSERT(!res.Root); 
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:3:22: Error: Streaming group by query must have a hopping window specification.\n"); 
+    } 
+ 
     Y_UNIT_TEST(KikimrInserts) {
          NYql::TAstParseResult res = SqlToYql(R"(
             USE plato;
@@ -1457,7 +1457,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
 
     Y_UNIT_TEST(PqReadByAfterUse) {
         ExpectFailWithError("use plato; pragma PqReadBy='plato2';",
-            "<main>:1:28: Error: Cluster in PqReadPqBy pragma differs from cluster specified in USE statement: plato2 != plato\n");
+            "<main>:1:28: Error: Cluster in PqReadPqBy pragma differs from cluster specified in USE statement: plato2 != plato\n"); 
 
         UNIT_ASSERT(SqlToYql("pragma PqReadBy='plato2';").IsOk());
         UNIT_ASSERT(SqlToYql("pragma PqReadBy='plato2'; use plato;").IsOk());
@@ -1498,8 +1498,8 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         bindSettings.Settings["format"] = "format";
         bindSettings.Settings["compression"] = "ccompression";
         bindSettings.Settings["bar"] = "1";
-        // schema is not validated in this test but should be valid YSON text
-        bindSettings.Settings["schema"] = R"__("[
+        // schema is not validated in this test but should be valid YSON text 
+        bindSettings.Settings["schema"] = R"__("[ 
                         "StructType";
                         [
                             [
@@ -1523,7 +1523,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
                                     "String"
                                 ]
                             ]
-                        ]])__";
+                        ]])__"; 
 
         settings.PrivateBindings["foo"] = bindSettings;
 
@@ -1536,7 +1536,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
             if (word == "MrObject") {
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos,
-                    line.find(R"__((MrObject '"path" '"format" '('('"bar" (String '"1")) '('"compression" (String '"ccompression")))))__"));
+                    line.find(R"__((MrObject '"path" '"format" '('('"bar" (String '"1")) '('"compression" (String '"ccompression")))))__")); 
             } else if (word == "userschema") {
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos,
                     line.find(R"__('('('"userschema" (SqlTypeFromYson)__"));
@@ -1667,17 +1667,17 @@ Y_UNIT_TEST_SUITE(ExternalFunction) {
 Y_UNIT_TEST_SUITE(SqlToYQLErrors) {
     Y_UNIT_TEST(StrayUTF8) {
         /// 'c' in plato is russian here
-        NYql::TAstParseResult res = SqlToYql("select * from сedar.Input");
+        NYql::TAstParseResult res = SqlToYql("select * from сedar.Input"); 
         UNIT_ASSERT(!res.Root);
-
-        TString a1 = Err2Str(res);
+ 
+        TString a1 = Err2Str(res); 
         TString a2(R"foo(<main>:1:14: Error: Unexpected character 'с' (Unicode character <1089>) : cannot match to any predicted input...
-
+ 
 <main>:1:15: Error: Unexpected character : cannot match to any predicted input...
-
-)foo");
-
-        UNIT_ASSERT_NO_DIFF(a1, a2);
+ 
+)foo"); 
+ 
+        UNIT_ASSERT_NO_DIFF(a1, a2); 
     }
 
     Y_UNIT_TEST(IvalidStringLiteralWithEscapedBackslash) {
@@ -2089,13 +2089,13 @@ Y_UNIT_TEST_SUITE(SqlToYQLErrors) {
     }
 
     Y_UNIT_TEST(UpsertValuesNoLabelsKikimr) {
-        NYql::TAstParseResult res = SqlToYql("upsert into plato.Output values (1)", 10, TString(NYql::KikimrProviderName));
+        NYql::TAstParseResult res = SqlToYql("upsert into plato.Output values (1)", 10, TString(NYql::KikimrProviderName)); 
         UNIT_ASSERT(!res.Root);
         UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:19: Error: UPSERT INTO ... VALUES requires specification of table columns\n");
     }
 
     Y_UNIT_TEST(ReplaceValuesNoLabelsKikimr) {
-        NYql::TAstParseResult res = SqlToYql("replace into plato.Output values (1)", 10, TString(NYql::KikimrProviderName));
+        NYql::TAstParseResult res = SqlToYql("replace into plato.Output values (1)", 10, TString(NYql::KikimrProviderName)); 
         UNIT_ASSERT(!res.Root);
         UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:20: Error: REPLACE INTO ... VALUES requires specification of table columns\n");
     }
@@ -2356,7 +2356,7 @@ Y_UNIT_TEST_SUITE(SqlToYQLErrors) {
     }
 
     Y_UNIT_TEST(InsertIntoWithTruncateKikimr) {
-        NYql::TAstParseResult res = SqlToYql("INSERT INTO plato.Output WITH TRUNCATE SELECT key FROM plato.Input", 10, TString(NYql::KikimrProviderName));
+        NYql::TAstParseResult res = SqlToYql("INSERT INTO plato.Output WITH TRUNCATE SELECT key FROM plato.Input", 10, TString(NYql::KikimrProviderName)); 
         UNIT_ASSERT(!res.Root);
         UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:0: Error: INSERT INTO WITH TRUNCATE is not supported for kikimr tables\n");
     }
@@ -2368,7 +2368,7 @@ Y_UNIT_TEST_SUITE(SqlToYQLErrors) {
     }
 
     Y_UNIT_TEST(UpsertWithWrongArgumentCount) {
-        NYql::TAstParseResult res = SqlToYql("upsert into plato.Output (key, value, subkey) values (2, '3');", 10, TString(NYql::KikimrProviderName));
+        NYql::TAstParseResult res = SqlToYql("upsert into plato.Output (key, value, subkey) values (2, '3');", 10, TString(NYql::KikimrProviderName)); 
         UNIT_ASSERT(!res.Root);
         UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:39: Error: VALUES have 2 columns, UPSERT INTO expects: 3\n");
     }
@@ -2524,16 +2524,16 @@ Y_UNIT_TEST_SUITE(SqlToYQLErrors) {
         UNIT_ASSERT(!res.Root);
         UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:0: Error: IF EXISTS in DROP TABLE is not supported.\n");
     }
-
+ 
     Y_UNIT_TEST(TooManyErrors) {
-        const char* q = R"(
-        USE plato;
+        const char* q = R"( 
+        USE plato; 
         select A, B, C, D, E, F, G, H, I, J, K, L, M, N from (select b from `abc`);
-)";
-
-        NYql::TAstParseResult res = SqlToYql(q, 10);
-        UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res),
+)"; 
+ 
+        NYql::TAstParseResult res = SqlToYql(q, 10); 
+        UNIT_ASSERT(!res.Root); 
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), 
             R"(<main>:3:16: Error: Column A is not in source column set. Did you mean b?
 <main>:3:19: Error: Column B is not in source column set. Did you mean b?
 <main>:3:22: Error: Column C is not in source column set. Did you mean b?
@@ -2544,7 +2544,7 @@ Y_UNIT_TEST_SUITE(SqlToYQLErrors) {
 <main>:3:37: Error: Column H is not in source column set. Did you mean b?
 <main>:3:40: Error: Column I is not in source column set. Did you mean b?
 <main>: Error: Too many issues, code: 1
-)");
+)"); 
     };
 
     Y_UNIT_TEST(ShouldCloneBindingForNamedParameter) {
@@ -2689,24 +2689,24 @@ select FormatType($f());
         UNIT_ASSERT(res.Root);
         UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:51: Warning: Column names in SELECT don't match column specification in parenthesis. \"key\" doesn't match \"Key\". \"new_value\" doesn't match \"value\", code: 4517\n");
     }
-
-    Y_UNIT_TEST(YtCaseInsensitive) {
-        NYql::TAstParseResult res = SqlToYql("select * from PlatO.foo;");
-        UNIT_ASSERT(res.Root);
-
-        res = SqlToYql("use PlatO; select * from foo;");
-        UNIT_ASSERT(res.Root);
-    }
-
-    Y_UNIT_TEST(KikimrCaseSensitive) {
-        NYql::TAstParseResult res = SqlToYql("select * from PlatO.foo;", 10, "kikimr");
-        UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:15: Error: Unknown cluster: PlatO\n");
-
-        res = SqlToYql("use PlatO; select * from foo;", 10, "kikimr");
-        UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:5: Error: Unknown cluster: PlatO\n");
-    }
+ 
+    Y_UNIT_TEST(YtCaseInsensitive) { 
+        NYql::TAstParseResult res = SqlToYql("select * from PlatO.foo;"); 
+        UNIT_ASSERT(res.Root); 
+ 
+        res = SqlToYql("use PlatO; select * from foo;"); 
+        UNIT_ASSERT(res.Root); 
+    } 
+ 
+    Y_UNIT_TEST(KikimrCaseSensitive) { 
+        NYql::TAstParseResult res = SqlToYql("select * from PlatO.foo;", 10, "kikimr"); 
+        UNIT_ASSERT(!res.Root); 
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:15: Error: Unknown cluster: PlatO\n"); 
+ 
+        res = SqlToYql("use PlatO; select * from foo;", 10, "kikimr"); 
+        UNIT_ASSERT(!res.Root); 
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:5: Error: Unknown cluster: PlatO\n"); 
+    } 
 
     Y_UNIT_TEST(DiscoveryModeForbidden) {
         NYql::TAstParseResult res = SqlToYqlWithMode("insert into plato.Output select * from plato.range(\"\", Input1, Input4)", NSQLTranslation::ESqlMode::DISCOVERY);
@@ -3940,7 +3940,7 @@ Y_UNIT_TEST_SUITE(SessionWindowNegative) {
             ";",
 
             "<main>:7:5: Error: Duplicate session window specification:\n"
-            "<main>:5:5: Error: Previous session window is declared here\n");
+            "<main>:5:5: Error: Previous session window is declared here\n"); 
 
         ExpectFailWithError(
             "SELECT\n"
@@ -3996,27 +3996,27 @@ Y_UNIT_TEST_SUITE(SessionWindowNegative) {
         ExpectFailWithError("SELECT 1 + SessionState(), MIN(key) over w from plato.Input group by key window w as (partition by SessionWindow(ts, 1)) ",
             "<main>:1:12: Error: SessionState can not be used here: SessionWindow specification is missing in GROUP BY. Maybe you forgot to add OVER `window_name`?\n");
     }
-
+ 
     Y_UNIT_TEST(AggregationBySessionStateIsNotSupportedYet) {
         ExpectFailWithError("SELECT SOME(1 + SessionState()), key from plato.Input group by key, SessionWindow(ts, 1);",
             "<main>:1:17: Error: SessionState with GROUP BY is not supported yet\n");
     }
 
-    Y_UNIT_TEST(SessionWindowInRtmr) {
-        NYql::TAstParseResult res = SqlToYql(
-            "SELECT * FROM plato.Input GROUP BY SessionWindow(ts, 10);",
-            10, TString(NYql::RtmrProviderName));
-        UNIT_ASSERT(!res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:54: Error: Streaming group by query must have a hopping window specification.\n");
-
-        res = SqlToYql(R"(
-            SELECT key, SUM(value) AS value FROM plato.Input
-            GROUP BY key, HOP(subkey, "PT10S", "PT30S", "PT20S"), SessionWindow(ts, 10);
-        )", 10, TString(NYql::RtmrProviderName));
-
-        UNIT_ASSERT(!res.Root);
+    Y_UNIT_TEST(SessionWindowInRtmr) { 
+        NYql::TAstParseResult res = SqlToYql( 
+            "SELECT * FROM plato.Input GROUP BY SessionWindow(ts, 10);", 
+            10, TString(NYql::RtmrProviderName)); 
+        UNIT_ASSERT(!res.Root); 
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:54: Error: Streaming group by query must have a hopping window specification.\n"); 
+ 
+        res = SqlToYql(R"( 
+            SELECT key, SUM(value) AS value FROM plato.Input 
+            GROUP BY key, HOP(subkey, "PT10S", "PT30S", "PT20S"), SessionWindow(ts, 10); 
+        )", 10, TString(NYql::RtmrProviderName)); 
+ 
+        UNIT_ASSERT(!res.Root); 
         UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:2:13: Error: SessionWindow is unsupported for streaming sources\n");
-    }
+    } 
 }
 
 Y_UNIT_TEST_SUITE(LibraSqlSugar) {

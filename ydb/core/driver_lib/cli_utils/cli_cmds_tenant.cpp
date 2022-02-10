@@ -600,10 +600,10 @@ public:
     TClientCommandTenantUnits()
         : TClientCommandTree("units", {}, "")
     {
-        AddCommand(std::make_unique<TClientCommandTenantAddUnits>());
-        AddCommand(std::make_unique<TClientCommandTenantRemoveUnits>());
-        AddCommand(std::make_unique<TClientCommandTenantRegisterUnits>());
-        AddCommand(std::make_unique<TClientCommandTenantDeregisterUnits>());
+        AddCommand(std::make_unique<TClientCommandTenantAddUnits>()); 
+        AddCommand(std::make_unique<TClientCommandTenantRemoveUnits>()); 
+        AddCommand(std::make_unique<TClientCommandTenantRegisterUnits>()); 
+        AddCommand(std::make_unique<TClientCommandTenantDeregisterUnits>()); 
     }
 };
 
@@ -612,7 +612,7 @@ public:
     TClientCommandTenantPools()
         : TClientCommandTree("pools", {}, "")
     {
-        AddCommand(std::make_unique<TClientCommandTenantAddPools>());
+        AddCommand(std::make_unique<TClientCommandTenantAddPools>()); 
     }
 };
 
@@ -621,11 +621,11 @@ public:
     TClientCommandTenantName()
         : TClientCommandTree("*", {}, "<database name>")
     {
-        AddCommand(std::make_unique<TClientCommandTenantCreate>());
-        AddCommand(std::make_unique<TClientCommandTenantPools>());
-        AddCommand(std::make_unique<TClientCommandTenantRemove>());
-        AddCommand(std::make_unique<TClientCommandTenantStatus>());
-        AddCommand(std::make_unique<TClientCommandTenantUnits>());
+        AddCommand(std::make_unique<TClientCommandTenantCreate>()); 
+        AddCommand(std::make_unique<TClientCommandTenantPools>()); 
+        AddCommand(std::make_unique<TClientCommandTenantRemove>()); 
+        AddCommand(std::make_unique<TClientCommandTenantStatus>()); 
+        AddCommand(std::make_unique<TClientCommandTenantUnits>()); 
     }
 
     virtual void Parse(TConfig& config) override {
@@ -638,9 +638,9 @@ public:
 TClientCommandTenant::TClientCommandTenant()
     : TClientCommandTree("database", {"db", "tenant"}, "Database administration")
 {
-    AddCommand(std::make_unique<TClientCommandTenantName>());
-    AddCommand(std::make_unique<TClientCommandTenantList>());
-    AddCommand(std::make_unique<TClientCommandTenantOptions>());
+    AddCommand(std::make_unique<TClientCommandTenantName>()); 
+    AddCommand(std::make_unique<TClientCommandTenantList>()); 
+    AddCommand(std::make_unique<TClientCommandTenantOptions>()); 
 }
 
 }

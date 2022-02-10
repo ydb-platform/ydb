@@ -95,15 +95,15 @@ public:
         const TString& txId,
         NPq::NProto::TDqPqTopicSink&& sinkParams,
         NYdb::TDriver driver,
-        std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory,
+        std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory, 
         IDqSinkActor::ICallbacks* callbacks,
         i64 freeSpace)
         : TActor<TDqPqWriteActor>(&TDqPqWriteActor::StateFunc)
         , OutputIndex(outputIndex)
         , TxId(txId)
         , SinkParams(std::move(sinkParams))
-        , Driver(std::move(driver))
-        , CredentialsProviderFactory(credentialsProviderFactory)
+        , Driver(std::move(driver)) 
+        , CredentialsProviderFactory(credentialsProviderFactory) 
         , Callbacks(callbacks)
         , FreeSpace(freeSpace)
         , PersQueueClient(Driver, GetPersQueueClientSettings())
@@ -233,12 +233,12 @@ private:
                 : NYdb::NPersQueue::ECodec::GZIP);
     }
 
-    NYdb::NPersQueue::TPersQueueClientSettings GetPersQueueClientSettings() {
-        return NYdb::NPersQueue::TPersQueueClientSettings()
+    NYdb::NPersQueue::TPersQueueClientSettings GetPersQueueClientSettings() { 
+        return NYdb::NPersQueue::TPersQueueClientSettings() 
             .Database(SinkParams.GetDatabase())
             .DiscoveryEndpoint(SinkParams.GetEndpoint())
             .EnableSsl(SinkParams.GetUseSsl())
-            .CredentialsProviderFactory(CredentialsProviderFactory);
+            .CredentialsProviderFactory(CredentialsProviderFactory); 
     }
 
     static i64 GetItemSize(const TString& item) {
@@ -370,7 +370,7 @@ private:
     const TString TxId;
     const NPq::NProto::TDqPqTopicSink SinkParams;
     NYdb::TDriver Driver;
-    std::shared_ptr<NYdb::ICredentialsProviderFactory> CredentialsProviderFactory;
+    std::shared_ptr<NYdb::ICredentialsProviderFactory> CredentialsProviderFactory; 
     IDqSinkActor::ICallbacks* const Callbacks;
     i64 FreeSpace = 0;
 
@@ -394,19 +394,19 @@ std::pair<IDqSinkActor*, NActors::IActor*> CreateDqPqWriteActor(
     TTxId txId,
     const THashMap<TString, TString>& secureParams,
     NYdb::TDriver driver,
-    ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
+    ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory, 
     IDqSinkActor::ICallbacks* callbacks,
     i64 freeSpace)
 {
-    const TString& tokenName = settings.GetToken().GetName();
-    const TString token = secureParams.Value(tokenName, TString());
+    const TString& tokenName = settings.GetToken().GetName(); 
+    const TString token = secureParams.Value(tokenName, TString()); 
     const bool addBearerToToken = settings.GetAddBearerToToken();
-
+ 
     TDqPqWriteActor* actor = new TDqPqWriteActor(
         outputIndex,
         std::holds_alternative<ui64>(txId) ? ToString(txId) : std::get<TString>(txId),
         std::move(settings),
-        std::move(driver),
+        std::move(driver), 
         CreateCredentialsProviderFactoryForStructuredToken(credentialsFactory, token, addBearerToToken),
         callbacks,
         freeSpace);
@@ -415,7 +415,7 @@ std::pair<IDqSinkActor*, NActors::IActor*> CreateDqPqWriteActor(
 
 void RegisterDqPqWriteActorFactory(TDqSinkFactory& factory, NYdb::TDriver driver, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory) {
     factory.Register<NPq::NProto::TDqPqTopicSink>("PqSink",
-        [driver = std::move(driver), credentialsFactory = std::move(credentialsFactory)](
+        [driver = std::move(driver), credentialsFactory = std::move(credentialsFactory)]( 
             NPq::NProto::TDqPqTopicSink&& settings,
             IDqSinkActorFactory::TArguments&& args)
         {
@@ -425,10 +425,10 @@ void RegisterDqPqWriteActorFactory(TDqSinkFactory& factory, NYdb::TDriver driver
                 args.OutputIndex,
                 args.TxId,
                 args.SecureParams,
-                driver,
-                credentialsFactory,
+                driver, 
+                credentialsFactory, 
                 args.Callback
-            );
+            ); 
         });
 }
 

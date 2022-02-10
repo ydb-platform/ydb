@@ -31,10 +31,10 @@ public:
     TDummyPqGateway& AddDummyTopic(const TDummyTopic& topic);
 
 public:
-    NThreading::TFuture<void> OpenSession(const TString& sessionId, const TString& username) override;
+    NThreading::TFuture<void> OpenSession(const TString& sessionId, const TString& username) override; 
     void CloseSession(const TString& sessionId) override;
 
-    NPq::NConfigurationManager::TAsyncDescribePathResult DescribePath(const TString& sessionId, const TString& cluster, const TString& database, const TString& path, const TString& token) override;
+    NPq::NConfigurationManager::TAsyncDescribePathResult DescribePath(const TString& sessionId, const TString& cluster, const TString& database, const TString& path, const TString& token) override; 
 
     void UpdateClusterConfigs(
         const TString& clusterName,
@@ -43,7 +43,7 @@ public:
         bool secure) override;
 
 private:
-    mutable TMutex Mutex;
+    mutable TMutex Mutex; 
     THashMap<std::pair<TString, TString>, TDummyTopic> Topics;
     THashSet<TString> OpenedSessions;
 };

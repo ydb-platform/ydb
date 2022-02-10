@@ -209,14 +209,14 @@ public:
     TClientCommandDisk()
         : TClientCommandTree("disk", {}, "Disk management")
     {
-        AddCommand(std::make_unique<TClientCommandDiskInfo>());
-        AddCommand(std::make_unique<TClientCommandDiskFormat>());
-        AddCommand(std::make_unique<TClientCommandDiskObliterate>());
+        AddCommand(std::make_unique<TClientCommandDiskInfo>()); 
+        AddCommand(std::make_unique<TClientCommandDiskFormat>()); 
+        AddCommand(std::make_unique<TClientCommandDiskObliterate>()); 
     }
 };
 
-std::unique_ptr<TClientCommand> CreateClientCommandDisk() {
-    return std::make_unique<TClientCommandDisk>();
+std::unique_ptr<TClientCommand> CreateClientCommandDisk() { 
+    return std::make_unique<TClientCommandDisk>(); 
 }
 
 }

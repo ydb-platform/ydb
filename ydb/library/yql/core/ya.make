@@ -27,8 +27,8 @@ SRCS(
     yql_gc_transformer.h
     yql_graph_transformer.cpp
     yql_graph_transformer.h
-    yql_holding_file_storage.cpp
-    yql_holding_file_storage.h
+    yql_holding_file_storage.cpp 
+    yql_holding_file_storage.h 
     yql_join.cpp
     yql_join.h
     yql_library_compiler.cpp
@@ -47,16 +47,16 @@ SRCS(
     yql_type_annotation.h
     yql_type_helpers.cpp
     yql_type_helpers.h
-    yql_udf_index.cpp
-    yql_udf_index.h
-    yql_udf_index_package_set.cpp
-    yql_udf_index_package_set.h
-    yql_udf_resolver.cpp
-    yql_udf_resolver.h
-    yql_user_data.cpp
-    yql_user_data.h
-    yql_user_data_storage.cpp
-    yql_user_data_storage.h
+    yql_udf_index.cpp 
+    yql_udf_index.h 
+    yql_udf_index_package_set.cpp 
+    yql_udf_index_package_set.h 
+    yql_udf_resolver.cpp 
+    yql_udf_resolver.h 
+    yql_user_data.cpp 
+    yql_user_data.h 
+    yql_user_data_storage.cpp 
+    yql_user_data_storage.h 
 )
 
 PEERDIR(
@@ -82,7 +82,7 @@ PEERDIR(
 
 GENERATE_ENUM_SERIALIZATION(yql_data_provider.h)
 
-GENERATE_ENUM_SERIALIZATION(yql_user_data.h)
+GENERATE_ENUM_SERIALIZATION(yql_user_data.h) 
 
 GENERATE_ENUM_SERIALIZATION(yql_atom_enums.h)
 

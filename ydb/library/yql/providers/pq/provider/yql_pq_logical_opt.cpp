@@ -24,8 +24,8 @@ public:
     {
 #define HNDL(name) "LogicalOptimizer-"#name, Hndl(&TPqLogicalOptProposalTransformer::name)
         AddHandler(0, &TCoLeft::Match, HNDL(TrimReadWorld));
-      //  AddHandler(0, &TCoExtractMembers::Match, HNDL(ExtractMembers));
-      //  AddHandler(0, &TCoExtractMembers::Match, HNDL(ExtractMembersOverDqWrap));
+      //  AddHandler(0, &TCoExtractMembers::Match, HNDL(ExtractMembers)); 
+      //  AddHandler(0, &TCoExtractMembers::Match, HNDL(ExtractMembersOverDqWrap)); 
         #undef HNDL
     }
 
@@ -37,7 +37,7 @@ public:
 
         return TExprBase(ctx.NewWorld(node.Pos()));
     }
-    /*
+    /* 
     TMaybeNode<TExprBase> ExtractMembers(TExprBase node, TExprContext& ctx) const {
         const auto& extract = node.Cast<TCoExtractMembers>();
         const auto& input = extract.Input();
@@ -73,7 +73,7 @@ public:
             .Columns(extract.Members())
             .Build()
             .Done();
-    }*/
+    }*/ 
 
 private:
     TPqState::TPtr State_;

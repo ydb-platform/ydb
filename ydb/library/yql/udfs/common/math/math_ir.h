@@ -109,21 +109,21 @@ void FuzzyEqualsIR(const IBoxedValue* /*pThis*/, TUnboxedValuePod* result, const
 
 extern "C" UDF_ALWAYS_INLINE
 void RoundIR(const IBoxedValue* /*pThis*/, TUnboxedValuePod* result, const IValueBuilder* /*valueBuilder*/, const TUnboxedValuePod* args) {
-    const double val = NMathUdf::RoundToDecimal<long double>(args[0].Get<double>(), args[1].GetOrDefault<int>(0));
+    const double val = NMathUdf::RoundToDecimal<long double>(args[0].Get<double>(), args[1].GetOrDefault<int>(0)); 
     *result = TUnboxedValuePod(val);
 }
 
-extern "C" UDF_ALWAYS_INLINE
-void ModIR(const IBoxedValue* /*pThis*/, TUnboxedValuePod* result, const IValueBuilder* /*valueBuilder*/, const TUnboxedValuePod* args) {
-    const auto val = NMathUdf::Mod(args[0].Get<i64>(), args[1].Get<i64>());
-    *result = val ? TUnboxedValuePod(*val) : TUnboxedValuePod();
-}
-
-extern "C" UDF_ALWAYS_INLINE
-void RemIR(const IBoxedValue* /*pThis*/, TUnboxedValuePod* result, const IValueBuilder* /*valueBuilder*/, const TUnboxedValuePod* args) {
-    const auto val = NMathUdf::Rem(args[0].Get<i64>(), args[1].Get<i64>());
-    *result = val ? TUnboxedValuePod(*val) : TUnboxedValuePod();
-}
-
+extern "C" UDF_ALWAYS_INLINE 
+void ModIR(const IBoxedValue* /*pThis*/, TUnboxedValuePod* result, const IValueBuilder* /*valueBuilder*/, const TUnboxedValuePod* args) { 
+    const auto val = NMathUdf::Mod(args[0].Get<i64>(), args[1].Get<i64>()); 
+    *result = val ? TUnboxedValuePod(*val) : TUnboxedValuePod(); 
+} 
+ 
+extern "C" UDF_ALWAYS_INLINE 
+void RemIR(const IBoxedValue* /*pThis*/, TUnboxedValuePod* result, const IValueBuilder* /*valueBuilder*/, const TUnboxedValuePod* args) { 
+    const auto val = NMathUdf::Rem(args[0].Get<i64>(), args[1].Get<i64>()); 
+    *result = val ? TUnboxedValuePod(*val) : TUnboxedValuePod(); 
+} 
+ 
 } // NUdf
 } // NYql

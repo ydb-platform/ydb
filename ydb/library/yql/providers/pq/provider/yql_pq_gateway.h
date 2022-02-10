@@ -12,11 +12,11 @@ namespace NYql {
 struct IPqGateway : public TThrRefBase {
     using TPtr = TIntrusivePtr<IPqGateway>;
 
-    virtual NThreading::TFuture<void> OpenSession(const TString& sessionId, const TString& username) = 0;
+    virtual NThreading::TFuture<void> OpenSession(const TString& sessionId, const TString& username) = 0; 
     virtual void CloseSession(const TString& sessionId) = 0;
 
     // CM API.
-    virtual ::NPq::NConfigurationManager::TAsyncDescribePathResult DescribePath(const TString& sessionId, const TString& cluster, const TString& database, const TString& path, const TString& token) = 0;
+    virtual ::NPq::NConfigurationManager::TAsyncDescribePathResult DescribePath(const TString& sessionId, const TString& cluster, const TString& database, const TString& path, const TString& token) = 0; 
 
     virtual void UpdateClusterConfigs(
         const TString& clusterName,

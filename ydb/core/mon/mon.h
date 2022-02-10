@@ -12,7 +12,7 @@ namespace NActors {
     class TActorSystem;
     struct TActorId;
 
-    class TMon : public NMonitoring::TMonService2 {
+    class TMon : public NMonitoring::TMonService2 { 
     public:
         using TRequestAuthorizer = std::function<IEventHandle*(const NActors::TActorId& owner, NMonitoring::IMonHttpRequest& request)>;
 

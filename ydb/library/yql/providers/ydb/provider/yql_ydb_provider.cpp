@@ -29,7 +29,7 @@ TDataProviderInitializer GetYdbDataProviderInitializer(
 
         state->Types = typeCtx.Get();
         state->FunctionRegistry = functionRegistry;
-        state->CredentialsFactory = credentialsFactory;
+        state->CredentialsFactory = credentialsFactory; 
         state->DbResolver = dbResolverWithMeta;
         if (gatewaysConfig) {
             state->Configuration->Init(gatewaysConfig->GetYdb(), typeCtx, state->DbResolver, state->DatabaseIds);

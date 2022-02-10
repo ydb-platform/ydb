@@ -1396,9 +1396,9 @@ NUdf::IFunctionTypeInfoBuilder1& TFunctionTypeInfoBuilder::UserTypeImpl(
 
 void TFunctionTypeInfoBuilder::SetError(const NUdf::TStringRef& error)
 {
-    if (!Error_) {
-        Error_ = error;
-    }
+    if (!Error_) { 
+        Error_ = error; 
+    } 
 }
 
 void TFunctionTypeInfoBuilder::Build(TFunctionTypeInfo* funcInfo)

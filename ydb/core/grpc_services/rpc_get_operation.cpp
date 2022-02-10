@@ -274,7 +274,7 @@ private:
     }
 
     TOperationId OperationId_;
-    ui64 RawOperationId_ = 0;
+    ui64 RawOperationId_ = 0; 
     TActorId PipeActorId_;
 };
 

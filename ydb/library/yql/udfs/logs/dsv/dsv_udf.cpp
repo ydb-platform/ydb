@@ -206,7 +206,7 @@ public:
     void GetAllFunctions(IFunctionsSink& sink) const final {
         sink.Add(TStringRef::Of("ReadRecord"));
         sink.Add(TStringRef::Of("Parse"));
-        sink.Add(TStringRef::Of("Serialize"))->SetTypeAwareness();
+        sink.Add(TStringRef::Of("Serialize"))->SetTypeAwareness(); 
     }
 
     void BuildFunctionTypeInfo(

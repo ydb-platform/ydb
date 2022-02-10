@@ -28,7 +28,7 @@ TString ErrorDistinctByGroupKey(const TString& column) {
 
 TTableRef::TTableRef(const TString& refName, const TString& cluster, TNodePtr keys)
     : RefName(refName)
-    , Cluster(cluster)
+    , Cluster(cluster) 
     , Keys(keys)
 {
 }
@@ -2196,7 +2196,7 @@ public:
         ui32 idx = 1;
         TString cluster;
         if (Ids.size() > 2) {
-            cluster = Ids[idx].Name;
+            cluster = Ids[idx].Name; 
             ++idx;
         }
 
@@ -2204,8 +2204,8 @@ public:
             return Nothing();
         }
 
-        TString normalizedClusterName;
-        if (!cluster.empty() && !ctx.GetClusterProvider(cluster, normalizedClusterName)) {
+        TString normalizedClusterName; 
+        if (!cluster.empty() && !ctx.GetClusterProvider(cluster, normalizedClusterName)) { 
             hasErrors = true;
             ctx.Error() << "Unknown cluster: " << cluster;
             return Nothing();
@@ -2216,7 +2216,7 @@ public:
             return Nothing();
         }
 
-        return std::make_pair(normalizedClusterName, tableName);
+        return std::make_pair(normalizedClusterName, tableName); 
     }
 
     TSourcePtr TryMakeSource(TContext& ctx, const TString& view, bool& hasErrors) {

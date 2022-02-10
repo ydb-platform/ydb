@@ -13,10 +13,10 @@ namespace NYdb::NConsoleClient {
 TCommandTools::TCommandTools()
     : TClientCommandTree("tools", {}, "YDB tools service")
 {
-    AddCommand(std::make_unique<TCommandDump>());
-    AddCommand(std::make_unique<TCommandRestore>());
-    AddCommand(std::make_unique<TCommandCopy>());
-    AddCommand(std::make_unique<TCommandRename>());
+    AddCommand(std::make_unique<TCommandDump>()); 
+    AddCommand(std::make_unique<TCommandRestore>()); 
+    AddCommand(std::make_unique<TCommandCopy>()); 
+    AddCommand(std::make_unique<TCommandRename>()); 
 }
 
 TToolsCommand::TToolsCommand(const TString& name, const std::initializer_list<TString>& aliases, const TString& description)

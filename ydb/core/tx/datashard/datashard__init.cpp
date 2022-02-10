@@ -288,7 +288,7 @@ bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
         TString splitDescr;
         LOAD_SYS_BYTES(db, Schema::Sys_DstSplitDescription, splitDescr);
         if (!splitDescr.empty()) {
-            Self->DstSplitDescription = std::make_shared<NKikimrTxDataShard::TSplitMergeDescription>();
+            Self->DstSplitDescription = std::make_shared<NKikimrTxDataShard::TSplitMergeDescription>(); 
             bool parseOk = ParseFromStringNoSizeLimit(*Self->DstSplitDescription, splitDescr);
             Y_VERIFY(parseOk);
         }
@@ -342,7 +342,7 @@ bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
         TString splitDescr;
         LOAD_SYS_BYTES(db, Schema::Sys_SrcSplitDescription, splitDescr);
         if (!splitDescr.empty()) {
-            Self->SrcSplitDescription = std::make_shared<NKikimrTxDataShard::TSplitMergeDescription>();
+            Self->SrcSplitDescription = std::make_shared<NKikimrTxDataShard::TSplitMergeDescription>(); 
             bool parseOk = ParseFromStringNoSizeLimit(*Self->SrcSplitDescription, splitDescr);
             Y_VERIFY(parseOk);
 

@@ -17,22 +17,22 @@ using namespace NNodes;
 
 namespace {
 
-void ScanPlanDependencies(const TExprNode::TPtr& input, TExprNode::TListType& children) {
-    VisitExpr(input, [&children](const TExprNode::TPtr& node) {
-        if (node->IsCallable("DqCnResult")) {
-            children.push_back(node->Child(0));
-            return false;
-        }
-
-        return true;
-    });
-}
-
-class TPqDataSinkProvider : public TDataProviderBase {
+void ScanPlanDependencies(const TExprNode::TPtr& input, TExprNode::TListType& children) { 
+    VisitExpr(input, [&children](const TExprNode::TPtr& node) { 
+        if (node->IsCallable("DqCnResult")) { 
+            children.push_back(node->Child(0)); 
+            return false; 
+        } 
+ 
+        return true; 
+    }); 
+} 
+ 
+class TPqDataSinkProvider : public TDataProviderBase { 
 public:
-    TPqDataSinkProvider(TPqState::TPtr state, IPqGateway::TPtr gateway)
+    TPqDataSinkProvider(TPqState::TPtr state, IPqGateway::TPtr gateway) 
         : State_(state)
-        , Gateway_(gateway)
+        , Gateway_(gateway) 
         , IODiscoveryTransformer_(CreatePqDataSinkIODiscoveryTransformer(State_))
         , TypeAnnotationTransformer_(CreatePqDataSinkTypeAnnotationTransformer(State_))
         , ExecutionTransformer_(CreatePqDataSinkExecTransformer(State_))
@@ -46,10 +46,10 @@ public:
     }
 
     bool CanParse(const TExprNode& node) override {
-        if (node.IsCallable(TCoWrite::CallableName())) {
+        if (node.IsCallable(TCoWrite::CallableName())) { 
             return TPqDataSink::Match(node.Child(1));
-        }
-
+        } 
+ 
         return TypeAnnotationTransformer_->CanParse(node);
     }
 
@@ -95,15 +95,15 @@ public:
         return *PhysicalOptProposalTransformer_;
     }
 
-    TExprNode::TPtr RewriteIO(const TExprNode::TPtr& node, TExprContext& ctx) override {
+    TExprNode::TPtr RewriteIO(const TExprNode::TPtr& node, TExprContext& ctx) override { 
         auto maybePqWrite = TMaybeNode<TPqWrite>(node);
         YQL_ENSURE(maybePqWrite.DataSink(), "Expected Write!, got: " << node->Content());
 
-        YQL_CLOG(INFO, ProviderPq) << "Rewrite " << node->Content();
-        const TCoWrite write(node);
-        TTopicKeyParser key;
-        YQL_ENSURE(key.Parse(*node->Child(2), nullptr, ctx), "Failed to extract topic name.");
-        const auto settings = NCommon::ParseWriteTableSettings(TExprList(node->Child(4)), ctx);
+        YQL_CLOG(INFO, ProviderPq) << "Rewrite " << node->Content(); 
+        const TCoWrite write(node); 
+        TTopicKeyParser key; 
+        YQL_ENSURE(key.Parse(*node->Child(2), nullptr, ctx), "Failed to extract topic name."); 
+        const auto settings = NCommon::ParseWriteTableSettings(TExprList(node->Child(4)), ctx); 
         YQL_ENSURE(settings.Mode.Cast() == "append", "Only append write mode is supported for writing into topic");
 
         const auto cluster = TString(maybePqWrite.Cast().DataSink().Cluster().Value());
@@ -116,64 +116,64 @@ public:
         auto topicNode = Build<TPqTopic>(ctx, write.Pos())
             .Cluster().Value(cluster).Build()
             .Database().Value(State_->Configuration->GetDatabaseForTopic(cluster)).Build()
-            .RowSpec(found->RowSpec)
+            .RowSpec(found->RowSpec) 
             .Path().Value(key.GetTopicPath()).Build()
             .Props(BuildTopicPropsList(*found, write.Pos(), ctx))
             .Metadata().Build()
             .Done();
 
         return Build<TPqWriteTopic>(ctx, node->Pos())
-            .World(write.World())
-            .DataSink(write.DataSink().Ptr())
+            .World(write.World()) 
+            .DataSink(write.DataSink().Ptr()) 
             .Topic(topicNode)
-            .Input(node->Child(3))
-            .Mode(settings.Mode.Cast())
-            .Settings(settings.Other)
-            .Done().Ptr();
-    }
-
-    TExprNode::TPtr GetClusterInfo(const TString& cluster, TExprContext& ctx) override {
+            .Input(node->Child(3)) 
+            .Mode(settings.Mode.Cast()) 
+            .Settings(settings.Other) 
+            .Done().Ptr(); 
+    } 
+ 
+    TExprNode::TPtr GetClusterInfo(const TString& cluster, TExprContext& ctx) override { 
         const auto* config = State_->Configuration->ClustersConfigurationSettings.FindPtr(cluster);
-        if (!config) {
-            return {};
-        }
-
-        TPositionHandle pos;
-        return Build<NNodes::TPqClusterConfig>(ctx, pos)
+        if (!config) { 
+            return {}; 
+        } 
+ 
+        TPositionHandle pos; 
+        return Build<NNodes::TPqClusterConfig>(ctx, pos) 
             .Endpoint<TCoAtom>().Build(config->Endpoint)
             .TvmId<TCoAtom>().Build(ToString(config->TvmId))
-            .Done().Ptr();
-    }
-
-    void GetOutputs(const TExprNode& node, TVector<TPinInfo>& outputs) override {
-        if (auto maybeOp = TMaybeNode<TPqWriteTopic>(&node)) {
-            auto op = maybeOp.Cast();
-            outputs.push_back(TPinInfo(nullptr, op.DataSink().Raw(), op.Topic().Raw(), MakeTopicDisplayName(op.Topic().Cluster().Value(), op.Topic().Path().Value()), false));
-        }
-    }
-
-    bool GetDependencies(const TExprNode& node, TExprNode::TListType& children, bool compact) override {
-        Y_UNUSED(compact);
-        if (CanExecute(node)) {
-            children.push_back(node.ChildPtr(0));
-
-            if (TMaybeNode<TPqWriteTopic>(&node)) {
-                ScanPlanDependencies(node.ChildPtr(TPqWriteTopic::idx_Input), children);
-            }
-
-            return true;
-        }
-
-        return false;
-    }
-
+            .Done().Ptr(); 
+    } 
+ 
+    void GetOutputs(const TExprNode& node, TVector<TPinInfo>& outputs) override { 
+        if (auto maybeOp = TMaybeNode<TPqWriteTopic>(&node)) { 
+            auto op = maybeOp.Cast(); 
+            outputs.push_back(TPinInfo(nullptr, op.DataSink().Raw(), op.Topic().Raw(), MakeTopicDisplayName(op.Topic().Cluster().Value(), op.Topic().Path().Value()), false)); 
+        } 
+    } 
+ 
+    bool GetDependencies(const TExprNode& node, TExprNode::TListType& children, bool compact) override { 
+        Y_UNUSED(compact); 
+        if (CanExecute(node)) { 
+            children.push_back(node.ChildPtr(0)); 
+ 
+            if (TMaybeNode<TPqWriteTopic>(&node)) { 
+                ScanPlanDependencies(node.ChildPtr(TPqWriteTopic::idx_Input), children); 
+            } 
+ 
+            return true; 
+        } 
+ 
+        return false; 
+    } 
+ 
     IDqIntegration* GetDqIntegration() override {
         return State_->DqIntegration.Get();
     }
 
 private:
     TPqState::TPtr State_;
-    IPqGateway::TPtr Gateway_;
+    IPqGateway::TPtr Gateway_; 
     THolder<IGraphTransformer> IODiscoveryTransformer_;
     THolder<TVisitorTransformerBase> TypeAnnotationTransformer_;
     THolder<TExecTransformerBase> ExecutionTransformer_;
@@ -183,8 +183,8 @@ private:
 
 }
 
-TIntrusivePtr<IDataProvider> CreatePqDataSink(TPqState::TPtr state, IPqGateway::TPtr gateway) {
-    return new TPqDataSinkProvider(state, gateway);
+TIntrusivePtr<IDataProvider> CreatePqDataSink(TPqState::TPtr state, IPqGateway::TPtr gateway) { 
+    return new TPqDataSinkProvider(state, gateway); 
 }
 
 } // namespace NYql

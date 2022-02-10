@@ -129,11 +129,11 @@ bool TSettingDispatcher::Dispatch(const TString& cluster, const TString& name, c
         handler->Handle(cluster, value, validateOnly);
         return !validateOnly;
     } else {
-        // ignore unknown names in config
-        if (stage == EStage::CONFIG) {
-            return false;
-        }
-
+        // ignore unknown names in config 
+        if (stage == EStage::CONFIG) { 
+            return false; 
+        } 
+ 
         TStringBuilder nearHandlerMsg;
         for (auto& item: Handlers) {
             if (NLevenshtein::Distance(normalizedName, item.first) < DefaultMistypeDistance) {

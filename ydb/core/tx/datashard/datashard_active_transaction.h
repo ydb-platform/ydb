@@ -30,7 +30,7 @@ class TActiveTransaction;
 struct TScanState {
     TString LastKey;
     ui64 Bytes = 0;
-    Ydb::StatusIds::StatusCode StatusCode = Ydb::StatusIds::STATUS_CODE_UNSPECIFIED;
+    Ydb::StatusIds::StatusCode StatusCode = Ydb::StatusIds::STATUS_CODE_UNSPECIFIED; 
     NYql::TIssues Issues;
 };
 

@@ -46,7 +46,7 @@ public:
         const TInstant& deadline,
         const NMonitoring::TDynamicCounterPtr& clientCounters)
         : ExecuterId(executerId)
-        , ResultBuilder(MakeHolder<TProtoBuilder>(resultType, columns))
+        , ResultBuilder(MakeHolder<TProtoBuilder>(resultType, columns)) 
         , ResultId({resultId})
         , TraceId(traceId)
         , Deadline(deadline)
@@ -108,7 +108,7 @@ private:
         Finished = true;
         NYql::NDqProto::TQueryResponse queryResult(ev->Get()->Record);
 
-        *queryResult.MutableYson() = ResultBuilder->BuildYson(Head);
+        *queryResult.MutableYson() = ResultBuilder->BuildYson(Head); 
         if (!Issues.Empty()) {
             IssuesToMessage(Issues, queryResult.MutableIssues());
         }
@@ -240,7 +240,7 @@ private:
 
     void ProcessData(NDq::TEvDqCompute::TEvChannelData::TPtr& ev) {
         auto& data = ev->Get()->Record.GetChannelData().GetData();
-        auto resultSet = ResultBuilder->BuildResultSet({data});
+        auto resultSet = ResultBuilder->BuildResultSet({data}); 
         FreeSpace -= data.GetRaw().size();
         OccupiedSpace += data.GetRaw().size();
 

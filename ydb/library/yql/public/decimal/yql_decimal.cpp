@@ -38,9 +38,9 @@ bool IsComparable(TInt128 v) {
 
 const char* ToString(TInt128 val, ui8 precision, ui8 scale) {
     if (!precision || precision > MaxPrecision || scale > precision) {
-        return nullptr;
-    }
-
+        return nullptr; 
+    } 
+ 
     if (val == Inf())
         return "inf";
     if (val == -Inf())
@@ -51,9 +51,9 @@ const char* ToString(TInt128 val, ui8 precision, ui8 scale) {
         return "-nan";
 
     if (!IsNormal(val)) {
-        return nullptr;
-    }
-
+        return nullptr; 
+    } 
+ 
     if (!val) {
         return "0";
     }
@@ -61,8 +61,8 @@ const char* ToString(TInt128 val, ui8 precision, ui8 scale) {
     const bool neg = val < 0;
     TUint128 v = neg ? -val : val;
 
-    // log_{10}(2^120) ~= 36.12, 37 decimal places
-    // plus dot, zero before dot, sign and zero byte at the end
+    // log_{10}(2^120) ~= 36.12, 37 decimal places 
+    // plus dot, zero before dot, sign and zero byte at the end 
     static thread_local char str[40];
     auto end = str + sizeof(str);
     *--end = 0;
@@ -70,41 +70,41 @@ const char* ToString(TInt128 val, ui8 precision, ui8 scale) {
     auto s = end;
 
     do {
-        if (!precision--) {
+        if (!precision--) { 
             return nullptr;
-        }
-
+        } 
+ 
 
         const auto digit = ui8(v % Ten);
         if (digit || !scale || s != end) {
             *--s = "0123456789"[digit];
-        }
-
+        } 
+ 
         if (scale && !--scale && s != end) {
             *--s = '.';
-        }
+        } 
     } while (v /= Ten);
 
-    if (scale) {
+    if (scale) { 
         do {
-            if (!precision--) {
-                return nullptr;
-            }
-
-            *--s = '0';
+            if (!precision--) { 
+                return nullptr; 
+            } 
+ 
+            *--s = '0'; 
         } while (--scale);
-
-        *--s = '.';
-    }
-
-    if (*s == '.') {
-        *--s = '0';
-    }
-
-    if (neg) {
+ 
+        *--s = '.'; 
+    } 
+ 
+    if (*s == '.') { 
+        *--s = '0'; 
+    } 
+ 
+    if (neg) { 
         *--s = '-';
-    }
-
+    } 
+ 
     return s;
 }
 

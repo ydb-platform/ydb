@@ -320,7 +320,7 @@ public:
         for (auto& cluster : Gateway->GetClusters()) {
             auto token = defaultToken;
 
-            if (auto credential = Types.FindCredential(TString("default_") + cluster)) {
+            if (auto credential = Types.FindCredential(TString("default_") + cluster)) { 
                 if (credential->Category != KikimrProviderName) {
                     ctx.AddError(TIssue({}, TStringBuilder()
                         << "Mismatch credential category, for cluster " << cluster

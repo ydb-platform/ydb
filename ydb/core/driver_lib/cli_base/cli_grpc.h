@@ -45,7 +45,7 @@ int DoGRpcRequest(const NGRpcProxy::TGRpcClientConfig &clientConfig,
     {
         NGrpc::TGRpcClientLow clientLow;
         auto connection = clientLow.CreateGRpcServiceConnection<TService>(clientConfig);
-        connection->DoRequest(request, responseCb, function, meta);
+        connection->DoRequest(request, responseCb, function, meta); 
     }
 
     NGrpc::TResponseCallback<Ydb::Operations::GetOperationResponse> operationCb =
@@ -64,7 +64,7 @@ int DoGRpcRequest(const NGRpcProxy::TGRpcClientConfig &clientConfig,
         auto connection = clientLow.CreateGRpcServiceConnection<Ydb::Operation::V1::OperationService>(clientConfig);
         Ydb::Operations::GetOperationRequest request;
         request.set_id(response.id());
-        connection->DoRequest(request, operationCb, &Ydb::Operation::V1::OperationService::Stub::AsyncGetOperation, meta);
+        connection->DoRequest(request, operationCb, &Ydb::Operation::V1::OperationService::Stub::AsyncGetOperation, meta); 
     }
 
     return res;

@@ -346,12 +346,12 @@ public:
     TClientCommandGenConfig()
         : TClientCommandTree("genconfig", {}, "Config generation")
     {
-        AddCommand(std::make_unique<TClientCommandGenConfigStatic>());
+        AddCommand(std::make_unique<TClientCommandGenConfigStatic>()); 
     }
 };
 
-std::unique_ptr<TClientCommand> CreateClientCommandGenConfig() {
-    return std::make_unique<TClientCommandGenConfig>();
+std::unique_ptr<TClientCommand> CreateClientCommandGenConfig() { 
+    return std::make_unique<TClientCommandGenConfig>(); 
 }
 
 } // NDriverClient

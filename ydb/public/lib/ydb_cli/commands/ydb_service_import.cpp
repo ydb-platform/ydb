@@ -15,8 +15,8 @@ namespace NConsoleClient {
 TCommandImport::TCommandImport()
     : TClientCommandTree("import", {}, "Import service operations")
 {
-    AddCommand(std::make_unique<TCommandImportFromS3>());
-    AddCommand(std::make_unique<TCommandImportFromFile>());
+    AddCommand(std::make_unique<TCommandImportFromS3>()); 
+    AddCommand(std::make_unique<TCommandImportFromFile>()); 
 }
 
 /// S3
@@ -128,8 +128,8 @@ int TCommandImportFromS3::Run(TConfig& config) {
 TCommandImportFromFile::TCommandImportFromFile()
     : TClientCommandTree("file", {}, "Import data from file")
 {
-    AddCommand(std::make_unique<TCommandImportFromCsv>());
-    AddCommand(std::make_unique<TCommandImportFromTsv>());
+    AddCommand(std::make_unique<TCommandImportFromCsv>()); 
+    AddCommand(std::make_unique<TCommandImportFromTsv>()); 
 }
 
 /// CSV

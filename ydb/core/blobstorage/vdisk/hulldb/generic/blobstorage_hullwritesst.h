@@ -344,14 +344,14 @@ namespace NKikimr {
             return location;
         }
 
-        TDiskPart Push(const TRope& buffer) {
+        TDiskPart Push(const TRope& buffer) { 
             Y_VERIFY_DEBUG(!Finished);
 
-            TMaybe<TDiskPart> result = TBase::AppendAligned(buffer);
+            TMaybe<TDiskPart> result = TBase::AppendAligned(buffer); 
             if (!result) {
                 // there is no space to fit in current chunk -- restart base writer with new chunk
                 TBase::FinishChunk();
-                result = TBase::AppendAligned(buffer);
+                result = TBase::AppendAligned(buffer); 
                 Y_VERIFY(result);
             }
 

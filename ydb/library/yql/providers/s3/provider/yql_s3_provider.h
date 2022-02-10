@@ -26,7 +26,7 @@ struct TS3State : public TThrRefBase
     TTypeAnnotationContext* Types = nullptr;
     TS3Configuration::TPtr Configuration = MakeIntrusive<TS3Configuration>();
     const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry = nullptr;
-    ISecuredServiceAccountCredentialsFactory::TPtr CredentialsFactory;
+    ISecuredServiceAccountCredentialsFactory::TPtr CredentialsFactory; 
 };
 
 TDataProviderInitializer GetS3DataProviderInitializer(IHTTPGateway::TPtr gateway, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory = nullptr);

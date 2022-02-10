@@ -1,13 +1,13 @@
 OWNER(g:yq)
 
-PROTO_LIBRARY()
+PROTO_LIBRARY() 
 
-INCLUDE_TAGS(GO_PROTO)
+INCLUDE_TAGS(GO_PROTO) 
+ 
+GRPC() 
 
-GRPC()
-
-SRCS(
-    token_accessor_pb.proto
-)
-
-END()
+SRCS( 
+    token_accessor_pb.proto 
+) 
+ 
+END() 

@@ -18,7 +18,7 @@ struct TValidateErrorPolicyThrow {
     template<class TException>
     static void GenerateExc(const TException& exc) {
         static_assert(std::is_base_of<yexception, TException>::value, "Must be derived from yexception");
-        ythrow TException() << exc.AsStrBuf();
+        ythrow TException() << exc.AsStrBuf(); 
     }
 };
 

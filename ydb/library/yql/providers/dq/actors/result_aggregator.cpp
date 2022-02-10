@@ -68,7 +68,7 @@ public:
         , Discard(discard)
         , TraceId(traceId)
         , Settings(settings)
-        , ResultBuilder(MakeHolder<TProtoBuilder>(resultType, columns))
+        , ResultBuilder(MakeHolder<TProtoBuilder>(resultType, columns)) 
         , ResultYsonOut(new THoldingStream<TCountingOutput>(MakeHolder<TStringOutput>(ResultYson)))
         , ResultYsonWriter(MakeHolder<NYson::TYsonWriter>(ResultYsonOut.Get(), NYson::EYsonFormat::Binary, ::NYson::EYsonType::Node, true))
     {

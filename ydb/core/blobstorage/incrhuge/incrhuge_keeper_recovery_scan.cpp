@@ -102,7 +102,7 @@ namespace NKikimr {
                 }
 
                 // validate checksum
-                const ui32 checksum = Crc32c(&header.ChunkSerNum, sizeof(TBlobIndexHeader) - sizeof(ui32) + dataSize);
+                const ui32 checksum = Crc32c(&header.ChunkSerNum, sizeof(TBlobIndexHeader) - sizeof(ui32) + dataSize); 
                 if (checksum != header.Checksum) {
                     return false;
                 }
@@ -129,7 +129,7 @@ namespace NKikimr {
                         break;
                     }
 
-                    const ui32 checksum = Crc32c(&header.IndexRecord, sizeof(TBlobHeader) - sizeof(ui32) +
+                    const ui32 checksum = Crc32c(&header.IndexRecord, sizeof(TBlobHeader) - sizeof(ui32) + 
                             header.IndexRecord.PayloadSize);
                     if (checksum != header.Checksum) {
                         break;

@@ -19,7 +19,7 @@ bool TS3Configuration::HasCluster(TStringBuf cluster) const {
     return ValidClusters.contains(cluster);
 }
 
-void TS3Configuration::Init(const TS3GatewayConfig& config, TIntrusivePtr<TTypeAnnotationContext> typeCtx)
+void TS3Configuration::Init(const TS3GatewayConfig& config, TIntrusivePtr<TTypeAnnotationContext> typeCtx) 
 {
     FileSizeLimit = config.HasFileSizeLimit() ? config.GetFileSizeLimit() : 2_GB;
     MaxFilesPerQuery = config.HasMaxFilesPerQuery() ? config.GetMaxFilesPerQuery() : 7000;
@@ -37,11 +37,11 @@ void TS3Configuration::Init(const TS3GatewayConfig& config, TIntrusivePtr<TTypeA
         this->Dispatch(cluster.GetName(), cluster.GetSettings());
         auto& settings = Clusters[cluster.GetName()];
         settings.Url = cluster.GetUrl();
-        TString authToken;
+        TString authToken; 
         if (const auto& token = cluster.GetToken()) {
             authToken = typeCtx->FindCredentialContent("cluster:default_" + cluster.GetName(), "", token);
-        }
-        Tokens[cluster.GetName()] = ComposeStructuredTokenJsonForServiceAccount(cluster.GetServiceAccountId(), cluster.GetServiceAccountIdSignature(), authToken);
+        } 
+        Tokens[cluster.GetName()] = ComposeStructuredTokenJsonForServiceAccount(cluster.GetServiceAccountId(), cluster.GetServiceAccountIdSignature(), authToken); 
     }
     this->FreezeDefaults();
 }

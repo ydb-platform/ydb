@@ -1,6 +1,6 @@
 UNITTEST_FOR(ydb/core/yq/libs/checkpointing)
 
-OWNER(g:yq)
+OWNER(g:yq) 
 
 SRCS(
     checkpoint_coordinator_ut.cpp
@@ -17,4 +17,4 @@ SIZE(MEDIUM)
 
 YQL_LAST_ABI_VERSION()
 
-END()
+END() 

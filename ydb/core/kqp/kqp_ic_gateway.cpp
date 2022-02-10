@@ -37,10 +37,10 @@
 namespace NKikimr {
 namespace NKqp {
 
-using NYql::TIssue;
-using TIssuesIds = NYql::TIssuesIds;
+using NYql::TIssue; 
+using TIssuesIds = NYql::TIssuesIds; 
 using namespace NThreading;
-using namespace NYql::NCommon;
+using namespace NYql::NCommon; 
 using namespace NSchemeShard;
 using namespace NKikimrSchemeOp;
 
@@ -65,7 +65,7 @@ namespace {
 template <class TResult>
 static NThreading::TFuture<TResult> NotImplemented() {
     TResult result;
-    result.AddIssue(TIssue({}, "Not implemented in interconnect gateway."));
+    result.AddIssue(TIssue({}, "Not implemented in interconnect gateway.")); 
     return NThreading::MakeFuture(result);
 }
 
@@ -783,7 +783,7 @@ public:
             message << ", reason: " << response.GetSchemeShardReason();
         }
 
-        Promise.SetValue(ResultFromError<TResult>(TIssue({}, message)));
+        Promise.SetValue(ResultFromError<TResult>(TIssue({}, message))); 
         this->Die(ctx);
     }
 
@@ -1006,7 +1006,7 @@ public:
         return Cluster;
     }
 
-    TMaybe<NYql::TKikimrClusterConfig> GetClusterConfig(const TString& cluster) override {
+    TMaybe<NYql::TKikimrClusterConfig> GetClusterConfig(const TString& cluster) override { 
         Y_UNUSED(cluster);
         return {};
     }
@@ -1089,7 +1089,7 @@ public:
         }
     }
 
-    TFuture<TGenericResult> CreateTable(NYql::TKikimrTableMetadataPtr metadata, bool createDir) override {
+    TFuture<TGenericResult> CreateTable(NYql::TKikimrTableMetadataPtr metadata, bool createDir) override { 
         using TRequest = TEvTxUserProxy::TEvProposeTransaction;
 
         try {
@@ -1870,7 +1870,7 @@ public:
                 handle.Snapshot = response.Snapshot;
                 handle.ManagingActor = snapMgrActorId;
                 handle.Status = response.Status;
-                handle.AddIssues(response.Issues);
+                handle.AddIssues(response.Issues); 
                 promise.SetValue(handle);
             }
         );
@@ -1895,7 +1895,7 @@ public:
                     IKqpGateway::TKqpSnapshotHandle handle;
                     handle.Snapshot = response.Snapshot;
                     handle.Status = response.Status;
-                    handle.AddIssues(response.Issues);
+                    handle.AddIssues(response.Issues); 
                     promise.SetValue(handle);
                 }
             );

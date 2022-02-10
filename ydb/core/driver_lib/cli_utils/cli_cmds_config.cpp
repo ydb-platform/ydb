@@ -242,7 +242,7 @@ public:
     TPropose()
         : TClientCommandTree("propose", {}, "Configuration proposition for migration and initial configuring")
     {
-        AddCommand(std::make_unique<TProposeStoragePools>());
+        AddCommand(std::make_unique<TProposeStoragePools>()); 
     }
 };
 
@@ -251,14 +251,14 @@ public:
     TClientCommandBsConfig()
         : TClientCommandTree("config", {}, "Configuration management")
     {
-        AddCommand(std::make_unique<TPropose>());
-        AddCommand(std::make_unique<TInvoke>());
+        AddCommand(std::make_unique<TPropose>()); 
+        AddCommand(std::make_unique<TInvoke>()); 
         AddCommand(std::make_unique<TInit>());
     }
 };
 
-std::unique_ptr<TClientCommand> CreateClientCommandBsConfig() {
-    return std::make_unique<TClientCommandBsConfig>();
+std::unique_ptr<TClientCommand> CreateClientCommandBsConfig() { 
+    return std::make_unique<TClientCommandBsConfig>(); 
 }
 
 } // NDriverClient

@@ -7,10 +7,10 @@ SRCS(
     yql_codec.h
     yql_codec_buf.cpp
     yql_codec_buf.h
-    yql_codec_results.cpp
-    yql_codec_results.h
-    yql_restricted_yson.cpp
-    yql_restricted_yson.h
+    yql_codec_results.cpp 
+    yql_codec_results.h 
+    yql_restricted_yson.cpp 
+    yql_restricted_yson.h 
     yql_codec_type_flags.cpp
     yql_codec_type_flags.h
 )

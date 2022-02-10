@@ -20,7 +20,7 @@ class TJsonDescribe : public TViewerPipeClient<TJsonDescribe> {
     NMon::TEvHttpInfo::TPtr Event;
     TAutoPtr<TEvSchemeShard::TEvDescribeSchemeResult> DescribeResult;
     TJsonSettings JsonSettings;
-    ui32 Timeout = 0;
+    ui32 Timeout = 0; 
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {

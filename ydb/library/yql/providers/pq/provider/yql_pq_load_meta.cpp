@@ -19,23 +19,23 @@ namespace {
 
 class TPqLoadTopicMetadataTransformer : public TGraphTransformerBase {
 public:
-    explicit TPqLoadTopicMetadataTransformer(TPqState::TPtr state)
+    explicit TPqLoadTopicMetadataTransformer(TPqState::TPtr state) 
         : State_(std::move(state))
     {}
 
-    void AddToPendingTopics(const TString& cluster, const TString& topicPath, TPositionHandle pos, TExprNode::TPtr rowSpec, TExprNode::TPtr columnOrder) {
+    void AddToPendingTopics(const TString& cluster, const TString& topicPath, TPositionHandle pos, TExprNode::TPtr rowSpec, TExprNode::TPtr columnOrder) { 
         const auto topicKey = std::make_pair(cluster, topicPath);
         const auto found = State_->Topics.FindPtr(topicKey);
-        if (found) {
-            return;
+        if (found) { 
+            return; 
         }
-
-        YQL_CLOG(INFO, ProviderPq) << "Load topic meta for: `" << cluster << "`.`" << topicPath << "`";
-        TPqState::TTopicMeta m;
-        m.Pos = pos;
-        m.RowSpec = rowSpec;
-        m.ColumnOrder = columnOrder;
-        PendingTopics_.emplace(topicKey, m);
+ 
+        YQL_CLOG(INFO, ProviderPq) << "Load topic meta for: `" << cluster << "`.`" << topicPath << "`"; 
+        TPqState::TTopicMeta m; 
+        m.Pos = pos; 
+        m.RowSpec = rowSpec; 
+        m.ColumnOrder = columnOrder; 
+        PendingTopics_.emplace(topicKey, m); 
     }
 
     TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final {
@@ -48,32 +48,32 @@ public:
         VisitExpr(input, [&](const TExprNode::TPtr& node) {
             if (auto maybePqRead = TMaybeNode<TPqRead>(node)) {
                 TPqRead read = maybePqRead.Cast();
-                if (read.DataSource().Category().Value() != PqProviderName) {
-                    return true;
+                if (read.DataSource().Category().Value() != PqProviderName) { 
+                    return true; 
                 }
-
-                TTopicKeyParser topicParser(read.Arg(2).Ref(), read.Ref().Child(4), ctx);
-                AddToPendingTopics(read.DataSource().Cluster().StringValue(), topicParser.GetTopicPath(), node->Pos(), topicParser.GetUserSchema(), topicParser.GetColumnOrder());
+ 
+                TTopicKeyParser topicParser(read.Arg(2).Ref(), read.Ref().Child(4), ctx); 
+                AddToPendingTopics(read.DataSource().Cluster().StringValue(), topicParser.GetTopicPath(), node->Pos(), topicParser.GetUserSchema(), topicParser.GetColumnOrder()); 
             } else if (auto maybePqWrite = TMaybeNode<TPqWrite>(node)) {
                 TPqWrite write = maybePqWrite.Cast();
                 if (write.DataSink().Category().Value() == PqProviderName) {
-                    TTopicKeyParser topicParser(write.Arg(2).Ref(), nullptr, ctx);
-                    AddToPendingTopics(write.DataSink().Cluster().StringValue(), topicParser.GetTopicPath(), node->Pos(), {}, {});
+                    TTopicKeyParser topicParser(write.Arg(2).Ref(), nullptr, ctx); 
+                    AddToPendingTopics(write.DataSink().Cluster().StringValue(), topicParser.GetTopicPath(), node->Pos(), {}, {}); 
                 }
             }
             return true;
         });
 
-        for (auto& [x, meta] : PendingTopics_) {
-            auto itemType = LoadTopicMeta(x.first, x.second, ctx, meta);
-            if (!itemType) {
+        for (auto& [x, meta] : PendingTopics_) { 
+            auto itemType = LoadTopicMeta(x.first, x.second, ctx, meta); 
+            if (!itemType) { 
                 return TStatus::Error;
             }
 
-            meta.RawFormat = (meta.RowSpec == nullptr);
-            if (!meta.RowSpec) {
-                meta.RowSpec = ExpandType(meta.Pos, *itemType, ctx);
-            }
+            meta.RawFormat = (meta.RowSpec == nullptr); 
+            if (!meta.RowSpec) { 
+                meta.RowSpec = ExpandType(meta.Pos, *itemType, ctx); 
+            } 
             State_->Topics.emplace(x, meta);
         }
 
@@ -94,7 +94,7 @@ public:
     }
 
 private:
-    static const TStructExprType* CreateDefaultItemType(TExprContext& ctx) {
+    static const TStructExprType* CreateDefaultItemType(TExprContext& ctx) { 
         // Schema for topic:
         // {
         //     Data:String
@@ -111,29 +111,29 @@ private:
         return ctx.MakeType<TStructExprType>(items);
     }
 
-    const TStructExprType* LoadTopicMeta(const TString& cluster, const TString& topic, TExprContext& ctx, TPqState::TTopicMeta& meta) {
-        // todo: return TFuture
-        try {
-            auto future = State_->Gateway->DescribePath(State_->SessionId, cluster, State_->Configuration->GetDatabaseForTopic(cluster), topic, State_->Configuration->Tokens.at(cluster));
-            NPq::NConfigurationManager::TDescribePathResult description = future.GetValueSync();
-            if (!description.IsTopic()) {
-                ctx.IssueManager.RaiseIssue(TIssue{TStringBuilder() << "Path '" << topic << "' is not a topic"});
-                return {};
-            }
-            meta.Description = description.GetTopicDescription();
-            return CreateDefaultItemType(ctx);
+    const TStructExprType* LoadTopicMeta(const TString& cluster, const TString& topic, TExprContext& ctx, TPqState::TTopicMeta& meta) { 
+        // todo: return TFuture 
+        try { 
+            auto future = State_->Gateway->DescribePath(State_->SessionId, cluster, State_->Configuration->GetDatabaseForTopic(cluster), topic, State_->Configuration->Tokens.at(cluster)); 
+            NPq::NConfigurationManager::TDescribePathResult description = future.GetValueSync(); 
+            if (!description.IsTopic()) { 
+                ctx.IssueManager.RaiseIssue(TIssue{TStringBuilder() << "Path '" << topic << "' is not a topic"}); 
+                return {}; 
+            } 
+            meta.Description = description.GetTopicDescription(); 
+            return CreateDefaultItemType(ctx); 
         } catch (const std::exception& ex) {
             TIssues issues;
             issues.AddIssue(ex.what());
             ctx.IssueManager.AddIssues(issues);
-            return nullptr;
-        }
-    }
-
+            return nullptr; 
+        } 
+    } 
+ 
 private:
     TPqState::TPtr State_;
-    // (cluster, topic) -> meta
-    THashMap<std::pair<TString, TString>, TPqState::TTopicMeta> PendingTopics_;
+    // (cluster, topic) -> meta 
+    THashMap<std::pair<TString, TString>, TPqState::TTopicMeta> PendingTopics_; 
     NThreading::TFuture<void> AsyncFuture_;
 };
 

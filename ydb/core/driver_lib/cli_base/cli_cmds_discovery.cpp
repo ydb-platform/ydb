@@ -54,7 +54,7 @@ struct TClientCommandDiscoveryListEndpoints
 TClientCommandDiscovery::TClientCommandDiscovery()
     : TClientCommandTree("discovery", {}, "Endpoint discovery")
 {
-    AddCommand(std::make_unique<TClientCommandDiscoveryListEndpoints>());
+    AddCommand(std::make_unique<TClientCommandDiscoveryListEndpoints>()); 
 }
 
 // New YDB behavior:

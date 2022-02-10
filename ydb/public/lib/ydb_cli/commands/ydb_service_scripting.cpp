@@ -12,7 +12,7 @@ namespace NConsoleClient {
 TCommandScripting::TCommandScripting()
 : TClientCommandTree("scripting", {}, "Scripting service operations")
 {
-    AddCommand(std::make_unique<TCommandExecuteYqlScript>());
+    AddCommand(std::make_unique<TCommandExecuteYqlScript>()); 
 }
 
 TCommandExecuteYqlScript::TCommandExecuteYqlScript()

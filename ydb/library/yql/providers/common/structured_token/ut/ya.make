@@ -1,12 +1,12 @@
 UNITTEST_FOR(ydb/library/yql/providers/common/structured_token)
-
-OWNER(
+ 
+OWNER( 
     g:yq
-    g:yql
-)
-
-SRCS(
-    yql_structured_token_ut.cpp
-)
-
-END()
+    g:yql 
+) 
+ 
+SRCS( 
+    yql_structured_token_ut.cpp 
+) 
+ 
+END() 

@@ -1166,7 +1166,7 @@ protected:
         }
         for (auto& [inputIndex, source] : SourcesMap) {
             if (TaskRunner) { source.Source = TaskRunner->GetSource(inputIndex); Y_VERIFY(source.Source);}
-            Y_VERIFY(SourceActorFactory);
+            Y_VERIFY(SourceActorFactory); 
             const auto& inputDesc = Task.GetInputs(inputIndex);
             const ui64 i = inputIndex; // Crutch for clang
             CA_LOG_D("Create source actor for input " << i << " " << inputDesc);
@@ -1222,9 +1222,9 @@ protected:
                 continue;
             }
             const i64 freeSpace = SourceFreeSpace(source);
-            if (freeSpace > 0) {
+            if (freeSpace > 0) { 
                 NKikimr::NMiniKQL::TUnboxedValueVector batch;
-                Y_VERIFY(source.SourceActor);
+                Y_VERIFY(source.SourceActor); 
                 bool finished = false;
                 const i64 space = source.SourceActor->GetSourceData(batch, finished, freeSpace);
                 const ui64 index = inputIndex;

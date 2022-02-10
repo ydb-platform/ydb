@@ -3,9 +3,9 @@ jstyle:
         ignore:
             - '*'
         prefixes: []
-    NoParameterNumber:
-        ignore:
-            - 'ParameterNumber'
-        prefixes: 
-            - 'tracker'
+    NoParameterNumber: 
+        ignore: 
+            - 'ParameterNumber' 
+        prefixes:  
+            - 'tracker' 
             - 'ci'

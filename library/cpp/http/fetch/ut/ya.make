@@ -6,7 +6,7 @@ OWNER(
 
 SRCS(
     httpfsm_ut.cpp
-    httpparser_ut.cpp
+    httpparser_ut.cpp 
 )
 
 END()

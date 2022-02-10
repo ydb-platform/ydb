@@ -730,13 +730,13 @@ include DateTimeParserCommon;
 multiplier
     = '' #   >{ MultiplierPower =  6; } # work around Ragel bugs
     | 'w'  @{ MultiplierPower =  6; Multiplier = 604800; }
-    | 'd'  @{ MultiplierPower =  6; Multiplier = 86400; }
-    | 'h'  @{ MultiplierPower =  6; Multiplier = 3600; }
-    | 'm'  @{ MultiplierPower =  6; Multiplier = 60; }
-    | 's'  @{ MultiplierPower =  6; Multiplier = 1; }
-    | 'ms' @{ MultiplierPower =  3; Multiplier = 1; }
-    | 'us' @{ MultiplierPower =  0; Multiplier = 1; }
-    | 'ns' @{ MultiplierPower = -3; Multiplier = 1; }
+    | 'd'  @{ MultiplierPower =  6; Multiplier = 86400; } 
+    | 'h'  @{ MultiplierPower =  6; Multiplier = 3600; } 
+    | 'm'  @{ MultiplierPower =  6; Multiplier = 60; } 
+    | 's'  @{ MultiplierPower =  6; Multiplier = 1; } 
+    | 'ms' @{ MultiplierPower =  3; Multiplier = 1; } 
+    | 'us' @{ MultiplierPower =  0; Multiplier = 1; } 
+    | 'ns' @{ MultiplierPower = -3; Multiplier = 1; } 
     ;
 
 integer = int @{ IntegerPart = I; };
@@ -756,7 +756,7 @@ TDurationParser::TDurationParser()
     , I(0)
     , Dc(0)
     , MultiplierPower(6)
-    , Multiplier(1)
+    , Multiplier(1) 
     , IntegerPart(0)
     , FractionPart(0)
     , FractionDigits(0)
@@ -783,8 +783,8 @@ TDuration TDurationParser::GetResult(TDuration defaultValue) const {
     if (cs < TDurationParser_first_final)
         return defaultValue;
     ui64 us = 0;
-    us += Multiplier * DecPower(IntegerPart, MultiplierPower);
-    us += Multiplier * DecPower(FractionPart, MultiplierPower - FractionDigits);
+    us += Multiplier * DecPower(IntegerPart, MultiplierPower); 
+    us += Multiplier * DecPower(FractionPart, MultiplierPower - FractionDigits); 
     return TDuration::MicroSeconds(us);
 }
 

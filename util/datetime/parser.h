@@ -146,7 +146,7 @@ struct TDurationParser {
     ui32 Dc;
 
     i32 MultiplierPower; // 6 for seconds, 0 for microseconds, -3 for nanoseconds
-    i32 Multiplier;
+    i32 Multiplier; 
     ui64 IntegerPart;
     ui32 FractionPart;
     ui32 FractionDigits;

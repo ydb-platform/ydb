@@ -18,7 +18,7 @@ TIpRangeSet::~TIpRangeSet() = default;
 void TIpRangeSet::Add(TIpAddressRange r) {
     Y_ENSURE(IsEmpty() || r.Type() == Type(), "Mixing IPv4 and IPv6 ranges is disallowed");
 
-    auto lowerIt = Ranges_.lower_bound(r); 
+    auto lowerIt = Ranges_.lower_bound(r);
 
     // still may overlap the last interval in our tree
     if (IsEmpty()) {
@@ -72,7 +72,7 @@ TIpRangeSet::TIterator TIpRangeSet::Find(TIpv6Address addr) const {
         return End();
     }
 
-    auto lowerIt = Ranges_.lower_bound(TIpAddressRange(addr, addr)); 
+    auto lowerIt = Ranges_.lower_bound(TIpAddressRange(addr, addr));
 
     if (lowerIt == Ranges_.begin()) {
         return lowerIt->Contains(addr)

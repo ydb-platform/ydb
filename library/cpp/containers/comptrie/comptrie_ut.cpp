@@ -78,21 +78,21 @@ private:
     UNIT_TEST(TestTrieForVectorInt64);
     UNIT_TEST(TestTrieForListInt64);
     UNIT_TEST(TestTrieForSetInt64);
-
+ 
     UNIT_TEST(TestTrieForVectorStroka);
     UNIT_TEST(TestTrieForListStroka);
     UNIT_TEST(TestTrieForSetStroka);
-
+ 
     UNIT_TEST(TestTrieForVectorWtroka);
     UNIT_TEST(TestTrieForVectorFloat);
     UNIT_TEST(TestTrieForVectorDouble);
-
+ 
     UNIT_TEST(TestTrieForListVectorInt64);
     UNIT_TEST(TestTrieForPairWtrokaVectorInt64);
-
+ 
     UNIT_TEST(TestEmptyValueOutOfOrder);
     UNIT_TEST(TestFindLongestPrefixWithEmptyValue);
-
+ 
     UNIT_TEST(TestSearchIterChar);
     UNIT_TEST(TestSearchIterWchar);
     UNIT_TEST(TestSearchIterWchar32)
@@ -143,15 +143,15 @@ private:
     void TestUniqueImpl(bool isPrefixGrouped);
 
     TVector<TUtf16String> GetSampleKeys(size_t nKeys) const;
-    template <class TContainer>
+    template <class TContainer> 
     TVector<TContainer> GetSampleVectorData(size_t nValues);
-    template <class TContainer>
+    template <class TContainer> 
     TVector<TContainer> GetSampleTextVectorData(size_t nValues);
     template <class T>
-    void CheckEquality(const T& value1, const T& value2) const;
-    template <class TContainer>
+    void CheckEquality(const T& value1, const T& value2) const; 
+    template <class TContainer> 
     void TestTrieWithContainers(const TVector<TUtf16String>& keys, const TVector<TContainer>& sampleData, TString methodName);
-
+ 
     template <typename TChar>
     void TestSearchIterImpl();
 
@@ -211,22 +211,22 @@ public:
     void TestIterateEmptyKey();
 
     void TestTrieSet();
-
-    void TestTrieForVectorInt64();
-    void TestTrieForListInt64();
-    void TestTrieForSetInt64();
-
-    void TestTrieForVectorStroka();
-    void TestTrieForListStroka();
-    void TestTrieForSetStroka();
-
-    void TestTrieForVectorWtroka();
-    void TestTrieForVectorFloat();
-    void TestTrieForVectorDouble();
-
-    void TestTrieForListVectorInt64();
-    void TestTrieForPairWtrokaVectorInt64();
-
+ 
+    void TestTrieForVectorInt64(); 
+    void TestTrieForListInt64(); 
+    void TestTrieForSetInt64(); 
+ 
+    void TestTrieForVectorStroka(); 
+    void TestTrieForListStroka(); 
+    void TestTrieForSetStroka(); 
+ 
+    void TestTrieForVectorWtroka(); 
+    void TestTrieForVectorFloat(); 
+    void TestTrieForVectorDouble(); 
+ 
+    void TestTrieForListVectorInt64(); 
+    void TestTrieForPairWtrokaVectorInt64(); 
+ 
     void TestEmptyValueOutOfOrder();
     void TestFindLongestPrefixWithEmptyValue();
 
@@ -1102,156 +1102,156 @@ void TCompactTrieTest::TestTrieSet() {
     UNIT_ASSERT(empty.Has("")); // contains only empty string
 }
 
-// Tests for trie with vector (list, set) values
-
+// Tests for trie with vector (list, set) values 
+ 
 TVector<TUtf16String> TCompactTrieTest::GetSampleKeys(size_t nKeys) const {
     Y_ASSERT(nKeys <= 10);
     TString sampleKeys[] = {"a", "b", "ac", "bd", "abe", "bcf", "deg", "ah", "xy", "abc"};
     TVector<TUtf16String> result;
-    for (size_t i = 0; i < nKeys; i++)
+    for (size_t i = 0; i < nKeys; i++) 
         result.push_back(ASCIIToWide(sampleKeys[i]));
-    return result;
-}
-
-template <class TContainer>
+    return result; 
+} 
+ 
+template <class TContainer> 
 TVector<TContainer> TCompactTrieTest::GetSampleVectorData(size_t nValues) {
     TVector<TContainer> data;
-    for (size_t i = 0; i < nValues; i++) {
-        data.push_back(TContainer());
-        for (size_t j = 0; j < i; j++)
+    for (size_t i = 0; i < nValues; i++) { 
+        data.push_back(TContainer()); 
+        for (size_t j = 0; j < i; j++) 
             data[i].insert(data[i].end(), (typename TContainer::value_type)((j == 3) ? 0 : (1 << (j * 5))));
-    }
-    return data;
-}
-
-template <class TContainer>
+    } 
+    return data; 
+} 
+ 
+template <class TContainer> 
 TVector<TContainer> TCompactTrieTest::GetSampleTextVectorData(size_t nValues) {
     TVector<TContainer> data;
-    for (size_t i = 0; i < nValues; i++) {
-        data.push_back(TContainer());
-        for (size_t j = 0; j < i; j++)
+    for (size_t i = 0; i < nValues; i++) { 
+        data.push_back(TContainer()); 
+        for (size_t j = 0; j < i; j++) 
             data[i].insert(data[i].end(), TString("abc") + ToString<size_t>(j));
-    }
-    return data;
-}
-
+    } 
+    return data; 
+} 
+ 
 template <class T>
-void TCompactTrieTest::CheckEquality(const T& value1, const T& value2) const {
-    UNIT_ASSERT_VALUES_EQUAL(value1, value2);
-}
-
+void TCompactTrieTest::CheckEquality(const T& value1, const T& value2) const { 
+    UNIT_ASSERT_VALUES_EQUAL(value1, value2); 
+} 
+ 
 template <>
 void TCompactTrieTest::CheckEquality<TVector<i64>>(const TVector<i64>& value1, const TVector<i64>& value2) const {
     UNIT_ASSERT_VALUES_EQUAL(value1.size(), value2.size());
     for (size_t i = 0; i < value1.size(); i++)
         UNIT_ASSERT_VALUES_EQUAL(value1[i], value2[i]);
-}
-
-template <class TContainer>
+} 
+ 
+template <class TContainer> 
 void TCompactTrieTest::TestTrieWithContainers(const TVector<TUtf16String>& keys, const TVector<TContainer>& sampleData, TString methodName) {
     TString fileName = GetSystemTempDir() + "/TCompactTrieTest-TestTrieWithContainers-" + methodName;
-
-    TCompactTrieBuilder<wchar16, TContainer> b;
-    for (size_t i = 0; i < keys.size(); i++) {
-        b.Add(keys[i], sampleData[i]);
-    }
+ 
+    TCompactTrieBuilder<wchar16, TContainer> b; 
+    for (size_t i = 0; i < keys.size(); i++) { 
+        b.Add(keys[i], sampleData[i]); 
+    } 
     TUnbufferedFileOutput out(fileName);
-    b.Save(out);
-
-    TCompactTrie<wchar16, TContainer> trie(TBlob::FromFileSingleThreaded(fileName));
-    for (size_t i = 0; i < keys.size(); i++) {
-        TContainer value = trie.Get(keys[i]);
-        UNIT_ASSERT_VALUES_EQUAL(value.size(), sampleData[i].size());
-        typename TContainer::const_iterator p = value.begin();
-        typename TContainer::const_iterator p1 = sampleData[i].begin();
-        for (; p != value.end(); p++, p1++)
-            CheckEquality<typename TContainer::value_type>(*p, *p1);
-    }
+    b.Save(out); 
+ 
+    TCompactTrie<wchar16, TContainer> trie(TBlob::FromFileSingleThreaded(fileName)); 
+    for (size_t i = 0; i < keys.size(); i++) { 
+        TContainer value = trie.Get(keys[i]); 
+        UNIT_ASSERT_VALUES_EQUAL(value.size(), sampleData[i].size()); 
+        typename TContainer::const_iterator p = value.begin(); 
+        typename TContainer::const_iterator p1 = sampleData[i].begin(); 
+        for (; p != value.end(); p++, p1++) 
+            CheckEquality<typename TContainer::value_type>(*p, *p1); 
+    } 
 
     unlink(fileName.data());
-}
-
+} 
+ 
 template <>
 void TCompactTrieTest::TestTrieWithContainers<std::pair<TUtf16String, TVector<i64>>>(const TVector<TUtf16String>& keys, const TVector<std::pair<TUtf16String, TVector<i64>>>& sampleData, TString methodName) {
     typedef std::pair<TUtf16String, TVector<i64>> TContainer;
     TString fileName = GetSystemTempDir() + "/TCompactTrieTest-TestTrieWithContainers-" + methodName;
-
-    TCompactTrieBuilder<wchar16, TContainer> b;
-    for (size_t i = 0; i < keys.size(); i++) {
-        b.Add(keys[i], sampleData[i]);
-    }
+ 
+    TCompactTrieBuilder<wchar16, TContainer> b; 
+    for (size_t i = 0; i < keys.size(); i++) { 
+        b.Add(keys[i], sampleData[i]); 
+    } 
     TUnbufferedFileOutput out(fileName);
-    b.Save(out);
-
-    TCompactTrie<wchar16, TContainer> trie(TBlob::FromFileSingleThreaded(fileName));
-    for (size_t i = 0; i < keys.size(); i++) {
-        TContainer value = trie.Get(keys[i]);
+    b.Save(out); 
+ 
+    TCompactTrie<wchar16, TContainer> trie(TBlob::FromFileSingleThreaded(fileName)); 
+    for (size_t i = 0; i < keys.size(); i++) { 
+        TContainer value = trie.Get(keys[i]); 
         CheckEquality<TContainer::first_type>(value.first, sampleData[i].first);
         CheckEquality<TContainer::second_type>(value.second, sampleData[i].second);
-    }
+    } 
 
     unlink(fileName.data());
-}
-
-void TCompactTrieTest::TestTrieForVectorInt64() {
+} 
+ 
+void TCompactTrieTest::TestTrieForVectorInt64() { 
     TestTrieWithContainers<TVector<i64>>(GetSampleKeys(10), GetSampleVectorData<TVector<i64>>(10), "v-i64");
-}
-
-void TCompactTrieTest::TestTrieForListInt64() {
+} 
+ 
+void TCompactTrieTest::TestTrieForListInt64() { 
     TestTrieWithContainers<TList<i64>>(GetSampleKeys(10), GetSampleVectorData<TList<i64>>(10), "l-i64");
-}
-
-void TCompactTrieTest::TestTrieForSetInt64() {
+} 
+ 
+void TCompactTrieTest::TestTrieForSetInt64() { 
     TestTrieWithContainers<TSet<i64>>(GetSampleKeys(10), GetSampleVectorData<TSet<i64>>(10), "s-i64");
-}
-
-void TCompactTrieTest::TestTrieForVectorStroka() {
+} 
+ 
+void TCompactTrieTest::TestTrieForVectorStroka() { 
     TestTrieWithContainers<TVector<TString>>(GetSampleKeys(10), GetSampleTextVectorData<TVector<TString>>(10), "v-str");
-}
-
-void TCompactTrieTest::TestTrieForListStroka() {
+} 
+ 
+void TCompactTrieTest::TestTrieForListStroka() { 
     TestTrieWithContainers<TList<TString>>(GetSampleKeys(10), GetSampleTextVectorData<TList<TString>>(10), "l-str");
-}
-
-void TCompactTrieTest::TestTrieForSetStroka() {
+} 
+ 
+void TCompactTrieTest::TestTrieForSetStroka() { 
     TestTrieWithContainers<TSet<TString>>(GetSampleKeys(10), GetSampleTextVectorData<TSet<TString>>(10), "s-str");
-}
-
-void TCompactTrieTest::TestTrieForVectorWtroka() {
+} 
+ 
+void TCompactTrieTest::TestTrieForVectorWtroka() { 
     TVector<TVector<TString>> data = GetSampleTextVectorData<TVector<TString>>(10);
     TVector<TVector<TUtf16String>> wData;
-    for (size_t i = 0; i < data.size(); i++) {
+    for (size_t i = 0; i < data.size(); i++) { 
         wData.push_back(TVector<TUtf16String>());
-        for (size_t j = 0; j < data[i].size(); j++)
+        for (size_t j = 0; j < data[i].size(); j++) 
             wData[i].push_back(UTF8ToWide(data[i][j]));
-    }
+    } 
     TestTrieWithContainers<TVector<TUtf16String>>(GetSampleKeys(10), wData, "v-wtr");
-}
-
-void TCompactTrieTest::TestTrieForVectorFloat() {
+} 
+ 
+void TCompactTrieTest::TestTrieForVectorFloat() { 
     TestTrieWithContainers<TVector<float>>(GetSampleKeys(10), GetSampleVectorData<TVector<float>>(10), "v-float");
-}
-
-void TCompactTrieTest::TestTrieForVectorDouble() {
+} 
+ 
+void TCompactTrieTest::TestTrieForVectorDouble() { 
     TestTrieWithContainers<TVector<double>>(GetSampleKeys(10), GetSampleVectorData<TVector<double>>(10), "v-double");
-}
-
-void TCompactTrieTest::TestTrieForListVectorInt64() {
+} 
+ 
+void TCompactTrieTest::TestTrieForListVectorInt64() { 
     TVector<i64> tmp;
     tmp.push_back(0);
     TList<TVector<i64>> dataElement(5, tmp);
     TVector<TList<TVector<i64>>> data(10, dataElement);
     TestTrieWithContainers<TList<TVector<i64>>>(GetSampleKeys(10), data, "l-v-i64");
-}
-
-void TCompactTrieTest::TestTrieForPairWtrokaVectorInt64() {
+} 
+ 
+void TCompactTrieTest::TestTrieForPairWtrokaVectorInt64() { 
     TVector<TUtf16String> keys = GetSampleKeys(10);
     TVector<TVector<i64>> values = GetSampleVectorData<TVector<i64>>(10);
     TVector<std::pair<TUtf16String, TVector<i64>>> data;
-    for (size_t i = 0; i < 10; i++)
+    for (size_t i = 0; i < 10; i++) 
         data.push_back(std::pair<TUtf16String, TVector<i64>>(keys[i] + u"_v", values[i]));
     TestTrieWithContainers<std::pair<TUtf16String, TVector<i64>>>(keys, data, "pair-str-v-i64");
-}
+} 
 
 void TCompactTrieTest::TestEmptyValueOutOfOrder() {
     TBufferOutput buffer;

@@ -1,11 +1,11 @@
-"""
-    pygments.lexers._csound_builtins
-    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
+""" 
+    pygments.lexers._csound_builtins 
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ 
+ 
     :copyright: Copyright 2006-2021 by the Pygments team, see AUTHORS.
-    :license: BSD, see LICENSE for details.
-"""
-
+    :license: BSD, see LICENSE for details. 
+""" 
+ 
 REMOVED_OPCODES = set('''
 OSCsendA
 beadsynt

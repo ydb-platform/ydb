@@ -1,24 +1,24 @@
-"""
-    pygments.lexers.css
-    ~~~~~~~~~~~~~~~~~~~
-
-    Lexers for CSS and related stylesheet formats.
-
+""" 
+    pygments.lexers.css 
+    ~~~~~~~~~~~~~~~~~~~ 
+ 
+    Lexers for CSS and related stylesheet formats. 
+ 
     :copyright: Copyright 2006-2021 by the Pygments team, see AUTHORS.
-    :license: BSD, see LICENSE for details.
-"""
-
-import re
-import copy
-
-from pygments.lexer import ExtendedRegexLexer, RegexLexer, include, bygroups, \
-    default, words, inherit
-from pygments.token import Text, Comment, Operator, Keyword, Name, String, \
+    :license: BSD, see LICENSE for details. 
+""" 
+ 
+import re 
+import copy 
+ 
+from pygments.lexer import ExtendedRegexLexer, RegexLexer, include, bygroups, \ 
+    default, words, inherit 
+from pygments.token import Text, Comment, Operator, Keyword, Name, String, \ 
     Number, Punctuation, Whitespace
-
-__all__ = ['CssLexer', 'SassLexer', 'ScssLexer', 'LessCssLexer']
-
-
+ 
+__all__ = ['CssLexer', 'SassLexer', 'ScssLexer', 'LessCssLexer'] 
+ 
+ 
 # List of vendor prefixes obtained from:
 # https://www.w3.org/TR/CSS21/syndata.html#vendor-keyword-history
 _vendor_prefixes = (
@@ -264,47 +264,47 @@ _all_units = _angle_units + _frequency_units + _length_units + \
     _resolution_units + _time_units
 
 
-class CssLexer(RegexLexer):
-    """
-    For CSS (Cascading Style Sheets).
-    """
-
-    name = 'CSS'
-    aliases = ['css']
-    filenames = ['*.css']
-    mimetypes = ['text/css']
-
-    tokens = {
-        'root': [
-            include('basics'),
-        ],
-        'basics': [
+class CssLexer(RegexLexer): 
+    """ 
+    For CSS (Cascading Style Sheets). 
+    """ 
+ 
+    name = 'CSS' 
+    aliases = ['css'] 
+    filenames = ['*.css'] 
+    mimetypes = ['text/css'] 
+ 
+    tokens = { 
+        'root': [ 
+            include('basics'), 
+        ], 
+        'basics': [ 
             (r'\s+', Whitespace),
-            (r'/\*(?:.|\n)*?\*/', Comment),
-            (r'\{', Punctuation, 'content'),
+            (r'/\*(?:.|\n)*?\*/', Comment), 
+            (r'\{', Punctuation, 'content'), 
             (r'(\:{1,2})([\w-]+)', bygroups(Punctuation, Name.Decorator)),
             (r'(\.)([\w-]+)', bygroups(Punctuation, Name.Class)),
             (r'(\#)([\w-]+)', bygroups(Punctuation, Name.Namespace)),
             (r'(@)([\w-]+)', bygroups(Punctuation, Keyword), 'atrule'),
-            (r'[\w-]+', Name.Tag),
-            (r'[~^*!%&$\[\]()<>|+=@:;,./?-]', Operator),
+            (r'[\w-]+', Name.Tag), 
+            (r'[~^*!%&$\[\]()<>|+=@:;,./?-]', Operator), 
             (r'"(\\\\|\\[^\\]|[^"\\])*"', String.Double),
             (r"'(\\\\|\\[^\\]|[^'\\])*'", String.Single),
-        ],
-        'atrule': [
-            (r'\{', Punctuation, 'atcontent'),
-            (r';', Punctuation, '#pop'),
-            include('basics'),
-        ],
-        'atcontent': [
-            include('basics'),
-            (r'\}', Punctuation, '#pop:2'),
-        ],
-        'content': [
+        ], 
+        'atrule': [ 
+            (r'\{', Punctuation, 'atcontent'), 
+            (r';', Punctuation, '#pop'), 
+            include('basics'), 
+        ], 
+        'atcontent': [ 
+            include('basics'), 
+            (r'\}', Punctuation, '#pop:2'), 
+        ], 
+        'content': [ 
             (r'\s+', Whitespace),
-            (r'\}', Punctuation, '#pop'),
+            (r'\}', Punctuation, '#pop'), 
             (r';', Punctuation),
-            (r'^@.*?$', Comment.Preproc),
+            (r'^@.*?$', Comment.Preproc), 
 
             (words(_vendor_prefixes,), Keyword.Pseudo),
             (r'('+r'|'.join(_css_properties)+r')(\s*)(\:)',
@@ -329,8 +329,8 @@ class CssLexer(RegexLexer):
             (words(_color_keywords, suffix=r'\b'), Keyword.Constant),
             # for transition-property etc.
             (words(_css_properties, suffix=r'\b'), Keyword),
-            (r'\!important', Comment.Preproc),
-            (r'/\*(?:.|\n)*?\*/', Comment),
+            (r'\!important', Comment.Preproc), 
+            (r'/\*(?:.|\n)*?\*/', Comment), 
 
             include('numeric-values'),
 
@@ -384,311 +384,311 @@ class CssLexer(RegexLexer):
             (r'%', Keyword.Type),
             default('#pop'),
         ],
-    }
-
-
-common_sass_tokens = {
-    'value': [
+    } 
+ 
+ 
+common_sass_tokens = { 
+    'value': [ 
         (r'[ \t]+', Whitespace),
-        (r'[!$][\w-]+', Name.Variable),
-        (r'url\(', String.Other, 'string-url'),
-        (r'[a-z_-][\w-]*(?=\()', Name.Function),
+        (r'[!$][\w-]+', Name.Variable), 
+        (r'url\(', String.Other, 'string-url'), 
+        (r'[a-z_-][\w-]*(?=\()', Name.Function), 
         (words(_css_properties + (
-            'above', 'absolute', 'always', 'armenian', 'aural', 'auto', 'avoid', 'baseline',
-            'behind', 'below', 'bidi-override', 'blink', 'block', 'bold', 'bolder', 'both',
-            'capitalize', 'center-left', 'center-right', 'center', 'circle',
-            'cjk-ideographic', 'close-quote', 'collapse', 'condensed', 'continuous',
+            'above', 'absolute', 'always', 'armenian', 'aural', 'auto', 'avoid', 'baseline', 
+            'behind', 'below', 'bidi-override', 'blink', 'block', 'bold', 'bolder', 'both', 
+            'capitalize', 'center-left', 'center-right', 'center', 'circle', 
+            'cjk-ideographic', 'close-quote', 'collapse', 'condensed', 'continuous', 
             'crosshair', 'cross', 'cursive', 'dashed', 'decimal-leading-zero',
-            'decimal', 'default', 'digits', 'disc', 'dotted', 'double', 'e-resize', 'embed',
-            'extra-condensed', 'extra-expanded', 'expanded', 'fantasy', 'far-left',
-            'far-right', 'faster', 'fast', 'fixed', 'georgian', 'groove', 'hebrew', 'help',
-            'hidden', 'hide', 'higher', 'high', 'hiragana-iroha', 'hiragana', 'icon',
-            'inherit', 'inline-table', 'inline', 'inset', 'inside', 'invert', 'italic',
-            'justify', 'katakana-iroha', 'katakana', 'landscape', 'larger', 'large',
-            'left-side', 'leftwards', 'level', 'lighter', 'line-through', 'list-item',
-            'loud', 'lower-alpha', 'lower-greek', 'lower-roman', 'lowercase', 'ltr',
-            'lower', 'low', 'medium', 'message-box', 'middle', 'mix', 'monospace',
-            'n-resize', 'narrower', 'ne-resize', 'no-close-quote', 'no-open-quote',
-            'no-repeat', 'none', 'normal', 'nowrap', 'nw-resize', 'oblique', 'once',
-            'open-quote', 'outset', 'outside', 'overline', 'pointer', 'portrait', 'px',
-            'relative', 'repeat-x', 'repeat-y', 'repeat', 'rgb', 'ridge', 'right-side',
-            'rightwards', 's-resize', 'sans-serif', 'scroll', 'se-resize',
-            'semi-condensed', 'semi-expanded', 'separate', 'serif', 'show', 'silent',
-            'slow', 'slower', 'small-caps', 'small-caption', 'smaller', 'soft', 'solid',
-            'spell-out', 'square', 'static', 'status-bar', 'super', 'sw-resize',
-            'table-caption', 'table-cell', 'table-column', 'table-column-group',
-            'table-footer-group', 'table-header-group', 'table-row',
-            'table-row-group', 'text', 'text-bottom', 'text-top', 'thick', 'thin',
-            'transparent', 'ultra-condensed', 'ultra-expanded', 'underline',
-            'upper-alpha', 'upper-latin', 'upper-roman', 'uppercase', 'url',
-            'visible', 'w-resize', 'wait', 'wider', 'x-fast', 'x-high', 'x-large', 'x-loud',
-            'x-low', 'x-small', 'x-soft', 'xx-large', 'xx-small', 'yes'), suffix=r'\b'),
-         Name.Constant),
+            'decimal', 'default', 'digits', 'disc', 'dotted', 'double', 'e-resize', 'embed', 
+            'extra-condensed', 'extra-expanded', 'expanded', 'fantasy', 'far-left', 
+            'far-right', 'faster', 'fast', 'fixed', 'georgian', 'groove', 'hebrew', 'help', 
+            'hidden', 'hide', 'higher', 'high', 'hiragana-iroha', 'hiragana', 'icon', 
+            'inherit', 'inline-table', 'inline', 'inset', 'inside', 'invert', 'italic', 
+            'justify', 'katakana-iroha', 'katakana', 'landscape', 'larger', 'large', 
+            'left-side', 'leftwards', 'level', 'lighter', 'line-through', 'list-item', 
+            'loud', 'lower-alpha', 'lower-greek', 'lower-roman', 'lowercase', 'ltr', 
+            'lower', 'low', 'medium', 'message-box', 'middle', 'mix', 'monospace', 
+            'n-resize', 'narrower', 'ne-resize', 'no-close-quote', 'no-open-quote', 
+            'no-repeat', 'none', 'normal', 'nowrap', 'nw-resize', 'oblique', 'once', 
+            'open-quote', 'outset', 'outside', 'overline', 'pointer', 'portrait', 'px', 
+            'relative', 'repeat-x', 'repeat-y', 'repeat', 'rgb', 'ridge', 'right-side', 
+            'rightwards', 's-resize', 'sans-serif', 'scroll', 'se-resize', 
+            'semi-condensed', 'semi-expanded', 'separate', 'serif', 'show', 'silent', 
+            'slow', 'slower', 'small-caps', 'small-caption', 'smaller', 'soft', 'solid', 
+            'spell-out', 'square', 'static', 'status-bar', 'super', 'sw-resize', 
+            'table-caption', 'table-cell', 'table-column', 'table-column-group', 
+            'table-footer-group', 'table-header-group', 'table-row', 
+            'table-row-group', 'text', 'text-bottom', 'text-top', 'thick', 'thin', 
+            'transparent', 'ultra-condensed', 'ultra-expanded', 'underline', 
+            'upper-alpha', 'upper-latin', 'upper-roman', 'uppercase', 'url', 
+            'visible', 'w-resize', 'wait', 'wider', 'x-fast', 'x-high', 'x-large', 'x-loud', 
+            'x-low', 'x-small', 'x-soft', 'xx-large', 'xx-small', 'yes'), suffix=r'\b'), 
+         Name.Constant), 
         (words(_color_keywords, suffix=r'\b'), Name.Entity),
-        (words((
-            'black', 'silver', 'gray', 'white', 'maroon', 'red', 'purple', 'fuchsia', 'green',
-            'lime', 'olive', 'yellow', 'navy', 'blue', 'teal', 'aqua'), suffix=r'\b'),
-         Name.Builtin),
-        (r'\!(important|default)', Name.Exception),
-        (r'(true|false)', Name.Pseudo),
-        (r'(and|or|not)', Operator.Word),
-        (r'/\*', Comment.Multiline, 'inline-comment'),
-        (r'//[^\n]*', Comment.Single),
-        (r'\#[a-z0-9]{1,6}', Number.Hex),
-        (r'(-?\d+)(\%|[a-z]+)?', bygroups(Number.Integer, Keyword.Type)),
-        (r'(-?\d*\.\d+)(\%|[a-z]+)?', bygroups(Number.Float, Keyword.Type)),
-        (r'#\{', String.Interpol, 'interpolation'),
-        (r'[~^*!&%<>|+=@:,./?-]+', Operator),
-        (r'[\[\]()]+', Punctuation),
-        (r'"', String.Double, 'string-double'),
-        (r"'", String.Single, 'string-single'),
-        (r'[a-z_-][\w-]*', Name),
-    ],
-
-    'interpolation': [
-        (r'\}', String.Interpol, '#pop'),
-        include('value'),
-    ],
-
-    'selector': [
+        (words(( 
+            'black', 'silver', 'gray', 'white', 'maroon', 'red', 'purple', 'fuchsia', 'green', 
+            'lime', 'olive', 'yellow', 'navy', 'blue', 'teal', 'aqua'), suffix=r'\b'), 
+         Name.Builtin), 
+        (r'\!(important|default)', Name.Exception), 
+        (r'(true|false)', Name.Pseudo), 
+        (r'(and|or|not)', Operator.Word), 
+        (r'/\*', Comment.Multiline, 'inline-comment'), 
+        (r'//[^\n]*', Comment.Single), 
+        (r'\#[a-z0-9]{1,6}', Number.Hex), 
+        (r'(-?\d+)(\%|[a-z]+)?', bygroups(Number.Integer, Keyword.Type)), 
+        (r'(-?\d*\.\d+)(\%|[a-z]+)?', bygroups(Number.Float, Keyword.Type)), 
+        (r'#\{', String.Interpol, 'interpolation'), 
+        (r'[~^*!&%<>|+=@:,./?-]+', Operator), 
+        (r'[\[\]()]+', Punctuation), 
+        (r'"', String.Double, 'string-double'), 
+        (r"'", String.Single, 'string-single'), 
+        (r'[a-z_-][\w-]*', Name), 
+    ], 
+ 
+    'interpolation': [ 
+        (r'\}', String.Interpol, '#pop'), 
+        include('value'), 
+    ], 
+ 
+    'selector': [ 
         (r'[ \t]+', Whitespace),
-        (r'\:', Name.Decorator, 'pseudo-class'),
-        (r'\.', Name.Class, 'class'),
-        (r'\#', Name.Namespace, 'id'),
-        (r'[\w-]+', Name.Tag),
-        (r'#\{', String.Interpol, 'interpolation'),
-        (r'&', Keyword),
-        (r'[~^*!&\[\]()<>|+=@:;,./?-]', Operator),
-        (r'"', String.Double, 'string-double'),
-        (r"'", String.Single, 'string-single'),
-    ],
-
-    'string-double': [
-        (r'(\\.|#(?=[^\n{])|[^\n"#])+', String.Double),
-        (r'#\{', String.Interpol, 'interpolation'),
-        (r'"', String.Double, '#pop'),
-    ],
-
-    'string-single': [
+        (r'\:', Name.Decorator, 'pseudo-class'), 
+        (r'\.', Name.Class, 'class'), 
+        (r'\#', Name.Namespace, 'id'), 
+        (r'[\w-]+', Name.Tag), 
+        (r'#\{', String.Interpol, 'interpolation'), 
+        (r'&', Keyword), 
+        (r'[~^*!&\[\]()<>|+=@:;,./?-]', Operator), 
+        (r'"', String.Double, 'string-double'), 
+        (r"'", String.Single, 'string-single'), 
+    ], 
+ 
+    'string-double': [ 
+        (r'(\\.|#(?=[^\n{])|[^\n"#])+', String.Double), 
+        (r'#\{', String.Interpol, 'interpolation'), 
+        (r'"', String.Double, '#pop'), 
+    ], 
+ 
+    'string-single': [ 
         (r"(\\.|#(?=[^\n{])|[^\n'#])+", String.Single),
-        (r'#\{', String.Interpol, 'interpolation'),
+        (r'#\{', String.Interpol, 'interpolation'), 
         (r"'", String.Single, '#pop'),
-    ],
-
-    'string-url': [
-        (r'(\\#|#(?=[^\n{])|[^\n#)])+', String.Other),
-        (r'#\{', String.Interpol, 'interpolation'),
-        (r'\)', String.Other, '#pop'),
-    ],
-
-    'pseudo-class': [
-        (r'[\w-]+', Name.Decorator),
-        (r'#\{', String.Interpol, 'interpolation'),
-        default('#pop'),
-    ],
-
-    'class': [
-        (r'[\w-]+', Name.Class),
-        (r'#\{', String.Interpol, 'interpolation'),
-        default('#pop'),
-    ],
-
-    'id': [
-        (r'[\w-]+', Name.Namespace),
-        (r'#\{', String.Interpol, 'interpolation'),
-        default('#pop'),
-    ],
-
-    'for': [
-        (r'(from|to|through)', Operator.Word),
-        include('value'),
-    ],
-}
-
-
-def _indentation(lexer, match, ctx):
-    indentation = match.group(0)
+    ], 
+ 
+    'string-url': [ 
+        (r'(\\#|#(?=[^\n{])|[^\n#)])+', String.Other), 
+        (r'#\{', String.Interpol, 'interpolation'), 
+        (r'\)', String.Other, '#pop'), 
+    ], 
+ 
+    'pseudo-class': [ 
+        (r'[\w-]+', Name.Decorator), 
+        (r'#\{', String.Interpol, 'interpolation'), 
+        default('#pop'), 
+    ], 
+ 
+    'class': [ 
+        (r'[\w-]+', Name.Class), 
+        (r'#\{', String.Interpol, 'interpolation'), 
+        default('#pop'), 
+    ], 
+ 
+    'id': [ 
+        (r'[\w-]+', Name.Namespace), 
+        (r'#\{', String.Interpol, 'interpolation'), 
+        default('#pop'), 
+    ], 
+ 
+    'for': [ 
+        (r'(from|to|through)', Operator.Word), 
+        include('value'), 
+    ], 
+} 
+ 
+ 
+def _indentation(lexer, match, ctx): 
+    indentation = match.group(0) 
     yield match.start(), Whitespace, indentation
-    ctx.last_indentation = indentation
-    ctx.pos = match.end()
-
-    if hasattr(ctx, 'block_state') and ctx.block_state and \
-            indentation.startswith(ctx.block_indentation) and \
-            indentation != ctx.block_indentation:
-        ctx.stack.append(ctx.block_state)
-    else:
-        ctx.block_state = None
-        ctx.block_indentation = None
-        ctx.stack.append('content')
-
-
-def _starts_block(token, state):
-    def callback(lexer, match, ctx):
-        yield match.start(), token, match.group(0)
-
-        if hasattr(ctx, 'last_indentation'):
-            ctx.block_indentation = ctx.last_indentation
-        else:
-            ctx.block_indentation = ''
-
-        ctx.block_state = state
-        ctx.pos = match.end()
-
-    return callback
-
-
-class SassLexer(ExtendedRegexLexer):
-    """
-    For Sass stylesheets.
-
-    .. versionadded:: 1.3
-    """
-
-    name = 'Sass'
-    aliases = ['sass']
-    filenames = ['*.sass']
-    mimetypes = ['text/x-sass']
-
-    flags = re.IGNORECASE | re.MULTILINE
-
-    tokens = {
-        'root': [
+    ctx.last_indentation = indentation 
+    ctx.pos = match.end() 
+ 
+    if hasattr(ctx, 'block_state') and ctx.block_state and \ 
+            indentation.startswith(ctx.block_indentation) and \ 
+            indentation != ctx.block_indentation: 
+        ctx.stack.append(ctx.block_state) 
+    else: 
+        ctx.block_state = None 
+        ctx.block_indentation = None 
+        ctx.stack.append('content') 
+ 
+ 
+def _starts_block(token, state): 
+    def callback(lexer, match, ctx): 
+        yield match.start(), token, match.group(0) 
+ 
+        if hasattr(ctx, 'last_indentation'): 
+            ctx.block_indentation = ctx.last_indentation 
+        else: 
+            ctx.block_indentation = '' 
+ 
+        ctx.block_state = state 
+        ctx.pos = match.end() 
+ 
+    return callback 
+ 
+ 
+class SassLexer(ExtendedRegexLexer): 
+    """ 
+    For Sass stylesheets. 
+ 
+    .. versionadded:: 1.3 
+    """ 
+ 
+    name = 'Sass' 
+    aliases = ['sass'] 
+    filenames = ['*.sass'] 
+    mimetypes = ['text/x-sass'] 
+ 
+    flags = re.IGNORECASE | re.MULTILINE 
+ 
+    tokens = { 
+        'root': [ 
             (r'[ \t]*\n', Whitespace),
-            (r'[ \t]*', _indentation),
-        ],
-
-        'content': [
-            (r'//[^\n]*', _starts_block(Comment.Single, 'single-comment'),
-             'root'),
-            (r'/\*[^\n]*', _starts_block(Comment.Multiline, 'multi-comment'),
-             'root'),
-            (r'@import', Keyword, 'import'),
-            (r'@for', Keyword, 'for'),
-            (r'@(debug|warn|if|while)', Keyword, 'value'),
+            (r'[ \t]*', _indentation), 
+        ], 
+ 
+        'content': [ 
+            (r'//[^\n]*', _starts_block(Comment.Single, 'single-comment'), 
+             'root'), 
+            (r'/\*[^\n]*', _starts_block(Comment.Multiline, 'multi-comment'), 
+             'root'), 
+            (r'@import', Keyword, 'import'), 
+            (r'@for', Keyword, 'for'), 
+            (r'@(debug|warn|if|while)', Keyword, 'value'), 
             (r'(@mixin)( )([\w-]+)', bygroups(Keyword, Whitespace, Name.Function), 'value'),
             (r'(@include)( )([\w-]+)', bygroups(Keyword, Whitespace, Name.Decorator), 'value'),
-            (r'@extend', Keyword, 'selector'),
-            (r'@[\w-]+', Keyword, 'selector'),
-            (r'=[\w-]+', Name.Function, 'value'),
-            (r'\+[\w-]+', Name.Decorator, 'value'),
-            (r'([!$][\w-]\w*)([ \t]*(?:(?:\|\|)?=|:))',
-             bygroups(Name.Variable, Operator), 'value'),
-            (r':', Name.Attribute, 'old-style-attr'),
-            (r'(?=.+?[=:]([^a-z]|$))', Name.Attribute, 'new-style-attr'),
-            default('selector'),
-        ],
-
-        'single-comment': [
-            (r'.+', Comment.Single),
+            (r'@extend', Keyword, 'selector'), 
+            (r'@[\w-]+', Keyword, 'selector'), 
+            (r'=[\w-]+', Name.Function, 'value'), 
+            (r'\+[\w-]+', Name.Decorator, 'value'), 
+            (r'([!$][\w-]\w*)([ \t]*(?:(?:\|\|)?=|:))', 
+             bygroups(Name.Variable, Operator), 'value'), 
+            (r':', Name.Attribute, 'old-style-attr'), 
+            (r'(?=.+?[=:]([^a-z]|$))', Name.Attribute, 'new-style-attr'), 
+            default('selector'), 
+        ], 
+ 
+        'single-comment': [ 
+            (r'.+', Comment.Single), 
             (r'\n', Whitespace, 'root'),
-        ],
-
-        'multi-comment': [
-            (r'.+', Comment.Multiline),
+        ], 
+ 
+        'multi-comment': [ 
+            (r'.+', Comment.Multiline), 
             (r'\n', Whitespace, 'root'),
-        ],
-
-        'import': [
+        ], 
+ 
+        'import': [ 
             (r'[ \t]+', Whitespace),
-            (r'\S+', String),
+            (r'\S+', String), 
             (r'\n', Whitespace, 'root'),
-        ],
-
-        'old-style-attr': [
-            (r'[^\s:="\[]+', Name.Attribute),
-            (r'#\{', String.Interpol, 'interpolation'),
+        ], 
+ 
+        'old-style-attr': [ 
+            (r'[^\s:="\[]+', Name.Attribute), 
+            (r'#\{', String.Interpol, 'interpolation'), 
             (r'([ \t]*)(=)', bygroups(Whitespace, Operator), 'value'),
-            default('value'),
-        ],
-
-        'new-style-attr': [
-            (r'[^\s:="\[]+', Name.Attribute),
-            (r'#\{', String.Interpol, 'interpolation'),
+            default('value'), 
+        ], 
+ 
+        'new-style-attr': [ 
+            (r'[^\s:="\[]+', Name.Attribute), 
+            (r'#\{', String.Interpol, 'interpolation'), 
             (r'([ \t]*)([=:])', bygroups(Whitespace, Operator), 'value'),
-        ],
-
-        'inline-comment': [
-            (r"(\\#|#(?=[^\n{])|\*(?=[^\n/])|[^\n#*])+", Comment.Multiline),
-            (r'#\{', String.Interpol, 'interpolation'),
-            (r"\*/", Comment, '#pop'),
-        ],
-    }
+        ], 
+ 
+        'inline-comment': [ 
+            (r"(\\#|#(?=[^\n{])|\*(?=[^\n/])|[^\n#*])+", Comment.Multiline), 
+            (r'#\{', String.Interpol, 'interpolation'), 
+            (r"\*/", Comment, '#pop'), 
+        ], 
+    } 
     for group, common in common_sass_tokens.items():
-        tokens[group] = copy.copy(common)
+        tokens[group] = copy.copy(common) 
     tokens['value'].append((r'\n', Whitespace, 'root'))
     tokens['selector'].append((r'\n', Whitespace, 'root'))
-
-
-class ScssLexer(RegexLexer):
-    """
-    For SCSS stylesheets.
-    """
-
-    name = 'SCSS'
-    aliases = ['scss']
-    filenames = ['*.scss']
-    mimetypes = ['text/x-scss']
-
-    flags = re.IGNORECASE | re.DOTALL
-    tokens = {
-        'root': [
+ 
+ 
+class ScssLexer(RegexLexer): 
+    """ 
+    For SCSS stylesheets. 
+    """ 
+ 
+    name = 'SCSS' 
+    aliases = ['scss'] 
+    filenames = ['*.scss'] 
+    mimetypes = ['text/x-scss'] 
+ 
+    flags = re.IGNORECASE | re.DOTALL 
+    tokens = { 
+        'root': [ 
             (r'\s+', Whitespace),
-            (r'//.*?\n', Comment.Single),
-            (r'/\*.*?\*/', Comment.Multiline),
-            (r'@import', Keyword, 'value'),
-            (r'@for', Keyword, 'for'),
-            (r'@(debug|warn|if|while)', Keyword, 'value'),
-            (r'(@mixin)( [\w-]+)', bygroups(Keyword, Name.Function), 'value'),
-            (r'(@include)( [\w-]+)', bygroups(Keyword, Name.Decorator), 'value'),
-            (r'@extend', Keyword, 'selector'),
+            (r'//.*?\n', Comment.Single), 
+            (r'/\*.*?\*/', Comment.Multiline), 
+            (r'@import', Keyword, 'value'), 
+            (r'@for', Keyword, 'for'), 
+            (r'@(debug|warn|if|while)', Keyword, 'value'), 
+            (r'(@mixin)( [\w-]+)', bygroups(Keyword, Name.Function), 'value'), 
+            (r'(@include)( [\w-]+)', bygroups(Keyword, Name.Decorator), 'value'), 
+            (r'@extend', Keyword, 'selector'), 
             (r'(@media)(\s+)', bygroups(Keyword, Whitespace), 'value'),
-            (r'@[\w-]+', Keyword, 'selector'),
-            (r'(\$[\w-]*\w)([ \t]*:)', bygroups(Name.Variable, Operator), 'value'),
-            # TODO: broken, and prone to infinite loops.
+            (r'@[\w-]+', Keyword, 'selector'), 
+            (r'(\$[\w-]*\w)([ \t]*:)', bygroups(Name.Variable, Operator), 'value'), 
+            # TODO: broken, and prone to infinite loops. 
             # (r'(?=[^;{}][;}])', Name.Attribute, 'attr'),
             # (r'(?=[^;{}:]+:[^a-z])', Name.Attribute, 'attr'),
-            default('selector'),
-        ],
-
-        'attr': [
-            (r'[^\s:="\[]+', Name.Attribute),
-            (r'#\{', String.Interpol, 'interpolation'),
-            (r'[ \t]*:', Operator, 'value'),
-            default('#pop'),
-        ],
-
-        'inline-comment': [
-            (r"(\\#|#(?=[^{])|\*(?=[^/])|[^#*])+", Comment.Multiline),
-            (r'#\{', String.Interpol, 'interpolation'),
-            (r"\*/", Comment, '#pop'),
-        ],
-    }
+            default('selector'), 
+        ], 
+ 
+        'attr': [ 
+            (r'[^\s:="\[]+', Name.Attribute), 
+            (r'#\{', String.Interpol, 'interpolation'), 
+            (r'[ \t]*:', Operator, 'value'), 
+            default('#pop'), 
+        ], 
+ 
+        'inline-comment': [ 
+            (r"(\\#|#(?=[^{])|\*(?=[^/])|[^#*])+", Comment.Multiline), 
+            (r'#\{', String.Interpol, 'interpolation'), 
+            (r"\*/", Comment, '#pop'), 
+        ], 
+    } 
     for group, common in common_sass_tokens.items():
-        tokens[group] = copy.copy(common)
+        tokens[group] = copy.copy(common) 
     tokens['value'].extend([(r'\n', Whitespace), (r'[;{}]', Punctuation, '#pop')])
     tokens['selector'].extend([(r'\n', Whitespace), (r'[;{}]', Punctuation, '#pop')])
-
-
-class LessCssLexer(CssLexer):
-    """
-    For `LESS <http://lesscss.org/>`_ styleshets.
-
-    .. versionadded:: 2.1
-    """
-
-    name = 'LessCss'
-    aliases = ['less']
-    filenames = ['*.less']
-    mimetypes = ['text/x-less-css']
-
-    tokens = {
-        'root': [
-            (r'@\w+', Name.Variable),
-            inherit,
-        ],
-        'content': [
+ 
+ 
+class LessCssLexer(CssLexer): 
+    """ 
+    For `LESS <http://lesscss.org/>`_ styleshets. 
+ 
+    .. versionadded:: 2.1 
+    """ 
+ 
+    name = 'LessCss' 
+    aliases = ['less'] 
+    filenames = ['*.less'] 
+    mimetypes = ['text/x-less-css'] 
+ 
+    tokens = { 
+        'root': [ 
+            (r'@\w+', Name.Variable), 
+            inherit, 
+        ], 
+        'content': [ 
             (r'\{', Punctuation, '#push'),
             (r'//.*\n', Comment.Single),
-            inherit,
-        ],
-    }
+            inherit, 
+        ], 
+    } 

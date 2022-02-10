@@ -1,56 +1,56 @@
-"""
-    pygments.lexers.graph
-    ~~~~~~~~~~~~~~~~~~~~~
-
-    Lexers for graph query languages.
-
+""" 
+    pygments.lexers.graph 
+    ~~~~~~~~~~~~~~~~~~~~~ 
+ 
+    Lexers for graph query languages. 
+ 
     :copyright: Copyright 2006-2021 by the Pygments team, see AUTHORS.
-    :license: BSD, see LICENSE for details.
-"""
-
-import re
-
+    :license: BSD, see LICENSE for details. 
+""" 
+ 
+import re 
+ 
 from pygments.lexer import RegexLexer, include, bygroups, using, this, words
-from pygments.token import Keyword, Punctuation, Comment, Operator, Name,\
-    String, Number, Whitespace
-
-
-__all__ = ['CypherLexer']
-
-
-class CypherLexer(RegexLexer):
-    """
-    For `Cypher Query Language
+from pygments.token import Keyword, Punctuation, Comment, Operator, Name,\ 
+    String, Number, Whitespace 
+ 
+ 
+__all__ = ['CypherLexer'] 
+ 
+ 
+class CypherLexer(RegexLexer): 
+    """ 
+    For `Cypher Query Language 
     <https://neo4j.com/docs/developer-manual/3.3/cypher/>`_
-
+ 
     For the Cypher version in Neo4j 3.3
-
-    .. versionadded:: 2.0
-    """
-    name = 'Cypher'
-    aliases = ['cypher']
-    filenames = ['*.cyp', '*.cypher']
-
-    flags = re.MULTILINE | re.IGNORECASE
-
-    tokens = {
-        'root': [
-            include('comment'),
+ 
+    .. versionadded:: 2.0 
+    """ 
+    name = 'Cypher' 
+    aliases = ['cypher'] 
+    filenames = ['*.cyp', '*.cypher'] 
+ 
+    flags = re.MULTILINE | re.IGNORECASE 
+ 
+    tokens = { 
+        'root': [ 
+            include('comment'), 
             include('clauses'),
-            include('keywords'),
-            include('relations'),
-            include('strings'),
-            include('whitespace'),
-            include('barewords'),
-        ],
-        'comment': [
+            include('keywords'), 
+            include('relations'), 
+            include('strings'), 
+            include('whitespace'), 
+            include('barewords'), 
+        ], 
+        'comment': [ 
             (r'^.*//.*$', Comment.Single),
-        ],
-        'keywords': [
-            (r'(create|order|match|limit|set|skip|start|return|with|where|'
+        ], 
+        'keywords': [ 
+            (r'(create|order|match|limit|set|skip|start|return|with|where|' 
              r'delete|foreach|not|by|true|false)\b', Keyword),
-        ],
-        'clauses': [
+        ], 
+        'clauses': [ 
             # based on https://neo4j.com/docs/cypher-refcard/3.3/
             (r'(create)(\s+)(index|unique)\b',
                 bygroups(Keyword, Whitespace, Keyword)),
@@ -82,24 +82,24 @@ class CypherLexer(RegexLexer):
                 'foreach', 'in', 'limit', 'match', 'merge', 'none', 'not', 'null', 
                 'remove', 'return', 'set', 'skip', 'single', 'start', 'then', 'union', 
                 'unwind', 'yield', 'where', 'when', 'with'), suffix=r'\b'), Keyword),
-        ],
-        'relations': [
-            (r'(-\[)(.*?)(\]->)', bygroups(Operator, using(this), Operator)),
-            (r'(<-\[)(.*?)(\]-)', bygroups(Operator, using(this), Operator)),
-            (r'(-\[)(.*?)(\]-)', bygroups(Operator, using(this), Operator)),
-            (r'-->|<--|\[|\]', Operator),
-            (r'<|>|<>|=|<=|=>|\(|\)|\||:|,|;', Punctuation),
-            (r'[.*{}]', Punctuation),
-        ],
-        'strings': [
-            (r'"(?:\\[tbnrf\'"\\]|[^\\"])*"', String),
-            (r'`(?:``|[^`])+`', Name.Variable),
-        ],
-        'whitespace': [
-            (r'\s+', Whitespace),
-        ],
-        'barewords': [
-            (r'[a-z]\w*', Name),
-            (r'\d+', Number),
-        ],
-    }
+        ], 
+        'relations': [ 
+            (r'(-\[)(.*?)(\]->)', bygroups(Operator, using(this), Operator)), 
+            (r'(<-\[)(.*?)(\]-)', bygroups(Operator, using(this), Operator)), 
+            (r'(-\[)(.*?)(\]-)', bygroups(Operator, using(this), Operator)), 
+            (r'-->|<--|\[|\]', Operator), 
+            (r'<|>|<>|=|<=|=>|\(|\)|\||:|,|;', Punctuation), 
+            (r'[.*{}]', Punctuation), 
+        ], 
+        'strings': [ 
+            (r'"(?:\\[tbnrf\'"\\]|[^\\"])*"', String), 
+            (r'`(?:``|[^`])+`', Name.Variable), 
+        ], 
+        'whitespace': [ 
+            (r'\s+', Whitespace), 
+        ], 
+        'barewords': [ 
+            (r'[a-z]\w*', Name), 
+            (r'\d+', Number), 
+        ], 
+    } 

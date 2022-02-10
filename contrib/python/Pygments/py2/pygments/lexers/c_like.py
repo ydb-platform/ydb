@@ -1,296 +1,296 @@
-# -*- coding: utf-8 -*-
-"""
-    pygments.lexers.c_like
-    ~~~~~~~~~~~~~~~~~~~~~~
-
-    Lexers for other C-like languages.
-
+# -*- coding: utf-8 -*- 
+""" 
+    pygments.lexers.c_like 
+    ~~~~~~~~~~~~~~~~~~~~~~ 
+ 
+    Lexers for other C-like languages. 
+ 
     :copyright: Copyright 2006-2019 by the Pygments team, see AUTHORS.
-    :license: BSD, see LICENSE for details.
-"""
-
-import re
-
-from pygments.lexer import RegexLexer, include, bygroups, inherit, words, \
-    default
-from pygments.token import Text, Comment, Operator, Keyword, Name, String, \
-    Number, Punctuation
-
-from pygments.lexers.c_cpp import CLexer, CppLexer
-from pygments.lexers import _mql_builtins
-
-__all__ = ['PikeLexer', 'NesCLexer', 'ClayLexer', 'ECLexer', 'ValaLexer',
+    :license: BSD, see LICENSE for details. 
+""" 
+ 
+import re 
+ 
+from pygments.lexer import RegexLexer, include, bygroups, inherit, words, \ 
+    default 
+from pygments.token import Text, Comment, Operator, Keyword, Name, String, \ 
+    Number, Punctuation 
+ 
+from pygments.lexers.c_cpp import CLexer, CppLexer 
+from pygments.lexers import _mql_builtins 
+ 
+__all__ = ['PikeLexer', 'NesCLexer', 'ClayLexer', 'ECLexer', 'ValaLexer', 
            'CudaLexer', 'SwigLexer', 'MqlLexer', 'ArduinoLexer', 'CharmciLexer']
-
-
-class PikeLexer(CppLexer):
-    """
-    For `Pike <http://pike.lysator.liu.se/>`_ source code.
-
-    .. versionadded:: 2.0
-    """
-    name = 'Pike'
-    aliases = ['pike']
-    filenames = ['*.pike', '*.pmod']
-    mimetypes = ['text/x-pike']
-
-    tokens = {
-        'statements': [
-            (words((
-                'catch', 'new', 'private', 'protected', 'public', 'gauge',
-                'throw', 'throws', 'class', 'interface', 'implement', 'abstract', 'extends', 'from',
-                'this', 'super', 'constant', 'final', 'static', 'import', 'use', 'extern',
-                'inline', 'proto', 'break', 'continue', 'if', 'else', 'for',
-                'while', 'do', 'switch', 'case', 'as', 'in', 'version', 'return', 'true', 'false', 'null',
-                '__VERSION__', '__MAJOR__', '__MINOR__', '__BUILD__', '__REAL_VERSION__',
-                '__REAL_MAJOR__', '__REAL_MINOR__', '__REAL_BUILD__', '__DATE__', '__TIME__',
-                '__FILE__', '__DIR__', '__LINE__', '__AUTO_BIGNUM__', '__NT__', '__PIKE__',
-                '__amigaos__', '_Pragma', 'static_assert', 'defined', 'sscanf'), suffix=r'\b'),
-             Keyword),
-            (r'(bool|int|long|float|short|double|char|string|object|void|mapping|'
-             r'array|multiset|program|function|lambda|mixed|'
-             r'[a-z_][a-z0-9_]*_t)\b',
-             Keyword.Type),
-            (r'(class)(\s+)', bygroups(Keyword, Text), 'classname'),
-            (r'[~!%^&*+=|?:<>/@-]', Operator),
-            inherit,
-        ],
-        'classname': [
-            (r'[a-zA-Z_]\w*', Name.Class, '#pop'),
-            # template specification
-            (r'\s*(?=>)', Text, '#pop'),
-        ],
-    }
-
-
-class NesCLexer(CLexer):
-    """
-    For `nesC <https://github.com/tinyos/nesc>`_ source code with preprocessor
-    directives.
-
-    .. versionadded:: 2.0
-    """
-    name = 'nesC'
-    aliases = ['nesc']
-    filenames = ['*.nc']
-    mimetypes = ['text/x-nescsrc']
-
-    tokens = {
-        'statements': [
-            (words((
-                'abstract', 'as', 'async', 'atomic', 'call', 'command', 'component',
-                'components', 'configuration', 'event', 'extends', 'generic',
-                'implementation', 'includes', 'interface', 'module', 'new', 'norace',
-                'post', 'provides', 'signal', 'task', 'uses'), suffix=r'\b'),
-             Keyword),
-            (words(('nx_struct', 'nx_union', 'nx_int8_t', 'nx_int16_t', 'nx_int32_t',
-                    'nx_int64_t', 'nx_uint8_t', 'nx_uint16_t', 'nx_uint32_t',
-                    'nx_uint64_t'), suffix=r'\b'),
-             Keyword.Type),
-            inherit,
-        ],
-    }
-
-
-class ClayLexer(RegexLexer):
-    """
-    For `Clay <http://claylabs.com/clay/>`_ source.
-
-    .. versionadded:: 2.0
-    """
-    name = 'Clay'
-    filenames = ['*.clay']
-    aliases = ['clay']
-    mimetypes = ['text/x-clay']
-    tokens = {
-        'root': [
-            (r'\s', Text),
+ 
+ 
+class PikeLexer(CppLexer): 
+    """ 
+    For `Pike <http://pike.lysator.liu.se/>`_ source code. 
+ 
+    .. versionadded:: 2.0 
+    """ 
+    name = 'Pike' 
+    aliases = ['pike'] 
+    filenames = ['*.pike', '*.pmod'] 
+    mimetypes = ['text/x-pike'] 
+ 
+    tokens = { 
+        'statements': [ 
+            (words(( 
+                'catch', 'new', 'private', 'protected', 'public', 'gauge', 
+                'throw', 'throws', 'class', 'interface', 'implement', 'abstract', 'extends', 'from', 
+                'this', 'super', 'constant', 'final', 'static', 'import', 'use', 'extern', 
+                'inline', 'proto', 'break', 'continue', 'if', 'else', 'for', 
+                'while', 'do', 'switch', 'case', 'as', 'in', 'version', 'return', 'true', 'false', 'null', 
+                '__VERSION__', '__MAJOR__', '__MINOR__', '__BUILD__', '__REAL_VERSION__', 
+                '__REAL_MAJOR__', '__REAL_MINOR__', '__REAL_BUILD__', '__DATE__', '__TIME__', 
+                '__FILE__', '__DIR__', '__LINE__', '__AUTO_BIGNUM__', '__NT__', '__PIKE__', 
+                '__amigaos__', '_Pragma', 'static_assert', 'defined', 'sscanf'), suffix=r'\b'), 
+             Keyword), 
+            (r'(bool|int|long|float|short|double|char|string|object|void|mapping|' 
+             r'array|multiset|program|function|lambda|mixed|' 
+             r'[a-z_][a-z0-9_]*_t)\b', 
+             Keyword.Type), 
+            (r'(class)(\s+)', bygroups(Keyword, Text), 'classname'), 
+            (r'[~!%^&*+=|?:<>/@-]', Operator), 
+            inherit, 
+        ], 
+        'classname': [ 
+            (r'[a-zA-Z_]\w*', Name.Class, '#pop'), 
+            # template specification 
+            (r'\s*(?=>)', Text, '#pop'), 
+        ], 
+    } 
+ 
+ 
+class NesCLexer(CLexer): 
+    """ 
+    For `nesC <https://github.com/tinyos/nesc>`_ source code with preprocessor 
+    directives. 
+ 
+    .. versionadded:: 2.0 
+    """ 
+    name = 'nesC' 
+    aliases = ['nesc'] 
+    filenames = ['*.nc'] 
+    mimetypes = ['text/x-nescsrc'] 
+ 
+    tokens = { 
+        'statements': [ 
+            (words(( 
+                'abstract', 'as', 'async', 'atomic', 'call', 'command', 'component', 
+                'components', 'configuration', 'event', 'extends', 'generic', 
+                'implementation', 'includes', 'interface', 'module', 'new', 'norace', 
+                'post', 'provides', 'signal', 'task', 'uses'), suffix=r'\b'), 
+             Keyword), 
+            (words(('nx_struct', 'nx_union', 'nx_int8_t', 'nx_int16_t', 'nx_int32_t', 
+                    'nx_int64_t', 'nx_uint8_t', 'nx_uint16_t', 'nx_uint32_t', 
+                    'nx_uint64_t'), suffix=r'\b'), 
+             Keyword.Type), 
+            inherit, 
+        ], 
+    } 
+ 
+ 
+class ClayLexer(RegexLexer): 
+    """ 
+    For `Clay <http://claylabs.com/clay/>`_ source. 
+ 
+    .. versionadded:: 2.0 
+    """ 
+    name = 'Clay' 
+    filenames = ['*.clay'] 
+    aliases = ['clay'] 
+    mimetypes = ['text/x-clay'] 
+    tokens = { 
+        'root': [ 
+            (r'\s', Text), 
             (r'//.*?$', Comment.Single),
-            (r'/(\\\n)?[*](.|\n)*?[*](\\\n)?/', Comment.Multiline),
-            (r'\b(public|private|import|as|record|variant|instance'
-             r'|define|overload|default|external|alias'
-             r'|rvalue|ref|forward|inline|noinline|forceinline'
-             r'|enum|var|and|or|not|if|else|goto|return|while'
-             r'|switch|case|break|continue|for|in|true|false|try|catch|throw'
-             r'|finally|onerror|staticassert|eval|when|newtype'
-             r'|__FILE__|__LINE__|__COLUMN__|__ARG__'
-             r')\b', Keyword),
-            (r'[~!%^&*+=|:<>/-]', Operator),
-            (r'[#(){}\[\],;.]', Punctuation),
-            (r'0x[0-9a-fA-F]+[LlUu]*', Number.Hex),
-            (r'\d+[LlUu]*', Number.Integer),
-            (r'\b(true|false)\b', Name.Builtin),
-            (r'(?i)[a-z_?][\w?]*', Name),
-            (r'"""', String, 'tdqs'),
-            (r'"', String, 'dqs'),
-        ],
-        'strings': [
-            (r'(?i)\\(x[0-9a-f]{2}|.)', String.Escape),
-            (r'.', String),
-        ],
-        'nl': [
-            (r'\n', String),
-        ],
-        'dqs': [
-            (r'"', String, '#pop'),
-            include('strings'),
-        ],
-        'tdqs': [
-            (r'"""', String, '#pop'),
-            include('strings'),
-            include('nl'),
-        ],
-    }
-
-
-class ECLexer(CLexer):
-    """
-    For eC source code with preprocessor directives.
-
-    .. versionadded:: 1.5
-    """
-    name = 'eC'
-    aliases = ['ec']
-    filenames = ['*.ec', '*.eh']
-    mimetypes = ['text/x-echdr', 'text/x-ecsrc']
-
-    tokens = {
-        'statements': [
-            (words((
-                'virtual', 'class', 'private', 'public', 'property', 'import',
-                'delete', 'new', 'new0', 'renew', 'renew0', 'define', 'get',
-                'set', 'remote', 'dllexport', 'dllimport', 'stdcall', 'subclass',
-                '__on_register_module', 'namespace', 'using', 'typed_object',
-                'any_object', 'incref', 'register', 'watch', 'stopwatching', 'firewatchers',
-                'watchable', 'class_designer', 'class_fixed', 'class_no_expansion', 'isset',
-                'class_default_property', 'property_category', 'class_data',
-                'class_property', 'thisclass', 'dbtable', 'dbindex',
-                'database_open', 'dbfield'), suffix=r'\b'), Keyword),
-            (words(('uint', 'uint16', 'uint32', 'uint64', 'bool', 'byte',
-                    'unichar', 'int64'), suffix=r'\b'),
-             Keyword.Type),
-            (r'(class)(\s+)', bygroups(Keyword, Text), 'classname'),
-            (r'(null|value|this)\b', Name.Builtin),
-            inherit,
-        ],
-        'classname': [
-            (r'[a-zA-Z_]\w*', Name.Class, '#pop'),
-            # template specification
-            (r'\s*(?=>)', Text, '#pop'),
-        ],
-    }
-
-
-class ValaLexer(RegexLexer):
-    """
-    For Vala source code with preprocessor directives.
-
-    .. versionadded:: 1.1
-    """
-    name = 'Vala'
-    aliases = ['vala', 'vapi']
-    filenames = ['*.vala', '*.vapi']
-    mimetypes = ['text/x-vala']
-
-    tokens = {
-        'whitespace': [
-            (r'^\s*#if\s+0', Comment.Preproc, 'if0'),
-            (r'\n', Text),
-            (r'\s+', Text),
-            (r'\\\n', Text),  # line continuation
-            (r'//(\n|(.|\n)*?[^\\]\n)', Comment.Single),
-            (r'/(\\\n)?[*](.|\n)*?[*](\\\n)?/', Comment.Multiline),
-        ],
-        'statements': [
-            (r'[L@]?"', String, 'string'),
-            (r"L?'(\\.|\\[0-7]{1,3}|\\x[a-fA-F0-9]{1,2}|[^\\\'\n])'",
-             String.Char),
-            (r'(?s)""".*?"""', String),  # verbatim strings
-            (r'(\d+\.\d*|\.\d+|\d+)[eE][+-]?\d+[lL]?', Number.Float),
-            (r'(\d+\.\d*|\.\d+|\d+[fF])[fF]?', Number.Float),
-            (r'0x[0-9a-fA-F]+[Ll]?', Number.Hex),
-            (r'0[0-7]+[Ll]?', Number.Oct),
-            (r'\d+[Ll]?', Number.Integer),
-            (r'[~!%^&*+=|?:<>/-]', Operator),
-            (r'(\[)(Compact|Immutable|(?:Boolean|Simple)Type)(\])',
-             bygroups(Punctuation, Name.Decorator, Punctuation)),
-            # TODO: "correctly" parse complex code attributes
-            (r'(\[)(CCode|(?:Integer|Floating)Type)',
-             bygroups(Punctuation, Name.Decorator)),
-            (r'[()\[\],.]', Punctuation),
-            (words((
-                'as', 'base', 'break', 'case', 'catch', 'construct', 'continue',
-                'default', 'delete', 'do', 'else', 'enum', 'finally', 'for',
-                'foreach', 'get', 'if', 'in', 'is', 'lock', 'new', 'out', 'params',
-                'return', 'set', 'sizeof', 'switch', 'this', 'throw', 'try',
-                'typeof', 'while', 'yield'), suffix=r'\b'),
-             Keyword),
-            (words((
-                'abstract', 'const', 'delegate', 'dynamic', 'ensures', 'extern',
-                'inline', 'internal', 'override', 'owned', 'private', 'protected',
-                'public', 'ref', 'requires', 'signal', 'static', 'throws', 'unowned',
-                'var', 'virtual', 'volatile', 'weak', 'yields'), suffix=r'\b'),
-             Keyword.Declaration),
-            (r'(namespace|using)(\s+)', bygroups(Keyword.Namespace, Text),
-             'namespace'),
-            (r'(class|errordomain|interface|struct)(\s+)',
-             bygroups(Keyword.Declaration, Text), 'class'),
-            (r'(\.)([a-zA-Z_]\w*)',
-             bygroups(Operator, Name.Attribute)),
-            # void is an actual keyword, others are in glib-2.0.vapi
-            (words((
-                'void', 'bool', 'char', 'double', 'float', 'int', 'int8', 'int16',
-                'int32', 'int64', 'long', 'short', 'size_t', 'ssize_t', 'string',
-                'time_t', 'uchar', 'uint', 'uint8', 'uint16', 'uint32', 'uint64',
-                'ulong', 'unichar', 'ushort'), suffix=r'\b'),
-             Keyword.Type),
-            (r'(true|false|null)\b', Name.Builtin),
+            (r'/(\\\n)?[*](.|\n)*?[*](\\\n)?/', Comment.Multiline), 
+            (r'\b(public|private|import|as|record|variant|instance' 
+             r'|define|overload|default|external|alias' 
+             r'|rvalue|ref|forward|inline|noinline|forceinline' 
+             r'|enum|var|and|or|not|if|else|goto|return|while' 
+             r'|switch|case|break|continue|for|in|true|false|try|catch|throw' 
+             r'|finally|onerror|staticassert|eval|when|newtype' 
+             r'|__FILE__|__LINE__|__COLUMN__|__ARG__' 
+             r')\b', Keyword), 
+            (r'[~!%^&*+=|:<>/-]', Operator), 
+            (r'[#(){}\[\],;.]', Punctuation), 
+            (r'0x[0-9a-fA-F]+[LlUu]*', Number.Hex), 
+            (r'\d+[LlUu]*', Number.Integer), 
+            (r'\b(true|false)\b', Name.Builtin), 
+            (r'(?i)[a-z_?][\w?]*', Name), 
+            (r'"""', String, 'tdqs'), 
+            (r'"', String, 'dqs'), 
+        ], 
+        'strings': [ 
+            (r'(?i)\\(x[0-9a-f]{2}|.)', String.Escape), 
+            (r'.', String), 
+        ], 
+        'nl': [ 
+            (r'\n', String), 
+        ], 
+        'dqs': [ 
+            (r'"', String, '#pop'), 
+            include('strings'), 
+        ], 
+        'tdqs': [ 
+            (r'"""', String, '#pop'), 
+            include('strings'), 
+            include('nl'), 
+        ], 
+    } 
+ 
+ 
+class ECLexer(CLexer): 
+    """ 
+    For eC source code with preprocessor directives. 
+ 
+    .. versionadded:: 1.5 
+    """ 
+    name = 'eC' 
+    aliases = ['ec'] 
+    filenames = ['*.ec', '*.eh'] 
+    mimetypes = ['text/x-echdr', 'text/x-ecsrc'] 
+ 
+    tokens = { 
+        'statements': [ 
+            (words(( 
+                'virtual', 'class', 'private', 'public', 'property', 'import', 
+                'delete', 'new', 'new0', 'renew', 'renew0', 'define', 'get', 
+                'set', 'remote', 'dllexport', 'dllimport', 'stdcall', 'subclass', 
+                '__on_register_module', 'namespace', 'using', 'typed_object', 
+                'any_object', 'incref', 'register', 'watch', 'stopwatching', 'firewatchers', 
+                'watchable', 'class_designer', 'class_fixed', 'class_no_expansion', 'isset', 
+                'class_default_property', 'property_category', 'class_data', 
+                'class_property', 'thisclass', 'dbtable', 'dbindex', 
+                'database_open', 'dbfield'), suffix=r'\b'), Keyword), 
+            (words(('uint', 'uint16', 'uint32', 'uint64', 'bool', 'byte', 
+                    'unichar', 'int64'), suffix=r'\b'), 
+             Keyword.Type), 
+            (r'(class)(\s+)', bygroups(Keyword, Text), 'classname'), 
+            (r'(null|value|this)\b', Name.Builtin), 
+            inherit, 
+        ], 
+        'classname': [ 
+            (r'[a-zA-Z_]\w*', Name.Class, '#pop'), 
+            # template specification 
+            (r'\s*(?=>)', Text, '#pop'), 
+        ], 
+    } 
+ 
+ 
+class ValaLexer(RegexLexer): 
+    """ 
+    For Vala source code with preprocessor directives. 
+ 
+    .. versionadded:: 1.1 
+    """ 
+    name = 'Vala' 
+    aliases = ['vala', 'vapi'] 
+    filenames = ['*.vala', '*.vapi'] 
+    mimetypes = ['text/x-vala'] 
+ 
+    tokens = { 
+        'whitespace': [ 
+            (r'^\s*#if\s+0', Comment.Preproc, 'if0'), 
+            (r'\n', Text), 
+            (r'\s+', Text), 
+            (r'\\\n', Text),  # line continuation 
+            (r'//(\n|(.|\n)*?[^\\]\n)', Comment.Single), 
+            (r'/(\\\n)?[*](.|\n)*?[*](\\\n)?/', Comment.Multiline), 
+        ], 
+        'statements': [ 
+            (r'[L@]?"', String, 'string'), 
+            (r"L?'(\\.|\\[0-7]{1,3}|\\x[a-fA-F0-9]{1,2}|[^\\\'\n])'", 
+             String.Char), 
+            (r'(?s)""".*?"""', String),  # verbatim strings 
+            (r'(\d+\.\d*|\.\d+|\d+)[eE][+-]?\d+[lL]?', Number.Float), 
+            (r'(\d+\.\d*|\.\d+|\d+[fF])[fF]?', Number.Float), 
+            (r'0x[0-9a-fA-F]+[Ll]?', Number.Hex), 
+            (r'0[0-7]+[Ll]?', Number.Oct), 
+            (r'\d+[Ll]?', Number.Integer), 
+            (r'[~!%^&*+=|?:<>/-]', Operator), 
+            (r'(\[)(Compact|Immutable|(?:Boolean|Simple)Type)(\])', 
+             bygroups(Punctuation, Name.Decorator, Punctuation)), 
+            # TODO: "correctly" parse complex code attributes 
+            (r'(\[)(CCode|(?:Integer|Floating)Type)', 
+             bygroups(Punctuation, Name.Decorator)), 
+            (r'[()\[\],.]', Punctuation), 
+            (words(( 
+                'as', 'base', 'break', 'case', 'catch', 'construct', 'continue', 
+                'default', 'delete', 'do', 'else', 'enum', 'finally', 'for', 
+                'foreach', 'get', 'if', 'in', 'is', 'lock', 'new', 'out', 'params', 
+                'return', 'set', 'sizeof', 'switch', 'this', 'throw', 'try', 
+                'typeof', 'while', 'yield'), suffix=r'\b'), 
+             Keyword), 
+            (words(( 
+                'abstract', 'const', 'delegate', 'dynamic', 'ensures', 'extern', 
+                'inline', 'internal', 'override', 'owned', 'private', 'protected', 
+                'public', 'ref', 'requires', 'signal', 'static', 'throws', 'unowned', 
+                'var', 'virtual', 'volatile', 'weak', 'yields'), suffix=r'\b'), 
+             Keyword.Declaration), 
+            (r'(namespace|using)(\s+)', bygroups(Keyword.Namespace, Text), 
+             'namespace'), 
+            (r'(class|errordomain|interface|struct)(\s+)', 
+             bygroups(Keyword.Declaration, Text), 'class'), 
+            (r'(\.)([a-zA-Z_]\w*)', 
+             bygroups(Operator, Name.Attribute)), 
+            # void is an actual keyword, others are in glib-2.0.vapi 
+            (words(( 
+                'void', 'bool', 'char', 'double', 'float', 'int', 'int8', 'int16', 
+                'int32', 'int64', 'long', 'short', 'size_t', 'ssize_t', 'string', 
+                'time_t', 'uchar', 'uint', 'uint8', 'uint16', 'uint32', 'uint64', 
+                'ulong', 'unichar', 'ushort'), suffix=r'\b'), 
+             Keyword.Type), 
+            (r'(true|false|null)\b', Name.Builtin), 
             (r'[a-zA-Z_]\w*', Name),
-        ],
-        'root': [
-            include('whitespace'),
-            default('statement'),
-        ],
-        'statement': [
-            include('whitespace'),
-            include('statements'),
-            ('[{}]', Punctuation),
-            (';', Punctuation, '#pop'),
-        ],
-        'string': [
-            (r'"', String, '#pop'),
-            (r'\\([\\abfnrtv"\']|x[a-fA-F0-9]{2,4}|[0-7]{1,3})', String.Escape),
-            (r'[^\\"\n]+', String),  # all other characters
-            (r'\\\n', String),  # line continuation
-            (r'\\', String),  # stray backslash
-        ],
-        'if0': [
-            (r'^\s*#if.*?(?<!\\)\n', Comment.Preproc, '#push'),
-            (r'^\s*#el(?:se|if).*\n', Comment.Preproc, '#pop'),
-            (r'^\s*#endif.*?(?<!\\)\n', Comment.Preproc, '#pop'),
-            (r'.*?\n', Comment),
-        ],
-        'class': [
-            (r'[a-zA-Z_]\w*', Name.Class, '#pop')
-        ],
-        'namespace': [
-            (r'[a-zA-Z_][\w.]*', Name.Namespace, '#pop')
-        ],
-    }
-
-
-class CudaLexer(CLexer):
-    """
-    For NVIDIA `CUDA™ <http://developer.nvidia.com/category/zone/cuda-zone>`_
-    source.
-
-    .. versionadded:: 1.6
-    """
-    name = 'CUDA'
-    filenames = ['*.cu', '*.cuh']
-    aliases = ['cuda', 'cu']
-    mimetypes = ['text/x-cuda']
-
+        ], 
+        'root': [ 
+            include('whitespace'), 
+            default('statement'), 
+        ], 
+        'statement': [ 
+            include('whitespace'), 
+            include('statements'), 
+            ('[{}]', Punctuation), 
+            (';', Punctuation, '#pop'), 
+        ], 
+        'string': [ 
+            (r'"', String, '#pop'), 
+            (r'\\([\\abfnrtv"\']|x[a-fA-F0-9]{2,4}|[0-7]{1,3})', String.Escape), 
+            (r'[^\\"\n]+', String),  # all other characters 
+            (r'\\\n', String),  # line continuation 
+            (r'\\', String),  # stray backslash 
+        ], 
+        'if0': [ 
+            (r'^\s*#if.*?(?<!\\)\n', Comment.Preproc, '#push'), 
+            (r'^\s*#el(?:se|if).*\n', Comment.Preproc, '#pop'), 
+            (r'^\s*#endif.*?(?<!\\)\n', Comment.Preproc, '#pop'), 
+            (r'.*?\n', Comment), 
+        ], 
+        'class': [ 
+            (r'[a-zA-Z_]\w*', Name.Class, '#pop') 
+        ], 
+        'namespace': [ 
+            (r'[a-zA-Z_][\w.]*', Name.Namespace, '#pop') 
+        ], 
+    } 
+ 
+ 
+class CudaLexer(CLexer): 
+    """ 
+    For NVIDIA `CUDA™ <http://developer.nvidia.com/category/zone/cuda-zone>`_ 
+    source. 
+ 
+    .. versionadded:: 1.6 
+    """ 
+    name = 'CUDA' 
+    filenames = ['*.cu', '*.cuh'] 
+    aliases = ['cuda', 'cu'] 
+    mimetypes = ['text/x-cuda'] 
+ 
     function_qualifiers = {'__device__', '__global__', '__host__',
                            '__noinline__', '__forceinline__'}
     variable_qualifiers = {'__device__', '__constant__', '__shared__',
@@ -308,132 +308,132 @@ class CudaLexer(CLexer):
                  '__syncthreads', '__syncthreads_count', '__syncthreads_and',
                  '__syncthreads_or'}
     execution_confs = {'<<<', '>>>'}
-
-    def get_tokens_unprocessed(self, text):
-        for index, token, value in CLexer.get_tokens_unprocessed(self, text):
-            if token is Name:
-                if value in self.variable_qualifiers:
-                    token = Keyword.Type
-                elif value in self.vector_types:
-                    token = Keyword.Type
-                elif value in self.variables:
-                    token = Name.Builtin
-                elif value in self.execution_confs:
-                    token = Keyword.Pseudo
-                elif value in self.function_qualifiers:
-                    token = Keyword.Reserved
-                elif value in self.functions:
-                    token = Name.Function
-            yield index, token, value
-
-
-class SwigLexer(CppLexer):
-    """
-    For `SWIG <http://www.swig.org/>`_ source code.
-
-    .. versionadded:: 2.0
-    """
-    name = 'SWIG'
-    aliases = ['swig']
-    filenames = ['*.swg', '*.i']
-    mimetypes = ['text/swig']
-    priority = 0.04  # Lower than C/C++ and Objective C/C++
-
-    tokens = {
-        'statements': [
-            # SWIG directives
-            (r'(%[a-z_][a-z0-9_]*)', Name.Function),
-            # Special variables
+ 
+    def get_tokens_unprocessed(self, text): 
+        for index, token, value in CLexer.get_tokens_unprocessed(self, text): 
+            if token is Name: 
+                if value in self.variable_qualifiers: 
+                    token = Keyword.Type 
+                elif value in self.vector_types: 
+                    token = Keyword.Type 
+                elif value in self.variables: 
+                    token = Name.Builtin 
+                elif value in self.execution_confs: 
+                    token = Keyword.Pseudo 
+                elif value in self.function_qualifiers: 
+                    token = Keyword.Reserved 
+                elif value in self.functions: 
+                    token = Name.Function 
+            yield index, token, value 
+ 
+ 
+class SwigLexer(CppLexer): 
+    """ 
+    For `SWIG <http://www.swig.org/>`_ source code. 
+ 
+    .. versionadded:: 2.0 
+    """ 
+    name = 'SWIG' 
+    aliases = ['swig'] 
+    filenames = ['*.swg', '*.i'] 
+    mimetypes = ['text/swig'] 
+    priority = 0.04  # Lower than C/C++ and Objective C/C++ 
+ 
+    tokens = { 
+        'statements': [ 
+            # SWIG directives 
+            (r'(%[a-z_][a-z0-9_]*)', Name.Function), 
+            # Special variables 
             (r'\$\**\&?\w+', Name),
-            # Stringification / additional preprocessor directives
-            (r'##*[a-zA-Z_]\w*', Comment.Preproc),
-            inherit,
-        ],
-    }
-
-    # This is a far from complete set of SWIG directives
+            # Stringification / additional preprocessor directives 
+            (r'##*[a-zA-Z_]\w*', Comment.Preproc), 
+            inherit, 
+        ], 
+    } 
+ 
+    # This is a far from complete set of SWIG directives 
     swig_directives = {
-        # Most common directives
-        '%apply', '%define', '%director', '%enddef', '%exception', '%extend',
-        '%feature', '%fragment', '%ignore', '%immutable', '%import', '%include',
-        '%inline', '%insert', '%module', '%newobject', '%nspace', '%pragma',
-        '%rename', '%shared_ptr', '%template', '%typecheck', '%typemap',
-        # Less common directives
-        '%arg', '%attribute', '%bang', '%begin', '%callback', '%catches', '%clear',
-        '%constant', '%copyctor', '%csconst', '%csconstvalue', '%csenum',
-        '%csmethodmodifiers', '%csnothrowexception', '%default', '%defaultctor',
-        '%defaultdtor', '%defined', '%delete', '%delobject', '%descriptor',
-        '%exceptionclass', '%exceptionvar', '%extend_smart_pointer', '%fragments',
-        '%header', '%ifcplusplus', '%ignorewarn', '%implicit', '%implicitconv',
-        '%init', '%javaconst', '%javaconstvalue', '%javaenum', '%javaexception',
-        '%javamethodmodifiers', '%kwargs', '%luacode', '%mutable', '%naturalvar',
-        '%nestedworkaround', '%perlcode', '%pythonabc', '%pythonappend',
-        '%pythoncallback', '%pythoncode', '%pythondynamic', '%pythonmaybecall',
-        '%pythonnondynamic', '%pythonprepend', '%refobject', '%shadow', '%sizeof',
-        '%trackobjects', '%types', '%unrefobject', '%varargs', '%warn',
+        # Most common directives 
+        '%apply', '%define', '%director', '%enddef', '%exception', '%extend', 
+        '%feature', '%fragment', '%ignore', '%immutable', '%import', '%include', 
+        '%inline', '%insert', '%module', '%newobject', '%nspace', '%pragma', 
+        '%rename', '%shared_ptr', '%template', '%typecheck', '%typemap', 
+        # Less common directives 
+        '%arg', '%attribute', '%bang', '%begin', '%callback', '%catches', '%clear', 
+        '%constant', '%copyctor', '%csconst', '%csconstvalue', '%csenum', 
+        '%csmethodmodifiers', '%csnothrowexception', '%default', '%defaultctor', 
+        '%defaultdtor', '%defined', '%delete', '%delobject', '%descriptor', 
+        '%exceptionclass', '%exceptionvar', '%extend_smart_pointer', '%fragments', 
+        '%header', '%ifcplusplus', '%ignorewarn', '%implicit', '%implicitconv', 
+        '%init', '%javaconst', '%javaconstvalue', '%javaenum', '%javaexception', 
+        '%javamethodmodifiers', '%kwargs', '%luacode', '%mutable', '%naturalvar', 
+        '%nestedworkaround', '%perlcode', '%pythonabc', '%pythonappend', 
+        '%pythoncallback', '%pythoncode', '%pythondynamic', '%pythonmaybecall', 
+        '%pythonnondynamic', '%pythonprepend', '%refobject', '%shadow', '%sizeof', 
+        '%trackobjects', '%types', '%unrefobject', '%varargs', '%warn', 
         '%warnfilter'}
+ 
+    def analyse_text(text): 
+        rv = 0 
+        # Search for SWIG directives, which are conventionally at the beginning of 
+        # a line. The probability of them being within a line is low, so let another 
+        # lexer win in this case. 
+        matches = re.findall(r'^\s*(%[a-z_][a-z0-9_]*)', text, re.M) 
+        for m in matches: 
+            if m in SwigLexer.swig_directives: 
+                rv = 0.98 
+                break 
+            else: 
+                rv = 0.91  # Fraction higher than MatlabLexer 
+        return rv 
+ 
+ 
+class MqlLexer(CppLexer): 
+    """ 
+    For `MQL4 <http://docs.mql4.com/>`_ and 
+    `MQL5 <http://www.mql5.com/en/docs>`_ source code. 
+ 
+    .. versionadded:: 2.0 
+    """ 
+    name = 'MQL' 
+    aliases = ['mql', 'mq4', 'mq5', 'mql4', 'mql5'] 
+    filenames = ['*.mq4', '*.mq5', '*.mqh'] 
+    mimetypes = ['text/x-mql'] 
+ 
+    tokens = { 
+        'statements': [ 
+            (words(_mql_builtins.keywords, suffix=r'\b'), Keyword), 
+            (words(_mql_builtins.c_types, suffix=r'\b'), Keyword.Type), 
+            (words(_mql_builtins.types, suffix=r'\b'), Name.Function), 
+            (words(_mql_builtins.constants, suffix=r'\b'), Name.Constant), 
+            (words(_mql_builtins.colors, prefix='(clr)?', suffix=r'\b'), 
+             Name.Constant), 
+            inherit, 
+        ], 
+    } 
+ 
 
-    def analyse_text(text):
-        rv = 0
-        # Search for SWIG directives, which are conventionally at the beginning of
-        # a line. The probability of them being within a line is low, so let another
-        # lexer win in this case.
-        matches = re.findall(r'^\s*(%[a-z_][a-z0-9_]*)', text, re.M)
-        for m in matches:
-            if m in SwigLexer.swig_directives:
-                rv = 0.98
-                break
-            else:
-                rv = 0.91  # Fraction higher than MatlabLexer
-        return rv
-
-
-class MqlLexer(CppLexer):
-    """
-    For `MQL4 <http://docs.mql4.com/>`_ and
-    `MQL5 <http://www.mql5.com/en/docs>`_ source code.
-
-    .. versionadded:: 2.0
-    """
-    name = 'MQL'
-    aliases = ['mql', 'mq4', 'mq5', 'mql4', 'mql5']
-    filenames = ['*.mq4', '*.mq5', '*.mqh']
-    mimetypes = ['text/x-mql']
-
-    tokens = {
-        'statements': [
-            (words(_mql_builtins.keywords, suffix=r'\b'), Keyword),
-            (words(_mql_builtins.c_types, suffix=r'\b'), Keyword.Type),
-            (words(_mql_builtins.types, suffix=r'\b'), Name.Function),
-            (words(_mql_builtins.constants, suffix=r'\b'), Name.Constant),
-            (words(_mql_builtins.colors, prefix='(clr)?', suffix=r'\b'),
-             Name.Constant),
-            inherit,
-        ],
-    }
-
-
-class ArduinoLexer(CppLexer):
-    """
-    For `Arduino(tm) <https://arduino.cc/>`_ source.
-
-    This is an extension of the CppLexer, as the Arduino® Language is a superset
-    of C++
-
-    .. versionadded:: 2.1
-    """
-
-    name = 'Arduino'
-    aliases = ['arduino']
-    filenames = ['*.ino']
-    mimetypes = ['text/x-arduino']
-
-    # Language sketch main structure functions
+class ArduinoLexer(CppLexer): 
+    """ 
+    For `Arduino(tm) <https://arduino.cc/>`_ source. 
+ 
+    This is an extension of the CppLexer, as the Arduino® Language is a superset 
+    of C++ 
+ 
+    .. versionadded:: 2.1 
+    """ 
+ 
+    name = 'Arduino' 
+    aliases = ['arduino'] 
+    filenames = ['*.ino'] 
+    mimetypes = ['text/x-arduino'] 
+ 
+    # Language sketch main structure functions 
     structure = {'setup', 'loop'}
-
+ 
     # Language operators
     operators = {'not', 'or', 'and', 'xor'}
-
+ 
     # Language 'variables'
     variables = {
         'DIGITAL_MESSAGE', 'FIRMATA_STRING', 'ANALOG_MESSAGE', 'REPORT_DIGITAL',
@@ -454,7 +454,7 @@ class ArduinoLexer(CppLexer):
         'atomic_ushort', 'atomic_int', 'atomic_uint', 'atomic_long', 'atomic_ulong',
         'atomic_llong', 'atomic_ullong', 'PROGMEM'}
 
-    # Language shipped functions and class ( )
+    # Language shipped functions and class ( ) 
     functions = {
         'KeyboardController', 'MouseController', 'SoftwareSerial', 'EthernetServer',
         'EthernetClient', 'LiquidCrystal', 'RobotControl', 'GSMVoiceCall',
@@ -518,15 +518,15 @@ class ArduinoLexer(CppLexer):
         'isAlphaNumeric', 'isAlpha', 'isAscii', 'isWhitespace', 'isControl', 'isDigit',
         'isGraph', 'isLowerCase', 'isPrintable', 'isPunct', 'isSpace', 'isUpperCase',
         'isHexadecimalDigit'}
-
+ 
     # do not highlight
     suppress_highlight = {
         'namespace', 'template', 'mutable', 'using', 'asm', 'typeid',
         'typename', 'this', 'alignof', 'constexpr', 'decltype', 'noexcept',
         'static_assert', 'thread_local', 'restrict'}
 
-    def get_tokens_unprocessed(self, text):
-        for index, token, value in CppLexer.get_tokens_unprocessed(self, text):
+    def get_tokens_unprocessed(self, text): 
+        for index, token, value in CppLexer.get_tokens_unprocessed(self, text): 
             if value in self.structure:
                 yield index, Name.Builtin, value
             elif value in self.operators:
@@ -537,8 +537,8 @@ class ArduinoLexer(CppLexer):
                 yield index, Name, value
             elif value in self.functions:
                 yield index, Name.Function, value
-            else:
-                yield index, token, value
+            else: 
+                yield index, token, value 
 
 
 class CharmciLexer(CppLexer):

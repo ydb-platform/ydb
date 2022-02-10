@@ -1,215 +1,215 @@
-"""
-    pygments.lexers.asm
-    ~~~~~~~~~~~~~~~~~~~
-
-    Lexers for assembly languages.
-
+""" 
+    pygments.lexers.asm 
+    ~~~~~~~~~~~~~~~~~~~ 
+ 
+    Lexers for assembly languages. 
+ 
     :copyright: Copyright 2006-2021 by the Pygments team, see AUTHORS.
-    :license: BSD, see LICENSE for details.
-"""
-
-import re
-
+    :license: BSD, see LICENSE for details. 
+""" 
+ 
+import re 
+ 
 from pygments.lexer import RegexLexer, include, bygroups, using, words, \
     DelegatingLexer, default
-from pygments.lexers.c_cpp import CppLexer, CLexer
-from pygments.lexers.d import DLexer
-from pygments.token import Text, Name, Number, String, Comment, Punctuation, \
+from pygments.lexers.c_cpp import CppLexer, CLexer 
+from pygments.lexers.d import DLexer 
+from pygments.token import Text, Name, Number, String, Comment, Punctuation, \ 
     Other, Keyword, Operator, Whitespace
-
-__all__ = ['GasLexer', 'ObjdumpLexer', 'DObjdumpLexer', 'CppObjdumpLexer',
+ 
+__all__ = ['GasLexer', 'ObjdumpLexer', 'DObjdumpLexer', 'CppObjdumpLexer', 
            'CObjdumpLexer', 'HsailLexer', 'LlvmLexer', 'LlvmMirBodyLexer',
            'LlvmMirLexer', 'NasmLexer', 'NasmObjdumpLexer', 'TasmLexer',
            'Ca65Lexer', 'Dasm16Lexer']
-
-
-class GasLexer(RegexLexer):
-    """
-    For Gas (AT&T) assembly code.
-    """
-    name = 'GAS'
-    aliases = ['gas', 'asm']
-    filenames = ['*.s', '*.S']
-    mimetypes = ['text/x-gas']
-
-    #: optional Comment or Whitespace
-    string = r'"(\\"|[^"])*"'
-    char = r'[\w$.@-]'
+ 
+ 
+class GasLexer(RegexLexer): 
+    """ 
+    For Gas (AT&T) assembly code. 
+    """ 
+    name = 'GAS' 
+    aliases = ['gas', 'asm'] 
+    filenames = ['*.s', '*.S'] 
+    mimetypes = ['text/x-gas'] 
+ 
+    #: optional Comment or Whitespace 
+    string = r'"(\\"|[^"])*"' 
+    char = r'[\w$.@-]' 
     identifier = r'(?:[a-zA-Z$_]' + char + r'*|\.' + char + '+)'
     number = r'(?:0[xX][a-fA-F0-9]+|#?-?\d+)'
     register = '%' + identifier + r'\b'
-
-    tokens = {
-        'root': [
-            include('whitespace'),
-            (identifier + ':', Name.Label),
-            (r'\.' + identifier, Name.Attribute, 'directive-args'),
-            (r'lock|rep(n?z)?|data\d+', Name.Attribute),
-            (identifier, Name.Function, 'instruction-args'),
-            (r'[\r\n]+', Text)
-        ],
-        'directive-args': [
-            (identifier, Name.Constant),
-            (string, String),
-            ('@' + identifier, Name.Attribute),
-            (number, Number.Integer),
+ 
+    tokens = { 
+        'root': [ 
+            include('whitespace'), 
+            (identifier + ':', Name.Label), 
+            (r'\.' + identifier, Name.Attribute, 'directive-args'), 
+            (r'lock|rep(n?z)?|data\d+', Name.Attribute), 
+            (identifier, Name.Function, 'instruction-args'), 
+            (r'[\r\n]+', Text) 
+        ], 
+        'directive-args': [ 
+            (identifier, Name.Constant), 
+            (string, String), 
+            ('@' + identifier, Name.Attribute), 
+            (number, Number.Integer), 
             (register, Name.Variable),
             (r'[\r\n]+', Whitespace, '#pop'),
             (r'([;#]|//).*?\n', Comment.Single, '#pop'),
             (r'/[*].*?[*]/', Comment.Multiline),
             (r'/[*].*?\n[\w\W]*?[*]/', Comment.Multiline, '#pop'),
-
-            include('punctuation'),
-            include('whitespace')
-        ],
-        'instruction-args': [
-            # For objdump-disassembled code, shouldn't occur in
-            # actual assembler input
-            ('([a-z0-9]+)( )(<)('+identifier+')(>)',
-                bygroups(Number.Hex, Text, Punctuation, Name.Constant,
-                         Punctuation)),
-            ('([a-z0-9]+)( )(<)('+identifier+')([-+])('+number+')(>)',
-                bygroups(Number.Hex, Text, Punctuation, Name.Constant,
-                         Punctuation, Number.Integer, Punctuation)),
-
-            # Address constants
-            (identifier, Name.Constant),
-            (number, Number.Integer),
-            # Registers
+ 
+            include('punctuation'), 
+            include('whitespace') 
+        ], 
+        'instruction-args': [ 
+            # For objdump-disassembled code, shouldn't occur in 
+            # actual assembler input 
+            ('([a-z0-9]+)( )(<)('+identifier+')(>)', 
+                bygroups(Number.Hex, Text, Punctuation, Name.Constant, 
+                         Punctuation)), 
+            ('([a-z0-9]+)( )(<)('+identifier+')([-+])('+number+')(>)', 
+                bygroups(Number.Hex, Text, Punctuation, Name.Constant, 
+                         Punctuation, Number.Integer, Punctuation)), 
+ 
+            # Address constants 
+            (identifier, Name.Constant), 
+            (number, Number.Integer), 
+            # Registers 
             (register, Name.Variable),
-            # Numeric constants
-            ('$'+number, Number.Integer),
-            (r"$'(.|\\')'", String.Char),
+            # Numeric constants 
+            ('$'+number, Number.Integer), 
+            (r"$'(.|\\')'", String.Char), 
             (r'[\r\n]+', Whitespace, '#pop'),
             (r'([;#]|//).*?\n', Comment.Single, '#pop'),
             (r'/[*].*?[*]/', Comment.Multiline),
             (r'/[*].*?\n[\w\W]*?[*]/', Comment.Multiline, '#pop'),
 
-            include('punctuation'),
-            include('whitespace')
-        ],
-        'whitespace': [
+            include('punctuation'), 
+            include('whitespace') 
+        ], 
+        'whitespace': [ 
             (r'\n', Whitespace),
             (r'\s+', Whitespace),
             (r'([;#]|//).*?\n', Comment.Single),
             (r'/[*][\w\W]*?[*]/', Comment.Multiline)
-        ],
-        'punctuation': [
-            (r'[-*,.()\[\]!:]+', Punctuation)
-        ]
-    }
-
-    def analyse_text(text):
+        ], 
+        'punctuation': [ 
+            (r'[-*,.()\[\]!:]+', Punctuation) 
+        ] 
+    } 
+ 
+    def analyse_text(text): 
         if re.search(r'^\.(text|data|section)', text, re.M):
-            return True
+            return True 
         elif re.search(r'^\.\w+', text, re.M):
-            return 0.1
-
-
-def _objdump_lexer_tokens(asm_lexer):
-    """
-    Common objdump lexer tokens to wrap an ASM lexer.
-    """
-    hex_re = r'[0-9A-Za-z]'
-    return {
-        'root': [
-            # File name & format:
-            ('(.*?)(:)( +file format )(.*?)$',
-                bygroups(Name.Label, Punctuation, Text, String)),
-            # Section header
-            ('(Disassembly of section )(.*?)(:)$',
-                bygroups(Text, Name.Label, Punctuation)),
-            # Function labels
-            # (With offset)
-            ('('+hex_re+'+)( )(<)(.*?)([-+])(0[xX][A-Za-z0-9]+)(>:)$',
+            return 0.1 
+ 
+ 
+def _objdump_lexer_tokens(asm_lexer): 
+    """ 
+    Common objdump lexer tokens to wrap an ASM lexer. 
+    """ 
+    hex_re = r'[0-9A-Za-z]' 
+    return { 
+        'root': [ 
+            # File name & format: 
+            ('(.*?)(:)( +file format )(.*?)$', 
+                bygroups(Name.Label, Punctuation, Text, String)), 
+            # Section header 
+            ('(Disassembly of section )(.*?)(:)$', 
+                bygroups(Text, Name.Label, Punctuation)), 
+            # Function labels 
+            # (With offset) 
+            ('('+hex_re+'+)( )(<)(.*?)([-+])(0[xX][A-Za-z0-9]+)(>:)$', 
                 bygroups(Number.Hex, Whitespace, Punctuation, Name.Function,
-                         Punctuation, Number.Hex, Punctuation)),
-            # (Without offset)
-            ('('+hex_re+'+)( )(<)(.*?)(>:)$',
+                         Punctuation, Number.Hex, Punctuation)), 
+            # (Without offset) 
+            ('('+hex_re+'+)( )(<)(.*?)(>:)$', 
                 bygroups(Number.Hex, Whitespace, Punctuation, Name.Function,
-                         Punctuation)),
-            # Code line with disassembled instructions
-            ('( *)('+hex_re+r'+:)(\t)((?:'+hex_re+hex_re+' )+)( *\t)([a-zA-Z].*?)$',
+                         Punctuation)), 
+            # Code line with disassembled instructions 
+            ('( *)('+hex_re+r'+:)(\t)((?:'+hex_re+hex_re+' )+)( *\t)([a-zA-Z].*?)$', 
                 bygroups(Whitespace, Name.Label, Whitespace, Number.Hex, Whitespace,
-                         using(asm_lexer))),
+                         using(asm_lexer))), 
             # Code line without raw instructions (objdump --no-show-raw-insn)
             ('( *)('+hex_re+r'+:)( *\t)([a-zA-Z].*?)$',
                 bygroups(Whitespace, Name.Label, Whitespace,
                          using(asm_lexer))),
-            # Code line with ascii
-            ('( *)('+hex_re+r'+:)(\t)((?:'+hex_re+hex_re+' )+)( *)(.*?)$',
+            # Code line with ascii 
+            ('( *)('+hex_re+r'+:)(\t)((?:'+hex_re+hex_re+' )+)( *)(.*?)$', 
                 bygroups(Whitespace, Name.Label, Whitespace, Number.Hex, Whitespace, String)),
-            # Continued code line, only raw opcodes without disassembled
-            # instruction
-            ('( *)('+hex_re+r'+:)(\t)((?:'+hex_re+hex_re+' )+)$',
+            # Continued code line, only raw opcodes without disassembled 
+            # instruction 
+            ('( *)('+hex_re+r'+:)(\t)((?:'+hex_re+hex_re+' )+)$', 
                 bygroups(Whitespace, Name.Label, Whitespace, Number.Hex)),
-            # Skipped a few bytes
-            (r'\t\.\.\.$', Text),
-            # Relocation line
-            # (With offset)
-            (r'(\t\t\t)('+hex_re+r'+:)( )([^\t]+)(\t)(.*?)([-+])(0x'+hex_re+'+)$',
+            # Skipped a few bytes 
+            (r'\t\.\.\.$', Text), 
+            # Relocation line 
+            # (With offset) 
+            (r'(\t\t\t)('+hex_re+r'+:)( )([^\t]+)(\t)(.*?)([-+])(0x'+hex_re+'+)$', 
                 bygroups(Whitespace, Name.Label, Whitespace, Name.Property, Whitespace,
-                         Name.Constant, Punctuation, Number.Hex)),
-            # (Without offset)
-            (r'(\t\t\t)('+hex_re+r'+:)( )([^\t]+)(\t)(.*?)$',
+                         Name.Constant, Punctuation, Number.Hex)), 
+            # (Without offset) 
+            (r'(\t\t\t)('+hex_re+r'+:)( )([^\t]+)(\t)(.*?)$', 
                 bygroups(Whitespace, Name.Label, Whitespace, Name.Property, Whitespace,
-                         Name.Constant)),
-            (r'[^\n]+\n', Other)
-        ]
-    }
-
-
-class ObjdumpLexer(RegexLexer):
-    """
+                         Name.Constant)), 
+            (r'[^\n]+\n', Other) 
+        ] 
+    } 
+ 
+ 
+class ObjdumpLexer(RegexLexer): 
+    """ 
     For the output of ``objdump -dr``.
-    """
-    name = 'objdump'
-    aliases = ['objdump']
-    filenames = ['*.objdump']
-    mimetypes = ['text/x-objdump']
-
-    tokens = _objdump_lexer_tokens(GasLexer)
-
-
-class DObjdumpLexer(DelegatingLexer):
-    """
+    """ 
+    name = 'objdump' 
+    aliases = ['objdump'] 
+    filenames = ['*.objdump'] 
+    mimetypes = ['text/x-objdump'] 
+ 
+    tokens = _objdump_lexer_tokens(GasLexer) 
+ 
+ 
+class DObjdumpLexer(DelegatingLexer): 
+    """ 
     For the output of ``objdump -Sr`` on compiled D files.
-    """
-    name = 'd-objdump'
-    aliases = ['d-objdump']
-    filenames = ['*.d-objdump']
-    mimetypes = ['text/x-d-objdump']
-
-    def __init__(self, **options):
+    """ 
+    name = 'd-objdump' 
+    aliases = ['d-objdump'] 
+    filenames = ['*.d-objdump'] 
+    mimetypes = ['text/x-d-objdump'] 
+ 
+    def __init__(self, **options): 
         super().__init__(DLexer, ObjdumpLexer, **options)
-
-
-class CppObjdumpLexer(DelegatingLexer):
-    """
+ 
+ 
+class CppObjdumpLexer(DelegatingLexer): 
+    """ 
     For the output of ``objdump -Sr`` on compiled C++ files.
-    """
-    name = 'cpp-objdump'
-    aliases = ['cpp-objdump', 'c++-objdumb', 'cxx-objdump']
-    filenames = ['*.cpp-objdump', '*.c++-objdump', '*.cxx-objdump']
-    mimetypes = ['text/x-cpp-objdump']
-
-    def __init__(self, **options):
+    """ 
+    name = 'cpp-objdump' 
+    aliases = ['cpp-objdump', 'c++-objdumb', 'cxx-objdump'] 
+    filenames = ['*.cpp-objdump', '*.c++-objdump', '*.cxx-objdump'] 
+    mimetypes = ['text/x-cpp-objdump'] 
+ 
+    def __init__(self, **options): 
         super().__init__(CppLexer, ObjdumpLexer, **options)
-
-
-class CObjdumpLexer(DelegatingLexer):
-    """
+ 
+ 
+class CObjdumpLexer(DelegatingLexer): 
+    """ 
     For the output of ``objdump -Sr`` on compiled C files.
-    """
-    name = 'c-objdump'
-    aliases = ['c-objdump']
-    filenames = ['*.c-objdump']
-    mimetypes = ['text/x-c-objdump']
-
-    def __init__(self, **options):
+    """ 
+    name = 'c-objdump' 
+    aliases = ['c-objdump'] 
+    filenames = ['*.c-objdump'] 
+    mimetypes = ['text/x-c-objdump'] 
+ 
+    def __init__(self, **options): 
         super().__init__(CLexer, ObjdumpLexer, **options)
-
-
+ 
+ 
 class HsailLexer(RegexLexer):
     """
     For HSAIL assembly code.
@@ -345,49 +345,49 @@ class HsailLexer(RegexLexer):
     }
 
 
-class LlvmLexer(RegexLexer):
-    """
-    For LLVM assembly code.
-    """
-    name = 'LLVM'
-    aliases = ['llvm']
-    filenames = ['*.ll']
-    mimetypes = ['text/x-llvm']
-
-    #: optional Comment or Whitespace
-    string = r'"[^"]*?"'
-    identifier = r'([-a-zA-Z$._][\w\-$.]*|' + string + ')'
+class LlvmLexer(RegexLexer): 
+    """ 
+    For LLVM assembly code. 
+    """ 
+    name = 'LLVM' 
+    aliases = ['llvm'] 
+    filenames = ['*.ll'] 
+    mimetypes = ['text/x-llvm'] 
+ 
+    #: optional Comment or Whitespace 
+    string = r'"[^"]*?"' 
+    identifier = r'([-a-zA-Z$._][\w\-$.]*|' + string + ')' 
     block_label = r'(' + identifier + r'|(\d+))'
-
-    tokens = {
-        'root': [
-            include('whitespace'),
-
-            # Before keywords, because keywords are valid label names :(...
+ 
+    tokens = { 
+        'root': [ 
+            include('whitespace'), 
+ 
+            # Before keywords, because keywords are valid label names :(... 
             (block_label + r'\s*:', Name.Label),
-
-            include('keyword'),
-
-            (r'%' + identifier, Name.Variable),
-            (r'@' + identifier, Name.Variable.Global),
-            (r'%\d+', Name.Variable.Anonymous),
-            (r'@\d+', Name.Variable.Global),
-            (r'#\d+', Name.Variable.Global),
-            (r'!' + identifier, Name.Variable),
-            (r'!\d+', Name.Variable.Anonymous),
-            (r'c?' + string, String),
-
-            (r'0[xX][a-fA-F0-9]+', Number),
-            (r'-?\d+(?:[.]\d+)?(?:[eE][-+]?\d+(?:[.]\d+)?)?', Number),
-
-            (r'[=<>{}\[\]()*.,!]|x\b', Punctuation)
-        ],
-        'whitespace': [
+ 
+            include('keyword'), 
+ 
+            (r'%' + identifier, Name.Variable), 
+            (r'@' + identifier, Name.Variable.Global), 
+            (r'%\d+', Name.Variable.Anonymous), 
+            (r'@\d+', Name.Variable.Global), 
+            (r'#\d+', Name.Variable.Global), 
+            (r'!' + identifier, Name.Variable), 
+            (r'!\d+', Name.Variable.Anonymous), 
+            (r'c?' + string, String), 
+ 
+            (r'0[xX][a-fA-F0-9]+', Number), 
+            (r'-?\d+(?:[.]\d+)?(?:[eE][-+]?\d+(?:[.]\d+)?)?', Number), 
+ 
+            (r'[=<>{}\[\]()*.,!]|x\b', Punctuation) 
+        ], 
+        'whitespace': [ 
             (r'(\n|\s+)+', Whitespace),
-            (r';.*?\n', Comment)
-        ],
-        'keyword': [
-            # Regular keywords
+            (r';.*?\n', Comment) 
+        ], 
+        'keyword': [ 
+            # Regular keywords 
             (words((
                 'aarch64_sve_vector_pcs', 'aarch64_vector_pcs', 'acq_rel',
                 'acquire', 'add', 'addrspace', 'addrspacecast', 'afn', 'alias',
@@ -473,19 +473,19 @@ class LlvmLexer(RegexLexer):
                 'x86_vectorcallcc', 'xchg', 'xor', 'zeroext',
                 'zeroinitializer', 'zext', 'immarg', 'willreturn'),
                 suffix=r'\b'), Keyword),
-
-            # Types
+ 
+            # Types 
             (words(('void', 'half', 'bfloat', 'float', 'double', 'fp128',
                     'x86_fp80', 'ppc_fp128', 'label', 'metadata', 'x86_mmx',
                     'x86_amx', 'token')),
                    Keyword.Type),
-
-            # Integer types
+ 
+            # Integer types 
             (r'i[1-9]\d*', Keyword.Type)
-        ]
-    }
-
-
+        ] 
+    } 
+ 
+ 
 class LlvmMirBodyLexer(RegexLexer):
     """
     For LLVM MIR examples without the YAML wrapper.
@@ -708,105 +708,105 @@ class LlvmMirLexer(RegexLexer):
     }
 
 
-class NasmLexer(RegexLexer):
-    """
-    For Nasm (Intel) assembly code.
-    """
-    name = 'NASM'
-    aliases = ['nasm']
-    filenames = ['*.asm', '*.ASM']
-    mimetypes = ['text/x-nasm']
-
+class NasmLexer(RegexLexer): 
+    """ 
+    For Nasm (Intel) assembly code. 
+    """ 
+    name = 'NASM' 
+    aliases = ['nasm'] 
+    filenames = ['*.asm', '*.ASM'] 
+    mimetypes = ['text/x-nasm'] 
+ 
     # Tasm uses the same file endings, but TASM is not as common as NASM, so
     # we prioritize NASM higher by default
     priority = 1.0
 
-    identifier = r'[a-z$._?][\w$.?#@~]*'
-    hexn = r'(?:0x[0-9a-f]+|$0[0-9a-f]*|[0-9]+[0-9a-f]*h)'
-    octn = r'[0-7]+q'
-    binn = r'[01]+b'
-    decn = r'[0-9]+'
-    floatn = decn + r'\.e?' + decn
-    string = r'"(\\"|[^"\n])*"|' + r"'(\\'|[^'\n])*'|" + r"`(\\`|[^`\n])*`"
-    declkw = r'(?:res|d)[bwdqt]|times'
+    identifier = r'[a-z$._?][\w$.?#@~]*' 
+    hexn = r'(?:0x[0-9a-f]+|$0[0-9a-f]*|[0-9]+[0-9a-f]*h)' 
+    octn = r'[0-7]+q' 
+    binn = r'[01]+b' 
+    decn = r'[0-9]+' 
+    floatn = decn + r'\.e?' + decn 
+    string = r'"(\\"|[^"\n])*"|' + r"'(\\'|[^'\n])*'|" + r"`(\\`|[^`\n])*`" 
+    declkw = r'(?:res|d)[bwdqt]|times' 
     register = (r'(r[0-9][0-5]?[bwd]?|'
-                r'[a-d][lh]|[er]?[a-d]x|[er]?[sb]p|[er]?[sd]i|[c-gs]s|st[0-7]|'
+                r'[a-d][lh]|[er]?[a-d]x|[er]?[sb]p|[er]?[sd]i|[c-gs]s|st[0-7]|' 
                 r'mm[0-7]|cr[0-4]|dr[0-367]|tr[3-7])\b')
-    wordop = r'seg|wrt|strict'
-    type = r'byte|[dq]?word'
+    wordop = r'seg|wrt|strict' 
+    type = r'byte|[dq]?word' 
     # Directives must be followed by whitespace, otherwise CPU will match
     # cpuid for instance.
     directives = (r'(?:BITS|USE16|USE32|SECTION|SEGMENT|ABSOLUTE|EXTERN|GLOBAL|'
-                  r'ORG|ALIGN|STRUC|ENDSTRUC|COMMON|CPU|GROUP|UPPERCASE|IMPORT|'
+                  r'ORG|ALIGN|STRUC|ENDSTRUC|COMMON|CPU|GROUP|UPPERCASE|IMPORT|' 
                   r'EXPORT|LIBRARY|MODULE)(?=\s)')
-
-    flags = re.IGNORECASE | re.MULTILINE
-    tokens = {
-        'root': [
-            (r'^\s*%', Comment.Preproc, 'preproc'),
-            include('whitespace'),
-            (identifier + ':', Name.Label),
-            (r'(%s)(\s+)(equ)' % identifier,
+ 
+    flags = re.IGNORECASE | re.MULTILINE 
+    tokens = { 
+        'root': [ 
+            (r'^\s*%', Comment.Preproc, 'preproc'), 
+            include('whitespace'), 
+            (identifier + ':', Name.Label), 
+            (r'(%s)(\s+)(equ)' % identifier, 
                 bygroups(Name.Constant, Whitespace, Keyword.Declaration),
-                'instruction-args'),
-            (directives, Keyword, 'instruction-args'),
-            (declkw, Keyword.Declaration, 'instruction-args'),
-            (identifier, Name.Function, 'instruction-args'),
+                'instruction-args'), 
+            (directives, Keyword, 'instruction-args'), 
+            (declkw, Keyword.Declaration, 'instruction-args'), 
+            (identifier, Name.Function, 'instruction-args'), 
             (r'[\r\n]+', Whitespace)
-        ],
-        'instruction-args': [
-            (string, String),
-            (hexn, Number.Hex),
-            (octn, Number.Oct),
-            (binn, Number.Bin),
-            (floatn, Number.Float),
-            (decn, Number.Integer),
-            include('punctuation'),
-            (register, Name.Builtin),
-            (identifier, Name.Variable),
+        ], 
+        'instruction-args': [ 
+            (string, String), 
+            (hexn, Number.Hex), 
+            (octn, Number.Oct), 
+            (binn, Number.Bin), 
+            (floatn, Number.Float), 
+            (decn, Number.Integer), 
+            include('punctuation'), 
+            (register, Name.Builtin), 
+            (identifier, Name.Variable), 
             (r'[\r\n]+', Whitespace, '#pop'),
-            include('whitespace')
-        ],
-        'preproc': [
-            (r'[^;\n]+', Comment.Preproc),
-            (r';.*?\n', Comment.Single, '#pop'),
-            (r'\n', Comment.Preproc, '#pop'),
-        ],
-        'whitespace': [
+            include('whitespace') 
+        ], 
+        'preproc': [ 
+            (r'[^;\n]+', Comment.Preproc), 
+            (r';.*?\n', Comment.Single, '#pop'), 
+            (r'\n', Comment.Preproc, '#pop'), 
+        ], 
+        'whitespace': [ 
             (r'\n', Whitespace),
             (r'[ \t]+', Whitespace),
             (r';.*', Comment.Single),
             (r'#.*', Comment.Single)
-        ],
-        'punctuation': [
-            (r'[,():\[\]]+', Punctuation),
-            (r'[&|^<>+*/%~-]+', Operator),
-            (r'[$]+', Keyword.Constant),
-            (wordop, Operator.Word),
-            (type, Keyword.Type)
-        ],
-    }
-
+        ], 
+        'punctuation': [ 
+            (r'[,():\[\]]+', Punctuation), 
+            (r'[&|^<>+*/%~-]+', Operator), 
+            (r'[$]+', Keyword.Constant), 
+            (wordop, Operator.Word), 
+            (type, Keyword.Type) 
+        ], 
+    } 
+ 
     def analyse_text(text):
         # Probably TASM
         if re.match(r'PROC', text, re.IGNORECASE):
             return False
+ 
 
-
-class NasmObjdumpLexer(ObjdumpLexer):
-    """
+class NasmObjdumpLexer(ObjdumpLexer): 
+    """ 
     For the output of ``objdump -d -M intel``.
-
-    .. versionadded:: 2.0
-    """
-    name = 'objdump-nasm'
-    aliases = ['objdump-nasm']
-    filenames = ['*.objdump-intel']
-    mimetypes = ['text/x-nasm-objdump']
-
-    tokens = _objdump_lexer_tokens(NasmLexer)
-
-
+ 
+    .. versionadded:: 2.0 
+    """ 
+    name = 'objdump-nasm' 
+    aliases = ['objdump-nasm'] 
+    filenames = ['*.objdump-intel'] 
+    mimetypes = ['text/x-nasm-objdump'] 
+ 
+    tokens = _objdump_lexer_tokens(NasmLexer) 
+ 
+ 
 class TasmLexer(RegexLexer):
     """
     For Tasm (Turbo Assembler) assembly code.
@@ -892,43 +892,43 @@ class TasmLexer(RegexLexer):
             return True
 
 
-class Ca65Lexer(RegexLexer):
-    """
-    For ca65 assembler sources.
-
-    .. versionadded:: 1.6
-    """
-    name = 'ca65 assembler'
-    aliases = ['ca65']
-    filenames = ['*.s']
-
-    flags = re.IGNORECASE
-
-    tokens = {
-        'root': [
-            (r';.*', Comment.Single),
+class Ca65Lexer(RegexLexer): 
+    """ 
+    For ca65 assembler sources. 
+ 
+    .. versionadded:: 1.6 
+    """ 
+    name = 'ca65 assembler' 
+    aliases = ['ca65'] 
+    filenames = ['*.s'] 
+ 
+    flags = re.IGNORECASE 
+ 
+    tokens = { 
+        'root': [ 
+            (r';.*', Comment.Single), 
             (r'\s+', Whitespace),
-            (r'[a-z_.@$][\w.@$]*:', Name.Label),
-            (r'((ld|st)[axy]|(in|de)[cxy]|asl|lsr|ro[lr]|adc|sbc|cmp|cp[xy]'
-             r'|cl[cvdi]|se[cdi]|jmp|jsr|bne|beq|bpl|bmi|bvc|bvs|bcc|bcs'
-             r'|p[lh][ap]|rt[is]|brk|nop|ta[xy]|t[xy]a|txs|tsx|and|ora|eor'
-             r'|bit)\b', Keyword),
-            (r'\.\w+', Keyword.Pseudo),
-            (r'[-+~*/^&|!<>=]', Operator),
-            (r'"[^"\n]*.', String),
-            (r"'[^'\n]*.", String.Char),
-            (r'\$[0-9a-f]+|[0-9a-f]+h\b', Number.Hex),
-            (r'\d+', Number.Integer),
-            (r'%[01]+', Number.Bin),
-            (r'[#,.:()=\[\]]', Punctuation),
-            (r'[a-z_.@$][\w.@$]*', Name),
-        ]
-    }
-
-    def analyse_text(self, text):
-        # comments in GAS start with "#"
+            (r'[a-z_.@$][\w.@$]*:', Name.Label), 
+            (r'((ld|st)[axy]|(in|de)[cxy]|asl|lsr|ro[lr]|adc|sbc|cmp|cp[xy]' 
+             r'|cl[cvdi]|se[cdi]|jmp|jsr|bne|beq|bpl|bmi|bvc|bvs|bcc|bcs' 
+             r'|p[lh][ap]|rt[is]|brk|nop|ta[xy]|t[xy]a|txs|tsx|and|ora|eor' 
+             r'|bit)\b', Keyword), 
+            (r'\.\w+', Keyword.Pseudo), 
+            (r'[-+~*/^&|!<>=]', Operator), 
+            (r'"[^"\n]*.', String), 
+            (r"'[^'\n]*.", String.Char), 
+            (r'\$[0-9a-f]+|[0-9a-f]+h\b', Number.Hex), 
+            (r'\d+', Number.Integer), 
+            (r'%[01]+', Number.Bin), 
+            (r'[#,.:()=\[\]]', Punctuation), 
+            (r'[a-z_.@$][\w.@$]*', Name), 
+        ] 
+    } 
+ 
+    def analyse_text(self, text): 
+        # comments in GAS start with "#" 
         if re.search(r'^\s*;', text, re.MULTILINE):
-            return 0.9
+            return 0.9 
 
 
 class Dasm16Lexer(RegexLexer):

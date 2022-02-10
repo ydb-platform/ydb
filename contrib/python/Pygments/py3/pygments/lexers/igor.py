@@ -1,52 +1,52 @@
-"""
-    pygments.lexers.igor
-    ~~~~~~~~~~~~~~~~~~~~
-
-    Lexers for Igor Pro.
-
+""" 
+    pygments.lexers.igor 
+    ~~~~~~~~~~~~~~~~~~~~ 
+ 
+    Lexers for Igor Pro. 
+ 
     :copyright: Copyright 2006-2021 by the Pygments team, see AUTHORS.
-    :license: BSD, see LICENSE for details.
-"""
-
-import re
-
-from pygments.lexer import RegexLexer, words
-from pygments.token import Text, Comment, Keyword, Name, String
-
-__all__ = ['IgorLexer']
-
-
-class IgorLexer(RegexLexer):
-    """
-    Pygments Lexer for Igor Pro procedure files (.ipf).
-    See http://www.wavemetrics.com/ and http://www.igorexchange.com/.
-
-    .. versionadded:: 2.0
-    """
-
-    name = 'Igor'
-    aliases = ['igor', 'igorpro']
-    filenames = ['*.ipf']
-    mimetypes = ['text/ipf']
-
-    flags = re.IGNORECASE | re.MULTILINE
-
-    flowControl = (
-        'if', 'else', 'elseif', 'endif', 'for', 'endfor', 'strswitch', 'switch',
-        'case', 'default', 'endswitch', 'do', 'while', 'try', 'catch', 'endtry',
-        'break', 'continue', 'return', 'AbortOnRTE', 'AbortOnValue'
-    )
-    types = (
-        'variable', 'string', 'constant', 'strconstant', 'NVAR', 'SVAR', 'WAVE',
-        'STRUCT', 'dfref', 'funcref', 'char', 'uchar', 'int16', 'uint16', 'int32',
+    :license: BSD, see LICENSE for details. 
+""" 
+ 
+import re 
+ 
+from pygments.lexer import RegexLexer, words 
+from pygments.token import Text, Comment, Keyword, Name, String 
+ 
+__all__ = ['IgorLexer'] 
+ 
+ 
+class IgorLexer(RegexLexer): 
+    """ 
+    Pygments Lexer for Igor Pro procedure files (.ipf). 
+    See http://www.wavemetrics.com/ and http://www.igorexchange.com/. 
+ 
+    .. versionadded:: 2.0 
+    """ 
+ 
+    name = 'Igor' 
+    aliases = ['igor', 'igorpro'] 
+    filenames = ['*.ipf'] 
+    mimetypes = ['text/ipf'] 
+ 
+    flags = re.IGNORECASE | re.MULTILINE 
+ 
+    flowControl = ( 
+        'if', 'else', 'elseif', 'endif', 'for', 'endfor', 'strswitch', 'switch', 
+        'case', 'default', 'endswitch', 'do', 'while', 'try', 'catch', 'endtry', 
+        'break', 'continue', 'return', 'AbortOnRTE', 'AbortOnValue' 
+    ) 
+    types = ( 
+        'variable', 'string', 'constant', 'strconstant', 'NVAR', 'SVAR', 'WAVE', 
+        'STRUCT', 'dfref', 'funcref', 'char', 'uchar', 'int16', 'uint16', 'int32', 
         'uint32', 'int64', 'uint64', 'float', 'double'
-    )
-    keywords = (
-        'override', 'ThreadSafe', 'MultiThread', 'static',  'Proc',
-        'Picture', 'Prompt', 'DoPrompt', 'macro', 'window', 'function', 'end',
-        'Structure', 'EndStructure', 'EndMacro', 'Menu', 'SubMenu'
-    )
-    operations = (
+    ) 
+    keywords = ( 
+        'override', 'ThreadSafe', 'MultiThread', 'static',  'Proc', 
+        'Picture', 'Prompt', 'DoPrompt', 'macro', 'window', 'function', 'end', 
+        'Structure', 'EndStructure', 'EndMacro', 'Menu', 'SubMenu' 
+    ) 
+    operations = ( 
         'Abort', 'AddFIFOData', 'AddFIFOVectData', 'AddMovieAudio', 'AddMovieFrame',
         'AddWavesToBoxPlot', 'AddWavesToViolinPlot', 'AdoptFiles', 'APMath', 'Append',
         'AppendBoxPlot', 'AppendImage', 'AppendLayoutObject', 'AppendMatrixContour',
@@ -134,7 +134,7 @@ class IgorLexer(RegexLexer):
         'ModifyContour', 'ModifyControl', 'ModifyControlList', 'ModifyFreeAxis',
         'ModifyGizmo', 'ModifyGraph', 'ModifyImage', 'ModifyLayout', 'ModifyPanel',
         'ModifyTable', 'ModifyViolinPlot', 'ModifyWaterfall', 'MoveDataFolder',
-        'MoveFile', 'MoveFolder', 'MoveString', 'MoveSubwindow', 'MoveVariable',
+        'MoveFile', 'MoveFolder', 'MoveString', 'MoveSubwindow', 'MoveVariable', 
         'MoveWave', 'MoveWindow', 'MultiTaperPSD', 'MultiThreadingControl',
         'NC_CloseFile', 'NC_DumpErrors', 'NC_Inquire', 'NC_ListAttributes',
         'NC_ListObjects', 'NC_LoadData', 'NC_OpenFile', 'NeuralNetworkRun',
@@ -169,7 +169,7 @@ class IgorLexer(RegexLexer):
         'StatsCircularTwoSampleTest', 'StatsCochranTest', 'StatsContingencyTable',
         'StatsDIPTest', 'StatsDunnettTest', 'StatsFriedmanTest', 'StatsFTest',
         'StatsHodgesAjneTest', 'StatsJBTest', 'StatsKDE', 'StatsKendallTauTest',
-        'StatsKSTest', 'StatsKWTest', 'StatsLinearCorrelationTest',
+        'StatsKSTest', 'StatsKWTest', 'StatsLinearCorrelationTest', 
         'StatsLinearRegression', 'StatsMultiCorrelationTest', 'StatsNPMCTest',
         'StatsNPNominalSRTest', 'StatsQuantiles', 'StatsRankCorrelationTest',
         'StatsResample', 'StatsSample', 'StatsScheffeTest', 'StatsShapiroWilkTest',
@@ -188,8 +188,8 @@ class IgorLexer(RegexLexer):
         'VISAReadBinaryWave', 'VISAReadWave', 'VISAWrite', 'VISAWriteBinary',
         'VISAWriteBinaryWave', 'VISAWriteWave', 'WaveMeanStdv', 'WaveStats',
         'WaveTransform', 'wfprintf', 'WignerTransform', 'WindowFunction', 'XLLoadWave'
-    )
-    functions = (
+    ) 
+    functions = ( 
         'abs', 'acos', 'acosh', 'AddListItem', 'AiryA', 'AiryAD', 'AiryB', 'AiryBD',
         'alog', 'AnnotationInfo', 'AnnotationList', 'area', 'areaXY', 'asin', 'asinh',
         'atan', 'atanh', 'atan2', 'AxisInfo', 'AxisList', 'AxisValFromPixel',
@@ -321,9 +321,9 @@ class IgorLexer(RegexLexer):
         'StatsInvMaxwellCDF', 'StatsInvMooreCDF', 'StatsInvNBinomialCDF',
         'StatsInvNCChiCDF', 'StatsInvNCFCDF', 'StatsInvNormalCDF', 'StatsInvParetoCDF',
         'StatsInvPoissonCDF', 'StatsInvPowerCDF', 'StatsInvQCDF', 'StatsInvQpCDF',
-        'StatsInvRayleighCDF', 'StatsInvRectangularCDF', 'StatsInvSpearmanCDF',
-        'StatsInvStudentCDF', 'StatsInvTopDownCDF', 'StatsInvTriangularCDF',
-        'StatsInvUsquaredCDF', 'StatsInvVonMisesCDF', 'StatsInvWeibullCDF',
+        'StatsInvRayleighCDF', 'StatsInvRectangularCDF', 'StatsInvSpearmanCDF', 
+        'StatsInvStudentCDF', 'StatsInvTopDownCDF', 'StatsInvTriangularCDF', 
+        'StatsInvUsquaredCDF', 'StatsInvVonMisesCDF', 'StatsInvWeibullCDF', 
         'StatsKuiperCDF', 'StatsLogisticCDF', 'StatsLogisticPDF', 'StatsLogNormalCDF',
         'StatsLogNormalPDF', 'StatsMaxwellCDF', 'StatsMaxwellPDF', 'StatsMedian',
         'StatsMooreCDF', 'StatsNBinomialCDF', 'StatsNBinomialPDF', 'StatsNCChiCDF',
@@ -333,7 +333,7 @@ class IgorLexer(RegexLexer):
         'StatsPowerNoise', 'StatsPowerPDF', 'StatsQCDF', 'StatsQpCDF', 'StatsRayleighCDF',
         'StatsRayleighPDF', 'StatsRectangularCDF', 'StatsRectangularPDF', 'StatsRunsCDF',
         'StatsSpearmanRhoCDF', 'StatsStudentCDF', 'StatsStudentPDF', 'StatsTopDownCDF',
-        'StatsTriangularCDF', 'StatsTriangularPDF', 'StatsTrimmedMean',
+        'StatsTriangularCDF', 'StatsTriangularPDF', 'StatsTrimmedMean', 
         'StatsUSquaredCDF', 'StatsVonMisesCDF', 'StatsVonMisesNoise', 'StatsVonMisesPDF',
         'StatsWaldCDF', 'StatsWaldPDF', 'StatsWeibullCDF', 'StatsWeibullPDF',
         'StopMSTimer', 'StringByKey', 'stringCRC', 'StringFromList', 'StringList',
@@ -394,26 +394,26 @@ class IgorLexer(RegexLexer):
         'zeromq_client_send', 'zeromq_handler_start', 'zeromq_handler_stop',
         'zeromq_server_bind', 'zeromq_server_recv', 'zeromq_server_send', 'zeromq_set',
         'zeromq_stop', 'zeromq_test_callfunction', 'zeromq_test_serializeWave', 'zeta'
-    )
-
-    tokens = {
-        'root': [
-            (r'//.*$', Comment.Single),
-            (r'"([^"\\]|\\.)*"', String),
-            # Flow Control.
-            (words(flowControl, prefix=r'\b', suffix=r'\b'), Keyword),
-            # Types.
-            (words(types, prefix=r'\b', suffix=r'\b'), Keyword.Type),
-            # Keywords.
-            (words(keywords, prefix=r'\b', suffix=r'\b'), Keyword.Reserved),
-            # Built-in operations.
-            (words(operations, prefix=r'\b', suffix=r'\b'), Name.Class),
-            # Built-in functions.
-            (words(functions, prefix=r'\b', suffix=r'\b'), Name.Function),
-            # Compiler directives.
+    ) 
+ 
+    tokens = { 
+        'root': [ 
+            (r'//.*$', Comment.Single), 
+            (r'"([^"\\]|\\.)*"', String), 
+            # Flow Control. 
+            (words(flowControl, prefix=r'\b', suffix=r'\b'), Keyword), 
+            # Types. 
+            (words(types, prefix=r'\b', suffix=r'\b'), Keyword.Type), 
+            # Keywords. 
+            (words(keywords, prefix=r'\b', suffix=r'\b'), Keyword.Reserved), 
+            # Built-in operations. 
+            (words(operations, prefix=r'\b', suffix=r'\b'), Name.Class), 
+            # Built-in functions. 
+            (words(functions, prefix=r'\b', suffix=r'\b'), Name.Function), 
+            # Compiler directives. 
             (r'^#(include|pragma|define|undef|ifdef|ifndef|if|elif|else|endif)',
-             Name.Decorator),
-            (r'[^a-z"/]+$', Text),
-            (r'.', Text),
-        ],
-    }
+             Name.Decorator), 
+            (r'[^a-z"/]+$', Text), 
+            (r'.', Text), 
+        ], 
+    } 

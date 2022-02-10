@@ -1,31 +1,31 @@
-"""
-    pygments.lexers.chapel
-    ~~~~~~~~~~~~~~~~~~~~~~
-
-    Lexer for the Chapel language.
-
+""" 
+    pygments.lexers.chapel 
+    ~~~~~~~~~~~~~~~~~~~~~~ 
+ 
+    Lexer for the Chapel language. 
+ 
     :copyright: Copyright 2006-2021 by the Pygments team, see AUTHORS.
-    :license: BSD, see LICENSE for details.
-"""
-
-from pygments.lexer import RegexLexer, bygroups, words
-from pygments.token import Text, Comment, Operator, Keyword, Name, String, \
+    :license: BSD, see LICENSE for details. 
+""" 
+ 
+from pygments.lexer import RegexLexer, bygroups, words 
+from pygments.token import Text, Comment, Operator, Keyword, Name, String, \ 
     Number, Punctuation, Whitespace
-
-__all__ = ['ChapelLexer']
-
-
-class ChapelLexer(RegexLexer):
-    """
+ 
+__all__ = ['ChapelLexer'] 
+ 
+ 
+class ChapelLexer(RegexLexer): 
+    """ 
     For `Chapel <https://chapel-lang.org/>`_ source.
-
-    .. versionadded:: 2.0
-    """
-    name = 'Chapel'
-    filenames = ['*.chpl']
-    aliases = ['chapel', 'chpl']
-    # mimetypes = ['text/x-chapel']
-
+ 
+    .. versionadded:: 2.0 
+    """ 
+    name = 'Chapel' 
+    filenames = ['*.chpl'] 
+    aliases = ['chapel', 'chpl'] 
+    # mimetypes = ['text/x-chapel'] 
+ 
     known_types = ('bool', 'bytes', 'complex', 'imag', 'int', 'locale',
                    'nothing', 'opaque', 'range', 'real', 'string', 'uint',
                    'void')
@@ -58,15 +58,15 @@ class ChapelLexer(RegexLexer):
                       'yield',
                       'zip')
 
-    tokens = {
-        'root': [
+    tokens = { 
+        'root': [ 
             (r'\n', Whitespace),
             (r'\s+', Whitespace),
-            (r'\\\n', Text),
-
-            (r'//(.*?)\n', Comment.Single),
-            (r'/(\\\n)?[*](.|\n)*?[*](\\\n)?/', Comment.Multiline),
-
+            (r'\\\n', Text), 
+ 
+            (r'//(.*?)\n', Comment.Single), 
+            (r'/(\\\n)?[*](.|\n)*?[*](\\\n)?/', Comment.Multiline), 
+ 
             (words(declarations, suffix=r'\b'), Keyword.Declaration),
             (words(constants, suffix=r'\b'), Keyword.Constant),
             (words(known_types, suffix=r'\b'), Keyword.Type),
@@ -76,48 +76,48 @@ class ChapelLexer(RegexLexer):
             (r'(proc)(\s+)', bygroups(Keyword, Whitespace), 'procname'),
             (r'(operator)(\s+)', bygroups(Keyword, Whitespace), 'procname'),
             (r'(class|interface|module|record|union)(\s+)', bygroups(Keyword, Whitespace),
-             'classname'),
-
-            # imaginary integers
-            (r'\d+i', Number),
-            (r'\d+\.\d*([Ee][-+]\d+)?i', Number),
-            (r'\.\d+([Ee][-+]\d+)?i', Number),
-            (r'\d+[Ee][-+]\d+i', Number),
-
-            # reals cannot end with a period due to lexical ambiguity with
-            # .. operator. See reference for rationale.
-            (r'(\d*\.\d+)([eE][+-]?[0-9]+)?i?', Number.Float),
-            (r'\d+[eE][+-]?[0-9]+i?', Number.Float),
-
-            # integer literals
-            # -- binary
-            (r'0[bB][01]+', Number.Bin),
-            # -- hex
-            (r'0[xX][0-9a-fA-F]+', Number.Hex),
-            # -- octal
-            (r'0[oO][0-7]+', Number.Oct),
-            # -- decimal
-            (r'[0-9]+', Number.Integer),
-
-            # strings
+             'classname'), 
+ 
+            # imaginary integers 
+            (r'\d+i', Number), 
+            (r'\d+\.\d*([Ee][-+]\d+)?i', Number), 
+            (r'\.\d+([Ee][-+]\d+)?i', Number), 
+            (r'\d+[Ee][-+]\d+i', Number), 
+ 
+            # reals cannot end with a period due to lexical ambiguity with 
+            # .. operator. See reference for rationale. 
+            (r'(\d*\.\d+)([eE][+-]?[0-9]+)?i?', Number.Float), 
+            (r'\d+[eE][+-]?[0-9]+i?', Number.Float), 
+ 
+            # integer literals 
+            # -- binary 
+            (r'0[bB][01]+', Number.Bin), 
+            # -- hex 
+            (r'0[xX][0-9a-fA-F]+', Number.Hex), 
+            # -- octal 
+            (r'0[oO][0-7]+', Number.Oct), 
+            # -- decimal 
+            (r'[0-9]+', Number.Integer), 
+ 
+            # strings 
             (r'"(\\\\|\\"|[^"])*"', String),
             (r"'(\\\\|\\'|[^'])*'", String),
-
-            # tokens
-            (r'(=|\+=|-=|\*=|/=|\*\*=|%=|&=|\|=|\^=|&&=|\|\|=|<<=|>>=|'
-             r'<=>|<~>|\.\.|by|#|\.\.\.|'
-             r'&&|\|\||!|&|\||\^|~|<<|>>|'
-             r'==|!=|<=|>=|<|>|'
-             r'[+\-*/%]|\*\*)', Operator),
-            (r'[:;,.?()\[\]{}]', Punctuation),
-
-            # identifiers
-            (r'[a-zA-Z_][\w$]*', Name.Other),
-        ],
-        'classname': [
-            (r'[a-zA-Z_][\w$]*', Name.Class, '#pop'),
-        ],
-        'procname': [
+ 
+            # tokens 
+            (r'(=|\+=|-=|\*=|/=|\*\*=|%=|&=|\|=|\^=|&&=|\|\|=|<<=|>>=|' 
+             r'<=>|<~>|\.\.|by|#|\.\.\.|' 
+             r'&&|\|\||!|&|\||\^|~|<<|>>|' 
+             r'==|!=|<=|>=|<|>|' 
+             r'[+\-*/%]|\*\*)', Operator), 
+            (r'[:;,.?()\[\]{}]', Punctuation), 
+ 
+            # identifiers 
+            (r'[a-zA-Z_][\w$]*', Name.Other), 
+        ], 
+        'classname': [ 
+            (r'[a-zA-Z_][\w$]*', Name.Class, '#pop'), 
+        ], 
+        'procname': [ 
             (r'([a-zA-Z_][.\w$]*|'  # regular function name, including secondary
              r'\~[a-zA-Z_][.\w$]*|'  # support for legacy destructors
              r'[+*/!~%<>=&^|\-:]{1,2})',  # operators
@@ -126,10 +126,10 @@ class ChapelLexer(RegexLexer):
             # allow `proc (atomic T).foo`
             (r'\(', Punctuation, "receivertype"),
             (r'\)+\.', Punctuation),
-        ],
+        ], 
         'receivertype': [
             (words(type_modifiers, suffix=r'\b'), Keyword),
             (words(known_types, suffix=r'\b'), Keyword.Type),
             (r'[^()]*', Name.Other, '#pop'),
         ],
-    }
+    } 

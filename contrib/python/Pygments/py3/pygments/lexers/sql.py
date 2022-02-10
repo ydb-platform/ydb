@@ -1,51 +1,51 @@
-"""
-    pygments.lexers.sql
-    ~~~~~~~~~~~~~~~~~~~
-
-    Lexers for various SQL dialects and related interactive sessions.
-
-    Postgres specific lexers:
-
-    `PostgresLexer`
-        A SQL lexer for the PostgreSQL dialect. Differences w.r.t. the SQL
-        lexer are:
-
-        - keywords and data types list parsed from the PG docs (run the
-          `_postgres_builtins` module to update them);
-        - Content of $-strings parsed using a specific lexer, e.g. the content
-          of a PL/Python function is parsed using the Python lexer;
-        - parse PG specific constructs: E-strings, $-strings, U&-strings,
-          different operators and punctuation.
-
-    `PlPgsqlLexer`
-        A lexer for the PL/pgSQL language. Adds a few specific construct on
-        top of the PG SQL lexer (such as <<label>>).
-
-    `PostgresConsoleLexer`
-        A lexer to highlight an interactive psql session:
-
-        - identifies the prompt and does its best to detect the end of command
-          in multiline statement where not all the lines are prefixed by a
-          prompt, telling them apart from the output;
-        - highlights errors in the output and notification levels;
-        - handles psql backslash commands.
-
-    The ``tests/examplefiles`` contains a few test files with data to be
-    parsed by these lexers.
-
+""" 
+    pygments.lexers.sql 
+    ~~~~~~~~~~~~~~~~~~~ 
+ 
+    Lexers for various SQL dialects and related interactive sessions. 
+ 
+    Postgres specific lexers: 
+ 
+    `PostgresLexer` 
+        A SQL lexer for the PostgreSQL dialect. Differences w.r.t. the SQL 
+        lexer are: 
+ 
+        - keywords and data types list parsed from the PG docs (run the 
+          `_postgres_builtins` module to update them); 
+        - Content of $-strings parsed using a specific lexer, e.g. the content 
+          of a PL/Python function is parsed using the Python lexer; 
+        - parse PG specific constructs: E-strings, $-strings, U&-strings, 
+          different operators and punctuation. 
+ 
+    `PlPgsqlLexer` 
+        A lexer for the PL/pgSQL language. Adds a few specific construct on 
+        top of the PG SQL lexer (such as <<label>>). 
+ 
+    `PostgresConsoleLexer` 
+        A lexer to highlight an interactive psql session: 
+ 
+        - identifies the prompt and does its best to detect the end of command 
+          in multiline statement where not all the lines are prefixed by a 
+          prompt, telling them apart from the output; 
+        - highlights errors in the output and notification levels; 
+        - handles psql backslash commands. 
+ 
+    The ``tests/examplefiles`` contains a few test files with data to be 
+    parsed by these lexers. 
+ 
     :copyright: Copyright 2006-2021 by the Pygments team, see AUTHORS.
-    :license: BSD, see LICENSE for details.
-"""
-
-import re
-
-from pygments.lexer import Lexer, RegexLexer, do_insertions, bygroups, words
+    :license: BSD, see LICENSE for details. 
+""" 
+ 
+import re 
+ 
+from pygments.lexer import Lexer, RegexLexer, do_insertions, bygroups, words 
 from pygments.token import Punctuation, Whitespace, Text, Comment, Operator, \
     Keyword, Name, String, Number, Generic, Literal
-from pygments.lexers import get_lexer_by_name, ClassNotFound
-
-from pygments.lexers._postgres_builtins import KEYWORDS, DATATYPES, \
-    PSEUDO_TYPES, PLPGSQL_KEYWORDS
+from pygments.lexers import get_lexer_by_name, ClassNotFound 
+ 
+from pygments.lexers._postgres_builtins import KEYWORDS, DATATYPES, \ 
+    PSEUDO_TYPES, PLPGSQL_KEYWORDS 
 from pygments.lexers._mysql_builtins import \
     MYSQL_CONSTANTS, \
     MYSQL_DATATYPES, \
@@ -54,19 +54,19 @@ from pygments.lexers._mysql_builtins import \
     MYSQL_OPTIMIZER_HINTS
 
 from pygments.lexers import _tsql_builtins
-
-
-__all__ = ['PostgresLexer', 'PlPgsqlLexer', 'PostgresConsoleLexer',
+ 
+ 
+__all__ = ['PostgresLexer', 'PlPgsqlLexer', 'PostgresConsoleLexer', 
            'SqlLexer', 'TransactSqlLexer', 'MySqlLexer',
            'SqliteConsoleLexer', 'RqlLexer']
-
-line_re  = re.compile('.*?\n')
+ 
+line_re  = re.compile('.*?\n') 
 sqlite_prompt_re = re.compile(r'^(?:sqlite|   ...)>(?= )')
-
-language_re = re.compile(r"\s+LANGUAGE\s+'?(\w+)'?", re.IGNORECASE)
-
+ 
+language_re = re.compile(r"\s+LANGUAGE\s+'?(\w+)'?", re.IGNORECASE) 
+ 
 do_re = re.compile(r'\bDO\b', re.IGNORECASE)
-
+ 
 # Regular expressions for analyse_text()
 name_between_bracket_re = re.compile(r'\[[a-zA-Z_]\w*\]')
 name_between_backtick_re = re.compile(r'`[a-zA-Z_]\w*`')
@@ -75,27 +75,27 @@ tsql_declare_re = re.compile(r'\bdeclare\s+@', re.IGNORECASE)
 tsql_variable_re = re.compile(r'@[a-zA-Z_]\w*\b')
 
 
-def language_callback(lexer, match):
-    """Parse the content of a $-string using a lexer
-
+def language_callback(lexer, match): 
+    """Parse the content of a $-string using a lexer 
+ 
     The lexer is chosen looking for a nearby LANGUAGE or assumed as
     plpgsql if inside a DO statement and no LANGUAGE has been found.
-    """
+    """ 
     lx = None
-    m = language_re.match(lexer.text[match.end():match.end()+100])
-    if m is not None:
+    m = language_re.match(lexer.text[match.end():match.end()+100]) 
+    if m is not None: 
         lx = lexer._get_lexer(m.group(1))
-    else:
-        m = list(language_re.finditer(
-            lexer.text[max(0, match.start()-100):match.start()]))
-        if m:
+    else: 
+        m = list(language_re.finditer( 
+            lexer.text[max(0, match.start()-100):match.start()])) 
+        if m: 
             lx = lexer._get_lexer(m[-1].group(1))
         else:
             m = list(do_re.finditer(
                 lexer.text[max(0, match.start()-25):match.start()]))
             if m:
                 lx = lexer._get_lexer('plpgsql')
-
+ 
     # 1 = $, 2 = delimiter, 3 = $
     yield (match.start(1), String, match.group(1))
     yield (match.start(2), String.Delimiter, match.group(2))
@@ -103,94 +103,94 @@ def language_callback(lexer, match):
     # 4 = string contents
     if lx:
         yield from lx.get_tokens_unprocessed(match.group(4))
-    else:
+    else: 
         yield (match.start(4), String, match.group(4))
     # 5 = $, 6 = delimiter, 7 = $
     yield (match.start(5), String, match.group(5))
     yield (match.start(6), String.Delimiter, match.group(6))
     yield (match.start(7), String, match.group(7))
-
-
+ 
+ 
 class PostgresBase:
-    """Base class for Postgres-related lexers.
-
-    This is implemented as a mixin to avoid the Lexer metaclass kicking in.
-    this way the different lexer don't have a common Lexer ancestor. If they
-    had, _tokens could be created on this ancestor and not updated for the
-    other classes, resulting e.g. in PL/pgSQL parsed as SQL. This shortcoming
-    seem to suggest that regexp lexers are not really subclassable.
-    """
-    def get_tokens_unprocessed(self, text, *args):
-        # Have a copy of the entire text to be used by `language_callback`.
-        self.text = text
+    """Base class for Postgres-related lexers. 
+ 
+    This is implemented as a mixin to avoid the Lexer metaclass kicking in. 
+    this way the different lexer don't have a common Lexer ancestor. If they 
+    had, _tokens could be created on this ancestor and not updated for the 
+    other classes, resulting e.g. in PL/pgSQL parsed as SQL. This shortcoming 
+    seem to suggest that regexp lexers are not really subclassable. 
+    """ 
+    def get_tokens_unprocessed(self, text, *args): 
+        # Have a copy of the entire text to be used by `language_callback`. 
+        self.text = text 
         yield from super().get_tokens_unprocessed(text, *args)
-
-    def _get_lexer(self, lang):
-        if lang.lower() == 'sql':
-            return get_lexer_by_name('postgresql', **self.options)
-
-        tries = [lang]
-        if lang.startswith('pl'):
-            tries.append(lang[2:])
-        if lang.endswith('u'):
-            tries.append(lang[:-1])
-        if lang.startswith('pl') and lang.endswith('u'):
-            tries.append(lang[2:-1])
-
+ 
+    def _get_lexer(self, lang): 
+        if lang.lower() == 'sql': 
+            return get_lexer_by_name('postgresql', **self.options) 
+ 
+        tries = [lang] 
+        if lang.startswith('pl'): 
+            tries.append(lang[2:]) 
+        if lang.endswith('u'): 
+            tries.append(lang[:-1]) 
+        if lang.startswith('pl') and lang.endswith('u'): 
+            tries.append(lang[2:-1]) 
+ 
         for lx in tries:
-            try:
+            try: 
                 return get_lexer_by_name(lx, **self.options)
-            except ClassNotFound:
-                pass
-        else:
-            # TODO: better logging
-            # print >>sys.stderr, "language not found:", lang
-            return None
-
-
-class PostgresLexer(PostgresBase, RegexLexer):
-    """
-    Lexer for the PostgreSQL dialect of SQL.
-
-    .. versionadded:: 1.5
-    """
-
-    name = 'PostgreSQL SQL dialect'
-    aliases = ['postgresql', 'postgres']
-    mimetypes = ['text/x-postgresql']
-
-    flags = re.IGNORECASE
-    tokens = {
-        'root': [
+            except ClassNotFound: 
+                pass 
+        else: 
+            # TODO: better logging 
+            # print >>sys.stderr, "language not found:", lang 
+            return None 
+ 
+ 
+class PostgresLexer(PostgresBase, RegexLexer): 
+    """ 
+    Lexer for the PostgreSQL dialect of SQL. 
+ 
+    .. versionadded:: 1.5 
+    """ 
+ 
+    name = 'PostgreSQL SQL dialect' 
+    aliases = ['postgresql', 'postgres'] 
+    mimetypes = ['text/x-postgresql'] 
+ 
+    flags = re.IGNORECASE 
+    tokens = { 
+        'root': [ 
             (r'\s+', Whitespace),
             (r'--.*\n?', Comment.Single),
-            (r'/\*', Comment.Multiline, 'multiline-comments'),
+            (r'/\*', Comment.Multiline, 'multiline-comments'), 
             (r'(' + '|'.join(s.replace(" ", r"\s+")
                              for s in DATATYPES + PSEUDO_TYPES) + r')\b',
              Name.Builtin),
-            (words(KEYWORDS, suffix=r'\b'), Keyword),
-            (r'[+*/<>=~!@#%^&|`?-]+', Operator),
-            (r'::', Operator),  # cast
-            (r'\$\d+', Name.Variable),
-            (r'([0-9]*\.[0-9]*|[0-9]+)(e[+-]?[0-9]+)?', Number.Float),
-            (r'[0-9]+', Number.Integer),
+            (words(KEYWORDS, suffix=r'\b'), Keyword), 
+            (r'[+*/<>=~!@#%^&|`?-]+', Operator), 
+            (r'::', Operator),  # cast 
+            (r'\$\d+', Name.Variable), 
+            (r'([0-9]*\.[0-9]*|[0-9]+)(e[+-]?[0-9]+)?', Number.Float), 
+            (r'[0-9]+', Number.Integer), 
             (r"((?:E|U&)?)(')", bygroups(String.Affix, String.Single), 'string'),
             # quoted identifier
             (r'((?:U&)?)(")', bygroups(String.Affix, String.Name), 'quoted-ident'),
             (r'(?s)(\$)([^$]*)(\$)(.*?)(\$)(\2)(\$)', language_callback),
-            (r'[a-z_]\w*', Name),
-
-            # psql variable in SQL
-            (r""":(['"]?)[a-z]\w*\b\1""", Name.Variable),
-
-            (r'[;:()\[\]{},.]', Punctuation),
-        ],
-        'multiline-comments': [
-            (r'/\*', Comment.Multiline, 'multiline-comments'),
-            (r'\*/', Comment.Multiline, '#pop'),
-            (r'[^/*]+', Comment.Multiline),
-            (r'[/*]', Comment.Multiline)
-        ],
+            (r'[a-z_]\w*', Name), 
+ 
+            # psql variable in SQL 
+            (r""":(['"]?)[a-z]\w*\b\1""", Name.Variable), 
+ 
+            (r'[;:()\[\]{},.]', Punctuation), 
+        ], 
+        'multiline-comments': [ 
+            (r'/\*', Comment.Multiline, 'multiline-comments'), 
+            (r'\*/', Comment.Multiline, '#pop'), 
+            (r'[^/*]+', Comment.Multiline), 
+            (r'[/*]', Comment.Multiline) 
+        ], 
         'string': [
             (r"[^']+", String.Single),
             (r"''", String.Single),
@@ -201,191 +201,191 @@ class PostgresLexer(PostgresBase, RegexLexer):
             (r'""', String.Name),
             (r'"', String.Name, '#pop'),
         ],
-    }
-
-
-class PlPgsqlLexer(PostgresBase, RegexLexer):
-    """
-    Handle the extra syntax in Pl/pgSQL language.
-
-    .. versionadded:: 1.5
-    """
-    name = 'PL/pgSQL'
-    aliases = ['plpgsql']
-    mimetypes = ['text/x-plpgsql']
-
-    flags = re.IGNORECASE
+    } 
+ 
+ 
+class PlPgsqlLexer(PostgresBase, RegexLexer): 
+    """ 
+    Handle the extra syntax in Pl/pgSQL language. 
+ 
+    .. versionadded:: 1.5 
+    """ 
+    name = 'PL/pgSQL' 
+    aliases = ['plpgsql'] 
+    mimetypes = ['text/x-plpgsql'] 
+ 
+    flags = re.IGNORECASE 
     tokens = {k: l[:] for (k, l) in PostgresLexer.tokens.items()}
-
-    # extend the keywords list
-    for i, pattern in enumerate(tokens['root']):
-        if pattern[1] == Keyword:
-            tokens['root'][i] = (
-                words(KEYWORDS + PLPGSQL_KEYWORDS, suffix=r'\b'),
-                Keyword)
-            del i
-            break
-    else:
-        assert 0, "SQL keywords not found"
-
-    # Add specific PL/pgSQL rules (before the SQL ones)
-    tokens['root'][:0] = [
-        (r'\%[a-z]\w*\b', Name.Builtin),     # actually, a datatype
-        (r':=', Operator),
-        (r'\<\<[a-z]\w*\>\>', Name.Label),
-        (r'\#[a-z]\w*\b', Keyword.Pseudo),   # #variable_conflict
-    ]
-
-
-class PsqlRegexLexer(PostgresBase, RegexLexer):
-    """
-    Extend the PostgresLexer adding support specific for psql commands.
-
-    This is not a complete psql lexer yet as it lacks prompt support
-    and output rendering.
-    """
-
-    name = 'PostgreSQL console - regexp based lexer'
-    aliases = []    # not public
-
-    flags = re.IGNORECASE
+ 
+    # extend the keywords list 
+    for i, pattern in enumerate(tokens['root']): 
+        if pattern[1] == Keyword: 
+            tokens['root'][i] = ( 
+                words(KEYWORDS + PLPGSQL_KEYWORDS, suffix=r'\b'), 
+                Keyword) 
+            del i 
+            break 
+    else: 
+        assert 0, "SQL keywords not found" 
+ 
+    # Add specific PL/pgSQL rules (before the SQL ones) 
+    tokens['root'][:0] = [ 
+        (r'\%[a-z]\w*\b', Name.Builtin),     # actually, a datatype 
+        (r':=', Operator), 
+        (r'\<\<[a-z]\w*\>\>', Name.Label), 
+        (r'\#[a-z]\w*\b', Keyword.Pseudo),   # #variable_conflict 
+    ] 
+ 
+ 
+class PsqlRegexLexer(PostgresBase, RegexLexer): 
+    """ 
+    Extend the PostgresLexer adding support specific for psql commands. 
+ 
+    This is not a complete psql lexer yet as it lacks prompt support 
+    and output rendering. 
+    """ 
+ 
+    name = 'PostgreSQL console - regexp based lexer' 
+    aliases = []    # not public 
+ 
+    flags = re.IGNORECASE 
     tokens = {k: l[:] for (k, l) in PostgresLexer.tokens.items()}
-
-    tokens['root'].append(
-        (r'\\[^\s]+', Keyword.Pseudo, 'psql-command'))
-    tokens['psql-command'] = [
-        (r'\n', Text, 'root'),
+ 
+    tokens['root'].append( 
+        (r'\\[^\s]+', Keyword.Pseudo, 'psql-command')) 
+    tokens['psql-command'] = [ 
+        (r'\n', Text, 'root'), 
         (r'\s+', Whitespace),
-        (r'\\[^\s]+', Keyword.Pseudo),
-        (r""":(['"]?)[a-z]\w*\b\1""", Name.Variable),
-        (r"'(''|[^'])*'", String.Single),
-        (r"`([^`])*`", String.Backtick),
-        (r"[^\s]+", String.Symbol),
-    ]
+        (r'\\[^\s]+', Keyword.Pseudo), 
+        (r""":(['"]?)[a-z]\w*\b\1""", Name.Variable), 
+        (r"'(''|[^'])*'", String.Single), 
+        (r"`([^`])*`", String.Backtick), 
+        (r"[^\s]+", String.Symbol), 
+    ] 
+ 
 
-
-re_prompt = re.compile(r'^(\S.*?)??[=\-\(\$\'\"][#>]')
-re_psql_command = re.compile(r'\s*\\')
-re_end_command = re.compile(r';\s*(--.*?)?$')
-re_psql_command = re.compile(r'(\s*)(\\.+?)(\s+)$')
-re_error = re.compile(r'(ERROR|FATAL):')
-re_message = re.compile(
-    r'((?:DEBUG|INFO|NOTICE|WARNING|ERROR|'
-    r'FATAL|HINT|DETAIL|CONTEXT|LINE [0-9]+):)(.*?\n)')
-
-
+re_prompt = re.compile(r'^(\S.*?)??[=\-\(\$\'\"][#>]') 
+re_psql_command = re.compile(r'\s*\\') 
+re_end_command = re.compile(r';\s*(--.*?)?$') 
+re_psql_command = re.compile(r'(\s*)(\\.+?)(\s+)$') 
+re_error = re.compile(r'(ERROR|FATAL):') 
+re_message = re.compile( 
+    r'((?:DEBUG|INFO|NOTICE|WARNING|ERROR|' 
+    r'FATAL|HINT|DETAIL|CONTEXT|LINE [0-9]+):)(.*?\n)') 
+ 
+ 
 class lookahead:
-    """Wrap an iterator and allow pushing back an item."""
-    def __init__(self, x):
-        self.iter = iter(x)
-        self._nextitem = None
-
-    def __iter__(self):
-        return self
-
-    def send(self, i):
-        self._nextitem = i
-        return i
-
-    def __next__(self):
-        if self._nextitem is not None:
-            ni = self._nextitem
-            self._nextitem = None
-            return ni
-        return next(self.iter)
-    next = __next__
-
-
-class PostgresConsoleLexer(Lexer):
-    """
-    Lexer for psql sessions.
-
-    .. versionadded:: 1.5
-    """
-
-    name = 'PostgreSQL console (psql)'
-    aliases = ['psql', 'postgresql-console', 'postgres-console']
-    mimetypes = ['text/x-postgresql-psql']
-
-    def get_tokens_unprocessed(self, data):
-        sql = PsqlRegexLexer(**self.options)
-
-        lines = lookahead(line_re.findall(data))
-
-        # prompt-output cycle
-        while 1:
-
-            # consume the lines of the command: start with an optional prompt
-            # and continue until the end of command is detected
-            curcode = ''
-            insertions = []
+    """Wrap an iterator and allow pushing back an item.""" 
+    def __init__(self, x): 
+        self.iter = iter(x) 
+        self._nextitem = None 
+ 
+    def __iter__(self): 
+        return self 
+ 
+    def send(self, i): 
+        self._nextitem = i 
+        return i 
+ 
+    def __next__(self): 
+        if self._nextitem is not None: 
+            ni = self._nextitem 
+            self._nextitem = None 
+            return ni 
+        return next(self.iter) 
+    next = __next__ 
+ 
+ 
+class PostgresConsoleLexer(Lexer): 
+    """ 
+    Lexer for psql sessions. 
+ 
+    .. versionadded:: 1.5 
+    """ 
+ 
+    name = 'PostgreSQL console (psql)' 
+    aliases = ['psql', 'postgresql-console', 'postgres-console'] 
+    mimetypes = ['text/x-postgresql-psql'] 
+ 
+    def get_tokens_unprocessed(self, data): 
+        sql = PsqlRegexLexer(**self.options) 
+ 
+        lines = lookahead(line_re.findall(data)) 
+ 
+        # prompt-output cycle 
+        while 1: 
+ 
+            # consume the lines of the command: start with an optional prompt 
+            # and continue until the end of command is detected 
+            curcode = '' 
+            insertions = [] 
             for line in lines:
-                # Identify a shell prompt in case of psql commandline example
-                if line.startswith('$') and not curcode:
-                    lexer = get_lexer_by_name('console', **self.options)
+                # Identify a shell prompt in case of psql commandline example 
+                if line.startswith('$') and not curcode: 
+                    lexer = get_lexer_by_name('console', **self.options) 
                     yield from lexer.get_tokens_unprocessed(line)
-                    break
-
-                # Identify a psql prompt
-                mprompt = re_prompt.match(line)
-                if mprompt is not None:
-                    insertions.append((len(curcode),
-                                       [(0, Generic.Prompt, mprompt.group())]))
-                    curcode += line[len(mprompt.group()):]
-                else:
-                    curcode += line
-
-                # Check if this is the end of the command
-                # TODO: better handle multiline comments at the end with
-                # a lexer with an external state?
-                if re_psql_command.match(curcode) \
-                   or re_end_command.search(curcode):
-                    break
-
-            # Emit the combined stream of command and prompt(s)
+                    break 
+ 
+                # Identify a psql prompt 
+                mprompt = re_prompt.match(line) 
+                if mprompt is not None: 
+                    insertions.append((len(curcode), 
+                                       [(0, Generic.Prompt, mprompt.group())])) 
+                    curcode += line[len(mprompt.group()):] 
+                else: 
+                    curcode += line 
+ 
+                # Check if this is the end of the command 
+                # TODO: better handle multiline comments at the end with 
+                # a lexer with an external state? 
+                if re_psql_command.match(curcode) \ 
+                   or re_end_command.search(curcode): 
+                    break 
+ 
+            # Emit the combined stream of command and prompt(s) 
             yield from do_insertions(insertions,
                                      sql.get_tokens_unprocessed(curcode))
-
-            # Emit the output lines
-            out_token = Generic.Output
+ 
+            # Emit the output lines 
+            out_token = Generic.Output 
             for line in lines:
-                mprompt = re_prompt.match(line)
-                if mprompt is not None:
-                    # push the line back to have it processed by the prompt
-                    lines.send(line)
-                    break
-
-                mmsg = re_message.match(line)
-                if mmsg is not None:
-                    if mmsg.group(1).startswith("ERROR") \
-                       or mmsg.group(1).startswith("FATAL"):
-                        out_token = Generic.Error
-                    yield (mmsg.start(1), Generic.Strong, mmsg.group(1))
-                    yield (mmsg.start(2), out_token, mmsg.group(2))
-                else:
-                    yield (0, out_token, line)
+                mprompt = re_prompt.match(line) 
+                if mprompt is not None: 
+                    # push the line back to have it processed by the prompt 
+                    lines.send(line) 
+                    break 
+ 
+                mmsg = re_message.match(line) 
+                if mmsg is not None: 
+                    if mmsg.group(1).startswith("ERROR") \ 
+                       or mmsg.group(1).startswith("FATAL"): 
+                        out_token = Generic.Error 
+                    yield (mmsg.start(1), Generic.Strong, mmsg.group(1)) 
+                    yield (mmsg.start(2), out_token, mmsg.group(2)) 
+                else: 
+                    yield (0, out_token, line) 
             else:
                 return
-
-
-class SqlLexer(RegexLexer):
-    """
-    Lexer for Structured Query Language. Currently, this lexer does
-    not recognize any special syntax except ANSI SQL.
-    """
-
-    name = 'SQL'
-    aliases = ['sql']
-    filenames = ['*.sql']
-    mimetypes = ['text/x-sql']
-
-    flags = re.IGNORECASE
-    tokens = {
-        'root': [
+ 
+ 
+class SqlLexer(RegexLexer): 
+    """ 
+    Lexer for Structured Query Language. Currently, this lexer does 
+    not recognize any special syntax except ANSI SQL. 
+    """ 
+ 
+    name = 'SQL' 
+    aliases = ['sql'] 
+    filenames = ['*.sql'] 
+    mimetypes = ['text/x-sql'] 
+ 
+    flags = re.IGNORECASE 
+    tokens = { 
+        'root': [ 
             (r'\s+', Whitespace),
             (r'--.*\n?', Comment.Single),
-            (r'/\*', Comment.Multiline, 'multiline-comments'),
-            (words((
+            (r'/\*', Comment.Multiline, 'multiline-comments'), 
+            (words(( 
                 'ABORT', 'ABS', 'ABSOLUTE', 'ACCESS', 'ADA', 'ADD', 'ADMIN', 'AFTER',
                 'AGGREGATE', 'ALIAS', 'ALL', 'ALLOCATE', 'ALTER', 'ANALYSE', 'ANALYZE',
                 'AND', 'ANY', 'ARE', 'AS', 'ASC', 'ASENSITIVE', 'ASSERTION', 'ASSIGNMENT',
@@ -393,8 +393,8 @@ class SqlLexer(RegexLexer):
                 'BEFORE', 'BEGIN', 'BETWEEN', 'BITVAR', 'BIT_LENGTH', 'BOTH', 'BREADTH',
                 'BY', 'C', 'CACHE', 'CALL', 'CALLED', 'CARDINALITY', 'CASCADE',
                 'CASCADED', 'CASE', 'CAST', 'CATALOG', 'CATALOG_NAME', 'CHAIN',
-                'CHARACTERISTICS', 'CHARACTER_LENGTH', 'CHARACTER_SET_CATALOG',
-                'CHARACTER_SET_NAME', 'CHARACTER_SET_SCHEMA', 'CHAR_LENGTH', 'CHECK',
+                'CHARACTERISTICS', 'CHARACTER_LENGTH', 'CHARACTER_SET_CATALOG', 
+                'CHARACTER_SET_NAME', 'CHARACTER_SET_SCHEMA', 'CHAR_LENGTH', 'CHECK', 
                 'CHECKED', 'CHECKPOINT', 'CLASS', 'CLASS_ORIGIN', 'CLOB', 'CLOSE',
                 'CLUSTER', 'COALESCE', 'COBOL', 'COLLATE', 'COLLATION',
                 'COLLATION_CATALOG', 'COLLATION_NAME', 'COLLATION_SCHEMA', 'COLUMN',
@@ -407,7 +407,7 @@ class SqlLexer(RegexLexer):
                 'CROSS', 'CUBE', 'CURRENT', 'CURRENT_DATE', 'CURRENT_PATH',
                 'CURRENT_ROLE', 'CURRENT_TIME', 'CURRENT_TIMESTAMP', 'CURRENT_USER',
                 'CURSOR', 'CURSOR_NAME', 'CYCLE', 'DATA', 'DATABASE',
-                'DATETIME_INTERVAL_CODE', 'DATETIME_INTERVAL_PRECISION', 'DAY',
+                'DATETIME_INTERVAL_CODE', 'DATETIME_INTERVAL_PRECISION', 'DAY', 
                 'DEALLOCATE', 'DECLARE', 'DEFAULT', 'DEFAULTS', 'DEFERRABLE',
                 'DEFERRED', 'DEFINED', 'DEFINER', 'DELETE', 'DELIMITER', 'DELIMITERS',
                 'DEREF', 'DESC', 'DESCRIBE', 'DESCRIPTOR', 'DESTROY', 'DESTRUCTOR',
@@ -473,32 +473,32 @@ class SqlLexer(RegexLexer):
                 'VERSION', 'VERSIONS', 'VERSIONING', 'VIEW',
                 'VOLATILE', 'WHEN', 'WHENEVER', 'WHERE', 'WITH', 'WITHOUT', 'WORK',
                 'WRITE', 'YEAR', 'ZONE'), suffix=r'\b'),
-             Keyword),
-            (words((
+             Keyword), 
+            (words(( 
                 'ARRAY', 'BIGINT', 'BINARY', 'BIT', 'BLOB', 'BOOLEAN', 'CHAR',
                 'CHARACTER', 'DATE', 'DEC', 'DECIMAL', 'FLOAT', 'INT', 'INTEGER',
                 'INTERVAL', 'NUMBER', 'NUMERIC', 'REAL', 'SERIAL', 'SMALLINT',
                 'VARCHAR', 'VARYING', 'INT8', 'SERIAL8', 'TEXT'), suffix=r'\b'),
-             Name.Builtin),
-            (r'[+*/<>=~!@#%^&|`?-]', Operator),
-            (r'[0-9]+', Number.Integer),
-            # TODO: Backslash escapes?
-            (r"'(''|[^'])*'", String.Single),
-            (r'"(""|[^"])*"', String.Symbol),  # not a real string literal in ANSI SQL
-            (r'[a-z_][\w$]*', Name),  # allow $s in strings for Oracle
-            (r'[;:()\[\],.]', Punctuation)
-        ],
-        'multiline-comments': [
-            (r'/\*', Comment.Multiline, 'multiline-comments'),
-            (r'\*/', Comment.Multiline, '#pop'),
-            (r'[^/*]+', Comment.Multiline),
-            (r'[/*]', Comment.Multiline)
-        ]
-    }
-
+             Name.Builtin), 
+            (r'[+*/<>=~!@#%^&|`?-]', Operator), 
+            (r'[0-9]+', Number.Integer), 
+            # TODO: Backslash escapes? 
+            (r"'(''|[^'])*'", String.Single), 
+            (r'"(""|[^"])*"', String.Symbol),  # not a real string literal in ANSI SQL 
+            (r'[a-z_][\w$]*', Name),  # allow $s in strings for Oracle 
+            (r'[;:()\[\],.]', Punctuation) 
+        ], 
+        'multiline-comments': [ 
+            (r'/\*', Comment.Multiline, 'multiline-comments'), 
+            (r'\*/', Comment.Multiline, '#pop'), 
+            (r'[^/*]+', Comment.Multiline), 
+            (r'[/*]', Comment.Multiline) 
+        ] 
+    } 
+ 
     def analyse_text(self, text):
         return
-
+ 
 
 class TransactSqlLexer(RegexLexer):
     """
@@ -584,22 +584,22 @@ class TransactSqlLexer(RegexLexer):
         return rating
 
 
-class MySqlLexer(RegexLexer):
+class MySqlLexer(RegexLexer): 
     """The Oracle MySQL lexer.
 
     This lexer does not attempt to maintain strict compatibility with
     MariaDB syntax or keywords. Although MySQL and MariaDB's common code
     history suggests there may be significant overlap between the two,
     compatibility between the two is not a target for this lexer.
-    """
-
-    name = 'MySQL'
-    aliases = ['mysql']
-    mimetypes = ['text/x-mysql']
-
-    flags = re.IGNORECASE
-    tokens = {
-        'root': [
+    """ 
+ 
+    name = 'MySQL' 
+    aliases = ['mysql'] 
+    mimetypes = ['text/x-mysql'] 
+ 
+    flags = re.IGNORECASE 
+    tokens = { 
+        'root': [ 
             (r'\s+', Whitespace),
 
             # Comments
@@ -676,7 +676,7 @@ class MySqlLexer(RegexLexer):
 
             # Punctuation
             (r'[(),.;]', Punctuation),
-        ],
+        ], 
 
         # Multiline comment substates
         # ---------------------------
@@ -691,7 +691,7 @@ class MySqlLexer(RegexLexer):
 
         'multiline-comment': [
             (r'[^*]+', Comment.Multiline),
-            (r'\*/', Comment.Multiline, '#pop'),
+            (r'\*/', Comment.Multiline, '#pop'), 
             (r'\*', Comment.Multiline),
         ],
 
@@ -746,8 +746,8 @@ class MySqlLexer(RegexLexer):
             (r'``', Name.Quoted.Escape),
             (r'`', Name.Quoted, '#pop'),
         ],
-    }
-
+    } 
+ 
     def analyse_text(text):
         rating = 0
         name_between_backtick_count = len(
@@ -765,75 +765,75 @@ class MySqlLexer(RegexLexer):
         elif name_between_backtick_count > 0:
             rating += 0.1
         return rating
+ 
 
-
-class SqliteConsoleLexer(Lexer):
-    """
-    Lexer for example sessions using sqlite3.
-
-    .. versionadded:: 0.11
-    """
-
-    name = 'sqlite3con'
-    aliases = ['sqlite3']
-    filenames = ['*.sqlite3-console']
-    mimetypes = ['text/x-sqlite3-console']
-
-    def get_tokens_unprocessed(self, data):
-        sql = SqlLexer(**self.options)
-
-        curcode = ''
-        insertions = []
-        for match in line_re.finditer(data):
-            line = match.group()
+class SqliteConsoleLexer(Lexer): 
+    """ 
+    Lexer for example sessions using sqlite3. 
+ 
+    .. versionadded:: 0.11 
+    """ 
+ 
+    name = 'sqlite3con' 
+    aliases = ['sqlite3'] 
+    filenames = ['*.sqlite3-console'] 
+    mimetypes = ['text/x-sqlite3-console'] 
+ 
+    def get_tokens_unprocessed(self, data): 
+        sql = SqlLexer(**self.options) 
+ 
+        curcode = '' 
+        insertions = [] 
+        for match in line_re.finditer(data): 
+            line = match.group() 
             prompt_match = sqlite_prompt_re.match(line)
             if prompt_match is not None:
-                insertions.append((len(curcode),
+                insertions.append((len(curcode), 
                                    [(0, Generic.Prompt, line[:7])]))
                 insertions.append((len(curcode),
                                    [(7, Whitespace, ' ')]))
-                curcode += line[8:]
-            else:
-                if curcode:
+                curcode += line[8:] 
+            else: 
+                if curcode: 
                     yield from do_insertions(insertions,
                                              sql.get_tokens_unprocessed(curcode))
-                    curcode = ''
-                    insertions = []
-                if line.startswith('SQL error: '):
-                    yield (match.start(), Generic.Traceback, line)
-                else:
-                    yield (match.start(), Generic.Output, line)
-        if curcode:
+                    curcode = '' 
+                    insertions = [] 
+                if line.startswith('SQL error: '): 
+                    yield (match.start(), Generic.Traceback, line) 
+                else: 
+                    yield (match.start(), Generic.Output, line) 
+        if curcode: 
             yield from do_insertions(insertions,
                                      sql.get_tokens_unprocessed(curcode))
-
-
-class RqlLexer(RegexLexer):
-    """
-    Lexer for Relation Query Language.
-
-    `RQL <http://www.logilab.org/project/rql>`_
-
-    .. versionadded:: 2.0
-    """
-    name = 'RQL'
-    aliases = ['rql']
-    filenames = ['*.rql']
-    mimetypes = ['text/x-rql']
-
-    flags = re.IGNORECASE
-    tokens = {
-        'root': [
+ 
+ 
+class RqlLexer(RegexLexer): 
+    """ 
+    Lexer for Relation Query Language. 
+ 
+    `RQL <http://www.logilab.org/project/rql>`_ 
+ 
+    .. versionadded:: 2.0 
+    """ 
+    name = 'RQL' 
+    aliases = ['rql'] 
+    filenames = ['*.rql'] 
+    mimetypes = ['text/x-rql'] 
+ 
+    flags = re.IGNORECASE 
+    tokens = { 
+        'root': [ 
             (r'\s+', Whitespace),
-            (r'(DELETE|SET|INSERT|UNION|DISTINCT|WITH|WHERE|BEING|OR'
-             r'|AND|NOT|GROUPBY|HAVING|ORDERBY|ASC|DESC|LIMIT|OFFSET'
-             r'|TODAY|NOW|TRUE|FALSE|NULL|EXISTS)\b', Keyword),
-            (r'[+*/<>=%-]', Operator),
-            (r'(Any|is|instance_of|CWEType|CWRelation)\b', Name.Builtin),
-            (r'[0-9]+', Number.Integer),
-            (r'[A-Z_]\w*\??', Name),
-            (r"'(''|[^'])*'", String.Single),
-            (r'"(""|[^"])*"', String.Single),
-            (r'[;:()\[\],.]', Punctuation)
-        ],
-    }
+            (r'(DELETE|SET|INSERT|UNION|DISTINCT|WITH|WHERE|BEING|OR' 
+             r'|AND|NOT|GROUPBY|HAVING|ORDERBY|ASC|DESC|LIMIT|OFFSET' 
+             r'|TODAY|NOW|TRUE|FALSE|NULL|EXISTS)\b', Keyword), 
+            (r'[+*/<>=%-]', Operator), 
+            (r'(Any|is|instance_of|CWEType|CWRelation)\b', Name.Builtin), 
+            (r'[0-9]+', Number.Integer), 
+            (r'[A-Z_]\w*\??', Name), 
+            (r"'(''|[^'])*'", String.Single), 
+            (r'"(""|[^"])*"', String.Single), 
+            (r'[;:()\[\],.]', Punctuation) 
+        ], 
+    } 

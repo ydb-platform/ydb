@@ -177,25 +177,25 @@ namespace {
     };
 
     struct TDefaultTraits {
-        THolder<TEntropyPoolStream> EP;
+        THolder<TEntropyPoolStream> EP; 
         TSeedStream SS;
 
         inline TDefaultTraits() {
-            Reset();
+            Reset(); 
         }
 
         inline IInputStream& EntropyPool() noexcept {
-            return *EP;
+            return *EP; 
         }
 
         inline IInputStream& Seed() noexcept {
             return SS;
         }
 
-        inline void Reset() noexcept {
-            EP.Reset(new TEntropyPoolStream(THostEntropy()));
-        }
-
+        inline void Reset() noexcept { 
+            EP.Reset(new TEntropyPoolStream(THostEntropy())); 
+        } 
+ 
         static inline TDefaultTraits& Instance() {
             auto res = SingletonWithPriority<TDefaultTraits, 0>();
 
@@ -216,6 +216,6 @@ IInputStream& Seed() {
     return TRandomTraits::Instance().Seed();
 }
 
-void ResetEntropyPool() {
-    TRandomTraits::Instance().Reset();
+void ResetEntropyPool() { 
+    TRandomTraits::Instance().Reset(); 
 }

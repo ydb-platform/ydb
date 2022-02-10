@@ -141,7 +141,7 @@ RECURSE(
     libcpuid
     libcroco
     libde265
-    libdivide
+    libdivide 
     libdivsufsort2
     libeatmydata/dynamic
     libev
@@ -265,7 +265,7 @@ RECURSE(
     pango
     pcre
     pcre2
-    pdqsort
+    pdqsort 
     pffft
     pfr
     picohttpparser

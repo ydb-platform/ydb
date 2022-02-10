@@ -1,135 +1,135 @@
-"""
-    pygments.lexers.perl
-    ~~~~~~~~~~~~~~~~~~~~
-
+""" 
+    pygments.lexers.perl 
+    ~~~~~~~~~~~~~~~~~~~~ 
+ 
     Lexers for Perl, Raku and related languages.
-
+ 
     :copyright: Copyright 2006-2021 by the Pygments team, see AUTHORS.
-    :license: BSD, see LICENSE for details.
-"""
-
-import re
-
-from pygments.lexer import RegexLexer, ExtendedRegexLexer, include, bygroups, \
-    using, this, default, words
-from pygments.token import Text, Comment, Operator, Keyword, Name, String, \
-    Number, Punctuation
-from pygments.util import shebang_matches
-
-__all__ = ['PerlLexer', 'Perl6Lexer']
-
-
-class PerlLexer(RegexLexer):
-    """
+    :license: BSD, see LICENSE for details. 
+""" 
+ 
+import re 
+ 
+from pygments.lexer import RegexLexer, ExtendedRegexLexer, include, bygroups, \ 
+    using, this, default, words 
+from pygments.token import Text, Comment, Operator, Keyword, Name, String, \ 
+    Number, Punctuation 
+from pygments.util import shebang_matches 
+ 
+__all__ = ['PerlLexer', 'Perl6Lexer'] 
+ 
+ 
+class PerlLexer(RegexLexer): 
+    """ 
     For `Perl <https://www.perl.org>`_ source code.
-    """
-
-    name = 'Perl'
-    aliases = ['perl', 'pl']
+    """ 
+ 
+    name = 'Perl' 
+    aliases = ['perl', 'pl'] 
     filenames = ['*.pl', '*.pm', '*.t', '*.perl']
-    mimetypes = ['text/x-perl', 'application/x-perl']
-
-    flags = re.DOTALL | re.MULTILINE
-    # TODO: give this to a perl guy who knows how to parse perl...
-    tokens = {
-        'balanced-regex': [
-            (r'/(\\\\|\\[^\\]|[^\\/])*/[egimosx]*', String.Regex, '#pop'),
-            (r'!(\\\\|\\[^\\]|[^\\!])*![egimosx]*', String.Regex, '#pop'),
-            (r'\\(\\\\|[^\\])*\\[egimosx]*', String.Regex, '#pop'),
-            (r'\{(\\\\|\\[^\\]|[^\\}])*\}[egimosx]*', String.Regex, '#pop'),
-            (r'<(\\\\|\\[^\\]|[^\\>])*>[egimosx]*', String.Regex, '#pop'),
-            (r'\[(\\\\|\\[^\\]|[^\\\]])*\][egimosx]*', String.Regex, '#pop'),
-            (r'\((\\\\|\\[^\\]|[^\\)])*\)[egimosx]*', String.Regex, '#pop'),
-            (r'@(\\\\|\\[^\\]|[^\\@])*@[egimosx]*', String.Regex, '#pop'),
-            (r'%(\\\\|\\[^\\]|[^\\%])*%[egimosx]*', String.Regex, '#pop'),
-            (r'\$(\\\\|\\[^\\]|[^\\$])*\$[egimosx]*', String.Regex, '#pop'),
-        ],
-        'root': [
-            (r'\A\#!.+?$', Comment.Hashbang),
-            (r'\#.*?$', Comment.Single),
-            (r'^=[a-zA-Z0-9]+\s+.*?\n=cut', Comment.Multiline),
-            (words((
-                'case', 'continue', 'do', 'else', 'elsif', 'for', 'foreach',
-                'if', 'last', 'my', 'next', 'our', 'redo', 'reset', 'then',
+    mimetypes = ['text/x-perl', 'application/x-perl'] 
+ 
+    flags = re.DOTALL | re.MULTILINE 
+    # TODO: give this to a perl guy who knows how to parse perl... 
+    tokens = { 
+        'balanced-regex': [ 
+            (r'/(\\\\|\\[^\\]|[^\\/])*/[egimosx]*', String.Regex, '#pop'), 
+            (r'!(\\\\|\\[^\\]|[^\\!])*![egimosx]*', String.Regex, '#pop'), 
+            (r'\\(\\\\|[^\\])*\\[egimosx]*', String.Regex, '#pop'), 
+            (r'\{(\\\\|\\[^\\]|[^\\}])*\}[egimosx]*', String.Regex, '#pop'), 
+            (r'<(\\\\|\\[^\\]|[^\\>])*>[egimosx]*', String.Regex, '#pop'), 
+            (r'\[(\\\\|\\[^\\]|[^\\\]])*\][egimosx]*', String.Regex, '#pop'), 
+            (r'\((\\\\|\\[^\\]|[^\\)])*\)[egimosx]*', String.Regex, '#pop'), 
+            (r'@(\\\\|\\[^\\]|[^\\@])*@[egimosx]*', String.Regex, '#pop'), 
+            (r'%(\\\\|\\[^\\]|[^\\%])*%[egimosx]*', String.Regex, '#pop'), 
+            (r'\$(\\\\|\\[^\\]|[^\\$])*\$[egimosx]*', String.Regex, '#pop'), 
+        ], 
+        'root': [ 
+            (r'\A\#!.+?$', Comment.Hashbang), 
+            (r'\#.*?$', Comment.Single), 
+            (r'^=[a-zA-Z0-9]+\s+.*?\n=cut', Comment.Multiline), 
+            (words(( 
+                'case', 'continue', 'do', 'else', 'elsif', 'for', 'foreach', 
+                'if', 'last', 'my', 'next', 'our', 'redo', 'reset', 'then', 
                 'unless', 'until', 'while', 'print', 'new', 'BEGIN',
-                'CHECK', 'INIT', 'END', 'return'), suffix=r'\b'),
-             Keyword),
-            (r'(format)(\s+)(\w+)(\s*)(=)(\s*\n)',
-             bygroups(Keyword, Text, Name, Text, Punctuation, Text), 'format'),
-            (r'(eq|lt|gt|le|ge|ne|not|and|or|cmp)\b', Operator.Word),
-            # common delimiters
-            (r's/(\\\\|\\[^\\]|[^\\/])*/(\\\\|\\[^\\]|[^\\/])*/[egimosx]*',
-                String.Regex),
-            (r's!(\\\\|\\!|[^!])*!(\\\\|\\!|[^!])*![egimosx]*', String.Regex),
-            (r's\\(\\\\|[^\\])*\\(\\\\|[^\\])*\\[egimosx]*', String.Regex),
-            (r's@(\\\\|\\[^\\]|[^\\@])*@(\\\\|\\[^\\]|[^\\@])*@[egimosx]*',
-                String.Regex),
-            (r's%(\\\\|\\[^\\]|[^\\%])*%(\\\\|\\[^\\]|[^\\%])*%[egimosx]*',
-                String.Regex),
-            # balanced delimiters
-            (r's\{(\\\\|\\[^\\]|[^\\}])*\}\s*', String.Regex, 'balanced-regex'),
-            (r's<(\\\\|\\[^\\]|[^\\>])*>\s*', String.Regex, 'balanced-regex'),
-            (r's\[(\\\\|\\[^\\]|[^\\\]])*\]\s*', String.Regex,
-                'balanced-regex'),
-            (r's\((\\\\|\\[^\\]|[^\\)])*\)\s*', String.Regex,
-                'balanced-regex'),
-
-            (r'm?/(\\\\|\\[^\\]|[^\\/\n])*/[gcimosx]*', String.Regex),
-            (r'm(?=[/!\\{<\[(@%$])', String.Regex, 'balanced-regex'),
-            (r'((?<==~)|(?<=\())\s*/(\\\\|\\[^\\]|[^\\/])*/[gcimosx]*',
-                String.Regex),
-            (r'\s+', Text),
-            (words((
-                'abs', 'accept', 'alarm', 'atan2', 'bind', 'binmode', 'bless', 'caller', 'chdir',
-                'chmod', 'chomp', 'chop', 'chown', 'chr', 'chroot', 'close', 'closedir', 'connect',
-                'continue', 'cos', 'crypt', 'dbmclose', 'dbmopen', 'defined', 'delete', 'die',
-                'dump', 'each', 'endgrent', 'endhostent', 'endnetent', 'endprotoent',
-                'endpwent', 'endservent', 'eof', 'eval', 'exec', 'exists', 'exit', 'exp', 'fcntl',
-                'fileno', 'flock', 'fork', 'format', 'formline', 'getc', 'getgrent', 'getgrgid',
-                'getgrnam', 'gethostbyaddr', 'gethostbyname', 'gethostent', 'getlogin',
-                'getnetbyaddr', 'getnetbyname', 'getnetent', 'getpeername', 'getpgrp',
-                'getppid', 'getpriority', 'getprotobyname', 'getprotobynumber',
-                'getprotoent', 'getpwent', 'getpwnam', 'getpwuid', 'getservbyname',
-                'getservbyport', 'getservent', 'getsockname', 'getsockopt', 'glob', 'gmtime',
-                'goto', 'grep', 'hex', 'import', 'index', 'int', 'ioctl', 'join', 'keys', 'kill', 'last',
-                'lc', 'lcfirst', 'length', 'link', 'listen', 'local', 'localtime', 'log', 'lstat',
+                'CHECK', 'INIT', 'END', 'return'), suffix=r'\b'), 
+             Keyword), 
+            (r'(format)(\s+)(\w+)(\s*)(=)(\s*\n)', 
+             bygroups(Keyword, Text, Name, Text, Punctuation, Text), 'format'), 
+            (r'(eq|lt|gt|le|ge|ne|not|and|or|cmp)\b', Operator.Word), 
+            # common delimiters 
+            (r's/(\\\\|\\[^\\]|[^\\/])*/(\\\\|\\[^\\]|[^\\/])*/[egimosx]*', 
+                String.Regex), 
+            (r's!(\\\\|\\!|[^!])*!(\\\\|\\!|[^!])*![egimosx]*', String.Regex), 
+            (r's\\(\\\\|[^\\])*\\(\\\\|[^\\])*\\[egimosx]*', String.Regex), 
+            (r's@(\\\\|\\[^\\]|[^\\@])*@(\\\\|\\[^\\]|[^\\@])*@[egimosx]*', 
+                String.Regex), 
+            (r's%(\\\\|\\[^\\]|[^\\%])*%(\\\\|\\[^\\]|[^\\%])*%[egimosx]*', 
+                String.Regex), 
+            # balanced delimiters 
+            (r's\{(\\\\|\\[^\\]|[^\\}])*\}\s*', String.Regex, 'balanced-regex'), 
+            (r's<(\\\\|\\[^\\]|[^\\>])*>\s*', String.Regex, 'balanced-regex'), 
+            (r's\[(\\\\|\\[^\\]|[^\\\]])*\]\s*', String.Regex, 
+                'balanced-regex'), 
+            (r's\((\\\\|\\[^\\]|[^\\)])*\)\s*', String.Regex, 
+                'balanced-regex'), 
+ 
+            (r'm?/(\\\\|\\[^\\]|[^\\/\n])*/[gcimosx]*', String.Regex), 
+            (r'm(?=[/!\\{<\[(@%$])', String.Regex, 'balanced-regex'), 
+            (r'((?<==~)|(?<=\())\s*/(\\\\|\\[^\\]|[^\\/])*/[gcimosx]*', 
+                String.Regex), 
+            (r'\s+', Text), 
+            (words(( 
+                'abs', 'accept', 'alarm', 'atan2', 'bind', 'binmode', 'bless', 'caller', 'chdir', 
+                'chmod', 'chomp', 'chop', 'chown', 'chr', 'chroot', 'close', 'closedir', 'connect', 
+                'continue', 'cos', 'crypt', 'dbmclose', 'dbmopen', 'defined', 'delete', 'die', 
+                'dump', 'each', 'endgrent', 'endhostent', 'endnetent', 'endprotoent', 
+                'endpwent', 'endservent', 'eof', 'eval', 'exec', 'exists', 'exit', 'exp', 'fcntl', 
+                'fileno', 'flock', 'fork', 'format', 'formline', 'getc', 'getgrent', 'getgrgid', 
+                'getgrnam', 'gethostbyaddr', 'gethostbyname', 'gethostent', 'getlogin', 
+                'getnetbyaddr', 'getnetbyname', 'getnetent', 'getpeername', 'getpgrp', 
+                'getppid', 'getpriority', 'getprotobyname', 'getprotobynumber', 
+                'getprotoent', 'getpwent', 'getpwnam', 'getpwuid', 'getservbyname', 
+                'getservbyport', 'getservent', 'getsockname', 'getsockopt', 'glob', 'gmtime', 
+                'goto', 'grep', 'hex', 'import', 'index', 'int', 'ioctl', 'join', 'keys', 'kill', 'last', 
+                'lc', 'lcfirst', 'length', 'link', 'listen', 'local', 'localtime', 'log', 'lstat', 
                 'map', 'mkdir', 'msgctl', 'msgget', 'msgrcv', 'msgsnd', 'my', 'next', 'oct', 'open',
                 'opendir', 'ord', 'our', 'pack', 'pipe', 'pop', 'pos', 'printf',
-                'prototype', 'push', 'quotemeta', 'rand', 'read', 'readdir',
+                'prototype', 'push', 'quotemeta', 'rand', 'read', 'readdir', 
                 'readline', 'readlink', 'readpipe', 'recv', 'redo', 'ref', 'rename',
-                'reverse', 'rewinddir', 'rindex', 'rmdir', 'scalar', 'seek', 'seekdir',
-                'select', 'semctl', 'semget', 'semop', 'send', 'setgrent', 'sethostent', 'setnetent',
-                'setpgrp', 'setpriority', 'setprotoent', 'setpwent', 'setservent',
-                'setsockopt', 'shift', 'shmctl', 'shmget', 'shmread', 'shmwrite', 'shutdown',
-                'sin', 'sleep', 'socket', 'socketpair', 'sort', 'splice', 'split', 'sprintf', 'sqrt',
-                'srand', 'stat', 'study', 'substr', 'symlink', 'syscall', 'sysopen', 'sysread',
-                'sysseek', 'system', 'syswrite', 'tell', 'telldir', 'tie', 'tied', 'time', 'times', 'tr',
-                'truncate', 'uc', 'ucfirst', 'umask', 'undef', 'unlink', 'unpack', 'unshift', 'untie',
-                'utime', 'values', 'vec', 'wait', 'waitpid', 'wantarray', 'warn', 'write'), suffix=r'\b'),
-             Name.Builtin),
-            (r'((__(DATA|DIE|WARN)__)|(STD(IN|OUT|ERR)))\b', Name.Builtin.Pseudo),
+                'reverse', 'rewinddir', 'rindex', 'rmdir', 'scalar', 'seek', 'seekdir', 
+                'select', 'semctl', 'semget', 'semop', 'send', 'setgrent', 'sethostent', 'setnetent', 
+                'setpgrp', 'setpriority', 'setprotoent', 'setpwent', 'setservent', 
+                'setsockopt', 'shift', 'shmctl', 'shmget', 'shmread', 'shmwrite', 'shutdown', 
+                'sin', 'sleep', 'socket', 'socketpair', 'sort', 'splice', 'split', 'sprintf', 'sqrt', 
+                'srand', 'stat', 'study', 'substr', 'symlink', 'syscall', 'sysopen', 'sysread', 
+                'sysseek', 'system', 'syswrite', 'tell', 'telldir', 'tie', 'tied', 'time', 'times', 'tr', 
+                'truncate', 'uc', 'ucfirst', 'umask', 'undef', 'unlink', 'unpack', 'unshift', 'untie', 
+                'utime', 'values', 'vec', 'wait', 'waitpid', 'wantarray', 'warn', 'write'), suffix=r'\b'), 
+             Name.Builtin), 
+            (r'((__(DATA|DIE|WARN)__)|(STD(IN|OUT|ERR)))\b', Name.Builtin.Pseudo), 
             (r'(<<)([\'"]?)([a-zA-Z_]\w*)(\2;?\n.*?\n)(\3)(\n)',
              bygroups(String, String, String.Delimiter, String, String.Delimiter, Text)),
-            (r'__END__', Comment.Preproc, 'end-part'),
-            (r'\$\^[ADEFHILMOPSTWX]', Name.Variable.Global),
-            (r"\$[\\\"\[\]'&`+*.,;=%~?@$!<>(^|/-](?!\w)", Name.Variable.Global),
-            (r'[$@%#]+', Name.Variable, 'varname'),
-            (r'0_?[0-7]+(_[0-7]+)*', Number.Oct),
-            (r'0x[0-9A-Fa-f]+(_[0-9A-Fa-f]+)*', Number.Hex),
-            (r'0b[01]+(_[01]+)*', Number.Bin),
-            (r'(?i)(\d*(_\d*)*\.\d+(_\d*)*|\d+(_\d*)*\.\d+(_\d*)*)(e[+-]?\d+)?',
-             Number.Float),
-            (r'(?i)\d+(_\d*)*e[+-]?\d+(_\d*)*', Number.Float),
-            (r'\d+(_\d+)*', Number.Integer),
-            (r"'(\\\\|\\[^\\]|[^'\\])*'", String),
-            (r'"(\\\\|\\[^\\]|[^"\\])*"', String),
-            (r'`(\\\\|\\[^\\]|[^`\\])*`', String.Backtick),
-            (r'<([^\s>]+)>', String.Regex),
-            (r'(q|qq|qw|qr|qx)\{', String.Other, 'cb-string'),
-            (r'(q|qq|qw|qr|qx)\(', String.Other, 'rb-string'),
-            (r'(q|qq|qw|qr|qx)\[', String.Other, 'sb-string'),
-            (r'(q|qq|qw|qr|qx)\<', String.Other, 'lt-string'),
-            (r'(q|qq|qw|qr|qx)([\W_])(.|\n)*?\2', String.Other),
+            (r'__END__', Comment.Preproc, 'end-part'), 
+            (r'\$\^[ADEFHILMOPSTWX]', Name.Variable.Global), 
+            (r"\$[\\\"\[\]'&`+*.,;=%~?@$!<>(^|/-](?!\w)", Name.Variable.Global), 
+            (r'[$@%#]+', Name.Variable, 'varname'), 
+            (r'0_?[0-7]+(_[0-7]+)*', Number.Oct), 
+            (r'0x[0-9A-Fa-f]+(_[0-9A-Fa-f]+)*', Number.Hex), 
+            (r'0b[01]+(_[01]+)*', Number.Bin), 
+            (r'(?i)(\d*(_\d*)*\.\d+(_\d*)*|\d+(_\d*)*\.\d+(_\d*)*)(e[+-]?\d+)?', 
+             Number.Float), 
+            (r'(?i)\d+(_\d*)*e[+-]?\d+(_\d*)*', Number.Float), 
+            (r'\d+(_\d+)*', Number.Integer), 
+            (r"'(\\\\|\\[^\\]|[^'\\])*'", String), 
+            (r'"(\\\\|\\[^\\]|[^"\\])*"', String), 
+            (r'`(\\\\|\\[^\\]|[^`\\])*`', String.Backtick), 
+            (r'<([^\s>]+)>', String.Regex), 
+            (r'(q|qq|qw|qr|qx)\{', String.Other, 'cb-string'), 
+            (r'(q|qq|qw|qr|qx)\(', String.Other, 'rb-string'), 
+            (r'(q|qq|qw|qr|qx)\[', String.Other, 'sb-string'), 
+            (r'(q|qq|qw|qr|qx)\<', String.Other, 'lt-string'), 
+            (r'(q|qq|qw|qr|qx)([\W_])(.|\n)*?\2', String.Other), 
             (r'(package)(\s+)([a-zA-Z_]\w*(?:::[a-zA-Z_]\w*)*)',
              bygroups(Keyword, Text, Name.Namespace)),
             (r'(use|require|no)(\s+)([a-zA-Z_]\w*(?:::[a-zA-Z_]\w*)*)',
@@ -138,107 +138,107 @@ class PerlLexer(RegexLexer):
             (words((
                 'no', 'package', 'require', 'use'), suffix=r'\b'),
              Keyword),
-            (r'(\[\]|\*\*|::|<<|>>|>=|<=>|<=|={3}|!=|=~|'
-             r'!~|&&?|\|\||\.{1,3})', Operator),
-            (r'[-+/*%=<>&^|!\\~]=?', Operator),
-            (r'[()\[\]:;,<>/?{}]', Punctuation),  # yes, there's no shortage
-                                                  # of punctuation in Perl!
-            (r'(?=\w)', Name, 'name'),
-        ],
-        'format': [
-            (r'\.\n', String.Interpol, '#pop'),
-            (r'[^\n]*\n', String.Interpol),
-        ],
-        'varname': [
-            (r'\s+', Text),
-            (r'\{', Punctuation, '#pop'),    # hash syntax?
-            (r'\)|,', Punctuation, '#pop'),  # argument specifier
-            (r'\w+::', Name.Namespace),
-            (r'[\w:]+', Name.Variable, '#pop'),
-        ],
-        'name': [
+            (r'(\[\]|\*\*|::|<<|>>|>=|<=>|<=|={3}|!=|=~|' 
+             r'!~|&&?|\|\||\.{1,3})', Operator), 
+            (r'[-+/*%=<>&^|!\\~]=?', Operator), 
+            (r'[()\[\]:;,<>/?{}]', Punctuation),  # yes, there's no shortage 
+                                                  # of punctuation in Perl! 
+            (r'(?=\w)', Name, 'name'), 
+        ], 
+        'format': [ 
+            (r'\.\n', String.Interpol, '#pop'), 
+            (r'[^\n]*\n', String.Interpol), 
+        ], 
+        'varname': [ 
+            (r'\s+', Text), 
+            (r'\{', Punctuation, '#pop'),    # hash syntax? 
+            (r'\)|,', Punctuation, '#pop'),  # argument specifier 
+            (r'\w+::', Name.Namespace), 
+            (r'[\w:]+', Name.Variable, '#pop'), 
+        ], 
+        'name': [ 
             (r'[a-zA-Z_]\w*(::[a-zA-Z_]\w*)*(::)?(?=\s*->)', Name.Namespace, '#pop'),
             (r'[a-zA-Z_]\w*(::[a-zA-Z_]\w*)*::', Name.Namespace, '#pop'),
-            (r'[\w:]+', Name, '#pop'),
-            (r'[A-Z_]+(?=\W)', Name.Constant, '#pop'),
-            (r'(?=\W)', Text, '#pop'),
-        ],
-        'funcname': [
-            (r'[a-zA-Z_]\w*[!?]?', Name.Function),
-            (r'\s+', Text),
-            # argument declaration
-            (r'(\([$@%]*\))(\s*)', bygroups(Punctuation, Text)),
-            (r';', Punctuation, '#pop'),
-            (r'.*?\{', Punctuation, '#pop'),
-        ],
-        'cb-string': [
-            (r'\\[{}\\]', String.Other),
-            (r'\\', String.Other),
-            (r'\{', String.Other, 'cb-string'),
-            (r'\}', String.Other, '#pop'),
-            (r'[^{}\\]+', String.Other)
-        ],
-        'rb-string': [
-            (r'\\[()\\]', String.Other),
-            (r'\\', String.Other),
-            (r'\(', String.Other, 'rb-string'),
-            (r'\)', String.Other, '#pop'),
-            (r'[^()]+', String.Other)
-        ],
-        'sb-string': [
-            (r'\\[\[\]\\]', String.Other),
-            (r'\\', String.Other),
-            (r'\[', String.Other, 'sb-string'),
-            (r'\]', String.Other, '#pop'),
-            (r'[^\[\]]+', String.Other)
-        ],
-        'lt-string': [
-            (r'\\[<>\\]', String.Other),
-            (r'\\', String.Other),
-            (r'\<', String.Other, 'lt-string'),
-            (r'\>', String.Other, '#pop'),
-            (r'[^<>]+', String.Other)
-        ],
-        'end-part': [
-            (r'.+', Comment.Preproc, '#pop')
-        ]
-    }
-
-    def analyse_text(text):
-        if shebang_matches(text, r'perl'):
-            return True
+            (r'[\w:]+', Name, '#pop'), 
+            (r'[A-Z_]+(?=\W)', Name.Constant, '#pop'), 
+            (r'(?=\W)', Text, '#pop'), 
+        ], 
+        'funcname': [ 
+            (r'[a-zA-Z_]\w*[!?]?', Name.Function), 
+            (r'\s+', Text), 
+            # argument declaration 
+            (r'(\([$@%]*\))(\s*)', bygroups(Punctuation, Text)), 
+            (r';', Punctuation, '#pop'), 
+            (r'.*?\{', Punctuation, '#pop'), 
+        ], 
+        'cb-string': [ 
+            (r'\\[{}\\]', String.Other), 
+            (r'\\', String.Other), 
+            (r'\{', String.Other, 'cb-string'), 
+            (r'\}', String.Other, '#pop'), 
+            (r'[^{}\\]+', String.Other) 
+        ], 
+        'rb-string': [ 
+            (r'\\[()\\]', String.Other), 
+            (r'\\', String.Other), 
+            (r'\(', String.Other, 'rb-string'), 
+            (r'\)', String.Other, '#pop'), 
+            (r'[^()]+', String.Other) 
+        ], 
+        'sb-string': [ 
+            (r'\\[\[\]\\]', String.Other), 
+            (r'\\', String.Other), 
+            (r'\[', String.Other, 'sb-string'), 
+            (r'\]', String.Other, '#pop'), 
+            (r'[^\[\]]+', String.Other) 
+        ], 
+        'lt-string': [ 
+            (r'\\[<>\\]', String.Other), 
+            (r'\\', String.Other), 
+            (r'\<', String.Other, 'lt-string'), 
+            (r'\>', String.Other, '#pop'), 
+            (r'[^<>]+', String.Other) 
+        ], 
+        'end-part': [ 
+            (r'.+', Comment.Preproc, '#pop') 
+        ] 
+    } 
+ 
+    def analyse_text(text): 
+        if shebang_matches(text, r'perl'): 
+            return True 
 
         result = 0
 
         if re.search(r'(?:my|our)\s+[$@%(]', text):
             result += 0.9
-
+ 
         if ':=' in text:
             # := is not valid Perl, but it appears in unicon, so we should
             # become less confident if we think we found Perl with :=
             result /= 2
-
+ 
         return result
 
 
-class Perl6Lexer(ExtendedRegexLexer):
-    """
+class Perl6Lexer(ExtendedRegexLexer): 
+    """ 
     For `Raku <https://www.raku.org>`_ (a.k.a. Perl 6) source code.
-
-    .. versionadded:: 2.0
-    """
-
-    name = 'Perl6'
+ 
+    .. versionadded:: 2.0 
+    """ 
+ 
+    name = 'Perl6' 
     aliases = ['perl6', 'pl6', 'raku']
-    filenames = ['*.pl', '*.pm', '*.nqp', '*.p6', '*.6pl', '*.p6l', '*.pl6',
+    filenames = ['*.pl', '*.pm', '*.nqp', '*.p6', '*.6pl', '*.p6l', '*.pl6', 
                  '*.6pm', '*.p6m', '*.pm6', '*.t', '*.raku', '*.rakumod',
                  '*.rakutest', '*.rakudoc']
-    mimetypes = ['text/x-perl6', 'application/x-perl6']
-    flags = re.MULTILINE | re.DOTALL | re.UNICODE
-
+    mimetypes = ['text/x-perl6', 'application/x-perl6'] 
+    flags = re.MULTILINE | re.DOTALL | re.UNICODE 
+ 
     PERL6_IDENTIFIER_RANGE = r"['\w:-]"
-
-    PERL6_KEYWORDS = (
+ 
+    PERL6_KEYWORDS = ( 
         #Phasers
         'BEGIN','CATCH','CHECK','CLOSE','CONTROL','DOC','END','ENTER','FIRST',
         'INIT','KEEP','LAST','LEAVE','NEXT','POST','PRE','QUIT','UNDO',
@@ -252,9 +252,9 @@ class Perl6Lexer(ExtendedRegexLexer):
         'when','while','with','without',
         #Traits
         'export','native','repr','required','rw','symbol',
-    )
-
-    PERL6_BUILTINS = (
+    ) 
+ 
+    PERL6_BUILTINS = ( 
         'ACCEPTS','abs','abs2rel','absolute','accept','accessed','acos',
         'acosec','acosech','acosh','acotan','acotanh','acquire','act','action',
         'actions','add','add_attribute','add_enum_value','add_fallback',
@@ -368,9 +368,9 @@ class Perl6Lexer(ExtendedRegexLexer):
         'whole-second','WHY','wordcase','words','workaround','wrap','write',
         'write-to','x','yada','year','yield','yyyy-mm-dd','z','zip','zip-latest',
 
-    )
-
-    PERL6_BUILTIN_CLASSES = (
+    ) 
+ 
+    PERL6_BUILTIN_CLASSES = ( 
         #Booleans
         'False','True',
         #Classes
@@ -406,24 +406,24 @@ class Perl6Lexer(ExtendedRegexLexer):
         'Telemetry::Period','Telemetry::Sampler','Thread','ThreadPoolScheduler',
         'UInt','uint16','uint32','uint64','uint8','Uni','utf8','Variable',
         'Version','VM','Whatever','WhateverCode','WrapHandle'
-    )
-
-    PERL6_OPERATORS = (
-        'X', 'Z', 'after', 'also', 'and', 'andthen', 'before', 'cmp', 'div',
-        'eq', 'eqv', 'extra', 'ff', 'fff', 'ge', 'gt', 'le', 'leg', 'lt', 'm',
-        'mm', 'mod', 'ne', 'or', 'orelse', 'rx', 's', 'tr', 'x', 'xor', 'xx',
-        '++', '--', '**', '!', '+', '-', '~', '?', '|', '||', '+^', '~^', '?^',
-        '^', '*', '/', '%', '%%', '+&', '+<', '+>', '~&', '~<', '~>', '?&',
-        'gcd', 'lcm', '+', '-', '+|', '+^', '~|', '~^', '?|', '?^',
-        '~', '&', '^', 'but', 'does', '<=>', '..', '..^', '^..', '^..^',
-        '!=', '==', '<', '<=', '>', '>=', '~~', '===', '!eqv',
-        '&&', '||', '^^', '//', 'min', 'max', '??', '!!', 'ff', 'fff', 'so',
+    ) 
+ 
+    PERL6_OPERATORS = ( 
+        'X', 'Z', 'after', 'also', 'and', 'andthen', 'before', 'cmp', 'div', 
+        'eq', 'eqv', 'extra', 'ff', 'fff', 'ge', 'gt', 'le', 'leg', 'lt', 'm', 
+        'mm', 'mod', 'ne', 'or', 'orelse', 'rx', 's', 'tr', 'x', 'xor', 'xx', 
+        '++', '--', '**', '!', '+', '-', '~', '?', '|', '||', '+^', '~^', '?^', 
+        '^', '*', '/', '%', '%%', '+&', '+<', '+>', '~&', '~<', '~>', '?&', 
+        'gcd', 'lcm', '+', '-', '+|', '+^', '~|', '~^', '?|', '?^', 
+        '~', '&', '^', 'but', 'does', '<=>', '..', '..^', '^..', '^..^', 
+        '!=', '==', '<', '<=', '>', '>=', '~~', '===', '!eqv', 
+        '&&', '||', '^^', '//', 'min', 'max', '??', '!!', 'ff', 'fff', 'so', 
         'not', '<==', '==>', '<<==', '==>>','unicmp',
-    )
-
-    # Perl 6 has a *lot* of possible bracketing characters
-    # this list was lifted from STD.pm6 (https://github.com/perl6/std)
-    PERL6_BRACKETS = {
+    ) 
+ 
+    # Perl 6 has a *lot* of possible bracketing characters 
+    # this list was lifted from STD.pm6 (https://github.com/perl6/std) 
+    PERL6_BRACKETS = { 
         '\u0028': '\u0029', '\u003c': '\u003e', '\u005b': '\u005d',
         '\u007b': '\u007d', '\u00ab': '\u00bb', '\u0f3a': '\u0f3b',
         '\u0f3c': '\u0f3d', '\u169b': '\u169c', '\u2018': '\u2019',
@@ -488,244 +488,244 @@ class Perl6Lexer(ExtendedRegexLexer):
         '\ufe59': '\ufe5a', '\ufe5b': '\ufe5c', '\ufe5d': '\ufe5e',
         '\uff08': '\uff09', '\uff1c': '\uff1e', '\uff3b': '\uff3d',
         '\uff5b': '\uff5d', '\uff5f': '\uff60', '\uff62': '\uff63',
-    }
-
-    def _build_word_match(words, boundary_regex_fragment=None, prefix='', suffix=''):
-        if boundary_regex_fragment is None:
-            return r'\b(' + prefix + r'|'.join(re.escape(x) for x in words) + \
-                suffix + r')\b'
-        else:
-            return r'(?<!' + boundary_regex_fragment + r')' + prefix + r'(' + \
-                r'|'.join(re.escape(x) for x in words) + r')' + suffix + r'(?!' + \
-                boundary_regex_fragment + r')'
-
-    def brackets_callback(token_class):
-        def callback(lexer, match, context):
-            groups = match.groupdict()
-            opening_chars = groups['delimiter']
-            n_chars = len(opening_chars)
-            adverbs = groups.get('adverbs')
-
-            closer = Perl6Lexer.PERL6_BRACKETS.get(opening_chars[0])
-            text = context.text
-
-            if closer is None:  # it's not a mirrored character, which means we
-                                # just need to look for the next occurrence
-
-                end_pos = text.find(opening_chars, match.start('delimiter') + n_chars)
-            else:   # we need to look for the corresponding closing character,
-                    # keep nesting in mind
-                closing_chars = closer * n_chars
-                nesting_level = 1
-
-                search_pos = match.start('delimiter')
-
-                while nesting_level > 0:
-                    next_open_pos = text.find(opening_chars, search_pos + n_chars)
-                    next_close_pos = text.find(closing_chars, search_pos + n_chars)
-
-                    if next_close_pos == -1:
-                        next_close_pos = len(text)
-                        nesting_level = 0
-                    elif next_open_pos != -1 and next_open_pos < next_close_pos:
-                        nesting_level += 1
-                        search_pos = next_open_pos
-                    else:  # next_close_pos < next_open_pos
-                        nesting_level -= 1
-                        search_pos = next_close_pos
-
-                end_pos = next_close_pos
-
-            if end_pos < 0:     # if we didn't find a closer, just highlight the
-                                # rest of the text in this class
-                end_pos = len(text)
-
-            if adverbs is not None and re.search(r':to\b', adverbs):
-                heredoc_terminator = text[match.start('delimiter') + n_chars:end_pos]
-                end_heredoc = re.search(r'^\s*' + re.escape(heredoc_terminator) +
-                                        r'\s*$', text[end_pos:], re.MULTILINE)
-
-                if end_heredoc:
-                    end_pos += end_heredoc.end()
-                else:
-                    end_pos = len(text)
-
-            yield match.start(), token_class, text[match.start():end_pos + n_chars]
-            context.pos = end_pos + n_chars
-
-        return callback
-
-    def opening_brace_callback(lexer, match, context):
-        stack = context.stack
-
-        yield match.start(), Text, context.text[match.start():match.end()]
-        context.pos = match.end()
-
-        # if we encounter an opening brace and we're one level
-        # below a token state, it means we need to increment
-        # the nesting level for braces so we know later when
-        # we should return to the token rules.
-        if len(stack) > 2 and stack[-2] == 'token':
-            context.perl6_token_nesting_level += 1
-
-    def closing_brace_callback(lexer, match, context):
-        stack = context.stack
-
-        yield match.start(), Text, context.text[match.start():match.end()]
-        context.pos = match.end()
-
-        # if we encounter a free closing brace and we're one level
-        # below a token state, it means we need to check the nesting
-        # level to see if we need to return to the token state.
-        if len(stack) > 2 and stack[-2] == 'token':
-            context.perl6_token_nesting_level -= 1
-            if context.perl6_token_nesting_level == 0:
-                stack.pop()
-
-    def embedded_perl6_callback(lexer, match, context):
-        context.perl6_token_nesting_level = 1
-        yield match.start(), Text, context.text[match.start():match.end()]
-        context.pos = match.end()
-        context.stack.append('root')
-
-    # If you're modifying these rules, be careful if you need to process '{' or '}'
-    # characters. We have special logic for processing these characters (due to the fact
-    # that you can nest Perl 6 code in regex blocks), so if you need to process one of
-    # them, make sure you also process the corresponding one!
-    tokens = {
-        'common': [
-            (r'#[`|=](?P<delimiter>(?P<first_char>[' + ''.join(PERL6_BRACKETS) + r'])(?P=first_char)*)',
-             brackets_callback(Comment.Multiline)),
+    } 
+ 
+    def _build_word_match(words, boundary_regex_fragment=None, prefix='', suffix=''): 
+        if boundary_regex_fragment is None: 
+            return r'\b(' + prefix + r'|'.join(re.escape(x) for x in words) + \ 
+                suffix + r')\b' 
+        else: 
+            return r'(?<!' + boundary_regex_fragment + r')' + prefix + r'(' + \ 
+                r'|'.join(re.escape(x) for x in words) + r')' + suffix + r'(?!' + \ 
+                boundary_regex_fragment + r')' 
+ 
+    def brackets_callback(token_class): 
+        def callback(lexer, match, context): 
+            groups = match.groupdict() 
+            opening_chars = groups['delimiter'] 
+            n_chars = len(opening_chars) 
+            adverbs = groups.get('adverbs') 
+ 
+            closer = Perl6Lexer.PERL6_BRACKETS.get(opening_chars[0]) 
+            text = context.text 
+ 
+            if closer is None:  # it's not a mirrored character, which means we 
+                                # just need to look for the next occurrence 
+ 
+                end_pos = text.find(opening_chars, match.start('delimiter') + n_chars) 
+            else:   # we need to look for the corresponding closing character, 
+                    # keep nesting in mind 
+                closing_chars = closer * n_chars 
+                nesting_level = 1 
+ 
+                search_pos = match.start('delimiter') 
+ 
+                while nesting_level > 0: 
+                    next_open_pos = text.find(opening_chars, search_pos + n_chars) 
+                    next_close_pos = text.find(closing_chars, search_pos + n_chars) 
+ 
+                    if next_close_pos == -1: 
+                        next_close_pos = len(text) 
+                        nesting_level = 0 
+                    elif next_open_pos != -1 and next_open_pos < next_close_pos: 
+                        nesting_level += 1 
+                        search_pos = next_open_pos 
+                    else:  # next_close_pos < next_open_pos 
+                        nesting_level -= 1 
+                        search_pos = next_close_pos 
+ 
+                end_pos = next_close_pos 
+ 
+            if end_pos < 0:     # if we didn't find a closer, just highlight the 
+                                # rest of the text in this class 
+                end_pos = len(text) 
+ 
+            if adverbs is not None and re.search(r':to\b', adverbs): 
+                heredoc_terminator = text[match.start('delimiter') + n_chars:end_pos] 
+                end_heredoc = re.search(r'^\s*' + re.escape(heredoc_terminator) + 
+                                        r'\s*$', text[end_pos:], re.MULTILINE) 
+ 
+                if end_heredoc: 
+                    end_pos += end_heredoc.end() 
+                else: 
+                    end_pos = len(text) 
+ 
+            yield match.start(), token_class, text[match.start():end_pos + n_chars] 
+            context.pos = end_pos + n_chars 
+ 
+        return callback 
+ 
+    def opening_brace_callback(lexer, match, context): 
+        stack = context.stack 
+ 
+        yield match.start(), Text, context.text[match.start():match.end()] 
+        context.pos = match.end() 
+ 
+        # if we encounter an opening brace and we're one level 
+        # below a token state, it means we need to increment 
+        # the nesting level for braces so we know later when 
+        # we should return to the token rules. 
+        if len(stack) > 2 and stack[-2] == 'token': 
+            context.perl6_token_nesting_level += 1 
+ 
+    def closing_brace_callback(lexer, match, context): 
+        stack = context.stack 
+ 
+        yield match.start(), Text, context.text[match.start():match.end()] 
+        context.pos = match.end() 
+ 
+        # if we encounter a free closing brace and we're one level 
+        # below a token state, it means we need to check the nesting 
+        # level to see if we need to return to the token state. 
+        if len(stack) > 2 and stack[-2] == 'token': 
+            context.perl6_token_nesting_level -= 1 
+            if context.perl6_token_nesting_level == 0: 
+                stack.pop() 
+ 
+    def embedded_perl6_callback(lexer, match, context): 
+        context.perl6_token_nesting_level = 1 
+        yield match.start(), Text, context.text[match.start():match.end()] 
+        context.pos = match.end() 
+        context.stack.append('root') 
+ 
+    # If you're modifying these rules, be careful if you need to process '{' or '}' 
+    # characters. We have special logic for processing these characters (due to the fact 
+    # that you can nest Perl 6 code in regex blocks), so if you need to process one of 
+    # them, make sure you also process the corresponding one! 
+    tokens = { 
+        'common': [ 
+            (r'#[`|=](?P<delimiter>(?P<first_char>[' + ''.join(PERL6_BRACKETS) + r'])(?P=first_char)*)', 
+             brackets_callback(Comment.Multiline)), 
             (r'#[^\n]*$', Comment.Single),
-            (r'^(\s*)=begin\s+(\w+)\b.*?^\1=end\s+\2', Comment.Multiline),
-            (r'^(\s*)=for.*?\n\s*?\n', Comment.Multiline),
-            (r'^=.*?\n\s*?\n', Comment.Multiline),
-            (r'(regex|token|rule)(\s*' + PERL6_IDENTIFIER_RANGE + '+:sym)',
-             bygroups(Keyword, Name), 'token-sym-brackets'),
+            (r'^(\s*)=begin\s+(\w+)\b.*?^\1=end\s+\2', Comment.Multiline), 
+            (r'^(\s*)=for.*?\n\s*?\n', Comment.Multiline), 
+            (r'^=.*?\n\s*?\n', Comment.Multiline), 
+            (r'(regex|token|rule)(\s*' + PERL6_IDENTIFIER_RANGE + '+:sym)', 
+             bygroups(Keyword, Name), 'token-sym-brackets'), 
             (r'(regex|token|rule)(?!' + PERL6_IDENTIFIER_RANGE + r')(\s*' + PERL6_IDENTIFIER_RANGE + '+)?',
-             bygroups(Keyword, Name), 'pre-token'),
-            # deal with a special case in the Perl 6 grammar (role q { ... })
-            (r'(role)(\s+)(q)(\s*)', bygroups(Keyword, Text, Name, Text)),
-            (_build_word_match(PERL6_KEYWORDS, PERL6_IDENTIFIER_RANGE), Keyword),
-            (_build_word_match(PERL6_BUILTIN_CLASSES, PERL6_IDENTIFIER_RANGE, suffix='(?::[UD])?'),
-             Name.Builtin),
-            (_build_word_match(PERL6_BUILTINS, PERL6_IDENTIFIER_RANGE), Name.Builtin),
-            # copied from PerlLexer
+             bygroups(Keyword, Name), 'pre-token'), 
+            # deal with a special case in the Perl 6 grammar (role q { ... }) 
+            (r'(role)(\s+)(q)(\s*)', bygroups(Keyword, Text, Name, Text)), 
+            (_build_word_match(PERL6_KEYWORDS, PERL6_IDENTIFIER_RANGE), Keyword), 
+            (_build_word_match(PERL6_BUILTIN_CLASSES, PERL6_IDENTIFIER_RANGE, suffix='(?::[UD])?'), 
+             Name.Builtin), 
+            (_build_word_match(PERL6_BUILTINS, PERL6_IDENTIFIER_RANGE), Name.Builtin), 
+            # copied from PerlLexer 
             (r'[$@%&][.^:?=!~]?' + PERL6_IDENTIFIER_RANGE + '+(?:<<.*?>>|<.*?>|«.*?»)*',
-             Name.Variable),
-            (r'\$[!/](?:<<.*?>>|<.*?>|«.*?»)*', Name.Variable.Global),
-            (r'::\?\w+', Name.Variable.Global),
+             Name.Variable), 
+            (r'\$[!/](?:<<.*?>>|<.*?>|«.*?»)*', Name.Variable.Global), 
+            (r'::\?\w+', Name.Variable.Global), 
             (r'[$@%&]\*' + PERL6_IDENTIFIER_RANGE + '+(?:<<.*?>>|<.*?>|«.*?»)*',
-             Name.Variable.Global),
-            (r'\$(?:<.*?>)+', Name.Variable),
-            (r'(?:q|qq|Q)[a-zA-Z]?\s*(?P<adverbs>:[\w\s:]+)?\s*(?P<delimiter>(?P<first_char>[^0-9a-zA-Z:\s])'
-             r'(?P=first_char)*)', brackets_callback(String)),
-            # copied from PerlLexer
-            (r'0_?[0-7]+(_[0-7]+)*', Number.Oct),
-            (r'0x[0-9A-Fa-f]+(_[0-9A-Fa-f]+)*', Number.Hex),
-            (r'0b[01]+(_[01]+)*', Number.Bin),
-            (r'(?i)(\d*(_\d*)*\.\d+(_\d*)*|\d+(_\d*)*\.\d+(_\d*)*)(e[+-]?\d+)?',
-             Number.Float),
-            (r'(?i)\d+(_\d*)*e[+-]?\d+(_\d*)*', Number.Float),
-            (r'\d+(_\d+)*', Number.Integer),
-            (r'(?<=~~)\s*/(?:\\\\|\\/|.)*?/', String.Regex),
-            (r'(?<=[=(,])\s*/(?:\\\\|\\/|.)*?/', String.Regex),
-            (r'm\w+(?=\()', Name),
-            (r'(?:m|ms|rx)\s*(?P<adverbs>:[\w\s:]+)?\s*(?P<delimiter>(?P<first_char>[^\w:\s])'
-             r'(?P=first_char)*)', brackets_callback(String.Regex)),
-            (r'(?:s|ss|tr)\s*(?::[\w\s:]+)?\s*/(?:\\\\|\\/|.)*?/(?:\\\\|\\/|.)*?/',
-             String.Regex),
-            (r'<[^\s=].*?\S>', String),
-            (_build_word_match(PERL6_OPERATORS), Operator),
-            (r'\w' + PERL6_IDENTIFIER_RANGE + '*', Name),
-            (r"'(\\\\|\\[^\\]|[^'\\])*'", String),
-            (r'"(\\\\|\\[^\\]|[^"\\])*"', String),
-        ],
-        'root': [
-            include('common'),
-            (r'\{', opening_brace_callback),
-            (r'\}', closing_brace_callback),
-            (r'.+?', Text),
-        ],
-        'pre-token': [
-            include('common'),
-            (r'\{', Text, ('#pop', 'token')),
-            (r'.+?', Text),
-        ],
-        'token-sym-brackets': [
-            (r'(?P<delimiter>(?P<first_char>[' + ''.join(PERL6_BRACKETS) + '])(?P=first_char)*)',
-             brackets_callback(Name), ('#pop', 'pre-token')),
-            default(('#pop', 'pre-token')),
-        ],
-        'token': [
-            (r'\}', Text, '#pop'),
-            (r'(?<=:)(?:my|our|state|constant|temp|let).*?;', using(this)),
-            # make sure that quotes in character classes aren't treated as strings
-            (r'<(?:[-!?+.]\s*)?\[.*?\]>', String.Regex),
-            # make sure that '#' characters in quotes aren't treated as comments
-            (r"(?<!\\)'(\\\\|\\[^\\]|[^'\\])*'", String.Regex),
-            (r'(?<!\\)"(\\\\|\\[^\\]|[^"\\])*"', String.Regex),
+             Name.Variable.Global), 
+            (r'\$(?:<.*?>)+', Name.Variable), 
+            (r'(?:q|qq|Q)[a-zA-Z]?\s*(?P<adverbs>:[\w\s:]+)?\s*(?P<delimiter>(?P<first_char>[^0-9a-zA-Z:\s])' 
+             r'(?P=first_char)*)', brackets_callback(String)), 
+            # copied from PerlLexer 
+            (r'0_?[0-7]+(_[0-7]+)*', Number.Oct), 
+            (r'0x[0-9A-Fa-f]+(_[0-9A-Fa-f]+)*', Number.Hex), 
+            (r'0b[01]+(_[01]+)*', Number.Bin), 
+            (r'(?i)(\d*(_\d*)*\.\d+(_\d*)*|\d+(_\d*)*\.\d+(_\d*)*)(e[+-]?\d+)?', 
+             Number.Float), 
+            (r'(?i)\d+(_\d*)*e[+-]?\d+(_\d*)*', Number.Float), 
+            (r'\d+(_\d+)*', Number.Integer), 
+            (r'(?<=~~)\s*/(?:\\\\|\\/|.)*?/', String.Regex), 
+            (r'(?<=[=(,])\s*/(?:\\\\|\\/|.)*?/', String.Regex), 
+            (r'm\w+(?=\()', Name), 
+            (r'(?:m|ms|rx)\s*(?P<adverbs>:[\w\s:]+)?\s*(?P<delimiter>(?P<first_char>[^\w:\s])' 
+             r'(?P=first_char)*)', brackets_callback(String.Regex)), 
+            (r'(?:s|ss|tr)\s*(?::[\w\s:]+)?\s*/(?:\\\\|\\/|.)*?/(?:\\\\|\\/|.)*?/', 
+             String.Regex), 
+            (r'<[^\s=].*?\S>', String), 
+            (_build_word_match(PERL6_OPERATORS), Operator), 
+            (r'\w' + PERL6_IDENTIFIER_RANGE + '*', Name), 
+            (r"'(\\\\|\\[^\\]|[^'\\])*'", String), 
+            (r'"(\\\\|\\[^\\]|[^"\\])*"', String), 
+        ], 
+        'root': [ 
+            include('common'), 
+            (r'\{', opening_brace_callback), 
+            (r'\}', closing_brace_callback), 
+            (r'.+?', Text), 
+        ], 
+        'pre-token': [ 
+            include('common'), 
+            (r'\{', Text, ('#pop', 'token')), 
+            (r'.+?', Text), 
+        ], 
+        'token-sym-brackets': [ 
+            (r'(?P<delimiter>(?P<first_char>[' + ''.join(PERL6_BRACKETS) + '])(?P=first_char)*)', 
+             brackets_callback(Name), ('#pop', 'pre-token')), 
+            default(('#pop', 'pre-token')), 
+        ], 
+        'token': [ 
+            (r'\}', Text, '#pop'), 
+            (r'(?<=:)(?:my|our|state|constant|temp|let).*?;', using(this)), 
+            # make sure that quotes in character classes aren't treated as strings 
+            (r'<(?:[-!?+.]\s*)?\[.*?\]>', String.Regex), 
+            # make sure that '#' characters in quotes aren't treated as comments 
+            (r"(?<!\\)'(\\\\|\\[^\\]|[^'\\])*'", String.Regex), 
+            (r'(?<!\\)"(\\\\|\\[^\\]|[^"\\])*"', String.Regex), 
             (r'#.*?$', Comment.Single),
-            (r'\{', embedded_perl6_callback),
-            ('.+?', String.Regex),
-        ],
-    }
-
-    def analyse_text(text):
-        def strip_pod(lines):
-            in_pod = False
-            stripped_lines = []
-
-            for line in lines:
-                if re.match(r'^=(?:end|cut)', line):
-                    in_pod = False
-                elif re.match(r'^=\w+', line):
-                    in_pod = True
-                elif not in_pod:
-                    stripped_lines.append(line)
-
-            return stripped_lines
-
-        # XXX handle block comments
-        lines = text.splitlines()
-        lines = strip_pod(lines)
-        text = '\n'.join(lines)
-
-        if shebang_matches(text, r'perl6|rakudo|niecza|pugs'):
-            return True
-
-        saw_perl_decl = False
-        rating = False
-
-        # check for my/our/has declarations
+            (r'\{', embedded_perl6_callback), 
+            ('.+?', String.Regex), 
+        ], 
+    } 
+ 
+    def analyse_text(text): 
+        def strip_pod(lines): 
+            in_pod = False 
+            stripped_lines = [] 
+ 
+            for line in lines: 
+                if re.match(r'^=(?:end|cut)', line): 
+                    in_pod = False 
+                elif re.match(r'^=\w+', line): 
+                    in_pod = True 
+                elif not in_pod: 
+                    stripped_lines.append(line) 
+ 
+            return stripped_lines 
+ 
+        # XXX handle block comments 
+        lines = text.splitlines() 
+        lines = strip_pod(lines) 
+        text = '\n'.join(lines) 
+ 
+        if shebang_matches(text, r'perl6|rakudo|niecza|pugs'): 
+            return True 
+ 
+        saw_perl_decl = False 
+        rating = False 
+ 
+        # check for my/our/has declarations 
         if re.search(r"(?:my|our|has)\s+(?:" + Perl6Lexer.PERL6_IDENTIFIER_RANGE +
                      r"+\s+)?[$@%&(]", text):
-            rating = 0.8
-            saw_perl_decl = True
-
-        for line in lines:
-            line = re.sub('#.*', '', line)
+            rating = 0.8 
+            saw_perl_decl = True 
+ 
+        for line in lines: 
+            line = re.sub('#.*', '', line) 
             if re.match(r'^\s*$', line):
-                continue
-
-            # match v6; use v6; use v6.0; use v6.0.0;
+                continue 
+ 
+            # match v6; use v6; use v6.0; use v6.0.0; 
             if re.match(r'^\s*(?:use\s+)?v6(?:\.\d(?:\.\d)?)?;', line):
-                return True
-            # match class, module, role, enum, grammar declarations
+                return True 
+            # match class, module, role, enum, grammar declarations 
             class_decl = re.match(r'^\s*(?:(?P<scope>my|our)\s+)?(?:module|class|role|enum|grammar)', line)
-            if class_decl:
-                if saw_perl_decl or class_decl.group('scope') is not None:
-                    return True
-                rating = 0.05
-                continue
-            break
-
+            if class_decl: 
+                if saw_perl_decl or class_decl.group('scope') is not None: 
+                    return True 
+                rating = 0.05 
+                continue 
+            break 
+ 
         if ':=' in text:
             # Same logic as above for PerlLexer
             rating /= 2
 
-        return rating
-
-    def __init__(self, **options):
+        return rating 
+ 
+    def __init__(self, **options): 
         super().__init__(**options)
-        self.encoding = options.get('encoding', 'utf-8')
+        self.encoding = options.get('encoding', 'utf-8') 

@@ -1,12 +1,12 @@
-# -*- coding: utf-8 -*-
-"""
-    pygments.lexers._csound_builtins
-    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
+# -*- coding: utf-8 -*- 
+""" 
+    pygments.lexers._csound_builtins 
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ 
+ 
     :copyright: Copyright 2006-2019 by the Pygments team, see AUTHORS.
-    :license: BSD, see LICENSE for details.
-"""
-
+    :license: BSD, see LICENSE for details. 
+""" 
+ 
 # Opcodes in Csound 6.13.0 using:
 #   python3 -c "
 #   import re

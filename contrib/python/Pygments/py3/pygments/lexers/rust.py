@@ -1,31 +1,31 @@
-"""
-    pygments.lexers.rust
-    ~~~~~~~~~~~~~~~~~~~~
-
-    Lexers for the Rust language.
-
+""" 
+    pygments.lexers.rust 
+    ~~~~~~~~~~~~~~~~~~~~ 
+ 
+    Lexers for the Rust language. 
+ 
     :copyright: Copyright 2006-2021 by the Pygments team, see AUTHORS.
-    :license: BSD, see LICENSE for details.
-"""
-
-from pygments.lexer import RegexLexer, include, bygroups, words, default
-from pygments.token import Text, Comment, Operator, Keyword, Name, String, \
-    Number, Punctuation, Whitespace
-
-__all__ = ['RustLexer']
-
-
-class RustLexer(RegexLexer):
-    """
+    :license: BSD, see LICENSE for details. 
+""" 
+ 
+from pygments.lexer import RegexLexer, include, bygroups, words, default 
+from pygments.token import Text, Comment, Operator, Keyword, Name, String, \ 
+    Number, Punctuation, Whitespace 
+ 
+__all__ = ['RustLexer'] 
+ 
+ 
+class RustLexer(RegexLexer): 
+    """ 
     Lexer for the Rust programming language (version 1.47).
-
-    .. versionadded:: 1.6
-    """
-    name = 'Rust'
-    filenames = ['*.rs', '*.rs.in']
+ 
+    .. versionadded:: 1.6 
+    """ 
+    name = 'Rust' 
+    filenames = ['*.rs', '*.rs.in'] 
     aliases = ['rust', 'rs']
     mimetypes = ['text/rust', 'text/x-rust']
-
+ 
     keyword_types = (words((
         'u8', 'u16', 'u32', 'u64', 'u128', 'i8', 'i16', 'i32', 'i64', 'i128',
         'usize', 'isize', 'f32', 'f64', 'char', 'str', 'bool',
@@ -63,27 +63,27 @@ class RustLexer(RegexLexer):
         'vec', 'write', 'writeln',
     ), suffix=r'!'), Name.Function.Magic)
 
-    tokens = {
-        'root': [
-            # rust allows a file to start with a shebang, but if the first line
+    tokens = { 
+        'root': [ 
+            # rust allows a file to start with a shebang, but if the first line 
             # starts with #![ then it's not a shebang but a crate attribute.
-            (r'#![^[\r\n].*$', Comment.Preproc),
-            default('base'),
-        ],
-        'base': [
-            # Whitespace and Comments
-            (r'\n', Whitespace),
-            (r'\s+', Whitespace),
-            (r'//!.*?\n', String.Doc),
-            (r'///(\n|[^/].*?\n)', String.Doc),
-            (r'//(.*?)\n', Comment.Single),
-            (r'/\*\*(\n|[^/*])', String.Doc, 'doccomment'),
-            (r'/\*!', String.Doc, 'doccomment'),
-            (r'/\*', Comment.Multiline, 'comment'),
-
-            # Macro parameters
-            (r"""\$([a-zA-Z_]\w*|\(,?|\),?|,?)""", Comment.Preproc),
-            # Keywords
+            (r'#![^[\r\n].*$', Comment.Preproc), 
+            default('base'), 
+        ], 
+        'base': [ 
+            # Whitespace and Comments 
+            (r'\n', Whitespace), 
+            (r'\s+', Whitespace), 
+            (r'//!.*?\n', String.Doc), 
+            (r'///(\n|[^/].*?\n)', String.Doc), 
+            (r'//(.*?)\n', Comment.Single), 
+            (r'/\*\*(\n|[^/*])', String.Doc, 'doccomment'), 
+            (r'/\*!', String.Doc, 'doccomment'), 
+            (r'/\*', Comment.Multiline, 'comment'), 
+ 
+            # Macro parameters 
+            (r"""\$([a-zA-Z_]\w*|\(,?|\),?|,?)""", Comment.Preproc), 
+            # Keywords 
             (words(('as', 'async', 'await', 'box', 'const', 'crate', 'dyn',
                     'else', 'extern', 'for', 'if', 'impl', 'in', 'loop',
                     'match', 'move', 'mut', 'pub', 'ref', 'return', 'static',
@@ -92,10 +92,10 @@ class RustLexer(RegexLexer):
             (words(('abstract', 'become', 'do', 'final', 'macro', 'override',
                     'priv', 'typeof', 'try', 'unsized', 'virtual', 'yield'),
                    suffix=r'\b'), Keyword.Reserved),
-            (r'(true|false)\b', Keyword.Constant),
+            (r'(true|false)\b', Keyword.Constant), 
             (r'self\b', Name.Builtin.Pseudo),
             (r'mod\b', Keyword, 'modname'),
-            (r'let\b', Keyword.Declaration),
+            (r'let\b', Keyword.Declaration), 
             (r'fn\b', Keyword, 'funcname'),
             (r'(struct|enum|type|union)\b', Keyword, 'typename'),
             (r'(default)(\s+)(type|fn)\b', bygroups(Keyword, Text, Keyword)),
@@ -108,68 +108,68 @@ class RustLexer(RegexLexer):
             (r'::\b', Text),
             # Types in positions.
             (r'(?::|->)', Text, 'typename'),
-            # Labels
+            # Labels 
             (r'(break|continue)(\b\s*)(\'[A-Za-z_]\w*)?',
              bygroups(Keyword, Text.Whitespace, Name.Label)),
 
             # Character literals
-            (r"""'(\\['"\\nrt]|\\x[0-7][0-9a-fA-F]|\\0"""
-             r"""|\\u\{[0-9a-fA-F]{1,6}\}|.)'""",
-             String.Char),
-            (r"""b'(\\['"\\nrt]|\\x[0-9a-fA-F]{2}|\\0"""
-             r"""|\\u\{[0-9a-fA-F]{1,6}\}|.)'""",
-             String.Char),
+            (r"""'(\\['"\\nrt]|\\x[0-7][0-9a-fA-F]|\\0""" 
+             r"""|\\u\{[0-9a-fA-F]{1,6}\}|.)'""", 
+             String.Char), 
+            (r"""b'(\\['"\\nrt]|\\x[0-9a-fA-F]{2}|\\0""" 
+             r"""|\\u\{[0-9a-fA-F]{1,6}\}|.)'""", 
+             String.Char), 
 
             # Binary literals
-            (r'0b[01_]+', Number.Bin, 'number_lit'),
+            (r'0b[01_]+', Number.Bin, 'number_lit'), 
             # Octal literals
-            (r'0o[0-7_]+', Number.Oct, 'number_lit'),
+            (r'0o[0-7_]+', Number.Oct, 'number_lit'), 
             # Hexadecimal literals
-            (r'0[xX][0-9a-fA-F_]+', Number.Hex, 'number_lit'),
+            (r'0[xX][0-9a-fA-F_]+', Number.Hex, 'number_lit'), 
             # Decimal literals
-            (r'[0-9][0-9_]*(\.[0-9_]+[eE][+\-]?[0-9_]+|'
+            (r'[0-9][0-9_]*(\.[0-9_]+[eE][+\-]?[0-9_]+|' 
              r'\.[0-9_]*(?!\.)|[eE][+\-]?[0-9_]+)', Number.Float,
              'number_lit'),
-            (r'[0-9][0-9_]*', Number.Integer, 'number_lit'),
+            (r'[0-9][0-9_]*', Number.Integer, 'number_lit'), 
 
             # String literals
-            (r'b"', String, 'bytestring'),
-            (r'"', String, 'string'),
+            (r'b"', String, 'bytestring'), 
+            (r'"', String, 'string'), 
             (r'(?s)b?r(#*)".*?"\1', String),
-
+ 
             # Lifetime names
             (r"'", Operator, 'lifetime'),
-
-            # Operators and Punctuation
+ 
+            # Operators and Punctuation 
             (r'\.\.=?', Operator),
-            (r'[{}()\[\],.;]', Punctuation),
-            (r'[+\-*/%&|<>^!~@=:?]', Operator),
-
+            (r'[{}()\[\],.;]', Punctuation), 
+            (r'[+\-*/%&|<>^!~@=:?]', Operator), 
+ 
             # Identifiers
-            (r'[a-zA-Z_]\w*', Name),
+            (r'[a-zA-Z_]\w*', Name), 
             # Raw identifiers
             (r'r#[a-zA-Z_]\w*', Name),
-
-            # Attributes
-            (r'#!?\[', Comment.Preproc, 'attribute['),
+ 
+            # Attributes 
+            (r'#!?\[', Comment.Preproc, 'attribute['), 
 
             # Misc
             # Lone hashes: not used in Rust syntax, but allowed in macro
             # arguments, most famously for quote::quote!()
             (r'#', Text),
-        ],
-        'comment': [
-            (r'[^*/]+', Comment.Multiline),
-            (r'/\*', Comment.Multiline, '#push'),
-            (r'\*/', Comment.Multiline, '#pop'),
-            (r'[*/]', Comment.Multiline),
-        ],
-        'doccomment': [
-            (r'[^*/]+', String.Doc),
-            (r'/\*', String.Doc, '#push'),
-            (r'\*/', String.Doc, '#pop'),
-            (r'[*/]', String.Doc),
-        ],
+        ], 
+        'comment': [ 
+            (r'[^*/]+', Comment.Multiline), 
+            (r'/\*', Comment.Multiline, '#push'), 
+            (r'\*/', Comment.Multiline, '#pop'), 
+            (r'[*/]', Comment.Multiline), 
+        ], 
+        'doccomment': [ 
+            (r'[^*/]+', String.Doc), 
+            (r'/\*', String.Doc, '#push'), 
+            (r'\*/', String.Doc, '#pop'), 
+            (r'[*/]', String.Doc), 
+        ], 
         'modname': [
             (r'\s+', Text),
             (r'[a-zA-Z_]\w*', Name.Namespace, '#pop'),
@@ -194,29 +194,29 @@ class RustLexer(RegexLexer):
             (r"[a-zA-Z_]+\w*", Name.Attribute),
             default('#pop'),
         ],
-        'number_lit': [
-            (r'[ui](8|16|32|64|size)', Keyword, '#pop'),
-            (r'f(32|64)', Keyword, '#pop'),
-            default('#pop'),
-        ],
-        'string': [
-            (r'"', String, '#pop'),
-            (r"""\\['"\\nrt]|\\x[0-7][0-9a-fA-F]|\\0"""
-             r"""|\\u\{[0-9a-fA-F]{1,6}\}""", String.Escape),
-            (r'[^\\"]+', String),
-            (r'\\', String),
-        ],
-        'bytestring': [
-            (r"""\\x[89a-fA-F][0-9a-fA-F]""", String.Escape),
-            include('string'),
-        ],
-        'attribute_common': [
-            (r'"', String, 'string'),
-            (r'\[', Comment.Preproc, 'attribute['),
-        ],
-        'attribute[': [
-            include('attribute_common'),
+        'number_lit': [ 
+            (r'[ui](8|16|32|64|size)', Keyword, '#pop'), 
+            (r'f(32|64)', Keyword, '#pop'), 
+            default('#pop'), 
+        ], 
+        'string': [ 
+            (r'"', String, '#pop'), 
+            (r"""\\['"\\nrt]|\\x[0-7][0-9a-fA-F]|\\0""" 
+             r"""|\\u\{[0-9a-fA-F]{1,6}\}""", String.Escape), 
+            (r'[^\\"]+', String), 
+            (r'\\', String), 
+        ], 
+        'bytestring': [ 
+            (r"""\\x[89a-fA-F][0-9a-fA-F]""", String.Escape), 
+            include('string'), 
+        ], 
+        'attribute_common': [ 
+            (r'"', String, 'string'), 
+            (r'\[', Comment.Preproc, 'attribute['), 
+        ], 
+        'attribute[': [ 
+            include('attribute_common'), 
             (r'\]', Comment.Preproc, '#pop'),
             (r'[^"\]\[]+', Comment.Preproc),
-        ],
-    }
+        ], 
+    } 

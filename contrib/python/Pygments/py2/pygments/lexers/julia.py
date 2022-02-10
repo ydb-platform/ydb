@@ -1,56 +1,56 @@
-# -*- coding: utf-8 -*-
-"""
-    pygments.lexers.julia
-    ~~~~~~~~~~~~~~~~~~~~~
-
-    Lexers for the Julia language.
-
+# -*- coding: utf-8 -*- 
+""" 
+    pygments.lexers.julia 
+    ~~~~~~~~~~~~~~~~~~~~~ 
+ 
+    Lexers for the Julia language. 
+ 
     :copyright: Copyright 2006-2019 by the Pygments team, see AUTHORS.
-    :license: BSD, see LICENSE for details.
-"""
-
-import re
-
+    :license: BSD, see LICENSE for details. 
+""" 
+ 
+import re 
+ 
 from pygments.lexer import Lexer, RegexLexer, bygroups, do_insertions, \
     words, include
-from pygments.token import Text, Comment, Operator, Keyword, Name, String, \
-    Number, Punctuation, Generic
-from pygments.util import shebang_matches, unirange
-
-__all__ = ['JuliaLexer', 'JuliaConsoleLexer']
-
+from pygments.token import Text, Comment, Operator, Keyword, Name, String, \ 
+    Number, Punctuation, Generic 
+from pygments.util import shebang_matches, unirange 
+ 
+__all__ = ['JuliaLexer', 'JuliaConsoleLexer'] 
+ 
 allowed_variable = (
     u'(?:[a-zA-Z_\u00A1-\uffff]|%s)(?:[a-zA-Z_0-9\u00A1-\uffff]|%s)*!*' %
     ((unirange(0x10000, 0x10ffff),) * 2))
+ 
 
+class JuliaLexer(RegexLexer): 
+    """ 
+    For `Julia <http://julialang.org/>`_ source code. 
+ 
+    .. versionadded:: 1.6 
+    """ 
 
-class JuliaLexer(RegexLexer):
-    """
-    For `Julia <http://julialang.org/>`_ source code.
-
-    .. versionadded:: 1.6
-    """
-
-    name = 'Julia'
-    aliases = ['julia', 'jl']
-    filenames = ['*.jl']
-    mimetypes = ['text/x-julia', 'application/x-julia']
-
-    flags = re.MULTILINE | re.UNICODE
-
-    tokens = {
-        'root': [
-            (r'\n', Text),
-            (r'[^\S\n]+', Text),
-            (r'#=', Comment.Multiline, "blockcomment"),
-            (r'#.*$', Comment),
+    name = 'Julia' 
+    aliases = ['julia', 'jl'] 
+    filenames = ['*.jl'] 
+    mimetypes = ['text/x-julia', 'application/x-julia'] 
+ 
+    flags = re.MULTILINE | re.UNICODE 
+ 
+    tokens = { 
+        'root': [ 
+            (r'\n', Text), 
+            (r'[^\S\n]+', Text), 
+            (r'#=', Comment.Multiline, "blockcomment"), 
+            (r'#.*$', Comment), 
             (r'[\[\]{}(),;]', Punctuation),
-
-            # keywords
+ 
+            # keywords 
             (r'in\b', Keyword.Pseudo),
             (r'isa\b', Keyword.Pseudo),
             (r'(true|false)\b', Keyword.Constant),
-            (r'(local|global|const)\b', Keyword.Declaration),
+            (r'(local|global|const)\b', Keyword.Declaration), 
             (words([
                 'function', 'type', 'typealias', 'abstract', 'immutable',
                 'baremodule', 'begin', 'bitstype', 'break', 'catch', 'ccall',
@@ -59,18 +59,18 @@ class JuliaLexer(RegexLexer):
                 'mutable', 'primitive', 'quote', 'return', 'struct', 'try',
                 'using', 'while'],
                 suffix=r'\b'), Keyword),
-
+ 
             # NOTE
             # Patterns below work only for definition sites and thus hardly reliable.
             #
-            # functions
+            # functions 
             # (r'(function)(\s+)(' + allowed_variable + ')',
             #  bygroups(Keyword, Text, Name.Function)),
             #
-            # types
+            # types 
             # (r'(type|typealias|abstract|immutable)(\s+)(' + allowed_variable + ')',
             #  bygroups(Keyword, Text, Name.Class)),
-
+ 
             # type names
             (words([
                 'ANY', 'ASCIIString', 'AbstractArray', 'AbstractChannel',
@@ -128,8 +128,8 @@ class JuliaLexer(RegexLexer):
                 'Vararg', 'VecOrMat', 'Vector', 'VersionNumber', 'Void', 'WString',
                 'WeakKeyDict', 'WeakRef', 'WorkerConfig', 'Zip'], suffix=r'\b'),
                 Keyword.Type),
-
-            # builtins
+ 
+            # builtins 
             (words([
                 u'ARGS', u'CPU_CORES', u'C_NULL', u'DevNull', u'ENDIAN_BOM',
                 u'ENV', u'I', u'Inf', u'Inf16', u'Inf32', u'Inf64',
@@ -142,7 +142,7 @@ class JuliaLexer(RegexLexer):
                 u'eulergamma', u'golden', u'im', u'nothing', u'pi', u'γ',
                 u'π', u'φ'],
                 suffix=r'\b'), Name.Builtin),
-
+ 
             # operators
             # see: https://github.com/JuliaLang/julia/blob/master/src/julia-parser.scm
             (words([
@@ -185,18 +185,18 @@ class JuliaLexer(RegexLexer):
                 # unary op
                 u'+', u'-', u'!', u'√', u'∛', u'∜'
             ]), Operator),
-
-            # chars
-            (r"'(\\.|\\[0-7]{1,3}|\\x[a-fA-F0-9]{1,3}|\\u[a-fA-F0-9]{1,4}|"
-             r"\\U[a-fA-F0-9]{1,6}|[^\\\'\n])'", String.Char),
-
-            # try to match trailing transpose
-            (r'(?<=[.\w)\]])\'+', Operator),
-
-            # strings
+ 
+            # chars 
+            (r"'(\\.|\\[0-7]{1,3}|\\x[a-fA-F0-9]{1,3}|\\u[a-fA-F0-9]{1,4}|" 
+             r"\\U[a-fA-F0-9]{1,6}|[^\\\'\n])'", String.Char), 
+ 
+            # try to match trailing transpose 
+            (r'(?<=[.\w)\]])\'+', Operator), 
+ 
+            # strings 
             (r'"""', String, 'tqstring'),
             (r'"', String, 'string'),
-
+ 
             # regular expressions
             (r'r"""', String.Regex, 'tqregex'),
             (r'r"', String.Regex, 'regex'),
@@ -204,34 +204,34 @@ class JuliaLexer(RegexLexer):
             # backticks
             (r'`', String.Backtick, 'command'),
 
-            # names
+            # names 
             (allowed_variable, Name),
             (r'@' + allowed_variable, Name.Decorator),
+ 
+            # numbers 
+            (r'(\d+(_\d+)+\.\d*|\d*\.\d+(_\d+)+)([eEf][+-]?[0-9]+)?', Number.Float), 
+            (r'(\d+\.\d*|\d*\.\d+)([eEf][+-]?[0-9]+)?', Number.Float), 
+            (r'\d+(_\d+)+[eEf][+-]?[0-9]+', Number.Float), 
+            (r'\d+[eEf][+-]?[0-9]+', Number.Float), 
+            (r'0b[01]+(_[01]+)+', Number.Bin), 
+            (r'0b[01]+', Number.Bin), 
+            (r'0o[0-7]+(_[0-7]+)+', Number.Oct), 
+            (r'0o[0-7]+', Number.Oct), 
+            (r'0x[a-fA-F0-9]+(_[a-fA-F0-9]+)+', Number.Hex), 
+            (r'0x[a-fA-F0-9]+', Number.Hex), 
+            (r'\d+(_\d+)+', Number.Integer), 
+            (r'\d+', Number.Integer) 
+        ], 
+ 
+        "blockcomment": [ 
+            (r'[^=#]', Comment.Multiline), 
+            (r'#=', Comment.Multiline, '#push'), 
+            (r'=#', Comment.Multiline, '#pop'), 
+            (r'[=#]', Comment.Multiline), 
+        ], 
 
-            # numbers
-            (r'(\d+(_\d+)+\.\d*|\d*\.\d+(_\d+)+)([eEf][+-]?[0-9]+)?', Number.Float),
-            (r'(\d+\.\d*|\d*\.\d+)([eEf][+-]?[0-9]+)?', Number.Float),
-            (r'\d+(_\d+)+[eEf][+-]?[0-9]+', Number.Float),
-            (r'\d+[eEf][+-]?[0-9]+', Number.Float),
-            (r'0b[01]+(_[01]+)+', Number.Bin),
-            (r'0b[01]+', Number.Bin),
-            (r'0o[0-7]+(_[0-7]+)+', Number.Oct),
-            (r'0o[0-7]+', Number.Oct),
-            (r'0x[a-fA-F0-9]+(_[a-fA-F0-9]+)+', Number.Hex),
-            (r'0x[a-fA-F0-9]+', Number.Hex),
-            (r'\d+(_\d+)+', Number.Integer),
-            (r'\d+', Number.Integer)
-        ],
-
-        "blockcomment": [
-            (r'[^=#]', Comment.Multiline),
-            (r'#=', Comment.Multiline, '#push'),
-            (r'=#', Comment.Multiline, '#pop'),
-            (r'[=#]', Comment.Multiline),
-        ],
-
-        'string': [
-            (r'"', String, '#pop'),
+        'string': [ 
+            (r'"', String, '#pop'), 
             # FIXME: This escape pattern is not perfect.
             (r'\\([\\"\'$nrbtfav]|(x|u|U)[a-fA-F0-9]+|\d+)', String.Escape),
             # Interpolation is defined as "$" followed by the shortest full
@@ -244,7 +244,7 @@ class JuliaLexer(RegexLexer):
             (r'%[-#0 +]*([0-9]+|[*])?(\.([0-9]+|[*]))?[hlL]?[E-GXc-giorsux%]',
              String.Interpol),
             (r'.|\s', String),
-        ],
+        ], 
 
         'tqstring': [
             (r'"""', String, '#pop'),
@@ -277,33 +277,33 @@ class JuliaLexer(RegexLexer):
             (r'\)', Punctuation, '#pop'),
             include('root'),
         ]
-    }
-
-    def analyse_text(text):
-        return shebang_matches(text, r'julia')
-
-
-class JuliaConsoleLexer(Lexer):
-    """
-    For Julia console sessions. Modeled after MatlabSessionLexer.
-
-    .. versionadded:: 1.6
-    """
-    name = 'Julia console'
-    aliases = ['jlcon']
-
-    def get_tokens_unprocessed(self, text):
-        jllexer = JuliaLexer(**self.options)
+    } 
+ 
+    def analyse_text(text): 
+        return shebang_matches(text, r'julia') 
+ 
+ 
+class JuliaConsoleLexer(Lexer): 
+    """ 
+    For Julia console sessions. Modeled after MatlabSessionLexer. 
+ 
+    .. versionadded:: 1.6 
+    """ 
+    name = 'Julia console' 
+    aliases = ['jlcon'] 
+ 
+    def get_tokens_unprocessed(self, text): 
+        jllexer = JuliaLexer(**self.options) 
         start = 0
-        curcode = ''
-        insertions = []
+        curcode = '' 
+        insertions = [] 
         output = False
         error = False
-
+ 
         for line in text.splitlines(True):
-            if line.startswith('julia>'):
+            if line.startswith('julia>'): 
                 insertions.append((len(curcode), [(0, Generic.Prompt, line[:6])]))
-                curcode += line[6:]
+                curcode += line[6:] 
                 output = False
                 error = False
             elif line.startswith('help?>') or line.startswith('shell>'):
@@ -314,13 +314,13 @@ class JuliaConsoleLexer(Lexer):
             elif line.startswith('      ') and not output:
                 insertions.append((len(curcode), [(0, Text, line[:6])]))
                 curcode += line[6:]
-            else:
-                if curcode:
-                    for item in do_insertions(
-                            insertions, jllexer.get_tokens_unprocessed(curcode)):
-                        yield item
-                    curcode = ''
-                    insertions = []
+            else: 
+                if curcode: 
+                    for item in do_insertions( 
+                            insertions, jllexer.get_tokens_unprocessed(curcode)): 
+                        yield item 
+                    curcode = '' 
+                    insertions = [] 
                 if line.startswith('ERROR: ') or error:
                     yield start, Generic.Error, line
                     error = True
@@ -328,8 +328,8 @@ class JuliaConsoleLexer(Lexer):
                     yield start, Generic.Output, line
                 output = True
             start += len(line)
-
+ 
         if curcode:
-            for item in do_insertions(
-                    insertions, jllexer.get_tokens_unprocessed(curcode)):
-                yield item
+            for item in do_insertions( 
+                    insertions, jllexer.get_tokens_unprocessed(curcode)): 
+                yield item 

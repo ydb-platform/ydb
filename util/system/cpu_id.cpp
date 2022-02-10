@@ -1,7 +1,7 @@
 #include "cpu_id.h"
 #include "types.h"
 #include "platform.h"
- 
+
 #include <util/generic/singleton.h>
 
 #if defined(_win_)
@@ -12,7 +12,7 @@
 #endif
 
 #include <string.h>
- 
+
 #if defined(_x86_) && !defined(_win_)
 static ui64 _xgetbv(ui32 xcr) {
     ui32 eax;
@@ -81,9 +81,9 @@ namespace {
             NX86::CpuId(op, subOp, Info);
         }
     };
- 
+
     static_assert(sizeof(TX86CpuInfo) == 16, "please, fix me");
-} 
+}
 
 // https://en.wikipedia.org/wiki/CPUID
 bool NX86::HaveRDTSCP() noexcept {

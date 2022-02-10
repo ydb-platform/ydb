@@ -43,14 +43,14 @@ namespace NProtoBuf {
         }
 
         Base64EncodeUrl(rawData, dataBase64);
-    } 
+    }
 
     TString SerializeToBase64String(const Message& m) {
         TString s;
         SerializeToBase64String(m, s);
         return s;
-    } 
- 
+    }
+
     bool TrySerializeToBase64String(const Message& m, TString& dataBase64) {
         try {
             SerializeToBase64String(m, dataBase64);
@@ -67,8 +67,8 @@ namespace NProtoBuf {
         TString result;
         printer.PrintToString(message, &result);
         return result;
-    } 
- 
+    }
+
     bool MergePartialFromString(NProtoBuf::Message& m, const TStringBuf serializedProtoMessage) {
         google::protobuf::io::CodedInputStream input(reinterpret_cast<const ui8*>(serializedProtoMessage.data()), serializedProtoMessage.size());
         bool ok = m.MergePartialFromCodedStream(&input);

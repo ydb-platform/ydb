@@ -28,7 +28,7 @@ extern "C" {
     #define SIGALRM 14       //will not receive under win?
 #endif
 
-#if defined(__FreeBSD__) || defined(_darwin_)
+#if defined(__FreeBSD__) || defined(_darwin_) 
     #define HAVE_NATIVE_GETPROGNAME
 #endif
 

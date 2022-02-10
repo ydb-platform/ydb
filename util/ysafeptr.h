@@ -20,7 +20,7 @@
 //        for destruction of objects (because of 'delete this').
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-#if defined(_MSC_VER) && defined(_DEBUG)
+#if defined(_MSC_VER) && defined(_DEBUG) 
     #include <util/system/winint.h>
     #define CHECK_YPTR2
 #endif
@@ -223,7 +223,7 @@ private:
         return dynamic_cast<classname*>(p);                                          \
     }                                                                                \
     Y_PRAGMA_DIAGNOSTIC_POP
-
+ 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 template <class TUserObj>
 IObjectBase* CastToObjectBaseImpl(TUserObj* p, void*);

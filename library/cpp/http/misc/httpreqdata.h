@@ -28,7 +28,7 @@ public:
     }
 
     const TString& ServerName() const {
-        return Host;
+        return Host; 
     }
 
     NAddr::IRemoteAddrPtr ServerAddress() const {
@@ -36,7 +36,7 @@ public:
     }
 
     const TString& ServerPort() const {
-        return Port;
+        return Port; 
     }
 
     const char* ScriptName() const {
@@ -96,7 +96,7 @@ private:
     size_t SearchLength; // length of Search
     TStringBuf OrigSearch;
     THttpHeadersContainer HeadersIn_;
-    mutable char AddrData[INET6_ADDRSTRLEN];
+    mutable char AddrData[INET6_ADDRSTRLEN]; 
     SOCKET Socket;
     ui64 BeginTime;
     mutable TString CurPage;

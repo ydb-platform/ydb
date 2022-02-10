@@ -269,10 +269,10 @@ Y_UNIT_TEST_SUITE(TAlgorithm) {
     Y_UNIT_TEST(EraseTest) {
         TVector<int> data = {5, 4, 3, 2, 1, 0};
         TVector<int> expected = {5, 4, 2, 1, 0};
-        Erase(data, 3);
-        UNIT_ASSERT_EQUAL(data, expected);
-    }
-
+        Erase(data, 3); 
+        UNIT_ASSERT_EQUAL(data, expected); 
+    } 
+ 
     Y_UNIT_TEST(EraseIfTest) {
         TVector<int> data = {5, 4, 3, 2, 1, 0};
         TVector<int> expected = {2, 1, 0};

@@ -7,7 +7,7 @@
 
 #define BAD_DATE ((time_t)-1)
 
-inline time_t parse_http_date(const TStringBuf& datestring) {
+inline time_t parse_http_date(const TStringBuf& datestring) { 
     try {
         return TInstant::ParseHttpDeprecated(datestring).TimeT();
     } catch (const TDateTimeParseException&) {

@@ -2,7 +2,7 @@
 
 #include <build/scripts/c_templates/svnversion.h>
 
-#include <util/folder/dirut.h>
+#include <util/folder/dirut.h> 
 #include <util/folder/path.h>
 #include <util/generic/singleton.h>
 #include <util/stream/file.h>
@@ -48,21 +48,21 @@ TString GetArcadiaTestsData() {
 
     TString path = NPrivate::GetCwd();
     const char pathsep = GetDirectorySeparator();
-    while (!path.empty()) {
+    while (!path.empty()) { 
         TString dataDir = path + "/arcadia_tests_data";
         if (IsDir(dataDir)) {
-            return dataDir;
+            return dataDir; 
         }
-
+ 
         size_t pos = path.find_last_of(pathsep);
         if (pos == TString::npos) {
-            pos = 0;
+            pos = 0; 
         }
-        path.erase(pos);
-    }
-
+        path.erase(pos); 
+    } 
+ 
     return {};
-}
+} 
 
 TString GetWorkPath() {
     TString workPath = NPrivate::GetTestEnv().WorkPath;

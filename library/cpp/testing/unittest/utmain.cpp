@@ -83,7 +83,7 @@ private:
 
     inline void TraceSubtestFinished(const char* className, const char* subtestName, const char* status, const TString comment, const TTestContext* context) {
         const TInstant now = TInstant::Now();
-        NJson::TJsonValue event;
+        NJson::TJsonValue event; 
         event.InsertValue("class", className);
         event.InsertValue("subtest", subtestName);
         event.InsertValue("status", status);
@@ -116,7 +116,7 @@ private:
     }
 
     void OnBeforeTest(const TTest* test) override {
-        NJson::TJsonValue event;
+        NJson::TJsonValue event; 
         event.InsertValue("class", test->unit->name);
         event.InsertValue("subtest", test->name);
         Trace("subtest-started", event);
@@ -128,13 +128,13 @@ private:
     }
 
     void OnUnitStart(const TUnit* unit) override {
-        NJson::TJsonValue event;
+        NJson::TJsonValue event; 
         event.InsertValue("class", unit->name);
         Trace("test-started", event);
     }
 
     void OnUnitStop(const TUnit* unit) override {
-        NJson::TJsonValue event;
+        NJson::TJsonValue event; 
         event.InsertValue("class", unit->name);
         Trace("test-finished", event);
     }
@@ -417,7 +417,7 @@ private:
             fprintf(stderr, ", err: %s%u%s",
                     LightRedColor().data(), FailTests(), OldColor().data());
         fprintf(stderr, "\n");
-
+ 
         if (ShowFails) {
             for (size_t i = 0; i < Fails.size(); ++i) {
                 printf("%s", Fails[i].data());
@@ -567,16 +567,16 @@ private:
     IOutputStream& Stream_;
 };
 
-#ifdef _win_
-class TWinEnvironment {
-public:
-    TWinEnvironment()
+#ifdef _win_ 
+class TWinEnvironment { 
+public: 
+    TWinEnvironment() 
         : OutputCP(GetConsoleOutputCP())
-    {
-        setmode(fileno(stdout), _O_BINARY);
-        SetConsoleOutputCP(CP_UTF8);
-
-        _CrtSetDbgFlag(_CRTDBG_ALLOC_MEM_DF | _CRTDBG_LEAK_CHECK_DF);
+    { 
+        setmode(fileno(stdout), _O_BINARY); 
+        SetConsoleOutputCP(CP_UTF8); 
+ 
+        _CrtSetDbgFlag(_CRTDBG_ALLOC_MEM_DF | _CRTDBG_LEAK_CHECK_DF); 
 
         if (!IsDebuggerPresent()) {
             _CrtSetReportMode(_CRT_ASSERT, _CRTDBG_MODE_FILE | _CRTDBG_MODE_DEBUG);
@@ -586,20 +586,20 @@ public:
         }
     }
     ~TWinEnvironment() {
-        if (!IsDebuggerPresent()) {
-            _CrtSetReportMode(_CRT_WARN, _CRTDBG_MODE_FILE);
-            _CrtSetReportFile(_CRT_WARN, _CRTDBG_FILE_STDERR);
-        }
+        if (!IsDebuggerPresent()) { 
+            _CrtSetReportMode(_CRT_WARN, _CRTDBG_MODE_FILE); 
+            _CrtSetReportFile(_CRT_WARN, _CRTDBG_FILE_STDERR); 
+        } 
 
-        SetConsoleOutputCP(OutputCP); // restore original output CP at program exit
-    }
+        SetConsoleOutputCP(OutputCP); // restore original output CP at program exit 
+    } 
 
-private:
-    UINT OutputCP; // original codepage
-};
-static const TWinEnvironment Instance;
-#endif // _win_
-
+private: 
+    UINT OutputCP; // original codepage 
+}; 
+static const TWinEnvironment Instance; 
+#endif // _win_ 
+ 
 static int DoList(bool verbose, IOutputStream& stream) {
     TEnumeratingProcessor eproc(verbose, stream);
     TTestFactory::Instance().SetProcessor(&eproc);

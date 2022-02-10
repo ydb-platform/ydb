@@ -9,49 +9,49 @@
 #include <cctype>
 
 /*
- * MIME types
+ * MIME types 
  */
 
-class TMimeTypes {
+class TMimeTypes { 
     // Constructor
-public:
-    TMimeTypes();
-
+public: 
+    TMimeTypes(); 
+ 
     // Methods
-public:
-    const char* StrByExt(const char* ext) const;
+public: 
+    const char* StrByExt(const char* ext) const; 
 
     MimeTypes MimeByStr(const char* str) const;
-    MimeTypes MimeByStr(const TStringBuf& str) const;
-    const char* StrByMime(MimeTypes mime) const;
-
+    MimeTypes MimeByStr(const TStringBuf& str) const; 
+    const char* StrByMime(MimeTypes mime) const; 
+ 
     // Constants
-public:
+public: 
     static const size_t MAX_EXT_LEN = 11; // max length of supported extensions
-
+ 
     // Helper methods
-private:
-    void SetContentTypes();
-    void SetExt();
-
+private: 
+    void SetContentTypes(); 
+    void SetExt(); 
+ 
     // Types
-private:
-    struct TRecord {
-        MimeTypes Mime;
-        const char* ContentType;
-        const char* Ext;
-    };
-
+private: 
+    struct TRecord { 
+        MimeTypes Mime; 
+        const char* ContentType; 
+        const char* Ext; 
+    }; 
+ 
     typedef THashMap<const char*, int> TRecordHash;
-
+ 
     // Fields
-private:
-    static const TRecord Records[];
-    TRecordHash ContentTypes;
-    TRecordHash Ext;
-};
-
-const TMimeTypes::TRecord TMimeTypes::Records[] = {
+private: 
+    static const TRecord Records[]; 
+    TRecordHash ContentTypes; 
+    TRecordHash Ext; 
+}; 
+ 
+const TMimeTypes::TRecord TMimeTypes::Records[] = { 
     {MIME_UNKNOWN, nullptr, nullptr},
     {MIME_TEXT, "text/plain\0", "asc\0txt\0"},
     {MIME_HTML, "text/html\0", "html\0htm\0shtml\0"},
@@ -86,7 +86,7 @@ const TMimeTypes::TRecord TMimeTypes::Records[] = {
     {MIME_TEX, "application/x-tex\0application/x-latex\0text/x-tex\0", "tex\0"},
     {MIME_JSON, "application/json\0", "json\0"},
     {MIME_APK, "application/vnd.android.package-archive\0", "apk\0"},
-    {MIME_CSS, "text/css\0", "css\0"},
+    {MIME_CSS, "text/css\0", "css\0"}, 
     {MIME_IMAGE_WEBP, "image/webp\0", "webp\0"},
     {MIME_DJVU, "image/vnd.djvu\0image/x-djvu\0", "djvu\0djv\0"},
     {MIME_CHM, "application/x-chm\0application/vnd.ms-htmlhelp\0", "chm\0"},
@@ -100,70 +100,70 @@ const TMimeTypes::TRecord TMimeTypes::Records[] = {
     {MIME_TTF, "font/ttf\0", "ttf\0"},
     {MIME_WEBMANIFEST, "application/manifest+json\0", "webmanifest\0"},
     {MIME_MAX, nullptr, nullptr},
-
-    // Additional records
+ 
+    // Additional records 
     {MIME_HTML, "application/xhtml+xml\0", "xhtml\0"},
-};
-
-TMimeTypes::TMimeTypes()
+}; 
+ 
+TMimeTypes::TMimeTypes() 
     : ContentTypes()
     , Ext()
-{
-    SetContentTypes();
-    SetExt();
-}
-
-void TMimeTypes::SetContentTypes() {
+{ 
+    SetContentTypes(); 
+    SetExt(); 
+} 
+ 
+void TMimeTypes::SetContentTypes() { 
     for (int i = 0; i < (int)Y_ARRAY_SIZE(Records); ++i) {
-        const TRecord& record(Records[i]);
-        assert(i == record.Mime || i > MIME_MAX || record.Mime == MIME_UNKNOWN);
-        if (!record.ContentType)
-            continue;
-        for (const char* type = record.ContentType; *type; type += strlen(type) + 1) {
-            assert(ContentTypes.find(type) == ContentTypes.end());
-            ContentTypes[type] = i;
-        }
-    }
-}
-
-void TMimeTypes::SetExt() {
+        const TRecord& record(Records[i]); 
+        assert(i == record.Mime || i > MIME_MAX || record.Mime == MIME_UNKNOWN); 
+        if (!record.ContentType) 
+            continue; 
+        for (const char* type = record.ContentType; *type; type += strlen(type) + 1) { 
+            assert(ContentTypes.find(type) == ContentTypes.end()); 
+            ContentTypes[type] = i; 
+        } 
+    } 
+} 
+ 
+void TMimeTypes::SetExt() { 
     for (int i = 0; i < (int)Y_ARRAY_SIZE(Records); ++i) {
-        const TRecord& record(Records[i]);
-        if (!record.Ext)
-            continue;
-        for (const char* ext = record.Ext; *ext; ext += strlen(ext) + 1) {
-            assert(strlen(ext) <= MAX_EXT_LEN);
-            assert(Ext.find(ext) == Ext.end());
-            Ext[ext] = i;
-        }
-    }
-}
-
-const char* TMimeTypes::StrByExt(const char* ext) const {
-    TRecordHash::const_iterator it = Ext.find(ext);
-    if (it == Ext.end())
+        const TRecord& record(Records[i]); 
+        if (!record.Ext) 
+            continue; 
+        for (const char* ext = record.Ext; *ext; ext += strlen(ext) + 1) { 
+            assert(strlen(ext) <= MAX_EXT_LEN); 
+            assert(Ext.find(ext) == Ext.end()); 
+            Ext[ext] = i; 
+        } 
+    } 
+} 
+ 
+const char* TMimeTypes::StrByExt(const char* ext) const { 
+    TRecordHash::const_iterator it = Ext.find(ext); 
+    if (it == Ext.end()) 
         return nullptr;
-    return Records[it->second].ContentType;
-}
-
-MimeTypes TMimeTypes::MimeByStr(const char* str) const {
-    TRecordHash::const_iterator it = ContentTypes.find(str);
-    if (it == ContentTypes.end())
-        return MIME_UNKNOWN;
-    return Records[it->second].Mime;
-}
-
-MimeTypes TMimeTypes::MimeByStr(const TStringBuf& str) const {
-    TRecordHash::const_iterator it = ContentTypes.find(str);
-    if (it == ContentTypes.end())
-        return MIME_UNKNOWN;
-    return Records[it->second].Mime;
-}
-
-const char* TMimeTypes::StrByMime(MimeTypes mime) const {
-    return Records[mime].ContentType;
-}
-
+    return Records[it->second].ContentType; 
+} 
+ 
+MimeTypes TMimeTypes::MimeByStr(const char* str) const { 
+    TRecordHash::const_iterator it = ContentTypes.find(str); 
+    if (it == ContentTypes.end()) 
+        return MIME_UNKNOWN; 
+    return Records[it->second].Mime; 
+} 
+ 
+MimeTypes TMimeTypes::MimeByStr(const TStringBuf& str) const { 
+    TRecordHash::const_iterator it = ContentTypes.find(str); 
+    if (it == ContentTypes.end()) 
+        return MIME_UNKNOWN; 
+    return Records[it->second].Mime; 
+} 
+ 
+const char* TMimeTypes::StrByMime(MimeTypes mime) const { 
+    return Records[mime].ContentType; 
+} 
+ 
 const char* mimetypeByExt(const char* fname, const char* check_ext) {
     const char* ext_p;
     if (fname == nullptr || *fname == 0 ||
@@ -171,7 +171,7 @@ const char* mimetypeByExt(const char* fname, const char* check_ext) {
         return nullptr;
     }
 
-    char ext[TMimeTypes::MAX_EXT_LEN + 1];
+    char ext[TMimeTypes::MAX_EXT_LEN + 1]; 
     size_t i;
     ext_p++;
     for (i = 0; i < TMimeTypes::MAX_EXT_LEN && ext_p[i]; i++)
@@ -185,23 +185,23 @@ const char* mimetypeByExt(const char* fname, const char* check_ext) {
             return nullptr;
     }
 
-    return Singleton<TMimeTypes>()->StrByExt(ext);
+    return Singleton<TMimeTypes>()->StrByExt(ext); 
 }
 
-MimeTypes mimeByStr(const char* mimeStr) {
-    return Singleton<TMimeTypes>()->MimeByStr(mimeStr);
-}
-
-MimeTypes mimeByStr(const TStringBuf& mimeStr) {
-    return Singleton<TMimeTypes>()->MimeByStr(mimeStr);
-}
-
-const char* strByMime(MimeTypes mime) {
-    if (mime < 0 || mime > MIME_MAX)
+MimeTypes mimeByStr(const char* mimeStr) { 
+    return Singleton<TMimeTypes>()->MimeByStr(mimeStr); 
+} 
+ 
+MimeTypes mimeByStr(const TStringBuf& mimeStr) { 
+    return Singleton<TMimeTypes>()->MimeByStr(mimeStr); 
+} 
+ 
+const char* strByMime(MimeTypes mime) { 
+    if (mime < 0 || mime > MIME_MAX) 
         return nullptr; // index may contain documents with invalid MIME (ex. 255)
-    return Singleton<TMimeTypes>()->StrByMime(mime);
-}
-
+    return Singleton<TMimeTypes>()->StrByMime(mime); 
+} 
+ 
 const char* MimeNames[MIME_MAX] = {
     "unknown", // MIME_UNKNOWN         //  0
     "text",    // MIME_TEXT            //  1
@@ -237,7 +237,7 @@ const char* MimeNames[MIME_MAX] = {
     "tex",     // MIME_TEX             // 31
     "json",    // MIME_JSON            // 32
     "apk",     // MIME_APK             // 33
-    "css",     // MIME_CSS             // 34
+    "css",     // MIME_CSS             // 34 
     "webp",    // MIME_IMAGE_WEBP      // 35
     "djvu",    // MIME_DJVU            // 36
     "chm",     // MIME_CHM             // 37

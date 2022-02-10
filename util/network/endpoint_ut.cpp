@@ -70,20 +70,20 @@ Y_UNIT_TEST_SUITE(TEndpointTest) {
         he.insert(ep1);
         he.insert(ep2);
 
-        UNIT_ASSERT_VALUES_EQUAL(3u, he.size());
+        UNIT_ASSERT_VALUES_EQUAL(3u, he.size()); 
 
         he.insert(ep2_);
 
-        UNIT_ASSERT_VALUES_EQUAL(3u, he.size());
+        UNIT_ASSERT_VALUES_EQUAL(3u, he.size()); 
 
         he.insert(ep3);
         he.insert(ep3_);
 
-        UNIT_ASSERT_VALUES_EQUAL(4u, he.size());
+        UNIT_ASSERT_VALUES_EQUAL(4u, he.size()); 
 
         he.insert(ep4);
 
-        UNIT_ASSERT_VALUES_EQUAL(5u, he.size());
+        UNIT_ASSERT_VALUES_EQUAL(5u, he.size()); 
     }
 
     Y_UNIT_TEST(TestEqual) {

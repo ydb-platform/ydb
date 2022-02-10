@@ -59,7 +59,7 @@ public:
             } catch (...) {
             }
         }
-        if (Ptr)
+        if (Ptr) 
             free(Header());
     }
 
@@ -120,7 +120,7 @@ public:
     }
 
     size_t Size() const {
-        return Ptr ? Header()->Size : 0;
+        return Ptr ? Header()->Size : 0; 
     }
 
     size_t size() const {
@@ -136,7 +136,7 @@ public:
     }
 
     size_t Capacity() const {
-        return Ptr ? Header()->Capacity : 0;
+        return Ptr ? Header()->Capacity : 0; 
     }
 
     void PushBack(const T& elem) {

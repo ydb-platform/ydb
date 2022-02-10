@@ -298,7 +298,7 @@ Y_UNIT_TEST_SUITE(TDateTimeTest) {
         }
         return strcmp(zone0, zone1) == 0;
     }
-
+ 
     static bool CompareTMFull(const tm* t0, const tm* t1) {
         return t0 && t1 &&
                CompareTM(*t0, *t1) &&
@@ -320,14 +320,14 @@ Y_UNIT_TEST_SUITE(TDateTimeTest) {
         for (time_t t = starttime; t < finishtime; t += step) {
             ptm0 = GmTimeR(&t, &tms0);
             UNIT_ASSERT_EQUAL(ptm0, &tms0);
-
-#ifdef _win_
+ 
+#ifdef _win_ 
             if (tms0.tm_year + 1900 > 3000) {
                 // Windows: _MAX__TIME64_T == 23:59:59. 12/31/3000 UTC
                 continue;
             }
-#endif
-
+#endif 
+ 
             ptm1 = gmtime_r(&t, &tms1);
             if (!ptm1) {
                 continue;
@@ -372,7 +372,7 @@ Y_UNIT_TEST_SUITE(DateTimeTest) {
     }
 
     Y_UNIT_TEST(TestFromString) {
-        static const struct T {
+        static const struct T { 
             const char* const Str;
             const TDuration::TValue MicroSeconds;
             const bool Parseable;
@@ -383,7 +383,7 @@ Y_UNIT_TEST_SUITE(DateTimeTest) {
             {"3ms", 3000, true},
             {"x3ms", 0, false},
         };
-
+ 
         for (const T* t = tests; t != std::end(tests); ++t) {
             // FromString
             bool parsed = false;
@@ -400,9 +400,9 @@ Y_UNIT_TEST_SUITE(DateTimeTest) {
             if (t->Parseable) {
                 UNIT_ASSERT_EQUAL(t->MicroSeconds, tryTime.MicroSeconds());
             }
-        }
-    }
-
+        } 
+    } 
+ 
     Y_UNIT_TEST(TestSleep) {
         // check does not throw
         Sleep(TDuration::Seconds(0));

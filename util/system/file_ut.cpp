@@ -143,7 +143,7 @@ void TFileTest::TestOpen() {
     UNIT_ASSERT_VALUES_EQUAL(f1.GetLength(), 0);
 
     try {
-        TFile f2("f1.txt", CreateNew);
+        TFile f2("f1.txt", CreateNew); 
     } catch (const yexception& e) {
         res = e.what();
     }
@@ -163,7 +163,7 @@ void TFileTest::TestOpenSync() {
 }
 
 void TFileTest::TestRW() {
-    TFile f1("f1.txt", CreateNew);
+    TFile f1("f1.txt", CreateNew); 
     UNIT_ASSERT(f1.IsOpen());
     UNIT_ASSERT_VALUES_EQUAL(f1.GetName(), "f1.txt");
     UNIT_ASSERT_VALUES_EQUAL(f1.GetLength(), 0);

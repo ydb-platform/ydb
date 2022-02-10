@@ -36,16 +36,16 @@ public:
     static int TerminateNow;
 
     THttpFetcher()
-        : THttpParser<TCheck>()
-        , TAlloc()
-        , TWriter()
-        , TAgent()
+        : THttpParser<TCheck>() 
+        , TAlloc() 
+        , TWriter() 
+        , TAgent() 
     {
     }
-
+ 
     virtual ~THttpFetcher() {
     }
-
+ 
     int Fetch(THttpHeader* header, const char* path, const char* const* headers, int persistent, bool head_request = false) {
         int ret = 0;
         int fetcherr = 0;

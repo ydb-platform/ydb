@@ -14,12 +14,12 @@ Y_UNIT_TEST_SUITE(TStreamPrintfTest) {
         UNIT_ASSERT_EQUAL(ss.Str(), "qw er 1");
     }
 
-#ifdef __GNUC__
+#ifdef __GNUC__ 
     #pragma GCC diagnostic ignored "-Wformat-zero-length"
-#endif // __GNUC__
-
+#endif // __GNUC__ 
+ 
     Y_UNIT_TEST(TestZeroString) {
-        UNIT_ASSERT_EQUAL(Printf(Cnull, ""), 0);
+        UNIT_ASSERT_EQUAL(Printf(Cnull, ""), 0); 
     }
 
     Y_UNIT_TEST(TestLargePrintf) {

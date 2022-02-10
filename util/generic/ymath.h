@@ -1,7 +1,7 @@
 #pragma once
 
 #include <util/system/yassert.h>
-#include <util/system/defaults.h>
+#include <util/system/defaults.h> 
 
 #include <cmath>
 #include <cfloat>
@@ -91,14 +91,14 @@ static inline bool IsNan(double f) {
 inline bool IsValidFloat(double f) {
     return IsFinite(f) && !IsNan(f);
 }
-
+ 
 #ifdef _MSC_VER
-double Erf(double x);
-#else
-inline double Erf(double x) {
-    return erf(x);
-}
-#endif
+double Erf(double x); 
+#else 
+inline double Erf(double x) { 
+    return erf(x); 
+} 
+#endif 
 
 /**
  * @returns                             Natural logarithm of the absolute value

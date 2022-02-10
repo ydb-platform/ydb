@@ -119,14 +119,14 @@ inline TString JoinVectorIntoString(const TVector<T>& v, size_t index, size_t co
 
 TUtf16String JoinStrings(const TVector<TUtf16String>& v, const TWtringBuf delim);
 TUtf16String JoinStrings(const TVector<TUtf16String>& v, size_t index, size_t count, const TWtringBuf delim);
-
+ 
 //! Converts vector of strings to vector of type T variables
 template <typename T, typename TStringType>
 TVector<T> Scan(const TVector<TStringType>& input) {
     TVector<T> output;
-    output.reserve(input.size());
+    output.reserve(input.size()); 
     for (int i = 0; i < input.ysize(); ++i) {
-        output.push_back(FromString<T>(input[i]));
-    }
-    return output;
-}
+        output.push_back(FromString<T>(input[i])); 
+    } 
+    return output; 
+} 

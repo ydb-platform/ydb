@@ -67,22 +67,22 @@ const char* LastSystemErrorText(int code) {
 #endif
 }
 
-#ifdef _win_
-static char* Strip(char* s) {
-    size_t len = strlen(s);
-    const char* ptr = s;
-    Strip(ptr, len);
-    if (ptr != s)
-        memmove(s, ptr, len);
-    s[len] = 0;
-    return s;
-}
-#endif // _win_
-
+#ifdef _win_ 
+static char* Strip(char* s) { 
+    size_t len = strlen(s); 
+    const char* ptr = s; 
+    Strip(ptr, len); 
+    if (ptr != s) 
+        memmove(s, ptr, len); 
+    s[len] = 0; 
+    return s; 
+} 
+#endif // _win_ 
+ 
 void LastSystemErrorText(char* str, size_t size, int code) {
 #if defined(_win_)
     FormatMessage(FORMAT_MESSAGE_FROM_SYSTEM, 0, code, 0, str, DWORD(size), 0);
-    Strip(str);
+    Strip(str); 
 #elif defined(_sun_)
     strfcpy(str, strerror(code), size);
 #elif defined(_freebsd_) || defined(_darwin_) || defined(_musl_) || defined(_bionic_)

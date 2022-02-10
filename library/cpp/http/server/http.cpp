@@ -172,11 +172,11 @@ public:
         ErrorCode = WSAGetLastError();
     }
 
-    int GetErrorCode() const {
+    int GetErrorCode() const { 
         return ErrorCode;
     }
 
-    const char* GetError() const {
+    const char* GetError() const { 
         return LastSystemErrorText(ErrorCode);
     }
 
@@ -213,7 +213,7 @@ public:
     void Wait() {
         Cb_->OnWait();
         TGuard<TMutex> g(StopMutex);
-        if (ListenThread) {
+        if (ListenThread) { 
             ListenThread->Join();
             ListenThread.Reset(nullptr);
         }
@@ -223,7 +223,7 @@ public:
         Shutdown();
 
         TGuard<TMutex> g(StopMutex);
-        if (ListenThread) {
+        if (ListenThread) { 
             ListenThread->Join();
             ListenThread.Reset(nullptr);
         }
@@ -560,7 +560,7 @@ TClientConnection::TClientConnection(const TSocket& s, THttpServer::TImpl* serv,
 
     const TDuration& clientTimeout = HttpServ_->Options().ClientTimeout;
     if (clientTimeout != TDuration::Zero()) {
-        SetSocketTimeout(Socket_, (long)clientTimeout.Seconds(), clientTimeout.MilliSecondsOfSecond());
+        SetSocketTimeout(Socket_, (long)clientTimeout.Seconds(), clientTimeout.MilliSecondsOfSecond()); 
     }
 
     HttpServ_->IncreaseConnections();
@@ -738,7 +738,7 @@ void TClientRequest::ProcessFailRequest(int failstate) {
 
         // Skipping spaces before url...
         size_t start = 3;
-        while (str[start] == ' ') {
+        while (str[start] == ' ') { 
             ++start;
         }
 

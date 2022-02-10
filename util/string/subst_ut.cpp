@@ -121,13 +121,13 @@ Y_UNIT_TEST_SUITE(TStringSubst) {
 
     Y_UNIT_TEST(TestSubstGlobalOld) {
         TString s;
-        s = "aaa";
+        s = "aaa"; 
         SubstGlobal(s, "a", "bb");
         UNIT_ASSERT_EQUAL(s, TString("bbbbbb"));
-        s = "aaa";
+        s = "aaa"; 
         SubstGlobal(s, "a", "b");
         UNIT_ASSERT_EQUAL(s, TString("bbb"));
-        s = "aaa";
+        s = "aaa"; 
         SubstGlobal(s, "a", "");
         UNIT_ASSERT_EQUAL(s, TString(""));
         s = "abcdefbcbcdfb";
@@ -168,7 +168,7 @@ Y_UNIT_TEST_SUITE(TStringSubst) {
         TString s = "aaa";
         SubstGlobal(s, 'a', 'b', 1);
         UNIT_ASSERT_EQUAL(s, TString("abb"));
-    }
+    } 
 
     Y_UNIT_TEST(TestSubstCharGlobalRet) {
         const TUtf16String w1 = u"abcdabcd";

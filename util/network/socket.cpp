@@ -713,7 +713,7 @@ static inline ssize_t DoSendV(SOCKET fd, const struct iovec* iov, size_t count) 
     } while (ret == -1 && errno == EINTR);
 
     if (ret < 0) {
-        return -LastSystemError();
+        return -LastSystemError(); 
     }
 
     return ret;
@@ -1092,11 +1092,11 @@ struct addrinfo* TNetworkAddress::Info() const noexcept {
 
 TNetworkResolutionError::TNetworkResolutionError(int error) {
     const char* errMsg = nullptr;
-#ifdef _win_
+#ifdef _win_ 
     errMsg = LastSystemErrorText(error); // gai_strerror is not thread-safe on Windows
-#else
-    errMsg = gai_strerror(error);
-#endif
+#else 
+    errMsg = gai_strerror(error); 
+#endif 
     (*this) << errMsg << "(" << error;
 
 #if defined(_unix_)
@@ -1106,8 +1106,8 @@ TNetworkResolutionError::TNetworkResolutionError(int error) {
 #endif
 
     (*this) << "): ";
-}
-
+} 
+ 
 #if defined(_unix_)
 static inline int GetFlags(int fd) {
     const int ret = fcntl(fd, F_GETFL);

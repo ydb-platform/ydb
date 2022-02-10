@@ -312,8 +312,8 @@ public:
 
     inline bool StartsWith(TCharType ch) const noexcept {
         return !empty() && TTraits::eq(*Ptr(), ch);
-    }
-
+    } 
+ 
     inline bool EndsWith(const TCharType* s, size_t n) const noexcept {
         return EndsWith(Ptr(), Len(), s, n);
     }
@@ -324,8 +324,8 @@ public:
 
     inline bool EndsWith(TCharType ch) const noexcept {
         return !empty() && TTraits::eq(Ptr()[Len() - 1], ch);
-    }
-
+    } 
+ 
     template <typename TDerived2, typename TTraits2>
     bool operator==(const TStringBase<TDerived2, TChar, TTraits2>& s2) const noexcept {
         return equal(*this, s2);
@@ -473,8 +473,8 @@ public:
 
     inline size_t rfind(const TStringView str, size_t pos = npos) const {
         return AsStringView().rfind(str.data(), pos, str.size());
-    }
-
+    } 
+ 
     //~~~~Contains~~~~
     /**
      * @returns                         Whether this string contains the provided substring.

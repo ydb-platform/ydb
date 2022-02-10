@@ -266,22 +266,22 @@ public:
 #endif
     }
 
-    using TBase::back;
-
+    using TBase::back; 
+ 
     inline reference back() noexcept {
         Y_ASSERT(!this->empty());
 
 #ifdef TSTRING_IS_STD_STRING
         return Storage_.back();
 #else
-        if (Y_UNLIKELY(this->empty())) {
+        if (Y_UNLIKELY(this->empty())) { 
             return reference(*this, 0);
-        }
+        } 
 
         return reference(*this, length() - 1);
 #endif
-    }
-
+    } 
+ 
     using TBase::front;
 
     inline reference front() noexcept {
@@ -606,9 +606,9 @@ public:
     }
 
     TBasicString& assign(TCharType ch) {
-        return assign(&ch, 1);
-    }
-
+        return assign(&ch, 1); 
+    } 
+ 
     TBasicString& assign(const TCharType* pc, size_t len) {
 #if defined(address_sanitizer_enabled) || defined(thread_sanitizer_enabled)
         pc = (const TCharType*)HidePointerOrigin((void*)pc);
@@ -704,9 +704,9 @@ public:
     TBasicString& operator=(std::nullptr_t) = delete;
 
     TBasicString& operator=(TExplicitType<TCharType> ch) {
-        return assign(ch);
-    }
-
+        return assign(ch); 
+    } 
+ 
     inline void reserve(size_t len) {
         MutRef().reserve(len);
     }
@@ -931,12 +931,12 @@ public:
 
     friend TBasicString operator+(const TBasicStringBuf<TCharType, TTraits> s1, const TBasicString& s2) Y_WARN_UNUSED_RESULT {
         return Join(s1, s2);
-    }
-
+    } 
+ 
     friend TBasicString operator+(const TCharType* s1, const TBasicString& s2) Y_WARN_UNUSED_RESULT {
         return Join(s1, s2);
-    }
-
+    } 
+ 
     friend TBasicString operator+(std::basic_string<TCharType, TTraits> l, TBasicString r) {
         return l + r.ConstRef();
     }

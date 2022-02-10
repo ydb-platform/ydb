@@ -21,13 +21,13 @@ static void SetErrno() {
 
 struct DIR* opendir(const char* dirname) {
     struct DIR* dir = (struct DIR*)malloc(sizeof(struct DIR));
-    if (!dir) {
-        return NULL;
+    if (!dir) { 
+        return NULL; 
     }
-    dir->sh = INVALID_HANDLE_VALUE;
-    dir->fff_templ = NULL;
-    dir->file_no = 0;
-    dir->readdir_buf = NULL;
+    dir->sh = INVALID_HANDLE_VALUE; 
+    dir->fff_templ = NULL; 
+    dir->file_no = 0; 
+    dir->readdir_buf = NULL; 
 
     int len = strlen(dirname);
     //Remove trailing slashes
@@ -36,31 +36,31 @@ struct DIR* opendir(const char* dirname) {
     }
     int len_converted = MultiByteToWideChar(CP_UTF8, 0, dirname, len, 0, 0);
     if (len_converted == 0) {
-        closedir(dir);
-        return NULL;
+        closedir(dir); 
+        return NULL; 
     }
     dir->fff_templ = (WCHAR*)malloc((len_converted + 5) * sizeof(WCHAR));
-    if (!dir->fff_templ) {
-        closedir(dir);
-        return NULL;
+    if (!dir->fff_templ) { 
+        closedir(dir); 
+        return NULL; 
     }
     MultiByteToWideChar(CP_UTF8, 0, dirname, len, dir->fff_templ, len_converted);
 
     WCHAR append[] = {'\\', '*', '.', '*', 0};
     memcpy(dir->fff_templ + len_converted, append, sizeof(append));
     dir->sh = FindFirstFileW(dir->fff_templ, &dir->wfd);
-    if (dir->sh == INVALID_HANDLE_VALUE) {
+    if (dir->sh == INVALID_HANDLE_VALUE) { 
         SetErrno();
-        closedir(dir);
-        return NULL;
+        closedir(dir); 
+        return NULL; 
     }
-
+ 
     return dir;
 }
 
 int closedir(struct DIR* dir) {
-    if (dir->sh != INVALID_HANDLE_VALUE)
-        FindClose(dir->sh);
+    if (dir->sh != INVALID_HANDLE_VALUE) 
+        FindClose(dir->sh); 
     free(dir->fff_templ);
     free(dir->readdir_buf);
     free(dir);

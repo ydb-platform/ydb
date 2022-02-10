@@ -55,7 +55,7 @@ TSysLogBackend::~TSysLogBackend() {
 void TSysLogBackend::WriteData(const TLogRecord& rec) {
 #if defined(_unix_)
     syslog(ELogPriority2SyslogPriority(rec.Priority), "%.*s", (int)rec.Len, rec.Data);
-#else
+#else 
     Y_UNUSED(rec);
 #endif
 }

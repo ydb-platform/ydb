@@ -34,7 +34,7 @@
 #include <util/system/sanitizers.h>
 #include "filemap.h"
 
-#undef PAGE_SIZE
+#undef PAGE_SIZE 
 #undef GRANULARITY
 
 #ifdef _win_

@@ -172,7 +172,7 @@ size_t TDecodedInput::DoUnboundedNext(const void** ptr) {
         const size_t payload = sizeof(TCodecID) + sizeof(TBlockLen);
         char buf[32];
 
-        S_->LoadOrFail(buf, payload);
+        S_->LoadOrFail(buf, payload); 
 
         TMemoryInput in(buf, payload);
 

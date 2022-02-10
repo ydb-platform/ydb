@@ -10,11 +10,11 @@ public:
     inline TImpl(const TString& command, const char* mode)
         : Pipe_(nullptr)
     {
-#ifndef _freebsd_
+#ifndef _freebsd_ 
         if (strcmp(mode, "r+") == 0) {
             ythrow TSystemError(EINVAL) << "pipe \"r+\" mode is implemented only on FreeBSD";
         }
-#endif
+#endif 
         Pipe_ = ::popen(command.data(), mode);
         if (Pipe_ == nullptr) {
             ythrow TSystemError() << "failed to open pipe: " << command.Quote();

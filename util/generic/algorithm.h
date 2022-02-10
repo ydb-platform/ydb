@@ -337,11 +337,11 @@ void StableSortUniqueBy(C& c, const TGetKey& getKey) {
     c.erase(UniqueBy(c.begin(), c.end(), getKey), c.end());
 }
 
-template <class C, class TValue>
-void Erase(C& c, const TValue& value) {
-    c.erase(std::remove(c.begin(), c.end(), value), c.end());
-}
-
+template <class C, class TValue> 
+void Erase(C& c, const TValue& value) { 
+    c.erase(std::remove(c.begin(), c.end(), value), c.end()); 
+} 
+ 
 template <class C, class P>
 void EraseIf(C& c, P p) {
     c.erase(std::remove_if(c.begin(), c.end(), p), c.end());

@@ -304,32 +304,32 @@ namespace {
         size_t Index_;
     };
 
-    const char Text[] =
+    const char Text[] = 
         // UTF8 encoded "one \ntwo\r\nthree\n\tfour\nfive\n" in russian and ...
-        "один \n"
-        "два\r\n"
-        "три\n"
-        "\tчетыре\n"
-        "пять\n"
+        "один \n" 
+        "два\r\n" 
+        "три\n" 
+        "\tчетыре\n" 
+        "пять\n" 
         // ... additional test cases
-        "\r\n"
-        "\n\r" // this char goes to the front of the next string
-        "one two\n"
-        "123\r\n"
-        "\t\r ";
+        "\r\n" 
+        "\n\r" // this char goes to the front of the next string 
+        "one two\n" 
+        "123\r\n" 
+        "\t\r "; 
 
-    const char* Expected[] = {
+    const char* Expected[] = { 
         // UTF8 encoded "one ", "two", "three", "\tfour", "five" in russian and ...
-        "один ",
-        "два",
-        "три",
-        "\tчетыре",
-        "пять",
+        "один ", 
+        "два", 
+        "три", 
+        "\tчетыре", 
+        "пять", 
         // ... additional test cases
-        "",
-        "",
-        "\rone two",
-        "123",
+        "", 
+        "", 
+        "\rone two", 
+        "123", 
         "\t\r "};
     void TestStreamReadTo1(IInputStream& input, const char* comment) {
         TString tmp;

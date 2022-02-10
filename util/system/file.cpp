@@ -86,10 +86,10 @@ TFileHandle::TFileHandle(const TString& fName, EOpenMode oMode) noexcept {
         case OpenAlways:
             fcMode = OPEN_ALWAYS;
             break;
-        case CreateNew:
+        case CreateNew: 
             fcMode = CREATE_NEW;
             break;
-        case CreateAlways:
+        case CreateAlways: 
             fcMode = CREATE_ALWAYS;
             break;
         default:
@@ -152,10 +152,10 @@ TFileHandle::TFileHandle(const TString& fName, EOpenMode oMode) noexcept {
         case OpenAlways:
             fcMode = O_CREAT;
             break;
-        case CreateNew:
+        case CreateNew: 
             fcMode = O_CREAT | O_EXCL;
             break;
-        case CreateAlways:
+        case CreateAlways: 
             fcMode = O_CREAT | O_TRUNC;
             break;
         default:
@@ -417,7 +417,7 @@ bool TFileHandle::Flush() noexcept {
         return false;
     }
 #if defined(_win_)
-    bool ok = ::FlushFileBuffers(Fd_) != 0;
+    bool ok = ::FlushFileBuffers(Fd_) != 0; 
     /*
      * FlushFileBuffers fails if hFile is a handle to the console output.
      * That is because the console output is not buffered.

@@ -43,5 +43,5 @@ public:
         return (!User_);
     }
 
-    const char* getHeaderInstruction() const;
+    const char* getHeaderInstruction() const; 
 };

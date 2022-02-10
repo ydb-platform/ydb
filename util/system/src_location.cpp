@@ -2,16 +2,16 @@
 
 #include <util/stream/output.h>
 
-#include <algorithm>
-
+#include <algorithm> 
+ 
 template <>
 void Out<TSourceLocation>(IOutputStream& o, const TSourceLocation& t) {
-#if defined(_win_)
+#if defined(_win_) 
     TString file(t.File);
-    std::replace(file.begin(), file.vend(), '\\', '/');
-    o << file;
-#else
-    o << t.File;
-#endif
-    o << ':' << t.Line;
+    std::replace(file.begin(), file.vend(), '\\', '/'); 
+    o << file; 
+#else 
+    o << t.File; 
+#endif 
+    o << ':' << t.Line; 
 }

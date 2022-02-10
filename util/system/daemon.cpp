@@ -85,11 +85,11 @@ bool NDaemonMaker::MakeMeDaemon(ECloseDescriptors cd, EStdIoDescriptors iod, ECh
         return true;
     }
 
-    if (chd == chdirRoot) {
+    if (chd == chdirRoot) { 
         if (chdir("/")) {
-            ythrow TSystemError() << "chdir(\"/\") failed";
+            ythrow TSystemError() << "chdir(\"/\") failed"; 
         }
-    }
+    } 
 
     int fd[4] = {-1, -1, -1, -1};
     switch (iod) {

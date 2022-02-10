@@ -42,9 +42,9 @@ public:
     }
 
     void PushBack(std::unique_ptr<T> t) {
-        PushBack(t.release());
-    }
-
+        PushBack(t.release()); 
+    } 
+ 
     void PushBack(THolder<T> t) {
         PushBack(t.Release());
     }
@@ -78,10 +78,10 @@ public:
         TBase::resize(newSize);
     }
 
-    void Swap(THolderVector& other) {
-        TBase::swap(other);
-    }
-
+    void Swap(THolderVector& other) { 
+        TBase::swap(other); 
+    } 
+ 
     using TBase::operator[];
     using TBase::operator bool;
     using TBase::at;

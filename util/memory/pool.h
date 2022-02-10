@@ -159,7 +159,7 @@ public:
     inline T* Allocate() {
         return (T*)this->Allocate(sizeof(T), alignof(T));
     }
-
+ 
     template <typename T>
     inline T* Allocate(size_t align) {
         return (T*)this->Allocate(sizeof(T), Max(align, alignof(T)));
@@ -175,20 +175,20 @@ public:
         return (T*)this->Allocate(sizeof(T) * count, Max(align, alignof(T)));
     }
 
-    template <typename T>
-    inline T* AllocateZeroArray(size_t count) {
-        T* ptr = AllocateArray<T>(count);
-        memset(ptr, 0, count * sizeof(T));
-        return ptr;
-    }
-
-    template <typename T>
-    inline T* AllocateZeroArray(size_t count, size_t align) {
-        T* ptr = AllocateArray<T>(count, align);
-        memset(ptr, 0, count * sizeof(T));
-        return ptr;
-    }
-
+    template <typename T> 
+    inline T* AllocateZeroArray(size_t count) { 
+        T* ptr = AllocateArray<T>(count); 
+        memset(ptr, 0, count * sizeof(T)); 
+        return ptr; 
+    } 
+ 
+    template <typename T> 
+    inline T* AllocateZeroArray(size_t count, size_t align) { 
+        T* ptr = AllocateArray<T>(count, align); 
+        memset(ptr, 0, count * sizeof(T)); 
+        return ptr; 
+    } 
+ 
     template <typename T, typename... Args>
     inline T* New(Args&&... args) {
         return new (Allocate<T>()) T(std::forward<Args>(args)...);

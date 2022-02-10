@@ -15,18 +15,18 @@
 #endif
 
 class TSockTest: public TTestBase {
-    UNIT_TEST_SUITE(TSockTest);
+    UNIT_TEST_SUITE(TSockTest); 
     UNIT_TEST(TestSock);
     UNIT_TEST(TestTimeout);
-#ifndef _win_ // Test hangs on Windows
+#ifndef _win_ // Test hangs on Windows 
     UNIT_TEST_EXCEPTION(TestConnectionRefused, yexception);
-#endif
+#endif 
     UNIT_TEST(TestNetworkResolutionError);
     UNIT_TEST(TestNetworkResolutionErrorMessage);
     UNIT_TEST(TestBrokenPipe);
     UNIT_TEST(TestClose);
     UNIT_TEST(TestReusePortAvailCheck);
-    UNIT_TEST_SUITE_END();
+    UNIT_TEST_SUITE_END(); 
 
 public:
     void TestSock();
@@ -53,45 +53,45 @@ void TSockTest::TestSock() {
     UNIT_ASSERT(!si.ReadLine().empty());
 }
 
-void TSockTest::TestTimeout() {
-    static const int timeout = 1000;
-    i64 startTime = millisec();
-    try {
-        TNetworkAddress addr("localhost", 1313);
-        TSocket s(addr, TDuration::MilliSeconds(timeout));
+void TSockTest::TestTimeout() { 
+    static const int timeout = 1000; 
+    i64 startTime = millisec(); 
+    try { 
+        TNetworkAddress addr("localhost", 1313); 
+        TSocket s(addr, TDuration::MilliSeconds(timeout)); 
     } catch (const yexception&) {
-    }
-    int realTimeout = (int)(millisec() - startTime);
-    if (realTimeout > timeout + 2000) {
+    } 
+    int realTimeout = (int)(millisec() - startTime); 
+    if (realTimeout > timeout + 2000) { 
         TString err = TStringBuilder() << "Timeout exceeded: " << realTimeout << " ms (expected " << timeout << " ms)";
-        UNIT_FAIL(err);
-    }
-}
-
-void TSockTest::TestConnectionRefused() {
-    TNetworkAddress addr("localhost", 1313);
-    TSocket s(addr);
-}
-
-void TSockTest::TestNetworkResolutionError() {
+        UNIT_FAIL(err); 
+    } 
+} 
+ 
+void TSockTest::TestConnectionRefused() { 
+    TNetworkAddress addr("localhost", 1313); 
+    TSocket s(addr); 
+} 
+ 
+void TSockTest::TestNetworkResolutionError() { 
     TString errMsg;
-    try {
-        TNetworkAddress addr("", 0);
+    try { 
+        TNetworkAddress addr("", 0); 
     } catch (const TNetworkResolutionError& e) {
-        errMsg = e.what();
-    }
-
+        errMsg = e.what(); 
+    } 
+ 
     if (errMsg.empty()) {
-        return; // on Windows getaddrinfo("", 0, ...) returns "OK"
+        return; // on Windows getaddrinfo("", 0, ...) returns "OK" 
     }
-
-    int expectedErr = EAI_NONAME;
+ 
+    int expectedErr = EAI_NONAME; 
     TString expectedErrMsg = gai_strerror(expectedErr);
     if (errMsg.find(expectedErrMsg) == TString::npos) {
         UNIT_FAIL("TNetworkResolutionError contains\nInvalid msg: " + errMsg + "\nExpected msg: " + expectedErrMsg + "\n");
-    }
-}
-
+    } 
+} 
+ 
 void TSockTest::TestNetworkResolutionErrorMessage() {
 #ifdef _unix_
     auto str = [](int code) -> TString {

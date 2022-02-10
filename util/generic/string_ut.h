@@ -699,20 +699,20 @@ public:
 
         const TStringType rs = Data._0123401234();
         UNIT_ASSERT(rs.rfind(*Data._3()) == 8);
-
+ 
         const TStringType empty;
-        UNIT_ASSERT(empty.find(empty) == 0);
-        UNIT_ASSERT(s.find(empty, 0) == 0);
-        UNIT_ASSERT(s.find(empty, 1) == 1);
-        UNIT_ASSERT(s.find(empty, s.length()) == s.length());
+        UNIT_ASSERT(empty.find(empty) == 0); 
+        UNIT_ASSERT(s.find(empty, 0) == 0); 
+        UNIT_ASSERT(s.find(empty, 1) == 1); 
+        UNIT_ASSERT(s.find(empty, s.length()) == s.length()); 
         UNIT_ASSERT(s.find(empty, s.length() + 1) == TStringType::npos);
-
-        UNIT_ASSERT(s.rfind(empty) == s.length());
-        UNIT_ASSERT(empty.rfind(empty) == 0);
+ 
+        UNIT_ASSERT(s.rfind(empty) == s.length()); 
+        UNIT_ASSERT(empty.rfind(empty) == 0); 
         UNIT_ASSERT(empty.rfind(s) == TStringType::npos);
-
+ 
         UNIT_ASSERT(s2.rfind(s) == TStringType::npos);
-        UNIT_ASSERT(s.rfind(s2) == 0);
+        UNIT_ASSERT(s.rfind(s2) == 0); 
         UNIT_ASSERT(s.rfind(TStringType(Data._345())) == 10);
         UNIT_ASSERT(s.rfind(TStringType(Data._345()), 13) == 10);
         UNIT_ASSERT(s.rfind(TStringType(Data._345()), 10) == 10);
@@ -736,7 +736,7 @@ public:
         UNIT_ASSERT(s.Contains(empty));
         UNIT_ASSERT(!empty.Contains(s));
         UNIT_ASSERT(empty.Contains(empty));
-        UNIT_ASSERT(s.Contains(empty, s.length()));
+        UNIT_ASSERT(s.Contains(empty, s.length())); 
     }
 
     // Operators
@@ -885,9 +885,9 @@ public:
         s2.assign(Data._0123456(), 4);
         UNIT_ASSERT(s2 == Data._0123());
 
-        s2.assign('1');
-        UNIT_ASSERT(s2 == Data._1());
-
+        s2.assign('1'); 
+        UNIT_ASSERT(s2 == Data._1()); 
+ 
         s2.assign(Data._0123456());
         UNIT_ASSERT(s2 == Data._0123456());
 
@@ -978,8 +978,8 @@ public:
             UNIT_ASSERT_EQUAL(data[4], 0);
         }
     }
-
-    void TestPrefixSuffix() {
+ 
+    void TestPrefixSuffix() { 
         const TStringType emptyStr;
         UNIT_ASSERT_EQUAL(emptyStr.StartsWith('x'), false);
         UNIT_ASSERT_EQUAL(emptyStr.EndsWith('x'), false);
@@ -987,7 +987,7 @@ public:
         UNIT_ASSERT_EQUAL(emptyStr.EndsWith(0), false);
         UNIT_ASSERT_EQUAL(emptyStr.StartsWith(emptyStr), true);
         UNIT_ASSERT_EQUAL(emptyStr.EndsWith(emptyStr), true);
-
+ 
         const char_type chars[] = {'h', 'e', 'l', 'l', 'o', 0};
         const TStringType str(chars);
         UNIT_ASSERT_EQUAL(str.StartsWith('h'), true);
@@ -996,7 +996,7 @@ public:
         UNIT_ASSERT_EQUAL(str.EndsWith('h'), false);
         UNIT_ASSERT_EQUAL(str.StartsWith(emptyStr), true);
         UNIT_ASSERT_EQUAL(str.EndsWith(emptyStr), true);
-    }
+    } 
 
 #ifndef TSTRING_IS_STD_STRING
     void TestCharRef() {
@@ -1046,20 +1046,20 @@ public:
         }
     }
 #endif
-
-    void TestBack() {
-        const char_type chars[] = {'f', 'o', 'o', 0};
-
+ 
+    void TestBack() { 
+        const char_type chars[] = {'f', 'o', 'o', 0}; 
+ 
         TStringType str = chars;
         const TStringType constStr = str;
-
+ 
         UNIT_ASSERT_VALUES_EQUAL(constStr.back(), (ui8)'o');
         UNIT_ASSERT_VALUES_EQUAL(str.back(), (ui8)'o');
-
-        str.back() = 'r';
+ 
+        str.back() = 'r'; 
         UNIT_ASSERT_VALUES_EQUAL(constStr.back(), (ui8)'o');
         UNIT_ASSERT_VALUES_EQUAL(str.back(), (ui8)'r');
-    }
+    } 
 
     void TestFront() {
         const char_type chars[] = {'f', 'o', 'o', 0};

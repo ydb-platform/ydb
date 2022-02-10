@@ -1,9 +1,9 @@
 #include <library/cpp/uri/encode.h>
 
-#ifdef __clang__
-    #pragma clang diagnostic ignored "-Wunused-variable"
-#endif
-
+#ifdef __clang__ 
+    #pragma clang diagnostic ignored "-Wunused-variable" 
+#endif 
+ 
 namespace NUri {
 namespace NEncode {
 

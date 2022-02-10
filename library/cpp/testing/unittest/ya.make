@@ -18,10 +18,10 @@ PEERDIR(
 
 SRCS(
     gtest.cpp
-    checks.cpp
+    checks.cpp 
     plugin.cpp
     registar.cpp
-    tests_data.cpp
+    tests_data.cpp 
     utmain.cpp
 )
 

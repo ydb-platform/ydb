@@ -27,7 +27,7 @@ namespace NLastGetopt {
 
             for (const struct option* o = longopts; o != nullptr && o->name != nullptr; ++o) {
                 TOpt* opt;
-                if ((unsigned)o->val < 0x80 && isalnum(o->val)) {
+                if ((unsigned)o->val < 0x80 && isalnum(o->val)) { 
                     opt = &Opts->CharOption(char(o->val));
                     opt->AddLongName(o->name);
                 } else {
@@ -49,9 +49,9 @@ namespace NLastGetopt {
             } else {
                 optarg = (char*)OptsParser->CurVal();
                 optind = (int)OptsParser->Pos_;
-                if (longindex && OptsParser->CurOpt())
+                if (longindex && OptsParser->CurOpt()) 
                     *longindex = (int)Opts->IndexOf(OptsParser->CurOpt());
-                return OptsParser->CurOpt() ? OptsParser->CurOpt()->GetCharOr0() : 1;
+                return OptsParser->CurOpt() ? OptsParser->CurOpt()->GetCharOr0() : 1; 
             }
         } catch (const NLastGetopt::TException&) {
             return '?';

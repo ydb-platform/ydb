@@ -310,7 +310,7 @@ public:
 
         ythrow yexception() << "incorrect index";
     }
-
+ 
     inline bool Has(const TStringBuf key) const {
         return Dict_.contains(key);
     }
@@ -378,9 +378,9 @@ TString TArchiveReader::KeyByIndex(size_t n) const {
 }
 
 bool TArchiveReader::Has(const TStringBuf key) const {
-    return Impl_->Has(key);
-}
-
+    return Impl_->Has(key); 
+} 
+ 
 TAutoPtr<IInputStream> TArchiveReader::ObjectByKey(const TStringBuf key) const {
     return Impl_->ObjectByKey(key);
 }

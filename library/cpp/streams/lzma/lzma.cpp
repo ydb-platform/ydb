@@ -497,7 +497,7 @@ void TLzmaCompress::DoWrite(const void* buf, size_t len) {
 void TLzmaCompress::DoFinish() {
     THolder<TImpl> impl(Impl_.Release());
 
-    if (impl) {
+    if (impl) { 
         impl->Finish();
     }
 }

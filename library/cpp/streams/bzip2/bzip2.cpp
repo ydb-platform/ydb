@@ -190,7 +190,7 @@ void TBZipCompress::DoWrite(const void* buf, size_t size) {
 }
 
 void TBZipCompress::DoFlush() {
-    if (Impl_) {
+    if (Impl_) { 
         Impl_->Flush();
     }
 }
@@ -198,7 +198,7 @@ void TBZipCompress::DoFlush() {
 void TBZipCompress::DoFinish() {
     THolder<TImpl> impl(Impl_.Release());
 
-    if (impl) {
+    if (impl) { 
         impl->Finish();
     }
 }

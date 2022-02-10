@@ -11,10 +11,10 @@
 #include <library/cpp/http/fetch/httpheader.h>
 #include <library/cpp/http/fetch/httpfsm.h>
 
-#ifdef _MSC_VER
-#pragma warning(disable: 4702)  // unreachable code
-#endif
-
+#ifdef _MSC_VER 
+#pragma warning(disable: 4702)  // unreachable code 
+#endif 
+ 
 #define c(i) I = i;
 #define m(i) I = std::max(I, (long)i);
 

@@ -352,11 +352,11 @@ namespace {
         void DoWrite(const void* buf, size_t len) override {
             if (len != fwrite(buf, 1, len, F_)) {
 #if defined(_win_)
-                // On Windows, if 'F_' is console -- 'fwrite' returns count of written characters.
-                // If, for example, console output codepage is UTF-8, then returned value is
-                // not equal to 'len'. So, we ignore some 'errno' values...
+                // On Windows, if 'F_' is console -- 'fwrite' returns count of written characters. 
+                // If, for example, console output codepage is UTF-8, then returned value is 
+                // not equal to 'len'. So, we ignore some 'errno' values... 
                 if ((errno == 0 || errno == EINVAL || errno == EILSEQ) && _isatty(fileno(F_))) {
-                    return;
+                    return; 
                 }
 #endif
                 ythrow TSystemError() << "write failed";

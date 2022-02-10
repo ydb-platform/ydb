@@ -459,7 +459,7 @@ TString GetHomeDir() {
 #ifndef _win32_
         passwd* pw = nullptr;
         s = getenv("USER");
-        if (s)
+        if (s) 
             pw = getpwnam(s.data());
         else
             pw = getpwuid(getuid());
@@ -517,7 +517,7 @@ TString GetSystemTempDir() {
     const char* var = "TMPDIR";
     const char* def = "/tmp";
     const char* r = getenv(var);
-    const char* result = r ? r : def;
+    const char* result = r ? r : def; 
     return result[0] == '/' ? result : ResolveDir(result);
 #endif
 }

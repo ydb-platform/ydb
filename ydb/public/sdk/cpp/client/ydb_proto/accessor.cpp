@@ -1,7 +1,7 @@
-#include "accessor.h"
+#include "accessor.h" 
 
 #include <ydb/public/sdk/cpp/client/ydb_value/value.h>
-
+ 
 namespace NYdb {
 
 const Ydb::Type& TProtoAccessor::GetProto(const TType& type) {

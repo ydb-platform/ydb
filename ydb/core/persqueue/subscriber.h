@@ -1,8 +1,8 @@
 #pragma once
-
+ 
 #include "header.h"
 #include "blob.h"
-
+ 
 #include <ydb/core/tablet/tablet_counters.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/persqueue/events/internal.h>
@@ -12,11 +12,11 @@ namespace NPQ {
 
 struct TUserInfo;
 
-struct TReadAnswer {
-    ui64 Size;
-    THolder<IEventBase> Event;
-};
-
+struct TReadAnswer { 
+    ui64 Size; 
+    THolder<IEventBase> Event; 
+}; 
+ 
 struct TReadInfo {
     TString User;
     TString ClientDC;
@@ -27,7 +27,7 @@ struct TReadInfo {
     ui64 Destination;
     TInstant Timestamp;
     ui64 ReadTimestampMs;
-    TDuration WaitQuotaTime;
+    TDuration WaitQuotaTime; 
 
     bool IsSubscription;
 
@@ -36,17 +36,17 @@ struct TReadInfo {
     TVector<TClientBlob> Cached; //records from head
 
     TReadInfo() = delete;
-    TReadInfo(
-        const TString& user,
-        const TString& clientDC,
-        const ui64 offset,
-        const ui16 partNo,
-        const ui64 count,
-        const ui32 size,
-        const ui64 dst,
-        ui64 readTimestampMs,
-        TDuration waitQuotaTime
-    )
+    TReadInfo( 
+        const TString& user, 
+        const TString& clientDC, 
+        const ui64 offset, 
+        const ui16 partNo, 
+        const ui64 count, 
+        const ui32 size, 
+        const ui64 dst, 
+        ui64 readTimestampMs, 
+        TDuration waitQuotaTime 
+    ) 
         : User(user)
         , ClientDC(clientDC)
         , Offset(offset)
@@ -55,30 +55,30 @@ struct TReadInfo {
         , Size(size)
         , Destination(dst)
         , Timestamp(TAppData::TimeProvider->Now())
-        , ReadTimestampMs(readTimestampMs)
-        , WaitQuotaTime(waitQuotaTime)
+        , ReadTimestampMs(readTimestampMs) 
+        , WaitQuotaTime(waitQuotaTime) 
         , IsSubscription(false)
         , CachedOffset(0)
     {}
 
-    TReadAnswer FormAnswer(
-        const TActorContext& ctx,
-        const TEvPQ::TEvBlobResponse& response,
-        const ui64 endOffset,
-        const ui32 partition,
-        TUserInfo* ui,
-        const ui64 dst,
-        const ui64 sizeLag
-    );
+    TReadAnswer FormAnswer( 
+        const TActorContext& ctx, 
+        const TEvPQ::TEvBlobResponse& response, 
+        const ui64 endOffset, 
+        const ui32 partition, 
+        TUserInfo* ui, 
+        const ui64 dst, 
+        const ui64 sizeLag 
+    ); 
 
-    TReadAnswer FormAnswer(
-        const TActorContext& ctx,
-        const ui64 endOffset,
-        const ui32 partition,
-        TUserInfo* ui,
-        const ui64 dst,
-        const ui64 sizeLag
-    ) {
+    TReadAnswer FormAnswer( 
+        const TActorContext& ctx, 
+        const ui64 endOffset, 
+        const ui32 partition, 
+        TUserInfo* ui, 
+        const ui64 dst, 
+        const ui64 sizeLag 
+    ) { 
         TEvPQ::TEvBlobResponse response(0, TVector<TRequestedBlob>());
         return FormAnswer(ctx, response, endOffset, partition, ui, dst, sizeLag);
     }
@@ -116,7 +116,7 @@ public:
     void AddSubscription(TReadInfo&& info, const ui32 timeout, const ui64 cookie, const TActorContext& ctx);
 
     //handle of timeout for some read
-    TMaybe<TReadInfo> OnTimeout(TEvPQ::TEvReadTimeout::TPtr& ev);
+    TMaybe<TReadInfo> OnTimeout(TEvPQ::TEvReadTimeout::TPtr& ev); 
 
     //get completed subscriptions
     TVector<std::pair<TReadInfo, ui64>> GetReads(const ui64 endOffsets);

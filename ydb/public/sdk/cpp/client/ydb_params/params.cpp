@@ -1,5 +1,5 @@
-#include "params.h"
-#include "impl.h"
+#include "params.h" 
+#include "impl.h" 
 
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
 #include <ydb/public/sdk/cpp/client/ydb_types/fatal_error_handlers/handlers.h>
@@ -14,14 +14,14 @@ namespace NYdb {
 TParams::TParams(::google::protobuf::Map<TString, Ydb::TypedValue>&& protoMap)
     : Impl_(new TImpl(std::move(protoMap))) {}
 
-::google::protobuf::Map<TString, Ydb::TypedValue>* TParams::GetProtoMapPtr() {
-    return Impl_->GetProtoMapPtr();
-}
-
-const ::google::protobuf::Map<TString, Ydb::TypedValue>& TParams::GetProtoMap() const {
-    return Impl_->GetProtoMap();
-}
-
+::google::protobuf::Map<TString, Ydb::TypedValue>* TParams::GetProtoMapPtr() { 
+    return Impl_->GetProtoMapPtr(); 
+} 
+ 
+const ::google::protobuf::Map<TString, Ydb::TypedValue>& TParams::GetProtoMap() const { 
+    return Impl_->GetProtoMap(); 
+} 
+ 
 bool TParams::Empty() const {
     return Impl_->Empty();
 }

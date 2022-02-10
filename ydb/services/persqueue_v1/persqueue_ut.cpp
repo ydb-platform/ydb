@@ -14,12 +14,12 @@
 
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/library/persqueue/obfuscate/obfuscate.h>
-#include <ydb/library/persqueue/tests/counters.h>
+#include <ydb/library/persqueue/tests/counters.h> 
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
 
 #include <library/cpp/testing/unittest/tests_data.h>
 #include <library/cpp/testing/unittest/registar.h>
-#include <library/cpp/json/json_reader.h>
+#include <library/cpp/json/json_reader.h> 
 #include <library/cpp/monlib/dynamic_counters/encode.h>
 #include <google/protobuf/text_format.h>
 #include <google/protobuf/util/message_differencer.h>
@@ -433,9 +433,9 @@ namespace {
         server.AnnoyingClient->CreateTopic("rt3.dc1--topic", 1);
 
         auto driver = server.AnnoyingClient->GetDriver();
-
+ 
         auto writer = CreateSimpleWriter(*driver, "topic", "test source ID");
-
+ 
         bool res = true;
 
         ui32 messageCount = 1000;
@@ -668,7 +668,7 @@ namespace {
 
         server.EnableLogs({ NKikimrServices::PERSQUEUE });
 
-        // empty data and sourceId
+        // empty data and sourceId 
         server.AnnoyingClient->WriteToPQ(DEFAULT_TOPIC_NAME, 1, "", 1, "", "", ETransport::MsgBus, NMsgBusProxy::MSTATUS_ERROR);
         server.AnnoyingClient->WriteToPQ(DEFAULT_TOPIC_NAME, 1, "a", 1, "", "", ETransport::MsgBus, NMsgBusProxy::MSTATUS_ERROR);
         server.AnnoyingClient->WriteToPQ(DEFAULT_TOPIC_NAME, 1, "", 1, "a", "", ETransport::MsgBus, NMsgBusProxy::MSTATUS_ERROR);
@@ -1623,7 +1623,7 @@ namespace {
         auto pqLib = TPQLib::WithCerrLogger();
 
         // Write nonempty data
-        NKikimr::NPersQueueTests::TRequestWritePQ writeReq(DEFAULT_TOPIC_NAME, 0, "src", 4);
+        NKikimr::NPersQueueTests::TRequestWritePQ writeReq(DEFAULT_TOPIC_NAME, 0, "src", 4); 
 
         auto write = [&](const TString& data, bool empty = false) {
             NKikimrPQClient::TDataChunk dataChunk;
@@ -1643,10 +1643,10 @@ namespace {
             write("data3");
         }
 
-        ui32 maxCount = 1;
-        bool unpack = false;
-        ui32 maxInflyRequests = 1;
-        ui32 maxMemoryUsage = 1;
+        ui32 maxCount = 1; 
+        bool unpack = false; 
+        ui32 maxInflyRequests = 1; 
+        ui32 maxMemoryUsage = 1; 
         auto [consumer, ccResult] = CreateConsumer(
                 pqLib, server.GrpcPort, "user", {SHORT_TOPIC_NAME, {}},
                 maxCount, unpack, {}, maxInflyRequests, maxMemoryUsage
@@ -1707,10 +1707,10 @@ namespace {
         auto f = producer->Write(1,  TString(1024, 'a'));
         f.Wait();
 
-        ui32 maxCount = 1;
-        bool unpack = false;
+        ui32 maxCount = 1; 
+        bool unpack = false; 
         auto [consumer, ccResult] = CreateConsumer(pqLib, server.GrpcPort, "user", {SHORT_TOPIC_NAME, {}}, maxCount, unpack);
-        Cerr << ccResult.Response << "\n";
+        Cerr << ccResult.Response << "\n"; 
 
         auto msg = consumer->GetNextMessage();
         msg.Wait();
@@ -1743,7 +1743,7 @@ namespace {
 
         {
             auto [producer, pcResult] = CreateProducer(pqLib, server.GrpcPort, "aaa/bbb/ccc/topic", "123");
-            UNIT_ASSERT_C(pcResult.Response.server_message_case() == StreamingWriteServerMessage::kInitResponse, pcResult.Response);
+            UNIT_ASSERT_C(pcResult.Response.server_message_case() == StreamingWriteServerMessage::kInitResponse, pcResult.Response); 
             for (ui32 i = 1; i <= 11; ++i) {
                 auto f = producer->Write(i,  TString(10, 'a'));
                 f.Wait();
@@ -1751,8 +1751,8 @@ namespace {
             }
         }
 
-        ui32 maxCount = 1;
-        bool unpack = false;
+        ui32 maxCount = 1; 
+        bool unpack = false; 
         auto [consumer, ccResult] = CreateConsumer(pqLib, server.GrpcPort, "user", {"aaa/bbb/ccc/topic", {}}, maxCount, unpack);
         UNIT_ASSERT_C(ccResult.Response.response_case() == MigrationStreamingReadServerMessage::kInitResponse, ccResult.Response);
 
@@ -1773,11 +1773,11 @@ namespace {
         TPQDataWriter writer("source", server);
 
         for (ui32 i = 1; i <= 3; ++i) {
-            TString sourceId = "123" + ToString<int>(i);
-            ui32 partitionGroup = i;
+            TString sourceId = "123" + ToString<int>(i); 
+            ui32 partitionGroup = i; 
             auto [producer, pcResult] = CreateProducer(pqLib, server.GrpcPort, SHORT_TOPIC_NAME, sourceId, partitionGroup);
 
-            UNIT_ASSERT(pcResult.Response.server_message_case() == StreamingWriteServerMessage::kInitResponse);
+            UNIT_ASSERT(pcResult.Response.server_message_case() == StreamingWriteServerMessage::kInitResponse); 
             auto f = producer->Write(i,  TString(10, 'a'));
             f.Wait();
         }
@@ -1791,7 +1791,7 @@ namespace {
         ss.Unpack = false;
 
         auto [consumer, ccResult] = CreateConsumer(pqLib, ss);
-        Cerr << ccResult.Response << "\n";
+        Cerr << ccResult.Response << "\n"; 
 
         for (ui32 i = 1; i <= 3; ++i) {
             auto msg = consumer->GetNextMessage();
@@ -1803,7 +1803,7 @@ namespace {
         }
 
         auto [consumer2, ccResult2] = CreateConsumer(pqLib, ss);
-        Cerr << ccResult2.Response << "\n";
+        Cerr << ccResult2.Response << "\n"; 
 
         auto msg = consumer->GetNextMessage();
         auto msg2 = consumer2->GetNextMessage();
@@ -1838,12 +1838,12 @@ namespace {
         TVector<std::pair<ui64, ui64>> cookies;
 
         for (ui32 i = 1; i <= 3; ++i) {
-            TString sourceId = "123" + ToString<int>(i);
-            ui32 partitionGroup = i;
+            TString sourceId = "123" + ToString<int>(i); 
+            ui32 partitionGroup = i; 
 
             auto [producer, pcResult] = CreateProducer(pqLib, server.GrpcPort, SHORT_TOPIC_NAME, sourceId, partitionGroup);
             Cerr << "===Response: " << pcResult.Response << Endl;
-            UNIT_ASSERT(pcResult.Response.server_message_case() == StreamingWriteServerMessage::kInitResponse);
+            UNIT_ASSERT(pcResult.Response.server_message_case() == StreamingWriteServerMessage::kInitResponse); 
             auto f = producer->Write(i,  TString(10, 'a'));
             f.Wait();
         }
@@ -1857,7 +1857,7 @@ namespace {
         ss.Unpack = false;
 
         auto [consumer, ccResult] = CreateConsumer(pqLib, ss);
-        Cerr << ccResult.Response << "\n";
+        Cerr << ccResult.Response << "\n"; 
 
         for (ui32 i = 1; i <= 3; ++i) {
             auto msg = GetNextMessageSkipAssignment(consumer);
@@ -1869,7 +1869,7 @@ namespace {
         }
 
         auto [consumer2, ccResult2] = CreateConsumer(pqLib, ss);
-        Cerr << ccResult2.Response << "\n";
+        Cerr << ccResult2.Response << "\n"; 
 
         auto msg = consumer->GetNextMessage();
         auto msg2 = consumer2->GetNextMessage();
@@ -1910,7 +1910,7 @@ namespace {
         ss.Unpack = false;
 
         auto [consumer, ccResult] = CreateConsumer(pqLib, ss);
-        Cerr << ccResult.Response << "\n";
+        Cerr << ccResult.Response << "\n"; 
 
         auto msg = consumer->GetNextMessage();
         msg.Wait();
@@ -1925,7 +1925,7 @@ namespace {
         THolder<IConsumer> consumer2;
         do {
             std::tie(consumer2, ccResult) = CreateConsumer(pqLib, ss);
-            Cerr << ccResult.Response << "\n";
+            Cerr << ccResult.Response << "\n"; 
         } while(!msg.Wait(TDuration::Seconds(1)));
 
         Cerr << msg.GetValue().Response << "\n";
@@ -2015,96 +2015,96 @@ namespace {
         } while (count < 100);
     }
 
-    Y_UNIT_TEST(TestReadQuotasSimple) {
-        TRateLimiterTestSetup setup(NKikimrPQ::TPQConfig::TQuotingConfig::USER_PAYLOAD_SIZE, 1000, 1000, true);
+    Y_UNIT_TEST(TestReadQuotasSimple) { 
+        TRateLimiterTestSetup setup(NKikimrPQ::TPQConfig::TQuotingConfig::USER_PAYLOAD_SIZE, 1000, 1000, true); 
 
-        const TString topicPath = "acc/topic1";
-        const TString consumerPath = "acc2/reader1";
-        setup.CreateTopic(topicPath);
-        setup.CreateConsumer(consumerPath);
-
-        THolder<IProducer> producer = setup.StartProducer(topicPath, true);
-
+        const TString topicPath = "acc/topic1"; 
+        const TString consumerPath = "acc2/reader1"; 
+        setup.CreateTopic(topicPath); 
+        setup.CreateConsumer(consumerPath); 
+ 
+        THolder<IProducer> producer = setup.StartProducer(topicPath, true); 
+ 
         auto pqLib = TPQLib::WithCerrLogger();
 
         auto [consumer, ccResult] = CreateConsumer(
                 pqLib, setup.GetGrpcPort(), consumerPath, {topicPath , {}}, 1000, false
         );
-        Cerr << ccResult.Response << "\n";
-
-        {
-            auto msg = consumer->GetNextMessage();
-            msg.Wait();
+        Cerr << ccResult.Response << "\n"; 
+ 
+        { 
+            auto msg = consumer->GetNextMessage(); 
+            msg.Wait(); 
             Cerr << "consumer assign response: " << msg.GetValue().Response << "\n";
-            UNIT_ASSERT(msg.GetValue().Type == EMT_ASSIGNED);
-            msg.GetValue().StartRead.SetValue(TAssignInfo());
-        }
-
-        TVector<NThreading::TFuture<Ydb::PersQueue::TProducerCommitResponse>> writeResults;
-        TVector<NThreading::TFuture<Ydb::PersQueue::TConsumerMessage>> readResults;
-
-        for (ui32 readBatches = 0; readBatches < 10; ++readBatches) {
-            auto msg = consumer->GetNextMessage();
-            while (!msg.HasValue()) {
-                producer->Write(TString(std::string(10000, 'A')));
-                Sleep(TDuration::MilliSeconds(10));
-            }
-            const auto& response = msg.GetValue().Response;
-            Cerr << "next read response: " << response << "\n";
-
-            for (auto& data : response.data_batch().partition_data()) {
-                for (auto& batch : data.batches()) {
-                    UNIT_ASSERT(batch.message_data_size() > 0);
-                }
-            }
-        }
-    }
-
-    Y_UNIT_TEST(TestReadWithQuoterWithoutResources) {
+            UNIT_ASSERT(msg.GetValue().Type == EMT_ASSIGNED); 
+            msg.GetValue().StartRead.SetValue(TAssignInfo()); 
+        } 
+ 
+        TVector<NThreading::TFuture<Ydb::PersQueue::TProducerCommitResponse>> writeResults; 
+        TVector<NThreading::TFuture<Ydb::PersQueue::TConsumerMessage>> readResults; 
+ 
+        for (ui32 readBatches = 0; readBatches < 10; ++readBatches) { 
+            auto msg = consumer->GetNextMessage(); 
+            while (!msg.HasValue()) { 
+                producer->Write(TString(std::string(10000, 'A'))); 
+                Sleep(TDuration::MilliSeconds(10)); 
+            } 
+            const auto& response = msg.GetValue().Response; 
+            Cerr << "next read response: " << response << "\n"; 
+ 
+            for (auto& data : response.data_batch().partition_data()) { 
+                for (auto& batch : data.batches()) { 
+                    UNIT_ASSERT(batch.message_data_size() > 0); 
+                } 
+            } 
+        } 
+    } 
+ 
+    Y_UNIT_TEST(TestReadWithQuoterWithoutResources) { 
         if (NSan::ASanIsOn()) {
             return;
         }
-        TRateLimiterTestSetup setup(NKikimrPQ::TPQConfig::TQuotingConfig::USER_PAYLOAD_SIZE, 1000, 1000, true);
-
-        const TString topicPath = "acc/topic1";
-        const TString consumerPath = "acc2/reader1"; // don't create kesus resources
-        setup.CreateTopic(topicPath);
-
-        THolder<IProducer> producer = setup.StartProducer(topicPath, true);
-
-        TPQLibSettings pqLibSettings({ .DefaultLogger = new TCerrLogger(DEBUG_LOG_LEVEL) });
-        TPQLib PQLib(pqLibSettings);
-        auto [consumer, ccResult] = CreateConsumer(PQLib, setup.GetGrpcPort(), consumerPath, {topicPath , {}}, 1000, false);
-        Cerr << ccResult.Response << "\n";
-
-        {
-            auto msg = consumer->GetNextMessage();
-            msg.Wait();
-            Cerr << "consumer assign  response: " << msg.GetValue().Response << "\n";
-            UNIT_ASSERT(msg.GetValue().Type == EMT_ASSIGNED);
-            msg.GetValue().StartRead.SetValue(TAssignInfo());
-        }
-
-        TVector<NThreading::TFuture<Ydb::PersQueue::TProducerCommitResponse>> writeResults;
-        TVector<NThreading::TFuture<Ydb::PersQueue::TConsumerMessage>> readResults;
-
-        for (ui32 readBatches = 0; readBatches < 10; ++readBatches) {
-            auto msg = consumer->GetNextMessage();
-            while (!msg.HasValue()) {
-                producer->Write(TString(std::string(10000, 'A')));
-                Sleep(TDuration::MilliSeconds(10));
-            }
-            const auto& response = msg.GetValue().Response;
-            Cerr << "next read response: " << response << "\n";
-
-            for (auto& data : response.data_batch().partition_data()) {
-                for (auto& batch : data.batches()) {
-                    UNIT_ASSERT(batch.message_data_size() > 0);
-                }
-            }
-        }
-    }
-
+        TRateLimiterTestSetup setup(NKikimrPQ::TPQConfig::TQuotingConfig::USER_PAYLOAD_SIZE, 1000, 1000, true); 
+ 
+        const TString topicPath = "acc/topic1"; 
+        const TString consumerPath = "acc2/reader1"; // don't create kesus resources 
+        setup.CreateTopic(topicPath); 
+ 
+        THolder<IProducer> producer = setup.StartProducer(topicPath, true); 
+ 
+        TPQLibSettings pqLibSettings({ .DefaultLogger = new TCerrLogger(DEBUG_LOG_LEVEL) }); 
+        TPQLib PQLib(pqLibSettings); 
+        auto [consumer, ccResult] = CreateConsumer(PQLib, setup.GetGrpcPort(), consumerPath, {topicPath , {}}, 1000, false); 
+        Cerr << ccResult.Response << "\n"; 
+ 
+        { 
+            auto msg = consumer->GetNextMessage(); 
+            msg.Wait(); 
+            Cerr << "consumer assign  response: " << msg.GetValue().Response << "\n"; 
+            UNIT_ASSERT(msg.GetValue().Type == EMT_ASSIGNED); 
+            msg.GetValue().StartRead.SetValue(TAssignInfo()); 
+        } 
+ 
+        TVector<NThreading::TFuture<Ydb::PersQueue::TProducerCommitResponse>> writeResults; 
+        TVector<NThreading::TFuture<Ydb::PersQueue::TConsumerMessage>> readResults; 
+ 
+        for (ui32 readBatches = 0; readBatches < 10; ++readBatches) { 
+            auto msg = consumer->GetNextMessage(); 
+            while (!msg.HasValue()) { 
+                producer->Write(TString(std::string(10000, 'A'))); 
+                Sleep(TDuration::MilliSeconds(10)); 
+            } 
+            const auto& response = msg.GetValue().Response; 
+            Cerr << "next read response: " << response << "\n"; 
+ 
+            for (auto& data : response.data_batch().partition_data()) { 
+                for (auto& batch : data.batches()) { 
+                    UNIT_ASSERT(batch.message_data_size() > 0); 
+                } 
+            } 
+        } 
+    } 
+ 
     Y_UNIT_TEST(TestDeletionOfTopic) {
         if (NSan::ASanIsOn()) {
             return;
@@ -2118,8 +2118,8 @@ namespace {
         server.AnnoyingClient->DeleteTopic2(DEFAULT_TOPIC_NAME, NPersQueue::NErrorCode::OK, false);
         auto pqLib = TPQLib::WithCerrLogger();
 
-        ui32 maxCount = 1;
-        bool unpack = false;
+        ui32 maxCount = 1; 
+        bool unpack = false; 
         auto [consumer, ccResult] = CreateConsumer(pqLib, server.GrpcPort, "user", {SHORT_TOPIC_NAME, {}}, maxCount, unpack);
         Cerr << "Consumer create response: " << ccResult.Response << "\n";
 
@@ -2375,10 +2375,10 @@ namespace {
             auto props = request.mutable_settings();
             props->set_partitions_count(1);
             props->set_supported_format(Ydb::PersQueue::V1::TopicSettings::FORMAT_BASE);
-            props->set_retention_period_ms(TDuration::Days(1).MilliSeconds());
-            props->set_max_partition_storage_size(1000);
-            props->set_max_partition_write_speed(1000);
-            props->set_max_partition_write_burst(1000);
+            props->set_retention_period_ms(TDuration::Days(1).MilliSeconds()); 
+            props->set_max_partition_storage_size(1000); 
+            props->set_max_partition_write_speed(1000); 
+            props->set_max_partition_write_burst(1000); 
             grpc::ClientContext rcontext;
             rcontext.AddMetadata("x-ydb-auth-ticket", "user@" BUILTIN_ACL_DOMAIN);
 
@@ -2405,10 +2405,10 @@ namespace {
             auto props = request.mutable_settings();
             props->set_partitions_count(2);
             props->set_supported_format(Ydb::PersQueue::V1::TopicSettings::FORMAT_BASE);
-            props->set_retention_period_ms(TDuration::Days(1).MilliSeconds());
-            props->set_max_partition_storage_size(1000);
-            props->set_max_partition_write_speed(1000);
-            props->set_max_partition_write_burst(1000);
+            props->set_retention_period_ms(TDuration::Days(1).MilliSeconds()); 
+            props->set_max_partition_storage_size(1000); 
+            props->set_max_partition_write_speed(1000); 
+            props->set_max_partition_write_burst(1000); 
 
             grpc::ClientContext rcontext;
 
@@ -2444,10 +2444,10 @@ namespace {
         auto props = request.mutable_settings();
         props->set_partitions_count(1);
         props->set_supported_format(Ydb::PersQueue::V1::TopicSettings::FORMAT_BASE);
-        props->set_retention_period_ms(TDuration::Days(1).MilliSeconds());
-        props->set_max_partition_storage_size(1000);
-        props->set_max_partition_write_speed(1000);
-        props->set_max_partition_write_burst(1000);
+        props->set_retention_period_ms(TDuration::Days(1).MilliSeconds()); 
+        props->set_max_partition_storage_size(1000); 
+        props->set_max_partition_write_speed(1000); 
+        props->set_max_partition_write_burst(1000); 
         alter(request, Ydb::StatusIds::UNAUTHORIZED, true);
         alter(request, Ydb::StatusIds::GENERIC_ERROR, false);
         props->set_partitions_count(3);
@@ -2492,7 +2492,7 @@ namespace {
     PartitionConfig {
       MaxCountInPartition: 2147483647
       MaxSizeInPartition: 234
-      LifetimeSeconds: 86400
+      LifetimeSeconds: 86400 
       ImportantClientId: "consumer"
       SourceIdLifetimeSeconds: 1382400
       WriteSpeedInBytesPerSecond: 123
@@ -2553,7 +2553,7 @@ namespace {
       Codecs: "lzop"
       Codecs: "gzip"
     }
-    ReadRuleServiceTypes: "data-transfer"
+    ReadRuleServiceTypes: "data-transfer" 
     FormatVersion: 0
     Codecs {
       Ids: 0
@@ -2582,7 +2582,7 @@ namespace {
             DescribeTopicResult res;
             response.operation().result().UnpackTo(&res);
             Cerr << response << "\n" << res << "\n";
-            UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SCHEME_ERROR); // muts be Ydb::StatusIds::UNAUTHORIZED);
+            UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SCHEME_ERROR); // muts be Ydb::StatusIds::UNAUTHORIZED); 
         }
 
         {
@@ -2684,226 +2684,226 @@ namespace {
 
     }
 
-
-    Y_UNIT_TEST(SchemeOperationsCheckPropValues) {
+ 
+    Y_UNIT_TEST(SchemeOperationsCheckPropValues) { 
         NPersQueue::TTestServer server;
         server.EnableLogs({ NKikimrServices::PQ_READ_PROXY, NKikimrServices::BLACKBOX_VALIDATOR });
-
+ 
         server.AnnoyingClient->CreateTopic("rt3.dc1--acc--topic1", 1);
         server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 1);
         server.AnnoyingClient->CreateConsumer("user");
-
-        std::shared_ptr<grpc::Channel> Channel_;
-        std::unique_ptr<Ydb::PersQueue::V1::PersQueueService::Stub> StubP_;
-
-        {
+ 
+        std::shared_ptr<grpc::Channel> Channel_; 
+        std::unique_ptr<Ydb::PersQueue::V1::PersQueueService::Stub> StubP_; 
+ 
+        { 
             Channel_ = grpc::CreateChannel("localhost:" + ToString(server.GrpcPort), grpc::InsecureChannelCredentials());
-            StubP_ = Ydb::PersQueue::V1::PersQueueService::NewStub(Channel_);
-        }
-
-        {
-            // zero value is forbidden for: partitions_count
-            CreateTopicRequest request;
-            CreateTopicResponse response;
-            request.set_path("/Root/PQ/rt3.dc1--acc--topic1");
-            auto props = request.mutable_settings();
-            props->set_partitions_count(0);
-            props->set_supported_format(Ydb::PersQueue::V1::TopicSettings::FORMAT_BASE);
-            props->set_retention_period_ms(TDuration::Days(1).MilliSeconds());
-
-            grpc::ClientContext rcontext;
-            auto status = StubP_->CreateTopic(&rcontext, request, &response);
-
-            UNIT_ASSERT(status.ok());
-            CreateTopicResult res;
-            response.operation().result().UnpackTo(&res);
-            Cerr << response << "\n" << res << "\n";
-            UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::BAD_REQUEST);
-        }
-        {
-            // zero value is forbidden for: retention_period_ms
-            CreateTopicRequest request;
-            CreateTopicResponse response;
-            request.set_path("/Root/PQ/rt3.dc1--acc--topic1");
-            auto props = request.mutable_settings();
-            props->set_partitions_count(1);
-            props->set_supported_format(Ydb::PersQueue::V1::TopicSettings::FORMAT_BASE);
-            props->set_retention_period_ms(0);
-
-            grpc::ClientContext rcontext;
-            auto status = StubP_->CreateTopic(&rcontext, request, &response);
-
-            UNIT_ASSERT(status.ok());
-            CreateTopicResult res;
-            response.operation().result().UnpackTo(&res);
-            Cerr << response << "\n" << res << "\n";
-            UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::BAD_REQUEST);
-        }
-        {
-            // zero value is allowed for: partition_storage_size, max_partition_write_speed, max_partition_write_burst
-            CreateTopicRequest request;
-            CreateTopicResponse response;
-            request.set_path("/Root/PQ/rt3.dc1--acc--topic1");
-            auto props = request.mutable_settings();
-            props->set_partitions_count(1);
-            props->set_supported_format(Ydb::PersQueue::V1::TopicSettings::FORMAT_BASE);
-            props->set_retention_period_ms(TDuration::Days(1).MilliSeconds());
-            props->set_max_partition_storage_size(0);
-            props->set_max_partition_write_speed(0);
-            props->set_max_partition_write_burst(0);
-
-            grpc::ClientContext rcontext;
-            auto status = StubP_->CreateTopic(&rcontext, request, &response);
-
-            UNIT_ASSERT(status.ok());
-            CreateTopicResult res;
-            response.operation().result().UnpackTo(&res);
-            Cerr << response << "\n" << res << "\n";
-            UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SUCCESS);
-        }
-    }
-
-    Y_UNIT_TEST(ReadRuleServiceType) {
+            StubP_ = Ydb::PersQueue::V1::PersQueueService::NewStub(Channel_); 
+        } 
+ 
+        { 
+            // zero value is forbidden for: partitions_count 
+            CreateTopicRequest request; 
+            CreateTopicResponse response; 
+            request.set_path("/Root/PQ/rt3.dc1--acc--topic1"); 
+            auto props = request.mutable_settings(); 
+            props->set_partitions_count(0); 
+            props->set_supported_format(Ydb::PersQueue::V1::TopicSettings::FORMAT_BASE); 
+            props->set_retention_period_ms(TDuration::Days(1).MilliSeconds()); 
+ 
+            grpc::ClientContext rcontext; 
+            auto status = StubP_->CreateTopic(&rcontext, request, &response); 
+ 
+            UNIT_ASSERT(status.ok()); 
+            CreateTopicResult res; 
+            response.operation().result().UnpackTo(&res); 
+            Cerr << response << "\n" << res << "\n"; 
+            UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::BAD_REQUEST); 
+        } 
+        { 
+            // zero value is forbidden for: retention_period_ms 
+            CreateTopicRequest request; 
+            CreateTopicResponse response; 
+            request.set_path("/Root/PQ/rt3.dc1--acc--topic1"); 
+            auto props = request.mutable_settings(); 
+            props->set_partitions_count(1); 
+            props->set_supported_format(Ydb::PersQueue::V1::TopicSettings::FORMAT_BASE); 
+            props->set_retention_period_ms(0); 
+ 
+            grpc::ClientContext rcontext; 
+            auto status = StubP_->CreateTopic(&rcontext, request, &response); 
+ 
+            UNIT_ASSERT(status.ok()); 
+            CreateTopicResult res; 
+            response.operation().result().UnpackTo(&res); 
+            Cerr << response << "\n" << res << "\n"; 
+            UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::BAD_REQUEST); 
+        } 
+        { 
+            // zero value is allowed for: partition_storage_size, max_partition_write_speed, max_partition_write_burst 
+            CreateTopicRequest request; 
+            CreateTopicResponse response; 
+            request.set_path("/Root/PQ/rt3.dc1--acc--topic1"); 
+            auto props = request.mutable_settings(); 
+            props->set_partitions_count(1); 
+            props->set_supported_format(Ydb::PersQueue::V1::TopicSettings::FORMAT_BASE); 
+            props->set_retention_period_ms(TDuration::Days(1).MilliSeconds()); 
+            props->set_max_partition_storage_size(0); 
+            props->set_max_partition_write_speed(0); 
+            props->set_max_partition_write_burst(0); 
+ 
+            grpc::ClientContext rcontext; 
+            auto status = StubP_->CreateTopic(&rcontext, request, &response); 
+ 
+            UNIT_ASSERT(status.ok()); 
+            CreateTopicResult res; 
+            response.operation().result().UnpackTo(&res); 
+            Cerr << response << "\n" << res << "\n"; 
+            UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SUCCESS); 
+        } 
+    } 
+ 
+    Y_UNIT_TEST(ReadRuleServiceType) { 
         TServerSettings settings = PQSettings(0);
-        {
-            settings.PQConfig.AddClientServiceType()->SetName("MyGreatType");
-            settings.PQConfig.AddClientServiceType()->SetName("AnotherType");
-            settings.PQConfig.AddClientServiceType()->SetName("SecondType");
-        }
+        { 
+            settings.PQConfig.AddClientServiceType()->SetName("MyGreatType"); 
+            settings.PQConfig.AddClientServiceType()->SetName("AnotherType"); 
+            settings.PQConfig.AddClientServiceType()->SetName("SecondType"); 
+        } 
         NPersQueue::TTestServer server(settings);
         server.EnableLogs({ NKikimrServices::PQ_READ_PROXY, NKikimrServices::BLACKBOX_VALIDATOR });
-
-        std::unique_ptr<Ydb::PersQueue::V1::PersQueueService::Stub> pqStub;
-
-        {
+ 
+        std::unique_ptr<Ydb::PersQueue::V1::PersQueueService::Stub> pqStub; 
+ 
+        { 
             std::shared_ptr<grpc::Channel> channel = grpc::CreateChannel("localhost:" + ToString(server.GrpcPort), grpc::InsecureChannelCredentials());
-            pqStub = Ydb::PersQueue::V1::PersQueueService::NewStub(channel);
-        }
-        auto checkDescribe = [&](const TVector<std::pair<TString, TString>>& readRules) {
-            DescribeTopicRequest request;
-            DescribeTopicResponse response;
-            request.set_path("/Root/PQ/rt3.dc1--acc--some-topic");
-            grpc::ClientContext rcontext;
+            pqStub = Ydb::PersQueue::V1::PersQueueService::NewStub(channel); 
+        } 
+        auto checkDescribe = [&](const TVector<std::pair<TString, TString>>& readRules) { 
+            DescribeTopicRequest request; 
+            DescribeTopicResponse response; 
+            request.set_path("/Root/PQ/rt3.dc1--acc--some-topic"); 
+            grpc::ClientContext rcontext; 
+ 
+            auto status = pqStub->DescribeTopic(&rcontext, request, &response); 
+            UNIT_ASSERT(status.ok()); 
+            DescribeTopicResult res; 
+            response.operation().result().UnpackTo(&res); 
+            Cerr << response << "\n" << res << "\n"; 
+            UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SUCCESS); 
+ 
+            UNIT_ASSERT_VALUES_EQUAL(res.settings().read_rules().size(), readRules.size()); 
+            for (ui64 i = 0; i < readRules.size(); ++i) { 
+                const auto& rr = res.settings().read_rules(i); 
+                UNIT_ASSERT_EQUAL(rr.consumer_name(), readRules[i].first); 
+                UNIT_ASSERT_EQUAL(rr.service_type(), readRules[i].second); 
+            } 
+        }; 
+        { 
+            CreateTopicRequest request; 
+            CreateTopicResponse response; 
+            request.set_path("/Root/PQ/rt3.dc1--acc--some-topic"); 
+            auto props = request.mutable_settings(); 
+            props->set_partitions_count(1); 
+            props->set_supported_format(Ydb::PersQueue::V1::TopicSettings::FORMAT_BASE); 
+            props->set_retention_period_ms(TDuration::Days(1).MilliSeconds()); 
+            { 
+                auto rr = props->add_read_rules(); 
+                rr->set_supported_format(Ydb::PersQueue::V1::TopicSettings::Format(1)); 
+                rr->set_consumer_name("acc/consumer1"); 
+            } 
+            { 
+                auto rr = props->add_read_rules(); 
+                rr->set_supported_format(Ydb::PersQueue::V1::TopicSettings::Format(1)); 
+                rr->set_consumer_name("acc/consumer2"); 
+                rr->set_service_type("MyGreatType"); 
+            } 
+ 
+            grpc::ClientContext rcontext; 
+            auto status = pqStub->CreateTopic(&rcontext, request, &response); 
+ 
+            UNIT_ASSERT(status.ok()); 
+            CreateTopicResult res; 
+            response.operation().result().UnpackTo(&res); 
+            Cerr << response << "\n" << res << "\n"; 
+            UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SUCCESS); 
+        } 
+        checkDescribe({ 
+            {"acc/consumer1", "data-transfer"}, 
+            {"acc/consumer2", "MyGreatType"} 
+        }); 
+        { 
+            AlterTopicRequest request; 
+            AlterTopicResponse response; 
+            request.set_path("/Root/PQ/rt3.dc1--acc--some-topic"); 
+            auto props = request.mutable_settings(); 
+            props->set_partitions_count(1); 
+            props->set_supported_format(Ydb::PersQueue::V1::TopicSettings::FORMAT_BASE); 
+            props->set_retention_period_ms(TDuration::Days(1).MilliSeconds()); 
+            { 
+                auto rr = props->add_read_rules(); 
+                rr->set_supported_format(Ydb::PersQueue::V1::TopicSettings::Format(1)); 
+                rr->set_consumer_name("acc/consumer1"); 
+            } 
+            { 
+                auto rr = props->add_read_rules(); 
+                rr->set_supported_format(Ydb::PersQueue::V1::TopicSettings::Format(1)); 
+                rr->set_consumer_name("acc/consumer2"); 
+                rr->set_service_type("AnotherType"); 
+            } 
+            { 
+                auto rr = props->add_read_rules(); 
+                rr->set_supported_format(Ydb::PersQueue::V1::TopicSettings::Format(1)); 
+                rr->set_consumer_name("acc/consumer3"); 
+                rr->set_service_type("SecondType"); 
+            } 
+ 
+            grpc::ClientContext rcontext; 
+            auto status = pqStub->AlterTopic(&rcontext, request, &response); 
+ 
+            UNIT_ASSERT(status.ok()); 
+            CreateTopicResult res; 
+            response.operation().result().UnpackTo(&res); 
+            Cerr << response << "\n" << res << "\n"; 
+            UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SUCCESS); 
+        } 
+        checkDescribe({ 
+            {"acc/consumer1", "data-transfer"}, 
+            {"acc/consumer2", "AnotherType"}, 
+            {"acc/consumer3", "SecondType"} 
+        }); 
 
-            auto status = pqStub->DescribeTopic(&rcontext, request, &response);
-            UNIT_ASSERT(status.ok());
-            DescribeTopicResult res;
-            response.operation().result().UnpackTo(&res);
-            Cerr << response << "\n" << res << "\n";
-            UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SUCCESS);
-
-            UNIT_ASSERT_VALUES_EQUAL(res.settings().read_rules().size(), readRules.size());
-            for (ui64 i = 0; i < readRules.size(); ++i) {
-                const auto& rr = res.settings().read_rules(i);
-                UNIT_ASSERT_EQUAL(rr.consumer_name(), readRules[i].first);
-                UNIT_ASSERT_EQUAL(rr.service_type(), readRules[i].second);
-            }
-        };
-        {
-            CreateTopicRequest request;
-            CreateTopicResponse response;
-            request.set_path("/Root/PQ/rt3.dc1--acc--some-topic");
-            auto props = request.mutable_settings();
-            props->set_partitions_count(1);
-            props->set_supported_format(Ydb::PersQueue::V1::TopicSettings::FORMAT_BASE);
-            props->set_retention_period_ms(TDuration::Days(1).MilliSeconds());
-            {
-                auto rr = props->add_read_rules();
-                rr->set_supported_format(Ydb::PersQueue::V1::TopicSettings::Format(1));
-                rr->set_consumer_name("acc/consumer1");
-            }
-            {
-                auto rr = props->add_read_rules();
-                rr->set_supported_format(Ydb::PersQueue::V1::TopicSettings::Format(1));
-                rr->set_consumer_name("acc/consumer2");
-                rr->set_service_type("MyGreatType");
-            }
-
-            grpc::ClientContext rcontext;
-            auto status = pqStub->CreateTopic(&rcontext, request, &response);
-
-            UNIT_ASSERT(status.ok());
-            CreateTopicResult res;
-            response.operation().result().UnpackTo(&res);
-            Cerr << response << "\n" << res << "\n";
-            UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SUCCESS);
-        }
-        checkDescribe({
-            {"acc/consumer1", "data-transfer"},
-            {"acc/consumer2", "MyGreatType"}
-        });
-        {
-            AlterTopicRequest request;
-            AlterTopicResponse response;
-            request.set_path("/Root/PQ/rt3.dc1--acc--some-topic");
-            auto props = request.mutable_settings();
-            props->set_partitions_count(1);
-            props->set_supported_format(Ydb::PersQueue::V1::TopicSettings::FORMAT_BASE);
-            props->set_retention_period_ms(TDuration::Days(1).MilliSeconds());
-            {
-                auto rr = props->add_read_rules();
-                rr->set_supported_format(Ydb::PersQueue::V1::TopicSettings::Format(1));
-                rr->set_consumer_name("acc/consumer1");
-            }
-            {
-                auto rr = props->add_read_rules();
-                rr->set_supported_format(Ydb::PersQueue::V1::TopicSettings::Format(1));
-                rr->set_consumer_name("acc/consumer2");
-                rr->set_service_type("AnotherType");
-            }
-            {
-                auto rr = props->add_read_rules();
-                rr->set_supported_format(Ydb::PersQueue::V1::TopicSettings::Format(1));
-                rr->set_consumer_name("acc/consumer3");
-                rr->set_service_type("SecondType");
-            }
-
-            grpc::ClientContext rcontext;
-            auto status = pqStub->AlterTopic(&rcontext, request, &response);
-
-            UNIT_ASSERT(status.ok());
-            CreateTopicResult res;
-            response.operation().result().UnpackTo(&res);
-            Cerr << response << "\n" << res << "\n";
-            UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SUCCESS);
-        }
-        checkDescribe({
-            {"acc/consumer1", "data-transfer"},
-            {"acc/consumer2", "AnotherType"},
-            {"acc/consumer3", "SecondType"}
-        });
-
-        {
-            AlterTopicRequest request;
-            AlterTopicResponse response;
-            request.set_path("/Root/PQ/rt3.dc1--acc--some-topic");
-            auto props = request.mutable_settings();
-            props->set_partitions_count(1);
-            props->set_supported_format(Ydb::PersQueue::V1::TopicSettings::FORMAT_BASE);
-            props->set_retention_period_ms(TDuration::Days(1).MilliSeconds());
-            {
-                auto rr = props->add_read_rules();
-                rr->set_supported_format(Ydb::PersQueue::V1::TopicSettings::Format(1));
-                rr->set_consumer_name("acc/consumer1");
-                rr->set_service_type("BadServiceType");
-            }
-
-            grpc::ClientContext rcontext;
-            auto status = pqStub->AlterTopic(&rcontext, request, &response);
-
-            UNIT_ASSERT(status.ok());
-            CreateTopicResult res;
-            response.operation().result().UnpackTo(&res);
-            Cerr << response << "\n" << res << "\n";
-            UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::BAD_REQUEST);
-        }
-        checkDescribe({
-            {"acc/consumer1", "data-transfer"},
-            {"acc/consumer2", "AnotherType"},
-            {"acc/consumer3", "SecondType"}
-        });
-    }
-
+        { 
+            AlterTopicRequest request; 
+            AlterTopicResponse response; 
+            request.set_path("/Root/PQ/rt3.dc1--acc--some-topic"); 
+            auto props = request.mutable_settings(); 
+            props->set_partitions_count(1); 
+            props->set_supported_format(Ydb::PersQueue::V1::TopicSettings::FORMAT_BASE); 
+            props->set_retention_period_ms(TDuration::Days(1).MilliSeconds()); 
+            { 
+                auto rr = props->add_read_rules(); 
+                rr->set_supported_format(Ydb::PersQueue::V1::TopicSettings::Format(1)); 
+                rr->set_consumer_name("acc/consumer1"); 
+                rr->set_service_type("BadServiceType"); 
+            } 
+ 
+            grpc::ClientContext rcontext; 
+            auto status = pqStub->AlterTopic(&rcontext, request, &response); 
+ 
+            UNIT_ASSERT(status.ok()); 
+            CreateTopicResult res; 
+            response.operation().result().UnpackTo(&res); 
+            Cerr << response << "\n" << res << "\n"; 
+            UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::BAD_REQUEST); 
+        } 
+        checkDescribe({ 
+            {"acc/consumer1", "data-transfer"}, 
+            {"acc/consumer2", "AnotherType"}, 
+            {"acc/consumer3", "SecondType"} 
+        }); 
+    } 
+ 
 
     Y_UNIT_TEST(ReadRuleServiceTypeLimit) {
         TServerSettings settings = PQSettings(0);
@@ -3023,514 +3023,514 @@ namespace {
     }
 
 
-    Y_UNIT_TEST(ReadRuleDisallowDefaultServiceType) {
+    Y_UNIT_TEST(ReadRuleDisallowDefaultServiceType) { 
+        TServerSettings settings = PQSettings(0); 
+        { 
+            settings.PQConfig.AddClientServiceType()->SetName("MyGreatType"); 
+            settings.PQConfig.AddClientServiceType()->SetName("AnotherType"); 
+            settings.PQConfig.AddClientServiceType()->SetName("SecondType"); 
+            settings.PQConfig.SetDisallowDefaultClientServiceType(true); 
+        } 
+        NPersQueue::TTestServer server(settings); 
+        server.EnableLogs({ NKikimrServices::PQ_READ_PROXY, NKikimrServices::BLACKBOX_VALIDATOR }); 
+ 
+        std::unique_ptr<Ydb::PersQueue::V1::PersQueueService::Stub> pqStub; 
+ 
+        { 
+            std::shared_ptr<grpc::Channel> channel = grpc::CreateChannel("localhost:" + ToString(server.GrpcPort), grpc::InsecureChannelCredentials()); 
+            pqStub = Ydb::PersQueue::V1::PersQueueService::NewStub(channel); 
+        } 
+        auto checkDescribe = [&](const TVector<std::pair<TString, TString>>& readRules) { 
+            DescribeTopicRequest request; 
+            DescribeTopicResponse response; 
+            request.set_path("/Root/PQ/rt3.dc1--acc--some-topic"); 
+            grpc::ClientContext rcontext; 
+ 
+            auto status = pqStub->DescribeTopic(&rcontext, request, &response); 
+            UNIT_ASSERT(status.ok()); 
+            DescribeTopicResult res; 
+            response.operation().result().UnpackTo(&res); 
+            Cerr << response << "\n" << res << "\n"; 
+            UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SUCCESS); 
+ 
+            UNIT_ASSERT_VALUES_EQUAL(res.settings().read_rules().size(), readRules.size()); 
+            for (ui64 i = 0; i < readRules.size(); ++i) { 
+                const auto& rr = res.settings().read_rules(i); 
+                UNIT_ASSERT_EQUAL(rr.consumer_name(), readRules[i].first); 
+                UNIT_ASSERT_EQUAL(rr.service_type(), readRules[i].second); 
+            } 
+        }; 
+        { 
+            CreateTopicRequest request; 
+            CreateTopicResponse response; 
+            request.set_path("/Root/PQ/rt3.dc1--acc--some-topic"); 
+            auto props = request.mutable_settings(); 
+            props->set_partitions_count(1); 
+            props->set_supported_format(Ydb::PersQueue::V1::TopicSettings::FORMAT_BASE); 
+            props->set_retention_period_ms(TDuration::Days(1).MilliSeconds()); 
+            { 
+                auto rr = props->add_read_rules(); 
+                rr->set_supported_format(Ydb::PersQueue::V1::TopicSettings::Format(1)); 
+                rr->set_consumer_name("acc/consumer1"); 
+            } 
+ 
+            grpc::ClientContext rcontext; 
+            auto status = pqStub->CreateTopic(&rcontext, request, &response); 
+ 
+            UNIT_ASSERT(status.ok()); 
+            CreateTopicResult res; 
+            response.operation().result().UnpackTo(&res); 
+            Cerr << response << "\n" << res << "\n"; 
+            UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::BAD_REQUEST); 
+        } 
+        { 
+            CreateTopicRequest request; 
+            CreateTopicResponse response; 
+            request.set_path("/Root/PQ/rt3.dc1--acc--some-topic"); 
+            auto props = request.mutable_settings(); 
+            props->set_partitions_count(1); 
+            props->set_supported_format(Ydb::PersQueue::V1::TopicSettings::FORMAT_BASE); 
+            props->set_retention_period_ms(TDuration::Days(1).MilliSeconds()); 
+            { 
+                auto rr = props->add_read_rules(); 
+                rr->set_supported_format(Ydb::PersQueue::V1::TopicSettings::Format(1)); 
+                rr->set_consumer_name("acc/consumer1"); 
+                rr->set_service_type("MyGreatType"); 
+            } 
+ 
+            grpc::ClientContext rcontext; 
+            auto status = pqStub->CreateTopic(&rcontext, request, &response); 
+ 
+            UNIT_ASSERT(status.ok()); 
+            CreateTopicResult res; 
+            response.operation().result().UnpackTo(&res); 
+            Cerr << response << "\n" << res << "\n"; 
+            UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SUCCESS); 
+        } 
+        checkDescribe({{"acc/consumer1", "MyGreatType"}}); 
+        { 
+            AlterTopicRequest request; 
+            AlterTopicResponse response; 
+            request.set_path("/Root/PQ/rt3.dc1--acc--some-topic"); 
+            auto props = request.mutable_settings(); 
+            props->set_partitions_count(1); 
+            props->set_supported_format(Ydb::PersQueue::V1::TopicSettings::FORMAT_BASE); 
+            props->set_retention_period_ms(TDuration::Days(1).MilliSeconds()); 
+            { 
+                auto rr = props->add_read_rules(); 
+                rr->set_supported_format(Ydb::PersQueue::V1::TopicSettings::Format(1)); 
+                rr->set_consumer_name("acc/consumer1"); 
+            } 
+ 
+            grpc::ClientContext rcontext; 
+            auto status = pqStub->AlterTopic(&rcontext, request, &response); 
+ 
+            UNIT_ASSERT(status.ok()); 
+            CreateTopicResult res; 
+            response.operation().result().UnpackTo(&res); 
+            Cerr << response << "\n" << res << "\n"; 
+            UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::BAD_REQUEST); 
+        } 
+        checkDescribe({{"acc/consumer1", "MyGreatType"}}); 
+
+        { 
+            AlterTopicRequest request; 
+            AlterTopicResponse response; 
+            request.set_path("/Root/PQ/rt3.dc1--acc--some-topic"); 
+            auto props = request.mutable_settings(); 
+            props->set_partitions_count(1); 
+            props->set_supported_format(Ydb::PersQueue::V1::TopicSettings::FORMAT_BASE); 
+            props->set_retention_period_ms(TDuration::Days(1).MilliSeconds()); 
+            { 
+                auto rr = props->add_read_rules(); 
+                rr->set_supported_format(Ydb::PersQueue::V1::TopicSettings::Format(1)); 
+                rr->set_consumer_name("acc/consumer1"); 
+                rr->set_service_type("AnotherType"); 
+            } 
+            { 
+                auto rr = props->add_read_rules(); 
+                rr->set_supported_format(Ydb::PersQueue::V1::TopicSettings::Format(1)); 
+                rr->set_consumer_name("acc/consumer2"); 
+            } 
+ 
+            grpc::ClientContext rcontext; 
+            auto status = pqStub->AlterTopic(&rcontext, request, &response); 
+ 
+            UNIT_ASSERT(status.ok()); 
+            CreateTopicResult res; 
+            response.operation().result().UnpackTo(&res); 
+            Cerr << response << "\n" << res << "\n"; 
+            UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::BAD_REQUEST); 
+        } 
+        checkDescribe({{"acc/consumer1", "MyGreatType"}}); 
+    } 
+ 
+    Y_UNIT_TEST(ReadRuleServiceTypeMigration) { 
         TServerSettings settings = PQSettings(0);
-        {
-            settings.PQConfig.AddClientServiceType()->SetName("MyGreatType");
-            settings.PQConfig.AddClientServiceType()->SetName("AnotherType");
-            settings.PQConfig.AddClientServiceType()->SetName("SecondType");
-            settings.PQConfig.SetDisallowDefaultClientServiceType(true);
-        }
+        { 
+            settings.PQConfig.MutableDefaultClientServiceType()->SetName("default_type"); 
+            settings.PQConfig.AddClientServiceType()->SetName("MyGreatType"); 
+            settings.PQConfig.AddClientServiceType()->SetName("AnotherType"); 
+            settings.PQConfig.AddClientServiceType()->SetName("SecondType"); 
+        } 
         NPersQueue::TTestServer server(settings);
+ 
         server.EnableLogs({ NKikimrServices::PQ_READ_PROXY, NKikimrServices::BLACKBOX_VALIDATOR });
-
-        std::unique_ptr<Ydb::PersQueue::V1::PersQueueService::Stub> pqStub;
-
-        {
+ 
+        const ui32 topicsCount = 4; 
+        for (ui32 i = 1; i <= topicsCount; ++i) { 
+            TRequestCreatePQ createTopicRequest(TStringBuilder() << "rt3.dc1--topic_" << i, 1); 
+            createTopicRequest.ReadRules.push_back("acc@user1"); 
+            createTopicRequest.ReadRules.push_back("acc@user2"); 
+            createTopicRequest.ReadRules.push_back("acc@user3"); 
+            server.AnnoyingClient->CreateTopic(createTopicRequest); 
+        } 
+ 
+        std::unique_ptr<Ydb::PersQueue::V1::PersQueueService::Stub> pqStub; 
+        { 
             std::shared_ptr<grpc::Channel> channel = grpc::CreateChannel("localhost:" + ToString(server.GrpcPort), grpc::InsecureChannelCredentials());
-            pqStub = Ydb::PersQueue::V1::PersQueueService::NewStub(channel);
-        }
-        auto checkDescribe = [&](const TVector<std::pair<TString, TString>>& readRules) {
-            DescribeTopicRequest request;
-            DescribeTopicResponse response;
-            request.set_path("/Root/PQ/rt3.dc1--acc--some-topic");
-            grpc::ClientContext rcontext;
-
-            auto status = pqStub->DescribeTopic(&rcontext, request, &response);
-            UNIT_ASSERT(status.ok());
-            DescribeTopicResult res;
-            response.operation().result().UnpackTo(&res);
-            Cerr << response << "\n" << res << "\n";
-            UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SUCCESS);
-
-            UNIT_ASSERT_VALUES_EQUAL(res.settings().read_rules().size(), readRules.size());
-            for (ui64 i = 0; i < readRules.size(); ++i) {
-                const auto& rr = res.settings().read_rules(i);
-                UNIT_ASSERT_EQUAL(rr.consumer_name(), readRules[i].first);
-                UNIT_ASSERT_EQUAL(rr.service_type(), readRules[i].second);
-            }
-        };
-        {
-            CreateTopicRequest request;
-            CreateTopicResponse response;
-            request.set_path("/Root/PQ/rt3.dc1--acc--some-topic");
-            auto props = request.mutable_settings();
-            props->set_partitions_count(1);
-            props->set_supported_format(Ydb::PersQueue::V1::TopicSettings::FORMAT_BASE);
-            props->set_retention_period_ms(TDuration::Days(1).MilliSeconds());
-            {
-                auto rr = props->add_read_rules();
-                rr->set_supported_format(Ydb::PersQueue::V1::TopicSettings::Format(1));
-                rr->set_consumer_name("acc/consumer1");
-            }
-
-            grpc::ClientContext rcontext;
-            auto status = pqStub->CreateTopic(&rcontext, request, &response);
-
-            UNIT_ASSERT(status.ok());
-            CreateTopicResult res;
-            response.operation().result().UnpackTo(&res);
-            Cerr << response << "\n" << res << "\n";
-            UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::BAD_REQUEST);
-        }
-        {
-            CreateTopicRequest request;
-            CreateTopicResponse response;
-            request.set_path("/Root/PQ/rt3.dc1--acc--some-topic");
-            auto props = request.mutable_settings();
-            props->set_partitions_count(1);
-            props->set_supported_format(Ydb::PersQueue::V1::TopicSettings::FORMAT_BASE);
-            props->set_retention_period_ms(TDuration::Days(1).MilliSeconds());
-            {
-                auto rr = props->add_read_rules();
-                rr->set_supported_format(Ydb::PersQueue::V1::TopicSettings::Format(1));
-                rr->set_consumer_name("acc/consumer1");
-                rr->set_service_type("MyGreatType");
-            }
-
-            grpc::ClientContext rcontext;
-            auto status = pqStub->CreateTopic(&rcontext, request, &response);
-
-            UNIT_ASSERT(status.ok());
-            CreateTopicResult res;
-            response.operation().result().UnpackTo(&res);
-            Cerr << response << "\n" << res << "\n";
-            UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SUCCESS);
-        }
-        checkDescribe({{"acc/consumer1", "MyGreatType"}});
-        {
-            AlterTopicRequest request;
-            AlterTopicResponse response;
-            request.set_path("/Root/PQ/rt3.dc1--acc--some-topic");
-            auto props = request.mutable_settings();
-            props->set_partitions_count(1);
-            props->set_supported_format(Ydb::PersQueue::V1::TopicSettings::FORMAT_BASE);
-            props->set_retention_period_ms(TDuration::Days(1).MilliSeconds());
-            {
-                auto rr = props->add_read_rules();
-                rr->set_supported_format(Ydb::PersQueue::V1::TopicSettings::Format(1));
-                rr->set_consumer_name("acc/consumer1");
-            }
-
-            grpc::ClientContext rcontext;
-            auto status = pqStub->AlterTopic(&rcontext, request, &response);
-
-            UNIT_ASSERT(status.ok());
-            CreateTopicResult res;
-            response.operation().result().UnpackTo(&res);
-            Cerr << response << "\n" << res << "\n";
-            UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::BAD_REQUEST);
-        }
-        checkDescribe({{"acc/consumer1", "MyGreatType"}});
-
-        {
-            AlterTopicRequest request;
-            AlterTopicResponse response;
-            request.set_path("/Root/PQ/rt3.dc1--acc--some-topic");
-            auto props = request.mutable_settings();
-            props->set_partitions_count(1);
-            props->set_supported_format(Ydb::PersQueue::V1::TopicSettings::FORMAT_BASE);
-            props->set_retention_period_ms(TDuration::Days(1).MilliSeconds());
-            {
-                auto rr = props->add_read_rules();
-                rr->set_supported_format(Ydb::PersQueue::V1::TopicSettings::Format(1));
-                rr->set_consumer_name("acc/consumer1");
-                rr->set_service_type("AnotherType");
-            }
-            {
-                auto rr = props->add_read_rules();
-                rr->set_supported_format(Ydb::PersQueue::V1::TopicSettings::Format(1));
-                rr->set_consumer_name("acc/consumer2");
-            }
-
-            grpc::ClientContext rcontext;
-            auto status = pqStub->AlterTopic(&rcontext, request, &response);
-
-            UNIT_ASSERT(status.ok());
-            CreateTopicResult res;
-            response.operation().result().UnpackTo(&res);
-            Cerr << response << "\n" << res << "\n";
-            UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::BAD_REQUEST);
-        }
-        checkDescribe({{"acc/consumer1", "MyGreatType"}});
-    }
-
-    Y_UNIT_TEST(ReadRuleServiceTypeMigration) {
-        TServerSettings settings = PQSettings(0);
-        {
-            settings.PQConfig.MutableDefaultClientServiceType()->SetName("default_type");
-            settings.PQConfig.AddClientServiceType()->SetName("MyGreatType");
-            settings.PQConfig.AddClientServiceType()->SetName("AnotherType");
-            settings.PQConfig.AddClientServiceType()->SetName("SecondType");
-        }
-        NPersQueue::TTestServer server(settings);
-
-        server.EnableLogs({ NKikimrServices::PQ_READ_PROXY, NKikimrServices::BLACKBOX_VALIDATOR });
-
-        const ui32 topicsCount = 4;
-        for (ui32 i = 1; i <= topicsCount; ++i) {
-            TRequestCreatePQ createTopicRequest(TStringBuilder() << "rt3.dc1--topic_" << i, 1);
-            createTopicRequest.ReadRules.push_back("acc@user1");
-            createTopicRequest.ReadRules.push_back("acc@user2");
-            createTopicRequest.ReadRules.push_back("acc@user3");
-            server.AnnoyingClient->CreateTopic(createTopicRequest);
-        }
-
-        std::unique_ptr<Ydb::PersQueue::V1::PersQueueService::Stub> pqStub;
-        {
-            std::shared_ptr<grpc::Channel> channel = grpc::CreateChannel("localhost:" + ToString(server.GrpcPort), grpc::InsecureChannelCredentials());
-            pqStub = Ydb::PersQueue::V1::PersQueueService::NewStub(channel);
-        }
-        auto doAlter = [&](const TString& topic, const TVector<std::pair<TString, TString>>& readRules) {
-            AlterTopicRequest request;
-            AlterTopicResponse response;
-            request.set_path(topic);
-            auto props = request.mutable_settings();
-            props->set_partitions_count(1);
-            props->set_supported_format(Ydb::PersQueue::V1::TopicSettings::FORMAT_BASE);
-            props->set_retention_period_ms(TDuration::Days(1).MilliSeconds());
-            for (auto rrInfo : readRules) {
-                auto rr = props->add_read_rules();
-                rr->set_supported_format(Ydb::PersQueue::V1::TopicSettings::Format(1));
-                rr->set_consumer_name(rrInfo.first);
-                rr->set_service_type(rrInfo.second);
-            }
-
-            grpc::ClientContext rcontext;
-            auto status = pqStub->AlterTopic(&rcontext, request, &response);
-
-            UNIT_ASSERT(status.ok());
-            CreateTopicResult res;
-            response.operation().result().UnpackTo(&res);
-            Cerr << response << "\n" << res << "\n";
-            UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SUCCESS);
-        };
+            pqStub = Ydb::PersQueue::V1::PersQueueService::NewStub(channel); 
+        } 
+        auto doAlter = [&](const TString& topic, const TVector<std::pair<TString, TString>>& readRules) { 
+            AlterTopicRequest request; 
+            AlterTopicResponse response; 
+            request.set_path(topic); 
+            auto props = request.mutable_settings(); 
+            props->set_partitions_count(1); 
+            props->set_supported_format(Ydb::PersQueue::V1::TopicSettings::FORMAT_BASE); 
+            props->set_retention_period_ms(TDuration::Days(1).MilliSeconds()); 
+            for (auto rrInfo : readRules) { 
+                auto rr = props->add_read_rules(); 
+                rr->set_supported_format(Ydb::PersQueue::V1::TopicSettings::Format(1)); 
+                rr->set_consumer_name(rrInfo.first); 
+                rr->set_service_type(rrInfo.second); 
+            } 
+ 
+            grpc::ClientContext rcontext; 
+            auto status = pqStub->AlterTopic(&rcontext, request, &response); 
+ 
+            UNIT_ASSERT(status.ok()); 
+            CreateTopicResult res; 
+            response.operation().result().UnpackTo(&res); 
+            Cerr << response << "\n" << res << "\n"; 
+            UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SUCCESS); 
+        }; 
 
 
-        auto checkDescribe = [&](const TString& topic, const TVector<std::pair<TString, TString>>& readRules) {
-            DescribeTopicRequest request;
-            DescribeTopicResponse response;
-            request.set_path(topic);
-            grpc::ClientContext rcontext;
+        auto checkDescribe = [&](const TString& topic, const TVector<std::pair<TString, TString>>& readRules) { 
+            DescribeTopicRequest request; 
+            DescribeTopicResponse response; 
+            request.set_path(topic); 
+            grpc::ClientContext rcontext; 
+ 
+            auto status = pqStub->DescribeTopic(&rcontext, request, &response); 
+            UNIT_ASSERT(status.ok()); 
+            DescribeTopicResult res; 
+            response.operation().result().UnpackTo(&res); 
+            Cerr << response << "\n" << res << "\n"; 
+            UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SUCCESS); 
+ 
+            UNIT_ASSERT_VALUES_EQUAL(res.settings().read_rules().size(), readRules.size()); 
+            for (ui64 i = 0; i < readRules.size(); ++i) { 
+                const auto& rr = res.settings().read_rules(i); 
+                UNIT_ASSERT_EQUAL(rr.consumer_name(), readRules[i].first); 
+                UNIT_ASSERT_EQUAL(rr.service_type(), readRules[i].second); 
+            } 
+        }; 
+        checkDescribe( 
+            "/Root/PQ/rt3.dc1--topic_1", 
+            { 
+                {"acc/user1", "default_type"}, 
+                {"acc/user2", "default_type"}, 
+                {"acc/user3", "default_type"} 
+            } 
+        ); 
+        { 
+            doAlter( 
+                "/Root/PQ/rt3.dc1--topic_2", 
+                { 
+                    {"acc/user1", ""}, 
+                    {"acc/new_user", "MyGreatType"}, 
+                    {"acc/user2", "default_type"}, 
+                    {"acc/user3", "default_type"}, 
+                    {"acc/user4", "AnotherType"} 
+                } 
+            ); 
+            checkDescribe( 
+                "/Root/PQ/rt3.dc1--topic_2", 
+                { 
+                    {"acc/user1", "default_type"}, 
+                    {"acc/new_user", "MyGreatType"}, 
+                    {"acc/user2", "default_type"}, 
+                    {"acc/user3", "default_type"}, 
+                    {"acc/user4", "AnotherType"} 
+                } 
+            ); 
+        } 
+        { 
+            AddReadRuleRequest request; 
+            AddReadRuleResponse response; 
+            request.set_path("/Root/PQ/rt3.dc1--topic_3"); 
+            auto rr = request.mutable_read_rule(); 
+            rr->set_supported_format(Ydb::PersQueue::V1::TopicSettings::Format(1)); 
+            rr->set_consumer_name("acc/new_user"); 
+            rr->set_service_type("MyGreatType"); 
 
-            auto status = pqStub->DescribeTopic(&rcontext, request, &response);
-            UNIT_ASSERT(status.ok());
-            DescribeTopicResult res;
-            response.operation().result().UnpackTo(&res);
-            Cerr << response << "\n" << res << "\n";
-            UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SUCCESS);
+            grpc::ClientContext rcontext; 
+            auto status = pqStub->AddReadRule(&rcontext, request, &response); 
+ 
+            UNIT_ASSERT(status.ok()); 
+            CreateTopicResult res; 
+            response.operation().result().UnpackTo(&res); 
+            Cerr << response << "\n" << res << "\n"; 
+            UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SUCCESS); 
 
-            UNIT_ASSERT_VALUES_EQUAL(res.settings().read_rules().size(), readRules.size());
-            for (ui64 i = 0; i < readRules.size(); ++i) {
-                const auto& rr = res.settings().read_rules(i);
-                UNIT_ASSERT_EQUAL(rr.consumer_name(), readRules[i].first);
-                UNIT_ASSERT_EQUAL(rr.service_type(), readRules[i].second);
-            }
-        };
-        checkDescribe(
-            "/Root/PQ/rt3.dc1--topic_1",
-            {
-                {"acc/user1", "default_type"},
-                {"acc/user2", "default_type"},
-                {"acc/user3", "default_type"}
-            }
-        );
-        {
-            doAlter(
-                "/Root/PQ/rt3.dc1--topic_2",
-                {
-                    {"acc/user1", ""},
-                    {"acc/new_user", "MyGreatType"},
-                    {"acc/user2", "default_type"},
-                    {"acc/user3", "default_type"},
-                    {"acc/user4", "AnotherType"}
-                }
-            );
-            checkDescribe(
-                "/Root/PQ/rt3.dc1--topic_2",
-                {
-                    {"acc/user1", "default_type"},
-                    {"acc/new_user", "MyGreatType"},
-                    {"acc/user2", "default_type"},
-                    {"acc/user3", "default_type"},
-                    {"acc/user4", "AnotherType"}
-                }
-            );
-        }
-        {
-            AddReadRuleRequest request;
-            AddReadRuleResponse response;
-            request.set_path("/Root/PQ/rt3.dc1--topic_3");
-            auto rr = request.mutable_read_rule();
-            rr->set_supported_format(Ydb::PersQueue::V1::TopicSettings::Format(1));
-            rr->set_consumer_name("acc/new_user");
-            rr->set_service_type("MyGreatType");
+            checkDescribe( 
+                "/Root/PQ/rt3.dc1--topic_3", 
+                { 
+                    {"acc/user1", "default_type"}, 
+                    {"acc/user2", "default_type"}, 
+                    {"acc/user3", "default_type"}, 
+                    {"acc/new_user", "MyGreatType"} 
+                } 
+            ); 
+        } 
 
-            grpc::ClientContext rcontext;
-            auto status = pqStub->AddReadRule(&rcontext, request, &response);
+        { 
+            checkDescribe( 
+                "/Root/PQ/rt3.dc1--topic_4", 
+                { 
+                    {"acc/user1", "default_type"}, 
+                    {"acc/user2", "default_type"}, 
+                    {"acc/user3", "default_type"} 
+                } 
+            ); 
 
-            UNIT_ASSERT(status.ok());
-            CreateTopicResult res;
-            response.operation().result().UnpackTo(&res);
-            Cerr << response << "\n" << res << "\n";
-            UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SUCCESS);
+            RemoveReadRuleRequest request; 
+            RemoveReadRuleResponse response; 
+            request.set_path("/Root/PQ/rt3.dc1--topic_4"); 
+            request.set_consumer_name("acc@user2"); 
 
-            checkDescribe(
-                "/Root/PQ/rt3.dc1--topic_3",
-                {
-                    {"acc/user1", "default_type"},
-                    {"acc/user2", "default_type"},
-                    {"acc/user3", "default_type"},
-                    {"acc/new_user", "MyGreatType"}
-                }
-            );
-        }
+            grpc::ClientContext rcontext; 
+            auto status = pqStub->RemoveReadRule(&rcontext, request, &response); 
+ 
+            UNIT_ASSERT(status.ok()); 
+            CreateTopicResult res; 
+            response.operation().result().UnpackTo(&res); 
+            Cerr << response << "\n" << res << "\n"; 
+            UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SUCCESS); 
 
-        {
-            checkDescribe(
-                "/Root/PQ/rt3.dc1--topic_4",
-                {
-                    {"acc/user1", "default_type"},
-                    {"acc/user2", "default_type"},
-                    {"acc/user3", "default_type"}
-                }
-            );
+            checkDescribe( 
+                "/Root/PQ/rt3.dc1--topic_4", 
+                { 
+                    {"acc/user1", "default_type"}, 
+                    {"acc/user3", "default_type"} 
+                } 
+            ); 
+        } 
+    } 
 
-            RemoveReadRuleRequest request;
-            RemoveReadRuleResponse response;
-            request.set_path("/Root/PQ/rt3.dc1--topic_4");
-            request.set_consumer_name("acc@user2");
+    Y_UNIT_TEST(ReadRuleServiceTypeMigrationWithDisallowDefault) { 
+        TServerSettings settings = PQSettings(0); 
+        { 
+            settings.PQConfig.MutableDefaultClientServiceType()->SetName("default_type"); 
+            settings.PQConfig.AddClientServiceType()->SetName("MyGreatType"); 
+            settings.PQConfig.AddClientServiceType()->SetName("AnotherType"); 
+            settings.PQConfig.AddClientServiceType()->SetName("SecondType"); 
+            settings.PQConfig.SetDisallowDefaultClientServiceType(true); 
+        } 
+        NPersQueue::TTestServer server(settings); 
+ 
+        server.EnableLogs({ NKikimrServices::PQ_READ_PROXY, NKikimrServices::BLACKBOX_VALIDATOR }); 
+ 
+        const ui32 topicsCount = 4; 
+        for (ui32 i = 1; i <= topicsCount; ++i) { 
+            TRequestCreatePQ createTopicRequest(TStringBuilder() << "rt3.dc1--topic_" << i, 1); 
+            createTopicRequest.ReadRules.push_back("acc@user1"); 
+            createTopicRequest.ReadRules.push_back("acc@user2"); 
+            createTopicRequest.ReadRules.push_back("acc@user3"); 
+            server.AnnoyingClient->CreateTopic(createTopicRequest); 
+        } 
+ 
+        std::unique_ptr<Ydb::PersQueue::V1::PersQueueService::Stub> pqStub; 
+        { 
+            std::shared_ptr<grpc::Channel> channel = grpc::CreateChannel("localhost:" + ToString(server.GrpcPort), grpc::InsecureChannelCredentials()); 
+            pqStub = Ydb::PersQueue::V1::PersQueueService::NewStub(channel); 
+        } 
 
-            grpc::ClientContext rcontext;
-            auto status = pqStub->RemoveReadRule(&rcontext, request, &response);
-
-            UNIT_ASSERT(status.ok());
-            CreateTopicResult res;
-            response.operation().result().UnpackTo(&res);
-            Cerr << response << "\n" << res << "\n";
-            UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SUCCESS);
-
-            checkDescribe(
-                "/Root/PQ/rt3.dc1--topic_4",
-                {
-                    {"acc/user1", "default_type"},
-                    {"acc/user3", "default_type"}
-                }
-            );
-        }
-    }
-
-    Y_UNIT_TEST(ReadRuleServiceTypeMigrationWithDisallowDefault) {
-        TServerSettings settings = PQSettings(0);
-        {
-            settings.PQConfig.MutableDefaultClientServiceType()->SetName("default_type");
-            settings.PQConfig.AddClientServiceType()->SetName("MyGreatType");
-            settings.PQConfig.AddClientServiceType()->SetName("AnotherType");
-            settings.PQConfig.AddClientServiceType()->SetName("SecondType");
-            settings.PQConfig.SetDisallowDefaultClientServiceType(true);
-        }
-        NPersQueue::TTestServer server(settings);
-
-        server.EnableLogs({ NKikimrServices::PQ_READ_PROXY, NKikimrServices::BLACKBOX_VALIDATOR });
-
-        const ui32 topicsCount = 4;
-        for (ui32 i = 1; i <= topicsCount; ++i) {
-            TRequestCreatePQ createTopicRequest(TStringBuilder() << "rt3.dc1--topic_" << i, 1);
-            createTopicRequest.ReadRules.push_back("acc@user1");
-            createTopicRequest.ReadRules.push_back("acc@user2");
-            createTopicRequest.ReadRules.push_back("acc@user3");
-            server.AnnoyingClient->CreateTopic(createTopicRequest);
-        }
-
-        std::unique_ptr<Ydb::PersQueue::V1::PersQueueService::Stub> pqStub;
-        {
-            std::shared_ptr<grpc::Channel> channel = grpc::CreateChannel("localhost:" + ToString(server.GrpcPort), grpc::InsecureChannelCredentials());
-            pqStub = Ydb::PersQueue::V1::PersQueueService::NewStub(channel);
-        }
-
-        auto doAlter = [&](
-            const TString& topic,
-            const TVector<std::pair<TString, TString>>& readRules,
-            Ydb::StatusIds::StatusCode statusCode = Ydb::StatusIds::SUCCESS
-        ) {
-            AlterTopicRequest request;
-            AlterTopicResponse response;
-            request.set_path(topic);
-            auto props = request.mutable_settings();
-            props->set_partitions_count(1);
-            props->set_supported_format(Ydb::PersQueue::V1::TopicSettings::FORMAT_BASE);
-            props->set_retention_period_ms(TDuration::Days(1).MilliSeconds());
-            for (auto rrInfo : readRules) {
-                auto rr = props->add_read_rules();
-                rr->set_supported_format(Ydb::PersQueue::V1::TopicSettings::Format(1));
-                rr->set_consumer_name(rrInfo.first);
-                rr->set_service_type(rrInfo.second);
-            }
-
-            grpc::ClientContext rcontext;
-            auto status = pqStub->AlterTopic(&rcontext, request, &response);
-
-            UNIT_ASSERT(status.ok());
-            CreateTopicResult res;
-            response.operation().result().UnpackTo(&res);
-            Cerr << response << "\n" << res << "\n";
-            UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), statusCode);
-        };
-
-        auto checkDescribe = [&](
-            const TString& topic,
-            const TVector<std::pair<TString, TString>>& readRules,
-            Ydb::StatusIds::StatusCode statusCode = Ydb::StatusIds::SUCCESS
-        ) {
-            DescribeTopicRequest request;
-            DescribeTopicResponse response;
-            request.set_path(topic);
-            grpc::ClientContext rcontext;
-
-            auto status = pqStub->DescribeTopic(&rcontext, request, &response);
-            UNIT_ASSERT(status.ok());
-            DescribeTopicResult res;
-            response.operation().result().UnpackTo(&res);
-            Cerr << response << "\n" << res << "\n";
-            UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), statusCode);
-            if (statusCode == Ydb::StatusIds::SUCCESS) {
-                UNIT_ASSERT_VALUES_EQUAL(res.settings().read_rules().size(), readRules.size());
-                for (ui64 i = 0; i < readRules.size(); ++i) {
-                    const auto& rr = res.settings().read_rules(i);
-                    UNIT_ASSERT_EQUAL(rr.consumer_name(), readRules[i].first);
-                    UNIT_ASSERT_EQUAL(rr.service_type(), readRules[i].second);
-                }
-            }
-        };
-        checkDescribe(
-            "/Root/PQ/rt3.dc1--topic_1",
-            {},
-            Ydb::StatusIds::INTERNAL_ERROR
-        );
-        {
-            doAlter(
-                "/Root/PQ/rt3.dc1--topic_2",
-                {
-                    {"acc/new_user", "MyGreatType"},
-                    {"acc/user2", "SecondType"},
-                    {"acc/user3", "AnotherType"},
-                    {"acc/user4", "AnotherType"}
-                }
-            );
-            checkDescribe(
-                "/Root/PQ/rt3.dc1--topic_2",
-                {
-                    {"acc/new_user", "MyGreatType"},
-                    {"acc/user2", "SecondType"},
-                    {"acc/user3", "AnotherType"},
-                    {"acc/user4", "AnotherType"}
-                }
-            );
-        }
-    }
-
-    Y_UNIT_TEST(TClusterTrackerTest) {
-        APITestSetup setup{TEST_CASE_NAME};
-        setup.GetPQConfig().SetClustersUpdateTimeoutSec(0);
-        const auto edgeActorID = setup.GetServer().GetRuntime()->AllocateEdgeActor();
-        THashMap<TString, TPQTestClusterInfo> clusters = DEFAULT_CLUSTERS_LIST;
-
-        auto compareInfo = [](const TString& name, const TPQTestClusterInfo& info, const NPQ::NClusterTracker::TClustersList::TCluster& trackerInfo) {
-            UNIT_ASSERT_EQUAL(name, trackerInfo.Name);
-            UNIT_ASSERT_EQUAL(name, trackerInfo.Datacenter);
-            UNIT_ASSERT_EQUAL(info.Balancer, trackerInfo.Balancer);
-            UNIT_ASSERT_EQUAL(info.Enabled, trackerInfo.IsEnabled);
-            UNIT_ASSERT_EQUAL(info.Weight, trackerInfo.Weight);
-        };
-
-        auto getClustersFromTracker = [&]() {
-            setup.GetServer().GetRuntime()->Send(new IEventHandle(
-                NPQ::NClusterTracker::MakeClusterTrackerID(),
-                edgeActorID,
-                new NPQ::NClusterTracker::TEvClusterTracker::TEvSubscribe
-            ));
-            return setup.GetServer().GetRuntime()->GrabEdgeEvent<NPQ::NClusterTracker::TEvClusterTracker::TEvClustersUpdate>();
-        };
-
-
-        {
-            auto trackerResponce = getClustersFromTracker();
-            for (auto& clusterInfo : trackerResponce->ClustersList->Clusters) {
-                auto it = clusters.find(clusterInfo.Name);
-                UNIT_ASSERT(it != clusters.end());
-                compareInfo(it->first, it->second, clusterInfo);
-            }
-        }
-
-        UNIT_ASSERT_EQUAL(clusters.count("dc1"), 1);
-        UNIT_ASSERT_EQUAL(clusters.count("dc2"), 1);
-        clusters["dc1"].Weight = 666;
-        clusters["dc2"].Balancer = "newbalancer.net";
-        setup.GetFlatMsgBusPQClient().InitDCs(clusters);
-        TInstant updateTime = TInstant::Now();
-
-        while (true) {
-            auto trackerResponce = getClustersFromTracker();
-            if (trackerResponce->ClustersListUpdateTimestamp) {
-                if (trackerResponce->ClustersListUpdateTimestamp.GetRef() >= updateTime + TDuration::Seconds(5)) {
-                    for (auto& clusterInfo : trackerResponce->ClustersList->Clusters) {
-                        auto it = clusters.find(clusterInfo.Name);
-                        UNIT_ASSERT(it != clusters.end());
-                        compareInfo(it->first, it->second, clusterInfo);
-                    }
-                    break;
-                }
-            }
-            Sleep(TDuration::MilliSeconds(100));
-        }
-    }
-
-    Y_UNIT_TEST(TestReadPartitionByGroupId) {
-        NPersQueue::TTestServer server;
-
-        ui32 partitionsCount = 100;
+        auto doAlter = [&]( 
+            const TString& topic, 
+            const TVector<std::pair<TString, TString>>& readRules, 
+            Ydb::StatusIds::StatusCode statusCode = Ydb::StatusIds::SUCCESS 
+        ) { 
+            AlterTopicRequest request; 
+            AlterTopicResponse response; 
+            request.set_path(topic); 
+            auto props = request.mutable_settings(); 
+            props->set_partitions_count(1); 
+            props->set_supported_format(Ydb::PersQueue::V1::TopicSettings::FORMAT_BASE); 
+            props->set_retention_period_ms(TDuration::Days(1).MilliSeconds()); 
+            for (auto rrInfo : readRules) { 
+                auto rr = props->add_read_rules(); 
+                rr->set_supported_format(Ydb::PersQueue::V1::TopicSettings::Format(1)); 
+                rr->set_consumer_name(rrInfo.first); 
+                rr->set_service_type(rrInfo.second); 
+            } 
+ 
+            grpc::ClientContext rcontext; 
+            auto status = pqStub->AlterTopic(&rcontext, request, &response); 
+ 
+            UNIT_ASSERT(status.ok()); 
+            CreateTopicResult res; 
+            response.operation().result().UnpackTo(&res); 
+            Cerr << response << "\n" << res << "\n"; 
+            UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), statusCode); 
+        }; 
+ 
+        auto checkDescribe = [&]( 
+            const TString& topic, 
+            const TVector<std::pair<TString, TString>>& readRules, 
+            Ydb::StatusIds::StatusCode statusCode = Ydb::StatusIds::SUCCESS 
+        ) { 
+            DescribeTopicRequest request; 
+            DescribeTopicResponse response; 
+            request.set_path(topic); 
+            grpc::ClientContext rcontext; 
+ 
+            auto status = pqStub->DescribeTopic(&rcontext, request, &response); 
+            UNIT_ASSERT(status.ok()); 
+            DescribeTopicResult res; 
+            response.operation().result().UnpackTo(&res); 
+            Cerr << response << "\n" << res << "\n"; 
+            UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), statusCode); 
+            if (statusCode == Ydb::StatusIds::SUCCESS) { 
+                UNIT_ASSERT_VALUES_EQUAL(res.settings().read_rules().size(), readRules.size()); 
+                for (ui64 i = 0; i < readRules.size(); ++i) { 
+                    const auto& rr = res.settings().read_rules(i); 
+                    UNIT_ASSERT_EQUAL(rr.consumer_name(), readRules[i].first); 
+                    UNIT_ASSERT_EQUAL(rr.service_type(), readRules[i].second); 
+                } 
+            } 
+        }; 
+        checkDescribe( 
+            "/Root/PQ/rt3.dc1--topic_1", 
+            {}, 
+            Ydb::StatusIds::INTERNAL_ERROR 
+        ); 
+        { 
+            doAlter( 
+                "/Root/PQ/rt3.dc1--topic_2", 
+                { 
+                    {"acc/new_user", "MyGreatType"}, 
+                    {"acc/user2", "SecondType"}, 
+                    {"acc/user3", "AnotherType"}, 
+                    {"acc/user4", "AnotherType"} 
+                } 
+            ); 
+            checkDescribe( 
+                "/Root/PQ/rt3.dc1--topic_2", 
+                { 
+                    {"acc/new_user", "MyGreatType"}, 
+                    {"acc/user2", "SecondType"}, 
+                    {"acc/user3", "AnotherType"}, 
+                    {"acc/user4", "AnotherType"} 
+                } 
+            ); 
+        } 
+    } 
+ 
+    Y_UNIT_TEST(TClusterTrackerTest) { 
+        APITestSetup setup{TEST_CASE_NAME}; 
+        setup.GetPQConfig().SetClustersUpdateTimeoutSec(0); 
+        const auto edgeActorID = setup.GetServer().GetRuntime()->AllocateEdgeActor(); 
+        THashMap<TString, TPQTestClusterInfo> clusters = DEFAULT_CLUSTERS_LIST; 
+ 
+        auto compareInfo = [](const TString& name, const TPQTestClusterInfo& info, const NPQ::NClusterTracker::TClustersList::TCluster& trackerInfo) { 
+            UNIT_ASSERT_EQUAL(name, trackerInfo.Name); 
+            UNIT_ASSERT_EQUAL(name, trackerInfo.Datacenter); 
+            UNIT_ASSERT_EQUAL(info.Balancer, trackerInfo.Balancer); 
+            UNIT_ASSERT_EQUAL(info.Enabled, trackerInfo.IsEnabled); 
+            UNIT_ASSERT_EQUAL(info.Weight, trackerInfo.Weight); 
+        }; 
+ 
+        auto getClustersFromTracker = [&]() { 
+            setup.GetServer().GetRuntime()->Send(new IEventHandle( 
+                NPQ::NClusterTracker::MakeClusterTrackerID(), 
+                edgeActorID, 
+                new NPQ::NClusterTracker::TEvClusterTracker::TEvSubscribe 
+            )); 
+            return setup.GetServer().GetRuntime()->GrabEdgeEvent<NPQ::NClusterTracker::TEvClusterTracker::TEvClustersUpdate>(); 
+        }; 
+ 
+ 
+        { 
+            auto trackerResponce = getClustersFromTracker(); 
+            for (auto& clusterInfo : trackerResponce->ClustersList->Clusters) { 
+                auto it = clusters.find(clusterInfo.Name); 
+                UNIT_ASSERT(it != clusters.end()); 
+                compareInfo(it->first, it->second, clusterInfo); 
+            } 
+        } 
+ 
+        UNIT_ASSERT_EQUAL(clusters.count("dc1"), 1); 
+        UNIT_ASSERT_EQUAL(clusters.count("dc2"), 1); 
+        clusters["dc1"].Weight = 666; 
+        clusters["dc2"].Balancer = "newbalancer.net"; 
+        setup.GetFlatMsgBusPQClient().InitDCs(clusters); 
+        TInstant updateTime = TInstant::Now(); 
+ 
+        while (true) { 
+            auto trackerResponce = getClustersFromTracker(); 
+            if (trackerResponce->ClustersListUpdateTimestamp) { 
+                if (trackerResponce->ClustersListUpdateTimestamp.GetRef() >= updateTime + TDuration::Seconds(5)) { 
+                    for (auto& clusterInfo : trackerResponce->ClustersList->Clusters) { 
+                        auto it = clusters.find(clusterInfo.Name); 
+                        UNIT_ASSERT(it != clusters.end()); 
+                        compareInfo(it->first, it->second, clusterInfo); 
+                    } 
+                    break; 
+                } 
+            } 
+            Sleep(TDuration::MilliSeconds(100)); 
+        } 
+    } 
+ 
+    Y_UNIT_TEST(TestReadPartitionByGroupId) { 
+        NPersQueue::TTestServer server; 
+ 
+        ui32 partitionsCount = 100; 
         TString topic = "topic1";
         TString topicFullName = "rt3.dc1--" + topic;
-
+ 
         server.AnnoyingClient->CreateTopic(topicFullName, partitionsCount);
         server.EnableLogs({ NKikimrServices::PQ_READ_PROXY});
-
-        auto driver = server.AnnoyingClient->GetDriver();
-
-        for (ui32 partition = 30; partition < partitionsCount; ++partition) {
-            auto reader = CreateReader(
-                *driver,
-                NYdb::NPersQueue::TReadSessionSettings()
-                    .AppendTopics(
-                        NYdb::NPersQueue::TTopicReadSettings(topic)
-                            .AppendPartitionGroupIds(partition + 1)
-                    )
-                    .ConsumerName("shared/user")
-                    .ReadOnlyOriginal(true)
-            );
-
-            TMaybe<NYdb::NPersQueue::TReadSessionEvent::TEvent> event = reader->GetEvent(true, 1);
-            auto createStream = std::get_if<NYdb::NPersQueue::TReadSessionEvent::TCreatePartitionStreamEvent>(&*event);
-            UNIT_ASSERT(createStream);
+ 
+        auto driver = server.AnnoyingClient->GetDriver(); 
+ 
+        for (ui32 partition = 30; partition < partitionsCount; ++partition) { 
+            auto reader = CreateReader( 
+                *driver, 
+                NYdb::NPersQueue::TReadSessionSettings() 
+                    .AppendTopics( 
+                        NYdb::NPersQueue::TTopicReadSettings(topic) 
+                            .AppendPartitionGroupIds(partition + 1) 
+                    ) 
+                    .ConsumerName("shared/user") 
+                    .ReadOnlyOriginal(true) 
+            ); 
+ 
+            TMaybe<NYdb::NPersQueue::TReadSessionEvent::TEvent> event = reader->GetEvent(true, 1); 
+            auto createStream = std::get_if<NYdb::NPersQueue::TReadSessionEvent::TCreatePartitionStreamEvent>(&*event); 
+            UNIT_ASSERT(createStream); 
             TString stepDescription = TStringBuilder() << "create stream for partition=" << partition
-                << " : " << createStream->DebugString();
-            Cerr << stepDescription << Endl;
-            UNIT_ASSERT_EQUAL_C(
-                partition,
-                createStream->GetPartitionStream()->GetPartitionId(),
-                stepDescription
+                << " : " << createStream->DebugString(); 
+            Cerr << stepDescription << Endl; 
+            UNIT_ASSERT_EQUAL_C( 
+                partition, 
+                createStream->GetPartitionStream()->GetPartitionId(), 
+                stepDescription 
             );
         }
-    }
+    } 
 }
 }

@@ -5,7 +5,7 @@
 namespace Ydb {
 namespace Discovery {
     class ListEndpointsResult;
-    class WhoAmIResult;
+    class WhoAmIResult; 
 } // namespace Discovery
 } // namespace Ydb
 

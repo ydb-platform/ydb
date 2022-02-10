@@ -1,9 +1,9 @@
 #include "ydb_experimental.h"
 
-#define INCLUDE_YDB_INTERNAL_H
+#define INCLUDE_YDB_INTERNAL_H 
 #include <ydb/public/sdk/cpp/client/impl/ydb_internal/make_request/make.h>
-#undef INCLUDE_YDB_INTERNAL_H
-
+#undef INCLUDE_YDB_INTERNAL_H 
+ 
 #include <ydb/public/api/grpc/draft/ydb_experimental_v1.grpc.pb.h>
 #include <library/cpp/grpc/client/grpc_client_low.h>
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
@@ -112,7 +112,7 @@ public:
         auto request = MakeRequest<Ydb::Experimental::ExecuteStreamQueryRequest>();
         request.set_yql_text(query);
         if (params) {
-            *request.mutable_parameters() = params->GetProtoMap();
+            *request.mutable_parameters() = params->GetProtoMap(); 
         }
 
         switch (settings.ProfileMode_) {

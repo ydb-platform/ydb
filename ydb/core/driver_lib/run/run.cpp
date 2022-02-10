@@ -398,10 +398,10 @@ void TKikimrRunner::InitializeControlBoard(const TKikimrRunConfig& runConfig)
     }
 }
 
-void TKikimrRunner::InitializeMessageBus(
-    const TKikimrRunConfig& runConfig,
-    std::shared_ptr<TModuleFactories> factories
-) {
+void TKikimrRunner::InitializeMessageBus( 
+    const TKikimrRunConfig& runConfig, 
+    std::shared_ptr<TModuleFactories> factories 
+) { 
     if (runConfig.AppConfig.HasMessageBusConfig() && runConfig.AppConfig.GetMessageBusConfig().GetStartBusProxy()) {
         const auto& msgbusConfig = runConfig.AppConfig.GetMessageBusConfig();
 
@@ -440,21 +440,21 @@ void TKikimrRunner::InitializeMessageBus(
 
         Bus.Reset(NBus::CreateMessageQueue(ProxyBusQueueConfig, "server proxy"));
         if (msgbusConfig.GetStartTracingBusProxy()) {
-            BusServer.Reset(NMsgBusProxy::CreateMsgBusTracingServer(
-                Bus.Get(),
-                ProxyBusSessionConfig,
-                msgbusConfig.GetTracePath(),
-                factories ? factories->PQReadSessionsInfoWorkerFactory : nullptr,
-                msgbusConfig.GetBusProxyPort())
-            );
+            BusServer.Reset(NMsgBusProxy::CreateMsgBusTracingServer( 
+                Bus.Get(), 
+                ProxyBusSessionConfig, 
+                msgbusConfig.GetTracePath(), 
+                factories ? factories->PQReadSessionsInfoWorkerFactory : nullptr, 
+                msgbusConfig.GetBusProxyPort()) 
+            ); 
         }
         else {
-            BusServer.Reset(NMsgBusProxy::CreateMsgBusServer(
-                Bus.Get(),
-                ProxyBusSessionConfig,
-                factories ? factories->PQReadSessionsInfoWorkerFactory : nullptr,
-                msgbusConfig.GetBusProxyPort()
-            ));
+            BusServer.Reset(NMsgBusProxy::CreateMsgBusServer( 
+                Bus.Get(), 
+                ProxyBusSessionConfig, 
+                factories ? factories->PQReadSessionsInfoWorkerFactory : nullptr, 
+                msgbusConfig.GetBusProxyPort() 
+            )); 
         }
 
         if (Monitoring) {
@@ -852,7 +852,7 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
                                &KikimrShouldContinue));
     AppData->DataShardExportFactory = ModuleFactories ? ModuleFactories->DataShardExportFactory.get() : nullptr;
     AppData->SqsEventsWriterFactory = ModuleFactories ? ModuleFactories->SqsEventsWriterFactory.get() : nullptr;
-    AppData->PersQueueMirrorReaderFactory = ModuleFactories ? ModuleFactories->PersQueueMirrorReaderFactory.get() : nullptr;
+    AppData->PersQueueMirrorReaderFactory = ModuleFactories ? ModuleFactories->PersQueueMirrorReaderFactory.get() : nullptr; 
     AppData->IoContextFactory = ModuleFactories ? ModuleFactories->IoContextFactory.get() : nullptr;
 
     AppData->SqsAuthFactory = ModuleFactories
@@ -1223,7 +1223,7 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
     }
 
     if (serviceMask.EnableGRpcService) {
-        sil->AddServiceInitializer(new TGRpcServicesInitializer(runConfig, ModuleFactories));
+        sil->AddServiceInitializer(new TGRpcServicesInitializer(runConfig, ModuleFactories)); 
     }
 
 #ifdef ACTORSLIB_COLLECT_EXEC_STATS
@@ -1260,8 +1260,8 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
         sil->AddServiceInitializer(new TPersQueueClusterTrackerInitializer(runConfig));
     }
 
-    sil->AddServiceInitializer(new TPersQueueLibSharedInstanceInitializer(runConfig));
-
+    sil->AddServiceInitializer(new TPersQueueLibSharedInstanceInitializer(runConfig)); 
+ 
     sil->AddServiceInitializer(new TMemProfMonitorInitializer(runConfig));
 
 #if defined(ENABLE_MEMORY_TRACKING)
@@ -1559,12 +1559,12 @@ TIntrusivePtr<TKikimrRunner> TKikimrRunner::CreateKikimrRunner(
         std::shared_ptr<TModuleFactories> factories) {
     TBasicKikimrServicesMask servicesMask; // all services enabled by default
 
-    TIntrusivePtr<TKikimrRunner> runner(new TKikimrRunner(factories));
+    TIntrusivePtr<TKikimrRunner> runner(new TKikimrRunner(factories)); 
     runner->InitializeAllocator(runConfig);
     runner->InitializeRegistries(runConfig);
     runner->InitializeMonitoring(runConfig);
     runner->InitializeControlBoard(runConfig);
-    runner->InitializeMessageBus(runConfig, factories);
+    runner->InitializeMessageBus(runConfig, factories); 
     runner->InitializeAppData(runConfig);
     runner->InitializeLogSettings(runConfig);
     TIntrusivePtr<TServiceInitializersList> sil(runner->CreateServiceInitializersList(runConfig, servicesMask));

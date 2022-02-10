@@ -76,7 +76,7 @@ public:
     void virtual CheckAcquireResource(const TString& coordinationNodePath, const TString& resourcePath, const NYdb::NRateLimiter::TAcquireResourceSettings& settings, NYdb::EStatus expected) {
         const auto acquireResultFuture = RateLimiterClient.AcquireResource(coordinationNodePath, resourcePath, settings);
         ASSERT_STATUS(acquireResultFuture, expected);
-    }
+    } 
 
     static TString CoordinationNodePath;
 
@@ -345,7 +345,7 @@ Y_UNIT_TEST_SUITE(TGRpcRateLimiterTest) {
             setup->CheckAcquireResource(TTestSetup::CoordinationNodePath, "res", TAcquireResourceSettings().Amount(1).OperationTimeout(TDuration::MilliSeconds(200)), NYdb::EStatus::TIMEOUT);
             setup->CheckAcquireResource(TTestSetup::CoordinationNodePath, "res", TAcquireResourceSettings().Amount(1).IsUsedAmount(true).OperationTimeout(TDuration::MilliSeconds(200)), NYdb::EStatus::SUCCESS);
         }
-    }
+    } 
 
     Y_UNIT_TEST(AcquireResourceManyRequiredGrpcApi) {
         AcquireResourceManyRequired(false);

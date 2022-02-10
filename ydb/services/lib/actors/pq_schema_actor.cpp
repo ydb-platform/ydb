@@ -22,54 +22,54 @@ namespace NKikimr::NGRpcProxy::V1 {
 
     TClientServiceTypes GetSupportedClientServiceTypes(const TActorContext& ctx) {
         TClientServiceTypes serviceTypes;
-        const auto& pqConfig = AppData(ctx)->PQConfig;
+        const auto& pqConfig = AppData(ctx)->PQConfig; 
         ui32 count = pqConfig.GetDefaultClientServiceType().GetMaxReadRulesCountPerTopic();
         if (count == 0) count = Max<ui32>();
         TString name = pqConfig.GetDefaultClientServiceType().GetName();
         serviceTypes.insert({name, {name, count}});
-        for (const auto& serviceType : pqConfig.GetClientServiceType()) {
+        for (const auto& serviceType : pqConfig.GetClientServiceType()) { 
             ui32 count = serviceType.GetMaxReadRulesCountPerTopic();
             if (count == 0) count = Max<ui32>();
             TString name = serviceType.GetName();
             serviceTypes.insert({name, {name, count}});
-        }
-        return serviceTypes;
-    }
+        } 
+        return serviceTypes; 
+    } 
 
-    TString ReadRuleServiceTypeMigration(NKikimrPQ::TPQTabletConfig *config, const TActorContext& ctx) {
-        auto rrServiceTypes = config->MutableReadRuleServiceTypes();
-        if (config->ReadRuleServiceTypesSize() > config->ReadRulesSize()) {
-            rrServiceTypes->Clear();
-        }
-        if (config->ReadRuleServiceTypesSize() < config->ReadRulesSize()) {
-            rrServiceTypes->Reserve(config->ReadRulesSize());
-            const auto& pqConfig = AppData(ctx)->PQConfig;
-            if (pqConfig.GetDisallowDefaultClientServiceType()) {
-                return "service type must be set for all read rules";
-            }
-            for (ui64 i = rrServiceTypes->size(); i < config->ReadRulesSize(); ++i) {
-                *rrServiceTypes->Add() = pqConfig.GetDefaultClientServiceType().GetName();
-            }
-        }
-        return "";
-    }
-
-    TString AddReadRuleToConfig(
-        NKikimrPQ::TPQTabletConfig* config,
-        const Ydb::PersQueue::V1::TopicSettings::ReadRule& rr,
+    TString ReadRuleServiceTypeMigration(NKikimrPQ::TPQTabletConfig *config, const TActorContext& ctx) { 
+        auto rrServiceTypes = config->MutableReadRuleServiceTypes(); 
+        if (config->ReadRuleServiceTypesSize() > config->ReadRulesSize()) { 
+            rrServiceTypes->Clear(); 
+        } 
+        if (config->ReadRuleServiceTypesSize() < config->ReadRulesSize()) { 
+            rrServiceTypes->Reserve(config->ReadRulesSize()); 
+            const auto& pqConfig = AppData(ctx)->PQConfig; 
+            if (pqConfig.GetDisallowDefaultClientServiceType()) { 
+                return "service type must be set for all read rules"; 
+            } 
+            for (ui64 i = rrServiceTypes->size(); i < config->ReadRulesSize(); ++i) { 
+                *rrServiceTypes->Add() = pqConfig.GetDefaultClientServiceType().GetName(); 
+            } 
+        } 
+        return ""; 
+    } 
+ 
+    TString AddReadRuleToConfig( 
+        NKikimrPQ::TPQTabletConfig* config, 
+        const Ydb::PersQueue::V1::TopicSettings::ReadRule& rr, 
         const TClientServiceTypes& supportedClientServiceTypes,
-        const TActorContext& ctx
-    ) {
+        const TActorContext& ctx 
+    ) { 
         auto consumerName = NPersQueue::ConvertNewConsumerName(rr.consumer_name(), ctx);
         if(consumerName.find("/") != TString::npos || consumerName.find("|") != TString::npos) {
             return TStringBuilder() << "consumer '" << rr.consumer_name() << "' has illegal symbols";
         }
-        {
-            TString migrationError = ReadRuleServiceTypeMigration(config, ctx);
-            if (migrationError) {
-                return migrationError;
-            }
-        }
+        { 
+            TString migrationError = ReadRuleServiceTypeMigration(config, ctx); 
+            if (migrationError) { 
+                return migrationError; 
+            } 
+        } 
 
         config->AddReadRules(consumerName);
 
@@ -102,29 +102,29 @@ namespace NKikimr::NGRpcProxy::V1 {
         if (rr.important())
             config->MutablePartitionConfig()->AddImportantClientId(consumerName);
 
-        if (!rr.service_type().empty()) {
+        if (!rr.service_type().empty()) { 
             if (!supportedClientServiceTypes.contains(rr.service_type())) {
-                return TStringBuilder() << "Unknown read rule service type '" << rr.service_type()
-                                        << "' for consumer '" << rr.consumer_name() << "'";
-            }
-            config->AddReadRuleServiceTypes(rr.service_type());
-        } else {
-            const auto& pqConfig = AppData(ctx)->PQConfig;
-            if (pqConfig.GetDisallowDefaultClientServiceType()) {
-                return TStringBuilder() << "service type cannot be empty for consumer '" << rr.consumer_name() << "'";
-            }
-            const auto& defaultCientServiceType = pqConfig.GetDefaultClientServiceType().GetName();
-            config->AddReadRuleServiceTypes(defaultCientServiceType);
-        }
+                return TStringBuilder() << "Unknown read rule service type '" << rr.service_type() 
+                                        << "' for consumer '" << rr.consumer_name() << "'"; 
+            } 
+            config->AddReadRuleServiceTypes(rr.service_type()); 
+        } else { 
+            const auto& pqConfig = AppData(ctx)->PQConfig; 
+            if (pqConfig.GetDisallowDefaultClientServiceType()) { 
+                return TStringBuilder() << "service type cannot be empty for consumer '" << rr.consumer_name() << "'"; 
+            } 
+            const auto& defaultCientServiceType = pqConfig.GetDefaultClientServiceType().GetName(); 
+            config->AddReadRuleServiceTypes(defaultCientServiceType); 
+        } 
         return "";
     }
 
-    TString RemoveReadRuleFromConfig(
-        NKikimrPQ::TPQTabletConfig* config,
-        const NKikimrPQ::TPQTabletConfig& originalConfig,
-        const TString& consumerName,
-        const TActorContext& ctx
-    ) {
+    TString RemoveReadRuleFromConfig( 
+        NKikimrPQ::TPQTabletConfig* config, 
+        const NKikimrPQ::TPQTabletConfig& originalConfig, 
+        const TString& consumerName, 
+        const TActorContext& ctx 
+    ) { 
         THashSet<TString> rulesToRemove;
         rulesToRemove.insert(consumerName);
 
@@ -134,7 +134,7 @@ namespace NKikimr::NGRpcProxy::V1 {
         config->ClearConsumerFormatVersions();
         config->ClearConsumerCodecs();
         config->MutablePartitionConfig()->ClearImportantClientId();
-        config->ClearReadRuleServiceTypes();
+        config->ClearReadRuleServiceTypes(); 
 
         for (const auto& importantConsumer : originalConfig.GetPartitionConfig().GetImportantClientId()) {
             if (rulesToRemove.find(importantConsumer) == rulesToRemove.end()) {
@@ -142,7 +142,7 @@ namespace NKikimr::NGRpcProxy::V1 {
             }
         }
 
-        const auto& pqConfig = AppData(ctx)->PQConfig;
+        const auto& pqConfig = AppData(ctx)->PQConfig; 
         for (size_t i = 0; i < originalConfig.ReadRulesSize(); i++) {
             if (auto it = rulesToRemove.find(originalConfig.GetReadRules(i)); it != rulesToRemove.end()) {
                 rulesToRemove.erase(it);
@@ -158,15 +158,15 @@ namespace NKikimr::NGRpcProxy::V1 {
                 ct->AddCodecs(originalConfig.GetConsumerCodecs(i).GetCodecs(j));
                 ct->AddIds(originalConfig.GetConsumerCodecs(i).GetIds(j));
             }
-            if (i < originalConfig.ReadRuleServiceTypesSize()) {
-                config->AddReadRuleServiceTypes(originalConfig.GetReadRuleServiceTypes(i));
-            } else {
-                if (pqConfig.GetDisallowDefaultClientServiceType()) {
+            if (i < originalConfig.ReadRuleServiceTypesSize()) { 
+                config->AddReadRuleServiceTypes(originalConfig.GetReadRuleServiceTypes(i)); 
+            } else { 
+                if (pqConfig.GetDisallowDefaultClientServiceType()) { 
                     return TStringBuilder() << "service type cannot be empty for consumer '"
-                        << originalConfig.GetReadRules(i) << "'";
-                }
-                config->AddReadRuleServiceTypes(pqConfig.GetDefaultClientServiceType().GetName());
-            }
+                        << originalConfig.GetReadRules(i) << "'"; 
+                } 
+                config->AddReadRuleServiceTypes(pqConfig.GetDefaultClientServiceType().GetName()); 
+            } 
         }
 
         if (rulesToRemove.size() > 0) {
@@ -387,15 +387,15 @@ namespace NKikimr::NGRpcProxy::V1 {
             return Ydb::StatusIds::BAD_REQUEST;
         }
 
-        {
-            error = ReadRuleServiceTypeMigration(config, ctx);
-            if (error) {
-                return Ydb::StatusIds::INTERNAL_ERROR;
-            }
-        }
-        const auto& supportedClientServiceTypes = GetSupportedClientServiceTypes(ctx);
+        { 
+            error = ReadRuleServiceTypeMigration(config, ctx); 
+            if (error) { 
+                return Ydb::StatusIds::INTERNAL_ERROR; 
+            } 
+        } 
+        const auto& supportedClientServiceTypes = GetSupportedClientServiceTypes(ctx); 
         for (const auto& rr : settings.read_rules()) {
-            error = AddReadRuleToConfig(config, rr, supportedClientServiceTypes, ctx);
+            error = AddReadRuleToConfig(config, rr, supportedClientServiceTypes, ctx); 
             if (!error.Empty()) {
                 return Ydb::StatusIds::BAD_REQUEST;
             }

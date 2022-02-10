@@ -788,24 +788,24 @@ private:
                                         [GRPC_STATUSES_COUNT]; // 18 types.
 };
 
-// Metering counters in SQS core subsystem.
-struct TMeteringCounters : public TAtomicRefCount<TMeteringCounters> {
-    THashMap<TString, TLazyCachedCounter> ClassifierRequestsResults;
-    THashMap<TString, TLazyCachedCounter> IdleClassifierRequestsResults;
-
-    TMeteringCounters(const NKikimrConfig::TSqsConfig& config, const TIntrusivePtr<NMonitoring::TDynamicCounters>& sqsMeteringCounters, const TVector<TString>& classifierLabels)
-        : SqsMeteringCounters(sqsMeteringCounters)
-        , Config(config)
-    {
-        InitCounters(classifierLabels);
-    }
-
-private:
-    void InitCounters(const TVector<TString>& classifierLabels);
-
-private:
-    TIntrusivePtr<NMonitoring::TDynamicCounters> SqsMeteringCounters;
-    const NKikimrConfig::TSqsConfig& Config;
-};
-
+// Metering counters in SQS core subsystem. 
+struct TMeteringCounters : public TAtomicRefCount<TMeteringCounters> { 
+    THashMap<TString, TLazyCachedCounter> ClassifierRequestsResults; 
+    THashMap<TString, TLazyCachedCounter> IdleClassifierRequestsResults; 
+ 
+    TMeteringCounters(const NKikimrConfig::TSqsConfig& config, const TIntrusivePtr<NMonitoring::TDynamicCounters>& sqsMeteringCounters, const TVector<TString>& classifierLabels) 
+        : SqsMeteringCounters(sqsMeteringCounters) 
+        , Config(config) 
+    { 
+        InitCounters(classifierLabels); 
+    } 
+ 
+private: 
+    void InitCounters(const TVector<TString>& classifierLabels); 
+ 
+private: 
+    TIntrusivePtr<NMonitoring::TDynamicCounters> SqsMeteringCounters; 
+    const NKikimrConfig::TSqsConfig& Config; 
+}; 
+ 
 } // namespace NKikimr::NSQS

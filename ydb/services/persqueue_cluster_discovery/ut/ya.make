@@ -1,10 +1,10 @@
 UNITTEST_FOR(ydb/services/persqueue_cluster_discovery)
 
-OWNER(
-    radix
+OWNER( 
+    radix 
     g:kikimr
-    g:logbroker
-)
+    g:logbroker 
+) 
 
 FORK_SUBTESTS()
 

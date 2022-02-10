@@ -1,14 +1,14 @@
-LIBRARY()
+LIBRARY() 
 
-OWNER(g:kikimr)
-
-SRCS(
-    out.cpp
+OWNER(g:kikimr) 
+ 
+SRCS( 
+    out.cpp 
     out_sequenceshard.cpp
-)
-
-PEERDIR(
+) 
+ 
+PEERDIR( 
     ydb/core/protos
-)
-
-END()
+) 
+ 
+END() 

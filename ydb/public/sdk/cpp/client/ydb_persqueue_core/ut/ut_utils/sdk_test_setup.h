@@ -87,9 +87,9 @@ public:
         return LocalDC;
     }
 
-    ui16 GetGrpcPort() const {
-        return Server.GrpcPort;
-    }
+    ui16 GetGrpcPort() const { 
+        return Server.GrpcPort; 
+    } 
 
     NGrpc::TServerOptions& GetGrpcServerOptions() {
         return Server.GrpcServerOptions;

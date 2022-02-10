@@ -17,13 +17,13 @@ namespace NMessageBusTracer {
 class TMessageBusTracingServer : public NKikimr::NMsgBusProxy::TMessageBusServer, public NMsgBusProxy::IMessageWatcher {
 public:
     using TBusKey = NBus::TBusKey;
-    TMessageBusTracingServer(
-        const NBus::TBusServerSessionConfig &sessionConfig,
-        NBus::TBusMessageQueue *busQueue,
-        const TString &tracePath,
-        ui32 bindPort,
-        std::shared_ptr<NMsgBusProxy::IPersQueueGetReadSessionsInfoWorkerFactory> pqReadSessionsInfoWorkerFactory
-    );
+    TMessageBusTracingServer( 
+        const NBus::TBusServerSessionConfig &sessionConfig, 
+        NBus::TBusMessageQueue *busQueue, 
+        const TString &tracePath, 
+        ui32 bindPort, 
+        std::shared_ptr<NMsgBusProxy::IPersQueueGetReadSessionsInfoWorkerFactory> pqReadSessionsInfoWorkerFactory 
+    ); 
     IActor* CreateMessageBusTraceService() override;
 protected:
     TActorId MessageBusTracerActorID;

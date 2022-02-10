@@ -1,17 +1,17 @@
-LIBRARY()
-
-OWNER(
-    dcherednik
-    g:kikimr
-)
-
-SRCS(
-    coordination.cpp
-)
-
-GENERATE_ENUM_SERIALIZATION(coordination.h)
-
-PEERDIR(
+LIBRARY() 
+ 
+OWNER( 
+    dcherednik 
+    g:kikimr 
+) 
+ 
+SRCS( 
+    coordination.cpp 
+) 
+ 
+GENERATE_ENUM_SERIALIZATION(coordination.h) 
+ 
+PEERDIR( 
     ydb/public/api/grpc
     ydb/public/sdk/cpp/client/impl/ydb_internal/make_request
     ydb/public/sdk/cpp/client/ydb_common_client
@@ -19,10 +19,10 @@ PEERDIR(
     ydb/public/sdk/cpp/client/ydb_driver
     ydb/public/sdk/cpp/client/ydb_types
     ydb/public/sdk/cpp/client/ydb_types/status
-)
-
-END()
-
+) 
+ 
+END() 
+ 
 RECURSE_FOR_TESTS(
     ut
 )

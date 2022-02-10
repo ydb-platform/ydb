@@ -22,7 +22,7 @@ using namespace NKikimrClient;
 using grpc::Status;
 
 namespace NKikimr::NDataStreams::V1 {
-    const TString YDS_SERVICE_TYPE = "data-streams";
+    const TString YDS_SERVICE_TYPE = "data-streams"; 
 
     using namespace NGRpcService;
     using namespace NGRpcProxy::V1;
@@ -263,7 +263,7 @@ namespace NKikimr::NDataStreams::V1 {
         }
 
         void Bootstrap(const TActorContext& ctx);
-        void ModifyPersqueueConfig(const TActorContext& ctx,
+        void ModifyPersqueueConfig(const TActorContext& ctx, 
                                    NKikimrSchemeOp::TPersQueueGroupDescription& groupConfig,
                                    const NKikimrSchemeOp::TPersQueueGroupDescription& pqGroupDescription,
                                    const NKikimrSchemeOp::TDirEntry& selfInfo);
@@ -275,14 +275,14 @@ namespace NKikimr::NDataStreams::V1 {
         Become(&TBase::StateWork);
     }
 
-    void TUpdateShardCountActor::ModifyPersqueueConfig(
-        const TActorContext& ctx,
+    void TUpdateShardCountActor::ModifyPersqueueConfig( 
+        const TActorContext& ctx, 
         NKikimrSchemeOp::TPersQueueGroupDescription& groupConfig,
         const NKikimrSchemeOp::TPersQueueGroupDescription& pqGroupDescription,
         const NKikimrSchemeOp::TDirEntry& selfInfo
-    ) {
-        Y_UNUSED(pqGroupDescription);
-        Y_UNUSED(selfInfo);
+    ) { 
+        Y_UNUSED(pqGroupDescription); 
+        Y_UNUSED(selfInfo); 
 
         TString error;
         if (!ValidateShardsCount(*GetProtoRequest(), groupConfig, error)) {
@@ -304,7 +304,7 @@ namespace NKikimr::NDataStreams::V1 {
         }
 
         void Bootstrap(const TActorContext& ctx);
-        void ModifyPersqueueConfig(const TActorContext& ctx,
+        void ModifyPersqueueConfig(const TActorContext& ctx, 
                                    NKikimrSchemeOp::TPersQueueGroupDescription& groupConfig,
                                    const NKikimrSchemeOp::TPersQueueGroupDescription& pqGroupDescription,
                                    const NKikimrSchemeOp::TDirEntry& selfInfo);
@@ -316,14 +316,14 @@ namespace NKikimr::NDataStreams::V1 {
         Become(&TBase::StateWork);
     }
 
-    void TUpdateStreamActor::ModifyPersqueueConfig(
-        const TActorContext& ctx,
+    void TUpdateStreamActor::ModifyPersqueueConfig( 
+        const TActorContext& ctx, 
         NKikimrSchemeOp::TPersQueueGroupDescription& groupConfig,
         const NKikimrSchemeOp::TPersQueueGroupDescription& pqGroupDescription,
         const NKikimrSchemeOp::TDirEntry& selfInfo
-    ) {
-        Y_UNUSED(pqGroupDescription);
-        Y_UNUSED(selfInfo);
+    ) { 
+        Y_UNUSED(pqGroupDescription); 
+        Y_UNUSED(selfInfo); 
 
         TString error;
         if (!ValidateShardsCount(*GetProtoRequest(), groupConfig, error)
@@ -351,7 +351,7 @@ namespace NKikimr::NDataStreams::V1 {
         }
 
         void Bootstrap(const TActorContext& ctx);
-        void ModifyPersqueueConfig(const TActorContext& ctx,
+        void ModifyPersqueueConfig(const TActorContext& ctx, 
                                    NKikimrSchemeOp::TPersQueueGroupDescription& groupConfig,
                                    const NKikimrSchemeOp::TPersQueueGroupDescription& pqGroupDescription,
                                    const NKikimrSchemeOp::TDirEntry& selfInfo);
@@ -363,14 +363,14 @@ namespace NKikimr::NDataStreams::V1 {
         Become(&TBase::StateWork);
     }
 
-    void TSetWriteQuotaActor::ModifyPersqueueConfig(
-        const TActorContext& ctx,
+    void TSetWriteQuotaActor::ModifyPersqueueConfig( 
+        const TActorContext& ctx, 
         NKikimrSchemeOp::TPersQueueGroupDescription& groupConfig,
         const NKikimrSchemeOp::TPersQueueGroupDescription& pqGroupDescription,
         const NKikimrSchemeOp::TDirEntry& selfInfo
-    ) {
-        Y_UNUSED(pqGroupDescription);
-        Y_UNUSED(selfInfo);
+    ) { 
+        Y_UNUSED(pqGroupDescription); 
+        Y_UNUSED(selfInfo); 
 
         TString error;
         if (!ValidateWriteSpeedLimit(*GetProtoRequest(), error, ctx)) {
@@ -399,14 +399,14 @@ namespace NKikimr::NDataStreams::V1 {
             TBase::Become(&TBase::StateWork);
         }
 
-        void ModifyPersqueueConfig(
-            const TActorContext& ctx,
+        void ModifyPersqueueConfig( 
+            const TActorContext& ctx, 
             NKikimrSchemeOp::TPersQueueGroupDescription& groupConfig,
             const NKikimrSchemeOp::TPersQueueGroupDescription& pqGroupDescription,
             const NKikimrSchemeOp::TDirEntry& selfInfo
-        ) {
-            Y_UNUSED(pqGroupDescription);
-            Y_UNUSED(selfInfo);
+        ) { 
+            Y_UNUSED(pqGroupDescription); 
+            Y_UNUSED(selfInfo); 
 
             TString error;
             if (!ValidateRetentionPeriod(*this->GetProtoRequest(), groupConfig, ShouldIncrease, error)) {
@@ -493,9 +493,9 @@ namespace NKikimr::NDataStreams::V1 {
     }
 
     void TDescribeStreamActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx) {
-        const NSchemeCache::TSchemeCacheNavigate* result = ev->Get()->Request.Get();
-        Y_VERIFY(result->ResultSet.size() == 1); // describe only one topic
-        const auto& response = result->ResultSet.front();
+        const NSchemeCache::TSchemeCacheNavigate* result = ev->Get()->Request.Get(); 
+        Y_VERIFY(result->ResultSet.size() == 1); // describe only one topic 
+        const auto& response = result->ResultSet.front(); 
         const TString path = JoinSeq("/", response.Path);
 
         if (ReplyIfNotTopic(ev, ctx)) {
@@ -535,29 +535,29 @@ namespace NKikimr::NDataStreams::V1 {
     void TDescribeStreamActor::ReplyAndDie(const TActorContext& ctx) {
         Ydb::DataStreams::V1::DescribeStreamResult result;
 
-        auto& pqConfig = PQGroup.GetPQTabletConfig();
+        auto& pqConfig = PQGroup.GetPQTabletConfig(); 
         ui32 writeSpeed = pqConfig.GetPartitionConfig().GetWriteSpeedInBytesPerSecond() / 1024;
         auto& description = *result.mutable_stream_description();
         description.set_stream_name(GetProtoRequest()->stream_name());
         ui32 retentionPeriodHours = TInstant::Seconds(pqConfig.GetPartitionConfig().GetLifetimeSeconds()).Hours();
         description.set_retention_period_hours(retentionPeriodHours);
         description.set_write_quota_kb_per_sec(writeSpeed);
-        if (SelfInfo.GetCreateFinished()) {
-            description.set_stream_status(Ydb::DataStreams::V1::StreamDescription::ACTIVE);
-        } else {
-            description.set_stream_status(Ydb::DataStreams::V1::StreamDescription::CREATING);
+        if (SelfInfo.GetCreateFinished()) { 
+            description.set_stream_status(Ydb::DataStreams::V1::StreamDescription::ACTIVE); 
+        } else { 
+            description.set_stream_status(Ydb::DataStreams::V1::StreamDescription::CREATING); 
         }
 
         bool startShardFound = GetProtoRequest()->exclusive_start_shard_id().empty();
         description.set_has_more_shards(false);
 
-        description.set_owner(SelfInfo.GetOwner());
-        description.set_stream_creation_timestamp(TInstant::MilliSeconds(SelfInfo.GetCreateStep()).Seconds());
+        description.set_owner(SelfInfo.GetOwner()); 
+        description.set_stream_creation_timestamp(TInstant::MilliSeconds(SelfInfo.GetCreateStep()).Seconds()); 
 
         int limit = GetProtoRequest()->limit() == 0 ? 100 : GetProtoRequest()->limit();
 
-        for (uint32_t i = 0; i < (uint32_t)PQGroup.GetPartitions().size(); ++i) {
-            ui32 partitionId = PQGroup.GetPartitions(i).GetPartitionId();
+        for (uint32_t i = 0; i < (uint32_t)PQGroup.GetPartitions().size(); ++i) { 
+            ui32 partitionId = PQGroup.GetPartitions(i).GetPartitionId(); 
             TString shardName = GetShardName(partitionId);
             if (shardName == GetProtoRequest()->exclusive_start_shard_id()) {
                 startShardFound = true;
@@ -569,7 +569,7 @@ namespace NKikimr::NDataStreams::V1 {
                     auto* shard = description.add_shards();
                     shard->set_shard_id(shardName);
                     auto* rangeProto = shard->mutable_hash_key_range();
-                    auto range = RangeFromShardNumber(partitionId, PQGroup.GetPartitions().size());
+                    auto range = RangeFromShardNumber(partitionId, PQGroup.GetPartitions().size()); 
                     rangeProto->set_starting_hash_key(Uint128ToDecimalString(range.Start));
                     rangeProto->set_ending_hash_key(Uint128ToDecimalString(range.End));
                     auto it = StartEndOffsetsPerPartition.find(partitionId);
@@ -809,9 +809,9 @@ namespace NKikimr::NDataStreams::V1 {
     }
 
     void TListStreamConsumersActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx) {
-        const NSchemeCache::TSchemeCacheNavigate* result = ev->Get()->Request.Get();
-        Y_VERIFY(result->ResultSet.size() == 1); // describe only one topic
-
+        const NSchemeCache::TSchemeCacheNavigate* result = ev->Get()->Request.Get(); 
+        Y_VERIFY(result->ResultSet.size() == 1); // describe only one topic 
+ 
         if (ReplyIfNotTopic(ev, ctx)) {
             return;
         }
@@ -893,24 +893,24 @@ namespace NKikimr::NDataStreams::V1 {
         Become(&TRegisterStreamConsumerActor::StateWork);
     }
 
-    void TRegisterStreamConsumerActor::ModifyPersqueueConfig(
-        const TActorContext& ctx,
+    void TRegisterStreamConsumerActor::ModifyPersqueueConfig( 
+        const TActorContext& ctx, 
         NKikimrSchemeOp::TPersQueueGroupDescription& groupConfig,
         const NKikimrSchemeOp::TPersQueueGroupDescription& pqGroupDescription,
         const NKikimrSchemeOp::TDirEntry& selfInfo
-    ) {
-        Y_UNUSED(pqGroupDescription);
-
+    ) { 
+        Y_UNUSED(pqGroupDescription); 
+ 
         auto* pqConfig = groupConfig.MutablePQTabletConfig();
         Ydb::PersQueue::V1::TopicSettings::ReadRule readRule;
         readRule.set_consumer_name(ConsumerName);
         readRule.set_supported_format(Ydb::PersQueue::V1::TopicSettings_Format_FORMAT_BASE);
         readRule.set_starting_message_timestamp_ms(TInstant::Now().MilliSeconds());
         readRule.set_important(false);
-        readRule.set_service_type(YDS_SERVICE_TYPE);
+        readRule.set_service_type(YDS_SERVICE_TYPE); 
 
         if (readRule.version() == 0) {
-            readRule.set_version(selfInfo.GetVersion().GetPQVersion());
+            readRule.set_version(selfInfo.GetVersion().GetPQVersion()); 
         }
         auto serviceTypes = GetSupportedClientServiceTypes(ctx);
         TString error = AddReadRuleToConfig(pqConfig, readRule, serviceTypes, ctx);
@@ -967,19 +967,19 @@ namespace NKikimr::NDataStreams::V1 {
         Become(&TDeregisterStreamConsumerActor::StateWork);
     }
 
-    void TDeregisterStreamConsumerActor::ModifyPersqueueConfig(
-        const TActorContext& ctx,
+    void TDeregisterStreamConsumerActor::ModifyPersqueueConfig( 
+        const TActorContext& ctx, 
         NKikimrSchemeOp::TPersQueueGroupDescription& groupConfig,
         const NKikimrSchemeOp::TPersQueueGroupDescription& pqGroupDescription,
         const NKikimrSchemeOp::TDirEntry& selfInfo
-    ) {
-        Y_UNUSED(selfInfo);
-        auto error = RemoveReadRuleFromConfig(
-            groupConfig.MutablePQTabletConfig(),
-            pqGroupDescription.GetPQTabletConfig(),
-            GetProtoRequest()->consumer_name(),
-            ctx
-        );
+    ) { 
+        Y_UNUSED(selfInfo); 
+        auto error = RemoveReadRuleFromConfig( 
+            groupConfig.MutablePQTabletConfig(), 
+            pqGroupDescription.GetPQTabletConfig(), 
+            GetProtoRequest()->consumer_name(), 
+            ctx 
+        ); 
         if (!error.Empty()) {
             return ReplyWithError(Ydb::StatusIds::NOT_FOUND, Ydb::PersQueue::ErrorCode::BAD_REQUEST, error, ctx);
         }

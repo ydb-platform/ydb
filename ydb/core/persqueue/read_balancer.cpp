@@ -9,9 +9,9 @@ namespace NPQ {
 
 using namespace NTabletFlatExecutor;
 
-static constexpr TDuration ACL_SUCCESS_RETRY_TIMEOUT = TDuration::Seconds(30);
-static constexpr TDuration ACL_ERROR_RETRY_TIMEOUT = TDuration::Seconds(5);
-static constexpr TDuration ACL_EXPIRATION_TIMEOUT = TDuration::Minutes(5);
+static constexpr TDuration ACL_SUCCESS_RETRY_TIMEOUT = TDuration::Seconds(30); 
+static constexpr TDuration ACL_ERROR_RETRY_TIMEOUT = TDuration::Seconds(5); 
+static constexpr TDuration ACL_EXPIRATION_TIMEOUT = TDuration::Minutes(5); 
 
 bool TPersQueueReadBalancer::TTxPreInit::Execute(TTransactionContext& txc, const TActorContext& ctx) {
     Y_UNUSED(ctx);
@@ -319,7 +319,7 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvCheckACL::TPtr &ev, const T
         return;
     }
 
-    if (ctx.Now() > LastACLUpdate + ACL_EXPIRATION_TIMEOUT || Topic.empty()) { //Topic.empty is only for tests
+    if (ctx.Now() > LastACLUpdate + ACL_EXPIRATION_TIMEOUT || Topic.empty()) { //Topic.empty is only for tests 
         WaitingACLRequests.push_back(ev);
         return;
     }
@@ -394,7 +394,7 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvWakeupClient::TPtr &ev, con
 }
 
 void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvDescribe::TPtr &ev, const TActorContext& ctx) {
-    if (ctx.Now() > LastACLUpdate + ACL_EXPIRATION_TIMEOUT || Topic.empty()) { //Topic.empty is only for tests
+    if (ctx.Now() > LastACLUpdate + ACL_EXPIRATION_TIMEOUT || Topic.empty()) { //Topic.empty is only for tests 
         WaitingDescribeRequests.push_back(ev);
         return;
     } else {
@@ -685,7 +685,7 @@ void TPersQueueReadBalancer::Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSch
         AnswerWaitingRequests(ctx);
     } else {
         LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE_READ_BALANCER, GetPrefix() << "couldn't receive ACL due to " << record.GetStatus());
-        ctx.Schedule(ACL_ERROR_RETRY_TIMEOUT, new TEvPersQueue::TEvUpdateACL());
+        ctx.Schedule(ACL_ERROR_RETRY_TIMEOUT, new TEvPersQueue::TEvUpdateACL()); 
     }
 }
 
@@ -715,7 +715,7 @@ void TPersQueueReadBalancer::GetACL(const TActorContext& ctx) {
     if (WaitingForACL) // if there is request infly
         return;
     if (SchemeShardId == 0) {
-        ctx.Schedule(ACL_SUCCESS_RETRY_TIMEOUT, new TEvPersQueue::TEvUpdateACL());
+        ctx.Schedule(ACL_SUCCESS_RETRY_TIMEOUT, new TEvPersQueue::TEvUpdateACL()); 
     } else {
         WaitingForACL = true;
         RequestTabletIfNeeded(SchemeShardId, ctx);
@@ -771,14 +771,14 @@ void TPersQueueReadBalancer::TClientInfo::AddSession(const ui32 group, const THa
     }
 
     auto it = ClientGroupsInfo.find(group);
-    it->second.SessionsInfo.insert({
-        std::make_pair(pipe, it->second.RandomNumber),
-        TClientGroupInfo::TSessionInfo(
-            record.GetSession(), sender,
-            record.HasClientNode() ? record.GetClientNode() : "none",
-            sender.NodeId(), TAppData::TimeProvider->Now()
-        )
-    });
+    it->second.SessionsInfo.insert({ 
+        std::make_pair(pipe, it->second.RandomNumber), 
+        TClientGroupInfo::TSessionInfo( 
+            record.GetSession(), sender, 
+            record.HasClientNode() ? record.GetClientNode() : "none", 
+            sender.NodeId(), TAppData::TimeProvider->Now() 
+        ) 
+    }); 
 }
 
 
@@ -888,7 +888,7 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvGetReadSessionsInfo::TPtr& 
                     pi->SetClientNode(jt->second.ClientNode);
                     pi->SetProxyNodeId(jt->second.ProxyNodeId);
                     pi->SetSession(jt->second.Session);
-                    pi->SetTimestamp(jt->second.Timestamp.Seconds());
+                    pi->SetTimestamp(jt->second.Timestamp.Seconds()); 
                 } else {
                     pi->SetClientNode("");
                     pi->SetProxyNodeId(0);

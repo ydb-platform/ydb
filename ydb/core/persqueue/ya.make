@@ -3,30 +3,30 @@ LIBRARY()
 OWNER(
     alexnick
     g:kikimr
-    g:logbroker
+    g:logbroker 
 )
 
 SRCS(
     cluster_tracker.cpp
     blob.cpp
-    event_helpers.cpp
+    event_helpers.cpp 
     header.cpp
     percentile_counter.cpp
     pq.cpp
     pq_database.cpp
     pq_impl.cpp
     sourceid.cpp
-    mirrorer.cpp
-    mirrorer.h
+    mirrorer.cpp 
+    mirrorer.h 
     ownerinfo.cpp
     partition.cpp
     pq_l2_cache.cpp
     read_balancer.cpp
-    read_speed_limiter.cpp
+    read_speed_limiter.cpp 
     subscriber.cpp
     type_codecs_defs.cpp
-    user_info.cpp
-    write_meta.cpp
+    user_info.cpp 
+    write_meta.cpp 
     actor_persqueue_client_iface.h
 )
 

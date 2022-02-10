@@ -126,7 +126,7 @@ TDescribeTopicResult::TTopicSettings::TReadRule::TReadRule(const Ydb::PersQueue:
         SupportedCodecs_.push_back(static_cast<ECodec>(codec));
     }
     Version_ = settings.version();
-    ServiceType_ = settings.service_type();
+    ServiceType_ = settings.service_type(); 
 }
 
 TDescribeTopicResult::TTopicSettings::TRemoteMirrorRule::TRemoteMirrorRule(const Ydb::PersQueue::V1::TopicSettings::RemoteMirrorRule& settings)

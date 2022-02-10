@@ -33,8 +33,8 @@ struct TModuleFactories {
     std::shared_ptr<ILogBackendFactory> LogBackendFactory;
     // A backend factory for Query Replay
     std::shared_ptr<NKqp::IQueryReplayBackendFactory> QueryReplayBackendFactory;
-    //
-    std::shared_ptr<NMsgBusProxy::IPersQueueGetReadSessionsInfoWorkerFactory> PQReadSessionsInfoWorkerFactory;
+    // 
+    std::shared_ptr<NMsgBusProxy::IPersQueueGetReadSessionsInfoWorkerFactory> PQReadSessionsInfoWorkerFactory; 
     // Can be nullptr. In that case there would be no ability to work with Yandex Logbroker in Yandex Query.
     NPq::NConfigurationManager::IConnections::TPtr PqCmConnections;
     // Export implementation for Data Shards
@@ -50,7 +50,7 @@ struct TModuleFactories {
     // Factory for grpc services
     TGrpcServiceFactory GrpcServiceFactory;
 
-    std::shared_ptr<NPQ::IPersQueueMirrorReaderFactory> PersQueueMirrorReaderFactory;
+    std::shared_ptr<NPQ::IPersQueueMirrorReaderFactory> PersQueueMirrorReaderFactory; 
     /// Factory for pdisk's aio engines
     std::shared_ptr<NPDisk::IIoContextFactory> IoContextFactory;
 

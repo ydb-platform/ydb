@@ -5,7 +5,7 @@
 #include "proxy_actor.h"
 
 #include <ydb/core/mind/address_classification/net_classifier.h>
-
+ 
 #include <ydb/core/ymq/base/action.h>
 #include <ydb/core/ymq/base/counters.h>
 #include <ydb/core/ymq/base/processed_request_attributes.h>
@@ -14,7 +14,7 @@
 #include <library/cpp/logger/record.h>
 
 #include <util/generic/guid.h>
-#include <util/generic/serialized_enum.h>
+#include <util/generic/serialized_enum.h> 
 #include <util/string/builder.h>
 #include <util/system/hostname.h>
 
@@ -24,28 +24,28 @@ namespace NKikimr::NSQS {
 
 using namespace NAddressClassifier;
 
-const THashMap<TString, TString> TProcessedRequestsAggregator::LabelTransformation = {
-    {"yacloud", ToString(ENetworkClass::cloud)}
-};
-
-TProcessedRequestsAggregator::TProcessedRequestsAggregator(const NKikimrConfig::TSqsConfig& config)
-    : NetClassifierOnly(config.GetMeteringByNetClassifierOnly())
-{
-    auto enumValues = GetEnumNames<ENetworkClass>();
-    TVector<TString> labels(enumValues.size());
-    for (auto enumItem : enumValues) {
-        Y_VERIFY(enumItem.first < labels.size());
-        labels[enumItem.first] = enumItem.second;
-    }
-    Counters = new TMeteringCounters(config, GetSqsServiceCounters(AppData()->Counters, "metering"), labels);
-    if (!NetClassifierOnly) {
-        InitAddressClassifier(config, std::move(labels));
-    }
-}
+const THashMap<TString, TString> TProcessedRequestsAggregator::LabelTransformation = { 
+    {"yacloud", ToString(ENetworkClass::cloud)} 
+}; 
+ 
+TProcessedRequestsAggregator::TProcessedRequestsAggregator(const NKikimrConfig::TSqsConfig& config) 
+    : NetClassifierOnly(config.GetMeteringByNetClassifierOnly()) 
+{ 
+    auto enumValues = GetEnumNames<ENetworkClass>(); 
+    TVector<TString> labels(enumValues.size()); 
+    for (auto enumItem : enumValues) { 
+        Y_VERIFY(enumItem.first < labels.size()); 
+        labels[enumItem.first] = enumItem.second; 
+    } 
+    Counters = new TMeteringCounters(config, GetSqsServiceCounters(AppData()->Counters, "metering"), labels); 
+    if (!NetClassifierOnly) { 
+        InitAddressClassifier(config, std::move(labels)); 
+    } 
+} 
 
 bool TProcessedRequestsAggregator::TReportedTrafficKey::operator<(const TReportedTrafficKey& rhs) const {
-    return std::tie(ResourceId, TrafficType, NetworkClassLabel) <
-        std::tie(rhs.ResourceId, rhs.TrafficType, rhs.NetworkClassLabel);
+    return std::tie(ResourceId, TrafficType, NetworkClassLabel) < 
+        std::tie(rhs.ResourceId, rhs.TrafficType, rhs.NetworkClassLabel); 
 }
 
 bool TProcessedRequestsAggregator::TReportedRequestsKey::operator<(const TReportedRequestsKey& rhs) const {
@@ -53,33 +53,33 @@ bool TProcessedRequestsAggregator::TReportedRequestsKey::operator<(const TReport
         std::tie(rhs.ResourceId, rhs.QueueType);
 }
 
-TString TProcessedRequestsAggregator::ClassifyNetwork(NAddressClassifier::TLabeledAddressClassifier::TConstPtr classifier, const TString& address)  {
-    if (classifier) {
-        auto result = classifier->ClassifyAddress(address);
-        if (!result) {
-            return ToString(ENetworkClass::inet);
-        }
-        auto it = LabelTransformation.find(result.GetRef());
-        if (it != LabelTransformation.end()) {
-            return it->second;
-        }
-        return result.GetRef();
+TString TProcessedRequestsAggregator::ClassifyNetwork(NAddressClassifier::TLabeledAddressClassifier::TConstPtr classifier, const TString& address)  { 
+    if (classifier) { 
+        auto result = classifier->ClassifyAddress(address); 
+        if (!result) { 
+            return ToString(ENetworkClass::inet); 
+        } 
+        auto it = LabelTransformation.find(result.GetRef()); 
+        if (it != LabelTransformation.end()) { 
+            return it->second; 
+        } 
+        return result.GetRef(); 
+    } 
+    return ToString(ENetworkClass::unknown); 
+} 
+ 
+TString TProcessedRequestsAggregator::ClassifyNetwork(const TString& address) const { 
+    TString netClassifierResult = ClassifyNetwork(NetClassifier, address); 
+ 
+    TString result; 
+    if (NetClassifierOnly) { 
+        result = std::move(netClassifierResult); 
+    } else { 
+        result = ClassifyNetwork(AddressClassifier, address); 
+        INC_COUNTER(Counters, IdleClassifierRequestsResults[netClassifierResult]); 
     }
-    return ToString(ENetworkClass::unknown);
-}
-
-TString TProcessedRequestsAggregator::ClassifyNetwork(const TString& address) const {
-    TString netClassifierResult = ClassifyNetwork(NetClassifier, address);
-
-    TString result;
-    if (NetClassifierOnly) {
-        result = std::move(netClassifierResult);
-    } else {
-        result = ClassifyNetwork(AddressClassifier, address);
-        INC_COUNTER(Counters, IdleClassifierRequestsResults[netClassifierResult]);
-    }
-    INC_COUNTER(Counters, ClassifierRequestsResults[result]);
-    return result;
+    INC_COUNTER(Counters, ClassifierRequestsResults[result]); 
+    return result; 
 }
 
 ui64 TProcessedRequestsAggregator::CountBlocks(const ui64 bytes, const ui64 blockSize) const {
@@ -97,13 +97,13 @@ bool TProcessedRequestsAggregator::Add(const TProcessedRequestAttributes& attrs)
         queueType = EQueueType::other;
         resourceId = "";
     }
-    const auto networkClassLabel = ClassifyNetwork(attrs.SourceAddress);
+    const auto networkClassLabel = ClassifyNetwork(attrs.SourceAddress); 
 
     Y_VERIFY(attrs.RequestSizeInBytes);
     Y_VERIFY(attrs.ResponseSizeInBytes);
 
-    ReportedTraffic[attrs.FolderId][{resourceId, ETrafficType::ingress, networkClassLabel}] += attrs.RequestSizeInBytes;
-    ReportedTraffic[attrs.FolderId][{resourceId, ETrafficType::egress, networkClassLabel}] += attrs.ResponseSizeInBytes;
+    ReportedTraffic[attrs.FolderId][{resourceId, ETrafficType::ingress, networkClassLabel}] += attrs.RequestSizeInBytes; 
+    ReportedTraffic[attrs.FolderId][{resourceId, ETrafficType::egress, networkClassLabel}] += attrs.ResponseSizeInBytes; 
 
     static const ui64 defaultRequestBlockSize = 64 * 1024; // SQS-22
     ReportedRequests[attrs.FolderId][{resourceId, queueType}] += CountBlocks(attrs.RequestSizeInBytes + attrs.ResponseSizeInBytes,
@@ -112,16 +112,16 @@ bool TProcessedRequestsAggregator::Add(const TProcessedRequestAttributes& attrs)
     return true;
 }
 
-NSc::TValue CreateMeteringBillingRecord(
-    const TString& folderId,
-    const TString& resourceId,
-    const TString& schema,
-    const TString& fqdn,
-    const TInstant& now,
-    const ui64 quantity,
-    const TString& unit,
-    const NSc::TValue& tags
-) {
+NSc::TValue CreateMeteringBillingRecord( 
+    const TString& folderId, 
+    const TString& resourceId, 
+    const TString& schema, 
+    const TString& fqdn, 
+    const TInstant& now, 
+    const ui64 quantity, 
+    const TString& unit, 
+    const NSc::TValue& tags 
+) { 
     const TString& billingRecordVersion = "v1";
     const ui64 utcSeconds = now.Seconds();
 
@@ -157,10 +157,10 @@ TVector<NSc::TValue> TProcessedRequestsAggregator::DumpReportedTrafficAsJsonArra
         for (const auto& [trafficKey, trafficValue] : perFolderData.second) {
             NSc::TValue tags;
             tags.SetDict();
-            tags["type"] = trafficKey.NetworkClassLabel;
+            tags["type"] = trafficKey.NetworkClassLabel; 
             tags["direction"] = ToString(trafficKey.TrafficType);
 
-            result.push_back(CreateMeteringBillingRecord(folderId,
+            result.push_back(CreateMeteringBillingRecord(folderId, 
                                                  trafficKey.ResourceId,
                                                  "ymq.traffic.v1",
                                                  fqdn,
@@ -184,7 +184,7 @@ TVector<NSc::TValue> TProcessedRequestsAggregator::DumpReportedRequestsAsJsonArr
             tags.SetDict();
             tags["queue_type"] = ToString(requestsKey.QueueType);
 
-            result.push_back(CreateMeteringBillingRecord(folderId,
+            result.push_back(CreateMeteringBillingRecord(folderId, 
                                                  requestsKey.ResourceId,
                                                  "ymq.requests.v1",
                                                  fqdn,
@@ -203,23 +203,23 @@ void TProcessedRequestsAggregator::ResetReportsStorage() {
     ReportedRequests.clear();
 }
 
-void TProcessedRequestsAggregator::UpdateNetClassifier(NAddressClassifier::TLabeledAddressClassifier::TConstPtr classifier, TMaybe<TInstant> /*netDataUpdateTimestamp*/) {
-    NetClassifier = classifier;
-}
-
-void TProcessedRequestsAggregator::InitAddressClassifier(const NKikimrConfig::TSqsConfig& config, TVector<TString>&& labels) {
-    TAddressClassifier addressClassifier;
-    for (size_t i = 0; i < config.MeteringCloudNetCidrSize(); ++i) {
-        addressClassifier.AddNetByCidrAndLabel(config.GetMeteringCloudNetCidr(i) , ENetworkClass::cloud);
-    }
-
-    for (size_t i = 0; i < config.MeteringYandexNetCidrSize(); ++i) {
-        addressClassifier.AddNetByCidrAndLabel(config.GetMeteringYandexNetCidr(i) , ENetworkClass::yandex);
-    }
-
-    AddressClassifier = TLabeledAddressClassifier::MakeLabeledAddressClassifier(std::move(addressClassifier), std::move(labels));
-}
-
+void TProcessedRequestsAggregator::UpdateNetClassifier(NAddressClassifier::TLabeledAddressClassifier::TConstPtr classifier, TMaybe<TInstant> /*netDataUpdateTimestamp*/) { 
+    NetClassifier = classifier; 
+} 
+ 
+void TProcessedRequestsAggregator::InitAddressClassifier(const NKikimrConfig::TSqsConfig& config, TVector<TString>&& labels) { 
+    TAddressClassifier addressClassifier; 
+    for (size_t i = 0; i < config.MeteringCloudNetCidrSize(); ++i) { 
+        addressClassifier.AddNetByCidrAndLabel(config.GetMeteringCloudNetCidr(i) , ENetworkClass::cloud); 
+    } 
+ 
+    for (size_t i = 0; i < config.MeteringYandexNetCidrSize(); ++i) { 
+        addressClassifier.AddNetByCidrAndLabel(config.GetMeteringYandexNetCidr(i) , ENetworkClass::yandex); 
+    } 
+ 
+    AddressClassifier = TLabeledAddressClassifier::MakeLabeledAddressClassifier(std::move(addressClassifier), std::move(labels)); 
+} 
+ 
 class TMeteringActor
     : public TActorBootstrapped<TMeteringActor>
 {
@@ -229,11 +229,11 @@ public:
     {
     }
 
-    void Bootstrap(const TActorContext& ctx) {
+    void Bootstrap(const TActorContext& ctx) { 
         Become(&TThis::Work);
 
-        ctx.Send(NNetClassifier::MakeNetClassifierID(), new NNetClassifier::TEvNetClassifier::TEvSubscribe);
-
+        ctx.Send(NNetClassifier::MakeNetClassifierID(), new NNetClassifier::TEvNetClassifier::TEvSubscribe); 
+ 
         Aggregator = MakeHolder<TProcessedRequestsAggregator>(Cfg());
 
         FlushProcessedRequestsAttributes();
@@ -286,17 +286,17 @@ public:
     STATEFN(Work) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvWakeup, HandleWakeup);
-            hFunc(NNetClassifier::TEvNetClassifier::TEvClassifierUpdate, HandleNetClassifierUpdate);
+            hFunc(NNetClassifier::TEvNetClassifier::TEvClassifierUpdate, HandleNetClassifierUpdate); 
             hFunc(TSqsEvents::TEvReportProcessedRequestAttributes, HandleReportProcessedRequestAttributes);
         }
     }
-
+ 
 private:
-    void HandleNetClassifierUpdate(NNetClassifier::TEvNetClassifier::TEvClassifierUpdate::TPtr& ev) {
-        Aggregator->UpdateNetClassifier(ev->Get()->Classifier, ev->Get()->NetDataUpdateTimestamp);
-    }
-
-private:
+    void HandleNetClassifierUpdate(NNetClassifier::TEvNetClassifier::TEvClassifierUpdate::TPtr& ev) { 
+        Aggregator->UpdateNetClassifier(ev->Get()->Classifier, ev->Get()->NetDataUpdateTimestamp); 
+    } 
+ 
+private: 
     const TString HostFQDN;
     THolder<TProcessedRequestsAggregator> Aggregator;
 };

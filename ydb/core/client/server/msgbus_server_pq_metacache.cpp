@@ -35,7 +35,7 @@ public:
         : Counters(counters)
         , ClientWrapper(std::move(std::make_unique<TClientWrapper>(grpcPort)))
         , VersionCheckInterval(versionCheckInterval)
-        , Generation(std::make_shared<TAtomicCounter>())
+        , Generation(std::make_shared<TAtomicCounter>()) 
     {
     }
 
@@ -43,7 +43,7 @@ public:
                              const TDuration& versionCheckInterval)
         : Counters(counters)
         , VersionCheckInterval(versionCheckInterval)
-        , Generation(std::make_shared<TAtomicCounter>())
+        , Generation(std::make_shared<TAtomicCounter>()) 
     {
     }
 
@@ -86,22 +86,22 @@ public:
     }
 
 private:
-    template<class TEventType, class TFutureType, class... TArgs>
-    void SubscribeEvent(const TFutureType& future, TArgs... args) {
-        std::weak_ptr<TAtomicCounter> weakGeneration(Generation);
+    template<class TEventType, class TFutureType, class... TArgs> 
+    void SubscribeEvent(const TFutureType& future, TArgs... args) { 
+        std::weak_ptr<TAtomicCounter> weakGeneration(Generation); 
         future.Subscribe(
-            [
-                id = SelfId(),
-                originalGen = Generation->Val(),
-                weakGen = weakGeneration,
-                as = ActorSystem,
-                ... args = std::forward<TArgs>(args)
-            ](const auto&) mutable {
-                auto currentGen = weakGen.lock();
-                if (currentGen && originalGen == currentGen->Val()) {
-                    as->Send(id, new TEventType(args...));
+            [ 
+                id = SelfId(), 
+                originalGen = Generation->Val(), 
+                weakGen = weakGeneration, 
+                as = ActorSystem, 
+                ... args = std::forward<TArgs>(args) 
+            ](const auto&) mutable { 
+                auto currentGen = weakGen.lock(); 
+                if (currentGen && originalGen == currentGen->Val()) { 
+                    as->Send(id, new TEventType(args...)); 
                 }
-            }
+            } 
         );
     }
 
@@ -119,7 +119,7 @@ private:
     void StartSession(const TActorContext& ctx) {
         LOG_DEBUG_S(ctx, NKikimrServices::PQ_METACACHE, "Start new session");
         SessionFuture = ClientWrapper->GetClient()->GetSession();
-        SubscribeEvent<TEvPqNewMetaCache::TEvSessionStarted>(SessionFuture);
+        SubscribeEvent<TEvPqNewMetaCache::TEvSessionStarted>(SessionFuture); 
     }
 
     void HandleSessionStarted(const TActorContext& ctx) {
@@ -136,7 +136,7 @@ private:
     void PrepareTopicsQuery(const TActorContext& ctx) {
         Y_UNUSED(ctx);
         TopicsQueryFuture = YdbSession->PrepareDataQuery(TopicsQuery);
-        SubscribeEvent<TEvPqNewMetaCache::TEvQueryPrepared>(TopicsQueryFuture);
+        SubscribeEvent<TEvPqNewMetaCache::TEvQueryPrepared>(TopicsQueryFuture); 
     }
 
     void HandleTopicsQueryPrepared(const TActorContext& ctx) {
@@ -176,7 +176,7 @@ private:
             }
             AsyncQueryResult = PreparedTopicsQuery->Execute(TTxControl::BeginTx().CommitTx(), builder.Build());
         }
-        SubscribeEvent<TEvPqNewMetaCache::TEvQueryComplete>(AsyncQueryResult, type);
+        SubscribeEvent<TEvPqNewMetaCache::TEvQueryComplete>(AsyncQueryResult, type); 
     }
 
     void HandleCheckVersionResult(const TActorContext& ctx) {
@@ -522,7 +522,7 @@ private:
     NActors::TActorId SchemeCacheId;
     TString PathPrefix;
     TVector<TString> PathPrefixParts;
-    std::shared_ptr<TAtomicCounter> Generation;
+    std::shared_ptr<TAtomicCounter> Generation; 
     bool SkipVersionCheck = false;
 };
 

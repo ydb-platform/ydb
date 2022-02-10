@@ -3,12 +3,12 @@ LIBRARY()
 OWNER(
     alexnick
     g:kikimr
-    g:logbroker
+    g:logbroker 
 )
 
 SRCS(
     grpc_pq_actor.h
-    grpc_pq_codecs.cpp
+    grpc_pq_codecs.cpp 
     grpc_pq_read_actor.cpp
     grpc_pq_read.cpp
     grpc_pq_read.h
@@ -37,7 +37,7 @@ PEERDIR(
     ydb/core/ydb_convert
     ydb/library/aclib
     ydb/library/persqueue/obfuscate
-    ydb/library/persqueue/tests
+    ydb/library/persqueue/tests 
     ydb/library/persqueue/topic_parser
     ydb/public/api/grpc/draft
     ydb/public/api/protos

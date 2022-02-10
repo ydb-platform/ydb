@@ -1,7 +1,7 @@
 #pragma once
-
-#include "pq.h"
-#include "user_info.h"
+ 
+#include "pq.h" 
+#include "user_info.h" 
 
 #include <ydb/core/testlib/basics/runtime.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
@@ -1093,7 +1093,7 @@ void FillDeprecatedUserInfo(NKikimrClient::TKeyValueRequest_TCmdWrite* write, TS
     NPQ::TKeyPrefix ikeyDeprecated(NPQ::TKeyPrefix::TypeInfo, partition, NPQ::TKeyPrefix::MarkUserDeprecated);
     ikeyDeprecated.Append(client.c_str(), client.size());
 
-    TBuffer idataDeprecated = NPQ::NDeprecatedUserData::Serialize(offset, gen, step, session);
+    TBuffer idataDeprecated = NPQ::NDeprecatedUserData::Serialize(offset, gen, step, session); 
     write->SetKey(ikeyDeprecated.Data(), ikeyDeprecated.Size());
     write->SetValue(idataDeprecated.Data(), idataDeprecated.Size());
 }

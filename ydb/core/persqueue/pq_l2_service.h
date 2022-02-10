@@ -16,7 +16,7 @@ inline TActorId MakePersQueueL2CacheID() {
 
 struct TCacheL2Parameters {
     ui32 MaxSizeMB;
-    TDuration KeepTime;
+    TDuration KeepTime; 
 };
 
 IActor* CreateNodePersQueueL2Cache(const TCacheL2Parameters&, TIntrusivePtr<NMonitoring::TDynamicCounters>);

@@ -1,7 +1,7 @@
 #pragma once
-
-#include "common.h"
-
+ 
+#include "common.h" 
+ 
 #include <ydb/public/sdk/cpp/client/ydb_common_client/impl/client.h>
 
 #include <ydb/public/api/grpc/draft/ydb_persqueue_v1.grpc.pb.h>
@@ -98,11 +98,11 @@ class TDataDecompressionInfo {
 public:
     TDataDecompressionInfo(const TDataDecompressionInfo&) = default;
     TDataDecompressionInfo(TDataDecompressionInfo&&) = default;
-    TDataDecompressionInfo(
-        Ydb::PersQueue::V1::MigrationStreamingReadServerMessage::DataBatch::PartitionData&& msg,
-        std::weak_ptr<TSingleClusterReadSessionImpl> session,
-        bool doDecompress
-    );
+    TDataDecompressionInfo( 
+        Ydb::PersQueue::V1::MigrationStreamingReadServerMessage::DataBatch::PartitionData&& msg, 
+        std::weak_ptr<TSingleClusterReadSessionImpl> session, 
+        bool doDecompress 
+    ); 
 
     i64 StartDecompressionTasks(const IExecutor::TPtr& executor,
                                 i64 availableMemory,
@@ -155,10 +155,10 @@ public:
     }
 
     // Takes data. Returns true if event has more unpacked data.
-    bool TakeData(const TIntrusivePtr<TPartitionStreamImpl>& partitionStream,
-                  TVector<TReadSessionEvent::TDataReceivedEvent::TMessage>* messages,
-                  TVector<TReadSessionEvent::TDataReceivedEvent::TCompressedMessage>* compressedMessages,
-                  size_t* maxByteSize);
+    bool TakeData(const TIntrusivePtr<TPartitionStreamImpl>& partitionStream, 
+                  TVector<TReadSessionEvent::TDataReceivedEvent::TMessage>* messages, 
+                  TVector<TReadSessionEvent::TDataReceivedEvent::TCompressedMessage>* compressedMessages, 
+                  size_t* maxByteSize); 
 
     bool HasMoreData() const {
         return CurrentReadingMessage.first < static_cast<size_t>(GetServerMessage().batches_size());
@@ -212,7 +212,7 @@ private:
     Ydb::PersQueue::V1::MigrationStreamingReadServerMessage::DataBatch::PartitionData ServerMessage;
     std::vector<TWriteSessionMeta::TPtr> BatchesMeta;
     std::weak_ptr<TSingleClusterReadSessionImpl> Session;
-    bool DoDecompress;
+    bool DoDecompress; 
     i64 CompressedDataSize = 0;
     std::atomic<i64> SourceDataNotProcessed = 0;
     std::pair<size_t, size_t> CurrentDecompressingMessage = {0, 0}; // (Batch, Message)
@@ -256,16 +256,16 @@ struct TReadSessionEventInfo {
 
     TReadSessionEventInfo(TIntrusivePtr<TPartitionStreamImpl> partitionStream,
                           std::weak_ptr<IUserRetrievedEventCallback> session,
-                          TVector<TReadSessionEvent::TDataReceivedEvent::TMessage> messages,
-                          TVector<TReadSessionEvent::TDataReceivedEvent::TCompressedMessage> compressedMessages);
+                          TVector<TReadSessionEvent::TDataReceivedEvent::TMessage> messages, 
+                          TVector<TReadSessionEvent::TDataReceivedEvent::TCompressedMessage> compressedMessages); 
 
     bool IsEmpty() const;
     bool IsDataEvent() const;
 
     // Takes data. Returns true if event has more unpacked data.
-    bool TakeData(TVector<TReadSessionEvent::TDataReceivedEvent::TMessage>* messages,
-                  TVector<TReadSessionEvent::TDataReceivedEvent::TCompressedMessage>* comressedMessages,
-                  size_t* maxByteSize);
+    bool TakeData(TVector<TReadSessionEvent::TDataReceivedEvent::TMessage>* messages, 
+                  TVector<TReadSessionEvent::TDataReceivedEvent::TCompressedMessage>* comressedMessages, 
+                  size_t* maxByteSize); 
 
     TEvent& GetEvent() {
         Y_ASSERT(Event);
@@ -295,12 +295,12 @@ struct TRawPartitionStreamEvent {
     TRawPartitionStreamEvent(const TRawPartitionStreamEvent&) = default;
     TRawPartitionStreamEvent(TRawPartitionStreamEvent&&) = default;
 
-    TRawPartitionStreamEvent(
-        Ydb::PersQueue::V1::MigrationStreamingReadServerMessage::DataBatch::PartitionData&& msg,
-        std::weak_ptr<TSingleClusterReadSessionImpl> session,
-        bool doDecompress
-    )
-        : Event(std::in_place_type_t<TDataDecompressionInfo>(), std::move(msg), std::move(session), doDecompress)
+    TRawPartitionStreamEvent( 
+        Ydb::PersQueue::V1::MigrationStreamingReadServerMessage::DataBatch::PartitionData&& msg, 
+        std::weak_ptr<TSingleClusterReadSessionImpl> session, 
+        bool doDecompress 
+    ) 
+        : Event(std::in_place_type_t<TDataDecompressionInfo>(), std::move(msg), std::move(session), doDecompress) 
     {
     }
 
@@ -413,12 +413,12 @@ public:
         EventsQueue.emplace_back(std::forward<T>(event));
     }
 
-    TDataDecompressionInfo& InsertDataEvent(
-        Ydb::PersQueue::V1::MigrationStreamingReadServerMessage::DataBatch::PartitionData&& msg,
-        bool doDecompress
-    ) {
+    TDataDecompressionInfo& InsertDataEvent( 
+        Ydb::PersQueue::V1::MigrationStreamingReadServerMessage::DataBatch::PartitionData&& msg, 
+        bool doDecompress 
+    ) { 
         ++DataDecompressionEventsCount;
-        return EventsQueue.emplace_back(std::move(msg), Session, doDecompress).GetData();
+        return EventsQueue.emplace_back(std::move(msg), Session, doDecompress).GetData(); 
     }
 
     bool IsWaitingForDataDecompression() const {

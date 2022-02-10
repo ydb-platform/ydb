@@ -58,7 +58,7 @@ namespace NSQS {
 }
 
 namespace NPQ {
-    class IPersQueueMirrorReaderFactory;
+    class IPersQueueMirrorReaderFactory; 
 }
 
 class TFormatFactory;
@@ -83,7 +83,7 @@ struct TAppData {
 
     IActor*(*FolderServiceFactory)(const NKikimrProto::NFolderService::TFolderServiceConfig&);
 
-    const NPQ::IPersQueueMirrorReaderFactory* PersQueueMirrorReaderFactory = nullptr;
+    const NPQ::IPersQueueMirrorReaderFactory* PersQueueMirrorReaderFactory = nullptr; 
     NYdb::TDriver* YdbDriver = nullptr;
     const NPDisk::IIoContextFactory* IoContextFactory = nullptr;
 

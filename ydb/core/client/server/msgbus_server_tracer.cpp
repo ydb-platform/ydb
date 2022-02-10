@@ -6,14 +6,14 @@ namespace NKikimr {
 namespace NMessageBusTracer {
 
 
-TMessageBusTracingServer::TMessageBusTracingServer(
-    const NBus::TBusServerSessionConfig &sessionConfig,
-    NBus::TBusMessageQueue *busQueue,
-    const TString& tracePath,
-    ui32 bindPort,
-    std::shared_ptr<NMsgBusProxy::IPersQueueGetReadSessionsInfoWorkerFactory> pqReadSessionsInfoWorkerFactory
-)
-    : NKikimr::NMsgBusProxy::TMessageBusServer(sessionConfig, busQueue, bindPort, pqReadSessionsInfoWorkerFactory)
+TMessageBusTracingServer::TMessageBusTracingServer( 
+    const NBus::TBusServerSessionConfig &sessionConfig, 
+    NBus::TBusMessageQueue *busQueue, 
+    const TString& tracePath, 
+    ui32 bindPort, 
+    std::shared_ptr<NMsgBusProxy::IPersQueueGetReadSessionsInfoWorkerFactory> pqReadSessionsInfoWorkerFactory 
+) 
+    : NKikimr::NMsgBusProxy::TMessageBusServer(sessionConfig, busQueue, bindPort, pqReadSessionsInfoWorkerFactory) 
     , MessageBusTracerActorID(MakeMessageBusTraceServiceID())
     , TraceActive(false)
     , TracePath(tracePath)
@@ -239,20 +239,20 @@ IActor* CreateMessageBusTracerStopTrace(NMsgBusProxy::TBusMessageContext &msg) {
 
 namespace NMsgBusProxy {
 
-IMessageBusServer* CreateMsgBusTracingServer(
-    NBus::TBusMessageQueue *queue,
-    const NBus::TBusServerSessionConfig &config,
-    const TString &tracePath,
-    std::shared_ptr<IPersQueueGetReadSessionsInfoWorkerFactory> pqReadSessionsInfoWorkerFactory,
-    ui32 bindPort
-) {
-    return new NMessageBusTracer::TMessageBusTracingServer(
-        config,
-        queue,
-        tracePath,
-        bindPort,
-        pqReadSessionsInfoWorkerFactory
-    );
+IMessageBusServer* CreateMsgBusTracingServer( 
+    NBus::TBusMessageQueue *queue, 
+    const NBus::TBusServerSessionConfig &config, 
+    const TString &tracePath, 
+    std::shared_ptr<IPersQueueGetReadSessionsInfoWorkerFactory> pqReadSessionsInfoWorkerFactory, 
+    ui32 bindPort 
+) { 
+    return new NMessageBusTracer::TMessageBusTracingServer( 
+        config, 
+        queue, 
+        tracePath, 
+        bindPort, 
+        pqReadSessionsInfoWorkerFactory 
+    ); 
 }
 
 }

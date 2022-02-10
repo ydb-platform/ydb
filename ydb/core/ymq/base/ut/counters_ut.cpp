@@ -500,31 +500,31 @@ Y_UNIT_TEST_SUITE(HttpCountersTest) {
     }
 }
 
-Y_UNIT_TEST_SUITE(MeteringCountersTest) {
-    Y_UNIT_TEST(CountersAggregationTest) {
-        NKikimrConfig::TSqsConfig config;
-        config.SetCreateLazyCounters(false);
-        TIntrusivePtr<NMonitoring::TDynamicCounters> metering = new NMonitoring::TDynamicCounters();
-        TIntrusivePtr<TMeteringCounters> counters = new TMeteringCounters(config, metering, {"inet", "yandex", "unknown", "cloud"});
-        *counters->ClassifierRequestsResults["inet"] = 33;
-        *counters->ClassifierRequestsResults["yandex"] = 42;
-        *counters->ClassifierRequestsResults["unknown"] = 113;
-        *counters->IdleClassifierRequestsResults["cloud"] = 128;
-
-        AssertCounterValues(metering,
-                    {
-                        { "ConnectionsCount", 0 },
-                        { "ClassifierRequests_cloud", 0},
-                        { "ClassifierRequests_inet", 33},
-                        { "ClassifierRequests_unknown", 113},
-                        { "ClassifierRequests_yandex", 42},
-                        { "IdleClassifierRequests_cloud", 128},
-                        { "IdleClassifierRequests_inet", 0},
-                        { "IdleClassifierRequests_unknown", 0},
-                        { "IdleClassifierRequests_yandex", 0},
-                        { "RequestExceptions", 0}
-                    });
-    }
-}
-
+Y_UNIT_TEST_SUITE(MeteringCountersTest) { 
+    Y_UNIT_TEST(CountersAggregationTest) { 
+        NKikimrConfig::TSqsConfig config; 
+        config.SetCreateLazyCounters(false); 
+        TIntrusivePtr<NMonitoring::TDynamicCounters> metering = new NMonitoring::TDynamicCounters(); 
+        TIntrusivePtr<TMeteringCounters> counters = new TMeteringCounters(config, metering, {"inet", "yandex", "unknown", "cloud"}); 
+        *counters->ClassifierRequestsResults["inet"] = 33; 
+        *counters->ClassifierRequestsResults["yandex"] = 42; 
+        *counters->ClassifierRequestsResults["unknown"] = 113; 
+        *counters->IdleClassifierRequestsResults["cloud"] = 128; 
+ 
+        AssertCounterValues(metering, 
+                    { 
+                        { "ConnectionsCount", 0 }, 
+                        { "ClassifierRequests_cloud", 0}, 
+                        { "ClassifierRequests_inet", 33}, 
+                        { "ClassifierRequests_unknown", 113}, 
+                        { "ClassifierRequests_yandex", 42}, 
+                        { "IdleClassifierRequests_cloud", 128}, 
+                        { "IdleClassifierRequests_inet", 0}, 
+                        { "IdleClassifierRequests_unknown", 0}, 
+                        { "IdleClassifierRequests_yandex", 0}, 
+                        { "RequestExceptions", 0} 
+                    }); 
+    } 
+} 
+ 
 } // namespace NKikimr::NSQS

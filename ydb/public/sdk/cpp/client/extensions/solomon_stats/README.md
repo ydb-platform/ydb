@@ -38,7 +38,7 @@ After creating NYdb::TDriver you need to add Solomon Monitoring extension. If yo
 ...
 
 {
-    auto config = NYdb::TDriverConfig();
+    auto config = NYdb::TDriverConfig(); 
     NYdb::TDriver driver(config);
     try {
 

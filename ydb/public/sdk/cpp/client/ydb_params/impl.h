@@ -1,6 +1,6 @@
 #pragma once
 
-#include "params.h"
+#include "params.h" 
 
 namespace NYdb {
 
@@ -12,7 +12,7 @@ public:
     TMap<TString, TValue> GetValues() const;
     TMaybe<TValue> GetValue(const TString& name) const;
     ::google::protobuf::Map<TString, Ydb::TypedValue>* GetProtoMapPtr();
-    const ::google::protobuf::Map<TString, Ydb::TypedValue>& GetProtoMap() const;
+    const ::google::protobuf::Map<TString, Ydb::TypedValue>& GetProtoMap() const; 
 
 private:
     ::google::protobuf::Map<TString, Ydb::TypedValue> ParamsMap_;

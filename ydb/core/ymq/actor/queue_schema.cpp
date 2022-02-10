@@ -9,22 +9,22 @@
 #include <ydb/core/ymq/queues/fifo/schema.h>
 #include <ydb/core/ymq/queues/std/schema.h>
 
-#include <util/digest/city.h>
+#include <util/digest/city.h> 
 #include <util/generic/utility.h>
-#include <util/string/join.h>
+#include <util/string/join.h> 
 
 using NKikimr::NClient::TValue;
 
 namespace NKikimr::NSQS {
 
-constexpr TStringBuf FIFO_TABLES_DIR = ".FIFO";
-constexpr TStringBuf STD_TABLES_DIR = ".STD";
-
-template <class... TArgs>
-ui64 GetHash(TArgs&&... args) {
-    return CityHash64(Join("#", args...));
-}
-
+constexpr TStringBuf FIFO_TABLES_DIR = ".FIFO"; 
+constexpr TStringBuf STD_TABLES_DIR = ".STD"; 
+ 
+template <class... TArgs> 
+ui64 GetHash(TArgs&&... args) { 
+    return CityHash64(Join("#", args...)); 
+} 
+ 
 static bool IsGoodStatusCode(ui32 code) {
     switch (NTxProxy::TResultStatus::EStatus(code)) {
         case NTxProxy::TResultStatus::EStatus::ExecComplete:
@@ -411,40 +411,40 @@ void TCreateQueueSchemaActorV2::OnAtomicCounterIncrement(TSqsEvents::TEvAtomicCo
     PassAway();
 }
 
-static const char* const GetTablesFormatQuery = R"__(
-    (
-        (let defaultTablesFormat (Parameter 'DEFAULT_TABLES_FORMAT (DataType 'Uint32)))
-        (let userName   (Parameter 'USER_NAME  (DataType 'Utf8String)))
-        (let settingsTable '%1$s/.Settings)
-        (let tablesFormatSettingRow '(
-            '('Account userName)
-            '('Name (Utf8String '"CreateQueuesWithTabletFormat"))))
-        (let tablesFormatSettingSelect '('Value))
-        (let tablesFormatSettingRead (SelectRow settingsTable tablesFormatSettingRow tablesFormatSettingSelect))
-        (let tablesFormatSetting 
-            (If (Exists tablesFormatSettingRead) 
-                (Cast (Member tablesFormatSettingRead 'Value) 'Uint32)
-                defaultTablesFormat
-            )
-        )
-        
-        (return (AsList
-            (SetResult 'tablesFormat tablesFormatSetting)
-                )
-        )
-    )
-)__";
-
-void TCreateQueueSchemaActorV2::RequestTablesFormatSettings(const TString& accountName) {
-    auto ev = MakeExecuteEvent(Sprintf(GetTablesFormatQuery, Cfg().GetRoot().c_str()));
-    auto* trans = ev->Record.MutableTransaction()->MutableMiniKQLTransaction();
-    TParameters(trans->MutableParams()->MutableProto())
-        .Utf8("USER_NAME", accountName)
-        .Uint32("DEFAULT_TABLES_FORMAT", 0);
-
-    Register(new TMiniKqlExecutionActor(SelfId(), RequestId_, std::move(ev), false, QueuePath_, GetTransactionCounters(UserCounters_)));
-}
-
+static const char* const GetTablesFormatQuery = R"__( 
+    ( 
+        (let defaultTablesFormat (Parameter 'DEFAULT_TABLES_FORMAT (DataType 'Uint32))) 
+        (let userName   (Parameter 'USER_NAME  (DataType 'Utf8String))) 
+        (let settingsTable '%1$s/.Settings) 
+        (let tablesFormatSettingRow '( 
+            '('Account userName) 
+            '('Name (Utf8String '"CreateQueuesWithTabletFormat")))) 
+        (let tablesFormatSettingSelect '('Value)) 
+        (let tablesFormatSettingRead (SelectRow settingsTable tablesFormatSettingRow tablesFormatSettingSelect)) 
+        (let tablesFormatSetting  
+            (If (Exists tablesFormatSettingRead)  
+                (Cast (Member tablesFormatSettingRead 'Value) 'Uint32) 
+                defaultTablesFormat 
+            ) 
+        ) 
+         
+        (return (AsList 
+            (SetResult 'tablesFormat tablesFormatSetting) 
+                ) 
+        ) 
+    ) 
+)__"; 
+ 
+void TCreateQueueSchemaActorV2::RequestTablesFormatSettings(const TString& accountName) { 
+    auto ev = MakeExecuteEvent(Sprintf(GetTablesFormatQuery, Cfg().GetRoot().c_str())); 
+    auto* trans = ev->Record.MutableTransaction()->MutableMiniKQLTransaction(); 
+    TParameters(trans->MutableParams()->MutableProto()) 
+        .Utf8("USER_NAME", accountName) 
+        .Uint32("DEFAULT_TABLES_FORMAT", 0); 
+ 
+    Register(new TMiniKqlExecutionActor(SelfId(), RequestId_, std::move(ev), false, QueuePath_, GetTransactionCounters(UserCounters_))); 
+} 
+ 
 void TCreateQueueSchemaActorV2::RegisterMakeDirActor(const TString& workingDir, const TString& dirName) {
     auto ev = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
     auto* trans = ev->Record.MutableTransaction()->MutableModifyScheme();
@@ -466,10 +466,10 @@ void TCreateQueueSchemaActorV2::RequestLeaderTabletId() {
 
 void TCreateQueueSchemaActorV2::CreateComponents() {
     switch (CurrentCreationStep_) {
-        case ECreateComponentsStep::GetTablesFormatSetting: {
-            RequestTablesFormatSettings(QueuePath_.UserName);
-            break;
-        }
+        case ECreateComponentsStep::GetTablesFormatSetting: { 
+            RequestTablesFormatSettings(QueuePath_.UserName); 
+            break; 
+        } 
         case ECreateComponentsStep::MakeQueueDir: {
             RegisterMakeDirActor(QueuePath_.GetUserPath(), QueuePath_.QueueName);
             break;
@@ -500,10 +500,10 @@ void TCreateQueueSchemaActorV2::CreateComponents() {
 
             break;
         }
-        case ECreateComponentsStep::DescribeTableForSetSchemeShardId: {
-            SendDescribeTable();
-            break;
-        }
+        case ECreateComponentsStep::DescribeTableForSetSchemeShardId: { 
+            SendDescribeTable(); 
+            break; 
+        } 
         case ECreateComponentsStep::DiscoverLeaderTabletId: {
             RequestLeaderTabletId();
             break;
@@ -519,7 +519,7 @@ STATEFN(TCreateQueueSchemaActorV2::CreateComponentsState) {
     switch (ev->GetTypeRewrite()) {
         hFunc(TSqsEvents::TEvExecuted, OnExecuted);
         hFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, OnDescribeSchemeResult);
-        hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleTableDescription);
+        hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleTableDescription); 
         hFunc(NKesus::TEvKesus::TEvAddQuoterResourceResult, HandleAddQuoterResource);
         cFunc(TEvPoisonPill::EventType, PassAway);
     }
@@ -528,16 +528,16 @@ STATEFN(TCreateQueueSchemaActorV2::CreateComponentsState) {
 void TCreateQueueSchemaActorV2::Step() {
     RLOG_SQS_TRACE("Next step. Step: " << (int)CurrentCreationStep_);
     switch (CurrentCreationStep_) {
-        case ECreateComponentsStep::GetTablesFormatSetting: {
-            CurrentCreationStep_ = ECreateComponentsStep::MakeQueueDir;
-            break;
-        }
+        case ECreateComponentsStep::GetTablesFormatSetting: { 
+            CurrentCreationStep_ = ECreateComponentsStep::MakeQueueDir; 
+            break; 
+        } 
         case ECreateComponentsStep::MakeQueueDir: {
-            if (TablesFormat_ == 0) {
-                CurrentCreationStep_ = ECreateComponentsStep::MakeQueueVersionDir;
-            } else {
-                CurrentCreationStep_ = ECreateComponentsStep::DescribeTableForSetSchemeShardId;
-            }
+            if (TablesFormat_ == 0) { 
+                CurrentCreationStep_ = ECreateComponentsStep::MakeQueueVersionDir; 
+            } else { 
+                CurrentCreationStep_ = ECreateComponentsStep::DescribeTableForSetSchemeShardId; 
+            } 
             break;
         }
         case ECreateComponentsStep::MakeQueueVersionDir: {
@@ -566,12 +566,12 @@ void TCreateQueueSchemaActorV2::Step() {
             CurrentCreationStep_ = ECreateComponentsStep::DiscoverLeaderTabletId;
             break;
         }
-        case ECreateComponentsStep::DescribeTableForSetSchemeShardId: {
-            Y_VERIFY(TablesFormat_ == 1);
-            Y_VERIFY(TableWithLeaderPathId_.first && TableWithLeaderPathId_.second);
-            CurrentCreationStep_ = ECreateComponentsStep::DiscoverLeaderTabletId;
-            break;
-        }
+        case ECreateComponentsStep::DescribeTableForSetSchemeShardId: { 
+            Y_VERIFY(TablesFormat_ == 1); 
+            Y_VERIFY(TableWithLeaderPathId_.first && TableWithLeaderPathId_.second); 
+            CurrentCreationStep_ = ECreateComponentsStep::DiscoverLeaderTabletId; 
+            break; 
+        } 
         case ECreateComponentsStep::DiscoverLeaderTabletId: {
             Y_VERIFY(Cfg().GetQuotingConfig().GetEnableQuoting() && Cfg().GetQuotingConfig().HasKesusQuoterConfig());
             CurrentCreationStep_ = ECreateComponentsStep::AddQuoterResource;
@@ -601,28 +601,28 @@ void TCreateQueueSchemaActorV2::OnExecuted(TSqsEvents::TEvExecuted::TPtr& ev) {
     // SS finishes transaction immediately if the specified path already exists
     // DO NOT add any special logic based on the result type (except for an error)
     if (IsGoodStatusCode(status)) {
-        if (CurrentCreationStep_ == ECreateComponentsStep::GetTablesFormatSetting) {
-            const TValue value(TValue::Create(record.GetExecutionEngineEvaluatedResponse()));
-            const TValue formatValue = value["tablesFormat"];
-            if (formatValue.HaveValue()) {
-                TablesFormat_ = static_cast<ui32>(formatValue);
-            }
-            if (!formatValue.HaveValue() || TablesFormat_ > 1) {
-                RLOG_SQS_WARN("Incorrect TablesFormat settings for account " 
-                    << QueuePath_.UserName << ", responce:" << record);
-
-                auto resp = MakeErrorResponse(NErrors::INTERNAL_FAILURE);
-                resp->State = EQueueState::Creating;
-                resp->Error = "Incorrect TablesFormat settings for account";
-
-                Send(Sender_, std::move(resp));
-                PassAway();
-                return;
-            }
-            RLOG_SQS_DEBUG("Got table format '" << TablesFormat_ << "' for " 
-                << QueuePath_.UserName << record);
-        }
-
+        if (CurrentCreationStep_ == ECreateComponentsStep::GetTablesFormatSetting) { 
+            const TValue value(TValue::Create(record.GetExecutionEngineEvaluatedResponse())); 
+            const TValue formatValue = value["tablesFormat"]; 
+            if (formatValue.HaveValue()) { 
+                TablesFormat_ = static_cast<ui32>(formatValue); 
+            } 
+            if (!formatValue.HaveValue() || TablesFormat_ > 1) { 
+                RLOG_SQS_WARN("Incorrect TablesFormat settings for account "  
+                    << QueuePath_.UserName << ", responce:" << record); 
+ 
+                auto resp = MakeErrorResponse(NErrors::INTERNAL_FAILURE); 
+                resp->State = EQueueState::Creating; 
+                resp->Error = "Incorrect TablesFormat settings for account"; 
+ 
+                Send(Sender_, std::move(resp)); 
+                PassAway(); 
+                return; 
+            } 
+            RLOG_SQS_DEBUG("Got table format '" << TablesFormat_ << "' for "  
+                << QueuePath_.UserName << record); 
+        } 
+ 
         Step();
     } else {
         RLOG_SQS_WARN("Component creation request execution error: " << record);
@@ -667,30 +667,30 @@ void TCreateQueueSchemaActorV2::OnDescribeSchemeResult(NSchemeShard::TEvSchemeSh
     }
 }
 
-void TCreateQueueSchemaActorV2::SendDescribeTable() {
-    auto navigateRequest = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
-
-    NSchemeCache::TSchemeCacheNavigate::TEntry entry;
-    entry.Path = NKikimr::SplitPath(Cfg().GetRoot() + "/.Queues");
-    entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpTable;
-    navigateRequest->ResultSet.emplace_back(entry);
-    
-    Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(navigateRequest.release()));
-}
-        
-void TCreateQueueSchemaActorV2::HandleTableDescription(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
-    const NSchemeCache::TSchemeCacheNavigate* result = ev->Get()->Request.Get();
-    Y_VERIFY(result->ResultSet.size() == 1);
-    const auto& response = result->ResultSet.front();
-
-    TableWithLeaderPathId_ = std::make_pair(
-        response.TableId.PathId.OwnerId,
-        response.TableId.PathId.LocalPathId
-    );
-
-    Step();
-}
-
+void TCreateQueueSchemaActorV2::SendDescribeTable() { 
+    auto navigateRequest = std::make_unique<NSchemeCache::TSchemeCacheNavigate>(); 
+ 
+    NSchemeCache::TSchemeCacheNavigate::TEntry entry; 
+    entry.Path = NKikimr::SplitPath(Cfg().GetRoot() + "/.Queues"); 
+    entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpTable; 
+    navigateRequest->ResultSet.emplace_back(entry); 
+     
+    Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(navigateRequest.release())); 
+} 
+         
+void TCreateQueueSchemaActorV2::HandleTableDescription(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) { 
+    const NSchemeCache::TSchemeCacheNavigate* result = ev->Get()->Request.Get(); 
+    Y_VERIFY(result->ResultSet.size() == 1); 
+    const auto& response = result->ResultSet.front(); 
+ 
+    TableWithLeaderPathId_ = std::make_pair( 
+        response.TableId.PathId.OwnerId, 
+        response.TableId.PathId.LocalPathId 
+    ); 
+ 
+    Step(); 
+} 
+ 
 void TCreateQueueSchemaActorV2::AddRPSQuota() {
     NKikimrKesus::TEvAddQuoterResource cmd;
     auto& res = *cmd.MutableResource();
@@ -730,9 +730,9 @@ static const char* const CommitQueueParamsQuery = R"__(
         (let shards                 (Parameter 'SHARDS            (DataType 'Uint64)))
         (let partitions             (Parameter 'PARTITIONS        (DataType 'Uint64)))
         (let masterTabletId         (Parameter 'MASTER_TABLET_ID  (DataType 'Uint64)))
-        (let tablesFormat           (Parameter 'TABLES_FORMAT     (DataType 'Uint32)))
+        (let tablesFormat           (Parameter 'TABLES_FORMAT     (DataType 'Uint32))) 
         (let version                (Parameter 'VERSION           (DataType 'Uint64)))
-        (let queueIdNumberHash      (Parameter 'QUEUE_ID_NUMBER_HASH (DataType 'Uint64)))
+        (let queueIdNumberHash      (Parameter 'QUEUE_ID_NUMBER_HASH (DataType 'Uint64))) 
         (let maxSize                (Parameter 'MAX_SIZE          (DataType 'Uint64)))
         (let delay                  (Parameter 'DELAY             (DataType 'Uint64)))
         (let visibility             (Parameter 'VISIBILITY        (DataType 'Uint64)))
@@ -744,11 +744,11 @@ static const char* const CommitQueueParamsQuery = R"__(
         (let defaultMaxQueuesCount  (Parameter 'DEFAULT_MAX_QUEUES_COUNT (DataType 'Uint64)))
         (let userName               (Parameter 'USER_NAME         (DataType 'Utf8String)))
 
-        (let attrsTable '%1$s/Attributes)
-        (let stateTable '%1$s/State)
-        (let settingsTable '%2$s/.Settings)
-        (let queuesTable '%2$s/.Queues)
-        (let eventsTable '%2$s/.Events)
+        (let attrsTable '%1$s/Attributes) 
+        (let stateTable '%1$s/State) 
+        (let settingsTable '%2$s/.Settings) 
+        (let queuesTable '%2$s/.Queues) 
+        (let eventsTable '%2$s/.Events) 
 
         (let maxQueuesCountSettingRow '(
             '('Account userName)
@@ -833,16 +833,16 @@ static const char* const CommitQueueParamsQuery = R"__(
             '('Partitions partitions)
             '('Version version)
             '('DlqName dlqName)
-            '('MasterTabletId masterTabletId)
-            '('TablesFormat tablesFormat)))
+            '('MasterTabletId masterTabletId) 
+            '('TablesFormat tablesFormat))) 
 
         (let eventsUpdate '(
             '('CustomQueueName customName)
             '('EventTimestamp now)
             '('FolderId folderId)))
 
-        (let attrRow '(%3$s))
-
+        (let attrRow '(%3$s)) 
+ 
         (let attrUpdate '(
             '('ContentBasedDeduplication contentBasedDeduplication)
             '('DelaySeconds delay)
@@ -860,19 +860,19 @@ static const char* const CommitQueueParamsQuery = R"__(
                 (Not queueExists)
                 (Not overLimit)))
 
-        (let stateUpdate '(
-                        '('CleanupTimestamp now)
-                        '('CreatedTimestamp now)
-                        '('LastModifiedTimestamp now)
-                        '('InflyCount (Int64 '0))
-                        '('MessageCount (Int64 '0))
-                        '('RetentionBoundary (Uint64 '0))
-                        '('ReadOffset (Uint64 '0))
-                        '('WriteOffset (Uint64 '0))
-                        '('CleanupVersion (Uint64 '0))))
-
-        (let queueIdNumberAndShardHashes (AsList %4$s))
-
+        (let stateUpdate '( 
+                        '('CleanupTimestamp now) 
+                        '('CreatedTimestamp now) 
+                        '('LastModifiedTimestamp now) 
+                        '('InflyCount (Int64 '0)) 
+                        '('MessageCount (Int64 '0)) 
+                        '('RetentionBoundary (Uint64 '0)) 
+                        '('ReadOffset (Uint64 '0)) 
+                        '('WriteOffset (Uint64 '0)) 
+                        '('CleanupVersion (Uint64 '0)))) 
+ 
+        (let queueIdNumberAndShardHashes (AsList %4$s)) 
+ 
         (return (Extend
             (AsList
                 (SetResult 'exists queueExists)
@@ -886,14 +886,14 @@ static const char* const CommitQueueParamsQuery = R"__(
             (ListIf willCommit (UpdateRow queuesTable queuesRow queuesUpdate))
             (ListIf willCommit (UpdateRow eventsTable eventsRow eventsUpdate))
             (ListIf willCommit (UpdateRow attrsTable attrRow attrUpdate))
-            
-             (If (Not willCommit) (AsList (Void))
-                (Map (Enumerate queueIdNumberAndShardHashes) (lambda '(item) (block '(
-                    (let shardOriginal (Nth item '0))
-                    (let shard (Cast shardOriginal 'Uint32))
-                    (let queueIdNumberAndShardHash (Nth item '1))
-                        
-                    (let row '(%5$s))
+             
+             (If (Not willCommit) (AsList (Void)) 
+                (Map (Enumerate queueIdNumberAndShardHashes) (lambda '(item) (block '( 
+                    (let shardOriginal (Nth item '0)) 
+                    (let shard (Cast shardOriginal 'Uint32)) 
+                    (let queueIdNumberAndShardHash (Nth item '1)) 
+                         
+                    (let row '(%5$s)) 
                     (let update '(
                         '('CleanupTimestamp now)
                         '('CreatedTimestamp now)
@@ -909,62 +909,62 @@ static const char* const CommitQueueParamsQuery = R"__(
     )
 )__";
 
-TString GetStateTableKeys(ui32 tablesFormat, bool isFifo) {
-    if (tablesFormat == 1) {
-        if (isFifo) {
-            return R"__(
-                '('QueueIdNumberHash queueIdNumberHash)
-                '('QueueIdNumber version)
-            )__";
-        }
-        return R"__(
-            '('QueueIdNumberAndShardHash queueIdNumberAndShardHash)
-            '('QueueIdNumber version)
-            '('Shard shard)
-        )__";
-        
-    }
-    return "'('State shardOriginal)";
-}
-
-TString GetAttrTableKeys(ui32 tablesFormat) {
-    if (tablesFormat == 1) {
-        return R"__(
-            '('QueueIdNumberHash queueIdNumberHash)
-            '('QueueIdNumber version)
-        )__";
-    }
-    return "'('State (Uint64 '0))";
-}
-
-TString GetQueueIdAndShardHashesList(ui64 version, ui32 shards) {
-    TStringBuilder hashes;
-    for (ui32 i = 0; i < shards; ++i) {
-        hashes << "(Uint64 '" << GetHash(version, i) << ") ";
-    }
-    return hashes;
-}
-
+TString GetStateTableKeys(ui32 tablesFormat, bool isFifo) { 
+    if (tablesFormat == 1) { 
+        if (isFifo) { 
+            return R"__( 
+                '('QueueIdNumberHash queueIdNumberHash) 
+                '('QueueIdNumber version) 
+            )__"; 
+        } 
+        return R"__( 
+            '('QueueIdNumberAndShardHash queueIdNumberAndShardHash) 
+            '('QueueIdNumber version) 
+            '('Shard shard) 
+        )__"; 
+         
+    } 
+    return "'('State shardOriginal)"; 
+} 
+ 
+TString GetAttrTableKeys(ui32 tablesFormat) { 
+    if (tablesFormat == 1) { 
+        return R"__( 
+            '('QueueIdNumberHash queueIdNumberHash) 
+            '('QueueIdNumber version) 
+        )__"; 
+    } 
+    return "'('State (Uint64 '0))"; 
+} 
+ 
+TString GetQueueIdAndShardHashesList(ui64 version, ui32 shards) { 
+    TStringBuilder hashes; 
+    for (ui32 i = 0; i < shards; ++i) { 
+        hashes << "(Uint64 '" << GetHash(version, i) << ") "; 
+    } 
+    return hashes; 
+} 
+ 
 void TCreateQueueSchemaActorV2::CommitNewVersion() {
     Become(&TCreateQueueSchemaActorV2::FinalizeAndCommit);
 
-    TString queuePath;
-    if (TablesFormat_ == 0) {
-        queuePath = Join("/", QueuePath_.GetUserPath(), QueuePath_.QueueName, VersionName_);
-    } else {
-        queuePath = Join("/", Cfg().GetRoot(), IsFifo_ ? FIFO_TABLES_DIR : STD_TABLES_DIR);
-    }
-
-    TString query = Sprintf(
-        CommitQueueParamsQuery,
-        queuePath.c_str(),
-        Cfg().GetRoot().c_str(),
-        GetAttrTableKeys(TablesFormat_).c_str(),
-        GetQueueIdAndShardHashesList(Version_, RequiredShardsCount_).c_str(),
-        GetStateTableKeys(TablesFormat_, IsFifo_).c_str()
-    );
-
-    auto ev = MakeExecuteEvent(query);
+    TString queuePath; 
+    if (TablesFormat_ == 0) { 
+        queuePath = Join("/", QueuePath_.GetUserPath(), QueuePath_.QueueName, VersionName_); 
+    } else { 
+        queuePath = Join("/", Cfg().GetRoot(), IsFifo_ ? FIFO_TABLES_DIR : STD_TABLES_DIR); 
+    } 
+ 
+    TString query = Sprintf( 
+        CommitQueueParamsQuery, 
+        queuePath.c_str(), 
+        Cfg().GetRoot().c_str(), 
+        GetAttrTableKeys(TablesFormat_).c_str(), 
+        GetQueueIdAndShardHashesList(Version_, RequiredShardsCount_).c_str(), 
+        GetStateTableKeys(TablesFormat_, IsFifo_).c_str() 
+    ); 
+ 
+    auto ev = MakeExecuteEvent(query); 
     auto* trans = ev->Record.MutableTransaction()->MutableMiniKQLTransaction();
     Y_VERIFY(LeaderTabletId_ != 0);
     TParameters(trans->MutableParams()->MutableProto())
@@ -978,9 +978,9 @@ void TCreateQueueSchemaActorV2::CommitNewVersion() {
         .Uint64("SHARDS", RequiredShardsCount_)
         .Uint64("PARTITIONS", Request_.GetPartitions())
         .Uint64("MASTER_TABLET_ID", LeaderTabletId_)
-        .Uint32("TABLES_FORMAT", TablesFormat_)
+        .Uint32("TABLES_FORMAT", TablesFormat_) 
         .Uint64("VERSION", Version_)
-        .Uint64("QUEUE_ID_NUMBER_HASH", GetHash(Version_))
+        .Uint64("QUEUE_ID_NUMBER_HASH", GetHash(Version_)) 
         .Uint64("MAX_SIZE", *ValidatedAttributes_.MaximumMessageSize)
         .Uint64("DELAY", SecondsToMs(*ValidatedAttributes_.DelaySeconds))
         .Uint64("VISIBILITY", SecondsToMs(*ValidatedAttributes_.VisibilityTimeout))

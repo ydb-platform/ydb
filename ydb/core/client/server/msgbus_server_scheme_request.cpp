@@ -218,7 +218,7 @@ void TMessageBusServerProxy::Handle(TEvBusProxy::TEvPersQueue::TPtr& ev, const T
         ctx.Register(new TMessageBusServerSchemeRequest<TBusPersQueue>(ev->Get()), TMailboxType::HTSwap, AppData()->UserPoolId);
         return;
     }
-    ctx.Register(CreateMessageBusServerPersQueue(msg->MsgContext, PqMetaCache, PQReadSessionsInfoWorkerFactory));
+    ctx.Register(CreateMessageBusServerPersQueue(msg->MsgContext, PqMetaCache, PQReadSessionsInfoWorkerFactory)); 
 }
 
 void TMessageBusServerProxy::Handle(TEvBusProxy::TEvFlatTxRequest::TPtr& ev, const TActorContext& ctx) {

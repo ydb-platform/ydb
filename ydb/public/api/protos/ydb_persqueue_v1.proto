@@ -1108,22 +1108,22 @@ message DropTopicResult {
 }
 
 /**
- * Credentials settings
- */
-
-message Credentials {
-    message Iam {
-        string endpoint = 1;
-        string service_account_key = 2;
-    }
-    oneof credentials {
-        string oauth_token = 1;
-        string jwt_params = 2;
-        Iam iam = 3;
-    }
-}
-
-/**
+ * Credentials settings 
+ */ 
+ 
+message Credentials { 
+    message Iam { 
+        string endpoint = 1; 
+        string service_account_key = 2; 
+    } 
+    oneof credentials { 
+        string oauth_token = 1; 
+        string jwt_params = 2; 
+        Iam iam = 3; 
+    } 
+} 
+ 
+/** 
  * Message for describing topic internals.
  */
 
@@ -1134,9 +1134,9 @@ message TopicSettings {
     }
 
     // How many partitions in topic. Must less than database limit. Default limit - 10.
-    int32 partitions_count = 1 [(value) = "> 0"];
+    int32 partitions_count = 1 [(value) = "> 0"]; 
     // How long data in partition should be stored. Must be greater than 0 and less than limit for this database.  Default limit - 36 hours.
-    int64 retention_period_ms = 2 [(value) = "> 0"];
+    int64 retention_period_ms = 2 [(value) = "> 0"]; 
     // How long last written seqno for message group should be stored. Must be greater then retention_period_ms and less then limit for this database.  Default limit - 16 days.
     int64 message_group_seqno_retention_period_ms = 12 [(value) = ">= 0"];
     // How many last written seqno for various message groups should be stored per partition. Must be less than limit for this database.  Default limit - 6*10^6 values.
@@ -1148,11 +1148,11 @@ message TopicSettings {
     // Writes with codec not from this list are forbiden.
     repeated Codec supported_codecs = 4 [(size).le = 100];
     // Max storage usage for each topic's partition. Must be less than database limit. Default limit - 130 GB.
-    int64 max_partition_storage_size = 5 [(value) = ">= 0"];
+    int64 max_partition_storage_size = 5 [(value) = ">= 0"]; 
     // Partition write speed in bytes per second. Must be less than database limit. Default limit - 1 MB/s.
-    int64 max_partition_write_speed = 6 [(value) = ">= 0"];
+    int64 max_partition_write_speed = 6 [(value) = ">= 0"]; 
     // Burst size for write in partition, in bytes. Must be less than database limit. Default limit - 1 MB.
-    int64 max_partition_write_burst = 7 [(value) = ">= 0"];
+    int64 max_partition_write_burst = 7 [(value) = ">= 0"]; 
 
     // Disallows client writes. Used for mirrored topics in federation.
     bool client_write_disabled = 8;
@@ -1164,7 +1164,7 @@ message TopicSettings {
         // Flag that this consumer is important.
         bool important = 2;
         // All messages with smaller timestamp of write will be skipped.
-        int64 starting_message_timestamp_ms = 3 [(value) = ">= 0"];
+        int64 starting_message_timestamp_ms = 3 [(value) = ">= 0"]; 
         // Max format version that is supported by this consumer.
         // supported_format on topic must not be greater.
         Format supported_format = 4;
@@ -1173,10 +1173,10 @@ message TopicSettings {
         repeated Codec supported_codecs = 5 [(size).le = 100];
 
         // Read rule version. Any non-negative integer.
-        int64 version = 6 [(value) = ">= 0"];
-
-        // Client service type.
-        string service_type = 7;
+        int64 version = 6 [(value) = ">= 0"]; 
+ 
+        // Client service type. 
+        string service_type = 7; 
     }
 
     // List of consumer read rules for this topic.
@@ -1184,24 +1184,24 @@ message TopicSettings {
 
     // User and server attributes of topic. Server attributes starts from "_" and will be validated by server.
     map<string, string> attributes = 10;
-
-    // Message for remote mirror rule description.
-    message RemoteMirrorRule {
-        // Source cluster endpoint in format server:port.
-        string endpoint = 1;
-        // Source topic that we want to mirror.
-        string topic_path = 2;
-        // Source consumer for reading source topic.
-        string consumer_name = 3;
-        // Credentials for reading source topic by source consumer.
-        Credentials credentials = 4;
-        // All messages with smaller timestamp of write will be skipped.
-        int64 starting_message_timestamp_ms = 5 [(value) = ">= 0"];
-        // Database
-        string database = 6;
-    }
-    // remote mirror rule for this topic.
-    RemoteMirrorRule remote_mirror_rule = 11;
+ 
+    // Message for remote mirror rule description. 
+    message RemoteMirrorRule { 
+        // Source cluster endpoint in format server:port. 
+        string endpoint = 1; 
+        // Source topic that we want to mirror. 
+        string topic_path = 2; 
+        // Source consumer for reading source topic. 
+        string consumer_name = 3; 
+        // Credentials for reading source topic by source consumer. 
+        Credentials credentials = 4; 
+        // All messages with smaller timestamp of write will be skipped. 
+        int64 starting_message_timestamp_ms = 5 [(value) = ">= 0"]; 
+        // Database 
+        string database = 6; 
+    } 
+    // remote mirror rule for this topic. 
+    RemoteMirrorRule remote_mirror_rule = 11; 
 }
 
 /**

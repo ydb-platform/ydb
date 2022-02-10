@@ -55,11 +55,11 @@ TSubscriber::TSubscriber(const ui32 partition, TTabletCountersBase& counters, co
     , Tablet(tablet)
 {}
 
-TMaybe<TReadInfo> TSubscriber::OnTimeout(TEvPQ::TEvReadTimeout::TPtr& ev) {
+TMaybe<TReadInfo> TSubscriber::OnTimeout(TEvPQ::TEvReadTimeout::TPtr& ev) { 
     TMaybe<TReadInfo> res = Subscriber.ForgetSubscription(ev->Get()->Cookie);
-    if (res) {
-        Counters.Cumulative()[COUNTER_PQ_READ_SUBSCRIPTION_TIMEOUT].Increment(1);
-    }
+    if (res) { 
+        Counters.Cumulative()[COUNTER_PQ_READ_SUBSCRIPTION_TIMEOUT].Increment(1); 
+    } 
     return res;
 }
 

@@ -3,7 +3,7 @@ UNITTEST_FOR(ydb/services/persqueue_v1)
 OWNER(
     zhenyok
     g:kikimr
-    g:logbroker
+    g:logbroker 
 )
 
 CFLAGS(

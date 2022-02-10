@@ -1388,12 +1388,12 @@ public:
     TString RequestId;
 };
 
-template <template <class TImpl, class... TArgs> class TSenderImpl, class... T>
-IActor* CreatePersQueueRequestProcessor(
-    const NKikimrClient::TPersQueueRequest& request,
-    std::shared_ptr<IPersQueueGetReadSessionsInfoWorkerFactory> pqReadSessionsInfoWorkerFactory,
-    T&&... constructorParams
-) {
+template <template <class TImpl, class... TArgs> class TSenderImpl, class... T> 
+IActor* CreatePersQueueRequestProcessor( 
+    const NKikimrClient::TPersQueueRequest& request, 
+    std::shared_ptr<IPersQueueGetReadSessionsInfoWorkerFactory> pqReadSessionsInfoWorkerFactory, 
+    T&&... constructorParams 
+) { 
     try {
         if (request.HasMetaRequest() + request.HasPartitionRequest() + request.HasFetchRequest() > 1) {
             throw std::runtime_error("only one from meta partition or fetch requests must be filled");
@@ -1414,10 +1414,10 @@ IActor* CreatePersQueueRequestProcessor(
             } else if (meta.HasCmdGetPartitionStatus()) {
                 return new TSenderImpl<TPersQueueGetPartitionStatusProcessor>(std::forward<T>(constructorParams)...);
             } else if (meta.HasCmdGetReadSessionsInfo()) {
-                return new TSenderImpl<TPersQueueGetReadSessionsInfoProcessor>(
-                    std::forward<T>(constructorParams)...,
-                    pqReadSessionsInfoWorkerFactory
-                );
+                return new TSenderImpl<TPersQueueGetReadSessionsInfoProcessor>( 
+                    std::forward<T>(constructorParams)..., 
+                    pqReadSessionsInfoWorkerFactory 
+                ); 
             } else {
                 throw std::runtime_error("Not implemented yet");
             }
@@ -1439,9 +1439,9 @@ IActor* CreatePersQueueRequestProcessor(
 template <class TImplActor>
 class TMessageBusServerPersQueue : public TImplActor, TMessageBusSessionIdentHolder {
 public:
-    template <class... T>
-    TMessageBusServerPersQueue(TBusMessageContext& msg, T&&... constructorParams)
-        : TImplActor(static_cast<TBusPersQueue*>(msg.GetMessage())->Record, std::forward<T>(constructorParams)...)
+    template <class... T> 
+    TMessageBusServerPersQueue(TBusMessageContext& msg, T&&... constructorParams) 
+        : TImplActor(static_cast<TBusPersQueue*>(msg.GetMessage())->Record, std::forward<T>(constructorParams)...) 
         , TMessageBusSessionIdentHolder(msg)
     {}
 
@@ -1459,33 +1459,33 @@ public:
 };
 
 
-IActor* CreateMessageBusServerPersQueue(
-    TBusMessageContext& msg,
-    const TActorId& schemeCache,
-    std::shared_ptr<IPersQueueGetReadSessionsInfoWorkerFactory> pqReadSessionsInfoWorkerFactory
-) {
+IActor* CreateMessageBusServerPersQueue( 
+    TBusMessageContext& msg, 
+    const TActorId& schemeCache, 
+    std::shared_ptr<IPersQueueGetReadSessionsInfoWorkerFactory> pqReadSessionsInfoWorkerFactory 
+) { 
     const NKikimrClient::TPersQueueRequest& request = static_cast<TBusPersQueue*>(msg.GetMessage())->Record;
-    return CreatePersQueueRequestProcessor<TMessageBusServerPersQueue>(
-        request,
-        pqReadSessionsInfoWorkerFactory,
-        msg,
-        schemeCache
-    );
+    return CreatePersQueueRequestProcessor<TMessageBusServerPersQueue>( 
+        request, 
+        pqReadSessionsInfoWorkerFactory, 
+        msg, 
+        schemeCache 
+    ); 
 }
 
-IActor* CreateActorServerPersQueue(
-    const TActorId& parentId,
-    const NKikimrClient::TPersQueueRequest& request,
-    const TActorId& schemeCache,
-    std::shared_ptr<IPersQueueGetReadSessionsInfoWorkerFactory> pqReadSessionsInfoWorkerFactory
-) {
-    return CreatePersQueueRequestProcessor<TReplierToParent>(
-        request,
-        pqReadSessionsInfoWorkerFactory,
-        parentId,
-        request,
-        schemeCache
-    );
+IActor* CreateActorServerPersQueue( 
+    const TActorId& parentId, 
+    const NKikimrClient::TPersQueueRequest& request, 
+    const TActorId& schemeCache, 
+    std::shared_ptr<IPersQueueGetReadSessionsInfoWorkerFactory> pqReadSessionsInfoWorkerFactory 
+) { 
+    return CreatePersQueueRequestProcessor<TReplierToParent>( 
+        request, 
+        pqReadSessionsInfoWorkerFactory, 
+        parentId, 
+        request, 
+        schemeCache 
+    ); 
 }
 
 }

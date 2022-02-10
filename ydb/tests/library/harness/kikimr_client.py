@@ -74,14 +74,14 @@ class KiKiMRMessageBusClient(object):
         request.Options.ReturnPartitioningInfo = False
         return self.send(request, 'SchemeDescribe')
 
-    def _get_invoke_callee(self, method):
-        return getattr(self._stub, method)
-
+    def _get_invoke_callee(self, method): 
+        return getattr(self._stub, method) 
+ 
     def invoke(self, request, method):
         retry = self.__retry_count
         while True:
             try:
-                callee = self._get_invoke_callee(method)
+                callee = self._get_invoke_callee(method) 
                 return callee(request)
             except (RuntimeError, grpc.RpcError):
                 retry -= 1

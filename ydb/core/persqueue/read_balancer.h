@@ -334,7 +334,7 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
 
     struct TClientGroupInfo {
         struct TSessionInfo {
-            TSessionInfo(const TString& session, const TActorId sender, const TString& clientNode, ui32 proxyNodeId, TInstant ts)
+            TSessionInfo(const TString& session, const TActorId sender, const TString& clientNode, ui32 proxyNodeId, TInstant ts) 
                 : Session(session)
                 , Sender(sender)
                 , NumSuspended(0)
@@ -351,7 +351,7 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
 
             TString ClientNode;
             ui32 ProxyNodeId;
-            TInstant Timestamp;
+            TInstant Timestamp; 
         };
 
         TString ClientId;

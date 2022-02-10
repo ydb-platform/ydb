@@ -1,4 +1,4 @@
-#include "common.h"
+#include "common.h" 
 
 #include <util/charset/unidata.h>
 
@@ -73,16 +73,16 @@ NYql::TIssues MakeIssueWithSubIssues(const TString& description, const NYql::TIs
 size_t CalcDataSize(const TReadSessionEvent::TEvent& event) {
     if (const TReadSessionEvent::TDataReceivedEvent* dataEvent = std::get_if<TReadSessionEvent::TDataReceivedEvent>(&event)) {
         size_t len = 0;
-        if (dataEvent->IsCompressedMessages()) {
-            for (const auto& msg : dataEvent->GetCompressedMessages()) {
-                len += msg.GetData().size();
-            }
-        } else {
-            for (const auto& msg : dataEvent->GetMessages()) {
-                if (!msg.HasException()) {
-                    len += msg.GetData().size();
-                }
-            }
+        if (dataEvent->IsCompressedMessages()) { 
+            for (const auto& msg : dataEvent->GetCompressedMessages()) { 
+                len += msg.GetData().size(); 
+            } 
+        } else { 
+            for (const auto& msg : dataEvent->GetMessages()) { 
+                if (!msg.HasException()) { 
+                    len += msg.GetData().size(); 
+                } 
+            } 
         }
         return len;
     } else {

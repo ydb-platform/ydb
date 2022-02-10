@@ -226,20 +226,20 @@ namespace Tests {
         if (port) {
             Bus = NBus::CreateMessageQueue(NBus::TBusQueueConfig());
             if (tracePath) {
-                BusServer.Reset(NMsgBusProxy::CreateMsgBusTracingServer(
-                    Bus.Get(),
-                    BusServerSessionConfig,
-                    tracePath,
-                    Settings->PersQueueGetReadSessionsInfoWorkerFactory,
-                    port
-                ));
+                BusServer.Reset(NMsgBusProxy::CreateMsgBusTracingServer( 
+                    Bus.Get(), 
+                    BusServerSessionConfig, 
+                    tracePath, 
+                    Settings->PersQueueGetReadSessionsInfoWorkerFactory, 
+                    port 
+                )); 
             } else {
-                BusServer.Reset(NMsgBusProxy::CreateMsgBusServer(
-                    Bus.Get(),
-                    BusServerSessionConfig,
-                    Settings->PersQueueGetReadSessionsInfoWorkerFactory,
-                    port
-                ));
+                BusServer.Reset(NMsgBusProxy::CreateMsgBusServer( 
+                    Bus.Get(), 
+                    BusServerSessionConfig, 
+                    Settings->PersQueueGetReadSessionsInfoWorkerFactory, 
+                    port 
+                )); 
             }
         }
     }
@@ -704,7 +704,7 @@ namespace Tests {
             TActorId netClassifierId = Runtime->Register(netClassifier, nodeIdx);
             Runtime->RegisterService(NNetClassifier::MakeNetClassifierID(), netClassifierId, nodeIdx);
         }
-
+ 
         if (Settings->EnableYq) {
             NYq::NConfig::TConfig protoConfig;
             protoConfig.SetEnabled(true);

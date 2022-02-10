@@ -137,7 +137,7 @@ class DiscoveryEndpointsResolver(object):
         self._endpoints_iter = itertools.cycle(self._endpoints)
 
     def _add_debug_details(self, message, *args):
-        self.logger.debug(message, *args)
+        self.logger.debug(message, *args) 
         message = message % args
         with self._lock:
             self._debug_details_items.append(message)

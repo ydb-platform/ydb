@@ -11,19 +11,19 @@
 #include <ydb/public/sdk/cpp/client/ydb_import/import.h>
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
 #include <ydb/public/sdk/cpp/client/ydb_persqueue_public/persqueue.h>
-
+ 
 namespace NYdb {
 
-class TResultSet;
-class TValue;
-class TType;
-
-namespace NTable {
-class TQueryStats;
-class TTableDescription;
+class TResultSet; 
+class TValue; 
+class TType; 
+ 
+namespace NTable { 
+class TQueryStats; 
+class TTableDescription; 
 class TIndexDescription;
-}
-
+} 
+ 
 //! Provides access to raw protobuf values of YDB API entities. It is not recommended to use this
 //! class in client applications as it add dependency on API protobuf format which is subject to
 //! change. Use functionality provided by YDB SDK classes.

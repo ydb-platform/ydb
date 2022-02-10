@@ -1,9 +1,9 @@
-LIBRARY()
-
+LIBRARY() 
+ 
 OWNER(g:kikimr)
-
-SRCS(
-    exceptions.cpp
-)
-
-END()
+ 
+SRCS( 
+    exceptions.cpp 
+) 
+ 
+END() 

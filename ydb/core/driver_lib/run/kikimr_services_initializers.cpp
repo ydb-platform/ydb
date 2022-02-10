@@ -1471,12 +1471,12 @@ void TSecurityServicesInitializer::InitializeServices(NActors::TActorSystemSetup
 
 // TGRpcServicesInitializer
 
-TGRpcServicesInitializer::TGRpcServicesInitializer(
-    const TKikimrRunConfig& runConfig,
-    std::shared_ptr<TModuleFactories> factories
-)
+TGRpcServicesInitializer::TGRpcServicesInitializer( 
+    const TKikimrRunConfig& runConfig, 
+    std::shared_ptr<TModuleFactories> factories 
+) 
     : IKikimrServicesInitializer(runConfig)
-    , Factories(factories)
+    , Factories(factories) 
 {}
 
 void TGRpcServicesInitializer::InitializeServices(NActors::TActorSystemSetup* setup,
@@ -1484,10 +1484,10 @@ void TGRpcServicesInitializer::InitializeServices(NActors::TActorSystemSetup* se
 {
     if (!IsServiceInitialized(setup, NMsgBusProxy::CreateMsgBusProxyId())
         && Config.HasGRpcConfig() && Config.GetGRpcConfig().GetStartGRpcProxy()) {
-        IActor * proxy = NMsgBusProxy::CreateMessageBusServerProxy(
-            nullptr,
-            Factories ? Factories->PQReadSessionsInfoWorkerFactory : nullptr
-        );
+        IActor * proxy = NMsgBusProxy::CreateMessageBusServerProxy( 
+            nullptr, 
+            Factories ? Factories->PQReadSessionsInfoWorkerFactory : nullptr 
+        ); 
         Y_VERIFY(proxy);
         setup->LocalServices.emplace_back(
             NMsgBusProxy::CreateMsgBusProxyId(),
@@ -1799,11 +1799,11 @@ TPersQueueL2CacheInitializer::TPersQueueL2CacheInitializer(const TKikimrRunConfi
 
 void TPersQueueL2CacheInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
     static const ui64 DEFAULT_PQ_L2_MAX_SIZE_MB = 8 * 1024;
-    static const TDuration DEFAULT_PQ_L2_KEEP_TIMEOUT = TDuration::Seconds(10);
+    static const TDuration DEFAULT_PQ_L2_KEEP_TIMEOUT = TDuration::Seconds(10); 
 
     NPQ::TCacheL2Parameters params;
     params.MaxSizeMB = DEFAULT_PQ_L2_MAX_SIZE_MB;
-    params.KeepTime = DEFAULT_PQ_L2_KEEP_TIMEOUT;
+    params.KeepTime = DEFAULT_PQ_L2_KEEP_TIMEOUT; 
 
     if (Config.HasBootstrapConfig() && Config.GetBootstrapConfig().HasNodeLimits()) {
         auto nodeLimits = Config.GetBootstrapConfig().GetNodeLimits();
@@ -1812,7 +1812,7 @@ void TPersQueueL2CacheInitializer::InitializeServices(NActors::TActorSystemSetup
             if (cfg.HasSharedCacheSizeMb())
                 params.MaxSizeMB = cfg.GetSharedCacheSizeMb();
             if (cfg.HasCacheKeepTimeSec())
-                params.KeepTime = TDuration::Seconds(cfg.GetCacheKeepTimeSec());
+                params.KeepTime = TDuration::Seconds(cfg.GetCacheKeepTimeSec()); 
         }
     }
 
@@ -1860,24 +1860,24 @@ void TPersQueueClusterTrackerInitializer::InitializeServices(NActors::TActorSyst
         TActorSetupCmd(actor, TMailboxType::HTSwap, appData->UserPoolId)));
 }
 
-// TPersQueueLibSharedInstanceInitializer
+// TPersQueueLibSharedInstanceInitializer 
 
-TPersQueueLibSharedInstanceInitializer::TPersQueueLibSharedInstanceInitializer(const TKikimrRunConfig& runConfig)
-    : IKikimrServicesInitializer(runConfig)
-{}
-
+TPersQueueLibSharedInstanceInitializer::TPersQueueLibSharedInstanceInitializer(const TKikimrRunConfig& runConfig) 
+    : IKikimrServicesInitializer(runConfig) 
+{} 
+ 
 void TPersQueueLibSharedInstanceInitializer::InitializeServices(NActors::TActorSystemSetup*, const NKikimr::TAppData* appData) {
-    if (Config.HasPQConfig() && Config.GetPQConfig().GetEnabled()) {
-        if (Config.GetPQConfig().GetMirrorConfig().GetEnabled()) {
-            if (appData->PersQueueMirrorReaderFactory) {
-                appData->PersQueueMirrorReaderFactory->Initialize(Config.GetPQConfig().GetMirrorConfig().GetPQLibSettings());
+    if (Config.HasPQConfig() && Config.GetPQConfig().GetEnabled()) { 
+        if (Config.GetPQConfig().GetMirrorConfig().GetEnabled()) { 
+            if (appData->PersQueueMirrorReaderFactory) { 
+                appData->PersQueueMirrorReaderFactory->Initialize(Config.GetPQConfig().GetMirrorConfig().GetPQLibSettings()); 
             }
-        }
-    }
-}
-
-// TMemProfMonitorInitializer
-
+        } 
+    } 
+} 
+ 
+// TMemProfMonitorInitializer 
+ 
 TMemProfMonitorInitializer::TMemProfMonitorInitializer(const TKikimrRunConfig& runConfig)
     : IKikimrServicesInitializer(runConfig)
 {}

@@ -1,11 +1,11 @@
-#include "stats.h"
+#include "stats.h" 
 
 #include <ydb/public/api/protos/ydb_table.pb.h>
 
 #include <util/datetime/base.h>
 
-#include <google/protobuf/text_format.h>
-
+#include <google/protobuf/text_format.h> 
+ 
 namespace NYdb {
 namespace NTable {
 

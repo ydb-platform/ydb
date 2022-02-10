@@ -3,7 +3,7 @@ LIBRARY()
 OWNER(
     alexnick
     g:kikimr
-    g:logbroker
+    g:logbroker 
 )
 
 SRCS(

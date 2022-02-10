@@ -2,8 +2,8 @@
 
 #include <ydb/core/protos/counters_pq.pb.h>
 
-#include <library/cpp/monlib/dynamic_counters/counters.h>
-
+#include <library/cpp/monlib/dynamic_counters/counters.h> 
+ 
 namespace NKikimr {
 namespace NPQ {
 
@@ -11,26 +11,26 @@ namespace NPQ {
 class TWorkingTimeCounter {
 private:
     bool IsInWorkingState;
-    NMonitoring::TDynamicCounters::TCounterPtr WorkingTimeMicroSec;
+    NMonitoring::TDynamicCounters::TCounterPtr WorkingTimeMicroSec; 
     TInstant LastUpdateTimestamp;
 public:
 
     TWorkingTimeCounter(NMonitoring::TDynamicCounters::TCounterPtr counter)
     : IsInWorkingState(false)
-    , WorkingTimeMicroSec(counter)
+    , WorkingTimeMicroSec(counter) 
     {}
 
     void UpdateState(bool state) {
         IsInWorkingState = state;
     }
 
-    void UpdateWorkingTime(const TInstant now) {
-        if (!WorkingTimeMicroSec) //no counter
+    void UpdateWorkingTime(const TInstant now) { 
+        if (!WorkingTimeMicroSec) //no counter 
             return;
         if (IsInWorkingState && LastUpdateTimestamp > TInstant::Zero()) {
-            TDuration res = now - LastUpdateTimestamp;
-            (*WorkingTimeMicroSec) += res.MicroSeconds();
-            LastUpdateTimestamp += res;
+            TDuration res = now - LastUpdateTimestamp; 
+            (*WorkingTimeMicroSec) += res.MicroSeconds(); 
+            LastUpdateTimestamp += res; 
         } else {
             LastUpdateTimestamp = now;
         }

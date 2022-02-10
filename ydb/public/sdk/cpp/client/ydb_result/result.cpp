@@ -1,11 +1,11 @@
-#include "result.h"
+#include "result.h" 
 
 #include <ydb/public/sdk/cpp/client/ydb_types/fatal_error_handlers/handlers.h>
-
+ 
 #include <ydb/public/api/protos/ydb_common.pb.h>
 #include <ydb/public/api/protos/ydb_value.pb.h>
 
-#include <util/generic/map.h>
+#include <util/generic/map.h> 
 #include <util/string/builder.h>
 
 #include <google/protobuf/text_format.h>

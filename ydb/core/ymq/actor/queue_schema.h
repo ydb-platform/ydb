@@ -47,7 +47,7 @@ public:
     void RequestCreateQueueQuota();
     void OnCreateQueueQuota(TEvQuota::TEvClearance::TPtr& ev);
 
-    void RequestTablesFormatSettings(const TString& accountName);
+    void RequestTablesFormatSettings(const TString& accountName); 
     void RegisterMakeDirActor(const TString& workingDir, const TString& dirName);
 
     void RequestLeaderTabletId();
@@ -62,9 +62,9 @@ public:
 
     void OnDescribeSchemeResult(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev);
 
-    void SendDescribeTable();
-    void HandleTableDescription(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev);
-
+    void SendDescribeTable(); 
+    void HandleTableDescription(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev); 
+ 
     template <typename T>
     T GetAttribute(const TStringBuf name, const T& defaultValue) const;
 
@@ -92,12 +92,12 @@ public:
 
 private:
     enum class ECreateComponentsStep : ui32 {
-        GetTablesFormatSetting,
-        MakeQueueDir,
+        GetTablesFormatSetting, 
+        MakeQueueDir, 
         MakeQueueVersionDir,
         MakeShards,
         MakeTables,
-        DescribeTableForSetSchemeShardId,
+        DescribeTableForSetSchemeShardId, 
         DiscoverLeaderTabletId,
         AddQuoterResource,
     };
@@ -115,7 +115,7 @@ private:
     bool IsCloudMode_ = false;
     bool EnableQueueAttributesValidation_ = true;
 
-    ui32 TablesFormat_ = 0;
+    ui32 TablesFormat_ = 0; 
     ui64 Version_ = 0;
 
     TString VersionName_;
@@ -134,7 +134,7 @@ private:
     ui64 CreateTableWithLeaderTabletTxId_ = 0;
     std::pair<ui64, ui64> TableWithLeaderPathId_ = std::make_pair(0, 0); // (scheme shard, path id) are required for describing table
 
-    ECreateComponentsStep CurrentCreationStep_ = ECreateComponentsStep::GetTablesFormatSetting;
+    ECreateComponentsStep CurrentCreationStep_ = ECreateComponentsStep::GetTablesFormatSetting; 
 
     TActorId AddQuoterResourceActor_;
 };

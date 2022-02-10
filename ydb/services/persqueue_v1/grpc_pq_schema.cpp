@@ -18,7 +18,7 @@ using grpc::Status;
 namespace NKikimr::NGRpcProxy::V1 {
 
 constexpr TStringBuf GRPCS_ENDPOINT_PREFIX = "grpcs://";
-
+ 
 ///////////////////////////////////////////////////////////////////////////////
 
 using namespace PersQueue::V1;
@@ -122,13 +122,13 @@ void TDescribeTopicActor::StateWork(TAutoPtr<IEventHandle>& ev, const TActorCont
 
 
 void TDescribeTopicActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx) {
-    Y_VERIFY(ev->Get()->Request.Get()->ResultSet.size() == 1); // describe for only one topic
+    Y_VERIFY(ev->Get()->Request.Get()->ResultSet.size() == 1); // describe for only one topic 
     if (ReplyIfNotTopic(ev, ctx)) {
         return;
     }
 
-    const auto& response = ev->Get()->Request.Get()->ResultSet.front();
-
+    const auto& response = ev->Get()->Request.Get()->ResultSet.front(); 
+ 
     const TString path = JoinSeq("/", response.Path);
 
     Ydb::PersQueue::V1::DescribeTopicResult result;
@@ -184,7 +184,7 @@ void TDescribeTopicActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEv
             settings->add_supported_codecs((Ydb::PersQueue::V1::Codec) (codec + 1));
         }
 
-        const auto& pqConfig = AppData(ctx)->PQConfig;
+        const auto& pqConfig = AppData(ctx)->PQConfig; 
         for (ui32 i = 0; i < config.ReadRulesSize(); ++i) {
             auto rr = settings->add_read_rules();
             auto consumerName = NPersQueue::ConvertOldConsumerName(config.GetReadRules(i), ctx);
@@ -204,20 +204,20 @@ void TDescribeTopicActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEv
                 }
             }
             rr->set_important(important);
-
-            if (i < config.ReadRuleServiceTypesSize()) {
-                rr->set_service_type(config.GetReadRuleServiceTypes(i));
-            } else {
-                if (pqConfig.GetDisallowDefaultClientServiceType()) {
-                    this->Request_->RaiseIssue(FillIssue(
-                        "service type must be set for all read rules",
-                        Ydb::PersQueue::ErrorCode::ERROR
-                    ));
-                    Reply(Ydb::StatusIds::INTERNAL_ERROR, ctx);
-                    return;
-                }
-                rr->set_service_type(pqConfig.GetDefaultClientServiceType().GetName());
-            }
+ 
+            if (i < config.ReadRuleServiceTypesSize()) { 
+                rr->set_service_type(config.GetReadRuleServiceTypes(i)); 
+            } else { 
+                if (pqConfig.GetDisallowDefaultClientServiceType()) { 
+                    this->Request_->RaiseIssue(FillIssue( 
+                        "service type must be set for all read rules", 
+                        Ydb::PersQueue::ErrorCode::ERROR 
+                    )); 
+                    Reply(Ydb::StatusIds::INTERNAL_ERROR, ctx); 
+                    return; 
+                } 
+                rr->set_service_type(pqConfig.GetDefaultClientServiceType().GetName()); 
+            } 
         }
         if (partConfig.HasMirrorFrom()) {
             auto rmr = settings->mutable_remote_mirror_rule();
@@ -250,7 +250,7 @@ void TDescribeTopicActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEv
                                                                                        NPersQueue::ObfuscateString(
                                                                                                                    partConfig.GetMirrorFrom().GetCredentials().GetIam().GetServiceAccountKey())
                                                                                        );
-                }
+                } 
             }
             rmr->set_database(partConfig.GetMirrorFrom().GetDatabase());
         }
@@ -279,19 +279,19 @@ void TAddReadRuleActor::Bootstrap(const NActors::TActorContext& ctx) {
     Become(&TBase::StateWork);
 }
 
-void TAddReadRuleActor::ModifyPersqueueConfig(
-    const TActorContext& ctx,
+void TAddReadRuleActor::ModifyPersqueueConfig( 
+    const TActorContext& ctx, 
     NKikimrSchemeOp::TPersQueueGroupDescription& groupConfig,
     const NKikimrSchemeOp::TPersQueueGroupDescription& pqGroupDescription,
     const NKikimrSchemeOp::TDirEntry& selfInfo
-) {
-    Y_UNUSED(pqGroupDescription);
-
+) { 
+    Y_UNUSED(pqGroupDescription); 
+ 
     auto* pqConfig = groupConfig.MutablePQTabletConfig();
     auto rule = GetProtoRequest()->read_rule();
 
     if (rule.version() == 0) {
-        rule.set_version(selfInfo.GetVersion().GetPQVersion());
+        rule.set_version(selfInfo.GetVersion().GetPQVersion()); 
     }
     auto serviceTypes = GetSupportedClientServiceTypes(ctx);
     TString error = AddReadRuleToConfig(pqConfig, rule, serviceTypes, ctx);
@@ -318,20 +318,20 @@ void TRemoveReadRuleActor::Bootstrap(const NActors::TActorContext& ctx) {
     Become(&TBase::StateWork);
 }
 
-void TRemoveReadRuleActor::ModifyPersqueueConfig(
-    const TActorContext& ctx,
+void TRemoveReadRuleActor::ModifyPersqueueConfig( 
+    const TActorContext& ctx, 
     NKikimrSchemeOp::TPersQueueGroupDescription& groupConfig,
     const NKikimrSchemeOp::TPersQueueGroupDescription& pqGroupDescription,
     const NKikimrSchemeOp::TDirEntry& selfInfo
-) {
-    Y_UNUSED(selfInfo);
-
-    auto error = RemoveReadRuleFromConfig(
-        groupConfig.MutablePQTabletConfig(),
-        pqGroupDescription.GetPQTabletConfig(),
-        GetProtoRequest()->consumer_name(),
-        ctx
-    );
+) { 
+    Y_UNUSED(selfInfo); 
+ 
+    auto error = RemoveReadRuleFromConfig( 
+        groupConfig.MutablePQTabletConfig(), 
+        pqGroupDescription.GetPQTabletConfig(), 
+        GetProtoRequest()->consumer_name(), 
+        ctx 
+    ); 
     if (!error.Empty()) {
         return ReplyWithError(Ydb::StatusIds::NOT_FOUND, Ydb::PersQueue::ErrorCode::BAD_REQUEST, error, ctx);
     }
@@ -372,14 +372,14 @@ void TCreateTopicActor::FillProposeRequest(TEvTxUserProxy::TEvProposeTransaction
     NKikimrSchemeOp::TModifyScheme& modifyScheme(*proposal.Record.MutableTransaction()->MutableModifyScheme());
     modifyScheme.SetWorkingDir(workingDir);
 
-    {
-        TString error;
-        auto status = FillProposeRequestImpl(name, GetProtoRequest()->settings(), modifyScheme, ctx, false, error);
-        if (!error.empty()) {
-            Request_->RaiseIssue(FillIssue(error, PersQueue::ErrorCode::BAD_REQUEST));
-            return ReplyWithResult(status, ctx);
-        }
-    }
+    { 
+        TString error; 
+        auto status = FillProposeRequestImpl(name, GetProtoRequest()->settings(), modifyScheme, ctx, false, error); 
+        if (!error.empty()) { 
+            Request_->RaiseIssue(FillIssue(error, PersQueue::ErrorCode::BAD_REQUEST)); 
+            return ReplyWithResult(status, ctx); 
+        } 
+    } 
 
     const auto& pqDescr = modifyScheme.GetCreatePersQueueGroup();
     const auto& config = pqDescr.GetPQTabletConfig();
@@ -389,8 +389,8 @@ void TCreateTopicActor::FillProposeRequest(TEvTxUserProxy::TEvProposeTransaction
                                     << "' instead of " << LocalCluster, PersQueue::ErrorCode::BAD_REQUEST));
         return ReplyWithResult(Ydb::StatusIds::BAD_REQUEST, ctx);
     }
-    if (Count(Clusters, config.GetDC()) == 0 && !Clusters.empty()) {
-        Request_->RaiseIssue(FillIssue(TStringBuilder() << "Unknown cluster '" << config.GetDC() << "'", PersQueue::ErrorCode::BAD_REQUEST));
+    if (Count(Clusters, config.GetDC()) == 0 && !Clusters.empty()) { 
+        Request_->RaiseIssue(FillIssue(TStringBuilder() << "Unknown cluster '" << config.GetDC() << "'", PersQueue::ErrorCode::BAD_REQUEST)); 
         return ReplyWithResult(Ydb::StatusIds::BAD_REQUEST, ctx);
     }
 }

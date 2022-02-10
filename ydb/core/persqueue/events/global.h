@@ -42,7 +42,7 @@ struct TEvPersQueue {
         EvError,
         EvGetPartitionIdForWrite,
         EvGetPartitionIdForWriteResponse,
-        EvReportPartitionError,
+        EvReportPartitionError, 
         EvResponse = EvRequest + 256,
         EvInternalEvents = EvResponse + 256,
         EvEnd
@@ -199,7 +199,7 @@ struct TEvPersQueue {
     };
 
     struct TEvError : public TEventPB<TEvError,
-            NPersQueueCommon::TError, EvError> {
+            NPersQueueCommon::TError, EvError> { 
             TEvError() {}
     };
 
@@ -213,10 +213,10 @@ struct TEvPersQueue {
         {};
     };
 
-    struct TEvReportPartitionError : public TEventPB<TEvReportPartitionError, NKikimrPQ::TStatusResponse::TErrorMessage, EvReportPartitionError> {
-        TEvReportPartitionError()
-        {}
-    };
-
+    struct TEvReportPartitionError : public TEventPB<TEvReportPartitionError, NKikimrPQ::TStatusResponse::TErrorMessage, EvReportPartitionError> { 
+        TEvReportPartitionError() 
+        {} 
+    }; 
+ 
 };
 } //NKikimr

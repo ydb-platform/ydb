@@ -174,10 +174,10 @@ private:
 
             cluster.IsLocal = t.GetList(i).GetStruct(2).GetOptional().GetBool();
             cluster.IsEnabled = t.GetList(i).GetStruct(3).GetOptional().GetBool();
-            cluster.Weight = t.GetList(i).GetStruct(4).GetOptional().GetUint64();
+            cluster.Weight = t.GetList(i).GetStruct(4).GetOptional().GetUint64(); 
         }
 
-        clustersList->Version = t.GetList(0).GetStruct(5).GetOptional().GetInt64();
+        clustersList->Version = t.GetList(0).GetStruct(5).GetOptional().GetInt64(); 
 
         ClustersList = std::move(clustersList);
         ClustersListUpdateTimestamp = Ctx().Now();

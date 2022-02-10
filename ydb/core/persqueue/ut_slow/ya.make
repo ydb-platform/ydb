@@ -1,10 +1,10 @@
 UNITTEST_FOR(ydb/core/persqueue)
 
-OWNER(
-    alexnick
+OWNER( 
+    alexnick 
     g:kikimr
-    g:logbroker
-)
+    g:logbroker 
+) 
 
 FORK_SUBTESTS()
 

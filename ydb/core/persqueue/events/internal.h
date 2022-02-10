@@ -1,10 +1,10 @@
 #pragma once
 
-#include "global.h"
-
+#include "global.h" 
+ 
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/tablet/tablet_counters.h>
-
+ 
 #include <library/cpp/actors/core/event_local.h>
 #include <library/cpp/actors/core/actorid.h>
 
@@ -97,17 +97,17 @@ struct TEvPQ {
         EvRegisterMessageGroup,
         EvDeregisterMessageGroup,
         EvSplitMessageGroup,
-        EvUpdateCounters,
-        EvMirrorerCounters,
-        EvReadLimiterRequest,
-        EvReadLimiterResponse,
-        EvReadLimiterConsumed,
-        EvReadLimiterCounters,
-        EvRetryWrite,
-        EvInitCredentials,
-        EvCreateConsumer,
-        EvRequestPartitionStatus,
-        EvReaderEventArrived,
+        EvUpdateCounters, 
+        EvMirrorerCounters, 
+        EvReadLimiterRequest, 
+        EvReadLimiterResponse, 
+        EvReadLimiterConsumed, 
+        EvReadLimiterCounters, 
+        EvRetryWrite, 
+        EvInitCredentials, 
+        EvCreateConsumer, 
+        EvRequestPartitionStatus, 
+        EvReaderEventArrived, 
         EvEnd
     };
 
@@ -580,44 +580,44 @@ struct TEvPQ {
         TVector<TDeregisterBody> Deregistrations;
         TVector<TRegisterBody> Registrations;
     };
-
-    struct TEvUpdateCounters : public TEventLocal<TEvUpdateCounters, EvUpdateCounters> {
-        TEvUpdateCounters()
-        {}
-    };
-
-    struct TEvMirrorerCounters : public TEventLocal<TEvMirrorerCounters, EvMirrorerCounters> {
-        TEvMirrorerCounters(const NKikimr::TTabletCountersBase& counters) {
-            Counters.Populate(counters);
-        }
-
-        NKikimr::TTabletCountersBase Counters;
-    };
-
-    struct TEvRetryWrite : public TEventLocal<TEvRetryWrite, EvRetryWrite> {
-        TEvRetryWrite()
-        {}
-    };
-
-    struct TEvInitCredentials : public TEventLocal<TEvInitCredentials, EvInitCredentials> {
-        TEvInitCredentials()
-        {}
-    };
-
-    struct TEvCreateConsumer : public TEventLocal<TEvCreateConsumer, EvCreateConsumer> {
-        TEvCreateConsumer()
-        {}
-    };
-
-    struct TEvRequestPartitionStatus : public TEventLocal<TEvRequestPartitionStatus, EvRequestPartitionStatus> {
-        TEvRequestPartitionStatus()
-        {}
-    };
-
-    struct TEvReaderEventArrived : public TEventLocal<TEvReaderEventArrived, EvReaderEventArrived> {
-        TEvReaderEventArrived()
-        {}
-    };
+ 
+    struct TEvUpdateCounters : public TEventLocal<TEvUpdateCounters, EvUpdateCounters> { 
+        TEvUpdateCounters() 
+        {} 
+    }; 
+ 
+    struct TEvMirrorerCounters : public TEventLocal<TEvMirrorerCounters, EvMirrorerCounters> { 
+        TEvMirrorerCounters(const NKikimr::TTabletCountersBase& counters) { 
+            Counters.Populate(counters); 
+        } 
+ 
+        NKikimr::TTabletCountersBase Counters; 
+    }; 
+ 
+    struct TEvRetryWrite : public TEventLocal<TEvRetryWrite, EvRetryWrite> { 
+        TEvRetryWrite() 
+        {} 
+    }; 
+ 
+    struct TEvInitCredentials : public TEventLocal<TEvInitCredentials, EvInitCredentials> { 
+        TEvInitCredentials() 
+        {} 
+    }; 
+ 
+    struct TEvCreateConsumer : public TEventLocal<TEvCreateConsumer, EvCreateConsumer> { 
+        TEvCreateConsumer() 
+        {} 
+    }; 
+ 
+    struct TEvRequestPartitionStatus : public TEventLocal<TEvRequestPartitionStatus, EvRequestPartitionStatus> { 
+        TEvRequestPartitionStatus() 
+        {} 
+    }; 
+ 
+    struct TEvReaderEventArrived : public TEventLocal<TEvReaderEventArrived, EvReaderEventArrived> { 
+        TEvReaderEventArrived() 
+        {} 
+    }; 
 };
 
 } //NKikimr

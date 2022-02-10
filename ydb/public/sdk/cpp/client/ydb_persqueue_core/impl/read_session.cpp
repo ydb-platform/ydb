@@ -1,11 +1,11 @@
 #include "persqueue_impl.h"
-#include "read_session.h"
-#include "common.h"
+#include "read_session.h" 
+#include "common.h" 
 
-#define INCLUDE_YDB_INTERNAL_H
+#define INCLUDE_YDB_INTERNAL_H 
 #include <ydb/public/sdk/cpp/client/impl/ydb_internal/logger/log.h>
-#undef INCLUDE_YDB_INTERNAL_H
-
+#undef INCLUDE_YDB_INTERNAL_H 
+ 
 #include <library/cpp/containers/disjoint_interval_tree/disjoint_interval_tree.h>
 #include <util/generic/guid.h>
 #include <util/generic/size_literals.h>
@@ -22,15 +22,15 @@ static const TString DRIVER_IS_STOPPING_DESCRIPTION = "Driver is stopping";
 
 static const bool RangesMode = !GetEnv("PQ_OFFSET_RANGES_MODE").empty();
 
-std::pair<ui64, ui64> GetMessageOffsetRange(const TReadSessionEvent::TDataReceivedEvent& dataReceivedEvent, ui64 index) {
-    if (dataReceivedEvent.IsCompressedMessages()) {
-        const auto& msg = dataReceivedEvent.GetCompressedMessages()[index];
-        return {msg.GetOffset(0), msg.GetOffset(msg.GetBlocksCount() - 1) + 1};
-    }
-    const auto& msg = dataReceivedEvent.GetMessages()[index];
-    return {msg.GetOffset(), msg.GetOffset() + 1};
-}
-
+std::pair<ui64, ui64> GetMessageOffsetRange(const TReadSessionEvent::TDataReceivedEvent& dataReceivedEvent, ui64 index) { 
+    if (dataReceivedEvent.IsCompressedMessages()) { 
+        const auto& msg = dataReceivedEvent.GetCompressedMessages()[index]; 
+        return {msg.GetOffset(0), msg.GetOffset(msg.GetBlocksCount() - 1) + 1}; 
+    } 
+    const auto& msg = dataReceivedEvent.GetMessages()[index]; 
+    return {msg.GetOffset(), msg.GetOffset() + 1}; 
+} 
+ 
 TString IssuesSingleLineString(const NYql::TIssues& issues) {
     return SubstGlobalCopy(issues.ToString(), '\n', ' ');
 }
@@ -1023,14 +1023,14 @@ void TSingleClusterReadSessionImpl::RequestPartitionStreamStatus(const TPartitio
 
 void TSingleClusterReadSessionImpl::OnUserRetrievedEvent(const TReadSessionEvent::TEvent& event) {
     Log << TLOG_DEBUG << "Read session event " << DebugString(event);
-    const i64 bytesCount = static_cast<i64>(CalcDataSize(event));
+    const i64 bytesCount = static_cast<i64>(CalcDataSize(event)); 
     Y_ASSERT(bytesCount >= 0);
 
     if (!std::get_if<TReadSessionEvent::TDataReceivedEvent>(&event)) { // Event is not data event.
         return;
     }
 
-    *Settings.Counters_->MessagesInflight -= std::get<TReadSessionEvent::TDataReceivedEvent>(event).GetMessagesCount();
+    *Settings.Counters_->MessagesInflight -= std::get<TReadSessionEvent::TDataReceivedEvent>(event).GetMessagesCount(); 
     *Settings.Counters_->BytesInflightTotal -= bytesCount;
     *Settings.Counters_->BytesInflightUncompressed -= bytesCount;
 
@@ -1580,18 +1580,18 @@ TReadSessionEvent::TPartitionStreamClosedEvent::TPartitionStreamClosedEvent(TPar
 }
 
 TReadSessionEvent::TDataReceivedEvent::TDataReceivedEvent(TVector<TMessage> messages,
-                                                          TVector<TCompressedMessage> compressedMessages,
+                                                          TVector<TCompressedMessage> compressedMessages, 
                                                           TPartitionStream::TPtr partitionStream)
     : Messages(std::move(messages))
-    , CompressedMessages(std::move(compressedMessages))
+    , CompressedMessages(std::move(compressedMessages)) 
     , PartitionStream(std::move(partitionStream))
 {
-    for (size_t i = 0; i < GetMessagesCount(); ++i) {
-        auto [from, to] = GetMessageOffsetRange(*this, i);
-        if (OffsetRanges.empty() || OffsetRanges.back().second != from) {
-            OffsetRanges.emplace_back(from, to);
-        } else {
-            OffsetRanges.back().second = to;
+    for (size_t i = 0; i < GetMessagesCount(); ++i) { 
+        auto [from, to] = GetMessageOffsetRange(*this, i); 
+        if (OffsetRanges.empty() || OffsetRanges.back().second != from) { 
+            OffsetRanges.emplace_back(from, to); 
+        } else { 
+            OffsetRanges.back().second = to; 
         }
     }
 }
@@ -1616,14 +1616,14 @@ TString TReadSessionEvent::TDataReceivedEvent::DebugString(bool printData) const
     TStringBuilder ret;
     ret << "DataReceived { PartitionStreamId: " << GetPartitionStream()->GetPartitionStreamId()
         << " PartitionId: " << GetPartitionStream()->GetPartitionId();
-    for (const auto& message : Messages) {
+    for (const auto& message : Messages) { 
         ret << " ";
-        message.DebugString(ret, printData);
+        message.DebugString(ret, printData); 
     }
-    for (const auto& message : CompressedMessages) {
-        ret << " ";
-        message.DebugString(ret, printData);
-    }
+    for (const auto& message : CompressedMessages) { 
+        ret << " "; 
+        message.DebugString(ret, printData); 
+    } 
     ret << " }";
     return std::move(ret);
 }
@@ -1696,16 +1696,16 @@ TReadSessionEventInfo::TReadSessionEventInfo(TIntrusivePtr<TPartitionStreamImpl>
 
 TReadSessionEventInfo::TReadSessionEventInfo(TIntrusivePtr<TPartitionStreamImpl> partitionStream,
                                              std::weak_ptr<IUserRetrievedEventCallback> session,
-                                             TVector<TReadSessionEvent::TDataReceivedEvent::TMessage> messages,
-                                             TVector<TReadSessionEvent::TDataReceivedEvent::TCompressedMessage> compressedMessages)
+                                             TVector<TReadSessionEvent::TDataReceivedEvent::TMessage> messages, 
+                                             TVector<TReadSessionEvent::TDataReceivedEvent::TCompressedMessage> compressedMessages) 
     : PartitionStream(std::move(partitionStream))
-    , Event(
-        NMaybe::TInPlace(),
-        std::in_place_type_t<TReadSessionEvent::TDataReceivedEvent>(),
-        std::move(messages),
-        std::move(compressedMessages),
-        PartitionStream
-    )
+    , Event( 
+        NMaybe::TInPlace(), 
+        std::in_place_type_t<TReadSessionEvent::TDataReceivedEvent>(), 
+        std::move(messages), 
+        std::move(compressedMessages), 
+        PartitionStream 
+    ) 
     , Session(std::move(session))
 {
 }
@@ -1745,11 +1745,11 @@ void TReadSessionEventInfo::OnUserRetrievedEvent() {
     }
 }
 
-bool TReadSessionEventInfo::TakeData(TVector<TReadSessionEvent::TDataReceivedEvent::TMessage>* messages,
-                                     TVector<TReadSessionEvent::TDataReceivedEvent::TCompressedMessage>* compressedMessages,
-                                     size_t* maxByteSize)
-{
-    return PartitionStream->TopEvent().GetData().TakeData(PartitionStream, messages, compressedMessages, maxByteSize);
+bool TReadSessionEventInfo::TakeData(TVector<TReadSessionEvent::TDataReceivedEvent::TMessage>* messages, 
+                                     TVector<TReadSessionEvent::TDataReceivedEvent::TCompressedMessage>* compressedMessages, 
+                                     size_t* maxByteSize) 
+{ 
+    return PartitionStream->TopEvent().GetData().TakeData(PartitionStream, messages, compressedMessages, maxByteSize); 
 }
 
 TReadSessionEventsQueue::TReadSessionEventsQueue(const TSettings& settings, std::weak_ptr<IUserRetrievedEventCallback> session)
@@ -1799,17 +1799,17 @@ TDataDecompressionInfo* TReadSessionEventsQueue::PushDataEvent(TIntrusivePtr<TPa
     }
 
     with_lock (Mutex) {
-        return &partitionStream->InsertDataEvent(std::move(msg), Settings.Decompress_);
+        return &partitionStream->InsertDataEvent(std::move(msg), Settings.Decompress_); 
     }
 }
 
 TMaybe<TReadSessionEventsQueue::TEventInfo> TReadSessionEventsQueue::GetDataEventImpl(TEventInfo& srcDataEventInfo, size_t* maxByteSize) { // Assumes that we're under lock.
     TVector<TReadSessionEvent::TDataReceivedEvent::TMessage> messages;
-    TVector<TReadSessionEvent::TDataReceivedEvent::TCompressedMessage> compressedMessages;
+    TVector<TReadSessionEvent::TDataReceivedEvent::TCompressedMessage> compressedMessages; 
     TIntrusivePtr<TPartitionStreamImpl> partitionStream = srcDataEventInfo.PartitionStream;
     bool messageExtracted = false;
     while (srcDataEventInfo.HasReadyUnreadData() && *maxByteSize > 0) {
-        const bool hasMoreUnpackedData = srcDataEventInfo.TakeData(&messages, &compressedMessages, maxByteSize);
+        const bool hasMoreUnpackedData = srcDataEventInfo.TakeData(&messages, &compressedMessages, maxByteSize); 
         if (!hasMoreUnpackedData) {
             const bool messageIsFullyRead = !srcDataEventInfo.HasMoreData();
             if (messageIsFullyRead) {
@@ -1823,10 +1823,10 @@ TMaybe<TReadSessionEventsQueue::TEventInfo> TReadSessionEventsQueue::GetDataEven
         partitionStream->TopEvent().Signalled = false;
     }
 
-    if (messages.empty() && compressedMessages.empty()) {
+    if (messages.empty() && compressedMessages.empty()) { 
         return Nothing();
     }
-    return TEventInfo(partitionStream, partitionStream->GetSession(), std::move(messages), std::move(compressedMessages));
+    return TEventInfo(partitionStream, partitionStream->GetSession(), std::move(messages), std::move(compressedMessages)); 
 }
 
 void TReadSessionEventsQueue::SignalReadyEvents(TPartitionStreamImpl* partitionStream) {
@@ -1938,14 +1938,14 @@ void TReadSessionEventsQueue::ClearAllEvents() {
     }
 }
 
-TDataDecompressionInfo::TDataDecompressionInfo(
-    Ydb::PersQueue::V1::MigrationStreamingReadServerMessage::DataBatch::PartitionData&& msg,
-    std::weak_ptr<TSingleClusterReadSessionImpl> session,
-    bool doDecompress
-)
+TDataDecompressionInfo::TDataDecompressionInfo( 
+    Ydb::PersQueue::V1::MigrationStreamingReadServerMessage::DataBatch::PartitionData&& msg, 
+    std::weak_ptr<TSingleClusterReadSessionImpl> session, 
+    bool doDecompress 
+) 
     : ServerMessage(std::move(msg))
     , Session(std::move(session))
-    , DoDecompress(doDecompress)
+    , DoDecompress(doDecompress) 
 {
     for (const Ydb::PersQueue::V1::MigrationStreamingReadServerMessage::DataBatch::Batch& batch : ServerMessage.batches()) {
         for (const Ydb::PersQueue::V1::MigrationStreamingReadServerMessage::DataBatch::MessageData& messageData : batch.message_data()) {
@@ -2035,11 +2035,11 @@ i64 TDataDecompressionInfo::StartDecompressionTasks(const IExecutor::TPtr& execu
     return used;
 }
 
-bool TDataDecompressionInfo::TakeData(const TIntrusivePtr<TPartitionStreamImpl>& partitionStream,
-                                      TVector<TReadSessionEvent::TDataReceivedEvent::TMessage>* messages,
-                                      TVector<TReadSessionEvent::TDataReceivedEvent::TCompressedMessage>* compressedMessages,
-                                      size_t* maxByteSize)
-{
+bool TDataDecompressionInfo::TakeData(const TIntrusivePtr<TPartitionStreamImpl>& partitionStream, 
+                                      TVector<TReadSessionEvent::TDataReceivedEvent::TMessage>* messages, 
+                                      TVector<TReadSessionEvent::TDataReceivedEvent::TCompressedMessage>* compressedMessages, 
+                                      size_t* maxByteSize) 
+{ 
     TMaybe<std::pair<size_t, size_t>> readyThreshold = GetReadyThreshold();
     Y_ASSERT(readyThreshold);
     auto& msg = GetServerMessage();
@@ -2054,35 +2054,35 @@ bool TDataDecompressionInfo::TakeData(const TIntrusivePtr<TPartitionStreamImpl>&
             auto& messageData = *batch.mutable_message_data(CurrentReadingMessage.second);
             minOffset = Min(minOffset, messageData.offset());
             maxOffset = Max(maxOffset, messageData.offset());
-            TReadSessionEvent::TDataReceivedEvent::TMessageInformation messageInfo(
+            TReadSessionEvent::TDataReceivedEvent::TMessageInformation messageInfo( 
                 messageData.offset(),
                 batch.source_id(),
                 messageData.seq_no(),
                 TInstant::MilliSeconds(messageData.create_timestamp_ms()),
                 batchWriteTimestamp,
                 batch.ip(),
-                meta,
-                messageData.uncompressed_size()
+                meta, 
+                messageData.uncompressed_size() 
             );
-            if (DoDecompress) {
-                messages->emplace_back(
-                    messageData.data(),
-                    GetDecompressionError(CurrentReadingMessage.first, CurrentReadingMessage.second),
-                    messageInfo,
-                    partitionStream,
-                    messageData.partition_key(),
-                    messageData.explicit_hash()
-                );
-            } else {
-                compressedMessages->emplace_back(
-                    static_cast<ECodec>(messageData.codec()),
-                    messageData.data(),
-                    TVector<TReadSessionEvent::TDataReceivedEvent::TMessageInformation>{messageInfo},
-                    partitionStream,
-                    messageData.partition_key(),
-                    messageData.explicit_hash()
-                );
-            }
+            if (DoDecompress) { 
+                messages->emplace_back( 
+                    messageData.data(), 
+                    GetDecompressionError(CurrentReadingMessage.first, CurrentReadingMessage.second), 
+                    messageInfo, 
+                    partitionStream, 
+                    messageData.partition_key(), 
+                    messageData.explicit_hash() 
+                ); 
+            } else { 
+                compressedMessages->emplace_back( 
+                    static_cast<ECodec>(messageData.codec()), 
+                    messageData.data(), 
+                    TVector<TReadSessionEvent::TDataReceivedEvent::TMessageInformation>{messageInfo}, 
+                    partitionStream, 
+                    messageData.partition_key(), 
+                    messageData.explicit_hash() 
+                ); 
+            } 
             *maxByteSize -= Min(*maxByteSize, messageData.data().size());
 
             // Clear data to free internal session's memory.
@@ -2154,15 +2154,15 @@ void TDataDecompressionInfo::TDecompressionTask::operator()() {
             maxOffset = Max(maxOffset, data.offset());
 
             try {
-                if (Parent->DoDecompress
-                    && data.codec() != Ydb::PersQueue::V1::CODEC_RAW
-                    && data.codec() != Ydb::PersQueue::V1::CODEC_UNSPECIFIED
-                ) {
-                    TString decompressed = NCompressionDetails::Decompress(data);
-                    data.set_data(decompressed);
-                    data.set_codec(Ydb::PersQueue::V1::CODEC_RAW);
-                }
-                DecompressedSize += data.data().size();
+                if (Parent->DoDecompress 
+                    && data.codec() != Ydb::PersQueue::V1::CODEC_RAW 
+                    && data.codec() != Ydb::PersQueue::V1::CODEC_UNSPECIFIED 
+                ) { 
+                    TString decompressed = NCompressionDetails::Decompress(data); 
+                    data.set_data(decompressed); 
+                    data.set_codec(Ydb::PersQueue::V1::CODEC_RAW); 
+                } 
+                DecompressedSize += data.data().size(); 
             } catch (...) {
                 Parent->PutDecompressionError(std::current_exception(), messages.Batch, i);
                 data.clear_data(); // Free memory, because we don't count it.
@@ -2303,17 +2303,17 @@ public:
     }
 
     void OnDataReceived(TReadSessionEvent::TDataReceivedEvent& event) {
-        Y_ASSERT(event.GetMessagesCount());
+        Y_ASSERT(event.GetMessagesCount()); 
         TDeferredCommit deferredCommit;
         with_lock (Lock) {
             auto& offsetSet = PartitionStreamToUncommittedOffsets[event.GetPartitionStream()->GetPartitionStreamId()];
             // Messages could contain holes in offset, but later commit ack will tell us right border.
             // So we can easily insert the whole interval with holes included.
             // It will be removed from set by specifying proper right border.
-            auto firstMessageOffsets = GetMessageOffsetRange(event, 0);
-            auto lastMessageOffsets = GetMessageOffsetRange(event, event.GetMessagesCount() - 1);
+            auto firstMessageOffsets = GetMessageOffsetRange(event, 0); 
+            auto lastMessageOffsets = GetMessageOffsetRange(event, event.GetMessagesCount() - 1); 
 
-            offsetSet.InsertInterval(firstMessageOffsets.first, lastMessageOffsets.second);
+            offsetSet.InsertInterval(firstMessageOffsets.first, lastMessageOffsets.second); 
 
             if (CommitAfterProcessing) {
                 deferredCommit.Add(event);
@@ -2457,7 +2457,7 @@ TDeferredCommit::~TDeferredCommit() {
         Impl = MakeHolder<TImpl>();             \
     }                                           \
     Impl
-
+ 
 void TDeferredCommit::Add(const TPartitionStream::TPtr& partitionStream, ui64 startOffset, ui64 endOffset) {
     GET_IMPL()->Add(partitionStream, startOffset, endOffset);
 }
@@ -2485,8 +2485,8 @@ void TDeferredCommit::Commit() {
 void TDeferredCommit::TImpl::Add(const TReadSessionEvent::TDataReceivedEvent::TMessage& message) {
     Y_ASSERT(message.GetPartitionStream());
     Add(message.GetPartitionStream(), message.GetOffset());
-}
-
+} 
+ 
 void TDeferredCommit::TImpl::Add(const TPartitionStream::TPtr& partitionStream, TDisjointIntervalTree<ui64>& offsetSet, ui64 startOffset, ui64 endOffset) {
     if (offsetSet.Intersects(startOffset, endOffset)) {
         ThrowFatalError(TStringBuilder() << "Commit set already has some offsets from half-interval ["
@@ -2517,15 +2517,15 @@ void TDeferredCommit::TImpl::Add(const TReadSessionEvent::TDataReceivedEvent& da
     const TPartitionStream::TPtr& partitionStream = dataReceivedEvent.GetPartitionStream();
     Y_ASSERT(partitionStream);
     auto& offsetSet = Offsets[partitionStream];
-    auto [startOffset, endOffset] = GetMessageOffsetRange(dataReceivedEvent, 0);
-    for (size_t i = 1; i < dataReceivedEvent.GetMessagesCount(); ++i) {
-        auto msgOffsetRange = GetMessageOffsetRange(dataReceivedEvent, i);
-        if (msgOffsetRange.first == endOffset) {
-            endOffset= msgOffsetRange.second;
+    auto [startOffset, endOffset] = GetMessageOffsetRange(dataReceivedEvent, 0); 
+    for (size_t i = 1; i < dataReceivedEvent.GetMessagesCount(); ++i) { 
+        auto msgOffsetRange = GetMessageOffsetRange(dataReceivedEvent, i); 
+        if (msgOffsetRange.first == endOffset) { 
+            endOffset= msgOffsetRange.second; 
         } else {
             Add(partitionStream, offsetSet, startOffset, endOffset);
-            startOffset = msgOffsetRange.first;
-            endOffset = msgOffsetRange.second;
+            startOffset = msgOffsetRange.first; 
+            endOffset = msgOffsetRange.second; 
         }
     }
     Add(partitionStream, offsetSet, startOffset, endOffset);

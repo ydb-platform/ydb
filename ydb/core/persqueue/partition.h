@@ -11,7 +11,7 @@
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/persqueue/events/internal.h>
 #include <ydb/library/persqueue/counter_time_keeper/counter_time_keeper.h>
-
+ 
 #include "key.h"
 #include "blob.h"
 #include "subscriber.h"
@@ -35,19 +35,19 @@ typedef TProtobufTabletLabeledCounters<EPartitionLabeledCounters_descriptor> TPa
 struct TDataKey {
     TKey Key;
     ui32 Size;
-    TInstant Timestamp;
+    TInstant Timestamp; 
     ui64 CumulativeSize;
 };
 
-ui64 GetOffsetEstimate(const std::deque<TDataKey>& container, TInstant timestamp, ui64 headOffset);
+ui64 GetOffsetEstimate(const std::deque<TDataKey>& container, TInstant timestamp, ui64 headOffset); 
 
-struct TMirrorerInfo;
-
+struct TMirrorerInfo; 
+ 
 class TPartition : public TActorBootstrapped<TPartition> {
-private:
-    static constexpr ui32 MAX_ERRORS_COUNT_TO_STORE = 10;
+private: 
+    static constexpr ui32 MAX_ERRORS_COUNT_TO_STORE = 10; 
 
-private:
+private: 
     struct THasDataReq;
     struct THasDataDeadline;
 
@@ -60,20 +60,20 @@ private:
     void ReplyError(const TActorContext& ctx, const ui64 dst, NPersQueue::NErrorCode::EErrorCode errorCode, const TString& error);
     void ReplyErrorForStoredWrites(const TActorContext& ctx);
     void ReplyOk(const TActorContext& ctx, const ui64 dst);
-    void ReplyWrite(
-        const TActorContext& ctx, ui64 dst, const TString& sourceId, ui64 seqNo, ui16 partNo, ui16 totalParts,
-        ui64 offset, TInstant writeTimestamp, bool already, ui64 maxSeqNo,
-        ui64 partitionQuotedTime, TDuration topicQuotedTime, ui64 queueTime, ui64 writeTime);
+    void ReplyWrite( 
+        const TActorContext& ctx, ui64 dst, const TString& sourceId, ui64 seqNo, ui16 partNo, ui16 totalParts, 
+        ui64 offset, TInstant writeTimestamp, bool already, ui64 maxSeqNo, 
+        ui64 partitionQuotedTime, TDuration topicQuotedTime, ui64 queueTime, ui64 writeTime); 
     void ReplyGetClientOffsetOk(const TActorContext& ctx, const ui64 dst, const i64 offset,
-        const TInstant writeTimestamp, const TInstant createTimestamp);
+        const TInstant writeTimestamp, const TInstant createTimestamp); 
 
     void ReplyOwnerOk(const TActorContext& ctx, const ui64 dst, const TString& ownerCookie);
 
     void Handle(TEvPersQueue::TEvHasDataInfo::TPtr& ev, const TActorContext& ctx);
 
-    void Handle(TEvPQ::TEvMirrorerCounters::TPtr& ev, const TActorContext& ctx);
-    void Handle(NReadSpeedLimiterEvents::TEvCounters::TPtr& ev, const TActorContext& ctx);
-
+    void Handle(TEvPQ::TEvMirrorerCounters::TPtr& ev, const TActorContext& ctx); 
+    void Handle(NReadSpeedLimiterEvents::TEvCounters::TPtr& ev, const TActorContext& ctx); 
+ 
     //answer for reads for Timestamps
     void Handle(TEvPQ::TEvProxyResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvError::TPtr& ev, const TActorContext& ctx);
@@ -117,10 +117,10 @@ private:
     void Handle(TEvPQ::TEvPartitionStatus::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvGetPartitionClientInfo::TPtr& ev, const TActorContext& ctx);
 
-    void Handle(TEvPersQueue::TEvReportPartitionError::TPtr& ev, const TActorContext& ctx);
-    void LogAndCollectError(const NKikimrPQ::TStatusResponse::TErrorMessage& error, const TActorContext& ctx);
-    void LogAndCollectError(NKikimrServices::EServiceKikimr service, const TString& msg, const TActorContext& ctx);
-
+    void Handle(TEvPersQueue::TEvReportPartitionError::TPtr& ev, const TActorContext& ctx); 
+    void LogAndCollectError(const NKikimrPQ::TStatusResponse::TErrorMessage& error, const TActorContext& ctx); 
+    void LogAndCollectError(NKikimrServices::EServiceKikimr service, const TString& msg, const TActorContext& ctx); 
+ 
     void HandleOnIdle(TEvPQ::TEvUpdateAvailableSize::TPtr& ev, const TActorContext& ctx);
     void HandleOnWrite(TEvPQ::TEvUpdateAvailableSize::TPtr& ev, const TActorContext& ctx);
 
@@ -136,9 +136,9 @@ private:
     void Handle(TEvents::TEvPoisonPill::TPtr& ev, const TActorContext& ctx);
 
     void Handle(TEvPQ::TEvRead::TPtr& ev, const TActorContext& ctx);
-    void Handle(NReadSpeedLimiterEvents::TEvResponse::TPtr& ev, const TActorContext& ctx);
-    void DoRead(TEvPQ::TEvRead::TPtr ev, TDuration waitQuotaTime, const TActorContext& ctx);
-    void OnReadRequestFinished(TReadInfo&& info, ui64 answerSize);
+    void Handle(NReadSpeedLimiterEvents::TEvResponse::TPtr& ev, const TActorContext& ctx); 
+    void DoRead(TEvPQ::TEvRead::TPtr ev, TDuration waitQuotaTime, const TActorContext& ctx); 
+    void OnReadRequestFinished(TReadInfo&& info, ui64 answerSize); 
 
     // will return rcount and rsize also
     TVector<TRequestedBlob> GetReadRequestFromBody(const ui64 startOffset, const ui16 partNo, const ui32 maxCount, const ui32 maxSize, ui32* rcount, ui32* rsize);
@@ -207,7 +207,7 @@ private:
     void Handle(TEvPQ::TEvReserveBytes::TPtr& ev, const TActorContext& ctx);
     void ProcessReserveRequests(const TActorContext& ctx);
 
-    void CreateMirrorerActor();
+    void CreateMirrorerActor(); 
     bool IsQuotingEnabled() const;
 
     void SetupTopicCounters(const TActorContext& ctx);
@@ -252,7 +252,7 @@ private:
 
     STFUNC(StateInit)
     {
-        NPersQueue::TCounterTimeKeeper keeper(Counters.Cumulative()[COUNTER_PQ_TABLET_CPU_USAGE]);
+        NPersQueue::TCounterTimeKeeper keeper(Counters.Cumulative()[COUNTER_PQ_TABLET_CPU_USAGE]); 
 
         LOG_TRACE_S(ctx, NKikimrServices::PERSQUEUE, EventStr("StateInit", ev));
 
@@ -265,10 +265,10 @@ private:
             HFuncTraced(TEvPQ::TEvChangeConfig, Handle);
             HFuncTraced(TEvPQ::TEvPartitionOffsets, HandleOnInit);
             HFuncTraced(TEvPQ::TEvPartitionStatus, HandleOnInit);
-            HFuncTraced(TEvPersQueue::TEvReportPartitionError, Handle);
+            HFuncTraced(TEvPersQueue::TEvReportPartitionError, Handle); 
             HFuncTraced(TEvPersQueue::TEvHasDataInfo, Handle);
-            HFuncTraced(TEvPQ::TEvMirrorerCounters, Handle);
-            HFuncTraced(NReadSpeedLimiterEvents::TEvCounters, Handle);
+            HFuncTraced(TEvPQ::TEvMirrorerCounters, Handle); 
+            HFuncTraced(NReadSpeedLimiterEvents::TEvCounters, Handle); 
             HFuncTraced(TEvPQ::TEvGetPartitionClientInfo, Handle);
         default:
             LOG_ERROR_S(ctx, NKikimrServices::PERSQUEUE, "Unexpected " << EventStr("StateInit", ev));
@@ -278,7 +278,7 @@ private:
 
     STFUNC(StateIdle)
     {
-        NPersQueue::TCounterTimeKeeper keeper(Counters.Cumulative()[COUNTER_PQ_TABLET_CPU_USAGE]);
+        NPersQueue::TCounterTimeKeeper keeper(Counters.Cumulative()[COUNTER_PQ_TABLET_CPU_USAGE]); 
 
         LOG_TRACE_S(ctx, NKikimrServices::PERSQUEUE, EventStr("StateIdle", ev));
 
@@ -289,7 +289,7 @@ private:
             HFuncTraced(TEvPQ::TEvBlobResponse, Handle);
             HFuncTraced(TEvPQ::TEvWrite, HandleOnIdle);
             HFuncTraced(TEvPQ::TEvRead, Handle);
-            HFuncTraced(NReadSpeedLimiterEvents::TEvResponse, Handle);
+            HFuncTraced(NReadSpeedLimiterEvents::TEvResponse, Handle); 
             HFuncTraced(TEvPQ::TEvReadTimeout, Handle);
             HFuncTraced(TEvents::TEvPoisonPill, Handle);
             HFuncTraced(TEvPQ::TEvMonRequest, HandleMonitoring);
@@ -300,11 +300,11 @@ private:
             HFuncTraced(TEvPQ::TEvSetClientInfo, Handle);
             HFuncTraced(TEvPQ::TEvPartitionOffsets, Handle);
             HFuncTraced(TEvPQ::TEvPartitionStatus, Handle);
-            HFuncTraced(TEvPersQueue::TEvReportPartitionError, Handle);
+            HFuncTraced(TEvPersQueue::TEvReportPartitionError, Handle); 
             HFuncTraced(TEvPQ::TEvChangeOwner, Handle);
             HFuncTraced(TEvPersQueue::TEvHasDataInfo, Handle);
-            HFuncTraced(TEvPQ::TEvMirrorerCounters, Handle);
-            HFuncTraced(NReadSpeedLimiterEvents::TEvCounters, Handle);
+            HFuncTraced(TEvPQ::TEvMirrorerCounters, Handle); 
+            HFuncTraced(NReadSpeedLimiterEvents::TEvCounters, Handle); 
             HFuncTraced(TEvPQ::TEvProxyResponse, Handle);
             HFuncTraced(TEvPQ::TEvError, Handle);
             HFuncTraced(TEvPQ::TEvGetPartitionClientInfo, Handle);
@@ -325,7 +325,7 @@ private:
 
     STFUNC(StateWrite)
     {
-        NPersQueue::TCounterTimeKeeper keeper(Counters.Cumulative()[COUNTER_PQ_TABLET_CPU_USAGE]);
+        NPersQueue::TCounterTimeKeeper keeper(Counters.Cumulative()[COUNTER_PQ_TABLET_CPU_USAGE]); 
 
         LOG_TRACE_S(ctx, NKikimrServices::PERSQUEUE, EventStr("StateWrite", ev));
 
@@ -337,7 +337,7 @@ private:
             HFuncTraced(TEvPQ::TEvBlobResponse, Handle);
             HFuncTraced(TEvPQ::TEvWrite, HandleOnWrite);
             HFuncTraced(TEvPQ::TEvRead, Handle);
-            HFuncTraced(NReadSpeedLimiterEvents::TEvResponse, Handle);
+            HFuncTraced(NReadSpeedLimiterEvents::TEvResponse, Handle); 
             HFuncTraced(TEvPQ::TEvReadTimeout, Handle);
             HFuncTraced(TEvents::TEvPoisonPill, Handle);
             HFuncTraced(TEvPQ::TEvMonRequest, HandleMonitoring);
@@ -347,12 +347,12 @@ private:
             HFuncTraced(TEvPQ::TEvSetClientInfo, Handle);
             HFuncTraced(TEvPQ::TEvPartitionOffsets, Handle);
             HFuncTraced(TEvPQ::TEvPartitionStatus, Handle);
-            HFuncTraced(TEvPersQueue::TEvReportPartitionError, Handle);
+            HFuncTraced(TEvPersQueue::TEvReportPartitionError, Handle); 
             HFuncTraced(TEvPQ::TEvChangeOwner, Handle);
             HFuncTraced(TEvPQ::TEvChangeConfig, Handle);
             HFuncTraced(TEvPersQueue::TEvHasDataInfo, Handle);
-            HFuncTraced(TEvPQ::TEvMirrorerCounters, Handle);
-            HFuncTraced(NReadSpeedLimiterEvents::TEvCounters, Handle);
+            HFuncTraced(TEvPQ::TEvMirrorerCounters, Handle); 
+            HFuncTraced(NReadSpeedLimiterEvents::TEvCounters, Handle); 
             HFuncTraced(TEvPQ::TEvProxyResponse, Handle);
             HFuncTraced(TEvPQ::TEvError, Handle);
             HFuncTraced(TEvPQ::TEvReserveBytes, Handle);
@@ -379,8 +379,8 @@ private:
 
     void CheckHeadConsistency() const;
 
-    std::pair<TInstant, TInstant> GetTime(const TUserInfo& userInfo, ui64 offset) const;
-    TInstant GetWriteTimeEstimate(ui64 offset) const;
+    std::pair<TInstant, TInstant> GetTime(const TUserInfo& userInfo, ui64 offset) const; 
+    TInstant GetWriteTimeEstimate(ui64 offset) const; 
 
     ui32 NextChannel(bool isHead, ui32 blobSize);
 
@@ -568,7 +568,7 @@ private:
     TString DbId;
     TString FolderId;
 
-    TUsersInfoStorage UsersInfoStorage;
+    TUsersInfoStorage UsersInfoStorage; 
 
     std::deque<TString> UpdateUserInfoTimestamp;
     bool ReadingTimestamp;
@@ -606,7 +606,7 @@ private:
     ui32 WriteNewMessages;
     ui32 WriteNewMessagesInternal;
 
-    TInstant CurrentTimestamp;
+    TInstant CurrentTimestamp; 
 
     bool DiskIsFull;
 
@@ -632,7 +632,7 @@ private:
 
     TInstant WriteTimestamp;
     TInstant WriteTimestampEstimate;
-    bool ManageWriteTimestampEstimate = true;
+    bool ManageWriteTimestampEstimate = true; 
     NSlidingWindow::TSlidingWindow<NSlidingWindow::TMaxOperation<ui64>> WriteLagMs;
     THolder<TPercentileCounter> InputTimeLag;
     THolder<TPercentileCounter> MessageSize;
@@ -656,10 +656,10 @@ private:
     TString TopicWriteQuoterPath;
     TString TopicWriteQuotaResourcePath;
     ui64 NextTopicWriteQuotaRequestCookie = 1;
-
-    TDeque<NKikimrPQ::TStatusResponse::TErrorMessage> Errors;
-
-    THolder<TMirrorerInfo> Mirrorer;
+ 
+    TDeque<NKikimrPQ::TStatusResponse::TErrorMessage> Errors; 
+ 
+    THolder<TMirrorerInfo> Mirrorer; 
 };
 
 }// NPQ

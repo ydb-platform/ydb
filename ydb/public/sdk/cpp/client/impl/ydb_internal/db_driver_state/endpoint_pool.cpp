@@ -1,14 +1,14 @@
-#define INCLUDE_YDB_INTERNAL_H
-#include "endpoint_pool.h"
-
-namespace NYdb {
-TEndpointPool::TEndpointPool(TListEndpointsResultProvider&& provider, const IInternalClient* client)
-    : Provider_(provider)
-    , LastUpdateTime_(TInstant::Zero().MicroSeconds())
-    , BalancingSettings_(client->GetBalancingSettings())
-{}
-
-TEndpointPool::~TEndpointPool() {
+#define INCLUDE_YDB_INTERNAL_H 
+#include "endpoint_pool.h" 
+ 
+namespace NYdb { 
+TEndpointPool::TEndpointPool(TListEndpointsResultProvider&& provider, const IInternalClient* client) 
+    : Provider_(provider) 
+    , LastUpdateTime_(TInstant::Zero().MicroSeconds()) 
+    , BalancingSettings_(client->GetBalancingSettings()) 
+{} 
+ 
+TEndpointPool::~TEndpointPool() { 
     try {
         NThreading::TFuture<TEndpointUpdateResult> future;
         {
@@ -16,43 +16,43 @@ TEndpointPool::~TEndpointPool() {
             if (DiscoveryPromise_.Initialized()) {
                future = DiscoveryPromise_.GetFuture();
             }
-        }
+        } 
         if (future.Initialized()) {
             future.Wait();
         }
     } catch (...) {
         Y_FAIL("Unexpected exception from endpoint pool dtor");
-    }
-}
-
-std::pair<NThreading::TFuture<TEndpointUpdateResult>, bool> TEndpointPool::UpdateAsync() {
-    NThreading::TFuture<TEndpointUpdateResult> future;
+    } 
+} 
+ 
+std::pair<NThreading::TFuture<TEndpointUpdateResult>, bool> TEndpointPool::UpdateAsync() { 
+    NThreading::TFuture<TEndpointUpdateResult> future; 
     {
         std::lock_guard guard(Mutex_);
-        if (DiscoveryPromise_.Initialized()) {
-            return {DiscoveryPromise_.GetFuture(), false};
-        } else {
-            DiscoveryPromise_ = NThreading::NewPromise<TEndpointUpdateResult>();
-            future = DiscoveryPromise_.GetFuture();
-        }
-    }
-    auto handler = [this](const TAsyncListEndpointsResult& future) {
-        TListEndpointsResult result = future.GetValue();
+        if (DiscoveryPromise_.Initialized()) { 
+            return {DiscoveryPromise_.GetFuture(), false}; 
+        } else { 
+            DiscoveryPromise_ = NThreading::NewPromise<TEndpointUpdateResult>(); 
+            future = DiscoveryPromise_.GetFuture(); 
+        } 
+    } 
+    auto handler = [this](const TAsyncListEndpointsResult& future) { 
+        TListEndpointsResult result = future.GetValue(); 
         std::vector<TStringType> removed;
-        if (result.DiscoveryStatus.Status == EStatus::SUCCESS) {
+        if (result.DiscoveryStatus.Status == EStatus::SUCCESS) { 
             std::vector<TEndpointRecord> records;
-            // Is used to convert float to integer load factor
-            // same integer values will be selected randomly.
-            const float multiplicator = 10.0;
-            const auto& preferedLocation = GetPreferedLocation(result.Result.self_location());
-            for (const auto& endpoint : result.Result.endpoints()) {
-                i32 loadFactor = (i32)(multiplicator * Min(LoadMax, Max(LoadMin, endpoint.load_factor())));
-                if (BalancingSettings_.Policy != EBalancingPolicy::UseAllNodes) {
-                    if (endpoint.location() != preferedLocation) {
-                        // Location missmatch, shift this endpoint
-                        loadFactor += GetLocalityShift();
-                    }
-                }
+            // Is used to convert float to integer load factor 
+            // same integer values will be selected randomly. 
+            const float multiplicator = 10.0; 
+            const auto& preferedLocation = GetPreferedLocation(result.Result.self_location()); 
+            for (const auto& endpoint : result.Result.endpoints()) { 
+                i32 loadFactor = (i32)(multiplicator * Min(LoadMax, Max(LoadMin, endpoint.load_factor()))); 
+                if (BalancingSettings_.Policy != EBalancingPolicy::UseAllNodes) { 
+                    if (endpoint.location() != preferedLocation) { 
+                        // Location missmatch, shift this endpoint 
+                        loadFactor += GetLocalityShift(); 
+                    } 
+                } 
 
                 TStringType sslTargetNameOverride = endpoint.ssl_target_name_override();
                 auto getIpSslTargetNameOverride = [&]() -> TStringType {
@@ -105,82 +105,82 @@ std::pair<NThreading::TFuture<TEndpointUpdateResult>, bool> TEndpointPool::Updat
                             << endpoint.port();
                     records.emplace_back(std::move(endpointString), loadFactor, std::move(sslTargetNameOverride));
                 }
-            }
-            LastUpdateTime_ = TInstant::Now().MicroSeconds();
-            removed = Elector_.SetNewState(std::move(records));
-        }
-        NThreading::TPromise<TEndpointUpdateResult> promise;
+            } 
+            LastUpdateTime_ = TInstant::Now().MicroSeconds(); 
+            removed = Elector_.SetNewState(std::move(records)); 
+        } 
+        NThreading::TPromise<TEndpointUpdateResult> promise; 
         {
             std::lock_guard guard(Mutex_);
-            DiscoveryPromise_.Swap(promise);
-        }
-        promise.SetValue({std::move(removed), result.DiscoveryStatus});
-    };
-
-    Provider_().Subscribe(handler);
-    return {future, true};
-}
-
+            DiscoveryPromise_.Swap(promise); 
+        } 
+        promise.SetValue({std::move(removed), result.DiscoveryStatus}); 
+    }; 
+ 
+    Provider_().Subscribe(handler); 
+    return {future, true}; 
+} 
+ 
 TEndpointRecord TEndpointPool::GetEndpoint(const TStringType& preferredEndpoint) const {
-    return Elector_.GetEndpoint(preferredEndpoint);
-}
-
-TDuration TEndpointPool::TimeSinceLastUpdate() const {
-    auto now = TInstant::Now().MicroSeconds();
+    return Elector_.GetEndpoint(preferredEndpoint); 
+} 
+ 
+TDuration TEndpointPool::TimeSinceLastUpdate() const { 
+    auto now = TInstant::Now().MicroSeconds(); 
     return TDuration::MicroSeconds(now - LastUpdateTime_.load());
-}
-
+} 
+ 
 void TEndpointPool::BanEndpoint(const TStringType& endpoint) {
-    Elector_.PessimizeEndpoint(endpoint);
-}
-
-int TEndpointPool::GetPessimizationRatio() {
-    return Elector_.GetPessimizationRatio();
-}
-
+    Elector_.PessimizeEndpoint(endpoint); 
+} 
+ 
+int TEndpointPool::GetPessimizationRatio() { 
+    return Elector_.GetPessimizationRatio(); 
+} 
+ 
 bool TEndpointPool::LinkObjToEndpoint(const TStringType& endpoint, TEndpointObj* obj, const void* tag) {
-    return Elector_.LinkObjToEndpoint(endpoint, obj, tag);
-}
-
-void TEndpointPool::ForEachEndpoint(const TEndpointElectorSafe::THandleCb& cb, const void* tag) const {
-    return Elector_.ForEachEndpoint(cb, 0, Max<i32>(), tag);
-}
-
-void TEndpointPool::ForEachLocalEndpoint(const TEndpointElectorSafe::THandleCb& cb, const void* tag) const {
-    return Elector_.ForEachEndpoint(cb, 0, GetLocalityShift() - 1, tag);
-}
-
-void TEndpointPool::ForEachForeignEndpoint(const TEndpointElectorSafe::THandleCb& cb, const void* tag) const {
-    return Elector_.ForEachEndpoint(cb, GetLocalityShift(), Max<i32>() - 1, tag);
-}
-
-EBalancingPolicy TEndpointPool::GetBalancingPolicy() const {
-    return BalancingSettings_.Policy;
-}
-
-void TEndpointPool::SetStatCollector(NSdkStats::TStatCollector& statCollector) {
-    if (!statCollector.IsCollecting())
-        return;
-    Elector_.SetStatCollector(statCollector.GetEndpointElectorStatCollector());
-    StatCollector_ = &statCollector;
-}
-
-constexpr i32 TEndpointPool::GetLocalityShift() {
-    return LoadMax * Multiplicator;
-}
-
+    return Elector_.LinkObjToEndpoint(endpoint, obj, tag); 
+} 
+ 
+void TEndpointPool::ForEachEndpoint(const TEndpointElectorSafe::THandleCb& cb, const void* tag) const { 
+    return Elector_.ForEachEndpoint(cb, 0, Max<i32>(), tag); 
+} 
+ 
+void TEndpointPool::ForEachLocalEndpoint(const TEndpointElectorSafe::THandleCb& cb, const void* tag) const { 
+    return Elector_.ForEachEndpoint(cb, 0, GetLocalityShift() - 1, tag); 
+} 
+ 
+void TEndpointPool::ForEachForeignEndpoint(const TEndpointElectorSafe::THandleCb& cb, const void* tag) const { 
+    return Elector_.ForEachEndpoint(cb, GetLocalityShift(), Max<i32>() - 1, tag); 
+} 
+ 
+EBalancingPolicy TEndpointPool::GetBalancingPolicy() const { 
+    return BalancingSettings_.Policy; 
+} 
+ 
+void TEndpointPool::SetStatCollector(NSdkStats::TStatCollector& statCollector) { 
+    if (!statCollector.IsCollecting()) 
+        return; 
+    Elector_.SetStatCollector(statCollector.GetEndpointElectorStatCollector()); 
+    StatCollector_ = &statCollector; 
+} 
+ 
+constexpr i32 TEndpointPool::GetLocalityShift() { 
+    return LoadMax * Multiplicator; 
+} 
+ 
 TStringType TEndpointPool::GetPreferedLocation(const TStringType& selfLocation) {
-    switch (BalancingSettings_.Policy) {
-        case EBalancingPolicy::UseAllNodes:
-            return {};
-        case EBalancingPolicy::UsePreferableLocation:
-            if (BalancingSettings_.PolicyParams.empty()) {
-                return selfLocation;
-            } else {
-                return BalancingSettings_.PolicyParams;
-            }
-    }
-    return {};
-}
-
-} // namespace NYdb
+    switch (BalancingSettings_.Policy) { 
+        case EBalancingPolicy::UseAllNodes: 
+            return {}; 
+        case EBalancingPolicy::UsePreferableLocation: 
+            if (BalancingSettings_.PolicyParams.empty()) { 
+                return selfLocation; 
+            } else { 
+                return BalancingSettings_.PolicyParams; 
+            } 
+    } 
+    return {}; 
+} 
+ 
+} // namespace NYdb 

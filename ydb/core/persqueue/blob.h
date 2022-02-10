@@ -2,11 +2,11 @@
 #include "header.h"
 #include "key.h"
 
-#include <util/datetime/base.h>
-#include <util/generic/maybe.h>
-#include <util/generic/vector.h>
-
-#include <deque>
+#include <util/datetime/base.h> 
+#include <util/generic/maybe.h> 
+#include <util/generic/vector.h> 
+ 
+#include <deque> 
 
 namespace NKikimr {
 namespace NPQ {
@@ -38,8 +38,8 @@ struct TClientBlob {
     ui64 SeqNo;
     TString Data;
     TMaybe<TPartData> PartData;
-    TInstant WriteTimestamp;
-    TInstant CreateTimestamp;
+    TInstant WriteTimestamp; 
+    TInstant CreateTimestamp; 
     ui32 UncompressedSize;
     TString PartitionKey;
     TString ExplicitHashKey;
@@ -49,7 +49,7 @@ struct TClientBlob {
         , UncompressedSize(0)
     {}
 
-    TClientBlob(const TString& sourceId, const ui64 seqNo, const TString& data, TMaybe<TPartData> &&partData, TInstant writeTimestamp, TInstant createTimestamp,
+    TClientBlob(const TString& sourceId, const ui64 seqNo, const TString& data, TMaybe<TPartData> &&partData, TInstant writeTimestamp, TInstant createTimestamp, 
                 const ui64 uncompressedSize, const TString& partitionKey, const TString& explicitHashKey)
         : SourceId(sourceId)
         , SeqNo(seqNo)

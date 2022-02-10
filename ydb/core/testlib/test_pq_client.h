@@ -74,54 +74,54 @@ inline Tests::TServerSettings PQSettings(ui16 port, ui32 nodesCount = 2, bool ro
 const TString TopicPrefix = "/Root/PQ/";
 const static TString DEFAULT_SRC_IDS_PATH = "/Root/PQ/SourceIdMeta2";
 
-
+ 
 struct TRequestCreatePQ {
-    TRequestCreatePQ(
-        const TString& topic,
-        ui32 numParts,
-        ui32 cacheSize = 0,
-        ui64 lifetimeS = 86400,
-        ui32 lowWatermark = 8 * 1024 * 1024,
-        ui64 writeSpeed = 20000000,
-        const TString& user = "",
-        ui64 readSpeed = 20000000,
-        const TVector<TString>& readRules = {},
-        const TVector<TString>& important = {},
-        std::optional<NKikimrPQ::TMirrorPartitionConfig> mirrorFrom = {},
-        ui64 sourceIdMaxCount = 6000000,
-        ui64 sourceIdLifetime = 86400
-    )
-        : Topic(topic)
-        , NumParts(numParts)
-        , CacheSize(cacheSize)
-        , LifetimeS(lifetimeS)
-        , LowWatermark(lowWatermark)
-        , WriteSpeed(writeSpeed)
-        , User(user)
-        , ReadSpeed(readSpeed)
-        , ReadRules(readRules)
-        , Important(important)
-        , MirrorFrom(mirrorFrom)
-        , SourceIdMaxCount(sourceIdMaxCount)
-        , SourceIdLifetime(sourceIdLifetime)
-    {}
-
+    TRequestCreatePQ( 
+        const TString& topic, 
+        ui32 numParts, 
+        ui32 cacheSize = 0, 
+        ui64 lifetimeS = 86400, 
+        ui32 lowWatermark = 8 * 1024 * 1024, 
+        ui64 writeSpeed = 20000000, 
+        const TString& user = "", 
+        ui64 readSpeed = 20000000, 
+        const TVector<TString>& readRules = {}, 
+        const TVector<TString>& important = {}, 
+        std::optional<NKikimrPQ::TMirrorPartitionConfig> mirrorFrom = {}, 
+        ui64 sourceIdMaxCount = 6000000, 
+        ui64 sourceIdLifetime = 86400 
+    ) 
+        : Topic(topic) 
+        , NumParts(numParts) 
+        , CacheSize(cacheSize) 
+        , LifetimeS(lifetimeS) 
+        , LowWatermark(lowWatermark) 
+        , WriteSpeed(writeSpeed) 
+        , User(user) 
+        , ReadSpeed(readSpeed) 
+        , ReadRules(readRules) 
+        , Important(important) 
+        , MirrorFrom(mirrorFrom) 
+        , SourceIdMaxCount(sourceIdMaxCount) 
+        , SourceIdLifetime(sourceIdLifetime) 
+    {} 
+ 
     TString Topic;
     ui32 NumParts;
     ui32 CacheSize;
-    ui64 LifetimeS;
-    ui32 LowWatermark;
+    ui64 LifetimeS; 
+    ui32 LowWatermark; 
 
-    ui64 WriteSpeed;
+    ui64 WriteSpeed; 
 
     TString User;
-    ui64 ReadSpeed;
+    ui64 ReadSpeed; 
 
     TVector<TString> ReadRules;
     TVector<TString> Important;
 
-    std::optional<NKikimrPQ::TMirrorPartitionConfig> MirrorFrom;
-
+    std::optional<NKikimrPQ::TMirrorPartitionConfig> MirrorFrom; 
+ 
     ui64 SourceIdMaxCount;
     ui64 SourceIdLifetime;
 
@@ -156,10 +156,10 @@ struct TRequestCreatePQ {
         config->MutablePartitionConfig()->SetBurstSize(WriteSpeed);
         for (auto& rr : ReadRules) {
             config->AddReadRules(rr);
-            config->AddReadFromTimestampsMs(0);
-            config->AddConsumerFormatVersions(0);
-            config->AddReadRuleVersions(0);
-            config->AddConsumerCodecs()->AddIds(0);
+            config->AddReadFromTimestampsMs(0); 
+            config->AddConsumerFormatVersions(0); 
+            config->AddReadRuleVersions(0); 
+            config->AddConsumerCodecs()->AddIds(0); 
         }
         if (!ReadRules.empty()) {
             config->SetRequireAuthRead(true);
@@ -171,38 +171,38 @@ struct TRequestCreatePQ {
             rq->SetClientId(User);
         }
 
-        if (MirrorFrom) {
-            auto mirrorFromConfig = config->MutablePartitionConfig()->MutableMirrorFrom();
-            mirrorFromConfig->CopyFrom(MirrorFrom.value());
-        }
+        if (MirrorFrom) { 
+            auto mirrorFromConfig = config->MutablePartitionConfig()->MutableMirrorFrom(); 
+            mirrorFromConfig->CopyFrom(MirrorFrom.value()); 
+        } 
         return request;
     }
 };
 
 
 struct TRequestAlterPQ {
-    TRequestAlterPQ(
-        const TString& topic,
-        ui32 numParts,
-        ui64 cacheSize = 0,
-        ui64 lifetimeS = 86400,
-        bool fillPartitionConfig = false,
-        std::optional<NKikimrPQ::TMirrorPartitionConfig> mirrorFrom = {}
-    )
-        : Topic(topic)
-        , NumParts(numParts)
-        , CacheSize(cacheSize)
-        , LifetimeS(lifetimeS)
-        , FillPartitionConfig(fillPartitionConfig)
-        , MirrorFrom(mirrorFrom)
-    {}
-
+    TRequestAlterPQ( 
+        const TString& topic, 
+        ui32 numParts, 
+        ui64 cacheSize = 0, 
+        ui64 lifetimeS = 86400, 
+        bool fillPartitionConfig = false, 
+        std::optional<NKikimrPQ::TMirrorPartitionConfig> mirrorFrom = {} 
+    ) 
+        : Topic(topic) 
+        , NumParts(numParts) 
+        , CacheSize(cacheSize) 
+        , LifetimeS(lifetimeS) 
+        , FillPartitionConfig(fillPartitionConfig) 
+        , MirrorFrom(mirrorFrom) 
+    {} 
+ 
     TString Topic;
     ui32 NumParts;
     ui64 CacheSize;
     ui64 LifetimeS;
-    bool FillPartitionConfig;
-    std::optional<NKikimrPQ::TMirrorPartitionConfig> MirrorFrom;
+    bool FillPartitionConfig; 
+    std::optional<NKikimrPQ::TMirrorPartitionConfig> MirrorFrom; 
 
     THolder<NMsgBusProxy::TBusPersQueue> GetRequest() {
         THolder<NMsgBusProxy::TBusPersQueue> request(new NMsgBusProxy::TBusPersQueue);
@@ -213,21 +213,21 @@ struct TRequestAlterPQ {
             auto config = req->MutableConfig();
             config->SetCacheSize(CacheSize);
         }
-        if (FillPartitionConfig) {
-            req->MutableConfig()->MutablePartitionConfig()->SetLifetimeSeconds(LifetimeS);
-            if (MirrorFrom) {
-                req->MutableConfig()->MutablePartitionConfig()->MutableMirrorFrom()->CopyFrom(MirrorFrom.value());
-            }
-        }
+        if (FillPartitionConfig) { 
+            req->MutableConfig()->MutablePartitionConfig()->SetLifetimeSeconds(LifetimeS); 
+            if (MirrorFrom) { 
+                req->MutableConfig()->MutablePartitionConfig()->MutableMirrorFrom()->CopyFrom(MirrorFrom.value()); 
+            } 
+        } 
         return request;
     }
 };
 
 struct TRequestDeletePQ {
-    TRequestDeletePQ(const TString& topic)
-        : Topic(topic)
-    {}
-
+    TRequestDeletePQ(const TString& topic) 
+        : Topic(topic) 
+    {} 
+ 
     TString Topic;
 
     THolder<NMsgBusProxy::TBusPersQueue> GetRequest() {
@@ -239,11 +239,11 @@ struct TRequestDeletePQ {
 };
 
 struct TRequestGetOwnership {
-    TRequestGetOwnership(const TString& topic, ui32 partition)
-        : Topic(topic)
-        , Partition(partition)
-    {}
-
+    TRequestGetOwnership(const TString& topic, ui32 partition) 
+        : Topic(topic) 
+        , Partition(partition) 
+    {} 
+ 
     TString Topic;
     ui32 Partition;
 
@@ -259,13 +259,13 @@ struct TRequestGetOwnership {
 
 
 struct TRequestWritePQ {
-    TRequestWritePQ(const TString& topic, ui32 partition, const TString& sourceId, ui64 seqNo)
-        : Topic(topic)
-        , Partition(partition)
-        , SourceId(sourceId)
-        , SeqNo(seqNo)
-    {}
-
+    TRequestWritePQ(const TString& topic, ui32 partition, const TString& sourceId, ui64 seqNo) 
+        : Topic(topic) 
+        , Partition(partition) 
+        , SourceId(sourceId) 
+        , SeqNo(seqNo) 
+    {} 
+ 
     TString Topic;
     ui32 Partition;
     TString SourceId;
@@ -287,20 +287,20 @@ struct TRequestWritePQ {
 };
 
 struct TRequestReadPQ {
-    TRequestReadPQ(
-        const TString& topic,
-        ui32 partition,
-        ui64 startOffset,
-        ui32 count,
-        const TString& user
-    )
-        : Topic(topic)
-        , Partition(partition)
-        , StartOffset(startOffset)
-        , Count(count)
-        , User(user)
-    {}
-
+    TRequestReadPQ( 
+        const TString& topic, 
+        ui32 partition, 
+        ui64 startOffset, 
+        ui32 count, 
+        const TString& user 
+    ) 
+        : Topic(topic) 
+        , Partition(partition) 
+        , StartOffset(startOffset) 
+        , Count(count) 
+        , User(user) 
+    {} 
+ 
     TString Topic;
     ui32 Partition;
     ui64 StartOffset;
@@ -321,18 +321,18 @@ struct TRequestReadPQ {
 };
 
 struct TRequestSetClientOffsetPQ {
-    TRequestSetClientOffsetPQ(
-        const TString& topic,
-        ui32 partition,
-        ui64 offset,
-        const TString& user
-    )
-        : Topic(topic)
-        , Partition(partition)
-        , Offset(offset)
-        , User(user)
-    {}
-
+    TRequestSetClientOffsetPQ( 
+        const TString& topic, 
+        ui32 partition, 
+        ui64 offset, 
+        const TString& user 
+    ) 
+        : Topic(topic) 
+        , Partition(partition) 
+        , Offset(offset) 
+        , User(user) 
+    {} 
+ 
     TString Topic;
     ui32 Partition;
     ui64 Offset;
@@ -459,7 +459,7 @@ enum class ETransport {
 struct TPQTestClusterInfo {
     TString Balancer;
     bool Enabled;
-    ui64 Weight = 1000;
+    ui64 Weight = 1000; 
 };
 
 static THashMap<TString, TPQTestClusterInfo> DEFAULT_CLUSTERS_LIST = {
@@ -615,7 +615,7 @@ public:
                 balancer Utf8,
                 local Bool,
                 enabled Bool,
-                weight Uint64,
+                weight Uint64, 
                 PRIMARY KEY (name)
             );
             CREATE TABLE [/Root/PQ/Config/V2/Topics] (
@@ -634,14 +634,14 @@ public:
         )___");
 
         TStringBuilder upsertClusters;
-        upsertClusters <<  "UPSERT INTO [/Root/PQ/Config/V2/Cluster] (name, balancer, local, enabled, weight) VALUES ";
+        upsertClusters <<  "UPSERT INTO [/Root/PQ/Config/V2/Cluster] (name, balancer, local, enabled, weight) VALUES "; 
         bool first = true;
         for (auto& [cluster, info] : clusters) {
             bool isLocal = localCluster.empty() ? first : localCluster == cluster;
             if (!first)
                 upsertClusters << ", ";
             upsertClusters << "(\"" << cluster << "\", \"" << info.Balancer << "\", " << (isLocal ? "true" : "false")
-                           << ", " << (info.Enabled ? "true" : "false") << ", " << info.Weight << ")";
+                           << ", " << (info.Enabled ? "true" : "false") << ", " << info.Weight << ")"; 
             first = false;
         }
         upsertClusters << ";\n";
@@ -661,21 +661,21 @@ public:
         RunYqlDataQuery(query);
     }
 
-    TPQTestClusterInfo GetDcInfo(const TString& name) {
-        TStringBuilder query;
-        query << "SELECT balancer, enabled, weight FROM [/Root/PQ/Config/V2/Cluster] where name = \"" << name << "\";";
-        auto result = RunYqlDataQuery(query);
-        NYdb::TResultSetParser parser(*result);
-        UNIT_ASSERT_VALUES_EQUAL(parser.RowsCount(), 1);
-        parser.TryNextRow();
-
-        TPQTestClusterInfo info;
-        info.Balancer = *parser.ColumnParser("balancer").GetOptionalUtf8();
-        info.Enabled = *parser.ColumnParser("enabled").GetOptionalBool();
-        info.Weight = *parser.ColumnParser("weight").GetOptionalUint64();
-        return info;
-    }
-
+    TPQTestClusterInfo GetDcInfo(const TString& name) { 
+        TStringBuilder query; 
+        query << "SELECT balancer, enabled, weight FROM [/Root/PQ/Config/V2/Cluster] where name = \"" << name << "\";"; 
+        auto result = RunYqlDataQuery(query); 
+        NYdb::TResultSetParser parser(*result); 
+        UNIT_ASSERT_VALUES_EQUAL(parser.RowsCount(), 1); 
+        parser.TryNextRow(); 
+ 
+        TPQTestClusterInfo info; 
+        info.Balancer = *parser.ColumnParser("balancer").GetOptionalUtf8(); 
+        info.Enabled = *parser.ColumnParser("enabled").GetOptionalBool(); 
+        info.Weight = *parser.ColumnParser("weight").GetOptionalUint64(); 
+        return info; 
+    } 
+ 
     void InitUserRegistry() {
         MkDir("/Root/PQ", "Config");
         MkDir("/Root/PQ/Config", "V2");
@@ -915,27 +915,27 @@ public:
         }
     }
 
-    void CreateTopic(
-        const TString& name,
-        ui32 nParts,
-        ui32 lowWatermark = 8*1024*1024,
-        ui64 lifetimeS = 86400,
-        ui64 writeSpeed = 20000000,
-        TString user = "",
-        ui64 readSpeed = 200000000,
-        TVector<TString> rr = {},
-        TVector<TString> important = {},
+    void CreateTopic( 
+        const TString& name, 
+        ui32 nParts, 
+        ui32 lowWatermark = 8*1024*1024, 
+        ui64 lifetimeS = 86400, 
+        ui64 writeSpeed = 20000000, 
+        TString user = "", 
+        ui64 readSpeed = 200000000, 
+        TVector<TString> rr = {}, 
+        TVector<TString> important = {}, 
         std::optional<NKikimrPQ::TMirrorPartitionConfig> mirrorFrom = {},
         ui64 sourceIdMaxCount = 6000000,
         ui64 sourceIdLifetime = 86400
-    ) {
+    ) { 
         Y_VERIFY(name.StartsWith("rt3."));
 
         Cerr << "PQ Client: create topic: " << name << " with " << nParts << " partitions" << Endl;
-        auto request = TRequestCreatePQ(
+        auto request = TRequestCreatePQ( 
                 name, nParts, 0, lifetimeS, lowWatermark, writeSpeed, user, readSpeed, rr, important, mirrorFrom,
                 sourceIdMaxCount, sourceIdLifetime
-        );
+        ); 
         return CreateTopic(request);
     }
 
@@ -955,17 +955,17 @@ public:
         Cerr << "Alter topic (" << path << ") response: " << res.GetValue().IsSuccess() << " " << res.GetValue().GetIssues().ToString() << Endl;
     }
 
-    void AlterTopic(
-        const TString& name,
-        ui32 nParts,
-        ui32 cacheSize = 0,
-        ui64 lifetimeS = 86400,
-        bool fillPartitionConfig = false,
-        std::optional<NKikimrPQ::TMirrorPartitionConfig> mirrorFrom = {}
-    ) {
+    void AlterTopic( 
+        const TString& name, 
+        ui32 nParts, 
+        ui32 cacheSize = 0, 
+        ui64 lifetimeS = 86400, 
+        bool fillPartitionConfig = false, 
+        std::optional<NKikimrPQ::TMirrorPartitionConfig> mirrorFrom = {} 
+    ) { 
         Y_VERIFY(name.StartsWith("rt3."));
-        TRequestAlterPQ requestDescr(name, nParts, cacheSize, lifetimeS, fillPartitionConfig, mirrorFrom);
-        THolder<NMsgBusProxy::TBusPersQueue> request = requestDescr.GetRequest();
+        TRequestAlterPQ requestDescr(name, nParts, cacheSize, lifetimeS, fillPartitionConfig, mirrorFrom); 
+        THolder<NMsgBusProxy::TBusPersQueue> request = requestDescr.GetRequest(); 
 
         ui32 prevVersion = TopicCreated(name);
 

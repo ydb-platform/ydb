@@ -131,11 +131,11 @@ private:
 
 class TPersQueueGetReadSessionsInfoProcessor : public TPersQueueBaseRequestProcessor {
 public:
-    TPersQueueGetReadSessionsInfoProcessor(
-        const NKikimrClient::TPersQueueRequest& request,
-        const TActorId& schemeCache,
-        std::shared_ptr<IPersQueueGetReadSessionsInfoWorkerFactory> pqReadSessionsInfoWorkerFactory
-    );
+    TPersQueueGetReadSessionsInfoProcessor( 
+        const NKikimrClient::TPersQueueRequest& request, 
+        const TActorId& schemeCache, 
+        std::shared_ptr<IPersQueueGetReadSessionsInfoWorkerFactory> pqReadSessionsInfoWorkerFactory 
+    ); 
 
     bool ReadyForAnswer(const TActorContext& ctx) override {
         if (TPersQueueBaseRequestProcessor::ReadyForAnswer(ctx)) {
@@ -172,7 +172,7 @@ private:
     THolder<IActor> CreateTopicSubactor(const TSchemeEntry& topicEntry, const TString& name) override;
     THolder<IActor> CreateSessionsSubactor(const THashMap<TString, TActorId>&& readSessions);
 
-    std::shared_ptr<IPersQueueGetReadSessionsInfoWorkerFactory> PQReadSessionsInfoWorkerFactory;
+    std::shared_ptr<IPersQueueGetReadSessionsInfoWorkerFactory> PQReadSessionsInfoWorkerFactory; 
     mutable bool HasSessionsRequest = false;
     THashMap<TString, TActorId> ReadSessions;
 };

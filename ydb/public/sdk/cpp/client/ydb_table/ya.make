@@ -1,18 +1,18 @@
-LIBRARY()
-
-OWNER(
-    dcherednik
-    g:kikimr
-)
-
-SRCS(
-    table.cpp
-    proto_accessor.cpp
-)
-
-GENERATE_ENUM_SERIALIZATION(table_enum.h)
-
-PEERDIR(
+LIBRARY() 
+ 
+OWNER( 
+    dcherednik 
+    g:kikimr 
+) 
+ 
+SRCS( 
+    table.cpp 
+    proto_accessor.cpp 
+) 
+ 
+GENERATE_ENUM_SERIALIZATION(table_enum.h) 
+ 
+PEERDIR( 
     ydb/public/api/protos
     ydb/public/sdk/cpp/client/impl/ydb_internal/make_request
     ydb/public/sdk/cpp/client/ydb_driver
@@ -23,6 +23,6 @@ PEERDIR(
     ydb/public/sdk/cpp/client/ydb_table/query_stats
     ydb/public/sdk/cpp/client/ydb_types/operation
     ydb/public/sdk/cpp/client/ydb_value
-)
-
-END()
+) 
+ 
+END() 

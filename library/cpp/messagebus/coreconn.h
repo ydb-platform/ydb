@@ -1,8 +1,8 @@
 #pragma once
 
-//////////////////////////////////////////////////////////////
-/// \file
-/// \brief Definitions for asynchonous connection queue
+////////////////////////////////////////////////////////////// 
+/// \file 
+/// \brief Definitions for asynchonous connection queue 
 
 #include "base.h"
 #include "event_loop.h"
@@ -21,7 +21,7 @@
 #include <util/string/util.h>
 #include <util/system/condvar.h>
 #include <util/system/mutex.h>
-#include <util/system/thread.h>
+#include <util/system/thread.h> 
 #include <util/thread/lfqueue.h>
 
 #include <deque>
@@ -38,12 +38,12 @@ namespace NBus {
     class TBusConnection;
     class TBusConnectionFactory;
     class TBusServerFactory;
-
+ 
     using TBusConnectionList = TList<TBusConnection*>;
-
+ 
     /// @throw yexception
     EIpVersion MakeIpVersion(bool allowIpv4, bool allowIpv6);
-
+ 
     inline bool WouldBlock() {
         int syserr = LastSystemError();
         return syserr == EAGAIN || syserr == EINPROGRESS || syserr == EWOULDBLOCK || syserr == EINTR;

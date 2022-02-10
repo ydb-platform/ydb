@@ -27,23 +27,23 @@
 #include <util/generic/buffer.h>
 #include <util/generic/noncopyable.h>
 #include <util/generic/ptr.h>
-#include <util/stream/input.h>
-#include <util/system/atomic.h>
+#include <util/stream/input.h> 
+#include <util/system/atomic.h> 
 #include <util/system/condvar.h>
 #include <util/system/type_name.h>
 #include <util/system/event.h>
 #include <util/system/mutex.h>
-
-namespace NBus {
+ 
+namespace NBus { 
     ////////////////////////////////////////////////////////
     /// \brief Common structure to store address information
-
+ 
     int CompareByHost(const IRemoteAddr& l, const IRemoteAddr& r) noexcept;
     bool operator<(const TNetAddr& a1, const TNetAddr& a2); // compare by addresses
 
     /////////////////////////////////////////////////////////////////////////
     /// \brief Handles routing and data encoding to/from wire
-
+ 
     /// Protocol is stateless threadsafe singleton object that
     /// encapsulates relationship between a message (TBusMessage) object
     /// and destination server. Protocol object is reponsible for serializing in-memory
@@ -69,7 +69,7 @@ namespace NBus {
         TBusService GetService() const {
             return ServiceName.data();
         }
-
+ 
         /// returns port number for destination session to open socket
         int GetPort() const {
             return ServicePort;
@@ -81,18 +81,18 @@ namespace NBus {
         /// \brief serialized protocol specific data into TBusData
         /// \note buffer passed to the function (data) is not empty, use append functions
         virtual void Serialize(const TBusMessage* mess, TBuffer& data) = 0;
-
+ 
         /// deserialized TBusData into new instance of the message
         virtual TAutoPtr<TBusMessage> Deserialize(ui16 messageType, TArrayRef<const char> payload) = 0;
-
+ 
         /// returns key for messages of this protocol
         virtual TBusKey GetKey(const TBusMessage*) {
             return YBUS_KEYMIN;
         }
-
+ 
         /// default implementation of routing policy to allow overrides
         virtual EMessageStatus GetDestination(const TBusClientSession* session, TBusMessage* mess, TBusLocator* locator, TNetAddr* addr);
-
+ 
         /// codec for transport level compression
         virtual NCodecs::TCodecPtr GetTransportCodec(void) const {
             return NCodecs::ICodec::GetInstance("snappy");
@@ -101,7 +101,7 @@ namespace NBus {
 
     class TBusSyncSourceSession: public TAtomicRefCount<TBusSyncSourceSession> {
         friend class TBusMessageQueue;
-
+ 
     public:
         TBusSyncSourceSession(TIntrusivePtr< ::NBus::NPrivate::TBusSyncSourceSessionImpl> session);
         ~TBusSyncSourceSession();
@@ -139,9 +139,9 @@ namespace NBus {
         TList<TIntrusivePtr< ::NBus::NPrivate::TBusSessionImpl>> Sessions;
         TSimpleIntrusivePtr<TBusLocator> Locator;
         NPrivate::TScheduler Scheduler;
-
+ 
         ::NActor::TExecutorPtr WorkQueue;
-
+ 
         TAtomic Running;
         TSystemEvent ShutdownComplete;
 
@@ -151,12 +151,12 @@ namespace NBus {
 
     public:
         TString GetNameInternal() const;
-
+ 
         ~TBusMessageQueue();
 
         void Stop();
         bool IsRunning();
-
+ 
     public:
         void EnqueueWork(TArrayRef< ::NActor::IWorkItem* const> w) {
             WorkQueue->EnqueueWork(w);
@@ -180,11 +180,11 @@ namespace NBus {
         TBusSyncClientSessionPtr CreateSyncSource(TBusProtocol* proto, const TBusClientSessionConfig& config, bool needReply = true, const TString& name = "");
         TBusServerSessionPtr CreateDestination(TBusProtocol* proto, IBusServerHandler* hander, const TBusServerSessionConfig& config, const TString& name = "");
         TBusServerSessionPtr CreateDestination(TBusProtocol* proto, IBusServerHandler* hander, const TBusServerSessionConfig& config, const TVector<TBindResult>& bindTo, const TString& name = "");
-
+ 
     private:
         void Destroy(TBusSession* session);
         void Destroy(TBusSyncClientSessionPtr session);
-
+ 
     public:
         void Schedule(NPrivate::IScheduleItemAutoPtr i);
 
@@ -201,5 +201,5 @@ namespace NBus {
     TBusMessageQueuePtr CreateMessageQueue(const TBusQueueConfig& config, const char* name = "");
     TBusMessageQueuePtr CreateMessageQueue(const TBusQueueConfig& config, TBusLocator* locator, const char* name = "");
     TBusMessageQueuePtr CreateMessageQueue(const TBusQueueConfig& config, NActor::TExecutorPtr executor, TBusLocator* locator, const char* name = "");
-
+ 
 }

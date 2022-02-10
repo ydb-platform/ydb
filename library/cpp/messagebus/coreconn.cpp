@@ -12,7 +12,7 @@ namespace NBus {
     TBusInstant Now() {
         return millisec();
     }
-
+ 
     EIpVersion MakeIpVersion(bool allowIpv4, bool allowIpv6) {
         if (allowIpv4) {
             if (allowIpv6) {
@@ -23,8 +23,8 @@ namespace NBus {
         } else if (allowIpv6) {
             return EIP_VERSION_6;
         }
-
+ 
         ythrow yexception() << "Neither of IPv4/IPv6 is allowed.";
     }
 
-}
+} 

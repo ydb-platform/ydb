@@ -1,5 +1,5 @@
 #include "simple_proto.h"
-
+ 
 #include <library/cpp/messagebus/test/perftest/messages.pb.h>
 
 #include <library/cpp/messagebus/text_utils.h>
@@ -448,66 +448,66 @@ private:
     }
 };
 
-// ./perftest/perftest -s 11456 -c localhost:11456 -r 60 -n 4 -i 5000
-
-using namespace std;
-using namespace NBus;
-
+// ./perftest/perftest -s 11456 -c localhost:11456 -r 60 -n 4 -i 5000 
+ 
+using namespace std; 
+using namespace NBus; 
+ 
 static TNetworkAddress ParseNetworkAddress(const char* string) {
     TString Name;
     int Port;
-
+ 
     const char* port = strchr(string, ':');
-
+ 
     if (port != nullptr) {
         Name.append(string, port - string);
-        Port = atoi(port + 1);
+        Port = atoi(port + 1); 
     } else {
         Name.append(string);
         Port = TheConfig->ServerPort != 0 ? TheConfig->ServerPort : DEFAULT_PORT;
-    }
-
+    } 
+ 
     return TNetworkAddress(Name, Port);
 }
 
 TVector<TNetAddr> ParseNodes(const TString nodes) {
     TVector<TNetAddr> r;
-
+ 
     TVector<TString> hosts;
-
+ 
     size_t numh = Split(nodes.data(), ",", hosts);
-
-    for (int i = 0; i < int(numh); i++) {
+ 
+    for (int i = 0; i < int(numh); i++) { 
         const TNetworkAddress& networkAddress = ParseNetworkAddress(hosts[i].data());
         Y_VERIFY(networkAddress.Begin() != networkAddress.End(), "no addresses");
         r.push_back(TNetAddr(networkAddress, &*networkAddress.Begin()));
-    }
-
+    } 
+ 
     return r;
-}
-
+} 
+ 
 TPerftestConfig::TPerftestConfig() {
     TBusSessionConfig defaultConfig;
 
     ServerPort = DEFAULT_PORT;
-    Delay = 0; // artificial delay inside server OnMessage()
+    Delay = 0; // artificial delay inside server OnMessage() 
     MessageSize = 200;
-    Failure = 0.00;
-    Run = 60; // in seconds
-    Nodes = "localhost";
+    Failure = 0.00; 
+    Run = 60; // in seconds 
+    Nodes = "localhost"; 
     ServerUseModules = false;
     ExecuteOnMessageInWorkerPool = defaultConfig.ExecuteOnMessageInWorkerPool;
     ExecuteOnReplyInWorkerPool = defaultConfig.ExecuteOnReplyInWorkerPool;
     UseCompression = false;
     Profile = false;
     WwwPort = 0;
-}
-
+} 
+ 
 TPerftestConfig* TheConfig = new TPerftestConfig();
 bool TheExit = false;
 
 TSystemEvent StopEvent;
-
+ 
 TSimpleSharedPtr<TPerftestServer> Server;
 TSimpleSharedPtr<TPerftestUsingModule> ServerUsingModule;
 
@@ -516,13 +516,13 @@ TMutex ClientsLock;
 
 void stopsignal(int /*sig*/) {
     fprintf(stderr, "\n-------------------- exiting ------------------\n");
-    TheExit = true;
+    TheExit = true; 
     StopEvent.Signal();
-}
-
-// -s <num> - start server on port <num>
-// -c <node:port,node:port> - start client
-
+} 
+ 
+// -s <num> - start server on port <num> 
+// -c <node:port,node:port> - start client 
+ 
 void TTestStats::PeriodicallyPrint() {
     SetCurrentThreadName("print-stats");
 
@@ -589,7 +589,7 @@ void TTestStats::PeriodicallyPrint() {
 
 int main(int argc, char* argv[]) {
     NLWTrace::StartLwtraceFromEnv();
-
+ 
     /* unix foo */
     setvbuf(stdout, nullptr, _IONBF, 0);
     setvbuf(stderr, nullptr, _IONBF, 0);
@@ -600,7 +600,7 @@ int main(int argc, char* argv[]) {
     SetAsyncSignalHandler(SIGUSR1, stopsignal);
 #endif
     signal(SIGPIPE, SIG_IGN);
-
+ 
     NLastGetopt::TOpts opts = NLastGetopt::TOpts::Default();
     opts.AddLongOption('s', "server-port", "server port").RequiredArgument("port").StoreResult(&TheConfig->ServerPort);
     opts.AddCharOption('m', "average message size").RequiredArgument("size").StoreResult(&TheConfig->MessageSize);
@@ -621,7 +621,7 @@ int main(int argc, char* argv[]) {
     opts.AddLongOption("profile").SetFlag(&TheConfig->Profile);
     opts.AddLongOption("www-port").RequiredArgument("PORT").StoreResult(&TheConfig->WwwPort);
     opts.AddHelpOption();
-
+ 
     Config.ServerQueueConfig.ConfigureLastGetopt(opts, "server-");
     Config.ServerSessionConfig.ConfigureLastGetopt(opts, "server-");
     Config.ClientQueueConfig.ConfigureLastGetopt(opts, "client-");
@@ -631,9 +631,9 @@ int main(int argc, char* argv[]) {
 
     NLastGetopt::TOptsParseResult parseResult(&opts, argc, argv);
 
-    TheConfig->Print();
+    TheConfig->Print(); 
     Config.Print();
-
+ 
     if (TheConfig->Profile) {
         BeginProfiling();
     }
@@ -642,7 +642,7 @@ int main(int argc, char* argv[]) {
 
     ServerAddresses = ParseNodes(TheConfig->Nodes);
 
-    if (TheConfig->ServerPort) {
+    if (TheConfig->ServerPort) { 
         if (TheConfig->ServerUseModules) {
             ServerUsingModule = new TPerftestUsingModule();
             www->RegisterModule(ServerUsingModule.Get());
@@ -650,7 +650,7 @@ int main(int argc, char* argv[]) {
             Server = new TPerftestServer();
             www->RegisterServerSession(Server->Session);
         }
-    }
+    } 
 
     TVector<TSimpleSharedPtr<NThreading::TLegacyFuture<void, false>>> futures;
 
@@ -661,8 +661,8 @@ int main(int argc, char* argv[]) {
             futures.push_back(new NThreading::TLegacyFuture<void, false>(std::bind(&TPerftestClient::Work, Clients.back())));
             www->RegisterClientSession(Clients.back()->Session);
         }
-    }
-
+    } 
+ 
     futures.push_back(new NThreading::TLegacyFuture<void, false>(std::bind(&TTestStats::PeriodicallyPrint, std::ref(Stats))));
 
     THolder<TBusWwwHttpServer> wwwServer;
@@ -709,5 +709,5 @@ int main(int argc, char* argv[]) {
     }
 
     Cerr << "***SUCCESS***\n";
-    return 0;
-}
+    return 0; 
+} 

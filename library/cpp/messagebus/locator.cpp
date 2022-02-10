@@ -1,9 +1,9 @@
-////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////// 
 /// \file
-/// \brief Implementation of locator service
-
+/// \brief Implementation of locator service 
+ 
 #include "locator.h"
-
+ 
 #include "ybus.h"
 
 #include <util/generic/hash_set.h>
@@ -11,7 +11,7 @@
 
 namespace NBus {
     using namespace NAddr;
-
+ 
     static TIpPort GetAddrPort(const IRemoteAddr& addr) {
         switch (addr.Addr()->sa_family) {
             case AF_INET: {
@@ -84,8 +84,8 @@ namespace NBus {
 
     static const sockaddr_in6* SockAddrIpV6(const IRemoteAddr& a) {
         return (const sockaddr_in6*)a.Addr();
-    }
-
+    } 
+ 
     static bool IsAddressEqual(const IRemoteAddr& a1, const IRemoteAddr& a2) {
         if (a1.Addr()->sa_family == a2.Addr()->sa_family) {
             if (a1.Addr()->sa_family == AF_INET) {
@@ -95,13 +95,13 @@ namespace NBus {
             }
         }
         return false;
-    }
+    } 
 
     TBusLocator::TBusLocator()
         : MyInterfaces(GetNetworkInterfaces())
     {
     }
-
+ 
     bool TBusLocator::TItem::operator<(const TItem& y) const {
         const TItem& x = *this;
 
@@ -114,7 +114,7 @@ namespace NBus {
     bool TBusLocator::TItem::operator==(const TItem& y) const {
         return ServiceId == y.ServiceId && Start == y.Start && End == y.End && Addr == y.Addr;
     }
-
+ 
     TBusLocator::TItem::TItem(TServiceId serviceId, TBusKey start, TBusKey end, const TNetAddr& addr)
         : ServiceId(serviceId)
         , Start(start)
@@ -122,7 +122,7 @@ namespace NBus {
         , Addr(addr)
     {
     }
-
+ 
     bool TBusLocator::IsLocal(const TNetAddr& addr) {
         for (const auto& myInterface : MyInterfaces) {
             if (IsAddressEqual(addr, *myInterface.Address)) {
@@ -132,7 +132,7 @@ namespace NBus {
 
         return false;
     }
-
+ 
     TBusLocator::TServiceId TBusLocator::GetServiceId(const char* name) {
         const char* c = ServiceIdSet.insert(name).first->c_str();
         return (ui64)c;
@@ -140,7 +140,7 @@ namespace NBus {
 
     int TBusLocator::RegisterBreak(TBusService service, const TVector<TBusKey>& starts, const TNetAddr& addr) {
         TGuard<TMutex> G(Lock);
-
+ 
         TServiceId serviceId = GetServiceId(service);
         for (size_t i = 0; i < starts.size(); ++i) {
             RegisterBreak(serviceId, starts[i], addr);
@@ -152,7 +152,7 @@ namespace NBus {
         TItems::const_iterator it = Items.lower_bound(TItem(serviceId, 0, start, addr));
         TItems::const_iterator service_it =
             Items.lower_bound(TItem(serviceId, 0, 0, TNetAddr()));
-
+ 
         THolder<TItem> left;
         THolder<TItem> right;
         if ((it != Items.end() || Items.begin() != Items.end()) && service_it != Items.end() && service_it->ServiceId == serviceId) {
@@ -174,11 +174,11 @@ namespace NBus {
         Items.insert(*right);
         NormalizeBreaks(serviceId);
         return 0;
-    }
-
+    } 
+ 
     int TBusLocator::UnregisterBreak(TBusService service, const TNetAddr& addr) {
         TGuard<TMutex> G(Lock);
-
+ 
         TServiceId serviceId = GetServiceId(service);
         return UnregisterBreak(serviceId, addr);
     }
@@ -225,7 +225,7 @@ namespace NBus {
             TItem item(serviceId, YBUS_KEYMIN, first->Start - 1, first->Addr);
             Items.insert(item);
         }
-
+ 
         NormalizeBreaks(serviceId);
         return deleted;
     }
@@ -238,7 +238,7 @@ namespace NBus {
             if (serviceId != Max<TServiceId>()) {
                 last = Items.lower_bound(TItem(serviceId + 1, YBUS_KEYMIN, YBUS_KEYMIN, TNetAddr()));
             }
-
+ 
             --last;
             Y_ASSERT(Items.end() != last);
             Y_ASSERT(last->ServiceId == serviceId);
@@ -251,10 +251,10 @@ namespace NBus {
     int TBusLocator::LocateAll(TBusService service, TBusKey key, TVector<TNetAddr>& addrs) {
         TGuard<TMutex> G(Lock);
         Y_VERIFY(addrs.empty(), "Non emtpy addresses");
-
+ 
         TServiceId serviceId = GetServiceId(service);
         TItems::const_iterator it;
-
+ 
         for (it = Items.lower_bound(TItem(serviceId, 0, key, TNetAddr()));
              it != Items.end() && it->ServiceId == serviceId && it->Start <= key && key <= it->End;
              ++it) {
@@ -273,27 +273,27 @@ namespace NBus {
 
         TServiceId serviceId = GetServiceId(service);
         TItems::const_iterator it;
-
+ 
         it = Items.lower_bound(TItem(serviceId, 0, key, TNetAddr()));
-
+ 
         if (it != Items.end()) {
             const TItem& item = *it;
             if (item.ServiceId == serviceId && item.Start <= key && key < item.End) {
                 *addr = item.Addr;
-
+ 
                 return 0;
             }
         }
 
         return -1;
-    }
-
+    } 
+ 
     int TBusLocator::GetLocalPort(TBusService service) {
         TGuard<TMutex> G(Lock);
         TServiceId serviceId = GetServiceId(service);
         TItems::const_iterator it;
         int port = 0;
-
+ 
         for (it = Items.lower_bound(TItem(serviceId, 0, 0, TNetAddr())); it != Items.end(); ++it) {
             const TItem& item = *it;
             if (item.ServiceId != serviceId) {
@@ -357,8 +357,8 @@ namespace NBus {
             *isLocal = IsLocal(addr);
         }
         return 0;
-    }
-
+    } 
+ 
     int TBusLocator::LocateKeys(TBusService service, TBusKeyVec& keys, bool onlyLocal) {
         TGuard<TMutex> G(Lock);
         Y_VERIFY(keys.empty(), "Non empty keys");
@@ -376,8 +376,8 @@ namespace NBus {
             keys.push_back(std::make_pair(item.Start, item.End));
         }
         return (int)keys.size();
-    }
-
+    } 
+ 
     int TBusLocator::Register(TBusService service, const char* hostName, int port, TBusKey start /*= YBUS_KEYMIN*/, TBusKey end /*= YBUS_KEYMAX*/, EIpVersion requireVersion /*= EIP_VERSION_4*/, EIpVersion preferVersion /*= EIP_VERSION_ANY*/) {
         TNetAddr addr(hostName, port, requireVersion, preferVersion); // throws
         {
@@ -387,13 +387,13 @@ namespace NBus {
         Register(service, start, end, addr);
         return 0;
     }
-
+ 
     int TBusLocator::Register(TBusService service, TBusKey start, TBusKey end, const TNetworkAddress& na, EIpVersion requireVersion /*= EIP_VERSION_4*/, EIpVersion preferVersion /*= EIP_VERSION_ANY*/) {
         TNetAddr addr(na, requireVersion, preferVersion); // throws
         Register(service, start, end, addr);
         return 0;
-    }
-
+    } 
+ 
     int TBusLocator::Register(TBusService service, TBusKey start, TBusKey end, const TNetAddr& addr) {
         TGuard<TMutex> G(Lock);
 
@@ -412,7 +412,7 @@ namespace NBus {
                 Y_FAIL("Overlap in registered keys with non-identical range");
             }
         }
-
+ 
         Items.insert(itemToReg);
         return 0;
     }
@@ -424,4 +424,4 @@ namespace NBus {
         return 0;
     }
 
-}
+} 

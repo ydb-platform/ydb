@@ -1,8 +1,8 @@
 PROGRAM(messagebus_perftest)
-
+ 
 OWNER(g:messagebus)
 
-PEERDIR(
+PEERDIR( 
     library/cpp/deprecated/threadable
     library/cpp/execprofile
     library/cpp/getopt
@@ -13,12 +13,12 @@ PEERDIR(
     library/cpp/messagebus/www
     library/cpp/sighandler
     library/cpp/threading/future
-)
-
-SRCS(
+) 
+ 
+SRCS( 
     messages.proto
-    perftest.cpp
+    perftest.cpp 
     simple_proto.cpp
-)
-
-END()
+) 
+ 
+END() 

@@ -216,7 +216,7 @@ message TKqpTransaction {
     }
 
     optional EKqpTransactionType Type = 1;
-    repeated NYql.NDqProto.TDqTask Tasks = 2; 
+    repeated NYql.NDqProto.TDqTask Tasks = 2;
     optional TKqpLocks Locks = 3;
 
     optional NYql.NDqProto.TComputeRuntimeSettings RuntimeSettings = 4;

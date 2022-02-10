@@ -1,37 +1,37 @@
-#include "dq_opt_log.h" 
- 
-#include "dq_opt.h" 
- 
+#include "dq_opt_log.h"
+
+#include "dq_opt.h"
+
 #include <ydb/library/yql/core/yql_expr_optimize.h>
 #include <ydb/library/yql/core/yql_opt_aggregate.h>
 #include <ydb/library/yql/core/yql_opt_window.h>
 #include <ydb/library/yql/core/yql_opt_utils.h>
 #include <ydb/library/yql/core/yql_type_annotation.h>
- 
 
-using namespace NYql::NNodes; 
- 
-namespace NYql::NDq { 
- 
-TExprBase DqRewriteAggregate(TExprBase node, TExprContext& ctx) { 
-    if (!node.Maybe<TCoAggregate>()) { 
-        return node; 
-    } 
- 
+
+using namespace NYql::NNodes;
+
+namespace NYql::NDq {
+
+TExprBase DqRewriteAggregate(TExprBase node, TExprContext& ctx) {
+    if (!node.Maybe<TCoAggregate>()) {
+        return node;
+    }
+
     auto result = ExpandAggregate(node.Ptr(), ctx);
-    YQL_ENSURE(result); 
- 
-    return TExprBase(result); 
-} 
- 
+    YQL_ENSURE(result);
+
+    return TExprBase(result);
+}
+
 // Take . Sort -> TopSort
 // Take . Skip . Sort -> Take . Skip . TopSort
-TExprBase DqRewriteTakeSortToTopSort(TExprBase node, TExprContext& ctx, const TParentsMap& parents) { 
+TExprBase DqRewriteTakeSortToTopSort(TExprBase node, TExprContext& ctx, const TParentsMap& parents) {
     if (!node.Maybe<TCoTake>()) {
-        return node; 
-    } 
-    auto take = node.Cast<TCoTake>(); 
- 
+        return node;
+    }
+    auto take = node.Cast<TCoTake>();
+
     auto maybeSkip = take.Input().Maybe<TCoSkip>();
     auto maybeSort = maybeSkip ? maybeSkip.Cast().Input().Maybe<TCoSort>() : take.Input().Maybe<TCoSort>();
 
@@ -41,13 +41,13 @@ TExprBase DqRewriteTakeSortToTopSort(TExprBase node, TExprContext& ctx, const TP
     auto sort = maybeSort.Cast();
 
     if (!IsSingleConsumer(sort, parents)) {
-        return node; 
-    } 
- 
+        return node;
+    }
+
     if (!IsDqPureExpr(take.Count())) {
-        return node; 
-    } 
- 
+        return node;
+    }
+
     if (maybeSkip) {
         auto skip = maybeSkip.Cast();
 
@@ -76,14 +76,14 @@ TExprBase DqRewriteTakeSortToTopSort(TExprBase node, TExprContext& ctx, const TP
             .Done();
     }
 
-    return Build<TCoTopSort>(ctx, node.Pos()) 
-        .Input(sort.Input()) 
-        .KeySelectorLambda(sort.KeySelectorLambda()) 
-        .SortDirections(sort.SortDirections()) 
-        .Count(take.Count()) 
-        .Done(); 
-} 
- 
+    return Build<TCoTopSort>(ctx, node.Pos())
+        .Input(sort.Input())
+        .KeySelectorLambda(sort.KeySelectorLambda())
+        .SortDirections(sort.SortDirections())
+        .Count(take.Count())
+        .Done();
+}
+
 /*
  * Enforce PARTITION COMPACT BY as it avoids generating join in favour of Fold1Map.
  */
@@ -124,7 +124,7 @@ TExprBase DqEnforceCompactPartition(TExprBase node, TExprList frames, TExprConte
     }
 
     return node;
-} 
+}
 
 TExprBase DqExpandWindowFunctions(TExprBase node, TExprContext& ctx, bool enforceCompact) {
     if (node.Maybe<TCoCalcOverWindowBase>() || node.Maybe<TCoCalcOverWindowGroup>()) {

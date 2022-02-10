@@ -1,12 +1,12 @@
-RECURSE( 
+RECURSE(
     actors
     common
     comp_nodes
-    expr_nodes 
-    opt 
-    proto 
+    expr_nodes
+    opt
+    proto
     runtime
     state
-    tasks 
-    type_ann 
-) 
+    tasks
+    type_ann
+)

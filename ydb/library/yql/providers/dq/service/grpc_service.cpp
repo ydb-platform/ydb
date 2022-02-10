@@ -1,5 +1,5 @@
-#include "grpc_service.h" 
- 
+#include "grpc_service.h"
+
 #include <ydb/library/yql/utils/log/log.h>
 
 #include <ydb/library/yql/providers/dq/actors/actor_helpers.h>
@@ -28,17 +28,17 @@
 #include <library/cpp/actors/helpers/future_callback.h>
 #include <library/cpp/build_info/build_info.h>
 #include <library/cpp/svnversion/svnversion.h>
- 
-#include <util/string/split.h> 
+
+#include <util/string/split.h>
 #include <util/system/env.h>
- 
-namespace NYql::NDqs { 
+
+namespace NYql::NDqs {
     using namespace NYql::NDqs;
     using namespace NKikimr;
     using namespace NThreading;
     using namespace NMonitoring;
     using namespace NActors;
- 
+
     namespace {
         NGrpc::ICounterBlockPtr BuildCB(TIntrusivePtr<NMonitoring::TDynamicCounters>& counters, const TString& name) {
             auto grpcCB = counters->GetSubgroup("rpc_name", name);
@@ -54,7 +54,7 @@ namespace NYql::NDqs {
                 grpcCB->GetCounter("resExh", true),
                 grpcCB);
         }
- 
+
         template<typename RequestType, typename ResponseType>
         class TServiceProxyActor: public TSynchronizableRichActor<TServiceProxyActor<RequestType, ResponseType>> {
         public:
@@ -83,17 +83,17 @@ namespace NYql::NDqs {
                 MaxRetries = Settings->MaxRetries.Get().GetOrElse(MaxRetries);
                 RetryBackoff = TDuration::MilliSeconds(Settings->RetryBackoffMs.Get().GetOrElse(RetryBackoff.MilliSeconds()));
             }
- 
+
             STRICT_STFUNC(Handler, {
                 HFunc(TEvQueryResponse, OnReturnResult);
                 cFunc(TEvents::TEvPoison::EventType, OnPoison);
                 SFunc(TEvents::TEvBootstrap, DoBootstrap)
             })
- 
+
             TAutoPtr<IEventHandle> AfterRegister(const TActorId& self, const TActorId& parentId) override {
                 return new IEventHandle(self, parentId, new TEvents::TEvBootstrap(), 0);
             }
- 
+
             void OnPoison() {
                 YQL_LOG_CTX_SCOPE(TraceId);
                 YQL_LOG(DEBUG) << __FUNCTION__ ;
@@ -164,7 +164,7 @@ namespace NYql::NDqs {
                 operation.Mutableresult()->PackFrom(queryResult);
                 *operation.Mutableissues() = result.GetIssues();
                 ResponseBuffer.SetTruncated(result.GetTruncated());
- 
+
                 Reply(Ydb::StatusIds::SUCCESS, result.GetIssues().size() > 0);
             }
 
@@ -202,7 +202,7 @@ namespace NYql::NDqs {
                     SendResponse(ev);
                 }
             }
- 
+
             TFuture<void> GetFuture() {
                 return Promise.GetFuture();
             }
@@ -250,7 +250,7 @@ namespace NYql::NDqs {
                 Request = dynamic_cast<const RequestType*>(Ctx->GetRequest());
             }
         };
- 
+
         class TExecuteGraphProxyActor: public TServiceProxyActor<Yql::DqsProto::ExecuteGraphRequest, Yql::DqsProto::ExecuteGraphResponse> {
         public:
             using TBase = TServiceProxyActor<Yql::DqsProto::ExecuteGraphRequest, Yql::DqsProto::ExecuteGraphResponse>;
@@ -425,8 +425,8 @@ namespace NYql::NDqs {
 
             return sb;
         }
-    } 
- 
+    }
+
     TDqsGrpcService::TDqsGrpcService(
             NActors::TActorSystem& system,
             TIntrusivePtr<NMonitoring::TDynamicCounters> counters,
@@ -452,11 +452,11 @@ namespace NYql::NDqs {
             logger,                                                     \
             BuildCB(Counters, #NAME))                                   \
             ->Run();                                                    \
-    } while (0) 
- 
+    } while (0)
+
     void TDqsGrpcService::InitService(grpc::ServerCompletionQueue* cq, NGrpc::TLoggerPtr logger) {
         using namespace google::protobuf;
- 
+
         CQ = cq;
 
         using TDqTaskPreprocessorCollection = std::vector<NYql::IDqTaskPreprocessor::TPtr>;
@@ -798,15 +798,15 @@ namespace NYql::NDqs {
             });
 */
     }
- 
+
     void TDqsGrpcService::SetGlobalLimiterHandle(NGrpc::TGlobalLimiter* limiter) {
         Limiter = limiter;
     }
- 
+
     bool TDqsGrpcService::IncRequest() {
         return Limiter->Inc();
     }
- 
+
     void TDqsGrpcService::DecRequest() {
         Limiter->Dec();
         Y_ASSERT(Limiter->GetCurrentInFlight() >= 0);
@@ -821,4 +821,4 @@ namespace NYql::NDqs {
         }
         return future;
     }
-} 
+}

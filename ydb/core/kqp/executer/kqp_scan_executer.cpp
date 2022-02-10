@@ -30,7 +30,7 @@ namespace NKikimr {
 namespace NKqp {
 
 using namespace NYql;
-using namespace NYql::NDq; 
+using namespace NYql::NDq;
 
 namespace {
 
@@ -760,13 +760,13 @@ private:
         ui32 nShardScans = 0;
         ui32 nScanTasks = 0;
 
-        TVector<NYql::NDqProto::TDqTask> computeTasks; 
+        TVector<NYql::NDqProto::TDqTask> computeTasks;
 
-        for (auto& task : TasksGraph.GetTasks()) { 
-            auto& stageInfo = TasksGraph.GetStageInfo(task.StageId); 
+        for (auto& task : TasksGraph.GetTasks()) {
+            auto& stageInfo = TasksGraph.GetStageInfo(task.StageId);
             auto& stage = GetStage(stageInfo);
 
-            NYql::NDqProto::TDqTask taskDesc; 
+            NYql::NDqProto::TDqTask taskDesc;
             taskDesc.SetId(task.Id);
             ActorIdToProto(SelfId(), taskDesc.MutableExecuter()->MutableActorId());
 
@@ -1065,16 +1065,16 @@ public:
         return proxy;
     }
 
-    void FillChannelDesc(NYql::NDqProto::TChannel& channelDesc, const TChannel& channel) { 
+    void FillChannelDesc(NYql::NDqProto::TChannel& channelDesc, const TChannel& channel) {
         channelDesc.SetId(channel.Id);
-        channelDesc.SetSrcTaskId(channel.SrcTask); 
-        channelDesc.SetDstTaskId(channel.DstTask); 
+        channelDesc.SetSrcTaskId(channel.SrcTask);
+        channelDesc.SetDstTaskId(channel.DstTask);
 
-        YQL_ENSURE(channel.SrcTask); 
-        FillEndpointDesc(*channelDesc.MutableSrcEndpoint(), TasksGraph.GetTask(channel.SrcTask)); 
+        YQL_ENSURE(channel.SrcTask);
+        FillEndpointDesc(*channelDesc.MutableSrcEndpoint(), TasksGraph.GetTask(channel.SrcTask));
 
-        if (channel.DstTask) { 
-            FillEndpointDesc(*channelDesc.MutableDstEndpoint(), TasksGraph.GetTask(channel.DstTask)); 
+        if (channel.DstTask) {
+            FillEndpointDesc(*channelDesc.MutableDstEndpoint(), TasksGraph.GetTask(channel.DstTask));
         } else {
             auto proxy = GetOrCreateChannelProxy(channel);
             ActorIdToProto(proxy->SelfId(), channelDesc.MutableDstEndpoint()->MutableActorId());

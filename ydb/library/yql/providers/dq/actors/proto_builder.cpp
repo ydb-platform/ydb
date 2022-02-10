@@ -1,21 +1,21 @@
-#include "proto_builder.h" 
- 
+#include "proto_builder.h"
+
 #include <ydb/library/yql/providers/common/codec/yql_codec.h>
 #include <ydb/library/yql/dq/proto/dq_transport.pb.h>
 #include <ydb/library/yql/dq/runtime/dq_transport.h>
 #include <ydb/library/yql/minikql/mkql_node_cast.h>
 #include <ydb/library/yql/minikql/mkql_node_serialization.h>
 #include <ydb/library/yql/utils/log/log.h>
- 
+
 #include <ydb/library/mkql_proto/mkql_proto.h>
- 
+
 #include <library/cpp/yson/node/node_io.h>
 #include <library/cpp/yson/writer.h>
 
-namespace NYql::NDqs { 
- 
+namespace NYql::NDqs {
+
 using namespace NKikimr::NMiniKQL;
- 
+
 namespace {
 
 TVector<ui32> BuildColumnOrder(const TVector<TString>& columns, NKikimr::NMiniKQL::TType* resultType) {
@@ -123,12 +123,12 @@ bool TProtoBuilder::WriteData(const NDqProto::TData& data, const std::function<b
 
 bool TProtoBuilder::WriteData(const TVector<NDqProto::TData>& rows, const std::function<bool(const NYql::NUdf::TUnboxedValuePod& value)>& func) {
     TGuard<TScopedAlloc> allocGuard(Alloc);
- 
+
     TMemoryUsageInfo memInfo("ProtoBuilder");
     THolderFactory holderFactory(Alloc.Ref(), memInfo);
     const auto transportVersion = rows.empty() ? NDqProto::EDataTransportVersion::DATA_TRANSPORT_VERSION_UNSPECIFIED : GetTransportVersion(rows.front());
     NDq::TDqDataSerializer dataSerializer(TypeEnv, holderFactory, transportVersion);
- 
+
     for (const auto& part : rows) {
         TUnboxedValueVector buffer;
         dataSerializer.Deserialize(part, ResultType, buffer);
@@ -137,7 +137,7 @@ bool TProtoBuilder::WriteData(const TVector<NDqProto::TData>& rows, const std::f
                 return false;
             }
         }
-    } 
+    }
     return true;
 }
 
@@ -158,7 +158,7 @@ Ydb::ResultSet TProtoBuilder::BuildResultSet(const TVector<NYql::NDqProto::TData
     });
 
     return resultSet;
-} 
+}
 
 TString TProtoBuilder::GetSerializedType() const {
     auto result = SerializeNode(ResultType, TypeEnv);

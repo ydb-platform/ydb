@@ -1,5 +1,5 @@
 #include "dq_tasks_runner.h"
- 
+
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
 #include <ydb/library/yql/dq/runtime/dq_columns_resolve.h>
 #include <ydb/library/yql/dq/runtime/dq_input_channel.h>
@@ -13,15 +13,15 @@
 #include <ydb/library/yql/core/user_data/yql_user_data.h>
 #include <ydb/library/yql/minikql/mkql_node_serialization.h>
 #include <ydb/library/yql/minikql/mkql_node_visitor.h>
- 
+
 #include <util/generic/scope.h>
 
-using namespace NKikimr; 
-using namespace NKikimr::NMiniKQL; 
-using namespace NYql::NDqProto; 
- 
-namespace NYql::NDq { 
- 
+using namespace NKikimr;
+using namespace NKikimr::NMiniKQL;
+using namespace NYql::NDqProto;
+
+namespace NYql::NDq {
+
 namespace {
 
 void ValidateParamValue(std::string_view paramName, const TType* type, const NUdf::TUnboxedValuePod& value) {
@@ -509,8 +509,8 @@ public:
                 Stats->OutputChannels.emplace(channelId, outputChannel->GetStats());
             }
         }
-    } 
- 
+    }
+
     ERunStatus Run() final {
         LOG(TStringBuilder() << "Run task: " << TaskId);
 
@@ -531,7 +531,7 @@ public:
                 });
             }
         }
- 
+
         if (runStatus == ERunStatus::Finished) {
             if (Stats) {
                 Stats->FinishTs = TInstant::Now();
@@ -539,7 +539,7 @@ public:
             if (Y_UNLIKELY(CollectProfileStats)) {
                 StopWaiting(Stats->FinishTs);
             }
- 
+
             return ERunStatus::Finished;
         }
 
@@ -552,18 +552,18 @@ public:
         }
 
         return runStatus; // PendingInput or PendingOutput
-    } 
- 
-    bool HasEffects() const final { 
+    }
+
+    bool HasEffects() const final {
         return TaskHasEffects;
-    } 
- 
+    }
+
     IDqInputChannel::TPtr GetInputChannel(ui64 channelId) override {
         auto ptr = InputChannels.FindPtr(channelId);
         YQL_ENSURE(ptr, "task: " << TaskId << " does not have input channelId: " << channelId);
         return *ptr;
-    } 
- 
+    }
+
     IDqSource::TPtr GetSource(ui64 inputIndex) override {
         auto ptr = Sources.FindPtr(inputIndex);
         YQL_ENSURE(ptr, "task: " << TaskId << " does not have input index: " << inputIndex);
@@ -574,8 +574,8 @@ public:
         auto ptr = OutputChannels.FindPtr(channelId);
         YQL_ENSURE(ptr, "task: " << TaskId << " does not have output channelId: " << channelId);
         return *ptr;
-    } 
- 
+    }
+
     IDqSink::TPtr GetSink(ui64 outputIndex) override {
         auto ptr = Sinks.FindPtr(outputIndex);
         YQL_ENSURE(ptr, "task: " << TaskId << " does not have output index: " << outputIndex);
@@ -588,16 +588,16 @@ public:
             guard.GetMutex()->SetLimit(*memoryLimit);
         }
         return guard;
-    } 
- 
+    }
+
     bool IsAllocatorAttached() override {
         return Context.TypeEnv ? Context.TypeEnv->GetAllocator().IsAttached() : SelfTypeEnv->GetAllocator().IsAttached();
     }
 
     const NKikimr::NMiniKQL::TTypeEnvironment& GetTypeEnv() const override {
         return Context.TypeEnv ? *Context.TypeEnv : *SelfTypeEnv;
-    } 
- 
+    }
+
     const NKikimr::NMiniKQL::THolderFactory& GetHolderFactory() const override {
         return ProgramParsed.CompGraph->GetHolderFactory();
     }
@@ -618,8 +618,8 @@ public:
 
     const TDqTaskRunnerStats* GetStats() const override {
         return Stats.get();
-    } 
- 
+    }
+
     TString Save() const override {
         return ProgramParsed.CompGraph->SaveGraphState();
     }
@@ -628,7 +628,7 @@ public:
         ProgramParsed.CompGraph->LoadGraphState(in);
     }
 
-private: 
+private:
     NKikimr::NMiniKQL::TTypeEnvironment& TypeEnv() {
         return Context.TypeEnv ? *Context.TypeEnv : *SelfTypeEnv;
     }
@@ -751,12 +751,12 @@ private:
             StartWaitTime.reset();
         }
     }
-}; 
- 
+};
+
 TIntrusivePtr<IDqTaskRunner> MakeDqTaskRunner(const TDqTaskRunnerContext& ctx, const TDqTaskRunnerSettings& settings,
     const TLogFunc& logFunc)
 {
     return new TDqTaskRunner(ctx, settings, logFunc);
 }
 
-} // namespace NYql::NDq 
+} // namespace NYql::NDq

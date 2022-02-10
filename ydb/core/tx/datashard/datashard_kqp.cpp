@@ -482,8 +482,8 @@ void KqpFillOutReadSets(TOutputOpData::TOutReadSets& outReadSets, const NKikimrT
         for (ui32 i = 0; i < task.OutputsSize(); ++i) {
             for (auto& channel : task.GetOutputs(i).GetChannels()) {
                 if (channel.GetIsPersistent()) {
-                    MKQL_ENSURE_S(channel.GetSrcEndpoint().HasTabletId()); 
-                    MKQL_ENSURE_S(channel.GetDstEndpoint().HasTabletId()); 
+                    MKQL_ENSURE_S(channel.GetSrcEndpoint().HasTabletId());
+                    MKQL_ENSURE_S(channel.GetDstEndpoint().HasTabletId());
 
                     NDqProto::TData outputData;
                     auto fetchStatus = FetchAllOutput(taskRunner.GetOutputChannel(channel.GetId()).Get(), outputData);
@@ -619,8 +619,8 @@ void KqpPrepareInReadsets(TInputOpData::TInReadSets& inReadSets,
         for (ui32 i = 0; i < task.InputsSize(); ++i) {
             for (auto& channel : task.GetInputs(i).GetChannels()) {
                 if (channel.GetIsPersistent()) {
-                    MKQL_ENSURE_S(channel.GetSrcEndpoint().HasTabletId()); 
-                    MKQL_ENSURE_S(channel.GetDstEndpoint().HasTabletId()); 
+                    MKQL_ENSURE_S(channel.GetSrcEndpoint().HasTabletId());
+                    MKQL_ENSURE_S(channel.GetDstEndpoint().HasTabletId());
 
                     auto key = std::make_pair(channel.GetSrcEndpoint().GetTabletId(),
                         channel.GetDstEndpoint().GetTabletId());

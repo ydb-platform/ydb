@@ -2,11 +2,11 @@
 #include "result_receiver.h"
 #include "proto_builder.h"
 #include "full_result_writer.h"
- 
+
 #include <ydb/library/yql/providers/dq/actors/actor_helpers.h>
 #include <ydb/library/yql/providers/dq/actors/events.h>
 #include <ydb/library/yql/providers/dq/actors/executer_actor.h>
- 
+
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
 #include <ydb/library/yql/providers/dq/counters/counters.h>
 
@@ -14,13 +14,13 @@
 
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 #include <ydb/library/yql/sql/sql.h>
- 
+
 #include <ydb/library/yql/utils/failure_injector/failure_injector.h>
 #include <ydb/library/yql/utils/actor_log/log.h>
 #include <ydb/library/yql/utils/log/log.h>
 
 #include <ydb/public/lib/yson_value/ydb_yson_value.h>
- 
+
 #include <library/cpp/actors/core/actorsystem.h>
 #include <library/cpp/actors/core/event_pb.h>
 #include <library/cpp/actors/core/executor_pool_basic.h>
@@ -28,14 +28,14 @@
 #include <library/cpp/actors/core/scheduler_basic.h>
 #include <library/cpp/threading/future/future.h>
 #include <library/cpp/yson/writer.h>
- 
-#include <util/generic/ptr.h> 
-#include <util/string/split.h> 
-#include <util/system/types.h> 
+
+#include <util/generic/ptr.h>
+#include <util/string/split.h>
+#include <util/system/types.h>
 #include <util/stream/holder.h>
 #include <util/stream/str.h>
 #include <util/stream/length.h>
- 
+
 
 namespace NYql::NDqs::NExecutionHelpers {
 
@@ -46,17 +46,17 @@ using namespace NYql::NNodes;
 using namespace NKikimr::NMiniKQL;
 
 using namespace Yql::DqsProto;
- 
+
 using namespace NYql::NDq;
 using namespace NYql::NDqs;
 using namespace NYql::NDqProto;
 using namespace NActors;
- 
+
 namespace {
 
 class TResultAggregator: public TSynchronizableRichActor<TResultAggregator>, NYql::TCounters {
     static constexpr ui32 MAX_RESULT_BATCH = 2048;
- 
+
 public:
     static constexpr char ActorName[] = "YQL_DQ_RESULT_AGGREGATOR";
 
@@ -87,7 +87,7 @@ public:
             }
         }
     }
- 
+
 private:
 #define HANDLER_STUB(TEvType)                                           \
     cFunc(TEvType::EventType, [this]() {                        \
@@ -113,7 +113,7 @@ private:
         cFunc(TEvents::TEvWakeup::EventType, OnWakeup)
         cFunc(TEvents::TEvGone::EventType, OnFullResultWriterShutdown)
     })
- 
+
 
     STRICT_STFUNC(ShutdownHandler, {
         HFunc(TEvents::TEvGone, OnShutdownQueryResult);
@@ -182,7 +182,7 @@ private:
         PullRequestStartTime = TInstant::Now();
         Send(SourceID, MakeHolder<TEvPullDataRequest>(MAX_RESULT_BATCH), IEventHandle::FlagTrackDelivery);
     }
- 
+
     void OnError(const TString& message, bool retriable, bool needFallback) {
         YQL_LOG(ERROR) << "OnError " << message;
         auto issueCode = needFallback
@@ -192,7 +192,7 @@ private:
         FlushCounters(req->Record);
         Send(ExecuterID, req.Release());
     }
- 
+
     void OnPingResponse(TEvPingResponse::TPtr&, const TActorContext&) {
         PingRequested = false;
     }
@@ -234,7 +234,7 @@ private:
 
         if (!Discard) {
             auto fullResultTableEnabled = Settings->EnableFullResultWrite.Get().GetOrElse(false);
- 
+
             if (fullResultTableEnabled && Truncated) {
                 WriteToFullResultTable(new NDqProto::TData(std::move(*response.MutableData())));
             } else {
@@ -382,7 +382,7 @@ private:
             DoFinish();
         }
     }
- 
+
     void DoFinish() {
         Send(ExecuterID, new TEvGraphFinished());
     }
@@ -482,7 +482,7 @@ private:
     TIssues FinishIssues;
     bool FinishTruncated = false;
     bool FinishCalled = false;
- 
+
     THashSet<TActorId> BlockingActors;
     THolder<TEvQueryResponse> QueryResponse;
 };
@@ -497,7 +497,7 @@ public:
         , Promise(promise)
     {
     }
- 
+
 private:
     STRICT_STFUNC(Handler, { HFunc(TEvQueryResponse, OnQueryResult); })
 
@@ -516,18 +516,18 @@ private:
                 Output << NYT::NodeToYsonString(row) << "\n";
             }
         }
- 
+
         Promise.SetValue();
         PassAway();
     }
- 
+
 private:
     IOutputStream& Output;
     NThreading::TPromise<void>& Promise;
 };
- 
+
 } // unnamed
- 
+
 THolder<NActors::IActor> MakeResultAggregator(
     const TVector<TString>& columns,
     const NActors::TActorId& executerId,
@@ -545,8 +545,8 @@ THolder<NActors::IActor> MakeResultAggregator(
     } else {
         // compute actor push
         result = NYql::MakeResultReceiver(columns, executerId, traceId, settings, secureParams, resultType, discard);
-    } 
+    }
     return MakeHolder<TLogWrapReceive>(result.Release(), traceId);
 }
- 
+
 } // NYql::NDqs::NExecutionHelpers

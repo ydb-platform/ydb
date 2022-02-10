@@ -1,11 +1,11 @@
-{ 
+{
     "NodeRootType": "TExprBase",
     "NodeBuilderBase": "TNodeBuilderBase",
     "ListBuilderBase": "TListBuilderBase",
     "FreeArgCallableBase": "TFreeArgCallable",
     "FreeArgBuilderBase": "TFreeArgCallableBuilderBase",
     "Nodes": [
-    { 
+    {
         "Name": "TDqJoinKeyTuple",
         "Base": "TExprBase",
         "Match": {"Type": "Tuple"},
@@ -90,8 +90,8 @@
             {"Index": 2, "Name": "Settings", "Type": "TCoNameValueTupleList"},
             {"Index": 3, "Name": "Sinks", "Type": "TDqSinksList", "Optional": true}
         ]
-    }, 
-    { 
+    },
+    {
         "Name": "TDqStage",
         "Base": "TDqStageBase",
         "Match": {"Type": "Callable", "Name": "DqStage"}
@@ -104,8 +104,8 @@
     {
         "Name": "TDqStageList",
         "ListBase": "TDqStageBase"
-    }, 
-    { 
+    },
+    {
         "Name": "TDqPhyStageList",
         "ListBase": "TDqPhyStage"
     },
@@ -117,8 +117,8 @@
             {"Index": 0, "Name": "Stage", "Type": "TDqStageBase"},
             {"Index": 1, "Name": "Index", "Type": "TCoAtom"}
         ]
-    }, 
-    { 
+    },
+    {
         "Name": "TDqConnection",
         "Base": "TCallable",
         "Definition": "Custom",
@@ -126,31 +126,31 @@
         "Children": [
             {"Index": 0, "Name": "Output", "Type": "TDqOutput"}
         ]
-    }, 
-    { 
+    },
+    {
         "Name": "TDqCnHashShuffle",
         "Base": "TDqConnection",
         "Match": {"Type": "Callable", "Name": "DqCnHashShuffle"},
         "Children": [
             {"Index": 1, "Name": "KeyColumns", "Type": "TCoAtomList"}
         ]
-    }, 
-    { 
+    },
+    {
         "Name": "TDqCnBroadcast",
         "Base": "TDqConnection",
         "Match": {"Type": "Callable", "Name": "DqCnBroadcast"}
-    }, 
-    { 
+    },
+    {
         "Name": "TDqCnUnionAll",
         "Base": "TDqConnection",
         "Match": {"Type": "Callable", "Name": "DqCnUnionAll"}
-    }, 
-    { 
+    },
+    {
         "Name": "TDqCnMap",
         "Base": "TDqConnection",
         "Match": {"Type": "Callable", "Name": "DqCnMap"}
-    }, 
-    { 
+    },
+    {
         "Name": "TDqCnResult",
         "Base": "TDqConnection",
         "Match": {"Type": "Callable", "Name": "DqCnResult"},
@@ -226,6 +226,6 @@
             {"Index": 1, "Name": "TransformName", "Type": "TExprBase"},
             {"Index": 2, "Name": "Settings", "Type": "TExprBase"}
         ]
-    } 
+    }
     ]
 }

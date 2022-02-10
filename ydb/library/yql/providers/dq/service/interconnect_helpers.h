@@ -1,13 +1,13 @@
-#pragma once 
- 
+#pragma once
+
 #include <library/cpp/actors/core/actorsystem.h>
 #include <library/cpp/actors/interconnect/poller_tcp.h>
 #include <library/cpp/actors/interconnect/interconnect.h>
 #include <library/cpp/yson/node/node.h>
- 
+
 #include <ydb/library/yql/providers/dq/config/config.pb.h>
 
-namespace NYql::NDqs { 
+namespace NYql::NDqs {
 
 enum class ENodeIdLimits {
     MinServiceNodeId = 1,
@@ -32,7 +32,7 @@ struct TServiceNodeConfig {
         return CreateNameserverTable(setup);
     };
 };
- 
+
 std::tuple<TString, TString> GetLocalAddress(const TString* hostname = nullptr);
 std::tuple<TString, TString> GetUserToken(const TMaybe<TString>& user, const TMaybe<TString>& tokenFile);
 

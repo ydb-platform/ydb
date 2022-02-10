@@ -70,5 +70,5 @@ TIntrusivePtr<TKqpTasksRunner> CreateKqpTasksRunner(const google::protobuf::Repe
     const NYql::NDq::TDqTaskRunnerContext& execCtx, const NYql::NDq::TDqTaskRunnerSettings& settings,
     const NYql::NDq::TLogFunc& logFunc);
 
-} // namespace NKqp 
+} // namespace NKqp
 } // namespace NKikimr

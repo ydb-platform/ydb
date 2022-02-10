@@ -1,9 +1,9 @@
-#include "execution_helpers.h" 
- 
-#include <util/generic/ptr.h> 
-#include <util/string/split.h> 
-#include <util/system/types.h> 
- 
+#include "execution_helpers.h"
+
+#include <util/generic/ptr.h>
+#include <util/string/split.h>
+#include <util/system/types.h>
+
 
 
 namespace NYql {

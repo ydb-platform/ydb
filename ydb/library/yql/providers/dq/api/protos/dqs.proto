@@ -1,8 +1,8 @@
-syntax = "proto3"; 
-option cc_enable_arenas = true; 
- 
-package NYql.NDqProto; 
- 
+syntax = "proto3";
+option cc_enable_arenas = true;
+
+package NYql.NDqProto;
+
 import "google/protobuf/any.proto";
 import "ydb/library/yql/dq/proto/dq_transport.proto";
 import "ydb/library/yql/dq/proto/dq_tasks.proto";
@@ -10,9 +10,9 @@ import "ydb/library/yql/providers/dq/api/protos/service.proto";
 import "ydb/public/api/protos/ydb_issue_message.proto";
 import "ydb/public/api/protos/ydb_value.proto";
 import "library/cpp/actors/protos/actors.proto";
- 
-message TAllocateWorkersRequest { 
-    uint32 Count = 1; 
+
+message TAllocateWorkersRequest {
+    uint32 Count = 1;
     // Yql.DqsProto.ExecuteQueryRequest Request = 2; // unused
 
     bool IsForwarded = 3;
@@ -36,14 +36,14 @@ message TAllocateWorkersRequest {
     NActorsProto.TActorId ResultActorId = 13; // used for compute actor
 
     uint64 FreeWorkerAfterMs = 14;
-} 
- 
-message TWorkerGroup { 
+}
+
+message TWorkerGroup {
     uint64 ResourceId = 1;
     repeated NActorsProto.TActorId WorkerActor = 2;
     repeated Yql.DqsProto.TWorkerInfo Worker = 3;
-} 
- 
+}
+
 enum EErrorCode {
     EUNKNOWN = 0;
     EMISMATCH = 1;
@@ -55,27 +55,27 @@ enum EErrorCode {
 message TDqError {
     string Message = 1;
     EErrorCode ErrorCode = 2;
-} 
- 
-message TAllocateWorkersResponse { 
-    oneof TResponse { 
+}
+
+message TAllocateWorkersResponse {
+    oneof TResponse {
         TWorkerGroup Workers = 1; // contains actorIds
         TDqError Error = 2;
         TWorkerGroup Nodes = 3; // contains nodeIds
     };
 
     repeated TMetric Metric = 4;
-} 
- 
-message TFreeWorkersNotify { 
+}
+
+message TFreeWorkersNotify {
     uint64 ResourceId = 1;
     bool IsForwarded = 2;
 
     string TraceId = 6;
     // repeated TWorker.TGuid FailedWorker = 7; // reserved
     repeated string FailedWorkerGuid = 8;
-} 
- 
+}
+
 message TEvRegisterNode {
     Yql.DqsProto.RegisterNodeRequest Request = 1;
     bool IsForwarded = 4;
@@ -134,18 +134,18 @@ message TEvRoutesResponse {
     Yql.DqsProto.RoutesResponse Response = 1;
 }
 
-message TPullRequest { 
-    uint32 RowThreshold = 1; 
-} 
- 
-enum EPullResponseType { 
-    UNKNOWN = 0; 
-    CONTINUE = 1; 
-    FINISH = 2; 
-    YIELD = 3; 
+message TPullRequest {
+    uint32 RowThreshold = 1;
+}
+
+enum EPullResponseType {
+    UNKNOWN = 0;
+    CONTINUE = 1;
+    FINISH = 2;
+    YIELD = 3;
     ERROR = 4;
-} 
- 
+}
+
 message TMetric {
     string Name = 1;
     int64 Sum = 2;
@@ -161,24 +161,24 @@ message TRusage {
     int64 MajorPageFaults = 3;
 }
 
-message TPullResponse { 
-    EPullResponseType ResponseType = 1; 
-    TData Data = 2; 
+message TPullResponse {
+    EPullResponseType ResponseType = 1;
+    TData Data = 2;
     repeated TMetric Metric = 3;
     string ErrorMessage = 4;
-} 
- 
-message TQueryResponse { 
-    Ydb.ResultSet ResultSet = 1; 
-    repeated Ydb.Issue.IssueMessage Issues = 2; 
+}
+
+message TQueryResponse {
+    Ydb.ResultSet ResultSet = 1;
+    repeated Ydb.Issue.IssueMessage Issues = 2;
     bytes Yson = 3;
     bool Retriable = 4;
     bool NeedFallback = 6;
     repeated TMetric Metric = 5;
     bool Truncated = 7;
     uint64 RowsCount = 8;
-} 
- 
+}
+
 message TDqFailure {
     repeated Ydb.Issue.IssueMessage Issues = 4;
     repeated TMetric Metric = 5;
@@ -197,13 +197,13 @@ message TDqTaskRequest {
     NYql.NDqProto.TDqTask Task = 1;
 }
 
-message TReadyState { 
+message TReadyState {
     NActorsProto.TActorId SourceId = 1;
-    string ResultType = 2; 
+    string ResultType = 2;
     repeated TMetric Metric = 3;
     repeated NYql.NDqProto.TDqTask Task = 4; // used for compute actor
     repeated NActorsProto.TActorId ActorId = 5; // used for compute actor
-} 
+}
 
 enum EGraphExecutionEventType {
     SYNC = 0;

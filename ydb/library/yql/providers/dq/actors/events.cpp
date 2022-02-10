@@ -1,8 +1,8 @@
-#include "events.h" 
- 
+#include "events.h"
+
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 
-namespace NYql::NDqs { 
+namespace NYql::NDqs {
     TEvDqTask::TEvDqTask(NDqProto::TDqTask task) {
         *Record.MutableTask() = std::move(task);
     }
@@ -31,7 +31,7 @@ namespace NYql::NDqs {
         NActors::ActorIdToProto(sourceId, Record.MutableSourceId());
         *Record.MutableResultType() = std::move(type);
     }
- 
+
     TEvReadyState::TEvReadyState(NDqProto::TReadyState&& proto) {
         Record = std::move(proto);
     }
@@ -43,7 +43,7 @@ namespace NYql::NDqs {
     TEvPullDataRequest::TEvPullDataRequest(ui32 rowThreshold) {
         Record.SetRowThreshold(rowThreshold);
     }
- 
+
     TEvPullDataResponse::TEvPullDataResponse(NYql::NDqProto::TPullResponse& data) {
         Record.Swap(&data);
     }
@@ -51,4 +51,4 @@ namespace NYql::NDqs {
     TEvFullResultWriterStatusResponse::TEvFullResultWriterStatusResponse(NDqProto::TFullResultWriterStatusResponse& data) {
         Record.CopyFrom(data);
     }
-} 
+}

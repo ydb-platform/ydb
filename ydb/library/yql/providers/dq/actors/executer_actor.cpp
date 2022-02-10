@@ -1,6 +1,6 @@
-#include "executer_actor.h" 
+#include "executer_actor.h"
 #include "resource_allocator.h"
- 
+
 #include "execution_helpers.h"
 
 #include <ydb/library/yql/providers/dq/actors/events.h>
@@ -8,18 +8,18 @@
 
 #include <ydb/library/yql/providers/dq/planner/execution_planner.h>
 #include <ydb/library/yql/providers/dq/worker_manager/interface/events.h>
- 
+
 #include <ydb/library/yql/utils/actor_log/log.h>
 #include <ydb/library/yql/utils/log/log.h>
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
- 
+
 #include <library/cpp/actors/core/hfunc.h>
 #include <library/cpp/protobuf/util/pb_io.h>
- 
+
 #include <ydb/library/yql/utils/failure_injector/failure_injector.h>
 #include <ydb/library/yql/providers/dq/counters/counters.h>
 #include <ydb/library/yql/providers/dq/api/protos/service.pb.h>
- 
+
 #include <util/string/split.h>
 #include <util/system/env.h>
 
@@ -60,7 +60,7 @@ public:
         , TasksHistogram(Counters->GetSubgroup("component", "ServiceProxyActorHistograms")->GetHistogram("TasksCount", ExponentialHistogram(10, 2, 1)))
         , CreateTaskSuspended(createTaskSuspended)
     { }
- 
+
     ~TDqExecuter() {
         MaybeResetAllocationWarnCounter();
 
@@ -91,7 +91,7 @@ private:
         })
         cFunc(TEvents::TEvWakeup::EventType, OnWakeup)
     })
- 
+
     Yql::DqsProto::TWorkerFilter GetPragmaFilter() {
         Yql::DqsProto::TWorkerFilter pragmaFilter;
         if (Settings->WorkerFilter.Get()) {
@@ -319,8 +319,8 @@ private:
             case TAllocateWorkersResponse::kNodes:
             case TAllocateWorkersResponse::TRESPONSE_NOT_SET:
                 YQL_ENSURE(false, "Unexpected allocate result");
-        } 
- 
+        }
+
         auto& workerGroup = response.GetWorkers();
         ResourceId = workerGroup.GetResourceId();
         YQL_LOG(DEBUG) << "Allocated resource " << ResourceId;
@@ -351,7 +351,7 @@ private:
             }
             AddCounter("UniqueWorkers", uniqueWorkers.size());
         }
- 
+
         YQL_LOG(INFO) << workers.size() << " workers allocated";
 
         YQL_ENSURE(workers.size() == tasks.size());
@@ -399,7 +399,7 @@ private:
             ExecutionTimeoutCookieHolder.Reset(ISchedulerCookie::Make2Way());
             Schedule(Timeout, new TEvents::TEvBootstrap, ExecutionTimeoutCookieHolder.Get());
         }
-    } 
+    }
 
     TAutoPtr<IEventHandle> AfterRegister(const TActorId& self, const TActorId& parentId) override {
         return new IEventHandle(self, parentId, new TEvents::TEvWakeup(), 0);

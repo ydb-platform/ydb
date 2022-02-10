@@ -1,10 +1,10 @@
-#pragma once 
- 
+#pragma once
+
 #include <ydb/library/yql/providers/dq/api/protos/dqs.pb.h>
- 
+
 #include <util/generic/guid.h>
- 
-namespace NYql::NDqs::NExecutionHelpers { 
+
+namespace NYql::NDqs::NExecutionHelpers {
     TString PrettyPrintWorkerInfo(const Yql::DqsProto::TWorkerInfo& workerInfo, ui64 stageId);
 
     template<typename T>

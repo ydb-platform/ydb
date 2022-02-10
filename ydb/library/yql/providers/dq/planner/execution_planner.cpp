@@ -1,5 +1,5 @@
-#include "execution_planner.h" 
- 
+#include "execution_planner.h"
+
 #include <ydb/library/yql/providers/dq/interface/yql_dq_integration.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
 #include <ydb/library/yql/providers/dq/opt/dqs_opt.h>
@@ -10,7 +10,7 @@
 #include <ydb/library/yql/providers/dq/common/yql_dq_common.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider.h>
 #include <ydb/library/yql/providers/common/mkql/yql_type_mkql.h>
- 
+
 #include <ydb/library/yql/core/yql_expr_optimize.h>
 #include <ydb/library/yql/core/type_ann/type_ann_expr.h>
 #include <ydb/library/yql/core/peephole_opt/yql_opt_peephole_physical.h>
@@ -23,22 +23,22 @@
 #include <ydb/library/yql/core/services/yql_transform_pipeline.h>
 #include <ydb/library/yql/minikql/aligned_page_pool.h>
 #include <ydb/library/yql/minikql/mkql_node_serialization.h>
- 
+
 #include <library/cpp/actors/core/event_pb.h>
- 
+
 #include <stack>
 
-using namespace NYql; 
+using namespace NYql;
 using namespace NYql::NCommon;
 using namespace NYql::NDq;
-using namespace NYql::NDqProto; 
-using namespace NYql::NNodes; 
- 
-using namespace NKikimr::NMiniKQL; 
- 
+using namespace NYql::NDqProto;
+using namespace NYql::NNodes;
+
+using namespace NKikimr::NMiniKQL;
+
 using namespace Yql::DqsProto;
 
-namespace NYql::NDqs { 
+namespace NYql::NDqs {
     namespace {
         TVector<TDqPhyStage> GetStages(const TExprNode::TPtr& exprRoot) {
             TVector<TDqPhyStage> stages;
@@ -53,13 +53,13 @@ namespace NYql::NDqs {
                     if (auto maybeStage = node.Maybe<TDqPhyStage>()) {
                         stages.push_back(maybeStage.Cast());
                     }
- 
+
                     return true;
                 });
- 
+
             return stages;
         }
- 
+
         bool HasReadWraps(const TExprNode::TPtr& node) {
             bool result = false;
             VisitExpr(node, [&result](const TExprNode::TPtr& exprNode) {
@@ -79,8 +79,8 @@ namespace NYql::NDqs {
             }
             return false;
         }
-    } 
- 
+    }
+
     TDqsExecutionPlanner::TDqsExecutionPlanner(TIntrusivePtr<TTypeAnnotationContext> typeContext,
                                                NYql::TExprContext& exprContext,
                                                const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
@@ -95,7 +95,7 @@ namespace NYql::NDqs {
         , ResultID(resultID)
     {
     }
- 
+
     void TDqsExecutionPlanner::Clear() {
         TasksGraph.Clear();
         _MaxDataSizePerJob = 0;
@@ -143,7 +143,7 @@ namespace NYql::NDqs {
         for (const auto& stage : stages) {
             TasksGraph.AddStageInfo(TStageInfo(stage, {stage}));
         }
- 
+
         for (const auto& stage : stages) {
             const bool hasDqSource = HasDqSource(stage);
             if ((hasDqSource || HasReadWraps(stage.Program().Ptr())) && BuildReadStage(settings, stage, hasDqSource, canFallback)) {
@@ -152,7 +152,7 @@ namespace NYql::NDqs {
                 YQL_LOG(DEBUG) << "Common stage " << NCommon::ExprToPrettyString(ExprContext, *stage.Ptr());
                 NDq::CommonBuildTasks(TasksGraph, stage);
             }
- 
+
             // Sinks
             if (auto maybeDqSinksList = stage.Sinks()) {
                 auto dqSinksList = maybeDqSinksList.Cast();
@@ -188,8 +188,8 @@ namespace NYql::NDqs {
             if (canFallback && TasksGraph.GetTasks().size() > maxTasksPerOperation) {
                 break;
             }
-        } 
- 
+        }
+
         for (const auto& stage : stages) {
             auto& stageInfo = TasksGraph.GetStageInfo(stage);
             YQL_ENSURE(!stageInfo.Tasks.empty());
@@ -214,8 +214,8 @@ namespace NYql::NDqs {
         BuildCheckpointingMode();
 
         return TasksGraph.GetTasks().size();
-    } 
- 
+    }
+
     bool TDqsExecutionPlanner::IsEgressTask(const TDqsTasksGraph::TTaskType& task) const {
         for (const auto& output : task.Outputs) {
             for (ui64 channelId : output.Channels) {
@@ -316,11 +316,11 @@ namespace NYql::NDqs {
     TVector<TDqTask> TDqsExecutionPlanner::GetTasks(const TVector<NActors::TActorId>& workers) {
         auto& tasks = TasksGraph.GetTasks();
         YQL_ENSURE(tasks.size() == workers.size());
- 
+
         for (size_t i = 0; i < workers.size(); i++) {
             tasks[i].ComputeActorId = workers[i];
         }
- 
+
         THashMap<TStageId, std::tuple<TString, ui64>> stagePrograms = BuildAllPrograms();
         TVector<TDqTask> plan;
         THashSet<TString> clusterNameHints;
@@ -343,7 +343,7 @@ namespace NYql::NDqs {
             } else {
                 taskMeta.SetClusterNameHint(task.Meta.ClusterNameHint);
             }
- 
+
             for (auto& input : task.Inputs) {
                 auto& inputDesc = *taskDesc.AddInputs();
                 if (input.SourceSettings) {
@@ -354,11 +354,11 @@ namespace NYql::NDqs {
                     FillInputDesc(inputDesc, input);
                 }
             }
- 
+
             for (auto& output : task.Outputs) {
                 FillOutputDesc(*taskDesc.AddOutputs(), output);
-            } 
- 
+            }
+
             auto& transform = *taskDesc.MutableOutputTransform();
             transform.SetType(task.OutputTransform.Type);
             transform.SetFunctionName(task.OutputTransform.FunctionName);
@@ -374,19 +374,19 @@ namespace NYql::NDqs {
             taskDesc.SetStageId(stageId);
 
             plan.emplace_back(std::move(taskDesc));
-        } 
- 
+        }
+
         return plan;
     }
- 
+
     NActors::TActorId TDqsExecutionPlanner::GetSourceID() const {
         if (SourceID) {
             return *SourceID;
         } else {
             return {};
         }
-    } 
- 
+    }
+
     TString TDqsExecutionPlanner::GetResultType(bool withTagged) const {
         if (SourceTaskID) {
             auto& stage = TasksGraph.GetStageInfo(TasksGraph.GetTask(SourceTaskID).StageId).Meta.Stage;
@@ -396,10 +396,10 @@ namespace NYql::NDqs {
             auto& item = result->Cast<TTupleExprType>()->GetItems()[0];
             YQL_ENSURE(item->GetKind() == ETypeAnnotationKind::List);
             auto exprType = item->Cast<TListExprType>()->GetItemType();
- 
+
             TScopedAlloc alloc;
             TTypeEnvironment typeEnv(alloc);
- 
+
             TProgramBuilder pgmBuilder(typeEnv, *FunctionRegistry);
             TStringStream errorStream;
             auto type = NCommon::BuildType(*exprType, pgmBuilder, errorStream, withTagged);
@@ -407,10 +407,10 @@ namespace NYql::NDqs {
         }
         return {};
     }
- 
+
     bool TDqsExecutionPlanner::BuildReadStage(const TDqSettings::TPtr& settings, const TDqPhyStage& stage, bool dqSource, bool canFallback) {
         auto& stageInfo = TasksGraph.GetStageInfo(stage);
- 
+
         for (ui32 i = 0; i < stageInfo.InputsCount; i++) {
             const auto& input = stage.Inputs().Item(i);
             YQL_ENSURE(input.Maybe<TDqCnBroadcast>() || (dqSource && input.Maybe<TDqSource>()));
@@ -449,7 +449,7 @@ namespace NYql::NDqs {
         const ui32 dataSourceChildIndex = dqSource ? 0 : 1;
         YQL_ENSURE(read->ChildrenSize() > 1);
         YQL_ENSURE(read->Child(dataSourceChildIndex)->IsCallable("DataSource"));
- 
+
         auto dataSourceName = read->Child(dataSourceChildIndex)->Child(0)->Content();
         auto datasource = TypeContext->DataSourceMap.FindPtr(dataSourceName);
         YQL_ENSURE(datasource);
@@ -485,17 +485,17 @@ namespace NYql::NDqs {
             }
         }
         return !parts.empty();
-    } 
- 
-#define BUILD_CONNECTION(TYPE, BUILDER)                  \ 
-    if (auto conn = input.Maybe<TYPE>()) {               \ 
-        BUILDER(TasksGraph, stage, inputIndex, logFunc); \ 
-        continue;                                        \ 
-    } 
- 
+    }
+
+#define BUILD_CONNECTION(TYPE, BUILDER)                  \
+    if (auto conn = input.Maybe<TYPE>()) {               \
+        BUILDER(TasksGraph, stage, inputIndex, logFunc); \
+        continue;                                        \
+    }
+
     void TDqsExecutionPlanner::BuildConnections(const NNodes::TDqPhyStage& stage) {
         NDq::TChannelLogFunc logFunc = [](ui64, ui64, ui64, TStringBuf, bool) {};
- 
+
         for (ui32 inputIndex = 0; inputIndex < stage.Inputs().Size(); ++inputIndex) {
             const auto& input = stage.Inputs().Item(inputIndex);
             if (input.Maybe<TDqConnection>()) {
@@ -509,10 +509,10 @@ namespace NYql::NDqs {
                 YQL_ENSURE(input.Maybe<TDqSource>());
             }
         }
-    } 
- 
-#undef BUILD_CONNECTION 
- 
+    }
+
+#undef BUILD_CONNECTION
+
     THashMap<TStageId, std::tuple<TString,ui64>> TDqsExecutionPlanner::BuildAllPrograms() {
         using namespace NKikimr::NMiniKQL;
 
@@ -522,12 +522,12 @@ namespace NYql::NDqs {
         TVector<NNodes::TExprBase> fakeReads;
         NCommon::TMkqlCommonCallableCompiler compiler;
         RegisterDqsMkqlCompilers(compiler, *TypeContext);
- 
+
         for (const auto& stageInfo : TasksGraph.GetStagesInfo()) {
             const auto& stage = stageInfo.second.Meta.Stage;
             auto paramsType = NDq::CollectParameters(stage.Program(), ExprContext);
             YQL_ENSURE(paramsType->GetItems().empty()); // TODO support parameters
- 
+
             auto settings = NDq::TDqStageSettings::Parse(stage);
             ui64 stageId = stage.Ref().UniqueId();
             auto maybeStageId = PublicIds.find(settings.LogicalId);
@@ -558,19 +558,19 @@ namespace NYql::NDqs {
         }
 
         return result;
-    } 
- 
+    }
+
     void TDqsExecutionPlanner::FillChannelDesc(NDqProto::TChannel& channelDesc, const NDq::TChannel& channel) {
         channelDesc.SetId(channel.Id);
         channelDesc.SetSrcTaskId(channel.SrcTask);
         channelDesc.SetDstTaskId(channel.DstTask);
         channelDesc.SetCheckpointingMode(channel.CheckpointingMode);
- 
+
         if (channel.SrcTask) {
             NActors::ActorIdToProto(TasksGraph.GetTask(channel.SrcTask).ComputeActorId,
                                         channelDesc.MutableSrcEndpoint()->MutableActorId());
         }
- 
+
         if (channel.DstTask) {
             NActors::ActorIdToProto(TasksGraph.GetTask(channel.DstTask).ComputeActorId,
                                         channelDesc.MutableDstEndpoint()->MutableActorId());
@@ -581,8 +581,8 @@ namespace NYql::NDqs {
             ActorIdToProto(ResultID, channelDesc.MutableDstEndpoint()->MutableActorId());
             SourceID = TasksGraph.GetTask(channel.SrcTask).ComputeActorId;
         }
-    } 
- 
+    }
+
     void TDqsExecutionPlanner::FillInputDesc(NDqProto::TTaskInput& inputDesc, const TTaskInput& input) {
         switch (input.Type()) {
             case TTaskInputType::UnionAll: {
@@ -615,7 +615,7 @@ namespace NYql::NDqs {
                 YQL_ENSURE(output.Channels.size() == 1);
                 outputDesc.MutableMap(); //->SetChannelId(output.Channels[0]);
                 break;
- 
+
             case TTaskOutputType::HashPartition: {
                 YQL_ENSURE(output.Channels.size() == output.PartitionsCount);
                 auto& hashPartitionDesc = *outputDesc.MutableHashPartition();
@@ -625,14 +625,14 @@ namespace NYql::NDqs {
                 hashPartitionDesc.SetPartitionsCount(output.PartitionsCount);
                 break;
             }
- 
+
             case TTaskOutputType::Broadcast: {
                 //for (const auto channel : output.Channels) {
                     outputDesc.MutableBroadcast(); //->AddChannelIds(channel);
                 //}
                 break;
-            } 
- 
+            }
+
             case TTaskOutputType::Sink: {
                 YQL_ENSURE(output.Channels.empty());
                 YQL_ENSURE(output.SinkType);
@@ -645,14 +645,14 @@ namespace NYql::NDqs {
 
             case TTaskOutputType::Undefined: {
                 YQL_ENSURE(false, "Unexpected task output type `TTaskOutputType::Undefined`");
-            } 
-        } 
- 
+            }
+        }
+
         for (auto& channel : output.Channels) {
             auto& channelDesc = *outputDesc.AddChannels();
             FillChannelDesc(channelDesc, TasksGraph.GetChannel(channel));
-        } 
-    } 
+        }
+    }
 
 
     TDqsSingleExecutionPlanner::TDqsSingleExecutionPlanner(

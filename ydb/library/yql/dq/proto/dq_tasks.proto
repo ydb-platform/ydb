@@ -1,17 +1,17 @@
-syntax = "proto3"; 
-option cc_enable_arenas = true; 
- 
-package NYql.NDqProto; 
- 
+syntax = "proto3";
+option cc_enable_arenas = true;
+
+package NYql.NDqProto;
+
 import "google/protobuf/any.proto";
 import "library/cpp/actors/protos/actors.proto";
 import "ydb/library/yql/dq/proto/dq_transport.proto";
- 
-enum ERuntimeVersion { 
-    RUNTIME_VERSION_UNSPECIFIED = 0; 
-    RUNTIME_VERSION_YQL_1_0 = 100000; 
+
+enum ERuntimeVersion {
+    RUNTIME_VERSION_UNSPECIFIED = 0;
+    RUNTIME_VERSION_YQL_1_0 = 100000;
 }
- 
+
 // Mode of checkpoints support.
 // There can be different checkpoints settings
 // in different graph parts.
@@ -20,7 +20,7 @@ enum ECheckpointingMode {
     CHECKPOINTING_MODE_DISABLED = 1; // Checkpoints are not used in this part of graph (channels, tasks). This is typically when we are deadling with finite part of graph.
 }
 
-message TProgram { 
+message TProgram {
     message TSettings {
         bool HasMapJoin = 1;
         bool HasSort = 2;
@@ -31,38 +31,38 @@ message TProgram {
     bytes Raw = 2;
     TSettings Settings = 3;
 }
- 
-message TDqUri { 
-    string Protocol = 1; 
-    string Uri = 2; 
-    uint32 ShardId = 3; 
-} 
- 
-message TEndpoint { 
-    oneof EndpointType { 
-        NActorsProto.TActorId ActorId = 1;
-        fixed64 TabletId = 2; 
-        TDqUri Uri = 3; 
-    } 
+
+message TDqUri {
+    string Protocol = 1;
+    string Uri = 2;
+    uint32 ShardId = 3;
 }
- 
-message TChannel { 
-    uint64 Id = 1; 
-    EDataTransportVersion TransportVersion = 2; 
- 
-    uint64 SrcTaskId = 3; 
-    uint64 DstTaskId = 4; 
-    TEndpoint SrcEndpoint = 5; 
-    TEndpoint DstEndpoint = 6; 
- 
+
+message TEndpoint {
+    oneof EndpointType {
+        NActorsProto.TActorId ActorId = 1;
+        fixed64 TabletId = 2;
+        TDqUri Uri = 3;
+    }
+}
+
+message TChannel {
+    uint64 Id = 1;
+    EDataTransportVersion TransportVersion = 2;
+
+    uint64 SrcTaskId = 3;
+    uint64 DstTaskId = 4;
+    TEndpoint SrcEndpoint = 5;
+    TEndpoint DstEndpoint = 6;
+
     bool IsPersistent = 7;
     bool InMemory = 8;
     ECheckpointingMode CheckpointingMode = 9;
 }
- 
-message TUnionAllInput { 
+
+message TUnionAllInput {
 }
- 
+
 message TSourceInput {
     string Type = 1;
     google.protobuf.Any Settings = 2;
@@ -77,38 +77,38 @@ message TMergeInput {
     repeated TSortColumn SortColumns = 1;
 }
 
-message TTaskInput { 
-    repeated TChannel Channels = 1; 
-    oneof Type { 
-        TUnionAllInput UnionAll = 10; 
+message TTaskInput {
+    repeated TChannel Channels = 1;
+    oneof Type {
+        TUnionAllInput UnionAll = 10;
         TSourceInput Source = 11;
         TMergeInput Merge = 12;
-    } 
+    }
 }
- 
-message TTaskOutputMap { 
-} 
- 
-message TRangePartitionInfo { 
-    bytes EndKeyPrefix = 1; 
-    bool IsInclusive = 2; 
-    bool IsPoint = 3; 
-    uint64 ChannelId = 4; 
+
+message TTaskOutputMap {
 }
- 
-message TTaskOutputRangePartition { 
-    repeated string KeyColumns = 1; 
-    repeated TRangePartitionInfo Partitions = 2; 
+
+message TRangePartitionInfo {
+    bytes EndKeyPrefix = 1;
+    bool IsInclusive = 2;
+    bool IsPoint = 3;
+    uint64 ChannelId = 4;
 }
- 
-message TTaskOutputBroadcast { 
+
+message TTaskOutputRangePartition {
+    repeated string KeyColumns = 1;
+    repeated TRangePartitionInfo Partitions = 2;
 }
- 
-message TTaskOutputHashPartition { 
-    repeated string KeyColumns = 1; 
-    uint32 PartitionsCount = 2; 
-} 
- 
+
+message TTaskOutputBroadcast {
+}
+
+message TTaskOutputHashPartition {
+    repeated string KeyColumns = 1;
+    uint32 PartitionsCount = 2;
+}
+
 message TTaskOutputEffects {
 }
 
@@ -117,18 +117,18 @@ message TTaskOutputSink {
     google.protobuf.Any Settings = 2;
 }
 
-message TTaskOutput { 
-    repeated TChannel Channels = 1; 
-    oneof Type { 
-        TTaskOutputMap Map = 10; 
-        TTaskOutputRangePartition RangePartition = 11; 
-        TTaskOutputHashPartition HashPartition = 12; 
-        TTaskOutputBroadcast Broadcast = 13; 
+message TTaskOutput {
+    repeated TChannel Channels = 1;
+    oneof Type {
+        TTaskOutputMap Map = 10;
+        TTaskOutputRangePartition RangePartition = 11;
+        TTaskOutputHashPartition HashPartition = 12;
+        TTaskOutputBroadcast Broadcast = 13;
         TTaskOutputEffects Effects = 14;
         TTaskOutputSink Sink = 15;
-    } 
+    }
 }
- 
+
 enum ETransformType {
     TRANSFORM_YANDEX_CLOUD = 0;
 }
@@ -139,14 +139,14 @@ message TDqTransform {
     string ConnectionName = 3;
 }
 
-message TDqTask { 
-    uint64 Id = 1; 
+message TDqTask {
+    uint64 Id = 1;
     uint32 StageId = 9;
-    TEndpoint Executer = 2; 
-    TProgram Program = 3; 
-    map<string, TData> Parameters = 4; 
-    repeated TTaskInput Inputs = 5; 
-    repeated TTaskOutput Outputs = 6; 
+    TEndpoint Executer = 2;
+    TProgram Program = 3;
+    map<string, TData> Parameters = 4;
+    repeated TTaskInput Inputs = 5;
+    repeated TTaskOutput Outputs = 6;
     google.protobuf.Any Meta = 7;
     bool CreateSuspended = 8;
     optional TDqTransform OutputTransform = 12;

@@ -82,8 +82,8 @@ RECURSE(
     func
     func/ut
     fs
-    geolocation
-    geolocation/ut
+    geolocation 
+    geolocation/ut 
     geohash
     geohash/ut
     golovan_stats_aggregator

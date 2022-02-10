@@ -5,7 +5,7 @@ RECURSE(
     accessors/ut
     autoarray
     base64
-    datafile 
+    datafile
     dater_old
     dater_old/ut
     enum_codegen

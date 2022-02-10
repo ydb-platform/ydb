@@ -262,16 +262,16 @@ DENY .* -> contrib/python/pymqi
 ALLOW datalens/backend/app/dls -> contrib/python/quart
 DENY .* -> contrib/python/quart
 
-# https://st.yandex-team.ru/CONTRIB-2012 
+# https://st.yandex-team.ru/CONTRIB-2012
 ALLOW maps/geomarketing -> contrib/python/facebook-business
-ALLOW sandbox/projects/maps/geomarketing -> contrib/python/facebook-business 
-ALLOW jupytercloud/arcadia_kernel/default -> contrib/python/facebook-business 
-ALLOW jupytercloud/arcadia_kernel/default_yql -> contrib/python/facebook-business 
+ALLOW sandbox/projects/maps/geomarketing -> contrib/python/facebook-business
+ALLOW jupytercloud/arcadia_kernel/default -> contrib/python/facebook-business
+ALLOW jupytercloud/arcadia_kernel/default_yql -> contrib/python/facebook-business
 ALLOW geoproduct/amocrm/fb_leads -> contrib/python/facebook-business
 ALLOW statbox/statkey -> contrib/python/facebook-business
 ALLOW quality/ab_testing/cofe/bin/lib/files/py3/cofe_kernel_yql -> contrib/python/facebook-business
-DENY .* -> contrib/python/facebook-business 
- 
+DENY .* -> contrib/python/facebook-business
+
 # https://st.yandex-team.ru/CONTRIB-1954
 ALLOW contrib/python/glom -> contrib/python/face$
 DENY .* -> contrib/python/face$

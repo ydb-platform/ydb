@@ -9,10 +9,10 @@
 #include <ydb/core/protos/counters_keyvalue.pb.h>
 #include <ydb/core/metering/metering.h>
 #include <ydb/core/tablet/tablet_counters.h>
-#include <library/cpp/json/json_writer.h>
+#include <library/cpp/json/json_writer.h> 
 
-#include <util/generic/strbuf.h>
-
+#include <util/generic/strbuf.h> 
+ 
 //TODO: move this code to vieiwer
 #include <ydb/core/tablet/tablet_counters_aggregator.h>
 
@@ -583,7 +583,7 @@ void TPersQueue::ApplyNewConfigAndReply(const TActorContext& ctx)
     Config = NewConfig;
 
     FillMeteringParams(ctx);
-
+ 
     if (!Config.PartitionsSize()) {
         for (const auto partitionId : Config.GetPartitionIds()) {
             Config.AddPartitions()->SetPartitionId(partitionId);
@@ -1406,10 +1406,10 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, const TActorId& p
                                     const NKikimrClient::TPersQueuePartitionRequest& req, const TActorContext& ctx)
 {
     Y_VERIFY(req.CmdWriteSize());
-    FlushMetrics(false, ctx); // To ensure hours' border;
-    if (req.HasPutUnitsSize()) {
-        CurrentPutUnitsQuantity += req.GetPutUnitsSize();
-    }
+    FlushMetrics(false, ctx); // To ensure hours' border; 
+    if (req.HasPutUnitsSize()) { 
+        CurrentPutUnitsQuantity += req.GetPutUnitsSize(); 
+    } 
 
     TVector <TEvPQ::TEvWrite::TMsg> msgs;
 
@@ -1949,8 +1949,8 @@ bool TPersQueue::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TAc
 
 void TPersQueue::HandleDie(const TActorContext& ctx)
 {
-    FlushMetrics(true, ctx);
-
+    FlushMetrics(true, ctx); 
+ 
     for (const auto& p : Partitions) {
         ctx.Send(p.second.Actor, new TEvents::TEvPoisonPill());
     }
@@ -2034,122 +2034,122 @@ void TPersQueue::HandleWakeup(const TActorContext& ctx) {
     for (auto& g : groups) {
         AggregateAndSendLabeledCountersFor(g, ctx);
     }
-    FlushMetrics(false, ctx);
+    FlushMetrics(false, ctx); 
     ctx.Schedule(TDuration::Seconds(5), new TEvents::TEvWakeup());
 }
 
-TString TPersQueue::GetMeteringJson(
-        const TString& metricBillingId, const TString& schemeName, const THashMap<TString, ui64>& tags,
-        ui64 quantity, const TString& quantityUnit,
-        const TInstant& start, const TInstant& end, const TInstant& now
-) {
-    TStringStream output;
-    NJson::TJsonWriter writer(&output, false);
+TString TPersQueue::GetMeteringJson( 
+        const TString& metricBillingId, const TString& schemeName, const THashMap<TString, ui64>& tags, 
+        ui64 quantity, const TString& quantityUnit, 
+        const TInstant& start, const TInstant& end, const TInstant& now 
+) { 
+    TStringStream output; 
+    NJson::TJsonWriter writer(&output, false); 
 
-    writer.OpenMap();
-
-    writer.Write("cloud_id", Config.GetYcCloudId());
-    writer.Write("folder_id", Config.GetYcFolderId());
-    writer.Write("resource_id", ResourceId);
+    writer.OpenMap(); 
+ 
+    writer.Write("cloud_id", Config.GetYcCloudId()); 
+    writer.Write("folder_id", Config.GetYcFolderId()); 
+    writer.Write("resource_id", ResourceId); 
     writer.Write("id", TStringBuilder() << metricBillingId << "-" << Config.GetYdbDatabaseId() << "-" << TabletID() << "-" << start.MilliSeconds() << "-" << (++MeteringCounter));
-
-    writer.Write("schema", schemeName);
-
-    writer.OpenMap("tags");
-    for (const auto& [tag, value] : tags) {
-        writer.Write(tag, value);
-    }
-    writer.CloseMap(); // "tags"
-
-    writer.OpenMap("usage");
-    writer.Write("quantity", quantity);
-    writer.Write("unit", quantityUnit);
-    writer.Write("start", start.Seconds());
+ 
+    writer.Write("schema", schemeName); 
+ 
+    writer.OpenMap("tags"); 
+    for (const auto& [tag, value] : tags) { 
+        writer.Write(tag, value); 
+    } 
+    writer.CloseMap(); // "tags" 
+ 
+    writer.OpenMap("usage"); 
+    writer.Write("quantity", quantity); 
+    writer.Write("unit", quantityUnit); 
+    writer.Write("start", start.Seconds()); 
     writer.Write("finish", end.Seconds());
-    writer.CloseMap(); // "usage"
-
-    writer.OpenMap("labels");
+    writer.CloseMap(); // "usage" 
+ 
+    writer.OpenMap("labels"); 
     writer.Write("datastreams_stream_name", StreamName);
     writer.Write("ydb_database", Config.GetYdbDatabaseId());
-    writer.CloseMap(); // "labels"
-
-    writer.Write("version", "v1");
-    writer.Write("source_id", ToString(TabletID()));
-    writer.Write("source_wt", now.Seconds());
-    writer.CloseMap();
-    writer.Flush();
-    output << Endl;
-    return output.Str();
-}
-
-void TPersQueue::FlushMetrics(bool force, const TActorContext &ctx) {
-    if (!MeteringEnabled) {
-        return;
-    }
+    writer.CloseMap(); // "labels" 
+ 
+    writer.Write("version", "v1"); 
+    writer.Write("source_id", ToString(TabletID())); 
+    writer.Write("source_wt", now.Seconds()); 
+    writer.CloseMap(); 
+    writer.Flush(); 
+    output << Endl; 
+    return output.Str(); 
+} 
+ 
+void TPersQueue::FlushMetrics(bool force, const TActorContext &ctx) { 
+    if (!MeteringEnabled) { 
+        return; 
+    } 
     if (Config.PartitionsSize() == 0)
         return;
-    auto now = ctx.Now();
-    bool needFlushRequests = force, needFlushShards = force;
-
-    auto checkFlushInterval = [&](const TInstant& lastFlush, bool& flag) {
-        if ((now - lastFlush) >= MetricsFlushInterval) {
-            flag = true;
-        }
-    };
-    checkFlushInterval(RequestsMetricsLastFlush, needFlushRequests);
-    checkFlushInterval(ShardsMetricsLastFlush, needFlushShards);
-
-    auto requestsEndTime = now;
-    if (now.Hours() > RequestsMetricsLastFlush.Hours()) {
-        needFlushRequests = true;
-        // If we jump over a hour edge, report requests metrics for a previous hour;
-        requestsEndTime = TInstant::Hours(RequestsMetricsLastFlush.Hours() + 1);
-        Y_VERIFY(requestsEndTime < now);
-    } else {
-        Y_VERIFY(now.Hours() == RequestsMetricsLastFlush.Hours());
-    }
-
-    if (needFlushRequests) {
-        if (CurrentPutUnitsQuantity > 0) {
-            auto record = GetMeteringJson(
+    auto now = ctx.Now(); 
+    bool needFlushRequests = force, needFlushShards = force; 
+ 
+    auto checkFlushInterval = [&](const TInstant& lastFlush, bool& flag) { 
+        if ((now - lastFlush) >= MetricsFlushInterval) { 
+            flag = true; 
+        } 
+    }; 
+    checkFlushInterval(RequestsMetricsLastFlush, needFlushRequests); 
+    checkFlushInterval(ShardsMetricsLastFlush, needFlushShards); 
+ 
+    auto requestsEndTime = now; 
+    if (now.Hours() > RequestsMetricsLastFlush.Hours()) { 
+        needFlushRequests = true; 
+        // If we jump over a hour edge, report requests metrics for a previous hour; 
+        requestsEndTime = TInstant::Hours(RequestsMetricsLastFlush.Hours() + 1); 
+        Y_VERIFY(requestsEndTime < now); 
+    } else { 
+        Y_VERIFY(now.Hours() == RequestsMetricsLastFlush.Hours()); 
+    } 
+ 
+    if (needFlushRequests) { 
+        if (CurrentPutUnitsQuantity > 0) { 
+            auto record = GetMeteringJson( 
                     "put_units", "yds.events.puts.v1", {}, CurrentPutUnitsQuantity, "put_events",
-                    RequestsMetricsLastFlush, requestsEndTime, now
-            );
-            NMetering::SendMeteringJson(ctx, record);
-        }
-        CurrentPutUnitsQuantity = 0;
-        RequestsMetricsLastFlush = now;
-    }
-    if (needFlushShards) {
+                    RequestsMetricsLastFlush, requestsEndTime, now 
+            ); 
+            NMetering::SendMeteringJson(ctx, record); 
+        } 
+        CurrentPutUnitsQuantity = 0; 
+        RequestsMetricsLastFlush = now; 
+    } 
+    if (needFlushShards) { 
         ui64 writeQuota = Config.GetPartitionConfig().GetWriteSpeedInBytesPerSecond();
         ui64 reservedSpace = Config.GetPartitionConfig().GetLifetimeSeconds() * writeQuota;
         ui64 consumersThroughput = Config.ReadRulesSize() * writeQuota;
         ui64 numPartitions = Config.PartitionsSize();
-        THashMap<TString, ui64> tags = {
-                {"reserved_throughput_bps", writeQuota}, {"shard_enhanced_consumers_throughput", consumersThroughput},
-                {"reserved_storage_bytes", reservedSpace}
-        };
-        auto makeShardsMetricsJson = [&](TInstant& end) {
-            auto res =  GetMeteringJson(
+        THashMap<TString, ui64> tags = { 
+                {"reserved_throughput_bps", writeQuota}, {"shard_enhanced_consumers_throughput", consumersThroughput}, 
+                {"reserved_storage_bytes", reservedSpace} 
+        }; 
+        auto makeShardsMetricsJson = [&](TInstant& end) { 
+            auto res =  GetMeteringJson( 
                     "reserved_resources", "yds.resources.reserved.v1", tags,
                     numPartitions * (end - ShardsMetricsLastFlush).Seconds(), "second",
-                    ShardsMetricsLastFlush, end, now
-            );
-            ShardsMetricsLastFlush = end;
-            return res;
-        };
-        auto interval = TInstant::Hours(ShardsMetricsLastFlush.Hours() + 1);
-        while (interval < now) {
-            NMetering::SendMeteringJson(ctx, makeShardsMetricsJson(interval));
-            interval += TDuration::Hours(1);
-        }
-        if (ShardsMetricsLastFlush < now) {
-            NMetering::SendMeteringJson(ctx, makeShardsMetricsJson(now));
-        }
-        Y_VERIFY(ShardsMetricsLastFlush == now);
-    }
-}
-
+                    ShardsMetricsLastFlush, end, now 
+            ); 
+            ShardsMetricsLastFlush = end; 
+            return res; 
+        }; 
+        auto interval = TInstant::Hours(ShardsMetricsLastFlush.Hours() + 1); 
+        while (interval < now) { 
+            NMetering::SendMeteringJson(ctx, makeShardsMetricsJson(interval)); 
+            interval += TDuration::Hours(1); 
+        } 
+        if (ShardsMetricsLastFlush < now) { 
+            NMetering::SendMeteringJson(ctx, makeShardsMetricsJson(now)); 
+        } 
+        Y_VERIFY(ShardsMetricsLastFlush == now); 
+    } 
+} 
+ 
 bool TPersQueue::HandleHook(STFUNC_SIG)
 {
     SetActivityType(NKikimrServices::TActivity::PERSQUEUE_ACTOR);

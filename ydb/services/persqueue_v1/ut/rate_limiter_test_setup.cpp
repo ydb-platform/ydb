@@ -6,7 +6,7 @@ using namespace NPersQueue;
 using namespace Ydb::PersQueue;
 using namespace NKikimr::Tests;
 
-
+ 
 namespace NKikimr::NPersQueueTests {
 
 TRateLimiterTestSetup::TRateLimiterTestSetup(
@@ -15,7 +15,7 @@ TRateLimiterTestSetup::TRateLimiterTestSetup(
     double readAccountQuota,
     bool enableReadQuoting
 )
-    : Server(new NPersQueue::TTestServer(false))
+    : Server(new NPersQueue::TTestServer(false)) 
     , LimitedEntity(limitedEntity)
     , WriteAccountQuota(writeAccountQuota)
     , ReadAccountQuota(readAccountQuota)
@@ -28,7 +28,7 @@ void TRateLimiterTestSetup::CreateTopic(const TString& path) {
     const TString account = GetAccount(name);
 
     Cerr << "Creating topic \"" << name << "\"" << Endl;
-    Server->AnnoyingClient->CreateTopic(name, 1);
+    Server->AnnoyingClient->CreateTopic(name, 1); 
 
     CreateKesus(account);
     CreateQuotaResources(path, "write-quota", false);
@@ -39,7 +39,7 @@ void TRateLimiterTestSetup::CreateConsumer(const TString& path) {
     const TString account = GetAccount(path);
 
     Cerr << "Creating consumer \"" << path << "\"" << Endl;
-    Server->AnnoyingClient->CreateConsumer(path);
+    Server->AnnoyingClient->CreateConsumer(path); 
 
     CreateKesus(account);
     CreateQuotaResources(path, "write-quota", true);
@@ -47,7 +47,7 @@ void TRateLimiterTestSetup::CreateConsumer(const TString& path) {
 }
 
 void TRateLimiterTestSetup::CreateKesus(const TString& account) {
-    const NMsgBusProxy::EResponseStatus createKesusResult = Server->AnnoyingClient->CreateKesus(QuotersRootPath, account);
+    const NMsgBusProxy::EResponseStatus createKesusResult = Server->AnnoyingClient->CreateKesus(QuotersRootPath, account); 
     UNIT_ASSERT_C(createKesusResult == NMsgBusProxy::MSTATUS_OK, createKesusResult);
 
     const TString kesusPath = TStringBuilder() << QuotersRootPath << "/" << account;
@@ -55,9 +55,9 @@ void TRateLimiterTestSetup::CreateKesus(const TString& account) {
     Cerr << "Creating kesus with path=" << kesusPath << Endl;
     auto setAccountQuota = [&](const TString& quotaPrefix, double value) {
         Cerr << "Adding quota for account kesus=" << kesusPath << " quota-path=" << quotaPrefix << " value=" << value << Endl;
-        const auto statusCode = Server->AnnoyingClient->AddQuoterResource(
-                Server->CleverServer->GetRuntime(), kesusPath, quotaPrefix, value
-        );
+        const auto statusCode = Server->AnnoyingClient->AddQuoterResource( 
+                Server->CleverServer->GetRuntime(), kesusPath, quotaPrefix, value 
+        ); 
         UNIT_ASSERT_C(
             statusCode == Ydb::StatusIds::SUCCESS || statusCode == Ydb::StatusIds::ALREADY_EXISTS,
             "Status: " << Ydb::StatusIds::StatusCode_Name(statusCode)
@@ -83,9 +83,9 @@ void TRateLimiterTestSetup::CreateQuotaResources(const TString& path, const TStr
     for (auto currentComponent = firstIt; currentComponent != lastIt; ++currentComponent) {
         prefixPath << "/" << *currentComponent;
         Cerr << "Adding quoter resource: \"" << prefixPath << "\"" << Endl;
-        const auto statusCode = Server->AnnoyingClient->AddQuoterResource(
-                Server->CleverServer->GetRuntime(), kesusPath, prefixPath
-        );
+        const auto statusCode = Server->AnnoyingClient->AddQuoterResource( 
+                Server->CleverServer->GetRuntime(), kesusPath, prefixPath 
+        ); 
         UNIT_ASSERT_C(
             statusCode == Ydb::StatusIds::SUCCESS || statusCode == Ydb::StatusIds::ALREADY_EXISTS,
             "Status: " << Ydb::StatusIds::StatusCode_Name(statusCode)
@@ -94,13 +94,13 @@ void TRateLimiterTestSetup::CreateQuotaResources(const TString& path, const TStr
 }
 
 /*
-THolder<Ydb::PersQueue::IProducer> TRateLimiterTestSetup::StartProducer(const TString& topicPath, bool compress) {
-    Ydb::PersQueue::TProducerSettings producerSettings;
-    producerSettings.Server = Ydb::PersQueue::TServerSetting("localhost", Server->GrpcPort);
+THolder<Ydb::PersQueue::IProducer> TRateLimiterTestSetup::StartProducer(const TString& topicPath, bool compress) { 
+    Ydb::PersQueue::TProducerSettings producerSettings; 
+    producerSettings.Server = Ydb::PersQueue::TServerSetting("localhost", Server->GrpcPort); 
     producerSettings.Topic = topicPath;
     producerSettings.SourceId = "TRateLimiterTestSetupSourceId";
     producerSettings.Codec = compress ? "gzip" : "raw";
-    THolder<Ydb::PersQueue::IProducer> producer = PQLib->CreateProducer(producerSettings);
+    THolder<Ydb::PersQueue::IProducer> producer = PQLib->CreateProducer(producerSettings); 
     auto startResult = producer->Start();
     UNIT_ASSERT_EQUAL_C(Ydb::StatusIds::SUCCESS, startResult.GetValueSync().Response.status(), "Response: " << startResult.GetValueSync().Response);
     return producer;
@@ -114,15 +114,15 @@ void TRateLimiterTestSetup::Start(bool enableReadQuoting) {
 }
 
 void TRateLimiterTestSetup::InitServer(bool enableReadQuoting) {
-    auto& settings = Server->ServerSettings;
+    auto& settings = Server->ServerSettings; 
 
-    settings.PQConfig.MutableQuotingConfig()->SetEnableQuoting(true);
-    settings.PQConfig.MutableQuotingConfig()->SetEnableReadQuoting(enableReadQuoting);
-    settings.PQConfig.MutableQuotingConfig()->SetTopicWriteQuotaEntityToLimit(LimitedEntity);
+    settings.PQConfig.MutableQuotingConfig()->SetEnableQuoting(true); 
+    settings.PQConfig.MutableQuotingConfig()->SetEnableReadQuoting(enableReadQuoting); 
+    settings.PQConfig.MutableQuotingConfig()->SetTopicWriteQuotaEntityToLimit(LimitedEntity); 
 
-    Server->GrpcServerOptions.SetMaxMessageSize(130 * 1024 * 1024);
-    Server->StartServer();
-    Server->EnableLogs(
+    Server->GrpcServerOptions.SetMaxMessageSize(130 * 1024 * 1024); 
+    Server->StartServer(); 
+    Server->EnableLogs( 
         {
             NKikimrServices::PQ_READ_PROXY,
             NKikimrServices::PQ_WRITE_PROXY,
@@ -137,13 +137,13 @@ void TRateLimiterTestSetup::InitServer(bool enableReadQuoting) {
 }
 
 void TRateLimiterTestSetup::InitQuoting() {
-    Server->AnnoyingClient->MkDir("/Root", "PersQueue");
-    Server->AnnoyingClient->MkDir("/Root/PersQueue", "System");
-    Server->AnnoyingClient->MkDir("/Root/PersQueue/System", "Quoters");
+    Server->AnnoyingClient->MkDir("/Root", "PersQueue"); 
+    Server->AnnoyingClient->MkDir("/Root/PersQueue", "System"); 
+    Server->AnnoyingClient->MkDir("/Root/PersQueue/System", "Quoters"); 
 }
 
 void TRateLimiterTestSetup::WaitWritePQServiceInitialization() {
-    PQDataWriter = MakeHolder<TPQDataWriter>("writer_source_id", *Server);
+    PQDataWriter = MakeHolder<TPQDataWriter>("writer_source_id", *Server); 
 }
 
 }

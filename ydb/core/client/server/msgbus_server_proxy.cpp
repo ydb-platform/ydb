@@ -176,7 +176,7 @@ void TMessageBusServerProxy::Bootstrap(const TActorContext& ctx) {
 
     auto cacheConfig = MakeIntrusive<NSchemeCache::TSchemeCacheConfig>(AppData(ctx), SchemeCacheCounters);
     SchemeCache = ctx.ExecutorThread.RegisterActor(CreateSchemeBoardSchemeCache(cacheConfig.Get()));
-    PqMetaCache = CreatePersQueueMetaCacheV2Id();
+    PqMetaCache = CreatePersQueueMetaCacheV2Id(); 
 
     if (Server) {
         Server->InitSession(ctx.ExecutorThread.ActorSystem, ctx.SelfID);

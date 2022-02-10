@@ -24,7 +24,7 @@ from concurrent import futures
 
 from sqs_matchers import ReadResponseMatcher
 
-DEFAULT_VISIBILITY_TIMEOUT = 30
+DEFAULT_VISIBILITY_TIMEOUT = 30 
 
 logger = logging.getLogger(__name__)
 
@@ -138,15 +138,15 @@ def get_test_with_sqs_installation_by_path(base_test_class):
     return TestWithPath
 
 
-class KikimrSqsTestBase(object):
+class KikimrSqsTestBase(object): 
     erasure = None
     slot_count = 0
     database = '/Root'
     sqs_root = '/Root/SQS'
     use_in_memory_pdisks = True
-
-    @classmethod
-    def setup_class(cls):
+ 
+    @classmethod 
+    def setup_class(cls): 
         cls.cluster, cls.config_generator = cls._setup_cluster()
         cls.sqs_ports = []
         if cls.slot_count:
@@ -158,8 +158,8 @@ class KikimrSqsTestBase(object):
             cls.sqs_ports.append(node.sqs_port)
 
         cls.sqs_port = cls.sqs_ports[0]
-        cls.server_fqdn = get_fqdn()
-
+        cls.server_fqdn = get_fqdn() 
+ 
     def setup_method(self, method=None):
         logging.debug('Test started: {}'.format(str(method.__name__)))
         logging.debug("Kikimr logs dir: {}".format(self.cluster.slots[1].cwd if self.slot_count else self.cluster.nodes[1].cwd))
@@ -216,8 +216,8 @@ class KikimrSqsTestBase(object):
         self.message_ids = []
         self.read_result = []
 
-        self.seq_no = 0
-
+        self.seq_no = 0 
+ 
     def teardown_method(self, method=None):
         self.check_no_queues_table(self._username)
         self._driver.stop()
@@ -246,14 +246,14 @@ class KikimrSqsTestBase(object):
 
         assert_that(raised)
 
-    @classmethod
-    def teardown_class(cls):
-        if hasattr(cls, 'cluster'):
-            cls.cluster.stop()
-
+    @classmethod 
+    def teardown_class(cls): 
+        if hasattr(cls, 'cluster'): 
+            cls.cluster.stop() 
+ 
     @classmethod
     def _setup_config_generator(cls):
-        config_generator = KikimrConfigGenerator(
+        config_generator = KikimrConfigGenerator( 
             erasure=cls.erasure,
             use_in_memory_pdisks=cls.use_in_memory_pdisks,
             additional_log_configs={'SQS': LogLevels.INFO},
@@ -268,7 +268,7 @@ class KikimrSqsTestBase(object):
         config_generator.yaml_config['sqs_config']['check_all_shards_in_receive_message'] = True
         config_generator.yaml_config['sqs_config']['create_legacy_duration_counters'] = False
         config_generator.yaml_config['sqs_config']['validate_message_body'] = True
-
+ 
         return config_generator
 
     @classmethod
@@ -313,17 +313,17 @@ class KikimrSqsTestBase(object):
             '-u', 'metauser',
             '-n', _username,
         ] + self._sqs_server_opts
-        while retries_count:
+        while retries_count: 
             logging.debug("Running {}".format(' '.join(cmd)))
-            try:
+            try: 
                 yatest_common.execute(cmd)
             except yatest_common.ExecutionError as ex:
                 logging.debug("Create user failed: {}. Retrying".format(ex))
-                retries_count -= 1
+                retries_count -= 1 
                 time.sleep(3)
-            else:
+            else: 
                 return
-        raise RuntimeError("Failed to create SQS user")
+        raise RuntimeError("Failed to create SQS user") 
 
     def _create_api_for_user(self, user_name, raise_on_error=True, security_token=None, force_private=False, iam_token=None, folder_id=None):
         api = SqsHttpApi(self.cluster.nodes[1].host,
@@ -368,7 +368,7 @@ class KikimrSqsTestBase(object):
                 else:
                     raise
 
-    def _queue_url_matcher(self, queue_name):
+    def _queue_url_matcher(self, queue_name): 
         urls_matchers = [
             equal_to(
                 to_bytes(
@@ -388,9 +388,9 @@ class KikimrSqsTestBase(object):
         logging.debug('Create queue. Attributes: {}. Use http: {}. Is fifo: {}'.format(attributes, use_http, is_fifo))
         assert (len(attributes.keys()) == 0 or use_http), 'Attributes are supported only for http queue creation'
         assert (shards is None or not use_http), 'Custom shards number is only supported in non-http mode'
-        while retries:
+        while retries: 
             retries -= 1
-            try:
+            try: 
                 if use_http:
                     self.queue_url = self._sqs_api.create_queue(queue_name, is_fifo=is_fifo, attributes=attributes)
                 else:
@@ -412,52 +412,52 @@ class KikimrSqsTestBase(object):
                 else:
                     raise
             if self.queue_url is not None:  # queue_url will be None in case of connection error
-                break
+                break 
         assert_that(
             to_bytes(self.queue_url),
-            self._queue_url_matcher(queue_name)
+            self._queue_url_matcher(queue_name) 
         )
         return self.queue_url
 
     def _send_message_and_assert(self, queue_url, msg_body, seq_no=None, group_id=None, attributes=None, delay_seconds=None):
         attributes = {} if attributes is None else attributes
-        send_msg_result = self._sqs_api.send_message(
+        send_msg_result = self._sqs_api.send_message( 
             queue_url, msg_body, deduplication_id=seq_no, group_id=group_id, attributes=attributes, delay_seconds=delay_seconds
-        )
+        ) 
         assert_that(
             send_msg_result, not_none()
         )
         return send_msg_result
 
-    def _send_messages(self, queue_url, message_count, msg_body_template=None, is_fifo=False, group_id=None):
-        if msg_body_template is None:
-            msg_body_template = self._msg_body_template
+    def _send_messages(self, queue_url, message_count, msg_body_template=None, is_fifo=False, group_id=None): 
+        if msg_body_template is None: 
+            msg_body_template = self._msg_body_template 
         ret = []
         for _ in range(message_count):
-            if is_fifo:
-                result = self._send_message_and_assert(
+            if is_fifo: 
+                result = self._send_message_and_assert( 
                     queue_url, msg_body_template.format(next(self.counter)), seq_no=self.seq_no, group_id=group_id
-                )
-                self.seq_no += 1
-            else:
+                ) 
+                self.seq_no += 1 
+            else: 
                 result = self._send_message_and_assert(queue_url, msg_body_template.format(next(self.counter)))
             ret.append(result)
         return ret
 
     def _read_while_not_empty(self, queue_url, messages_count, visibility_timeout=None, wait_timeout=1, max_empty_reads=1):
-        ret = []
-        messages_by_time = {}
-        actual_vis_timeout = visibility_timeout if visibility_timeout is not None else DEFAULT_VISIBILITY_TIMEOUT
+        ret = [] 
+        messages_by_time = {} 
+        actual_vis_timeout = visibility_timeout if visibility_timeout is not None else DEFAULT_VISIBILITY_TIMEOUT 
         empty_reads_count = 0
         max_batch_to_read = self.config_generator.yaml_config['sqs_config']['max_number_of_receive_messages']
-        while len(ret) < messages_count:
-            # noinspection PyTypeChecker
+        while len(ret) < messages_count: 
+            # noinspection PyTypeChecker 
             request_start = time.time()
-            read_result = self._sqs_api.receive_message(
+            read_result = self._sqs_api.receive_message( 
                 queue_url, max_number_of_messages=min(messages_count - len(ret), max_batch_to_read),
                 visibility_timeout=visibility_timeout, wait_timeout=wait_timeout
-            )
-            if not read_result:
+            ) 
+            if not read_result: 
                 empty_reads_count += 1
                 if empty_reads_count == max_empty_reads:
                     break
@@ -477,38 +477,38 @@ class KikimrSqsTestBase(object):
                         )
                     else:
                         raise AssertionError("Message {} appeared twice before visibility timeout expired".format(msg_id))
-        return ret
-
-    def _read_messages_and_assert(
+        return ret 
+ 
+    def _read_messages_and_assert( 
             self, queue_url, messages_count, matcher=None, visibility_timeout=None, wait_timeout=1
     ):
         read_result = self._read_while_not_empty(
-            queue_url, messages_count=messages_count,
+            queue_url, messages_count=messages_count, 
             visibility_timeout=visibility_timeout, wait_timeout=wait_timeout
         )
-        if matcher is not None:
-            assert_that(
-                read_result, matcher
-            )
+        if matcher is not None: 
+            assert_that( 
+                read_result, matcher 
+            ) 
         return read_result
 
-    def _create_queue_send_x_messages_read_y_messages(
-            self, queue_name, send_count, read_count, msg_body_template,
+    def _create_queue_send_x_messages_read_y_messages( 
+            self, queue_name, send_count, read_count, msg_body_template, 
             is_fifo=False, visibility_timeout=None, wait_timeout=1, group_id="1"
     ):
         self._create_queue_and_assert(queue_name, is_fifo)
         if is_fifo:
-            self.message_ids = self._send_messages(
-                self.queue_url, send_count, msg_body_template, is_fifo=True, group_id=group_id
-            )
-        else:
-            self.message_ids = self._send_messages(
-                self.queue_url, send_count, msg_body_template
-            )
-        self.read_result = self._read_messages_and_assert(
-            self.queue_url, read_count,
-            ReadResponseMatcher().with_some_of_message_ids(self.message_ids).with_n_messages(read_count),
-            visibility_timeout, wait_timeout
+            self.message_ids = self._send_messages( 
+                self.queue_url, send_count, msg_body_template, is_fifo=True, group_id=group_id 
+            ) 
+        else: 
+            self.message_ids = self._send_messages( 
+                self.queue_url, send_count, msg_body_template 
+            ) 
+        self.read_result = self._read_messages_and_assert( 
+            self.queue_url, read_count, 
+            ReadResponseMatcher().with_some_of_message_ids(self.message_ids).with_n_messages(read_count), 
+            visibility_timeout, wait_timeout 
         )
 
     def _other_node(self, node_index):
@@ -516,7 +516,7 @@ class KikimrSqsTestBase(object):
             return 1
         else:
             return node_index - 1
-
+ 
     def _get_live_node_index(self):
         for i in range(self.cluster_nodes_count):
             if self.slot_count:
@@ -534,12 +534,12 @@ class KikimrSqsTestBase(object):
             return self.config_generator.port_allocator.get_node_port_allocator(node_index + 1).mon_port
 
     def _get_sqs_counters(self, node_index=0, counters_format='json'):
-        return self._get_counters(node_index, "sqs", counters_format)
-
-    def _get_ymq_counters(self, cloud, folder, node_index=0, counters_format='json'):
-        return self._get_counters(node_index, "ymq_public", counters_format, cloud=cloud, folder=folder)
-
-    def _get_counters(self, node_index, component, counters_format, cloud=None, folder=None):
+        return self._get_counters(node_index, "sqs", counters_format) 
+ 
+    def _get_ymq_counters(self, cloud, folder, node_index=0, counters_format='json'): 
+        return self._get_counters(node_index, "ymq_public", counters_format, cloud=cloud, folder=folder) 
+ 
+    def _get_counters(self, node_index, component, counters_format, cloud=None, folder=None): 
         mon_port = self._get_mon_port(node_index)
 
         if counters_format == 'json':
@@ -549,13 +549,13 @@ class KikimrSqsTestBase(object):
         else:
             raise Exception('Unknown counters format: \"{}\"'.format(counters_format))
 
-        if folder is not None:
-            labels="/cloud%3D{cloud}/folder%3D{folder}".format(cloud=cloud, folder=folder)
-        else:
-            labels = ''
-        counters_url = 'http://localhost:{port}/counters/counters%3D{component}{labels}{suffix}'.format(
-            port=mon_port, component=component, suffix=format_suffix, labels=labels
-        )
+        if folder is not None: 
+            labels="/cloud%3D{cloud}/folder%3D{folder}".format(cloud=cloud, folder=folder) 
+        else: 
+            labels = '' 
+        counters_url = 'http://localhost:{port}/counters/counters%3D{component}{labels}{suffix}'.format( 
+            port=mon_port, component=component, suffix=format_suffix, labels=labels 
+        ) 
         reply = requests.get(counters_url)
         assert_that(reply.status_code, equal_to(200))
 

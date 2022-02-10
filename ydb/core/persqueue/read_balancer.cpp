@@ -348,7 +348,7 @@ void TPersQueueReadBalancer::RespondWithACL(
         const TActorContext &ctx) {
     THolder<TEvPersQueue::TEvCheckACLResponse> res{new TEvPersQueue::TEvCheckACLResponse};
     res->Record.SetTopic(Topic);
-    res->Record.SetPath(Path);
+    res->Record.SetPath(Path); 
     res->Record.SetAccess(access);
     res->Record.SetError(error);
     ctx.Send(request->Sender, res.Release());

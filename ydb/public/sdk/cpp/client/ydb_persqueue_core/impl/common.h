@@ -5,36 +5,36 @@
 
 #include <util/generic/queue.h>
 #include <util/system/condvar.h>
-#include <util/thread/pool.h>
+#include <util/thread/pool.h> 
 
 #include <queue>
 
 namespace NYdb::NPersQueue {
 
 IRetryPolicy::ERetryErrorClass GetRetryErrorClass(EStatus status);
-IRetryPolicy::ERetryErrorClass GetRetryErrorClassV2(EStatus status);
-
-void Cancel(NGrpc::IQueueClientContextPtr& context);
-
-NYql::TIssues MakeIssueWithSubIssues(const TString& description, const NYql::TIssues& subissues);
-
+IRetryPolicy::ERetryErrorClass GetRetryErrorClassV2(EStatus status); 
+ 
+void Cancel(NGrpc::IQueueClientContextPtr& context); 
+ 
+NYql::TIssues MakeIssueWithSubIssues(const TString& description, const NYql::TIssues& subissues); 
+ 
 TString IssuesSingleLineString(const NYql::TIssues& issues);
 
 size_t CalcDataSize(const TReadSessionEvent::TEvent& event);
 
-template <class TMessage>
-bool IsErrorMessage(const TMessage& serverMessage) {
-    const Ydb::StatusIds::StatusCode status = serverMessage.status();
-    return status != Ydb::StatusIds::SUCCESS && status != Ydb::StatusIds::STATUS_CODE_UNSPECIFIED;
-}
-
-template <class TMessage>
-TPlainStatus MakeErrorFromProto(const TMessage& serverMessage) {
-    NYql::TIssues issues;
-    NYql::IssuesFromMessage(serverMessage.issues(), issues);
-    return TPlainStatus(static_cast<EStatus>(serverMessage.status()), std::move(issues));
-}
-
+template <class TMessage> 
+bool IsErrorMessage(const TMessage& serverMessage) { 
+    const Ydb::StatusIds::StatusCode status = serverMessage.status(); 
+    return status != Ydb::StatusIds::SUCCESS && status != Ydb::StatusIds::STATUS_CODE_UNSPECIFIED; 
+} 
+ 
+template <class TMessage> 
+TPlainStatus MakeErrorFromProto(const TMessage& serverMessage) { 
+    NYql::TIssues issues; 
+    NYql::IssuesFromMessage(serverMessage.issues(), issues); 
+    return TPlainStatus(static_cast<EStatus>(serverMessage.status()), std::move(issues)); 
+} 
+ 
 // Gets source endpoint for the whole driver (or persqueue client)
 // and endpoint that was given us by the cluster discovery service
 // and gives endpoint for the current LB cluster.
@@ -189,22 +189,22 @@ std::shared_ptr<ISessionConnectionProcessorFactory<TRequest, TResponse>>
 template <class TEvent_>
 struct TBaseEventInfo {
     using TEvent = TEvent_;
-
+ 
     TEvent Event;
-
+ 
     TEvent& GetEvent() {
         return Event;
-    }
-
+    } 
+ 
     void OnUserRetrievedEvent() {
-    }
-
+    } 
+ 
     template <class T>
     TBaseEventInfo(T&& event)
         : Event(std::forward<T>(event))
     {}
 };
-
+ 
 
 class ISignalable {
 public:
@@ -278,27 +278,27 @@ protected:
     using TSettings = TSettings_;
     using TEvent = TEvent_;
     using TEventInfo = TEventInfo_;
-
-
+ 
+ 
     // Template for visitor implementation.
     struct TBaseHandlersVisitor {
         TBaseHandlersVisitor(const TSettings& settings, TEventInfo& eventInfo)
             : Settings(settings)
             , EventInfo(eventInfo)
-        {}
-
+        {} 
+ 
         template <class TEventType, class TFunc, class TCommonFunc>
         bool PushHandler(TEventInfo&& eventInfo, const TFunc& specific, const TCommonFunc& common) {
             if (specific) {
                 PushSpecificHandler<TEventType>(std::move(eventInfo), specific);
                 return true;
-            }
+            } 
             if (common) {
                 PushCommonHandler(std::move(eventInfo), common);
                 return true;
             }
             return false;
-        }
+        } 
 
         template <class TEventType, class TFunc>
         void PushSpecificHandler(TEventInfo&& eventInfo, const TFunc& f) {
@@ -320,17 +320,17 @@ protected:
             executor->Post(std::move(f));
         }
 
-        const TSettings& Settings;
-        TEventInfo& EventInfo;
-    };
-
+        const TSettings& Settings; 
+        TEventInfo& EventInfo; 
+    }; 
+ 
 
 public:
     TBaseSessionEventsQueue(const TSettings& settings)
         : Settings(settings)
         , Waiter(NThreading::NewPromise<void>(), this)
     {}
-
+ 
     virtual ~TBaseSessionEventsQueue() = default;
 
 
@@ -338,11 +338,11 @@ public:
         CondVar.Signal();
     }
 
-protected:
+protected: 
     virtual bool HasEventsImpl() const {  // Assumes that we're under lock.
-        return !Events.empty() || CloseEvent;
-    }
-
+        return !Events.empty() || CloseEvent; 
+    } 
+ 
     TWaiter PopWaiterImpl() { // Assumes that we're under lock.
         TWaiter waiter(Waiter.ExtractPromise(), this);
         return std::move(waiter);
@@ -353,7 +353,7 @@ protected:
             CondVar.WaitI(Mutex);
         }
     }
-
+ 
     void RenewWaiterImpl() {
         if (Events.empty() && Waiter.GetFuture().HasValue()) {
             Waiter = TWaiter(NThreading::NewPromise<void>(), this);
@@ -373,41 +373,41 @@ public:
         }
     }
 
-protected:
-    const TSettings& Settings;
+protected: 
+    const TSettings& Settings; 
     TWaiter Waiter;
-    std::queue<TEventInfo> Events;
-    TCondVar CondVar;
-    TMutex Mutex;
-    TMaybe<TSessionClosedEvent> CloseEvent;
-    std::atomic<bool> Closed = false;
-};
-
+    std::queue<TEventInfo> Events; 
+    TCondVar CondVar; 
+    TMutex Mutex; 
+    TMaybe<TSessionClosedEvent> CloseEvent; 
+    std::atomic<bool> Closed = false; 
+}; 
+ 
 class IAsyncExecutor : public IExecutor {
-private:
-    virtual void PostImpl(TVector<std::function<void()>>&&) = 0;
-    virtual void PostImpl(std::function<void()>&&) = 0;
-
-public:
+private: 
+    virtual void PostImpl(TVector<std::function<void()>>&&) = 0; 
+    virtual void PostImpl(std::function<void()>&&) = 0; 
+ 
+public: 
     bool IsAsync() const override {
-        return true;
-    }
-    // Post Implementation MUST NOT run f before it returns
-    void Post(TFunction&& f) final;
-};
-
+        return true; 
+    } 
+    // Post Implementation MUST NOT run f before it returns 
+    void Post(TFunction&& f) final; 
+}; 
+ 
 IExecutor::TPtr CreateDefaultExecutor();
-
-
-class TThreadPoolExecutor : public IAsyncExecutor {
-private:
+ 
+ 
+class TThreadPoolExecutor : public IAsyncExecutor { 
+private: 
     std::shared_ptr<IThreadPool> ThreadPool;
-
-public:
+ 
+public: 
     TThreadPoolExecutor(std::shared_ptr<IThreadPool> threadPool);
     TThreadPoolExecutor(size_t threadsCount);
-    ~TThreadPoolExecutor() = default;
-
+    ~TThreadPoolExecutor() = default; 
+ 
     bool IsAsync() const override {
         return !IsFakeThreadPool;
     }
@@ -418,44 +418,44 @@ public:
         }
     }
 
-private:
-    void PostImpl(TVector<TFunction>&& fs) override;
-    void PostImpl(TFunction&& f) override;
+private: 
+    void PostImpl(TVector<TFunction>&& fs) override; 
+    void PostImpl(TFunction&& f) override; 
 
 private:
     bool IsFakeThreadPool = false;
     size_t ThreadsCount = 0;
-};
-
-class TSerialExecutor : public IAsyncExecutor, public std::enable_shared_from_this<TSerialExecutor> {
-private:
-    IAsyncExecutor::TPtr Executor; //!< Wrapped executor that is actually doing the job
-    bool Busy = false; //!< Set if some closure was scheduled for execution and did not finish yet
-    TMutex Mutex = {};
-    TQueue<TFunction> ExecutionQueue = {};
-
-public:
-    TSerialExecutor(IAsyncExecutor::TPtr executor);
-    ~TSerialExecutor() = default;
-
-private:
-    void PostImpl(TVector<TFunction>&& fs) override;
-    void PostImpl(TFunction&& f) override;
-    void PostNext();
-};
-
+}; 
+ 
+class TSerialExecutor : public IAsyncExecutor, public std::enable_shared_from_this<TSerialExecutor> { 
+private: 
+    IAsyncExecutor::TPtr Executor; //!< Wrapped executor that is actually doing the job 
+    bool Busy = false; //!< Set if some closure was scheduled for execution and did not finish yet 
+    TMutex Mutex = {}; 
+    TQueue<TFunction> ExecutionQueue = {}; 
+ 
+public: 
+    TSerialExecutor(IAsyncExecutor::TPtr executor); 
+    ~TSerialExecutor() = default; 
+ 
+private: 
+    void PostImpl(TVector<TFunction>&& fs) override; 
+    void PostImpl(TFunction&& f) override; 
+    void PostNext(); 
+}; 
+ 
 class TSyncExecutor : public IExecutor {
-public:
-    void Post(TFunction&& f) final {
-        return f();
-    }
+public: 
+    void Post(TFunction&& f) final { 
+        return f(); 
+    } 
     bool IsAsync() const final {
-        return false;
-    }
+        return false; 
+    } 
     void DoStart() override {
     }
-};
-
+}; 
+ 
 IExecutor::TPtr CreateGenericExecutor();
-
+ 
 } // namespace NYdb::NPersQueue

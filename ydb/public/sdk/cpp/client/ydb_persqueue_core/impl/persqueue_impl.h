@@ -195,8 +195,8 @@ public:
 
     // Runtime API.
     std::shared_ptr<IReadSession> CreateReadSession(const TReadSessionSettings& settings);
-    std::shared_ptr<ISimpleBlockingWriteSession> CreateSimpleWriteSession(const TWriteSessionSettings& settings);
-    std::shared_ptr<IWriteSession> CreateWriteSession(const TWriteSessionSettings& settings);
+    std::shared_ptr<ISimpleBlockingWriteSession> CreateSimpleWriteSession(const TWriteSessionSettings& settings); 
+    std::shared_ptr<IWriteSession> CreateWriteSession(const TWriteSessionSettings& settings); 
 
     std::shared_ptr<TImpl> GetClientForEndpoint(const TString& clusterEndoint);
 
@@ -204,12 +204,12 @@ public:
 
     std::shared_ptr<IReadSessionConnectionProcessorFactory> CreateReadSessionConnectionProcessorFactory();
 
-    using IWriteSessionConnectionProcessorFactory = ISessionConnectionProcessorFactory<
-            Ydb::PersQueue::V1::StreamingWriteClientMessage,
-            Ydb::PersQueue::V1::StreamingWriteServerMessage>;
-
-    std::shared_ptr<IWriteSessionConnectionProcessorFactory> CreateWriteSessionConnectionProcessorFactory();
-
+    using IWriteSessionConnectionProcessorFactory = ISessionConnectionProcessorFactory< 
+            Ydb::PersQueue::V1::StreamingWriteClientMessage, 
+            Ydb::PersQueue::V1::StreamingWriteServerMessage>; 
+ 
+    std::shared_ptr<IWriteSessionConnectionProcessorFactory> CreateWriteSessionConnectionProcessorFactory(); 
+ 
     NGrpc::IQueueClientContextPtr CreateContext() {
         return Connections_->CreateContext();
     }

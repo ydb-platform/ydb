@@ -1,48 +1,48 @@
-# -*- coding: utf-8 -*-
-
+# -*- coding: utf-8 -*- 
+ 
 import functools
 import itertools
-import logging
-from abc import ABCMeta, abstractmethod
+import logging 
+from abc import ABCMeta, abstractmethod 
 from ydb.tests.library.nemesis.remote_execution import execute_command_with_output_on_hosts
+ 
 
-
-logger = logging.getLogger()
-
-
-class SafetyWarden(object):
-    __metaclass__ = ABCMeta
-
+logger = logging.getLogger() 
+ 
+ 
+class SafetyWarden(object): 
+    __metaclass__ = ABCMeta 
+ 
     def __init__(self, name):
         super(SafetyWarden, self).__init__()
         self.__name = name
 
-    @abstractmethod
-    def list_of_safety_violations(self):
-        pass
-
+    @abstractmethod 
+    def list_of_safety_violations(self): 
+        pass 
+ 
     @property
-    def name(self):
+    def name(self): 
         return self.__name
-
+ 
     def __str__(self):
         return self.name
+ 
 
-
-class AggregateSafetyWarden(SafetyWarden):
-    def __init__(self, list_of_safety_wardens):
+class AggregateSafetyWarden(SafetyWarden): 
+    def __init__(self, list_of_safety_wardens): 
         super(AggregateSafetyWarden, self).__init__('AggregateSafetyWarden')
         self.__list_of_safety_wardens = list(list_of_safety_wardens)
-
-    def list_of_safety_violations(self):
-        all_safety_violations = []
+ 
+    def list_of_safety_violations(self): 
+        all_safety_violations = [] 
         for warden in self.__list_of_safety_wardens:
-            all_safety_violations.extend(
-                warden.list_of_safety_violations()
-            )
-        return all_safety_violations
-
-
+            all_safety_violations.extend( 
+                warden.list_of_safety_violations() 
+            ) 
+        return all_safety_violations 
+ 
+ 
 def split_in_chunks(list_of_lines, chunk_size):
     """
     >>> a = list(map(str, range(6)))
@@ -132,7 +132,7 @@ class GrepLogFileForMarkers(AbstractRemoteCommandExecutionSafetyWarden):
             + [
                 log_file_name,
             ]
-        )
+        ) 
 
         remote_command.extend(
             [

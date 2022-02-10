@@ -368,7 +368,7 @@ class KikimrConfigGenerator(object):
             {"vdisk_locations": [{"node_id": node_id, "pdisk_id": pdisk_id, "pdisk_guid": pdisk_id, 'vdisk_slot_id': 0}]}
         )
 
-    def __build(self):
+    def __build(self): 
         datacenter_id_generator = itertools.cycle(self._dcs)
         self.yaml_config["blob_storage_config"] = {}
         self.yaml_config["blob_storage_config"]["service_set"] = {}

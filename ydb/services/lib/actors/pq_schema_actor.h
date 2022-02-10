@@ -58,7 +58,7 @@ namespace NKikimr::NGRpcProxy::V1 {
         {
         }
 
-        void PrepareTopicPath(const NActors::TActorContext &ctx) { // ToDo !!
+        void PrepareTopicPath(const NActors::TActorContext &ctx) { // ToDo !! 
             TopicPath = NPersQueue::GetFullTopicPath(ctx, this->Request_->GetDatabaseName(), TopicPath);
         }
 

@@ -665,10 +665,10 @@ void TReadSessionImplTestSetup::AssertNoEvents() {
     UNIT_ASSERT(!event);
 }
 
-using NYdb::NPersQueue::NTests::TPersQueueYdbSdkTestSetup;
+using NYdb::NPersQueue::NTests::TPersQueueYdbSdkTestSetup; 
 Y_UNIT_TEST_SUITE(PersQueueSdkReadSessionTest) {
     void ReadSessionImpl(bool close, bool commit, bool explicitlySpecifiedPartitions = false) {
-        NYdb::NPersQueue::NTests::TPersQueueYdbSdkTestSetup setup("ReadSession");
+        NYdb::NPersQueue::NTests::TPersQueueYdbSdkTestSetup setup("ReadSession"); 
         setup.WriteToTopic({"message1", "message2"});
         auto settings = setup.GetReadSessionSettings();
         if (explicitlySpecifiedPartitions) {

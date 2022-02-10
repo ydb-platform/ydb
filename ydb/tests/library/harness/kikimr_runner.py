@@ -30,7 +30,7 @@ def get_unique_path_for_current_test(output_path, sub_folder):
 
     return os.path.join(output_path, test_name, sub_folder)
 
-
+ 
 def ensure_path_exists(path):
     if not os.path.isdir(path):
         os.makedirs(path)
@@ -119,20 +119,20 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
         if self.__configurator.suppress_version_check:
             command.append("--suppress-version-check")
 
-        if self.__node_broker_port is not None:
+        if self.__node_broker_port is not None: 
             command.append("--node-broker=%s%s:%d" % (
                 "grpcs://" if self.__configurator.grpc_ssl_enable else "",
                 self.host,
                 self.__node_broker_port))
         else:
-            command.append("--node=%d" % self.node_id)
+            command.append("--node=%d" % self.node_id) 
 
         if self.__configurator.grpc_ssl_enable:
             command.append(
                 "--ca=%s" % self.__configurator.grpc_tls_ca_path
             )
 
-        if self.__role == 'slot':
+        if self.__role == 'slot': 
             command.append(
                 "--tenant=%s" % self._tenant_affiliation
             )
@@ -165,12 +165,12 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
         logger.info("Final command: %s", ' '.join(command).replace(self.__config_path, '$CFG_DIR_PATH'))
         return command
 
-    def stop(self):
+    def stop(self): 
         try:
             super(KiKiMRNode, self).stop()
         finally:
             logger.info("Stopped node %s", self)
-
+ 
     def kill(self):
         try:
             super(KiKiMRNode, self).kill()
@@ -431,7 +431,7 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
             self.nodes[node_id].format_pdisk(**pdisk)
 
     def __add_bs_box(self):
-        request = bs.TConfigRequest()
+        request = bs.TConfigRequest() 
 
         for node_id in self.__configurator.all_node_ids():
             cmd = request.Command.add()
@@ -483,7 +483,7 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
     def add_storage_pool(self, name=None, kind="rot", pdisk_user_kind=0, erasure=None):
         if erasure is None:
             erasure = self.__configurator.static_erasure
-        request = bs.TConfigRequest()
+        request = bs.TConfigRequest() 
         cmd = request.Command.add()
         cmd.DefineStoragePool.BoxId = 1
 
@@ -505,16 +505,16 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
 
     def __wait_for_bs_controller_to_start(self):
         monitors = [node.monitor for node in self.nodes.values()]
-
-        def predicate():
-            return blobstorage_controller_has_started_on_some_node(monitors)
-
+ 
+        def predicate(): 
+            return blobstorage_controller_has_started_on_some_node(monitors) 
+ 
         timeout_seconds = yatest_common.plain_or_under_sanitizer(120, 240)
         bs_controller_started = wait_for(
             predicate=predicate, timeout_seconds=timeout_seconds, step_seconds=1.0, multiply=1.3
         )
         assert bs_controller_started
-
+ 
 
 class KikimrExternalNode(daemon.ExternalNodeDaemon, kikimr_node_interface.NodeInterface):
     def __init__(

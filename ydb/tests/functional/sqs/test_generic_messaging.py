@@ -5,22 +5,22 @@ import logging
 import time
 from collections import OrderedDict
 
-import pytest
+import pytest 
 from hamcrest import assert_that, equal_to, not_none, greater_than, has_item, has_items, raises, is_not, not_, empty, instance_of
 
 from sqs_requests_client import SqsMessageAttribute, SqsSendMessageParams, SqsChangeMessageVisibilityParams
 
-from sqs_matchers import ReadResponseMatcher, extract_message_ids
+from sqs_matchers import ReadResponseMatcher, extract_message_ids 
 from sqs_test_base import to_bytes
 from sqs_test_base import KikimrSqsTestBase, get_test_with_sqs_installation_by_path, get_test_with_sqs_tenant_installation, IS_FIFO_PARAMS
 
 
 class SqsGenericMessagingTest(KikimrSqsTestBase):
     @pytest.mark.parametrize(**IS_FIFO_PARAMS)
-    def test_send_message(self, is_fifo):
-        if is_fifo:
-            self.queue_name = self.queue_name + '.fifo'
-        created_queue_url = self._create_queue_and_assert(self.queue_name, is_fifo=is_fifo)
+    def test_send_message(self, is_fifo): 
+        if is_fifo: 
+            self.queue_name = self.queue_name + '.fifo' 
+        created_queue_url = self._create_queue_and_assert(self.queue_name, is_fifo=is_fifo) 
         self.seq_no += 1
         self._send_message_and_assert(created_queue_url, 'test_send_message', seq_no=self.seq_no if is_fifo else None, group_id='group' if is_fifo else None)
 
@@ -130,11 +130,11 @@ class SqsGenericMessagingTest(KikimrSqsTestBase):
         )
 
     @pytest.mark.parametrize(**IS_FIFO_PARAMS)
-    def test_send_and_read_message(self, is_fifo):
-        if is_fifo:
-            self.queue_name = self.queue_name + '.fifo'
-
-        created_queue_url = self._create_queue_and_assert(self.queue_name, is_fifo=is_fifo)
+    def test_send_and_read_message(self, is_fifo): 
+        if is_fifo: 
+            self.queue_name = self.queue_name + '.fifo' 
+ 
+        created_queue_url = self._create_queue_and_assert(self.queue_name, is_fifo=is_fifo) 
         body = '<' + self._msg_body_template.format('trololo') + '<'  # to ensure that we have correct xml
         attributes = {
             SqsMessageAttribute('a', 'String', 'xyz'),
@@ -304,89 +304,89 @@ class SqsGenericMessagingTest(KikimrSqsTestBase):
         )
 
     @pytest.mark.parametrize(**IS_FIFO_PARAMS)
-    def test_create_q_twice(self, is_fifo):
-        if is_fifo:
-            self.queue_name = self.queue_name + '.fifo'
-        created_queue_url = self._create_queue_and_assert(self.queue_name, is_fifo=is_fifo)
+    def test_create_q_twice(self, is_fifo): 
+        if is_fifo: 
+            self.queue_name = self.queue_name + '.fifo' 
+        created_queue_url = self._create_queue_and_assert(self.queue_name, is_fifo=is_fifo) 
         self.seq_no += 1
         message_id = self._send_message_and_assert(created_queue_url, self._msg_body_template, seq_no=self.seq_no if is_fifo else None, group_id='group' if is_fifo else None)
-        second_url = self._create_queue_and_assert(self.queue_name, is_fifo=is_fifo)
+        second_url = self._create_queue_and_assert(self.queue_name, is_fifo=is_fifo) 
         assert_that(second_url, equal_to(created_queue_url))
 
-        self._read_messages_and_assert(
+        self._read_messages_and_assert( 
             created_queue_url,
             messages_count=1,
             visibility_timeout=1000, matcher=ReadResponseMatcher().with_message_ids([message_id, ])
-        )
+        ) 
 
-    def test_send_and_read_multiple_messages(self):
-        queue_url = self._create_queue_and_assert(self.queue_name, is_fifo=False)
-        first_message_id = self._send_message_and_assert(
-            queue_url, self._msg_body_template.format('0')
-        )
+    def test_send_and_read_multiple_messages(self): 
+        queue_url = self._create_queue_and_assert(self.queue_name, is_fifo=False) 
+        first_message_id = self._send_message_and_assert( 
+            queue_url, self._msg_body_template.format('0') 
+        ) 
         time.sleep(5)
-        second_message_id = self._send_message_and_assert(
-            queue_url, self._msg_body_template.format('1')
-        )
-        self._read_messages_and_assert(
+        second_message_id = self._send_message_and_assert( 
+            queue_url, self._msg_body_template.format('1') 
+        ) 
+        self._read_messages_and_assert( 
             queue_url, messages_count=2, visibility_timeout=1000,
-            matcher=ReadResponseMatcher().with_message_ids(
-                [first_message_id, second_message_id]
-            ).with_messages_data([self._msg_body_template.format('0'), self._msg_body_template.format('1')])
+            matcher=ReadResponseMatcher().with_message_ids( 
+                [first_message_id, second_message_id] 
+            ).with_messages_data([self._msg_body_template.format('0'), self._msg_body_template.format('1')]) 
         )
 
-    def test_read_dont_stall(self):
-        queue_url = self._create_queue_and_assert(self.queue_name, is_fifo=False)
-        first_pack_size = 5
-        second_pack_size = 5
-        first_pack_ids = self._send_messages(
-            queue_url, message_count=first_pack_size, msg_body_template=self._msg_body_template
-        )
-        self._send_messages(queue_url, message_count=second_pack_size, msg_body_template=self._msg_body_template)
-        self._read_messages_and_assert(
+    def test_read_dont_stall(self): 
+        queue_url = self._create_queue_and_assert(self.queue_name, is_fifo=False) 
+        first_pack_size = 5 
+        second_pack_size = 5 
+        first_pack_ids = self._send_messages( 
+            queue_url, message_count=first_pack_size, msg_body_template=self._msg_body_template 
+        ) 
+        self._send_messages(queue_url, message_count=second_pack_size, msg_body_template=self._msg_body_template) 
+        self._read_messages_and_assert( 
             queue_url, messages_count=10, visibility_timeout=1000, matcher=ReadResponseMatcher(
             ).with_n_or_more_messages(first_pack_size + 1).with_these_or_more_message_ids(first_pack_ids)
-        )
-
-    def test_multi_read_dont_stall(self):
-        queue_url = self._create_queue_and_assert(self.queue_name)
-        pack_size = 7
-        total_packs = 3
-        all_ids = set()
-        read_ids = set()
-        for _ in range(total_packs):
-            all_ids.update(self._send_messages(
-                queue_url, message_count=pack_size, msg_body_template=self._msg_body_template
-            ))
-            result = self._read_messages_and_assert(
+        ) 
+ 
+    def test_multi_read_dont_stall(self): 
+        queue_url = self._create_queue_and_assert(self.queue_name) 
+        pack_size = 7 
+        total_packs = 3 
+        all_ids = set() 
+        read_ids = set() 
+        for _ in range(total_packs): 
+            all_ids.update(self._send_messages( 
+                queue_url, message_count=pack_size, msg_body_template=self._msg_body_template 
+            )) 
+            result = self._read_messages_and_assert( 
                 queue_url, messages_count=10, visibility_timeout=1000,
-                matcher=ReadResponseMatcher().with_some_of_message_ids(all_ids - read_ids)
-            )
-            if result:
-                read_ids.update(extract_message_ids(result))
-
-        assert_that(
-            len(read_ids), greater_than(pack_size),
-            "Wrote {packs} packs of size {size}, but got only {total_read} messages after all read attempts".format(
-                packs=total_packs, size=pack_size, total_read=len(read_ids)
-            )
-        )
-
-    def test_visibility_timeout_works(self):
-        total_msg_count = 10
+                matcher=ReadResponseMatcher().with_some_of_message_ids(all_ids - read_ids) 
+            ) 
+            if result: 
+                read_ids.update(extract_message_ids(result)) 
+ 
+        assert_that( 
+            len(read_ids), greater_than(pack_size), 
+            "Wrote {packs} packs of size {size}, but got only {total_read} messages after all read attempts".format( 
+                packs=total_packs, size=pack_size, total_read=len(read_ids) 
+            ) 
+        ) 
+ 
+    def test_visibility_timeout_works(self): 
+        total_msg_count = 10 
         visibility_timeout = 5
 
         before_read_time = time.time()
-        self._create_queue_send_x_messages_read_y_messages(
+        self._create_queue_send_x_messages_read_y_messages( 
             self.queue_name, send_count=total_msg_count, read_count=1, visibility_timeout=visibility_timeout,
             msg_body_template=self._msg_body_template, is_fifo=False
         )
-        msg_data = [self._msg_body_template.format(i) for i in range(total_msg_count)]
-
-        already_read_id = extract_message_ids(self.read_result)[0]
+        msg_data = [self._msg_body_template.format(i) for i in range(total_msg_count)] 
+ 
+        already_read_id = extract_message_ids(self.read_result)[0] 
         read_result = self._read_messages_and_assert(
             self.queue_url, messages_count=5, visibility_timeout=visibility_timeout, wait_timeout=1,
-            matcher=ReadResponseMatcher().with_some_of_message_ids(self.message_ids)
+            matcher=ReadResponseMatcher().with_some_of_message_ids(self.message_ids) 
                 .with_n_messages(5)
         )
 
@@ -396,25 +396,25 @@ class SqsGenericMessagingTest(KikimrSqsTestBase):
             assert_that(read_ids, not_(has_item(already_read_id)))
 
         time.sleep(visibility_timeout + 0.1)
-        self._read_messages_and_assert(
+        self._read_messages_and_assert( 
             self.queue_url, messages_count=10, visibility_timeout=1000,
-            matcher=ReadResponseMatcher().with_message_ids(self.message_ids).with_messages_data(msg_data)
+            matcher=ReadResponseMatcher().with_message_ids(self.message_ids).with_messages_data(msg_data) 
         )
 
-    def test_visibility_timeout_expires_on_wait_timeout(self):
-        queue_url = self._create_queue_and_assert(self.queue_name, is_fifo=False)
-        message_ids = self._send_messages(
-            queue_url, message_count=10, msg_body_template=self._msg_body_template
-        )
-        # noinspection PyTypeChecker
-        self._read_messages_and_assert(
-            queue_url, messages_count=10, matcher=ReadResponseMatcher().with_message_ids(message_ids),
-            visibility_timeout=9
-        )
-        self._read_messages_and_assert(
+    def test_visibility_timeout_expires_on_wait_timeout(self): 
+        queue_url = self._create_queue_and_assert(self.queue_name, is_fifo=False) 
+        message_ids = self._send_messages( 
+            queue_url, message_count=10, msg_body_template=self._msg_body_template 
+        ) 
+        # noinspection PyTypeChecker 
+        self._read_messages_and_assert( 
+            queue_url, messages_count=10, matcher=ReadResponseMatcher().with_message_ids(message_ids), 
+            visibility_timeout=9 
+        ) 
+        self._read_messages_and_assert( 
             queue_url, messages_count=10, visibility_timeout=1000, matcher=ReadResponseMatcher().with_some_of_message_ids(message_ids), wait_timeout=10,
-        )
-
+        ) 
+ 
     @pytest.mark.parametrize(**IS_FIFO_PARAMS)
     def test_zero_visibility_timeout_works(self, is_fifo):
         if is_fifo:
@@ -633,24 +633,24 @@ class SqsGenericMessagingTest(KikimrSqsTestBase):
             raises(RuntimeError, pattern='InvalidParameterValue')
         )
 
-    def test_delete_message_works(self):
-        self._create_queue_send_x_messages_read_y_messages(
+    def test_delete_message_works(self): 
+        self._create_queue_send_x_messages_read_y_messages( 
             self.queue_name, send_count=10, read_count=2, visibility_timeout=0,
-            msg_body_template=self._msg_body_template
+            msg_body_template=self._msg_body_template 
         )
         handle = self.read_result[0]['ReceiptHandle']
-        self.message_ids.remove(self.read_result[0]['MessageId'])
-
+        self.message_ids.remove(self.read_result[0]['MessageId']) 
+ 
         assert_that(
-            self._sqs_api.delete_message(self.queue_url, handle), not_none()
+            self._sqs_api.delete_message(self.queue_url, handle), not_none() 
         )
         # check double deletion
         assert_that(
             self._sqs_api.delete_message(self.queue_url, handle), not_none()
         )
-        self._read_messages_and_assert(
+        self._read_messages_and_assert( 
             self.queue_url, messages_count=10, visibility_timeout=1000,
-            matcher=ReadResponseMatcher().with_message_ids(self.message_ids)
+            matcher=ReadResponseMatcher().with_message_ids(self.message_ids) 
         )
 
         counters = self._get_sqs_counters()
@@ -774,37 +774,37 @@ class SqsGenericMessagingTest(KikimrSqsTestBase):
             else:
                 assert_that(messages_count_metric, equal_to(0))
 
-    def test_can_read_new_written_data_on_visibility_timeout(self):
-        visibility_timeout = 15
-        self._create_queue_send_x_messages_read_y_messages(
-            self.queue_name, send_count=7, read_count=4, visibility_timeout=visibility_timeout,
-            msg_body_template=self._msg_body_template
+    def test_can_read_new_written_data_on_visibility_timeout(self): 
+        visibility_timeout = 15 
+        self._create_queue_send_x_messages_read_y_messages( 
+            self.queue_name, send_count=7, read_count=4, visibility_timeout=visibility_timeout, 
+            msg_body_template=self._msg_body_template 
         )
         begin_time = time.time()
-        first_pack_ids = self.message_ids
-        second_pack_ids = self._send_messages(
-            self.queue_url, message_count=3, msg_body_template=self._msg_body_template
-        )
-        message_ids = set(first_pack_ids) - set(extract_message_ids(self.read_result))
-        message_ids.update(second_pack_ids)
+        first_pack_ids = self.message_ids 
+        second_pack_ids = self._send_messages( 
+            self.queue_url, message_count=3, msg_body_template=self._msg_body_template 
+        ) 
+        message_ids = set(first_pack_ids) - set(extract_message_ids(self.read_result)) 
+        message_ids.update(second_pack_ids) 
 
         visibility_timeout_2 = 15
-        self._read_messages_and_assert(
+        self._read_messages_and_assert( 
             self.queue_url, messages_count=10, visibility_timeout=visibility_timeout_2,
             matcher=ReadResponseMatcher().with_these_or_more_message_ids(message_ids).with_n_or_more_messages(6),
-        )
+        ) 
         remaining_time = visibility_timeout - (time.time() - begin_time)  # for first pack read
         time.sleep(max(remaining_time + 0.1, visibility_timeout_2 + 0.1, 0))
-        self._read_messages_and_assert(
+        self._read_messages_and_assert( 
             self.queue_url, messages_count=10, visibility_timeout=1000, matcher=ReadResponseMatcher().with_message_ids(
-                first_pack_ids + second_pack_ids
-            )
-        )
+                first_pack_ids + second_pack_ids 
+            ) 
+        ) 
 
-    def test_partial_delete_works(self):
-        self._create_queue_send_x_messages_read_y_messages(
-            self.queue_name, send_count=10, read_count=5, visibility_timeout=5,
-            msg_body_template=self._msg_body_template
+    def test_partial_delete_works(self): 
+        self._create_queue_send_x_messages_read_y_messages( 
+            self.queue_name, send_count=10, read_count=5, visibility_timeout=5, 
+            msg_body_template=self._msg_body_template 
         )
         handle = self.read_result[4]['ReceiptHandle']  # select the last read message to avoid race with visibility timeout while reading
         self.message_ids.remove(self.read_result[4]['MessageId'])
@@ -813,18 +813,18 @@ class SqsGenericMessagingTest(KikimrSqsTestBase):
             not_none()
         )
         time.sleep(6)
-        self._read_messages_and_assert(
+        self._read_messages_and_assert( 
             self.queue_url, messages_count=10, visibility_timeout=1000,
-            matcher=ReadResponseMatcher().with_message_ids(self.message_ids)
+            matcher=ReadResponseMatcher().with_message_ids(self.message_ids) 
         )
-
+ 
     def test_wrong_delete_fails(self):
         self._create_queue_send_x_messages_read_y_messages(
             self.queue_name, send_count=1, read_count=1, visibility_timeout=5,
             msg_body_template=self._msg_body_template
         )
         handle = self.read_result[0]['ReceiptHandle']
-
+ 
         def call_delete_invalid_handle():
             self._sqs_api.delete_message(self.queue_url, handle + handle),  # wrong handle
         assert_that(

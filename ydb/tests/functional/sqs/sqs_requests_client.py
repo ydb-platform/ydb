@@ -3,9 +3,9 @@
 
 import itertools
 import logging
-import urllib
-import requests
-import xmltodict
+import urllib 
+import requests 
+import xmltodict 
 import six
 
 from ydb.tests.library.common.helpers import wrap_in_list
@@ -83,7 +83,7 @@ class SqsHttpApi(object):
         self.__auth_headers = auth_headers(user, security_token, iam_token)
         if not server.startswith('http'):
             server = 'http://' + server
-        self.__request = requests.Request(
+        self.__request = requests.Request( 
             'POST',
             "{}:{}".format(server, port),
             headers=auth_headers(user, security_token, iam_token)
@@ -93,8 +93,8 @@ class SqsHttpApi(object):
             "{}:{}/private".format(server, port),
             headers=auth_headers(user, security_token, iam_token)
         )
-        self.__session = requests.Session()
-        self.__raise_on_error = raise_on_error
+        self.__session = requests.Session() 
+        self.__raise_on_error = raise_on_error 
         self.__user = user
         self.__timeout = timeout
         self.__security_token = security_token
@@ -117,9 +117,9 @@ class SqsHttpApi(object):
         request.data = urllib.parse.urlencode(params)
         logger.debug("Execute request {} {} from user {} with params: {}".format(
             request.method, request.url, self.__user, request.data)
-        )
+        ) 
         prep = request.prepare()
-        try:
+        try: 
             response = self.__session.send(prep, timeout=self.__timeout)
         except (requests.ConnectionError, requests.exceptions.Timeout) as ex:
             logging.debug("Request failed with connection exception {}: {}".format(type(ex), ex))
@@ -127,44 +127,44 @@ class SqsHttpApi(object):
                 raise
             else:
                 response = None
-        return self._process_response(
-            response,
-            extract_result_method, default
-        )
+        return self._process_response( 
+            response, 
+            extract_result_method, default 
+        ) 
 
-    def _process_response(self, response, extract_method, default=None):
-        if response is None:
+    def _process_response(self, response, extract_method, default=None): 
+        if response is None: 
             logging.debug('Returning {} by default'.format(default))
-            return default
-        if response.status_code != 200:
+            return default 
+        if response.status_code != 200: 
             logger.warn("Last request failed with code {}, reason '{}' and text '{}'".format(
                 response.status_code, response.reason, response.text
             ))
             # Assert that no internal info will be given to user
             assert response.text.find('.cpp:') == -1, 'No internal info should be given to user'
-            if self.__raise_on_error:
-                raise RuntimeError(
-                    "Request {} failed with status {} and text {}".format(
-                        self.__request.data, response.status_code, response.text
-                    )
-                )
-            return default
+            if self.__raise_on_error: 
+                raise RuntimeError( 
+                    "Request {} failed with status {} and text {}".format( 
+                        self.__request.data, response.status_code, response.text 
+                    ) 
+                ) 
+            return default 
 
         logging.debug('Parsing response: {}'.format(response.text))
-        result = xmltodict.parse(response.text)
+        result = xmltodict.parse(response.text) 
         try:
-            return extract_method(result)
+            return extract_method(result) 
         except (KeyError, TypeError) as ex:
             logger.error("Could not process response from SQS: {}. {}: {}".format(result, type(ex), ex))
-            return default
+            return default 
 
-    def create_user(self, username):
+    def create_user(self, username): 
         return self.execute_request(
-            action='CreateUser',
-            extract_result_method=lambda x: x['CreateUserResponse']['ResponseMetadata'],
-            UserName=username
-        )
-
+            action='CreateUser', 
+            extract_result_method=lambda x: x['CreateUserResponse']['ResponseMetadata'], 
+            UserName=username 
+        ) 
+ 
     def delete_user(self, username):
         return self.execute_request(
             action='DeleteUser',
@@ -172,24 +172,24 @@ class SqsHttpApi(object):
             UserName=username
         )
 
-    def list_users(self):
+    def list_users(self): 
         return self.execute_request(
-            action='ListUsers',
+            action='ListUsers', 
             extract_result_method=lambda x: wrap_in_list(x['ListUsersResponse']['ListUsersResult']['UserName'])
-        )
-
-    def list_queues(self, name_prefix=None):
-        if name_prefix is not None:
+        ) 
+ 
+    def list_queues(self, name_prefix=None): 
+        if name_prefix is not None: 
             return self.execute_request(
-                action='ListQueues',
+                action='ListQueues', 
                 extract_result_method=lambda x: wrap_in_list(x['ListQueuesResponse']['ListQueuesResult']['QueueUrl']), default=(),
-                QueueNamePrefix=name_prefix
-            )
-        else:
+                QueueNamePrefix=name_prefix 
+            ) 
+        else: 
             return self.execute_request(
-                action='ListQueues',
+                action='ListQueues', 
                 extract_result_method=lambda x: wrap_in_list(x['ListQueuesResponse']['ListQueuesResult']['QueueUrl']), default=(),
-            )
+            ) 
 
     def private_count_queues(self):
         return self.execute_request(
@@ -198,32 +198,32 @@ class SqsHttpApi(object):
             extract_result_method=lambda x: x['CountQueuesResponse']['CountQueuesResult']['Count'],
         )
 
-    def create_queue(self, queue_name, is_fifo=False, attributes=None):
-        # if is_fifo and not queue_name.endswith('.fifo'):
-        #     return None
-        if attributes is None:
+    def create_queue(self, queue_name, is_fifo=False, attributes=None): 
+        # if is_fifo and not queue_name.endswith('.fifo'): 
+        #     return None 
+        if attributes is None: 
             attributes = dict()
-        if is_fifo:
+        if is_fifo: 
             attributes = dict(attributes)  # copy
-            attributes['FifoQueue'] = 'true'
-        params = {}
-        for i, (k, v) in enumerate(attributes.items()):
-            params['Attribute.{id}.Name'.format(id=i+1)] = k
-            params['Attribute.{id}.Value'.format(id=i + 1)] = v
-
+            attributes['FifoQueue'] = 'true' 
+        params = {} 
+        for i, (k, v) in enumerate(attributes.items()): 
+            params['Attribute.{id}.Name'.format(id=i+1)] = k 
+            params['Attribute.{id}.Value'.format(id=i + 1)] = v 
+ 
         return self.execute_request(
-            action='CreateQueue',
-            extract_result_method=lambda x: x['CreateQueueResponse']['CreateQueueResult']['QueueUrl'],
-            QueueName=queue_name,
-            **params
-        )
+            action='CreateQueue', 
+            extract_result_method=lambda x: x['CreateQueueResponse']['CreateQueueResult']['QueueUrl'], 
+            QueueName=queue_name, 
+            **params 
+        ) 
 
-    def delete_queue(self, queue_url):
+    def delete_queue(self, queue_url): 
         return self.execute_request(
-            action='DeleteQueue',
-            extract_result_method=lambda x: x['DeleteQueueResponse']['ResponseMetadata']['RequestId'],
-            QueueUrl=queue_url
-        )
+            action='DeleteQueue', 
+            extract_result_method=lambda x: x['DeleteQueueResponse']['ResponseMetadata']['RequestId'], 
+            QueueUrl=queue_url 
+        ) 
 
     def private_delete_queue_batch(self, queue_urls):
         args = {}
@@ -260,10 +260,10 @@ class SqsHttpApi(object):
 
     def get_queue_url(self, queue_name):
         return self.execute_request(
-            action='GetQueueUrl',
-            extract_result_method=lambda x: x['GetQueueUrlResponse']['GetQueueUrlResult']['QueueUrl'],
-            QueueName=queue_name
-        )
+            action='GetQueueUrl', 
+            extract_result_method=lambda x: x['GetQueueUrlResponse']['GetQueueUrlResult']['QueueUrl'], 
+            QueueName=queue_name 
+        ) 
 
     def list_dead_letter_source_queues(self, queue_url):
         return self.execute_request(
@@ -383,10 +383,10 @@ class SqsHttpApi(object):
                 )] = attr.value
 
         return self.execute_request(
-            action='SendMessage',
-            extract_result_method=lambda x: x['SendMessageResponse']['SendMessageResult']['MessageId'],
-            **params
-        )
+            action='SendMessage', 
+            extract_result_method=lambda x: x['SendMessageResponse']['SendMessageResult']['MessageId'], 
+            **params 
+        ) 
 
     def send_message_batch(self, queue_url, send_message_params_list):
         params = {
@@ -470,31 +470,31 @@ class SqsHttpApi(object):
             params['ReceiveRequestAttemptId'] = receive_request_attempt_id
 
         return self.execute_request(
-            action='ReceiveMessage',
-            extract_result_method=lambda x: wrap_in_list(
-                x['ReceiveMessageResponse']['ReceiveMessageResult']['Message']
-            ),
-            **params
+            action='ReceiveMessage', 
+            extract_result_method=lambda x: wrap_in_list( 
+                x['ReceiveMessageResponse']['ReceiveMessageResult']['Message'] 
+            ), 
+            **params 
         )
 
     def delete_message(self, queue_url, handle):
         return self.execute_request(
-            action='DeleteMessage',
-            extract_result_method=lambda x: x['DeleteMessageResponse']['ResponseMetadata']['RequestId'],
-            QueueUrl=queue_url, ReceiptHandle=handle
-        )
-
-    def delete_message_batch(self, queue_url, message_handles):
-        args = {}
-        for i, handle in enumerate(message_handles):
+            action='DeleteMessage', 
+            extract_result_method=lambda x: x['DeleteMessageResponse']['ResponseMetadata']['RequestId'], 
+            QueueUrl=queue_url, ReceiptHandle=handle 
+        ) 
+ 
+    def delete_message_batch(self, queue_url, message_handles): 
+        args = {} 
+        for i, handle in enumerate(message_handles): 
             args["DeleteMessageBatchRequestEntry.{}.Id".format(i+1)] = str(i)
-            args["DeleteMessageBatchRequestEntry.{}.ReceiptHandle".format(i+1)] = handle
-
+            args["DeleteMessageBatchRequestEntry.{}.ReceiptHandle".format(i+1)] = handle 
+ 
         resp = self.execute_request(
-            action='DeleteMessageBatch',
+            action='DeleteMessageBatch', 
             extract_result_method=lambda x: x['DeleteMessageBatchResponse'],
-            QueueUrl=queue_url, **args
-        )
+            QueueUrl=queue_url, **args 
+        ) 
         result = [dict() for i in six.moves.range(len(message_handles))]
         results = resp.get('DeleteMessageBatchResult')
         logging.debug('results: {}'.format(results))
@@ -506,7 +506,7 @@ class SqsHttpApi(object):
                     i = int(res['Id'])
                     assert i < len(result) and i >= 0
                     result[i]['DeleteMessageBatchResultEntry'] = res
-
+ 
             errors = results.get('BatchResultErrorEntry')
             logging.debug('errors: {}'.format(errors))
             if errors:
@@ -515,7 +515,7 @@ class SqsHttpApi(object):
                     assert i < len(result) and i >= 0
                     result[i]['BatchResultErrorEntry'] = err
         return result
-
+ 
     def change_message_visibility(self, queue_url, handle, visibility_timeout):
         return self.execute_request(
             action='ChangeMessageVisibility',
@@ -557,19 +557,19 @@ class SqsHttpApi(object):
         return result
 
 
-class SqsHttpMinigunApi(SqsHttpApi):
-    def _process_response(self, response, extract_method, default=None):
-        if response is None:
-            return -1, default
-        try:
-            parsed = xmltodict.parse(response.text)
-        except xmltodict.expat.ExpatError:
-            return response.status_code, default
-
-        if response.status_code != 200:
-            extract_method = lambda x: x['ErrorResponse']['Error']['Message']
-        try:
-            result = extract_method(parsed)
-        except (KeyError, TypeError):
-            result = default
-        return response.status_code, result
+class SqsHttpMinigunApi(SqsHttpApi): 
+    def _process_response(self, response, extract_method, default=None): 
+        if response is None: 
+            return -1, default 
+        try: 
+            parsed = xmltodict.parse(response.text) 
+        except xmltodict.expat.ExpatError: 
+            return response.status_code, default 
+ 
+        if response.status_code != 200: 
+            extract_method = lambda x: x['ErrorResponse']['Error']['Message'] 
+        try: 
+            result = extract_method(parsed) 
+        except (KeyError, TypeError): 
+            result = default 
+        return response.status_code, result 

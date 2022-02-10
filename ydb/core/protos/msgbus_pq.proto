@@ -137,7 +137,7 @@ message TPersQueuePartitionRequest {
     optional TCmdUpdateWriteTimestamp CmdUpdateWriteTimestamp = 17;
 
     optional bool IsDirectWrite = 18 [default = false];
-    optional uint64 PutUnitsSize = 19;
+    optional uint64 PutUnitsSize = 19; 
 }
 
 message TPersQueueMetaRequest {

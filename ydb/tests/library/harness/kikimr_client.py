@@ -91,9 +91,9 @@ class KiKiMRMessageBusClient(object):
 
                 time.sleep(self.__retry_sleep_seconds)
 
-    def close(self):
+    def close(self): 
         self._channel.close()
-
+ 
     def update_self_heal(self, enable, domain=1):
         request = msgbus.TBlobStorageConfigRequest()
         request.Domain = domain
@@ -392,5 +392,5 @@ class KiKiMRMessageBusClient(object):
         request.Alive = True
         return self.invoke(request, 'TabletStateRequest')
 
-    def __del__(self):
-        self.close()
+    def __del__(self): 
+        self.close() 

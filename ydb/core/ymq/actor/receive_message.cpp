@@ -209,14 +209,14 @@ private:
                 // counters
                 const TDuration messageResideDuration = TActivationContext::Now() - message.SentTimestamp;
                 COLLECT_HISTOGRAM_COUNTER(QueueCounters_, MessageReceiveAttempts, message.ReceiveCount);
-                COLLECT_HISTOGRAM_COUNTER(QueueCounters_, receive_attempts_count_rate, message.ReceiveCount);
+                COLLECT_HISTOGRAM_COUNTER(QueueCounters_, receive_attempts_count_rate, message.ReceiveCount); 
                 COLLECT_HISTOGRAM_COUNTER(QueueCounters_, MessageReside_Duration, messageResideDuration.MilliSeconds());
-                COLLECT_HISTOGRAM_COUNTER(QueueCounters_, reside_duration_milliseconds, messageResideDuration.MilliSeconds());
-                INC_COUNTER_COUPLE(QueueCounters_, ReceiveMessage_Count, received_count_per_second);
-                ADD_COUNTER_COUPLE(QueueCounters_, ReceiveMessage_BytesRead, received_bytes_per_second, message.Data.size());
+                COLLECT_HISTOGRAM_COUNTER(QueueCounters_, reside_duration_milliseconds, messageResideDuration.MilliSeconds()); 
+                INC_COUNTER_COUPLE(QueueCounters_, ReceiveMessage_Count, received_count_per_second); 
+                ADD_COUNTER_COUPLE(QueueCounters_, ReceiveMessage_BytesRead, received_bytes_per_second, message.Data.size()); 
             }
             if (ev->Get()->Messages.empty()) {
-                INC_COUNTER_COUPLE(QueueCounters_, ReceiveMessage_EmptyCount, empty_receive_attempts_count_per_second);
+                INC_COUNTER_COUPLE(QueueCounters_, ReceiveMessage_EmptyCount, empty_receive_attempts_count_per_second); 
             }
         }
         SendReplyAndDie();

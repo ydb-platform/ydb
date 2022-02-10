@@ -146,7 +146,7 @@ void TPurgeActor::MakeStage2Request(ui64 cleanupVersion, const TValue& messages,
         if (status == TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecComplete) {
             const TValue val(TValue::Create(ev.GetExecutionEngineEvaluatedResponse()));
             const ui64 messagesDeleted = val["messagesDeleted"];
-            ADD_COUNTER_COUPLE(Counters_, MessagesPurged, purged_count_per_second, messagesDeleted);
+            ADD_COUNTER_COUPLE(Counters_, MessagesPurged, purged_count_per_second, messagesDeleted); 
             RLOG_SQS_DEBUG("Purged " << messagesDeleted << " messages from queue [" << QueuePath_ << "]");
             const bool versionIsSame = val["versionIsSame"];
             if (versionIsSame) {

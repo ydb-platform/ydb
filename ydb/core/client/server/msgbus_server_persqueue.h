@@ -17,16 +17,16 @@ namespace NMsgBusProxy {
 
 const TString& TopicPrefix(const TActorContext& ctx);
 
-struct TProcessingResult {
-    EResponseStatus Status = MSTATUS_OK;
-    NPersQueue::NErrorCode::EErrorCode ErrorCode;
-    TString Reason;
-    bool IsFatal = false;
-};
-
-TProcessingResult ProcessMetaCacheAllTopicsResponse(NPqMetaCacheV2::TEvPqNewMetaCache::TEvDescribeAllTopicsResponse::TPtr& response);
-TProcessingResult ProcessMetaCacheSingleTopicsResponse(const NSchemeCache::TSchemeCacheNavigate::TEntry& entry);
-
+struct TProcessingResult { 
+    EResponseStatus Status = MSTATUS_OK; 
+    NPersQueue::NErrorCode::EErrorCode ErrorCode; 
+    TString Reason; 
+    bool IsFatal = false; 
+}; 
+ 
+TProcessingResult ProcessMetaCacheAllTopicsResponse(NPqMetaCacheV2::TEvPqNewMetaCache::TEvDescribeAllTopicsResponse::TPtr& response); 
+TProcessingResult ProcessMetaCacheSingleTopicsResponse(const NSchemeCache::TSchemeCacheNavigate::TEntry& entry); 
+ 
 // Worker actor creation
 IActor* CreateMessageBusServerPersQueue(
     TBusMessageContext& msg,
@@ -60,20 +60,20 @@ inline ui64 GetTabletId<TEvTabletPipe::TEvClientConnected>(const TEvTabletPipe::
 // 2. Implement CreateTopicSubactor() and, optionally, MergeSubactorReplies() methods.
 class TPersQueueBaseRequestProcessor : public TActorBootstrapped<TPersQueueBaseRequestProcessor> {
 protected:
-    using TSchemeEntry = NSchemeCache::TSchemeCacheNavigate::TEntry;
-    using TPQGroupInfoPtr = TIntrusiveConstPtr<NSchemeCache::TSchemeCacheNavigate::TPQGroupInfo>;
-    using ESchemeStatus = NSchemeCache::TSchemeCacheNavigate::EStatus;
-
+    using TSchemeEntry = NSchemeCache::TSchemeCacheNavigate::TEntry; 
+    using TPQGroupInfoPtr = TIntrusiveConstPtr<NSchemeCache::TSchemeCacheNavigate::TPQGroupInfo>; 
+    using ESchemeStatus = NSchemeCache::TSchemeCacheNavigate::EStatus; 
+ 
     struct TPerTopicInfo {
         TPerTopicInfo()
         { }
-        explicit TPerTopicInfo(const TSchemeEntry& topicEntry)
+        explicit TPerTopicInfo(const TSchemeEntry& topicEntry) 
             : TopicEntry(topicEntry)
         {
         }
 
         TActorId ActorId;
-        TSchemeEntry TopicEntry;
+        TSchemeEntry TopicEntry; 
         NKikimrClient::TResponse Response;
         bool ActorAnswered = false;
     };
@@ -101,7 +101,7 @@ public:
     }
 
 protected:
-    TPersQueueBaseRequestProcessor(const NKikimrClient::TPersQueueRequest& request, const TActorId& pqMetaCacheId, bool listNodes);
+    TPersQueueBaseRequestProcessor(const NKikimrClient::TPersQueueRequest& request, const TActorId& pqMetaCacheId, bool listNodes); 
 
     ~TPersQueueBaseRequestProcessor();
 
@@ -111,7 +111,7 @@ public:
 protected:
     bool CreateChildrenIfNeeded(const TActorContext& ctx);
 
-    virtual THolder<IActor> CreateTopicSubactor(const TSchemeEntry& topicEntry, const TString& name) = 0; // Creates actor for processing one concrete topic.
+    virtual THolder<IActor> CreateTopicSubactor(const TSchemeEntry& topicEntry, const TString& name) = 0; // Creates actor for processing one concrete topic. 
     virtual NKikimrClient::TResponse MergeSubactorReplies();
 
     virtual void SendReplyAndDie(NKikimrClient::TResponse&& record, const TActorContext& ctx) = 0;
@@ -129,8 +129,8 @@ protected:
     virtual STFUNC(StateFunc);
 
     void Handle(TEvInterconnect::TEvNodesInfo::TPtr& ev, const TActorContext& ctx);
-    void Handle(NPqMetaCacheV2::TEvPqNewMetaCache::TEvDescribeTopicsResponse::TPtr& ev, const TActorContext& ctx);
-    void Handle(NPqMetaCacheV2::TEvPqNewMetaCache::TEvDescribeAllTopicsResponse::TPtr& ev, const TActorContext& ctx);
+    void Handle(NPqMetaCacheV2::TEvPqNewMetaCache::TEvDescribeTopicsResponse::TPtr& ev, const TActorContext& ctx); 
+    void Handle(NPqMetaCacheV2::TEvPqNewMetaCache::TEvDescribeAllTopicsResponse::TPtr& ev, const TActorContext& ctx); 
     void Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorContext& ctx);
     void HandleTimeout(const TActorContext& ctx);
 
@@ -142,10 +142,10 @@ protected:
     const TString RequestId;
     THashSet<TString> TopicsToRequest; // Topics that we need to request. If this set id empty, we are interested in all existing topics.
 
-    const TActorId PqMetaCache;
+    const TActorId PqMetaCache; 
     THashMap<TActorId, THolder<TPerTopicInfo>> Children;
     size_t ChildrenAnswered = 0;
-    THolder<NSchemeCache::TSchemeCacheNavigate> SchemeCacheResponse;
+    THolder<NSchemeCache::TSchemeCacheNavigate> SchemeCacheResponse; 
 
     // Nodes info
     const bool ListNodes;
@@ -153,15 +153,15 @@ protected:
 };
 
 // Helper actor that sends TEvGetBalancerDescribe and checks ACL (ACL is not implemented yet).
-class TTopicInfoBasedActor : public TActorBootstrapped<TTopicInfoBasedActor> {
+class TTopicInfoBasedActor : public TActorBootstrapped<TTopicInfoBasedActor> { 
 protected:
-    using TSchemeEntry = NSchemeCache::TSchemeCacheNavigate::TEntry;
-    using TPQGroupInfoPtr = TIntrusiveConstPtr<NSchemeCache::TSchemeCacheNavigate::TPQGroupInfo>;
-    using ESchemeStatus = NSchemeCache::TSchemeCacheNavigate::EStatus;
+    using TSchemeEntry = NSchemeCache::TSchemeCacheNavigate::TEntry; 
+    using TPQGroupInfoPtr = TIntrusiveConstPtr<NSchemeCache::TSchemeCacheNavigate::TPQGroupInfo>; 
+    using ESchemeStatus = NSchemeCache::TSchemeCacheNavigate::EStatus; 
 
-    TTopicInfoBasedActor(const TSchemeEntry& topicEntry, const TString& topicName);
+    TTopicInfoBasedActor(const TSchemeEntry& topicEntry, const TString& topicName); 
 
-    virtual void BootstrapImpl(const TActorContext& ctx) = 0;
+    virtual void BootstrapImpl(const TActorContext& ctx) = 0; 
     virtual void Answer(const TActorContext& ctx, EResponseStatus status, NPersQueue::NErrorCode::EErrorCode code, const TString& errorReason) = 0;
 
     virtual void SendReplyAndDie(NKikimrClient::TResponse&& record, const TActorContext& ctx) = 0;
@@ -170,11 +170,11 @@ protected:
 
 protected:
     TActorId SchemeCache;
-    TSchemeEntry SchemeEntry;
-    TString Name;
-    TProcessingResult ProcessingResult;
-public:
-    void Bootstrap(const TActorContext& ctx);
+    TSchemeEntry SchemeEntry; 
+    TString Name; 
+    TProcessingResult ProcessingResult; 
+public: 
+    void Bootstrap(const TActorContext& ctx); 
 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::PQ_BASE_REQUEST_PROCESSOR;

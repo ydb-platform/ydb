@@ -11,43 +11,43 @@
 
 namespace NPersQueue {
 
-static constexpr int DEBUG_LOG_LEVEL = 7;
-
+static constexpr int DEBUG_LOG_LEVEL = 7; 
+ 
 class TTestServer {
 public:
-    TTestServer(bool start = true, TMaybe<TSimpleSharedPtr<TPortManager>> portManager = Nothing())
-        : PortManager(portManager.GetOrElse(MakeSimpleShared<TPortManager>()))
-        , Port(PortManager->GetPort(2134))
-        , GrpcPort(PortManager->GetPort(2135))
-        , ServerSettings(NKikimr::NPersQueueTests::PQSettings(Port).SetGrpcPort(GrpcPort))
+    TTestServer(bool start = true, TMaybe<TSimpleSharedPtr<TPortManager>> portManager = Nothing()) 
+        : PortManager(portManager.GetOrElse(MakeSimpleShared<TPortManager>())) 
+        , Port(PortManager->GetPort(2134)) 
+        , GrpcPort(PortManager->GetPort(2135)) 
+        , ServerSettings(NKikimr::NPersQueueTests::PQSettings(Port).SetGrpcPort(GrpcPort)) 
         , GrpcServerOptions(NGrpc::TServerOptions().SetHost("[::1]").SetPort(GrpcPort))
     {
         if (start) {
             StartServer();
         }
     }
-    TTestServer(const NKikimr::Tests::TServerSettings& settings, bool start = true)
-        : PortManager(MakeSimpleShared<TPortManager>())
-        , Port(PortManager->GetPort(2134))
-        , GrpcPort(PortManager->GetPort(2135))
-        , ServerSettings(settings)
-        , GrpcServerOptions(NGrpc::TServerOptions().SetHost("[::1]").SetPort(GrpcPort))
-    {
-        ServerSettings.Port = Port;
-        ServerSettings.SetGrpcPort(GrpcPort);
-        if (start)
-            StartServer();
-    }
+    TTestServer(const NKikimr::Tests::TServerSettings& settings, bool start = true) 
+        : PortManager(MakeSimpleShared<TPortManager>()) 
+        , Port(PortManager->GetPort(2134)) 
+        , GrpcPort(PortManager->GetPort(2135)) 
+        , ServerSettings(settings) 
+        , GrpcServerOptions(NGrpc::TServerOptions().SetHost("[::1]").SetPort(GrpcPort)) 
+    { 
+        ServerSettings.Port = Port; 
+        ServerSettings.SetGrpcPort(GrpcPort); 
+        if (start) 
+            StartServer(); 
+    } 
 
-    void StartServer(bool doClientInit = true) {
-        PrepareNetDataFile();
+    void StartServer(bool doClientInit = true) { 
+        PrepareNetDataFile(); 
         CleverServer = MakeHolder<NKikimr::Tests::TServer>(ServerSettings);
         CleverServer->EnableGRpc(GrpcServerOptions);
         AnnoyingClient = MakeHolder<NKikimr::NPersQueueTests::TFlatMsgBusPQClient>(ServerSettings, GrpcPort);
         EnableLogs(LOGGED_SERVICES);
-        if (doClientInit) {
-            AnnoyingClient->FullInit();
-        }
+        if (doClientInit) { 
+            AnnoyingClient->FullInit(); 
+        } 
     }
 
     void ShutdownGRpc() {
@@ -68,7 +68,7 @@ public:
     }
 
     void EnableLogs(const TVector<NKikimrServices::EServiceKikimr> services,
-                    NActors::NLog::EPriority prio = NActors::NLog::PRI_DEBUG) {
+                    NActors::NLog::EPriority prio = NActors::NLog::PRI_DEBUG) { 
         Y_VERIFY(CleverServer != nullptr, "Start server before enabling logs");
         for (auto s : services) {
             CleverServer->GetRuntime()->SetLogPriority(s, prio);
@@ -79,14 +79,14 @@ public:
         AnnoyingClient->WaitTopicInit(topic);
     }
 
-    bool PrepareNetDataFile(const TString& content = "::1/128\tdc1") {
-        if (NetDataFile)
-            return false;
+    bool PrepareNetDataFile(const TString& content = "::1/128\tdc1") { 
+        if (NetDataFile) 
+            return false; 
         NetDataFile = MakeHolder<TTempFileHandle>("netData.tsv");
         NetDataFile->Write(content.Data(), content.Size());
         NetDataFile->FlushData();
         ServerSettings.NetClassifierConfig.SetNetDataFilePath(NetDataFile->Name());
-        return true;
+        return true; 
     }
 
     void UpdateDC(const TString& name, bool local, bool enabled) {
@@ -94,7 +94,7 @@ public:
     }
 
 public:
-    TSimpleSharedPtr<TPortManager> PortManager;
+    TSimpleSharedPtr<TPortManager> PortManager; 
     ui16 Port;
     ui16 GrpcPort;
 
@@ -105,7 +105,7 @@ public:
 
     THolder<NKikimr::NPersQueueTests::TFlatMsgBusPQClient> AnnoyingClient;
 
-
+ 
     static const TVector<NKikimrServices::EServiceKikimr> LOGGED_SERVICES;
 };
 

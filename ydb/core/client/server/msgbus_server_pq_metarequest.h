@@ -7,20 +7,20 @@ namespace NMsgBusProxy {
 //
 // GetTopicMetadata command
 //
-//
+// 
 class TPersQueueGetTopicMetadataProcessor : public TPersQueueBaseRequestProcessor {
 public:
     TPersQueueGetTopicMetadataProcessor(const NKikimrClient::TPersQueueRequest& request, const TActorId& schemeCache);
 
 private:
-    THolder<IActor> CreateTopicSubactor(const TSchemeEntry& topicEntry, const TString& name) override;
+    THolder<IActor> CreateTopicSubactor(const TSchemeEntry& topicEntry, const TString& name) override; 
 };
 
-class TPersQueueGetTopicMetadataTopicWorker : public TReplierToParent<TTopicInfoBasedActor> {
+class TPersQueueGetTopicMetadataTopicWorker : public TReplierToParent<TTopicInfoBasedActor> { 
 public:
-    TPersQueueGetTopicMetadataTopicWorker(const TActorId& parent, const TSchemeEntry& topicEntry, const TString& name);
+    TPersQueueGetTopicMetadataTopicWorker(const TActorId& parent, const TSchemeEntry& topicEntry, const TString& name); 
 
-    void BootstrapImpl(const TActorContext& ctx) override;
+    void BootstrapImpl(const TActorContext& ctx) override; 
     void Answer(const TActorContext& ctx, EResponseStatus status, NPersQueue::NErrorCode::EErrorCode code, const TString& errorReason) override;
 };
 
@@ -31,23 +31,23 @@ public:
 
 class TPersQueueGetPartitionOffsetsProcessor : public TPersQueueBaseRequestProcessor {
 public:
-    TPersQueueGetPartitionOffsetsProcessor(const NKikimrClient::TPersQueueRequest& request, const TActorId& metaCacheId);
+    TPersQueueGetPartitionOffsetsProcessor(const NKikimrClient::TPersQueueRequest& request, const TActorId& metaCacheId); 
 
 private:
-    THolder<IActor> CreateTopicSubactor(const TSchemeEntry& topicEntry, const TString& name) override;
+    THolder<IActor> CreateTopicSubactor(const TSchemeEntry& topicEntry, const TString& name) override; 
 
 private:
     THashMap<TString, std::shared_ptr<THashSet<ui64>>> PartitionsToRequest;
 };
 
-class TPersQueueGetPartitionOffsetsTopicWorker : public TReplierToParent<TPipesWaiterActor<TTopicInfoBasedActor, TEvPersQueue::TEvOffsetsResponse>> {
+class TPersQueueGetPartitionOffsetsTopicWorker : public TReplierToParent<TPipesWaiterActor<TTopicInfoBasedActor, TEvPersQueue::TEvOffsetsResponse>> { 
 public:
     TPersQueueGetPartitionOffsetsTopicWorker(const TActorId& parent,
-                                             const TSchemeEntry& topicEntry, const TString& name,
+                                             const TSchemeEntry& topicEntry, const TString& name, 
                                              const std::shared_ptr<THashSet<ui64>>& partitionsToRequest,
                                              const std::shared_ptr<const NKikimrClient::TPersQueueRequest>& requestProto);
 
-    void BootstrapImpl(const TActorContext& ctx) override;
+    void BootstrapImpl(const TActorContext& ctx) override; 
     bool OnPipeEventsAreReady(const TActorContext& ctx) override;
     void Answer(const TActorContext& ctx, EResponseStatus status, NPersQueue::NErrorCode::EErrorCode code, const TString& errorReason) override;
 
@@ -66,21 +66,21 @@ public:
     TPersQueueGetPartitionStatusProcessor(const NKikimrClient::TPersQueueRequest& request, const TActorId& schemeCache);
 
 private:
-    THolder<IActor> CreateTopicSubactor(const TSchemeEntry& topicEntry, const TString& name) override;
+    THolder<IActor> CreateTopicSubactor(const TSchemeEntry& topicEntry, const TString& name) override; 
 
 private:
     THashMap<TString, std::shared_ptr<THashSet<ui64>>> PartitionsToRequest;
 };
 
-class TPersQueueGetPartitionStatusTopicWorker : public TReplierToParent<TPipesWaiterActor<TTopicInfoBasedActor, TEvPersQueue::TEvStatusResponse>> {
+class TPersQueueGetPartitionStatusTopicWorker : public TReplierToParent<TPipesWaiterActor<TTopicInfoBasedActor, TEvPersQueue::TEvStatusResponse>> { 
 public:
     TPersQueueGetPartitionStatusTopicWorker(const TActorId& parent,
-                                            const TTopicInfoBasedActor::TSchemeEntry& topicEntry,
-                                            const TString& name,
+                                            const TTopicInfoBasedActor::TSchemeEntry& topicEntry, 
+                                            const TString& name, 
                                             const std::shared_ptr<THashSet<ui64>>& partitionsToRequest,
                                             const std::shared_ptr<const NKikimrClient::TPersQueueRequest>& requestProto);
 
-    void BootstrapImpl(const TActorContext& ctx) override;
+    void BootstrapImpl(const TActorContext& ctx) override; 
     bool OnPipeEventsAreReady(const TActorContext& ctx) override;
     void Answer(const TActorContext& ctx, EResponseStatus status, NPersQueue::NErrorCode::EErrorCode code, const TString& errorReason) override;
 
@@ -99,21 +99,21 @@ public:
     TPersQueueGetPartitionLocationsProcessor(const NKikimrClient::TPersQueueRequest& request, const TActorId& schemeCache);
 
 private:
-    THolder<IActor> CreateTopicSubactor(const TSchemeEntry& topicEntry, const TString& name) override;
+    THolder<IActor> CreateTopicSubactor(const TSchemeEntry& topicEntry, const TString& name) override; 
 
 private:
     THashMap<TString, std::shared_ptr<THashSet<ui64>>> PartitionsToRequest;
 };
 
-class TPersQueueGetPartitionLocationsTopicWorker : public TReplierToParent<TPipesWaiterActor<TTopicInfoBasedActor, TEvTabletPipe::TEvClientConnected>> {
+class TPersQueueGetPartitionLocationsTopicWorker : public TReplierToParent<TPipesWaiterActor<TTopicInfoBasedActor, TEvTabletPipe::TEvClientConnected>> { 
 public:
     TPersQueueGetPartitionLocationsTopicWorker(const TActorId& parent,
-                                               const TTopicInfoBasedActor::TSchemeEntry& topicEntry, const TString& name,
+                                               const TTopicInfoBasedActor::TSchemeEntry& topicEntry, const TString& name, 
                                                const std::shared_ptr<THashSet<ui64>>& partitionsToRequest,
                                                const std::shared_ptr<const NKikimrClient::TPersQueueRequest>& requestProto,
                                                std::shared_ptr<const TPersQueueBaseRequestProcessor::TNodesInfo> nodesInfo);
 
-    void BootstrapImpl(const TActorContext& ctx) override;
+    void BootstrapImpl(const TActorContext& ctx) override; 
     bool OnPipeEventsAreReady(const TActorContext& ctx) override;
     void Answer(const TActorContext& ctx, EResponseStatus status, NPersQueue::NErrorCode::EErrorCode code, const TString& errorReason) override;
 
@@ -169,7 +169,7 @@ public:
 
 private:
 
-    THolder<IActor> CreateTopicSubactor(const TSchemeEntry& topicEntry, const TString& name) override;
+    THolder<IActor> CreateTopicSubactor(const TSchemeEntry& topicEntry, const TString& name) override; 
     THolder<IActor> CreateSessionsSubactor(const THashMap<TString, TActorId>&& readSessions);
 
     std::shared_ptr<IPersQueueGetReadSessionsInfoWorkerFactory> PQReadSessionsInfoWorkerFactory;
@@ -178,14 +178,14 @@ private:
 };
 
 
-class TPersQueueGetReadSessionsInfoTopicWorker : public TReplierToParent<TPipesWaiterActor<TTopicInfoBasedActor, TEvPersQueue::TEvOffsetsResponse>> {
+class TPersQueueGetReadSessionsInfoTopicWorker : public TReplierToParent<TPipesWaiterActor<TTopicInfoBasedActor, TEvPersQueue::TEvOffsetsResponse>> { 
 public:
     TPersQueueGetReadSessionsInfoTopicWorker(const TActorId& parent,
-                                             const TTopicInfoBasedActor::TSchemeEntry& topicEntry, const TString& name,
+                                             const TTopicInfoBasedActor::TSchemeEntry& topicEntry, const TString& name, 
                                              const std::shared_ptr<const NKikimrClient::TPersQueueRequest>& requestProto,
                                              std::shared_ptr<const TPersQueueBaseRequestProcessor::TNodesInfo> nodesInfo);
 
-    void BootstrapImpl(const TActorContext& ctx) override;
+    void BootstrapImpl(const TActorContext& ctx) override; 
     void Answer(const TActorContext& ctx, EResponseStatus status, NPersQueue::NErrorCode::EErrorCode code, const TString& errorReason) override;
     bool OnPipeEventsAreReady(const TActorContext& ctx) override;
 

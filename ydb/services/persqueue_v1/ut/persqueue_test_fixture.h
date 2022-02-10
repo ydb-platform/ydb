@@ -16,15 +16,15 @@
 
 namespace NKikimr::NPersQueueTests {
 
-
-
-#define SET_LOCALS                                              \
-    auto& pqClient = server.Server->AnnoyingClient;             \
-    Y_UNUSED(pqClient);                                         \
-    auto* runtime = server.Server->CleverServer->GetRuntime();  \
-    Y_UNUSED(runtime);                                          \
-
-
+ 
+ 
+#define SET_LOCALS                                              \ 
+    auto& pqClient = server.Server->AnnoyingClient;             \ 
+    Y_UNUSED(pqClient);                                         \ 
+    auto* runtime = server.Server->CleverServer->GetRuntime();  \ 
+    Y_UNUSED(runtime);                                          \ 
+ 
+ 
     using namespace Tests;
     using namespace NKikimrClient;
     using namespace Ydb::PersQueue;
@@ -32,46 +32,46 @@ namespace NKikimr::NPersQueueTests {
     using namespace NThreading;
     using namespace NNetClassifier;
 
-    class TPersQueueV1TestServerBase {
+    class TPersQueueV1TestServerBase { 
     public:
-        virtual void AlterSettings(NKikimr::Tests::TServerSettings& settings) {
-            Y_UNUSED(settings);
-        }
-        void InitializePQ() {
-            Cerr << "===Init PQ - create server\n";
-            Y_VERIFY(Server == nullptr);
-            PortManager = new TPortManager();
-            Server = MakeHolder<NPersQueue::TTestServer>(false, PortManager);
-            Server->ServerSettings.PQConfig.SetTopicsAreFirstClassCitizen(TenantModeEnabled());
-            Server->ServerSettings.PQConfig.SetMetaCacheTimeoutSec(30);
-            AlterSettings(Server->ServerSettings);
-            Server->StartServer(false);
+        virtual void AlterSettings(NKikimr::Tests::TServerSettings& settings) { 
+            Y_UNUSED(settings); 
+        } 
+        void InitializePQ() { 
+            Cerr << "===Init PQ - create server\n"; 
+            Y_VERIFY(Server == nullptr); 
+            PortManager = new TPortManager(); 
+            Server = MakeHolder<NPersQueue::TTestServer>(false, PortManager); 
+            Server->ServerSettings.PQConfig.SetTopicsAreFirstClassCitizen(TenantModeEnabled()); 
+            Server->ServerSettings.PQConfig.SetMetaCacheTimeoutSec(30); 
+            AlterSettings(Server->ServerSettings); 
+            Server->StartServer(false); 
             if (TenantModeEnabled()) {
-                Server->AnnoyingClient->SetNoConfigMode();
-                Server->ServerSettings.PQConfig.SetSourceIdTablePath("some unused path");
+                Server->AnnoyingClient->SetNoConfigMode(); 
+                Server->ServerSettings.PQConfig.SetSourceIdTablePath("some unused path"); 
             }
-            Cerr << "Init PQ - start server on port " << Server->GrpcPort << Endl;
-            Server->GrpcServerOptions.SetMaxMessageSize(130 * 1024 * 1024);
+            Cerr << "Init PQ - start server on port " << Server->GrpcPort << Endl; 
+            Server->GrpcServerOptions.SetMaxMessageSize(130 * 1024 * 1024); 
             EnablePQLogs({NKikimrServices::PQ_READ_PROXY, NKikimrServices::PQ_WRITE_PROXY, NKikimrServices::FLAT_TX_SCHEMESHARD});
-            EnablePQLogs({NKikimrServices::PERSQUEUE}, NLog::EPriority::PRI_INFO);
+            EnablePQLogs({NKikimrServices::PERSQUEUE}, NLog::EPriority::PRI_INFO); 
 
-            Server->AnnoyingClient->FullInit();
-            Server->AnnoyingClient->CreateConsumer("user");
+            Server->AnnoyingClient->FullInit(); 
+            Server->AnnoyingClient->CreateConsumer("user"); 
             if (TenantModeEnabled()) {
-                Cerr << "=== Will create fst-class topics\n";
-                Server->AnnoyingClient->CreateTopicNoLegacy("/Root/acc/topic1", 1);
-                Server->AnnoyingClient->CreateTopicNoLegacy("/Root/PQ/acc/topic1", 1);
+                Cerr << "=== Will create fst-class topics\n"; 
+                Server->AnnoyingClient->CreateTopicNoLegacy("/Root/acc/topic1", 1); 
+                Server->AnnoyingClient->CreateTopicNoLegacy("/Root/PQ/acc/topic1", 1); 
             } else {
-                Cerr << "=== Will create legacy-style topics\n";
+                Cerr << "=== Will create legacy-style topics\n"; 
                 Server->AnnoyingClient->CreateTopicNoLegacy("rt3.dc1--acc--topic2dc", 1);
                 Server->AnnoyingClient->CreateTopicNoLegacy("rt3.dc2--acc--topic2dc", 1, true, false);
                 Server->AnnoyingClient->CreateTopicNoLegacy("rt3.dc1--topic1", 1);
-                Server->AnnoyingClient->CreateTopicNoLegacy("rt3.dc1--acc--topic1", 1);
-                Server->WaitInit("topic1");
-                Sleep(TDuration::Seconds(10));
+                Server->AnnoyingClient->CreateTopicNoLegacy("rt3.dc1--acc--topic1", 1); 
+                Server->WaitInit("topic1"); 
+                Sleep(TDuration::Seconds(10)); 
             }
 
-            InsecureChannel = grpc::CreateChannel("localhost:" + ToString(Server->GrpcPort), grpc::InsecureChannelCredentials());
+            InsecureChannel = grpc::CreateChannel("localhost:" + ToString(Server->GrpcPort), grpc::InsecureChannelCredentials()); 
             ServiceStub = Ydb::PersQueue::V1::PersQueueService::NewStub(InsecureChannel);
             InitializeWritePQService(TenantModeEnabled() ? "Root/acc/topic1" : "topic1");
 
@@ -85,7 +85,7 @@ namespace NKikimr::NPersQueueTests {
                         NActors::NLog::EPriority prio = NActors::NLog::PRI_DEBUG)
         {
             for (auto s : services) {
-                Server->CleverServer->GetRuntime()->SetLogPriority(s, prio);
+                Server->CleverServer->GetRuntime()->SetLogPriority(s, prio); 
             }
         }
 
@@ -132,9 +132,9 @@ namespace NKikimr::NPersQueueTests {
         void ModifyTopicACL(const TString& topic, const NACLib::TDiffACL& acl) {
             if (TenantModeEnabled()) {
                 TFsPath path(topic);
-                Server->AnnoyingClient->ModifyACL(path.Dirname(), path.Basename(), acl.SerializeAsString());
+                Server->AnnoyingClient->ModifyACL(path.Dirname(), path.Basename(), acl.SerializeAsString()); 
             } else {
-                Server->AnnoyingClient->ModifyACL("/Root/PQ", topic, acl.SerializeAsString());
+                Server->AnnoyingClient->ModifyACL("/Root/PQ", topic, acl.SerializeAsString()); 
             }
             WaitACLModification();
 
@@ -157,8 +157,8 @@ namespace NKikimr::NPersQueueTests {
         }
 
     public:
-        THolder<NPersQueue::TTestServer> Server;
-        TSimpleSharedPtr<TPortManager> PortManager;
+        THolder<NPersQueue::TTestServer> Server; 
+        TSimpleSharedPtr<TPortManager> PortManager; 
         std::shared_ptr<grpc::Channel> InsecureChannel;
         std::unique_ptr<Ydb::PersQueue::V1::PersQueueService::Stub> ServiceStub;
 
@@ -166,61 +166,61 @@ namespace NKikimr::NPersQueueTests {
         THolder<NYdb::NPersQueue::TPersQueueClient> PersQueueClient;
     };
 
-    class TPersQueueV1TestServer : public TPersQueueV1TestServerBase {
+    class TPersQueueV1TestServer : public TPersQueueV1TestServerBase { 
     public:
-        TPersQueueV1TestServer(bool checkAcl = false)
-            : CheckACL(checkAcl)
-        {
+        TPersQueueV1TestServer(bool checkAcl = false) 
+            : CheckACL(checkAcl) 
+        { 
             InitAll();
         }
 
         void InitAll() {
-            InitializePQ();
+            InitializePQ(); 
         }
-
-        void AlterSettings(NKikimr::Tests::TServerSettings& settings) override {
-            if (CheckACL)
-                settings.PQConfig.SetCheckACL(true);
-        }
-    private:
-        bool CheckACL;
+ 
+        void AlterSettings(NKikimr::Tests::TServerSettings& settings) override { 
+            if (CheckACL) 
+                settings.PQConfig.SetCheckACL(true); 
+        } 
+    private: 
+        bool CheckACL; 
     };
 
-    class TPersQueueV1TestServerWithRateLimiter : public TPersQueueV1TestServerBase {
-    private:
-        NKikimrPQ::TPQConfig::TQuotingConfig::ELimitedEntity LimitedEntity;
+    class TPersQueueV1TestServerWithRateLimiter : public TPersQueueV1TestServerBase { 
+    private: 
+        NKikimrPQ::TPQConfig::TQuotingConfig::ELimitedEntity LimitedEntity; 
     public:
-        TPersQueueV1TestServerWithRateLimiter()
-            : TPersQueueV1TestServerBase()
-        {}
+        TPersQueueV1TestServerWithRateLimiter() 
+            : TPersQueueV1TestServerBase() 
+        {} 
 
-        void AlterSettings(NKikimr::Tests::TServerSettings& settings) override {
-            settings.PQConfig.MutableQuotingConfig()->SetEnableQuoting(true);
-            settings.PQConfig.MutableQuotingConfig()->SetTopicWriteQuotaEntityToLimit(LimitedEntity);
-        }
-
+        void AlterSettings(NKikimr::Tests::TServerSettings& settings) override { 
+            settings.PQConfig.MutableQuotingConfig()->SetEnableQuoting(true); 
+            settings.PQConfig.MutableQuotingConfig()->SetTopicWriteQuotaEntityToLimit(LimitedEntity); 
+        } 
+ 
         void InitAll(NKikimrPQ::TPQConfig::TQuotingConfig::ELimitedEntity limitedEntity) {
-            LimitedEntity = limitedEntity;
-            InitializePQ();
+            LimitedEntity = limitedEntity; 
+            InitializePQ(); 
             InitQuotingPaths();
         }
 
         void InitQuotingPaths() {
-            Server->AnnoyingClient->MkDir("/Root", "PersQueue");
-            Server->AnnoyingClient->MkDir("/Root/PersQueue", "System");
-            Server->AnnoyingClient->MkDir("/Root/PersQueue/System", "Quoters");
+            Server->AnnoyingClient->MkDir("/Root", "PersQueue"); 
+            Server->AnnoyingClient->MkDir("/Root/PersQueue", "System"); 
+            Server->AnnoyingClient->MkDir("/Root/PersQueue/System", "Quoters"); 
         }
 
         void CreateTopicWithQuota(const TString& path, bool createKesus = true, double writeQuota = 1000.0) {
             TVector<TString> pathComponents = SplitPath(path);
             const TString account = pathComponents[0];
-            const TString name = NPersQueue::BuildFullTopicName(path, "dc1");
+            const TString name = NPersQueue::BuildFullTopicName(path, "dc1"); 
 
             if (TenantModeEnabled()) {
-                Server->AnnoyingClient->CreateTopicNoLegacy("/Root/PQ/" + path, 1);
+                Server->AnnoyingClient->CreateTopicNoLegacy("/Root/PQ/" + path, 1); 
             } else {
                 Cerr << "Creating topic \"" << name << "\"" << Endl;
-                Server->AnnoyingClient->CreateTopicNoLegacy(name, 1);
+                Server->AnnoyingClient->CreateTopicNoLegacy(name, 1); 
             }
 
             const TString rootPath = "/Root/PersQueue/System/Quoters";
@@ -228,12 +228,12 @@ namespace NKikimr::NPersQueueTests {
 
             if (createKesus) {
                 Cerr << "Creating kesus \"" << account << "\"" << Endl;
-                const NMsgBusProxy::EResponseStatus createKesusResult = Server->AnnoyingClient->CreateKesus(rootPath, account);
+                const NMsgBusProxy::EResponseStatus createKesusResult = Server->AnnoyingClient->CreateKesus(rootPath, account); 
                 UNIT_ASSERT_C(createKesusResult == NMsgBusProxy::MSTATUS_OK, createKesusResult);
 
-                const auto statusCode = Server->AnnoyingClient->AddQuoterResource(
-                        Server->CleverServer->GetRuntime(), kesusPath, "write-quota", writeQuota
-                );
+                const auto statusCode = Server->AnnoyingClient->AddQuoterResource( 
+                        Server->CleverServer->GetRuntime(), kesusPath, "write-quota", writeQuota 
+                ); 
                 UNIT_ASSERT_EQUAL_C(statusCode, Ydb::StatusIds::SUCCESS, "Status: " << Ydb::StatusIds::StatusCode_Name(statusCode));
             }
 
@@ -243,9 +243,9 @@ namespace NKikimr::NPersQueueTests {
                 for (auto currentComponent = pathComponents.begin() + 1; currentComponent != pathComponents.end(); ++currentComponent) {
                     prefixPath << "/" << *currentComponent;
                     Cerr << "Adding quoter resource: \"" << prefixPath << "\"" << Endl;
-                    const auto statusCode = Server->AnnoyingClient->AddQuoterResource(
-                            Server->CleverServer->GetRuntime(), kesusPath, prefixPath
-                    );
+                    const auto statusCode = Server->AnnoyingClient->AddQuoterResource( 
+                            Server->CleverServer->GetRuntime(), kesusPath, prefixPath 
+                    ); 
                     UNIT_ASSERT_C(statusCode == Ydb::StatusIds::SUCCESS || statusCode == Ydb::StatusIds::ALREADY_EXISTS, "Status: " << Ydb::StatusIds::StatusCode_Name(statusCode));
                 }
             }
@@ -254,7 +254,7 @@ namespace NKikimr::NPersQueueTests {
         THolder<IProducer> StartProducer(const TString& topicPath, bool compress = false) {
             TString fullPath = TenantModeEnabled() ? "/Root/PQ/" + topicPath : topicPath;
             TProducerSettings producerSettings;
-            producerSettings.Server = TServerSetting("localhost", Server->GrpcPort);
+            producerSettings.Server = TServerSetting("localhost", Server->GrpcPort); 
             producerSettings.Topic = fullPath;
             producerSettings.SourceId = "TRateLimiterTestSetupSourceId";
             producerSettings.Codec = compress ? "gzip" : "raw";

@@ -206,11 +206,11 @@ def _construct_channel_options(driver_config, endpoint_options=None):
     if driver_config.channel_options is None:
         return _default_connect_options
     channel_options = copy.deepcopy(driver_config.channel_options)
-    custom_options_keys = set(i[0] for i in driver_config.channel_options)
+    custom_options_keys = set(i[0] for i in driver_config.channel_options) 
     for item in filter(
         lambda x: x[0] not in custom_options_keys, _default_connect_options
     ):
-        channel_options.append(item)
+        channel_options.append(item) 
     return channel_options
 
 
@@ -297,8 +297,8 @@ def channel_factory(
 ):
     channel_provider = channel_provider if channel_provider is not None else grpc
     options = _construct_channel_options(driver_config, endpoint_options)
-    logger.debug("Channel options: {}".format(options))
-
+    logger.debug("Channel options: {}".format(options)) 
+ 
     if driver_config.root_certificates is None and not driver_config.secure_channel:
         return channel_provider.insecure_channel(endpoint, options)
     root_certificates = driver_config.root_certificates

@@ -24,13 +24,13 @@
 #include <ydb/public/sdk/cpp/client/ydb_persqueue_core/ut/ut_utils/data_plane_helpers.h>
 
 namespace {
-    const static TString DEFAULT_TOPIC_NAME = "rt3.dc1--topic1";
-    const static TString DEFAULT_TOPIC_PATH = "/Root/PQ/rt3.dc1--topic1";
-
-    const static TString SHORT_TOPIC_NAME = "topic1";
+    const static TString DEFAULT_TOPIC_NAME = "rt3.dc1--topic1"; 
+    const static TString DEFAULT_TOPIC_PATH = "/Root/PQ/rt3.dc1--topic1"; 
+ 
+    const static TString SHORT_TOPIC_NAME = "topic1"; 
 }
 
-
+ 
 namespace NKikimr::NPersQueueTests {
 
     using namespace Tests;
@@ -40,7 +40,7 @@ namespace NKikimr::NPersQueueTests {
     using namespace NThreading;
     using namespace NNetClassifier;
     using namespace NYdb::NPersQueue;
-    using namespace NPersQueue;
+    using namespace NPersQueue; 
 
     NJson::TJsonValue GetCountersNewSchemeCache(ui16 port, const TString& counters, const TString& subsystem, const TString& topicPath) {
         TString escapedPath = "%2F" + JoinStrings(SplitString(topicPath, "/"), "%2F");
@@ -69,28 +69,28 @@ namespace NKikimr::NPersQueueTests {
     Y_UNIT_TEST_SUITE(TPersQueueNewSchemeCacheTest) {
 
         void PrepareForGrpcNoDC(TFlatMsgBusPQClient& annoyingClient) {
-            annoyingClient.SetNoConfigMode();
-            annoyingClient.FullInit();
+            annoyingClient.SetNoConfigMode(); 
+            annoyingClient.FullInit(); 
             annoyingClient.InitUserRegistry();
             annoyingClient.MkDir("/Root", "account1");
             annoyingClient.MkDir("/Root/PQ", "account1");
-            annoyingClient.CreateTopicNoLegacy(DEFAULT_TOPIC_PATH, 5, false);
-            annoyingClient.CreateTopicNoLegacy("/Root/PQ/account1/topic1", 5, false);
+            annoyingClient.CreateTopicNoLegacy(DEFAULT_TOPIC_PATH, 5, false); 
+            annoyingClient.CreateTopicNoLegacy("/Root/PQ/account1/topic1", 5, false); 
             annoyingClient.CreateTopicNoLegacy("/Root/account2/topic2", 5);
         }
 
         Y_UNIT_TEST(CheckGrpcWriteNoDC) {
-            TTestServer server(false);
-            server.ServerSettings.PQConfig.SetTopicsAreFirstClassCitizen(true);
+            TTestServer server(false); 
+            server.ServerSettings.PQConfig.SetTopicsAreFirstClassCitizen(true); 
 
-            server.StartServer();
-            server.EnableLogs({
-                NKikimrServices::PQ_WRITE_PROXY, NKikimrServices::TX_PROXY_SCHEME_CACHE,
-                NKikimrServices::FLAT_TX_SCHEMESHARD, NKikimrServices::PQ_METACACHE}
-            );
-            PrepareForGrpcNoDC(*server.AnnoyingClient);
+            server.StartServer(); 
+            server.EnableLogs({ 
+                NKikimrServices::PQ_WRITE_PROXY, NKikimrServices::TX_PROXY_SCHEME_CACHE, 
+                NKikimrServices::FLAT_TX_SCHEMESHARD, NKikimrServices::PQ_METACACHE} 
+            ); 
+            PrepareForGrpcNoDC(*server.AnnoyingClient); 
 
-            TPQDataWriter writer("source1", server, DEFAULT_TOPIC_PATH);
+            TPQDataWriter writer("source1", server, DEFAULT_TOPIC_PATH); 
 
             writer.Write("/Root/account2/topic2", {"valuevaluevalue1"}, true, "topic1@" BUILTIN_ACL_DOMAIN);
             writer.Write("/Root/PQ/account1/topic1", {"valuevaluevalue1"}, true, "topic1@" BUILTIN_ACL_DOMAIN);
@@ -98,7 +98,7 @@ namespace NKikimr::NPersQueueTests {
             NACLib::TDiffACL acl;
             acl.AddAccess(NACLib::EAccessType::Allow, NACLib::UpdateRow, "topic1@" BUILTIN_ACL_DOMAIN);
             server.AnnoyingClient->ModifyACL("/Root/account2", "topic2", acl.SerializeAsString());
-            server.AnnoyingClient->ModifyACL("/Root/PQ/account1", "topic1", acl.SerializeAsString());
+            server.AnnoyingClient->ModifyACL("/Root/PQ/account1", "topic1", acl.SerializeAsString()); 
 
             WaitACLModification();
             writer.Write("/Root/account2/topic2", {"valuevaluevalue1"}, false, "topic1@" BUILTIN_ACL_DOMAIN);
@@ -109,17 +109,17 @@ namespace NKikimr::NPersQueueTests {
         }
 
         Y_UNIT_TEST(CheckGrpcReadNoDC) {
-            TTestServer server(false);
-            server.ServerSettings.PQConfig.SetTopicsAreFirstClassCitizen(true);
-            server.StartServer();
-            server.EnableLogs({NKikimrServices::PQ_READ_PROXY, NKikimrServices::TX_PROXY_SCHEME_CACHE});
-            PrepareForGrpcNoDC(*server.AnnoyingClient);
-            NYdb::TDriverConfig driverCfg;
+            TTestServer server(false); 
+            server.ServerSettings.PQConfig.SetTopicsAreFirstClassCitizen(true); 
+            server.StartServer(); 
+            server.EnableLogs({NKikimrServices::PQ_READ_PROXY, NKikimrServices::TX_PROXY_SCHEME_CACHE}); 
+            PrepareForGrpcNoDC(*server.AnnoyingClient); 
+            NYdb::TDriverConfig driverCfg; 
 
             driverCfg.SetEndpoint(TStringBuilder() << "localhost:" << server.GrpcPort).SetLog(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG)).SetDatabase("/Root");
 
-            auto ydbDriver = MakeHolder<NYdb::TDriver>(driverCfg);
-            auto persQueueClient = MakeHolder<NYdb::NPersQueue::TPersQueueClient>(*ydbDriver);
+            auto ydbDriver = MakeHolder<NYdb::TDriver>(driverCfg); 
+            auto persQueueClient = MakeHolder<NYdb::NPersQueue::TPersQueueClient>(*ydbDriver); 
 
             {
                 auto res = persQueueClient->AddReadRule("/Root/account2/topic2", TAddReadRuleSettings().ReadRule(TReadRuleSettings().ConsumerName("user1")));
@@ -165,25 +165,25 @@ namespace NKikimr::NPersQueueTests {
 
 
     Y_UNIT_TEST_SUITE(TPersqueueDataPlaneTestSuite) {
-        Y_UNIT_TEST(WriteSession) {
-            TPersQueueV1TestServer server(true);
+        Y_UNIT_TEST(WriteSession) { 
+            TPersQueueV1TestServer server(true); 
 
             TString topic = "/Root/account1/write_topic";
             TString consumer = "consumer_aba";
             {
-                auto res = server.PersQueueClient->CreateTopic(topic);
+                auto res = server.PersQueueClient->CreateTopic(topic); 
                 res.Wait();
                 UNIT_ASSERT(res.GetValue().IsSuccess());
             }
 
             {
-                auto res = server.PersQueueClient->AddReadRule(topic, TAddReadRuleSettings().ReadRule(TReadRuleSettings().ConsumerName(consumer)));
+                auto res = server.PersQueueClient->AddReadRule(topic, TAddReadRuleSettings().ReadRule(TReadRuleSettings().ConsumerName(consumer))); 
                 res.Wait();
                 UNIT_ASSERT(res.GetValue().IsSuccess());
             }
 
             {
-                auto writer = server.PersQueueClient->CreateSimpleBlockingWriteSession(TWriteSessionSettings()
+                auto writer = server.PersQueueClient->CreateSimpleBlockingWriteSession(TWriteSessionSettings() 
                                                                     .Path(topic).MessageGroupId("my_group_1")
                                                                     .ClusterDiscoveryMode(EClusterDiscoveryMode::Off)
                                                                     .RetryPolicy(IRetryPolicy::GetNoRetryPolicy()));
@@ -192,7 +192,7 @@ namespace NKikimr::NPersQueueTests {
                 writer->Close();
             }
             {
-                auto reader = server.PersQueueClient->CreateReadSession(TReadSessionSettings().ConsumerName("non_existing")
+                auto reader = server.PersQueueClient->CreateReadSession(TReadSessionSettings().ConsumerName("non_existing") 
                                                                         .AppendTopics(topic).DisableClusterDiscovery(true)
                                                                         .RetryPolicy(IRetryPolicy::GetNoRetryPolicy()));
 
@@ -209,7 +209,7 @@ namespace NKikimr::NPersQueueTests {
                 UNIT_ASSERT(std::get_if<TSessionClosedEvent>(&*event));
             }
             {
-                auto reader = server.PersQueueClient->CreateReadSession(TReadSessionSettings().ConsumerName(consumer)
+                auto reader = server.PersQueueClient->CreateReadSession(TReadSessionSettings().ConsumerName(consumer) 
                                                                         .AppendTopics(topic).DisableClusterDiscovery(true)
                                                                         .RetryPolicy(IRetryPolicy::GetNoRetryPolicy()));
 
@@ -229,18 +229,18 @@ namespace NKikimr::NPersQueueTests {
     }
 
     Y_UNIT_TEST_SUITE(TPersqueueControlPlaneTestSuite) {
-        Y_UNIT_TEST(SetupReadLockSessionWithDatabase) {
-            TPersQueueV1TestServer server;
+        Y_UNIT_TEST(SetupReadLockSessionWithDatabase) { 
+            TPersQueueV1TestServer server; 
 
             {
-                auto res = server.PersQueueClient->AddReadRule("/Root/acc/topic1", TAddReadRuleSettings().ReadRule(TReadRuleSettings().ConsumerName("user")));
+                auto res = server.PersQueueClient->AddReadRule("/Root/acc/topic1", TAddReadRuleSettings().ReadRule(TReadRuleSettings().ConsumerName("user"))); 
                 res.Wait();
                 Cerr << "ADD RESULT " << res.GetValue().GetIssues().ToString() << "\n";
                 UNIT_ASSERT(res.GetValue().IsSuccess());
             }
 
 
-            auto stub = Ydb::PersQueue::V1::PersQueueService::NewStub(server.InsecureChannel);
+            auto stub = Ydb::PersQueue::V1::PersQueueService::NewStub(server.InsecureChannel); 
             grpc::ClientContext grpcContext;
             grpcContext.AddMetadata("x-ydb-database", "/Root/acc");
             auto readStream = stub->MigrationStreamingRead(&grpcContext);
@@ -265,10 +265,10 @@ namespace NKikimr::NPersQueueTests {
             }
         }
 
-        Y_UNIT_TEST(SetupWriteLockSessionWithDatabase) {
-            TPersQueueV1TestServer server;
-
-            auto stub = Ydb::PersQueue::V1::PersQueueService::NewStub(server.InsecureChannel);
+        Y_UNIT_TEST(SetupWriteLockSessionWithDatabase) { 
+            TPersQueueV1TestServer server; 
+ 
+            auto stub = Ydb::PersQueue::V1::PersQueueService::NewStub(server.InsecureChannel); 
             grpc::ClientContext grpcContext;
             grpcContext.AddMetadata("x-ydb-database", "/Root/acc");
 
@@ -290,19 +290,19 @@ namespace NKikimr::NPersQueueTests {
             }
         }
 
-        Y_UNIT_TEST(TestAddRemoveReadRule) {
-            TPersQueueV1TestServer server;
-            SET_LOCALS;
+        Y_UNIT_TEST(TestAddRemoveReadRule) { 
+            TPersQueueV1TestServer server; 
+            SET_LOCALS; 
 
-            pqClient->CreateConsumer("goodUser");
+            pqClient->CreateConsumer("goodUser"); 
 
-            TString path = server.GetTopicPath();
-
+            TString path = server.GetTopicPath(); 
+ 
             Ydb::PersQueue::V1::AddReadRuleRequest addRuleRequest;
             Ydb::PersQueue::V1::AddReadRuleResponse addRuleResponse;
             addRuleRequest.set_path(path);
 
-            auto stub = Ydb::PersQueue::V1::PersQueueService::NewStub(server.InsecureChannel);
+            auto stub = Ydb::PersQueue::V1::PersQueueService::NewStub(server.InsecureChannel); 
             {
                 grpc::ClientContext grpcContext;
                 grpcContext.AddMetadata("x-ydb-database", "/Root/acc");

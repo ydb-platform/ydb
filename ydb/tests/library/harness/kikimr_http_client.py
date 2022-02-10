@@ -55,40 +55,40 @@ class HiveClient(object):
             url_lst.append('channel=' + ','.join(map(str, channels)))
         self.__get('&'.join(url_lst), timeout=TIMEOUT)
 
-    def kick_tablets_from_node(self, node_id):
+    def kick_tablets_from_node(self, node_id): 
         self.__get(
-            self.__url + "&page=KickNode&node={node}".format(node=node_id),
-            timeout=TIMEOUT
-        )
+            self.__url + "&page=KickNode&node={node}".format(node=node_id), 
+            timeout=TIMEOUT 
+        ) 
 
-    def block_node(self, node_id, block=True):
-        block = '1' if block else '0'
+    def block_node(self, node_id, block=True): 
+        block = '1' if block else '0' 
         self.__get(
-            self.__url + "&page=SetDown&node={node}&down={down}".format(node=node_id, down=block),
-            timeout=TIMEOUT
-        )
-
-    def unblock_node(self, node_id):
+            self.__url + "&page=SetDown&node={node}&down={down}".format(node=node_id, down=block), 
+            timeout=TIMEOUT 
+        ) 
+ 
+    def unblock_node(self, node_id): 
         self.block_node(node_id, block=False)
-
-    def change_tablet_weight(self, tablet_id, tablet_weight):
+ 
+    def change_tablet_weight(self, tablet_id, tablet_weight): 
         self.__get(
-            self.__url + "&page=UpdateResources&tablet={tablet}&kv={size}".format(
-                tablet=tablet_id,
-                size=tablet_weight
-            ),
-            timeout=TIMEOUT
-        )
-
-    def change_tablet_cpu_usage(self, tablet_id, cpu_usage):
+            self.__url + "&page=UpdateResources&tablet={tablet}&kv={size}".format( 
+                tablet=tablet_id, 
+                size=tablet_weight 
+            ), 
+            timeout=TIMEOUT 
+        ) 
+ 
+    def change_tablet_cpu_usage(self, tablet_id, cpu_usage): 
         self.__get(
-            self.__url + "&page=UpdateResources&tablet={tablet}&cpu={size}".format(
-                tablet=tablet_id,
-                size=cpu_usage
-            ),
-            timeout=TIMEOUT
-        )
-
+            self.__url + "&page=UpdateResources&tablet={tablet}&cpu={size}".format( 
+                tablet=tablet_id, 
+                size=cpu_usage 
+            ), 
+            timeout=TIMEOUT 
+        ) 
+ 
     def set_min_scatter_to_balance(self, min_scatter_to_balance=101):
         """
         min_scatter_to_balance=101 -- effectively disables auto rebalancing
@@ -97,7 +97,7 @@ class HiveClient(object):
             self.__url + "&page=Settings&minScatterToBalance={min_scatter_to_balance}".format(
                 min_scatter_to_balance=min_scatter_to_balance), timeout=TIMEOUT
         )
-
+ 
     def set_max_scheduled_tablets(self, max_scheduled_tablets=10):
         self.__get(
             self.__url + "&page=Settings&maxScheduledTablets={max_scheduled_tablets}".format(
@@ -158,17 +158,17 @@ class SwaggerClient(object):
             "/json/pdiskinfo", node_id=str(node_id), enums='true', timeout=self.__timeout
         )
 
-    def vdisk_info(self):
-        return self.__http_get_and_parse_json(
-            "/json/vdiskinfo", timeout=self.__timeout
-        )
+    def vdisk_info(self): 
+        return self.__http_get_and_parse_json( 
+            "/json/vdiskinfo", timeout=self.__timeout 
+        ) 
 
-    def tablet_info(self, tablet_type=None):
-        if tablet_type is not None:
-            return self.__http_get_and_parse_json(
-                "/json/tabletinfo", timeout=self.__timeout, filter='Type={}'.format(tablet_type)
-            )
-        else:
-            return self.__http_get_and_parse_json(
-                "/json/tabletinfo", timeout=self.__timeout
-            )
+    def tablet_info(self, tablet_type=None): 
+        if tablet_type is not None: 
+            return self.__http_get_and_parse_json( 
+                "/json/tabletinfo", timeout=self.__timeout, filter='Type={}'.format(tablet_type) 
+            ) 
+        else: 
+            return self.__http_get_and_parse_json( 
+                "/json/tabletinfo", timeout=self.__timeout 
+            ) 

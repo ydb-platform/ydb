@@ -7,7 +7,7 @@ OWNER(
     vvvv
     g:kikimr
 )
-
+ 
 IF (OS_WINDOWS)
     NO_OPTIMIZE_PY_PROTOS()
 ENDIF()

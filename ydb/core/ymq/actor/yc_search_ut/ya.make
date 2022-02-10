@@ -1,25 +1,25 @@
-OWNER(
-    komels
+OWNER( 
+    komels 
     g:kikimr
-    g:sqs
-)
-
-UNITTEST()
-
-PEERDIR(
+    g:sqs 
+) 
+ 
+UNITTEST() 
+ 
+PEERDIR( 
     ydb/core/testlib
     ydb/core/ymq/actor
-)
+) 
+ 
+SRCS( 
+    index_events_processor_ut.cpp 
+    test_events_writer.cpp 
+) 
 
-SRCS(
-    index_events_processor_ut.cpp
-    test_events_writer.cpp
-)
+SIZE(MEDIUM) 
 
-SIZE(MEDIUM)
+TIMEOUT(300) 
 
-TIMEOUT(300)
-
-YQL_LAST_ABI_VERSION()
-
-END()
+YQL_LAST_ABI_VERSION() 
+ 
+END() 

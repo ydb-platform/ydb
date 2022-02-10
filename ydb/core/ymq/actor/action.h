@@ -217,23 +217,23 @@ protected:
 
         RLOG_SQS_ERROR("Request timeout. User [" << UserName_ << "] Queue [" << GetQueueName() << "] Action [" << Action_ << "]. State: { " << DumpState() << " }");
         if (QueueCounters_) {
-            INC_COUNTER_COUPLE(QueueCounters_, RequestTimeouts, request_timeouts_count_per_second);
+            INC_COUNTER_COUPLE(QueueCounters_, RequestTimeouts, request_timeouts_count_per_second); 
         } else if (UserCounters_) {
             INC_COUNTER(UserCounters_, RequestTimeouts);
         } else {
-            TIntrusivePtrCntrCouple rootCounters {
-                    SqsCoreCounters_ ? SqsCoreCounters_ : GetSqsServiceCounters(AppData()->Counters, "core"),
-                    GetYmqPublicCounters(AppData()->Counters)
-            };
-            auto [userCounters, queueCounters] = GetUserAndQueueCounters(rootCounters, TQueuePath(Cfg().GetRoot(), UserName_, GetQueueName()));
-            if (queueCounters.SqsCounters) {
-                queueCounters.SqsCounters->GetCounter("RequestTimeouts", true)->Inc();
-            } else if (userCounters.SqsCounters) {
-                userCounters.SqsCounters->GetCounter("RequestTimeouts", true)->Inc();
+            TIntrusivePtrCntrCouple rootCounters { 
+                    SqsCoreCounters_ ? SqsCoreCounters_ : GetSqsServiceCounters(AppData()->Counters, "core"), 
+                    GetYmqPublicCounters(AppData()->Counters) 
+            }; 
+            auto [userCounters, queueCounters] = GetUserAndQueueCounters(rootCounters, TQueuePath(Cfg().GetRoot(), UserName_, GetQueueName())); 
+            if (queueCounters.SqsCounters) { 
+                queueCounters.SqsCounters->GetCounter("RequestTimeouts", true)->Inc(); 
+            } else if (userCounters.SqsCounters) { 
+                userCounters.SqsCounters->GetCounter("RequestTimeouts", true)->Inc(); 
             }
-            if (queueCounters.YmqCounters) {
-                queueCounters.YmqCounters->GetCounter("RequestTimeouts", true)->Inc();
-            }
+            if (queueCounters.YmqCounters) { 
+                queueCounters.YmqCounters->GetCounter("RequestTimeouts", true)->Inc(); 
+            } 
         }
 
         MakeError(MutableErrorDesc(), NErrors::TIMEOUT);
@@ -260,30 +260,30 @@ protected:
 
     void SendReplyAndDie() {
         RLOG_SQS_TRACE("SendReplyAndDie from action actor " << Response_);
-        auto actionCountersCouple = GetActionCounters();
+        auto actionCountersCouple = GetActionCounters(); 
         auto* detailedCounters = UserCounters_ ? UserCounters_->GetDetailedCounters() : nullptr;
         const size_t errors = ErrorsCount(Response_, detailedCounters ? &detailedCounters->APIStatuses : nullptr);
-        if (actionCountersCouple.SqsCounters) {
+        if (actionCountersCouple.SqsCounters) { 
             if (errors) {
-                ADD_COUNTER(actionCountersCouple.SqsCounters, Errors, errors);
+                ADD_COUNTER(actionCountersCouple.SqsCounters, Errors, errors); 
             } else {
-                INC_COUNTER(actionCountersCouple.SqsCounters, Success);
+                INC_COUNTER(actionCountersCouple.SqsCounters, Success); 
             }
         }
-        if (actionCountersCouple.YmqCounters) {
-            if (errors) {
-                ADD_COUNTER(actionCountersCouple.YmqCounters, Errors, errors);
-            } else {
-                INC_COUNTER(actionCountersCouple.YmqCounters, Success);
-            }
-        }
+        if (actionCountersCouple.YmqCounters) { 
+            if (errors) { 
+                ADD_COUNTER(actionCountersCouple.YmqCounters, Errors, errors); 
+            } else { 
+                INC_COUNTER(actionCountersCouple.YmqCounters, Success); 
+            } 
+        } 
         FinishTs_ = TActivationContext::Now();
         const TDuration workingDuration = GetRequestWorkingDuration();
         RLOG_SQS_DEBUG("Request " << Action_ << " working duration: " << workingDuration.MilliSeconds() << "ms");
-        if (actionCountersCouple.Defined()) {
+        if (actionCountersCouple.Defined()) { 
             const TDuration duration = GetRequestDuration();
-            COLLECT_HISTOGRAM_COUNTER_COUPLE(actionCountersCouple, Duration, duration.MilliSeconds());
-            COLLECT_HISTOGRAM_COUNTER_COUPLE(actionCountersCouple, WorkingDuration, workingDuration.MilliSeconds());
+            COLLECT_HISTOGRAM_COUNTER_COUPLE(actionCountersCouple, Duration, duration.MilliSeconds()); 
+            COLLECT_HISTOGRAM_COUNTER_COUPLE(actionCountersCouple, WorkingDuration, workingDuration.MilliSeconds()); 
         }
         if (IsRequestSlow()) {
             PrintSlowRequestWarning();
@@ -395,32 +395,32 @@ protected:
     bool IsForbiddenPath(const TString& path) const {
         return path.Contains("..") || path.Contains("//") || IsInternalResource(path);
     }
-    struct TActionCountersPack {
-        TActionCounters* CoreCounters = nullptr;
-        TActionCounters* YmqCounters = nullptr;
-    };
+    struct TActionCountersPack { 
+        TActionCounters* CoreCounters = nullptr; 
+        TActionCounters* YmqCounters = nullptr; 
+    }; 
 
-    TCountersCouple<TActionCounters*> GetActionCounters() const {
-        TCountersCouple<TActionCounters*> result{nullptr, nullptr};
+    TCountersCouple<TActionCounters*> GetActionCounters() const { 
+        TCountersCouple<TActionCounters*> result{nullptr, nullptr}; 
         if (IsActionForQueue(Action_) && QueueCounters_) {
             if (IsActionForMessage(Action_) || QueueCounters_->NeedToShowDetailedCounters()) {
-                result.SqsCounters = &QueueCounters_->SqsActionCounters[Action_];
+                result.SqsCounters = &QueueCounters_->SqsActionCounters[Action_]; 
             }
         } else if (IsActionForUser(Action_) && UserCounters_) {
             if (UserCounters_->NeedToShowDetailedCounters()) {
-                result.SqsCounters = &UserCounters_->SqsActionCounters[Action_];
+                result.SqsCounters = &UserCounters_->SqsActionCounters[Action_]; 
             }
         }
-        if (IsActionForQueueYMQ(Action_) && QueueCounters_) {
-            if (IsActionForMessage(Action_) || QueueCounters_->NeedToShowDetailedCounters()) {
-                result.YmqCounters = &QueueCounters_->YmqActionCounters[Action_];
-            }
-        } else if (IsActionForUserYMQ(Action_) && UserCounters_) {
-            if (UserCounters_->NeedToShowDetailedCounters()) {
-                result.YmqCounters = &UserCounters_->YmqActionCounters[Action_];
-            }
-        }
-        return result;
+        if (IsActionForQueueYMQ(Action_) && QueueCounters_) { 
+            if (IsActionForMessage(Action_) || QueueCounters_->NeedToShowDetailedCounters()) { 
+                result.YmqCounters = &QueueCounters_->YmqActionCounters[Action_]; 
+            } 
+        } else if (IsActionForUserYMQ(Action_) && UserCounters_) { 
+            if (UserCounters_->NeedToShowDetailedCounters()) { 
+                result.YmqCounters = &UserCounters_->YmqActionCounters[Action_]; 
+            } 
+        } 
+        return result; 
     }
 
     void RequestSchemeCache(const TString& path) {
@@ -696,39 +696,39 @@ private:
 
 private:
     void Start() {
-        auto actionCountersCouple = GetActionCounters();
-        if (actionCountersCouple.SqsCounters) {
+        auto actionCountersCouple = GetActionCounters(); 
+        if (actionCountersCouple.SqsCounters) { 
             if (IsActionForQueue(Action_) && QueueCounters_) {
-                NeedReportSqsActionInflyCounter = QueueCounters_->NeedToShowDetailedCounters();
+                NeedReportSqsActionInflyCounter = QueueCounters_->NeedToShowDetailedCounters(); 
             } else if (IsActionForUser(Action_) && UserCounters_) {
-                NeedReportSqsActionInflyCounter = UserCounters_->NeedToShowDetailedCounters();
+                NeedReportSqsActionInflyCounter = UserCounters_->NeedToShowDetailedCounters(); 
             }
-            if (NeedReportSqsActionInflyCounter) {
-                INC_COUNTER(actionCountersCouple.SqsCounters, Infly);
-            }
-        }
-        if (actionCountersCouple.YmqCounters) {
-            if (IsActionForQueueYMQ(Action_) && QueueCounters_) {
-                NeedReportYmqActionInflyCounter = QueueCounters_->NeedToShowDetailedCounters();
-            } else if (IsActionForUserYMQ(Action_) && UserCounters_) {
-                NeedReportYmqActionInflyCounter = UserCounters_->NeedToShowDetailedCounters();
-            }
-            if (NeedReportYmqActionInflyCounter) {
-                INC_COUNTER(actionCountersCouple.YmqCounters, Infly);
+            if (NeedReportSqsActionInflyCounter) { 
+                INC_COUNTER(actionCountersCouple.SqsCounters, Infly); 
             }
         }
+        if (actionCountersCouple.YmqCounters) { 
+            if (IsActionForQueueYMQ(Action_) && QueueCounters_) { 
+                NeedReportYmqActionInflyCounter = QueueCounters_->NeedToShowDetailedCounters(); 
+            } else if (IsActionForUserYMQ(Action_) && UserCounters_) { 
+                NeedReportYmqActionInflyCounter = UserCounters_->NeedToShowDetailedCounters(); 
+            } 
+            if (NeedReportYmqActionInflyCounter) { 
+                INC_COUNTER(actionCountersCouple.YmqCounters, Infly); 
+            } 
+        } 
         DoStart();
         StartRequestWasCalled_ = true;
     }
 
     void Finish() {
-        auto actionCounters = GetActionCounters();
-        if (NeedReportSqsActionInflyCounter) {
-            DEC_COUNTER(actionCounters.SqsCounters, Infly);
+        auto actionCounters = GetActionCounters(); 
+        if (NeedReportSqsActionInflyCounter) { 
+            DEC_COUNTER(actionCounters.SqsCounters, Infly); 
         }
-        if (NeedReportYmqActionInflyCounter && actionCounters.YmqCounters) {
-            DEC_COUNTER(actionCounters.YmqCounters, Infly);
-        }
+        if (NeedReportYmqActionInflyCounter && actionCounters.YmqCounters) { 
+            DEC_COUNTER(actionCounters.YmqCounters, Infly); 
+        } 
         if (StartRequestWasCalled_) {
             DoFinish();
             FinishRequestWasCalled_ = true;
@@ -756,7 +756,7 @@ protected:
     TInstant StartTs_;
     TInstant FinishTs_;
     TIntrusivePtr<NMonitoring::TDynamicCounters> SqsCoreCounters_; // Raw counters interface. Is is not prefered to use them
-    TIntrusivePtr<NMonitoring::TDynamicCounters> YmqRootCounters_; // Raw counters interface. Is is not prefered to use them
+    TIntrusivePtr<NMonitoring::TDynamicCounters> YmqRootCounters_; // Raw counters interface. Is is not prefered to use them 
     TIntrusivePtr<TUserCounters> UserCounters_;
     TIntrusivePtr<TQueueCounters> QueueCounters_;
     TMaybe<TSqsEvents::TQueueAttributes> QueueAttributes_;
@@ -767,8 +767,8 @@ protected:
     bool FinishRequestWasCalled_ = false;
     TInstant QuotaRequestTs_;
     TIntrusivePtr<TSqsEvents::TQuoterResourcesForActions> QuoterResources_;
-    bool NeedReportSqsActionInflyCounter = false;
-    bool NeedReportYmqActionInflyCounter = false;
+    bool NeedReportSqsActionInflyCounter = false; 
+    bool NeedReportYmqActionInflyCounter = false; 
     TSchedulerCookieHolder TimeoutCookie_ = ISchedulerCookie::Make2Way();
     NKikimrClient::TSqsRequest SourceSqsRequest_;
 };

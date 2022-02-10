@@ -29,12 +29,12 @@ struct TCloudAuthCounters;
         ++*countersPack->counter;                \
     }
 
-#define INC_COUNTER_COUPLE(countersPack, sqsCounter, ymqCounter)       \
-    if (countersPack) {                                                \
-        ++*countersPack->sqsCounter;                                   \
-        ++*countersPack->ymqCounter;                                   \
-    }
-
+#define INC_COUNTER_COUPLE(countersPack, sqsCounter, ymqCounter)       \ 
+    if (countersPack) {                                                \ 
+        ++*countersPack->sqsCounter;                                   \ 
+        ++*countersPack->ymqCounter;                                   \ 
+    } 
+ 
 #define DEC_COUNTER(countersPack, counter)       \
     if (countersPack) {                          \
         --*countersPack->counter;                \
@@ -45,31 +45,31 @@ struct TCloudAuthCounters;
         *countersPack->counter += (count);          \
     }
 
-#define ADD_COUNTER_COUPLE(countersPack, sqsCounter, ymqCounter, count)   \
-    if (countersPack) {                                                   \
-        *countersPack->sqsCounter += (count);                             \
-        *countersPack->ymqCounter += (count);                             \
-    }
-
-#define SET_COUNTER_COUPLE(countersPack, sqsCounter, ymqCounter, count)   \
-    if (countersPack) {                                                   \
-        *countersPack->sqsCounter = (count);                              \
-        *countersPack->ymqCounter = (count);                              \
-    }
-
+#define ADD_COUNTER_COUPLE(countersPack, sqsCounter, ymqCounter, count)   \ 
+    if (countersPack) {                                                   \ 
+        *countersPack->sqsCounter += (count);                             \ 
+        *countersPack->ymqCounter += (count);                             \ 
+    } 
+ 
+#define SET_COUNTER_COUPLE(countersPack, sqsCounter, ymqCounter, count)   \ 
+    if (countersPack) {                                                   \ 
+        *countersPack->sqsCounter = (count);                              \ 
+        *countersPack->ymqCounter = (count);                              \ 
+    } 
+ 
 #define COLLECT_HISTOGRAM_COUNTER(countersPack, counter, count) \
     if (countersPack) {                                         \
         countersPack->counter->Collect(count);                  \
     }
 
-#define COLLECT_HISTOGRAM_COUNTER_COUPLE(countersCouple, counter, count)    \
-    if (countersCouple.SqsCounters) {                                       \
-        countersCouple.SqsCounters->counter->Collect(count);                \
-    }                                                                       \
-    if (countersCouple.YmqCounters) {                                       \
-        countersCouple.YmqCounters->counter->Collect(count);                \
-    }
-
+#define COLLECT_HISTOGRAM_COUNTER_COUPLE(countersCouple, counter, count)    \ 
+    if (countersCouple.SqsCounters) {                                       \ 
+        countersCouple.SqsCounters->counter->Collect(count);                \ 
+    }                                                                       \ 
+    if (countersCouple.YmqCounters) {                                       \ 
+        countersCouple.YmqCounters->counter->Collect(count);                \ 
+    } 
+ 
 // Enums for code readability and for static types guarantee that all parameters passed correctly.
 enum class ELaziness {
     OnStart,
@@ -87,36 +87,36 @@ enum class EValueType {
 };
 
 extern const TString TOTAL_COUNTER_LABEL;
-//constexpr static std::array<int, 10> RESPONSE_CODES = {200, 400, 403, 404, 500, 503, 504};
+//constexpr static std::array<int, 10> RESPONSE_CODES = {200, 400, 403, 404, 500, 503, 504}; 
 
-template<typename TCounterPtrType>
-struct TCountersCouple {
-    TCounterPtrType SqsCounters = nullptr;
-    TCounterPtrType YmqCounters = nullptr;
-    bool Defined() {
-        return SqsCounters != nullptr;
-    }
-};
+template<typename TCounterPtrType> 
+struct TCountersCouple { 
+    TCounterPtrType SqsCounters = nullptr; 
+    TCounterPtrType YmqCounters = nullptr; 
+    bool Defined() { 
+        return SqsCounters != nullptr; 
+    } 
+}; 
 
-using TIntrusivePtrCntrCouple = TCountersCouple<TIntrusivePtr<NMonitoring::TDynamicCounters>>;
-
-TIntrusivePtr<NMonitoring::TDynamicCounters> GetSqsServiceCounters(
-        const TIntrusivePtr<NMonitoring::TDynamicCounters>& countersRoot, const TString& subgroup);
-TIntrusivePtr<NMonitoring::TDynamicCounters> GetYmqPublicCounters(
-        const TIntrusivePtr<NMonitoring::TDynamicCounters>& countersRoot);
-
-TIntrusivePtrCntrCouple GetFolderCounters(const TIntrusivePtrCntrCouple& userCounters, const TString& folderId);
-void RemoveFolderCounters(const TIntrusivePtrCntrCouple& userCounters, const TString& folderId);
-std::pair<TIntrusivePtrCntrCouple, TIntrusivePtrCntrCouple> GetUserAndQueueCounters(
-        const TIntrusivePtrCntrCouple& sqsRootCounters, const TQueuePath& queuePath);
-TIntrusivePtr<NMonitoring::TDynamicCounters> GetAggregatedCountersFromSqsCoreCounters(
-        const TIntrusivePtrCntrCouple& sqsCoreCounters, const NKikimrConfig::TSqsConfig& cfg);
-TIntrusivePtr<NMonitoring::TDynamicCounters> GetAggregatedCountersFromUserCounters(
-        const TIntrusivePtrCntrCouple& sqsCoreCounters, const NKikimrConfig::TSqsConfig& cfg);
-
+using TIntrusivePtrCntrCouple = TCountersCouple<TIntrusivePtr<NMonitoring::TDynamicCounters>>; 
+ 
+TIntrusivePtr<NMonitoring::TDynamicCounters> GetSqsServiceCounters( 
+        const TIntrusivePtr<NMonitoring::TDynamicCounters>& countersRoot, const TString& subgroup); 
+TIntrusivePtr<NMonitoring::TDynamicCounters> GetYmqPublicCounters( 
+        const TIntrusivePtr<NMonitoring::TDynamicCounters>& countersRoot); 
+ 
+TIntrusivePtrCntrCouple GetFolderCounters(const TIntrusivePtrCntrCouple& userCounters, const TString& folderId); 
+void RemoveFolderCounters(const TIntrusivePtrCntrCouple& userCounters, const TString& folderId); 
+std::pair<TIntrusivePtrCntrCouple, TIntrusivePtrCntrCouple> GetUserAndQueueCounters( 
+        const TIntrusivePtrCntrCouple& sqsRootCounters, const TQueuePath& queuePath); 
+TIntrusivePtr<NMonitoring::TDynamicCounters> GetAggregatedCountersFromSqsCoreCounters( 
+        const TIntrusivePtrCntrCouple& sqsCoreCounters, const NKikimrConfig::TSqsConfig& cfg); 
+TIntrusivePtr<NMonitoring::TDynamicCounters> GetAggregatedCountersFromUserCounters( 
+        const TIntrusivePtrCntrCouple& sqsCoreCounters, const NKikimrConfig::TSqsConfig& cfg); 
+ 
 extern const TString DEFAULT_COUNTER_NAME;
-extern const TString DEFAULT_YMQ_COUNTER_NAME;
-//extern const TString ACTION_CNTR_PREFIX;
+extern const TString DEFAULT_YMQ_COUNTER_NAME; 
+//extern const TString ACTION_CNTR_PREFIX; 
 
 namespace NDetails {
 
@@ -342,7 +342,7 @@ struct TLazyCachedHistogram : public NDetails::TLazyCachedCounterBase<NMonitorin
     }
 
     void Init(const TIntrusivePtr<NMonitoring::TDynamicCounters>& rootCounters, ELifetime lifetime, const NMonitoring::TBucketBounds& buckets, const TString& name, const TString& value, ELaziness laziness) {
-        Buckets = &buckets;
+        Buckets = &buckets; 
         TLazyCachedCounterBase::Init(rootCounters, lifetime, name, value, ELaziness::OnDemand);
         if (laziness == ELaziness::OnStart) {
             EnsureCreated();
@@ -368,7 +368,7 @@ private:
 
 // Counters for actions (like SendMessage, CreateQueue or GetQueueUrl).
 struct TActionCounters {
-public:
+public: 
     TLazyCachedCounter Success;
     TLazyCachedCounter Errors; // User metric for cloud console (SendMessage/ReceiveMessage/DeleteMessage).
     TLazyCachedCounter Infly;
@@ -379,27 +379,27 @@ public:
     TLazyCachedHistogram WorkingDuration; // Special duration except wait time for ReceiveMessage action (== 18 counters). // User metric for cloud console (ReceiveMessage).
 
 public:
-    void Init(const NKikimrConfig::TSqsConfig& cfg, const TIntrusivePtr<NMonitoring::TDynamicCounters>& rootCounters,
-                      EAction action, ELifetime lifetime = ELifetime::Persistent);
+    void Init(const NKikimrConfig::TSqsConfig& cfg, const TIntrusivePtr<NMonitoring::TDynamicCounters>& rootCounters, 
+                      EAction action, ELifetime lifetime = ELifetime::Persistent); 
 
-    virtual void SetAggregatedParent(TActionCounters* parent);
+    virtual void SetAggregatedParent(TActionCounters* parent); 
     virtual ~TActionCounters() {}
 };
 
-struct TYmqActionCounters : public TActionCounters {
-    void Init(const NKikimrConfig::TSqsConfig& cfg, const TIntrusivePtr<NMonitoring::TDynamicCounters>& rootCounters,
-              EAction action, const TString& labelName, const TString& namePrefix,
-              ELifetime lifetime = ELifetime::Persistent);
-public:
+struct TYmqActionCounters : public TActionCounters { 
+    void Init(const NKikimrConfig::TSqsConfig& cfg, const TIntrusivePtr<NMonitoring::TDynamicCounters>& rootCounters, 
+              EAction action, const TString& labelName, const TString& namePrefix, 
+              ELifetime lifetime = ELifetime::Persistent); 
+public: 
     virtual ~TYmqActionCounters() {}
-    void SetAggregatedParent(TActionCounters*) override {
-        return;
-    }
-
-private:
-    NMonitoring::TDynamicCounterPtr SubGroup;
-};
-
+    void SetAggregatedParent(TActionCounters*) override { 
+        return; 
+    } 
+ 
+private: 
+    NMonitoring::TDynamicCounterPtr SubGroup; 
+}; 
+ 
 // Counters for typed queries (WRITE_MESSAGE_ID, PURGE_QUEUE_ID and etc).
 struct TQueryTypeCounters {
     TLazyCachedCounter TransactionsCount;
@@ -453,7 +453,7 @@ private:
 struct TUserCounters : public TAtomicRefCount<TUserCounters> {
     // Action types are declared in ydb/core/ymq/base/action.h.
     TActionCounters SqsActionCounters[EAction::ActionsArraySize]; // 11 actions. See IsActionForUser() function in ydb/core/ymq/base/action.cpp.
-    TYmqActionCounters YmqActionCounters[EAction::ActionsArraySize]; // see IsActionForUserYMQ() function.
+    TYmqActionCounters YmqActionCounters[EAction::ActionsArraySize]; // see IsActionForUserYMQ() function. 
 
     TLazyCachedCounter RequestTimeouts; // Requests that weren't processed in 10 minutes. They are almost sure hanged.
 
@@ -470,7 +470,7 @@ struct TUserCounters : public TAtomicRefCount<TUserCounters> {
         TLazyCachedCounter CreateAccountOnTheFly_Success; // Account created on the fly (Yandex Cloud mode).
         TLazyCachedCounter CreateAccountOnTheFly_Errors; // Account that were failed to create on the fly (Yandex Cloud mode).
 
-        void Init(const TIntrusivePtrCntrCouple& userCounters,
+        void Init(const TIntrusivePtrCntrCouple& userCounters, 
                   const std::shared_ptr<TAlignedPagePoolCounters>& allocPoolCounters,
                   const NKikimrConfig::TSqsConfig& cfg);
         void SetAggregatedParent(TDetailedCounters* parent);
@@ -488,21 +488,21 @@ struct TUserCounters : public TAtomicRefCount<TUserCounters> {
 
     // Raw counters interface
     // Don't use counters by name!
-    TIntrusivePtrCntrCouple SqsCoreCounters; // Sqs core subsystem
-    TIntrusivePtrCntrCouple UserCounters; // User tree in core subsystem
+    TIntrusivePtrCntrCouple SqsCoreCounters; // Sqs core subsystem 
+    TIntrusivePtrCntrCouple UserCounters; // User tree in core subsystem 
 
-    TUserCounters(
-            const NKikimrConfig::TSqsConfig& cfg, const TIntrusivePtr<NMonitoring::TDynamicCounters>& sqsCoreCounters,
-            const TIntrusivePtr<NMonitoring::TDynamicCounters>& ymqRootCounters,
+    TUserCounters( 
+            const NKikimrConfig::TSqsConfig& cfg, const TIntrusivePtr<NMonitoring::TDynamicCounters>& sqsCoreCounters, 
+            const TIntrusivePtr<NMonitoring::TDynamicCounters>& ymqRootCounters, 
             const std::shared_ptr<TAlignedPagePoolCounters>& allocPoolCounters, const TString& userName,
-            const TIntrusivePtr<TUserCounters>& aggregatedParent,
-            bool isAggregatedCounters = false
-    )
-        : SqsCoreCounters{sqsCoreCounters, ymqRootCounters}
+            const TIntrusivePtr<TUserCounters>& aggregatedParent, 
+            bool isAggregatedCounters = false 
+    ) 
+        : SqsCoreCounters{sqsCoreCounters, ymqRootCounters} 
         , Cfg(&cfg)
         , UserName(userName)
         , AggregatedParent(aggregatedParent)
-        , IsAggregatedCounters(isAggregatedCounters)
+        , IsAggregatedCounters(isAggregatedCounters) 
     {
         InitCounters(userName, allocPoolCounters);
     }
@@ -551,7 +551,7 @@ private:
     TDetailedCounters DetailedCounters;
     TIntrusivePtr<TUserCounters> AggregatedParent;
     TIntrusivePtr<TQueueCounters> AggregatedQueueCounters;
-    bool IsAggregatedCounters;
+    bool IsAggregatedCounters; 
 };
 
 // Queue counters in SQS core subsystem.
@@ -561,46 +561,46 @@ struct TQueueCounters : public TAtomicRefCount<TQueueCounters> {
     TYmqActionCounters YmqActionCounters[EAction::ActionsArraySize]; // See IsActionForQueueYMQ() function in ydb/core/ymq/sqs/base/action.cpp.
 
     TLazyCachedCounter RequestTimeouts; // Requests that weren't processed in 10 minutes. They are almost sure hanged.
-    TLazyCachedCounter request_timeouts_count_per_second; // Requests that weren't processed in 10 minutes. They are almost sure hanged.
+    TLazyCachedCounter request_timeouts_count_per_second; // Requests that weren't processed in 10 minutes. They are almost sure hanged. 
     TLazyCachedCounter RequestsThrottled; // Request that ended with ThrottlingException
     TLazyCachedCounter QueueMasterStartProblems; // TODO: remove after migration
     TLazyCachedCounter QueueLeaderStartProblems; // Critical problems during leader start.
 
     TLazyCachedCounter MessagesPurged;
-    TLazyCachedCounter purged_count_per_second;
+    TLazyCachedCounter purged_count_per_second; 
 
     TLazyCachedHistogram MessageReceiveAttempts; // User attempts for receive messages. Histogram with buckets for receive attempts (== 4 counters). // User metric for cloud console.
-    TLazyCachedHistogram receive_attempts_count_rate;
+    TLazyCachedHistogram receive_attempts_count_rate; 
     TLazyCachedHistogram ClientMessageProcessing_Duration; // Time between receive and delete for deleted message. Histogram with buckets for client processing (== 21 counters). // User metric for cloud console.
-    TLazyCachedHistogram client_processing_duration_milliseconds;
+    TLazyCachedHistogram client_processing_duration_milliseconds; 
     TLazyCachedHistogram MessageReside_Duration; // Time between send and receive for received messages. Histogram with buckets for client processing (== 21 counters). // User metric for cloud console.
-    TLazyCachedHistogram reside_duration_milliseconds;
+    TLazyCachedHistogram reside_duration_milliseconds; 
 
     TLazyCachedCounter DeleteMessage_Count; // Messages count that were deleted. // User metric for cloud console.
-    TLazyCachedCounter deleted_count_per_second;
+    TLazyCachedCounter deleted_count_per_second; 
 
     TLazyCachedCounter ReceiveMessage_EmptyCount; // Receive message requests count that returned empty results.
-    TLazyCachedCounter empty_receive_attempts_count_per_second;
+    TLazyCachedCounter empty_receive_attempts_count_per_second; 
     TLazyCachedCounter ReceiveMessage_Count; // Messages count that were received. // User metric for cloud console.
-    TLazyCachedCounter received_count_per_second;
+    TLazyCachedCounter received_count_per_second; 
     TLazyCachedCounter ReceiveMessage_BytesRead; // Bytes of message bodies that were received. // User metric for cloud console.
-    TLazyCachedCounter received_bytes_per_second;
+    TLazyCachedCounter received_bytes_per_second; 
 
     TLazyCachedCounter MessagesMovedToDLQ; // Count of messages that were moved to DLQ.
 
     TLazyCachedCounter SendMessage_DeduplicationCount; // Count of messages that were deduplicated (for fifo only).
-    TLazyCachedCounter deduplicated_count_per_second;
+    TLazyCachedCounter deduplicated_count_per_second; 
     TLazyCachedCounter SendMessage_Count; // Count of messages that were sent. // User metric for cloud console.
-    TLazyCachedCounter sent_count_per_second;
+    TLazyCachedCounter sent_count_per_second; 
     TLazyCachedCounter SendMessage_BytesWritten; // Bytes of message bodies that were sent.
-    TLazyCachedCounter sent_bytes_per_second;
+    TLazyCachedCounter sent_bytes_per_second; 
 
     TLazyCachedCounter MessagesCount; // Messages count in queue. // User metric for cloud console.
-    TLazyCachedCounter stored_count;
+    TLazyCachedCounter stored_count; 
     TLazyCachedCounter InflyMessagesCount; // Messages count in queue that are inflight. // User metric for cloud console.
-    TLazyCachedCounter inflight_count;
+    TLazyCachedCounter inflight_count; 
     TLazyCachedCounter OldestMessageAgeSeconds; // Age of the oldest message in queue. // User metric for cloud console.
-    TLazyCachedCounter oldest_age_milliseconds;
+    TLazyCachedCounter oldest_age_milliseconds; 
 
     struct TDetailedCounters {
         TIntrusivePtr<TTransactionCounters> TransactionCounters;
@@ -626,16 +626,16 @@ struct TQueueCounters : public TAtomicRefCount<TQueueCounters> {
         }
     }
 
-    // Raw counters interface.RootCounters
+    // Raw counters interface.RootCounters 
     // Don't use counters by name!
-    TIntrusivePtrCntrCouple RootCounters; // Sqs core subsystem.
-    TIntrusivePtrCntrCouple UserCounters; // User tree in core subsystem
-    TIntrusivePtrCntrCouple FolderCounters; // Folder subtree in user tree (only for Yandex Cloud).
-    TIntrusivePtrCntrCouple QueueCounters; // Queue subtree in user (or folder) tree.
+    TIntrusivePtrCntrCouple RootCounters; // Sqs core subsystem. 
+    TIntrusivePtrCntrCouple UserCounters; // User tree in core subsystem 
+    TIntrusivePtrCntrCouple FolderCounters; // Folder subtree in user tree (only for Yandex Cloud). 
+    TIntrusivePtrCntrCouple QueueCounters; // Queue subtree in user (or folder) tree. 
 
     // Creates counters for not leader node.
     TQueueCounters(const NKikimrConfig::TSqsConfig& cfg,
-                   const TIntrusivePtrCntrCouple& sqsCoreCounters,
+                   const TIntrusivePtrCntrCouple& sqsCoreCounters, 
                    const TUserCounters* userCounters,
                    const TString& queueName,
                    const TString& folderId,

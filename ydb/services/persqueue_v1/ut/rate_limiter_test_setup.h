@@ -23,19 +23,19 @@ public:
 
     // Getters
     ui16 GetGrpcPort() const {
-        return Server->GrpcPort;
+        return Server->GrpcPort; 
     }
 
     ui16 GetMsgBusPort() const {
-        return Server->Port;
+        return Server->Port; 
     }
 
     NKikimr::Tests::TServer& GetServer() {
-        return *Server->CleverServer;
+        return *Server->CleverServer; 
     }
 
     NPersQueueTests::TFlatMsgBusPQClient& GetClient() {
-        return *Server->AnnoyingClient;
+        return *Server->AnnoyingClient; 
     }
 
 private:
@@ -49,7 +49,7 @@ private:
     void WaitWritePQServiceInitialization();
 
 private:
-    THolder<NPersQueue::TTestServer> Server;
+    THolder<NPersQueue::TTestServer> Server; 
     THolder<TPQDataWriter> PQDataWriter; // For waiting for grpc writer service initialization.
     const NKikimrPQ::TPQConfig::TQuotingConfig::ELimitedEntity LimitedEntity;
     double WriteAccountQuota;

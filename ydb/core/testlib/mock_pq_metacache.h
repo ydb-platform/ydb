@@ -9,9 +9,9 @@
 
 namespace NKikimr {
 
-using TEvPqMetaCache = NMsgBusProxy::NPqMetaCacheV2::TEvPqNewMetaCache;
-using TPQGroupInfoPtr = TIntrusiveConstPtr<NSchemeCache::TSchemeCacheNavigate::TPQGroupInfo>;
-using ESchemeStatus = NSchemeCache::TSchemeCacheNavigate::EStatus;
+using TEvPqMetaCache = NMsgBusProxy::NPqMetaCacheV2::TEvPqNewMetaCache; 
+using TPQGroupInfoPtr = TIntrusiveConstPtr<NSchemeCache::TSchemeCacheNavigate::TPQGroupInfo>; 
+using ESchemeStatus = NSchemeCache::TSchemeCacheNavigate::EStatus; 
 // The functionality of this class is not full.
 // So anyone is welcome to improve it.
 class TMockPQMetaCache: public TActor<TMockPQMetaCache> {
@@ -23,57 +23,57 @@ public:
 
     STFUNC(StateFunc) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(TEvPqMetaCache::TEvDescribeTopicsRequest, HandleDescribeTopics);
-            HFunc(TEvPqMetaCache::TEvDescribeAllTopicsRequest, HandleDescribeAllTopics);
+            HFunc(TEvPqMetaCache::TEvDescribeTopicsRequest, HandleDescribeTopics); 
+            HFunc(TEvPqMetaCache::TEvDescribeAllTopicsRequest, HandleDescribeAllTopics); 
         default:
             UNIT_FAIL_NONFATAL("Unexpected event to PQ metacache: " << ev->GetTypeRewrite());
         }
     }
 
-    MOCK_METHOD(void, HandleDescribeTopics, (TEvPqMetaCache::TEvDescribeTopicsRequest::TPtr& ev, const TActorContext& ctx), ());
-    MOCK_METHOD(void, HandleDescribeAllTopics, (TEvPqMetaCache::TEvDescribeAllTopicsRequest::TPtr& ev, const TActorContext& ctx), ());
-    //MOCK_METHOD4(HandleDescribeAllTopics, void(const TString& topic, ui64 balancerTabletId, NMsgBusProxy::TEvPqMetaCache::TEvGetBalancerDescribe::TPtr& ev, const TActorContext& ctx));
+    MOCK_METHOD(void, HandleDescribeTopics, (TEvPqMetaCache::TEvDescribeTopicsRequest::TPtr& ev, const TActorContext& ctx), ()); 
+    MOCK_METHOD(void, HandleDescribeAllTopics, (TEvPqMetaCache::TEvDescribeAllTopicsRequest::TPtr& ev, const TActorContext& ctx), ()); 
+    //MOCK_METHOD4(HandleDescribeAllTopics, void(const TString& topic, ui64 balancerTabletId, NMsgBusProxy::TEvPqMetaCache::TEvGetBalancerDescribe::TPtr& ev, const TActorContext& ctx)); 
 
     //
     // Helpers
     //
 
-    void SetDescribeCustomTopicsAnswer(const NSchemeCache::TSchemeCacheNavigate::TResultSet& resultSet = {}) {
-        // ToDo - !!!
+    void SetDescribeCustomTopicsAnswer(const NSchemeCache::TSchemeCacheNavigate::TResultSet& resultSet = {}) { 
+        // ToDo - !!! 
         using namespace testing;
-//        auto handle = [success, description](NMsgBusProxy::TEvPqMetaCache::TEvGetNode::TPtr& ev, const TActorContext& ctx) {
-//            auto& req = ev->Get()->Request;
-//            req->Description = description;
-//            req->Succeded = success;
-//            auto result = MakeHolder<NMsgBusProxy::TEvPqMetaCache::TEvGetNodeResult>(std::move(req));
-//
-//            ctx.Send(ev->Sender, std::move(result));
-//        };
-        auto handle = [=](TEvPqMetaCache::TEvDescribeTopicsRequest::TPtr& ev, const TActorContext& ctx) {
-            auto* result = new NSchemeCache::TSchemeCacheNavigate();
-            result->ResultSet = resultSet;
-            auto* response = new TEvPqMetaCache::TEvDescribeTopicsResponse(ev->Get()->Topics, result);
-            ctx.Send(ev->Sender, response);
+//        auto handle = [success, description](NMsgBusProxy::TEvPqMetaCache::TEvGetNode::TPtr& ev, const TActorContext& ctx) { 
+//            auto& req = ev->Get()->Request; 
+//            req->Description = description; 
+//            req->Succeded = success; 
+//            auto result = MakeHolder<NMsgBusProxy::TEvPqMetaCache::TEvGetNodeResult>(std::move(req)); 
+// 
+//            ctx.Send(ev->Sender, std::move(result)); 
+//        }; 
+        auto handle = [=](TEvPqMetaCache::TEvDescribeTopicsRequest::TPtr& ev, const TActorContext& ctx) { 
+            auto* result = new NSchemeCache::TSchemeCacheNavigate(); 
+            result->ResultSet = resultSet; 
+            auto* response = new TEvPqMetaCache::TEvDescribeTopicsResponse(ev->Get()->Topics, result); 
+            ctx.Send(ev->Sender, response); 
         };
 
-        EXPECT_CALL(*this, HandleDescribeTopics(_, _))
+        EXPECT_CALL(*this, HandleDescribeTopics(_, _)) 
             .WillOnce(Invoke(handle));
     }
 
-    void SetAllTopicsAnswer(
-            bool success = true, const NSchemeCache::TSchemeCacheNavigate::TResultSet& resultSet = {}
-    ) {
+    void SetAllTopicsAnswer( 
+            bool success = true, const NSchemeCache::TSchemeCacheNavigate::TResultSet& resultSet = {} 
+    ) { 
         using namespace testing;
-        auto handle = [=](TEvPqMetaCache::TEvDescribeAllTopicsRequest::TPtr& ev, const TActorContext& ctx) {
-            auto* response = new TEvPqMetaCache::TEvDescribeAllTopicsResponse("/Root/PQ/");
-            response->Success = success;
-            auto* result = new NSchemeCache::TSchemeCacheNavigate();
-            result->ResultSet = resultSet;
-            response->Result.Reset(result);
-            ctx.Send(ev->Sender, std::move(response));
+        auto handle = [=](TEvPqMetaCache::TEvDescribeAllTopicsRequest::TPtr& ev, const TActorContext& ctx) { 
+            auto* response = new TEvPqMetaCache::TEvDescribeAllTopicsResponse("/Root/PQ/"); 
+            response->Success = success; 
+            auto* result = new NSchemeCache::TSchemeCacheNavigate(); 
+            result->ResultSet = resultSet; 
+            response->Result.Reset(result); 
+            ctx.Send(ev->Sender, std::move(response)); 
         };
 
-        EXPECT_CALL(*this, HandleDescribeAllTopics(_, _))
+        EXPECT_CALL(*this, HandleDescribeAllTopics(_, _)) 
             .WillOnce(Invoke(handle));
     }
 };

@@ -40,18 +40,18 @@ TPQReadService::TPQReadService(const TActorId& schemeCache, const TActorId& newS
 
 
 void TPQReadService::Bootstrap(const TActorContext& ctx) {
-    HaveClusters = !AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen(); // ToDo[migration] - proper condition
-    if (HaveClusters) {
+    HaveClusters = !AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen(); // ToDo[migration] - proper condition 
+    if (HaveClusters) { 
         ctx.Send(NPQ::NClusterTracker::MakeClusterTrackerID(),
                  new NPQ::NClusterTracker::TEvClusterTracker::TEvSubscribe);
     }
     ctx.Send(NNetClassifier::MakeNetClassifierID(), new NNetClassifier::TEvNetClassifier::TEvSubscribe);
-    TopicConverterFactory = std::make_shared<NPersQueue::TTopicNamesConverterFactory>(
-            AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen(), AppData(ctx)->PQConfig.GetRoot()
-    );
-    TopicsHandler = std::make_unique<NPersQueue::TTopicsListController>(
-            TopicConverterFactory, HaveClusters, Clusters, LocalCluster
-    );
+    TopicConverterFactory = std::make_shared<NPersQueue::TTopicNamesConverterFactory>( 
+            AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen(), AppData(ctx)->PQConfig.GetRoot() 
+    ); 
+    TopicsHandler = std::make_unique<NPersQueue::TTopicsListController>( 
+            TopicConverterFactory, HaveClusters, Clusters, LocalCluster 
+    ); 
     Become(&TThis::StateFunc);
 }
 
@@ -89,7 +89,7 @@ void TPQReadService::Handle(NPQ::NClusterTracker::TEvClusterTracker::TEvClusters
     for (size_t i = 0; i < clusters.size(); ++i) {
         Clusters[i] = clusters[i].Name;
     }
-    TopicsHandler->UpdateClusters(Clusters, LocalCluster);
+    TopicsHandler->UpdateClusters(Clusters, LocalCluster); 
 }
 
 
@@ -122,8 +122,8 @@ void TPQReadService::Handle(NKikimr::NGRpcService::TEvStreamPQReadRequest::TPtr&
         ev->Get()->GetStreamCtx()->WriteAndFinish(FillReadResponse("proxy overloaded", PersQueue::ErrorCode::OVERLOAD), grpc::Status::OK); //CANCELLED
         return;
     }
-    if (HaveClusters
-    && (Clusters.empty() || LocalCluster.empty())) {
+    if (HaveClusters 
+    && (Clusters.empty() || LocalCluster.empty())) { 
         LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, "new grpc connection failed - cluster is not known yet");
 
         ev->Get()->GetStreamCtx()->Attach(ctx.SelfID);
@@ -137,11 +137,11 @@ void TPQReadService::Handle(NKikimr::NGRpcService::TEvStreamPQReadRequest::TPtr&
 
         auto ip = ev->Get()->GetStreamCtx()->GetPeerName();
 
-        TActorId worker = ctx.Register(new TReadSessionActor(
-                ev->Release().Release(), cookie, SchemeCache, NewSchemeCache, Counters,
-                DatacenterClassifier ? DatacenterClassifier->ClassifyAddress(NAddressClassifier::ExtractAddress(ip)) : "unknown",
-                *TopicsHandler
-        ));
+        TActorId worker = ctx.Register(new TReadSessionActor( 
+                ev->Release().Release(), cookie, SchemeCache, NewSchemeCache, Counters, 
+                DatacenterClassifier ? DatacenterClassifier->ClassifyAddress(NAddressClassifier::ExtractAddress(ip)) : "unknown", 
+                *TopicsHandler 
+        )); 
 
         Sessions[cookie] = worker;
     }
@@ -158,8 +158,8 @@ void TPQReadService::Handle(NKikimr::NGRpcService::TEvPQReadInfoRequest::TPtr& e
         ev->Get()->SendResult(ConvertPersQueueInternalCodeToStatus(PersQueue::ErrorCode::INITIALIZING), FillInfoResponse("cluster initializing", PersQueue::ErrorCode::INITIALIZING)); //CANCELLED
         return;
     } else {
-        //ctx.Register(new TReadInfoActor(ev->Release().Release(), Clusters, LocalCluster, SchemeCache, NewSchemeCache, Counters));
-        ctx.Register(new TReadInfoActor(ev->Release().Release(), *TopicsHandler, SchemeCache, NewSchemeCache, Counters));
+        //ctx.Register(new TReadInfoActor(ev->Release().Release(), Clusters, LocalCluster, SchemeCache, NewSchemeCache, Counters)); 
+        ctx.Register(new TReadInfoActor(ev->Release().Release(), *TopicsHandler, SchemeCache, NewSchemeCache, Counters)); 
     }
 }
 

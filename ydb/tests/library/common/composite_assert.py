@@ -44,28 +44,28 @@ class CompositeAssert(object):
         return False
 
 
-# ToDo: Refactor to use CompositeAssert instead of this.
-class CompositeCheckResult(object):
-    def __init__(self):
-        self.__result = True
-        self.__reason = []
-
-    @property
-    def result(self):
-        return self.__result
-
-    @property
-    def description(self):
-        return '\n'.join(self.__reason)
-
-    def check(self, condition, description=""):
-        if not condition:
-            self.set_failed(description)
-
-    def set_failed(self, description=""):
-        self.__result = False
-        if description:
-            self.__reason.append(description)
-
-    def __nonzero__(self):
-        return self.__result
+# ToDo: Refactor to use CompositeAssert instead of this. 
+class CompositeCheckResult(object): 
+    def __init__(self): 
+        self.__result = True 
+        self.__reason = [] 
+ 
+    @property 
+    def result(self): 
+        return self.__result 
+ 
+    @property 
+    def description(self): 
+        return '\n'.join(self.__reason) 
+ 
+    def check(self, condition, description=""): 
+        if not condition: 
+            self.set_failed(description) 
+ 
+    def set_failed(self, description=""): 
+        self.__result = False 
+        if description: 
+            self.__reason.append(description) 
+ 
+    def __nonzero__(self): 
+        return self.__result 

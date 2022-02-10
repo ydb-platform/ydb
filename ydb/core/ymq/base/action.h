@@ -36,13 +36,13 @@ enum EAction {
 
 EAction ActionFromString(const TString& name);
 const TString& ActionToString(EAction action);
-const TString& ActionToCloudConvMethod(EAction action);
+const TString& ActionToCloudConvMethod(EAction action); 
 
 bool IsBatchAction(EAction action);
 bool IsActionForQueue(EAction action);
-bool IsActionForQueueYMQ(EAction action);
+bool IsActionForQueueYMQ(EAction action); 
 bool IsActionForUser(EAction action);
-bool IsActionForUserYMQ(EAction action);
+bool IsActionForUserYMQ(EAction action); 
 bool IsProxyAction(EAction action);
 bool IsActionForMessage(EAction action);
 bool IsFastAction(EAction action);

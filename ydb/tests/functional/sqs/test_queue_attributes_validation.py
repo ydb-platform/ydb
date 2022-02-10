@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-import pytest
+import pytest 
 from hamcrest import assert_that, equal_to
 
 from sqs_test_base import KikimrSqsTestBase, IS_FIFO_PARAMS

@@ -26,11 +26,11 @@ message TPQConfig {
                                                          //32 => 1mb blobs at last level
     optional uint32 MaxBlobSize = 4 [default = 8388608]; //8mb
     optional uint32 ClustersUpdateTimeoutSec = 5 [default = 30];
-
-    optional bool Enabled = 6 [default = false]; // Enable PQ proxies
-
-    optional uint32 MetaCacheTimeoutSec = 7 [default = 30];
-
+ 
+    optional bool Enabled = 6 [default = false]; // Enable PQ proxies 
+ 
+    optional uint32 MetaCacheTimeoutSec = 7 [default = 30]; 
+ 
     optional uint32 MaxReadCookies = 8 [default = 100000];
 
     optional bool CheckACL = 9 [default = false];
@@ -107,7 +107,7 @@ message TPQConfig {
     optional string SourceIdTablePath = 33 [default = "/Root/PQ/SourceIdMeta2"];
 
     repeated uint32 ValidWriteSpeedLimitsKbPerSec = 34;
-
+ 
     message TReadMeteringConfig {
         message TPricing {
             optional string Name = 1 [default = "unknown"];
@@ -116,13 +116,13 @@ message TPQConfig {
         optional TPricing UnknownPricing = 3;
     }
 
-    message TBillingMeteringConfig {
-        optional bool Enabled = 1 [default = false];
-        optional uint64 FlushIntervalSec = 2 [default = 30];
+    message TBillingMeteringConfig { 
+        optional bool Enabled = 1 [default = false]; 
+        optional uint64 FlushIntervalSec = 2 [default = 30]; 
         optional TReadMeteringConfig Read = 3;
-    }
+    } 
 
-    optional TBillingMeteringConfig BillingMeteringConfig = 35;
+    optional TBillingMeteringConfig BillingMeteringConfig = 35; 
 
     optional NKikimrNodeLimits.TNodeLimitsConfig.TPersQueueNodeConfig PersQueueNodeConfig = 36;
 
@@ -139,9 +139,9 @@ message TPQConfig {
     repeated TClientServiceType ClientServiceType = 39;
     optional TClientServiceType DefaultClientServiceType = 40;
     optional bool DisallowDefaultClientServiceType = 43 [default = false];
-
-    optional uint32 MetaCacheRefreshIntervalMilliSeconds = 41 [default = 10000];
-    optional bool MetaCacheSkipVersionCheck = 42 [default = false];
+ 
+    optional uint32 MetaCacheRefreshIntervalMilliSeconds = 41 [default = 10000]; 
+    optional bool MetaCacheSkipVersionCheck = 42 [default = false]; 
 }
 
 message TChannelProfile {
@@ -259,11 +259,11 @@ message TPQTabletConfig {
 
     optional uint64 AbcId = 24;
     optional string AbcSlug = 25;
-
-    optional string YcCloudId = 26 [default = ""];
-    optional string YcFolderId = 27 [default = ""];
-    optional string YdbDatabaseId = 28 [default = ""];
-    optional string YdbDatabasePath = 29 [default = ""];
+ 
+    optional string YcCloudId = 26 [default = ""]; 
+    optional string YcFolderId = 27 [default = ""]; 
+    optional string YdbDatabaseId = 28 [default = ""]; 
+    optional string YdbDatabasePath = 29 [default = ""]; 
 
     message TKeyComponentSchema {
         optional string Name = 1;
@@ -365,7 +365,7 @@ message TCheckACL {
 message TCheckACLResponse {
     optional EAccess Access = 1;
     optional string Topic = 2;
-    optional string Path = 3;
+    optional string Path = 3; 
 
     optional string Error = 4;
 }
@@ -680,7 +680,7 @@ message TPQClusterDiscoveryConfig {
     optional bool Enabled = 1;
     optional uint32 TimedCountersUpdateIntervalSeconds = 2 [default = 15];
     optional NKikimrNetClassifier.TNetData CloudNetData = 3;
-    optional uint64 RequestInflightLimit = 4;
+    optional uint64 RequestInflightLimit = 4; 
 }
 
 message TYdsNextToken {

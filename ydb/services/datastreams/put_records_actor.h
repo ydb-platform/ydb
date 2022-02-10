@@ -13,12 +13,12 @@
 
 #include <library/cpp/digest/md5/md5.h>
 
-#define PUT_UNIT_SIZE 40960u // 40Kb
+#define PUT_UNIT_SIZE 40960u // 40Kb 
 
 namespace NKikimr::NDataStreams::V1 {
 
 
-
+ 
     struct TPutRecordsItem {
         TString Data;
         TString Key;
@@ -98,7 +98,7 @@ namespace NKikimr::NDataStreams::V1 {
             request.MutablePartitionRequest()->SetPartition(Partition);
             request.MutablePartitionRequest()->SetIsDirectWrite(true);
             ActorIdToProto(PipeClient, request.MutablePartitionRequest()->MutablePipeClient());
-            ui64 totalSize = 0;
+            ui64 totalSize = 0; 
             for (const auto& item : DataToWrite) {
                 auto w = request.MutablePartitionRequest()->AddCmdWrite();
                 w->SetData(GetSerializedData(item));
@@ -108,12 +108,12 @@ namespace NKikimr::NDataStreams::V1 {
                 w->SetCreateTimeMS(TInstant::Now().MilliSeconds());
                 w->SetUncompressedSize(item.Data.size());
                 w->SetExternalOperation(true);
-                totalSize += (item.Data.size() + item.Key.size() + item.ExplicitHash.size());
+                totalSize += (item.Data.size() + item.Key.size() + item.ExplicitHash.size()); 
             }
-            ui64 putUnitsCount = totalSize / PUT_UNIT_SIZE;
-            if (totalSize % PUT_UNIT_SIZE != 0)
-                putUnitsCount++;
-            request.MutablePartitionRequest()->SetPutUnitsSize(putUnitsCount);
+            ui64 putUnitsCount = totalSize / PUT_UNIT_SIZE; 
+            if (totalSize % PUT_UNIT_SIZE != 0) 
+                putUnitsCount++; 
+            request.MutablePartitionRequest()->SetPutUnitsSize(putUnitsCount); 
 
             TAutoPtr<TEvPersQueue::TEvRequest> req(new TEvPersQueue::TEvRequest);
             req->Record.Swap(&request);

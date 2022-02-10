@@ -2,7 +2,7 @@
 #include "test_server.h"
 #include <ydb/library/persqueue/topic_parser_public/topic_parser.h>
 #include <library/cpp/logger/log.h>
-#include <util/system/tempfile.h>
+#include <util/system/tempfile.h> 
 
 #define TEST_CASE_NAME (this->Name_)
 
@@ -13,8 +13,8 @@ protected:
     TString TestCaseName;
 
     THolder<TTempFileHandle> NetDataFile;
-    THashMap<TString, NKikimr::NPersQueueTests::TPQTestClusterInfo> DataCenters;
-    TString LocalDC = "dc1";
+    THashMap<TString, NKikimr::NPersQueueTests::TPQTestClusterInfo> DataCenters; 
+    TString LocalDC = "dc1"; 
     TTestServer Server = TTestServer(false /* don't start */);
 
     TLog Log = TLog("cerr");
@@ -39,10 +39,10 @@ public:
         // 2. 'got more than 10 uncommitted reads'
         Server.ServerSettings.PQConfig.Clear();
         Server.ServerSettings.PQConfig.SetEnabled(true);
-        Server.ServerSettings.PQConfig.SetRemoteClusterEnabledDelaySec(1);
-        Server.ServerSettings.PQConfig.SetCloseClientSessionWithEnabledRemotePreferredClusterDelaySec(1);
+        Server.ServerSettings.PQConfig.SetRemoteClusterEnabledDelaySec(1); 
+        Server.ServerSettings.PQConfig.SetCloseClientSessionWithEnabledRemotePreferredClusterDelaySec(1); 
         Server.ServerSettings.PQClusterDiscoveryConfig.SetEnabled(true);
-        SetNetDataViaFile("::1/128\t" + GetLocalCluster());
+        SetNetDataViaFile("::1/128\t" + GetLocalCluster()); 
 
         auto seed = TInstant::Now().MicroSeconds();
         // This makes failing randomized tests (for example with NUnitTest::RandomString(size, std::rand()) calls) reproducable
@@ -51,7 +51,7 @@ public:
     }
 
     void Start(bool waitInit = true, bool addBrokenDatacenter = false) {
-        Server.StartServer(false);
+        Server.StartServer(false); 
         //Server.EnableLogs({NKikimrServices::PQ_WRITE_PROXY, NKikimrServices::PQ_READ_PROXY});
         Server.AnnoyingClient->InitRoot();
         if (DataCenters.empty()) {
@@ -62,10 +62,10 @@ public:
             }
             Server.AnnoyingClient->InitDCs(dataCenters);
         } else {
-            Server.AnnoyingClient->InitDCs(DataCenters, LocalDC);
+            Server.AnnoyingClient->InitDCs(DataCenters, LocalDC); 
         }
         Server.AnnoyingClient->InitSourceIds();
-        CreateTopic(GetTestTopic(), GetLocalCluster());
+        CreateTopic(GetTestTopic(), GetLocalCluster()); 
         if (waitInit) {
             Server.WaitInit(GetTestTopic());
         }
@@ -84,7 +84,7 @@ public:
     }
 
     TString GetLocalCluster() const {
-        return LocalDC;
+        return LocalDC; 
     }
 
     ui16 GetGrpcPort() const {
@@ -95,13 +95,13 @@ public:
         return Server.GrpcServerOptions;
     }
 
-    void SetNetDataViaFile(const TString& netDataTsv) {
-        NetDataFile = MakeHolder<TTempFileHandle>("netData.tsv");
-        NetDataFile->Write(netDataTsv.Data(), netDataTsv.Size());
-        NetDataFile->FlushData();
-        Server.ServerSettings.NetClassifierConfig.SetNetDataFilePath(NetDataFile->Name());
-    }
-
+    void SetNetDataViaFile(const TString& netDataTsv) { 
+        NetDataFile = MakeHolder<TTempFileHandle>("netData.tsv"); 
+        NetDataFile->Write(netDataTsv.Data(), netDataTsv.Size()); 
+        NetDataFile->FlushData(); 
+        Server.ServerSettings.NetClassifierConfig.SetNetDataFilePath(NetDataFile->Name()); 
+    } 
+ 
 
     TLog& GetLog() {
         return Log;
@@ -131,40 +131,40 @@ public:
     }
 
     void SetSingleDataCenter(const TString& name = "dc1") {
-        UNIT_ASSERT(
-                DataCenters.insert(std::make_pair(
-                        name,
-                        NKikimr::NPersQueueTests::TPQTestClusterInfo{TStringBuilder() << "localhost:" << Server.GrpcPort, true}
-                )).second
-        );
-        LocalDC = name;
+        UNIT_ASSERT( 
+                DataCenters.insert(std::make_pair( 
+                        name, 
+                        NKikimr::NPersQueueTests::TPQTestClusterInfo{TStringBuilder() << "localhost:" << Server.GrpcPort, true} 
+                )).second 
+        ); 
+        LocalDC = name; 
     }
 
     void AddDataCenter(const TString& name, const TString& address, bool enabled = true, bool setSelfAsDc = true) {
         if (DataCenters.empty() && setSelfAsDc) {
             SetSingleDataCenter();
         }
-        NKikimr::NPersQueueTests::TPQTestClusterInfo info{
+        NKikimr::NPersQueueTests::TPQTestClusterInfo info{ 
             address,
-            enabled
-        };
-        UNIT_ASSERT(DataCenters.insert(std::make_pair(name, info)).second);
+            enabled 
+        }; 
+        UNIT_ASSERT(DataCenters.insert(std::make_pair(name, info)).second); 
     }
 
     void AddDataCenter(const TString& name, const SDKTestSetup& cluster, bool enabled = true, bool setSelfAsDc = true) {
         AddDataCenter(name, TStringBuilder() << "localhost:" << cluster.Server.GrpcPort, enabled, setSelfAsDc);
     }
 
-    void EnableDataCenter(const TString& name) {
-        auto iter = DataCenters.find(name);
-        UNIT_ASSERT(iter != DataCenters.end());
-        Server.AnnoyingClient->UpdateDcEnabled(name, true);
-    }
-    void DisableDataCenter(const TString& name) {
-        auto iter = DataCenters.find(name);
-        UNIT_ASSERT(iter != DataCenters.end());
-        Server.AnnoyingClient->UpdateDcEnabled(name, false);
-    }
+    void EnableDataCenter(const TString& name) { 
+        auto iter = DataCenters.find(name); 
+        UNIT_ASSERT(iter != DataCenters.end()); 
+        Server.AnnoyingClient->UpdateDcEnabled(name, true); 
+    } 
+    void DisableDataCenter(const TString& name) { 
+        auto iter = DataCenters.find(name); 
+        UNIT_ASSERT(iter != DataCenters.end()); 
+        Server.AnnoyingClient->UpdateDcEnabled(name, false); 
+    } 
 
     void ShutdownGRpc() {
         Server.ShutdownGRpc();
@@ -174,21 +174,21 @@ public:
         Server.EnableGRpc();
         Server.WaitInit(GetTestTopic());
     }
-
-    void KickTablets() {
+ 
+    void KickTablets() { 
         for (ui32 i = 0; i < Server.CleverServer->StaticNodes() + Server.CleverServer->DynamicNodes(); i++) {
-            Server.AnnoyingClient->MarkNodeInHive(Server.CleverServer->GetRuntime(), i, false);
+            Server.AnnoyingClient->MarkNodeInHive(Server.CleverServer->GetRuntime(), i, false); 
         }
         for (ui32 i = 0; i < Server.CleverServer->StaticNodes() + Server.CleverServer->DynamicNodes(); i++) {
-            Server.AnnoyingClient->KickNodeInHive(Server.CleverServer->GetRuntime(), i);
-        }
-    }
-    void AllowTablets() {
+            Server.AnnoyingClient->KickNodeInHive(Server.CleverServer->GetRuntime(), i); 
+        } 
+    } 
+    void AllowTablets() { 
         for (ui32 i = 0; i < Server.CleverServer->StaticNodes() + Server.CleverServer->DynamicNodes(); i++) {
-            Server.AnnoyingClient->MarkNodeInHive(Server.CleverServer->GetRuntime(), i, true);
-        }
-    }
-
+            Server.AnnoyingClient->MarkNodeInHive(Server.CleverServer->GetRuntime(), i, true); 
+        } 
+    } 
+ 
     void CreateTopic(const TString& topic, const TString& cluster, size_t partitionsCount = 1) {
         Server.AnnoyingClient->CreateTopic(BuildFullTopicName(topic, cluster), partitionsCount);
     }

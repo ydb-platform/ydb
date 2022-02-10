@@ -30,9 +30,9 @@ binary_path = wrap(ya_common.binary_path, lambda x: x)
 output_path = wrap(ya_common.output_path, lambda x: x)
 work_path = wrap(ya_common.work_path, lambda x: x)
 
-get_param = wrap(ya_common.get_param, lambda x, y=None: y)
+get_param = wrap(ya_common.get_param, lambda x, y=None: y) 
 get_param_dict_copy = wrap(ya_common.get_param_dict_copy, lambda: dict())
-
+ 
 
 def get_bool_param(key, default):
     val = get_param(key, default)
@@ -67,4 +67,4 @@ def plain_or_under_sanitizer(plain, sanitized):
 
     :return: plain if no sanitizer enabled or sanitized otherwise
     """
-    return plain if not context.sanitize else sanitized
+    return plain if not context.sanitize else sanitized 

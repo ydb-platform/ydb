@@ -9,19 +9,19 @@ from concurrent import futures
 logger = logging.getLogger(__name__)
 
 
-def execute_command(command, timeout=60):
+def execute_command(command, timeout=60): 
     logger.info("Running: {}".format(command))
     process = subprocess.Popen(command)
-    wait_timeout(process, timeout)
-    return process.returncode
-
-
+    wait_timeout(process, timeout) 
+    return process.returncode 
+ 
+ 
 def execute_command_with_output(command, timeout=60):
     logger.info("Running command = {}".format(command))
     list_of_lines = []
     with tempfile.TemporaryFile() as f_out, tempfile.TemporaryFile() as f_err:
         process = subprocess.Popen(command, stdout=f_out, stderr=f_err)
-        wait_timeout(process, timeout)
+        wait_timeout(process, timeout) 
         process_return_code = process.returncode
         f_err.flush()
         f_err.seek(0)
@@ -30,22 +30,22 @@ def execute_command_with_output(command, timeout=60):
             f_out.flush()
             f_out.seek(0)
             list_of_lines = list(f_out.readlines())
-
-    logger.info("Finished execution command = {}".format(command))
+ 
+    logger.info("Finished execution command = {}".format(command)) 
     if logger.isEnabledFor(logging.DEBUG):
         logger.debug('Command output = \n{}'.format('\n'.join(list_of_lines)))
         logger.debug('Stderr = \n{}'.format('\n'.join(std_err_lines)))
     return process_return_code, list_of_lines
+ 
 
-
-def wait_timeout(process, timeout):
-    start_time = time.time()
-    while time.time() < start_time + timeout:
-        process.poll()
-        if process.returncode is not None:
-            return
-        time.sleep(0.5)
-    process.kill()
+def wait_timeout(process, timeout): 
+    start_time = time.time() 
+    while time.time() < start_time + timeout: 
+        process.poll() 
+        if process.returncode is not None: 
+            return 
+        time.sleep(0.5) 
+    process.kill() 
     process.wait()
 
 

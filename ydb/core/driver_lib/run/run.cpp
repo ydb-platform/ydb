@@ -606,7 +606,7 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
         if (hasLegacy) {
             // start legacy service
             auto grpcService = new NGRpcProxy::TGRpcService();
-            auto future = grpcService->Prepare(ActorSystem.Get(), NMsgBusProxy::CreatePersQueueMetaCacheV2Id(), NMsgBusProxy::CreateMsgBusProxyId(), Counters);
+            auto future = grpcService->Prepare(ActorSystem.Get(), NMsgBusProxy::CreatePersQueueMetaCacheV2Id(), NMsgBusProxy::CreateMsgBusProxyId(), Counters); 
             auto startCb = [grpcService](NThreading::TFuture<void> result) {
                 if (result.HasException()) {
                     try {
@@ -674,19 +674,19 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
         }
 
         if (hasPQv1) {
-            server.AddService(new NGRpcService::V1::TGRpcPersQueueService(ActorSystem.Get(), Counters, NMsgBusProxy::CreatePersQueueMetaCacheV2Id(), grpcRequestProxyId));
+            server.AddService(new NGRpcService::V1::TGRpcPersQueueService(ActorSystem.Get(), Counters, NMsgBusProxy::CreatePersQueueMetaCacheV2Id(), grpcRequestProxyId)); 
         }
 
         if (hasPQCD) {
             // the service has its own flag since it should be capable of using custom grpc port
-            const auto& pqcdConfig = AppData->PQClusterDiscoveryConfig;
-            TMaybe<ui64> inflightLimit = Nothing();
-            if (pqcdConfig.HasRequestInflightLimit() && pqcdConfig.GetRequestInflightLimit() > 0) {
-                inflightLimit = pqcdConfig.GetRequestInflightLimit();
-            }
-            server.AddService(new NGRpcService::TGRpcPQClusterDiscoveryService(
-                    ActorSystem.Get(), Counters, grpcRequestProxyId, inflightLimit
-            ));
+            const auto& pqcdConfig = AppData->PQClusterDiscoveryConfig; 
+            TMaybe<ui64> inflightLimit = Nothing(); 
+            if (pqcdConfig.HasRequestInflightLimit() && pqcdConfig.GetRequestInflightLimit() > 0) { 
+                inflightLimit = pqcdConfig.GetRequestInflightLimit(); 
+            } 
+            server.AddService(new NGRpcService::TGRpcPQClusterDiscoveryService( 
+                    ActorSystem.Get(), Counters, grpcRequestProxyId, inflightLimit 
+            )); 
         }
 
         if (hasCms) {
@@ -1109,19 +1109,19 @@ void TKikimrRunner::InitializeActorSystem(
             SqsHttp.Reset(new NSQS::TAsyncHttpServer(AppData->SqsConfig));
             SqsHttp->Initialize(ActorSystem.Get(),
                                 GetServiceCounters(AppData->Counters, "sqs"),
-                                GetServiceCounters(AppData->Counters, "ymq_public"),
+                                GetServiceCounters(AppData->Counters, "ymq_public"), 
                                 AppData->UserPoolId);
         }
     }
 
     if (runConfig.AppConfig.HasGRpcConfig()) {
         if (const ui32 grpcPort = runConfig.AppConfig.GetGRpcConfig().GetPort()) {
-            auto driverConfig = NYdb::TDriverConfig().SetEndpoint(TStringBuilder() << "localhost:" << grpcPort);
+            auto driverConfig = NYdb::TDriverConfig().SetEndpoint(TStringBuilder() << "localhost:" << grpcPort); 
             YdbDriver.Reset(new NYdb::TDriver(driverConfig));
             AppData->YdbDriver = YdbDriver.Get();
-        }
-    }
-
+        } 
+    } 
+ 
     if (YqSharedResources) {
         YqSharedResources->Init(ActorSystem.Get());
     }
@@ -1439,8 +1439,8 @@ void TKikimrRunner::KikimrStop(bool graceful) {
 
     if (YdbDriver) {
         YdbDriver->Stop(true);
-    }
-
+    } 
+ 
     if (Monitoring) {
         Monitoring->Stop();
     }

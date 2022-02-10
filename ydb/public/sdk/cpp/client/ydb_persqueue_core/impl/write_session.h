@@ -1,5 +1,5 @@
-#pragma once
-
+#pragma once 
+ 
 #include "common.h"
 #include "persqueue_impl.h"
 
@@ -7,27 +7,27 @@
 
 #include <util/generic/buffer.h>
 
-
-namespace NYdb::NPersQueue {
-
-inline const TString& GetCodecId(const ECodec codec) {
-    static THashMap<ECodec, TString> idByCodec{
-        {ECodec::RAW, TString(1, '\0')},
-        {ECodec::GZIP, "\1"},
-        {ECodec::LZOP, "\2"},
-        {ECodec::ZSTD, "\3"}
-    };
-    Y_VERIFY(idByCodec.contains(codec));
-    return idByCodec[codec];
-}
-
+ 
+namespace NYdb::NPersQueue { 
+ 
+inline const TString& GetCodecId(const ECodec codec) { 
+    static THashMap<ECodec, TString> idByCodec{ 
+        {ECodec::RAW, TString(1, '\0')}, 
+        {ECodec::GZIP, "\1"}, 
+        {ECodec::LZOP, "\2"}, 
+        {ECodec::ZSTD, "\3"} 
+    }; 
+    Y_VERIFY(idByCodec.contains(codec)); 
+    return idByCodec[codec]; 
+} 
+ 
 class TWriteSessionEventsQueue : public TBaseSessionEventsQueue<TWriteSessionSettings, TWriteSessionEvent::TEvent> {
     using TParent = TBaseSessionEventsQueue<TWriteSessionSettings, TWriteSessionEvent::TEvent>;
-public:
-    TWriteSessionEventsQueue(const TWriteSessionSettings& settings)
-    : TParent(settings)
-    {}
-
+public: 
+    TWriteSessionEventsQueue(const TWriteSessionSettings& settings) 
+    : TParent(settings) 
+    {} 
+ 
     void PushEvent(TEventInfo eventInfo) {
         if (Closed || ApplyHandler(eventInfo)) {
             return;
@@ -98,33 +98,33 @@ public:
         waiter.Signal();
     }
 
-private:
+private: 
     struct THandlersVisitor : public TParent::TBaseHandlersVisitor {
         using TParent::TBaseHandlersVisitor::TBaseHandlersVisitor;
-#define DECLARE_HANDLER(type, handler, answer)          \
-        bool operator()(type& event) {                  \
-            if (Settings.EventHandlers_.handler) {      \
-                Settings.EventHandlers_.handler(event); \
-                return answer;                          \
-            }                                           \
-            return false;                               \
-        }                                               \
-        /**/
-        DECLARE_HANDLER(TWriteSessionEvent::TAcksEvent, AcksHandler_, true);
-        DECLARE_HANDLER(TWriteSessionEvent::TReadyToAcceptEvent, ReadyToAcceptHander_, true);
-        DECLARE_HANDLER(TSessionClosedEvent, SessionClosedHandler_, false); // Not applied
-
-#undef DECLARE_HANDLER
+#define DECLARE_HANDLER(type, handler, answer)          \ 
+        bool operator()(type& event) {                  \ 
+            if (Settings.EventHandlers_.handler) {      \ 
+                Settings.EventHandlers_.handler(event); \ 
+                return answer;                          \ 
+            }                                           \ 
+            return false;                               \ 
+        }                                               \ 
+        /**/ 
+        DECLARE_HANDLER(TWriteSessionEvent::TAcksEvent, AcksHandler_, true); 
+        DECLARE_HANDLER(TWriteSessionEvent::TReadyToAcceptEvent, ReadyToAcceptHander_, true); 
+        DECLARE_HANDLER(TSessionClosedEvent, SessionClosedHandler_, false); // Not applied 
+ 
+#undef DECLARE_HANDLER 
         bool Visit() {
-            return std::visit(*this, EventInfo.Event);
-        }
-
-    };
-
+            return std::visit(*this, EventInfo.Event); 
+        } 
+ 
+    }; 
+ 
     bool ApplyHandler(TEventInfo& eventInfo) {
         THandlersVisitor visitor(Settings, eventInfo);
-        return visitor.Visit();
-    }
+        return visitor.Visit(); 
+    } 
 
     TEventInfo GetEventImpl() { // Assumes that we're under lock and that the event queue has events.
         Y_ASSERT(HasEventsImpl());
@@ -137,98 +137,98 @@ private:
         Y_ASSERT(CloseEvent);
         return {*CloseEvent};
     }
-};
-
-struct TMemoryUsageChange {
-    bool WasOk; //!< MemoryUsage <= Config.MaxMemoryUsage_ before update
-    bool NowOk; //!< Same, only after update
-};
-
-namespace NTests {
-    class TSimpleWriteSessionTestAdapter;
-}
-
-class TWriteSession : public IWriteSession,
+}; 
+ 
+struct TMemoryUsageChange { 
+    bool WasOk; //!< MemoryUsage <= Config.MaxMemoryUsage_ before update 
+    bool NowOk; //!< Same, only after update 
+}; 
+ 
+namespace NTests { 
+    class TSimpleWriteSessionTestAdapter; 
+} 
+ 
+class TWriteSession : public IWriteSession, 
                       public std::enable_shared_from_this<TWriteSession> {
-private:
-    friend class TSimpleBlockingWriteSession;
+private: 
+    friend class TSimpleBlockingWriteSession; 
     friend class TPersQueueClient;
-    friend class NTests::TSimpleWriteSessionTestAdapter;
-
-    using TClientMessage = Ydb::PersQueue::V1::StreamingWriteClientMessage;
-    using TServerMessage = Ydb::PersQueue::V1::StreamingWriteServerMessage;
-    using IWriteSessionConnectionProcessorFactory =
+    friend class NTests::TSimpleWriteSessionTestAdapter; 
+ 
+    using TClientMessage = Ydb::PersQueue::V1::StreamingWriteClientMessage; 
+    using TServerMessage = Ydb::PersQueue::V1::StreamingWriteServerMessage; 
+    using IWriteSessionConnectionProcessorFactory = 
             TPersQueueClient::TImpl::IWriteSessionConnectionProcessorFactory;
-    using IProcessor = IWriteSessionConnectionProcessorFactory::IProcessor;
-
-    struct TMessage {
-        ui64 SeqNo;
-        TInstant CreatedAt;
-        TStringBuf DataRef;
+    using IProcessor = IWriteSessionConnectionProcessorFactory::IProcessor; 
+ 
+    struct TMessage { 
+        ui64 SeqNo; 
+        TInstant CreatedAt; 
+        TStringBuf DataRef; 
         TMaybe<ECodec> Codec;
         ui32 OriginalSize; // only for coded messages
         TMessage(ui64 seqNo, const TInstant& createdAt, TStringBuf data, TMaybe<ECodec> codec = {}, ui32 originalSize = 0)
-            : SeqNo(seqNo)
-            , CreatedAt(createdAt)
-            , DataRef(data)
+            : SeqNo(seqNo) 
+            , CreatedAt(createdAt) 
+            , DataRef(data) 
             , Codec(codec)
             , OriginalSize(originalSize)
-        {}
-    };
-
-    struct TMessageBatch {
-        TBuffer Data;
-        TVector<TMessage> Messages;
-        ui64 CurrentSize = 0;
-        TInstant StartedAt = TInstant::Zero();
-        bool Acquired = false;
-        bool FlushRequested = false;
+        {} 
+    }; 
+ 
+    struct TMessageBatch { 
+        TBuffer Data; 
+        TVector<TMessage> Messages; 
+        ui64 CurrentSize = 0; 
+        TInstant StartedAt = TInstant::Zero(); 
+        bool Acquired = false; 
+        bool FlushRequested = false; 
         void Add(ui64 seqNo, const TInstant& createdAt, TStringBuf data, TMaybe<ECodec> codec, ui32 originalSize) {
-            if (StartedAt == TInstant::Zero())
-                StartedAt = TInstant::Now();
+            if (StartedAt == TInstant::Zero()) 
+                StartedAt = TInstant::Now(); 
             CurrentSize += codec ? originalSize : data.size();
             Messages.emplace_back(seqNo, createdAt, data, codec, originalSize);
-            Acquired = false;
-        }
-
+            Acquired = false; 
+        } 
+ 
         bool HasCodec() const {
             return Messages.empty() ? false : Messages.front().Codec.Defined();
         }
 
-        bool Acquire() {
-            if (Acquired || Messages.empty())
-                return false;
-            auto currSize = Data.size();
-            Data.Append(Messages.back().DataRef.data(), Messages.back().DataRef.size());
-            Messages.back().DataRef = TStringBuf(Data.data() + currSize, Data.size() - currSize);
-            Acquired = true;
-            return true;
-        }
-
-        bool Empty() const noexcept {
-            return CurrentSize == 0 && Messages.empty();
-        }
-
-        void Reset() {
-            StartedAt = TInstant::Zero();
-            Messages.clear();
-            Data.Clear();
-            Acquired = false;
-            CurrentSize = 0;
-            FlushRequested = false;
-        }
-    };
-
-    struct TBlock {
-        size_t Offset = 0; //!< First message sequence number in the block
-        size_t MessageCount = 0;
-        size_t PartNumber = 0;
-        size_t OriginalSize = 0;
-        size_t OriginalMemoryUsage = 0;
-        TString CodecID = GetCodecId(ECodec::RAW);
+        bool Acquire() { 
+            if (Acquired || Messages.empty()) 
+                return false; 
+            auto currSize = Data.size(); 
+            Data.Append(Messages.back().DataRef.data(), Messages.back().DataRef.size()); 
+            Messages.back().DataRef = TStringBuf(Data.data() + currSize, Data.size() - currSize); 
+            Acquired = true; 
+            return true; 
+        } 
+ 
+        bool Empty() const noexcept { 
+            return CurrentSize == 0 && Messages.empty(); 
+        } 
+ 
+        void Reset() { 
+            StartedAt = TInstant::Zero(); 
+            Messages.clear(); 
+            Data.Clear(); 
+            Acquired = false; 
+            CurrentSize = 0; 
+            FlushRequested = false; 
+        } 
+    }; 
+ 
+    struct TBlock { 
+        size_t Offset = 0; //!< First message sequence number in the block 
+        size_t MessageCount = 0; 
+        size_t PartNumber = 0; 
+        size_t OriginalSize = 0; 
+        size_t OriginalMemoryUsage = 0; 
+        TString CodecID = GetCodecId(ECodec::RAW); 
         mutable TVector<TStringBuf> OriginalDataRefs;
         mutable TBuffer Data;
-        bool Compressed = false;
+        bool Compressed = false; 
         mutable bool Valid = true;
 
         TBlock& operator=(TBlock&&) = default;
@@ -250,69 +250,69 @@ private:
             rhs.Data.Clear();
             rhs.OriginalDataRefs.clear();
         }
-    };
-
-    struct TOriginalMessage {
-        ui64 SeqNo;
-        TInstant CreatedAt;
-        size_t Size;
-        TOriginalMessage(const ui64 sequenceNumber, const TInstant createdAt, const size_t size)
-                : SeqNo(sequenceNumber)
-                , CreatedAt(createdAt)
-                , Size(size)
-        {}
-    };
-
-    //! Block comparer, makes block with smallest offset (first sequence number) appear on top of the PackedMessagesToSend priority queue
-    struct Greater {
-        bool operator() (const TBlock& lhs, const TBlock& rhs) {
-            return lhs.Offset > rhs.Offset;
-        }
-    };
-
-    struct THandleResult {
-        bool DoRestart = false;
-        TDuration StartDelay = TDuration::Zero();
-        bool DoStop = false;
-        bool DoSetSeqNo = false;
-    };
-    struct TProcessSrvMessageResult {
-        THandleResult HandleResult;
-        TMaybe<ui64> InitSeqNo;
-        TVector<TWriteSessionEvent::TEvent> Events;
-        bool Ok = true;
-    };
-
-    THandleResult OnErrorImpl(NYdb::TPlainStatus&& status); // true - should Start(), false - should Close(), empty - no action
-
-public:
-    TWriteSession(const TWriteSessionSettings& settings,
+    }; 
+ 
+    struct TOriginalMessage { 
+        ui64 SeqNo; 
+        TInstant CreatedAt; 
+        size_t Size; 
+        TOriginalMessage(const ui64 sequenceNumber, const TInstant createdAt, const size_t size) 
+                : SeqNo(sequenceNumber) 
+                , CreatedAt(createdAt) 
+                , Size(size) 
+        {} 
+    }; 
+ 
+    //! Block comparer, makes block with smallest offset (first sequence number) appear on top of the PackedMessagesToSend priority queue 
+    struct Greater { 
+        bool operator() (const TBlock& lhs, const TBlock& rhs) { 
+            return lhs.Offset > rhs.Offset; 
+        } 
+    }; 
+ 
+    struct THandleResult { 
+        bool DoRestart = false; 
+        TDuration StartDelay = TDuration::Zero(); 
+        bool DoStop = false; 
+        bool DoSetSeqNo = false; 
+    }; 
+    struct TProcessSrvMessageResult { 
+        THandleResult HandleResult; 
+        TMaybe<ui64> InitSeqNo; 
+        TVector<TWriteSessionEvent::TEvent> Events; 
+        bool Ok = true; 
+    }; 
+ 
+    THandleResult OnErrorImpl(NYdb::TPlainStatus&& status); // true - should Start(), false - should Close(), empty - no action 
+ 
+public: 
+    TWriteSession(const TWriteSessionSettings& settings, 
             std::shared_ptr<TPersQueueClient::TImpl> client,
-            std::shared_ptr<TGRpcConnectionsImpl> connections,
-            TDbDriverStatePtr dbDriverState);
-
-    TMaybe<TWriteSessionEvent::TEvent> GetEvent(bool block = false) override;
-    TVector<TWriteSessionEvent::TEvent> GetEvents(bool block = false,
-                                                  TMaybe<size_t> maxEventsCount = Nothing()) override;
-    NThreading::TFuture<ui64> GetInitSeqNo() override;
-
-    void Write(TContinuationToken&& continuationToken, TStringBuf data,
-               TMaybe<ui64> seqNo = Nothing(), TMaybe<TInstant> createTimestamp = Nothing()) override;
-
+            std::shared_ptr<TGRpcConnectionsImpl> connections, 
+            TDbDriverStatePtr dbDriverState); 
+ 
+    TMaybe<TWriteSessionEvent::TEvent> GetEvent(bool block = false) override; 
+    TVector<TWriteSessionEvent::TEvent> GetEvents(bool block = false, 
+                                                  TMaybe<size_t> maxEventsCount = Nothing()) override; 
+    NThreading::TFuture<ui64> GetInitSeqNo() override; 
+ 
+    void Write(TContinuationToken&& continuationToken, TStringBuf data, 
+               TMaybe<ui64> seqNo = Nothing(), TMaybe<TInstant> createTimestamp = Nothing()) override; 
+ 
     void WriteEncoded(TContinuationToken&& continuationToken, TStringBuf data, ECodec codec, ui32 originalSize,
                TMaybe<ui64> seqNo = Nothing(), TMaybe<TInstant> createTimestamp = Nothing()) override;
 
 
-    NThreading::TFuture<void> WaitEvent() override;
-
-    // Empty maybe - block till all work is done. Otherwise block at most at closeTimeout duration.
-    bool Close(TDuration closeTimeout = TDuration::Max()) override;
-
+    NThreading::TFuture<void> WaitEvent() override; 
+ 
+    // Empty maybe - block till all work is done. Otherwise block at most at closeTimeout duration. 
+    bool Close(TDuration closeTimeout = TDuration::Max()) override; 
+ 
     TWriterCounters::TPtr GetCounters() override {Y_FAIL("Unimplemented"); } //ToDo - unimplemented;
-
-    ~TWriteSession(); // will not call close - destroy everything without acks
-
-private:
+ 
+    ~TWriteSession(); // will not call close - destroy everything without acks 
+ 
+private: 
 
     TString LogPrefix() const;
 
@@ -321,152 +321,152 @@ private:
     void WriteInternal(TContinuationToken&& continuationToken, TStringBuf data, TMaybe<ECodec> codec, ui32 originalSize,
                TMaybe<ui64> seqNo = Nothing(), TMaybe<TInstant> createTimestamp = Nothing());
 
-    void FlushWriteIfRequiredImpl();
-    size_t WriteBatchImpl();
-    void Start(const TDuration& delay);
-    void InitWriter();
-
-    void DoCdsRequest(TDuration delay = TDuration::Zero());
-    void OnCdsResponse(TStatus& status, const Ydb::PersQueue::ClusterDiscovery::DiscoverClustersResult& result);
-    void OnConnect(TPlainStatus&& st, typename IProcessor::TPtr&& processor,
-            const NGrpc::IQueueClientContextPtr& connectContext);
-    void OnConnectTimeout(const NGrpc::IQueueClientContextPtr& connectTimeoutContext);
-    void ResetForRetryImpl();
-    THandleResult RestartImpl(const TPlainStatus& status);
+    void FlushWriteIfRequiredImpl(); 
+    size_t WriteBatchImpl(); 
+    void Start(const TDuration& delay); 
+    void InitWriter(); 
+ 
+    void DoCdsRequest(TDuration delay = TDuration::Zero()); 
+    void OnCdsResponse(TStatus& status, const Ydb::PersQueue::ClusterDiscovery::DiscoverClustersResult& result); 
+    void OnConnect(TPlainStatus&& st, typename IProcessor::TPtr&& processor, 
+            const NGrpc::IQueueClientContextPtr& connectContext); 
+    void OnConnectTimeout(const NGrpc::IQueueClientContextPtr& connectTimeoutContext); 
+    void ResetForRetryImpl(); 
+    THandleResult RestartImpl(const TPlainStatus& status); 
     void DoConnect(const TDuration& delay, const TString& endpoint);
-    void InitImpl();
-    void ReadFromProcessor(); // Assumes that we're under lock.
-    void WriteToProcessorImpl(TClientMessage&& req); // Assumes that we're under lock.
-    void OnReadDone(NGrpc::TGrpcStatus&& grpcStatus, size_t connectionGeneration);
-    void OnWriteDone(NGrpc::TGrpcStatus&& status, size_t connectionGeneration);
-    TProcessSrvMessageResult ProcessServerMessageImpl();
-    TMemoryUsageChange OnMemoryUsageChangedImpl(i64 diff);
-    void CompressImpl(TBlock&& block);
-    void OnCompressed(TBlock&& block, bool isSyncCompression=false);
-    TMemoryUsageChange OnCompressedImpl(TBlock&& block);
-
-    //TString GetDebugIdentity() const;
-    Ydb::PersQueue::V1::StreamingWriteClientMessage GetInitClientMessage();
-    bool CleanupOnAcknowledged(ui64 sequenceNumber);
-    bool IsReadyToSendNextImpl() const;
-    ui64 GetNextSeqNoImpl(const TMaybe<ui64>& seqNo);
-    void SendImpl();
+    void InitImpl(); 
+    void ReadFromProcessor(); // Assumes that we're under lock. 
+    void WriteToProcessorImpl(TClientMessage&& req); // Assumes that we're under lock. 
+    void OnReadDone(NGrpc::TGrpcStatus&& grpcStatus, size_t connectionGeneration); 
+    void OnWriteDone(NGrpc::TGrpcStatus&& status, size_t connectionGeneration); 
+    TProcessSrvMessageResult ProcessServerMessageImpl(); 
+    TMemoryUsageChange OnMemoryUsageChangedImpl(i64 diff); 
+    void CompressImpl(TBlock&& block); 
+    void OnCompressed(TBlock&& block, bool isSyncCompression=false); 
+    TMemoryUsageChange OnCompressedImpl(TBlock&& block); 
+ 
+    //TString GetDebugIdentity() const; 
+    Ydb::PersQueue::V1::StreamingWriteClientMessage GetInitClientMessage(); 
+    bool CleanupOnAcknowledged(ui64 sequenceNumber); 
+    bool IsReadyToSendNextImpl() const; 
+    ui64 GetNextSeqNoImpl(const TMaybe<ui64>& seqNo); 
+    void SendImpl(); 
     void AbortImpl();
-    void CloseImpl(EStatus statusCode, NYql::TIssues&& issues);
-    void CloseImpl(EStatus statusCode, const TString& message);
-    void CloseImpl(TPlainStatus&& status);
-
-    void OnErrorResolved() {
-        RetryState = nullptr;
-    }
-    void CheckHandleResultImpl(THandleResult& result);
-    void ProcessHandleResult(THandleResult& result);
-    void HandleWakeUpImpl();
-    void UpdateTimedCountersImpl();
-
-private:
-    TWriteSessionSettings Settings;
+    void CloseImpl(EStatus statusCode, NYql::TIssues&& issues); 
+    void CloseImpl(EStatus statusCode, const TString& message); 
+    void CloseImpl(TPlainStatus&& status); 
+ 
+    void OnErrorResolved() { 
+        RetryState = nullptr; 
+    } 
+    void CheckHandleResultImpl(THandleResult& result); 
+    void ProcessHandleResult(THandleResult& result); 
+    void HandleWakeUpImpl(); 
+    void UpdateTimedCountersImpl(); 
+ 
+private: 
+    TWriteSessionSettings Settings; 
     std::shared_ptr<TPersQueueClient::TImpl> Client;
-    std::shared_ptr<TGRpcConnectionsImpl> Connections;
-    TString TargetCluster;
-    TString InitialCluster;
-    TString CurrentCluster;
-    bool OnSeqNoShift = false;
+    std::shared_ptr<TGRpcConnectionsImpl> Connections; 
+    TString TargetCluster; 
+    TString InitialCluster; 
+    TString CurrentCluster; 
+    bool OnSeqNoShift = false; 
     TString PreferredClusterByCDS;
-    std::shared_ptr<IWriteSessionConnectionProcessorFactory> ConnectionFactory;
-    TDbDriverStatePtr DbDriverState;
+    std::shared_ptr<IWriteSessionConnectionProcessorFactory> ConnectionFactory; 
+    TDbDriverStatePtr DbDriverState; 
     TStringType PrevToken;
     bool UpdateTokenInProgress = false;
     TInstant LastTokenUpdate = TInstant::Zero();
-    std::shared_ptr<TWriteSessionEventsQueue> EventsQueue;
-    NGrpc::IQueueClientContextPtr ClientContext; // Common client context.
-    NGrpc::IQueueClientContextPtr ConnectContext;
-    NGrpc::IQueueClientContextPtr ConnectTimeoutContext;
-    NGrpc::IQueueClientContextPtr ConnectDelayContext;
-    size_t ConnectionGeneration = 0;
-    size_t ConnectionAttemptsDone = 0;
-    TAdaptiveLock Lock;
-    IProcessor::TPtr Processor;
-    IRetryState::TPtr RetryState; // Current retry state (if now we are (re)connecting).
-    std::shared_ptr<TServerMessage> ServerMessage; // Server message to write server response to.
-
-    TString SessionId;
+    std::shared_ptr<TWriteSessionEventsQueue> EventsQueue; 
+    NGrpc::IQueueClientContextPtr ClientContext; // Common client context. 
+    NGrpc::IQueueClientContextPtr ConnectContext; 
+    NGrpc::IQueueClientContextPtr ConnectTimeoutContext; 
+    NGrpc::IQueueClientContextPtr ConnectDelayContext; 
+    size_t ConnectionGeneration = 0; 
+    size_t ConnectionAttemptsDone = 0; 
+    TAdaptiveLock Lock; 
+    IProcessor::TPtr Processor; 
+    IRetryState::TPtr RetryState; // Current retry state (if now we are (re)connecting). 
+    std::shared_ptr<TServerMessage> ServerMessage; // Server message to write server response to. 
+ 
+    TString SessionId; 
     IExecutor::TPtr Executor;
     IExecutor::TPtr CompressionExecutor;
-    size_t MemoryUsage = 0; //!< Estimated amount of memory used
-
-    TMessageBatch CurrentBatch;
-
+    size_t MemoryUsage = 0; //!< Estimated amount of memory used 
+ 
+    TMessageBatch CurrentBatch; 
+ 
     std::queue<TOriginalMessage> OriginalMessagesToSend;
     std::priority_queue<TBlock, std::vector<TBlock>, Greater> PackedMessagesToSend;
-    //! Messages that are sent but yet not acknowledged
+    //! Messages that are sent but yet not acknowledged 
     std::queue<TOriginalMessage> SentOriginalMessages;
     std::queue<TBlock> SentPackedMessage;
-
-    const size_t MaxBlockSize = std::numeric_limits<size_t>::max();
-    const size_t MaxBlockMessageCount = 1; //!< Max message count that can be packed into a single block. In block version 0 is equal to 1 for compatibility
-    bool Connected = false;
-    bool Started = false;
-    TAtomic Aborting = 0;
-    bool SessionEstablished = false;
-    ui32 PartitionId = 0;
-    ui64 LastSeqNo = 0;
-    ui64 MinUnsentSeqNo = 0;
-    ui64 SeqNoShift = 0;
-    TMaybe<bool> AutoSeqNoMode;
+ 
+    const size_t MaxBlockSize = std::numeric_limits<size_t>::max(); 
+    const size_t MaxBlockMessageCount = 1; //!< Max message count that can be packed into a single block. In block version 0 is equal to 1 for compatibility 
+    bool Connected = false; 
+    bool Started = false; 
+    TAtomic Aborting = 0; 
+    bool SessionEstablished = false; 
+    ui32 PartitionId = 0; 
+    ui64 LastSeqNo = 0; 
+    ui64 MinUnsentSeqNo = 0; 
+    ui64 SeqNoShift = 0; 
+    TMaybe<bool> AutoSeqNoMode; 
     bool ValidateSeqNoMode = false;
-
-    NThreading::TPromise<ui64> InitSeqNoPromise;
-    bool InitSeqNoSetDone = false;
-    TInstant SessionStartedTs;
-    TInstant LastCountersUpdateTs = TInstant::Zero();
-    TInstant LastCountersLogTs;
-    TWriterCounters::TPtr Counters;
-    TDuration WakeupInterval;
-
-protected:
-    ui64 MessagesAcquired = 0;
-};
-
-class TSimpleBlockingWriteSession : public ISimpleBlockingWriteSession {
-    friend class NTests::TSimpleWriteSessionTestAdapter;
-
-private:
-    using TClientMessage = TWriteSession::TClientMessage;
-    using TServerMessage = TWriteSession::TServerMessage;
-    using IWriteSessionConnectionProcessorFactory = TWriteSession::IWriteSessionConnectionProcessorFactory;
-    using IProcessor = TWriteSession::IProcessor;
-
-public:
-    TSimpleBlockingWriteSession(
-            const TWriteSessionSettings& settings,
+ 
+    NThreading::TPromise<ui64> InitSeqNoPromise; 
+    bool InitSeqNoSetDone = false; 
+    TInstant SessionStartedTs; 
+    TInstant LastCountersUpdateTs = TInstant::Zero(); 
+    TInstant LastCountersLogTs; 
+    TWriterCounters::TPtr Counters; 
+    TDuration WakeupInterval; 
+ 
+protected: 
+    ui64 MessagesAcquired = 0; 
+}; 
+ 
+class TSimpleBlockingWriteSession : public ISimpleBlockingWriteSession { 
+    friend class NTests::TSimpleWriteSessionTestAdapter; 
+ 
+private: 
+    using TClientMessage = TWriteSession::TClientMessage; 
+    using TServerMessage = TWriteSession::TServerMessage; 
+    using IWriteSessionConnectionProcessorFactory = TWriteSession::IWriteSessionConnectionProcessorFactory; 
+    using IProcessor = TWriteSession::IProcessor; 
+ 
+public: 
+    TSimpleBlockingWriteSession( 
+            const TWriteSessionSettings& settings, 
             std::shared_ptr<TPersQueueClient::TImpl> client,
-            std::shared_ptr<TGRpcConnectionsImpl> connections,
-            TDbDriverStatePtr dbDriverState);
-
-    bool Write(TStringBuf data, TMaybe<ui64> seqNo = Nothing(), TMaybe<TInstant> createTimestamp = Nothing(),
-               const TDuration& blockTimeout = TDuration::Max()) override;
-
-    ui64 GetInitSeqNo() override;
-
-    bool Close(TDuration closeTimeout = TDuration::Max()) override;
-    bool IsAlive() const override;
-
-    TWriterCounters::TPtr GetCounters() override;
-
-protected:
-    std::shared_ptr<TWriteSession> Writer;
-
-private:
-    TMaybe<TContinuationToken> WaitForToken(const TDuration& timeout);
-    void HandleAck(TWriteSessionEvent::TAcksEvent&);
-    void HandleReady(TWriteSessionEvent::TReadyToAcceptEvent&);
-    void HandleClosed(const TSessionClosedEvent&);
-
-    TAdaptiveLock Lock;
+            std::shared_ptr<TGRpcConnectionsImpl> connections, 
+            TDbDriverStatePtr dbDriverState); 
+ 
+    bool Write(TStringBuf data, TMaybe<ui64> seqNo = Nothing(), TMaybe<TInstant> createTimestamp = Nothing(), 
+               const TDuration& blockTimeout = TDuration::Max()) override; 
+ 
+    ui64 GetInitSeqNo() override; 
+ 
+    bool Close(TDuration closeTimeout = TDuration::Max()) override; 
+    bool IsAlive() const override; 
+ 
+    TWriterCounters::TPtr GetCounters() override; 
+ 
+protected: 
+    std::shared_ptr<TWriteSession> Writer; 
+ 
+private: 
+    TMaybe<TContinuationToken> WaitForToken(const TDuration& timeout); 
+    void HandleAck(TWriteSessionEvent::TAcksEvent&); 
+    void HandleReady(TWriteSessionEvent::TReadyToAcceptEvent&); 
+    void HandleClosed(const TSessionClosedEvent&); 
+ 
+    TAdaptiveLock Lock; 
     std::queue<TContinuationToken> ContinueTokens;
-    bool Closed = false;
-};
-
-
-}; // namespace NYdb::NPersQueue
+    bool Closed = false; 
+}; 
+ 
+ 
+}; // namespace NYdb::NPersQueue 

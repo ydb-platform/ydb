@@ -33,7 +33,7 @@ inline void WaitACLModification() {
     TServer server = TServer(settings);\
     server.EnableGRpc(NGrpc::TServerOptions().SetHost("localhost").SetPort(grpc));\
     TFlatMsgBusPQClient client(settings, grpc);\
-    client.FullInit();\
+    client.FullInit();\ 
     client.CreateTopic("rt3.dc1--" + TString(topic), 1);\
     EnableLogs(server, { NKikimrServices::PQ_WRITE_PROXY });\
     TPQDataWriter writer(messageGroupId, grpc, client, server.GetRuntime());\

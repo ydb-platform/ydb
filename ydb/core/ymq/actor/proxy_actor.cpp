@@ -145,19 +145,19 @@ void TProxyActor::HandleWakeup(TEvWakeup::TPtr&) {
     RLOG_SQS_ERROR("Proxy request timeout. User [" << UserName_ << "] Queue [" << QueueName_ << "] Action [" << actionName << "]");
 
     if (QueueCounters_) {
-        INC_COUNTER_COUPLE(QueueCounters_, RequestTimeouts, request_timeouts_count_per_second);
+        INC_COUNTER_COUPLE(QueueCounters_, RequestTimeouts, request_timeouts_count_per_second); 
     } else {
-        auto rootCounters = TIntrusivePtrCntrCouple{
-            GetSqsServiceCounters(AppData()->Counters, "core"),
-            GetYmqPublicCounters(AppData()->Counters)
-        };
-        auto [userCountersCouple, queueCountersCouple] = GetUserAndQueueCounters(rootCounters, TQueuePath(Cfg().GetRoot(), UserName_, QueueName_));
-        if (queueCountersCouple.SqsCounters) {
-            queueCountersCouple.SqsCounters->GetCounter("RequestTimeouts", true)->Inc();
+        auto rootCounters = TIntrusivePtrCntrCouple{ 
+            GetSqsServiceCounters(AppData()->Counters, "core"), 
+            GetYmqPublicCounters(AppData()->Counters) 
+        }; 
+        auto [userCountersCouple, queueCountersCouple] = GetUserAndQueueCounters(rootCounters, TQueuePath(Cfg().GetRoot(), UserName_, QueueName_)); 
+        if (queueCountersCouple.SqsCounters) { 
+            queueCountersCouple.SqsCounters->GetCounter("RequestTimeouts", true)->Inc(); 
         }
-        if (queueCountersCouple.YmqCounters) {
-            queueCountersCouple.YmqCounters->GetCounter("request_timeouts_count_per_second", true)->Inc();
-        }
+        if (queueCountersCouple.YmqCounters) { 
+            queueCountersCouple.YmqCounters->GetCounter("request_timeouts_count_per_second", true)->Inc(); 
+        } 
     }
 
     SendErrorAndDie(NErrors::TIMEOUT);

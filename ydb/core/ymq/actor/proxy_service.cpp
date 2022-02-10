@@ -60,8 +60,8 @@ void TSqsProxyService::Bootstrap() {
     LOG_SQS_INFO("Start SQS proxy service actor");
     Become(&TThis::StateFunc);
 
-    SqsCounters_ = GetSqsServiceCounters(AppData()->Counters, "core");
-    YmqPublicCounters_ = GetYmqPublicCounters(AppData()->Counters);
+    SqsCounters_ = GetSqsServiceCounters(AppData()->Counters, "core"); 
+    YmqPublicCounters_ = GetYmqPublicCounters(AppData()->Counters); 
 }
 
 void TSqsProxyService::HandleExecuted(TSqsEvents::TEvExecuted::TPtr& ev) {

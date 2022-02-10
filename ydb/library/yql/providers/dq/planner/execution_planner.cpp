@@ -359,10 +359,10 @@ namespace NYql::NDqs {
                 FillOutputDesc(*taskDesc.AddOutputs(), output);
             }
 
-            auto& transform = *taskDesc.MutableOutputTransform();
-            transform.SetType(task.OutputTransform.Type);
-            transform.SetFunctionName(task.OutputTransform.FunctionName);
-
+            auto& transform = *taskDesc.MutableOutputTransform(); 
+            transform.SetType(task.OutputTransform.Type); 
+            transform.SetFunctionName(task.OutputTransform.FunctionName); 
+ 
             auto& program = *taskDesc.MutableProgram();
             program.SetRuntimeVersion(NYql::NDqProto::ERuntimeVersion::RUNTIME_VERSION_YQL_1_0);
             TString programStr;
@@ -454,11 +454,11 @@ namespace NYql::NDqs {
         auto datasource = TypeContext->DataSourceMap.FindPtr(dataSourceName);
         YQL_ENSURE(datasource);
         const auto stageSettings = TDqStageSettings::Parse(stage);
-        auto tasksPerStage = settings->MaxTasksPerStage.Get().GetOrElse(TDqSettings::TDefault::MaxTasksPerStage);
-        if (stageSettings.IsExternalFunction) {
-            tasksPerStage = Min(tasksPerStage, stageSettings.MaxTransformConcurrency());
-        }
-        const size_t maxPartitions = stageSettings.SinglePartition ? 1ULL : tasksPerStage;
+        auto tasksPerStage = settings->MaxTasksPerStage.Get().GetOrElse(TDqSettings::TDefault::MaxTasksPerStage); 
+        if (stageSettings.IsExternalFunction) { 
+            tasksPerStage = Min(tasksPerStage, stageSettings.MaxTransformConcurrency()); 
+        } 
+        const size_t maxPartitions = stageSettings.SinglePartition ? 1ULL : tasksPerStage; 
         TVector<TString> parts;
         if (auto dqIntegration = (*datasource)->GetDqIntegration()) {
             TString clusterName;
@@ -479,9 +479,9 @@ namespace NYql::NDqs {
                     task.Inputs[dqSourceInputIndex].SourceSettings = sourceSettings;
                     task.Inputs[dqSourceInputIndex].SourceType = sourceType;
                 }
-                auto& transform = task.OutputTransform;
-                transform.Type = stageSettings.TransformType;
-                transform.FunctionName = stageSettings.TransformName;
+                auto& transform = task.OutputTransform; 
+                transform.Type = stageSettings.TransformType; 
+                transform.FunctionName = stageSettings.TransformName; 
             }
         }
         return !parts.empty();

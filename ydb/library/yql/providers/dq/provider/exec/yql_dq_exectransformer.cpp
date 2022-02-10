@@ -657,10 +657,10 @@ private:
             }
 
             THashMap<ui32, ui32> allPublicIds;
-            bool hasStageError = false;
+            bool hasStageError = false; 
             VisitExpr(result.Ptr(), [&](const TExprNode::TPtr& node) {
-                const TExprBase expr(node);
-                if (expr.Maybe<TResFill>()) {
+                const TExprBase expr(node); 
+                if (expr.Maybe<TResFill>()) { 
                     if (auto publicId = State->TypeCtx->TranslateOperationId(node->UniqueId())) {
                         allPublicIds.emplace(*publicId, 0U);
                     }
@@ -668,10 +668,10 @@ private:
                 return true;
             });
 
-            if (hasStageError) {
-                return SyncError();
-            }
-
+            if (hasStageError) { 
+                return SyncError(); 
+            } 
+ 
             IDqGateway::TDqProgressWriter progressWriter = MakeDqProgressWriter(allPublicIds);
 
             auto executionPlanner = THolder<IDqsExecutionPlanner>(new TDqsSingleExecutionPlanner(lambda, NActors::TActorId(), NActors::TActorId(1, 0, 1, 0), State->FunctionRegistry, result.Input().Ref().GetTypeAnn()));
@@ -849,7 +849,7 @@ private:
         size_t graphsCount = 0;
         THashMap<ui32, ui32> allPublicIds;
         THashMap<ui64, ui32> stage2publicId;
-        bool hasStageError = false;
+        bool hasStageError = false; 
         VisitExpr(pull.Ptr(), [&](const TExprNode::TPtr& node) {
             if (TResTransientBase::Match(node.Get()))
                 return false;
@@ -858,8 +858,8 @@ private:
                     allPublicIds.emplace(*publicId, 0U);
                 }
             } else if (const auto& maybeStage = expr.Maybe<TDqStage>()) {
-                const auto& stage = maybeStage.Cast();
-                if (!(stage.Ref().StartsExecution() || stage.Ref().HasResult())) {
+                const auto& stage = maybeStage.Cast(); 
+                if (!(stage.Ref().StartsExecution() || stage.Ref().HasResult())) { 
                     if (const auto publicId = State->TypeCtx->TranslateOperationId(node->UniqueId())) {
                         if (const auto settings = NDq::TDqStageSettings::Parse(maybeStage.Cast()); settings.LogicalId) {
                             stage2publicId[settings.LogicalId] = *publicId;
@@ -876,10 +876,10 @@ private:
         });
         YQL_ENSURE(!oneGraphPerQuery || graphsCount == 1, "Internal error: only one graph per query is allowed");
 
-        if (hasStageError) {
-            return SyncError();
-        }
-
+        if (hasStageError) { 
+            return SyncError(); 
+        } 
+ 
         auto optimizedInput = pull.Input().Ptr();
         THashMap<TString, TString> secureParams;
         NCommon::FillSecureParams(optimizedInput, *State->TypeCtx, secureParams);

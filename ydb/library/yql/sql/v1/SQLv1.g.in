@@ -219,7 +219,7 @@ invoke_expr_tail:
     (null_treatment | filter_clause)? (OVER window_name_or_specification)?
 ;
 
-using_call_expr: ((an_id_or_type NAMESPACE an_id_or_type) | an_id_expr | bind_parameter | (EXTERNAL FUNCTION)) invoke_expr;
+using_call_expr: ((an_id_or_type NAMESPACE an_id_or_type) | an_id_expr | bind_parameter | (EXTERNAL FUNCTION)) invoke_expr; 
 
 key_expr: LBRACE_SQUARE expr RBRACE_SQUARE;
 
@@ -342,13 +342,13 @@ select_kind: (DISCARD)? (process_core | reduce_core | select_core) (INTO RESULT 
 
 process_core:
   PROCESS STREAM? named_single_source (COMMA named_single_source)* (USING using_call_expr (AS an_id)?
-  (WITH external_call_settings)?
+  (WITH external_call_settings)? 
   (WHERE expr)? (HAVING expr)? (ASSUME order_by_clause)?)?
 ;
 
-external_call_param: an_id EQUALS expr;
-external_call_settings: external_call_param (COMMA external_call_param)*;
-
+external_call_param: an_id EQUALS expr; 
+external_call_settings: external_call_param (COMMA external_call_param)*; 
+ 
 reduce_core:
   REDUCE named_single_source (COMMA named_single_source)* (PRESORT sort_specification_list)?
   ON column_list USING ALL? using_call_expr (AS an_id)?
@@ -911,14 +911,14 @@ keyword_compat: (
   | EXCLUSIVE
   | EXPLAIN
   | EXPORT
-  | EXTERNAL
+  | EXTERNAL 
   | FAIL
   | FILTER
   | FLATTEN
   | FOLLOWING
   | FOR
   | FOREIGN
-  | FUNCTION
+  | FUNCTION 
   | GLOB
   | GROUP
   | GROUPING
@@ -1191,7 +1191,7 @@ EXCLUSION: E X C L U S I O N;
 EXISTS: E X I S T S;
 EXPLAIN: E X P L A I N;
 EXPORT: E X P O R T;
-EXTERNAL: E X T E R N A L;
+EXTERNAL: E X T E R N A L; 
 FAIL: F A I L;
 FAMILY: F A M I L Y;
 FILTER: F I L T E R;
@@ -1202,7 +1202,7 @@ FOR: F O R;
 FOREIGN: F O R E I G N;
 FROM: F R O M;
 FULL: F U L L;
-FUNCTION: F U N C T I O N;
+FUNCTION: F U N C T I O N; 
 GLOB: G L O B;
 GLOBAL: G L O B A L;
 GROUP: G R O U P;

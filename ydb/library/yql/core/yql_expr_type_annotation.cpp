@@ -2245,18 +2245,18 @@ bool EnsureStructType(TPositionHandle position, const TTypeAnnotationNode& type,
     return true;
 }
 
-bool EnsureTypeWithStructType(const TExprNode& node, TExprContext& ctx) {
-    if (!EnsureType(node, ctx)) {
-        return false;
-    }
-    auto nodeType = node.GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+bool EnsureTypeWithStructType(const TExprNode& node, TExprContext& ctx) { 
+    if (!EnsureType(node, ctx)) { 
+        return false; 
+    } 
+    auto nodeType = node.GetTypeAnn()->Cast<TTypeExprType>()->GetType(); 
     YQL_ENSURE(nodeType);
     if (!EnsureStructType(node.Pos(), *nodeType, ctx)) {
-        return false;
-    }
-    return true;
-}
-
+        return false; 
+    } 
+    return true; 
+} 
+ 
 bool EnsureComposable(const TExprNode& node, TExprContext& ctx) {
     if (!node.IsComposable()) {
         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), "Composable required. World, datasink, datasource and lambda are not composable"));

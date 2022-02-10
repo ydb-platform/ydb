@@ -763,25 +763,25 @@ bool TWinLeadLag::DoInit(TContext& ctx, ISource* src) {
 
 TWinRank::TWinRank(TPosition pos, const TString& opName, i32 minArgs, i32 maxArgs, const TVector<TNodePtr>& args)
     : TWinAggrEmulation(pos, opName, minArgs, maxArgs, args)
-{
+{ 
 
-}
-
-bool TExternalFunctionConfig::DoInit(TContext& ctx, ISource* src) {
-    for (auto& param: Config) {
-        auto paramName = Y(BuildQuotedAtom(Pos, param.first));
-        if (!param.second->Init(ctx, src)) {
-            return false;
-        }
-        Nodes.push_back(Q(L(paramName, param.second)));
-    }
-    return true;
-}
-
-INode::TPtr TExternalFunctionConfig::DoClone() const {
-    return {};
-}
-
+} 
+ 
+bool TExternalFunctionConfig::DoInit(TContext& ctx, ISource* src) { 
+    for (auto& param: Config) { 
+        auto paramName = Y(BuildQuotedAtom(Pos, param.first)); 
+        if (!param.second->Init(ctx, src)) { 
+            return false; 
+        } 
+        Nodes.push_back(Q(L(paramName, param.second))); 
+    } 
+    return true; 
+} 
+ 
+INode::TPtr TExternalFunctionConfig::DoClone() const { 
+    return {}; 
+} 
+ 
 bool TWinRank::DoInit(TContext& ctx, ISource* src) {
     if (!ValidateArguments(ctx)) {
         return false;

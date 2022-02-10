@@ -412,23 +412,23 @@ namespace NSQLTranslationV1 {
         TString FuncAlias;
     };
 
-    using TFunctionConfig = TMap<TString, TNodePtr>;
-
-    class TExternalFunctionConfig final: public TAstListNode {
-    public:
-        TExternalFunctionConfig(TPosition pos, const TFunctionConfig& config)
-        : TAstListNode(pos)
-        , Config(config)
-        {
-        }
-
-        bool DoInit(TContext& ctx, ISource* src) override;
-        TPtr DoClone() const final;
-
-    private:
-        TFunctionConfig Config;
-    };
-
+    using TFunctionConfig = TMap<TString, TNodePtr>; 
+ 
+    class TExternalFunctionConfig final: public TAstListNode { 
+    public: 
+        TExternalFunctionConfig(TPosition pos, const TFunctionConfig& config) 
+        : TAstListNode(pos) 
+        , Config(config) 
+        { 
+        } 
+ 
+        bool DoInit(TContext& ctx, ISource* src) override; 
+        TPtr DoClone() const final; 
+ 
+    private: 
+        TFunctionConfig Config; 
+    }; 
+ 
     class TWinRowNumber final: public TWinAggrEmulation {
         TPtr DoClone() const final {
             return CallNodeClone<TWinRowNumber>();
@@ -1300,7 +1300,7 @@ namespace NSQLTranslationV1 {
     TSourcePtr BuildReduce(TPosition pos, ReduceMode mode, TSourcePtr source, TVector<TSortSpecificationPtr>&& orderBy,
         TVector<TNodePtr>&& keys, TVector<TNodePtr>&& args, TNodePtr udf, TNodePtr having, const TWriteSettings& settings,
         const TVector<TSortSpecificationPtr>& assumeOrderBy, bool listCall);
-    TSourcePtr BuildProcess(TPosition pos, TSourcePtr source, TNodePtr with, bool withExtFunction, TVector<TNodePtr>&& terms, bool listCall,
+    TSourcePtr BuildProcess(TPosition pos, TSourcePtr source, TNodePtr with, bool withExtFunction, TVector<TNodePtr>&& terms, bool listCall, 
         bool prcessStream, const TWriteSettings& settings, const TVector<TSortSpecificationPtr>& assumeOrderBy);
 
     TNodePtr BuildSelectResult(TPosition pos, TSourcePtr source, bool writeResult, bool inSubquery, TScopedStatePtr scoped);

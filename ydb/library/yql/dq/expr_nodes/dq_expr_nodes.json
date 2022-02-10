@@ -216,16 +216,16 @@
         "Children": [
             {"Index": 0, "Name": "Connection", "Type": "TDqConnection"}
         ]
-    },
-    {
-        "Name": "TDqSqlExternalFunction",
-        "Base": "TCallable",
-        "Match": {"Type": "Callable", "Name": "SqlExternalFunction"},
-        "Children": [
-            {"Index": 0, "Name": "TransformType", "Type": "TExprBase"},
-            {"Index": 1, "Name": "TransformName", "Type": "TExprBase"},
-            {"Index": 2, "Name": "Settings", "Type": "TExprBase"}
-        ]
+    }, 
+    { 
+        "Name": "TDqSqlExternalFunction", 
+        "Base": "TCallable", 
+        "Match": {"Type": "Callable", "Name": "SqlExternalFunction"}, 
+        "Children": [ 
+            {"Index": 0, "Name": "TransformType", "Type": "TExprBase"}, 
+            {"Index": 1, "Name": "TransformName", "Type": "TExprBase"}, 
+            {"Index": 2, "Name": "Settings", "Type": "TExprBase"} 
+        ] 
     }
     ]
 }

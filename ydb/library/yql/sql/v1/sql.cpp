@@ -2,7 +2,7 @@
 
 #include "context.h"
 #include "node.h"
-#include "sql_call_param.h"
+#include "sql_call_param.h" 
 #include "ydb/library/yql/ast/yql_ast.h"
 #include <ydb/library/yql/parser/proto_ast/collect_issues/collect_issues.h>
 #include <ydb/library/yql/parser/proto_ast/gen/v1/SQLv1Lexer.h>
@@ -1102,8 +1102,8 @@ public:
         , AggMode(call.AggMode)
         , DistinctAllowed(call.DistinctAllowed)
         , UsingCallExpr(call.UsingCallExpr)
-        , IsExternalCall(call.IsExternalCall)
-        , CallConfig(call.CallConfig)
+        , IsExternalCall(call.IsExternalCall) 
+        , CallConfig(call.CallConfig) 
     {
     }
 
@@ -1117,7 +1117,7 @@ public:
     bool Init(const TRule_using_call_expr& node);
     bool Init(const TRule_value_constructor& node);
     bool Init(const TRule_invoke_expr& node);
-    bool ConfigureExternalCall(const TRule_external_call_settings& node);
+    bool ConfigureExternalCall(const TRule_external_call_settings& node); 
     void IncCounters();
 
     TNodePtr BuildUdf(bool forReduce) {
@@ -1149,27 +1149,27 @@ public:
             }
             args.emplace_back(BuildTuple(Pos, PositionalArgs));
             args.emplace_back(BuildStructure(Pos, NamedArgs));
-        } else if (IsExternalCall) {
-            Func = "SqlExternalFunction";
-            if (Args.size() < 2 || Args.size() > 3) {
-                Ctx.Error(Pos) << "EXTERNAL FUNCTION requires from 2 to 3 arguments, but got: " << Args.size();
-                return nullptr;
-            }
-
-            if (Args.size() == 3) {
-                args.insert(args.end(), Args.begin(), Args.end() - 1);
-                Args.erase(Args.begin(), Args.end() - 1);
-            } else {
-                args.insert(args.end(), Args.begin(), Args.end());
-                Args.erase(Args.begin(), Args.end());
-            }
-            auto configNode = new TExternalFunctionConfig(Pos, CallConfig);
-            auto configList = new TAstListNodeImpl(Pos, { new TAstAtomNodeImpl(Pos, "quote", 0), configNode });
-            args.push_back(configList);
+        } else if (IsExternalCall) { 
+            Func = "SqlExternalFunction"; 
+            if (Args.size() < 2 || Args.size() > 3) { 
+                Ctx.Error(Pos) << "EXTERNAL FUNCTION requires from 2 to 3 arguments, but got: " << Args.size(); 
+                return nullptr; 
+            } 
+ 
+            if (Args.size() == 3) { 
+                args.insert(args.end(), Args.begin(), Args.end() - 1); 
+                Args.erase(Args.begin(), Args.end() - 1); 
+            } else { 
+                args.insert(args.end(), Args.begin(), Args.end()); 
+                Args.erase(Args.begin(), Args.end()); 
+            } 
+            auto configNode = new TExternalFunctionConfig(Pos, CallConfig); 
+            auto configList = new TAstListNodeImpl(Pos, { new TAstAtomNodeImpl(Pos, "quote", 0), configNode }); 
+            args.push_back(configList); 
         } else {
             args.insert(args.end(), Args.begin(), Args.end());
         }
-
+ 
         auto result = BuildBuiltinFunc(Ctx, Pos, Func, args, Module, AggMode, &mustUseNamed, warnOnYqlNameSpace);
         if (mustUseNamed) {
             Error() << "Named args are used for call, but unsupported by function: " << Func;
@@ -1200,16 +1200,16 @@ public:
         Func += "_IgnoreNulls";
     }
 
-    bool IsExternal() {
-        return IsExternalCall;
-    }
-
+    bool IsExternal() { 
+        return IsExternalCall; 
+    } 
+ 
 private:
     bool ExtractCallParam(const TRule_external_call_param& node);
     bool FillArg(const TString& module, const TString& func, size_t& idx, const TRule_named_expr& node);
     bool FillArgs(const TRule_named_expr_list& node);
-
-private:
+ 
+private: 
     TPosition Pos;
     TString Func;
     TString Module;
@@ -1221,8 +1221,8 @@ private:
     TString WindowName;
     bool DistinctAllowed = false;
     bool UsingCallExpr = false;
-    bool IsExternalCall = false;
-    TFunctionConfig CallConfig;
+    bool IsExternalCall = false; 
+    TFunctionConfig CallConfig; 
 };
 
 TNodePtr TSqlTranslation::NamedExpr(const TRule_named_expr& node, EExpr exprMode) {
@@ -3192,9 +3192,9 @@ bool TSqlCallExpr::Init(const TRule_value_constructor& node) {
 }
 
 bool TSqlCallExpr::ExtractCallParam(const TRule_external_call_param& node) {
-    TString paramName = Id(node.GetRule_an_id1(), *this);
-    paramName = to_lower(paramName);
-
+    TString paramName = Id(node.GetRule_an_id1(), *this); 
+    paramName = to_lower(paramName); 
+ 
     if (CallConfig.contains(paramName)) {
         Ctx.Error() << "WITH " << to_upper(paramName).Quote()
             << " clause should be specified only once";
@@ -3215,27 +3215,27 @@ bool TSqlCallExpr::ExtractCallParam(const TRule_external_call_param& node) {
         TDeferredAtom atom;
         MakeTableFromExpression(Ctx, value, atom);
         value = new TCallNodeImpl(Ctx.Pos(), "String", { atom.Build() });
-    }
-
+    } 
+ 
     if (!value) {
         return false;
     }
 
     CallConfig[paramName] = value;
     return true;
-}
-
-bool TSqlCallExpr::ConfigureExternalCall(const TRule_external_call_settings& node) {
+} 
+ 
+bool TSqlCallExpr::ConfigureExternalCall(const TRule_external_call_settings& node) { 
     bool success = ExtractCallParam(node.GetRule_external_call_param1());
     for (auto& block: node.GetBlock2()) {
         success = ExtractCallParam(block.GetRule_external_call_param2()) && success;
-    }
-
-    return success;
-}
-
+    } 
+ 
+    return success; 
+} 
+ 
 bool TSqlCallExpr::Init(const TRule_using_call_expr& node) {
-    // using_call_expr: ((an_id_or_type NAMESPACE an_id_or_type) | an_id_expr | bind_parameter | (EXTERNAL FUNCTION)) invoke_expr;
+    // using_call_expr: ((an_id_or_type NAMESPACE an_id_or_type) | an_id_expr | bind_parameter | (EXTERNAL FUNCTION)) invoke_expr; 
     const auto& block = node.GetBlock1();
     switch (block.Alt_case()) {
         case TRule_using_call_expr::TBlock1::kAlt1: {
@@ -3259,10 +3259,10 @@ bool TSqlCallExpr::Init(const TRule_using_call_expr& node) {
             }
             break;
         }
-        case TRule_using_call_expr::TBlock1::kAlt4: {
-            IsExternalCall = true;
-            break;
-        }
+        case TRule_using_call_expr::TBlock1::kAlt4: { 
+            IsExternalCall = true; 
+            break; 
+        } 
         default:
             Y_FAIL("You should change implementation according to grammar changes");
     }
@@ -3373,11 +3373,11 @@ bool TSqlCallExpr::Init(const TRule_invoke_expr& node) {
             break;
         }
         case TRule_invoke_expr::TBlock2::kAlt2:
-            if (IsExternalCall) {
-                Ctx.Error() << "You should set EXTERNAL FUNCTION type. Example: EXTERNAL FUNCTION('YANDEX-CLOUD', ...)";
-            } else {
-                Args.push_back(new TAsteriskNode(Pos));
-            }
+            if (IsExternalCall) { 
+                Ctx.Error() << "You should set EXTERNAL FUNCTION type. Example: EXTERNAL FUNCTION('YANDEX-CLOUD', ...)"; 
+            } else { 
+                Args.push_back(new TAsteriskNode(Pos)); 
+            } 
             break;
         default:
             Y_FAIL("You should change implementation according to grammar changes");
@@ -3387,11 +3387,11 @@ bool TSqlCallExpr::Init(const TRule_invoke_expr& node) {
     const auto& tail = node.GetRule_invoke_expr_tail4();
 
     if (tail.HasBlock1()) {
-        if (IsExternalCall) {
-            Ctx.Error() << "Additional clause after EXTERNAL FUNCTION(...) is not supported";
-            return false;
-        }
-
+        if (IsExternalCall) { 
+            Ctx.Error() << "Additional clause after EXTERNAL FUNCTION(...) is not supported"; 
+            return false; 
+        } 
+ 
         switch (tail.GetBlock1().Alt_case()) {
         case TRule_invoke_expr_tail::TBlock1::kAlt1: {
             if (!tail.HasBlock2()) {
@@ -6321,7 +6321,7 @@ bool TSqlTranslation::RoleParameters(const TRule_create_user_option& node, TRole
 
 TSourcePtr TSqlSelect::ProcessCore(const TRule_process_core& node, const TWriteSettings& settings, TPosition& selectPos) {
     // PROCESS STREAM? named_single_source (COMMA named_single_source)* (USING using_call_expr (AS an_id)?
-    // (WITH external_call_settings)?
+    // (WITH external_call_settings)? 
     // (WHERE expr)? (HAVING expr)? (ASSUME order_by_clause)?)?
 
     Token(node.GetToken1());
@@ -6352,14 +6352,14 @@ TSourcePtr TSqlSelect::ProcessCore(const TRule_process_core& node, const TWriteS
     const bool processStream = node.HasBlock2();
 
     if (!hasUsing) {
-        return BuildProcess(startPos, std::move(source), nullptr, false, {}, false, processStream, settings, {});
+        return BuildProcess(startPos, std::move(source), nullptr, false, {}, false, processStream, settings, {}); 
     }
 
     const auto& block5 = node.GetBlock5();
-    if (block5.HasBlock5()) {
+    if (block5.HasBlock5()) { 
         TSqlExpression expr(Ctx, Mode);
         TColumnRefScope scope(Ctx, EColumnRefState::Allow);
-        TNodePtr where = expr.Build(block5.GetBlock5().GetRule_expr2());
+        TNodePtr where = expr.Build(block5.GetBlock5().GetRule_expr2()); 
         if (!where || !source->AddFilter(Ctx, where)) {
             return nullptr;
         }
@@ -6368,7 +6368,7 @@ TSourcePtr TSqlSelect::ProcessCore(const TRule_process_core& node, const TWriteS
         Ctx.IncrementMonCounter("sql_features", processStream ? "ProcessStream" : "Process");
     }
 
-    if (block5.HasBlock6()) {
+    if (block5.HasBlock6()) { 
         Ctx.Error() << "PROCESS does not allow HAVING yet! You may request it on yql@ maillist.";
         return nullptr;
     }
@@ -6395,45 +6395,45 @@ TSourcePtr TSqlSelect::ProcessCore(const TRule_process_core& node, const TWriteS
         }
     }
 
-    if (!call.IsExternal() && block5.HasBlock4()) {
-        Ctx.Error() << "PROCESS without USING EXTERNAL FUNCTION doesn't allow WITH block";
-        return nullptr;
-    }
-
-    if (block5.HasBlock4()) {
-        const auto& block54 = block5.GetBlock4();
-        if (!call.ConfigureExternalCall(block54.GetRule_external_call_settings2())) {
-            return nullptr;
-        }
-    }
-
+    if (!call.IsExternal() && block5.HasBlock4()) { 
+        Ctx.Error() << "PROCESS without USING EXTERNAL FUNCTION doesn't allow WITH block"; 
+        return nullptr; 
+    } 
+ 
+    if (block5.HasBlock4()) { 
+        const auto& block54 = block5.GetBlock4(); 
+        if (!call.ConfigureExternalCall(block54.GetRule_external_call_settings2())) { 
+            return nullptr; 
+        } 
+    } 
+ 
     TSqlCallExpr finalCall(call, args);
-    TNodePtr with(finalCall.IsExternal() ? finalCall.BuildCall() : finalCall.BuildUdf(/* forReduce = */ false));
+    TNodePtr with(finalCall.IsExternal() ? finalCall.BuildCall() : finalCall.BuildUdf(/* forReduce = */ false)); 
     if (!with) {
         return {};
     }
     args = finalCall.GetArgs();
-    if (call.IsExternal())
-        listCall = true;
+    if (call.IsExternal()) 
+        listCall = true; 
 
     if (block5.HasBlock3()) {
         with->SetLabel(Id(block5.GetBlock3().GetRule_an_id2(), *this));
     }
 
-    if (call.IsExternal() && block5.HasBlock7()) {
-        Ctx.Error() << "PROCESS with USING EXTERNAL FUNCTION doesn't allow ASSUME block";
-        return nullptr;
-    }
-
+    if (call.IsExternal() && block5.HasBlock7()) { 
+        Ctx.Error() << "PROCESS with USING EXTERNAL FUNCTION doesn't allow ASSUME block"; 
+        return nullptr; 
+    } 
+ 
     TVector<TSortSpecificationPtr> assumeOrderBy;
-    if (block5.HasBlock7()) {
-        if (!OrderByClause(block5.GetBlock7().GetRule_order_by_clause2(), assumeOrderBy)) {
+    if (block5.HasBlock7()) { 
+        if (!OrderByClause(block5.GetBlock7().GetRule_order_by_clause2(), assumeOrderBy)) { 
             return nullptr;
         }
         Ctx.IncrementMonCounter("sql_features", IsColumnsOnly(assumeOrderBy) ? "AssumeOrderBy" : "AssumeOrderByExpr");
     }
 
-    return BuildProcess(startPos, std::move(source), with, finalCall.IsExternal(), std::move(args), listCall, processStream, settings, assumeOrderBy);
+    return BuildProcess(startPos, std::move(source), with, finalCall.IsExternal(), std::move(args), listCall, processStream, settings, assumeOrderBy); 
 }
 
 TSourcePtr TSqlSelect::ReduceCore(const TRule_reduce_core& node, const TWriteSettings& settings, TPosition& selectPos) {

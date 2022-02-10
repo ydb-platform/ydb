@@ -24,7 +24,7 @@ struct TDqSettings {
         static constexpr int MaxNetworkRetries = 5;
         static constexpr ui64 LiteralTimeout = 60000; // 1 minutes
         static constexpr ui64 TableTimeout = 600000; // 10 minutes
-        static constexpr ui32 CloudFunctionConcurrency = 10;
+        static constexpr ui32 CloudFunctionConcurrency = 10; 
     };
 
     using TPtr = std::shared_ptr<TDqSettings>;

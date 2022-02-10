@@ -129,16 +129,16 @@ message TTaskOutput {
     }
 }
 
-enum ETransformType {
-    TRANSFORM_YANDEX_CLOUD = 0;
-}
-
-message TDqTransform {
-    ETransformType Type = 1;
-    string FunctionName = 2;
-    string ConnectionName = 3;
-}
-
+enum ETransformType { 
+    TRANSFORM_YANDEX_CLOUD = 0; 
+} 
+ 
+message TDqTransform { 
+    ETransformType Type = 1; 
+    string FunctionName = 2; 
+    string ConnectionName = 3; 
+} 
+ 
 message TDqTask {
     uint64 Id = 1;
     uint32 StageId = 9;
@@ -149,5 +149,5 @@ message TDqTask {
     repeated TTaskOutput Outputs = 6;
     google.protobuf.Any Meta = 7;
     bool CreateSuspended = 8;
-    optional TDqTransform OutputTransform = 12;
+    optional TDqTransform OutputTransform = 12; 
 }

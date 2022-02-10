@@ -119,18 +119,18 @@ inline void SetEnumFlags(const std::pair<const char*, E>* str2Enum, TStringBuf o
     }
 }
 
-// for enums generated with GENERATE_ENUM_SERIALIZATION
-template <class E, size_t B>
-inline void SetEnumFlags(TStringBuf optSpec, std::bitset<B>& flags, bool allIfEmpty = true) {
-    if (optSpec.empty()) {
+// for enums generated with GENERATE_ENUM_SERIALIZATION 
+template <class E, size_t B> 
+inline void SetEnumFlags(TStringBuf optSpec, std::bitset<B>& flags, bool allIfEmpty = true) { 
+    if (optSpec.empty()) { 
         SetEnumFlagsForEmptySpec(flags, allIfEmpty);
-    } else {
-        flags.reset();
+    } else { 
+        flags.reset(); 
         for (const auto& it : StringSplitter(optSpec).Split(',')) {
-            E e;
+            E e; 
             if (!TryFromString(it.Token(), e))
                 ythrow yexception() << "Unknown enum value '" << it.Token() << "'";
-            flags.set((size_t)e);
-        }
-    }
-}
+            flags.set((size_t)e); 
+        } 
+    } 
+} 

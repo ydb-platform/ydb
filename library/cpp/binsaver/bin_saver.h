@@ -66,22 +66,22 @@ private:
     void CallObjectSerialize(T* p, NBinSaverInternals::TOverloadPriority<2>) { // highest priority -  will be resolved first if enabled
                                            // Note: p->operator &(*this) would lead to infinite recursion
         p->T::operator&(*this);
-    }
-
+    } 
+ 
     template <class T, typename = decltype(std::declval<T&>() & std::declval<IBinSaver&>())>
     void CallObjectSerialize(T* p, NBinSaverInternals::TOverloadPriority<1>) { // lower priority - will be resolved second if enabled
-        (*p) & (*this);
-    }
-
+        (*p) & (*this); 
+    } 
+ 
     template <class T>
     void CallObjectSerialize(T* p, NBinSaverInternals::TOverloadPriority<0>) { // lower priority - will be resolved last
-#if (!defined(_MSC_VER))
-        // In MSVC __has_trivial_copy returns false to enums, primitive types and arrays.
+#if (!defined(_MSC_VER)) 
+        // In MSVC __has_trivial_copy returns false to enums, primitive types and arrays. 
         static_assert(__has_trivial_copy(T), "Class is nontrivial copyable, you must define operator&, see");
 #endif
-        DataChunk(p, sizeof(T));
-    }
-
+        DataChunk(p, sizeof(T)); 
+    } 
+ 
     // vector
     template <class T, class TA>
     void DoVector(TVector<T, TA>& data) {
@@ -327,7 +327,7 @@ public:
     }
     template <class T1, class TA>
     int Add(const chunk_id, TVector<T1, TA>* pVec) {
-        if (HasNonTrivialSerializer<T1>(0u))
+        if (HasNonTrivialSerializer<T1>(0u)) 
             DoVector(*pVec);
         else
             DoDataVector(*pVec);
@@ -371,7 +371,7 @@ public:
 
     template <class T1>
     int Add(const chunk_id, TArray2D<T1>* pArr) {
-        if (HasNonTrivialSerializer<T1>(0u))
+        if (HasNonTrivialSerializer<T1>(0u)) 
             Do2DArray(*pArr);
         else
             Do2DArrayData(*pArr);
@@ -403,7 +403,7 @@ public:
 
     template <class T1, size_t N>
     int Add(const chunk_id, std::array<T1, N>* pData) {
-        if (HasNonTrivialSerializer<T1>(0u)) {
+        if (HasNonTrivialSerializer<T1>(0u)) { 
             for (size_t i = 0; i < N; ++i)
                 Add(1, &(*pData)[i]);
         } else {
@@ -494,11 +494,11 @@ public:
     void AddPolymorphicBase(chunk_id, IObjectBase* pObject) {
         (*pObject) & (*this);
     }
-
+ 
     template <class T1, class T2>
     void DoPtr(TPtrBase<T1, T2>* pData) {
-        if (pData && pData->Get()) {
-        }
+        if (pData && pData->Get()) { 
+        } 
         if (IsReading())
             pData->Set(CastToUserObject(LoadObject(), (T1*)nullptr));
         else
@@ -536,14 +536,14 @@ public:
     }
 
     template <class T, typename = decltype(std::declval<T&>() & std::declval<IBinSaver&>())>
-    static bool HasNonTrivialSerializer(ui32) {
-        return true;
+    static bool HasNonTrivialSerializer(ui32) { 
+        return true; 
     }
 
     template <class T>
-    static bool HasNonTrivialSerializer(...) {
+    static bool HasNonTrivialSerializer(...) { 
         return sizeof(std::declval<IBinSaver*>()->Add(0, std::declval<T*>())) != 1;
-    }
+    } 
 
 public:
     IBinSaver(IBinaryStream& stream, bool _bRead, bool stableOutput = false)

@@ -981,28 +981,28 @@ public:
 		mNewFsm.Connect(from, to, letter);
 	}
 	typedef bool Result;
-
-	Result Success() {
-		Fsm::Outputs oldOutputs;
-		// remove redundant outputs
-		oldOutputs.swap(mNewFsm.outputs);
-		for (size_t from = 0; from < mNewFsm.Size(); ++from) {
+ 
+	Result Success() { 
+		Fsm::Outputs oldOutputs; 
+		// remove redundant outputs 
+		oldOutputs.swap(mNewFsm.outputs); 
+		for (size_t from = 0; from < mNewFsm.Size(); ++from) { 
 			auto fromOutput = oldOutputs.find(from);
-			if (fromOutput == oldOutputs.end())
-				continue;
+			if (fromOutput == oldOutputs.end()) 
+				continue; 
 			const auto& newTransitionsRow = mNewFsm.m_transitions[from];
 			for (auto&& row : newTransitionsRow) {
 				for (auto&& stateIt : row.second) {
 					auto toOutput = fromOutput->second.find(stateIt);
-					if (toOutput != fromOutput->second.end()) {
-						mNewFsm.outputs[from].insert(*toOutput);
-					}
-				}
-			}
-		}
-		return true;
-	}
-
+					if (toOutput != fromOutput->second.end()) { 
+						mNewFsm.outputs[from].insert(*toOutput); 
+					} 
+				} 
+			} 
+		} 
+		return true; 
+	} 
+ 
 	Result Failure() { return false; }
 
 	Fsm& Output() { return mNewFsm; }

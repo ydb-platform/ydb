@@ -18,9 +18,9 @@ public:
     static TTempDir NewTempDir(const TString& root);
 
     const TString& operator()() const {
-        return Name();
-    }
-
+        return Name(); 
+    } 
+ 
     const TString& Name() const {
         return TempDir.GetPath();
     }

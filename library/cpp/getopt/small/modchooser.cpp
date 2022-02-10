@@ -181,7 +181,7 @@ int TModChooser::Run(const int argc, const char** argv) const {
     }
 
     if (modeName == "-h" || modeName == "--help" || modeName == "-?") {
-        PrintHelp(argv[0]);
+        PrintHelp(argv[0]); 
         return 0;
     }
     if (VersionHandler && (modeName == "-v" || modeName == "--version")) {
@@ -200,7 +200,7 @@ int TModChooser::Run(const int argc, const char** argv) const {
 
     if (modeIter == Modes.end()) {
         Cerr << "Unknown mode " << modeName.Quote() << "." << Endl;
-        PrintHelp(argv[0]);
+        PrintHelp(argv[0]); 
         return 1;
     }
 

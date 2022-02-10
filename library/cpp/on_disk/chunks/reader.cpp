@@ -47,6 +47,6 @@ TChunkedDataReader::TChunkedDataReader(const TBlob& blob) {
     }
 }
 
-TBlob TChunkedDataReader::GetBlob(size_t index) const {
-    return TBlob::NoCopy(GetBlock(index), GetBlockLen(index));
-}
+TBlob TChunkedDataReader::GetBlob(size_t index) const { 
+    return TBlob::NoCopy(GetBlock(index), GetBlockLen(index)); 
+} 

@@ -26,7 +26,7 @@ namespace NProtoBuf {
             ythrow yexception() << "can't parse " << m.GetTypeName() << " from base64-encoded string";
         }
     }
-
+ 
     bool TryParseFromBase64String(const TStringBuf dataBase64, Message& m, bool allowUneven) {
         try {
             ParseFromBase64String(dataBase64, m, allowUneven);
@@ -35,7 +35,7 @@ namespace NProtoBuf {
             return false;
         }
     }
-
+ 
     void SerializeToBase64String(const Message& m, TString& dataBase64) {
         TString rawData;
         if (!m.SerializeToString(&rawData)) {
@@ -82,17 +82,17 @@ namespace NProtoBuf {
 }
 
 int operator&(NProtoBuf::Message& m, IBinSaver& f) {
-    TStringStream ss;
-    if (f.IsReading()) {
-        f.Add(0, &ss.Str());
+    TStringStream ss; 
+    if (f.IsReading()) { 
+        f.Add(0, &ss.Str()); 
         m.ParseFromArcadiaStream(&ss);
-    } else {
+    } else { 
         m.SerializeToArcadiaStream(&ss);
-        f.Add(0, &ss.Str());
-    }
-    return 0;
-}
-
+        f.Add(0, &ss.Str()); 
+    } 
+    return 0; 
+} 
+ 
 void SerializeToTextFormat(const NProtoBuf::Message& m, IOutputStream& out) {
     NProtoBuf::io::TCopyingOutputStreamAdaptor adaptor(&out);
 

@@ -333,12 +333,12 @@ bool TFsPath::Exists() const {
     return IsDefined() && NFs::Exists(*this);
 }
 
-void TFsPath::CheckExists() const {
-    if (!Exists()) {
+void TFsPath::CheckExists() const { 
+    if (!Exists()) { 
         ythrow TIoException() << "path does not exist " << Path_;
-    }
-}
-
+    } 
+} 
+ 
 bool TFsPath::IsDirectory() const {
     return IsDefined() && TFileStat(GetPath().data()).IsDir();
 }

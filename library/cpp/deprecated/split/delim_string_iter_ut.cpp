@@ -10,7 +10,7 @@ static void AssertStringSplit(const TString& str, const TString& delim, const TV
     for (const auto& expectedString : expected) {
         UNIT_ASSERT(it.Valid());
         UNIT_ASSERT(bool(it));
-        UNIT_ASSERT_STRINGS_EQUAL(it->ToString(), expectedString);
+        UNIT_ASSERT_STRINGS_EQUAL(it->ToString(), expectedString); 
         ++it;
     }
     UNIT_ASSERT(!it.Valid());
@@ -30,14 +30,14 @@ Y_UNIT_TEST_SUITE(TDelimStrokaIterTestSuite) {
     Y_UNIT_TEST(NoDelimitersPresent) {
         AssertStringSplit("This string could be yours", "\t", {"This string could be yours"});
     }
-
+ 
     Y_UNIT_TEST(Cdr) {
         TDelimStringIter it("a\tc\t", "\t");
-        UNIT_ASSERT_STRINGS_EQUAL(*it, "a");
-        UNIT_ASSERT_STRINGS_EQUAL(it.Cdr(), "c\t");
-        ++it;
-        UNIT_ASSERT_STRINGS_EQUAL(it.Cdr(), "");
-    }
+        UNIT_ASSERT_STRINGS_EQUAL(*it, "a"); 
+        UNIT_ASSERT_STRINGS_EQUAL(it.Cdr(), "c\t"); 
+        ++it; 
+        UNIT_ASSERT_STRINGS_EQUAL(it.Cdr(), ""); 
+    } 
 
     Y_UNIT_TEST(ForIter) {
         TVector<TStringBuf> expected = {"1", "", "3@4", ""};

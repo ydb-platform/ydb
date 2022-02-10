@@ -28,16 +28,16 @@ public:
 
         return Lengths[index];
     }
-
+ 
     TBlob GetBlob(size_t index) const;
-
+ 
     template <typename T>
     TArrayRef<const T> GetRegion(size_t index) const {
         size_t len = GetBlockLen(index);
         Y_ENSURE(len % sizeof(T) == 0, "wrong data padding");
         return TArrayRef<const T>(reinterpret_cast<const T*>(GetBlock(index)), len / sizeof(T));
     }
-
+ 
     inline size_t GetBlocksCount() const {
         return Offsets.size();
     }

@@ -374,7 +374,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
         return true;
     }
 
-    typedef std::tuple<TPathId, ui32, TString, NScheme::TTypeId, ui32, ui64, ui64, ui32, ETableColumnDefaultKind, TString, bool> TColumnRec;
+    typedef std::tuple<TPathId, ui32, TString, NScheme::TTypeId, ui32, ui64, ui64, ui32, ETableColumnDefaultKind, TString, bool> TColumnRec; 
     typedef TDeque<TColumnRec> TColumnRows;
 
     bool LoadColumns(NIceDb::TNiceDb& db, TColumnRows& columnRows) const {
@@ -396,11 +396,11 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 ui32 family = rowSet.GetValueOrDefault<Schema::Columns::Family>(0);
                 auto defaultKind = rowSet.GetValue<Schema::Columns::DefaultKind>();
                 auto defaultValue = rowSet.GetValue<Schema::Columns::DefaultValue>();
-                auto notNull = rowSet.GetValueOrDefault<Schema::Columns::NotNull>(false);
+                auto notNull = rowSet.GetValueOrDefault<Schema::Columns::NotNull>(false); 
 
                 columnRows.emplace_back(pathId, colId,
                                         colName, typeId, keyOrder, createVersion, deleteVersion,
-                                        family, defaultKind, defaultValue, notNull);
+                                        family, defaultKind, defaultValue, notNull); 
 
                 if (!rowSet.Next()) {
                     return false;
@@ -428,11 +428,11 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 ui32 family = rowSet.GetValueOrDefault<Schema::MigratedColumns::Family>(0);
                 auto defaultKind = rowSet.GetValue<Schema::MigratedColumns::DefaultKind>();
                 auto defaultValue = rowSet.GetValue<Schema::MigratedColumns::DefaultValue>();
-                auto notNull = rowSet.GetValueOrDefault<Schema::MigratedColumns::NotNull>(false);
+                auto notNull = rowSet.GetValueOrDefault<Schema::MigratedColumns::NotNull>(false); 
 
                 columnRows.emplace_back(pathId, colId,
                                         colName, typeId, keyOrder, createVersion, deleteVersion,
-                                        family, defaultKind, defaultValue, notNull);
+                                        family, defaultKind, defaultValue, notNull); 
 
                 if (!rowSet.Next()) {
                     return false;
@@ -462,11 +462,11 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 ui32 family = rowSet.GetValueOrDefault<Schema::ColumnAlters::Family>(0);
                 auto defaultKind = rowSet.GetValue<Schema::ColumnAlters::DefaultKind>();
                 auto defaultValue = rowSet.GetValue<Schema::ColumnAlters::DefaultValue>();
-                auto notNull = rowSet.GetValueOrDefault<Schema::ColumnAlters::NotNull>(false);
+                auto notNull = rowSet.GetValueOrDefault<Schema::ColumnAlters::NotNull>(false); 
 
                 columnRows.emplace_back(pathId, colId,
                                         colName, typeId, keyOrder, createVersion, deleteVersion,
-                                        family, defaultKind, defaultValue, notNull);
+                                        family, defaultKind, defaultValue, notNull); 
 
                 if (!rowSet.Next()) {
                     return false;
@@ -494,11 +494,11 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 ui32 family = rowSet.GetValueOrDefault<Schema::MigratedColumnAlters::Family>(0);
                 auto defaultKind = rowSet.GetValue<Schema::MigratedColumnAlters::DefaultKind>();
                 auto defaultValue = rowSet.GetValue<Schema::MigratedColumnAlters::DefaultValue>();
-                auto notNull = rowSet.GetValueOrDefault<Schema::MigratedColumnAlters::NotNull>(false);
+                auto notNull = rowSet.GetValueOrDefault<Schema::MigratedColumnAlters::NotNull>(false); 
 
                 columnRows.emplace_back(pathId, colId,
                                         colName, typeId, keyOrder, createVersion, deleteVersion,
-                                        family, defaultKind, defaultValue, notNull);
+                                        family, defaultKind, defaultValue, notNull); 
 
                 if (!rowSet.Next()) {
                     return false;
@@ -1831,7 +1831,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 ui32 family = std::get<7>(rec);
                 auto defaultKind = std::get<8>(rec);
                 auto defaultValue = std::get<9>(rec);
-                auto notNull = std::get<10>(rec);
+                auto notNull = std::get<10>(rec); 
 
                 Y_VERIFY_S(Self->PathsById.contains(pathId), "Path doesn't exist, pathId: " << pathId);
                 Y_VERIFY_S(Self->PathsById.at(pathId)->IsTable(), "Path is not a table, pathId: " << pathId);
@@ -1849,7 +1849,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 colInfo.Family = family;
                 colInfo.DefaultKind = defaultKind;
                 colInfo.DefaultValue = defaultValue;
-                colInfo.NotNull = notNull;
+                colInfo.NotNull = notNull; 
 
                 tableInfo->Columns[colId] = colInfo;
 
@@ -1883,7 +1883,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 ui32 family = std::get<7>(rec);
                 auto defaultKind = std::get<8>(rec);
                 auto defaultValue = std::get<9>(rec);
-                auto notNull = std::get<10>(rec);
+                auto notNull = std::get<10>(rec); 
 
                 Y_VERIFY_S(Self->PathsById.contains(pathId), "Path doesn't exist, pathId: " << pathId);
                 Y_VERIFY_S(Self->PathsById.at(pathId)->IsTable(), "Path is not a table, pathId: " << pathId);
@@ -1903,7 +1903,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 colInfo.Family = family;
                 colInfo.DefaultKind = defaultKind;
                 colInfo.DefaultValue = defaultValue;
-                colInfo.NotNull = notNull;
+                colInfo.NotNull = notNull; 
                 tableInfo->AlterData->Columns[colId] = colInfo;
             }
         }

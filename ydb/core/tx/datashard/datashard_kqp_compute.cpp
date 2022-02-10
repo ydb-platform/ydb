@@ -141,13 +141,13 @@ TString TKqpDatashardComputeContext::GetTablePath(const TTableId &tableId) const
     return (*table)->Path;
 }
 
-const NDataShard::TUserTable* TKqpDatashardComputeContext::GetTable(const TTableId& tableId) const {
-    MKQL_ENSURE_S(Shard);
-    auto ptr = Shard->GetUserTables().FindPtr(tableId.PathId.LocalPathId);
-    MKQL_ENSURE_S(ptr);
-    return ptr->Get();
-}
-
+const NDataShard::TUserTable* TKqpDatashardComputeContext::GetTable(const TTableId& tableId) const { 
+    MKQL_ENSURE_S(Shard); 
+    auto ptr = Shard->GetUserTables().FindPtr(tableId.PathId.LocalPathId); 
+    MKQL_ENSURE_S(ptr); 
+    return ptr->Get(); 
+} 
+ 
 void TKqpDatashardComputeContext::ReadTable(const TTableId& tableId, const TTableRange& range) const {
     MKQL_ENSURE_S(Shard);
     Shard->SysLocksTable().SetLock(tableId, range, LockTxId);

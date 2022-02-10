@@ -9,7 +9,7 @@ namespace NKikimr {
     namespace NDataShard {
         class TExecuteKqpScanTxUnit;
         class TDataShard;
-        struct TUserTable;
+        struct TUserTable; 
     }
 }
 
@@ -29,7 +29,7 @@ public:
 
     ui64 GetLocalTableId(const TTableId& tableId) const;
     TString GetTablePath(const TTableId& tableId) const;
-    const NDataShard::TUserTable* GetTable(const TTableId& tableId) const;
+    const NDataShard::TUserTable* GetTable(const TTableId& tableId) const; 
     void ReadTable(const TTableId& tableId, const TTableRange& range) const;
     void ReadTable(const TTableId& tableId, const TArrayRef<const TCell>& key) const;
     void BreakSetLocks() const;

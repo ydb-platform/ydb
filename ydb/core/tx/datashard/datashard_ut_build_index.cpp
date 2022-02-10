@@ -90,7 +90,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardBuildIndexScan) {
                         .EnableOutOfOrder(enableOutOfOrder)
                         .Policy(policy.Get())
                         .ShadowData(EShadowDataMode::Enabled)
-                        .Columns({{"value", "Uint32", true, false}, {"key", "Uint32", true, false}});
+                        .Columns({{"value", "Uint32", true, false}, {"key", "Uint32", true, false}}); 
 
         CreateShardedTable(server, sender, root, name, opts);
     }

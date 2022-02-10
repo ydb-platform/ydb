@@ -648,8 +648,8 @@ public:
 
     TTableBuilder& AddNullableColumn(const TString& name, const EPrimitiveType& type, const TString& family = TString());
     TTableBuilder& AddNullableColumn(const TString& name, const TDecimalType& type, const TString& family = TString());
-    TTableBuilder& AddNonNullableColumn(const TString& name, const EPrimitiveType& type, const TString& family = TString());
-    TTableBuilder& AddNonNullableColumn(const TString& name, const TDecimalType& type, const TString& family = TString());
+    TTableBuilder& AddNonNullableColumn(const TString& name, const EPrimitiveType& type, const TString& family = TString()); 
+    TTableBuilder& AddNonNullableColumn(const TString& name, const TDecimalType& type, const TString& family = TString()); 
     TTableBuilder& SetPrimaryKeyColumns(const TVector<TString>& primaryKeyColumns);
     TTableBuilder& SetPrimaryKeyColumn(const TString& primaryKeyColumn);
 

@@ -193,13 +193,13 @@ void TestCreateTableCommon(TIntrusivePtr<IKikimrGateway> gateway, Tests::TClient
     metadata->Cluster = TestCluster;
     metadata->Name = "/Root/f1/f2/table";
 
-    UNIT_ASSERT(metadata->ColumnOrder.size() == metadata->Columns.size());
-
-    metadata->Columns.insert(std::make_pair("Column1", TKikimrColumnMetadata{"Column1", 0, "Uint32", false}));
-    metadata->ColumnOrder.push_back("Column1");
-
-    metadata->Columns.insert(std::make_pair("Column2", TKikimrColumnMetadata{"Column2", 0, "String", false}));
-    metadata->ColumnOrder.push_back("Column2");
+    UNIT_ASSERT(metadata->ColumnOrder.size() == metadata->Columns.size()); 
+ 
+    metadata->Columns.insert(std::make_pair("Column1", TKikimrColumnMetadata{"Column1", 0, "Uint32", false})); 
+    metadata->ColumnOrder.push_back("Column1"); 
+ 
+    metadata->Columns.insert(std::make_pair("Column2", TKikimrColumnMetadata{"Column2", 0, "String", false})); 
+    metadata->ColumnOrder.push_back("Column2"); 
 
     if (withExtendedDdl) {
         metadata->Columns["Column2"].Families.push_back("Family2");
@@ -210,8 +210,8 @@ void TestCreateTableCommon(TIntrusivePtr<IKikimrGateway> gateway, Tests::TClient
     if (withIndex) {
         TVector<TString> dataColumns;
         if (withIndex->WithDataColumns) {
-            metadata->Columns.insert(std::make_pair("Column3", TKikimrColumnMetadata{"Column3", 0, "String", false}));
-            metadata->ColumnOrder.push_back("Column3");
+            metadata->Columns.insert(std::make_pair("Column3", TKikimrColumnMetadata{"Column3", 0, "String", false})); 
+            metadata->ColumnOrder.push_back("Column3"); 
             dataColumns.push_back("Column3");
         }
         TIndexDescription indexDesc{

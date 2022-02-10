@@ -235,7 +235,7 @@ struct TUserTable : public TThrRefBase {
         TString Name;
         bool IsKey;
         ui32 Family = 0;
-        bool NotNull = false;
+        bool NotNull = false; 
 
         TUserColumn(NScheme::TTypeId type, TString name, bool isKey = false)
             : Type(type)

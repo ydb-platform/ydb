@@ -551,10 +551,10 @@ public:
                         auto typeNode = columnTuple.Item(1);
                         auto columnType = typeNode.Ref().GetTypeAnn();
                         auto type = columnType->Cast<TTypeExprType>()->GetType();
-                        auto notNull = type->GetKind() != ETypeAnnotationKind::Optional;
-                        auto actualType = notNull ? type : type->Cast<TOptionalExprType>()->GetItemType();
+                        auto notNull = type->GetKind() != ETypeAnnotationKind::Optional; 
+                        auto actualType = notNull ? type : type->Cast<TOptionalExprType>()->GetItemType(); 
                         auto dataType = actualType->Cast<TDataExprType>();
-                        SetColumnType(*add_column->mutable_type(), TString(dataType->GetName()), notNull);
+                        SetColumnType(*add_column->mutable_type(), TString(dataType->GetName()), notNull); 
                         if (columnTuple.Size() > 2) {
                             auto families = columnTuple.Item(2).Cast<TCoAtomList>();
                             if (families.Size() > 1) {

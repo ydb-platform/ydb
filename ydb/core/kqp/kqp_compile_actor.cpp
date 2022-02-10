@@ -50,7 +50,7 @@ public:
         : Owner(owner)
         , ModuleResolverState(moduleResolverState)
         , Counters(counters)
-        , Uid(uid)
+        , Uid(uid) 
         , Query(query)
         , UserToken(userToken)
         , DbCounters(dbCounters)
@@ -96,7 +96,7 @@ public:
 
         Config->FeatureFlags = AppData(ctx)->FeatureFlags;
 
-        KqpHost = CreateKqpHost(Gateway, Query.Cluster, Query.Database, Config, ModuleResolverState->ModuleResolver,
+        KqpHost = CreateKqpHost(Gateway, Query.Cluster, Query.Database, Config, ModuleResolverState->ModuleResolver, 
             AppData(ctx)->FunctionRegistry, false);
 
         IKqpHost::TPrepareSettings prepareSettings;
@@ -217,7 +217,7 @@ private:
     }
 
     void ReplyError(Ydb::StatusIds::StatusCode status, const TIssues& issues, const TActorContext& ctx) {
-        Reply(TKqpCompileResult::Make(Uid, std::move(Query), status, issues), ctx);
+        Reply(TKqpCompileResult::Make(Uid, std::move(Query), status, issues), ctx); 
     }
 
     void InternalError(const TString message, const TActorContext &ctx) {
@@ -260,7 +260,7 @@ private:
             AddMessageToReplayLog(kqpResult.QueryPlan);
         }
 
-        KqpCompileResult = TKqpCompileResult::Make(Uid, std::move(Query), status, kqpResult.Issues());
+        KqpCompileResult = TKqpCompileResult::Make(Uid, std::move(Query), status, kqpResult.Issues()); 
 
         if (status == Ydb::StatusIds::SUCCESS) {
             YQL_ENSURE(kqpResult.PreparingQuery);
@@ -372,7 +372,7 @@ private:
     TActorId Owner;
     TIntrusivePtr<TModuleResolverState> ModuleResolverState;
     TIntrusivePtr<TKqpCounters> Counters;
-    TString Uid;
+    TString Uid; 
     TKqpQueryId Query;
     TString UserToken;
     TKqpDbCountersPtr DbCounters;
@@ -405,7 +405,7 @@ IActor* CreateKqpCompileActor(const TActorId& owner, const TKqpSettings::TConstP
     TIntrusivePtr<TKqpCounters> counters, const TString& uid, const TKqpQueryId& query, const TString& userToken,
     TKqpDbCountersPtr dbCounters, bool recompileWithNewEngine)
 {
-    return new TKqpCompileActor(owner, kqpSettings, serviceConfig, moduleResolverState, counters, uid,
+    return new TKqpCompileActor(owner, kqpSettings, serviceConfig, moduleResolverState, counters, uid, 
         std::move(query), userToken, dbCounters, recompileWithNewEngine);
 }
 

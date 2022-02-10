@@ -34,9 +34,9 @@ message TTableAccessStats {
 message TPerShardStats {
     optional uint64 ShardId = 1;
     optional uint64 CpuTimeUsec = 2;
-    optional uint64 OutgoingReadSetsCount = 3;
-    optional uint64 ProgramSize = 4;
-    optional uint64 ReplySize = 5;
+    optional uint64 OutgoingReadSetsCount = 3; 
+    optional uint64 ProgramSize = 4; 
+    optional uint64 ReplySize = 5; 
 }
 
 message TTxStats {

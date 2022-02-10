@@ -282,11 +282,11 @@ private:
             if (!CellFromProtoVal(fd.Type, &proto.Getitems(fd.PositionInStruct), cells.back(), err, valueDataPool)) {
                 return false;
             }
-
-            if (fd.NotNull && cells.back().IsNull()) {
-                err = TStringBuilder() << "Received NULL value for not null column: " << fd.ColName;
-                return false;
-            }
+ 
+            if (fd.NotNull && cells.back().IsNull()) { 
+                err = TStringBuilder() << "Received NULL value for not null column: " << fd.ColName; 
+                return false; 
+            } 
         }
 
         return true;

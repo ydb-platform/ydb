@@ -53,11 +53,11 @@ Y_UNIT_TEST_SUITE(KqpSort) {
 
             NJson::TJsonValue plan;
             NJson::ReadJsonTree(result.GetPlan(), &plan, true);
-            auto node = FindPlanNodeByKv(plan, "Node Type", "Limit-TableFullScan"); // without `Sort`
+            auto node = FindPlanNodeByKv(plan, "Node Type", "Limit-TableFullScan"); // without `Sort` 
             UNIT_ASSERT(node.IsDefined());
-            auto read = FindPlanNodeByKv(node, "Name", "TableFullScan");
-            UNIT_ASSERT(read.IsDefined());
-            UNIT_ASSERT(read.GetMapSafe().contains("Reverse"));
+            auto read = FindPlanNodeByKv(node, "Name", "TableFullScan"); 
+            UNIT_ASSERT(read.IsDefined()); 
+            UNIT_ASSERT(read.GetMapSafe().contains("Reverse")); 
         } else {
             UNIT_ASSERT_C(result.GetAst().Contains("'\"Reverse\" (Bool '\"true\")"), result.GetAst());
             UNIT_ASSERT_C(!result.GetAst().Contains("Sort"), result.GetAst());
@@ -98,11 +98,11 @@ Y_UNIT_TEST_SUITE(KqpSort) {
 
             NJson::TJsonValue plan;
             NJson::ReadJsonTree(result.GetPlan(), &plan, true);
-            auto node = FindPlanNodeByKv(plan, "Node Type", "Limit-TableRangeScan"); // without `Sort`
+            auto node = FindPlanNodeByKv(plan, "Node Type", "Limit-TableRangeScan"); // without `Sort` 
             UNIT_ASSERT_C(node.IsDefined(), result.GetPlan());
-            auto read = FindPlanNodeByKv(node, "Name", "TableRangeScan");
-            UNIT_ASSERT(read.IsDefined());
-            UNIT_ASSERT(read.GetMapSafe().contains("Reverse"));
+            auto read = FindPlanNodeByKv(node, "Name", "TableRangeScan"); 
+            UNIT_ASSERT(read.IsDefined()); 
+            UNIT_ASSERT(read.GetMapSafe().contains("Reverse")); 
         } else {
             UNIT_ASSERT_C(result.GetAst().Contains("'\"Reverse\" (Bool '\"true\")"), result.GetAst());
         }
@@ -141,11 +141,11 @@ Y_UNIT_TEST_SUITE(KqpSort) {
 
                 NJson::TJsonValue plan;
                 NJson::ReadJsonTree(result.GetPlan(), &plan, true);
-                auto node = FindPlanNodeByKv(plan, "Node Type", "Limit-TableFullScan"); // without `Sort`
+                auto node = FindPlanNodeByKv(plan, "Node Type", "Limit-TableFullScan"); // without `Sort` 
                 UNIT_ASSERT_C(node.IsDefined(), result.GetPlan());
-                auto read = FindPlanNodeByKv(node, "Name", "TableFullScan");
-                UNIT_ASSERT(read.IsDefined());
-                UNIT_ASSERT(read.GetMapSafe().contains("Reverse"));
+                auto read = FindPlanNodeByKv(node, "Name", "TableFullScan"); 
+                UNIT_ASSERT(read.IsDefined()); 
+                UNIT_ASSERT(read.GetMapSafe().contains("Reverse")); 
             } else {
                 UNIT_ASSERT_C(result.GetAst().Contains("'\"Reverse\" (Bool '\"true\")"), result.GetAst());
             }
@@ -186,7 +186,7 @@ Y_UNIT_TEST_SUITE(KqpSort) {
 
                 NJson::TJsonValue plan;
                 NJson::ReadJsonTree(result.GetPlan(), &plan, true);
-                auto node = FindPlanNodeByKv(plan, "Node Type", "TopSort-TableFullScan");
+                auto node = FindPlanNodeByKv(plan, "Node Type", "TopSort-TableFullScan"); 
                 UNIT_ASSERT_C(node.IsDefined(), result.GetPlan());
                 UNIT_ASSERT(!node.GetMapSafe().contains("Reverse"));
             } else {
@@ -230,11 +230,11 @@ Y_UNIT_TEST_SUITE(KqpSort) {
 
                 NJson::TJsonValue plan;
                 NJson::ReadJsonTree(result.GetPlan(), &plan, true);
-                auto node = FindPlanNodeByKv(plan, "Node Type", "Limit-TableRangeScan");
+                auto node = FindPlanNodeByKv(plan, "Node Type", "Limit-TableRangeScan"); 
                 UNIT_ASSERT_C(node.IsDefined(), result.GetPlan());
-                auto read = FindPlanNodeByKv(node, "Name", "TableRangeScan");
-                UNIT_ASSERT(read.IsDefined());
-                UNIT_ASSERT(read.GetMapSafe().contains("Reverse"));
+                auto read = FindPlanNodeByKv(node, "Name", "TableRangeScan"); 
+                UNIT_ASSERT(read.IsDefined()); 
+                UNIT_ASSERT(read.GetMapSafe().contains("Reverse")); 
             } else {
                 UNIT_ASSERT_C(result.GetAst().Contains("'\"Reverse\" (Bool '\"true\")"), result.GetAst());
             }
@@ -277,14 +277,14 @@ Y_UNIT_TEST_SUITE(KqpSort) {
 
                 NJson::TJsonValue plan;
                 NJson::ReadJsonTree(result.GetPlan(), &plan, true);
-                auto node = FindPlanNodeByKv(plan, "Node Type", "Limit-TableFullScan");
+                auto node = FindPlanNodeByKv(plan, "Node Type", "Limit-TableFullScan"); 
                 UNIT_ASSERT_C(node.IsDefined(), result.GetPlan());
-                auto read = FindPlanNodeByKv(node, "Name", "TableFullScan");
-                UNIT_ASSERT(read.IsDefined());
-                UNIT_ASSERT(read.GetMapSafe().contains("Reverse"));
-                auto limit = FindPlanNodeByKv(node, "Name", "Limit");
-                UNIT_ASSERT(limit.IsDefined());
-                UNIT_ASSERT(limit.GetMapSafe().contains("Limit"));
+                auto read = FindPlanNodeByKv(node, "Name", "TableFullScan"); 
+                UNIT_ASSERT(read.IsDefined()); 
+                UNIT_ASSERT(read.GetMapSafe().contains("Reverse")); 
+                auto limit = FindPlanNodeByKv(node, "Name", "Limit"); 
+                UNIT_ASSERT(limit.IsDefined()); 
+                UNIT_ASSERT(limit.GetMapSafe().contains("Limit")); 
             } else {
                 UNIT_ASSERT_C(result.GetAst().Contains("'\"Reverse\" (Bool '\"true\")"), result.GetAst());
             }
@@ -325,14 +325,14 @@ Y_UNIT_TEST_SUITE(KqpSort) {
 
                 NJson::TJsonValue plan;
                 NJson::ReadJsonTree(result.GetPlan(), &plan, true);
-                auto node = FindPlanNodeByKv(plan, "Node Type", "Limit-TableRangeScan");
+                auto node = FindPlanNodeByKv(plan, "Node Type", "Limit-TableRangeScan"); 
                 UNIT_ASSERT_C(node.IsDefined(), result.GetPlan());
-                auto read = FindPlanNodeByKv(node, "Name", "TableRangeScan");
-                UNIT_ASSERT(read.IsDefined());
-                UNIT_ASSERT(read.GetMapSafe().contains("Reverse"));
-                auto limit = FindPlanNodeByKv(node, "Name", "Limit");
-                UNIT_ASSERT(limit.IsDefined());
-                UNIT_ASSERT(limit.GetMapSafe().contains("Limit"));
+                auto read = FindPlanNodeByKv(node, "Name", "TableRangeScan"); 
+                UNIT_ASSERT(read.IsDefined()); 
+                UNIT_ASSERT(read.GetMapSafe().contains("Reverse")); 
+                auto limit = FindPlanNodeByKv(node, "Name", "Limit"); 
+                UNIT_ASSERT(limit.IsDefined()); 
+                UNIT_ASSERT(limit.GetMapSafe().contains("Limit")); 
             } else {
                 UNIT_ASSERT_C(result.GetAst().Contains("'\"Reverse\" (Bool '\"true\")"), result.GetAst());
             }
@@ -376,11 +376,11 @@ Y_UNIT_TEST_SUITE(KqpSort) {
 
                 NJson::TJsonValue plan;
                 NJson::ReadJsonTree(result.GetPlan(), &plan, true);
-                auto node = FindPlanNodeByKv(plan, "Node Type", "Limit-TableFullScan");
+                auto node = FindPlanNodeByKv(plan, "Node Type", "Limit-TableFullScan"); 
                 UNIT_ASSERT_C(node.IsDefined(), result.GetPlan());
-                auto read = FindPlanNodeByKv(node, "Name", "TableFullScan");
-                UNIT_ASSERT(read.IsDefined());
-                UNIT_ASSERT(read.GetMapSafe().contains("Reverse"));
+                auto read = FindPlanNodeByKv(node, "Name", "TableFullScan"); 
+                UNIT_ASSERT(read.IsDefined()); 
+                UNIT_ASSERT(read.GetMapSafe().contains("Reverse")); 
             } else {
                 UNIT_ASSERT_C(result.GetAst().Contains("'\"Reverse\" (Bool '\"true\")"), result.GetAst());
             }
@@ -427,7 +427,7 @@ Y_UNIT_TEST_SUITE(KqpSort) {
             if (UseNewEngine) {
                 NJson::TJsonValue plan;
                 NJson::ReadJsonTree(result.GetPlan(), &plan, true);
-                auto node = FindPlanNodeByKv(plan, "Node Type", "TopSort-TableRangeScan");
+                auto node = FindPlanNodeByKv(plan, "Node Type", "TopSort-TableRangeScan"); 
                 UNIT_ASSERT_C(node.IsDefined(), result.GetPlan());
             } else {
                 UNIT_ASSERT_C(result.GetAst().Contains("KiPartialTake"), result.GetAst());
@@ -485,7 +485,7 @@ Y_UNIT_TEST_SUITE(KqpSort) {
             if (UseNewEngine) {
                 NJson::TJsonValue plan;
                 NJson::ReadJsonTree(result.GetPlan(), &plan, true);
-                auto node = FindPlanNodeByKv(plan, "Node Type", "TopSort-TableRangeScan");
+                auto node = FindPlanNodeByKv(plan, "Node Type", "TopSort-TableRangeScan"); 
                 UNIT_ASSERT_C(node.IsDefined(), result.GetPlan());
             } else {
                 UNIT_ASSERT_C(result.GetAst().Contains("KiPartialTake"), result.GetAst());
@@ -991,7 +991,7 @@ Y_UNIT_TEST_SUITE(KqpSort) {
             if (UseNewEngine) {
                 NJson::TJsonValue plan;
                 NJson::ReadJsonTree(result.GetPlan(), &plan, true);
-                auto node = FindPlanNodeByKv(plan, "Node Type", "Limit-TableFullScan");
+                auto node = FindPlanNodeByKv(plan, "Node Type", "Limit-TableFullScan"); 
                 UNIT_ASSERT_C(node.IsDefined(), result.GetPlan());
             } else {
                 UNIT_ASSERT_C(!result.GetAst().Contains("KiPartialTake"), result.GetAst());
@@ -1041,10 +1041,10 @@ Y_UNIT_TEST_SUITE(KqpSort) {
             if (UseNewEngine) {
                 NJson::TJsonValue plan;
                 NJson::ReadJsonTree(result.GetPlan(), &plan, true);
-                auto node = FindPlanNodeByKv(plan, "Node Type", "Filter-TableFullScan");
+                auto node = FindPlanNodeByKv(plan, "Node Type", "Filter-TableFullScan"); 
                 UNIT_ASSERT_C(node.IsDefined(), result.GetPlan());
-                auto limit = FindPlanNodeByKv(node, "Limit", "Min(1001,$limit)");
-                UNIT_ASSERT(limit.IsDefined());
+                auto limit = FindPlanNodeByKv(node, "Limit", "Min(1001,$limit)"); 
+                UNIT_ASSERT(limit.IsDefined()); 
             } else {
                 UNIT_ASSERT_C(result.GetAst().Contains("KiPartialTake"), result.GetAst());
             }

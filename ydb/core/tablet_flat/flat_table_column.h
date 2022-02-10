@@ -15,11 +15,11 @@ namespace NTable {
 
         TColumn() = default;
 
-        TColumn(const TString& name, TTag tag, NScheme::TTypeId type, bool notNull = false)
+        TColumn(const TString& name, TTag tag, NScheme::TTypeId type, bool notNull = false) 
             : Id(tag)
             , PType(type)
             , Name(name)
-            , NotNull(notNull)
+            , NotNull(notNull) 
         {
 
         }
@@ -31,8 +31,8 @@ namespace NTable {
                 && PType == col.PType
                 && KeyOrder == col.KeyOrder
                 && Name == col.Name
-                && Family == col.Family
-                && NotNull == col.NotNull;
+                && Family == col.Family 
+                && NotNull == col.NotNull; 
         }
 
         void SetDefault(const TCell &null)
@@ -53,7 +53,7 @@ namespace NTable {
         NTable::TPos KeyOrder = Max<TPos>();
         TCell Null;
         TString Storage;
-        bool NotNull = false;
+        bool NotNull = false; 
     };
 }
 }

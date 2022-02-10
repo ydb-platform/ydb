@@ -86,103 +86,103 @@ TSerializedTableRange CreateTableRange(const TParseReadTableResult& parseResult,
     return TSerializedTableRange(fromCells, parseResult.FromInclusive, toCells, parseResult.ToInclusive);
 }
 
-TSerializedTableRange BuildFullRange(ui32 keyColumnsSize) {
-    /* Build range from NULL, ... NULL to +inf, ... +inf */
-    TVector<TCell> fromKeyValues(keyColumnsSize);
-    return TSerializedTableRange(fromKeyValues, true, TVector<TCell>(), false);
-}
-
-TSerializedTableRange BuildRange(const TTupleType* fromType, const NUdf::TUnboxedValue& fromValue,
-    const TTupleType* toType, const NUdf::TUnboxedValue& toValue, const TTypeEnvironment& typeEnv, ui32 keyColumnsSize) {
-
-    auto fillTupleCells = [&typeEnv, keyColumnsSize](const auto tupleType, const auto& tupleValue) {
-        TVector<TCell> cells;
-        cells.reserve(keyColumnsSize);
-
-        for (ui32 i = 0; i < keyColumnsSize; ++i) {
-            auto type = tupleType->GetElementType(i);
-            auto value = tupleValue.GetElement(i);
-
-            if (type->IsOptional()) {
-                if (!value) {
-                    return cells;
-                }
-
-                type = AS_TYPE(TOptionalType, type)->GetItemType();
-                value = value.GetOptionalValue();
-
-                if (type->IsOptional()) {
-                    if (!value) {
-                        cells.emplace_back(TCell());
-                        continue;
-                    }
-
-                    type = AS_TYPE(TOptionalType, type)->GetItemType();
-                    value = value.GetOptionalValue();
-                }
-            }
-
-            cells.emplace_back(MakeCell(AS_TYPE(TDataType, type)->GetSchemeType(), value, typeEnv, /* copy */ true));
-        }
-
-        return cells;
-    };
-
-    Y_ENSURE(fromType->GetElementsCount() == keyColumnsSize + 1);
-    bool fromInclusive = !!fromValue.GetElement(keyColumnsSize).Get<int>();
-    auto fromCells = fillTupleCells(fromType, fromValue);
-
-    if (fromCells.empty()) {
-        fromInclusive = true;
-    }
-
-    if (fromInclusive) {
-        while (fromCells.size() != keyColumnsSize) {
-            fromCells.emplace_back(TCell());
-        }
-    }
-
-    Y_ENSURE(toType->GetElementsCount() == keyColumnsSize + 1);
-    bool toInclusive = !!toValue.GetElement(keyColumnsSize).Get<int>();
-    auto toCells = fillTupleCells(toType, toValue);
-
-    if (!toInclusive && !toCells.empty()) {
-        while (toCells.size() != keyColumnsSize) {
-            toCells.emplace_back(TCell());
-        }
-    }
-
-    return TSerializedTableRange(fromCells, fromInclusive, toCells, toInclusive);
-}
-
-template <bool IsReverse>
-TVector<TSerializedTableRange> CreateTableRanges(const TParseReadTableRangesResult& parseResult,
-    const IComputationNode* rangesNode, const TTypeEnvironment& typeEnv, TComputationContext& ctx, ui32 keyColumnsSize)
-{
+TSerializedTableRange BuildFullRange(ui32 keyColumnsSize) { 
+    /* Build range from NULL, ... NULL to +inf, ... +inf */ 
+    TVector<TCell> fromKeyValues(keyColumnsSize); 
+    return TSerializedTableRange(fromKeyValues, true, TVector<TCell>(), false); 
+} 
+ 
+TSerializedTableRange BuildRange(const TTupleType* fromType, const NUdf::TUnboxedValue& fromValue, 
+    const TTupleType* toType, const NUdf::TUnboxedValue& toValue, const TTypeEnvironment& typeEnv, ui32 keyColumnsSize) { 
+ 
+    auto fillTupleCells = [&typeEnv, keyColumnsSize](const auto tupleType, const auto& tupleValue) { 
+        TVector<TCell> cells; 
+        cells.reserve(keyColumnsSize); 
+ 
+        for (ui32 i = 0; i < keyColumnsSize; ++i) { 
+            auto type = tupleType->GetElementType(i); 
+            auto value = tupleValue.GetElement(i); 
+ 
+            if (type->IsOptional()) { 
+                if (!value) { 
+                    return cells; 
+                } 
+ 
+                type = AS_TYPE(TOptionalType, type)->GetItemType(); 
+                value = value.GetOptionalValue(); 
+ 
+                if (type->IsOptional()) { 
+                    if (!value) { 
+                        cells.emplace_back(TCell()); 
+                        continue; 
+                    } 
+ 
+                    type = AS_TYPE(TOptionalType, type)->GetItemType(); 
+                    value = value.GetOptionalValue(); 
+                } 
+            } 
+ 
+            cells.emplace_back(MakeCell(AS_TYPE(TDataType, type)->GetSchemeType(), value, typeEnv, /* copy */ true)); 
+        } 
+ 
+        return cells; 
+    }; 
+ 
+    Y_ENSURE(fromType->GetElementsCount() == keyColumnsSize + 1); 
+    bool fromInclusive = !!fromValue.GetElement(keyColumnsSize).Get<int>(); 
+    auto fromCells = fillTupleCells(fromType, fromValue); 
+ 
+    if (fromCells.empty()) { 
+        fromInclusive = true; 
+    } 
+ 
+    if (fromInclusive) { 
+        while (fromCells.size() != keyColumnsSize) { 
+            fromCells.emplace_back(TCell()); 
+        } 
+    } 
+ 
+    Y_ENSURE(toType->GetElementsCount() == keyColumnsSize + 1); 
+    bool toInclusive = !!toValue.GetElement(keyColumnsSize).Get<int>(); 
+    auto toCells = fillTupleCells(toType, toValue); 
+ 
+    if (!toInclusive && !toCells.empty()) { 
+        while (toCells.size() != keyColumnsSize) { 
+            toCells.emplace_back(TCell()); 
+        } 
+    } 
+ 
+    return TSerializedTableRange(fromCells, fromInclusive, toCells, toInclusive); 
+} 
+ 
+template <bool IsReverse> 
+TVector<TSerializedTableRange> CreateTableRanges(const TParseReadTableRangesResult& parseResult, 
+    const IComputationNode* rangesNode, const TTypeEnvironment& typeEnv, TComputationContext& ctx, ui32 keyColumnsSize) 
+{ 
     auto keyRangesType = ParseKeyRangesType(parseResult.Ranges->GetType());
     if (!keyRangesType) {
-        return {BuildFullRange(keyColumnsSize)};
-    }
-
-    auto list = rangesNode->GetValue(ctx).GetElement(0).GetElement(0);
-
-    TVector<TSerializedTableRange> ranges;
-    auto listIt = list.GetListIterator();
-    TUnboxedValue tuple;
-    while (listIt.Next(tuple)) {
-        const auto& from = tuple.GetElement(0);
-        const auto& to = tuple.GetElement(1);
-
+        return {BuildFullRange(keyColumnsSize)}; 
+    } 
+ 
+    auto list = rangesNode->GetValue(ctx).GetElement(0).GetElement(0); 
+ 
+    TVector<TSerializedTableRange> ranges; 
+    auto listIt = list.GetListIterator(); 
+    TUnboxedValue tuple; 
+    while (listIt.Next(tuple)) { 
+        const auto& from = tuple.GetElement(0); 
+        const auto& to = tuple.GetElement(1); 
+ 
         ranges.emplace_back(BuildRange(keyRangesType->From, from, keyRangesType->To, to, typeEnv, keyColumnsSize));
-    }
-
-    if constexpr (IsReverse) {
-        Reverse(ranges.begin(), ranges.end());
-    }
-
-    return ranges;
-}
-
+    } 
+ 
+    if constexpr (IsReverse) { 
+        Reverse(ranges.begin(), ranges.end()); 
+    } 
+ 
+    return ranges; 
+} 
+ 
 void CreateRangePoints(ui64 localTid, const TSerializedTableRange& serializedTableRange, TSmallVec<TRawTypeValue>& from,
     TSmallVec<TRawTypeValue>& to, TKqpDatashardComputeContext& computeCtx)
 {
@@ -193,17 +193,17 @@ void CreateRangePoints(ui64 localTid, const TSerializedTableRange& serializedTab
 }
 
 template <bool IsReverse>
-class TKqpWideReadTableWrapperBase : public TStatelessWideFlowCodegeneratorNode<TKqpWideReadTableWrapperBase<IsReverse>> {
+class TKqpWideReadTableWrapperBase : public TStatelessWideFlowCodegeneratorNode<TKqpWideReadTableWrapperBase<IsReverse>> { 
 public:
-    TKqpWideReadTableWrapperBase(TKqpDatashardComputeContext& computeCtx, const TTypeEnvironment& typeEnv,
-        const TSmallVec<TTag>& systemColumnTags, const TSmallVec<bool>& skipNullKeys)
-        : TStatelessWideFlowCodegeneratorNode<TKqpWideReadTableWrapperBase<IsReverse>>(this)
+    TKqpWideReadTableWrapperBase(TKqpDatashardComputeContext& computeCtx, const TTypeEnvironment& typeEnv, 
+        const TSmallVec<TTag>& systemColumnTags, const TSmallVec<bool>& skipNullKeys) 
+        : TStatelessWideFlowCodegeneratorNode<TKqpWideReadTableWrapperBase<IsReverse>>(this) 
         , ComputeCtx(computeCtx)
         , TypeEnv(typeEnv)
-        , SystemColumnTags(systemColumnTags)
-        , SkipNullKeys(skipNullKeys)
+        , SystemColumnTags(systemColumnTags) 
+        , SkipNullKeys(skipNullKeys) 
         , ShardTableStats(ComputeCtx.GetDatashardCounters())
-        , TaskTableStats(ComputeCtx.GetTaskCounters(ComputeCtx.GetCurrentTaskId())) {
+        , TaskTableStats(ComputeCtx.GetTaskCounters(ComputeCtx.GetCurrentTaskId())) { 
     }
 
     EFetchResult DoCalculate(TComputationContext& ctx, NUdf::TUnboxedValue* const* output) const {
@@ -217,10 +217,10 @@ public:
     }
 #endif
 
-protected:
-    virtual EFetchResult ReadValue(TComputationContext& ctx, NUdf::TUnboxedValue* const* output) const = 0;
+protected: 
+    virtual EFetchResult ReadValue(TComputationContext& ctx, NUdf::TUnboxedValue* const* output) const = 0; 
 
-    EFetchResult ReadNext(NUdf::TUnboxedValue* const* output) const {
+    EFetchResult ReadNext(NUdf::TUnboxedValue* const* output) const { 
         bool breakLocks = false;
         while (Iterator->Next(NTable::ENext::Data) == NTable::EReady::Data) {
             if (!breakLocks && (breakLocks = bool(Iterator->Stats.InvisibleRowSkips))) {
@@ -237,10 +237,10 @@ protected:
             TaskTableStats.SelectRangeDeletedRowSkips += deletedRowSkips;
             TaskTableStats.InvisibleRowSkips +=  invisibleRowSkips;
 
-            Y_VERIFY(SkipNullKeys.size() <= rowKey.ColumnCount);
+            Y_VERIFY(SkipNullKeys.size() <= rowKey.ColumnCount); 
             bool skipRow = false;
-            for (ui32 i = 0; i < SkipNullKeys.size(); ++i) {
-                if (SkipNullKeys[i] && rowKey.Columns[i].IsNull()) {
+            for (ui32 i = 0; i < SkipNullKeys.size(); ++i) { 
+                if (SkipNullKeys[i] && rowKey.Columns[i].IsNull()) { 
                     skipRow = true;
                     break;
                 }
@@ -305,7 +305,7 @@ protected:
         TaskTableStats.SelectRangeDeletedRowSkips += deletedRowSkips;
         TaskTableStats.InvisibleRowSkips += invisibleRowSkips;
 
-        if (Iterator->Last() == NTable::EReady::Page) {
+        if (Iterator->Last() == NTable::EReady::Page) { 
             ComputeCtx.SetTabletNotReady();
             return EFetchResult::Yield;
         }
@@ -313,71 +313,71 @@ protected:
         return EFetchResult::Finish;
     }
 
-protected:
-    TKqpDatashardComputeContext& ComputeCtx;
-    const TTypeEnvironment& TypeEnv;
-    TSmallVec<TTag> SystemColumnTags;
-    TSmallVec<bool> SkipNullKeys;
-    TKqpTableStats& ShardTableStats;
-    TKqpTableStats& TaskTableStats;
-    using TTableIterator = std::conditional_t<IsReverse, NTable::TTableReverseIt, NTable::TTableIt>;
-    mutable TAutoPtr<TTableIterator> Iterator;
-    mutable std::optional<ui64> Remains;
-};
-
-template <bool IsReverse>
-class TKqpWideReadTableWrapper : public TKqpWideReadTableWrapperBase<IsReverse> {
-public:
-    TKqpWideReadTableWrapper(TKqpDatashardComputeContext& computeCtx, const TTypeEnvironment& typeEnv,
-        const TParseReadTableResult& parseResult, IComputationNode* fromNode, IComputationNode* toNode,
-        IComputationNode* itemsLimit)
-        : TKqpWideReadTableWrapperBase<IsReverse>(computeCtx, typeEnv, ExtractTags(parseResult.SystemColumns), parseResult.SkipNullKeys)
-        , ParseResult(parseResult)
-        , FromNode(fromNode)
-        , ToNode(toNode)
-        , ItemsLimit(itemsLimit)
-        , LocalTid(computeCtx.GetLocalTableId(parseResult.TableId))
-        , ColumnTags(ExtractTags(parseResult.Columns))
-    {
-        this->ShardTableStats.NSelectRange++;
-        this->TaskTableStats.NSelectRange++;
-    }
-
+protected: 
+    TKqpDatashardComputeContext& ComputeCtx; 
+    const TTypeEnvironment& TypeEnv; 
+    TSmallVec<TTag> SystemColumnTags; 
+    TSmallVec<bool> SkipNullKeys; 
+    TKqpTableStats& ShardTableStats; 
+    TKqpTableStats& TaskTableStats; 
+    using TTableIterator = std::conditional_t<IsReverse, NTable::TTableReverseIt, NTable::TTableIt>; 
+    mutable TAutoPtr<TTableIterator> Iterator; 
+    mutable std::optional<ui64> Remains; 
+}; 
+ 
+template <bool IsReverse> 
+class TKqpWideReadTableWrapper : public TKqpWideReadTableWrapperBase<IsReverse> { 
+public: 
+    TKqpWideReadTableWrapper(TKqpDatashardComputeContext& computeCtx, const TTypeEnvironment& typeEnv, 
+        const TParseReadTableResult& parseResult, IComputationNode* fromNode, IComputationNode* toNode, 
+        IComputationNode* itemsLimit) 
+        : TKqpWideReadTableWrapperBase<IsReverse>(computeCtx, typeEnv, ExtractTags(parseResult.SystemColumns), parseResult.SkipNullKeys) 
+        , ParseResult(parseResult) 
+        , FromNode(fromNode) 
+        , ToNode(toNode) 
+        , ItemsLimit(itemsLimit) 
+        , LocalTid(computeCtx.GetLocalTableId(parseResult.TableId)) 
+        , ColumnTags(ExtractTags(parseResult.Columns)) 
+    { 
+        this->ShardTableStats.NSelectRange++; 
+        this->TaskTableStats.NSelectRange++; 
+    } 
+ 
 private:
-    EFetchResult ReadValue(TComputationContext& ctx, NUdf::TUnboxedValue* const* output) const final {
-        if (!this->Iterator) {
-            auto serializedTableRange = CreateTableRange(ParseResult, FromNode, ToNode, this->TypeEnv, ctx);
-            auto tableRange = serializedTableRange.ToTableRange();
-            this->ComputeCtx.ReadTable(ParseResult.TableId, tableRange);
-
-            TSmallVec<TRawTypeValue> from, to;
-            CreateRangePoints(LocalTid, serializedTableRange, from, to, this->ComputeCtx);
-
-            NTable::TKeyRange keyRange;
-            keyRange.MinKey = from;
-            keyRange.MaxKey = to;
-            keyRange.MinInclusive = tableRange.InclusiveFrom;
-            keyRange.MaxInclusive = tableRange.InclusiveTo;
-
-            if (ItemsLimit) {
-                this->Remains = ItemsLimit->GetValue(ctx).Get<ui64>();
-            }
-
-            if constexpr (IsReverse) {
-                this->Iterator = this->ComputeCtx.Database->IterateRangeReverse(LocalTid, keyRange, ColumnTags, this->ComputeCtx.GetReadVersion());
-            } else {
-                this->Iterator = this->ComputeCtx.Database->IterateRange(LocalTid, keyRange, ColumnTags, this->ComputeCtx.GetReadVersion());
-            }
-        }
-
-        if (this->Remains && *this->Remains == 0) {
-            return EFetchResult::Finish;
-        }
-
-        return this->ReadNext(output);
-    }
-
-private:
+    EFetchResult ReadValue(TComputationContext& ctx, NUdf::TUnboxedValue* const* output) const final { 
+        if (!this->Iterator) { 
+            auto serializedTableRange = CreateTableRange(ParseResult, FromNode, ToNode, this->TypeEnv, ctx); 
+            auto tableRange = serializedTableRange.ToTableRange(); 
+            this->ComputeCtx.ReadTable(ParseResult.TableId, tableRange); 
+ 
+            TSmallVec<TRawTypeValue> from, to; 
+            CreateRangePoints(LocalTid, serializedTableRange, from, to, this->ComputeCtx); 
+ 
+            NTable::TKeyRange keyRange; 
+            keyRange.MinKey = from; 
+            keyRange.MaxKey = to; 
+            keyRange.MinInclusive = tableRange.InclusiveFrom; 
+            keyRange.MaxInclusive = tableRange.InclusiveTo; 
+ 
+            if (ItemsLimit) { 
+                this->Remains = ItemsLimit->GetValue(ctx).Get<ui64>(); 
+            } 
+ 
+            if constexpr (IsReverse) { 
+                this->Iterator = this->ComputeCtx.Database->IterateRangeReverse(LocalTid, keyRange, ColumnTags, this->ComputeCtx.GetReadVersion()); 
+            } else { 
+                this->Iterator = this->ComputeCtx.Database->IterateRange(LocalTid, keyRange, ColumnTags, this->ComputeCtx.GetReadVersion()); 
+            } 
+        } 
+ 
+        if (this->Remains && *this->Remains == 0) { 
+            return EFetchResult::Finish; 
+        } 
+ 
+        return this->ReadNext(output); 
+    } 
+ 
+private: 
     void RegisterDependencies() const final {
         this->FlowDependsOn(FromNode);
         this->FlowDependsOn(ToNode);
@@ -393,87 +393,87 @@ private:
     ui64 TaskId;
 };
 
-template <bool IsReverse>
-class TKqpWideReadTableRangesWrapper : public TKqpWideReadTableWrapperBase<IsReverse> {
-public:
-    TKqpWideReadTableRangesWrapper(TKqpDatashardComputeContext& computeCtx, const TTypeEnvironment& typeEnv,
-        const TParseReadTableRangesResult& parseResult, IComputationNode* rangesNode, IComputationNode* itemsLimit)
-        : TKqpWideReadTableWrapperBase<IsReverse>(computeCtx, typeEnv, ExtractTags(parseResult.SystemColumns), parseResult.SkipNullKeys)
-        , ParseResult(parseResult)
-        , RangesNode(rangesNode)
-        , ItemsLimit(itemsLimit)
-        , LocalTid(computeCtx.GetLocalTableId(parseResult.TableId))
-        , ColumnTags(ExtractTags(parseResult.Columns)) {
-    }
-
-private:
-    EFetchResult ReadValue(TComputationContext& ctx, NUdf::TUnboxedValue* const* output) const final {
-        if (!RangeId) {
-            const auto* tableInfo = this->ComputeCtx.Database->GetScheme().GetTableInfo(LocalTid);
-            Ranges = CreateTableRanges<IsReverse>(ParseResult, RangesNode, this->TypeEnv, ctx, tableInfo->KeyColumns.size());
-            RangeId = 0;
-
-            if (ItemsLimit) {
-                this->Remains = ItemsLimit->GetValue(ctx).Get<ui64>();
-            }
-        }
-
-        Y_ENSURE(RangeId);
-        while (*RangeId < Ranges.size()) {
-            this->ShardTableStats.NSelectRange++;
-            this->TaskTableStats.NSelectRange++;
-
-            if (!this->Iterator) {
-                auto& range = Ranges[*RangeId];
-                auto tableRange = range.ToTableRange();
-                this->ComputeCtx.ReadTable(ParseResult.TableId, tableRange);
-
-                TSmallVec<TRawTypeValue> from, to;
-                CreateRangePoints(LocalTid, range, from, to, this->ComputeCtx);
-
-                NTable::TKeyRange keyRange;
-                keyRange.MinKey = from;
-                keyRange.MaxKey = to;
-                keyRange.MinInclusive = tableRange.InclusiveFrom;
-                keyRange.MaxInclusive = tableRange.InclusiveTo;
-
-                if constexpr (IsReverse) {
-                    this->Iterator = this->ComputeCtx.Database->IterateRangeReverse(LocalTid, keyRange, ColumnTags, this->ComputeCtx.GetReadVersion());
-                } else {
-                    this->Iterator = this->ComputeCtx.Database->IterateRange(LocalTid, keyRange, ColumnTags, this->ComputeCtx.GetReadVersion());
-                }
-            }
-
-            if (this->Remains && *this->Remains == 0) {
-                return EFetchResult::Finish;
-            }
-
-            auto status = this->ReadNext(output);
-            if (status != EFetchResult::Finish) {
-                return status;
-            }
-
-            this->Iterator.Reset();
-            ++(*RangeId);
-        }
-
-        return EFetchResult::Finish;
-    }
-
-    void RegisterDependencies() const final {
-        this->FlowDependsOn(RangesNode);
-    }
-
-    TParseReadTableRangesResult ParseResult;
-    IComputationNode* RangesNode;
-    IComputationNode* ItemsLimit;
-    ui64 LocalTid;
-    TSmallVec<TTag> ColumnTags;
-    ui64 TaskId;
-    mutable TVector<TSerializedTableRange> Ranges;
-    mutable std::optional<ui32> RangeId;
-};
-
+template <bool IsReverse> 
+class TKqpWideReadTableRangesWrapper : public TKqpWideReadTableWrapperBase<IsReverse> { 
+public: 
+    TKqpWideReadTableRangesWrapper(TKqpDatashardComputeContext& computeCtx, const TTypeEnvironment& typeEnv, 
+        const TParseReadTableRangesResult& parseResult, IComputationNode* rangesNode, IComputationNode* itemsLimit) 
+        : TKqpWideReadTableWrapperBase<IsReverse>(computeCtx, typeEnv, ExtractTags(parseResult.SystemColumns), parseResult.SkipNullKeys) 
+        , ParseResult(parseResult) 
+        , RangesNode(rangesNode) 
+        , ItemsLimit(itemsLimit) 
+        , LocalTid(computeCtx.GetLocalTableId(parseResult.TableId)) 
+        , ColumnTags(ExtractTags(parseResult.Columns)) { 
+    } 
+ 
+private: 
+    EFetchResult ReadValue(TComputationContext& ctx, NUdf::TUnboxedValue* const* output) const final { 
+        if (!RangeId) { 
+            const auto* tableInfo = this->ComputeCtx.Database->GetScheme().GetTableInfo(LocalTid); 
+            Ranges = CreateTableRanges<IsReverse>(ParseResult, RangesNode, this->TypeEnv, ctx, tableInfo->KeyColumns.size()); 
+            RangeId = 0; 
+ 
+            if (ItemsLimit) { 
+                this->Remains = ItemsLimit->GetValue(ctx).Get<ui64>(); 
+            } 
+        } 
+ 
+        Y_ENSURE(RangeId); 
+        while (*RangeId < Ranges.size()) { 
+            this->ShardTableStats.NSelectRange++; 
+            this->TaskTableStats.NSelectRange++; 
+ 
+            if (!this->Iterator) { 
+                auto& range = Ranges[*RangeId]; 
+                auto tableRange = range.ToTableRange(); 
+                this->ComputeCtx.ReadTable(ParseResult.TableId, tableRange); 
+ 
+                TSmallVec<TRawTypeValue> from, to; 
+                CreateRangePoints(LocalTid, range, from, to, this->ComputeCtx); 
+ 
+                NTable::TKeyRange keyRange; 
+                keyRange.MinKey = from; 
+                keyRange.MaxKey = to; 
+                keyRange.MinInclusive = tableRange.InclusiveFrom; 
+                keyRange.MaxInclusive = tableRange.InclusiveTo; 
+ 
+                if constexpr (IsReverse) { 
+                    this->Iterator = this->ComputeCtx.Database->IterateRangeReverse(LocalTid, keyRange, ColumnTags, this->ComputeCtx.GetReadVersion()); 
+                } else { 
+                    this->Iterator = this->ComputeCtx.Database->IterateRange(LocalTid, keyRange, ColumnTags, this->ComputeCtx.GetReadVersion()); 
+                } 
+            } 
+ 
+            if (this->Remains && *this->Remains == 0) { 
+                return EFetchResult::Finish; 
+            } 
+ 
+            auto status = this->ReadNext(output); 
+            if (status != EFetchResult::Finish) { 
+                return status; 
+            } 
+ 
+            this->Iterator.Reset(); 
+            ++(*RangeId); 
+        } 
+ 
+        return EFetchResult::Finish; 
+    } 
+ 
+    void RegisterDependencies() const final { 
+        this->FlowDependsOn(RangesNode); 
+    } 
+ 
+    TParseReadTableRangesResult ParseResult; 
+    IComputationNode* RangesNode; 
+    IComputationNode* ItemsLimit; 
+    ui64 LocalTid; 
+    TSmallVec<TTag> ColumnTags; 
+    ui64 TaskId; 
+    mutable TVector<TSerializedTableRange> Ranges; 
+    mutable std::optional<ui32> RangeId; 
+}; 
+ 
 void FetchRowImpl(const TDbTupleRef& dbTuple, TUnboxedValue& row, TComputationContext& ctx, TKqpTableStats& tableStats,
     const TKqpDatashardComputeContext& computeCtx, const TSmallVec<TTag>& systemColumnTags)
 {
@@ -560,9 +560,9 @@ void FetchRow(const TDbTupleRef& dbTuple, TUnboxedValue& row, TComputationContex
 IComputationNode* WrapKqpWideReadTableRanges(TCallable& callable, const TComputationNodeFactoryContext& ctx,
     TKqpDatashardComputeContext& computeCtx)
 {
-    auto parseResult = ParseWideReadTableRanges(callable);
-    auto rangesNode = LocateNode(ctx.NodeLocator, *parseResult.Ranges);
-
+    auto parseResult = ParseWideReadTableRanges(callable); 
+    auto rangesNode = LocateNode(ctx.NodeLocator, *parseResult.Ranges); 
+ 
     auto keyColumns = computeCtx.GetKeyColumnsInfo(parseResult.TableId);
     auto keyRangesType = ParseKeyRangesType(parseResult.Ranges->GetType());
     if (keyRangesType) {
@@ -570,16 +570,16 @@ IComputationNode* WrapKqpWideReadTableRanges(TCallable& callable, const TComputa
         ValidateRangeBound(keyRangesType->To, keyColumns);
     }
 
-    IComputationNode* itemsLimit = nullptr;
-    if (parseResult.ItemsLimit) {
-        itemsLimit = LocateNode(ctx.NodeLocator, *parseResult.ItemsLimit);
-    }
-
-    if (parseResult.Reverse) {
-        return new TKqpWideReadTableRangesWrapper<true>(computeCtx, ctx.Env, parseResult, rangesNode, itemsLimit);
-    }
-
-    return new TKqpWideReadTableRangesWrapper<false>(computeCtx, ctx.Env, parseResult, rangesNode, itemsLimit);
+    IComputationNode* itemsLimit = nullptr; 
+    if (parseResult.ItemsLimit) { 
+        itemsLimit = LocateNode(ctx.NodeLocator, *parseResult.ItemsLimit); 
+    } 
+ 
+    if (parseResult.Reverse) { 
+        return new TKqpWideReadTableRangesWrapper<true>(computeCtx, ctx.Env, parseResult, rangesNode, itemsLimit); 
+    } 
+ 
+    return new TKqpWideReadTableRangesWrapper<false>(computeCtx, ctx.Env, parseResult, rangesNode, itemsLimit); 
 }
 
 IComputationNode* WrapKqpWideReadTable(TCallable& callable, const TComputationNodeFactoryContext& ctx,

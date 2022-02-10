@@ -82,8 +82,8 @@ namespace NKqp {
     XX(DB_KQP_YDB_WORKERS_CLOSED_IDLE, YdbWorkersClosedIdle) \
     XX(DB_KQP_YDB_REQUEST_BYTES, YdbRequestBytes) \
     XX(DB_KQP_YDB_PARAMS_BYTES, YdbParametersBytes) \
-    XX(DB_KQP_YDB_RSP_LOCKS_INVALIDATED, YdbResponsesLocksInvalidated) \
-    XX(DB_KQP_QUERIES_WITH_RANGE_SCAN, QueriesWithRangeScan) \
+    XX(DB_KQP_YDB_RSP_LOCKS_INVALIDATED, YdbResponsesLocksInvalidated) \ 
+    XX(DB_KQP_QUERIES_WITH_RANGE_SCAN, QueriesWithRangeScan) \ 
     XX(DB_KQP_QUERIES_WITH_FULL_SCAN, QueriesWithFullScan) \
     XX(DB_KQP_YDB_RESPONSE_BYTES, YdbResponseBytes)
 
@@ -115,12 +115,12 @@ namespace NKqp {
     XX(DB_KQP_RW_CLIENT_DURATION, YdbTxByKind[TKqpTransactionInfo::EKind::ReadWrite].ClientDuration) \
     XX(DB_KQP_YDB_COMPILE_DURATION, YdbCompileDuration) \
     XX(DB_KQP_COMPILE_CPU_TIME, CompileCpuTime) \
-    XX(DB_KQP_YDB_QUERY_LATENCY_EXECUTE, YdbQueryExecuteLatency) \
-    XX(DB_KQP_QUERY_AFFECTED_SHARDS, QueryAffectedShardsCount) \
-    XX(DB_KQP_QUERY_READ_SETS, QueryReadSetsCount) \
-    XX(DB_KQP_QUERY_READ_BYTES, QueryReadBytes) \
-    XX(DB_KQP_QUERY_READ_ROWS, QueryReadRows) \
-    XX(DB_KQP_QUERY_MAX_SHARD_REPLY, QueryMaxShardReplySize) \
-    XX(DB_KQP_QUERY_MAX_SHARD_PROGRAM, QueryMaxShardProgramSize)
+    XX(DB_KQP_YDB_QUERY_LATENCY_EXECUTE, YdbQueryExecuteLatency) \ 
+    XX(DB_KQP_QUERY_AFFECTED_SHARDS, QueryAffectedShardsCount) \ 
+    XX(DB_KQP_QUERY_READ_SETS, QueryReadSetsCount) \ 
+    XX(DB_KQP_QUERY_READ_BYTES, QueryReadBytes) \ 
+    XX(DB_KQP_QUERY_READ_ROWS, QueryReadRows) \ 
+    XX(DB_KQP_QUERY_MAX_SHARD_REPLY, QueryMaxShardReplySize) \ 
+    XX(DB_KQP_QUERY_MAX_SHARD_PROGRAM, QueryMaxShardProgramSize) 
 }
 }

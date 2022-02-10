@@ -1,9 +1,9 @@
 #include "format.h"
 #include "pretty_table.h"
 
-#include <util/string/vector.h>
-#include <library/cpp/json/json_prettifier.h>
-
+#include <util/string/vector.h> 
+#include <library/cpp/json/json_prettifier.h> 
+ 
 #include <ydb/public/lib/json_value/ydb_json_value.h>
 
 namespace NYdb {
@@ -110,155 +110,155 @@ void TCommandWithFormat::ParseFormats() {
     }
 }
 
-void TQueryPlanPrinter::Print(const TString& plan) {
-    switch (Format) {
-        case EOutputFormat::Default:
-        case EOutputFormat::Pretty: {
-            NJson::TJsonValue planJson;
-            NJson::ReadJsonTree(plan, &planJson, true);
-
-            Y_ENSURE(planJson.GetMapSafe().contains("meta"));
-            const auto& meta = planJson.GetMapSafe().at("meta");
-
-            Y_ENSURE(meta.GetMapSafe().contains("type"));
-            if (meta.GetMapSafe().at("type").GetStringSafe() == "script") {
-                Y_ENSURE(planJson.GetMapSafe().contains("queries"));
-                const auto& queries = planJson.GetMapSafe().at("queries").GetArraySafe();
-                for (size_t queryId = 0; queryId < queries.size(); ++queryId) {
-                    const auto& query = queries[queryId];
-                    Cout << "Query " << queryId << ":" << Endl;
-                    PrintPretty(query);
-                }
-            } else {
-                PrintPretty(planJson);
-            }
-
-            break;
-        }
-        case EOutputFormat::JsonUnicode:
-        case EOutputFormat::JsonBase64:
-            PrintJson(plan);
-            break;
-        default:
-            throw TMissUseException() << "This command doesn't support " << Format << " output format";
-    }
+void TQueryPlanPrinter::Print(const TString& plan) { 
+    switch (Format) { 
+        case EOutputFormat::Default: 
+        case EOutputFormat::Pretty: { 
+            NJson::TJsonValue planJson; 
+            NJson::ReadJsonTree(plan, &planJson, true); 
+ 
+            Y_ENSURE(planJson.GetMapSafe().contains("meta")); 
+            const auto& meta = planJson.GetMapSafe().at("meta"); 
+ 
+            Y_ENSURE(meta.GetMapSafe().contains("type")); 
+            if (meta.GetMapSafe().at("type").GetStringSafe() == "script") { 
+                Y_ENSURE(planJson.GetMapSafe().contains("queries")); 
+                const auto& queries = planJson.GetMapSafe().at("queries").GetArraySafe(); 
+                for (size_t queryId = 0; queryId < queries.size(); ++queryId) { 
+                    const auto& query = queries[queryId]; 
+                    Cout << "Query " << queryId << ":" << Endl; 
+                    PrintPretty(query); 
+                } 
+            } else { 
+                PrintPretty(planJson); 
+            } 
+ 
+            break; 
+        } 
+        case EOutputFormat::JsonUnicode: 
+        case EOutputFormat::JsonBase64: 
+            PrintJson(plan); 
+            break; 
+        default: 
+            throw TMissUseException() << "This command doesn't support " << Format << " output format"; 
+    } 
 }
-
-void TQueryPlanPrinter::PrintJson(const TString& plan) {
-    Cout << NJson::PrettifyJson(plan, true) << Endl;
+ 
+void TQueryPlanPrinter::PrintJson(const TString& plan) { 
+    Cout << NJson::PrettifyJson(plan, true) << Endl; 
 }
-
-void TQueryPlanPrinter::PrintPretty(const NJson::TJsonValue& plan) {
-    if (plan.GetMapSafe().contains("Plan")) {
-        const auto& queryPlan = plan.GetMapSafe().at("Plan").GetMapSafe();
-        Y_ENSURE(queryPlan.contains("Plans"));
-
-        TVector<TString> offsets;
-        for (const auto& subplan : queryPlan.at("Plans").GetArraySafe()) {
-            PrintPrettyImpl(subplan, offsets);
-        }
-    } else { /* old format plan */
-        PrintJson(plan.GetStringRobust());
-    }
-}
-
-void TQueryPlanPrinter::PrintPrettyImpl(const NJson::TJsonValue& plan, TVector<TString>& offsets) {
-    static const TString edge = "|  ";
-    static const TString noEdge = "   ";
-    static const TString edgeBranch = "├──";
-    static const TString edgeBranchLast = "└──";
-
-    TStringBuilder prefix;
-    TStringBuilder headerPrefix;
-    for (const auto& offset : offsets) {
-        if (&offset != &offsets.back()) {
-            prefix << offset;
-        }
-        headerPrefix << offset;
-    }
-
-    if (!offsets.empty()) {
-        bool last = (offsets.back() == edge);
-        prefix << (last ? edgeBranch : edgeBranchLast);
-    }
-
-    const auto& node = plan.GetMapSafe();
-
-    if (node.contains("Operators")) {
-        for (const auto& op : node.at("Operators").GetArraySafe()) {
-            TVector<TString> info;
-            for (const auto& [key, value] : op.GetMapSafe()) {
-                if (key != "Name") {
-                    info.emplace_back(TStringBuilder() << key << ": " << JsonToString(value));
-                }
-            }
-
-            if (info.empty()) {
-                Cout << prefix << op.GetMapSafe().at("Name").GetString() << Endl;
-            } else {
-                Cout << prefix << op.GetMapSafe().at("Name").GetString()
-                     << " (" << JoinStrings(info, ", ") << ")" << Endl;
-            }
-        }
-    } else if (node.contains("PlanNodeType") && node.at("PlanNodeType").GetString() == "Connection") {
-        Cout << prefix << "<" << node.at("Node Type").GetString() << ">" << Endl;
-    } else {
-        Cout << prefix << node.at("Node Type").GetString() << Endl;
-    }
-
-    static const THashSet<TString> requiredFields = {"CTE Name", "Tables"};
-    for (const auto& [key, value] : node) {
-        if (requiredFields.contains(key)) {
-            Cout << headerPrefix << key << ": " << JsonToString(value) << Endl;
-        }
-    }
-
-    if (AnalyzeMode && node.contains("Stats")) {
-        NColorizer::TColors colors = NColorizer::AutoColors(Cout);
-        for (const auto& [key, value] : node.at("Stats").GetMapSafe()) {
-            Cout << headerPrefix << colors.Yellow() << key << ": " << colors.Cyan()
-                 << JsonToString(value) << colors.Default() << Endl;
-        }
-    }
-
-    if (node.contains("Plans")) {
-        const auto& plans = node.at("Plans").GetArraySafe();
-        for (const auto& subplan : plans) {
-            offsets.push_back(&subplan != &plans.back() ? edge : noEdge);
-            PrintPrettyImpl(subplan, offsets);
-            offsets.pop_back();
-        }
-    }
-}
-
-TString TQueryPlanPrinter::JsonToString(const NJson::TJsonValue& jsonValue) {
-    TStringBuilder str;
-
-    if (jsonValue.IsString()) {
-        str << jsonValue.GetString();
-    } else if (jsonValue.IsArray()) {
-        str << "[";
-        const auto& array = jsonValue.GetArraySafe();
-        for (auto it = array.begin(); it != array.end(); ++it) {
-            str << (it != array.begin() ? ", " : "")
-                << JsonToString(*it);
-        }
-        str << "]";
-    } else if (jsonValue.IsMap()) {
-        str << "{";
-        const auto& map = jsonValue.GetMapSafe();
-        for (auto it = map.begin(); it != map.end(); ++it) {
-            str << (it != map.begin() ? ", " : "")
-                << it->first << ": " << JsonToString(it->second);
-        }
-        str << "}";
-    } else {
-        str << jsonValue;
-    }
-
-    return str;
-}
-
+ 
+void TQueryPlanPrinter::PrintPretty(const NJson::TJsonValue& plan) { 
+    if (plan.GetMapSafe().contains("Plan")) { 
+        const auto& queryPlan = plan.GetMapSafe().at("Plan").GetMapSafe(); 
+        Y_ENSURE(queryPlan.contains("Plans")); 
+ 
+        TVector<TString> offsets; 
+        for (const auto& subplan : queryPlan.at("Plans").GetArraySafe()) { 
+            PrintPrettyImpl(subplan, offsets); 
+        } 
+    } else { /* old format plan */ 
+        PrintJson(plan.GetStringRobust()); 
+    } 
+} 
+ 
+void TQueryPlanPrinter::PrintPrettyImpl(const NJson::TJsonValue& plan, TVector<TString>& offsets) { 
+    static const TString edge = "|  "; 
+    static const TString noEdge = "   "; 
+    static const TString edgeBranch = "├──"; 
+    static const TString edgeBranchLast = "└──"; 
+ 
+    TStringBuilder prefix; 
+    TStringBuilder headerPrefix; 
+    for (const auto& offset : offsets) { 
+        if (&offset != &offsets.back()) { 
+            prefix << offset; 
+        } 
+        headerPrefix << offset; 
+    } 
+ 
+    if (!offsets.empty()) { 
+        bool last = (offsets.back() == edge); 
+        prefix << (last ? edgeBranch : edgeBranchLast); 
+    } 
+ 
+    const auto& node = plan.GetMapSafe(); 
+ 
+    if (node.contains("Operators")) { 
+        for (const auto& op : node.at("Operators").GetArraySafe()) { 
+            TVector<TString> info; 
+            for (const auto& [key, value] : op.GetMapSafe()) { 
+                if (key != "Name") { 
+                    info.emplace_back(TStringBuilder() << key << ": " << JsonToString(value)); 
+                } 
+            } 
+ 
+            if (info.empty()) { 
+                Cout << prefix << op.GetMapSafe().at("Name").GetString() << Endl; 
+            } else { 
+                Cout << prefix << op.GetMapSafe().at("Name").GetString() 
+                     << " (" << JoinStrings(info, ", ") << ")" << Endl; 
+            } 
+        } 
+    } else if (node.contains("PlanNodeType") && node.at("PlanNodeType").GetString() == "Connection") { 
+        Cout << prefix << "<" << node.at("Node Type").GetString() << ">" << Endl; 
+    } else { 
+        Cout << prefix << node.at("Node Type").GetString() << Endl; 
+    } 
+ 
+    static const THashSet<TString> requiredFields = {"CTE Name", "Tables"}; 
+    for (const auto& [key, value] : node) { 
+        if (requiredFields.contains(key)) { 
+            Cout << headerPrefix << key << ": " << JsonToString(value) << Endl; 
+        } 
+    } 
+ 
+    if (AnalyzeMode && node.contains("Stats")) { 
+        NColorizer::TColors colors = NColorizer::AutoColors(Cout); 
+        for (const auto& [key, value] : node.at("Stats").GetMapSafe()) { 
+            Cout << headerPrefix << colors.Yellow() << key << ": " << colors.Cyan() 
+                 << JsonToString(value) << colors.Default() << Endl; 
+        } 
+    } 
+ 
+    if (node.contains("Plans")) { 
+        const auto& plans = node.at("Plans").GetArraySafe(); 
+        for (const auto& subplan : plans) { 
+            offsets.push_back(&subplan != &plans.back() ? edge : noEdge); 
+            PrintPrettyImpl(subplan, offsets); 
+            offsets.pop_back(); 
+        } 
+    } 
+} 
+ 
+TString TQueryPlanPrinter::JsonToString(const NJson::TJsonValue& jsonValue) { 
+    TStringBuilder str; 
+ 
+    if (jsonValue.IsString()) { 
+        str << jsonValue.GetString(); 
+    } else if (jsonValue.IsArray()) { 
+        str << "["; 
+        const auto& array = jsonValue.GetArraySafe(); 
+        for (auto it = array.begin(); it != array.end(); ++it) { 
+            str << (it != array.begin() ? ", " : "") 
+                << JsonToString(*it); 
+        } 
+        str << "]"; 
+    } else if (jsonValue.IsMap()) { 
+        str << "{"; 
+        const auto& map = jsonValue.GetMapSafe(); 
+        for (auto it = map.begin(); it != map.end(); ++it) { 
+            str << (it != map.begin() ? ", " : "") 
+                << it->first << ": " << JsonToString(it->second); 
+        } 
+        str << "}"; 
+    } else { 
+        str << jsonValue; 
+    } 
+ 
+    return str; 
+} 
+ 
 
 TResultSetPrinter::TResultSetPrinter(EOutputFormat format, std::function<bool()> isInterrupted)
     : Format(format)
@@ -269,7 +269,7 @@ TResultSetPrinter::~TResultSetPrinter() {
     if (PrintedSomething && !IsInterrupted()) {
         EndResultSet();
     }
-}
+} 
 
 void TResultSetPrinter::Print(const TResultSet& resultSet) {
     if (FirstPart) {
@@ -302,7 +302,7 @@ void TResultSetPrinter::Print(const TResultSet& resultSet) {
     default:
         throw TMissUseException() << "This command doesn't support " << Format << " output format";
     }
-}
+} 
 
 void TResultSetPrinter::Reset() {
     if (PrintedSomething) {

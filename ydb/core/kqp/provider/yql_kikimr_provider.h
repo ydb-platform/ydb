@@ -111,45 +111,45 @@ struct TKikimrQueryContext : TThrRefBase {
     NActors::TActorId ReplyTarget;
     TMaybe<NKikimrKqp::TRlPath> RlPath;
 
-    TIntrusivePtr<ITimeProvider> TimeProvider;
-    TIntrusivePtr<IRandomProvider> RandomProvider;
-
-    std::optional<ui64> CachedNow;
-    std::tuple<std::optional<ui64>, std::optional<double>, std::optional<TGUID>> CachedRandom;
-
-    ui64 GetCachedNow() {
-        if (!CachedNow) {
-            CachedNow = TimeProvider->Now().GetValue();
-        }
-
-        return *CachedNow;
-    }
-
-    ui64 GetCachedDate() {
-        return std::min<ui64>(NUdf::MAX_DATE - 1u, GetCachedNow() / 86400000000ul);
-    }
-
-    ui64 GetCachedDatetime() {
-        return std::min<ui64>(NUdf::MAX_DATETIME - 1u, GetCachedNow() / 1000000ul);
-    }
-
-    ui64 GetCachedTimestamp() {
-        return std::min<ui64>(NUdf::MAX_TIMESTAMP - 1u, GetCachedNow());
-    }
-
-    template <typename T>
-    T GetRandom() const;
-
-    template <typename T>
-    T GetCachedRandom() {
-        auto& cached = std::get<std::optional<T>>(CachedRandom);
-        if (!cached) {
-            cached = GetRandom<T>();
-        }
-
-        return *cached;
-    }
-
+    TIntrusivePtr<ITimeProvider> TimeProvider; 
+    TIntrusivePtr<IRandomProvider> RandomProvider; 
+ 
+    std::optional<ui64> CachedNow; 
+    std::tuple<std::optional<ui64>, std::optional<double>, std::optional<TGUID>> CachedRandom; 
+ 
+    ui64 GetCachedNow() { 
+        if (!CachedNow) { 
+            CachedNow = TimeProvider->Now().GetValue(); 
+        } 
+ 
+        return *CachedNow; 
+    } 
+ 
+    ui64 GetCachedDate() { 
+        return std::min<ui64>(NUdf::MAX_DATE - 1u, GetCachedNow() / 86400000000ul); 
+    } 
+ 
+    ui64 GetCachedDatetime() { 
+        return std::min<ui64>(NUdf::MAX_DATETIME - 1u, GetCachedNow() / 1000000ul); 
+    } 
+ 
+    ui64 GetCachedTimestamp() { 
+        return std::min<ui64>(NUdf::MAX_TIMESTAMP - 1u, GetCachedNow()); 
+    } 
+ 
+    template <typename T> 
+    T GetRandom() const; 
+ 
+    template <typename T> 
+    T GetCachedRandom() { 
+        auto& cached = std::get<std::optional<T>>(CachedRandom); 
+        if (!cached) { 
+            cached = GetRandom<T>(); 
+        } 
+ 
+        return *cached; 
+    } 
+ 
     void Reset() {
         PrepareOnly = false;
         SuppressDdlChecks = false;
@@ -168,11 +168,11 @@ struct TKikimrQueryContext : TThrRefBase {
         ExecutionOrder.clear();
 
         RlPath.Clear();
-
-        CachedNow.reset();
-        std::get<0>(CachedRandom).reset();
-        std::get<1>(CachedRandom).reset();
-        std::get<2>(CachedRandom).reset();
+ 
+        CachedNow.reset(); 
+        std::get<0>(CachedRandom).reset(); 
+        std::get<1>(CachedRandom).reset(); 
+        std::get<2>(CachedRandom).reset(); 
     }
 };
 
@@ -185,7 +185,7 @@ public:
 
     TKikimrTableMetadataPtr Metadata = nullptr;
     const TStructExprType* SchemeNode = nullptr;
-    TMaybe<TString> RelativePath;
+    TMaybe<TString> RelativePath; 
 
     bool Load(TExprContext& ctx, bool withVirtualColumns = false);
     void ToYson(NYson::TYsonWriter& writer) const;
@@ -211,7 +211,7 @@ public:
     TKikimrTablesData(const TKikimrTablesData&) = delete;
     TKikimrTablesData& operator=(const TKikimrTablesData&) = delete;
 
-    TKikimrTableDescription& GetOrAddTable(const TString& cluster, const TString& database, const TString& table);
+    TKikimrTableDescription& GetOrAddTable(const TString& cluster, const TString& database, const TString& table); 
     TKikimrTableDescription& GetTable(const TString& cluster, const TString& table);
 
     const TKikimrTableDescription* EnsureTableExists(const TString& cluster, const TString& table,
@@ -348,14 +348,14 @@ public:
         UserName = userName;
     }
 
-    TString GetDatabase() const {
-        return Database;
-    }
-
-    void SetDatabase(const TString& database) {
-        Database = database;
-    }
-
+    TString GetDatabase() const { 
+        return Database; 
+    } 
+ 
+    void SetDatabase(const TString& database) { 
+        Database = database; 
+    } 
+ 
     void Reset(bool keepConfigChanges) {
         TablesData->Reset();
         QueryCtx->Reset();
@@ -368,7 +368,7 @@ public:
 
 private:
     TString UserName;
-    TString Database;
+    TString Database; 
     TKikimrConfiguration::TPtr Configuration;
     TIntrusivePtr<TKikimrTablesData> TablesData;
     TIntrusivePtr<TKikimrQueryContext> QueryCtx;

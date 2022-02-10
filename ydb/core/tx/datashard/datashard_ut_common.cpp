@@ -1120,7 +1120,7 @@ void CreateShardedTable(Tests::TServer::TPtr server,
             auto col = desc->AddColumns();
             col->SetName(column.Name);
             col->SetType(column.Type);
-            col->SetNotNull(column.NotNull);
+            col->SetNotNull(column.NotNull); 
             if (column.IsKey) {
                 desc->AddKeyColumnNames(column.Name);
             }

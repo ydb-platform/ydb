@@ -1015,24 +1015,24 @@ TTableBuilder& TTableBuilder::AddNullableColumn(const TString& name, const TDeci
     return *this;
 }
 
-TTableBuilder& TTableBuilder::AddNonNullableColumn(const TString& name, const EPrimitiveType& type, const TString& family) {
-    auto columnType = TTypeBuilder()
-        .Primitive(type)
-        .Build();
-
-    TableDescription_.AddColumn(name, TProtoAccessor::GetProto(columnType), family);
-    return *this;
-}
-
-TTableBuilder& TTableBuilder::AddNonNullableColumn(const TString& name, const TDecimalType& type, const TString& family) {
-    auto columnType = TTypeBuilder()
-        .Decimal(type)
-        .Build();
-
-    TableDescription_.AddColumn(name, TProtoAccessor::GetProto(columnType), family);
-    return *this;
-}
-
+TTableBuilder& TTableBuilder::AddNonNullableColumn(const TString& name, const EPrimitiveType& type, const TString& family) { 
+    auto columnType = TTypeBuilder() 
+        .Primitive(type) 
+        .Build(); 
+ 
+    TableDescription_.AddColumn(name, TProtoAccessor::GetProto(columnType), family); 
+    return *this; 
+} 
+ 
+TTableBuilder& TTableBuilder::AddNonNullableColumn(const TString& name, const TDecimalType& type, const TString& family) { 
+    auto columnType = TTypeBuilder() 
+        .Decimal(type) 
+        .Build(); 
+ 
+    TableDescription_.AddColumn(name, TProtoAccessor::GetProto(columnType), family); 
+    return *this; 
+} 
+ 
 TTableBuilder& TTableBuilder::SetPrimaryKeyColumns(const TVector<TString>& primaryKeyColumns) {
     TableDescription_.SetPrimaryKeyColumns(primaryKeyColumns);
     return *this;

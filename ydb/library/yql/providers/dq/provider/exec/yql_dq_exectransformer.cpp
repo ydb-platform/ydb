@@ -889,11 +889,11 @@ private:
         optimizedInput->CopyConstraints(pull.Input().Ref());
 
         TDqsPipelineConfigurator peepholeConfig;
-        TPeepholeSettings peepholeSettings;
-        peepholeSettings.CommonConfig = &peepholeConfig;
+        TPeepholeSettings peepholeSettings; 
+        peepholeSettings.CommonConfig = &peepholeConfig; 
         bool hasNonDeterministicFunctions;
         // TODO: do it per stage
-        auto status = PeepHoleOptimizeNode<true>(optimizedInput, optimizedInput, ctx, *State->TypeCtx, nullptr, hasNonDeterministicFunctions, peepholeSettings);
+        auto status = PeepHoleOptimizeNode<true>(optimizedInput, optimizedInput, ctx, *State->TypeCtx, nullptr, hasNonDeterministicFunctions, peepholeSettings); 
         if (status != TStatus::Ok) {
             ctx.AddError(TIssue(ctx.GetPosition(optimizedInput->Pos()), TString("Peephole optimization failed for Dq stage")));
             return SyncStatus(status);

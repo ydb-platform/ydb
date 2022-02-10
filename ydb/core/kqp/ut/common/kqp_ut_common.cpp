@@ -108,7 +108,7 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
     ServerSettings->SetKeepSnapshotTimeout(settings.KeepSnapshotTimeout);
     ServerSettings->SetFrFactory(&UdfFrFactory);
     ServerSettings->SetEnableSchemeTransactionsAtSchemeShard(true);
-    ServerSettings->SetEnableNotNullColumns(true);
+    ServerSettings->SetEnableNotNullColumns(true); 
     if (settings.LogStream)
         ServerSettings->SetLogBackend(new TStreamLogBackend(settings.LogStream));
 
@@ -770,15 +770,15 @@ NJson::TJsonValue FindPlanNodeByKv(const NJson::TJsonValue& plan, const TString&
                 return stage;
             }
         }
-
-        if (map.contains("Operators")) {
-            for (const auto &node : map["Operators"].GetArraySafe()) {
-                auto op = FindPlanNodeByKv(node, key, value);
-                if (op.IsDefined()) {
-                    return op;
-                }
-            }
-        }
+ 
+        if (map.contains("Operators")) { 
+            for (const auto &node : map["Operators"].GetArraySafe()) { 
+                auto op = FindPlanNodeByKv(node, key, value); 
+                if (op.IsDefined()) { 
+                    return op; 
+                } 
+            } 
+        } 
     } else {
         Y_ASSERT(false);
     }

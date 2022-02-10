@@ -1391,90 +1391,90 @@ Y_UNIT_TEST_SUITE(KqpTablePredicate) {
         // TODO: Need to get real ranges from explain, no anything in JSON
     }
 
-    Y_UNIT_TEST(ValidatePredicatesDataQuery) {
-        TKikimrRunner kikimr;
-        auto db = kikimr.GetTableClient();
-        auto session = db.CreateSession().GetValueSync().GetSession();
-
-        {
-            UNIT_ASSERT(session.ExecuteSchemeQuery(R"(
-                CREATE TABLE [/Root/TestTable] (
-                    Key1 Uint32,
-                    Key2 Uint32,
-                    Key3 String,
-                    Value Uint32,
-                    PRIMARY KEY (Key1, Key2, Key3)
-                );
-            )").GetValueSync().IsSuccess());
-
-            auto result = session.ExecuteDataQuery(R"(
-                REPLACE INTO [/Root/TestTable] (Key1, Key2, Key3, Value) VALUES
-                    (1u, 10u, 'SomeString1', 100),
-                    (2u, 20u, 'SomeString2', 200),
-                    (3u, 30u, 'SomeString3', 300),
-                    (4u, 40u, 'SomeString4', 400),
-                    (5u, 50u, 'SomeString5', 500),
-                    (6u, 60u, 'SomeString6', 600),
-                    (NULL, 70u, 'SomeString7', 700),
-                    (8u, NULL, 'SomeString8', 800),
-                    (9u, 90u, NULL, 900),
-                    (10u, 100u, 'SomeString10', NULL);
-            )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).GetValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        }
-
-        std::vector<TString> predicates = {
-            "Key1 < 2",
-            "Key1 > 1",
-            "Key1 = 1",
-            "Key1 = 1 AND Key2 > 0",
-            "Key1 >= 1 AND Key2 > 8",
-            "Key1 >= 1 AND Key2 = 20",
-            "Key1 >= 8 AND Key2 >= 20",
-            "Key1 < 2 AND Key2 < 80",
-            "Key1 <= 8 AND Key2 < 80",
-            "Key1 <= 9 AND Key2 <= 200",
-            "Key1 > 4 AND Key2 > 40 AND Key3 > \"SomeString\"",
-            "Key1 >= 4000 AND Key2 >= 4 AND Key3 >= \"SomeString3\"",
-            "Key2 > 80",
-            "Key2 < 90",
-            "Key2 <= 20 AND Key3 <= \"SomeString3\"",
-            "Key1 IS NULL",
-            "Key2 IS NULL",
-            "Key1 IS NOT NULL",
-            "Key1 > 1 AND Key2 IS NULL",
-            "Key1 > 1 OR Key2 IS NULL",
-            "Key1 >= 1 OR Key2 IS NOT NULL",
-            "Key1 < 9 OR Key3 IS NOT NULL",
-            "Key1 < 9 OR Key3 IS NULL",
-            "Value = 200",
-            "(Key1 <= 10) OR (Key1 > 2 AND Key1 < 5) OR (Key1 >= 8)",
-            "Key1 < NULL"
-        };
-
-        TString enablePredicateExtractor = R"(
-            PRAGMA Kikimr.OptEnablePredicateExtract = "true";
-        )";
-
-        TString query = R"(
-            PRAGMA kikimr.UseNewEngine = "true";
-            SELECT * FROM [/Root/TestTable] WHERE <PREDICATE> ORDER BY `Value`;
-        )";
-
-        for (const auto& predicate : predicates) {
-            SubstGlobal(query, "<PREDICATE>", predicate);
-            auto expectedResult = session.ExecuteDataQuery(query, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
-                .ExtractValueSync();
-            UNIT_ASSERT_C(expectedResult.IsSuccess(), expectedResult.GetIssues().ToString());
-            const auto expectedYson = FormatResultSetYson(expectedResult.GetResultSet(0));
-
-            auto result = session.ExecuteDataQuery(enablePredicateExtractor + query,
-                TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-
-            CompareYson(expectedYson, FormatResultSetYson(result.GetResultSet(0)));
-        }
-    }
+    Y_UNIT_TEST(ValidatePredicatesDataQuery) { 
+        TKikimrRunner kikimr; 
+        auto db = kikimr.GetTableClient(); 
+        auto session = db.CreateSession().GetValueSync().GetSession(); 
+ 
+        { 
+            UNIT_ASSERT(session.ExecuteSchemeQuery(R"( 
+                CREATE TABLE [/Root/TestTable] ( 
+                    Key1 Uint32, 
+                    Key2 Uint32, 
+                    Key3 String, 
+                    Value Uint32, 
+                    PRIMARY KEY (Key1, Key2, Key3) 
+                ); 
+            )").GetValueSync().IsSuccess()); 
+ 
+            auto result = session.ExecuteDataQuery(R"( 
+                REPLACE INTO [/Root/TestTable] (Key1, Key2, Key3, Value) VALUES 
+                    (1u, 10u, 'SomeString1', 100), 
+                    (2u, 20u, 'SomeString2', 200), 
+                    (3u, 30u, 'SomeString3', 300), 
+                    (4u, 40u, 'SomeString4', 400), 
+                    (5u, 50u, 'SomeString5', 500), 
+                    (6u, 60u, 'SomeString6', 600), 
+                    (NULL, 70u, 'SomeString7', 700), 
+                    (8u, NULL, 'SomeString8', 800), 
+                    (9u, 90u, NULL, 900), 
+                    (10u, 100u, 'SomeString10', NULL); 
+            )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).GetValueSync(); 
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString()); 
+        } 
+ 
+        std::vector<TString> predicates = { 
+            "Key1 < 2", 
+            "Key1 > 1", 
+            "Key1 = 1", 
+            "Key1 = 1 AND Key2 > 0", 
+            "Key1 >= 1 AND Key2 > 8", 
+            "Key1 >= 1 AND Key2 = 20", 
+            "Key1 >= 8 AND Key2 >= 20", 
+            "Key1 < 2 AND Key2 < 80", 
+            "Key1 <= 8 AND Key2 < 80", 
+            "Key1 <= 9 AND Key2 <= 200", 
+            "Key1 > 4 AND Key2 > 40 AND Key3 > \"SomeString\"", 
+            "Key1 >= 4000 AND Key2 >= 4 AND Key3 >= \"SomeString3\"", 
+            "Key2 > 80", 
+            "Key2 < 90", 
+            "Key2 <= 20 AND Key3 <= \"SomeString3\"", 
+            "Key1 IS NULL", 
+            "Key2 IS NULL", 
+            "Key1 IS NOT NULL", 
+            "Key1 > 1 AND Key2 IS NULL", 
+            "Key1 > 1 OR Key2 IS NULL", 
+            "Key1 >= 1 OR Key2 IS NOT NULL", 
+            "Key1 < 9 OR Key3 IS NOT NULL", 
+            "Key1 < 9 OR Key3 IS NULL", 
+            "Value = 200", 
+            "(Key1 <= 10) OR (Key1 > 2 AND Key1 < 5) OR (Key1 >= 8)", 
+            "Key1 < NULL" 
+        }; 
+ 
+        TString enablePredicateExtractor = R"( 
+            PRAGMA Kikimr.OptEnablePredicateExtract = "true"; 
+        )"; 
+ 
+        TString query = R"( 
+            PRAGMA kikimr.UseNewEngine = "true"; 
+            SELECT * FROM [/Root/TestTable] WHERE <PREDICATE> ORDER BY `Value`; 
+        )"; 
+ 
+        for (const auto& predicate : predicates) { 
+            SubstGlobal(query, "<PREDICATE>", predicate); 
+            auto expectedResult = session.ExecuteDataQuery(query, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()) 
+                .ExtractValueSync(); 
+            UNIT_ASSERT_C(expectedResult.IsSuccess(), expectedResult.GetIssues().ToString()); 
+            const auto expectedYson = FormatResultSetYson(expectedResult.GetResultSet(0)); 
+ 
+            auto result = session.ExecuteDataQuery(enablePredicateExtractor + query, 
+                TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync(); 
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString()); 
+ 
+            CompareYson(expectedYson, FormatResultSetYson(result.GetResultSet(0))); 
+        } 
+    } 
 
     Y_UNIT_TEST_NEW_ENGINE(CastKeyBounds) {
         TKikimrRunner kikimr;

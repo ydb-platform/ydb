@@ -911,7 +911,7 @@ void TSchemeShard::DescribeTable(const TTableInfo::TPtr tableInfo, const NScheme
         colDescr->SetType(typeRegistry->GetTypeName(cinfo.PType));
         colDescr->SetTypeId(cinfo.PType);
         colDescr->SetId(cinfo.Id);
-        colDescr->SetNotNull(cinfo.NotNull);
+        colDescr->SetNotNull(cinfo.NotNull); 
 
         if (cinfo.Family != 0) {
             colDescr->SetFamily(cinfo.Family);

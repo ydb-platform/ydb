@@ -262,9 +262,9 @@ public:
         ETabletStatus TabletStatus = ETabletStatus::StatusUnknown;
         ui64 ReadSize = 0;
         ui64 ReplySize = 0;
-        ui64 ProgramSize = 0;
+        ui64 ProgramSize = 0; 
         ui64 IncomingReadSetsSize = 0;
-        ui64 OutgoingReadSetsSize = 0;
+        ui64 OutgoingReadSetsSize = 0; 
         bool StreamCleared = false;
         bool Restarting = false;
         size_t RestartCount = 0;
@@ -914,11 +914,11 @@ void TDataReq::BuildTxStats(NKikimrQueryStats::TTxStats& stats) {
             tableStats.SetShardCount(tableStats.GetShardCount() + 1);
         }
         if (shard.second.Stats->PerShardStatsSize() == 1) {
-            auto shardStats = stats.AddPerShardStats();
-            shardStats->CopyFrom(shard.second.Stats->GetPerShardStats(0));
-            shardStats->SetOutgoingReadSetsCount(shard.second.OutgoingReadSetsSize);
-            shardStats->SetProgramSize(shard.second.ProgramSize);
-            shardStats->SetReplySize(shard.second.ReplySize);
+            auto shardStats = stats.AddPerShardStats(); 
+            shardStats->CopyFrom(shard.second.Stats->GetPerShardStats(0)); 
+            shardStats->SetOutgoingReadSetsCount(shard.second.OutgoingReadSetsSize); 
+            shardStats->SetProgramSize(shard.second.ProgramSize); 
+            shardStats->SetReplySize(shard.second.ReplySize); 
         }
     }
 
@@ -1023,7 +1023,7 @@ void TDataReq::ProcessFlatMKQLResolve(NSchemeCache::TSchemeCacheRequest *cacheRe
         TPerTablet &perTablet = PerTablet[shardData.ShardId];
         Y_VERIFY(perTablet.TabletStatus == TPerTablet::ETabletStatus::StatusUnknown);
         perTablet.TabletStatus = TPerTablet::ETabletStatus::StatusWait;
-        perTablet.ProgramSize = transactionBuffer.size();
+        perTablet.ProgramSize = transactionBuffer.size(); 
         ++TabletsLeft;
 
         perTablet.AffectedFlags |= affectedType;
@@ -1808,7 +1808,7 @@ void TDataReq::HandlePrepare(TEvDataShard::TEvProposeTransactionResult::TPtr &ev
         perTablet->MaxStep = record.GetMaxStep();
         perTablet->ReadSize = record.GetReadSize();
         perTablet->ReplySize = record.GetReplySize();
-        perTablet->OutgoingReadSetsSize = record.OutgoingReadSetInfoSize();
+        perTablet->OutgoingReadSetsSize = record.OutgoingReadSetInfoSize(); 
         for (size_t i = 0; i < record.OutgoingReadSetInfoSize(); ++i) {
             auto& rs = record.GetOutgoingReadSetInfo(i);
             ui64 targetTabletId = rs.GetShardId();

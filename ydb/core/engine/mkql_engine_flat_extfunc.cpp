@@ -745,45 +745,45 @@ namespace {
             LocateNode(ctx.NodeLocator, callable, 1));
     }
 
-    IComputationNode* WrapUpdateRow(TCallable& callable, const TComputationNodeFactoryContext& ctx, IEngineFlatHost* host) {
+    IComputationNode* WrapUpdateRow(TCallable& callable, const TComputationNodeFactoryContext& ctx, IEngineFlatHost* host) { 
         MKQL_ENSURE(callable.GetInputsCount() == 3, "Expected 3 arg");
 
         auto tableNode = callable.GetInput(0);
         const auto tableId = ExtractTableId(tableNode);
-
-        auto tableInfo = host->GetTableInfo(tableId);
-        MKQL_ENSURE(tableInfo, "Table not found: " << tableId.PathId.ToString());
-
+ 
+        auto tableInfo = host->GetTableInfo(tableId); 
+        MKQL_ENSURE(tableInfo, "Table not found: " << tableId.PathId.ToString()); 
+ 
         auto tupleType = AS_TYPE(TTupleType, callable.GetInput(1));
-        for (ui32 i = 0; i < tupleType->GetElementsCount(); ++i) {
-            auto columnId = tableInfo->KeyColumns[i];
-            const auto& column = tableInfo->Columns.at(columnId);
-            if (column.NotNull) {
-                MKQL_ENSURE(!tupleType->GetElementType(i)->IsOptional(),
-                    "Not null column " << column.Name << " can't be optional");
-            }
-        }
-
+        for (ui32 i = 0; i < tupleType->GetElementsCount(); ++i) { 
+            auto columnId = tableInfo->KeyColumns[i]; 
+            const auto& column = tableInfo->Columns.at(columnId); 
+            if (column.NotNull) { 
+                MKQL_ENSURE(!tupleType->GetElementType(i)->IsOptional(), 
+                    "Not null column " << column.Name << " can't be optional"); 
+            } 
+        } 
+ 
         auto structUpdate = AS_VALUE(TStructLiteral, callable.GetInput(2));
-        for (ui32 i = 0; i < structUpdate->GetValuesCount(); ++i) {
-            auto columnId = FromString<ui32>(structUpdate->GetType()->GetMemberName(i));
-            const auto& column = tableInfo->Columns.at(columnId);
-            auto type = structUpdate->GetType()->GetMemberType(i);
+        for (ui32 i = 0; i < structUpdate->GetValuesCount(); ++i) { 
+            auto columnId = FromString<ui32>(structUpdate->GetType()->GetMemberName(i)); 
+            const auto& column = tableInfo->Columns.at(columnId); 
+            auto type = structUpdate->GetType()->GetMemberType(i); 
 
-            if (type->IsTuple()) {
-                auto itemType = AS_TYPE(TTupleType, type);
-                if (column.NotNull) {
-                    MKQL_ENSURE(!itemType->GetElementType(1)->IsOptional(),
-                        "Not null column " << column.Name << " can't be optional");
-                }
-            } else if (!type->IsVoid()) {
-                if (column.NotNull) {
-                    MKQL_ENSURE(!type->IsOptional(),
-                        "Not null column " << column.Name << " can't be optional");
-                }
-            }
-        }
-
+            if (type->IsTuple()) { 
+                auto itemType = AS_TYPE(TTupleType, type); 
+                if (column.NotNull) { 
+                    MKQL_ENSURE(!itemType->GetElementType(1)->IsOptional(), 
+                        "Not null column " << column.Name << " can't be optional"); 
+                } 
+            } else if (!type->IsVoid()) { 
+                if (column.NotNull) { 
+                    MKQL_ENSURE(!type->IsOptional(), 
+                        "Not null column " << column.Name << " can't be optional"); 
+                } 
+            } 
+        } 
+ 
         return new TUpdateRowWrapper(ctx.Mutables, tableId, tupleType,
             LocateNode(ctx.NodeLocator, callable, 1), structUpdate, LocateNode(ctx.NodeLocator, callable, 2));
     }
@@ -874,7 +874,7 @@ TComputationNodeFactory GetFlatShardExecutionFactory(TShardExecData& execData, b
         }
 
         if (nameStr == strings.UpdateRow) {
-            return WrapUpdateRow(callable, ctx, settings.Host);
+            return WrapUpdateRow(callable, ctx, settings.Host); 
         }
 
         if (nameStr == strings.AcquireLocks) {

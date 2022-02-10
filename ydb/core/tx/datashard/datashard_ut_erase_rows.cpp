@@ -48,8 +48,8 @@ void CreateTable(TServer::TPtr server, const TActorId& sender, const TString& ro
     auto opts = TShardedTableOptions()
         .EnableOutOfOrder(false)
         .Columns({
-            {"key", "Uint32", true, false},
-            {"value", ttlColType, false, false}
+            {"key", "Uint32", true, false}, 
+            {"value", ttlColType, false, false} 
         });
     CreateShardedTable(server, sender, root, name, opts);
 }
@@ -59,10 +59,10 @@ void CreateIndexedTable(TServer::TPtr server, const TActorId& sender, const TStr
     auto opts = TShardedTableOptions()
         .EnableOutOfOrder(false)
         .Columns({
-            {"key", "Uint32", true, false},
-            {"skey", "Uint32", false, false},
-            {"tkey", "Uint32", false, false},
-            {"value", ttlColType, false, false}
+            {"key", "Uint32", true, false}, 
+            {"skey", "Uint32", false, false}, 
+            {"tkey", "Uint32", false, false}, 
+            {"value", ttlColType, false, false} 
         })
         .Indexes({
             {"by_skey", {"skey"}},

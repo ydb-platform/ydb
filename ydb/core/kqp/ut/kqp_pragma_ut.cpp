@@ -1,7 +1,7 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 
 #include <ydb/public/sdk/cpp/client/draft/ydb_scripting.h>
-
+ 
 namespace NKikimr {
 namespace NKqp {
 
@@ -69,33 +69,33 @@ Y_UNIT_TEST_SUITE(KqpPragma) {
         UNIT_ASSERT(result.IsSuccess());
         CompareYson(R"([[[1u];["One"]]])", FormatResultSetYson(result.GetResultSet(0)));
     }
-
-    Y_UNIT_TEST(OrderedColumns) {
-        TKikimrRunner kikimr;
-        NYdb::NScripting::TScriptingClient client(kikimr.GetDriver());
-
-        auto result = client.ExecuteYqlScript(R"(
-            --!syntax_v1
-            CREATE TABLE `/Root/NewTable` (
-                Column3 Uint32,
-                Column2 Uint32,
-                Column1 Uint32,
-                PRIMARY KEY (Column1)
-            );
-            COMMIT;
-
-            INSERT INTO `/Root/NewTable` (Column1, Column2, Column3) VALUES (1, 2, 3);
-            COMMIT;
-
-            PRAGMA OrderedColumns;
-            SELECT * FROM `/Root/NewTable`;
-        )").GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-
-        CompareYson(R"([
-            [[3u];[2u];[1u]]
-        ])", FormatResultSetYson(result.GetResultSet(0)));
-    }
+ 
+    Y_UNIT_TEST(OrderedColumns) { 
+        TKikimrRunner kikimr; 
+        NYdb::NScripting::TScriptingClient client(kikimr.GetDriver()); 
+ 
+        auto result = client.ExecuteYqlScript(R"( 
+            --!syntax_v1 
+            CREATE TABLE `/Root/NewTable` ( 
+                Column3 Uint32, 
+                Column2 Uint32, 
+                Column1 Uint32, 
+                PRIMARY KEY (Column1) 
+            ); 
+            COMMIT; 
+ 
+            INSERT INTO `/Root/NewTable` (Column1, Column2, Column3) VALUES (1, 2, 3); 
+            COMMIT; 
+ 
+            PRAGMA OrderedColumns; 
+            SELECT * FROM `/Root/NewTable`; 
+        )").GetValueSync(); 
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString()); 
+ 
+        CompareYson(R"([ 
+            [[3u];[2u];[1u]] 
+        ])", FormatResultSetYson(result.GetResultSet(0))); 
+    } 
 }
 
 } // namspace NKqp

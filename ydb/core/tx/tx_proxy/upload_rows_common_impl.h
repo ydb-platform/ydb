@@ -133,10 +133,10 @@ protected:
     // Positions of key and value fields in the request proto struct
     struct TFieldDescription {
         ui32 ColId;
-        TString ColName;
+        TString ColName; 
         ui32 PositionInStruct;
         NScheme::TTypeId Type;
-        bool NotNull = false;
+        bool NotNull = false; 
     };
     TVector<TString> KeyColumnNames;
     TVector<TFieldDescription> KeyColumnPositions;
@@ -298,7 +298,7 @@ private:
         TVector<ui32> keyColumnIds;
         THashMap<TString, ui32> columnByName;
         THashSet<TString> keyColumnsLeft;
-        THashSet<TString> notNullColumnsLeft = entry.NotNullColumns;
+        THashSet<TString> notNullColumnsLeft = entry.NotNullColumns; 
         SrcColumns.reserve(entry.Columns.size());
 
         for (const auto& [_, colInfo] : entry.Columns) {
@@ -371,18 +371,18 @@ private:
                 return false;
             }
 
-            bool notNull = entry.NotNullColumns.contains(ci.Name);
-            if (notNull) {
-                notNullColumnsLeft.erase(ci.Name);
-            }
-
+            bool notNull = entry.NotNullColumns.contains(ci.Name); 
+            if (notNull) { 
+                notNullColumnsLeft.erase(ci.Name); 
+            } 
+ 
             NScheme::TTypeId typeId = (NScheme::TTypeId)ci.PType;
             if (ci.KeyOrder != -1) {
-                KeyColumnPositions[ci.KeyOrder] = TFieldDescription{ci.Id, ci.Name, (ui32)pos, typeId, notNull};
+                KeyColumnPositions[ci.KeyOrder] = TFieldDescription{ci.Id, ci.Name, (ui32)pos, typeId, notNull}; 
                 keyColumnsLeft.erase(ci.Name);
                 KeyColumnNames[ci.KeyOrder] = ci.Name;
             } else {
-                ValueColumnPositions.emplace_back(TFieldDescription{ci.Id, ci.Name, (ui32)pos, typeId, notNull});
+                ValueColumnPositions.emplace_back(TFieldDescription{ci.Id, ci.Name, (ui32)pos, typeId, notNull}); 
                 ValueColumnNames.emplace_back(ci.Name);
                 ValueColumnTypes.emplace_back(ci.PType);
             }
@@ -410,11 +410,11 @@ private:
             return false;
         }
 
-        if (!notNullColumnsLeft.empty()) {
-            errorMessage = Sprintf("Missing not null columns: %s", JoinSeq(", ", notNullColumnsLeft).c_str());
-            return false;
-        }
-
+        if (!notNullColumnsLeft.empty()) { 
+            errorMessage = Sprintf("Missing not null columns: %s", JoinSeq(", ", notNullColumnsLeft).c_str()); 
+            return false; 
+        } 
+ 
         return true;
     }
 

@@ -7,17 +7,17 @@ namespace NYql {
 
 struct IPipelineConfigurator;
 
-struct TPeepholeSettings {
-    const IPipelineConfigurator* CommonConfig = nullptr;
-    const IPipelineConfigurator* FinalConfig = nullptr;
-    bool WithFinalStageRules = true;
-    bool WithNonDeterministicRules = true;
-};
-
+struct TPeepholeSettings { 
+    const IPipelineConfigurator* CommonConfig = nullptr; 
+    const IPipelineConfigurator* FinalConfig = nullptr; 
+    bool WithFinalStageRules = true; 
+    bool WithNonDeterministicRules = true; 
+}; 
+ 
 template <bool EnableNewOptimizers>
 IGraphTransformer::TStatus PeepHoleOptimizeNode(const TExprNode::TPtr& input, TExprNode::TPtr& output,
     TExprContext& ctx, TTypeAnnotationContext& types, IGraphTransformer* typeAnnotator,
-    bool& hasNonDeterministicFunctions, const TPeepholeSettings& peepholeSettings = {});
+    bool& hasNonDeterministicFunctions, const TPeepholeSettings& peepholeSettings = {}); 
 
 THolder<IGraphTransformer> MakePeepholeOptimization(TTypeAnnotationContextPtr typeAnnotationContext, const IPipelineConfigurator* config = nullptr);
 

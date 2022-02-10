@@ -65,23 +65,23 @@ private:
     std::function<bool()> IsInterrupted;
 };
 
-class TQueryPlanPrinter {
-public:
-    TQueryPlanPrinter(EOutputFormat format, bool analyzeMode = false)
-        : Format(format)
-        , AnalyzeMode(analyzeMode) {}
-
-    void Print(const TString& plan);
-
-private:
-    void PrintPretty(const NJson::TJsonValue& plan);
-    void PrintPrettyImpl(const NJson::TJsonValue& plan, TVector<TString>& offsets);
-    void PrintJson(const TString& plan);
-    TString JsonToString(const NJson::TJsonValue& jsonValue);
-
-    EOutputFormat Format;
-    bool AnalyzeMode;
-};
-
+class TQueryPlanPrinter { 
+public: 
+    TQueryPlanPrinter(EOutputFormat format, bool analyzeMode = false) 
+        : Format(format) 
+        , AnalyzeMode(analyzeMode) {} 
+ 
+    void Print(const TString& plan); 
+ 
+private: 
+    void PrintPretty(const NJson::TJsonValue& plan); 
+    void PrintPrettyImpl(const NJson::TJsonValue& plan, TVector<TString>& offsets); 
+    void PrintJson(const TString& plan); 
+    TString JsonToString(const NJson::TJsonValue& jsonValue); 
+ 
+    EOutputFormat Format; 
+    bool AnalyzeMode; 
+}; 
+ 
 }
 }

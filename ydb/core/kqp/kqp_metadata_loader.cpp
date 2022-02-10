@@ -146,19 +146,19 @@ TTableMetadataResult GetLoadTableMetadataResult(const NSchemeCache::TSchemeCache
     tableMeta->Attributes = entry.Attributes;
 
     std::map<ui32, TString, std::less<ui32>> keyColumns;
-    std::map<ui32, TString, std::less<ui32>> columnOrder;
+    std::map<ui32, TString, std::less<ui32>> columnOrder; 
     for (auto& pair : entry.Columns) {
         const auto& columnDesc = pair.second;
 
         TString typeName;
         YQL_ENSURE(NScheme::TryGetTypeName(columnDesc.PType, typeName));
-        auto notNull = entry.NotNullColumns.contains(columnDesc.Name);
-        tableMeta->Columns.emplace(columnDesc.Name, NYql::TKikimrColumnMetadata(
-            columnDesc.Name, columnDesc.Id, typeName, notNull, columnDesc.PType));
+        auto notNull = entry.NotNullColumns.contains(columnDesc.Name); 
+        tableMeta->Columns.emplace(columnDesc.Name, NYql::TKikimrColumnMetadata( 
+            columnDesc.Name, columnDesc.Id, typeName, notNull, columnDesc.PType)); 
         if (columnDesc.KeyOrder >= 0) {
             keyColumns[columnDesc.KeyOrder] = columnDesc.Name;
         }
-        columnOrder[columnDesc.Id] = columnDesc.Name;
+        columnOrder[columnDesc.Id] = columnDesc.Name; 
     }
 
     tableMeta->KeyColumnNames.reserve(keyColumns.size());
@@ -166,11 +166,11 @@ TTableMetadataResult GetLoadTableMetadataResult(const NSchemeCache::TSchemeCache
         tableMeta->KeyColumnNames.push_back(pair.second);
     }
 
-    tableMeta->ColumnOrder.reserve(columnOrder.size());
-    for (const auto& [_, column] : columnOrder) {
-        tableMeta->ColumnOrder.push_back(column);
-    }
-
+    tableMeta->ColumnOrder.reserve(columnOrder.size()); 
+    for (const auto& [_, column] : columnOrder) { 
+        tableMeta->ColumnOrder.push_back(column); 
+    } 
+ 
     IndexProtoToMetadata(entry.Indexes, tableMeta);
 
     return result;

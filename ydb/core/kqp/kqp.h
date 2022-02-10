@@ -169,12 +169,12 @@ using TPreparedQueryConstPtr = std::shared_ptr<const NKikimrKqp::TPreparedQuery>
 struct TKqpCompileResult {
     using TConstPtr = std::shared_ptr<const TKqpCompileResult>;
 
-    TKqpCompileResult(const TString& uid, TKqpQueryId&& query, const Ydb::StatusIds::StatusCode& status,
-        const NYql::TIssues& issues)
+    TKqpCompileResult(const TString& uid, TKqpQueryId&& query, const Ydb::StatusIds::StatusCode& status, 
+        const NYql::TIssues& issues) 
         : Status(status)
         , Issues(issues)
         , Query(std::move(query))
-        , Uid(uid) {}
+        , Uid(uid) {} 
 
     TKqpCompileResult(const TString& uid, const Ydb::StatusIds::StatusCode& status, const NYql::TIssues& issues)
         : Status(status)
@@ -182,7 +182,7 @@ struct TKqpCompileResult {
         , Uid(uid) {}
 
     static std::shared_ptr<TKqpCompileResult> Make(const TString& uid, TKqpQueryId&& query,
-        const Ydb::StatusIds::StatusCode& status, const NYql::TIssues& issues)
+        const Ydb::StatusIds::StatusCode& status, const NYql::TIssues& issues) 
     {
         return std::make_shared<TKqpCompileResult>(uid, std::move(query), status, issues);
     }
@@ -385,23 +385,23 @@ struct TEvKqp {
         TMaybe<bool> DocumentApiRestricted;
     };
 
-    struct TEvRecompileRequest : public TEventLocal<TEvRecompileRequest, TKqpEvents::EvRecompileRequest> {
-        TEvRecompileRequest(const TString& userToken, const TString& uid, const TMaybe<TKqpQueryId>& query,
+    struct TEvRecompileRequest : public TEventLocal<TEvRecompileRequest, TKqpEvents::EvRecompileRequest> { 
+        TEvRecompileRequest(const TString& userToken, const TString& uid, const TMaybe<TKqpQueryId>& query, 
             TInstant deadline, TKqpDbCountersPtr dbCounters)
-            : UserToken(userToken)
-            , Uid(uid)
-            , Query(query)
-            , Deadline(deadline)
+            : UserToken(userToken) 
+            , Uid(uid) 
+            , Query(query) 
+            , Deadline(deadline) 
             , DbCounters(dbCounters) {}
-
-        TString UserToken;
-        TString Uid;
-        TMaybe<TKqpQueryId> Query;
-
-        TInstant Deadline;
+ 
+        TString UserToken; 
+        TString Uid; 
+        TMaybe<TKqpQueryId> Query; 
+ 
+        TInstant Deadline; 
         TKqpDbCountersPtr DbCounters;
-    };
-
+    }; 
+ 
     struct TEvCompileResponse : public TEventLocal<TEvCompileResponse, TKqpEvents::EvCompileResponse> {
         TEvCompileResponse(const TKqpCompileResult::TConstPtr& compileResult)
             : CompileResult(compileResult) {}

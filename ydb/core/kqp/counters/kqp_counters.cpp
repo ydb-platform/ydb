@@ -8,7 +8,7 @@
 
 #include <library/cpp/actors/core/log.h>
 
-#include <util/generic/size_literals.h>
+#include <util/generic/size_literals.h> 
 
 #include <ydb/library/yql/core/issue/protos/issue_id.pb.h>
 
@@ -104,22 +104,22 @@ void TKqpCountersBase::Init() {
         KqpGroup->GetCounter("Request/QueryTypeAstScan", true);
     OtherQueryTypes = KqpGroup->GetCounter("Requests/QueryTypeOther", true);
 
-    QueriesWithRangeScan = KqpGroup->GetCounter("Query/WithRangeScan", true);
-    QueriesWithFullScan = KqpGroup->GetCounter("Query/WithFullScan", true);
-
-    QueryAffectedShardsCount = KqpGroup->GetHistogram("Query/AffectedShards",
-        NMonitoring::ExplicitHistogram({1, 9, 49, 99, 499, 999}));
-    QueryReadSetsCount = KqpGroup->GetHistogram("Query/ReadSets",
-        NMonitoring::ExplicitHistogram({99, 999, 9999, 99999}));
-    QueryReadBytes = KqpGroup->GetHistogram("Query/ReadBytes",
-        NMonitoring::ExplicitHistogram({1_MB, 9_MB, 99_MB, 999_MB}));
-    QueryReadRows = KqpGroup->GetHistogram("Query/ReadRows",
-        NMonitoring::ExplicitHistogram({1, 99, 999, 9999, 99999, 999999}));
-    QueryMaxShardReplySize = KqpGroup->GetHistogram("Query/MaxShardReplySize",
-        NMonitoring::ExplicitHistogram({1_MB, 9_MB, 29_MB}));
-    QueryMaxShardProgramSize = KqpGroup->GetHistogram("Query/MaxShardProgramSize",
-        NMonitoring::ExplicitHistogram({1_MB, 9_MB, 29_MB}));
-
+    QueriesWithRangeScan = KqpGroup->GetCounter("Query/WithRangeScan", true); 
+    QueriesWithFullScan = KqpGroup->GetCounter("Query/WithFullScan", true); 
+ 
+    QueryAffectedShardsCount = KqpGroup->GetHistogram("Query/AffectedShards", 
+        NMonitoring::ExplicitHistogram({1, 9, 49, 99, 499, 999})); 
+    QueryReadSetsCount = KqpGroup->GetHistogram("Query/ReadSets", 
+        NMonitoring::ExplicitHistogram({99, 999, 9999, 99999})); 
+    QueryReadBytes = KqpGroup->GetHistogram("Query/ReadBytes", 
+        NMonitoring::ExplicitHistogram({1_MB, 9_MB, 99_MB, 999_MB})); 
+    QueryReadRows = KqpGroup->GetHistogram("Query/ReadRows", 
+        NMonitoring::ExplicitHistogram({1, 99, 999, 9999, 99999, 999999})); 
+    QueryMaxShardReplySize = KqpGroup->GetHistogram("Query/MaxShardReplySize", 
+        NMonitoring::ExplicitHistogram({1_MB, 9_MB, 29_MB})); 
+    QueryMaxShardProgramSize = KqpGroup->GetHistogram("Query/MaxShardProgramSize", 
+        NMonitoring::ExplicitHistogram({1_MB, 9_MB, 29_MB})); 
+ 
     /* Request latency */
     QueryLatencies[NKikimrKqp::QUERY_ACTION_EXECUTE] = KqpGroup->GetHistogram(
         "Query/ExecuteLatencyMs", NMonitoring::ExponentialHistogram(20, 2, 1));
@@ -210,7 +210,7 @@ void TKqpCountersBase::Init() {
     CompileRequestsInvalidate = KqpGroup->GetCounter("Compilation/Requests/Invalidate", true);
     CompileRequestsRejected = KqpGroup->GetCounter("Compilation/Requests/Rejected", true);
     CompileRequestsTimeout = KqpGroup->GetCounter("Compilation/Requests/Timeout", true);
-    CompileRequestsRecompile = KqpGroup->GetCounter("Compilation/Requests/Recompile", true);
+    CompileRequestsRecompile = KqpGroup->GetCounter("Compilation/Requests/Recompile", true); 
 
     CompileCpuTime = KqpGroup->GetHistogram(
         "Compilation/CPUTimeMs", NMonitoring::ExponentialHistogram(20, 2, 1));
@@ -289,38 +289,38 @@ void TKqpCountersBase::ReportQueryRequest(const NKikimrKqp::TQueryRequest& reque
     *YdbParametersBytes += parametersBytes;
 }
 
-void TKqpCountersBase::ReportQueryWithRangeScan() {
-    QueriesWithRangeScan->Inc();
-}
-
-void TKqpCountersBase::ReportQueryWithFullScan() {
-    QueriesWithFullScan->Inc();
-}
-
-void TKqpCountersBase::ReportQueryAffectedShards(ui64 shardsCount) {
-    QueryAffectedShardsCount->Collect(shardsCount > Max<i64>() ? Max<i64>() : static_cast<i64>(shardsCount));
-}
-
-void TKqpCountersBase::ReportQueryReadSets(ui64 readSetsCount) {
-    QueryReadSetsCount->Collect(readSetsCount > Max<i64>() ? Max<i64>() : static_cast<i64>(readSetsCount));
-}
-
-void TKqpCountersBase::ReportQueryReadBytes(ui64 bytesCount) {
-    QueryReadBytes->Collect(bytesCount > Max<i64>() ? Max<i64>() : static_cast<i64>(bytesCount));
-}
-
-void TKqpCountersBase::ReportQueryReadRows(ui64 rowsCount) {
-    QueryReadRows->Collect(rowsCount > Max<i64>() ? Max<i64>() : static_cast<i64>(rowsCount));
-}
-
-void TKqpCountersBase::ReportQueryMaxShardReplySize(ui64 replySize) {
-    QueryMaxShardReplySize->Collect(replySize > Max<i64>() ? Max<i64>() : static_cast<i64>(replySize));
-}
-
-void TKqpCountersBase::ReportQueryMaxShardProgramSize(ui64 programSize) {
-    QueryMaxShardProgramSize->Collect(programSize > Max<i64>() ? Max<i64>() : static_cast<i64>(programSize));
-}
-
+void TKqpCountersBase::ReportQueryWithRangeScan() { 
+    QueriesWithRangeScan->Inc(); 
+} 
+ 
+void TKqpCountersBase::ReportQueryWithFullScan() { 
+    QueriesWithFullScan->Inc(); 
+} 
+ 
+void TKqpCountersBase::ReportQueryAffectedShards(ui64 shardsCount) { 
+    QueryAffectedShardsCount->Collect(shardsCount > Max<i64>() ? Max<i64>() : static_cast<i64>(shardsCount)); 
+} 
+ 
+void TKqpCountersBase::ReportQueryReadSets(ui64 readSetsCount) { 
+    QueryReadSetsCount->Collect(readSetsCount > Max<i64>() ? Max<i64>() : static_cast<i64>(readSetsCount)); 
+} 
+ 
+void TKqpCountersBase::ReportQueryReadBytes(ui64 bytesCount) { 
+    QueryReadBytes->Collect(bytesCount > Max<i64>() ? Max<i64>() : static_cast<i64>(bytesCount)); 
+} 
+ 
+void TKqpCountersBase::ReportQueryReadRows(ui64 rowsCount) { 
+    QueryReadRows->Collect(rowsCount > Max<i64>() ? Max<i64>() : static_cast<i64>(rowsCount)); 
+} 
+ 
+void TKqpCountersBase::ReportQueryMaxShardReplySize(ui64 replySize) { 
+    QueryMaxShardReplySize->Collect(replySize > Max<i64>() ? Max<i64>() : static_cast<i64>(replySize)); 
+} 
+ 
+void TKqpCountersBase::ReportQueryMaxShardProgramSize(ui64 programSize) { 
+    QueryMaxShardProgramSize->Collect(programSize > Max<i64>() ? Max<i64>() : static_cast<i64>(programSize)); 
+} 
+ 
 void TKqpCountersBase::ReportResponseStatus(ui64 responseSize, Ydb::StatusIds::StatusCode ydbStatus) {
     *ResponseBytes += responseSize;
     *YdbResponseBytes += responseSize;
@@ -525,9 +525,9 @@ void TKqpCountersBase::ReportCompileDurations(TDuration duration, TDuration cpuT
     CompileCpuTime->Collect(cpuTime.MilliSeconds());
 }
 
-void TKqpCountersBase::ReportRecompileRequestGet() {
-    CompileRequestsRecompile->Inc();
-}
+void TKqpCountersBase::ReportRecompileRequestGet() { 
+    CompileRequestsRecompile->Inc(); 
+} 
 
 
 TKqpDbCounters::TKqpDbCounters() {
@@ -820,61 +820,61 @@ void TKqpCounters::ReportQueryRequest(TKqpDbCountersPtr dbCounters, const NKikim
 }
 
 void TKqpCounters::ReportQueryWithRangeScan(TKqpDbCountersPtr dbCounters) {
-    TKqpCountersBase::ReportQueryWithRangeScan();
+    TKqpCountersBase::ReportQueryWithRangeScan(); 
     if (dbCounters) {
         dbCounters->ReportQueryWithRangeScan();
-    }
-}
-
+    } 
+} 
+ 
 void TKqpCounters::ReportQueryWithFullScan(TKqpDbCountersPtr dbCounters) {
-    TKqpCountersBase::ReportQueryWithFullScan();
+    TKqpCountersBase::ReportQueryWithFullScan(); 
     if (dbCounters) {
         dbCounters->ReportQueryWithFullScan();
-    }
-}
-
+    } 
+} 
+ 
 void TKqpCounters::ReportQueryAffectedShards(TKqpDbCountersPtr dbCounters, ui64 shardsCount) {
-    TKqpCountersBase::ReportQueryAffectedShards(shardsCount);
+    TKqpCountersBase::ReportQueryAffectedShards(shardsCount); 
     if (dbCounters) {
         dbCounters->ReportQueryAffectedShards(shardsCount);
-    }
-}
-
+    } 
+} 
+ 
 void TKqpCounters::ReportQueryReadSets(TKqpDbCountersPtr dbCounters, ui64 readSetsCount) {
-    TKqpCountersBase::ReportQueryReadSets(readSetsCount);
+    TKqpCountersBase::ReportQueryReadSets(readSetsCount); 
     if (dbCounters) {
         dbCounters->ReportQueryReadSets(readSetsCount);
-    }
-}
-
+    } 
+} 
+ 
 void TKqpCounters::ReportQueryReadBytes(TKqpDbCountersPtr dbCounters, ui64 bytesCount) {
-    TKqpCountersBase::ReportQueryReadBytes(bytesCount);
+    TKqpCountersBase::ReportQueryReadBytes(bytesCount); 
     if (dbCounters) {
         dbCounters->ReportQueryReadBytes(bytesCount);
-    }
-}
-
+    } 
+} 
+ 
 void TKqpCounters::ReportQueryReadRows(TKqpDbCountersPtr dbCounters, ui64 rowsCount) {
-    TKqpCountersBase::ReportQueryReadRows(rowsCount);
+    TKqpCountersBase::ReportQueryReadRows(rowsCount); 
     if (dbCounters) {
         dbCounters->ReportQueryReadRows(rowsCount);
-    }
-}
-
+    } 
+} 
+ 
 void TKqpCounters::ReportQueryMaxShardReplySize(TKqpDbCountersPtr dbCounters, ui64 replySize) {
-    TKqpCountersBase::ReportQueryMaxShardReplySize(replySize);
+    TKqpCountersBase::ReportQueryMaxShardReplySize(replySize); 
     if (dbCounters) {
         dbCounters->ReportQueryMaxShardReplySize(replySize);
-    }
-}
-
+    } 
+} 
+ 
 void TKqpCounters::ReportQueryMaxShardProgramSize(TKqpDbCountersPtr dbCounters, ui64 programSize) {
-    TKqpCountersBase::ReportQueryMaxShardProgramSize(programSize);
+    TKqpCountersBase::ReportQueryMaxShardProgramSize(programSize); 
     if (dbCounters) {
         dbCounters->ReportQueryMaxShardProgramSize(programSize);
-    }
-}
-
+    } 
+} 
+ 
 void TKqpCounters::ReportResponseStatus(TKqpDbCountersPtr dbCounters, ui64 responseSize,
     Ydb::StatusIds::StatusCode ydbStatus)
 {
@@ -1067,12 +1067,12 @@ void TKqpCounters::ReportCompileDurations(TKqpDbCountersPtr dbCounters, TDuratio
 }
 
 void TKqpCounters::ReportRecompileRequestGet(TKqpDbCountersPtr dbCounters) {
-    TKqpCountersBase::ReportRecompileRequestGet();
+    TKqpCountersBase::ReportRecompileRequestGet(); 
     if (dbCounters) {
         dbCounters->ReportRecompileRequestGet();
-    }
-}
-
+    } 
+} 
+ 
 void TKqpCounters::ReportNewEngineForcedQueryStats(NKikimrKqp::EQueryAction action, TDuration duration,
     ui64 computeCpuTime)
 {
@@ -1095,10 +1095,10 @@ void TKqpCounters::ReportNewEngineCompatibleQueryStats(NKikimrKqp::EQueryAction 
     }
 }
 
-const NMonitoring::TDynamicCounters::TCounterPtr TKqpCounters::RecompileRequestGet() const {
-    return TKqpCountersBase::CompileRequestsRecompile;
-}
-
+const NMonitoring::TDynamicCounters::TCounterPtr TKqpCounters::RecompileRequestGet() const { 
+    return TKqpCountersBase::CompileRequestsRecompile; 
+} 
+ 
 NMonitoring::TDynamicCounters::TCounterPtr TKqpCounters::GetQueryTypeCounter(
     NKikimrKqp::EQueryType queryType)
 {

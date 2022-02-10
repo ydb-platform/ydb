@@ -29,7 +29,7 @@ struct TKqpEvents {
         EvContinueShutdown,
         EvDataQueryStreamPart,
         EvDataQueryStreamPartAck,
-        EvRecompileRequest,
+        EvRecompileRequest, 
     };
 
     static_assert (EvCompileInvalidateRequest + 1 == EvAbortExecution);

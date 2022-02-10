@@ -39,7 +39,7 @@ void ParseReadColumns(const TType* readType, const TRuntimeNode& tagsNode,
     TSmallVec<TKqpComputeContextBase::TColumn>& columns, TSmallVec<TKqpComputeContextBase::TColumn>& systemColumns);
 
 TParseReadTableResult ParseWideReadTable(TCallable& callable);
-TParseReadTableRangesResult ParseWideReadTableRanges(TCallable& callable);
+TParseReadTableRangesResult ParseWideReadTableRanges(TCallable& callable); 
 
 IComputationNode* WrapKqpScanWideReadTableRanges(TCallable& callable, const TComputationNodeFactoryContext& ctx,
     TKqpScanComputeContext& computeCtx);

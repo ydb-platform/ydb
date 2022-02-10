@@ -473,28 +473,28 @@ TStatus AnnotateUpsertRows(const TExprNode::TPtr& node, TExprContext& ctx, const
 
     for (auto& keyColumnName : table.second->Metadata->KeyColumnNames) {
         if (!rowType->FindItem(keyColumnName)) {
-            ctx.AddError(YqlIssue(ctx.GetPosition(node->Pos()), TIssuesIds::KIKIMR_PRECONDITION_FAILED, TStringBuilder()
+            ctx.AddError(YqlIssue(ctx.GetPosition(node->Pos()), TIssuesIds::KIKIMR_PRECONDITION_FAILED, TStringBuilder() 
                 << "Missing key column in input type: " << keyColumnName));
             return TStatus::Error;
         }
     }
 
-    for (auto& [name, meta] : table.second->Metadata->Columns) {
-        if (meta.NotNull && !rowType->FindItem(name)) {
-            ctx.AddError(YqlIssue(ctx.GetPosition(node->Pos()), TIssuesIds::KIKIMR_NO_COLUMN_DEFAULT_VALUE, TStringBuilder()
-                << "Missing not null column in input: " << name
-                << ". All not null columns should be initialized"));
-            return TStatus::Error;
-        }
-
-        if (meta.NotNull && rowType->FindItemType(name)->HasOptionalOrNull()) {
-            ctx.AddError(YqlIssue(ctx.GetPosition(node->Pos()), TIssuesIds::KIKIMR_BAD_COLUMN_TYPE, TStringBuilder()
-                << "Can't set optional or NULL value to not null column: " << name
-                << ". All not null columns should be initialized"));
-            return TStatus::Error;
-        }
-    }
-
+    for (auto& [name, meta] : table.second->Metadata->Columns) { 
+        if (meta.NotNull && !rowType->FindItem(name)) { 
+            ctx.AddError(YqlIssue(ctx.GetPosition(node->Pos()), TIssuesIds::KIKIMR_NO_COLUMN_DEFAULT_VALUE, TStringBuilder() 
+                << "Missing not null column in input: " << name 
+                << ". All not null columns should be initialized")); 
+            return TStatus::Error; 
+        } 
+ 
+        if (meta.NotNull && rowType->FindItemType(name)->HasOptionalOrNull()) { 
+            ctx.AddError(YqlIssue(ctx.GetPosition(node->Pos()), TIssuesIds::KIKIMR_BAD_COLUMN_TYPE, TStringBuilder() 
+                << "Can't set optional or NULL value to not null column: " << name 
+                << ". All not null columns should be initialized")); 
+            return TStatus::Error; 
+        } 
+    } 
+ 
     if (TKqlUpsertRowsIndex::Match(node.Get())) {
         Y_ENSURE(!table.second->Metadata->SecondaryGlobalIndexMetadata.empty());
     }
@@ -546,28 +546,28 @@ TStatus AnnotateInsertRows(const TExprNode::TPtr& node, TExprContext& ctx, const
 
     for (auto& keyColumnName : table.second->Metadata->KeyColumnNames) {
         if (!rowType->FindItem(keyColumnName)) {
-            ctx.AddError(YqlIssue(ctx.GetPosition(node->Pos()), TIssuesIds::KIKIMR_PRECONDITION_FAILED, TStringBuilder()
+            ctx.AddError(YqlIssue(ctx.GetPosition(node->Pos()), TIssuesIds::KIKIMR_PRECONDITION_FAILED, TStringBuilder() 
                 << "Missing key column in input type: " << keyColumnName));
             return TStatus::Error;
         }
     }
 
-    for (auto& [name, meta] : table.second->Metadata->Columns) {
-        if (meta.NotNull && !rowType->FindItem(name)) {
-            ctx.AddError(YqlIssue(ctx.GetPosition(node->Pos()), TIssuesIds::KIKIMR_NO_COLUMN_DEFAULT_VALUE, TStringBuilder()
-                << "Missing not null column in input: " << name
-                << ". All not null columns should be initialized"));
-            return TStatus::Error;
-        }
-
-        if (meta.NotNull && rowType->FindItemType(name)->HasOptionalOrNull()) {
-            ctx.AddError(YqlIssue(ctx.GetPosition(node->Pos()), TIssuesIds::KIKIMR_BAD_COLUMN_TYPE, TStringBuilder()
-                << "Can't set optional or NULL value to not null column: " << name
-                << ". All not null columns should be initialized"));
-            return TStatus::Error;
-        }
-    }
-
+    for (auto& [name, meta] : table.second->Metadata->Columns) { 
+        if (meta.NotNull && !rowType->FindItem(name)) { 
+            ctx.AddError(YqlIssue(ctx.GetPosition(node->Pos()), TIssuesIds::KIKIMR_NO_COLUMN_DEFAULT_VALUE, TStringBuilder() 
+                << "Missing not null column in input: " << name 
+                << ". All not null columns should be initialized")); 
+            return TStatus::Error; 
+        } 
+ 
+        if (meta.NotNull && rowType->FindItemType(name)->HasOptionalOrNull()) { 
+            ctx.AddError(YqlIssue(ctx.GetPosition(node->Pos()), TIssuesIds::KIKIMR_BAD_COLUMN_TYPE, TStringBuilder() 
+                << "Can't set optional or NULL value to not null column: " << name 
+                << ". All not null columns should be initialized")); 
+            return TStatus::Error; 
+        } 
+    } 
+ 
     if (!EnsureAtom(*node->Child(TKqlInsertRows::idx_OnConflict), ctx)) {
         return TStatus::Error;
     }
@@ -616,23 +616,23 @@ TStatus AnnotateUpdateRows(const TExprNode::TPtr& node, TExprContext& ctx, const
     }
 
     for (auto& keyColumnName : table.second->Metadata->KeyColumnNames) {
-        if (!rowType->FindItem(keyColumnName)) {
-            ctx.AddError(YqlIssue(ctx.GetPosition(node->Pos()), TIssuesIds::KIKIMR_NO_COLUMN_DEFAULT_VALUE, TStringBuilder()
-                << "Missing key column in input type: " << keyColumnName));
-            return TStatus::Error;
-        }
+        if (!rowType->FindItem(keyColumnName)) { 
+            ctx.AddError(YqlIssue(ctx.GetPosition(node->Pos()), TIssuesIds::KIKIMR_NO_COLUMN_DEFAULT_VALUE, TStringBuilder() 
+                << "Missing key column in input type: " << keyColumnName)); 
+            return TStatus::Error; 
+        } 
     }
 
-    for (const auto& item : rowType->GetItems()) {
-        auto column = table.second->Metadata->Columns.FindPtr(TString(item->GetName()));
-        YQL_ENSURE(column);
-        if (column->NotNull && item->HasOptionalOrNull()) {
-            ctx.AddError(YqlIssue(ctx.GetPosition(node->Pos()), TIssuesIds::KIKIMR_BAD_COLUMN_TYPE, TStringBuilder()
-                << "Can't set optional or NULL value to not null column: " << column->Name));
-            return TStatus::Error;
-        }
-    }
-
+    for (const auto& item : rowType->GetItems()) { 
+        auto column = table.second->Metadata->Columns.FindPtr(TString(item->GetName())); 
+        YQL_ENSURE(column); 
+        if (column->NotNull && item->HasOptionalOrNull()) { 
+            ctx.AddError(YqlIssue(ctx.GetPosition(node->Pos()), TIssuesIds::KIKIMR_BAD_COLUMN_TYPE, TStringBuilder() 
+                << "Can't set optional or NULL value to not null column: " << column->Name)); 
+            return TStatus::Error; 
+        } 
+    } 
+ 
     node->SetTypeAnn(ctx.MakeType<TListExprType>(MakeKqpEffectType(ctx)));
     return TStatus::Ok;
 }
@@ -676,7 +676,7 @@ TStatus AnnotateDeleteRows(const TExprNode::TPtr& node, TExprContext& ctx, const
     auto rowType = itemType->Cast<TStructExprType>();
     for (auto& keyColumnName : table.second->Metadata->KeyColumnNames) {
         if (!rowType->FindItem(keyColumnName)) {
-            ctx.AddError(YqlIssue(ctx.GetPosition(node->Pos()), TIssuesIds::KIKIMR_PRECONDITION_FAILED, TStringBuilder()
+            ctx.AddError(YqlIssue(ctx.GetPosition(node->Pos()), TIssuesIds::KIKIMR_PRECONDITION_FAILED, TStringBuilder() 
                 << "Missing key column in input type: " << keyColumnName));
             return TStatus::Error;
         }
@@ -836,30 +836,30 @@ TStatus AnnotateOlapFilterExists(const TExprNode::TPtr& node, TExprContext& ctx)
     return TStatus::Ok;
 }
 
-TStatus AnnotateKqpTxInternalBinding(const TExprNode::TPtr& node, TExprContext& ctx) {
-    if (!EnsureArgsCount(*node, 2, ctx)) {
-        return TStatus::Error;
-    }
-
-    auto* kind = node->Child(TKqpTxInternalBinding::idx_Kind);
-    if (!EnsureAtom(*kind, ctx)) {
-        return TStatus::Error;
-    }
-
-    if (kind->IsAtom("Unspecified")) {
-        ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), "Unspecified internal binding kind"));
-        return TStatus::Error;
-    }
-
-    auto* type = node->Child(TKqpTxInternalBinding::idx_Type);
-    if (!EnsureType(*type, ctx)) {
-        return TStatus::Error;
-    }
-
-    node->SetTypeAnn(type->GetTypeAnn()->Cast<TTypeExprType>()->GetType());
-    return TStatus::Ok;
-}
-
+TStatus AnnotateKqpTxInternalBinding(const TExprNode::TPtr& node, TExprContext& ctx) { 
+    if (!EnsureArgsCount(*node, 2, ctx)) { 
+        return TStatus::Error; 
+    } 
+ 
+    auto* kind = node->Child(TKqpTxInternalBinding::idx_Kind); 
+    if (!EnsureAtom(*kind, ctx)) { 
+        return TStatus::Error; 
+    } 
+ 
+    if (kind->IsAtom("Unspecified")) { 
+        ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), "Unspecified internal binding kind")); 
+        return TStatus::Error; 
+    } 
+ 
+    auto* type = node->Child(TKqpTxInternalBinding::idx_Type); 
+    if (!EnsureType(*type, ctx)) { 
+        return TStatus::Error; 
+    } 
+ 
+    node->SetTypeAnn(type->GetTypeAnn()->Cast<TTypeExprType>()->GetType()); 
+    return TStatus::Ok; 
+} 
+ 
 TStatus AnnotateKqpTxResultBinding(const TExprNode::TPtr& node, TExprContext& ctx) {
     if (!EnsureArgsCount(*node, 3, ctx)) {
         return TStatus::Error;
@@ -1098,10 +1098,10 @@ TAutoPtr<IGraphTransformer> CreateKqpTypeAnnotationTransformer(const TString& cl
                 return AnnotateKqpTxResultBinding(input, ctx);
             }
 
-            if (TKqpTxInternalBinding::Match(input.Get())) {
-                return AnnotateKqpTxInternalBinding(input, ctx);
-            }
-
+            if (TKqpTxInternalBinding::Match(input.Get())) { 
+                return AnnotateKqpTxInternalBinding(input, ctx); 
+            } 
+ 
             if (TKqpPhysicalTx::Match(input.Get())) {
                 return AnnotateKqpPhysicalTx(input, ctx);
             }

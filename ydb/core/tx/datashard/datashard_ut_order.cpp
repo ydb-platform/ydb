@@ -3672,9 +3672,9 @@ void TestLateKqpQueryAfterColumnDrop(bool dataQuery, const TString& query, bool 
 
     CreateShardedTable(server, sender, "/Root", "table-1", TShardedTableOptions()
             .Columns({
-                {"key", "Uint32", true, false},
-                {"value1", "Uint32", false, false},
-                {"value2", "Uint32", false, false}}));
+                {"key", "Uint32", true, false}, 
+                {"value1", "Uint32", false, false}, 
+                {"value2", "Uint32", false, false}})); 
 
     ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value1, value2) VALUES (1, 1, 10), (2, 2, 20);");
 

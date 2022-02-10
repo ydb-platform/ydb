@@ -619,8 +619,8 @@ struct TSchemeShard::TTxMigrate : public TSchemeShard::TRwTxBase {
                     NIceDb::TUpdate<Schema::MigratedColumns::DeleteVersion>(colDescr.GetDeleteVersion()),
                     NIceDb::TUpdate<Schema::MigratedColumns::Family>(colDescr.GetFamily()),
                     NIceDb::TUpdate<Schema::MigratedColumns::DefaultKind>(ETableColumnDefaultKind(colDescr.GetDefaultKind())),
-                    NIceDb::TUpdate<Schema::MigratedColumns::DefaultValue>(colDescr.GetDefaultValue()),
-                    NIceDb::TUpdate<Schema::MigratedColumns::NotNull>(colDescr.GetNotNull()));
+                    NIceDb::TUpdate<Schema::MigratedColumns::DefaultValue>(colDescr.GetDefaultValue()), 
+                    NIceDb::TUpdate<Schema::MigratedColumns::NotNull>(colDescr.GetNotNull())); 
             }
 
             for (const NKikimrScheme::TMigratePartition& partDescr: tableDescr.GetPartitions()) {

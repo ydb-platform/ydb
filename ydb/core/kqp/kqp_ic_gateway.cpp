@@ -1614,30 +1614,30 @@ public:
         return ExecutePhysicalQueryInternal(std::move(request), target, false);
     }
 
-    TFuture<TExecPhysicalResult> ExecutePure(TExecPhysicalRequest&& request, const NActors::TActorId& target) override {
-        YQL_ENSURE(!request.Transactions.empty());
-        YQL_ENSURE(request.Locks.empty());
-
-        auto containOnlyPureStages = [](const auto& request) {
-            for (const auto& tx : request.Transactions) {
-                if (tx.Body.GetType() != NKqpProto::TKqpPhyTx::TYPE_COMPUTE) {
-                    return false;
-                }
-
-                for (const auto& stage : tx.Body.GetStages()) {
-                    if (stage.InputsSize() != 0) {
-                        return false;
-                    }
-                }
-            }
-
-            return true;
-        };
-
-        YQL_ENSURE(containOnlyPureStages(request));
-        return ExecutePhysicalQueryInternal(std::move(request), target, false);
-    }
-
+    TFuture<TExecPhysicalResult> ExecutePure(TExecPhysicalRequest&& request, const NActors::TActorId& target) override { 
+        YQL_ENSURE(!request.Transactions.empty()); 
+        YQL_ENSURE(request.Locks.empty()); 
+ 
+        auto containOnlyPureStages = [](const auto& request) { 
+            for (const auto& tx : request.Transactions) { 
+                if (tx.Body.GetType() != NKqpProto::TKqpPhyTx::TYPE_COMPUTE) { 
+                    return false; 
+                } 
+ 
+                for (const auto& stage : tx.Body.GetStages()) { 
+                    if (stage.InputsSize() != 0) { 
+                        return false; 
+                    } 
+                } 
+            } 
+ 
+            return true; 
+        }; 
+ 
+        YQL_ENSURE(containOnlyPureStages(request)); 
+        return ExecutePhysicalQueryInternal(std::move(request), target, false); 
+    } 
+ 
     TFuture<TQueryResult> ExecScanQueryAst(const TString& cluster, const TString& query,
         TKqpParamsMap&& params, const TAstQuerySettings& settings, ui64 rowsLimit) override
     {
@@ -2210,17 +2210,17 @@ private:
     {
         tableDesc.SetName(name);
 
-        Y_ENSURE(metadata->ColumnOrder.size() == metadata->Columns.size());
-        for (const auto& name : metadata->ColumnOrder) {
-            auto columnIt = metadata->Columns.find(name);
-            Y_ENSURE(columnIt != metadata->Columns.end());
+        Y_ENSURE(metadata->ColumnOrder.size() == metadata->Columns.size()); 
+        for (const auto& name : metadata->ColumnOrder) { 
+            auto columnIt = metadata->Columns.find(name); 
+            Y_ENSURE(columnIt != metadata->Columns.end()); 
 
             TColumnDescription& columnDesc = *tableDesc.AddColumns();
-            columnDesc.SetName(columnIt->second.Name);
-            columnDesc.SetType(columnIt->second.Type);
-            columnDesc.SetNotNull(columnIt->second.NotNull);
-            if (columnIt->second.Families) {
-                columnDesc.SetFamilyName(*columnIt->second.Families.begin());
+            columnDesc.SetName(columnIt->second.Name); 
+            columnDesc.SetType(columnIt->second.Type); 
+            columnDesc.SetNotNull(columnIt->second.NotNull); 
+            if (columnIt->second.Families) { 
+                columnDesc.SetFamilyName(*columnIt->second.Families.begin()); 
             }
         }
 

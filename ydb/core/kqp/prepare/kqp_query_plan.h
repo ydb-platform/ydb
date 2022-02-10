@@ -18,9 +18,9 @@ void WriteKqlPlan(NJsonWriter::TBuf& writer, const NYql::TExprNode::TPtr& query)
  * Set dqPlan in each physical transaction (TKqpPhyQuery.Transactions[].Plan). Common query plan with all
  * table accesses is stored in top-level TKqpPhyQuery.QueryPlan.
  */
-void PhyQuerySetTxPlans(NKqpProto::TKqpPhyQuery& queryProto, const NYql::NNodes::TKqpPhysicalQuery& query,
-    THashMap<ui32, TVector<NKikimrMiniKQL::TResult>> pureTxResults, NYql::TExprContext& ctx, const TString& cluster,
-    const TIntrusivePtr<NYql::TKikimrTablesData> tablesData, NYql::TKikimrConfiguration::TPtr config);
+void PhyQuerySetTxPlans(NKqpProto::TKqpPhyQuery& queryProto, const NYql::NNodes::TKqpPhysicalQuery& query, 
+    THashMap<ui32, TVector<NKikimrMiniKQL::TResult>> pureTxResults, NYql::TExprContext& ctx, const TString& cluster, 
+    const TIntrusivePtr<NYql::TKikimrTablesData> tablesData, NYql::TKikimrConfiguration::TPtr config); 
 
 /*
  * Fill stages in given txPlan with ExecutionStats fields. Each plan stage stores StageGuid which is

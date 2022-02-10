@@ -25,8 +25,8 @@ namespace NTabletFlatExecutor {
 
                 txc.DB.Alter()
                     .AddTable("test" + ToString(ui32(TableId)), TableId)
-                    .AddColumn(TableId, "key", ColumnKeyId, NScheme::TInt64::TypeId, false)
-                    .AddColumn(TableId, "value", ColumnValueId, NScheme::TString::TypeId, false)
+                    .AddColumn(TableId, "key", ColumnKeyId, NScheme::TInt64::TypeId, false) 
+                    .AddColumn(TableId, "value", ColumnValueId, NScheme::TString::TypeId, false) 
                     .AddColumnToKey(TableId, ColumnKeyId)
                     .SetCompactionPolicy(TableId, *Policy);
 
@@ -2475,9 +2475,9 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorVersionedLargeBlobs) {
             // Values bigger than 128 bytes stored in large blobs
             txc.DB.Alter()
                 .AddTable("test", TableId)
-                .AddColumn(TableId, "key", KeyColumnId, NScheme::TInt64::TypeId, false)
-                .AddColumn(TableId, "value", ValueColumnId, NScheme::TString::TypeId, false)
-                .AddColumn(TableId, "counter", CounterColumnId, NScheme::TInt64::TypeId, false)
+                .AddColumn(TableId, "key", KeyColumnId, NScheme::TInt64::TypeId, false) 
+                .AddColumn(TableId, "value", ValueColumnId, NScheme::TString::TypeId, false) 
+                .AddColumn(TableId, "counter", CounterColumnId, NScheme::TInt64::TypeId, false) 
                 .AddColumnToKey(TableId, KeyColumnId)
                 .SetCompactionPolicy(TableId, *policy)
                 .SetFamilyBlobs(TableId, 0, -1, 128);
@@ -2819,8 +2819,8 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorMoveTableData) {
 
             txc.DB.Alter()
                 .AddTable("test" + ToString(ui32(tableId)), tableId)
-                .AddColumn(tableId, "key", TRowsModel::ColumnKeyId, NScheme::TInt64::TypeId, false)
-                .AddColumn(tableId, "value", TRowsModel::ColumnValueId, NScheme::TString::TypeId, false)
+                .AddColumn(tableId, "key", TRowsModel::ColumnKeyId, NScheme::TInt64::TypeId, false) 
+                .AddColumn(tableId, "value", TRowsModel::ColumnValueId, NScheme::TString::TypeId, false) 
                 .AddColumnToKey(tableId, TRowsModel::ColumnKeyId)
                 .SetCompactionPolicy(tableId, policy);
         }
@@ -3557,8 +3557,8 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorRejectProbability) {
             for (ui32 tableId = 201; tableId <= 208; ++tableId) {
                 txc.DB.Alter()
                     .AddTable("test" + ToString(ui32(tableId)), tableId)
-                    .AddColumn(tableId, "key", TRowsModel::ColumnKeyId, NScheme::TInt64::TypeId, false)
-                    .AddColumn(tableId, "value", TRowsModel::ColumnValueId, NScheme::TString::TypeId, false)
+                    .AddColumn(tableId, "key", TRowsModel::ColumnKeyId, NScheme::TInt64::TypeId, false) 
+                    .AddColumn(tableId, "value", TRowsModel::ColumnValueId, NScheme::TString::TypeId, false) 
                     .AddColumnToKey(tableId, TRowsModel::ColumnKeyId)
                     .SetCompactionPolicy(tableId, *Policy);
             }
@@ -3764,8 +3764,8 @@ Y_UNIT_TEST_SUITE(TFlatTableCold) {
 
             txc.DB.Alter()
                 .AddTable("test" + ToString(ui32(TRowsModel::TableId)), TRowsModel::TableId)
-                .AddColumn(TRowsModel::TableId, "key", TRowsModel::ColumnKeyId, NScheme::TInt64::TypeId, false)
-                .AddColumn(TRowsModel::TableId, "value", TRowsModel::ColumnValueId, NScheme::TString::TypeId, false)
+                .AddColumn(TRowsModel::TableId, "key", TRowsModel::ColumnKeyId, NScheme::TInt64::TypeId, false) 
+                .AddColumn(TRowsModel::TableId, "value", TRowsModel::ColumnValueId, NScheme::TString::TypeId, false) 
                 .AddColumnToKey(TRowsModel::TableId, TRowsModel::ColumnKeyId)
                 .SetCompactionPolicy(TRowsModel::TableId, *Policy)
                 .SetColdBorrow(TRowsModel::TableId, true);

@@ -22,13 +22,13 @@ TVector<TKqpTableColumn> GetKqpColumns(const TKikimrTableMetadata& table, const 
     for (const auto& name : columnNames) {
         ui32 columnId = 0;
         ui32 columnType = 0;
-        bool notNull = false;
+        bool notNull = false; 
 
         auto columnData = table.Columns.FindPtr(name);
         if (columnData) {
             columnId = columnData->Id;
             columnType = columnData->TypeId;
-            notNull = columnData->NotNull;
+            notNull = columnData->NotNull; 
         } else if (allowSystemColumns) {
             auto systemColumn = GetSystemColumns().find(name);
             YQL_ENSURE(systemColumn != GetSystemColumns().end());
@@ -37,7 +37,7 @@ TVector<TKqpTableColumn> GetKqpColumns(const TKikimrTableMetadata& table, const 
         }
 
         YQL_ENSURE(columnId, "Unknown column: " << name);
-        pgmColumns.emplace_back(columnId, name, columnType, notNull);
+        pgmColumns.emplace_back(columnId, name, columnType, notNull); 
     }
 
     return pgmColumns;

@@ -402,17 +402,17 @@ void ExtractQueryStats(NKqpProto::TKqpStatsQuery& dst, const NKikimrQueryStats::
         ui64 minCpu = Max<ui64>();
         ui64 maxCpu = 0;
         ui64 sumCpu = 0;
-        ui64 sumReadSets = 0;
-        ui64 maxProgramSize = 0;
-        ui64 maxReplySize = 0;
+        ui64 sumReadSets = 0; 
+        ui64 maxProgramSize = 0; 
+        ui64 maxReplySize = 0; 
         for (const auto& perShard : txStats.GetPerShardStats()) {
             ui64 cpu = perShard.GetCpuTimeUsec();
             minCpu = Min(minCpu, cpu);
             maxCpu = Max(maxCpu, cpu);
             sumCpu += cpu;
-            sumReadSets += perShard.GetOutgoingReadSetsCount();
-            maxProgramSize = Max(maxProgramSize, perShard.GetProgramSize());
-            maxReplySize = Max(maxReplySize, perShard.GetReplySize());
+            sumReadSets += perShard.GetOutgoingReadSetsCount(); 
+            maxProgramSize = Max(maxProgramSize, perShard.GetProgramSize()); 
+            maxReplySize = Max(maxReplySize, perShard.GetReplySize()); 
             ++cnt;
         }
         if (cnt) {
@@ -421,10 +421,10 @@ void ExtractQueryStats(NKqpProto::TKqpStatsQuery& dst, const NKikimrQueryStats::
             dstShardTime.SetMax(maxCpu);
             dstShardTime.SetSum(sumCpu);
             dstShardTime.SetCnt(cnt);
-
-            dst.SetReadSetsCount(dst.GetReadSetsCount() + sumReadSets);
-            dst.SetMaxShardProgramSize(Max(dst.GetMaxShardProgramSize(), maxProgramSize));
-            dst.SetMaxShardReplySize(Max(dst.GetMaxShardReplySize(), maxReplySize));
+ 
+            dst.SetReadSetsCount(dst.GetReadSetsCount() + sumReadSets); 
+            dst.SetMaxShardProgramSize(Max(dst.GetMaxShardProgramSize(), maxProgramSize)); 
+            dst.SetMaxShardReplySize(Max(dst.GetMaxShardReplySize(), maxReplySize)); 
 
             dstExec.SetCpuTimeUs(dstExec.GetCpuTimeUs() + sumCpu);
         }
@@ -613,53 +613,53 @@ TKqpParamsMap BuildParamsMap(const TVector<NKikimrKqp::TParameterBinding>& bindi
             param.MutableType()->MutableData()->SetScheme(NKikimr::NUdf::TDataType<ui32>::Id);
             param.MutableValue()->SetUint32(readTarget);
             paramRef = NDq::TMkqlValueRef(param);
-        } else if (binding.GetName() == NowParamName) {
-            auto& param = txState->Tx().ParamsState->Values[binding.GetName()];
-            param.MutableType()->SetKind(NKikimrMiniKQL::ETypeKind::Data);
-            param.MutableType()->MutableData()->SetScheme(NKikimr::NUdf::TDataType<ui64>::Id);
-            param.MutableValue()->SetUint64(transformCtx->QueryCtx->GetCachedNow());
-            paramRef = NDq::TMkqlValueRef(param);
-        } else if (binding.GetName() == CurrentDateParamName) {
-            auto& param = txState->Tx().ParamsState->Values[binding.GetName()];
-            param.MutableType()->SetKind(NKikimrMiniKQL::ETypeKind::Data);
-            param.MutableType()->MutableData()->SetScheme(NKikimr::NUdf::TDataType<NUdf::TDate>::Id);
-            ui64 date = transformCtx->QueryCtx->GetCachedDate();
-            YQL_ENSURE(date <= Max<ui32>());
-            param.MutableValue()->SetUint32(static_cast<ui32>(date));
-            paramRef = NDq::TMkqlValueRef(param);
-        } else if (binding.GetName() == CurrentDatetimeParamName) {
-            auto& param = txState->Tx().ParamsState->Values[binding.GetName()];
-            param.MutableType()->SetKind(NKikimrMiniKQL::ETypeKind::Data);
-            param.MutableType()->MutableData()->SetScheme(NKikimr::NUdf::TDataType<NUdf::TDatetime>::Id);
-            ui64 datetime = transformCtx->QueryCtx->GetCachedDatetime();
-            YQL_ENSURE(datetime <= Max<ui32>());
-            param.MutableValue()->SetUint32(static_cast<ui32>(datetime));
-            paramRef = NDq::TMkqlValueRef(param);
-        } else if (binding.GetName() == CurrentTimestampParamName) {
-            auto& param = txState->Tx().ParamsState->Values[binding.GetName()];
-            param.MutableType()->SetKind(NKikimrMiniKQL::ETypeKind::Data);
-            param.MutableType()->MutableData()->SetScheme(NKikimr::NUdf::TDataType<NUdf::TTimestamp>::Id);
-            param.MutableValue()->SetUint64(transformCtx->QueryCtx->GetCachedTimestamp());
-            paramRef = NDq::TMkqlValueRef(param);
-        } else if (binding.GetName() == RandomNumberParamName) {
-            auto& param = txState->Tx().ParamsState->Values[binding.GetName()];
-            param.MutableType()->SetKind(NKikimrMiniKQL::ETypeKind::Data);
-            param.MutableType()->MutableData()->SetScheme(NKikimr::NUdf::TDataType<ui64>::Id);
-            param.MutableValue()->SetUint64(transformCtx->QueryCtx->GetCachedRandom<ui64>());
-            paramRef = NDq::TMkqlValueRef(param);
-        } else if (binding.GetName() == RandomParamName) {
-            auto& param = txState->Tx().ParamsState->Values[binding.GetName()];
-            param.MutableType()->SetKind(NKikimrMiniKQL::ETypeKind::Data);
-            param.MutableType()->MutableData()->SetScheme(NKikimr::NUdf::TDataType<double>::Id);
-            param.MutableValue()->SetDouble(transformCtx->QueryCtx->GetCachedRandom<double>());
-            paramRef = NDq::TMkqlValueRef(param);
-        } else if (binding.GetName() == RandomUuidParamName) {
-            auto& param = txState->Tx().ParamsState->Values[binding.GetName()];
-            param.MutableType()->SetKind(NKikimrMiniKQL::ETypeKind::Data);
-            param.MutableType()->MutableData()->SetScheme(NKikimr::NUdf::TDataType<NUdf::TUuid>::Id);
-            auto uuid = transformCtx->QueryCtx->GetCachedRandom<TGUID>();
-            param.MutableValue()->SetBytes(uuid.dw, sizeof(TGUID));
-            paramRef = NDq::TMkqlValueRef(param);
+        } else if (binding.GetName() == NowParamName) { 
+            auto& param = txState->Tx().ParamsState->Values[binding.GetName()]; 
+            param.MutableType()->SetKind(NKikimrMiniKQL::ETypeKind::Data); 
+            param.MutableType()->MutableData()->SetScheme(NKikimr::NUdf::TDataType<ui64>::Id); 
+            param.MutableValue()->SetUint64(transformCtx->QueryCtx->GetCachedNow()); 
+            paramRef = NDq::TMkqlValueRef(param); 
+        } else if (binding.GetName() == CurrentDateParamName) { 
+            auto& param = txState->Tx().ParamsState->Values[binding.GetName()]; 
+            param.MutableType()->SetKind(NKikimrMiniKQL::ETypeKind::Data); 
+            param.MutableType()->MutableData()->SetScheme(NKikimr::NUdf::TDataType<NUdf::TDate>::Id); 
+            ui64 date = transformCtx->QueryCtx->GetCachedDate(); 
+            YQL_ENSURE(date <= Max<ui32>()); 
+            param.MutableValue()->SetUint32(static_cast<ui32>(date)); 
+            paramRef = NDq::TMkqlValueRef(param); 
+        } else if (binding.GetName() == CurrentDatetimeParamName) { 
+            auto& param = txState->Tx().ParamsState->Values[binding.GetName()]; 
+            param.MutableType()->SetKind(NKikimrMiniKQL::ETypeKind::Data); 
+            param.MutableType()->MutableData()->SetScheme(NKikimr::NUdf::TDataType<NUdf::TDatetime>::Id); 
+            ui64 datetime = transformCtx->QueryCtx->GetCachedDatetime(); 
+            YQL_ENSURE(datetime <= Max<ui32>()); 
+            param.MutableValue()->SetUint32(static_cast<ui32>(datetime)); 
+            paramRef = NDq::TMkqlValueRef(param); 
+        } else if (binding.GetName() == CurrentTimestampParamName) { 
+            auto& param = txState->Tx().ParamsState->Values[binding.GetName()]; 
+            param.MutableType()->SetKind(NKikimrMiniKQL::ETypeKind::Data); 
+            param.MutableType()->MutableData()->SetScheme(NKikimr::NUdf::TDataType<NUdf::TTimestamp>::Id); 
+            param.MutableValue()->SetUint64(transformCtx->QueryCtx->GetCachedTimestamp()); 
+            paramRef = NDq::TMkqlValueRef(param); 
+        } else if (binding.GetName() == RandomNumberParamName) { 
+            auto& param = txState->Tx().ParamsState->Values[binding.GetName()]; 
+            param.MutableType()->SetKind(NKikimrMiniKQL::ETypeKind::Data); 
+            param.MutableType()->MutableData()->SetScheme(NKikimr::NUdf::TDataType<ui64>::Id); 
+            param.MutableValue()->SetUint64(transformCtx->QueryCtx->GetCachedRandom<ui64>()); 
+            paramRef = NDq::TMkqlValueRef(param); 
+        } else if (binding.GetName() == RandomParamName) { 
+            auto& param = txState->Tx().ParamsState->Values[binding.GetName()]; 
+            param.MutableType()->SetKind(NKikimrMiniKQL::ETypeKind::Data); 
+            param.MutableType()->MutableData()->SetScheme(NKikimr::NUdf::TDataType<double>::Id); 
+            param.MutableValue()->SetDouble(transformCtx->QueryCtx->GetCachedRandom<double>()); 
+            paramRef = NDq::TMkqlValueRef(param); 
+        } else if (binding.GetName() == RandomUuidParamName) { 
+            auto& param = txState->Tx().ParamsState->Values[binding.GetName()]; 
+            param.MutableType()->SetKind(NKikimrMiniKQL::ETypeKind::Data); 
+            param.MutableType()->MutableData()->SetScheme(NKikimr::NUdf::TDataType<NUdf::TUuid>::Id); 
+            auto uuid = transformCtx->QueryCtx->GetCachedRandom<TGUID>(); 
+            param.MutableValue()->SetBytes(uuid.dw, sizeof(TGUID)); 
+            paramRef = NDq::TMkqlValueRef(param); 
         } else if (binding.HasMkqlIndex()) {
             paramRef = GetParamFromResult(binding, *transformCtx);
         } else {

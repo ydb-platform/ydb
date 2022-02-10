@@ -2208,8 +2208,8 @@ void TSchemeShard::PersistTableAltered(NIceDb::TNiceDb& db, const TPathId pathId
                 NIceDb::TUpdate<Schema::Columns::DeleteVersion>(cinfo.DeleteVersion),
                 NIceDb::TUpdate<Schema::Columns::Family>(cinfo.Family),
                 NIceDb::TUpdate<Schema::Columns::DefaultKind>(cinfo.DefaultKind),
-                NIceDb::TUpdate<Schema::Columns::DefaultValue>(cinfo.DefaultValue),
-                NIceDb::TUpdate<Schema::Columns::NotNull>(cinfo.NotNull));
+                NIceDb::TUpdate<Schema::Columns::DefaultValue>(cinfo.DefaultValue), 
+                NIceDb::TUpdate<Schema::Columns::NotNull>(cinfo.NotNull)); 
 
             db.Table<Schema::ColumnAlters>().Key(pathId.LocalPathId, colId).Delete();
         } else {
@@ -2221,8 +2221,8 @@ void TSchemeShard::PersistTableAltered(NIceDb::TNiceDb& db, const TPathId pathId
                 NIceDb::TUpdate<Schema::MigratedColumns::DeleteVersion>(cinfo.DeleteVersion),
                 NIceDb::TUpdate<Schema::MigratedColumns::Family>(cinfo.Family),
                 NIceDb::TUpdate<Schema::MigratedColumns::DefaultKind>(cinfo.DefaultKind),
-                NIceDb::TUpdate<Schema::MigratedColumns::DefaultValue>(cinfo.DefaultValue),
-                NIceDb::TUpdate<Schema::MigratedColumns::NotNull>(cinfo.NotNull));
+                NIceDb::TUpdate<Schema::MigratedColumns::DefaultValue>(cinfo.DefaultValue), 
+                NIceDb::TUpdate<Schema::MigratedColumns::NotNull>(cinfo.NotNull)); 
         }
         db.Table<Schema::MigratedColumnAlters>().Key(pathId.OwnerId, pathId.LocalPathId, colId).Delete();
     }
@@ -2259,8 +2259,8 @@ void TSchemeShard::PersistAddAlterTable(NIceDb::TNiceDb& db, TPathId pathId, con
                 NIceDb::TUpdate<Schema::ColumnAlters::DeleteVersion>(cinfo.DeleteVersion),
                 NIceDb::TUpdate<Schema::ColumnAlters::Family>(cinfo.Family),
                 NIceDb::TUpdate<Schema::ColumnAlters::DefaultKind>(cinfo.DefaultKind),
-                NIceDb::TUpdate<Schema::ColumnAlters::DefaultValue>(cinfo.DefaultValue),
-                NIceDb::TUpdate<Schema::ColumnAlters::NotNull>(cinfo.NotNull));
+                NIceDb::TUpdate<Schema::ColumnAlters::DefaultValue>(cinfo.DefaultValue), 
+                NIceDb::TUpdate<Schema::ColumnAlters::NotNull>(cinfo.NotNull)); 
         } else {
             db.Table<Schema::MigratedColumnAlters>().Key(pathId.OwnerId, pathId.LocalPathId, colId).Update(
                 NIceDb::TUpdate<Schema::MigratedColumnAlters::ColName>(cinfo.Name),
@@ -2270,8 +2270,8 @@ void TSchemeShard::PersistAddAlterTable(NIceDb::TNiceDb& db, TPathId pathId, con
                 NIceDb::TUpdate<Schema::MigratedColumnAlters::DeleteVersion>(cinfo.DeleteVersion),
                 NIceDb::TUpdate<Schema::MigratedColumnAlters::Family>(cinfo.Family),
                 NIceDb::TUpdate<Schema::MigratedColumnAlters::DefaultKind>(cinfo.DefaultKind),
-                NIceDb::TUpdate<Schema::MigratedColumnAlters::DefaultValue>(cinfo.DefaultValue),
-                NIceDb::TUpdate<Schema::MigratedColumnAlters::NotNull>(cinfo.NotNull));
+                NIceDb::TUpdate<Schema::MigratedColumnAlters::DefaultValue>(cinfo.DefaultValue), 
+                NIceDb::TUpdate<Schema::MigratedColumnAlters::NotNull>(cinfo.NotNull)); 
         }
     }
 }

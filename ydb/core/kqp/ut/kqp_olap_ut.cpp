@@ -924,7 +924,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         NJson::ReadJsonTree(*result.PlanJson, &plan, true);
         Cerr << *result.PlanJson << Endl;
 
-        node = FindPlanNodeByKv(plan, "Node Type", "Limit-TableFullScan");
+        node = FindPlanNodeByKv(plan, "Node Type", "Limit-TableFullScan"); 
         UNIT_ASSERT(node.IsDefined());
         reverse = FindPlanNodeByKv(node, "Reverse", "true");
         UNIT_ASSERT(reverse.IsDefined());

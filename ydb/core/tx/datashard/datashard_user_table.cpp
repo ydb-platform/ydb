@@ -220,7 +220,7 @@ void TUserTable::ParseProto(const NKikimrSchemeOp::TTableDescription& descr)
             column = TUserColumn(col.GetTypeId(), col.GetName());
         }
         column.Family = col.GetFamily();
-        column.NotNull = col.GetNotNull();
+        column.NotNull = col.GetNotNull(); 
     }
 
     for (const auto& col : descr.GetDropColumns()) {
@@ -331,7 +331,7 @@ void TUserTable::AlterSchema() {
         descr->SetId(col.first);
         descr->SetTypeId(column.Type);
         descr->SetFamily(column.Family);
-        descr->SetNotNull(column.NotNull);
+        descr->SetNotNull(column.NotNull); 
     }
 
     schema.SetPartitionRangeBegin(Range.From.GetBuffer());
@@ -388,7 +388,7 @@ void TUserTable::DoApplyCreate(
         ui32 columnId = col.first;
         const TUserColumn& column = col.second;
 
-        alter.AddColumn(tid, column.Name, columnId, column.Type, column.NotNull);
+        alter.AddColumn(tid, column.Name, columnId, column.Type, column.NotNull); 
         alter.AddColumnToFamily(tid, columnId, column.Family);
     }
 
@@ -490,7 +490,7 @@ void TUserTable::ApplyAlter(
 
         if (!oldTable.Columns.contains(colId)) {
             for (ui32 tid : tids) {
-                alter.AddColumn(tid, column.Name, colId, column.Type, column.NotNull);
+                alter.AddColumn(tid, column.Name, colId, column.Type, column.NotNull); 
             }
         }
 

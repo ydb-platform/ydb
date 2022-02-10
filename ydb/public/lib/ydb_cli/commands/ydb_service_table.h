@@ -115,7 +115,7 @@ private:
     bool BasicStats = false;
 };
 
-class TCommandExplain : public TTableCommand, public TCommandWithFormat, TCommandQueryBase, TInterruptibleCommand {
+class TCommandExplain : public TTableCommand, public TCommandWithFormat, TCommandQueryBase, TInterruptibleCommand { 
 public:
     TCommandExplain();
     virtual void Config(TConfig& config) override;

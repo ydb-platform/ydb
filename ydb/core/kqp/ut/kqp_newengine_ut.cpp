@@ -1960,19 +1960,19 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
                         query << " order by Key"; // redundant sort by PK
                     }
 
-                    const int limitValue = 5;
-                    const int offsetValue = 1;
-
+                    const int limitValue = 5; 
+                    const int offsetValue = 1; 
+ 
                     switch (takeType) {
                         case None: UNIT_FAIL("Unexpected"); break;
-                        case Literal: query << " limit " << limitValue; break;
+                        case Literal: query << " limit " << limitValue; break; 
                         case Parameter: query << " limit $limit"; break;
-                        case Expression: query << " limit ($limit + 1)"; break;
+                        case Expression: query << " limit ($limit + 1)"; break; 
                     }
 
                     switch (skipType) {
                         case None: break;
-                        case Literal: query << " offset " << offsetValue; break;
+                        case Literal: query << " offset " << offsetValue; break; 
                         case Parameter: query << " offset $offset"; break;
                         case Expression: query << " offset ($offset + 1)"; break;
                     }
@@ -1985,20 +1985,20 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
 
                     NJson::TJsonValue plan;
                     NJson::ReadJsonTree(result.GetPlan(), &plan, true);
-                    auto node = FindPlanNodeByKv(plan, "Node Type", "Limit-TableFullScan");
-                    UNIT_ASSERT(node.IsDefined());
-
-                    TStringBuilder readLimitValue;
-                    if (takeType == EType::Literal && skipType == EType::None) {
-                        readLimitValue << limitValue;
-                    } else if (takeType == EType::Literal && skipType == EType::Literal) {
-                        readLimitValue << limitValue + offsetValue;
-                    } else {
-                        readLimitValue << "%kqp%tx_result_binding_0_0";
-                    }
-
-                    auto readLimit = FindPlanNodeByKv(node, "ReadLimit", readLimitValue);
-                    UNIT_ASSERT(readLimit.IsDefined());
+                    auto node = FindPlanNodeByKv(plan, "Node Type", "Limit-TableFullScan"); 
+                    UNIT_ASSERT(node.IsDefined()); 
+ 
+                    TStringBuilder readLimitValue; 
+                    if (takeType == EType::Literal && skipType == EType::None) { 
+                        readLimitValue << limitValue; 
+                    } else if (takeType == EType::Literal && skipType == EType::Literal) { 
+                        readLimitValue << limitValue + offsetValue; 
+                    } else { 
+                        readLimitValue << "%kqp%tx_result_binding_0_0"; 
+                    } 
+ 
+                    auto readLimit = FindPlanNodeByKv(node, "ReadLimit", readLimitValue); 
+                    UNIT_ASSERT(readLimit.IsDefined()); 
                 }
             }
         }
@@ -2175,25 +2175,25 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
             ]
         )", FormatResultSetYson(result.GetResultSet(0)));
     }
-
-    Y_UNIT_TEST(ReadRangeWithParams) {
-        TKikimrRunner kikimr;
-        auto db = kikimr.GetTableClient();
-        auto session = db.CreateSession().GetValueSync().GetSession();
-
-        auto result = session.ExplainDataQuery(R"(
-            PRAGMA Kikimr.UseNewEngine = "true";
-            DECLARE $max_key as Uint64;
-            DECLARE $min_key as Uint64;
-            SELECT * FROM `/Root/KeyValue` WHERE Key <= $max_key AND Key >= $min_key;
-        )").ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-
-        NJson::TJsonValue plan;
-        NJson::ReadJsonTree(result.GetPlan(), &plan, true);
-        auto range = FindPlanNodeByKv(plan, "ReadRange", "[\"Key [$min_key, $max_key]\"]");
-        UNIT_ASSERT(range.IsDefined());
-    }
+ 
+    Y_UNIT_TEST(ReadRangeWithParams) { 
+        TKikimrRunner kikimr; 
+        auto db = kikimr.GetTableClient(); 
+        auto session = db.CreateSession().GetValueSync().GetSession(); 
+ 
+        auto result = session.ExplainDataQuery(R"( 
+            PRAGMA Kikimr.UseNewEngine = "true"; 
+            DECLARE $max_key as Uint64; 
+            DECLARE $min_key as Uint64; 
+            SELECT * FROM `/Root/KeyValue` WHERE Key <= $max_key AND Key >= $min_key; 
+        )").ExtractValueSync(); 
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString()); 
+ 
+        NJson::TJsonValue plan; 
+        NJson::ReadJsonTree(result.GetPlan(), &plan, true); 
+        auto range = FindPlanNodeByKv(plan, "ReadRange", "[\"Key [$min_key, $max_key]\"]"); 
+        UNIT_ASSERT(range.IsDefined()); 
+    } 
 
     Y_UNIT_TEST(Nondeterministic) { // TODO: KIKIMR-4759
         TKikimrRunner kikimr;

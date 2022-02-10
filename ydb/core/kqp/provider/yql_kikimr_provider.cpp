@@ -132,20 +132,20 @@ const TKikimrTableDescription* TKikimrTablesData::EnsureTableExists(const TStrin
     return nullptr;
 }
 
-TKikimrTableDescription& TKikimrTablesData::GetOrAddTable(const TString& cluster, const TString& database, const TString& table) {
-    if (!Tables.FindPtr(std::make_pair(cluster, table))) {
-        auto& desc = Tables[std::make_pair(cluster, table)];
-
-        TString error;
-        std::pair<TString, TString> pathPair;
-        if (NKikimr::TrySplitPathByDb(table, database, pathPair, error)) {
-            desc.RelativePath = pathPair.second;
-        }
-
-        return desc;
-    }
-
-    return Tables[std::make_pair(cluster, table)];
+TKikimrTableDescription& TKikimrTablesData::GetOrAddTable(const TString& cluster, const TString& database, const TString& table) { 
+    if (!Tables.FindPtr(std::make_pair(cluster, table))) { 
+        auto& desc = Tables[std::make_pair(cluster, table)]; 
+ 
+        TString error; 
+        std::pair<TString, TString> pathPair; 
+        if (NKikimr::TrySplitPathByDb(table, database, pathPair, error)) { 
+            desc.RelativePath = pathPair.second; 
+        } 
+ 
+        return desc; 
+    } 
+ 
+    return Tables[std::make_pair(cluster, table)]; 
 }
 
 TKikimrTableDescription& TKikimrTablesData::GetTable(const TString& cluster, const TString& table) {
@@ -175,7 +175,7 @@ bool TKikimrTableDescription::Load(TExprContext& ctx, bool withSystemColumns) {
         // Currently Kikimr doesn't have parametrized types and Decimal type
         // is passed with no params. It's known to always be Decimal(22,9),
         // so we transform Decimal type here.
-        const TTypeAnnotationNode *type;
+        const TTypeAnnotationNode *type; 
         if (to_lower(column.Type) == "decimal")
             type = ctx.MakeType<TDataExprParamsType>(
                 NKikimr::NUdf::GetDataSlot(column.Type),
@@ -184,13 +184,13 @@ bool TKikimrTableDescription::Load(TExprContext& ctx, bool withSystemColumns) {
         else
             type = ctx.MakeType<TDataExprType>(NKikimr::NUdf::GetDataSlot(column.Type));
 
-        if (!column.NotNull) {
-            type = ctx.MakeType<TOptionalExprType>(type);
-        }
+        if (!column.NotNull) { 
+            type = ctx.MakeType<TOptionalExprType>(type); 
+        } 
 
-        items.push_back(ctx.MakeType<TItemExprType>(column.Name, type));
-
-        auto insertResult = ColumnTypes.insert(std::make_pair(column.Name, type));
+        items.push_back(ctx.MakeType<TItemExprType>(column.Name, type)); 
+ 
+        auto insertResult = ColumnTypes.insert(std::make_pair(column.Name, type)); 
         YQL_ENSURE(insertResult.second);
     }
 
@@ -788,19 +788,19 @@ TCoNameValueTupleList TKiExecDataQuerySettings::BuildNode(TExprContext& ctx, TPo
         .Done();
 }
 
-template <>
-double TKikimrQueryContext::GetRandom<double>() const {
-    return RandomProvider->GenRandReal2();
-}
-
-template <>
-ui64 TKikimrQueryContext::GetRandom<ui64>() const {
-    return RandomProvider->GenRand64();
-}
-
-template <>
-TGUID TKikimrQueryContext::GetRandom<TGUID>() const {
-    return RandomProvider->GenUuid4();
-}
-
+template <> 
+double TKikimrQueryContext::GetRandom<double>() const { 
+    return RandomProvider->GenRandReal2(); 
+} 
+ 
+template <> 
+ui64 TKikimrQueryContext::GetRandom<ui64>() const { 
+    return RandomProvider->GenRand64(); 
+} 
+ 
+template <> 
+TGUID TKikimrQueryContext::GetRandom<TGUID>() const { 
+    return RandomProvider->GenUuid4(); 
+} 
+ 
 } // namespace NYql

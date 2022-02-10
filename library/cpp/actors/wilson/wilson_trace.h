@@ -41,12 +41,12 @@ namespace NWilson {
         {
         }
 
-        explicit TTraceId(ui64 traceId)
-            : TraceId(traceId)
-            , SpanId(0)
-        {
-        }
-
+        explicit TTraceId(ui64 traceId) 
+            : TraceId(traceId) 
+            , SpanId(0) 
+        { 
+        } 
+ 
         TTraceId(const TSerializedTraceId& in)
             : TraceId(reinterpret_cast<const ui64*>(in)[0])
             , SpanId(reinterpret_cast<const ui64*>(in)[1])
@@ -91,10 +91,10 @@ namespace NWilson {
             return *this ? TTraceId(TraceId, GenerateSpanId()) : TTraceId();
         }
 
-        ui64 GetTraceId() const {
-            return TraceId;
-        }
-
+        ui64 GetTraceId() const { 
+            return TraceId; 
+        } 
+ 
         // Check if request tracing is enabled
         operator bool() const {
             return TraceId != 0;

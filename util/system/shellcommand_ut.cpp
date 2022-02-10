@@ -79,7 +79,7 @@ Y_UNIT_TEST_SUITE(TShellCommandTest) {
         UNIT_ASSERT_VALUES_EQUAL(cmd.GetError(), "");
         UNIT_ASSERT_VALUES_EQUAL(cmd.GetOutput(), "hello" NL);
         UNIT_ASSERT(TShellCommand::SHELL_FINISHED == cmd.GetStatus());
-        UNIT_ASSERT(cmd.GetExitCode().Defined() && 0 == cmd.GetExitCode());
+        UNIT_ASSERT(cmd.GetExitCode().Defined() && 0 == cmd.GetExitCode()); 
 
         UNIT_ASSERT_VALUES_EQUAL(cmd.GetQuotedCommand(), "echo hello");
     }
@@ -108,7 +108,7 @@ Y_UNIT_TEST_SUITE(TShellCommandTest) {
         UNIT_ASSERT_VALUES_EQUAL(cmd.GetOutput(), "hello\n");
 #endif
         UNIT_ASSERT(TShellCommand::SHELL_FINISHED == cmd.GetStatus());
-        UNIT_ASSERT(cmd.GetExitCode().Defined() && 0 == cmd.GetExitCode());
+        UNIT_ASSERT(cmd.GetExitCode().Defined() && 0 == cmd.GetExitCode()); 
     }
     // running with no shell is not implemented for win
     // there should be no problem with it as long as SearchPath is on
@@ -130,7 +130,7 @@ Y_UNIT_TEST_SUITE(TShellCommandTest) {
 
             cmd.Run();
             UNIT_ASSERT(TShellCommand::SHELL_ERROR == cmd.GetStatus());
-            UNIT_ASSERT(cmd.GetExitCode().Defined() && 0 != cmd.GetExitCode());
+            UNIT_ASSERT(cmd.GetExitCode().Defined() && 0 != cmd.GetExitCode()); 
         }
         {
             options.SetUseShell(true);
@@ -140,7 +140,7 @@ Y_UNIT_TEST_SUITE(TShellCommandTest) {
             cmd.Run();
             UNIT_ASSERT(TShellCommand::SHELL_FINISHED == cmd.GetStatus());
             UNIT_ASSERT_VALUES_EQUAL(cmd.GetError().size(), 0u);
-            UNIT_ASSERT(cmd.GetExitCode().Defined() && 0 == cmd.GetExitCode());
+            UNIT_ASSERT(cmd.GetExitCode().Defined() && 0 == cmd.GetExitCode()); 
         }
     }
     Y_UNIT_TEST(TestAsyncRun) {
@@ -165,7 +165,7 @@ Y_UNIT_TEST_SUITE(TShellCommandTest) {
 #if !defined(_win_)
         UNIT_ASSERT(TShellCommand::SHELL_FINISHED == cmd.GetStatus());
         UNIT_ASSERT_VALUES_EQUAL(cmd.GetOutput().size(), 0u);
-        UNIT_ASSERT(cmd.GetExitCode().Defined() && 0 == cmd.GetExitCode());
+        UNIT_ASSERT(cmd.GetExitCode().Defined() && 0 == cmd.GetExitCode()); 
 #endif
     }
     Y_UNIT_TEST(TestQuotes) {
@@ -190,15 +190,15 @@ Y_UNIT_TEST_SUITE(TShellCommandTest) {
         cmd.Run().Wait();
         UNIT_ASSERT(TShellCommand::SHELL_ERROR == cmd.GetStatus());
         UNIT_ASSERT_VALUES_UNEQUAL(cmd.GetError().size(), 0u);
-        UNIT_ASSERT(cmd.GetExitCode().Defined() && 0 != cmd.GetExitCode());
+        UNIT_ASSERT(cmd.GetExitCode().Defined() && 0 != cmd.GetExitCode()); 
     }
     Y_UNIT_TEST(TestExitCode) {
-        TShellCommand cmd("grep qwerty qwerty"); // some nonexistent file name
-        cmd.Run().Wait();
-        UNIT_ASSERT(TShellCommand::SHELL_ERROR == cmd.GetStatus());
+        TShellCommand cmd("grep qwerty qwerty"); // some nonexistent file name 
+        cmd.Run().Wait(); 
+        UNIT_ASSERT(TShellCommand::SHELL_ERROR == cmd.GetStatus()); 
         UNIT_ASSERT_VALUES_UNEQUAL(cmd.GetError().size(), 0u);
-        UNIT_ASSERT(cmd.GetExitCode().Defined() && 2 == cmd.GetExitCode());
-    }
+        UNIT_ASSERT(cmd.GetExitCode().Defined() && 2 == cmd.GetExitCode()); 
+    } 
     // 'type con' and 'copy con con' want real console, not stdin, use sort
     Y_UNIT_TEST(TestInput) {
         TShellCommandOptions options;
@@ -258,7 +258,7 @@ Y_UNIT_TEST_SUITE(TShellCommandTest) {
         UNIT_ASSERT_VALUES_EQUAL(cmd.GetError(), "");
         UNIT_ASSERT(TShellCommand::SHELL_FINISHED == cmd.GetStatus());
         UNIT_ASSERT_VALUES_EQUAL(read.Str(), "alpha" NL "omega" NL "zeta" NL);
-        UNIT_ASSERT(cmd.GetExitCode().Defined() && 0 == cmd.GetExitCode());
+        UNIT_ASSERT(cmd.GetExitCode().Defined() && 0 == cmd.GetExitCode()); 
     }
     Y_UNIT_TEST(TestStreamClose) {
         struct TStream: public IOutputStream {

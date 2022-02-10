@@ -2,52 +2,52 @@
  * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
  * SPDX-License-Identifier: Apache-2.0.
  */
-
-#pragma once
-
-#include <aws/core/Core_EXPORTS.h>
-
+ 
+#pragma once 
+ 
+#include <aws/core/Core_EXPORTS.h> 
+ 
 #include <cassert>
-#include <utility>
-
-namespace Aws
-{
-    namespace Utils
-    {
-
-        /**
-         * Template class representing the outcome of making a request.  It will contain
-         * either a successful result or the failure error.  The caller must check
-         * whether the outcome of the request was a success before attempting to access
-         *  the result or the error.
-         */
-        template<typename R, typename E> // Result, Error
-        class Outcome
-        {
-        public:
-
+#include <utility> 
+ 
+namespace Aws 
+{ 
+    namespace Utils 
+    { 
+ 
+        /** 
+         * Template class representing the outcome of making a request.  It will contain 
+         * either a successful result or the failure error.  The caller must check 
+         * whether the outcome of the request was a success before attempting to access 
+         *  the result or the error. 
+         */ 
+        template<typename R, typename E> // Result, Error 
+        class Outcome 
+        { 
+        public: 
+ 
             Outcome() : result(), error(), success(false)
-            {
+            { 
             }
             Outcome(const R& r) : result(r), error(), success(true)
-            {
+            { 
             }
             Outcome(const E& e) : result(), error(e), success(false)
-            {
+            { 
             }
             Outcome(R&& r) : result(std::forward<R>(r)), error(), success(true)
-            {
+            { 
             }
             Outcome(E&& e) : result(), error(std::forward<E>(e)), success(false)
-            {
+            { 
             }
-            Outcome(const Outcome& o) :
-                result(o.result),
-                error(o.error),
-                success(o.success)
-            {
-            }
-
+            Outcome(const Outcome& o) : 
+                result(o.result), 
+                error(o.error), 
+                success(o.success) 
+            { 
+            } 
+ 
             template<typename RT, typename ET>
             friend class Outcome;
 
@@ -94,77 +94,77 @@ namespace Aws
             {
             }
 
-            Outcome& operator=(const Outcome& o)
-            {
-                if (this != &o)
-                {
-                    result = o.result;
-                    error = o.error;
-                    success = o.success;
-                }
-
-                return *this;
-            }
-
-            Outcome(Outcome&& o) : // Required to force Move Constructor
-                result(std::move(o.result)),
-                error(std::move(o.error)),
-                success(o.success)
-            {
-            }
-
-            Outcome& operator=(Outcome&& o)
-            {
-                if (this != &o)
-                {
-                    result = std::move(o.result);
-                    error = std::move(o.error);
-                    success = o.success;
-                }
-
-                return *this;
-            }
-
-            inline const R& GetResult() const
-            {
-                return result;
-            }
-
-            inline R& GetResult()
-            {
-                return result;
-            }
-
-            /**
-             * casts the underlying result to an r-value so that caller can take ownership of underlying resources.
-             * this is necessary when streams are involved.
-             */
-            inline R&& GetResultWithOwnership()
-            {
-                return std::move(result);
-            }
-
-            inline const E& GetError() const
-            {
-                return error;
-            }
-
+            Outcome& operator=(const Outcome& o) 
+            { 
+                if (this != &o) 
+                { 
+                    result = o.result; 
+                    error = o.error; 
+                    success = o.success; 
+                } 
+ 
+                return *this; 
+            } 
+ 
+            Outcome(Outcome&& o) : // Required to force Move Constructor 
+                result(std::move(o.result)), 
+                error(std::move(o.error)), 
+                success(o.success) 
+            { 
+            } 
+ 
+            Outcome& operator=(Outcome&& o) 
+            { 
+                if (this != &o) 
+                { 
+                    result = std::move(o.result); 
+                    error = std::move(o.error); 
+                    success = o.success; 
+                } 
+ 
+                return *this; 
+            } 
+ 
+            inline const R& GetResult() const 
+            { 
+                return result; 
+            } 
+ 
+            inline R& GetResult() 
+            { 
+                return result; 
+            } 
+ 
+            /** 
+             * casts the underlying result to an r-value so that caller can take ownership of underlying resources. 
+             * this is necessary when streams are involved. 
+             */ 
+            inline R&& GetResultWithOwnership() 
+            { 
+                return std::move(result); 
+            } 
+ 
+            inline const E& GetError() const 
+            { 
+                return error; 
+            } 
+ 
             template<typename T>
             inline T GetError()
             {
                 return error.template GetModeledError<T>();
             }
 
-            inline bool IsSuccess() const
-            {
-                return this->success;
-            }
-
-        private:
-            R result;
-            E error;
-            bool success;
-        };
-
-    } // namespace Utils
-} // namespace Aws
+            inline bool IsSuccess() const 
+            { 
+                return this->success; 
+            } 
+ 
+        private: 
+            R result; 
+            E error; 
+            bool success; 
+        }; 
+ 
+    } // namespace Utils 
+} // namespace Aws 

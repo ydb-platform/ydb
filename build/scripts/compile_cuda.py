@@ -60,8 +60,8 @@ def main():
         skip_list.append('-nostdinc++')
 
     for flag in skip_list:
-        if flag in cflags:
-            cflags.remove(flag)
+        if flag in cflags: 
+            cflags.remove(flag) 
 
     skip_prefix_list = [
         '-fsanitize=',

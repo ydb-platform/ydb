@@ -2,22 +2,22 @@
  * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
  * SPDX-License-Identifier: Apache-2.0.
  */
-
-#include <aws/core/client/AWSError.h>
-#include <aws/core/client/CoreErrors.h>
+ 
+#include <aws/core/client/AWSError.h> 
+#include <aws/core/client/CoreErrors.h> 
 #include <aws/core/utils/memory/stl/AWSMap.h>
-#include <aws/core/utils/HashingUtils.h>
-
-using namespace Aws::Client;
-using namespace Aws::Utils;
-using namespace Aws::Http;
-
+#include <aws/core/utils/HashingUtils.h> 
+ 
+using namespace Aws::Client; 
+using namespace Aws::Utils; 
+using namespace Aws::Http; 
+ 
 #ifdef _MSC_VER
 #pragma warning(push)
 // VS2015 compiler's bug, warning s_CoreErrorsMapper: symbol will be dynamically initialized (implementation limitation)
 #pragma warning(disable : 4592)
 #endif
-
+ 
 static Aws::UniquePtr<Aws::Map<Aws::String, AWSError<CoreErrors> > > s_CoreErrorsMapper(nullptr);
 
 #ifdef _MSC_VER
@@ -25,7 +25,7 @@ static Aws::UniquePtr<Aws::Map<Aws::String, AWSError<CoreErrors> > > s_CoreError
 #endif
 
 void CoreErrorsMapper::InitCoreErrorsMapper()
-{
+{ 
     if (s_CoreErrorsMapper)
     {
       return;
@@ -89,7 +89,7 @@ void CoreErrorsMapper::InitCoreErrorsMapper()
     s_CoreErrorsMapper->emplace("RequestTimeoutException", AWSError<CoreErrors>(CoreErrors::REQUEST_TIMEOUT, true));
     s_CoreErrorsMapper->emplace("RequestTimeout", AWSError<CoreErrors>(CoreErrors::REQUEST_TIMEOUT, true));
 }
-
+ 
 void CoreErrorsMapper::CleanupCoreErrorsMapper()
 {
     if (s_CoreErrorsMapper)
@@ -97,7 +97,7 @@ void CoreErrorsMapper::CleanupCoreErrorsMapper()
       s_CoreErrorsMapper = nullptr;
     }
 }
-
+ 
 AWSError<CoreErrors> CoreErrorsMapper::GetErrorForName(const char* errorName)
 {
     auto iter = s_CoreErrorsMapper->find(errorName);
@@ -106,46 +106,46 @@ AWSError<CoreErrors> CoreErrorsMapper::GetErrorForName(const char* errorName)
       return iter->second;
     }
     return AWSError<CoreErrors>(CoreErrors::UNKNOWN, false);
-}
-
-AWS_CORE_API AWSError<CoreErrors> CoreErrorsMapper::GetErrorForHttpResponseCode(HttpResponseCode code)
-{
-    // best effort attempt to map HTTP response codes to CoreErrors
-    bool retryable = IsRetryableHttpResponseCode(code);
+} 
+ 
+AWS_CORE_API AWSError<CoreErrors> CoreErrorsMapper::GetErrorForHttpResponseCode(HttpResponseCode code) 
+{ 
+    // best effort attempt to map HTTP response codes to CoreErrors 
+    bool retryable = IsRetryableHttpResponseCode(code); 
     AWSError<CoreErrors> error;
     switch (code)
-    {
-        case HttpResponseCode::UNAUTHORIZED:
-        case HttpResponseCode::FORBIDDEN:
+    { 
+        case HttpResponseCode::UNAUTHORIZED: 
+        case HttpResponseCode::FORBIDDEN: 
             error =  AWSError<CoreErrors>(CoreErrors::ACCESS_DENIED, retryable);
             break;
-        case HttpResponseCode::NOT_FOUND:
+        case HttpResponseCode::NOT_FOUND: 
             error = AWSError<CoreErrors>(CoreErrors::RESOURCE_NOT_FOUND, retryable);
             break;
-        case HttpResponseCode::TOO_MANY_REQUESTS:
+        case HttpResponseCode::TOO_MANY_REQUESTS: 
             error = AWSError<CoreErrors>(CoreErrors::SLOW_DOWN, retryable);
             break;
-        case HttpResponseCode::INTERNAL_SERVER_ERROR:
+        case HttpResponseCode::INTERNAL_SERVER_ERROR: 
             error = AWSError<CoreErrors>(CoreErrors::INTERNAL_FAILURE, retryable);
             break;
-        case HttpResponseCode::BANDWIDTH_LIMIT_EXCEEDED:
+        case HttpResponseCode::BANDWIDTH_LIMIT_EXCEEDED: 
             error = AWSError<CoreErrors>(CoreErrors::THROTTLING, retryable);
             break;
-        case HttpResponseCode::SERVICE_UNAVAILABLE:
+        case HttpResponseCode::SERVICE_UNAVAILABLE: 
             error = AWSError<CoreErrors>(CoreErrors::SERVICE_UNAVAILABLE, retryable);
             break;
-        case HttpResponseCode::REQUEST_TIMEOUT:
-        case HttpResponseCode::AUTHENTICATION_TIMEOUT:
-        case HttpResponseCode::LOGIN_TIMEOUT:
-        case HttpResponseCode::GATEWAY_TIMEOUT:
-        case HttpResponseCode::NETWORK_READ_TIMEOUT:
-        case HttpResponseCode::NETWORK_CONNECT_TIMEOUT:
+        case HttpResponseCode::REQUEST_TIMEOUT: 
+        case HttpResponseCode::AUTHENTICATION_TIMEOUT: 
+        case HttpResponseCode::LOGIN_TIMEOUT: 
+        case HttpResponseCode::GATEWAY_TIMEOUT: 
+        case HttpResponseCode::NETWORK_READ_TIMEOUT: 
+        case HttpResponseCode::NETWORK_CONNECT_TIMEOUT: 
             error = AWSError<CoreErrors>(CoreErrors::REQUEST_TIMEOUT, retryable);
             break;
-        default:
-            int codeValue = static_cast<int>(code);
+        default: 
+            int codeValue = static_cast<int>(code); 
             error = AWSError<CoreErrors>(CoreErrors::UNKNOWN, codeValue >= 500 && codeValue < 600);
-    }
+    } 
     error.SetResponseCode(code);
     return error;
-}
+} 

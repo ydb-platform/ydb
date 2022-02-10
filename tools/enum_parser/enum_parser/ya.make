@@ -10,7 +10,7 @@ ENDIF()
 IF (NOT PREBUILT)
     INCLUDE(${ARCADIA_ROOT}/tools/enum_parser/enum_parser/bin/ya.make)
 ENDIF()
-
+ 
 RECURSE(
     bin
 )

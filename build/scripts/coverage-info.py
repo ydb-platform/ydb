@@ -242,9 +242,9 @@ def main(source_root, output, gcno_archive, gcda_archive, gcov_tool, prefix_filt
     else:
         output_dir = output + '.dir'
 
-    if not os.path.exists(output_dir):
-        os.makedirs(output_dir)
-
+    if not os.path.exists(output_dir): 
+        os.makedirs(output_dir) 
+ 
     teamcity_stat_file = None
     if teamcity_stat_output:
         teamcity_stat_file = os.path.join(output_dir, 'teamcity.out')

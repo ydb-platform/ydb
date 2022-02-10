@@ -13,7 +13,7 @@ RECURSE(
     asmlib
     authparser
     avs-device-sdk
-    aws-sdk-cpp
+    aws-sdk-cpp 
     backtrace
     base64
     bdb
@@ -427,7 +427,7 @@ IF (OS_LINUX OR OS_WINDOWS)
         lockless
     )
 ENDIF()
-
+ 
 IF (OS_ANDROID)
     RECURSE(
         android_cpufeatures

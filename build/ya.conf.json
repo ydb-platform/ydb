@@ -2788,13 +2788,13 @@
                 }
             ]
         },
-        "python": {
-            "tools": {
+        "python": { 
+            "tools": { 
                 "python": {
                     "bottle": "python",
                     "executable": "python"
                 }
-            },
+            }, 
             "platforms": [
                 {
                     "host": {
@@ -2836,7 +2836,7 @@
                     "default": true
                 }
             ]
-        },
+        }, 
         "ipython": {
             "tools": {
                 "ipython": {
@@ -2963,14 +2963,14 @@
                 }
             ]
         },
-        "yndexer": {
-            "tools": {
+        "yndexer": { 
+            "tools": { 
                 "yndexer": {
                     "bottle": "yndexer",
                     "executable": "yndexer"
                 }
-            },
-            "platforms": [
+            }, 
+            "platforms": [ 
                 {
                     "host": {
                         "os": "LINUX"
@@ -2983,16 +2983,16 @@
                     },
                     "default": true
                 }
-            ]
-        },
-        "ytyndexer": {
-            "tools": {
+            ] 
+        }, 
+        "ytyndexer": { 
+            "tools": { 
                 "ytyndexer": {
                     "bottle": "ytyndexer",
                     "executable": "ytyndexer"
                 }
-            },
-            "platforms": [
+            }, 
+            "platforms": [ 
                 {
                     "host": {
                         "os": "LINUX"
@@ -3005,8 +3005,8 @@
                     },
                     "default": true
                 }
-            ]
-        },
+            ] 
+        }, 
         "ymakeyndexer": {
             "tools": {
                 "ymakeyndexer": {
@@ -3165,8 +3165,8 @@
                 }
             ]
         },
-        "jdk": {
-            "tools": {
+        "jdk": { 
+            "tools": { 
                 "javac": {
                     "bottle": "jdk",
                     "executable": "javac"
@@ -3179,7 +3179,7 @@
                     "bottle": "jdk",
                     "executable": "jar"
                 }
-            },
+            }, 
             "platforms": [
                 {
                     "host": {
@@ -3200,7 +3200,7 @@
                     "default": true
                 }
             ]
-        },
+        }, 
         "jdk10": {
             "tools": {
                 "javac10": {
@@ -5933,17 +5933,17 @@
                 ]
             }
         },
-        "python": {
-            "formula": {
+        "python": { 
+            "formula": { 
                 "sandbox_id": 981577320,
-                "match": "Python"
-            },
-            "executable": {
+                "match": "Python" 
+            }, 
+            "executable": { 
                 "python": [
                     "python"
                 ]
-            }
-        },
+            } 
+        }, 
         "bloat": {
             "formula": {
                 "sandbox_id": [
@@ -5957,17 +5957,17 @@
                 ]
             }
         },
-        "jdk": {
-            "formula": {
+        "jdk": { 
+            "formula": { 
                 "sandbox_id": [
                     854293674,
                     854378931,
                     854302209,
                     1054292521
                 ],
-                "match": "jdk"
-            },
-            "executable": {
+                "match": "jdk" 
+            }, 
+            "executable": { 
                 "javac": [
                     "bin",
                     "javac"
@@ -5980,8 +5980,8 @@
                     "bin",
                     "jar"
                 ]
-            }
-        },
+            } 
+        }, 
         "jdk10": {
             "formula": {
                 "sandbox_id": [
@@ -6532,28 +6532,28 @@
                 ]
             }
         },
-        "yndexer": {
-            "formula": {
+        "yndexer": { 
+            "formula": { 
                 "sandbox_id": 992600186,
-                "match": "YNDEXER"
-            },
-            "executable": {
+                "match": "YNDEXER" 
+            }, 
+            "executable": { 
                 "yndexer": [
                     "yndexer"
                 ]
-            }
-        },
-        "ytyndexer": {
-            "formula": {
+            } 
+        }, 
+        "ytyndexer": { 
+            "formula": { 
                 "sandbox_id": 1051903185,
-                "match": "YTYNDEXER"
-            },
-            "executable": {
+                "match": "YTYNDEXER" 
+            }, 
+            "executable": { 
                 "ytyndexer": [
                     "ytyndexer"
                 ]
-            }
-        },
+            } 
+        }, 
         "ymakeyndexer": {
             "formula": {
                 "sandbox_id": 239256113,
@@ -6770,7 +6770,7 @@
         },
         "ag": {
             "formula": {
-                "sandbox_id": 75851513,
+                "sandbox_id": 75851513, 
                 "match": "Ag"
             },
             "executable": {
@@ -7071,17 +7071,17 @@
                 ]
             }
         },
-        "kwmktorrent": {
-            "formula": {
+        "kwmktorrent": { 
+            "formula": { 
                 "sandbox_id": 451506451,
-                "match": "KWMKTorrent"
-            },
-            "executable": {
+                "match": "KWMKTorrent" 
+            }, 
+            "executable": { 
                 "kwmktorrent": [
                     "kwmktorrent"
                 ]
-            }
-        },
+            } 
+        }, 
         "kwmqbuild": {
             "formula": {
                 "sandbox_id": 41067877,
@@ -7095,8 +7095,8 @@
         },
         "gpt": {
             "formula": {
-                "sandbox_id": 21836503,
-                "match": "GooglePerformanceTools"
+                "sandbox_id": 21836503, 
+                "match": "GooglePerformanceTools" 
             }
         },
         "ant": {

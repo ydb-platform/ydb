@@ -31,14 +31,14 @@ class ResourceInfoError(Exception):
     pass
 
 
-class UnsupportedProtocolException(Exception):
-    pass
-
-
+class UnsupportedProtocolException(Exception): 
+    pass 
+ 
+ 
 def _sky_path():
     return "/usr/local/bin/sky"
-
-
+ 
+ 
 def _is_skynet_avaliable():
     if not os.path.exists(_sky_path()):
         return False
@@ -52,28 +52,28 @@ def _is_skynet_avaliable():
 
 
 def download_by_skynet(resource_info, file_name):
-    def sky_get(skynet_id, target_dir, timeout=None):
+    def sky_get(skynet_id, target_dir, timeout=None): 
         cmd_args = [_sky_path(), 'get', "-N", "Backbone", "--user", "--wait", "--dir", target_dir, skynet_id]
-        if timeout is not None:
-            cmd_args += ["--timeout", str(timeout)]
+        if timeout is not None: 
+            cmd_args += ["--timeout", str(timeout)] 
         logging.info('Call skynet with args: %s', cmd_args)
-        stdout = subprocess.check_output(cmd_args).strip()
-        logging.debug('Skynet call with args %s is finished, result is %s', cmd_args, stdout)
-        return stdout
-
+        stdout = subprocess.check_output(cmd_args).strip() 
+        logging.debug('Skynet call with args %s is finished, result is %s', cmd_args, stdout) 
+        return stdout 
+ 
     if not _is_skynet_avaliable():
-        raise UnsupportedProtocolException("Skynet is not available")
-
-    skynet_id = resource_info.get("skynet_id")
-    if not skynet_id:
-        raise ValueError("Resource does not have skynet_id")
-
+        raise UnsupportedProtocolException("Skynet is not available") 
+ 
+    skynet_id = resource_info.get("skynet_id") 
+    if not skynet_id: 
+        raise ValueError("Resource does not have skynet_id") 
+ 
     temp_dir = os.path.abspath(fetch_from.uniq_string_generator())
-    os.mkdir(temp_dir)
-    sky_get(skynet_id, temp_dir)
-    return os.path.join(temp_dir, file_name)
-
-
+    os.mkdir(temp_dir) 
+    sky_get(skynet_id, temp_dir) 
+    return os.path.join(temp_dir, file_name) 
+ 
+ 
 def _urlopen(url, data=None, headers=None):
     n = 10
     tout = 30
@@ -154,11 +154,11 @@ def fetch(resource_id, custom_fetcher):
     mds_id = resource_info.get('attributes', {}).get('mds')
     mds_link = MDS_PREFIX + mds_id if mds_id else None
 
-    def get_storage_links():
-        storage_links = get_resource_http_links(resource_id)
-        random.shuffle(storage_links)
-        return storage_links
-
+    def get_storage_links(): 
+        storage_links = get_resource_http_links(resource_id) 
+        random.shuffle(storage_links) 
+        return storage_links 
+ 
     skynet = _is_skynet_avaliable()
 
     if not skynet:
@@ -173,7 +173,7 @@ def fetch(resource_id, custom_fetcher):
 
         # Don't try too hard here: we will get back to proxy later on
         yield lambda: fetch_from.fetch_url(proxy_link, False, resource_file_name, expected_md5, tries=2)
-        for x in get_storage_links():
+        for x in get_storage_links(): 
             # Don't spend too much time connecting single host
             yield lambda: fetch_from.fetch_url(x, False, resource_file_name, expected_md5, tries=1)
             if mds_link is not None:

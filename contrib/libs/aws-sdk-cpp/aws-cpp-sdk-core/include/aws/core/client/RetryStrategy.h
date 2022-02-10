@@ -2,15 +2,15 @@
  * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
  * SPDX-License-Identifier: Apache-2.0.
  */
-
-#pragma once
-
-#include <aws/core/Core_EXPORTS.h>
+ 
+#pragma once 
+ 
+#include <aws/core/Core_EXPORTS.h> 
 #include <aws/core/utils/threading/ReaderWriterLock.h>
 #include <memory>
-
-namespace Aws
-{
+ 
+namespace Aws 
+{ 
     namespace Http
     {
         class HttpResponse;
@@ -22,31 +22,31 @@ namespace Aws
         class Outcome;
     }
 
-    namespace Client
-    {
-        enum class CoreErrors;
-        template<typename ERROR_TYPE>
-        class AWSError;
-
+    namespace Client 
+    { 
+        enum class CoreErrors; 
+        template<typename ERROR_TYPE> 
+        class AWSError; 
+ 
         typedef Utils::Outcome<std::shared_ptr<Aws::Http::HttpResponse>, AWSError<CoreErrors>> HttpResponseOutcome;
 
-        /**
-         * Interface for defining a Retry Strategy. Override this class to provide your own custom retry behavior.
-         */
-        class AWS_CORE_API RetryStrategy
-        {
-        public:
+        /** 
+         * Interface for defining a Retry Strategy. Override this class to provide your own custom retry behavior. 
+         */ 
+        class AWS_CORE_API RetryStrategy 
+        { 
+        public: 
             virtual ~RetryStrategy() = default;
-            /**
-             * Returns true if the error can be retried given the error and the number of times already tried.
-             */
-            virtual bool ShouldRetry(const AWSError<CoreErrors>& error, long attemptedRetries) const = 0;
-
-            /**
+            /** 
+             * Returns true if the error can be retried given the error and the number of times already tried. 
+             */ 
+            virtual bool ShouldRetry(const AWSError<CoreErrors>& error, long attemptedRetries) const = 0; 
+ 
+            /** 
              * Calculates the time in milliseconds the client should sleep before attempting another request based on the error and attemptedRetries count.
-             */
-            virtual long CalculateDelayBeforeNextRetry(const AWSError<CoreErrors>& error, long attemptedRetries) const = 0;
-
+             */ 
+            virtual long CalculateDelayBeforeNextRetry(const AWSError<CoreErrors>& error, long attemptedRetries) const = 0; 
+ 
             /**
              * Gets max number of attempts allowed for an operation.
              * Returns non positive value if not defined.
@@ -63,8 +63,8 @@ namespace Aws
              */
             virtual void RequestBookkeeping(const HttpResponseOutcome& /* httpResponseOutcome */) {}
             virtual void RequestBookkeeping(const HttpResponseOutcome& /* httpResponseOutcome */, const AWSError<CoreErrors>& /* lastError */) {}
-        };
-
+        }; 
+ 
         /**
          * The container for retry quotas.
          * A failed request will acquire retry quotas to retry.
@@ -117,5 +117,5 @@ namespace Aws
             std::shared_ptr<RetryQuotaContainer> m_retryQuotaContainer;
             long m_maxAttempts;
         };
-    } // namespace Client
-} // namespace Aws
+    } // namespace Client 
+} // namespace Aws 

@@ -63,13 +63,13 @@ void TFsTest::TestCreateRemove() {
     Touch(file3);
     //UNIT_ASSERT(NFs::SymLink(file3.RealPath(), link));
 
-    UNIT_ASSERT(NFs::MakeDirectoryRecursive(dir1 / "subdir1" / "subdir2" / "subdir3" / "subdir4", NFs::FP_COMMON_FILE, false));
-    UNIT_ASSERT(NFs::MakeDirectoryRecursive(dir1 / "subdir1" / "subdir2", NFs::FP_COMMON_FILE, false));
-
-    // the target path is a file or "subdirectory" of a file
-    UNIT_ASSERT(!NFs::MakeDirectoryRecursive(file1 / "subdir1" / "subdir2", NFs::FP_COMMON_FILE, false));
-    UNIT_ASSERT(!NFs::MakeDirectoryRecursive(file1, NFs::FP_COMMON_FILE, false));
-
+    UNIT_ASSERT(NFs::MakeDirectoryRecursive(dir1 / "subdir1" / "subdir2" / "subdir3" / "subdir4", NFs::FP_COMMON_FILE, false)); 
+    UNIT_ASSERT(NFs::MakeDirectoryRecursive(dir1 / "subdir1" / "subdir2", NFs::FP_COMMON_FILE, false)); 
+ 
+    // the target path is a file or "subdirectory" of a file 
+    UNIT_ASSERT(!NFs::MakeDirectoryRecursive(file1 / "subdir1" / "subdir2", NFs::FP_COMMON_FILE, false)); 
+    UNIT_ASSERT(!NFs::MakeDirectoryRecursive(file1, NFs::FP_COMMON_FILE, false)); 
+ 
     TString longUtf8Name = "";
     while (longUtf8Name.size() < 255) {
         longUtf8Name = longUtf8Name + "fф";

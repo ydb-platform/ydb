@@ -111,8 +111,8 @@ TFileHandle::TFileHandle(const TString& fName, EOpenMode oMode) noexcept {
         faMode &= ~FILE_WRITE_DATA;
     }
 
-    bool inheritHandle = !(oMode & CloseOnExec);
-
+    bool inheritHandle = !(oMode & CloseOnExec); 
+ 
     ui32 shMode = FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE;
 
     ui32 attrMode = FILE_ATTRIBUTE_NORMAL;
@@ -175,10 +175,10 @@ TFileHandle::TFileHandle(const TString& fName, EOpenMode oMode) noexcept {
         fcMode |= O_APPEND;
     }
 
-    if (oMode & CloseOnExec) {
-        fcMode |= O_CLOEXEC;
-    }
-
+    if (oMode & CloseOnExec) { 
+        fcMode |= O_CLOEXEC; 
+    } 
+ 
     /* I don't now about this for unix...
     if (oMode & Temp) {
     }

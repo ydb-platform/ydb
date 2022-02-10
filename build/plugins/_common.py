@@ -1,4 +1,4 @@
-import sys
+import sys 
 import hashlib
 import base64
 
@@ -165,26 +165,26 @@ def skip_build_root(x):
     return x
 
 
-def get_interpreter_path():
-    interpreter_path = [sys.executable]
-    if 'ymake' in interpreter_path[0]:
-        interpreter_path.append('--python')
-    return interpreter_path
-
-
-def filter_out_by_keyword(test_data, keyword):
-    def _iterate():
-        i = 0
-        while i < len(test_data):
-            if test_data[i] == keyword:
-                i += 2
-            else:
-                yield test_data[i]
-                i += 1
-
-    return list(_iterate())
-
-
+def get_interpreter_path(): 
+    interpreter_path = [sys.executable] 
+    if 'ymake' in interpreter_path[0]: 
+        interpreter_path.append('--python') 
+    return interpreter_path 
+ 
+ 
+def filter_out_by_keyword(test_data, keyword): 
+    def _iterate(): 
+        i = 0 
+        while i < len(test_data): 
+            if test_data[i] == keyword: 
+                i += 2 
+            else: 
+                yield test_data[i] 
+                i += 1 
+ 
+    return list(_iterate()) 
+ 
+ 
 def generate_chunks(lst, chunk_size):
     for i in xrange(0, len(lst), chunk_size):
         yield lst[i:(i + chunk_size)]

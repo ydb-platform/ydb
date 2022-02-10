@@ -71,16 +71,16 @@ bool NFs::MakeDirectoryRecursive(const TString& path, EFilePermissions mode, boo
         return true;
     } else {
         //NOTE: recursion is finite due to existence of "." and "/"
-        if (!NFs::MakeDirectoryRecursive(TFsPath(path).Parent(), mode, false)) {
-            return false;
-        }
-
-        bool isDirMade = NFs::MakeDirectory(path, mode);
-        if (!isDirMade && alwaysCreate) {
+        if (!NFs::MakeDirectoryRecursive(TFsPath(path).Parent(), mode, false)) { 
+            return false; 
+        } 
+ 
+        bool isDirMade = NFs::MakeDirectory(path, mode); 
+        if (!isDirMade && alwaysCreate) { 
             ythrow TIoException() << "failed to create " << path << " with cwd (" << NFs::CurrentWorkingDirectory() << ")";
         }
-
-        return TFileStat(path).IsDir();
+ 
+        return TFileStat(path).IsDir(); 
     }
 }
 

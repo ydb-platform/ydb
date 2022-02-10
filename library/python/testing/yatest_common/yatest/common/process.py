@@ -24,22 +24,22 @@ from . import path
 from . import environment
 
 
-MAX_OUT_LEN = 1000 * 1000  # 1 mb
+MAX_OUT_LEN = 1000 * 1000  # 1 mb 
 MAX_MESSAGE_LEN = 1500
 SANITIZER_ERROR_PATTERN = br": ([A-Z][\w]+Sanitizer)"
 GLIBC_PATTERN = re.compile(r"\S+@GLIBC_([0-9.]+)")
 yatest_logger = logging.getLogger("ya.test")
 
 
-def truncate(s, size):
-    if s is None:
-        return None
-    elif len(s) <= size:
-        return s
-    else:
+def truncate(s, size): 
+    if s is None: 
+        return None 
+    elif len(s) <= size: 
+        return s 
+    else: 
         return (b'...' if isinstance(s, bytes) else '...') + s[-(size - 3):]
-
-
+ 
+ 
 def get_command_name(command):
     return os.path.basename(command.split()[0] if isinstance(command, six.string_types) else command[0])
 
@@ -623,7 +623,7 @@ def wait_for(check_function, timeout, fail_message="", sleep_time=1.0, on_check_
     message = "{} second(s) wait timeout has expired".format(timeout)
     if fail_message:
         message += ": {}".format(fail_message)
-    raise TimeoutError(truncate(message, MAX_MESSAGE_LEN))
+    raise TimeoutError(truncate(message, MAX_MESSAGE_LEN)) 
 
 
 def _kill_process_tree(process_pid, target_pid_signal=None):

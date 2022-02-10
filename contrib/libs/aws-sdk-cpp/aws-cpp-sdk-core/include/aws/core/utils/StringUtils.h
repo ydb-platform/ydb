@@ -2,71 +2,71 @@
  * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
  * SPDX-License-Identifier: Apache-2.0.
  */
-
-#pragma once
-
-#include <aws/core/Core_EXPORTS.h>
-
-#include <aws/core/utils/memory/stl/AWSString.h>
-#include <aws/core/utils/memory/stl/AWSVector.h>
-#include <aws/core/utils/memory/stl/AWSStringStream.h>
-
-
-
-namespace Aws
-{
-    namespace Utils
-    {
-        /**
-        * All the things the c++ stdlib is missing for string operations that I needed.
-        */
-        class AWS_CORE_API StringUtils
-        {
-        public:
-            static void Replace(Aws::String& s, const char* search, const char* replace);
-
-
-            /**
-            * Converts a string to lower case.
-            */
-            static Aws::String ToLower(const char* source);
-
-
-            /**
-            * Converts a string to upper case.
-            */
-            static Aws::String ToUpper(const char* source);
-
-
-            /**
-            * Does a caseless comparison of two strings.
-            */
-            static bool CaselessCompare(const char* value1, const char* value2);
-
-
-            /**
-            * URL encodes a string (uses %20 not + for spaces).
-            */
-            static Aws::String URLEncode(const char* unsafe);
-
-            /**
-            * Http Clients tend to escape some characters but not all. Escaping all of them causes problems, because the client
-            * will also try to escape them.
-            * So this only escapes non-ascii characters and the + character
-            */
-            static Aws::String UTF8Escape(const char* unicodeString, const char* delimiter);
-
-            /**
-            * URL encodes a double (if it ends up going to scientific notation) otherwise it just returns it as a string.
-            */
-            static Aws::String URLEncode(double unsafe);
-
-
-            /**
-            * Decodes a URL encoded string (will handle both encoding schemes for spaces).
-            */
-            static Aws::String URLDecode(const char* safe);
-
+ 
+#pragma once 
+ 
+#include <aws/core/Core_EXPORTS.h> 
+ 
+#include <aws/core/utils/memory/stl/AWSString.h> 
+#include <aws/core/utils/memory/stl/AWSVector.h> 
+#include <aws/core/utils/memory/stl/AWSStringStream.h> 
+ 
+ 
+ 
+namespace Aws 
+{ 
+    namespace Utils 
+    { 
+        /** 
+        * All the things the c++ stdlib is missing for string operations that I needed. 
+        */ 
+        class AWS_CORE_API StringUtils 
+        { 
+        public: 
+            static void Replace(Aws::String& s, const char* search, const char* replace); 
+ 
+ 
+            /** 
+            * Converts a string to lower case. 
+            */ 
+            static Aws::String ToLower(const char* source); 
+ 
+ 
+            /** 
+            * Converts a string to upper case. 
+            */ 
+            static Aws::String ToUpper(const char* source); 
+ 
+ 
+            /** 
+            * Does a caseless comparison of two strings. 
+            */ 
+            static bool CaselessCompare(const char* value1, const char* value2); 
+ 
+ 
+            /** 
+            * URL encodes a string (uses %20 not + for spaces). 
+            */ 
+            static Aws::String URLEncode(const char* unsafe); 
+ 
+            /** 
+            * Http Clients tend to escape some characters but not all. Escaping all of them causes problems, because the client 
+            * will also try to escape them. 
+            * So this only escapes non-ascii characters and the + character 
+            */ 
+            static Aws::String UTF8Escape(const char* unicodeString, const char* delimiter); 
+ 
+            /** 
+            * URL encodes a double (if it ends up going to scientific notation) otherwise it just returns it as a string. 
+            */ 
+            static Aws::String URLEncode(double unsafe); 
+ 
+ 
+            /** 
+            * Decodes a URL encoded string (will handle both encoding schemes for spaces). 
+            */ 
+            static Aws::String URLDecode(const char* safe); 
+ 
             enum class SplitOptions
             {
                 /**
@@ -79,14 +79,14 @@ namespace Aws
                 INCLUDE_EMPTY_ENTRIES
             };
 
-            /**
-             * @brief Splits a string on a delimiter (empty items are excluded).
-             * @param toSplit, the original string to split
-             * @param splitOn, the delemiter you want to use.
-             */
-            static Aws::Vector<Aws::String> Split(const Aws::String& toSplit, char splitOn);
-
-            /**
+            /** 
+             * @brief Splits a string on a delimiter (empty items are excluded). 
+             * @param toSplit, the original string to split 
+             * @param splitOn, the delemiter you want to use. 
+             */ 
+            static Aws::Vector<Aws::String> Split(const Aws::String& toSplit, char splitOn); 
+ 
+            /** 
              * @brief Splits a string on a delimiter.
              * @param toSplit, the original string to split
              * @param splitOn, the delemiter you want to use.
@@ -95,13 +95,13 @@ namespace Aws
             static Aws::Vector<Aws::String> Split(const Aws::String& toSplit, char splitOn, SplitOptions option);
 
             /**
-             * @brief Splits a string on a delimiter (empty items are excluded).
-             * @param toSplit, the original string to split
-             * @param splitOn, the delemiter you want to use.
-             * @param numOfTargetParts, how many target parts you want to get, if it is 0, as many as possible.
-             */
-            static Aws::Vector<Aws::String> Split(const Aws::String& toSplit, char splitOn, size_t numOfTargetParts);
-
+             * @brief Splits a string on a delimiter (empty items are excluded). 
+             * @param toSplit, the original string to split 
+             * @param splitOn, the delemiter you want to use. 
+             * @param numOfTargetParts, how many target parts you want to get, if it is 0, as many as possible. 
+             */ 
+            static Aws::Vector<Aws::String> Split(const Aws::String& toSplit, char splitOn, size_t numOfTargetParts); 
+ 
             /**
              * @brief Splits a string on a delimiter.
              * @param toSplit, the original string to split
@@ -110,77 +110,77 @@ namespace Aws
              * @param option, if INCLUDE_EMPTY_ENTRIES, includes empty entries in the result, otherwise removes empty entries.
              */
             static Aws::Vector<Aws::String> Split(const Aws::String& toSplit, char splitOn, size_t numOfTargetParts, SplitOptions option);
-
+ 
+            /** 
+            * Splits a string on new line characters. 
+            */ 
+            static Aws::Vector<Aws::String> SplitOnLine(const Aws::String& toSplit); 
+ 
+ 
+            /** static Aws::Vector<Aws::String> SplitOnRegex(Aws::String regex); 
+             *  trim from start 
+             */ 
+            static Aws::String LTrim(const char* source); 
+ 
+ 
+            /** 
+             * trim from end 
+             */ 
+            static Aws::String RTrim(const char* source); 
+ 
+            /** 
+             * trim from both ends 
+             */ 
+            static Aws::String Trim(const char* source); 
+ 
+ 
+            /** 
+             * convert to int 64 
+             */ 
+            static long long ConvertToInt64(const char* source); 
+ 
+ 
+            /** 
+             * convert to int 32 
+             */ 
+            static long ConvertToInt32(const char* source); 
+ 
+ 
             /**
-            * Splits a string on new line characters.
-            */
-            static Aws::Vector<Aws::String> SplitOnLine(const Aws::String& toSplit);
-
-
-            /** static Aws::Vector<Aws::String> SplitOnRegex(Aws::String regex);
-             *  trim from start
+             * convert to bool 
+             */ 
+            static bool ConvertToBool(const char* source); 
+ 
+ 
+            /** 
+             * convert to double 
+             */ 
+            static double ConvertToDouble(const char* source); 
+ 
+ 
+#ifdef _WIN32 
+            /** 
+            * Converts a string to wstring. 
+            */ 
+            static Aws::WString ToWString(const char* source); 
+ 
+            /** 
+            * Converts a wstring to string. 
+            */ 
+            static Aws::String FromWString(const wchar_t* source); 
+#endif 
+ 
+            /** 
+             * not all platforms (Android) have std::to_string 
              */
-            static Aws::String LTrim(const char* source);
-
-
-            /**
-             * trim from end
-             */
-            static Aws::String RTrim(const char* source);
-
-            /**
-             * trim from both ends
-             */
-            static Aws::String Trim(const char* source);
-
-
-            /**
-             * convert to int 64
-             */
-            static long long ConvertToInt64(const char* source);
-
-
-            /**
-             * convert to int 32
-             */
-            static long ConvertToInt32(const char* source);
-
-
-            /**
-             * convert to bool
-             */
-            static bool ConvertToBool(const char* source);
-
-
-            /**
-             * convert to double
-             */
-            static double ConvertToDouble(const char* source);
-
-
-#ifdef _WIN32
-            /**
-            * Converts a string to wstring.
-            */
-            static Aws::WString ToWString(const char* source);
-
-            /**
-            * Converts a wstring to string.
-            */
-            static Aws::String FromWString(const wchar_t* source);
-#endif
-
-            /**
-             * not all platforms (Android) have std::to_string
-             */
-            template< typename T >
-            static Aws::String to_string(T value)
-            {
-                Aws::OStringStream os;
-                os << value;
-                return os.str();
-            }
-
+            template< typename T > 
+            static Aws::String to_string(T value) 
+            { 
+                Aws::OStringStream os; 
+                os << value; 
+                return os.str(); 
+            } 
+ 
             /**
              * locale agnostic implementation of std::isalnum
              */
@@ -212,8 +212,8 @@ namespace Aws
                 std::reverse(s.begin(), s.end());
                 return s;
             }
-        };
-
-
-    } // namespace Utils
+        }; 
+ 
+ 
+    } // namespace Utils 
 } // namespace Aws

@@ -4533,15 +4533,15 @@
                     "default": true
                 }
             ]
-        },
-        "graphs_difference": {
-            "tools": {
+        }, 
+        "graphs_difference": { 
+            "tools": { 
                 "graphs_difference": {
                     "bottle": "graphs_difference",
                     "executable": "graphs_difference"
                 }
-            },
-            "platforms": [
+            }, 
+            "platforms": [ 
                 {
                     "host": {
                         "os": "LINUX"
@@ -4560,16 +4560,16 @@
                     },
                     "default": true
                 }
-            ]
+            ] 
         },
-        "contexts_difference": {
-            "tools": {
+        "contexts_difference": { 
+            "tools": { 
                 "contexts_difference": {
                     "bottle": "contexts_difference",
                     "executable": "contexts_difference"
                 }
-            },
-            "platforms": [
+            }, 
+            "platforms": [ 
                 {
                     "host": {
                         "os": "LINUX"
@@ -4588,8 +4588,8 @@
                     },
                     "default": true
                 }
-            ]
-        },
+            ] 
+        }, 
         "ycmerge": {
             "tools": {
                 "ycmerge": {
@@ -7259,29 +7259,29 @@
                     "run_python_udf"
                 ]
             }
-        },
-        "graphs_difference": {
-            "formula": {
-                "sandbox_id": 374662639,
-                "match": "graphs_difference"
-            },
-            "executable": {
+        }, 
+        "graphs_difference": { 
+            "formula": { 
+                "sandbox_id": 374662639, 
+                "match": "graphs_difference" 
+            }, 
+            "executable": { 
                 "graphs_difference": [
                     "graphs_difference"
                 ]
-            }
+            } 
         },
-        "contexts_difference": {
-            "formula": {
+        "contexts_difference": { 
+            "formula": { 
                 "sandbox_id": 1128937263,
-                "match": "contexts_difference"
-            },
-            "executable": {
+                "match": "contexts_difference" 
+            }, 
+            "executable": { 
                 "contexts_difference": [
                     "contexts_difference"
                 ]
-            }
-        },
+            } 
+        }, 
         "ycmerge": {
             "formula": {
                 "sandbox_id": 1164600398,

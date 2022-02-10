@@ -215,9 +215,9 @@ RECURSE(
     django
     django-admin-inline-paginator
     django-admin-rangefilter
-    django-admin-view-permission
+    django-admin-view-permission 
     django-advanced-filters
-    django-ajax-selects
+    django-ajax-selects 
     django-alive
     django-autoconfig
     django-appconf
@@ -239,7 +239,7 @@ RECURSE(
     django-cte
     django-datetime-widget
     django-db-geventpool
-    django-dbtemplates
+    django-dbtemplates 
     django-debug-panel
     django-debug-toolbar
     django-dirtyfields
@@ -252,17 +252,17 @@ RECURSE(
     django-fernet-fields
     django-filebrowser-no-grappelli
     django-filter
-    django-fsm
+    django-fsm 
     django-grappelli
     django-guardian
     django-hosts
-    django-http-proxy
+    django-http-proxy 
     django-import-export
     django-introspection
     django-jinja
     django-js-asset
     django-json-widget
-    django-markwhat
+    django-markwhat 
     django-model-choices
     django-model-utils
     django-modeladmin-reorder
@@ -279,10 +279,10 @@ RECURSE(
     django-pdb
     django-phonenumbers
     django-picklefield
-    django-post-office
+    django-post-office 
     django-postgrespool2
     django-proxy-storage
-    django-query-exchange
+    django-query-exchange 
     django-redis
     django-redis-cache
     django-replicated
@@ -297,7 +297,7 @@ RECURSE(
     django-sitetree
     django-sortedm2m
     django-storages
-    django-tastypie
+    django-tastypie 
     django-test-migrations
     django-timezone-field
     django-treebeard
@@ -413,7 +413,7 @@ RECURSE(
     flask-swagger
     flask-swagger-ui
     Flask-Table
-    Flask-UUID
+    Flask-UUID 
     Flask-WTF
     flatbuffers
     flex
@@ -502,7 +502,7 @@ RECURSE(
     hyperopt
     hypothesis
     ibm-db
-    icalendar
+    icalendar 
     idna
     idna-ssl
     ijson
@@ -590,7 +590,7 @@ RECURSE(
     lmdb
     localshop
     lockfile
-    logging-tree
+    logging-tree 
     loguru
     logutils
     luigi
@@ -756,7 +756,7 @@ RECURSE(
     portpicker
     ppdeep
     pq
-    pql
+    pql 
     prance
     premailer
     preshed
@@ -884,7 +884,7 @@ RECURSE(
     pytest-timeout
     pytest-tornado
     pytest-twisted
-    pytest-vcr
+    pytest-vcr 
     pytest-xdist
     pytest-xprocess
     python-crfsuite
@@ -904,7 +904,7 @@ RECURSE(
     python-json-logger
     python-ldap
     python-libarchive
-    python-magic
+    python-magic 
     python-memcached
     python-mimeparse
     python-multipart

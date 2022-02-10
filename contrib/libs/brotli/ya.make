@@ -1,10 +1,10 @@
 VERSION(1.0.1)
 
 RECURSE(
-    common
+    common 
     dec
     enc
     tools
-    python
+    python 
     java
 )

@@ -3628,14 +3628,14 @@
                 }
             ]
         },
-        "dctl": {
-            "tools": {
+        "dctl": { 
+            "tools": { 
                 "dctl": {
                     "bottle": "dctl",
                     "executable": "dctl"
                 }
-            },
-            "platforms": [
+            }, 
+            "platforms": [ 
                 {
                     "host": {
                         "os": "LINUX"
@@ -3648,8 +3648,8 @@
                     },
                     "default": true
                 }
-            ]
-        },
+            ] 
+        }, 
         "jq": {
             "tools": {
                 "jq": {
@@ -6863,19 +6863,19 @@
                 ]
             }
         },
-        "dctl": {
-            "formula": {
+        "dctl": { 
+            "formula": { 
                 "sandbox_id": [
                     1198127186
                 ],
-                "match": "dctl"
-            },
-            "executable": {
+                "match": "dctl" 
+            }, 
+            "executable": { 
                 "dctl": [
                     "dctl"
                 ]
-            }
-        },
+            } 
+        }, 
         "vim": {
             "formula": {
                 "sandbox_id": 82345405,

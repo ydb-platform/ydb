@@ -53,10 +53,10 @@ public:
     }
 
     inline TVector(size_type count, const T& val, const typename TBase::allocator_type& a)
-        : TBase(count, val, a)
-    {
-    }
-
+        : TBase(count, val, a) 
+    { 
+    } 
+ 
     inline TVector(std::initializer_list<T> il)
         : TBase(il)
     {

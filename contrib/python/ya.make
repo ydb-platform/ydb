@@ -560,7 +560,7 @@ RECURSE(
     jsonref
     jsonschema
     jsonstreams
-    juggler_sdk
+    juggler_sdk 
     juggler_sdk/cli
     junitparser
     jupyter_client
@@ -1073,7 +1073,7 @@ RECURSE(
     toml
     tomli
     toolz
-    toposort
+    toposort 
     toredis
     tornado
     tornado-opentracing

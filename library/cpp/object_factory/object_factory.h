@@ -57,7 +57,7 @@ namespace NObjectFactory {
         void Register(const TKey& key, IFactoryObjectCreator<TProduct, TArgs...>* creator) {
             if (!creator)
                 ythrow yexception() << "Please specify non-null creator for " << key;
- 
+
             TWriteGuard guard(CreatorsLock);
             if (!Creators.insert(typename ICreators::value_type(key, creator)).second)
                 ythrow yexception() << "Product with key " << key << " already registered";
@@ -187,7 +187,7 @@ namespace NObjectFactory {
             IFactoryObjectCreator<TProduct, TArgs...>* creator = IObjectFactory<TProduct, TKey, TArgs...>::GetCreator(key);
             return creator == nullptr ? nullptr : creator->Create(std::forward<TArgs>(args)...);
         }
- 
+
         static bool Has(const TKey& key) {
             return Singleton<TParametrizedObjectFactory<TProduct, TKey, TArgs...>>()->HasImpl(key);
         }

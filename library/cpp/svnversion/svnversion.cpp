@@ -7,10 +7,10 @@
 
 #include <util/generic/strbuf.h>
 
-extern "C" void PrintProgramSvnVersion() {
-    puts(GetProgramSvnVersion());
-}
-
+extern "C" void PrintProgramSvnVersion() { 
+    puts(GetProgramSvnVersion()); 
+} 
+ 
 extern "C" void PrintSvnVersionAndExit0() {
     PrintProgramSvnVersion();
     exit(0);

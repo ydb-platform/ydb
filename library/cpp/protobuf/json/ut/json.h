@@ -55,9 +55,9 @@ namespace NProtobufJsonTest {
 
 #define UNIT_ASSERT_JSONS_EQUAL(lhs, rhs)                                        \
     if (lhs != rhs) {                                                            \
-        UNIT_ASSERT_STRINGS_EQUAL(lhs.GetStringRobust(), rhs.GetStringRobust()); \
-    }
-
+        UNIT_ASSERT_STRINGS_EQUAL(lhs.GetStringRobust(), rhs.GetStringRobust()); \ 
+    } 
+ 
 #define UNIT_ASSERT_JSON_STRINGS_EQUAL(lhs, rhs)           \
     if (lhs != rhs) {                                      \
         NJson::TJsonValue _lhs_json, _rhs_json;            \

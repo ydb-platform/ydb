@@ -34,35 +34,35 @@ namespace NPrivate {
 }
 
 template <class T>
-static inline void Sort(T f, T l) {
+static inline void Sort(T f, T l) { 
     std::sort(f, l);
 }
 
 template <class T, class C>
-static inline void Sort(T f, T l, C c) {
+static inline void Sort(T f, T l, C c) { 
     std::sort(f, l, c);
 }
 
-template <class TContainer>
-static inline void Sort(TContainer& container) {
-    Sort(container.begin(), container.end());
-}
-
-template <class TContainer, typename TCompare>
-static inline void Sort(TContainer& container, TCompare compare) {
-    Sort(container.begin(), container.end(), compare);
-}
-
-template <class TIterator, typename TGetKey>
-static inline void SortBy(TIterator begin, TIterator end, const TGetKey& getKey) {
+template <class TContainer> 
+static inline void Sort(TContainer& container) { 
+    Sort(container.begin(), container.end()); 
+} 
+ 
+template <class TContainer, typename TCompare> 
+static inline void Sort(TContainer& container, TCompare compare) { 
+    Sort(container.begin(), container.end(), compare); 
+} 
+ 
+template <class TIterator, typename TGetKey> 
+static inline void SortBy(TIterator begin, TIterator end, const TGetKey& getKey) { 
     Sort(begin, end, [&](auto&& left, auto&& right) { return getKey(left) < getKey(right); });
-}
-
-template <class TContainer, typename TGetKey>
-static inline void SortBy(TContainer& container, const TGetKey& getKey) {
-    SortBy(container.begin(), container.end(), getKey);
-}
-
+} 
+ 
+template <class TContainer, typename TGetKey> 
+static inline void SortBy(TContainer& container, const TGetKey& getKey) { 
+    SortBy(container.begin(), container.end(), getKey); 
+} 
+ 
 template <class T>
 static inline void StableSort(T f, T l) {
     std::stable_sort(f, l);

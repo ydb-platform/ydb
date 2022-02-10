@@ -1,7 +1,7 @@
-#include "stack_vec.h"
-
+#include "stack_vec.h" 
+ 
 #include <library/cpp/testing/unittest/registar.h>
-
+ 
 namespace {
     struct TNotCopyAssignable {
         const int Value;
@@ -45,19 +45,19 @@ namespace {
 
 Y_UNIT_TEST_SUITE(TStackBasedVectorTest) {
     Y_UNIT_TEST(TestCreateEmpty) {
-        TStackVec<int> ints;
-        UNIT_ASSERT_EQUAL(ints.size(), 0);
-    }
-
+        TStackVec<int> ints; 
+        UNIT_ASSERT_EQUAL(ints.size(), 0); 
+    } 
+ 
     Y_UNIT_TEST(TestCreateNonEmpty) {
-        TStackVec<int> ints(5);
-        UNIT_ASSERT_EQUAL(ints.size(), 5);
-
-        for (size_t i = 0; i < ints.size(); ++i) {
-            UNIT_ASSERT_EQUAL(ints[i], 0);
-        }
-    }
-
+        TStackVec<int> ints(5); 
+        UNIT_ASSERT_EQUAL(ints.size(), 5); 
+ 
+        for (size_t i = 0; i < ints.size(); ++i) { 
+            UNIT_ASSERT_EQUAL(ints[i], 0); 
+        } 
+    } 
+ 
     Y_UNIT_TEST(TestReallyOnStack) {
         const TStackVec<int> vec(5);
 
@@ -65,39 +65,39 @@ Y_UNIT_TEST_SUITE(TStackBasedVectorTest) {
             (const char*)&vec <= (const char*)&vec[0] &&
             (const char*)&vec[0] <= (const char*)&vec + sizeof(vec)
         );
-    }
-
+    } 
+ 
     Y_UNIT_TEST(TestFallback) {
-        TSmallVec<int> ints;
-        for (int i = 0; i < 14; ++i) {
-            ints.push_back(i);
-        }
-
-        for (size_t i = 0; i < ints.size(); ++i) {
-            UNIT_ASSERT_EQUAL(ints[i], (int)i);
-        }
-
-        for (int i = 14; i < 20; ++i) {
-            ints.push_back(i);
-        }
-
-        for (size_t i = 0; i < ints.size(); ++i) {
-            UNIT_ASSERT_EQUAL(ints[i], (int)i);
-        }
-
-        TSmallVec<int> ints2 = ints;
-
-        for (size_t i = 0; i < ints2.size(); ++i) {
-            UNIT_ASSERT_EQUAL(ints2[i], (int)i);
-        }
-
-        TSmallVec<int> ints3;
-        ints3 = ints2;
-
-        for (size_t i = 0; i < ints3.size(); ++i) {
-            UNIT_ASSERT_EQUAL(ints3[i], (int)i);
-        }
-    }
+        TSmallVec<int> ints; 
+        for (int i = 0; i < 14; ++i) { 
+            ints.push_back(i); 
+        } 
+ 
+        for (size_t i = 0; i < ints.size(); ++i) { 
+            UNIT_ASSERT_EQUAL(ints[i], (int)i); 
+        } 
+ 
+        for (int i = 14; i < 20; ++i) { 
+            ints.push_back(i); 
+        } 
+ 
+        for (size_t i = 0; i < ints.size(); ++i) { 
+            UNIT_ASSERT_EQUAL(ints[i], (int)i); 
+        } 
+ 
+        TSmallVec<int> ints2 = ints; 
+ 
+        for (size_t i = 0; i < ints2.size(); ++i) { 
+            UNIT_ASSERT_EQUAL(ints2[i], (int)i); 
+        } 
+ 
+        TSmallVec<int> ints3; 
+        ints3 = ints2; 
+ 
+        for (size_t i = 0; i < ints3.size(); ++i) { 
+            UNIT_ASSERT_EQUAL(ints3[i], (int)i); 
+        } 
+    } 
 
     Y_UNIT_TEST(TestCappedSize) {
         TStackVec<int, 8, false> ints;
@@ -141,4 +141,4 @@ Y_UNIT_TEST_SUITE(TStackBasedVectorTest) {
         }
         UNIT_ASSERT_VALUES_EQUAL(count, 3);
     }
-}
+} 

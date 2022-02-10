@@ -76,10 +76,10 @@ struct TRawLiteral {
 
 template <class TChar>
 static inline TRawLiteral<TChar> DumpRaw(const TBasicStringBuf<TChar>& s) noexcept {
-    return {s};
-}
-
-template <class TChar>
+    return {s}; 
+} 
+ 
+template <class TChar> 
 static inline TRawLiteral<TChar> DumpRaw(const TChar* s) noexcept {
     return {s};
 }
@@ -130,7 +130,7 @@ struct TCharDumper {
 
 template <class S, class V>
 static inline void OutSequence(S& s, const V& v, const char* openTag, const char* closeTag) {
-    s.ColorScheme.Markup(s);
+    s.ColorScheme.Markup(s); 
     s << DumpRaw(openTag);
 
     {
@@ -139,21 +139,21 @@ static inline void OutSequence(S& s, const V& v, const char* openTag, const char
 
         for (const auto& x : v) {
             if (cnt) {
-                s.ColorScheme.Markup(s);
+                s.ColorScheme.Markup(s); 
                 s << DumpRaw(", ");
             }
 
-            s << IndentNewLine();
-            s.ColorScheme.Literal(s);
-            s << x;
+            s << IndentNewLine(); 
+            s.ColorScheme.Literal(s); 
+            s << x; 
             ++cnt;
         }
     }
 
-    s << IndentNewLine();
-    s.ColorScheme.Markup(s);
-    s << DumpRaw(closeTag);
-    s.ColorScheme.ResetType(s);
+    s << IndentNewLine(); 
+    s.ColorScheme.Markup(s); 
+    s << DumpRaw(closeTag); 
+    s.ColorScheme.ResetType(s); 
 }
 
 struct TAssocDumper {
@@ -173,8 +173,8 @@ struct TSeqDumper {
 struct TStrDumper {
     template <class S, class V>
     static inline void Dump(S& s, const V& v) {
-        s.ColorScheme.String(s);
+        s.ColorScheme.String(s); 
         s.String(v);
-        s.ColorScheme.ResetType(s);
+        s.ColorScheme.ResetType(s); 
     }
 };

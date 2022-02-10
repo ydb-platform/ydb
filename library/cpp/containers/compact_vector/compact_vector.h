@@ -2,12 +2,12 @@
 
 #include <util/generic/yexception.h>
 #include <util/generic/utility.h>
-#include <util/memory/alloc.h>
-#include <util/stream/output.h>
+#include <util/memory/alloc.h> 
+#include <util/stream/output.h> 
 #include <util/system/yassert.h>
 
 #include <cstdlib>
-
+ 
 // vector that is 8 bytes when empty (TVector is 24 bytes)
 
 template <typename T>
@@ -102,7 +102,7 @@ public:
     void Reserve(size_t newCapacity) {
         if (newCapacity <= Capacity()) {
         } else if (Ptr == nullptr) {
-            void* mem = ::malloc(sizeof(THeader) + newCapacity * sizeof(T));
+            void* mem = ::malloc(sizeof(THeader) + newCapacity * sizeof(T)); 
             if (mem == nullptr)
                 ythrow yexception() << "out of memory";
             Ptr = (T*)(((THeader*)mem) + 1);

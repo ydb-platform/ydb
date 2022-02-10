@@ -70,28 +70,28 @@ namespace NPlugins {
             }
 
             virtual void GenerateAccessorDeclarations(io::Printer* printer) = 0;
-            virtual void GenerateJSONPrinting(io::Printer* printer) = 0;
+            virtual void GenerateJSONPrinting(io::Printer* printer) = 0; 
 
         protected:
-            void GenerateRepeatedJSONPrinting(io::Printer* printer, const char* itemPrinter) {
-                printer->Print("out << '[';\n");
-                printer->Print("{\n");
-                printer->Indent();
-                printer->Print("const char* separator = \"\";\n");
+            void GenerateRepeatedJSONPrinting(io::Printer* printer, const char* itemPrinter) { 
+                printer->Print("out << '[';\n"); 
+                printer->Print("{\n"); 
+                printer->Indent(); 
+                printer->Print("const char* separator = \"\";\n"); 
                 printer->Print(Variables_, "for (size_t _index = 0; _index < $rname$Size(); ++_index) {\n");
-                printer->Indent();
-                printer->Print("out << separator;\n");
-                printer->Print(Variables_, itemPrinter);
-                printer->Print(";\n");
-                printer->Print("separator = \",\";\n");
-                printer->Outdent();
-                printer->Print("}\n");
-                printer->Outdent();
-                printer->Print("}\n");
-                printer->Print("out << ']';\n");
-            }
-
-        protected:
+                printer->Indent(); 
+                printer->Print("out << separator;\n"); 
+                printer->Print(Variables_, itemPrinter); 
+                printer->Print(";\n"); 
+                printer->Print("separator = \",\";\n"); 
+                printer->Outdent(); 
+                printer->Print("}\n"); 
+                printer->Outdent(); 
+                printer->Print("}\n"); 
+                printer->Print("out << ']';\n"); 
+            } 
+ 
+        protected: 
             const FieldDescriptor* Field_;
             TVariables Variables_;
     };
@@ -115,10 +115,10 @@ namespace NPlugins {
                         "inline const $type$& Get$RName$() const { return $name$(); }\n"
                         "inline $type$* Mutable$RName$() { return mutable_$name$(); }\n");
             }
-
-            void GenerateJSONPrinting(io::Printer* printer) override {
-                printer->Print(Variables_, "Get$rname$().PrintJSON(out);\n");
-            }
+ 
+            void GenerateJSONPrinting(io::Printer* printer) override { 
+                printer->Print(Variables_, "Get$rname$().PrintJSON(out);\n"); 
+            } 
     };
 
     class TMapFieldExtGenerator: public TFieldExtGenerator {
@@ -230,10 +230,10 @@ namespace NPlugins {
                         "    Mutable$RName$() { return mutable_$name$(); }\n"
                     );
             }
-
-            void GenerateJSONPrinting(io::Printer* printer) override {
+ 
+            void GenerateJSONPrinting(io::Printer* printer) override { 
                 GenerateRepeatedJSONPrinting(printer, "Get$rname$(_index).PrintJSON(out)");
-            }
+            } 
     };
 
     class TStringFieldExtGenerator: public TFieldExtGenerator  {
@@ -279,10 +279,10 @@ namespace NPlugins {
                 }
 
             }
-
-            void GenerateJSONPrinting(io::Printer* printer) override {
-                printer->Print(Variables_, "::google::protobuf::io::PrintJSONString(out, Get$rname$());\n");
-            }
+ 
+            void GenerateJSONPrinting(io::Printer* printer) override { 
+                printer->Print(Variables_, "::google::protobuf::io::PrintJSONString(out, Get$rname$());\n"); 
+            } 
     };
 
     class TRepeatedStringFieldExtGenerator: public TFieldExtGenerator  {
@@ -348,13 +348,13 @@ namespace NPlugins {
                     printer->Indent();
                 }
             }
-
-            void GenerateJSONPrinting(io::Printer* printer) override {
-                GenerateRepeatedJSONPrinting(
-                    printer,
+ 
+            void GenerateJSONPrinting(io::Printer* printer) override { 
+                GenerateRepeatedJSONPrinting( 
+                    printer, 
                     "::google::protobuf::io::PrintJSONString(out, Get$rname$(_index))"
-                );
-            }
+                ); 
+            } 
     };
 
     class TEnumFieldExtGenerator: public TFieldExtGenerator  {
@@ -377,10 +377,10 @@ namespace NPlugins {
                         "inline void Set$RName$($type$ value) { set_$name$(value); }\n"
                     );
             }
-
-            void GenerateJSONPrinting(io::Printer* printer) override {
-                printer->Print(Variables_, "out << (int)Get$rname$();\n");
-            }
+ 
+            void GenerateJSONPrinting(io::Printer* printer) override { 
+                printer->Print(Variables_, "out << (int)Get$rname$();\n"); 
+            } 
     };
 
     class TRepeatedEnumFieldExtGenerator: public TFieldExtGenerator  {
@@ -410,10 +410,10 @@ namespace NPlugins {
                         "inline ::google::protobuf::RepeatedField<int>* Mutable$RName$() { return mutable_$name$(); }\n"
                     );
             }
-
-            void GenerateJSONPrinting(io::Printer* printer) override {
+ 
+            void GenerateJSONPrinting(io::Printer* printer) override { 
                 GenerateRepeatedJSONPrinting(printer, "out << (int)Get$rname$(_index)");
-            }
+            } 
     };
 
     class TPrimitiveFieldExtGenerator: public TFieldExtGenerator  {
@@ -435,10 +435,10 @@ namespace NPlugins {
                         "inline void Set$RName$($type$ value) { set_$name$(value); }\n"
                     );
             }
-
-            void GenerateJSONPrinting(io::Printer* printer) override {
-                printer->Print(Variables_, "out << Get$rname$();\n");
-            }
+ 
+            void GenerateJSONPrinting(io::Printer* printer) override { 
+                printer->Print(Variables_, "out << Get$rname$();\n"); 
+            } 
     };
 
     class TRepeatedPrimitiveFieldExtGenerator: public TFieldExtGenerator  {
@@ -473,60 +473,60 @@ namespace NPlugins {
                         "    Mutable$RName$() { return mutable_$name$(); }\n"
                     );
             }
-
-            void GenerateJSONPrinting(io::Printer* printer) override {
+ 
+            void GenerateJSONPrinting(io::Printer* printer) override { 
                 GenerateRepeatedJSONPrinting(printer, "out << Get$rname$(_index)");
-            }
+            } 
     };
 
-    class TBoolFieldExtGenerator: public TPrimitiveFieldExtGenerator {
-        public:
-            TBoolFieldExtGenerator(const FieldDescriptor* field)
-                : TPrimitiveFieldExtGenerator(field)
-            {
-            }
-
-            void GenerateJSONPrinting(io::Printer* printer) override {
-                printer->Print(Variables_, "out << (Get$rname$() ? \"true\" : \"false\");\n");
-            }
-    };
-
-    class TRepeatedBoolFieldExtGenerator: public TRepeatedPrimitiveFieldExtGenerator {
-        public:
-            TRepeatedBoolFieldExtGenerator(const FieldDescriptor* field)
-                : TRepeatedPrimitiveFieldExtGenerator(field)
-            {
-            }
-
-            void GenerateJSONPrinting(io::Printer* printer) override {
+    class TBoolFieldExtGenerator: public TPrimitiveFieldExtGenerator { 
+        public: 
+            TBoolFieldExtGenerator(const FieldDescriptor* field) 
+                : TPrimitiveFieldExtGenerator(field) 
+            { 
+            } 
+ 
+            void GenerateJSONPrinting(io::Printer* printer) override { 
+                printer->Print(Variables_, "out << (Get$rname$() ? \"true\" : \"false\");\n"); 
+            } 
+    }; 
+ 
+    class TRepeatedBoolFieldExtGenerator: public TRepeatedPrimitiveFieldExtGenerator { 
+        public: 
+            TRepeatedBoolFieldExtGenerator(const FieldDescriptor* field) 
+                : TRepeatedPrimitiveFieldExtGenerator(field) 
+            { 
+            } 
+ 
+            void GenerateJSONPrinting(io::Printer* printer) override { 
                 GenerateRepeatedJSONPrinting(printer, "out << (Get$rname$(_index) ? \"true\" : \"false\")");
-            }
-    };
-
-    class TFloatFieldExtGenerator: public TPrimitiveFieldExtGenerator {
-        public:
-            TFloatFieldExtGenerator(const FieldDescriptor* field)
-                : TPrimitiveFieldExtGenerator(field)
-            {
-            }
-
-            void GenerateJSONPrinting(io::Printer* printer) override {
-                printer->Print(Variables_, "out << double(Get$rname$());\n");
-            }
-    };
-
-    class TRepeatedFloatFieldExtGenerator: public TRepeatedPrimitiveFieldExtGenerator {
-        public:
-            TRepeatedFloatFieldExtGenerator(const FieldDescriptor* field)
-                : TRepeatedPrimitiveFieldExtGenerator(field)
-            {
-            }
-
-            void GenerateJSONPrinting(io::Printer* printer) override {
+            } 
+    }; 
+ 
+    class TFloatFieldExtGenerator: public TPrimitiveFieldExtGenerator { 
+        public: 
+            TFloatFieldExtGenerator(const FieldDescriptor* field) 
+                : TPrimitiveFieldExtGenerator(field) 
+            { 
+            } 
+ 
+            void GenerateJSONPrinting(io::Printer* printer) override { 
+                printer->Print(Variables_, "out << double(Get$rname$());\n"); 
+            } 
+    }; 
+ 
+    class TRepeatedFloatFieldExtGenerator: public TRepeatedPrimitiveFieldExtGenerator { 
+        public: 
+            TRepeatedFloatFieldExtGenerator(const FieldDescriptor* field) 
+                : TRepeatedPrimitiveFieldExtGenerator(field) 
+            { 
+            } 
+ 
+            void GenerateJSONPrinting(io::Printer* printer) override { 
                 GenerateRepeatedJSONPrinting(printer, "out << double(Get$rname$(_index))");
-            }
-    };
-
+            } 
+    }; 
+ 
     // borrowed mostly from protobuf/compiler/cpp/cpp_extension.cc
     class TExtensionGenerator {
     public:
@@ -616,10 +616,10 @@ namespace NPlugins {
                         return new TMapFieldExtGenerator(field);
                     }
                     return new TRepeatedMessageFieldExtGenerator(field);
-                case FieldDescriptor::CPPTYPE_BOOL:
-                    return new TRepeatedBoolFieldExtGenerator(field);
-                case FieldDescriptor::CPPTYPE_FLOAT:
-                    return new TRepeatedFloatFieldExtGenerator(field);
+                case FieldDescriptor::CPPTYPE_BOOL: 
+                    return new TRepeatedBoolFieldExtGenerator(field); 
+                case FieldDescriptor::CPPTYPE_FLOAT: 
+                    return new TRepeatedFloatFieldExtGenerator(field); 
                 case FieldDescriptor::CPPTYPE_STRING:
                     switch (field->options().ctype()) {
                         default:  // RepeatedStringFieldExtGenerator handles unknown ctypes.
@@ -635,10 +635,10 @@ namespace NPlugins {
             switch (field->cpp_type()) {
                 case FieldDescriptor::CPPTYPE_MESSAGE:
                     return new TMessageFieldExtGenerator(field);
-                case FieldDescriptor::CPPTYPE_BOOL:
-                    return new TBoolFieldExtGenerator(field);
-                case FieldDescriptor::CPPTYPE_FLOAT:
-                    return new TFloatFieldExtGenerator(field);
+                case FieldDescriptor::CPPTYPE_BOOL: 
+                    return new TBoolFieldExtGenerator(field); 
+                case FieldDescriptor::CPPTYPE_FLOAT: 
+                    return new TFloatFieldExtGenerator(field); 
                 case FieldDescriptor::CPPTYPE_STRING:
                     switch (field->options().ctype()) {
                         default:  // StringFieldGenerator handles unknown ctypes.
@@ -684,21 +684,21 @@ namespace NPlugins {
 
             void GenerateClassDefinitionExtension() {
                 GenerateSaveLoadImplementation();
-                GenerateJSONImplementation();
+                GenerateJSONImplementation(); 
 
                 for (auto& nestedGenerator: NestedGenerators_) {
                     nestedGenerator.GenerateClassDefinitionExtension();
                 }
             }
 
-            void GenerateDebugOutputExtension() {
-                GenerateDebugOutput();
-
+            void GenerateDebugOutputExtension() { 
+                GenerateDebugOutput(); 
+ 
                 for (auto& nestedGenerator: NestedGenerators_) {
                     nestedGenerator.GenerateDebugOutputExtension();
-                }
-            }
-
+                } 
+            } 
+ 
             void GenerateTypedefOutputExtension(bool nested) {
                 GenerateTypedefOutput(nested);
 
@@ -709,10 +709,10 @@ namespace NPlugins {
 
 
             void GenerateClassExtension() {
-                GenerateDebugStringImplementation();
+                GenerateDebugStringImplementation(); 
                 for (auto& nestedGenerator: NestedGenerators_) {
                     nestedGenerator.GenerateClassExtension();
-                }
+                } 
             }
 
             void GenerateDeclarations() {
@@ -775,8 +775,8 @@ namespace NPlugins {
                 for (auto& oneofGenerator: OneofGenerators_) {
                     oneofGenerator.GenerateDeclarations(&printer);
                 }
-                TVariables vars;
-                vars["class"] = ClassName(Descriptor_, false);
+                TVariables vars; 
+                vars["class"] = ClassName(Descriptor_, false); 
                 if (!IsLiteRuntimeMessage(Descriptor_)) {
                     printer.Print("TProtoStringType ShortUtf8DebugString() const;\n");
 
@@ -788,9 +788,9 @@ namespace NPlugins {
                     printer.Print("void Save(IOutputStream* output) const;\n");
                     printer.Print("void Load(IInputStream* input);\n");
                 }
-                printer.Print("// End of Yandex-specific extension\n");
-            }
-
+                printer.Print("// End of Yandex-specific extension\n"); 
+            } 
+ 
             void GenerateSaveLoadImplementation() {
                 TProtoStringType fileName = SourceFileName(Descriptor_->file());
                 TProtoStringType scope = "namespace_scope";
@@ -812,15 +812,15 @@ namespace NPlugins {
                 }
             }
 
-            void GenerateDebugStringImplementation() {
-                TProtoStringType fileName = SourceFileName(Descriptor_->file());
-                TProtoStringType scope = "namespace_scope";
+            void GenerateDebugStringImplementation() { 
+                TProtoStringType fileName = SourceFileName(Descriptor_->file()); 
+                TProtoStringType scope = "namespace_scope"; 
                 std::unique_ptr<io::ZeroCopyOutputStream> output(
-                    OutputDirectory_->OpenForInsert(fileName, scope));
-                io::Printer printer(output.get(), '$');
-
-                TVariables vars;
-                vars["class"] = Classname_;
+                    OutputDirectory_->OpenForInsert(fileName, scope)); 
+                io::Printer printer(output.get(), '$'); 
+ 
+                TVariables vars; 
+                vars["class"] = Classname_; 
                 if (!IsLiteRuntimeMessage(Descriptor_)) {
                     printer.Print("// Yandex-specific extension\n");
                     printer.Print(vars, "TProtoStringType $class$::ShortUtf8DebugString() const {\n");
@@ -830,65 +830,65 @@ namespace NPlugins {
                 }
             }
 
-            void GenerateJSONImplementation() {
+            void GenerateJSONImplementation() { 
                 if (IsLiteRuntimeMessage(Descriptor_)) {
                     return;
                 }
 
                 TProtoStringType fileName = SourceFileName(Descriptor_->file());
-                TProtoStringType scope = "namespace_scope";
+                TProtoStringType scope = "namespace_scope"; 
                 std::unique_ptr<io::ZeroCopyOutputStream> output(
-                    OutputDirectory_->OpenForInsert(fileName, scope));
-                io::Printer printer(output.get(), '$');
-                printer.Print("// Yandex JSON extension\n");
-                TVariables vars;
-                vars["class"] = ClassName(Descriptor_, true);
+                    OutputDirectory_->OpenForInsert(fileName, scope)); 
+                io::Printer printer(output.get(), '$'); 
+                printer.Print("// Yandex JSON extension\n"); 
+                TVariables vars; 
+                vars["class"] = ClassName(Descriptor_, true); 
                 printer.Print(vars, "inline void $class$::PrintJSON(IOutputStream& out) const {\n");
-
-                printer.Indent();
-                printer.Print("out << '{';\n");
-                if (Descriptor_->field_count() > 0) {
-                    printer.Print("const char* sep = \"\";\n");
-                }
-                for (int i = 0; i < Descriptor_->field_count(); i++) {
-                    const FieldDescriptor* field = Descriptor_->field(i);
-
-                    TVariables vars;
-                    SetCommonFieldVariables(field, &vars);
-
-                    if (field->is_repeated()) {
+ 
+                printer.Indent(); 
+                printer.Print("out << '{';\n"); 
+                if (Descriptor_->field_count() > 0) { 
+                    printer.Print("const char* sep = \"\";\n"); 
+                } 
+                for (int i = 0; i < Descriptor_->field_count(); i++) { 
+                    const FieldDescriptor* field = Descriptor_->field(i); 
+ 
+                    TVariables vars; 
+                    SetCommonFieldVariables(field, &vars); 
+ 
+                    if (field->is_repeated()) { 
                         // map or repeated field in both proto3 and proto2 syntax
-                        printer.Print(vars, "if ($rname$Size() > 0) {\n");
+                        printer.Print(vars, "if ($rname$Size() > 0) {\n"); 
                     } else if (field->has_presence()) {
                         // any optional or required field in proto2 syntax
                         // message-field or any oneof field in proto3 syntax
                         printer.Print(vars, "if (Has$rname$()) {\n");
-                    } else {
+                    } else { 
                         // string, enum or primitive field in proto3 syntax
                         printer.Print(vars, "if (Get$rname$()) {\n");
-                    }
-
-                    printer.Indent();
-                    printer.Print("out << sep;\n");
-                    printer.Print(vars, "out << \"\\\"$rname$\\\":\";\n");
-                    FieldGenerators_[i]->GenerateJSONPrinting(&printer);
-                    printer.Print(vars, "sep = \",\";\n");
-                    printer.Outdent();
-                    printer.Print("}\n");
-                }
-                printer.Print("out << '}';\n");
-                printer.Outdent();
-                printer.Print("}\n");
-
-                printer.Print("// End of Yandex JSON extension\n");
-            }
-
-            void GenerateDebugOutput() {
-                TProtoStringType fileName = SourceFileName(Descriptor_->file());
-                TProtoStringType scope = "global_scope";
+                    } 
+ 
+                    printer.Indent(); 
+                    printer.Print("out << sep;\n"); 
+                    printer.Print(vars, "out << \"\\\"$rname$\\\":\";\n"); 
+                    FieldGenerators_[i]->GenerateJSONPrinting(&printer); 
+                    printer.Print(vars, "sep = \",\";\n"); 
+                    printer.Outdent(); 
+                    printer.Print("}\n"); 
+                } 
+                printer.Print("out << '}';\n"); 
+                printer.Outdent(); 
+                printer.Print("}\n"); 
+ 
+                printer.Print("// End of Yandex JSON extension\n"); 
+            } 
+ 
+            void GenerateDebugOutput() { 
+                TProtoStringType fileName = SourceFileName(Descriptor_->file()); 
+                TProtoStringType scope = "global_scope"; 
                 std::unique_ptr<io::ZeroCopyOutputStream> output(
-                    OutputDirectory_->OpenForInsert(fileName, scope));
-                io::Printer printer(output.get(), '$');
+                    OutputDirectory_->OpenForInsert(fileName, scope)); 
+                io::Printer printer(output.get(), '$'); 
                 if (!IsLiteRuntimeMessage(Descriptor_)) {
                     printer.Print("// Yandex debug output extension\n");
                     TVariables vars;
@@ -899,8 +899,8 @@ namespace NPlugins {
                     printer.Print("}\n");
                     printer.Print("// End of Yandex debug output extension\n");
                 }
-            }
-
+            } 
+ 
             void GenerateTypedefOutput(bool nested) {
                 if (!GenerateYaStyle(Descriptor_->file()))
                     return;
@@ -937,8 +937,8 @@ namespace NPlugins {
     class TFileExtGenerator {
         public:
             TFileExtGenerator(const FileDescriptor* file, OutputDirectory* output_directory)
-                : File_(file)
-                , OutputDirectory_(output_directory)
+                : File_(file) 
+                , OutputDirectory_(output_directory) 
             {
                 MessageGenerators_.reserve(file->message_type_count());
                 for (size_t i = 0; i < file->message_type_count(); i++) {
@@ -947,8 +947,8 @@ namespace NPlugins {
             }
 
             void GenerateHeaderExtensions() {
-                GenerateHeaderIncludeExtensions();
-
+                GenerateHeaderIncludeExtensions(); 
+ 
                 for (auto& messageGenerator: MessageGenerators_) {
                     messageGenerator.GenerateTypedefOutputExtension(false);
                     messageGenerator.GenerateDeclarations();
@@ -956,43 +956,43 @@ namespace NPlugins {
             }
 
             void GenerateSourceExtensions() {
-                GenerateSourceIncludeExtensions();
-
+                GenerateSourceIncludeExtensions(); 
+ 
                 for (auto& messageGenerator: MessageGenerators_) {
                     messageGenerator.GenerateDefinitions();
                 }
             }
 
         private:
-            void GenerateSourceIncludeExtensions() {
-                TProtoStringType fileName = SourceFileName(File_);
-                TProtoStringType scope = "includes";
+            void GenerateSourceIncludeExtensions() { 
+                TProtoStringType fileName = SourceFileName(File_); 
+                TProtoStringType scope = "includes"; 
                 std::unique_ptr<io::ZeroCopyOutputStream> output(
-                    OutputDirectory_->OpenForInsert(fileName, scope));
-                io::Printer printer(output.get(), '$');
+                    OutputDirectory_->OpenForInsert(fileName, scope)); 
+                io::Printer printer(output.get(), '$'); 
                 printer.Print("#include <google/protobuf/messagext.h>\n");
-            }
-
-            void GenerateHeaderIncludeExtensions() {
-                TProtoStringType fileName = HeaderFileName(File_);
-                TProtoStringType scope = "includes";
+            } 
+ 
+            void GenerateHeaderIncludeExtensions() { 
+                TProtoStringType fileName = HeaderFileName(File_); 
+                TProtoStringType scope = "includes"; 
                 std::unique_ptr<io::ZeroCopyOutputStream> output(
-                    OutputDirectory_->OpenForInsert(fileName, scope));
-                io::Printer printer(output.get(), '$');
+                    OutputDirectory_->OpenForInsert(fileName, scope)); 
+                io::Printer printer(output.get(), '$'); 
                 printer.Print("#include <google/protobuf/json_util.h>\n");
-            }
-
-        private:
-            const FileDescriptor* File_;
+            } 
+ 
+        private: 
+            const FileDescriptor* File_; 
             OutputDirectory* OutputDirectory_;
             size_t MessageTypeCount_;
             std::vector<TMessageExtGenerator> MessageGenerators_;
     };
 
     bool TCppStyleGuideExtensionGenerator::Generate(const FileDescriptor* file,
-        const TProtoStringType&,
+        const TProtoStringType&, 
         OutputDirectory* outputDirectory,
-        TProtoStringType*) const {
+        TProtoStringType*) const { 
 
         TFileExtGenerator fileGenerator(file, outputDirectory);
 
@@ -1000,7 +1000,7 @@ namespace NPlugins {
         fileGenerator.GenerateHeaderExtensions();
 
         // Generate cc file.
-        fileGenerator.GenerateSourceExtensions();
+        fileGenerator.GenerateSourceExtensions(); 
 
         return true;
     }
@@ -1010,7 +1010,7 @@ namespace NPlugins {
 }
 
 int main(int argc, char* argv[]) {
-#ifdef _MSC_VER
+#ifdef _MSC_VER 
     // Don't print a silly message or stick a modal dialog box in my face,
     // please.
     _set_abort_behavior(0, ~0);

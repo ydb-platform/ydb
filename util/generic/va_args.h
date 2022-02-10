@@ -1,9 +1,9 @@
-#pragma once
-
+#pragma once 
+ 
 /// @file va_args.h
 ///
 /// Some handy macros for preprocessor metaprogramming.
-
+ 
 // NOTE: this file has been generated with "./va_args_gen.py", do not edit -- use the generator instead
 
 // DO_NOT_STYLE
@@ -17,14 +17,14 @@
  * See http://stackoverflow.com/questions/5134523/msvc-doesnt-expand-va-args-correctly
  */
 #define Y_PASS_VA_ARGS(x) x
-
+ 
 /**
  * Count number of arguments in `__VA_ARGS__`.
  * Doesn't work with empty arguments list.
  */
 #define Y_COUNT_ARGS(...) Y_PASS_VA_ARGS(__Y_COUNT_ARGS(__VA_ARGS__, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0))
 #define __Y_COUNT_ARGS(_50, _49, _48, _47, _46, _45, _44, _43, _42, _41, _40, _39, _38, _37, _36, _35, _34, _33, _32, _31, _30, _29, _28, _27, _26, _25, _24, _23, _22, _21, _20, _19, _18, _17, _16, _15, _14, _13, _12, _11, _10, _9, _8, _7, _6, _5, _4, _3, _2, _1, N, ...) N
-
+ 
 /**
  * Get the i-th element from `__VA_ARGS__`.
  */
@@ -80,7 +80,7 @@
 #define __Y_GET_ARG_48(_0, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16, _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, _47, _48, ...) _48
 #define __Y_GET_ARG_49(_0, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16, _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, _47, _48, _49, ...) _49
 #define __Y_GET_ARG_50(_0, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16, _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, _47, _48, _49, _50, ...) _50
-
+ 
 /**
  * Expands a macro for each of the variable arguments.
  * Doesn't work with empty arguments list.

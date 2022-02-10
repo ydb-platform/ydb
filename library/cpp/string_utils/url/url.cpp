@@ -125,10 +125,10 @@ TStringBuf CutSchemePrefix(const TStringBuf url) noexcept {
 
 template <bool KeepPort>
 static inline TStringBuf GetHostAndPortImpl(const TStringBuf url) {
-    TStringBuf urlNoScheme = url;
+    TStringBuf urlNoScheme = url; 
 
-    urlNoScheme.Skip(GetHttpPrefixSize(url));
-
+    urlNoScheme.Skip(GetHttpPrefixSize(url)); 
+ 
     struct TDelim: public str_spn {
         inline TDelim()
             : str_spn(KeepPort ? "/;?#" : "/:;?#")
@@ -137,7 +137,7 @@ static inline TStringBuf GetHostAndPortImpl(const TStringBuf url) {
     };
 
     const auto& nonHostCharacters = *Singleton<TDelim>();
-    const char* firstNonHostCharacter = nonHostCharacters.brk(urlNoScheme.begin(), urlNoScheme.end());
+    const char* firstNonHostCharacter = nonHostCharacters.brk(urlNoScheme.begin(), urlNoScheme.end()); 
 
     if (firstNonHostCharacter != urlNoScheme.end()) {
         return urlNoScheme.substr(0, firstNonHostCharacter - urlNoScheme.data());

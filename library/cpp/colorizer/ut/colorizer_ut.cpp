@@ -1,29 +1,29 @@
 #include <library/cpp/colorizer/colors.h>
-
+ 
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/stream/str.h>
-
-#include <util/string/escape.h>
-
+ 
+#include <util/string/escape.h> 
+ 
 Y_UNIT_TEST_SUITE(ColorizerTest) {
     Y_UNIT_TEST(BasicTest) {
-        NColorizer::TColors colors;
-        colors.Enable();
+        NColorizer::TColors colors; 
+        colors.Enable(); 
         UNIT_ASSERT_STRINGS_EQUAL(EscapeC(colors.BlueColor()), "\\x1B[22;34m");
         UNIT_ASSERT_STRINGS_EQUAL(EscapeC(colors.ForeBlue()), "\\x1B[34m");
-        colors.Disable();
-        UNIT_ASSERT(colors.BlueColor().Empty());
-    }
-
+        colors.Disable(); 
+        UNIT_ASSERT(colors.BlueColor().Empty()); 
+    } 
+ 
     Y_UNIT_TEST(ResettingTest) {
-        NColorizer::TColors colors;
-        colors.Enable();
-        // 22;39, not 0, should be used so that only foreground changes
+        NColorizer::TColors colors; 
+        colors.Enable(); 
+        // 22;39, not 0, should be used so that only foreground changes 
         UNIT_ASSERT_STRINGS_EQUAL(EscapeC(colors.OldColor()), "\\x1B[22;39m");
         UNIT_ASSERT_STRINGS_EQUAL(EscapeC(colors.Reset()), "\\x1B[0m");
-        // 22, not 0, should be used to reset boldness
+        // 22, not 0, should be used to reset boldness 
         UNIT_ASSERT_STRINGS_EQUAL(EscapeC(colors.PurpleColor()), "\\x1B[22;35m");
-    }
+    } 
 
     Y_UNIT_TEST(PrintAnsi) {
         UNIT_ASSERT_STRINGS_EQUAL(EscapeC(ToString(NColorizer::BLUE)), "\\x1B[0m\\x1B[0;34m");
@@ -60,4 +60,4 @@ Y_UNIT_TEST_SUITE(ColorizerTest) {
         UNIT_ASSERT_VALUES_EQUAL(NColorizer::TotalAnsiEscapeCodeLen("some [0;1;2;3m text"), 0);
         UNIT_ASSERT_VALUES_EQUAL(NColorizer::TotalAnsiEscapeCodeLen("some\033[m text"), 3);
     }
-}
+} 

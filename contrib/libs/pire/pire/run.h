@@ -11,7 +11,7 @@
  * it under the terms of the GNU Lesser Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
- * 
+ *  
  * Pire is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
@@ -68,7 +68,7 @@ namespace Impl {
 		PIRE_FORCED_INLINE PIRE_HOT_FUNCTION
 		Action operator()(const Scanner&, const typename Scanner::State&, const char*) const { return Continue; }
 	};
-	
+	 
 	template<class Scanner>
 	struct ShortestPrefixPred {
 		explicit ShortestPrefixPred(const char*& pos): m_pos(&pos) {}
@@ -80,17 +80,17 @@ namespace Impl {
 				*m_pos = pos;
 				return Stop;
 			} else {
-				return (sc.Dead(st) ? Stop : Continue);
+				return (sc.Dead(st) ? Stop : Continue); 
 			}
 		}
 	private:
 		const char** m_pos;
 	};
-	
+	 
 	template<class Scanner>
 	struct LongestPrefixPred {
 		explicit LongestPrefixPred(const char*& pos): m_pos(&pos) {}
-		
+		 
 		PIRE_FORCED_INLINE PIRE_HOT_FUNCTION
 		Action operator()(const Scanner& sc, const typename Scanner::State& st, const char* pos) const
 		{
@@ -270,7 +270,7 @@ namespace Impl {
 }
 
 #endif
-	
+	 
 template<class Scanner>
 void Run(const Scanner& sc, typename Scanner::State& st, TStringBuf str)
 {
@@ -337,7 +337,7 @@ const char* ShortestPrefix(const Scanner& sc, const char* begin, const char* end
     return prefix.data() + prefix.size();
 }
 
-	
+	 
 /// The same as above, but scans string in reverse direction
 /// (consider using Fsm::Reverse() for using in this function).
 /// Returns default constructed string_view{} if there is no matching suffix
@@ -389,12 +389,12 @@ inline std::string_view ShortestSuffix(const Scanner& scanner, std::string_view 
 	if (throughEndMark)
 		Step(scanner, state, EndMark);
 	PIRE_IFDEBUG(Cdbg << "Running ShortestSuffix on string " << ystring(str) << Endl);
-	PIRE_IFDEBUG(Cdbg << "Initial state " << StDump(scanner, state) << Endl);
+	PIRE_IFDEBUG(Cdbg << "Initial state " << StDump(scanner, state) << Endl); 
 
 	while (begin != str.data() && !scanner.Final(state) && !scanner.Dead(state)) {
 		--begin;
 		scanner.Next(state, (unsigned char)*begin);
-		PIRE_IFDEBUG(Cdbg << *rbegin << " => state " << StDump(scanner, state) << Endl);
+		PIRE_IFDEBUG(Cdbg << *rbegin << " => state " << StDump(scanner, state) << Endl); 
 	}
 	if (throughBeginMark)
 		Step(scanner, state, BeginMark);

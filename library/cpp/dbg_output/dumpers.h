@@ -74,18 +74,18 @@ template <class A, class B>
 struct TDumper<std::pair<A, B>> {
     template <class S>
     static inline void Dump(S& s, const std::pair<A, B>& v) {
-        s.ColorScheme.Key(s);
-        s.ColorScheme.Literal(s);
-        s << v.first;
-        s.ColorScheme.ResetType(s);
-        s.ColorScheme.ResetRole(s);
-        s.ColorScheme.Markup(s);
-        s << DumpRaw(" -> ");
-        s.ColorScheme.Value(s);
-        s.ColorScheme.Literal(s);
-        s << v.second;
-        s.ColorScheme.ResetType(s);
-        s.ColorScheme.ResetRole(s);
+        s.ColorScheme.Key(s); 
+        s.ColorScheme.Literal(s); 
+        s << v.first; 
+        s.ColorScheme.ResetType(s); 
+        s.ColorScheme.ResetRole(s); 
+        s.ColorScheme.Markup(s); 
+        s << DumpRaw(" -> "); 
+        s.ColorScheme.Value(s); 
+        s.ColorScheme.Literal(s); 
+        s << v.second; 
+        s.ColorScheme.ResetType(s); 
+        s.ColorScheme.ResetRole(s); 
     }
 };
 

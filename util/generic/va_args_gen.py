@@ -1,19 +1,19 @@
-#!/usr/bin/env python
+#!/usr/bin/env python 
 """
 Generates some handy macros for preprocessor metaprogramming.
-
+ 
 """
 
 from __future__ import print_function
 
-import sys
+import sys 
 import textwrap
-
+ 
 if sys.version_info >= (3, 0, 0):
     xrange = range
+ 
 
-
-def generate(limit):
+def generate(limit): 
     print('#pragma once')
     print(textwrap.dedent('''
         /// @file va_args.h
@@ -28,7 +28,7 @@ def generate(limit):
     print('')
     print('#include <util/system/defaults.h>')
     print('')
-
+ 
     pass_va_args()
     count(limit)
     get_elem(limit)
@@ -39,8 +39,8 @@ def generate(limit):
     all_but_last(limit)
     last(limit)
     impl_dispatcher()
-
-
+ 
+ 
 def pass_va_args():
     print(textwrap.dedent('''
         /**
@@ -51,8 +51,8 @@ def pass_va_args():
          */
     '''.rstrip()))
     print('#define Y_PASS_VA_ARGS(x) x')
-
-
+ 
+ 
 def count(limit):
     print(textwrap.dedent('''
         /**
@@ -66,7 +66,7 @@ def count(limit):
           '__Y_COUNT_ARGS(__VA_ARGS__, {}))'.format(numbers))
     print('#define __Y_COUNT_ARGS({}, N, ...) N'.format(u_numbers))
 
-
+ 
 def get_elem(limit):
     print(textwrap.dedent('''
         /**
@@ -78,8 +78,8 @@ def get_elem(limit):
     for i in xrange(0, limit + 1):
         args = ', '.join(map('_{}'.format, xrange(i + 1)))
         print('#define __Y_GET_ARG_{}({}, ...) _{}'.format(i, args, i))
-
-
+ 
+ 
 def map_args(limit):
     print(textwrap.dedent('''
         /**
@@ -94,8 +94,8 @@ def map_args(limit):
     for i in xrange(2, limit + 1):
         print('#define __Y_MAP_ARGS_{}(ACTION, x, ...) ACTION(x) Y_PASS_VA_ARGS(__Y_MAP_ARGS_{}('
               'ACTION, __VA_ARGS__))'.format(i, i - 1))
-
-
+ 
+ 
 def map_args_n(limit):
     print(textwrap.dedent('''
         /**
@@ -128,8 +128,8 @@ def map_args_with_last(limit):
     for i in xrange(2, limit + 1):
         print('#define __Y_MAP_ARGS_WITH_LAST_{}(ACTION, LAST_ACTION, x, ...) ACTION(x) Y_PASS_VA_ARGS('
               '__Y_MAP_ARGS_WITH_LAST_{}(ACTION, LAST_ACTION, __VA_ARGS__))'.format(i, i - 1))
-
-
+ 
+ 
 def map_args_with_last_n(limit):
     print(textwrap.dedent('''
         /**
@@ -197,15 +197,15 @@ def impl_dispatcher():
     print('/// }@')
 
 
-def main():
-    if len(sys.argv) > 2:
+def main(): 
+    if len(sys.argv) > 2: 
         sys.stderr.write('Usage: {} [limit=50]\n'.format(sys.argv[0]))
-        sys.exit(1)
+        sys.exit(1) 
     limit = 50
-    if len(sys.argv) == 2:
-        limit = int(sys.argv[1])
-    generate(limit)
-
-
-if __name__ == '__main__':
-    main()
+    if len(sys.argv) == 2: 
+        limit = int(sys.argv[1]) 
+    generate(limit) 
+ 
+ 
+if __name__ == '__main__': 
+    main() 

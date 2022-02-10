@@ -1,7 +1,7 @@
-#pragma once
-
-#include <util/generic/va_args.h>
-
+#pragma once 
+ 
+#include <util/generic/va_args.h> 
+ 
 /**
  * Generates an output sequence for the provided expressions that is formatted
  * as a labeled comma-separated list.
@@ -16,4 +16,4 @@
 #define LabeledOutput(...) "" Y_PASS_VA_ARGS(Y_MAP_ARGS_WITH_LAST(__LABELED_OUTPUT_NONLAST__, __LABELED_OUTPUT_IMPL__, __VA_ARGS__))
 
 #define __LABELED_OUTPUT_IMPL__(x) << #x " = " << (x)
-#define __LABELED_OUTPUT_NONLAST__(x) __LABELED_OUTPUT_IMPL__(x) << ", "
+#define __LABELED_OUTPUT_NONLAST__(x) __LABELED_OUTPUT_IMPL__(x) << ", " 

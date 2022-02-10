@@ -1,21 +1,21 @@
-#include "va_args.h"
-
+#include "va_args.h" 
+ 
 #include <library/cpp/testing/unittest/registar.h>
-
+ 
 Y_UNIT_TEST_SUITE(TMacroVarargMapTest) {
     Y_UNIT_TEST(TestMapArgs) {
         static const char COMBINED[] = Y_MAP_ARGS(Y_STRINGIZE, 1, 2, 3);
-        UNIT_ASSERT_STRINGS_EQUAL(COMBINED, "123");
-    }
-
+        UNIT_ASSERT_STRINGS_EQUAL(COMBINED, "123"); 
+    } 
+ 
     Y_UNIT_TEST(TestMapArgsWithLast) {
-#define ADD(x) x +
-#define ID(x) x
+#define ADD(x) x + 
+#define ID(x) x 
         static const int SUM = Y_MAP_ARGS_WITH_LAST(ADD, ID, 1, 2, 3, 4 + 5);
-        UNIT_ASSERT_VALUES_EQUAL(SUM, 1 + 2 + 3 + 4 + 5);
+        UNIT_ASSERT_VALUES_EQUAL(SUM, 1 + 2 + 3 + 4 + 5); 
 #undef ADD
 #undef ID
-    }
+    } 
 
     Y_UNIT_TEST(TestMapArgsN) {
 #define MAP_ARG(INDEX, X) Y_STRINGIZE(X)
@@ -40,7 +40,7 @@ Y_UNIT_TEST_SUITE(TMacroVarargMapTest) {
 #undef ADD_ARG
 #undef ID_ARG
     }
-}
+} 
 
 Y_UNIT_TEST_SUITE(TestVaArgs) {
     Y_UNIT_TEST(Count) {

@@ -41,7 +41,7 @@ namespace NUri {
                 continue;
 
             if (ch == '_') { // non-standard case we allow for certain hosts
-                domainLevelOfUnderscore = domainLevel;
+                domainLevelOfUnderscore = domainLevel; 
                 continue;
             }
 

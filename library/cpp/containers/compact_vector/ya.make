@@ -1,9 +1,9 @@
-LIBRARY()
-
-OWNER(nga)
-
-SRCS(
-    compact_vector.cpp
-)
-
-END()
+LIBRARY() 
+ 
+OWNER(nga) 
+ 
+SRCS( 
+    compact_vector.cpp 
+) 
+ 
+END() 

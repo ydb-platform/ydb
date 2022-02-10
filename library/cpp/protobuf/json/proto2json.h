@@ -10,7 +10,7 @@
 #include <util/generic/fwd.h>
 #include <util/generic/vector.h>
 #include <util/generic/yexception.h>
-#include <util/stream/str.h>
+#include <util/stream/str.h> 
 
 #include <functional>
 
@@ -51,7 +51,7 @@ namespace NProtobufJson {
     inline void Proto2Json(const T& proto, TStringStream& out) {
         out << proto.AsJSON();
     }
-
+ 
     /// @throw yexception
     void Proto2Json(const NProtoBuf::Message& proto, TString& str,
                     const TProto2JsonConfig& config);
@@ -75,4 +75,4 @@ namespace NProtobufJson {
         return result;
     }
 
-}
+} 

@@ -1,13 +1,13 @@
-#ifndef REF_COUNTED_INL_H_ 
-#error "Direct inclusion of this file is not allowed, include ref_counted.h" 
+#ifndef REF_COUNTED_INL_H_
+#error "Direct inclusion of this file is not allowed, include ref_counted.h"
 // For the sake of sane code completion.
 #include "ref_counted.h"
-#endif 
- 
-namespace NYT { 
- 
-//////////////////////////////////////////////////////////////////////////////// 
- 
+#endif
+
+namespace NYT {
+
+////////////////////////////////////////////////////////////////////////////////
+
 constexpr uint16_t PtrBits = 48;
 constexpr uintptr_t PtrMask = (1ULL << PtrBits) - 1;
 
@@ -35,7 +35,7 @@ Y_FORCE_INLINE TPackedPointer<T> UnpackPointer(void* packedPtr)
 
 template <class T, class = void>
 struct TMemoryReleaser
-{ 
+{
     static void Do(void* ptr, uint16_t /*offset*/)
     {
         TFreeMemory<T>::Do(ptr);
@@ -275,4 +275,4 @@ void TRefCounted::DestroyRefCountedImpl(T* ptr)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYT 
+} // namespace NYT

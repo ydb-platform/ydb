@@ -570,7 +570,7 @@ def onadd_check(unit, *args):
         allowed_levels = {
             'base': '/yandex_checks.xml',
             'strict': '/yandex_checks_strict.xml',
-            'extended': '/yandex_checks_extended.xml',
+            'extended': '/yandex_checks_extended.xml', 
             'library': '/yandex_checks_library.xml',
         }
         if check_level not in allowed_levels:

@@ -103,7 +103,7 @@ void SetKeepAlive(SOCKET s);
 void SetLinger(SOCKET s, bool on, unsigned len);
 void SetZeroLinger(SOCKET s);
 void SetKeepAlive(SOCKET s, bool value);
-void SetCloseOnExec(SOCKET s, bool value);
+void SetCloseOnExec(SOCKET s, bool value); 
 void SetOutputBuffer(SOCKET s, unsigned value);
 void SetInputBuffer(SOCKET s, unsigned value);
 void SetReusePort(SOCKET s, bool value);

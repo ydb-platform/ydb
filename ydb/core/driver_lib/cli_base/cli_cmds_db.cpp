@@ -70,26 +70,26 @@ public:
     }
 };
 
-class TClientCommandSchemaDrop : public TClientCommand { 
-public: 
-    TClientCommandSchemaDrop() 
-        : TClientCommand("drop", {}, "Remove schema object") 
-    {} 
- 
-    TAutoPtr<NKikimrClient::TSchemeOperation> Request; 
- 
-    virtual void Config(TConfig& config) override { 
-        TClientCommand::Config(config); 
+class TClientCommandSchemaDrop : public TClientCommand {
+public:
+    TClientCommandSchemaDrop()
+        : TClientCommand("drop", {}, "Remove schema object")
+    {}
+
+    TAutoPtr<NKikimrClient::TSchemeOperation> Request;
+
+    virtual void Config(TConfig& config) override {
+        TClientCommand::Config(config);
         config.SetFreeArgsNum(1);
         SetFreeArgTitle(0, "<NAME>", "Full pathname of an object (e.g. /ru/home/user/mydb/test1/test2).\n"
             "          Or short pathname if profile path is set (e.g. test1/test2).");
-    } 
- 
-    TString Base; 
-    TString Name; 
- 
-    virtual void Parse(TConfig& config) override { 
-        TClientCommand::Parse(config); 
+    }
+
+    TString Base;
+    TString Name;
+
+    virtual void Parse(TConfig& config) override {
+        TClientCommand::Parse(config);
         TString pathname = config.ParseResult->GetFreeArgs()[0];
         size_t pos = pathname.rfind('/');
         if (config.Path) {
@@ -104,17 +104,17 @@ public:
         }
         Base = pathname.substr(0, pos);
         Name = pathname.substr(pos + 1);
-    } 
- 
-    virtual int Run(TConfig& config) override { 
-        auto handler = [this](NClient::TKikimr& kikimr) { 
-            kikimr.GetSchemaRoot(Base).GetChild(Name).Drop(); 
-            return 0; 
-        }; 
-        return InvokeThroughKikimr(config, std::move(handler)); 
-    } 
-}; 
- 
+    }
+
+    virtual int Run(TConfig& config) override {
+        auto handler = [this](NClient::TKikimr& kikimr) {
+            kikimr.GetSchemaRoot(Base).GetChild(Name).Drop();
+            return 0;
+        };
+        return InvokeThroughKikimr(config, std::move(handler));
+    }
+};
+
 class TClientCommandSchemaExec : public TClientCommandConfig {
 public:
     TClientCommandSchemaExec()

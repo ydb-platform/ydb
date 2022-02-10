@@ -721,41 +721,41 @@ Y_UNIT_TEST(TestFieldNameMode) {
     // Camelcase
     {
         TString modelStr(R"_({"string":"value"})_");
- 
+
         TFlatOptional proto;
         proto.SetString("value");
         TStringStream jsonStr;
         TProto2JsonConfig config;
         config.FieldNameMode = TProto2JsonConfig::FieldNameCamelCase;
- 
+
         UNIT_ASSERT_NO_EXCEPTION(Proto2Json(proto, jsonStr, config));
         UNIT_ASSERT_JSON_STRINGS_EQUAL(jsonStr.Str(), modelStr);
     }
     {
         TString modelStr(R"_({"oneString":"value"})_");
- 
+
         TFlatOptional proto;
         proto.SetOneString("value");
         TStringStream jsonStr;
         TProto2JsonConfig config;
         config.FieldNameMode = TProto2JsonConfig::FieldNameCamelCase;
- 
+
         UNIT_ASSERT_NO_EXCEPTION(Proto2Json(proto, jsonStr, config));
         UNIT_ASSERT_JSON_STRINGS_EQUAL(jsonStr.Str(), modelStr);
     }
     {
         TString modelStr(R"_({"oneTwoString":"value"})_");
- 
+
         TFlatOptional proto;
         proto.SetOneTwoString("value");
         TStringStream jsonStr;
         TProto2JsonConfig config;
         config.FieldNameMode = TProto2JsonConfig::FieldNameCamelCase;
- 
+
         UNIT_ASSERT_NO_EXCEPTION(Proto2Json(proto, jsonStr, config));
         UNIT_ASSERT_JSON_STRINGS_EQUAL(jsonStr.Str(), modelStr);
     }
- 
+
     // snake_case
     {
         TString modelStr(R"_({"string":"value"})_");
@@ -857,7 +857,7 @@ Y_UNIT_TEST(TestFieldNameMode) {
         // FIXME(CONTRIB-139): see the comment about UseJsonName in json2proto_ut.cpp:
         // Def_upper json name should be "DefUpper".
         TString modelStr(R"_({"My-Upper":1,"my-lower":2,"defUpper":3,"defLower":4})_");
- 
+
         TWithJsonName proto;
         proto.Setmy_upper(1);
         proto.SetMy_lower(2);
@@ -866,11 +866,11 @@ Y_UNIT_TEST(TestFieldNameMode) {
         TStringStream jsonStr;
         TProto2JsonConfig config;
         config.SetUseJsonName(true);
- 
+
         UNIT_ASSERT_NO_EXCEPTION(Proto2Json(proto, jsonStr, config));
         UNIT_ASSERT_STRINGS_EQUAL(jsonStr.Str(), modelStr);
     }
- 
+
     // FieldNameMode with UseJsonName
     {
         TProto2JsonConfig config;
@@ -884,7 +884,7 @@ Y_UNIT_TEST(TestFieldNameMode) {
         UNIT_ASSERT_EXCEPTION_CONTAINS(
             config.SetFieldNameMode(TProto2JsonConfig::FieldNameLowerCase), yexception, "mutually exclusive");
     }
- 
+
     /// TODO: test missing keys
 } // TestFieldNameMode
 

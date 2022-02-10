@@ -179,17 +179,17 @@ public:
     }
 
     /**
-    * @brief set if input stream should be closed after all data is read 
-    * call SetCloseInput(false) for interactive process 
-    * @param val if input stream should be closed 
-    * @return self 
-    */ 
-    inline TShellCommandOptions& SetCloseInput(bool val) { 
-        ShouldCloseInput = val; 
-        return *this; 
-    } 
- 
-    /** 
+    * @brief set if input stream should be closed after all data is read
+    * call SetCloseInput(false) for interactive process
+    * @param val if input stream should be closed
+    * @return self
+    */
+    inline TShellCommandOptions& SetCloseInput(bool val) {
+        ShouldCloseInput = val;
+        return *this;
+    }
+
+    /**
     * @brief set if command should be interpreted by OS shell (/bin/sh or cmd.exe)
     * shell is enabled by default
     * call SetUseShell(false) for command to be sent to OS verbatim
@@ -457,13 +457,13 @@ public:
      */
     TShellCommand& Wait();
 
-    /** 
-     * @brief close process' stdin 
-     * 
-     * @return self 
-     */ 
-    TShellCommand& CloseInput(); 
- 
+    /**
+     * @brief close process' stdin
+     *
+     * @return self
+     */
+    TShellCommand& CloseInput();
+
     /**
      * @brief Get quoted command (for debug/view purposes only!)
      **/

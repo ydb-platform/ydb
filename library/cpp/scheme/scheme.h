@@ -384,7 +384,7 @@ namespace NSc {
 
     public:
         // very specific methods useful in very specific corner cases
- 
+
         static TValue From(const ::google::protobuf::Message&, bool mapAsDict = false);
 
         void To(::google::protobuf::Message&, const TProtoOpts& opts = {}) const;

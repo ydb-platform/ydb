@@ -4,7 +4,7 @@
 #include "name_generator.h"
 
 #include <util/generic/vector.h>
-#include <util/generic/yexception.h> 
+#include <util/generic/yexception.h>
 
 #include <functional>
 
@@ -68,7 +68,7 @@ namespace NProtobufJson {
         /// Transforms will be applied only to string values (== protobuf fields of string / bytes type).
         /// yajl_encode_string will be used if no transforms are specified.
         TVector<TStringTransformPtr> StringTransforms;
- 
+
         /// Print map as object, otherwise print it as array of key/value objects
         bool MapAsObject = false;
 
@@ -134,7 +134,7 @@ namespace NProtobufJson {
             StringTransforms.push_back(transform);
             return *this;
         }
- 
+
         TSelf& SetMapAsObject(bool value) {
             MapAsObject = value;
             return *this;

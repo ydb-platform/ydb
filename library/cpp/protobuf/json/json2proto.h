@@ -52,7 +52,7 @@ namespace NProtobufJson {
             StringTransforms.push_back(transform);
             return *this;
         }
- 
+
         TSelf& SetCastFromString(bool cast) {
             CastFromString = cast;
             return *this;
@@ -67,7 +67,7 @@ namespace NProtobufJson {
             CastRobust = cast;
             return *this;
         }
- 
+
         TSelf& SetMapAsObject(bool mapAsObject) {
             MapAsObject = mapAsObject;
             return *this;
@@ -112,7 +112,7 @@ namespace NProtobufJson {
 
         /// Transforms will be applied only to string values (== protobuf fields of string / bytes type).
         TVector<TStringTransformPtr> StringTransforms;
- 
+
         /// Cast string json values to protobuf field type
         bool CastFromString = false;
         /// Skip empty strings, instead casting from string into scalar types.
@@ -120,7 +120,7 @@ namespace NProtobufJson {
         bool DoNotCastEmptyStrings = false;
         /// Cast all json values to protobuf field types
         bool CastRobust = false;
- 
+
         /// Consider map to be an object, otherwise consider it to be an array of key/value objects
         bool MapAsObject = false;
 

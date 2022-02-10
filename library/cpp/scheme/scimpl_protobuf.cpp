@@ -1,22 +1,22 @@
-#include "scheme.h" 
- 
-#include <util/generic/vector.h> 
-#include <util/generic/yexception.h> 
- 
+#include "scheme.h"
+
+#include <util/generic/vector.h>
+#include <util/generic/yexception.h>
+
 #include <google/protobuf/descriptor.h>
 #include <google/protobuf/message.h>
 #include <google/protobuf/reflection.h>
- 
-using namespace google::protobuf; 
- 
-namespace NSc { 
+
+using namespace google::protobuf;
+
+namespace NSc {
     TValue TValue::From(const Message& msg, bool mapAsDict) {
         TValue v;
         const Reflection* r = msg.GetReflection();
         TVector<const FieldDescriptor*> fields;
         TVector<const FieldDescriptor*>::iterator it;
         int i1;
- 
+
         r->ListFields(msg, &fields);
         for (it = fields.begin(), i1 = 0; it != fields.end(); ++it, ++i1) {
             const FieldDescriptor* field = *it;
@@ -39,16 +39,16 @@ namespace NSc {
                 }
             } catch (...) {
                 /* conversion failed, skip this field */
-            } 
-        } 
+            }
+        }
 
         return v;
-    } 
- 
+    }
+
     TValue TValue::FromField(const Message& msg, const FieldDescriptor* field) {
         TValue v;
         const Reflection* r = msg.GetReflection();
- 
+
         switch (field->cpp_type()) {
             case FieldDescriptor::CPPTYPE_INT32:
                 v = r->GetInt32(msg, field);
@@ -83,14 +83,14 @@ namespace NSc {
             default:
                 ythrow TSchemeException() << "field " << field->full_name() << " unexpected type " << (int)field->cpp_type();
         }
- 
+
         return v;
-    } 
- 
+    }
+
     TValue TValue::FromRepeatedField(const Message& msg, const FieldDescriptor* field, int index) {
         TValue v;
         const Reflection* r = msg.GetReflection();
- 
+
         switch (field->cpp_type()) {
             case FieldDescriptor::CPPTYPE_INT32:
                 v = r->GetRepeatedInt32(msg, field, index);
@@ -125,10 +125,10 @@ namespace NSc {
             default:
                 ythrow TSchemeException() << "field " << field->full_name() << " unexpected type " << (int)field->cpp_type();
         }
- 
+
         return v;
-    } 
- 
+    }
+
     void TValue::To(Message& msg, const TProtoOpts& opts) const {
         msg.Clear();
 
@@ -326,4 +326,4 @@ namespace NSc {
             mutableField.Add(*entry);
         }
     }
-} 
+}

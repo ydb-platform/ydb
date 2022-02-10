@@ -1844,7 +1844,7 @@ struct TBlockStoreVolumeInfo : public TSimpleRefCount<TBlockStoreVolumeInfo> {
 
     static constexpr size_t NumVolumeTabletChannels = 3;
 
-    ui32 DefaultPartitionCount = 0;
+    ui32 DefaultPartitionCount = 0; 
     NKikimrBlockStore::TVolumeConfig VolumeConfig;
     ui64 AlterVersion = 0;
     ui64 TokenVersion = 0;
@@ -1854,28 +1854,28 @@ struct TBlockStoreVolumeInfo : public TSimpleRefCount<TBlockStoreVolumeInfo> {
     TShardIdx VolumeShardIdx = InvalidShardIdx;
     TString MountToken;
     TTabletCache TabletCache;
-    ui32 ExplicitChannelProfileCount = 0;
+    ui32 ExplicitChannelProfileCount = 0; 
 
-    static ui32 CalculateDefaultPartitionCount(
-        const NKikimrBlockStore::TVolumeConfig& config)
-    {
-        ui32 c = 0;
-        for (const auto& partition: config.GetPartitions()) {
-            if (partition.GetType() == NKikimrBlockStore::EPartitionType::Default) {
-                ++c;
-            }
-        }
-
-        return c;
-    }
-
+    static ui32 CalculateDefaultPartitionCount( 
+        const NKikimrBlockStore::TVolumeConfig& config) 
+    { 
+        ui32 c = 0; 
+        for (const auto& partition: config.GetPartitions()) { 
+            if (partition.GetType() == NKikimrBlockStore::EPartitionType::Default) { 
+                ++c; 
+            } 
+        } 
+ 
+        return c; 
+    } 
+ 
     bool HasVolumeTablet() const { return VolumeTabletId != InvalidTabletId; }
 
     void PrepareAlter(TBlockStoreVolumeInfo::TPtr alterData) {
         Y_VERIFY(alterData, "No alter data at Alter preparation");
-        if (!alterData->DefaultPartitionCount) {
-            alterData->DefaultPartitionCount =
-                CalculateDefaultPartitionCount(alterData->VolumeConfig);
+        if (!alterData->DefaultPartitionCount) { 
+            alterData->DefaultPartitionCount = 
+                CalculateDefaultPartitionCount(alterData->VolumeConfig); 
         }
         alterData->VolumeTabletId = VolumeTabletId;
         alterData->VolumeShardIdx = VolumeShardIdx;
@@ -1890,8 +1890,8 @@ struct TBlockStoreVolumeInfo : public TSimpleRefCount<TBlockStoreVolumeInfo> {
 
     void FinishAlter() {
         Y_VERIFY(AlterData, "No alter data at Alter completion");
-        DefaultPartitionCount = AlterData->DefaultPartitionCount;
-        ExplicitChannelProfileCount = AlterData->ExplicitChannelProfileCount;
+        DefaultPartitionCount = AlterData->DefaultPartitionCount; 
+        ExplicitChannelProfileCount = AlterData->ExplicitChannelProfileCount; 
         VolumeConfig.CopyFrom(AlterData->VolumeConfig);
         ++AlterVersion;
         Y_VERIFY(AlterVersion == AlterData->AlterVersion);
@@ -1909,7 +1909,7 @@ struct TBlockStoreVolumeInfo : public TSimpleRefCount<TBlockStoreVolumeInfo> {
         }
 
         TabletCache.Tablets.clear();
-        TabletCache.Tablets.resize(DefaultPartitionCount);
+        TabletCache.Tablets.resize(DefaultPartitionCount); 
 
         for (const auto& kv : Shards) {
             TShardIdx shardIdx = kv.first;
@@ -1920,7 +1920,7 @@ struct TBlockStoreVolumeInfo : public TSimpleRefCount<TBlockStoreVolumeInfo> {
             TTabletId tabletId = itShard->second.TabletID;
 
             if (partInfo.AlterVersion <= AlterVersion) {
-                Y_VERIFY(partInfo.PartitionId < DefaultPartitionCount,
+                Y_VERIFY(partInfo.PartitionId < DefaultPartitionCount, 
                     "Wrong PartitionId %" PRIu32, partInfo.PartitionId);
                 TabletCache.Tablets[partInfo.PartitionId] = tabletId;
             }
@@ -1943,8 +1943,8 @@ struct TBlockStoreVolumeInfo : public TSimpleRefCount<TBlockStoreVolumeInfo> {
     TVolumeSpace GetVolumeSpace() const {
         ui64 blockSize = VolumeConfig.GetBlockSize();
         ui64 blockCount = 0;
-        for (const auto& partition: VolumeConfig.GetPartitions()) {
-            blockCount += partition.GetBlockCount();
+        for (const auto& partition: VolumeConfig.GetPartitions()) { 
+            blockCount += partition.GetBlockCount(); 
         }
 
         TVolumeSpace space;
@@ -1966,9 +1966,9 @@ struct TBlockStoreVolumeInfo : public TSimpleRefCount<TBlockStoreVolumeInfo> {
                 space.HDD += blockCount * blockSize; // merged blobs
                 space.SSD += (blockCount / 8) * blockSize; // mixed blobs
                 break;
-            case 4: // STORAGE_MEDIA_SSD_NONREPLICATED
-                space.SSDNonrepl += blockCount * blockSize; // blocks are stored directly
-                break;
+            case 4: // STORAGE_MEDIA_SSD_NONREPLICATED 
+                space.SSDNonrepl += blockCount * blockSize; // blocks are stored directly 
+                break; 
         }
 
         if (AlterData) {
@@ -1976,7 +1976,7 @@ struct TBlockStoreVolumeInfo : public TSimpleRefCount<TBlockStoreVolumeInfo> {
             space.Raw = Max(space.Raw, altSpace.Raw);
             space.SSD = Max(space.SSD, altSpace.SSD);
             space.HDD = Max(space.HDD, altSpace.HDD);
-            space.SSDNonrepl = Max(space.SSDNonrepl, altSpace.SSDNonrepl);
+            space.SSDNonrepl = Max(space.SSDNonrepl, altSpace.SSDNonrepl); 
             space.SSDSystem = Max(space.SSDSystem, altSpace.SSDSystem);
         }
 

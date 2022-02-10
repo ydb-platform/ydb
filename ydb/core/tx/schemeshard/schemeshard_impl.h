@@ -334,12 +334,12 @@ public:
     bool ResolveSolomonChannels(ui32 profileId, const TPathId domainId, TChannelsBindings& channelsBinding) const;
     bool ResolvePqChannels(ui32 profileId, const TPathId domainId, TChannelsBindings& channelsBinding) const;
     bool ResolveChannelsByPoolKinds(
-        const TVector<TStringBuf>& channelPoolKinds,
-        const TPathId domainId,
-        TChannelsBindings& channelsBinding) const;
-    static void SetNbsChannelsParams(
-        const google::protobuf::RepeatedPtrField<NKikimrBlockStore::TChannelProfile>& ecps,
-        TChannelsBindings& channelsBinding);
+        const TVector<TStringBuf>& channelPoolKinds, 
+        const TPathId domainId, 
+        TChannelsBindings& channelsBinding) const; 
+    static void SetNbsChannelsParams( 
+        const google::protobuf::RepeatedPtrField<NKikimrBlockStore::TChannelProfile>& ecps, 
+        TChannelsBindings& channelsBinding); 
     static void SetNfsChannelsParams(
         const google::protobuf::RepeatedPtrField<NKikimrFileStore::TChannelProfile>& ecps,
         TChannelsBindings& channelsBinding);

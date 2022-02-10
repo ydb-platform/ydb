@@ -635,7 +635,7 @@ public:
         Self->Become(&TSelf::StateWork);
         Self->SetCounterTabletsTotal(tabletsTotal);
         Self->MigrationState = NKikimrHive::EMigrationState::MIGRATION_READY;
-        ctx.Send(Self->SelfId(), new TEvPrivate::TEvBootTablets());
+        ctx.Send(Self->SelfId(), new TEvPrivate::TEvBootTablets()); 
 
         for (auto it = Self->Nodes.begin(); it != Self->Nodes.end(); ++it) {
             Self->ScheduleUnlockTabletExecution(it->second);

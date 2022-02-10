@@ -3,80 +3,80 @@
 namespace NYT {
     TYson2JsonCallbacksAdapter::TYson2JsonCallbacksAdapter(::NYson::TYsonConsumerBase* impl, bool throwException)
         : NJson::TJsonCallbacks(throwException)
-        , Impl_(impl)
+        , Impl_(impl) 
     {
     }
 
     bool TYson2JsonCallbacksAdapter::OnNull() {
         WrapIfListItem();
-        Impl_->OnEntity();
+        Impl_->OnEntity(); 
         return true;
     }
 
     bool TYson2JsonCallbacksAdapter::OnBoolean(bool val) {
         WrapIfListItem();
-        Impl_->OnBooleanScalar(val);
+        Impl_->OnBooleanScalar(val); 
         return true;
     }
 
     bool TYson2JsonCallbacksAdapter::OnInteger(long long val) {
         WrapIfListItem();
-        Impl_->OnInt64Scalar(val);
+        Impl_->OnInt64Scalar(val); 
         return true;
     }
 
     bool TYson2JsonCallbacksAdapter::OnUInteger(unsigned long long val) {
         WrapIfListItem();
-        Impl_->OnUint64Scalar(val);
+        Impl_->OnUint64Scalar(val); 
         return true;
     }
 
     bool TYson2JsonCallbacksAdapter::OnString(const TStringBuf& val) {
         WrapIfListItem();
-        Impl_->OnStringScalar(val);
+        Impl_->OnStringScalar(val); 
         return true;
     }
 
     bool TYson2JsonCallbacksAdapter::OnDouble(double val) {
         WrapIfListItem();
-        Impl_->OnDoubleScalar(val);
+        Impl_->OnDoubleScalar(val); 
         return true;
     }
 
     bool TYson2JsonCallbacksAdapter::OnOpenArray() {
         WrapIfListItem();
-        State_.ContextStack.push(true);
-        Impl_->OnBeginList();
+        State_.ContextStack.push(true); 
+        Impl_->OnBeginList(); 
         return true;
     }
 
     bool TYson2JsonCallbacksAdapter::OnCloseArray() {
-        State_.ContextStack.pop();
-        Impl_->OnEndList();
+        State_.ContextStack.pop(); 
+        Impl_->OnEndList(); 
         return true;
     }
 
     bool TYson2JsonCallbacksAdapter::OnOpenMap() {
         WrapIfListItem();
-        State_.ContextStack.push(false);
-        Impl_->OnBeginMap();
+        State_.ContextStack.push(false); 
+        Impl_->OnBeginMap(); 
         return true;
     }
 
     bool TYson2JsonCallbacksAdapter::OnCloseMap() {
-        State_.ContextStack.pop();
-        Impl_->OnEndMap();
+        State_.ContextStack.pop(); 
+        Impl_->OnEndMap(); 
         return true;
     }
 
     bool TYson2JsonCallbacksAdapter::OnMapKey(const TStringBuf& val) {
-        Impl_->OnKeyedItem(val);
+        Impl_->OnKeyedItem(val); 
         return true;
     }
 
     void TYson2JsonCallbacksAdapter::WrapIfListItem() {
-        if (!State_.ContextStack.empty() && State_.ContextStack.top()) {
-            Impl_->OnListItem();
+        if (!State_.ContextStack.empty() && State_.ContextStack.top()) { 
+            Impl_->OnListItem(); 
         }
     }
 }

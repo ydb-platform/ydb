@@ -3,10 +3,10 @@ LIBRARY()
 OWNER(g:kikimr)
 
 SRCS(
-    appdata.cpp
+    appdata.cpp 
     helpers.cpp
     runtime.cpp
-    services.cpp
+    services.cpp 
 )
 
 PEERDIR(

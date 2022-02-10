@@ -16,42 +16,42 @@ namespace NSchemeShard {
 
 const ui64 NEW_TABLE_ALTER_VERSION = 1;
 
-namespace {
-
-bool ResolvePoolNames(
-    const ui32 channelCount,
-    const std::function<TStringBuf(ui32)> &channel2poolKind,
-    const TStoragePools &storagePools,
-    TChannelsBindings &channelsBinding)
-{
-    TChannelsBindings result;
-
-    for (ui32 channelId = 0; channelId < channelCount; ++channelId) {
-        const auto poolKind = channel2poolKind(channelId);
-
-        auto poolIt = std::find_if(
-            storagePools.begin(),
-            storagePools.end(),
-            [=] (const TStoragePools::value_type& pool) {
-                return poolKind == pool.GetKind();
-            }
-        );
-
-        if (poolIt == storagePools.end()) {
-            //unable to construct channel binding with the storage pool
-            return false;
-        }
-
-        result.emplace_back();
-        result.back().SetStoragePoolName(poolIt->GetName());
-    }
-
-    channelsBinding.swap(result);
-    return true;
-}
-
-}   // namespace
-
+namespace { 
+ 
+bool ResolvePoolNames( 
+    const ui32 channelCount, 
+    const std::function<TStringBuf(ui32)> &channel2poolKind, 
+    const TStoragePools &storagePools, 
+    TChannelsBindings &channelsBinding) 
+{ 
+    TChannelsBindings result; 
+ 
+    for (ui32 channelId = 0; channelId < channelCount; ++channelId) { 
+        const auto poolKind = channel2poolKind(channelId); 
+ 
+        auto poolIt = std::find_if( 
+            storagePools.begin(), 
+            storagePools.end(), 
+            [=] (const TStoragePools::value_type& pool) { 
+                return poolKind == pool.GetKind(); 
+            } 
+        ); 
+ 
+        if (poolIt == storagePools.end()) { 
+            //unable to construct channel binding with the storage pool 
+            return false; 
+        } 
+ 
+        result.emplace_back(); 
+        result.back().SetStoragePoolName(poolIt->GetName()); 
+    } 
+ 
+    channelsBinding.swap(result); 
+    return true; 
+} 
+ 
+}   // namespace 
+ 
 const TSchemeLimits TSchemeShard::DefaultLimits = {};
 
 void TSchemeShard::ActivateAfterInitialization(const TActorContext& ctx,
@@ -777,52 +777,52 @@ bool TSchemeShard::ResolvePqChannels(ui32 profileId, const TPathId domainId, TCh
 }
 
 bool TSchemeShard::ResolveChannelsByPoolKinds(
-    const TVector<TStringBuf> &channelPoolKinds,
-    const TPathId domainId,
-    TChannelsBindings &channelsBinding) const
+    const TVector<TStringBuf> &channelPoolKinds, 
+    const TPathId domainId, 
+    TChannelsBindings &channelsBinding) const 
 {
-    TSubDomainInfo::TPtr domainInfo = SubDomains.at(domainId);
-    auto& storagePools = domainInfo->EffectiveStoragePools();
-
-    if (!storagePools || !channelPoolKinds) {
-        return false;
+    TSubDomainInfo::TPtr domainInfo = SubDomains.at(domainId); 
+    auto& storagePools = domainInfo->EffectiveStoragePools(); 
+ 
+    if (!storagePools || !channelPoolKinds) { 
+        return false; 
     }
-
-    if (!ResolvePoolNames(
-            channelPoolKinds.size(),
-            [&] (ui32 channel) {
-                return channelPoolKinds[channel];
-            },
-            storagePools,
-            channelsBinding
-        ))
-    {
-        return false;
-    }
-
-    Y_VERIFY_DEBUG(!channelsBinding.empty());
-    return !channelsBinding.empty();
+ 
+    if (!ResolvePoolNames( 
+            channelPoolKinds.size(), 
+            [&] (ui32 channel) { 
+                return channelPoolKinds[channel]; 
+            }, 
+            storagePools, 
+            channelsBinding 
+        )) 
+    { 
+        return false; 
+    } 
+ 
+    Y_VERIFY_DEBUG(!channelsBinding.empty()); 
+    return !channelsBinding.empty(); 
 }
 
 void TSchemeShard::SetNbsChannelsParams(
-    const google::protobuf::RepeatedPtrField<NKikimrBlockStore::TChannelProfile>& ecps,
-    TChannelsBindings& channelsBinding)
-{
-    Y_VERIFY(channelsBinding.ysize() == ecps.size());
-
-    for (int i = 0; i < ecps.size(); ++i) {
-        channelsBinding[i].SetSize(ecps[i].GetSize());
-        // XXX IOPS and Throughput should be split into read/write IOPS
-        // and read/write Throughput in Hive
-        channelsBinding[i].SetThroughput(
-            ecps[i].GetReadBandwidth() + ecps[i].GetWriteBandwidth()
-        );
-        channelsBinding[i].SetIOPS(
-            ecps[i].GetReadIops() + ecps[i].GetWriteIops()
-        );
-    }
-}
-
+    const google::protobuf::RepeatedPtrField<NKikimrBlockStore::TChannelProfile>& ecps, 
+    TChannelsBindings& channelsBinding) 
+{ 
+    Y_VERIFY(channelsBinding.ysize() == ecps.size()); 
+ 
+    for (int i = 0; i < ecps.size(); ++i) { 
+        channelsBinding[i].SetSize(ecps[i].GetSize()); 
+        // XXX IOPS and Throughput should be split into read/write IOPS 
+        // and read/write Throughput in Hive 
+        channelsBinding[i].SetThroughput( 
+            ecps[i].GetReadBandwidth() + ecps[i].GetWriteBandwidth() 
+        ); 
+        channelsBinding[i].SetIOPS( 
+            ecps[i].GetReadIops() + ecps[i].GetWriteIops() 
+        ); 
+    } 
+} 
+ 
 void TSchemeShard::SetNfsChannelsParams(
     const google::protobuf::RepeatedPtrField<NKikimrFileStore::TChannelProfile>& ecps,
     TChannelsBindings& channelsBinding)
@@ -902,19 +902,19 @@ bool TSchemeShard::ResolveChannelCommon(ui32 profileId, const TPathId domainId, 
 }
 
 bool TSchemeShard::ResolveChannelsDetailsAsIs(
-    ui32,
-    const TChannelProfiles::TProfile &profile,
-    const TStoragePools &storagePools,
-    TChannelsBindings &channelsBinding)
+    ui32, 
+    const TChannelProfiles::TProfile &profile, 
+    const TStoragePools &storagePools, 
+    TChannelsBindings &channelsBinding) 
 {
-    return ResolvePoolNames(
-        profile.Channels.size(),
-        [&] (ui32 channel) {
-            return TStringBuf(profile.Channels[channel].PoolKind);
-        },
-        storagePools,
-        channelsBinding
-    );
+    return ResolvePoolNames( 
+        profile.Channels.size(), 
+        [&] (ui32 channel) { 
+            return TStringBuf(profile.Channels[channel].PoolKind); 
+        }, 
+        storagePools, 
+        channelsBinding 
+    ); 
 }
 
 bool TSchemeShard::TabletResolveChannelsDetails(ui32 profileId, const TChannelProfiles::TProfile &profile, const TStoragePools &storagePools, TChannelsBindings &channelsBinding)
@@ -2723,7 +2723,7 @@ void TSchemeShard::PersistAddBlockStoreVolumeAlter(NIceDb::TNiceDb& db, TPathId 
     db.Table<Schema::BlockStoreVolumeAlters>().Key(pathId.LocalPathId).Update(
         NIceDb::TUpdate<Schema::BlockStoreVolumeAlters::VolumeConfig>(volumeConfig),
         NIceDb::TUpdate<Schema::BlockStoreVolumeAlters::AlterVersion>(volume->AlterVersion),
-        NIceDb::TUpdate<Schema::BlockStoreVolumeAlters::PartitionCount>(volume->DefaultPartitionCount));
+        NIceDb::TUpdate<Schema::BlockStoreVolumeAlters::PartitionCount>(volume->DefaultPartitionCount)); 
 }
 
 void TSchemeShard::PersistRemoveBlockStoreVolumeAlter(NIceDb::TNiceDb& db, TPathId pathId)
@@ -5347,7 +5347,7 @@ void TSchemeShard::Handle(TEvPrivate::TEvRunConditionalErase::TPtr& ev, const TA
 }
 
 void TSchemeShard::ScheduleServerlessStorageBilling(const TActorContext &ctx) {
-    ctx.Send(SelfId(), new TEvPrivate::TEvServerlessStorageBilling());
+    ctx.Send(SelfId(), new TEvPrivate::TEvServerlessStorageBilling()); 
 }
 
 void TSchemeShard::Handle(TEvPrivate::TEvServerlessStorageBilling::TPtr &, const TActorContext &ctx) {

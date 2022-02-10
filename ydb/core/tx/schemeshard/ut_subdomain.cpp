@@ -1164,12 +1164,12 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
 
         TestCreateBlockStoreVolume(runtime, txId++, "/MyRoot/USER_0",
                                    "Name: \"BSVolume\" "
-                                   "VolumeConfig: { "
-                                   " ExplicitChannelProfiles { PoolKind: \"storage-pool-number-1\"}"
-                                   " ExplicitChannelProfiles { PoolKind: \"storage-pool-number-1\"}"
-                                   " ExplicitChannelProfiles { PoolKind: \"storage-pool-number-1\"}"
-                                   " ExplicitChannelProfiles { PoolKind: \"storage-pool-number-2\"}"
-                                   " BlockSize: 4096 Partitions { BlockCount: 16 } } ");
+                                   "VolumeConfig: { " 
+                                   " ExplicitChannelProfiles { PoolKind: \"storage-pool-number-1\"}" 
+                                   " ExplicitChannelProfiles { PoolKind: \"storage-pool-number-1\"}" 
+                                   " ExplicitChannelProfiles { PoolKind: \"storage-pool-number-1\"}" 
+                                   " ExplicitChannelProfiles { PoolKind: \"storage-pool-number-2\"}" 
+                                   " BlockSize: 4096 Partitions { BlockCount: 16 } } "); 
 
         env.TestWaitNotification(runtime, {txId-2, txId-1});
         UNIT_ASSERT(CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", 2));
@@ -1215,24 +1215,24 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
                             "}");
 
         NKikimrSchemeOp::TBlockStoreVolumeDescription vdescr;
-        vdescr.SetName("BSVolume");
-        auto& vc = *vdescr.MutableVolumeConfig();
-        vc.SetBlockSize(4096);
-        vc.AddPartitions()->SetBlockCount(16);
-        for (ui32 i = 0; i < 3; ++i) {
-            auto* ecp = vc.AddExplicitChannelProfiles();
-            ecp->SetPoolKind("storage-pool-number-1");
-            ecp->SetSize(111);
-        }
+        vdescr.SetName("BSVolume"); 
+        auto& vc = *vdescr.MutableVolumeConfig(); 
+        vc.SetBlockSize(4096); 
+        vc.AddPartitions()->SetBlockCount(16); 
+        for (ui32 i = 0; i < 3; ++i) { 
+            auto* ecp = vc.AddExplicitChannelProfiles(); 
+            ecp->SetPoolKind("storage-pool-number-1"); 
+            ecp->SetSize(111); 
+        } 
 
-        {
-            auto* ecp = vc.AddExplicitChannelProfiles();
-            ecp->SetPoolKind("storage-pool-number-2");
-            ecp->SetSize(222);
-        }
-
-        TestCreateBlockStoreVolume(runtime, txId++, "/MyRoot/USER_0", vdescr.DebugString());
-
+        { 
+            auto* ecp = vc.AddExplicitChannelProfiles(); 
+            ecp->SetPoolKind("storage-pool-number-2"); 
+            ecp->SetSize(222); 
+        } 
+ 
+        TestCreateBlockStoreVolume(runtime, txId++, "/MyRoot/USER_0", vdescr.DebugString()); 
+ 
         env.TestWaitNotification(runtime, {txId-2, txId-1});
 
         const TFakeHiveTabletInfo* tablet = nullptr;
@@ -1246,26 +1246,26 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
 
         // Tablet should be created with 3 + 1 storage pool bound channels
         UNIT_ASSERT_VALUES_EQUAL(tablet->BoundChannels.size(), 4u);
-        UNIT_ASSERT_VALUES_EQUAL(
-            tablet->BoundChannels[0].GetStoragePoolName(),
-            "name_USER_0_kind_hdd-1"
-        );
-        UNIT_ASSERT_VALUES_EQUAL(tablet->BoundChannels[0].GetSize(), 111);
-        UNIT_ASSERT_VALUES_EQUAL(
-            tablet->BoundChannels[1].GetStoragePoolName(),
-            "name_USER_0_kind_hdd-1"
-        );
-        UNIT_ASSERT_VALUES_EQUAL(tablet->BoundChannels[1].GetSize(), 111);
-        UNIT_ASSERT_VALUES_EQUAL(
-            tablet->BoundChannels[2].GetStoragePoolName(),
-            "name_USER_0_kind_hdd-1"
-        );
-        UNIT_ASSERT_VALUES_EQUAL(tablet->BoundChannels[2].GetSize(), 111);
-        UNIT_ASSERT_VALUES_EQUAL(
-            tablet->BoundChannels[3].GetStoragePoolName(),
-            "name_USER_0_kind_hdd-2"
-        );
-        UNIT_ASSERT_VALUES_EQUAL(tablet->BoundChannels[3].GetSize(), 222);
+        UNIT_ASSERT_VALUES_EQUAL( 
+            tablet->BoundChannels[0].GetStoragePoolName(), 
+            "name_USER_0_kind_hdd-1" 
+        ); 
+        UNIT_ASSERT_VALUES_EQUAL(tablet->BoundChannels[0].GetSize(), 111); 
+        UNIT_ASSERT_VALUES_EQUAL( 
+            tablet->BoundChannels[1].GetStoragePoolName(), 
+            "name_USER_0_kind_hdd-1" 
+        ); 
+        UNIT_ASSERT_VALUES_EQUAL(tablet->BoundChannels[1].GetSize(), 111); 
+        UNIT_ASSERT_VALUES_EQUAL( 
+            tablet->BoundChannels[2].GetStoragePoolName(), 
+            "name_USER_0_kind_hdd-1" 
+        ); 
+        UNIT_ASSERT_VALUES_EQUAL(tablet->BoundChannels[2].GetSize(), 111); 
+        UNIT_ASSERT_VALUES_EQUAL( 
+            tablet->BoundChannels[3].GetStoragePoolName(), 
+            "name_USER_0_kind_hdd-2" 
+        ); 
+        UNIT_ASSERT_VALUES_EQUAL(tablet->BoundChannels[3].GetSize(), 222); 
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
                             {NLs::SubdomainWithNoEmptyStoragePools});
@@ -1273,47 +1273,47 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
         TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0/BSVolume"),
                             {NLs::PathsInsideDomain(1), NLs::ShardsInsideDomain(4)});
 
-        vc.ClearBlockSize();
-        vc.ClearPartitions();
-        vc.SetVersion(1);
-        vc.MutableExplicitChannelProfiles(3)->SetPoolKind("storage-pool-number-1");
-        vc.MutableExplicitChannelProfiles(3)->SetSize(333);
-        vc.SetPoolKindChangeAllowed(true);
-        TestAlterBlockStoreVolume(runtime, txId++, "/MyRoot/USER_0", vdescr.DebugString());
-
-        env.TestWaitNotification(runtime, txId-1);
-
-        // Storage pool and size for channel 3 should be changed
-        UNIT_ASSERT_VALUES_EQUAL(
-            tablet->BoundChannels[3].GetStoragePoolName(),
-            "name_USER_0_kind_hdd-1"
-        );
-        UNIT_ASSERT_VALUES_EQUAL(tablet->BoundChannels[3].GetSize(), 333);
-
-        vc.ClearPoolKindChangeAllowed();
-        vc.SetVersion(2);
-        {
-            auto* ecp = vc.AddExplicitChannelProfiles();
-            ecp->SetPoolKind("storage-pool-number-2");
-            ecp->SetSize(444);
-        }
-        TestAlterBlockStoreVolume(runtime, txId++, "/MyRoot/USER_0", vdescr.DebugString());
+        vc.ClearBlockSize(); 
+        vc.ClearPartitions(); 
+        vc.SetVersion(1); 
+        vc.MutableExplicitChannelProfiles(3)->SetPoolKind("storage-pool-number-1"); 
+        vc.MutableExplicitChannelProfiles(3)->SetSize(333); 
+        vc.SetPoolKindChangeAllowed(true); 
+        TestAlterBlockStoreVolume(runtime, txId++, "/MyRoot/USER_0", vdescr.DebugString()); 
+ 
+        env.TestWaitNotification(runtime, txId-1); 
+ 
+        // Storage pool and size for channel 3 should be changed 
+        UNIT_ASSERT_VALUES_EQUAL( 
+            tablet->BoundChannels[3].GetStoragePoolName(), 
+            "name_USER_0_kind_hdd-1" 
+        ); 
+        UNIT_ASSERT_VALUES_EQUAL(tablet->BoundChannels[3].GetSize(), 333); 
+ 
+        vc.ClearPoolKindChangeAllowed(); 
+        vc.SetVersion(2); 
+        { 
+            auto* ecp = vc.AddExplicitChannelProfiles(); 
+            ecp->SetPoolKind("storage-pool-number-2"); 
+            ecp->SetSize(444); 
+        } 
+        TestAlterBlockStoreVolume(runtime, txId++, "/MyRoot/USER_0", vdescr.DebugString()); 
 
         env.TestWaitNotification(runtime, txId-1);
 
         // Tablet should be recreated with 3 + 2 storage pool bound channels
         UNIT_ASSERT_VALUES_EQUAL(tablet->BoundChannels.size(), 5u);
-        UNIT_ASSERT_VALUES_EQUAL(
-            tablet->BoundChannels[4].GetStoragePoolName(),
-            "name_USER_0_kind_hdd-2"
-        );
-        UNIT_ASSERT_VALUES_EQUAL(tablet->BoundChannels[4].GetSize(), 444);
+        UNIT_ASSERT_VALUES_EQUAL( 
+            tablet->BoundChannels[4].GetStoragePoolName(), 
+            "name_USER_0_kind_hdd-2" 
+        ); 
+        UNIT_ASSERT_VALUES_EQUAL(tablet->BoundChannels[4].GetSize(), 444); 
 
-        vc.SetVersion(3);
-        for (ui32 i = 0; i < 251; ++i) {
-            vc.AddExplicitChannelProfiles()->SetPoolKind("storage-pool-number-2");
-        }
-        TestAlterBlockStoreVolume(runtime, txId++, "/MyRoot/USER_0", vdescr.DebugString());
+        vc.SetVersion(3); 
+        for (ui32 i = 0; i < 251; ++i) { 
+            vc.AddExplicitChannelProfiles()->SetPoolKind("storage-pool-number-2"); 
+        } 
+        TestAlterBlockStoreVolume(runtime, txId++, "/MyRoot/USER_0", vdescr.DebugString()); 
 
         env.TestWaitNotification(runtime, txId-1);
 

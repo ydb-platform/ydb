@@ -96,7 +96,7 @@ namespace NSc {
         }
 
     public:
-        bool RelaxedJson = false;
+        bool RelaxedJson = false; 
         int Opts = 0;
         bool SortKeys = true;
         bool FormatJson = false;

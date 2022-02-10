@@ -126,7 +126,7 @@ TStringBuf HttpCodeStrEx(int code) noexcept {
             return TStringBuf("507 Insufficient storage");
         case HTTP_LOOP_DETECTED:
             return TStringBuf("508 Loop Detected");
-        case HTTP_BANDWIDTH_LIMIT_EXCEEDED:
+        case HTTP_BANDWIDTH_LIMIT_EXCEEDED: 
             return TStringBuf("509 Bandwidth Limit Exceeded");
         case HTTP_NOT_EXTENDED:
             return TStringBuf("510 Not Extended");

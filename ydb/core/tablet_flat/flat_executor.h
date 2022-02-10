@@ -351,7 +351,7 @@ class TExecutor
 
     const TIntrusivePtr<ITimeProvider> Time = nullptr;
     NFlatExecutorSetup::ITablet * Owner;
-    const TActorId OwnerActorId;
+    const TActorId OwnerActorId; 
     TAutoPtr<NUtil::ILogger> Logger;
 
     ui32 FollowerId = 0;
@@ -615,7 +615,7 @@ public:
         return NKikimrServices::TActivity::FLAT_EXECUTOR;
     }
 
-    TExecutor(NFlatExecutorSetup::ITablet *owner, const TActorId& ownerActorId);
+    TExecutor(NFlatExecutorSetup::ITablet *owner, const TActorId& ownerActorId); 
     ~TExecutor();
 
     STFUNC(StateInit);

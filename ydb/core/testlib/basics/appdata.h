@@ -41,33 +41,33 @@ namespace NKikimr {
             TIntrusivePtr<TFormatFactory> Formats;
             std::shared_ptr<NDataShard::IExportFactory> DataShardExportFactory;
             std::shared_ptr<NPDisk::IIoContextFactory> IoContext;
-
-            ~TMine();
+ 
+            ~TMine(); 
         };
 
         using TFnReg = std::function<NMiniKQL::IFunctionRegistry*(const NScheme::TTypeRegistry&)>;
 
-        TAppPrepare(std::shared_ptr<NKikimr::NDataShard::IExportFactory> ef = {});
+        TAppPrepare(std::shared_ptr<NKikimr::NDataShard::IExportFactory> ef = {}); 
 
-        NActors::TTestActorRuntime::TEgg Unwrap() noexcept;
+        NActors::TTestActorRuntime::TEgg Unwrap() noexcept; 
 
-        void AddDomain(TDomainsInfo::TDomain* domain);
-        void AddHive(ui32 hiveUid, ui64 hive);
-        void ClearDomainsAndHive();
-        void SetChannels(TIntrusivePtr<TChannelProfiles> channels);
-        void SetBSConf(NKikimrBlobStorage::TNodeWardenServiceSet config);
-        void SetFnRegistry(TFnReg func);
-        void SetFormatsFactory(TIntrusivePtr<TFormatFactory> formats);
-        void SetKeyForNode(const TString& path, ui32 node);
-        void SetEnableKqpSpilling(bool value);
-        void SetNetDataSourceUrl(const TString& value);
-        void SetKeepSnapshotTimeout(TDuration value);
-        void SetChangesQueueItemsLimit(ui64 value);
-        void SetChangesQueueBytesLimit(ui64 value);
-        void SetMinRequestSequenceSize(ui64 value);
-        void SetRequestSequenceSize(ui64 value);
-        void AddSystemBackupSID(const TString& sid);
-        void SetEnableProtoSourceIdInfo(std::optional<bool> value);
+        void AddDomain(TDomainsInfo::TDomain* domain); 
+        void AddHive(ui32 hiveUid, ui64 hive); 
+        void ClearDomainsAndHive(); 
+        void SetChannels(TIntrusivePtr<TChannelProfiles> channels); 
+        void SetBSConf(NKikimrBlobStorage::TNodeWardenServiceSet config); 
+        void SetFnRegistry(TFnReg func); 
+        void SetFormatsFactory(TIntrusivePtr<TFormatFactory> formats); 
+        void SetKeyForNode(const TString& path, ui32 node); 
+        void SetEnableKqpSpilling(bool value); 
+        void SetNetDataSourceUrl(const TString& value); 
+        void SetKeepSnapshotTimeout(TDuration value); 
+        void SetChangesQueueItemsLimit(ui64 value); 
+        void SetChangesQueueBytesLimit(ui64 value); 
+        void SetMinRequestSequenceSize(ui64 value); 
+        void SetRequestSequenceSize(ui64 value); 
+        void AddSystemBackupSID(const TString& sid); 
+        void SetEnableProtoSourceIdInfo(std::optional<bool> value); 
 
         TIntrusivePtr<TChannelProfiles> Channels;
         NKikimrBlobStorage::TNodeWardenServiceSet BSConf;

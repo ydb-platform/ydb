@@ -9,50 +9,50 @@ using namespace NKikimr;
 using namespace NSchemeShard;
 using namespace NSchemeShardUT_Private;
 
-namespace {
-
-auto& InitCreateVolumeConfig(
-    const TString& name,
+namespace { 
+ 
+auto& InitCreateVolumeConfig( 
+    const TString& name, 
     NKikimrSchemeOp::TBlockStoreVolumeDescription& vdescr)
-{
-    vdescr.SetName(name);
-    auto& vc = *vdescr.MutableVolumeConfig();
-    vc.SetBlockSize(4096);
-    vc.SetDiskId("foo");
-    vc.AddPartitions()->SetBlockCount(16);
-    vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1");
-    vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1");
-    vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1");
-    vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-2");
-    return vc;
-}
-
-void InitAlterVolumeConfig(NKikimrBlockStore::TVolumeConfig& vc)
-{
-    vc.Clear();
-    vc.SetVersion(1);
-    vc.AddPartitions()->SetBlockCount(32);
-    vc.AddPartitions()->SetBlockCount(32);
-}
-
-}   // namespace
-
+{ 
+    vdescr.SetName(name); 
+    auto& vc = *vdescr.MutableVolumeConfig(); 
+    vc.SetBlockSize(4096); 
+    vc.SetDiskId("foo"); 
+    vc.AddPartitions()->SetBlockCount(16); 
+    vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1"); 
+    vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1"); 
+    vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1"); 
+    vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-2"); 
+    return vc; 
+} 
+ 
+void InitAlterVolumeConfig(NKikimrBlockStore::TVolumeConfig& vc) 
+{ 
+    vc.Clear(); 
+    vc.SetVersion(1); 
+    vc.AddPartitions()->SetBlockCount(32); 
+    vc.AddPartitions()->SetBlockCount(32); 
+} 
+ 
+}   // namespace 
+ 
 Y_UNIT_TEST_SUITE(TBSVWithReboots) {
     Y_UNIT_TEST(AlterAssignDrop) { //+
         TTestWithReboots t;
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             NKikimrSchemeOp::TBlockStoreVolumeDescription vdescr;
-            auto& vc = InitCreateVolumeConfig("BSVolume", vdescr);
-
+            auto& vc = InitCreateVolumeConfig("BSVolume", vdescr); 
+ 
             {
                 TInactiveZone inactive(activeZone);
                 t.RestoreLogging();
-                TestCreateBlockStoreVolume(runtime, ++t.TxId, "/MyRoot", vdescr.DebugString());
+                TestCreateBlockStoreVolume(runtime, ++t.TxId, "/MyRoot", vdescr.DebugString()); 
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
             }
 
-            InitAlterVolumeConfig(vc);
-            AsyncAlterBlockStoreVolume(runtime, ++t.TxId, "/MyRoot", vdescr.DebugString());
+            InitAlterVolumeConfig(vc); 
+            AsyncAlterBlockStoreVolume(runtime, ++t.TxId, "/MyRoot", vdescr.DebugString()); 
 
             AsyncAssignBlockStoreVolume(runtime, ++t.TxId, "/MyRoot", "BSVolume", "Owner123");
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
@@ -79,8 +79,8 @@ Y_UNIT_TEST_SUITE(TBSVWithReboots) {
             t.RestoreLogging();
 
             NKikimrSchemeOp::TBlockStoreVolumeDescription vdescr;
-            InitCreateVolumeConfig("BSVolume_1", vdescr);
-            TestCreateBlockStoreVolume(runtime, t.TxId++, "/MyRoot/DirA", vdescr.DebugString());
+            InitCreateVolumeConfig("BSVolume_1", vdescr); 
+            TestCreateBlockStoreVolume(runtime, t.TxId++, "/MyRoot/DirA", vdescr.DebugString()); 
             t.TestEnv->TestWaitNotification(runtime, t.TxId-1);
 
             activeZone = false;
@@ -94,14 +94,14 @@ Y_UNIT_TEST_SUITE(TBSVWithReboots) {
             t.RestoreLogging();
 
             NKikimrSchemeOp::TBlockStoreVolumeDescription vdescr;
-            auto& vc = InitCreateVolumeConfig("BSVolume_2", vdescr);
-            TestCreateBlockStoreVolume(runtime, t.TxId++, "/MyRoot/DirA", vdescr.DebugString());
+            auto& vc = InitCreateVolumeConfig("BSVolume_2", vdescr); 
+            TestCreateBlockStoreVolume(runtime, t.TxId++, "/MyRoot/DirA", vdescr.DebugString()); 
             t.TestEnv->TestWaitNotification(runtime, t.TxId-1);
 
             TestLs(runtime, "/MyRoot/DirA/BSVolume_2", false, NLs::Finished);
 
-            InitAlterVolumeConfig(vc);
-            TestAlterBlockStoreVolume(runtime, t.TxId++, "/MyRoot/DirA", vdescr.DebugString());
+            InitAlterVolumeConfig(vc); 
+            TestAlterBlockStoreVolume(runtime, t.TxId++, "/MyRoot/DirA", vdescr.DebugString()); 
             t.TestEnv->TestWaitNotification(runtime, t.TxId-1);
 
             activeZone = false;
@@ -118,13 +118,13 @@ Y_UNIT_TEST_SUITE(TBSVWithReboots) {
             t.RestoreLogging();
 
             NKikimrSchemeOp::TBlockStoreVolumeDescription vdescr;
-            auto& vc = InitCreateVolumeConfig("BSVolume_2", vdescr);
-            TestCreateBlockStoreVolume(runtime, t.TxId++, "/MyRoot/DirA", vdescr.DebugString());
+            auto& vc = InitCreateVolumeConfig("BSVolume_2", vdescr); 
+            TestCreateBlockStoreVolume(runtime, t.TxId++, "/MyRoot/DirA", vdescr.DebugString()); 
             t.TestEnv->TestWaitNotification(runtime, t.TxId-1);
             TestLs(runtime, "/MyRoot/DirA/BSVolume_2", false, NLs::Finished);
 
-            InitAlterVolumeConfig(vc);
-            TestAlterBlockStoreVolume(runtime, t.TxId++, "/MyRoot/DirA", vdescr.DebugString());
+            InitAlterVolumeConfig(vc); 
+            TestAlterBlockStoreVolume(runtime, t.TxId++, "/MyRoot/DirA", vdescr.DebugString()); 
             t.TestEnv->TestWaitNotification(runtime, t.TxId-1);
 
             activeZone = false;
@@ -138,8 +138,8 @@ Y_UNIT_TEST_SUITE(TBSVWithReboots) {
             t.RestoreLogging();
 
             NKikimrSchemeOp::TBlockStoreVolumeDescription vdescr;
-            InitCreateVolumeConfig("BSVolume_3", vdescr);
-            TestCreateBlockStoreVolume(runtime, t.TxId++, "/MyRoot/DirA", vdescr.DebugString());
+            InitCreateVolumeConfig("BSVolume_3", vdescr); 
+            TestCreateBlockStoreVolume(runtime, t.TxId++, "/MyRoot/DirA", vdescr.DebugString()); 
 
             t.TestEnv->TestWaitNotification(runtime, t.TxId-1);
             TestLs(runtime, "/MyRoot/DirA/BSVolume_3", false, NLs::Finished);
@@ -158,8 +158,8 @@ Y_UNIT_TEST_SUITE(TBSVWithReboots) {
             t.RestoreLogging();
 
             NKikimrSchemeOp::TBlockStoreVolumeDescription vdescr;
-            auto& vc = InitCreateVolumeConfig("BSVolume_4", vdescr);
-            TestCreateBlockStoreVolume(runtime, t.TxId++, "/MyRoot/DirA", vdescr.DebugString());
+            auto& vc = InitCreateVolumeConfig("BSVolume_4", vdescr); 
+            TestCreateBlockStoreVolume(runtime, t.TxId++, "/MyRoot/DirA", vdescr.DebugString()); 
 
             t.TestEnv->TestWaitNotification(runtime, t.TxId-1);
             TestLs(runtime, "/MyRoot/DirA/BSVolume_4", false, NLs::Finished);
@@ -168,8 +168,8 @@ Y_UNIT_TEST_SUITE(TBSVWithReboots) {
             t.TestEnv->TestWaitNotification(runtime, t.TxId-1);
             TestLs(runtime, "/MyRoot/DirA/BSVolume_4", false, NLs::CheckMountToken("BSVolume_4", "Owner123"));
 
-            InitAlterVolumeConfig(vc);
-            TestAlterBlockStoreVolume(runtime, t.TxId++, "/MyRoot/DirA", vdescr.DebugString());
+            InitAlterVolumeConfig(vc); 
+            TestAlterBlockStoreVolume(runtime, t.TxId++, "/MyRoot/DirA", vdescr.DebugString()); 
 
             activeZone = false;
             TestLs(runtime, "/MyRoot/DirA/BSVolume_4", false, NLs::PathExist);
@@ -182,8 +182,8 @@ Y_UNIT_TEST_SUITE(TBSVWithReboots) {
             t.RestoreLogging();
 
             NKikimrSchemeOp::TBlockStoreVolumeDescription vdescr;
-            auto& vc = InitCreateVolumeConfig("BSVolume_4", vdescr);
-            TestCreateBlockStoreVolume(runtime, t.TxId++, "/MyRoot/DirA", vdescr.DebugString());
+            auto& vc = InitCreateVolumeConfig("BSVolume_4", vdescr); 
+            TestCreateBlockStoreVolume(runtime, t.TxId++, "/MyRoot/DirA", vdescr.DebugString()); 
 
             t.TestEnv->TestWaitNotification(runtime, t.TxId-1);
             TestLs(runtime, "/MyRoot/DirA/BSVolume_4", false, NLs::Finished);
@@ -192,8 +192,8 @@ Y_UNIT_TEST_SUITE(TBSVWithReboots) {
             t.TestEnv->TestWaitNotification(runtime, t.TxId-1);
             TestLs(runtime, "/MyRoot/DirA/BSVolume_4", false, NLs::CheckMountToken("BSVolume_4", "Owner123"));
 
-            InitAlterVolumeConfig(vc);
-            TestAlterBlockStoreVolume(runtime, t.TxId++, "/MyRoot/DirA", vdescr.DebugString());
+            InitAlterVolumeConfig(vc); 
+            TestAlterBlockStoreVolume(runtime, t.TxId++, "/MyRoot/DirA", vdescr.DebugString()); 
 
             activeZone = false;
             TestLs(runtime, "/MyRoot/DirA/BSVolume_4", false, NLs::PathExist);
@@ -206,8 +206,8 @@ Y_UNIT_TEST_SUITE(TBSVWithReboots) {
             t.RestoreLogging();
 
             NKikimrSchemeOp::TBlockStoreVolumeDescription vdescr;
-            InitCreateVolumeConfig("BSVolume_4", vdescr);
-            TestCreateBlockStoreVolume(runtime, t.TxId++, "/MyRoot/DirA", vdescr.DebugString());
+            InitCreateVolumeConfig("BSVolume_4", vdescr); 
+            TestCreateBlockStoreVolume(runtime, t.TxId++, "/MyRoot/DirA", vdescr.DebugString()); 
 
             t.TestEnv->TestWaitNotification(runtime, t.TxId-1);
             TestLs(runtime, "/MyRoot/DirA/BSVolume_4", false, NLs::Finished);
@@ -229,8 +229,8 @@ Y_UNIT_TEST_SUITE(TBSVWithReboots) {
             t.RestoreLogging();
 
             NKikimrSchemeOp::TBlockStoreVolumeDescription vdescr;
-            InitCreateVolumeConfig("BSVolume_4", vdescr);
-            TestCreateBlockStoreVolume(runtime, t.TxId++, "/MyRoot/DirA", vdescr.DebugString());
+            InitCreateVolumeConfig("BSVolume_4", vdescr); 
+            TestCreateBlockStoreVolume(runtime, t.TxId++, "/MyRoot/DirA", vdescr.DebugString()); 
 
             t.TestEnv->TestWaitNotification(runtime, t.TxId-1);
             TestLs(runtime, "/MyRoot/DirA/BSVolume_4", false, NLs::Finished);
@@ -274,13 +274,13 @@ Y_UNIT_TEST_SUITE(TBSVWithReboots) {
             }
 
             NKikimrSchemeOp::TBlockStoreVolumeDescription vdescr;
-            auto& vc = InitCreateVolumeConfig("BSVolume", vdescr);
-            vc.ClearExplicitChannelProfiles();
-            vc.AddExplicitChannelProfiles()->SetPoolKind("storage-pool-number-1");
-            vc.AddExplicitChannelProfiles()->SetPoolKind("storage-pool-number-1");
-            vc.AddExplicitChannelProfiles()->SetPoolKind("storage-pool-number-1");
-            vc.AddExplicitChannelProfiles()->SetPoolKind("storage-pool-number-2");
-            TestCreateBlockStoreVolume(runtime, ++t.TxId, "/MyRoot/DirA/USER_0", vdescr.DebugString());
+            auto& vc = InitCreateVolumeConfig("BSVolume", vdescr); 
+            vc.ClearExplicitChannelProfiles(); 
+            vc.AddExplicitChannelProfiles()->SetPoolKind("storage-pool-number-1"); 
+            vc.AddExplicitChannelProfiles()->SetPoolKind("storage-pool-number-1"); 
+            vc.AddExplicitChannelProfiles()->SetPoolKind("storage-pool-number-1"); 
+            vc.AddExplicitChannelProfiles()->SetPoolKind("storage-pool-number-2"); 
+            TestCreateBlockStoreVolume(runtime, ++t.TxId, "/MyRoot/DirA/USER_0", vdescr.DebugString()); 
 
             TestForceDropSubDomain(runtime, ++t.TxId,  "/MyRoot/DirA", "USER_0");
 
@@ -302,11 +302,11 @@ Y_UNIT_TEST_SUITE(TBSVWithReboots) {
 
     Y_UNIT_TEST(CreateWithIntermediateDirs) {
         NKikimrSchemeOp::TBlockStoreVolumeDescription vdescr;
-        InitCreateVolumeConfig("Valid/x/y/z", vdescr);
-        const auto validScheme = vdescr.DebugString();
-        vdescr.Clear();
-        InitCreateVolumeConfig("Invalid/wr0ng n@me", vdescr);
-        const auto invalidScheme = vdescr.DebugString();
+        InitCreateVolumeConfig("Valid/x/y/z", vdescr); 
+        const auto validScheme = vdescr.DebugString(); 
+        vdescr.Clear(); 
+        InitCreateVolumeConfig("Invalid/wr0ng n@me", vdescr); 
+        const auto invalidScheme = vdescr.DebugString(); 
         const auto validStatus = NKikimrScheme::StatusAccepted;
         const auto invalidStatus = NKikimrScheme::StatusSchemeError;
 
@@ -318,8 +318,8 @@ Y_UNIT_TEST_SUITE(TBSVWithReboots) {
     Y_UNIT_TEST(CreateWithIntermediateDirsForceDrop) {
         CreateWithIntermediateDirsForceDrop([](TTestActorRuntime& runtime, ui64 txId, const TString& root) {
             NKikimrSchemeOp::TBlockStoreVolumeDescription vdescr;
-            InitCreateVolumeConfig("x/y/z", vdescr);
-            AsyncCreateBlockStoreVolume(runtime, txId, root, vdescr.DebugString());
+            InitCreateVolumeConfig("x/y/z", vdescr); 
+            AsyncCreateBlockStoreVolume(runtime, txId, root, vdescr.DebugString()); 
         });
     }
 

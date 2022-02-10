@@ -560,7 +560,7 @@ namespace NFlatExecutorSetup {
         ui32 Step0;
     };
 
-    IActor* CreateExecutor(ITablet *owner, const TActorId& ownerActorId);
+    IActor* CreateExecutor(ITablet *owner, const TActorId& ownerActorId); 
 };
 
 }} // end of the NKikimr namespace

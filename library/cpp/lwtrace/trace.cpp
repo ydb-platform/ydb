@@ -548,8 +548,8 @@ namespace NLWTrace {
                 TArgumentDescription arg0 = arguments.at(0);
                 TArgumentDescription arg1 = arguments.at(1);
 
-                const char* tName0 = arg0.ParamIdx == size_t(-1) ? nullptr : probe->Event.Signature.ParamTypes[arg0.ParamIdx];
-                const char* tName1 = arg1.ParamIdx == size_t(-1) ? nullptr : probe->Event.Signature.ParamTypes[arg1.ParamIdx];
+                const char* tName0 = arg0.ParamIdx == size_t(-1) ? nullptr : probe->Event.Signature.ParamTypes[arg0.ParamIdx]; 
+                const char* tName1 = arg1.ParamIdx == size_t(-1) ? nullptr : probe->Event.Signature.ParamTypes[arg1.ParamIdx]; 
 
                 TString var0 = op.GetArgument(0).GetVariable();
                 TString var1 = op.GetArgument(1).GetVariable();

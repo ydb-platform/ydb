@@ -64,12 +64,12 @@ namespace NJson {
         TJsonCallbacks c(throwOnError);
         return ReadJson(in, config, &c);
     }
-
+ 
     inline bool ValidateJson(TStringBuf in, const TJsonReaderConfig& config = TJsonReaderConfig(), bool throwOnError = false) {
         TMemoryInput min(in.data(), in.size());
         return ValidateJson(&min, &config, throwOnError);
     }
-
+ 
     inline bool ValidateJsonThrow(IInputStream* in, const TJsonReaderConfig* config) {
         return ValidateJson(in, config, true);
     }

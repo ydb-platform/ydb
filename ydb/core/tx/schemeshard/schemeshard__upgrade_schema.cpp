@@ -112,7 +112,7 @@ struct TSchemeShard::TTxUpgradeSchema : public TTransactionBase<TSchemeShard> {
         if (!IsOk) {
             LOG_CRIT_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                        "send TEvPoisonPill to self " << Self->TabletID());
-            ctx.Send(Self->SelfId(), new TEvents::TEvPoisonPill());
+            ctx.Send(Self->SelfId(), new TEvents::TEvPoisonPill()); 
             return;
         }
 

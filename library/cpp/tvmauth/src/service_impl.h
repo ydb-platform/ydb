@@ -18,7 +18,7 @@ namespace NTvmAuth {
     using TServiceTicketImplPtr = THolder<TCheckedServiceTicket::TImpl>;
     class TCheckedServiceTicket::TImpl {
     public:
-        explicit operator bool() const;
+        explicit operator bool() const; 
 
         TTvmId GetSrc() const;
         const TScopes& GetScopes() const;

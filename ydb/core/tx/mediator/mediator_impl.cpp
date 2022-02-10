@@ -110,7 +110,7 @@ void TTxMediator::DoConfigure(const TEvSubDomain::TEvConfigure &ev, const TActor
     const TEvSubDomain::TEvConfigure::ProtoRecordType &record = ev.Record;
     if (0 == record.CoordinatorsSize() || 0 == record.GetTimeCastBucketsPerMediator()) {
         LOG_ERROR_S(ctx, NKikimrServices::TX_MEDIATOR
-                     , "tablet# " << TabletID() << " actor# " << SelfId()
+                     , "tablet# " << TabletID() << " actor# " << SelfId() 
                     << " Apply TEvMediatorConfiguration Version# " << record.GetVersion()
                     << " recive empty coordinators set");
         Y_FAIL("empty coordinators set");
@@ -131,7 +131,7 @@ void TTxMediator::DoConfigure(const TEvSubDomain::TEvConfigure &ev, const TActor
 void TTxMediator::Handle(TEvSubDomain::TEvConfigure::TPtr &ev, const TActorContext &ctx) {
     const TEvSubDomain::TEvConfigure::ProtoRecordType &record = ev->Get()->Record;
     LOG_NOTICE_S(ctx, NKikimrServices::TX_MEDIATOR
-                 , "tablet# " << TabletID() << " actor# " << SelfId()
+                 , "tablet# " << TabletID() << " actor# " << SelfId() 
                 << " HANDLE TEvMediatorConfiguration Version# " << record.GetVersion());
 
     DoConfigure(*ev->Get(), ctx, ev->Sender);

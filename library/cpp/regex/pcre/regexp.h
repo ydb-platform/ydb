@@ -29,7 +29,7 @@ public:
     int Exec(const char* str, regmatch_t pmatch[], int eflags, int nmatches = NMATCHES) const;
     void Compile(const TString& regExpr, int cflags = REG_EXTENDED);
     bool IsCompiled() const;
-    int GetCompileOptions() const;
+    int GetCompileOptions() const; 
     TString GetRegExpr() const;
 };
 

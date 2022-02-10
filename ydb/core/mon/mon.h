@@ -24,7 +24,7 @@ namespace NActors {
             TString Host;
             TRequestAuthorizer Authorizer = DefaultAuthorizer;
             TVector<TString> AllowedSIDs;
-            TString RedirectMainPageTo;
+            TString RedirectMainPageTo; 
         };
 
         TMon(TConfig config);

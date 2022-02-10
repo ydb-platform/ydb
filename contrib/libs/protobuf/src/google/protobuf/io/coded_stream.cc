@@ -813,7 +813,7 @@ uint8* EpsCopyOutputStream::Next() {
       buffer_end_ = ptr;
       end_ = buffer_ + size;
       return buffer_;
-    }
+    } 
   } else {
     std::memcpy(buffer_, end_, kSlopBytes);
     buffer_end_ = end_;

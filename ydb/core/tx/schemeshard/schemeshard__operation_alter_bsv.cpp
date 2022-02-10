@@ -93,10 +93,10 @@ public:
         LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                     "AlterBlockStoreVolume opId# " << operationId
                     << " AlterVersion# " << volume->AlterData->AlterVersion
-                    << " DefaultPartitions#" << volume->DefaultPartitionCount
-                    << "->" << volume->AlterData->DefaultPartitionCount
-                    << " ExplicitChannelProfiles#" << volume->ExplicitChannelProfileCount
-                    << "->" << volume->AlterData->ExplicitChannelProfileCount);
+                    << " DefaultPartitions#" << volume->DefaultPartitionCount 
+                    << "->" << volume->AlterData->DefaultPartitionCount 
+                    << " ExplicitChannelProfiles#" << volume->ExplicitChannelProfileCount 
+                    << "->" << volume->AlterData->ExplicitChannelProfileCount); 
 
         bool needMoreShards = ApplySharding(
             operationId.GetTxId(),
@@ -142,11 +142,11 @@ public:
         return txState;
     }
 
-    static bool Compare(const TChannelBind& a, const TChannelBind& b)
-    {
-        return a.SerializeAsString() == b.SerializeAsString();
-    }
-
+    static bool Compare(const TChannelBind& a, const TChannelBind& b) 
+    { 
+        return a.SerializeAsString() == b.SerializeAsString(); 
+    } 
+ 
     bool ApplySharding(
             TTxId txId,
             TPathId pathId,
@@ -156,11 +156,11 @@ public:
             const TChannelsBindings& volumeChannels,
             TOperationContext& context)
     {
-        Y_VERIFY(volume->AlterData->DefaultPartitionCount
-                >= volume->DefaultPartitionCount);
-        ui64 count = volume->AlterData->DefaultPartitionCount + 1;
-        ui64 shardsToCreate = volume->AlterData->DefaultPartitionCount
-            - volume->DefaultPartitionCount;
+        Y_VERIFY(volume->AlterData->DefaultPartitionCount 
+                >= volume->DefaultPartitionCount); 
+        ui64 count = volume->AlterData->DefaultPartitionCount + 1; 
+        ui64 shardsToCreate = volume->AlterData->DefaultPartitionCount 
+            - volume->DefaultPartitionCount; 
         txState.Shards.reserve(count + 1);
 
         // reconfigure old shards
@@ -169,16 +169,16 @@ public:
             auto& shardInfo = context.SS->ShardInfos[shardIdx];
             auto partitionOp = TTxState::ConfigureParts;
 
-            if (!shardInfo.BindedChannels.empty()) {
-                for (ui32 i = 0; i < partitionChannels.size(); ++i) {
-                    if (i >= shardInfo.BindedChannels.size()) {
-                        shardInfo.BindedChannels.push_back(partitionChannels[i]);
-                        partitionOp = TTxState::CreateParts;
-                    } else if (!Compare(partitionChannels[i], shardInfo.BindedChannels[i])) {
-                        shardInfo.BindedChannels[i] = partitionChannels[i];
-                        partitionOp = TTxState::CreateParts;
-                    }
-                }
+            if (!shardInfo.BindedChannels.empty()) { 
+                for (ui32 i = 0; i < partitionChannels.size(); ++i) { 
+                    if (i >= shardInfo.BindedChannels.size()) { 
+                        shardInfo.BindedChannels.push_back(partitionChannels[i]); 
+                        partitionOp = TTxState::CreateParts; 
+                    } else if (!Compare(partitionChannels[i], shardInfo.BindedChannels[i])) { 
+                        shardInfo.BindedChannels[i] = partitionChannels[i]; 
+                        partitionOp = TTxState::CreateParts; 
+                    } 
+                } 
             }
 
             if (volume->VolumeConfig.GetTabletVersion() == 2) {
@@ -203,7 +203,7 @@ public:
             txState.Shards.emplace_back(shardIdx, shardInfo.TabletType, TTxState::CreateParts);
 
             TBlockStorePartitionInfo::TPtr part = new TBlockStorePartitionInfo();
-            part->PartitionId = i + volume->DefaultPartitionCount;
+            part->PartitionId = i + volume->DefaultPartitionCount; 
             part->AlterVersion = volume->AlterData->AlterVersion;
             volume->Shards[shardIdx] = std::move(part);
         }
@@ -227,7 +227,7 @@ public:
     }
 
     const NKikimrBlockStore::TVolumeConfig* ParseParams(
-            const NKikimrBlockStore::TVolumeConfig& baseline,
+            const NKikimrBlockStore::TVolumeConfig& baseline, 
             const NKikimrSchemeOp::TBlockStoreVolumeDescription& alter,
             TString& errStr)
     {
@@ -255,12 +255,12 @@ public:
             return nullptr;
         }
 
-        // treating missing media kind and 0 (default media kind) in the same way
-        if (baseline.GetStorageMediaKind() && volumeConfig.HasStorageMediaKind()) {
-            errStr = TStringBuilder() << "Cannot change media kind after creation"
-                << ", current media kind: " << baseline.GetStorageMediaKind()
-                << ", attempted to change to: " << volumeConfig.GetStorageMediaKind()
-                ;
+        // treating missing media kind and 0 (default media kind) in the same way 
+        if (baseline.GetStorageMediaKind() && volumeConfig.HasStorageMediaKind()) { 
+            errStr = TStringBuilder() << "Cannot change media kind after creation" 
+                << ", current media kind: " << baseline.GetStorageMediaKind() 
+                << ", attempted to change to: " << volumeConfig.GetStorageMediaKind() 
+                ; 
             return nullptr;
         }
 
@@ -326,81 +326,81 @@ public:
         return true;
     }
 
-    bool ProcessChannelProfiles(
-        const TPath& path,
-        const NKikimrBlockStore::TVolumeConfig& volumeConfig,
-        const NKikimrBlockStore::TVolumeConfig& alterVolumeConfig,
-        TOperationContext& context,
-        TProposeResponse& result,
-        TChannelsBindings* partitionChannelsBinding)
-    {
-        const auto& alterEcps = alterVolumeConfig.GetExplicitChannelProfiles();
-
-        if (alterEcps.size()) {
-            if (ui32(alterEcps.size()) > NHive::MAX_TABLET_CHANNELS) {
-                auto errStr = Sprintf("Wrong number of channels %u , should be [1 .. %lu]",
-                                    alterEcps.size(),
-                                    NHive::MAX_TABLET_CHANNELS);
+    bool ProcessChannelProfiles( 
+        const TPath& path, 
+        const NKikimrBlockStore::TVolumeConfig& volumeConfig, 
+        const NKikimrBlockStore::TVolumeConfig& alterVolumeConfig, 
+        TOperationContext& context, 
+        TProposeResponse& result, 
+        TChannelsBindings* partitionChannelsBinding) 
+    { 
+        const auto& alterEcps = alterVolumeConfig.GetExplicitChannelProfiles(); 
+ 
+        if (alterEcps.size()) { 
+            if (ui32(alterEcps.size()) > NHive::MAX_TABLET_CHANNELS) { 
+                auto errStr = Sprintf("Wrong number of channels %u , should be [1 .. %lu]", 
+                                    alterEcps.size(), 
+                                    NHive::MAX_TABLET_CHANNELS); 
                 result.SetError(NKikimrScheme::StatusInvalidParameter, errStr);
-                return false;
-            }
-
-            // Cannot delete explicit profiles for existing channels
-            if (alterVolumeConfig.ExplicitChannelProfilesSize()
-                    < volumeConfig.ExplicitChannelProfilesSize())
-            {
-                result.SetError(
+                return false; 
+            } 
+ 
+            // Cannot delete explicit profiles for existing channels 
+            if (alterVolumeConfig.ExplicitChannelProfilesSize() 
+                    < volumeConfig.ExplicitChannelProfilesSize()) 
+            { 
+                result.SetError( 
                     NKikimrScheme::StatusInvalidParameter,
-                    "Cannot reduce the number of channel profiles");
-                return false;
-            }
-
-            if (!alterVolumeConfig.GetPoolKindChangeAllowed()) {
-                // Cannot change pool kinds for existing channels
-                // But it's ok to change other params, e.g. DataKind
-                for (ui32 i = 0; i < volumeConfig.ExplicitChannelProfilesSize(); ++i) {
-                    const auto& prevProfile =
-                        volumeConfig.GetExplicitChannelProfiles(i);
-                    const auto& newProfile =
-                        alterVolumeConfig.GetExplicitChannelProfiles(i);
-                    if (prevProfile.GetPoolKind() != newProfile.GetPoolKind()) {
-                        result.SetError(
+                    "Cannot reduce the number of channel profiles"); 
+                return false; 
+            } 
+ 
+            if (!alterVolumeConfig.GetPoolKindChangeAllowed()) { 
+                // Cannot change pool kinds for existing channels 
+                // But it's ok to change other params, e.g. DataKind 
+                for (ui32 i = 0; i < volumeConfig.ExplicitChannelProfilesSize(); ++i) { 
+                    const auto& prevProfile = 
+                        volumeConfig.GetExplicitChannelProfiles(i); 
+                    const auto& newProfile = 
+                        alterVolumeConfig.GetExplicitChannelProfiles(i); 
+                    if (prevProfile.GetPoolKind() != newProfile.GetPoolKind()) { 
+                        result.SetError( 
                             NKikimrScheme::StatusInvalidParameter,
-                            TStringBuilder() << "Cannot change PoolKind for channel " << i
-                                << ", " << prevProfile.GetPoolKind()
-                                << " -> " << newProfile.GetPoolKind());
-                        return false;
-                    }
-                }
-            }
-        }
-
-        const auto& ecps = alterEcps.empty()
-            ? volumeConfig.GetExplicitChannelProfiles()
-            : alterEcps;
-
-        TVector<TStringBuf> partitionPoolKinds;
-        partitionPoolKinds.reserve(ecps.size());
-        for (const auto& ecp : ecps) {
-            partitionPoolKinds.push_back(ecp.GetPoolKind());
-        }
-
+                            TStringBuilder() << "Cannot change PoolKind for channel " << i 
+                                << ", " << prevProfile.GetPoolKind() 
+                                << " -> " << newProfile.GetPoolKind()); 
+                        return false; 
+                    } 
+                } 
+            } 
+        } 
+ 
+        const auto& ecps = alterEcps.empty() 
+            ? volumeConfig.GetExplicitChannelProfiles() 
+            : alterEcps; 
+ 
+        TVector<TStringBuf> partitionPoolKinds; 
+        partitionPoolKinds.reserve(ecps.size()); 
+        for (const auto& ecp : ecps) { 
+            partitionPoolKinds.push_back(ecp.GetPoolKind()); 
+        } 
+ 
         const auto partitionChannelsResolved = context.SS->ResolveChannelsByPoolKinds(
-            partitionPoolKinds,
-            path.DomainId(),
-            *partitionChannelsBinding
-        );
-        if (!partitionChannelsResolved) {
+            partitionPoolKinds, 
+            path.DomainId(), 
+            *partitionChannelsBinding 
+        ); 
+        if (!partitionChannelsResolved) { 
             result.SetError(NKikimrScheme::StatusInvalidParameter,
-                            "Unable to construct channel binding for partition with the storage pool");
-            return false;
-        }
-
-        context.SS->SetNbsChannelsParams(ecps, *partitionChannelsBinding);
-
-        return true;
-    }
-
+                            "Unable to construct channel binding for partition with the storage pool"); 
+            return false; 
+        } 
+ 
+        context.SS->SetNbsChannelsParams(ecps, *partitionChannelsBinding); 
+ 
+        return true; 
+    } 
+ 
     THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
         const TTabletId ssId = context.SS->SelfTabletId();
 
@@ -408,8 +408,8 @@ public:
 
         const TString& parentPathStr = Transaction.GetWorkingDir();
         const TString& name = alter.GetName();
-        const TPathId pathId = alter.HasPathId()
-            ? context.SS->MakeLocalId(alter.GetPathId()) : InvalidPathId;
+        const TPathId pathId = alter.HasPathId() 
+            ? context.SS->MakeLocalId(alter.GetPathId()) : InvalidPathId; 
 
         LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                      "TAlterBlockStoreVolume Propose"
@@ -418,16 +418,16 @@ public:
                          << ", opId: " << OperationId
                          << ", at schemeshard: " << ssId);
 
-        auto result = MakeHolder<TProposeResponse>(
+        auto result = MakeHolder<TProposeResponse>( 
             NKikimrScheme::StatusAccepted,
-            ui64(OperationId.GetTxId()),
-            ui64(ssId)
-        );
+            ui64(OperationId.GetTxId()), 
+            ui64(ssId) 
+        ); 
 
         TString errStr;
 
         if (!alter.HasName() && !alter.HasPathId()) {
-            errStr = "Neither volume name nor pathId are present in BlockStoreVolume";
+            errStr = "Neither volume name nor pathId are present in BlockStoreVolume"; 
             result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
             return result;
         }
@@ -457,10 +457,10 @@ public:
             }
         }
 
-        TBlockStoreVolumeInfo::TPtr volume = context.SS->BlockStoreVolumes.at(path.Base()->PathId);
-        Y_VERIFY(volume);
-
-        const auto* alterVolumeConfig = ParseParams(volume->VolumeConfig, alter, errStr);
+        TBlockStoreVolumeInfo::TPtr volume = context.SS->BlockStoreVolumes.at(path.Base()->PathId); 
+        Y_VERIFY(volume); 
+ 
+        const auto* alterVolumeConfig = ParseParams(volume->VolumeConfig, alter, errStr); 
         if (!alterVolumeConfig) {
             result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
             return result;
@@ -479,23 +479,23 @@ public:
             return result;
         }
 
-        const auto defaultPartitionCount =
-            TBlockStoreVolumeInfo::CalculateDefaultPartitionCount(volume->VolumeConfig);
-        const auto newDefaultPartitionCount =
-            TBlockStoreVolumeInfo::CalculateDefaultPartitionCount(*alterVolumeConfig);
+        const auto defaultPartitionCount = 
+            TBlockStoreVolumeInfo::CalculateDefaultPartitionCount(volume->VolumeConfig); 
+        const auto newDefaultPartitionCount = 
+            TBlockStoreVolumeInfo::CalculateDefaultPartitionCount(*alterVolumeConfig); 
 
-        TChannelsBindings partitionChannelsBinding;
-        if (defaultPartitionCount || newDefaultPartitionCount) {
-            const auto channelProfilesProcessed = ProcessChannelProfiles(
-                path,
-                volume->VolumeConfig,
-                *alterVolumeConfig,
-                context,
-                *result,
-                &partitionChannelsBinding
-            );
+        TChannelsBindings partitionChannelsBinding; 
+        if (defaultPartitionCount || newDefaultPartitionCount) { 
+            const auto channelProfilesProcessed = ProcessChannelProfiles( 
+                path, 
+                volume->VolumeConfig, 
+                *alterVolumeConfig, 
+                context, 
+                *result, 
+                &partitionChannelsBinding 
+            ); 
 
-            if (!channelProfilesProcessed) {
+            if (!channelProfilesProcessed) { 
                 return result;
             }
         }
@@ -513,43 +513,43 @@ public:
             return result;
         }
 
-        if (alterVolumeConfig->PartitionsSize()) {
-            // Cannot delete individual partitions
-            // Do we need to verify whether geometry changes make sense?
-            if (alterVolumeConfig->PartitionsSize()
-                    < volume->VolumeConfig.PartitionsSize())
-            {
-                result->SetError(
+        if (alterVolumeConfig->PartitionsSize()) { 
+            // Cannot delete individual partitions 
+            // Do we need to verify whether geometry changes make sense? 
+            if (alterVolumeConfig->PartitionsSize() 
+                    < volume->VolumeConfig.PartitionsSize()) 
+            { 
+                result->SetError( 
                     NKikimrScheme::StatusInvalidParameter,
-                    "Cannot reduce the number of partitions");
-                return result;
-            }
+                    "Cannot reduce the number of partitions"); 
+                return result; 
+            } 
 
-            for (ui32 i = 0; i < volume->VolumeConfig.PartitionsSize(); ++i) {
-                if (!volume->VolumeConfig.GetSizeDecreaseAllowed()) {
-                    const auto newBlockCount =
-                        alterVolumeConfig->GetPartitions(i).GetBlockCount();
-                    const auto prevBlockCount =
-                        volume->VolumeConfig.GetPartitions(i).GetBlockCount();
-                    if (newBlockCount < prevBlockCount) {
-                        result->SetError(
+            for (ui32 i = 0; i < volume->VolumeConfig.PartitionsSize(); ++i) { 
+                if (!volume->VolumeConfig.GetSizeDecreaseAllowed()) { 
+                    const auto newBlockCount = 
+                        alterVolumeConfig->GetPartitions(i).GetBlockCount(); 
+                    const auto prevBlockCount = 
+                        volume->VolumeConfig.GetPartitions(i).GetBlockCount(); 
+                    if (newBlockCount < prevBlockCount) { 
+                        result->SetError( 
                             NKikimrScheme::StatusInvalidParameter,
-                            "Decreasing block count is not allowed");
-                        return result;
-                    }
-                }
-
-                if (alterVolumeConfig->GetPartitions(i).GetType()
-                        != volume->VolumeConfig.GetPartitions(i).GetType())
-                {
-                    result->SetError(
+                            "Decreasing block count is not allowed"); 
+                        return result; 
+                    } 
+                } 
+ 
+                if (alterVolumeConfig->GetPartitions(i).GetType() 
+                        != volume->VolumeConfig.GetPartitions(i).GetType()) 
+                { 
+                    result->SetError( 
                         NKikimrScheme::StatusInvalidParameter,
-                        "partition type can't be changed");
-                    return result;
-                }
-            }
-        }
-
+                        "partition type can't be changed"); 
+                    return result; 
+                } 
+            } 
+        } 
+ 
         if (alterVolumeConfig->HasVersion() &&
             alterVolumeConfig->GetVersion() != volume->AlterVersion)
         {
@@ -564,10 +564,10 @@ public:
             return result;
         }
 
-        ui64 shardsToCreate = newDefaultPartitionCount
-            ? newDefaultPartitionCount - defaultPartitionCount
+        ui64 shardsToCreate = newDefaultPartitionCount 
+            ? newDefaultPartitionCount - defaultPartitionCount 
             : 0;
-
+ 
         {
             TPath::TChecker checks = path.Check();
             checks
@@ -591,24 +591,24 @@ public:
             // MergeFrom will append partitions, we want a replace operation instead
             alterData->VolumeConfig.ClearPartitions();
         }
-        if (alterVolumeConfig->ExplicitChannelProfilesSize() > 0) {
-            // MergeFrom will append explicit channel profiles, we want a replace operation instead
-            alterData->VolumeConfig.ClearExplicitChannelProfiles();
-        }
+        if (alterVolumeConfig->ExplicitChannelProfilesSize() > 0) { 
+            // MergeFrom will append explicit channel profiles, we want a replace operation instead 
+            alterData->VolumeConfig.ClearExplicitChannelProfiles(); 
+        } 
         if (alterVolumeConfig->VolumeExplicitChannelProfilesSize() > 0) {
             // MergeFrom will append explicit channel profiles, we want a replace operation instead
             alterData->VolumeConfig.ClearVolumeExplicitChannelProfiles();
         }
-        if (alterVolumeConfig->TagsSize() > 0) {
-            // MergeFrom will append tags, we want a replace operation instead
-            alterData->VolumeConfig.ClearTags();
-        }
+        if (alterVolumeConfig->TagsSize() > 0) { 
+            // MergeFrom will append tags, we want a replace operation instead 
+            alterData->VolumeConfig.ClearTags(); 
+        } 
         alterData->VolumeConfig.MergeFrom(*alterVolumeConfig);
-        alterData->VolumeConfig.ClearSizeDecreaseAllowed();
-        alterData->VolumeConfig.ClearPoolKindChangeAllowed();
-        alterData->DefaultPartitionCount =
-            TBlockStoreVolumeInfo::CalculateDefaultPartitionCount(alterData->VolumeConfig);
-        alterData->ExplicitChannelProfileCount = alterData->VolumeConfig.ExplicitChannelProfilesSize();
+        alterData->VolumeConfig.ClearSizeDecreaseAllowed(); 
+        alterData->VolumeConfig.ClearPoolKindChangeAllowed(); 
+        alterData->DefaultPartitionCount = 
+            TBlockStoreVolumeInfo::CalculateDefaultPartitionCount(alterData->VolumeConfig); 
+        alterData->ExplicitChannelProfileCount = alterData->VolumeConfig.ExplicitChannelProfilesSize(); 
         volume->PrepareAlter(alterData);
 
         auto newVolumeSpace = volume->GetVolumeSpace();
@@ -617,13 +617,13 @@ public:
         Y_VERIFY(domainDir);
 
         auto checkedSpaceChange = domainDir->CheckVolumeSpaceChange(newVolumeSpace, oldVolumeSpace, errStr);
-        if (!checkedSpaceChange) {
+        if (!checkedSpaceChange) { 
             result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr);
             volume->ForgetAlter();
             return result;
         }
 
-        // Increase in occupied space is applied immediately
+        // Increase in occupied space is applied immediately 
         domainDir->ChangeVolumeSpaceBegin(newVolumeSpace, oldVolumeSpace);
 
         const TTxState& txState = PrepareChanges(

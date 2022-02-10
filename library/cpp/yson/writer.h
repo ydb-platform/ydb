@@ -23,14 +23,14 @@ namespace NYson {
 
             friend class TYsonWriter;
         };
-
+ 
     public:
         TYsonWriter(
             IOutputStream* stream,
             EYsonFormat format = EYsonFormat::Binary,
             EYsonType type = ::NYson::EYsonType::Node,
             bool enableRaw = false);
-
+ 
         void OnStringScalar(TStringBuf value) override;
         void OnInt64Scalar(i64 value) override;
         void OnUint64Scalar(ui64 value) override;
@@ -59,7 +59,7 @@ namespace NYson {
         EYsonFormat Format;
         EYsonType Type;
         bool EnableRaw;
-
+ 
         int Depth;
         bool BeforeFirstItem;
 

@@ -62,13 +62,13 @@ TTableSnapshotContext::~TTableSnapshotContext() = default;
 
 using namespace NResourceBroker;
 
-TExecutor::TExecutor(
-        NFlatExecutorSetup::ITablet* owner,
-        const TActorId& ownerActorId)
+TExecutor::TExecutor( 
+        NFlatExecutorSetup::ITablet* owner, 
+        const TActorId& ownerActorId) 
     : TActor(&TThis::StateInit)
     , Time(TAppData::TimeProvider)
     , Owner(owner)
-    , OwnerActorId(ownerActorId)
+    , OwnerActorId(ownerActorId) 
     , ActivationQueue(new TActivationQueue())
     , PendingQueue(new TActivationQueue())
     , Emitter(new TIdEmitter)
@@ -87,14 +87,14 @@ ui64 TExecutor::Stamp() const noexcept
 }
 
 TActorContext TExecutor::OwnerCtx() const {
-    return TActivationContext::ActorContextFor(OwnerActorId);
+    return TActivationContext::ActorContextFor(OwnerActorId); 
 }
 
 void TExecutor::Registered(TActorSystem *sys, const TActorId&)
 {
     Logger = new NUtil::TLogger(sys, NKikimrServices::TABLET_EXECUTOR);
     Broker = new TBroker(this, Emitter);
-    Scans = new TScans(Logger.Get(), this, Emitter, Owner, OwnerActorId);
+    Scans = new TScans(Logger.Get(), this, Emitter, Owner, OwnerActorId); 
     Memory = new TMemory(Logger.Get(), this, Emitter, Sprintf(" at tablet %" PRIu64, Owner->TabletID()));
     TString myTabletType = TTabletTypes::TypeToStr(Owner->TabletType());
     AppData()->Icb->RegisterSharedControl(LogFlushDelayOverrideUsec, myTabletType + "_LogFlushDelayOverrideUsec");
@@ -1470,7 +1470,7 @@ void TExecutor::ExecuteTransaction(TAutoPtr<TSeat> seat, const TActorContext &ct
 
     Database->Begin(Stamp(), env);
     LWTRACK(TransactionExecuteBegin, seat->Self->Orbit, seat->UniqID);
-    const bool done = seat->Self->Execute(txc, ctx.MakeFor(OwnerActorId));
+    const bool done = seat->Self->Execute(txc, ctx.MakeFor(OwnerActorId)); 
     LWTRACK(TransactionExecuteEnd, seat->Self->Orbit, seat->UniqID, done);
     seat->CPUExecTime += cpuTimer.PassedReset();
 
@@ -1565,7 +1565,7 @@ void TExecutor::ReleaseTxData(TSeat &seat, ui64 requested, const TActorContext &
 
     TTxMemoryProvider provider(seat.CurrentTxDataLimit - requested, seat.TaskId);
     static_cast<TTxMemoryProviderBase&>(provider).RequestMemory(requested);
-    seat.Self->ReleaseTxData(provider, ctx.MakeFor(OwnerActorId));
+    seat.Self->ReleaseTxData(provider, ctx.MakeFor(OwnerActorId)); 
 
     Counters->Cumulative()[TExecutorCounters::TX_DATA_RELEASES].Increment(1);
 
@@ -1786,7 +1786,7 @@ void TExecutor::CommitTransactionLog(TAutoPtr<TSeat> seat, TPageCollectionTxEnv 
             --Stats->TxInFly;
             Counters->Simple()[TExecutorCounters::DB_TX_IN_FLY] = Stats->TxInFly;
             seat->Self->Terminate(seat->TerminationReason, OwnerCtx());
-        } else if (LogicRedo->TerminateTransaction(seat, ctx, OwnerActorId)) {
+        } else if (LogicRedo->TerminateTransaction(seat, ctx, OwnerActorId)) { 
             --Stats->TxInFly;
             Counters->Simple()[TExecutorCounters::DB_TX_IN_FLY] = Stats->TxInFly;
         }
@@ -2634,7 +2634,7 @@ void TExecutor::Handle(TEvTablet::TEvCommitResult::TPtr &ev, const TActorContext
     switch (cookie) {
     case ECommit::Redo:
         {
-            const ui64 confirmedTransactions = LogicRedo->Confirm(step, ctx, OwnerActorId);
+            const ui64 confirmedTransactions = LogicRedo->Confirm(step, ctx, OwnerActorId); 
             Stats->TxInFly -= confirmedTransactions;
             Counters->Simple()[TExecutorCounters::DB_TX_IN_FLY] = Stats->TxInFly;
 

@@ -111,7 +111,7 @@ namespace {
                 return generateError("Failed to parse blob parameter -- " + errorExplanation);
             } else if (logoBlobId != logoBlobId.FullID()) {
                 return generateError("Desired blob must be full one");
-            } else if (!logoBlobId || !logoBlobId.BlobSize()) {
+            } else if (!logoBlobId || !logoBlobId.BlobSize()) { 
                 return generateError("Invalid blob id");
             }
 

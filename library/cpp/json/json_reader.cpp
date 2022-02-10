@@ -1,13 +1,13 @@
 #include "json_reader.h"
 
-#include "rapidjson_helpers.h"
-
+#include "rapidjson_helpers.h" 
+ 
 #include <contrib/libs/rapidjson/include/rapidjson/error/en.h>
 #include <contrib/libs/rapidjson/include/rapidjson/error/error.h>
-#include <contrib/libs/rapidjson/include/rapidjson/reader.h>
+#include <contrib/libs/rapidjson/include/rapidjson/reader.h> 
 
-#include <util/generic/stack.h>
-#include <util/string/cast.h>
+#include <util/generic/stack.h> 
+#include <util/string/cast.h> 
 #include <util/system/yassert.h>
 #include <util/string/builder.h>
 
@@ -155,17 +155,17 @@ namespace NJson {
 
     namespace {
         struct TJsonValueBuilder {
-#ifdef NDEBUG
+#ifdef NDEBUG 
             using TItem = TJsonValue*;
-
+ 
             inline TJsonValue& Access(TItem& item) const {
                 return *item;
             }
-#else
+#else 
             struct TItem {
                 TJsonValue* V;
                 size_t DuplicateKeyCount;
-
+ 
                 TItem(TJsonValue* v)
                     : V(v)
                     , DuplicateKeyCount(0)
@@ -175,19 +175,19 @@ namespace NJson {
 
             inline TJsonValue& Access(TItem& item) const {
                 return *item.V;
-            }
-#endif
-
+            } 
+#endif 
+ 
             NJson::TJsonValue& V;
-
+ 
             TStack<TItem> S;
-
+ 
             TJsonValueBuilder(NJson::TJsonValue& v)
                 : V(v)
             {
                 S.emplace(&V);
             }
-
+ 
             template <class T>
             void Set(const T& t) {
                 if (Access(S.top()).IsArray()) {
@@ -196,23 +196,23 @@ namespace NJson {
                     Access(S.top()) = t;
                     S.pop();
                 }
-            }
-
+            } 
+ 
             bool Null() {
                 Set(NJson::JSON_NULL);
                 return true;
             }
-
+ 
             bool Bool(bool b) {
                 Set(b);
                 return true;
             }
-
+ 
             bool Int(int i) {
                 Set(i);
                 return true;
             }
-
+ 
             template <class U>
             bool ProcessUint(U u) {
                 if (Y_LIKELY(u <= static_cast<ui64>(Max<i64>()))) {
@@ -221,26 +221,26 @@ namespace NJson {
                     Set(u);
                 }
                 return true;
-            }
-
+            } 
+ 
             bool Uint(unsigned u) {
                 return ProcessUint(u);
             }
-
+ 
             bool Int64(i64 i) {
                 Set(i);
                 return true;
             }
-
+ 
             bool Uint64(ui64 u) {
                 return ProcessUint(u);
             }
-
+ 
             bool Double(double d) {
                 Set(d);
                 return true;
             }
-
+ 
             bool RawNumber(const char* str, rapidjson::SizeType length, bool copy) {
                 Y_ASSERT(false && "this method should never be called");
                 Y_UNUSED(str);
@@ -248,13 +248,13 @@ namespace NJson {
                 Y_UNUSED(copy);
                 return true;
             }
-
+ 
             bool String(const char* str, rapidjson::SizeType length, bool copy) {
                 Y_ASSERT(copy);
                 Set(TStringBuf(str, length));
                 return true;
             }
-
+ 
             bool StartObject() {
                 if (Access(S.top()).IsArray()) {
                     S.emplace(&Access(S.top()).AppendValue(NJson::JSON_MAP));
@@ -262,35 +262,35 @@ namespace NJson {
                     Access(S.top()).SetType(NJson::JSON_MAP);
                 }
                 return true;
-            }
-
+            } 
+ 
             bool Key(const char* str, rapidjson::SizeType length, bool copy) {
                 Y_ASSERT(copy);
                 auto& value = Access(S.top())[TStringBuf(str, length)];
-                if (Y_UNLIKELY(value.GetType() != JSON_UNDEFINED)) {
-#ifndef NDEBUG
+                if (Y_UNLIKELY(value.GetType() != JSON_UNDEFINED)) { 
+#ifndef NDEBUG 
                     ++S.top().DuplicateKeyCount;
-#endif
+#endif 
                     value.SetType(JSON_UNDEFINED);
                 }
                 S.emplace(&value);
                 return true;
-            }
-
+            } 
+ 
             inline int GetDuplicateKeyCount() const {
-#ifdef NDEBUG
+#ifdef NDEBUG 
                 return 0;
-#else
+#else 
                 return S.top().DuplicateKeyCount;
-#endif
+#endif 
             }
-
+ 
             bool EndObject(rapidjson::SizeType memberCount) {
                 Y_ASSERT(memberCount == Access(S.top()).GetMap().size() + GetDuplicateKeyCount());
                 S.pop();
                 return true;
             }
-
+ 
             bool StartArray() {
                 if (Access(S.top()).IsArray()) {
                     S.emplace(&Access(S.top()).AppendValue(NJson::JSON_ARRAY));
@@ -344,9 +344,9 @@ namespace NJson {
                     return reader.Parse<rapidjson::kParseEscapedApostropheFlag>(is, handler);
                 default:
                     return reader.Parse<rapidjson::kParseNoFlags>(is, handler);
-            }
-        }
-
+            } 
+        } 
+ 
         template <class TRapidJsonCompliantInputStream, class THandler>
         bool ReadJson(TRapidJsonCompliantInputStream& is, const TJsonReaderConfig* config, THandler& handler, bool throwOnError) {
             rapidjson::Reader reader;
@@ -361,9 +361,9 @@ namespace NJson {
                 }
             }
 
-            return true;
-        }
-
+            return true; 
+        } 
+ 
         template <class TRapidJsonCompliantInputStream>
         bool ReadJsonTree(TRapidJsonCompliantInputStream& is, const TJsonReaderConfig* config, TJsonValue* out, bool throwOnError) {
             out->SetType(NJson::JSON_NULL);
@@ -371,57 +371,57 @@ namespace NJson {
             TJsonValueBuilder handler(*out);
 
             return ReadJson(is, config, handler, throwOnError);
-        }
-
+        } 
+ 
         template <class TData>
         bool ReadJsonTreeImpl(TData* in, const TJsonReaderConfig* config, TJsonValue* out, bool throwOnError) {
             std::conditional_t<std::is_same<TData, TStringBuf>::value, TStringBufStreamWrapper, TInputStreamWrapper> is(*in);
             return ReadJsonTree(is, config, out, throwOnError);
         }
-
+ 
         template <class TData>
         bool ReadJsonTreeImpl(TData* in, bool allowComments, TJsonValue* out, bool throwOnError) {
             TJsonReaderConfig config;
             config.AllowComments = allowComments;
             return ReadJsonTreeImpl(in, &config, out, throwOnError);
         }
-
+ 
         template <class TData>
         bool ReadJsonTreeImpl(TData* in, TJsonValue* out, bool throwOnError) {
             return ReadJsonTreeImpl(in, false, out, throwOnError);
-        }
+        } 
     } //namespace
-
+ 
     bool ReadJsonTree(TStringBuf in, TJsonValue* out, bool throwOnError) {
         return ReadJsonTreeImpl(&in, out, throwOnError);
-    }
-
+    } 
+ 
     bool ReadJsonTree(TStringBuf in, bool allowComments, TJsonValue* out, bool throwOnError) {
         return ReadJsonTreeImpl(&in, allowComments, out, throwOnError);
     }
-
+ 
     bool ReadJsonTree(TStringBuf in, const TJsonReaderConfig* config, TJsonValue* out, bool throwOnError) {
         return ReadJsonTreeImpl(&in, config, out, throwOnError);
-    }
-
+    } 
+ 
     bool ReadJsonTree(IInputStream* in, TJsonValue* out, bool throwOnError) {
         return ReadJsonTreeImpl(in, out, throwOnError);
-    }
-
+    } 
+ 
     bool ReadJsonTree(IInputStream* in, bool allowComments, TJsonValue* out, bool throwOnError) {
         return ReadJsonTreeImpl(in, allowComments, out, throwOnError);
-    }
-
+    } 
+ 
     bool ReadJsonTree(IInputStream* in, const TJsonReaderConfig* config, TJsonValue* out, bool throwOnError) {
         return ReadJsonTreeImpl(in, config, out, throwOnError);
-    }
-
+    } 
+ 
     bool ReadJsonFastTree(TStringBuf in, TJsonValue* out, bool throwOnError, bool notClosedBracketIsError) {
         TParserCallbacks cb(*out, throwOnError, notClosedBracketIsError);
-
+ 
         return ReadJsonFast(in, &cb);
     }
-
+ 
     TJsonValue ReadJsonFastTree(TStringBuf in, bool notClosedBracketIsError) {
         TJsonValue value;
         // There is no way to report an error apart from throwing an exception when we return result by value.
@@ -432,7 +432,7 @@ namespace NJson {
     namespace {
         struct TJsonCallbacksWrapper {
             TJsonCallbacks& Impl;
-
+ 
             TJsonCallbacksWrapper(TJsonCallbacks& impl)
                 : Impl(impl)
             {
@@ -462,67 +462,67 @@ namespace NJson {
             bool Uint(unsigned u) {
                 return ProcessUint(u);
             }
-
+ 
             bool Int64(i64 i) {
                 return Impl.OnInteger(i);
             }
-
+ 
             bool Uint64(ui64 u) {
                 return ProcessUint(u);
             }
-
+ 
             bool Double(double d) {
                 return Impl.OnDouble(d);
             }
-
+ 
             bool RawNumber(const char* str, rapidjson::SizeType length, bool copy) {
                 Y_ASSERT(false && "this method should never be called");
                 Y_UNUSED(str);
                 Y_UNUSED(length);
                 Y_UNUSED(copy);
                 return true;
-            }
-
+            } 
+ 
             bool String(const char* str, rapidjson::SizeType length, bool copy) {
                 Y_ASSERT(copy);
                 return Impl.OnString(TStringBuf(str, length));
             }
-
+ 
             bool StartObject() {
                 return Impl.OnOpenMap();
             }
-
+ 
             bool Key(const char* str, rapidjson::SizeType length, bool copy) {
                 Y_ASSERT(copy);
                 return Impl.OnMapKey(TStringBuf(str, length));
             }
-
+ 
             bool EndObject(rapidjson::SizeType memberCount) {
                 Y_UNUSED(memberCount);
                 return Impl.OnCloseMap();
             }
-
+ 
             bool StartArray() {
                 return Impl.OnOpenArray();
             }
-
+ 
             bool EndArray(rapidjson::SizeType elementCount) {
                 Y_UNUSED(elementCount);
                 return Impl.OnCloseArray();
             }
         };
     }
-
+ 
     bool ReadJson(IInputStream* in, TJsonCallbacks* cbs) {
         return ReadJson(in, false, cbs);
     }
-
+ 
     bool ReadJson(IInputStream* in, bool allowComments, TJsonCallbacks* cbs) {
         TJsonReaderConfig config;
         config.AllowComments = allowComments;
         return ReadJson(in, &config, cbs);
     }
-
+ 
     bool ReadJson(IInputStream* in, bool allowComments, bool allowEscapedApostrophe, TJsonCallbacks* cbs) {
         TJsonReaderConfig config;
         config.AllowComments = allowComments;
@@ -533,35 +533,35 @@ namespace NJson {
     bool ReadJson(IInputStream* in, const TJsonReaderConfig* config, TJsonCallbacks* cbs) {
         TJsonCallbacksWrapper wrapper(*cbs);
         TInputStreamWrapper is(*in);
-
+ 
         rapidjson::Reader reader;
         auto result = Read(*config, reader, is, wrapper);
-
+ 
         if (result.IsError()) {
             cbs->OnError(result.Offset(), PrintError(result));
-
+ 
             return false;
-        }
-
+        } 
+ 
         return cbs->OnEnd();
     }
-
+ 
     TJsonValue ReadJsonTree(IInputStream* in, bool throwOnError) {
         TJsonValue out;
         ReadJsonTree(in, &out, throwOnError);
         return out;
     }
-
+ 
     TJsonValue ReadJsonTree(IInputStream* in, bool allowComments, bool throwOnError) {
         TJsonValue out;
         ReadJsonTree(in, allowComments, &out, throwOnError);
         return out;
     }
-
+ 
     TJsonValue ReadJsonTree(IInputStream* in, const TJsonReaderConfig* config, bool throwOnError) {
         TJsonValue out;
         ReadJsonTree(in, config, &out, throwOnError);
         return out;
-    }
-
-}
+    } 
+ 
+} 

@@ -114,8 +114,8 @@ struct TKikimrEvents : TEvents {
         ES_SYSTEM_VIEW,
         ES_TENANT_NODE_ENUMERATOR,
         ES_SERVICE_ACCOUNT_SERVICE,
-        ES_INDEX_BUILD,
-        ES_BLOCKSTORE_PRIVATE,
+        ES_INDEX_BUILD, 
+        ES_BLOCKSTORE_PRIVATE, 
         ES_YT_WRAPPER,
         ES_S3_WRAPPER,
         ES_FILESTORE,
@@ -139,8 +139,8 @@ struct TKikimrEvents : TEvents {
         ES_DATABASE_SERVICE, //4215
         ES_SEQUENCESHARD, // 4216
         ES_SEQUENCEPROXY, // 4217
-        ES_CLOUD_STORAGE,
-        ES_CLOUD_STORAGE_PRIVATE,
+        ES_CLOUD_STORAGE, 
+        ES_CLOUD_STORAGE_PRIVATE, 
         ES_FOLDER_SERVICE_ADAPTER,
         ES_PQ_PARTITION_WRITER,
         ES_YDB_PROXY,

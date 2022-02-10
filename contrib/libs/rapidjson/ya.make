@@ -1,4 +1,4 @@
-LIBRARY()
+LIBRARY() 
 
 LICENSE(
     BSD-3-Clause AND
@@ -15,9 +15,9 @@ OWNER(
     g:contrib
     g:cpp-contrib
 )
-
+ 
 ADDINCL(
     contrib/libs/rapidjson/include
 )
-
-END()
+ 
+END() 

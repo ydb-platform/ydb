@@ -398,7 +398,7 @@
         },
         "lkvm": {
             "description": "kvmtool is a userland tool for creating and controlling KVM guests"
-        }, 
+        },
         "coronerctl": {
             "description": "yandex-coroner cli, https://a.yandex-team.ru/arc/trunk/arcadia/infra/rsm/coroner/README.md"
         },
@@ -430,8 +430,8 @@
             "description": "optrace records output files written by each process",
             "visible": false
         },
-        "yoimports": { 
-            "description": "Go imports formatting tool" 
+        "yoimports": {
+            "description": "Go imports formatting tool"
         },
         "jstyle": {
             "description": "Java styler"
@@ -1272,34 +1272,34 @@
                 }
             ]
         },
-        "yoimports": { 
-            "tools": { 
-                "yoimports": { 
-                    "bottle": "yoimports", 
-                    "executable": "yoimports" 
-                } 
-            }, 
-            "platforms": [ 
-                { 
-                    "host": { 
-                        "os": "LINUX" 
-                    }, 
-                    "default": true 
-                }, 
-                { 
-                    "host": { 
-                        "os": "DARWIN" 
-                    }, 
-                    "default": true 
-                }, 
-                { 
-                    "host": { 
-                        "os": "WIN" 
-                    }, 
-                    "default": true 
-                } 
-            ] 
-        }, 
+        "yoimports": {
+            "tools": {
+                "yoimports": {
+                    "bottle": "yoimports",
+                    "executable": "yoimports"
+                }
+            },
+            "platforms": [
+                {
+                    "host": {
+                        "os": "LINUX"
+                    },
+                    "default": true
+                },
+                {
+                    "host": {
+                        "os": "DARWIN"
+                    },
+                    "default": true
+                },
+                {
+                    "host": {
+                        "os": "WIN"
+                    },
+                    "default": true
+                }
+            ]
+        },
         "releaser": {
             "tools": {
                 "releaser": {
@@ -5885,17 +5885,17 @@
                 ]
             }
         },
-        "yoimports": { 
-            "formula": { 
+        "yoimports": {
+            "formula": {
                 "sandbox_id": 1113620552,
-                "match": "yoimports" 
-            }, 
-            "executable": { 
-                "yoimports": [ 
-                    "yoimports" 
-                ] 
-            } 
-        }, 
+                "match": "yoimports"
+            },
+            "executable": {
+                "yoimports": [
+                    "yoimports"
+                ]
+            }
+        },
         "releaser": {
             "formula": {
                 "sandbox_id": [

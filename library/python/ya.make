@@ -168,7 +168,7 @@ RECURSE(
     sfx
     selenium_ui_test
     sendmsg
-    stubmaker
+    stubmaker 
     solomon
     spack
     spyt

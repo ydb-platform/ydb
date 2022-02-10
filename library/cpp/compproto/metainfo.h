@@ -5,7 +5,7 @@
 #include <util/generic/ptr.h>
 #include <util/generic/refcount.h>
 #include <util/stream/input.h>
-#include <util/stream/str.h> 
+#include <util/stream/str.h>
 
 #include "compressor.h"
 

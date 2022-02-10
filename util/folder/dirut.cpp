@@ -614,8 +614,8 @@ TString ResolvePath(const char* path, bool isDir) {
 
 TString StripFileComponent(const TString& fileName) {
     TString dir = IsDir(fileName) ? fileName : GetDirName(fileName);
-    if (!dir.empty() && dir.back() != GetDirectorySeparator()) { 
-        dir.append(GetDirectorySeparator()); 
-    } 
-    return dir; 
-} 
+    if (!dir.empty() && dir.back() != GetDirectorySeparator()) {
+        dir.append(GetDirectorySeparator());
+    }
+    return dir;
+}

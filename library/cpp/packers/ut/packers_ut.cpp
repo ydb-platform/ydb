@@ -51,9 +51,9 @@ void TPackersTest::TestPacker(const TData& data) {
     TPacker().PackLeaf(buf.Get(), data, len);
 
     UNIT_ASSERT(TPacker().SkipLeaf(buf.Get()) == len);
- 
-    TData dataTmp; 
-    TPacker().UnpackLeaf(buf.Get(), dataTmp); 
+
+    TData dataTmp;
+    TPacker().UnpackLeaf(buf.Get(), dataTmp);
     UNIT_ASSERT(data == dataTmp);
 }
 

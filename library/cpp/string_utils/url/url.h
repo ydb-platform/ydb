@@ -41,7 +41,7 @@ size_t GetSchemePrefixSize(const TStringBuf url) noexcept;
 
 Y_PURE_FUNCTION
 TStringBuf GetSchemePrefix(const TStringBuf url) noexcept;
- 
+
 //! removes protocol prefixes 'http://' and 'https://' from given URL
 //! @note if URL has no prefix or some other prefix the function does nothing
 //! @param url    URL from which the prefix should be removed
@@ -122,7 +122,7 @@ bool TryGetSchemeHostAndPort(const TStringBuf url, TStringBuf& scheme, TStringBu
  * @throws yexception  if present port number cannot be parsed into ui16.
  */
 void GetSchemeHostAndPort(const TStringBuf url, TStringBuf& scheme, TStringBuf& host, ui16& port);
- 
+
 Y_PURE_FUNCTION
 TStringBuf GetPathAndQuery(const TStringBuf url, bool trimFragment = true) noexcept;
 /**

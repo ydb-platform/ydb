@@ -168,7 +168,7 @@ namespace NCompactTrie {
     }
 
     //-------------------------------------------------------------------------
- 
+
     TFork::TFork(const char* data, size_t offset, size_t limit, const ILeafSkipper& skipper)
         : Node(data, offset, skipper)
         , Data(data)

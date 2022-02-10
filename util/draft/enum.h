@@ -118,7 +118,7 @@ inline void SetEnumFlags(const std::pair<const char*, E>* str2Enum, TStringBuf o
         }
     }
 }
- 
+
 // for enums generated with GENERATE_ENUM_SERIALIZATION
 template <class E, size_t B>
 inline void SetEnumFlags(TStringBuf optSpec, std::bitset<B>& flags, bool allIfEmpty = true) {

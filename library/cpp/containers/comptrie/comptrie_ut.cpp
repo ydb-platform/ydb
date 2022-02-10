@@ -1016,9 +1016,9 @@ template <class T>
 class TCompactTrieTest::TDummyPacker: public TNullPacker<T> {
 public:
     static T Data(const TString&) {
-        T data; 
+        T data;
         TNullPacker<T>().UnpackLeaf(nullptr, data);
-        return data; 
+        return data;
     }
 
     typedef T TData;

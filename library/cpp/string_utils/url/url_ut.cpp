@@ -7,38 +7,38 @@
 Y_UNIT_TEST_SUITE(TUtilUrlTest) {
     Y_UNIT_TEST(TestGetHostAndGetHostAndPort) {
         UNIT_ASSERT_VALUES_EQUAL("ya.ru", GetHost("ya.ru/bebe"));
-        UNIT_ASSERT_VALUES_EQUAL("ya.ru", GetHostAndPort("ya.ru/bebe")); 
+        UNIT_ASSERT_VALUES_EQUAL("ya.ru", GetHostAndPort("ya.ru/bebe"));
         UNIT_ASSERT_VALUES_EQUAL("ya.ru", GetHost("ya.ru"));
-        UNIT_ASSERT_VALUES_EQUAL("ya.ru", GetHostAndPort("ya.ru")); 
+        UNIT_ASSERT_VALUES_EQUAL("ya.ru", GetHostAndPort("ya.ru"));
         UNIT_ASSERT_VALUES_EQUAL("ya.ru", GetHost("ya.ru:8080"));
-        UNIT_ASSERT_VALUES_EQUAL("ya.ru:8080", GetHostAndPort("ya.ru:8080")); 
+        UNIT_ASSERT_VALUES_EQUAL("ya.ru:8080", GetHostAndPort("ya.ru:8080"));
         UNIT_ASSERT_VALUES_EQUAL("ya.ru", GetHost("ya.ru/bebe:8080"));
-        UNIT_ASSERT_VALUES_EQUAL("ya.ru", GetHostAndPort("ya.ru/bebe:8080")); 
+        UNIT_ASSERT_VALUES_EQUAL("ya.ru", GetHostAndPort("ya.ru/bebe:8080"));
         UNIT_ASSERT_VALUES_EQUAL("ya.ru", GetHost("ya.ru:8080/bebe"));
         UNIT_ASSERT_VALUES_EQUAL("ya.ru", GetHost("https://ya.ru:8080/bebe"));
         UNIT_ASSERT_VALUES_EQUAL("www.ya.ru", GetHost("www.ya.ru:8080/bebe"));
         UNIT_ASSERT_VALUES_EQUAL("www.ya.ru", GetHost("https://www.ya.ru:8080/bebe"));
-        UNIT_ASSERT_VALUES_EQUAL("ya.ru:8080", GetHostAndPort("ya.ru:8080/bebe")); 
+        UNIT_ASSERT_VALUES_EQUAL("ya.ru:8080", GetHostAndPort("ya.ru:8080/bebe"));
         // irl RFC3986 sometimes gets ignored
         UNIT_ASSERT_VALUES_EQUAL("pravda-kmv.ru", GetHost("pravda-kmv.ru?page=news&id=6973"));
-        UNIT_ASSERT_VALUES_EQUAL("pravda-kmv.ru", GetHostAndPort("pravda-kmv.ru?page=news&id=6973")); 
+        UNIT_ASSERT_VALUES_EQUAL("pravda-kmv.ru", GetHostAndPort("pravda-kmv.ru?page=news&id=6973"));
         // check simple string
         UNIT_ASSERT_VALUES_EQUAL("some_blender_url", GetHost("some_blender_url"));
         UNIT_ASSERT_VALUES_EQUAL("", GetHost(""));
     }
 
     Y_UNIT_TEST(TestGetPathAndQuery) {
-        UNIT_ASSERT_VALUES_EQUAL("/", GetPathAndQuery("ru.wikipedia.org")); 
-        UNIT_ASSERT_VALUES_EQUAL("/", GetPathAndQuery("ru.wikipedia.org/")); 
-        UNIT_ASSERT_VALUES_EQUAL("/", GetPathAndQuery("ru.wikipedia.org:8080")); 
-        UNIT_ASSERT_VALUES_EQUAL("/index.php?123/", GetPathAndQuery("ru.wikipedia.org/index.php?123/")); 
-        UNIT_ASSERT_VALUES_EQUAL("/", GetPathAndQuery("http://ru.wikipedia.org:8080")); 
-        UNIT_ASSERT_VALUES_EQUAL("/index.php?123/", GetPathAndQuery("https://ru.wikipedia.org/index.php?123/")); 
-        UNIT_ASSERT_VALUES_EQUAL("/", GetPathAndQuery("ru.wikipedia.org/#comment")); 
-        UNIT_ASSERT_VALUES_EQUAL("/?1", GetPathAndQuery("ru.wikipedia.org/?1#comment")); 
-        UNIT_ASSERT_VALUES_EQUAL("/?1#comment", GetPathAndQuery("ru.wikipedia.org/?1#comment", false)); 
-    } 
- 
+        UNIT_ASSERT_VALUES_EQUAL("/", GetPathAndQuery("ru.wikipedia.org"));
+        UNIT_ASSERT_VALUES_EQUAL("/", GetPathAndQuery("ru.wikipedia.org/"));
+        UNIT_ASSERT_VALUES_EQUAL("/", GetPathAndQuery("ru.wikipedia.org:8080"));
+        UNIT_ASSERT_VALUES_EQUAL("/index.php?123/", GetPathAndQuery("ru.wikipedia.org/index.php?123/"));
+        UNIT_ASSERT_VALUES_EQUAL("/", GetPathAndQuery("http://ru.wikipedia.org:8080"));
+        UNIT_ASSERT_VALUES_EQUAL("/index.php?123/", GetPathAndQuery("https://ru.wikipedia.org/index.php?123/"));
+        UNIT_ASSERT_VALUES_EQUAL("/", GetPathAndQuery("ru.wikipedia.org/#comment"));
+        UNIT_ASSERT_VALUES_EQUAL("/?1", GetPathAndQuery("ru.wikipedia.org/?1#comment"));
+        UNIT_ASSERT_VALUES_EQUAL("/?1#comment", GetPathAndQuery("ru.wikipedia.org/?1#comment", false));
+    }
+
     Y_UNIT_TEST(TestGetDomain) {
         UNIT_ASSERT_VALUES_EQUAL("ya.ru", GetDomain("www.ya.ru"));
         UNIT_ASSERT_VALUES_EQUAL("ya.ru", GetDomain("ya.ru"));

@@ -178,7 +178,7 @@ inline constexpr float Frac2Float(T pf) {
     constexpr float multiplier = float(1.0 / Max<T>());
     return pf * multiplier;
 }
- 
+
 class TUi82FloatMapping {
 private:
     float Mapping[Max<ui8>() + 1] = {};
@@ -208,10 +208,10 @@ inline float Frac2Float(ui32 pf) = delete;
 
 template <class T>
 inline float FracOrFloatToFloat(T t) {
-    return Frac2Float(t); 
-} 
- 
+    return Frac2Float(t);
+}
+
 template <>
 inline float FracOrFloatToFloat<float>(float t) {
-    return t; 
-} 
+    return t;
+}

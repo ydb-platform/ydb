@@ -169,14 +169,14 @@ void SlowScanner::Load(yistream* s)
 	Swap(sc);
 }
 
-void LoadedScanner::Save(yostream* s) const { 
-	Save(s, ScannerIOTypes::LoadedScanner); 
-} 
- 
-void LoadedScanner::Save(yostream* s, ui32 type) const 
+void LoadedScanner::Save(yostream* s) const {
+	Save(s, ScannerIOTypes::LoadedScanner);
+}
+
+void LoadedScanner::Save(yostream* s, ui32 type) const
 {
-	Y_ASSERT(type == ScannerIOTypes::LoadedScanner || type == ScannerIOTypes::NoGlueLimitCountingScanner); 
-	SavePodType(s, Header(type, sizeof(m))); 
+	Y_ASSERT(type == ScannerIOTypes::LoadedScanner || type == ScannerIOTypes::NoGlueLimitCountingScanner);
+	SavePodType(s, Header(type, sizeof(m)));
 	Impl::AlignSave(s, sizeof(Header));
 	Locals mc = m;
 	mc.initial -= reinterpret_cast<size_t>(m_jumps);
@@ -188,17 +188,17 @@ void LoadedScanner::Save(yostream* s, ui32 type) const
 	Impl::AlignedSaveArray(s, m_tags, m.statesCount);
 }
 
-void LoadedScanner::Load(yistream* s) { 
-	Load(s, nullptr); 
-} 
- 
-void LoadedScanner::Load(yistream* s, ui32* type) 
+void LoadedScanner::Load(yistream* s) {
+	Load(s, nullptr);
+}
+
+void LoadedScanner::Load(yistream* s, ui32* type)
 {
 	LoadedScanner sc;
 	Header header = Impl::ValidateHeader(s, ScannerIOTypes::LoadedScanner, sizeof(sc.m));
-	if (type) { 
-		*type = header.Type; 
-	} 
+	if (type) {
+		*type = header.Type;
+	}
 	LoadPodType(s, sc.m);
 	Impl::AlignLoad(s, sizeof(sc.m));
 	sc.m_buffer = BufferType(new char[sc.BufSize()]);

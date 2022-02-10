@@ -36,8 +36,8 @@ namespace Pire {
 			Scanner = 1,
 			SimpleScanner = 2,
 			SlowScanner = 3,
-			LoadedScanner = 4, 
-			NoGlueLimitCountingScanner = 5, 
+			LoadedScanner = 4,
+			NoGlueLimitCountingScanner = 5,
 		};
 	}
 
@@ -68,12 +68,12 @@ namespace Pire {
 				throw Error("Serialized regexp incompatible with your system");
 			if (Version != RE_VERSION && Version != RE_VERSION_WITH_MACTIONS)
 				throw Error("You are trying to used an incompatible version of a serialized regexp");
-			if (type != ScannerIOTypes::NoScanner && type != Type && 
-			   !(type == ScannerIOTypes::LoadedScanner && Type == ScannerIOTypes::NoGlueLimitCountingScanner)) { 
+			if (type != ScannerIOTypes::NoScanner && type != Type &&
+			   !(type == ScannerIOTypes::LoadedScanner && Type == ScannerIOTypes::NoGlueLimitCountingScanner)) {
 				throw Error("Serialized regexp incompatible with your system");
-			} 
-			if (hdrsize != 0 && HdrSize != hdrsize) 
-				throw Error("Serialized regexp incompatible with your system"); 
+			}
+			if (hdrsize != 0 && HdrSize != hdrsize)
+				throw Error("Serialized regexp incompatible with your system");
 		}
 	};
 

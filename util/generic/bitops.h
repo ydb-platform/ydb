@@ -33,27 +33,27 @@ namespace NBitOps {
 
         // see http://www-graphics.stanford.edu/~seander/bithacks.html#ReverseParallel
 
-        Y_FORCE_INLINE ui64 SwapOddEvenBits(ui64 v) { 
+        Y_FORCE_INLINE ui64 SwapOddEvenBits(ui64 v) {
             return ((v >> 1ULL) & 0x5555555555555555ULL) | ((v & 0x5555555555555555ULL) << 1ULL);
         }
 
-        Y_FORCE_INLINE ui64 SwapBitPairs(ui64 v) { 
+        Y_FORCE_INLINE ui64 SwapBitPairs(ui64 v) {
             return ((v >> 2ULL) & 0x3333333333333333ULL) | ((v & 0x3333333333333333ULL) << 2ULL);
         }
 
-        Y_FORCE_INLINE ui64 SwapNibbles(ui64 v) { 
+        Y_FORCE_INLINE ui64 SwapNibbles(ui64 v) {
             return ((v >> 4ULL) & 0x0F0F0F0F0F0F0F0FULL) | ((v & 0x0F0F0F0F0F0F0F0FULL) << 4ULL);
         }
 
-        Y_FORCE_INLINE ui64 SwapOddEvenBytes(ui64 v) { 
+        Y_FORCE_INLINE ui64 SwapOddEvenBytes(ui64 v) {
             return ((v >> 8ULL) & 0x00FF00FF00FF00FFULL) | ((v & 0x00FF00FF00FF00FFULL) << 8ULL);
         }
 
-        Y_FORCE_INLINE ui64 SwapBytePairs(ui64 v) { 
+        Y_FORCE_INLINE ui64 SwapBytePairs(ui64 v) {
             return ((v >> 16ULL) & 0x0000FFFF0000FFFFULL) | ((v & 0x0000FFFF0000FFFFULL) << 16ULL);
         }
 
-        Y_FORCE_INLINE ui64 SwapByteQuads(ui64 v) { 
+        Y_FORCE_INLINE ui64 SwapByteQuads(ui64 v) {
             return (v >> 32ULL) | (v << 32ULL);
         }
 
@@ -243,35 +243,35 @@ static inline unsigned CountTrailingZeroBits(T value) noexcept {
 /*
  * Returns 64-bit mask with `bits` lower bits set.
  */
-Y_FORCE_INLINE ui64 MaskLowerBits(ui64 bits) { 
+Y_FORCE_INLINE ui64 MaskLowerBits(ui64 bits) {
     return ::NBitOps::NPrivate::WORD_MASK[bits];
 }
 
 /*
  * Return 64-bit mask with `bits` set starting from `skipbits`.
  */
-Y_FORCE_INLINE ui64 MaskLowerBits(ui64 bits, ui64 skipbits) { 
+Y_FORCE_INLINE ui64 MaskLowerBits(ui64 bits, ui64 skipbits) {
     return MaskLowerBits(bits) << skipbits;
 }
 
 /*
  * Return 64-bit mask with all bits set except for `bits` lower bits.
  */
-Y_FORCE_INLINE ui64 InverseMaskLowerBits(ui64 bits) { 
+Y_FORCE_INLINE ui64 InverseMaskLowerBits(ui64 bits) {
     return ::NBitOps::NPrivate::INVERSE_WORD_MASK[bits];
 }
 
 /*
  * Return 64-bit mask with all bits set except for `bits` bitst starting from `skipbits`.
  */
-Y_FORCE_INLINE ui64 InverseMaskLowerBits(ui64 bits, ui64 skipbits) { 
+Y_FORCE_INLINE ui64 InverseMaskLowerBits(ui64 bits, ui64 skipbits) {
     return ~MaskLowerBits(bits, skipbits);
 }
 
 /*
  * Returns 0-based position of the most significant bit that is set. 0 for 0.
  */
-Y_FORCE_INLINE ui64 MostSignificantBit(ui64 v) { 
+Y_FORCE_INLINE ui64 MostSignificantBit(ui64 v) {
 #ifdef __GNUC__
     ui64 res = v ? (63 - __builtin_clzll(v)) : 0;
 #elif defined(_MSC_VER) && defined(_64_)
@@ -320,41 +320,41 @@ constexpr ui64 MostSignificantBitCT(ui64 x) {
 /*
  * Return rounded up binary logarithm of `x`.
  */
-Y_FORCE_INLINE ui8 CeilLog2(ui64 x) { 
+Y_FORCE_INLINE ui8 CeilLog2(ui64 x) {
     return static_cast<ui8>(MostSignificantBit(x - 1)) + 1;
 }
 
-Y_FORCE_INLINE ui8 ReverseBytes(ui8 t) { 
+Y_FORCE_INLINE ui8 ReverseBytes(ui8 t) {
     return t;
 }
 
-Y_FORCE_INLINE ui16 ReverseBytes(ui16 t) { 
+Y_FORCE_INLINE ui16 ReverseBytes(ui16 t) {
     return static_cast<ui16>(::NBitOps::NPrivate::SwapOddEvenBytes(t));
 }
 
-Y_FORCE_INLINE ui32 ReverseBytes(ui32 t) { 
+Y_FORCE_INLINE ui32 ReverseBytes(ui32 t) {
     return static_cast<ui32>(::NBitOps::NPrivate::SwapBytePairs(
         ::NBitOps::NPrivate::SwapOddEvenBytes(t)));
 }
 
-Y_FORCE_INLINE ui64 ReverseBytes(ui64 t) { 
+Y_FORCE_INLINE ui64 ReverseBytes(ui64 t) {
     return ::NBitOps::NPrivate::SwapByteQuads((::NBitOps::NPrivate::SwapOddEvenBytes(t)));
 }
 
-Y_FORCE_INLINE ui8 ReverseBits(ui8 t) { 
+Y_FORCE_INLINE ui8 ReverseBits(ui8 t) {
     return static_cast<ui8>(::NBitOps::NPrivate::SwapNibbles(
         ::NBitOps::NPrivate::SwapBitPairs(
             ::NBitOps::NPrivate::SwapOddEvenBits(t))));
 }
 
-Y_FORCE_INLINE ui16 ReverseBits(ui16 t) { 
+Y_FORCE_INLINE ui16 ReverseBits(ui16 t) {
     return static_cast<ui16>(::NBitOps::NPrivate::SwapOddEvenBytes(
         ::NBitOps::NPrivate::SwapNibbles(
             ::NBitOps::NPrivate::SwapBitPairs(
                 ::NBitOps::NPrivate::SwapOddEvenBits(t)))));
 }
 
-Y_FORCE_INLINE ui32 ReverseBits(ui32 t) { 
+Y_FORCE_INLINE ui32 ReverseBits(ui32 t) {
     return static_cast<ui32>(::NBitOps::NPrivate::SwapBytePairs(
         ::NBitOps::NPrivate::SwapOddEvenBytes(
             ::NBitOps::NPrivate::SwapNibbles(
@@ -362,7 +362,7 @@ Y_FORCE_INLINE ui32 ReverseBits(ui32 t) {
                     ::NBitOps::NPrivate::SwapOddEvenBits(t))))));
 }
 
-Y_FORCE_INLINE ui64 ReverseBits(ui64 t) { 
+Y_FORCE_INLINE ui64 ReverseBits(ui64 t) {
     return ::NBitOps::NPrivate::SwapByteQuads(
         ::NBitOps::NPrivate::SwapBytePairs(
             ::NBitOps::NPrivate::SwapOddEvenBytes(
@@ -376,7 +376,7 @@ Y_FORCE_INLINE ui64 ReverseBits(ui64 t) {
  * 1000111000111000 , bits = 6 => 1000111000000111
  */
 template <typename T>
-Y_FORCE_INLINE T ReverseBits(T v, ui64 bits) { 
+Y_FORCE_INLINE T ReverseBits(T v, ui64 bits) {
     return bits ? (T(v & ::InverseMaskLowerBits(bits)) | T(ReverseBits(T(v & ::MaskLowerBits(bits)))) >> ((ui64{sizeof(T)} << ui64{3}) - bits)) : v;
 }
 
@@ -385,7 +385,7 @@ Y_FORCE_INLINE T ReverseBits(T v, ui64 bits) {
  * 1000111000111000 , bits = 4, skipbits = 2 => 1000111000011100
  */
 template <typename T>
-Y_FORCE_INLINE T ReverseBits(T v, ui64 bits, ui64 skipbits) { 
+Y_FORCE_INLINE T ReverseBits(T v, ui64 bits, ui64 skipbits) {
     return (T(ReverseBits((v >> skipbits), bits)) << skipbits) | T(v & MaskLowerBits(skipbits));
 }
 

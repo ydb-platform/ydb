@@ -938,11 +938,11 @@ namespace {
             }
         }
 
-        Y_FORCE_INLINE void Write(char c) { 
+        Y_FORCE_INLINE void Write(char c) {
             Out.append(c);
         }
 
-        Y_FORCE_INLINE void WriteMany(const void* buf, size_t len) { 
+        Y_FORCE_INLINE void WriteMany(const void* buf, size_t len) {
             Out.AppendNoAlias((const char*)buf, len);
         }
 
@@ -1052,14 +1052,14 @@ namespace {
             THROW yexception() << "Serialized data is corrupted";
         }
 
-        Y_FORCE_INLINE char Read() { 
+        Y_FORCE_INLINE char Read() {
             if (Current == End)
                 ThrowNoData();
 
             return *Current++;
         }
 
-        Y_FORCE_INLINE const char* ReadMany(ui32 count) { 
+        Y_FORCE_INLINE const char* ReadMany(ui32 count) {
             if (Current + count > End)
                 ThrowNoData();
 

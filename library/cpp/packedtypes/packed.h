@@ -52,15 +52,15 @@ struct TZCMemoryInput_traits {
         return get<ui8>(in);
     }
 
-    static ui16 Y_FORCE_INLINE get_16(TZCMemoryInput& in) { 
+    static ui16 Y_FORCE_INLINE get_16(TZCMemoryInput& in) {
         return get<ui16>(in);
     }
 
-    static ui32 Y_FORCE_INLINE get_32(TZCMemoryInput& in) { 
+    static ui32 Y_FORCE_INLINE get_32(TZCMemoryInput& in) {
         return get<ui32>(in);
     }
 
-    static int Y_FORCE_INLINE is_good(TZCMemoryInput&) { 
+    static int Y_FORCE_INLINE is_good(TZCMemoryInput&) {
         return 1;
     }
 };

@@ -3,13 +3,13 @@
 #include "fhandle.h"
 #include "flock.h"
 
-#include <util/generic/flags.h> 
+#include <util/generic/flags.h>
 #include <util/generic/ptr.h>
 #include <util/generic/noncopyable.h>
 
 #include <cstdio>
 
-enum EOpenModeFlag { 
+enum EOpenModeFlag {
     OpenExisting = 0,  // Opens a file. It fails if the file does not exist.
     TruncExisting = 1, // Opens a file and truncates it to zero size. It fails if the file does not exist.
     OpenAlways = 2,    // Opens a file, always. If a file does not exist, it creates a file.
@@ -49,9 +49,9 @@ enum EOpenModeFlag {
     AMask = 0x0FFF0000,
 };
 
-Y_DECLARE_FLAGS(EOpenMode, EOpenModeFlag) 
-Y_DECLARE_OPERATORS_FOR_FLAGS(EOpenMode) 
- 
+Y_DECLARE_FLAGS(EOpenMode, EOpenModeFlag)
+Y_DECLARE_OPERATORS_FOR_FLAGS(EOpenMode)
+
 TString DecodeOpenMode(ui32 openMode);
 
 enum SeekDir {

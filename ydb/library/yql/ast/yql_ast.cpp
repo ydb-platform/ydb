@@ -450,17 +450,17 @@ namespace {
             const char* begin = str.data();
             do {
                 ui32 count = 0;
-                for (; idx < str.length() && str[idx] == '@'; ++idx) { 
-                    ++count; 
-                } 
+                for (; idx < str.length() && str[idx] == '@'; ++idx) {
+                    ++count;
+                }
 
                 if (count % 2 == 0) {
                     out.Write(begin, idx - (begin - str.data()) - count);
                     begin = str.data() + idx;
 
-                    while (count--) { 
+                    while (count--) {
                         out.Write(TStringBuf("@@"));
-                    } 
+                    }
                 }
                 idx = str.find('@', idx);
             } while (idx != TString::npos);

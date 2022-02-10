@@ -55,7 +55,7 @@ class TNullTraceWriterProcessor: public ITestSuiteProcessor {
 
 class TTraceWriterProcessor: public ITestSuiteProcessor {
 public:
-    inline TTraceWriterProcessor(const char* traceFilePath, EOpenMode mode) 
+    inline TTraceWriterProcessor(const char* traceFilePath, EOpenMode mode)
         : PrevTime(TInstant::Now())
     {
         TraceFile = new TUnbufferedFileOutput(TFile(traceFilePath, mode | WrOnly | Seq));

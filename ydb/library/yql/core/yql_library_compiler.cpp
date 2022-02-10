@@ -50,7 +50,7 @@ bool ReplaceNodes(TExprNode& node, const TNodeOnNodeOwnedMap& replaces, bool& ha
 
 TString Load(const TString& path)
 {
-    TFile file(path, EOpenModeFlag::RdOnly); 
+    TFile file(path, EOpenModeFlag::RdOnly);
     if (file.GetLength() <= 0)
         return TString();
     std::vector<TString::value_type> buffer(file.GetLength());

@@ -186,7 +186,7 @@ TFsPath::TSplit& TFsPath::GetSplit() const {
     return *Split_;
 }
 
-static Y_FORCE_INLINE void VerifyPath(const TStringBuf path) { 
+static Y_FORCE_INLINE void VerifyPath(const TStringBuf path) {
     Y_VERIFY(!path.Contains('\0'), "wrong format of TFsPath");
 }
 

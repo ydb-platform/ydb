@@ -575,7 +575,7 @@ void TConversionTest::TestUnicodeDetails() {
     for (wchar32 i = 0; i != NUnicode::UnicodeInstancesLimit(); ++i) {
         temp.clear();
         WriteSymbol(i, temp);
-        UNIT_ASSERT(temp.size() == W16SymbolSize(temp.c_str(), temp.c_str() + temp.size())); 
+        UNIT_ASSERT(temp.size() == W16SymbolSize(temp.c_str(), temp.c_str() + temp.size()));
     }
 }
 

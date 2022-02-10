@@ -7,7 +7,7 @@
 
 #include <utility>
 #include <util/str_stl.h>
-#include <util/digest/multi.h> 
+#include <util/digest/multi.h>
 
 static const char star = 42;
 
@@ -58,7 +58,7 @@ class THashTest: public TTestBase {
     UNIT_TEST(TestHSetInitializerList);
     UNIT_TEST(TestHMSetInitializerList);
     UNIT_TEST(TestHSetInsertInitializerList);
-    UNIT_TEST(TestTupleHash); 
+    UNIT_TEST(TestTupleHash);
     UNIT_TEST_SUITE_END();
 
     using hmset = THashMultiSet<char, hash<char>, TEqualTo<char>>;
@@ -109,7 +109,7 @@ protected:
     void TestHSetInitializerList();
     void TestHMSetInitializerList();
     void TestHSetInsertInitializerList();
-    void TestTupleHash(); 
+    void TestTupleHash();
 };
 
 UNIT_TEST_SUITE_REGISTRATION(THashTest);
@@ -1249,23 +1249,23 @@ void THashTest::TestHSetInsertInitializerList() {
         UNIT_ASSERT_VALUES_EQUAL(x, y);
     }
 }
- 
-/* 
-* Sequence for MultiHash is reversed as it calculates hash as 
-* f(head:tail) = f(tail)xHash(head) 
-*/ 
-void THashTest::TestTupleHash() { 
-    std::tuple<int, int> tuple{1, 3}; 
-    UNIT_ASSERT_VALUES_EQUAL(THash<decltype(tuple)>()(tuple), MultiHash(3, 1)); 
- 
-    /* 
-    * This thing checks that we didn't break STL code 
-    * See https://a.yandex-team.ru/arc/commit/2864838#comment-401 
-    * for example 
-    */ 
-    struct A { 
+
+/*
+* Sequence for MultiHash is reversed as it calculates hash as
+* f(head:tail) = f(tail)xHash(head)
+*/
+void THashTest::TestTupleHash() {
+    std::tuple<int, int> tuple{1, 3};
+    UNIT_ASSERT_VALUES_EQUAL(THash<decltype(tuple)>()(tuple), MultiHash(3, 1));
+
+    /*
+    * This thing checks that we didn't break STL code
+    * See https://a.yandex-team.ru/arc/commit/2864838#comment-401
+    * for example
+    */
+    struct A {
         A Foo(const std::tuple<A, float>& v) {
-            return std::get<A>(v); 
-        } 
-    }; 
-} 
+            return std::get<A>(v);
+        }
+    };
+}

@@ -11,7 +11,7 @@
             SysLogInstance().ResetBackend(THolder<TLogBackend>(                                                                      \
                 (ident) ? (TLogBackend*)(new TSysLogBackend((ident), (facility), (flags))) : (TLogBackend*)(new TNullLogBackend())));\
         }                                                                                                                            \
-    } Y_CAT(loginit, __LINE__); 
+    } Y_CAT(loginit, __LINE__);
 
 #define YSYSLOGINIT(ident, facility) YSYSLOGINIT_FLAGS((ident), (facility), 0)
 

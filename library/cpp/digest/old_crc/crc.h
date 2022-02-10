@@ -20,7 +20,7 @@ inline ui16 crc16(const char* buf, size_t buflen, ui32 crcinit = CRC16INIT) {
 }
 
 struct IdTR {
-    Y_FORCE_INLINE static ui8 T(ui8 a) { 
+    Y_FORCE_INLINE static ui8 T(ui8 a) {
         return a;
     }
 };

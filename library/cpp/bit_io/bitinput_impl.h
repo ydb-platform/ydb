@@ -32,7 +32,7 @@ namespace NBitIO {
 
     protected:
         template <ui32 bits>
-        Y_FORCE_INLINE bool ReadKImpl(ui64& result) { 
+        Y_FORCE_INLINE bool ReadKImpl(ui64& result) {
             result = (ReadUnaligned<ui64>((const void*)(Start + (BOffset >> 3))) >> (BOffset & 7)) & Mask64(bits);
             BOffset += bits;
             if (BOffset < FakeStart)
@@ -46,7 +46,7 @@ namespace NBitIO {
             return true;
         }
 
-        Y_FORCE_INLINE bool ReadImpl(ui64& result, ui32 bits) { 
+        Y_FORCE_INLINE bool ReadImpl(ui64& result, ui32 bits) {
             result = (ReadUnaligned<ui64>((const void*)(Start + (BOffset >> 3))) >> (BOffset & 7)) & MaskLowerBits(bits);
             BOffset += bits;
             if (BOffset < FakeStart)
@@ -60,15 +60,15 @@ namespace NBitIO {
             return true;
         }
 
-        Y_FORCE_INLINE bool EofImpl() const { 
+        Y_FORCE_INLINE bool EofImpl() const {
             return BOffset >= Length;
         }
 
-        Y_FORCE_INLINE ui64 BitOffset() const { 
+        Y_FORCE_INLINE ui64 BitOffset() const {
             return BOffset;
         }
 
-        Y_FORCE_INLINE bool Seek(i64 offset) { 
+        Y_FORCE_INLINE bool Seek(i64 offset) {
             if (offset < 0 || offset > (i64)Length)
                 return false;
             BOffset = offset;
@@ -78,18 +78,18 @@ namespace NBitIO {
 
     protected:
         template <ui64 bits, typename T>
-        Y_FORCE_INLINE static void CopyToResultK(T& result, ui64 r64, ui64 skipbits) { 
+        Y_FORCE_INLINE static void CopyToResultK(T& result, ui64 r64, ui64 skipbits) {
             result = (result & ~(Mask64(bits) << skipbits)) | (r64 << skipbits);
         }
 
         template <typename T>
-        Y_FORCE_INLINE static void CopyToResult(T& result, ui64 r64, ui64 bits, ui64 skipbits) { 
+        Y_FORCE_INLINE static void CopyToResult(T& result, ui64 r64, ui64 bits, ui64 skipbits) {
             result = (result & InverseMaskLowerBits(bits, skipbits)) | (r64 << skipbits);
         }
 
     public:
         template <ui64 bits>
-        Y_FORCE_INLINE bool ReadWordsImpl(ui64& data) { 
+        Y_FORCE_INLINE bool ReadWordsImpl(ui64& data) {
             data = 0;
 
             const ui64 haveMore = NthBit64(bits);

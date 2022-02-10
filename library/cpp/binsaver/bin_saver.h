@@ -8,7 +8,7 @@
 #include <util/generic/hash_set.h>
 #include <util/generic/buffer.h>
 #include <util/generic/list.h>
-#include <util/generic/maybe.h> 
+#include <util/generic/maybe.h>
 #include <util/generic/bitmap.h>
 #include <util/generic/variant.h>
 #include <util/generic/ylimits.h>
@@ -507,22 +507,22 @@ public:
     template <class T, class TPolicy>
     int Add(const chunk_id, TMaybe<T, TPolicy>* pData) {
         TMaybe<T, TPolicy>& data = *pData;
-        if (IsReading()) { 
+        if (IsReading()) {
             bool defined = false;
-            Add(1, &defined); 
-            if (defined) { 
-                data = T(); 
-                Add(2, data.Get()); 
-            } 
-        } else { 
-            bool defined = data.Defined(); 
-            Add(1, &defined); 
-            if (defined) { 
-                Add(2, data.Get()); 
-            } 
-        } 
-        return 0; 
-    } 
+            Add(1, &defined);
+            if (defined) {
+                data = T();
+                Add(2, data.Get());
+            }
+        } else {
+            bool defined = data.Defined();
+            Add(1, &defined);
+            if (defined) {
+                Add(2, data.Get());
+            }
+        }
+        return 0;
+    }
 
     template <typename TOne>
     void AddMulti(TOne& one) {

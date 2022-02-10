@@ -133,7 +133,7 @@ RECURSE(
     catalogue
     cattrs
     cbor2
-    cchardet 
+    cchardet
     celery
     celery-mock
     Cerberus

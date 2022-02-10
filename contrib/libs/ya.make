@@ -160,7 +160,7 @@ RECURSE(
     libjpeg-turbo
     libjwt
     liblinear
-    libm
+    libm 
     libmagic
     libmemcached
     libmp3lame

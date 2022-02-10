@@ -171,13 +171,13 @@ TNode& TNode::operator=(const TNode& rhs)
     return *this;
 }
 
-TNode::TNode(TNode&& rhs) noexcept
+TNode::TNode(TNode&& rhs) noexcept 
     : TNode()
 {
     Move(std::move(rhs));
 }
 
-TNode& TNode::operator=(TNode&& rhs) noexcept
+TNode& TNode::operator=(TNode&& rhs) noexcept 
 {
     if (this != &rhs) {
         TNode tmp = std::move(rhs);

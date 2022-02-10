@@ -588,7 +588,7 @@ RECURSE(
     linecache2
     llist
     lmdb
-    localshop 
+    localshop
     lockfile
     logging-tree
     loguru

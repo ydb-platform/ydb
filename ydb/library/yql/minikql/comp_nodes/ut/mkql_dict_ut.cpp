@@ -18,9 +18,9 @@ Y_UNIT_TEST_SUITE(TMiniKQLDictRelatedNodesTest) {
         const auto payload2 = pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>("B");
         const auto payload3 = pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>("C");
         TVector<std::pair<TRuntimeNode, TRuntimeNode>> dictItems;
-        dictItems.push_back(std::make_pair(key1, payload1));
-        dictItems.push_back(std::make_pair(key2, payload2));
-        dictItems.push_back(std::make_pair(key3, payload3));
+        dictItems.push_back(std::make_pair(key1, payload1)); 
+        dictItems.push_back(std::make_pair(key2, payload2)); 
+        dictItems.push_back(std::make_pair(key3, payload3)); 
         const auto dictType = pgmBuilder.NewDictType(pgmBuilder.NewDataType(NUdf::TDataType<ui32>::Id),
             pgmBuilder.NewDataType(NUdf::TDataType<char*>::Id), false);
         const auto dict = pgmBuilder.NewDict(dictType, dictItems);
@@ -42,9 +42,9 @@ Y_UNIT_TEST_SUITE(TMiniKQLDictRelatedNodesTest) {
         const auto payload2 = pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>("B");
         const auto payload3 = pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>("C");
         TVector<std::pair<TRuntimeNode, TRuntimeNode>> dictItems;
-        dictItems.push_back(std::make_pair(key1, payload1));
-        dictItems.push_back(std::make_pair(key2, payload2));
-        dictItems.push_back(std::make_pair(key3, payload3));
+        dictItems.push_back(std::make_pair(key1, payload1)); 
+        dictItems.push_back(std::make_pair(key2, payload2)); 
+        dictItems.push_back(std::make_pair(key3, payload3)); 
         const auto dictType = pgmBuilder.NewDictType(pgmBuilder.NewDataType(NUdf::TDataType<ui32>::Id),
             pgmBuilder.NewDataType(NUdf::TDataType<char*>::Id), false);
         const auto dict = pgmBuilder.NewDict(dictType, dictItems);
@@ -80,9 +80,9 @@ Y_UNIT_TEST_SUITE(TMiniKQLDictRelatedNodesTest) {
         const auto payload2 = pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>("B");
         const auto payload3 = pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>("C");
         TVector<std::pair<TRuntimeNode, TRuntimeNode>> dictItems;
-        dictItems.push_back(std::make_pair(key1, payload1));
-        dictItems.push_back(std::make_pair(key2, payload2));
-        dictItems.push_back(std::make_pair(key3, payload3));
+        dictItems.push_back(std::make_pair(key1, payload1)); 
+        dictItems.push_back(std::make_pair(key2, payload2)); 
+        dictItems.push_back(std::make_pair(key3, payload3)); 
         const auto dictType = pgmBuilder.NewDictType(pgmBuilder.NewDataType(NUdf::TDataType<ui32>::Id),
             pgmBuilder.NewDataType(NUdf::TDataType<char*>::Id), false);
         const auto dict = pgmBuilder.NewDict(dictType, dictItems);
@@ -242,7 +242,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLDictRelatedNodesTest) {
 
         if (SortBeforeCompare) {
             std::sort(items.begin(), items.end(), [](const std::pair<ui32, TString>& left, const std::pair<ui32, TString>& right) {
-                return left.first < right.first;
+                return left.first < right.first; 
             });
         }
 

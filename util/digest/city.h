@@ -3,13 +3,13 @@
 #include <util/generic/utility.h>
 #include <util/generic/strbuf.h>
 
-#include <utility>
+#include <utility> 
 
 // NOTE: These functions provide CityHash 1.0 implementation whose results are *different* from
 // the mainline version of CityHash.
 
-using uint128 = std::pair<ui64, ui64>;
-
+using uint128 = std::pair<ui64, ui64>; 
+ 
 constexpr ui64 Uint128Low64(const uint128& x) {
     return x.first;
 }

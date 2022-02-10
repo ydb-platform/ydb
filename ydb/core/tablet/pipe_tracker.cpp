@@ -12,11 +12,11 @@ void TPipeTrackerBase::AttachTablet(ui64 txid, ui64 tabletid, ui64 cookie) {
     }
 
     auto& tabletSet = txIt->second;
-    auto tabIt = tabletSet.find(std::make_pair(cookie, tabletid));
+    auto tabIt = tabletSet.find(std::make_pair(cookie, tabletid)); 
     if (tabIt != tabletSet.end())
         return;
 
-    tabletSet.insert(std::make_pair(cookie, tabletid));
+    tabletSet.insert(std::make_pair(cookie, tabletid)); 
     TabletToTx[tabletid].insert(txid);
     TxTablets[txid].insert(tabletid);
 }
@@ -27,7 +27,7 @@ bool TPipeTrackerBase::DetachTablet(ui64 txid, ui64 tabletid, ui64 cookie) {
         return false;
 
     auto& tabletSet = txIt->second;
-    auto tabIt = tabletSet.find(std::make_pair(cookie, tabletid));
+    auto tabIt = tabletSet.find(std::make_pair(cookie, tabletid)); 
     if (tabIt == tabletSet.end())
         return false;
 

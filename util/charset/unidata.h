@@ -110,13 +110,13 @@ namespace NUnicode {
             TCombining Combining;
         };
 
-        extern const size_t DEFAULT_KEY;
-
+        extern const size_t DEFAULT_KEY; 
+ 
         using TUnidataTable = NUnicodeTable::TTable<NUnicodeTable::TSubtable<NUnicodeTable::UNICODE_TABLE_SHIFT, NUnicodeTable::TValues<TProperty>>>;
         const TUnidataTable& UnidataTable();
 
         inline const TProperty& CharProperty(wchar32 ch) {
-            return UnidataTable().Get(ch, DEFAULT_KEY);
+            return UnidataTable().Get(ch, DEFAULT_KEY); 
         }
 
         inline ui32 CharInfo(wchar32 ch) {

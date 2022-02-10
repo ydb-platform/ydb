@@ -334,7 +334,7 @@ public:
     TFeaturesTransformer Solve(const size_t iterationsCount = 100) {
         TFeaturesTransformerLearner learner(TransformationType);
         for (auto&& argumentWithBucket : Buckets) {
-            const TBucket& bucket = argumentWithBucket.second;
+            const TBucket& bucket = argumentWithBucket.second; 
             learner.Add(bucket.ArgumentsMean.GetMean(), bucket.TargetsMean.GetMean());
         }
         return learner.Solve(iterationsCount);

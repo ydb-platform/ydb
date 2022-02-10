@@ -7530,9 +7530,9 @@ namespace NUnicode {
         }
     } // namespace NPrivate
 } // namespace NUnicode
-namespace NUnicode {
-    namespace NPrivate {
-        const size_t DEFAULT_KEY = 0xE001;
-        static_assert(NUnidataTableGenerated::Size > DEFAULT_KEY, "table size should be greater then default key");
-    }
-}
+namespace NUnicode { 
+    namespace NPrivate { 
+        const size_t DEFAULT_KEY = 0xE001; 
+        static_assert(NUnidataTableGenerated::Size > DEFAULT_KEY, "table size should be greater then default key"); 
+    } 
+} 

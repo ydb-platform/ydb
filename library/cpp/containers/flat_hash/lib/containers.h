@@ -101,7 +101,7 @@ public:
     explicit TFlatContainer(size_type initSize, const allocator_type& alloc = {})
         : Buckets_(initSize, alloc)
         , Taken_(0)
-        , Empty_(initSize) {}
+        , Empty_(initSize) {} 
 
     TFlatContainer(const TFlatContainer&) = default;
     TFlatContainer(TFlatContainer&& rhs)

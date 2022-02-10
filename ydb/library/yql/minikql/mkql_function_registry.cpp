@@ -172,7 +172,7 @@ public:
                 }
             }
 
-            libIt = LoadedLibraries_.insert({ libraryPath, lib }).first;
+            libIt = LoadedLibraries_.insert({ libraryPath, lib }).first; 
         }
 
         // (2) ensure that Register() func is present

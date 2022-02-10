@@ -115,7 +115,7 @@ class TFloat : public TRealBase<float, TFloat, NTypeIds::Float, NNames::Float> {
 ////////////////////////////////////////////////////////
 template<typename TFirst, typename TSecond, ui32 TypeId, const char* Name>
 class IIntegerPair : public TTypedType<
-    std::pair<TFirst, TSecond>,
+    std::pair<TFirst, TSecond>, 
     IIntegerPair<TFirst, TSecond, TypeId, Name>,
     TypeId, Name
     >

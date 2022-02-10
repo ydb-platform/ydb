@@ -6,7 +6,7 @@
 #include <util/generic/hash_set.h>
 #include <util/generic/vector.h>
 #include <util/generic/yexception.h>
-#include <utility>
+#include <utility> 
 
 template <class TValue>
 struct TUniformSizeProvider {
@@ -471,8 +471,8 @@ public:
         return true;
     }
 
-    bool Insert(const std::pair<TKey, TValue>& p) {
-        return Insert(p.first, p.second);
+    bool Insert(const std::pair<TKey, TValue>& p) { 
+        return Insert(p.first, p.second); 
     }
 
     bool Insert(const TKey& key, const TValue& value) {
@@ -551,13 +551,13 @@ protected:
     bool MultiValue;
 
     TIterator FindByItem(TItem* item) {
-        std::pair<TIndexIterator, TIndexIterator> p = Index.equal_range(*item);
+        std::pair<TIndexIterator, TIndexIterator> p = Index.equal_range(*item); 
         // we have to delete the exact unlinked item (there may be multiple items for one key)
         TIndexIterator it;
-        for (it = p.first; it != p.second; ++it)
+        for (it = p.first; it != p.second; ++it) 
             if (&*it == item)
                 break;
-        return (it == p.second ? End() : TIterator(it));
+        return (it == p.second ? End() : TIterator(it)); 
     }
 
     void EraseFromIndex(TItem* item) {

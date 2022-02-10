@@ -525,12 +525,12 @@ void TBusSessionImpl::SendSnapshotToStatusActor() {
 void TBusSessionImpl::InsertConnectionLockAcquired(TRemoteConnection* connection) {
     //Y_ASSERT(ConnectionsLock.IsLocked());
 
-    Connections.insert(std::make_pair(connection->PeerAddrSocketAddr, connection));
+    Connections.insert(std::make_pair(connection->PeerAddrSocketAddr, connection)); 
     // connection for given adds may already exist at this point
     // (so we overwrite old connection)
     // after reconnect, if previous connections wasn't shutdown yet
 
-    bool inserted2 = ConnectionsById.insert(std::make_pair(connection->ConnectionId, connection)).second;
+    bool inserted2 = ConnectionsById.insert(std::make_pair(connection->ConnectionId, connection)).second; 
     Y_VERIFY(inserted2, "state check: must be inserted (2)");
 
     SendSnapshotToStatusActor();

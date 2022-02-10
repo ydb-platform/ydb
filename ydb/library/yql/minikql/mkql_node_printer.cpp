@@ -599,12 +599,12 @@ namespace {
                 for (ui32 index = 0; index < node.GetItemsCount(); ++index) {
                     WriteIndentation();
                     const auto& item = node.GetItem(index);
-                    Out << "Key of item #" << index << ", " << (item.first.IsImmediate() ? "immediate" : "not immediate") << " {";
+                    Out << "Key of item #" << index << ", " << (item.first.IsImmediate() ? "immediate" : "not immediate") << " {"; 
                     WriteNewline();
 
                     {
                         TIndentScope scope2(this);
-                        item.first.GetNode()->Accept(*this);
+                        item.first.GetNode()->Accept(*this); 
                     }
 
                     WriteIndentation();
@@ -612,12 +612,12 @@ namespace {
                     WriteNewline();
 
                     WriteIndentation();
-                    Out << "Payload of item #" << index << ", " << (item.second.IsImmediate() ? "immediate" : "not immediate") << " {";
+                    Out << "Payload of item #" << index << ", " << (item.second.IsImmediate() ? "immediate" : "not immediate") << " {"; 
                     WriteNewline();
 
                     {
                         TIndentScope scope2(this);
-                        item.second.GetNode()->Accept(*this);
+                        item.second.GetNode()->Accept(*this); 
                     }
 
                     WriteIndentation();

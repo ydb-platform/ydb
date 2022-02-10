@@ -378,7 +378,7 @@ public:
         }
 
         ui64 size = TSelf::Measure(key, value);
-        it = Items.insert(std::make_pair(key, value)).first;
+        it = Items.insert(std::make_pair(key, value)).first; 
         currentValue = &it->second;
         this->OnInsert(key, value, size);
         return true;
@@ -541,7 +541,7 @@ public:
 
         TSelf::PopWhileOverflow();
         ui64 size = TSelf::Measure(key, value);
-        indexIt = Index.insert(tmpItem).first;
+        indexIt = Index.insert(tmpItem).first; 
         List.PushFront(const_cast<TItem*>(&*indexIt));
         currentValue = const_cast<TValue*>(&indexIt->Value);
         this->OnInsert(key, value, size);
@@ -677,7 +677,7 @@ public:
             auto inItem = InList.PopBack();
 
             TItemKey tmpItemKey(inItem->Key);
-            auto outInsertedIt = OutIndex.insert(tmpItemKey).first;
+            auto outInsertedIt = OutIndex.insert(tmpItemKey).first; 
             OutList.PushFront(const_cast<TItemKey*>(&*outInsertedIt));
 
             ui64 size = TSelf::Measure(inItem->Key, inItem->Value);
@@ -734,11 +734,11 @@ public:
 
         ui64 size = TSelf::Measure(key, value);
         if (isOut) {
-            auto insertedIt = MainIndex.insert(tmpItem).first;
+            auto insertedIt = MainIndex.insert(tmpItem).first; 
             MainList.PushFront(const_cast<TItem*>(&*insertedIt));
             currentValue = const_cast<TValue*>(&insertedIt->Value);
         } else {
-            auto insertedIt = InIndex.insert(tmpItem).first;
+            auto insertedIt = InIndex.insert(tmpItem).first; 
             InList.PushFront(const_cast<TItem*>(&*insertedIt));
             InSize += size;
             currentValue = const_cast<TValue*>(&insertedIt->Value);

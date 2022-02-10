@@ -168,7 +168,7 @@ RECURSE(
     unpackrrr
     unpack_staff_cert
     untranslit_test
-    untranslit_test/tests
+    untranslit_test/tests 
     url
     urlmenuindexer
     urlseq_print

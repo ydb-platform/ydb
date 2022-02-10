@@ -6,7 +6,7 @@
 #include <util/generic/algorithm.h>
 #include <util/generic/mapfindptr.h>
 #include <util/ysaveload.h>
-#include <utility>
+#include <utility> 
 
 #include <initializer_list>
 
@@ -127,12 +127,12 @@ namespace NSorted {
         // if the value with the same key doesn't exist. Returns <iterator, bool> pair,
         // where the first member is the pointer to the inserted/existing value, and the
         // second member indicates either the value is inserted or not.
-        inline std::pair<iterator, bool> InsertUnique(const value_type& value) {
+        inline std::pair<iterator, bool> InsertUnique(const value_type& value) { 
             iterator i = LowerBound(TKeyExtractor()(value));
             if (i == TBase::end() || !TValueEqual()(*i, value))
-                return std::pair<iterator, bool>(TBase::insert(i, value), true);
+                return std::pair<iterator, bool>(TBase::insert(i, value), true); 
             else
-                return std::pair<iterator, bool>(i, false);
+                return std::pair<iterator, bool>(i, false); 
         }
 
         // STL-compatible synonym
@@ -305,7 +305,7 @@ namespace NSorted {
 
         template<class K>
         inline void Erase(const K& key) {
-            std::pair<iterator, iterator> res = EqualRange(key);
+            std::pair<iterator, iterator> res = EqualRange(key); 
             TBase::erase(res.first, res.second);
         }
 
@@ -316,7 +316,7 @@ namespace NSorted {
 
         template<class K>
         inline size_t count(const K& key) const {
-            const std::pair<const_iterator, const_iterator> range = this->EqualRange(key);
+            const std::pair<const_iterator, const_iterator> range = this->EqualRange(key); 
             return std::distance(range.first, range.second);
         }
 
@@ -333,7 +333,7 @@ namespace NSorted {
         public TMapOps<TSimpleMap<TKeyType, TValueType, TPredicate, A>>
     {
     private:
-        typedef TSortedVector<std::pair<TKeyType, TValueType>, TKeyType, TSelect1st, TPredicate, A> TBase;
+        typedef TSortedVector<std::pair<TKeyType, TValueType>, TKeyType, TSelect1st, TPredicate, A> TBase; 
 
     public:
         typedef typename TBase::value_type value_type;

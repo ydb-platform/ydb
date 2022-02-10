@@ -630,12 +630,12 @@ public:
 
     TInternName GetMemberNameStr(ui32 index) const {
         Y_VERIFY_DEBUG(index < MembersCount);
-        return Members[index].first;
+        return Members[index].first; 
     }
 
     TType* GetMemberType(ui32 index) const {
         Y_VERIFY_DEBUG(index < MembersCount);
-        return Members[index].second;
+        return Members[index].second; 
     }
 
     ui32 GetMemberIndex(const TStringBuf& name) const;
@@ -892,7 +892,7 @@ private:
 class TDictLiteral : public TNode {
     friend class TNode;
 public:
-    static TDictLiteral* Create(ui32 itemsCount, const std::pair<TRuntimeNode, TRuntimeNode>* items, TDictType* type, const TTypeEnvironment& env);
+    static TDictLiteral* Create(ui32 itemsCount, const std::pair<TRuntimeNode, TRuntimeNode>* items, TDictType* type, const TTypeEnvironment& env); 
     TDictType* GetType() const {
         return static_cast<TDictType*>(GetGenericType());
     }
@@ -901,13 +901,13 @@ public:
         return ItemsCount;
     }
 
-    std::pair<TRuntimeNode, TRuntimeNode> GetItem(ui32 index) const {
+    std::pair<TRuntimeNode, TRuntimeNode> GetItem(ui32 index) const { 
         Y_VERIFY_DEBUG(index < ItemsCount);
         return Items[index];
     }
 
 private:
-    TDictLiteral(ui32 itemsCount, std::pair<TRuntimeNode, TRuntimeNode>* items, TDictType* type, bool validate = true);
+    TDictLiteral(ui32 itemsCount, std::pair<TRuntimeNode, TRuntimeNode>* items, TDictType* type, bool validate = true); 
     using TNode::Equals;
     bool Equals(const TDictLiteral& nodeToCompare) const;
 
@@ -917,7 +917,7 @@ private:
 
 private:
     ui32 ItemsCount;
-    std::pair<TRuntimeNode, TRuntimeNode>* Items;
+    std::pair<TRuntimeNode, TRuntimeNode>* Items; 
 };
 
 class TCallableType : public TType {

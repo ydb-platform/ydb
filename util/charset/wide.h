@@ -13,12 +13,12 @@
 #include <util/system/cpu_id.h>
 #include <util/system/yassert.h>
 
-#include <cstring>
-
-#ifdef _sse2_
+#include <cstring> 
+ 
+#ifdef _sse2_ 
     #include <emmintrin.h>
-#endif
-
+#endif 
+ 
 template <class T>
 class TTempArray;
 using TCharTemp = TTempArray<wchar16>;
@@ -258,26 +258,26 @@ public:
     }
 };
 
-namespace NDetail {
-    template <bool robust, typename TCharType>
+namespace NDetail { 
+    template <bool robust, typename TCharType> 
     inline void UTF8ToWideImplScalar(const unsigned char*& cur, const unsigned char* last, TCharType*& dest) noexcept {
-        wchar32 rune = BROKEN_RUNE;
-
-        while (cur != last) {
-            if (ReadUTF8CharAndAdvance(rune, cur, last) != RECODE_OK) {
-                if (robust) {
-                    rune = BROKEN_RUNE;
-                    ++cur;
-                } else {
-                    break;
-                }
-            }
-
-            Y_ASSERT(cur <= last);
-            WriteSymbol(rune, dest);
-        }
-    }
-
+        wchar32 rune = BROKEN_RUNE; 
+ 
+        while (cur != last) { 
+            if (ReadUTF8CharAndAdvance(rune, cur, last) != RECODE_OK) { 
+                if (robust) { 
+                    rune = BROKEN_RUNE; 
+                    ++cur; 
+                } else { 
+                    break; 
+                } 
+            } 
+ 
+            Y_ASSERT(cur <= last); 
+            WriteSymbol(rune, dest); 
+        } 
+    } 
+ 
     template <typename TCharType>
     inline void UTF16ToUTF32ImplScalar(const wchar16* cur, const wchar16* last, TCharType*& dest) noexcept {
         wchar32 rune = BROKEN_RUNE;
@@ -289,28 +289,28 @@ namespace NDetail {
         }
     }
 
-    template <class TCharType>
-    inline void UTF8ToWideImplSSE41(const unsigned char*& /*cur*/, const unsigned char* /*last*/, TCharType*& /*dest*/) noexcept {
-    }
-
-    void UTF8ToWideImplSSE41(const unsigned char*& cur, const unsigned char* last, wchar16*& dest) noexcept;
+    template <class TCharType> 
+    inline void UTF8ToWideImplSSE41(const unsigned char*& /*cur*/, const unsigned char* /*last*/, TCharType*& /*dest*/) noexcept { 
+    } 
+ 
+    void UTF8ToWideImplSSE41(const unsigned char*& cur, const unsigned char* last, wchar16*& dest) noexcept; 
 
     void UTF8ToWideImplSSE41(const unsigned char*& cur, const unsigned char* last, wchar32*& dest) noexcept;
 }
-
+ 
 //! @return len if robust and position where encoding stopped if not
 template <bool robust, typename TCharType>
 inline size_t UTF8ToWideImpl(const char* text, size_t len, TCharType* dest, size_t& written) noexcept {
     const unsigned char* cur = reinterpret_cast<const unsigned char*>(text);
-    const unsigned char* last = cur + len;
+    const unsigned char* last = cur + len; 
     TCharType* p = dest;
-#ifdef _sse_ //can't check for sse4, as we build most of arcadia without sse4 support even on platforms that support it
-    if (cur + 16 <= last && NX86::CachedHaveSSE41()) {
-        ::NDetail::UTF8ToWideImplSSE41(cur, last, p);
-    }
-#endif
+#ifdef _sse_ //can't check for sse4, as we build most of arcadia without sse4 support even on platforms that support it 
+    if (cur + 16 <= last && NX86::CachedHaveSSE41()) { 
+        ::NDetail::UTF8ToWideImplSSE41(cur, last, p); 
+    } 
+#endif 
 
-    ::NDetail::UTF8ToWideImplScalar<robust>(cur, last, p);
+    ::NDetail::UTF8ToWideImplScalar<robust>(cur, last, p); 
     written = p - dest;
     return cur - reinterpret_cast<const unsigned char*>(text);
 }
@@ -510,22 +510,22 @@ namespace NDetail {
     };
 
     template <typename TChar>
-    inline bool DoIsStringASCIISlow(const TChar* first, const TChar* last) {
+    inline bool DoIsStringASCIISlow(const TChar* first, const TChar* last) { 
         using TUnsignedChar = std::make_unsigned_t<TChar>;
-        Y_ASSERT(first <= last);
-        for (; first != last; ++first) {
-            if (static_cast<TUnsignedChar>(*first) > 0x7F) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    template <typename TChar>
+        Y_ASSERT(first <= last); 
+        for (; first != last; ++first) { 
+            if (static_cast<TUnsignedChar>(*first) > 0x7F) { 
+                return false; 
+            } 
+        } 
+        return true; 
+    } 
+ 
+    template <typename TChar> 
     inline bool DoIsStringASCII(const TChar* first, const TChar* last) {
-        if (last - first < 10) {
-            return DoIsStringASCIISlow(first, last);
-        }
+        if (last - first < 10) { 
+            return DoIsStringASCIISlow(first, last); 
+        } 
         TMachineWord allCharBits = 0;
         TMachineWord nonAsciiBitMask = NonASCIIMask<sizeof(TMachineWord), TChar>::Value();
 
@@ -557,40 +557,40 @@ namespace NDetail {
         return !(allCharBits & nonAsciiBitMask);
     }
 
-#ifdef _sse2_
-    inline bool DoIsStringASCIISSE(const unsigned char* first, const unsigned char* last) {
-        //scalar version for short strings
-        if (first + 8 > last) {
-            return ::NDetail::DoIsStringASCIISlow(first, last);
-        }
-
-        alignas(16) unsigned char buf[16];
-
-        while (first + 16 <= last) {
-            memcpy(buf, first, 16);
-            __m128i chunk = _mm_load_si128(reinterpret_cast<__m128i*>(buf));
-
-            int asciiMask = _mm_movemask_epi8(chunk);
-            if (asciiMask) {
+#ifdef _sse2_ 
+    inline bool DoIsStringASCIISSE(const unsigned char* first, const unsigned char* last) { 
+        //scalar version for short strings 
+        if (first + 8 > last) { 
+            return ::NDetail::DoIsStringASCIISlow(first, last); 
+        } 
+ 
+        alignas(16) unsigned char buf[16]; 
+ 
+        while (first + 16 <= last) { 
+            memcpy(buf, first, 16); 
+            __m128i chunk = _mm_load_si128(reinterpret_cast<__m128i*>(buf)); 
+ 
+            int asciiMask = _mm_movemask_epi8(chunk); 
+            if (asciiMask) { 
                 return false;
             }
-            first += 16;
+            first += 16; 
         }
-
-        if (first + 8 <= last) {
-            memcpy(buf, first, 8);
-            __m128i chunk = _mm_loadl_epi64(reinterpret_cast<__m128i*>(buf));
-
-            int asciiMask = _mm_movemask_epi8(chunk);
-            if (asciiMask) {
-                return false;
-            }
-            first += 8;
-        }
-
-        return ::NDetail::DoIsStringASCIISlow(first, last);
+ 
+        if (first + 8 <= last) { 
+            memcpy(buf, first, 8); 
+            __m128i chunk = _mm_loadl_epi64(reinterpret_cast<__m128i*>(buf)); 
+ 
+            int asciiMask = _mm_movemask_epi8(chunk); 
+            if (asciiMask) { 
+                return false; 
+            } 
+            first += 8; 
+        } 
+ 
+        return ::NDetail::DoIsStringASCIISlow(first, last); 
     }
-#endif //_sse2_
+#endif //_sse2_ 
 
 }
 
@@ -600,17 +600,17 @@ inline bool IsStringASCII(const TChar* first, const TChar* last) {
     return ::NDetail::DoIsStringASCII(first, last);
 }
 
-#ifdef _sse2_
-template <>
-inline bool IsStringASCII<unsigned char>(const unsigned char* first, const unsigned char* last) {
-    return ::NDetail::DoIsStringASCIISSE(first, last);
-}
-template <>
-inline bool IsStringASCII<char>(const char* first, const char* last) {
-    return ::NDetail::DoIsStringASCIISSE(reinterpret_cast<const unsigned char*>(first), reinterpret_cast<const unsigned char*>(last));
-}
-#endif
-
+#ifdef _sse2_ 
+template <> 
+inline bool IsStringASCII<unsigned char>(const unsigned char* first, const unsigned char* last) { 
+    return ::NDetail::DoIsStringASCIISSE(first, last); 
+} 
+template <> 
+inline bool IsStringASCII<char>(const char* first, const char* last) { 
+    return ::NDetail::DoIsStringASCIISSE(reinterpret_cast<const unsigned char*>(first), reinterpret_cast<const unsigned char*>(last)); 
+} 
+#endif 
+ 
 //! copies elements from one character sequence to another using memcpy
 //! for compatibility only
 template <typename TChar>

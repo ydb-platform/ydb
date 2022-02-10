@@ -80,8 +80,8 @@ Y_UNIT_TEST_SUITE(TMiniKQLNodeTest) {
         UNIT_ASSERT_EQUAL(s1->GetMemberType(0)->GetKind(), TType::EKind::Void);
 
         TVector<std::pair<TString, TType*>> s2members;
-        s2members.push_back(std::make_pair("bbb", env.GetEmptyStruct()->GetGenericType()));
-        s2members.push_back(std::make_pair("ccc", env.GetTypeOfVoid()));
+        s2members.push_back(std::make_pair("bbb", env.GetEmptyStruct()->GetGenericType())); 
+        s2members.push_back(std::make_pair("ccc", env.GetTypeOfVoid())); 
         TStructType* s2 = TStructType::Create(s2members.data(), s2members.size(), env);
         UNIT_ASSERT_EQUAL(s2->GetMembersCount(), 2);
         UNIT_ASSERT_EQUAL(s2->GetMemberName(0), "bbb");
@@ -90,7 +90,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLNodeTest) {
         UNIT_ASSERT_EQUAL(s2->GetMemberType(1)->GetKind(), TType::EKind::Void);
 
         TVector<std::pair<TString, TType*>> s3members;
-        s3members.push_back(std::make_pair("", env.GetEmptyStruct()->GetGenericType()));
+        s3members.push_back(std::make_pair("", env.GetEmptyStruct()->GetGenericType())); 
         UNIT_ASSERT_EXCEPTION(TStructType::Create(s3members.data(), s3members.size(), env), yexception);
 
         TStructType* s2cloned = TStructType::Create(s2members.data(), s2members.size(), env);
@@ -316,23 +316,23 @@ Y_UNIT_TEST_SUITE(TMiniKQLNodeTest) {
 
         TString u = "34567";
         TVector<std::pair<TRuntimeNode, TRuntimeNode>> someItems;
-        someItems.push_back(std::make_pair(TRuntimeNode(TDataLiteral::Create(
+        someItems.push_back(std::make_pair(TRuntimeNode(TDataLiteral::Create( 
             NUdf::TUnboxedValuePod::Embedded(u), dtype1, env), true),
             TRuntimeNode(TDataLiteral::Create(
             NUdf::TUnboxedValuePod((ui32)13), dtype2, env), true)));
         u = "878";
-        someItems.push_back(std::make_pair(TRuntimeNode(TDataLiteral::Create(
+        someItems.push_back(std::make_pair(TRuntimeNode(TDataLiteral::Create( 
             NUdf::TUnboxedValuePod::Embedded(u), dtype1, env), true),
             TRuntimeNode(TDataLiteral::Create(NUdf::TUnboxedValuePod((ui32)14), dtype2, env), true)));
         TDictLiteral* dict2 = TDictLiteral::Create(someItems.size(), someItems.data(), dict2Type, env);
         UNIT_ASSERT_EQUAL(dict2->GetItemsCount(), 2);
-        UNIT_ASSERT_EQUAL(dict2->GetItem(0).first.GetNode()->GetType()->GetKind(), TType::EKind::Data);
+        UNIT_ASSERT_EQUAL(dict2->GetItem(0).first.GetNode()->GetType()->GetKind(), TType::EKind::Data); 
         UNIT_ASSERT_EQUAL(static_cast<const TDataLiteral&>(*dict2->GetItem(0).first.GetNode()).AsValue().AsStringRef(), NUdf::TStringRef::Of("34567"));
-        UNIT_ASSERT_EQUAL(dict2->GetItem(0).second.GetNode()->GetType()->GetKind(), TType::EKind::Data);
+        UNIT_ASSERT_EQUAL(dict2->GetItem(0).second.GetNode()->GetType()->GetKind(), TType::EKind::Data); 
         UNIT_ASSERT_EQUAL(static_cast<const TDataLiteral&>(*dict2->GetItem(0).second.GetNode()).AsValue().Get<ui32>(), 13);
-        UNIT_ASSERT_EQUAL(dict2->GetItem(1).first.GetNode()->GetType()->GetKind(), TType::EKind::Data);
+        UNIT_ASSERT_EQUAL(dict2->GetItem(1).first.GetNode()->GetType()->GetKind(), TType::EKind::Data); 
         UNIT_ASSERT_EQUAL(static_cast<const TDataLiteral&>(*dict2->GetItem(1).first.GetNode()).AsValue().AsStringRef(), NUdf::TStringRef::Of("878"));
-        UNIT_ASSERT_EQUAL(dict2->GetItem(1).second.GetNode()->GetType()->GetKind(), TType::EKind::Data);
+        UNIT_ASSERT_EQUAL(dict2->GetItem(1).second.GetNode()->GetType()->GetKind(), TType::EKind::Data); 
         UNIT_ASSERT_EQUAL(static_cast<const TDataLiteral&>(*dict2->GetItem(1).second.GetNode()).AsValue().Get<ui32>(), 14);
 
         UNIT_ASSERT_EXCEPTION(TDictLiteral::Create(someItems.size(), someItems.data(), dict1Type, env), yexception);
@@ -342,7 +342,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLNodeTest) {
 
         TVector<std::pair<TRuntimeNode, TRuntimeNode>> someDynItems;
         TCallableType* ctype = TCallableType::Create("c1", dtype1, 0, nullptr, nullptr, env);
-        someDynItems.push_back(std::make_pair(
+        someDynItems.push_back(std::make_pair( 
             TRuntimeNode(TCallable::Create(0, nullptr, ctype, env), false),
             TRuntimeNode(TDataLiteral::Create(NUdf::TUnboxedValuePod((ui32)123), dtype2, env), true)));
 

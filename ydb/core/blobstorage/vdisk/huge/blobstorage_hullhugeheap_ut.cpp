@@ -253,7 +253,7 @@ namespace NKikimr {
             TAllChains all("vdisk", 134274560, 56896, 512 << 10, 512 << 10, 10 << 20, 8, false);
             all.PrintOutChains(STR);
             all.PrintOutSearchTable(STR);
-            std::pair<ui32, ui32> p = all.GetTablesSize();
+            std::pair<ui32, ui32> p = all.GetTablesSize(); 
             TVector<NPrivate::TChainLayoutBuilder::TSeg> canonical = {
                 {9, 10}, {10, 11}, {11, 12}, {12, 13}, {13, 14}, {14, 15}, {15, 16}, {16, 18}, {18, 20},
                 {20, 22}, {22, 24}, {24, 27}, {27, 30}, {30, 33}, {33, 37}, {37, 41}, {41, 46}, {46, 51},

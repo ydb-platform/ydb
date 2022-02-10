@@ -52,10 +52,10 @@ namespace NKikimr {
             }
         }
 
-        std::pair<TOneChunkPtr, const char *> TOneChunk::Construct(const char *serialized) {
+        std::pair<TOneChunkPtr, const char *> TOneChunk::Construct(const char *serialized) { 
             ui32 chunkIdx = *(const ui32 *)serialized;
             serialized += 4;
-            return std::pair<TOneChunkPtr, const char *>(new TOneChunk(chunkIdx), serialized);
+            return std::pair<TOneChunkPtr, const char *>(new TOneChunk(chunkIdx), serialized); 
         }
 
         ////////////////////////////////////////////////////////////////////////////
@@ -136,7 +136,7 @@ namespace NKikimr {
             return idx.Serialize(s);
         }
 
-        std::pair<TOneChunkIndexPtr, const char *> TOneChunkIndex::Construct(const char *serialized) {
+        std::pair<TOneChunkIndexPtr, const char *> TOneChunkIndex::Construct(const char *serialized) { 
             ui64 lastRealLsn;
             memcpy(&lastRealLsn, serialized, sizeof(ui64));
             serialized += sizeof(ui64);
@@ -157,7 +157,7 @@ namespace NKikimr {
             }
 
             TOneChunkIndexPtr ptr(new TOneChunkIndex(lastRealLsn, index));
-            return std::pair<TOneChunkIndexPtr, const char *>(ptr, serialized);
+            return std::pair<TOneChunkIndexPtr, const char *>(ptr, serialized); 
         }
 
         TOneChunkIndex::TOneChunkIndex(ui64 lastRealLsn, TDiskIndexRecs &index)
@@ -177,11 +177,11 @@ namespace NKikimr {
             str << "}";
         }
 
-        std::pair<TIndexedChunkPtr, const char *> TIndexedChunk::Construct(const char *serialized) {
+        std::pair<TIndexedChunkPtr, const char *> TIndexedChunk::Construct(const char *serialized) { 
             auto chunkRes = TOneChunk::Construct(serialized);
             auto indexRes = TOneChunkIndex::Construct(chunkRes.second);
             TIndexedChunkPtr ptr(new TIndexedChunk(chunkRes.first, indexRes.first));
-            return std::pair<TIndexedChunkPtr, const char *>(ptr, indexRes.second);
+            return std::pair<TIndexedChunkPtr, const char *>(ptr, indexRes.second); 
         }
 
         ui32 TIndexedChunk::Serialize(IOutputStream &s) const {
@@ -490,7 +490,7 @@ namespace NKikimr {
             ui32 chunksNum = *(const ui32 *)pos;
             pos += 4;
             while (pos != end) {
-                std::pair<TIndexedChunkPtr, const char *> c = TIndexedChunk::Construct(pos);
+                std::pair<TIndexedChunkPtr, const char *> c = TIndexedChunk::Construct(pos); 
                 ManyIdxChunks.push_back(c.first);
                 pos = c.second;
             }

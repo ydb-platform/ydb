@@ -446,8 +446,8 @@ namespace {
                 Owner.WriteVar32(node.GetItemsCount());
                 for (ui32 i = node.GetItemsCount(); i-- > 0;) {
                     auto item = node.GetItem(i);
-                    Owner.AddChildNode(*item.second.GetNode());
-                    Owner.AddChildNode(*item.first.GetNode());
+                    Owner.AddChildNode(*item.second.GetNode()); 
+                    Owner.AddChildNode(*item.first.GetNode()); 
                 }
 
                 Owner.AddChildNode(*type);
@@ -778,11 +778,11 @@ namespace {
                 TStackVec<char> immediateFlags(GetBitmapBytes(node.GetItemsCount() * 2));
                 for (ui32 i = 0, e = node.GetItemsCount(); i < e; ++i) {
                     auto item = node.GetItem(i);
-                    if (item.first.IsImmediate()) {
+                    if (item.first.IsImmediate()) { 
                         SetBitmapBit(immediateFlags.data(), 2 * i);
                     }
 
-                    if (item.second.IsImmediate()) {
+                    if (item.second.IsImmediate()) { 
                         SetBitmapBit(immediateFlags.data(), 2 * i + 1);
                     }
                 }
@@ -852,13 +852,13 @@ namespace {
             Begin(node.IsImmediate());
             TPreVisitor preVisitor(*this);
             TPostVisitor postVisitor(*this);
-            Stack.push_back(std::make_pair(node.GetNode(), false));
+            Stack.push_back(std::make_pair(node.GetNode(), false)); 
             while (!Stack.empty()) {
                 auto& nodeAndFlag = Stack.back();
-                if (!nodeAndFlag.second) {
-                    nodeAndFlag.second = true;
+                if (!nodeAndFlag.second) { 
+                    nodeAndFlag.second = true; 
                     auto prevSize = Stack.size();
-                    nodeAndFlag.first->Accept(preVisitor);
+                    nodeAndFlag.first->Accept(preVisitor); 
                     if (preVisitor.IsProcessed()) { // ref or small node, some nodes have been added
                         Y_VERIFY_DEBUG(prevSize == Stack.size());
                         Stack.pop_back();
@@ -868,7 +868,7 @@ namespace {
                     Y_VERIFY_DEBUG(prevSize <= Stack.size());
                 } else {
                     auto prevSize = Stack.size();
-                    nodeAndFlag.first->Accept(postVisitor);
+                    nodeAndFlag.first->Accept(postVisitor); 
                     Y_VERIFY_DEBUG(prevSize == Stack.size());
                     Stack.pop_back();
                 }
@@ -885,7 +885,7 @@ namespace {
         void Begin(bool isImmediate) {
             Write(SystemMask | (isImmediate ? (char)ESystemCommand::Begin : (char)ESystemCommand::BeginNotImmediate));
             for (auto it = Names.begin(); it != Names.end();) {
-                if (it->second <= 1) {
+                if (it->second <= 1) { 
                     Names.erase(it++);
                 } else {
                     ++it;
@@ -899,10 +899,10 @@ namespace {
                 if (it == Names.end()) {
                     continue;
                 }
-                const auto& name = it->first;
+                const auto& name = it->first; 
                 WriteVar32(name.Str().size());
                 WriteMany(name.Str().data(), name.Str().size());
-                it->second = nameIndex++;
+                it->second = nameIndex++; 
             }
 
             Y_VERIFY_DEBUG(nameIndex == Names.size());
@@ -913,7 +913,7 @@ namespace {
         }
 
         void AddChildNode(TNode& node) {
-            Stack.push_back(std::make_pair(&node, false));
+            Stack.push_back(std::make_pair(&node, false)); 
         }
 
         void RegisterReference(TNode& node) {
@@ -934,7 +934,7 @@ namespace {
                 WriteVar32(name.Str().size() << 1);
                 WriteMany(name.Str().data(), name.Str().size());
             } else {
-                WriteVar32((it->second << 1) | NameRefMark);
+                WriteVar32((it->second << 1) | NameRefMark); 
             }
         }
 
@@ -1006,7 +1006,7 @@ namespace {
                         lastPos = Current;
                     }
 
-                    NodeStack.push_back(std::make_pair(newNode, Current));
+                    NodeStack.push_back(std::make_pair(newNode, Current)); 
                     CtxStack.pop_back();
                     continue;
                 }
@@ -1106,8 +1106,8 @@ namespace {
 
             auto nodeAndFinish = NodeStack.back();
             NodeStack.pop_back();
-            Current = nodeAndFinish.second;
-            return nodeAndFinish.first;
+            Current = nodeAndFinish.second; 
+            return nodeAndFinish.first; 
         }
 
         TNode* PeekNode(ui32 index) {
@@ -1115,8 +1115,8 @@ namespace {
                 ThrowCorrupted();
 
             auto nodeAndFinish = NodeStack[NodeStack.size() - 1 - index];
-            Current = nodeAndFinish.second;
-            return nodeAndFinish.first;
+            Current = nodeAndFinish.second; 
+            return nodeAndFinish.first; 
         }
 
         TNode* ReadNode() {
@@ -1853,18 +1853,18 @@ namespace {
                 ThrowCorrupted();
 
             auto dictType = static_cast<TDictType*>(type);
-            TStackVec<std::pair<TRuntimeNode, TRuntimeNode>> items(itemsCount);
+            TStackVec<std::pair<TRuntimeNode, TRuntimeNode>> items(itemsCount); 
             for (ui32 i = 0; i < itemsCount; ++i) {
                 auto key = PopNode();
                 auto payload = PopNode();
-                items[i].first = TRuntimeNode(key, false);
-                items[i].second = TRuntimeNode(payload, false);
+                items[i].first = TRuntimeNode(key, false); 
+                items[i].second = TRuntimeNode(payload, false); 
             }
 
             const char* immediateFlags = ReadMany(GetBitmapBytes(itemsCount * 2));
             for (ui32 i = 0; i < itemsCount; ++i) {
-                items[i].first = TRuntimeNode(items[i].first.GetNode(), GetBitmapBit(immediateFlags, 2 * i));
-                items[i].second = TRuntimeNode(items[i].second.GetNode(), GetBitmapBit(immediateFlags, 2 * i + 1));
+                items[i].first = TRuntimeNode(items[i].first.GetNode(), GetBitmapBit(immediateFlags, 2 * i)); 
+                items[i].second = TRuntimeNode(items[i].second.GetNode(), GetBitmapBit(immediateFlags, 2 * i + 1)); 
             }
 
             auto node = TDictLiteral::Create(itemsCount, items.data(), dictType, Env);

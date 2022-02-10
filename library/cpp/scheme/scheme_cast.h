@@ -61,11 +61,11 @@ namespace NJsonConverters {
     template <class K, class L, class A>
     void FromTValue(const NSc::TValue& x, TSet<K, L, A>& out, const bool validate);
 
-    //std::pair
+    //std::pair 
     template <class T1, class T2>
-    NSc::TValue ToTValue(const std::pair<T1, T2>& x);
+    NSc::TValue ToTValue(const std::pair<T1, T2>& x); 
     template <class T1, class T2>
-    void FromTValue(const NSc::TValue& x, std::pair<T1, T2>& out, const bool validate);
+    void FromTValue(const NSc::TValue& x, std::pair<T1, T2>& out, const bool validate); 
 
     //////////////////////////////////////////////////////////////////////
     // simple From, To helpers
@@ -168,7 +168,7 @@ namespace NJsonConverters {
                 for (const auto& it : dict) {
                     TKey key = NJsonConverters::FromString<TKey>(it.first, validate);
                     TMapped val = NJsonConverters::FromTValue<TMapped>(it.second, validate);
-                    out.insert(std::pair<TKey, TMapped>(key, val));
+                    out.insert(std::pair<TKey, TMapped>(key, val)); 
                 }
             }
         }
@@ -278,7 +278,7 @@ namespace NJsonConverters {
     // std::pair
     //////////////////////////////////////////////////////////////////////
     template <class T1, class T2>
-    NSc::TValue ToTValue(const std::pair<T1, T2>& x) {
+    NSc::TValue ToTValue(const std::pair<T1, T2>& x) { 
         NSc::TValue out;
         out.SetArray();
         out.Push(NJsonConverters::ToTValue(x.first));
@@ -287,7 +287,7 @@ namespace NJsonConverters {
     }
 
     template <class T1, class T2>
-    void FromTValue(const NSc::TValue& x, std::pair<T1, T2>& out, const bool validate) {
+    void FromTValue(const NSc::TValue& x, std::pair<T1, T2>& out, const bool validate) { 
         if (validate)
             Y_ENSURE(x.IsArray() || x.IsNull(), "not valid input scheme");
         if (x.IsArray()) {

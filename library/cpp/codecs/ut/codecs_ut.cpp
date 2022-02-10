@@ -1219,7 +1219,7 @@ private:
 
         {
             THuffmanCodec codec;
-            std::pair<char, ui64> freqs[256];
+            std::pair<char, ui64> freqs[256]; 
 
             for (size_t i = 0; i < Y_ARRAY_SIZE(freqs); ++i) {
                 freqs[i].first = (char)i;

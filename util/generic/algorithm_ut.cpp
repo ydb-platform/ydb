@@ -391,7 +391,7 @@ Y_UNIT_TEST_SUITE(TAlgorithm) {
 
         {
             int data[] = {1, 1, 1, 1, 1, 2, 2, 3, 3, 3, 3, 4, 5};
-            using PairOfInt = std::pair<int*, int*>;
+            using PairOfInt = std::pair<int*, int*>; 
             PairOfInt tmp = EqualRange(data, data + Y_ARRAY_SIZE(data), 3);
 
             UNIT_ASSERT_EQUAL(tmp.second - tmp.first, 4);
@@ -603,7 +603,7 @@ Y_UNIT_TEST_SUITE(TAlgorithm) {
     }
 
     Y_UNIT_TEST(MinMaxTest) {
-        std::pair<int, int> p1 = MinMax(5, 12);
+        std::pair<int, int> p1 = MinMax(5, 12); 
         UNIT_ASSERT_EQUAL(p1.first, 5);
         UNIT_ASSERT_EQUAL(p1.second, 12);
 

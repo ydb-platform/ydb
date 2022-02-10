@@ -43,7 +43,7 @@ DEFINE_TYPE_AUTO(double, TDouble);
 DEFINE_TYPE_AUTO(TString, TString);
 DEFINE_TYPE_AUTO(const char*, TString);
 
-using TPairUi64Ui64Type = std::pair<ui64, ui64>;
+using TPairUi64Ui64Type = std::pair<ui64, ui64>; 
 DEFINE_TYPE_AUTO(TPairUi64Ui64Type, TPairUi64Ui64);
 
 #undef DEFINE_TYPE_AUTO

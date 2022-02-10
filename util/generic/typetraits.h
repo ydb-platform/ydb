@@ -6,7 +6,7 @@
 
 #include <iterator>
 #include <type_traits>
-#include <stlfwd>
+#include <stlfwd> 
 
 #if _LIBCPP_STD_VER >= 17
 template <bool B>
@@ -228,12 +228,12 @@ class TTypeTraits<void>: public TTypeTraitsBase<void> {};
  */
 #define Y_HAS_SUBTYPE(...) Y_PASS_VA_ARGS(Y_MACRO_IMPL_DISPATCHER_2(__VA_ARGS__, Y_HAS_SUBTYPE_IMPL_2, Y_HAS_SUBTYPE_IMPL_1)(__VA_ARGS__))
 
-template <class T1, class T2>
-struct TPodTraits<std::pair<T1, T2>> {
-    enum {
-        IsPod = TTypeTraits<T1>::IsPod && TTypeTraits<T2>::IsPod
-    };
-};
+template <class T1, class T2> 
+struct TPodTraits<std::pair<T1, T2>> { 
+    enum { 
+        IsPod = TTypeTraits<T1>::IsPod && TTypeTraits<T2>::IsPod 
+    }; 
+}; 
 
 template <class T>
 struct TIsPointerToConstMemberFunction: std::false_type {

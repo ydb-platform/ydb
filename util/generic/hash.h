@@ -15,7 +15,7 @@
 #include <initializer_list>
 #include <memory>
 #include <tuple>
-#include <utility>
+#include <utility> 
 
 #include <cstdlib>
 
@@ -1027,13 +1027,13 @@ std::pair<typename THashTable<V, K, HF, Ex, Eq, A>::iterator, bool> THashTable<V
     if (first)                                                          /*y*/
         for (node* cur = first; !((uintptr_t)cur & 1); cur = cur->next) /*y*/
             if (equals(get_key(cur->val), get_key(obj)))
-                return std::pair<iterator, bool>(iterator(cur), false); /*y*/
+                return std::pair<iterator, bool>(iterator(cur), false); /*y*/ 
 
     node* tmp = new_node(obj);
     tmp->next = first ? first : (node*)((uintptr_t)&buckets[n + 1] | 1); /*y*/
     buckets[n] = tmp;
     ++num_elements;
-    return std::pair<iterator, bool>(iterator(tmp), true); /*y*/
+    return std::pair<iterator, bool>(iterator(tmp), true); /*y*/ 
 }
 
 template <class V, class K, class HF, class Ex, class Eq, class A>
@@ -1099,7 +1099,7 @@ __yhashtable_iterator<V> THashTable<V, K, HF, Ex, Eq, A>::find_i(const OtherKey&
 template <class V, class K, class HF, class Ex, class Eq, class A>
 template <class OtherKey>
 std::pair<__yhashtable_iterator<V>, __yhashtable_iterator<V>> THashTable<V, K, HF, Ex, Eq, A>::equal_range(const OtherKey& key) {
-    using pii = std::pair<iterator, iterator>;
+    using pii = std::pair<iterator, iterator>; 
     const size_type n = bkt_num_key(key);
     node* first = buckets[n];
 
@@ -1122,7 +1122,7 @@ std::pair<__yhashtable_iterator<V>, __yhashtable_iterator<V>> THashTable<V, K, H
 template <class V, class K, class HF, class Ex, class Eq, class A>
 template <class OtherKey>
 std::pair<__yhashtable_const_iterator<V>, __yhashtable_const_iterator<V>> THashTable<V, K, HF, Ex, Eq, A>::equal_range(const OtherKey& key) const {
-    using pii = std::pair<const_iterator, const_iterator>;
+    using pii = std::pair<const_iterator, const_iterator>; 
     const size_type n = bkt_num_key(key);
     const node* first = buckets[n];
 
@@ -1525,7 +1525,7 @@ public:
         return rep.size();
     }
     yssize_t ysize() const noexcept {
-        return (yssize_t)rep.size();
+        return (yssize_t)rep.size(); 
     }
     size_type max_size() const noexcept {
         return rep.max_size();
@@ -1566,7 +1566,7 @@ public:
         rep.insert_unique(f, l);
     }
 
-    std::pair<iterator, bool> insert(const value_type& obj) {
+    std::pair<iterator, bool> insert(const value_type& obj) { 
         return rep.insert_unique(obj);
     }
 
@@ -1677,12 +1677,12 @@ public:
     }
 
     template <class TKey>
-    std::pair<iterator, iterator> equal_range(const TKey& key) {
+    std::pair<iterator, iterator> equal_range(const TKey& key) { 
         return rep.equal_range(key);
     }
 
     template <class TKey>
-    std::pair<const_iterator, const_iterator> equal_range(const TKey& key) const {
+    std::pair<const_iterator, const_iterator> equal_range(const TKey& key) const { 
         return rep.equal_range(key);
     }
 
@@ -1849,8 +1849,8 @@ public:
     size_type size() const {
         return rep.size();
     }
-    yssize_t ysize() const {
-        return (yssize_t)rep.size();
+    yssize_t ysize() const { 
+        return (yssize_t)rep.size(); 
     }
     size_type max_size() const {
         return rep.max_size();
@@ -1945,12 +1945,12 @@ public:
     }
 
     template <class TKey>
-    std::pair<iterator, iterator> equal_range(const TKey& key) {
+    std::pair<iterator, iterator> equal_range(const TKey& key) { 
         return rep.equal_range(key);
     }
 
     template <class TKey>
-    std::pair<const_iterator, const_iterator> equal_range(const TKey& key) const {
+    std::pair<const_iterator, const_iterator> equal_range(const TKey& key) const { 
         return rep.equal_range(key);
     }
 

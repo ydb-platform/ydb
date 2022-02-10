@@ -420,7 +420,7 @@ TDataLiteral* TDataLiteral::Create(const NUdf::TUnboxedValuePod& value, TDataTyp
 void TDataLiteral::DoUpdateLinks(const THashMap<TNode*, TNode*>& links) {
     auto typeIt = links.find(Type);
     if (typeIt != links.end()) {
-        TNode* newNode = typeIt->second;
+        TNode* newNode = typeIt->second; 
         Y_VERIFY_DEBUG(Type->Equals(*newNode));
         Type = static_cast<TType*>(newNode);
     }
@@ -473,7 +473,7 @@ TStructType::TStructType(ui32 membersCount, std::pair<TInternName, TType*>* memb
 
     TInternName lastMemberName;
     for (size_t index = 0; index < membersCount; ++index) {
-        const auto& name = Members[index].first;
+        const auto& name = Members[index].first; 
         MKQL_ENSURE(!name.Str().empty(), "Empty member name is not allowed");
 
         MKQL_ENSURE(name.Str() > lastMemberName.Str(), "Member names are not sorted: "
@@ -488,7 +488,7 @@ TStructType* TStructType::Create(const std::pair<TString, TType*>* members, ui32
     if (membersCount) {
         allocatedMembers = static_cast<std::pair<TInternName, TType*>*>(env.AllocateBuffer(membersCount * sizeof(*allocatedMembers)));
         for (ui32 i = 0; i < membersCount; ++i) {
-            allocatedMembers[i] = std::make_pair(env.InternName(members[i].first), members[i].second);
+            allocatedMembers[i] = std::make_pair(env.InternName(members[i].first), members[i].second); 
         }
     }
 
@@ -500,7 +500,7 @@ TStructType* TStructType::Create(ui32 membersCount, const TStructMember* members
     if (membersCount) {
         allocatedMembers = static_cast<std::pair<TInternName, TType*>*>(env.AllocateBuffer(membersCount * sizeof(*allocatedMembers)));
         for (ui32 i = 0; i < membersCount; ++i) {
-            allocatedMembers[i] = std::make_pair(env.InternName(members[i].Name), members[i].Type);
+            allocatedMembers[i] = std::make_pair(env.InternName(members[i].Name), members[i].Type); 
         }
     }
 
@@ -515,9 +515,9 @@ bool TStructType::IsSameType(const TStructType& typeToCompare) const {
         return false;
 
     for (size_t index = 0; index < MembersCount; ++index) {
-        if (Members[index].first != typeToCompare.Members[index].first)
+        if (Members[index].first != typeToCompare.Members[index].first) 
             return false;
-        if (!Members[index].second->IsSameType(*typeToCompare.Members[index].second))
+        if (!Members[index].second->IsSameType(*typeToCompare.Members[index].second)) 
             return false;
     }
 
@@ -544,11 +544,11 @@ bool TStructType::IsConvertableTo(const TStructType& typeToCompare, bool ignoreT
 void TStructType::DoUpdateLinks(const THashMap<TNode*, TNode*>& links) {
     for (ui32 i = 0; i < MembersCount; ++i) {
         auto& member = Members[i];
-        auto memberIt = links.find(member.second);
+        auto memberIt = links.find(member.second); 
         if (memberIt != links.end()) {
-            TNode* newNode = memberIt->second;
+            TNode* newNode = memberIt->second; 
             Y_VERIFY_DEBUG(member.second->Equals(*newNode));
-            member.second = static_cast<TType*>(newNode);
+            member.second = static_cast<TType*>(newNode); 
         }
     }
 }
@@ -569,12 +569,12 @@ TNode* TStructType::DoCloneOnCallableWrite(const TTypeEnvironment& env) const {
     if (MembersCount) {
         allocatedMembers = static_cast<std::pair<TInternName, TType*>*>(env.AllocateBuffer(MembersCount * sizeof(*allocatedMembers)));
         for (ui32 i = 0; i < MembersCount; ++i) {
-            allocatedMembers[i].first = Members[i].first;
+            allocatedMembers[i].first = Members[i].first; 
             auto newNode = (TNode*)Members[i].second->GetCookie();
             if (newNode) {
                 allocatedMembers[i].second = static_cast<TType*>(newNode);
             } else {
-                allocatedMembers[i].second = Members[i].second;
+                allocatedMembers[i].second = Members[i].second; 
             }
         }
     }
@@ -651,7 +651,7 @@ TStructLiteral* TStructLiteral::Create(ui32 valuesCount, const TRuntimeNode* val
 void TStructLiteral::DoUpdateLinks(const THashMap<TNode*, TNode*>& links) {
     auto typeIt = links.find(Type);
     if (typeIt != links.end()) {
-        TNode* newNode = typeIt->second;
+        TNode* newNode = typeIt->second; 
         Y_VERIFY_DEBUG(Type->Equals(*newNode));
         Type = static_cast<TType*>(newNode);
     }
@@ -660,7 +660,7 @@ void TStructLiteral::DoUpdateLinks(const THashMap<TNode*, TNode*>& links) {
         auto& value = Values[i];
         auto valueIt = links.find(value.GetNode());
         if (valueIt != links.end()) {
-            TNode* newNode = valueIt->second;
+            TNode* newNode = valueIt->second; 
             Y_VERIFY_DEBUG(value.GetNode()->Equals(*newNode));
             value = TRuntimeNode(newNode, value.IsImmediate());
         }
@@ -742,7 +742,7 @@ bool TListType::IsConvertableTo(const TListType& typeToCompare, bool ignoreTagge
 void TListType::DoUpdateLinks(const THashMap<TNode*, TNode*>& links) {
     auto itemTypeIt = links.find(GetItemType());
     if (itemTypeIt != links.end()) {
-        TNode* newNode = itemTypeIt->second;
+        TNode* newNode = itemTypeIt->second; 
         Y_VERIFY_DEBUG(GetItemType()->Equals(*newNode));
         Data = static_cast<TType*>(newNode);
     }
@@ -797,7 +797,7 @@ TListLiteral* TListLiteral::Create(TRuntimeNode* items, ui32 count, TListType* t
 void TListLiteral::DoUpdateLinks(const THashMap<TNode*, TNode*>& links) {
     auto typeIt = links.find(Type);
     if (typeIt != links.end()) {
-        TNode* newNode = typeIt->second;
+        TNode* newNode = typeIt->second; 
         Y_VERIFY_DEBUG(Type->Equals(*newNode));
         Type = static_cast<TType*>(newNode);
     }
@@ -806,7 +806,7 @@ void TListLiteral::DoUpdateLinks(const THashMap<TNode*, TNode*>& links) {
         auto& item = Items[i];
         auto itemIt = links.find(item.GetNode());
         if (itemIt != links.end()) {
-            TNode* newNode = itemIt->second;
+            TNode* newNode = itemIt->second; 
             Y_VERIFY_DEBUG(item.GetNode()->Equals(*newNode));
             item = TRuntimeNode(newNode, item.IsImmediate());
         }
@@ -993,7 +993,7 @@ bool TOptionalType::IsConvertableTo(const TOptionalType& typeToCompare, bool ign
 void TOptionalType::DoUpdateLinks(const THashMap<TNode*, TNode*>& links) {
     auto itemTypeIt = links.find(GetItemType());
     if (itemTypeIt != links.end()) {
-        TNode* newNode = itemTypeIt->second;
+        TNode* newNode = itemTypeIt->second; 
         Y_VERIFY_DEBUG(GetItemType()->Equals(*newNode));
         Data = static_cast<TType*>(newNode);
     }
@@ -1084,7 +1084,7 @@ TOptionalLiteral* TOptionalLiteral::Create(TRuntimeNode item, TOptionalType* typ
 void TOptionalLiteral::DoUpdateLinks(const THashMap<TNode*, TNode*>& links) {
     auto typeIt = links.find(Type);
     if (typeIt != links.end()) {
-        TNode* newNode = typeIt->second;
+        TNode* newNode = typeIt->second; 
         Y_VERIFY_DEBUG(Type->Equals(*newNode));
         Type = static_cast<TType*>(newNode);
     }
@@ -1092,7 +1092,7 @@ void TOptionalLiteral::DoUpdateLinks(const THashMap<TNode*, TNode*>& links) {
     if (Item.GetNode()) {
         auto itemIt = links.find(Item.GetNode());
         if (itemIt != links.end()) {
-            TNode* newNode = itemIt->second;
+            TNode* newNode = itemIt->second; 
             Y_VERIFY_DEBUG(Item.GetNode()->Equals(*newNode));
             Item = TRuntimeNode(newNode, Item.IsImmediate());
         }
@@ -1147,14 +1147,14 @@ bool TDictType::IsConvertableTo(const TDictType& typeToCompare, bool ignoreTagge
 void TDictType::DoUpdateLinks(const THashMap<TNode*, TNode*>& links) {
     auto keyTypeIt = links.find(KeyType);
     if (keyTypeIt != links.end()) {
-        TNode* newNode = keyTypeIt->second;
+        TNode* newNode = keyTypeIt->second; 
         Y_VERIFY_DEBUG(KeyType->Equals(*newNode));
         KeyType = static_cast<TType*>(newNode);
     }
 
     auto payloadTypeIt = links.find(PayloadType);
     if (payloadTypeIt != links.end()) {
-        TNode* newNode = payloadTypeIt->second;
+        TNode* newNode = payloadTypeIt->second; 
         Y_VERIFY_DEBUG(PayloadType->Equals(*newNode));
         PayloadType = static_cast<TType*>(newNode);
     }
@@ -1191,7 +1191,7 @@ void TDictType::EnsureValidDictKey(TType* keyType) {
     Y_UNUSED(keyType);
 }
 
-TDictLiteral::TDictLiteral(ui32 itemsCount, std::pair<TRuntimeNode, TRuntimeNode>* items, TDictType* type, bool validate)
+TDictLiteral::TDictLiteral(ui32 itemsCount, std::pair<TRuntimeNode, TRuntimeNode>* items, TDictType* type, bool validate) 
     : TNode(type)
     , ItemsCount(itemsCount)
     , Items(items)
@@ -1199,8 +1199,8 @@ TDictLiteral::TDictLiteral(ui32 itemsCount, std::pair<TRuntimeNode, TRuntimeNode
     if (!validate) {
         for (size_t index = 0; index < itemsCount; ++index) {
             auto& item = Items[index];
-            item.first.Freeze();
-            item.second.Freeze();
+            item.first.Freeze(); 
+            item.second.Freeze(); 
         }
 
         return;
@@ -1208,20 +1208,20 @@ TDictLiteral::TDictLiteral(ui32 itemsCount, std::pair<TRuntimeNode, TRuntimeNode
 
     for (size_t index = 0; index < itemsCount; ++index) {
         auto& item = Items[index];
-        MKQL_ENSURE(item.first.GetStaticType()->IsSameType(*type->GetKeyType()), "Wrong type of key");
+        MKQL_ENSURE(item.first.GetStaticType()->IsSameType(*type->GetKeyType()), "Wrong type of key"); 
 
-        MKQL_ENSURE(item.second.GetStaticType()->IsSameType(*type->GetPayloadType()), "Wrong type of payload");
+        MKQL_ENSURE(item.second.GetStaticType()->IsSameType(*type->GetPayloadType()), "Wrong type of payload"); 
 
-        item.first.Freeze();
-        item.second.Freeze();
+        item.first.Freeze(); 
+        item.second.Freeze(); 
     }
 }
 
-TDictLiteral* TDictLiteral::Create(ui32 itemsCount, const std::pair<TRuntimeNode, TRuntimeNode>* items, TDictType* type,
+TDictLiteral* TDictLiteral::Create(ui32 itemsCount, const std::pair<TRuntimeNode, TRuntimeNode>* items, TDictType* type, 
     const TTypeEnvironment& env) {
-    std::pair<TRuntimeNode, TRuntimeNode>* allocatedItems = nullptr;
+    std::pair<TRuntimeNode, TRuntimeNode>* allocatedItems = nullptr; 
     if (itemsCount) {
-        allocatedItems = static_cast<std::pair<TRuntimeNode, TRuntimeNode>*>(env.AllocateBuffer(itemsCount * sizeof(*allocatedItems)));
+        allocatedItems = static_cast<std::pair<TRuntimeNode, TRuntimeNode>*>(env.AllocateBuffer(itemsCount * sizeof(*allocatedItems))); 
         for (ui32 i = 0; i < itemsCount; ++i) {
             allocatedItems[i] = items[i];
         }
@@ -1233,25 +1233,25 @@ TDictLiteral* TDictLiteral::Create(ui32 itemsCount, const std::pair<TRuntimeNode
 void TDictLiteral::DoUpdateLinks(const THashMap<TNode*, TNode*>& links) {
     auto typeIt = links.find(Type);
     if (typeIt != links.end()) {
-        TNode* newNode = typeIt->second;
+        TNode* newNode = typeIt->second; 
         Y_VERIFY_DEBUG(Type->Equals(*newNode));
         Type = static_cast<TType*>(newNode);
     }
 
     for (ui32 i = 0; i < ItemsCount; ++i) {
         auto& item = Items[i];
-        auto itemKeyIt = links.find(item.first.GetNode());
+        auto itemKeyIt = links.find(item.first.GetNode()); 
         if (itemKeyIt != links.end()) {
-            TNode* newNode = itemKeyIt->second;
+            TNode* newNode = itemKeyIt->second; 
             Y_VERIFY_DEBUG(item.first.GetNode()->Equals(*newNode));
-            item.first = TRuntimeNode(newNode, item.first.IsImmediate());
+            item.first = TRuntimeNode(newNode, item.first.IsImmediate()); 
         }
 
-        auto itemPayloadIt = links.find(item.second.GetNode());
+        auto itemPayloadIt = links.find(item.second.GetNode()); 
         if (itemPayloadIt != links.end()) {
-            TNode* newNode = itemPayloadIt->second;
+            TNode* newNode = itemPayloadIt->second; 
             Y_VERIFY_DEBUG(item.second.GetNode()->Equals(*newNode));
-            item.second = TRuntimeNode(newNode, item.second.IsImmediate());
+            item.second = TRuntimeNode(newNode, item.second.IsImmediate()); 
         }
     }
 }
@@ -1278,9 +1278,9 @@ TNode* TDictLiteral::DoCloneOnCallableWrite(const TTypeEnvironment& env) const {
     if (!needClone)
         return const_cast<TDictLiteral*>(this);
 
-    std::pair<TRuntimeNode, TRuntimeNode>* allocatedItems = nullptr;
+    std::pair<TRuntimeNode, TRuntimeNode>* allocatedItems = nullptr; 
     if (ItemsCount) {
-        allocatedItems = static_cast<std::pair<TRuntimeNode, TRuntimeNode>*>(env.AllocateBuffer(ItemsCount * sizeof(*allocatedItems)));
+        allocatedItems = static_cast<std::pair<TRuntimeNode, TRuntimeNode>*>(env.AllocateBuffer(ItemsCount * sizeof(*allocatedItems))); 
         for (ui32 i = 0; i < ItemsCount; ++i) {
             allocatedItems[i] = Items[i];
             auto newKeyNode = (TNode*)Items[i].first.GetNode()->GetCookie();
@@ -1302,8 +1302,8 @@ TNode* TDictLiteral::DoCloneOnCallableWrite(const TTypeEnvironment& env) const {
 void TDictLiteral::DoFreeze(const TTypeEnvironment& env) {
     Y_UNUSED(env);
     for (ui32 i = 0; i < ItemsCount; ++i) {
-        Items[i].first.Freeze();
-        Items[i].second.Freeze();
+        Items[i].first.Freeze(); 
+        Items[i].second.Freeze(); 
     }
 }
 
@@ -1433,7 +1433,7 @@ void TCallableType::SetOptionalArgumentsCount(ui32 count) {
 void TCallableType::DoUpdateLinks(const THashMap<TNode*, TNode*>& links) {
     auto returnTypeIt = links.find(ReturnType);
     if (returnTypeIt != links.end()) {
-        TNode* newNode = returnTypeIt->second;
+        TNode* newNode = returnTypeIt->second; 
         Y_VERIFY_DEBUG(ReturnType->Equals(*newNode));
         ReturnType = static_cast<TType*>(newNode);
     }
@@ -1442,7 +1442,7 @@ void TCallableType::DoUpdateLinks(const THashMap<TNode*, TNode*>& links) {
         auto& arg = Arguments[i];
         auto argIt = links.find(arg);
         if (argIt != links.end()) {
-            TNode* newNode = argIt->second;
+            TNode* newNode = argIt->second; 
             Y_VERIFY_DEBUG(arg->Equals(*newNode));
             arg = static_cast<TType*>(newNode);
         }
@@ -1451,7 +1451,7 @@ void TCallableType::DoUpdateLinks(const THashMap<TNode*, TNode*>& links) {
     if (Payload) {
         auto payloadIt = links.find(Payload);
         if (payloadIt != links.end()) {
-            TNode* newNode = payloadIt->second;
+            TNode* newNode = payloadIt->second; 
             Y_VERIFY_DEBUG(Payload->Equals(*newNode));
             Payload = newNode;
         }
@@ -1559,7 +1559,7 @@ TCallable* TCallable::Create(TRuntimeNode result, TCallableType* type, const TTy
 void TCallable::DoUpdateLinks(const THashMap<TNode*, TNode*>& links) {
     auto typeIt = links.find(Type);
     if (typeIt != links.end()) {
-        TNode* newNode = typeIt->second;
+        TNode* newNode = typeIt->second; 
         Y_VERIFY_DEBUG(Type->Equals(*newNode));
         Type = static_cast<TType*>(newNode);
     }
@@ -1568,7 +1568,7 @@ void TCallable::DoUpdateLinks(const THashMap<TNode*, TNode*>& links) {
         auto& input = Inputs[i];
         auto inputIt = links.find(input.GetNode());
         if (inputIt != links.end()) {
-            TNode* newNode = inputIt->second;
+            TNode* newNode = inputIt->second; 
             Y_VERIFY_DEBUG(input.GetNode()->Equals(*newNode));
             input = TRuntimeNode(newNode, input.IsImmediate());
         }
@@ -1577,7 +1577,7 @@ void TCallable::DoUpdateLinks(const THashMap<TNode*, TNode*>& links) {
     if (Result.GetNode()) {
         auto resultIt = links.find(Result.GetNode());
         if (resultIt != links.end()) {
-            TNode* newNode = resultIt->second;
+            TNode* newNode = resultIt->second; 
             Y_VERIFY_DEBUG(Result.GetNode()->Equals(*newNode));
             Result = TRuntimeNode(newNode, Result.IsImmediate());
         }
@@ -1850,7 +1850,7 @@ void TTupleType::DoUpdateLinks(const THashMap<TNode*, TNode*>& links) {
         auto& element = Elements[i];
         auto elementIt = links.find(element);
         if (elementIt != links.end()) {
-            TNode* newNode = elementIt->second;
+            TNode* newNode = elementIt->second; 
             Y_VERIFY_DEBUG(element->Equals(*newNode));
             element = static_cast<TType*>(newNode);
         }
@@ -1928,7 +1928,7 @@ TTupleLiteral* TTupleLiteral::Create(ui32 valuesCount, const TRuntimeNode* value
 void TTupleLiteral::DoUpdateLinks(const THashMap<TNode*, TNode*>& links) {
     auto typeIt = links.find(Type);
     if (typeIt != links.end()) {
-        TNode* newNode = typeIt->second;
+        TNode* newNode = typeIt->second; 
         Y_VERIFY_DEBUG(Type->Equals(*newNode));
         Type = static_cast<TType*>(newNode);
     }
@@ -1937,7 +1937,7 @@ void TTupleLiteral::DoUpdateLinks(const THashMap<TNode*, TNode*>& links) {
         auto& value = Values[i];
         auto valueIt = links.find(value.GetNode());
         if (valueIt != links.end()) {
-            TNode* newNode = valueIt->second;
+            TNode* newNode = valueIt->second; 
             Y_VERIFY_DEBUG(value.GetNode()->Equals(*newNode));
             value = TRuntimeNode(newNode, value.IsImmediate());
         }

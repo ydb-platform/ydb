@@ -12,7 +12,7 @@
 #include <util/generic/yexception.h>
 #include <util/memory/blob.h>
 #include <util/stream/input.h>
-#include <utility>
+#include <utility> 
 
 template <class T, class D, class S>
 class TCompactTrieBuilder;
@@ -39,8 +39,8 @@ public:
     typedef typename TCompactTrieKeySelector<TSymbol>::TKey TKey;
     typedef typename TCompactTrieKeySelector<TSymbol>::TKeyBuf TKeyBuf;
 
-    typedef std::pair<TKey, TData> TValueType;
-    typedef std::pair<size_t, TData> TPhraseMatch;
+    typedef std::pair<TKey, TData> TValueType; 
+    typedef std::pair<size_t, TData> TPhraseMatch; 
     typedef TVector<TPhraseMatch> TPhraseMatchVector;
 
     typedef TCompactTrieBuilder<T, D, S> TBuilder;

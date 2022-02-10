@@ -29,10 +29,10 @@ inline ui64 MakeGenStepPair(ui32 gen, ui32 step) {
     return (g << 32ull) | s;
 }
 
-inline std::pair<ui32, ui32> ExpandGenStepPair(ui64 x) {
+inline std::pair<ui32, ui32> ExpandGenStepPair(ui64 x) { 
     ui32 g = (ui32)(x >> 32ull);
     ui32 s = (ui32)(x);
-    return std::pair<ui32, ui32>(g, s);
+    return std::pair<ui32, ui32>(g, s); 
 }
 
 struct TEvTablet {
@@ -103,7 +103,7 @@ struct TEvTablet {
 
     struct TDependencyGraph : public TThrRefBase {
         struct TEntry {
-            std::pair<ui32, ui32> Id;
+            std::pair<ui32, ui32> Id; 
             bool IsSnapshot;
             TVector<TLogoBlobID> References;
 
@@ -135,10 +135,10 @@ struct TEvTablet {
             }
         };
 
-        std::pair<ui32, ui32> Snapshot;
+        std::pair<ui32, ui32> Snapshot; 
         TDeque<TEntry> Entries;
 
-        TDependencyGraph(const std::pair<ui32, ui32> &snap)
+        TDependencyGraph(const std::pair<ui32, ui32> &snap) 
             : Snapshot(snap)
         {}
 
@@ -164,12 +164,12 @@ struct TEvTablet {
         }
 
         void Invalidate() {
-            Snapshot = std::make_pair(Max<ui32>(), Max<ui32>());
+            Snapshot = std::make_pair(Max<ui32>(), Max<ui32>()); 
             Entries.clear();
         }
 
         bool IsValid() const {
-            return (Snapshot.first != Max<ui32>());
+            return (Snapshot.first != Max<ui32>()); 
         }
     };
 

@@ -95,7 +95,7 @@ public:
             clientConfig.ForceFollower = true;
         }
 
-        std::pair<ui64, TAutoPtr<IEventBase>> reqPair = static_cast<TDerived *>(this)->MakeReqPair(ctx);
+        std::pair<ui64, TAutoPtr<IEventBase>> reqPair = static_cast<TDerived *>(this)->MakeReqPair(ctx); 
         TabletId = reqPair.first;
 
         if (reqPair.first) {
@@ -130,8 +130,8 @@ protected:
     {}
 
 public:
-    std::pair<ui64, TAutoPtr<IEventBase>> MakeReqPair(const TActorContext &ctx) {
-        return std::pair<ui64, TAutoPtr<IEventBase>>(TabletID, static_cast<TDerived *>(this)->MakeReq(ctx));
+    std::pair<ui64, TAutoPtr<IEventBase>> MakeReqPair(const TActorContext &ctx) { 
+        return std::pair<ui64, TAutoPtr<IEventBase>>(TabletID, static_cast<TDerived *>(this)->MakeReq(ctx)); 
     }
 
     static constexpr auto ActorActivityType() {

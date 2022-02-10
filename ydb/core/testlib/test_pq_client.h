@@ -853,7 +853,7 @@ public:
     }
 
 
-    void CreateTopicNoLegacy(const TString& name, ui32 partsCount, bool doWait = true, bool canWrite = true) {
+    void CreateTopicNoLegacy(const TString& name, ui32 partsCount, bool doWait = true, bool canWrite = true, TVector<TString> rr = {}) {
         TString path = name;
         if (UseConfigTables) {
             path = TStringBuilder() << "/Root/PQ/" << name;
@@ -861,6 +861,12 @@ public:
 
         auto pqClient = NYdb::NPersQueue::TPersQueueClient(*Driver);
         auto settings = NYdb::NPersQueue::TCreateTopicSettings().PartitionsCount(partsCount).ClientWriteDisabled(!canWrite);
+        TVector<NYdb::NPersQueue::TReadRuleSettings> rrSettings;
+        for (auto &user : rr) {
+            rrSettings.push_back({NYdb::NPersQueue::TReadRuleSettings{}.ConsumerName(user)});
+        }
+        settings.ReadRules(rrSettings);
+
         Cerr << "===Create topic: " << path << Endl;
         auto res = pqClient.CreateTopic(path, settings);
         //ToDo - hack, cannot avoid legacy compat yet as PQv1 still uses RequestProcessor from core/client/server

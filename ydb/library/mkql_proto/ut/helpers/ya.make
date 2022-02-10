@@ -1,6 +1,6 @@
 LIBRARY()
 
-OWNER(g:kikimr)
+OWNER(g:kikimr) 
 
 PEERDIR(
     ydb/library/yql/minikql
@@ -11,7 +11,7 @@ PEERDIR(
     contrib/libs/protobuf
 )
 
-YQL_LAST_ABI_VERSION()
+YQL_LAST_ABI_VERSION() 
 
 SRCS(
     helpers.cpp

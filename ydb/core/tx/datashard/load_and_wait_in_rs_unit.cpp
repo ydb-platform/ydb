@@ -3,13 +3,13 @@
 #include "execution_unit_ctors.h"
 
 namespace NKikimr {
-namespace NDataShard {
+namespace NDataShard { 
 
 using namespace NMiniKQL;
 
 class TLoadAndWaitInRSUnit : public TExecutionUnit {
 public:
-    TLoadAndWaitInRSUnit(TDataShard &dataShard,
+    TLoadAndWaitInRSUnit(TDataShard &dataShard, 
                          TPipeline &pipeline);
     ~TLoadAndWaitInRSUnit() override;
 
@@ -23,7 +23,7 @@ public:
 private:
 };
 
-TLoadAndWaitInRSUnit::TLoadAndWaitInRSUnit(TDataShard &dataShard,
+TLoadAndWaitInRSUnit::TLoadAndWaitInRSUnit(TDataShard &dataShard, 
                                            TPipeline &pipeline)
     : TExecutionUnit(EExecutionUnitKind::LoadAndWaitInRS, true, dataShard, pipeline)
 {
@@ -79,11 +79,11 @@ void TLoadAndWaitInRSUnit::Complete(TOperation::TPtr,
 {
 }
 
-THolder<TExecutionUnit> CreateLoadAndWaitInRSUnit(TDataShard &dataShard,
+THolder<TExecutionUnit> CreateLoadAndWaitInRSUnit(TDataShard &dataShard, 
                                                   TPipeline &pipeline)
 {
     return THolder(new TLoadAndWaitInRSUnit(dataShard, pipeline));
 }
 
-} // namespace NDataShard
+} // namespace NDataShard 
 } // namespace NKikimr

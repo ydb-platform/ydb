@@ -1,6 +1,6 @@
 OWNER(
     radix
-    g:kikimr
+    g:kikimr 
     g:logbroker
 )
 

@@ -3,11 +3,11 @@
 #include "execution_unit_ctors.h"
 
 namespace NKikimr {
-namespace NDataShard {
+namespace NDataShard { 
 
 class TProtectSchemeEchoesUnit : public TExecutionUnit {
 public:
-    TProtectSchemeEchoesUnit(TDataShard &dataShard, TPipeline &pipeline)
+    TProtectSchemeEchoesUnit(TDataShard &dataShard, TPipeline &pipeline) 
         : TExecutionUnit(EExecutionUnitKind::ProtectSchemeEchoes, false, dataShard, pipeline)
     { }
 
@@ -46,7 +46,7 @@ public:
     }
 };
 
-THolder<TExecutionUnit> CreateProtectSchemeEchoesUnit(TDataShard &dataShard, TPipeline &pipeline) {
+THolder<TExecutionUnit> CreateProtectSchemeEchoesUnit(TDataShard &dataShard, TPipeline &pipeline) { 
     return THolder(new TProtectSchemeEchoesUnit(dataShard, pipeline));
 }
 

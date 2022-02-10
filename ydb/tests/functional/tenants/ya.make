@@ -1,6 +1,6 @@
 OWNER(g:kikimr)
 PY3TEST()
-ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
+ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd") 
 TEST_SRCS(
     common.py
     test_db_counters.py
@@ -15,7 +15,7 @@ SPLIT_FACTOR(20)
 TIMEOUT(600)
 SIZE(MEDIUM)
 
-DEPENDS(ydb/apps/ydbd)
+DEPENDS(ydb/apps/ydbd) 
 
 PEERDIR(
     ydb/tests/library

@@ -1,9 +1,9 @@
 LIBRARY()
 
-OWNER(
-    g:yql
-    g:yql_ydb_core
-)
+OWNER( 
+    g:yql 
+    g:yql_ydb_core 
+) 
 
 SRCS(
     yql_issue.cpp
@@ -14,10 +14,10 @@ SRCS(
 )
 
 PEERDIR(
-    contrib/libs/protobuf
-    library/cpp/colorizer
+    contrib/libs/protobuf 
+    library/cpp/colorizer 
     library/cpp/resource
-    ydb/public/api/protos
+    ydb/public/api/protos 
     ydb/library/yql/public/issue/protos
     ydb/library/yql/utils
 )

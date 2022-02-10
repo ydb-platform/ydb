@@ -8,15 +8,15 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/core/protos
-    ydb/core/scheme_types
+    ydb/core/protos 
+    ydb/core/scheme_types 
     ydb/library/yql/minikql/invoke_builtins
 )
 
-YQL_LAST_ABI_VERSION()
+YQL_LAST_ABI_VERSION() 
 
-END()
+END() 
 
-RECURSE_FOR_TESTS(
-    ut
-)
+RECURSE_FOR_TESTS( 
+    ut 
+) 

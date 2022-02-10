@@ -2,13 +2,13 @@
 #include "datashard_direct_erase.h"
 #include "erase_rows_condition.h"
 
-#include <ydb/core/base/appdata.h>
+#include <ydb/core/base/appdata.h> 
 
 #include <util/generic/xrange.h>
 #include <util/string/builder.h>
 
 namespace NKikimr {
-namespace NDataShard {
+namespace NDataShard { 
 
 TDirectTxErase::TDirectTxErase(TEvDataShard::TEvEraseRowsRequest::TPtr& ev)
     : Ev(ev)
@@ -134,7 +134,7 @@ TDirectTxErase::EStatus TDirectTxErase::CheckedExecute(
         }
 
         Y_VERIFY(params.Tx->ChangeCollector);
-        if (!params.Tx->ChangeCollector->Collect(fullTableId, NTable::ERowOp::Erase, key, {})) {
+        if (!params.Tx->ChangeCollector->Collect(fullTableId, NTable::ERowOp::Erase, key, {})) { 
             pageFault = true;
         }
 
@@ -143,7 +143,7 @@ TDirectTxErase::EStatus TDirectTxErase::CheckedExecute(
         }
 
         self->SysLocksTable().BreakLock(fullTableId, keyCells.GetCells());
-        params.Txc->DB.Update(localTableId, NTable::ERowOp::Erase, key, {}, params.WriteVersion);
+        params.Txc->DB.Update(localTableId, NTable::ERowOp::Erase, key, {}, params.WriteVersion); 
     }
 
     if (pageFault) {
@@ -158,7 +158,7 @@ TDirectTxErase::EStatus TDirectTxErase::CheckedExecute(
     return EStatus::Success;
 }
 
-bool TDirectTxErase::CheckRequest(TDataShard* self, const NKikimrTxDataShard::TEvEraseRowsRequest& request,
+bool TDirectTxErase::CheckRequest(TDataShard* self, const NKikimrTxDataShard::TEvEraseRowsRequest& request, 
         NKikimrTxDataShard::TEvEraseRowsResponse::EStatus& status, TString& error)
 {
     const auto result = CheckedExecute(self, TExecuteParams::ForCheck(), request, status, error);
@@ -172,7 +172,7 @@ bool TDirectTxErase::CheckRequest(TDataShard* self, const NKikimrTxDataShard::TE
     }
 }
 
-bool TDirectTxErase::Execute(TDataShard* self, TTransactionContext& txc,
+bool TDirectTxErase::Execute(TDataShard* self, TTransactionContext& txc, 
         const TRowVersion& readVersion, const TRowVersion& writeVersion)
 {
     const auto& record = Ev->Get()->Record;
@@ -204,7 +204,7 @@ bool TDirectTxErase::Execute(TDataShard* self, TTransactionContext& txc,
     return true;
 }
 
-void TDirectTxErase::SendResult(TDataShard* self, const TActorContext& ctx) {
+void TDirectTxErase::SendResult(TDataShard* self, const TActorContext& ctx) { 
     Y_VERIFY(Result);
 
     if (Result->Record.GetStatus() == NKikimrTxDataShard::TEvEraseRowsResponse::OK) {
@@ -225,5 +225,5 @@ TVector<NMiniKQL::IChangeCollector::TChange> TDirectTxErase::GetCollectedChanges
     return changes;
 }
 
-} // NDataShard
+} // NDataShard 
 } // NKikimr

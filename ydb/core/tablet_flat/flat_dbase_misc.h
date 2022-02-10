@@ -1,7 +1,7 @@
 #pragma once
 #include "flat_table_stats.h"
 
-#include <ydb/core/scheme_types/scheme_raw_type_value.h>
+#include <ydb/core/scheme_types/scheme_raw_type_value.h> 
 #include <util/generic/hash.h>
 #include <util/system/types.h>
 
@@ -18,15 +18,15 @@ namespace NTable {
 
             out
                 << "DBase{" << Tables << "t " << Parts.PartsCount << "p"
-                << " " << Parts.RowsTotal << "r" << ", (" << MemTableBytes << " mem, "
+                << " " << Parts.RowsTotal << "r" << ", (" << MemTableBytes << " mem, " 
                 << sys << " sys, " << (Parts.CodedBytes + Parts.LargeBytes) << ")b}";
         }
 
         ui32 Tables = 0;
         ui64 TxCommited = 0;
-        ui64 MemTableWaste = 0;
-        ui64 MemTableBytes = 0;
-        ui64 MemTableOps = 0;
+        ui64 MemTableWaste = 0; 
+        ui64 MemTableBytes = 0; 
+        ui64 MemTableOps = 0; 
         TPartStats Parts;
         THashMap<ui64, TPartStats> PartsPerTablet;
     };

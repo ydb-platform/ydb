@@ -8,9 +8,9 @@ OWNER(
 
 IF (KIKIMR_DEFAULT_SHARDED_COMPACTION)
     # Makes it easier to test sharded compaction
-    CFLAGS(
-        -DKIKIMR_DEFAULT_SHARDED_COMPACTION=1
-    )
+    CFLAGS( 
+        -DKIKIMR_DEFAULT_SHARDED_COMPACTION=1 
+    ) 
 ENDIF()
 
 SRCS(
@@ -20,7 +20,7 @@ SRCS(
     board_lookup.cpp
     board_publish.cpp
     board_replica.cpp
-    blobstorage.h
+    blobstorage.h 
     blobstorage.cpp
     channel_profiles.h
     counters.cpp
@@ -96,32 +96,32 @@ PEERDIR(
     library/cpp/deprecated/enum_codegen
     library/cpp/logger
     library/cpp/lwtrace
-    library/cpp/lwtrace/mon
+    library/cpp/lwtrace/mon 
     library/cpp/random_provider
     library/cpp/time_provider
-    ydb/core/base/services
-    ydb/core/debug
-    ydb/core/erasure
-    ydb/core/protos
-    ydb/core/protos/out
-    ydb/library/aclib
-    ydb/library/login
-    ydb/library/pdisk_io
-    ydb/library/pretty_types_print/protobuf
-    ydb/library/pretty_types_print/wilson
-    ydb/library/wilson
-    ydb/public/api/protos/out
+    ydb/core/base/services 
+    ydb/core/debug 
+    ydb/core/erasure 
+    ydb/core/protos 
+    ydb/core/protos/out 
+    ydb/library/aclib 
+    ydb/library/login 
+    ydb/library/pdisk_io 
+    ydb/library/pretty_types_print/protobuf 
+    ydb/library/pretty_types_print/wilson 
+    ydb/library/wilson 
+    ydb/public/api/protos/out 
     ydb/library/yql/minikql
 )
 
 RESOURCE(
-    ydb/core/base/kikimr_issue.txt kikimr_issue.txt
+    ydb/core/base/kikimr_issue.txt kikimr_issue.txt 
 )
 
 GENERATE_ENUM_SERIALIZATION(quoter.h)
 
 END()
-
-RECURSE_FOR_TESTS(
-    ut
-)
+ 
+RECURSE_FOR_TESTS( 
+    ut 
+) 

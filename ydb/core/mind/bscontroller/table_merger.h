@@ -89,13 +89,13 @@ namespace NKikimr {
         for (auto [prev, cur] : Diff(Original, Changed)) {
             // pick the operation we want -- either insert row, or erase row
             const TKey *key = nullptr;
-            NTable::ERowOp op;
+            NTable::ERowOp op; 
             if (!cur) {
                 key = prev;
-                op = NTable::ERowOp::Erase;
+                op = NTable::ERowOp::Erase; 
             } else if (!prev) {
                 key = cur;
-                op = NTable::ERowOp::Upsert;
+                op = NTable::ERowOp::Upsert; 
             }
 
             if (key) {

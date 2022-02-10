@@ -315,15 +315,15 @@ Y_UNIT_TEST_SUITE(THttpStreamTest) {
         TBufferedOutput bufOut(&strOut, 8192);
         TTeeOutput teeOut(&bufOut, &checkOut);
         THttpOutput httpOut(&teeOut);
-
+ 
         httpOut.EnableKeepAlive(true);
         httpOut.EnableCompression(true);
-
+ 
         const char* header = "POST / HTTP/1.1\r\nHost: yandex.ru\r\n\r\n";
         httpOut << header;
-
+ 
         UNIT_ASSERT_VALUES_EQUAL(str.size(), 0u);
-
+ 
         const char* body = "<html>Hello</html>";
         httpOut << body;
         UNIT_ASSERT_VALUES_EQUAL(str.size(), 0u);

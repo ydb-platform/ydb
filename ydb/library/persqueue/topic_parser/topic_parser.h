@@ -5,8 +5,8 @@
 #include <util/generic/string.h>
 #include <util/generic/hash.h>
 #include <util/string/builder.h>
-#include <ydb/core/base/path.h>
-#include <ydb/library/persqueue/topic_parser_public/topic_parser.h>
+#include <ydb/core/base/path.h> 
+#include <ydb/library/persqueue/topic_parser_public/topic_parser.h> 
 
 namespace NPersQueue {
 
@@ -45,7 +45,7 @@ protected:
         : NoDcMode(noDcMode)
         , PQRootPrefix(pqNormalizedRootPrefix)
     {}
-
+ 
     TTopicNameConverter& ApplyToTopic(
             const TString& topic, const TString& dc = TString(), const TString& database = TString()
     ) {

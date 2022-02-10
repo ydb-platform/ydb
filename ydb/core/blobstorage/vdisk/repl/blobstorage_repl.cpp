@@ -1,45 +1,45 @@
-#include "blobstorage_repl.h"
+#include "blobstorage_repl.h" 
 #include "blobstorage_replproxy.h"
 #include "blobstorage_replbroker.h"
 #include "blobstorage_hullrepljob.h"
 #include "query_donor.h"
-#include <ydb/core/blobstorage/base/utility.h>
-#include <ydb/core/blobstorage/backpressure/queue_backpressure_client.h>
-#include <ydb/core/blobstorage/vdisk/common/circlebuf.h>
-#include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
-#include <ydb/core/blobstorage/vdisk/common/vdisk_queues.h>
-#include <ydb/core/blobstorage/vdisk/hulldb/base/hullbase_logoblob.h>
-
+#include <ydb/core/blobstorage/base/utility.h> 
+#include <ydb/core/blobstorage/backpressure/queue_backpressure_client.h> 
+#include <ydb/core/blobstorage/vdisk/common/circlebuf.h> 
+#include <ydb/core/blobstorage/vdisk/common/vdisk_events.h> 
+#include <ydb/core/blobstorage/vdisk/common/vdisk_queues.h> 
+#include <ydb/core/blobstorage/vdisk/hulldb/base/hullbase_logoblob.h> 
+ 
 #include <library/cpp/monlib/service/pages/templates.h>
-#include <util/generic/queue.h>
-#include <util/generic/deque.h>
-
-using namespace NKikimrServices;
-
-namespace NKikimr {
-
-    ////////////////////////////////////////////////////////////////////////////
-    // Internal Repl messages
-    ////////////////////////////////////////////////////////////////////////////
+#include <util/generic/queue.h> 
+#include <util/generic/deque.h> 
+ 
+using namespace NKikimrServices; 
+ 
+namespace NKikimr { 
+ 
+    //////////////////////////////////////////////////////////////////////////// 
+    // Internal Repl messages 
+    //////////////////////////////////////////////////////////////////////////// 
     TEvReplFinished::TInfo::TInfo()
         : Start(TAppData::TimeProvider->Now())
         , End()
         , KeyPos()
         , Eof(false)
     {}
-
+ 
     TEvReplFinished::TInfo::~TInfo()
     {}
 
-    ////////////////////////////////////////////////////////////////////////////
-    // TEvReplFinished::TInfo
-    ////////////////////////////////////////////////////////////////////////////
+    //////////////////////////////////////////////////////////////////////////// 
+    // TEvReplFinished::TInfo 
+    //////////////////////////////////////////////////////////////////////////// 
     TString TEvReplFinished::TInfo::ToString() const {
         return Sprintf("{KeyPos: %s Eof: %s ReplicaOk: %" PRIu64 " RecoveryScheduled: %" PRIu64 " DataRecoverySuccess: %"
             PRIu64 " DataRecoveryFailure: %" PRIu64 "}", KeyPos.ToString().data(), (Eof ? "true" : "false"),
             ReplicaOk, RecoveryScheduled, DataRecoverySuccess, DataRecoveryFailure);
-    }
-
+    } 
+ 
     void TEvReplFinished::TInfo::OutputHtml(IOutputStream &str) const {
 #define PARAM(NAME, VALUE) TABLER() { \
             TABLED() { str << #NAME; } \
@@ -121,30 +121,30 @@ namespace NKikimr {
 #undef GROUP
 #undef PARAM_V
 #undef PARAM
-    }
-
-
-
-    ////////////////////////////////////////////////////////////////////////////
-    // TReplScheduler
-    ////////////////////////////////////////////////////////////////////////////
-    class TReplScheduler : public TActorBootstrapped<TReplScheduler> {
+    } 
+ 
+ 
+ 
+    //////////////////////////////////////////////////////////////////////////// 
+    // TReplScheduler 
+    //////////////////////////////////////////////////////////////////////////// 
+    class TReplScheduler : public TActorBootstrapped<TReplScheduler> { 
         enum {
             EvResumeForce = EventSpaceBegin(TEvents::ES_PRIVATE),
         };
         struct TEvResumeForce : TEventLocal<TEvResumeForce, EvResumeForce> {};
 
-        typedef TCircleBuf<TEvReplFinished::TInfoPtr> THistory;
-        enum EState {
+        typedef TCircleBuf<TEvReplFinished::TInfoPtr> THistory; 
+        enum EState { 
             Plan,
             AwaitToken,
             WaitQueues,
-            Replication,
+            Replication, 
             Relaxation,
             Finished
-        };
-        static const unsigned HistorySize = 12;
-
+        }; 
+        static const unsigned HistorySize = 12; 
+ 
         struct TDonorQueueItem {
             TVDiskID VDiskId;
             TActorId QueueActorId;
@@ -154,13 +154,13 @@ namespace NKikimr {
         };
 
         std::shared_ptr<TReplCtx> ReplCtx;
-        THistory History;
-        EState State;
-        TInstant LastReplStart;
-        TInstant LastReplEnd;
-        TInstant LastReplQuantumStart;
-        TInstant LastReplQuantumEnd;
-        TQueueActorMapPtr QueueActorMapPtr;
+        THistory History; 
+        EState State; 
+        TInstant LastReplStart; 
+        TInstant LastReplEnd; 
+        TInstant LastReplQuantumStart; 
+        TInstant LastReplQuantumEnd; 
+        TQueueActorMapPtr QueueActorMapPtr; 
         TBlobIdQueuePtr BlobsToReplicatePtr;
         TBlobIdQueuePtr UnreplicatedBlobsPtr = std::make_shared<TBlobIdQueue>();
         TActorId ReplJobActorId;
@@ -168,21 +168,21 @@ namespace NKikimr {
         std::deque<std::pair<TVDiskID, TActorId>> Donors;
         std::set<TVDiskID> ConnectedPeerDisks, ConnectedDonorDisks;
         TEvResumeForce *ResumeForceToken = nullptr;
-
-        friend class TActorBootstrapped<TReplScheduler>;
-
-        const char *StateToStr(EState state) {
-            switch (state) {
+ 
+        friend class TActorBootstrapped<TReplScheduler>; 
+ 
+        const char *StateToStr(EState state) { 
+            switch (state) { 
                 case Plan:        return "Plan";
                 case AwaitToken:  return "AwaitToken";
                 case WaitQueues:  return "WaitQueues";
-                case Replication: return "Replication";
-                case Relaxation:  return "Relaxation";
+                case Replication: return "Replication"; 
+                case Relaxation:  return "Relaxation"; 
                 case Finished:    return "Finished";
                 default:          return "Unknown";
-            }
-        }
-
+            } 
+        } 
+ 
         void Transition(EState current, EState next) {
             Y_VERIFY(State == current, "State# %s Expected# %s", StateToStr(State), StateToStr(current));
             State = next;
@@ -228,8 +228,8 @@ namespace NKikimr {
             } else {
                 StartReplication();
             }
-        }
-
+        } 
+ 
         void Handle(TEvProxyQueueState::TPtr ev) {
             const TVDiskID& vdiskId = ev->Get()->VDiskId;
             auto& set = vdiskId.GroupGeneration == ReplCtx->GInfo->GroupGeneration
@@ -250,14 +250,14 @@ namespace NKikimr {
             STLOG(PRI_DEBUG, BS_REPL, BSVR15, VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "QUANTUM START"));
 
             LastReplStart = TAppData::TimeProvider->Now();
-            ReplCtx->MonGroup.ReplCurrentUnreplicatedParts() = 0;
-            ReplCtx->MonGroup.ReplCurrentUnreplicatedBytes() = 0;
-            ReplCtx->MonGroup.ReplCurrentPhantoms() = 0;
+            ReplCtx->MonGroup.ReplCurrentUnreplicatedParts() = 0; 
+            ReplCtx->MonGroup.ReplCurrentUnreplicatedBytes() = 0; 
+            ReplCtx->MonGroup.ReplCurrentPhantoms() = 0; 
             ReplCtx->MonGroup.ReplCurrentNumUnrecoveredPhantomBlobs() = 0;
             ReplCtx->MonGroup.ReplCurrentNumUnrecoveredNonPhantomBlobs() = 0;
             ReplCtx->MonGroup.ReplUnreplicatedVDisks() = 1;
 
-            Become(&TThis::StateRepl);
+            Become(&TThis::StateRepl); 
 
             // switch to planning state
             Transition(Relaxation, Plan);
@@ -309,8 +309,8 @@ namespace NKikimr {
                 ResumeForceToken = nullptr;
             }
             return ready;
-        }
-
+        } 
+ 
         void Handle(TEvResumeForce::TPtr ev) {
             if (ev->Get() == ResumeForceToken) {
                 Transition(WaitQueues, Replication);
@@ -335,10 +335,10 @@ namespace NKikimr {
 
             TEvReplFinished *msg = ev->Get();
             TEvReplFinished::TInfoPtr info = msg->Info;
-            TInstant now = TAppData::TimeProvider->Now();
+            TInstant now = TAppData::TimeProvider->Now(); 
             STLOG(PRI_DEBUG, BS_REPL, BSVR16, VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "QUANTUM COMPLETED"), (Info, *info));
-            LastReplQuantumEnd = now;
-
+            LastReplQuantumEnd = now; 
+ 
             bool finished = false;
 
             if (info->Eof) { // when it is the last quantum for some donor, rotate the blob sets
@@ -366,13 +366,13 @@ namespace NKikimr {
                 }
             }
 
-            History.Push(info);
+            History.Push(info); 
             if (finished) {
                 STLOG(PRI_DEBUG, BS_REPL, BSVR17, VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "REPL COMPLETED"),
                     (BlobsToReplicate, BlobsToReplicatePtr->size()));
-                LastReplEnd = now;
-                ReplCtx->MonGroup.ReplUnreplicatedBytes() = ReplCtx->MonGroup.ReplCurrentUnreplicatedBytes();
-                ReplCtx->MonGroup.ReplPhantoms() = ReplCtx->MonGroup.ReplCurrentPhantoms();
+                LastReplEnd = now; 
+                ReplCtx->MonGroup.ReplUnreplicatedBytes() = ReplCtx->MonGroup.ReplCurrentUnreplicatedBytes(); 
+                ReplCtx->MonGroup.ReplPhantoms() = ReplCtx->MonGroup.ReplCurrentPhantoms(); 
                 ReplCtx->MonGroup.ReplNumUnrecoveredPhantomBlobs() = ReplCtx->MonGroup.ReplCurrentNumUnrecoveredPhantomBlobs();
                 ReplCtx->MonGroup.ReplNumUnrecoveredNonPhantomBlobs() = ReplCtx->MonGroup.ReplCurrentNumUnrecoveredNonPhantomBlobs();
 
@@ -381,7 +381,7 @@ namespace NKikimr {
                     Send(MakeBlobStorageReplBrokerID(), new TEvReleaseReplToken);
                 }
 
-                Become(&TThis::StateRelax);
+                Become(&TThis::StateRelax); 
                 if (*BlobsToReplicatePtr) {
                     // try again for unreplicated blobs in some future
                     State = Relaxation;
@@ -393,12 +393,12 @@ namespace NKikimr {
                     TActivationContext::Send(new IEventHandle(TEvBlobStorage::EvReplDone, 0, ReplCtx->SkeletonId,
                         SelfId(), nullptr, 0));
                 }
-            } else {
+            } else { 
                 STLOG(PRI_DEBUG, BS_REPL, BSVR18, VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "QUANTUM START"));
                 RunRepl(info->KeyPos);
-            }
-        }
-
+            } 
+        } 
+ 
         void RunRepl(const TLogoBlobID& from) {
             LastReplQuantumStart = TAppData::TimeProvider->Now();
             Y_VERIFY(!ReplJobActorId);
@@ -415,13 +415,13 @@ namespace NKikimr {
         void OutputRow(IOutputStream &str, Iter &it, Iter &e) {
             HTML(str) {
                 TABLER() {
-                    for (unsigned i = 0; i < 3 && it != e; i++, ++it) {
+                    for (unsigned i = 0; i < 3 && it != e; i++, ++it) { 
                         TABLED() { (*it)->OutputHtml(str); }
-                    }
+                    } 
                 }
             }
-        }
-
+        } 
+ 
         template<typename Iter>
         void OutputQuantums(IOutputStream& str, Iter it, Iter e) {
             if (it != e) {
@@ -445,10 +445,10 @@ namespace NKikimr {
 
         void Handle(NMon::TEvHttpInfo::TPtr &ev) {
             Y_VERIFY_DEBUG(ev->Get()->SubRequestId == TDbMon::ReplId);
-
-            TStringStream str;
-            unsigned historySize = HistorySize;
-            str << "\n";
+ 
+            TStringStream str; 
+            unsigned historySize = HistorySize; 
+            str << "\n"; 
             HTML(str) {
                 DIV_CLASS("panel panel-success") {
                     DIV_CLASS("panel-heading") {str << "Repl";}
@@ -471,7 +471,7 @@ namespace NKikimr {
                             << "LastReplQuantumEnd: " << ToStringLocalTimeUpToSeconds(LastReplQuantumEnd) << "<br>"
                             << "NumConnectedPeerDisks: " << ConnectedPeerDisks.size() << "<br>"
                             << "ConnectedDonorDisks: " << makeConnectedDonorDisks() << "<br>";
-
+ 
                         TABLE_CLASS ("table table-condensed") {
                             CAPTION() STRONG() {str << "Last " << historySize << " replication quantums"; }
                             TABLEBODY() {
@@ -485,15 +485,15 @@ namespace NKikimr {
                     }
                 }
             }
-            str << "\n";
-
+            str << "\n"; 
+ 
             Send(ev->Sender, new NMon::TEvHttpInfoRes(str.Str(), TDbMon::ReplId));
-        }
-
+        } 
+ 
         void HandleGenerationChange(TEvVGenerationChange::TPtr& ev) {
             // forward message to queue actors
             TEvVGenerationChange *msg = ev->Get();
-            for (const auto& kv : *QueueActorMapPtr) {
+            for (const auto& kv : *QueueActorMapPtr) { 
                 Send(kv.second, msg->Clone());
             }
             ReplCtx->GInfo = msg->NewInfo;
@@ -524,10 +524,10 @@ namespace NKikimr {
             hFunc(TEvents::TEvActorDied, Handle)
             cFunc(TEvBlobStorage::EvCommenceRepl, StartReplication)
         )
-
+ 
         void PassAway() override {
             // forward poison pills to queue actors
-            for (const auto& kv : *QueueActorMapPtr) {
+            for (const auto& kv : *QueueActorMapPtr) { 
                 Send(kv.second, new TEvents::TEvPoison);
             }
             for (const auto& donor : DonorQueue) {
@@ -549,8 +549,8 @@ namespace NKikimr {
             }
 
             TActorBootstrapped::PassAway();
-        }
-
+        } 
+ 
         STRICT_STFUNC(StateRepl,
             cFunc(TEvReplToken::EventType, HandleReplToken)
             hFunc(TEvReplStarted, Handle)
@@ -564,26 +564,26 @@ namespace NKikimr {
             hFunc(TEvents::TEvActorDied, Handle)
             cFunc(TEvBlobStorage::EvCommenceRepl, Ignore)
         )
-
-    public:
+ 
+    public: 
         static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
             return NKikimrServices::TActivity::BS_REPL_SCHEDULER;
         }
 
         TReplScheduler(std::shared_ptr<TReplCtx> &replCtx)
-            : TActorBootstrapped<TReplScheduler>()
-            , ReplCtx(replCtx)
-            , History(HistorySize)
-            , State(Relaxation)
+            : TActorBootstrapped<TReplScheduler>() 
+            , ReplCtx(replCtx) 
+            , History(HistorySize) 
+            , State(Relaxation) 
         {}
-    };
-
-
-    ////////////////////////////////////////////////////////////////////////////
-    // REPL ACTOR CREATOR
-    ////////////////////////////////////////////////////////////////////////////
+    }; 
+ 
+ 
+    //////////////////////////////////////////////////////////////////////////// 
+    // REPL ACTOR CREATOR 
+    //////////////////////////////////////////////////////////////////////////// 
     IActor* CreateReplActor(std::shared_ptr<TReplCtx> &replCtx) {
         return new TReplScheduler(replCtx);
-    }
-
-} // NKikimr
+    } 
+ 
+} // NKikimr 

@@ -2,10 +2,10 @@
 
 #include "datashard_impl.h"
 
-#include <ydb/core/engine/minikql/change_collector_iface.h>
+#include <ydb/core/engine/minikql/change_collector_iface.h> 
 
 namespace NKikimr {
-namespace NDataShard {
+namespace NDataShard { 
 
 template <typename TEvRequest, typename TEvResponse>
 class TCommonUploadOps {
@@ -23,12 +23,12 @@ public:
 
 protected:
     bool Execute(TDataShard* self, TTransactionContext& txc, const TRowVersion& readVersion, const TRowVersion& writeVersion);
-    void SendResult(TDataShard* self, const TActorContext& ctx);
+    void SendResult(TDataShard* self, const TActorContext& ctx); 
     TVector<IChangeCollector::TChange> GetCollectedChanges() const;
 
 private:
     void SetError(ui32 status, const TString& descr);
 };
 
-} // NDataShard
+} // NDataShard 
 } // NKikimr

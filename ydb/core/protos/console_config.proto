@@ -1,7 +1,7 @@
 import "library/cpp/actors/protos/actors.proto";
-import "ydb/core/protos/config.proto";
-import "ydb/core/protos/console_base.proto";
-import "ydb/public/api/protos/ydb_status_codes.proto";
+import "ydb/core/protos/config.proto"; 
+import "ydb/core/protos/console_base.proto"; 
+import "ydb/public/api/protos/ydb_status_codes.proto"; 
 
 package NKikimrConsole;
 option java_package = "ru.yandex.kikimr.proto";

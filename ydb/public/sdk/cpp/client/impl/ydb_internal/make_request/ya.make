@@ -1,6 +1,6 @@
 LIBRARY()
 
-OWNER(g:kikimr)
+OWNER(g:kikimr) 
 
 SRCS(
     make.cpp
@@ -8,7 +8,7 @@ SRCS(
 
 PEERDIR(
     contrib/libs/protobuf
-    ydb/public/api/protos
+    ydb/public/api/protos 
 )
 
 END()

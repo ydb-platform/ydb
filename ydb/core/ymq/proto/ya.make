@@ -1,5 +1,5 @@
 OWNER(
-    g:kikimr
+    g:kikimr 
     g:sqs
 )
 
@@ -10,7 +10,7 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/core/protos
+    ydb/core/protos 
 )
 
 EXCLUDE_TAGS(GO_PROTO)

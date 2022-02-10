@@ -1,16 +1,16 @@
 #include "datashard_txs.h"
 
 namespace NKikimr {
-namespace NDataShard {
+namespace NDataShard { 
 
-TDataShard::TTxCancelTransactionProposal::TTxCancelTransactionProposal(TDataShard *self,
+TDataShard::TTxCancelTransactionProposal::TTxCancelTransactionProposal(TDataShard *self, 
                                                                               ui64 txId)
     : TBase(self)
     , TxId(txId)
 {
 }
 
-bool TDataShard::TTxCancelTransactionProposal::Execute(TTransactionContext &txc,
+bool TDataShard::TTxCancelTransactionProposal::Execute(TTransactionContext &txc, 
                                                               const TActorContext &ctx)
 {
     if (Self->IsFollower()) {
@@ -35,11 +35,11 @@ bool TDataShard::TTxCancelTransactionProposal::Execute(TTransactionContext &txc,
     return Self->Pipeline.CancelPropose(db, ctx, TxId);
 }
 
-void TDataShard::TTxCancelTransactionProposal::Complete(const TActorContext &ctx)
+void TDataShard::TTxCancelTransactionProposal::Complete(const TActorContext &ctx) 
 {
     Self->CheckSplitCanStart(ctx);
     Self->CheckMvccStateChangeCanStart(ctx);
 }
 
-} // namespace NDataShard
+} // namespace NDataShard 
 } // namespace NKikimr

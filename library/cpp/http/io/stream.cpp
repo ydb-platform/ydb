@@ -73,8 +73,8 @@ namespace {
             for (TPtr* cur = Beg_; cur != end; ++cur) {
                 f(*cur);
             }
-        }
-
+        } 
+ 
         TPtr Top() {
             const TPtr* end = T_ + N;
             return end == Beg_ ? nullptr : *Beg_;

@@ -3,15 +3,15 @@
 #include "flat_bio_stats.h"
 #include "util_fmt_logger.h"
 
-#include <ydb/core/base/blobstorage.h>
+#include <ydb/core/base/blobstorage.h> 
 
 namespace NKikimr {
 namespace NTabletFlatExecutor {
-namespace NBlockIO {
+namespace NBlockIO { 
 
 using TEvGet = TEvBlobStorage::TEvGet;
 
-struct TBlockIO::TLoaded : public TEvBlobStorage::TEvGetResult::TResponse{ };
+struct TBlockIO::TLoaded : public TEvBlobStorage::TEvGetResult::TResponse{ }; 
 
 TBlockIO::TBlockIO(TActorId service, ui64 cookie)
     : ::NActors::IActor(static_cast<TReceiveFunc>(&TBlockIO::Inbox), NKikimrServices::TActivity::SAUSAGE_BIO_A)
@@ -32,7 +32,7 @@ void TBlockIO::Registered(TActorSystem *sys, const TActorId&)
 
 void TBlockIO::Inbox(TEventHandlePtr &eh, const ::NActors::TActorContext&)
 {
-    if (auto *ev = eh->CastAsLocal<TEvBlobStorage::TEvGetResult>()) {
+    if (auto *ev = eh->CastAsLocal<TEvBlobStorage::TEvGetResult>()) { 
         if (ev->Status != NKikimrProto::OK)
             Terminate(ev->Status);
         else {
@@ -40,28 +40,28 @@ void TBlockIO::Inbox(TEventHandlePtr &eh, const ::NActors::TActorContext&)
 
             Handle(eh->Cookie, { ptr, size_t(ev->ResponseSz) });
         }
-    } else if (auto *ev = eh->CastAsLocal<NBlockIO::TEvFetch>()) {
+    } else if (auto *ev = eh->CastAsLocal<NBlockIO::TEvFetch>()) { 
         Y_VERIFY(!Owner, "TBlockIO actor now can hanle only one request");
 
         Owner = eh->Sender;
-        Bootstrap(ev->Priority, ev->Fetch);
+        Bootstrap(ev->Priority, ev->Fetch); 
     } else if (eh->CastAsLocal<TEvents::TEvUndelivered>()) {
         Terminate(NKikimrProto::UNKNOWN);
     } else if (eh->CastAsLocal<TEvents::TEvPoison>()) {
         PassAway();
     } else {
-        Y_FAIL("Page collection blocks IO actor got an unexpected event");
+        Y_FAIL("Page collection blocks IO actor got an unexpected event"); 
     }
 }
 
 void TBlockIO::Bootstrap(EPriority priority, TAutoPtr<NPageCollection::TFetch> origin) noexcept
 {
     Origin = origin;
-    Priority = priority;
+    Priority = priority; 
 
     Y_VERIFY(Origin->Pages, "Got TFetch request without pages list");
 
-    PagesToBlobsConverter = new TPagesToBlobsConverter(*Origin->PageCollection, Origin->Pages);
+    PagesToBlobsConverter = new TPagesToBlobsConverter(*Origin->PageCollection, Origin->Pages); 
 
     BlockStates.reserve(Origin->Pages.size());
 
@@ -78,29 +78,29 @@ void TBlockIO::Dispatch() noexcept
     const auto ctx = TActivationContext::ActorContextFor(SelfId());
 
     NKikimrBlobStorage::EGetHandleClass klass;
-    switch (Priority) {
-        case NBlockIO::EPriority::None:
-        case NBlockIO::EPriority::Fast:
+    switch (Priority) { 
+        case NBlockIO::EPriority::None: 
+        case NBlockIO::EPriority::Fast: 
             klass = NKikimrBlobStorage::FastRead;
             break;
-        case NBlockIO::EPriority::Bulk:
-        case NBlockIO::EPriority::Bkgr: /* FIXME: switch to LowRead in the future */
+        case NBlockIO::EPriority::Bulk: 
+        case NBlockIO::EPriority::Bkgr: /* FIXME: switch to LowRead in the future */ 
             klass = NKikimrBlobStorage::AsyncRead;
             break;
-        case NBlockIO::EPriority::Low:
+        case NBlockIO::EPriority::Low: 
             klass = NKikimrBlobStorage::LowRead;
             break;
     }
 
-    while (auto more = PagesToBlobsConverter->Grow(NBlockIO::BlockSize)) {
-        auto group = NPageCollection::TLargeGlobId::InvalidGroup;
+    while (auto more = PagesToBlobsConverter->Grow(NBlockIO::BlockSize)) { 
+        auto group = NPageCollection::TLargeGlobId::InvalidGroup; 
 
         TArrayHolder<TEvGet::TQuery> query(new TEvGet::TQuery[+more]);
 
         ui32 lastBlob = Max<ui32>();
         for (const auto on : xrange(+more)) {
-            auto &brick = PagesToBlobsConverter->Queue[more.From + on];
-            auto glob = Origin->PageCollection->Glob(brick.Blob);
+            auto &brick = PagesToBlobsConverter->Queue[more.From + on]; 
+            auto glob = Origin->PageCollection->Glob(brick.Blob); 
 
             if ((group = (on ? group : glob.Group)) != glob.Group)
                 Y_FAIL("Cannot handle different groups in one request");
@@ -130,19 +130,19 @@ void TBlockIO::Dispatch() noexcept
 
     if (auto logl = Logger->Log(ELnLev::Debug)) {
         logl
-            << "NBlockIO pageCollection " << Origin->PageCollection->Label() << " cooked flow "
-            << PagesToBlobsConverter->OnHold << "b " << PagesToBlobsConverter->Tail << "p" << " " << PagesToBlobsConverter->Queue.size()
+            << "NBlockIO pageCollection " << Origin->PageCollection->Label() << " cooked flow " 
+            << PagesToBlobsConverter->OnHold << "b " << PagesToBlobsConverter->Tail << "p" << " " << PagesToBlobsConverter->Queue.size() 
             << " bricks in " << Pending << " reads, " << BlockStates.size() <<  "p req";
     }
 
-    Y_VERIFY(PagesToBlobsConverter->Complete(), "NPageCollection::TPagesToBlobsConverter cooked incomplete loads");
+    Y_VERIFY(PagesToBlobsConverter->Complete(), "NPageCollection::TPagesToBlobsConverter cooked incomplete loads"); 
 }
 
 void TBlockIO::Handle(ui32 base, TArrayRef<TLoaded> items) noexcept
 {
     if (auto logl = Logger->Log(ELnLev::Debug)) {
         logl
-            << "NBlockIO pageCollection " << Origin->PageCollection->Label() << " got base"
+            << "NBlockIO pageCollection " << Origin->PageCollection->Label() << " got base" 
             << " " << items.size() << " bricks, left " << Pending;
     }
 
@@ -150,14 +150,14 @@ void TBlockIO::Handle(ui32 base, TArrayRef<TLoaded> items) noexcept
         if (piece.Status != NKikimrProto::OK) {
             if (auto logl = Logger->Log(ELnLev::Warn)) {
                 logl
-                    << "NBlockIO pageCollection " << Origin->PageCollection->Label() << " get failed"
+                    << "NBlockIO pageCollection " << Origin->PageCollection->Label() << " get failed" 
                     << ", " << piece.Id << " status " << piece.Status;
             }
 
             return Terminate(piece.Status);
         }
 
-        const auto &brick = PagesToBlobsConverter->Queue[base + (&piece - &items[0])];
+        const auto &brick = PagesToBlobsConverter->Queue[base + (&piece - &items[0])]; 
 
         auto& state = BlockStates.at(brick.Slot);
         Y_VERIFY(state.Data.size() - state.Offset >= piece.Buffer.size());
@@ -175,18 +175,18 @@ void TBlockIO::Handle(ui32 base, TArrayRef<TLoaded> items) noexcept
     for (ui32 pageId : Origin->Pages) {
         auto& state = BlockStates.at(index++);
         Y_VERIFY(state.Offset == state.Data.size());
-        if (Origin->PageCollection->Verify(pageId, state.Data)) {
+        if (Origin->PageCollection->Verify(pageId, state.Data)) { 
             continue;
         } else if (auto logl = Logger->Log(ELnLev::Crit)) {
-            const auto bnd = Origin->PageCollection->Bounds(pageId);
+            const auto bnd = Origin->PageCollection->Bounds(pageId); 
 
             logl
-                << "NBlockIO pageCollection " << Origin->PageCollection->Label() << " verify failed"
+                << "NBlockIO pageCollection " << Origin->PageCollection->Label() << " verify failed" 
                 << ", page " << pageId << " " << state.Data.size() << "b"
                 << " spans over {";
 
             for (auto one: xrange(bnd.Lo.Blob, bnd.Up.Blob + 1)) {
-                const auto glob = Origin->PageCollection->Glob(one);
+                const auto glob = Origin->PageCollection->Glob(one); 
 
                 logl << " " << glob.Group << " " << glob.Logo;
             }
@@ -204,12 +204,12 @@ void TBlockIO::Terminate(EStatus code) noexcept
 {
     if (auto logl = Logger->Log(code ? ELnLev::Warn : ELnLev::Debug)) {
         logl
-            << "NBlockIO pageCollection " << Origin->PageCollection->Label() << " end, status " << code
+            << "NBlockIO pageCollection " << Origin->PageCollection->Label() << " end, status " << code 
             << ", cookie {req " << Origin->Cookie << " ev " << Cookie << "}"
             << ", " << BlockStates.size() << " pages";
     }
 
-    auto *ev = new TEvData(std::move(Origin->PageCollection), Origin->Cookie, code);
+    auto *ev = new TEvData(std::move(Origin->PageCollection), Origin->Cookie, code); 
 
     if (code == NKikimrProto::OK) {
         size_t index = 0;
@@ -221,7 +221,7 @@ void TBlockIO::Terminate(EStatus code) noexcept
     }
 
     if (Service)
-        Send(Service, new TEvStat(EDir::Read, Priority, PagesToBlobsConverter->OnHold, TotalOps, std::move(GroupBytes), std::move(GroupOps)));
+        Send(Service, new TEvStat(EDir::Read, Priority, PagesToBlobsConverter->OnHold, TotalOps, std::move(GroupBytes), std::move(GroupOps))); 
 
     Send(Owner, ev, 0, Cookie);
 

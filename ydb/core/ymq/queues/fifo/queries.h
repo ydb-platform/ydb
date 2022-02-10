@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/core/ymq/base/query_id.h>
+#include <ydb/core/ymq/base/query_id.h> 
 
 namespace NKikimr::NSQS {
 

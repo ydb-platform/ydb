@@ -1,9 +1,9 @@
 LIBRARY()
 
-OWNER(
-    serxa
-    g:kikimr
-)
+OWNER( 
+    serxa 
+    g:kikimr 
+) 
 
 RESOURCE(
     static/css/bootstrap.min.css schlab/css/bootstrap.min.css
@@ -24,17 +24,17 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/html/pcdata
+    library/cpp/html/pcdata 
     library/cpp/monlib/dynamic_counters
     library/cpp/resource
-    ydb/library/schlab/schemu
+    ydb/library/schlab/schemu 
 )
 
 END()
 
 RECURSE(
     test
-    static
-    static/css
-    static/js
+    static 
+    static/css 
+    static/js 
 )

@@ -3,15 +3,15 @@
 #include "quoter_service_impl.h"
 #include "kesus_quoter_proxy.h"
 
-#include <ydb/core/kesus/tablet/events.h>
-#include <ydb/core/testlib/actors/test_runtime.h>
-#include <ydb/core/testlib/basics/appdata.h>
-#include <ydb/core/testlib/basics/helpers.h>
-#include <ydb/core/testlib/tablet_helpers.h>
-#include <ydb/core/testlib/test_client.h>
+#include <ydb/core/kesus/tablet/events.h> 
+#include <ydb/core/testlib/actors/test_runtime.h> 
+#include <ydb/core/testlib/basics/appdata.h> 
+#include <ydb/core/testlib/basics/helpers.h> 
+#include <ydb/core/testlib/tablet_helpers.h> 
+#include <ydb/core/testlib/test_client.h> 
 
-#include <ydb/core/protos/flat_tx_scheme.pb.h>
-#include <ydb/core/protos/kesus.pb.h>
+#include <ydb/core/protos/flat_tx_scheme.pb.h> 
+#include <ydb/core/protos/kesus.pb.h> 
 
 #include <library/cpp/testing/gmock_in_unittest/gmock.h>
 #include <library/cpp/testing/unittest/registar.h>

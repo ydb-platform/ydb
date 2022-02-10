@@ -1,10 +1,10 @@
 #include "cli.h"
 #include "cli_cmds.h"
-#include <ydb/core/base/location.h>
-#include <ydb/core/base/path.h>
-#include <ydb/core/driver_lib/run/run.h>
+#include <ydb/core/base/location.h> 
+#include <ydb/core/base/path.h> 
+#include <ydb/core/driver_lib/run/run.h> 
 #include <ydb/library/yaml_config/yaml_config_parser.h>
-#include <ydb/public/lib/deprecated/kicli/kicli.h>
+#include <ydb/public/lib/deprecated/kicli/kicli.h> 
 #include <util/digest/city.h>
 #include <util/random/random.h>
 #include <util/string/cast.h>
@@ -1138,21 +1138,21 @@ public:
 
 class TClientCommandServer : public TClientCommandServerBase {
 public:
-    TClientCommandServer(std::shared_ptr<TModuleFactories> factories)
+    TClientCommandServer(std::shared_ptr<TModuleFactories> factories) 
         : TClientCommandServerBase("server", "Execute KiKiMR server")
-        , Factories(std::move(factories))
+        , Factories(std::move(factories)) 
     {}
 
     virtual int Run(TConfig &/*config*/) override {
         Y_VERIFY(RunConfig.NodeId);
-        return MainRun(RunConfig, Factories);
+        return MainRun(RunConfig, Factories); 
     }
-
-private:
-    std::shared_ptr<TModuleFactories> Factories;
+ 
+private: 
+    std::shared_ptr<TModuleFactories> Factories; 
 };
 
-void AddClientCommandServer(TClientCommandTree& parent, std::shared_ptr<TModuleFactories> factories) {
+void AddClientCommandServer(TClientCommandTree& parent, std::shared_ptr<TModuleFactories> factories) { 
     parent.AddCommand(std::make_unique<TClientCommandServer>(factories));
     parent.AddCommand(std::make_unique<TClientCommandServerConfig>());
 }

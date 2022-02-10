@@ -8,7 +8,7 @@ FORK_TEST_FILES()
 TIMEOUT(600)
 SIZE(MEDIUM)
 
-ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
+ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd") 
 
 TEST_SRCS(
     test_session_pool.py
@@ -26,7 +26,7 @@ TEST_SRCS(
 )
 
 DEPENDS(
-    ydb/apps/ydbd
+    ydb/apps/ydbd 
 )
 
 PEERDIR(

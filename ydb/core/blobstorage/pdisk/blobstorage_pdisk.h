@@ -5,11 +5,11 @@
 #include "blobstorage_pdisk_params.h"
 #include "blobstorage_pdisk_config.h"
 
-#include <ydb/core/blobstorage/base/vdisk_lsn.h>
-#include <ydb/core/blobstorage/base/blobstorage_vdiskid.h>
-#include <ydb/core/blobstorage/base/bufferwithgaps.h>
-#include <ydb/core/blobstorage/base/transparent.h>
-#include <ydb/core/blobstorage/base/batched_vec.h>
+#include <ydb/core/blobstorage/base/vdisk_lsn.h> 
+#include <ydb/core/blobstorage/base/blobstorage_vdiskid.h> 
+#include <ydb/core/blobstorage/base/bufferwithgaps.h> 
+#include <ydb/core/blobstorage/base/transparent.h> 
+#include <ydb/core/blobstorage/base/batched_vec.h> 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <util/generic/map.h>
 
@@ -237,8 +237,8 @@ struct TEvYardInitResult : public TEventLocal<TEvYardInitResult, TEvBlobStorage:
     }
 };
 
-struct TEvLogResult;
-
+struct TEvLogResult; 
+ 
 ////////////////////////////////////////////////////////////////////////////
 // LOG
 ////////////////////////////////////////////////////////////////////////////
@@ -259,7 +259,7 @@ struct TEvLog : public TEventLocal<TEvLog, TEvBlobStorage::EvLog> {
         , LsnSegmentStart(seg.First)
         , Lsn(seg.Last)
         , Cookie(cookie)
-        , LogCallback(std::move(cb))
+        , LogCallback(std::move(cb)) 
     {
         Y_VERIFY(Owner);
         REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(&owner, sizeof(owner));
@@ -280,7 +280,7 @@ struct TEvLog : public TEventLocal<TEvLog, TEvBlobStorage::EvLog> {
         , LsnSegmentStart(seg.First)
         , Lsn(seg.Last)
         , Cookie(cookie)
-        , LogCallback(std::move(cb))
+        , LogCallback(std::move(cb)) 
         , CommitRecord(commitRecord)
     {
         REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(&owner, sizeof(owner));
@@ -323,7 +323,7 @@ struct TEvLog : public TEventLocal<TEvLog, TEvBlobStorage::EvLog> {
                             // usually LsnSegmentStart=Lsn and this diapason is a single point
     ui64 Lsn;
     void *Cookie;
-    TCallback LogCallback;
+    TCallback LogCallback; 
     TCommitRecord CommitRecord;
 
     mutable NLWTrace::TOrbit Orbit;
@@ -1209,7 +1209,7 @@ struct TEvYardControl : public TEventLocal<TEvYardControl, TEvBlobStorage::EvYar
     enum EAction {
         ActionPause = 0,
         ActionStep = 1,
-        ActionResume = 2,
+        ActionResume = 2, 
         Brake = 3,
         PDiskStop = 4,
         // If pdisk is working now successfull responce will be sent immediately
@@ -1274,7 +1274,7 @@ struct TEvCutLog : public TEventLocal<TEvCutLog, TEvBlobStorage::EvCutLog> {
     TOwnerRound OwnerRound;
     ui64 FreeUpToLsn; // excluding this lsn
 
-    // The following values are all set to 0 at ydb/core/blobstorage/vdisk/common/vdisk_recoverylogwriter.cpp : 141
+    // The following values are all set to 0 at ydb/core/blobstorage/vdisk/common/vdisk_recoverylogwriter.cpp : 141 
     i64 LogSizeChunks; // Total number of chunks used for logs
     i64 OwnedLogChunks; // Number of log chunks held by the owner
     i64 YellowZoneChunks; // Stop logging for non-compaction purposes (even if it is not your fault), cut the log

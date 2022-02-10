@@ -1,7 +1,7 @@
 LIBRARY()
 
 OWNER(
-    a-romanov
+    a-romanov 
     ddoarn
     g:kikimr
 )
@@ -44,23 +44,23 @@ PEERDIR(
     library/cpp/digest/crc32c
     library/cpp/html/pcdata
     library/cpp/lwtrace
-    library/cpp/lwtrace/mon
+    library/cpp/lwtrace/mon 
     library/cpp/messagebus/monitoring
     library/cpp/monlib/dynamic_counters
     library/cpp/monlib/service/pages/tablesorter
     library/cpp/packedtypes
     library/cpp/sliding_window
-    ydb/core/base
-    ydb/core/mon
-    ydb/core/node_whiteboard
-    ydb/core/protos
-    ydb/core/util
+    ydb/core/base 
+    ydb/core/mon 
+    ydb/core/node_whiteboard 
+    ydb/core/protos 
+    ydb/core/util 
 )
 
-YQL_LAST_ABI_VERSION()
+YQL_LAST_ABI_VERSION() 
 
 END()
-
-RECURSE_FOR_TESTS(
-    ut
-)
+ 
+RECURSE_FOR_TESTS( 
+    ut 
+) 

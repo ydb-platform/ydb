@@ -3,12 +3,12 @@
 #include <util/generic/size_literals.h>
 
 namespace NKikimr {
-namespace NDataShard {
+namespace NDataShard { 
 
 using namespace NTabletFlatExecutor;
 
-class TDataShard::TTxRequestChangeRecords: public TTransactionBase<TDataShard> {
-    using Schema = TDataShard::Schema;
+class TDataShard::TTxRequestChangeRecords: public TTransactionBase<TDataShard> { 
+    using Schema = TDataShard::Schema; 
 
     bool Precharge(NIceDb::TNiceDb& db) {
         size_t bodiesSize = 0;
@@ -84,7 +84,7 @@ class TDataShard::TTxRequestChangeRecords: public TTransactionBase<TDataShard> {
     }
 
 public:
-    explicit TTxRequestChangeRecords(TDataShard* self)
+    explicit TTxRequestChangeRecords(TDataShard* self) 
         : TTransactionBase(self)
     {
     }
@@ -159,7 +159,7 @@ private:
 
 }; // TTxRequestChangeRecords
 
-class TDataShard::TTxRemoveChangeRecords: public TTransactionBase<TDataShard> {
+class TDataShard::TTxRemoveChangeRecords: public TTransactionBase<TDataShard> { 
     void FillActivationList() {
         if (!Self->ChangesQueue) {
             if (!Self->ChangeExchangeSplitter.Done()) {
@@ -175,7 +175,7 @@ class TDataShard::TTxRemoveChangeRecords: public TTransactionBase<TDataShard> {
     }
 
 public:
-    explicit TTxRemoveChangeRecords(TDataShard* self)
+    explicit TTxRemoveChangeRecords(TDataShard* self) 
         : TTransactionBase(self)
     {
     }
@@ -285,36 +285,36 @@ private:
 }; // TTxChangeExchangeSplitAck
 
 /// Request
-void TDataShard::Handle(TEvChangeExchange::TEvRequestRecords::TPtr& ev, const TActorContext& ctx) {
+void TDataShard::Handle(TEvChangeExchange::TEvRequestRecords::TPtr& ev, const TActorContext& ctx) { 
     ChangeRecordsRequested[ev->Sender].insert(ev->Get()->Records.begin(), ev->Get()->Records.end());
     ScheduleRequestChangeRecords(ctx);
 }
 
-void TDataShard::ScheduleRequestChangeRecords(const TActorContext& ctx) {
+void TDataShard::ScheduleRequestChangeRecords(const TActorContext& ctx) { 
     if (ChangeRecordsRequested && !RequestChangeRecordsInFly) {
         ctx.Send(SelfId(), new TEvPrivate::TEvRequestChangeRecords);
         RequestChangeRecordsInFly = true;
     }
 }
 
-void TDataShard::Handle(TEvPrivate::TEvRequestChangeRecords::TPtr&, const TActorContext& ctx) {
+void TDataShard::Handle(TEvPrivate::TEvRequestChangeRecords::TPtr&, const TActorContext& ctx) { 
     Execute(new TTxRequestChangeRecords(this), ctx);
 }
 
 /// Remove
-void TDataShard::Handle(TEvChangeExchange::TEvRemoveRecords::TPtr& ev, const TActorContext& ctx) {
+void TDataShard::Handle(TEvChangeExchange::TEvRemoveRecords::TPtr& ev, const TActorContext& ctx) { 
     ChangeRecordsToRemove.insert(ev->Get()->Records.begin(), ev->Get()->Records.end());
     ScheduleRemoveChangeRecords(ctx);
 }
 
-void TDataShard::ScheduleRemoveChangeRecords(const TActorContext& ctx) {
+void TDataShard::ScheduleRemoveChangeRecords(const TActorContext& ctx) { 
     if (ChangeRecordsToRemove && !RemoveChangeRecordsInFly) {
         ctx.Send(SelfId(), new TEvPrivate::TEvRemoveChangeRecords);
         RemoveChangeRecordsInFly = true;
     }
 }
 
-void TDataShard::Handle(TEvPrivate::TEvRemoveChangeRecords::TPtr&, const TActorContext& ctx) {
+void TDataShard::Handle(TEvPrivate::TEvRemoveChangeRecords::TPtr&, const TActorContext& ctx) { 
     Execute(new TTxRemoveChangeRecords(this), ctx);
 }
 
@@ -323,5 +323,5 @@ void TDataShard::Handle(TEvChangeExchange::TEvSplitAck::TPtr&, const TActorConte
     Execute(new TTxChangeExchangeSplitAck(this), ctx);
 }
 
-} // NDataShard
+} // NDataShard 
 } // NKikimr

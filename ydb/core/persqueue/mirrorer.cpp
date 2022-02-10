@@ -1,11 +1,11 @@
 #include "mirrorer.h"
 #include "write_meta.h"
 
-#include <ydb/core/persqueue/writer/source_id_encoding.h>
-#include <ydb/core/protos/grpc_pq_old.pb.h>
-#include <ydb/library/persqueue/topic_parser/topic_parser.h>
-#include <ydb/core/base/counters.h>
-#include <ydb/core/util/yverify_stream.h>
+#include <ydb/core/persqueue/writer/source_id_encoding.h> 
+#include <ydb/core/protos/grpc_pq_old.pb.h> 
+#include <ydb/library/persqueue/topic_parser/topic_parser.h> 
+#include <ydb/core/base/counters.h> 
+#include <ydb/core/util/yverify_stream.h> 
 
 #include <library/cpp/time_provider/time_provider.h>
 
@@ -170,7 +170,7 @@ void TMirrorer::ProcessWriteResponse(
         << ". First expected offset= " << (WriteInFlight.empty() ? -1 : WriteInFlight.front().Offset)
         << " response: " << response);
 
-
+ 
     NYdb::NPersQueue::TDeferredCommit deferredCommit;
     for (auto& result : response.GetCmdWriteResult()) {
         if (result.GetAlreadyWritten()) {
@@ -250,7 +250,7 @@ void TMirrorer::Handle(TEvPQ::TEvUpdateCounters::TPtr& /*ev*/, const TActorConte
         }
         if (PartitionStream) {
             LOG_NOTICE_S(ctx, NKikimrServices::PQ_MIRRORER, MirrorerDescription()
-                << "[STATE] has partition stream " << PartitionStream->GetTopicPath()
+                << "[STATE] has partition stream " << PartitionStream->GetTopicPath() 
                 << ":" << PartitionStream->GetPartitionId()
                 << " with id " << PartitionStream->GetPartitionStreamId());
         } else {
@@ -493,8 +493,8 @@ void TMirrorer::ProcessNextReaderEvent(TEvPQ::TEvReaderEventArrived::TPtr&, cons
         AddMessagesToQueue(std::move(dataEvent->GetCompressedMessages()));
     } else if (auto* createStream = std::get_if<TPersQueueReadEvent::TCreatePartitionStreamEvent>(&event.GetRef())) {
         Y_VERIFY_S(
-            !PartitionStream,
-            MirrorerDescription()
+            !PartitionStream, 
+            MirrorerDescription() 
                 << " already has stream " << PartitionStream->GetPartitionStreamId()
                 << ", new stream " << createStream->GetPartitionStream()->GetPartitionStreamId()
         );
@@ -502,18 +502,18 @@ void TMirrorer::ProcessNextReaderEvent(TEvPQ::TEvReaderEventArrived::TPtr&, cons
         Y_VERIFY_S(
             Partition == PartitionStream->GetPartitionId(),
             MirrorerDescription()
-                << " got stream for incorrect partition, stream: topic=" << PartitionStream->GetTopicPath()
+                << " got stream for incorrect partition, stream: topic=" << PartitionStream->GetTopicPath() 
                 << " partition=" << PartitionStream->GetPartitionId()
         );
         if (OffsetToRead < createStream->GetCommittedOffset()) {
-            ProcessError(ctx, TStringBuilder() << "stream has commit offset more then partition end offset,"
+            ProcessError(ctx, TStringBuilder() << "stream has commit offset more then partition end offset," 
                 << "gap will be created [" << OffsetToRead << ";" << createStream->GetCommittedOffset() << ")"
            );
         }
         LOG_INFO_S(ctx, NKikimrServices::PQ_MIRRORER,
-            MirrorerDescription() << " got create stream event for '" << createStream->DebugString()
+            MirrorerDescription() << " got create stream event for '" << createStream->DebugString() 
                 << " and will set offset=" << OffsetToRead);
-
+ 
         createStream->Confirm(OffsetToRead, OffsetToRead);
         RequestSourcePartitionStatus();
     } else if (auto* destroyStream = std::get_if<TPersQueueReadEvent::TDestroyPartitionStreamEvent>(&event.GetRef())) {

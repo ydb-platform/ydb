@@ -1,11 +1,11 @@
 #include "change_record.h"
 
-#include <ydb/core/protos/change_exchange.pb.h>
+#include <ydb/core/protos/change_exchange.pb.h> 
 
 #include <util/stream/str.h>
 
 namespace NKikimr {
-namespace NDataShard {
+namespace NDataShard { 
 
 i64 TChangeRecord::GetSeqNo() const {
     Y_VERIFY(Order <= Max<i64>());
@@ -117,5 +117,5 @@ TChangeRecord&& TChangeRecordBuilder::Build() {
     return std::move(Record);
 }
 
-} // NDataShard
+} // NDataShard 
 } // NKikimr

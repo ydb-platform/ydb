@@ -1,5 +1,5 @@
-#include <ydb/core/testlib/test_client.h>
-#include <ydb/core/ymq/actor/index_events_processor.h>
+#include <ydb/core/testlib/test_client.h> 
+#include <ydb/core/ymq/actor/index_events_processor.h> 
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/stream/file.h>
 #include <library/cpp/json/json_reader.h>
@@ -26,7 +26,7 @@ public:
         auto driverConfig = TDriverConfig().SetEndpoint(TStringBuilder() << "localhost:" << grpcPort);
 
         Driver = MakeHolder<TDriver>(driverConfig);
-        TableClient = MakeSimpleShared<NYdb::NTable::TTableClient>(*Driver);
+        TableClient = MakeSimpleShared<NYdb::NTable::TTableClient>(*Driver); 
     }
 
 private:
@@ -79,7 +79,7 @@ private:
             TClient client(Parent->Server->GetSettings());
             client.MkDir(Parent->Root, SchemePath);
             auto session = Parent->TableClient->CreateSession().GetValueSync().GetSession();
-            auto desc = NYdb::NTable::TTableBuilder()
+            auto desc = NYdb::NTable::TTableBuilder() 
                     .AddNullableColumn("Account", EPrimitiveType::Utf8)
                     .AddNullableColumn("QueueName", EPrimitiveType::Utf8)
                     .AddNullableColumn("CreatedTimestamp", EPrimitiveType::Uint64)
@@ -87,7 +87,7 @@ private:
                     .AddNullableColumn("CustomQueueName", EPrimitiveType::Utf8)
                     .SetPrimaryKeyColumns({"Account", "QueueName"})
                     .Build();
-            auto eventsDesc = NYdb::NTable::TTableBuilder()
+            auto eventsDesc = NYdb::NTable::TTableBuilder() 
                     .AddNullableColumn("Account", EPrimitiveType::Utf8)
                     .AddNullableColumn("QueueName", EPrimitiveType::Utf8)
                     .AddNullableColumn("EventType", EPrimitiveType::Uint64)
@@ -107,11 +107,11 @@ private:
         }
 
         TAsyncStatus RunDataQuery(const TString& query) {
-            auto status = Parent->TableClient->RetryOperation<NYdb::NTable::TDataQueryResult>(
+            auto status = Parent->TableClient->RetryOperation<NYdb::NTable::TDataQueryResult>( 
                     [query](NYdb::NTable::TSession session) {
                         return session.ExecuteDataQuery(
-                                query, NYdb::NTable::TTxControl::BeginTx().CommitTx(),
-                                NYdb::NTable::TExecDataQuerySettings().ClientTimeout(TDuration::Seconds(10))
+                                query, NYdb::NTable::TTxControl::BeginTx().CommitTx(), 
+                                NYdb::NTable::TExecDataQuerySettings().ClientTimeout(TDuration::Seconds(10)) 
                         ).Apply([](const auto &future) mutable {
                             return future;
                         });
@@ -151,7 +151,7 @@ private:
 
         void AddQueuesBatch(const TString& account, const TString& queueNameBase, ui64 count, ui64 startIndex = 0) {
             Cerr << "===Started add queue batch\n";
-            TDeque<NYdb::NTable::TAsyncDataQueryResult> results;
+            TDeque<NYdb::NTable::TAsyncDataQueryResult> results; 
             ui64 maxInflight = 1;
             auto getRessionResult = Parent->TableClient->GetSession().GetValueSync();
             UNIT_ASSERT(getRessionResult.IsSuccess());
@@ -170,7 +170,7 @@ private:
             auto txResult = session.BeginTransaction().GetValueSync();
             UNIT_ASSERT(txResult.IsSuccess());
             auto tx = txResult.GetTransaction();
-            auto txControl = NYdb::NTable::TTxControl::Tx(tx);
+            auto txControl = NYdb::NTable::TTxControl::Tx(tx); 
 
             for (auto i = startIndex; i < startIndex + count; i++) {
                 while (results.size() < maxInflight) {
@@ -202,10 +202,10 @@ private:
             TMaybe<NYdb::NTable::TDataQueryResult> countEventsResult;
 
             queryBuilder << "select count(*) as Count from [" << SchemePath << "/." << table << "];";
-            auto status = Parent->TableClient->RetryOperation<NYdb::NTable::TDataQueryResult>([query = TString(queryBuilder), &countEventsResult](NYdb::NTable::TSession session) {
+            auto status = Parent->TableClient->RetryOperation<NYdb::NTable::TDataQueryResult>([query = TString(queryBuilder), &countEventsResult](NYdb::NTable::TSession session) { 
                 return session.ExecuteDataQuery(
-                        query, NYdb::NTable::TTxControl::BeginTx().CommitTx(),
-                        NYdb::NTable::TExecDataQuerySettings().ClientTimeout(TDuration::Seconds(5))
+                        query, NYdb::NTable::TTxControl::BeginTx().CommitTx(), 
+                        NYdb::NTable::TExecDataQuerySettings().ClientTimeout(TDuration::Seconds(5)) 
                 ).Apply([&](const auto& future) mutable {
                     countEventsResult = future.GetValue();
                     return future;
@@ -242,7 +242,7 @@ private:
 
 private:
     THolder<TDriver> Driver;
-    TSimpleSharedPtr<NYdb::NTable::TTableClient> TableClient;
+    TSimpleSharedPtr<NYdb::NTable::TTableClient> TableClient; 
     THolder<TServer> Server;
     TString Root = "/Root/SQS";
 

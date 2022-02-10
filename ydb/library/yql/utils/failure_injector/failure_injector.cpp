@@ -1,6 +1,6 @@
 #include "failure_injector.h"
 
-#include <ydb/library/yql/utils/log/log.h>
+#include <ydb/library/yql/utils/log/log.h> 
 #include <ydb/library/yql/utils/yql_panic.h>
 
 #include <util/generic/singleton.h>

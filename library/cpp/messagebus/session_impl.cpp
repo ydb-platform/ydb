@@ -484,7 +484,7 @@ void TBusSessionImpl::Act(TConnectionTag) {
 }
 
 void TBusSessionImpl::Listen(int port, TBusMessageQueue* q) {
-    Listen(BindOnPort(port, Config.ReusePort).second, q);
+    Listen(BindOnPort(port, Config.ReusePort).second, q); 
 }
 
 void TBusSessionImpl::Listen(const TVector<TBindResult>& bindTo, TBusMessageQueue* q) {

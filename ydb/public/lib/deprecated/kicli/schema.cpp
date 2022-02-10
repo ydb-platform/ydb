@@ -1,5 +1,5 @@
 #include "kicli.h"
-#include <ydb/public/lib/deprecated/client/msgbus_client.h>
+#include <ydb/public/lib/deprecated/client/msgbus_client.h> 
 
 namespace NKikimr {
 namespace NClient {
@@ -36,9 +36,9 @@ TType::TType(const TString& typeName, NScheme::TTypeId typeId)
 {}
 
 TType::TType(NScheme::TTypeId typeId)
-    : TypeName(NScheme::TypeName(typeId))
-    , TypeId(typeId)
-{}
+    : TypeName(NScheme::TypeName(typeId)) 
+    , TypeId(typeId) 
+{} 
 
 const TType TType::Int64(NScheme::NTypeIds::Int64);
 const TType TType::Uint64(NScheme::NTypeIds::Uint64);

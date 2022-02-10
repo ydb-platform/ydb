@@ -8,14 +8,14 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/json/writer
+    library/cpp/json/writer 
     library/cpp/string_utils/base64
-    ydb/public/sdk/cpp/client/ydb_result
-    ydb/public/sdk/cpp/client/ydb_value
+    ydb/public/sdk/cpp/client/ydb_result 
+    ydb/public/sdk/cpp/client/ydb_value 
 )
 
 END()
-
-RECURSE_FOR_TESTS(
-    ut
-)
+ 
+RECURSE_FOR_TESTS( 
+    ut 
+) 

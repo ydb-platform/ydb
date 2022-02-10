@@ -1,11 +1,11 @@
 #pragma once
 #include "defs.h"
 
-#include <ydb/core/ymq/base/action.h>
-#include <ydb/core/util/address_classifier.h>
-#include <ydb/core/ymq/base/processed_request_attributes.h>
+#include <ydb/core/ymq/base/action.h> 
+#include <ydb/core/util/address_classifier.h> 
+#include <ydb/core/ymq/base/processed_request_attributes.h> 
 
-#include <ydb/core/protos/config.pb.h>
+#include <ydb/core/protos/config.pb.h> 
 
 #include <library/cpp/scheme/scheme.h>
 

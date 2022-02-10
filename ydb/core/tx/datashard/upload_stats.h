@@ -2,10 +2,10 @@
 
 #include "defs.h"
 
-#include <ydb/core/base/counters.h>
+#include <ydb/core/base/counters.h> 
 
 namespace NKikimr {
-namespace NDataShard {
+namespace NDataShard { 
 
 class IStatHolder {
 public:

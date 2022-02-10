@@ -6,12 +6,12 @@ SIZE(MEDIUM)
 
 PEERDIR(
     library/cpp/actors/interconnect/mock
-    ydb/core/blobstorage/backpressure
-    ydb/core/blobstorage/base
-    ydb/core/blobstorage/vdisk
-    ydb/core/blobstorage/vdisk/common
-    ydb/core/tx/scheme_board
-    ydb/library/yql/public/udf/service/stub
+    ydb/core/blobstorage/backpressure 
+    ydb/core/blobstorage/base 
+    ydb/core/blobstorage/vdisk 
+    ydb/core/blobstorage/vdisk/common 
+    ydb/core/tx/scheme_board 
+    ydb/library/yql/public/udf/service/stub 
 )
 
 YQL_LAST_ABI_VERSION()

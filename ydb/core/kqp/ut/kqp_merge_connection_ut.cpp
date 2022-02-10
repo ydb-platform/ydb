@@ -1,4 +1,4 @@
-#include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include <ydb/core/kqp/ut/common/kqp_ut_common.h> 
 
 #include <util/generic/size_literals.h>
 
@@ -38,7 +38,7 @@ void CreateSimpleDataTypes(TKikimrRunner& kikimr) {
 
     result = session.ExecuteDataQuery(R"(
         --!syntax_v1
-        REPLACE INTO `/Root/SimpleDataTypes` (col_bool, col_uint64, col_int32,
+        REPLACE INTO `/Root/SimpleDataTypes` (col_bool, col_uint64, col_int32, 
             col_double, col_float, col_string, col_utf8, col_date, col_datetime,
             col_timestamp, col_interval, col_decimal) VALUES
             (NULL, NULL, -1, 1.0, 1.0f, "Value-001", "値-001",
@@ -112,7 +112,7 @@ Y_UNIT_TEST_SUITE(KqpMergeCn) {
 
         auto result = db.StreamExecuteScanQuery(query, settings).GetValueSync();
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-
+ 
         auto res = CollectStreamResult(result);
         CheckPlanForMergeCn(res.PlanJson, true, "TopSort");
 
@@ -419,7 +419,7 @@ Y_UNIT_TEST_SUITE(KqpMergeCn) {
         CreateSimpleDataTypes(kikimr);
 
         TString query = R"(
-            SELECT CAST(col_date AS String) AS col_date, CAST(col_datetime AS String) AS col_datetime
+            SELECT CAST(col_date AS String) AS col_date, CAST(col_datetime AS String) AS col_datetime 
             FROM `/Root/SimpleDataTypes` ORDER BY col_date, col_datetime LIMIT 4
         )";
 
@@ -455,7 +455,7 @@ Y_UNIT_TEST_SUITE(KqpMergeCn) {
 
         auto result = db.StreamExecuteScanQuery(query, settings).GetValueSync();
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-
+ 
         auto res = CollectStreamResult(result);
         CheckPlanForMergeCn(res.PlanJson, false, "Sort");
 
@@ -507,5 +507,5 @@ Y_UNIT_TEST_SUITE(KqpMergeCn) {
 }
 
 } // namespace NKqp
-} // namespace NKikimr
-
+} // namespace NKikimr 
+ 

@@ -9,7 +9,7 @@ SRCS(
     examples.cpp
     format.cpp
     interruptible.cpp
-    normalize_path.cpp
+    normalize_path.cpp 
     parameters.cpp
     pretty_table.cpp
     print_operation.cpp
@@ -27,19 +27,19 @@ PEERDIR(
     library/cpp/getopt
     library/cpp/json/writer
     library/cpp/yaml/as
-    ydb/public/lib/json_value
-    ydb/public/lib/operation_id
-    ydb/public/lib/yson_value
-    ydb/public/sdk/cpp/client/draft
-    ydb/public/sdk/cpp/client/ydb_result
-    ydb/public/sdk/cpp/client/ydb_scheme
-    ydb/public/sdk/cpp/client/ydb_types/credentials
+    ydb/public/lib/json_value 
+    ydb/public/lib/operation_id 
+    ydb/public/lib/yson_value 
+    ydb/public/sdk/cpp/client/draft 
+    ydb/public/sdk/cpp/client/ydb_result 
+    ydb/public/sdk/cpp/client/ydb_scheme 
+    ydb/public/sdk/cpp/client/ydb_types/credentials 
 )
 
 GENERATE_ENUM_SERIALIZATION(formats.h)
 
 END()
-
-RECURSE_FOR_TESTS(
-    ut
-)
+ 
+RECURSE_FOR_TESTS( 
+    ut 
+) 

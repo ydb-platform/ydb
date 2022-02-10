@@ -6,7 +6,7 @@
 #include <ydb/library/yql/providers/common/transform/yql_exec.h>
 #include <ydb/library/yql/providers/common/transform/yql_visit.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
+#include <ydb/public/sdk/cpp/client/ydb_table/table.h> 
 
 #include <util/generic/ptr.h>
 

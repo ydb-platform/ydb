@@ -17,13 +17,13 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/core/engine
-    ydb/core/kqp/common
+    ydb/core/engine 
+    ydb/core/kqp/common 
     ydb/library/yql/dq/actors/protos
     ydb/library/yql/dq/type_ann
 )
 
-YQL_LAST_ABI_VERSION()
+YQL_LAST_ABI_VERSION() 
 
 GENERATE_ENUM_SERIALIZATION(kqp_prepare_impl.h)
 

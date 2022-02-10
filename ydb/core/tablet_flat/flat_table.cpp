@@ -11,7 +11,7 @@
 #include "flat_util_misc.h"
 #include "util_fmt_abort.h"
 
-#include <ydb/core/util/yverify_stream.h>
+#include <ydb/core/util/yverify_stream.h> 
 
 namespace NKikimr {
 namespace NTable {
@@ -196,12 +196,12 @@ void TTable::ReplaceSlices(TBundleSlicesMap slices) noexcept
 
 void TTable::Replace(TArrayRef<const TPartView> partViews, const TSubset &subset) noexcept
 {
-    for (const auto &partView : partViews) {
-        Y_VERIFY(partView, "Replace(...) shouldn't get empty parts");
-        Y_VERIFY(!partView.Screen, "Replace(...) shouldn't get screened parts");
-        Y_VERIFY(partView.Slices && *partView.Slices, "Got parts without slices");
-        if (Flatten.contains(partView->Label) || ColdParts.contains(partView->Label)) {
-            Y_Fail("Duplicate bundle " << partView->Label);
+    for (const auto &partView : partViews) { 
+        Y_VERIFY(partView, "Replace(...) shouldn't get empty parts"); 
+        Y_VERIFY(!partView.Screen, "Replace(...) shouldn't get screened parts"); 
+        Y_VERIFY(partView.Slices && *partView.Slices, "Got parts without slices"); 
+        if (Flatten.contains(partView->Label) || ColdParts.contains(partView->Label)) { 
+            Y_Fail("Duplicate bundle " << partView->Label); 
         }
     }
 
@@ -211,20 +211,20 @@ void TTable::Replace(TArrayRef<const TPartView> partViews, const TSubset &subset
 
     THashSet<ui64> checkNewTransactions;
 
-    for (auto &memTable : subset.Frozen) {
-        const auto found = Frozen.erase(memTable.MemTable);
+    for (auto &memTable : subset.Frozen) { 
+        const auto found = Frozen.erase(memTable.MemTable); 
 
-        Y_VERIFY(found == 1, "Got an unknown TMemTable table in TSubset");
+        Y_VERIFY(found == 1, "Got an unknown TMemTable table in TSubset"); 
 
-        NUtil::SubSafe(Stat_.FrozenWaste, memTable->GetWastedMem());
-        NUtil::SubSafe(Stat_.FrozenSize, memTable->GetUsedMem());
-        NUtil::SubSafe(Stat_.FrozenOps,  memTable->GetOpsCount());
-        NUtil::SubSafe(Stat_.FrozenRows, memTable->GetRowCount());
+        NUtil::SubSafe(Stat_.FrozenWaste, memTable->GetWastedMem()); 
+        NUtil::SubSafe(Stat_.FrozenSize, memTable->GetUsedMem()); 
+        NUtil::SubSafe(Stat_.FrozenOps,  memTable->GetOpsCount()); 
+        NUtil::SubSafe(Stat_.FrozenRows, memTable->GetRowCount()); 
 
-        for (const auto &pr : memTable.MemTable->GetTxIdStats()) {
+        for (const auto &pr : memTable.MemTable->GetTxIdStats()) { 
             const ui64 txId = pr.first;
             auto& tx = OpenTransactions[txId];
-            bool removed = tx.Mem.erase(memTable.MemTable);
+            bool removed = tx.Mem.erase(memTable.MemTable); 
             Y_VERIFY(removed);
             if (tx.Mem.empty() && tx.Parts.empty()) {
                 checkNewTransactions.insert(txId);
@@ -288,15 +288,15 @@ void TTable::Replace(TArrayRef<const TPartView> partViews, const TSubset &subset
     }
 
     for (const auto &partView : partViews) {
-        if (Mutable && partView->Epoch >= Mutable->Epoch) {
-            Y_Fail("Replace with " << NFmt::Do(*partView) << " after mutable epoch " << Mutable->Epoch);
+        if (Mutable && partView->Epoch >= Mutable->Epoch) { 
+            Y_Fail("Replace with " << NFmt::Do(*partView) << " after mutable epoch " << Mutable->Epoch); 
         }
 
-        if (Frozen && partView->Epoch >= (*Frozen.begin())->Epoch) {
-            Y_Fail("Replace with " << NFmt::Do(*partView) << " after frozen epoch " << (*Frozen.begin())->Epoch);
+        if (Frozen && partView->Epoch >= (*Frozen.begin())->Epoch) { 
+            Y_Fail("Replace with " << NFmt::Do(*partView) << " after frozen epoch " << (*Frozen.begin())->Epoch); 
         }
 
-        Epoch = Max(Epoch, partView->Epoch + 1);
+        Epoch = Max(Epoch, partView->Epoch + 1); 
 
         AddSafe(partView);
     }
@@ -348,31 +348,31 @@ void TTable::ReplaceTxStatus(TArrayRef<const TIntrusiveConstPtr<TTxStatusPart>> 
     }
 }
 
-void TTable::Merge(TPartView partView) noexcept
+void TTable::Merge(TPartView partView) noexcept 
 {
-    Y_VERIFY(partView, "Merge(...) shouldn't get empty part");
-    Y_VERIFY(partView.Slices, "Merge(...) shouldn't get parts without slices");
+    Y_VERIFY(partView, "Merge(...) shouldn't get empty part"); 
+    Y_VERIFY(partView.Slices, "Merge(...) shouldn't get parts without slices"); 
 
-    if (Mutable && partView->Epoch >= Mutable->Epoch) {
-        Y_Fail("Merge " << NFmt::Do(*partView) << " after mutable epoch " << Mutable->Epoch);
+    if (Mutable && partView->Epoch >= Mutable->Epoch) { 
+        Y_Fail("Merge " << NFmt::Do(*partView) << " after mutable epoch " << Mutable->Epoch); 
     }
 
-    if (Frozen && partView->Epoch >= (*Frozen.begin())->Epoch) {
-        Y_Fail("Merge " << NFmt::Do(*partView) << " after frozen epoch " << (*Frozen.begin())->Epoch);
+    if (Frozen && partView->Epoch >= (*Frozen.begin())->Epoch) { 
+        Y_Fail("Merge " << NFmt::Do(*partView) << " after frozen epoch " << (*Frozen.begin())->Epoch); 
     }
 
-    auto it = Flatten.find(partView->Label);
+    auto it = Flatten.find(partView->Label); 
 
     if (it == Flatten.end()) {
-        Epoch = Max(Epoch, partView->Epoch + 1);
+        Epoch = Max(Epoch, partView->Epoch + 1); 
 
-        AddSafe(std::move(partView));
-    } else if (it->second->Epoch != partView->Epoch) {
+        AddSafe(std::move(partView)); 
+    } else if (it->second->Epoch != partView->Epoch) { 
         Y_FAIL("Got the same labeled parts with different epoch");
     } else {
         Levels.Reset();
-        it->second.Screen = TScreen::Join(it->second.Screen, partView.Screen);
-        it->second.Slices = TSlices::Merge(it->second.Slices, partView.Slices);
+        it->second.Screen = TScreen::Join(it->second.Screen, partView.Screen); 
+        it->second.Slices = TSlices::Merge(it->second.Slices, partView.Slices); 
     }
 
     ErasedKeysCache.Reset();
@@ -464,20 +464,20 @@ const TLevels& TTable::GetLevels() const noexcept
 {
     if (!Levels) {
         Y_VERIFY(ColdParts.empty(), "Cannot construct Levels with cold parts");
-        TVector<const TPartView*> parts; // TPartView* avoids expensive atomic ops
+        TVector<const TPartView*> parts; // TPartView* avoids expensive atomic ops 
         parts.reserve(Flatten.size());
         for (const auto& kv : Flatten) {
             parts.push_back(&kv.second);
         }
         std::sort(parts.begin(), parts.end(),
-            [](const TPartView* a, const TPartView* b) {
+            [](const TPartView* a, const TPartView* b) { 
                 if (a->Part->Epoch != b->Part->Epoch) {
                     return a->Part->Epoch < b->Part->Epoch;
                 }
                 return a->Part->Label < b->Part->Label;
             });
         Levels.Reset(new TLevels(Scheme->Keys));
-        for (const TPartView* p : parts) {
+        for (const TPartView* p : parts) { 
             Levels->Add(p->Part, p->Slices);
         }
     }
@@ -496,14 +496,14 @@ ui64 TTable::GetSearchHeight() const noexcept
     return height;
 }
 
-TVector<TIntrusiveConstPtr<TMemTable>> TTable::GetMemTables() const noexcept
+TVector<TIntrusiveConstPtr<TMemTable>> TTable::GetMemTables() const noexcept 
 {
-    TVector<TIntrusiveConstPtr<TMemTable>> vec(Frozen.begin(), Frozen.end());
+    TVector<TIntrusiveConstPtr<TMemTable>> vec(Frozen.begin(), Frozen.end()); 
 
     if (Mutable)
-        vec.emplace_back(Mutable);
+        vec.emplace_back(Mutable); 
 
-    return vec;
+    return vec; 
 }
 
 TEpoch TTable::Snapshot() noexcept
@@ -517,7 +517,7 @@ TEpoch TTable::Snapshot() noexcept
         Stat_.FrozenOps += Mutable->GetOpsCount();
         Stat_.FrozenRows += Mutable->GetRowCount();
 
-        Mutable = nullptr; /* have to make new TMemTable on next update */
+        Mutable = nullptr; /* have to make new TMemTable on next update */ 
 
         if (++Epoch == TEpoch::Max()) {
             Y_FAIL("Table epoch counter has reached infinity value");
@@ -527,13 +527,13 @@ TEpoch TTable::Snapshot() noexcept
     return Epoch;
 }
 
-void TTable::AddSafe(TPartView partView)
+void TTable::AddSafe(TPartView partView) 
 {
-    if (partView) {
-        Y_VERIFY(partView->Epoch < Epoch, "Cannot add part above head epoch");
+    if (partView) { 
+        Y_VERIFY(partView->Epoch < Epoch, "Cannot add part above head epoch"); 
 
-        Stat_.Parts.Add(partView);
-        Stat_.PartsPerTablet[partView->Label.TabletID()].Add(partView);
+        Stat_.Parts.Add(partView); 
+        Stat_.PartsPerTablet[partView->Label.TabletID()].Add(partView); 
 
         if (partView->TxIdStats) {
             for (const auto& item : partView->TxIdStats->GetItems()) {
@@ -544,17 +544,17 @@ void TTable::AddSafe(TPartView partView)
 
         using TVal = decltype(Flatten)::value_type;
 
-        if (FlattenEpoch <= partView->Epoch) {
-            FlattenEpoch = partView->Epoch;
+        if (FlattenEpoch <= partView->Epoch) { 
+            FlattenEpoch = partView->Epoch; 
             if (Levels) {
                 // Slices from this part may be added on top
-                Levels->Add(partView.Part, partView.Slices);
+                Levels->Add(partView.Part, partView.Slices); 
             }
         } else {
             Levels.Reset();
         }
 
-        bool done = Flatten.insert(TVal(partView->Label, std::move(partView))).second;
+        bool done = Flatten.insert(TVal(partView->Label, std::move(partView))).second; 
         Y_VERIFY(done);
     }
 }
@@ -619,11 +619,11 @@ TTable::TReady TTable::Precharge(TRawVals minKey_, TRawVals maxKey_, TTagsRef ta
     return res;
 }
 
-void TTable::Update(ERowOp rop, TRawVals key, TOpsRef ops, TArrayRef<TMemGlob> apart, TRowVersion rowVersion)
+void TTable::Update(ERowOp rop, TRawVals key, TOpsRef ops, TArrayRef<TMemGlob> apart, TRowVersion rowVersion) 
 {
-    Y_VERIFY(!(ops && TCellOp::HaveNoOps(rop)), "Given ERowOp can't have ops");
+    Y_VERIFY(!(ops && TCellOp::HaveNoOps(rop)), "Given ERowOp can't have ops"); 
 
-    if (ErasedKeysCache && rop != ERowOp::Erase) {
+    if (ErasedKeysCache && rop != ERowOp::Erase) { 
         const TCelled cells(key, *Scheme->Keys, true);
         auto res = ErasedKeysCache->FindKey(cells);
         if (res.second) {
@@ -634,7 +634,7 @@ void TTable::Update(ERowOp rop, TRawVals key, TOpsRef ops, TArrayRef<TMemGlob> a
     MemTable().Update(rop, key, ops, apart, rowVersion, CommittedTransactions);
 }
 
-void TTable::UpdateTx(ERowOp rop, TRawVals key, TOpsRef ops, TArrayRef<TMemGlob> apart, ui64 txId)
+void TTable::UpdateTx(ERowOp rop, TRawVals key, TOpsRef ops, TArrayRef<TMemGlob> apart, ui64 txId) 
 {
     // Use a special row version that marks this update as uncommitted
     TRowVersion rowVersion(Max<ui64>(), txId);
@@ -673,10 +673,10 @@ void TTable::RemoveTx(ui64 txId)
     }
 }
 
-TMemTable& TTable::MemTable()
+TMemTable& TTable::MemTable() 
 {
     return
-        *(Mutable ? Mutable : (Mutable = new TMemTable(Scheme, Epoch, Annexed)));
+        *(Mutable ? Mutable : (Mutable = new TMemTable(Scheme, Epoch, Annexed))); 
 }
 
 TAutoPtr<TTableIt> TTable::Iterate(TRawVals key_, TTagsRef tags, IPages* env, ESeek seek, TRowVersion snapshot) const noexcept
@@ -693,7 +693,7 @@ TAutoPtr<TTableIt> TTable::Iterate(TRawVals key_, TTagsRef tags, IPages* env, ES
     }
 
     for (auto& fti : Frozen) {
-        const TMemTable* memTable = fti.Get();
+        const TMemTable* memTable = fti.Get(); 
 
         dbIter->Push(TMemIt::Make(*memTable, memTable->Immediate(), key, seek, Scheme->Keys, &dbIter->Remap, env, EDirection::Forward));
     }
@@ -731,7 +731,7 @@ TAutoPtr<TTableReverseIt> TTable::IterateReverse(TRawVals key_, TTagsRef tags, I
     }
 
     for (auto& fti : Frozen) {
-        const TMemTable* memTable = fti.Get();
+        const TMemTable* memTable = fti.Get(); 
 
         dbIter->Push(TMemIt::Make(*memTable, memTable->Immediate(), key, seek, Scheme->Keys, &dbIter->Remap, env, EDirection::Reverse));
     }
@@ -769,7 +769,7 @@ TTable::TReady TTable::Select(TRawVals key_, TTagsRef tags, IPages* env, TRowSta
     row.Reset(remap.Nulls());
 
     for (auto &pin: remap.KeyPins())
-        row.Set(pin.Pos, { ECellOp::Set, ELargeObj::Inline }, key[pin.Key]);
+        row.Set(pin.Pos, { ECellOp::Set, ELargeObj::Inline }, key[pin.Key]); 
 
     TReady result;
 
@@ -794,10 +794,10 @@ TTable::TReady TTable::Select(TRawVals key_, TTagsRef tags, IPages* env, TRowSta
 
     // Frozen are sorted by epoch, apply in reverse order
     for (auto pos = Frozen.rbegin(); !row.IsFinalized() && pos != Frozen.rend(); ++pos) {
-        const auto& memTable = *pos;
-        Y_VERIFY(lastEpoch > memTable->Epoch, "Ordering of epochs is incorrect");
-        lastEpoch = memTable->Epoch;
-        if (auto it = TMemIt::Make(*memTable, memTable->Immediate(), key, ESeek::Exact, Scheme->Keys, &remap, env, EDirection::Forward)) {
+        const auto& memTable = *pos; 
+        Y_VERIFY(lastEpoch > memTable->Epoch, "Ordering of epochs is incorrect"); 
+        lastEpoch = memTable->Epoch; 
+        if (auto it = TMemIt::Make(*memTable, memTable->Immediate(), key, ESeek::Exact, Scheme->Keys, &remap, env, EDirection::Forward)) { 
             if (it->IsValid() && (snapshotFound || it->SkipToRowVersion(snapshot, CommittedTransactions))) {
                 // N.B. stop looking for snapshot after the first hit
                 snapshotFound = true;
@@ -854,7 +854,7 @@ TTable::TReady TTable::Select(TRawVals key_, TTagsRef tags, IPages* env, TRowSta
 
     if (!ready || row.Need()) {
         result.Ready = EReady::Page;
-    } else if (row == ERowOp::Erase || row == ERowOp::Absent) {
+    } else if (row == ERowOp::Erase || row == ERowOp::Absent) { 
         result.Ready = EReady::Gone;
     } else {
         result.Ready = EReady::Data;
@@ -930,47 +930,47 @@ TCompactionStats TTable::GetCompactionStats() const
     return stats;
 }
 
-void TPartStats::Add(const TPartView& partView)
+void TPartStats::Add(const TPartView& partView) 
 {
     PartsCount += 1;
-    IndexBytes += partView->IndexesRawSize;
-    ByKeyBytes += partView->ByKey ? partView->ByKey->Raw.size() : 0;
-    PlainBytes += partView->Stat.Bytes;
-    CodedBytes += partView->Stat.Coded;
-    RowsErase += partView->Stat.Drops;
-    RowsTotal += partView->Stat.Rows;
-    SmallBytes += partView->Small ? partView->Small->Stats().Size : 0;
-    SmallItems += partView->Small ? partView->Small->Stats().Items : 0;
-    LargeBytes += partView->Large ? partView->Large->Stats().Size : 0;
-    LargeItems += partView->Blobs ? partView->Blobs->Total() : 0;
+    IndexBytes += partView->IndexesRawSize; 
+    ByKeyBytes += partView->ByKey ? partView->ByKey->Raw.size() : 0; 
+    PlainBytes += partView->Stat.Bytes; 
+    CodedBytes += partView->Stat.Coded; 
+    RowsErase += partView->Stat.Drops; 
+    RowsTotal += partView->Stat.Rows; 
+    SmallBytes += partView->Small ? partView->Small->Stats().Size : 0; 
+    SmallItems += partView->Small ? partView->Small->Stats().Items : 0; 
+    LargeBytes += partView->Large ? partView->Large->Stats().Size : 0; 
+    LargeItems += partView->Blobs ? partView->Blobs->Total() : 0; 
 
-    OtherBytes += (partView->Small ? partView->Small->Raw.size() : 0);
-    OtherBytes += (partView->Large ? partView->Large->Raw.size() : 0);
-    OtherBytes += (partView->Blobs ? partView->Blobs->Raw.size() : 0);
+    OtherBytes += (partView->Small ? partView->Small->Raw.size() : 0); 
+    OtherBytes += (partView->Large ? partView->Large->Raw.size() : 0); 
+    OtherBytes += (partView->Blobs ? partView->Blobs->Raw.size() : 0); 
 }
 
-bool TPartStats::Remove(const TPartView& partView)
+bool TPartStats::Remove(const TPartView& partView) 
 {
     NUtil::SubSafe(PartsCount, ui64(1));
-    NUtil::SubSafe(IndexBytes, partView->IndexesRawSize);
-    NUtil::SubSafe(ByKeyBytes, partView->ByKey ? partView->ByKey->Raw.size() : 0);
-    NUtil::SubSafe(PlainBytes, partView->Stat.Bytes);
-    NUtil::SubSafe(CodedBytes, partView->Stat.Coded);
-    NUtil::SubSafe(RowsErase, partView->Stat.Drops);
-    NUtil::SubSafe(RowsTotal, partView->Stat.Rows);
+    NUtil::SubSafe(IndexBytes, partView->IndexesRawSize); 
+    NUtil::SubSafe(ByKeyBytes, partView->ByKey ? partView->ByKey->Raw.size() : 0); 
+    NUtil::SubSafe(PlainBytes, partView->Stat.Bytes); 
+    NUtil::SubSafe(CodedBytes, partView->Stat.Coded); 
+    NUtil::SubSafe(RowsErase, partView->Stat.Drops); 
+    NUtil::SubSafe(RowsTotal, partView->Stat.Rows); 
 
-    if (auto *small = partView->Small.Get()) {
+    if (auto *small = partView->Small.Get()) { 
         NUtil::SubSafe(SmallBytes, small->Stats().Size);
         NUtil::SubSafe(SmallItems, ui64(small->Stats().Items));
         NUtil::SubSafe(OtherBytes, ui64(small->Raw.size()));
     }
 
-    if (auto *large = partView->Large.Get()) {
+    if (auto *large = partView->Large.Get()) { 
         NUtil::SubSafe(LargeBytes, large->Stats().Size);
         NUtil::SubSafe(OtherBytes, large->Raw.size());
     }
 
-    if (auto *blobs = partView->Blobs.Get()) {
+    if (auto *blobs = partView->Blobs.Get()) { 
         NUtil::SubSafe(LargeItems, ui64(blobs->Total()));
         NUtil::SubSafe(OtherBytes, blobs->Raw.size());
     }

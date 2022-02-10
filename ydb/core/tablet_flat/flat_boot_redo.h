@@ -40,8 +40,8 @@ namespace NBoot {
             }
 
             for (auto slot: xrange(Queue.size()))
-                if (const auto &largeGlobId = Queue.at(slot).LargeGlobId)
-                    Pending += Spawn<TLoadBlobs>(largeGlobId, slot);
+                if (const auto &largeGlobId = Queue.at(slot).LargeGlobId) 
+                    Pending += Spawn<TLoadBlobs>(largeGlobId, slot); 
 
             Flush();
         }
@@ -62,9 +62,9 @@ namespace NBoot {
         void Flush() noexcept
         {
             for (TLogEntry *head = nullptr; Queue && *(head = &Queue[0]); ) {
-                auto index = TCookie(head->LargeGlobId.Lead.Cookie()).Index();
+                auto index = TCookie(head->LargeGlobId.Lead.Cookie()).Index(); 
 
-                if (head->LargeGlobId && index != TCookie::EIdx::RedoLz4) {
+                if (head->LargeGlobId && index != TCookie::EIdx::RedoLz4) { 
                     Apply(head->Stamp, *head, head->Body);
                 } else {
                     Apply(head->Stamp, *head, Codec->Decode(head->Body));
@@ -82,25 +82,25 @@ namespace NBoot {
 
         void Apply(ui64 stamp, const TLogEntry &entry, TString redo) noexcept
         {
-            const auto begin_ = Back->DatabaseImpl->Serial();
+            const auto begin_ = Back->DatabaseImpl->Serial(); 
 
-            Back->DatabaseImpl->Switch(stamp).ApplyRedo(redo).GrabAnnex();
+            Back->DatabaseImpl->Switch(stamp).ApplyRedo(redo).GrabAnnex(); 
 
-            const auto affects = Back->DatabaseImpl->GrabAffects();
+            const auto affects = Back->DatabaseImpl->GrabAffects(); 
 
             if (auto logl = Env->Logger()->Log(ELnLev::Debug)) {
                 logl
                     << NFmt::Do(*Back) << " redo log " << NFmt::TStamp(stamp)
-                    << " serial " << begin_ << " -> [" << Back->DatabaseImpl->First_
-                    << ", " << Back->DatabaseImpl->Serial() << "] applied"
+                    << " serial " << begin_ << " -> [" << Back->DatabaseImpl->First_ 
+                    << ", " << Back->DatabaseImpl->Serial() << "] applied" 
                     << ", affects " << NFmt::Arr(affects);
             }
 
             if (affects) {
                 if (auto *logic = Back->Redo.Get()) {
-                    if (entry.LargeGlobId) {
-                        logic->Push(stamp, affects, entry.LargeGlobId);
-                    } else { /* has no TLargeGlobId, thus was embedded to entry */
+                    if (entry.LargeGlobId) { 
+                        logic->Push(stamp, affects, entry.LargeGlobId); 
+                    } else { /* has no TLargeGlobId, thus was embedded to entry */ 
                         logic->Push(stamp, affects, std::move(entry.Body));
                     }
                 }

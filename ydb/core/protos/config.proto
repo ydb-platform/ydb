@@ -1,31 +1,31 @@
 import "google/protobuf/descriptor.proto";
 import "library/cpp/actors/protos/interconnect.proto";
-import "ydb/core/protos/blobstorage.proto";
-import "ydb/core/protos/blobstorage_config.proto";
-import "ydb/core/protos/blobstorage_vdisk_config.proto";
-import "ydb/core/protos/blobstorage_pdisk_config.proto";
-import "ydb/core/protos/cms.proto";
-import "ydb/core/protos/config_units.proto";
-import "ydb/core/protos/drivemodel.proto";
-import "ydb/core/protos/flat_scheme_op.proto";
-import "ydb/core/protos/http_config.proto";
-import "ydb/core/protos/hive.proto";
-import "ydb/core/protos/kqp.proto";
-import "ydb/core/protos/netclassifier.proto";
-import "ydb/core/protos/node_broker.proto";
-import "ydb/core/protos/pqconfig.proto";
-import "ydb/core/protos/resource_broker.proto";
-import "ydb/core/protos/shared_cache.proto";
-import "ydb/core/protos/stream.proto";
-import "ydb/core/protos/tablet.proto";
-import "ydb/core/protos/tablet_database.proto";
-import "ydb/core/protos/tenant_pool.proto";
-import "ydb/core/protos/tenant_slot_broker.proto";
-import "ydb/core/protos/auth.proto";
-import "ydb/core/protos/key.proto";
-import "ydb/core/protos/alloc.proto";
-import "ydb/core/protos/node_limits.proto";
-import "ydb/core/yq/libs/config/protos/yq_config.proto";
+import "ydb/core/protos/blobstorage.proto"; 
+import "ydb/core/protos/blobstorage_config.proto"; 
+import "ydb/core/protos/blobstorage_vdisk_config.proto"; 
+import "ydb/core/protos/blobstorage_pdisk_config.proto"; 
+import "ydb/core/protos/cms.proto"; 
+import "ydb/core/protos/config_units.proto"; 
+import "ydb/core/protos/drivemodel.proto"; 
+import "ydb/core/protos/flat_scheme_op.proto"; 
+import "ydb/core/protos/http_config.proto"; 
+import "ydb/core/protos/hive.proto"; 
+import "ydb/core/protos/kqp.proto"; 
+import "ydb/core/protos/netclassifier.proto"; 
+import "ydb/core/protos/node_broker.proto"; 
+import "ydb/core/protos/pqconfig.proto"; 
+import "ydb/core/protos/resource_broker.proto"; 
+import "ydb/core/protos/shared_cache.proto"; 
+import "ydb/core/protos/stream.proto"; 
+import "ydb/core/protos/tablet.proto"; 
+import "ydb/core/protos/tablet_database.proto"; 
+import "ydb/core/protos/tenant_pool.proto"; 
+import "ydb/core/protos/tenant_slot_broker.proto"; 
+import "ydb/core/protos/auth.proto"; 
+import "ydb/core/protos/key.proto"; 
+import "ydb/core/protos/alloc.proto"; 
+import "ydb/core/protos/node_limits.proto"; 
+import "ydb/core/yq/libs/config/protos/yq_config.proto"; 
 
 package NKikimrConfig;
 option java_package = "ru.yandex.kikimr.proto";
@@ -683,25 +683,25 @@ message TSqsConfig {
     optional string Root = 1 [default = "/Root/SQS"];
     // optional uint32 HttpPort = 2 [default = 8771]; // moved to HttpServerConfig
 
-    // URL that must be specified as an entry point to SQS cluster.
-    // It must be used if SQS nodes are placed behind the balancer.
-    // If this field is not specified, every node uses its own
-    // fqdn here.
+    // URL that must be specified as an entry point to SQS cluster. 
+    // It must be used if SQS nodes are placed behind the balancer. 
+    // If this field is not specified, every node uses its own 
+    // fqdn here. 
     optional string Endpoint = 3;
 
     optional THttpServerConfig HttpServerConfig = 4;
 
-    // Turn on queue leaders option
+    // Turn on queue leaders option 
     optional bool EnableQueueMaster = 6 [default = true]; // TODO: remove
     optional bool EnableQueueLeader = 68 [default = true];
 
-    // Time to live for queue attributes cache
+    // Time to live for queue attributes cache 
     optional uint64 QueueAttributesCacheTimeMs = 8 [default = 60000];
 
-    // Effective query execution time that is treated as slow query
+    // Effective query execution time that is treated as slow query 
     optional uint64 SlowRequestTimeMs = 9 [default = 2500];
 
-    // Max time value for long polling (param WaitTimeSeconds for ReceiveMessage)
+    // Max time value for long polling (param WaitTimeSeconds for ReceiveMessage) 
     optional uint64 MaxWaitTimeoutMs = 10 [default = 20000];
 
     optional uint32 SchemeCacheSoftRefreshTimeSeconds = 11 [default = 5];

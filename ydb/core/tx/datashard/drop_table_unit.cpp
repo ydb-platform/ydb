@@ -3,11 +3,11 @@
 #include "execution_unit_ctors.h"
 
 namespace NKikimr {
-namespace NDataShard {
+namespace NDataShard { 
 
 class TDropTableUnit : public TExecutionUnit {
 public:
-    TDropTableUnit(TDataShard &dataShard,
+    TDropTableUnit(TDataShard &dataShard, 
                    TPipeline &pipeline);
     ~TDropTableUnit() override;
 
@@ -21,7 +21,7 @@ public:
 private:
 };
 
-TDropTableUnit::TDropTableUnit(TDataShard &dataShard,
+TDropTableUnit::TDropTableUnit(TDataShard &dataShard, 
                                TPipeline &pipeline)
     : TExecutionUnit(EExecutionUnitKind::DropTable, false, dataShard, pipeline)
 {
@@ -103,11 +103,11 @@ void TDropTableUnit::Complete(TOperation::TPtr,
 {
 }
 
-THolder<TExecutionUnit> CreateDropTableUnit(TDataShard &dataShard,
+THolder<TExecutionUnit> CreateDropTableUnit(TDataShard &dataShard, 
                                             TPipeline &pipeline)
 {
     return THolder(new TDropTableUnit(dataShard, pipeline));
 }
 
-} // namespace NDataShard
+} // namespace NDataShard 
 } // namespace NKikimr

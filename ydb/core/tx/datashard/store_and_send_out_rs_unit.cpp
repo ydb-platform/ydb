@@ -3,13 +3,13 @@
 #include "execution_unit_ctors.h"
 
 namespace NKikimr {
-namespace NDataShard {
+namespace NDataShard { 
 
 using namespace NMiniKQL;
 
 class TStoreAndSendOutRSUnit : public TExecutionUnit {
 public:
-    TStoreAndSendOutRSUnit(TDataShard &dataShard,
+    TStoreAndSendOutRSUnit(TDataShard &dataShard, 
                            TPipeline &pipeline);
     ~TStoreAndSendOutRSUnit() override;
 
@@ -23,7 +23,7 @@ public:
 private:
 };
 
-TStoreAndSendOutRSUnit::TStoreAndSendOutRSUnit(TDataShard &dataShard,
+TStoreAndSendOutRSUnit::TStoreAndSendOutRSUnit(TDataShard &dataShard, 
                                                TPipeline &pipeline)
     : TExecutionUnit(EExecutionUnitKind::StoreAndSendOutRS, false, dataShard, pipeline)
 {
@@ -85,11 +85,11 @@ void TStoreAndSendOutRSUnit::Complete(TOperation::TPtr op,
         DataShard.SendReadSets(ctx, std::move(op->PreparedOutReadSets()));
 }
 
-THolder<TExecutionUnit> CreateStoreAndSendOutRSUnit(TDataShard &dataShard,
+THolder<TExecutionUnit> CreateStoreAndSendOutRSUnit(TDataShard &dataShard, 
                                                     TPipeline &pipeline)
 {
     return THolder(new TStoreAndSendOutRSUnit(dataShard, pipeline));
 }
 
-} // namespace NDataShard
+} // namespace NDataShard 
 } // namespace NKikimr

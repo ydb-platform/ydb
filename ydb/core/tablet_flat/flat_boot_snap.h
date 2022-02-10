@@ -10,8 +10,8 @@
 #include "flat_executor_gclogic.h"
 #include "flat_executor_txloglogic.h"
 
-#include <ydb/core/tablet_flat/flat_executor.pb.h>
-#include <ydb/core/util/pb.h>
+#include <ydb/core/tablet_flat/flat_executor.pb.h> 
+#include <ydb/core/util/pb.h> 
 #include <util/generic/xrange.h>
 
 namespace NKikimr {
@@ -39,12 +39,12 @@ namespace NBoot {
 
             if (!Snap) {
                 ProcessDeps(), Env->Finish(this);
-            } else if (Snap->LargeGlobId.Lead.Step() == 0) {
-                Y_Fail("Invalid TLogoBlobID of snaphot: " << Snap->LargeGlobId.Lead);
+            } else if (Snap->LargeGlobId.Lead.Step() == 0) { 
+                Y_Fail("Invalid TLogoBlobID of snaphot: " << Snap->LargeGlobId.Lead); 
             } else if (Snap->Body) {
-                Apply(Snap->LargeGlobId, Snap->Body);
+                Apply(Snap->LargeGlobId, Snap->Body); 
             } else {
-                Pending += Spawn<TLoadBlobs>(Snap->LargeGlobId, 0);
+                Pending += Spawn<TLoadBlobs>(Snap->LargeGlobId, 0); 
             }
         }
 
@@ -52,7 +52,7 @@ namespace NBoot {
         {
             auto *load = step->ConsumeAs<TLoadBlobs>(Pending);
 
-            Apply(load->LargeGlobId, load->Plain());
+            Apply(load->LargeGlobId, load->Plain()); 
         }
 
     private:
@@ -83,8 +83,8 @@ namespace NBoot {
                     << snap.Lead.Generation() << ":" << snap.Lead.Step()
                     << " change " << change << ", " << body.size() << "b"
                     << ", ABI " << edge << " of "
-                        << "[" << ui32(NTable::ECompatibility::Tail)
-                        << ", " << ui32(NTable::ECompatibility::Edge) << "]"
+                        << "[" << ui32(NTable::ECompatibility::Tail) 
+                        << ", " << ui32(NTable::ECompatibility::Edge) << "]" 
                     << ", GC{ +" << Proto.GcSnapDiscoveredSize()
                         << " -" << Proto.GcSnapLeftSize() << " }";
             }
@@ -93,7 +93,7 @@ namespace NBoot {
                 NTable::TAbi().Check(abi->GetTail(), abi->GetHead(), "snap");
         }
 
-        void ProcessSnap(const NPageCollection::TLargeGlobId &snap) noexcept
+        void ProcessSnap(const NPageCollection::TLargeGlobId &snap) noexcept 
         {
             Back->Snap = snap;
             Back->Serial = Proto.GetSerial();
@@ -145,12 +145,12 @@ namespace NBoot {
             for (const auto &one : Proto.GetSchemeInfoBodies())
                 blobs.emplace_back(LogoBlobIDFromLogoBlobID(one));
 
-            NPageCollection::TGroupBlobsByCookie chop(blobs);
+            NPageCollection::TGroupBlobsByCookie chop(blobs); 
 
             while (auto span = chop.Do()) {
                 const auto group = Logic->GetBSGroupFor(span[0]);
 
-                Back->AlterLog.push_back({ NPageCollection::TGroupBlobsByCookie::ToLargeGlobId(span, group), { } });
+                Back->AlterLog.push_back({ NPageCollection::TGroupBlobsByCookie::ToLargeGlobId(span, group), { } }); 
             }
         }
 
@@ -166,7 +166,7 @@ namespace NBoot {
             for (const auto &x : Proto.GetNonSnapLogBodies())
                 logos.emplace_back(LogoBlobIDFromLogoBlobID(x));
 
-            NPageCollection::TGroupBlobsByCookie chop(logos);
+            NPageCollection::TGroupBlobsByCookie chop(logos); 
 
             size_t offset = 0;
             const size_t size = Proto.EmbeddedLogBodiesSize();
@@ -177,9 +177,9 @@ namespace NBoot {
                 auto left = span ? TTxStamp{ span[0].Generation(), span[0].Step() } : TTxStamp{ Max<ui64>() };
 
                 if (left < right) {
-                    auto largeGlobId = NPageCollection::TGroupBlobsByCookie::ToLargeGlobId(span, Logic->GetBSGroupFor(span[0]));
+                    auto largeGlobId = NPageCollection::TGroupBlobsByCookie::ToLargeGlobId(span, Logic->GetBSGroupFor(span[0])); 
 
-                    Back->RedoLog.emplace_back(left, largeGlobId);
+                    Back->RedoLog.emplace_back(left, largeGlobId); 
                 } else {
                     Back->RedoLog.emplace_back(right, lx->GetBody());
 
@@ -235,7 +235,7 @@ namespace NBoot {
                         promote start age to the current snapshot since
                         waste, produced until current state, is known. */
 
-                    const auto &lead = Snap->LargeGlobId.Lead;
+                    const auto &lead = Snap->LargeGlobId.Lead; 
 
                     waste->Since = TTxStamp(lead.Generation(), lead.Step());
                 }
@@ -249,23 +249,23 @@ namespace NBoot {
             if (entry && entry->IsSnapshot) {
                 TTxStamp stamp{ entry->Id.first, entry->Id.second };
 
-                const auto span = NPageCollection::TGroupBlobsByCookie(entry->References).Do();
-                const auto largeGlobId = NPageCollection::TGroupBlobsByCookie::ToLargeGlobId(span, Logic->GetBSGroupFor(span[0]));
+                const auto span = NPageCollection::TGroupBlobsByCookie(entry->References).Do(); 
+                const auto largeGlobId = NPageCollection::TGroupBlobsByCookie::ToLargeGlobId(span, Logic->GetBSGroupFor(span[0])); 
 
                 Y_VERIFY(span.size() == entry->References.size());
                 Y_VERIFY(TCookie(span[0].Cookie()).Type() == TCookie::EType::Log);
-                Y_VERIFY(largeGlobId, "Cannot make TLargeGlobId for snapshot");
+                Y_VERIFY(largeGlobId, "Cannot make TLargeGlobId for snapshot"); 
 
                 if (auto logl = Env->Logger()->Log(ELnLev::Debug)) {
                     logl
                         << NFmt::Do(*Back) << " snap in deps on "
-                        << NFmt::TStamp(stamp) << ", " << NFmt::Do(largeGlobId);
+                        << NFmt::TStamp(stamp) << ", " << NFmt::Do(largeGlobId); 
                 }
 
                 ProcessGcLogEntry(*entry, true);
 
                 Deps->Entries.pop_front(); /* skip record in ProcessDeps() */
-                Snap = new TBody{ largeGlobId, { } };
+                Snap = new TBody{ largeGlobId, { } }; 
             }
         }
 
@@ -281,7 +281,7 @@ namespace NBoot {
                         Y_VERIFY(entry.References.empty());
                         Back->RedoLog.emplace_back(stamp, entry.EmbeddedLogBody);
                     } else {
-                        NPageCollection::TGroupBlobsByCookie chop(entry.References);
+                        NPageCollection::TGroupBlobsByCookie chop(entry.References); 
 
                         while (auto span = chop.Do())
                             SortLogoSpan(stamp, span);
@@ -311,7 +311,7 @@ namespace NBoot {
             Logic->Result().GcLogic->ApplyLogEntry(gcEntry);
         }
 
-        void SortLogoSpan(TTxStamp stamp, NPageCollection::TGroupBlobsByCookie::TArray span)
+        void SortLogoSpan(TTxStamp stamp, NPageCollection::TGroupBlobsByCookie::TArray span) 
         {
             Y_VERIFY(TCookie(span[0].Cookie()).Type() == TCookie::EType::Log);
 
@@ -320,16 +320,16 @@ namespace NBoot {
 
             if (index == EIdx::Redo || index == EIdx::RedoLz4) {
 
-                Back->RedoLog.emplace_back(stamp, NPageCollection::TGroupBlobsByCookie::ToLargeGlobId(span, group));
+                Back->RedoLog.emplace_back(stamp, NPageCollection::TGroupBlobsByCookie::ToLargeGlobId(span, group)); 
 
             } else if (index == EIdx::Alter) {
 
-                Back->AlterLog.push_back({ NPageCollection::TGroupBlobsByCookie::ToLargeGlobId(span, group), { } });
+                Back->AlterLog.push_back({ NPageCollection::TGroupBlobsByCookie::ToLargeGlobId(span, group), { } }); 
 
             } else if (index == EIdx::Turn || index == EIdx::TurnLz4) {
 
                 for (auto &one: span) {
-                    Back->Switches.push_back(NPageCollection::TLargeGlobId{ group, one });
+                    Back->Switches.push_back(NPageCollection::TLargeGlobId{ group, one }); 
                 }
 
             } else if (index == EIdx::Loan) {
@@ -342,7 +342,7 @@ namespace NBoot {
                     for (auto &one: span)
                         Back->GCELog.push_back({ { group, one }, { }});
                 }
-            } else if (TCookie::CookieRangeRaw().Has(span[0].Cookie())) {
+            } else if (TCookie::CookieRangeRaw().Has(span[0].Cookie())) { 
                 /* Annex (external blobs for redo log), isn't used here */
             } else {
                 Y_Fail(

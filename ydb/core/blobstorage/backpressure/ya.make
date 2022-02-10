@@ -1,35 +1,35 @@
-LIBRARY()
-
+LIBRARY() 
+ 
 OWNER(alexvru)
-
-PEERDIR(
-    contrib/libs/protobuf
+ 
+PEERDIR( 
+    contrib/libs/protobuf 
     library/cpp/actors/core
     library/cpp/containers/intrusive_rb_tree
-    ydb/core/base
-    ydb/core/blobstorage/groupinfo
-    ydb/core/blobstorage/lwtrace_probes
-    ydb/core/protos
-)
-
-SRCS(
+    ydb/core/base 
+    ydb/core/blobstorage/groupinfo 
+    ydb/core/blobstorage/lwtrace_probes 
+    ydb/core/protos 
+) 
+ 
+SRCS( 
     common.h
-    defs.h
+    defs.h 
     event.cpp
     event.h
     queue.cpp
     queue.h
-    queue_backpressure_client.cpp
-    queue_backpressure_client.h
-    queue_backpressure_common.h
-    queue_backpressure_server.h
+    queue_backpressure_client.cpp 
+    queue_backpressure_client.h 
+    queue_backpressure_common.h 
+    queue_backpressure_server.h 
     unisched.cpp
     unisched.h
-)
-
-END()
-
-RECURSE_FOR_TESTS(
-    ut
-    ut_client
-)
+) 
+ 
+END() 
+ 
+RECURSE_FOR_TESTS( 
+    ut 
+    ut_client 
+) 

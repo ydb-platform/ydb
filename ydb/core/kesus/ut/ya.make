@@ -1,4 +1,4 @@
 RECURSE_ROOT_RELATIVE(
-    ydb/core/kesus/proxy/ut
-    ydb/core/kesus/tablet/ut
+    ydb/core/kesus/proxy/ut 
+    ydb/core/kesus/tablet/ut 
 )

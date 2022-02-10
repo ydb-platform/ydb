@@ -189,7 +189,7 @@ private:
         TInstant deadline = TInstant::Max();
         if (record.HasMsgQoS() && record.GetMsgQoS().HasDeadlineSeconds()) {
             deadline = TInstant::Seconds(record.GetMsgQoS().GetDeadlineSeconds());
-        }
+        } 
 
         QLOG_DEBUG_S("BSQ05", "T# " << TypeName<decltype(*ev->Get())>()
             << " deadline# " << deadline.ToString() << " State# " << GetStateName()
@@ -209,7 +209,7 @@ private:
             ctx.Send(ev->Sender, reply.release(), 0, ev->Cookie);
         }
     }
-
+ 
     ////////////////////////////////////////////////////////////////////////
     // BACKWARD SECTOR
     ////////////////////////////////////////////////////////////////////////
@@ -393,7 +393,7 @@ private:
             ResetConnection(ctx, NKikimrProto::ERROR, msg, TDuration::Zero());
             return;
         }
-
+ 
         // reset watchdog back to default interval -- we've got successful response
         ResetWatchdogTimer(ctx.Now());
 
@@ -404,7 +404,7 @@ private:
         if (isOk) {
             NWilson::TTraceId traceId = std::move(ev->TraceId);
             ctx.Send(sender, ev->Release().Release(), 0, cookie, std::move(traceId));
-        }
+        } 
         QLOG_DEBUG_S("BSQ08", "T# " << TypeName<TEv>()
             << " sequenceId# " << sequenceId << " msgId# " << msgId
             << " status# " << NKikimrProto::EReplyStatus_Name(status)
@@ -413,7 +413,7 @@ private:
 
         Pump(ctx);
     }
-
+ 
     ////////////////////////////////////////////////////////////////////////
     // CONTROL SECTOR
     ////////////////////////////////////////////////////////////////////////
@@ -440,13 +440,13 @@ private:
             HandleWindow(ctx, window);
             ResetWatchdogTimer(ctx.Now());
             Pump(ctx);
-        }
+        } 
     }
-
+ 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // CONNECT SECTOR
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
+ 
     void ResetConnection(const TActorContext& ctx, NKikimrProto::EReplyStatus status, const TString& errorReason,
             TDuration timeout) {
         switch (State) {
@@ -454,7 +454,7 @@ private:
             case EState::CHECK_READINESS_SENT:
             case EState::EXPECT_READY_NOTIFY:
                 break;
-
+ 
             case EState::READY:
                 QLOG_NOTICE_S("BSQ96", "connection lost status# " << NKikimrProto::EReplyStatus_Name(status)
                     << " errorReason# " << errorReason << " timeout# " << timeout);
@@ -488,7 +488,7 @@ private:
             SessionId = {};
         }
     }
-
+ 
     // issue TEvVCheckReadiness message to VDisk; we ask for session subscription and delivery tracking, thus there are
     // the following cases:
     // * message reaches original VDisk and the TEvVCheckReadinessResult message is issued
@@ -902,7 +902,7 @@ private:
         }
     }
 };
-
+ 
 } // NKikimr::NBsQueue
 
 namespace NKikimr {
@@ -918,5 +918,5 @@ IActor* CreateVDiskBackpressureClient(const TIntrusivePtr<TBlobStorageGroupInfo>
     return new NBsQueue::TVDiskBackpressureClientActor(info, vdiskId, queueId, counters, bspctx, clientId, queueName,
         interconnectChannel, local, watchdogTimeout, flowRecord, visibility);
 }
-
-} // NKikimr
+ 
+} // NKikimr 

@@ -11,8 +11,8 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/core/kqp/common
-    ydb/library/naming_conventions
+    ydb/core/kqp/common 
+    ydb/library/naming_conventions 
     ydb/library/yql/dq/opt
 )
 

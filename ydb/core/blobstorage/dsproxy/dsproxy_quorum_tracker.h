@@ -2,7 +2,7 @@
 
 #include "defs.h"
 
-#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_sets.h>
+#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_sets.h> 
 
 namespace NKikimr {
 
@@ -27,8 +27,8 @@ namespace NKikimr {
     public:
         TGroupQuorumTracker(const TBlobStorageGroupInfo *info)
             : Info(info)
-            , SuccessfulDisks(&Info->GetTopology())
-            , ErroneousDisks(&Info->GetTopology())
+            , SuccessfulDisks(&Info->GetTopology()) 
+            , ErroneousDisks(&Info->GetTopology()) 
             , NumResendsRemain(Info->GetTotalVDisksNum())
             , NumStatusRemain(2 * Info->GetTotalVDisksNum())
         {}

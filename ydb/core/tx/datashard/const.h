@@ -3,7 +3,7 @@
 #include "defs.h"
 
 namespace NKikimr {
-namespace NDataShard {
+namespace NDataShard { 
 
 constexpr ui64 INVALID_TABLET_ID = Max<ui64>();
 constexpr ui64 MEMORY_REQUEST_FACTOR = 8;
@@ -16,5 +16,5 @@ namespace NLimits {
     static constexpr ui64 MaxWriteValueSize = 16 * 1024 * 1024; // 16MB
 }
 
-} // namespace NDataShard
+} // namespace NDataShard 
 } // namespace NKikimr

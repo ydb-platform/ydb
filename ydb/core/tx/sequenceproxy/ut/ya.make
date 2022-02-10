@@ -1,4 +1,4 @@
-UNITTEST_FOR(ydb/core/tx/sequenceproxy)
+UNITTEST_FOR(ydb/core/tx/sequenceproxy) 
 
 OWNER(g:kikimr)
 
@@ -7,7 +7,7 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/core/testlib
+    ydb/core/testlib 
 )
 
 YQL_LAST_ABI_VERSION()

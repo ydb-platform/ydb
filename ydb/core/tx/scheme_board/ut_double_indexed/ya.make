@@ -1,4 +1,4 @@
-UNITTEST_FOR(ydb/core/tx/scheme_board)
+UNITTEST_FOR(ydb/core/tx/scheme_board) 
 
 OWNER(
     ilnaz

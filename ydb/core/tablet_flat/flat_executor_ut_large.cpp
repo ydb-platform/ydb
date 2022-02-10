@@ -80,12 +80,12 @@ Y_UNIT_TEST_SUITE(TFlatTableLongTxLarge) {
             const auto key = NScheme::TInt64::TInstance(Key);
 
             const auto val = NScheme::TString::TInstance(Value);
-            NTable::TUpdateOp ops{ ColumnId, NTable::ECellOp::Set, val };
+            NTable::TUpdateOp ops{ ColumnId, NTable::ECellOp::Set, val }; 
 
             if (TxId == 0) {
-                txc.DB.Update(TableId, NTable::ERowOp::Upsert, { key }, { ops });
+                txc.DB.Update(TableId, NTable::ERowOp::Upsert, { key }, { ops }); 
             } else {
-                txc.DB.UpdateTx(TableId, NTable::ERowOp::Upsert, { key }, { ops }, TxId);
+                txc.DB.UpdateTx(TableId, NTable::ERowOp::Upsert, { key }, { ops }, TxId); 
             }
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
             return true;
@@ -131,8 +131,8 @@ Y_UNIT_TEST_SUITE(TFlatTableLongTxLarge) {
                 DbgPrintValue(value2, row.Get(2), NScheme::TString::TypeId);
 
                 builder << "Key " << key << " = " << row.GetRowState()
-                    << " value = " << NTable::ECellOp(row.GetOp(1)) << " " << value
-                    << " value2 = " << NTable::ECellOp(row.GetOp(2)) << " " << value2 << Endl;
+                    << " value = " << NTable::ECellOp(row.GetOp(1)) << " " << value 
+                    << " value2 = " << NTable::ECellOp(row.GetOp(2)) << " " << value2 << Endl; 
             }
 
             Data = builder;

@@ -1,4 +1,4 @@
-UNITTEST_FOR(ydb/core/tablet_flat)
+UNITTEST_FOR(ydb/core/tablet_flat) 
 
 FORK_SUBTESTS()
 
@@ -55,16 +55,16 @@ SRCS(
 )
 
 RESOURCE(
-    ../test/data/002_full_part.pages abi/002_full_part.pages
-    ../test/data/008_basics_db.redo abi/008_basics_db.redo
+    ../test/data/002_full_part.pages abi/002_full_part.pages 
+    ../test/data/008_basics_db.redo abi/008_basics_db.redo 
 )
 
 PEERDIR(
-    library/cpp/resource
-    ydb/core/scheme
-    ydb/core/tablet_flat/test/libs/exec
-    ydb/core/tablet_flat/test/libs/table
-    ydb/library/yql/public/udf/service/exception_policy
+    library/cpp/resource 
+    ydb/core/scheme 
+    ydb/core/tablet_flat/test/libs/exec 
+    ydb/core/tablet_flat/test/libs/table 
+    ydb/library/yql/public/udf/service/exception_policy 
 )
 
 END()

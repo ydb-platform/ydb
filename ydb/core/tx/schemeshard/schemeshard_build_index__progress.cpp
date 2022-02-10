@@ -3,10 +3,10 @@
 #include "schemeshard_build_index_helpers.h"
 #include "schemeshard_build_index_tx_base.h"
 
-#include <ydb/core/tx/datashard/range_ops.h>
+#include <ydb/core/tx/datashard/range_ops.h> 
 
-#include <ydb/public/api/protos/ydb_issue_message.pb.h>
-#include <ydb/public/api/protos/ydb_status_codes.pb.h>
+#include <ydb/public/api/protos/ydb_issue_message.pb.h> 
+#include <ydb/public/api/protos/ydb_status_codes.pb.h> 
 
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 

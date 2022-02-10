@@ -1,8 +1,8 @@
 #pragma once
 
 #include "hive.h"
-#include <ydb/core/protos/hive.pb.h>
-#include <ydb/core/base/location.h>
+#include <ydb/core/protos/hive.pb.h> 
+#include <ydb/core/base/location.h> 
 
 namespace NKikimr {
 namespace NHive {

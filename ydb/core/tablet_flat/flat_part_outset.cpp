@@ -4,19 +4,19 @@
 namespace NKikimr {
 namespace NTable {
 
-void TPageCollectionComponents::ParsePacket(TSharedData meta) {
+void TPageCollectionComponents::ParsePacket(TSharedData meta) { 
     Y_VERIFY_DEBUG(!Packet, "Packet is already parsed");
 
-    Packet = new NPageCollection::TPageCollection(LargeGlobId, std::move(meta));
+    Packet = new NPageCollection::TPageCollection(LargeGlobId, std::move(meta)); 
 }
 
-TEpoch TPartComponents::GetEpoch() const {
+TEpoch TPartComponents::GetEpoch() const { 
     if (Epoch != TEpoch::Max()) {
         return Epoch;
     }
 
-    Y_VERIFY(PageCollectionComponents && PageCollectionComponents[0].Packet,
-        "PartComponents has neither a known epoch, nor a parsed meta packet");
+    Y_VERIFY(PageCollectionComponents && PageCollectionComponents[0].Packet, 
+        "PartComponents has neither a known epoch, nor a parsed meta packet"); 
 
     return TLoader::GrabEpoch(*this);
 }

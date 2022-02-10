@@ -7,7 +7,7 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/public/lib/ydb_cli/commands
+    ydb/public/lib/ydb_cli/commands 
 )
 
 END()

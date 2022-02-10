@@ -1,6 +1,6 @@
 #include "fetch.h"
 
-#include <ydb/library/yql/utils/log/log.h>
+#include <ydb/library/yql/utils/log/log.h> 
 
 #include <library/cpp/openssl/io/stream.h>
 #include <library/cpp/http/misc/httpcodes.h>

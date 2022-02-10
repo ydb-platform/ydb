@@ -1,8 +1,8 @@
 #pragma once
 #include "defs.h"
 
-#include <ydb/core/base/blobstorage.h>
-#include <ydb/core/protos/tenant_slot_broker.pb.h>
+#include <ydb/core/base/blobstorage.h> 
+#include <ydb/core/protos/tenant_slot_broker.pb.h> 
 
 namespace NKikimr {
 namespace NTenantSlotBroker {

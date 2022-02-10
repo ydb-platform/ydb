@@ -59,8 +59,8 @@ namespace NTable {
         {
             ui64 rows = 0;
 
-            for (const auto &memTable : Frozen)
-                rows += memTable->GetRowCount();
+            for (const auto &memTable : Frozen) 
+                rows += memTable->GetRowCount(); 
 
             for (const auto &part : Flatten)
                 rows += part->Stat.Rows;
@@ -77,8 +77,8 @@ namespace NTable {
         {
             TRowVersion minVersion = TRowVersion::Max();
 
-            for (const auto &memTable : Frozen)
-                minVersion = Min(minVersion, memTable->GetMinRowVersion());
+            for (const auto &memTable : Frozen) 
+                minVersion = Min(minVersion, memTable->GetMinRowVersion()); 
 
             for (const auto &part : Flatten)
                 minVersion = Min(minVersion, part->MinRowVersion);
@@ -97,7 +97,7 @@ namespace NTable {
         { }
 
         // This constructor is mainly for tests
-        TSubset(TEpoch head, TIntrusiveConstPtr<TRowScheme> scheme, TVector<TMemTableSnapshot> frozen)
+        TSubset(TEpoch head, TIntrusiveConstPtr<TRowScheme> scheme, TVector<TMemTableSnapshot> frozen) 
             : Head(head)
             , Scheme(std::move(scheme))
             , Frozen(std::move(frozen))
@@ -113,8 +113,8 @@ namespace NTable {
         const TEpoch Head;
 
         TIntrusiveConstPtr<TRowScheme> Scheme;
-        TVector<TMemTableSnapshot> Frozen;
-        TVector<TPartView> Flatten;
+        TVector<TMemTableSnapshot> Frozen; 
+        TVector<TPartView> Flatten; 
         TVector<TIntrusiveConstPtr<TColdPart>> ColdParts;
         TTransactionMap<TRowVersion> CommittedTransactions;
         TTransactionSet RemovedTransactions;

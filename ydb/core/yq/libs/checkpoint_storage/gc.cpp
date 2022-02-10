@@ -1,6 +1,6 @@
 #include "gc.h"
 
-#include <ydb/core/yq/libs/checkpointing_common/defs.h>
+#include <ydb/core/yq/libs/checkpointing_common/defs.h> 
 #include <ydb/core/yq/libs/checkpoint_storage/events/events.h>
 #include <ydb/core/yq/libs/actors/logging/log.h>
 

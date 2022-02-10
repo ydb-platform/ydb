@@ -6,7 +6,7 @@
 #include <ydb/library/yql/providers/dq/backtrace/backtrace.h>
 #include <ydb/library/yql/providers/dq/api/protos/dqs.pb.h>
 #include <ydb/library/yql/providers/dq/api/protos/task_command_executor.pb.h>
-#include <ydb/library/yql/utils/backtrace/backtrace.h>
+#include <ydb/library/yql/utils/backtrace/backtrace.h> 
 
 #include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
 #include <ydb/library/yql/minikql/mkql_node_serialization.h>
@@ -16,7 +16,7 @@
 #include <ydb/library/yql/minikql/aligned_page_pool.h>
 #include <ydb/library/yql/dq/runtime/dq_input_channel.h>
 #include <ydb/library/yql/dq/runtime/dq_output_channel.h>
-#include <ydb/library/yql/utils/log/log.h>
+#include <ydb/library/yql/utils/log/log.h> 
 #include <ydb/library/yql/utils/yql_panic.h>
 
 #include <util/system/thread.h>

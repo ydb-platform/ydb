@@ -6,7 +6,7 @@
 #include "util_basics.h"
 #include "util_deref.h"
 
-#include <ydb/core/base/shared_data.h>
+#include <ydb/core/base/shared_data.h> 
 
 #include <library/cpp/blockcodecs/codecs.h>
 #include <util/generic/buffer.h>
@@ -16,12 +16,12 @@ namespace NTable {
 namespace NPage {
 
 
-    struct TDataPage {
+    struct TDataPage { 
 
         /*
                 TRecord binary layout v1
             .-------------------------.
-            | ERowOp                  | header
+            | ERowOp                  | header 
             .---------.---------------.       -.
             | cell op | value OR offs | cell_1 |
             .---------.---------------.        |
@@ -36,10 +36,10 @@ namespace NPage {
 #pragma pack(push,1)
 
         struct TItem {
-            TCellOp GetOp(bool key) const noexcept
+            TCellOp GetOp(bool key) const noexcept 
             {
                 return
-                    key ? TCellOp(Null ? ECellOp::Null : ECellOp::Set) : TCellOp::By(Flg);
+                    key ? TCellOp(Null ? ECellOp::Null : ECellOp::Set) : TCellOp::By(Flg); 
             }
 
             union {
@@ -74,11 +74,11 @@ namespace NPage {
             }
         } Y_PACKED;
 
-        struct TRecord : public TDataPageRecord<TRecord, TItem> {
+        struct TRecord : public TDataPageRecord<TRecord, TItem> { 
             ui8 Fields_;
 
-            ERowOp GetRop() const noexcept {
-                return ERowOp(Fields_ & 0x0F);
+            ERowOp GetRop() const noexcept { 
+                return ERowOp(Fields_ & 0x0F); 
             }
 
             bool IsErased() const noexcept {
@@ -102,7 +102,7 @@ namespace NPage {
                 Fields_ = 0;
             }
 
-            void SetFields(ERowOp rop, bool erased, bool versioned, bool delta) noexcept {
+            void SetFields(ERowOp rop, bool erased, bool versioned, bool delta) noexcept { 
                 Fields_ = ui8(rop) | (delta ? 0x20 : ((erased ? 0x80 : 0) | (versioned ? 0x40 : 0)));
             }
 
@@ -149,17 +149,17 @@ namespace NPage {
 
 #pragma pack(pop)
 
-        static_assert(sizeof(TItem) == 1, "Invalid TDataPage TItem size");
-        static_assert(sizeof(TVersion) == 16, "Invalid TDataPage TVersion size");
-        static_assert(sizeof(TRecord) == 1, "Invalid TDataPage TRecord size");
-        static_assert(sizeof(TExtra) == 8, "Invalid TDataPage page extra chunk");
+        static_assert(sizeof(TItem) == 1, "Invalid TDataPage TItem size"); 
+        static_assert(sizeof(TVersion) == 16, "Invalid TDataPage TVersion size"); 
+        static_assert(sizeof(TRecord) == 1, "Invalid TDataPage TRecord size"); 
+        static_assert(sizeof(TExtra) == 8, "Invalid TDataPage page extra chunk"); 
 
         using TBlock = TBlockWithRecords<TRecord>;
 
     public:
         using TIter = TBlock::TIterator;
 
-        TDataPage(const TSharedData *raw = nullptr) noexcept
+        TDataPage(const TSharedData *raw = nullptr) noexcept 
         {
             Set(raw);
         }
@@ -184,15 +184,15 @@ namespace NPage {
             return Raw ? BaseRow_ : Max<TRowId>();
         }
 
-        TDataPage& Set(const TSharedData *raw = nullptr) noexcept
+        TDataPage& Set(const TSharedData *raw = nullptr) noexcept 
         {
             Page = { };
 
             if (Raw = raw ? *raw : TSharedData{ }) {
                 const void* base = Raw.data();
-                auto got = NPage::THello().Read(Raw, EPage::DataPage);
+                auto got = NPage::THello().Read(Raw, EPage::DataPage); 
 
-                Y_VERIFY(got.Version == 1, "Unknown EPage::DataPage version");
+                Y_VERIFY(got.Version == 1, "Unknown EPage::DataPage version"); 
 
                 if (got.Codec != ECodec::Plain) {
                     /* Compressed, should convert to regular page */

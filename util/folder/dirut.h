@@ -40,7 +40,7 @@ char* mkdtemp(char* path);
 bool IsDir(const TString& path);
 
 int mkpath(char* path, int mode = 0777);
-
+ 
 TString GetHomeDir();
 
 void MakeDirIfNotExist(const char* path, int mode = 0777);

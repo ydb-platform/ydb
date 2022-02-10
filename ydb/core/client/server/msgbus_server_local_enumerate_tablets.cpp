@@ -1,6 +1,6 @@
 #include "msgbus_servicereq.h"
-#include <ydb/core/mind/local.h>
-#include <ydb/core/protos/local.pb.h>
+#include <ydb/core/mind/local.h> 
+#include <ydb/core/protos/local.pb.h> 
 namespace NKikimr {
 namespace NMsgBusProxy {
 

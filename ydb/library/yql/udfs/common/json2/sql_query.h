@@ -4,10 +4,10 @@
 #include "compile_path.h"
 
 #include <ydb/library/yql/core/yql_atom_enums.h>
-#include <ydb/library/yql/public/udf/udf_type_builder.h>
-#include <ydb/library/yql/public/udf/udf_value.h>
-#include <ydb/library/yql/public/udf/udf_helpers.h>
-#include <ydb/library/yql/minikql/dom/node.h>
+#include <ydb/library/yql/public/udf/udf_type_builder.h> 
+#include <ydb/library/yql/public/udf/udf_value.h> 
+#include <ydb/library/yql/public/udf/udf_helpers.h> 
+#include <ydb/library/yql/minikql/dom/node.h> 
 
 #include <util/generic/yexception.h>
 
@@ -178,5 +178,5 @@ namespace NJson2Udf {
     TStringRef TSqlQuery<EDataSlot::JsonDocument, EJsonQueryWrap::ConditionalWrap>::Name() {
         return "JsonDocumentSqlQueryConditionalWrap";
     }
-}
-
+} 
+ 

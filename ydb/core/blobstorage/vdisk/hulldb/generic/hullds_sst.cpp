@@ -1,6 +1,6 @@
 #include "hullds_sst.h"
 #include "hullds_sst_it.h"
-#include <ydb/core/blobstorage/base/utility.h>
+#include <ydb/core/blobstorage/base/utility.h> 
 #include <library/cpp/monlib/service/pages/templates.h>
 
 namespace NKikimr {
@@ -29,13 +29,13 @@ namespace NKikimr {
         sum += Info;
     }
 
-    template <class TKey, class TMemRec>
-    void TLevelSegment<TKey, TMemRec>::Output(IOutputStream &str) const {
-        str << "[" << FirstKey().ToString() << " " << LastKey().ToString() << " Info# ";
-        Info.Output(str);
-        str << " Ratio# " << StorageRatio.MonSummary() << "]";
-    }
-
+    template <class TKey, class TMemRec> 
+    void TLevelSegment<TKey, TMemRec>::Output(IOutputStream &str) const { 
+        str << "[" << FirstKey().ToString() << " " << LastKey().ToString() << " Info# "; 
+        Info.Output(str); 
+        str << " Ratio# " << StorageRatio.MonSummary() << "]"; 
+    } 
+ 
     template struct TLevelSegment<TKeyLogoBlob, TMemRecLogoBlob>;
     template struct TLevelSegment<TKeyBarrier, TMemRecBarrier>;
     template struct TLevelSegment<TKeyBlock, TMemRecBlock>;

@@ -7,15 +7,15 @@
 #include <ydb/library/yql/dq/common/dq_common.h>
 #include <ydb/library/yql/dq/proto/dq_checkpoint.pb.h>
 
-#include <ydb/library/yql/utils/log/log.h>
+#include <ydb/library/yql/utils/log/log.h> 
 #include <ydb/library/yql/minikql/comp_nodes/mkql_saveload.h>
 #include <ydb/library/yql/minikql/mkql_alloc.h>
 #include <ydb/library/yql/minikql/mkql_string_util.h>
 #include <ydb/library/yql/providers/pq/proto/dq_io_state.pb.h>
 #include <ydb/library/yql/utils/yql_panic.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/persqueue.h>
-#include <ydb/public/sdk/cpp/client/ydb_types/credentials/credentials.h>
+#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/persqueue.h> 
+#include <ydb/public/sdk/cpp/client/ydb_types/credentials/credentials.h> 
 
 #include <library/cpp/actors/core/actor.h>
 #include <library/cpp/actors/core/event_local.h>
@@ -32,8 +32,8 @@
 #include <variant>
 
 namespace NKikimrServices {
-    // using constant value from ydb/core/protos/services.proto
-    // but to avoid peerdir on ydb/core/protos we introduce this constant
+    // using constant value from ydb/core/protos/services.proto 
+    // but to avoid peerdir on ydb/core/protos we introduce this constant 
     constexpr ui32 KQP_COMPUTE = 535;
 };
 

@@ -3,7 +3,7 @@
 #include "datashard_impl.h"
 
 namespace NKikimr {
-namespace NDataShard {
+namespace NDataShard { 
 
 const TSet<TStepOrder> TTransQueue::EMPTY_PLAN;
 
@@ -34,7 +34,7 @@ void TTransQueue::RemoveTxInFly(ui64 txId) {
 }
 
 bool TTransQueue::Load(NIceDb::TNiceDb& db) {
-    using Schema = TDataShard::Schema;
+    using Schema = TDataShard::Schema; 
 
     // Load must be idempotent
     Y_VERIFY(TxsInFly.empty());
@@ -186,7 +186,7 @@ bool TTransQueue::Load(NIceDb::TNiceDb& db) {
 }
 
 void TTransQueue::ProposeSchemaTx(NIceDb::TNiceDb& db, const TSchemaOperation& op) {
-    using Schema = TDataShard::Schema;
+    using Schema = TDataShard::Schema; 
 
     // Auto-ack previous schema operation
     if (!SchemaOps.empty()) {
@@ -220,7 +220,7 @@ void TTransQueue::ProposeSchemaTx(NIceDb::TNiceDb& db, const TSchemaOperation& o
 }
 
 void TTransQueue::ProposeTx(NIceDb::TNiceDb& db, TOperation::TPtr op, TActorId source, const TStringBuf& txBody) {
-    using Schema = TDataShard::Schema;
+    using Schema = TDataShard::Schema; 
 
     const ui64 preserveFlagsMask = TTxFlags::PublicFlagsMask | TTxFlags::PreservedPrivateFlagsMask;
 
@@ -243,7 +243,7 @@ void TTransQueue::ProposeTx(NIceDb::TNiceDb& db, TOperation::TPtr op, TActorId s
 }
 
 void TTransQueue::UpdateTxFlags(NIceDb::TNiceDb& db, ui64 txId, ui64 flags) {
-    using Schema = TDataShard::Schema;
+    using Schema = TDataShard::Schema; 
 
     Y_VERIFY(TxsInFly.contains(txId));
 
@@ -255,7 +255,7 @@ void TTransQueue::UpdateTxFlags(NIceDb::TNiceDb& db, ui64 txId, ui64 flags) {
 }
 
 void TTransQueue::UpdateTxBody(NIceDb::TNiceDb& db, ui64 txId, const TStringBuf& txBody) {
-    using Schema = TDataShard::Schema;
+    using Schema = TDataShard::Schema; 
 
     db.Table<Schema::TxDetails>().Key(txId, Self->TabletID())
         .Update<Schema::TxDetails::Body>(TString(txBody));
@@ -263,7 +263,7 @@ void TTransQueue::UpdateTxBody(NIceDb::TNiceDb& db, ui64 txId, const TStringBuf&
 
 void TTransQueue::RemoveTx(NIceDb::TNiceDb &db,
                            const TOperation &op) {
-    using Schema = TDataShard::Schema;
+    using Schema = TDataShard::Schema; 
 
     db.Table<Schema::TxMain>().Key(op.GetTxId()).Delete();
     db.Table<Schema::TxDetails>().Key(op.GetTxId(), Self->TabletID()).Delete();
@@ -279,13 +279,13 @@ void TTransQueue::RemoveTx(NIceDb::TNiceDb &db,
 }
 
 void TTransQueue::RemoveSchemaOperation(NIceDb::TNiceDb& db, ui64 txId) {
-    using Schema = TDataShard::Schema;
+    using Schema = TDataShard::Schema; 
     SchemaOps.erase(txId);
     db.Table<Schema::SchemaOperations>().Key(txId).Delete();
 }
 
 void TTransQueue::RemoveScanProgress(NIceDb::TNiceDb& db, ui64 txId) {
-    using Schema = TDataShard::Schema;
+    using Schema = TDataShard::Schema; 
     db.Table<Schema::ScanProgress>().Key(txId).Delete();
 }
 
@@ -319,7 +319,7 @@ bool TTransQueue::LoadTxDetails(NIceDb::TNiceDb &db,
                                 TString &txBody,
                                 TVector<TSysTables::TLocksTable::TLock> &locks,
                                 ui64 &artifactFlags) {
-    using Schema = TDataShard::Schema;
+    using Schema = TDataShard::Schema; 
 
     auto detailsRow = db.Table<Schema::TxDetails>().Key(txId, Self->TabletID()).Select();
     auto artifactsRow = db.Table<Schema::TxArtifacts>().Key(txId).Select();
@@ -343,7 +343,7 @@ bool TTransQueue::LoadTxDetails(NIceDb::TNiceDb &db,
 
 // Clear TxDetails for all origins
 bool TTransQueue::ClearTxDetails(NIceDb::TNiceDb& db, ui64 txId) {
-    using Schema = TDataShard::Schema;
+    using Schema = TDataShard::Schema; 
 
     auto txdRowset = db.Table<Schema::TxDetails>().Prefix(txId).Select();
     if (!txdRowset.IsReady())
@@ -362,7 +362,7 @@ bool TTransQueue::ClearTxDetails(NIceDb::TNiceDb& db, ui64 txId) {
 }
 
 bool TTransQueue::CancelPropose(NIceDb::TNiceDb& db, ui64 txId) {
-    using Schema = TDataShard::Schema;
+    using Schema = TDataShard::Schema; 
 
     auto it = TxsInFly.find(txId);
     if (it == TxsInFly.end())
@@ -387,7 +387,7 @@ bool TTransQueue::CancelPropose(NIceDb::TNiceDb& db, ui64 txId) {
 // all planned transactions.
 // NOTE: DeadlineQueue no longer contains planned transactions.
 ECleanupStatus TTransQueue::CleanupOutdated(NIceDb::TNiceDb& db, ui64 outdatedStep, ui32 batchSize, TVector<ui64>& outdatedTxs) {
-    using Schema = TDataShard::Schema;
+    using Schema = TDataShard::Schema; 
 
     outdatedTxs.reserve(batchSize);
     TSet<std::pair<ui64, ui64>> erasedDeadlines;
@@ -443,7 +443,7 @@ void TTransQueue::PlanTx(TOperation::TPtr op,
                 "Tx " << op->GetTxId() << " must not change step from " << op->GetStep() << " to " << step);
     }
 
-    using Schema = TDataShard::Schema;
+    using Schema = TDataShard::Schema; 
     db.Table<Schema::PlanQueue>().Key(step, op->GetTxId()).Update();
     PlannedTxs.emplace(op->GetStepOrder());
     PlannedTxsByKind[op->GetKind()].emplace(op->GetStepOrder());
@@ -452,7 +452,7 @@ void TTransQueue::PlanTx(TOperation::TPtr op,
 
 void TTransQueue::ForgetPlannedTx(NIceDb::TNiceDb &db, ui64 step, ui64 txId)
 {
-    using Schema = TDataShard::Schema;
+    using Schema = TDataShard::Schema; 
     db.Table<Schema::PlanQueue>().Key(step, txId).Delete();
     PlannedTxs.erase(TStepOrder(step, txId));
     for (auto& kv : PlannedTxsByKind) {

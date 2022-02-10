@@ -19,15 +19,15 @@ PEERDIR(
     library/cpp/containers/bitseq
     library/cpp/deprecated/enum_codegen
     library/cpp/yson
-    ydb/core/base
-    ydb/core/scheme_types
-    ydb/core/util
-    ydb/library/aclib
-    ydb/public/lib/scheme_types
+    ydb/core/base 
+    ydb/core/scheme_types 
+    ydb/core/util 
+    ydb/library/aclib 
+    ydb/public/lib/scheme_types 
 )
 
 END()
-
-RECURSE_FOR_TESTS(
-    ut
-)
+ 
+RECURSE_FOR_TESTS( 
+    ut 
+) 

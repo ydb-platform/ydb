@@ -1,10 +1,10 @@
 #pragma once
 
-#include <ydb/core/kqp/common/kqp_common.h>
-#include <ydb/core/kqp/common/kqp_gateway.h>
-#include <ydb/core/kqp/counters/kqp_counters.h>
-#include <ydb/core/protos/config.pb.h>
-#include <ydb/core/protos/kqp.pb.h>
+#include <ydb/core/kqp/common/kqp_common.h> 
+#include <ydb/core/kqp/common/kqp_gateway.h> 
+#include <ydb/core/kqp/counters/kqp_counters.h> 
+#include <ydb/core/protos/config.pb.h> 
+#include <ydb/core/protos/kqp.pb.h> 
 
 namespace NKikimr {
 namespace NKqp {

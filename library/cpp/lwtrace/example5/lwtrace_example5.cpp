@@ -5,7 +5,7 @@ template <ui64 N>
 ui64 Fact() {
     ui64 result = N * Fact<N - 1>();
 
-#ifndef LWTRACE_DISABLE
+#ifndef LWTRACE_DISABLE 
     // Note that probe is create on the first pass
     // LWTRACE_DECLARE_PROVIDER and LWTRACE_DEFINE_PROVIDER are not needed
     // (Provider is created implicitly)
@@ -13,7 +13,7 @@ ui64 Fact() {
         "LWTRACE_EXAMPLE_PROVIDER", "FactProbe_" + ToString(N), {}, {"result"});
 
     LWPROBE_OBJ(factProbe, result);
-#endif // LWTRACE_DISABLE
+#endif // LWTRACE_DISABLE 
     return result;
 }
 

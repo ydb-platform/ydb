@@ -10,12 +10,12 @@ namespace NTable {
 
     class TAnnex : public NRedo::IAnnex  {
         using TFamily = TScheme::TFamily;
-        using TGlobId = NPageCollection::TGlobId;
+        using TGlobId = NPageCollection::TGlobId; 
 
     public:
         TAnnex(const TScheme &scheme) : Scheme(scheme) { }
 
-        TVector<NPageCollection::TMemGlob> Unwrap() noexcept
+        TVector<NPageCollection::TMemGlob> Unwrap() noexcept 
         {
             return std::move(Blobs);
         }
@@ -35,7 +35,7 @@ namespace NTable {
             }
         }
 
-        TResult Place(ui32 table, TTag, TArrayRef<const char> data) noexcept override
+        TResult Place(ui32 table, TTag, TArrayRef<const char> data) noexcept override 
         {
             Y_VERIFY(Lookup(table) && data.size() >= Family->Large);
 
@@ -62,7 +62,7 @@ namespace NTable {
 
     private:
         const TScheme &Scheme;
-        TVector<NPageCollection::TMemGlob> Blobs;
+        TVector<NPageCollection::TMemGlob> Blobs; 
 
         /*_ Simple table info lookup cache */
         ui32 Table = Max<ui32>();

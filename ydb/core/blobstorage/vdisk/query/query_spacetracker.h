@@ -1,30 +1,30 @@
-#pragma once
-#include "defs.h"
-#include <ydb/core/base/blobstorage.h>
+#pragma once 
+#include "defs.h" 
+#include <ydb/core/base/blobstorage.h> 
+ 
+namespace NKikimr { 
+ 
+    //////////////////////////////////////////////////////////////////////////// 
+    // TQueryResultSizeTracker 
+    // This class is used for tracking query result size to avoid memory or 
+    // transport (protobuf) overflow 
+    //////////////////////////////////////////////////////////////////////////// 
+    class TQueryResultSizeTracker { 
+    public: 
+        // add LogoBlob w/o data 
+        void AddLogoBlobIndex() { 
+            Size += LogoBlobIndexSize; 
+        } 
 
-namespace NKikimr {
-
-    ////////////////////////////////////////////////////////////////////////////
-    // TQueryResultSizeTracker
-    // This class is used for tracking query result size to avoid memory or
-    // transport (protobuf) overflow
-    ////////////////////////////////////////////////////////////////////////////
-    class TQueryResultSizeTracker {
-    public:
-        // add LogoBlob w/o data
-        void AddLogoBlobIndex() {
-            Size += LogoBlobIndexSize;
-        }
-
-        void AddLogoBlobData(ui64 blobSize, ui64 queryShift, ui64 querySize) {
-            if (querySize) {
-                Size += querySize;
-            } else {
-                Y_VERIFY(blobSize >= queryShift, "blobSize# %" PRIu64 " queryShift# %" PRIu64, blobSize, queryShift);
-                Size += blobSize - queryShift;
-            }
-        }
-
+        void AddLogoBlobData(ui64 blobSize, ui64 queryShift, ui64 querySize) { 
+            if (querySize) { 
+                Size += querySize; 
+            } else { 
+                Y_VERIFY(blobSize >= queryShift, "blobSize# %" PRIu64 " queryShift# %" PRIu64, blobSize, queryShift); 
+                Size += blobSize - queryShift; 
+            } 
+        } 
+ 
         void AddAllPartsOfLogoBlob(const TBlobStorageGroupType &type, TLogoBlobID blobId) {
             for (ui32 partIdx = 0; partIdx < type.TotalPartCount(); ++partIdx) {
                 AddLogoBlobIndex();
@@ -34,22 +34,22 @@ namespace NKikimr {
 
         bool IsOverflow() const {
             return Size > MaxProtobufSize;
-        }
-
-        ui64 GetSize() const {
-            return Size;
-        }
-
+        } 
+ 
+        ui64 GetSize() const { 
+            return Size; 
+        } 
+ 
         void Init() {
             Size = VGetResultIndexSize;
         }
 
-    private:
-        // Result size we have counted
-        ui64 Size = 0;
-
+    private: 
+        // Result size we have counted 
+        ui64 Size = 0; 
+ 
         // Max size of TQueryResult without Buffer data
-        static constexpr ui64 LogoBlobIndexSize =
+        static constexpr ui64 LogoBlobIndexSize = 
             1 + 2        // Status
             + 1 + 1 + 24 // BlobId
             + 1 + 10     // Shift
@@ -68,7 +68,7 @@ namespace NKikimr {
             + 1 + 2 + 274  // MsgQoS
             + 1 + 5        // BlockedGeneration
             + 1 + 1 + 45;  // Timestamp=
-        // total limit on result
-    };
-
-} // NKikimr
+        // total limit on result 
+    }; 
+ 
+} // NKikimr 

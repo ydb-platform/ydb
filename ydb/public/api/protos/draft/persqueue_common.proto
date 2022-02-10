@@ -1,6 +1,6 @@
 syntax = "proto3";
 import "google/protobuf/descriptor.proto";
-import "ydb/public/api/protos/draft/persqueue_error_codes.proto";
+import "ydb/public/api/protos/draft/persqueue_error_codes.proto"; 
 
 package NPersQueueCommon;
 

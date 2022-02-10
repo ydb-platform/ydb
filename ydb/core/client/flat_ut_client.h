@@ -1,9 +1,9 @@
 #pragma once
 
-#include <ydb/core/base/tablet_resolver.h>
-#include <ydb/core/testlib/test_client.h>
-#include <ydb/core/tx/tx_proxy/proxy.h>
-#include <ydb/public/lib/deprecated/kicli/kicli.h>
+#include <ydb/core/base/tablet_resolver.h> 
+#include <ydb/core/testlib/test_client.h> 
+#include <ydb/core/tx/tx_proxy/proxy.h> 
+#include <ydb/public/lib/deprecated/kicli/kicli.h> 
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <google/protobuf/text_format.h>

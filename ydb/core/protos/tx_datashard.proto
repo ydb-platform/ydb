@@ -2,17 +2,17 @@
 option cc_enable_arenas = true;
 
 import "library/cpp/actors/protos/actors.proto";
-import "ydb/core/protos/base.proto";
-import "ydb/core/protos/kqp.proto";
-import "ydb/core/protos/ssa.proto";
-import "ydb/core/protos/tablet.proto";
-import "ydb/core/protos/tx.proto";
-import "ydb/core/protos/flat_scheme_op.proto";
-import "ydb/core/protos/table_stats.proto";
-import "ydb/core/protos/subdomains.proto";
-import "ydb/core/protos/query_stats.proto";
-import "ydb/public/api/protos/ydb_issue_message.proto";
-import "ydb/public/api/protos/ydb_status_codes.proto";
+import "ydb/core/protos/base.proto"; 
+import "ydb/core/protos/kqp.proto"; 
+import "ydb/core/protos/ssa.proto"; 
+import "ydb/core/protos/tablet.proto"; 
+import "ydb/core/protos/tx.proto"; 
+import "ydb/core/protos/flat_scheme_op.proto"; 
+import "ydb/core/protos/table_stats.proto"; 
+import "ydb/core/protos/subdomains.proto"; 
+import "ydb/core/protos/query_stats.proto"; 
+import "ydb/public/api/protos/ydb_issue_message.proto"; 
+import "ydb/public/api/protos/ydb_status_codes.proto"; 
 import "ydb/library/yql/dq/actors/protos/dq_events.proto";
 import "ydb/library/yql/dq/actors/protos/dq_stats.proto";
 import "ydb/library/yql/dq/proto/dq_tasks.proto";
@@ -461,7 +461,7 @@ enum ETransactionKind {
     TX_KIND_COMMIT_WRITES = 8;
 
     // Values [100, inf) are used for internal datashard operation
-    // kinds. See NKikimr::NDataShard::EOperationKind.
+    // kinds. See NKikimr::NDataShard::EOperationKind. 
 }
 
 message TMvccSnapshot {

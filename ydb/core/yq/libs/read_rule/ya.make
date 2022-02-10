@@ -1,4 +1,4 @@
-OWNER(g:yq)
+OWNER(g:yq) 
 
 LIBRARY()
 
@@ -9,11 +9,11 @@ SRCS(
 
 PEERDIR(
     library/cpp/actors/core
-    ydb/core/protos
-    ydb/core/yq/libs/events
-    ydb/public/api/protos
-    ydb/public/lib/operation_id/protos
-    ydb/public/sdk/cpp/client/ydb_persqueue_core
+    ydb/core/protos 
+    ydb/core/yq/libs/events 
+    ydb/public/api/protos 
+    ydb/public/lib/operation_id/protos 
+    ydb/public/sdk/cpp/client/ydb_persqueue_core 
     ydb/library/yql/providers/common/proto
     ydb/library/yql/providers/dq/api/protos
     ydb/library/yql/providers/pq/proto

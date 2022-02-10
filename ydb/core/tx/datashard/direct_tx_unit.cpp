@@ -4,7 +4,7 @@
 #include "setup_sys_locks.h"
 
 namespace NKikimr {
-namespace NDataShard {
+namespace NDataShard { 
 
 class TDirectOpUnit : public TExecutionUnit {
 public:
@@ -67,5 +67,5 @@ THolder<TExecutionUnit> CreateDirectOpUnit(TDataShard& self, TPipeline& pipeline
     return THolder(new TDirectOpUnit(self, pipeline));
 }
 
-} // NDataShard
+} // NDataShard 
 } // NKikimr

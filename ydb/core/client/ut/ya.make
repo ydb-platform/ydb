@@ -1,14 +1,14 @@
-UNITTEST_FOR(ydb/core/client)
+UNITTEST_FOR(ydb/core/client) 
 
-OWNER(
-    vvvv
-    g:kikimr
-)
+OWNER( 
+    vvvv 
+    g:kikimr 
+) 
 
 FORK_SUBTESTS()
-
+ 
 SPLIT_FACTOR(60)
-
+ 
 IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND)
     TIMEOUT(3600)
     SIZE(LARGE)
@@ -27,15 +27,15 @@ ELSE()
 ENDIF()
 
 PEERDIR(
-    library/cpp/getopt
+    library/cpp/getopt 
     library/cpp/regex/pcre
-    library/cpp/svnversion
-    ydb/core/client/scheme_cache_lib
-    ydb/core/tablet_flat/test/libs/rows
-    ydb/core/testlib
+    library/cpp/svnversion 
+    ydb/core/client/scheme_cache_lib 
+    ydb/core/tablet_flat/test/libs/rows 
+    ydb/core/testlib 
 )
 
-YQL_LAST_ABI_VERSION()
+YQL_LAST_ABI_VERSION() 
 
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/supp/ubsan_supp.inc)
 

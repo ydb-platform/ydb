@@ -6,14 +6,14 @@
 #include <library/cpp/blockcodecs/codecs.h>
 
 namespace NKikimr {
-namespace NPageCollection {
+namespace NPageCollection { 
 
     struct TSlicer {
 
-        TSlicer(ui8 channel, TCookieAllocator *cookieAllocator, ui32 block)
+        TSlicer(ui8 channel, TCookieAllocator *cookieAllocator, ui32 block) 
             : Channel(channel)
             , Block(block)
-            , CookieAllocator(cookieAllocator)
+            , CookieAllocator(cookieAllocator) 
         {
 
         }
@@ -22,7 +22,7 @@ namespace NPageCollection {
         {
             if (body.size() > Block) {
                 Y_Fail(
-                    "Cannot put " << body.size() << "b to "<< NFmt::Do(*CookieAllocator)
+                    "Cannot put " << body.size() << "b to "<< NFmt::Do(*CookieAllocator) 
                     << " as single blob, block limit is " << Block << "b");
             }
 
@@ -30,28 +30,28 @@ namespace NPageCollection {
 
             if (lz4) std::exchange(body, Lz4()->Encode(body));
 
-            auto glob = CookieAllocator->Do(Channel, body.size());
+            auto glob = CookieAllocator->Do(Channel, body.size()); 
 
             refs.push_back({ glob.Logo, std::move(body) });
 
             return glob;
         }
 
-        TLargeGlobId Do(TVector<TLogoBlob> &refs, TString body, bool lz4) const
+        TLargeGlobId Do(TVector<TLogoBlob> &refs, TString body, bool lz4) const 
         {
             if (body.size() >= Max<ui32>()) {
                 Y_Fail(
-                    "Cannot put " << body.size() << "b to "<< NFmt::Do(*CookieAllocator)
+                    "Cannot put " << body.size() << "b to "<< NFmt::Do(*CookieAllocator) 
                     << " as a TSloid, blob have to be less than 4GiB");
             }
 
             if (lz4) std::exchange(body, Lz4()->Encode(body));
 
             const ui32 size = body.size();
-            auto largeGlobId = CookieAllocator->Do(Channel, size, Block);
+            auto largeGlobId = CookieAllocator->Do(Channel, size, Block); 
 
             if (size <= Block) {
-                refs.push_back({ largeGlobId.Lead, std::move(body) });
+                refs.push_back({ largeGlobId.Lead, std::move(body) }); 
             } else {
                 ui32 off = 0;
                 for (auto blobId : largeGlobId.Blobs()) {
@@ -63,7 +63,7 @@ namespace NPageCollection {
                 Y_VERIFY_DEBUG(off == largeGlobId.Bytes);
             }
 
-            return largeGlobId;
+            return largeGlobId; 
         }
 
         static inline const NBlockCodecs::ICodec* Lz4() noexcept
@@ -76,7 +76,7 @@ namespace NPageCollection {
     private:
         const ui8 Channel = Max<ui8>();
         const ui32 Block = Max<ui32>();
-        TCookieAllocator * const CookieAllocator = nullptr;
+        TCookieAllocator * const CookieAllocator = nullptr; 
     };
 }
 }

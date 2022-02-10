@@ -1,12 +1,12 @@
 #include "defs.h"
 #include "dsproxy_vdisk_mock_ut.h"
 
-#include <ydb/core/testlib/basics/runtime.h>
-#include <ydb/core/testlib/actor_helpers.h>
-#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
-#include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
-#include <ydb/core/blobstorage/dsproxy/dsproxy_get_impl.h>
-#include <ydb/core/blobstorage/dsproxy/dsproxy_put_impl.h>
+#include <ydb/core/testlib/basics/runtime.h> 
+#include <ydb/core/testlib/actor_helpers.h> 
+#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h> 
+#include <ydb/core/blobstorage/vdisk/common/vdisk_events.h> 
+#include <ydb/core/blobstorage/dsproxy/dsproxy_get_impl.h> 
+#include <ydb/core/blobstorage/dsproxy/dsproxy_put_impl.h> 
 
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 #include <library/cpp/testing/unittest/registar.h>
@@ -31,7 +31,7 @@ Y_UNIT_TEST_SUITE(TDSProxyGetTest) {
 void TestIntervalsAndCrcAllOk(TErasureType::EErasureSpecies erasureSpecies, bool isVerboseNoDataEnabled, bool checkCrc) {
     TActorSystemStub actorSystemStub;
 
-    TBlobStorageGroupType groupType(erasureSpecies);
+    TBlobStorageGroupType groupType(erasureSpecies); 
 
     const ui32 groupId = 0;
     const ui32 domainCount = groupType.BlobSubgroupSize();
@@ -460,7 +460,7 @@ void TestIntervalsWipedAllOk(TErasureType::EErasureSpecies erasureSpecies, bool 
     TActorSystemStub actorSystemStub;
 
     const ui32 groupId = 0;
-    TBlobStorageGroupType groupType(erasureSpecies);
+    TBlobStorageGroupType groupType(erasureSpecies); 
     const ui32 domainCount = groupType.BlobSubgroupSize();
 
     TVector<ui64> queryCounts = {1, 2, 3, 13, 34};

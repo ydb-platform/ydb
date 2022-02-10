@@ -2,13 +2,13 @@
 
 #include "datashard_s3_upload.h"
 
-#include <ydb/core/tablet_flat/flat_cxx_database.h>
+#include <ydb/core/tablet_flat/flat_cxx_database.h> 
 
 #include <util/generic/hash.h>
 #include <util/generic/string.h>
 
 namespace NKikimr {
-namespace NDataShard {
+namespace NDataShard { 
 
 class TS3UploadsManager {
 public:
@@ -38,5 +38,5 @@ private:
 
 }; // TS3UploadsManager
 
-} // namespace NDataShard
+} // namespace NDataShard 
 } // namespace NKikimr

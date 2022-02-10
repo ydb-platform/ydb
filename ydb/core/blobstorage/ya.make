@@ -1,63 +1,63 @@
-LIBRARY()
-
+LIBRARY() 
+ 
 OWNER(
-    alexvru
-    cthulhu
+    alexvru 
+    cthulhu 
     ddoarn
     fomichev
     g:kikimr
 )
 
-SRCS(
-    defs.h
-)
-
-PEERDIR(
-    ydb/core/base
-    ydb/core/blobstorage/backpressure
-    ydb/core/blobstorage/base
-    ydb/core/blobstorage/crypto
-    ydb/core/blobstorage/dsproxy
-    ydb/core/blobstorage/groupinfo
-    ydb/core/blobstorage/incrhuge
-    ydb/core/blobstorage/lwtrace_probes
-    ydb/core/blobstorage/nodewarden
-    ydb/core/blobstorage/other
-    ydb/core/blobstorage/pdisk
-    ydb/core/blobstorage/storagepoolmon
-    ydb/core/blobstorage/testload
-    ydb/core/blobstorage/vdisk
-)
-
+SRCS( 
+    defs.h 
+) 
+ 
+PEERDIR( 
+    ydb/core/base 
+    ydb/core/blobstorage/backpressure 
+    ydb/core/blobstorage/base 
+    ydb/core/blobstorage/crypto 
+    ydb/core/blobstorage/dsproxy 
+    ydb/core/blobstorage/groupinfo 
+    ydb/core/blobstorage/incrhuge 
+    ydb/core/blobstorage/lwtrace_probes 
+    ydb/core/blobstorage/nodewarden 
+    ydb/core/blobstorage/other 
+    ydb/core/blobstorage/pdisk 
+    ydb/core/blobstorage/storagepoolmon 
+    ydb/core/blobstorage/testload 
+    ydb/core/blobstorage/vdisk 
+) 
+ 
 IF (MSVC)
-    CFLAGS(
-        /wd4503
-    )
+    CFLAGS( 
+        /wd4503 
+    ) 
 ENDIF()
 
-END()
+END() 
 
 RECURSE(
-    backpressure
-    base
+    backpressure 
+    base 
     crypto
-    dsproxy
-    groupinfo
-    incrhuge
+    dsproxy 
+    groupinfo 
+    incrhuge 
     lwtrace_probes
-    nodewarden
-    other
-    pdisk
+    nodewarden 
+    other 
+    pdisk 
     storagepoolmon
-    testload
-    vdisk
+    testload 
+    vdisk 
 )
-
-RECURSE_FOR_TESTS(
+ 
+RECURSE_FOR_TESTS( 
     ut_blobstorage
     ut_group
     ut_mirror3of4
-    ut_pdiskfit
-    ut_vdisk
+    ut_pdiskfit 
+    ut_vdisk 
     ut_vdisk2
-)
+) 

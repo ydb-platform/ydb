@@ -23,12 +23,12 @@
 #include "shared_cache_events.h"
 #include "util_fmt_logger.h"
 
-#include <ydb/core/control/immediate_control_board_wrapper.h>
-#include <ydb/core/tablet/tablet_counters.h>
-#include <ydb/core/tablet/tablet_counters_aggregator.h>
-#include <ydb/core/tablet/tablet_counters_protobuf.h>
-#include <ydb/core/tablet/tablet_metrics.h>
-#include <ydb/core/util/queue_oneone_inplace.h>
+#include <ydb/core/control/immediate_control_board_wrapper.h> 
+#include <ydb/core/tablet/tablet_counters.h> 
+#include <ydb/core/tablet/tablet_counters_aggregator.h> 
+#include <ydb/core/tablet/tablet_counters_protobuf.h> 
+#include <ydb/core/tablet/tablet_metrics.h> 
+#include <ydb/core/util/queue_oneone_inplace.h> 
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
@@ -57,8 +57,8 @@ class TCommitManager;
 class TScans;
 class TMemory;
 struct TIdEmitter;
-struct TPageCollectionReadEnv;
-struct TPageCollectionTxEnv;
+struct TPageCollectionReadEnv; 
+struct TPageCollectionTxEnv; 
 struct TProdCompact;
 struct TProdBackup;
 struct TSeat;
@@ -66,13 +66,13 @@ struct TSeat;
 struct TPendingPartSwitch {
     struct TLargeGlobLoader {
         size_t Index;
-        NPageCollection::TLargeGlobId LargeGlobId;
-        NPageCollection::TLargeGlobIdRestoreState State;
+        NPageCollection::TLargeGlobId LargeGlobId; 
+        NPageCollection::TLargeGlobIdRestoreState State; 
 
         explicit TLargeGlobLoader(size_t idx, const NPageCollection::TLargeGlobId& largeGlobId)
             : Index(idx)
-            , LargeGlobId(largeGlobId)
-            , State(LargeGlobId)
+            , LargeGlobId(largeGlobId) 
+            , State(LargeGlobId) 
         { }
 
         bool Accept(const TLogoBlobID& id, TString body) {
@@ -87,15 +87,15 @@ struct TPendingPartSwitch {
     using TLargeGlobLoaders = TList<TLargeGlobLoader>;
 
     struct TMetaStage {
-        NTable::TPartComponents PartComponents;
+        NTable::TPartComponents PartComponents; 
         TLargeGlobLoaders Loaders;
 
-        explicit TMetaStage(NTable::TPartComponents&& pc)
-            : PartComponents(std::move(pc))
+        explicit TMetaStage(NTable::TPartComponents&& pc) 
+            : PartComponents(std::move(pc)) 
         {
-            for (size_t idx = 0; idx < PartComponents.PageCollectionComponents.size(); ++idx) {
-                if (!PartComponents.PageCollectionComponents[idx].Packet) {
-                    Loaders.emplace_back(idx, PartComponents.PageCollectionComponents[idx].LargeGlobId);
+            for (size_t idx = 0; idx < PartComponents.PageCollectionComponents.size(); ++idx) { 
+                if (!PartComponents.PageCollectionComponents[idx].Packet) { 
+                    Loaders.emplace_back(idx, PartComponents.PageCollectionComponents[idx].LargeGlobId); 
                 }
             }
         }
@@ -106,7 +106,7 @@ struct TPendingPartSwitch {
 
         bool Accept(TLargeGlobLoaders::iterator it, const TLogoBlobID& id, TString body) {
             if (it->Accept(id, std::move(body))) {
-                PartComponents.PageCollectionComponents[it->Index].ParsePacket(it->Finish());
+                PartComponents.PageCollectionComponents[it->Index].ParsePacket(it->Finish()); 
                 Loaders.erase(it);
                 return !Loaders;
             }
@@ -117,26 +117,26 @@ struct TPendingPartSwitch {
 
     struct TLoaderStage {
         NTable::TLoader Loader;
-        const NPageCollection::IPageCollection* Fetching = nullptr;
+        const NPageCollection::IPageCollection* Fetching = nullptr; 
 
-        explicit TLoaderStage(NTable::TPartComponents&& pc)
-            : Loader(std::move(pc))
+        explicit TLoaderStage(NTable::TPartComponents&& pc) 
+            : Loader(std::move(pc)) 
         { }
     };
 
     struct TResultStage {
-        NTable::TPartView PartView;
+        NTable::TPartView PartView; 
 
-        explicit TResultStage(NTable::TPartView&& partView)
-            : PartView(std::move(partView))
+        explicit TResultStage(NTable::TPartView&& partView) 
+            : PartView(std::move(partView)) 
         { }
     };
 
     struct TNewBundle {
         std::variant<TMetaStage, TLoaderStage, TResultStage> Stage;
 
-        explicit TNewBundle(NTable::TPartComponents pc)
-            : Stage(std::in_place_type<TMetaStage>, std::move(pc))
+        explicit TNewBundle(NTable::TPartComponents pc) 
+            : Stage(std::in_place_type<TMetaStage>, std::move(pc)) 
         { }
 
         template<class T>
@@ -154,7 +154,7 @@ struct TPendingPartSwitch {
             : Epoch(epoch)
         {
             if (!data.empty()) {
-                TxStatus = new NTable::TTxStatusPartStore(dataId, Epoch, TSharedData::Copy(data));
+                TxStatus = new NTable::TTxStatusPartStore(dataId, Epoch, TSharedData::Copy(data)); 
             } else {
                 Loader.emplace(0, dataId);
             }
@@ -167,7 +167,7 @@ struct TPendingPartSwitch {
         bool Accept(const TLogoBlobID& id, TString body) {
             if (Loader->Accept(id, std::move(body))) {
                 auto data = Loader->Finish();
-                TxStatus = new NTable::TTxStatusPartStore(Loader->LargeGlobId, Epoch, std::move(data));
+                TxStatus = new NTable::TTxStatusPartStore(Loader->LargeGlobId, Epoch, std::move(data)); 
                 Loader.reset();
                 return !Loader;
             }
@@ -277,7 +277,7 @@ struct TPendingPartSwitch {
     }
 };
 
-enum class EPageCollectionRequest : ui64 {
+enum class EPageCollectionRequest : ui64 { 
     Undefined = 0,
     Cache = 1,
     CacheSync,
@@ -287,17 +287,17 @@ enum class EPageCollectionRequest : ui64 {
 
 struct TExecutorStatsImpl : public TExecutorStats {
     TInstant YellowLastChecked;
-    ui64 PacksMetaBytes = 0;    /* Memory occupied by NPageCollection::TMeta */
+    ui64 PacksMetaBytes = 0;    /* Memory occupied by NPageCollection::TMeta */ 
 };
 
-struct TTransactionWaitPad : public TPrivatePageCacheWaitPad {
+struct TTransactionWaitPad : public TPrivatePageCacheWaitPad { 
     THolder<TSeat> Seat;
 
     TTransactionWaitPad(THolder<TSeat> seat);
     ~TTransactionWaitPad();
 };
 
-struct TCompactionReadWaitPad : public TPrivatePageCacheWaitPad {
+struct TCompactionReadWaitPad : public TPrivatePageCacheWaitPad { 
     const ui64 ReadId;
 
     TCompactionReadWaitPad(ui64 readId)
@@ -382,7 +382,7 @@ class TExecutor
     TWaitingSnaps WaitingSnapshots;
 
     THolder<TExecutorBootLogic> BootLogic;
-    THolder<TPrivatePageCache> PrivatePageCache;
+    THolder<TPrivatePageCache> PrivatePageCache; 
     THolder<TExecutorCounters> Counters;
     THolder<TTabletCountersBase> AppCounters;
     THolder<TTabletCountersBase> CountersBaseline;
@@ -410,8 +410,8 @@ class TExecutor
 
     TActorId Launcher;
 
-    THashMap<TPrivatePageCacheWaitPad*, THolder<TTransactionWaitPad>> TransactionWaitPads;
-    THashMap<TPrivatePageCacheWaitPad*, THolder<TCompactionReadWaitPad>> CompactionReadWaitPads;
+    THashMap<TPrivatePageCacheWaitPad*, THolder<TTransactionWaitPad>> TransactionWaitPads; 
+    THashMap<TPrivatePageCacheWaitPad*, THolder<TCompactionReadWaitPad>> CompactionReadWaitPads; 
 
     ui64 TransactionUniqCounter = 0;
     ui64 CompactionReadUniqCounter = 0;
@@ -421,7 +421,7 @@ class TExecutor
     bool NeedFollowerSnapshot = false;
 
     TCacheCacheConfig::TCounterPtr CounterCacheFresh;
-    TCacheCacheConfig::TCounterPtr CounterCacheMemTable;
+    TCacheCacheConfig::TCounterPtr CounterCacheMemTable; 
     TCacheCacheConfig::TCounterPtr CounterCacheStaging;
 
     THashMap<ui32, TIntrusivePtr<TBarrier>> InFlyCompactionGcBarriers;
@@ -446,7 +446,7 @@ class TExecutor
     void Broken();
     void Active(const TActorContext &ctx);
     void ActivateFollower(const TActorContext &ctx);
-    void RecreatePageCollectionsCache() noexcept;
+    void RecreatePageCollectionsCache() noexcept; 
     void ReflectSchemeSettings() noexcept;
     void OnYellowChannels(TVector<ui32> yellowMoveChannels, TVector<ui32> yellowStopChannels) override;
     void CheckYellow(TVector<ui32> &&yellowMoveChannels, TVector<ui32> &&yellowStopChannels, bool terminal = false);
@@ -454,7 +454,7 @@ class TExecutor
     void CheckCollectionBarrier(TIntrusivePtr<TBarrier> &barrier);
     void UtilizeSubset(const NTable::TSubset&, const NTable::NFwd::TSeen&,
         THashSet<TLogoBlobID> reusedBundles, TLogCommit *commit);
-    bool PrepareExternalPart(TPendingPartSwitch &partSwitch, NTable::TPartComponents &&pc);
+    bool PrepareExternalPart(TPendingPartSwitch &partSwitch, NTable::TPartComponents &&pc); 
     bool PrepareExternalPart(TPendingPartSwitch &partSwitch, TPendingPartSwitch::TNewBundle &bundle);
     bool PrepareExternalTxStatus(TPendingPartSwitch &partSwitch, const NPageCollection::TLargeGlobId &dataId, NTable::TEpoch epoch, const TString &data);
     bool PrepareExternalTxStatus(TPendingPartSwitch &partSwitch, TPendingPartSwitch::TNewTxStatus &txStatus);
@@ -475,17 +475,17 @@ class TExecutor
     void PostponeTransaction(TAutoPtr<TSeat>, TPageCollectionTxEnv&, TAutoPtr<NTable::TChange>, THPTimer &bookkeepingTimer, const TActorContext &ctx);
     void PlanTransactionActivation();
     void MakeLogSnapshot();
-    void ActivateWaitingTransactions(TPrivatePageCache::TPage::TWaitQueuePtr waitPadsQueue);
-    void AddCachesOfBundle(const NTable::TPartView &partView) noexcept;
-    void AddSingleCache(const TIntrusivePtr<TPrivatePageCache::TInfo> &info) noexcept;
+    void ActivateWaitingTransactions(TPrivatePageCache::TPage::TWaitQueuePtr waitPadsQueue); 
+    void AddCachesOfBundle(const NTable::TPartView &partView) noexcept; 
+    void AddSingleCache(const TIntrusivePtr<TPrivatePageCache::TInfo> &info) noexcept; 
     void DropCachesOfBundle(const NTable::TPart &part) noexcept;
     void DropSingleCache(const TLogoBlobID&) noexcept;
 
     void TranslateCacheTouchesToSharedCache();
     void RequestInMemPagesForDatabase();
-    void RequestInMemPagesForPartStore(ui32 tableId, const NTable::TPartView &partView);
+    void RequestInMemPagesForPartStore(ui32 tableId, const NTable::TPartView &partView); 
     void RequestFromSharedCache(TAutoPtr<NPageCollection::TFetch> fetch,
-        NBlockIO::EPriority way, EPageCollectionRequest requestCategory);
+        NBlockIO::EPriority way, EPageCollectionRequest requestCategory); 
     THolder<TScanSnapshot> PrepareScanSnapshot(ui32 table,
         const NTable::TCompactionParams* params, TRowVersion snapshot = TRowVersion::Max());
     void ReleaseScanLocks(TIntrusivePtr<TBarrier>, const NTable::TSubset&);
@@ -507,13 +507,13 @@ class TExecutor
     void Handle(TEvPrivate::TEvBrokenTransaction::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvents::TEvFlushLog::TPtr &ev);
     void Handle(TEvBlobStorage::TEvCollectGarbageResult::TPtr&);
-    void Handle(NSharedCache::TEvResult::TPtr &ev);
-    void Handle(NSharedCache::TEvRequest::TPtr &ev);
-    void Handle(NSharedCache::TEvUpdated::TPtr &ev);
+    void Handle(NSharedCache::TEvResult::TPtr &ev); 
+    void Handle(NSharedCache::TEvRequest::TPtr &ev); 
+    void Handle(NSharedCache::TEvUpdated::TPtr &ev); 
     void Handle(NResourceBroker::TEvResourceBroker::TEvResourceAllocated::TPtr&);
     void Handle(NOps::TEvScanStat::TPtr &ev, const TActorContext &ctx);
     void Handle(NOps::TEvResult::TPtr &ev);
-    void Handle(NBlockIO::TEvStat::TPtr &ev, const TActorContext &ctx);
+    void Handle(NBlockIO::TEvStat::TPtr &ev, const TActorContext &ctx); 
     void Handle(NOps::TEvResult *ops, TProdCompact *msg, bool cancelled);
     void Handle(TEvBlobStorage::TEvGetResult::TPtr&, const TActorContext&);
 
@@ -533,8 +533,8 @@ class TExecutor
     TIntrusiveConstPtr<NTable::TRowScheme> RowScheme(ui32 table) override;
     const NTable::TScheme::TTableInfo* TableScheme(ui32 table) override;
     ui64 TableMemSize(ui32 table, NTable::TEpoch epoch) override;
-    NTable::TPartView TablePart(ui32 table, const TLogoBlobID& label) override;
-    TVector<NTable::TPartView> TableParts(ui32 table) override;
+    NTable::TPartView TablePart(ui32 table, const TLogoBlobID& label) override; 
+    TVector<NTable::TPartView> TableParts(ui32 table) override; 
     TVector<TIntrusiveConstPtr<NTable::TColdPart>> TableColdParts(ui32 table) override;
     const NTable::TRowVersionRanges& TableRemovedRowVersions(ui32 table) override;
     ui64 BeginCompaction(THolder<NTable::TCompactionParams> params) override;
@@ -545,7 +545,7 @@ class TExecutor
 
     // Compaction read support
 
-    void PostponeCompactionRead(TCompactionReadState* state, TPageCollectionReadEnv* env);
+    void PostponeCompactionRead(TCompactionReadState* state, TPageCollectionReadEnv* env); 
     size_t UnpinCompactionReadPages(TCompactionReadState* state);
     void PlanCompactionReadActivation();
     void Handle(TEvPrivate::TEvActivateCompactionRead::TPtr& ev, const TActorContext& ctx);

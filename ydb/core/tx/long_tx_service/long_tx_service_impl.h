@@ -1,8 +1,8 @@
 #pragma once
 #include "long_tx_service.h"
 
-#include <ydb/core/tx/long_tx_service/public/events.h>
-#include <ydb/core/util/ulid.h>
+#include <ydb/core/tx/long_tx_service/public/events.h> 
+#include <ydb/core/util/ulid.h> 
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/hfunc.h>
@@ -162,7 +162,7 @@ namespace NLongTxService {
 
         static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
             return NKikimrServices::TActivity::LONG_TX_SERVICE;
-        }
+        } 
 
         void Bootstrap();
 

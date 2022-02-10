@@ -1,14 +1,14 @@
 #pragma once
 #include "event_ids.h"
 
-#include <ydb/library/yql/core/facade/yql_facade.h>
+#include <ydb/library/yql/core/facade/yql_facade.h> 
 #include <ydb/library/yql/providers/dq/provider/yql_dq_gateway.h>
 #include <ydb/library/yql/public/issue/yql_issue.h>
 
 #include <ydb/core/yq/libs/graph_params/proto/graph_params.pb.h>
-#include <ydb/public/api/protos/draft/yq_private.pb.h>
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
-#include <ydb/public/lib/yq/scope.h>
+#include <ydb/public/api/protos/draft/yq_private.pb.h> 
+#include <ydb/public/sdk/cpp/client/ydb_table/table.h> 
+#include <ydb/public/lib/yq/scope.h> 
 
 #include <library/cpp/actors/core/events.h>
 

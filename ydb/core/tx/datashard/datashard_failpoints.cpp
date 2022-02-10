@@ -1,7 +1,7 @@
 #include "datashard_failpoints.h"
 
 namespace NKikimr {
-namespace NDataShard {
+namespace NDataShard { 
 
 TCancelTxFailPoint gCancelTxFailPoint;
 TSkipRepliesFailPoint gSkipRepliesFailPoint;

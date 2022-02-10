@@ -1,17 +1,17 @@
-RECURSE_FOR_TESTS(
-    ut
-)
+RECURSE_FOR_TESTS( 
+    ut 
+) 
 
 LIBRARY()
 
-OWNER(
-    davenger
-    g:kikimr
-)
+OWNER( 
+    davenger 
+    g:kikimr 
+) 
 
 PEERDIR(
     contrib/libs/apache/arrow
-    ydb/core/scheme
+    ydb/core/scheme 
 )
 
 SRCS(

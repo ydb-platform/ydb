@@ -6,7 +6,7 @@
 #include "flat_dbase_apply.h"
 #include "logic_alter_main.h"
 
-#include <ydb/core/util/pb.h>
+#include <ydb/core/util/pb.h> 
 #include <util/generic/xrange.h>
 
 namespace NKikimr {
@@ -28,8 +28,8 @@ namespace NBoot {
         void Start() noexcept override
         {
             for (auto slot: xrange(Queue.size()))
-                if (const auto &largeGlobId = Queue.at(slot).LargeGlobId)
-                    Pending += Spawn<TLoadBlobs>(largeGlobId, slot);
+                if (const auto &largeGlobId = Queue.at(slot).LargeGlobId) 
+                    Pending += Spawn<TLoadBlobs>(largeGlobId, slot); 
 
             Flush();
         }
@@ -50,7 +50,7 @@ namespace NBoot {
         void Flush() noexcept
         {
             for (TBody *head = nullptr; Queue && *(head = &Queue[0]); ) {
-                Apply(head->LargeGlobId, head->Body);
+                Apply(head->LargeGlobId, head->Body); 
 
                 ++Skip, Queue.pop_front();
             }
@@ -74,14 +74,14 @@ namespace NBoot {
                 if (auto logl = Env->Logger()->Log(ELnLev::Debug)) {
                     logl
                         << NFmt::Do(*Back) << " alter log "
-                        << NFmt::TStamp(NTable::TTxStamp(largeGlobId.Lead).Raw)
+                        << NFmt::TStamp(NTable::TTxStamp(largeGlobId.Lead).Raw) 
                         << ", " << (changed ? "update" : "noop")
                         << " affects " << NFmt::Arr(apply.Affects);
                 }
             }
 
             if (auto *logic = Logic->Result().Alter.Get())
-                logic->RestoreLog(largeGlobId);
+                logic->RestoreLog(largeGlobId); 
         }
 
     private:

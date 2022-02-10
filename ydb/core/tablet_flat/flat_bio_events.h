@@ -3,13 +3,13 @@
 #include "flat_bio_eggs.h"
 #include "flat_sausage_packet.h"
 #include "flat_sausage_fetch.h"
-#include <ydb/core/protos/base.pb.h>
-#include <ydb/core/base/events.h>
+#include <ydb/core/protos/base.pb.h> 
+#include <ydb/core/base/events.h> 
 #include <library/cpp/actors/core/event_local.h>
 
 namespace NKikimr {
 namespace NTabletFlatExecutor {
-namespace NBlockIO {
+namespace NBlockIO { 
 
     enum class EEv : ui32 {
         Base_ = EventSpaceBegin(TKikimrEvents::ES_FLAT_EXECUTOR) + 1088,
@@ -21,13 +21,13 @@ namespace NBlockIO {
 
     struct TEvFetch : public TEventLocal<TEvFetch, ui32(EEv::Fetch)> {
         TEvFetch(EPriority priority, TAutoPtr<NPageCollection::TFetch> fetch)
-            : Priority(priority)
+            : Priority(priority) 
             , Fetch(fetch)
         {
 
         }
 
-        const EPriority Priority = EPriority::None;
+        const EPriority Priority = EPriority::None; 
         TAutoPtr<NPageCollection::TFetch> Fetch;
     };
 
@@ -55,14 +55,14 @@ namespace NBlockIO {
         {
             return
                 std::accumulate(Blocks.begin(), Blocks.end(), ui64(0),
-                    [](ui64 bytes, const NPageCollection::TLoadedPage& block)
+                    [](ui64 bytes, const NPageCollection::TLoadedPage& block) 
                         { return bytes + block.Data.size(); });
         }
 
         const EStatus Status;
         const ui64 Cookie = Max<ui64>();
         TIntrusiveConstPtr<NPageCollection::IPageCollection> Origin;
-        TVector<NPageCollection::TLoadedPage> Blocks;
+        TVector<NPageCollection::TLoadedPage> Blocks; 
     };
 
 }

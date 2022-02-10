@@ -1,17 +1,17 @@
 LIBRARY()
 
 OWNER(
-    g:yql
-    g:yql_ydb_core
+    g:yql 
+    g:yql_ydb_core 
 )
 
 PEERDIR(
     contrib/libs/apache/arrow
-    ydb/core/util
-    ydb/library/mkql_proto
-    ydb/library/yql/minikql/comp_nodes
-    ydb/library/yql/minikql/computation
-    ydb/library/yql/public/udf
+    ydb/core/util 
+    ydb/library/mkql_proto 
+    ydb/library/yql/minikql/comp_nodes 
+    ydb/library/yql/minikql/computation 
+    ydb/library/yql/public/udf 
     ydb/library/yql/dq/actors/protos
     ydb/library/yql/dq/common
     ydb/library/yql/dq/expr_nodes
@@ -34,7 +34,7 @@ SRCS(
 
 GENERATE_ENUM_SERIALIZATION(dq_tasks_runner.h)
 
-YQL_LAST_ABI_VERSION()
+YQL_LAST_ABI_VERSION() 
 
 END()
 

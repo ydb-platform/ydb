@@ -76,7 +76,7 @@ namespace NActors {
                 CStime /= tickPerMillisec;
                 SystemUptime = ::Uptime();
                 Uptime = SystemUptime - TDuration::MilliSeconds(StartTime / TicksPerMillisec());
-            }
+            } 
 
             TFileInput statm("/proc/" + strPid + "/statm");
             statm.ReadLine(str);
@@ -122,7 +122,7 @@ namespace NActors {
         long sz = sysconf(_SC_PAGESIZE);
         return sz;
     }
-
+ 
 #else
 
     bool TProcStat::Fill(pid_t pid) {
@@ -133,7 +133,7 @@ namespace NActors {
     long TProcStat::ObtainPageSize() {
         return 0;
     }
-
+ 
 #endif
 
 namespace {

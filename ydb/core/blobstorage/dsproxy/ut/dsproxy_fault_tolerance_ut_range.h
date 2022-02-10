@@ -3,7 +3,7 @@
 #include "defs.h"
 #include "dsproxy_fault_tolerance_ut_base.h"
 
-#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_partlayout.h>
+#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_partlayout.h> 
 
 #include <util/random/fast.h>
 

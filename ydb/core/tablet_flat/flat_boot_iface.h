@@ -24,17 +24,17 @@ namespace NBoot {
 
     enum class EStep {
         None    = 0,
-        Blobs   = 1,    // Generic blobs loader tool (like NBlockIO)
+        Blobs   = 1,    // Generic blobs loader tool (like NBlockIO) 
         Stages  = 2,
-        Bundle  = 3,    // DB bundles (parts) loader and merger
-        Redo    = 4,    // DB Redo log queue loader and applier
-        MemTable= 5,    // Loader of external TMemTable blobs to cache
-        Alter   = 6,    // Local db scheme alteration (TAlter) log
-        Loans   = 7,    // Executor borrow and loans logic log
-        GCELog  = 8,    // Extended garbage collector log
-        Turns   = 9,    // Bundles switch (turns) log processing
-        Snap    = 10,   // Log snapshot and deps graph processor
-        TxStatus = 11,  // TxStatus data loader and merger
+        Bundle  = 3,    // DB bundles (parts) loader and merger 
+        Redo    = 4,    // DB Redo log queue loader and applier 
+        MemTable= 5,    // Loader of external TMemTable blobs to cache 
+        Alter   = 6,    // Local db scheme alteration (TAlter) log 
+        Loans   = 7,    // Executor borrow and loans logic log 
+        GCELog  = 8,    // Extended garbage collector log 
+        Turns   = 9,    // Bundles switch (turns) log processing 
+        Snap    = 10,   // Log snapshot and deps graph processor 
+        TxStatus = 11,  // TxStatus data loader and merger 
     };
 
     struct IEnv {
@@ -72,9 +72,9 @@ namespace NBoot {
 
         virtual void Start() noexcept = 0;
 
-        virtual bool HandleBio(NSharedCache::TEvResult&) noexcept
+        virtual bool HandleBio(NSharedCache::TEvResult&) noexcept 
         {
-            Y_FAIL("Boot IStep got an unhandled NSharedCache::TEvResult event");
+            Y_FAIL("Boot IStep got an unhandled NSharedCache::TEvResult event"); 
         }
 
         virtual void HandleStep(TIntrusivePtr<IStep>) noexcept

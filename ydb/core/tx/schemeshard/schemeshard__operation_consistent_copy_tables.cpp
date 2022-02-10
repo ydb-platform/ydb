@@ -4,9 +4,9 @@
 
 #include "schemeshard_impl.h"
 
-#include <ydb/core/base/path.h>
-#include <ydb/core/protos/flat_tx_scheme.pb.h>
-#include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/core/base/path.h> 
+#include <ydb/core/protos/flat_tx_scheme.pb.h> 
+#include <ydb/core/protos/flat_scheme_op.pb.h> 
 
 NKikimrSchemeOp::TModifyScheme CopyTableTask(NKikimr::NSchemeShard::TPath& src, NKikimr::NSchemeShard::TPath& dst, bool omitFollowers, bool isBackup) {
     using namespace NKikimr::NSchemeShard;

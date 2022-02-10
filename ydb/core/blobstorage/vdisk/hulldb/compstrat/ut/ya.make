@@ -1,22 +1,22 @@
-UNITTEST_FOR(ydb/core/blobstorage/vdisk/hulldb/compstrat)
-
-OWNER(g:kikimr)
-
-FORK_SUBTESTS()
-
-TIMEOUT(600)
-
-SIZE(MEDIUM)
-
-PEERDIR(
-    ydb/core/base
-    ydb/core/blobstorage/vdisk/common
-    ydb/core/blobstorage/vdisk/hulldb
-    ydb/core/blobstorage/vdisk/hulldb/test
-)
-
-SRCS(
-    hulldb_compstrat_ut.cpp
-)
-
-END()
+UNITTEST_FOR(ydb/core/blobstorage/vdisk/hulldb/compstrat) 
+ 
+OWNER(g:kikimr) 
+ 
+FORK_SUBTESTS() 
+ 
+TIMEOUT(600) 
+ 
+SIZE(MEDIUM) 
+ 
+PEERDIR( 
+    ydb/core/base 
+    ydb/core/blobstorage/vdisk/common 
+    ydb/core/blobstorage/vdisk/hulldb 
+    ydb/core/blobstorage/vdisk/hulldb/test 
+) 
+ 
+SRCS( 
+    hulldb_compstrat_ut.cpp 
+) 
+ 
+END() 

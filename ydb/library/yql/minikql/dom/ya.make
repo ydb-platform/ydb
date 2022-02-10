@@ -1,10 +1,10 @@
 LIBRARY()
 
-OWNER(
-    g:kikimr
-    g:yql
-    g:yql_ydb_core
-)
+OWNER( 
+    g:kikimr 
+    g:yql 
+    g:yql_ydb_core 
+) 
 
 YQL_ABI_VERSION(2 21 0)
 
@@ -12,7 +12,7 @@ PEERDIR(
     library/cpp/containers/stack_vector
     library/cpp/json
     library/cpp/yson_pull
-    ydb/library/yql/public/udf
+    ydb/library/yql/public/udf 
     ydb/library/yql/utils
 )
 

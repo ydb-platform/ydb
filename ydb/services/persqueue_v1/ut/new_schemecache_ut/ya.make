@@ -1,22 +1,22 @@
-UNITTEST_FOR(ydb/services/persqueue_v1)
-
+UNITTEST_FOR(ydb/services/persqueue_v1) 
+ 
 OWNER(
     zhenyok
-    g:kikimr
+    g:kikimr 
     g:logbroker
 )
 
-CFLAGS(
-    -DACTORLIB_HUGE_PB_SIZE
-)
+CFLAGS( 
+    -DACTORLIB_HUGE_PB_SIZE 
+) 
 
 FORK_SUBTESTS()
-
+ 
 IF (WITH_VALGRIND)
     TIMEOUT(1800)
     SIZE(LARGE)
     TAG(ya:fat)
-    REQUIREMENTS(ram:32)
+    REQUIREMENTS(ram:32) 
 ELSE()
     TIMEOUT(600)
     SIZE(MEDIUM)
@@ -35,14 +35,14 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/getopt
-    library/cpp/svnversion
-    ydb/core/testlib
-    ydb/public/api/grpc
-    ydb/public/sdk/cpp/client/resources
-    ydb/public/sdk/cpp/client/ydb_persqueue_core/ut/ut_utils
-    ydb/public/sdk/cpp/client/ydb_table
-    ydb/services/persqueue_v1
+    library/cpp/getopt 
+    library/cpp/svnversion 
+    ydb/core/testlib 
+    ydb/public/api/grpc 
+    ydb/public/sdk/cpp/client/resources 
+    ydb/public/sdk/cpp/client/ydb_persqueue_core/ut/ut_utils 
+    ydb/public/sdk/cpp/client/ydb_table 
+    ydb/services/persqueue_v1 
 )
 
 YQL_LAST_ABI_VERSION()

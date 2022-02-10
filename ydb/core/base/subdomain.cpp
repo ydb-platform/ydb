@@ -1,6 +1,6 @@
 #include "subdomain.h"
 
-#include <ydb/core/base/defs.h>
+#include <ydb/core/base/defs.h> 
 
 namespace NKikimr {
 TSubDomainKey::TSubDomainKey(ui64 shardId, ui64 pathId)

@@ -1,20 +1,20 @@
 #include "datashard_impl.h"
 
-#include <ydb/core/tablet_flat/tablet_flat_executor.h>
+#include <ydb/core/tablet_flat/tablet_flat_executor.h> 
 
 #include <util/string/escape.h>
 
 namespace NKikimr {
-namespace NDataShard {
+namespace NDataShard { 
 
 
-class TDataShard::TTxInitSplitMergeDestination : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
+class TDataShard::TTxInitSplitMergeDestination : public NTabletFlatExecutor::TTransactionBase<TDataShard> { 
 private:
     TEvDataShard::TEvInitSplitMergeDestination::TPtr Ev;
 
 public:
-    TTxInitSplitMergeDestination(TDataShard* ds, TEvDataShard::TEvInitSplitMergeDestination::TPtr ev)
-        : NTabletFlatExecutor::TTransactionBase<TDataShard>(ds)
+    TTxInitSplitMergeDestination(TDataShard* ds, TEvDataShard::TEvInitSplitMergeDestination::TPtr ev) 
+        : NTabletFlatExecutor::TTransactionBase<TDataShard>(ds) 
         , Ev(ev)
     {}
 
@@ -107,14 +107,14 @@ public:
 };
 
 
-class TDataShard::TTxSplitTransferSnapshot : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
+class TDataShard::TTxSplitTransferSnapshot : public NTabletFlatExecutor::TTransactionBase<TDataShard> { 
 private:
     TEvDataShard::TEvSplitTransferSnapshot::TPtr Ev;
     bool LastSnapshotReceived;
 
 public:
-    TTxSplitTransferSnapshot(TDataShard* ds, TEvDataShard::TEvSplitTransferSnapshot::TPtr& ev)
-        : NTabletFlatExecutor::TTransactionBase<TDataShard>(ds)
+    TTxSplitTransferSnapshot(TDataShard* ds, TEvDataShard::TEvSplitTransferSnapshot::TPtr& ev) 
+        : NTabletFlatExecutor::TTransactionBase<TDataShard>(ds) 
         , Ev(ev)
         , LastSnapshotReceived(false)
     {}
@@ -128,7 +128,7 @@ public:
      */
     void LegacyInitSchema(TTransactionContext& txc) {
         const auto& tableScheme = Ev->Get()->Record.GetUserTableScheme();
-        TString tableName = TDataShard::Schema::UserTablePrefix + tableScheme.GetName();
+        TString tableName = TDataShard::Schema::UserTablePrefix + tableScheme.GetName(); 
         if (!txc.DB.GetScheme().TableNames.contains(tableName)) { // TODO: properly check if table has already been created
             NKikimrSchemeOp::TTableDescription newTableScheme(tableScheme);
 
@@ -181,7 +181,7 @@ public:
 
         // Choose the highest write version, so we won't overwrite any important data
         TRowVersion minWriteVersion(record.GetMinWriteVersionStep(), record.GetMinWriteVersionTxId());
-
+ 
         if (Self->GetSnapshotManager().GetMinWriteVersion() < minWriteVersion)
             Self->GetSnapshotManager().SetMinWriteVersion(db, minWriteVersion);
 
@@ -507,11 +507,11 @@ public:
     }
 };
 
-void TDataShard::Handle(TEvDataShard::TEvInitSplitMergeDestination::TPtr& ev, const TActorContext& ctx) {
+void TDataShard::Handle(TEvDataShard::TEvInitSplitMergeDestination::TPtr& ev, const TActorContext& ctx) { 
     Execute(new TTxInitSplitMergeDestination(this, ev), ctx);
 }
 
-void TDataShard::Handle(TEvDataShard::TEvSplitTransferSnapshot::TPtr& ev, const TActorContext& ctx) {
+void TDataShard::Handle(TEvDataShard::TEvSplitTransferSnapshot::TPtr& ev, const TActorContext& ctx) { 
     const auto* msg = ev->Get();
     const ui64 srcTabletId = msg->Record.GetSrcTabletId();
     const ui64 srcTabletGen = msg->Record.GetSrcTabletGeneration();

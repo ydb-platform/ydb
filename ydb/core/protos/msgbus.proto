@@ -1,31 +1,31 @@
-import "ydb/core/protos/console.proto";
+import "ydb/core/protos/console.proto"; 
 import "library/cpp/actors/protos/interconnect.proto";
-import "ydb/core/protos/console_base.proto";
-import "ydb/core/protos/console_config.proto";
-import "ydb/core/protos/console_tenant.proto";
-import "ydb/core/protos/tablet_counters.proto";
-import "ydb/core/protos/flat_scheme_op.proto";
-import "ydb/core/protos/tx_proxy.proto";
-import "ydb/core/protos/tx_scheme.proto";
-import "ydb/core/protos/node_whiteboard.proto";
-import "ydb/core/protos/blobstorage.proto";
-import "ydb/core/protos/bind_channel_storage_pool.proto";
-import "ydb/core/protos/msgbus_kv.proto";
-import "ydb/core/protos/msgbus_pq.proto";
-import "ydb/core/protos/scheme_log.proto";
-import "ydb/core/protos/base.proto";
-import "ydb/core/protos/tablet.proto";
-import "ydb/core/protos/blobstorage_config.proto";
-import "ydb/core/protos/node_broker.proto";
-import "ydb/core/protos/cms.proto";
-import "ydb/core/protos/sqs.proto";
-import "ydb/core/protos/issue_id.proto";
-import "ydb/core/protos/subdomains.proto";
-import "ydb/core/protos/query_stats.proto";
-import "ydb/public/api/protos/ydb_operation.proto";
-import "ydb/public/api/protos/draft/persqueue_error_codes.proto";
-import "ydb/public/api/protos/ydb_issue_message.proto";
-import "ydb/library/mkql_proto/protos/minikql.proto";
+import "ydb/core/protos/console_base.proto"; 
+import "ydb/core/protos/console_config.proto"; 
+import "ydb/core/protos/console_tenant.proto"; 
+import "ydb/core/protos/tablet_counters.proto"; 
+import "ydb/core/protos/flat_scheme_op.proto"; 
+import "ydb/core/protos/tx_proxy.proto"; 
+import "ydb/core/protos/tx_scheme.proto"; 
+import "ydb/core/protos/node_whiteboard.proto"; 
+import "ydb/core/protos/blobstorage.proto"; 
+import "ydb/core/protos/bind_channel_storage_pool.proto"; 
+import "ydb/core/protos/msgbus_kv.proto"; 
+import "ydb/core/protos/msgbus_pq.proto"; 
+import "ydb/core/protos/scheme_log.proto"; 
+import "ydb/core/protos/base.proto"; 
+import "ydb/core/protos/tablet.proto"; 
+import "ydb/core/protos/blobstorage_config.proto"; 
+import "ydb/core/protos/node_broker.proto"; 
+import "ydb/core/protos/cms.proto"; 
+import "ydb/core/protos/sqs.proto"; 
+import "ydb/core/protos/issue_id.proto"; 
+import "ydb/core/protos/subdomains.proto"; 
+import "ydb/core/protos/query_stats.proto"; 
+import "ydb/public/api/protos/ydb_operation.proto"; 
+import "ydb/public/api/protos/draft/persqueue_error_codes.proto"; 
+import "ydb/public/api/protos/ydb_issue_message.proto"; 
+import "ydb/library/mkql_proto/protos/minikql.proto"; 
 
 import "google/protobuf/descriptor.proto";
 
@@ -84,7 +84,7 @@ message TResponse {
             {Value: 133 Name: "MSTATUS_INTERNALERROR" Man: "Something unexpected happend on server-side" },
             {Value: 134 Name: "MSTATUS_REJECTED" Man: "Request rejected for now, try later" }
         ]}
-    ]; // EResponseStatus from ydb/core/client/base/msgbus.h
+    ]; // EResponseStatus from ydb/core/client/base/msgbus.h 
 
     optional string ErrorReason = 400; // When present contains human-readable error description  (aka ProtobufError)
 
@@ -96,13 +96,13 @@ message TResponse {
         (CommonDescription) = "Transaction proxy processing status",
         (EnumValueHint) = { Hints : [
             {Value: 0 Name: "Unknown" Man: "Status unknown, must not be seen" },
-            {Value: 1 Name: "WrongRequest" Man: "Not recognized or erroneous request, see error description fields for possible details" },
+            {Value: 1 Name: "WrongRequest" Man: "Not recognized or erroneous request, see error description fields for possible details" }, 
             {Value: 2 Name: "EmptyAffectedSet" Man: "Program must touch at least one shard but touches none" },
             {Value: 3 Name: "NotImplemented" Man: "Not yet implemented feature requested" },
             {Value: 4 Name: "ResolveError" Man: "Some keys not resolved, see UnresolvedKeys for details" },
             {Value: 5 Name: "AccessDenied" Man: "Access denied for request" },
             {Value: 6 Name: "DomainLocalityError" Man: "Cross database transactions not allowed"},
-            {Value: 16 Name: "ProxyNotReady" Man: "Transaction proxy not ready for handling requests, try later. Most known case is temporary lack of txid-s" },
+            {Value: 16 Name: "ProxyNotReady" Man: "Transaction proxy not ready for handling requests, try later. Most known case is temporary lack of txid-s" }, 
             {Value: 17 Name: "ProxyAccepted" Man: "Request accepted by proxy. Transitional status" },
             {Value: 18 Name: "ProxyResolved" Man: "Request keys resolved to datashards. Transitional status" },
             {Value: 19 Name: "ProxyPrepared" Man: "Request fragmets prepared on datashards. Transitional status" },
@@ -210,12 +210,12 @@ message TResponse {
     // THiveCreateTablet
     message TCreateTabletResult {
         // Should be NKikimrProto::OK or NKikimrProto::ALREADY in case of success or repeated call
-        optional uint32 Status = 1; // EReplyStatus from ydb/core/protos/base.proto
+        optional uint32 Status = 1; // EReplyStatus from ydb/core/protos/base.proto 
         optional uint64 TabletId = 2;
     }
     message TLookupTabletResult {
         // Should be NKikimrProto::OK or NKikimrProto::NODATA in case of non existing tablet
-        optional uint32 Status = 1; // EReplyStatus from ydb/core/protos/base.proto
+        optional uint32 Status = 1; // EReplyStatus from ydb/core/protos/base.proto 
         optional uint64 TabletId = 2;
     }
     repeated TCreateTabletResult CreateTabletResult = 1000;
@@ -235,7 +235,7 @@ message TResponse {
     optional NKikimrTabletBase.TTabletCounters TabletCounters = 1020;
 
     // TBlobStorageConfigRequest
-    optional NKikimrBlobStorage.TConfigResponse BlobStorageConfigResponse = 1030;
+    optional NKikimrBlobStorage.TConfigResponse BlobStorageConfigResponse = 1030; 
 
     optional TResolveNodeResponse ResolveNodeResponse = 1040;
 
@@ -329,7 +329,7 @@ message THiveCreateTablet {
     message TCmdCreateTablet {
         optional uint64 OwnerId = 1; // mandatory, senders TabletId (use 0 for human/external system)
         optional uint64 OwnerIdx = 2; // mandatory, per-sender unique request id for duplicate request detection
-        optional NKikimrTabletBase.TTabletTypes.EType TabletType = 3; // mandatory, tablet type, see ydb/core/base/tablet_types.h
+        optional NKikimrTabletBase.TTabletTypes.EType TabletType = 3; // mandatory, tablet type, see ydb/core/base/tablet_types.h 
         optional uint32 ChannelsProfile = 4; // mandatory, channels profile index (use 0 for default profile)
         repeated uint32 AllowedNodeIDs = 5;
         repeated NKikimrSubDomains.TDomainKey AllowedDomains = 6;
@@ -347,18 +347,18 @@ message THiveCreateTablet {
 }
 
 message THiveCreateTabletResult {
-    optional uint32 Status = 1; // EResponseStatus from ydb/core/client/base/msgbus.h
+    optional uint32 Status = 1; // EResponseStatus from ydb/core/client/base/msgbus.h 
     optional bytes ProtobufError = 400;
 
     message TCreateTabletResult {
         // Should be NKikimrProto::OK or NKikimrProto::ALREADY in case of success or repeated call
-        optional uint32 Status = 1; // EReplyStatus from ydb/core/protos/base.proto
+        optional uint32 Status = 1; // EReplyStatus from ydb/core/protos/base.proto 
         optional uint64 TabletId = 2;
     }
 
     message TLookupTabletResult {
         // Should be NKikimrProto::OK or NKikimrProto::NODATA in case of non existing tablet
-        optional uint32 Status = 1; // EReplyStatus from ydb/core/protos/base.proto
+        optional uint32 Status = 1; // EReplyStatus from ydb/core/protos/base.proto 
         optional uint64 TabletId = 2;
     }
 
@@ -374,7 +374,7 @@ message TLocalEnumerateTablets {
 }
 
 message TLocalEnumerateTabletsResult {
-    optional uint32 Status = 1; // EResponseStatus from ydb/core/client/base/msgbus.h
+    optional uint32 Status = 1; // EResponseStatus from ydb/core/client/base/msgbus.h 
     optional bytes ProtobufError = 400;
 
     message TTabletInfo {
@@ -392,7 +392,7 @@ message TTypeMetadataRequest {
 
 // must start from TResponseBase
 message TTypeMetadataResponse {
-    optional uint32 Status = 1; // EResponseStatus from ydb/core/client/base/msgbus.h
+    optional uint32 Status = 1; // EResponseStatus from ydb/core/client/base/msgbus.h 
     optional bytes ProtobufError = 400;
 
     optional uint64 ETag = 2;
@@ -511,7 +511,7 @@ message TWhoAmI {
 
 message TBlobStorageConfigRequest {
     optional uint32 Domain = 1;
-    optional NKikimrBlobStorage.TConfigRequest Request = 2;
+    optional NKikimrBlobStorage.TConfigRequest Request = 2; 
     optional string SecurityToken = 3;
 }
 

@@ -7,7 +7,7 @@ namespace NKikimr {
         const TIntrusivePtr<TBlobStorageGroupInfo> Info;
         const TIntrusivePtr<TVDiskContext> VCtx;
         const TString& LogPrefix;
-        const TPDiskCtxPtr PDiskCtx;
+        const TPDiskCtxPtr PDiskCtx; 
         const TInstant Deadline;
         std::vector<TEvRecoverBlobResult::TItem> Items;
         const bool WriteRestoredParts;
@@ -50,7 +50,7 @@ namespace NKikimr {
             }
 
             void AddFromSegment(const TMemRecLogoBlob& memRec, const TDiskPart *outbound, const TKeyLogoBlob& /*key*/,
-                    ui64 /*circaLsn*/) {
+                    ui64 /*circaLsn*/) { 
                 const NMatrix::TVectorType local = memRec.GetLocalParts(GType);
                 if ((local & Item->Needed).Empty()) {
                     return; // no useful parts here
@@ -95,7 +95,7 @@ namespace NKikimr {
     public:
         TRestoreCorruptedBlobActor(TActorId skeletonId, TEvRestoreCorruptedBlob::TPtr& ev,
                 TIntrusivePtr<TBlobStorageGroupInfo> info, TIntrusivePtr<TVDiskContext> vctx,
-                TPDiskCtxPtr pdiskCtx)
+                TPDiskCtxPtr pdiskCtx) 
             : SkeletonId(skeletonId)
             , Info(std::move(info))
             , VCtx(std::move(vctx))
@@ -332,7 +332,7 @@ namespace NKikimr {
 
     IActor *CreateRestoreCorruptedBlobActor(TActorId skeletonId, TEvRestoreCorruptedBlob::TPtr& ev,
             TIntrusivePtr<TBlobStorageGroupInfo> info, TIntrusivePtr<TVDiskContext> vctx,
-            TPDiskCtxPtr pdiskCtx) {
+            TPDiskCtxPtr pdiskCtx) { 
         return new TRestoreCorruptedBlobActor(skeletonId, ev, std::move(info), std::move(vctx), std::move(pdiskCtx));
     }
 

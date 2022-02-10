@@ -2,11 +2,11 @@
 
 #include "iface.h"
 
-#include <ydb/core/tablet_flat/flat_mem_warm.h>
-#include <ydb/core/tablet_flat/flat_mem_iter.h>
-#include <ydb/core/tablet_flat/flat_row_state.h>
-#include <ydb/core/tablet_flat/flat_row_scheme.h>
-#include <ydb/core/tablet_flat/test/libs/table/test_make.h>
+#include <ydb/core/tablet_flat/flat_mem_warm.h> 
+#include <ydb/core/tablet_flat/flat_mem_iter.h> 
+#include <ydb/core/tablet_flat/flat_row_state.h> 
+#include <ydb/core/tablet_flat/flat_row_scheme.h> 
+#include <ydb/core/tablet_flat/test/libs/table/test_make.h> 
 
 namespace NKikimr {
 namespace NTable {
@@ -62,14 +62,14 @@ namespace NPerf {
             const auto key = Iter->GetKey();
 
             for (auto &pin: Remap.KeyPins())
-                State.Set(pin.Pos, ECellOp::Set, key.Columns[pin.Key]);
+                State.Set(pin.Pos, ECellOp::Set, key.Columns[pin.Key]); 
 
             Iter->Apply(State, /* committed */ {});
             aggr(State);
         }
 
     private:
-        TIntrusivePtr<TMemTable> Table;
+        TIntrusivePtr<TMemTable> Table; 
         TIntrusiveConstPtr<TKeyNulls> Nulls;
         TRemap Remap;
         TAutoPtr<TMemIt> Iter;

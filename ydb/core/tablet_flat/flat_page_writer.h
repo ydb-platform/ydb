@@ -17,8 +17,8 @@ namespace NKikimr {
 namespace NTable {
 namespace NPage {
 
-    struct TDataPageBuilder {
-        TDataPageBuilder(EPage type, ui16 version, bool label, ui32 extra)
+    struct TDataPageBuilder { 
+        TDataPageBuilder(EPage type, ui16 version, bool label, ui32 extra) 
             : Type(type)
             , Version(version)
             , V2Label(label)
@@ -57,7 +57,7 @@ namespace NPage {
 
         void Open(size_t more, size_t least, ui32 rows = 0) noexcept
         {
-            Y_VERIFY(!Blob, "TDataPageBuilder is already has live page");
+            Y_VERIFY(!Blob, "TDataPageBuilder is already has live page"); 
 
             PageBytes = Max(least, BytesUsed() + more);
             PageRows = rows ? rows : Max<ui32>();
@@ -289,10 +289,10 @@ namespace NPage {
     };
 
 
-    class TDataPageWriter {
+    class TDataPageWriter { 
     public:
         struct TSizeInfo {
-            TPgSize DataPageSize = 0;
+            TPgSize DataPageSize = 0; 
             TPgSize SmallSize = 0;
             TPgSize LargeSize = 0;
             ui32 NewSmallRefs = 0;
@@ -303,7 +303,7 @@ namespace NPage {
         };
 
     public:
-        TDataPageWriter(TIntrusiveConstPtr<TPartScheme> scheme, const TConf &conf, TTagsRef tags, TGroupId groupId)
+        TDataPageWriter(TIntrusiveConstPtr<TPartScheme> scheme, const TConf &conf, TTagsRef tags, TGroupId groupId) 
             : Scheme(std::move(scheme))
             , PageSize(conf.Groups[groupId.Index].PageSize)
             , PageRows(conf.Groups[groupId.Index].PageRows)
@@ -313,21 +313,21 @@ namespace NPage {
             , Pinout(Scheme->MakePinout(tags, groupId.Index))
             , GroupId(groupId)
             , GroupInfo(Scheme->GetLayout(groupId))
-            , DataPageBuilder(EPage::DataPage, 1, bool(conf.Groups[groupId.Index].Codec), sizeof(TDataPage::TExtra))
+            , DataPageBuilder(EPage::DataPage, 1, bool(conf.Groups[groupId.Index].Codec), sizeof(TDataPage::TExtra)) 
         {
             size_t expected = GroupInfo.Columns.size() - GroupInfo.ColsKeyData.size();
 
-            Y_VERIFY(Pinout.size() == expected, "TDataPageWriter got an invalid pinout");
+            Y_VERIFY(Pinout.size() == expected, "TDataPageWriter got an invalid pinout"); 
         }
 
         ui32 PrefixSize() const noexcept
         {
-            return DataPageBuilder.PrefixSize();
+            return DataPageBuilder.PrefixSize(); 
         }
 
         ui64 BytesUsed() const noexcept
         {
-            return DataPageBuilder.BytesUsed();
+            return DataPageBuilder.BytesUsed(); 
         }
 
         TSizeInfo CalcSize(TCellsRef key, const TRowState& row, bool finalRow, TRowVersion minVersion, TRowVersion maxVersion, ui64 txId) const
@@ -339,17 +339,17 @@ namespace NPage {
             const bool isDelta = txId != 0;
 
             TSizeInfo ret;
-            ret.DataPageSize = TPgSizeOf<NPage::TDataPage::TRecord>::Value;
-            ret.DataPageSize += !DataPageBuilder.HasDeltas() ? sizeof(TPgSize) : 0; // entry in the offsets table
-            ret.DataPageSize += isDelta ? sizeof(ui64) : 0; // every row delta has an additional offset delta
-            ret.DataPageSize += GroupInfo.FixedSize;
-            ret.DataPageSize += isErased ? sizeof(NPage::TDataPage::TVersion) : 0;
-            ret.DataPageSize += isVersioned ? sizeof(NPage::TDataPage::TVersion) : 0;
-            ret.DataPageSize += GroupId.Index == 0 && isDelta ? sizeof(NPage::TDataPage::TDelta) : 0;
+            ret.DataPageSize = TPgSizeOf<NPage::TDataPage::TRecord>::Value; 
+            ret.DataPageSize += !DataPageBuilder.HasDeltas() ? sizeof(TPgSize) : 0; // entry in the offsets table 
+            ret.DataPageSize += isDelta ? sizeof(ui64) : 0; // every row delta has an additional offset delta 
+            ret.DataPageSize += GroupInfo.FixedSize; 
+            ret.DataPageSize += isErased ? sizeof(NPage::TDataPage::TVersion) : 0; 
+            ret.DataPageSize += isVersioned ? sizeof(NPage::TDataPage::TVersion) : 0; 
+            ret.DataPageSize += GroupId.Index == 0 && isDelta ? sizeof(NPage::TDataPage::TDelta) : 0; 
 
             // Only the main group includes the key
             for (TPos it = 0; it < GroupInfo.ColsKeyData.size(); it++) {
-                ret.DataPageSize += GroupInfo.ColsKeyData[it].IsFixed ? 0 : key[it].Size();
+                ret.DataPageSize += GroupInfo.ColsKeyData[it].IsFixed ? 0 : key[it].Size(); 
             }
 
             for (const auto& pin : Pinout) {
@@ -357,7 +357,7 @@ namespace NPage {
 
                 if (!row.IsFinalized(pin.To) || info.IsKey() || info.IsFixed) {
 
-                } else if (row.GetOp(pin.To) != ELargeObj::Inline) {
+                } else if (row.GetOp(pin.To) != ELargeObj::Inline) { 
                     /* External blob occupies only fixed technical field */
                     ++ret.ReusedLargeRefs;
                 } else if (!isDelta && IsLargeSize(row.Get(pin.To).Size())) {
@@ -366,12 +366,12 @@ namespace NPage {
                 } else if (!isDelta && IsSmallSize(row.Get(pin.To).Size())) {
                     ret.SmallSize += row.Get(pin.To).Size();
                     ++ret.NewSmallRefs;
-                } else if (isDelta || !finalRow || row.GetOp(pin.To) != ECellOp::Reset) {
-                    ret.DataPageSize += row.Get(pin.To).Size();
+                } else if (isDelta || !finalRow || row.GetOp(pin.To) != ECellOp::Reset) { 
+                    ret.DataPageSize += row.Get(pin.To).Size(); 
                 }
             }
 
-            ret.Overflow = DataPageBuilder.Overflow(ret.DataPageSize, 1);
+            ret.Overflow = DataPageBuilder.Overflow(ret.DataPageSize, 1); 
             return ret;
         }
 
@@ -379,15 +379,15 @@ namespace NPage {
         {
             if (more.Overflow) {
                 LastRecord = nullptr;
-                saver.Save(DataPageBuilder.Close(), GroupId);
+                saver.Save(DataPageBuilder.Close(), GroupId); 
             }
 
-            if (!DataPageBuilder) {
-                DataPageBuilder.Open(more.DataPageSize, PageSize, PageRows);
-                DataPageBuilder.ExtraAs<TDataPage::TExtra>()->BaseRow = RowId;
+            if (!DataPageBuilder) { 
+                DataPageBuilder.Open(more.DataPageSize, PageSize, PageRows); 
+                DataPageBuilder.ExtraAs<TDataPage::TExtra>()->BaseRow = RowId; 
             }
 
-            Put(key, row, saver, finalRow, minVersion, maxVersion, txId, more.DataPageSize);
+            Put(key, row, saver, finalRow, minVersion, maxVersion, txId, more.DataPageSize); 
 
             if (txId == 0) {
                 BlobRowId = ++RowId;
@@ -396,21 +396,21 @@ namespace NPage {
 
         void FlushDeltas() noexcept
         {
-            DataPageBuilder.PushOffset(0);
+            DataPageBuilder.PushOffset(0); 
             BlobRowId = ++RowId;
         }
 
         void Flush(ISaver &saver) noexcept
         {
             LastRecord = nullptr;
-            if (auto flesh = DataPageBuilder.Close())
+            if (auto flesh = DataPageBuilder.Close()) 
                 saver.Save(flesh, GroupId);
         }
 
         void Reset() noexcept
         {
             BlobRowId = RowId = 0;
-            DataPageBuilder.Reset();
+            DataPageBuilder.Reset(); 
         }
 
         void SetBlobRowId(TRowId rowId) noexcept
@@ -423,7 +423,7 @@ namespace NPage {
             return RowId - 1;
         }
 
-        NPage::TDataPage::TRecord& GetLastRecord() const noexcept
+        NPage::TDataPage::TRecord& GetLastRecord() const noexcept 
         {
             Y_VERIFY(LastRecord != nullptr);
             return *LastRecord;
@@ -438,31 +438,31 @@ namespace NPage {
 
             if (isDelta) {
                 Y_VERIFY(!isErased && !isVersioned);
-                DataPageBuilder.PushDelta(recordSize);
+                DataPageBuilder.PushDelta(recordSize); 
             } else {
-                DataPageBuilder.PushOffset(recordSize);
+                DataPageBuilder.PushOffset(recordSize); 
             }
 
-            auto &rec = DataPageBuilder.Place<NPage::TDataPage::TRecord>();
+            auto &rec = DataPageBuilder.Place<NPage::TDataPage::TRecord>(); 
 
             for (const auto &info: GroupInfo.Columns) {
-                DataPageBuilder.Place<NPage::TDataPage::TItem>().Flg = ui8(ECellOp::Empty);
-                DataPageBuilder.Zero(info.FixedSize);
+                DataPageBuilder.Place<NPage::TDataPage::TItem>().Flg = ui8(ECellOp::Empty); 
+                DataPageBuilder.Zero(info.FixedSize); 
             }
 
             if (GroupId.Index == 0) {
                 rec.SetFields(row.GetRowState(), isErased, isVersioned, isDelta);
 
                 if (isErased) {
-                    DataPageBuilder.Place<NPage::TDataPage::TVersion>().Set(maxVersion);
+                    DataPageBuilder.Place<NPage::TDataPage::TVersion>().Set(maxVersion); 
                 }
 
                 if (isVersioned) {
-                    DataPageBuilder.Place<NPage::TDataPage::TVersion>().Set(minVersion);
+                    DataPageBuilder.Place<NPage::TDataPage::TVersion>().Set(minVersion); 
                 }
 
                 if (isDelta) {
-                    DataPageBuilder.Place<NPage::TDataPage::TDelta>().SetTxId(txId);
+                    DataPageBuilder.Place<NPage::TDataPage::TDelta>().SetTxId(txId); 
                 }
             } else {
                 rec.SetZero(); // We don't store flags in alternative groups
@@ -473,7 +473,7 @@ namespace NPage {
                 const TCell& val = key[i];
                 auto &info = GroupInfo.ColsKeyData[i];
                 if (!val.IsNull()) {
-                    DataPageBuilder.AddValue(info, val, rec)->Null = false;
+                    DataPageBuilder.AddValue(info, val, rec)->Null = false; 
                 } else {
                     rec.GetItem(info)->Null = true;
                 }
@@ -484,25 +484,25 @@ namespace NPage {
 
                 if (!row.IsFinalized(pin.To) || info.IsKey()) {
 
-                } else if (row.GetOp(pin.To) == ECellOp::Reset) {
+                } else if (row.GetOp(pin.To) == ECellOp::Reset) { 
                     if (!finalRow)
-                        rec.GetItem(info)->Flg = ui8(ECellOp::Reset);
+                        rec.GetItem(info)->Flg = ui8(ECellOp::Reset); 
                 } else if (auto cell = row.Get(pin.To)) {
-                    auto cellOp = row.GetOp(pin.To);
+                    auto cellOp = row.GetOp(pin.To); 
 
-                    if (info.IsFixed /* may place only as ELargeObj::Inline */) {
-                        Y_VERIFY(cellOp == ELargeObj::Inline, "Got fixed non-inlined");
+                    if (info.IsFixed /* may place only as ELargeObj::Inline */) { 
+                        Y_VERIFY(cellOp == ELargeObj::Inline, "Got fixed non-inlined"); 
 
-                        DataPageBuilder.AddValue(info, cell, rec)->Flg = *cellOp;
+                        DataPageBuilder.AddValue(info, cell, rec)->Flg = *cellOp; 
                     } else if (auto lob = SaveBlob(cellOp, pin.To, cell, saver, isDelta)) {
                         auto *item = rec.GetItem(info);
 
                         WriteUnaligned<ui64>(rec.template GetFixed<void>(item), lob.Ref);
-                        item->Flg = *TCellOp{ cellOp, lob.Lob };
+                        item->Flg = *TCellOp{ cellOp, lob.Lob }; 
                     } else
-                        DataPageBuilder.AddValue(info, cell, rec)->Flg = *cellOp;
+                        DataPageBuilder.AddValue(info, cell, rec)->Flg = *cellOp; 
                 } else {
-                    rec.GetItem(info)->Flg = ui8(ECellOp::Null);
+                    rec.GetItem(info)->Flg = ui8(ECellOp::Null); 
                 }
             }
 
@@ -511,10 +511,10 @@ namespace NPage {
 
         TLargeObj SaveBlob(TCellOp cellOp, ui32 pin, const TCell &cell, ISaver &saver, bool isDelta) noexcept
         {
-            if (cellOp == ELargeObj::GlobId) {
-                return saver.Save(BlobRowId, pin, cell.AsValue<NPageCollection::TGlobId>());
-            } else if (cellOp != ELargeObj::Inline) {
-                Y_Fail("Got an unexpected ELargeObj ref type " << int(ELargeObj(cellOp)));
+            if (cellOp == ELargeObj::GlobId) { 
+                return saver.Save(BlobRowId, pin, cell.AsValue<NPageCollection::TGlobId>()); 
+            } else if (cellOp != ELargeObj::Inline) { 
+                Y_Fail("Got an unexpected ELargeObj ref type " << int(ELargeObj(cellOp))); 
             } else if (!isDelta && (IsLargeSize(cell.Size()) || IsSmallSize(cell.Size()))) {
                 // FIXME: we cannot handle blob references during scans, so we
                 //        avoid creating large objects when they are in deltas
@@ -547,9 +547,9 @@ namespace NPage {
         const TPartScheme::TGroupInfo& GroupInfo;
         TRowId RowId = 0;
         TRowId BlobRowId = 0;
-        TDataPageBuilder DataPageBuilder;
+        TDataPageBuilder DataPageBuilder; 
 
-        NPage::TDataPage::TRecord* LastRecord = nullptr;
+        NPage::TDataPage::TRecord* LastRecord = nullptr; 
     };
 
 
@@ -560,14 +560,14 @@ namespace NPage {
             , MinSize(conf.Groups[groupId.Index].IndexMin)
             , GroupId(groupId)
             , GroupInfo(Scheme->GetLayout(groupId))
-            , DataPageBuilder(EPage::Index, groupId.IsMain() ? 3 : 2, false, 0 /* no extra data before block */)
+            , DataPageBuilder(EPage::Index, groupId.IsMain() ? 3 : 2, false, 0 /* no extra data before block */) 
         {
 
         }
 
         ui64 BytesUsed() const noexcept
         {
-            return DataPageBuilder.BytesUsed();
+            return DataPageBuilder.BytesUsed(); 
         }
 
         TPgSize CalcSize(TCellsRef key) const noexcept
@@ -587,7 +587,7 @@ namespace NPage {
 
         void Add(TPgSize more, TCellsRef key, TRowId row, TPageId page) noexcept
         {
-            DataPageBuilder.Grow(more, MinSize, 1.42);
+            DataPageBuilder.Grow(more, MinSize, 1.42); 
 
             return Put(key, row, page, more);
         }
@@ -599,31 +599,31 @@ namespace NPage {
 
         TSharedData Flush() noexcept
         {
-            return DataPageBuilder.Close();
+            return DataPageBuilder.Close(); 
         }
 
         void Reset() noexcept
         {
-            DataPageBuilder.Reset();
+            DataPageBuilder.Reset(); 
         }
 
     private:
         void Put(TCellsRef key, TRowId row, TPageId page, TPgSize recordSize) noexcept
         {
-            DataPageBuilder.PushOffset(recordSize);
+            DataPageBuilder.PushOffset(recordSize); 
 
-            auto &rec = DataPageBuilder.Place<NPage::TIndex::TRecord>();
+            auto &rec = DataPageBuilder.Place<NPage::TIndex::TRecord>(); 
             rec.SetRowId(row);
             rec.SetPageId(page);
 
             for (const auto &info: GroupInfo.ColsKeyIdx) {
-                DataPageBuilder.Place<NPage::TIndex::TItem>().Null = true;
-                DataPageBuilder.Zero(info.FixedSize);
+                DataPageBuilder.Place<NPage::TIndex::TItem>().Null = true; 
+                DataPageBuilder.Zero(info.FixedSize); 
             }
 
             for (TPos it = 0; it < GroupInfo.ColsKeyIdx.size(); it++) {
                 if (const auto &val = key[it]) {
-                    DataPageBuilder.AddValue(GroupInfo.ColsKeyIdx[it], val, rec)->Null = false;
+                    DataPageBuilder.AddValue(GroupInfo.ColsKeyIdx[it], val, rec)->Null = false; 
                 }
             }
         }
@@ -635,7 +635,7 @@ namespace NPage {
         const TPgSize MinSize = 8 * 1024;
         const TGroupId GroupId;
         const TPartScheme::TGroupInfo& GroupInfo;
-        TDataPageBuilder DataPageBuilder;
+        TDataPageBuilder DataPageBuilder; 
     };
 
 }

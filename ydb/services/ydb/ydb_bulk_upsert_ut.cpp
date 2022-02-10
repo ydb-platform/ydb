@@ -1,8 +1,8 @@
 #include "ydb_common_ut.h"
 
-#include <ydb/public/sdk/cpp/client/ydb_result/result.h>
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
-#include <ydb/public/lib/yson_value/ydb_yson_value.h>
+#include <ydb/public/sdk/cpp/client/ydb_result/result.h> 
+#include <ydb/public/sdk/cpp/client/ydb_table/table.h> 
+#include <ydb/public/lib/yson_value/ydb_yson_value.h> 
 
 #include <ydb/library/yql/public/issue/yql_issue.h>
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
@@ -1194,12 +1194,12 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsert) {
         EStatus::TRANSPORT_UNAVAILABLE
     };
 
-    NYdb::NTable::TRetryOperationSettings GetTestRetrySettings() {
-        NYdb::NTable::TRetryOperationSettings retrySettings;
+    NYdb::NTable::TRetryOperationSettings GetTestRetrySettings() { 
+        NYdb::NTable::TRetryOperationSettings retrySettings; 
         retrySettings
             .Idempotent(true)
-            .FastBackoffSettings(NYdb::NTable::TBackoffSettings().SlotDuration(TDuration::MilliSeconds(1)).Ceiling(3))
-            .SlowBackoffSettings(NYdb::NTable::TBackoffSettings().SlotDuration(TDuration::MilliSeconds(1)).Ceiling(3))
+            .FastBackoffSettings(NYdb::NTable::TBackoffSettings().SlotDuration(TDuration::MilliSeconds(1)).Ceiling(3)) 
+            .SlowBackoffSettings(NYdb::NTable::TBackoffSettings().SlotDuration(TDuration::MilliSeconds(1)).Ceiling(3)) 
             .MaxRetries(5);
         return retrySettings;
     }
@@ -1214,7 +1214,7 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsert) {
 
         CreateTestTable(db);
 
-        NYdb::NTable::TRetryOperationSettings retrySettings = GetTestRetrySettings();
+        NYdb::NTable::TRetryOperationSettings retrySettings = GetTestRetrySettings(); 
 
         for (EStatus injectedStatus : InjectedFailStatuses) {
             for (ui32 injectCount : {10, 6, 5, 3, 0}) {
@@ -1225,7 +1225,7 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsert) {
                 auto status = db.RetryOperationSync([&failInjector](NYdb::NTable::TTableClient& db) {
                         EStatus injected = failInjector.GetInjectedStatus();
                         if (injected != EStatus::SUCCESS) {
-                            return NYdb::NTable::TBulkUpsertResult(TStatus(injected, NYql::TIssues()));
+                            return NYdb::NTable::TBulkUpsertResult(TStatus(injected, NYql::TIssues())); 
                         }
 
                         NYdb::TValueBuilder rows;
@@ -1264,7 +1264,7 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsert) {
 
         CreateTestTable(db);
 
-        NYdb::NTable::TRetryOperationSettings retrySettings = GetTestRetrySettings();
+        NYdb::NTable::TRetryOperationSettings retrySettings = GetTestRetrySettings(); 
 
         for (EStatus injectedStatus : InjectedFailStatuses) {
             for (ui32 injectCount : {10, 6, 5, 3, 0}) {
@@ -1276,7 +1276,7 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsert) {
                     [&failInjector](NYdb::NTable::TTableClient& db) {
                         EStatus injected = failInjector.GetInjectedStatus();
                         if (injected != EStatus::SUCCESS) {
-                            return NThreading::MakeFuture<NYdb::NTable::TBulkUpsertResult>(NYdb::NTable::TBulkUpsertResult(TStatus(injected, NYql::TIssues())));
+                            return NThreading::MakeFuture<NYdb::NTable::TBulkUpsertResult>(NYdb::NTable::TBulkUpsertResult(TStatus(injected, NYql::TIssues()))); 
                         }
 
                         NYdb::TValueBuilder rows;

@@ -12,8 +12,8 @@ namespace NTable {
         using TIter = TIndex::TIter;
 
     public:
-        struct TResult {
-            TResult(TPageId pageId) noexcept : PageId(pageId) { }
+        struct TResult { 
+            TResult(TPageId pageId) noexcept : PageId(pageId) { } 
 
             explicit operator bool() const noexcept
             {
@@ -60,7 +60,7 @@ namespace NTable {
             return Head - Tail;
         }
 
-        TResult Clean(TPageId until) noexcept
+        TResult Clean(TPageId until) noexcept 
         {
             if (PageOf(Tail) > until) {
                 Y_FAIL("Part lookups goes below of its trace pages");
@@ -82,7 +82,7 @@ namespace NTable {
             return Max<TPageId>();
         }
 
-        TResult More(TPageId until) noexcept
+        TResult More(TPageId until) noexcept 
         {
             if (Head != End && ((Edge - Head >= 0) || PageOf(Head) < until)) {
                 return (Head++)->GetPageId();

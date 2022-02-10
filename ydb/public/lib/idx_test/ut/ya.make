@@ -1,4 +1,4 @@
-UNITTEST_FOR(ydb/public/lib/idx_test)
+UNITTEST_FOR(ydb/public/lib/idx_test) 
 
 OWNER(
     dcherednik
@@ -6,13 +6,13 @@ OWNER(
 )
 
 TIMEOUT(600)
-
+ 
 SIZE(MEDIUM)
 
 FORK_SUBTESTS()
 
 PEERDIR(
-    ydb/public/lib/idx_test
+    ydb/public/lib/idx_test 
 )
 
 SRCS(

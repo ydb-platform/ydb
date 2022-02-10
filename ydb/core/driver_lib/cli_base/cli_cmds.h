@@ -5,10 +5,10 @@
 #include "cli_grpc.h"
 #include "cli_kicli.h"
 
-#include <ydb/public/lib/ydb_cli/common/root.h>
+#include <ydb/public/lib/ydb_cli/common/root.h> 
 
-#include <ydb/public/api/protos/ydb_discovery.pb.h>
-#include <ydb/public/api/grpc/ydb_discovery_v1.grpc.pb.h>
+#include <ydb/public/api/protos/ydb_discovery.pb.h> 
+#include <ydb/public/api/grpc/ydb_discovery_v1.grpc.pb.h> 
 
 namespace NKikimr {
 namespace NDriverClient {

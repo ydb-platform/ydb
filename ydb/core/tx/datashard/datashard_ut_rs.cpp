@@ -1,9 +1,9 @@
 #include "defs.h"
 #include "datashard_ut_common.h"
 
-#include <ydb/core/testlib/test_client.h>
-#include <ydb/core/tx/schemeshard/schemeshard.h>
-#include <ydb/core/tx/tx_proxy/proxy.h>
+#include <ydb/core/testlib/test_client.h> 
+#include <ydb/core/tx/schemeshard/schemeshard.h> 
+#include <ydb/core/tx/tx_proxy/proxy.h> 
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -144,7 +144,7 @@ Y_UNIT_TEST_SUITE(TDataShardRSTest) {
             runtime.Register(CreateTabletKiller(shards[0]));
 
             TDispatchOptions options;
-            //TDataShard::TEvPrivate::EvRemoveOldInReadSets
+            //TDataShard::TEvPrivate::EvRemoveOldInReadSets 
             options.FinalEvents.emplace_back(EventSpaceBegin(TKikimrEvents::ES_PRIVATE) + 9, 5);
             runtime.DispatchEvents(options);
 

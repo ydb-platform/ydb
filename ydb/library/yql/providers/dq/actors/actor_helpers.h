@@ -6,7 +6,7 @@
 #include <library/cpp/actors/core/hfunc.h>
 #include <ydb/library/yql/utils/actors/rich_actor.h>
 
-#include <ydb/library/yql/utils/log/log.h>
+#include <ydb/library/yql/utils/log/log.h> 
 
 namespace NYql {
 

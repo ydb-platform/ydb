@@ -1,4 +1,4 @@
-#include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include <ydb/core/kqp/ut/common/kqp_ut_common.h> 
 
 #include <library/cpp/threading/local_executor/local_executor.h>
 
@@ -66,7 +66,7 @@ Y_UNIT_TEST_SUITE(KqpService) {
     }
 
     Y_UNIT_TEST(CloseSessionsWithLoad) {
-        auto kikimr = std::make_shared<TKikimrRunner>();
+        auto kikimr = std::make_shared<TKikimrRunner>(); 
         auto db = kikimr->GetTableClient();
 
         const ui32 SessionsCount = 50;

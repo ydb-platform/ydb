@@ -1,13 +1,13 @@
 #pragma once
 
-#include <ydb/core/tablet_flat/flat_database.h>
-#include <ydb/core/util/tuples.h>
-#include <ydb/core/util/templates.h>
+#include <ydb/core/tablet_flat/flat_database.h> 
+#include <ydb/core/util/tuples.h> 
+#include <ydb/core/util/templates.h> 
 
 #include <util/system/type_name.h>
 #include <util/system/unaligned_mem.h>
 #include <library/cpp/containers/stack_vector/stack_vec.h>
-#include <utility>
+#include <utility> 
 
 #include <cxxabi.h>
 
@@ -606,14 +606,14 @@ struct TUpdate {
     {}
 
     operator TUpdateOp() const {
-        return TUpdateOp(Column::ColumnId, NTable::ECellOp::Set, Value);
+        return TUpdateOp(Column::ColumnId, NTable::ECellOp::Set, Value); 
     }
 };
 
 template <typename Column>
 struct TNull {
     operator TUpdateOp() const {
-        return TUpdateOp(Column::ColumnId, NTable::ECellOp::Null, { });
+        return TUpdateOp(Column::ColumnId, NTable::ECellOp::Null, { }); 
     }
 };
 
@@ -1008,7 +1008,7 @@ struct Schema {
             private:
                 bool IsDeleted() const {
                     Y_VERIFY_DEBUG(
-                        Iterator->Row().GetRowState() != NTable::ERowOp::Erase,
+                        Iterator->Row().GetRowState() != NTable::ERowOp::Erase, 
                         "Unexpected deleted row returned from iterator");
                     return false;
                 }
@@ -1785,16 +1785,16 @@ struct Schema {
             template <typename... UpdateTypes>
             KeyOperations& Update(const UpdateTypes&... updates) {
                 std::array<TUpdateOp, sizeof...(UpdateTypes)> update_ops = {{updates...}};
-                Database->Update(TableId, NTable::ERowOp::Upsert, TTupleToRawTypeValue<KeyValuesType, KeyColumnsType>(KeyValues), update_ops);
+                Database->Update(TableId, NTable::ERowOp::Upsert, TTupleToRawTypeValue<KeyValuesType, KeyColumnsType>(KeyValues), update_ops); 
                 return *this;
             }
 
             void Update() {
-                Database->Update(TableId, NTable::ERowOp::Upsert, TTupleToRawTypeValue<KeyValuesType, KeyColumnsType>(KeyValues), { });
+                Database->Update(TableId, NTable::ERowOp::Upsert, TTupleToRawTypeValue<KeyValuesType, KeyColumnsType>(KeyValues), { }); 
             }
 
             void Delete() {
-                Database->Update(TableId, NTable::ERowOp::Erase, TTupleToRawTypeValue<KeyValuesType, KeyColumnsType>(KeyValues), { });
+                Database->Update(TableId, NTable::ERowOp::Erase, TTupleToRawTypeValue<KeyValuesType, KeyColumnsType>(KeyValues), { }); 
             }
         };
     };

@@ -4,8 +4,8 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <util/generic/ptr.h>
-#include <util/generic/xrange.h>
+#include <util/generic/ptr.h> 
+#include <util/generic/xrange.h> 
 
 
 namespace NKikimr {
@@ -34,7 +34,7 @@ struct TPriorityItem {
         Id = rhs.Id;
         Priority = rhs.Priority;
         return *this;
-    }
+    } 
 
     size_t Hash() const {
         return THash<int>()(Id);
@@ -210,7 +210,7 @@ Y_UNIT_TEST_SUITE(TPriorityOperationQueueTest) {
         UNIT_ASSERT_VALUES_EQUAL(starter.StartHistory.size(), 2UL);
         UNIT_ASSERT_VALUES_EQUAL(starter.StartHistory.back(), TPriorityItem(1, 1));
     }
-
+ 
     Y_UNIT_TEST(ShouldUpdatePriorityReadyQueue) {
         TPriorityQueue::TConfig config;
         config.IsCircular = true;

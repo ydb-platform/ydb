@@ -1,14 +1,14 @@
 #pragma once
 
-#include <ydb/core/kqp/runtime/kqp_scan_data.h>
-#include <ydb/core/engine/mkql_engine_flat.h>
-#include <ydb/core/scheme/scheme_tabledefs.h>
-#include <ydb/core/tablet_flat/flat_database.h>
+#include <ydb/core/kqp/runtime/kqp_scan_data.h> 
+#include <ydb/core/engine/mkql_engine_flat.h> 
+#include <ydb/core/scheme/scheme_tabledefs.h> 
+#include <ydb/core/tablet_flat/flat_database.h> 
 
 namespace NKikimr {
-    namespace NDataShard {
+    namespace NDataShard { 
         class TExecuteKqpScanTxUnit;
-        class TDataShard;
+        class TDataShard; 
         struct TUserTable;
     }
 }
@@ -22,7 +22,7 @@ using TKqpTableStats = TEngineHostCounters;
 
 class TKqpDatashardComputeContext : public TKqpComputeContextBase {
 public:
-    TKqpDatashardComputeContext(NDataShard::TDataShard* shard, TEngineHostCounters& counters, TInstant now)
+    TKqpDatashardComputeContext(NDataShard::TDataShard* shard, TEngineHostCounters& counters, TInstant now) 
         : Shard(shard)
         , DatashardCounters(counters)
         , Now(now) {}
@@ -62,7 +62,7 @@ public:
     NTable::TDatabase* Database = nullptr;
 
 private:
-    NDataShard::TDataShard* Shard;
+    NDataShard::TDataShard* Shard; 
     std::unordered_map<ui64, TEngineHostCounters> TaskCounters;
     TEngineHostCounters& DatashardCounters;
     TInstant Now;

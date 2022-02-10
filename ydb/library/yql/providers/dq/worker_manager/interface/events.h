@@ -4,7 +4,7 @@
 #include "worker_info.h"
 #include <ydb/library/yql/dq/common/dq_common.h>
 
-#include <ydb/library/yql/utils/log/log.h>
+#include <ydb/library/yql/utils/log/log.h> 
 
 #include <library/cpp/actors/core/actor.h>
 #include <library/cpp/actors/interconnect/interconnect.h>

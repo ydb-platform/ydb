@@ -1,10 +1,10 @@
 #include "yq.h"
 
 #define INCLUDE_YDB_INTERNAL_H
-#include <ydb/public/sdk/cpp/client/impl/ydb_internal/make_request/make.h>
+#include <ydb/public/sdk/cpp/client/impl/ydb_internal/make_request/make.h> 
 #undef INCLUDE_YDB_INTERNAL_H
 
-#include <ydb/public/sdk/cpp/client/ydb_common_client/impl/client.h>
+#include <ydb/public/sdk/cpp/client/ydb_common_client/impl/client.h> 
 
 namespace NYdb::NYq {
 
@@ -452,34 +452,34 @@ public:
         return future;
     }
 
-    TAsyncTestConnectionResult TestConnection(
-        const YandexQuery::TestConnectionRequest& protoRequest,
-        const TTestConnectionSettings& settings) {
-        auto request = MakeOperationRequest<YandexQuery::TestConnectionRequest>(settings);
-        request = protoRequest;
-
-        auto promise = NThreading::NewPromise<TTestConnectionResult>();
-        auto future = promise.GetFuture();
-
-        auto extractor = MakeResultExtractor<
-            YandexQuery::TestConnectionResult,
-            TTestConnectionResult>(std::move(promise));
-
-        Connections_->RunDeferred<
-            YandexQuery::V1::YandexQueryService,
-            YandexQuery::TestConnectionRequest,
-            YandexQuery::TestConnectionResponse>(
-                    std::move(request),
-                    std::move(extractor),
-                    &YandexQuery::V1::YandexQueryService::Stub::AsyncTestConnection,
-                    DbDriverState_,
-                    INITIAL_DEFERRED_CALL_DELAY,
-                    TRpcRequestSettings::Make(settings),
-                    settings.ClientTimeout_);
-
-        return future;
-    }
-
+    TAsyncTestConnectionResult TestConnection( 
+        const YandexQuery::TestConnectionRequest& protoRequest, 
+        const TTestConnectionSettings& settings) { 
+        auto request = MakeOperationRequest<YandexQuery::TestConnectionRequest>(settings); 
+        request = protoRequest; 
+ 
+        auto promise = NThreading::NewPromise<TTestConnectionResult>(); 
+        auto future = promise.GetFuture(); 
+ 
+        auto extractor = MakeResultExtractor< 
+            YandexQuery::TestConnectionResult, 
+            TTestConnectionResult>(std::move(promise)); 
+ 
+        Connections_->RunDeferred< 
+            YandexQuery::V1::YandexQueryService, 
+            YandexQuery::TestConnectionRequest, 
+            YandexQuery::TestConnectionResponse>( 
+                    std::move(request), 
+                    std::move(extractor), 
+                    &YandexQuery::V1::YandexQueryService::Stub::AsyncTestConnection, 
+                    DbDriverState_, 
+                    INITIAL_DEFERRED_CALL_DELAY, 
+                    TRpcRequestSettings::Make(settings), 
+                    settings.ClientTimeout_); 
+ 
+        return future; 
+    } 
+ 
     TAsyncCreateBindingResult CreateBinding(
         const YandexQuery::CreateBindingRequest& protoRequest,
         const TCreateBindingSettings& settings) {
@@ -715,12 +715,12 @@ TAsyncDeleteConnectionResult TClient::DeleteConnection(
     return Impl_->DeleteConnection(request, settings);
 }
 
-TAsyncTestConnectionResult TClient::TestConnection(
-    const YandexQuery::TestConnectionRequest& request,
-    const TTestConnectionSettings& settings) {
-    return Impl_->TestConnection(request, settings);
-}
-
+TAsyncTestConnectionResult TClient::TestConnection( 
+    const YandexQuery::TestConnectionRequest& request, 
+    const TTestConnectionSettings& settings) { 
+    return Impl_->TestConnection(request, settings); 
+} 
+ 
 TAsyncCreateBindingResult TClient::CreateBinding(
     const YandexQuery::CreateBindingRequest& request,
     const TCreateBindingSettings& settings) {

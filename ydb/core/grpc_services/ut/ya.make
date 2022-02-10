@@ -1,10 +1,10 @@
-UNITTEST_FOR(ydb/core/grpc_services)
+UNITTEST_FOR(ydb/core/grpc_services) 
 
-OWNER(
-    dcherednik
-    g:kikimr
-)
-
+OWNER( 
+    dcherednik 
+    g:kikimr 
+) 
+ 
 FORK_SUBTESTS()
 
 IF (SANITIZER_TYPE OR WITH_VALGRIND)
@@ -18,10 +18,10 @@ SRCS(
 
 PEERDIR(
     library/cpp/getopt
-    library/cpp/regex/pcre
+    library/cpp/regex/pcre 
     library/cpp/svnversion
-    ydb/core/client/scheme_cache_lib
-    ydb/core/testlib
+    ydb/core/client/scheme_cache_lib 
+    ydb/core/testlib 
 )
 
 END()

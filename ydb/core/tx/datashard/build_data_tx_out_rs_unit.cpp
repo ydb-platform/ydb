@@ -4,13 +4,13 @@
 #include "setup_sys_locks.h"
 
 namespace NKikimr {
-namespace NDataShard {
+namespace NDataShard { 
 
 using namespace NMiniKQL;
 
 class TBuildDataTxOutRSUnit : public TExecutionUnit {
 public:
-    TBuildDataTxOutRSUnit(TDataShard &dataShard,
+    TBuildDataTxOutRSUnit(TDataShard &dataShard, 
                           TPipeline &pipeline);
     ~TBuildDataTxOutRSUnit() override;
 
@@ -24,7 +24,7 @@ public:
 private:
 };
 
-TBuildDataTxOutRSUnit::TBuildDataTxOutRSUnit(TDataShard &dataShard,
+TBuildDataTxOutRSUnit::TBuildDataTxOutRSUnit(TDataShard &dataShard, 
                                              TPipeline &pipeline)
     : TExecutionUnit(EExecutionUnitKind::BuildDataTxOutRS, true, dataShard, pipeline)
 {
@@ -120,11 +120,11 @@ void TBuildDataTxOutRSUnit::Complete(TOperation::TPtr,
 {
 }
 
-THolder<TExecutionUnit> CreateBuildDataTxOutRSUnit(TDataShard &dataShard,
+THolder<TExecutionUnit> CreateBuildDataTxOutRSUnit(TDataShard &dataShard, 
                                                    TPipeline &pipeline)
 {
     return THolder(new TBuildDataTxOutRSUnit(dataShard, pipeline));
 }
 
-} // namespace NDataShard
+} // namespace NDataShard 
 } // namespace NKikimr

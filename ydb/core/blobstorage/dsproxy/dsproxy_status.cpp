@@ -1,8 +1,8 @@
 #include "dsproxy.h"
 #include "dsproxy_mon.h"
 #include "dsproxy_quorum_tracker.h"
-#include <ydb/core/blobstorage/base/blobstorage_events.h>
-#include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
+#include <ydb/core/blobstorage/base/blobstorage_events.h> 
+#include <ydb/core/blobstorage/vdisk/common/vdisk_events.h> 
 
 namespace NKikimr {
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -29,7 +29,7 @@ class TBlobStorageGroupStatusRequest : public TBlobStorageGroupRequestActor<TBlo
             << " status# " << NKikimrProto::EReplyStatus_Name(status).data()
             << " From# " << vdisk.ToString()
             << " StatusFlags# " << (record.HasStatusFlags() ? Sprintf("%" PRIx32, record.GetStatusFlags()).data() : "NA")
-            << " NodeId# " << Info->GetActorId(vdisk).NodeId());
+            << " NodeId# " << Info->GetActorId(vdisk).NodeId()); 
 
         if (record.HasStatusFlags()) {
             StatusFlags.Merge(record.GetStatusFlags());
@@ -97,12 +97,12 @@ public:
             << " RestartCounter# " << RestartCounter);
 
         for (const auto& vdisk : Info->GetVDisks()) {
-            const ui64 cookie = TVDiskIdShort(Info->GetVDiskId(vdisk.OrderNumber)).GetRaw();
+            const ui64 cookie = TVDiskIdShort(Info->GetVDiskId(vdisk.OrderNumber)).GetRaw(); 
 
-            auto vd = Info->GetVDiskId(vdisk.OrderNumber);
+            auto vd = Info->GetVDiskId(vdisk.OrderNumber); 
             A_LOG_DEBUG_S("DSPS04", "Sending TEvVStatus"
                 << " vDiskId# " << vd
-                << " node# " << Info->GetActorId(vd).NodeId());
+                << " node# " << Info->GetActorId(vd).NodeId()); 
 
             auto msg = std::make_unique<TEvBlobStorage::TEvVStatus>(vd);
             SendToQueue(std::move(msg), cookie, NWilson::TTraceId()); // FIXME: wilson

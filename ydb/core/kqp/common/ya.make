@@ -20,17 +20,17 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/core/base
-    ydb/core/engine
-    ydb/core/kqp/expr_nodes
-    ydb/core/kqp/provider
-    ydb/library/aclib
+    ydb/core/base 
+    ydb/core/engine 
+    ydb/core/kqp/expr_nodes 
+    ydb/core/kqp/provider 
+    ydb/library/aclib 
     ydb/library/yql/core/issue
     ydb/library/yql/dq/actors
     ydb/library/yql/dq/common
 )
 
-YQL_LAST_ABI_VERSION()
+YQL_LAST_ABI_VERSION() 
 
 GENERATE_ENUM_SERIALIZATION(kqp_yql.h)
 

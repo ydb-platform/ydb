@@ -1,16 +1,16 @@
 #pragma once
 
-#include "defs.h"
+#include "defs.h" 
 #include "blobstorage_repl.h"
-#include <ydb/core/blobstorage/vdisk/hulldb/hull_ds_all.h>
-#include <ydb/core/blobstorage/vdisk/hulldb/generic/blobstorage_hullwritesst.h>
-#include <ydb/core/blobstorage/vdisk/hulldb/hulldb_bulksst_add.h>
+#include <ydb/core/blobstorage/vdisk/hulldb/hull_ds_all.h> 
+#include <ydb/core/blobstorage/vdisk/hulldb/generic/blobstorage_hullwritesst.h> 
+#include <ydb/core/blobstorage/vdisk/hulldb/hulldb_bulksst_add.h> 
 
 namespace NKikimr {
 
     class TReplSstStreamWriter
     {
-        using TWriter = TLogoBlobsSst::TWriter;
+        using TWriter = TLogoBlobsSst::TWriter; 
 
     public:
         struct TRecoveredBlobInfo {
@@ -46,11 +46,11 @@ namespace NKikimr {
         };
 
     public:
-        TReplSstStreamWriter(
+        TReplSstStreamWriter( 
                 std::shared_ptr<TReplCtx> replCtx,
-                TIntrusivePtr<THullDs> hullDs)
-            : ReplCtx(std::move(replCtx))
-            , HullDs(std::move(hullDs))
+                TIntrusivePtr<THullDs> hullDs) 
+            : ReplCtx(std::move(replCtx)) 
+            , HullDs(std::move(hullDs)) 
             , State(EState::STOPPED)
             , MinReservedChunksCount(ReplCtx->VDiskCfg->HullSstSizeInChunksFresh)
             , Arena(&TRopeArenaBackend::Allocate)
@@ -135,8 +135,8 @@ namespace NKikimr {
             // create new writer
             Y_VERIFY(!Writer);
             Writer = std::make_unique<TWriter>(ReplCtx->VCtx, EWriterDataType::Replication, 1, ReplCtx->PDiskCtx->Dsk->Owner,
-                ReplCtx->PDiskCtx->Dsk->OwnerRound, ReplCtx->PDiskCtx->Dsk->ChunkSize,
-                ReplCtx->PDiskCtx->Dsk->AppendBlockSize, ReplCtx->PDiskCtx->Dsk->BulkWriteBlockSize,
+                ReplCtx->PDiskCtx->Dsk->OwnerRound, ReplCtx->PDiskCtx->Dsk->ChunkSize, 
+                ReplCtx->PDiskCtx->Dsk->AppendBlockSize, ReplCtx->PDiskCtx->Dsk->BulkWriteBlockSize, 
                 HullDs->LogoBlobs->AllocSstId(), true, ReservedChunks, Arena);
 
             // start collecting blobs
@@ -150,7 +150,7 @@ namespace NKikimr {
 
             // generate merged ingress for all locally recovered parts
             TIngress ingress = TIngress::CreateFromRepl(ReplCtx->VCtx->Top.get(), ReplCtx->VCtx->ShortSelfVDisk,
-                                                        record.Id, record.LocalParts);
+                                                        record.Id, record.LocalParts); 
 
             // add disk blob to merger (in order to write it to SSTable)
             Merger.AddBlob(TDiskBlob(&record.Data, record.LocalParts, ReplCtx->VCtx->Top->GType, record.Id));
@@ -268,7 +268,7 @@ namespace NKikimr {
 
     private:
         std::shared_ptr<TReplCtx> ReplCtx;
-        TIntrusivePtr<THullDs> HullDs;
+        TIntrusivePtr<THullDs> HullDs; 
         TLogoBlobID PrevID;
         EState State;
         EOutputState OutputState;

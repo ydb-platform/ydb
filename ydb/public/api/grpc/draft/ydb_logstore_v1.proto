@@ -3,7 +3,7 @@ syntax = "proto3";
 package Ydb.LogStore.V1;
 option java_package = "com.yandex.ydb.logstore.v1";
 
-import "ydb/public/api/protos/draft/ydb_logstore.proto";
+import "ydb/public/api/protos/draft/ydb_logstore.proto"; 
 
 service LogStoreService {
     rpc CreateLogStore(CreateLogStoreRequest) returns (CreateLogStoreResponse);

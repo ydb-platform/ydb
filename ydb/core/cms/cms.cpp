@@ -3,11 +3,11 @@
 #include "scheme.h"
 #include "sentinel.h"
 
-#include <ydb/core/actorlib_impl/long_timer.h>
-#include <ydb/core/base/appdata.h>
-#include <ydb/core/cms/console/config_helpers.h>
-#include <ydb/core/base/ticket_parser.h>
-#include <ydb/core/tablet_flat/tablet_flat_executed.h>
+#include <ydb/core/actorlib_impl/long_timer.h> 
+#include <ydb/core/base/appdata.h> 
+#include <ydb/core/cms/console/config_helpers.h> 
+#include <ydb/core/base/ticket_parser.h> 
+#include <ydb/core/tablet_flat/tablet_flat_executed.h> 
 
 #include <library/cpp/actors/interconnect/interconnect.h>
 
@@ -479,7 +479,7 @@ bool TCms::CheckActionRestartServices(const TAction &action,
         }
     }
 
-    if (!found) {
+    if (!found) { 
         error.Code =  TStatus::NO_SUCH_SERVICE;
         error.Reason = Sprintf("No such services: %s on host %s",
             JoinSeq(", ", action.GetServices()).c_str(), action.GetHost().c_str());

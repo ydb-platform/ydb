@@ -1,10 +1,10 @@
 LIBRARY()
 
-OWNER(
-    spuchin
-    g:yql
-    g:yql_ydb_core
-)
+OWNER( 
+    spuchin 
+    g:yql 
+    g:yql_ydb_core 
+) 
 
 SRCS(
     yql_data_provider_impl.cpp
@@ -18,11 +18,11 @@ SRCS(
 
 PEERDIR(
     ydb/library/yql/minikql
-    ydb/library/yql/public/udf
+    ydb/library/yql/public/udf 
     ydb/library/yql/sql # fixme
     ydb/library/yql/core
 )
 
-YQL_LAST_ABI_VERSION()
+YQL_LAST_ABI_VERSION() 
 
 END()

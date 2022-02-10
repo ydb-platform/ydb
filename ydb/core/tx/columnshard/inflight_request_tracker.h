@@ -1,7 +1,7 @@
 #pragma once
 
 #include "blob.h"
-#include <ydb/core/tx/columnshard/engines/indexed_read_data.h>
+#include <ydb/core/tx/columnshard/engines/indexed_read_data.h> 
 
 namespace NKikimr::NColumnShard {
 

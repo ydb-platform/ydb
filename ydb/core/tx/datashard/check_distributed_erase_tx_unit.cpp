@@ -8,11 +8,11 @@
 #include <util/string/builder.h>
 
 namespace NKikimr {
-namespace NDataShard {
+namespace NDataShard { 
 
 class TCheckDistributedEraseTxUnit : public TExecutionUnit {
 public:
-    TCheckDistributedEraseTxUnit(TDataShard& self, TPipeline& pipeline)
+    TCheckDistributedEraseTxUnit(TDataShard& self, TPipeline& pipeline) 
         : TExecutionUnit(EExecutionUnitKind::CheckDistributedEraseTx, false, self, pipeline)
     {
     }
@@ -118,9 +118,9 @@ public:
     }
 };
 
-THolder<TExecutionUnit> CreateCheckDistributedEraseTxUnit(TDataShard& self, TPipeline& pipeline) {
+THolder<TExecutionUnit> CreateCheckDistributedEraseTxUnit(TDataShard& self, TPipeline& pipeline) { 
     return THolder(new TCheckDistributedEraseTxUnit(self, pipeline));
 }
 
-} // namespace NDataShard
+} // namespace NDataShard 
 } // namespace NKikimr

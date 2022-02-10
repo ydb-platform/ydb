@@ -1,7 +1,7 @@
 #pragma once
 
-#include <ydb/core/scheme/scheme_type_id.h>
-#include <ydb/core/util/blob_data_stream.h>
+#include <ydb/core/scheme/scheme_type_id.h> 
+#include <ydb/core/util/blob_data_stream.h> 
 
 #include <util/generic/hash.h>
 #include <util/generic/ptr.h>
@@ -193,7 +193,7 @@ public:
 /***************************************************************************//**
  * TDataRef can either share the data (TString) or keep a reference (TStringBuf).
  * It uses short string optimization (SSO) to store small data (<= 16b).
- * TODO: Move to ydb/core/util
+ * TODO: Move to ydb/core/util 
  ******************************************************************************/
 class TDataRef {
 public:

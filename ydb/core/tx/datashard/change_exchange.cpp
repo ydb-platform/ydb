@@ -4,7 +4,7 @@
 #include <util/string/join.h>
 
 namespace NKikimr {
-namespace NDataShard {
+namespace NDataShard { 
 
 /// TEvEnqueueRecords
 TEvChangeExchange::TEvEnqueueRecords::TEvEnqueueRecords(const TVector<TRecordInfo>& records)
@@ -151,5 +151,5 @@ TString TEvChangeExchange::TEvRemoveSender::ToString() const {
     << " }";
 }
 
-} // NDataShard
+} // NDataShard 
 } // NKikimr

@@ -5,16 +5,16 @@
 #include "flat_sausage_solid.h"
 
 namespace NKikimr {
-namespace NPageCollection {
+namespace NPageCollection { 
 
     struct TSlot {
         TSlot(ui8 cnl, ui32 group) : Channel(cnl), Group(group) { }
 
         ui8 Channel = Max<ui8>();
-        ui32 Group = NPageCollection::TLargeGlobId::InvalidGroup;
+        ui32 Group = NPageCollection::TLargeGlobId::InvalidGroup; 
     };
 
-    struct TCookieRange {
+    struct TCookieRange { 
         constexpr bool Has(ui32 ref) const noexcept
         {
             return Head <= ref && ref <= Tail;
@@ -23,23 +23,23 @@ namespace NPageCollection {
         ui32 Head, Tail; /* [ Head, Tail], but Tail is used as a gap */
     };
 
-    class TCookieAllocator {
+    class TCookieAllocator { 
         static constexpr ui32 Mask = Max<ui32>() >> 8;
         static constexpr ui32 Spacer = ui32(1) << 31;
 
     public:
-        TCookieAllocator(ui64 tablet, ui64 stamp, TCookieRange cookieRange, TArrayRef<const TSlot> row)
+        TCookieAllocator(ui64 tablet, ui64 stamp, TCookieRange cookieRange, TArrayRef<const TSlot> row) 
             : Tablet(tablet)
             , Gen(stamp >> 32)
-            , CookieRange(cookieRange)
-            , Span(CookieRange.Tail - CookieRange.Head)
+            , CookieRange(cookieRange) 
+            , Span(CookieRange.Tail - CookieRange.Head) 
             , Step(stamp)
             , Slots(Max<ui8>(), Max<ui8>())
         {
-            if ((cookieRange.Head & ~Mask) || (cookieRange.Tail & ~Mask)) {
-                Y_FAIL("CookieRange range can use only lower 24 bits");
-            } else if (cookieRange.Head > cookieRange.Tail) {
-                Y_FAIL("Invalid TLogoBlobID cookieRange capacity range");
+            if ((cookieRange.Head & ~Mask) || (cookieRange.Tail & ~Mask)) { 
+                Y_FAIL("CookieRange range can use only lower 24 bits"); 
+            } else if (cookieRange.Head > cookieRange.Tail) { 
+                Y_FAIL("Invalid TLogoBlobID cookieRange capacity range"); 
             }
 
             for (auto &one: row) {
@@ -66,7 +66,7 @@ namespace NPageCollection {
         {
             out
                 << "Cookies{" << Tablet << ":" << Gen << ":" << Step
-                << " cookieRange[" << CookieRange.Head << " +" << Span << "]}";
+                << " cookieRange[" << CookieRange.Head << " +" << Span << "]}"; 
         }
 
         ui32 GroupBy(ui8 channel) const noexcept
@@ -90,12 +90,12 @@ namespace NPageCollection {
             return { lead, Group[slot] };
         }
 
-        TLargeGlobId Do(ui8 cnl, ui32 bytes, ui32 lim) noexcept
+        TLargeGlobId Do(ui8 cnl, ui32 bytes, ui32 lim) noexcept 
         {
             const auto slot = Locate(cnl);
 
-            /* Eeach TLargeGlobId have to be gapped with a single unused TLogoBlobID
-                items for ability to chop them with NPageCollection::TGroupBlobsByCookie tool. */
+            /* Eeach TLargeGlobId have to be gapped with a single unused TLogoBlobID 
+                items for ability to chop them with NPageCollection::TGroupBlobsByCookie tool. */ 
 
             auto first = Allocate(slot, bytes / lim + (bytes % lim > 0), true);
 
@@ -127,13 +127,13 @@ namespace NPageCollection {
 
             ui32 to = ((Mask & value) + num) | (gap ? Spacer : 0);
 
-            return CookieRange.Head + (Mask & std::exchange(value, to)) + left;
+            return CookieRange.Head + (Mask & std::exchange(value, to)) + left; 
         }
 
     public:
         const ui64 Tablet = 0;
         const ui32 Gen = Max<ui32>();
-        const TCookieRange CookieRange;       /* Cookie range row over channels slices*/
+        const TCookieRange CookieRange;       /* Cookie range row over channels slices*/ 
 
     protected:
         const ui32 Span = 0;
@@ -144,9 +144,9 @@ namespace NPageCollection {
         TVector<ui32> State;
     };
 
-    class TSteppedCookieAllocator : public TCookieAllocator {
+    class TSteppedCookieAllocator : public TCookieAllocator { 
     public:
-        using TCookieAllocator::TCookieAllocator;
+        using TCookieAllocator::TCookieAllocator; 
 
         void Switch(const ui32 step, bool strict) noexcept
         {

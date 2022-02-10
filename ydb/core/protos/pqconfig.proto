@@ -1,11 +1,11 @@
-import "ydb/public/api/protos/draft/persqueue_error_codes.proto";
-import "ydb/public/api/protos/draft/persqueue_common.proto";
+import "ydb/public/api/protos/draft/persqueue_error_codes.proto"; 
+import "ydb/public/api/protos/draft/persqueue_common.proto"; 
 
-import "ydb/core/protos/base.proto";
-import "ydb/core/protos/msgbus_kv.proto";
-import "ydb/core/protos/node_limits.proto";
-import "ydb/core/protos/netclassifier.proto";
-import "ydb/core/protos/services.proto";
+import "ydb/core/protos/base.proto"; 
+import "ydb/core/protos/msgbus_kv.proto"; 
+import "ydb/core/protos/node_limits.proto"; 
+import "ydb/core/protos/netclassifier.proto"; 
+import "ydb/core/protos/services.proto"; 
 
 import "library/cpp/actors/protos/actors.proto";
 
@@ -181,7 +181,7 @@ message TPartitionConfig {
     optional int32 MaxCountInPartition = 1 [default = 10000000];
     optional int64 MaxSizeInPartition = 2 [default = 1099511627776];
     optional int32 LifetimeSeconds = 3; //mandatory, must be set
-    // List of ClientIds, for which we don't delete data until they are read by these clients
+    // List of ClientIds, for which we don't delete data until they are read by these clients 
     repeated string ImportantClientId = 4; //can be empty
     optional uint32 LowWatermark = 5 [default = 6291456]; //6Mb, compact blobs if they at least this big.
     optional uint32 SourceIdLifetimeSeconds = 6 [ default = 1382400]; //16 days

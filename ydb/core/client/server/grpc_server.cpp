@@ -1,8 +1,8 @@
 #include "grpc_server.h"
 #include "grpc_proxy_status.h"
 
-#include <ydb/core/client/server/msgbus_server_persqueue.h>
-#include <ydb/core/grpc_services/grpc_helper.h>
+#include <ydb/core/client/server/msgbus_server_persqueue.h> 
+#include <ydb/core/grpc_services/grpc_helper.h> 
 #include <library/cpp/grpc/server/grpc_request.h>
 #include <library/cpp/grpc/server/grpc_counters.h>
 #include <library/cpp/grpc/server/grpc_async_ctx_base.h>
@@ -457,8 +457,8 @@ void TGRpcService::SetupIncomingRequests() {
     ADD_ACTOR_REQUEST(LocalSchemeTx,             TLocalSchemeTx,                    MTYPE_CLIENT_LOCAL_SCHEME_TX)
     ADD_ACTOR_REQUEST(TabletKillRequest,         TTabletKillRequest,                MTYPE_CLIENT_TABLET_KILL_REQUEST)
     ADD_ACTOR_REQUEST(SchemeOperationStatus,     TSchemeOperationStatus,            MTYPE_CLIENT_FLAT_TX_STATUS_REQUEST)
-    ADD_ACTOR_REQUEST(BlobStorageLoadRequest,    TBsTestLoadRequest,                MTYPE_CLIENT_LOAD_REQUEST)
-    ADD_ACTOR_REQUEST(BlobStorageGetRequest,     TBsGetRequest,                     MTYPE_CLIENT_GET_REQUEST)
+    ADD_ACTOR_REQUEST(BlobStorageLoadRequest,    TBsTestLoadRequest,                MTYPE_CLIENT_LOAD_REQUEST) 
+    ADD_ACTOR_REQUEST(BlobStorageGetRequest,     TBsGetRequest,                     MTYPE_CLIENT_GET_REQUEST) 
     ADD_ACTOR_REQUEST(ChooseProxy,               TChooseProxyRequest,               MTYPE_CLIENT_CHOOSE_PROXY)
     ADD_ACTOR_REQUEST(WhoAmI,                    TWhoAmI,                           MTYPE_CLIENT_WHOAMI)
     ADD_ACTOR_REQUEST(ResolveNode,               TResolveNodeRequest,               MTYPE_CLIENT_RESOLVE_NODE)

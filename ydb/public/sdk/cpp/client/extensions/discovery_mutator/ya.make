@@ -10,11 +10,11 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/public/sdk/cpp/client/ydb_extension
+    ydb/public/sdk/cpp/client/ydb_extension 
 )
 
 END()
 
-RECURSE_FOR_TESTS(
-    ut
-)
+RECURSE_FOR_TESTS( 
+    ut 
+) 

@@ -8,8 +8,8 @@
 #include "flat_executor_counters.h"
 #include "flat_sausage_slicer.h"
 #include "logic_redo_eggs.h"
-#include <ydb/core/tablet_flat/flat_executor.pb.h>
-#include <ydb/core/tablet/tablet_counters_protobuf.h>
+#include <ydb/core/tablet_flat/flat_executor.pb.h> 
+#include <ydb/core/tablet/tablet_counters_protobuf.h> 
 
 namespace NKikimr {
 namespace NTabletFlatExecutor {
@@ -26,10 +26,10 @@ class TLogicRedo {
     using TMonCo = TExecutorCounters;
 
     TCommitManager * const CommitManager;
-    TAutoPtr<NPageCollection::TSteppedCookieAllocator> Cookies;
+    TAutoPtr<NPageCollection::TSteppedCookieAllocator> Cookies; 
     TAutoPtr<NRedo::TBatch> Batch;
     TAutoPtr<NRedo::TQueue> Queue;
-    NPageCollection::TSlicer Slicer;
+    NPageCollection::TSlicer Slicer; 
 
     TExecutorCounters *Counters = nullptr;
     TTabletCountersWithTxTypes *AppTxCounters = nullptr;
@@ -54,7 +54,7 @@ public:
         bool NeedFlush;
     };
 
-    TLogicRedo(TAutoPtr<NPageCollection::TSteppedCookieAllocator>, TCommitManager*, TAutoPtr<NRedo::TQueue>);
+    TLogicRedo(TAutoPtr<NPageCollection::TSteppedCookieAllocator>, TCommitManager*, TAutoPtr<NRedo::TQueue>); 
     ~TLogicRedo();
 
     void Describe(IOutputStream &out) const noexcept;

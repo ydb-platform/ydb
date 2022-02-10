@@ -1,13 +1,13 @@
 #pragma once
 #include "defs.h"
 
-#include <ydb/core/base/events.h>
-#include <ydb/core/base/subdomain.h>
-#include <ydb/core/mind/labels_maintainer.h>
-#include <ydb/core/mind/local.h>
-#include <ydb/core/mind/tenant_pool.h>
-#include <ydb/core/testlib/actors/test_runtime.h>
-#include <ydb/core/testlib/basics/runtime.h>
+#include <ydb/core/base/events.h> 
+#include <ydb/core/base/subdomain.h> 
+#include <ydb/core/mind/labels_maintainer.h> 
+#include <ydb/core/mind/local.h> 
+#include <ydb/core/mind/tenant_pool.h> 
+#include <ydb/core/testlib/actors/test_runtime.h> 
+#include <ydb/core/testlib/basics/runtime.h> 
 
 #include <util/generic/string.h>
 

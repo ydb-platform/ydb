@@ -1,6 +1,6 @@
-import "ydb/core/protos/counters.proto";
+import "ydb/core/protos/counters.proto"; 
 
-package NKikimr.NDataShard;
+package NKikimr.NDataShard; 
 
 option java_package = "ru.yandex.kikimr.proto";
 

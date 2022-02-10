@@ -1,4 +1,4 @@
-OWNER(g:yq)
+OWNER(g:yq) 
 
 LIBRARY()
 
@@ -8,8 +8,8 @@ SRCS(
 
 PEERDIR(
     library/cpp/actors/core
-    ydb/core/protos
-    ydb/library/yql/utils/actor_log
+    ydb/core/protos 
+    ydb/library/yql/utils/actor_log 
 )
 
 YQL_LAST_ABI_VERSION()

@@ -2,11 +2,11 @@
 
 #include "appdata.h"
 #include "runtime.h"
-#include <ydb/core/util/defs.h>
-#include <ydb/core/base/blobstorage.h>
-#include <ydb/core/blobstorage/nodewarden/node_warden.h>
-#include <ydb/core/blobstorage/pdisk/blobstorage_pdisk.h>
-#include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_factory.h>
+#include <ydb/core/util/defs.h> 
+#include <ydb/core/base/blobstorage.h> 
+#include <ydb/core/blobstorage/nodewarden/node_warden.h> 
+#include <ydb/core/blobstorage/pdisk/blobstorage_pdisk.h> 
+#include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_factory.h> 
 
 #include <functional>
 
@@ -44,7 +44,7 @@ namespace NFake {
     void SetupTabletResolver(TTestActorRuntime& runtime, ui32 nodeIndex);
     void SetupTabletPipePeNodeCaches(TTestActorRuntime& runtime, ui32 nodeIndex);
     void SetupResourceBroker(TTestActorRuntime& runtime, ui32 nodeIndex);
-    void SetupSharedPageCache(TTestActorRuntime& runtime, ui32 nodeIndex, NFake::TCaches caches);
+    void SetupSharedPageCache(TTestActorRuntime& runtime, ui32 nodeIndex, NFake::TCaches caches); 
     void SetupNodeWhiteboard(TTestActorRuntime& runtime, ui32 nodeIndex);
     void SetupMonitoringProxy(TTestActorRuntime& runtime, ui32 nodeIndex);
     void SetupGRpcProxyStatus(TTestActorRuntime& runtime, ui32 nodeIndex);
@@ -53,7 +53,7 @@ namespace NFake {
     void SetupQuoterService(TTestActorRuntime& runtime, ui32 nodeIndex);
     void SetupSysViewService(TTestActorRuntime& runtime, ui32 nodeIndex);
 
-    // StateStorage, NodeWarden, TabletResolver, ResourceBroker, SharedPageCache
+    // StateStorage, NodeWarden, TabletResolver, ResourceBroker, SharedPageCache 
     void SetupBasicServices(TTestActorRuntime &runtime, TAppPrepare &app, bool mockDisk = false,
                             NFake::INode *factory = nullptr, NFake::TStorage storage = {}, NFake::TCaches caches = {});
 

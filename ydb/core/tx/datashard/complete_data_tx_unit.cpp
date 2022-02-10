@@ -3,16 +3,16 @@
 #include "datashard_pipeline.h"
 #include "execution_unit_ctors.h"
 
-#include <ydb/core/engine/minikql/minikql_engine_host.h>
+#include <ydb/core/engine/minikql/minikql_engine_host.h> 
 
 namespace NKikimr {
-namespace NDataShard {
+namespace NDataShard { 
 
 using namespace NMiniKQL;
 
 class TCompleteOperationUnit : public TExecutionUnit {
 public:
-    TCompleteOperationUnit(TDataShard &dataShard,
+    TCompleteOperationUnit(TDataShard &dataShard, 
                            TPipeline &pipeline);
     ~TCompleteOperationUnit() override;
 
@@ -28,7 +28,7 @@ private:
                            const TActorContext &ctx);
 };
 
-TCompleteOperationUnit::TCompleteOperationUnit(TDataShard &dataShard,
+TCompleteOperationUnit::TCompleteOperationUnit(TDataShard &dataShard, 
                                                TPipeline &pipeline)
     : TExecutionUnit(EExecutionUnitKind::CompleteOperation, false, dataShard, pipeline)
 {
@@ -119,11 +119,11 @@ void TCompleteOperationUnit::Complete(TOperation::TPtr op,
     DataShard.EnqueueChangeRecords(std::move(op->ChangeRecords()));
 }
 
-THolder<TExecutionUnit> CreateCompleteOperationUnit(TDataShard &dataShard,
+THolder<TExecutionUnit> CreateCompleteOperationUnit(TDataShard &dataShard, 
                                                     TPipeline &pipeline)
 {
     return THolder(new TCompleteOperationUnit(dataShard, pipeline));
 }
 
-} // namespace NDataShard
+} // namespace NDataShard 
 } // namespace NKikimr

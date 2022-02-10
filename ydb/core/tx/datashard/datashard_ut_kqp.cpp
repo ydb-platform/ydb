@@ -1,17 +1,17 @@
 #include "datashard_ut_common.h"
 #include "datashard_ut_common_kqp.h"
 
-#include <ydb/core/kqp/executer/kqp_executer.h>
-#include <ydb/core/testlib/tenant_runtime.h>
-#include <ydb/public/sdk/cpp/client/ydb_result/result.h>
-#include <ydb/public/lib/yson_value/ydb_yson_value.h>
+#include <ydb/core/kqp/executer/kqp_executer.h> 
+#include <ydb/core/testlib/tenant_runtime.h> 
+#include <ydb/public/sdk/cpp/client/ydb_result/result.h> 
+#include <ydb/public/lib/yson_value/ydb_yson_value.h> 
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 
 
 using namespace NKikimr;
-using namespace NKikimr::NDataShard;
-using namespace NKikimr::NDataShard::NKqpHelpers;
+using namespace NKikimr::NDataShard; 
+using namespace NKikimr::NDataShard::NKqpHelpers; 
 using namespace Tests;
 using namespace NKqp;
 using namespace NYql;
@@ -63,7 +63,7 @@ public:
         TTestBase::BeforeTest(test);
     }
 
-    // disable due to https://a.yandex-team.ru/arc/trunk/arcadia/ydb/core/testlib/test_client.cpp#L448
+    // disable due to https://a.yandex-team.ru/arc/trunk/arcadia/ydb/core/testlib/test_client.cpp#L448 
     UNIT_TEST_SUITE(KqpStabilityTests);
 //        UNIT_TEST(DropChannelDataWithUnreachable);
 //        UNIT_TEST(DropChannelDataWithUnknownActor);

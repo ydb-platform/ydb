@@ -136,12 +136,12 @@ namespace NPage {
         TVector<TFresh> Cook;
     };
 
-    class TExtBlobsWriter {
-        using THeader = TExtBlobs::THeader;
-        using TEntry = TExtBlobs::TEntry;
+    class TExtBlobsWriter { 
+        using THeader = TExtBlobs::THeader; 
+        using TEntry = TExtBlobs::TEntry; 
 
     public:
-        ui32 Put(const NPageCollection::TGlobId &glob) noexcept
+        ui32 Put(const NPageCollection::TGlobId &glob) noexcept 
         {
             Bytes += glob.Logo.BlobSize();
             Globs.emplace_back(glob);

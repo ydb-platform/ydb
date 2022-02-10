@@ -1,14 +1,14 @@
-UNITTEST_FOR(ydb/library/yql/core/file_storage)
+UNITTEST_FOR(ydb/library/yql/core/file_storage) 
 
 OWNER(g:yql)
 
-IF (OPENSOURCE)
-    CFLAGS(
-        -DOPENSOURCE
-    )
-ENDIF()
-
-
+IF (OPENSOURCE) 
+    CFLAGS( 
+        -DOPENSOURCE 
+    ) 
+ENDIF() 
+ 
+ 
 SRCS(
     file_storage_ut.cpp
     sized_cache_ut.cpp

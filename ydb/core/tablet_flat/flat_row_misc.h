@@ -4,7 +4,7 @@
 #include "flat_row_remap.h"
 #include "util_fmt_desc.h"
 
-#include <ydb/core/scheme/scheme_tablecell.h>
+#include <ydb/core/scheme/scheme_tablecell.h> 
 
 namespace NKikimr {
 namespace NFmt {

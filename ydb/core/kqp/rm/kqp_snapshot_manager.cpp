@@ -1,8 +1,8 @@
 #include "kqp_snapshot_manager.h"
 
-#include <ydb/core/tx/tx_proxy/proxy.h>
-#include <ydb/core/tx/long_tx_service/public/events.h>
-#include <ydb/core/actorlib_impl/long_timer.h>
+#include <ydb/core/tx/tx_proxy/proxy.h> 
+#include <ydb/core/tx/long_tx_service/public/events.h> 
+#include <ydb/core/actorlib_impl/long_timer.h> 
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/hfunc.h>

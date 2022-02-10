@@ -15,15 +15,15 @@ GENERATE_ENUM_SERIALIZATION(net_classifier.h)
 PEERDIR(
     library/cpp/actors/core
     library/cpp/monlib/dynamic_counters
-    ydb/core/base
-    ydb/core/cms/console
-    ydb/core/mon
-    ydb/core/protos
-    ydb/core/util
+    ydb/core/base 
+    ydb/core/cms/console 
+    ydb/core/mon 
+    ydb/core/protos 
+    ydb/core/util 
 )
 
 END()
-
-RECURSE_FOR_TESTS(
-    ut
-)
+ 
+RECURSE_FOR_TESTS( 
+    ut 
+) 

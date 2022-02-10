@@ -2,17 +2,17 @@
 #include "console_configs_manager.h"
 #include "console_configs_subscriber.h"
 
-#include <ydb/core/base/counters.h>
-#include <ydb/core/node_whiteboard/node_whiteboard.h>
-#include <ydb/core/base/path.h>
-#include <ydb/core/cms/console/validators/registry.h>
-#include <ydb/core/tablet/bootstrapper.h>
-#include <ydb/core/tablet_flat/tablet_flat_executed.h>
-#include <ydb/core/testlib/tablet_helpers.h>
+#include <ydb/core/base/counters.h> 
+#include <ydb/core/node_whiteboard/node_whiteboard.h> 
+#include <ydb/core/base/path.h> 
+#include <ydb/core/cms/console/validators/registry.h> 
+#include <ydb/core/tablet/bootstrapper.h> 
+#include <ydb/core/tablet_flat/tablet_flat_executed.h> 
+#include <ydb/core/testlib/tablet_helpers.h> 
 
 #include <library/cpp/actors/interconnect/interconnect_impl.h>
 
-#include <ydb/core/testlib/tenant_runtime.h>
+#include <ydb/core/testlib/tenant_runtime.h> 
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/system/hostname.h>
@@ -3637,7 +3637,7 @@ Y_UNIT_TEST_SUITE(TConsoleInMemoryConfigSubscriptionTests) {
         auto subscriber = NConsole::CreateConfigsSubscriber(edgeId, TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem}), NKikimrConfig::TAppConfig());
 
         runtime.Register(subscriber);
-
+ 
         ui64 id = 0;
         for (int i = 0; i < 100; i++) {
             if (i % 2 == 0) {

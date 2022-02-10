@@ -57,9 +57,9 @@ namespace NPage {
         Undef = 0,
         Scheme = 2,
         Index = 3,
-        DataPage = 4,
+        DataPage = 4, 
         Frames = 5, /* Tagged entities to TRowId relation index     */
-        Globs = 6,  /* Just enumartion of NPageCollection::TGlobId refs    */
+        Globs = 6,  /* Just enumartion of NPageCollection::TGlobId refs    */ 
         Schem2 = 7, /* New version of EPage::Scheme with TLabel     */
         Opaque = 8, /* User defined content, cell value as blob     */
         Bloom = 9,  /* Bloom filter for some app. defined cells set */

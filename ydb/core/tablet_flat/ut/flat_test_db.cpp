@@ -1,10 +1,10 @@
 #include "flat_test_db.h"
 #include "flat_database_ut_common.h"
 
-#include <ydb/core/tablet_flat/flat_database.h>
-#include <ydb/core/tablet_flat/test/libs/rows/tool.h>
-#include <ydb/core/scheme_types/scheme_types.h>
-#include <ydb/core/util/pb.h>
+#include <ydb/core/tablet_flat/flat_database.h> 
+#include <ydb/core/tablet_flat/test/libs/rows/tool.h> 
+#include <ydb/core/scheme_types/scheme_types.h> 
+#include <ydb/core/util/pb.h> 
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -230,11 +230,11 @@ public:
         return TString();
     }
 
-    void Update(ui32 root, ERowOp rop, TRawVals key, TArrayRef<const TUpdateOp> ops) override
+    void Update(ui32 root, ERowOp rop, TRawVals key, TArrayRef<const TUpdateOp> ops) override 
     {
-        if (rop == ERowOp::Upsert) {
+        if (rop == ERowOp::Upsert) { 
             UpdateRow(root, key, ops);
-        } else if (rop == ERowOp::Erase){
+        } else if (rop == ERowOp::Erase){ 
             EraseRow(root, key);
         }
     }
@@ -253,7 +253,7 @@ public:
         TFakeVal& fv = TxChanges[root][fk];
         fv.IsDeleted = false;
         for (auto &one: ops) {
-            if (one.Op == ECellOp::Null || !one.Value)
+            if (one.Op == ECellOp::Null || !one.Value) 
                 fv.Columns[one.Tag].Set({ });
             else
                 fv.Columns[one.Tag].Set(one.Value);

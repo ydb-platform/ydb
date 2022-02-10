@@ -1,6 +1,6 @@
 OWNER(g:kikimr)
 PY3TEST()
-ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
+ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd") 
 
 TEST_SRCS(
     test_copy_ops.py
@@ -12,7 +12,7 @@ TIMEOUT(600)
 SIZE(MEDIUM)
 
 DEPENDS(
-    ydb/apps/ydbd
+    ydb/apps/ydbd 
 )
 
 PEERDIR(

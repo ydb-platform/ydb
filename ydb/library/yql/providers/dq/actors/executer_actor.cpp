@@ -9,8 +9,8 @@
 #include <ydb/library/yql/providers/dq/planner/execution_planner.h>
 #include <ydb/library/yql/providers/dq/worker_manager/interface/events.h>
 
-#include <ydb/library/yql/utils/actor_log/log.h>
-#include <ydb/library/yql/utils/log/log.h>
+#include <ydb/library/yql/utils/actor_log/log.h> 
+#include <ydb/library/yql/utils/log/log.h> 
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 
 #include <library/cpp/actors/core/hfunc.h>

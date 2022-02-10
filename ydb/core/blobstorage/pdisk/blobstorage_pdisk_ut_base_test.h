@@ -247,11 +247,11 @@ protected:
 
     void Handle(NPDisk::TEvChunkReadResult::TPtr &ev, const TActorContext &ctx) {
         NPDisk::TEvChunkReadResult &result = *(ev->Get());
-        VERBOSE_COUT("Got " << result.ToString());
+        VERBOSE_COUT("Got " << result.ToString()); 
         LastResponse.Status = result.Status;
         LastResponse.EventType = (TEvBlobStorage::EEv)result.Type();
         LastResponse.Offset = result.Offset;
-        LastResponse.Data = std::move(result.Data);
+        LastResponse.Data = std::move(result.Data); 
         LastResponse.ChunkIdx = result.ChunkIdx;
         LastResponse.Cookie = result.Cookie;
         LastResponse.StatusFlags = result.StatusFlags;

@@ -1,9 +1,9 @@
 import "library/cpp/actors/protos/interconnect.proto";
-import "ydb/core/protos/base.proto";
-import "ydb/core/protos/tablet.proto";
-import "ydb/core/protos/subdomains.proto";
-import "ydb/core/protos/flat_scheme_op.proto";
-import "ydb/core/protos/follower_group.proto";
+import "ydb/core/protos/base.proto"; 
+import "ydb/core/protos/tablet.proto"; 
+import "ydb/core/protos/subdomains.proto"; 
+import "ydb/core/protos/flat_scheme_op.proto"; 
+import "ydb/core/protos/follower_group.proto"; 
 
 package NKikimrLocal;
 option java_package = "ru.yandex.kikimr.proto";

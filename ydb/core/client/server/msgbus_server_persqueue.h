@@ -3,9 +3,9 @@
 #include "grpc_server.h"
 #include "msgbus_tabletreq.h"
 
-#include <ydb/core/base/tablet_pipe.h>
-#include <ydb/core/persqueue/events/global.h>
-#include <ydb/core/tx/scheme_cache/scheme_cache.h>
+#include <ydb/core/base/tablet_pipe.h> 
+#include <ydb/core/persqueue/events/global.h> 
+#include <ydb/core/tx/scheme_cache/scheme_cache.h> 
 
 #include <library/cpp/actors/core/interconnect.h>
 
@@ -124,7 +124,7 @@ protected:
 
     virtual bool ReadyForAnswer(const TActorContext& ctx);
     void AnswerAndDie(const TActorContext& ctx);
-    void GetTopicsListOrThrow(const ::google::protobuf::RepeatedPtrField<::NKikimrClient::TPersQueueMetaRequest::TTopicRequest>& requests, THashMap<TString, std::shared_ptr<THashSet<ui64>>>& partitionsToRequest);
+    void GetTopicsListOrThrow(const ::google::protobuf::RepeatedPtrField<::NKikimrClient::TPersQueueMetaRequest::TTopicRequest>& requests, THashMap<TString, std::shared_ptr<THashSet<ui64>>>& partitionsToRequest); 
 
     virtual STFUNC(StateFunc);
 
@@ -138,7 +138,7 @@ protected:
 
 protected:
     // Request
-    std::shared_ptr<const NKikimrClient::TPersQueueRequest> RequestProto;
+    std::shared_ptr<const NKikimrClient::TPersQueueRequest> RequestProto; 
     const TString RequestId;
     THashSet<TString> TopicsToRequest; // Topics that we need to request. If this set id empty, we are interested in all existing topics.
 
@@ -149,7 +149,7 @@ protected:
 
     // Nodes info
     const bool ListNodes;
-    std::shared_ptr<const TNodesInfo> NodesInfo;
+    std::shared_ptr<const TNodesInfo> NodesInfo; 
 };
 
 // Helper actor that sends TEvGetBalancerDescribe and checks ACL (ACL is not implemented yet).

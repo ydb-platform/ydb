@@ -12,7 +12,7 @@ class TVDiskMockActor : public TActorBootstrapped<TVDiskMockActor> {
     const TVDiskID VDiskId;
     const TIntrusivePtr<TVDiskMockSharedState> Shared;
     const std::shared_ptr<TBlobStorageGroupInfo::TTopology> Top;
-    TVDiskContextPtr VCtx;
+    TVDiskContextPtr VCtx; 
     TMap<TLogoBlobID, std::optional<TString>> LogoBlobs;
     TMap<std::tuple<ui64, ui8, ui32, ui32, bool>, std::tuple<ui32, ui32>> Barriers;
     TMap<ui64, ui32> Blocks;
@@ -20,12 +20,12 @@ class TVDiskMockActor : public TActorBootstrapped<TVDiskMockActor> {
     bool LostMode = false;
 
 public:
-    TVDiskMockActor(const TVDiskID& vdiskId,
-            TIntrusivePtr<TVDiskMockSharedState> shared,
+    TVDiskMockActor(const TVDiskID& vdiskId, 
+            TIntrusivePtr<TVDiskMockSharedState> shared, 
             std::shared_ptr<TBlobStorageGroupInfo::TTopology> top)
         : VDiskId(vdiskId)
         , Shared(std::move(shared))
-        , Top(std::move(top))
+        , Top(std::move(top)) 
     {
     }
 
@@ -35,7 +35,7 @@ public:
         p->FinalizeAndSend(ctx, std::make_unique<IEventHandle>(recipient, ctx.SelfID, ptr.release()));
     }
 
-    void Bootstrap(const TActorContext& ctx) {
+    void Bootstrap(const TActorContext& ctx) { 
         VCtx.Reset(new TVDiskContext(ctx.SelfID, Top, new NMonitoring::TDynamicCounters, VDiskId,
                 ctx.ExecutorThread.ActorSystem, TPDiskCategory::DEVICE_TYPE_UNKNOWN));
         Become(&TVDiskMockActor::StateFunc);
@@ -100,8 +100,8 @@ public:
         auto sendResponse = [&](NKikimrProto::EReplyStatus status, const TString& errorReason) {
             ui64 cookie = record.GetCookie();
             auto response = std::make_unique<TEvBlobStorage::TEvVPutResult>(status, id,
-                    VDiskIDFromVDiskID(record.GetVDiskID()), record.HasCookie() ? &cookie : nullptr,
-                    TOutOfSpaceStatus(0u, 0.0), TAppData::TimeProvider->Now(), (ui32)ev->Get()->GetCachedByteSize(),
+                    VDiskIDFromVDiskID(record.GetVDiskID()), record.HasCookie() ? &cookie : nullptr, 
+                    TOutOfSpaceStatus(0u, 0.0), TAppData::TimeProvider->Now(), (ui32)ev->Get()->GetCachedByteSize(), 
                     &record, nullptr, nullptr, nullptr, 0, NWilson::TTraceId(), 0, errorReason);
             FinalizeAndSend(std::move(response), ctx, ev->Sender);
         };
@@ -326,7 +326,7 @@ public:
 
         ui32& gen = Blocks[record.GetTabletId()];
         gen = Max(gen, record.GetGeneration());
-        TEvBlobStorage::TEvVBlockResult::TTabletActGen actual(record.GetTabletId(), record.GetGeneration());
+        TEvBlobStorage::TEvVBlockResult::TTabletActGen actual(record.GetTabletId(), record.GetGeneration()); 
         auto response = std::make_unique<TEvBlobStorage::TEvVBlockResult>(NKikimrProto::OK, &actual,
                 VDiskIDFromVDiskID(record.GetVDiskID()), TAppData::TimeProvider->Now(),
                 (ui32)ev->Get()->GetCachedByteSize(), &record, nullptr, nullptr, nullptr, NWilson::TTraceId(), 0);
@@ -437,7 +437,7 @@ public:
                     for (auto it = first; it != last; ++it) {
                         const TLogoBlobID& id = it->first;
                         TLogoBlobID fullId(id.FullID());
-                        TIngress ingress(*TIngress::CreateIngressWithLocal(&Shared->GroupInfo->GetTopology(), VDiskId, id));
+                        TIngress ingress(*TIngress::CreateIngressWithLocal(&Shared->GroupInfo->GetTopology(), VDiskId, id)); 
                         TIngress& sharedIngress = Shared->BlobToIngressMap[fullId];
                         ui64 newSharedIngress = sharedIngress.Raw() & ~ingress.Raw();
                         if (!newSharedIngress) {
@@ -459,7 +459,7 @@ public:
         ctx.Send(ev->Sender, new TEvVMockCtlResponse);
     }
 
-    STRICT_STFUNC(StateFunc,
+    STRICT_STFUNC(StateFunc, 
             HFunc(TEvBlobStorage::TEvVPut, Handle);
             HFunc(TEvBlobStorage::TEvVMultiPut, Handle);
             HFunc(TEvBlobStorage::TEvVGet, Handle);
@@ -469,13 +469,13 @@ public:
             HFunc(TEvBlobStorage::TEvVGetBarrier, Handle);
             HFunc(TEvBlobStorage::TEvVCheckReadiness, Handle);
             HFunc(TEvVMockCtlRequest, Handle);
-    )
+    ) 
 };
 
-IActor *CreateVDiskMockActor(const TVDiskID& vdiskId,
-        TIntrusivePtr<TVDiskMockSharedState> shared,
+IActor *CreateVDiskMockActor(const TVDiskID& vdiskId, 
+        TIntrusivePtr<TVDiskMockSharedState> shared, 
         std::shared_ptr<TBlobStorageGroupInfo::TTopology> top) {
-    return new TVDiskMockActor(vdiskId, std::move(shared), std::move(top));
+    return new TVDiskMockActor(vdiskId, std::move(shared), std::move(top)); 
 }
 
 } // NKikimr

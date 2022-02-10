@@ -15,7 +15,7 @@ namespace NRedo {
     struct TStats {
         ui64 Items;
         ui64 Memory;    /* Memory consumed by entry states  */
-        ui64 LargeGlobIds;    /* Storage space consumed by redo   */
+        ui64 LargeGlobIds;    /* Storage space consumed by redo   */ 
     };
 
 }

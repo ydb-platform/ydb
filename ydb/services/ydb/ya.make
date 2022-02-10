@@ -21,27 +21,27 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/monlib/encode
-    library/cpp/uri
-    ydb/core/base
-    ydb/core/client
-    ydb/core/formats
-    ydb/core/grpc_services
-    ydb/core/grpc_services/base
-    ydb/core/grpc_streaming
-    ydb/core/protos
-    ydb/core/scheme
-    ydb/library/aclib
-    ydb/public/api/grpc
-    ydb/public/api/grpc/draft
-    ydb/public/api/protos
+    library/cpp/monlib/encode 
+    library/cpp/uri 
+    ydb/core/base 
+    ydb/core/client 
+    ydb/core/formats 
+    ydb/core/grpc_services 
+    ydb/core/grpc_services/base 
+    ydb/core/grpc_streaming 
+    ydb/core/protos 
+    ydb/core/scheme 
+    ydb/library/aclib 
+    ydb/public/api/grpc 
+    ydb/public/api/grpc/draft 
+    ydb/public/api/protos 
     ydb/library/yql/public/types
 )
 
 END()
-
-RECURSE_FOR_TESTS(
-    index_ut
-    sdk_credprovider_ut
-    ut
-)
+ 
+RECURSE_FOR_TESTS( 
+    index_ut 
+    sdk_credprovider_ut 
+    ut 
+) 

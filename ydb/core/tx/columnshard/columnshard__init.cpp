@@ -4,7 +4,7 @@
 #include "columnshard_schema.h"
 #include "blob_manager_db.h"
 
-#include <ydb/core/tablet/tablet_exception.h>
+#include <ydb/core/tablet/tablet_exception.h> 
 
 namespace NKikimr::NColumnShard {
 

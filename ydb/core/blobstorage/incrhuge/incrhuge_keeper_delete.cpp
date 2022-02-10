@@ -2,7 +2,7 @@
 #include "incrhuge_data.h"
 #include "incrhuge_keeper_log.h"
 #include "incrhuge_keeper.h"
-#include <ydb/core/protos/blobstorage_vdisk_internal.pb.h>
+#include <ydb/core/protos/blobstorage_vdisk_internal.pb.h> 
 
 namespace NKikimr {
     namespace NIncrHuge {

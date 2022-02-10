@@ -1,10 +1,10 @@
 LIBRARY()
 
-OWNER(
-    spuchin
-    g:yql
-    g:yql_ydb_core
-)
+OWNER( 
+    spuchin 
+    g:yql 
+    g:yql_ydb_core 
+) 
 
 SRCS(
     yql_mounts.h
@@ -12,12 +12,12 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/resource
-    ydb/library/yql/core/user_data
+    library/cpp/resource 
+    ydb/library/yql/core/user_data 
     ydb/library/yql/core
 )
 
-YQL_LAST_ABI_VERSION()
+YQL_LAST_ABI_VERSION() 
 
 RESOURCE(
     ydb/library/yql/mount/lib/yql/aggregate.yql /lib/yql/aggregate.yql

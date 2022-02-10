@@ -1,6 +1,6 @@
-OWNER(g:kikimr)
-
-RECURSE(
-    libs
-)
-
+OWNER(g:kikimr) 
+ 
+RECURSE( 
+    libs 
+) 
+ 

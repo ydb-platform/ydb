@@ -6,7 +6,7 @@ OWNER(
 )
 
 PEERDIR(
-    ydb/public/api/protos/annotations
+    ydb/public/api/protos/annotations 
 )
 
 SRCS(

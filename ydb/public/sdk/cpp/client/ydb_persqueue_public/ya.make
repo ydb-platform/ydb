@@ -1,7 +1,7 @@
 LIBRARY()
 
 OWNER(
-    g:kikimr
+    g:kikimr 
     g:logbroker
 )
 
@@ -10,8 +10,8 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/public/sdk/cpp/client/ydb_persqueue_core
-    ydb/public/sdk/cpp/client/ydb_persqueue_public/codecs
+    ydb/public/sdk/cpp/client/ydb_persqueue_core 
+    ydb/public/sdk/cpp/client/ydb_persqueue_public/codecs 
 )
 
 END()

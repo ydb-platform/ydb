@@ -28,7 +28,7 @@ public:
         const TString& parentPathStr = Transaction.GetWorkingDir();
         const TString& name = Transaction.GetAssignBlockStoreVolume().GetName();
         const TString mountToken = Transaction.GetAssignBlockStoreVolume().GetNewMountToken();
-        const auto version = Transaction.GetAssignBlockStoreVolume().GetTokenVersion();
+        const auto version = Transaction.GetAssignBlockStoreVolume().GetTokenVersion(); 
 
         LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                      "TAssignBlockStoreVolume Propose"
@@ -79,7 +79,7 @@ public:
                 NKikimrScheme::StatusPreconditionFailed,
                 "Wrong version in Assign Volume");
             return result;
-        }
+        } 
 
         TString errStr;
         if (!context.SS->CheckApplyIf(Transaction, errStr)) {

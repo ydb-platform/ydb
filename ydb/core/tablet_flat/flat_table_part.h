@@ -65,10 +65,10 @@ namespace NTable {
         struct TStat {
             ui64 Bytes;     /* Part raw data (unencoded) bytes  */
             ui64 Coded;     /* Encoded data pages in part bytes */
-            ui64 Drops;     /* Total rows with ERowOp::Erase code */
+            ui64 Drops;     /* Total rows with ERowOp::Erase code */ 
             ui64 Rows;      /* Total rows count in the TPart    */
             ui64 HiddenRows; /* Hidden (non-main) total rows */
-            ui64 HiddenDrops; /* Hidden (non-main) rows with ERowOp::Erase */
+            ui64 HiddenDrops; /* Hidden (non-main) rows with ERowOp::Erase */ 
         };
 
         TPart(const TLogoBlobID &label, TEgg egg, TStat stat)

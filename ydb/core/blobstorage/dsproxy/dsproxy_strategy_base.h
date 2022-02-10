@@ -2,7 +2,7 @@
 
 #include "dsproxy_blackboard.h"
 
-#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_sets.h>
+#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_sets.h> 
 
 namespace NKikimr {
 

@@ -1,9 +1,9 @@
 PROTO_LIBRARY()
 
-OWNER(
-    va-kuznecov
-    g:kikimr
-)
+OWNER( 
+    va-kuznecov 
+    g:kikimr 
+) 
 
 IF (OS_WINDOWS)
     NO_OPTIMIZE_PY_PROTOS()

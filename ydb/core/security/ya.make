@@ -14,20 +14,20 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/actors/core
+    library/cpp/actors/core 
     library/cpp/actors/http
-    library/cpp/monlib/service/pages
+    library/cpp/monlib/service/pages 
     library/cpp/openssl/io
-    ydb/core/base
-    ydb/core/protos
-    ydb/library/aclib
-    ydb/library/aclib/protos
-    ydb/library/login
-    ydb/library/security
+    ydb/core/base 
+    ydb/core/protos 
+    ydb/library/aclib 
+    ydb/library/aclib/protos 
+    ydb/library/login 
+    ydb/library/security 
 )
 
 END()
-
-RECURSE_FOR_TESTS(
-    ut
-)
+ 
+RECURSE_FOR_TESTS( 
+    ut 
+) 

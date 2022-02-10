@@ -160,15 +160,15 @@ namespace NWilson {
         --end;
 
         // generate log record
-        TString finalMessage;
-        TStringOutput s(finalMessage);
+        TString finalMessage; 
+        TStringOutput s(finalMessage); 
         s << GetNodeId(actorSystem) << " " << TStringBuf(base64, end) << " ";
         traceId->Output(s, parentTraceId);
         s << " ";
         event.Output(s);
 
         // output wilson event FIXME: special facility for wilson events w/binary serialization
-        NActors::MemLogAdapter(actorSystem, NActors::NLog::PRI_DEBUG, WilsonComponentId, std::move(finalMessage));
+        NActors::MemLogAdapter(actorSystem, NActors::NLog::PRI_DEBUG, WilsonComponentId, std::move(finalMessage)); 
     }
 
 #else

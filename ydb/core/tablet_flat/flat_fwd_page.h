@@ -53,14 +53,14 @@ namespace NFwd {
             return Data ? &Data : nullptr;
         }
 
-        ui32 Settle(NPageCollection::TLoadedPage &page) noexcept
+        ui32 Settle(NPageCollection::TLoadedPage &page) noexcept 
         {
             const auto was = std::exchange(Fetch, EFetch::Done);
 
             if (PageId != page.PageId) {
                 Y_FAIL("Settling page with different reference number");
             } else if (Size != page.Data.size()) {
-                Y_FAIL("Requested and obtained page sizes are not the same");
+                Y_FAIL("Requested and obtained page sizes are not the same"); 
             } else if (was == EFetch::Drop) {
                 std::exchange(page.Data, { });
             } else if (was != EFetch::Wait) {

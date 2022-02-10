@@ -1,94 +1,94 @@
-#include "blobstorage_replproxy.h"
+#include "blobstorage_replproxy.h" 
 #include "blobstorage_replbroker.h"
-#include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
-#include <ydb/core/blobstorage/vdisk/common/vdisk_response.h>
-#include <ydb/core/blobstorage/backpressure/queue_backpressure_client.h>
+#include <ydb/core/blobstorage/vdisk/common/vdisk_events.h> 
+#include <ydb/core/blobstorage/vdisk/common/vdisk_response.h> 
+#include <ydb/core/blobstorage/backpressure/queue_backpressure_client.h> 
 #include <library/cpp/actors/core/interconnect.h>
-#include <util/generic/fwd.h>
-#include <util/generic/queue.h>
-#include <util/generic/deque.h>
-
-using namespace NKikimrServices;
-using namespace NKikimr::NRepl;
-
-namespace NKikimr {
-
-    namespace NRepl {
-
-        // forward declaration
-        IActor *CreateVDiskProxyActor(
+#include <util/generic/fwd.h> 
+#include <util/generic/queue.h> 
+#include <util/generic/deque.h> 
+ 
+using namespace NKikimrServices; 
+using namespace NKikimr::NRepl; 
+ 
+namespace NKikimr { 
+ 
+    namespace NRepl { 
+ 
+        // forward declaration 
+        IActor *CreateVDiskProxyActor( 
                 std::shared_ptr<TReplCtx> replCtx,
-                TTrackableVector<TVDiskProxy::TScheduledBlob>&& ids,
-                const TVDiskID& vdiskId,
+                TTrackableVector<TVDiskProxy::TScheduledBlob>&& ids, 
+                const TVDiskID& vdiskId, 
                 const TActorId& serviceId);
-
-        ////////////////////////////////////////////////////////////////////////////
-        // TVDiskProxy
-        ////////////////////////////////////////////////////////////////////////////
+ 
+        //////////////////////////////////////////////////////////////////////////// 
+        // TVDiskProxy 
+        //////////////////////////////////////////////////////////////////////////// 
         TVDiskProxy::TVDiskProxy(std::shared_ptr<TReplCtx> replCtx, const TVDiskID& vdisk, const TActorId& serviceId)
-            : ReplCtx(std::move(replCtx))
+            : ReplCtx(std::move(replCtx)) 
             , VDiskId(vdisk)
             , ServiceId(serviceId)
-            , Ids(TMemoryConsumer(ReplCtx->VCtx->Replication))
-            , DataPortion(TMemoryConsumer(ReplCtx->VCtx->Replication))
-        {}
-
+            , Ids(TMemoryConsumer(ReplCtx->VCtx->Replication)) 
+            , DataPortion(TMemoryConsumer(ReplCtx->VCtx->Replication)) 
+        {} 
+ 
         TActorId TVDiskProxy::Run(const TActorId& parentId) {
             Y_VERIFY_DEBUG(State == Initial);
-            State = RunProxy;
+            State = RunProxy; 
             STLOG(PRI_DEBUG, BS_REPL, BSVR19, VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "TVDiskProxy::Run"));
             ParentId = parentId;
             ProxyId = TActivationContext::Register(CreateVDiskProxyActor(ReplCtx, std::move(Ids), VDiskId, ServiceId), ParentId);
             return ProxyId;
-        }
-
+        } 
+ 
         void TVDiskProxy::SendNextRequest() {
             TActorIdentity(ParentId).Send(ProxyId, new TEvReplProxyNext);
-        }
-
-        void TVDiskProxy::HandleNext(TEvReplProxyNextResult::TPtr &ev) {
+        } 
+ 
+        void TVDiskProxy::HandleNext(TEvReplProxyNextResult::TPtr &ev) { 
             // transit to Ok state on first message
             if (State == RunProxy) {
                 State = Ok;
             }
             Y_VERIFY(State == Ok);
-            HandlePortion(ev->Get()->Portion);
+            HandlePortion(ev->Get()->Portion); 
             Stat = ev->Get()->Stat;
             HasTransientErrors = HasTransientErrors || ev->Get()->HasTransientErrors;
-        }
-
-        void TVDiskProxy::HandlePortion(TNextPortion &portion) {
-            switch (portion.Status) {
-                case TNextPortion::Ok:
-                    State = Ok;
+        } 
+ 
+        void TVDiskProxy::HandlePortion(TNextPortion &portion) { 
+            switch (portion.Status) { 
+                case TNextPortion::Ok: 
+                    State = Ok; 
                     Y_VERIFY(portion.DataPortion.Valid());
-                    break;
-                case TNextPortion::Eof:
-                    State = Eof;
-                    break;
-                case TNextPortion::Error:
-                    State = Error;
-                    break;
-                default:
+                    break; 
+                case TNextPortion::Eof: 
+                    State = Eof; 
+                    break; 
+                case TNextPortion::Error: 
+                    State = Error; 
+                    break; 
+                default: 
                     Y_FAIL("Unexpected value: %d", portion.Status);
-            }
-
+            } 
+ 
             Y_VERIFY(!DataPortion.Valid());
             DataPortion = std::move(portion.DataPortion);
-        }
-
-
-        ////////////////////////////////////////////////////////////////////////////
-        // Proxy Actor
-        // TVDiskProxy uses this actor to communicate with a concrete VDisk.
-        // TVDiskProxy sends the following messages:
-        //   * TEvReplProxyNext
-        //
-        // TVDiskProxy receives the following messages:
-        //   * TEvReplProxyNextResult
-        //
-        ////////////////////////////////////////////////////////////////////////////
-        class TVDiskProxyActor : public TActorBootstrapped<TVDiskProxyActor> {
+        } 
+ 
+ 
+        //////////////////////////////////////////////////////////////////////////// 
+        // Proxy Actor 
+        // TVDiskProxy uses this actor to communicate with a concrete VDisk. 
+        // TVDiskProxy sends the following messages: 
+        //   * TEvReplProxyNext 
+        // 
+        // TVDiskProxy receives the following messages: 
+        //   * TEvReplProxyNextResult 
+        // 
+        //////////////////////////////////////////////////////////////////////////// 
+        class TVDiskProxyActor : public TActorBootstrapped<TVDiskProxyActor> { 
             using TQueueItem = std::unique_ptr<TEvBlobStorage::TEvVGetResult>;
 
             struct TCompare {
@@ -110,12 +110,12 @@ namespace NKikimr {
             using TResultQueue = TPriorityQueue<TQueueItem, TVector<TQueueItem>, TCompare>;
 
             std::shared_ptr<TReplCtx> ReplCtx;
-            const TBlobStorageGroupType GType;
+            const TBlobStorageGroupType GType; 
             TActorId Recipient;
             TTrackableVector<TVDiskProxy::TScheduledBlob> Ids;
             TVDiskID VDiskId;
             TActorId ServiceId;
-            TProxyStat Stat;
+            TProxyStat Stat; 
             ui32 SendIdx;
             ui32 CurPosIdx;
             ui32 RequestsInFlight;
@@ -128,12 +128,12 @@ namespace NKikimr {
             ui64 NextSendCookie;
             ui64 NextReceiveCookie;
             TResultQueue ResultQueue;
-
+ 
             TQueue<std::unique_ptr<TEvBlobStorage::TEvVGet>> SchedulerRequestQ;
             THashMap<ui64, TReplMemTokenId> RequestTokens;
 
-            friend class TActorBootstrapped<TVDiskProxyActor>;
-
+            friend class TActorBootstrapped<TVDiskProxyActor>; 
+ 
             void Bootstrap(const TActorId& parentId) {
                 STLOG(PRI_DEBUG, BS_REPL, BSVR20, VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "TVDiskProxyActor::Bootstrap"));
 
@@ -144,10 +144,10 @@ namespace NKikimr {
                 Y_VERIFY(!Ids.empty());
 
                 // send initial request
-                Become(&TThis::StateFunc);
+                Become(&TThis::StateFunc); 
                 ProcessPendingRequests();
-            }
-
+            } 
+ 
             void SendRequest() {
                 // query timestamp
                 TInstant timestamp = TAppData::TimeProvider->Now();
@@ -164,7 +164,7 @@ namespace NKikimr {
                     maxResponseSize = Min(maxResponseSize, quoter->GetMaxPacketSize());
                 }
 
-                // prepare a set of extreme queries
+                // prepare a set of extreme queries 
                 Y_VERIFY(SendIdx < Ids.size());
                 ui32 numIDsRemain = Min<size_t>(Ids.size() - SendIdx, ReplCtx->VDiskCfg->ReplRequestElements);
                 ui32 responseSize = 0;
@@ -182,7 +182,7 @@ namespace NKikimr {
                     req->AddExtremeQuery(id, 0, 0, &cookie);
                     bytes += Ids[SendIdx].ExpectedReplySize;
                     ++SendIdx;
-                }
+                } 
 
                 if (Send(MakeBlobStorageReplBrokerID(), new TEvQueryReplMemToken(bytes), 0, getCookie)) {
                     SchedulerRequestQ.push(std::move(req));
@@ -195,8 +195,8 @@ namespace NKikimr {
                 Stat.VDiskReqs++;
 
                 STLOG(PRI_DEBUG, BS_REPL, BSVR21, VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "TVDiskProxyActor::SendRequest"));
-            }
-
+            } 
+ 
             void Handle(TEvReplMemToken::TPtr& ev) {
                 // send scheduled item and remember result token for this request
                 Y_VERIFY(SchedulerRequestQ);
@@ -288,7 +288,7 @@ namespace NKikimr {
             }
 
             void ProcessScheduledResult(std::unique_ptr<TEvBlobStorage::TEvVGetResult>& ev) {
-                ReplCtx->MonGroup.ReplVGetBytesReceived() += ev->GetCachedByteSize();
+                ReplCtx->MonGroup.ReplVGetBytesReceived() += ev->GetCachedByteSize(); 
 
                 // if result came out-of-order, then put it into result queue, otherwise process message and any
                 // possible pending messages which came out-of-order before this one
@@ -335,10 +335,10 @@ namespace NKikimr {
                 }
 
                 // process VGetResult status
-                TNextPortion portion(TNextPortion::Error, TMemoryConsumer(ReplCtx->VCtx->Replication));
+                TNextPortion portion(TNextPortion::Error, TMemoryConsumer(ReplCtx->VCtx->Replication)); 
                 const NKikimrBlobStorage::TEvVGetResult &rec = msg->Record;
-                switch (rec.GetStatus()) {
-                    case NKikimrProto::OK:
+                switch (rec.GetStatus()) { 
+                    case NKikimrProto::OK: 
                         portion.Status = TNextPortion::Ok;
                         ++Stat.VDiskRespOK;
                         break;
@@ -358,12 +358,12 @@ namespace NKikimr {
                     case NKikimrProto::TRYLATER_TIME:
                     case NKikimrProto::TRYLATER_SIZE:
                         Y_FAIL("unexpected Status# %s from BS_QUEUE", EReplyStatus_Name(rec.GetStatus()).data());
-                    default:
+                    default: 
                         ++Stat.VDiskRespOther;
                         STLOG(PRI_DEBUG, BS_REPL, BSVR24, VDISKP(ReplCtx->VCtx->VDiskLogPrefix,
                             "TVDiskProxyActor::Handle(TEvVGetResult)"), (Status, rec.GetStatus()));
                         break;
-                }
+                } 
                 if (portion.Status != TNextPortion::Ok) {
                     STLOG(PRI_DEBUG, BS_REPL, BSVR25, VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "EvVGet failed"),
                         (Status, rec.GetStatus()));
@@ -374,24 +374,24 @@ namespace NKikimr {
                     for (ui32 i = 0; i < size; i++) {
                         const NKikimrBlobStorage::TQueryResult &q = rec.GetResult(i);
                         ui64 cookie = q.GetCookie();
-
+ 
                         Y_VERIFY(cookie == CurPosIdx || (CurPosIdx && cookie == CurPosIdx - 1),
                                "i# %" PRIu32 " cookie# %" PRIu64 " CurPosIdx %" PRIu32,
                                i, cookie, CurPosIdx);
-
+ 
                         // ensure we received correctly ordered LogoBlob ID
-                        const TLogoBlobID id = LogoBlobIDFromLogoBlobID(q.GetBlobID());
+                        const TLogoBlobID id = LogoBlobIDFromLogoBlobID(q.GetBlobID()); 
                         const TLogoBlobID genId = Ids[cookie].Id.PartId() ? id : TLogoBlobID(id, 0);
                         Y_VERIFY(genId == Ids[cookie].Id);
                         if (CurPosIdx == cookie)
                             ++CurPosIdx;
-
+ 
                         if (q.GetStatus() == NKikimrProto::OK) {
                             TString buffer = q.GetBuffer();
                             if (buffer.size() != GType.PartSize(id)) {
-                                TString message = VDISKP(ReplCtx->VCtx->VDiskLogPrefix,
-                                    "Received incorrect data BlobId# %s Buffer.size# %zu;"
-                                    " VDISK CAN NOT REPLICATE A BLOB BECAUSE HAS FOUND INCONSISTENCY IN BLOB SIZE",
+                                TString message = VDISKP(ReplCtx->VCtx->VDiskLogPrefix, 
+                                    "Received incorrect data BlobId# %s Buffer.size# %zu;" 
+                                    " VDISK CAN NOT REPLICATE A BLOB BECAUSE HAS FOUND INCONSISTENCY IN BLOB SIZE", 
                                     id.ToString().data(), buffer.size());
                                 STLOG(PRI_CRIT, BS_REPL, BSVR26, message, (BlobId, id), (BufferSize, buffer.size()));
                                 Y_VERIFY_DEBUG(false, "%s", message.data());
@@ -403,7 +403,7 @@ namespace NKikimr {
                                 Stat.LogoBlobDataSize += buffer.size();
                                 portion.DataPortion.Add(id, std::move(buffer));
                             }
-                        } else {
+                        } else { 
                             portion.DataPortion.AddError(id, q.GetStatus());
                             if (q.GetStatus() == NKikimrProto::OVERRUN) { // FIXME: implement overrun in query exec code
                                 Stat.OverflowedMsgs++;
@@ -412,20 +412,20 @@ namespace NKikimr {
                             } else {
                                 Stat.LogoBlobNotOK++;
                             }
-                        }
-                    }
+                        } 
+                    } 
                     Y_VERIFY(CurPosIdx <= Ids.size());
                     if (CurPosIdx == Ids.size())
                         portion.Status = TNextPortion::Eof;
-
+ 
                     // if we haven't received actual data items at all, then send next request
                     if (!portion.DataPortion.Valid() && portion.Status == TNextPortion::Ok)
                         ProcessPendingRequests();
                     else
                         PutResponseQueueItem(std::move(portion));
-                }
-            }
-
+                } 
+            } 
+ 
             STRICT_STFUNC(StateFunc,
                 hFunc(TEvReplProxyNext, Handle)
                 hFunc(TEvReplMemToken, Handle)
@@ -433,29 +433,29 @@ namespace NKikimr {
                 cFunc(TEvents::TSystem::Poison, PassAway)
                 hFunc(TEvProcessDelayedEvent, Handle)
             )
-
-        public:
+ 
+        public: 
             static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
                 return NKikimrServices::TActivity::BS_VDISK_REPL_PROXY;
             }
 
-            TVDiskProxyActor(
+            TVDiskProxyActor( 
                     std::shared_ptr<TReplCtx> replCtx,
-                    TTrackableVector<TVDiskProxy::TScheduledBlob>&& ids,
-                    const TVDiskID& vdiskId,
+                    TTrackableVector<TVDiskProxy::TScheduledBlob>&& ids, 
+                    const TVDiskID& vdiskId, 
                     const TActorId& serviceId)
-                : TActorBootstrapped<TVDiskProxyActor>()
-                , ReplCtx(std::move(replCtx))
-                , GType(ReplCtx->VCtx->Top->GType)
+                : TActorBootstrapped<TVDiskProxyActor>() 
+                , ReplCtx(std::move(replCtx)) 
+                , GType(ReplCtx->VCtx->Top->GType) 
                 , Ids(std::move(ids))
                 , VDiskId(vdiskId)
                 , ServiceId(serviceId)
-                , Stat()
+                , Stat() 
                 , SendIdx(0)
-                , CurPosIdx(0)
+                , CurPosIdx(0) 
                 , RequestsInFlight(0)
                 , MaxRequestsInFlight(3)
-                , Prefetch(TNextPortion::Unknown, TMemoryConsumer(ReplCtx->VCtx->Replication))
+                , Prefetch(TNextPortion::Unknown, TMemoryConsumer(ReplCtx->VCtx->Replication)) 
                 , PrefetchDataSize(0)
                 , RequestFromVDiskProxyPending(true)
                 , Finished(false)
@@ -464,15 +464,15 @@ namespace NKikimr {
             {}
 
             ~TVDiskProxyActor() {}
-        };
-
+        }; 
+ 
         IActor *CreateVDiskProxyActor(std::shared_ptr<TReplCtx> replCtx,
-                TTrackableVector<TVDiskProxy::TScheduledBlob>&& ids,
-                const TVDiskID& vdiskId,
+                TTrackableVector<TVDiskProxy::TScheduledBlob>&& ids, 
+                const TVDiskID& vdiskId, 
                 const TActorId& serviceId) {
             return new TVDiskProxyActor(std::move(replCtx), std::move(ids), vdiskId, serviceId);
-        }
-
-    } // NRepl
-
-} // NKikimr
+        } 
+ 
+    } // NRepl 
+ 
+} // NKikimr 

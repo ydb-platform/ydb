@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/core/base/shared_data.h>
+#include <ydb/core/base/shared_data.h> 
 
 #include <util/generic/ptr.h>
 

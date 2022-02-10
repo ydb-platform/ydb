@@ -1,9 +1,9 @@
-#include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include <ydb/core/kqp/ut/common/kqp_ut_common.h> 
 
-#include <ydb/core/tx/datashard/datashard_failpoints.h>
-#include <ydb/core/kqp/provider/yql_kikimr_expr_nodes.h>
-#include <ydb/core/kqp/counters/kqp_counters.h>
-#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
+#include <ydb/core/tx/datashard/datashard_failpoints.h> 
+#include <ydb/core/kqp/provider/yql_kikimr_expr_nodes.h> 
+#include <ydb/core/kqp/counters/kqp_counters.h> 
+#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h> 
 
 #include <ydb/library/yql/ast/yql_ast.h>
 #include <ydb/library/yql/ast/yql_expr.h>
@@ -192,7 +192,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
                 .SetEndpoint(kikimr.GetEndpoint())
                 .SetAuthToken("user0@builtin");
             auto driver = TDriver(driverConfig);
-            auto db = NYdb::NTable::TTableClient(driver);
+            auto db = NYdb::NTable::TTableClient(driver); 
 
             auto session = db.CreateSession().GetValueSync().GetSession();
             auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
@@ -205,7 +205,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
                 .SetEndpoint(kikimr.GetEndpoint())
                 .SetAuthToken("user0@builtin");
             auto driver = TDriver(driverConfig);
-            auto db = NYdb::NTable::TTableClient(driver);
+            auto db = NYdb::NTable::TTableClient(driver); 
 
             auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -226,7 +226,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
 
         auto txControl = TTxControl::BeginTx().CommitTx();
 
-        NDataShard::gSkipRepliesFailPoint.Enable(-1, -1, 1);
+        NDataShard::gSkipRepliesFailPoint.Enable(-1, -1, 1); 
 
         auto result = session.ExecuteDataQuery(
             query,
@@ -238,7 +238,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         result.GetIssues().PrintTo(Cerr);
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::TIMEOUT);
 
-        NDataShard::gSkipRepliesFailPoint.Disable();
+        NDataShard::gSkipRepliesFailPoint.Disable(); 
 
         // Check session is ready or busy
         result = session.ExecuteDataQuery(query, txControl).ExtractValueSync();
@@ -256,7 +256,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
 
         auto txControl = TTxControl::BeginTx().CommitTx();
 
-        NDataShard::gSkipRepliesFailPoint.Enable(-1, -1, 1);
+        NDataShard::gSkipRepliesFailPoint.Enable(-1, -1, 1); 
 
         auto result = session.ExecuteDataQuery(
             query,
@@ -268,7 +268,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         result.GetIssues().PrintTo(Cerr);
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::TIMEOUT);
 
-        NDataShard::gSkipRepliesFailPoint.Disable();
+        NDataShard::gSkipRepliesFailPoint.Disable(); 
 
         // Check session is ready or busy (both possible)
         result = session.ExecuteDataQuery(query, txControl).ExtractValueSync();
@@ -293,7 +293,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
 
             auto txControl = TTxControl::BeginTx().CommitTx();
 
-            NDataShard::gSkipRepliesFailPoint.Enable(-1, -1, 1);
+            NDataShard::gSkipRepliesFailPoint.Enable(-1, -1, 1); 
 
             auto result = session.ExecuteDataQuery(
                 query,
@@ -306,7 +306,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
             result.GetIssues().PrintTo(Cerr);
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::CLIENT_DEADLINE_EXCEEDED);
 
-            NDataShard::gSkipRepliesFailPoint.Disable();
+            NDataShard::gSkipRepliesFailPoint.Disable(); 
         }
 
         TString line;
@@ -341,7 +341,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
 
         auto txControl = TTxControl::BeginTx().CommitTx();
 
-        NDataShard::gCancelTxFailPoint.Enable(-1, -1, 1);
+        NDataShard::gCancelTxFailPoint.Enable(-1, -1, 1); 
 
         auto result = session.ExecuteDataQuery(
             query,
@@ -351,7 +351,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         result.GetIssues().PrintTo(Cerr);
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::CANCELLED);
 
-        NDataShard::gCancelTxFailPoint.Disable();
+        NDataShard::gCancelTxFailPoint.Disable(); 
 
         // Check session is ready
         result = session.ExecuteDataQuery(query, txControl).ExtractValueSync();
@@ -369,7 +369,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
 
         auto txControl = TTxControl::BeginTx().CommitTx();
 
-        NDataShard::gCancelTxFailPoint.Enable(-1, -1, 0);
+        NDataShard::gCancelTxFailPoint.Enable(-1, -1, 0); 
 
         auto result = session.ExecuteDataQuery(
             query,
@@ -379,7 +379,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         result.GetIssues().PrintTo(Cerr);
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::CANCELLED);
 
-        NDataShard::gCancelTxFailPoint.Disable();
+        NDataShard::gCancelTxFailPoint.Disable(); 
 
         // Check session is ready
         result = session.ExecuteDataQuery(query, txControl).ExtractValueSync();
@@ -399,7 +399,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
 
         auto txControl = TTxControl::BeginTx().CommitTx();
 
-        NDataShard::gCancelTxFailPoint.Enable(-1, -1, 0);
+        NDataShard::gCancelTxFailPoint.Enable(-1, -1, 0); 
 
         auto result = session.ExecuteDataQuery(
             query,
@@ -407,7 +407,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         ).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
-        NDataShard::gCancelTxFailPoint.Disable();
+        NDataShard::gCancelTxFailPoint.Disable(); 
     }
 
     Y_UNIT_TEST_NEW_ENGINE(QueryCancelWriteImmediate) {
@@ -422,7 +422,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
 
         auto txControl = TTxControl::BeginTx().CommitTx();
 
-        NDataShard::gCancelTxFailPoint.Enable(-1, -1, 0);
+        NDataShard::gCancelTxFailPoint.Enable(-1, -1, 0); 
 
         auto result = session.ExecuteDataQuery(
             query,
@@ -430,7 +430,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         ).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
-        NDataShard::gCancelTxFailPoint.Disable();
+        NDataShard::gCancelTxFailPoint.Disable(); 
     }
 
     Y_UNIT_TEST_NEW_ENGINE(QueryResultsTruncated) {

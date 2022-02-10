@@ -4,8 +4,8 @@
 #include "console.h"
 #include "http.h"
 
-#include <ydb/core/mind/tenant_pool.h>
-#include <ydb/core/mon/mon.h>
+#include <ydb/core/mind/tenant_pool.h> 
+#include <ydb/core/mon/mon.h> 
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/mon.h>
@@ -241,7 +241,7 @@ private:
 
     // Structures to process config requests.
     THashMap<ui64, THolder<IEventHandle>> ConfigRequests;
-    THashMap<TDynBitMap, std::shared_ptr<NKikimrConfig::TAppConfig>> ConfigsCache;
+    THashMap<TDynBitMap, std::shared_ptr<NKikimrConfig::TAppConfig>> ConfigsCache; 
 };
 
 TConfigsDispatcher::TConfigsDispatcher(const NKikimrConfig::TAppConfig &config)
@@ -605,7 +605,7 @@ void TConfigsDispatcher::ProcessLocalCacheUpdate(TEvConsole::TEvConfigNotificati
     BLOG_D("Update local cache for kinds=" << KindsToString(subscription->Kinds)
                 << " config='" << rec.GetConfig().ShortDebugString() << "'");
 
-    ConfigsCache[subscription->Kinds].reset(new NKikimrConfig::TAppConfig(rec.GetConfig()));
+    ConfigsCache[subscription->Kinds].reset(new NKikimrConfig::TAppConfig(rec.GetConfig())); 
 
     auto resp = MakeHolder<TEvConsole::TEvConfigNotificationResponse>(rec);
 
@@ -875,7 +875,7 @@ void TConfigsDispatcher::Handle(TEvConsole::TEvGetNodeConfigResponse::TPtr &ev)
     }
 
     auto resp = MakeHolder<TEvConfigsDispatcher::TEvGetConfigResponse>();
-    resp->Config.reset(new NKikimrConfig::TAppConfig(ev->Get()->Record.GetConfig()));
+    resp->Config.reset(new NKikimrConfig::TAppConfig(ev->Get()->Record.GetConfig())); 
 
     BLOG_TRACE("Send TEvConfigsDispatcher::TEvGetConfigResponse"
             " to " << ev->Sender

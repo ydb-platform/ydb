@@ -1,7 +1,7 @@
 LIBRARY()
 
 OWNER(
-    g:kikimr
+    g:kikimr 
     g:logbroker
 )
 
@@ -12,9 +12,9 @@ SRCS(
 
 PEERDIR(
     library/cpp/streams/zstd
-    ydb/library/yql/public/issue/protos
-    ydb/public/api/grpc/draft
-    ydb/public/api/protos
+    ydb/library/yql/public/issue/protos 
+    ydb/public/api/grpc/draft 
+    ydb/public/api/protos 
 )
 
 PROVIDES(pq_codecs_2)

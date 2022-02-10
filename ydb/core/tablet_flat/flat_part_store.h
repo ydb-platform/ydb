@@ -12,43 +12,43 @@
 namespace NKikimr {
 namespace NTable {
 
-class TColdPartStore : public TColdPart {
+class TColdPartStore : public TColdPart { 
 public:
-    TColdPartStore(
-            TVector<NPageCollection::TLargeGlobId> largeGlobIds,
+    TColdPartStore( 
+            TVector<NPageCollection::TLargeGlobId> largeGlobIds, 
             TString legacy,
             TString opaque,
             TEpoch epoch)
-        : TColdPart(ExtractLabel(largeGlobIds), epoch)
-        , LargeGlobIds(std::move(largeGlobIds))
+        : TColdPart(ExtractLabel(largeGlobIds), epoch) 
+        , LargeGlobIds(std::move(largeGlobIds)) 
         , Legacy(std::move(legacy))
         , Opaque(std::move(opaque))
     { }
 
 private:
-    static TLogoBlobID ExtractLabel(const TVector<NPageCollection::TLargeGlobId>& largeGlobIds) {
-        Y_VERIFY(!largeGlobIds.empty());
-        return largeGlobIds[0].Lead;
+    static TLogoBlobID ExtractLabel(const TVector<NPageCollection::TLargeGlobId>& largeGlobIds) { 
+        Y_VERIFY(!largeGlobIds.empty()); 
+        return largeGlobIds[0].Lead; 
     }
 
 public:
-    TVector<NPageCollection::TLargeGlobId> LargeGlobIds;
+    TVector<NPageCollection::TLargeGlobId> LargeGlobIds; 
     TString Legacy;
     TString Opaque;
 };
 
-class TPartStore : public TPart, public IBundle {
+class TPartStore : public TPart, public IBundle { 
 protected:
-    TPartStore(const TPartStore& src, TEpoch epoch)
+    TPartStore(const TPartStore& src, TEpoch epoch) 
         : TPart(src, epoch)
-        , PageCollections(src.PageCollections)
+        , PageCollections(src.PageCollections) 
         , Pseudo(src.Pseudo)
     { }
 
 public:
-    using TCache = NTabletFlatExecutor::TPrivatePageCache::TInfo;
+    using TCache = NTabletFlatExecutor::TPrivatePageCache::TInfo; 
 
-    TPartStore(const TLogoBlobID &label, TEgg egg, TStat stat)
+    TPartStore(const TLogoBlobID &label, TEgg egg, TStat stat) 
         : TPart(label, egg, stat)
     {
 
@@ -56,14 +56,14 @@ public:
 
     const TLogoBlobID& BundleId() const override
     {
-        return PageCollections[0]->PageCollection->Label();
+        return PageCollections[0]->PageCollection->Label(); 
     }
 
     ui64 BackingSize() const override
     {
         ui64 size = 0;
-        for (const auto &cache : PageCollections) {
-            size += cache->PageCollection->BackingSize();
+        for (const auto &cache : PageCollections) { 
+            size += cache->PageCollection->BackingSize(); 
         }
         return size;
     }
@@ -75,29 +75,29 @@ public:
 
     ui64 GetPageSize(NPage::TPageId id, NPage::TGroupId groupId) const override
     {
-        Y_VERIFY(groupId.Index < PageCollections.size());
-        return PageCollections[groupId.Index]->PageCollection->Page(id).Size;
+        Y_VERIFY(groupId.Index < PageCollections.size()); 
+        return PageCollections[groupId.Index]->PageCollection->Page(id).Size; 
     }
 
     TIntrusiveConstPtr<TPart> CloneWithEpoch(TEpoch epoch) const override
     {
-        return new TPartStore(*this, epoch);
+        return new TPartStore(*this, epoch); 
     }
 
-    const NPageCollection::TPageCollection* Packet(ui32 room) const noexcept override
+    const NPageCollection::TPageCollection* Packet(ui32 room) const noexcept override 
     {
-        auto *pageCollection = room < PageCollections.size() ? PageCollections[room]->PageCollection.Get() : nullptr;
+        auto *pageCollection = room < PageCollections.size() ? PageCollections[room]->PageCollection.Get() : nullptr; 
 
-        return dynamic_cast<const NPageCollection::TPageCollection*>(pageCollection);
+        return dynamic_cast<const NPageCollection::TPageCollection*>(pageCollection); 
     }
 
-    TCache* Locate(ELargeObj lob, ui64 ref) const noexcept
+    TCache* Locate(ELargeObj lob, ui64 ref) const noexcept 
     {
-        if ((lob != ELargeObj::Extern && lob != ELargeObj::Outer) || (ref >> 32)) {
-            Y_Fail("Invalid ref ELargeObj{" << int(lob) << ", " << ref << "}");
+        if ((lob != ELargeObj::Extern && lob != ELargeObj::Outer) || (ref >> 32)) { 
+            Y_Fail("Invalid ref ELargeObj{" << int(lob) << ", " << ref << "}"); 
         }
 
-        return (lob == ELargeObj::Extern ? Pseudo : PageCollections.at(Groups)).Get();
+        return (lob == ELargeObj::Extern ? Pseudo : PageCollections.at(Groups)).Get(); 
     }
 
     TAutoPtr<NPageCollection::TFetch> DataPages() const noexcept
@@ -110,14 +110,14 @@ public:
 
         for (; it; ++it) pages.emplace_back(it->GetPageId());
 
-        return new NPageCollection::TFetch{ 0, PageCollections[0]->PageCollection , std::move(pages) };
+        return new NPageCollection::TFetch{ 0, PageCollections[0]->PageCollection , std::move(pages) }; 
     }
 
-    static TVector<TIntrusivePtr<TCache>> Construct(TVector<TPageCollectionComponents> components) noexcept
+    static TVector<TIntrusivePtr<TCache>> Construct(TVector<TPageCollectionComponents> components) noexcept 
     {
         TVector<TIntrusivePtr<TCache>> caches;
 
-        for (auto &one: components) {
+        for (auto &one: components) { 
             caches.emplace_back(new TCache(std::move(one.Packet)));
 
             for (auto &page: one.Sticky)
@@ -129,9 +129,9 @@ public:
 
     static TArrayRef<const TIntrusivePtr<TCache>> Storages(const TPartView &partView) noexcept
     {
-        auto *part = partView.As<TPartStore>();
+        auto *part = partView.As<TPartStore>(); 
 
-        Y_VERIFY(!partView || part, "Got an unexpected type of TPart part");
+        Y_VERIFY(!partView || part, "Got an unexpected type of TPart part"); 
 
         return part ? part->PageCollections : TArrayRef<const TIntrusivePtr<TCache>> { };
     }
@@ -140,9 +140,9 @@ public:
     TIntrusivePtr<TCache> Pseudo;    /* Cache for NPage::TBlobs */
 };
 
-class TTxStatusPartStore : public TTxStatusPart, public IBorrowBundle {
+class TTxStatusPartStore : public TTxStatusPart, public IBorrowBundle { 
 public:
-    TTxStatusPartStore(const NPageCollection::TLargeGlobId& dataId, TEpoch epoch, TSharedData data)
+    TTxStatusPartStore(const NPageCollection::TLargeGlobId& dataId, TEpoch epoch, TSharedData data) 
         : TTxStatusPart(dataId.Lead, epoch, new NPage::TTxStatusPage(data))
         , DataId(dataId)
     { }

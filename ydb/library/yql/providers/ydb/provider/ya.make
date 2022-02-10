@@ -1,6 +1,6 @@
 LIBRARY()
 
-OWNER(g:yql)
+OWNER(g:yql) 
 
 SRCS(
     yql_ydb_datasink.cpp
@@ -23,18 +23,18 @@ SRCS(
 PEERDIR(
     library/cpp/random_provider
     library/cpp/time_provider
-    library/cpp/yson/node
-    ydb/core/yq/libs/common
-    ydb/core/yq/libs/db_resolver
-    ydb/library/yql/ast
-    ydb/library/yql/minikql
-    ydb/library/yql/minikql/comp_nodes
-    ydb/library/yql/minikql/computation
-    ydb/library/yql/providers/common/structured_token
-    ydb/library/yql/providers/common/token_accessor/client
-    ydb/public/lib/experimental
-    ydb/public/sdk/cpp/client/ydb_driver
-    ydb/public/sdk/cpp/client/ydb_table
+    library/cpp/yson/node 
+    ydb/core/yq/libs/common 
+    ydb/core/yq/libs/db_resolver 
+    ydb/library/yql/ast 
+    ydb/library/yql/minikql 
+    ydb/library/yql/minikql/comp_nodes 
+    ydb/library/yql/minikql/computation 
+    ydb/library/yql/providers/common/structured_token 
+    ydb/library/yql/providers/common/token_accessor/client 
+    ydb/public/lib/experimental 
+    ydb/public/sdk/cpp/client/ydb_driver 
+    ydb/public/sdk/cpp/client/ydb_table 
     ydb/library/yql/core
     ydb/library/yql/core/type_ann
     ydb/library/yql/dq/expr_nodes

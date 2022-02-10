@@ -3,12 +3,12 @@ LIBRARY()
 OWNER(g:kikimr)
 
 PEERDIR(
-    ydb/core/base
-    ydb/core/engine/minikql
-    ydb/core/erasure
-    ydb/core/protos
-    ydb/core/tablet_flat
-    ydb/core/tx/sequenceshard/public
+    ydb/core/base 
+    ydb/core/engine/minikql 
+    ydb/core/erasure 
+    ydb/core/protos 
+    ydb/core/tablet_flat 
+    ydb/core/tx/sequenceshard/public 
 )
 
 SRCS(
@@ -31,10 +31,10 @@ YQL_LAST_ABI_VERSION()
 
 END()
 
-RECURSE(
-    public
-)
-
-RECURSE_FOR_TESTS(
-    ut
-)
+RECURSE( 
+    public 
+) 
+ 
+RECURSE_FOR_TESTS( 
+    ut 
+) 

@@ -1,9 +1,9 @@
 LIBRARY()
 
-OWNER(
-    snaury
-    g:kikimr
-)
+OWNER( 
+    snaury 
+    g:kikimr 
+) 
 
 SRCS(
     events.cpp
@@ -42,21 +42,21 @@ SRCS(
 
 PEERDIR(
     library/cpp/protobuf/util
-    ydb/core/actorlib_impl
-    ydb/core/base
-    ydb/core/engine/minikql
-    ydb/core/erasure
-    ydb/core/metering
-    ydb/core/protos
-    ydb/core/tablet_flat
+    ydb/core/actorlib_impl 
+    ydb/core/base 
+    ydb/core/engine/minikql 
+    ydb/core/erasure 
+    ydb/core/metering 
+    ydb/core/protos 
+    ydb/core/tablet_flat 
 )
 
 END()
-
-RECURSE(
-    quoter_performance_test
-)
-
-RECURSE_FOR_TESTS(
-    ut
-)
+ 
+RECURSE( 
+    quoter_performance_test 
+) 
+ 
+RECURSE_FOR_TESTS( 
+    ut 
+) 

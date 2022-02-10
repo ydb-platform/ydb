@@ -1,12 +1,12 @@
 #pragma once
-#include <contrib/libs/apache/arrow/cpp/src/arrow/scalar.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/status.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/type_fwd.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/type_traits.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/compute/function.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/scalar.h> 
+#include <contrib/libs/apache/arrow/cpp/src/arrow/status.h> 
+#include <contrib/libs/apache/arrow/cpp/src/arrow/type.h> 
+#include <contrib/libs/apache/arrow/cpp/src/arrow/type_fwd.h> 
+#include <contrib/libs/apache/arrow/cpp/src/arrow/type_traits.h> 
+#include <contrib/libs/apache/arrow/cpp/src/arrow/compute/function.h> 
 
-#include <util/system/yassert.h>
+#include <util/system/yassert.h> 
 
 #include <type_traits>
 

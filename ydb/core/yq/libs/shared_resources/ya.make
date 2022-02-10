@@ -1,4 +1,4 @@
-OWNER(g:yq)
+OWNER(g:yq) 
 
 LIBRARY()
 
@@ -10,12 +10,12 @@ SRCS(
 PEERDIR(
     library/cpp/actors/core
     library/cpp/monlib/dynamic_counters
-    ydb/core/protos
-    ydb/core/yq/libs/events
-    ydb/core/yq/libs/shared_resources/interface
-    ydb/library/security
-    ydb/public/sdk/cpp/client/ydb_driver
-    ydb/public/sdk/cpp/client/ydb_table
+    ydb/core/protos 
+    ydb/core/yq/libs/events 
+    ydb/core/yq/libs/shared_resources/interface 
+    ydb/library/security 
+    ydb/public/sdk/cpp/client/ydb_driver 
+    ydb/public/sdk/cpp/client/ydb_table 
 )
 
 YQL_LAST_ABI_VERSION()

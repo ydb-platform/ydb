@@ -1,27 +1,27 @@
-UNITTEST_FOR(ydb/core/mind/hive)
+UNITTEST_FOR(ydb/core/mind/hive) 
 
-OWNER(
-    ddoarn
-    xenoxeno
-    g:kikimr
-)
+OWNER( 
+    ddoarn 
+    xenoxeno 
+    g:kikimr 
+) 
 
 FORK_SUBTESTS()
 
 TIMEOUT(600)
-
+ 
 SIZE(MEDIUM)
 
 PEERDIR(
     library/cpp/getopt
     library/cpp/svnversion
-    ydb/core/base
-    ydb/core/mind
-    ydb/core/mind/hive
-    ydb/core/testlib
+    ydb/core/base 
+    ydb/core/mind 
+    ydb/core/mind/hive 
+    ydb/core/testlib 
 )
 
-YQL_LAST_ABI_VERSION()
+YQL_LAST_ABI_VERSION() 
 
 SRCS(
     sequencer_ut.cpp

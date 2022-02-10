@@ -5,8 +5,8 @@
 #include "datashard__engine_host.h"
 #include "operation.h"
 
-#include <ydb/core/tx/tx_processing.h>
-#include <ydb/core/tablet_flat/flat_cxx_database.h>
+#include <ydb/core/tx/tx_processing.h> 
+#include <ydb/core/tablet_flat/flat_cxx_database.h> 
 
 #include <ydb/library/yql/public/issue/yql_issue.h>
 
@@ -14,7 +14,7 @@ namespace NKikimr {
 
 class TBalanceCoverageBuilder;
 
-namespace NDataShard {
+namespace NDataShard { 
 
 static constexpr char MemoryLabelValidatedDataTx[] = "Datashard/TValidatedDataTx";
 static constexpr char MemoryLabelActiveTransactionBody[] = "Datashard/TActiveTransaction/TxBody";
@@ -22,7 +22,7 @@ static constexpr char MemoryLabelActiveTransactionBody[] = "Datashard/TActiveTra
 using NTabletFlatExecutor::TTransactionContext;
 using NTabletFlatExecutor::TTableSnapshotContext;
 
-class TDataShard;
+class TDataShard; 
 class TSysLocks;
 struct TReadSetKey;
 class TActiveTransaction;
@@ -115,7 +115,7 @@ class TValidatedDataTx : TNonCopyable {
 public:
     using TPtr = std::shared_ptr<TValidatedDataTx>;
 
-    TValidatedDataTx(TDataShard *self,
+    TValidatedDataTx(TDataShard *self, 
                      TTransactionContext &txc,
                      const TActorContext &ctx,
                      const TStepOrder &stepTxId,
@@ -327,7 +327,7 @@ public:
 
     TActiveTransaction(const TBasicOpInfo &op,
                        TValidatedDataTx::TPtr savedTx);
-    TActiveTransaction(TDataShard *self,
+    TActiveTransaction(TDataShard *self, 
                        TTransactionContext &txc,
                        const TActorContext &ctx,
                        const TBasicOpInfo &op,
@@ -339,7 +339,7 @@ public:
     ~TActiveTransaction();
 
     void FillTxData(TValidatedDataTx::TPtr dataTx);
-    void FillTxData(TDataShard *self,
+    void FillTxData(TDataShard *self, 
                     TTransactionContext &txc,
                     const TActorContext &ctx,
                     const TActorId &target,
@@ -381,7 +381,7 @@ public:
     }
 
     const TValidatedDataTx::TPtr& GetDataTx() const { return DataTx; }
-    TValidatedDataTx::TPtr BuildDataTx(TDataShard *self,
+    TValidatedDataTx::TPtr BuildDataTx(TDataShard *self, 
                                        TTransactionContext &txc,
                                        const TActorContext &ctx);
     void ClearDataTx() { DataTx = nullptr; }
@@ -460,10 +460,10 @@ public:
         return ArtifactFlags & LOCKS_STORED;
     }
 
-    void DbStoreLocksAccessLog(TDataShard * self,
+    void DbStoreLocksAccessLog(TDataShard * self, 
                                TTransactionContext &txc,
                                const TActorContext &ctx);
-    void DbStoreArtifactFlags(TDataShard * self,
+    void DbStoreArtifactFlags(TDataShard * self, 
                               TTransactionContext &txc,
                               const TActorContext &ctx);
 
@@ -478,7 +478,7 @@ public:
     }
 
     void ReleaseTxData(NTabletFlatExecutor::TTxMemoryProviderBase &provider, const TActorContext &ctx);
-    ERestoreDataStatus RestoreTxData(TDataShard * self, TTransactionContext &txc, const TActorContext &ctx);
+    ERestoreDataStatus RestoreTxData(TDataShard * self, TTransactionContext &txc, const TActorContext &ctx); 
     void FinalizeDataTxPlan();
 
     // TOperation iface.

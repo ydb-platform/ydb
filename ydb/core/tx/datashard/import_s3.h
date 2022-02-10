@@ -9,13 +9,13 @@ namespace NKikimrSchemeOp {
 }
 
 namespace NKikimr {
-namespace NDataShard {
+namespace NDataShard { 
 
 class TTableInfo;
 
 IActor* CreateS3Downloader(const TActorId& dataShard, ui64 txId, const NKikimrSchemeOp::TRestoreTask& task, const TTableInfo& info);
 
-} // NDataShard
+} // NDataShard 
 } // NKikimr
 
 #endif // KIKIMR_DISABLE_S3_OPS

@@ -1,11 +1,11 @@
 #pragma once
 
-#include <ydb/core/protos/config.pb.h>
+#include <ydb/core/protos/config.pb.h> 
 
-#include <ydb/core/ymq/base/action.h>
-#include <ydb/core/ymq/base/cloud_enums.h>
-#include <ydb/core/ymq/base/query_id.h>
-#include <ydb/core/ymq/base/queue_path.h>
+#include <ydb/core/ymq/base/action.h> 
+#include <ydb/core/ymq/base/cloud_enums.h> 
+#include <ydb/core/ymq/base/query_id.h> 
+#include <ydb/core/ymq/base/queue_path.h> 
 
 #include <ydb/library/yql/minikql/aligned_page_pool.h>
 
@@ -383,7 +383,7 @@ public:
                       EAction action, ELifetime lifetime = ELifetime::Persistent);
 
     virtual void SetAggregatedParent(TActionCounters* parent);
-    virtual ~TActionCounters() {}
+    virtual ~TActionCounters() {} 
 };
 
 struct TYmqActionCounters : public TActionCounters {
@@ -391,7 +391,7 @@ struct TYmqActionCounters : public TActionCounters {
               EAction action, const TString& labelName, const TString& namePrefix,
               ELifetime lifetime = ELifetime::Persistent);
 public:
-    virtual ~TYmqActionCounters() {}
+    virtual ~TYmqActionCounters() {} 
     void SetAggregatedParent(TActionCounters*) override {
         return;
     }
@@ -412,10 +412,10 @@ struct TQueryTypeCounters {
 // Counters for transactions processing.
 // These counters are present in queue counters and in user counters.
 struct TTransactionCounters : public TAtomicRefCount<TTransactionCounters> {
-    // Query types are declared in ydb/core/ymq/base/query_id.h.
+    // Query types are declared in ydb/core/ymq/base/query_id.h. 
     TQueryTypeCounters QueryTypeCounters[EQueryId::QUERY_VECTOR_SIZE]; // 23 types at all. 15 for std. 16 for fifo. 2 for user.
 
-    std::shared_ptr<TAlignedPagePoolCounters> AllocPoolCounters; // counters for kikimr core.
+    std::shared_ptr<TAlignedPagePoolCounters> AllocPoolCounters; // counters for kikimr core. 
 
     TLazyCachedCounter CompileQueryCount; // Compiles count.
     TLazyCachedCounter TransactionsCount; // Transactions processed.
@@ -429,8 +429,8 @@ struct TTransactionCounters : public TAtomicRefCount<TTransactionCounters> {
     void SetAggregatedParent(const TIntrusivePtr<TTransactionCounters>& parent);
 
 public:
-    void Init(const TIntrusivePtr<NMonitoring::TDynamicCounters>& rootCounters,
-        std::shared_ptr<TAlignedPagePoolCounters> poolCounters, bool forQueue);
+    void Init(const TIntrusivePtr<NMonitoring::TDynamicCounters>& rootCounters, 
+        std::shared_ptr<TAlignedPagePoolCounters> poolCounters, bool forQueue); 
 };
 
 // Amazon status codes.
@@ -444,15 +444,15 @@ public:
     void SetAggregatedParent(TAPIStatusesCounters* parent);
 
 private:
-    THashMap<TString, TLazyCachedCounter> ErrorToCounter; // Map with different status codes. See ydb/core/ymq/base/error.cpp.
+    THashMap<TString, TLazyCachedCounter> ErrorToCounter; // Map with different status codes. See ydb/core/ymq/base/error.cpp. 
     TLazyCachedCounter OkCounter; // Special status for successful requests.
     TLazyCachedCounter UnknownCounter; // Special status for statuses that are not in map.
 };
 
 // User counters in SQS core subsystem.
 struct TUserCounters : public TAtomicRefCount<TUserCounters> {
-    // Action types are declared in ydb/core/ymq/base/action.h.
-    TActionCounters SqsActionCounters[EAction::ActionsArraySize]; // 11 actions. See IsActionForUser() function in ydb/core/ymq/base/action.cpp.
+    // Action types are declared in ydb/core/ymq/base/action.h. 
+    TActionCounters SqsActionCounters[EAction::ActionsArraySize]; // 11 actions. See IsActionForUser() function in ydb/core/ymq/base/action.cpp. 
     TYmqActionCounters YmqActionCounters[EAction::ActionsArraySize]; // see IsActionForUserYMQ() function.
 
     TLazyCachedCounter RequestTimeouts; // Requests that weren't processed in 10 minutes. They are almost sure hanged.
@@ -471,8 +471,8 @@ struct TUserCounters : public TAtomicRefCount<TUserCounters> {
         TLazyCachedCounter CreateAccountOnTheFly_Errors; // Account that were failed to create on the fly (Yandex Cloud mode).
 
         void Init(const TIntrusivePtrCntrCouple& userCounters,
-                  const std::shared_ptr<TAlignedPagePoolCounters>& allocPoolCounters,
-                  const NKikimrConfig::TSqsConfig& cfg);
+                  const std::shared_ptr<TAlignedPagePoolCounters>& allocPoolCounters, 
+                  const NKikimrConfig::TSqsConfig& cfg); 
         void SetAggregatedParent(TDetailedCounters* parent);
     };
 
@@ -494,7 +494,7 @@ struct TUserCounters : public TAtomicRefCount<TUserCounters> {
     TUserCounters(
             const NKikimrConfig::TSqsConfig& cfg, const TIntrusivePtr<NMonitoring::TDynamicCounters>& sqsCoreCounters,
             const TIntrusivePtr<NMonitoring::TDynamicCounters>& ymqRootCounters,
-            const std::shared_ptr<TAlignedPagePoolCounters>& allocPoolCounters, const TString& userName,
+            const std::shared_ptr<TAlignedPagePoolCounters>& allocPoolCounters, const TString& userName, 
             const TIntrusivePtr<TUserCounters>& aggregatedParent,
             bool isAggregatedCounters = false
     )
@@ -538,7 +538,7 @@ struct TUserCounters : public TAtomicRefCount<TUserCounters> {
     }
 
 private:
-    void InitCounters(const TString& userName, const std::shared_ptr<TAlignedPagePoolCounters>& allocPoolCounters);
+    void InitCounters(const TString& userName, const std::shared_ptr<TAlignedPagePoolCounters>& allocPoolCounters); 
     TIntrusivePtr<TQueueCounters> CreateQueueCountersImpl(const TString& queueName, const TString& folderId, bool insertCounters, bool aggregated = false);
 
     friend struct TQueueCounters;
@@ -546,7 +546,7 @@ private:
 private:
     const NKikimrConfig::TSqsConfig* Cfg = nullptr;
     const TString UserName;
-    std::shared_ptr<std::atomic<ui64>> ShowDetailedCountersDeadline = std::make_shared<std::atomic<ui64>>(0ul); // TInstant value
+    std::shared_ptr<std::atomic<ui64>> ShowDetailedCountersDeadline = std::make_shared<std::atomic<ui64>>(0ul); // TInstant value 
     std::atomic<bool> NeedExportTransactionCounters = false;
     TDetailedCounters DetailedCounters;
     TIntrusivePtr<TUserCounters> AggregatedParent;
@@ -556,9 +556,9 @@ private:
 
 // Queue counters in SQS core subsystem.
 struct TQueueCounters : public TAtomicRefCount<TQueueCounters> {
-    // Action types are declared in ydb/core/ymq/base/action.h.
-    TActionCounters SqsActionCounters[EAction::ActionsArraySize]; // 12 actions. See IsActionForQueue() function in ydb/core/ymq/base/action.cpp.
-    TYmqActionCounters YmqActionCounters[EAction::ActionsArraySize]; // See IsActionForQueueYMQ() function in ydb/core/ymq/sqs/base/action.cpp.
+    // Action types are declared in ydb/core/ymq/base/action.h. 
+    TActionCounters SqsActionCounters[EAction::ActionsArraySize]; // 12 actions. See IsActionForQueue() function in ydb/core/ymq/base/action.cpp. 
+    TYmqActionCounters YmqActionCounters[EAction::ActionsArraySize]; // See IsActionForQueueYMQ() function in ydb/core/ymq/sqs/base/action.cpp. 
 
     TLazyCachedCounter RequestTimeouts; // Requests that weren't processed in 10 minutes. They are almost sure hanged.
     TLazyCachedCounter request_timeouts_count_per_second; // Requests that weren't processed in 10 minutes. They are almost sure hanged.
@@ -611,8 +611,8 @@ struct TQueueCounters : public TAtomicRefCount<TQueueCounters> {
 
         TLazyCachedHistogram ReceiveMessageImmediate_Duration; // Time for receive message request that was processed with only one attempt (without wait or try many shards). Histogram with buckets for durations (== 18 counters).
 
-        void Init(const TIntrusivePtr<NMonitoring::TDynamicCounters>& queueCounters,
-            const std::shared_ptr<TAlignedPagePoolCounters>& allocPoolCounters, bool forLeaderNode);
+        void Init(const TIntrusivePtr<NMonitoring::TDynamicCounters>& queueCounters, 
+            const std::shared_ptr<TAlignedPagePoolCounters>& allocPoolCounters, bool forLeaderNode); 
         void SetAggregatedParent(TDetailedCounters* parent);
     };
 
@@ -682,10 +682,10 @@ private:
     const TString QueueName;
     bool AggregatedCounters = false;
     TIntrusivePtr<TQueueCounters> NotLeaderNodeCounters;
-    std::shared_ptr<std::atomic<ui64>> ShowDetailedCountersDeadline = std::make_shared<std::atomic<ui64>>(0ul); // TInstant value
-    std::shared_ptr<std::atomic<ui64>> UserShowDetailedCountersDeadline;
+    std::shared_ptr<std::atomic<ui64>> ShowDetailedCountersDeadline = std::make_shared<std::atomic<ui64>>(0ul); // TInstant value 
+    std::shared_ptr<std::atomic<ui64>> UserShowDetailedCountersDeadline; 
     TDetailedCounters DetailedCounters;
-    std::shared_ptr<TAlignedPagePoolCounters> AllocPoolCounters; // Transaction counters for kikimr core.
+    std::shared_ptr<TAlignedPagePoolCounters> AllocPoolCounters; // Transaction counters for kikimr core. 
     TIntrusivePtr<TQueueCounters> AggregatedParent;
 };
 
@@ -705,7 +705,7 @@ private:
 };
 
 struct THttpUserCounters : public TAtomicRefCount<THttpUserCounters> {
-    // Action types are declared in ydb/core/ymq/base/action.h.
+    // Action types are declared in ydb/core/ymq/base/action.h. 
     THttpActionCounters ActionCounters[EAction::ActionsArraySize]; // 23 actions.
 
     TLazyCachedCounter RequestExceptions; // Exceptions count during http request processing.

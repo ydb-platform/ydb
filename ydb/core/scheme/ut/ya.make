@@ -1,4 +1,4 @@
-UNITTEST_FOR(ydb/core/scheme)
+UNITTEST_FOR(ydb/core/scheme) 
 
 OWNER(g:kikimr)
 
@@ -7,7 +7,7 @@ FORK_SUBTESTS()
 SIZE(SMALL)
 
 PEERDIR(
-    ydb/core/scheme
+    ydb/core/scheme 
 )
 
 SRCS(

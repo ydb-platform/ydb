@@ -27,18 +27,18 @@ void TCompletionLogWrite::Exec(TActorSystem *actorSystem) {
             PDisk->InputRequest(req);
         }
     }
-
-    auto sendResponse = [&] (TLogWrite *evLog) {
+ 
+    auto sendResponse = [&] (TLogWrite *evLog) { 
         Y_VERIFY_DEBUG(evLog->Result);
-        actorSystem->Send(evLog->Sender, evLog->Result.Release());
-        PDisk->Mon.WriteLog.CountResponse();
-    };
-
-    THashMap<ui64, TLogWrite *> batchMap;
+        actorSystem->Send(evLog->Sender, evLog->Result.Release()); 
+        PDisk->Mon.WriteLog.CountResponse(); 
+    }; 
+ 
+    THashMap<ui64, TLogWrite *> batchMap; 
     NHPTimer::STime now = HPNow();
     for (auto it = LogWriteQueue.begin(); it != LogWriteQueue.end(); ++it) {
         TLogWrite &evLog = *(*it);
-        TLogWrite *&batch = batchMap[evLog.Owner];
+        TLogWrite *&batch = batchMap[evLog.Owner]; 
         LOG_DEBUG_S(*actorSystem, NKikimrServices::BS_PDISK, "PDiskId# " << PDisk->PDiskId
                 << " ReqId# " << evLog.ReqId.Id << " TEvLogResult Sender# " << evLog.Sender.LocalId()
                 << " Lsn# " << evLog.Lsn << " Latency# " << evLog.LifeDurationMs(now)
@@ -58,35 +58,35 @@ void TCompletionLogWrite::Exec(TActorSystem *actorSystem) {
 
         PDisk->Mon.LogResponseTime.Increment(evLog.LifeDurationMs(now));
 
-        if (evLog.LogCallback) {
-            (*evLog.LogCallback)(actorSystem, *evLog.Result);
+        if (evLog.LogCallback) { 
+            (*evLog.LogCallback)(actorSystem, *evLog.Result); 
         }
         if (evLog.Result->Status == NKikimrProto::OK) {
-            if (batch) {
-                if (batch->Sender == evLog.Sender) {
-                    batch->Result->Results.push_back(std::move(evLog.Result->Results[0]));
-                } else {
-                    sendResponse(batch);
-                    batch = &evLog;
-                }
+            if (batch) { 
+                if (batch->Sender == evLog.Sender) { 
+                    batch->Result->Results.push_back(std::move(evLog.Result->Results[0])); 
+                } else { 
+                    sendResponse(batch); 
+                    batch = &evLog; 
+                } 
             } else {
-                batch = &evLog;
+                batch = &evLog; 
             }
         } else {
             // Send all previous successes...
-            if (batch) {
-                sendResponse(batch);
+            if (batch) { 
+                sendResponse(batch); 
             }
-            batch = nullptr;
+            batch = nullptr; 
             // And only then - send the error.
-            sendResponse(&evLog);
+            sendResponse(&evLog); 
         }
     }
-
-    for (auto &elem : batchMap) {
-        if (elem.second) {
-            sendResponse(elem.second);
-        }
+ 
+    for (auto &elem : batchMap) { 
+        if (elem.second) { 
+            sendResponse(elem.second); 
+        } 
     }
     delete this;
 }

@@ -3,7 +3,7 @@
 #include "flat_dbase_scheme.h"
 #include "flat_page_iface.h"
 #include <util/generic/hash_set.h>
-#include <ydb/core/protos/scheme_log.pb.h>
+#include <ydb/core/protos/scheme_log.pb.h> 
 
 namespace NKikimr {
 namespace NTable {

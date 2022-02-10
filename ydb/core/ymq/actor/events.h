@@ -1,20 +1,20 @@
 #pragma once
 #include "defs.h"
 
-#include <ydb/core/base/defs.h>
-#include <ydb/core/tx/scheme_cache/scheme_cache.h>
-#include <ydb/core/tx/tx_proxy/proxy.h>
-#include <ydb/core/protos/config.pb.h>
-#include <ydb/core/protos/msgbus.pb.h>
+#include <ydb/core/base/defs.h> 
+#include <ydb/core/tx/scheme_cache/scheme_cache.h> 
+#include <ydb/core/tx/tx_proxy/proxy.h> 
+#include <ydb/core/protos/config.pb.h> 
+#include <ydb/core/protos/msgbus.pb.h> 
 
-#include <ydb/library/http_proxy/error/error.h>
+#include <ydb/library/http_proxy/error/error.h> 
 
-#include <ydb/core/ymq/base/action.h>
-#include <ydb/core/ymq/base/counters.h>
-#include <ydb/core/ymq/base/processed_request_attributes.h>
-#include <ydb/core/ymq/base/query_id.h>
-#include <ydb/core/ymq/base/queue_path.h>
-#include <ydb/core/ymq/proto/records.pb.h>
+#include <ydb/core/ymq/base/action.h> 
+#include <ydb/core/ymq/base/counters.h> 
+#include <ydb/core/ymq/base/processed_request_attributes.h> 
+#include <ydb/core/ymq/base/query_id.h> 
+#include <ydb/core/ymq/base/queue_path.h> 
+#include <ydb/core/ymq/proto/records.pb.h> 
 
 #include <library/cpp/actors/core/event_pb.h>
 #include <library/cpp/actors/core/event_local.h>
@@ -37,41 +37,41 @@ enum class EQueueState {
 
 struct TSqsEvents {
     enum EEv {
-        /// Request for queue configuration
+        /// Request for queue configuration 
         EvGetConfiguration = EventSpaceBegin(TKikimrEvents::ES_SQS),
         EvConfiguration,
-        /// Request for transaction execution
+        /// Request for transaction execution 
         EvExecute,
-        /// Notification about completed transaction
+        /// Notification about completed transaction 
         EvExecuted,
-        /// Request to select the requested number of visible messages
+        /// Request to select the requested number of visible messages 
         EvLockRequest, // not used
         EvLockResponse, // not used
-        /// Notification about queue creation
+        /// Notification about queue creation 
         EvQueueCreated,
-        /// Notification about queue deletion
+        /// Notification about queue deletion 
         EvQueueDeleted,
-        /// Notification about catalogs creation for a new user
+        /// Notification about catalogs creation for a new user 
         EvUserCreated,
         EvUserDeleted,
-        /// Clear the queue
+        /// Clear the queue 
         EvPurgeQueue,
-        /// Go to the next request from a packet
+        /// Go to the next request from a packet 
         EvNextRequest, // not used
-        /// Request from a proxy to sqs service
+        /// Request from a proxy to sqs service 
         EvSqsRequest,
-        /// Response from sqs service to the proxy
+        /// Response from sqs service to the proxy 
         EvSqsResponse,
-        /// Request for proxying request to another node
+        /// Request for proxying request to another node 
         EvProxySqsRequest,
-        /// Response to proxy from the leader
+        /// Response to proxy from the leader 
         EvProxySqsResponse,
-        /// Update queue attributes cache
+        /// Update queue attributes cache 
         EvClearQueueAttributesCache,
-        /// Incrementing of atomic counter
+        /// Incrementing of atomic counter 
         EvAtomicCounterIncrementResult,
 
-        /// Request for finding leader node for the given queue
+        /// Request for finding leader node for the given queue 
         EvGetLeaderNodeForQueueRequest,
         EvGetLeaderNodeForQueueResponse,
 
@@ -206,23 +206,23 @@ struct TSqsEvents {
     };
 
     struct TEvExecute : public NActors::TEventLocal<TEvExecute, EvExecute> {
-        /// Query sender
+        /// Query sender 
         TActorId Sender;
-        // User request id this query belongs to
+        // User request id this query belongs to 
         TString RequestId;
-        /// Queue path in the catalog
+        /// Queue path in the catalog 
         TQueuePath QueuePath;
-        /// Shard id we address by this query
+        /// Shard id we address by this query 
         ui64 Shard;
-        /// Query index to execute
+        /// Query index to execute 
         EQueryId QueryIdx;
-        /// Query params
+        /// Query params 
         NKikimrMiniKQL::TParams Params;
-        /// Callback that is called on response receiving
+        /// Callback that is called on response receiving 
         TExecutedCallback Cb;
-        /// This option specifies if it safe to retry transaction in case of undertermined transaction status,
-        /// for example timeout. If transaction is idempotent, this options makes the whole system less sensitive to
-        /// tablets restarts.
+        /// This option specifies if it safe to retry transaction in case of undertermined transaction status, 
+        /// for example timeout. If transaction is idempotent, this options makes the whole system less sensitive to 
+        /// tablets restarts. 
         bool RetryOnTimeout = false;
 
         TEvExecute() = default;
@@ -366,9 +366,9 @@ struct TSqsEvents {
     };
 
     struct TEvPurgeQueue : public NActors::TEventLocal<TEvPurgeQueue, EvPurgeQueue> {
-        /// Queue path in the catalog
+        /// Queue path in the catalog 
         TQueuePath QueuePath;
-        /// All messages must be deleted until this timestamp
+        /// All messages must be deleted until this timestamp 
         TInstant Boundary;
         ui64 Shard;
 
@@ -769,8 +769,8 @@ struct TSqsEvents {
     };
 
     struct TEvUserSettingsChanged : public NActors::TEventLocal<TEvUserSettingsChanged, EvUserSettingsChanged> {
-        TEvUserSettingsChanged(const TString& userName, std::shared_ptr<const std::map<TString, TString>> settings,
-                std::shared_ptr<const std::set<TString>> diff)
+        TEvUserSettingsChanged(const TString& userName, std::shared_ptr<const std::map<TString, TString>> settings, 
+                std::shared_ptr<const std::set<TString>> diff) 
             : UserName(userName)
             , Settings(std::move(settings))
             , Diff(std::move(diff))
@@ -778,8 +778,8 @@ struct TSqsEvents {
         }
 
         TString UserName;
-        std::shared_ptr<const std::map<TString, TString>> Settings;
-        std::shared_ptr<const std::set<TString>> Diff;
+        std::shared_ptr<const std::map<TString, TString>> Settings; 
+        std::shared_ptr<const std::set<TString>> Diff; 
     };
 
     struct TEvReadQueuesList : public NActors::TEventLocal<TEvReadQueuesList, EvReadQueuesList> {

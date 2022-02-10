@@ -1,6 +1,6 @@
 LIBRARY(base_utils)
 
-OWNER(g:kikimr)
+OWNER(g:kikimr) 
 
 SRCS(
     base_utils.h
@@ -14,14 +14,14 @@ SRCS(
 
 PEERDIR(
     library/cpp/deprecated/enum_codegen
-    library/cpp/grpc/client
-    ydb/core/blobstorage/pdisk
-    ydb/core/client/server
-    ydb/core/driver_lib/cli_config_base
-    ydb/core/protos
-    ydb/public/lib/deprecated/client
+    library/cpp/grpc/client 
+    ydb/core/blobstorage/pdisk 
+    ydb/core/client/server 
+    ydb/core/driver_lib/cli_config_base 
+    ydb/core/protos 
+    ydb/public/lib/deprecated/client 
 )
 
-YQL_LAST_ABI_VERSION()
+YQL_LAST_ABI_VERSION() 
 
 END()

@@ -4,13 +4,13 @@
 #include "datashard_impl.h"
 
 namespace NKikimr {
-namespace NDataShard {
+namespace NDataShard { 
 
 struct TSetupSysLocks {
     TSysLocks &SysLocksTable;
 
     TSetupSysLocks(TOperation::TPtr op,
-                   TDataShard &self)
+                   TDataShard &self) 
         : SysLocksTable(self.SysLocksTable())
     {
         TLocksUpdate &update = op->LocksUpdate();
@@ -46,5 +46,5 @@ struct TSetupSysLocks {
     }
 };
 
-} // namespace NDataShard
+} // namespace NDataShard 
 } // namespace NKikimr

@@ -89,31 +89,31 @@ RESOURCE(
 
 PEERDIR(
     library/cpp/actors/core
-    ydb/core/actorlib_impl
-    ydb/core/base
-    ydb/core/blobstorage
-    ydb/core/blobstorage/base
-    ydb/core/blobstorage/crypto
-    ydb/core/engine/minikql
-    ydb/core/mind
-    ydb/core/mind/bscontroller
-    ydb/core/node_whiteboard
-    ydb/core/protos
-    ydb/core/protos/out
-    ydb/core/tablet_flat
-    ydb/core/tx/datashard
-    ydb/library/aclib
+    ydb/core/actorlib_impl 
+    ydb/core/base 
+    ydb/core/blobstorage 
+    ydb/core/blobstorage/base 
+    ydb/core/blobstorage/crypto 
+    ydb/core/engine/minikql 
+    ydb/core/mind 
+    ydb/core/mind/bscontroller 
+    ydb/core/node_whiteboard 
+    ydb/core/protos 
+    ydb/core/protos/out 
+    ydb/core/tablet_flat 
+    ydb/core/tx/datashard 
+    ydb/library/aclib 
 )
 
 GENERATE_ENUM_SERIALIZATION(services.h)
 
 END()
-
-RECURSE(
-    console
-)
-
-RECURSE_FOR_TESTS(
-    ut
-    ut_sentinel
-)
+ 
+RECURSE( 
+    console 
+) 
+ 
+RECURSE_FOR_TESTS( 
+    ut 
+    ut_sentinel 
+) 

@@ -1,21 +1,21 @@
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
-#include <ydb/core/mon/mon.h>
+#include <ydb/core/mon/mon.h> 
 #include <library/cpp/actors/core/mon.h>
-#include <ydb/core/base/appdata.h>
+#include <ydb/core/base/appdata.h> 
 #include <library/cpp/monlib/service/pages/templates.h>
 #include <library/cpp/actors/core/interconnect.h>
 #include <util/generic/algorithm.h>
-#include <ydb/core/base/path.h>
-#include <ydb/core/base/tablet_types.h>
-#include <ydb/core/node_whiteboard/node_whiteboard.h>
-#include <ydb/core/base/statestorage.h>
+#include <ydb/core/base/path.h> 
+#include <ydb/core/base/tablet_types.h> 
+#include <ydb/core/node_whiteboard/node_whiteboard.h> 
+#include <ydb/core/base/statestorage.h> 
 #include <library/cpp/mime/types/mime.h>
 #include <util/system/fstat.h>
 #include <util/stream/file.h>
 #include "viewer.h"
-#include <ydb/core/viewer/json/json.h>
-#include <ydb/core/util/wildcard.h>
+#include <ydb/core/viewer/json/json.h> 
+#include <ydb/core/util/wildcard.h> 
 #include "json_nodelist.h"
 #include "json_nodeinfo.h"
 #include "json_vdiskinfo.h"
@@ -426,7 +426,7 @@ private:
         // TODO: cache
         if (msg->Request.GetPathInfo().StartsWith('/')) {
             if (filename.StartsWith("viewer")) {
-                filename.erase(0, 6);
+                filename.erase(0, 6); 
             }
             if (IsMatchesWildcard(filename, "monitoring*/resources/js/*")
             || IsMatchesWildcard(filename, "monitoring*/resources/css/*")

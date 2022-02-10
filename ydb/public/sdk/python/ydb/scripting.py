@@ -1,5 +1,5 @@
-from ydb.public.api.protos import ydb_scripting_pb2
-from ydb.public.api.grpc import ydb_scripting_v1_pb2_grpc
+from ydb.public.api.protos import ydb_scripting_pb2 
+from ydb.public.api.grpc import ydb_scripting_v1_pb2_grpc 
 from . import issues, convert, settings
 
 

@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/public/api/protos/yq.pb.h>
+#include <ydb/public/api/protos/yq.pb.h> 
 
 namespace NYq {
 

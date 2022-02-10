@@ -1,7 +1,7 @@
 #pragma once
 #include <ydb/library/yql/public/issue/yql_issue.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_types/credentials/credentials.h>
+#include <ydb/public/sdk/cpp/client/ydb_types/credentials/credentials.h> 
 
 #include <library/cpp/threading/future/future.h>
 
@@ -17,7 +17,7 @@
 
 namespace NPq::NConfigurationManager {
 
-// Statuses as in ydb/public/api/protos/ydb_status_codes.proto
+// Statuses as in ydb/public/api/protos/ydb_status_codes.proto 
 enum class EStatus {
     STATUS_CODE_UNSPECIFIED,
     SUCCESS,

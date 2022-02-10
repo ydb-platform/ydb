@@ -23,7 +23,7 @@ public:
 
     TString GetHostByAddr(const NAddr::IRemoteAddr&);
 
-    // ip in network byte order
+    // ip in network byte order 
     TIpHost Get(const TString& host);
 
     /* use with AF_INET, AF_INET6 or AF_UNSPEC */

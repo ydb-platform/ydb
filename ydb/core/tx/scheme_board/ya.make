@@ -7,13 +7,13 @@ OWNER(
 
 PEERDIR(
     library/cpp/actors/core
-    ydb/core/base
-    ydb/core/mon
-    ydb/core/protos
-    ydb/core/sys_view/common
-    ydb/core/tx/scheme_cache
-    ydb/core/util
-    ydb/library/aclib
+    ydb/core/base 
+    ydb/core/mon 
+    ydb/core/protos 
+    ydb/core/sys_view/common 
+    ydb/core/tx/scheme_cache 
+    ydb/core/util 
+    ydb/library/aclib 
 )
 
 SRCS(
@@ -30,12 +30,12 @@ SRCS(
 GENERATE_ENUM_SERIALIZATION(subscriber.h)
 
 END()
-
-RECURSE_FOR_TESTS(
-    ut_cache
-    ut_double_indexed
-    ut_monitoring
-    ut_populator
-    ut_replica
-    ut_subscriber
-)
+ 
+RECURSE_FOR_TESTS( 
+    ut_cache 
+    ut_double_indexed 
+    ut_monitoring 
+    ut_populator 
+    ut_replica 
+    ut_subscriber 
+) 

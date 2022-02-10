@@ -1,4 +1,4 @@
-UNITTEST_FOR(ydb/public/sdk/cpp/client/ydb_coordination)
+UNITTEST_FOR(ydb/public/sdk/cpp/client/ydb_coordination) 
 
 OWNER(
     dcherednik
@@ -17,7 +17,7 @@ ENDIF()
 FORK_SUBTESTS()
 
 PEERDIR(
-    ydb/public/api/grpc
+    ydb/public/api/grpc 
 )
 
 SRCS(

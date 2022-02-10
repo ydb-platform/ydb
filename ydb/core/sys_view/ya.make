@@ -11,32 +11,32 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/core/base
-    ydb/core/kqp/runtime
-    ydb/core/sys_view/common
-    ydb/core/sys_view/nodes
-    ydb/core/sys_view/partition_stats
-    ydb/core/sys_view/query_stats
-    ydb/core/sys_view/service
-    ydb/core/sys_view/storage
-    ydb/core/sys_view/tablets
+    ydb/core/base 
+    ydb/core/kqp/runtime 
+    ydb/core/sys_view/common 
+    ydb/core/sys_view/nodes 
+    ydb/core/sys_view/partition_stats 
+    ydb/core/sys_view/query_stats 
+    ydb/core/sys_view/service 
+    ydb/core/sys_view/storage 
+    ydb/core/sys_view/tablets 
 )
 
-YQL_LAST_ABI_VERSION()
+YQL_LAST_ABI_VERSION() 
 
-END()
+END() 
 
-RECURSE(
-    common
-    nodes
-    partition_stats
-    processor
-    query_stats
-    service
-    storage
-    tablets
-)
+RECURSE( 
+    common 
+    nodes 
+    partition_stats 
+    processor 
+    query_stats 
+    service 
+    storage 
+    tablets 
+) 
 
-RECURSE_FOR_TESTS(
-    ut_kqp
-)
+RECURSE_FOR_TESTS( 
+    ut_kqp 
+) 

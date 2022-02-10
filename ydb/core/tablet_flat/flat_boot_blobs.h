@@ -3,7 +3,7 @@
 
 #include "flat_boot_iface.h"
 #include "flat_sausage_solid.h"
-#include <ydb/core/base/logoblob.h>
+#include <ydb/core/base/logoblob.h> 
 
 namespace NKikimr {
 namespace NTabletFlatExecutor {
@@ -19,7 +19,7 @@ namespace NBoot {
         static constexpr NBoot::EStep StepKind = NBoot::EStep::Blobs;
 
         TLoadBlobs() = default;
-        TLoadBlobs(IStep *owner, NPageCollection::TLargeGlobId largeGlobId, ui64 cookie);
+        TLoadBlobs(IStep *owner, NPageCollection::TLargeGlobId largeGlobId, ui64 cookie); 
 
         ~TLoadBlobs()
         {
@@ -51,10 +51,10 @@ namespace NBoot {
 
     public:
         const ui64 Cookie = Max<ui64>();
-        NPageCollection::TLargeGlobId LargeGlobId; /* new method of holding blobs range */
+        NPageCollection::TLargeGlobId LargeGlobId; /* new method of holding blobs range */ 
 
     private:
-        NPageCollection::TLargeGlobIdRestoreState State;
+        NPageCollection::TLargeGlobIdRestoreState State; 
     };
 }
 }

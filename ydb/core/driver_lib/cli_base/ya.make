@@ -11,14 +11,14 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/core/driver_lib/cli_config_base
-    ydb/library/aclib
-    ydb/public/lib/deprecated/kicli
-    ydb/public/lib/ydb_cli/common
-    ydb/public/sdk/cpp/client/resources
-    ydb/public/sdk/cpp/client/ydb_table
+    ydb/core/driver_lib/cli_config_base 
+    ydb/library/aclib 
+    ydb/public/lib/deprecated/kicli 
+    ydb/public/lib/ydb_cli/common 
+    ydb/public/sdk/cpp/client/resources 
+    ydb/public/sdk/cpp/client/ydb_table 
 )
 
-YQL_LAST_ABI_VERSION()
+YQL_LAST_ABI_VERSION() 
 
 END()

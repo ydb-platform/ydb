@@ -1,9 +1,9 @@
 LIBRARY()
 
-OWNER(
-    g:yql
-    g:yql_ydb_core
-)
+OWNER( 
+    g:yql 
+    g:yql_ydb_core 
+) 
 
 SRCS(
     yql_exec.cpp
@@ -14,8 +14,8 @@ SRCS(
 
 PEERDIR(
     ydb/library/yql/ast
-    ydb/library/yql/utils
-    ydb/library/yql/utils/log
+    ydb/library/yql/utils 
+    ydb/library/yql/utils/log 
     ydb/library/yql/core
     ydb/library/yql/core/expr_nodes
 )

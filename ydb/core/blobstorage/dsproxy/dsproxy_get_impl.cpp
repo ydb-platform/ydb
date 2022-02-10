@@ -12,7 +12,7 @@
 #include "dsproxy_strategy_get_min_iops_block.h"
 #include "dsproxy_strategy_get_min_iops_mirror.h"
 
-#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_sets.h>
+#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_sets.h> 
 
 namespace NKikimr {
 
@@ -391,7 +391,7 @@ EStrategyOutcome TGetImpl::RunMirror3of4Strategy(TLogContext &logCtx) {
 }
 
 EStrategyOutcome TGetImpl::RunStrategies(TLogContext &logCtx) {
-    if (Info->Type.GetErasure() == TErasureType::ErasureMirror3dc) {
+    if (Info->Type.GetErasure() == TErasureType::ErasureMirror3dc) { 
         return RunMirror3dcStrategy(logCtx);
     } else if (Info->Type.GetErasure() == TErasureType::ErasureMirror3of4) {
         return RunMirror3of4Strategy(logCtx);

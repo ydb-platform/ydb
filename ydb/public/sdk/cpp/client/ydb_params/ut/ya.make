@@ -1,4 +1,4 @@
-UNITTEST_FOR(ydb/public/sdk/cpp/client/ydb_params)
+UNITTEST_FOR(ydb/public/sdk/cpp/client/ydb_params) 
 
 OWNER(
     dcherednik
@@ -17,7 +17,7 @@ ENDIF()
 FORK_SUBTESTS()
 
 PEERDIR(
-    ydb/public/lib/yson_value
+    ydb/public/lib/yson_value 
 )
 
 SRCS(

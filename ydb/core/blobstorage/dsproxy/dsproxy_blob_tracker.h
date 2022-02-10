@@ -2,7 +2,7 @@
 
 #include "defs.h"
 
-#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_partlayout.h>
+#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_partlayout.h> 
 
 namespace NKikimr {
 
@@ -20,12 +20,12 @@ namespace NKikimr {
     public:
         TBlobStatusTracker(const TLogoBlobID& fullId, const TBlobStorageGroupInfo *info)
             : FullId(fullId)
-            , FaultyDisks(&info->GetTopology())
+            , FaultyDisks(&info->GetTopology()) 
         {}
 
         void Output(IOutputStream& str, const TBlobStorageGroupInfo *info) const {
             str << "{FullId# " << FullId.ToString() << " PresentParts# ";
-            PresentParts.Output(str, info->Type);
+            PresentParts.Output(str, info->Type); 
             str << " FaultyDisks# ";
             FaultyDisks.Output(str);
             if (HasIngress) {
@@ -64,7 +64,7 @@ namespace NKikimr {
                 case NKikimrProto::OK: {
                     const ui32 partId = id.PartId();
                     if (partId > 0) {
-                        PresentParts.AddItem(nodeId, partId - 1, info->Type);
+                        PresentParts.AddItem(nodeId, partId - 1, info->Type); 
                     }
                     break;
                 }
@@ -75,7 +75,7 @@ namespace NKikimr {
                 case NKikimrProto::NOT_YET:
                 case NKikimrProto::ERROR:
                 case NKikimrProto::VDISK_ERROR_STATE:
-                    FaultyDisks += TBlobStorageGroupInfo::TSubgroupVDisks(&info->GetTopology(), nodeId);
+                    FaultyDisks += TBlobStorageGroupInfo::TSubgroupVDisks(&info->GetTopology(), nodeId); 
                     break;
 
                 default:
@@ -89,8 +89,8 @@ namespace NKikimr {
 
             // check if the blob was completely written according to returned Ingress information
             const bool fullByIngress = HasIngress &&
-                checker.GetBlobState(TSubgroupPartLayout::CreateFromIngress(Ingress, info->Type),
-                TBlobStorageGroupInfo::TSubgroupVDisks(&info->GetTopology())) == TBlobStorageGroupInfo::EBS_FULL;
+                checker.GetBlobState(TSubgroupPartLayout::CreateFromIngress(Ingress, info->Type), 
+                TBlobStorageGroupInfo::TSubgroupVDisks(&info->GetTopology())) == TBlobStorageGroupInfo::EBS_FULL; 
 
             // in case we have an ingress and we don't have all the replicas, we can update the state accoring to ingress
             // by finding out if the blob was seen on all disks

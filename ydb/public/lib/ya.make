@@ -1,16 +1,16 @@
 OWNER(g:kikimr)
-
-RECURSE(
+ 
+RECURSE( 
     base
     deprecated
     experimental
     idx_test
     json_value
-    jwt
+    jwt 
     operation_id
-    scheme_types
+    scheme_types 
     value
-    ydb_cli
-    yq
+    ydb_cli 
+    yq 
     yson_value
-)
+) 

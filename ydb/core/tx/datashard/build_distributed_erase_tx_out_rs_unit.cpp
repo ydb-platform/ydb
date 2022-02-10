@@ -11,7 +11,7 @@
 #include <util/generic/ptr.h>
 
 namespace NKikimr {
-namespace NDataShard {
+namespace NDataShard { 
 
 class TBuildDistributedEraseTxOutRSUnit : public TExecutionUnit {
     static TVector<NTable::TTag> MakeTags(const TVector<NTable::TTag>& conditionTags,
@@ -71,7 +71,7 @@ class TBuildDistributedEraseTxOutRSUnit : public TExecutionUnit {
     }
 
 public:
-    TBuildDistributedEraseTxOutRSUnit(TDataShard& self, TPipeline& pipeline)
+    TBuildDistributedEraseTxOutRSUnit(TDataShard& self, TPipeline& pipeline) 
         : TExecutionUnit(EExecutionUnitKind::BuildDistributedEraseTxOutRS, true, self, pipeline)
     {
     }
@@ -182,9 +182,9 @@ public:
     }
 };
 
-THolder<TExecutionUnit> CreateBuildDistributedEraseTxOutRSUnit(TDataShard& self, TPipeline& pipeline) {
+THolder<TExecutionUnit> CreateBuildDistributedEraseTxOutRSUnit(TDataShard& self, TPipeline& pipeline) { 
     return THolder(new TBuildDistributedEraseTxOutRSUnit(self, pipeline));
 }
 
-} // namespace NDataShard
+} // namespace NDataShard 
 } // namespace NKikimr

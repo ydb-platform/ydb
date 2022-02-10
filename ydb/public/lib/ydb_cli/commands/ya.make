@@ -25,21 +25,21 @@ PEERDIR(
     library/cpp/protobuf/json
     library/cpp/regex/pcre
     library/cpp/threading/local_executor
-    ydb/library/backup
+    ydb/library/backup 
     ydb/library/workload
-    ydb/public/lib/operation_id
-    ydb/public/lib/ydb_cli/common
-    ydb/public/lib/ydb_cli/dump
-    ydb/public/lib/ydb_cli/import
-    ydb/public/sdk/cpp/client/draft
-    ydb/public/sdk/cpp/client/ydb_discovery
-    ydb/public/sdk/cpp/client/ydb_export
-    ydb/public/sdk/cpp/client/ydb_import
-    ydb/public/sdk/cpp/client/ydb_operation
-    ydb/public/sdk/cpp/client/ydb_persqueue_public
-    ydb/public/sdk/cpp/client/ydb_proto
-    ydb/public/sdk/cpp/client/ydb_scheme
-    ydb/public/sdk/cpp/client/ydb_table
+    ydb/public/lib/operation_id 
+    ydb/public/lib/ydb_cli/common 
+    ydb/public/lib/ydb_cli/dump 
+    ydb/public/lib/ydb_cli/import 
+    ydb/public/sdk/cpp/client/draft 
+    ydb/public/sdk/cpp/client/ydb_discovery 
+    ydb/public/sdk/cpp/client/ydb_export 
+    ydb/public/sdk/cpp/client/ydb_import 
+    ydb/public/sdk/cpp/client/ydb_operation 
+    ydb/public/sdk/cpp/client/ydb_persqueue_public 
+    ydb/public/sdk/cpp/client/ydb_proto 
+    ydb/public/sdk/cpp/client/ydb_scheme 
+    ydb/public/sdk/cpp/client/ydb_table 
 )
 
 END()

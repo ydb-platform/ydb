@@ -21,7 +21,7 @@
 namespace NMonitoring {
 #define BEGIN_OUTPUT_COUNTERS             \
     void OutputImpl(IOutputStream& out) { \
-        char prettyBuf[32];
+        char prettyBuf[32]; 
 #define END_OUTPUT_COUNTERS \
     out.Flush();            \
     }
@@ -31,7 +31,7 @@ namespace NMonitoring {
 
     char* PrettyNumShort(i64 val, char* buf, size_t size);
     char* PrettyNum(i64 val, char* buf, size_t size);
-
+ 
     // This class is deprecated. Please consider to use
     // library/cpp/monlib/metrics instead. See more info at
     // https://wiki.yandex-team.ru/solomon/libs/monlib_cpp/

@@ -3,11 +3,11 @@ option cc_enable_arenas = true;
 
 package Yq.Private;
 
-import "ydb/public/api/protos/ydb_operation.proto";
-import "ydb/public/api/protos/ydb_value.proto";
-import "ydb/public/api/protos/ydb_issue_message.proto";
+import "ydb/public/api/protos/ydb_operation.proto"; 
+import "ydb/public/api/protos/ydb_value.proto"; 
+import "ydb/public/api/protos/ydb_issue_message.proto"; 
 
-import "ydb/public/api/protos/yq.proto";
+import "ydb/public/api/protos/yq.proto"; 
 
 import "google/protobuf/timestamp.proto";
 

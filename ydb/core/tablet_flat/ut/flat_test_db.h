@@ -1,9 +1,9 @@
 #pragma once
 
-#include <ydb/core/tablet_flat/test/libs/table/test_pretty.h>
-#include <ydb/core/tablet_flat/flat_database.h>
-#include <ydb/core/tablet_flat/flat_dbase_scheme.h>
-#include <ydb/core/tablet_flat/flat_update_op.h>
+#include <ydb/core/tablet_flat/test/libs/table/test_pretty.h> 
+#include <ydb/core/tablet_flat/flat_database.h> 
+#include <ydb/core/tablet_flat/flat_dbase_scheme.h> 
+#include <ydb/core/tablet_flat/flat_update_op.h> 
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -34,7 +34,7 @@ public:
     virtual void Init(const TScheme& scheme) = 0;
     virtual const TScheme& GetScheme() const = 0;
     virtual TString FinishTransaction(bool commit) = 0;
-    virtual void Update(ui32 root, ERowOp, TRawVals key, TArrayRef<const TUpdateOp> ops) = 0;
+    virtual void Update(ui32 root, ERowOp, TRawVals key, TArrayRef<const TUpdateOp> ops) = 0; 
 
     virtual void Precharge(ui32 root,
                            TRawVals keyFrom, TRawVals keyTo,
@@ -72,7 +72,7 @@ public:
     }
 
     bool IsRowDeleted() override {
-        return Iter->Row().GetRowState() == ERowOp::Erase;
+        return Iter->Row().GetRowState() == ERowOp::Erase; 
     }
 
     TDbTupleRef GetKey() override {
@@ -121,7 +121,7 @@ public:
         return "42";
     }
 
-    void Update(ui32 root, ERowOp rop, TRawVals key, TArrayRef<const TUpdateOp> ops) override
+    void Update(ui32 root, ERowOp rop, TRawVals key, TArrayRef<const TUpdateOp> ops) override 
     {
         Db->Update(root, rop, key, ops);
     }
@@ -247,7 +247,7 @@ public:
         return res;
     }
 
-    void Update(ui32 root, ERowOp rop, TRawVals key, TArrayRef<const TUpdateOp> ops) override {
+    void Update(ui32 root, ERowOp rop, TRawVals key, TArrayRef<const TUpdateOp> ops) override { 
         Db1->Update(root, rop, key, ops);
         Db2->Update(root, rop, key, ops);
     }

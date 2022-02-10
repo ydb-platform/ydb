@@ -1,13 +1,13 @@
 #include "datashard_txs.h"
 
 namespace NKikimr {
-namespace NDataShard {
+namespace NDataShard { 
 
 using namespace NTabletFlatExecutor;
 
-class TDataShard::TTxSchemaChanged : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
+class TDataShard::TTxSchemaChanged : public NTabletFlatExecutor::TTransactionBase<TDataShard> { 
 public:
-    TTxSchemaChanged(TDataShard* ds, TEvDataShard::TEvSchemaChangedResult::TPtr ev)
+    TTxSchemaChanged(TDataShard* ds, TEvDataShard::TEvSchemaChangedResult::TPtr ev) 
         : TBase(ds)
         , Ev(ev)
         , TxId(0)
@@ -36,7 +36,7 @@ private:
     ui64 TxId;
 };
 
-ITransaction* TDataShard::CreateTxSchemaChanged(TEvDataShard::TEvSchemaChangedResult::TPtr& ev) {
+ITransaction* TDataShard::CreateTxSchemaChanged(TEvDataShard::TEvSchemaChangedResult::TPtr& ev) { 
     return new TTxSchemaChanged(this, ev);
 }
 

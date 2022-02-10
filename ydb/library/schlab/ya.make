@@ -1,12 +1,12 @@
 LIBRARY()
 
-OWNER(
-    cthulhu
-    g:kikimr
-)
+OWNER( 
+    cthulhu 
+    g:kikimr 
+) 
 
 PEERDIR(
-    ydb/library/schlab/schine
+    ydb/library/schlab/schine 
 )
 
 SRCS(
@@ -24,8 +24,8 @@ RECURSE(
     schemu
     schine
     schoot
-)
-
-RECURSE_FOR_TESTS(
+) 
+ 
+RECURSE_FOR_TESTS( 
     ut
 )

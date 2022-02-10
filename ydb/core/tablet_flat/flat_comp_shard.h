@@ -531,8 +531,8 @@ namespace NCompShard {
 
     public:
         TTableShard* InputShard = nullptr;
-        TVector<TPartView> Original;
-        TVector<TPartView> Reused;
+        TVector<TPartView> Original; 
+        TVector<TPartView> Reused; 
     };
 
     class TShardedCompactionStrategy final
@@ -570,7 +570,7 @@ namespace NCompShard {
                 ui64 compactionId,
                 THolder<TCompactionParams> params,
                 THolder<TCompactionResult> result) override;
-        void PartMerged(TPartView part, ui32 level) override;
+        void PartMerged(TPartView part, ui32 level) override; 
         void PartMerged(TIntrusiveConstPtr<TColdPart> part, ui32 level) override;
         TCompactionChanges PartsRemoved(TArrayRef<const TLogoBlobID> parts) override;
         TCompactionChanges ApplyChanges() override;
@@ -597,7 +597,7 @@ namespace NCompShard {
          * These parts don't necessarily have to be new parts, but it's
          * important that during replacements old data is removed first.
          */
-        void AddParts(TVector<TPartView> parts);
+        void AddParts(TVector<TPartView> parts); 
 
         /**
          * Returns existing or creates a new TTablePart for the specified part
@@ -641,7 +641,7 @@ namespace NCompShard {
 
     private:
         struct TNurseryItem {
-            TPartView PartView;
+            TPartView PartView; 
             ui64 DataSize = 0;
         };
 

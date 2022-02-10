@@ -1,9 +1,9 @@
-OWNER(g:yq)
+OWNER(g:yq) 
 
 PROTO_LIBRARY()
 
 PEERDIR(
-    ydb/public/api/protos
+    ydb/public/api/protos 
     ydb/library/yql/dq/proto
     ydb/library/yql/providers/dq/api/protos
 )

@@ -2,7 +2,7 @@
 #include "configs_dispatcher.h"
 #include "console.h"
 
-#include <ydb/core/tablet_flat/shared_sausagecache.h>
+#include <ydb/core/tablet_flat/shared_sausagecache.h> 
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 
@@ -48,13 +48,13 @@ public:
     }
 
     void ApplyConfig(NKikimrSharedCache::TSharedCacheConfig&& cfg, const TActorContext& ctx) {
-        auto event = MakeHolder<TEvSharedPageCache::TEvConfigure>();
+        auto event = MakeHolder<TEvSharedPageCache::TEvConfigure>(); 
         event->Record.Swap(&cfg);
 
         LOG_DEBUG_S(ctx, NKikimrServices::CMS_CONFIGS,
                 "Applying new shared cache config: " << event->Record.ShortDebugString());
 
-        ctx.Send(MakeSharedPageCacheId(0), event.Release());
+        ctx.Send(MakeSharedPageCacheId(0), event.Release()); 
     }
 
     STFUNC(StateWork) {

@@ -1,11 +1,11 @@
 #pragma once
 
-#include <ydb/core/tablet_flat/flat_comp.h>
-#include <ydb/core/tablet_flat/flat_cxx_database.h>
-#include <ydb/core/tablet_flat/util_fmt_line.h>
+#include <ydb/core/tablet_flat/flat_comp.h> 
+#include <ydb/core/tablet_flat/flat_cxx_database.h> 
+#include <ydb/core/tablet_flat/util_fmt_line.h> 
 
-#include <ydb/core/tablet_flat/test/libs/table/test_part.h>
-#include <ydb/core/tablet_flat/test/libs/table/test_comp.h>
+#include <ydb/core/tablet_flat/test/libs/table/test_part.h> 
+#include <ydb/core/tablet_flat/test/libs/table/test_comp.h> 
 
 #include <library/cpp/time_provider/time_provider.h>
 
@@ -61,13 +61,13 @@ public:
         return DB.GetTableMemSize(table, epoch);
     }
 
-    TPartView TablePart(ui32 table, const TLogoBlobID& label) override {
-        auto partView = DB.GetPartView(table, label);
-        Y_VERIFY(partView, "Unexpected part %s", label.ToString().c_str());
-        return partView;
+    TPartView TablePart(ui32 table, const TLogoBlobID& label) override { 
+        auto partView = DB.GetPartView(table, label); 
+        Y_VERIFY(partView, "Unexpected part %s", label.ToString().c_str()); 
+        return partView; 
     }
 
-    TVector<TPartView> TableParts(ui32 table) override {
+    TVector<TPartView> TableParts(ui32 table) override { 
         return DB.GetTableParts(table);
     }
 
@@ -185,7 +185,7 @@ public:
 
         auto eggs = TCompaction(env, conf).Do(*subset, logo);
 
-        TVector<TPartView> parts(Reserve(eggs.Parts.size()));
+        TVector<TPartView> parts(Reserve(eggs.Parts.size())); 
         for (auto& part : eggs.Parts) {
             parts.push_back({ part, nullptr, part->Slices });
             Y_VERIFY(parts.back());
@@ -208,9 +208,9 @@ public:
         }
 
         for (auto& change : changes.SliceChanges) {
-            auto partView = DB.GetPartView(table, change.Label);
-            Y_VERIFY(partView, "Cannot find part %s", change.Label.ToString().c_str());
-            auto replaced = TSlices::Replace(partView.Slices, change.NewSlices);
+            auto partView = DB.GetPartView(table, change.Label); 
+            Y_VERIFY(partView, "Cannot find part %s", change.Label.ToString().c_str()); 
+            auto replaced = TSlices::Replace(partView.Slices, change.NewSlices); 
             DB.ReplaceSlices(table, {{ change.Label, std::move(replaced) }});
         }
     }
@@ -290,9 +290,9 @@ public:
         };
 
         TVector<TKeyRange> keyRanges;
-        for (auto& partView : TableParts(table)) {
-            for (auto& slice : *partView.Slices) {
-                keyRanges.emplace_back(slice, partView->Epoch, partView->Label.Step());
+        for (auto& partView : TableParts(table)) { 
+            for (auto& slice : *partView.Slices) { 
+                keyRanges.emplace_back(slice, partView->Epoch, partView->Label.Step()); 
             }
         }
         std::sort(keyRanges.begin(), keyRanges.end(), keyRangeLess);
@@ -311,7 +311,7 @@ private:
     void SwitchGen() {
         ++Gen;
         Step = 0;
-        Annex.Reset(new NPageCollection::TSteppedCookieAllocator(123, ui64(Gen) << 32, { 0, 999 }, {{ 1, 7 }}));
+        Annex.Reset(new NPageCollection::TSteppedCookieAllocator(123, ui64(Gen) << 32, { 0, 999 }, {{ 1, 7 }})); 
     }
 
 public:
@@ -322,7 +322,7 @@ public:
     THashMap<ui32, THashMap<ui64, TString>> TableState;
 
 private:
-    THolder<NPageCollection::TSteppedCookieAllocator> Annex;
+    THolder<NPageCollection::TSteppedCookieAllocator> Annex; 
     ui32 Gen = 0;
     ui32 Step = 0;
 

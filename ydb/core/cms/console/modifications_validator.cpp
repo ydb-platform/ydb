@@ -1,6 +1,6 @@
 #include "modifications_validator.h"
 
-#include <ydb/core/cms/console/validators/registry.h>
+#include <ydb/core/cms/console/validators/registry.h> 
 
 #include <ydb/library/yql/public/issue/protos/issue_severity.pb.h>
 

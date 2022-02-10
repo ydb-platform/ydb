@@ -19,7 +19,7 @@ namespace NActors {
     }
 
     struct TActorContext;
-
+ 
     struct TActivationContext {
     public:
         TMailboxHeader& Mailbox;

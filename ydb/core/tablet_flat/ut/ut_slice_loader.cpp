@@ -1,23 +1,23 @@
-#include <ydb/core/tablet_flat/test/libs/rows/cook.h>
-#include <ydb/core/tablet_flat/test/libs/rows/layout.h>
-#include <ydb/core/tablet_flat/test/libs/table/model/large.h>
-#include <ydb/core/tablet_flat/test/libs/table/wrap_part.h>
-#include <ydb/core/tablet_flat/test/libs/table/test_writer.h>
-#include <ydb/core/tablet_flat/test/libs/table/test_wreck.h>
-#include <ydb/core/tablet_flat/flat_part_slice.h>
-#include <ydb/core/tablet_flat/flat_part_keys.h>
-#include <ydb/core/tablet_flat/flat_sausage_gut.h>
-#include <ydb/core/tablet_flat/flat_store_hotdog.h>
-#include <ydb/core/tablet_flat/util_fmt_desc.h>
-#include <ydb/core/tablet_flat/util_basics.h>
+#include <ydb/core/tablet_flat/test/libs/rows/cook.h> 
+#include <ydb/core/tablet_flat/test/libs/rows/layout.h> 
+#include <ydb/core/tablet_flat/test/libs/table/model/large.h> 
+#include <ydb/core/tablet_flat/test/libs/table/wrap_part.h> 
+#include <ydb/core/tablet_flat/test/libs/table/test_writer.h> 
+#include <ydb/core/tablet_flat/test/libs/table/test_wreck.h> 
+#include <ydb/core/tablet_flat/flat_part_slice.h> 
+#include <ydb/core/tablet_flat/flat_part_keys.h> 
+#include <ydb/core/tablet_flat/flat_sausage_gut.h> 
+#include <ydb/core/tablet_flat/flat_store_hotdog.h> 
+#include <ydb/core/tablet_flat/util_fmt_desc.h> 
+#include <ydb/core/tablet_flat/util_basics.h> 
 
 #include <library/cpp/testing/unittest/registar.h>
 
 namespace NKikimr {
 namespace NTable {
 
-using TPageCollectionProtoHelper = NTabletFlatExecutor::TPageCollectionProtoHelper;
-using TCache = NTabletFlatExecutor::TPrivatePageCache::TInfo;
+using TPageCollectionProtoHelper = NTabletFlatExecutor::TPageCollectionProtoHelper; 
+using TCache = NTabletFlatExecutor::TPrivatePageCache::TInfo; 
 
 namespace {
     NPage::TConf PageConf() noexcept
@@ -25,7 +25,7 @@ namespace {
         NPage::TConf conf{ true, 2 * 1024 };
 
         conf.Group(0).IndexMin = 1024; /* Should cover index buffer grow code */
-        conf.SmallEdge = 19;  /* Packed to page collection large cell values */
+        conf.SmallEdge = 19;  /* Packed to page collection large cell values */ 
         conf.LargeEdge = 29;  /* Large values placed to single blobs */
         conf.SliceSize = conf.Group(0).PageSize * 4;
 
@@ -46,15 +46,15 @@ namespace {
         return eggs0;
     }
 
-    const TIntrusiveConstPtr<NTest::TPartStore>& Part0()
+    const TIntrusiveConstPtr<NTest::TPartStore>& Part0() 
     {
         static const auto part = Eggs0().At(0);
         return part;
     }
 
-    class TTestPartPageCollection : public NPageCollection::IPageCollection {
+    class TTestPartPageCollection : public NPageCollection::IPageCollection { 
     public:
-        TTestPartPageCollection(TIntrusiveConstPtr<NTest::TPartStore> part, ui32 room)
+        TTestPartPageCollection(TIntrusiveConstPtr<NTest::TPartStore> part, ui32 room) 
             : Part(std::move(part))
             , Room(room)
         {
@@ -67,22 +67,22 @@ namespace {
 
         ui32 Total() const noexcept override
         {
-            return Part->Store->PageCollectionPagesCount(Room);
+            return Part->Store->PageCollectionPagesCount(Room); 
         }
 
-        NPageCollection::TInfo Page(ui32 page) const noexcept override
+        NPageCollection::TInfo Page(ui32 page) const noexcept override 
         {
-            const auto array = Part->Store->PageCollectionArray(Room);
+            const auto array = Part->Store->PageCollectionArray(Room); 
 
             return { ui32(array.at(page).size()), ui32(EPage::Undef) };
         }
 
-        NPageCollection::TBorder Bounds(ui32) const noexcept override
+        NPageCollection::TBorder Bounds(ui32) const noexcept override 
         {
             Y_FAIL("Unexpected Bounds(...) call");
         }
 
-        NPageCollection::TGlobId Glob(ui32) const noexcept override
+        NPageCollection::TGlobId Glob(ui32) const noexcept override 
         {
             Y_FAIL("Unexpected Glob(...) call");
         }
@@ -94,11 +94,11 @@ namespace {
 
         size_t BackingSize() const noexcept override
         {
-            return Part->Store->PageCollectionBytes(Room);
+            return Part->Store->PageCollectionBytes(Room); 
         }
 
     private:
-        TIntrusiveConstPtr<NTest::TPartStore> Part;
+        TIntrusiveConstPtr<NTest::TPartStore> Part; 
         ui32 Room;
     };
 
@@ -123,20 +123,20 @@ namespace {
         }
     }
 
-    TCheckResult RunLoaderTest(TIntrusiveConstPtr<NTest::TPartStore> part, TIntrusiveConstPtr<TScreen> screen)
+    TCheckResult RunLoaderTest(TIntrusiveConstPtr<NTest::TPartStore> part, TIntrusiveConstPtr<TScreen> screen) 
     {
         TCheckResult result;
 
         TIntrusiveConstPtr<NPageCollection::IPageCollection> pageCollection = new TTestPartPageCollection(part, 0);
-        TKeysEnv env(part.Get(), new TCache(pageCollection));
+        TKeysEnv env(part.Get(), new TCache(pageCollection)); 
         TKeysLoader loader(part.Get(), &env);
 
         if (result.Run = loader.Do(screen)) {
             env.Check(false); /* On success there shouldn't be left loads */
             result.Pages = 0;
         } else  if (auto fetch = env.GetFetches()) {
-            UNIT_ASSERT_C(fetch->PageCollection.Get() == pageCollection.Get(),
-                "TLoader wants to fetch from an unexpected pageCollection");
+            UNIT_ASSERT_C(fetch->PageCollection.Get() == pageCollection.Get(), 
+                "TLoader wants to fetch from an unexpected pageCollection"); 
             UNIT_ASSERT_C(fetch->Pages, "TLoader wants a fetch, but there are no pages");
             result.Pages = fetch->Pages.size();
 

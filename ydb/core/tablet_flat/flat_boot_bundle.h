@@ -14,18 +14,18 @@ namespace NKikimr {
 namespace NTabletFlatExecutor {
 namespace NBoot {
 
-    class TBundleLoadStep final: public NBoot::IStep {
+    class TBundleLoadStep final: public NBoot::IStep { 
     public:
-        using TCache = TPrivatePageCache::TInfo;
+        using TCache = TPrivatePageCache::TInfo; 
 
         static constexpr NBoot::EStep StepKind = NBoot::EStep::Bundle;
 
-        TBundleLoadStep() = delete;
+        TBundleLoadStep() = delete; 
 
-        TBundleLoadStep(IStep *owner, ui32 table, TSwitch::TBundle &bundle)
+        TBundleLoadStep(IStep *owner, ui32 table, TSwitch::TBundle &bundle) 
             : IStep(owner, NBoot::EStep::Bundle)
             , Table(table)
-            , LargeGlobIds(std::move(bundle.LargeGlobIds))
+            , LargeGlobIds(std::move(bundle.LargeGlobIds)) 
             , Legacy(std::move(bundle.Legacy))
             , Opaque(std::move(bundle.Opaque))
             , Deltas(std::move(bundle.Deltas))
@@ -37,22 +37,22 @@ namespace NBoot {
     private: /* IStep, boot logic DSL actor interface   */
         void Start() noexcept override
         {
-            PageCollections.resize(LargeGlobIds.size());
+            PageCollections.resize(LargeGlobIds.size()); 
 
-            for (auto slot: xrange(LargeGlobIds.size())) {
+            for (auto slot: xrange(LargeGlobIds.size())) { 
                 if (auto *info = Back->PageCaches.FindPtr(LargeGlobIds[slot].Lead)) {
-                    PageCollections[slot] = *info;
+                    PageCollections[slot] = *info; 
                 } else {
-                    LeftMetas += Spawn<TLoadBlobs>(LargeGlobIds[slot], slot);
+                    LeftMetas += Spawn<TLoadBlobs>(LargeGlobIds[slot], slot); 
                 }
             }
 
             TryLoad();
         }
 
-        bool HandleBio(NSharedCache::TEvResult &msg) noexcept override
+        bool HandleBio(NSharedCache::TEvResult &msg) noexcept override 
         {
-            Y_VERIFY(Loader, "PageCollections loader got un unexpected pages fetch");
+            Y_VERIFY(Loader, "PageCollections loader got un unexpected pages fetch"); 
 
             LeftReads -= 1;
 
@@ -64,7 +64,7 @@ namespace NBoot {
             } else if (auto logl = Env->Logger()->Log(ELnLev::Error)) {
                 logl
                     << NFmt::Do(*Back)
-                    << " Page collection load failed, " << NFmt::Do(msg);
+                    << " Page collection load failed, " << NFmt::Do(msg); 
             }
 
             return msg.Status == NKikimrProto::OK;
@@ -76,14 +76,14 @@ namespace NBoot {
 
             if (Loader) {
                 Y_FAIL("Got an unexpected load blobs result");
-            } else if (load->Cookie >= PageCollections.size()) {
+            } else if (load->Cookie >= PageCollections.size()) { 
                 Y_FAIL("Got blobs load step with an invalid cookie");
-            } else if (PageCollections[load->Cookie]) {
-                Y_FAIL("Page collection is already loaded at room %zu", load->Cookie);
+            } else if (PageCollections[load->Cookie]) { 
+                Y_FAIL("Page collection is already loaded at room %zu", load->Cookie); 
             } else {
-                auto *pack = new NPageCollection::TPageCollection(load->LargeGlobId, load->PlainData());
+                auto *pack = new NPageCollection::TPageCollection(load->LargeGlobId, load->PlainData()); 
 
-                PageCollections[load->Cookie] = new TPrivatePageCache::TInfo(pack);
+                PageCollections[load->Cookie] = new TPrivatePageCache::TInfo(pack); 
             }
 
             TryLoad();
@@ -94,7 +94,7 @@ namespace NBoot {
         {
             if (!LeftMetas) {
                 Loader = new NTable::TLoader(
-                    std::move(PageCollections),
+                    std::move(PageCollections), 
                     std::move(Legacy),
                     std::move(Opaque),
                     std::move(Deltas),
@@ -113,32 +113,32 @@ namespace NBoot {
             }
 
             if (!LeftReads) {
-                NTable::TPartView partView = Loader->Result();
+                NTable::TPartView partView = Loader->Result(); 
 
                 if (auto logl = Env->Logger()->Log(ELnLev::Debug)) {
                     logl
                         << NFmt::Do(*Back) << " table " << Table
-                        << " part loaded, page collections [";
+                        << " part loaded, page collections ["; 
 
-                    for (auto &cache : partView.As<NTable::TPartStore>()->PageCollections)
+                    for (auto &cache : partView.As<NTable::TPartStore>()->PageCollections) 
                         logl << " " << cache->Id;
 
                     logl << " ]";
                 }
 
-                PropagateSideEffects(partView);
-                Back->DatabaseImpl->Merge(Table, std::move(partView));
+                PropagateSideEffects(partView); 
+                Back->DatabaseImpl->Merge(Table, std::move(partView)); 
 
                 Env->Finish(this); /* return self to owner */
             }
         }
 
-        void PropagateSideEffects(const NTable::TPartView &partView)
+        void PropagateSideEffects(const NTable::TPartView &partView) 
         {
-            for (auto &cache : partView.As<NTable::TPartStore>()->PageCollections)
+            for (auto &cache : partView.As<NTable::TPartStore>()->PageCollections) 
                 Logic->Result().PageCaches.push_back(cache);
 
-            if (auto &cache = partView.As<NTable::TPartStore>()->Pseudo)
+            if (auto &cache = partView.As<NTable::TPartStore>()->Pseudo) 
                 Logic->Result().PageCaches.push_back(cache);
         }
 
@@ -146,7 +146,7 @@ namespace NBoot {
         const ui32 Table = Max<ui32>();
 
         TAutoPtr<NTable::TLoader> Loader;
-        TVector<NPageCollection::TLargeGlobId> LargeGlobIds;
+        TVector<NPageCollection::TLargeGlobId> LargeGlobIds; 
         TVector<TIntrusivePtr<TCache>> PageCollections;
         TString Legacy;
         TString Opaque;

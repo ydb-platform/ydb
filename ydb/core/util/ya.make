@@ -1,9 +1,9 @@
 LIBRARY()
 
-OWNER(
-    ddoarn
-    g:kikimr
-)
+OWNER( 
+    ddoarn 
+    g:kikimr 
+) 
 
 SRCS(
     address_classifier.cpp
@@ -17,8 +17,8 @@ SRCS(
     console.h
     counted_leaky_bucket.h
     defs.h
-    failure_injection.cpp
-    failure_injection.h
+    failure_injection.cpp 
+    failure_injection.h 
     fast_tls.cpp
     format.cpp
     format.h
@@ -39,7 +39,7 @@ SRCS(
     page_map.cpp
     pb.h
     proto_duration.h
-    queue_inplace.h
+    queue_inplace.h 
     queue_oneone_inplace.h
     simple_cache.h
     single_thread_ic_mock.cpp
@@ -52,7 +52,7 @@ SRCS(
     text.h
     time_series_vec.h
     token_bucket.h
-    throughput_meter.h
+    throughput_meter.h 
     tuples.h
     type_alias.h
     ulid.cpp
@@ -70,13 +70,13 @@ PEERDIR(
     library/cpp/lwtrace
     library/cpp/monlib/dynamic_counters
     library/cpp/random_provider
-    ydb/core/base
-    ydb/core/protos
+    ydb/core/base 
+    ydb/core/protos 
 )
 
 END()
-
-RECURSE_FOR_TESTS(
-    btree_benchmark
-    ut
-)
+ 
+RECURSE_FOR_TESTS( 
+    btree_benchmark 
+    ut 
+) 

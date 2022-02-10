@@ -1,10 +1,10 @@
 LIBRARY()
 
-OWNER(
-    ddoarn
-    g:kikimr
+OWNER( 
+    ddoarn 
+    g:kikimr 
     g:logbroker
-)
+) 
 
 SRCS(
     document_conversion.h
@@ -73,35 +73,35 @@ PEERDIR(
     library/cpp/protobuf/json
     library/cpp/protobuf/util
     library/cpp/threading/future
-    ydb/core/actorlib_impl
-    ydb/core/base
-    ydb/core/blobstorage/base
-    ydb/core/client/metadata
-    ydb/core/client/scheme_cache_lib
-    ydb/core/engine
-    ydb/core/engine/minikql
-    ydb/core/grpc_services
-    ydb/core/keyvalue
-    ydb/core/node_whiteboard
-    ydb/core/persqueue
-    ydb/core/persqueue/writer
-    ydb/core/protos
-    ydb/core/ydb_convert
-    ydb/core/ymq/actor
-    ydb/library/aclib
-    ydb/library/persqueue/topic_parser
-    ydb/public/api/grpc
-    ydb/public/api/grpc/draft
-    ydb/public/lib/base
-    ydb/public/lib/deprecated/client
-    ydb/public/lib/deprecated/kicli
-    ydb/services/persqueue_v1
+    ydb/core/actorlib_impl 
+    ydb/core/base 
+    ydb/core/blobstorage/base 
+    ydb/core/client/metadata 
+    ydb/core/client/scheme_cache_lib 
+    ydb/core/engine 
+    ydb/core/engine/minikql 
+    ydb/core/grpc_services 
+    ydb/core/keyvalue 
+    ydb/core/node_whiteboard 
+    ydb/core/persqueue 
+    ydb/core/persqueue/writer 
+    ydb/core/protos 
+    ydb/core/ydb_convert 
+    ydb/core/ymq/actor 
+    ydb/library/aclib 
+    ydb/library/persqueue/topic_parser 
+    ydb/public/api/grpc 
+    ydb/public/api/grpc/draft 
+    ydb/public/lib/base 
+    ydb/public/lib/deprecated/client 
+    ydb/public/lib/deprecated/kicli 
+    ydb/services/persqueue_v1 
 )
 
-YQL_LAST_ABI_VERSION()
+YQL_LAST_ABI_VERSION() 
 
-END()
+END() 
 
-RECURSE_FOR_TESTS(
-    ut
-)
+RECURSE_FOR_TESTS( 
+    ut 
+) 

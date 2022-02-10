@@ -3,7 +3,7 @@
 #include "flat_page_iface.h"
 #include "util_basics.h"
 
-#include <ydb/core/base/shared_data.h>
+#include <ydb/core/base/shared_data.h> 
 
 #include <util/generic/array_ref.h>
 #include <util/system/unaligned_mem.h>
@@ -24,7 +24,7 @@ namespace NPage {
     static_assert(sizeof(TLabel) == 8, "Invalid page TLabel unit");
 
     struct THello {
-        struct TResult {
+        struct TResult { 
             bool operator==(NPage::ECodec codec) const noexcept
             {
                 return Codec == codec;
@@ -46,7 +46,7 @@ namespace NPage {
             TArrayRef<const char> Page;
         };
 
-        TResult Read(TArrayRef<const char>, EPage type = EPage::Undef) const noexcept;
+        TResult Read(TArrayRef<const char>, EPage type = EPage::Undef) const noexcept; 
         static TSharedData Wrap(TArrayRef<const char>, EPage, ui16 version) noexcept;
         static TString WrapString(TArrayRef<const char>, EPage, ui16 version) noexcept;
     };

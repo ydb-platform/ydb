@@ -4,7 +4,7 @@
 #include <util/stream/output.h>
 #include <math.h>
 #include <numeric>
-#include <utility>
+#include <utility> 
 
 struct hash_combiner {
     template <typename T>
@@ -36,12 +36,12 @@ namespace std {
 template <typename... Types>
 struct hash<std::tuple<Types...>> {
     template <typename TupleType, std::size_t... I>
-    inline static std::size_t MultiHasher(const TupleType& tuple, std::index_sequence<I...> ) {
+    inline static std::size_t MultiHasher(const TupleType& tuple, std::index_sequence<I...> ) { 
         return hash_combiner::hash_val(std::get<I>(tuple)...);
     }
 
     inline size_t operator()(const std::tuple<Types...>& tuple) const {
-        return MultiHasher(tuple, std::make_index_sequence<sizeof...(Types)>());
+        return MultiHasher(tuple, std::make_index_sequence<sizeof...(Types)>()); 
     }
 };
 
@@ -85,54 +85,54 @@ namespace NKikimr {
 
 template <std::size_t... I, typename... A, typename... B>
 decltype(std::make_tuple(std::get<I>(std::tuple<A...>()) + std::get<I>(std::tuple<B...>())...))
-add(std::index_sequence<I...>, const std::tuple<A...>& a, const std::tuple<B...>& b) {
+add(std::index_sequence<I...>, const std::tuple<A...>& a, const std::tuple<B...>& b) { 
     return std::make_tuple(std::get<I>(a) + std::get<I>(b)...);
 }
 
 template <typename... A, typename... B>
-decltype(add(std::make_index_sequence<sizeof...(A)>(), std::tuple<A...>(), std::tuple<B...>()))
+decltype(add(std::make_index_sequence<sizeof...(A)>(), std::tuple<A...>(), std::tuple<B...>())) 
 operator +(const std::tuple<A...>& a, const std::tuple<B...>& b) {
     static_assert(sizeof...(A) == sizeof...(B), "Tuples should be the same size");
-    return add(std::make_index_sequence<sizeof...(A)>(), a, b);
+    return add(std::make_index_sequence<sizeof...(A)>(), a, b); 
 }
 
 template <std::size_t... I, typename... A, typename... B>
 decltype(std::make_tuple(std::get<I>(std::tuple<A...>()) - std::get<I>(std::tuple<B...>())...))
-sub(std::index_sequence<I...>, const std::tuple<A...>& a, const std::tuple<B...>& b) {
+sub(std::index_sequence<I...>, const std::tuple<A...>& a, const std::tuple<B...>& b) { 
     return std::make_tuple(std::get<I>(a) - std::get<I>(b)...);
 }
 
 template <typename... A, typename... B>
-decltype(sub(std::make_index_sequence<sizeof...(A)>(), std::tuple<A...>(), std::tuple<B...>()))
+decltype(sub(std::make_index_sequence<sizeof...(A)>(), std::tuple<A...>(), std::tuple<B...>())) 
 operator -(const std::tuple<A...>& a, const std::tuple<B...>& b) {
     static_assert(sizeof...(A) == sizeof...(B), "Tuples should be the same size");
-    return sub(std::make_index_sequence<sizeof...(A)>(), a, b);
+    return sub(std::make_index_sequence<sizeof...(A)>(), a, b); 
 }
 
 template <std::size_t... I, typename... A, typename... B>
 decltype(std::make_tuple(std::get<I>(std::tuple<A...>()) * std::get<I>(std::tuple<B...>())...))
-mul(std::index_sequence<I...>, const std::tuple<A...>& a, const std::tuple<B...>& b) {
+mul(std::index_sequence<I...>, const std::tuple<A...>& a, const std::tuple<B...>& b) { 
     return std::make_tuple(std::get<I>(a) * std::get<I>(b)...);
 }
 
 template <typename... A, typename... B>
-decltype(mul(std::make_index_sequence<sizeof...(A)>(), std::tuple<A...>(), std::tuple<B...>()))
+decltype(mul(std::make_index_sequence<sizeof...(A)>(), std::tuple<A...>(), std::tuple<B...>())) 
 operator *(const std::tuple<A...>& a, const std::tuple<B...>& b) {
     static_assert(sizeof...(A) == sizeof...(B), "Tuples should be the same size");
-    return mul(std::make_index_sequence<sizeof...(A)>(), a, b);
+    return mul(std::make_index_sequence<sizeof...(A)>(), a, b); 
 }
 
 template <std::size_t... I, typename... A, typename... B>
 decltype(std::make_tuple(std::get<I>(std::tuple<A...>()) / std::get<I>(std::tuple<B...>())...))
-div(std::index_sequence<I...>, const std::tuple<A...>& a, const std::tuple<B...>& b) {
+div(std::index_sequence<I...>, const std::tuple<A...>& a, const std::tuple<B...>& b) { 
     return std::make_tuple(std::get<I>(a) / std::get<I>(b)...);
 }
 
 template <typename... A, typename... B>
-decltype(div(std::make_index_sequence<sizeof...(A)>(), std::tuple<A...>(), std::tuple<B...>()))
+decltype(div(std::make_index_sequence<sizeof...(A)>(), std::tuple<A...>(), std::tuple<B...>())) 
 operator /(const std::tuple<A...>& a, const std::tuple<B...>& b) {
     static_assert(sizeof...(A) == sizeof...(B), "Tuples should be the same size");
-    return div(std::make_index_sequence<sizeof...(A)>(), a, b);
+    return div(std::make_index_sequence<sizeof...(A)>(), a, b); 
 }
 
 /////
@@ -151,14 +151,14 @@ operator *(const std::tuple<A...>& a, V b) {
 
 template <std::size_t... I, typename... A, typename V>
 decltype(std::make_tuple(std::get<I>(std::tuple<A...>()) / V()...))
-div(std::index_sequence<I...>, const std::tuple<A...>& a, V b) {
+div(std::index_sequence<I...>, const std::tuple<A...>& a, V b) { 
     return std::make_tuple(std::get<I>(a) / b...);
 }
 
 template <typename... A, typename V>
-decltype(div(std::make_index_sequence<sizeof...(A)>(), std::tuple<A...>(), V()))
+decltype(div(std::make_index_sequence<sizeof...(A)>(), std::tuple<A...>(), V())) 
 operator /(const std::tuple<A...>& a, V b) {
-    return div(std::make_index_sequence<sizeof...(A)>(), a, b);
+    return div(std::make_index_sequence<sizeof...(A)>(), a, b); 
 }
 
 /////
@@ -193,62 +193,62 @@ decltype(std::tuple<T...>() / V()) operator /=(std::tuple<T...>& a, V b) {
 // max(tuple<>) - returns maximum of all tuple elements
 
 template <std::size_t... I, typename...T>
-decltype(std::max({std::get<I>(std::tuple<T...>())...})) max(std::index_sequence<I...>, const std::tuple<T...>& a) {
+decltype(std::max({std::get<I>(std::tuple<T...>())...})) max(std::index_sequence<I...>, const std::tuple<T...>& a) { 
     return std::max({std::get<I>(a)...});
 }
 
 template <typename... T>
-decltype(max(std::make_index_sequence<sizeof...(T)>(), std::tuple<T...>())) max(const std::tuple<T...>& a) {
-    return max(std::make_index_sequence<sizeof...(T)>(), a);
+decltype(max(std::make_index_sequence<sizeof...(T)>(), std::tuple<T...>())) max(const std::tuple<T...>& a) { 
+    return max(std::make_index_sequence<sizeof...(T)>(), a); 
 }
 
 // min(tuple<>) - returns minimum of all tuple elements
 
 template <std::size_t... I, typename...T>
-decltype(std::min({std::get<I>(std::tuple<T...>())...})) min(std::index_sequence<I...>, const std::tuple<T...>& a) {
+decltype(std::min({std::get<I>(std::tuple<T...>())...})) min(std::index_sequence<I...>, const std::tuple<T...>& a) { 
     return std::min({std::get<I>(a)...});
 }
 
 template <typename... T>
-decltype(min(std::make_index_sequence<sizeof...(T)>(), std::tuple<T...>())) min(const std::tuple<T...>& a) {
-    return min(std::make_index_sequence<sizeof...(T)>(), a);
+decltype(min(std::make_index_sequence<sizeof...(T)>(), std::tuple<T...>())) min(const std::tuple<T...>& a) { 
+    return min(std::make_index_sequence<sizeof...(T)>(), a); 
 }
 
 // sqrt(tuple<>) - returns sqrt of every tuple element
 
 template <std::size_t... I, typename...T>
-decltype(std::make_tuple(::sqrt(std::get<I>(std::tuple<T...>()))...)) sqrt(std::index_sequence<I...>, const std::tuple<T...>& a) {
+decltype(std::make_tuple(::sqrt(std::get<I>(std::tuple<T...>()))...)) sqrt(std::index_sequence<I...>, const std::tuple<T...>& a) { 
     return std::make_tuple(::sqrt(std::get<I>(a))...);
 }
 
 template <typename... T>
-decltype(sqrt(std::make_index_sequence<sizeof...(T)>(), std::tuple<T...>())) sqrt(const std::tuple<T...>& a) {
-    return sqrt(std::make_index_sequence<sizeof...(T)>(), a);
+decltype(sqrt(std::make_index_sequence<sizeof...(T)>(), std::tuple<T...>())) sqrt(const std::tuple<T...>& a) { 
+    return sqrt(std::make_index_sequence<sizeof...(T)>(), a); 
 }
 
 // convert(tuple<>, f) - converts every tuple element using f
 
 template <std::size_t... I, typename...T, typename F>
-decltype(std::make_tuple((*(F*)(nullptr))(std::get<I>(std::tuple<T...>()))...)) convert(std::index_sequence<I...>, const std::tuple<T...>& a, F f) {
+decltype(std::make_tuple((*(F*)(nullptr))(std::get<I>(std::tuple<T...>()))...)) convert(std::index_sequence<I...>, const std::tuple<T...>& a, F f) { 
     return std::make_tuple(f(std::get<I>(a))...);
 }
 
 template <typename... T, typename F>
-decltype(convert(std::make_index_sequence<sizeof...(T)>(), std::tuple<T...>(), *(F*)(nullptr))) convert(const std::tuple<T...>& a, F f) {
-    return convert(std::make_index_sequence<sizeof...(T)>(), a, f);
+decltype(convert(std::make_index_sequence<sizeof...(T)>(), std::tuple<T...>(), *(F*)(nullptr))) convert(const std::tuple<T...>& a, F f) { 
+    return convert(std::make_index_sequence<sizeof...(T)>(), a, f); 
 }
 
 template <typename... T>
 struct tuple_cast {
     template <std::size_t... I, typename... F>
-    static std::tuple<T...> cast(std::index_sequence<I...>, const std::tuple<F...>& a) {
+    static std::tuple<T...> cast(std::index_sequence<I...>, const std::tuple<F...>& a) { 
         return std::tuple<T...>((T)std::get<I>(a)...);
     }
 
     template <typename... F>
     static std::tuple<T...> cast(const std::tuple<F...>& a) {
         static_assert(sizeof...(F) == sizeof...(T), "Tuples should be equal size");
-        return cast(std::make_index_sequence<sizeof...(T)>(), a);
+        return cast(std::make_index_sequence<sizeof...(T)>(), a); 
     }
 };
 
@@ -260,13 +260,13 @@ T sum(const std::initializer_list<T>& v) {
 }
 
 template <std::size_t... I, typename...T>
-decltype(sum({std::get<I>(std::tuple<T...>())...})) sum(std::index_sequence<I...>, const std::tuple<T...>& a) {
+decltype(sum({std::get<I>(std::tuple<T...>())...})) sum(std::index_sequence<I...>, const std::tuple<T...>& a) { 
     return sum({std::get<I>(a)...});
 }
 
 template <typename... T>
-decltype(sum(std::make_index_sequence<sizeof...(T)>(), std::tuple<T...>())) sum(const std::tuple<T...>& a) {
-    return sum(std::make_index_sequence<sizeof...(T)>(), a);
+decltype(sum(std::make_index_sequence<sizeof...(T)>(), std::tuple<T...>())) sum(const std::tuple<T...>& a) { 
+    return sum(std::make_index_sequence<sizeof...(T)>(), a); 
 }
 
 // make_n_tuple<N,T>::type - returns type of std::tuple<T, T, T... N times>
@@ -295,19 +295,19 @@ std::array<std::tuple_element_t<0, T>, std::tuple_size<T>::value> tuple_to_array
 
 template <typename T>
 std::array<std::tuple_element_t<0, T>, std::tuple_size<T>::value> tuple_to_array(const T& a) {
-    return tuple_to_array(std::make_index_sequence<std::tuple_size<T>::value>(), a);
+    return tuple_to_array(std::make_index_sequence<std::tuple_size<T>::value>(), a); 
 }
 
 // make_tuple(array<>) - converts to std::tuple<>
 
 template <typename T, std::size_t S, std::size_t... I>
-typename make_n_tuple<S, T>::type array_to_tuple(std::index_sequence<I...>, const std::array<T, S>& a) {
+typename make_n_tuple<S, T>::type array_to_tuple(std::index_sequence<I...>, const std::array<T, S>& a) { 
     return std::make_tuple(a[I]...);
 }
 
 template <typename T, std::size_t S>
 typename make_n_tuple<S, T>::type array_to_tuple(const std::array<T, S>& a) {
-    return array_to_tuple(std::make_index_sequence<S>(), a);
+    return array_to_tuple(std::make_index_sequence<S>(), a); 
 }
 
 // index_of

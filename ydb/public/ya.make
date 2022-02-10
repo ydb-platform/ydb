@@ -1,8 +1,8 @@
-OWNER(g:kikimr)
-
-RECURSE(
-    api
-    lib
-    sdk
+OWNER(g:kikimr) 
+ 
+RECURSE( 
+    api 
+    lib 
+    sdk 
     tools
-)
+) 

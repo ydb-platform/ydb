@@ -11,14 +11,14 @@ SRCS(
 
 PEERDIR(
     contrib/libs/protobuf
-    ydb/core/protos
-    ydb/core/scheme
-    ydb/library/mkql_proto/protos
-    ydb/public/lib/deprecated/kicli
+    ydb/core/protos 
+    ydb/core/scheme 
+    ydb/library/mkql_proto/protos 
+    ydb/public/lib/deprecated/kicli 
 )
 
 END()
-
-RECURSE_FOR_TESTS(
-    ut
-)
+ 
+RECURSE_FOR_TESTS( 
+    ut 
+) 

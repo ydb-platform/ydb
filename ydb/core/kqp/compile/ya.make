@@ -12,12 +12,12 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/core/formats
-    ydb/core/kqp/common
-    ydb/core/protos
-    ydb/library/mkql_proto
+    ydb/core/formats 
+    ydb/core/kqp/common 
+    ydb/core/protos 
+    ydb/library/mkql_proto 
 )
 
-YQL_LAST_ABI_VERSION()
+YQL_LAST_ABI_VERSION() 
 
 END()

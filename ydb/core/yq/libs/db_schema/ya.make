@@ -1,4 +1,4 @@
-OWNER(g:yq)
+OWNER(g:yq) 
 
 LIBRARY()
 
@@ -7,8 +7,8 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/public/sdk/cpp/client/ydb_params
-    ydb/public/sdk/cpp/client/ydb_table
+    ydb/public/sdk/cpp/client/ydb_params 
+    ydb/public/sdk/cpp/client/ydb_table 
 )
 
 YQL_LAST_ABI_VERSION()

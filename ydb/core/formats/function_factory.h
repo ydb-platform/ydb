@@ -1,9 +1,9 @@
-#pragma once
+#pragma once 
 
-#include <ydb/core/formats/arrow/compute/registry.h>
-#include <ydb/core/formats/arrow/result.h>
-#include <ydb/core/formats/arrow/status.h>
-
+#include <ydb/core/formats/arrow/compute/registry.h> 
+#include <ydb/core/formats/arrow/result.h> 
+#include <ydb/core/formats/arrow/status.h> 
+ 
 #include <algorithm>
 #include <memory>
 #include <shared_mutex>
@@ -11,7 +11,7 @@
 #include <unordered_map>
 #include <utility>
 
-#include <ydb/core/formats/arrow/compute/function.h>
+#include <ydb/core/formats/arrow/compute/function.h> 
 
 namespace NKikimr::NArrow {
 

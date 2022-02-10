@@ -32,31 +32,31 @@ GENERATE_ENUM_SERIALIZATION(columnshard.h)
 
 PEERDIR(
     library/cpp/actors/core
-    ydb/core/actorlib_impl
-    ydb/core/base
-    ydb/core/blobstorage/dsproxy
-    ydb/core/control
-    ydb/core/formats
-    ydb/core/kqp
-    ydb/core/protos
-    ydb/core/tablet
-    ydb/core/tablet_flat
-    ydb/core/tx/columnshard/engines
-    ydb/core/tx/long_tx_service/public
-    ydb/core/util
-    ydb/core/wrappers
-    ydb/public/api/protos
+    ydb/core/actorlib_impl 
+    ydb/core/base 
+    ydb/core/blobstorage/dsproxy 
+    ydb/core/control 
+    ydb/core/formats 
+    ydb/core/kqp 
+    ydb/core/protos 
+    ydb/core/tablet 
+    ydb/core/tablet_flat 
+    ydb/core/tx/columnshard/engines 
+    ydb/core/tx/long_tx_service/public 
+    ydb/core/util 
+    ydb/core/wrappers 
+    ydb/public/api/protos 
     ydb/library/yql/dq/actors/compute
 )
 
-YQL_LAST_ABI_VERSION()
+YQL_LAST_ABI_VERSION() 
 
-END()
+END() 
 
-RECURSE(
-    engines
-)
-
-RECURSE_FOR_TESTS(
-    ut
-)
+RECURSE( 
+    engines 
+) 
+ 
+RECURSE_FOR_TESTS( 
+    ut 
+) 

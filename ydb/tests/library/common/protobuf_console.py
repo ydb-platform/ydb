@@ -1,13 +1,13 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-import ydb.core.protos.msgbus_pb2 as msgbus
+import ydb.core.protos.msgbus_pb2 as msgbus 
 
 from ydb.tests.library.common.protobuf import AbstractProtobufBuilder
 
 
 class CreateTenantRequest(AbstractProtobufBuilder):
     """
-    See /arcadia/ydb/public/api/protos/ydb_cms.proto
+    See /arcadia/ydb/public/api/protos/ydb_cms.proto 
     """
 
     def __init__(self, path):
@@ -71,7 +71,7 @@ class CreateTenantRequest(AbstractProtobufBuilder):
 
 class AlterTenantRequest(AbstractProtobufBuilder):
     """
-    See /arcadia/ydb/public/api/protos/ydb_cms.proto
+    See /arcadia/ydb/public/api/protos/ydb_cms.proto 
     """
 
     def __init__(self, path):
@@ -99,7 +99,7 @@ class AlterTenantRequest(AbstractProtobufBuilder):
 
 class GetTenantStatusRequest(AbstractProtobufBuilder):
     """
-    See /arcadia/ydb/public/api/protos/ydb_cms.proto
+    See /arcadia/ydb/public/api/protos/ydb_cms.proto 
     """
 
     def __init__(self, path):
@@ -109,7 +109,7 @@ class GetTenantStatusRequest(AbstractProtobufBuilder):
 
 class RemoveTenantRequest(AbstractProtobufBuilder):
     """
-    See /arcadia/ydb/public/api/protos/ydb_cms.proto
+    See /arcadia/ydb/public/api/protos/ydb_cms.proto 
     """
 
     def __init__(self, path):
@@ -119,7 +119,7 @@ class RemoveTenantRequest(AbstractProtobufBuilder):
 
 class SetConfigRequest(AbstractProtobufBuilder):
     """
-    See /arcadia/ydb/core/protos/console.proto
+    See /arcadia/ydb/core/protos/console.proto 
     """
 
     def __init__(self):
@@ -152,7 +152,7 @@ class SetConfigRequest(AbstractProtobufBuilder):
 
 class GetOperationRequest(AbstractProtobufBuilder):
     """
-    See /arcadia/ydb/core/protos/console.proto
+    See /arcadia/ydb/core/protos/console.proto 
     """
 
     def __init__(self, op_id):

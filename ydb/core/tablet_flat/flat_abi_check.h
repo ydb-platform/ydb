@@ -7,7 +7,7 @@ namespace NKikimr {
 namespace NTable {
 
     struct TAbi {
-        using EVol = ECompatibility;
+        using EVol = ECompatibility; 
 
         void Check(ui32 tail, ui32 head, const char *label) const noexcept
         {

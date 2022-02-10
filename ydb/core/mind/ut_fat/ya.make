@@ -1,4 +1,4 @@
-UNITTEST_FOR(ydb/core/mind)
+UNITTEST_FOR(ydb/core/mind) 
 
 OWNER(
     ddoarn
@@ -16,16 +16,16 @@ PEERDIR(
     library/cpp/getopt
     library/cpp/regex/pcre
     library/cpp/svnversion
-    ydb/core/base
-    ydb/core/blobstorage/base
-    ydb/core/blobstorage/crypto
-    ydb/core/blobstorage/nodewarden
-    ydb/core/blobstorage/pdisk
-    ydb/core/blobstorage/vdisk/common
-    ydb/core/testlib
+    ydb/core/base 
+    ydb/core/blobstorage/base 
+    ydb/core/blobstorage/crypto 
+    ydb/core/blobstorage/nodewarden 
+    ydb/core/blobstorage/pdisk 
+    ydb/core/blobstorage/vdisk/common 
+    ydb/core/testlib 
 )
 
-YQL_LAST_ABI_VERSION()
+YQL_LAST_ABI_VERSION() 
 
 SRCS(
     blobstorage_node_warden_ut_fat.cpp

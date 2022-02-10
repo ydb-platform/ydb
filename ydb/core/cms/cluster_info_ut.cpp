@@ -2,7 +2,7 @@
 #include "ut_helpers.h"
 
 #include <library/cpp/actors/interconnect/interconnect.h>
-#include <ydb/core/node_whiteboard/node_whiteboard.h>
+#include <ydb/core/node_whiteboard/node_whiteboard.h> 
 
 #include <library/cpp/testing/unittest/registar.h>
 

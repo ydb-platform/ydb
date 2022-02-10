@@ -1,13 +1,13 @@
 LIBRARY()
 
-OWNER(g:kikimr)
+OWNER(g:kikimr) 
 
 SRCS(
     helpers.cpp
 )
 
 PEERDIR(
-    ydb/public/api/protos
+    ydb/public/api/protos 
 )
 
 END()

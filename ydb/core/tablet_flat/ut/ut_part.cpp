@@ -1,10 +1,10 @@
-#include <ydb/core/tablet_flat/flat_part_dump.h>
-#include <ydb/core/tablet_flat/test/libs/rows/cook.h>
-#include <ydb/core/tablet_flat/test/libs/rows/layout.h>
-#include <ydb/core/tablet_flat/test/libs/table/model/large.h>
-#include <ydb/core/tablet_flat/test/libs/table/wrap_part.h>
-#include <ydb/core/tablet_flat/test/libs/table/test_writer.h>
-#include <ydb/core/tablet_flat/test/libs/table/test_wreck.h>
+#include <ydb/core/tablet_flat/flat_part_dump.h> 
+#include <ydb/core/tablet_flat/test/libs/rows/cook.h> 
+#include <ydb/core/tablet_flat/test/libs/rows/layout.h> 
+#include <ydb/core/tablet_flat/test/libs/table/model/large.h> 
+#include <ydb/core/tablet_flat/test/libs/table/wrap_part.h> 
+#include <ydb/core/tablet_flat/test/libs/table/test_writer.h> 
+#include <ydb/core/tablet_flat/test/libs/table/test_wreck.h> 
 #include <ydb/core/tablet_flat/test/libs/table/test_comp.h>
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -21,7 +21,7 @@ namespace {
         for (size_t group : xrange(groups)) {
             conf.Group(group).IndexMin = 1024; /* Should cover index buffer grow code */
         }
-        conf.SmallEdge = 19;  /* Packed to page collection large cell values */
+        conf.SmallEdge = 19;  /* Packed to page collection large cell values */ 
         conf.LargeEdge = 29;  /* Large values placed to single blobs */
         conf.SliceSize = conf.Group(0).PageSize * 4;
 
@@ -61,11 +61,11 @@ Y_UNIT_TEST_SUITE(TPart) {
     {
         TRowState row(2);
 
-        const NPageCollection::TGlobId glob{ TLogoBlobID(10, 20, 30, 1, 0, 0), 7 };
+        const NPageCollection::TGlobId glob{ TLogoBlobID(10, 20, 30, 1, 0, 0), 7 }; 
 
-        row.Set(1, { ECellOp::Set, ELargeObj::GlobId }, TCell::Make(glob));
+        row.Set(1, { ECellOp::Set, ELargeObj::GlobId }, TCell::Make(glob)); 
         UNIT_ASSERT(row.Need() == 0 && row.Left() == 1);
-        row.Set(0, { ECellOp::Null, ELargeObj::GlobId }, TCell::Make(glob));
+        row.Set(0, { ECellOp::Null, ELargeObj::GlobId }, TCell::Make(glob)); 
         UNIT_ASSERT(row.Need() == 1 && row.Left() == 0);
     }
 
@@ -230,12 +230,12 @@ Y_UNIT_TEST_SUITE(TPart) {
 
         wrap.To(10).Seek(foo, ESeek::Exact).To(11).Is(foo);
 
-        auto &part = dynamic_cast<const NTest::TPartStore&>(*(*wrap).Eggs.Lone());
+        auto &part = dynamic_cast<const NTest::TPartStore&>(*(*wrap).Eggs.Lone()); 
 
         const auto glob = part.Store->GlobForBlob(0);
 
         { /*_ Check that part has exactly one external blob */
-            UNIT_ASSERT(part.Store->PageCollectionPagesCount(part.Store->GetExternRoom()) == 1);
+            UNIT_ASSERT(part.Store->PageCollectionPagesCount(part.Store->GetExternRoom()) == 1); 
             UNIT_ASSERT(part.Blobs->Total() == 1);
             UNIT_ASSERT(part.Blobs->Glob(0) == glob);
             UNIT_ASSERT(part.Large->Stats().Items == 1);
@@ -244,23 +244,23 @@ Y_UNIT_TEST_SUITE(TPart) {
         }
 
         { /*_ Check access to external blob out of cache */
-            wrap.Displace<IPages>(new TNoEnv{ true, ELargeObjNeed::Yes });
+            wrap.Displace<IPages>(new TNoEnv{ true, ELargeObjNeed::Yes }); 
 
             wrap.To(12).Seek(foo, ESeek::Exact).Is(EReady::Page);
         }
 
         { /*_ Check correctness of reference to TGlobId array */
-            wrap.Displace<IPages>(new TNoEnv{ true, ELargeObjNeed::No });
+            wrap.Displace<IPages>(new TNoEnv{ true, ELargeObjNeed::No }); 
             wrap.To(14).Seek(foo, ESeek::Exact);
 
             const auto cell = (*wrap).Apply().Get(1);
 
             UNIT_ASSERT(cell.Data() == (void*)&(**part.Blobs)[0]);
-            UNIT_ASSERT(cell.Size() == sizeof(NPageCollection::TGlobId));
+            UNIT_ASSERT(cell.Size() == sizeof(NPageCollection::TGlobId)); 
         }
 
         { /*_ Check marker of absent external blob in TCell */
-            wrap.Displace<IPages>(new TNoEnv{ true, ELargeObjNeed::No });
+            wrap.Displace<IPages>(new TNoEnv{ true, ELargeObjNeed::No }); 
 
             auto marked = *TNatural(*lay).Col(7_u32, glob);
 
@@ -283,7 +283,7 @@ Y_UNIT_TEST_SUITE(TPart) {
 
         TCheckIt wrap(cook.Add(foo).Finish(), { });
 
-        wrap.Displace<IPages>(new TNoEnv{ true, ELargeObjNeed::No });
+        wrap.Displace<IPages>(new TNoEnv{ true, ELargeObjNeed::No }); 
         wrap.To(10).Seek(foo, ESeek::Exact).To(11).Is(foo);
 
         { /*_ Check that part has correct glob in its catalog  */
@@ -356,13 +356,13 @@ Y_UNIT_TEST_SUITE(TPart) {
             auto one = Eggs0().Lone()->Blobs->Total();
             auto two = Eggs0().Lone()->Large->Stats().Items;
 
-            UNIT_ASSERT(one && one == two && one == part.Store->PageCollectionPagesCount(part.Store->GetExternRoom()));
+            UNIT_ASSERT(one && one == two && one == part.Store->PageCollectionPagesCount(part.Store->GetExternRoom())); 
         }
 
         { /*_ Ensure that part has some outer packed blobs in room 2 */
             auto one = Eggs0().Lone()->Small->Stats().Items;
 
-            UNIT_ASSERT(one && one == part.Store->PageCollectionPagesCount(part.Store->GetOuterRoom()));
+            UNIT_ASSERT(one && one == part.Store->PageCollectionPagesCount(part.Store->GetOuterRoom())); 
         }
 
         { /*_ Enusre there is some rows with two cells with references */
@@ -445,14 +445,14 @@ Y_UNIT_TEST_SUITE(TPart) {
 
         auto eggs = TPartCook(lay, conf)
             .Ver({5, 50}).Add(hey)
-            .Ver({4, 0}).Add(foo1, ERowOp::Erase)
+            .Ver({4, 0}).Add(foo1, ERowOp::Erase) 
             .Ver({3, 30}).Add(foo1)
-            .Ver({2, 20}).Add(foo2, ERowOp::Erase)
+            .Ver({2, 20}).Add(foo2, ERowOp::Erase) 
             .Ver({1, 10}).Add(foo2)
             .Ver({0, 99}).Add(foo3)
             .Ver({4, 40}).Add(bar)
             .Ver({5, 50}).Add(baz)
-            .Ver({5, 0}).Add(baz, ERowOp::Erase)
+            .Ver({5, 0}).Add(baz, ERowOp::Erase) 
             .Finish();
         auto part = eggs.Lone();
 
@@ -464,12 +464,12 @@ Y_UNIT_TEST_SUITE(TPart) {
 
         wrap.To(10).Has(hey).NoKey(foo, false).Has(bar);
 
-        wrap.To(20).Seek(foo, ESeek::Lower).IsOp(ERowOp::Erase, foo).IsVer({4, 0})
-            .To(21).Ver({4, 0}).IsOp(ERowOp::Erase, foo).IsVer({4, 0})
+        wrap.To(20).Seek(foo, ESeek::Lower).IsOp(ERowOp::Erase, foo).IsVer({4, 0}) 
+            .To(21).Ver({4, 0}).IsOp(ERowOp::Erase, foo).IsVer({4, 0}) 
             .To(22).Ver({3, 99}).Is(foo1).IsVer({3, 30})
             .To(23).Ver({3, 30}).Is(foo1).IsVer({3, 30})
-            .To(24).Ver({2, 99}).IsOp(ERowOp::Erase, foo).IsVer({2, 20})
-            .To(25).Ver({2, 20}).IsOp(ERowOp::Erase, foo).IsVer({2, 20})
+            .To(24).Ver({2, 99}).IsOp(ERowOp::Erase, foo).IsVer({2, 20}) 
+            .To(25).Ver({2, 20}).IsOp(ERowOp::Erase, foo).IsVer({2, 20}) 
             .To(26).Ver({1, 99}).Is(foo2).IsVer({1, 10})
             .To(27).Ver({1, 10}).Is(foo2).IsVer({1, 10})
             .To(28).Ver({1, 9}).Is(foo3).IsVer({0, 99});
@@ -487,9 +487,9 @@ Y_UNIT_TEST_SUITE(TPart) {
 
         // This verifies that history data is correctly repositioned to an
         // earlier version after seeking backwards in part iterator.
-        wrap.To(50).Seek(foo, ESeek::Exact).IsOp(ERowOp::Erase, foo).IsVer({4, 0})
+        wrap.To(50).Seek(foo, ESeek::Exact).IsOp(ERowOp::Erase, foo).IsVer({4, 0}) 
             .To(51).Ver({1, 9}).Is(foo3).IsVer({0, 99})
-            .To(52).SeekAgain(foo, ESeek::Exact).IsOp(ERowOp::Erase, foo).IsVer({4, 0})
+            .To(52).SeekAgain(foo, ESeek::Exact).IsOp(ERowOp::Erase, foo).IsVer({4, 0}) 
             .To(53).Ver({1, 10}).Is(foo2).IsVer({1, 10});
 
         // This verifies that using a version that is too low returns EReady::Gone
@@ -500,7 +500,7 @@ Y_UNIT_TEST_SUITE(TPart) {
         wrap.To(70).Seek(hey, ESeek::Exact).Is(hey).IsVer({5, 50})
             .To(71).Ver({5, 50}).Is(hey).IsVer({5, 50})
             .To(72).Ver({5, 49}).Is(EReady::Gone)
-            .To(73).Next().IsOp(ERowOp::Erase, foo).IsVer({4, 0});
+            .To(73).Next().IsOp(ERowOp::Erase, foo).IsVer({4, 0}); 
     }
 
     Y_UNIT_TEST(ManyVersions)

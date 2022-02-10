@@ -174,7 +174,7 @@ struct TRecordsEntry {
 } Y_PACKED;
 
 template <class TRecord, class TItem>
-struct TDataPageRecord {
+struct TDataPageRecord { 
     void* Base() {
         return NextPtr((TRecord*)this);
     }
@@ -206,7 +206,7 @@ struct TDataPageRecord {
         return reinterpret_cast<const T*>(NextPtr(item));
     }
 
-    TCellOp GetOp(const TPartScheme::TColumn &info) const
+    TCellOp GetOp(const TPartScheme::TColumn &info) const 
     {
         return GetItem(info)->GetOp(info.IsKey());
     }
@@ -216,15 +216,15 @@ struct TDataPageRecord {
         const TItem* item = GetItem(info);
         const auto op = item->GetOp(info.IsKey());
 
-        if (op == ECellOp::Empty || op == ECellOp::Null || op == ECellOp::Reset) {
+        if (op == ECellOp::Empty || op == ECellOp::Null || op == ECellOp::Reset) { 
             return { };
         } else if (info.IsFixed) {
             return { GetFixed<const char>(item), info.FixedSize };
-        } else if (op == ELargeObj::Inline) {
+        } else if (op == ELargeObj::Inline) { 
             auto *ref = GetFixed<TDataRef>(item);
 
             return { TDeref<const char>::At(Base(), ref->Offset), ref->Size };
-        } else { /* ELargeObj::Extern or other link to attached blob */
+        } else { /* ELargeObj::Extern or other link to attached blob */ 
             return { GetFixed<const char>(item), sizeof(ui64) };
 
             static_assert(sizeof(TDataRef) == sizeof(ui64), "");

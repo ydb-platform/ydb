@@ -1,7 +1,7 @@
 UNITTEST()
 
 FORK_SUBTESTS()
-
+ 
 SPLIT_FACTOR(20)
 
 OWNER(
@@ -22,10 +22,10 @@ ENDIF()
 PEERDIR(
     library/cpp/getopt
     library/cpp/svnversion
-    ydb/core/blobstorage/storagepoolmon
-    ydb/core/testlib
-    ydb/core/testlib/actors
-    ydb/core/testlib/basics
+    ydb/core/blobstorage/storagepoolmon 
+    ydb/core/testlib 
+    ydb/core/testlib/actors 
+    ydb/core/testlib/basics 
 )
 
 SRCS(

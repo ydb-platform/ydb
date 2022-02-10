@@ -1,5 +1,5 @@
 #pragma once
-// unique tag to fix pragma once gcc glueing: ./ydb/core/util/defs.h
+// unique tag to fix pragma once gcc glueing: ./ydb/core/util/defs.h 
 
 #include <library/cpp/actors/core/actor.h>
 #include <library/cpp/actors/core/hfunc.h>

@@ -5,8 +5,8 @@ package Ydb.PersQueue.V1;
 
 option java_package = "com.yandex.ydb.persqueue.v1";
 
-import "ydb/public/api/protos/ydb_persqueue_cluster_discovery.proto";
-import "ydb/public/api/protos/ydb_persqueue_v1.proto";
+import "ydb/public/api/protos/ydb_persqueue_cluster_discovery.proto"; 
+import "ydb/public/api/protos/ydb_persqueue_v1.proto"; 
 
 service PersQueueService {
 

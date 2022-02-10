@@ -1,13 +1,13 @@
-UNITTEST_FOR(ydb/core/blobstorage/pdisk)
+UNITTEST_FOR(ydb/core/blobstorage/pdisk) 
 
 FORK_SUBTESTS()
 
-OWNER(
-    cthulhu
-    ddoarn
-    fomichev
-    g:kikimr
-)
+OWNER( 
+    cthulhu 
+    ddoarn 
+    fomichev 
+    g:kikimr 
+) 
 
 IF (WITH_VALGRIND)
     ENV(VALGRIND_OPTS=--max-stackframe=16000000)
@@ -26,8 +26,8 @@ ENDIF()
 PEERDIR(
     library/cpp/getopt
     library/cpp/svnversion
-    ydb/core/blobstorage/lwtrace_probes
-    ydb/core/testlib/actors
+    ydb/core/blobstorage/lwtrace_probes 
+    ydb/core/testlib/actors 
 )
 
 SRCS(
@@ -40,12 +40,12 @@ SRCS(
     blobstorage_pdisk_ut_run.cpp
 )
 
-IF (BUILD_TYPE == "RELEASE")
-    SRCS(
-        blobstorage_pdisk_ut_yard.cpp
-    )
-ELSE ()
-    MESSAGE(WARNING "It takes too much time to run test in DEBUG mode, some tests are skipped")
-ENDIF ()
-
+IF (BUILD_TYPE == "RELEASE") 
+    SRCS( 
+        blobstorage_pdisk_ut_yard.cpp 
+    ) 
+ELSE () 
+    MESSAGE(WARNING "It takes too much time to run test in DEBUG mode, some tests are skipped") 
+ENDIF () 
+ 
 END()

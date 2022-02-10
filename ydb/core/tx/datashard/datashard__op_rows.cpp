@@ -2,19 +2,19 @@
 #include "datashard_direct_transaction.h"
 
 namespace NKikimr {
-namespace NDataShard {
+namespace NDataShard { 
 
 using namespace NTabletFlatExecutor;
 
 template <typename TEvRequest>
-class TTxDirectBase : public TTransactionBase<TDataShard> {
+class TTxDirectBase : public TTransactionBase<TDataShard> { 
     TEvRequest Ev;
 
     TOperation::TPtr Op;
     TVector<EExecutionUnitKind> CompleteList;
 
 public:
-    TTxDirectBase(TDataShard* ds, TEvRequest ev)
+    TTxDirectBase(TDataShard* ds, TEvRequest ev) 
         : TBase(ds)
         , Ev(ev)
     {
@@ -60,13 +60,13 @@ public:
 
 }; // TTxDirectBase
 
-class TDataShard::TTxUploadRows : public TTxDirectBase<TEvDataShard::TEvUploadRowsRequest::TPtr> {
+class TDataShard::TTxUploadRows : public TTxDirectBase<TEvDataShard::TEvUploadRowsRequest::TPtr> { 
 public:
     using TTxDirectBase::TTxDirectBase;
     TTxType GetTxType() const override { return TXTYPE_UPLOAD_ROWS; }
 };
 
-class TDataShard::TTxEraseRows : public TTxDirectBase<TEvDataShard::TEvEraseRowsRequest::TPtr> {
+class TDataShard::TTxEraseRows : public TTxDirectBase<TEvDataShard::TEvEraseRowsRequest::TPtr> { 
 public:
     using TTxDirectBase::TTxDirectBase;
     TTxType GetTxType() const override { return TXTYPE_ERASE_ROWS; }
@@ -90,7 +90,7 @@ static void WrongShardState(NKikimrTxDataShard::TEvEraseRowsResponse& response) 
 }
 
 template <typename TEvResponse, typename TEvRequest>
-static bool MaybeReject(TDataShard* self, TEvRequest& ev, const TActorContext& ctx, const TString& txDesc, bool isWrite) {
+static bool MaybeReject(TDataShard* self, TEvRequest& ev, const TActorContext& ctx, const TString& txDesc, bool isWrite) { 
     NKikimrTxDataShard::TEvProposeTransactionResult::EStatus rejectStatus;
     TString rejectReason;
     bool reject = self->CheckDataTxReject(txDesc, ctx, rejectStatus, rejectReason);
@@ -131,7 +131,7 @@ static bool MaybeReject(TDataShard* self, TEvRequest& ev, const TActorContext& c
     return true;
 }
 
-void TDataShard::Handle(TEvDataShard::TEvUploadRowsRequest::TPtr& ev, const TActorContext& ctx) {
+void TDataShard::Handle(TEvDataShard::TEvUploadRowsRequest::TPtr& ev, const TActorContext& ctx) { 
     if (!MaybeReject<TEvDataShard::TEvUploadRowsResponse>(this, ev, ctx, "bulk upsert", true)) {
         Executor()->Execute(new TTxUploadRows(this, ev), ctx);
     } else {
@@ -139,7 +139,7 @@ void TDataShard::Handle(TEvDataShard::TEvUploadRowsRequest::TPtr& ev, const TAct
     }
 }
 
-void TDataShard::Handle(TEvDataShard::TEvEraseRowsRequest::TPtr& ev, const TActorContext& ctx) {
+void TDataShard::Handle(TEvDataShard::TEvEraseRowsRequest::TPtr& ev, const TActorContext& ctx) { 
     if (!MaybeReject<TEvDataShard::TEvEraseRowsResponse>(this, ev, ctx, "erase", false)) {
         Executor()->Execute(new TTxEraseRows(this, ev), ctx);
     } else {
@@ -147,5 +147,5 @@ void TDataShard::Handle(TEvDataShard::TEvEraseRowsRequest::TPtr& ev, const TActo
     }
 }
 
-} // NDataShard
+} // NDataShard 
 } // NKikimr

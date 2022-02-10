@@ -31,8 +31,8 @@ struct TServiceCounters {
         , Counters(subsystemName ? RootCounters->GetSubgroup("subsystem", subsystemName) : serviceCounters.Counters)
     {
     }
-
-    TServiceCounters& operator=(const TServiceCounters& serviceCounters) = default;
+ 
+    TServiceCounters& operator=(const TServiceCounters& serviceCounters) = default; 
 };
 
 } // namespace NCommon

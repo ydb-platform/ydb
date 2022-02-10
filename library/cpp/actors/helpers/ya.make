@@ -3,8 +3,8 @@ LIBRARY()
 OWNER(g:kikimr)
 
 SRCS(
-    activeactors.cpp
-    activeactors.h
+    activeactors.cpp 
+    activeactors.h 
     flow_controlled_queue.cpp
     flow_controlled_queue.h
     future_callback.h

@@ -1,13 +1,13 @@
 #include "datashard_impl.h"
 
 namespace NKikimr {
-namespace NDataShard {
+namespace NDataShard { 
 
 using namespace NTabletFlatExecutor;
 
-class TDataShard::TTxActivateChangeSender: public TTransactionBase<TDataShard> {
+class TDataShard::TTxActivateChangeSender: public TTransactionBase<TDataShard> { 
 public:
-    explicit TTxActivateChangeSender(TDataShard* self, ui64 origin, const TActorId& ackTo)
+    explicit TTxActivateChangeSender(TDataShard* self, ui64 origin, const TActorId& ackTo) 
         : TTransactionBase(self)
         , Origin(origin)
         , AckTo(ackTo)
@@ -67,9 +67,9 @@ private:
 
 }; // TTxActivateChangeSender
 
-class TDataShard::TTxActivateChangeSenderAck: public TTransactionBase<TDataShard> {
+class TDataShard::TTxActivateChangeSenderAck: public TTransactionBase<TDataShard> { 
 public:
-    explicit TTxActivateChangeSenderAck(TDataShard* self, ui64 origin)
+    explicit TTxActivateChangeSenderAck(TDataShard* self, ui64 origin) 
         : TTransactionBase(self)
         , Origin(origin)
         , AllDstAcksReceived(false)
@@ -118,13 +118,13 @@ private:
 
 }; // TTxActivateChangeSenderAck
 
-void TDataShard::Handle(TEvChangeExchange::TEvActivateSender::TPtr& ev, const TActorContext& ctx) {
+void TDataShard::Handle(TEvChangeExchange::TEvActivateSender::TPtr& ev, const TActorContext& ctx) { 
     Execute(new TTxActivateChangeSender(this, ev->Get()->Record.GetOrigin(), ev->Sender), ctx);
 }
 
-void TDataShard::Handle(TEvChangeExchange::TEvActivateSenderAck::TPtr& ev, const TActorContext& ctx) {
+void TDataShard::Handle(TEvChangeExchange::TEvActivateSenderAck::TPtr& ev, const TActorContext& ctx) { 
     Execute(new TTxActivateChangeSenderAck(this, ev->Get()->Record.GetOrigin()), ctx);
 }
 
-} // NDataShard
+} // NDataShard 
 } // NKikimr

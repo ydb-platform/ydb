@@ -2,11 +2,11 @@
 #include "execution_unit_ctors.h"
 
 namespace NKikimr {
-namespace NDataShard {
+namespace NDataShard { 
 
 class TLoadTxDetailsUnit : public TExecutionUnit {
 public:
-    TLoadTxDetailsUnit(TDataShard &dataShard,
+    TLoadTxDetailsUnit(TDataShard &dataShard, 
                        TPipeline &pipeline);
     ~TLoadTxDetailsUnit() override;
 
@@ -20,7 +20,7 @@ public:
 private:
 };
 
-TLoadTxDetailsUnit::TLoadTxDetailsUnit(TDataShard &dataShard,
+TLoadTxDetailsUnit::TLoadTxDetailsUnit(TDataShard &dataShard, 
                                        TPipeline &pipeline)
     : TExecutionUnit(EExecutionUnitKind::LoadTxDetails, true, dataShard, pipeline)
 {
@@ -53,11 +53,11 @@ void TLoadTxDetailsUnit::Complete(TOperation::TPtr,
 {
 }
 
-THolder<TExecutionUnit> CreateLoadTxDetailsUnit(TDataShard &dataShard,
+THolder<TExecutionUnit> CreateLoadTxDetailsUnit(TDataShard &dataShard, 
                                                 TPipeline &pipeline)
 {
     return MakeHolder<TLoadTxDetailsUnit>(dataShard, pipeline);
 }
 
-} // namespace NDataShard
+} // namespace NDataShard 
 } // namespace NKikimr

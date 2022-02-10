@@ -1,12 +1,12 @@
 #include "datashard_locks.h"
 #include "datashard_impl.h"
 #include "datashard_counters.h"
-#include <ydb/core/tablet_flat/flat_dbase_scheme.h>
+#include <ydb/core/tablet_flat/flat_dbase_scheme.h> 
 
-#include <ydb/core/base/appdata.h>
+#include <ydb/core/base/appdata.h> 
 
 namespace NKikimr {
-namespace NDataShard {
+namespace NDataShard { 
 
 // TLockInfo
 

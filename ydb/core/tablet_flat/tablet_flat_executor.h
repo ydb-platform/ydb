@@ -3,8 +3,8 @@
 
 #include "flat_scan_iface.h"
 
-#include <ydb/core/base/tablet.h>
-#include <ydb/core/base/blobstorage.h>
+#include <ydb/core/base/tablet.h> 
+#include <ydb/core/base/blobstorage.h> 
 #include <library/cpp/lwtrace/shuttle.h>
 #include <util/generic/maybe.h>
 #include <util/system/type_name.h>
@@ -23,11 +23,11 @@ namespace NTabletFlatExecutor {
 
 class TTransactionContext;
 class TExecutor;
-struct TPageCollectionTxEnv;
+struct TPageCollectionTxEnv; 
 
 class TTableSnapshotContext : public TThrRefBase, TNonCopyable {
     friend class TExecutor;
-    friend struct TPageCollectionTxEnv;
+    friend struct TPageCollectionTxEnv; 
 
     class TImpl;
     THolder<TImpl> Impl;

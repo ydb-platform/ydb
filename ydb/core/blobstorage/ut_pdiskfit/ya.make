@@ -1,13 +1,13 @@
-OWNER(
-    alexvru
-    g:kikimr
-)
+OWNER( 
+    alexvru 
+    g:kikimr 
+) 
 
 RECURSE(
     pdiskfit
-    lib
+    lib 
 )
-
-RECURSE_FOR_TESTS(
-    ut
-)
+ 
+RECURSE_FOR_TESTS( 
+    ut 
+) 

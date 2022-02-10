@@ -75,18 +75,18 @@ namespace NActors {
 
         class TEvLog: public TEventLocal<TEvLog, int(EEv::Log)> {
         public:
-            TEvLog(TInstant stamp, TLevel level, EComponent comp, const TString &line)
+            TEvLog(TInstant stamp, TLevel level, EComponent comp, const TString &line) 
                 : Stamp(stamp)
                 , Level(level)
                 , Component(comp)
-                , Line(line)
-            {
-            }
-
-            TEvLog(TInstant stamp, TLevel level, EComponent comp, TString &&line)
-                : Stamp(stamp)
-                , Level(level)
-                , Component(comp)
+                , Line(line) 
+            { 
+            } 
+ 
+            TEvLog(TInstant stamp, TLevel level, EComponent comp, TString &&line) 
+                : Stamp(stamp) 
+                , Level(level) 
+                , Component(comp) 
                 , Line(std::move(line))
             {
             }

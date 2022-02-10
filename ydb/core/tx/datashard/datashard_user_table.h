@@ -2,20 +2,20 @@
 
 #include "datashard.h"
 
-#include <ydb/core/base/storage_pools.h>
-#include <ydb/core/scheme/scheme_tabledefs.h>
-#include <ydb/core/tablet_flat/flat_stat_table.h>
+#include <ydb/core/base/storage_pools.h> 
+#include <ydb/core/scheme/scheme_tabledefs.h> 
+#include <ydb/core/tablet_flat/flat_stat_table.h> 
 
 #include <util/generic/ptr.h>
 #include <util/generic/hash.h>
 
 namespace NKikimr {
-
-namespace NTabletFlatExecutor {
-class TTransactionContext;
-}
-
-namespace NDataShard {
+ 
+namespace NTabletFlatExecutor { 
+class TTransactionContext; 
+} 
+ 
+namespace NDataShard { 
 
 //
 struct TUserTable : public TThrRefBase {
@@ -279,7 +279,7 @@ struct TUserTable : public TThrRefBase {
 
             fillColumnIds(indexDesc.GetKeyColumnNames(),  KeyColumnIds);
             fillColumnIds(indexDesc.GetDataColumnNames(), DataColumnIds);
-        }
+        } 
     };
 
     struct TCdcStream {
@@ -372,13 +372,13 @@ struct TUserTable : public TThrRefBase {
     TUserTable(ui32 localTid, const NKikimrSchemeOp::TTableDescription& descr, ui32 shadowTid); // for create
     TUserTable(const TUserTable& table, const NKikimrSchemeOp::TTableDescription& descr); // for alter
 
-    void ApplyCreate(NTabletFlatExecutor::TTransactionContext& txc, const TString& tableName,
+    void ApplyCreate(NTabletFlatExecutor::TTransactionContext& txc, const TString& tableName, 
                      const NKikimrSchemeOp::TPartitionConfig& partConfig) const;
-    void ApplyCreateShadow(NTabletFlatExecutor::TTransactionContext& txc, const TString& tableName,
+    void ApplyCreateShadow(NTabletFlatExecutor::TTransactionContext& txc, const TString& tableName, 
                      const NKikimrSchemeOp::TPartitionConfig& partConfig) const;
-    void ApplyAlter(NTabletFlatExecutor::TTransactionContext& txc, const TUserTable& oldTable,
+    void ApplyAlter(NTabletFlatExecutor::TTransactionContext& txc, const TUserTable& oldTable, 
                     const NKikimrSchemeOp::TTableDescription& alter, TString& strError);
-    void ApplyDefaults(NTabletFlatExecutor::TTransactionContext& txc) const;
+    void ApplyDefaults(NTabletFlatExecutor::TTransactionContext& txc) const; 
 
     TTableRange GetTableRange() const { return Range.ToTableRange(); }
     const TString& GetSchema() const { return Schema; }
@@ -409,7 +409,7 @@ struct TUserTable : public TThrRefBase {
     bool HasCdcStreams() const;
 
 private:
-    void DoApplyCreate(NTabletFlatExecutor::TTransactionContext& txc, const TString& tableName, bool shadow,
+    void DoApplyCreate(NTabletFlatExecutor::TTransactionContext& txc, const TString& tableName, bool shadow, 
             const NKikimrSchemeOp::TPartitionConfig& partConfig) const;
 
 private:

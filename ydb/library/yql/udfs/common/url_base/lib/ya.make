@@ -6,10 +6,10 @@ YQL_ABI_VERSION(
     0
 )
 
-OWNER(
-    g:yql
-    g:yql_ydb_core
-)
+OWNER( 
+    g:yql 
+    g:yql_ydb_core 
+) 
 
 SRCS(
     url_base_udf.cpp
@@ -19,12 +19,12 @@ SRCS(
 
 PEERDIR(
     library/cpp/charset
-    library/cpp/string_utils/quote
-    library/cpp/string_utils/url
+    library/cpp/string_utils/quote 
+    library/cpp/string_utils/url 
     library/cpp/tld
     library/cpp/unicode/punycode
     library/cpp/uri
-    ydb/library/yql/public/udf
+    ydb/library/yql/public/udf 
 )
 
 END()

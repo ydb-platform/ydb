@@ -1,7 +1,7 @@
 PY23_LIBRARY()
 
-OWNER(g:kikimr)
-
+OWNER(g:kikimr) 
+ 
 PY_SRCS(
     common/__init__.py
     common/yatest_common.py
@@ -82,20 +82,20 @@ IF (NOT PYTHON3)
 ENDIF()
 
 PEERDIR(
-    contrib/python/PyHamcrest
-    contrib/python/PyYAML
-    contrib/python/cryptography
-    contrib/python/protobuf
-    contrib/python/pytest
-    contrib/python/six
+    contrib/python/PyHamcrest 
+    contrib/python/PyYAML 
+    contrib/python/cryptography 
+    contrib/python/protobuf 
+    contrib/python/pytest 
+    contrib/python/six 
     ydb/public/sdk/python/ydb
-    library/python/resource
+    library/python/resource 
     library/python/svn_version
     library/python/testing/yatest_common
-    ydb/core/protos
-    ydb/public/api/grpc
-    ydb/public/api/grpc/draft
-    ydb/public/api/protos
+    ydb/core/protos 
+    ydb/public/api/grpc 
+    ydb/public/api/grpc/draft 
+    ydb/public/api/protos 
     ydb/tests/library/sqs
 )
 

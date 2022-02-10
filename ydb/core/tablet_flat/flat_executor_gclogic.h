@@ -4,8 +4,8 @@
 #include "flat_exec_commit.h"
 #include <util/generic/vector.h>
 #include <util/generic/set.h>
-#include <ydb/core/base/blobstorage.h>
-#include <ydb/core/tablet_flat/flat_executor.pb.h>
+#include <ydb/core/base/blobstorage.h> 
+#include <ydb/core/tablet_flat/flat_executor.pb.h> 
 
 namespace NKikimr {
 namespace NTabletFlatExecutor {
@@ -37,7 +37,7 @@ struct TGCLogEntry {
 
 class TExecutorGCLogic {
 public:
-    TExecutorGCLogic(TIntrusiveConstPtr<TTabletStorageInfo>, TAutoPtr<NPageCollection::TSteppedCookieAllocator>);
+    TExecutorGCLogic(TIntrusiveConstPtr<TTabletStorageInfo>, TAutoPtr<NPageCollection::TSteppedCookieAllocator>); 
     void WriteToLog(TLogCommit &logEntry);
     TGCLogEntry SnapshotLog(ui32 step);
     void SnapToLog(NKikimrExecutorFlat::TLogSnapshot &logSnapshot, ui32 step);
@@ -75,9 +75,9 @@ public:
     TIntrospection IntrospectStateSize() const;
 protected:
     const TIntrusiveConstPtr<TTabletStorageInfo> TabletStorageInfo;
-    const TAutoPtr<NPageCollection::TSteppedCookieAllocator> Cookies;
+    const TAutoPtr<NPageCollection::TSteppedCookieAllocator> Cookies; 
     const ui32 Generation;
-    NPageCollection::TSlicer Slicer;
+    NPageCollection::TSlicer Slicer; 
 
     struct TChannelInfo {
         TMap<TGCTime, TGCBlobDelta> CommittedDelta; // we don't really need per-step map, what we really need is distinction b/w sent and not-yet-sent idsets

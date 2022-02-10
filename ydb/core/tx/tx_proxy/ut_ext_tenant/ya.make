@@ -1,9 +1,9 @@
-UNITTEST_FOR(ydb/core/tx/tx_proxy)
+UNITTEST_FOR(ydb/core/tx/tx_proxy) 
 
-OWNER(
-    svc
-    g:kikimr
-)
+OWNER( 
+    svc 
+    g:kikimr 
+) 
 
 FORK_SUBTESTS()
 
@@ -20,12 +20,12 @@ PEERDIR(
     library/cpp/getopt
     library/cpp/svnversion
     library/cpp/testing/unittest
-    ydb/core/testlib
-    ydb/core/tx
-    ydb/library/yql/public/udf/service/exception_policy
+    ydb/core/testlib 
+    ydb/core/tx 
+    ydb/library/yql/public/udf/service/exception_policy 
 )
 
-YQL_LAST_ABI_VERSION()
+YQL_LAST_ABI_VERSION() 
 
 SRCS(
     proxy_ext_tenant_ut.cpp

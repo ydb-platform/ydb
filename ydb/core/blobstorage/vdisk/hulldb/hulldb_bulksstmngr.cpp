@@ -1,13 +1,13 @@
-#include "hulldb_bulksstmngr.h"
-#include "hulldb_bulksstloaded.h"
-#include <ydb/core/blobstorage/vdisk/hullop/blobstorage_hullload.h>
+#include "hulldb_bulksstmngr.h" 
+#include "hulldb_bulksstloaded.h" 
+#include <ydb/core/blobstorage/vdisk/hullop/blobstorage_hullload.h> 
 
 namespace NKikimr {
 
     namespace NLoaderActor {
         using TLevelSegment = NKikimr::TLevelSegment<TKeyLogoBlob, TMemRecLogoBlob>;
         using TLevelSegmentPtr = TIntrusivePtr<TLevelSegment>;
-        using THullSegLoaded = NKikimr::THullSegLoaded<TLevelSegment>;
+        using THullSegLoaded = NKikimr::THullSegLoaded<TLevelSegment>; 
 
         class TLoaderActor : public TActorBootstrapped<TLoaderActor> {
             struct TBulkSegmentLoadQueueItem {
@@ -23,13 +23,13 @@ namespace NKikimr {
                 }
             };
 
-            TVDiskContextPtr VCtx;
-            TPDiskCtxPtr PDiskCtx;
+            TVDiskContextPtr VCtx; 
+            TPDiskCtxPtr PDiskCtx; 
             const TActorId LocalRecoveryActorId;
             TQueue<TBulkSegmentLoadQueueItem> BulkSegmentLoadQueue;
             THashMap<TActorId, TBulkSegmentLoadQueueItem> BulkSegmentLoadInFlight;
             TVector<TLevelSegmentPtr> Segments;
-            TActiveActors ActiveActors;
+            TActiveActors ActiveActors; 
 
         public:
             static constexpr auto ActorActivityType() {
@@ -37,13 +37,13 @@ namespace NKikimr {
             }
 
             TLoaderActor(TVDiskContextPtr &&vctx, TPDiskCtxPtr &&pdiskCtx, const TActorId& localRecoveryActorId)
-                : VCtx(std::move(vctx))
-                , PDiskCtx(std::move(pdiskCtx))
+                : VCtx(std::move(vctx)) 
+                , PDiskCtx(std::move(pdiskCtx)) 
                 , LocalRecoveryActorId(localRecoveryActorId)
             {}
 
             void AddQueueItem(const TBulkFormedSstInfo& seg) {
-                TLevelSegmentPtr segment = new TLevelSegment(VCtx, seg.EntryPoint);
+                TLevelSegmentPtr segment = new TLevelSegment(VCtx, seg.EntryPoint); 
                 BulkSegmentLoadQueue.emplace(segment, seg.FirstBlobLsn, seg.LastBlobLsn);
             }
 
@@ -59,9 +59,9 @@ namespace NKikimr {
                 while (!BulkSegmentLoadQueue.empty() && BulkSegmentLoadInFlight.size() < 3) {
                     TBulkSegmentLoadQueueItem& item = BulkSegmentLoadQueue.front();
                     auto loader = std::make_unique<TLevelSegmentLoader<TKeyLogoBlob, TMemRecLogoBlob>>(VCtx,
-                            PDiskCtx, item.Segment.Get(), ctx.SelfID, "BulkSegsLoader");
+                            PDiskCtx, item.Segment.Get(), ctx.SelfID, "BulkSegsLoader"); 
                     TActorId loaderId = ctx.ExecutorThread.RegisterActor(loader.release());
-                    ActiveActors.Insert(loaderId);
+                    ActiveActors.Insert(loaderId); 
                     BulkSegmentLoadInFlight.emplace(loaderId, std::move(item));
                     BulkSegmentLoadQueue.pop();
                 }
@@ -71,7 +71,7 @@ namespace NKikimr {
             }
 
             void Handle(THullSegLoaded::TPtr& ev, const TActorContext& ctx) {
-                ActiveActors.Erase(ev->Sender);
+                ActiveActors.Erase(ev->Sender); 
                 auto i = BulkSegmentLoadInFlight.find(ev->Sender);
                 Y_VERIFY(i != BulkSegmentLoadInFlight.end());
                 TBulkSegmentLoadQueueItem& item = i->second;
@@ -99,12 +99,12 @@ namespace NKikimr {
                 Die(ctx);
             }
 
-            void HandlePoison(TEvents::TEvPoisonPill::TPtr &ev, const TActorContext &ctx) {
-                Y_UNUSED(ev);
-                ActiveActors.KillAndClear(ctx);
-                Die(ctx);
-            }
-
+            void HandlePoison(TEvents::TEvPoisonPill::TPtr &ev, const TActorContext &ctx) { 
+                Y_UNUSED(ev); 
+                ActiveActors.KillAndClear(ctx); 
+                Die(ctx); 
+            } 
+ 
             STRICT_STFUNC(StateFunc,
                 HFunc(THullSegLoaded, Handle)
                 HFunc(TEvents::TEvPoisonPill, HandlePoison)
@@ -136,20 +136,20 @@ namespace NKikimr {
     }
 
     void TBulkFormedSstInfoSet::AddBulkFormedSst(ui64 firstLsn, ui64 lastLsn, const TDiskPart& entryPoint) {
-        Y_VERIFY(firstLsn && lastLsn && !entryPoint.Empty(),
-            "firstLsn# %" PRIu64 " lastLsn# %" PRIu64 " entryPoint# %s",
-            firstLsn, lastLsn, entryPoint.ToString().data());
+        Y_VERIFY(firstLsn && lastLsn && !entryPoint.Empty(), 
+            "firstLsn# %" PRIu64 " lastLsn# %" PRIu64 " entryPoint# %s", 
+            firstLsn, lastLsn, entryPoint.ToString().data()); 
         // keep sorted order while inserting new item
         const auto it = std::lower_bound(BulkFormedSsts.begin(), BulkFormedSsts.end(), entryPoint);
         BulkFormedSsts.emplace(it, firstLsn, lastLsn, entryPoint);
     }
 
-    IActor *TBulkFormedSstInfoSet::CreateLoaderActor(TVDiskContextPtr vctx,
-            TPDiskCtxPtr pdiskCtx,
-            ui64 syncLogMaxLsnStored,
+    IActor *TBulkFormedSstInfoSet::CreateLoaderActor(TVDiskContextPtr vctx, 
+            TPDiskCtxPtr pdiskCtx, 
+            ui64 syncLogMaxLsnStored, 
             const TActorId& localRecoveryActorId) {
         auto loader = std::make_unique<NLoaderActor::TLoaderActor>(std::move(vctx), std::move(pdiskCtx),
-                localRecoveryActorId);
+                localRecoveryActorId); 
 
         for (const TBulkFormedSstInfo& seg : BulkFormedSsts) {
             // ignore segments which are not needed to recover SyncLog -- their LSNs are obsolete
@@ -179,16 +179,16 @@ namespace NKikimr {
         return pb.ParseFromArray(begin, end - begin);
     }
 
-    const TBulkFormedSstInfo& TBulkFormedSstInfoSet::FindIntactBulkFormedSst(const TDiskPart& entryPoint) const {
-        return FindIntactBulkFormedSstPrivate(entryPoint);
-    }
-
+    const TBulkFormedSstInfo& TBulkFormedSstInfoSet::FindIntactBulkFormedSst(const TDiskPart& entryPoint) const { 
+        return FindIntactBulkFormedSstPrivate(entryPoint); 
+    } 
+ 
     TBulkFormedSstInfo& TBulkFormedSstInfoSet::FindIntactBulkFormedSst(const TDiskPart& entryPoint) {
-        return const_cast<TBulkFormedSstInfo&>(
-            static_cast<const TBulkFormedSstInfoSet&>(*this).FindIntactBulkFormedSstPrivate(entryPoint));
-    }
-
-    const TBulkFormedSstInfo& TBulkFormedSstInfoSet::FindIntactBulkFormedSstPrivate(const TDiskPart& entryPoint) const {
+        return const_cast<TBulkFormedSstInfo&>( 
+            static_cast<const TBulkFormedSstInfoSet&>(*this).FindIntactBulkFormedSstPrivate(entryPoint)); 
+    } 
+ 
+    const TBulkFormedSstInfo& TBulkFormedSstInfoSet::FindIntactBulkFormedSstPrivate(const TDiskPart& entryPoint) const { 
         for (auto it = std::lower_bound(BulkFormedSsts.begin(), BulkFormedSsts.end(), entryPoint);
                 it != BulkFormedSsts.end() && it->EntryPoint == entryPoint; ++it) {
             if (!it->RemovedFromIndex) {

@@ -6,20 +6,20 @@
 #include <library/cpp/grpc/server/grpc_request_base.h>
 #include <library/cpp/string_utils/quote/quote.h>
 
-#include <ydb/public/api/protos/ydb_issue_message.pb.h>
-#include <ydb/public/api/protos/ydb_status_codes.pb.h>
-#include <ydb/public/api/protos/ydb_operation.pb.h>
-#include <ydb/public/api/protos/ydb_common.pb.h>
+#include <ydb/public/api/protos/ydb_issue_message.pb.h> 
+#include <ydb/public/api/protos/ydb_status_codes.pb.h> 
+#include <ydb/public/api/protos/ydb_operation.pb.h> 
+#include <ydb/public/api/protos/ydb_common.pb.h> 
 
-#include <ydb/public/sdk/cpp/client/resources/ydb_resources.h>
+#include <ydb/public/sdk/cpp/client/resources/ydb_resources.h> 
 
 #include <ydb/library/yql/public/issue/yql_issue.h>
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 #include <ydb/library/yql/public/issue/yql_issue_manager.h>
 
-#include <ydb/core/grpc_streaming/grpc_streaming.h>
-#include <ydb/core/tx/scheme_board/events.h>
-#include <ydb/core/base/events.h>
+#include <ydb/core/grpc_streaming/grpc_streaming.h> 
+#include <ydb/core/tx/scheme_board/events.h> 
+#include <ydb/core/base/events.h> 
 
 namespace NKikimrConfig {
 class TAppConfig;

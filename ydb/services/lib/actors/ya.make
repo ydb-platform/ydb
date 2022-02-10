@@ -7,15 +7,15 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/grpc/server
-    ydb/core/grpc_services
-    ydb/core/mind
-    ydb/library/persqueue/obfuscate
-    ydb/library/persqueue/topic_parser
-    ydb/public/api/grpc
-    ydb/public/api/grpc/draft
-    ydb/public/lib/jwt
-    ydb/public/lib/operation_id
+    library/cpp/grpc/server 
+    ydb/core/grpc_services 
+    ydb/core/mind 
+    ydb/library/persqueue/obfuscate 
+    ydb/library/persqueue/topic_parser 
+    ydb/public/api/grpc 
+    ydb/public/api/grpc/draft 
+    ydb/public/lib/jwt 
+    ydb/public/lib/operation_id 
 )
 
 END()

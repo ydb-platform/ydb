@@ -1,11 +1,11 @@
 #include "yql_kikimr_provider_impl.h"
 
 #include <ydb/library/yql/providers/common/proto/gateways_config.pb.h>
-#include <ydb/core/base/path.h>
+#include <ydb/core/base/path.h> 
 #include <ydb/library/yql/providers/result/provider/yql_result_provider.h>
 #include <ydb/library/yql/providers/common/schema/expr/yql_expr_schema.h>
 
-#include <ydb/public/lib/scheme_types/scheme_type_id.h>
+#include <ydb/public/lib/scheme_types/scheme_type_id.h> 
 
 namespace NYql {
 

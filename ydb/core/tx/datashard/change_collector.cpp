@@ -6,7 +6,7 @@
 #include <util/generic/vector.h>
 
 namespace NKikimr {
-namespace NDataShard {
+namespace NDataShard { 
 
 using namespace NMiniKQL;
 
@@ -38,7 +38,7 @@ public:
         }
     }
 
-    bool Collect(const TTableId& tableId, NTable::ERowOp rop,
+    bool Collect(const TTableId& tableId, NTable::ERowOp rop, 
         TArrayRef<const TRawTypeValue> key, TArrayRef<const NTable::TUpdateOp> updates) override
     {
         for (auto& collector : Underlying) {
@@ -106,5 +106,5 @@ IChangeCollector* CreateChangeCollector(TDataShard& dataShard, NTable::TDatabase
     return CreateChangeCollector(dataShard, db, tableInfo, isImmediateTx);
 }
 
-} // NDataShard
+} // NDataShard 
 } // NKikimr

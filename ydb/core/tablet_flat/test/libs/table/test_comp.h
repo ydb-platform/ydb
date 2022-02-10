@@ -3,10 +3,10 @@
 #include "test_part.h"
 #include "test_writer.h"
 
-#include <ydb/core/tablet_flat/util_basics.h>
-#include <ydb/core/tablet_flat/flat_table_subset.h>
-#include <ydb/core/tablet_flat/flat_scan_feed.h>
-#include <ydb/core/tablet_flat/test/libs/rows/layout.h>
+#include <ydb/core/tablet_flat/util_basics.h> 
+#include <ydb/core/tablet_flat/flat_table_subset.h> 
+#include <ydb/core/tablet_flat/flat_scan_feed.h> 
+#include <ydb/core/tablet_flat/test/libs/rows/layout.h> 
 
 namespace NKikimr {
 namespace NTable {
@@ -47,9 +47,9 @@ namespace NTest {
 
         }
 
-        TPartEggs Do(TIntrusiveConstPtr<TMemTable> table)
+        TPartEggs Do(TIntrusiveConstPtr<TMemTable> table) 
         {
-            return Do(TSubset(TEpoch::Zero(), table->Scheme, { TMemTableSnapshot{ table, table->Immediate() } }));
+            return Do(TSubset(TEpoch::Zero(), table->Scheme, { TMemTableSnapshot{ table, table->Immediate() } })); 
         }
 
         TPartEggs Do(const TPartEggs &eggs)
@@ -59,12 +59,12 @@ namespace NTest {
 
         TPartEggs Do(TIntrusiveConstPtr<TRowScheme> scheme, TVector<const TPartEggs*> eggs)
         {
-            TVector<TPartView> partView;
+            TVector<TPartView> partView; 
 
             for (auto &one: eggs) {
                 for (const auto &part : one->Parts) {
                     Y_VERIFY(part->Slices, "Missing part slices");
-                    partView.push_back({ part, nullptr, part->Slices });
+                    partView.push_back({ part, nullptr, part->Slices }); 
                 }
             }
 

@@ -7,8 +7,8 @@ option java_outer_classname = "YandexQueryInternalProtos";
 
 import "ydb/library/yql/providers/dq/api/protos/service.proto";
 import "ydb/library/yql/dq/proto/dq_tasks.proto";
-import "ydb/public/api/protos/yq.proto";
-import "ydb/public/api/protos/draft/yq_private.proto";
+import "ydb/public/api/protos/yq.proto"; 
+import "ydb/public/api/protos/draft/yq_private.proto"; 
 
 message Consumer {
     string name = 1;

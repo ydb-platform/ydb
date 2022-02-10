@@ -5,7 +5,7 @@
 #include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
 #include <ydb/library/yql/core/yql_type_helpers.h>
 #include <ydb/library/yql/core/yql_join.h>
-#include <ydb/library/yql/utils/log/profile.h>
+#include <ydb/library/yql/utils/log/profile.h> 
 
 #include <util/generic/scope.h>
 #include <util/generic/maybe.h>

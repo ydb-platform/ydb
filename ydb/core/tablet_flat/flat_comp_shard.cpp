@@ -4,8 +4,8 @@
 #include "flat_stat_part.h"
 #include "util_fmt_cell.h"
 
-#include <ydb/core/tablet_flat/protos/flat_table_shard.pb.h>
-#include <ydb/core/util/pb.h>
+#include <ydb/core/tablet_flat/protos/flat_table_shard.pb.h> 
+#include <ydb/core/util/pb.h> 
 
 #include <library/cpp/monlib/service/pages/templates.h>
 #include <util/generic/cast.h>
@@ -58,9 +58,9 @@ namespace NCompShard {
         };
 
         TPartView MakePartView(TIntrusiveConstPtr<TPart> part, TIntrusiveConstPtr<TSlices> slices) noexcept {
-            TPartView partView{ std::move(part), nullptr, std::move(slices) };
-            partView.Screen = partView.Slices->ToScreen(); // TODO: remove screen from TPartView
-            return partView;
+            TPartView partView{ std::move(part), nullptr, std::move(slices) }; 
+            partView.Screen = partView.Slices->ToScreen(); // TODO: remove screen from TPartView 
+            return partView; 
         }
 
     }
@@ -928,7 +928,7 @@ namespace NCompShard {
 
         auto parts = Backend->TableParts(Table);
         std::sort(parts.begin(), parts.end(),
-            [](const TPartView& a, const TPartView& b) -> bool {
+            [](const TPartView& a, const TPartView& b) -> bool { 
                 if (a->Epoch != b->Epoch) {
                     return a->Epoch < b->Epoch;
                 }
@@ -936,23 +936,23 @@ namespace NCompShard {
             });
 
         while (parts) {
-            const auto& partView = parts.back();
-            TPartDataSizeHelper helper(partView.Part.Get());
+            const auto& partView = parts.back(); 
+            TPartDataSizeHelper helper(partView.Part.Get()); 
             ui64 fullSize = helper.CalcSize(0, Max<TRowId>());
             if (fullSize >= Policy->ShardPolicy.GetMinSliceSize()) {
                 break;
             }
-            AllBackingSize += partView.Part->BackingSize();
+            AllBackingSize += partView.Part->BackingSize(); 
             NurseryDataSize += fullSize;
             auto& nurseryItem = Nursery.emplace_back();
-            nurseryItem.PartView = partView;
+            nurseryItem.PartView = partView; 
             nurseryItem.DataSize = fullSize;
             parts.pop_back();
         }
 
-        for (const auto& partView : parts) {
-            Y_VERIFY(partView.Slices && !partView.Slices->empty());
-            EnsureGlobalPart(partView.Part, partView.Slices);
+        for (const auto& partView : parts) { 
+            Y_VERIFY(partView.Slices && !partView.Slices->empty()); 
+            EnsureGlobalPart(partView.Part, partView.Slices); 
         }
 
         AddParts(std::move(parts));
@@ -1047,7 +1047,7 @@ namespace NCompShard {
                     if (next.DataSize > expectedSize && !takeAll) {
                         break;
                     }
-                    params->Parts.push_back(next.PartView);
+                    params->Parts.push_back(next.PartView); 
                     expectedSize += next.DataSize;
                     ++NurseryTaken;
                 }
@@ -1064,7 +1064,7 @@ namespace NCompShard {
             TVector<const TBounds*> allBounds;
             for (size_t pos = NurseryTaken; pos < Nursery.size(); ++pos) {
                 auto& item = Nursery[pos];
-                for (const auto& slice : *item.PartView.Slices) {
+                for (const auto& slice : *item.PartView.Slices) { 
                     allBounds.push_back(&slice);
                 }
             }
@@ -1134,11 +1134,11 @@ namespace NCompShard {
             Y_VERIFY(!params->Original);
             Y_VERIFY(!params->Reused);
 
-            for (const auto& partView : params->Parts) {
+            for (const auto& partView : params->Parts) { 
                 Y_VERIFY(NurseryTaken > 0);
                 auto& item = Nursery.front();
-                Y_VERIFY(partView.Part == item.PartView.Part);
-                AllBackingSize -= partView.Part->BackingSize();
+                Y_VERIFY(partView.Part == item.PartView.Part); 
+                AllBackingSize -= partView.Part->BackingSize(); 
                 NurseryDataSize -= item.DataSize;
                 Nursery.pop_front();
                 --NurseryTaken;
@@ -1151,18 +1151,18 @@ namespace NCompShard {
         THashSet<TGlobalPart*> updateGarbageQueue;
 
         // Remove compacted slices from global parts
-        for (const auto& partView : params->Parts) {
-            auto label = partView->Label;
+        for (const auto& partView : params->Parts) { 
+            auto label = partView->Label; 
             auto* allInfo = AllParts.FindPtr(label);
             Y_VERIFY(allInfo, "Compacted part %s is not registered", label.ToString().c_str());
 
-            allInfo->Slices = TSlices::Subtract(allInfo->Slices, partView.Slices);
+            allInfo->Slices = TSlices::Subtract(allInfo->Slices, partView.Slices); 
             updateGarbageQueue.emplace(allInfo);
         }
 
         // Remove originally chosen slices from our state
-        for (auto& partView : params->Original) {
-            auto label = partView->Label;
+        for (auto& partView : params->Original) { 
+            auto label = partView->Label; 
             auto* allInfo = AllParts.FindPtr(label);
             Y_VERIFY(allInfo, "Compacted part %s is not registered", label.ToString().c_str());
 
@@ -1175,7 +1175,7 @@ namespace NCompShard {
                 auto* partShard = *readPos;
                 auto* info = partShard->Parts.FindPtr(label);
                 Y_VERIFY(info, "Compacted part %s cannot be found in a shard", label.ToString().c_str());
-                for (const auto& input : *partView.Slices) {
+                for (const auto& input : *partView.Slices) { 
                     auto pos = info->Slices.find(input);
                     if (pos != info->Slices.end()) {
                         auto& item = pos->second;
@@ -1203,7 +1203,7 @@ namespace NCompShard {
                 allInfo->Shards.erase(writePos, allInfo->Shards.end());
             }
 
-            Y_VERIFY(removedCount == partView.Slices->size(), "Not all slices have been removed");
+            Y_VERIFY(removedCount == partView.Slices->size(), "Not all slices have been removed"); 
 
             if (allInfo->Shards.empty() && allInfo->SplitBlocks == 0 && allInfo->Slices->empty()) {
                 updateGarbageQueue.erase(allInfo);
@@ -1217,16 +1217,16 @@ namespace NCompShard {
             UpdateGarbageStats(allInfo);
         }
 
-        TVector<TPartView> parts;
+        TVector<TPartView> parts; 
 
         auto flushNursery = [this, &parts]() {
             while (Nursery) {
                 // Go from oldest to newest
                 auto& item = Nursery.back();
-                auto& partView = item.PartView;
-                AllBackingSize -= partView.Part->BackingSize();
+                auto& partView = item.PartView; 
+                AllBackingSize -= partView.Part->BackingSize(); 
                 NurseryDataSize -= item.DataSize;
-                parts.push_back(std::move(partView));
+                parts.push_back(std::move(partView)); 
                 Nursery.pop_back();
             }
         };
@@ -1237,40 +1237,40 @@ namespace NCompShard {
 
         if (processNursery) {
             // We expect parts to be from the same epoch and in correct order
-            for (auto& partView : result->Parts) {
-                TPartDataSizeHelper helper(partView.Part.Get());
+            for (auto& partView : result->Parts) { 
+                TPartDataSizeHelper helper(partView.Part.Get()); 
                 ui64 fullSize = helper.CalcSize(0, Max<TRowId>());
                 if (fullSize >= Policy->ShardPolicy.GetMinSliceSize()) {
                     flushNursery();
-                    parts.push_back(std::move(partView));
+                    parts.push_back(std::move(partView)); 
                     continue;
                 }
                 // Add new item to front (it's the newest)
-                AllBackingSize += partView.Part->BackingSize();
+                AllBackingSize += partView.Part->BackingSize(); 
                 NurseryDataSize += fullSize;
                 auto& nurseryItem = Nursery.emplace_front();
-                nurseryItem.PartView = std::move(partView);
+                nurseryItem.PartView = std::move(partView); 
                 nurseryItem.DataSize = fullSize;
             }
         } else {
             parts.reserve(parts.size() + result->Parts.size());
-            for (auto& partView : result->Parts) {
-                parts.push_back(std::move(partView));
+            for (auto& partView : result->Parts) { 
+                parts.push_back(std::move(partView)); 
             }
         }
         result->Parts.clear();
 
         // Register all "new" parts in the global state
-        for (const auto& partView : parts) {
-            Y_VERIFY(partView.Slices && !partView.Slices->empty());
-            EnsureGlobalPart(partView.Part, partView.Slices);
+        for (const auto& partView : parts) { 
+            Y_VERIFY(partView.Slices && !partView.Slices->empty()); 
+            EnsureGlobalPart(partView.Part, partView.Slices); 
         }
 
         // Add any reused slices back to our state
         if (params->Reused) {
             parts.reserve(parts.size() + params->Reused.size());
-            for (auto& partView : params->Reused) {
-                parts.emplace_back(std::move(partView));
+            for (auto& partView : params->Reused) { 
+                parts.emplace_back(std::move(partView)); 
             }
             params->Reused.clear();
         }
@@ -1280,13 +1280,13 @@ namespace NCompShard {
         return ApplyChanges();
     }
 
-    void TShardedCompactionStrategy::PartMerged(TPartView part, ui32 level) {
+    void TShardedCompactionStrategy::PartMerged(TPartView part, ui32 level) { 
         Y_VERIFY(level == 255, "Unexpected level of the merged part");
 
         Y_VERIFY(part.Slices && !part.Slices->empty());
         EnsureGlobalPart(part.Part, part.Slices);
 
-        TVector<TPartView> parts(Reserve(1));
+        TVector<TPartView> parts(Reserve(1)); 
         parts.emplace_back(std::move(part));
         AddParts(std::move(parts));
     }
@@ -1324,7 +1324,7 @@ namespace NCompShard {
         TIntrusiveList<TState> needSort;
         THashMap<TLogoBlobID, TState> byLabel;
 
-        TVector<TPartView> parts(Reserve(SliceSplitResults.size()));
+        TVector<TPartView> parts(Reserve(SliceSplitResults.size())); 
 
         for (auto& result : SliceSplitResults) {
             Y_VERIFY(result.Part, "Unexpected result without a part");
@@ -1349,8 +1349,8 @@ namespace NCompShard {
             Y_VERIFY(allInfo, "Cannot find a globally registered part %s", result.Part->Label.ToString().c_str());
             allInfo->SplitBlocks--;
 
-            // Construct a fake TPartView so we may reuse AddParts method
-            parts.emplace_back(TPartView{ std::move(result.Part), nullptr, new TSlices(std::move(result.NewSlices)) });
+            // Construct a fake TPartView so we may reuse AddParts method 
+            parts.emplace_back(TPartView{ std::move(result.Part), nullptr, new TSlices(std::move(result.NewSlices)) }); 
 
             // All affected shards are no longer blocked by this op
             for (auto* affectedShard : result.Shards) {
@@ -1442,8 +1442,8 @@ namespace NCompShard {
                             auto end = std::remove(allInfo->Shards.begin(), allInfo->Shards.end(), shard);
                             allInfo->Shards.erase(end, allInfo->Shards.end());
 
-                            // Construct a fake TPartView so we may reuse AddParts method
-                            parts.emplace_back(TPartView{std::move(part), nullptr, new TSlices(std::move(slices))});
+                            // Construct a fake TPartView so we may reuse AddParts method 
+                            parts.emplace_back(TPartView{std::move(part), nullptr, new TSlices(std::move(slices))}); 
                         }
 
                         left.Release()->LinkBefore(shard);
@@ -1595,8 +1595,8 @@ namespace NCompShard {
                                 auto end = std::remove(allInfo->Shards.begin(), allInfo->Shards.end(), shard);
                                 allInfo->Shards.erase(end, allInfo->Shards.end());
 
-                                // Construct a fake TPartView so we may reuse AddParts method
-                                parts.emplace_back(TPartView{std::move(part), nullptr, new TSlices(std::move(slices))});
+                                // Construct a fake TPartView so we may reuse AddParts method 
+                                parts.emplace_back(TPartView{std::move(part), nullptr, new TSlices(std::move(slices))}); 
                             }
 
                             if (shard != first) {
@@ -1691,7 +1691,7 @@ namespace NCompShard {
 
             PRE() {
                 for (const auto& item : Nursery) {
-                    const auto* part = item.PartView.Part.Get();
+                    const auto* part = item.PartView.Part.Get(); 
                     const auto& label = part->Label;
                     out << "Genstep: " << label.Generation() << ":" << label.Step();
                     out << " epoch " << part->Epoch;
@@ -1751,7 +1751,7 @@ namespace NCompShard {
         }
     }
 
-    void TShardedCompactionStrategy::AddParts(TVector<TPartView> parts) {
+    void TShardedCompactionStrategy::AddParts(TVector<TPartView> parts) { 
         // Types and default values for current table keys
         const auto& nulls = *TableInfo.RowScheme->Keys;
 
@@ -1875,22 +1875,22 @@ namespace NCompShard {
         };
 
         size_t slicesCount = 0;
-        for (auto& partView : parts) {
-            Y_VERIFY(!partView.Slices->empty(), "Attempt to add part without slices");
+        for (auto& partView : parts) { 
+            Y_VERIFY(!partView.Slices->empty(), "Attempt to add part without slices"); 
 
-            slicesCount += partView.Slices->size();
+            slicesCount += partView.Slices->size(); 
 
-            auto* allInfo = AllParts.FindPtr(partView->Label);
-            Y_VERIFY(allInfo, "Added part %s is not globally registered", partView->Label.ToString().c_str());
+            auto* allInfo = AllParts.FindPtr(partView->Label); 
+            Y_VERIFY(allInfo, "Added part %s is not globally registered", partView->Label.ToString().c_str()); 
         }
 
         // We may need to split slices over multiple shards
         if (Shards.Size() > 1) {
 
             TVector<TItem> queue(Reserve(slicesCount));
-            for (auto& partView : parts) {
-                for (const auto& slice : *partView.Slices) {
-                    queue.emplace_back(partView.Part, slice);
+            for (auto& partView : parts) { 
+                for (const auto& slice : *partView.Slices) { 
+                    queue.emplace_back(partView.Part, slice); 
                 }
             }
             std::sort(queue.begin(), queue.end(), cmpByFirstKey);
@@ -2028,19 +2028,19 @@ namespace NCompShard {
             auto* shard = Shards.Front();
 
             // Make sure new parts are sorted by epoch
-            std::sort(parts.begin(), parts.end(), [](const TPartView& a, const TPartView& b) -> bool {
+            std::sort(parts.begin(), parts.end(), [](const TPartView& a, const TPartView& b) -> bool { 
                 if (a->Epoch != b->Epoch) {
                     return a->Epoch < b->Epoch;
                 }
                 return a->Label < b->Label;
             });
 
-            for (auto& partView : parts) {
-                auto label = partView->Label;
+            for (auto& partView : parts) { 
+                auto label = partView->Label; 
 
-                TPendingState state(shard, EnsurePart(shard, std::move(partView.Part)), TableInfo.GarbageParts.contains(label));
+                TPendingState state(shard, EnsurePart(shard, std::move(partView.Part)), TableInfo.GarbageParts.contains(label)); 
 
-                for (const auto& slice : *partView.Slices) {
+                for (const auto& slice : *partView.Slices) { 
                     state.AddSlice(slice);
                 }
             }
@@ -2492,7 +2492,7 @@ namespace NCompShard {
             }
         }
 
-        // Now turn those inputs into TPartView structures
+        // Now turn those inputs into TPartView structures 
         for (auto& kv : inputs) {
             auto& input = kv.second;
             std::sort(input.Slices.begin(), input.Slices.end(), [](const TSlice& a, const TSlice& b) noexcept -> bool {
@@ -2539,10 +2539,10 @@ namespace NCompShard {
 
             // Create necessary records if there is anything to compact
             if (compacted && !compacted->empty()) {
-                params->Parts.emplace_back(MakePartView(input.Part, std::move(compacted)));
-                params->Original.emplace_back(MakePartView(input.Part, std::move(original)));
+                params->Parts.emplace_back(MakePartView(input.Part, std::move(compacted))); 
+                params->Original.emplace_back(MakePartView(input.Part, std::move(original))); 
                 if (reused && !reused->empty()) {
-                    params->Reused.emplace_back(MakePartView(input.Part, std::move(reused)));
+                    params->Reused.emplace_back(MakePartView(input.Part, std::move(reused))); 
                 }
             }
         }
@@ -2613,7 +2613,7 @@ namespace NCompShard {
 
         // Take all non-nursery parts into a new giant compaction
         for (auto& kv : AllParts) {
-            params->Parts.push_back(MakePartView(kv.second.Part, kv.second.Slices));
+            params->Parts.push_back(MakePartView(kv.second.Part, kv.second.Slices)); 
             params->Original.push_back(params->Parts.back());
         }
 

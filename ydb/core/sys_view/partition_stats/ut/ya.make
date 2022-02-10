@@ -1,4 +1,4 @@
-UNITTEST_FOR(ydb/core/sys_view/partition_stats)
+UNITTEST_FOR(ydb/core/sys_view/partition_stats) 
 
 OWNER(
     monster
@@ -6,17 +6,17 @@ OWNER(
 )
 
 FORK_SUBTESTS()
-
+ 
 SIZE(MEDIUM)
-
+ 
 TIMEOUT(600)
 
 PEERDIR(
     library/cpp/testing/unittest
-    ydb/core/testlib
+    ydb/core/testlib 
 )
 
-YQL_LAST_ABI_VERSION()
+YQL_LAST_ABI_VERSION() 
 
 SRCS(
     partition_stats_ut.cpp

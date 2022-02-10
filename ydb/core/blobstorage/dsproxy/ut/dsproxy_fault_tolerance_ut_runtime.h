@@ -2,20 +2,20 @@
 
 #include "defs.h"
 
-#include <ydb/core/base/appdata.h>
+#include <ydb/core/base/appdata.h> 
 #include <library/cpp/actors/core/executor_pool_basic.h>
 #include <library/cpp/actors/core/executor_pool_io.h>
 #include <library/cpp/actors/core/scheduler_basic.h>
-#include <ydb/core/scheme/scheme_type_registry.h>
+#include <ydb/core/scheme/scheme_type_registry.h> 
 #include <ydb/library/yql/minikql/mkql_function_registry.h>
 #include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
 #include <library/cpp/actors/protos/services_common.pb.h>
-#include <ydb/core/blobstorage/dsproxy/dsproxy_nodemon.h>
-#include <ydb/core/blobstorage/dsproxy/dsproxy.h>
-#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
-#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_iter.h>
-#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_sets.h>
-#include <ydb/core/blobstorage/ut_vdisk/lib/vdisk_mock.h>
+#include <ydb/core/blobstorage/dsproxy/dsproxy_nodemon.h> 
+#include <ydb/core/blobstorage/dsproxy/dsproxy.h> 
+#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h> 
+#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_iter.h> 
+#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_sets.h> 
+#include <ydb/core/blobstorage/ut_vdisk/lib/vdisk_mock.h> 
 #include <util/system/sanitizers.h>
 
 namespace NKikimr {
@@ -58,8 +58,8 @@ public:
         GroupInfo.Reset(new TBlobStorageGroupInfo(groupType, numVDisksPerFailDomain, numFailDomains, numRealms));
 
         for (const auto& vdisk : GroupInfo->GetVDisks()) {
-            auto vd = GroupInfo->GetVDiskId(vdisk.OrderNumber);
-            VDisks.emplace_back(vd, GroupInfo->GetActorId(vdisk.OrderNumber));
+            auto vd = GroupInfo->GetVDiskId(vdisk.OrderNumber); 
+            VDisks.emplace_back(vd, GroupInfo->GetActorId(vdisk.OrderNumber)); 
         }
 
         auto setup = MakeHolder<TActorSystemSetup>();
@@ -78,8 +78,8 @@ public:
 
         auto shared = MakeIntrusive<TVDiskMockSharedState>(GroupInfo);
         for (const auto& pair : VDisks) {
-            setup->LocalServices.emplace_back(pair.second,
-                        TActorSetupCmd(CreateVDiskMockActor(pair.first, shared, GroupInfo->PickTopology()),
+            setup->LocalServices.emplace_back(pair.second, 
+                        TActorSetupCmd(CreateVDiskMockActor(pair.first, shared, GroupInfo->PickTopology()), 
                         TMailboxType::Simple, 0));
         }
         TIntrusivePtr<TDsProxyNodeMon> nodeMon(new TDsProxyNodeMon(Counters, true));

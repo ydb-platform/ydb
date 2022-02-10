@@ -1,9 +1,9 @@
 LIBRARY()
 
-OWNER(
-    g:kikimr
-    g:yq
-)
+OWNER( 
+    g:kikimr 
+    g:yq 
+) 
 
 SRCS(
     grpc_service.cpp
@@ -13,10 +13,10 @@ SRCS(
 PEERDIR(
     library/cpp/grpc/server
     library/cpp/retry
-    ydb/core/grpc_services
-    ydb/core/grpc_services/base
-    ydb/library/protobuf_printer
-    ydb/public/api/grpc
+    ydb/core/grpc_services 
+    ydb/core/grpc_services/base 
+    ydb/library/protobuf_printer 
+    ydb/public/api/grpc 
 )
 
 END()

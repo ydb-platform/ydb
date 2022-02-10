@@ -1,19 +1,19 @@
 #include "datashard_txs.h"
 
 namespace NKikimr {
-namespace NDataShard {
+namespace NDataShard { 
 
 using namespace NTabletFlatExecutor;
 
 
-TDataShard::TTxMigrateSchemeShard::TTxMigrateSchemeShard(
-    TDataShard* ds,
+TDataShard::TTxMigrateSchemeShard::TTxMigrateSchemeShard( 
+    TDataShard* ds, 
     TEvDataShard::TEvMigrateSchemeShardRequest::TPtr ev)
     : TBase(ds)
     , Ev(std::move(ev))
 { }
 
-bool TDataShard::TTxMigrateSchemeShard::Execute(TTransactionContext& txc, const TActorContext& ctx) {
+bool TDataShard::TTxMigrateSchemeShard::Execute(TTransactionContext& txc, const TActorContext& ctx) { 
     using TResponse = NKikimrTxDataShard::TEvMigrateSchemeShardResponse;
 
     txc.DB.NoMoreReadsForTx();
@@ -60,7 +60,7 @@ bool TDataShard::TTxMigrateSchemeShard::Execute(TTransactionContext& txc, const 
     return true;
 }
 
-void TDataShard::TTxMigrateSchemeShard::Complete(const TActorContext& ctx) {
+void TDataShard::TTxMigrateSchemeShard::Complete(const TActorContext& ctx) { 
     Y_VERIFY(Reply);
 
     NTabletPipe::CloseAndForgetClient(Self->SelfId(), Self->DbStatsReportPipe);
@@ -69,5 +69,5 @@ void TDataShard::TTxMigrateSchemeShard::Complete(const TActorContext& ctx) {
 }
 
 
-}   // namespace NDataShard
+}   // namespace NDataShard 
 }   // namespace NKikimr

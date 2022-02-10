@@ -1,20 +1,20 @@
 OWNER(
     galaxycrab
-    g:kikimr
+    g:kikimr 
     g:sqs
 )
 
 UNITTEST()
 
 PEERDIR(
-    contrib/libs/yaml-cpp
-    ydb/core/mind/address_classification
-    ydb/core/testlib
-    ydb/core/ymq/actor
-    ydb/core/ymq/base
-    ydb/core/ymq/http
+    contrib/libs/yaml-cpp 
+    ydb/core/mind/address_classification 
+    ydb/core/testlib 
+    ydb/core/ymq/actor 
+    ydb/core/ymq/base 
+    ydb/core/ymq/http 
 )
-
+ 
 SRCS(
     attributes_md5_ut.cpp
     infly_ut.cpp

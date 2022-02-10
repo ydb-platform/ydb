@@ -1,21 +1,21 @@
 LIBRARY()
 
-OWNER(g:kikimr)
+OWNER(g:kikimr) 
 
 SRCS(
     kqp_node.cpp
 )
 
 PEERDIR(
-    library/cpp/actors/core
-    ydb/core/actorlib_impl
-    ydb/core/base
-    ydb/core/cms/console
-    ydb/core/kqp/common
-    ydb/core/kqp/counters
-    ydb/core/mind
-    ydb/core/protos
-    ydb/core/tablet
+    library/cpp/actors/core 
+    ydb/core/actorlib_impl 
+    ydb/core/base 
+    ydb/core/cms/console 
+    ydb/core/kqp/common 
+    ydb/core/kqp/counters 
+    ydb/core/mind 
+    ydb/core/protos 
+    ydb/core/tablet 
     ydb/library/yql/dq/actors/compute
 )
 

@@ -4,7 +4,7 @@
 #include "names.h"
 #include "logger.h"
 
-#include <ydb/core/tablet_flat/flat_row_state.h>
+#include <ydb/core/tablet_flat/flat_row_state.h> 
 #include <util/stream/format.h>
 #include <util/digest/murmur.h>
 #include <util/digest/city.h>
@@ -36,7 +36,7 @@ namespace NTest {
 
             if (Kind == ESponge::None) {
 
-            } else if (op != ERowOp::Upsert && op != ERowOp::Reset) {
+            } else if (op != ERowOp::Upsert && op != ERowOp::Reset) { 
                 Value += 1;
 
             } else if (const ui32 cols = row.Size()) {

@@ -578,9 +578,9 @@ public:
             Cerr << msg.Str();
         }
 
-        auto lsn = Lsn++;
+        auto lsn = Lsn++; 
         SendPDiskRequest(ctx, new NPDisk::TEvLog(PDiskParams->Owner, PDiskParams->OwnerRound, signature, cr, data,
-            TLsnSeg(lsn, lsn), info), [&] {
+            TLsnSeg(lsn, lsn), info), [&] { 
                 State.InFlight.insert(*info);
                 if (cr.FirstLsnToKeep) {
                     Y_VERIFY(cr.FirstLsnToKeep >= State.FirstLsnToKeep);
@@ -741,7 +741,7 @@ public:
 
         SendPDiskRequest(ctx, new NPDisk::TEvChunkWrite(PDiskParams->Owner, PDiskParams->OwnerRound, it->first,
                 offsetInBlocks * PDiskParams->AppendBlockSize, new NPDisk::TEvChunkWrite::TStrokaBackedUpParts(data),
-                cookie, true, NPriWrite::HullHugeAsyncBlob), [&] {
+                cookie, true, NPriWrite::HullHugeAsyncBlob), [&] { 
             State.WritesInFlight.push_back(TWriteRecord{it->first, offsetInBlocks, numBlocks, std::move(checksums),
                     cookie});
         });

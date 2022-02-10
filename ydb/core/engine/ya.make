@@ -21,13 +21,13 @@ PEERDIR(
     library/cpp/deprecated/enum_codegen
     library/cpp/random_provider
     library/cpp/time_provider
-    ydb/core/base
-    ydb/core/scheme
-    ydb/core/tablet
-    ydb/library/mkql_proto
-    ydb/library/mkql_proto/protos
-    ydb/library/mkql_proto/ut/helpers
-    ydb/public/api/protos
+    ydb/core/base 
+    ydb/core/scheme 
+    ydb/core/tablet 
+    ydb/library/mkql_proto 
+    ydb/library/mkql_proto/protos 
+    ydb/library/mkql_proto/ut/helpers 
+    ydb/public/api/protos 
     ydb/library/yql/minikql
     ydb/library/yql/minikql/comp_nodes
     ydb/library/yql/minikql/computation
@@ -37,11 +37,11 @@ PEERDIR(
 YQL_LAST_ABI_VERSION()
 
 END()
-
-RECURSE(
-    minikql
-)
-
-RECURSE_FOR_TESTS(
-    ut
-)
+ 
+RECURSE( 
+    minikql 
+) 
+ 
+RECURSE_FOR_TESTS( 
+    ut 
+) 

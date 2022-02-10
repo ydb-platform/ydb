@@ -1,9 +1,9 @@
 LIBRARY()
 
-OWNER(
-    ddoarn
+OWNER( 
+    ddoarn 
     g:kikimr
-)
+) 
 
 SRCS(
     defs.h
@@ -16,7 +16,7 @@ PEERDIR(
     library/cpp/deprecated/enum_codegen
     library/cpp/messagebus
     library/cpp/messagebus/protobuf
-    ydb/core/protos
+    ydb/core/protos 
 )
 
 END()

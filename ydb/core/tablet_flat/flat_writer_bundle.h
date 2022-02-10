@@ -13,7 +13,7 @@ namespace NWriter {
     class TBundle : public NTable::IPageWriter, protected ICone {
     public:
         struct TResult {
-            using TCache = TPrivatePageCache::TInfo;
+            using TCache = TPrivatePageCache::TInfo; 
 
             TVector<TIntrusivePtr<TCache>> PageCollections;
             TDeque<NTable::TScreen::THole> Growth;
@@ -26,7 +26,7 @@ namespace NWriter {
             , ExtraChannel(conf.ExtraChannel)
             , Banks(base, conf.Slots)
         {
-            Y_VERIFY(Groups.size() >= 1, "There must be at least one page collection group");
+            Y_VERIFY(Groups.size() >= 1, "There must be at least one page collection group"); 
 
             const auto none = NTable::NPage::ECache::None;
 
@@ -44,7 +44,7 @@ namespace NWriter {
             Y_VERIFY(!Blobs, "Bundle writer still has some blobs");
         }
 
-        TVector<NPageCollection::TGlob> GetBlobsToSave() noexcept
+        TVector<NPageCollection::TGlob> GetBlobsToSave() noexcept 
         {
             return std::exchange(Blobs, { });
         }
@@ -60,7 +60,7 @@ namespace NWriter {
 
         NPageCollection::TLargeGlobId WriteExtra(TArrayRef<const char> body) noexcept
         {
-            return Put(/* data cookieRange */ 1, ExtraChannel, body, Groups[0].Block);
+            return Put(/* data cookieRange */ 1, ExtraChannel, body, Groups[0].Block); 
         }
 
     private:
@@ -80,7 +80,7 @@ namespace NWriter {
             Blocks[0]->WriteInplace(page, body);
         }
 
-        NPageCollection::TGlobId WriteLarge(TString blob, ui64 ref) noexcept override
+        NPageCollection::TGlobId WriteLarge(TString blob, ui64 ref) noexcept override 
         {
             auto glob = Banks.Data.Do(BlobsChannel, blob.size());
 
@@ -96,35 +96,35 @@ namespace NWriter {
 
             for (auto num : xrange(Blocks.size())) {
                 if (auto cache = Blocks[num]->Finish()) {
-                    result.PageCollections.emplace_back(std::move(cache));
+                    result.PageCollections.emplace_back(std::move(cache)); 
                 } else if (num < Blocks.size() - 1) {
-                    Y_FAIL("Finish produced an empty main page collection");
+                    Y_FAIL("Finish produced an empty main page collection"); 
                 }
 
                 Y_VERIFY(!*Blocks[num], "Block writer has unexpected data");
             }
 
-            Y_VERIFY(result.PageCollections, "Finish produced no page collections");
+            Y_VERIFY(result.PageCollections, "Finish produced no page collections"); 
 
             result.Growth = Growth->Unwrap();
             result.Overlay = overlay;
         }
 
-        NPageCollection::TCookieAllocator& CookieRange(ui32 cookieRange) noexcept override
+        NPageCollection::TCookieAllocator& CookieRange(ui32 cookieRange) noexcept override 
         {
-            Y_VERIFY(cookieRange == 0 || cookieRange == 1, "Invalid cookieRange requested");
+            Y_VERIFY(cookieRange == 0 || cookieRange == 1, "Invalid cookieRange requested"); 
 
-            return cookieRange == 0 ? Banks.Meta : Banks.Data;
+            return cookieRange == 0 ? Banks.Meta : Banks.Data; 
         }
 
-        void Put(NPageCollection::TGlob&& glob) noexcept override
+        void Put(NPageCollection::TGlob&& glob) noexcept override 
         {
             Blobs.emplace_back(std::move(glob));
         }
 
-        NPageCollection::TLargeGlobId Put(ui32 cookieRange, ui8 channel, TArrayRef<const char> body, ui32 block) noexcept override
+        NPageCollection::TLargeGlobId Put(ui32 cookieRange, ui8 channel, TArrayRef<const char> body, ui32 block) noexcept override 
         {
-            const auto largeGlobId = CookieRange(cookieRange).Do(channel, body.size(), block);
+            const auto largeGlobId = CookieRange(cookieRange).Do(channel, body.size(), block); 
 
             size_t offset = 0;
             size_t left = body.size();
@@ -151,7 +151,7 @@ namespace NWriter {
         const ui8 BlobsChannel;
         const ui8 ExtraChannel;
         TBanks Banks;
-        TVector<NPageCollection::TGlob> Blobs;
+        TVector<NPageCollection::TGlob> Blobs; 
         TVector<THolder<TBlocks>> Blocks;
         TAutoPtr<NTable::TScreen::TCook> Growth;
         TVector<TResult> Results_;

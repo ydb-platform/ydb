@@ -2,7 +2,7 @@
 
 #include "scheme_types_defs.h"
 
-#include <ydb/core/scheme_types/scheme_type_registry.h>
+#include <ydb/core/scheme_types/scheme_type_registry.h> 
 
 
 namespace NKikimr {

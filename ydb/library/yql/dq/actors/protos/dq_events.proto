@@ -6,8 +6,8 @@ import "ydb/library/yql/dq/actors/protos/dq_stats.proto";
 import "ydb/library/yql/dq/proto/dq_state_load_plan.proto";
 import "ydb/library/yql/dq/proto/dq_tasks.proto";
 import "ydb/library/yql/dq/proto/dq_transport.proto";
-import "ydb/public/api/protos/ydb_status_codes.proto";
-import "ydb/public/api/protos/ydb_issue_message.proto";
+import "ydb/public/api/protos/ydb_status_codes.proto"; 
+import "ydb/public/api/protos/ydb_issue_message.proto"; 
 
 message TCheckpoint {
     optional uint64 Id = 1;

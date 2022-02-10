@@ -1,4 +1,4 @@
-import "ydb/core/protos/counters.proto";
+import "ydb/core/protos/counters.proto"; 
 
 package NKikimr.NFlatTxCoordinator;
 

@@ -3,8 +3,8 @@
 #include "blobstorage_groupinfo_iter.h"
 #include "blobstorage_groupinfo_sets.h"
 #include "blobstorage_groupinfo_partlayout.h"
-#include <ydb/core/base/services/blobstorage_service_id.h>
-#include <ydb/core/blobstorage/vdisk/ingress/blobstorage_ingress.h>
+#include <ydb/core/base/services/blobstorage_service_id.h> 
+#include <ydb/core/blobstorage/vdisk/ingress/blobstorage_ingress.h> 
 
 #include <library/cpp/actors/core/interconnect.h>
 
@@ -14,7 +14,7 @@
 
 #include <util/string/printf.h>
 #include <util/string/escape.h>
-#include <util/stream/input.h>
+#include <util/stream/input.h> 
 #include <util/random/fast.h>
 #include <util/system/unaligned_mem.h>
 
@@ -22,11 +22,11 @@ namespace NKikimr {
 
 class TQuorumCheckerBase : public TBlobStorageGroupInfo::IQuorumChecker {
 protected:
-    const TBlobStorageGroupInfo::TTopology *Top;
+    const TBlobStorageGroupInfo::TTopology *Top; 
 
 public:
-    TQuorumCheckerBase(const TBlobStorageGroupInfo::TTopology *top)
-        : Top(top)
+    TQuorumCheckerBase(const TBlobStorageGroupInfo::TTopology *top) 
+        : Top(top) 
     {}
 
     bool CheckFailModelForGroup(const TBlobStorageGroupInfo::TGroupVDisks& failedGroupDisks) const override {
@@ -45,11 +45,11 @@ public:
     using TQuorumCheckerBase::TQuorumCheckerBase;
 
     bool CheckFailModelForSubgroup(const TBlobStorageGroupInfo::TSubgroupVDisks& failedSubgroupDisks) const override {
-        return failedSubgroupDisks.GetNumSetItems() <= Top->GType.Handoff();
+        return failedSubgroupDisks.GetNumSetItems() <= Top->GType.Handoff(); 
     }
 
     bool CheckFailModelForGroupDomains(const TBlobStorageGroupInfo::TGroupFailDomains& failedDomains) const override {
-        return failedDomains.GetNumSetItems() <= Top->GType.Handoff();
+        return failedDomains.GetNumSetItems() <= Top->GType.Handoff(); 
     }
 
     bool CheckQuorumForSubgroup(const TBlobStorageGroupInfo::TSubgroupVDisks& subgroupDisks) const override {
@@ -77,8 +77,8 @@ public:
         if (!CheckFailModelForSubgroup(failedDisks)) {
             return TBlobStorageGroupInfo::EBS_DISINTEGRATED;
         } else {
-            ui32 effectiveReplicas = parts.CountEffectiveReplicas(Top->GType);
-            return Top->BlobState(effectiveReplicas, failedDisks.GetNumSetItems());
+            ui32 effectiveReplicas = parts.CountEffectiveReplicas(Top->GType); 
+            return Top->BlobState(effectiveReplicas, failedDisks.GetNumSetItems()); 
         }
     }
 
@@ -207,7 +207,7 @@ class TQuorumCheckerMirror3dc : public TQuorumCheckerBase {
     bool CheckFailModelForGroupDomains(const TBlobStorageGroupInfo::TGroupFailDomains& failedDomains) const override {
         ui32 num1 = 0; // number of realms with at least one fail domain set
         ui32 num2 = 0; // number of realms with at least two fail domains set
-        for (auto realmIt = Top->FailRealmsBegin(), realmEnd = Top->FailRealmsEnd(); realmIt != realmEnd; ++realmIt) {
+        for (auto realmIt = Top->FailRealmsBegin(), realmEnd = Top->FailRealmsEnd(); realmIt != realmEnd; ++realmIt) { 
             ui32 num = 0;
             for (const TBlobStorageGroupInfo::TFailDomain& domain : realmIt.GetFailRealmFailDomains()) {
                 num += failedDomains[domain.FailDomainOrderNumber];
@@ -255,7 +255,7 @@ quitIter:   ;
         if (!CheckFailModelForSubgroup(failedDisks)) {
             return TBlobStorageGroupInfo::EBS_DISINTEGRATED;
         } else {
-            const TBlobStorageGroupInfo::TSubgroupVDisks& disksWithReplica = parts.GetInvolvedDisks(Top);
+            const TBlobStorageGroupInfo::TSubgroupVDisks& disksWithReplica = parts.GetInvolvedDisks(Top); 
 
             if (CheckQuorumForSubgroup(disksWithReplica)) {
                 // we have all required replicas present in the parts set, so the blob is fully written
@@ -291,13 +291,13 @@ public:
     using TQuorumCheckerBase::TQuorumCheckerBase;
 };
 
-////////////////////////////////////////////////////////////////////////////
-// TBlobStorageGroupInfo::TTopology
-////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////// 
+// TBlobStorageGroupInfo::TTopology 
+//////////////////////////////////////////////////////////////////////////// 
 TBlobStorageGroupInfo::TTopology::TTopology(TBlobStorageGroupType gtype)
-    : GType(gtype)
-{}
-
+    : GType(gtype) 
+{} 
+ 
 TBlobStorageGroupInfo::TTopology::TTopology(TBlobStorageGroupType gtype, ui32 numFailRealms,
         ui32 numFailDomainsPerFailRealm, ui32 numVDisksPerFailDomain)
     : GType(gtype)
@@ -309,43 +309,43 @@ TBlobStorageGroupInfo::TTopology::TTopology(TBlobStorageGroupType gtype, ui32 nu
     }};
 }
 
-TBlobStorageGroupInfo::TTopology::~TTopology() = default;
-
-bool TBlobStorageGroupInfo::TTopology::EqualityCheck(const TTopology &t) {
-    return GType.GetErasure() == t.GType.GetErasure() &&
-        TotalFailDomains == t.TotalFailDomains &&
-        TotalVDisks == t.TotalVDisks;
-}
-
-void TBlobStorageGroupInfo::TTopology::FinalizeConstruction() {
-    // finish construction of topology structure
+TBlobStorageGroupInfo::TTopology::~TTopology() = default; 
+ 
+bool TBlobStorageGroupInfo::TTopology::EqualityCheck(const TTopology &t) { 
+    return GType.GetErasure() == t.GType.GetErasure() && 
+        TotalFailDomains == t.TotalFailDomains && 
+        TotalVDisks == t.TotalVDisks; 
+} 
+ 
+void TBlobStorageGroupInfo::TTopology::FinalizeConstruction() { 
+    // finish construction of topology structure 
     ui32 failDomainOrderNumber = 0;
     ui32 vdiskOrderNumber = 0;
-    VDiskIdForOrderNumber.clear();
+    VDiskIdForOrderNumber.clear(); 
 
     for (auto realm = FailRealms.begin(); realm != FailRealms.end(); ++realm) {
         for (auto domain = realm->FailDomains.begin(); domain != realm->FailDomains.end(); ++domain) {
             domain->FailDomainOrderNumber = failDomainOrderNumber++;
             for (auto vdisk = domain->VDisks.begin(); vdisk != domain->VDisks.end(); ++vdisk) {
-                // calculate positions
+                // calculate positions 
                 ui8 realmPos = realm - FailRealms.begin();            // it.GetFailRealmIdx()
                 ui8 domainPos = domain - realm->FailDomains.begin();  // it.GetFailDomainIdx()
                 ui8 vdiskPos = vdisk - domain->VDisks.begin();        // it.GetVDiskIdx());
-                // fill in VDisk parameters
+                // fill in VDisk parameters 
                 vdisk->VDiskIdShort = TVDiskIdShort(realmPos, domainPos, vdiskPos);
                 vdisk->OrderNumber = vdiskOrderNumber++;
                 vdisk->FailDomainOrderNumber = domain->FailDomainOrderNumber;
-                // fill in VDiskIdForOrderNumber
+                // fill in VDiskIdForOrderNumber 
                 VDiskIdForOrderNumber.push_back(vdisk->VDiskIdShort);
-            }
+            } 
         }
     }
 
     TotalFailDomains = failDomainOrderNumber;
-    TotalVDisks = vdiskOrderNumber;
-    // create blob mapper
+    TotalVDisks = vdiskOrderNumber; 
+    // create blob mapper 
     BlobMapper.reset(CreateMapper(GType, this));
-    // create quorum checker
+    // create quorum checker 
     QuorumChecker.reset(CreateQuorumChecker(this));
 }
 
@@ -375,79 +375,79 @@ bool TBlobStorageGroupInfo::TTopology::IsValidId(const TVDiskIdShort& vdisk) con
     return true;
 }
 
-ui32 TBlobStorageGroupInfo::TTopology::GetFailDomainOrderNumber(const TVDiskIdShort& vdisk) const {
-    return FailRealms[vdisk.FailRealm].FailDomains[vdisk.FailDomain].VDisks[vdisk.VDisk].FailDomainOrderNumber;
-}
+ui32 TBlobStorageGroupInfo::TTopology::GetFailDomainOrderNumber(const TVDiskIdShort& vdisk) const { 
+    return FailRealms[vdisk.FailRealm].FailDomains[vdisk.FailDomain].VDisks[vdisk.VDisk].FailDomainOrderNumber; 
+} 
 
-TVDiskIdShort TBlobStorageGroupInfo::TTopology::GetVDiskId(ui32 orderNumber) const {
-    return VDiskIdForOrderNumber[orderNumber];
-}
-
-const TBlobStorageGroupInfo::TFailDomain& TBlobStorageGroupInfo::TTopology::GetFailDomain(const TVDiskIdShort& vdisk) const {
-    return FailRealms[vdisk.FailRealm].FailDomains[vdisk.FailDomain];
-}
-
-const TBlobStorageGroupInfo::TFailDomain& TBlobStorageGroupInfo::TTopology::GetFailDomain(ui32 failDomainOrderNumber) const {
-    ui32 realm = 0;
-    while (failDomainOrderNumber >= FailRealms[realm].FailDomains.size()) {
-        failDomainOrderNumber -= FailRealms[realm].FailDomains.size();
-        ++realm;
-    }
-    return FailRealms[realm].FailDomains[failDomainOrderNumber];
-}
-
-ui32 TBlobStorageGroupInfo::TTopology::GetOrderNumber(const TVDiskIdShort &vdisk) const {
-    return FailRealms[vdisk.FailRealm].FailDomains[vdisk.FailDomain].VDisks[vdisk.VDisk].OrderNumber;
-}
-
-ui32 TBlobStorageGroupInfo::TTopology::GetNumVDisksPerFailDomain() const {
-    return FailRealms[0].FailDomains[0].VDisks.size();
-}
-
-void TBlobStorageGroupInfo::TTopology::PickSubgroup(ui32 hash, TBlobStorageGroupInfo::TOrderNums &orderNums) const {
-    return BlobMapper->PickSubgroup(hash, orderNums);
-}
-
-bool TBlobStorageGroupInfo::TTopology::BelongsToSubgroup(const TVDiskIdShort& vdisk, ui32 hash) const {
-    return BlobMapper->BelongsToSubgroup(vdisk, hash);
-}
-
-ui32 TBlobStorageGroupInfo::TTopology::GetIdxInSubgroup(const TVDiskIdShort& vdisk, ui32 hash) const {
-    return BlobMapper->GetIdxInSubgroup(vdisk, hash);
-}
-
-TVDiskIdShort TBlobStorageGroupInfo::TTopology::GetVDiskInSubgroup(ui32 idxInSubgroup, ui32 hash) const {
-    return BlobMapper->GetVDiskInSubgroup(idxInSubgroup, hash);
-}
-
-TBlobStorageGroupInfo::EBlobState TBlobStorageGroupInfo::TTopology::BlobState(ui32 effectiveReplicas, ui32 errorDomains) const {
-    if (errorDomains > Min(GType.ParityParts(), GType.Handoff())) {
-        return EBS_DISINTEGRATED;
-    }
-    const ui32 minimalRestorable = GType.MinimalRestorablePartCount();
-    if (effectiveReplicas + errorDomains < minimalRestorable) {
-        return EBS_UNRECOVERABLE_FRAGMENTARY;
-    }
-    const ui32 totalParts = GType.TotalPartCount();
-    if (effectiveReplicas + errorDomains < totalParts) {
-        if (effectiveReplicas < minimalRestorable) {
-            return EBS_UNRECOVERABLE_FRAGMENTARY;
-        }
-        return EBS_RECOVERABLE_FRAGMENTARY;
-    }
-    if (effectiveReplicas == totalParts) {
-        return EBS_FULL;
-    }
-    if (effectiveReplicas < minimalRestorable) {
-        return EBS_UNRECOVERABLE_FRAGMENTARY;
-    }
-    return EBS_RECOVERABLE_DOUBTED;
-}
-
+TVDiskIdShort TBlobStorageGroupInfo::TTopology::GetVDiskId(ui32 orderNumber) const { 
+    return VDiskIdForOrderNumber[orderNumber]; 
+} 
+ 
+const TBlobStorageGroupInfo::TFailDomain& TBlobStorageGroupInfo::TTopology::GetFailDomain(const TVDiskIdShort& vdisk) const { 
+    return FailRealms[vdisk.FailRealm].FailDomains[vdisk.FailDomain]; 
+} 
+ 
+const TBlobStorageGroupInfo::TFailDomain& TBlobStorageGroupInfo::TTopology::GetFailDomain(ui32 failDomainOrderNumber) const { 
+    ui32 realm = 0; 
+    while (failDomainOrderNumber >= FailRealms[realm].FailDomains.size()) { 
+        failDomainOrderNumber -= FailRealms[realm].FailDomains.size(); 
+        ++realm; 
+    } 
+    return FailRealms[realm].FailDomains[failDomainOrderNumber]; 
+} 
+ 
+ui32 TBlobStorageGroupInfo::TTopology::GetOrderNumber(const TVDiskIdShort &vdisk) const { 
+    return FailRealms[vdisk.FailRealm].FailDomains[vdisk.FailDomain].VDisks[vdisk.VDisk].OrderNumber; 
+} 
+ 
+ui32 TBlobStorageGroupInfo::TTopology::GetNumVDisksPerFailDomain() const { 
+    return FailRealms[0].FailDomains[0].VDisks.size(); 
+} 
+ 
+void TBlobStorageGroupInfo::TTopology::PickSubgroup(ui32 hash, TBlobStorageGroupInfo::TOrderNums &orderNums) const { 
+    return BlobMapper->PickSubgroup(hash, orderNums); 
+} 
+ 
+bool TBlobStorageGroupInfo::TTopology::BelongsToSubgroup(const TVDiskIdShort& vdisk, ui32 hash) const { 
+    return BlobMapper->BelongsToSubgroup(vdisk, hash); 
+} 
+ 
+ui32 TBlobStorageGroupInfo::TTopology::GetIdxInSubgroup(const TVDiskIdShort& vdisk, ui32 hash) const { 
+    return BlobMapper->GetIdxInSubgroup(vdisk, hash); 
+} 
+ 
+TVDiskIdShort TBlobStorageGroupInfo::TTopology::GetVDiskInSubgroup(ui32 idxInSubgroup, ui32 hash) const { 
+    return BlobMapper->GetVDiskInSubgroup(idxInSubgroup, hash); 
+} 
+ 
+TBlobStorageGroupInfo::EBlobState TBlobStorageGroupInfo::TTopology::BlobState(ui32 effectiveReplicas, ui32 errorDomains) const { 
+    if (errorDomains > Min(GType.ParityParts(), GType.Handoff())) { 
+        return EBS_DISINTEGRATED; 
+    } 
+    const ui32 minimalRestorable = GType.MinimalRestorablePartCount(); 
+    if (effectiveReplicas + errorDomains < minimalRestorable) { 
+        return EBS_UNRECOVERABLE_FRAGMENTARY; 
+    } 
+    const ui32 totalParts = GType.TotalPartCount(); 
+    if (effectiveReplicas + errorDomains < totalParts) { 
+        if (effectiveReplicas < minimalRestorable) { 
+            return EBS_UNRECOVERABLE_FRAGMENTARY; 
+        } 
+        return EBS_RECOVERABLE_FRAGMENTARY; 
+    } 
+    if (effectiveReplicas == totalParts) { 
+        return EBS_FULL; 
+    } 
+    if (effectiveReplicas < minimalRestorable) { 
+        return EBS_UNRECOVERABLE_FRAGMENTARY; 
+    } 
+    return EBS_RECOVERABLE_DOUBTED; 
+} 
+ 
 IBlobToDiskMapper *TBlobStorageGroupInfo::TTopology::CreateMapper(TBlobStorageGroupType gtype,
-                                                                  const TTopology *topology)
-{
-    switch (gtype.GetErasure()) {
+                                                                  const TTopology *topology) 
+{ 
+    switch (gtype.GetErasure()) { 
         case TBlobStorageGroupType::ErasureNone:
         case TBlobStorageGroupType::ErasureMirror3:
         case TBlobStorageGroupType::Erasure3Plus1Block:
@@ -466,29 +466,29 @@ IBlobToDiskMapper *TBlobStorageGroupInfo::TTopology::CreateMapper(TBlobStorageGr
         case TBlobStorageGroupType::Erasure2Plus2Block:
         case TBlobStorageGroupType::Erasure2Plus2Stripe:
         case TBlobStorageGroupType::ErasureMirror3of4:
-            return IBlobToDiskMapper::CreateBasicMapper(topology);
+            return IBlobToDiskMapper::CreateBasicMapper(topology); 
 
         case TBlobStorageGroupType::ErasureMirror3dc:
-            return IBlobToDiskMapper::CreateMirror3dcMapper(topology);
+            return IBlobToDiskMapper::CreateMirror3dcMapper(topology); 
 
         default:
-            Y_FAIL("unexpected erasure type 0x%08" PRIx32, static_cast<ui32>(gtype.GetErasure()));
+            Y_FAIL("unexpected erasure type 0x%08" PRIx32, static_cast<ui32>(gtype.GetErasure())); 
     }
 
     Y_FAIL();
 }
 
-TBlobStorageGroupInfo::IQuorumChecker *TBlobStorageGroupInfo::TTopology::CreateQuorumChecker(const TTopology *topology) {
-    switch (topology->GType.GetErasure()) {
-        case TBlobStorageGroupType::ErasureNone:
-        case TBlobStorageGroupType::ErasureMirror3:
-        case TBlobStorageGroupType::Erasure3Plus1Block:
-        case TBlobStorageGroupType::Erasure3Plus1Stripe:
-        case TBlobStorageGroupType::Erasure4Plus2Block:
-        case TBlobStorageGroupType::Erasure3Plus2Block:
-        case TBlobStorageGroupType::Erasure4Plus2Stripe:
-        case TBlobStorageGroupType::Erasure3Plus2Stripe:
-        case TBlobStorageGroupType::ErasureMirror3Plus2:
+TBlobStorageGroupInfo::IQuorumChecker *TBlobStorageGroupInfo::TTopology::CreateQuorumChecker(const TTopology *topology) { 
+    switch (topology->GType.GetErasure()) { 
+        case TBlobStorageGroupType::ErasureNone: 
+        case TBlobStorageGroupType::ErasureMirror3: 
+        case TBlobStorageGroupType::Erasure3Plus1Block: 
+        case TBlobStorageGroupType::Erasure3Plus1Stripe: 
+        case TBlobStorageGroupType::Erasure4Plus2Block: 
+        case TBlobStorageGroupType::Erasure3Plus2Block: 
+        case TBlobStorageGroupType::Erasure4Plus2Stripe: 
+        case TBlobStorageGroupType::Erasure3Plus2Stripe: 
+        case TBlobStorageGroupType::ErasureMirror3Plus2: 
         case TBlobStorageGroupType::Erasure4Plus3Block:
         case TBlobStorageGroupType::Erasure4Plus3Stripe:
         case TBlobStorageGroupType::Erasure3Plus3Block:
@@ -497,62 +497,62 @@ TBlobStorageGroupInfo::IQuorumChecker *TBlobStorageGroupInfo::TTopology::CreateQ
         case TBlobStorageGroupType::Erasure2Plus3Stripe:
         case TBlobStorageGroupType::Erasure2Plus2Block:
         case TBlobStorageGroupType::Erasure2Plus2Stripe:
-            return new TQuorumCheckerOrdinary(topology);
-
-        case TBlobStorageGroupType::ErasureMirror3dc:
-            return new TQuorumCheckerMirror3dc(topology);
-
+            return new TQuorumCheckerOrdinary(topology); 
+ 
+        case TBlobStorageGroupType::ErasureMirror3dc: 
+            return new TQuorumCheckerMirror3dc(topology); 
+ 
         case TBlobStorageGroupType::ErasureMirror3of4:
             return new TQuorumCheckerMirror3of4(topology);
 
         default:
-            Y_FAIL("unexpected erasure type 0x%08" PRIx32,
-                   static_cast<ui32>(topology->GType.GetErasure()));
-    }
-
-    Y_FAIL();
-}
-
+            Y_FAIL("unexpected erasure type 0x%08" PRIx32, 
+                   static_cast<ui32>(topology->GType.GetErasure())); 
+    } 
+ 
+    Y_FAIL(); 
+} 
+ 
 TString TBlobStorageGroupInfo::TTopology::ToString() const {
-    TStringStream str;
-    str << "{GType# " << GType.ToString();
-    str << " FailRealms# {";
-    for (ui32 realmIdx = 0; realmIdx < FailRealms.size(); ++realmIdx) {
-        const TFailRealm& realm = FailRealms[realmIdx];
-        str << (realmIdx ? " " : "") << "[" << realmIdx << "]# TFailRealm{ FailDomains# {";
-        for (ui32 domainIdx = 0; domainIdx < realm.FailDomains.size(); ++domainIdx) {
-            const TFailDomain& domain = realm.FailDomains[domainIdx];
-            str << (domainIdx ? " " : "") << "[" << domainIdx << "]# TFailDomain{";
-            str << "FailDomainOrderNumber# " << domain.FailDomainOrderNumber
-                << " VDisks# {";
-            for (ui32 vdiskIdx = 0; vdiskIdx < domain.VDisks.size(); ++vdiskIdx) {
-                const TVDiskInfo& info = domain.VDisks[vdiskIdx];
-                str << (vdiskIdx ? " " : "") << "[" << vdiskIdx << "]# TVDiskInfo{"
-                << "OrderNumber# " << info.OrderNumber
-                << " FailDomainOrderNumber# " << info.FailDomainOrderNumber
-                << "}";
-            }
-            str << "}";
-        }
-        str << "}}";
-    }
-    str << "}}";
-    return str.Str();
-}
-
-
-
-////////////////////////////////////////////////////////////////////////////
-// TBlobStorageGroupInfo::TDynamicInfo
-////////////////////////////////////////////////////////////////////////////
-TBlobStorageGroupInfo::TDynamicInfo::TDynamicInfo(ui32 groupId, ui32 groupGen)
-    : GroupId(groupId)
-    , GroupGeneration(groupGen)
-{}
-
-////////////////////////////////////////////////////////////////////////////
-// TBlobStorageGroupInfo
-////////////////////////////////////////////////////////////////////////////
+    TStringStream str; 
+    str << "{GType# " << GType.ToString(); 
+    str << " FailRealms# {"; 
+    for (ui32 realmIdx = 0; realmIdx < FailRealms.size(); ++realmIdx) { 
+        const TFailRealm& realm = FailRealms[realmIdx]; 
+        str << (realmIdx ? " " : "") << "[" << realmIdx << "]# TFailRealm{ FailDomains# {"; 
+        for (ui32 domainIdx = 0; domainIdx < realm.FailDomains.size(); ++domainIdx) { 
+            const TFailDomain& domain = realm.FailDomains[domainIdx]; 
+            str << (domainIdx ? " " : "") << "[" << domainIdx << "]# TFailDomain{"; 
+            str << "FailDomainOrderNumber# " << domain.FailDomainOrderNumber 
+                << " VDisks# {"; 
+            for (ui32 vdiskIdx = 0; vdiskIdx < domain.VDisks.size(); ++vdiskIdx) { 
+                const TVDiskInfo& info = domain.VDisks[vdiskIdx]; 
+                str << (vdiskIdx ? " " : "") << "[" << vdiskIdx << "]# TVDiskInfo{" 
+                << "OrderNumber# " << info.OrderNumber 
+                << " FailDomainOrderNumber# " << info.FailDomainOrderNumber 
+                << "}"; 
+            } 
+            str << "}"; 
+        } 
+        str << "}}"; 
+    } 
+    str << "}}"; 
+    return str.Str(); 
+} 
+ 
+ 
+ 
+//////////////////////////////////////////////////////////////////////////// 
+// TBlobStorageGroupInfo::TDynamicInfo 
+//////////////////////////////////////////////////////////////////////////// 
+TBlobStorageGroupInfo::TDynamicInfo::TDynamicInfo(ui32 groupId, ui32 groupGen) 
+    : GroupId(groupId) 
+    , GroupGeneration(groupGen) 
+{} 
+ 
+//////////////////////////////////////////////////////////////////////////// 
+// TBlobStorageGroupInfo 
+//////////////////////////////////////////////////////////////////////////// 
 TBlobStorageGroupInfo::TBlobStorageGroupInfo(TBlobStorageGroupType gtype, ui32 numVDisksPerFailDomain,
         ui32 numFailDomains, ui32 numFailRealms, const TVector<TActorId> *vdiskIds, EEncryptionMode encryptionMode,
         ELifeCyclePhase lifeCyclePhase, TCypherKey key)
@@ -586,11 +586,11 @@ TBlobStorageGroupInfo::TBlobStorageGroupInfo(TBlobStorageGroupType gtype, ui32 n
 
 TBlobStorageGroupInfo::TBlobStorageGroupInfo(std::shared_ptr<TTopology> topology, TDynamicInfo&& dyn, TString storagePoolName,
         TMaybe<TKikimrScopeId> acceptedScope, TPDiskCategory::EDeviceType deviceType)
-    : GroupID(dyn.GroupId)
-    , GroupGeneration(dyn.GroupGeneration)
+    : GroupID(dyn.GroupId) 
+    , GroupGeneration(dyn.GroupGeneration) 
     , Type(topology->GType)
     , Topology(std::move(topology))
-    , Dynamic(std::move(dyn))
+    , Dynamic(std::move(dyn)) 
     , AcceptedScope(acceptedScope)
     , StoragePoolName(std::move(storagePoolName))
     , DeviceType(deviceType)
@@ -600,10 +600,10 @@ TBlobStorageGroupInfo::TBlobStorageGroupInfo(TTopology&& topology, TDynamicInfo&
         TMaybe<TKikimrScopeId> acceptedScope, TPDiskCategory::EDeviceType deviceType)
     : TBlobStorageGroupInfo(std::make_shared<TTopology>(std::move(topology)), std::move(dyn), std::move(storagePoolName),
             std::move(acceptedScope), deviceType)
-{
-    Topology->FinalizeConstruction();
-}
-
+{ 
+    Topology->FinalizeConstruction(); 
+} 
+ 
 TBlobStorageGroupInfo::TBlobStorageGroupInfo(const TIntrusivePtr<TBlobStorageGroupInfo>& info, const TVDiskID& vdiskId,
         const TActorId& actorId)
     : GroupID(vdiskId.GroupID)
@@ -622,9 +622,9 @@ TBlobStorageGroupInfo::TBlobStorageGroupInfo(const TIntrusivePtr<TBlobStorageGro
     Dynamic.ServiceIdForOrderNumber[GetOrderNumber(vdiskId)] = actorId;
 }
 
-TBlobStorageGroupInfo::~TBlobStorageGroupInfo()
-{}
-
+TBlobStorageGroupInfo::~TBlobStorageGroupInfo() 
+{} 
+ 
 TIntrusivePtr<TBlobStorageGroupInfo> TBlobStorageGroupInfo::Parse(const NKikimrBlobStorage::TGroupInfo& group,
         const TEncryptionKey *key, IOutputStream *err) {
     auto erasure = (TBlobStorageGroupType::EErasureSpecies)group.GetErasureSpecies();
@@ -745,7 +745,7 @@ bool TBlobStorageGroupInfo::DecryptGroupKey(TBlobStorageGroupInfo::EEncryptionMo
 }
 
 const TBlobStorageGroupInfo::IQuorumChecker& TBlobStorageGroupInfo::GetQuorumChecker() const {
-    return Topology->GetQuorumChecker();
+    return Topology->GetQuorumChecker(); 
 }
 
 TVDiskID TBlobStorageGroupInfo::CreateVDiskID(const TVDiskIdShort &id) const {
@@ -770,27 +770,27 @@ TString TBlobStorageGroupInfo::BlobStateToString(EBlobState state) {
 }
 
 TBlobStorageGroupInfo::EBlobState TBlobStorageGroupInfo::BlobState(ui32 effectiveReplicas, ui32 errorDomains) const {
-    return GetTopology().BlobState(effectiveReplicas, errorDomains);
+    return GetTopology().BlobState(effectiveReplicas, errorDomains); 
 }
 
 void TBlobStorageGroupInfo::PickSubgroup(ui32 hash, TVDiskIds *outVDisk, TServiceIds *outServiceIds) const {
-    TOrderNums orderNums;
-    Topology->PickSubgroup(hash, orderNums);
-    for (const auto x : orderNums) {
-        if (outVDisk) {
-            outVDisk->push_back(GetVDiskId(x));
-        }
-        if (outServiceIds) {
-            outServiceIds->push_back(GetActorId(x));
-        }
-    }
+    TOrderNums orderNums; 
+    Topology->PickSubgroup(hash, orderNums); 
+    for (const auto x : orderNums) { 
+        if (outVDisk) { 
+            outVDisk->push_back(GetVDiskId(x)); 
+        } 
+        if (outServiceIds) { 
+            outServiceIds->push_back(GetActorId(x)); 
+        } 
+    } 
 }
 
 bool TBlobStorageGroupInfo::BelongsToSubgroup(const TVDiskID &vdisk, ui32 hash) const {
     Y_VERIFY_DEBUG_S(vdisk.GroupID == GroupID, "Expected GroupID# " << GroupID << ", given GroupID# " << vdisk.GroupID);
     Y_VERIFY_DEBUG_S(vdisk.GroupGeneration == GroupGeneration, "Expected GroupGeeration# " << GroupGeneration
             << ", given GroupGeneration# " << vdisk.GroupGeneration);
-    return Topology->BelongsToSubgroup(TVDiskIdShort(vdisk), hash);
+    return Topology->BelongsToSubgroup(TVDiskIdShort(vdisk), hash); 
 }
 
 // Returns either vdisk idx in the blob subgroup, or BlobSubgroupSize if the vdisk is not in the blob subgroup
@@ -798,21 +798,21 @@ ui32 TBlobStorageGroupInfo::GetIdxInSubgroup(const TVDiskID &vdisk, ui32 hash) c
     Y_VERIFY_DEBUG_S(vdisk.GroupID == GroupID, "Expected GroupID# " << GroupID << ", given GroupID# " << vdisk.GroupID);
     Y_VERIFY_DEBUG_S(vdisk.GroupGeneration == GroupGeneration, "Expected GroupGeeration# " << GroupGeneration
             << ", given GroupGeneration# " << vdisk.GroupGeneration);
-    return Topology->GetIdxInSubgroup(vdisk, hash);
+    return Topology->GetIdxInSubgroup(vdisk, hash); 
 }
 
 TVDiskID TBlobStorageGroupInfo::GetVDiskInSubgroup(ui32 idxInSubgroup, ui32 hash) const {
-    auto shortId = Topology->GetVDiskInSubgroup(idxInSubgroup, hash);
-    return TVDiskID(GroupID, GroupGeneration, shortId);
+    auto shortId = Topology->GetVDiskInSubgroup(idxInSubgroup, hash); 
+    return TVDiskID(GroupID, GroupGeneration, shortId); 
 }
 
-ui32 TBlobStorageGroupInfo::GetOrderNumber(const TVDiskID &vdisk) const {
+ui32 TBlobStorageGroupInfo::GetOrderNumber(const TVDiskID &vdisk) const { 
     Y_VERIFY_S(vdisk.GroupID == GroupID, "Expected GroupID# " << GroupID << ", given GroupID# " << vdisk.GroupID);
     Y_VERIFY_S(vdisk.GroupGeneration == GroupGeneration, "Expected GroupGeeration# " << GroupGeneration
             << ", given GroupGeneration# " << vdisk.GroupGeneration);
-    return Topology->GetOrderNumber(vdisk);
+    return Topology->GetOrderNumber(vdisk); 
 }
-
+ 
 ui32 TBlobStorageGroupInfo::GetOrderNumber(const TVDiskIdShort &vdisk) const {
     return Topology->GetOrderNumber(vdisk);
 }
@@ -826,7 +826,7 @@ bool TBlobStorageGroupInfo::IsValidId(const TVDiskIdShort  &vdisk) const {
 }
 
 ui32 TBlobStorageGroupInfo::GetFailDomainOrderNumber(const TVDiskID& vdisk) const {
-    return Topology->GetFailDomainOrderNumber(vdisk);
+    return Topology->GetFailDomainOrderNumber(vdisk); 
 }
 
 ui32 TBlobStorageGroupInfo::GetFailDomainOrderNumber(const TVDiskIdShort& vdisk) const {
@@ -834,49 +834,49 @@ ui32 TBlobStorageGroupInfo::GetFailDomainOrderNumber(const TVDiskIdShort& vdisk)
 }
 
 TVDiskID TBlobStorageGroupInfo::GetVDiskId(ui32 orderNumber) const {
-    return TVDiskID(GroupID, GroupGeneration, Topology->GetVDiskId(orderNumber));
+    return TVDiskID(GroupID, GroupGeneration, Topology->GetVDiskId(orderNumber)); 
 }
 
-TVDiskID TBlobStorageGroupInfo::GetVDiskId(const TVDiskIdShort &vd) const {
-    return TVDiskID(GroupID, GroupGeneration, vd);
-}
-
+TVDiskID TBlobStorageGroupInfo::GetVDiskId(const TVDiskIdShort &vd) const { 
+    return TVDiskID(GroupID, GroupGeneration, vd); 
+} 
+ 
 TActorId TBlobStorageGroupInfo::GetActorId(ui32 orderNumber) const {
-    return Dynamic.ServiceIdForOrderNumber[orderNumber];
-}
-
+    return Dynamic.ServiceIdForOrderNumber[orderNumber]; 
+} 
+ 
 TActorId TBlobStorageGroupInfo::GetActorId(const TVDiskIdShort &vd) const {
-    return GetActorId(Topology->GetOrderNumber(vd));
-}
-
+    return GetActorId(Topology->GetOrderNumber(vd)); 
+} 
+ 
 ui32 TBlobStorageGroupInfo::GetTotalVDisksNum() const {
-    return Topology->GetTotalVDisksNum();
-}
-
+    return Topology->GetTotalVDisksNum(); 
+} 
+ 
 ui32 TBlobStorageGroupInfo::GetTotalFailDomainsNum() const {
-    return Topology->GetTotalFailDomainsNum();
+    return Topology->GetTotalFailDomainsNum(); 
 }
 
 ui32 TBlobStorageGroupInfo::GetNumVDisksPerFailDomain() const {
-    return Topology->GetNumVDisksPerFailDomain();
-}
-
+    return Topology->GetNumVDisksPerFailDomain(); 
+} 
+ 
 const TBlobStorageGroupInfo::TFailDomain& TBlobStorageGroupInfo::GetFailDomain(const TVDiskID& vdisk) const {
-    return Topology->GetFailDomain(vdisk);
+    return Topology->GetFailDomain(vdisk); 
 }
 
 const TBlobStorageGroupInfo::TFailDomain& TBlobStorageGroupInfo::GetFailDomain(ui32 failDomainOrderNumber) const {
-    return Topology->GetFailDomain(failDomainOrderNumber);
-}
-
+    return Topology->GetFailDomain(failDomainOrderNumber); 
+} 
+ 
 TString TBlobStorageGroupInfo::ToString() const {
     TStringStream str;
     str << "{GroupID# " << GroupID;
     str << " GroupGeneration# " << GroupGeneration;
     str << " Type# " << Type.ToString();
     str << " FailRealms# {";
-    for (ui32 realmIdx = 0; realmIdx < Topology->FailRealms.size(); ++realmIdx) {
-        const TFailRealm& realm = Topology->FailRealms[realmIdx];
+    for (ui32 realmIdx = 0; realmIdx < Topology->FailRealms.size(); ++realmIdx) { 
+        const TFailRealm& realm = Topology->FailRealms[realmIdx]; 
         str << (realmIdx ? " " : "") << "[" << realmIdx << "]# TFailRealm{ FailDomains# {";
         for (ui32 domainIdx = 0; domainIdx < realm.FailDomains.size(); ++domainIdx) {
             const TFailDomain& domain = realm.FailDomains[domainIdx];
@@ -886,8 +886,8 @@ TString TBlobStorageGroupInfo::ToString() const {
             for (ui32 vdiskIdx = 0; vdiskIdx < domain.VDisks.size(); ++vdiskIdx) {
                 const TVDiskInfo& info = domain.VDisks[vdiskIdx];
                 str << (vdiskIdx ? " " : "") << "[" << vdiskIdx << "]# TVDiskInfo{"
-                    << "ActorId# " << GetActorId(info.OrderNumber)
-                    << " VDiskId# " << GetVDiskId(info.OrderNumber)
+                    << "ActorId# " << GetActorId(info.OrderNumber) 
+                    << " VDiskId# " << GetVDiskId(info.OrderNumber) 
                     << " OrderNumber# " << info.OrderNumber
                     << " FailDomainOrderNumber# " << info.FailDomainOrderNumber
                     << "}";

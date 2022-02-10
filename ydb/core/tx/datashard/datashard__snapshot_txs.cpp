@@ -1,20 +1,20 @@
 #include "datashard_txs.h"
 
 namespace NKikimr {
-namespace NDataShard {
+namespace NDataShard { 
 
 using namespace NTabletFlatExecutor;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TDataShard::TTxRefreshVolatileSnapshot::TTxRefreshVolatileSnapshot(
-        TDataShard* ds,
+TDataShard::TTxRefreshVolatileSnapshot::TTxRefreshVolatileSnapshot( 
+        TDataShard* ds, 
         TEvDataShard::TEvRefreshVolatileSnapshotRequest::TPtr ev)
     : TBase(ds)
     , Ev(std::move(ev))
 { }
 
-bool TDataShard::TTxRefreshVolatileSnapshot::Execute(TTransactionContext&, const TActorContext& ctx) {
+bool TDataShard::TTxRefreshVolatileSnapshot::Execute(TTransactionContext&, const TActorContext& ctx) { 
     using TResponse = NKikimrTxDataShard::TEvRefreshVolatileSnapshotResponse;
 
     const auto& record = Ev->Get()->Record;
@@ -68,7 +68,7 @@ bool TDataShard::TTxRefreshVolatileSnapshot::Execute(TTransactionContext&, const
     return true;
 }
 
-void TDataShard::TTxRefreshVolatileSnapshot::Complete(const TActorContext& ctx) {
+void TDataShard::TTxRefreshVolatileSnapshot::Complete(const TActorContext& ctx) { 
     Y_VERIFY(Reply);
 
     ctx.Send(Ev->Sender, Reply.Release(), 0, Ev->Cookie);
@@ -76,14 +76,14 @@ void TDataShard::TTxRefreshVolatileSnapshot::Complete(const TActorContext& ctx) 
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TDataShard::TTxDiscardVolatileSnapshot::TTxDiscardVolatileSnapshot(
-        TDataShard* ds,
+TDataShard::TTxDiscardVolatileSnapshot::TTxDiscardVolatileSnapshot( 
+        TDataShard* ds, 
         TEvDataShard::TEvDiscardVolatileSnapshotRequest::TPtr ev)
     : TBase(ds)
     , Ev(std::move(ev))
 { }
 
-bool TDataShard::TTxDiscardVolatileSnapshot::Execute(TTransactionContext& txc, const TActorContext&) {
+bool TDataShard::TTxDiscardVolatileSnapshot::Execute(TTransactionContext& txc, const TActorContext&) { 
     using TResponse = NKikimrTxDataShard::TEvDiscardVolatileSnapshotResponse;
 
     const auto& record = Ev->Get()->Record;
@@ -139,7 +139,7 @@ bool TDataShard::TTxDiscardVolatileSnapshot::Execute(TTransactionContext& txc, c
     return true;
 }
 
-void TDataShard::TTxDiscardVolatileSnapshot::Complete(const TActorContext& ctx) {
+void TDataShard::TTxDiscardVolatileSnapshot::Complete(const TActorContext& ctx) { 
     Y_VERIFY(Reply);
 
     ctx.Send(Ev->Sender, Reply.Release(), 0, Ev->Cookie);
@@ -147,20 +147,20 @@ void TDataShard::TTxDiscardVolatileSnapshot::Complete(const TActorContext& ctx) 
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TDataShard::TTxCleanupRemovedSnapshots::TTxCleanupRemovedSnapshots(TDataShard* ds)
+TDataShard::TTxCleanupRemovedSnapshots::TTxCleanupRemovedSnapshots(TDataShard* ds) 
     : TBase(ds)
 { }
 
-bool TDataShard::TTxCleanupRemovedSnapshots::Execute(TTransactionContext& txc, const TActorContext&) {
+bool TDataShard::TTxCleanupRemovedSnapshots::Execute(TTransactionContext& txc, const TActorContext&) { 
     Self->GetSnapshotManager().CleanupRemovedSnapshots(txc.DB);
     return true;
 }
 
-void TDataShard::TTxCleanupRemovedSnapshots::Complete(const TActorContext& ctx) {
+void TDataShard::TTxCleanupRemovedSnapshots::Complete(const TActorContext& ctx) { 
     Y_UNUSED(ctx);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-}   // namespace NDataShard
+}   // namespace NDataShard 
 }   // namespace NKikimr

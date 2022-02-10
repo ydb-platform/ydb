@@ -20,8 +20,8 @@ namespace NKikimr {
         static bool HaveToMergeData() { return true; }
 
         // process on-disk data
-        void AddFromSegment(const TMemRecLogoBlob& memRec, const TDiskPart *outbound, const TKeyLogoBlob& key,
-                ui64 /*circaLsn*/) {
+        void AddFromSegment(const TMemRecLogoBlob& memRec, const TDiskPart *outbound, const TKeyLogoBlob& key, 
+                ui64 /*circaLsn*/) { 
             if (memRec.GetType() != TBlobType::DiskBlob) {
                 return;
             }
@@ -67,10 +67,10 @@ namespace NKikimr {
         static bool HaveToMergeData() { return true; }
 
         // process on-disk data
-        void AddFromSegment(const TMemRecLogoBlob& memRec, const TDiskPart *outbound, const TKeyLogoBlob& key,
-                ui64 circaLsn) {
+        void AddFromSegment(const TMemRecLogoBlob& memRec, const TDiskPart *outbound, const TKeyLogoBlob& key, 
+                ui64 circaLsn) { 
             if (memRec.GetType() == TBlobType::DiskBlob) {
-                TBlobLocationExtractorMerger::AddFromSegment(memRec, outbound, key, circaLsn);
+                TBlobLocationExtractorMerger::AddFromSegment(memRec, outbound, key, circaLsn); 
             }
         }
 

@@ -3,11 +3,11 @@
 #include "execution_unit_ctors.h"
 
 namespace NKikimr {
-namespace NDataShard {
+namespace NDataShard { 
 
 class TStoreDistributedEraseTxUnit : public TExecutionUnit {
 public:
-    TStoreDistributedEraseTxUnit(TDataShard& self, TPipeline& pipeline)
+    TStoreDistributedEraseTxUnit(TDataShard& self, TPipeline& pipeline) 
         : TExecutionUnit(EExecutionUnitKind::StoreDistributedEraseTx, false, self, pipeline)
     {
     }
@@ -34,9 +34,9 @@ public:
     }
 };
 
-THolder<TExecutionUnit> CreateStoreDistributedEraseTxUnit(TDataShard& self, TPipeline& pipeline) {
+THolder<TExecutionUnit> CreateStoreDistributedEraseTxUnit(TDataShard& self, TPipeline& pipeline) { 
     return THolder(new TStoreDistributedEraseTxUnit(self, pipeline));
 }
 
-} // namespace NDataShard
+} // namespace NDataShard 
 } // namespace NKikimr

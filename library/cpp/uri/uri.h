@@ -401,7 +401,7 @@ namespace NUri {
             const size_t printSize = PrintSize(flags) + 1;
             return printSize > size ? nullptr : PrintImpl(str, size, flags);
         }
-
+ 
         char* Serialize(int flags = FlagUrlFields) const {
             flags = PrintFlags(flags);
             const size_t size = PrintSize(flags) + 1;

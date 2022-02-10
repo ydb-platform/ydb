@@ -3,16 +3,16 @@
 #include "datashard_active_transaction.h"
 #include "operation.h"
 
-#include <ydb/core/tablet_flat/flat_cxx_database.h>
-#include <ydb/core/protos/counters_datashard.pb.h>
-#include <ydb/core/protos/tx_datashard.pb.h>
+#include <ydb/core/tablet_flat/flat_cxx_database.h> 
+#include <ydb/core/protos/counters_datashard.pb.h> 
+#include <ydb/core/protos/tx_datashard.pb.h> 
 
 #include <util/generic/set.h>
 
 namespace NKikimr {
-namespace NDataShard {
+namespace NDataShard { 
 
-class TDataShard;
+class TDataShard; 
 class TPipeline;
 
 enum class ECleanupStatus {
@@ -27,7 +27,7 @@ public:
     friend class TPipeline;
     friend class TActiveTransaction;
 
-    TTransQueue(TDataShard * self)
+    TTransQueue(TDataShard * self) 
         : Self(self)
     {}
 
@@ -121,7 +121,7 @@ private: // for pipeline only
     }
 
 private:
-    TDataShard * Self;
+    TDataShard * Self; 
     THashMap<ui64, TOperation::TPtr> TxsInFly;
     TSet<TStepOrder> PlannedTxs;
     THashMap<EOperationKind, TSet<TStepOrder>> PlannedTxsByKind;

@@ -1,11 +1,11 @@
-#include <ydb/core/tablet_flat/flat_table_subset.h>
-#include <ydb/core/tablet_flat/test/libs/rows/cook.h>
-#include <ydb/core/tablet_flat/test/libs/table/model/large.h>
-#include <ydb/core/tablet_flat/test/libs/table/test_comp.h>
-#include <ydb/core/tablet_flat/test/libs/table/test_make.h>
-#include <ydb/core/tablet_flat/test/libs/table/test_iter.h>
-#include <ydb/core/tablet_flat/test/libs/table/test_wreck.h>
-#include <ydb/core/tablet_flat/test/libs/table/wrap_iter.h>
+#include <ydb/core/tablet_flat/flat_table_subset.h> 
+#include <ydb/core/tablet_flat/test/libs/rows/cook.h> 
+#include <ydb/core/tablet_flat/test/libs/table/model/large.h> 
+#include <ydb/core/tablet_flat/test/libs/table/test_comp.h> 
+#include <ydb/core/tablet_flat/test/libs/table/test_make.h> 
+#include <ydb/core/tablet_flat/test/libs/table/test_iter.h> 
+#include <ydb/core/tablet_flat/test/libs/table/test_wreck.h> 
+#include <ydb/core/tablet_flat/test/libs/table/wrap_iter.h> 
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -26,7 +26,7 @@ namespace {
         for (size_t group : xrange(groups)) {
             conf.Group(group).IndexMin = 1024; /* Should cover index buffer grow code */
         }
-        conf.SmallEdge = 19;  /* Packed to page collection large cell values */
+        conf.SmallEdge = 19;  /* Packed to page collection large cell values */ 
         conf.LargeEdge = 29;  /* Large values placed to single blobs */
 
         return conf;
@@ -52,12 +52,12 @@ namespace {
 
     TSubset MakeSubset(TIntrusiveConstPtr<TRowScheme> scheme, TVector<const TPartEggs*> eggs)
     {
-        TVector<TPartView> partView;
+        TVector<TPartView> partView; 
 
         for (auto &one: eggs) {
             for (const auto &part : one->Parts) {
                 Y_VERIFY(part->Slices, "Missing part slices");
-                partView.push_back({ part, nullptr, part->Slices });
+                partView.push_back({ part, nullptr, part->Slices }); 
             }
         }
 
@@ -73,9 +73,9 @@ namespace {
         static const auto conf = PageConf(4);
 
         static const auto eggs0_n = TPartCook::Make(mass0, conf, TLogoBlobID(1, 2, 11, 1, 0, 0), TEpoch::FromIndex(1), TRowVersion(1, 10));
-        static const auto eggs0_e = TPartCook::Make(mass0, conf, TLogoBlobID(1, 2, 12, 1, 0, 0), TEpoch::FromIndex(2), TRowVersion(2, 20), ERowOp::Erase);
+        static const auto eggs0_e = TPartCook::Make(mass0, conf, TLogoBlobID(1, 2, 12, 1, 0, 0), TEpoch::FromIndex(2), TRowVersion(2, 20), ERowOp::Erase); 
         static const auto eggs1_n = TPartCook::Make(mass1, conf, TLogoBlobID(1, 2, 13, 1, 0, 0), TEpoch::FromIndex(3), TRowVersion(3, 30));
-        static const auto eggs1_e = TPartCook::Make(mass1, conf, TLogoBlobID(1, 2, 14, 1, 0, 0), TEpoch::FromIndex(4), TRowVersion(4, 40), ERowOp::Erase);
+        static const auto eggs1_e = TPartCook::Make(mass1, conf, TLogoBlobID(1, 2, 14, 1, 0, 0), TEpoch::FromIndex(4), TRowVersion(4, 40), ERowOp::Erase); 
         static const auto eggs2_n = TPartCook::Make(mass2, conf, TLogoBlobID(1, 2, 15, 1, 0, 0), TEpoch::FromIndex(5), TRowVersion(5, 50));
 
         static const auto eggs = TCompaction(new TForwardEnv(512, 1024), conf)

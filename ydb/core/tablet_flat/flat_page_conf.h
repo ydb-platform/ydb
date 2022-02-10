@@ -3,7 +3,7 @@
 #include "flat_page_iface.h"
 #include "flat_row_eggs.h"
 
-#include <ydb/core/scheme/scheme_tablecell.h>
+#include <ydb/core/scheme/scheme_tablecell.h> 
 
 #include <util/generic/ylimits.h>
 
@@ -84,8 +84,8 @@ namespace NPage {
         bool ByKeyFilter = false;       /* Per-part bloom filter        */
         ui64 MaxRows = 0;               /* Used to set up bloom filter size */
         ui64 SliceSize = Max<ui64>();   /* Data size for slice creation */
-        ui64 MainPageCollectionEdge = Max<ui64>();
-        ui64 SmallPageCollectionEdge = Max<ui64>();
+        ui64 MainPageCollectionEdge = Max<ui64>(); 
+        ui64 SmallPageCollectionEdge = Max<ui64>(); 
         IKeySpace* UnderlayMask = nullptr;
         ISplitKeys* SplitKeys = nullptr;
         TRowVersion MinRowVersion = TRowVersion::Min();

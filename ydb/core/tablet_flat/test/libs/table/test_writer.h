@@ -3,18 +3,18 @@
 #include "test_pretty.h"
 #include "test_part.h"
 
-#include <ydb/core/tablet_flat/test/libs/rows/cook.h>
-#include <ydb/core/tablet_flat/test/libs/rows/tool.h>
-#include <ydb/core/tablet_flat/test/libs/rows/mass.h>
-#include <ydb/core/tablet_flat/test/libs/rows/layout.h>
+#include <ydb/core/tablet_flat/test/libs/rows/cook.h> 
+#include <ydb/core/tablet_flat/test/libs/rows/tool.h> 
+#include <ydb/core/tablet_flat/test/libs/rows/mass.h> 
+#include <ydb/core/tablet_flat/test/libs/rows/layout.h> 
 
-#include <ydb/core/tablet_flat/flat_sausage_grind.h>
-#include <ydb/core/tablet_flat/flat_abi_check.h>
-#include <ydb/core/tablet_flat/flat_table_part.h>
-#include <ydb/core/tablet_flat/flat_part_iface.h>
-#include <ydb/core/tablet_flat/flat_part_scheme.h>
-#include <ydb/core/tablet_flat/flat_part_writer.h>
-#include <ydb/core/tablet_flat/protos/flat_table_part.pb.h>
+#include <ydb/core/tablet_flat/flat_sausage_grind.h> 
+#include <ydb/core/tablet_flat/flat_abi_check.h> 
+#include <ydb/core/tablet_flat/flat_table_part.h> 
+#include <ydb/core/tablet_flat/flat_part_iface.h> 
+#include <ydb/core/tablet_flat/flat_part_scheme.h> 
+#include <ydb/core/tablet_flat/flat_part_writer.h> 
+#include <ydb/core/tablet_flat/protos/flat_table_part.pb.h> 
 
 #include <util/generic/cast.h>
 #include <util/stream/mem.h>
@@ -32,15 +32,15 @@ namespace NTest {
 
         }
 
-        TIntrusiveConstPtr<TPartStore> Load(const TLogoBlobID token) noexcept
+        TIntrusiveConstPtr<TPartStore> Load(const TLogoBlobID token) noexcept 
         {
             using NPage::TFrames;
-            using NPage::TExtBlobs;
+            using NPage::TExtBlobs; 
             using NPage::TBloom;
 
             Y_VERIFY(Store, "Cannot load from an empty store");
 
-            if (Store->PageCollectionPagesCount(0 /* primary room */) == 0) {
+            if (Store->PageCollectionPagesCount(0 /* primary room */) == 0) { 
                 return nullptr;
             }
 
@@ -74,14 +74,14 @@ namespace NTest {
             TEpoch epoch = TEpoch(root.GetEpoch());
 
             return
-                new TPartStore(
+                new TPartStore( 
                     std::move(Store),
                     token,
                     {
                         epoch,
                         TPartScheme::Parse(*eggs.Scheme, eggs.Rooted),
                         *eggs.Index,
-                        eggs.Blobs ? new TExtBlobs(*eggs.Blobs, { }) : nullptr,
+                        eggs.Blobs ? new TExtBlobs(*eggs.Blobs, { }) : nullptr, 
                         eggs.ByKey ? new TBloom(*eggs.ByKey) : nullptr,
                         eggs.Large ? new TFrames(*eggs.Large) : nullptr,
                         eggs.Small ? new TFrames(*eggs.Small) : nullptr,
@@ -120,7 +120,7 @@ namespace NTest {
             }
 
             return {
-                true /* rooted page collection */,
+                true /* rooted page collection */, 
                 Store->GetPage(0, lay.HasIndex() ? lay.GetIndex() : undef),
                 Store->GetPage(0, lay.HasScheme() ? lay.GetScheme() : undef),
                 Store->GetPage(0, lay.HasGlobs() ? lay.GetGlobs() : undef),
@@ -143,7 +143,7 @@ namespace NTest {
     public:
         TWriterBundle(size_t groups, const TLogoBlobID token)
             : Groups(groups)
-            , CookieAllocator(new NPageCollection::TCookieAllocator(token.TabletID(),
+            , CookieAllocator(new NPageCollection::TCookieAllocator(token.TabletID(), 
                         (ui64(token.Generation()) << 32) | token.Step(),
                         { token.Cookie(), token.Cookie() + 1000 },
                         {{ ui8(0) /* channel */, ui32(0) /* grpup*/ }} ))
@@ -176,7 +176,7 @@ namespace NTest {
             Back().WriteInplace(page, body);
         }
 
-        NPageCollection::TGlobId WriteLarge(TString blob, ui64 ref) noexcept override
+        NPageCollection::TGlobId WriteLarge(TString blob, ui64 ref) noexcept override 
         {
             Growth->Pass(ref);
             return Back().WriteLarge(TSharedData::Copy(blob));
@@ -197,16 +197,16 @@ namespace NTest {
 
             NTest::TLoader loader(std::exchange(Store,{ }), std::move(overlay));
 
-            Parts.emplace_back(loader.Load(CookieAllocator->Do(0 /* channel */, 0).Logo));
+            Parts.emplace_back(loader.Load(CookieAllocator->Do(0 /* channel */, 0).Logo)); 
         }
 
     private:
         const size_t Groups;
         ui32 NextGlobOffset = 0;
         TIntrusivePtr<TStore> Store;
-        TAutoPtr<NPageCollection::TCookieAllocator> CookieAllocator;
+        TAutoPtr<NPageCollection::TCookieAllocator> CookieAllocator; 
         TAutoPtr<TScreen::TCook> Growth = new TScreen::TCook;
-        TVector<TIntrusiveConstPtr<TPartStore>> Parts;
+        TVector<TIntrusiveConstPtr<TPartStore>> Parts; 
     };
 
     class TPartCook {
@@ -223,7 +223,7 @@ namespace NTest {
 
         }
 
-        NPageCollection::TGlobId PutBlob(TString data, ui64 ref)
+        NPageCollection::TGlobId PutBlob(TString data, ui64 ref) 
         {
             return static_cast<IPageWriter&>(Pages).WriteLarge(std::move(data), ref);
         }
@@ -251,7 +251,7 @@ namespace NTest {
                 const TLogoBlobID &token = TLogoBlobID(1, 2, 3, 1, 0, 0),
                 TEpoch epoch = TEpoch::Zero(),
                 TRowVersion rowVersion = TRowVersion::Min(),
-                ERowOp op = ERowOp::Upsert)
+                ERowOp op = ERowOp::Upsert) 
         {
             TPartCook cook(mass.Model->Scheme, conf, token, epoch);
 
@@ -283,7 +283,7 @@ namespace NTest {
         }
 
         template<typename ...TArgs>
-        inline TPartCook& AddOpN(ERowOp op, TArgs&&...args)
+        inline TPartCook& AddOpN(ERowOp op, TArgs&&...args) 
         {
             auto row = *TNatural(*Scheme).Col(std::forward<TArgs>(args)...);
 
@@ -295,11 +295,11 @@ namespace NTest {
         {
             auto row = *TNatural(*Scheme).Col(std::forward<TArgs>(args)...);
 
-            return Add(std::move(row), ERowOp::Upsert);
+            return Add(std::move(row), ERowOp::Upsert); 
         }
 
         template<typename TIter>
-        TPartCook& AddOp(ERowOp op, TIter it, const TIter end)
+        TPartCook& AddOp(ERowOp op, TIter it, const TIter end) 
         {
             while (it != end) Add(*it++, op);
 
@@ -309,12 +309,12 @@ namespace NTest {
         template<typename TIter>
         TPartCook& Add(TIter it, const TIter end)
         {
-            while (it != end) Add(*it++, ERowOp::Upsert);
+            while (it != end) Add(*it++, ERowOp::Upsert); 
 
             return *this;
         }
 
-        TPartCook& Add(const TRow &tagged, ERowOp rop = ERowOp::Upsert)
+        TPartCook& Add(const TRow &tagged, ERowOp rop = ERowOp::Upsert) 
         {
             TVector<TCell> key(Scheme->Keys->Types.size());
             TRowState row(Remap.size());

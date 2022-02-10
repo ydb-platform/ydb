@@ -1,8 +1,8 @@
 LIBRARY()
 
 OWNER(
-    g:yql
-    g:yql_ydb_core
+    g:yql 
+    g:yql_ydb_core 
 )
 
 PEERDIR(

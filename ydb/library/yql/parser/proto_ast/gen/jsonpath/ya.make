@@ -5,7 +5,7 @@ OWNER(g:yql g:kikimr g:yql_ydb_core)
 IF (CPP_PROTO)
     SET(antlr_output ${ARCADIA_BUILD_ROOT}/${MODDIR})
     SET(antlr_templates ${antlr_output}/org/antlr/codegen/templates)
-    SET(jsonpath_grammar ${ARCADIA_ROOT}/ydb/library/yql/minikql/jsonpath/JsonPath.g)
+    SET(jsonpath_grammar ${ARCADIA_ROOT}/ydb/library/yql/minikql/jsonpath/JsonPath.g) 
 
     SET(ANTLR_PACKAGE_NAME NJsonPathGenerated)
     SET(PROTOBUF_HEADER_PATH ${MODDIR})

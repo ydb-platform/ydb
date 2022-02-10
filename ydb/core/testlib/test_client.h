@@ -1,29 +1,29 @@
 #pragma once
 #include "tablet_helpers.h"
 
-#include <ydb/core/base/appdata.h>
-#include <ydb/core/base/subdomain.h>
-#include <ydb/core/base/tablet_types.h>
-#include <ydb/core/base/domain.h>
-#include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
-#include <ydb/public/lib/deprecated/client/msgbus_client.h>
-#include <ydb/core/client/server/grpc_server.h>
-#include <ydb/core/scheme/scheme_types_defs.h>
-#include <ydb/core/scheme/scheme_type_registry.h>
-#include <ydb/core/mind/local.h>
+#include <ydb/core/base/appdata.h> 
+#include <ydb/core/base/subdomain.h> 
+#include <ydb/core/base/tablet_types.h> 
+#include <ydb/core/base/domain.h> 
+#include <ydb/public/sdk/cpp/client/ydb_driver/driver.h> 
+#include <ydb/public/lib/deprecated/client/msgbus_client.h> 
+#include <ydb/core/client/server/grpc_server.h> 
+#include <ydb/core/scheme/scheme_types_defs.h> 
+#include <ydb/core/scheme/scheme_type_registry.h> 
+#include <ydb/core/mind/local.h> 
 #include <ydb/library/yql/minikql/mkql_node.h>
 #include <ydb/library/yql/minikql/mkql_node_serialization.h>
 #include <ydb/library/yql/minikql/mkql_program_builder.h>
 #include <ydb/library/yql/minikql/mkql_function_registry.h>
-#include <ydb/library/mkql_proto/protos/minikql.pb.h>
-#include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/library/mkql_proto/protos/minikql.pb.h> 
+#include <ydb/core/protos/flat_scheme_op.pb.h> 
 #include <library/cpp/grpc/server/grpc_server.h>
-#include <ydb/core/testlib/basics/runtime.h>
-#include <ydb/core/testlib/basics/appdata.h>
-#include <ydb/core/protos/kesus.pb.h>
-#include <ydb/core/kesus/tablet/events.h>
-#include <ydb/core/security/ticket_parser.h>
-#include <ydb/core/base/grpc_service_factory.h>
+#include <ydb/core/testlib/basics/runtime.h> 
+#include <ydb/core/testlib/basics/appdata.h> 
+#include <ydb/core/protos/kesus.pb.h> 
+#include <ydb/core/kesus/tablet/events.h> 
+#include <ydb/core/security/ticket_parser.h> 
+#include <ydb/core/base/grpc_service_factory.h> 
 
 #include <google/protobuf/text_format.h>
 
@@ -279,7 +279,7 @@ namespace Tests {
         virtual ~TClient();
 
         const NMsgBusProxy::TMsgBusClientConfig& GetClientConfig() const;
-        std::shared_ptr<NMsgBusProxy::TMsgBusClient> GetClient() const;
+        std::shared_ptr<NMsgBusProxy::TMsgBusClient> GetClient() const; 
         bool LoadTypes();
         const NScheme::TTypeRegistry& GetTypeRegistry() const;
         const NScheme::TTypeMetadataRegistry& GetTypeMetadataRegistry() const;
@@ -514,7 +514,7 @@ namespace Tests {
         NScheme::TKikimrTypeRegistry TypeRegistry;
         TIntrusivePtr<NMiniKQL::IFunctionRegistry> FunctionRegistry;
         NMsgBusProxy::TMsgBusClientConfig ClientConfig;
-        std::shared_ptr<NMsgBusProxy::TMsgBusClient> Client;
+        std::shared_ptr<NMsgBusProxy::TMsgBusClient> Client; 
         TMaybe<ui64> TypesEtag;
         NScheme::TTypeMetadataRegistry LoadedTypeMetadataRegistry;
         TIntrusivePtr<NMiniKQL::IFunctionRegistry> LoadedFunctionRegistry;

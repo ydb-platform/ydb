@@ -1,25 +1,25 @@
 #include "kqp_proxy_service.h"
 
-#include <ydb/core/kqp/kqp_impl.h>
-#include <ydb/core/base/appdata.h>
-#include <ydb/core/base/path.h>
-#include <ydb/core/base/location.h>
-#include <ydb/core/base/statestorage.h>
-#include <ydb/core/cms/console/configs_dispatcher.h>
-#include <ydb/core/cms/console/console.h>
-#include <ydb/core/mind/tenant_pool.h>
-#include <ydb/core/kqp/counters/kqp_counters.h>
-#include <ydb/core/kqp/node/kqp_node.h>
-#include <ydb/core/kqp/rm/kqp_rm.h>
-#include <ydb/core/kqp/runtime/kqp_spilling_file.h>
-#include <ydb/core/kqp/runtime/kqp_spilling.h>
-#include <ydb/core/kqp/common/kqp_timeouts.h>
-#include <ydb/core/actorlib_impl/long_timer.h>
-#include <ydb/public/lib/operation_id/operation_id.h>
-#include <ydb/core/node_whiteboard/node_whiteboard.h>
+#include <ydb/core/kqp/kqp_impl.h> 
+#include <ydb/core/base/appdata.h> 
+#include <ydb/core/base/path.h> 
+#include <ydb/core/base/location.h> 
+#include <ydb/core/base/statestorage.h> 
+#include <ydb/core/cms/console/configs_dispatcher.h> 
+#include <ydb/core/cms/console/console.h> 
+#include <ydb/core/mind/tenant_pool.h> 
+#include <ydb/core/kqp/counters/kqp_counters.h> 
+#include <ydb/core/kqp/node/kqp_node.h> 
+#include <ydb/core/kqp/rm/kqp_rm.h> 
+#include <ydb/core/kqp/runtime/kqp_spilling_file.h> 
+#include <ydb/core/kqp/runtime/kqp_spilling.h> 
+#include <ydb/core/kqp/common/kqp_timeouts.h> 
+#include <ydb/core/actorlib_impl/long_timer.h> 
+#include <ydb/public/lib/operation_id/operation_id.h> 
+#include <ydb/core/node_whiteboard/node_whiteboard.h> 
 
-#include <ydb/library/yql/utils/actor_log/log.h>
-#include <ydb/library/yql/core/services/mounts/yql_mounts.h>
+#include <ydb/library/yql/utils/actor_log/log.h> 
+#include <ydb/library/yql/core/services/mounts/yql_mounts.h> 
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/interconnect.h>
@@ -244,13 +244,13 @@ public:
 
     TKqpProxyService(const NKikimrConfig::TLogConfig& logConfig,
         const NKikimrConfig::TTableServiceConfig& tableServiceConfig,
-        TVector<NKikimrKqp::TKqpSetting>&& settings,
-        std::shared_ptr<IQueryReplayBackendFactory> queryReplayFactory)
+        TVector<NKikimrKqp::TKqpSetting>&& settings, 
+        std::shared_ptr<IQueryReplayBackendFactory> queryReplayFactory) 
         : YqlLoggerScope(new NYql::NLog::TTlsLogBackend(new TNullLogBackend()))
         , LogConfig(logConfig)
         , TableServiceConfig(tableServiceConfig)
-        , KqpSettings(std::make_shared<const TKqpSettings>(std::move(settings)))
-        , QueryReplayFactory(std::move(queryReplayFactory))
+        , KqpSettings(std::make_shared<const TKqpSettings>(std::move(settings))) 
+        , QueryReplayFactory(std::move(queryReplayFactory)) 
         , PendingRequests()
         , TenantsReady(false)
         , Tenants()
@@ -292,8 +292,8 @@ public:
         }
 
         // Create compile service
-        CompileService = TlsActivationContext->ExecutorThread.RegisterActor(CreateKqpCompileService(TableServiceConfig,
-            KqpSettings, ModuleResolverState, Counters, std::move(QueryReplayFactory)));
+        CompileService = TlsActivationContext->ExecutorThread.RegisterActor(CreateKqpCompileService(TableServiceConfig, 
+            KqpSettings, ModuleResolverState, Counters, std::move(QueryReplayFactory))); 
         TlsActivationContext->ExecutorThread.ActorSystem->RegisterLocalService(
             MakeKqpCompileServiceID(SelfId().NodeId()), CompileService);
 
@@ -1266,7 +1266,7 @@ private:
     NKikimrConfig::TLogConfig LogConfig;
     NKikimrConfig::TTableServiceConfig TableServiceConfig;
     TKqpSettings::TConstPtr KqpSettings;
-    std::shared_ptr<IQueryReplayBackendFactory> QueryReplayFactory;
+    std::shared_ptr<IQueryReplayBackendFactory> QueryReplayFactory; 
 
     std::optional<TPeerStats> PeerStats;
     TKqpProxyRequestTracker PendingRequests;
@@ -1301,10 +1301,10 @@ private:
 
 IActor* CreateKqpProxyService(const NKikimrConfig::TLogConfig& logConfig,
     const NKikimrConfig::TTableServiceConfig& tableServiceConfig,
-    TVector<NKikimrKqp::TKqpSetting>&& settings,
-    std::shared_ptr<IQueryReplayBackendFactory> queryReplayFactory)
+    TVector<NKikimrKqp::TKqpSetting>&& settings, 
+    std::shared_ptr<IQueryReplayBackendFactory> queryReplayFactory) 
 {
-    return new TKqpProxyService(logConfig, tableServiceConfig, std::move(settings), std::move(queryReplayFactory));
+    return new TKqpProxyService(logConfig, tableServiceConfig, std::move(settings), std::move(queryReplayFactory)); 
 }
 
 } // namespace NKikimr::NKqp

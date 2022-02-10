@@ -1,7 +1,7 @@
 LIBRARY()
 
 OWNER(
-    cthulhu
+    cthulhu 
     ddoarn
     fomichev
     va-kuznecov
@@ -13,21 +13,21 @@ SRCS(
     erasure.h
     erasure_rope.cpp
     erasure_rope.h
-    erasure_perf_test.cpp
+    erasure_perf_test.cpp 
 )
 
 PEERDIR(
     library/cpp/actors/util
     library/cpp/containers/stack_vector
-    library/cpp/digest/crc32c
+    library/cpp/digest/crc32c 
     library/cpp/digest/old_crc
-    ydb/core/debug
+    ydb/core/debug 
 )
 
 IF (MSVC)
-    CFLAGS(
-        /wd4503
-    )
+    CFLAGS( 
+        /wd4503 
+    ) 
 ENDIF()
 
 END()

@@ -14,14 +14,14 @@ TLoader::TLoader(TVector<TIntrusivePtr<TCache>> pageCollections,
         TString opaque,
         TVector<TString> deltas,
         TEpoch epoch)
-    : Packs(std::move(pageCollections))
+    : Packs(std::move(pageCollections)) 
     , Legacy(std::move(legacy))
     , Opaque(std::move(opaque))
     , Deltas(std::move(deltas))
     , Epoch(epoch)
 {
     if (Packs.size() < 1) {
-        Y_Fail("Cannot load TPart from " << Packs.size() << " page collections");
+        Y_Fail("Cannot load TPart from " << Packs.size() << " page collections"); 
     }
 }
 
@@ -29,20 +29,20 @@ TLoader::~TLoader() { }
 
 void TLoader::StageParseMeta() noexcept
 {
-    auto* metaPacket = dynamic_cast<const NPageCollection::TPageCollection*>(Packs.at(0)->PageCollection.Get());
+    auto* metaPacket = dynamic_cast<const NPageCollection::TPageCollection*>(Packs.at(0)->PageCollection.Get()); 
     if (!metaPacket) {
-        Y_Fail("Unexpected IPageCollection type " << TypeName(*Packs.at(0)->PageCollection));
+        Y_Fail("Unexpected IPageCollection type " << TypeName(*Packs.at(0)->PageCollection)); 
     }
 
     auto &meta = metaPacket->Meta;
 
     TPageId pageId = meta.TotalPages();
 
-    Y_VERIFY(pageId > 0, "Got page collection without pages");
+    Y_VERIFY(pageId > 0, "Got page collection without pages"); 
 
     if (EPage(meta.Page(pageId - 1).Type) == EPage::Schem2) {
-        /* New styled page collection with layout meta. Later root meta will
-            be placed in page collection metablob, now it is placed as inplace
+        /* New styled page collection with layout meta. Later root meta will 
+            be placed in page collection metablob, now it is placed as inplace 
             data for EPage::Schem2, have to be the last page.
             */
 
@@ -50,7 +50,7 @@ void TLoader::StageParseMeta() noexcept
 
         ParseMeta(meta.GetPageInplaceData(SchemeId));
 
-        Y_VERIFY(Root.HasLayout(), "Rooted page collection has no layout");
+        Y_VERIFY(Root.HasLayout(), "Rooted page collection has no layout"); 
 
         if (auto *abi = Root.HasEvol() ? &Root.GetEvol() : nullptr)
             TAbi().Check(abi->GetTail(), abi->GetHead(), "part");
@@ -76,7 +76,7 @@ void TLoader::StageParseMeta() noexcept
             HistoricIndexesIds.push_back(id);
         }
 
-    } else { /* legacy page collection w/o layout data, (Evolution < 14) */
+    } else { /* legacy page collection w/o layout data, (Evolution < 14) */ 
         do {
             pageId--;
             auto type = EPage(meta.Page(pageId).Type);
@@ -85,7 +85,7 @@ void TLoader::StageParseMeta() noexcept
             case EPage::Scheme: SchemeId = pageId; break;
             case EPage::Index: IndexId = pageId; break;
             /* All special pages have to be placed after the index
-                page, hack is required for legacy page collections without
+                page, hack is required for legacy page collections without 
                 topology data in metablob.
                 */
             case EPage::Frames: LargeId = pageId; break;
@@ -107,7 +107,7 @@ void TLoader::StageParseMeta() noexcept
         || (LargeId == Max<TPageId>()) != (GlobsId == Max<TPageId>())
         || (1 + GroupIndexesIds.size() + (SmallId == Max<TPageId>() ? 0 : 1)) != Packs.size())
     {
-        Y_Fail("Part " << Packs[0]->PageCollection->Label() << " has"
+        Y_Fail("Part " << Packs[0]->PageCollection->Label() << " has" 
             << " invalid layout : " << (Rooted ? "rooted" : "legacy")
             << " " << Packs.size() << "s " << meta.TotalPages() << "pg"
             << ", Scheme " << SchemeId << ", Index " << IndexId
@@ -120,7 +120,7 @@ void TLoader::StageParseMeta() noexcept
 
 TAutoPtr<NPageCollection::TFetch> TLoader::StageCreatePartView() noexcept
 {
-    Y_VERIFY(!PartView, "PartView already initialized in CreatePartView stage");
+    Y_VERIFY(!PartView, "PartView already initialized in CreatePartView stage"); 
     Y_VERIFY(Packs && Packs.front());
 
     TVector<TPageId> load;
@@ -142,7 +142,7 @@ TAutoPtr<NPageCollection::TFetch> TLoader::StageCreatePartView() noexcept
     }
 
     if (load) {
-        return new NPageCollection::TFetch{ 0, Packs[0]->PageCollection, std::move(load) };
+        return new NPageCollection::TFetch{ 0, Packs[0]->PageCollection, std::move(load) }; 
     }
 
     auto *scheme = GetPage(SchemeId);
@@ -159,7 +159,7 @@ TAutoPtr<NPageCollection::TFetch> TLoader::StageCreatePartView() noexcept
     } else if (ByKeyId != Max<TPageId>() && !byKey) {
         Y_FAIL("Filter page must be loaded if it exists");
     } else if (small && Packs.size() != (1 + GroupIndexesIds.size() + 1)) {
-        Y_Fail("TPart has small blobs, " << Packs.size() << " page collections");
+        Y_Fail("TPart has small blobs, " << Packs.size() << " page collections"); 
     }
 
     TVector<TSharedData> groupIndexes;
@@ -181,20 +181,20 @@ TAutoPtr<NPageCollection::TFetch> TLoader::StageCreatePartView() noexcept
         historicIndexes.emplace_back(*page);
     }
 
-    const auto extra = BlobsLabelFor(Packs[0]->PageCollection->Label());
+    const auto extra = BlobsLabelFor(Packs[0]->PageCollection->Label()); 
 
     auto *stat = Root.HasStat() ? &Root.GetStat() : nullptr;
 
     // Use epoch from metadata unless it has been provided to loader externally
     TEpoch epoch = Epoch != TEpoch::Max() ? Epoch : TEpoch(Root.GetEpoch());
 
-    auto *partStore = new TPartStore(
-        Packs.front()->PageCollection->Label(),
+    auto *partStore = new TPartStore( 
+        Packs.front()->PageCollection->Label(), 
         {
             epoch,
             TPartScheme::Parse(*scheme, Rooted),
             *index,
-            blobs ? new NPage::TExtBlobs(*blobs, extra) : nullptr,
+            blobs ? new NPage::TExtBlobs(*blobs, extra) : nullptr, 
             byKey ? new NPage::TBloom(*byKey) : nullptr,
             large ? new NPage::TFrames(*large) : nullptr,
             small ? new NPage::TFrames(*small) : nullptr,
@@ -217,40 +217,40 @@ TAutoPtr<NPageCollection::TFetch> TLoader::StageCreatePartView() noexcept
         }
     );
 
-    partStore->PageCollections = std::move(Packs);
+    partStore->PageCollections = std::move(Packs); 
 
-    if (partStore->Blobs) {
-        Y_VERIFY(partStore->Large, "Cannot use blobs without frames");
+    if (partStore->Blobs) { 
+        Y_VERIFY(partStore->Large, "Cannot use blobs without frames"); 
 
-        partStore->Pseudo = new TCache(partStore->Blobs);
+        partStore->Pseudo = new TCache(partStore->Blobs); 
     }
 
     auto overlay = TOverlay::Decode(Legacy, Opaque);
 
-    PartView = { partStore, std::move(overlay.Screen), std::move(overlay.Slices) };
+    PartView = { partStore, std::move(overlay.Screen), std::move(overlay.Slices) }; 
 
-    KeysEnv = new TKeysEnv(PartView.Part.Get(), TPartStore::Storages(PartView).at(0));
+    KeysEnv = new TKeysEnv(PartView.Part.Get(), TPartStore::Storages(PartView).at(0)); 
 
     return nullptr;
 }
 
 TAutoPtr<NPageCollection::TFetch> TLoader::StageSliceBounds() noexcept
 {
-    Y_VERIFY(PartView, "Cannot generate bounds for a missing part");
+    Y_VERIFY(PartView, "Cannot generate bounds for a missing part"); 
 
-    if (PartView.Slices) {
-        TOverlay{ PartView.Screen, PartView.Slices }.Validate();
+    if (PartView.Slices) { 
+        TOverlay{ PartView.Screen, PartView.Slices }.Validate(); 
         return nullptr;
     }
 
     KeysEnv->Check(false); /* ensure there is no pending pages to load */
 
-    TKeysLoader loader(PartView.Part.Get(), KeysEnv.Get());
+    TKeysLoader loader(PartView.Part.Get(), KeysEnv.Get()); 
 
-    if (auto run = loader.Do(PartView.Screen)) {
+    if (auto run = loader.Do(PartView.Screen)) { 
         KeysEnv->Check(false); /* On success there shouldn't be left loads */
-        PartView.Slices = std::move(run);
-        TOverlay{ PartView.Screen, PartView.Slices }.Validate();
+        PartView.Slices = std::move(run); 
+        TOverlay{ PartView.Screen, PartView.Slices }.Validate(); 
 
         return nullptr;
     } else if (auto fetches = KeysEnv->GetFetches()) {
@@ -262,24 +262,24 @@ TAutoPtr<NPageCollection::TFetch> TLoader::StageSliceBounds() noexcept
 
 void TLoader::StageDeltas() noexcept
 {
-    Y_VERIFY(PartView, "Cannot apply deltas to a missing part");
-    Y_VERIFY(PartView.Slices, "Missing slices in deltas stage");
+    Y_VERIFY(PartView, "Cannot apply deltas to a missing part"); 
+    Y_VERIFY(PartView.Slices, "Missing slices in deltas stage"); 
 
     for (const TString& rawDelta : Deltas) {
-        TOverlay overlay{ std::move(PartView.Screen), std::move(PartView.Slices) };
+        TOverlay overlay{ std::move(PartView.Screen), std::move(PartView.Slices) }; 
 
         overlay.ApplyDelta(rawDelta);
 
-        PartView.Screen = std::move(overlay.Screen);
-        PartView.Slices = std::move(overlay.Slices);
+        PartView.Screen = std::move(overlay.Screen); 
+        PartView.Slices = std::move(overlay.Slices); 
     }
 }
 
-void TLoader::Save(ui64 cookie, TArrayRef<NSharedCache::TEvResult::TLoaded> blocks) noexcept
+void TLoader::Save(ui64 cookie, TArrayRef<NSharedCache::TEvResult::TLoaded> blocks) noexcept 
 {
     Y_VERIFY(cookie == 0, "Only the leader pack is used on load");
 
-    if (Stage == EStage::PartView) {
+    if (Stage == EStage::PartView) { 
         for (auto& loaded : blocks) {
             Packs[0]->Fill(std::move(loaded), true);
         }

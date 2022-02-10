@@ -1,5 +1,5 @@
 OWNER(
-    g:kikimr
+    g:kikimr 
     g:sqs
 )
 
@@ -10,8 +10,8 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/core/protos
-    ydb/public/lib/deprecated/client
+    ydb/core/protos 
+    ydb/public/lib/deprecated/client 
 )
 
 END()

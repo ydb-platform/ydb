@@ -1,19 +1,19 @@
 #include "datashard_txs.h"
 
 namespace NKikimr {
-namespace NDataShard {
+namespace NDataShard { 
 
 using namespace NTabletFlatExecutor;
 
-TDataShard::TTxStoreScanState::TTxStoreScanState(
-    TDataShard *ds,
+TDataShard::TTxStoreScanState::TTxStoreScanState( 
+    TDataShard *ds, 
     TEvPrivate::TEvPersistScanState::TPtr ev)
     : TBase(ds)
     , Ev(ev)
 {
 }
 
-bool TDataShard::TTxStoreScanState::Execute(TTransactionContext &txc,
+bool TDataShard::TTxStoreScanState::Execute(TTransactionContext &txc, 
     const TActorContext &ctx)
 {
     const TEvPrivate::TEvPersistScanState* event = Ev->Get();
@@ -56,10 +56,10 @@ bool TDataShard::TTxStoreScanState::Execute(TTransactionContext &txc,
     return true;
 }
 
-void TDataShard::TTxStoreScanState::Complete(const TActorContext &ctx)
+void TDataShard::TTxStoreScanState::Complete(const TActorContext &ctx) 
 {
-    ctx.Send(Ev->Sender, new TDataShard::TEvPrivate::TEvPersistScanStateAck());
+    ctx.Send(Ev->Sender, new TDataShard::TEvPrivate::TEvPersistScanStateAck()); 
 }
 
-} // namespace NDataShard
+} // namespace NDataShard 
 } // namespace NKikimr

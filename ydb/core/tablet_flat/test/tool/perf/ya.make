@@ -8,10 +8,10 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/core/tablet_flat/test/libs/table
+    ydb/core/tablet_flat/test/libs/table 
     library/cpp/charset
-    library/cpp/getopt
-    ydb/core/tablet_flat
+    library/cpp/getopt 
+    ydb/core/tablet_flat 
 )
 
 END()

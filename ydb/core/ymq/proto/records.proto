@@ -1,6 +1,6 @@
 package NKikimr.NSQS;
 
-import "ydb/core/protos/sqs.proto";
+import "ydb/core/protos/sqs.proto"; 
 
 message TMessageAttributeList {
     /// Message's attributes.

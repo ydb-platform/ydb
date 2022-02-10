@@ -1,7 +1,7 @@
 #pragma once
 
 #include "backend.h"
-
+ 
 class IOutputStream;
 
 class TStreamLogBackend: public TLogBackend {

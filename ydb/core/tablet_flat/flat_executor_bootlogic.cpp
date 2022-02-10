@@ -12,18 +12,18 @@
 #include "util_fmt_logger.h"
 #include "util_fmt_basic.h"
 #include "shared_sausagecache.h"
-#include <ydb/core/base/appdata.h>
-#include <ydb/core/base/counters.h>
-#include <ydb/core/util/pb.h>
+#include <ydb/core/base/appdata.h> 
+#include <ydb/core/base/counters.h> 
+#include <ydb/core/util/pb.h> 
 
 namespace NKikimr {
 namespace NTabletFlatExecutor {
 
-NBoot::TLoadBlobs::TLoadBlobs(IStep *owner, NPageCollection::TLargeGlobId largeGlobId, ui64 cookie)
+NBoot::TLoadBlobs::TLoadBlobs(IStep *owner, NPageCollection::TLargeGlobId largeGlobId, ui64 cookie) 
     : IStep(owner, NBoot::EStep::Blobs)
     , Cookie(cookie)
-    , LargeGlobId(largeGlobId)
-    , State(LargeGlobId)
+    , LargeGlobId(largeGlobId) 
+    , State(LargeGlobId) 
 {
     Logic->LoadEntry(this);
 }
@@ -84,14 +84,14 @@ TExecutorBootLogic::EOpResult TExecutorBootLogic::ReceiveFollowerBoot(
             body.append(blob.second);
         }
 
-        const auto span = NPageCollection::TGroupBlobsByCookie(logo).Do();
-        const auto largeGlobId = NPageCollection::TGroupBlobsByCookie::ToLargeGlobId(span, GetBSGroupFor(logo[0]));
+        const auto span = NPageCollection::TGroupBlobsByCookie(logo).Do(); 
+        const auto largeGlobId = NPageCollection::TGroupBlobsByCookie::ToLargeGlobId(span, GetBSGroupFor(logo[0])); 
 
         Y_VERIFY(span.size() == update->References.size());
         Y_VERIFY(TCookie(logo[0].Cookie()).Type() == TCookie::EType::Log);
-        Y_VERIFY(largeGlobId, "Cannot make TLargeGlobId for snapshot");
+        Y_VERIFY(largeGlobId, "Cannot make TLargeGlobId for snapshot"); 
 
-        Steps->Spawn<NBoot::TStages>(nullptr, new NBoot::TBody{ largeGlobId, std::move(body) });
+        Steps->Spawn<NBoot::TStages>(nullptr, new NBoot::TBody{ largeGlobId, std::move(body) }); 
     }
 
     Steps->Execute();
@@ -133,16 +133,16 @@ void TExecutorBootLogic::PrepareEnv(bool follower, ui32 gen, TExecutorCaches cac
     Result_ = new NBoot::TResult;
 
     if (follower) {
-        /* Required for TLargeGlobId-less TPart data (Evolution < 12) */
+        /* Required for TLargeGlobId-less TPart data (Evolution < 12) */ 
 
         Result().Loans = new TExecutorBorrowLogic(nullptr);
     } else {
-        auto &steppedCookieAllocatorFactory = *(State().SteppedCookieAllocatorFactory = new NBoot::TSteppedCookieAllocatorFactory(*Info, gen));
+        auto &steppedCookieAllocatorFactory = *(State().SteppedCookieAllocatorFactory = new NBoot::TSteppedCookieAllocatorFactory(*Info, gen)); 
 
         State().Waste = new NSnap::TWaste(gen);
-        Result().GcLogic = new TExecutorGCLogic(Info, steppedCookieAllocatorFactory.Sys(TCookie::EIdx::GCExt));
-        Result().Alter = new TLogicAlter(steppedCookieAllocatorFactory.Sys(TCookie::EIdx::Alter));
-        Result().Loans = new TExecutorBorrowLogic(steppedCookieAllocatorFactory.Sys(TCookie::EIdx::Loan));
+        Result().GcLogic = new TExecutorGCLogic(Info, steppedCookieAllocatorFactory.Sys(TCookie::EIdx::GCExt)); 
+        Result().Alter = new TLogicAlter(steppedCookieAllocatorFactory.Sys(TCookie::EIdx::Alter)); 
+        Result().Loans = new TExecutorBorrowLogic(steppedCookieAllocatorFactory.Sys(TCookie::EIdx::Loan)); 
         Result().Comp = new TCompactionLogicState();
 
         /* The rest of ... are produced on TStages::FinalizeLogicObjects() */
@@ -152,15 +152,15 @@ void TExecutorBootLogic::PrepareEnv(bool follower, ui32 gen, TExecutorCaches cac
 void TExecutorBootLogic::LoadEntry(TIntrusivePtr<NBoot::TLoadBlobs> entry) {
     if (auto logl = Steps->Logger()->Log(ELnLev::Debug)) {
         logl
-            << NFmt::Do(State()) << " Loading " << NFmt::Do(entry->LargeGlobId);
+            << NFmt::Do(State()) << " Loading " << NFmt::Do(entry->LargeGlobId); 
     }
 
-    Y_VERIFY(entry->LargeGlobId, "Support loads only of valid TLargeGlobId units");
-    Y_VERIFY(entry->Blobs(), "Valid TLargeGlobId unit hasn't been expanded to blobs");
+    Y_VERIFY(entry->LargeGlobId, "Support loads only of valid TLargeGlobId units"); 
+    Y_VERIFY(entry->Blobs(), "Valid TLargeGlobId unit hasn't been expanded to blobs"); 
 
-    const ui32 group = entry->LargeGlobId.Group;
+    const ui32 group = entry->LargeGlobId.Group; 
 
-    Y_VERIFY(group != NPageCollection::TLargeGlobId::InvalidGroup, "Got TLargeGlobId without BS group");
+    Y_VERIFY(group != NPageCollection::TLargeGlobId::InvalidGroup, "Got TLargeGlobId without BS group"); 
 
     for (const auto &blobId : entry->Blobs()) {
         EntriesToLoad[blobId] = entry;
@@ -169,17 +169,17 @@ void TExecutorBootLogic::LoadEntry(TIntrusivePtr<NBoot::TLoadBlobs> entry) {
 }
 
 NBoot::TSpawned TExecutorBootLogic::LoadPages(NBoot::IStep *step, TAutoPtr<NPageCollection::TFetch> req) {
-    auto success = Loads.insert(std::make_pair(req->PageCollection.Get(), step)).second;
+    auto success = Loads.insert(std::make_pair(req->PageCollection.Get(), step)).second; 
 
-    Y_VERIFY(success, "IPageCollection queued twice for loading");
+    Y_VERIFY(success, "IPageCollection queued twice for loading"); 
 
     Ops->Send(
-        MakeSharedPageCacheId(),
-        new NSharedCache::TEvRequest(
-            NBlockIO::EPriority::Fast,
+        MakeSharedPageCacheId(), 
+        new NSharedCache::TEvRequest( 
+            NBlockIO::EPriority::Fast, 
             req,
             SelfId),
-        0, (ui64)EPageCollectionRequest::BootLogic);
+        0, (ui64)EPageCollectionRequest::BootLogic); 
 
     return NBoot::TSpawned(true);
 }
@@ -257,8 +257,8 @@ TExecutorBootLogic::EOpResult TExecutorBootLogic::Receive(::NActors::IEventHandl
         if (!LoadBlobQueue.ProcessResult(msg))
             return OpResultBroken;
 
-    } else if (auto *msg = ev.CastAsLocal<NSharedCache::TEvResult>()) {
-        if (EPageCollectionRequest(ev.Cookie) != EPageCollectionRequest::BootLogic)
+    } else if (auto *msg = ev.CastAsLocal<NSharedCache::TEvResult>()) { 
+        if (EPageCollectionRequest(ev.Cookie) != EPageCollectionRequest::BootLogic) 
             return OpResultUnhandled;
 
         auto it = Loads.find(msg->Origin.Get());

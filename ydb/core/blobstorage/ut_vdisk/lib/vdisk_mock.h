@@ -2,7 +2,7 @@
 
 #include "defs.h"
 
-#include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
+#include <ydb/core/blobstorage/vdisk/common/vdisk_events.h> 
 
 #include <util/system/mutex.h>
 
@@ -63,8 +63,8 @@ struct TVDiskMockSharedState : public TThrRefBase {
     TVDiskMockSharedState(const TVDiskMockSharedState& other) = delete;
 };
 
-extern NActors::IActor *CreateVDiskMockActor(const TVDiskID& vdiskId,
-    TIntrusivePtr<TVDiskMockSharedState> shared,
+extern NActors::IActor *CreateVDiskMockActor(const TVDiskID& vdiskId, 
+    TIntrusivePtr<TVDiskMockSharedState> shared, 
     std::shared_ptr<TBlobStorageGroupInfo::TTopology> top);
 
 } // NKikimr

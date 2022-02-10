@@ -1,16 +1,16 @@
 #pragma once
 
-#include <ydb/core/tablet_flat/flat_cxx_database.h>
-#include <ydb/core/util/intrusive_heap.h>
+#include <ydb/core/tablet_flat/flat_cxx_database.h> 
+#include <ydb/core/util/intrusive_heap.h> 
 
 #include <util/generic/hash.h>
 #include <util/generic/list.h>
 #include <util/generic/map.h>
 
 namespace NKikimr {
-namespace NDataShard {
+namespace NDataShard { 
 
-class TDataShard;
+class TDataShard; 
 
 struct TBuildIndexRecord {
 
@@ -56,5 +56,5 @@ private:
     TBuildIndexIdToScanIdMap Records;
 };
 
-}   // namespace NDataShard
+}   // namespace NDataShard 
 }   // namespace NKikimr

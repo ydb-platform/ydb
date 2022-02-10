@@ -1,14 +1,14 @@
 LIBRARY()
 
-OWNER(g:yql)
+OWNER(g:yql) 
 
 PEERDIR(
-    ydb/core/scheme
-    ydb/library/yql/minikql
-    ydb/library/yql/minikql/computation
-    ydb/library/yql/providers/common/structured_token
-    ydb/public/lib/experimental
-    ydb/public/sdk/cpp/client/ydb_driver
+    ydb/core/scheme 
+    ydb/library/yql/minikql 
+    ydb/library/yql/minikql/computation 
+    ydb/library/yql/providers/common/structured_token 
+    ydb/public/lib/experimental 
+    ydb/public/sdk/cpp/client/ydb_driver 
     ydb/library/yql/providers/ydb/proto
 )
 

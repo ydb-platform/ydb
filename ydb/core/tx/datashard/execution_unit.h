@@ -5,18 +5,18 @@
 #include "execution_unit_kind.h"
 #include "operation.h"
 
-#include <ydb/core/tablet_flat/tablet_flat_executor.h>
+#include <ydb/core/tablet_flat/tablet_flat_executor.h> 
 
 #include <util/generic/hash.h>
 #include <util/generic/ptr.h>
 #include <util/generic/queue.h>
 
 namespace NKikimr {
-namespace NDataShard {
+namespace NDataShard { 
 
 using NTabletFlatExecutor::TTransactionContext;
 
-class TDataShard;
+class TDataShard; 
 class TPipeline;
 
 enum class EExecutionStatus {
@@ -58,7 +58,7 @@ public:
 
     TExecutionUnit(EExecutionUnitKind kind,
                    bool executionMightRestart,
-                   TDataShard &dataShard,
+                   TDataShard &dataShard, 
                    TPipeline &pipeline)
         : Kind(kind)
         , ExecutionMightRestart(executionMightRestart)
@@ -124,14 +124,14 @@ protected:
 
     const EExecutionUnitKind Kind;
     bool ExecutionMightRestart;
-    TDataShard &DataShard;
+    TDataShard &DataShard; 
     TPipeline &Pipeline;
     THashSet<TOperation::TPtr> OpsInFly;
 };
 
 THolder<TExecutionUnit> CreateExecutionUnit(EExecutionUnitKind kind,
-                                            TDataShard &dataShard,
+                                            TDataShard &dataShard, 
                                             TPipeline &pipeline);
 
-} // namespace NDataShard
+} // namespace NDataShard 
 } // namespace NKikimr

@@ -1,6 +1,6 @@
 #include "stats.h"
 
-#include <ydb/public/api/protos/ydb_table.pb.h>
+#include <ydb/public/api/protos/ydb_table.pb.h> 
 
 #include <util/datetime/base.h>
 

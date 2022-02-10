@@ -1,7 +1,7 @@
 #pragma once
 #include "defs.h"
 
-#include <ydb/core/protos/config.pb.h>
+#include <ydb/core/protos/config.pb.h> 
 
 #include <util/generic/vector.h>
 
@@ -79,7 +79,7 @@ struct TEvConfigsDispatcher {
     };
 
     struct TEvGetConfigResponse : public TEventLocal<TEvGetConfigResponse, EvGetConfigResponse> {
-        std::shared_ptr<const NKikimrConfig::TAppConfig> Config;
+        std::shared_ptr<const NKikimrConfig::TAppConfig> Config; 
     };
 };
 

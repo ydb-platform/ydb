@@ -4,7 +4,7 @@
 #include "const.h"
 
 namespace NKikimr {
-namespace NDataShard {
+namespace NDataShard { 
 
 static constexpr bool DelayPlannedRanges = true;
 static constexpr bool DelayImmediateRanges = true;
@@ -1012,5 +1012,5 @@ void TDependencyTracker::TMvccDependencyTrackingLogic::RemoveOperation(const TOp
     }
 }
 
-} // namespace NDataShard
+} // namespace NDataShard 
 } // namespace NKikimr

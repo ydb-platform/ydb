@@ -1,5 +1,5 @@
 #pragma once
-#include <ydb/core/scheme/scheme_tablecell.h>
+#include <ydb/core/scheme/scheme_tablecell.h> 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>
 
 namespace NKikimr::NArrow {

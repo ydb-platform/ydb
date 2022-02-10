@@ -1,17 +1,17 @@
-OWNER(g:yq)
+OWNER(g:yq) 
 
 LIBRARY()
 
 SRCS(
-    events.h
+    events.h 
     folder_service.cpp
-    folder_service.h
+    folder_service.h 
 )
 
 PEERDIR(
     library/cpp/actors/core
-    ydb/core/base
-    ydb/library/folder_service/proto
+    ydb/core/base 
+    ydb/library/folder_service/proto 
 )
 
 END()

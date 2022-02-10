@@ -1,12 +1,12 @@
 UNITTEST()
 
-OWNER(
-    cthulhu
-    g:kikimr
-)
+OWNER( 
+    cthulhu 
+    g:kikimr 
+) 
 
 PEERDIR(
-    ydb/library/schlab/schoot
+    ydb/library/schlab/schoot 
 )
 
 SRCS(

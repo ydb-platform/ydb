@@ -15,7 +15,7 @@ namespace NTabletFlatExecutor {
             ui64 AheadLo = 0;
             bool Trace = false; /* Record used by ref (seen) blobs  */
             ui64 Tablet = 0;    /* Allow blobs only for this tablet */
-            NBlockIO::EPriority ReadPrio = NBlockIO::EPriority::Bulk;
+            NBlockIO::EPriority ReadPrio = NBlockIO::EPriority::Bulk; 
         };
 
     }

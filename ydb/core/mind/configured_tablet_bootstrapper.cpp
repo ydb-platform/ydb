@@ -1,27 +1,27 @@
 #include "configured_tablet_bootstrapper.h"
 
-#include <ydb/core/tablet/bootstrapper.h>
-#include <ydb/core/cms/console/configs_dispatcher.h>
+#include <ydb/core/tablet/bootstrapper.h> 
+#include <ydb/core/cms/console/configs_dispatcher.h> 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 
 // for 'create' funcs
-#include <ydb/core/mind/bscontroller/bsc.h>
-#include <ydb/core/base/hive.h>
-#include <ydb/core/tx/coordinator/coordinator.h>
-#include <ydb/core/tx/mediator/mediator.h>
-#include <ydb/core/tx/tx_allocator/txallocator.h>
-#include <ydb/core/tx/datashard/datashard.h>
+#include <ydb/core/mind/bscontroller/bsc.h> 
+#include <ydb/core/base/hive.h> 
+#include <ydb/core/tx/coordinator/coordinator.h> 
+#include <ydb/core/tx/mediator/mediator.h> 
+#include <ydb/core/tx/tx_allocator/txallocator.h> 
+#include <ydb/core/tx/datashard/datashard.h> 
 #include <ydb/core/tx/replication/controller/controller.h>
-#include <ydb/core/tx/schemeshard/schemeshard.h>
-#include <ydb/core/tx/sequenceshard/sequenceshard.h>
-#include <ydb/core/keyvalue/keyvalue.h>
-#include <ydb/core/cms/cms.h>
-#include <ydb/core/cms/console/console.h>
-#include <ydb/core/mind/node_broker.h>
-#include <ydb/core/mind/tenant_slot_broker.h>
-#include <ydb/core/kesus/tablet/tablet.h>
-#include <ydb/core/sys_view/processor/processor.h>
-#include <ydb/core/test_tablet/test_tablet.h>
+#include <ydb/core/tx/schemeshard/schemeshard.h> 
+#include <ydb/core/tx/sequenceshard/sequenceshard.h> 
+#include <ydb/core/keyvalue/keyvalue.h> 
+#include <ydb/core/cms/cms.h> 
+#include <ydb/core/cms/console/console.h> 
+#include <ydb/core/mind/node_broker.h> 
+#include <ydb/core/mind/tenant_slot_broker.h> 
+#include <ydb/core/kesus/tablet/tablet.h> 
+#include <ydb/core/sys_view/processor/processor.h> 
+#include <ydb/core/test_tablet/test_tablet.h> 
 
 #include <library/cpp/actors/core/hfunc.h>
 
@@ -188,7 +188,7 @@ TIntrusivePtr<TTabletSetupInfo> MakeTabletSetupInfo(
         createFunc = &CreateTxAllocator;
         break;
     case TTabletTypes::DataShard:
-        createFunc = &CreateDataShard;
+        createFunc = &CreateDataShard; 
         break;
     case TTabletTypes::SchemeShard:
         createFunc = &CreateFlatTxSchemeShard;

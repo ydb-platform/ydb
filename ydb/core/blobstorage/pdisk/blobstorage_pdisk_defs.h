@@ -1,18 +1,18 @@
-#pragma once
-#include "defs.h"
-#include <ydb/core/base/blobstorage.h>
-#include <ydb/core/protos/blobstorage.pb.h>
-
+#pragma once 
+#include "defs.h" 
+#include <ydb/core/base/blobstorage.h> 
+#include <ydb/core/protos/blobstorage.pb.h> 
+ 
 #include "blobstorage_pdisk_signature.h"
 
-#include <ydb/core/util/text.h>
+#include <ydb/core/util/text.h> 
 
-namespace NKikimr {
-
+namespace NKikimr { 
+ 
     namespace NPDisk {
         struct TPrintable_ui8 {
             ui8 Val;
-
+ 
             TPrintable_ui8(ui8 val = 0)
                 : Val(val)
             {}
@@ -36,9 +36,9 @@ namespace NKikimr {
         typedef TPrintable_ui8 TOwner;
         typedef ui64 TOwnerRound;
         typedef ui32 TStatusFlags;
-        typedef ui64 TKey;
+        typedef ui64 TKey; 
         typedef ui64 THash;
-
+ 
         struct TOwnerToken {
             TOwner Owner = 0;
             TOwnerRound OwnerRound = 0;
@@ -67,7 +67,7 @@ namespace NKikimr {
             return !(x == y);
         }
 
-        // Flag values for TStatusFlags ydb/core/protos/blobstorage.proto EStatusFlags
+        // Flag values for TStatusFlags ydb/core/protos/blobstorage.proto EStatusFlags 
         inline TString StatusFlagsToString(TStatusFlags flags) {
             TStringStream str;
             bool isFirst = true;
@@ -88,7 +88,7 @@ namespace NKikimr {
             return str.Str();
         }
     } // NPDisk
-} // NKikimr
+} // NKikimr 
 
 template<>
 inline void Out<NKikimr::NPDisk::TLogPosition>(IOutputStream& os, const NKikimr::NPDisk::TLogPosition& pos) {

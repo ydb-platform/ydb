@@ -1,6 +1,6 @@
-RECURSE_FOR_TESTS(
-    ut
-)
+RECURSE_FOR_TESTS( 
+    ut 
+) 
 
 LIBRARY()
 
@@ -17,7 +17,7 @@ SRCS(
 PEERDIR(
     contrib/libs/protobuf
     library/cpp/string_utils/base64
-    ydb/core/viewer/protos
+    ydb/core/viewer/protos 
 )
 
 END()

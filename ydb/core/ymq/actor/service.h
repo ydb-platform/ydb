@@ -5,11 +5,11 @@
 #include "serviceid.h"
 #include "index_events_processor.h"
 
-#include <ydb/core/ymq/base/events_writer_iface.h>
-#include <ydb/core/base/tablet_pipe.h>
-#include <ydb/core/protos/config.pb.h>
-#include <ydb/core/tx/schemeshard/schemeshard.h>
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
+#include <ydb/core/ymq/base/events_writer_iface.h> 
+#include <ydb/core/base/tablet_pipe.h> 
+#include <ydb/core/protos/config.pb.h> 
+#include <ydb/core/tx/schemeshard/schemeshard.h> 
+#include <ydb/public/sdk/cpp/client/ydb_table/table.h> 
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <util/generic/hash.h>
@@ -135,7 +135,7 @@ private:
     TString RootUrl_;
     TIntrusivePtr<NMonitoring::TDynamicCounters> SqsCoreCounters_;
     TIntrusivePtr<NMonitoring::TDynamicCounters> YmqRootCounters_;
-    std::shared_ptr<TAlignedPagePoolCounters> AllocPoolCounters_;
+    std::shared_ptr<TAlignedPagePoolCounters> AllocPoolCounters_; 
     TIntrusivePtr<TUserCounters> AggregatedUserCounters_;
     TUsersMap Users_;
     THashMap<ui64, TQueueInfoPtr> LeaderTabletIdToQueue_;

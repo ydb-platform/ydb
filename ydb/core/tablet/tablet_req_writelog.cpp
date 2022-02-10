@@ -1,8 +1,8 @@
 #include "tablet_impl.h"
-#include <ydb/core/base/blobstorage.h>
+#include <ydb/core/base/blobstorage.h> 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/hfunc.h>
-#include <ydb/core/tablet/tablet_metrics.h>
+#include <ydb/core/tablet/tablet_metrics.h> 
 
 #include <util/random/random.h>
 
@@ -86,7 +86,7 @@ class TTabletReqWriteLog : public TActorBootstrapped<TTabletReqWriteLog> {
     }
 
     void SendToBS(const TLogoBlobID &id, const TString &buffer, const TActorContext &ctx,
-                  const NKikimrBlobStorage::EPutHandleClass handleClass) {
+                  const NKikimrBlobStorage::EPutHandleClass handleClass) { 
         Y_VERIFY(id.TabletID() == Info->TabletID);
         const TTabletChannelInfo *channelInfo = Info->ChannelInfo(id.Channel());
         Y_VERIFY(channelInfo);
@@ -134,7 +134,7 @@ public:
             logEntryBuffer.size(),
             LogEntryID.Cookie()
         );
-        SendToBS(actualLogEntryId, logEntryBuffer, ctx, NKikimrBlobStorage::TabletLog);
+        SendToBS(actualLogEntryId, logEntryBuffer, ctx, NKikimrBlobStorage::TabletLog); 
 
         RepliesToWait = References.size() + 1;
         Become(&TThis::StateWait);

@@ -46,7 +46,7 @@ TStringBuf HttpCodeStrEx(int code) noexcept {
             return TStringBuf("307 Temporarily redirect");
         case HTTP_PERMANENT_REDIRECT:
             return TStringBuf("308 Permanent redirect");
-
+ 
         case HTTP_BAD_REQUEST:
             return TStringBuf("400 Bad request");
         case HTTP_UNAUTHORIZED:
@@ -134,7 +134,7 @@ TStringBuf HttpCodeStrEx(int code) noexcept {
             return TStringBuf("511 Network Authentication Required");
         case HTTP_UNASSIGNED_512:
             return TStringBuf("512 Unassigned");
-
+ 
         default:
             return TStringBuf("000 Unknown HTTP code");
     }

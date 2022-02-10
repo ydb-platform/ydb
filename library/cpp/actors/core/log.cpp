@@ -1,8 +1,8 @@
-#include "log.h"
+#include "log.h" 
 #include "log_settings.h"
-
+ 
 #include <library/cpp/monlib/service/pages/templates.h>
-
+ 
 static_assert(int(NActors::NLog::PRI_EMERG) == int(::TLOG_EMERG), "expect int(NActors::NLog::PRI_EMERG) == int(::TLOG_EMERG)");
 static_assert(int(NActors::NLog::PRI_ALERT) == int(::TLOG_ALERT), "expect int(NActors::NLog::PRI_ALERT) == int(::TLOG_ALERT)");
 static_assert(int(NActors::NLog::PRI_CRIT) == int(::TLOG_CRIT), "expect int(NActors::NLog::PRI_CRIT) == int(::TLOG_CRIT)");
@@ -12,7 +12,7 @@ static_assert(int(NActors::NLog::PRI_NOTICE) == int(::TLOG_NOTICE), "expect int(
 static_assert(int(NActors::NLog::PRI_INFO) == int(::TLOG_INFO), "expect int(NActors::NLog::PRI_INFO) == int(::TLOG_INFO)");
 static_assert(int(NActors::NLog::PRI_DEBUG) == int(::TLOG_DEBUG), "expect int(NActors::NLog::PRI_DEBUG) == int(::TLOG_DEBUG)");
 static_assert(int(NActors::NLog::PRI_TRACE) == int(::TLOG_RESOURCES), "expect int(NActors::NLog::PRI_TRACE) == int(::TLOG_RESOURCES)");
-
+ 
 namespace {
     struct TRecordWithNewline {
         ELogPriority Priority;
@@ -32,7 +32,7 @@ namespace {
     };
 }
 
-namespace NActors {
+namespace NActors { 
 
     class TLoggerCounters : public ILoggerMetrics {
     public:
@@ -168,12 +168,12 @@ namespace NActors {
 
     TLoggerActor::TLoggerActor(TIntrusivePtr<NLog::TSettings> settings,
                                TAutoPtr<TLogBackend> logBackend,
-                               TIntrusivePtr<NMonitoring::TDynamicCounters> counters)
-        : TActor(&TLoggerActor::StateFunc)
-        , Settings(settings)
+                               TIntrusivePtr<NMonitoring::TDynamicCounters> counters) 
+        : TActor(&TLoggerActor::StateFunc) 
+        , Settings(settings) 
         , LogBackend(logBackend.Release())
         , Metrics(std::make_unique<TLoggerCounters>(counters))
-    {
+    { 
     }
 
     TLoggerActor::TLoggerActor(TIntrusivePtr<NLog::TSettings> settings,
@@ -204,25 +204,25 @@ namespace NActors {
         , LogBackend(logBackend)
         , Metrics(std::make_unique<TLoggerMetrics>(metrics))
     {
-    }
-
-    TLoggerActor::~TLoggerActor() {
-    }
-
+    } 
+ 
+    TLoggerActor::~TLoggerActor() { 
+    } 
+ 
     void TLoggerActor::Log(TInstant time, NLog::EPriority priority, NLog::EComponent component, const char* c, ...) {
         Metrics->IncDirectMsgs();
         if (Settings && Settings->Satisfies(priority, component, 0ull)) {
-            va_list params;
+            va_list params; 
             va_start(params, c);
             TString formatted;
-            vsprintf(formatted, c, params);
-
+            vsprintf(formatted, c, params); 
+ 
             auto ok = OutputRecord(time, NLog::EPrio(priority), component, formatted);
             Y_UNUSED(ok);
             va_end(params);
-        }
-    }
-
+        } 
+    } 
+ 
     void TLoggerActor::Throttle(const NLog::TSettings& settings) {
         if (AtomicGet(IsOverflow))
             Sleep(settings.ThrottleDelay);
@@ -241,7 +241,7 @@ namespace NActors {
         IgnoredCount = 0;
         PassedCount = 0;
     }
-
+ 
     void TLoggerActor::HandleIgnoredEventDrop() {
         // logger backend is unavailable, just ignore
     }
@@ -295,8 +295,8 @@ namespace NActors {
         if (!OutputRecord(ev->Get()->Stamp, prio, ev->Get()->Component, ev->Get()->Line)) {
             BecomeDefunct();
         }
-    }
-
+    } 
+ 
     void TLoggerActor::BecomeDefunct() {
         Become(&TThis::StateDefunct);
         Schedule(WakeupInterval, new TEvents::TEvWakeup);
@@ -306,11 +306,11 @@ namespace NActors {
         Metrics->IncLevelRequests();
         TString explanation;
         int code = Settings->SetLevel(ev->Get()->Priority, ev->Get()->Component, explanation);
-        ctx.Send(ev->Sender, new TLogComponentLevelResponse(code, explanation));
-    }
-
+        ctx.Send(ev->Sender, new TLogComponentLevelResponse(code, explanation)); 
+    } 
+ 
     void TLoggerActor::RenderComponentPriorities(IOutputStream& str) {
-        using namespace NLog;
+        using namespace NLog; 
         HTML(str) {
             H4() {
                 str << "Priority Settings for the Components";
@@ -333,7 +333,7 @@ namespace NActors {
                     }
                 }
                 TABLEBODY() {
-                    for (EComponent i = Settings->MinVal; i < Settings->MaxVal; i++) {
+                    for (EComponent i = Settings->MinVal; i < Settings->MaxVal; i++) { 
                         auto name = Settings->ComponentName(i);
                         if (!*name)
                             continue;
@@ -353,19 +353,19 @@ namespace NActors {
                                 str << componentSettings.Raw.X.SamplingRate;
                             }
                         }
-                    }
+                    } 
                 }
             }
         }
-    }
-
-    /*
-     * Logger INFO:
-     * 1. Current priority settings from components
-     * 2. Number of log messages (via actors events, directly)
-     * 3. Number of messages per components, per priority
-     * 4. Log level changes (last N changes)
-     */
+    } 
+ 
+    /* 
+     * Logger INFO: 
+     * 1. Current priority settings from components 
+     * 2. Number of log messages (via actors events, directly) 
+     * 3. Number of messages per components, per priority 
+     * 4. Log level changes (last N changes) 
+     */ 
     void TLoggerActor::HandleMonInfo(NMon::TEvHttpInfo::TPtr& ev, const TActorContext& ctx) {
         const auto& params = ev->Get()->Request.GetParams();
         NLog::EComponent component = NLog::InvalidComponent;
@@ -408,7 +408,7 @@ namespace NActors {
             }
         }
 
-        TStringStream str;
+        TStringStream str; 
         if (hasComponent && !hasPriority && !hasSamplingPriority && !hasSamplingRate) {
             NLog::TComponentSettings componentSettings = Settings->GetComponentSettings(component);
             ui32 samplingRate = componentSettings.Raw.X.SamplingRate;
@@ -568,10 +568,10 @@ namespace NActors {
                 Metrics->GetOutputHtml(str);
             }
         }
-
-        ctx.Send(ev->Sender, new NMon::TEvHttpInfoRes(str.Str()));
-    }
-
+ 
+        ctx.Send(ev->Sender, new NMon::TEvHttpInfoRes(str.Str())); 
+    } 
+ 
     constexpr size_t TimeBufSize = 512;
 
     bool TLoggerActor::OutputRecord(TInstant time, NLog::EPrio priority, NLog::EComponent component,
@@ -638,8 +638,8 @@ namespace NActors {
         return true;
     } catch (...) {
         return false;
-    }
-
+    } 
+ 
     void TLoggerActor::HandleLogEventDrop(const NLog::TEvLog::TPtr& ev) {
         WriteMessageStat(*ev->Get());
         Metrics->IncDroppedMsgs();
@@ -659,15 +659,15 @@ namespace NActors {
 
     TAutoPtr<TLogBackend> CreateSysLogBackend(const TString& ident,
                                               bool logPError, bool logCons) {
-        int flags = 0;
-        if (logPError)
-            flags |= TSysLogBackend::LogPerror;
-        if (logCons)
-            flags |= TSysLogBackend::LogCons;
-
+        int flags = 0; 
+        if (logPError) 
+            flags |= TSysLogBackend::LogPerror; 
+        if (logCons) 
+            flags |= TSysLogBackend::LogCons; 
+ 
         return new TSysLogBackend(ident.data(), TSysLogBackend::TSYSLOG_LOCAL1, flags);
-    }
-
+    } 
+ 
     class TStderrBackend: public TLogBackend {
     public:
         TStderrBackend() {

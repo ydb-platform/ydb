@@ -5,8 +5,8 @@ package Ydb.S3Internal;
 option java_package = "com.yandex.ydb.s3_internal";
 option java_outer_classname = "S3InternalProtos";
 
-import "ydb/public/api/protos/ydb_operation.proto";
-import "ydb/public/api/protos/ydb_value.proto";
+import "ydb/public/api/protos/ydb_operation.proto"; 
+import "ydb/public/api/protos/ydb_value.proto"; 
 
 message S3ListingRequest {
     string table_name = 1;

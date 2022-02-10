@@ -1,7 +1,7 @@
-#include <ydb/core/scheme/scheme_type_registry.h>
-#include <ydb/core/tablet_flat/test/libs/rows/layout.h>
-#include <ydb/core/tablet_flat/test/libs/table/test_part.h>
-#include <ydb/core/tablet_flat/test/libs/table/test_writer.h>
+#include <ydb/core/scheme/scheme_type_registry.h> 
+#include <ydb/core/tablet_flat/test/libs/rows/layout.h> 
+#include <ydb/core/tablet_flat/test/libs/table/test_part.h> 
+#include <ydb/core/tablet_flat/test/libs/table/test_writer.h> 
 
 #include "flat_stat_part.h"
 #include "flat_stat_table.h"
@@ -62,7 +62,7 @@ Y_UNIT_TEST_SUITE(TLegacy) {
         UNIT_ASSERT_C(eggs.Parts.size() == 1,
             "Unexpected " << eggs.Parts.size() << " results");
 
-        auto fnIterate = [&dbgOut, &typeRegistry] (TIntrusiveConstPtr<TPartStore> part, TIntrusiveConstPtr<TRowScheme> scheme) {
+        auto fnIterate = [&dbgOut, &typeRegistry] (TIntrusiveConstPtr<TPartStore> part, TIntrusiveConstPtr<TRowScheme> scheme) { 
             TPartIndexIterator idxIter(part, scheme->Keys);
 
             while (idxIter.IsValid()) {
@@ -116,9 +116,9 @@ Y_UNIT_TEST_SUITE(TLegacy) {
         UNIT_ASSERT_C(eggs.Parts.size() == 1,
             "Unexpected " << eggs.Parts.size() << " results");
 
-        auto fnIterate = [&dbgOut, &typeRegistry] (TIntrusiveConstPtr<TPartStore> part, TIntrusiveConstPtr<TScreen> screen,
+        auto fnIterate = [&dbgOut, &typeRegistry] (TIntrusiveConstPtr<TPartStore> part, TIntrusiveConstPtr<TScreen> screen, 
                             TIntrusiveConstPtr<TRowScheme> scheme, TIntrusiveConstPtr<NPage::TFrames> frames) -> std::pair<ui64, ui64> {
-            TScreenedPartIndexIterator idxIter(TPartView{part, screen, nullptr}, scheme->Keys, std::move(frames));
+            TScreenedPartIndexIterator idxIter(TPartView{part, screen, nullptr}, scheme->Keys, std::move(frames)); 
 
             ui64 rowCount = 0;
             ui64 size = 0;
@@ -283,8 +283,8 @@ Y_UNIT_TEST_SUITE(TLegacy) {
                 });
 
         TStatsIterator stIter(lay2.RowScheme()->Keys);
-        stIter.Add(MakeHolder<TScreenedPartIndexIterator>(TPartView{eggs2.At(0), screen2, nullptr}, lay2.RowScheme()->Keys, nullptr));
-        stIter.Add(MakeHolder<TScreenedPartIndexIterator>(TPartView{eggs1.At(0), screen1, nullptr}, lay2.RowScheme()->Keys, nullptr));
+        stIter.Add(MakeHolder<TScreenedPartIndexIterator>(TPartView{eggs2.At(0), screen2, nullptr}, lay2.RowScheme()->Keys, nullptr)); 
+        stIter.Add(MakeHolder<TScreenedPartIndexIterator>(TPartView{eggs1.At(0), screen1, nullptr}, lay2.RowScheme()->Keys, nullptr)); 
 
         UNIT_ASSERT(stIter.IsValid());
         UNIT_ASSERT(stIter.GetCurrentRowCount() == 0);

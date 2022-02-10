@@ -1,10 +1,10 @@
 #pragma once
 
-#include "defs.h"
+#include "defs.h" 
 #include "blobstorage_hullhuge.h"
 
 #include <library/cpp/monlib/service/pages/templates.h>
-#include <ydb/core/base/blobstorage.h>
+#include <ydb/core/base/blobstorage.h> 
 
 #include <util/generic/queue.h>
 
@@ -93,7 +93,7 @@ namespace NKikimr {
             ProcessRemovedHugeBlobsQueue(ctx, hugeKeeperId);
         }
 
-        void RenderState(IOutputStream &str) {
+        void RenderState(IOutputStream &str) { 
             HTML(str) {
                 DIV_CLASS("panel panel-default") {
                     DIV_CLASS("panel-heading") {
@@ -227,6 +227,6 @@ namespace NKikimr {
     };
 
     IActor *CreateDelayedHugeBlobDeleterActor(const TActorId &hugeKeeperId,
-        TIntrusivePtr<TDelayedHugeBlobDeleterInfo> info);
+        TIntrusivePtr<TDelayedHugeBlobDeleterInfo> info); 
 
 } // NKikimr

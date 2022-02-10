@@ -1,12 +1,12 @@
-UNITTEST_FOR(ydb/core/tx/balance_coverage)
+UNITTEST_FOR(ydb/core/tx/balance_coverage) 
 
-OWNER(
-    svc
-    g:kikimr
-)
+OWNER( 
+    svc 
+    g:kikimr 
+) 
 
 FORK_SUBTESTS()
-
+ 
 IF (SANITIZER_TYPE)
     TIMEOUT(600)
     SIZE(MEDIUM)
@@ -17,7 +17,7 @@ ENDIF()
 
 PEERDIR(
     library/cpp/testing/unittest
-    ydb/core/testlib
+    ydb/core/testlib 
 )
 
 SRCS(

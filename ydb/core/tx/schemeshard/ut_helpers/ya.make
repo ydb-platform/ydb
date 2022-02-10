@@ -4,22 +4,22 @@ OWNER(g:kikimr)
 
 PEERDIR(
     library/cpp/testing/unittest
-    ydb/core/base
-    ydb/core/blockstore/core
-    ydb/core/engine
-    ydb/core/engine/minikql
-    ydb/core/filestore/core
-    ydb/core/metering
-    ydb/core/protos
-    ydb/core/scheme
-    ydb/core/tablet_flat
-    ydb/core/testlib
-    ydb/core/tx
-    ydb/core/tx/datashard
-    ydb/core/tx/schemeshard
-    ydb/core/tx/tx_allocator
-    ydb/core/tx/tx_proxy
-    ydb/public/lib/scheme_types
+    ydb/core/base 
+    ydb/core/blockstore/core 
+    ydb/core/engine 
+    ydb/core/engine/minikql 
+    ydb/core/filestore/core 
+    ydb/core/metering 
+    ydb/core/protos 
+    ydb/core/scheme 
+    ydb/core/tablet_flat 
+    ydb/core/testlib 
+    ydb/core/tx 
+    ydb/core/tx/datashard 
+    ydb/core/tx/schemeshard 
+    ydb/core/tx/tx_allocator 
+    ydb/core/tx/tx_proxy 
+    ydb/public/lib/scheme_types 
 )
 
 SRCS(
@@ -33,6 +33,6 @@ SRCS(
     helpers.h
 )
 
-YQL_LAST_ABI_VERSION()
+YQL_LAST_ABI_VERSION() 
 
 END()

@@ -1,7 +1,7 @@
 #pragma once
-#include <ydb/public/lib/deprecated/kicli/kicli.h>
-#include <ydb/public/lib/deprecated/client/msgbus_client.h>
-#include <ydb/public/lib/deprecated/client/grpc_client.h>
+#include <ydb/public/lib/deprecated/kicli/kicli.h> 
+#include <ydb/public/lib/deprecated/client/msgbus_client.h> 
+#include <ydb/public/lib/deprecated/client/grpc_client.h> 
 #include <util/generic/variant.h>
 
 namespace NKikimr {

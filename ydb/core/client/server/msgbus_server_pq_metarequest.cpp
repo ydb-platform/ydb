@@ -101,8 +101,8 @@ THolder<IActor> TPersQueueGetPartitionOffsetsProcessor::CreateTopicSubactor(
 
 TPersQueueGetPartitionOffsetsTopicWorker::TPersQueueGetPartitionOffsetsTopicWorker(
         const TActorId& parent, const TSchemeEntry& topicEntry, const TString& name,
-        const std::shared_ptr<THashSet<ui64>>& partitionsToRequest,
-        const std::shared_ptr<const NKikimrClient::TPersQueueRequest>& requestProto
+        const std::shared_ptr<THashSet<ui64>>& partitionsToRequest, 
+        const std::shared_ptr<const NKikimrClient::TPersQueueRequest>& requestProto 
 )
     : TReplierToParent<TPipesWaiterActor<TTopicInfoBasedActor, TEvPersQueue::TEvOffsetsResponse>>(parent, topicEntry, name)
     , PartitionsToRequest(partitionsToRequest)
@@ -119,7 +119,7 @@ void TPersQueueGetPartitionOffsetsTopicWorker::BootstrapImpl(const TActorContext
         for (const auto& partition : pqDescr.GetPartitions()) {
             const ui32 partIndex = partition.GetPartitionId();
             const ui64 tabletId = partition.GetTabletId();
-            if (PartitionsToRequest.get() != nullptr && !PartitionsToRequest->empty() && !PartitionsToRequest->contains(partIndex)) {
+            if (PartitionsToRequest.get() != nullptr && !PartitionsToRequest->empty() && !PartitionsToRequest->contains(partIndex)) { 
                 continue;
             }
             parts.insert(partIndex);
@@ -135,13 +135,13 @@ void TPersQueueGetPartitionOffsetsTopicWorker::BootstrapImpl(const TActorContext
             CreatePipeAndSend(tabletId, ctx, std::move(ev));
         }
     }
-    if (PartitionsToRequest.get() != nullptr && !PartitionsToRequest->empty() && PartitionsToRequest->size() != partitionsAsked) {
+    if (PartitionsToRequest.get() != nullptr && !PartitionsToRequest->empty() && PartitionsToRequest->size() != partitionsAsked) { 
         SendErrorReplyAndDie(ctx, MSTATUS_ERROR, NPersQueue::NErrorCode::UNKNOWN_TOPIC,
                              TStringBuilder() << "no one of requested partitions in topic '" << Name << "', Marker# PQ96");
         return;
     }
-    if (!PartitionsToRequest.get() || PartitionsToRequest->empty()) {
-        PartitionsToRequest.reset(new THashSet<ui64>());
+    if (!PartitionsToRequest.get() || PartitionsToRequest->empty()) { 
+        PartitionsToRequest.reset(new THashSet<ui64>()); 
         PartitionsToRequest->swap(parts);
     }
     if(WaitAllPipeEvents(ctx)) {
@@ -171,14 +171,14 @@ void TPersQueueGetPartitionOffsetsTopicWorker::Answer(const TActorContext& ctx, 
             if (ans.second.Get() != nullptr) {
                 for (auto& partResult : *ans.second->Get()->Record.MutablePartResult()) {
                     const ui64 partitionIndex = partResult.GetPartition();
-                    if (PartitionsToRequest.get() == nullptr || PartitionsToRequest->empty() || PartitionsToRequest->contains(partitionIndex)) {
+                    if (PartitionsToRequest.get() == nullptr || PartitionsToRequest->empty() || PartitionsToRequest->contains(partitionIndex)) { 
                         topicResult.AddPartitionResult()->Swap(&partResult);
                         partitionsInserted.insert(partitionIndex);
                     }
                 }
             }
         }
-        if (PartitionsToRequest.get() != nullptr && !PartitionsToRequest->empty() && PartitionsToRequest->size() != partitionsInserted.size() && topicResult.GetErrorCode() == (ui32)NPersQueue::NErrorCode::OK) {
+        if (PartitionsToRequest.get() != nullptr && !PartitionsToRequest->empty() && PartitionsToRequest->size() != partitionsInserted.size() && topicResult.GetErrorCode() == (ui32)NPersQueue::NErrorCode::OK) { 
             const TString reason = "partition is not ready yet";
             for (ui64 partitionIndex : *PartitionsToRequest) {
                 if (!IsIn(partitionsInserted, partitionIndex)) {
@@ -214,8 +214,8 @@ THolder<IActor> TPersQueueGetPartitionStatusProcessor::CreateTopicSubactor(
 
 TPersQueueGetPartitionStatusTopicWorker::TPersQueueGetPartitionStatusTopicWorker(
         const TActorId& parent, const TSchemeEntry& topicEntry, const TString& name,
-        const std::shared_ptr<THashSet<ui64>>& partitionsToRequest,
-        const std::shared_ptr<const NKikimrClient::TPersQueueRequest>& requestProto
+        const std::shared_ptr<THashSet<ui64>>& partitionsToRequest, 
+        const std::shared_ptr<const NKikimrClient::TPersQueueRequest>& requestProto 
 )
     : TReplierToParent<TPipesWaiterActor<TTopicInfoBasedActor, TEvPersQueue::TEvStatusResponse>>(parent, topicEntry, name)
     , PartitionsToRequest(partitionsToRequest)
@@ -254,8 +254,8 @@ void TPersQueueGetPartitionStatusTopicWorker::BootstrapImpl(const TActorContext 
                              TStringBuilder() << "no one of requested partitions in topic '" << Name << "', Marker# PQ97");
         return;
     }
-    if (!PartitionsToRequest.get() || PartitionsToRequest->empty()) {
-        PartitionsToRequest.reset(new THashSet<ui64>());
+    if (!PartitionsToRequest.get() || PartitionsToRequest->empty()) { 
+        PartitionsToRequest.reset(new THashSet<ui64>()); 
         PartitionsToRequest->swap(parts);
     }
 
@@ -287,16 +287,16 @@ void TPersQueueGetPartitionStatusTopicWorker::Answer(
             if (ans.second.Get() != nullptr) {
                 for (auto& partResult : *ans.second->Get()->Record.MutablePartResult()) {
                     const ui64 partitionIndex = partResult.GetPartition();
-                    if (PartitionsToRequest.get() == nullptr || PartitionsToRequest->empty() || PartitionsToRequest->contains(partitionIndex)) {
+                    if (PartitionsToRequest.get() == nullptr || PartitionsToRequest->empty() || PartitionsToRequest->contains(partitionIndex)) { 
                         topicResult.AddPartitionResult()->Swap(&partResult);
-                        if (PartitionsToRequest.get() != nullptr && !PartitionsToRequest->empty()) {
+                        if (PartitionsToRequest.get() != nullptr && !PartitionsToRequest->empty()) { 
                             partitionsInserted.insert(partitionIndex);
                         }
                     }
                 }
             }
         }
-        if (PartitionsToRequest.get() != nullptr && !PartitionsToRequest->empty() && PartitionsToRequest->size() != partitionsInserted.size() && topicResult.GetErrorCode() == (ui32)NPersQueue::NErrorCode::OK) {
+        if (PartitionsToRequest.get() != nullptr && !PartitionsToRequest->empty() && PartitionsToRequest->size() != partitionsInserted.size() && topicResult.GetErrorCode() == (ui32)NPersQueue::NErrorCode::OK) { 
             const TString reason = "partition is not ready yet";
             for (ui64 partitionIndex : *PartitionsToRequest) {
                 if (!IsIn(partitionsInserted, partitionIndex)) {
@@ -326,7 +326,7 @@ TPersQueueGetPartitionLocationsProcessor::TPersQueueGetPartitionLocationsProcess
 THolder<IActor> TPersQueueGetPartitionLocationsProcessor::CreateTopicSubactor(
         const TSchemeEntry& topicEntry, const TString& name
 ) {
-    Y_VERIFY(NodesInfo.get() != nullptr);
+    Y_VERIFY(NodesInfo.get() != nullptr); 
     return MakeHolder<TPersQueueGetPartitionLocationsTopicWorker>(
             SelfId(), topicEntry, name,
             PartitionsToRequest[topicEntry.PQGroupInfo->Description.GetName()], RequestProto, NodesInfo
@@ -336,9 +336,9 @@ THolder<IActor> TPersQueueGetPartitionLocationsProcessor::CreateTopicSubactor(
 TPersQueueGetPartitionLocationsTopicWorker::TPersQueueGetPartitionLocationsTopicWorker(
         const TActorId& parent,
         const TSchemeEntry& topicEntry, const TString& name,
-        const std::shared_ptr<THashSet<ui64>>& partitionsToRequest,
-        const std::shared_ptr<const NKikimrClient::TPersQueueRequest>& requestProto,
-        std::shared_ptr<const TPersQueueBaseRequestProcessor::TNodesInfo> nodesInfo
+        const std::shared_ptr<THashSet<ui64>>& partitionsToRequest, 
+        const std::shared_ptr<const NKikimrClient::TPersQueueRequest>& requestProto, 
+        std::shared_ptr<const TPersQueueBaseRequestProcessor::TNodesInfo> nodesInfo 
 )
     : TReplierToParent<TPipesWaiterActor<TTopicInfoBasedActor, TEvTabletPipe::TEvClientConnected>>(parent, topicEntry, name)
     , PartitionsToRequest(partitionsToRequest)
@@ -356,7 +356,7 @@ void TPersQueueGetPartitionLocationsTopicWorker::BootstrapImpl(const TActorConte
         for (const auto& partition : pqDescr.GetPartitions()) {
             const ui32 partIndex = partition.GetPartitionId();
             const ui64 tabletId = partition.GetTabletId();
-            if (PartitionsToRequest.get() != nullptr && !PartitionsToRequest->empty() && !PartitionsToRequest->contains(partIndex)) {
+            if (PartitionsToRequest.get() != nullptr && !PartitionsToRequest->empty() && !PartitionsToRequest->contains(partIndex)) { 
                 continue;
             }
             PartitionToTablet[partIndex] = tabletId;
@@ -368,13 +368,13 @@ void TPersQueueGetPartitionLocationsTopicWorker::BootstrapImpl(const TActorConte
             CreatePipe(tabletId, ctx);
         }
     }
-    if (PartitionsToRequest.get() != nullptr && !PartitionsToRequest->empty() && PartitionsToRequest->size() != partitionsAsked) {
+    if (PartitionsToRequest.get() != nullptr && !PartitionsToRequest->empty() && PartitionsToRequest->size() != partitionsAsked) { 
         SendErrorReplyAndDie(ctx, MSTATUS_ERROR, NPersQueue::NErrorCode::UNKNOWN_TOPIC,
                              TStringBuilder() << "no one of requested partitions in topic '" << Name << "', Marker# PQ98");
         return;
     }
-    if (!PartitionsToRequest.get() || PartitionsToRequest->empty()) {
-        PartitionsToRequest.reset(new THashSet<ui64>());
+    if (!PartitionsToRequest.get() || PartitionsToRequest->empty()) { 
+        PartitionsToRequest.reset(new THashSet<ui64>()); 
         PartitionsToRequest->swap(parts);
     }
 
@@ -461,15 +461,15 @@ TPersQueueGetReadSessionsInfoProcessor::TPersQueueGetReadSessionsInfoProcessor(
 THolder<IActor> TPersQueueGetReadSessionsInfoProcessor::CreateTopicSubactor(
         const TSchemeEntry& topicEntry, const TString& name
 ) {
-    Y_VERIFY(NodesInfo.get() != nullptr);
+    Y_VERIFY(NodesInfo.get() != nullptr); 
     return MakeHolder<TPersQueueGetReadSessionsInfoTopicWorker>(
             SelfId(), topicEntry, name, RequestProto, NodesInfo);
 }
 
 TPersQueueGetReadSessionsInfoTopicWorker::TPersQueueGetReadSessionsInfoTopicWorker(
         const TActorId& parent, const TSchemeEntry& topicEntry, const TString& name,
-        const std::shared_ptr<const NKikimrClient::TPersQueueRequest>& requestProto,
-        std::shared_ptr<const TPersQueueBaseRequestProcessor::TNodesInfo> nodesInfo
+        const std::shared_ptr<const NKikimrClient::TPersQueueRequest>& requestProto, 
+        std::shared_ptr<const TPersQueueBaseRequestProcessor::TNodesInfo> nodesInfo 
 )
     : TReplierToParent<TPipesWaiterActor<TTopicInfoBasedActor, TEvPersQueue::TEvOffsetsResponse>>(parent, topicEntry, name)
     , RequestProto(requestProto)

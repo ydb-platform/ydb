@@ -1,15 +1,15 @@
 #include "datashard_impl.h"
 
-#include <ydb/core/actorlib_impl/long_timer.h>
+#include <ydb/core/actorlib_impl/long_timer.h> 
 
 #include <util/random/random.h>
 
 namespace NKikimr {
-namespace NDataShard {
+namespace NDataShard { 
 
 static constexpr TDuration MaxFindSubDomainPathIdDelay = TDuration::Minutes(10);
 
-class TDataShard::TFindSubDomainPathIdActor : public TActorBootstrapped<TFindSubDomainPathIdActor> {
+class TDataShard::TFindSubDomainPathIdActor : public TActorBootstrapped<TFindSubDomainPathIdActor> { 
     using TBase = TActorBootstrapped<TFindSubDomainPathIdActor>;
 
 public:
@@ -113,14 +113,14 @@ private:
     TActorId SchemeShardPipe;
 };
 
-void TDataShard::StopFindSubDomainPathId() {
+void TDataShard::StopFindSubDomainPathId() { 
     if (FindSubDomainPathIdActor) {
         Send(FindSubDomainPathIdActor, new TEvents::TEvPoison);
         FindSubDomainPathIdActor = { };
     }
 }
 
-void TDataShard::StartFindSubDomainPathId(bool delayFirstRequest) {
+void TDataShard::StartFindSubDomainPathId(bool delayFirstRequest) { 
     if (!FindSubDomainPathIdActor &&
         CurrentSchemeShardId != 0 &&
         CurrentSchemeShardId != INVALID_TABLET_ID &&
@@ -130,9 +130,9 @@ void TDataShard::StartFindSubDomainPathId(bool delayFirstRequest) {
     }
 }
 
-class TDataShard::TTxPersistSubDomainPathId : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
+class TDataShard::TTxPersistSubDomainPathId : public NTabletFlatExecutor::TTransactionBase<TDataShard> { 
 public:
-    TTxPersistSubDomainPathId(TDataShard* self, ui64 schemeShardId, ui64 localPathId)
+    TTxPersistSubDomainPathId(TDataShard* self, ui64 schemeShardId, ui64 localPathId) 
         : TTransactionBase(self)
         , SchemeShardId(schemeShardId)
         , LocalPathId(localPathId)
@@ -159,7 +159,7 @@ private:
     const ui64 LocalPathId;
 };
 
-void TDataShard::Handle(TEvPrivate::TEvSubDomainPathIdFound::TPtr& ev, const TActorContext& ctx) {
+void TDataShard::Handle(TEvPrivate::TEvSubDomainPathIdFound::TPtr& ev, const TActorContext& ctx) { 
     const auto* msg = ev->Get();
 
     if (FindSubDomainPathIdActor == ev->Sender) {
@@ -169,14 +169,14 @@ void TDataShard::Handle(TEvPrivate::TEvSubDomainPathIdFound::TPtr& ev, const TAc
     Execute(new TTxPersistSubDomainPathId(this, msg->SchemeShardId, msg->LocalPathId), ctx);
 }
 
-void TDataShard::StopWatchingSubDomainPathId() {
+void TDataShard::StopWatchingSubDomainPathId() { 
     if (WatchingSubDomainPathId) {
         Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvWatchRemove());
         WatchingSubDomainPathId.reset();
     }
 }
 
-void TDataShard::StartWatchingSubDomainPathId() {
+void TDataShard::StartWatchingSubDomainPathId() { 
     if (!SubDomainPathId || SubDomainPathId->OwnerId != CurrentSchemeShardId) {
         return;
     }
@@ -191,9 +191,9 @@ void TDataShard::StartWatchingSubDomainPathId() {
     }
 }
 
-class TDataShard::TTxPersistSubDomainOutOfSpace : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
+class TDataShard::TTxPersistSubDomainOutOfSpace : public NTabletFlatExecutor::TTransactionBase<TDataShard> { 
 public:
-    TTxPersistSubDomainOutOfSpace(TDataShard* self, bool outOfSpace)
+    TTxPersistSubDomainOutOfSpace(TDataShard* self, bool outOfSpace) 
         : TTransactionBase(self)
         , OutOfSpace(outOfSpace)
     { }
@@ -219,7 +219,7 @@ private:
     const bool OutOfSpace;
 };
 
-void TDataShard::Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPtr& ev, const TActorContext& ctx) {
+void TDataShard::Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPtr& ev, const TActorContext& ctx) { 
     const auto* msg = ev->Get();
     if (SubDomainPathId && msg->PathId == *SubDomainPathId) {
         const bool outOfSpace = msg->Result->GetPathDescription()
@@ -235,5 +235,5 @@ void TDataShard::Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPtr& ev, 
     }
 }
 
-} // namespace NDataShard
+} // namespace NDataShard 
 } // namespace NKikimr

@@ -4,7 +4,7 @@ FORK_SUBTESTS()
 
 SIZE(MEDIUM)
 
-OWNER(alexvru)
+OWNER(alexvru) 
 
 SRCS(
     main.cpp
@@ -18,11 +18,11 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/core/blobstorage/dsproxy/mock
-    ydb/core/blobstorage/pdisk/mock
-    ydb/core/mind/bscontroller
-    ydb/core/tx/scheme_board
-    ydb/library/yql/public/udf/service/stub
+    ydb/core/blobstorage/dsproxy/mock 
+    ydb/core/blobstorage/pdisk/mock 
+    ydb/core/mind/bscontroller 
+    ydb/core/tx/scheme_board 
+    ydb/library/yql/public/udf/service/stub 
 )
 
 YQL_LAST_ABI_VERSION()

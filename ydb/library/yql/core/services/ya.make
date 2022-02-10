@@ -1,10 +1,10 @@
 LIBRARY()
 
-OWNER(
-    spuchin
-    g:yql
-    g:yql_ydb_core
-)
+OWNER( 
+    spuchin 
+    g:yql 
+    g:yql_ydb_core 
+) 
 
 SRCS(
     yql_eval_expr.cpp
@@ -20,12 +20,12 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/string_utils/base64
-    library/cpp/yson
+    library/cpp/string_utils/base64 
+    library/cpp/yson 
     ydb/library/yql/ast/serialize
-    ydb/library/yql/minikql
-    ydb/library/yql/sql
-    ydb/library/yql/utils/log
+    ydb/library/yql/minikql 
+    ydb/library/yql/sql 
+    ydb/library/yql/utils/log 
     ydb/library/yql/core
     ydb/library/yql/core/common_opt
     ydb/library/yql/core/peephole_opt
@@ -37,6 +37,6 @@ PEERDIR(
     ydb/library/yql/providers/result/expr_nodes
 )
 
-YQL_LAST_ABI_VERSION()
+YQL_LAST_ABI_VERSION() 
 
 END()

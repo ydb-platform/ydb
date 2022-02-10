@@ -1,13 +1,13 @@
 #include "datashard_impl.h"
 
 namespace NKikimr {
-namespace NDataShard {
+namespace NDataShard { 
 
 using namespace NTabletFlatExecutor;
 
-class TDataShard::TTxDisconnected : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
+class TDataShard::TTxDisconnected : public NTabletFlatExecutor::TTransactionBase<TDataShard> { 
 public:
-    TTxDisconnected(TDataShard *self, TEvInterconnect::TEvNodeDisconnected::TPtr ev)
+    TTxDisconnected(TDataShard *self, TEvInterconnect::TEvNodeDisconnected::TPtr ev) 
         : TBase(self)
         , Event(std::move(ev))
     {}
@@ -36,7 +36,7 @@ private:
     TEvInterconnect::TEvNodeDisconnected::TPtr Event;
 };
 
-void TDataShard::Handle(TEvents::TEvUndelivered::TPtr &ev,
+void TDataShard::Handle(TEvents::TEvUndelivered::TPtr &ev, 
                                const TActorContext &ctx)
 {
     ui64 txId = ev->Cookie;
@@ -48,7 +48,7 @@ void TDataShard::Handle(TEvents::TEvUndelivered::TPtr &ev,
     }
 }
 
-void TDataShard::Handle(TEvInterconnect::TEvNodeDisconnected::TPtr &ev,
+void TDataShard::Handle(TEvInterconnect::TEvNodeDisconnected::TPtr &ev, 
                                const TActorContext &ctx)
 {
     ui32 nodeId = ev->Get()->NodeId;
@@ -61,5 +61,5 @@ void TDataShard::Handle(TEvInterconnect::TEvNodeDisconnected::TPtr &ev,
 }
 
 
-} // namesapce NDataShard
+} // namesapce NDataShard 
 } // namespace NKikimr

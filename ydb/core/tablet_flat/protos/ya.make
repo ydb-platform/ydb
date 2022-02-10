@@ -1,10 +1,10 @@
 LIBRARY()
 
-OWNER(
-    serxa
-    xenoxeno
-    g:kikimr
-)
+OWNER( 
+    serxa 
+    xenoxeno 
+    g:kikimr 
+) 
 
 SRCS(
     flat_table_part.proto
@@ -13,7 +13,7 @@ SRCS(
 
 PEERDIR(
     contrib/libs/protobuf
-    ydb/core/protos
+    ydb/core/protos 
 )
 
 END()

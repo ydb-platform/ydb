@@ -1,6 +1,6 @@
 #include "cluster_discovery_worker.h"
 
-#include <ydb/services/persqueue_cluster_discovery/cluster_ordering/weighed_ordering.h>
+#include <ydb/services/persqueue_cluster_discovery/cluster_ordering/weighed_ordering.h> 
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/hfunc.h>

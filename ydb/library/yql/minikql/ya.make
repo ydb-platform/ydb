@@ -2,7 +2,7 @@ LIBRARY()
 
 OWNER(
     vvvv
-    g:kikimr
+    g:kikimr 
     g:yql
     g:yql_ydb_core
 )
@@ -53,8 +53,8 @@ SRCS(
 )
 
 PEERDIR(
-    contrib/libs/apache/arrow
-    contrib/libs/cctz/tzdata
+    contrib/libs/apache/arrow 
+    contrib/libs/cctz/tzdata 
     library/cpp/actors/util
     library/cpp/deprecated/enum_codegen
     library/cpp/enumbitset
@@ -62,18 +62,18 @@ PEERDIR(
     library/cpp/packedtypes
     library/cpp/resource
     library/cpp/yson
-    ydb/library/binary_json
-    ydb/library/dynumber
-    ydb/library/yql/minikql/dom
-    ydb/library/yql/public/udf
-    ydb/library/yql/public/udf/tz
-    ydb/library/yql/utils
+    ydb/library/binary_json 
+    ydb/library/dynumber 
+    ydb/library/yql/minikql/dom 
+    ydb/library/yql/public/udf 
+    ydb/library/yql/public/udf/tz 
+    ydb/library/yql/utils 
 )
 
 IF (MKQL_RUNTIME_VERSION)
-    CFLAGS(
-        -DMKQL_RUNTIME_VERSION=$MKQL_RUNTIME_VERSION
-    )
+    CFLAGS( 
+        -DMKQL_RUNTIME_VERSION=$MKQL_RUNTIME_VERSION 
+    ) 
 ENDIF()
 
 YQL_LAST_ABI_VERSION()

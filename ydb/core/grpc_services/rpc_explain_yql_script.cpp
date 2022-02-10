@@ -2,7 +2,7 @@
 #include "rpc_kqp_base.h"
 #include "rpc_common.h"
 
-#include <ydb/public/api/protos/ydb_scripting.pb.h>
+#include <ydb/public/api/protos/ydb_scripting.pb.h> 
 
 namespace NKikimr {
 namespace NGRpcService {

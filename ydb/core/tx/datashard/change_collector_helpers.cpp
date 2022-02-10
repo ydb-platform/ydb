@@ -1,7 +1,7 @@
 #include "change_collector_helpers.h"
 
 namespace NKikimr {
-namespace NDataShard {
+namespace NDataShard { 
 
 using namespace NTable;
 
@@ -45,14 +45,14 @@ EReady TRowsCache::SelectRow(TDatabase& db, ui32 tid,
         }
 
         Y_VERIFY(it->second < key.size());
-        rowState.Set(pos, ECellOp::Set, key.at(it->second).AsRef());
+        rowState.Set(pos, ECellOp::Set, key.at(it->second).AsRef()); 
     }
 
     switch (row->Ready) {
     case EReady::Data:
         switch (row->Rop) {
-        case ERowOp::Upsert:
-        case ERowOp::Reset:
+        case ERowOp::Upsert: 
+        case ERowOp::Reset: 
             for (TPos pos = 0; pos < tags.size(); ++pos) {
                 const auto tag = tags.at(pos);
                 if (keyTagToPos.contains(tag)) {
@@ -60,9 +60,9 @@ EReady TRowsCache::SelectRow(TDatabase& db, ui32 tid,
                 }
 
                 if (const auto* cell = row->Cells.FindPtr(tag)) {
-                    rowState.Set(pos, ECellOp::Set, TCell(cell->data(), cell->size()));
+                    rowState.Set(pos, ECellOp::Set, TCell(cell->data(), cell->size())); 
                 } else {
-                    rowState.Set(pos, ECellOp::Null, TCell());
+                    rowState.Set(pos, ECellOp::Null, TCell()); 
                 }
             }
             break;
@@ -80,20 +80,20 @@ EReady TRowsCache::SelectRow(TDatabase& db, ui32 tid,
     return row->Ready;
 }
 
-void TRowsCache::UpdateCachedRow(ui32 tid, ERowOp rop,
+void TRowsCache::UpdateCachedRow(ui32 tid, ERowOp rop, 
         TArrayRef<const TRawTypeValue> key, TArrayRef<const TUpdateOp> updates)
 {
     auto& row = Rows[tid][SerializeKey(key)];
 
     row.Rop = rop;
-    if (rop == ERowOp::Erase) {
+    if (rop == ERowOp::Erase) { 
         row.Ready = EReady::Gone;
         row.Cells.clear();
         return;
     }
 
     row.Ready = EReady::Data;
-    if (rop == ERowOp::Reset) {
+    if (rop == ERowOp::Reset) { 
         row.Cells.clear();
     }
 
@@ -116,7 +116,7 @@ const TRowsCache::TRow* TRowsCache::CacheRow(ui32 tid, EReady ready,
 
     row.Ready = ready;
     if (ready == EReady::Gone) {
-        row.Rop = ERowOp::Erase;
+        row.Rop = ERowOp::Erase; 
         return &row;
     }
 
@@ -140,5 +140,5 @@ const TRowsCache::TRow* TRowsCache::FindCachedRow(ui32 tid, TArrayRef<const TRaw
         : nullptr;
 }
 
-} // NDataShard
+} // NDataShard 
 } // NKikimr

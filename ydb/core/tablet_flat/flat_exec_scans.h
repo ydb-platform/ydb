@@ -325,13 +325,13 @@ namespace NTabletFlatExecutor {
                 case TScanOptions::EReadPrio::Default:
                     break;
                 case TScanOptions::EReadPrio::Fast:
-                    conf.ReadPrio = NBlockIO::EPriority::Fast;
+                    conf.ReadPrio = NBlockIO::EPriority::Fast; 
                     break;
                 case TScanOptions::EReadPrio::Bulk:
-                    conf.ReadPrio = NBlockIO::EPriority::Bulk;
+                    conf.ReadPrio = NBlockIO::EPriority::Bulk; 
                     break;
                 case TScanOptions::EReadPrio::Low:
-                    conf.ReadPrio = NBlockIO::EPriority::Low;
+                    conf.ReadPrio = NBlockIO::EPriority::Low; 
                     break;
             }
 

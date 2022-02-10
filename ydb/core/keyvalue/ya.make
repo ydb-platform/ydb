@@ -1,7 +1,7 @@
 LIBRARY()
 
 OWNER(
-    alexvru
+    alexvru 
     cthulhu
     g:kikimr
 )
@@ -49,23 +49,23 @@ SRCS(
 PEERDIR(
     library/cpp/actors/core
     library/cpp/actors/protos
-    ydb/core/base
-    ydb/core/blobstorage/base
-    ydb/core/blobstorage/dsproxy
-    ydb/core/engine/minikql
-    ydb/core/keyvalue/protos
-    ydb/core/protos
-    ydb/core/tablet_flat
-    ydb/core/tx
-    ydb/public/lib/base
+    ydb/core/base 
+    ydb/core/blobstorage/base 
+    ydb/core/blobstorage/dsproxy 
+    ydb/core/engine/minikql 
+    ydb/core/keyvalue/protos 
+    ydb/core/protos 
+    ydb/core/tablet_flat 
+    ydb/core/tx 
+    ydb/public/lib/base 
 )
 
 END()
+ 
+RECURSE( 
+    protos 
+) 
 
-RECURSE(
-    protos
-)
-
-RECURSE_FOR_TESTS(
-    ut
-)
+RECURSE_FOR_TESTS( 
+    ut 
+) 

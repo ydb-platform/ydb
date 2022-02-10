@@ -3,7 +3,7 @@
 
 #include <ydb/library/yql/core/common_opt/yql_co_sqlin.h>
 #include <ydb/library/yql/core/yql_opt_utils.h>
-#include <ydb/library/yql/utils/log/log.h>
+#include <ydb/library/yql/utils/log/log.h> 
 #include <ydb/library/yql/utils/utf8.h>
 
 namespace NYql {

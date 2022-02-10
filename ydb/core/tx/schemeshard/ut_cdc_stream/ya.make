@@ -1,4 +1,4 @@
-UNITTEST_FOR(ydb/core/tx/schemeshard)
+UNITTEST_FOR(ydb/core/tx/schemeshard) 
 
 OWNER(
     ilnaz
@@ -6,7 +6,7 @@ OWNER(
 )
 
 FORK_SUBTESTS()
-
+ 
 SPLIT_FACTOR(2)
 
 IF (SANITIZER_TYPE OR WITH_VALGRIND)
@@ -19,15 +19,15 @@ ELSE()
 ENDIF()
 
 PEERDIR(
-    ydb/core/testlib
-    ydb/core/tx/schemeshard/ut_helpers
+    ydb/core/testlib 
+    ydb/core/tx/schemeshard/ut_helpers 
 )
 
 SRCS(
     ut_cdc_stream.cpp
 )
 
-YQL_LAST_ABI_VERSION()
+YQL_LAST_ABI_VERSION() 
 
 REQUIREMENTS(ram:11)
 

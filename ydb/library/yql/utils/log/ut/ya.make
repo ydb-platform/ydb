@@ -1,4 +1,4 @@
-UNITTEST_FOR(ydb/library/yql/utils/log)
+UNITTEST_FOR(ydb/library/yql/utils/log) 
 
 OWNER(g:yql)
 

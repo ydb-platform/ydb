@@ -1,4 +1,4 @@
-OWNER(g:yq)
+OWNER(g:yq) 
 
 LIBRARY()
 
@@ -12,16 +12,16 @@ SRCS(
 
 PEERDIR(
     contrib/libs/fmt
-    library/cpp/actors/core
+    library/cpp/actors/core 
     ydb/core/yq/libs/actors/logging
     ydb/core/yq/libs/control_plane_storage
-    ydb/core/yq/libs/ydb
+    ydb/core/yq/libs/ydb 
     ydb/core/yq/libs/checkpoint_storage/events
     ydb/core/yq/libs/checkpoint_storage/proto
     ydb/core/yq/libs/checkpointing_common
-    ydb/library/security
-    ydb/public/sdk/cpp/client/ydb_scheme
-    ydb/public/sdk/cpp/client/ydb_table
+    ydb/library/security 
+    ydb/public/sdk/cpp/client/ydb_scheme 
+    ydb/public/sdk/cpp/client/ydb_table 
     ydb/library/yql/dq/actors/compute
     ydb/library/yql/dq/proto
 )

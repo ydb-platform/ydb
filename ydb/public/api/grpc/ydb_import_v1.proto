@@ -3,7 +3,7 @@ syntax = "proto3";
 package Ydb.Import.V1;
 option java_package = "com.yandex.ydb.import_.v1";
 
-import "ydb/public/api/protos/ydb_import.proto";
+import "ydb/public/api/protos/ydb_import.proto"; 
 
 service ImportService {
 

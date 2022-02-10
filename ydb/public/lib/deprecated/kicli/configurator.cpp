@@ -1,6 +1,6 @@
 #include "kicli.h"
 
-#include <ydb/public/lib/deprecated/client/msgbus_client.h>
+#include <ydb/public/lib/deprecated/client/msgbus_client.h> 
 
 namespace NKikimr {
 namespace NClient {

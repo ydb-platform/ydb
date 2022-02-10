@@ -4,10 +4,10 @@
 #include "flat_sausage_layout.h"
 #include "flat_sausage_solid.h"
 
-#include <ydb/core/base/shared_data.h>
+#include <ydb/core/base/shared_data.h> 
 
 namespace NKikimr {
-namespace NPageCollection {
+namespace NPageCollection { 
 
     class TMeta {
     public:
@@ -42,8 +42,8 @@ namespace NPageCollection {
         TStringBuf GetPageInplaceData(ui32 pageId) const noexcept;
 
     public:
-        const TSharedData Raw;  /* Page collection serialized meta blob */
-        const ui32 Group = TLargeGlobId::InvalidGroup;
+        const TSharedData Raw;  /* Page collection serialized meta blob */ 
+        const ui32 Group = TLargeGlobId::InvalidGroup; 
 
     private:
         const THeader *Header = nullptr;

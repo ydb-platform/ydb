@@ -3,7 +3,7 @@
 #include "datashard_direct_upload.h"
 
 namespace NKikimr {
-namespace NDataShard {
+namespace NDataShard { 
 
 TDirectTransaction::TDirectTransaction(ui64 txId, TInstant receivedAt, ui64 tieBreakerIndex, TEvDataShard::TEvUploadRowsRequest::TPtr& ev)
     : TOperation(TBasicOpInfo(txId, EOperationKind::DirectTx, Flags, 0, receivedAt, tieBreakerIndex))
@@ -30,7 +30,7 @@ void TDirectTransaction::BuildExecutionPlan(bool loaded)
     RewriteExecutionPlan(plan);
 }
 
-bool TDirectTransaction::Execute(TDataShard* self, TTransactionContext& txc) {
+bool TDirectTransaction::Execute(TDataShard* self, TTransactionContext& txc) { 
     auto [readVersion, writeVersion] = self->GetReadWriteVersions();
     if (!Impl->Execute(self, txc, readVersion, writeVersion))
         return false;
@@ -39,7 +39,7 @@ bool TDirectTransaction::Execute(TDataShard* self, TTransactionContext& txc) {
     return true;
 }
 
-void TDirectTransaction::SendResult(TDataShard* self, const TActorContext& ctx) {
+void TDirectTransaction::SendResult(TDataShard* self, const TActorContext& ctx) { 
     Impl->SendResult(self, ctx);
 }
 
@@ -47,5 +47,5 @@ TVector<NMiniKQL::IChangeCollector::TChange> TDirectTransaction::GetCollectedCha
     return Impl->GetCollectedChanges();
 }
 
-} // NDataShard
+} // NDataShard 
 } // NKikimr

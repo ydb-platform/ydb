@@ -1,7 +1,7 @@
-UNITTEST_FOR(ydb/core/driver_lib/run)
+UNITTEST_FOR(ydb/core/driver_lib/run) 
 
-OWNER(alexvru)
+OWNER(alexvru) 
 
-SRCS(version_ut.cpp)
+SRCS(version_ut.cpp) 
 
 END()

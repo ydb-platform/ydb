@@ -4,8 +4,8 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <util/generic/ptr.h>
-#include <util/generic/xrange.h>
+#include <util/generic/ptr.h> 
+#include <util/generic/xrange.h> 
 
 namespace NKikimr {
 namespace NOperationQueue {

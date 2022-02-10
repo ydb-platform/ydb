@@ -3,7 +3,7 @@
 #include "flat_sausage_packet.h"
 
 #include <util/generic/ptr.h>
-#include <ydb/core/base/logoblob.h>
+#include <ydb/core/base/logoblob.h> 
 
 namespace NKikimr {
 namespace NTable {
@@ -12,7 +12,7 @@ namespace NTable {
     public:
         virtual const TLogoBlobID& BundleId() const = 0;
         virtual ui64 BackingSize() const = 0;
-        virtual const NPageCollection::TPageCollection* Packet(ui32 room) const noexcept = 0;
+        virtual const NPageCollection::TPageCollection* Packet(ui32 room) const noexcept = 0; 
 
         template<typename TContainer>
         void SaveAllBlobIdsTo(TContainer &vec) const

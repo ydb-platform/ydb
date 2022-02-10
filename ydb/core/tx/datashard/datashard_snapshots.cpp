@@ -5,7 +5,7 @@
 #include <util/stream/output.h>
 
 namespace NKikimr {
-namespace NDataShard {
+namespace NDataShard { 
 
 void TSnapshotManager::Reset() {
     MinWriteVersion = TRowVersion::Min();
@@ -22,7 +22,7 @@ void TSnapshotManager::Reset() {
 }
 
 bool TSnapshotManager::Reload(NIceDb::TNiceDb& db) {
-    using Schema = TDataShard::Schema;
+    using Schema = TDataShard::Schema; 
 
     bool ready = true;
 
@@ -124,7 +124,7 @@ TRowVersion TSnapshotManager::GetMinWriteVersion() const {
 }
 
 void TSnapshotManager::SetMinWriteVersion(NIceDb::TNiceDb& db, TRowVersion writeVersion) {
-    using Schema = TDataShard::Schema;
+    using Schema = TDataShard::Schema; 
 
     Self->PersistSys(db, Schema::Sys_MinWriteVersionStep, writeVersion.Step);
     Self->PersistSys(db, Schema::Sys_MinWriteVersionTxId, writeVersion.TxId);
@@ -140,7 +140,7 @@ TRowVersion TSnapshotManager::GetCommittedCompleteEdge() const {
 }
 
 void TSnapshotManager::SetCompleteEdge(NIceDb::TNiceDb& db, const TRowVersion& version) {
-    using Schema = TDataShard::Schema;
+    using Schema = TDataShard::Schema; 
 
     Self->PersistSys(db, Schema::SysMvcc_CompleteEdgeStep, version.Step);
     Self->PersistSys(db, Schema::SysMvcc_CompleteEdgeTxId, version.TxId);
@@ -185,7 +185,7 @@ TRowVersion TSnapshotManager::GetIncompleteEdge() const {
 }
 
 void TSnapshotManager::SetIncompleteEdge(NIceDb::TNiceDb& db, const TRowVersion& version) {
-    using Schema = TDataShard::Schema;
+    using Schema = TDataShard::Schema; 
 
     Self->PersistSys(db, Schema::SysMvcc_IncompleteEdgeStep, version.Step);
     Self->PersistSys(db, Schema::SysMvcc_IncompleteEdgeTxId, version.TxId);
@@ -209,7 +209,7 @@ bool TSnapshotManager::PromoteIncompleteEdge(TOperation* op, TTransactionContext
 }
 
 void TSnapshotManager::SetKeepSnapshotTimeout(NIceDb::TNiceDb& db, ui64 keepSnapshotTimeout) {
-    using Schema = TDataShard::Schema;
+    using Schema = TDataShard::Schema; 
 
     // TODO validate new value
     Self->PersistSys(db, Schema::SysMvcc_KeepSnapshotTimeout, keepSnapshotTimeout);
@@ -221,7 +221,7 @@ TRowVersion TSnapshotManager::GetLowWatermark() const {
 }
 
 void TSnapshotManager::SetLowWatermark(NIceDb::TNiceDb& db, TRowVersion watermark) {
-    using Schema = TDataShard::Schema;
+    using Schema = TDataShard::Schema; 
 
     Self->PersistSys(db, Schema::SysMvcc_LowWatermarkStep, watermark.Step);
     Self->PersistSys(db, Schema::SysMvcc_LowWatermarkTxId, watermark.TxId);
@@ -271,7 +271,7 @@ bool TSnapshotManager::ChangeMvccState(ui64 step, ui64 txId, TTransactionContext
     if (MvccState == state)
         return false;
 
-    using Schema = TDataShard::Schema;
+    using Schema = TDataShard::Schema; 
     const TRowVersion opVersion(step, txId);
 
     // We need to choose a version that is at least as large as all previous edges
@@ -605,7 +605,7 @@ bool TSnapshotManager::RemoveExpiredSnapshots(NTable::TDatabase& db, TInstant no
 }
 
 void TSnapshotManager::PersistAddSnapshot(NIceDb::TNiceDb& db, const TSnapshotKey& key, const TString& name, ui64 flags, TDuration timeout) {
-    using Schema = TDataShard::Schema;
+    using Schema = TDataShard::Schema; 
 
     auto res = Snapshots.emplace(
         std::piecewise_construct,
@@ -620,7 +620,7 @@ void TSnapshotManager::PersistAddSnapshot(NIceDb::TNiceDb& db, const TSnapshotKe
 }
 
 void TSnapshotManager::PersistRemoveSnapshot(NIceDb::TNiceDb& db, const TSnapshotKey& key) {
-    using Schema = TDataShard::Schema;
+    using Schema = TDataShard::Schema; 
 
     auto it = Snapshots.find(key);
     Y_VERIFY_S(it != Snapshots.end(), "Removing unknown snapshot: " << key);
@@ -637,7 +637,7 @@ void TSnapshotManager::PersistRemoveSnapshot(NIceDb::TNiceDb& db, const TSnapsho
 }
 
 void TSnapshotManager::PersistUpdateSnapshotFlags(NIceDb::TNiceDb& db, const TSnapshotKey& key) {
-    using Schema = TDataShard::Schema;
+    using Schema = TDataShard::Schema; 
 
     auto it = Snapshots.find(key);
     Y_VERIFY_S(it != Snapshots.end(), "Updating unknown snapshot: " << key);
@@ -654,7 +654,7 @@ void TSnapshotManager::PersistUpdateSnapshotFlags(NIceDb::TNiceDb& db, const TSn
 }
 
 void TSnapshotManager::PersistRemoveAllSnapshots(NIceDb::TNiceDb& db) {
-    using Schema = TDataShard::Schema;
+    using Schema = TDataShard::Schema; 
 
     for (auto& kv : Snapshots) {
         const auto& key = kv.first;
@@ -710,13 +710,13 @@ void TSnapshotManager::EnsureRemovedRowVersions(NTable::TDatabase& db, const TRo
     }
 }
 
-}   // namespace NDataShard
+}   // namespace NDataShard 
 }   // namespace NKikimr
 
-Y_DECLARE_OUT_SPEC(, NKikimr::NDataShard::TSnapshotTableKey, stream, value) {
+Y_DECLARE_OUT_SPEC(, NKikimr::NDataShard::TSnapshotTableKey, stream, value) { 
     stream << "{ table " << value.OwnerId << ":" << value.PathId << " }";
 }
 
-Y_DECLARE_OUT_SPEC(, NKikimr::NDataShard::TSnapshotKey, stream, value) {
+Y_DECLARE_OUT_SPEC(, NKikimr::NDataShard::TSnapshotKey, stream, value) { 
     stream << "{ table " << value.OwnerId << ":" << value.PathId << " version " << value.Step << "/" << value.TxId << " }";
 }

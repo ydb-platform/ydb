@@ -1,14 +1,14 @@
 #include "change_record.h"
 #include "datashard_ut_common.h"
 
-#include <ydb/core/protos/change_exchange.pb.h>
-#include <ydb/core/scheme/scheme_tablecell.h>
-#include <ydb/core/tx/scheme_cache/scheme_cache.h>
-#include <ydb/public/lib/deprecated/kicli/kicli.h>
+#include <ydb/core/protos/change_exchange.pb.h> 
+#include <ydb/core/scheme/scheme_tablecell.h> 
+#include <ydb/core/tx/scheme_cache/scheme_cache.h> 
+#include <ydb/public/lib/deprecated/kicli/kicli.h> 
 
 namespace NKikimr {
 
-using namespace NDataShard;
+using namespace NDataShard; 
 using namespace Tests;
 
 namespace {
@@ -149,7 +149,7 @@ static void OutKvContainer(IOutputStream& out, const C& c) {
 }
 
 struct TStructRecord {
-    NTable::ERowOp Rop;
+    NTable::ERowOp Rop; 
     TStructKey Key;
     TStructValue Update;
     TStructValue OldImage;
@@ -157,7 +157,7 @@ struct TStructRecord {
 
     TStructRecord() = default;
 
-    TStructRecord(NTable::ERowOp rop, const TStructKey& key,
+    TStructRecord(NTable::ERowOp rop, const TStructKey& key, 
             const TStructValue& update = {},
             const TStructValue& oldImage = {},
             const TStructValue& newImage = {})
@@ -198,16 +198,16 @@ struct TStructRecord {
 
         switch (proto.GetRowOperationCase()) {
         case NKikimrChangeExchange::TChangeRecord::TDataChange::kUpsert:
-            record.Rop = NTable::ERowOp::Upsert;
+            record.Rop = NTable::ERowOp::Upsert; 
             Parse(proto.GetUpsert(), tagToName, [&record](const TString& name, ui32 value) {
                 record.Update.emplace(name, value);
             });
             break;
         case NKikimrChangeExchange::TChangeRecord::TDataChange::kErase:
-            record.Rop = NTable::ERowOp::Erase;
+            record.Rop = NTable::ERowOp::Erase; 
             break;
         default:
-            record.Rop = NTable::ERowOp::Absent;
+            record.Rop = NTable::ERowOp::Absent; 
             break;
         }
 
@@ -354,30 +354,30 @@ Y_UNIT_TEST_SUITE(AsyncIndexChangeCollector) {
 
     Y_UNIT_TEST(InsertSingleRow) {
         Run("/Root/path", SimpleTable(), "INSERT INTO `/Root/path` (pkey, ikey) VALUES (1, 10);", {
-            {"by_ikey", {TStructRecord(NTable::ERowOp::Upsert, {{"ikey", 10}, {"pkey", 1}})}},
+            {"by_ikey", {TStructRecord(NTable::ERowOp::Upsert, {{"ikey", 10}, {"pkey", 1}})}}, 
         });
     }
 
     Y_UNIT_TEST(InsertManyRows) {
         Run("/Root/path", SimpleTable(), "INSERT INTO `/Root/path` (pkey, ikey) VALUES (1, 10), (2, 20);", {
             {"by_ikey", {
-                TStructRecord(NTable::ERowOp::Upsert, {{"ikey", 10}, {"pkey", 1}}),
-                TStructRecord(NTable::ERowOp::Upsert, {{"ikey", 20}, {"pkey", 2}}),
+                TStructRecord(NTable::ERowOp::Upsert, {{"ikey", 10}, {"pkey", 1}}), 
+                TStructRecord(NTable::ERowOp::Upsert, {{"ikey", 20}, {"pkey", 2}}), 
             }},
         });
     }
 
     Y_UNIT_TEST(UpsertSingleRow) {
         Run("/Root/path", SimpleTable(), "UPSERT INTO `/Root/path` (pkey, ikey) VALUES (1, 10);", {
-            {"by_ikey", {TStructRecord(NTable::ERowOp::Upsert, {{"ikey", 10}, {"pkey", 1}})}},
+            {"by_ikey", {TStructRecord(NTable::ERowOp::Upsert, {{"ikey", 10}, {"pkey", 1}})}}, 
         });
     }
 
     Y_UNIT_TEST(UpsertManyRows) {
         Run("/Root/path", SimpleTable(), "UPSERT INTO `/Root/path` (pkey, ikey) VALUES (1, 10), (2, 20);", {
             {"by_ikey", {
-                TStructRecord(NTable::ERowOp::Upsert, {{"ikey", 10}, {"pkey", 1}}),
-                TStructRecord(NTable::ERowOp::Upsert, {{"ikey", 20}, {"pkey", 2}}),
+                TStructRecord(NTable::ERowOp::Upsert, {{"ikey", 10}, {"pkey", 1}}), 
+                TStructRecord(NTable::ERowOp::Upsert, {{"ikey", 20}, {"pkey", 2}}), 
             }},
         });
     }
@@ -385,9 +385,9 @@ Y_UNIT_TEST_SUITE(AsyncIndexChangeCollector) {
     Y_UNIT_TEST(UpsertToSameKey) {
         Run("/Root/path", SimpleTable(), "UPSERT INTO `/Root/path` (pkey, ikey) VALUES (1, 10), (1, 20);", {
             {"by_ikey", {
-                TStructRecord(NTable::ERowOp::Upsert, {{"ikey", 10}, {"pkey", 1}}),
-                TStructRecord(NTable::ERowOp::Erase,  {{"ikey", 10}, {"pkey", 1}}),
-                TStructRecord(NTable::ERowOp::Upsert, {{"ikey", 20}, {"pkey", 1}}),
+                TStructRecord(NTable::ERowOp::Upsert, {{"ikey", 10}, {"pkey", 1}}), 
+                TStructRecord(NTable::ERowOp::Erase,  {{"ikey", 10}, {"pkey", 1}}), 
+                TStructRecord(NTable::ERowOp::Upsert, {{"ikey", 20}, {"pkey", 1}}), 
             }},
         });
     }
@@ -402,8 +402,8 @@ Y_UNIT_TEST_SUITE(AsyncIndexChangeCollector) {
             "DELETE FROM `/Root/path` WHERE pkey = 1;",
         }, {
             {"by_ikey", {
-                TStructRecord(NTable::ERowOp::Upsert, {{"ikey", 10}, {"pkey", 1}}),
-                TStructRecord(NTable::ERowOp::Erase,  {{"ikey", 10}, {"pkey", 1}}),
+                TStructRecord(NTable::ERowOp::Upsert, {{"ikey", 10}, {"pkey", 1}}), 
+                TStructRecord(NTable::ERowOp::Erase,  {{"ikey", 10}, {"pkey", 1}}), 
             }},
         });
     }
@@ -423,8 +423,8 @@ Y_UNIT_TEST_SUITE(AsyncIndexChangeCollector) {
 
     Y_UNIT_TEST(MultiIndexedTableInsertSingleRow) {
         Run("/Root/path", MultiIndexedTable(), "INSERT INTO `/Root/path` (pkey, ikey1, ikey2) VALUES (1, 10, 100);", {
-            {"by_ikey1", {TStructRecord(NTable::ERowOp::Upsert, {{"ikey1", 10},  {"pkey", 1}})}},
-            {"by_ikey2", {TStructRecord(NTable::ERowOp::Upsert, {{"ikey2", 100}, {"pkey", 1}})}},
+            {"by_ikey1", {TStructRecord(NTable::ERowOp::Upsert, {{"ikey1", 10},  {"pkey", 1}})}}, 
+            {"by_ikey2", {TStructRecord(NTable::ERowOp::Upsert, {{"ikey2", 100}, {"pkey", 1}})}}, 
         });
     }
 
@@ -434,12 +434,12 @@ Y_UNIT_TEST_SUITE(AsyncIndexChangeCollector) {
             "UPDATE `/Root/path` SET ikey1 = 20 WHERE pkey = 1;",
         }, {
             {"by_ikey1", {
-                TStructRecord(NTable::ERowOp::Upsert, {{"ikey1", 10},  {"pkey", 1}}),
-                TStructRecord(NTable::ERowOp::Erase,  {{"ikey1", 10},  {"pkey", 1}}),
-                TStructRecord(NTable::ERowOp::Upsert, {{"ikey1", 20},  {"pkey", 1}}),
+                TStructRecord(NTable::ERowOp::Upsert, {{"ikey1", 10},  {"pkey", 1}}), 
+                TStructRecord(NTable::ERowOp::Erase,  {{"ikey1", 10},  {"pkey", 1}}), 
+                TStructRecord(NTable::ERowOp::Upsert, {{"ikey1", 20},  {"pkey", 1}}), 
             }},
             {"by_ikey2", {
-                TStructRecord(NTable::ERowOp::Upsert, {{"ikey2", 100}, {"pkey", 1}}),
+                TStructRecord(NTable::ERowOp::Upsert, {{"ikey2", 100}, {"pkey", 1}}), 
             }},
         });
     }
@@ -450,14 +450,14 @@ Y_UNIT_TEST_SUITE(AsyncIndexChangeCollector) {
             "REPLACE INTO `/Root/path` (pkey, ikey1) VALUES (1, 20);",
         }, {
             {"by_ikey1", {
-                TStructRecord(NTable::ERowOp::Upsert, {{"ikey1", 10},  {"pkey", 1}}),
-                TStructRecord(NTable::ERowOp::Erase,  {{"ikey1", 10},  {"pkey", 1}}),
-                TStructRecord(NTable::ERowOp::Upsert, {{"ikey1", 20},  {"pkey", 1}}),
+                TStructRecord(NTable::ERowOp::Upsert, {{"ikey1", 10},  {"pkey", 1}}), 
+                TStructRecord(NTable::ERowOp::Erase,  {{"ikey1", 10},  {"pkey", 1}}), 
+                TStructRecord(NTable::ERowOp::Upsert, {{"ikey1", 20},  {"pkey", 1}}), 
             }},
             {"by_ikey2", {
-                TStructRecord(NTable::ERowOp::Upsert, {{"ikey2", 100}, {"pkey", 1}}),
-                TStructRecord(NTable::ERowOp::Erase,  {{"ikey2", 100}, {"pkey", 1}}),
-                TStructRecord(NTable::ERowOp::Upsert, {{"ikey2", Null}, {"pkey", 1}}),
+                TStructRecord(NTable::ERowOp::Upsert, {{"ikey2", 100}, {"pkey", 1}}), 
+                TStructRecord(NTable::ERowOp::Erase,  {{"ikey2", 100}, {"pkey", 1}}), 
+                TStructRecord(NTable::ERowOp::Upsert, {{"ikey2", Null}, {"pkey", 1}}), 
             }},
         });
     }
@@ -475,7 +475,7 @@ Y_UNIT_TEST_SUITE(AsyncIndexChangeCollector) {
 
     Y_UNIT_TEST(IndexedPrimaryKeyInsertSingleRow) {
         Run("/Root/path", IndexedPrimaryKey(), "INSERT INTO `/Root/path` (pkey, ikey) VALUES (1, 10);", {
-            {"by_ikey_pkey", {TStructRecord(NTable::ERowOp::Upsert, {{"ikey", 10}, {"pkey", 1}})}},
+            {"by_ikey_pkey", {TStructRecord(NTable::ERowOp::Upsert, {{"ikey", 10}, {"pkey", 1}})}}, 
         });
     }
 
@@ -485,8 +485,8 @@ Y_UNIT_TEST_SUITE(AsyncIndexChangeCollector) {
             "DELETE FROM `/Root/path` WHERE pkey = 1;",
         }, {
             {"by_ikey_pkey", {
-                TStructRecord(NTable::ERowOp::Upsert, {{"ikey", 10}, {"pkey", 1}}),
-                TStructRecord(NTable::ERowOp::Erase,  {{"ikey", 10}, {"pkey", 1}}),
+                TStructRecord(NTable::ERowOp::Upsert, {{"ikey", 10}, {"pkey", 1}}), 
+                TStructRecord(NTable::ERowOp::Erase,  {{"ikey", 10}, {"pkey", 1}}), 
             }},
         });
     }
@@ -509,8 +509,8 @@ Y_UNIT_TEST_SUITE(AsyncIndexChangeCollector) {
             "UPDATE `/Root/path` SET value = 200 WHERE pkey = 1;",
         }, {
             {"by_ikey", {
-                TStructRecord(NTable::ERowOp::Upsert, {{"ikey", 10}, {"pkey", 1}}, {{"value", 100}}),
-                TStructRecord(NTable::ERowOp::Upsert, {{"ikey", 10}, {"pkey", 1}}, {{"value", 200}}),
+                TStructRecord(NTable::ERowOp::Upsert, {{"ikey", 10}, {"pkey", 1}}, {{"value", 100}}), 
+                TStructRecord(NTable::ERowOp::Upsert, {{"ikey", 10}, {"pkey", 1}}, {{"value", 200}}), 
             }},
         });
     }
@@ -521,9 +521,9 @@ Y_UNIT_TEST_SUITE(AsyncIndexChangeCollector) {
             "UPSERT INTO `/Root/path` (pkey, ikey, value) VALUES (1, 10, 200);",
         }, {
             {"by_ikey", {
-                TStructRecord(NTable::ERowOp::Upsert, {{"ikey", 10}, {"pkey", 1}}, {{"value", 100}}),
-                TStructRecord(NTable::ERowOp::Erase,  {{"ikey", 10}, {"pkey", 1}}),
-                TStructRecord(NTable::ERowOp::Upsert, {{"ikey", 10}, {"pkey", 1}}, {{"value", 200}}),
+                TStructRecord(NTable::ERowOp::Upsert, {{"ikey", 10}, {"pkey", 1}}, {{"value", 100}}), 
+                TStructRecord(NTable::ERowOp::Erase,  {{"ikey", 10}, {"pkey", 1}}), 
+                TStructRecord(NTable::ERowOp::Upsert, {{"ikey", 10}, {"pkey", 1}}, {{"value", 200}}), 
             }},
         });
     }
@@ -662,21 +662,21 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
 
     Y_UNIT_TEST(InsertSingleRow) {
         Run("/Root/path", SimpleTable(), KeysOnly(), "INSERT INTO `/Root/path` (key, value) VALUES (1, 10);", {
-            {"keys_stream", {TStructRecord(NTable::ERowOp::Upsert, {{"key", 1}})}},
+            {"keys_stream", {TStructRecord(NTable::ERowOp::Upsert, {{"key", 1}})}}, 
         });
     }
 
     Y_UNIT_TEST(DeleteNothing) {
         Run("/Root/path", SimpleTable(), KeysOnly(), "DELETE FROM `/Root/path` WHERE key = 1;", {
-            {"keys_stream", {TStructRecord(NTable::ERowOp::Erase, {{"key", 1}})}},
+            {"keys_stream", {TStructRecord(NTable::ERowOp::Erase, {{"key", 1}})}}, 
         });
     }
 
     Y_UNIT_TEST(UpsertManyRows) {
         Run("/Root/path", SimpleTable(), Updates(), "UPSERT INTO `/Root/path` (key, value) VALUES (1, 10), (2, 20);", {
             {"updates_stream", {
-                TStructRecord(NTable::ERowOp::Upsert, {{"key", 1}}, {{"value", 10}}),
-                TStructRecord(NTable::ERowOp::Upsert, {{"key", 2}}, {{"value", 20}}),
+                TStructRecord(NTable::ERowOp::Upsert, {{"key", 1}}, {{"value", 10}}), 
+                TStructRecord(NTable::ERowOp::Upsert, {{"key", 2}}, {{"value", 20}}), 
             }},
         });
     }
@@ -684,8 +684,8 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
     Y_UNIT_TEST(UpsertToSameKey) {
         Run("/Root/path", SimpleTable(), Updates(), "UPSERT INTO `/Root/path` (key, value) VALUES (1, 10), (1, 20);", {
             {"updates_stream", {
-                TStructRecord(NTable::ERowOp::Upsert, {{"key", 1}}, {{"value", 10}}),
-                TStructRecord(NTable::ERowOp::Upsert, {{"key", 1}}, {{"value", 20}}),
+                TStructRecord(NTable::ERowOp::Upsert, {{"key", 1}}, {{"value", 10}}), 
+                TStructRecord(NTable::ERowOp::Upsert, {{"key", 1}}, {{"value", 20}}), 
             }},
         });
     }
@@ -693,8 +693,8 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
     Y_UNIT_TEST(UpsertToSameKeyWithImages) {
         Run("/Root/path", SimpleTable(), NewAndOldImages(), "UPSERT INTO `/Root/path` (key, value) VALUES (1, 10), (1, 20);", {
             {"new_and_old_images", {
-                TStructRecord(NTable::ERowOp::Upsert, {{"key", 1}}, {}, {}, {{"value", 10}}),
-                TStructRecord(NTable::ERowOp::Upsert, {{"key", 1}}, {}, {{"value", 10}}, {{"value", 20}}),
+                TStructRecord(NTable::ERowOp::Upsert, {{"key", 1}}, {}, {}, {{"value", 10}}), 
+                TStructRecord(NTable::ERowOp::Upsert, {{"key", 1}}, {}, {{"value", 10}}, {{"value", 20}}), 
             }},
         });
     }
@@ -704,12 +704,12 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
             "UPSERT INTO `/Root/path` (key, value) VALUES (1, 10), (1, 20);",
         }, {
             {"updates_stream", {
-                TStructRecord(NTable::ERowOp::Upsert, {{"key", 1}}, {{"value", 10}}),
-                TStructRecord(NTable::ERowOp::Upsert, {{"key", 1}}, {{"value", 20}}),
+                TStructRecord(NTable::ERowOp::Upsert, {{"key", 1}}, {{"value", 10}}), 
+                TStructRecord(NTable::ERowOp::Upsert, {{"key", 1}}, {{"value", 20}}), 
             }},
             {"new_and_old_images", {
-                TStructRecord(NTable::ERowOp::Upsert, {{"key", 1}}, {}, {}, {{"value", 10}}),
-                TStructRecord(NTable::ERowOp::Upsert, {{"key", 1}}, {}, {{"value", 10}}, {{"value", 20}}),
+                TStructRecord(NTable::ERowOp::Upsert, {{"key", 1}}, {}, {}, {{"value", 10}}), 
+                TStructRecord(NTable::ERowOp::Upsert, {{"key", 1}}, {}, {{"value", 10}}, {{"value", 20}}), 
             }},
         });
     }
@@ -720,8 +720,8 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
             "DELETE FROM `/Root/path` WHERE key = 1;",
         }, {
             {"new_and_old_images", {
-                TStructRecord(NTable::ERowOp::Upsert, {{"key", 1}}, {}, {}, {{"value", 10}}),
-                TStructRecord(NTable::ERowOp::Erase,  {{"key", 1}}, {}, {{"value", 10}}, {}),
+                TStructRecord(NTable::ERowOp::Upsert, {{"key", 1}}, {}, {}, {{"value", 10}}), 
+                TStructRecord(NTable::ERowOp::Erase,  {{"key", 1}}, {}, {{"value", 10}}, {}), 
             }},
         });
     }
@@ -733,9 +733,9 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
             "DELETE FROM `/Root/path` WHERE key = 1;",
         }, {
             {"new_and_old_images", {
-                TStructRecord(NTable::ERowOp::Upsert, {{"key", 1}}, {}, {}, {{"value", 10}}),
-                TStructRecord(NTable::ERowOp::Upsert, {{"key", 1}}, {}, {{"value", 10}}, {{"value", 20}}),
-                TStructRecord(NTable::ERowOp::Erase,  {{"key", 1}}, {}, {{"value", 20}}, {}),
+                TStructRecord(NTable::ERowOp::Upsert, {{"key", 1}}, {}, {}, {{"value", 10}}), 
+                TStructRecord(NTable::ERowOp::Upsert, {{"key", 1}}, {}, {{"value", 10}}, {{"value", 20}}), 
+                TStructRecord(NTable::ERowOp::Erase,  {{"key", 1}}, {}, {{"value", 20}}, {}), 
             }},
         });
     }
@@ -753,8 +753,8 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
 
     Y_UNIT_TEST(IndexAndStreamUpsert) {
         Run("/Root/path", IndexedTable(), Updates(), "INSERT INTO `/Root/path` (pkey, ikey) VALUES (1, 10);", {
-            {"by_ikey", {TStructRecord(NTable::ERowOp::Upsert, {{"ikey", 10}, {"pkey", 1}})}},
-            {"updates_stream", {TStructRecord(NTable::ERowOp::Upsert, {{"pkey", 1}}, {{"ikey", 10}})}},
+            {"by_ikey", {TStructRecord(NTable::ERowOp::Upsert, {{"ikey", 10}, {"pkey", 1}})}}, 
+            {"updates_stream", {TStructRecord(NTable::ERowOp::Upsert, {{"pkey", 1}}, {{"ikey", 10}})}}, 
         });
     }
 }

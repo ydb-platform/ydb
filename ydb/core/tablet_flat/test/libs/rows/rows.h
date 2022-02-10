@@ -2,10 +2,10 @@
 
 #include "misc.h"
 
-#include <ydb/core/tablet_flat/flat_row_eggs.h>
-#include <ydb/core/tablet_flat/flat_row_column.h>
-#include <ydb/core/tablet_flat/flat_sausage_solid.h>
-#include <ydb/core/scheme/scheme_tablecell.h>
+#include <ydb/core/tablet_flat/flat_row_eggs.h> 
+#include <ydb/core/tablet_flat/flat_row_column.h> 
+#include <ydb/core/tablet_flat/flat_sausage_solid.h> 
+#include <ydb/core/scheme/scheme_tablecell.h> 
 
 #include <util/generic/vector.h>
 #include <util/generic/utility.h>
@@ -48,7 +48,7 @@ namespace NTest {
         template<typename TVal> using TTypeFor = NScheme::TTypeFor<TVal>;
 
         struct TUpdate {
-            TUpdate(TTag tag, TType type, TCellOp op)
+            TUpdate(TTag tag, TType type, TCellOp op) 
                 : Tag(tag), Type(type), Op(op) { }
 
             TRawTypeValue Raw() const
@@ -58,7 +58,7 @@ namespace NTest {
 
             NTable::TTag Tag = Max<TTag>();
             TType Type = 0;
-            TCellOp Op = ECellOp::Set;
+            TCellOp Op = ECellOp::Set; 
             TCell Cell;
         };
 
@@ -88,12 +88,12 @@ namespace NTest {
 
         TRow& Do(NTable::TTag, const TOmit&) noexcept
         {
-            return *this; /* implicit ECellOp::Empty */
+            return *this; /* implicit ECellOp::Empty */ 
         }
 
-        TRow& Do(NTable::TTag tag, ECellOp op)
+        TRow& Do(NTable::TTag tag, ECellOp op) 
         {
-            Y_VERIFY(TCellOp::HaveNoPayload(op), "Allowed only payloadless ops");
+            Y_VERIFY(TCellOp::HaveNoPayload(op), "Allowed only payloadless ops"); 
 
             Cols.emplace_back(tag, 0, op);
 
@@ -120,13 +120,13 @@ namespace NTest {
             return Put(tag, TTypeFor<TString>::Type, buf.data(), buf.size());
         }
 
-        TRow& Do(NTable::TTag tag, const NPageCollection::TGlobId &glob)
+        TRow& Do(NTable::TTag tag, const NPageCollection::TGlobId &glob) 
         {
             auto *data = static_cast<const void*>(&glob);
 
             Put(tag, TTypeFor<TString>::Type, data, sizeof(glob));
 
-            Cols.back().Op = TCellOp{ ECellOp::Set, ELargeObj::GlobId };
+            Cols.back().Op = TCellOp{ ECellOp::Set, ELargeObj::GlobId }; 
 
             return *this;
         }
@@ -134,7 +134,7 @@ namespace NTest {
         TRow& Add(const TRow &tagged)
         {
             for (const auto &va: *tagged) {
-                if (va.Op == ECellOp::Set) {
+                if (va.Op == ECellOp::Set) { 
                     Put(va.Tag, va.Type, va.Cell.Data(), va.Cell.Size());
                 } else {
                     Cols.emplace_back(va.Tag, 0, va.Op);
@@ -158,7 +158,7 @@ namespace NTest {
         {
             auto *ptr = static_cast<const char*>(ptr_);
 
-            Cols.emplace_back(tag, type, ECellOp::Set);
+            Cols.emplace_back(tag, type, ECellOp::Set); 
 
             if (TCell::CanInline(len)) {
                 Cols.back().Cell = { ptr, len };

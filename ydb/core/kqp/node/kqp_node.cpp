@@ -1,17 +1,17 @@
 #include "kqp_node.h"
 #include "kqp_node_state.h"
 
-#include <ydb/core/actorlib_impl/long_timer.h>
-#include <ydb/core/cms/console/configs_dispatcher.h>
-#include <ydb/core/cms/console/console.h>
-#include <ydb/core/protos/tx_datashard.pb.h>
-#include <ydb/core/mon/mon.h>
+#include <ydb/core/actorlib_impl/long_timer.h> 
+#include <ydb/core/cms/console/configs_dispatcher.h> 
+#include <ydb/core/cms/console/console.h> 
+#include <ydb/core/protos/tx_datashard.pb.h> 
+#include <ydb/core/mon/mon.h> 
 
-#include <ydb/core/kqp/kqp.h>
-#include <ydb/core/kqp/compute_actor/kqp_compute_actor.h>
-#include <ydb/core/kqp/rm/kqp_resource_estimation.h>
-#include <ydb/core/kqp/rm/kqp_rm.h>
-#include <ydb/core/kqp/common/kqp_resolve.h>
+#include <ydb/core/kqp/kqp.h> 
+#include <ydb/core/kqp/compute_actor/kqp_compute_actor.h> 
+#include <ydb/core/kqp/rm/kqp_resource_estimation.h> 
+#include <ydb/core/kqp/rm/kqp_rm.h> 
+#include <ydb/core/kqp/common/kqp_resolve.h> 
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/monlib/service/pages/templates.h>

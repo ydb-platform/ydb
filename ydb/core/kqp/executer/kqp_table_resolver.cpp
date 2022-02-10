@@ -1,9 +1,9 @@
 #include "kqp_table_resolver.h"
 
-#include <ydb/core/base/appdata.h>
-#include <ydb/core/base/cputime.h>
-#include <ydb/core/base/path.h>
-#include <ydb/core/kqp/executer/kqp_executer.h>
+#include <ydb/core/base/appdata.h> 
+#include <ydb/core/base/cputime.h> 
+#include <ydb/core/base/path.h> 
+#include <ydb/core/kqp/executer/kqp_executer.h> 
 
 
 namespace NKikimr::NKqp {

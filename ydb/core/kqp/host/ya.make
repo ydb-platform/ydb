@@ -17,14 +17,14 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/core/base
-    ydb/core/kqp/common
-    ydb/core/kqp/opt
-    ydb/core/kqp/prepare
-    ydb/core/kqp/provider
-    ydb/library/yql/core/services
-    ydb/library/yql/minikql/invoke_builtins
-    ydb/library/yql/sql
+    ydb/core/base 
+    ydb/core/kqp/common 
+    ydb/core/kqp/opt 
+    ydb/core/kqp/prepare 
+    ydb/core/kqp/provider 
+    ydb/library/yql/core/services 
+    ydb/library/yql/minikql/invoke_builtins 
+    ydb/library/yql/sql 
     ydb/library/yql/core
     ydb/library/yql/providers/common/codec
     ydb/library/yql/providers/common/udf_resolve
@@ -32,6 +32,6 @@ PEERDIR(
     ydb/library/yql/providers/result/provider
 )
 
-YQL_LAST_ABI_VERSION()
+YQL_LAST_ABI_VERSION() 
 
 END()

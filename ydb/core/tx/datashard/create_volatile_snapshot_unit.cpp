@@ -3,11 +3,11 @@
 #include "execution_unit_ctors.h"
 
 namespace NKikimr {
-namespace NDataShard {
+namespace NDataShard { 
 
 class TCreateVolatileSnapshotUnit : public TExecutionUnit {
 public:
-    TCreateVolatileSnapshotUnit(TDataShard& dataShard, TPipeline& pipeline)
+    TCreateVolatileSnapshotUnit(TDataShard& dataShard, TPipeline& pipeline) 
         : TExecutionUnit(EExecutionUnitKind::CreateVolatileSnapshot, false, dataShard, pipeline)
     { }
 
@@ -66,11 +66,11 @@ public:
 };
 
 THolder<TExecutionUnit> CreateCreateVolatileSnapshotUnit(
-        TDataShard& dataShard,
+        TDataShard& dataShard, 
         TPipeline& pipeline)
 {
     return THolder(new TCreateVolatileSnapshotUnit(dataShard, pipeline));
 }
 
-} // namespace NDataShard
+} // namespace NDataShard 
 } // namespace NKikimr

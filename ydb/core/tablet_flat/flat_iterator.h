@@ -283,7 +283,7 @@ public:
                 }
             } else if ((Ready = Apply()) != EReady::Data) {
 
-            } else if (mode == ENext::All || mode == ENext::Uncommitted || State.GetRowState() != ERowOp::Erase) {
+            } else if (mode == ENext::All || mode == ENext::Uncommitted || State.GetRowState() != ERowOp::Erase) { 
                 break;
             } else {
                 ++Stats.DeletedRowSkips; /* skip internal technical row states w/o data */
@@ -495,7 +495,7 @@ template<class TIteratorOps>
 inline void TTableItBase<TIteratorOps>::Push(TAutoPtr<TMemIt> it)
 {
     if (it && it->IsValid()) {
-        TIteratorId itId = { EType::Mem, ui16(MemIters.size()), AdjustEpoch(it->MemTable->Epoch) };
+        TIteratorId itId = { EType::Mem, ui16(MemIters.size()), AdjustEpoch(it->MemTable->Epoch) }; 
 
         MemIters.PushBack(it);
         TDbTupleRef key = MemIters.back()->GetKey();
@@ -861,7 +861,7 @@ inline EReady TTableItBase<TIteratorOps>::Apply() noexcept
     const TDbTupleRef key = GetKey();
 
     for (auto &pin: Remap.KeyPins())
-        State.Set(pin.Pos, { ECellOp::Set, ELargeObj::Inline }, key.Columns[pin.Key]);
+        State.Set(pin.Pos, { ECellOp::Set, ELargeObj::Inline }, key.Columns[pin.Key]); 
 
     // We must have at least one active iterator
     Y_VERIFY_DEBUG(Active != Inactive);
@@ -943,7 +943,7 @@ inline TDbTupleRef TTableItBase<TIteratorOps>::GetKey() const noexcept
 template<class TIteratorOps>
 inline TDbTupleRef TTableItBase<TIteratorOps>::GetValues() const noexcept
 {
-    if (State.GetRowState() == ERowOp::Erase)
+    if (State.GetRowState() == ERowOp::Erase) 
         return TDbTupleRef();
     return TDbTupleRef(Remap.Types().begin(), (*State).begin(), (*State).size());
 }

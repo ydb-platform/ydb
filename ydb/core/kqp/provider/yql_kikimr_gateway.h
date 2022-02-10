@@ -2,17 +2,17 @@
 
 #include "yql_kikimr_query_traits.h"
 
-#include <ydb/library/yql/public/udf/udf_data_type.h>
+#include <ydb/library/yql/public/udf/udf_data_type.h> 
 #include <ydb/library/yql/utils/resetable_setting.h>
 #include <ydb/library/yql/utils/yql_panic.h>
 #include <ydb/library/yql/providers/common/gateway/yql_provider_gateway.h>
 #include <ydb/library/yql/providers/result/expr_nodes/yql_res_expr_nodes.h>
 
 // TODO: Switch to public protobufs
-#include <ydb/core/protos/kqp.pb.h>
+#include <ydb/core/protos/kqp.pb.h> 
 #include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
-#include <ydb/core/protos/flat_scheme_op.pb.h>
-#include <ydb/library/aclib/aclib.h>
+#include <ydb/core/protos/flat_scheme_op.pb.h> 
+#include <ydb/library/aclib/aclib.h> 
 
 #include <library/cpp/threading/future/future.h>
 

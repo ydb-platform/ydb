@@ -1,187 +1,187 @@
-#pragma once
-#include "defs.h"
-#include "memusage.h"
-#include "vdisk_config.h"
-#include "vdisk_log.h"
-#include "vdisk_pdisk_error.h"
-#include "vdisk_outofspace.h"
-#include "vdisk_histograms.h"
-#include "vdisk_mongroups.h"
-#include <ydb/core/blobstorage/base/ptr.h>
-#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
-
-namespace NKikimr {
-
-    /////////////////////////////////////////////////////////////////////////////////////////
-    // TBSProxyContext
-    /////////////////////////////////////////////////////////////////////////////////////////
-    struct TBSProxyContext : public TThrRefBase, TNonCopyable {
-        TBSProxyContext(const TIntrusivePtr<NMonitoring::TDynamicCounters>& mon)
-            : Queue(mon->GetCounter("MemTotal:Queue"))
-        {}
-
-        TMemoryConsumer Queue;
-    };
-
-    using TBSProxyContextPtr = TIntrusivePtr<TBSProxyContext>;
-
-    /////////////////////////////////////////////////////////////////////////////////////////
-    // TVDiskContext
-    /////////////////////////////////////////////////////////////////////////////////////////
-    class TVDiskContext : public TBSProxyContext {
-    public:
-        // ActorId of the main VDisk actor (currently ActorId of SkeletonFront)
+#pragma once 
+#include "defs.h" 
+#include "memusage.h" 
+#include "vdisk_config.h" 
+#include "vdisk_log.h" 
+#include "vdisk_pdisk_error.h" 
+#include "vdisk_outofspace.h" 
+#include "vdisk_histograms.h" 
+#include "vdisk_mongroups.h" 
+#include <ydb/core/blobstorage/base/ptr.h> 
+#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h> 
+ 
+namespace NKikimr { 
+ 
+    ///////////////////////////////////////////////////////////////////////////////////////// 
+    // TBSProxyContext 
+    ///////////////////////////////////////////////////////////////////////////////////////// 
+    struct TBSProxyContext : public TThrRefBase, TNonCopyable { 
+        TBSProxyContext(const TIntrusivePtr<NMonitoring::TDynamicCounters>& mon) 
+            : Queue(mon->GetCounter("MemTotal:Queue")) 
+        {} 
+ 
+        TMemoryConsumer Queue; 
+    }; 
+ 
+    using TBSProxyContextPtr = TIntrusivePtr<TBSProxyContext>; 
+ 
+    ///////////////////////////////////////////////////////////////////////////////////////// 
+    // TVDiskContext 
+    ///////////////////////////////////////////////////////////////////////////////////////// 
+    class TVDiskContext : public TBSProxyContext { 
+    public: 
+        // ActorId of the main VDisk actor (currently ActorId of SkeletonFront) 
         const TActorId VDiskActorId;
         const std::shared_ptr<TBlobStorageGroupInfo::TTopology> Top;
-        const TIntrusivePtr<NMonitoring::TDynamicCounters> VDiskCounters;
-        const TIntrusivePtr<NMonitoring::TDynamicCounters> VDiskMemCounters;
+        const TIntrusivePtr<NMonitoring::TDynamicCounters> VDiskCounters; 
+        const TIntrusivePtr<NMonitoring::TDynamicCounters> VDiskMemCounters; 
         // latency histograms
-        NVDiskMon::THistograms Histograms;
+        NVDiskMon::THistograms Histograms; 
         std::shared_ptr<NMonGroup::TVDiskIFaceGroup> IFaceMonGroup;
-        // Self VDisk related info
-        const ui32 GroupId;
-        const TVDiskIdShort ShortSelfVDisk;
+        // Self VDisk related info 
+        const ui32 GroupId; 
+        const TVDiskIdShort ShortSelfVDisk; 
         const TString VDiskLogPrefix;
-        const ui32 NodeId;
-        // Memory consumption
-        TMemoryConsumer FreshIndex;
-        TMemoryConsumer FreshData;
-        TMemoryConsumer SstIndex;
-        TMemoryConsumer CompDataFresh;
-        TMemoryConsumer CompIndexFresh;
-        TMemoryConsumer CompData;
-        TMemoryConsumer CompIndex;
-        TMemoryConsumer IteratorsCache;
-        TMemoryConsumer Replication;
-        TMemoryConsumer SyncLogCache;
-        TActorSystem *ActorSystem;
+        const ui32 NodeId; 
+        // Memory consumption 
+        TMemoryConsumer FreshIndex; 
+        TMemoryConsumer FreshData; 
+        TMemoryConsumer SstIndex; 
+        TMemoryConsumer CompDataFresh; 
+        TMemoryConsumer CompIndexFresh; 
+        TMemoryConsumer CompData; 
+        TMemoryConsumer CompIndex; 
+        TMemoryConsumer IteratorsCache; 
+        TMemoryConsumer Replication; 
+        TMemoryConsumer SyncLogCache; 
+        TActorSystem *ActorSystem; 
         TReplQuoter::TPtr ReplPDiskReadQuoter;
         TReplQuoter::TPtr ReplPDiskWriteQuoter;
         TReplQuoter::TPtr ReplNodeRequestQuoter;
         TReplQuoter::TPtr ReplNodeResponseQuoter;
-
-    private:
-        // Managing disk space
-        TOutOfSpaceState OutOfSpaceState;
-        // Global stat about huge heap fragmentation
-        THugeHeapFragmentation HugeHeapFragmentation;
-        // Tracks PDisk errors
-        TPDiskErrorState PDiskErrorState;
-        friend class TDskSpaceTrackerActor;
-
-    public:
-        TLogger Logger;
-
-        TPDiskErrorState::EState GetPDiskErrorState() const {
-            return PDiskErrorState.GetState();
-        }
-
-    public:
-        TVDiskContext(
+ 
+    private: 
+        // Managing disk space 
+        TOutOfSpaceState OutOfSpaceState; 
+        // Global stat about huge heap fragmentation 
+        THugeHeapFragmentation HugeHeapFragmentation; 
+        // Tracks PDisk errors 
+        TPDiskErrorState PDiskErrorState; 
+        friend class TDskSpaceTrackerActor; 
+ 
+    public: 
+        TLogger Logger; 
+ 
+        TPDiskErrorState::EState GetPDiskErrorState() const { 
+            return PDiskErrorState.GetState(); 
+        } 
+ 
+    public: 
+        TVDiskContext( 
                 const TActorId &vdiskActorId,
                 std::shared_ptr<TBlobStorageGroupInfo::TTopology> top,
-                const TIntrusivePtr<NMonitoring::TDynamicCounters>& vdiskCounters,
-                const TVDiskID &selfVDisk,
-                TActorSystem *as,   // can be nullptr for tests
+                const TIntrusivePtr<NMonitoring::TDynamicCounters>& vdiskCounters, 
+                const TVDiskID &selfVDisk, 
+                TActorSystem *as,   // can be nullptr for tests 
                 TPDiskCategory::EDeviceType type,
                 bool donorMode = false,
                 TReplQuoter::TPtr replPDiskReadQuoter = nullptr,
                 TReplQuoter::TPtr replPDiskWriteQuoter = nullptr,
                 TReplQuoter::TPtr replNodeRequestQuoter = nullptr,
                 TReplQuoter::TPtr replNodeResponseQuoter = nullptr);
-
-        // The function checks response from PDisk. Normally, it's OK.
-        // Other alternatives are: 1) shutdown; 2) FAIL
-        // true -- OK
-        // false -- shutdown caller
-        template <class T, class TActorSystemOrCtx>
-        bool CheckPDiskResponse(const TActorSystemOrCtx &actorSystemOrCtx, const T &ev, const TString &message = {}) {
-            // check status
-            switch (ev.Status) {
-                case NKikimrProto::OK:
+ 
+        // The function checks response from PDisk. Normally, it's OK. 
+        // Other alternatives are: 1) shutdown; 2) FAIL 
+        // true -- OK 
+        // false -- shutdown caller 
+        template <class T, class TActorSystemOrCtx> 
+        bool CheckPDiskResponse(const TActorSystemOrCtx &actorSystemOrCtx, const T &ev, const TString &message = {}) { 
+            // check status 
+            switch (ev.Status) { 
+                case NKikimrProto::OK: 
                     if constexpr (T::EventType != TEvBlobStorage::EvLogResult) {
                         // we have different semantics for TEvLogResult StatusFlags
                         OutOfSpaceState.UpdateLocal(ev.StatusFlags);
                     }
-                    return true;
-                case NKikimrProto::INVALID_OWNER:
-                case NKikimrProto::INVALID_ROUND:
-                    // BlobStorage group reconfiguration, just return false and wait until
-                    // node warden restarts VDisk
-                    LOG_NOTICE(actorSystemOrCtx, NKikimrServices::BS_VDISK_OTHER,
-                            VDISKP(VDiskLogPrefix,
-                                "CheckPDiskResponse: Group Reconfiguration: %s",
-                                FormatMessage(ev.Status, ev.ErrorReason, ev.StatusFlags, message).data()));
-                    return false;
-                case NKikimrProto::CORRUPTED:
-                case NKikimrProto::OUT_OF_SPACE: {
-                    // Device is out of order
-                    PDiskErrorState.Set(ev.Status, ev.StatusFlags);
-                    auto newState = PDiskErrorState.GetState();
-                    LOG_ERROR(actorSystemOrCtx, NKikimrServices::BS_VDISK_OTHER,
-                            VDISKP(VDiskLogPrefix,
-                                "CheckPDiskResponse: Recoverable error from PDisk: %s newState# %s",
-                                FormatMessage(ev.Status, ev.ErrorReason, ev.StatusFlags, message).data(),
-                                TPDiskErrorState::StateToString(newState)));
-                    actorSystemOrCtx.Send(VDiskActorId, new TEvPDiskErrorStateChange(newState));
-                    return false;
-                }
-                default:
-                    // fail process, unrecoverable error
-                    Y_FAIL("%s", VDISKP(VDiskLogPrefix, "CheckPDiskResponse: FATAL error from PDisk: %s",
-                                FormatMessage(ev.Status, ev.ErrorReason, ev.StatusFlags, message).data()).data());
-                    return false;
-            }
-        }
-
-        TOutOfSpaceState &GetOutOfSpaceState() {
-            return OutOfSpaceState;
-        }
-
-        THugeHeapFragmentation &GetHugeHeapFragmentation() {
-            return HugeHeapFragmentation;
-        }
-
-    private:
-        TString FormatMessage(
-                NKikimrProto::EReplyStatus status,
-                const TString &errorReason,
-                NPDisk::TStatusFlags statusFlags,
-                const TString &message);
-    };
-
-    using TVDiskContextPtr = TIntrusivePtr<TVDiskContext>;
-
-} // NKikimr
-
-// NOTES on handling PDisk responses
-// Every PDisk response MUST be handled with CHECK_PDISK_RESPONSE*
-// macros. In case of OK answer an actor continue execution.
-// In case of INVALID_OWNER or INVALID_ROUND (i.e. BlobStorage group
-// reconfiguration), an actor switches to a special state where
-// it waits for TEvPoisonPill message and ignores other messages.
-// We can't just kill this actor because it may be her responsibility
-// to notify some other actors (children) about VDisk/component death.
-#define CHECK_PDISK_RESPONSE(VCtx, ev, ctx)                             \
-do {                                                                    \
-    if (!((VCtx)->CheckPDiskResponse((ctx), *(ev)->Get()))) {           \
-        TThis::Become(&TThis::TerminateStateFunc);                      \
-        return;                                                         \
-    }                                                                   \
-} while (false)
-
-#define CHECK_PDISK_RESPONSE_MSG(VCtx, ev, ctx, msg)                    \
-do {                                                                    \
-    if (!((VCtx)->CheckPDiskResponse((ctx), *(ev)->Get(), (msg)))) {    \
-        TThis::Become(&TThis::TerminateStateFunc);                      \
-        return;                                                         \
-    }                                                                   \
-} while (false)
-
-#define PDISK_TERMINATE_STATE_FUNC_DEF                                  \
-STFUNC(TerminateStateFunc) {                                            \
-    switch (ev->GetTypeRewrite()) {                                     \
-        HFunc(TEvents::TEvPoisonPill, HandlePoison);                    \
-    }                                                                   \
-}
-
+                    return true; 
+                case NKikimrProto::INVALID_OWNER: 
+                case NKikimrProto::INVALID_ROUND: 
+                    // BlobStorage group reconfiguration, just return false and wait until 
+                    // node warden restarts VDisk 
+                    LOG_NOTICE(actorSystemOrCtx, NKikimrServices::BS_VDISK_OTHER, 
+                            VDISKP(VDiskLogPrefix, 
+                                "CheckPDiskResponse: Group Reconfiguration: %s", 
+                                FormatMessage(ev.Status, ev.ErrorReason, ev.StatusFlags, message).data())); 
+                    return false; 
+                case NKikimrProto::CORRUPTED: 
+                case NKikimrProto::OUT_OF_SPACE: { 
+                    // Device is out of order 
+                    PDiskErrorState.Set(ev.Status, ev.StatusFlags); 
+                    auto newState = PDiskErrorState.GetState(); 
+                    LOG_ERROR(actorSystemOrCtx, NKikimrServices::BS_VDISK_OTHER, 
+                            VDISKP(VDiskLogPrefix, 
+                                "CheckPDiskResponse: Recoverable error from PDisk: %s newState# %s", 
+                                FormatMessage(ev.Status, ev.ErrorReason, ev.StatusFlags, message).data(), 
+                                TPDiskErrorState::StateToString(newState))); 
+                    actorSystemOrCtx.Send(VDiskActorId, new TEvPDiskErrorStateChange(newState)); 
+                    return false; 
+                } 
+                default: 
+                    // fail process, unrecoverable error 
+                    Y_FAIL("%s", VDISKP(VDiskLogPrefix, "CheckPDiskResponse: FATAL error from PDisk: %s", 
+                                FormatMessage(ev.Status, ev.ErrorReason, ev.StatusFlags, message).data()).data()); 
+                    return false; 
+            } 
+        } 
+ 
+        TOutOfSpaceState &GetOutOfSpaceState() { 
+            return OutOfSpaceState; 
+        } 
+ 
+        THugeHeapFragmentation &GetHugeHeapFragmentation() { 
+            return HugeHeapFragmentation; 
+        } 
+ 
+    private: 
+        TString FormatMessage( 
+                NKikimrProto::EReplyStatus status, 
+                const TString &errorReason, 
+                NPDisk::TStatusFlags statusFlags, 
+                const TString &message); 
+    }; 
+ 
+    using TVDiskContextPtr = TIntrusivePtr<TVDiskContext>; 
+ 
+} // NKikimr 
+ 
+// NOTES on handling PDisk responses 
+// Every PDisk response MUST be handled with CHECK_PDISK_RESPONSE* 
+// macros. In case of OK answer an actor continue execution. 
+// In case of INVALID_OWNER or INVALID_ROUND (i.e. BlobStorage group 
+// reconfiguration), an actor switches to a special state where 
+// it waits for TEvPoisonPill message and ignores other messages. 
+// We can't just kill this actor because it may be her responsibility 
+// to notify some other actors (children) about VDisk/component death. 
+#define CHECK_PDISK_RESPONSE(VCtx, ev, ctx)                             \ 
+do {                                                                    \ 
+    if (!((VCtx)->CheckPDiskResponse((ctx), *(ev)->Get()))) {           \ 
+        TThis::Become(&TThis::TerminateStateFunc);                      \ 
+        return;                                                         \ 
+    }                                                                   \ 
+} while (false) 
+ 
+#define CHECK_PDISK_RESPONSE_MSG(VCtx, ev, ctx, msg)                    \ 
+do {                                                                    \ 
+    if (!((VCtx)->CheckPDiskResponse((ctx), *(ev)->Get(), (msg)))) {    \ 
+        TThis::Become(&TThis::TerminateStateFunc);                      \ 
+        return;                                                         \ 
+    }                                                                   \ 
+} while (false) 
+ 
+#define PDISK_TERMINATE_STATE_FUNC_DEF                                  \ 
+STFUNC(TerminateStateFunc) {                                            \ 
+    switch (ev->GetTypeRewrite()) {                                     \ 
+        HFunc(TEvents::TEvPoisonPill, HandlePoison);                    \ 
+    }                                                                   \ 
+} 
+ 

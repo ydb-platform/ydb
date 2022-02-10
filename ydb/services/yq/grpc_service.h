@@ -4,7 +4,7 @@
 
 #include <library/cpp/grpc/server/grpc_server.h>
 
-#include <ydb/public/api/grpc/yq_v1.grpc.pb.h>
+#include <ydb/public/api/grpc/yq_v1.grpc.pb.h> 
 
 namespace NKikimr {
 namespace NGRpcService {

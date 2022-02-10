@@ -1,23 +1,23 @@
-UNITTEST_FOR(ydb/core/base)
-
+UNITTEST_FOR(ydb/core/base) 
+ 
 OWNER(fomichev g:kikimr)
-
+ 
 FORK_SUBTESTS()
 TIMEOUT(600)
 SIZE(MEDIUM)
 
-PEERDIR(
+PEERDIR( 
     library/cpp/getopt
     library/cpp/svnversion
-)
-
-SRCS(
+) 
+ 
+SRCS( 
     blobstorage_grouptype_ut.cpp
     localdb_ut.cpp
     logoblob_ut.cpp
     shared_data_ut.cpp
     statestorage_ut.cpp
     statestorage_guardian_impl_ut.cpp
-)
-
-END()
+) 
+ 
+END() 

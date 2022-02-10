@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/core/ymq/actor/index_events_processor.h>
+#include <ydb/core/ymq/actor/index_events_processor.h> 
 
 namespace NKikimr::NSQS {
 

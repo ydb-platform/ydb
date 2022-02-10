@@ -2,11 +2,11 @@ PROTO_LIBRARY()
 
 GRPC()
 
-OWNER(
-    fomichev
-    vvvv
-    g:kikimr
-)
+OWNER( 
+    fomichev 
+    vvvv 
+    g:kikimr 
+) 
 
 IF (OS_WINDOWS)
     NO_OPTIMIZE_PY_PROTOS()
@@ -135,10 +135,10 @@ GENERATE_ENUM_SERIALIZATION(blobstorage_pdisk_config.pb.h)
 
 PEERDIR(
     library/cpp/actors/protos
-    ydb/core/yq/libs/config/protos
-    ydb/library/login/protos
-    ydb/library/mkql_proto/protos
-    ydb/public/api/protos
+    ydb/core/yq/libs/config/protos 
+    ydb/library/login/protos 
+    ydb/library/mkql_proto/protos 
+    ydb/public/api/protos 
     ydb/library/yql/core/issue/protos
     ydb/library/yql/dq/actors/protos
     ydb/library/yql/dq/proto

@@ -1,8 +1,8 @@
 #pragma once
 
-#include <ydb/core/tablet_flat/flat_sausage_solid.h>
-#include <ydb/core/blobstorage/dsproxy/mock/model.h>
-#include <ydb/core/base/blobstorage.h>
+#include <ydb/core/tablet_flat/flat_sausage_solid.h> 
+#include <ydb/core/blobstorage/dsproxy/mock/model.h> 
+#include <ydb/core/base/blobstorage.h> 
 
 namespace NKikimr {
 namespace NFake {
@@ -94,7 +94,7 @@ namespace NFake {
         }
 
     private:
-        const ui32 Group = NPageCollection::TLargeGlobId::InvalidGroup;
+        const ui32 Group = NPageCollection::TLargeGlobId::InvalidGroup; 
 
         TActorId Owner;
         TAutoPtr<NUtil::ILogger> Logger;

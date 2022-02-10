@@ -351,7 +351,7 @@ namespace NUri {
 
     IOutputStream& TUri::PrintImpl(IOutputStream& out, int flags) const {
         TStringBuf v;
-
+ 
         const int wantFlags = flags; // save the original
         flags &= FieldsSet;          // can't print what we don't have
         if (flags & FlagHostAscii)

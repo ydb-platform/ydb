@@ -24,7 +24,7 @@ Public domain.
  * This implementation supports parallel processing of multiple blocks,
  * including potentially using general-purpose registers.
  */
-#if (__ARM_NEON__ || defined(_arm64_))
+#if (__ARM_NEON__ || defined(_arm64_)) 
 #   include <arm_neon.h>
 #   define ONE       (vec)vsetq_lane_u32(1,vdupq_n_u32(0),0)
 #   define NONCE(p, bp)  (vec)vcombine_u32(vcreate_u32(*(uint64_t *)(bp)), vcreate_u32(*(uint64_t *)(p)))
@@ -164,7 +164,7 @@ void ChaChaVec::SetKey(const ui8* key, size_t size)
     memcpy(aligned_key, key, size);
 
     ui32 *kp;
-    #if ( __ARM_NEON__ || __SSE2__ || defined(_arm64_))
+    #if ( __ARM_NEON__ || __SSE2__ || defined(_arm64_)) 
         kp = (ui32*)aligned_key;
     #else
         alignas(16) ui32 k[4];
@@ -183,7 +183,7 @@ void ChaChaVec::SetIV(const ui8* iv, const ui8* blockIdx)
 {
     ui32 *np;
     ui32 *bp;
-    #if ( __ARM_NEON__ || __SSE2__ || defined(_arm64_))
+    #if ( __ARM_NEON__ || __SSE2__ || defined(_arm64_)) 
         np = (ui32*)iv;
         bp = (ui32*)blockIdx;
     #else

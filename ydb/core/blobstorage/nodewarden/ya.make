@@ -1,7 +1,7 @@
 LIBRARY()
 
 OWNER(
-    alexvru
+    alexvru 
     cthulhu
     g:kikimr
 )
@@ -24,16 +24,16 @@ SRCS(
 
 PEERDIR(
     library/cpp/json
-    ydb/core/base
-    ydb/core/blobstorage/groupinfo
-    ydb/core/blobstorage/pdisk
-    ydb/core/control
-    ydb/library/pdisk_io
+    ydb/core/base 
+    ydb/core/blobstorage/groupinfo 
+    ydb/core/blobstorage/pdisk 
+    ydb/core/control 
+    ydb/library/pdisk_io 
 )
 
 END()
-
-RECURSE_FOR_TESTS(
-    ut
-    ut_sequence
-)
+ 
+RECURSE_FOR_TESTS( 
+    ut 
+    ut_sequence 
+) 

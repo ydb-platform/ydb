@@ -1,10 +1,10 @@
 #pragma once
 
 #define INCLUDE_YDB_INTERNAL_H
-#include <ydb/public/sdk/cpp/client/impl/ydb_internal/grpc_connections/grpc_connections.h>
+#include <ydb/public/sdk/cpp/client/impl/ydb_internal/grpc_connections/grpc_connections.h> 
 #undef INCLUDE_YDB_INTERNAL_H
 
-#include <ydb/public/sdk/cpp/client/ydb_types/exceptions/exceptions.h>
+#include <ydb/public/sdk/cpp/client/ydb_types/exceptions/exceptions.h> 
 
 #include <memory>
 

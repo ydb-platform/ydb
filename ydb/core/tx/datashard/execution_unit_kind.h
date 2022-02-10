@@ -2,7 +2,7 @@
 #include "defs.h"
 
 namespace NKikimr {
-namespace NDataShard {
+namespace NDataShard { 
 
 enum class EExecutionUnitKind : ui32 {
     CheckDataTx,
@@ -66,5 +66,5 @@ enum class EExecutionUnitKind : ui32 {
     Unspecified
 };
 
-} // namespace NDataShard
+} // namespace NDataShard 
 } // namespace NKikimr

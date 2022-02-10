@@ -1,5 +1,5 @@
-UNITTEST_FOR(ydb/core/health_check)
-
+UNITTEST_FOR(ydb/core/health_check) 
+ 
 OWNER(g:kikimr)
 
 FORK_SUBTESTS()
@@ -7,7 +7,7 @@ FORK_SUBTESTS()
 SIZE(SMALL)
 
 PEERDIR(
-    ydb/core/testlib
+    ydb/core/testlib 
 )
 
 SRCS(

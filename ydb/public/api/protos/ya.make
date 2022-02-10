@@ -1,16 +1,16 @@
 PROTO_LIBRARY(api-protos)
-
+ 
 MAVEN_GROUP_ID(com.yandex.ydb)
 
-OWNER(
-    dcherednik
-    fomichev
-    vvvv
-    g:kikimr
-)
+OWNER( 
+    dcherednik 
+    fomichev 
+    vvvv 
+    g:kikimr 
+) 
 
 PEERDIR(
-    ydb/public/api/protos/annotations
+    ydb/public/api/protos/annotations 
 )
 
 SRCS(

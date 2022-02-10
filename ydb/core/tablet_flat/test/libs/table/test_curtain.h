@@ -3,9 +3,9 @@
 #include "test_part.h"
 #include "wrap_part.h"
 
-#include <ydb/core/tablet_flat/test/libs/rows/rows.h>
-#include <ydb/core/tablet_flat/flat_part_screen.h>
-#include <ydb/core/tablet_flat/flat_part_iter_multi.h>
+#include <ydb/core/tablet_flat/test/libs/rows/rows.h> 
+#include <ydb/core/tablet_flat/flat_part_screen.h> 
+#include <ydb/core/tablet_flat/flat_part_iter_multi.h> 
 
 namespace NKikimr {
 namespace NTable {
@@ -61,11 +61,11 @@ namespace NTest {
     struct TSlicer {
         TSlicer(const TRowScheme &scheme) : Scheme(scheme) { }
 
-        TIntrusiveConstPtr<TSlices> Cut(const TPartStore &partStore, const TScreen &screen) noexcept
+        TIntrusiveConstPtr<TSlices> Cut(const TPartStore &partStore, const TScreen &screen) noexcept 
         {
             TTestEnv env;
-            TPartSimpleIt first(&partStore, { }, Scheme.Keys, &env);
-            TPartSimpleIt last(&partStore, { }, Scheme.Keys, &env);
+            TPartSimpleIt first(&partStore, { }, Scheme.Keys, &env); 
+            TPartSimpleIt last(&partStore, { }, Scheme.Keys, &env); 
             TVector<TSlice> slices;
 
             TRowId lastEnd = 0;
@@ -86,7 +86,7 @@ namespace NTest {
                     }
 
                     auto cut = TSlices::Cut(
-                        partStore.Slices,
+                        partStore.Slices, 
                         first.GetRowId(),
                         last.GetRowId(),
                         firstKey,

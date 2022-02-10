@@ -4,14 +4,14 @@
 #include "datashard_impl.h"
 
 namespace NKikimr {
-namespace NDataShard {
+namespace NDataShard { 
 
 void TOutReadSets::UpdateMonCounter() const {
     Self->SetCounter(COUNTER_OUT_READSETS_IN_FLIGHT, CurrentReadSets.size());
 }
 
 bool TOutReadSets::LoadReadSets(NIceDb::TNiceDb& db) {
-    using Schema = TDataShard::Schema;
+    using Schema = TDataShard::Schema; 
 
     CurrentReadSets.clear(); // For idempotency
     CurrentReadSetInfos.clear();
@@ -49,7 +49,7 @@ bool TOutReadSets::LoadReadSets(NIceDb::TNiceDb& db) {
 }
 
 void TOutReadSets::SaveReadSet(NIceDb::TNiceDb& db, ui64 seqNo, ui64 step, const TReadSetKey& rsInfo, TString body) {
-    using Schema = TDataShard::Schema;
+    using Schema = TDataShard::Schema; 
 
     Y_VERIFY(!CurrentReadSets.contains(seqNo));
     Y_VERIFY(!CurrentReadSetInfos.contains(rsInfo));
@@ -113,7 +113,7 @@ void TOutReadSets::SaveAck(const TActorContext &ctx, TAutoPtr<TEvTxProcessing::T
 }
 
 void TOutReadSets::Cleanup(NIceDb::TNiceDb& db, const TActorContext& ctx) {
-    using Schema = TDataShard::Schema;
+    using Schema = TDataShard::Schema; 
 
     // Note that this code should be called only after no-more-reads to ensure we wont lost updates
     for (TIntrusivePtr<TEvTxProcessing::TEvReadSetAck>& event : ReadSetAcks) {
@@ -149,7 +149,7 @@ void TOutReadSets::ResendAll(const TActorContext& ctx) {
 }
 
 bool TOutReadSets::ResendRS(NTabletFlatExecutor::TTransactionContext &txc, const TActorContext &ctx, ui64 seqNo) {
-    using Schema = TDataShard::Schema;
+    using Schema = TDataShard::Schema; 
 
     NIceDb::TNiceDb db(txc.DB);
     if (AckedSeqno.contains(seqNo)) {

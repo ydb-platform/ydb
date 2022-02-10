@@ -1,9 +1,9 @@
 #pragma once
 
-#include <ydb/library/security/ydb_credentials_provider_factory.h>
-#include <ydb/core/yq/libs/config/protos/storage.pb.h>
+#include <ydb/library/security/ydb_credentials_provider_factory.h> 
+#include <ydb/core/yq/libs/config/protos/storage.pb.h> 
 
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
+#include <ydb/public/sdk/cpp/client/ydb_table/table.h> 
 
 namespace NYq {
 

@@ -1,9 +1,9 @@
 #include "dsproxy.h"
 #include "dsproxy_mon.h"
-#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_partlayout.h>
-#include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
-#include <ydb/core/blobstorage/lwtrace_probes/blobstorage_probes.h>
-#include <ydb/core/blobstorage/base/wilson_events.h>
+#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_partlayout.h> 
+#include <ydb/core/blobstorage/vdisk/common/vdisk_events.h> 
+#include <ydb/core/blobstorage/lwtrace_probes/blobstorage_probes.h> 
+#include <ydb/core/blobstorage/base/wilson_events.h> 
 
 namespace NKikimr {
 
@@ -327,7 +327,7 @@ class TBlobStorageGroupDiscoverRequest : public TBlobStorageGroupRequestActor<TB
         const TVDiskID vdisk = VDiskIDFromVDiskID(record.GetVDiskID());
 
         Y_VERIFY(status == NKikimrProto::OK || status == NKikimrProto::NODATA || status == NKikimrProto::ERROR
-            || status == NKikimrProto::VDISK_ERROR_STATE, "status# %" PRIu32, ui32(status));
+            || status == NKikimrProto::VDISK_ERROR_STATE, "status# %" PRIu32, ui32(status)); 
 
         A_LOG_LOG_S(false, PriorityForStatusInbound(status), "BSD03",
             "Status# " << NKikimrProto::EReplyStatus_Name(status)
@@ -340,7 +340,7 @@ class TBlobStorageGroupDiscoverRequest : public TBlobStorageGroupRequestActor<TB
         } else if (status == NKikimrProto::OK) {
             Y_VERIFY(record.HasGeneration());
             BlockedGen = Max(BlockedGen, record.GetGeneration());
-        } else if (status == NKikimrProto::ERROR || status == NKikimrProto::VDISK_ERROR_STATE) {
+        } else if (status == NKikimrProto::ERROR || status == NKikimrProto::VDISK_ERROR_STATE) { 
             ++GetBlockErrors;
         } else {
             Y_FAIL("status: %s" , NKikimrProto::EReplyStatus_Name(status).data());
@@ -390,7 +390,7 @@ class TBlobStorageGroupDiscoverRequest : public TBlobStorageGroupRequestActor<TB
         Y_VERIFY(record.HasVDiskID());
         const TVDiskID vdisk = VDiskIDFromVDiskID(record.GetVDiskID());
 
-        Y_VERIFY(status == NKikimrProto::OK || status == NKikimrProto::ERROR || status == NKikimrProto::VDISK_ERROR_STATE);
+        Y_VERIFY(status == NKikimrProto::OK || status == NKikimrProto::ERROR || status == NKikimrProto::VDISK_ERROR_STATE); 
         if (IsIterativeDone) {
             Y_VERIFY(TotalRecieved < TotalSent);
             return;
@@ -405,7 +405,7 @@ class TBlobStorageGroupDiscoverRequest : public TBlobStorageGroupRequestActor<TB
         A_LOG_LOG_S(false, PriorityForStatusInbound(status), "BSD07", "Handle TEvVGetResult"
             << " Status# " << NKikimrProto::EReplyStatus_Name(status)
             << " vdisk# " << vdisk.ToString()
-            << " NodeId# " << Info->GetActorId(vdisk).NodeId()
+            << " NodeId# " << Info->GetActorId(vdisk).NodeId() 
             << " ev# " << ev->Get()->ToString());
 
         vDiskData.IsResponsive = true;
@@ -922,12 +922,12 @@ public:
         WILSON_TRACE_FROM_ACTOR(*TlsActivationContext, *this, &TraceId, EvDiscoverReceived, GroupId = groupId, From = from, To = to);
 
         for (const auto& vdisk : Info->GetVDisks()) {
-            auto vd = Info->GetVDiskId(vdisk.OrderNumber);
+            auto vd = Info->GetVDiskId(vdisk.OrderNumber); 
             if (!IsGetBlockDone) {
-                const ui64 cookie = TVDiskIdShort(vd).GetRaw();
+                const ui64 cookie = TVDiskIdShort(vd).GetRaw(); 
                 auto getBlock = std::make_unique<TEvBlobStorage::TEvVGetBlock>(TabletId, vd, Deadline);
                 A_LOG_DEBUG_S("BSD24", "Sending TEvVGetBlock Tablet# " << TabletId
-                    << " vDiskId# " << vd
+                    << " vDiskId# " << vd 
                     << " cookie# " << cookie
                     << " node# " << Info->GetActorId(vd).NodeId());
                 WILSON_TRACE_FROM_ACTOR(*TlsActivationContext, *this, &TraceId, EvVGetBlockSent);
@@ -940,10 +940,10 @@ public:
                 {}, from, to, GroupResponseTracker.CurrentRequestSize, nullptr, ForceBlockedGeneration);
             msg->Record.SetTabletId(TabletId);
             msg->Record.SetAcquireBlockedGeneration(true);
-            const ui64 cookie = TVDiskIdShort(vd).GetRaw();
+            const ui64 cookie = TVDiskIdShort(vd).GetRaw(); 
             A_LOG_DEBUG_S("BSD25", "Sending TEvVGet Tablet# " << TabletId
-                << " vDiskId# " << vd
-                << " node# " << Info->GetActorId(vd).NodeId()
+                << " vDiskId# " << vd 
+                << " node# " << Info->GetActorId(vd).NodeId() 
                 << " msg# " << msg->ToString()
                 << " cookie# " << cookie);
             WILSON_TRACE_FROM_ACTOR(*TlsActivationContext, *this, &TraceId, EvVGetSent);
@@ -951,7 +951,7 @@ public:
             SendToQueue(std::move(msg), cookie, TraceId.SeparateBranch());
             TotalSent++;
 
-            TVDiskInfo &curVDisk = VDiskInfo[TVDiskIdShort(vd).GetRaw()];
+            TVDiskInfo &curVDisk = VDiskInfo[TVDiskIdShort(vd).GetRaw()]; 
             curVDisk.IsMoreRequested = true;
             curVDisk.LastRequestSize = GroupResponseTracker.CurrentRequestSize;
             curVDisk.nextLogoBlobId = from;

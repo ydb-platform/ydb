@@ -1,41 +1,41 @@
 #pragma once
 
-#include <ydb/core/base/logoblob.h>
-#include <ydb/core/base/shared_data.h>
+#include <ydb/core/base/logoblob.h> 
+#include <ydb/core/base/shared_data.h> 
 
 namespace NKikimr {
-namespace NPageCollection {
+namespace NPageCollection { 
 
-    struct TLargeGlobId {
+    struct TLargeGlobId { 
         /* ... is a piece of some data up to 4GiB placed on a continous
             series of TLogoBlobs which IDs are differs only in cookie and
             have the single upper chunk bytes limit. All blobs of span have
             the same BS storage group.
         */
 
-        constexpr static ui32 InvalidGroup = (Max<ui32>() >> 1);
+        constexpr static ui32 InvalidGroup = (Max<ui32>() >> 1); 
 
-        TLargeGlobId() { };
+        TLargeGlobId() { }; 
 
-        TLargeGlobId(ui32 group, TLogoBlobID single)
-            : TLargeGlobId(group, single, single.BlobSize())
+        TLargeGlobId(ui32 group, TLogoBlobID single) 
+            : TLargeGlobId(group, single, single.BlobSize()) 
         {
 
         }
 
-        TLargeGlobId(ui32 group, const TLogoBlobID &lead, ui64 bytes)
+        TLargeGlobId(ui32 group, const TLogoBlobID &lead, ui64 bytes) 
             : Group(group)
             , Bytes(bytes)
             , Lead(lead)
         {
-            //Y_VERIFY(Group != InvalidGroup, "Invalid TLargeGlobId storage group");
+            //Y_VERIFY(Group != InvalidGroup, "Invalid TLargeGlobId storage group"); 
             Y_VERIFY(Lead && Lead.BlobSize() && Lead.BlobSize() <= Bytes);
         }
 
         void Describe(IOutputStream &out) const noexcept
         {
             out
-                << "TLargeGlobId{" << Lead << " ~" << Bytes
+                << "TLargeGlobId{" << Lead << " ~" << Bytes 
                 << "b, grp " << Group << "}";
         }
 
@@ -44,7 +44,7 @@ namespace NPageCollection {
             return Bytes > 0;
         }
 
-        bool operator==(const TLargeGlobId &so) const noexcept
+        bool operator==(const TLargeGlobId &so) const noexcept 
         {
             return Lead == so.Lead && Group == so.Group && Bytes == so.Bytes;
         }
@@ -137,7 +137,7 @@ namespace NPageCollection {
             }
         }
 
-        ui32 Group = InvalidGroup;
+        ui32 Group = InvalidGroup; 
         ui32 Bytes = 0;     /* Total bytes in sequence  */
         TLogoBlobID Lead;   /* First blob in sequence   */
     };
@@ -173,7 +173,7 @@ namespace NPageCollection {
         }
 
         TLogoBlobID Logo;
-        ui32 Group = TLargeGlobId::InvalidGroup;
+        ui32 Group = TLargeGlobId::InvalidGroup; 
         ui32 Pad0_ = 0; /* Padding to 32 byte boundary, unused */
     };
 
@@ -223,14 +223,14 @@ namespace NPageCollection {
         TSharedData Data;
     };
 
-    class TLargeGlobIdRestoreState {
+    class TLargeGlobIdRestoreState { 
         using TBlobs = TVector<TLogoBlobID>;
         using TBodies = TVector<TString>;
 
     public:
-        TLargeGlobIdRestoreState(const TLargeGlobId& largeGlobId) {
+        TLargeGlobIdRestoreState(const TLargeGlobId& largeGlobId) { 
             Blobs.reserve(largeGlobId.BlobCount());
-            largeGlobId.MaterializeTo(Blobs);
+            largeGlobId.MaterializeTo(Blobs); 
             Bodies.resize(Blobs.size());
         }
 

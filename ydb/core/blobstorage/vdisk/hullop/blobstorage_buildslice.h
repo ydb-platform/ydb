@@ -1,42 +1,42 @@
-#pragma once
-
+#pragma once 
+ 
 #include "defs.h"
-#include <ydb/core/blobstorage/vdisk/hulldb/hull_ds_all.h>
-#include <ydb/core/blobstorage/vdisk/hulldb/generic/hullds_leveledssts.h>
-#include <ydb/core/blobstorage/vdisk/hulldb/compstrat/hulldb_compstrat_defs.h>
+#include <ydb/core/blobstorage/vdisk/hulldb/hull_ds_all.h> 
+#include <ydb/core/blobstorage/vdisk/hulldb/generic/hullds_leveledssts.h> 
+#include <ydb/core/blobstorage/vdisk/hulldb/compstrat/hulldb_compstrat_defs.h> 
 
 namespace NKikimr {
 
     ////////////////////////////////////////////////////////////////////////////
-    // THullOpUtil -- utils for compaction
-    ////////////////////////////////////////////////////////////////////////////
-    template <class TKey, class TMemRec>
-    struct THullOpUtil {
-        using TCompactionTask = ::NKikimr::NHullComp::TTask<TKey, TMemRec>;
-        using TFreshSegment = ::NKikimr::TFreshSegment<TKey, TMemRec>;
-        using TLevelSegment = ::NKikimr::TLevelSegment<TKey, TMemRec>;
-        using TLevelSegmentPtr = TIntrusivePtr<TLevelSegment>;
-        using TLevelSstPtr = typename TLevelSegment::TLevelSstPtr;
-        using TLevelSlice = ::NKikimr::TLevelSlice<TKey, TMemRec>;
-        using TLevelSlicePtr = TIntrusivePtr<TLevelSlice>;
-        using TSliceSstIterator = typename TLevelSlice::TSstIterator;
-        using TMemIterator = typename TLevelSegment::TMemIterator;
-        using TOrderedLevelSegments = ::NKikimr::TOrderedLevelSegments<TKey, TMemRec>;
-        using TOrderedLevelSegmentsPtr = TIntrusivePtr<TOrderedLevelSegments>;
-        using TLeveledSsts = ::NKikimr::TLeveledSsts<TKey, TMemRec>;
-        using TLeveledSstsIterator = typename TLeveledSsts::TIterator;
-        using TSortedLevel = ::NKikimr::TSortedLevel<TKey, TMemRec>;
-
+    // THullOpUtil -- utils for compaction 
+    //////////////////////////////////////////////////////////////////////////// 
+    template <class TKey, class TMemRec> 
+    struct THullOpUtil { 
+        using TCompactionTask = ::NKikimr::NHullComp::TTask<TKey, TMemRec>; 
+        using TFreshSegment = ::NKikimr::TFreshSegment<TKey, TMemRec>; 
+        using TLevelSegment = ::NKikimr::TLevelSegment<TKey, TMemRec>; 
+        using TLevelSegmentPtr = TIntrusivePtr<TLevelSegment>; 
+        using TLevelSstPtr = typename TLevelSegment::TLevelSstPtr; 
+        using TLevelSlice = ::NKikimr::TLevelSlice<TKey, TMemRec>; 
+        using TLevelSlicePtr = TIntrusivePtr<TLevelSlice>; 
+        using TSliceSstIterator = typename TLevelSlice::TSstIterator; 
+        using TMemIterator = typename TLevelSegment::TMemIterator; 
+        using TOrderedLevelSegments = ::NKikimr::TOrderedLevelSegments<TKey, TMemRec>; 
+        using TOrderedLevelSegmentsPtr = TIntrusivePtr<TOrderedLevelSegments>; 
+        using TLeveledSsts = ::NKikimr::TLeveledSsts<TKey, TMemRec>; 
+        using TLeveledSstsIterator = typename TLeveledSsts::TIterator; 
+        using TSortedLevel = ::NKikimr::TSortedLevel<TKey, TMemRec>; 
+ 
         // Find removed huge blobs
-        static TDiskPartVec FindRemovedHugeBlobsAfterLevelCompaction(
-                const TActorContext &ctx,
-                TSliceSstIterator oldSliceIt,
-                const TLevelSlice *newSlice);
+        static TDiskPartVec FindRemovedHugeBlobsAfterLevelCompaction( 
+                const TActorContext &ctx, 
+                TSliceSstIterator oldSliceIt, 
+                const TLevelSlice *newSlice); 
 
-        static TDiskPartVec FindRemovedHugeBlobsAfterFreshCompaction(
-                const TActorContext &ctx,
-                const TIntrusivePtr<TFreshSegment> &freshSeg,
-                const TOrderedLevelSegmentsPtr &segVec);
+        static TDiskPartVec FindRemovedHugeBlobsAfterFreshCompaction( 
+                const TActorContext &ctx, 
+                const TIntrusivePtr<TFreshSegment> &freshSeg, 
+                const TOrderedLevelSegmentsPtr &segVec); 
 
         struct TBuiltSlice {
             // new slice built from the previous one and changes provided
@@ -47,35 +47,35 @@ namespace NKikimr {
         };
 
         // Build new slice after compaction from previous slice and modifications provided
-        static TBuiltSlice BuildSlice(
-                const TIntrusivePtr<TVDiskContext> &vctx,
-                const TActorContext &ctx,
-                const TLevelIndexSettings &settings,
-                const TLevelSlice *slice,
-                const TCompactionTask &ctask,
-                bool findRemovedHugeBlobs);
+        static TBuiltSlice BuildSlice( 
+                const TIntrusivePtr<TVDiskContext> &vctx, 
+                const TActorContext &ctx, 
+                const TLevelIndexSettings &settings, 
+                const TLevelSlice *slice, 
+                const TCompactionTask &ctask, 
+                bool findRemovedHugeBlobs); 
 
     };
 
 //#define HULL_COMPACT_APPLY
 
-    template <class TKey, class TMemRec>
-    typename THullOpUtil<TKey, TMemRec>::TBuiltSlice
-    THullOpUtil<TKey, TMemRec>::BuildSlice(
-            const TIntrusivePtr<TVDiskContext> &vctx,
-            const TActorContext &ctx,
-            const TLevelIndexSettings &settings,
-            const TLevelSlice *slice,
-            const TCompactionTask &ctask,
-            bool findRemovedHugeBlobs)
-    {
+    template <class TKey, class TMemRec> 
+    typename THullOpUtil<TKey, TMemRec>::TBuiltSlice 
+    THullOpUtil<TKey, TMemRec>::BuildSlice( 
+            const TIntrusivePtr<TVDiskContext> &vctx, 
+            const TActorContext &ctx, 
+            const TLevelIndexSettings &settings, 
+            const TLevelSlice *slice, 
+            const TCompactionTask &ctask, 
+            bool findRemovedHugeBlobs) 
+    { 
         Y_UNUSED(ctx); // for log in debug
-        // initialize iterator for adding/removing
-        TLeveledSstsIterator addIt(&ctask.GetSstsToAdd());
-        addIt.SeekToFirst();
-        TLeveledSstsIterator delIt(&ctask.GetSstsToDelete());
-        delIt.SeekToFirst();
-        // create a new slice
+        // initialize iterator for adding/removing 
+        TLeveledSstsIterator addIt(&ctask.GetSstsToAdd()); 
+        addIt.SeekToFirst(); 
+        TLeveledSstsIterator delIt(&ctask.GetSstsToDelete()); 
+        delIt.SeekToFirst(); 
+        // create a new slice 
         TLevelSlicePtr res(new TLevelSlice(settings, slice->Ctx));
 
         ui32 levelsSize = slice->SortedLevels.size();
@@ -237,9 +237,9 @@ namespace NKikimr {
 
 #ifdef HULL_COMPACT_APPLY
         debugOutput << " RESULT\n" << res->ToString("  ");
-        LOG_DEBUG(ctx, NKikimrServices::BS_HULLCOMP, VDISKP(vctx, "%s", ~debugOutput.Str()));
+        LOG_DEBUG(ctx, NKikimrServices::BS_HULLCOMP, VDISKP(vctx, "%s", ~debugOutput.Str())); 
 #else
-        LOG_DEBUG(ctx, NKikimrServices::BS_HULLCOMP, VDISKP(vctx, "Changes to Hull applied"));
+        LOG_DEBUG(ctx, NKikimrServices::BS_HULLCOMP, VDISKP(vctx, "Changes to Hull applied")); 
 #endif
 
         TSliceSstIterator resIt(res.Get(), res->Level0CurSstsNum());
@@ -256,13 +256,13 @@ namespace NKikimr {
         return TBuiltSlice{ res, removedHugeBlobs };
     }
 
-    template <class TKey, class TMemRec>
+    template <class TKey, class TMemRec> 
     TDiskPartVec
-    THullOpUtil<TKey, TMemRec>::FindRemovedHugeBlobsAfterLevelCompaction(
-            const TActorContext &ctx,
-            TSliceSstIterator oldSliceIt,
-            const TLevelSlice *newSlice)
-    {
+    THullOpUtil<TKey, TMemRec>::FindRemovedHugeBlobsAfterLevelCompaction( 
+            const TActorContext &ctx, 
+            TSliceSstIterator oldSliceIt, 
+            const TLevelSlice *newSlice) 
+    { 
         Y_UNUSED(ctx);
         TSet<TDiskPart> hugeBlobs;
 
@@ -317,13 +317,13 @@ namespace NKikimr {
         return result;
     }
 
-    template <class TKey, class TMemRec>
+    template <class TKey, class TMemRec> 
     TDiskPartVec
-    THullOpUtil<TKey, TMemRec>::FindRemovedHugeBlobsAfterFreshCompaction(
-            const TActorContext &ctx,
-            const TIntrusivePtr<TFreshSegment> &freshSeg,
-            const TOrderedLevelSegmentsPtr &segVec)
-    {
+    THullOpUtil<TKey, TMemRec>::FindRemovedHugeBlobsAfterFreshCompaction( 
+            const TActorContext &ctx, 
+            const TIntrusivePtr<TFreshSegment> &freshSeg, 
+            const TOrderedLevelSegmentsPtr &segVec) 
+    { 
         Y_UNUSED(ctx);
         TSet<TDiskPart> hugeBlobs;
 
@@ -370,4 +370,4 @@ namespace NKikimr {
         return result;
     }
 
-} // NKikimr
+} // NKikimr 

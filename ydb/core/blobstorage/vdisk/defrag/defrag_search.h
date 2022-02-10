@@ -1,58 +1,58 @@
-#pragma once
-
-#include "defs.h"
-#include <ydb/core/blobstorage/vdisk/common/vdisk_defrag.h>
-#include <ydb/core/blobstorage/vdisk/huge/blobstorage_hullhugeheap.h>
-#include <ydb/core/blobstorage/vdisk/hulldb/hull_ds_all_snap.h>
-#include <ydb/core/blobstorage/vdisk/query/query_statalgo.h>
-
-namespace NKikimr {
-
+#pragma once 
+ 
+#include "defs.h" 
+#include <ydb/core/blobstorage/vdisk/common/vdisk_defrag.h> 
+#include <ydb/core/blobstorage/vdisk/huge/blobstorage_hullhugeheap.h> 
+#include <ydb/core/blobstorage/vdisk/hulldb/hull_ds_all_snap.h> 
+#include <ydb/core/blobstorage/vdisk/query/query_statalgo.h> 
+ 
+namespace NKikimr { 
+ 
     struct THugeBlobRecord {
         TDiskPart Part;
         TLogoBlobID Id;
         bool Useful;
-
+ 
         friend bool operator <(const THugeBlobRecord& x, const THugeBlobRecord& y) {
             return x.Part < y.Part;
         }
    };
 
-    struct TChunksToDefrag {
-        TDefragChunks Chunks;
+    struct TChunksToDefrag { 
+        TDefragChunks Chunks; 
         ui32 FoundChunksToDefrag = 0;
-        ui64 EstimatedSlotsCount = 0;
+        ui64 EstimatedSlotsCount = 0; 
         std::vector<THugeBlobRecord> HugeBlobs;
-
-        void Output(IOutputStream &str) const {
-            str << "{Chunks# " << FormatList(Chunks);
-            str << " EstimatedSlotsCount# " << EstimatedSlotsCount << "}";
-        }
-
-        TString ToString() const {
-            TStringStream str;
-            Output(str);
-            return str.Str();
-        }
+ 
+        void Output(IOutputStream &str) const { 
+            str << "{Chunks# " << FormatList(Chunks); 
+            str << " EstimatedSlotsCount# " << EstimatedSlotsCount << "}"; 
+        } 
+ 
+        TString ToString() const { 
+            TStringStream str; 
+            Output(str); 
+            return str.Str(); 
+        } 
 
         explicit operator bool() const {
             return !Chunks.empty();
         }
-    };
-
-    struct TDefragRecord {
-        // Record key, PartId is not 0
-        TLogoBlobID LogoBlobId;
-        // old huge blob address to read and rewrite
-        TDiskPart OldDiskPart;
-
-        TDefragRecord() = default;
-        TDefragRecord(const TLogoBlobID &id, const TDiskPart &part)
-            : LogoBlobId(id)
-            , OldDiskPart(part)
-        {}
-    };
-
+    }; 
+ 
+    struct TDefragRecord { 
+        // Record key, PartId is not 0 
+        TLogoBlobID LogoBlobId; 
+        // old huge blob address to read and rewrite 
+        TDiskPart OldDiskPart; 
+ 
+        TDefragRecord() = default; 
+        TDefragRecord(const TLogoBlobID &id, const TDiskPart &part) 
+            : LogoBlobId(id) 
+            , OldDiskPart(part) 
+        {} 
+    }; 
+ 
     template<typename TDerived>
     class TDefragScanner {
         THullDsSnap FullSnap;
@@ -60,13 +60,13 @@ namespace NKikimr {
         const TIntrusivePtr<TBarriersSnapshot::TBarriersEssence> Barriers;
         const bool AllowKeepFlags;
         TLogoBlobsSnapshot::TForwardIterator Iter;
-
+ 
         TDataMerger Merger;
         TKeyLogoBlob Key;
         TMemRecLogoBlob MemRec;
         ui32 NumMemRecsMerged;
 
-    public:
+    public: 
         TDefragScanner(THullDsSnap&& fullSnap)
             : FullSnap(std::move(fullSnap))
             , GType(FullSnap.HullCtx->VCtx->Top->GType)
@@ -439,4 +439,4 @@ namespace NKikimr {
         }
     };
 
-} // NKikimr
+} // NKikimr 

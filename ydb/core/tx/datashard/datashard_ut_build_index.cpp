@@ -2,10 +2,10 @@
 #include "datashard_ut_common.h"
 #include "datashard_ut_common_kqp.h"
 
-#include <ydb/core/testlib/test_client.h>
-#include <ydb/core/tx/schemeshard/schemeshard.h>
-#include <ydb/core/tx/tx_proxy/proxy.h>
-#include <ydb/core/tx/tx_proxy/upload_rows.h>
+#include <ydb/core/testlib/test_client.h> 
+#include <ydb/core/tx/schemeshard/schemeshard.h> 
+#include <ydb/core/tx/tx_proxy/proxy.h> 
+#include <ydb/core/tx/tx_proxy/upload_rows.h> 
 
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 
@@ -20,7 +20,7 @@ inline void Out<NKikimrTxDataShard::TEvBuildIndexProgressResponse::EStatus>
 
 namespace NKikimr {
 
-using namespace NKikimr::NDataShard::NKqpHelpers;
+using namespace NKikimr::NDataShard::NKqpHelpers; 
 using namespace NSchemeShard;
 using namespace Tests;
 

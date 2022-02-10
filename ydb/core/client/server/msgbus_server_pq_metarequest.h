@@ -37,23 +37,23 @@ private:
     THolder<IActor> CreateTopicSubactor(const TSchemeEntry& topicEntry, const TString& name) override;
 
 private:
-    THashMap<TString, std::shared_ptr<THashSet<ui64>>> PartitionsToRequest;
+    THashMap<TString, std::shared_ptr<THashSet<ui64>>> PartitionsToRequest; 
 };
 
 class TPersQueueGetPartitionOffsetsTopicWorker : public TReplierToParent<TPipesWaiterActor<TTopicInfoBasedActor, TEvPersQueue::TEvOffsetsResponse>> {
 public:
     TPersQueueGetPartitionOffsetsTopicWorker(const TActorId& parent,
                                              const TSchemeEntry& topicEntry, const TString& name,
-                                             const std::shared_ptr<THashSet<ui64>>& partitionsToRequest,
-                                             const std::shared_ptr<const NKikimrClient::TPersQueueRequest>& requestProto);
+                                             const std::shared_ptr<THashSet<ui64>>& partitionsToRequest, 
+                                             const std::shared_ptr<const NKikimrClient::TPersQueueRequest>& requestProto); 
 
     void BootstrapImpl(const TActorContext& ctx) override;
     bool OnPipeEventsAreReady(const TActorContext& ctx) override;
     void Answer(const TActorContext& ctx, EResponseStatus status, NPersQueue::NErrorCode::EErrorCode code, const TString& errorReason) override;
 
 private:
-    std::shared_ptr<THashSet<ui64>> PartitionsToRequest;
-    std::shared_ptr<const NKikimrClient::TPersQueueRequest> RequestProto;
+    std::shared_ptr<THashSet<ui64>> PartitionsToRequest; 
+    std::shared_ptr<const NKikimrClient::TPersQueueRequest> RequestProto; 
 };
 
 
@@ -69,7 +69,7 @@ private:
     THolder<IActor> CreateTopicSubactor(const TSchemeEntry& topicEntry, const TString& name) override;
 
 private:
-    THashMap<TString, std::shared_ptr<THashSet<ui64>>> PartitionsToRequest;
+    THashMap<TString, std::shared_ptr<THashSet<ui64>>> PartitionsToRequest; 
 };
 
 class TPersQueueGetPartitionStatusTopicWorker : public TReplierToParent<TPipesWaiterActor<TTopicInfoBasedActor, TEvPersQueue::TEvStatusResponse>> {
@@ -77,16 +77,16 @@ public:
     TPersQueueGetPartitionStatusTopicWorker(const TActorId& parent,
                                             const TTopicInfoBasedActor::TSchemeEntry& topicEntry,
                                             const TString& name,
-                                            const std::shared_ptr<THashSet<ui64>>& partitionsToRequest,
-                                            const std::shared_ptr<const NKikimrClient::TPersQueueRequest>& requestProto);
+                                            const std::shared_ptr<THashSet<ui64>>& partitionsToRequest, 
+                                            const std::shared_ptr<const NKikimrClient::TPersQueueRequest>& requestProto); 
 
     void BootstrapImpl(const TActorContext& ctx) override;
     bool OnPipeEventsAreReady(const TActorContext& ctx) override;
     void Answer(const TActorContext& ctx, EResponseStatus status, NPersQueue::NErrorCode::EErrorCode code, const TString& errorReason) override;
 
 private:
-    std::shared_ptr<THashSet<ui64>> PartitionsToRequest;
-    std::shared_ptr<const NKikimrClient::TPersQueueRequest> RequestProto;
+    std::shared_ptr<THashSet<ui64>> PartitionsToRequest; 
+    std::shared_ptr<const NKikimrClient::TPersQueueRequest> RequestProto; 
 };
 
 
@@ -102,26 +102,26 @@ private:
     THolder<IActor> CreateTopicSubactor(const TSchemeEntry& topicEntry, const TString& name) override;
 
 private:
-    THashMap<TString, std::shared_ptr<THashSet<ui64>>> PartitionsToRequest;
+    THashMap<TString, std::shared_ptr<THashSet<ui64>>> PartitionsToRequest; 
 };
 
 class TPersQueueGetPartitionLocationsTopicWorker : public TReplierToParent<TPipesWaiterActor<TTopicInfoBasedActor, TEvTabletPipe::TEvClientConnected>> {
 public:
     TPersQueueGetPartitionLocationsTopicWorker(const TActorId& parent,
                                                const TTopicInfoBasedActor::TSchemeEntry& topicEntry, const TString& name,
-                                               const std::shared_ptr<THashSet<ui64>>& partitionsToRequest,
-                                               const std::shared_ptr<const NKikimrClient::TPersQueueRequest>& requestProto,
-                                               std::shared_ptr<const TPersQueueBaseRequestProcessor::TNodesInfo> nodesInfo);
+                                               const std::shared_ptr<THashSet<ui64>>& partitionsToRequest, 
+                                               const std::shared_ptr<const NKikimrClient::TPersQueueRequest>& requestProto, 
+                                               std::shared_ptr<const TPersQueueBaseRequestProcessor::TNodesInfo> nodesInfo); 
 
     void BootstrapImpl(const TActorContext& ctx) override;
     bool OnPipeEventsAreReady(const TActorContext& ctx) override;
     void Answer(const TActorContext& ctx, EResponseStatus status, NPersQueue::NErrorCode::EErrorCode code, const TString& errorReason) override;
 
 private:
-    std::shared_ptr<THashSet<ui64>> PartitionsToRequest;
-    std::shared_ptr<const NKikimrClient::TPersQueueRequest> RequestProto;
+    std::shared_ptr<THashSet<ui64>> PartitionsToRequest; 
+    std::shared_ptr<const NKikimrClient::TPersQueueRequest> RequestProto; 
     THashMap<ui32, ui64> PartitionToTablet;
-    std::shared_ptr<const TPersQueueBaseRequestProcessor::TNodesInfo> NodesInfo;
+    std::shared_ptr<const TPersQueueBaseRequestProcessor::TNodesInfo> NodesInfo; 
 };
 
 
@@ -182,8 +182,8 @@ class TPersQueueGetReadSessionsInfoTopicWorker : public TReplierToParent<TPipesW
 public:
     TPersQueueGetReadSessionsInfoTopicWorker(const TActorId& parent,
                                              const TTopicInfoBasedActor::TSchemeEntry& topicEntry, const TString& name,
-                                             const std::shared_ptr<const NKikimrClient::TPersQueueRequest>& requestProto,
-                                             std::shared_ptr<const TPersQueueBaseRequestProcessor::TNodesInfo> nodesInfo);
+                                             const std::shared_ptr<const NKikimrClient::TPersQueueRequest>& requestProto, 
+                                             std::shared_ptr<const TPersQueueBaseRequestProcessor::TNodesInfo> nodesInfo); 
 
     void BootstrapImpl(const TActorContext& ctx) override;
     void Answer(const TActorContext& ctx, EResponseStatus status, NPersQueue::NErrorCode::EErrorCode code, const TString& errorReason) override;
@@ -205,14 +205,14 @@ public:
     bool HandleDestroy(TEvTabletPipe::TEvClientDestroyed* ev, const TActorContext& ctx);
 
 private:
-    std::shared_ptr<const NKikimrClient::TPersQueueRequest> RequestProto;
+    std::shared_ptr<const NKikimrClient::TPersQueueRequest> RequestProto; 
     TActorId BalancerPipe;
     TEvPersQueue::TEvReadSessionsInfoResponse::TPtr BalancerResponse;
     bool BalancerReplied = false;
     bool PipeEventsAreReady = false;
     THashMap<ui32, ui64> PartitionToTablet;
     THashMap<ui64, ui32> TabletNodes;
-    std::shared_ptr<const TPersQueueBaseRequestProcessor::TNodesInfo> NodesInfo;
+    std::shared_ptr<const TPersQueueBaseRequestProcessor::TNodesInfo> NodesInfo; 
 };
 
 } // namespace NMsgBusProxy

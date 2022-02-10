@@ -2,16 +2,16 @@
 #include "datashard_ut_common_kqp.h"
 #include "datashard_active_transaction.h"
 
-#include <ydb/core/base/tablet_pipecache.h>
-#include <ydb/core/base/tablet_resolver.h>
-#include <ydb/core/engine/minikql/minikql_engine_host.h>
-#include <ydb/core/kqp/executer/kqp_executer.h>
-#include <ydb/core/kqp/ut/common/kqp_ut_common.h> // Y_UNIT_TEST_(TWIN|QUAD)
-#include <ydb/core/tx/time_cast/time_cast.h>
-#include <ydb/core/tx/tx_proxy/proxy.h>
-#include <ydb/core/tx/tx_processing.h>
-#include <ydb/public/lib/deprecated/kicli/kicli.h>
-#include <ydb/core/testlib/tenant_runtime.h>
+#include <ydb/core/base/tablet_pipecache.h> 
+#include <ydb/core/base/tablet_resolver.h> 
+#include <ydb/core/engine/minikql/minikql_engine_host.h> 
+#include <ydb/core/kqp/executer/kqp_executer.h> 
+#include <ydb/core/kqp/ut/common/kqp_ut_common.h> // Y_UNIT_TEST_(TWIN|QUAD) 
+#include <ydb/core/tx/time_cast/time_cast.h> 
+#include <ydb/core/tx/tx_proxy/proxy.h> 
+#include <ydb/core/tx/tx_processing.h> 
+#include <ydb/public/lib/deprecated/kicli/kicli.h> 
+#include <ydb/core/testlib/tenant_runtime.h> 
 #include <util/system/valgrind.h>
 
 #include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
@@ -20,8 +20,8 @@ namespace NKikimr {
 
 using NClient::TValue;
 using IEngineFlat = NMiniKQL::IEngineFlat;
-using namespace NKikimr::NDataShard;
-using namespace NKikimr::NDataShard::NKqpHelpers;
+using namespace NKikimr::NDataShard; 
+using namespace NKikimr::NDataShard::NKqpHelpers; 
 using namespace NSchemeShard;
 using namespace Tests;
 
@@ -296,9 +296,9 @@ static void ImmediateBetweenOnline(const TTester::TOptions& opts, bool forceOnli
         return true;
     };
 
-    ui32 flags = NDataShard::TTxFlags::Default;
+    ui32 flags = NDataShard::TTxFlags::Default; 
     if (forceOnline) {
-        flags |= NDataShard::TTxFlags::ForceOnline;
+        flags |= NDataShard::TTxFlags::ForceOnline; 
     }
 
     for (ui32 i = 0; i < 100; i+=2) {
@@ -496,7 +496,7 @@ Y_UNIT_TEST_WITH_MVCC(ReadWriteReorder) {
     auto noCheck = [&](TFakeProxyTx&) -> bool {
         return true;
     };
-    auto txFlags = NDataShard::TTxFlags::Default;
+    auto txFlags = NDataShard::TTxFlags::Default; 
 
     // tx 7: This moves key 1000 to key 2 (and will be blocked on readsets)
     proxy.Enqueue(Sprintf(programMoveKey, 1000, 2), noCheck, txFlags);
@@ -742,7 +742,7 @@ static void RandomTxDeps(const TTester::TOptions& opts, ui32 numTxs, ui32 maxKey
         (return (AsList (SetResult 'Result select_) (SetResult 'Some forPlan_)))
     ))";
 
-    proxy.Enqueue(picture, extractActual, NDataShard::TTxFlags::Default);
+    proxy.Enqueue(picture, extractActual, NDataShard::TTxFlags::Default); 
 
     const char * immPicture = R"((
         (let range_ '('IncFrom 'IncTo '('key (Uint32 '%u) (Uint32 '%d))))
@@ -761,7 +761,7 @@ static void RandomTxDeps(const TTester::TOptions& opts, ui32 numTxs, ui32 maxKey
     if (sendImmediates) {
         // inconsistent print screen
         for (const auto& s : shots) {
-            proxy.Enqueue(Sprintf(immPicture, s.first, s.second), extractActual, NDataShard::TTxFlags::Default);
+            proxy.Enqueue(Sprintf(immPicture, s.first, s.second), extractActual, NDataShard::TTxFlags::Default); 
         }
     }
 
@@ -1122,7 +1122,7 @@ void RandomPointsAndRanges(TFakeMiniKQLProxy& proxy, ui32 numTxs, ui32 maxWrites
         table.Apply(*tx);
         TString progText = tx->ToText();
         //Cout << progText << Endl;
-        proxy.Enqueue(progText, extractActual, NDataShard::TTxFlags::ForceOnline);
+        proxy.Enqueue(progText, extractActual, NDataShard::TTxFlags::ForceOnline); 
     }
 
     proxy.ExecQueue();
@@ -1197,7 +1197,7 @@ Y_UNIT_TEST_WITH_MVCC(ScanFollowedByUpdate) {
     TSet<TString> ref1{"A", "B", "C"};
     proxy.EnqueueScan(dataTransaction.SerializeAsString(), [ref1, checkScanResult](TFakeProxyTx& tx) {
             return checkScanResult(tx, ref1);
-        }, NDataShard::TTxFlags::Default);
+        }, NDataShard::TTxFlags::Default); 
 
     ui32 N = 30;
 
@@ -1225,7 +1225,7 @@ Y_UNIT_TEST_WITH_MVCC(ScanFollowedByUpdate) {
     TSet<TString> ref2{"A" + ToString(N), "B" + ToString(N), "C" + ToString(N)};
     proxy.EnqueueScan(dataTransaction.SerializeAsString(), [ref2, checkScanResult](TFakeProxyTx& tx) {
             return checkScanResult(tx, ref2);
-        }, NDataShard::TTxFlags::Default);
+        }, NDataShard::TTxFlags::Default); 
     proxy.ExecQueue();
 }
 

@@ -1,8 +1,8 @@
 #pragma once
 
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
+#include <ydb/public/sdk/cpp/client/ydb_table/table.h> 
 
-#include <ydb/public/api/grpc/draft/ydb_datastreams_v1.grpc.pb.h>
+#include <ydb/public/api/grpc/draft/ydb_datastreams_v1.grpc.pb.h> 
 
 namespace NYdb::NDataStreams::V1 {
 

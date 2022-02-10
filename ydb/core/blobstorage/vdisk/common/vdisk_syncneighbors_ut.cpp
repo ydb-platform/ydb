@@ -1,5 +1,5 @@
 #include <library/cpp/testing/unittest/registar.h>
-#include "vdisk_syncneighbors.h"
+#include "vdisk_syncneighbors.h" 
 
 using namespace NKikimr;
 using namespace NSync;
@@ -12,8 +12,8 @@ namespace {
     TVector<TVDiskID> GetVDisks(const TIntrusivePtr<TBlobStorageGroupInfo>& info) {
         TVector<TVDiskID> ret;
         for (const auto& x : info->GetVDisks()) {
-            auto vd = info->GetVDiskId(x.OrderNumber);
-            ret.push_back(vd);
+            auto vd = info->GetVDiskId(x.OrderNumber); 
+            ret.push_back(vd); 
         }
         return ret;
     }
@@ -27,47 +27,47 @@ namespace {
             : Value(value)
         {}
 
-        bool operator ==(const TPayload& other) const {
-            return Value == other.Value;
+        bool operator ==(const TPayload& other) const { 
+            return Value == other.Value; 
         }
-    };
+    }; 
 
-    class TSer {
-    public:
+    class TSer { 
+    public: 
         TSer(IOutputStream &str)
-            : Str(str)
-        {}
-
-        void operator() (const TVDiskInfo<TPayload> &val) {
-            Save(&Str, val.Get().Value);
-        }
-
-        void Finish() {}
-
-    private:
+            : Str(str) 
+        {} 
+ 
+        void operator() (const TVDiskInfo<TPayload> &val) { 
+            Save(&Str, val.Get().Value); 
+        } 
+ 
+        void Finish() {} 
+ 
+    private: 
         IOutputStream &Str;
-    };
-
-    class TDes {
-    public:
+    }; 
+ 
+    class TDes { 
+    public: 
         TDes(IInputStream &str)
-            : Str(str)
-        {}
-
-        void operator() (TVDiskInfo<TPayload> &val) {
-            Load(&Str, val.Get().Value);
+            : Str(str) 
+        {} 
+ 
+        void operator() (TVDiskInfo<TPayload> &val) { 
+            Load(&Str, val.Get().Value); 
         }
-
-        void Finish() {
-            char c = '\0';
-            if (Str.ReadChar(c))
-                ythrow yexception() << "not eof";
-        }
-
-    private:
+ 
+        void Finish() { 
+            char c = '\0'; 
+            if (Str.ReadChar(c)) 
+                ythrow yexception() << "not eof"; 
+        } 
+ 
+    private: 
         IInputStream &Str;
     };
-
+ 
 }
 
 Y_UNIT_TEST_SUITE(TBlobStorageSyncNeighborsTest) {
@@ -77,11 +77,11 @@ Y_UNIT_TEST_SUITE(TBlobStorageSyncNeighborsTest) {
         TIntrusivePtr<TBlobStorageGroupInfo> info = CreateTestGroup(numDomains, 2);
         TVector<TVDiskID> vdisks = GetVDisks(info);
         const TVDiskID& self = vdisks[0];
-        TVDiskNeighbors<TPayload> neighbors(self, info->PickTopology());
+        TVDiskNeighbors<TPayload> neighbors(self, info->PickTopology()); 
 
         THashSet<TVDiskID> temp(vdisks.begin(), vdisks.end());
         for (const auto& item : neighbors) {
-            const size_t count = temp.erase(TVDiskID(info->GroupID, info->GroupGeneration, item.VDiskIdShort));
+            const size_t count = temp.erase(TVDiskID(info->GroupID, info->GroupGeneration, item.VDiskIdShort)); 
             UNIT_ASSERT_VALUES_EQUAL(count, 1);
         }
         UNIT_ASSERT_VALUES_EQUAL(temp.size(), 0);
@@ -92,10 +92,10 @@ Y_UNIT_TEST_SUITE(TBlobStorageSyncNeighborsTest) {
         TIntrusivePtr<TBlobStorageGroupInfo> info = CreateTestGroup(numDomains, 2);
         TVector<TVDiskID> vdisks = GetVDisks(info);
         const TVDiskID& self = vdisks[0];
-        TVDiskNeighbors<TPayload> neighbors(self, info->PickTopology());
+        TVDiskNeighbors<TPayload> neighbors(self, info->PickTopology()); 
 
         for (const TVDiskID& vdisk : vdisks) {
-            UNIT_ASSERT_EQUAL(TVDiskIdShort(vdisk), neighbors[vdisk].VDiskIdShort);
+            UNIT_ASSERT_EQUAL(TVDiskIdShort(vdisk), neighbors[vdisk].VDiskIdShort); 
         }
     }
 
@@ -104,7 +104,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageSyncNeighborsTest) {
         TIntrusivePtr<TBlobStorageGroupInfo> info = CreateTestGroup(numDomains, 2);
         TVector<TVDiskID> vdisks = GetVDisks(info);
         const TVDiskID& self = vdisks[0];
-        TVDiskNeighbors<TPayload> neighbors(self, info->PickTopology());
+        TVDiskNeighbors<TPayload> neighbors(self, info->PickTopology()); 
 
         for (ui32 i = 0; i < numDomains; ++i) {
             auto domains = neighbors.GetFailDomains();
@@ -121,22 +121,22 @@ Y_UNIT_TEST_SUITE(TBlobStorageSyncNeighborsTest) {
         TIntrusivePtr<TBlobStorageGroupInfo> info = CreateTestGroup(numDomains, 2);
         TVector<TVDiskID> vdisks = GetVDisks(info);
         const TVDiskID& self = vdisks[0];
-        TVDiskNeighborsSerializable<TPayload> neighbors(self, info->PickTopology());
+        TVDiskNeighborsSerializable<TPayload> neighbors(self, info->PickTopology()); 
 
         ui32 index = 0;
         for (const TVDiskID& vdisk : vdisks) {
             neighbors[vdisk].Get() = index++;
         }
 
-        // serialize
-        TStringStream outputStream;
-        TSer ser(outputStream);
-        neighbors.GenericSerialize(ser);
-        // parse
-        TVDiskNeighborsSerializable<TPayload> n2(self, info->PickTopology());
-        TStringInput inp(outputStream.Str());
-        TDes des(inp);
-        n2.GenericParse(des);
+        // serialize 
+        TStringStream outputStream; 
+        TSer ser(outputStream); 
+        neighbors.GenericSerialize(ser); 
+        // parse 
+        TVDiskNeighborsSerializable<TPayload> n2(self, info->PickTopology()); 
+        TStringInput inp(outputStream.Str()); 
+        TDes des(inp); 
+        n2.GenericParse(des); 
         for (const TVDiskID& vdisk : vdisks) {
             UNIT_ASSERT_EQUAL(neighbors[vdisk].Get(), n2[vdisk].Get());
         }

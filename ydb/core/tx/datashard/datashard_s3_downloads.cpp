@@ -2,10 +2,10 @@
 #include "datashard_impl.h"
 
 namespace NKikimr {
-namespace NDataShard {
+namespace NDataShard { 
 
 bool TS3DownloadsManager::Load(NIceDb::TNiceDb& db) {
-    using Schema = TDataShard::Schema;
+    using Schema = TDataShard::Schema; 
 
     bool ready = true;
     auto rowset = db.Table<Schema::S3Downloads>().Range().Select();
@@ -53,7 +53,7 @@ const TS3DownloadsManager::TInfo& TS3DownloadsManager::Store(NIceDb::TNiceDb& db
     info.WrittenBytes = msg.WrittenBytes;
     info.WrittenRows = msg.WrittenRows;
 
-    using Schema = TDataShard::Schema;
+    using Schema = TDataShard::Schema; 
     db.Table<Schema::S3Downloads>().Key(msg.TxId).Update(
         NIceDb::TUpdate<Schema::S3Downloads::DataETag>(msg.DataETag),
         NIceDb::TUpdate<Schema::S3Downloads::ProcessedBytes>(msg.ProcessedBytes),
@@ -63,5 +63,5 @@ const TS3DownloadsManager::TInfo& TS3DownloadsManager::Store(NIceDb::TNiceDb& db
     return info;
 }
 
-}   // namespace NDataShard
+}   // namespace NDataShard 
 }   // namespace NKikimr

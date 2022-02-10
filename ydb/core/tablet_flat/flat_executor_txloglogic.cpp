@@ -7,7 +7,7 @@
 #include "logic_redo_entry.h"
 #include "logic_redo_queue.h"
 #include "probes.h"
-#include <ydb/core/tablet_flat/flat_executor.pb.h>
+#include <ydb/core/tablet_flat/flat_executor.pb.h> 
 #include <util/system/sanitizers.h>
 
 namespace NKikimr {
@@ -24,12 +24,12 @@ TLogicRedo::TCompletionEntry::TCompletionEntry(TAutoPtr<TSeat> seat, ui32 step)
     , InFlyRWTransaction(seat)
 {}
 
-TLogicRedo::TLogicRedo(TAutoPtr<NPageCollection::TSteppedCookieAllocator> cookies, TCommitManager *commitManager, TAutoPtr<NRedo::TQueue> queue)
+TLogicRedo::TLogicRedo(TAutoPtr<NPageCollection::TSteppedCookieAllocator> cookies, TCommitManager *commitManager, TAutoPtr<NRedo::TQueue> queue) 
     : CommitManager(commitManager)
     , Cookies(cookies)
     , Batch(new NRedo::TBatch)
     , Queue(queue)
-    , Slicer(1, Cookies.Get(), NBlockIO::BlockSize)
+    , Slicer(1, Cookies.Get(), NBlockIO::BlockSize) 
 {}
 
 TLogicRedo::~TLogicRedo()
@@ -47,7 +47,7 @@ void TLogicRedo::InstallCounters(TExecutorCounters *counters, TTabletCountersWit
 
 NRedo::TStats TLogicRedo::LogStats() const noexcept
 {
-    return { Queue->Items, Queue->Memory, Queue->LargeGlobIdsBytes };
+    return { Queue->Items, Queue->Memory, Queue->LargeGlobIdsBytes }; 
 }
 
 TArrayRef<const NRedo::TUsage> TLogicRedo::GrabLogUsage() const noexcept
@@ -198,7 +198,7 @@ void TLogicRedo::MakeLogEntry(TLogCommit &commit, TString redo, TArrayRef<const 
 
         Cookies->Switch(commit.Step, true /* require step switch */);
 
-        auto coded = NPageCollection::TSlicer::Lz4()->Encode(redo);
+        auto coded = NPageCollection::TSlicer::Lz4()->Encode(redo); 
 
         Counters->Cumulative()[TMonCo::LOG_REDO_WRITTEN].Increment(coded.size());
 
@@ -206,10 +206,10 @@ void TLogicRedo::MakeLogEntry(TLogCommit &commit, TString redo, TArrayRef<const 
             commit.Embedded = std::move(coded);
             Queue->Push({ Cookies->Gen, commit.Step }, affects, commit.Embedded);
         } else {
-            auto largeGlobId = Slicer.Do(commit.Refs, std::move(coded), false);
-            largeGlobId.MaterializeTo(commit.GcDelta.Created);
+            auto largeGlobId = Slicer.Do(commit.Refs, std::move(coded), false); 
+            largeGlobId.MaterializeTo(commit.GcDelta.Created); 
 
-            Queue->Push({ Cookies->Gen, commit.Step }, affects, largeGlobId);
+            Queue->Push({ Cookies->Gen, commit.Step }, affects, largeGlobId); 
         }
     }
 }

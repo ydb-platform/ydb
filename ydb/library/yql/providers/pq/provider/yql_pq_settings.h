@@ -1,14 +1,14 @@
 #pragma once
 
-#include <ydb/library/yql/utils/log/log.h>
-#include <ydb/library/yql/providers/common/structured_token/yql_token_builder.h>
+#include <ydb/library/yql/utils/log/log.h> 
+#include <ydb/library/yql/providers/common/structured_token/yql_token_builder.h> 
 #include <ydb/library/yql/providers/common/config/yql_dispatch.h>
 #include <ydb/library/yql/providers/common/config/yql_setting.h>
 #include <ydb/library/yql/providers/common/proto/gateways_config.pb.h>
 
-#include <ydb/core/yq/libs/events/events.h>
-#include <ydb/core/yq/libs/db_resolver/db_async_resolver_with_meta.h>
-#include <ydb/core/yq/libs/common/database_token_builder.h>
+#include <ydb/core/yq/libs/events/events.h> 
+#include <ydb/core/yq/libs/db_resolver/db_async_resolver_with_meta.h> 
+#include <ydb/core/yq/libs/common/database_token_builder.h> 
 
 namespace NYql {
 

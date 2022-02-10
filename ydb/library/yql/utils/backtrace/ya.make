@@ -1,10 +1,10 @@
 LIBRARY()
 
-OWNER(
-    g:kikimr
-    g:yql
-    g:yql_ydb_core
-)
+OWNER( 
+    g:kikimr 
+    g:yql 
+    g:yql_ydb_core 
+) 
 
 SRCS(
     backtrace.cpp

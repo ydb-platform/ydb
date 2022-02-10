@@ -2,7 +2,7 @@
 #include "datashard_common_upload.h"
 
 namespace NKikimr {
-namespace NDataShard {
+namespace NDataShard { 
 
 template <typename TEvRequest, typename TEvResponse>
 TCommonUploadOps<TEvRequest, TEvResponse>::TCommonUploadOps(typename TEvRequest::TPtr& ev, bool breakLocks, bool collectChanges)
@@ -139,7 +139,7 @@ bool TCommonUploadOps<TEvRequest, TEvResponse>::Execute(TDataShard* self, TTrans
                 continue;
             }
 
-            if (rowState == NTable::ERowOp::Erase || rowState == NTable::ERowOp::Reset) {
+            if (rowState == NTable::ERowOp::Erase || rowState == NTable::ERowOp::Reset) { 
                 // Row has been erased in the past, ignore this upsert
                 continue;
             }
@@ -156,18 +156,18 @@ bool TCommonUploadOps<TEvRequest, TEvResponse>::Execute(TDataShard* self, TTrans
             }
 
             bool allowUpdate = true;
-            if (readForTableShadow && rowState == NTable::ERowOp::Upsert && rowState.GetOp(vi) != NTable::ECellOp::Empty) {
+            if (readForTableShadow && rowState == NTable::ERowOp::Upsert && rowState.GetOp(vi) != NTable::ECellOp::Empty) { 
                 // We don't want to overwrite columns that already has some value
                 allowUpdate = false;
             }
 
             if (allowUpdate) {
-                value.emplace_back(NTable::TUpdateOp(vt.first, NTable::ECellOp::Set, TRawTypeValue(valueCells.GetCells()[vi].AsRef(), vt.second)));
+                value.emplace_back(NTable::TUpdateOp(vt.first, NTable::ECellOp::Set, TRawTypeValue(valueCells.GetCells()[vi].AsRef(), vt.second))); 
             }
             ++vi;
         }
 
-        if (readForTableShadow && rowState != NTable::ERowOp::Absent && value.empty()) {
+        if (readForTableShadow && rowState != NTable::ERowOp::Absent && value.empty()) { 
             // We don't want to issue an Upsert when key already exists and there are no updates
             continue;
         }
@@ -176,7 +176,7 @@ bool TCommonUploadOps<TEvRequest, TEvResponse>::Execute(TDataShard* self, TTrans
             if (ChangeCollector) {
                 Y_VERIFY(CollectChanges);
 
-                if (!ChangeCollector->Collect(fullTableId, NTable::ERowOp::Upsert, key, value)) {
+                if (!ChangeCollector->Collect(fullTableId, NTable::ERowOp::Upsert, key, value)) { 
                     pageFault = true;
                 }
 
@@ -190,7 +190,7 @@ bool TCommonUploadOps<TEvRequest, TEvResponse>::Execute(TDataShard* self, TTrans
             }
         }
 
-        txc.DB.Update(writeTableId, NTable::ERowOp::Upsert, key, value, writeVersion);
+        txc.DB.Update(writeTableId, NTable::ERowOp::Upsert, key, value, writeVersion); 
     }
 
     if (pageFault) {
@@ -209,7 +209,7 @@ bool TCommonUploadOps<TEvRequest, TEvResponse>::Execute(TDataShard* self, TTrans
 }
 
 template <typename TEvRequest, typename TEvResponse>
-void TCommonUploadOps<TEvRequest, TEvResponse>::SendResult(TDataShard* self, const TActorContext& ctx) {
+void TCommonUploadOps<TEvRequest, TEvResponse>::SendResult(TDataShard* self, const TActorContext& ctx) { 
     Y_VERIFY(Result);
 
     if (Result->Record.GetStatus() == NKikimrTxDataShard::TError::OK) {
@@ -240,5 +240,5 @@ void TCommonUploadOps<TEvRequest, TEvResponse>::SetError(ui32 status, const TStr
 template class TCommonUploadOps<TEvDataShard::TEvUploadRowsRequest, TEvDataShard::TEvUploadRowsResponse>;
 template class TCommonUploadOps<TEvDataShard::TEvUnsafeUploadRowsRequest, TEvDataShard::TEvUnsafeUploadRowsResponse>;
 
-} // NDataShard
+} // NDataShard 
 } // NKikimr

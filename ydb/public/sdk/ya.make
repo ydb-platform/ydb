@@ -1,6 +1,6 @@
-OWNER(g:kikimr)
-
-RECURSE(
-    cpp
+OWNER(g:kikimr) 
+ 
+RECURSE( 
+    cpp 
     python/ydb
-)
+) 

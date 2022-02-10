@@ -1,17 +1,17 @@
 import "ydb/core/protos/base.proto";
-import "ydb/core/protos/bind_channel_storage_pool.proto";
-import "ydb/core/protos/pqconfig.proto";
+import "ydb/core/protos/bind_channel_storage_pool.proto"; 
+import "ydb/core/protos/pqconfig.proto"; 
 import "ydb/core/protos/replication.proto";
-import "ydb/core/protos/table_stats.proto";
-import "ydb/core/protos/tablet.proto";
-import "ydb/core/protos/subdomains.proto";
-import "ydb/core/protos/blockstore_config.proto";
-import "ydb/core/protos/filestore_config.proto";
-import "ydb/core/protos/channel_purpose.proto";
-import "ydb/core/protos/follower_group.proto";
-import "ydb/public/api/protos/ydb_coordination.proto";
-import "ydb/public/api/protos/ydb_export.proto";
-import "ydb/library/mkql_proto/protos/minikql.proto";
+import "ydb/core/protos/table_stats.proto"; 
+import "ydb/core/protos/tablet.proto"; 
+import "ydb/core/protos/subdomains.proto"; 
+import "ydb/core/protos/blockstore_config.proto"; 
+import "ydb/core/protos/filestore_config.proto"; 
+import "ydb/core/protos/channel_purpose.proto"; 
+import "ydb/core/protos/follower_group.proto"; 
+import "ydb/public/api/protos/ydb_coordination.proto"; 
+import "ydb/public/api/protos/ydb_export.proto"; 
+import "ydb/library/mkql_proto/protos/minikql.proto"; 
 
 
 package NKikimrSchemeOp;

@@ -122,23 +122,23 @@ public:
             key.emplace_back(keyCellVec.GetCells()[i].AsRef(), userTable.KeyColumnTypes[i]);
         }
 
-        NTable::ERowOp rop = NTable::ERowOp::Absent;
+        NTable::ERowOp rop = NTable::ERowOp::Absent; 
         TSerializedCellVec updateCellVec;
         TVector<NTable::TUpdateOp> update;
         switch (change.RowOperation_case()) {
             case NKikimrTxDataShard::TEvApplyReplicationChanges::TChange::kUpsert: {
-                rop = NTable::ERowOp::Upsert;
+                rop = NTable::ERowOp::Upsert; 
                 if (!ParseUpdatesProto(userTable, source, sourceOffset, change.GetUpsert(), updateCellVec, update)) {
                     return false;
                 }
                 break;
             }
             case NKikimrTxDataShard::TEvApplyReplicationChanges::TChange::kErase: {
-                rop = NTable::ERowOp::Erase;
+                rop = NTable::ERowOp::Erase; 
                 break;
             }
             case NKikimrTxDataShard::TEvApplyReplicationChanges::TChange::kReset: {
-                rop = NTable::ERowOp::Reset;
+                rop = NTable::ERowOp::Reset; 
                 if (!ParseUpdatesProto(userTable, source, sourceOffset, change.GetReset(), updateCellVec, update)) {
                     return false;
                 }
@@ -193,7 +193,7 @@ public:
                     TStringBuilder() << "Update at " << EscapeC(source.Name) << ":" << sourceOffset << " is updating a primary key column " << tag);
                 return false;
             }
-            update.emplace_back(tag, NTable::ECellOp::Set, TRawTypeValue(updateCellVec.GetCells()[i].AsRef(), it->second.Type));
+            update.emplace_back(tag, NTable::ECellOp::Set, TRawTypeValue(updateCellVec.GetCells()[i].AsRef(), it->second.Type)); 
         }
         return true;
     }

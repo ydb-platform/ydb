@@ -1,28 +1,28 @@
-#include "test_repl.h"
-#include "helpers.h"
-#include <ydb/core/blobstorage/vdisk/repl/blobstorage_replproxy.h>
-#include <ydb/core/blobstorage/backpressure/queue_backpressure_client.h>
-
-using namespace NKikimr;
-using namespace NKikimr::NRepl;
-
-///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-class TReadUntilSuccessActor : public TActorBootstrapped<TReadUntilSuccessActor> {
-    TConfiguration *Conf;
-    const IDataSet *DataSet;
-    TAllVDisks::TVDiskInstance &VDisk;
+#include "test_repl.h" 
+#include "helpers.h" 
+#include <ydb/core/blobstorage/vdisk/repl/blobstorage_replproxy.h> 
+#include <ydb/core/blobstorage/backpressure/queue_backpressure_client.h> 
+ 
+using namespace NKikimr; 
+using namespace NKikimr::NRepl; 
+ 
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////// 
+class TReadUntilSuccessActor : public TActorBootstrapped<TReadUntilSuccessActor> { 
+    TConfiguration *Conf; 
+    const IDataSet *DataSet; 
+    TAllVDisks::TVDiskInstance &VDisk; 
     ui32 Counter;
-    TDuration RepeatTimeout;
+    TDuration RepeatTimeout; 
     bool Multipart;
-
-    struct TVal {
+ 
+    struct TVal { 
         TString Data;
         ui32 PartMask;
 
         TVal(const TString &data)
-            : Data(data)
+            : Data(data) 
             , PartMask(0)
-        {}
+        {} 
 
         bool AddReply(const TLogoBlobID& id) {
             const ui8 partId = id.PartId();
@@ -32,19 +32,19 @@ class TReadUntilSuccessActor : public TActorBootstrapped<TReadUntilSuccessActor>
             PartMask |= mask;
             return PartMask == 7;
         }
-    };
+    }; 
     typedef TMap<TLogoBlobID, TVal> TReadSet;
-    TReadSet ReadSet;
+    TReadSet ReadSet; 
     typedef TSet<TLogoBlobID> TPendingReads;
     TPendingReads PendingReads;
     bool HaveNoData;
-
-    friend class TActorBootstrapped<TReadUntilSuccessActor>;
-
-    void SendAllMessages(const TActorContext &ctx) {
+ 
+    friend class TActorBootstrapped<TReadUntilSuccessActor>; 
+ 
+    void SendAllMessages(const TActorContext &ctx) { 
         std::unique_ptr<TEvBlobStorage::TEvVGet> req;
         ui32 numBlobs = 0;
-
+ 
         // send at most 10 packets of 64 requests
         for (auto it = PendingReads.begin(), e = PendingReads.end(); Counter < 10; ++it) {
             if (!req)
@@ -62,41 +62,41 @@ class TReadUntilSuccessActor : public TActorBootstrapped<TReadUntilSuccessActor>
                 if (it == e)
                     break;
             }
-        }
+        } 
 
         HaveNoData = false;
-    }
-
-    void Bootstrap(const TActorContext &ctx) {
+    } 
+ 
+    void Bootstrap(const TActorContext &ctx) { 
         ui32 numBlobs = 0;
         ui64 blobsSize = 0;
 
-        TAutoPtr<IDataSet::TIterator> it = DataSet->First();
-        Y_VERIFY(it->IsValid());
-        while (it->IsValid()) {
-            ReadSet.insert(std::pair<TLogoBlobID, TVal>(it->Get()->Id, TVal(it->Get()->Data)));
+        TAutoPtr<IDataSet::TIterator> it = DataSet->First(); 
+        Y_VERIFY(it->IsValid()); 
+        while (it->IsValid()) { 
+            ReadSet.insert(std::pair<TLogoBlobID, TVal>(it->Get()->Id, TVal(it->Get()->Data))); 
             PendingReads.insert(it->Get()->Id);
             ++numBlobs;
             blobsSize += it->Get()->Data.size();
-            it->Next();
-        }
-
+            it->Next(); 
+        } 
+ 
         LOG_INFO_S(ctx, NActorsServices::TEST, "numBlobs# " << numBlobs << " blobsSize# " << blobsSize);
 
-        Become(&TThis::StateFunc);
-        ctx.Schedule(RepeatTimeout, new TEvents::TEvWakeup());
-        SendAllMessages(ctx);
-    }
-
-    void Handle(TEvBlobStorage::TEvVGetResult::TPtr &ev, const TActorContext &ctx) {
+        Become(&TThis::StateFunc); 
+        ctx.Schedule(RepeatTimeout, new TEvents::TEvWakeup()); 
+        SendAllMessages(ctx); 
+    } 
+ 
+    void Handle(TEvBlobStorage::TEvVGetResult::TPtr &ev, const TActorContext &ctx) { 
         --Counter;
 
         LOG_DEBUG_S(ctx, NActorsServices::TEST, "received reply " << ev->Get()->ToString());
 
         ui32 ok = 0, notOk = 0, dataCorrupt = 0, miss = 0, noData = 0;
 
-        if (ev->Get()->Record.GetStatus() == NKikimrProto::OK) {
-            const NKikimrBlobStorage::TEvVGetResult &rec = ev->Get()->Record;
+        if (ev->Get()->Record.GetStatus() == NKikimrProto::OK) { 
+            const NKikimrBlobStorage::TEvVGetResult &rec = ev->Get()->Record; 
             for (const auto& q : rec.GetResult()) {
                 if (q.GetStatus() == NKikimrProto::OK) {
                     const TLogoBlobID id = TLogoBlobID(LogoBlobIDFromLogoBlobID(q.GetBlobID()), 0);
@@ -113,17 +113,17 @@ class TReadUntilSuccessActor : public TActorBootstrapped<TReadUntilSuccessActor>
                         }
                     } else {
                         ++miss;
-                    }
+                    } 
                 } else if (q.GetStatus() == NKikimrProto::NODATA) {
                     HaveNoData = true;
                     ++noData;
                 } else {
                     HaveNoData = true;
                     ++notOk;
-                }
-            }
+                } 
+            } 
         }
-
+ 
         LOG_INFO_S(ctx, NActorsServices::TEST, "ok# " << ok << " notOk# " << notOk <<
                 " noData# " << noData << " dataCorrupt# " << dataCorrupt <<
                 " miss# " << miss << " remain# " << PendingReads.size());
@@ -136,112 +136,112 @@ class TReadUntilSuccessActor : public TActorBootstrapped<TReadUntilSuccessActor>
             Die(ctx);
         } else if (!Counter && !HaveNoData) {
             SendAllMessages(ctx);
-        }
+        } 
      }
-
-    void HandleWakeup(const TActorContext &ctx) {
+ 
+    void HandleWakeup(const TActorContext &ctx) { 
         if (!Counter)
             SendAllMessages(ctx);
         ctx.Schedule(RepeatTimeout, new TEvents::TEvWakeup());
-    }
-
-
-    STRICT_STFUNC(StateFunc,
-        HFunc(TEvBlobStorage::TEvVGetResult, Handle);
-        CFunc(TEvents::TSystem::Wakeup, HandleWakeup);
-        IgnoreFunc(TEvBlobStorage::TEvVWindowChange);
-    )
-
-public:
-    TReadUntilSuccessActor(TConfiguration *conf, const IDataSet *dataSet, ui32 vdiskNumber, const TDuration &repeatTimeout,
+    } 
+ 
+ 
+    STRICT_STFUNC(StateFunc, 
+        HFunc(TEvBlobStorage::TEvVGetResult, Handle); 
+        CFunc(TEvents::TSystem::Wakeup, HandleWakeup); 
+        IgnoreFunc(TEvBlobStorage::TEvVWindowChange); 
+    ) 
+ 
+public: 
+    TReadUntilSuccessActor(TConfiguration *conf, const IDataSet *dataSet, ui32 vdiskNumber, const TDuration &repeatTimeout, 
             bool multipart)
-        : TActorBootstrapped<TReadUntilSuccessActor>()
-        , Conf(conf)
-        , DataSet(dataSet)
-        , VDisk(Conf->VDisks->Get(vdiskNumber))
+        : TActorBootstrapped<TReadUntilSuccessActor>() 
+        , Conf(conf) 
+        , DataSet(dataSet) 
+        , VDisk(Conf->VDisks->Get(vdiskNumber)) 
         , Counter(0)
-        , RepeatTimeout(repeatTimeout)
+        , RepeatTimeout(repeatTimeout) 
         , Multipart(multipart)
-    {}
-};
-
-void TReadUntilSuccess::operator ()(TConfiguration *conf) {
+    {} 
+}; 
+ 
+void TReadUntilSuccess::operator ()(TConfiguration *conf) { 
     conf->ActorSystem1->Register(new TReadUntilSuccessActor(conf, DataSet, VDiskNumber, RepeatTimeout, Multipart));
-}
+} 
+ 
+ 
+ 
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////// 
 
-
-
-///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-class TVDiskReplProxyReaderActor : public TActorBootstrapped<TVDiskReplProxyReaderActor> {
-private:
+class TVDiskReplProxyReaderActor : public TActorBootstrapped<TVDiskReplProxyReaderActor> { 
+private: 
     const TActorId NotifyID;
-    const TAllVDisks::TVDiskInstance VDiskInfo;
-    TConfiguration *Conf;
-    TVDiskContextPtr VCtx;
+    const TAllVDisks::TVDiskInstance VDiskInfo; 
+    TConfiguration *Conf; 
+    TVDiskContextPtr VCtx; 
     std::shared_ptr<TReplCtx> ReplCtx;
-    TVDiskProxyPtr Proxy;
-    IDataSet *DataSet;
-    TAutoPtr<TExpectedSet> ExpectedSetPtr;
+    TVDiskProxyPtr Proxy; 
+    IDataSet *DataSet; 
+    TAutoPtr<TExpectedSet> ExpectedSetPtr; 
     TActorId QueueId;
     bool Running = false;
-    /*
+    /* 
     void Put(const NKikimr::TLogoBlobID &id, NKikimrProto::EReplyStatus status, const TString &data);
     void Check(const NKikimr::TLogoBlobID &id, NKikimrProto::EReplyStatus status, const TString &data);
-    void Finish();
-    */
-
-    // FIXME: make logic ready for multiple Next
-
-    friend class TActorBootstrapped<TVDiskReplProxyReaderActor>;
-
-    void Bootstrap(const TActorContext &ctx) {
+    void Finish(); 
+    */ 
+ 
+    // FIXME: make logic ready for multiple Next 
+ 
+    friend class TActorBootstrapped<TVDiskReplProxyReaderActor>; 
+ 
+    void Bootstrap(const TActorContext &ctx) { 
         TIntrusivePtr<NMonitoring::TDynamicCounters> counters = new NMonitoring::TDynamicCounters;
-        auto groupInfo = TBlobStorageGroupInfo(TBlobStorageGroupType::ErasureMirror3, 2, 4);
+        auto groupInfo = TBlobStorageGroupInfo(TBlobStorageGroupType::ErasureMirror3, 2, 4); 
         VCtx.Reset(new TVDiskContext(ctx.SelfID, groupInfo.PickTopology(), counters, VDiskInfo.VDiskID,
                 ctx.ExecutorThread.ActorSystem, TPDiskCategory::DEVICE_TYPE_UNKNOWN));
-
+ 
         ReplCtx = std::make_shared<TReplCtx>(
-                VCtx,
-                nullptr, // PDiskCtx
-                nullptr, // HugeBlobCtx
+                VCtx, 
+                nullptr, // PDiskCtx 
+                nullptr, // HugeBlobCtx 
                 nullptr,
                 MakeIntrusive<TBlobStorageGroupInfo>(groupInfo),
-                ctx.SelfID,
+                ctx.SelfID, 
                 VDiskInfo.Cfg,
                 std::make_shared<std::atomic_uint64_t>());
-
+ 
         TBSProxyContextPtr bspctx = new TBSProxyContext(counters);
         TIntrusivePtr<NBackpressure::TFlowRecord> flowRecord(new NBackpressure::TFlowRecord);
         QueueId = ctx.Register(CreateVDiskBackpressureClient(Conf->GroupInfo, VDiskInfo.VDiskID,
             NKikimrBlobStorage::EVDiskQueueId::PutTabletLog, counters, bspctx, NBackpressure::TQueueClientId(),
             "PutTabletLog", 0, false, TDuration::Minutes(10), flowRecord,
             NMonitoring::TCountableBase::EVisibility::Public));
-        Proxy.Reset(new TVDiskProxy(ReplCtx, VDiskInfo.VDiskID, QueueId));
+        Proxy.Reset(new TVDiskProxy(ReplCtx, VDiskInfo.VDiskID, QueueId)); 
 
-        TAutoPtr<IDataSet::TIterator> it = DataSet->First();
-        while (it->IsValid()) {
+        TAutoPtr<IDataSet::TIterator> it = DataSet->First(); 
+        while (it->IsValid()) { 
             Proxy->Put(it->Get()->Id, 0);
-            it->Next();
-        }
-
-        Become(&TThis::StateRead);
-    }
-
-    void Handle(TEvReplProxyNextResult::TPtr &ev, const TActorContext &ctx) {
-        Proxy->HandleNext(ev);
-
-        while (Proxy->Valid()) {
+            it->Next(); 
+        } 
+ 
+        Become(&TThis::StateRead); 
+    } 
+ 
+    void Handle(TEvReplProxyNextResult::TPtr &ev, const TActorContext &ctx) { 
+        Proxy->HandleNext(ev); 
+ 
+        while (Proxy->Valid()) { 
             TLogoBlobID id;
             NKikimrProto::EReplyStatus status;
-            TTrackableString data(TMemoryConsumer(VCtx->Replication));
+            TTrackableString data(TMemoryConsumer(VCtx->Replication)); 
             Proxy->GetData(&id, &status, &data);
             if (status == NKikimrProto::OK) {
                 ExpectedSetPtr->Check(id, status, data.GetBaseConstRef());
             }
-            Proxy->Next();
-        }
-
+            Proxy->Next(); 
+        } 
+ 
         if (Proxy->IsEof()) {
             ExpectedSetPtr->Finish();
             ctx.Send(NotifyID, new TEvents::TEvCompleted());
@@ -250,8 +250,8 @@ private:
         } else {
             Proxy->SendNextRequest();
         }
-    }
-
+    } 
+ 
     void Handle(TEvProxyQueueState::TPtr& ev, const TActorContext& /*ctx*/) {
         if (ev->Get()->IsConnected && !Running) {
             Proxy->Run(SelfId());
@@ -259,60 +259,60 @@ private:
         }
     }
 
-    STRICT_STFUNC(StateRead,
-        HFunc(TEvReplProxyNextResult, Handle);
-        HFunc(TEvProxyQueueState, Handle);
-        IgnoreFunc(TEvBlobStorage::TEvVWindowChange);
-    )
+    STRICT_STFUNC(StateRead, 
+        HFunc(TEvReplProxyNextResult, Handle); 
+        HFunc(TEvProxyQueueState, Handle); 
+        IgnoreFunc(TEvBlobStorage::TEvVWindowChange); 
+    ) 
 
-public:
+public: 
     TVDiskReplProxyReaderActor(TConfiguration *conf, const TActorId &notifyID,
-                               const TAllVDisks::TVDiskInstance &vdiskInfo, TAutoPtr<TExpectedSet> expSetPtr,
-                               IDataSet *dataSet)
-        : TActorBootstrapped<TVDiskReplProxyReaderActor>()
-        , NotifyID(notifyID)
-        , VDiskInfo(vdiskInfo)
-        , Conf(conf)
-        , VCtx()
+                               const TAllVDisks::TVDiskInstance &vdiskInfo, TAutoPtr<TExpectedSet> expSetPtr, 
+                               IDataSet *dataSet) 
+        : TActorBootstrapped<TVDiskReplProxyReaderActor>() 
+        , NotifyID(notifyID) 
+        , VDiskInfo(vdiskInfo) 
+        , Conf(conf) 
+        , VCtx() 
         , Proxy()
-        , DataSet(dataSet)
-        , ExpectedSetPtr(expSetPtr)
-    {}
-};
-
+        , DataSet(dataSet) 
+        , ExpectedSetPtr(expSetPtr) 
+    {} 
+}; 
+ 
 IActor *CreateVDiskReplProxyReader(TConfiguration *conf, const TActorId &notifyID,
-                                   const TAllVDisks::TVDiskInstance &vdiskInfo,
-                                   TAutoPtr<TExpectedSet> expSetPtr, IDataSet *dataSet) {
-    return new TVDiskReplProxyReaderActor(conf, notifyID, vdiskInfo, expSetPtr, dataSet);
-}
-
-///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-SYNC_TEST_WITH_DATASET_BEGIN(TTestReplDataWriteAndSync)
-virtual void Scenario(const TActorContext &ctx) {
-    // load data
-    SyncRunner->Run(ctx, ManyPutsToCorrespondingVDisks(SyncRunner->NotifyID(), Conf, DataSet));
-    LOG_NOTICE(ctx, NActorsServices::TEST, "  Data is loaded");
-
-    // wait for sync
-    SyncRunner->Run(ctx, CreateWaitForSync(SyncRunner->NotifyID(), Conf));
-    LOG_NOTICE(ctx, NActorsServices::TEST, "  SYNC done");
-}
-SYNC_TEST_WITH_DATASET_END(TTestReplDataWriteAndSync)
-
+                                   const TAllVDisks::TVDiskInstance &vdiskInfo, 
+                                   TAutoPtr<TExpectedSet> expSetPtr, IDataSet *dataSet) { 
+    return new TVDiskReplProxyReaderActor(conf, notifyID, vdiskInfo, expSetPtr, dataSet); 
+} 
+ 
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////// 
+SYNC_TEST_WITH_DATASET_BEGIN(TTestReplDataWriteAndSync) 
+virtual void Scenario(const TActorContext &ctx) { 
+    // load data 
+    SyncRunner->Run(ctx, ManyPutsToCorrespondingVDisks(SyncRunner->NotifyID(), Conf, DataSet)); 
+    LOG_NOTICE(ctx, NActorsServices::TEST, "  Data is loaded"); 
+ 
+    // wait for sync 
+    SyncRunner->Run(ctx, CreateWaitForSync(SyncRunner->NotifyID(), Conf)); 
+    LOG_NOTICE(ctx, NActorsServices::TEST, "  SYNC done"); 
+} 
+SYNC_TEST_WITH_DATASET_END(TTestReplDataWriteAndSync) 
+ 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 SYNC_TEST_WITH_DATASET_BEGIN(TTestReplDataWriteAndSyncMultipart)
 virtual void Scenario(const TActorContext &ctx) {
     // load data
     SyncRunner->Run(ctx, ManyPutsToCorrespondingVDisks(SyncRunner->NotifyID(), Conf, DataSet));
     LOG_NOTICE(ctx, NActorsServices::TEST, "  Data is loaded");
-
+ 
     // duplicate data to handoff
     for (ui8 part = 1; part <= 3; ++part) {
         SyncRunner->Run(ctx, ManyPutsToOneVDisk(SyncRunner->NotifyID(), Conf->VDisks->Get(3), DataSet, part,
                 NKikimrBlobStorage::EPutHandleClass::TabletLog));
     }
     LOG_NOTICE(ctx, NActorsServices::TEST, "  Data is duplicated");
-
+ 
     // wait for sync
     SyncRunner->Run(ctx, CreateWaitForSync(SyncRunner->NotifyID(), Conf));
     LOG_NOTICE(ctx, NActorsServices::TEST, "  SYNC done");
@@ -322,180 +322,180 @@ SYNC_TEST_WITH_DATASET_END(TTestReplDataWriteAndSyncMultipart)
 
 
 
-///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-SYNC_TEST_BEGIN(TTestReplProxyData, TSyncTestWithSmallCommonDataset)
-virtual void Scenario(const TActorContext &ctx) {
-    // load data
-    SyncRunner->Run(ctx, ManyPutsToCorrespondingVDisks(SyncRunner->NotifyID(), Conf, &DataSet));
-    LOG_NOTICE(ctx, NActorsServices::TEST, "  Data is loaded");
-
-    // wait for sync
-    SyncRunner->Run(ctx, CreateWaitForSync(SyncRunner->NotifyID(), Conf));
-    LOG_NOTICE(ctx, NActorsServices::TEST, "  SYNC done");
-
-    TAllVDisks::TVDiskInstance &instance = Conf->VDisks->Get(0);
-    for (ui32 i = 1; i < 7; i++) {
-        TAutoPtr<TExpectedSet> expSetPtr(new TExpectedSet());
-        TAutoPtr<IDataSet::TIterator> it = DataSet.First();
-        while (it->IsValid()) {
-            expSetPtr->Put(TLogoBlobID(it->Get()->Id, 1), NKikimrProto::OK, it->Get()->Data);
-            it->Next();
-        }
-
-        SyncRunner->Run(ctx, CreateVDiskReplProxyReader(Conf, SyncRunner->NotifyID(), instance, expSetPtr, &DataSet));
-        LOG_NOTICE(ctx, NActorsServices::TEST, "  REPL PROXY READER done");
-    }
-}
-SYNC_TEST_END(TTestReplProxyData, TSyncTestWithSmallCommonDataset)
-
-
-///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-SYNC_TEST_BEGIN(TTestReplProxyKeepBits, TSyncTestWithSmallCommonDataset)
-virtual void Scenario(const TActorContext &ctx) {
-    // prepare gc command
-    ui64 tabletID = 0;
-    ui32 recGen = 1;
-    ui32 recGenCounter = 1;
-    ui32 channel = 0;
-    bool collect = true;
-    ui32 collectGen = 1;
-    ui32 collectStep = 40;
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////// 
+SYNC_TEST_BEGIN(TTestReplProxyData, TSyncTestWithSmallCommonDataset) 
+virtual void Scenario(const TActorContext &ctx) { 
+    // load data 
+    SyncRunner->Run(ctx, ManyPutsToCorrespondingVDisks(SyncRunner->NotifyID(), Conf, &DataSet)); 
+    LOG_NOTICE(ctx, NActorsServices::TEST, "  Data is loaded"); 
+ 
+    // wait for sync 
+    SyncRunner->Run(ctx, CreateWaitForSync(SyncRunner->NotifyID(), Conf)); 
+    LOG_NOTICE(ctx, NActorsServices::TEST, "  SYNC done"); 
+ 
+    TAllVDisks::TVDiskInstance &instance = Conf->VDisks->Get(0); 
+    for (ui32 i = 1; i < 7; i++) { 
+        TAutoPtr<TExpectedSet> expSetPtr(new TExpectedSet()); 
+        TAutoPtr<IDataSet::TIterator> it = DataSet.First(); 
+        while (it->IsValid()) { 
+            expSetPtr->Put(TLogoBlobID(it->Get()->Id, 1), NKikimrProto::OK, it->Get()->Data); 
+            it->Next(); 
+        } 
+ 
+        SyncRunner->Run(ctx, CreateVDiskReplProxyReader(Conf, SyncRunner->NotifyID(), instance, expSetPtr, &DataSet)); 
+        LOG_NOTICE(ctx, NActorsServices::TEST, "  REPL PROXY READER done"); 
+    } 
+} 
+SYNC_TEST_END(TTestReplProxyData, TSyncTestWithSmallCommonDataset) 
+ 
+ 
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////// 
+SYNC_TEST_BEGIN(TTestReplProxyKeepBits, TSyncTestWithSmallCommonDataset) 
+virtual void Scenario(const TActorContext &ctx) { 
+    // prepare gc command 
+    ui64 tabletID = 0; 
+    ui32 recGen = 1; 
+    ui32 recGenCounter = 1; 
+    ui32 channel = 0; 
+    bool collect = true; 
+    ui32 collectGen = 1; 
+    ui32 collectStep = 40; 
     TAutoPtr<TVector<NKikimr::TLogoBlobID>> keep(new TVector<NKikimr::TLogoBlobID>());
-    keep->push_back(TLogoBlobID(0, 1, 37, 0, 0, 0));
-    TAutoPtr<IActor> gcCommand(PutGCToCorrespondingVDisks(SyncRunner->NotifyID(), Conf, tabletID, recGen, recGenCounter,
-                                                          channel, collect, collectGen, collectStep, keep, nullptr));
-    // set gc settings
-    SyncRunner->Run(ctx, gcCommand);
-    LOG_NOTICE(ctx, NActorsServices::TEST, "  GC Message sent");
-
-    // wait for sync
-    SyncRunner->Run(ctx, CreateWaitForSync(SyncRunner->NotifyID(), Conf));
-    LOG_NOTICE(ctx, NActorsServices::TEST, "  SYNC done");
-    // wait for compaction
-    SyncRunner->Run(ctx, CreateWaitForCompaction(SyncRunner->NotifyID(), Conf));
-    LOG_NOTICE(ctx, NActorsServices::TEST, "  COMPACTION done");
-
-
-    TAllVDisks::TVDiskInstance &instance = Conf->VDisks->Get(0);
-    for (ui32 i = 1; i < 7; i++) {
-        TAutoPtr<TExpectedSet> expSetPtr(new TExpectedSet()); // empty, it's ok
-        SyncRunner->Run(ctx, CreateVDiskReplProxyReader(Conf, SyncRunner->NotifyID(), instance, expSetPtr, &DataSet));
-        LOG_NOTICE(ctx, NActorsServices::TEST, "  REPL PROXY READER done");
-    }
-}
-SYNC_TEST_END(TTestReplProxyKeepBits, TSyncTestWithSmallCommonDataset)
-
-
-///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-SYNC_TEST_BEGIN(TTestHandoffMoveDel, TSyncTestBase)
-virtual void Scenario(const TActorContext &ctx) {
-    TDataSnapshotPtr data(new TDataSnapshot(Conf->GroupInfo.Get()));
+    keep->push_back(TLogoBlobID(0, 1, 37, 0, 0, 0)); 
+    TAutoPtr<IActor> gcCommand(PutGCToCorrespondingVDisks(SyncRunner->NotifyID(), Conf, tabletID, recGen, recGenCounter, 
+                                                          channel, collect, collectGen, collectStep, keep, nullptr)); 
+    // set gc settings 
+    SyncRunner->Run(ctx, gcCommand); 
+    LOG_NOTICE(ctx, NActorsServices::TEST, "  GC Message sent"); 
+ 
+    // wait for sync 
+    SyncRunner->Run(ctx, CreateWaitForSync(SyncRunner->NotifyID(), Conf)); 
+    LOG_NOTICE(ctx, NActorsServices::TEST, "  SYNC done"); 
+    // wait for compaction 
+    SyncRunner->Run(ctx, CreateWaitForCompaction(SyncRunner->NotifyID(), Conf)); 
+    LOG_NOTICE(ctx, NActorsServices::TEST, "  COMPACTION done"); 
+ 
+ 
+    TAllVDisks::TVDiskInstance &instance = Conf->VDisks->Get(0); 
+    for (ui32 i = 1; i < 7; i++) { 
+        TAutoPtr<TExpectedSet> expSetPtr(new TExpectedSet()); // empty, it's ok 
+        SyncRunner->Run(ctx, CreateVDiskReplProxyReader(Conf, SyncRunner->NotifyID(), instance, expSetPtr, &DataSet)); 
+        LOG_NOTICE(ctx, NActorsServices::TEST, "  REPL PROXY READER done"); 
+    } 
+} 
+SYNC_TEST_END(TTestReplProxyKeepBits, TSyncTestWithSmallCommonDataset) 
+ 
+ 
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////// 
+SYNC_TEST_BEGIN(TTestHandoffMoveDel, TSyncTestBase) 
+virtual void Scenario(const TActorContext &ctx) { 
+    TDataSnapshotPtr data(new TDataSnapshot(Conf->GroupInfo.Get())); 
     TString aaaa("aaaa");
     TLogoBlobID id0(0, 1, 321, 0, aaaa.size(), 0);
-    // [0:0:0:0:0] - main
-    // [0:0:0:1:1] - main
-    // [0:0:0:2:0] - main
-    // [0:0:0:3:1] - handoff
-
-    TAllVDisks::TVDiskInstance &vdisk00 = Conf->VDisks->Get(0);
-    TAllVDisks::TVDiskInstance &vdisk11 = Conf->VDisks->Get(3);
-    TAllVDisks::TVDiskInstance &vdisk20 = Conf->VDisks->Get(4);
-    TAllVDisks::TVDiskInstance &vdisk31 = Conf->VDisks->Get(7);
-    data->PutExact(vdisk00.VDiskID, vdisk00.ActorID, TLogoBlobID(id0, 1), aaaa); // main 0
-    data->PutExact(vdisk11.VDiskID, vdisk11.ActorID, TLogoBlobID(id0, 2), aaaa); // main 1
-    data->PutExact(vdisk31.VDiskID, vdisk31.ActorID, TLogoBlobID(id0, 3), aaaa); // handoff
-
-    // load data
-    SyncRunner->Run(ctx, CreateLoadDataSnapshot(SyncRunner->NotifyID(), Conf, data,
-                                                NKikimrBlobStorage::EPutHandleClass::TabletLog));
-    LOG_NOTICE(ctx, NActorsServices::TEST, "  Data is loaded");
-
-    // wait for sync
-    SyncRunner->Run(ctx, CreateWaitForSync(SyncRunner->NotifyID(), Conf));
-    LOG_NOTICE(ctx, NActorsServices::TEST, "  SYNC done");
-    // wait for compaction
-    SyncRunner->Run(ctx, CreateWaitForCompaction(SyncRunner->NotifyID(), Conf));
-    LOG_NOTICE(ctx, NActorsServices::TEST, "  COMPACTION done");
-    // wait for sync
-    SyncRunner->Run(ctx, CreateWaitForSync(SyncRunner->NotifyID(), Conf));
-    LOG_NOTICE(ctx, NActorsServices::TEST, "  SYNC done");
-    // wait for compaction
-    SyncRunner->Run(ctx, CreateWaitForCompaction(SyncRunner->NotifyID(), Conf));
-    LOG_NOTICE(ctx, NActorsServices::TEST, "  COMPACTION done");
-    // wait for sync
-    SyncRunner->Run(ctx, CreateWaitForSync(SyncRunner->NotifyID(), Conf));
-    LOG_NOTICE(ctx, NActorsServices::TEST, "  SYNC done");
-    // wait for compaction
-    SyncRunner->Run(ctx, CreateWaitForCompaction(SyncRunner->NotifyID(), Conf));
-    LOG_NOTICE(ctx, NActorsServices::TEST, "  COMPACTION done");
-    // wait for sync
-    SyncRunner->Run(ctx, CreateWaitForSync(SyncRunner->NotifyID(), Conf));
-    LOG_NOTICE(ctx, NActorsServices::TEST, "  SYNC done");
-    // wait for compaction
-    SyncRunner->Run(ctx, CreateWaitForCompaction(SyncRunner->NotifyID(), Conf));
-    LOG_NOTICE(ctx, NActorsServices::TEST, "  COMPACTION done");
-
-    // check data
-    TDataSnapshotPtr result(new TDataSnapshot(Conf->GroupInfo.Get()));
-#ifdef OPTIMIZE_SYNC
-    result->PutExact(vdisk00.VDiskID, vdisk00.ActorID, TLogoBlobID(id0, 1), aaaa, TIngress(0x24)); // main 0
-    result->PutExact(vdisk11.VDiskID, vdisk11.ActorID, TLogoBlobID(id0, 2), aaaa, TIngress(0x12)); // main 1
-    result->PutExact(vdisk20.VDiskID, vdisk20.ActorID, TLogoBlobID(id0, 3), aaaa, TIngress(0x9));  // main 2
-    result->PutExact(vdisk31.VDiskID, vdisk31.ActorID, TLogoBlobID(id0, 3), "", TIngress(0xc38));  // handoff
-#else
-    result->PutExact(vdisk00.VDiskID, vdisk00.ActorID, TLogoBlobID(id0, 1), aaaa, TIngress(0xc3c)); // main 0   old: 0xc3c
-    result->PutExact(vdisk11.VDiskID, vdisk11.ActorID, TLogoBlobID(id0, 2), aaaa, TIngress(0xc3a)); // main 1   old: 0xc3a
-    result->PutExact(vdisk20.VDiskID, vdisk20.ActorID, TLogoBlobID(id0, 3), aaaa, TIngress(0xc39)); // main 2   old: 0xc39
-    result->PutExact(vdisk31.VDiskID, vdisk31.ActorID, TLogoBlobID(id0, 3), "", TIngress(0xc38));   // handoff
-#endif
-    TSyncRunner::TReturnValue ret{0, 0};
-    while (ret.Status != 1) {
-        ret = SyncRunner->Run(ctx, CreateCheckDataSnapshot(SyncRunner->NotifyID(), Conf, result));
-    }
-}
-SYNC_TEST_END(TTestHandoffMoveDel, TSyncTestBase)
-
-///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-SYNC_TEST_BEGIN(TTestCollectAllSimpleDataset, TSyncTestBase)
-virtual void Scenario(const TActorContext &ctx) {
-    // prepare gc command
-    ui64 tabletID = 0;
-    ui32 recGen = 1;
-    ui32 recGenCounter = 1;
-    ui32 channel = 1;
-    bool collect = true;
-    ui32 collectGen = 1;
-    ui32 collectStep = 1000;
-    TAutoPtr<IActor> gcCommand(PutGCToCorrespondingVDisks(SyncRunner->NotifyID(), Conf, tabletID, recGen,
-                                                          recGenCounter, channel, collect, collectGen, collectStep,
-                                                          nullptr, nullptr));
-    // set gc settings
-    SyncRunner->Run(ctx, gcCommand);
-    LOG_NOTICE(ctx, NActorsServices::TEST, "  GC Message sent");
-
-    // wait for sync
-    SyncRunner->Run(ctx, CreateWaitForSync(SyncRunner->NotifyID(), Conf));
-    LOG_NOTICE(ctx, NActorsServices::TEST, "  SYNC done");
-
-    // wait for compaction
-    SyncRunner->Run(ctx, CreateWaitForCompaction(SyncRunner->NotifyID(), Conf));
-    LOG_NOTICE(ctx, NActorsServices::TEST, "  COMPACTION done");
-
-    // wait for sync
-    SyncRunner->Run(ctx, CreateWaitForSync(SyncRunner->NotifyID(), Conf));
-    LOG_NOTICE(ctx, NActorsServices::TEST, "  SYNC done");
-
-    // wait for compaction
-    SyncRunner->Run(ctx, CreateWaitForCompaction(SyncRunner->NotifyID(), Conf));
-    LOG_NOTICE(ctx, NActorsServices::TEST, "  COMPACTION done");
-}
-SYNC_TEST_END(TTestCollectAllSimpleDataset, TSyncTestBase)
-
-///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-SYNC_TEST_BEGIN(TTestStub, TSyncTestBase)
-virtual void Scenario(const TActorContext &ctx) {
-    // do nothing
-    Y_UNUSED(ctx);
-}
-SYNC_TEST_END(TTestStub, TSyncTestBase)
-
+    // [0:0:0:0:0] - main 
+    // [0:0:0:1:1] - main 
+    // [0:0:0:2:0] - main 
+    // [0:0:0:3:1] - handoff 
+ 
+    TAllVDisks::TVDiskInstance &vdisk00 = Conf->VDisks->Get(0); 
+    TAllVDisks::TVDiskInstance &vdisk11 = Conf->VDisks->Get(3); 
+    TAllVDisks::TVDiskInstance &vdisk20 = Conf->VDisks->Get(4); 
+    TAllVDisks::TVDiskInstance &vdisk31 = Conf->VDisks->Get(7); 
+    data->PutExact(vdisk00.VDiskID, vdisk00.ActorID, TLogoBlobID(id0, 1), aaaa); // main 0 
+    data->PutExact(vdisk11.VDiskID, vdisk11.ActorID, TLogoBlobID(id0, 2), aaaa); // main 1 
+    data->PutExact(vdisk31.VDiskID, vdisk31.ActorID, TLogoBlobID(id0, 3), aaaa); // handoff 
+ 
+    // load data 
+    SyncRunner->Run(ctx, CreateLoadDataSnapshot(SyncRunner->NotifyID(), Conf, data, 
+                                                NKikimrBlobStorage::EPutHandleClass::TabletLog)); 
+    LOG_NOTICE(ctx, NActorsServices::TEST, "  Data is loaded"); 
+ 
+    // wait for sync 
+    SyncRunner->Run(ctx, CreateWaitForSync(SyncRunner->NotifyID(), Conf)); 
+    LOG_NOTICE(ctx, NActorsServices::TEST, "  SYNC done"); 
+    // wait for compaction 
+    SyncRunner->Run(ctx, CreateWaitForCompaction(SyncRunner->NotifyID(), Conf)); 
+    LOG_NOTICE(ctx, NActorsServices::TEST, "  COMPACTION done"); 
+    // wait for sync 
+    SyncRunner->Run(ctx, CreateWaitForSync(SyncRunner->NotifyID(), Conf)); 
+    LOG_NOTICE(ctx, NActorsServices::TEST, "  SYNC done"); 
+    // wait for compaction 
+    SyncRunner->Run(ctx, CreateWaitForCompaction(SyncRunner->NotifyID(), Conf)); 
+    LOG_NOTICE(ctx, NActorsServices::TEST, "  COMPACTION done"); 
+    // wait for sync 
+    SyncRunner->Run(ctx, CreateWaitForSync(SyncRunner->NotifyID(), Conf)); 
+    LOG_NOTICE(ctx, NActorsServices::TEST, "  SYNC done"); 
+    // wait for compaction 
+    SyncRunner->Run(ctx, CreateWaitForCompaction(SyncRunner->NotifyID(), Conf)); 
+    LOG_NOTICE(ctx, NActorsServices::TEST, "  COMPACTION done"); 
+    // wait for sync 
+    SyncRunner->Run(ctx, CreateWaitForSync(SyncRunner->NotifyID(), Conf)); 
+    LOG_NOTICE(ctx, NActorsServices::TEST, "  SYNC done"); 
+    // wait for compaction 
+    SyncRunner->Run(ctx, CreateWaitForCompaction(SyncRunner->NotifyID(), Conf)); 
+    LOG_NOTICE(ctx, NActorsServices::TEST, "  COMPACTION done"); 
+ 
+    // check data 
+    TDataSnapshotPtr result(new TDataSnapshot(Conf->GroupInfo.Get())); 
+#ifdef OPTIMIZE_SYNC 
+    result->PutExact(vdisk00.VDiskID, vdisk00.ActorID, TLogoBlobID(id0, 1), aaaa, TIngress(0x24)); // main 0 
+    result->PutExact(vdisk11.VDiskID, vdisk11.ActorID, TLogoBlobID(id0, 2), aaaa, TIngress(0x12)); // main 1 
+    result->PutExact(vdisk20.VDiskID, vdisk20.ActorID, TLogoBlobID(id0, 3), aaaa, TIngress(0x9));  // main 2 
+    result->PutExact(vdisk31.VDiskID, vdisk31.ActorID, TLogoBlobID(id0, 3), "", TIngress(0xc38));  // handoff 
+#else 
+    result->PutExact(vdisk00.VDiskID, vdisk00.ActorID, TLogoBlobID(id0, 1), aaaa, TIngress(0xc3c)); // main 0   old: 0xc3c 
+    result->PutExact(vdisk11.VDiskID, vdisk11.ActorID, TLogoBlobID(id0, 2), aaaa, TIngress(0xc3a)); // main 1   old: 0xc3a 
+    result->PutExact(vdisk20.VDiskID, vdisk20.ActorID, TLogoBlobID(id0, 3), aaaa, TIngress(0xc39)); // main 2   old: 0xc39 
+    result->PutExact(vdisk31.VDiskID, vdisk31.ActorID, TLogoBlobID(id0, 3), "", TIngress(0xc38));   // handoff 
+#endif 
+    TSyncRunner::TReturnValue ret{0, 0}; 
+    while (ret.Status != 1) { 
+        ret = SyncRunner->Run(ctx, CreateCheckDataSnapshot(SyncRunner->NotifyID(), Conf, result)); 
+    } 
+} 
+SYNC_TEST_END(TTestHandoffMoveDel, TSyncTestBase) 
+ 
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////// 
+SYNC_TEST_BEGIN(TTestCollectAllSimpleDataset, TSyncTestBase) 
+virtual void Scenario(const TActorContext &ctx) { 
+    // prepare gc command 
+    ui64 tabletID = 0; 
+    ui32 recGen = 1; 
+    ui32 recGenCounter = 1; 
+    ui32 channel = 1; 
+    bool collect = true; 
+    ui32 collectGen = 1; 
+    ui32 collectStep = 1000; 
+    TAutoPtr<IActor> gcCommand(PutGCToCorrespondingVDisks(SyncRunner->NotifyID(), Conf, tabletID, recGen, 
+                                                          recGenCounter, channel, collect, collectGen, collectStep, 
+                                                          nullptr, nullptr)); 
+    // set gc settings 
+    SyncRunner->Run(ctx, gcCommand); 
+    LOG_NOTICE(ctx, NActorsServices::TEST, "  GC Message sent"); 
+ 
+    // wait for sync 
+    SyncRunner->Run(ctx, CreateWaitForSync(SyncRunner->NotifyID(), Conf)); 
+    LOG_NOTICE(ctx, NActorsServices::TEST, "  SYNC done"); 
+ 
+    // wait for compaction 
+    SyncRunner->Run(ctx, CreateWaitForCompaction(SyncRunner->NotifyID(), Conf)); 
+    LOG_NOTICE(ctx, NActorsServices::TEST, "  COMPACTION done"); 
+ 
+    // wait for sync 
+    SyncRunner->Run(ctx, CreateWaitForSync(SyncRunner->NotifyID(), Conf)); 
+    LOG_NOTICE(ctx, NActorsServices::TEST, "  SYNC done"); 
+ 
+    // wait for compaction 
+    SyncRunner->Run(ctx, CreateWaitForCompaction(SyncRunner->NotifyID(), Conf)); 
+    LOG_NOTICE(ctx, NActorsServices::TEST, "  COMPACTION done"); 
+} 
+SYNC_TEST_END(TTestCollectAllSimpleDataset, TSyncTestBase) 
+ 
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////// 
+SYNC_TEST_BEGIN(TTestStub, TSyncTestBase) 
+virtual void Scenario(const TActorContext &ctx) { 
+    // do nothing 
+    Y_UNUSED(ctx); 
+} 
+SYNC_TEST_END(TTestStub, TSyncTestBase) 
+ 

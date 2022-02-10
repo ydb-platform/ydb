@@ -3,13 +3,13 @@
 #include "execution_unit_ctors.h"
 
 namespace NKikimr {
-namespace NDataShard {
+namespace NDataShard { 
 
 ////////////////////////////////////////////////////////////////////////////////
 
 class TAlterMoveShadowUnit : public TExecutionUnit {
 public:
-    TAlterMoveShadowUnit(TDataShard& dataShard, TPipeline& pipeline)
+    TAlterMoveShadowUnit(TDataShard& dataShard, TPipeline& pipeline) 
         : TExecutionUnit(EExecutionUnitKind::AlterMoveShadow, false, dataShard, pipeline)
     { }
 
@@ -85,7 +85,7 @@ public:
     }
 };
 
-THolder<TExecutionUnit> CreateAlterMoveShadowUnit(TDataShard& dataShard, TPipeline& pipeline)
+THolder<TExecutionUnit> CreateAlterMoveShadowUnit(TDataShard& dataShard, TPipeline& pipeline) 
 {
     return THolder(new TAlterMoveShadowUnit(dataShard, pipeline));
 }
@@ -94,7 +94,7 @@ THolder<TExecutionUnit> CreateAlterMoveShadowUnit(TDataShard& dataShard, TPipeli
 
 class TAlterTableUnit : public TExecutionUnit {
 public:
-    TAlterTableUnit(TDataShard &dataShard,
+    TAlterTableUnit(TDataShard &dataShard, 
                     TPipeline &pipeline);
     ~TAlterTableUnit() override;
 
@@ -108,7 +108,7 @@ public:
 private:
 };
 
-TAlterTableUnit::TAlterTableUnit(TDataShard &dataShard,
+TAlterTableUnit::TAlterTableUnit(TDataShard &dataShard, 
                                  TPipeline &pipeline)
     : TExecutionUnit(EExecutionUnitKind::AlterTable, false, dataShard, pipeline)
 {
@@ -162,11 +162,11 @@ void TAlterTableUnit::Complete(TOperation::TPtr,
 {
 }
 
-THolder<TExecutionUnit> CreateAlterTableUnit(TDataShard &dataShard,
+THolder<TExecutionUnit> CreateAlterTableUnit(TDataShard &dataShard, 
                                              TPipeline &pipeline)
 {
     return THolder(new TAlterTableUnit(dataShard, pipeline));
 }
 
-} // namespace NDataShard
+} // namespace NDataShard 
 } // namespace NKikimr

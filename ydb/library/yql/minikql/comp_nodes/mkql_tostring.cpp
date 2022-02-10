@@ -8,7 +8,7 @@
 #include <ydb/library/yql/minikql/mkql_string_util.h>
 #include <ydb/library/yql/public/decimal/yql_decimal.h>
 
-#include <ydb/library/yql/public/udf/udf_terminator.h>
+#include <ydb/library/yql/public/udf/udf_terminator.h> 
 
 #ifndef MKQL_DISABLE_CODEGEN
 extern "C" NYql::NUdf::TUnboxedValuePod DataToString(NYql::NUdf::TUnboxedValuePod data, NYql::NUdf::EDataSlot slot) {

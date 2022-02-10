@@ -53,39 +53,39 @@ SRCS(
 
 PEERDIR(
     library/cpp/actors/core
-    ydb/core/actorlib_impl
-    ydb/core/base
-    ydb/core/blobstorage
-    ydb/core/blobstorage/crypto
-    ydb/core/blobstorage/dsproxy/mock
-    ydb/core/blobstorage/groupinfo
-    ydb/core/blobstorage/incrhuge
-    ydb/core/blobstorage/pdisk
-    ydb/core/engine/minikql
-    ydb/core/kesus/tablet
-    ydb/core/keyvalue
-    ydb/core/mind/bscontroller
-    ydb/core/node_whiteboard
-    ydb/core/protos
-    ydb/core/sys_view/processor
-    ydb/core/tablet
-    ydb/core/tablet_flat
-    ydb/core/test_tablet
+    ydb/core/actorlib_impl 
+    ydb/core/base 
+    ydb/core/blobstorage 
+    ydb/core/blobstorage/crypto 
+    ydb/core/blobstorage/dsproxy/mock 
+    ydb/core/blobstorage/groupinfo 
+    ydb/core/blobstorage/incrhuge 
+    ydb/core/blobstorage/pdisk 
+    ydb/core/engine/minikql 
+    ydb/core/kesus/tablet 
+    ydb/core/keyvalue 
+    ydb/core/mind/bscontroller 
+    ydb/core/node_whiteboard 
+    ydb/core/protos 
+    ydb/core/sys_view/processor 
+    ydb/core/tablet 
+    ydb/core/tablet_flat 
+    ydb/core/test_tablet 
     ydb/core/tx/replication/controller
-    ydb/core/tx/scheme_board
-    ydb/core/tx/scheme_cache
-    ydb/core/tx/schemeshard
+    ydb/core/tx/scheme_board 
+    ydb/core/tx/scheme_cache 
+    ydb/core/tx/schemeshard 
 )
 
 END()
-
-RECURSE(
-    address_classification
-    bscontroller
-    hive
-)
-
-RECURSE_FOR_TESTS(
-    ut
-    ut_fat
-)
+ 
+RECURSE( 
+    address_classification 
+    bscontroller 
+    hive 
+) 
+ 
+RECURSE_FOR_TESTS( 
+    ut 
+    ut_fat 
+) 

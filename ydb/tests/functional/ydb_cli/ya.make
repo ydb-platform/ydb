@@ -8,13 +8,13 @@ TEST_SRCS(
 )
 
 ENV(YDB_TOKEN="root@builtin")
-ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
+ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd") 
 TIMEOUT(600)
 SIZE(MEDIUM)
 
 DEPENDS(
-    ydb/apps/ydbd
-    ydb/apps/ydb
+    ydb/apps/ydbd 
+    ydb/apps/ydb 
 )
 
 PEERDIR(

@@ -1,7 +1,7 @@
 LIBRARY()
 
 OWNER(
-    vvvv
+    vvvv 
     g:yql
     g:yql_ydb_core
 )
@@ -24,6 +24,6 @@ PEERDIR(
     ydb/library/yql/core/expr_nodes
 )
 
-YQL_LAST_ABI_VERSION()
+YQL_LAST_ABI_VERSION() 
 
 END()

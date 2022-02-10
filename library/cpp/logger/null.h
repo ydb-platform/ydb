@@ -1,7 +1,7 @@
 #pragma once
 
 #include "backend.h"
-
+ 
 class TNullLogBackend: public TLogBackend {
 public:
     TNullLogBackend();

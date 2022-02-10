@@ -1,7 +1,7 @@
 #pragma once
 #include <util/generic/string.h>
 
-#include <ydb/core/protos/msgbus.pb.h>
+#include <ydb/core/protos/msgbus.pb.h> 
 
 namespace NKikimr::NSQS {
 

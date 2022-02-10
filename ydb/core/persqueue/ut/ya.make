@@ -1,15 +1,15 @@
-UNITTEST_FOR(ydb/core/persqueue)
+UNITTEST_FOR(ydb/core/persqueue) 
 
 OWNER(
     alexnick
-    g:kikimr
+    g:kikimr 
     g:logbroker
 )
 
 FORK_SUBTESTS()
-
+ 
 SPLIT_FACTOR(40)
-
+ 
 IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND)
     SIZE(LARGE)
     TAG(ya:fat)
@@ -21,13 +21,13 @@ ENDIF()
 
 PEERDIR(
     library/cpp/getopt
-    library/cpp/regex/pcre
+    library/cpp/regex/pcre 
     library/cpp/svnversion
-    ydb/core/testlib
-    ydb/public/sdk/cpp/client/ydb_persqueue_core/ut/ut_utils
+    ydb/core/testlib 
+    ydb/public/sdk/cpp/client/ydb_persqueue_core/ut/ut_utils 
 )
 
-YQL_LAST_ABI_VERSION()
+YQL_LAST_ABI_VERSION() 
 
 SRCS(
     internals_ut.cpp

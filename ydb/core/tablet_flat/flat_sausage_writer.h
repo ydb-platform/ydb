@@ -5,15 +5,15 @@
 #include "util_basics.h"
 
 namespace NKikimr {
-namespace NPageCollection {
+namespace NPageCollection { 
 
     class TWriter {
     public:
-        TWriter(TCookieAllocator &cookieAllocator, ui8 channel, ui32 block)
+        TWriter(TCookieAllocator &cookieAllocator, ui8 channel, ui32 block) 
             : Block(block)
             , Channel(channel)
-            , CookieAllocator(cookieAllocator)
-            , Record(cookieAllocator.GroupBy(channel))
+            , CookieAllocator(cookieAllocator) 
+            , Record(cookieAllocator.GroupBy(channel)) 
         {
 
         }
@@ -68,7 +68,7 @@ namespace NPageCollection {
         void Flush() noexcept
         {
             if (Buffer) {
-                auto glob = CookieAllocator.Do(Channel, Buffer.size());
+                auto glob = CookieAllocator.Do(Channel, Buffer.size()); 
 
                 Y_VERIFY(glob.Group == Record.Group, "Unexpected BS group");
 
@@ -99,9 +99,9 @@ namespace NPageCollection {
         const ui8 Channel = Max<ui8>();
     private:
         TString Buffer;
-        TCookieAllocator &CookieAllocator;
+        TCookieAllocator &CookieAllocator; 
         TVector<TGlob> Blobs;
-        NPageCollection::TRecord Record;
+        NPageCollection::TRecord Record; 
     };
 
 }

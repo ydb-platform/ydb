@@ -2,14 +2,14 @@
 
 namespace NKikimr {
 
-namespace NDataShard {
+namespace NDataShard { 
 
-    TDataShard::TTxReadSet::TTxReadSet(TDataShard *self, TEvTxProcessing::TEvReadSet::TPtr ev)
+    TDataShard::TTxReadSet::TTxReadSet(TDataShard *self, TEvTxProcessing::TEvReadSet::TPtr ev) 
         : TBase(self)
         , Ev(ev)
     {}
 
-    bool TDataShard::TTxReadSet::Execute(TTransactionContext &txc, const TActorContext &ctx) {
+    bool TDataShard::TTxReadSet::Execute(TTransactionContext &txc, const TActorContext &ctx) { 
         LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
                     "TTxReadSet::Execute at " << Self->TabletID() << " got read set: "
                     << Ev->Get()->ToString().data());
@@ -39,12 +39,12 @@ namespace NDataShard {
         return true;
     }
 
-    THolder<IEventHandle> TDataShard::TTxReadSet::MakeAck(const TActorContext& ctx) {
+    THolder<IEventHandle> TDataShard::TTxReadSet::MakeAck(const TActorContext& ctx) { 
         return THolder(new IEventHandle(Ev->Sender, ctx.SelfID,
                                 new TEvTxProcessing::TEvReadSetAck(*Ev->Get(), Self->TabletID())));
     }
 
-    void TDataShard::TTxReadSet::Complete(const TActorContext &ctx) {
+    void TDataShard::TTxReadSet::Complete(const TActorContext &ctx) { 
         LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
                     "TTxReadSet::Complete at " << Self->TabletID());
 

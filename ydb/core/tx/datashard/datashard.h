@@ -2,15 +2,15 @@
 
 #include "datashard_s3_upload.h"
 
-#include <ydb/core/tx/tx.h>
-#include <ydb/core/tx/message_seqno.h>
-#include <ydb/core/base/domain.h>
-#include <ydb/core/base/row_version.h>
+#include <ydb/core/tx/tx.h> 
+#include <ydb/core/tx/message_seqno.h> 
+#include <ydb/core/base/domain.h> 
+#include <ydb/core/base/row_version.h> 
 #include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
-#include <ydb/core/scheme/scheme_type_registry.h>
-#include <ydb/core/protos/tx_datashard.pb.h>
-#include <ydb/core/tablet_flat/flat_row_versions.h>
+#include <ydb/core/scheme/scheme_type_registry.h> 
+#include <ydb/core/protos/tx_datashard.pb.h> 
+#include <ydb/core/tablet_flat/flat_row_versions.h> 
 
 #include <library/cpp/time_provider/time_provider.h>
 
@@ -22,7 +22,7 @@ class RecordBatch;
 
 namespace NKikimr {
 
-namespace NDataShard {
+namespace NDataShard { 
     using TShardState = NKikimrTxDataShard::EDatashardState;
 
     struct TTxFlags {
@@ -171,8 +171,8 @@ namespace NDataShard {
 
 // legacy
 namespace NTxDataShard {
-    using NDataShard::TShardState;
-    using NDataShard::TTxFlags;
+    using NDataShard::TShardState; 
+    using NDataShard::TTxFlags; 
 }
 
 struct TEvDataShard {
@@ -406,7 +406,7 @@ struct TEvDataShard {
         }
 
         TEvProposeTransaction(NKikimrTxDataShard::ETransactionKind txKind, const TActorId& source, ui64 txId,
-            const TStringBuf& txBody, ui32 flags = NDataShard::TTxFlags::Default)
+            const TStringBuf& txBody, ui32 flags = NDataShard::TTxFlags::Default) 
         {
             Record.SetTxKind(txKind);
             ActorIdToProto(source, Record.MutableSource());
@@ -417,7 +417,7 @@ struct TEvDataShard {
         }
 
         TEvProposeTransaction(NKikimrTxDataShard::ETransactionKind txKind, const TActorId& source, ui64 txId,
-            const TStringBuf& txBody, ui64 snapshotStep, ui64 snapshotTxId, ui32 flags = NDataShard::TTxFlags::Default)
+            const TStringBuf& txBody, ui64 snapshotStep, ui64 snapshotTxId, ui32 flags = NDataShard::TTxFlags::Default) 
             : TEvProposeTransaction(txKind, source, txId, txBody, flags)
         {
             auto &snapshot = *Record.MutableMvccSnapshot();
@@ -426,13 +426,13 @@ struct TEvDataShard {
         }
 
         TEvProposeTransaction(NKikimrTxDataShard::ETransactionKind txKind, const TActorId& source, ui64 txId,
-            const TStringBuf& txBody, const TRowVersion& snapshot, ui32 flags = NDataShard::TTxFlags::Default)
+            const TStringBuf& txBody, const TRowVersion& snapshot, ui32 flags = NDataShard::TTxFlags::Default) 
             : TEvProposeTransaction(txKind, source, txId, txBody, snapshot.Step, snapshot.TxId, flags)
         {
         }
 
         TEvProposeTransaction(NKikimrTxDataShard::ETransactionKind txKind, ui64 ssId, const TActorId& source, ui64 txId,
-            const TStringBuf& txBody, const NKikimrSubDomains::TProcessingParams &processingParams, ui32 flags = NDataShard::TTxFlags::Default)
+            const TStringBuf& txBody, const NKikimrSubDomains::TProcessingParams &processingParams, ui32 flags = NDataShard::TTxFlags::Default) 
             : TEvProposeTransaction(txKind, source, txId, txBody, flags)
         {
             Y_VERIFY(txKind == NKikimrTxDataShard::TX_KIND_SCHEME);
@@ -441,7 +441,7 @@ struct TEvDataShard {
         }
 
         TEvProposeTransaction(NKikimrTxDataShard::ETransactionKind txKind, ui64 ssId, ui64 subDomainPathId, const TActorId& source, ui64 txId,
-            const TStringBuf& txBody, const NKikimrSubDomains::TProcessingParams &processingParams, ui32 flags = NDataShard::TTxFlags::Default)
+            const TStringBuf& txBody, const NKikimrSubDomains::TProcessingParams &processingParams, ui32 flags = NDataShard::TTxFlags::Default) 
             : TEvProposeTransaction(txKind, ssId, source, txId, txBody, processingParams, flags)
         {
             if (subDomainPathId) {
@@ -1180,7 +1180,7 @@ struct TEvDataShard {
     struct TEvChangeS3UploadStatus
         : public TEventLocal<TEvChangeS3UploadStatus, TEvDataShard::EvChangeS3UploadStatus>
     {
-        using EStatus = NDataShard::TS3Upload::EStatus;
+        using EStatus = NDataShard::TS3Upload::EStatus; 
 
         TActorId ReplyTo;
         ui64 TxId;
@@ -1208,7 +1208,7 @@ struct TEvDataShard {
     struct TEvS3Upload
         : public TEventLocal<TEvS3Upload, TEvDataShard::EvS3Upload>
     {
-        using TS3Upload = NDataShard::TS3Upload;
+        using TS3Upload = NDataShard::TS3Upload; 
 
         TMaybe<TS3Upload> Upload;
 
@@ -1541,7 +1541,7 @@ struct TEvDataShard {
 
 };
 
-IActor* CreateDataShard(const TActorId &tablet, TTabletStorageInfo *info);
+IActor* CreateDataShard(const TActorId &tablet, TTabletStorageInfo *info); 
 
 }
 

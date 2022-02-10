@@ -4,7 +4,7 @@
 #include "import_s3.h"
 
 namespace NKikimr {
-namespace NDataShard {
+namespace NDataShard { 
 
 class TRestoreUnit : public TBackupRestoreUnitBase<TEvDataShard::TEvCancelRestore> {
 protected:
@@ -81,16 +81,16 @@ protected:
     }
 
 public:
-    TRestoreUnit(TDataShard& self, TPipeline& pipeline)
+    TRestoreUnit(TDataShard& self, TPipeline& pipeline) 
         : TBase(EExecutionUnitKind::Restore, self, pipeline)
     {
     }
 
 }; // TRestoreUnit
 
-THolder<TExecutionUnit> CreateRestoreUnit(TDataShard& self, TPipeline& pipeline) {
+THolder<TExecutionUnit> CreateRestoreUnit(TDataShard& self, TPipeline& pipeline) { 
     return THolder(new TRestoreUnit(self, pipeline));
 }
 
-} // namespace NDataShard
+} // namespace NDataShard 
 } // namespace NKikimr

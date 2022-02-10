@@ -1,9 +1,9 @@
 PY3_PROGRAM()
 
-OWNER(
-    spuchin
-    g:yql_ydb_core
-)
+OWNER( 
+    spuchin 
+    g:yql_ydb_core 
+) 
 
 PY_SRCS(__main__.py)
 

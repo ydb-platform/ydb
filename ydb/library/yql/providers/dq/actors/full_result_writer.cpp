@@ -7,7 +7,7 @@
 
 #include <ydb/library/yql/core/issue/yql_issue.h>
 
-#include <ydb/library/yql/utils/log/log.h>
+#include <ydb/library/yql/utils/log/log.h> 
 #include <ydb/library/yql/utils/failure_injector/failure_injector.h>
 #include <ydb/library/yql/utils/yql_panic.h>
 

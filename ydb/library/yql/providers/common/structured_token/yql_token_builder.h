@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/library/yql/providers/common/structured_token/yql_structured_token.h>
+#include <ydb/library/yql/providers/common/structured_token/yql_structured_token.h> 
 
 namespace NYql {
 

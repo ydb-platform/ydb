@@ -1,9 +1,9 @@
-#include <ydb/core/tablet_flat/test/libs/rows/cook.h>
-#include <ydb/core/tablet_flat/test/libs/table/model/large.h>
-#include <ydb/core/tablet_flat/test/libs/table/test_part.h>
-#include <ydb/core/tablet_flat/test/libs/table/wrap_part.h>
-#include <ydb/core/tablet_flat/test/libs/table/test_writer.h>
-#include <ydb/core/tablet_flat/test/libs/table/test_wreck.h>
+#include <ydb/core/tablet_flat/test/libs/rows/cook.h> 
+#include <ydb/core/tablet_flat/test/libs/table/model/large.h> 
+#include <ydb/core/tablet_flat/test/libs/table/test_part.h> 
+#include <ydb/core/tablet_flat/test/libs/table/wrap_part.h> 
+#include <ydb/core/tablet_flat/test/libs/table/test_writer.h> 
+#include <ydb/core/tablet_flat/test/libs/table/test_wreck.h> 
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/resource/resource.h>
@@ -16,7 +16,7 @@ namespace NTable {
 
 namespace {
     /* Sample rows set for old pages compatability tests, should be
-        updated with assosiated raw page collections (see data/ directory).
+        updated with assosiated raw page collections (see data/ directory). 
      */
 
     const NTest::TMass MassZ(new NTest::TModelStd(false), 128);
@@ -47,13 +47,13 @@ Y_UNIT_TEST_SUITE(NPage) {
 
         wrap.To(1).Has(foo).To(2).NoKey(bar);
 
-        auto &part = dynamic_cast<const NTest::TPartStore&>(*(*wrap).Eggs.Lone());
+        auto &part = dynamic_cast<const NTest::TPartStore&>(*(*wrap).Eggs.Lone()); 
 
-        for (auto page: xrange(part.Store->PageCollectionPagesCount(0))) {
+        for (auto page: xrange(part.Store->PageCollectionPagesCount(0))) { 
             auto *raw = part.Store->GetPage(0, page);
             auto got = NPage::THello().Read(*raw, NPage::EPage::Undef);
 
-            if (got.Type != NPage::EPage::DataPage) {
+            if (got.Type != NPage::EPage::DataPage) { 
                 /* Have to check for compression only rows page */
             } else if (got.Codec == NPage::ECodec::Plain) {
                 UNIT_FAIL("Test has failed to cook compressed pages");

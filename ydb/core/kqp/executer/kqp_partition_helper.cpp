@@ -1,13 +1,13 @@
 #include "kqp_partition_helper.h"
 #include "kqp_table_resolver.h"
 
-#include <ydb/core/base/appdata.h>
-#include <ydb/core/tx/datashard/range_ops.h>
-#include <ydb/library/mkql_proto/mkql_proto.h>
+#include <ydb/core/base/appdata.h> 
+#include <ydb/core/tx/datashard/range_ops.h> 
+#include <ydb/library/mkql_proto/mkql_proto.h> 
 
 #include <ydb/library/yql/dq/runtime/dq_columns_resolve.h>
 #include <ydb/library/yql/dq/runtime/dq_transport.h>
-#include <ydb/library/yql/utils/log/log.h>
+#include <ydb/library/yql/utils/log/log.h> 
 
 namespace NKikimr::NKqp {
 

@@ -81,22 +81,22 @@ SRCS(
 PEERDIR(
     library/cpp/actors/core
     library/cpp/actors/interconnect
-    library/cpp/json
+    library/cpp/json 
     library/cpp/monlib/dynamic_counters
-    ydb/core/base
-    ydb/core/blobstorage/base
-    ydb/core/blobstorage/crypto
-    ydb/core/blobstorage/nodewarden
-    ydb/core/engine/minikql
-    ydb/core/node_whiteboard
-    ydb/core/protos
-    ydb/core/sys_view/common
-    ydb/core/tablet
-    ydb/core/tablet_flat
+    ydb/core/base 
+    ydb/core/blobstorage/base 
+    ydb/core/blobstorage/crypto 
+    ydb/core/blobstorage/nodewarden 
+    ydb/core/engine/minikql 
+    ydb/core/node_whiteboard 
+    ydb/core/protos 
+    ydb/core/sys_view/common 
+    ydb/core/tablet 
+    ydb/core/tablet_flat 
 )
 
 END()
-
-RECURSE_FOR_TESTS(
-    ut
-)
+ 
+RECURSE_FOR_TESTS( 
+    ut 
+) 

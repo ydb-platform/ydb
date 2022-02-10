@@ -22,12 +22,12 @@ namespace NTable {
 
         }
 
-        TShrink& Put(const TPartView &partView, TRawVals from, TRawVals to)
+        TShrink& Put(const TPartView &partView, TRawVals from, TRawVals to) 
         {
-            return Put({ &partView, 1 }, from, to);
+            return Put({ &partView, 1 }, from, to); 
         }
 
-        TShrink& Put(TArrayRef<const TPartView> all, TRawVals from_, TRawVals to_)
+        TShrink& Put(TArrayRef<const TPartView> all, TRawVals from_, TRawVals to_) 
         {
             const TCelled from(from_, *Nulls, false);
             const TCelled to(to_, *Nulls, false);
@@ -35,18 +35,18 @@ namespace NTable {
             return Put(all, from, to);
         }
 
-        TShrink& Put(TArrayRef<const TPartView> all, TCells from, TCells to)
+        TShrink& Put(TArrayRef<const TPartView> all, TCells from, TCells to) 
         {
-            for (auto &partView: all) {
-                Y_VERIFY(partView.Slices, "Shrink attempt on a part without slices");
+            for (auto &partView: all) { 
+                Y_VERIFY(partView.Slices, "Shrink attempt on a part without slices"); 
 
                 if (!from && !to) /* [-inf, +inf) */ {
-                    PartView.emplace_back(partView);
+                    PartView.emplace_back(partView); 
                 } else {
-                    TPartSimpleIt first(partView.Part.Get(), { }, Nulls, Env);
+                    TPartSimpleIt first(partView.Part.Get(), { }, Nulls, Env); 
                     Skipped += EReady::Page == first.Seek(from, ESeek::Lower);
 
-                    TPartSimpleIt last(partView.Part.Get(), { }, Nulls, Env);
+                    TPartSimpleIt last(partView.Part.Get(), { }, Nulls, Env); 
                     Skipped += EReady::Page == last.Seek(to, to ? ESeek::Lower : ESeek::Upper);
 
                     auto firstRowId = first.GetRowId();
@@ -54,10 +54,10 @@ namespace NTable {
 
                     if (Skipped == 0 && firstRowId < lastRowId) {
                         auto with = TScreen::THole{ firstRowId, lastRowId };
-                        auto screen = TScreen::Cut(partView.Screen, with);
+                        auto screen = TScreen::Cut(partView.Screen, with); 
 
                         if (!screen || screen->Size() > 0) {
-                            auto keys = partView.Part->Scheme->Groups[0].KeyTypes.size();
+                            auto keys = partView.Part->Scheme->Groups[0].KeyTypes.size(); 
 
                             TArrayRef<const TCell> firstKey, lastKey;
                             firstKey = first.GetKey().Cells().Slice(0, keys);
@@ -66,7 +66,7 @@ namespace NTable {
                             }
 
                             auto run = TSlices::Cut(
-                                partView.Slices,
+                                partView.Slices, 
                                 firstRowId,
                                 lastRowId,
                                 firstKey,
@@ -75,7 +75,7 @@ namespace NTable {
 
                             if (run->size() > 0) {
                                 run->Validate();
-                                PartView.emplace_back(TPartView{ partView.Part, screen, std::move(run) });
+                                PartView.emplace_back(TPartView{ partView.Part, screen, std::move(run) }); 
                             }
                         }
                     }
@@ -89,7 +89,7 @@ namespace NTable {
         IPages * const Env = nullptr;
         TIntrusiveConstPtr<TKeyNulls> Nulls;
         size_t Skipped = 0;
-        TVector<TPartView> PartView;
+        TVector<TPartView> PartView; 
     };
 
 }

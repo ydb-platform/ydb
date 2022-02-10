@@ -2,7 +2,7 @@
 
 #include "columnshard__scan.h"
 #include "columnshard_common.h"
-#include <ydb/core/tx/columnshard/engines/indexed_read_data.h>
+#include <ydb/core/tx/columnshard/engines/indexed_read_data.h> 
 
 namespace NKikimr::NColumnShard {
 

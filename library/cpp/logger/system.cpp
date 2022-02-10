@@ -14,11 +14,11 @@
 #include "record.h"
 #include "stream.h"
 
-TSysLogBackend::TSysLogBackend(const char* ident, EFacility facility, int flags)
-    : Ident(ident)
-    , Facility(facility)
-    , Flags(flags)
-{
+TSysLogBackend::TSysLogBackend(const char* ident, EFacility facility, int flags) 
+    : Ident(ident) 
+    , Facility(facility) 
+    , Flags(flags) 
+{ 
 #if defined(_unix_)
     Y_ASSERT(TSYSLOG_LOCAL0 <= facility && facility <= TSYSLOG_LOCAL7);
 
@@ -43,34 +43,34 @@ TSysLogBackend::TSysLogBackend(const char* ident, EFacility facility, int flags)
     }
 
     openlog(Ident.data(), sysflags, f2sf[(size_t)facility]);
-#endif
-}
-
+#endif 
+} 
+ 
 TSysLogBackend::~TSysLogBackend() {
 #if defined(_unix_)
-    closelog();
-#endif
-}
-
+    closelog(); 
+#endif 
+} 
+ 
 void TSysLogBackend::WriteData(const TLogRecord& rec) {
 #if defined(_unix_)
     syslog(ELogPriority2SyslogPriority(rec.Priority), "%.*s", (int)rec.Len, rec.Data);
 #else
     Y_UNUSED(rec);
-#endif
-}
-
-void TSysLogBackend::ReopenLog() {
-}
-
+#endif 
+} 
+ 
+void TSysLogBackend::ReopenLog() { 
+} 
+ 
 int TSysLogBackend::ELogPriority2SyslogPriority(ELogPriority priority) {
 #if defined(_unix_)
      return Min(int(priority), (int)LOG_PRIMASK);
 #else
-    // trivial conversion
-    return int(priority);
+    // trivial conversion 
+    return int(priority); 
 #endif
-}
+} 
 
 namespace {
     class TSysLogInstance: public TLog {

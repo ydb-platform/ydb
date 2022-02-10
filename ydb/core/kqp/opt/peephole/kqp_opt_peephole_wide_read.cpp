@@ -1,7 +1,7 @@
 #include "kqp_opt_peephole_rules.h"
 
-#include <ydb/core/kqp/common/kqp_yql.h>
-#include <ydb/core/kqp/opt/kqp_opt_impl.h>
+#include <ydb/core/kqp/common/kqp_yql.h> 
+#include <ydb/core/kqp/opt/kqp_opt_impl.h> 
 
 namespace NKikimr::NKqp::NOpt {
 

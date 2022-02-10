@@ -1,5 +1,5 @@
 #include "portion_info.h"
-#include <ydb/core/protos/tx_columnshard.pb.h>
+#include <ydb/core/protos/tx_columnshard.pb.h> 
 
 namespace NKikimr::NOlap {
 

@@ -1,13 +1,13 @@
 LIBRARY()
 
-OWNER(g:yql)
+OWNER(g:yql) 
 
 PEERDIR(
-    library/cpp/string_utils/parse_size
+    library/cpp/string_utils/parse_size 
     ydb/library/yql/minikql
     ydb/library/yql/sql
     ydb/library/yql/utils
-    ydb/library/yql/utils/log
+    ydb/library/yql/utils/log 
 )
 
 SRCS(
@@ -16,6 +16,6 @@ SRCS(
     yql_dq_settings.cpp
 )
 
-YQL_LAST_ABI_VERSION()
+YQL_LAST_ABI_VERSION() 
 
 END()

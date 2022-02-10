@@ -501,11 +501,11 @@ Y_DECLARE_OUT_SPEC(inline, NUri::TScheme::EKind, out, t) {
 Y_DECLARE_OUT_SPEC(inline, NUri::TState::EParsed, out, t) {
     out << NUri::ParsedStateToString(t);
 }
-
+ 
 static inline ui16 DefaultPort(NUri::TScheme::EKind scheme) {
     return NUri::TSchemeInfo::GetDefaultPort(scheme);
-}
-
+} 
+ 
 static inline NUri::TScheme::EKind SchemeKind(const TStringBuf& scheme) {
     return NUri::TSchemeInfo::GetKind(scheme);
 }

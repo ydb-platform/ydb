@@ -4,7 +4,7 @@
 #include "flat_store_hotdog.h"
 #include "flat_store_solid.h"
 
-#include <ydb/core/tablet_flat/flat_executor.pb.h>
+#include <ydb/core/tablet_flat/flat_executor.pb.h> 
 
 namespace NKikimr {
 namespace NTabletFlatExecutor {
@@ -13,7 +13,7 @@ namespace NBoot {
     struct TSwitch {
 
         struct TBundle {
-            TVector<NPageCollection::TLargeGlobId> LargeGlobIds;
+            TVector<NPageCollection::TLargeGlobId> LargeGlobIds; 
             TString Legacy;
             TString Opaque;
             TVector<TString> Deltas;
@@ -23,11 +23,11 @@ namespace NBoot {
             template<class TLookup>
             void AddGroups(const TLookup &lookup)
             {
-                /* replaced by TLargeGlobId, required for (Evolution < 2) */
+                /* replaced by TLargeGlobId, required for (Evolution < 2) */ 
 
-                for (auto &largeGlobId : LargeGlobIds) {
-                    if (largeGlobId.Group == NPageCollection::TLargeGlobId::InvalidGroup) {
-                        largeGlobId.Group = lookup(largeGlobId.Lead);
+                for (auto &largeGlobId : LargeGlobIds) { 
+                    if (largeGlobId.Group == NPageCollection::TLargeGlobId::InvalidGroup) { 
+                        largeGlobId.Group = lookup(largeGlobId.Lead); 
                     }
                 }
             }
@@ -67,7 +67,7 @@ namespace NBoot {
         };
 
         TSwitch() { }
-        TSwitch(NPageCollection::TLargeGlobId largeGlobId) : LargeGlobId(largeGlobId) { }
+        TSwitch(NPageCollection::TLargeGlobId largeGlobId) : LargeGlobId(largeGlobId) { } 
 
         bool Loaded() const noexcept
         {
@@ -129,9 +129,9 @@ namespace NBoot {
             }
 
             if (snap.DbPartMetaInfoBodySize() > 0) {
-                /* Legacy mode, may hold only one page collection per entity */
+                /* Legacy mode, may hold only one page collection per entity */ 
 
-                AddLegacyLargeGlobId(Bundles.emplace_back(), snap.GetDbPartMetaInfoBody());
+                AddLegacyLargeGlobId(Bundles.emplace_back(), snap.GetDbPartMetaInfoBody()); 
             }
 
             if (snap.BundlesSize() > 0) {
@@ -140,19 +140,19 @@ namespace NBoot {
                 for (auto &bundle: snap.GetBundles()) {
                     auto &one = Bundles.emplace_back();
 
-                    one.LargeGlobIds.reserve(bundle.PageCollectionsSize());
+                    one.LargeGlobIds.reserve(bundle.PageCollectionsSize()); 
 
-                    for (auto &pageCollection: bundle.GetPageCollections()) {
-                        if (pageCollection.HasLargeGlobId()) {
-                            auto largeGlobId = TLargeGlobIdProto::Get(pageCollection.GetLargeGlobId());
+                    for (auto &pageCollection: bundle.GetPageCollections()) { 
+                        if (pageCollection.HasLargeGlobId()) { 
+                            auto largeGlobId = TLargeGlobIdProto::Get(pageCollection.GetLargeGlobId()); 
 
-                            one.LargeGlobIds.emplace_back(largeGlobId);
+                            one.LargeGlobIds.emplace_back(largeGlobId); 
                         } else {
-                            AddLegacyLargeGlobId(one, pageCollection.GetMetaId());
+                            AddLegacyLargeGlobId(one, pageCollection.GetMetaId()); 
                         }
                     }
 
-                    Y_VERIFY(one.LargeGlobIds.size(), "Part bundle has no page collections");
+                    Y_VERIFY(one.LargeGlobIds.size(), "Part bundle has no page collections"); 
 
                     if (bundle.HasLegacy())
                         one.Legacy = bundle.GetLegacy();
@@ -238,13 +238,13 @@ namespace NBoot {
         }
 
     private:
-        void AddLegacyLargeGlobId(TBundle &bundle, const TLargeGlobIdProto::TRep &rep)
+        void AddLegacyLargeGlobId(TBundle &bundle, const TLargeGlobIdProto::TRep &rep) 
         {
             auto lookup = [](const TLogoBlobID&) {
-                return NPageCollection::TLargeGlobId::InvalidGroup; /* Don't know now group id */
+                return NPageCollection::TLargeGlobId::InvalidGroup; /* Don't know now group id */ 
             };
 
-            bundle.LargeGlobIds.emplace_back(TLargeGlobIdProto::Get(rep, lookup));
+            bundle.LargeGlobIds.emplace_back(TLargeGlobIdProto::Get(rep, lookup)); 
         }
 
         void InitTable(ui32 table) {
@@ -259,7 +259,7 @@ namespace NBoot {
         }
 
     public:
-        const NPageCollection::TLargeGlobId LargeGlobId;  /* Switch blob LargeGlobId */
+        const NPageCollection::TLargeGlobId LargeGlobId;  /* Switch blob LargeGlobId */ 
 
         ui32 Table = Max<ui32>();
         ui32 Level = 255;

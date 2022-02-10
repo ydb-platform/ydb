@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/library/yql/utils/log/log.h>
+#include <ydb/library/yql/utils/log/log.h> 
 
 #include <library/cpp/testing/unittest/registar.h>
 

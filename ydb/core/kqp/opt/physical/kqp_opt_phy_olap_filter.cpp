@@ -1,7 +1,7 @@
 #include "kqp_opt_phy_rules.h"
 
-#include <ydb/core/kqp/common/kqp_yql.h>
-#include <ydb/library/yql/core/extract_predicate/extract_predicate.h>
+#include <ydb/core/kqp/common/kqp_yql.h> 
+#include <ydb/library/yql/core/extract_predicate/extract_predicate.h> 
 
 namespace NKikimr::NKqp::NOpt {
 
@@ -11,7 +11,7 @@ using namespace NYql::NNodes;
 namespace {
 
 static TMaybeNode<TExprBase> NullNode = TMaybeNode<TExprBase>();
-
+ 
 bool IsSupportedPredicate(const TCoCompare& predicate) {
     if (predicate.Maybe<TCoCmpEqual>()) {
         return true;

@@ -1,6 +1,6 @@
 #include "proxy_ut_helpers.h"
 
-#include <ydb/core/tx/schemeshard/schemeshard.h>
+#include <ydb/core/tx/schemeshard/schemeshard.h> 
 
 namespace NKikimr {
 namespace NTxProxyUT {

@@ -1,5 +1,5 @@
-#pragma once
-#include <ydb/core/yq/libs/checkpointing_common/defs.h>
+#pragma once 
+#include <ydb/core/yq/libs/checkpointing_common/defs.h> 
 
 #include <library/cpp/actors/core/actor.h>
 

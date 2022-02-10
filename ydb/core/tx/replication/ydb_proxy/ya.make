@@ -7,11 +7,11 @@ OWNER(
 
 PEERDIR(
     ydb/core/base
-    ydb/core/protos
-    ydb/public/sdk/cpp/client/ydb_driver
-    ydb/public/sdk/cpp/client/ydb_scheme
-    ydb/public/sdk/cpp/client/ydb_table
-    ydb/public/sdk/cpp/client/ydb_types/credentials
+    ydb/core/protos 
+    ydb/public/sdk/cpp/client/ydb_driver 
+    ydb/public/sdk/cpp/client/ydb_scheme 
+    ydb/public/sdk/cpp/client/ydb_table 
+    ydb/public/sdk/cpp/client/ydb_types/credentials 
 )
 
 SRCS(

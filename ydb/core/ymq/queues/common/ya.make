@@ -1,4 +1,4 @@
-OWNER(g:sqs)
+OWNER(g:sqs) 
 
 LIBRARY()
 
@@ -7,7 +7,7 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/core/ymq/base
+    ydb/core/ymq/base 
 )
 
 END()

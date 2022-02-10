@@ -7,7 +7,7 @@
 #include <util/random/random.h>
 
 namespace NKikimr {
-namespace NDataShard {
+namespace NDataShard { 
 
     template<class TValue>
     class TRangeAvlTree : public TRangeTreeBase {
@@ -717,5 +717,5 @@ namespace NDataShard {
         THashMap<TValue, TIntrusiveList<TNode>> Values;
     };
 
-} // namespace NDataShard
+} // namespace NDataShard 
 } // namespace NKikimr

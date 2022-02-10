@@ -103,7 +103,7 @@ message TKeyValueRequest {
 
 // must start from TResponseBase
 message TKeyValueResponse {
-    optional uint32 Status = 1; // EResponseStatus from ydb/core/client/base/msgbus.h
+    optional uint32 Status = 1; // EResponseStatus from ydb/core/client/base/msgbus.h 
     optional bytes ProtobufError = 400;
 
     message TKeyValuePair {
@@ -112,51 +112,51 @@ message TKeyValueResponse {
         optional uint32 ValueSize = 3;
         optional uint64 CreationUnixTime = 4;
         optional TKeyValueRequest.EStorageChannel StorageChannel = 5; // Returns the _actual_ storage channel
-        optional uint32 Status = 6; // EReplyStatus from ydb/core/protos/base.proto
+        optional uint32 Status = 6; // EReplyStatus from ydb/core/protos/base.proto 
     }
 
     message TDeleteRangeResult {
-        optional uint32 Status = 1; // EReplyStatus from ydb/core/protos/base.proto
+        optional uint32 Status = 1; // EReplyStatus from ydb/core/protos/base.proto 
     }
     message TIncrementGenerationResult {
-        optional uint32 Status = 1; // EReplyStatus from ydb/core/protos/base.proto
+        optional uint32 Status = 1; // EReplyStatus from ydb/core/protos/base.proto 
         optional uint64 Generation = 2;
     }
     message TReadResult {
-        optional uint32 Status = 1; // EReplyStatus from ydb/core/protos/base.proto
+        optional uint32 Status = 1; // EReplyStatus from ydb/core/protos/base.proto 
         optional bytes Value = 2;
         optional string Message = 3;
     }
     message TReadRangeResult {
         // may contain partial (truncated) result if Status == OVERRUN
-        optional uint32 Status = 1; // EReplyStatus from ydb/core/protos/base.proto
+        optional uint32 Status = 1; // EReplyStatus from ydb/core/protos/base.proto 
         repeated TKeyValuePair Pair = 2;
     }
     message TWriteResult {
-        optional uint32 Status = 1; // EReplyStatus from ydb/core/protos/base.proto
-        optional uint32 StatusFlags = 2;  // A set of flags from EStatusFlags ydb/core/protos/blobstorage.proto
+        optional uint32 Status = 1; // EReplyStatus from ydb/core/protos/base.proto 
+        optional uint32 StatusFlags = 2;  // A set of flags from EStatusFlags ydb/core/protos/blobstorage.proto 
     }
     message TRenameResult {
-        optional uint32 Status = 1; // EReplyStatus from ydb/core/protos/base.proto
+        optional uint32 Status = 1; // EReplyStatus from ydb/core/protos/base.proto 
     }
     message TCopyRangeResult {
-        optional uint32 Status = 1; // EReplyStatus from ydb/core/protos/base.proto
+        optional uint32 Status = 1; // EReplyStatus from ydb/core/protos/base.proto 
     }
     message TConcatResult {
-        optional uint32 Status = 1; // EReplyStatus from ydb/core/protos/base.proto
+        optional uint32 Status = 1; // EReplyStatus from ydb/core/protos/base.proto 
     }
     message TGetStatusResult {
-        optional uint32 Status = 1; // EReplyStatus from ydb/core/protos/base.proto
+        optional uint32 Status = 1; // EReplyStatus from ydb/core/protos/base.proto 
         optional TKeyValueRequest.EStorageChannel StorageChannel = 2;
-        optional uint32 StatusFlags = 3; // A set of flags from EStatusFlags ydb/core/protos/blobstorage.proto
+        optional uint32 StatusFlags = 3; // A set of flags from EStatusFlags ydb/core/protos/blobstorage.proto 
     }
     message TTrimLeakedBlobsResult {
-        optional uint32 Status = 1; // EReplyStatus from ydb/core/protos/base.proto
+        optional uint32 Status = 1; // EReplyStatus from ydb/core/protos/base.proto 
         optional uint32 NumItemsTrimmed = 2;
         optional uint32 NumItemsLeft = 3;
     }
     message TSetExecutorFastLogPolicyResult {
-        optional uint32 Status = 1; // EReplyStatus from ydb/core/protos/base.proto
+        optional uint32 Status = 1; // EReplyStatus from ydb/core/protos/base.proto 
     }
 
     optional uint64 Cookie = 2;

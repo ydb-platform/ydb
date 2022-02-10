@@ -7,14 +7,14 @@
 #include "datashard_user_table.h"
 #include "execution_unit.h"
 
-#include <ydb/core/tablet_flat/flat_cxx_database.h>
+#include <ydb/core/tablet_flat/flat_cxx_database.h> 
 
 namespace NKikimr {
-namespace NDataShard {
+namespace NDataShard { 
 
 using NTabletFlatExecutor::TTransactionContext;
 
-class TDataShard;
+class TDataShard; 
 class TOperation;
 
 ///
@@ -86,7 +86,7 @@ public:
         }
     };
 
-    TPipeline(TDataShard * self);
+    TPipeline(TDataShard * self); 
     ~TPipeline();
 
     bool Load(NIceDb::TNiceDb& db);
@@ -422,7 +422,7 @@ private:
     using TSortedOps = TMap<TStepOrder, TOperation::TPtr>;
 
     ///
-    TDataShard * const Self;
+    TDataShard * const Self; 
     TDependencyTracker DepTracker;
     TConfig Config;
     THashMap<ui64, TOperation::TPtr> ImmediateOps;

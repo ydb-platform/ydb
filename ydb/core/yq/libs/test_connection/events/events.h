@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/public/api/protos/yq.pb.h>
+#include <ydb/public/api/protos/yq.pb.h> 
 #include <ydb/core/yq/libs/events/event_subspace.h>
 
 #include <ydb/core/yq/libs/control_plane_storage/events/events.h>

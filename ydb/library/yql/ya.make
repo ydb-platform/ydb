@@ -1,8 +1,8 @@
-OWNER(g:yql)
+OWNER(g:yql) 
 
 RECURSE(
     ast
-    core
+    core 
     core/common_opt
     core/expr_nodes
     core/expr_nodes_gen
@@ -18,9 +18,9 @@ RECURSE(
     dq
     minikql
     mount
-    parser
-    protos
-    providers
+    parser 
+    protos 
+    providers 
     public
     sql
     udfs

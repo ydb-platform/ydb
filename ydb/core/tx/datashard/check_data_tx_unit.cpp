@@ -2,14 +2,14 @@
 #include "datashard_pipeline.h"
 #include "execution_unit_ctors.h"
 
-#include <ydb/core/tablet/tablet_exception.h>
+#include <ydb/core/tablet/tablet_exception.h> 
 
 namespace NKikimr {
-namespace NDataShard {
+namespace NDataShard { 
 
 class TCheckDataTxUnit : public TExecutionUnit {
 public:
-    TCheckDataTxUnit(TDataShard &dataShard,
+    TCheckDataTxUnit(TDataShard &dataShard, 
                      TPipeline &pipeline);
     ~TCheckDataTxUnit() override;
 
@@ -23,7 +23,7 @@ public:
 private:
 };
 
-TCheckDataTxUnit::TCheckDataTxUnit(TDataShard &dataShard,
+TCheckDataTxUnit::TCheckDataTxUnit(TDataShard &dataShard, 
                                    TPipeline &pipeline)
     : TExecutionUnit(EExecutionUnitKind::CheckDataTx, false, dataShard, pipeline)
 {
@@ -315,11 +315,11 @@ void TCheckDataTxUnit::Complete(TOperation::TPtr,
 {
 }
 
-THolder<TExecutionUnit> CreateCheckDataTxUnit(TDataShard &dataShard,
+THolder<TExecutionUnit> CreateCheckDataTxUnit(TDataShard &dataShard, 
                                               TPipeline &pipeline)
 {
     return THolder(new TCheckDataTxUnit(dataShard, pipeline));
 }
 
-} // namespace NDataShard
+} // namespace NDataShard 
 } // namespace NKikimr

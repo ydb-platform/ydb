@@ -13,9 +13,9 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/containers/stack_vector
+    library/cpp/containers/stack_vector 
     library/cpp/yson_pull
-    ydb/library/yql/minikql/dom
+    ydb/library/yql/minikql/dom 
 )
 
 END()

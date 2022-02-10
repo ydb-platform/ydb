@@ -2,14 +2,14 @@
 #include "datashard_failpoints.h"
 
 namespace NKikimr {
-namespace NDataShard {
+namespace NDataShard { 
 
-TDataShard::TTxProgressTransaction::TTxProgressTransaction(TDataShard *self, TOperation::TPtr op)
+TDataShard::TTxProgressTransaction::TTxProgressTransaction(TDataShard *self, TOperation::TPtr op) 
     : TBase(self)
     , ActiveOp(std::move(op))
 {}
 
-bool TDataShard::TTxProgressTransaction::Execute(TTransactionContext &txc, const TActorContext &ctx) {
+bool TDataShard::TTxProgressTransaction::Execute(TTransactionContext &txc, const TActorContext &ctx) { 
     LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
                 "TTxProgressTransaction::Execute at " << Self->TabletID());
 
@@ -106,7 +106,7 @@ bool TDataShard::TTxProgressTransaction::Execute(TTransactionContext &txc, const
     }
 }
 
-void TDataShard::TTxProgressTransaction::Complete(const TActorContext &ctx) {
+void TDataShard::TTxProgressTransaction::Complete(const TActorContext &ctx) { 
     LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
                 "TTxProgressTransaction::Complete at " << Self->TabletID());
 

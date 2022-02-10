@@ -1,4 +1,4 @@
-UNITTEST_FOR(ydb/core/client/minikql_compile)
+UNITTEST_FOR(ydb/core/client/minikql_compile) 
 
 OWNER(vvvv)
 
@@ -9,16 +9,16 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/testing/unittest
-    library/cpp/threading/future
-    ydb/core/client/scheme_cache_lib
-    ydb/core/client/server
-    ydb/core/tablet
-    ydb/core/testlib
+    library/cpp/testing/unittest 
+    library/cpp/threading/future 
+    ydb/core/client/scheme_cache_lib 
+    ydb/core/client/server 
+    ydb/core/tablet 
+    ydb/core/testlib 
     ydb/library/yql/minikql
-    ydb/library/yql/public/udf/service/exception_policy
+    ydb/library/yql/public/udf/service/exception_policy 
 )
 
-YQL_LAST_ABI_VERSION()
+YQL_LAST_ABI_VERSION() 
 
 END()

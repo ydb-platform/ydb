@@ -11,11 +11,11 @@ SRCS(
 
 PEERDIR(
     library/cpp/monlib/metrics
-    ydb/public/api/grpc
+    ydb/public/api/grpc 
 )
 
 END()
 
-RECURSE_FOR_TESTS(
-    ut
-)
+RECURSE_FOR_TESTS( 
+    ut 
+) 

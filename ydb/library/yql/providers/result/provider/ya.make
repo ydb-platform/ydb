@@ -8,9 +8,9 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/yson/node
-    ydb/library/yql/ast
-    ydb/library/yql/utils/log
+    library/cpp/yson/node 
+    ydb/library/yql/ast 
+    ydb/library/yql/utils/log 
     ydb/library/yql/core
     ydb/library/yql/core/expr_nodes
     ydb/library/yql/providers/common/codec
@@ -19,6 +19,6 @@ PEERDIR(
     ydb/library/yql/providers/result/expr_nodes
 )
 
-YQL_LAST_ABI_VERSION()
+YQL_LAST_ABI_VERSION() 
 
 END()

@@ -4,7 +4,7 @@ import string
 
 from enum import unique, IntEnum
 
-import ydb.core.protos.msgbus_kv_pb2 as msgbus_kv
+import ydb.core.protos.msgbus_kv_pb2 as msgbus_kv 
 
 
 @unique

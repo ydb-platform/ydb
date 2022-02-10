@@ -1,5 +1,5 @@
 #include "database_token_builder.h"
-#include <ydb/library/yql/providers/common/structured_token/yql_token_builder.h>
+#include <ydb/library/yql/providers/common/structured_token/yql_token_builder.h> 
 
 namespace NYq {
 
@@ -41,5 +41,5 @@ using namespace NYql;
         databaseIds[std::make_pair(databaseId, type)] = info;
     }
 
-} // NYq
-
+} // NYq 
+ 

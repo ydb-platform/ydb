@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/public/sdk/cpp/client/impl/ydb_internal/common/type_switcher.h>
+#include <ydb/public/sdk/cpp/client/impl/ydb_internal/common/type_switcher.h> 
 
 namespace NYdb {
 
@@ -12,5 +12,5 @@ struct TConnectionInfo {
 
 TConnectionInfo ParseConnectionString(const TStringType& connectionString);
 
-} // namespace NYdb
-
+} // namespace NYdb 
+ 

@@ -5,7 +5,7 @@ package Ydb.Discovery;
 option java_package = "com.yandex.ydb.discovery";
 option java_outer_classname = "DiscoveryProtos";
 
-import "ydb/public/api/protos/ydb_operation.proto";
+import "ydb/public/api/protos/ydb_operation.proto"; 
 
 message ListEndpointsRequest {
     string database = 1;

@@ -2,7 +2,7 @@
 #include <util/system/backtrace.h>
 
 #if defined(_win_) || defined(_darwin_)
-#include <ydb/library/yql/public/udf/udf_registrator.h>
+#include <ydb/library/yql/public/udf/udf_registrator.h> 
 
 #include <exception>
 

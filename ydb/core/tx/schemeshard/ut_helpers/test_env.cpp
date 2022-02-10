@@ -1,15 +1,15 @@
 #include "test_env.h"
 #include "helpers.h"
 
-#include <ydb/core/blockstore/core/blockstore.h>
-#include <ydb/core/base/tablet_resolver.h>
-#include <ydb/core/metering/metering.h>
-#include <ydb/core/tablet_flat/tablet_flat_executed.h>
-#include <ydb/core/tx/datashard/datashard.h>
-#include <ydb/core/tx/schemeshard/schemeshard_private.h>
-#include <ydb/core/tx/tx_allocator/txallocator.h>
-#include <ydb/core/tx/tx_proxy/proxy.h>
-#include <ydb/core/filestore/core/filestore.h>
+#include <ydb/core/blockstore/core/blockstore.h> 
+#include <ydb/core/base/tablet_resolver.h> 
+#include <ydb/core/metering/metering.h> 
+#include <ydb/core/tablet_flat/tablet_flat_executed.h> 
+#include <ydb/core/tx/datashard/datashard.h> 
+#include <ydb/core/tx/schemeshard/schemeshard_private.h> 
+#include <ydb/core/tx/tx_allocator/txallocator.h> 
+#include <ydb/core/tx/tx_proxy/proxy.h> 
+#include <ydb/core/filestore/core/filestore.h> 
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -470,12 +470,12 @@ private:
 // Globally enable/disable log batching at datashard creation time in test
 struct TDatashardLogBatchingSwitch {
     explicit TDatashardLogBatchingSwitch(bool newVal) {
-        PrevVal = NKikimr::NDataShard::gAllowLogBatchingDefaultValue;
-        NKikimr::NDataShard::gAllowLogBatchingDefaultValue = newVal;
+        PrevVal = NKikimr::NDataShard::gAllowLogBatchingDefaultValue; 
+        NKikimr::NDataShard::gAllowLogBatchingDefaultValue = newVal; 
     }
 
     ~TDatashardLogBatchingSwitch() {
-        NKikimr::NDataShard::gAllowLogBatchingDefaultValue = PrevVal;
+        NKikimr::NDataShard::gAllowLogBatchingDefaultValue = PrevVal; 
     }
 private:
     bool PrevVal;

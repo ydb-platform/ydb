@@ -5,8 +5,8 @@
 namespace NKikimr {
 namespace NTabletFlatExecutor {
 
-Y_UNIT_TEST_SUITE(TPrivatePageCacheTest) {
-    using TPage = TPrivatePageCache::TPage;
+Y_UNIT_TEST_SUITE(TPrivatePageCacheTest) { 
+    using TPage = TPrivatePageCache::TPage; 
 
     Y_UNIT_TEST(PageJoinSingle) {
         TPage a(123, 1, nullptr);

@@ -1,19 +1,19 @@
 #include "datashard_txs.h"
 
 namespace NKikimr {
-namespace NDataShard {
+namespace NDataShard { 
 
 using namespace NTabletFlatExecutor;
 
 /// Get
-TDataShard::TTxGetS3DownloadInfo::TTxGetS3DownloadInfo(
-    TDataShard* ds,
+TDataShard::TTxGetS3DownloadInfo::TTxGetS3DownloadInfo( 
+    TDataShard* ds, 
     TEvDataShard::TEvGetS3DownloadInfo::TPtr ev)
     : TBase(ds)
     , Ev(std::move(ev))
 { }
 
-bool TDataShard::TTxGetS3DownloadInfo::Execute(TTransactionContext& txc, const TActorContext&) {
+bool TDataShard::TTxGetS3DownloadInfo::Execute(TTransactionContext& txc, const TActorContext&) { 
     txc.DB.NoMoreReadsForTx();
 
     const auto* info = Self->S3Downloads.Find(Ev->Get()->TxId);
@@ -26,20 +26,20 @@ bool TDataShard::TTxGetS3DownloadInfo::Execute(TTransactionContext& txc, const T
     return true;
 }
 
-void TDataShard::TTxGetS3DownloadInfo::Complete(const TActorContext& ctx) {
+void TDataShard::TTxGetS3DownloadInfo::Complete(const TActorContext& ctx) { 
     Y_VERIFY(Reply);
     ctx.Send(Ev->Get()->ReplyTo, Reply.Release(), 0, Ev->Cookie);
 }
 
 /// Store
-TDataShard::TTxStoreS3DownloadInfo::TTxStoreS3DownloadInfo(
-    TDataShard* ds,
+TDataShard::TTxStoreS3DownloadInfo::TTxStoreS3DownloadInfo( 
+    TDataShard* ds, 
     TEvDataShard::TEvStoreS3DownloadInfo::TPtr ev)
     : TBase(ds)
     , Ev(std::move(ev))
 { }
 
-bool TDataShard::TTxStoreS3DownloadInfo::Execute(TTransactionContext& txc, const TActorContext&) {
+bool TDataShard::TTxStoreS3DownloadInfo::Execute(TTransactionContext& txc, const TActorContext&) { 
     const auto& msg = *Ev->Get();
 
     txc.DB.NoMoreReadsForTx();
@@ -51,10 +51,10 @@ bool TDataShard::TTxStoreS3DownloadInfo::Execute(TTransactionContext& txc, const
     return true;
 }
 
-void TDataShard::TTxStoreS3DownloadInfo::Complete(const TActorContext& ctx) {
+void TDataShard::TTxStoreS3DownloadInfo::Complete(const TActorContext& ctx) { 
     Y_VERIFY(Reply);
     ctx.Send(Ev->Get()->ReplyTo, Reply.Release(), 0, Ev->Cookie);
 }
 
-}   // namespace NDataShard
+}   // namespace NDataShard 
 }   // namespace NKikimr

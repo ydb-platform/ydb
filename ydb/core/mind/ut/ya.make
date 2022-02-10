@@ -1,13 +1,13 @@
-UNITTEST_FOR(ydb/core/mind)
+UNITTEST_FOR(ydb/core/mind) 
 
-OWNER(
-    ddoarn
-    fomichev
-    g:kikimr
-)
+OWNER( 
+    ddoarn 
+    fomichev 
+    g:kikimr 
+) 
 
 FORK_SUBTESTS()
-
+ 
 IF (SANITIZER_TYPE OR WITH_VALGRIND)
     TIMEOUT(3600)
     SIZE(LARGE)
@@ -29,9 +29,9 @@ ENDIF()
 
 PEERDIR(
     library/cpp/getopt
-    library/cpp/regex/pcre
+    library/cpp/regex/pcre 
     library/cpp/svnversion
-    ydb/core/testlib
+    ydb/core/testlib 
 )
 
 SRCS(
@@ -42,6 +42,6 @@ SRCS(
     tenant_node_enumeration_ut.cpp
 )
 
-YQL_LAST_ABI_VERSION()
+YQL_LAST_ABI_VERSION() 
 
 END()

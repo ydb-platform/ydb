@@ -1,44 +1,44 @@
-#include "log_settings.h"
-
-#include <util/stream/str.h>
-
-namespace NActors {
-    namespace NLog {
+#include "log_settings.h" 
+ 
+#include <util/stream/str.h> 
+ 
+namespace NActors { 
+    namespace NLog { 
         TSettings::TSettings(const TActorId& loggerActorId, const EComponent loggerComponent,
                              EComponent minVal, EComponent maxVal, EComponentToStringFunc func,
                              EPriority defPriority, EPriority defSamplingPriority,
                              ui32 defSamplingRate, ui64 timeThresholdMs)
-            : LoggerActorId(loggerActorId)
+            : LoggerActorId(loggerActorId) 
             , LoggerComponent(loggerComponent)
             , TimeThresholdMs(timeThresholdMs)
             , AllowDrop(true)
             , ThrottleDelay(TDuration::MilliSeconds(100))
-            , MinVal(0)
-            , MaxVal(0)
-            , Mask(0)
-            , DefPriority(defPriority)
+            , MinVal(0) 
+            , MaxVal(0) 
+            , Mask(0) 
+            , DefPriority(defPriority) 
             , DefSamplingPriority(defSamplingPriority)
             , DefSamplingRate(defSamplingRate)
             , UseLocalTimestamps(false)
             , Format(PLAIN_FULL_FORMAT)
             , ShortHostName("")
             , ClusterName("")
-        {
-            Append(minVal, maxVal, func);
-        }
-
+        { 
+            Append(minVal, maxVal, func); 
+        } 
+ 
         TSettings::TSettings(const TActorId& loggerActorId, const EComponent loggerComponent,
                              EPriority defPriority, EPriority defSamplingPriority,
                              ui32 defSamplingRate, ui64 timeThresholdMs)
-            : LoggerActorId(loggerActorId)
+            : LoggerActorId(loggerActorId) 
             , LoggerComponent(loggerComponent)
             , TimeThresholdMs(timeThresholdMs)
             , AllowDrop(true)
             , ThrottleDelay(TDuration::MilliSeconds(100))
-            , MinVal(0)
-            , MaxVal(0)
-            , Mask(0)
-            , DefPriority(defPriority)
+            , MinVal(0) 
+            , MaxVal(0) 
+            , Mask(0) 
+            , DefPriority(defPriority) 
             , DefSamplingPriority(defSamplingPriority)
             , DefSamplingRate(defSamplingRate)
             , UseLocalTimestamps(false)
@@ -47,8 +47,8 @@ namespace NActors {
             , ClusterName("")
         {
         }
-
-        void TSettings::Append(EComponent minVal, EComponent maxVal, EComponentToStringFunc func) {
+ 
+        void TSettings::Append(EComponent minVal, EComponent maxVal, EComponentToStringFunc func) { 
             Y_VERIFY(minVal >= 0, "NLog::TSettings: minVal must be non-negative");
             Y_VERIFY(maxVal > minVal, "NLog::TSettings: maxVal must be greater than minVal");
 
@@ -78,30 +78,30 @@ namespace NActors {
 
                 ComponentNames.resize(Mask + 1);
             }
-
+ 
             // assign new names but validate if newly added members were not used before
-            for (int i = minVal; i <= maxVal; i++) {
+            for (int i = minVal; i <= maxVal; i++) { 
                 Y_VERIFY(!ComponentNames[i], "component name at %d already set: %s",
                     i, ComponentNames[i].data());
-                ComponentNames[i] = func(i);
-            }
-        }
-
+                ComponentNames[i] = func(i); 
+            } 
+        } 
+ 
         int TSettings::SetLevelImpl(
             const TString& name, bool isSampling,
             EPriority priority, EComponent component, TString& explanation) {
             TString titleName(name);
             titleName.to_title();
 
-            // check priority
-            if (!IsValidPriority(priority)) {
+            // check priority 
+            if (!IsValidPriority(priority)) { 
                 TStringStream str;
                 str << "Invalid " << name;
                 explanation = str.Str();
-                return 1;
-            }
-
-            if (component == InvalidComponent) {
+                return 1; 
+            } 
+ 
+            if (component == InvalidComponent) { 
                 for (int i = 0; i < Mask + 1; i++) {
                     TComponentSettings settings = AtomicGet(ComponentInfo[i]);
                     if (isSampling) {
@@ -118,12 +118,12 @@ namespace NActors {
                     << " for all components has been changed to "
                     << PriorityToString(EPrio(priority));
                 explanation = str.Str();
-                return 0;
-            } else {
-                if (!IsValidComponent(component)) {
-                    explanation = "Invalid component";
-                    return 1;
-                }
+                return 0; 
+            } else { 
+                if (!IsValidComponent(component)) { 
+                    explanation = "Invalid component"; 
+                    return 1; 
+                } 
                 TComponentSettings settings = AtomicGet(ComponentInfo[component]);
                 EPriority oldPriority;
                 if (isSampling) {
@@ -134,15 +134,15 @@ namespace NActors {
                     settings.Raw.X.Level = priority;
                 }
                 AtomicSet(ComponentInfo[component], settings.Raw.Data);
-                TStringStream str;
+                TStringStream str; 
                 str << titleName << " for the component " << ComponentNames[component]
                     << " has been changed from " << PriorityToString(EPrio(oldPriority))
                     << " to " << PriorityToString(EPrio(priority));
-                explanation = str.Str();
-                return 0;
-            }
-        }
-
+                explanation = str.Str(); 
+                return 0; 
+            } 
+        } 
+ 
         int TSettings::SetLevel(EPriority priority, EComponent component, TString& explanation) {
             return SetLevelImpl("priority", false,
                                 priority, component, explanation);
@@ -181,26 +181,26 @@ namespace NActors {
             return 0;
         }
 
-        int TSettings::PowerOf2Mask(int val) {
-            int mask = 1;
-            while ((val & mask) != val) {
-                mask <<= 1;
-                mask |= 1;
-            }
-            return mask;
-        }
-
-        bool TSettings::IsValidPriority(EPriority priority) {
-            return priority == PRI_EMERG || priority == PRI_ALERT ||
+        int TSettings::PowerOf2Mask(int val) { 
+            int mask = 1; 
+            while ((val & mask) != val) { 
+                mask <<= 1; 
+                mask |= 1; 
+            } 
+            return mask; 
+        } 
+ 
+        bool TSettings::IsValidPriority(EPriority priority) { 
+            return priority == PRI_EMERG || priority == PRI_ALERT || 
                    priority == PRI_CRIT || priority == PRI_ERROR ||
                    priority == PRI_WARN || priority == PRI_NOTICE ||
                    priority == PRI_INFO || priority == PRI_DEBUG || priority == PRI_TRACE;
-        }
-
-        bool TSettings::IsValidComponent(EComponent component) {
+        } 
+ 
+        bool TSettings::IsValidComponent(EComponent component) { 
             return (MinVal <= component) && (component <= MaxVal) && !ComponentNames[component].empty();
-        }
-
+        } 
+ 
         void TSettings::SetAllowDrop(bool val) {
             AllowDrop = val;
         }
@@ -226,5 +226,5 @@ namespace NActors {
         }
 
     }
-
+ 
 }

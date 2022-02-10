@@ -1,15 +1,15 @@
 #pragma once
 
-#include <ydb/core/base/appdata.h>
+#include <ydb/core/base/appdata.h> 
 
-#include <ydb/core/yq/libs/actors/nodes_manager.h>
-#include <ydb/core/yq/libs/actors/proxy.h>
-#include <ydb/core/yq/libs/actors/proxy_private.h>
-#include <ydb/core/yq/libs/events/events.h>
-#include <ydb/core/yq/libs/shared_resources/interface/shared_resources.h>
+#include <ydb/core/yq/libs/actors/nodes_manager.h> 
+#include <ydb/core/yq/libs/actors/proxy.h> 
+#include <ydb/core/yq/libs/actors/proxy_private.h> 
+#include <ydb/core/yq/libs/events/events.h> 
+#include <ydb/core/yq/libs/shared_resources/interface/shared_resources.h> 
 
-#include <ydb/library/folder_service/proto/config.pb.h>
-#include <ydb/core/yq/libs/config/protos/audit.pb.h>
+#include <ydb/library/folder_service/proto/config.pb.h> 
+#include <ydb/core/yq/libs/config/protos/audit.pb.h> 
 
 #include <ydb/library/yql/providers/pq/cm_client/interface/client.h>
 

@@ -2,12 +2,12 @@
 #include "datashard_failpoints.h"
 #include "operation.h"
 
-#include <ydb/core/util/pb.h>
+#include <ydb/core/util/pb.h> 
 
 namespace NKikimr {
-namespace NDataShard {
+namespace NDataShard { 
 
-TDataShard::TTxProposeTransactionBase::TTxProposeTransactionBase(TDataShard *self,
+TDataShard::TTxProposeTransactionBase::TTxProposeTransactionBase(TDataShard *self, 
                                                                         TEvDataShard::TEvProposeTransaction::TPtr &&ev,
                                                                         TInstant receivedAt, ui64 tieBreakerIndex,
                                                                         bool delayed)
@@ -21,7 +21,7 @@ TDataShard::TTxProposeTransactionBase::TTxProposeTransactionBase(TDataShard *sel
 {
 }
 
-bool TDataShard::TTxProposeTransactionBase::Execute(NTabletFlatExecutor::TTransactionContext &txc,
+bool TDataShard::TTxProposeTransactionBase::Execute(NTabletFlatExecutor::TTransactionContext &txc, 
                                                            const TActorContext &ctx)
 {
     LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
@@ -154,7 +154,7 @@ bool TDataShard::TTxProposeTransactionBase::Execute(NTabletFlatExecutor::TTransa
     }
 }
 
-void TDataShard::TTxProposeTransactionBase::Complete(const TActorContext &ctx) {
+void TDataShard::TTxProposeTransactionBase::Complete(const TActorContext &ctx) { 
     LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
                 "TTxProposeTransactionBase::Complete at " << Self->TabletID());
 

@@ -1,7 +1,7 @@
 #pragma once
 
-#include "defs.h"
-
+#include "defs.h" 
+ 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
 #include <util/generic/buffer.h>
@@ -33,47 +33,47 @@ namespace NKikimr {
         void Delta(ssize_t bytes) {
             *Counter += static_cast<i64>(bytes);
         }
-
-        NMonitoring::TDynamicCounters::TCounterPtr GetCounter() const {
-            return Counter;
-        }
+ 
+        NMonitoring::TDynamicCounters::TCounterPtr GetCounter() const { 
+            return Counter; 
+        } 
     };
 
-    class TMemoryConsumerWithDropOnDestroy : protected TMemoryConsumer {
-    public:
-        TMemoryConsumerWithDropOnDestroy(NMonitoring::TDynamicCounters::TCounterPtr counter)
-            : TMemoryConsumer(counter)
-        {}
-        TMemoryConsumerWithDropOnDestroy(const TMemoryConsumer &other)
-            : TMemoryConsumer(other)
-        {}
-        TMemoryConsumerWithDropOnDestroy(TMemoryConsumerWithDropOnDestroy&& other) = default;
-        explicit TMemoryConsumerWithDropOnDestroy(const TMemoryConsumerWithDropOnDestroy& other) = default;
-
-        ~TMemoryConsumerWithDropOnDestroy() {
-            TMemoryConsumer::Subtract(MemConsumed);
-        }
-
-        void Add(size_t bytes) {
-            this->Delta(bytes);
-        }
-
-        void Subtract(size_t bytes) {
-            this->Delta(-static_cast<ssize_t>(bytes));
-        }
-
-        void Delta(ssize_t bytes) {
-            TMemoryConsumer::Delta(bytes);
-            MemConsumed += bytes;
-            Y_VERIFY_DEBUG(MemConsumed >= 0);
-        }
-
-        using TMemoryConsumer::GetCounter;
-
-    private:
-        ssize_t MemConsumed = 0;
-    };
-
+    class TMemoryConsumerWithDropOnDestroy : protected TMemoryConsumer { 
+    public: 
+        TMemoryConsumerWithDropOnDestroy(NMonitoring::TDynamicCounters::TCounterPtr counter) 
+            : TMemoryConsumer(counter) 
+        {} 
+        TMemoryConsumerWithDropOnDestroy(const TMemoryConsumer &other) 
+            : TMemoryConsumer(other) 
+        {} 
+        TMemoryConsumerWithDropOnDestroy(TMemoryConsumerWithDropOnDestroy&& other) = default; 
+        explicit TMemoryConsumerWithDropOnDestroy(const TMemoryConsumerWithDropOnDestroy& other) = default; 
+ 
+        ~TMemoryConsumerWithDropOnDestroy() { 
+            TMemoryConsumer::Subtract(MemConsumed); 
+        } 
+ 
+        void Add(size_t bytes) { 
+            this->Delta(bytes); 
+        } 
+ 
+        void Subtract(size_t bytes) { 
+            this->Delta(-static_cast<ssize_t>(bytes)); 
+        } 
+ 
+        void Delta(ssize_t bytes) { 
+            TMemoryConsumer::Delta(bytes); 
+            MemConsumed += bytes; 
+            Y_VERIFY_DEBUG(MemConsumed >= 0); 
+        } 
+ 
+        using TMemoryConsumer::GetCounter; 
+ 
+    private: 
+        ssize_t MemConsumed = 0; 
+    }; 
+ 
     template<typename TDerived>
     class TTrackableBase
     {

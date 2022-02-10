@@ -1,11 +1,11 @@
 LIBRARY()
 
-OWNER(
-    vvvv
-    g:kikimr
-    g:yql
-    g:yql_ydb_core
-)
+OWNER( 
+    vvvv 
+    g:kikimr 
+    g:yql 
+    g:yql_ydb_core 
+) 
 
 SRCS(
     mkql_computation_node.cpp
@@ -61,16 +61,16 @@ PEERDIR(
     library/cpp/packedtypes
     library/cpp/random_provider
     library/cpp/time_provider
-    ydb/library/yql/minikql
-    ydb/library/yql/minikql/arrow
-    ydb/library/yql/public/udf
-    ydb/library/yql/utils
+    ydb/library/yql/minikql 
+    ydb/library/yql/minikql/arrow 
+    ydb/library/yql/public/udf 
+    ydb/library/yql/utils 
 )
 
 IF (NOT MKQL_DISABLE_CODEGEN)
     NO_COMPILER_WARNINGS()
     PEERDIR(
-        ydb/library/yql/minikql/codegen
+        ydb/library/yql/minikql/codegen 
         contrib/libs/llvm12/lib/IR
         contrib/libs/llvm12/lib/ExecutionEngine/MCJIT
         contrib/libs/llvm12/lib/Linker
@@ -79,12 +79,12 @@ IF (NOT MKQL_DISABLE_CODEGEN)
         contrib/libs/llvm12/lib/Transforms/IPO
     )
 ELSE()
-    CFLAGS(
-        -DMKQL_DISABLE_CODEGEN
-    )
+    CFLAGS( 
+        -DMKQL_DISABLE_CODEGEN 
+    ) 
 ENDIF()
 
-YQL_LAST_ABI_VERSION()
+YQL_LAST_ABI_VERSION() 
 
 END()
 

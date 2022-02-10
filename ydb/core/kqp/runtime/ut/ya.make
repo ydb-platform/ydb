@@ -1,4 +1,4 @@
-UNITTEST_FOR(ydb/core/kqp/runtime)
+UNITTEST_FOR(ydb/core/kqp/runtime) 
 
 OWNER(g:kikimr)
 
@@ -13,12 +13,12 @@ SRCS(
     kqp_scan_data_ut.cpp
 )
 
-YQL_LAST_ABI_VERSION()
+YQL_LAST_ABI_VERSION() 
 
 PEERDIR(
-    library/cpp/testing/unittest
-    ydb/core/testlib/basics
-    ydb/library/yql/public/udf/service/exception_policy
+    library/cpp/testing/unittest 
+    ydb/core/testlib/basics 
+    ydb/library/yql/public/udf/service/exception_policy 
 )
 
 END()

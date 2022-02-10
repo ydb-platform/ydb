@@ -1,9 +1,9 @@
 #pragma once
 
-#include <ydb/core/tablet_flat/test/libs/rows/rows.h>
+#include <ydb/core/tablet_flat/test/libs/rows/rows.h> 
 
-#include <ydb/core/tablet_flat/flat_mem_warm.h>
-#include <ydb/core/tablet_flat/flat_mem_iter.h>
+#include <ydb/core/tablet_flat/flat_mem_warm.h> 
+#include <ydb/core/tablet_flat/flat_mem_iter.h> 
 
 namespace NKikimr {
 namespace NTable {
@@ -11,7 +11,7 @@ namespace NTest {
 
     template<EDirection Direction>
     struct TWrapMemtableImpl {
-        TWrapMemtableImpl(TIntrusiveConstPtr<TMemTable> egg, bool defaults = true)
+        TWrapMemtableImpl(TIntrusiveConstPtr<TMemTable> egg, bool defaults = true) 
             : Table(egg)
             , Scheme(Table->Scheme)
             , Remap_(TRemap::Full(*Scheme))
@@ -80,7 +80,7 @@ namespace NTest {
                 TDbTupleRef key = Iter->GetKey();
 
                 for (auto &pin: Remap_.KeyPins())
-                    State.Set(pin.Pos, ECellOp::Set, key.Columns[pin.Key]);
+                    State.Set(pin.Pos, ECellOp::Set, key.Columns[pin.Key]); 
 
                 Iter->Apply(State, /* committed */ {});
             }
@@ -88,7 +88,7 @@ namespace NTest {
             return Iter->IsValid() ? EReady::Data : EReady::Gone;
         }
 
-        const TIntrusiveConstPtr<TMemTable> Table;
+        const TIntrusiveConstPtr<TMemTable> Table; 
         const TIntrusiveConstPtr<TRowScheme> Scheme;
         const TRemap Remap_;
         const bool Defaults = true;

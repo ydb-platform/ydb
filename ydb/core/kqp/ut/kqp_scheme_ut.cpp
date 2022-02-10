@@ -1,5 +1,5 @@
-#include <ydb/core/kqp/ut/common/kqp_ut_common.h>
-#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
+#include <ydb/core/kqp/ut/common/kqp_ut_common.h> 
+#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h> 
 
 #include <library/cpp/threading/local_executor/local_executor.h>
 
@@ -192,7 +192,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     }
 
     Y_UNIT_TEST(QueryWithAlter) {
-        auto kikimr = std::make_shared<TKikimrRunner>();
+        auto kikimr = std::make_shared<TKikimrRunner>(); 
         auto db = kikimr->GetTableClient();
 
         const ui32 Inflight = 10;

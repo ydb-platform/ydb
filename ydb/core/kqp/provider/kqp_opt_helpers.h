@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/core/kqp/provider/yql_kikimr_gateway.h>
+#include <ydb/core/kqp/provider/yql_kikimr_gateway.h> 
 
 // Common opt helpers for "Old" and "New" engine.
 // Should be in core/kqp/opt directory, but also use by Old engine from core/kqp/provider.

@@ -13,8 +13,8 @@ SRCS(
 
 PEERDIR(
     contrib/libs/protobuf
-    ydb/library/security
-    ydb/public/api/protos/annotations
+    ydb/library/security 
+    ydb/public/api/protos/annotations 
 )
 
 END()

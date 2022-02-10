@@ -1,7 +1,7 @@
 import "library/cpp/actors/protos/actors.proto";
-import "ydb/core/protos/tablet.proto";
-import "ydb/core/protos/base.proto";
-import "ydb/core/protos/tracing.proto";
+import "ydb/core/protos/tablet.proto"; 
+import "ydb/core/protos/base.proto"; 
+import "ydb/core/protos/tracing.proto"; 
 
 package NKikimrTracing;
 option java_package = "ru.yandex.kikimr.proto";

@@ -1,6 +1,6 @@
 #include "resolve_local_db_table.h"
 
-#include <ydb/core/tablet_flat/flat_dbase_apply.h>
+#include <ydb/core/tablet_flat/flat_dbase_apply.h> 
 
 namespace NKikimr {
 namespace NGRpcService {

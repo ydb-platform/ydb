@@ -2,7 +2,7 @@
 
 #include "objects.h"
 
-#include <ydb/public/lib/deprecated/kicli/kicli.h>
+#include <ydb/public/lib/deprecated/kicli/kicli.h> 
 
 
 namespace NKikimrMiniKQL {

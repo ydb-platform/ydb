@@ -1,8 +1,8 @@
 #pragma once
 
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
+#include <ydb/public/sdk/cpp/client/ydb_table/table.h> 
 
-#include <ydb/public/api/grpc/yq_v1.grpc.pb.h>
+#include <ydb/public/api/grpc/yq_v1.grpc.pb.h> 
 
 namespace NYdb::NYq {
 
@@ -94,10 +94,10 @@ using TDeleteConnectionResult = TProtoResultWrapper<YandexQuery::DeleteConnectio
 using TAsyncDeleteConnectionResult = NThreading::TFuture<TDeleteConnectionResult>;
 struct TDeleteConnectionSettings : public NYdb::TOperationRequestSettings<TDeleteConnectionSettings> {};
 
-using TTestConnectionResult = TProtoResultWrapper<YandexQuery::TestConnectionResult>;
-using TAsyncTestConnectionResult = NThreading::TFuture<TTestConnectionResult>;
-struct TTestConnectionSettings : public NYdb::TOperationRequestSettings<TTestConnectionSettings> {};
-
+using TTestConnectionResult = TProtoResultWrapper<YandexQuery::TestConnectionResult>; 
+using TAsyncTestConnectionResult = NThreading::TFuture<TTestConnectionResult>; 
+struct TTestConnectionSettings : public NYdb::TOperationRequestSettings<TTestConnectionSettings> {}; 
+ 
 using TCreateBindingResult = TProtoResultWrapper<YandexQuery::CreateBindingResult>;
 using TAsyncCreateBindingResult = NThreading::TFuture<TCreateBindingResult>;
 struct TCreateBindingSettings : public NYdb::TOperationRequestSettings<TCreateBindingSettings> {};
@@ -184,10 +184,10 @@ public:
         const YandexQuery::DeleteConnectionRequest& request,
         const TDeleteConnectionSettings& settings = TDeleteConnectionSettings());
 
-    TAsyncTestConnectionResult TestConnection(
-        const YandexQuery::TestConnectionRequest& request,
-        const TTestConnectionSettings& settings = TTestConnectionSettings());
-
+    TAsyncTestConnectionResult TestConnection( 
+        const YandexQuery::TestConnectionRequest& request, 
+        const TTestConnectionSettings& settings = TTestConnectionSettings()); 
+ 
     TAsyncCreateBindingResult CreateBinding(
         const YandexQuery::CreateBindingRequest& request,
         const TCreateBindingSettings& settings = TCreateBindingSettings());

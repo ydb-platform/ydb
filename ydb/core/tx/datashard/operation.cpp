@@ -3,7 +3,7 @@
 #include "datashard_impl.h"
 
 namespace NKikimr {
-namespace NDataShard {
+namespace NDataShard { 
 
 namespace {
 void PrintDepTx(const TOperation *op,
@@ -270,5 +270,5 @@ bool TOperation::HasRuntimeConflicts() const noexcept
     return !Dependencies.empty();
 }
 
-} // namespace NDataShard
+} // namespace NDataShard 
 } // namespace NKikimr

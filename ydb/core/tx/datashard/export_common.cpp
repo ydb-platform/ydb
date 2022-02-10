@@ -1,17 +1,17 @@
 #include "export_common.h"
 
-#include <ydb/core/engine/mkql_proto.h>
-#include <ydb/core/ydb_convert/table_description.h>
-#include <ydb/core/ydb_convert/ydb_convert.h>
-#include <ydb/library/dynumber/dynumber.h>
-#include <ydb/public/lib/scheme_types/scheme_type_id.h>
+#include <ydb/core/engine/mkql_proto.h> 
+#include <ydb/core/ydb_convert/table_description.h> 
+#include <ydb/core/ydb_convert/ydb_convert.h> 
+#include <ydb/library/dynumber/dynumber.h> 
+#include <ydb/public/lib/scheme_types/scheme_type_id.h> 
 
 #include <ydb/library/yql/public/decimal/yql_decimal.h>
 
 #include <util/generic/algorithm.h>
 
 namespace NKikimr {
-namespace NDataShard {
+namespace NDataShard { 
 
 static void ResortColumns(
         google::protobuf::RepeatedPtrField<Ydb::Table::ColumnMeta>& columns,
@@ -82,5 +82,5 @@ TString DyNumberToString(TStringBuf data) {
     return *result;
 }
 
-} // NDataShard
+} // NDataShard 
 } // NKikimr

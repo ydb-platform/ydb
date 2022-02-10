@@ -17,8 +17,8 @@
 #include "util_fmt_abort.h"
 #include "util_deref.h"
 
-#include <ydb/core/tablet_flat/protos/flat_table_part.pb.h>
-#include <ydb/core/util/intrusive_heap.h>
+#include <ydb/core/tablet_flat/protos/flat_table_part.pb.h> 
+#include <ydb/core/util/intrusive_heap.h> 
 #include <util/system/sanitizers.h>
 
 namespace NKikimr {
@@ -45,8 +45,8 @@ namespace NTable {
             , MaxLargeBlob(conf.MaxLargeBlob)
             , Epoch(epoch)
             , SliceSize(conf.SliceSize)
-            , MainPageCollectionEdge(conf.MainPageCollectionEdge)
-            , SmallPageCollectionEdge(conf.SmallPageCollectionEdge)
+            , MainPageCollectionEdge(conf.MainPageCollectionEdge) 
+            , SmallPageCollectionEdge(conf.SmallPageCollectionEdge) 
             , UnderlayMask(conf.UnderlayMask)
             , SplitKeys(conf.SplitKeys)
             , MinRowVersion(conf.MinRowVersion)
@@ -63,7 +63,7 @@ namespace NTable {
             }
 
             if (conf.ByKeyFilter) {
-                if (MainPageCollectionEdge || SmallPageCollectionEdge || !conf.MaxRows) {
+                if (MainPageCollectionEdge || SmallPageCollectionEdge || !conf.MaxRows) { 
                     ByKey.Reset(new NBloom::TQueue(0.0001));
                 } else {
                     ByKey.Reset(new NBloom::TWriter(conf.MaxRows, 0.0001));
@@ -79,7 +79,7 @@ namespace NTable {
             }
 
             // This is used to write delayed erase markers
-            EraseRowState.Touch(ERowOp::Erase);
+            EraseRowState.Touch(ERowOp::Erase); 
         }
 
         void BeginKey(TCellsRef key) noexcept {
@@ -120,13 +120,13 @@ namespace NTable {
         {
             Y_VERIFY_DEBUG(version < KeyState.LastVersion, "Key versions must be in descending order");
 
-            if (row != ERowOp::Erase) {
+            if (row != ERowOp::Erase) { 
                 WriteRow(row, version, KeyState.DelayedErase ? KeyState.LastVersion : TRowVersion::Max());
                 KeyState.LastWritten = version;
             }
 
             KeyState.LastVersion = version;
-            KeyState.DelayedErase = row == ERowOp::Erase;
+            KeyState.DelayedErase = row == ERowOp::Erase; 
         }
 
         ui32 EndKey() noexcept
@@ -144,14 +144,14 @@ namespace NTable {
             return KeyState.Written + KeyState.WrittenDeltas;
         }
 
-        ERowOp AddRowLegacy(TCellsRef key, const TRowState& row) noexcept
+        ERowOp AddRowLegacy(TCellsRef key, const TRowState& row) noexcept 
         {
             BeginKey(key);
             AddKeyVersion(row, TRowVersion::Min());
             EndKey();
 
             if (KeyState.Written == 0) {
-                return ERowOp::Absent;
+                return ERowOp::Absent; 
             }
 
             return row.GetRowState();
@@ -188,7 +188,7 @@ namespace NTable {
                 g.NextDataSize = g.Data.CalcSize(groupKey, row, KeyState.Final, TRowVersion::Min(), TRowVersion::Max(), txId);
                 g.NextIndexSize = g.Index.CalcSize(groupKey);
                 overheadBytes += (
-                    g.NextDataSize.DataPageSize +
+                    g.NextDataSize.DataPageSize + 
                     g.NextDataSize.SmallSize +
                     g.NextDataSize.LargeSize);
             }
@@ -270,7 +270,7 @@ namespace NTable {
             }
 
             Current.Rows += 1;
-            Current.Drops += (row == ERowOp::Erase || maxVersion < TRowVersion::Max() ? 1 : 0);
+            Current.Drops += (row == ERowOp::Erase || maxVersion < TRowVersion::Max() ? 1 : 0); 
             Current.HiddenRows += (maxVersion < TRowVersion::Max() ? 1 : 0);
 
             if (!Current.Versioned && (minVersion > TRowVersion::Min() || maxVersion < TRowVersion::Max())) {
@@ -358,7 +358,7 @@ namespace NTable {
                 g.NextIndexSize = g.Index.CalcSize(groupKey);
 
                 overheadBytes += (
-                        g.NextDataSize.DataPageSize +
+                        g.NextDataSize.DataPageSize + 
                         g.NextDataSize.SmallSize +
                         g.NextDataSize.LargeSize +
                         g.NextIndexSize);
@@ -366,7 +366,7 @@ namespace NTable {
 
             // When max version is not max there are 2 rows (one is a virtual drop)
             Current.HiddenRows += (maxVersion < TRowVersion::Max() ? 2 : 1);
-            Current.HiddenDrops += (row == ERowOp::Erase || maxVersion < TRowVersion::Max() ? 1 : 0);
+            Current.HiddenDrops += (row == ERowOp::Erase || maxVersion < TRowVersion::Max() ? 1 : 0); 
 
             Current.HistoryWritten += 1;
             Current.Versioned = true;
@@ -406,21 +406,21 @@ namespace NTable {
 
         bool NeedFlush() const noexcept
         {
-            // Check if adding this row would overflow page collection size limits
+            // Check if adding this row would overflow page collection size limits 
             if (Current.Rows > 0) {
-                if (SmallPageCollectionEdge != Max<ui64>()) {
-                    ui64 smallPageCollectionSize = Current.SmallWritten;
+                if (SmallPageCollectionEdge != Max<ui64>()) { 
+                    ui64 smallPageCollectionSize = Current.SmallWritten; 
                     for (auto& g : Groups) {
-                        smallPageCollectionSize += g.NextDataSize.SmallSize;
-                        smallPageCollectionSize += g.NextDataSize.NewSmallRefs * sizeof(NPage::TLabel);
+                        smallPageCollectionSize += g.NextDataSize.SmallSize; 
+                        smallPageCollectionSize += g.NextDataSize.NewSmallRefs * sizeof(NPage::TLabel); 
                     }
 
-                    if (smallPageCollectionSize > SmallPageCollectionEdge) {
+                    if (smallPageCollectionSize > SmallPageCollectionEdge) { 
                         return true;
                     }
                 }
 
-                if (MainPageCollectionEdge != Max<ui64>()) {
+                if (MainPageCollectionEdge != Max<ui64>()) { 
                     ui64 indexSize = 0;
                     ui32 smallRefs = 0;
                     ui32 largeRefs = 0;
@@ -438,9 +438,9 @@ namespace NTable {
                     // Main index always includes an entry for the last key
                     indexSize += Groups[0].NextIndexSize;
 
-                    ui64 mainPageCollectionSize = Current.MainWritten
+                    ui64 mainPageCollectionSize = Current.MainWritten 
                             + Groups[0].Data.BytesUsed()
-                            + Groups[0].NextDataSize.DataPageSize
+                            + Groups[0].NextDataSize.DataPageSize 
                             + indexSize
                             + FrameS.EstimateBytesUsed(smallRefs)
                             + FrameL.EstimateBytesUsed(largeRefs)
@@ -450,10 +450,10 @@ namespace NTable {
 
                     // On overflow we would have to start a new data page
                     if (Groups[0].NextDataSize.Overflow) {
-                        mainPageCollectionSize += Groups[0].Data.PrefixSize();
+                        mainPageCollectionSize += Groups[0].Data.PrefixSize(); 
                     }
 
-                    if (mainPageCollectionSize > MainPageCollectionEdge) {
+                    if (mainPageCollectionSize > MainPageCollectionEdge) { 
                         return true;
                     }
                 }
@@ -567,10 +567,10 @@ namespace NTable {
             proto.SetEpoch(Epoch.ToProto());
 
             if (auto *abi = proto.MutableEvol()) {
-                ui32 head = ui32(NTable::ECompatibility::Head);
+                ui32 head = ui32(NTable::ECompatibility::Head); 
 
                 if (Current.Small != Max<TPageId>())
-                    head = Max(head, ui32(15) /* ELargeObj:Outer packed blobs */);
+                    head = Max(head, ui32(15) /* ELargeObj:Outer packed blobs */); 
 
                 if (!last || Result.Parts > 0)
                     head = Max(head, ui32(20) /* Multiple part outputs */);
@@ -585,7 +585,7 @@ namespace NTable {
                     head = Max(head, ui32(28) /* Uncommitted deltas present */);
 
                 abi->SetTail(head);
-                abi->SetHead(ui32(NTable::ECompatibility::Edge));
+                abi->SetHead(ui32(NTable::ECompatibility::Edge)); 
             }
 
             if (auto *stat = proto.MutableStat()) {
@@ -687,7 +687,7 @@ namespace NTable {
             }
             Y_VERIFY(raw, "Save(...) accepts only non-trivial blobs");
 
-            if (auto dataPage = NPage::TDataPage(&raw)) {
+            if (auto dataPage = NPage::TDataPage(&raw)) { 
                 TSharedData keep; /* should preserve original data for Key */
 
                 /* Need to extract first key from page. Just written key
@@ -696,14 +696,14 @@ namespace NTable {
                     TNulls object for expanding defaults.
                  */
 
-                Y_VERIFY(dataPage->Records, "Invalid EPage::DataPage blob");
+                Y_VERIFY(dataPage->Records, "Invalid EPage::DataPage blob"); 
 
                 if (groupId.IsMain()) {
                     Y_VERIFY_DEBUG(NextSliceFirstRowId != Max<TRowId>());
 
-                    InitKey(dataPage->Record(0), groupId);
+                    InitKey(dataPage->Record(0), groupId); 
                 } else if (groupId.Index == 0) {
-                    InitKey(dataPage->Record(0), groupId);
+                    InitKey(dataPage->Record(0), groupId); 
                 } else {
                     Key.clear();
                 }
@@ -718,19 +718,19 @@ namespace NTable {
 
                 Current.Coded += raw.size(); /* after encoding */
 
-                auto page = WritePage(raw, EPage::DataPage, groupId.Index);
+                auto page = WritePage(raw, EPage::DataPage, groupId.Index); 
 
                 // N.B. non-main groups have no key
                 Y_VERIFY_DEBUG(g.Index.CalcSize(Key) == g.FirstKeyIndexSize);
-                g.Index.Add(g.FirstKeyIndexSize, Key, dataPage.BaseRow(), page);
+                g.Index.Add(g.FirstKeyIndexSize, Key, dataPage.BaseRow(), page); 
 
                 // N.B. hack to save the last row/key for the main group
                 // SliceSize is wrong, but it's a hack for tests right now
                 if (groupId.IsMain() && (NextSliceForce || Phase == 1 || Current.Bytes - LastSliceBytes >= SliceSize)) {
                     NextSliceForce = false;
 
-                    TRowId lastRowId = dataPage.BaseRow() + dataPage->Records - 1;
-                    InitKey(dataPage->Record(dataPage->Records - 1), groupId);
+                    TRowId lastRowId = dataPage.BaseRow() + dataPage->Records - 1; 
+                    InitKey(dataPage->Record(dataPage->Records - 1), groupId); 
 
                     SaveSlice(lastRowId, TSerializedCellVec(TSerializedCellVec::Serialize(Key)));
 
@@ -746,12 +746,12 @@ namespace NTable {
             }
         }
 
-        TLargeObj Save(TRowId row, ui32 tag, const TGlobId &glob) noexcept override
+        TLargeObj Save(TRowId row, ui32 tag, const TGlobId &glob) noexcept override 
         {
             return Register(row, tag, glob);
         }
 
-        TLargeObj Save(TRowId row, ui32 tag, TArrayRef<const char> plain) noexcept override
+        TLargeObj Save(TRowId row, ui32 tag, TArrayRef<const char> plain) noexcept override 
         {
             if (plain.size() >= LargeEdge && plain.size() <= MaxLargeBlob) {
                 auto blob = NPage::THello::WrapString(plain, EPage::Opaque, 0);
@@ -768,15 +768,15 @@ namespace NTable {
 
                 Current.SmallWritten += blob.size();
 
-                return { ELargeObj::Outer, Pager.WriteOuter(std::move(blob)) };
+                return { ELargeObj::Outer, Pager.WriteOuter(std::move(blob)) }; 
 
             } else {
-                Y_Fail("Got ELargeObj blob " << plain.size() << "b out of limits"
+                Y_Fail("Got ELargeObj blob " << plain.size() << "b out of limits" 
                         << " { " << SmallEdge << "b, " << LargeEdge << "b }");
             }
         }
 
-        TLargeObj Register(TRowId row, ui32 tag, const TGlobId &glob) noexcept
+        TLargeObj Register(TRowId row, ui32 tag, const TGlobId &glob) noexcept 
         {
             ui32 ref;
 
@@ -799,14 +799,14 @@ namespace NTable {
                 registered.Ref = ref;
             }
 
-            return { ELargeObj::Extern, ref };
+            return { ELargeObj::Extern, ref }; 
         }
 
         TSharedData Encode(TArrayRef<const char> page, ECodec codec, bool force) noexcept
         {
             Y_VERIFY(codec == ECodec::LZ4, "Only LZ4 encoding allowed");
 
-            auto got = NPage::THello().Read(page, EPage::DataPage);
+            auto got = NPage::THello().Read(page, EPage::DataPage); 
 
             Y_VERIFY(got == ECodec::Plain, "Page is already encoded");
             Y_VERIFY(got.Page.data() - page.data() == 16, "Page compression would change page header size");
@@ -844,7 +844,7 @@ namespace NTable {
             }
         }
 
-        void InitKey(const NPage::TDataPage::TRecord* record, NPage::TGroupId groupId) noexcept
+        void InitKey(const NPage::TDataPage::TRecord* record, NPage::TGroupId groupId) noexcept 
         {
             const auto& layout = Scheme->GetLayout(groupId);
             Key.resize(layout.ColsKeyData.size());
@@ -878,8 +878,8 @@ namespace NTable {
         const ui32 MaxLargeBlob;
         const TEpoch Epoch;
         const ui64 SliceSize;
-        const ui64 MainPageCollectionEdge;
-        const ui64 SmallPageCollectionEdge;
+        const ui64 MainPageCollectionEdge; 
+        const ui64 SmallPageCollectionEdge; 
         NPage::IKeySpace* const UnderlayMask;
         NPage::ISplitKeys* const SplitKeys;
         const TRowVersion MinRowVersion;
@@ -889,7 +889,7 @@ namespace NTable {
         IPageWriter& Pager;
         NPage::TFrameWriter FrameL; /* Large blobs inverted index   */
         NPage::TFrameWriter FrameS; /* Packed blobs invertedi index */
-        NPage::TExtBlobsWriter Globs;
+        NPage::TExtBlobsWriter Globs; 
         THolder<NBloom::IWriter> ByKey;
         TWritten Result;
         TStackVec<TCell, 16> Key;
@@ -907,10 +907,10 @@ namespace NTable {
             const bool ForceCompression;
             const ECodec Codec;
 
-            NPage::TDataPageWriter Data;
+            NPage::TDataPageWriter Data; 
             NPage::TIndexWriter Index;
 
-            NPage::TDataPageWriter::TSizeInfo NextDataSize;
+            NPage::TDataPageWriter::TSizeInfo NextDataSize; 
             TPgSize NextIndexSize;
 
             TPgSize FirstKeyIndexSize = 0;

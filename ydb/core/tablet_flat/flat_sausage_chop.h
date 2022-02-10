@@ -4,12 +4,12 @@
 #include <util/generic/xrange.h>
 
 namespace NKikimr {
-namespace NPageCollection {
+namespace NPageCollection { 
 
-    struct TGroupBlobsByCookie {
-        using TArray = TArrayRef<const TLogoBlobID>;
+    struct TGroupBlobsByCookie { 
+        using TArray = TArrayRef<const TLogoBlobID>; 
 
-        TGroupBlobsByCookie(TArray array) : Array(array) { }
+        TGroupBlobsByCookie(TArray array) : Array(array) { } 
 
         explicit operator bool() const noexcept
         {
@@ -27,15 +27,15 @@ namespace NPageCollection {
             return { Array.end() - left, Array.begin() + Head };
         }
 
-        static bool Near(const TLogoBlobID &left, const TLogoBlobID &right, ui32 way)
+        static bool Near(const TLogoBlobID &left, const TLogoBlobID &right, ui32 way) 
         {
             return
-                TGroupBlobsByCookie::IsInPlane(left, right)
+                TGroupBlobsByCookie::IsInPlane(left, right) 
                 && left.Cookie() + way == right.Cookie()
                 && left.Cookie() != TLogoBlobID::MaxCookie - way;
         }
 
-        static TLargeGlobId ToLargeGlobId(TArray logo, ui32 group = TLargeGlobId::InvalidGroup) noexcept
+        static TLargeGlobId ToLargeGlobId(TArray logo, ui32 group = TLargeGlobId::InvalidGroup) noexcept 
         {
             if (logo) {
                 for (auto num : xrange(logo.size())) {
@@ -48,7 +48,7 @@ namespace NPageCollection {
 
                 return { group, logo[0], bulk + logo.back().BlobSize() };
             } else {
-                return { }; /* invalid TLargeGlobId object */
+                return { }; /* invalid TLargeGlobId object */ 
             }
         }
 

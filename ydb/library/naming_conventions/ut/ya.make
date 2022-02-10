@@ -1,4 +1,4 @@
-UNITTEST_FOR(ydb/library/naming_conventions)
+UNITTEST_FOR(ydb/library/naming_conventions) 
 
 OWNER(g:kikimr)
 

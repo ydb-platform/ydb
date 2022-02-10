@@ -2,10 +2,10 @@
 #include "dsproxy_mon.h"
 #include "root_cause.h"
 #include "dsproxy_put_impl.h"
-#include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
+#include <ydb/core/blobstorage/vdisk/common/vdisk_events.h> 
 
-#include <ydb/core/blobstorage/lwtrace_probes/blobstorage_probes.h>
-#include <ydb/core/blobstorage/base/wilson_events.h>
+#include <ydb/core/blobstorage/lwtrace_probes/blobstorage_probes.h> 
+#include <ydb/core/blobstorage/base/wilson_events.h> 
 
 #include <util/generic/ymath.h>
 #include <util/system/datetime.h>
@@ -76,7 +76,7 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor<TBlobSt
     ui64 ResponsesSent = 0;
 
     TInstant StartTime;
-    NKikimrBlobStorage::EPutHandleClass HandleClass;
+    NKikimrBlobStorage::EPutHandleClass HandleClass; 
 
     THPTimer Timer;
     i64 ReportedBytes;
@@ -457,7 +457,7 @@ public:
         , WaitingVDiskResponseCount(info->GetTotalVDisksNum())
         , Deadline(ev->Deadline)
         , StartTime(now)
-        , HandleClass(ev->HandleClass)
+        , HandleClass(ev->HandleClass) 
         , ReportedBytes(0)
         , TimeStatsEnabled(timeStatsEnabled)
         , Tactic(ev->Tactic)

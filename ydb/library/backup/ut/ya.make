@@ -1,19 +1,19 @@
-OWNER(
-    va-kuznecov
-    g:kikimr
-)
+OWNER( 
+    va-kuznecov 
+    g:kikimr 
+) 
 
-UNITTEST_FOR(ydb/library/backup)
+UNITTEST_FOR(ydb/library/backup) 
 
 SIZE(SMALL)
-
+ 
 TIMEOUT(60)
 
-SRC(ut.cpp)
+SRC(ut.cpp) 
 
 PEERDIR(
     library/cpp/string_utils/quote
-    ydb/library/backup
+    ydb/library/backup 
 )
 
 END()

@@ -162,16 +162,16 @@ void TLog::AddLog(const char* format, ...) const {
 }
 
 void TLog::AddLog(ELogPriority priority, const char* format, ...) const {
-    va_list args;
-    va_start(args, format);
-
+    va_list args; 
+    va_start(args, format); 
+ 
     Y_DEFER {
-        va_end(args);
+        va_end(args); 
     };
-
+ 
     Impl_->AddLog(priority, format, args);
-}
-
+} 
+ 
 void TLog::AddLogVAList(const char* format, va_list lst) {
     Impl_->AddLog(Impl_->DefaultPriority(), format, lst);
 }
@@ -233,8 +233,8 @@ void TLog::Write(ELogPriority priority, const char* data, size_t len) const {
     } else {
         Impl_->WriteData(priority, data, len);
     }
-}
-
+} 
+ 
 void TLog::Write(ELogPriority priority, const TStringBuf data) const {
     Write(priority, data.data(), data.size());
 }

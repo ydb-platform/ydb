@@ -7,7 +7,7 @@
 #include "columns_table.h"
 #include "granules_table.h"
 
-#include <ydb/core/tx/columnshard/blob.h>
+#include <ydb/core/tx/columnshard/blob.h> 
 
 namespace NKikimr::NOlap {
 

@@ -1,4 +1,4 @@
-UNITTEST_FOR(ydb/core/yq/libs/checkpointing)
+UNITTEST_FOR(ydb/core/yq/libs/checkpointing) 
 
 OWNER(g:yq)
 
@@ -8,9 +8,9 @@ SRCS(
 
 PEERDIR(
     library/cpp/testing/unittest
-    ydb/core/testlib/actors
-    ydb/core/testlib/basics
-    ydb/core/yq/libs/checkpointing
+    ydb/core/testlib/actors 
+    ydb/core/testlib/basics 
+    ydb/core/yq/libs/checkpointing 
 )
 
 SIZE(MEDIUM)

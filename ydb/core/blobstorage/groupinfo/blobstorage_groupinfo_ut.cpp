@@ -2,7 +2,7 @@
 #include "blobstorage_groupinfo_iter.h"
 #include "blobstorage_groupinfo_sets.h"
 #include "blobstorage_groupinfo_partlayout.h"
-#include <ydb/core/blobstorage/vdisk/ingress/blobstorage_ingress.h>
+#include <ydb/core/blobstorage/vdisk/ingress/blobstorage_ingress.h> 
 #include <library/cpp/testing/unittest/registar.h>
 
 namespace NKikimr {
@@ -23,7 +23,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoTest) {
                 for (ui32 hashIdx = 0; hashIdx < 1000; ++hashIdx) {
                     ui32 hash = 640480 + 13 * hashIdx;
                     TBlobStorageGroupInfo::TVDiskIds vdiskIds;
-                    info.PickSubgroup(hash, &vdiskIds, nullptr);
+                    info.PickSubgroup(hash, &vdiskIds, nullptr); 
                     TVector<bool> isMissingDomain;
                     auto realm0 = info.FailRealmsBegin();
                     isMissingDomain.resize(realm0.GetNumFailDomainsPerFailRealm());
@@ -88,38 +88,38 @@ Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoTest) {
                         TIngress ingress;
                         for (ui32 i = 0; i < totalPartCount; ++i) {
                             if (main & (1 << i)) {
-                                auto iOpt = TIngress::CreateIngressWithLocal(&info.GetTopology(),
-                                                                             ids[i],
-                                                                             TLogoBlobID(id, i + 1));
-                                ingress.Merge(*iOpt);
+                                auto iOpt = TIngress::CreateIngressWithLocal(&info.GetTopology(), 
+                                                                             ids[i], 
+                                                                             TLogoBlobID(id, i + 1)); 
+                                ingress.Merge(*iOpt); 
                             }
                             if (handoff1 & (1 << i)) {
-                                auto iOpt = TIngress::CreateIngressWithLocal(&info.GetTopology(),
-                                                                             ids[totalPartCount],
-                                                                             TLogoBlobID(id, i + 1));
-                                ingress.Merge(*iOpt);
+                                auto iOpt = TIngress::CreateIngressWithLocal(&info.GetTopology(), 
+                                                                             ids[totalPartCount], 
+                                                                             TLogoBlobID(id, i + 1)); 
+                                ingress.Merge(*iOpt); 
                             }
                             if (handoff2 & (1 << i)) {
-                                auto iOpt = TIngress::CreateIngressWithLocal(&info.GetTopology(),
-                                                                             ids[totalPartCount + 1],
-                                                                             TLogoBlobID(id, i + 1));
-                                ingress.Merge(*iOpt);
+                                auto iOpt = TIngress::CreateIngressWithLocal(&info.GetTopology(), 
+                                                                             ids[totalPartCount + 1], 
+                                                                             TLogoBlobID(id, i + 1)); 
+                                ingress.Merge(*iOpt); 
                             }
                         }
                         TSubgroupPartLayout layout;
                         for (ui32 i = 0; i < totalPartCount; ++i) {
                             if (main & (1 << i)) {
-                                layout.AddItem(i, i, info.Type);
+                                layout.AddItem(i, i, info.Type); 
                             }
                             if (handoff1 & (1 << i)) {
-                                layout.AddItem(totalPartCount, i, info.Type);
+                                layout.AddItem(totalPartCount, i, info.Type); 
                             }
                             if (handoff2 & (1 << i)) {
-                                layout.AddItem(totalPartCount + 1, i, info.Type);
+                                layout.AddItem(totalPartCount + 1, i, info.Type); 
                             }
                         }
 
-                        UNIT_ASSERT_EQUAL(layout, TSubgroupPartLayout::CreateFromIngress(ingress, info.Type));
+                        UNIT_ASSERT_EQUAL(layout, TSubgroupPartLayout::CreateFromIngress(ingress, info.Type)); 
 
 //                        Cerr << "main# " << main << " hanoff1# " << handoff1 << " handoff2# " << handoff2 << " num# " << num << " num2# " << num2 << Endl;
                     }
@@ -151,11 +151,11 @@ Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoTest) {
             }
 
             auto createGroupVDisks = [&](ui32 domainMask, ui32 vdiskMask) {
-                TBlobStorageGroupInfo::TGroupVDisks vdisks(&info.GetTopology());
+                TBlobStorageGroupInfo::TGroupVDisks vdisks(&info.GetTopology()); 
                 for (const auto& vdisk : info.GetVDisks()) {
-                    if (((domainMask >> vdisk.FailDomainOrderNumber) & 1) && ((vdiskMask >> vdisk.VDiskIdShort.VDisk) & 1)) {
-                        auto vd = info.GetVDiskId(vdisk.OrderNumber);
-                        vdisks += TBlobStorageGroupInfo::TGroupVDisks(&info.GetTopology(), vd);
+                    if (((domainMask >> vdisk.FailDomainOrderNumber) & 1) && ((vdiskMask >> vdisk.VDiskIdShort.VDisk) & 1)) { 
+                        auto vd = info.GetVDiskId(vdisk.OrderNumber); 
+                        vdisks += TBlobStorageGroupInfo::TGroupVDisks(&info.GetTopology(), vd); 
                     }
                 }
                 return vdisks;
@@ -225,11 +225,11 @@ Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoTest) {
         std::set_difference(allMasks.begin(), allMasks.end(), goodMask.begin(), goodMask.end(), std::back_inserter(badMask));
 
         auto createGroupVDisks = [&](ui32 domainMask) {
-            TBlobStorageGroupInfo::TGroupVDisks vdisks(&info.GetTopology());
+            TBlobStorageGroupInfo::TGroupVDisks vdisks(&info.GetTopology()); 
             for (const auto& vdisk : info.GetVDisks()) {
                 if ((domainMask >> vdisk.FailDomainOrderNumber) & 1) {
-                    auto vd = info.GetVDiskId(vdisk.OrderNumber);
-                    vdisks += TBlobStorageGroupInfo::TGroupVDisks(&info.GetTopology(), vd);
+                    auto vd = info.GetVDiskId(vdisk.OrderNumber); 
+                    vdisks += TBlobStorageGroupInfo::TGroupVDisks(&info.GetTopology(), vd); 
                 }
             }
             return vdisks;

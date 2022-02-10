@@ -1,10 +1,10 @@
 #include "dsproxy.h"
 #include "dsproxy_mon.h"
 #include "dsproxy_quorum_tracker.h"
-#include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
-#include <ydb/core/blobstorage/lwtrace_probes/blobstorage_probes.h>
-#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_sets.h>
-#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_partlayout.h>
+#include <ydb/core/blobstorage/vdisk/common/vdisk_events.h> 
+#include <ydb/core/blobstorage/lwtrace_probes/blobstorage_probes.h> 
+#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_sets.h> 
+#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_partlayout.h> 
 
 namespace NKikimr {
 
@@ -314,10 +314,10 @@ private:
     // this function checks whether erroneous disk count exceeds failure model for our erasure type or not; on success
     // returns true
     bool CheckGroupFailModel() {
-        TBlobStorageGroupInfo::TGroupVDisks failedGroupDisks(&Info->GetTopology());
+        TBlobStorageGroupInfo::TGroupVDisks failedGroupDisks(&Info->GetTopology()); 
         for (const TDiscoverVDiskWorker& worker : VDiskWorkers) {
             if (worker.IsErroneous()) {
-                failedGroupDisks += TBlobStorageGroupInfo::TGroupVDisks(&Info->GetTopology(), worker.GetVDiskId());
+                failedGroupDisks += TBlobStorageGroupInfo::TGroupVDisks(&Info->GetTopology(), worker.GetVDiskId()); 
             }
         }
         const auto& checker = Info->GetQuorumChecker();
@@ -406,7 +406,7 @@ private:
                     break;
 
                 case NKikimrProto::ERROR:
-                    failedSubgroupDisks += TBlobStorageGroupInfo::TSubgroupVDisks(&Info->GetTopology(), i);
+                    failedSubgroupDisks += TBlobStorageGroupInfo::TSubgroupVDisks(&Info->GetTopology(), i); 
                     break;
 
                 default:
@@ -497,7 +497,7 @@ public:
         // generate GetBlock queries if we need 'em
         if (DiscoverBlockedGeneration) {
             for (const auto& vdisk : Info->GetVDisks()) {
-                auto vd = Info->GetVDiskId(vdisk.OrderNumber);
+                auto vd = Info->GetVDiskId(vdisk.OrderNumber); 
                 auto query = std::make_unique<TEvBlobStorage::TEvVGetBlock>(TabletId, vd, Deadline);
 
                 A_LOG_DEBUG_S("DSPDM06", "sending TEvVGetBlock# " << query->ToString());

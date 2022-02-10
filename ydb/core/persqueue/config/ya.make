@@ -2,7 +2,7 @@ LIBRARY()
 
 OWNER(
     alexnick
-    g:kikimr
+    g:kikimr 
     g:logbroker
 )
 
@@ -12,7 +12,7 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/core/protos
+    ydb/core/protos 
 )
 
 END()

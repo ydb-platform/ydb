@@ -3,7 +3,7 @@
 #include "defs.h"
 #include "immediate_control_board_wrapper.h"
 
-#include <ydb/core/util/concurrent_rw_hash.h>
+#include <ydb/core/util/concurrent_rw_hash.h> 
 
 namespace NKikimr {
 

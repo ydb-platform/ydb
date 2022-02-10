@@ -1,9 +1,9 @@
 PROTO_LIBRARY()
 
-OWNER(
-    cthulhu
-    g:kikimr
-)
+OWNER( 
+    cthulhu 
+    g:kikimr 
+) 
 
 SRCS(
     schlab.proto

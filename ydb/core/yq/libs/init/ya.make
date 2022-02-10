@@ -1,4 +1,4 @@
-OWNER(g:yq)
+OWNER(g:yq) 
 
 LIBRARY()
 
@@ -7,24 +7,24 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/actors/core
-    library/cpp/actors/http
-    ydb/core/base
-    ydb/core/protos
-    ydb/core/yq/libs/actors
-    ydb/core/yq/libs/audit
-    ydb/core/yq/libs/checkpoint_storage
-    ydb/core/yq/libs/checkpointing
-    ydb/core/yq/libs/control_plane_proxy
-    ydb/core/yq/libs/control_plane_storage
-    ydb/core/yq/libs/events
-    ydb/core/yq/libs/gateway
-    ydb/core/yq/libs/shared_resources
+    library/cpp/actors/core 
+    library/cpp/actors/http 
+    ydb/core/base 
+    ydb/core/protos 
+    ydb/core/yq/libs/actors 
+    ydb/core/yq/libs/audit 
+    ydb/core/yq/libs/checkpoint_storage 
+    ydb/core/yq/libs/checkpointing 
+    ydb/core/yq/libs/control_plane_proxy 
+    ydb/core/yq/libs/control_plane_storage 
+    ydb/core/yq/libs/events 
+    ydb/core/yq/libs/gateway 
+    ydb/core/yq/libs/shared_resources 
     ydb/core/yq/libs/test_connection
-    ydb/library/folder_service
-    ydb/library/folder_service/proto
-    ydb/library/yql/minikql/comp_nodes
-    ydb/library/yql/utils/actor_log
+    ydb/library/folder_service 
+    ydb/library/folder_service/proto 
+    ydb/library/yql/minikql/comp_nodes 
+    ydb/library/yql/utils/actor_log 
     ydb/library/yql/dq/actors/compute
     ydb/library/yql/dq/comp_nodes
     ydb/library/yql/providers/clickhouse/actors

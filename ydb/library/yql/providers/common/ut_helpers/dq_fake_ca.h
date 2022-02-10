@@ -7,7 +7,7 @@
 #include <ydb/library/yql/dq/proto/dq_checkpoint.pb.h>
 #include <ydb/library/yql/minikql/mkql_alloc.h>
 
-#include <ydb/core/testlib/basics/runtime.h>
+#include <ydb/core/testlib/basics/runtime.h> 
 
 #include <library/cpp/retry/retry.h>
 #include <library/cpp/testing/unittest/registar.h>

@@ -49,7 +49,7 @@ static void Refurbish(TString &str, ui64 size) {
         str = TString::Uninitialized(size);
     }
 }
-
+ 
 static void Refurbish(TPartFragment &fragment, ui64 size) {
     if (fragment.size() != size) {
         TRACE("Refurbish fragment size# " << fragment.size() << " to size# " << size << Endl);
@@ -57,31 +57,31 @@ static void Refurbish(TPartFragment &fragment, ui64 size) {
     }
 }
 
-const char *TErasureType::ErasureSpeciesToStr(TErasureType::EErasureSpecies es) {
-    switch (es) {
-        case ErasureNone:           return "None";
-        case ErasureMirror3:        return "Mirror3";
-        case Erasure3Plus1Block:    return "3Plus1Block";
-        case Erasure3Plus1Stripe:   return "3Plus1Stripe";
-        case Erasure4Plus2Block:    return "4Plus2Block";
-        case Erasure3Plus2Block:    return "3Plus2Block";
-        case Erasure4Plus2Stripe:   return "4Plus2Stripe";
-        case Erasure3Plus2Stripe:   return "3Plus2Stripe";
-        case ErasureMirror3Plus2:   return "Mirror3Plus2";
-        case ErasureMirror3dc:      return "Mirror3dc";
-        case Erasure4Plus3Block:    return "4Plus3Block";
-        case Erasure4Plus3Stripe:   return "4Plus3Stripe";
-        case Erasure3Plus3Block:    return "3Plus3Block";
-        case Erasure3Plus3Stripe:   return "3Plus3Stripe";
-        case Erasure2Plus3Block:    return "2Plus3Block";
-        case Erasure2Plus3Stripe:   return "2Plus3Stripe";
-        case Erasure2Plus2Block:    return "2Plus2Block";
-        case Erasure2Plus2Stripe:   return "2Plus2Stripe";
+const char *TErasureType::ErasureSpeciesToStr(TErasureType::EErasureSpecies es) { 
+    switch (es) { 
+        case ErasureNone:           return "None"; 
+        case ErasureMirror3:        return "Mirror3"; 
+        case Erasure3Plus1Block:    return "3Plus1Block"; 
+        case Erasure3Plus1Stripe:   return "3Plus1Stripe"; 
+        case Erasure4Plus2Block:    return "4Plus2Block"; 
+        case Erasure3Plus2Block:    return "3Plus2Block"; 
+        case Erasure4Plus2Stripe:   return "4Plus2Stripe"; 
+        case Erasure3Plus2Stripe:   return "3Plus2Stripe"; 
+        case ErasureMirror3Plus2:   return "Mirror3Plus2"; 
+        case ErasureMirror3dc:      return "Mirror3dc"; 
+        case Erasure4Plus3Block:    return "4Plus3Block"; 
+        case Erasure4Plus3Stripe:   return "4Plus3Stripe"; 
+        case Erasure3Plus3Block:    return "3Plus3Block"; 
+        case Erasure3Plus3Stripe:   return "3Plus3Stripe"; 
+        case Erasure2Plus3Block:    return "2Plus3Block"; 
+        case Erasure2Plus3Stripe:   return "2Plus3Stripe"; 
+        case Erasure2Plus2Block:    return "2Plus2Block"; 
+        case Erasure2Plus2Stripe:   return "2Plus2Stripe"; 
         case ErasureMirror3of4:     return "ErasureMirror3of4";
-        default:                    return "UNKNOWN";
-    }
-}
-
+        default:                    return "UNKNOWN"; 
+    } 
+} 
+ 
 struct TErasureParameters {
     TErasureType::EErasureFamily ErasureFamily;
     ui32 DataParts; // for parity - number of data parts, for mirror - 1
@@ -3170,8 +3170,8 @@ void TErasureType::RestoreData(ECrcMode crcMode, TDataPartSet& partSet, bool res
     }
 }
 
-} // NKikimr
-
-Y_DECLARE_OUT_SPEC(, NKikimr::TErasureType::EErasureSpecies, stream, value) {
-    stream << NKikimr::TErasureType::ErasureSpeciesToStr(value);
+} // NKikimr 
+ 
+Y_DECLARE_OUT_SPEC(, NKikimr::TErasureType::EErasureSpecies, stream, value) { 
+    stream << NKikimr::TErasureType::ErasureSpeciesToStr(value); 
 }

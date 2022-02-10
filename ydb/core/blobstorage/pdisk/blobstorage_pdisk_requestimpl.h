@@ -1,17 +1,17 @@
 #pragma once
 #include "defs.h"
 #include "blobstorage_pdisk.h"
-#include <ydb/library/pdisk_io/buffers.h>
+#include <ydb/library/pdisk_io/buffers.h> 
 #include "blobstorage_pdisk_data.h"
 #include "blobstorage_pdisk_drivemodel.h"
 #include "blobstorage_pdisk_internal_interface.h"
 #include "blobstorage_pdisk_mon.h"
 #include "blobstorage_pdisk_request_id.h"
 
-#include <ydb/core/blobstorage/base/vdisk_priorities.h>
-#include <ydb/core/blobstorage/lwtrace_probes/blobstorage_probes.h>
-#include <ydb/core/blobstorage/crypto/secured_block.h>
-#include <ydb/library/schlab/schine/job_kind.h>
+#include <ydb/core/blobstorage/base/vdisk_priorities.h> 
+#include <ydb/core/blobstorage/lwtrace_probes/blobstorage_probes.h> 
+#include <ydb/core/blobstorage/crypto/secured_block.h> 
+#include <ydb/library/schlab/schine/job_kind.h> 
 
 #include <util/generic/utility.h>
 #include <util/generic/ptr.h>
@@ -252,14 +252,14 @@ public:
     TLogWrite *NextInBatch = nullptr;
     TLogWrite *BatchTail; // Valid only for the head of the batch
     using TCallback = NPDisk::TEvLog::TCallback;
-
+ 
     TLogSignature Signature;
     ui32 EstimatedChunkIdx;
     TString Data;
     ui64 LsnSegmentStart; // Additional data, for sanity checks only.
     ui64 Lsn; // Log sequence number
     void *Cookie;
-    TCallback LogCallback;
+    TCallback LogCallback; 
     NPDisk::TCommitRecord CommitRecord;
     THolder<NPDisk::TEvLogResult> Result;
     std::function<void()> OnDestroy;
@@ -272,7 +272,7 @@ public:
         , LsnSegmentStart(ev.LsnSegmentStart)
         , Lsn(ev.Lsn)
         , Cookie(ev.Cookie)
-        , LogCallback(std::move(ev.LogCallback))
+        , LogCallback(std::move(ev.LogCallback)) 
         , CommitRecord(ev.CommitRecord)
     {
         CommitRecord.Validate();

@@ -178,7 +178,7 @@ EOptionalFlag TKikimrSettings::GetEnableLlvm() const {
 }
 
 TKikimrSettings::TConstPtr TKikimrConfiguration::Snapshot() const {
-    return std::make_shared<const TKikimrSettings>(*this);
+    return std::make_shared<const TKikimrSettings>(*this); 
 }
 
 }

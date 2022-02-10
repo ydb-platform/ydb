@@ -1,18 +1,18 @@
-#include "main.h"
+#include "main.h" 
 #include "driver.h"
 
 // add support for base utils
-#include <ydb/core/driver_lib/base_utils/format_info.h>
-#include <ydb/core/driver_lib/base_utils/format_util.h>
-#include <ydb/core/driver_lib/base_utils/node_by_host.h>
+#include <ydb/core/driver_lib/base_utils/format_info.h> 
+#include <ydb/core/driver_lib/base_utils/format_util.h> 
+#include <ydb/core/driver_lib/base_utils/node_by_host.h> 
 
 // add support for CLI utils
-#include <ydb/core/driver_lib/cli_utils/cli.h>
+#include <ydb/core/driver_lib/cli_utils/cli.h> 
 
 // add support for running kikimr node
-#include <ydb/core/driver_lib/run/config.h>
-#include <ydb/core/driver_lib/run/config_parser.h>
-#include <ydb/core/driver_lib/run/run.h>
+#include <ydb/core/driver_lib/run/config.h> 
+#include <ydb/core/driver_lib/run/config_parser.h> 
+#include <ydb/core/driver_lib/run/run.h> 
 
 // allocator info
 #include <library/cpp/malloc/api/malloc.h>
@@ -23,7 +23,7 @@
 
 namespace NKikimr {
 
-int MainRun(const TKikimrRunConfig& runConfig, std::shared_ptr<TModuleFactories> factories) {
+int MainRun(const TKikimrRunConfig& runConfig, std::shared_ptr<TModuleFactories> factories) { 
 #ifdef _win32_
     WSADATA dummy;
     WSAStartup(MAKEWORD(2, 2), &dummy);
@@ -33,7 +33,7 @@ int MainRun(const TKikimrRunConfig& runConfig, std::shared_ptr<TModuleFactories>
     Cout << "Starting Kikimr r" << GetArcadiaLastChange()
          << " built by " << GetProgramBuildUser() << Endl;
 
-    TIntrusivePtr<TKikimrRunner> runner = TKikimrRunner::CreateKikimrRunner(runConfig, std::move(factories));
+    TIntrusivePtr<TKikimrRunner> runner = TKikimrRunner::CreateKikimrRunner(runConfig, std::move(factories)); 
     if (runner) {
         runner->KikimrStart();
         runner->BusyLoop();
@@ -51,7 +51,7 @@ int MainRun(const TKikimrRunConfig& runConfig, std::shared_ptr<TModuleFactories>
         exit(0);
     }
 
-    int Main(int argc, char **argv, std::shared_ptr<TModuleFactories> factories) {
+    int Main(int argc, char **argv, std::shared_ptr<TModuleFactories> factories) { 
 #ifndef _win_
         mlockall(MCL_CURRENT);
 #endif
@@ -81,7 +81,7 @@ int MainRun(const TKikimrRunConfig& runConfig, std::shared_ptr<TModuleFactories>
                 .NoArgument().Handler(&PrintAllocatorInfoAndExit);
         opts.SetFreeArgsMin(1);
         opts.SetFreeArgTitle(0, "<command>", TDriverModeParser::CommandsCsv());
-        opts.SetCmdLineDescr(NDriverClient::NewClientCommandsDescription(factories));
+        opts.SetCmdLineDescr(NDriverClient::NewClientCommandsDescription(factories)); 
 
         opts.AddHelpOption('h');
         opts.ArgPermutation_ = NLastGetopt::REQUIRE_ORDER;
@@ -107,7 +107,7 @@ int MainRun(const TKikimrRunConfig& runConfig, std::shared_ptr<TModuleFactories>
         {
             configParser.ParseRunOpts(argc, argv);
             configParser.ApplyParsedOptions();
-            return MainRun(runConfig, factories);
+            return MainRun(runConfig, factories); 
         }
         case EDM_ADMIN:
         case EDM_DB:
@@ -119,7 +119,7 @@ int MainRun(const TKikimrRunConfig& runConfig, std::shared_ptr<TModuleFactories>
         case EDM_CMS:
         case EDM_DISCOVERY:
         case EDM_WHOAMI:
-            return NDriverClient::NewClient(argc + freeArgsPos, argv - freeArgsPos, factories);
+            return NDriverClient::NewClient(argc + freeArgsPos, argv - freeArgsPos, factories); 
         case EDM_FORMAT_INFO:
             return MainFormatInfo(cmdConf, argc, argv);
         case EDM_FORMAT_UTIL:
@@ -148,7 +148,7 @@ int MainRun(const TKikimrRunConfig& runConfig, std::shared_ptr<TModuleFactories>
             Y_FAIL("Not Happens");
         }
     }
-} // NKikimr
+} // NKikimr 
 
 namespace {
 std::terminate_handler defaultTerminateHandler;
@@ -171,9 +171,9 @@ void SetupTerminateHandler() {
     std::set_terminate(KikimrTerminateHandler);
 }
 
-int ParameterizedMain(int argc, char **argv, std::shared_ptr<NKikimr::TModuleFactories> factories) {
+int ParameterizedMain(int argc, char **argv, std::shared_ptr<NKikimr::TModuleFactories> factories) { 
     try {
-        return NKikimr::Main(argc, argv, std::move(factories));
+        return NKikimr::Main(argc, argv, std::move(factories)); 
     }
     catch (const NYdb::NConsoleClient::TMissUseException& e) {
         Cerr << e.what() << Endl;
@@ -185,4 +185,4 @@ int ParameterizedMain(int argc, char **argv, std::shared_ptr<NKikimr::TModuleFac
         return 1;
     }
 }
-
+ 

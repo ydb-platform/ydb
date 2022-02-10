@@ -1,4 +1,4 @@
-UNITTEST_FOR(ydb/core/sys_view)
+UNITTEST_FOR(ydb/core/sys_view) 
 
 OWNER(
     monster
@@ -19,12 +19,12 @@ ENDIF()
 PEERDIR(
     library/cpp/testing/unittest
     library/cpp/yson/node
-    ydb/core/kqp/ut/common
-    ydb/core/testlib
-    ydb/public/sdk/cpp/client/draft
+    ydb/core/kqp/ut/common 
+    ydb/core/testlib 
+    ydb/public/sdk/cpp/client/draft 
 )
 
-YQL_LAST_ABI_VERSION()
+YQL_LAST_ABI_VERSION() 
 
 SRCS(
     ut_kqp.cpp

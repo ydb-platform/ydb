@@ -1,6 +1,6 @@
 #include "coordinator_impl.h"
 
-#include <ydb/core/tablet_flat/flat_cxx_database.h>
+#include <ydb/core/tablet_flat/flat_cxx_database.h> 
 
 #include <util/generic/hash_set.h>
 

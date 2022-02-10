@@ -4,13 +4,13 @@
 #include "execution_unit_ctors.h"
 
 namespace NKikimr {
-namespace NDataShard {
+namespace NDataShard { 
 
 using namespace NMiniKQL;
 
 class TPrepareKqpDataTxInRSUnit : public TExecutionUnit {
 public:
-    TPrepareKqpDataTxInRSUnit(TDataShard &dataShard, TPipeline &pipeline);
+    TPrepareKqpDataTxInRSUnit(TDataShard &dataShard, TPipeline &pipeline); 
     ~TPrepareKqpDataTxInRSUnit() override;
 
     bool IsReadyToExecute(TOperation::TPtr op) const override;
@@ -18,7 +18,7 @@ public:
     void Complete(TOperation::TPtr op, const TActorContext &ctx) override;
 };
 
-TPrepareKqpDataTxInRSUnit::TPrepareKqpDataTxInRSUnit(TDataShard &dataShard,
+TPrepareKqpDataTxInRSUnit::TPrepareKqpDataTxInRSUnit(TDataShard &dataShard, 
     TPipeline &pipeline)
     : TExecutionUnit(EExecutionUnitKind::PrepareKqpDataTxInRS, true, dataShard, pipeline) {}
 
@@ -68,9 +68,9 @@ EExecutionStatus TPrepareKqpDataTxInRSUnit::Execute(TOperation::TPtr op, TTransa
 
 void TPrepareKqpDataTxInRSUnit::Complete(TOperation::TPtr, const TActorContext &) {}
 
-THolder<TExecutionUnit> CreatePrepareKqpDataTxInRSUnit(TDataShard &dataShard, TPipeline &pipeline) {
+THolder<TExecutionUnit> CreatePrepareKqpDataTxInRSUnit(TDataShard &dataShard, TPipeline &pipeline) { 
     return THolder(new TPrepareKqpDataTxInRSUnit(dataShard, pipeline));
 }
 
-} // namespace NDataShard
+} // namespace NDataShard 
 } // namespace NKikimr

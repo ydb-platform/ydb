@@ -27,15 +27,15 @@ SRCS(
 
 PEERDIR(
     contrib/libs/apache/arrow
-    ydb/core/actorlib_impl
-    ydb/core/base
-    ydb/core/engine
-    ydb/core/engine/minikql
-    ydb/core/formats
-    ydb/core/kqp/common
-    ydb/core/protos
-    ydb/core/scheme
-    ydb/core/ydb_convert
+    ydb/core/actorlib_impl 
+    ydb/core/base 
+    ydb/core/engine 
+    ydb/core/engine/minikql 
+    ydb/core/formats 
+    ydb/core/kqp/common 
+    ydb/core/protos 
+    ydb/core/scheme 
+    ydb/core/ydb_convert 
     ydb/library/yql/minikql
     ydb/library/yql/minikql/comp_nodes
     ydb/library/yql/minikql/computation
@@ -44,9 +44,9 @@ PEERDIR(
     ydb/library/yql/dq/runtime
 )
 
-YQL_LAST_ABI_VERSION()
+YQL_LAST_ABI_VERSION() 
 
-GENERATE_ENUM_SERIALIZATION(kqp_spilling.h)
+GENERATE_ENUM_SERIALIZATION(kqp_spilling.h) 
 
 END()
 

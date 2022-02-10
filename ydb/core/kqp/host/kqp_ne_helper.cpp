@@ -1,9 +1,9 @@
 #include "kqp_ne_helper.h"
 
-#include <ydb/core/kqp/common/kqp_yql.h>
+#include <ydb/core/kqp/common/kqp_yql.h> 
 
 #include <ydb/library/yql/core/yql_expr_optimize.h>
-#include <ydb/library/yql/utils/log/log.h>
+#include <ydb/library/yql/utils/log/log.h> 
 
 namespace NKikimr {
 namespace NKqp {

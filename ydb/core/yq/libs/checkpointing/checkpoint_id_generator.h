@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/core/yq/libs/checkpointing_common/defs.h>
+#include <ydb/core/yq/libs/checkpointing_common/defs.h> 
 
 namespace NYq {
 

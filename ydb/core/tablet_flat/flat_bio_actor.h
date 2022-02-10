@@ -3,17 +3,17 @@
 #include "flat_sausage_flow.h"
 #include "flat_bio_events.h"
 #include "util_fmt_line.h"
-#include <ydb/core/tablet/tablet_metrics.h>
+#include <ydb/core/tablet/tablet_metrics.h> 
 
 namespace NKikimr {
 namespace NTabletFlatExecutor {
-namespace NBlockIO {
-
+namespace NBlockIO { 
+ 
     class TBlockIO : public ::NActors::IActor {
         using TEventHandlePtr = TAutoPtr<::NActors::IEventHandle>;
         using ELnLev = NUtil::ELnLev;
         using EStatus = NKikimrProto::EReplyStatus;
-        using TPagesToBlobsConverter = NPageCollection::TPagesToBlobsConverter<NPageCollection::IPageCollection>;
+        using TPagesToBlobsConverter = NPageCollection::TPagesToBlobsConverter<NPageCollection::IPageCollection>; 
 
         struct TLoaded; /* hack for fwd decl of BS interface units */
 
@@ -37,7 +37,7 @@ namespace NBlockIO {
         /*_ immutable request settings  */
 
         TActorId Owner;
-        EPriority Priority = EPriority::None;
+        EPriority Priority = EPriority::None; 
         TAutoPtr<NPageCollection::TFetch> Origin;
 
         /*_ request operational state   */
@@ -52,7 +52,7 @@ namespace NBlockIO {
         };
 
         TVector<TLoadState> BlockStates;
-        TAutoPtr<TPagesToBlobsConverter> PagesToBlobsConverter;
+        TAutoPtr<TPagesToBlobsConverter> PagesToBlobsConverter; 
         ui64 Pending = 0;
         ui64 TotalOps = 0;
         NMetrics::TTabletThroughputRawValue GroupBytes;

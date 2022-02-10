@@ -1,13 +1,13 @@
 #include "flat_ut_client.h"
 
-#include <ydb/core/base/appdata.h>
-#include <ydb/core/testlib/test_client.h>
-#include <ydb/core/tx/tx_proxy/proxy.h>
-#include <ydb/core/tx/datashard/datashard.h>
-#include <ydb/core/tx/schemeshard/schemeshard.h>
-#include <ydb/core/tablet_flat/test/libs/rows/misc.h>
-#include <ydb/public/lib/deprecated/kicli/kicli.h>
-#include <ydb/core/engine/mkql_engine_flat.h>
+#include <ydb/core/base/appdata.h> 
+#include <ydb/core/testlib/test_client.h> 
+#include <ydb/core/tx/tx_proxy/proxy.h> 
+#include <ydb/core/tx/datashard/datashard.h> 
+#include <ydb/core/tx/schemeshard/schemeshard.h> 
+#include <ydb/core/tablet_flat/test/libs/rows/misc.h> 
+#include <ydb/public/lib/deprecated/kicli/kicli.h> 
+#include <ydb/core/engine/mkql_engine_flat.h> 
 
 #include <library/cpp/http/io/stream.h>
 #include <library/cpp/http/server/http_ex.h>
@@ -2934,7 +2934,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         UNIT_ASSERT_VALUES_EQUAL(partitions.size(), 1);
 
         // Force stats reporting without delays
-        NDataShard::gDbStatsReportInterval = TDuration::Seconds(0);
+        NDataShard::gDbStatsReportInterval = TDuration::Seconds(0); 
 
         cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_DEBUG);
 //        cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_DEBUG);
@@ -3103,7 +3103,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         UNIT_ASSERT_VALUES_EQUAL(partitions.size(), 4);
 
         // Force stats reporting without delays
-        NDataShard::gDbStatsReportInterval = TDuration::Seconds(0);
+        NDataShard::gDbStatsReportInterval = TDuration::Seconds(0); 
 
         cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_DEBUG);
 //        cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_DEBUG);
@@ -3201,8 +3201,8 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         TVector<ui64> initialPartitions = annoyingClient.GetTablePartitions("/dc-1/Dir/T1");
 
         // Force stats reporting without delays
-        NDataShard::gDbStatsReportInterval = TDuration::Seconds(0);
-        NDataShard::gDbStatsDataSizeResolution = 80000;
+        NDataShard::gDbStatsReportInterval = TDuration::Seconds(0); 
+        NDataShard::gDbStatsDataSizeResolution = 80000; 
 
         TString bigValue(100*1024, '0');
         int key = 0;

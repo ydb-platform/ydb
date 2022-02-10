@@ -7,9 +7,9 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/core/base
-    ydb/library/aclib
-    ydb/public/api/protos
+    ydb/core/base 
+    ydb/library/aclib 
+    ydb/public/api/protos 
     ydb/library/yql/public/issue
 )
 

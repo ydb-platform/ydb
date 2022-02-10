@@ -1,10 +1,10 @@
-#include <ydb/core/tablet_flat/test/libs/rows/cook.h>
-#include <ydb/core/tablet_flat/test/libs/table/model/large.h>
-#include <ydb/core/tablet_flat/test/libs/table/wrap_part.h>
-#include <ydb/core/tablet_flat/test/libs/table/test_comp.h>
-#include <ydb/core/tablet_flat/test/libs/table/test_mixer.h>
-#include <ydb/core/tablet_flat/test/libs/table/test_make.h>
-#include <ydb/core/tablet_flat/test/libs/table/test_envs.h>
+#include <ydb/core/tablet_flat/test/libs/rows/cook.h> 
+#include <ydb/core/tablet_flat/test/libs/table/model/large.h> 
+#include <ydb/core/tablet_flat/test/libs/table/wrap_part.h> 
+#include <ydb/core/tablet_flat/test/libs/table/test_comp.h> 
+#include <ydb/core/tablet_flat/test/libs/table/test_mixer.h> 
+#include <ydb/core/tablet_flat/test/libs/table/test_make.h> 
+#include <ydb/core/tablet_flat/test/libs/table/test_envs.h> 
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -21,7 +21,7 @@ Y_UNIT_TEST_SUITE(TCompactionMulti) {
 
         auto conf = NPage::TConf{ };
         conf.Group(0).PageSize = 2 * 1024;
-        conf.MainPageCollectionEdge = 64 * 1024;
+        conf.MainPageCollectionEdge = 64 * 1024; 
 
         auto subset = TMake(mass).Mixed(0, 19, NTest::TMixerRnd(19));
         auto eggs = TCompaction(nullptr, conf).Do(*subset);
@@ -48,7 +48,7 @@ Y_UNIT_TEST_SUITE(TCompactionMulti) {
         auto* initialPart = initial.Parts.at(0).Get();
 
         auto fullPageSize = initialPart->Store->GetPage(0, 0)->size();
-        auto fullPartSize = initialPart->Store->PageCollectionBytes(0);
+        auto fullPartSize = initialPart->Store->PageCollectionBytes(0); 
 
         if (strictPageSize) {
             // Verify the first page is used to its full size
@@ -65,28 +65,28 @@ Y_UNIT_TEST_SUITE(TCompactionMulti) {
 
         for (int attempt : xrange(attempts)) {
             auto conf = initialConf;
-            conf.MainPageCollectionEdge = lastPartSize;
+            conf.MainPageCollectionEdge = lastPartSize; 
 
             // Verify we produce part with the exact same size
             {
                 auto born = TCompaction(nullptr, conf).Do(initial);
                 UNIT_ASSERT_VALUES_EQUAL(born.Parts.size(), attempt ? 2u : 1u);
-                UNIT_ASSERT_VALUES_EQUAL(born.At(0)->Store->PageCollectionBytes(0), lastPartSize);
+                UNIT_ASSERT_VALUES_EQUAL(born.At(0)->Store->PageCollectionBytes(0), lastPartSize); 
 
                 TCheckIt(born, { }).IsTheSame(rows).Is(EReady::Gone);
             }
 
-            --conf.MainPageCollectionEdge;
+            --conf.MainPageCollectionEdge; 
 
             // Verify we produce part that is slightly smaller when not enough space
             {
                 const auto born = TCompaction(nullptr, conf).Do(initial);
                 UNIT_ASSERT_VALUES_EQUAL(born.Parts.size(), 2u);
 
-                lastPartSize = born.At(0)->Store->PageCollectionBytes(0);
-                UNIT_ASSERT_C(lastPartSize <= conf.MainPageCollectionEdge,
+                lastPartSize = born.At(0)->Store->PageCollectionBytes(0); 
+                UNIT_ASSERT_C(lastPartSize <= conf.MainPageCollectionEdge, 
                     "Produced part with size " << lastPartSize
-                    << " expected no more than " << conf.MainPageCollectionEdge);
+                    << " expected no more than " << conf.MainPageCollectionEdge); 
 
                 TCheckIt(born, { }).IsTheSame(rows).Is(EReady::Gone);
 
@@ -122,7 +122,7 @@ Y_UNIT_TEST_SUITE(TCompactionMulti) {
         }
     }
 
-    Y_UNIT_TEST(MainPageCollectionEdge)
+    Y_UNIT_TEST(MainPageCollectionEdge) 
     {
         const TMass mass(new TModelStd(false), 32 * 1025);
 
@@ -135,7 +135,7 @@ Y_UNIT_TEST_SUITE(TCompactionMulti) {
         RunMainEdgeTest(mass.Model->Scheme, mass.Saved, initialConf, false, 2);
     }
 
-    Y_UNIT_TEST(MainPageCollectionEdgeMany)
+    Y_UNIT_TEST(MainPageCollectionEdgeMany) 
     {
         const TMass mass(new TModelStd(false), 32 * 1025);
 
@@ -152,26 +152,26 @@ Y_UNIT_TEST_SUITE(TCompactionMulti) {
         UNIT_ASSERT_C(initial.Parts.size() == 1,
             "Unexpected " << initial.Parts.size() << " results");
 
-        auto fullPartSize = initial.Parts.at(0)->Store->PageCollectionBytes(0);
+        auto fullPartSize = initial.Parts.at(0)->Store->PageCollectionBytes(0); 
 
         auto conf = initialConf;
-        conf.MainPageCollectionEdge = fullPartSize / 4;
+        conf.MainPageCollectionEdge = fullPartSize / 4; 
 
         auto born = TCompaction(nullptr, conf).Do(initial);
         UNIT_ASSERT_C(born.Parts.size() >= 4,
             "Unexpected " << born.Parts.size() << " results after compaction");
 
         for (auto &part : born.Parts) {
-            auto partSize = part->Store->PageCollectionBytes(0);
-            UNIT_ASSERT_C(partSize <= conf.MainPageCollectionEdge,
-                "Unexpected main page collection with " << partSize << " bytes,"
-                << " maximum of " << conf.MainPageCollectionEdge << " allowed");
+            auto partSize = part->Store->PageCollectionBytes(0); 
+            UNIT_ASSERT_C(partSize <= conf.MainPageCollectionEdge, 
+                "Unexpected main page collection with " << partSize << " bytes," 
+                << " maximum of " << conf.MainPageCollectionEdge << " allowed"); 
         }
 
         TCheckIt(born, { }).IsTheSame(mass.Saved).Is(EReady::Gone);
     }
 
-    Y_UNIT_TEST(MainPageCollectionOverflow)
+    Y_UNIT_TEST(MainPageCollectionOverflow) 
     {
         TLayoutCook lay;
 
@@ -195,7 +195,7 @@ Y_UNIT_TEST_SUITE(TCompactionMulti) {
         RunMainEdgeTest(lay.RowScheme(), rows, initialConf);
     }
 
-    Y_UNIT_TEST(MainPageCollectionOverflowSmallRefs)
+    Y_UNIT_TEST(MainPageCollectionOverflowSmallRefs) 
     {
         TLayoutCook lay;
 
@@ -225,7 +225,7 @@ Y_UNIT_TEST_SUITE(TCompactionMulti) {
         RunMainEdgeTest(lay.RowScheme(), rows, initialConf);
     }
 
-    Y_UNIT_TEST(MainPageCollectionOverflowLargeRefs)
+    Y_UNIT_TEST(MainPageCollectionOverflowLargeRefs) 
     {
         TLayoutCook lay;
 

@@ -3,10 +3,10 @@ LIBRARY()
 OWNER(g:kikimr)
 
 PEERDIR(
-    ydb/core/base
-    ydb/core/tx/scheme_cache
-    ydb/core/tx/sequenceproxy/public
-    ydb/core/tx/sequenceshard/public
+    ydb/core/base 
+    ydb/core/tx/scheme_cache 
+    ydb/core/tx/sequenceproxy/public 
+    ydb/core/tx/sequenceshard/public 
 )
 
 SRCS(
@@ -18,11 +18,11 @@ SRCS(
 
 END()
 
-RECURSE(
-    public
-    ut
-)
-
-RECURSE_FOR_TESTS(
-    ut
-)
+RECURSE( 
+    public 
+    ut 
+) 
+ 
+RECURSE_FOR_TESTS( 
+    ut 
+) 

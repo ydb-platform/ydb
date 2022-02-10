@@ -37,30 +37,30 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/deprecated/enum_codegen
+    library/cpp/deprecated/enum_codegen 
     library/cpp/grpc/client
     library/cpp/protobuf/json
     library/cpp/yson
-    ydb/core/actorlib_impl
-    ydb/core/base
-    ydb/core/blobstorage/pdisk
-    ydb/core/client/minikql_compile
-    ydb/core/client/scheme_cache_lib
-    ydb/core/driver_lib/cli_base
-    ydb/core/engine
-    ydb/core/erasure
-    ydb/core/mind/bscontroller
-    ydb/core/protos
-    ydb/core/scheme
-    ydb/library/aclib
-    ydb/library/folder_service/proto
-    ydb/library/yaml_config
-    ydb/public/api/grpc
-    ydb/public/api/grpc/draft
-    ydb/public/lib/deprecated/client
-    ydb/public/lib/ydb_cli/common
+    ydb/core/actorlib_impl 
+    ydb/core/base 
+    ydb/core/blobstorage/pdisk 
+    ydb/core/client/minikql_compile 
+    ydb/core/client/scheme_cache_lib 
+    ydb/core/driver_lib/cli_base 
+    ydb/core/engine 
+    ydb/core/erasure 
+    ydb/core/mind/bscontroller 
+    ydb/core/protos 
+    ydb/core/scheme 
+    ydb/library/aclib 
+    ydb/library/folder_service/proto 
+    ydb/library/yaml_config 
+    ydb/public/api/grpc 
+    ydb/public/api/grpc/draft 
+    ydb/public/lib/deprecated/client 
+    ydb/public/lib/ydb_cli/common 
 )
 
-YQL_LAST_ABI_VERSION()
+YQL_LAST_ABI_VERSION() 
 
 END()

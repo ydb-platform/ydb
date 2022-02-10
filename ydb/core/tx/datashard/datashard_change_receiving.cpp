@@ -1,15 +1,15 @@
 #include "datashard_impl.h"
 
 namespace NKikimr {
-namespace NDataShard {
+namespace NDataShard { 
 
 using namespace NTabletFlatExecutor;
 
-class TDataShard::TTxChangeExchangeHandshake: public TTransactionBase<TDataShard> {
-    using Schema = TDataShard::Schema;
+class TDataShard::TTxChangeExchangeHandshake: public TTransactionBase<TDataShard> { 
+    using Schema = TDataShard::Schema; 
 
 public:
-    explicit TTxChangeExchangeHandshake(TDataShard* self, TEvChangeExchange::TEvHandshake::TPtr ev)
+    explicit TTxChangeExchangeHandshake(TDataShard* self, TEvChangeExchange::TEvHandshake::TPtr ev) 
         : TTransactionBase(self)
         , Ev(std::move(ev))
         , Status(new TEvChangeExchange::TEvStatus)
@@ -76,17 +76,17 @@ private:
 
 }; // TTxChangeExchangeHandshake
 
-class TDataShard::TTxApplyChangeRecords: public TTransactionBase<TDataShard> {
-    static NTable::ERowOp GetRowOperation(const NKikimrChangeExchange::TChangeRecord::TDataChange& record) {
+class TDataShard::TTxApplyChangeRecords: public TTransactionBase<TDataShard> { 
+    static NTable::ERowOp GetRowOperation(const NKikimrChangeExchange::TChangeRecord::TDataChange& record) { 
         switch (record.GetRowOperationCase()) {
             case NKikimrChangeExchange::TChangeRecord::TDataChange::kUpsert:
-                return NTable::ERowOp::Upsert;
+                return NTable::ERowOp::Upsert; 
             case NKikimrChangeExchange::TChangeRecord::TDataChange::kErase:
-                return NTable::ERowOp::Erase;
+                return NTable::ERowOp::Erase; 
             case NKikimrChangeExchange::TChangeRecord::TDataChange::kReset:
-                return NTable::ERowOp::Reset;
+                return NTable::ERowOp::Reset; 
             default:
-                return NTable::ERowOp::Absent;
+                return NTable::ERowOp::Absent; 
         }
     }
 
@@ -208,10 +208,10 @@ class TDataShard::TTxApplyChangeRecords: public TTransactionBase<TDataShard> {
             return false;
         }
 
-        const NTable::ERowOp rop = GetRowOperation(asyncIndex);
+        const NTable::ERowOp rop = GetRowOperation(asyncIndex); 
         switch (rop) {
-            case NTable::ERowOp::Upsert:
-            case NTable::ERowOp::Reset: {
+            case NTable::ERowOp::Upsert: 
+            case NTable::ERowOp::Reset: { 
                 const auto& serializedValue = GetValue(asyncIndex);
 
                 if (!TSerializedCellVec::TryParse(serializedValue.GetData(), ValueCells)) {
@@ -250,16 +250,16 @@ class TDataShard::TTxApplyChangeRecords: public TTransactionBase<TDataShard> {
                         return false;
                     }
 
-                    Value.emplace_back(tag, NTable::ECellOp::Set, TRawTypeValue(cell.AsRef(), column->Type));
+                    Value.emplace_back(tag, NTable::ECellOp::Set, TRawTypeValue(cell.AsRef(), column->Type)); 
                 }
 
                 break;
             }
 
-            case NTable::ERowOp::Erase:
+            case NTable::ERowOp::Erase: 
                 break;
 
-            case NTable::ERowOp::Absent:
+            case NTable::ERowOp::Absent: 
                 AddRecordStatus(ctx, record.GetOrder(), NKikimrChangeExchange::TEvStatus::STATUS_REJECT,
                     NKikimrChangeExchange::TEvStatus::REASON_UNEXPECTED_ROW_OPERATION, "Row operation is absent");
                 return false;
@@ -272,7 +272,7 @@ class TDataShard::TTxApplyChangeRecords: public TTransactionBase<TDataShard> {
     }
 
 public:
-    explicit TTxApplyChangeRecords(TDataShard* self, TEvChangeExchange::TEvApplyRecords::TPtr ev)
+    explicit TTxApplyChangeRecords(TDataShard* self, TEvChangeExchange::TEvApplyRecords::TPtr ev) 
         : TTransactionBase(self)
         , Ev(std::move(ev))
         , Status(new TEvChangeExchange::TEvStatus)
@@ -353,11 +353,11 @@ private:
 
 }; // TTxApplyChangeRecords
 
-void TDataShard::Handle(TEvChangeExchange::TEvHandshake::TPtr& ev, const TActorContext& ctx) {
+void TDataShard::Handle(TEvChangeExchange::TEvHandshake::TPtr& ev, const TActorContext& ctx) { 
     Execute(new TTxChangeExchangeHandshake(this, ev), ctx);
 }
 
-void TDataShard::Handle(TEvChangeExchange::TEvApplyRecords::TPtr& ev, const TActorContext& ctx) {
+void TDataShard::Handle(TEvChangeExchange::TEvApplyRecords::TPtr& ev, const TActorContext& ctx) { 
     LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Handle TEvChangeExchange::TEvApplyRecords"
         << ": origin# " << ev->Get()->Record.GetOrigin()
         << ", generation# " << ev->Get()->Record.GetGeneration()
@@ -365,5 +365,5 @@ void TDataShard::Handle(TEvChangeExchange::TEvApplyRecords::TPtr& ev, const TAct
     Execute(new TTxApplyChangeRecords(this, ev), ctx);
 }
 
-} // NDataShard
+} // NDataShard 
 } // NKikimr

@@ -1,38 +1,38 @@
-UNITTEST_FOR(ydb/core/tx/schemeshard)
+UNITTEST_FOR(ydb/core/tx/schemeshard) 
 
-OWNER(
-    svc
-    g:kikimr
-)
+OWNER( 
+    svc 
+    g:kikimr 
+) 
 
 FORK_SUBTESTS()
-
+ 
 TIMEOUT(600)
-
+ 
 SIZE(MEDIUM)
 
 PEERDIR(
-    library/cpp/http/io
-    library/cpp/http/server
+    library/cpp/http/io 
+    library/cpp/http/server 
     library/cpp/svnversion
     library/cpp/testing/unittest
-    ydb/core/base
-    ydb/core/blockstore/core
-    ydb/core/engine/minikql
-    ydb/core/protos
-    ydb/core/scheme
-    ydb/core/tablet
-    ydb/core/tablet_flat
-    ydb/core/testlib
-    ydb/core/tx
-    ydb/core/tx/datashard
-    ydb/core/tx/schemeshard
-    ydb/core/tx/schemeshard/ut_helpers
-    ydb/core/util
+    ydb/core/base 
+    ydb/core/blockstore/core 
+    ydb/core/engine/minikql 
+    ydb/core/protos 
+    ydb/core/scheme 
+    ydb/core/tablet 
+    ydb/core/tablet_flat 
+    ydb/core/testlib 
+    ydb/core/tx 
+    ydb/core/tx/datashard 
+    ydb/core/tx/schemeshard 
+    ydb/core/tx/schemeshard/ut_helpers 
+    ydb/core/util 
     ydb/library/yql/public/issue
 )
 
-YQL_LAST_ABI_VERSION()
+YQL_LAST_ABI_VERSION() 
 
 SRCS(
     ut_user_attributes.cpp

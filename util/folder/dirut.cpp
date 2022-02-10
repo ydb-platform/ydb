@@ -394,11 +394,11 @@ void RemoveDirWithContents(TString dirName) {
         }
     }
 }
-
+ 
 int mkpath(char* path, int mode) {
     return NFs::MakeDirectoryRecursive(path, NFs::EFilePermission(mode)) ? 0 : -1;
-}
-
+} 
+ 
 // Implementation of realpath in FreeBSD (version 9.0 and less) and GetFullPathName in Windows
 // did not require last component of the file name to exist (other implementations will fail
 // if it does not). Use RealLocation if that behaviour is required.

@@ -1,4 +1,4 @@
-UNITTEST_FOR(ydb/core/tablet)
+UNITTEST_FOR(ydb/core/tablet) 
 
 OWNER(
     vvvv
@@ -6,21 +6,21 @@ OWNER(
 )
 
 FORK_SUBTESTS()
-
+ 
 SIZE(MEDIUM)
-
+ 
 TIMEOUT(600)
-
+ 
 SPLIT_FACTOR(50)
 
 PEERDIR(
     library/cpp/getopt
-    library/cpp/regex/pcre
+    library/cpp/regex/pcre 
     library/cpp/svnversion
-    ydb/core/testlib
+    ydb/core/testlib 
 )
 
-YQL_LAST_ABI_VERSION()
+YQL_LAST_ABI_VERSION() 
 
 SRCS(
     pipe_tracker_ut.cpp

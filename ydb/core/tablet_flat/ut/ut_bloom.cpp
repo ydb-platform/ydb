@@ -1,9 +1,9 @@
-#include <ydb/core/tablet_flat/flat_bloom_writer.h>
-#include <ydb/core/tablet_flat/test/libs/rows/cook.h>
-#include <ydb/core/tablet_flat/test/libs/table/model/large.h>
-#include <ydb/core/tablet_flat/test/libs/table/model/keys.h>
-#include <ydb/core/tablet_flat/test/libs/table/model/small.h>
-#include <ydb/core/tablet_flat/test/libs/table/test_dbase.h>
+#include <ydb/core/tablet_flat/flat_bloom_writer.h> 
+#include <ydb/core/tablet_flat/test/libs/rows/cook.h> 
+#include <ydb/core/tablet_flat/test/libs/table/model/large.h> 
+#include <ydb/core/tablet_flat/test/libs/table/model/keys.h> 
+#include <ydb/core/tablet_flat/test/libs/table/model/small.h> 
+#include <ydb/core/tablet_flat/test/libs/table/test_dbase.h> 
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -228,7 +228,7 @@ Y_UNIT_TEST_SUITE(Bloom) {
             UNIT_ASSERT_VALUES_EQUAL(stats.SelectSieved, 5);
             UNIT_ASSERT_VALUES_EQUAL(stats.SelectNoKey, 0);
 
-            DumpPart(static_cast<const TPartStore&>(*subset->Flatten[0]), 10);
+            DumpPart(static_cast<const TPartStore&>(*subset->Flatten[0]), 10); 
         }
 
         /*_ 40: Disable filter then check that is really gone */

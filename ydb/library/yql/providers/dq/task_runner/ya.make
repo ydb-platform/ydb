@@ -1,18 +1,18 @@
 LIBRARY()
 
-OWNER(g:yql)
+OWNER(g:yql) 
 
 PEERDIR(
-    library/cpp/svnversion
-    library/cpp/threading/task_scheduler
-    library/cpp/yson/node
-    ydb/library/yql/minikql
-    ydb/library/yql/minikql/computation
-    ydb/library/yql/minikql/invoke_builtins
-    ydb/library/yql/protos
-    ydb/library/yql/utils
-    ydb/library/yql/utils/backtrace
-    ydb/library/yql/utils/log
+    library/cpp/svnversion 
+    library/cpp/threading/task_scheduler 
+    library/cpp/yson/node 
+    ydb/library/yql/minikql 
+    ydb/library/yql/minikql/computation 
+    ydb/library/yql/minikql/invoke_builtins 
+    ydb/library/yql/protos 
+    ydb/library/yql/utils 
+    ydb/library/yql/utils/backtrace 
+    ydb/library/yql/utils/log 
     ydb/library/yql/dq/proto
     ydb/library/yql/dq/runtime
     ydb/library/yql/providers/common/proto
@@ -21,7 +21,7 @@ PEERDIR(
     ydb/library/yql/providers/dq/interface
 )
 
-YQL_LAST_ABI_VERSION()
+YQL_LAST_ABI_VERSION() 
 
 SRCS(
     file_cache.cpp

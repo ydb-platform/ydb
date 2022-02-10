@@ -11,7 +11,7 @@ namespace NTable {
     public:
         /* Basic helper tool for scan operations that helps to account time
             spent for waiting some one resource. It is used by scan actor for
-            counting blockage on NBlockIO reads and may be used by IScan impls.
+            counting blockage on NBlockIO reads and may be used by IScan impls. 
          */
 
         TSpent(ITimeProvider *prov)

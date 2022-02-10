@@ -39,21 +39,21 @@ namespace NMem {
 
 } // namespace NMem
 
-    struct TMemTableSnapshot {
-        TIntrusiveConstPtr<TMemTable> MemTable;
+    struct TMemTableSnapshot { 
+        TIntrusiveConstPtr<TMemTable> MemTable; 
         NMem::TTreeSnapshot Snapshot;
 
-        TMemTableSnapshot(TIntrusiveConstPtr<TMemTable> memTable, NMem::TTreeSnapshot snapshot)
-            : MemTable(std::move(memTable))
+        TMemTableSnapshot(TIntrusiveConstPtr<TMemTable> memTable, NMem::TTreeSnapshot snapshot) 
+            : MemTable(std::move(memTable)) 
             , Snapshot(std::move(snapshot))
         { }
 
-        const TMemTable& operator*() const {
-            return *MemTable;
+        const TMemTable& operator*() const { 
+            return *MemTable; 
         }
 
-        const TMemTable* operator->() const {
-            return MemTable.Get();
+        const TMemTable* operator->() const { 
+            return MemTable.Get(); 
         }
     };
 

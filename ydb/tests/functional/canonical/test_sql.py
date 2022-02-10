@@ -10,7 +10,7 @@ from ydb.tests.library.common import yatest_common
 from ydb.tests.library.harness.kikimr_cluster import kikimr_cluster_factory
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 import ydb
-from ydb.public.api.protos import ydb_table_pb2
+from ydb.public.api.protos import ydb_table_pb2 
 from google.protobuf import text_format
 import logging
 

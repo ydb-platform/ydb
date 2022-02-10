@@ -67,10 +67,10 @@ SRCS(
     io_dispatcher.cpp
     io_dispatcher.h
     lease.h
-    log.cpp
-    log.h
-    log_settings.cpp
-    log_settings.h
+    log.cpp 
+    log.h 
+    log_settings.cpp 
+    log_settings.h 
     mailbox.cpp
     mailbox.h
     mailbox_queue_revolving.h
@@ -79,7 +79,7 @@ SRCS(
     memory_track.h
     memory_tracker.cpp
     memory_tracker.h
-    mon.h
+    mon.h 
     mon_stats.h
     monotonic.cpp
     monotonic.h

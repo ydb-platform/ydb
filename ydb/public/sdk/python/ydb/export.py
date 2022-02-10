@@ -3,8 +3,8 @@ import enum
 from . import _apis
 
 from . import settings_impl as s_impl
-from ydb.public.api.protos import ydb_export_pb2
-from ydb.public.api.grpc import ydb_export_v1_pb2_grpc
+from ydb.public.api.protos import ydb_export_pb2 
+from ydb.public.api.grpc import ydb_export_v1_pb2_grpc 
 from . import operation
 
 _ExportToYt = "ExportToYt"

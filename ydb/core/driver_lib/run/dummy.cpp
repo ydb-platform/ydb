@@ -1,5 +1,5 @@
 #include "dummy.h"
-#include <ydb/core/base/blobstorage_grouptype.h>
+#include <ydb/core/base/blobstorage_grouptype.h> 
 
 TAutoPtr<NKikimrConfig::TActorSystemConfig> DummyActorSystemConfig() {
     TAutoPtr<NKikimrConfig::TActorSystemConfig> ret(new NKikimrConfig::TActorSystemConfig());

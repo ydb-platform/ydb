@@ -1,4 +1,4 @@
-#include "handoff_map.h"
-
-namespace NKikimr {
-} // NKikimr
+#include "handoff_map.h" 
+ 
+namespace NKikimr { 
+} // NKikimr 

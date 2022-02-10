@@ -6,11 +6,11 @@ YQL_ABI_VERSION(
     0
 )
 
-OWNER(
-    xenoxeno
-    g:yql
-    g:yql_ydb_core
-)
+OWNER( 
+    xenoxeno 
+    g:yql 
+    g:yql_ydb_core 
+) 
 
 SRCS(
     tdigest.proto
@@ -23,7 +23,7 @@ SRCS(
 PEERDIR(
     contrib/libs/protobuf
     util/draft
-    ydb/library/yql/public/udf
+    ydb/library/yql/public/udf 
 )
 
 END()

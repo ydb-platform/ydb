@@ -247,7 +247,7 @@ public:
 
         return nullptr;
     }
-
+ 
     inline T* LowerBound(const TTreeItem* el) const noexcept {
         TTreeItem* curEl = Root_;
         TTreeItem* lowerBound = nullptr;
@@ -260,9 +260,9 @@ public:
                 curEl = curEl->Right_;
             } else {
                 return AsT(curEl);
-            }
-        }
-
+            } 
+        } 
+ 
         return AsT(lowerBound);
     }
 

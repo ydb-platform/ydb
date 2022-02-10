@@ -2,7 +2,7 @@
 #include "schemeshard__operation_common.h"
 #include "schemeshard_impl.h"
 
-#include <ydb/core/base/subdomain.h>
+#include <ydb/core/base/subdomain.h> 
 
 namespace {
 

@@ -4,11 +4,11 @@
 #include "read_table_scan.h"
 
 namespace NKikimr {
-namespace NDataShard {
+namespace NDataShard { 
 
 class TReadTableScanUnit : public TExecutionUnit {
 public:
-    TReadTableScanUnit(TDataShard &dataShard,
+    TReadTableScanUnit(TDataShard &dataShard, 
                        TPipeline &pipeline);
     ~TReadTableScanUnit() override;
 
@@ -31,7 +31,7 @@ private:
                const TActorContext &ctx);
 };
 
-TReadTableScanUnit::TReadTableScanUnit(TDataShard &dataShard,
+TReadTableScanUnit::TReadTableScanUnit(TDataShard &dataShard, 
                                        TPipeline &pipeline)
     : TExecutionUnit(EExecutionUnitKind::ReadTableScan, false, dataShard, pipeline)
 {
@@ -231,11 +231,11 @@ void TReadTableScanUnit::Complete(TOperation::TPtr,
 {
 }
 
-THolder<TExecutionUnit> CreateReadTableScanUnit(TDataShard &dataShard,
+THolder<TExecutionUnit> CreateReadTableScanUnit(TDataShard &dataShard, 
                                                 TPipeline &pipeline)
 {
     return THolder(new TReadTableScanUnit(dataShard, pipeline));
 }
 
-} // namespace NDataShard
+} // namespace NDataShard 
 } // namespace NKikimr

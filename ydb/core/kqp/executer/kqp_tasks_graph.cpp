@@ -1,9 +1,9 @@
 #include "kqp_tasks_graph.h"
 
-#include <ydb/core/base/appdata.h>
-#include <ydb/core/protos/tx_datashard.pb.h>
-#include <ydb/core/kqp/common/kqp_yql.h>
-#include <ydb/core/tx/datashard/range_ops.h>
+#include <ydb/core/base/appdata.h> 
+#include <ydb/core/protos/tx_datashard.pb.h> 
+#include <ydb/core/kqp/common/kqp_yql.h> 
+#include <ydb/core/tx/datashard/range_ops.h> 
 
 #include <ydb/library/yql/core/yql_expr_optimize.h>
 
@@ -246,7 +246,7 @@ void BuildKqpStageChannels(TKqpTasksGraph& tasksGraph, const TKqpTableKeys& tabl
             case NKqpProto::TKqpPhyConnection::kMerge: {
                 TVector<TSortColumn> sortColumns;
                 sortColumns.reserve(input.GetMerge().SortColumnsSize());
-
+ 
                 for (const auto& sortColumn : input.GetMerge().GetSortColumns()) {
                     sortColumns.emplace_back(
                         TSortColumn(sortColumn.GetColumn(), sortColumn.GetAscending())

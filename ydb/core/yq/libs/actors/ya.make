@@ -1,4 +1,4 @@
-OWNER(g:yq)
+OWNER(g:yq) 
 
 LIBRARY()
 
@@ -31,36 +31,36 @@ PEERDIR(
     library/cpp/time_provider
     library/cpp/yson
     library/cpp/yson/node
-    ydb/core/base
-    ydb/core/protos
+    ydb/core/base 
+    ydb/core/protos 
     ydb/core/yq/libs/actors/logging
     ydb/core/yq/libs/checkpointing
     ydb/core/yq/libs/checkpointing_common
-    ydb/core/yq/libs/common
-    ydb/core/yq/libs/control_plane_storage
+    ydb/core/yq/libs/common 
+    ydb/core/yq/libs/control_plane_storage 
     ydb/core/yq/libs/control_plane_storage/events
-    ydb/core/yq/libs/db_resolver
-    ydb/core/yq/libs/db_schema
-    ydb/core/yq/libs/events
-    ydb/core/yq/libs/private_client
-    ydb/core/yq/libs/result_formatter
-    ydb/core/yq/libs/shared_resources
-    ydb/core/yq/libs/signer
-    ydb/library/mkql_proto
-    ydb/library/security
-    ydb/library/yql/ast
-    ydb/library/yql/core/facade
-    ydb/library/yql/core/services/mounts
-    ydb/library/yql/minikql
-    ydb/library/yql/minikql/comp_nodes
-    ydb/library/yql/providers/common/token_accessor/client
-    ydb/library/yql/public/issue
-    ydb/library/yql/public/issue/protos
-    ydb/library/yql/sql/settings
-    ydb/library/yql/utils/actor_log
-    ydb/public/api/protos
-    ydb/public/lib/yq
-    ydb/public/sdk/cpp/client/ydb_table
+    ydb/core/yq/libs/db_resolver 
+    ydb/core/yq/libs/db_schema 
+    ydb/core/yq/libs/events 
+    ydb/core/yq/libs/private_client 
+    ydb/core/yq/libs/result_formatter 
+    ydb/core/yq/libs/shared_resources 
+    ydb/core/yq/libs/signer 
+    ydb/library/mkql_proto 
+    ydb/library/security 
+    ydb/library/yql/ast 
+    ydb/library/yql/core/facade 
+    ydb/library/yql/core/services/mounts 
+    ydb/library/yql/minikql 
+    ydb/library/yql/minikql/comp_nodes 
+    ydb/library/yql/providers/common/token_accessor/client 
+    ydb/library/yql/public/issue 
+    ydb/library/yql/public/issue/protos 
+    ydb/library/yql/sql/settings 
+    ydb/library/yql/utils/actor_log 
+    ydb/public/api/protos 
+    ydb/public/lib/yq 
+    ydb/public/sdk/cpp/client/ydb_table 
     ydb/library/yql/providers/clickhouse/provider
     ydb/library/yql/providers/common/codec
     ydb/library/yql/providers/common/comp_nodes

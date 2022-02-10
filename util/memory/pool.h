@@ -75,7 +75,7 @@ private:
         inline const char* Data() const noexcept {
             return (const char*)(this + 1);
         }
-
+ 
         inline char* Data() noexcept {
             return (char*)(this + 1);
         }
@@ -83,7 +83,7 @@ private:
         inline size_t DataSize() const noexcept {
             return Cur_ - Data();
         }
-
+ 
         inline void ResetChunk() noexcept {
             size_t total = DataSize() + Left();
             Cur_ = Data();
@@ -94,7 +94,7 @@ private:
         char* Cur_;
         size_t Left_;
     };
-
+ 
     using TChunkList = TIntrusiveList<TChunk>;
 
 public:
@@ -256,9 +256,9 @@ public:
     inline void Traverse(TOp& op) const noexcept {
         for (TChunkList::TConstIterator i = Chunks_.Begin(); i != Chunks_.End(); ++i) {
             op(i->Data(), i->DataSize());
-        }
+        } 
     }
-
+ 
     inline IAllocator* RealAllocator() const noexcept {
         return Alloc_;
     }

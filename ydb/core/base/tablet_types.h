@@ -2,7 +2,7 @@
 
 #include "defs.h"
 #include "tabletid.h"
-#include <ydb/core/protos/tablet.pb.h>
+#include <ydb/core/protos/tablet.pb.h> 
 
 ////////////////////////////////////////////
 namespace NKikimr {
@@ -52,8 +52,8 @@ public:
             return type;
         } else {
             return TypeInvalid;
-        }
-    }
+        } 
+    } 
 };
 
 } // end of NKikimr

@@ -10,21 +10,21 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/core/base
-    ydb/core/tx/columnshard
-    ydb/core/tx/long_tx_service/public
+    ydb/core/base 
+    ydb/core/tx/columnshard 
+    ydb/core/tx/long_tx_service/public 
 )
 
 YQL_LAST_ABI_VERSION()
 
 END()
 
-RECURSE(
-    public
-    ut
-    public/ut
-)
-
-RECURSE_FOR_TESTS(
-    ut
-)
+RECURSE( 
+    public 
+    ut 
+    public/ut 
+) 
+ 
+RECURSE_FOR_TESTS( 
+    ut 
+) 

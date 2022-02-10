@@ -1,12 +1,12 @@
 #include "ut_common.h"
 
-#include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include <ydb/core/kqp/ut/common/kqp_ut_common.h> 
 
-#include <ydb/core/sys_view/common/events.h>
-#include <ydb/core/sys_view/service/sysview_service.h>
-#include <ydb/core/tx/datashard/datashard.h>
+#include <ydb/core/sys_view/common/events.h> 
+#include <ydb/core/sys_view/service/sysview_service.h> 
+#include <ydb/core/tx/datashard/datashard.h> 
 
-#include <ydb/public/sdk/cpp/client/draft/ydb_scripting.h>
+#include <ydb/public/sdk/cpp/client/draft/ydb_scripting.h> 
 
 #include <library/cpp/yson/node/node_io.h>
 
@@ -688,7 +688,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
     }
 
     Y_UNIT_TEST(PartitionStatsFields) {
-        NDataShard::gDbStatsReportInterval = TDuration::Seconds(0);
+        NDataShard::gDbStatsReportInterval = TDuration::Seconds(0); 
 
         auto nowUs = TInstant::Now().MicroSeconds();
 

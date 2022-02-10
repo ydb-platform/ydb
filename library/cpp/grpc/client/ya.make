@@ -1,9 +1,9 @@
 LIBRARY()
 
-OWNER(
-    ddoarn
+OWNER( 
+    ddoarn 
     g:kikimr
-)
+) 
 
 SRCS(
     grpc_client_low.cpp

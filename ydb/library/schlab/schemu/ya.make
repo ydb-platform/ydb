@@ -1,13 +1,13 @@
 LIBRARY()
 
-OWNER(
-    cthulhu
-    g:kikimr
-)
+OWNER( 
+    cthulhu 
+    g:kikimr 
+) 
 
 PEERDIR(
-    ydb/library/schlab/schine
-    ydb/library/schlab/schoot
+    ydb/library/schlab/schine 
+    ydb/library/schlab/schoot 
 )
 
 SRCS(
@@ -18,4 +18,4 @@ SRCS(
 
 END()
 
-RECURSE()
+RECURSE() 

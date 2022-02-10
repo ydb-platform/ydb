@@ -1,6 +1,6 @@
 #include "idx_test_common.h"
 
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
+#include <ydb/public/sdk/cpp/client/ydb_table/table.h> 
 
 using namespace NYdb;
 using namespace NYdb::NTable;

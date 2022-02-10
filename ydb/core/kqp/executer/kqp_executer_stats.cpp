@@ -1,6 +1,6 @@
 #include "kqp_executer_stats.h"
 
-#include <ydb/core/protos/kqp.pb.h>
+#include <ydb/core/protos/kqp.pb.h> 
 
 namespace NKikimr::NKqp {
 

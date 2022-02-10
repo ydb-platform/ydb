@@ -5,8 +5,8 @@
 #include <library/cpp/actors/core/actor.h>
 #include <library/cpp/actors/core/event.h>
 
-#include <ydb/core/base/blobstorage.h>
-#include <ydb/core/protos/grpc_status_proxy.pb.h>
+#include <ydb/core/base/blobstorage.h> 
+#include <ydb/core/protos/grpc_status_proxy.pb.h> 
 
 ////////////////////////////////////////////
 namespace NKikimr {
@@ -70,7 +70,7 @@ struct TEvGRpcProxyStatus {
 
 
     struct TEvResponse : public TEventLocal<TEvResponse, EvResponse> {
-        THashMap<ui32, std::shared_ptr<TEvGRpcProxyStatus::TEvGetStatusResponse>> PerNodeResponse;
+        THashMap<ui32, std::shared_ptr<TEvGRpcProxyStatus::TEvGetStatusResponse>> PerNodeResponse; 
         THashMap<ui32, TString> NodeNames;
         THashMap<ui32, TString> NodeDataCenter;
     };

@@ -1,13 +1,13 @@
 #include "proxy_private.h"
-#include <ydb/core/yq/libs/config/protos/yq_config.pb.h>
+#include <ydb/core/yq/libs/config/protos/yq_config.pb.h> 
 
-#include <ydb/core/yq/libs/events/events.h>
-#include <ydb/core/yq/libs/shared_resources/db_pool.h>
+#include <ydb/core/yq/libs/events/events.h> 
+#include <ydb/core/yq/libs/shared_resources/db_pool.h> 
 
 #include <library/cpp/actors/core/events.h>
 #include <library/cpp/actors/core/hfunc.h>
 #include <library/cpp/actors/core/actor_bootstrapped.h>
-#include <ydb/core/protos/services.pb.h>
+#include <ydb/core/protos/services.pb.h> 
 
 #include <library/cpp/actors/core/log.h>
 

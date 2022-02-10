@@ -3,10 +3,10 @@
 #include "datashard_ut_common.h"
 #include "datashard_ut_common_kqp.h"
 
-#include <ydb/core/kqp/ut/common/kqp_ut_common.h>
-#include <ydb/core/tx/scheme_cache/scheme_cache.h>
-#include <ydb/core/tx/tx_proxy/proxy.h>
-#include <ydb/core/tx/tx.h>
+#include <ydb/core/kqp/ut/common/kqp_ut_common.h> 
+#include <ydb/core/tx/scheme_cache/scheme_cache.h> 
+#include <ydb/core/tx/tx_proxy/proxy.h> 
+#include <ydb/core/tx/tx.h> 
 
 #include <util/generic/bitmap.h>
 #include <util/string/printf.h>
@@ -14,7 +14,7 @@
 
 namespace NKikimr {
 
-using namespace NDataShard::NKqpHelpers;
+using namespace NDataShard::NKqpHelpers; 
 using namespace Tests;
 
 struct TProto {
@@ -222,7 +222,7 @@ void EraseRows(
 void ConditionalEraseRows(
         TServer::TPtr server, const TActorId& sender, const TString& path,
         const TTableId& tableId, ui32 columnId, ui64 threshold, EUnit unit = TUnit::AUTO,
-        const NDataShard::TIndexes& indexes = {}, const TProto::TLimits& limits = {},
+        const NDataShard::TIndexes& indexes = {}, const TProto::TLimits& limits = {}, 
         ui32 status = TProto::TEvCondEraseResponse::ACCEPTED, const TString& error = "") {
     using TEvRequest = TEvDataShard::TEvConditionalEraseRowsRequest;
     using TEvResponse = TEvDataShard::TEvConditionalEraseRowsResponse;
@@ -254,7 +254,7 @@ void ConditionalEraseRows(
                 const TActorId& replyTo, ui64 tabletID,
                 const TTableId& tableId, ui32 columnId, ui64 threshold, EUnit unit,
                 const TProto::TLimits& limits,
-                const NDataShard::TIndexes& indexes)
+                const NDataShard::TIndexes& indexes) 
             : TBase(replyTo, tabletID)
             , TableId(tableId)
             , ColumnId(columnId)
@@ -297,7 +297,7 @@ void ConditionalEraseRows(
         const ui64 Threshold;
         const EUnit ColumnUnit;
         const TProto::TLimits Limits;
-        const NDataShard::TIndexes Indexes;
+        const NDataShard::TIndexes Indexes; 
     };
 
     auto tabletIDs = GetTableShards(server, sender, path);
@@ -827,7 +827,7 @@ Y_UNIT_TEST_SUITE(DistributedEraseTests) {
         return THolder(response);
     }
 
-    NDataShard::TIndexes GetIndexes(TServer::TPtr server, const TActorId& sender, const TString& path) {
+    NDataShard::TIndexes GetIndexes(TServer::TPtr server, const TActorId& sender, const TString& path) { 
         auto mainTable = Navigate(server, sender, path, TNavigate::OpTable);
         const auto& mainEntry = mainTable->ResultSet.at(0);
 
@@ -844,7 +844,7 @@ Y_UNIT_TEST_SUITE(DistributedEraseTests) {
             UNIT_ASSERT(columnNameToId.emplace(column.Name, id).second);
         }
 
-        NDataShard::TIndexes indexes;
+        NDataShard::TIndexes indexes; 
         for (const auto& index : mainEntry.Indexes) {
             if (index.GetType() == NKikimrSchemeOp::EIndexTypeGlobalAsync) {
                 continue;
@@ -852,7 +852,7 @@ Y_UNIT_TEST_SUITE(DistributedEraseTests) {
 
             THashSet<TString> seen;
 
-            NDataShard::TKeyMap keyMap;
+            NDataShard::TKeyMap keyMap; 
             ui32 i = 0;
             for (; i < index.KeyColumnNamesSize(); ++i) {
                 const TString& name = index.GetKeyColumnNames(i);
@@ -887,7 +887,7 @@ Y_UNIT_TEST_SUITE(DistributedEraseTests) {
 
     TVector<THolder<IEventHandle>> ConditionalEraseRowsDelayedPlan(
             TServer::TPtr server, const TActorId& sender, const TString& path,
-            const TTableId& tableId, ui32 columnId, ui64 threshold, const NDataShard::TIndexes& indexes) {
+            const TTableId& tableId, ui32 columnId, ui64 threshold, const NDataShard::TIndexes& indexes) { 
 
         TVector<THolder<IEventHandle>> delayed;
 
@@ -918,7 +918,7 @@ Y_UNIT_TEST_SUITE(DistributedEraseTests) {
 
     TVector<THolder<IEventHandle>> ConditionalEraseRowsDelayedResolve(
             TServer::TPtr server, const TActorId& sender, const TString& path,
-            const TTableId& tableId, ui32 columnId, ui64 threshold, const NDataShard::TIndexes& indexes) {
+            const TTableId& tableId, ui32 columnId, ui64 threshold, const NDataShard::TIndexes& indexes) { 
 
         TVector<THolder<IEventHandle>> delayed;
         TActorId eraser;
@@ -1296,7 +1296,7 @@ tkey = 100, key = 4
                 return TTestActorRuntime::EEventAction::PROCESS;
             });
 
-            const auto eraser = runtime.Register(NDataShard::CreateDistributedEraser(sender, tableId, indexes));
+            const auto eraser = runtime.Register(NDataShard::CreateDistributedEraser(sender, tableId, indexes)); 
             auto ev = runtime.GrabEdgeEventRethrow<TEvResponse>(sender);
             UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetStatus(), status);
             UNIT_ASSERT_STRING_CONTAINS(ev->Get()->Record.GetErrorDescription(), error);
@@ -1410,7 +1410,7 @@ tkey = 100, key = 4
 
         using TRequestMaker = std::function<IEventBase*(void)>;
         auto badRequest = [&](TEvResponse::ProtoRecordType::EStatus status, const TString& error, TRequestMaker maker) {
-            const auto eraser = runtime.Register(NDataShard::CreateDistributedEraser(sender, tableId, indexes));
+            const auto eraser = runtime.Register(NDataShard::CreateDistributedEraser(sender, tableId, indexes)); 
 
             runtime.Send(new IEventHandle(eraser, sender, maker()), 0, true);
             auto ev = runtime.GrabEdgeEventRethrow<TEvResponse>(sender);
@@ -1619,7 +1619,7 @@ tkey = 100, key = 4
             TProto::TEvProposeTxResult::BAD_REQUEST, "can only have dependents or dependencies");
 
         tx.MutableDependents()->Clear();
-        dependency.SetPresentRows(NDataShard::SerializeBitMap(TDynBitMap().Push(1)));
+        dependency.SetPresentRows(NDataShard::SerializeBitMap(TDynBitMap().Push(1))); 
         DistributedEraseTx(server, sender, "/Root/table-1", txId++, tx,
             TProto::TEvProposeTxResult::BAD_REQUEST, "Present rows count mismatch");
     }

@@ -2,11 +2,11 @@
 #include "datashard_locks.h"
 #include "datashard_ut_common.h"
 
-#include <ydb/core/tablet_flat/flat_dbase_apply.h>
-#include <ydb/core/tablet_flat/flat_exec_commit.h>
-#include <ydb/core/testlib/test_client.h>
-#include <ydb/core/tx/schemeshard/schemeshard.h>
-#include <ydb/core/tx/tx_proxy/proxy.h>
+#include <ydb/core/tablet_flat/flat_dbase_apply.h> 
+#include <ydb/core/tablet_flat/flat_exec_commit.h> 
+#include <ydb/core/testlib/test_client.h> 
+#include <ydb/core/tx/schemeshard/schemeshard.h> 
+#include <ydb/core/tx/tx_proxy/proxy.h> 
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -75,7 +75,7 @@ namespace NTest {
 
     public:
         TTabletCountersBase* TabletCounters = nullptr;
-        THashMap<ui64, NDataShard::TUserTable> TableInfos;
+        THashMap<ui64, NDataShard::TUserTable> TableInfos; 
     };
 }
 
@@ -83,7 +83,7 @@ namespace NTest {
 
 namespace NKikimr {
 
-using namespace NDataShard;
+using namespace NDataShard; 
 
 namespace NTest {
 

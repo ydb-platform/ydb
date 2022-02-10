@@ -4,7 +4,7 @@ option cc_enable_arenas = true;
 package NKqpProto;
 option java_package = "ru.yandex.kikimr.proto";
 
-import "ydb/library/mkql_proto/protos/minikql.proto";
+import "ydb/library/mkql_proto/protos/minikql.proto"; 
 import "ydb/library/yql/dq/proto/dq_tasks.proto";
 
 message TKqpPhyExternalBinding {

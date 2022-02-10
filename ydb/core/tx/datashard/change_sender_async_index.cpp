@@ -2,21 +2,21 @@
 #include "change_exchange_impl.h"
 #include "change_sender_common_ops.h"
 
-#include <ydb/core/base/tablet_pipecache.h>
-#include <ydb/core/protos/services.pb.h>
-#include <ydb/core/tablet_flat/flat_row_eggs.h>
-#include <ydb/core/tx/tx_proxy/proxy.h>
+#include <ydb/core/base/tablet_pipecache.h> 
+#include <ydb/core/protos/services.pb.h> 
+#include <ydb/core/tablet_flat/flat_row_eggs.h> 
+#include <ydb/core/tx/tx_proxy/proxy.h> 
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/hfunc.h>
 #include <library/cpp/actors/core/log.h>
 
-#include <ydb/library/yql/public/udf/udf_data_type.h>
+#include <ydb/library/yql/public/udf/udf_data_type.h> 
 
 #include <util/generic/maybe.h>
 
 namespace NKikimr {
-namespace NDataShard {
+namespace NDataShard { 
 
 using namespace NTable;
 
@@ -723,5 +723,5 @@ IActor* CreateAsyncIndexChangeSender(const TDataShardId& dataShard, const TTable
     return new TAsyncIndexChangeSenderMain(dataShard, userTableId, indexPathId);
 }
 
-} // NDataShard
+} // NDataShard 
 } // NKikimr

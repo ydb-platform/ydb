@@ -1,8 +1,8 @@
-#include <ydb/core/yq/libs/config/protos/yq_config.pb.h>
+#include <ydb/core/yq/libs/config/protos/yq_config.pb.h> 
 #include "proxy.h"
 
-#include <ydb/core/protos/services.pb.h>
-#include <ydb/core/yq/libs/common/rows_proto_splitter.h>
+#include <ydb/core/protos/services.pb.h> 
+#include <ydb/core/yq/libs/common/rows_proto_splitter.h> 
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 #include <ydb/library/yql/providers/dq/actors/proto_builder.h>
@@ -16,9 +16,9 @@
 #include <library/cpp/actors/core/log.h>
 #include <library/cpp/protobuf/interop/cast.h>
 
-#include <ydb/core/yq/libs/control_plane_storage/control_plane_storage.h>
-#include <ydb/core/yq/libs/control_plane_storage/events/events.h>
-#include <ydb/core/yq/libs/private_client/private_client.h>
+#include <ydb/core/yq/libs/control_plane_storage/control_plane_storage.h> 
+#include <ydb/core/yq/libs/control_plane_storage/events/events.h> 
+#include <ydb/core/yq/libs/private_client/private_client.h> 
 
 #define LOG_E(stream)                                                        \
     LOG_ERROR_S(*TlsActivationContext, NKikimrServices::YQL_PROXY, "Writer: " << TraceId << ": " << stream)
@@ -164,7 +164,7 @@ private:
 
             Requests.erase(it);
             MaybeFinish();
-        }
+        } 
         SendResult(); // Send remaining rows
     }
 

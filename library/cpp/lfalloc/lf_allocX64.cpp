@@ -128,7 +128,7 @@ NMalloc::TMallocInfo NMalloc::MallocInfo() {
     r.Name = "lfalloc_dbg";
 #elif defined(LFALLOC_YT)
     r.Name = "lfalloc_yt";
-#else
+#else 
     r.Name = "lfalloc";
 #endif
     r.SetParam = &LFAlloc_SetParam;
@@ -136,9 +136,9 @@ NMalloc::TMallocInfo NMalloc::MallocInfo() {
     return r;
 }
 #else
-NMalloc::TMallocInfo NMalloc::MallocInfo() {
-    NMalloc::TMallocInfo r;
-    r.Name = "system-darwin";
-    return r;
-}
+NMalloc::TMallocInfo NMalloc::MallocInfo() { 
+    NMalloc::TMallocInfo r; 
+    r.Name = "system-darwin"; 
+    return r; 
+} 
 #endif

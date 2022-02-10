@@ -9,15 +9,15 @@
 #include "resource_profile.h"
 #include "event_filter.h"
 
-#include <ydb/core/control/immediate_control_board_impl.h>
-#include <ydb/core/grpc_services/grpc_helper.h>
-#include <ydb/core/protos/auth.pb.h>
-#include <ydb/core/protos/cms.pb.h>
-#include <ydb/core/protos/config.pb.h>
-#include <ydb/core/protos/key.pb.h>
-#include <ydb/core/protos/pqconfig.pb.h>
-#include <ydb/core/protos/stream.pb.h>
-#include <ydb/library/pdisk_io/aio.h>
+#include <ydb/core/control/immediate_control_board_impl.h> 
+#include <ydb/core/grpc_services/grpc_helper.h> 
+#include <ydb/core/protos/auth.pb.h> 
+#include <ydb/core/protos/cms.pb.h> 
+#include <ydb/core/protos/config.pb.h> 
+#include <ydb/core/protos/key.pb.h> 
+#include <ydb/core/protos/pqconfig.pb.h> 
+#include <ydb/core/protos/stream.pb.h> 
+#include <ydb/library/pdisk_io/aio.h> 
 
 #include <library/cpp/actors/interconnect/poller_tcp.h>
 #include <library/cpp/actors/core/executor_thread.h>
@@ -48,10 +48,10 @@ namespace NMiniKQL {
     class IFunctionRegistry;
 }
 
-namespace NDataShard {
+namespace NDataShard { 
     class IExportFactory;
-}
-
+} 
+ 
 namespace NSQS {
     class IEventsWriterFactory;
     class IAuthFactory;
@@ -73,10 +73,10 @@ struct TAppData {
     const ui32 BatchPoolId;
     TMap<TString, ui32> ServicePools;
 
-    const NScheme::TTypeRegistry* TypeRegistry = nullptr;
-    const NMiniKQL::IFunctionRegistry* FunctionRegistry = nullptr;
+    const NScheme::TTypeRegistry* TypeRegistry = nullptr; 
+    const NMiniKQL::IFunctionRegistry* FunctionRegistry = nullptr; 
     const NDataShard::IExportFactory *DataShardExportFactory = nullptr;
-    const TFormatFactory* FormatFactory = nullptr;
+    const TFormatFactory* FormatFactory = nullptr; 
     const NSQS::IEventsWriterFactory* SqsEventsWriterFactory = nullptr;
 
     NSQS::IAuthFactory* SqsAuthFactory = nullptr;
@@ -195,4 +195,4 @@ inline TAppData* AppData(const TActorContext &ctx) {
     return AppData(ctx.ActorSystem());
 }
 
-} // NKikimr
+} // NKikimr 

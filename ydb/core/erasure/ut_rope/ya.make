@@ -1,7 +1,7 @@
-UNITTEST_FOR(ydb/core/erasure)
+UNITTEST_FOR(ydb/core/erasure) 
 
 FORK_SUBTESTS()
-
+ 
 SPLIT_FACTOR(30)
 
 IF (WITH_VALGRIND OR SANITIZER_TYPE == "thread")
@@ -13,16 +13,16 @@ ELSE()
     SIZE(MEDIUM)
 ENDIF()
 
-OWNER(
-    cthulhu
-    ddoarn
-    fomichev
-    g:kikimr
-)
+OWNER( 
+    cthulhu 
+    ddoarn 
+    fomichev 
+    g:kikimr 
+) 
 
 PEERDIR(
     library/cpp/digest/crc32c
-    ydb/core/erasure
+    ydb/core/erasure 
 )
 
 SRCS(

@@ -1,20 +1,20 @@
 #include "datashard_impl.h"
 
-#include <ydb/core/tablet_flat/tablet_flat_executor.h>
+#include <ydb/core/tablet_flat/tablet_flat_executor.h> 
 
 #include <util/string/join.h>
 
 namespace NKikimr {
-namespace NDataShard {
+namespace NDataShard { 
 
 // Find and return parts that are no longer needed on the target datashard
-class TDataShard::TTxInitiateBorrowedPartsReturn : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
+class TDataShard::TTxInitiateBorrowedPartsReturn : public NTabletFlatExecutor::TTransactionBase<TDataShard> { 
 private:
     THashMap<TLogoBlobID, NTabletFlatExecutor::TCompactedPartLoans> PartsToReturn;
 
 public:
-    TTxInitiateBorrowedPartsReturn(TDataShard* ds)
-        : NTabletFlatExecutor::TTransactionBase<TDataShard>(ds)
+    TTxInitiateBorrowedPartsReturn(TDataShard* ds) 
+        : NTabletFlatExecutor::TTransactionBase<TDataShard>(ds) 
     {}
 
     TTxType GetTxType() const override { return TXTYPE_INITIATE_BORROWED_PARTS_RETURN; }
@@ -45,25 +45,25 @@ public:
     }
 };
 
-NTabletFlatExecutor::ITransaction* TDataShard::CreateTxInitiateBorrowedPartsReturn() {
+NTabletFlatExecutor::ITransaction* TDataShard::CreateTxInitiateBorrowedPartsReturn() { 
     return new TTxInitiateBorrowedPartsReturn(this);
 }
 
-void TDataShard::CompletedLoansChanged(const TActorContext &ctx) {
+void TDataShard::CompletedLoansChanged(const TActorContext &ctx) { 
     Y_VERIFY(Executor()->GetStats().CompactedPartLoans);
 
     CheckInitiateBorrowedPartsReturn(ctx);
 }
 
 // Accept returned part on the source datashard
-class TDataShard::TTxReturnBorrowedPart : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
+class TDataShard::TTxReturnBorrowedPart : public NTabletFlatExecutor::TTransactionBase<TDataShard> { 
 private:
     TEvDataShard::TEvReturnBorrowedPart::TPtr Ev;
     TVector<TLogoBlobID> PartMetaVec;
     ui64 FromTabletId;
 public:
-    TTxReturnBorrowedPart(TDataShard* ds, TEvDataShard::TEvReturnBorrowedPart::TPtr& ev)
-        : NTabletFlatExecutor::TTransactionBase<TDataShard>(ds)
+    TTxReturnBorrowedPart(TDataShard* ds, TEvDataShard::TEvReturnBorrowedPart::TPtr& ev) 
+        : NTabletFlatExecutor::TTransactionBase<TDataShard>(ds) 
         , Ev(ev)
     {}
 
@@ -95,14 +95,14 @@ public:
 };
 
 // Forget the returned part on the target after source Ack from the source
-class TDataShard::TTxReturnBorrowedPartAck : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
+class TDataShard::TTxReturnBorrowedPartAck : public NTabletFlatExecutor::TTransactionBase<TDataShard> { 
 private:
     TEvDataShard::TEvReturnBorrowedPartAck::TPtr Ev;
     TVector<TLogoBlobID> PartMetaVec;
 
 public:
-    TTxReturnBorrowedPartAck(TDataShard* ds, TEvDataShard::TEvReturnBorrowedPartAck::TPtr& ev)
-        : NTabletFlatExecutor::TTransactionBase<TDataShard>(ds)
+    TTxReturnBorrowedPartAck(TDataShard* ds, TEvDataShard::TEvReturnBorrowedPartAck::TPtr& ev) 
+        : NTabletFlatExecutor::TTransactionBase<TDataShard>(ds) 
         , Ev(ev)
     {}
 
@@ -132,15 +132,15 @@ public:
     }
 };
 
-void TDataShard::Handle(TEvDataShard::TEvReturnBorrowedPart::TPtr& ev, const TActorContext& ctx) {
+void TDataShard::Handle(TEvDataShard::TEvReturnBorrowedPart::TPtr& ev, const TActorContext& ctx) { 
     Execute(new TTxReturnBorrowedPart(this, ev), ctx);
 }
 
-void TDataShard::Handle(TEvDataShard::TEvReturnBorrowedPartAck::TPtr& ev, const TActorContext& ctx) {
+void TDataShard::Handle(TEvDataShard::TEvReturnBorrowedPartAck::TPtr& ev, const TActorContext& ctx) { 
     Execute(new TTxReturnBorrowedPartAck(this, ev), ctx);
 }
 
-bool TDataShard::HasSharedBlobs() const {
+bool TDataShard::HasSharedBlobs() const { 
     const bool* hasSharedBlobsPtr = Executor()->GetStats().HasSharedBlobs;
     if (!hasSharedBlobsPtr) {
         Y_VERIFY(Executor()->GetStats().IsFollower);
@@ -151,10 +151,10 @@ bool TDataShard::HasSharedBlobs() const {
 
 
 // Switch to Offline state and notify the schemeshard to that it can initiate tablet deletion
-class TDataShard::TTxGoOffline : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
+class TDataShard::TTxGoOffline : public NTabletFlatExecutor::TTransactionBase<TDataShard> { 
 public:
-    explicit TTxGoOffline(TDataShard* ds)
-        : NTabletFlatExecutor::TTransactionBase<TDataShard>(ds)
+    explicit TTxGoOffline(TDataShard* ds) 
+        : NTabletFlatExecutor::TTransactionBase<TDataShard>(ds) 
     {}
 
     TTxType GetTxType() const override { return TXTYPE_GO_OFFLINE; }
@@ -180,7 +180,7 @@ public:
         NIceDb::TNiceDb db(txc.DB);
 
         Self->State = TShardState::Offline;
-        Self->PersistSys(db, TDataShard::Schema::Sys_State, Self->State);
+        Self->PersistSys(db, TDataShard::Schema::Sys_State, Self->State); 
 
         return true;
     }
@@ -190,13 +190,13 @@ public:
     }
 };
 
-void TDataShard::CheckInitiateBorrowedPartsReturn(const TActorContext &ctx) {
+void TDataShard::CheckInitiateBorrowedPartsReturn(const TActorContext &ctx) { 
     if (!Executor()->GetStats().CompactedPartLoans->empty()) {
         Execute(CreateTxInitiateBorrowedPartsReturn(), ctx);
     }
 }
 
-void TDataShard::CheckStateChange(const TActorContext& ctx) {
+void TDataShard::CheckStateChange(const TActorContext& ctx) { 
     if (State == TShardState::PreOffline) {
         auto fnListTxIds = [](const auto& txMap) {
             TStringStream str;

@@ -13,7 +13,7 @@
 #include <contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3/include/aws/s3/model/UploadPartRequest.h>
 #include <contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3/include/aws/s3/S3Client.h>
 
-#include <ydb/core/base/events.h>
+#include <ydb/core/base/events.h> 
 
 namespace NKikimr {
 namespace NWrappers {

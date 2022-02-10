@@ -52,17 +52,17 @@ public:
         for (const auto& failedDisks : FaultsExceedingFailModel) {
             ui32 num = 0;
             for (const TVDiskID& vdisk : vdisksWithLastBlob) {
-                if (~failedDisks & TBlobStorageGroupInfo::TGroupVDisks(&Info->GetTopology(), vdisk)) {
+                if (~failedDisks & TBlobStorageGroupInfo::TGroupVDisks(&Info->GetTopology(), vdisk)) { 
                     ++num;
                 }
             }
             const bool recoverable = num >= Info->Type.MinimalRestorablePartCount();
 
-            TBlobStorageGroupInfo::TSubgroupVDisks failedSubgroupDisks(&Info->GetTopology());
+            TBlobStorageGroupInfo::TSubgroupVDisks failedSubgroupDisks(&Info->GetTopology()); 
             for (const TVDiskID& vdisk : lastBlobSubgroup) {
-                if (failedDisks & TBlobStorageGroupInfo::TGroupVDisks(&Info->GetTopology(), vdisk)) {
+                if (failedDisks & TBlobStorageGroupInfo::TGroupVDisks(&Info->GetTopology(), vdisk)) { 
                     ui32 nodeId = Info->GetIdxInSubgroup(vdisk, lastBlobId.Hash());
-                    failedSubgroupDisks += TBlobStorageGroupInfo::TSubgroupVDisks(&Info->GetTopology(), nodeId);
+                    failedSubgroupDisks += TBlobStorageGroupInfo::TSubgroupVDisks(&Info->GetTopology(), nodeId); 
                 }
             }
             const bool restorable = Info->GetQuorumChecker().CheckFailModelForSubgroup(failedSubgroupDisks);
@@ -85,8 +85,8 @@ public:
             CTEST << "] failedDisks# [";
             bool first = true;
             for (const auto& vdisk : Info->GetVDisks()) {
-                auto vd = Info->GetVDiskId(vdisk.OrderNumber);
-                if (failedDisks & TBlobStorageGroupInfo::TGroupVDisks(&Info->GetTopology(), vd)) {
+                auto vd = Info->GetVDiskId(vdisk.OrderNumber); 
+                if (failedDisks & TBlobStorageGroupInfo::TGroupVDisks(&Info->GetTopology(), vd)) { 
                     CTEST << (first ? "" : " ") << vd;
                     first = false;
                 }
@@ -101,7 +101,7 @@ public:
                 "status# " << NKikimrProto::EReplyStatus_Name(status)
                 << " expected# " << NKikimrProto::EReplyStatus_Name(expected));
         }
-        SetFailedDisks(TBlobStorageGroupInfo::TGroupVDisks(&Info->GetTopology()));
+        SetFailedDisks(TBlobStorageGroupInfo::TGroupVDisks(&Info->GetTopology())); 
 
         // permute any combinations of faulty disks and check for blob recovery
         for (const auto& disks : FaultsFittingFailModel) {

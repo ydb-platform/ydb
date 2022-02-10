@@ -1,15 +1,15 @@
 LIBRARY()
 
-OWNER(
-    cthulhu
-    g:kikimr
-)
+OWNER( 
+    cthulhu 
+    g:kikimr 
+) 
 
 PEERDIR(
-    library/cpp/containers/stack_vector
-    library/cpp/lwtrace
+    library/cpp/containers/stack_vector 
+    library/cpp/lwtrace 
     library/cpp/lwtrace/mon
-    ydb/library/schlab/probes
+    ydb/library/schlab/probes 
 )
 
 SRCS(

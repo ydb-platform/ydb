@@ -1,7 +1,7 @@
 #pragma once
 
-#include <ydb/core/base/pathid.h>
-#include <ydb/core/scheme/scheme_tablecell.h>
+#include <ydb/core/base/pathid.h> 
+#include <ydb/core/scheme/scheme_tablecell.h> 
 
 #include <util/generic/maybe.h>
 #include <util/generic/string.h>
@@ -11,7 +11,7 @@ namespace NKikimrChangeExchange {
 }
 
 namespace NKikimr {
-namespace NDataShard {
+namespace NDataShard { 
 
 class TChangeRecordBuilder;
 
@@ -75,9 +75,9 @@ private:
 
 }; // TChangeRecordBuilder
 
-} // NDataShard
+} // NDataShard 
 } // NKikimr
 
-Y_DECLARE_OUT_SPEC(inline, NKikimr::NDataShard::TChangeRecord, out, value) {
+Y_DECLARE_OUT_SPEC(inline, NKikimr::NDataShard::TChangeRecord, out, value) { 
     return value.Out(out);
 }

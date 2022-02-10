@@ -1,18 +1,18 @@
 #include "nodes_manager.h"
-#include <ydb/core/yq/libs/config/protos/yq_config.pb.h>
+#include <ydb/core/yq/libs/config/protos/yq_config.pb.h> 
 
 #include <library/cpp/actors/core/events.h>
 #include <library/cpp/actors/core/hfunc.h>
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <ydb/library/yql/providers/dq/worker_manager/interface/events.h>
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
-#include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
-#include <ydb/public/sdk/cpp/client/ydb_value/value.h>
-#include <ydb/core/yq/libs/common/entity_id.h>
-#include <ydb/core/yq/libs/private_client/private_client.h>
+#include <ydb/public/sdk/cpp/client/ydb_driver/driver.h> 
+#include <ydb/public/sdk/cpp/client/ydb_value/value.h> 
+#include <ydb/core/yq/libs/common/entity_id.h> 
+#include <ydb/core/yq/libs/private_client/private_client.h> 
 #include <library/cpp/actors/core/log.h>
 #include <util/system/hostname.h>
-#include <ydb/core/protos/services.pb.h>
+#include <ydb/core/protos/services.pb.h> 
 
 
 #define LOG_E(stream) \

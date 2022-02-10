@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 
 def backup_bin():
-    return yatest_common.binary_path("ydb/apps/ydb/ydb")
+    return yatest_common.binary_path("ydb/apps/ydb/ydb") 
 
 
 def upsert_simple(session, full_path):

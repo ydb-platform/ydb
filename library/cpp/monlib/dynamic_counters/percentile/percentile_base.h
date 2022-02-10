@@ -16,20 +16,20 @@ struct TPercentileBase : public TThrRefBase {
 
     TPercentiles Percentiles;
 
-    void Initialize(const TIntrusivePtr<NMonitoring::TDynamicCounters> &counters, const TVector<float> &thresholds,
-            TCountableBase::EVisibility visibility = TCountableBase::EVisibility::Public) {
+    void Initialize(const TIntrusivePtr<NMonitoring::TDynamicCounters> &counters, const TVector<float> &thresholds, 
+            TCountableBase::EVisibility visibility = TCountableBase::EVisibility::Public) { 
         Percentiles.reserve(thresholds.size());
         for (size_t i = 0; i < thresholds.size(); ++i) {
             Percentiles.emplace_back(thresholds[i],
-                counters->GetNamedCounter("percentile", Sprintf("%.1f", thresholds[i] * 100.f), false, visibility));
+                counters->GetNamedCounter("percentile", Sprintf("%.1f", thresholds[i] * 100.f), false, visibility)); 
         }
     }
 
     void Initialize(const TIntrusivePtr<NMonitoring::TDynamicCounters> &counters, TString group, TString subgroup,
-            TString name, const TVector<float> &thresholds,
-            TCountableBase::EVisibility visibility = TCountableBase::EVisibility::Public) {
+            TString name, const TVector<float> &thresholds, 
+            TCountableBase::EVisibility visibility = TCountableBase::EVisibility::Public) { 
         auto subCounters = counters->GetSubgroup(group, subgroup)->GetSubgroup("sensor", name);
-        Initialize(subCounters, thresholds, visibility);
+        Initialize(subCounters, thresholds, visibility); 
     }
 };
 

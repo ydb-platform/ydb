@@ -1,7 +1,7 @@
 #pragma once
-#include <ydb/core/base/row_version.h>
-#include <ydb/core/util/ulid.h>
-#include <ydb/core/protos/long_tx_service.pb.h>
+#include <ydb/core/base/row_version.h> 
+#include <ydb/core/util/ulid.h> 
+#include <ydb/core/protos/long_tx_service.pb.h> 
 
 namespace NKikimr {
 namespace NLongTxService {

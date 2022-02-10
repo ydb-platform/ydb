@@ -1,4 +1,4 @@
-UNITTEST_FOR(ydb/core/kqp/provider)
+UNITTEST_FOR(ydb/core/kqp/provider) 
 
 OWNER(spuchin)
 
@@ -7,8 +7,8 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/core/client/minikql_result_lib
-    ydb/core/kqp/ut/common
+    ydb/core/client/minikql_result_lib 
+    ydb/core/kqp/ut/common 
 )
 
 YQL_LAST_ABI_VERSION()

@@ -1,6 +1,6 @@
-import "ydb/core/protos/console_base.proto";
-import "ydb/core/protos/console_tenant.proto";
-import "ydb/core/protos/console_config.proto";
+import "ydb/core/protos/console_base.proto"; 
+import "ydb/core/protos/console_tenant.proto"; 
+import "ydb/core/protos/console_config.proto"; 
 
 package NKikimrConsole;
 option java_package = "ru.yandex.kikimr.proto";

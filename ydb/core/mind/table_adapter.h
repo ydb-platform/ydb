@@ -1,7 +1,7 @@
 #pragma once
 
-#include <ydb/core/tablet_flat/tablet_flat_executor.h>
-#include <ydb/core/tablet_flat/flat_cxx_database.h>
+#include <ydb/core/tablet_flat/tablet_flat_executor.h> 
+#include <ydb/core/tablet_flat/flat_cxx_database.h> 
 
 namespace NKikimr {
 
@@ -183,7 +183,7 @@ namespace NKikimr {
             static void PopulateUpdateOp(TUpdates &updates, std::tuple<TArgs...> *tuple) {
                 NTable::TUpdateOp op;
                 op.Tag = TColumn::ColumnId;
-                op.Op = NTable::ECellOp::Set;
+                op.Op = NTable::ECellOp::Set; 
 
                 std::tuple_element_t<Index, std::tuple<TArgs...>> &maybe = std::get<Index>(*tuple);
                 op.Value = NIceDb::TConvertTypeValue<TColumn::ColumnType>(
@@ -539,7 +539,7 @@ namespace NKikimr {
             TStackVec<NTable::TUpdateOp, std::tuple_size<decltype(data)>::value> updates;
             TCells::template PopulateUpdateOp<0>(updates, &data);
 
-            txc.DB.Update(TTable::TableId, NTable::ERowOp::Upsert, keyForTable, updates);
+            txc.DB.Update(TTable::TableId, NTable::ERowOp::Upsert, keyForTable, updates); 
         }
 
         template<typename TKey>
@@ -549,7 +549,7 @@ namespace NKikimr {
             TStackVec<TRawTypeValue, std::tuple_size<decltype(keyTuple)>::value> keyForTable;
             NTableAdapter::MapKey<TTable>(&keyTuple, keyForTable);
 
-            txc.DB.Update(TTable::TableId, NTable::ERowOp::Erase, keyForTable, { });
+            txc.DB.Update(TTable::TableId, NTable::ERowOp::Erase, keyForTable, { }); 
         }
 
         template<typename TCallback>

@@ -3,15 +3,15 @@ OWNER(g:yql)
 IF (OS_LINUX OR OS_DARWIN)
     UNITTEST_FOR(ydb/library/yql/utils/failure_injector)
 
-    SIZE(SMALL)
+    SIZE(SMALL) 
 
-    SRCS(
-        failure_injector_ut.cpp
-    )
+    SRCS( 
+        failure_injector_ut.cpp 
+    ) 
 
-    PEERDIR(
-        ydb/library/yql/utils/log
-    )
+    PEERDIR( 
+        ydb/library/yql/utils/log 
+    ) 
 
-    END()
+    END() 
 ENDIF()

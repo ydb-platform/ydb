@@ -28,15 +28,15 @@ namespace NPage {
 #pragma pack(push,1)
 
         struct TItem {
-            TCellOp GetOp(bool) const noexcept
+            TCellOp GetOp(bool) const noexcept 
             {
-                return { Null ? ECellOp::Null : ECellOp::Set, ELargeObj::Inline };
+                return { Null ? ECellOp::Null : ECellOp::Set, ELargeObj::Inline }; 
             }
 
             bool Null;
         } Y_PACKED;
 
-        struct TRecord : public TDataPageRecord<TRecord, TItem> {
+        struct TRecord : public TDataPageRecord<TRecord, TItem> { 
             TRowId RowId_;
             TPageId PageId_;
 

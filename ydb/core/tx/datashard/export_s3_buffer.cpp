@@ -4,15 +4,15 @@
 #include "export_s3.h"
 #include "export_s3_buffer.h"
 
-#include <ydb/core/tablet_flat/flat_row_state.h>
-#include <ydb/library/binary_json/read.h>
-#include <ydb/public/lib/scheme_types/scheme_type_id.h>
+#include <ydb/core/tablet_flat/flat_row_state.h> 
+#include <ydb/library/binary_json/read.h> 
+#include <ydb/public/lib/scheme_types/scheme_type_id.h> 
 #include <library/cpp/string_utils/quote/quote.h>
 
 #include <util/datetime/base.h>
 
 namespace NKikimr {
-namespace NDataShard {
+namespace NDataShard { 
 
 using namespace NExportScan;
 using TTableColumns = TS3Export::TTableColumns;
@@ -186,7 +186,7 @@ IBuffer* CreateS3ExportBuffer(const TTableColumns& columns, ui64 rowsLimit, ui64
     return new TS3Buffer(columns, rowsLimit, bytesLimit);
 }
 
-} // NDataShard
+} // NDataShard 
 } // NKikimr
 
 #endif // KIKIMR_DISABLE_S3_OPS

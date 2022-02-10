@@ -69,11 +69,11 @@ IF (PYTHON2)
 ENDIF()
 
 PEERDIR(
-    contrib/libs/grpc/python
+    contrib/libs/grpc/python 
     contrib/python/protobuf
-    ydb/public/api/grpc
-    ydb/public/api/grpc/draft
-    ydb/public/api/protos
+    ydb/public/api/grpc 
+    ydb/public/api/grpc/draft 
+    ydb/public/api/protos 
 )
 
 END()

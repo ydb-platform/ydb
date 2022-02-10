@@ -9,8 +9,8 @@ from .kikimr_client import kikimr_client_factory
 from ydb.tests.library.common.protobuf_console import (
     CreateTenantRequest, AlterTenantRequest, GetTenantStatusRequest,
     RemoveTenantRequest, GetOperationRequest)
-import ydb.public.api.protos.ydb_cms_pb2 as cms_tenants_pb
-from ydb.public.api.protos.ydb_status_codes_pb2 import StatusIds
+import ydb.public.api.protos.ydb_cms_pb2 as cms_tenants_pb 
+from ydb.public.api.protos.ydb_status_codes_pb2 import StatusIds 
 
 
 logger = logging.getLogger(__name__)

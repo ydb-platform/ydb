@@ -28,7 +28,7 @@ class TAffinityGuard : TNonCopyable {
 
 public:
     TAffinityGuard(const TAffinity* affinity) {
-        Stacked = false;
+        Stacked = false; 
         if (affinity && !affinity->Empty()) {
             OldAffinity.Current();
             affinity->Set();

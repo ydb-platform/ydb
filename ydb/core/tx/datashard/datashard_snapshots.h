@@ -3,22 +3,22 @@
 #include "const.h"
 #include "snapshot_key.h"
 
-#include <ydb/core/tablet_flat/flat_cxx_database.h>
-#include <ydb/core/tablet_flat/tablet_flat_executor.h>
+#include <ydb/core/tablet_flat/flat_cxx_database.h> 
+#include <ydb/core/tablet_flat/tablet_flat_executor.h> 
 
-#include <ydb/core/util/intrusive_heap.h>
+#include <ydb/core/util/intrusive_heap.h> 
 
 #include <util/generic/hash.h>
 #include <util/generic/list.h>
 #include <util/generic/map.h>
 
 namespace NKikimr {
-namespace NDataShard {
+namespace NDataShard { 
 
 using NTabletFlatExecutor::TTransactionContext;
 
 class TOperation;
-class TDataShard;
+class TDataShard; 
 
 class TSnapshot {
     friend class TSnapshotExpireQueue;
@@ -102,7 +102,7 @@ public:
         const const_iterator End;
     };
 
-    explicit TSnapshotManager(TDataShard* self)
+    explicit TSnapshotManager(TDataShard* self) 
         : Self(self)
     { }
 
@@ -198,7 +198,7 @@ private:
     void DoRemoveSnapshot(NTable::TDatabase& db, const TSnapshotKey& key);
 
 private:
-    TDataShard* const Self;
+    TDataShard* const Self; 
     TRowVersion MinWriteVersion;
 
     EMvccState MvccState = EMvccState::MvccUnspecified;
@@ -219,5 +219,5 @@ private:
     TMonotonic LastAdvanceWatermark{};
 };
 
-}   // namespace NDataShard
+}   // namespace NDataShard 
 }   // namespace NKikimr

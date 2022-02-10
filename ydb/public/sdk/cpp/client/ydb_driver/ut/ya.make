@@ -1,4 +1,4 @@
-UNITTEST_FOR(ydb/public/sdk/cpp/client/ydb_driver)
+UNITTEST_FOR(ydb/public/sdk/cpp/client/ydb_driver) 
 
 OWNER(
     dcherednik
@@ -17,7 +17,7 @@ ENDIF()
 FORK_SUBTESTS()
 
 PEERDIR(
-    ydb/public/sdk/cpp/client/ydb_table
+    ydb/public/sdk/cpp/client/ydb_table 
 )
 
 SRCS(

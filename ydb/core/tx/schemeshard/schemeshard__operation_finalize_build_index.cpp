@@ -2,9 +2,9 @@
 #include "schemeshard__operation_common.h"
 #include "schemeshard_impl.h"
 
-#include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/core/protos/flat_scheme_op.pb.h> 
 
-#include <ydb/core/base/subdomain.h>
+#include <ydb/core/base/subdomain.h> 
 
 namespace {
 

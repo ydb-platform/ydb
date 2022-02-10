@@ -1,5 +1,5 @@
 OWNER(
-    g:kikimr
+    g:kikimr 
     g:sqs
 )
 
@@ -15,11 +15,11 @@ PEERDIR(
     library/cpp/cgiparam
     library/cpp/http/io
     library/cpp/http/misc
-    ydb/library/http_proxy/error
+    ydb/library/http_proxy/error 
 )
 
 END()
-
-RECURSE_FOR_TESTS(
-    ut
-)
+ 
+RECURSE_FOR_TESTS( 
+    ut 
+) 

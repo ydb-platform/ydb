@@ -1,8 +1,8 @@
 #include "datashard_impl.h"
 #include "operation.h"
 
-#include <ydb/core/tablet_flat/flat_stat_table.h>
-#include <ydb/core/util/pb.h>
+#include <ydb/core/tablet_flat/flat_stat_table.h> 
+#include <ydb/core/util/pb.h> 
 
 #include <library/cpp/mime/types/mime.h>
 #include <library/cpp/resource/resource.h>
@@ -10,13 +10,13 @@
 #include <library/cpp/html/pcdata/pcdata.h>
 
 namespace NKikimr {
-namespace NDataShard {
+namespace NDataShard { 
 
-class TDataShard::TTxMonitoringResetSchemaVersion
-    : public NTabletFlatExecutor::TTransactionBase<TDataShard>
+class TDataShard::TTxMonitoringResetSchemaVersion 
+    : public NTabletFlatExecutor::TTransactionBase<TDataShard> 
 {
 public:
-    TTxMonitoringResetSchemaVersion(TDataShard *self, NMon::TEvRemoteHttpInfo::TPtr ev)
+    TTxMonitoringResetSchemaVersion(TDataShard *self, NMon::TEvRemoteHttpInfo::TPtr ev) 
         : TBase(self)
         , Ev(ev)
     {}
@@ -54,8 +54,8 @@ private:
     size_t Updates = 0;
 };
 
-ITransaction* TDataShard::CreateTxMonitoringResetSchemaVersion(
-        TDataShard* self,
+ITransaction* TDataShard::CreateTxMonitoringResetSchemaVersion( 
+        TDataShard* self, 
         NMon::TEvRemoteHttpInfo::TPtr ev)
 {
     return new TTxMonitoringResetSchemaVersion(self, ev);

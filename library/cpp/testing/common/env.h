@@ -17,10 +17,10 @@ TString ArcadiaFromCurrentLocation(TStringBuf where, TStringBuf path);
 
 // @brief return build folder path
 TString BuildRoot();
-
+ 
 // @brief return full path to built artefact, where path is relative from arcadia root
 TString BinaryPath(TStringBuf path);
-
+ 
 // @brief return true if environment is testenv otherwise false
 bool FromYaTest();
 

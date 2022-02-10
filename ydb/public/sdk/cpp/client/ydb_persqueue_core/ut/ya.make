@@ -1,7 +1,7 @@
-UNITTEST_FOR(ydb/public/sdk/cpp/client/ydb_persqueue_core)
+UNITTEST_FOR(ydb/public/sdk/cpp/client/ydb_persqueue_core) 
 
 OWNER(
-    g:kikimr
+    g:kikimr 
     g:logbroker
 )
 
@@ -18,14 +18,14 @@ FORK_SUBTESTS()
 
 PEERDIR(
     library/cpp/testing/gmock_in_unittest
-    ydb/core/testlib
-    ydb/public/lib/json_value
-    ydb/public/lib/yson_value
-    ydb/public/sdk/cpp/client/ydb_driver
-    ydb/public/sdk/cpp/client/ydb_persqueue_core
-    ydb/public/sdk/cpp/client/ydb_persqueue_core/impl
-    ydb/public/sdk/cpp/client/ydb_persqueue_core/ut/ut_utils
-    ydb/public/sdk/cpp/client/ydb_persqueue_public/codecs
+    ydb/core/testlib 
+    ydb/public/lib/json_value 
+    ydb/public/lib/yson_value 
+    ydb/public/sdk/cpp/client/ydb_driver 
+    ydb/public/sdk/cpp/client/ydb_persqueue_core 
+    ydb/public/sdk/cpp/client/ydb_persqueue_core/impl 
+    ydb/public/sdk/cpp/client/ydb_persqueue_core/ut/ut_utils 
+    ydb/public/sdk/cpp/client/ydb_persqueue_public/codecs 
 )
 
 YQL_LAST_ABI_VERSION()
@@ -41,7 +41,7 @@ SRCS(
 )
 
 END()
-
-RECURSE_FOR_TESTS(
-    with_offset_ranges_mode_ut
-)
+ 
+RECURSE_FOR_TESTS( 
+    with_offset_ranges_mode_ut 
+) 

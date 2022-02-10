@@ -1,10 +1,10 @@
 #include "change_collector_async_index.h"
 #include "datashard_impl.h"
 
-#include <ydb/core/tablet_flat/flat_cxx_database.h>
+#include <ydb/core/tablet_flat/flat_cxx_database.h> 
 
 namespace NKikimr {
-namespace NDataShard {
+namespace NDataShard { 
 
 using namespace NMiniKQL;
 using namespace NTable;
@@ -72,7 +72,7 @@ void TAsyncIndexChangeCollector::SetReadVersion(const TRowVersion& readVersion) 
     ReadVersion = readVersion;
 }
 
-bool TAsyncIndexChangeCollector::Collect(const TTableId& tableId, ERowOp rop,
+bool TAsyncIndexChangeCollector::Collect(const TTableId& tableId, ERowOp rop, 
         TArrayRef<const TRawTypeValue> key, TArrayRef<const TUpdateOp> updates)
 {
     Y_VERIFY_S(Self->IsUserTable(tableId), "Unknown table: " << tableId);
@@ -84,9 +84,9 @@ bool TAsyncIndexChangeCollector::Collect(const TTableId& tableId, ERowOp rop,
         << ", tags# " << userTable->KeyColumnIds.size());
 
     switch (rop) {
-    case ERowOp::Upsert:
-    case ERowOp::Erase:
-    case ERowOp::Reset:
+    case ERowOp::Upsert: 
+    case ERowOp::Erase: 
+    case ERowOp::Reset: 
         break;
     default:
         Y_FAIL_S("Unsupported row op: " << static_cast<ui8>(rop));
@@ -103,7 +103,7 @@ bool TAsyncIndexChangeCollector::Collect(const TTableId& tableId, ERowOp rop,
     }
 
     const bool generateDeletions = (ready != EReady::Gone);
-    const bool generateUpdates = (rop != ERowOp::Erase);
+    const bool generateUpdates = (rop != ERowOp::Erase); 
 
     if (!generateDeletions && !generateUpdates) {
         return true;
@@ -121,7 +121,7 @@ bool TAsyncIndexChangeCollector::Collect(const TTableId& tableId, ERowOp rop,
             bool needDeletion = false;
 
             for (const auto tag : index.KeyColumnIds) {
-                if (updatedTagToPos.contains(tag) || rop == ERowOp::Erase || rop == ERowOp::Reset) {
+                if (updatedTagToPos.contains(tag) || rop == ERowOp::Erase || rop == ERowOp::Reset) { 
                     needDeletion = true;
                 }
 
@@ -135,7 +135,7 @@ bool TAsyncIndexChangeCollector::Collect(const TTableId& tableId, ERowOp rop,
             }
 
             if (needDeletion) {
-                Persist(pathId, ERowOp::Erase, IndexKeyVals, IndexKeyTags, {});
+                Persist(pathId, ERowOp::Erase, IndexKeyVals, IndexKeyTags, {}); 
             }
 
             Clear();
@@ -152,7 +152,7 @@ bool TAsyncIndexChangeCollector::Collect(const TTableId& tableId, ERowOp rop,
                     Y_VERIFY(userTable->Columns.contains(tag));
                     const auto& column = userTable->Columns.at(tag);
 
-                    if (rop == ERowOp::Reset && !column.IsKey) {
+                    if (rop == ERowOp::Reset && !column.IsKey) { 
                         needUpdate = true;
                         FillKeyWithNull(tag, column.Type);
                     } else {
@@ -170,7 +170,7 @@ bool TAsyncIndexChangeCollector::Collect(const TTableId& tableId, ERowOp rop,
                 if (updatedTagToPos.contains(tag)) {
                     needUpdate = true;
                     FillDataFromUpdate(tag, updatedTagToPos.at(tag), updates);
-                } else if (rop == ERowOp::Reset) {
+                } else if (rop == ERowOp::Reset) { 
                     needUpdate = true;
                     Y_VERIFY(userTable->Columns.contains(tag));
                     FillDataWithNull(tag, userTable->Columns.at(tag).Type);
@@ -178,7 +178,7 @@ bool TAsyncIndexChangeCollector::Collect(const TTableId& tableId, ERowOp rop,
             }
 
             if (needUpdate) {
-                Persist(pathId, ERowOp::Upsert, IndexKeyVals, IndexKeyTags, IndexDataVals);
+                Persist(pathId, ERowOp::Upsert, IndexKeyVals, IndexKeyTags, IndexDataVals); 
             }
 
             Clear();
@@ -217,17 +217,17 @@ const THashMap<TTag, TPos>& TAsyncIndexChangeCollector::GetKeyTagToPos(const TTa
     return it->second.KeyTagToPos;
 }
 
-TArrayRef<TTag> TAsyncIndexChangeCollector::GetTagsToSelect(const TTableId& tableId, ERowOp rop) const {
+TArrayRef<TTag> TAsyncIndexChangeCollector::GetTagsToSelect(const TTableId& tableId, ERowOp rop) const { 
     auto it = CachedTags.find(tableId);
     if (it == CachedTags.end()) {
         it = CacheTags(tableId);
     }
 
     switch (rop) {
-    case ERowOp::Upsert:
+    case ERowOp::Upsert: 
         return it->second.Columns;
-    case ERowOp::Erase:
-    case ERowOp::Reset:
+    case ERowOp::Erase: 
+    case ERowOp::Reset: 
         return it->second.IndexColumns;
     default:
         Y_FAIL("unreachable");
@@ -257,7 +257,7 @@ void TAsyncIndexChangeCollector::FillKeyFromUpdate(TTag tag, TPos pos, TArrayRef
     Y_VERIFY(pos < updates.size());
 
     const auto& update = updates.at(pos);
-    Y_VERIFY_S(update.Op == ECellOp::Set, "Unexpected op: " << update.Op.Raw());
+    Y_VERIFY_S(update.Op == ECellOp::Set, "Unexpected op: " << update.Op.Raw()); 
 
     IndexKeyVals.emplace_back(update.Value);
     IndexKeyTags.emplace_back(tag);
@@ -274,16 +274,16 @@ void TAsyncIndexChangeCollector::FillDataFromUpdate(TTag tag, TPos pos, TArrayRe
     Y_VERIFY(pos < updates.size());
 
     const auto& update = updates.at(pos);
-    Y_VERIFY_S(update.Op == ECellOp::Set, "Unexpected op: " << update.Op.Raw());
+    Y_VERIFY_S(update.Op == ECellOp::Set, "Unexpected op: " << update.Op.Raw()); 
 
-    IndexDataVals.emplace_back(tag, ECellOp::Set, update.Value);
+    IndexDataVals.emplace_back(tag, ECellOp::Set, update.Value); 
 }
 
 void TAsyncIndexChangeCollector::FillDataWithNull(TTag tag, NScheme::TTypeId type) {
-    IndexDataVals.emplace_back(tag, ECellOp::Set, TRawTypeValue({}, type));
+    IndexDataVals.emplace_back(tag, ECellOp::Set, TRawTypeValue({}, type)); 
 }
 
-void TAsyncIndexChangeCollector::Persist(const TPathId& pathId, ERowOp rop,
+void TAsyncIndexChangeCollector::Persist(const TPathId& pathId, ERowOp rop, 
         TArrayRef<const TRawTypeValue> key, TArrayRef<const TTag> keyTags, TArrayRef<const TUpdateOp> updates)
 {
     NKikimrChangeExchange::TChangeRecord::TDataChange body;
@@ -298,5 +298,5 @@ void TAsyncIndexChangeCollector::Clear() {
     IndexDataVals.clear();
 }
 
-} // NDataShard
+} // NDataShard 
 } // NKikimr

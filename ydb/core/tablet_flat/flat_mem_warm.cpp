@@ -9,9 +9,9 @@ TString PrintRow(const TDbTupleRef& row, const NScheme::TTypeRegistry& typeRegis
     return DbgPrintTuple(row, typeRegistry);
 }
 
-TIntrusiveConstPtr<NPage::TExtBlobs> TMemTable::MakeBlobsPage(TArrayRef<const TMemTableSnapshot> list)
+TIntrusiveConstPtr<NPage::TExtBlobs> TMemTable::MakeBlobsPage(TArrayRef<const TMemTableSnapshot> list) 
 {
-    NPage::TExtBlobsWriter writer;
+    NPage::TExtBlobsWriter writer; 
 
     for (auto &one: list) {
         for (auto it = one->GetBlobs()->Iterator(); it.IsValid(); it.Next()) {
@@ -19,14 +19,14 @@ TIntrusiveConstPtr<NPage::TExtBlobs> TMemTable::MakeBlobsPage(TArrayRef<const TM
         }
     }
 
-    return new NPage::TExtBlobs(writer.Make(true), { });
+    return new NPage::TExtBlobs(writer.Make(true), { }); 
 }
 
-NMem::TTreeSnapshot TMemTable::Snapshot() {
+NMem::TTreeSnapshot TMemTable::Snapshot() { 
     return NMem::TTreeSnapshot(Tree.Snapshot());
 }
 
-NMem::TTreeSnapshot TMemTable::Immediate() const {
+NMem::TTreeSnapshot TMemTable::Immediate() const { 
     // Immediate snapshots are used in two distinct cases:
     // 1) When taking a snapshot of a frozen mem table, in that case we know
     //    the tree is frozen and will not be modified, so using an unsafe
@@ -37,7 +37,7 @@ NMem::TTreeSnapshot TMemTable::Immediate() const {
     return NMem::TTreeSnapshot(Tree.UnsafeSnapshot());
 }
 
-void TMemTable::DebugDump(IOutputStream& str, const NScheme::TTypeRegistry& typeRegistry) const {
+void TMemTable::DebugDump(IOutputStream& str, const NScheme::TTypeRegistry& typeRegistry) const { 
     auto it = Immediate().Iterator();
     auto types = Scheme->Keys->BasicTypes();
     for (it.SeekFirst(); it.IsValid(); it.Next()) {
@@ -47,7 +47,7 @@ void TMemTable::DebugDump(IOutputStream& str, const NScheme::TTypeRegistry& type
         const auto *row = it.GetValue();
         while (row) {
             str << keyStr
-                << "ERowOp " << int(row->Rop)
+                << "ERowOp " << int(row->Rop) 
                 << " {";
             for (ui32 i = 0; i < row->Items; ++i) {
                 TTag colId = row->Ops()[i].Tag;
@@ -55,7 +55,7 @@ void TMemTable::DebugDump(IOutputStream& str, const NScheme::TTypeRegistry& type
                     NScheme::TTypeId typeId = Scheme->ColInfo(colId)->TypeId;
                     auto &op = row->Ops()[i];
 
-                    str << EOpToStr(ECellOp(op.Op)) << " " << op.Tag << " " << DbgPrintCell(op.Value, typeId, typeRegistry);
+                    str << EOpToStr(ECellOp(op.Op)) << " " << op.Tag << " " << DbgPrintCell(op.Value, typeId, typeRegistry); 
                 } else {
                     str << "unknown column " << colId;
                 }

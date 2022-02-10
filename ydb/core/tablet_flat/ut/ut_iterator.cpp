@@ -1,16 +1,16 @@
-#include <ydb/core/tablet_flat/flat_mem_warm.h>
-#include <ydb/core/tablet_flat/flat_mem_iter.h>
-#include <ydb/core/tablet_flat/flat_table_subset.h>
-#include <ydb/core/tablet_flat/flat_iterator.h>
-#include <ydb/core/tablet_flat/flat_part_slice.h>
-#include <ydb/core/tablet_flat/test/libs/rows/cook.h>
-#include <ydb/core/tablet_flat/test/libs/table/model/large.h>
-#include <ydb/core/tablet_flat/test/libs/table/test_pretty.h>
-#include <ydb/core/tablet_flat/test/libs/table/test_make.h>
-#include <ydb/core/tablet_flat/test/libs/table/test_iter.h>
-#include <ydb/core/tablet_flat/test/libs/table/test_wreck.h>
-#include <ydb/core/tablet_flat/test/libs/table/test_mixer.h>
-#include <ydb/core/tablet_flat/test/libs/table/wrap_iter.h>
+#include <ydb/core/tablet_flat/flat_mem_warm.h> 
+#include <ydb/core/tablet_flat/flat_mem_iter.h> 
+#include <ydb/core/tablet_flat/flat_table_subset.h> 
+#include <ydb/core/tablet_flat/flat_iterator.h> 
+#include <ydb/core/tablet_flat/flat_part_slice.h> 
+#include <ydb/core/tablet_flat/test/libs/rows/cook.h> 
+#include <ydb/core/tablet_flat/test/libs/table/model/large.h> 
+#include <ydb/core/tablet_flat/test/libs/table/test_pretty.h> 
+#include <ydb/core/tablet_flat/test/libs/table/test_make.h> 
+#include <ydb/core/tablet_flat/test/libs/table/test_iter.h> 
+#include <ydb/core/tablet_flat/test/libs/table/test_wreck.h> 
+#include <ydb/core/tablet_flat/test/libs/table/test_mixer.h> 
+#include <ydb/core/tablet_flat/test/libs/table/wrap_iter.h> 
 
 #include <util/generic/xrange.h>
 
@@ -35,15 +35,15 @@ namespace {
         /* parts form a single run and have non-trivial pages */
         TLevels levels(subset->Scheme->Keys);
 
-        for (const auto &partView : subset->Flatten) {
-            levels.Add(partView.Part, partView.Slices);
+        for (const auto &partView : subset->Flatten) { 
+            levels.Add(partView.Part, partView.Slices); 
 
-            auto *partStore = partView.As<NTest::TPartStore>();
+            auto *partStore = partView.As<NTest::TPartStore>(); 
 
-            if (partStore->Store->PageCollectionArray(0).size() * 3 > partStore->Stat.Rows) {
+            if (partStore->Store->PageCollectionArray(0).size() * 3 > partStore->Stat.Rows) { 
                 UNIT_ASSERT_C(false, "Part has too few rows per page"
-                    << ", rows " << partStore->Stat.Rows
-                    << ", pages " << partStore->Store->PageCollectionArray(0).size());
+                    << ", rows " << partStore->Stat.Rows 
+                    << ", pages " << partStore->Store->PageCollectionArray(0).size()); 
             }
         }
 
@@ -67,7 +67,7 @@ Y_UNIT_TEST_SUITE(TIterator) {
         }
 
         { /*_ Seek w/o pages have to yield EReady::Page forever */
-            auto *env = new TNoEnv{ false, ELargeObjNeed::Has };
+            auto *env = new TNoEnv{ false, ELargeObjNeed::Has }; 
 
             wrap.Displace<IPages>(env);
 
@@ -94,13 +94,13 @@ Y_UNIT_TEST_SUITE(TIterator) {
         const auto frame = ui32(0) - part->Large->Relation(0).Refer;
         const auto on = part->Large->Relation(frame).Row;
 
-        auto *env = new TNoEnv{ true, ELargeObjNeed::Has };
+        auto *env = new TNoEnv{ true, ELargeObjNeed::Has }; 
 
         wrap.Displace<IPages>(env);
         wrap.To(1).Seek(Mass0.Saved[on-1], ESeek::Lower).Is(Mass0.Saved[on-1]);
-        env->Lobs = ELargeObjNeed::Yes; /* no any blobs in cache */
+        env->Lobs = ELargeObjNeed::Yes; /* no any blobs in cache */ 
         wrap.To(2).Next().Is(EReady::Page).To(3).Next().Is(EReady::Page);
-        env->Lobs = ELargeObjNeed::Has; /* load all blobs to cache */
+        env->Lobs = ELargeObjNeed::Has; /* load all blobs to cache */ 
         wrap.To(8).Next().Is(Mass0.Saved[on]);
     }
 

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "defs.h"
+#include "defs.h" 
 #include "blobstorage_groupinfo.h"
 
 namespace NKikimr {
@@ -23,8 +23,8 @@ namespace NKikimr {
             std::fill(PerPartStatus.begin(), PerPartStatus.end(), 0);
         }
 
-        void AddItem(ui32 nodeId, ui32 partIdx, const TBlobStorageGroupType &gtype) {
-            Y_VERIFY(nodeId < gtype.BlobSubgroupSize() && partIdx < gtype.TotalPartCount());
+        void AddItem(ui32 nodeId, ui32 partIdx, const TBlobStorageGroupType &gtype) { 
+            Y_VERIFY(nodeId < gtype.BlobSubgroupSize() && partIdx < gtype.TotalPartCount()); 
             PerPartStatus[partIdx] |= TRowBitMask(1) << nodeId;
         }
 
@@ -42,19 +42,19 @@ namespace NKikimr {
         // Count number of effective replicas (that is, the number of replicas written on distinct disks) using the
         // part-to-node mask; items in that mask are indexes by part index and contain bitmask of subgroup's disks
         // containing these parts
-        ui32 CountEffectiveReplicas(const TBlobStorageGroupType &gtype) const;
+        ui32 CountEffectiveReplicas(const TBlobStorageGroupType &gtype) const; 
 
         // Create part layout from ingress
-        static TSubgroupPartLayout CreateFromIngress(TIngress ingress, const TBlobStorageGroupType &gtype);
+        static TSubgroupPartLayout CreateFromIngress(TIngress ingress, const TBlobStorageGroupType &gtype); 
 
         // Count effective replicas based on ingress.
         static ui32 CountEffectiveReplicas(TIngress ingress, TBlobStorageGroupType gtype);
 
         // Return a set of subgroup's disk contaning any replicas
-        TBlobStorageGroupInfo::TSubgroupVDisks GetInvolvedDisks(const TBlobStorageGroupInfo::TTopology *top) const;
+        TBlobStorageGroupInfo::TSubgroupVDisks GetInvolvedDisks(const TBlobStorageGroupInfo::TTopology *top) const; 
 
         void Output(IOutputStream& str, const TBlobStorageGroupType &gtype) const {
-            const ui32 totalPartCount = gtype.TotalPartCount();
+            const ui32 totalPartCount = gtype.TotalPartCount(); 
             str << "{";
             for (ui32 i = 0; i < totalPartCount; ++i) {
                 if (i) {

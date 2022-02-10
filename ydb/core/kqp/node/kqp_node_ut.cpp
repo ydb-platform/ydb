@@ -1,13 +1,13 @@
-#include <ydb/core/base/statestorage.h>
-#include <ydb/core/cms/console/console.h>
-#include <ydb/core/kqp/kqp.h>
-#include <ydb/core/kqp/node/kqp_node.h>
-#include <ydb/core/kqp/rm/kqp_rm.h>
-#include <ydb/core/tablet/resource_broker_impl.h>
+#include <ydb/core/base/statestorage.h> 
+#include <ydb/core/cms/console/console.h> 
+#include <ydb/core/kqp/kqp.h> 
+#include <ydb/core/kqp/node/kqp_node.h> 
+#include <ydb/core/kqp/rm/kqp_rm.h> 
+#include <ydb/core/tablet/resource_broker_impl.h> 
 
-#include <ydb/core/testlib/actor_helpers.h>
-#include <ydb/core/testlib/tablet_helpers.h>
-#include <ydb/core/testlib/tenant_runtime.h>
+#include <ydb/core/testlib/actor_helpers.h> 
+#include <ydb/core/testlib/tablet_helpers.h> 
+#include <ydb/core/testlib/tenant_runtime.h> 
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
@@ -113,8 +113,8 @@ struct TMockComputeActor {
     TActorId ExecuterId;
     ui64 TxId;
     NYql::NDqProto::TDqTask Task;
-    NYql::NDq::TComputeRuntimeSettings Settings;
-    NYql::NDq::TComputeMemoryLimits MemoryLimits;
+    NYql::NDq::TComputeRuntimeSettings Settings; 
+    NYql::NDq::TComputeMemoryLimits MemoryLimits; 
 };
 
 struct TMockKqpComputeActorFactory : public IKqpNodeComputeActorFactory {
@@ -125,7 +125,7 @@ struct TMockKqpComputeActorFactory : public IKqpNodeComputeActorFactory {
         : Runtime(runtime) {}
 
     IActor* CreateKqpComputeActor(const TActorId& executerId, ui64 txId, NYql::NDqProto::TDqTask&& task,
-        const NYql::NDq::TComputeRuntimeSettings& settings, const NYql::NDq::TComputeMemoryLimits& memoryLimits) override
+        const NYql::NDq::TComputeRuntimeSettings& settings, const NYql::NDq::TComputeMemoryLimits& memoryLimits) override 
     {
         auto actorId = Runtime.AllocateEdgeActor();
         auto& mock = Task2Actor[task.GetId()];
@@ -142,7 +142,7 @@ struct TMockKqpComputeActorFactory : public IKqpNodeComputeActorFactory {
 class KqpNode : public TTestBase {
 public:
     void SetUp() override {
-        Runtime.Reset(new TTenantTestRuntime(MakeTenantTestConfig()));
+        Runtime.Reset(new TTenantTestRuntime(MakeTenantTestConfig())); 
 
         NActors::NLog::EPriority priority = DETAILED_LOG ? NLog::PRI_DEBUG : NLog::PRI_ERROR;
         Runtime->SetLogPriority(NKikimrServices::RESOURCE_BROKER, priority);
@@ -160,7 +160,7 @@ public:
         ResourceBrokerActorId = Runtime->Register(broker);
         WaitForBootstrap();
 
-        CompFactory.Reset(new TMockKqpComputeActorFactory(*Runtime));
+        CompFactory.Reset(new TMockKqpComputeActorFactory(*Runtime)); 
     }
 
     void WaitForBootstrap() {

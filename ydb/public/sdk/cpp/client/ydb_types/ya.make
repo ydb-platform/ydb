@@ -1,6 +1,6 @@
 LIBRARY()
 
-OWNER(g:kikimr)
+OWNER(g:kikimr) 
 
 PEERDIR(
     contrib/libs/protobuf

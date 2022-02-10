@@ -1,6 +1,6 @@
 LIBRARY()
 
-OWNER(g:yql)
+OWNER(g:yql) 
 
 SRCS(
     grpc_service.cpp
@@ -14,12 +14,12 @@ PEERDIR(
     library/cpp/actors/dnsresolver
     library/cpp/actors/interconnect
     library/cpp/build_info
-    library/cpp/grpc/server
-    library/cpp/grpc/server/actors
+    library/cpp/grpc/server 
+    library/cpp/grpc/server/actors 
     library/cpp/svnversion
     library/cpp/threading/future
-    ydb/library/yql/sql
-    ydb/public/api/protos
+    ydb/library/yql/sql 
+    ydb/public/api/protos 
     ydb/library/yql/providers/common/metrics
     ydb/library/yql/providers/dq/actors
     ydb/library/yql/providers/dq/api/grpc
@@ -30,6 +30,6 @@ PEERDIR(
     ydb/library/yql/providers/dq/worker_manager/interface
 )
 
-YQL_LAST_ABI_VERSION()
+YQL_LAST_ABI_VERSION() 
 
 END()

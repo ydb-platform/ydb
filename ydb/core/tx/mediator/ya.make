@@ -17,17 +17,17 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/actors/core
-    ydb/core/base
-    ydb/core/engine/minikql
-    ydb/core/protos
-    ydb/core/scheme_types
-    ydb/core/tablet
-    ydb/core/tablet_flat
-    ydb/core/tx
-    ydb/core/tx/coordinator
-    ydb/core/tx/time_cast
-    ydb/core/util
+    library/cpp/actors/core 
+    ydb/core/base 
+    ydb/core/engine/minikql 
+    ydb/core/protos 
+    ydb/core/scheme_types 
+    ydb/core/tablet 
+    ydb/core/tablet_flat 
+    ydb/core/tx 
+    ydb/core/tx/coordinator 
+    ydb/core/tx/time_cast 
+    ydb/core/util 
 )
 
 END()

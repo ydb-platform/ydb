@@ -3,9 +3,9 @@
 namespace NKikimr {
 namespace NDataShard {
 
-class TDataShard::TTxCompactBorrowed : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
+class TDataShard::TTxCompactBorrowed : public NTabletFlatExecutor::TTransactionBase<TDataShard> { 
 public:
-    TTxCompactBorrowed(TDataShard* self, TEvDataShard::TEvCompactBorrowed::TPtr&& ev)
+    TTxCompactBorrowed(TDataShard* self, TEvDataShard::TEvCompactBorrowed::TPtr&& ev) 
         : TTransactionBase(self)
         , Ev(std::move(ev))
     {}
@@ -73,7 +73,7 @@ private:
     TEvDataShard::TEvCompactBorrowed::TPtr Ev;
 };
 
-void TDataShard::Handle(TEvDataShard::TEvCompactBorrowed::TPtr& ev, const TActorContext& ctx) {
+void TDataShard::Handle(TEvDataShard::TEvCompactBorrowed::TPtr& ev, const TActorContext& ctx) { 
     Execute(new TTxCompactBorrowed(this, std::move(ev)), ctx);
 }
 

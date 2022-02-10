@@ -2,8 +2,8 @@
 
 #include <ydb/library/yql/minikql/defs.h>
 #include <ydb/library/yql/minikql/mkql_node.h>
-#include <ydb/library/mkql_proto/protos/minikql.pb.h>
-#include <ydb/public/api/protos/ydb_value.pb.h>
+#include <ydb/library/mkql_proto/protos/minikql.pb.h> 
+#include <ydb/public/api/protos/ydb_value.pb.h> 
 
 namespace NKikimr::NMiniKQL {
 

@@ -2,7 +2,7 @@
 #include "defs.h"
 #include "keyvalue_intermediate.h"
 #include "keyvalue_item_type.h"
-#include <ydb/core/base/logoblob.h>
+#include <ydb/core/base/logoblob.h> 
 
 namespace NKikimr {
 namespace NKeyValue {

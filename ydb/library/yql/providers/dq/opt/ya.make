@@ -1,9 +1,9 @@
 LIBRARY()
 
-OWNER(g:yql)
+OWNER(g:yql) 
 
 PEERDIR(
-    ydb/library/yql/utils/log
+    ydb/library/yql/utils/log 
     ydb/library/yql/dq/opt
     ydb/library/yql/dq/type_ann
     ydb/library/yql/providers/common/transform
@@ -16,6 +16,6 @@ SRCS(
     physical_optimize.cpp
 )
 
-YQL_LAST_ABI_VERSION()
+YQL_LAST_ABI_VERSION() 
 
 END()

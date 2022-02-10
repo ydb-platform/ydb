@@ -1,4 +1,4 @@
-OWNER(g:yq)
+OWNER(g:yq) 
 
 LIBRARY()
 
@@ -18,23 +18,23 @@ SRCS(
 PEERDIR(
     library/cpp/lwtrace
     library/cpp/protobuf/interop
-    ydb/core/base
-    ydb/core/mon
+    ydb/core/base 
+    ydb/core/mon 
     ydb/core/yq/libs/actors/logging
-    ydb/core/yq/libs/common
-    ydb/core/yq/libs/config
-    ydb/core/yq/libs/config/protos
+    ydb/core/yq/libs/common 
+    ydb/core/yq/libs/config 
+    ydb/core/yq/libs/config/protos 
     ydb/core/yq/libs/control_plane_storage/events
-    ydb/core/yq/libs/control_plane_storage/internal
-    ydb/core/yq/libs/control_plane_storage/proto
-    ydb/core/yq/libs/db_schema
+    ydb/core/yq/libs/control_plane_storage/internal 
+    ydb/core/yq/libs/control_plane_storage/proto 
+    ydb/core/yq/libs/db_schema 
     ydb/core/yq/libs/graph_params/proto
-    ydb/core/yq/libs/shared_resources
-    ydb/core/yq/libs/ydb
-    ydb/library/security
-    ydb/public/api/protos
-    ydb/public/sdk/cpp/client/ydb_scheme
-    ydb/public/sdk/cpp/client/ydb_table
+    ydb/core/yq/libs/shared_resources 
+    ydb/core/yq/libs/ydb 
+    ydb/library/security 
+    ydb/public/api/protos 
+    ydb/public/sdk/cpp/client/ydb_scheme 
+    ydb/public/sdk/cpp/client/ydb_table 
     ydb/library/yql/public/issue
 )
 

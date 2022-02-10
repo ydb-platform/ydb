@@ -3,13 +3,13 @@
 #include "execution_unit_ctors.h"
 
 namespace NKikimr {
-namespace NDataShard {
+namespace NDataShard { 
 
 class TDropCdcStreamUnit : public TExecutionUnit {
     THolder<TEvChangeExchange::TEvRemoveSender> RemoveSender;
 
 public:
-    TDropCdcStreamUnit(TDataShard& self, TPipeline& pipeline)
+    TDropCdcStreamUnit(TDataShard& self, TPipeline& pipeline) 
         : TExecutionUnit(EExecutionUnitKind::DropCdcStream, false, self, pipeline)
     {
     }
@@ -55,9 +55,9 @@ public:
     }
 };
 
-THolder<TExecutionUnit> CreateDropCdcStreamUnit(TDataShard& self, TPipeline& pipeline) {
+THolder<TExecutionUnit> CreateDropCdcStreamUnit(TDataShard& self, TPipeline& pipeline) { 
     return THolder(new TDropCdcStreamUnit(self, pipeline));
 }
 
-} // namespace NDataShard
+} // namespace NDataShard 
 } // namespace NKikimr

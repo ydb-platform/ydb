@@ -8,7 +8,7 @@ SRCS(
 
 PEERDIR(
     library/cpp/getopt
-    ydb/core/tablet_flat
+    ydb/core/tablet_flat 
 )
 
 END()

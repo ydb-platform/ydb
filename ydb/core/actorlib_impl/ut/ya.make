@@ -1,10 +1,10 @@
-UNITTEST_FOR(ydb/core/actorlib_impl)
+UNITTEST_FOR(ydb/core/actorlib_impl) 
 
-OWNER(
-    alexvru
-    ddoarn
-    g:kikimr
-)
+OWNER( 
+    alexvru 
+    ddoarn 
+    g:kikimr 
+) 
 
 FORK_SUBTESTS()
 
@@ -23,8 +23,8 @@ PEERDIR(
     library/cpp/actors/interconnect
     library/cpp/getopt
     library/cpp/svnversion
-    ydb/core/testlib/actors
-    ydb/core/testlib/basics
+    ydb/core/testlib/actors 
+    ydb/core/testlib/basics 
 )
 
 SRCS(
@@ -35,6 +35,6 @@ SRCS(
     test_protocols_ut.cpp
 )
 
-YQL_LAST_ABI_VERSION()
+YQL_LAST_ABI_VERSION() 
 
 END()

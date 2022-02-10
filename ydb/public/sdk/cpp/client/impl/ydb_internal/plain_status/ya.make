@@ -1,14 +1,14 @@
 LIBRARY()
 
-OWNER(g:kikimr)
+OWNER(g:kikimr) 
 
 SRCS(
     status.cpp
 )
 
 PEERDIR(
-    contrib/libs/protobuf
-    library/cpp/grpc/client
+    contrib/libs/protobuf 
+    library/cpp/grpc/client 
     ydb/library/yql/public/issue
 )
 

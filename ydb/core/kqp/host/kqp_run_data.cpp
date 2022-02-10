@@ -1,7 +1,7 @@
 #include "kqp_host_impl.h"
 #include "kqp_run_physical.h"
 
-#include <ydb/core/kqp/common/kqp_yql.h>
+#include <ydb/core/kqp/common/kqp_yql.h> 
 
 namespace NKikimr {
 namespace NKqp {

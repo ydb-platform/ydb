@@ -10,8 +10,8 @@
 #include <ydb/core/testlib/minikql_compile.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/schemeshard/schemeshard_build_index.h>
-#include <ydb/core/tx/schemeshard/schemeshard_export.h>
-#include <ydb/core/tx/schemeshard/schemeshard_import.h>
+#include <ydb/core/tx/schemeshard/schemeshard_export.h> 
+#include <ydb/core/tx/schemeshard/schemeshard_import.h> 
 #include <ydb/core/tx/schemeshard/schemeshard_types.h>
 #include <ydb/library/yql/minikql/mkql_alloc.h>
 #include <ydb/library/yql/minikql/mkql_node_serialization.h>
@@ -409,7 +409,7 @@ namespace NSchemeShardUT_Private {
         ~TFakeDataReq();
 
         // returns Unknown if plan is required, Error/Complete/Abort otherwise
-        NMiniKQL::IEngineFlat::EStatus Propose(bool immediate, bool& activeZone, ui32 txFlags = NDataShard::TTxFlags::Default);
+        NMiniKQL::IEngineFlat::EStatus Propose(bool immediate, bool& activeZone, ui32 txFlags = NDataShard::TTxFlags::Default); 
 
         // Propose to coordinator
         void Plan(ui64 coordinatorId);

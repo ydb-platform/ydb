@@ -1,8 +1,8 @@
 #include "ydb_proxy.h"
 
-#include <ydb/core/protos/replication.pb.h>
-#include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
-#include <ydb/public/sdk/cpp/client/ydb_types/credentials/credentials.h>
+#include <ydb/core/protos/replication.pb.h> 
+#include <ydb/public/sdk/cpp/client/ydb_driver/driver.h> 
+#include <ydb/public/sdk/cpp/client/ydb_types/credentials/credentials.h> 
 
 #include <library/cpp/actors/core/actor.h>
 #include <library/cpp/actors/core/hfunc.h>
@@ -233,11 +233,11 @@ class TYdbProxy: public TBaseProxyActor<TYdbProxy> {
     void Handle(TEvYdbProxy::TEvCopyTableRequest::TPtr& ev) {
         CallSession<TEvYdbProxy::TEvCopyTableResponse>(ev, &TSession::CopyTable);
     }
-
+ 
     void Handle(TEvYdbProxy::TEvCopyTablesRequest::TPtr& ev) {
         CallSession<TEvYdbProxy::TEvCopyTablesResponse>(ev, &TSession::CopyTables);
     }
-
+ 
     void Handle(TEvYdbProxy::TEvRenameTablesRequest::TPtr& ev) {
         CallSession<TEvYdbProxy::TEvRenameTablesResponse>(ev, &TSession::RenameTables);
     }

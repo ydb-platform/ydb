@@ -5,8 +5,8 @@
 #include <library/cpp/testing/unittest/tests_data.h>
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <ydb/core/protos/index_builder.pb.h>
-#include <ydb/public/api/protos/ydb_operation.pb.h>
+#include <ydb/core/protos/index_builder.pb.h> 
+#include <ydb/public/api/protos/ydb_operation.pb.h> 
 
 namespace NKikimr {
 

@@ -1,7 +1,7 @@
 #pragma once
 #include <type_traits>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/api.h> 
+#include <contrib/libs/apache/arrow/cpp/src/arrow/type.h> 
 
 namespace NKikimr::NArrow {
 

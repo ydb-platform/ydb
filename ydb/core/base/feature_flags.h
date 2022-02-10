@@ -2,7 +2,7 @@
 
 #include "defs.h"
 
-#include <ydb/core/protos/config.pb.h>
+#include <ydb/core/protos/config.pb.h> 
 
 namespace NKikimr {
 

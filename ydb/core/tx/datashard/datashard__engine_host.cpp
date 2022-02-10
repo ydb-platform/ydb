@@ -3,10 +3,10 @@
 #include "datashard__engine_host.h"
 #include "sys_tables.h"
 
-#include <ydb/core/engine/minikql/minikql_engine_host.h>
-#include <ydb/core/kqp/runtime/kqp_compute.h>
-#include <ydb/core/scheme/scheme_tablecell.h>
-#include <ydb/core/tx/datashard/range_ops.h>
+#include <ydb/core/engine/minikql/minikql_engine_host.h> 
+#include <ydb/core/kqp/runtime/kqp_compute.h> 
+#include <ydb/core/scheme/scheme_tablecell.h> 
+#include <ydb/core/tx/datashard/range_ops.h> 
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 #include <ydb/library/yql/minikql/mkql_function_registry.h>
@@ -18,7 +18,7 @@
 #include <util/generic/cast.h>
 
 namespace NKikimr {
-namespace NDataShard {
+namespace NDataShard { 
 
 using namespace NMiniKQL;
 using namespace NTabletFlatExecutor;
@@ -191,7 +191,7 @@ class TDataShardSysTable {
 public:
     using TUpdateCommand = IEngineFlatHost::TUpdateCommand;
 
-    TDataShardSysTable(const TTableId& tableId, TDataShard* self)
+    TDataShardSysTable(const TTableId& tableId, TDataShard* self) 
         : TableId(tableId)
         , Self(self)
     {
@@ -247,7 +247,7 @@ public:
 
 private:
     const TTableId TableId;
-    TDataShard* Self;
+    TDataShard* Self; 
     THashMap<ui32, TSysTables::TTableColumnInfo> Columns;
     TVector<ui32> KeyTypes;
 };
@@ -257,7 +257,7 @@ class TDataShardSysTables : public TThrRefBase {
     TDataShardSysTable Locks;
     TDataShardSysTable Locks2;
 public:
-    TDataShardSysTables(TDataShard *self)
+    TDataShardSysTables(TDataShard *self) 
         : Locks(TTableId(TSysTables::SysSchemeShard, TSysTables::SysTableLocks), self)
         , Locks2(TTableId(TSysTables::SysSchemeShard, TSysTables::SysTableLocks2), self)
     {}
@@ -273,14 +273,14 @@ public:
     }
 };
 
-TIntrusivePtr<TThrRefBase> InitDataShardSysTables(TDataShard* self) {
+TIntrusivePtr<TThrRefBase> InitDataShardSysTables(TDataShard* self) { 
     return new TDataShardSysTables(self);
 }
 
 ///
 class TDataShardEngineHost : public TEngineHost {
 public:
-    TDataShardEngineHost(TDataShard* self, NTable::TDatabase& db, TEngineHostCounters& counters, ui64& lockTxId, TInstant now)
+    TDataShardEngineHost(TDataShard* self, NTable::TDatabase& db, TEngineHostCounters& counters, ui64& lockTxId, TInstant now) 
         : TEngineHost(db, counters,
             TEngineHostSettings(self->TabletID(),
                 (self->State == TShardState::Readonly || self->State == TShardState::Frozen),
@@ -469,7 +469,7 @@ public:
     bool IsPathErased(const TTableId& tableId) const override {
         if (TSysTables::IsSystemTable(tableId))
             return false;
-        return TDataShardEngineHost::LocalTableId(tableId) == 0;
+        return TDataShardEngineHost::LocalTableId(tableId) == 0; 
     }
 
     ui64 LocalTableId(const TTableId &tableId) const override {
@@ -496,7 +496,7 @@ private:
         return static_cast<const TDataShardSysTables *>(Self->GetDataShardSysTables())->Get(tableId);
     }
 
-    TDataShard* Self;
+    TDataShard* Self; 
     NTable::TDatabase& DB;
     const ui64& LockTxId;
     bool IsImmediateTx = false;
@@ -508,13 +508,13 @@ private:
 
 //
 
-TEngineBay::TEngineBay(TDataShard * self, TTransactionContext& txc, const TActorContext& ctx,
+TEngineBay::TEngineBay(TDataShard * self, TTransactionContext& txc, const TActorContext& ctx, 
                        std::pair<ui64, ui64> stepTxId)
     : StepTxId(stepTxId)
     , LockTxId(0)
 {
     auto now = TAppData::TimeProvider->Now();
-    EngineHost = MakeHolder<TDataShardEngineHost>(self, txc.DB, EngineHostCounters, LockTxId, now);
+    EngineHost = MakeHolder<TDataShardEngineHost>(self, txc.DB, EngineHostCounters, LockTxId, now); 
 
     EngineSettings = MakeHolder<TEngineFlatSettings>(IEngineFlat::EProtocol::V1, AppData(ctx)->FunctionRegistry,
         *TAppData::RandomProvider, *TAppData::TimeProvider, EngineHost.Get(), self->AllocCounters);
@@ -642,14 +642,14 @@ TEngineBay::TSizes TEngineBay::CalcSizes(bool needsTotalKeysSize) const {
 void TEngineBay::SetWriteVersion(TRowVersion writeVersion) {
     Y_VERIFY(EngineHost);
 
-    auto* host = static_cast<TDataShardEngineHost*>(EngineHost.Get());
+    auto* host = static_cast<TDataShardEngineHost*>(EngineHost.Get()); 
     host->SetWriteVersion(writeVersion);
 }
 
 void TEngineBay::SetReadVersion(TRowVersion readVersion) {
     Y_VERIFY(EngineHost);
 
-    auto* host = static_cast<TDataShardEngineHost*>(EngineHost.Get());
+    auto* host = static_cast<TDataShardEngineHost*>(EngineHost.Get()); 
     host->SetReadVersion(readVersion);
 
     Y_VERIFY(ComputeCtx);
@@ -659,14 +659,14 @@ void TEngineBay::SetReadVersion(TRowVersion readVersion) {
 void TEngineBay::SetIsImmediateTx() {
     Y_VERIFY(EngineHost);
 
-    auto* host = static_cast<TDataShardEngineHost*>(EngineHost.Get());
+    auto* host = static_cast<TDataShardEngineHost*>(EngineHost.Get()); 
     host->SetIsImmediateTx();
 }
 
 TVector<IChangeCollector::TChange> TEngineBay::GetCollectedChanges() const {
     Y_VERIFY(EngineHost);
 
-    auto* host = static_cast<TDataShardEngineHost*>(EngineHost.Get());
+    auto* host = static_cast<TDataShardEngineHost*>(EngineHost.Get()); 
     return host->GetCollectedChanges();
 }
 

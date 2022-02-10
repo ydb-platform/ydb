@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/core/yq/libs/config/protos/audit.pb.h>
+#include <ydb/core/yq/libs/config/protos/audit.pb.h> 
 
 #include <library/cpp/actors/core/actor.h>
 

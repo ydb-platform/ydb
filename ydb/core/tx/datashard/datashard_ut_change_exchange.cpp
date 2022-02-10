@@ -4,7 +4,7 @@
 
 namespace NKikimr {
 
-using namespace NDataShard;
+using namespace NDataShard; 
 using namespace Tests;
 
 Y_UNIT_TEST_SUITE(AsyncIndexChangeExchange) {

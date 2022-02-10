@@ -1,8 +1,8 @@
 #include "datashard_txs.h"
 
-namespace NKikimr::NDataShard {
+namespace NKikimr::NDataShard { 
 
-void TDataShard::CheckMvccStateChangeCanStart(const TActorContext& ctx) {
+void TDataShard::CheckMvccStateChangeCanStart(const TActorContext& ctx) { 
     switch (MvccSwitchState) {
         case TSwitchState::READY:
             switch (State) {
@@ -67,10 +67,10 @@ void TDataShard::CheckMvccStateChangeCanStart(const TActorContext& ctx) {
     }
 }
 
-TDataShard::TTxExecuteMvccStateChange::TTxExecuteMvccStateChange(TDataShard* ds)
+TDataShard::TTxExecuteMvccStateChange::TTxExecuteMvccStateChange(TDataShard* ds) 
     : TBase(ds) {}
 
-bool TDataShard::TTxExecuteMvccStateChange::Execute(TTransactionContext& txc, const TActorContext& ctx) {
+bool TDataShard::TTxExecuteMvccStateChange::Execute(TTransactionContext& txc, const TActorContext& ctx) { 
     if (Self->MvccSwitchState == TSwitchState::DONE)
         return true; // already switched
 
@@ -92,12 +92,12 @@ bool TDataShard::TTxExecuteMvccStateChange::Execute(TTransactionContext& txc, co
     return true;
 }
 
-void TDataShard::TTxExecuteMvccStateChange::Complete(const TActorContext& ctx) {
+void TDataShard::TTxExecuteMvccStateChange::Complete(const TActorContext& ctx) { 
     if (ActivateWaitingOps)
         Self->Pipeline.ActivateWaitingTxOps(ctx);
 }
 
-NTabletFlatExecutor::ITransaction* TDataShard::CreateTxExecuteMvccStateChange() {
+NTabletFlatExecutor::ITransaction* TDataShard::CreateTxExecuteMvccStateChange() { 
     return new TTxExecuteMvccStateChange(this);
 }
 

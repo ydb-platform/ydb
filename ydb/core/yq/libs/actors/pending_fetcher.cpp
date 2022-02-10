@@ -1,5 +1,5 @@
-#include <ydb/core/yq/libs/config/protos/pinger.pb.h>
-#include <ydb/core/yq/libs/config/protos/yq_config.pb.h>
+#include <ydb/core/yq/libs/config/protos/pinger.pb.h> 
+#include <ydb/core/yq/libs/config/protos/yq_config.pb.h> 
 #include "proxy.h"
 #include "nodes_manager.h"
 
@@ -9,12 +9,12 @@
 #include <library/cpp/actors/core/hfunc.h>
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/protobuf/interop/cast.h>
-#include <ydb/core/protos/services.pb.h>
+#include <ydb/core/protos/services.pb.h> 
 
 #include <ydb/library/yql/ast/yql_expr.h>
-#include <ydb/library/yql/utils/actor_log/log.h>
-#include <ydb/library/yql/core/services/mounts/yql_mounts.h>
-#include <ydb/library/yql/core/facade/yql_facade.h>
+#include <ydb/library/yql/utils/actor_log/log.h> 
+#include <ydb/library/yql/core/services/mounts/yql_mounts.h> 
+#include <ydb/library/yql/core/facade/yql_facade.h> 
 #include <ydb/library/yql/minikql/mkql_function_registry.h>
 #include <ydb/library/yql/minikql/comp_nodes/mkql_factories.h>
 #include <ydb/library/yql/providers/common/udf_resolve/yql_simple_udf_resolver.h>
@@ -30,28 +30,28 @@
 #include <ydb/library/yql/minikql/mkql_alloc.h>
 #include <ydb/library/yql/minikql/mkql_program_builder.h>
 #include <ydb/library/yql/minikql/mkql_node_cast.h>
-#include <ydb/library/mkql_proto/mkql_proto.h>
+#include <ydb/library/mkql_proto/mkql_proto.h> 
 #include <ydb/library/yql/providers/common/codec/yql_codec.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
 #include <ydb/library/yql/providers/dq/worker_manager/interface/events.h>
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 #include <ydb/library/yql/public/issue/protos/issue_message.pb.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
-#include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
-#include <ydb/public/sdk/cpp/client/ydb_value/value.h>
-#include <ydb/public/sdk/cpp/client/ydb_result/result.h>
+#include <ydb/public/sdk/cpp/client/ydb_table/table.h> 
+#include <ydb/public/sdk/cpp/client/ydb_driver/driver.h> 
+#include <ydb/public/sdk/cpp/client/ydb_value/value.h> 
+#include <ydb/public/sdk/cpp/client/ydb_result/result.h> 
 
-#include <ydb/core/yq/libs/common/entity_id.h>
-#include <ydb/core/yq/libs/events/events.h>
+#include <ydb/core/yq/libs/common/entity_id.h> 
+#include <ydb/core/yq/libs/events/events.h> 
 
-#include <ydb/core/yq/libs/control_plane_storage/control_plane_storage.h>
-#include <ydb/core/yq/libs/control_plane_storage/events/events.h>
-#include <ydb/core/yq/libs/private_client/private_client.h>
+#include <ydb/core/yq/libs/control_plane_storage/control_plane_storage.h> 
+#include <ydb/core/yq/libs/control_plane_storage/events/events.h> 
+#include <ydb/core/yq/libs/private_client/private_client.h> 
 
 #include <library/cpp/actors/core/log.h>
 
-#include <ydb/library/security/util.h>
+#include <ydb/library/security/util.h> 
 
 #include <util/generic/deque.h>
 #include <util/generic/guid.h>

@@ -8,17 +8,17 @@ OWNER(
 
 SRCS(
     mon.cpp
-    mon.h
+    mon.h 
     crossref.cpp
     crossref.h
 )
 
 PEERDIR(
     library/cpp/actors/core
-    library/cpp/lwtrace/mon
+    library/cpp/lwtrace/mon 
     library/cpp/string_utils/url
-    ydb/core/base
-    ydb/library/aclib
+    ydb/core/base 
+    ydb/library/aclib 
 )
 
 END()

@@ -24,12 +24,12 @@ namespace NBoot {
     class TStages final: public NBoot::IStep {
 
         enum class EStage : unsigned {
-            Snap           = 1, /* Read snapshot and deps graph log     */
-            Meta           = 2, /* Executor system metalog queues       */
-            DatabaseImpl   = 3, /* Roll up TDatabaseImpl to actual state*/
-            Blobs          = 4, /* Load TMemTable blobs to its cache    */
-            Result         = 5, /* Finalize NBoot::TResult object       */
-            Ready          = 6,
+            Snap           = 1, /* Read snapshot and deps graph log     */ 
+            Meta           = 2, /* Executor system metalog queues       */ 
+            DatabaseImpl   = 3, /* Roll up TDatabaseImpl to actual state*/ 
+            Blobs          = 4, /* Load TMemTable blobs to its cache    */ 
+            Result         = 5, /* Finalize NBoot::TResult object       */ 
+            Ready          = 6, 
         };
 
     public:
@@ -62,10 +62,10 @@ namespace NBoot {
                     StartStageSnap();
                 } else if (EStage::Meta == Next) {
                     StartStageMeta();
-                } else if (EStage::DatabaseImpl == Next) {
-                    StartStageDatabaseImpl();
+                } else if (EStage::DatabaseImpl == Next) { 
+                    StartStageDatabaseImpl(); 
                 } else if (EStage::Blobs == Next) {
-                    Pending += Spawn<TMemTable>();
+                    Pending += Spawn<TMemTable>(); 
                 } else if (EStage::Result == Next) {
                     StartStageResult(Logic->Result());
                 }
@@ -110,24 +110,24 @@ namespace NBoot {
             Pending += Spawn<TTurns>();
         }
 
-        void StartStageDatabaseImpl() noexcept
+        void StartStageDatabaseImpl() noexcept 
         {
             auto weak = Back->RedoLog ? Back->RedoLog.back().Stamp + 1 : 0;
 
-            Back->DatabaseImpl = new NTable::TDatabaseImpl(weak, Back->Scheme, &Back->Edges);
+            Back->DatabaseImpl = new NTable::TDatabaseImpl(weak, Back->Scheme, &Back->Edges); 
 
             if (!Back->Follower) {
                 Back->Redo = new NRedo::TQueue(std::move(Back->Edges));
             }
 
             for (auto &se: std::exchange(Back->Switches, { })) {
-                auto &wrap = Back->DatabaseImpl->Get(se.Table, false);
+                auto &wrap = Back->DatabaseImpl->Get(se.Table, false); 
 
                 if (!wrap) {
                     continue; // ignore dropped tables
                 }
 
-                auto &schema = Back->DatabaseImpl->Scheme->Tables.at(se.Table);
+                auto &schema = Back->DatabaseImpl->Scheme->Tables.at(se.Table); 
 
                 auto processBundles = [&](TVector<TSwitch::TBundle> &bundles) {
                     for (auto &bundle: bundles) {
@@ -139,18 +139,18 @@ namespace NBoot {
                             // for borrowed parts, otherwise we cannot perform
                             // many important gc tasks without knowing the full
                             // list of blobs.
-                            if (schema.ColdBorrow && !bundle.Deltas && bundle.LargeGlobIds[0].Lead.TabletID() != Back->Tablet) {
-                                Back->DatabaseImpl->Merge(
+                            if (schema.ColdBorrow && !bundle.Deltas && bundle.LargeGlobIds[0].Lead.TabletID() != Back->Tablet) { 
+                                Back->DatabaseImpl->Merge( 
                                     se.Table,
-                                    new NTable::TColdPartStore(
-                                        std::move(bundle.LargeGlobIds),
+                                    new NTable::TColdPartStore( 
+                                        std::move(bundle.LargeGlobIds), 
                                         std::move(bundle.Legacy),
                                         std::move(bundle.Opaque),
                                         bundle.Epoch));
                                 continue;
                             }
 
-                            Pending += Spawn<TBundleLoadStep>(se.Table, bundle);
+                            Pending += Spawn<TBundleLoadStep>(se.Table, bundle); 
                         }
                     }
                 };
@@ -192,9 +192,9 @@ namespace NBoot {
 
              */
 
-            const auto was = Back->DatabaseImpl->Rewind(Back->Serial);
+            const auto was = Back->DatabaseImpl->Rewind(Back->Serial); 
 
-            result.Database = new NTable::TDatabase(Back->DatabaseImpl.Release());
+            result.Database = new NTable::TDatabase(Back->DatabaseImpl.Release()); 
 
             if (auto logl = Env->Logger()->Log(ELnLev::Info)) {
                 auto serial = result.Database->Head(Max<ui32>()).Serial;
@@ -205,11 +205,11 @@ namespace NBoot {
             }
 
             if (!Back->Follower) {
-                FinalizeLeaderLogics(result, *Back->SteppedCookieAllocatorFactory);
+                FinalizeLeaderLogics(result, *Back->SteppedCookieAllocatorFactory); 
             }
         }
 
-        void FinalizeLeaderLogics(TResult&, TSteppedCookieAllocatorFactory&) noexcept;
+        void FinalizeLeaderLogics(TResult&, TSteppedCookieAllocatorFactory&) noexcept; 
 
     private:
         EStage Next = EStage::Snap;   /* Next stage to execute */

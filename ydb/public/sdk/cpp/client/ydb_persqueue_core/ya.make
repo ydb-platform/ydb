@@ -1,11 +1,11 @@
 LIBRARY()
 
 OWNER(
-    g:kikimr
+    g:kikimr 
     g:logbroker
 )
 
-GENERATE_ENUM_SERIALIZATION(ydb/public/sdk/cpp/client/ydb_persqueue_core/persqueue.h)
+GENERATE_ENUM_SERIALIZATION(ydb/public/sdk/cpp/client/ydb_persqueue_core/persqueue.h) 
 
 SRCS(
     persqueue.h
@@ -13,8 +13,8 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/public/sdk/cpp/client/ydb_persqueue_core/impl
-    ydb/public/sdk/cpp/client/ydb_proto
+    ydb/public/sdk/cpp/client/ydb_persqueue_core/impl 
+    ydb/public/sdk/cpp/client/ydb_proto 
 )
 
 END()

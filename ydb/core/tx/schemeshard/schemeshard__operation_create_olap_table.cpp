@@ -2,9 +2,9 @@
 #include "schemeshard__operation_common.h"
 #include "schemeshard_impl.h"
 
-#include <ydb/core/base/subdomain.h>
-#include <ydb/core/tx/columnshard/columnshard.h>
-#include <ydb/core/mind/hive/hive.h>
+#include <ydb/core/base/subdomain.h> 
+#include <ydb/core/tx/columnshard/columnshard.h> 
+#include <ydb/core/mind/hive/hive.h> 
 
 #include <util/random/shuffle.h>
 

@@ -1,19 +1,19 @@
 LIBRARY()
 
-OWNER(
-    laplab
-    g:kikimr
-)
+OWNER( 
+    laplab 
+    g:kikimr 
+) 
 
-YQL_ABI_VERSION(
-    2
-    21
-    0
-)
+YQL_ABI_VERSION( 
+    2 
+    21 
+    0 
+) 
 
 PEERDIR(
     library/cpp/json
-    ydb/library/yql/minikql/dom
+    ydb/library/yql/minikql/dom 
 )
 
 SRCS(
@@ -25,7 +25,7 @@ SRCS(
 GENERATE_ENUM_SERIALIZATION(format.h)
 
 END()
-
-RECURSE_FOR_TESTS(
-    ut
-)
+ 
+RECURSE_FOR_TESTS( 
+    ut 
+) 

@@ -3,23 +3,23 @@
 #include <library/cpp/digest/crc32c/crc32c.h>
 
 namespace NKikimr {
-namespace NPageCollection {
+namespace NPageCollection { 
 
 TMeta::TMeta(TSharedData raw, ui32 group)
     : Raw(std::move(raw))
     , Group(group)
 {
-    Y_VERIFY(Raw.size() >= sizeof(NPageCollection::THeader));
-    Header = (const NPageCollection::THeader *)Raw.data();
-    Y_VERIFY(Header->Magic == NPageCollection::Magic);
+    Y_VERIFY(Raw.size() >= sizeof(NPageCollection::THeader)); 
+    Header = (const NPageCollection::THeader *)Raw.data(); 
+    Y_VERIFY(Header->Magic == NPageCollection::Magic); 
 
     if (Header->Pages == 0)
         return;
 
     auto * const blobs = (const TLogoBlobID *)(Header + 1);
 
-    Index = (const NPageCollection::TEntry*)(blobs + Header->Blobs);
-    Extra = (const NPageCollection::TExtra*)(Index + Header->Pages);
+    Index = (const NPageCollection::TEntry*)(blobs + Header->Blobs); 
+    Extra = (const NPageCollection::TExtra*)(Index + Header->Pages); 
     InboundData = (const char *)(Extra + Header->Pages);
 
     if (const auto blobs = Blobs()) {

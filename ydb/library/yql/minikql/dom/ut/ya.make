@@ -1,24 +1,24 @@
 IF (NOT WINDOWS)
-    UNITTEST_FOR(yql/library/dom)
+    UNITTEST_FOR(yql/library/dom) 
 
-    OWNER(g:yql)
+    OWNER(g:yql) 
 
-    SRCS(
-        yson_ut.cpp
-        json_ut.cpp
-    )
+    SRCS( 
+        yson_ut.cpp 
+        json_ut.cpp 
+    ) 
 
-    IF (SANITIZER_TYPE)
-        SIZE(MEDIUM)
-        TIMEOUT(600)
-    ENDIF()
+    IF (SANITIZER_TYPE) 
+        SIZE(MEDIUM) 
+        TIMEOUT(600) 
+    ENDIF() 
 
-    PEERDIR(
-        ydb/library/yql/minikql/computation
-        ydb/library/yql/public/udf/service/exception_policy
-    )
+    PEERDIR( 
+        ydb/library/yql/minikql/computation 
+        ydb/library/yql/public/udf/service/exception_policy 
+    ) 
 
-    YQL_LAST_ABI_VERSION()
+    YQL_LAST_ABI_VERSION() 
 
-    END()
+    END() 
 ENDIF()

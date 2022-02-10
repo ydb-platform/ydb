@@ -9,9 +9,9 @@ PEERDIR(
     library/cpp/actors/core
     library/cpp/monlib/dynamic_counters
     util
-    ydb/core/base
-    ydb/core/mon
-    ydb/core/node_whiteboard
+    ydb/core/base 
+    ydb/core/mon 
+    ydb/core/node_whiteboard 
 )
 
 SRCS(
@@ -26,7 +26,7 @@ SRCS(
 )
 
 END()
-
-RECURSE_FOR_TESTS(
-    ut
-)
+ 
+RECURSE_FOR_TESTS( 
+    ut 
+) 

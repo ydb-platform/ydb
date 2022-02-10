@@ -1,6 +1,6 @@
 import "library/cpp/actors/protos/actors.proto";
-import "ydb/core/protos/base.proto";
-import "ydb/core/protos/bind_channel_storage_pool.proto";
+import "ydb/core/protos/base.proto"; 
+import "ydb/core/protos/bind_channel_storage_pool.proto"; 
 
 package NKikimrTxScheme;
 option java_package = "ru.yandex.kikimr.proto";

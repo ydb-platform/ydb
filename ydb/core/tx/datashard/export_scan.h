@@ -2,14 +2,14 @@
 
 #include "defs.h"
 
-#include <ydb/core/tablet_flat/flat_scan_iface.h>
+#include <ydb/core/tablet_flat/flat_scan_iface.h> 
 
 #include <util/generic/ptr.h>
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
 
 namespace NKikimr {
-namespace NDataShard {
+namespace NDataShard { 
 
 struct TEvExportScan {
     enum EEv {
@@ -109,5 +109,5 @@ public:
 
 NTable::IScan* CreateExportScan(NExportScan::IBuffer::TPtr buffer, std::function<NActors::IActor*()>&& createUploaderFn);
 
-} // NDataShard
+} // NDataShard 
 } // NKikimr

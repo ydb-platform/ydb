@@ -12,7 +12,7 @@ SRCS(
 
 PEERDIR(
     ydb/library/yql/minikql/computation
-    ydb/library/yql/providers/common/token_accessor/client
+    ydb/library/yql/providers/common/token_accessor/client 
     ydb/library/yql/public/types
     ydb/library/yql/dq/actors/compute
     ydb/library/yql/providers/clickhouse/proto

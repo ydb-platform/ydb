@@ -6,7 +6,7 @@
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/tx/tx_proxy/read_table.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_result/result.h>
+#include <ydb/public/sdk/cpp/client/ydb_result/result.h> 
 
 #include <algorithm>
 #include <map>
@@ -949,7 +949,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
             {1, 1, 1},
             true
         );
-
+ 
         request1->Record.SetMaxRowsInResult(1);
 
         auto readResult1 = helper.SendRead("table-1", request1.release());
@@ -1042,7 +1042,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         auto request = helper.GetBaseReadRequest("table-1", 1);
 
         AddKeyQuery(*request, {8});
-
+ 
         auto readResult = helper.SendRead("table-1", request.release());
         CheckResult(helper.Tables["table-1"].UserTable, *readResult, {
             {8, 0, 0, 800},
@@ -1058,7 +1058,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         auto request = helper.GetBaseReadRequest("table-1", 1);
 
         AddKeyQuery(*request, {8, 0});
-
+ 
         auto readResult = helper.SendRead("table-1", request.release());
         CheckResult(helper.Tables["table-1"].UserTable, *readResult, {
             {8, 0, 0, 800},
@@ -1072,7 +1072,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         auto request = helper.GetBaseReadRequest("table-1", 1);
 
         AddKeyQuery(*request, {8, 1, 0});
-
+ 
         auto readResult = helper.SendRead("table-1", request.release());
         CheckResult(helper.Tables["table-1"].UserTable, *readResult, {
             {8, 1, 0, 802},
@@ -1091,7 +1091,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
             {9},
             true
         );
-
+ 
         auto readResult = helper.SendRead("table-1", request.release());
         CheckResult(helper.Tables["table-1"].UserTable, *readResult, {
             {8, 0, 0, 800},
@@ -1113,7 +1113,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
             {9},
             false
         );
-
+ 
         auto readResult = helper.SendRead("table-1", request.release());
         CheckResult(helper.Tables["table-1"].UserTable, *readResult, {
             {8, 0, 0, 800},
@@ -1135,7 +1135,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
             {8},
             true
         );
-
+ 
         auto readResult = helper.SendRead("table-1", request.release());
         CheckResult(helper.Tables["table-1"].UserTable, *readResult, {
             {8, 0, 0, 800},
@@ -1157,7 +1157,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
             {8},
             false
         );
-
+ 
         auto readResult = helper.SendRead("table-1", request.release());
         CheckResult(helper.Tables["table-1"].UserTable, *readResult, {});
     }
@@ -1174,7 +1174,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
             {9},
             true
         );
-
+ 
         auto readResult = helper.SendRead("table-1", request.release());
         CheckResult(helper.Tables["table-1"].UserTable, *readResult, {
             {8, 1, 0, 802},

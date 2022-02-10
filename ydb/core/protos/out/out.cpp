@@ -1,15 +1,15 @@
-#include <ydb/core/protos/blobstorage.pb.h>
-#include <ydb/core/protos/blobstorage_vdisk_internal.pb.h>
-#include <ydb/core/protos/blobstorage_vdisk_config.pb.h>
-#include <ydb/core/protos/cms.pb.h>
-#include <ydb/core/protos/console_base.pb.h>
-#include <ydb/core/protos/console_config.pb.h>
-#include <ydb/core/protos/console_tenant.pb.h>
-#include <ydb/core/protos/flat_tx_scheme.pb.h>
-#include <ydb/core/protos/node_whiteboard.pb.h>
-#include <ydb/core/protos/resource_broker.pb.h>
-#include <ydb/core/protos/tenant_pool.pb.h>
-#include <ydb/core/protos/tx_datashard.pb.h>
+#include <ydb/core/protos/blobstorage.pb.h> 
+#include <ydb/core/protos/blobstorage_vdisk_internal.pb.h> 
+#include <ydb/core/protos/blobstorage_vdisk_config.pb.h> 
+#include <ydb/core/protos/cms.pb.h> 
+#include <ydb/core/protos/console_base.pb.h> 
+#include <ydb/core/protos/console_config.pb.h> 
+#include <ydb/core/protos/console_tenant.pb.h> 
+#include <ydb/core/protos/flat_tx_scheme.pb.h> 
+#include <ydb/core/protos/node_whiteboard.pb.h> 
+#include <ydb/core/protos/resource_broker.pb.h> 
+#include <ydb/core/protos/tenant_pool.pb.h> 
+#include <ydb/core/protos/tx_datashard.pb.h> 
 
 #include <util/stream/output.h>
 
@@ -84,7 +84,7 @@ Y_DECLARE_OUT_SPEC(, NKikimrBlobStorage::TSerialManagementStage::E, stream, valu
 Y_DECLARE_OUT_SPEC(, NKikimrResourceBroker::EResourceType, stream, value) {
     stream << NKikimrResourceBroker::EResourceType_Name(value);
 }
-/* FIXME
+/* FIXME 
 Y_DECLARE_OUT_SPEC(, Ydb::Cms::GetDatabaseStatusResult::State, stream, value) {
     stream << Ydb::Cms::GetDatabaseStatusResult::State_Name(value);
 }
@@ -92,7 +92,7 @@ Y_DECLARE_OUT_SPEC(, Ydb::Cms::GetDatabaseStatusResult::State, stream, value) {
 Y_DECLARE_OUT_SPEC(, Ydb::StatusIds::StatusCode, stream, value) {
     stream << Ydb::StatusIds::StatusCode_Name(value);
 }
-*/
+*/ 
 Y_DECLARE_OUT_SPEC(, NKikimrConsole::TConfigItem::EKind, stream, value) {
     stream << NKikimrConsole::TConfigItem::EKind_Name(value);
 }

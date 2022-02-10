@@ -13,13 +13,13 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/core/base
-    ydb/core/client/minikql_compile
-    ydb/core/engine
-    ydb/core/formats
-    ydb/core/tablet_flat
+    ydb/core/base 
+    ydb/core/client/minikql_compile 
+    ydb/core/engine 
+    ydb/core/formats 
+    ydb/core/tablet_flat 
 )
 
-YQL_LAST_ABI_VERSION()
+YQL_LAST_ABI_VERSION() 
 
 END()

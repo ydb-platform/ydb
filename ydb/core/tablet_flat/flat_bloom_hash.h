@@ -1,7 +1,7 @@
 #pragma once
 
 #include <library/cpp/containers/stack_vector/stack_vec.h>
-#include <ydb/core/scheme/scheme_tablecell.h>
+#include <ydb/core/scheme/scheme_tablecell.h> 
 
 #include <util/digest/murmur.h>
 

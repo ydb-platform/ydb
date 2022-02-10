@@ -6,8 +6,8 @@ OWNER(
 )
 
 PEERDIR(
-    contrib/libs/protoc
-    ydb/public/api/protos/annotations
+    contrib/libs/protoc 
+    ydb/public/api/protos/annotations 
 )
 
 SRCS(
@@ -16,7 +16,7 @@ SRCS(
 )
 
 END()
-
-RECURSE_FOR_TESTS(
-    ut
-)
+ 
+RECURSE_FOR_TESTS( 
+    ut 
+) 

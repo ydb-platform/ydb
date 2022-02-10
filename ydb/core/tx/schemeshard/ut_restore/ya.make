@@ -1,4 +1,4 @@
-UNITTEST_FOR(ydb/core/tx/schemeshard)
+UNITTEST_FOR(ydb/core/tx/schemeshard) 
 
 OWNER(
     ilnaz
@@ -6,7 +6,7 @@ OWNER(
 )
 
 FORK_SUBTESTS()
-
+ 
 SPLIT_FACTOR(60)
 
 IF (SANITIZER_TYPE OR WITH_VALGRIND)
@@ -21,16 +21,16 @@ ENDIF()
 PEERDIR(
     contrib/libs/double-conversion
     library/cpp/string_utils/quote
-    ydb/core/kqp/ut/common
-    ydb/core/tx/schemeshard/ut_helpers
-    ydb/core/wrappers/ut_helpers
-    ydb/core/ydb_convert
+    ydb/core/kqp/ut/common 
+    ydb/core/tx/schemeshard/ut_helpers 
+    ydb/core/wrappers/ut_helpers 
+    ydb/core/ydb_convert 
 )
 
 SRCS(
     ut_restore.cpp
 )
 
-YQL_LAST_ABI_VERSION()
+YQL_LAST_ABI_VERSION() 
 
 END()

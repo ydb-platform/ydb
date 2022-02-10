@@ -1,7 +1,7 @@
 LIBRARY()
 
 OWNER(
-    vvvv
+    vvvv 
     g:yql
     g:yql_ydb_core
 )
@@ -24,9 +24,9 @@ SRCS(
 
 PEERDIR(
     ydb/library/yql/ast
-    ydb/library/yql/minikql
-    ydb/library/yql/utils
-    ydb/library/yql/utils/log
+    ydb/library/yql/minikql 
+    ydb/library/yql/utils 
+    ydb/library/yql/utils/log 
     ydb/library/yql/core
     ydb/library/yql/core/expr_nodes
     ydb/library/yql/core/issue
@@ -34,6 +34,6 @@ PEERDIR(
     ydb/library/yql/providers/common/schema/expr
 )
 
-YQL_LAST_ABI_VERSION()
+YQL_LAST_ABI_VERSION() 
 
 END()

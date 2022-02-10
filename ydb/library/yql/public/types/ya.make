@@ -6,6 +6,6 @@ SRCS(
     yql_types.proto
 )
 
-EXCLUDE_TAGS(GO_PROTO) 
- 
+EXCLUDE_TAGS(GO_PROTO)
+
 END()

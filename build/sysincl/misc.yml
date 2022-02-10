@@ -369,11 +369,11 @@
   includes:
     - lzma.h
 
-- source_filter: "^contrib/libs/(kyotocabinet|minilzo)" 
+- source_filter: "^contrib/libs/(kyotocabinet|minilzo)"
   includes:
     - lzo/lzo1x.h
 
-- source_filter: "^contrib/libs/(gtest|libpng|opencv)" 
+- source_filter: "^contrib/libs/(gtest|libpng|opencv)"
   includes:
     - mem.h
 
@@ -389,7 +389,7 @@
   includes:
     - png.h
 
-- source_filter: "^(contrib/restricted/boost/boost/mpi|catboost/cuda/cuda_lib/mpi)" 
+- source_filter: "^(contrib/restricted/boost/boost/mpi|catboost/cuda/cuda_lib/mpi)"
   includes:
     - mpi.h
 

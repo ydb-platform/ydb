@@ -28,7 +28,7 @@ void WriteHeader(const TString& headerName, IOutputStream& out, IOutputStream* h
     out << "// This file was auto-generated. Do not edit!!!\n";
     out << "#include " << headerName << "\n";
     out << "#include <tools/enum_parser/enum_serialization_runtime/enum_runtime.h>\n\n";
-    out << "#include <tools/enum_parser/enum_parser/stdlib_deps.h>\n\n"; 
+    out << "#include <tools/enum_parser/enum_parser/stdlib_deps.h>\n\n";
     out << "#include <util/generic/typetraits.h>\n";
     out << "#include <util/generic/singleton.h>\n";
     out << "#include <util/generic/string.h>\n";

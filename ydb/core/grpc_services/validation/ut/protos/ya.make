@@ -15,6 +15,6 @@ SRCS(
 
 CPP_PROTO_PLUGIN0(validation ydb/core/grpc_services/validation)
 
-EXCLUDE_TAGS(GO_PROTO) 
- 
+EXCLUDE_TAGS(GO_PROTO)
+
 END()

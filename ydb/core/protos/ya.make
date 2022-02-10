@@ -146,6 +146,6 @@ PEERDIR(
     ydb/library/yql/public/types
 )
 
-EXCLUDE_TAGS(GO_PROTO) 
- 
+EXCLUDE_TAGS(GO_PROTO)
+
 END()

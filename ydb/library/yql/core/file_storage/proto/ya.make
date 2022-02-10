@@ -6,6 +6,6 @@ SRCS(
     file_storage.proto
 )
 
-EXCLUDE_TAGS(GO_PROTO) 
- 
+EXCLUDE_TAGS(GO_PROTO)
+
 END()

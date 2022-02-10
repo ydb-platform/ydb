@@ -689,33 +689,33 @@ class YMake(object):
     def __init__(self, arcadia):
         self.arcadia = arcadia
 
-    def print_presets(self): 
-        presets = opts().presets 
-        if presets and 'YMAKE_JAVA_MODULES' not in presets: 
-            if 'YA_IDE_IDEA' in presets or 'MAVEN_EXPORT' in presets: 
-                presets['YMAKE_JAVA_MODULES'] = 'no' 
-            else: 
-                presets['YMAKE_JAVA_MODULES'] = 'yes' 
-        if presets and 'YMAKE_JAVA_MODULES' in presets and presets['YMAKE_JAVA_MODULES'] == "yes": 
+    def print_presets(self):
+        presets = opts().presets
+        if presets and 'YMAKE_JAVA_MODULES' not in presets:
+            if 'YA_IDE_IDEA' in presets or 'MAVEN_EXPORT' in presets:
+                presets['YMAKE_JAVA_MODULES'] = 'no'
+            else:
+                presets['YMAKE_JAVA_MODULES'] = 'yes'
+        if presets and 'YMAKE_JAVA_MODULES' in presets and presets['YMAKE_JAVA_MODULES'] == "yes":
             print('@import "${CONF_ROOT}/conf/java.ymake.conf"')
-        else: 
+        else:
             print('@import "${CONF_ROOT}/conf/jbuild.ymake.conf"')
- 
-        if presets: 
+
+        if presets:
             print('# Variables set from command line by -D options')
-            for key in sorted(presets): 
+            for key in sorted(presets):
                 if key in ('MY_YMAKE_BIN', 'REAL_YMAKE_BIN'):
                     emit_with_ignore_comment(key, opts().presets[key])
-                elif key == 'YMAKE_JAVA_MODULES': 
-                    continue 
+                elif key == 'YMAKE_JAVA_MODULES':
+                    continue
                 else:
                     emit(key, opts().presets[key])
 
-    @staticmethod 
-    def _print_conf_content(path): 
-        with open(path, 'r') as fin: 
-            print(fin.read()) 
- 
+    @staticmethod
+    def _print_conf_content(path):
+        with open(path, 'r') as fin:
+            print(fin.read())
+
     def print_core_conf(self):
         emit('YMAKE_YNDEXER_IGNORE_BUILD_ROOT', 'yes')
         print('@import "${CONF_ROOT}/ymake.core.conf"')
@@ -724,17 +724,17 @@ class YMake(object):
         emit_with_ignore_comment('ARCADIA_ROOT', self.arcadia.root)
 
     @staticmethod
-    def _find_conf(conf_file): 
+    def _find_conf(conf_file):
         script_dir = os.path.dirname(__file__)
-        full_path = os.path.join(script_dir, conf_file) 
+        full_path = os.path.join(script_dir, conf_file)
         if os.path.exists(full_path):
             return full_path
         return None
 
-    def _find_core_conf(self): 
-        return self._find_conf('ymake.core.conf') 
+    def _find_core_conf(self):
+        return self._find_conf('ymake.core.conf')
 
- 
+
 class System(object):
     def __init__(self, platform):
         """
@@ -1919,7 +1919,7 @@ class LD(Linker):
             self.use_stdlib = '-nodefaultlibs'
             self.soname_option = '-install_name'
             if not preset('NO_DEBUGINFO'):
-                self.dwarf_command = '$DWARF_TOOL $TARGET -o ${output;pre=$MODULE_PREFIX$REALPRJNAME.dSYM/Contents/Resources/DWARF/$MODULE_PREFIX:REALPRJNAME}' 
+                self.dwarf_command = '$DWARF_TOOL $TARGET -o ${output;pre=$MODULE_PREFIX$REALPRJNAME.dSYM/Contents/Resources/DWARF/$MODULE_PREFIX:REALPRJNAME}'
 
         if self.target.is_ios and preset('MAPSMOBI_BUILD_TARGET') and self.target.is_arm:
             self.ld_flags.extend(('-fembed-bitcode', '-Wl,-bitcode_verify'))

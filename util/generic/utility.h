@@ -101,14 +101,14 @@ template <class T>
 static inline void DoSwap(T& l, T& r) noexcept(noexcept(NSwapCheck::TSwapSelector<T>::Swap(l, r))) {
     NSwapCheck::TSwapSelector<T>::Swap(l, r);
 }
-
-template <bool b>
-struct TNullTmpl {
+ 
+template <bool b> 
+struct TNullTmpl { 
     template <class T>
-    operator T() const {
-        return (T)0;
-    }
-};
+    operator T() const { 
+        return (T)0; 
+    } 
+}; 
 
 using TNull = TNullTmpl<0>;
 

@@ -662,7 +662,7 @@ namespace {
 void IThreadPool::SafeAdd(IObjectInQueue* obj) {
     Y_ENSURE_EX(Add(obj), TThreadPoolException() << TStringBuf("can not add object to queue"));
 }
-
+ 
 void IThreadPool::SafeAddAndOwn(THolder<IObjectInQueue> obj) {
     Y_ENSURE_EX(AddAndOwn(std::move(obj)), TThreadPoolException() << TStringBuf("can not add to queue and own"));
 }

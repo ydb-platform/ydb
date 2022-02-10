@@ -1,5 +1,5 @@
 #pragma once
-
+ 
 struct TSpinWait {
     TSpinWait() noexcept;
 

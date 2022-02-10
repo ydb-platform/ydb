@@ -10,8 +10,8 @@ class TStrUtilTest: public TTestBase {
 
 public:
     void TestSpn() {
-        str_spn rul("a-z", true);
-        char s[] = "!@#$ab%^&c+-";
+        str_spn rul("a-z", true); 
+        char s[] = "!@#$ab%^&c+-"; 
         UNIT_ASSERT_EQUAL(rul.brk(s), s + 4);
         UNIT_ASSERT_EQUAL(rul.brk(s + 4), s + 4);
         UNIT_ASSERT_EQUAL(rul.brk(s + 10), s + 12);
@@ -21,7 +21,7 @@ public:
         UNIT_ASSERT_EQUAL(strcmp(rul.sep(s1), "%^&"), 0);
         UNIT_ASSERT_EQUAL(strcmp(rul.sep(s1), "+-"), 0);
         UNIT_ASSERT_EQUAL(rul.sep(s1), nullptr);
-    }
+    } 
 
     void TestRemoveAll() {
         static const struct T {

@@ -1,11 +1,11 @@
 #pragma once
-
+ 
 #include <util/system/align.h>
 #include <util/system/yassert.h>
 #include <util/system/defaults.h>
 #include <util/generic/noncopyable.h>
 #include <util/generic/vector.h>
-#include <util/generic/strbuf.h>
+#include <util/generic/strbuf.h> 
 
 #include <memory>
 #include <cstdio>
@@ -18,7 +18,7 @@ template <class T, class Alloc = std::allocator<T>>
 class segmented_pool: TNonCopyable {
 protected:
     Alloc seg_allocator;
-    struct seg_inf {
+    struct seg_inf { 
         T* data;        // allocated chunk
         size_t _size;   // size of allocated chunk in sizeof(T)-units
         size_t freepos; // offset to free chunk's memory in bytes
@@ -34,7 +34,7 @@ protected:
             , freepos(0)
         {
         }
-    };
+    }; 
     using seg_container = TVector<seg_inf>;
     using seg_iterator = typename seg_container::iterator;
     using seg_const_iterator = typename seg_container::const_iterator;
@@ -72,7 +72,7 @@ public:
     }
     ~segmented_pool() {
         clear();
-    }
+    } 
     /* src - array of objects, len - count of elements in array */
     T* append(const T* src, size_t len) {
         check_capacity(len);
@@ -82,12 +82,12 @@ public:
             memcpy(rv, src, last_ins_size);
         curseg->freepos += last_ins_size, last_free -= len;
         return (T*)rv;
-    }
+    } 
     T* append() {
         T* obj = get_raw();
         new (obj) T();
         return obj;
-    }
+    } 
     T* get_raw() { // append(0, 1)
         check_capacity(1);
         ui8* rv = (ui8*)curseg->data + curseg->freepos;
@@ -114,38 +114,38 @@ public:
         return segs.size() * segment_size * sizeof(T);
     }
     void restart() {
-        if (curseg != segs.end())
-            ++curseg;
-        for (seg_iterator i = segs.begin(); i != curseg; ++i)
+        if (curseg != segs.end()) 
+            ++curseg; 
+        for (seg_iterator i = segs.begin(); i != curseg; ++i) 
             i->freepos = 0;
         curseg = segs.begin();
         last_free = 0;
         last_ins_size = 0;
     }
-    void clear() {
+    void clear() { 
         for (seg_iterator i = segs.begin(); i != segs.end(); ++i)
             seg_allocator.deallocate(i->data, i->_size);
-        segs.clear();
-        curseg = segs.begin();
-        last_free = 0;
-        last_ins_size = 0;
-    }
-    void undo_last_append() {
+        segs.clear(); 
+        curseg = segs.begin(); 
+        last_free = 0; 
+        last_ins_size = 0; 
+    } 
+    void undo_last_append() { 
         Y_ASSERT(curseg != segs.end()); // do not use before append()
         if (last_ins_size) {
             Y_ASSERT(last_ins_size <= curseg->freepos);
             curseg->freepos -= last_ins_size;
             last_free += last_ins_size / sizeof(T);
-            last_ins_size = 0;
-        }
-    }
+            last_ins_size = 0; 
+        } 
+    } 
     void alloc_first_seg() {
         Y_ASSERT(capacity() == 0);
         check_capacity(segment_size);
         Y_ASSERT(capacity() == segment_size * sizeof(T));
     }
-};
-
+}; 
+ 
 class segmented_string_pool: public segmented_pool<char> {
 private:
     using _Base = segmented_pool<char>;
@@ -166,14 +166,14 @@ public:
     }
     char* append(const char* src, size_t len) {
         char* rv = _Base::append(nullptr, len + 1);
-        if (src)
-            memcpy(rv, src, len);
-        rv[len] = 0;
-        return rv;
-    }
+        if (src) 
+            memcpy(rv, src, len); 
+        rv[len] = 0; 
+        return rv; 
+    } 
     char* Append(const TStringBuf s) {
         return append(s.data(), s.size());
-    }
+    } 
     void align_4() {
         size_t t = (curseg->freepos + 3) & ~3;
         last_free -= t - curseg->freepos;
@@ -184,11 +184,11 @@ public:
     }
 };
 
-template <typename T, typename C>
+template <typename T, typename C> 
 inline T* pool_push(segmented_pool<C>& pool, const T* v) {
     static_assert(sizeof(C) == 1, "only char type supported");
-    size_t len = SizeOf(v);
+    size_t len = SizeOf(v); 
     C* buf = pool.append(nullptr, AlignUp(len));
-    memcpy(buf, v, len);
-    return (T*)buf;
-}
+    memcpy(buf, v, len); 
+    return (T*)buf; 
+} 

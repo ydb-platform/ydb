@@ -8,8 +8,8 @@
 #include "direct_io.h"
 
 Y_UNIT_TEST_SUITE(TDirectIOTests) {
-    // Decrease numBufToWrite further if tests continue to time out
-    static void Y_NO_INLINE Test(EOpenMode mode, size_t numBufToWrite) {
+    // Decrease numBufToWrite further if tests continue to time out 
+    static void Y_NO_INLINE Test(EOpenMode mode, size_t numBufToWrite) { 
         const char TEMPLATE[] = "qwertyuiopQWERTYUIOPasdfghjklASD";
         const auto TEMPLATE_SIZE = Y_ARRAY_SIZE(TEMPLATE) - 1;
         static_assert(TEMPLATE_SIZE > 0, "must be greater than zero");
@@ -33,7 +33,7 @@ Y_UNIT_TEST_SUITE(TDirectIOTests) {
         auto&& directIOBuffer = TDirectIOBufferedFile{fileName, RdWr | CreateAlways | mode};
         {
             auto&& output = TRandomAccessFileOutput{directIOBuffer};
-            for (size_t i = 0; i < numBufToWrite; ++i) {
+            for (size_t i = 0; i < numBufToWrite; ++i) { 
                 output.Write(buffer.Data(), BUFFER_SIZE);
             }
         }
@@ -54,18 +54,18 @@ Y_UNIT_TEST_SUITE(TDirectIOTests) {
             }
         }
 
-        UNIT_ASSERT_VALUES_EQUAL(bytesRead, numBufToWrite * BUFFER_SIZE);
+        UNIT_ASSERT_VALUES_EQUAL(bytesRead, numBufToWrite * BUFFER_SIZE); 
     }
 
     Y_UNIT_TEST(ReadWriteTest) {
-        Test(0, 100 * 32);
+        Test(0, 100 * 32); 
     }
 
     Y_UNIT_TEST(ReadWriteDirectTest) {
-        Test(Direct, 100 * 4);
+        Test(Direct, 100 * 4); 
     }
 
     Y_UNIT_TEST(ReadWriteDirectSeqTest) {
-        Test(Direct | Seq, 100 * 4);
+        Test(Direct | Seq, 100 * 4); 
     }
 }

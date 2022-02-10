@@ -8,7 +8,7 @@
 #include <util/generic/yexception.h>
 #include "yassert.h"
 #include <utility>
-
+ 
 #if defined(_glibc_)
     #if !__GLIBC_PREREQ(2, 30)
         #include <sys/syscall.h>
@@ -82,7 +82,7 @@ namespace {
     #endif
         {
         }
-
+ 
         inline bool Running() const noexcept {
             return Handle != 0;
         }
@@ -231,7 +231,7 @@ namespace {
     #undef PCHECK
 
     using TThreadBase = TPosixThread;
-#endif
+#endif 
 
     template <class T>
     static inline typename T::TValueType* Impl(T& t, const char* op, bool check = true) {
@@ -403,48 +403,48 @@ static void WindowsCurrentSetThreadName(DWORD dwThreadID, const char* threadName
 }
 #endif
 
-#if defined(_win_)
-namespace {
-    struct TWinThreadDescrAPI {
-        TWinThreadDescrAPI()
+#if defined(_win_) 
+namespace { 
+    struct TWinThreadDescrAPI { 
+        TWinThreadDescrAPI() 
             : Kernel32Dll("kernel32.dll")
-            , SetThreadDescription((TSetThreadDescription)Kernel32Dll.SymOptional("SetThreadDescription"))
-            , GetThreadDescription((TGetThreadDescription)Kernel32Dll.SymOptional("GetThreadDescription"))
-        {
-        }
-
-        // This API is for Windows 10+ only:
-        // https://msdn.microsoft.com/en-us/library/windows/desktop/mt774972(v=vs.85).aspx
-        bool HasAPI() noexcept {
-            return SetThreadDescription && GetThreadDescription;
-        }
-
-        // Should always succeed, unless something very strange is passed in `descr'
-        void SetDescr(const char* descr) {
-            auto hr = SetThreadDescription(GetCurrentThread(), (const WCHAR*)UTF8ToWide(descr).data());
-            Y_VERIFY(SUCCEEDED(hr), "SetThreadDescription failed");
-        }
-
-        TString GetDescr() {
-            PWSTR wideName;
-            auto hr = GetThreadDescription(GetCurrentThread(), &wideName);
-            Y_VERIFY(SUCCEEDED(hr), "GetThreadDescription failed");
-            Y_DEFER {
-                LocalFree(wideName);
-            };
-            return WideToUTF8((const wchar16*)wideName);
-        }
-
+            , SetThreadDescription((TSetThreadDescription)Kernel32Dll.SymOptional("SetThreadDescription")) 
+            , GetThreadDescription((TGetThreadDescription)Kernel32Dll.SymOptional("GetThreadDescription")) 
+        { 
+        } 
+ 
+        // This API is for Windows 10+ only: 
+        // https://msdn.microsoft.com/en-us/library/windows/desktop/mt774972(v=vs.85).aspx 
+        bool HasAPI() noexcept { 
+            return SetThreadDescription && GetThreadDescription; 
+        } 
+ 
+        // Should always succeed, unless something very strange is passed in `descr' 
+        void SetDescr(const char* descr) { 
+            auto hr = SetThreadDescription(GetCurrentThread(), (const WCHAR*)UTF8ToWide(descr).data()); 
+            Y_VERIFY(SUCCEEDED(hr), "SetThreadDescription failed"); 
+        } 
+ 
+        TString GetDescr() { 
+            PWSTR wideName; 
+            auto hr = GetThreadDescription(GetCurrentThread(), &wideName); 
+            Y_VERIFY(SUCCEEDED(hr), "GetThreadDescription failed"); 
+            Y_DEFER { 
+                LocalFree(wideName); 
+            }; 
+            return WideToUTF8((const wchar16*)wideName); 
+        } 
+ 
         typedef HRESULT(__cdecl* TSetThreadDescription)(HANDLE hThread, PCWSTR lpThreadDescription);
         typedef HRESULT(__cdecl* TGetThreadDescription)(HANDLE hThread, PWSTR* ppszThreadDescription);
-
-        TDynamicLibrary Kernel32Dll;
-        TSetThreadDescription SetThreadDescription;
-        TGetThreadDescription GetThreadDescription;
-    };
-}
-#endif // _win_
-
+ 
+        TDynamicLibrary Kernel32Dll; 
+        TSetThreadDescription SetThreadDescription; 
+        TGetThreadDescription GetThreadDescription; 
+    }; 
+} 
+#endif // _win_ 
+ 
 void TThread::SetCurrentThreadName(const char* name) {
     (void)name;
 
@@ -455,15 +455,15 @@ void TThread::SetCurrentThreadName(const char* name) {
     prctl(PR_SET_NAME, name, 0, 0, 0);
 #elif defined(_darwin_)
     pthread_setname_np(name);
-#elif defined(_win_)
-    auto api = Singleton<TWinThreadDescrAPI>();
-    if (api->HasAPI()) {
-        api->SetDescr(name);
-    } else {
+#elif defined(_win_) 
+    auto api = Singleton<TWinThreadDescrAPI>(); 
+    if (api->HasAPI()) { 
+        api->SetDescr(name); 
+    } else { 
     #if defined(_MSC_VER)
-        WindowsCurrentSetThreadName(DWORD(-1), name);
+        WindowsCurrentSetThreadName(DWORD(-1), name); 
     #endif
-    }
+    } 
 #else
 // no idea
 #endif // OS
@@ -471,7 +471,7 @@ void TThread::SetCurrentThreadName(const char* name) {
 
 TString TThread::CurrentThreadName() {
 #if defined(_freebsd_)
-// TODO: check pthread_get_name_np API availability
+// TODO: check pthread_get_name_np API availability 
 #elif defined(_linux_)
     // > The buffer should allow space for up to 16 bytes; the returned string  will be
     // > null-terminated.
@@ -487,12 +487,12 @@ TString TThread::CurrentThreadName() {
     memset(name, 0, sizeof(name));
     Y_VERIFY(pthread_getname_np(thread, name, sizeof(name)) == 0, "pthread_getname_np failed: %s", strerror(errno));
     return name;
-#elif defined(_win_)
-    auto api = Singleton<TWinThreadDescrAPI>();
-    if (api->HasAPI()) {
-        return api->GetDescr();
-    }
-    return {};
+#elif defined(_win_) 
+    auto api = Singleton<TWinThreadDescrAPI>(); 
+    if (api->HasAPI()) { 
+        return api->GetDescr(); 
+    } 
+    return {}; 
 #else
 // no idea
 #endif // OS
@@ -500,16 +500,16 @@ TString TThread::CurrentThreadName() {
     return {};
 }
 
-bool TThread::CanGetCurrentThreadName() {
-#if defined(_linux_) || defined(_darwin_)
-    return true;
-#elif defined(_win_)
-    return Singleton<TWinThreadDescrAPI>()->HasAPI();
-#else
-    return false;
-#endif // OS
-}
-
+bool TThread::CanGetCurrentThreadName() { 
+#if defined(_linux_) || defined(_darwin_) 
+    return true; 
+#elif defined(_win_) 
+    return Singleton<TWinThreadDescrAPI>()->HasAPI(); 
+#else 
+    return false; 
+#endif // OS 
+} 
+ 
 TCurrentThreadLimits::TCurrentThreadLimits() noexcept
     : StackBegin(nullptr)
     , StackLength(0)

@@ -66,11 +66,11 @@ Y_UNIT_TEST_SUITE(TSysThreadTest) {
         TThread::SetCurrentThreadName(setName.data());
 
         const auto getName = TThread::CurrentThreadName();
-        if (TThread::CanGetCurrentThreadName()) {
-            UNIT_ASSERT_VALUES_EQUAL(setName, getName);
-        } else {
-            UNIT_ASSERT_VALUES_EQUAL("", getName);
-        }
+        if (TThread::CanGetCurrentThreadName()) { 
+            UNIT_ASSERT_VALUES_EQUAL(setName, getName); 
+        } else { 
+            UNIT_ASSERT_VALUES_EQUAL("", getName); 
+        } 
         return nullptr;
     }
 
@@ -97,11 +97,11 @@ Y_UNIT_TEST_SUITE(TSysThreadTest) {
         thread.Join();
 
         const auto getName = TThread::CurrentThreadName();
-        if (TThread::CanGetCurrentThreadName()) {
-            UNIT_ASSERT_VALUES_EQUAL(setName, getName);
-        } else {
-            UNIT_ASSERT_VALUES_EQUAL("", getName);
-        }
+        if (TThread::CanGetCurrentThreadName()) { 
+            UNIT_ASSERT_VALUES_EQUAL(setName, getName); 
+        } else { 
+            UNIT_ASSERT_VALUES_EQUAL("", getName); 
+        } 
         return nullptr;
     }
 

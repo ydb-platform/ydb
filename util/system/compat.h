@@ -44,7 +44,7 @@ extern "C" {
     void vwarnx(const char* format, va_list ap);
     void vwarn(const char* format, va_list ap);
     void verrx(int status, const char* format, va_list ap);
-#else
+#else 
     #include <err.h>
 #endif
 }

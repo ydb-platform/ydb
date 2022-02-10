@@ -326,7 +326,7 @@ public:
         return !empty() && TTraits::eq(Ptr()[Len() - 1], ch);
     }
 
-    template <typename TDerived2, typename TTraits2>
+    template <typename TDerived2, typename TTraits2> 
     bool operator==(const TStringBase<TDerived2, TChar, TTraits2>& s2) const noexcept {
         return equal(*this, s2);
     }
@@ -344,7 +344,7 @@ public:
         return equal(pc, s);
     }
 
-    template <typename TDerived2, typename TTraits2>
+    template <typename TDerived2, typename TTraits2> 
     friend bool operator!=(const TSelf& s1, const TStringBase<TDerived2, TChar, TTraits2>& s2) noexcept {
         return !(s1 == s2);
     }
@@ -362,7 +362,7 @@ public:
     }
 #endif
 
-    template <typename TDerived2, typename TTraits2>
+    template <typename TDerived2, typename TTraits2> 
     friend bool operator<(const TSelf& s1, const TStringBase<TDerived2, TChar, TTraits2>& s2) noexcept {
         return compare(s1, s2) < 0;
     }
@@ -379,7 +379,7 @@ public:
         return compare(pc, s) < 0;
     }
 
-    template <typename TDerived2, typename TTraits2>
+    template <typename TDerived2, typename TTraits2> 
     friend bool operator<=(const TSelf& s1, const TStringBase<TDerived2, TChar, TTraits2>& s2) noexcept {
         return compare(s1, s2) <= 0;
     }
@@ -396,7 +396,7 @@ public:
         return compare(pc, s) <= 0;
     }
 
-    template <typename TDerived2, typename TTraits2>
+    template <typename TDerived2, typename TTraits2> 
     friend bool operator>(const TSelf& s1, const TStringBase<TDerived2, TChar, TTraits2>& s2) noexcept {
         return compare(s1, s2) > 0;
     }
@@ -413,7 +413,7 @@ public:
         return compare(pc, s) > 0;
     }
 
-    template <typename TDerived2, typename TTraits2>
+    template <typename TDerived2, typename TTraits2> 
     friend bool operator>=(const TSelf& s1, const TStringBase<TDerived2, TChar, TTraits2>& s2) noexcept {
         return compare(s1, s2) >= 0;
     }
@@ -573,11 +573,11 @@ public:
         return TDerived(Ptr(), Len());
     }
 
-    // ~~~ Partial copy ~~~~
+    // ~~~ Partial copy ~~~~ 
     TDerived substr(size_t pos, size_t n = npos) const Y_WARN_UNUSED_RESULT {
-        return TDerived(*This(), pos, n);
-    }
-
+        return TDerived(*This(), pos, n); 
+    } 
+ 
 private:
     using GenericFinder = const TCharType* (*)(const TCharType*, size_t, const TCharType*, size_t);
 

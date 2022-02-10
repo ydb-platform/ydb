@@ -34,25 +34,25 @@ public:
 class TProfileTimer {
     TDuration T;
 
-public:
+public: 
     TProfileTimer() {
-        Reset();
-    }
+        Reset(); 
+    } 
     TDuration Get() const {
         return TRusage::Get().Utime - T;
-    }
+    } 
     TDuration Step() {
         TRusage r;
         r.Fill();
         TDuration d = r.Utime - T;
         T = r.Utime;
-        return d;
-    }
+        return d; 
+    } 
     void Reset() {
         T = TRusage::Get().Utime;
-    }
-};
-
+    } 
+}; 
+ 
 /// Return cached processor cycle count per second. Method takes 1 second at first invocation.
 /// Note, on older systems cycle rate may change during program lifetime,
 /// so returned value may be incorrect. Modern Intel and AMD processors keep constant TSC rate.
@@ -115,7 +115,7 @@ private:
     time_t Begin;
     ui64 BeginCycles;
 
-public:
+public: 
     TTimeLogger(const TString& message, bool verbose = true);
     ~TTimeLogger();
 

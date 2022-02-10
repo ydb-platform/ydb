@@ -72,7 +72,7 @@ int CodePage::stricmp(const char* dst, const char* src) const {
     return f - l;
 }
 
-int CodePage::strnicmp(const char* dst, const char* src, size_t len) const {
+int CodePage::strnicmp(const char* dst, const char* src, size_t len) const { 
     unsigned char f, l;
     if (len) {
         do {
@@ -258,8 +258,8 @@ void DoDecodeUnknownPlane(TxChar* str, TxChar*& ee, const ECharset enc) {
         for (TxChar* s = str; s < e; s++) {
             if (Hi8(Lo16(*s)) == 0xF0)
                 *s = (TxChar)cp->unicode[Lo8(Lo16(*s))]; // NOT mb compliant
-        }
-    } else if (enc == CODES_UTF8) {
+        } 
+    } else if (enc == CODES_UTF8) { 
         TxChar* s;
         TxChar* d;
 
@@ -272,13 +272,13 @@ void DoDecodeUnknownPlane(TxChar* str, TxChar*& ee, const ECharset enc) {
                 *d++ = BROKEN_RUNE;
                 ++s;
             }
-        }
-        e = d;
+        } 
+        e = d; 
     } else if (enc == CODES_UNKNOWN) {
         for (TxChar* s = str; s < e; s++) {
             if (Hi8(Lo16(*s)) == 0xF0)
                 *s = Lo8(Lo16(*s));
-        }
+        } 
     } else {
         Y_ASSERT(!SingleByteCodepage(enc));
 
@@ -307,13 +307,13 @@ void DoDecodeUnknownPlane(TxChar* str, TxChar*& ee, const ECharset enc) {
                 *d++ = *s;
             }
         }
-    }
-    ee = e;
-}
-
+    } 
+    ee = e; 
+} 
+ 
 void DecodeUnknownPlane(wchar16* str, wchar16*& ee, const ECharset enc) {
     DoDecodeUnknownPlane(str, ee, enc);
-}
+} 
 void DecodeUnknownPlane(wchar32* str, wchar32*& ee, const ECharset enc) {
     DoDecodeUnknownPlane(str, ee, enc);
 }

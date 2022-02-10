@@ -1,7 +1,7 @@
 #pragma once
 
 #include <util/generic/string.h>
-#include <util/generic/strbuf.h>
+#include <util/generic/strbuf.h> 
 
 template <class TChar>
 TBasicString<TChar>& EscapeCImpl(const TChar* str, size_t len, TBasicString<TChar>&);
@@ -26,9 +26,9 @@ static inline TBasicString<TChar> EscapeC(const TChar* str, size_t len) {
 template <typename TChar>
 static inline TBasicString<TChar> EscapeC(const TBasicStringBuf<TChar>& str) {
     return EscapeC(str.data(), str.size());
-}
-
-template <typename TChar>
+} 
+ 
+template <typename TChar> 
 static inline TBasicString<TChar>& UnescapeC(const TChar* str, size_t len, TBasicString<TChar>& s) {
     return UnescapeCImpl(str, len, s);
 }

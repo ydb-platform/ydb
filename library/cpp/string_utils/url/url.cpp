@@ -16,37 +16,37 @@
 #include <cstdlib>
 
 namespace {
-    struct TUncheckedSize {
+    struct TUncheckedSize { 
         static bool Has(size_t) {
-            return true;
-        }
-    };
-
-    struct TKnownSize {
-        size_t MySize;
+            return true; 
+        } 
+    }; 
+ 
+    struct TKnownSize { 
+        size_t MySize; 
         explicit TKnownSize(size_t sz)
-            : MySize(sz)
+            : MySize(sz) 
         {
         }
-        bool Has(size_t sz) const {
-            return sz <= MySize;
-        }
-    };
-
-    template <typename TChar1, typename TChar2>
-    int Compare1Case2(const TChar1* s1, const TChar2* s2, size_t n) {
-        for (size_t i = 0; i < n; ++i) {
+        bool Has(size_t sz) const { 
+            return sz <= MySize; 
+        } 
+    }; 
+ 
+    template <typename TChar1, typename TChar2> 
+    int Compare1Case2(const TChar1* s1, const TChar2* s2, size_t n) { 
+        for (size_t i = 0; i < n; ++i) { 
             if ((TChar1)ToLower(s1[i]) != s2[i])
                 return (TChar1)ToLower(s1[i]) < s2[i] ? -1 : 1;
-        }
-        return 0;
-    }
-
+        } 
+        return 0; 
+    } 
+ 
     template <typename TChar, typename TBounds>
     inline size_t GetHttpPrefixSizeImpl(const TChar* url, const TBounds& urlSize, bool ignorehttps) {
         const TChar httpPrefix[] = {'h', 't', 't', 'p', ':', '/', '/', 0};
         const TChar httpsPrefix[] = {'h', 't', 't', 'p', 's', ':', '/', '/', 0};
-        if (urlSize.Has(7) && Compare1Case2(url, httpPrefix, 7) == 0)
+        if (urlSize.Has(7) && Compare1Case2(url, httpPrefix, 7) == 0) 
             return 7;
         if (!ignorehttps && urlSize.Has(8) && Compare1Case2(url, httpsPrefix, 8) == 0)
             return 8;
@@ -113,8 +113,8 @@ size_t GetSchemePrefixSize(const TStringBuf url) noexcept {
     }
 
     return n + 3 - url.begin();
-}
-
+} 
+ 
 TStringBuf GetSchemePrefix(const TStringBuf url) noexcept {
     return url.Head(GetSchemePrefixSize(url));
 }
@@ -236,7 +236,7 @@ void GetSchemeHostAndPort(const TStringBuf url, TStringBuf& scheme, TStringBuf& 
 }
 
 TStringBuf GetOnlyHost(const TStringBuf url) noexcept {
-    return GetHost(CutSchemePrefix(url));
+    return GetHost(CutSchemePrefix(url)); 
 }
 
 TStringBuf GetPathAndQuery(const TStringBuf url, bool trimFragment) noexcept {
@@ -248,19 +248,19 @@ TStringBuf GetPathAndQuery(const TStringBuf url, bool trimFragment) noexcept {
     return trimFragment ? path.Before('#') : path;
 }
 
-// this strange creature returns 2nd level domain, possibly with port
+// this strange creature returns 2nd level domain, possibly with port 
 TStringBuf GetDomain(const TStringBuf host) noexcept {
     const char* c = !host ? host.data() : host.end() - 1;
     for (bool wasPoint = false; c != host.data(); --c) {
-        if (*c == '.') {
-            if (wasPoint) {
+        if (*c == '.') { 
+            if (wasPoint) { 
                 ++c;
                 break;
-            }
+            } 
             wasPoint = true;
         }
     }
-    return TStringBuf(c, host.end());
+    return TStringBuf(c, host.end()); 
 }
 
 TStringBuf GetParentDomain(const TStringBuf host, size_t level) noexcept {

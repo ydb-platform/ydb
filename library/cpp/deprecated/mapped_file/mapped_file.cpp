@@ -25,8 +25,8 @@ void TMappedFile::precharge(size_t off, size_t size) const {
         return;
 
     Map_->Precharge(off, size);
-}
-
+} 
+ 
 void TMappedFile::init(const TString& name) {
     THolder<TFileMap> map(new TFileMap(name));
     TMappedFile newFile(map.Get(), name.data());

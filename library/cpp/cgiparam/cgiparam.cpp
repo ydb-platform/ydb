@@ -227,47 +227,47 @@ bool TCgiParameters::Has(const TStringBuf name, const TStringBuf value) const no
 
     return false;
 }
-
-TQuickCgiParam::TQuickCgiParam(const TStringBuf cgiParamStr) {
+ 
+TQuickCgiParam::TQuickCgiParam(const TStringBuf cgiParamStr) { 
     UnescapeBuf.reserve(CgiUnescapeBufLen(cgiParamStr.size()));
-    char* buf = UnescapeBuf.begin();
-
-    auto f = [this, &buf](const TStringBuf key, const TStringBuf val) {
-        TStringBuf name = CgiUnescapeBuf(buf, key);
+    char* buf = UnescapeBuf.begin(); 
+ 
+    auto f = [this, &buf](const TStringBuf key, const TStringBuf val) { 
+        TStringBuf name = CgiUnescapeBuf(buf, key); 
         buf += name.size() + 1;
-        TStringBuf value = CgiUnescapeBuf(buf, val);
+        TStringBuf value = CgiUnescapeBuf(buf, val); 
         buf += value.size() + 1;
         Y_ASSERT(buf <= UnescapeBuf.begin() + UnescapeBuf.capacity() + 1 /*trailing zero*/);
-        emplace(name, value);
-    };
-
-    DoScan<false>(cgiParamStr, f);
-
-    if (buf != UnescapeBuf.begin()) {
-        UnescapeBuf.ReserveAndResize(buf - UnescapeBuf.begin() - 1 /*trailing zero*/);
-    }
-}
-
+        emplace(name, value); 
+    }; 
+ 
+    DoScan<false>(cgiParamStr, f); 
+ 
+    if (buf != UnescapeBuf.begin()) { 
+        UnescapeBuf.ReserveAndResize(buf - UnescapeBuf.begin() - 1 /*trailing zero*/); 
+    } 
+} 
+ 
 const TStringBuf& TQuickCgiParam::Get(const TStringBuf name, size_t pos) const noexcept {
-    const auto pair = equal_range(name);
-
-    for (auto it = pair.first; it != pair.second; ++it, --pos) {
-        if (0 == pos) {
-            return it->second;
-        }
-    }
-
-    return Default<TStringBuf>();
-}
-
+    const auto pair = equal_range(name); 
+ 
+    for (auto it = pair.first; it != pair.second; ++it, --pos) { 
+        if (0 == pos) { 
+            return it->second; 
+        } 
+    } 
+ 
+    return Default<TStringBuf>(); 
+} 
+ 
 bool TQuickCgiParam::Has(const TStringBuf name, const TStringBuf value) const noexcept {
-    const auto pair = equal_range(name);
-
-    for (auto it = pair.first; it != pair.second; ++it) {
-        if (value == it->second) {
-            return true;
-        }
-    }
-
-    return false;
-}
+    const auto pair = equal_range(name); 
+ 
+    for (auto it = pair.first; it != pair.second; ++it) { 
+        if (value == it->second) { 
+            return true; 
+        } 
+    } 
+ 
+    return false; 
+} 

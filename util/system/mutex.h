@@ -17,7 +17,7 @@ public:
 
     inline void Release() noexcept {
     }
-
+ 
     inline void lock() noexcept {
         Acquire();
     }

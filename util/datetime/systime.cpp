@@ -6,7 +6,7 @@
 #ifdef _win_
 
 void FileTimeToTimeval(const FILETIME* ft, timeval* tv) {
-    const i64 NANOINTERVAL = LL(116444736000000000); // Number of 100 nanosecond units from 1/1/1601 to 1/1/1970
+    const i64 NANOINTERVAL = LL(116444736000000000); // Number of 100 nanosecond units from 1/1/1601 to 1/1/1970 
     union {
         ui64 ft_scalar;
         FILETIME ft_struct;
@@ -38,14 +38,14 @@ tm* gmtime_r(const time_t* clock, tm* result) {
 }
 
 char* ctime_r(const time_t* clock, char* buf) {
-    char* res = ctime(clock);
-    if (res) {
-        memcpy(buf, res, 26);
-        return buf;
-    }
-    return 0;
-}
-
+    char* res = ctime(clock); 
+    if (res) { 
+        memcpy(buf, res, 26); 
+        return buf; 
+    } 
+    return 0; 
+} 
+ 
 #endif /* _win_ */
 
 #define YEAR0 1900

@@ -17,10 +17,10 @@ CFLAGS(
 )
 
 IF (NOT WIN32)
-    EXTRALIBS(-lutil)
+    EXTRALIBS(-lutil) 
 
     IF (LINUX)
-        EXTRALIBS(-ldl)
+        EXTRALIBS(-ldl) 
 
         CFLAGS(
             -DUNQUOTED_PYTHONPATH=:plat-linux2

@@ -2,7 +2,7 @@
 
 #include "fwd.h"
 #include "mapfindptr.h"
-
+ 
 #include <util/memory/alloc.h>
 #include <util/system/type_name.h>
 #include <util/system/yassert.h>
@@ -28,7 +28,7 @@ struct TSelect1st {
     }
 };
 
-template <class Value>
+template <class Value> 
 struct __yhashtable_node {
     /** If the first bit is not set, then this is a pointer to the next node in
      * the list of nodes for the current bucket. Otherwise this is a pointer of
@@ -42,37 +42,37 @@ struct __yhashtable_node {
     Value val;
 
     __yhashtable_node& operator=(const __yhashtable_node&) = delete;
-};
-
-template <class Value, class Key, class HashFcn,
-          class ExtractKey, class EqualKey, class Alloc>
+}; 
+ 
+template <class Value, class Key, class HashFcn, 
+          class ExtractKey, class EqualKey, class Alloc> 
 class THashTable;
-
+ 
 template <class Key, class T, class HashFcn,
           class EqualKey, typename size_type_f>
 class sthash;
 
-template <class Value>
+template <class Value> 
 struct __yhashtable_iterator;
-
-template <class Value>
+ 
+template <class Value> 
 struct __yhashtable_const_iterator;
-
-template <class Value>
+ 
+template <class Value> 
 struct __yhashtable_iterator {
     using iterator = __yhashtable_iterator<Value>;
     using const_iterator = __yhashtable_const_iterator<Value>;
     using node = __yhashtable_node<Value>;
-
+ 
     using iterator_category = std::forward_iterator_tag;
     using value_type = Value;
     using difference_type = ptrdiff_t;
     using size_type = size_t;
     using reference = Value&;
     using pointer = Value*;
-
+ 
     node* cur;
-
+ 
     explicit __yhashtable_iterator(node* n)
         : cur(n)
     {
@@ -99,23 +99,23 @@ struct __yhashtable_iterator {
     Y_FORCE_INLINE explicit operator bool() const noexcept {
         return cur != nullptr;
     }
-};
-
-template <class Value>
+}; 
+ 
+template <class Value> 
 struct __yhashtable_const_iterator {
     using iterator = __yhashtable_iterator<Value>;
     using const_iterator = __yhashtable_const_iterator<Value>;
     using node = __yhashtable_node<Value>;
-
+ 
     using iterator_category = std::forward_iterator_tag;
     using value_type = Value;
     using difference_type = ptrdiff_t;
     using size_type = size_t;
     using reference = const Value&;
     using pointer = const Value*;
-
+ 
     const node* cur;
-
+ 
     explicit __yhashtable_const_iterator(const node* n)
         : cur(n)
     {
@@ -146,8 +146,8 @@ struct __yhashtable_const_iterator {
     Y_FORCE_INLINE explicit operator bool() const noexcept {
         return cur != nullptr;
     }
-};
-
+}; 
+ 
 /**
  * This class saves some space in allocator-based containers for the most common
  * use case of empty allocators. This is achieved thanks to the application of
@@ -447,7 +447,7 @@ struct _yhashtable_traits {
 };
 
 extern const void* const _yhashtable_empty_data[];
-
+ 
 template <class Value, class Key, class HashFcn, class ExtractKey, class EqualKey, class Alloc>
 class THashTable: private _yhashtable_traits<Value, Key, HashFcn, ExtractKey, EqualKey, Alloc>::base_type {
     using traits_type = _yhashtable_traits<Value, Key, HashFcn, ExtractKey, EqualKey, Alloc>;
@@ -457,7 +457,7 @@ class THashTable: private _yhashtable_traits<Value, Key, HashFcn, ExtractKey, Eq
     using buckets_type = _yhashtable_buckets<node*, nodep_allocator_type>;
     using TBucketDivisor = ::NPrivate::THashDivisor;
 
-public:
+public: 
     using key_type = Key;
     using value_type = Value;
     using hasher = HashFcn;
@@ -465,14 +465,14 @@ public:
     using key_extract = ExtractKey;
     using allocator_type = Alloc;
     using node_allocator_type = typename traits_type::node_allocator_type;
-
+ 
     using size_type = size_t;
     using difference_type = ptrdiff_t;
     using pointer = value_type*;
     using const_pointer = const value_type*;
     using reference = value_type&;
     using const_reference = const value_type&;
-
+ 
     node_allocator_type& GetNodeAllocator() {
         return this->_get_alloc();
     }
@@ -485,13 +485,13 @@ public:
     hasher hash_function() const {
         return this->_get_hash_fun();
     }
-
-private:
+ 
+private: 
     template <class KeyL, class KeyR>
     bool equals(const KeyL& l, const KeyR& r) const {
         return this->_get_key_eq()(l, r);
     }
-
+ 
     /* This method is templated to postpone instantiation of key extraction functor. */
     template <class ValueL>
     auto get_key(const ValueL& value) const -> decltype(ExtractKey()(value)) {
@@ -509,16 +509,16 @@ private:
 
     buckets_type buckets;
     size_type num_elements;
-
-public:
+ 
+public: 
     using iterator = __yhashtable_iterator<Value>;
     using const_iterator = __yhashtable_const_iterator<Value>;
     using insert_ctx = node**;
-
+ 
     friend struct __yhashtable_iterator<Value>;
     friend struct __yhashtable_const_iterator<Value>;
-
-public:
+ 
+public: 
     THashTable()
         : base_type(HashFcn(), ExtractKey(), EqualKey(), node_allocator_type())
         , buckets(nodep_allocator_type())
@@ -534,7 +534,7 @@ public:
     {
         initialize_buckets(buckets, n);
     }
-
+ 
     THashTable(size_type n, const HashFcn& hf, const EqualKey& eql)
         : base_type(hf, ExtractKey(), eql, node_allocator_type())
         , buckets(nodep_allocator_type())
@@ -542,7 +542,7 @@ public:
     {
         initialize_buckets(buckets, n);
     }
-
+ 
     template <class TAllocParam>
     THashTable(size_type n, const HashFcn& hf, const EqualKey& eql, TAllocParam* allocParam)
         : base_type(hf, ExtractKey(), eql, allocParam)
@@ -551,7 +551,7 @@ public:
     {
         initialize_buckets(buckets, n);
     }
-
+ 
     THashTable(const THashTable& ht)
         : base_type(ht._get_hash_fun(), ht._get_key_extract(), ht._get_key_eq(), ht._get_alloc())
         , buckets(ht.buckets.get_allocator())
@@ -572,8 +572,8 @@ public:
     {
         initialize_buckets(buckets, 0);
         this->swap(ht);
-    }
-
+    } 
+ 
     THashTable& operator=(const THashTable& ht) {
         if (&ht != this) {
             basic_clear();
@@ -609,12 +609,12 @@ public:
 
         return *this;
     }
-
+ 
     ~THashTable() {
         basic_clear();
         deinitialize_buckets(buckets);
     }
-
+ 
     size_type size() const noexcept {
         return num_elements;
     }
@@ -625,24 +625,24 @@ public:
     Y_PURE_FUNCTION bool empty() const noexcept {
         return size() == 0;
     }
-
+ 
     void swap(THashTable& ht) {
         base_type::swap(ht);
         buckets.swap(ht.buckets);
         DoSwap(num_elements, ht.num_elements);
     }
-
+ 
     iterator begin() {
         for (size_type n = 0; n < buckets.size(); ++n) /*y*/
             if (buckets[n])
                 return iterator(buckets[n]); /*y*/
         return end();
     }
-
+ 
     iterator end() {
         return iterator(nullptr);
     } /*y*/
-
+ 
     const_iterator begin() const {
         for (size_type n = 0; n < buckets.size(); ++n) /*y*/
             if (buckets[n])
@@ -654,11 +654,11 @@ public:
         return const_iterator(nullptr);
     } /*y*/
 
-public:
+public: 
     size_type bucket_count() const {
         return buckets.size();
     } /*y*/
-
+ 
     size_type bucket_size(size_type bucket) const {
         size_type result = 0;
         if (const node* cur = buckets[bucket])
@@ -666,19 +666,19 @@ public:
                 result += 1;
         return result;
     }
-
+ 
     template <class OtherValue>
     std::pair<iterator, bool> insert_unique(const OtherValue& obj) {
         reserve(num_elements + 1);
         return insert_unique_noresize(obj);
     }
-
+ 
     template <class OtherValue>
     iterator insert_equal(const OtherValue& obj) {
         reserve(num_elements + 1);
         return emplace_equal_noresize(obj);
     }
-
+ 
     template <typename... Args>
     iterator emplace_equal(Args&&... args) {
         reserve(num_elements + 1);
@@ -702,7 +702,7 @@ public:
         ++num_elements;
         return iterator(tmp);
     }
-
+ 
     template <typename... Args>
     std::pair<iterator, bool> emplace_unique(Args&&... args) {
         reserve(num_elements + 1);
@@ -717,29 +717,29 @@ public:
 
     template <typename... Args>
     iterator emplace_equal_noresize(Args&&... args);
-
+ 
     template <class InputIterator>
     void insert_unique(InputIterator f, InputIterator l) {
         insert_unique(f, l, typename std::iterator_traits<InputIterator>::iterator_category());
     }
-
+ 
     template <class InputIterator>
     void insert_equal(InputIterator f, InputIterator l) {
         insert_equal(f, l, typename std::iterator_traits<InputIterator>::iterator_category());
     }
-
+ 
     template <class InputIterator>
     void insert_unique(InputIterator f, InputIterator l, std::input_iterator_tag) {
         for (; f != l; ++f)
             insert_unique(*f);
     }
-
+ 
     template <class InputIterator>
     void insert_equal(InputIterator f, InputIterator l, std::input_iterator_tag) {
         for (; f != l; ++f)
             insert_equal(*f);
     }
-
+ 
     template <class ForwardIterator>
     void insert_unique(ForwardIterator f, ForwardIterator l, std::forward_iterator_tag) {
         difference_type n = std::distance(f, l);
@@ -748,7 +748,7 @@ public:
         for (; n > 0; --n, ++f)
             insert_unique_noresize(*f);
     }
-
+ 
     template <class ForwardIterator>
     void insert_equal(ForwardIterator f, ForwardIterator l, std::forward_iterator_tag) {
         difference_type n = std::distance(f, l);
@@ -757,10 +757,10 @@ public:
         for (; n > 0; --n, ++f)
             emplace_equal_noresize(*f);
     }
-
+ 
     template <class OtherValue>
     reference find_or_insert(const OtherValue& v);
-
+ 
     template <class OtherKey>
     iterator find(const OtherKey& key) {
         size_type n = bkt_num_key(key);
@@ -784,25 +784,25 @@ public:
         }
         return const_iterator(first); /*y*/
     }
-
+ 
     template <class OtherKey>
     iterator find_i(const OtherKey& key, insert_ctx& ins);
-
+ 
     template <class OtherKey>
     size_type count(const OtherKey& key) const {
         const size_type n = bkt_num_key(key);
         size_type result = 0;
-
+ 
         if (const node* cur = buckets[n])
             for (; !((uintptr_t)cur & 1); cur = cur->next)
                 if (equals(get_key(cur->val), key))
                     ++result;
         return result;
     }
-
+ 
     template <class OtherKey>
     std::pair<iterator, iterator> equal_range(const OtherKey& key);
-
+ 
     template <class OtherKey>
     std::pair<const_iterator, const_iterator> equal_range(const OtherKey& key) const;
 
@@ -815,13 +815,13 @@ public:
     // void (instead of iterator) is intended, see http://www.open-std.org/jtc1/sc22/wg21/docs/papers/2006/n2023.pdf
     void erase(const iterator& it);
     void erase(iterator first, iterator last);
-
+ 
     void erase(const const_iterator& it);
     void erase(const_iterator first, const_iterator last);
-
+ 
     bool reserve(size_type num_elements_hint);
     void basic_clear();
-
+ 
     /**
      * Clears the hashtable without deallocating the nodes.
      *
@@ -840,10 +840,10 @@ public:
     // implemented in save_stl.h
     template <class KeySaver>
     int save_for_st(IOutputStream* stream, KeySaver& ks, sthash<int, int, THash<int>, TEqualTo<int>, typename KeySaver::TSizeType>* stHash = nullptr) const;
-
+ 
     void clear(size_type downsize) {
         basic_clear();
-
+ 
         if (downsize < buckets.size()) {
             const TBucketDivisor newSize = HashBucketCountExt(downsize);
             if (newSize() < buckets.size()) {
@@ -875,9 +875,9 @@ public:
     void clear() {
         if (num_elements)
             clear((num_elements * 2 + buckets.size()) / 3);
-    }
-
-private:
+    } 
+ 
+private: 
     static void initialize_buckets(buckets_type& buckets, size_type sizeHint) {
         if (sizeHint == 0) {
             buckets.initialize_static(reinterpret_cast<node**>(const_cast<void**>(_yhashtable_empty_data)) + 1, TBucketDivisor::One());
@@ -888,7 +888,7 @@ private:
             initialize_buckets_dynamic(buckets, size);
         }
     }
-
+ 
     static void initialize_buckets_dynamic(buckets_type& buckets, TBucketDivisor size) {
         buckets.initialize_dynamic(size);
         memset(buckets.data(), 0, size() * sizeof(*buckets.data()));
@@ -911,24 +911,24 @@ private:
     size_type bkt_num_key(const OtherKey& key) const {
         return bkt_num_key(key, buckets.ExtSize());
     }
-
+ 
     template <class OtherValue>
     size_type bkt_num(const OtherValue& obj) const {
         return bkt_num_key(get_key(obj));
     }
-
+ 
     template <class OtherKey>
     size_type bkt_num_key(const OtherKey& key, TBucketDivisor n) const {
         const size_type bucket = n.Remainder(this->_get_hash_fun()(key));
         Y_ASSERT((0 <= bucket) && (bucket < n()));
         return bucket;
     }
-
+ 
     template <class OtherValue>
     size_type bkt_num(const OtherValue& obj, TBucketDivisor n) const {
         return bkt_num_key(get_key(obj), n);
     }
-
+ 
     template <typename... Args>
     node* new_node(Args&&... val) {
         node* n = get_node();
@@ -947,56 +947,56 @@ private:
         //n->next = (node*) 0xDeadBeeful;
         put_node(n);
     }
-
+ 
     void erase_bucket(const size_type n, node* first, node* last);
     void erase_bucket(const size_type n, node* last);
-
+ 
     void copy_from_dynamic(const THashTable& ht);
-};
-
-template <class V>
+}; 
+ 
+template <class V> 
 __yhashtable_iterator<V>& __yhashtable_iterator<V>::operator++() {
     Y_ASSERT(cur);
-    cur = cur->next;
+    cur = cur->next; 
     if ((uintptr_t)cur & 1) {
         node** bucket = (node**)((uintptr_t)cur & ~1);
         while (*bucket == nullptr)
             ++bucket;
         Y_ASSERT(*bucket != nullptr);
         cur = (node*)((uintptr_t)*bucket & ~1);
-    }
-    return *this;
-}
-
-template <class V>
+    } 
+    return *this; 
+} 
+ 
+template <class V> 
 inline __yhashtable_iterator<V> __yhashtable_iterator<V>::operator++(int) {
     iterator tmp = *this;
     ++*this;
     return tmp;
-}
-
-template <class V>
+} 
+ 
+template <class V> 
 __yhashtable_const_iterator<V>& __yhashtable_const_iterator<V>::operator++() {
     Y_ASSERT(cur);
-    cur = cur->next;
+    cur = cur->next; 
     if ((uintptr_t)cur & 1) {
         node** bucket = (node**)((uintptr_t)cur & ~1);
         while (*bucket == nullptr)
             ++bucket;
         Y_ASSERT(*bucket != nullptr);
         cur = (node*)((uintptr_t)*bucket & ~1);
-    }
-    return *this;
-}
-
-template <class V>
+    } 
+    return *this; 
+} 
+ 
+template <class V> 
 inline __yhashtable_const_iterator<V> __yhashtable_const_iterator<V>::operator++(int) {
     const_iterator tmp = *this;
     ++*this;
     return tmp;
-}
-
-template <class V, class K, class HF, class Ex, class Eq, class A>
+} 
+ 
+template <class V, class K, class HF, class Ex, class Eq, class A> 
 template <typename... Args>
 std::pair<typename THashTable<V, K, HF, Ex, Eq, A>::iterator, bool> THashTable<V, K, HF, Ex, Eq, A>::emplace_unique_noresize(Args&&... args) {
     auto deleter = [&](node* tmp) { delete_node(tmp); };
@@ -1023,20 +1023,20 @@ template <class OtherValue>
 std::pair<typename THashTable<V, K, HF, Ex, Eq, A>::iterator, bool> THashTable<V, K, HF, Ex, Eq, A>::insert_unique_noresize(const OtherValue& obj) {
     const size_type n = bkt_num(obj);
     node* first = buckets[n];
-
+ 
     if (first)                                                          /*y*/
         for (node* cur = first; !((uintptr_t)cur & 1); cur = cur->next) /*y*/
             if (equals(get_key(cur->val), get_key(obj)))
                 return std::pair<iterator, bool>(iterator(cur), false); /*y*/
-
+ 
     node* tmp = new_node(obj);
     tmp->next = first ? first : (node*)((uintptr_t)&buckets[n + 1] | 1); /*y*/
     buckets[n] = tmp;
     ++num_elements;
     return std::pair<iterator, bool>(iterator(tmp), true); /*y*/
-}
-
-template <class V, class K, class HF, class Ex, class Eq, class A>
+} 
+ 
+template <class V, class K, class HF, class Ex, class Eq, class A> 
 template <typename... Args>
 __yhashtable_iterator<V> THashTable<V, K, HF, Ex, Eq, A>::emplace_equal_noresize(Args&&... args) {
     auto deleter = [&](node* tmp) { delete_node(tmp); };
@@ -1044,7 +1044,7 @@ __yhashtable_iterator<V> THashTable<V, K, HF, Ex, Eq, A>::emplace_equal_noresize
     std::unique_ptr<node, decltype(deleter)> guard(tmp, deleter);
     const size_type n = bkt_num(tmp->val);
     node* first = buckets[n];
-
+ 
     if (first)                                                          /*y*/
         for (node* cur = first; !((uintptr_t)cur & 1); cur = cur->next) /*y*/
             if (equals(get_key(cur->val), get_key(tmp->val))) {
@@ -1054,55 +1054,55 @@ __yhashtable_iterator<V> THashTable<V, K, HF, Ex, Eq, A>::emplace_equal_noresize
                 ++num_elements;
                 return iterator(tmp); /*y*/
             }
-
+ 
     guard.release();
     tmp->next = first ? first : (node*)((uintptr_t)&buckets[n + 1] | 1); /*y*/
     buckets[n] = tmp;
     ++num_elements;
     return iterator(tmp); /*y*/
-}
-
-template <class V, class K, class HF, class Ex, class Eq, class A>
+} 
+ 
+template <class V, class K, class HF, class Ex, class Eq, class A> 
 template <class OtherValue>
 typename THashTable<V, K, HF, Ex, Eq, A>::reference THashTable<V, K, HF, Ex, Eq, A>::find_or_insert(const OtherValue& v) {
     reserve(num_elements + 1);
-
+ 
     size_type n = bkt_num_key(get_key(v));
     node* first = buckets[n];
-
+ 
     if (first)                                                          /*y*/
         for (node* cur = first; !((uintptr_t)cur & 1); cur = cur->next) /*y*/
             if (equals(get_key(cur->val), get_key(v)))
                 return cur->val;
-
+ 
     node* tmp = new_node(v);
     tmp->next = first ? first : (node*)((uintptr_t)&buckets[n + 1] | 1); /*y*/
     buckets[n] = tmp;
     ++num_elements;
     return tmp->val;
-}
-
-template <class V, class K, class HF, class Ex, class Eq, class A>
+} 
+ 
+template <class V, class K, class HF, class Ex, class Eq, class A> 
 template <class OtherKey>
 __yhashtable_iterator<V> THashTable<V, K, HF, Ex, Eq, A>::find_i(const OtherKey& key, insert_ctx& ins) {
     size_type n = bkt_num_key(key);
     ins = &buckets[n];
     node* first = buckets[n];
-
+ 
     if (first)                                                          /*y*/
         for (node* cur = first; !((uintptr_t)cur & 1); cur = cur->next) /*y*/
             if (equals(get_key(cur->val), key))
                 return iterator(cur); /*y*/
     return end();
-}
-
-template <class V, class K, class HF, class Ex, class Eq, class A>
+} 
+ 
+template <class V, class K, class HF, class Ex, class Eq, class A> 
 template <class OtherKey>
 std::pair<__yhashtable_iterator<V>, __yhashtable_iterator<V>> THashTable<V, K, HF, Ex, Eq, A>::equal_range(const OtherKey& key) {
     using pii = std::pair<iterator, iterator>;
     const size_type n = bkt_num_key(key);
     node* first = buckets[n];
-
+ 
     if (first)                                                 /*y*/
         for (; !((uintptr_t)first & 1); first = first->next) { /*y*/
             if (equals(get_key(first->val), key)) {
@@ -1117,15 +1117,15 @@ std::pair<__yhashtable_iterator<V>, __yhashtable_iterator<V>> THashTable<V, K, H
             }
         }
     return pii(end(), end());
-}
-
-template <class V, class K, class HF, class Ex, class Eq, class A>
+} 
+ 
+template <class V, class K, class HF, class Ex, class Eq, class A> 
 template <class OtherKey>
 std::pair<__yhashtable_const_iterator<V>, __yhashtable_const_iterator<V>> THashTable<V, K, HF, Ex, Eq, A>::equal_range(const OtherKey& key) const {
     using pii = std::pair<const_iterator, const_iterator>;
     const size_type n = bkt_num_key(key);
     const node* first = buckets[n];
-
+ 
     if (first)                                                 /*y*/
         for (; !((uintptr_t)first & 1); first = first->next) { /*y*/
             if (equals(get_key(first->val), key)) {
@@ -1141,15 +1141,15 @@ std::pair<__yhashtable_const_iterator<V>, __yhashtable_const_iterator<V>> THashT
             }
         }
     return pii(end(), end());
-}
-
-template <class V, class K, class HF, class Ex, class Eq, class A>
+} 
+ 
+template <class V, class K, class HF, class Ex, class Eq, class A> 
 template <class OtherKey>
 typename THashTable<V, K, HF, Ex, Eq, A>::size_type THashTable<V, K, HF, Ex, Eq, A>::erase(const OtherKey& key) {
     const size_type n = bkt_num_key(key);
     node* first = buckets[n];
     size_type erased = 0;
-
+ 
     if (first) {
         node* cur = first;
         node* next = cur->next;
@@ -1171,11 +1171,11 @@ typename THashTable<V, K, HF, Ex, Eq, A>::size_type THashTable<V, K, HF, Ex, Eq,
             --num_elements;
             delete_node(first);
         }
-    }
+    } 
     return erased;
-}
-
-template <class V, class K, class HF, class Ex, class Eq, class A>
+} 
+ 
+template <class V, class K, class HF, class Ex, class Eq, class A> 
 template <class OtherKey>
 typename THashTable<V, K, HF, Ex, Eq, A>::size_type THashTable<V, K, HF, Ex, Eq, A>::erase_one(const OtherKey& key) {
     const size_type n = bkt_num_key(key);
@@ -1210,7 +1210,7 @@ void THashTable<V, K, HF, Ex, Eq, A>::erase(const iterator& it) {
     if (node* const p = it.cur) {
         const size_type n = bkt_num(p->val);
         node* cur = buckets[n];
-
+ 
         if (cur == p) {
             buckets[n] = ((uintptr_t)cur->next & 1) ? nullptr : cur->next; /*y*/
             delete_node(cur);
@@ -1228,15 +1228,15 @@ void THashTable<V, K, HF, Ex, Eq, A>::erase(const iterator& it) {
                     next = cur->next;
                 }
             }
-        }
-    }
-}
-
-template <class V, class K, class HF, class Ex, class Eq, class A>
+        } 
+    } 
+} 
+ 
+template <class V, class K, class HF, class Ex, class Eq, class A> 
 void THashTable<V, K, HF, Ex, Eq, A>::erase(iterator first, iterator last) {
     size_type f_bucket = first.cur ? bkt_num(first.cur->val) : buckets.size(); /*y*/
     size_type l_bucket = last.cur ? bkt_num(last.cur->val) : buckets.size();   /*y*/
-
+ 
     if (first.cur == last.cur)
         return;
     else if (f_bucket == l_bucket)
@@ -1248,20 +1248,20 @@ void THashTable<V, K, HF, Ex, Eq, A>::erase(iterator first, iterator last) {
         if (l_bucket != buckets.size()) /*y*/
             erase_bucket(l_bucket, last.cur);
     }
-}
-
-template <class V, class K, class HF, class Ex, class Eq, class A>
-inline void
+} 
+ 
+template <class V, class K, class HF, class Ex, class Eq, class A> 
+inline void 
 THashTable<V, K, HF, Ex, Eq, A>::erase(const_iterator first, const_iterator last) {
     erase(iterator(const_cast<node*>(first.cur)), iterator(const_cast<node*>(last.cur)));
-}
-
-template <class V, class K, class HF, class Ex, class Eq, class A>
+} 
+ 
+template <class V, class K, class HF, class Ex, class Eq, class A> 
 inline void THashTable<V, K, HF, Ex, Eq, A>::erase(const const_iterator& it) {
     erase(iterator(const_cast<node*>(it.cur)));
-}
-
-template <class V, class K, class HF, class Ex, class Eq, class A>
+} 
+ 
+template <class V, class K, class HF, class Ex, class Eq, class A> 
 bool THashTable<V, K, HF, Ex, Eq, A>::reserve(size_type num_elements_hint) {
     const size_type old_n = buckets.size(); /*y*/
     if (num_elements_hint + 1 > old_n) {
@@ -1304,13 +1304,13 @@ bool THashTable<V, K, HF, Ex, Eq, A>::reserve(size_type num_elements_hint) {
                 throw;
             }
 #endif /* __STL_USE_EXCEPTIONS */
-        }
-    }
+        } 
+    } 
 
     return false;
-}
-
-template <class V, class K, class HF, class Ex, class Eq, class A>
+} 
+ 
+template <class V, class K, class HF, class Ex, class Eq, class A> 
 void THashTable<V, K, HF, Ex, Eq, A>::erase_bucket(const size_type n, node* first, node* last) {
     node* cur = buckets[n];
     if (cur == first)
@@ -1325,10 +1325,10 @@ void THashTable<V, K, HF, Ex, Eq, A>::erase_bucket(const size_type n, node* firs
             next = ((uintptr_t)cur->next & 1) ? nullptr : cur->next; /*y*/
             --num_elements;
         }
-    }
-}
-
-template <class V, class K, class HF, class Ex, class Eq, class A>
+    } 
+} 
+ 
+template <class V, class K, class HF, class Ex, class Eq, class A> 
 void THashTable<V, K, HF, Ex, Eq, A>::erase_bucket(const size_type n, node* last) {
     node* cur = buckets[n];
     while (cur != last) {
@@ -1338,9 +1338,9 @@ void THashTable<V, K, HF, Ex, Eq, A>::erase_bucket(const size_type n, node* last
         buckets[n] = cur;
         --num_elements;
     }
-}
-
-template <class V, class K, class HF, class Ex, class Eq, class A>
+} 
+ 
+template <class V, class K, class HF, class Ex, class Eq, class A> 
 void THashTable<V, K, HF, Ex, Eq, A>::basic_clear() {
     if (!num_elements) {
         return;
@@ -1360,9 +1360,9 @@ void THashTable<V, K, HF, Ex, Eq, A>::basic_clear() {
         }
     }
     num_elements = 0;
-}
-
-template <class V, class K, class HF, class Ex, class Eq, class A>
+} 
+ 
+template <class V, class K, class HF, class Ex, class Eq, class A> 
 void THashTable<V, K, HF, Ex, Eq, A>::copy_from_dynamic(const THashTable& ht) {
     Y_ASSERT(buckets.size() == ht.buckets.size() && !ht.empty());
 
@@ -1373,23 +1373,23 @@ void THashTable<V, K, HF, Ex, Eq, A>::copy_from_dynamic(const THashTable& ht) {
             if (const node* cur = ht.buckets[i]) {
                 node* copy = new_node(cur->val);
                 buckets[i] = copy;
-
+ 
                 for (node* next = cur->next; !((uintptr_t)next & 1); cur = next, next = cur->next) {
                     copy->next = new_node(next->val);
                     copy = copy->next;
                 }
                 copy->next = (node*)((uintptr_t)&buckets[i + 1] | 1); /*y*/
             }
-        }
+        } 
         num_elements = ht.num_elements;
 #ifdef __STL_USE_EXCEPTIONS
     } catch (...) {
         basic_clear();
         throw;
-    }
+    } 
 #endif /* __STL_USE_EXCEPTIONS */
-}
-
+} 
+ 
 namespace NPrivate {
     template <class Key>
     inline TString MapKeyToString(const Key&) {
@@ -1423,11 +1423,11 @@ namespace NPrivate {
 
 template <class Key, class T, class HashFcn, class EqualKey, class Alloc>
 class THashMap: public TMapOps<THashMap<Key, T, HashFcn, EqualKey, Alloc>> {
-private:
+private: 
     using ht = THashTable<std::pair<const Key, T>, Key, HashFcn, TSelect1st, EqualKey, Alloc>;
     ht rep;
-
-public:
+ 
+public: 
     using key_type = typename ht::key_type;
     using value_type = typename ht::value_type;
     using hasher = typename ht::hasher;
@@ -1435,26 +1435,26 @@ public:
     using allocator_type = typename ht::allocator_type;
     using node_allocator_type = typename ht::node_allocator_type;
     using mapped_type = T;
-
+ 
     using size_type = typename ht::size_type;
     using difference_type = typename ht::difference_type;
     using pointer = typename ht::pointer;
     using const_pointer = typename ht::const_pointer;
     using reference = typename ht::reference;
     using const_reference = typename ht::const_reference;
-
+ 
     using iterator = typename ht::iterator;
     using const_iterator = typename ht::const_iterator;
     using insert_ctx = typename ht::insert_ctx;
-
+ 
     hasher hash_function() const {
         return rep.hash_function();
     }
     key_equal key_eq() const {
         return rep.key_eq();
     }
-
-public:
+ 
+public: 
     THashMap()
         : rep(0, hasher(), key_equal())
     {
@@ -1507,7 +1507,7 @@ public:
     {
         rep.insert_unique(f, l);
     }
-
+ 
     THashMap(const std::initializer_list<std::pair<Key, T>>& list)
         : rep(list.size(), hasher(), key_equal())
     {
@@ -1520,7 +1520,7 @@ public:
     // because its implementation is backed by THashTable.
     // See hash_ut.cpp
 
-public:
+public: 
     size_type size() const noexcept {
         return rep.size();
     }
@@ -1540,7 +1540,7 @@ public:
     void swap(THashMap& hs) {
         rep.swap(hs.rep);
     }
-
+ 
     iterator begin() {
         return rep.begin();
     }
@@ -1559,8 +1559,8 @@ public:
     const_iterator cend() const {
         return rep.end();
     }
-
-public:
+ 
+public: 
     template <class InputIterator>
     void insert(InputIterator f, InputIterator l) {
         rep.insert_unique(f, l);
@@ -1588,7 +1588,7 @@ public:
     iterator insert_direct(const TheObj& obj, const insert_ctx& ins) {
         return rep.insert_direct(obj, ins);
     }
-
+ 
     template <typename... Args>
     iterator emplace_direct(const insert_ctx& ins, Args&&... args) {
         return rep.emplace_direct(ins, std::forward<Args>(args)...);
@@ -1646,7 +1646,7 @@ public:
 
         return rep.emplace_direct(ctx, std::piecewise_construct, std::forward_as_tuple(key), std::forward_as_tuple())->second;
     }
-
+ 
     template <class TheKey>
     const T& at(const TheKey& key) const {
         using namespace ::NPrivate;
@@ -1680,7 +1680,7 @@ public:
     std::pair<iterator, iterator> equal_range(const TKey& key) {
         return rep.equal_range(key);
     }
-
+ 
     template <class TKey>
     std::pair<const_iterator, const_iterator> equal_range(const TKey& key) const {
         return rep.equal_range(key);
@@ -1690,7 +1690,7 @@ public:
     size_type erase(const TKey& key) {
         return rep.erase_one(key);
     }
-
+ 
     void erase(iterator it) {
         rep.erase(it);
     }
@@ -1715,8 +1715,8 @@ public:
     int save_for_st(IOutputStream* stream, KeySaver& ks, sthash<int, int, THash<int>, TEqualTo<int>, typename KeySaver::TSizeType>* stHash = nullptr) const {
         return rep.template save_for_st<KeySaver>(stream, ks, stHash);
     }
-
-public:
+ 
+public: 
     void reserve(size_type hint) {
         rep.reserve(hint);
     }
@@ -1732,9 +1732,9 @@ public:
     const node_allocator_type& GetNodeAllocator() const {
         return rep.GetNodeAllocator();
     }
-};
-
-template <class Key, class T, class HashFcn, class EqualKey, class Alloc>
+}; 
+ 
+template <class Key, class T, class HashFcn, class EqualKey, class Alloc> 
 inline bool operator==(const THashMap<Key, T, HashFcn, EqualKey, Alloc>& hm1, const THashMap<Key, T, HashFcn, EqualKey, Alloc>& hm2) {
     if (hm1.size() != hm2.size()) {
         return false;
@@ -1746,8 +1746,8 @@ inline bool operator==(const THashMap<Key, T, HashFcn, EqualKey, Alloc>& hm1, co
         }
     }
     return true;
-}
-
+} 
+ 
 template <class Key, class T, class HashFcn, class EqualKey, class Alloc>
 inline bool operator!=(const THashMap<Key, T, HashFcn, EqualKey, Alloc>& hm1, const THashMap<Key, T, HashFcn, EqualKey, Alloc>& hm2) {
     return !(hm1 == hm2);
@@ -1755,37 +1755,37 @@ inline bool operator!=(const THashMap<Key, T, HashFcn, EqualKey, Alloc>& hm1, co
 
 template <class Key, class T, class HashFcn, class EqualKey, class Alloc>
 class THashMultiMap {
-private:
+private: 
     using ht = THashTable<std::pair<const Key, T>, Key, HashFcn, TSelect1st, EqualKey, Alloc>;
     ht rep;
-
-public:
+ 
+public: 
     using key_type = typename ht::key_type;
     using value_type = typename ht::value_type;
     using hasher = typename ht::hasher;
     using key_equal = typename ht::key_equal;
     using mapped_type = T;
     using allocator_type = typename ht::allocator_type;
-
+ 
     using size_type = typename ht::size_type;
     using difference_type = typename ht::difference_type;
     using pointer = typename ht::pointer;
     using const_pointer = typename ht::const_pointer;
     using reference = typename ht::reference;
     using const_reference = typename ht::const_reference;
-
+ 
     using iterator = typename ht::iterator;
     using const_iterator = typename ht::const_iterator;
     using insert_ctx = typename ht::insert_ctx;
-
+ 
     hasher hash_function() const {
         return rep.hash_function();
     }
     key_equal key_eq() const {
         return rep.key_eq();
     }
-
-public:
+ 
+public: 
     THashMultiMap()
         : rep(0, hasher(), key_equal())
     {
@@ -1807,7 +1807,7 @@ public:
         : rep(n, hf, eql)
     {
     }
-
+ 
     template <class InputIterator>
     THashMultiMap(InputIterator f, InputIterator l)
         : rep(0, hasher(), key_equal())
@@ -1832,7 +1832,7 @@ public:
     {
         rep.insert_equal(f, l);
     }
-
+ 
     THashMultiMap(std::initializer_list<std::pair<Key, T>> list)
         : rep(list.size(), hasher(), key_equal())
     {
@@ -1845,7 +1845,7 @@ public:
     // because its implementation is backed by THashTable.
     // See hash_ut.cpp
 
-public:
+public: 
     size_type size() const {
         return rep.size();
     }
@@ -1865,7 +1865,7 @@ public:
     void swap(THashMultiMap& hs) {
         rep.swap(hs.rep);
     }
-
+ 
     iterator begin() {
         return rep.begin();
     }
@@ -1884,8 +1884,8 @@ public:
     const_iterator cend() const {
         return rep.end();
     }
-
-public:
+ 
+public: 
     template <class InputIterator>
     void insert(InputIterator f, InputIterator l) {
         rep.insert_equal(f, l);
@@ -1903,7 +1903,7 @@ public:
     iterator insert_noresize(const value_type& obj) {
         return rep.emplace_equal_noresize(obj);
     }
-
+ 
     template <typename... Args>
     iterator emplace_noresize(Args&&... args) {
         return rep.emplace_equal_noresize(std::forward<Args>(args)...);
@@ -1923,12 +1923,12 @@ public:
     const_iterator find(const TKey& key) const {
         return rep.find(key);
     }
-
+ 
     template <class TKey>
     iterator find(const TKey& key) {
         return rep.find(key);
     }
-
+ 
     template <class TheKey>
     iterator find(const TheKey& key, insert_ctx& ins) {
         return rep.find_i(key, ins);
@@ -1953,7 +1953,7 @@ public:
     std::pair<const_iterator, const_iterator> equal_range(const TKey& key) const {
         return rep.equal_range(key);
     }
-
+ 
     size_type erase(const key_type& key) {
         return rep.erase(key);
     }
@@ -1975,14 +1975,14 @@ public:
     void release_nodes() {
         rep.release_nodes();
     }
-
+ 
     // if (stHash != NULL) bucket_count() must be equal to stHash->bucket_count()
     template <class KeySaver>
     int save_for_st(IOutputStream* stream, KeySaver& ks, sthash<int, int, THash<int>, TEqualTo<int>, typename KeySaver::TSizeType>* stHash = nullptr) const {
         return rep.template save_for_st<KeySaver>(stream, ks, stHash);
     }
 
-public:
+public: 
     void reserve(size_type hint) {
         rep.reserve(hint);
     }
@@ -1992,9 +1992,9 @@ public:
     size_type bucket_size(size_type n) const {
         return rep.bucket_size(n);
     }
-};
-
-template <class Key, class T, class HF, class EqKey, class Alloc>
+}; 
+ 
+template <class Key, class T, class HF, class EqKey, class Alloc> 
 inline bool operator==(const THashMultiMap<Key, T, HF, EqKey, Alloc>& hm1, const THashMultiMap<Key, T, HF, EqKey, Alloc>& hm2) {
     // NOTE: copy-pasted from
     // contrib/libs/cxxsupp/libcxx/include/unordered_map
@@ -2015,8 +2015,8 @@ inline bool operator==(const THashMultiMap<Key, T, HF, EqKey, Alloc>& hm1, const
         it = eq1.second;
     }
     return true;
-}
-
+} 
+ 
 template <class Key, class T, class HF, class EqKey, class Alloc>
 inline bool operator!=(const THashMultiMap<Key, T, HF, EqKey, Alloc>& hm1, const THashMultiMap<Key, T, HF, EqKey, Alloc>& hm2) {
     return !(hm1 == hm2);

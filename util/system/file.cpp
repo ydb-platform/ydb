@@ -49,7 +49,7 @@
     #include <sys/sendfile.h>
     #define HAVE_POSIX_FADVISE 1
     #define HAVE_SYNC_FILE_RANGE 1
-#elif defined(__FreeBSD__) && !defined(WITH_VALGRIND)
+#elif defined(__FreeBSD__) && !defined(WITH_VALGRIND) 
     #include <sys/param.h>
     #define HAVE_POSIX_FADVISE (__FreeBSD_version >= 900501)
     #define HAVE_SYNC_FILE_RANGE 0
@@ -565,38 +565,38 @@ FHANDLE TFileHandle::Duplicate() const noexcept {
 #endif
 }
 
-int TFileHandle::Duplicate2Posix(int dstHandle) const noexcept {
-    if (!IsOpen()) {
-        return -1;
-    }
-#if defined(_win_)
-    FHANDLE dupHandle = Duplicate();
-    if (dupHandle == INVALID_FHANDLE) {
-        _set_errno(EMFILE);
-        return -1;
-    }
-    int posixHandle = _open_osfhandle((intptr_t)dupHandle, 0);
-    if (posixHandle == -1) {
-        CloseHandle(dupHandle);
-        return -1;
-    }
-    if (dup2(posixHandle, dstHandle) == -1) {
-        dstHandle = -1;
-    }
-    _close(posixHandle);
-    return dstHandle;
-#elif defined(_unix_)
-    while (dup2(Fd_, dstHandle) == -1) {
-        if (errno != EINTR) {
-            return -1;
-        }
-    }
-    return dstHandle;
-#else
+int TFileHandle::Duplicate2Posix(int dstHandle) const noexcept { 
+    if (!IsOpen()) { 
+        return -1; 
+    } 
+#if defined(_win_) 
+    FHANDLE dupHandle = Duplicate(); 
+    if (dupHandle == INVALID_FHANDLE) { 
+        _set_errno(EMFILE); 
+        return -1; 
+    } 
+    int posixHandle = _open_osfhandle((intptr_t)dupHandle, 0); 
+    if (posixHandle == -1) { 
+        CloseHandle(dupHandle); 
+        return -1; 
+    } 
+    if (dup2(posixHandle, dstHandle) == -1) { 
+        dstHandle = -1; 
+    } 
+    _close(posixHandle); 
+    return dstHandle; 
+#elif defined(_unix_) 
+    while (dup2(Fd_, dstHandle) == -1) { 
+        if (errno != EINTR) { 
+            return -1; 
+        } 
+    } 
+    return dstHandle; 
+#else 
     #error unsupported platform
-#endif
-}
-
+#endif 
+} 
+ 
 bool TFileHandle::LinkTo(const TFileHandle& fh) const noexcept {
 #if defined(_unix_)
     while (dup2(fh.Fd_, Fd_) == -1) {

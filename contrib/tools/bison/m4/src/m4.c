@@ -364,9 +364,9 @@ process_file (const char *name)
 int
 main (int argc, char *const *argv)
 {
-#if !defined(_WIN32) && !defined(_WIN64)
+#if !defined(_WIN32) && !defined(_WIN64) 
   struct sigaction act;
-#endif
+#endif 
   macro_definition *head;       /* head of deferred argument list */
   macro_definition *tail;
   macro_definition *defn;
@@ -402,9 +402,9 @@ main (int argc, char *const *argv)
   signal_message[SIGFPE] = xstrdup (strsignal (SIGFPE));
   if (SIGBUS != SIGILL && SIGBUS != SIGSEGV)
     signal_message[SIGBUS] = xstrdup (strsignal (SIGBUS));
-#if !defined(_WIN32) && !defined(_WIN64)
-  // No such signals on Windows
-  sigemptyset(&act.sa_mask);
+#if !defined(_WIN32) && !defined(_WIN64) 
+  // No such signals on Windows 
+  sigemptyset(&act.sa_mask); 
   /* One-shot - if we fault while handling a fault, we want to revert
      to default signal behavior.  */
   act.sa_flags = SA_NODEFER | SA_RESETHAND;

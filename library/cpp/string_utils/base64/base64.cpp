@@ -150,11 +150,11 @@ char* Base64EncodeUrl(char* outstr, const unsigned char* instr, size_t len) {
 }
 
 inline void uudecode_1(char* dst, unsigned char* src) {
-    dst[0] = char((base64_bkw[src[0]] << 2) | (base64_bkw[src[1]] >> 4));
-    dst[1] = char((base64_bkw[src[1]] << 4) | (base64_bkw[src[2]] >> 2));
-    dst[2] = char((base64_bkw[src[2]] << 6) | base64_bkw[src[3]]);
-}
-
+    dst[0] = char((base64_bkw[src[0]] << 2) | (base64_bkw[src[1]] >> 4)); 
+    dst[1] = char((base64_bkw[src[1]] << 4) | (base64_bkw[src[2]] >> 2)); 
+    dst[2] = char((base64_bkw[src[2]] << 6) | base64_bkw[src[3]]); 
+} 
+ 
 static size_t Base64DecodePlain(void* dst, const char* b, const char* e) {
     size_t n = 0;
     while (b < e) {
@@ -174,8 +174,8 @@ static size_t Base64DecodePlain(void* dst, const char* b, const char* e) {
         }
     }
 
-    return n;
-}
+    return n; 
+} 
 
 // Table for Base64StrictDecode
 static const char base64_bkw_strict[] =

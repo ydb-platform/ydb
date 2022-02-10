@@ -245,10 +245,10 @@ Y_UNIT_TEST_SUITE(SplitStringTest) {
         TVector<TString> test;
         Split(data, delim, test);
         Cmp(good, test);
-
+ 
         TVector<TStringBuf> test1;
         Split(data, delim.data(), test1);
-        Cmp(good, test1);
+        Cmp(good, test1); 
     }
 
     Y_UNIT_TEST(ConvenientSplitTest) {

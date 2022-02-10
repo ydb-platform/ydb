@@ -173,14 +173,14 @@ class Platform(object):
             if self._parse_os(key) == self.os:
                 return dict_[key]
         return default
-
+ 
     @property
     def os_compat(self):
         if self.is_macos:
             return 'DARWIN'
         else:
             return self.os.upper()
-
+ 
     def exe(self, *paths):
         if self.is_windows:
             return ntpath.join(*itertools.chain(paths[:-1], (paths[-1] + '.exe',)))
@@ -189,24 +189,24 @@ class Platform(object):
 
     def __str__(self):
         return '{name}-{os}-{arch}'.format(name=self.name, os=self.os, arch=self.arch)
-
+ 
     def __cmp__(self, other):
         return cmp((self.name, self.os, self.arch), (other.name, other.os, other.arch))
-
+ 
     def __hash__(self):
         return hash((self.name, self.os, self.arch))
-
+ 
     @staticmethod
     def _parse_os(os):
         os = os.lower()
-
+ 
         if os == 'darwin':
             return 'macos'
         if os in ('win', 'win32', 'win64'):
             return 'windows'
         if os.startswith('cygwin'):
             return 'cygwin'
-
+ 
         return os
 
 
@@ -417,16 +417,16 @@ class Options(object):
 
         self.options, self.arguments = parser.parse_args(argv)
 
-        argv = self.arguments
-        if len(argv) < 4:
+        argv = self.arguments 
+        if len(argv) < 4: 
             print('Usage: ArcRoot, --BuildType--, Verbosity, [Path to local.ymake]', file=sys.stderr)
-            sys.exit(1)
-
+            sys.exit(1) 
+ 
         self.arcadia_root = argv[1]
         init_logger(argv[3] == 'verbose')
 
         # Эти переменные не надо использоваться напрямую. Их значения уже разбираются в других местах.
-        self.build_type = argv[2].lower()
+        self.build_type = argv[2].lower() 
         self.local_distbuild = self.options.local_distbuild
         self.toolchain_params = self.options.toolchain_params
 
@@ -435,12 +435,12 @@ class Options(object):
 
     Instance = None
 
-
+ 
 def opts():
     if Options.Instance is None:
         Options.Instance = Options(sys.argv)
     return Options.Instance
-
+ 
 
 class Profiler(object):
     Generic = 'generic'
@@ -476,7 +476,7 @@ class Build(object):
 
         if force_ignore_local_files:
             self.ignore_local_files = True
-
+ 
         if self.is_ide_build_type(self.build_type):
             self.ignore_local_files = True
 
@@ -517,7 +517,7 @@ class Build(object):
     def _print_build_settings(self):
         emit('BUILD_TYPE', self.build_type.upper())
         emit('BT_' + self.build_type.upper().replace('-', '_'), 'yes')
-
+ 
         if self.build_system == 'distbuild':
             emit('DISTBUILD', 'yes')
         elif self.build_system != 'ymake':
@@ -615,7 +615,7 @@ class Build(object):
         host = self.host
 
         emit('USE_LOCAL_TOOLS', 'no' if self.ignore_local_files else 'yes')
-
+ 
         ragel = Ragel()
         ragel.configure_toolchain(self, compiler)
         ragel.print_variables()
@@ -733,7 +733,7 @@ class YMake(object):
 
     def _find_core_conf(self):
         return self._find_conf('ymake.core.conf')
-
+ 
 
 class System(object):
     def __init__(self, platform):
@@ -801,18 +801,18 @@ when (($USEMPROF == "yes") || ($USE_MPROF == "yes")) {
         emit('HOST_PLATFORM', self.platform.os_compat)
         if not self.platform.is_windows:
             self.print_nix_host_const()
-
+ 
         for variable in itertools.chain(self.platform.os_variables, self.platform.arch_variables):
             emit('HOST_{var}'.format(var=variable), 'yes')
-
-
+ 
+ 
 class CompilerDetector(object):
     def __init__(self):
         self.type = None
         self.c_compiler = None
         self.cxx_compiler = None
         self.version_list = None
-
+ 
     @staticmethod
     def preprocess_source(compiler, source):
         # noinspection PyBroadException
@@ -825,7 +825,7 @@ class CompilerDetector(object):
             finally:
                 os.remove(path)
             return stdout, code
-
+ 
         except Exception as e:
             logger.debug('Preprocessing failed: %s', e)
             return None, None
@@ -834,13 +834,13 @@ class CompilerDetector(object):
     def get_compiler_vars(compiler, names):
         prefix = '____YA_VAR_'
         source = '\n'.join(['{prefix}{name}={name}\n'.format(prefix=prefix, name=n) for n in names])
-
+ 
         # Некоторые препроцессоры возвращают ненулевой код возврата. Поэтому его проверять нельзя.
         # Мы можем только удостовериться после разбора stdout, что в нём
         # присутствовала хотя бы одна подставленная переменная.
         # TODO(somov): Исследовать, можно ли проверять ограниченный набор кодов возврата.
         stdout, _ = CompilerDetector.preprocess_source(compiler, source)
-
+ 
         if stdout is None:
             return None
 
@@ -852,14 +852,14 @@ class CompilerDetector(object):
                 if value == name:
                     continue  # Preprocessor variable was not substituted
                 vars_[name] = value
-
+ 
         return vars_
-
+ 
     def detect(self, c_compiler=None, cxx_compiler=None):
         c_compiler = c_compiler or os.environ.get('CC')
         cxx_compiler = cxx_compiler or os.environ.get('CXX') or c_compiler
         c_compiler = c_compiler or cxx_compiler
-
+ 
         logger.debug('e=%s', os.environ)
         if c_compiler is None:
             raise ConfigureError('Custom compiler was requested but not specified')
@@ -872,10 +872,10 @@ class CompilerDetector(object):
         apple_var = '__apple_build_version__'
 
         compiler_vars = self.get_compiler_vars(c_compiler_path, clang_vars + [apple_var] + gcc_vars + msvc_vars)
-
+ 
         if not compiler_vars:
             raise ConfigureError('Could not determine custom compiler version: {}'.format(c_compiler))
-
+ 
         def version(version_names):
             def iter_version():
                 for name in version_names:
@@ -906,12 +906,12 @@ class CompilerDetector(object):
             self.type = 'msvc'
         else:
             raise ConfigureError('Could not determine custom compiler type: {}'.format(c_compiler))
-
+ 
         self.version_list = clang_version or gcc_version or msvc_version
 
         self.c_compiler = c_compiler_path
         self.cxx_compiler = cxx_compiler and which(cxx_compiler) or c_compiler_path
-
+ 
 
 class ToolchainOptions(object):
     def __init__(self, build, detector):
@@ -929,20 +929,20 @@ class ToolchainOptions(object):
 
         self.params = tc_json['params']
         self._name = tc_json.get('name', 'theyknow')
-
+ 
         if detector:
             self.type = detector.type
             self.from_arcadia = False
-
+ 
             self.c_compiler = detector.c_compiler
             self.cxx_compiler = detector.cxx_compiler
             self.compiler_version_list = detector.version_list
             self.compiler_version = '.'.join(map(lambda part: six.ensure_str(str(part)), self.compiler_version_list))
 
-        else:
+        else: 
             self.type = self.params['type']
             self.from_arcadia = True
-
+ 
             self.c_compiler = self.params['c_compiler']
             self.cxx_compiler = self.params['cxx_compiler']
 
@@ -1071,15 +1071,15 @@ class Compiler(object):
     def __init__(self, tc, compiler_variable):
         self.compiler_variable = compiler_variable
         self.tc = tc
-
+ 
     def print_compiler(self):
         # CLANG and CLANG_VER variables
         emit(self.compiler_variable, 'yes')
         emit('{}_VER'.format(self.compiler_variable), self.tc.compiler_version)
         if self.tc.is_xcode:
             emit('XCODE', 'yes')
-
-
+ 
+ 
 class GnuToolchain(Toolchain):
     def __init__(self, tc, build):
         """
@@ -1302,7 +1302,7 @@ class GnuToolchain(Toolchain):
         emit('C_FLAGS_PLATFORM', self.c_flags_platform)
         emit('SWIFT_FLAGS_PLATFORM', self.swift_flags_platform)
         emit('SWIFT_LD_FLAGS', '-L{}'.format(self.swift_lib_path) if self.swift_lib_path else '')
-
+ 
         emit('PERL_SDK', preset('OS_SDK') or self.tc.os_sdk)
         if preset('OS_SDK') is None:
             emit('OS_SDK', self.tc.os_sdk)
@@ -1323,8 +1323,8 @@ class GnuCompiler(Compiler):
         self.build = build
         self.host = self.build.host
         self.target = self.build.target
-        self.tc = tc
-
+        self.tc = tc 
+ 
         self.c_foptions = [
             # Enable C++ exceptions (and allow them to be throw through pure C code)
             '-fexceptions',
@@ -1404,7 +1404,7 @@ class GnuCompiler(Compiler):
         self.c_flags += self.tc.arch_opt + ['-pipe']
 
         self.sfdl_flags = ['-E', '-C', '-x', 'c++']
-
+ 
         if self.target.is_x86:
             self.c_flags.append('-m32')
         if self.target.is_x86_64:
@@ -1801,10 +1801,10 @@ class LD(Linker):
         self.build = build
         self.host = self.build.host
         self.target = self.build.target
-        self.tc = tc
+        self.tc = tc 
 
         target = self.target
-
+ 
         self.ar = preset('AR') or self.tc.ar
         self.ar_plugin = self.tc.ar_plugin
         self.strip = self.tc.strip
@@ -2088,7 +2088,7 @@ class LD(Linker):
                  ld_env_style,
                  )
             emit('REAL_LINK_EXE', '$REAL_LINK_EXE_IMPL($_WHOLE_ARCHIVE_PEERS_VALUE)')
-
+ 
         # Executable Shared Library
 
         emit('REAL_LINK_EXEC_DYN_LIB_CMDLINE',
@@ -2110,7 +2110,7 @@ class LD(Linker):
         emit('REAL_LINK_EXEC_DYN_LIB', '$REAL_LINK_EXEC_DYN_LIB_IMPL($_WHOLE_ARCHIVE_PEERS_VALUE)')
 
         # Shared Library
-
+ 
         emit('LINK_DYN_LIB_FLAGS')
         emit('REAL_LINK_DYN_LIB_CMDLINE',
              '$YMAKE_PYTHON ${input:"build/scripts/link_dyn_lib.py"}',
@@ -2128,7 +2128,7 @@ class LD(Linker):
              exe_flags,
              ld_env_style)
         emit('REAL_LINK_DYN_LIB', '$REAL_LINK_DYN_LIB_IMPL($_WHOLE_ARCHIVE_PEERS_VALUE)')
-
+ 
         if self.dwarf_command is None or self.target.is_ios:
             emit('DWARF_COMMAND')
         else:
@@ -2169,7 +2169,7 @@ class LD(Linker):
         emit_link_fat_obj('LINK_FAT_OBJECT', True, '--obj=$TARGET', '--lib=${output:REALPRJNAME.a}')
         emit_link_fat_obj('LINK_RECURSIVE_LIBRARY', False, '--lib=$TARGET', '--with-own-obj', '--with-global-srcs')
         emit_link_fat_obj('LINK_FAT_OBJECT_LIBRARY', False, '--lib=$TARGET', '$FAT_OBJECT_ARGS', '$FAT_OBJECT_OUTS')
-
+ 
         emit('LIBRT', '-lrt')
         emit('MD5LIB', '-lcrypt')
         emit('LIBRESOLV', self.libresolv)
@@ -2631,7 +2631,7 @@ class MSVCCompiler(MSVC, Compiler):
              masm_io + '${requirements;hide:CC_REQUIREMENTS} ${kv;hide:"p AS"} ${kv;hide:"pc yellow"}'
              )
 
-
+ 
 class MSVCLinker(MSVC, Linker):
     def __init__(self, tc, build):
         MSVC.__init__(self, tc, build)

@@ -23,7 +23,7 @@
 extern "C" int mkstemps(char* path, int slen);
 char* mkdtemp(char* path);
 
-#else
+#else 
     #ifdef _sun_
         #include <alloca.h>
 
@@ -55,7 +55,7 @@ void MakePathIfNotExist(const char* path, int mode = 0777);
 void SlashFolderLocal(TString& folder);
 bool correctpath(TString& filename);
 bool resolvepath(TString& folder, const TString& home);
-
+ 
 char GetDirectorySeparator();
 const char* GetDirectorySeparatorS();
 

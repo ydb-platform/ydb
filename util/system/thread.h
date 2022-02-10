@@ -1,5 +1,5 @@
 #pragma once
-
+ 
 /// This code should not be used directly unless you really understand what you do.
 /// If you need threads, use thread pool functionality in <util/thread/factory.h>
 /// @see SystemThreadFactory()
@@ -9,7 +9,7 @@
 
 #include "defaults.h"
 #include "progname.h"
-
+ 
 bool SetHighestThreadPriority();
 
 class TThread {
@@ -71,7 +71,7 @@ public:
             return *this;
         }
     };
-
+ 
     TThread(const TParams& params);
     TThread(TThreadProc threadProc, void* param);
 
@@ -113,18 +113,18 @@ public:
     // NOTE: Content of `name` will be copied.
     //
     // NOTE: On Linux thread name is limited to 15 symbols which is probably the smallest one among
-    // all platforms. If you provide a name longer than 15 symbols it will be cut. So if you expect
+    // all platforms. If you provide a name longer than 15 symbols it will be cut. So if you expect 
     // `CurrentThreadName` to return the same name as `name` make sure it's not longer than 15
     // symbols.
     static void SetCurrentThreadName(const char* name);
 
-    // NOTE: Will return empty string where CanGetCurrentThreadName() returns false.
+    // NOTE: Will return empty string where CanGetCurrentThreadName() returns false. 
     static TString CurrentThreadName();
 
-    // NOTE: Depends on a platform version.
-    // Will return true for Darwin, Linux or fresh Windows 10.
-    static bool CanGetCurrentThreadName();
-
+    // NOTE: Depends on a platform version. 
+    // Will return true for Darwin, Linux or fresh Windows 10. 
+    static bool CanGetCurrentThreadName(); 
+ 
 private:
     struct TCallableBase {
         virtual ~TCallableBase() = default;
@@ -155,7 +155,7 @@ private:
 private:
     class TImpl;
     THolder<TImpl> Impl_;
-};
+}; 
 
 class ISimpleThread: public TThread {
 public:

@@ -474,11 +474,11 @@ private:
     using TImplRef = TSimpleIntrusivePtr<TImpl>;
     TImplRef Impl;
 };
-
-/// Appends to dst: quoted arg
+ 
+/// Appends to dst: quoted arg 
 void ShellQuoteArg(TString& dst, TStringBuf arg);
-
-/// Appends to dst: space, quoted arg
+ 
+/// Appends to dst: space, quoted arg 
 void ShellQuoteArgSp(TString& dst, TStringBuf arg);
 
 /// Returns true if arg should be quoted

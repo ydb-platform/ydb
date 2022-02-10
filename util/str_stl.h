@@ -25,7 +25,7 @@ namespace std {
         }
         bool operator()(const char* x, const TStringBuf y) const {
             return strlen(x) == y.size() && memcmp(x, y.data(), y.size()) == 0;
-        }
+        } 
         using is_transparent = void;
     };
 }
@@ -65,17 +65,17 @@ template <typename T>
 struct hash<const T*> {
     inline size_t operator()(const T* t) const noexcept {
         return NumericHash(t);
-    }
-};
-
+    } 
+}; 
+ 
 template <class T>
 struct hash<T*>: public ::hash<const T*> {
 };
 
 template <>
 struct hash<const char*>: ::NHashPrivate::TStringHash<char> {
-};
-
+}; 
+ 
 template <>
 struct THash<TStringBuf>: ::NHashPrivate::TStringHash<char> {
 };
@@ -154,7 +154,7 @@ namespace NHashPrivate {
 
     public:
         template <class T>
-        inline size_t operator()(const T& pair) const {
+        inline size_t operator()(const T& pair) const { 
             return CombineHashes(FirstHash(pair.first), SecondHash(pair.second));
         }
     };
@@ -167,7 +167,7 @@ namespace NHashPrivate {
     template <class TFirst, class TSecond>
     struct TPairHash<TFirst, TSecond, true> {
         template <class T>
-        inline size_t operator()(const T& pair) const {
+        inline size_t operator()(const T& pair) const { 
             // maps have TFirst = const TFoo, which would make for an undefined specialization
             using TFirstClean = std::remove_cv_t<TFirst>;
             using TSecondClean = std::remove_cv_t<TSecond>;
@@ -184,12 +184,12 @@ template <class T>
 struct TEqualTo: public std::equal_to<T> {
 };
 
-template <>
+template <> 
 struct TEqualTo<TString>: public TEqualTo<TStringBuf> {
     using is_transparent = void;
-};
-
-template <>
+}; 
+ 
+template <> 
 struct TEqualTo<TUtf16String>: public TEqualTo<TWtringBuf> {
     using is_transparent = void;
 };
@@ -200,14 +200,14 @@ struct TEqualTo<TUtf32String>: public TEqualTo<TUtf32StringBuf> {
 };
 
 template <class TFirst, class TSecond>
-struct TEqualTo<std::pair<TFirst, TSecond>> {
+struct TEqualTo<std::pair<TFirst, TSecond>> { 
     template <class TOther>
-    inline bool operator()(const std::pair<TFirst, TSecond>& a, const TOther& b) const {
-        return TEqualTo<TFirst>()(a.first, b.first) && TEqualTo<TSecond>()(a.second, b.second);
-    }
-    using is_transparent = void;
-};
-
+    inline bool operator()(const std::pair<TFirst, TSecond>& a, const TOther& b) const { 
+        return TEqualTo<TFirst>()(a.first, b.first) && TEqualTo<TSecond>()(a.second, b.second); 
+    } 
+    using is_transparent = void; 
+}; 
+ 
 template <class T>
 struct TCIEqualTo {
 };
@@ -240,8 +240,8 @@ struct TLess: public std::less<T> {
 template <>
 struct TLess<TString>: public TLess<TStringBuf> {
     using is_transparent = void;
-};
-
+}; 
+ 
 template <>
 struct TLess<TUtf16String>: public TLess<TWtringBuf> {
     using is_transparent = void;

@@ -213,11 +213,11 @@ namespace NPlugins {
                     "inline $type$* Add$rname$() { return add_$name$(); }\n"
                     "inline const $type$& get_idx_$name$(int _index) const { return $name$(_index); }\n"
                     "inline const ::google::protobuf::RepeatedPtrField< $type$ >&\n"
-                    "    get_arr_$name$() const { return $name$(); }\n"
+                    "    get_arr_$name$() const { return $name$(); }\n" 
                     "inline const ::google::protobuf::RepeatedPtrField< $type$ >&\n"
-                    "    Get$rname$() const { return $name$(); }\n"
+                    "    Get$rname$() const { return $name$(); }\n" 
                     "inline ::google::protobuf::RepeatedPtrField< $type$ >*\n"
-                    "    Mutable$rname$() { return mutable_$name$(); }\n");
+                    "    Mutable$rname$() { return mutable_$name$(); }\n"); 
 
                 if (Variables_.end() != Variables_.find("RName"))
                     printer->Print(Variables_,
@@ -225,9 +225,9 @@ namespace NPlugins {
                         "inline $type$* Mutable$RName$(size_t _index) {Y_ASSERT(_index < static_cast<size_t>(::Max<int>())); return mutable_$name$(int(_index)); }\n"
                         "inline $type$* Add$RName$() { return add_$name$(); }\n"
                         "inline const ::google::protobuf::RepeatedPtrField< $type$ >&\n"
-                        "    Get$RName$() const { return $name$(); }\n"
+                        "    Get$RName$() const { return $name$(); }\n" 
                         "inline ::google::protobuf::RepeatedPtrField< $type$ >*\n"
-                        "    Mutable$RName$() { return mutable_$name$(); }\n"
+                        "    Mutable$RName$() { return mutable_$name$(); }\n" 
                     );
             }
 
@@ -457,20 +457,20 @@ namespace NPlugins {
                     "inline void Add$rname$($type$ value) { add_$name$(value); }\n"
                     "inline $type$ get_idx_$name$(int _index) const { return $name$(_index); }\n"
                     "inline const ::google::protobuf::RepeatedField< $type$ >&\n"
-                    "    get_arr_$name$() const { return $name$(); }\n"
+                    "    get_arr_$name$() const { return $name$(); }\n" 
                     "inline const ::google::protobuf::RepeatedField< $type$ >&\n"
-                    "    Get$rname$() const { return $name$(); }\n"
+                    "    Get$rname$() const { return $name$(); }\n" 
                     "inline ::google::protobuf::RepeatedField< $type$ >*\n"
-                    "    Mutable$rname$() { return mutable_$name$(); }\n");
+                    "    Mutable$rname$() { return mutable_$name$(); }\n"); 
                 if (Variables_.end() != Variables_.find("RName"))
                     printer->Print(Variables_,
                         "inline $type$ Get$RName$(size_t _index) const {Y_ASSERT(_index < static_cast<size_t>(::Max<int>())); return $name$(_index); }\n"
                         "inline void Set$RName$(size_t _index, $type$ value) {Y_ASSERT(_index < static_cast<size_t>(::Max<int>())); set_$name$(_index, value); }\n"
                         "inline void Add$RName$($type$ value) { add_$name$(value); }\n"
                         "inline const ::google::protobuf::RepeatedField< $type$ >&\n"
-                        "    Get$RName$() const { return $name$(); }\n"
+                        "    Get$RName$() const { return $name$(); }\n" 
                         "inline ::google::protobuf::RepeatedField< $type$ >*\n"
-                        "    Mutable$RName$() { return mutable_$name$(); }\n"
+                        "    Mutable$RName$() { return mutable_$name$(); }\n" 
                     );
             }
 

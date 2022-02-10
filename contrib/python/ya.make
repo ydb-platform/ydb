@@ -1101,7 +1101,7 @@ RECURSE(
     typing-extensions
     typing-inspect
     tzlocal
-    ua-parser
+    ua-parser 
     udatetime
     uhashring
     ujson

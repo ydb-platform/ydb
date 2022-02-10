@@ -221,7 +221,7 @@ namespace NUri {
                 UNIT_ASSERT_VALUES_EQUAL(parsedUrl.GetPort(), 443);
                 UNIT_ASSERT_VALUES_EQUAL(parsedUrl.PrintS(), "https://www.host.com/script.cgi?param1=value1&param2=value2");
             }
- 
+
             // change scheme with non-default port
             {
                 TUri parsedUrl;
@@ -231,14 +231,14 @@ namespace NUri {
                 UNIT_ASSERT_VALUES_EQUAL(parsedUrl.PrintS(), "https://www.host.com:8080/script.cgi?param1=value1&param2=value2");
             }
         }
- 
+
         Y_UNIT_TEST(test_httpURLAuth) {
             {
                 TUri parsedUrl;
                 TState::EParsed st = parsedUrl.Parse("http://@www.host.com/path", TFeature::FeaturesRobot);
                 UNIT_ASSERT_VALUES_EQUAL(st, TState::ParsedBadAuth);
             }
- 
+
             {
                 TUri parsedUrl;
                 TState::EParsed st = parsedUrl.Parse("http://loginwithnopass@www.host.com/path", TFeature::FeatureAuthSupported);
@@ -247,7 +247,7 @@ namespace NUri {
                 UNIT_ASSERT_EQUAL(parsedUrl.GetField(TField::FieldUser), "loginwithnopass");
                 UNIT_ASSERT_EQUAL(parsedUrl.GetField(TField::FieldPass), "");
             }
- 
+
             {
                 TUri parsedUrl;
                 TState::EParsed st = parsedUrl.Parse("http://login:pass@www.host.com/path", TFeature::FeatureAuthSupported);
@@ -257,7 +257,7 @@ namespace NUri {
                 UNIT_ASSERT_EQUAL(parsedUrl.GetField(TField::FieldPass), "pass");
             }
         }
- 
+
         Y_UNIT_TEST(test01) {
             TTest test = {
                 "user:pass@host:8080", TFeature::FeaturesAll, TState::ParsedRootless, "user", "", "", "", 0, "", "", ""};

@@ -120,8 +120,8 @@ namespace NUri {
         }
 
         return FldTryCpy(field, value);
-    } 
- 
+    }
+
     /********************************************************/
     bool TUri::FldTryCpy(EField field, const TStringBuf& value) {
         if (!FldIsDirty(field)) {
@@ -158,7 +158,7 @@ namespace NUri {
             if (FldIsSet(fld))
                 len += 1 + Fields[fld].length();
         }
- 
+
         if (!len)
             Buffer.Clear();
         else {

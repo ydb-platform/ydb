@@ -508,4 +508,4 @@ static inline ui16 DefaultPort(NUri::TScheme::EKind scheme) {
 
 static inline NUri::TScheme::EKind SchemeKind(const TStringBuf& scheme) {
     return NUri::TSchemeInfo::GetKind(scheme);
-} 
+}

@@ -126,7 +126,7 @@ void FileChannel::log(const Message& msg)
 	{
 		_pFile->write(msg.getText(), _flush);
 	}
-	catch (const WriteFileException &)
+	catch (const WriteFileException &) 
 	{
 		// In case of no space left on device,
 		// we try to purge old files or truncate current file.
@@ -139,10 +139,10 @@ void FileChannel::log(const Message& msg)
 		{
 			PurgeOneFileStrategy().purge(_path);
 		}
-
-		delete _pFile;
-		_pFile = 0;
-		_pFile = new LogFile(_path);
+ 
+		delete _pFile; 
+		_pFile = 0; 
+		_pFile = new LogFile(_path); 
 	}
 }
 

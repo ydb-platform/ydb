@@ -282,7 +282,7 @@ compiler_log_formatter::entry_context_finish( std::ostream& output, log_level l 
 //____________________________________________________________________________//
 
 void
-compiler_log_formatter::log_entry_context( std::ostream& output, log_level /*l*/, const_string context_descr )
+compiler_log_formatter::log_entry_context( std::ostream& output, log_level /*l*/, const_string context_descr ) 
 {
     output << "\n    " << context_descr;
 }

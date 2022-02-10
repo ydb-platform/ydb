@@ -1,6 +1,6 @@
 import collections.abc
-import inspect
-import warnings
+import inspect 
+import warnings 
 from typing import Any
 from typing import Callable
 from typing import Collection
@@ -19,37 +19,37 @@ from typing import Type
 from typing import TYPE_CHECKING
 from typing import TypeVar
 from typing import Union
-
-import attr
-
+ 
+import attr 
+ 
 from .._code import getfslineno
 from ..compat import ascii_escaped
 from ..compat import final
-from ..compat import NOTSET
+from ..compat import NOTSET 
 from ..compat import NotSetType
 from _pytest.config import Config
-from _pytest.outcomes import fail
+from _pytest.outcomes import fail 
 from _pytest.warning_types import PytestUnknownMarkWarning
-
+ 
 if TYPE_CHECKING:
     from ..nodes import Node
 
 
-EMPTY_PARAMETERSET_OPTION = "empty_parameter_set_mark"
-
-
+EMPTY_PARAMETERSET_OPTION = "empty_parameter_set_mark" 
+ 
+ 
 def istestfunc(func) -> bool:
-    return (
-        hasattr(func, "__call__")
-        and getattr(func, "__name__", "<lambda>") != "<lambda>"
-    )
-
-
+    return ( 
+        hasattr(func, "__call__") 
+        and getattr(func, "__name__", "<lambda>") != "<lambda>" 
+    ) 
+ 
+ 
 def get_empty_parameterset_mark(
     config: Config, argnames: Sequence[str], func
 ) -> "MarkDecorator":
-    from ..nodes import Collector
-
+    from ..nodes import Collector 
+ 
     fs, lineno = getfslineno(func)
     reason = "got empty parameter set %r, function %s at %s:%d" % (
         argnames,
@@ -58,22 +58,22 @@ def get_empty_parameterset_mark(
         lineno,
     )
 
-    requested_mark = config.getini(EMPTY_PARAMETERSET_OPTION)
-    if requested_mark in ("", None, "skip"):
+    requested_mark = config.getini(EMPTY_PARAMETERSET_OPTION) 
+    if requested_mark in ("", None, "skip"): 
         mark = MARK_GEN.skip(reason=reason)
-    elif requested_mark == "xfail":
+    elif requested_mark == "xfail": 
         mark = MARK_GEN.xfail(reason=reason, run=False)
-    elif requested_mark == "fail_at_collect":
-        f_name = func.__name__
-        _, lineno = getfslineno(func)
-        raise Collector.CollectError(
+    elif requested_mark == "fail_at_collect": 
+        f_name = func.__name__ 
+        _, lineno = getfslineno(func) 
+        raise Collector.CollectError( 
             "Empty parameter set in '%s' at line %d" % (f_name, lineno + 1)
-        )
-    else:
-        raise LookupError(requested_mark)
+        ) 
+    else: 
+        raise LookupError(requested_mark) 
     return mark
-
-
+ 
+ 
 class ParameterSet(
     NamedTuple(
         "ParameterSet",
@@ -84,18 +84,18 @@ class ParameterSet(
         ],
     )
 ):
-    @classmethod
+    @classmethod 
     def param(
         cls,
         *values: object,
         marks: Union["MarkDecorator", Collection[Union["MarkDecorator", "Mark"]]] = (),
         id: Optional[str] = None,
     ) -> "ParameterSet":
-        if isinstance(marks, MarkDecorator):
-            marks = (marks,)
-        else:
+        if isinstance(marks, MarkDecorator): 
+            marks = (marks,) 
+        else: 
             assert isinstance(marks, collections.abc.Collection)
-
+ 
         if id is not None:
             if not isinstance(id, str):
                 raise TypeError(
@@ -103,8 +103,8 @@ class ParameterSet(
                 )
             id = ascii_escaped(id)
         return cls(values, marks, id)
-
-    @classmethod
+ 
+    @classmethod 
     def extract_from(
         cls,
         parameterset: Union["ParameterSet", Sequence[object], object],
@@ -112,19 +112,19 @@ class ParameterSet(
     ) -> "ParameterSet":
         """Extract from an object or objects.
 
-        :param parameterset:
+        :param parameterset: 
             A legacy style parameterset that may or may not be a tuple,
             and may or may not be wrapped into a mess of mark objects.
-
+ 
         :param force_tuple:
             Enforce tuple wrapping so single argument tuple values
             don't get decomposed and break tests.
-        """
-
-        if isinstance(parameterset, cls):
-            return parameterset
+        """ 
+ 
+        if isinstance(parameterset, cls): 
+            return parameterset 
         if force_tuple:
-            return cls.param(parameterset)
+            return cls.param(parameterset) 
         else:
             # TODO: Refactor to fix this type-ignore. Currently the following
             # passes type-checking but crashes:
@@ -132,7 +132,7 @@ class ParameterSet(
             #   @pytest.mark.parametrize(('x', 'y'), [1, 2])
             #   def test_foo(x, y): pass
             return cls(parameterset, marks=[], id=None)  # type: ignore[arg-type]
-
+ 
     @staticmethod
     def _parse_parametrize_args(
         argnames: Union[str, List[str], Tuple[str, ...]],
@@ -140,11 +140,11 @@ class ParameterSet(
         *args,
         **kwargs,
     ) -> Tuple[Union[List[str], Tuple[str, ...]], bool]:
-        if not isinstance(argnames, (tuple, list)):
-            argnames = [x.strip() for x in argnames.split(",") if x.strip()]
-            force_tuple = len(argnames) == 1
-        else:
-            force_tuple = False
+        if not isinstance(argnames, (tuple, list)): 
+            argnames = [x.strip() for x in argnames.split(",") if x.strip()] 
+            force_tuple = len(argnames) == 1 
+        else: 
+            force_tuple = False 
         return argnames, force_tuple
 
     @staticmethod
@@ -154,7 +154,7 @@ class ParameterSet(
     ) -> List["ParameterSet"]:
         return [
             ParameterSet.extract_from(x, force_tuple=force_tuple) for x in argvalues
-        ]
+        ] 
 
     @classmethod
     def _for_parametrize(
@@ -167,18 +167,18 @@ class ParameterSet(
     ) -> Tuple[Union[List[str], Tuple[str, ...]], List["ParameterSet"]]:
         argnames, force_tuple = cls._parse_parametrize_args(argnames, argvalues)
         parameters = cls._parse_parametrize_parameters(argvalues, force_tuple)
-        del argvalues
-
-        if parameters:
+        del argvalues 
+ 
+        if parameters: 
             # Check all parameter sets have the correct number of values.
-            for param in parameters:
-                if len(param.values) != len(argnames):
+            for param in parameters: 
+                if len(param.values) != len(argnames): 
                     msg = (
                         '{nodeid}: in "parametrize" the number of names ({names_len}):\n'
                         "  {names}\n"
                         "must be equal to the number of values ({values_len}):\n"
                         "  {values}"
-                    )
+                    ) 
                     fail(
                         msg.format(
                             nodeid=nodeid,
@@ -189,26 +189,26 @@ class ParameterSet(
                         ),
                         pytrace=False,
                     )
-        else:
+        else: 
             # Empty parameter set (likely computed at runtime): create a single
             # parameter set with NOTSET values, with the "empty parameter set" mark applied to it.
-            mark = get_empty_parameterset_mark(config, argnames, func)
-            parameters.append(
-                ParameterSet(values=(NOTSET,) * len(argnames), marks=[mark], id=None)
-            )
-        return argnames, parameters
-
-
+            mark = get_empty_parameterset_mark(config, argnames, func) 
+            parameters.append( 
+                ParameterSet(values=(NOTSET,) * len(argnames), marks=[mark], id=None) 
+            ) 
+        return argnames, parameters 
+ 
+ 
 @final
-@attr.s(frozen=True)
+@attr.s(frozen=True) 
 class Mark:
     #: Name of the mark.
-    name = attr.ib(type=str)
+    name = attr.ib(type=str) 
     #: Positional arguments of the mark decorator.
     args = attr.ib(type=Tuple[Any, ...])
     #: Keyword arguments of the mark decorator.
     kwargs = attr.ib(type=Mapping[str, Any])
-
+ 
     #: Source Mark for ids with parametrize Marks.
     _param_ids_from = attr.ib(type=Optional["Mark"], default=None, repr=False)
     #: Resolved/generated ids with parametrize Marks.
@@ -226,9 +226,9 @@ class Mark:
         Combines by appending args and merging kwargs.
 
         :param Mark other: The mark to combine with.
-        :rtype: Mark
-        """
-        assert self.name == other.name
+        :rtype: Mark 
+        """ 
+        assert self.name == other.name 
 
         # Remember source of ids with parametrize Marks.
         param_ids_from: Optional[Mark] = None
@@ -238,37 +238,37 @@ class Mark:
             elif self._has_param_ids():
                 param_ids_from = self
 
-        return Mark(
+        return Mark( 
             self.name,
             self.args + other.args,
             dict(self.kwargs, **other.kwargs),
             param_ids_from=param_ids_from,
-        )
-
-
+        ) 
+ 
+ 
 # A generic parameter designating an object to which a Mark may
 # be applied -- a test function (callable) or class.
 # Note: a lambda is not allowed, but this can't be represented.
 _Markable = TypeVar("_Markable", bound=Union[Callable[..., object], type])
 
 
-@attr.s
+@attr.s 
 class MarkDecorator:
     """A decorator for applying a mark on test functions and classes.
-
+ 
     MarkDecorators are created with ``pytest.mark``::
-
+ 
         mark1 = pytest.mark.NAME              # Simple MarkDecorator
         mark2 = pytest.mark.NAME(name1=value) # Parametrized MarkDecorator
 
-    and can then be applied as decorators to test functions::
-
-        @mark2
-        def test_function():
-            pass
-
+    and can then be applied as decorators to test functions:: 
+ 
+        @mark2 
+        def test_function(): 
+            pass 
+ 
     When a MarkDecorator is called it does the following:
-
+ 
     1. If called with a single class as its only positional argument and no
        additional keyword arguments, it attaches the mark to the class so it
        gets applied automatically to all test cases found in that class.
@@ -281,21 +281,21 @@ class MarkDecorator:
     3. When called in any other case, it returns a new MarkDecorator instance
        with the original MarkDecorator's content updated with the arguments
        passed to this call.
-
+ 
     Note: The rules above prevent MarkDecorators from storing only a single
     function or class reference as their positional argument with no
     additional keyword or positional arguments. You can work around this by
     using `with_args()`.
-    """
-
+    """ 
+ 
     mark = attr.ib(type=Mark, validator=attr.validators.instance_of(Mark))
-
+ 
     @property
     def name(self) -> str:
         """Alias for mark.name."""
         return self.mark.name
-
-    @property
+ 
+    @property 
     def args(self) -> Tuple[Any, ...]:
         """Alias for mark.args."""
         return self.mark.args
@@ -307,22 +307,22 @@ class MarkDecorator:
 
     @property
     def markname(self) -> str:
-        return self.name  # for backward-compat (2.4.1 had this attr)
-
+        return self.name  # for backward-compat (2.4.1 had this attr) 
+ 
     def __repr__(self) -> str:
         return f"<MarkDecorator {self.mark!r}>"
-
+ 
     def with_args(self, *args: object, **kwargs: object) -> "MarkDecorator":
         """Return a MarkDecorator with extra arguments added.
-
+ 
         Unlike calling the MarkDecorator, with_args() can be used even
         if the sole argument is a callable/class.
-
+ 
         :rtype: MarkDecorator
-        """
-        mark = Mark(self.name, args, kwargs)
-        return self.__class__(self.mark.combined_with(mark))
-
+        """ 
+        mark = Mark(self.name, args, kwargs) 
+        return self.__class__(self.mark.combined_with(mark)) 
+ 
     # Type ignored because the overloads overlap with an incompatible
     # return type. Not much we can do about that. Thankfully mypy picks
     # the first match so it works out even if we break the rules.
@@ -336,29 +336,29 @@ class MarkDecorator:
 
     def __call__(self, *args: object, **kwargs: object):
         """Call the MarkDecorator."""
-        if args and not kwargs:
-            func = args[0]
-            is_class = inspect.isclass(func)
-            if len(args) == 1 and (istestfunc(func) or is_class):
+        if args and not kwargs: 
+            func = args[0] 
+            is_class = inspect.isclass(func) 
+            if len(args) == 1 and (istestfunc(func) or is_class): 
                 store_mark(func, self.mark)
-                return func
-        return self.with_args(*args, **kwargs)
-
-
+                return func 
+        return self.with_args(*args, **kwargs) 
+ 
+ 
 def get_unpacked_marks(obj) -> List[Mark]:
     """Obtain the unpacked marks that are stored on an object."""
-    mark_list = getattr(obj, "pytestmark", [])
-    if not isinstance(mark_list, list):
-        mark_list = [mark_list]
-    return normalize_mark_list(mark_list)
-
-
+    mark_list = getattr(obj, "pytestmark", []) 
+    if not isinstance(mark_list, list): 
+        mark_list = [mark_list] 
+    return normalize_mark_list(mark_list) 
+ 
+ 
 def normalize_mark_list(mark_list: Iterable[Union[Mark, MarkDecorator]]) -> List[Mark]:
     """Normalize marker decorating helpers to mark objects.
-
+ 
     :type List[Union[Mark, Markdecorator]] mark_list:
-    :rtype: List[Mark]
-    """
+    :rtype: List[Mark] 
+    """ 
     extracted = [
         getattr(mark, "mark", mark) for mark in mark_list
     ]  # unpack MarkDecorator
@@ -366,19 +366,19 @@ def normalize_mark_list(mark_list: Iterable[Union[Mark, MarkDecorator]]) -> List
         if not isinstance(mark, Mark):
             raise TypeError(f"got {mark!r} instead of Mark")
     return [x for x in extracted if isinstance(x, Mark)]
-
-
+ 
+ 
 def store_mark(obj, mark: Mark) -> None:
     """Store a Mark on an object.
 
     This is used to implement the Mark declarations/decorators correctly.
-    """
-    assert isinstance(mark, Mark), mark
+    """ 
+    assert isinstance(mark, Mark), mark 
     # Always reassign name to avoid updating pytestmark in a reference that
     # was only borrowed.
-    obj.pytestmark = get_unpacked_marks(obj) + [mark]
-
-
+    obj.pytestmark = get_unpacked_marks(obj) + [mark] 
+ 
+ 
 # Typing for builtin pytest marks. This is cheating; it gives builtin marks
 # special privilege, and breaks modularity. But practicality beats purity...
 if TYPE_CHECKING:
@@ -453,21 +453,21 @@ if TYPE_CHECKING:
 class MarkGenerator:
     """Factory for :class:`MarkDecorator` objects - exposed as
     a ``pytest.mark`` singleton instance.
-
+ 
     Example::
 
-         import pytest
+         import pytest 
 
-         @pytest.mark.slowtest
-         def test_function():
-            pass
-
+         @pytest.mark.slowtest 
+         def test_function(): 
+            pass 
+ 
     applies a 'slowtest' :class:`Mark` on ``test_function``.
     """
-
+ 
     _config: Optional[Config] = None
     _markers: Set[str] = set()
-
+ 
     # See TYPE_CHECKING above.
     if TYPE_CHECKING:
         skip: _SkipMarkDecorator
@@ -478,10 +478,10 @@ class MarkGenerator:
         filterwarnings: _FilterwarningsMarkDecorator
 
     def __getattr__(self, name: str) -> MarkDecorator:
-        if name[0] == "_":
-            raise AttributeError("Marker name must NOT start with underscore")
+        if name[0] == "_": 
+            raise AttributeError("Marker name must NOT start with underscore") 
 
-        if self._config is not None:
+        if self._config is not None: 
             # We store a set of markers as a performance optimisation - if a mark
             # name is in the set we definitely know it, but a mark may be known and
             # not in the set.  We therefore start by updating the set!
@@ -518,45 +518,45 @@ class MarkGenerator:
                     2,
                 )
 
-        return MarkDecorator(Mark(name, (), {}))
-
-
-MARK_GEN = MarkGenerator()
-
-
+        return MarkDecorator(Mark(name, (), {})) 
+ 
+ 
+MARK_GEN = MarkGenerator() 
+ 
+ 
 @final
 class NodeKeywords(MutableMapping[str, Any]):
     def __init__(self, node: "Node") -> None:
-        self.node = node
-        self.parent = node.parent
-        self._markers = {node.name: True}
-
+        self.node = node 
+        self.parent = node.parent 
+        self._markers = {node.name: True} 
+ 
     def __getitem__(self, key: str) -> Any:
-        try:
-            return self._markers[key]
-        except KeyError:
-            if self.parent is None:
-                raise
-            return self.parent.keywords[key]
-
+        try: 
+            return self._markers[key] 
+        except KeyError: 
+            if self.parent is None: 
+                raise 
+            return self.parent.keywords[key] 
+ 
     def __setitem__(self, key: str, value: Any) -> None:
-        self._markers[key] = value
-
+        self._markers[key] = value 
+ 
     def __delitem__(self, key: str) -> None:
-        raise ValueError("cannot delete key in keywords dict")
-
+        raise ValueError("cannot delete key in keywords dict") 
+ 
     def __iter__(self) -> Iterator[str]:
-        seen = self._seen()
-        return iter(seen)
-
+        seen = self._seen() 
+        return iter(seen) 
+ 
     def _seen(self) -> Set[str]:
-        seen = set(self._markers)
-        if self.parent is not None:
-            seen.update(self.parent.keywords)
-        return seen
-
+        seen = set(self._markers) 
+        if self.parent is not None: 
+            seen.update(self.parent.keywords) 
+        return seen 
+ 
     def __len__(self) -> int:
-        return len(self._seen())
-
+        return len(self._seen()) 
+ 
     def __repr__(self) -> str:
         return f"<NodeKeywords for node {self.node}>"

@@ -35,29 +35,29 @@
 
 #include <curl/curl.h>
 
-#ifdef USE_LIBIDN2
-#error #include <idn2.h>
+#ifdef USE_LIBIDN2 
+#error #include <idn2.h> 
 #endif
 
-#ifdef USE_WINDOWS_SSPI
-#include "curl_sspi.h"
-#endif
-
+#ifdef USE_WINDOWS_SSPI 
+#include "curl_sspi.h" 
+#endif 
+ 
 #include "strerror.h"
-/* The last 3 #include files should be in this order */
-#include "curl_printf.h"
+/* The last 3 #include files should be in this order */ 
+#include "curl_printf.h" 
 #include "curl_memory.h"
 #include "memdebug.h"
 
-#if defined(WIN32) || defined(_WIN32_WCE)
-#define PRESERVE_WINDOWS_ERROR_CODE
-#endif
-
+#if defined(WIN32) || defined(_WIN32_WCE) 
+#define PRESERVE_WINDOWS_ERROR_CODE 
+#endif 
+ 
 const char *
 curl_easy_strerror(CURLcode error)
 {
 #ifndef CURL_DISABLE_VERBOSE_STRINGS
-  switch(error) {
+  switch(error) { 
   case CURLE_OK:
     return "No error";
 
@@ -83,8 +83,8 @@ curl_easy_strerror(CURLcode error)
   case CURLE_COULDNT_CONNECT:
     return "Couldn't connect to server";
 
-  case CURLE_WEIRD_SERVER_REPLY:
-    return "Weird server reply";
+  case CURLE_WEIRD_SERVER_REPLY: 
+    return "Weird server reply"; 
 
   case CURLE_REMOTE_ACCESS_DENIED:
     return "Access denied to remote resource";
@@ -110,9 +110,9 @@ curl_easy_strerror(CURLcode error)
   case CURLE_FTP_CANT_GET_HOST:
     return "FTP: can't figure out the host in the PASV response";
 
-  case CURLE_HTTP2:
-    return "Error in the HTTP2 framing layer";
-
+  case CURLE_HTTP2: 
+    return "Error in the HTTP2 framing layer"; 
+ 
   case CURLE_FTP_COULDNT_SET_TYPE:
     return "FTP: couldn't set file type";
 
@@ -215,8 +215,8 @@ curl_easy_strerror(CURLcode error)
   case CURLE_SSL_CIPHER:
     return "Couldn't use specified SSL cipher";
 
-  case CURLE_PEER_FAILED_VERIFICATION:
-    return "SSL peer certificate or SSH remote key was not OK";
+  case CURLE_PEER_FAILED_VERIFICATION: 
+    return "SSL peer certificate or SSH remote key was not OK"; 
 
   case CURLE_SSL_CACERT_BADFILE:
     return "Problem with the SSL CA cert (path? access rights?)";
@@ -299,18 +299,18 @@ curl_easy_strerror(CURLcode error)
   case CURLE_NO_CONNECTION_AVAILABLE:
     return "The max connection limit is reached";
 
-  case CURLE_SSL_PINNEDPUBKEYNOTMATCH:
-    return "SSL public key does not match pinned public key";
-
-  case CURLE_SSL_INVALIDCERTSTATUS:
-    return "SSL server certificate status verification FAILED";
-
-  case CURLE_HTTP2_STREAM:
-    return "Stream error in the HTTP/2 framing layer";
-
-  case CURLE_RECURSIVE_API_CALL:
-    return "API function called from within callback";
-
+  case CURLE_SSL_PINNEDPUBKEYNOTMATCH: 
+    return "SSL public key does not match pinned public key"; 
+ 
+  case CURLE_SSL_INVALIDCERTSTATUS: 
+    return "SSL server certificate status verification FAILED"; 
+ 
+  case CURLE_HTTP2_STREAM: 
+    return "Stream error in the HTTP/2 framing layer"; 
+ 
+  case CURLE_RECURSIVE_API_CALL: 
+    return "API function called from within callback"; 
+ 
   case CURLE_AUTH_ERROR:
     return "An authentication function returned an error";
 
@@ -332,7 +332,7 @@ curl_easy_strerror(CURLcode error)
   case CURLE_OBSOLETE44:
   case CURLE_OBSOLETE46:
   case CURLE_OBSOLETE50:
-  case CURLE_OBSOLETE51:
+  case CURLE_OBSOLETE51: 
   case CURLE_OBSOLETE57:
   case CURL_LAST:
     break;
@@ -353,7 +353,7 @@ curl_easy_strerror(CURLcode error)
    */
   return "Unknown error";
 #else
-  if(!error)
+  if(!error) 
     return "No error";
   else
     return "Error";
@@ -364,7 +364,7 @@ const char *
 curl_multi_strerror(CURLMcode error)
 {
 #ifndef CURL_DISABLE_VERBOSE_STRINGS
-  switch(error) {
+  switch(error) { 
   case CURLM_CALL_MULTI_PERFORM:
     return "Please call curl_multi_perform() soon";
 
@@ -392,9 +392,9 @@ curl_multi_strerror(CURLMcode error)
   case CURLM_ADDED_ALREADY:
     return "The easy handle is already added to a multi handle";
 
-  case CURLM_RECURSIVE_API_CALL:
-    return "API function called from within callback";
-
+  case CURLM_RECURSIVE_API_CALL: 
+    return "API function called from within callback"; 
+ 
   case CURLM_WAKEUP_FAILURE:
     return "Wakeup is unavailable or failed";
 
@@ -418,7 +418,7 @@ const char *
 curl_share_strerror(CURLSHcode error)
 {
 #ifndef CURL_DISABLE_VERBOSE_STRINGS
-  switch(error) {
+  switch(error) { 
   case CURLSHE_OK:
     return "No error";
 
@@ -460,7 +460,7 @@ get_winsock_error (int err, char *buf, size_t len)
 {
 #ifndef CURL_DISABLE_VERBOSE_STRINGS
   const char *p;
-#endif
+#endif 
 
   if(!len)
     return NULL;
@@ -471,7 +471,7 @@ get_winsock_error (int err, char *buf, size_t len)
   (void)err;
   return NULL;
 #else
-  switch(err) {
+  switch(err) { 
   case WSAEINTR:
     p = "Call interrupted";
     break;
@@ -639,13 +639,13 @@ get_winsock_error (int err, char *buf, size_t len)
   default:
     return NULL;
   }
-  strncpy(buf, p, len);
+  strncpy(buf, p, len); 
   buf [len-1] = '\0';
   return buf;
 #endif
 }
 #endif   /* USE_WINSOCK */
-
+ 
 #if defined(WIN32) || defined(_WIN32_WCE)
 /* This is a helper function for Curl_strerror that converts Windows API error
  * codes (GetLastError) to error messages.
@@ -656,10 +656,10 @@ get_winapi_error(int err, char *buf, size_t buflen)
 {
   char *p;
   wchar_t wbuf[256];
-
+ 
   if(!buflen)
     return NULL;
-
+ 
   *buf = '\0';
   *wbuf = L'\0';
 
@@ -711,10 +711,10 @@ get_winapi_error(int err, char *buf, size_t buflen)
  */
 const char *Curl_strerror(int err, char *buf, size_t buflen)
 {
-#ifdef PRESERVE_WINDOWS_ERROR_CODE
-  DWORD old_win_err = GetLastError();
-#endif
-  int old_errno = errno;
+#ifdef PRESERVE_WINDOWS_ERROR_CODE 
+  DWORD old_win_err = GetLastError(); 
+#endif 
+  int old_errno = errno; 
   char *p;
   size_t max;
 
@@ -739,7 +739,7 @@ const char *Curl_strerror(int err, char *buf, size_t buflen)
        !get_winsock_error(err, buf, max) &&
 #endif
        !get_winapi_error((DWORD)err, buf, max))
-      msnprintf(buf, max, "Unknown error %d (%#x)", err, err);
+      msnprintf(buf, max, "Unknown error %d (%#x)", err, err); 
   }
 #else /* not Windows coming up */
 
@@ -751,7 +751,7 @@ const char *Curl_strerror(int err, char *buf, size_t buflen)
   */
   if(0 != strerror_r(err, buf, max)) {
     if('\0' == buf[0])
-      msnprintf(buf, max, "Unknown error %d", err);
+      msnprintf(buf, max, "Unknown error %d", err); 
   }
 #elif defined(HAVE_STRERROR_R) && defined(HAVE_GLIBC_STRERROR_R)
  /*
@@ -765,19 +765,19 @@ const char *Curl_strerror(int err, char *buf, size_t buflen)
     if(msg)
       strncpy(buf, msg, max);
     else
-      msnprintf(buf, max, "Unknown error %d", err);
+      msnprintf(buf, max, "Unknown error %d", err); 
   }
 #elif defined(HAVE_STRERROR_R) && defined(HAVE_VXWORKS_STRERROR_R)
  /*
   * The vxworks-style strerror_r() does use the buffer we pass to the function.
-  * The buffer size should be at least NAME_MAX (256)
+  * The buffer size should be at least NAME_MAX (256) 
   */
   {
     char buffer[256];
     if(OK == strerror_r(err, buffer))
       strncpy(buf, buffer, max);
     else
-      msnprintf(buf, max, "Unknown error %d", err);
+      msnprintf(buf, max, "Unknown error %d", err); 
   }
 #else
   {
@@ -785,7 +785,7 @@ const char *Curl_strerror(int err, char *buf, size_t buflen)
     if(msg)
       strncpy(buf, msg, max);
     else
-      msnprintf(buf, max, "Unknown error %d", err);
+      msnprintf(buf, max, "Unknown error %d", err); 
   }
 #endif
 
@@ -794,21 +794,21 @@ const char *Curl_strerror(int err, char *buf, size_t buflen)
   buf[max] = '\0'; /* make sure the string is null-terminated */
 
   /* strip trailing '\r\n' or '\n'. */
-  p = strrchr(buf, '\n');
-  if(p && (p - buf) >= 2)
-    *p = '\0';
-  p = strrchr(buf, '\r');
-  if(p && (p - buf) >= 1)
-    *p = '\0';
+  p = strrchr(buf, '\n'); 
+  if(p && (p - buf) >= 2) 
+    *p = '\0'; 
+  p = strrchr(buf, '\r'); 
+  if(p && (p - buf) >= 1) 
+    *p = '\0'; 
 
-  if(errno != old_errno)
-    errno = old_errno;
+  if(errno != old_errno) 
+    errno = old_errno; 
 
-#ifdef PRESERVE_WINDOWS_ERROR_CODE
-  if(old_win_err != GetLastError())
-    SetLastError(old_win_err);
-#endif
-
+#ifdef PRESERVE_WINDOWS_ERROR_CODE 
+  if(old_win_err != GetLastError()) 
+    SetLastError(old_win_err); 
+#endif 
+ 
   return buf;
 }
 
@@ -860,11 +860,11 @@ const char *Curl_winapi_strerror(DWORD err, char *buf, size_t buflen)
  */
 const char *Curl_sspi_strerror(int err, char *buf, size_t buflen)
 {
-#ifdef PRESERVE_WINDOWS_ERROR_CODE
-  DWORD old_win_err = GetLastError();
-#endif
-  int old_errno = errno;
-  const char *txt;
+#ifdef PRESERVE_WINDOWS_ERROR_CODE 
+  DWORD old_win_err = GetLastError(); 
+#endif 
+  int old_errno = errno; 
+  const char *txt; 
 
   if(!buflen)
     return NULL;
@@ -873,7 +873,7 @@ const char *Curl_sspi_strerror(int err, char *buf, size_t buflen)
 
 #ifndef CURL_DISABLE_VERBOSE_STRINGS
 
-  switch(err) {
+  switch(err) { 
     case SEC_E_OK:
       txt = "No error";
       break;
@@ -964,16 +964,16 @@ const char *Curl_sspi_strerror(int err, char *buf, size_t buflen)
 
   if(err == SEC_E_ILLEGAL_MESSAGE) {
     msnprintf(buf, buflen,
-              "SEC_E_ILLEGAL_MESSAGE (0x%08X) - This error usually occurs "
-              "when a fatal SSL/TLS alert is received (e.g. handshake failed)."
-              " More detail may be available in the Windows System event log.",
-              err);
+              "SEC_E_ILLEGAL_MESSAGE (0x%08X) - This error usually occurs " 
+              "when a fatal SSL/TLS alert is received (e.g. handshake failed)." 
+              " More detail may be available in the Windows System event log.", 
+              err); 
   }
   else {
     char txtbuf[80];
     char msgbuf[256];
 
-    msnprintf(txtbuf, sizeof(txtbuf), "%s (0x%08X)", txt, err);
+    msnprintf(txtbuf, sizeof(txtbuf), "%s (0x%08X)", txt, err); 
 
     if(get_winapi_error(err, msgbuf, sizeof(msgbuf)))
       msnprintf(buf, buflen, "%s - %s", txtbuf, msgbuf);
@@ -992,14 +992,14 @@ const char *Curl_sspi_strerror(int err, char *buf, size_t buflen)
   buf[buflen - 1] = '\0';
 #endif
 
-  if(errno != old_errno)
-    errno = old_errno;
-
-#ifdef PRESERVE_WINDOWS_ERROR_CODE
-  if(old_win_err != GetLastError())
-    SetLastError(old_win_err);
-#endif
-
+  if(errno != old_errno) 
+    errno = old_errno; 
+ 
+#ifdef PRESERVE_WINDOWS_ERROR_CODE 
+  if(old_win_err != GetLastError()) 
+    SetLastError(old_win_err); 
+#endif 
+ 
   return buf;
 }
 #endif /* USE_WINDOWS_SSPI */

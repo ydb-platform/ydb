@@ -26,10 +26,10 @@
 
 #ifndef CURL_DISABLE_CRYPTO_AUTH
 
-#include <curl/curl.h>
-
+#include <curl/curl.h> 
+ 
 #include "curl_hmac.h"
-#include "curl_memory.h"
+#include "curl_memory.h" 
 #include "warnless.h"
 
 /* The last #include file should be: */
@@ -50,16 +50,16 @@ static const unsigned char hmac_opad = 0x5C;
 
 struct HMAC_context *
 Curl_HMAC_init(const struct HMAC_params *hashparams,
-               const unsigned char *key,
+               const unsigned char *key, 
                unsigned int keylen)
 {
   size_t i;
   struct HMAC_context *ctxt;
-  unsigned char *hkey;
+  unsigned char *hkey; 
   unsigned char b;
 
   /* Create HMAC context. */
-  i = sizeof(*ctxt) + 2 * hashparams->hmac_ctxtsize +
+  i = sizeof(*ctxt) + 2 * hashparams->hmac_ctxtsize + 
     hashparams->hmac_resultlen;
   ctxt = malloc(i);
 
@@ -102,7 +102,7 @@ Curl_HMAC_init(const struct HMAC_params *hashparams,
 }
 
 int Curl_HMAC_update(struct HMAC_context *ctxt,
-                     const unsigned char *data,
+                     const unsigned char *data, 
                      unsigned int len)
 {
   /* Update first hash calculation. */

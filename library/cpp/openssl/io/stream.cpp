@@ -84,47 +84,47 @@ namespace {
         return ctx;
     }
 
-    struct TStreamIO : public NOpenSSL::TAbstractIO {
-        inline TStreamIO(IInputStream* in, IOutputStream* out)
-            : In(in)
-            , Out(out)
-        {
+    struct TStreamIO : public NOpenSSL::TAbstractIO { 
+        inline TStreamIO(IInputStream* in, IOutputStream* out) 
+            : In(in) 
+            , Out(out) 
+        { 
+        } 
+
+        int Write(const char* data, size_t dlen, size_t* written) override { 
+            Out->Write(data, dlen); 
+ 
+            *written = dlen; 
+            return 1; 
         }
 
-        int Write(const char* data, size_t dlen, size_t* written) override {
-            Out->Write(data, dlen);
-
-            *written = dlen;
-            return 1;
+        int Read(char* data, size_t dlen, size_t* readbytes) override { 
+            *readbytes = In->Read(data, dlen); 
+            return 1; 
         }
 
-        int Read(char* data, size_t dlen, size_t* readbytes) override {
-            *readbytes = In->Read(data, dlen);
-            return 1;
+        int Puts(const char* buf) override { 
+            Y_UNUSED(buf); 
+            return -1; 
         }
 
-        int Puts(const char* buf) override {
-            Y_UNUSED(buf);
-            return -1;
+        int Gets(char* buf, int size) override { 
+            Y_UNUSED(buf); 
+            Y_UNUSED(size); 
+            return -1; 
         }
 
-        int Gets(char* buf, int size) override {
-            Y_UNUSED(buf);
-            Y_UNUSED(size);
-            return -1;
+        void Flush() override { 
         }
 
-        void Flush() override {
-        }
-
-        IInputStream* In;
-        IOutputStream* Out;
+        IInputStream* In; 
+        IOutputStream* Out; 
     };
 
     struct TSslIO: public TSslInitOnDemand, public TOptions {
         inline TSslIO(IInputStream* in, IOutputStream* out, const TOptions& opts)
             : TOptions(opts)
-            , Io(in, out)
+            , Io(in, out) 
             , Ctx(CreateClientContext())
             , Ssl(ConstructSsl())
         {
@@ -175,8 +175,8 @@ namespace {
                 InitVerification(ssl.Get());
             }
 
-            BIO_up_ref(Io); // SSL_set_bio consumes only one reference if rbio and wbio are the same
-            SSL_set_bio(ssl.Get(), Io, Io);
+            BIO_up_ref(Io); // SSL_set_bio consumes only one reference if rbio and wbio are the same 
+            SSL_set_bio(ssl.Get(), Io, Io); 
 
             return ssl;
         }
@@ -233,7 +233,7 @@ namespace {
             }
         }
 
-        TStreamIO Io;
+        TStreamIO Io; 
         TSslContextPtr Ctx;
         TSslPtr Ssl;
     };

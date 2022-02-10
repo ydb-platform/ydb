@@ -44,7 +44,7 @@ extern int errno, h_errno;
 #ifdef __libnix__
 void __request(const char *msg);
 #else
-# define __request(msg)       Printf(msg "\n\a")
+# define __request(msg)       Printf(msg "\n\a") 
 #endif
 
 void Curl_amiga_cleanup()
@@ -66,7 +66,7 @@ bool Curl_amiga_init()
   }
 
   if(SocketBaseTags(SBTM_SETVAL(SBTC_ERRNOPTR(sizeof(errno))), (ULONG) &errno,
-                    SBTM_SETVAL(SBTC_LOGTAGPTR), (ULONG) "curl",
+                    SBTM_SETVAL(SBTC_LOGTAGPTR), (ULONG) "curl", 
                     TAG_DONE)) {
     __request("SocketBaseTags ERROR");
     return FALSE;
@@ -80,7 +80,7 @@ bool Curl_amiga_init()
 }
 
 #ifdef __libnix__
-ADD2EXIT(Curl_amiga_cleanup, -50);
+ADD2EXIT(Curl_amiga_cleanup, -50); 
 #endif
 
 #endif /* HAVE_PROTO_BSDSOCKET_H */

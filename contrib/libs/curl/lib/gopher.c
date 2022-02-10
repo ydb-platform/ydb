@@ -34,7 +34,7 @@
 #include "select.h"
 #include "strdup.h"
 #include "url.h"
-#include "escape.h"
+#include "escape.h" 
 #include "warnless.h"
 #include "curl_printf.h"
 #include "curl_memory.h"
@@ -68,7 +68,7 @@ const struct Curl_handler Curl_handler_gopher = {
   ZERO_NULL,                            /* perform_getsock */
   ZERO_NULL,                            /* disconnect */
   ZERO_NULL,                            /* readwrite */
-  ZERO_NULL,                            /* connection_check */
+  ZERO_NULL,                            /* connection_check */ 
   PORT_GOPHER,                          /* defport */
   CURLPROTO_GOPHER,                     /* protocol */
   CURLPROTO_GOPHER,                     /* family */
@@ -77,17 +77,17 @@ const struct Curl_handler Curl_handler_gopher = {
 
 static CURLcode gopher_do(struct connectdata *conn, bool *done)
 {
-  CURLcode result = CURLE_OK;
-  struct Curl_easy *data = conn->data;
+  CURLcode result = CURLE_OK; 
+  struct Curl_easy *data = conn->data; 
   curl_socket_t sockfd = conn->sock[FIRSTSOCKET];
   char *gopherpath;
-  char *path = data->state.up.path;
+  char *path = data->state.up.path; 
   char *query = data->state.up.query;
-  char *sel = NULL;
+  char *sel = NULL; 
   char *sel_org = NULL;
   timediff_t timeout_ms;
   ssize_t amount, k;
-  size_t len;
+  size_t len; 
   int what;
 
   *done = TRUE; /* unconditionally */
@@ -106,41 +106,41 @@ static CURLcode gopher_do(struct connectdata *conn, bool *done)
   /* Create selector. Degenerate cases: / and /1 => convert to "" */
   if(strlen(gopherpath) <= 2) {
     sel = (char *)"";
-    len = strlen(sel);
+    len = strlen(sel); 
     free(gopherpath);
-  }
+  } 
   else {
     char *newp;
 
     /* Otherwise, drop / and the first character (i.e., item type) ... */
     newp = gopherpath;
-    newp += 2;
+    newp += 2; 
 
     /* ... and finally unescape */
     result = Curl_urldecode(data, newp, 0, &sel, &len, REJECT_ZERO);
     free(gopherpath);
-    if(result)
-      return result;
+    if(result) 
+      return result; 
     sel_org = sel;
   }
 
-  k = curlx_uztosz(len);
+  k = curlx_uztosz(len); 
 
   for(;;) {
     result = Curl_write(conn, sockfd, sel, k, &amount);
-    if(!result) { /* Which may not have written it all! */
+    if(!result) { /* Which may not have written it all! */ 
       result = Curl_client_write(conn, CLIENTWRITE_HEADER, sel, amount);
-      if(result)
-        break;
-
+      if(result) 
+        break; 
+ 
       k -= amount;
       sel += amount;
       if(k < 1)
         break; /* but it did write it all */
     }
-    else
-      break;
-
+    else 
+      break; 
+ 
     timeout_ms = Curl_timeleft(conn->data, NULL, FALSE);
     if(timeout_ms < 0) {
       result = CURLE_OPERATION_TIMEDOUT;
@@ -157,20 +157,20 @@ static CURLcode gopher_do(struct connectdata *conn, bool *done)
     */
     what = SOCKET_WRITABLE(sockfd, timeout_ms);
     if(what < 0) {
-      result = CURLE_SEND_ERROR;
-      break;
-    }
+      result = CURLE_SEND_ERROR; 
+      break; 
+    } 
     else if(!what) {
       result = CURLE_OPERATION_TIMEDOUT;
       break;
     }
   }
 
-  free(sel_org);
+  free(sel_org); 
 
-  if(!result)
+  if(!result) 
     result = Curl_write(conn, sockfd, "\r\n", 2, &amount);
-  if(result) {
+  if(result) { 
     failf(data, "Failed sending Gopher request");
     return result;
   }

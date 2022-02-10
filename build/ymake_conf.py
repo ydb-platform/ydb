@@ -56,9 +56,9 @@ class Platform(object):
 
         self.is_armv7 = self.arch in ('armv7', 'armv7a', 'armv7a_neon', 'arm', 'armv7a_cortex_a9', 'armv7ahf_cortex_a35', 'armv7ahf_cortex_a53')
         self.is_armv8 = self.arch in ('armv8', 'armv8a', 'arm64', 'aarch64', 'armv8a_cortex_a35', 'armv8a_cortex_a53')
-        self.is_armv8m = self.arch in ('armv8m_cortex_m33',)
+        self.is_armv8m = self.arch in ('armv8m_cortex_m33',) 
         self.is_arm64 = self.arch in ('arm64',)
-        self.is_arm = self.is_armv7 or self.is_armv8 or self.is_armv8m
+        self.is_arm = self.is_armv7 or self.is_armv8 or self.is_armv8m 
         self.is_armv7_neon = self.arch in ('armv7a_neon', 'armv7a_cortex_a9', 'armv7ahf_cortex_a35', 'armv7ahf_cortex_a53')
         self.is_armv7hf = self.arch in ('armv7ahf_cortex_a35', 'armv7ahf_cortex_a53')
 
@@ -72,13 +72,13 @@ class Platform(object):
         self.is_cortex_a9 = self.arch in ('armv7a_cortex_a9',)
         self.is_cortex_a35 = self.arch in ('armv7ahf_cortex_a35', 'armv8a_cortex_a35')
         self.is_cortex_a53 = self.arch in ('armv7ahf_cortex_a53', 'armv8a_cortex_a53')
-        self.is_cortex_m33 = self.arch in ('armv8m_cortex_m33',)
+        self.is_cortex_m33 = self.arch in ('armv8m_cortex_m33',) 
 
         self.is_power8le = self.arch == 'ppc64le'
         self.is_power9le = self.arch == 'power9le'
         self.is_powerpc = self.is_power8le or self.is_power9le
 
-        self.is_32_bit = self.is_x86 or self.is_armv7 or self.is_armv8m
+        self.is_32_bit = self.is_x86 or self.is_armv7 or self.is_armv8m 
         self.is_64_bit = self.is_x86_64 or self.is_armv8 or self.is_powerpc
 
         assert self.is_32_bit or self.is_64_bit
@@ -113,8 +113,8 @@ class Platform(object):
         self.is_cygwin = self.os == 'cygwin'
         self.is_yocto = self.os == 'yocto'
 
-        self.is_none = self.os == 'none'
-
+        self.is_none = self.os == 'none' 
+ 
         self.is_posix = self.is_linux or self.is_apple or self.is_android or self.is_cygwin or self.is_yocto
 
     @staticmethod
@@ -152,7 +152,7 @@ class Platform(object):
             (self.is_armv7, 'ARCH_ARM7'),
             (self.is_armv7_neon, 'ARCH_ARM7_NEON'),
             (self.is_armv8, 'ARCH_ARM64'),
-            (self.is_armv8m, 'ARCH_ARM8M'),
+            (self.is_armv8m, 'ARCH_ARM8M'), 
             (self.is_arm, 'ARCH_ARM'),
             (self.is_linux_armv8 or self.is_macos_arm64, 'ARCH_AARCH64'),
             (self.is_powerpc, 'ARCH_PPC64LE'),
@@ -932,7 +932,7 @@ class ToolchainOptions(object):
 
         if detector:
             self.type = detector.type
-            self.from_arcadia = False
+            self.from_arcadia = False 
 
             self.c_compiler = detector.c_compiler
             self.cxx_compiler = detector.cxx_compiler
@@ -941,7 +941,7 @@ class ToolchainOptions(object):
 
         else:
             self.type = self.params['type']
-            self.from_arcadia = True
+            self.from_arcadia = True 
 
             self.c_compiler = self.params['c_compiler']
             self.cxx_compiler = self.params['cxx_compiler']
@@ -991,14 +991,14 @@ class ToolchainOptions(object):
     def is_clang(self):
         return self.type in ('clang', 'xcode')
 
-    @property
+    @property 
     def is_xcode(self):
         return self.type == 'xcode'
 
     @property
-    def is_from_arcadia(self):
-        return self.from_arcadia
-
+    def is_from_arcadia(self): 
+        return self.from_arcadia 
+ 
     def get_env(self, convert_list=None):
         convert_list = convert_list or (lambda x: x)
         r = {}
@@ -1200,13 +1200,13 @@ class GnuToolchain(Toolchain):
         elif target.is_cortex_a53:
             self.c_flags_platform.append('-mcpu=cortex-a53')
 
-        elif target.is_cortex_m33:
-            self.c_flags_platform.append('-mcpu=cortex-m33 -mfpu=fpv5-sp-d16')
-
+        elif target.is_cortex_m33: 
+            self.c_flags_platform.append('-mcpu=cortex-m33 -mfpu=fpv5-sp-d16') 
+ 
         elif target.is_armv7_neon:
             self.c_flags_platform.append('-mfpu=neon')
 
-        if (target.is_armv7 or target.is_armv8m) and build.is_size_optimized:
+        if (target.is_armv7 or target.is_armv8m) and build.is_size_optimized: 
             # Enable ARM Thumb2 variable-length instruction encoding
             # to reduce code size
             self.c_flags_platform.append('-mthumb')
@@ -1236,29 +1236,29 @@ class GnuToolchain(Toolchain):
             if target.is_ios:
                 self.c_flags_platform.append('-D__IOS__=1')
 
-            if self.tc.is_from_arcadia:
-                if target.is_apple:
+            if self.tc.is_from_arcadia: 
+                if target.is_apple: 
                     if target.is_ios:
-                        self.setup_sdk(project='build/platform/ios_sdk', var='${IOS_SDK_ROOT_RESOURCE_GLOBAL}')
+                        self.setup_sdk(project='build/platform/ios_sdk', var='${IOS_SDK_ROOT_RESOURCE_GLOBAL}') 
                         self.platform_projects.append('build/platform/macos_system_stl')
-                    if target.is_macos:
-                        self.setup_sdk(project='build/platform/macos_sdk', var='${MACOS_SDK_RESOURCE_GLOBAL}')
+                    if target.is_macos: 
+                        self.setup_sdk(project='build/platform/macos_sdk', var='${MACOS_SDK_RESOURCE_GLOBAL}') 
                         self.platform_projects.append('build/platform/macos_system_stl')
 
                     if not self.tc.inplace_tools:
                         self.setup_tools(project='build/platform/cctools', var='${CCTOOLS_ROOT_RESOURCE_GLOBAL}', bin='bin', ldlibs=None)
 
-                if target.is_linux:
-                    if not tc.os_sdk_local:
-                        self.setup_sdk(project='build/platform/linux_sdk', var='$OS_SDK_ROOT_RESOURCE_GLOBAL')
+                if target.is_linux: 
+                    if not tc.os_sdk_local: 
+                        self.setup_sdk(project='build/platform/linux_sdk', var='$OS_SDK_ROOT_RESOURCE_GLOBAL') 
 
-                    if target.is_x86_64:
+                    if target.is_x86_64: 
                         if host.is_linux and not self.tc.is_gcc:
-                            self.setup_tools(project='build/platform/linux_sdk', var='$OS_SDK_ROOT_RESOURCE_GLOBAL', bin='usr/bin', ldlibs='usr/lib/x86_64-linux-gnu')
-                        elif host.is_macos:
-                            self.setup_tools(project='build/platform/binutils', var='$BINUTILS_ROOT_RESOURCE_GLOBAL', bin='x86_64-linux-gnu/bin', ldlibs=None)
+                            self.setup_tools(project='build/platform/linux_sdk', var='$OS_SDK_ROOT_RESOURCE_GLOBAL', bin='usr/bin', ldlibs='usr/lib/x86_64-linux-gnu') 
+                        elif host.is_macos: 
+                            self.setup_tools(project='build/platform/binutils', var='$BINUTILS_ROOT_RESOURCE_GLOBAL', bin='x86_64-linux-gnu/bin', ldlibs=None) 
                     elif target.is_powerpc:
-                        self.setup_tools(project='build/platform/linux_sdk', var='$OS_SDK_ROOT_RESOURCE_GLOBAL', bin='usr/bin', ldlibs='usr/x86_64-linux-gnu/powerpc64le-linux-gnu/lib')
+                        self.setup_tools(project='build/platform/linux_sdk', var='$OS_SDK_ROOT_RESOURCE_GLOBAL', bin='usr/bin', ldlibs='usr/x86_64-linux-gnu/powerpc64le-linux-gnu/lib') 
                     elif target.is_armv8:
                         self.setup_tools(project='build/platform/linux_sdk', var='$OS_SDK_ROOT_RESOURCE_GLOBAL', bin='usr/bin', ldlibs='usr/lib/x86_64-linux-gnu')
 
@@ -1816,13 +1816,13 @@ class LD(Linker):
             if target.is_apple:
                 # Use libtool. cctools ar does not understand -M needed for archive merging
                 self.ar = '${CCTOOLS_ROOT_RESOURCE_GLOBAL}/bin/libtool'
-            elif self.tc.is_from_arcadia:
+            elif self.tc.is_from_arcadia: 
                 if self.tc.is_clang:
                     self.ar = '{}/bin/llvm-ar'.format(self.tc.name_marker)
                 if self.tc.is_gcc:
                     self.ar = '{}/gcc/bin/gcc-ar'.format(self.tc.name_marker)
             else:
-                self.ar = 'ar'
+                self.ar = 'ar' 
 
         self.ar_type = 'GNU_AR'
         self.llvm_ar_format = 'None'
@@ -1907,7 +1907,7 @@ class LD(Linker):
             self.ld_export_dynamic_flag = '-rdynamic'
             self.use_stdlib = '-nodefaultlibs'
 
-        if target.is_linux or target.is_android or target.is_cygwin or target.is_none:
+        if target.is_linux or target.is_android or target.is_cygwin or target.is_none: 
             self.start_group = '-Wl,--start-group'
             self.end_group = '-Wl,--end-group'
             self.whole_archive = '-Wl,--whole-archive'
@@ -2022,8 +2022,8 @@ class LD(Linker):
                 EXPORTS_VALUE=
             }''')
 
-        emit('LINKER_SCRIPT_VALUE', '${ext=.ld;pre=-T:SRCS_GLOBAL}')
-
+        emit('LINKER_SCRIPT_VALUE', '${ext=.ld;pre=-T:SRCS_GLOBAL}') 
+ 
         linker_time_trace_requested = is_positive('TIME_TRACE') or is_positive('LINKER_TIME_TRACE')
         linker_supports_time_trace = self.type == Linker.LLD  # XXX: Should really check the linker version if we had one
         if linker_time_trace_requested and linker_supports_time_trace:
@@ -2038,7 +2038,7 @@ class LD(Linker):
 
         exe_flags = [
             '$C_FLAGS_PLATFORM', '$BEFORE_PEERS', self.start_group, '${rootrel:PEERS}', self.end_group, '$AFTER_PEERS',
-            '$EXPORTS_VALUE $LINKER_SCRIPT_VALUE $LDFLAGS $LDFLAGS_GLOBAL $OBJADDE $OBJADDE_LIB',
+            '$EXPORTS_VALUE $LINKER_SCRIPT_VALUE $LDFLAGS $LDFLAGS_GLOBAL $OBJADDE $OBJADDE_LIB', 
             '$C_LIBRARY_PATH $C_SYSTEM_LIBRARIES_INTERCEPT $C_SYSTEM_LIBRARIES $STRIP_FLAG $DCE_FLAG $ICF_FLAG $LINKER_TIME_TRACE_FLAG']
 
         arch_flag = '--arch={arch}'.format(arch=self.target.os_compat)
@@ -2158,7 +2158,7 @@ class LD(Linker):
         def emit_link_fat_obj(cmd_name, need_wa_option, *extended_flags):
             prefix = ['$GENERATE_MF && $GENERATE_VCS_C_INFO_NODEP &&',
                       '$YMAKE_PYTHON ${input:"build/scripts/link_fat_obj.py"} --build-root $ARCADIA_BUILD_ROOT']
-            globals_libs = srcs_globals if need_wa_option else '${rootrel;ext=.a:SRCS_GLOBAL} ${rootrel;ext=.o:SRCS_GLOBAL}'
+            globals_libs = srcs_globals if need_wa_option else '${rootrel;ext=.a:SRCS_GLOBAL} ${rootrel;ext=.o:SRCS_GLOBAL}' 
             suffix = [arch_flag,
                       '-Ya,input $AUTO_INPUT $VCS_C_OBJ -Ya,global_srcs', globals_libs, '-Ya,peers $PEERS',
                       '-Ya,linker $CXX_COMPILER $LDFLAGS_GLOBAL $C_FLAGS_PLATFORM', self.ld_sdk, '-Ya,archiver', archiver,
@@ -2809,7 +2809,7 @@ class MSVCLinker(MSVC, Linker):
         emit('LINK_EXEC_DYN_LIB', '$LINK_EXEC_DYN_LIB_IMPL($_WHOLE_ARCHIVE_PEERS_VALUE)')
 
         emit('LINK_GLOBAL_FAT_OBJECT', '${TOOLCHAIN_ENV} ${cwd:ARCADIA_BUILD_ROOT} ${LIB_WRAPPER} ${LINK_LIB_CMD} /OUT:${qe;rootrel:TARGET} \
-            --ya-start-command-file ${qe;rootrel;ext=.lib:SRCS_GLOBAL} ${qe;rootrel;ext=.obj:SRCS_GLOBAL} ${qe;rootrel:AUTO_INPUT} $LINK_LIB_FLAGS --ya-end-command-file')
+            --ya-start-command-file ${qe;rootrel;ext=.lib:SRCS_GLOBAL} ${qe;rootrel;ext=.obj:SRCS_GLOBAL} ${qe;rootrel:AUTO_INPUT} $LINK_LIB_FLAGS --ya-end-command-file') 
         emit('LINK_PEERS_FAT_OBJECT', '${TOOLCHAIN_ENV} ${cwd:ARCADIA_BUILD_ROOT} ${LIB_WRAPPER} ${LINK_LIB_CMD} /OUT:${qe;rootrel;output:REALPRJNAME.lib} \
             --ya-start-command-file ${qe;rootrel:PEERS} $LINK_LIB_FLAGS --ya-end-command-file')
         emit('LINK_FAT_OBJECT', '${GENERATE_MF} && $GENERATE_VCS_C_INFO_NODEP && $LINK_GLOBAL_FAT_OBJECT && $LINK_PEERS_FAT_OBJECT ${kv;hide:"p LD"} ${requirements;hide:LD_REQUIREMENTS} ${kv;hide:"pc light-blue"} ${kv;hide:"show_out"}')  # noqa E501

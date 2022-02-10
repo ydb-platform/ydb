@@ -24,7 +24,7 @@
 /* Escape and unescape URL encoding in strings. The functions return a new
  * allocated string or NULL if an error occurred.  */
 
-bool Curl_isunreserved(unsigned char in);
+bool Curl_isunreserved(unsigned char in); 
 
 enum urlreject {
   REJECT_NADA = 2,
@@ -32,7 +32,7 @@ enum urlreject {
   REJECT_ZERO
 };
 
-CURLcode Curl_urldecode(struct Curl_easy *data,
+CURLcode Curl_urldecode(struct Curl_easy *data, 
                         const char *string, size_t length,
                         char **ostring, size_t *olen,
                         enum urlreject ctrl);

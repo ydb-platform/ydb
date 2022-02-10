@@ -1,11 +1,11 @@
 import sys
-import warnings
+import warnings 
 
-
-class PyStdIsDeprecatedWarning(DeprecationWarning):
-    pass
-
-
+ 
+class PyStdIsDeprecatedWarning(DeprecationWarning): 
+    pass 
+ 
+ 
 class Std(object):
     """ makes top-level python modules available as an attribute,
         importing them on first access.

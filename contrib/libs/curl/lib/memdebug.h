@@ -53,7 +53,7 @@ CURL_EXTERN void curl_dbg_log(const char *format, ...);
 CURL_EXTERN curl_socket_t curl_dbg_socket(int domain, int type, int protocol,
                                           int line, const char *source);
 CURL_EXTERN void curl_dbg_mark_sclose(curl_socket_t sockfd,
-                                      int line, const char *source);
+                                      int line, const char *source); 
 CURL_EXTERN int curl_dbg_sclose(curl_socket_t sockfd,
                                 int line, const char *source);
 CURL_EXTERN curl_socket_t curl_dbg_accept(curl_socket_t s, void *a, void *alen,
@@ -64,7 +64,7 @@ CURL_EXTERN int curl_dbg_socketpair(int domain, int type, int protocol,
                                     int line, const char *source);
 #endif
 
-/* send/receive sockets */
+/* send/receive sockets */ 
 CURL_EXTERN SEND_TYPE_RETV curl_dbg_send(SEND_TYPE_ARG1 sockfd,
                                          SEND_QUAL_ARG2 SEND_TYPE_ARG2 buf,
                                          SEND_TYPE_ARG3 len,
@@ -75,7 +75,7 @@ CURL_EXTERN RECV_TYPE_RETV curl_dbg_recv(RECV_TYPE_ARG1 sockfd,
                                          RECV_TYPE_ARG3 len,
                                          RECV_TYPE_ARG4 flags, int line,
                                          const char *source);
-
+ 
 /* FILE functions */
 CURL_EXTERN FILE *curl_dbg_fopen(const char *file, const char *mode, int line,
                                  const char *source);
@@ -110,7 +110,7 @@ CURL_EXTERN int curl_dbg_fclose(FILE *file, int line, const char *source);
 #  endif
 #endif
 
-#undef socket
+#undef socket 
 #define socket(domain,type,protocol)\
  curl_dbg_socket(domain, type, protocol, __LINE__, __FILE__)
 #undef accept /* for those with accept as a macro */

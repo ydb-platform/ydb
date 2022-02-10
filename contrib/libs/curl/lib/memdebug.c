@@ -29,9 +29,9 @@
 #include "urldata.h"
 
 #define MEMDEBUG_NODEFINES /* don't redefine the standard functions */
-
-/* The last 3 #include files should be in this order */
-#include "curl_printf.h"
+ 
+/* The last 3 #include files should be in this order */ 
+#include "curl_printf.h" 
 #include "curl_memory.h"
 #include "memdebug.h"
 
@@ -40,7 +40,7 @@ struct memdebug {
   union {
     curl_off_t o;
     double d;
-    void *p;
+    void *p; 
   } mem[1];
   /* I'm hoping this is the thing with the strictest alignment
    * requirements.  That also means we waste some space :-( */
@@ -100,7 +100,7 @@ static bool countcheck(const char *func, int line, const char *source)
                 source, line, func);
         fflush(curl_dbg_logfile); /* because it might crash now */
       }
-      errno = ENOMEM;
+      errno = ENOMEM; 
       return TRUE; /* RETURN ERROR! */
     }
     else
@@ -117,13 +117,13 @@ void *curl_dbg_malloc(size_t wantedsize, int line, const char *source)
   struct memdebug *mem;
   size_t size;
 
-  DEBUGASSERT(wantedsize != 0);
+  DEBUGASSERT(wantedsize != 0); 
 
   if(countcheck("malloc", line, source))
     return NULL;
 
   /* alloc at least 64 bytes */
-  size = sizeof(struct memdebug) + wantedsize;
+  size = sizeof(struct memdebug) + wantedsize; 
 
   mem = (Curl_cmalloc)(size);
   if(mem) {
@@ -144,8 +144,8 @@ void *curl_dbg_calloc(size_t wanted_elements, size_t wanted_size,
   struct memdebug *mem;
   size_t size, user_size;
 
-  DEBUGASSERT(wanted_elements != 0);
-  DEBUGASSERT(wanted_size != 0);
+  DEBUGASSERT(wanted_elements != 0); 
+  DEBUGASSERT(wanted_size != 0); 
 
   if(countcheck("calloc", line, source))
     return NULL;
@@ -171,12 +171,12 @@ char *curl_dbg_strdup(const char *str, int line, const char *source)
   char *mem;
   size_t len;
 
-  DEBUGASSERT(str != NULL);
+  DEBUGASSERT(str != NULL); 
 
   if(countcheck("strdup", line, source))
     return NULL;
 
-  len = strlen(str) + 1;
+  len = strlen(str) + 1; 
 
   mem = curl_dbg_malloc(len, 0, NULL); /* NULL prevents logging */
   if(mem)
@@ -195,7 +195,7 @@ wchar_t *curl_dbg_wcsdup(const wchar_t *str, int line, const char *source)
   wchar_t *mem;
   size_t wsiz, bsiz;
 
-  DEBUGASSERT(str != NULL);
+  DEBUGASSERT(str != NULL); 
 
   if(countcheck("wcsdup", line, source))
     return NULL;
@@ -220,11 +220,11 @@ wchar_t *curl_dbg_wcsdup(const wchar_t *str, int line, const char *source)
 void *curl_dbg_realloc(void *ptr, size_t wantedsize,
                       int line, const char *source)
 {
-  struct memdebug *mem = NULL;
+  struct memdebug *mem = NULL; 
 
-  size_t size = sizeof(struct memdebug) + wantedsize;
+  size_t size = sizeof(struct memdebug) + wantedsize; 
 
-  DEBUGASSERT(wantedsize != 0);
+  DEBUGASSERT(wantedsize != 0); 
 
   if(countcheck("realloc", line, source))
     return NULL;
@@ -258,7 +258,7 @@ void *curl_dbg_realloc(void *ptr, size_t wantedsize,
 
 void curl_dbg_free(void *ptr, int line, const char *source)
 {
-  if(ptr) {
+  if(ptr) { 
     struct memdebug *mem;
 
 #ifdef __INTEL_COMPILER
@@ -267,15 +267,15 @@ void curl_dbg_free(void *ptr, int line, const char *source)
    /* 1684: conversion from pointer to same-sized integral type */
 #endif
 
-    mem = (void *)((char *)ptr - offsetof(struct memdebug, mem));
+    mem = (void *)((char *)ptr - offsetof(struct memdebug, mem)); 
 
 #ifdef __INTEL_COMPILER
 #  pragma warning(pop)
 #endif
 
-    /* free for real */
-    (Curl_cfree)(mem);
-  }
+    /* free for real */ 
+    (Curl_cfree)(mem); 
+  } 
 
   if(source && ptr)
     curl_dbg_log("MEM %s:%d free(%p)\n", source, line, (void *)ptr);
@@ -285,18 +285,18 @@ curl_socket_t curl_dbg_socket(int domain, int type, int protocol,
                              int line, const char *source)
 {
   const char *fmt = (sizeof(curl_socket_t) == sizeof(int)) ?
-    "FD %s:%d socket() = %d\n" :
-    (sizeof(curl_socket_t) == sizeof(long)) ?
-    "FD %s:%d socket() = %ld\n" :
-    "FD %s:%d socket() = %zd\n";
+    "FD %s:%d socket() = %d\n" : 
+    (sizeof(curl_socket_t) == sizeof(long)) ? 
+    "FD %s:%d socket() = %ld\n" : 
+    "FD %s:%d socket() = %zd\n"; 
 
-  curl_socket_t sockfd;
+  curl_socket_t sockfd; 
 
-  if(countcheck("socket", line, source))
-    return CURL_SOCKET_BAD;
-
-  sockfd = socket(domain, type, protocol);
-
+  if(countcheck("socket", line, source)) 
+    return CURL_SOCKET_BAD; 
+ 
+  sockfd = socket(domain, type, protocol); 
+ 
   if(source && (sockfd != CURL_SOCKET_BAD))
     curl_dbg_log(fmt, source, line, sockfd);
 
@@ -307,41 +307,41 @@ SEND_TYPE_RETV curl_dbg_send(SEND_TYPE_ARG1 sockfd,
                             SEND_QUAL_ARG2 SEND_TYPE_ARG2 buf,
                             SEND_TYPE_ARG3 len, SEND_TYPE_ARG4 flags, int line,
                             const char *source)
-{
-  SEND_TYPE_RETV rc;
-  if(countcheck("send", line, source))
-    return -1;
-  rc = send(sockfd, buf, len, flags);
-  if(source)
+{ 
+  SEND_TYPE_RETV rc; 
+  if(countcheck("send", line, source)) 
+    return -1; 
+  rc = send(sockfd, buf, len, flags); 
+  if(source) 
     curl_dbg_log("SEND %s:%d send(%lu) = %ld\n",
-                source, line, (unsigned long)len, (long)rc);
-  return rc;
-}
-
+                source, line, (unsigned long)len, (long)rc); 
+  return rc; 
+} 
+ 
 RECV_TYPE_RETV curl_dbg_recv(RECV_TYPE_ARG1 sockfd, RECV_TYPE_ARG2 buf,
                             RECV_TYPE_ARG3 len, RECV_TYPE_ARG4 flags, int line,
                             const char *source)
-{
-  RECV_TYPE_RETV rc;
-  if(countcheck("recv", line, source))
-    return -1;
-  rc = recv(sockfd, buf, len, flags);
-  if(source)
+{ 
+  RECV_TYPE_RETV rc; 
+  if(countcheck("recv", line, source)) 
+    return -1; 
+  rc = recv(sockfd, buf, len, flags); 
+  if(source) 
     curl_dbg_log("RECV %s:%d recv(%lu) = %ld\n",
-                source, line, (unsigned long)len, (long)rc);
-  return rc;
-}
-
+                source, line, (unsigned long)len, (long)rc); 
+  return rc; 
+} 
+ 
 #ifdef HAVE_SOCKETPAIR
 int curl_dbg_socketpair(int domain, int type, int protocol,
                        curl_socket_t socket_vector[2],
                        int line, const char *source)
 {
   const char *fmt = (sizeof(curl_socket_t) == sizeof(int)) ?
-    "FD %s:%d socketpair() = %d %d\n" :
-    (sizeof(curl_socket_t) == sizeof(long)) ?
-    "FD %s:%d socketpair() = %ld %ld\n" :
-    "FD %s:%d socketpair() = %zd %zd\n";
+    "FD %s:%d socketpair() = %d %d\n" : 
+    (sizeof(curl_socket_t) == sizeof(long)) ? 
+    "FD %s:%d socketpair() = %ld %ld\n" : 
+    "FD %s:%d socketpair() = %zd %zd\n"; 
 
   int res = socketpair(domain, type, protocol, socket_vector);
 
@@ -356,10 +356,10 @@ curl_socket_t curl_dbg_accept(curl_socket_t s, void *saddr, void *saddrlen,
                              int line, const char *source)
 {
   const char *fmt = (sizeof(curl_socket_t) == sizeof(int)) ?
-    "FD %s:%d accept() = %d\n" :
-    (sizeof(curl_socket_t) == sizeof(long)) ?
-    "FD %s:%d accept() = %ld\n" :
-    "FD %s:%d accept() = %zd\n";
+    "FD %s:%d accept() = %d\n" : 
+    (sizeof(curl_socket_t) == sizeof(long)) ? 
+    "FD %s:%d accept() = %ld\n" : 
+    "FD %s:%d accept() = %zd\n"; 
 
   struct sockaddr *addr = (struct sockaddr *)saddr;
   curl_socklen_t *addrlen = (curl_socklen_t *)saddrlen;
@@ -376,10 +376,10 @@ curl_socket_t curl_dbg_accept(curl_socket_t s, void *saddr, void *saddrlen,
 void curl_dbg_mark_sclose(curl_socket_t sockfd, int line, const char *source)
 {
   const char *fmt = (sizeof(curl_socket_t) == sizeof(int)) ?
-    "FD %s:%d sclose(%d)\n":
-    (sizeof(curl_socket_t) == sizeof(long)) ?
-    "FD %s:%d sclose(%ld)\n":
-    "FD %s:%d sclose(%zd)\n";
+    "FD %s:%d sclose(%d)\n": 
+    (sizeof(curl_socket_t) == sizeof(long)) ? 
+    "FD %s:%d sclose(%ld)\n": 
+    "FD %s:%d sclose(%zd)\n"; 
 
   if(source)
     curl_dbg_log(fmt, source, line, sockfd);
@@ -388,7 +388,7 @@ void curl_dbg_mark_sclose(curl_socket_t sockfd, int line, const char *source)
 /* this is our own defined way to close sockets on *ALL* platforms */
 int curl_dbg_sclose(curl_socket_t sockfd, int line, const char *source)
 {
-  int res = sclose(sockfd);
+  int res = sclose(sockfd); 
   curl_dbg_mark_sclose(sockfd, line, source);
   return res;
 }
@@ -396,7 +396,7 @@ int curl_dbg_sclose(curl_socket_t sockfd, int line, const char *source)
 FILE *curl_dbg_fopen(const char *file, const char *mode,
                     int line, const char *source)
 {
-  FILE *res = fopen(file, mode);
+  FILE *res = fopen(file, mode); 
 
   if(source)
     curl_dbg_log("FILE %s:%d fopen(\"%s\",\"%s\") = %p\n",
@@ -419,20 +419,20 @@ int curl_dbg_fclose(FILE *file, int line, const char *source)
 {
   int res;
 
-  DEBUGASSERT(file != NULL);
+  DEBUGASSERT(file != NULL); 
 
   if(source)
     curl_dbg_log("FILE %s:%d fclose(%p)\n",
                  source, line, (void *)file);
 
-  res = fclose(file);
+  res = fclose(file); 
 
   return res;
 }
 
 #define LOGLINE_BUFSIZE  1024
 
-/* this does the writing to the memory tracking log file */
+/* this does the writing to the memory tracking log file */ 
 void curl_dbg_log(const char *format, ...)
 {
   char *buf;
@@ -447,7 +447,7 @@ void curl_dbg_log(const char *format, ...)
     return;
 
   va_start(ap, format);
-  nchars = mvsnprintf(buf, LOGLINE_BUFSIZE, format, ap);
+  nchars = mvsnprintf(buf, LOGLINE_BUFSIZE, format, ap); 
   va_end(ap);
 
   if(nchars > LOGLINE_BUFSIZE - 1)

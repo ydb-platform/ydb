@@ -15,8 +15,8 @@ from typing import TypeVar
 from typing import Union
 
 import attr
-import py
-
+import py 
+ 
 from _pytest._code.code import ExceptionChainRepr
 from _pytest._code.code import ExceptionInfo
 from _pytest._code.code import ExceptionRepr
@@ -27,33 +27,33 @@ from _pytest._code.code import ReprFileLocation
 from _pytest._code.code import ReprFuncArgs
 from _pytest._code.code import ReprLocals
 from _pytest._code.code import ReprTraceback
-from _pytest._code.code import TerminalRepr
+from _pytest._code.code import TerminalRepr 
 from _pytest._io import TerminalWriter
 from _pytest.compat import final
 from _pytest.config import Config
 from _pytest.nodes import Collector
 from _pytest.nodes import Item
 from _pytest.outcomes import skip
-
+ 
 if TYPE_CHECKING:
     from typing import NoReturn
     from typing_extensions import Literal
-
+ 
     from _pytest.runner import CallInfo
 
 
 def getworkerinfoline(node):
-    try:
+    try: 
         return node._workerinfocache
-    except AttributeError:
+    except AttributeError: 
         d = node.workerinfo
-        ver = "%s.%s.%s" % d["version_info"][:3]
+        ver = "%s.%s.%s" % d["version_info"][:3] 
         node._workerinfocache = s = "[{}] {} -- Python {} {}".format(
             d["id"], d["sysplatform"], ver, d["executable"]
-        )
-        return s
-
-
+        ) 
+        return s 
+ 
+ 
 _R = TypeVar("_R", bound="BaseReport")
 
 
@@ -67,93 +67,93 @@ class BaseReport:
     nodeid: str
 
     def __init__(self, **kw: Any) -> None:
-        self.__dict__.update(kw)
-
+        self.__dict__.update(kw) 
+ 
     if TYPE_CHECKING:
         # Can have arbitrary fields given to __init__().
         def __getattr__(self, key: str) -> Any:
             ...
 
     def toterminal(self, out: TerminalWriter) -> None:
-        if hasattr(self, "node"):
+        if hasattr(self, "node"): 
             out.line(getworkerinfoline(self.node))
-
-        longrepr = self.longrepr
-        if longrepr is None:
-            return
-
-        if hasattr(longrepr, "toterminal"):
+ 
+        longrepr = self.longrepr 
+        if longrepr is None: 
+            return 
+ 
+        if hasattr(longrepr, "toterminal"): 
             longrepr_terminal = cast(TerminalRepr, longrepr)
             longrepr_terminal.toterminal(out)
-        else:
-            try:
+        else: 
+            try: 
                 s = str(longrepr)
-            except UnicodeEncodeError:
+            except UnicodeEncodeError: 
                 s = "<unprintable longrepr>"
             out.line(s)
-
+ 
     def get_sections(self, prefix: str) -> Iterator[Tuple[str, str]]:
-        for name, content in self.sections:
-            if name.startswith(prefix):
-                yield prefix, content
-
-    @property
+        for name, content in self.sections: 
+            if name.startswith(prefix): 
+                yield prefix, content 
+ 
+    @property 
     def longreprtext(self) -> str:
         """Read-only property that returns the full string representation of
         ``longrepr``.
-
-        .. versionadded:: 3.0
-        """
+ 
+        .. versionadded:: 3.0 
+        """ 
         file = StringIO()
         tw = TerminalWriter(file)
-        tw.hasmarkup = False
-        self.toterminal(tw)
+        tw.hasmarkup = False 
+        self.toterminal(tw) 
         exc = file.getvalue()
-        return exc.strip()
-
-    @property
+        return exc.strip() 
+ 
+    @property 
     def caplog(self) -> str:
         """Return captured log lines, if log capturing is enabled.
-
-        .. versionadded:: 3.5
-        """
-        return "\n".join(
-            content for (prefix, content) in self.get_sections("Captured log")
-        )
-
-    @property
+ 
+        .. versionadded:: 3.5 
+        """ 
+        return "\n".join( 
+            content for (prefix, content) in self.get_sections("Captured log") 
+        ) 
+ 
+    @property 
     def capstdout(self) -> str:
         """Return captured text from stdout, if capturing is enabled.
-
-        .. versionadded:: 3.0
-        """
-        return "".join(
-            content for (prefix, content) in self.get_sections("Captured stdout")
-        )
-
-    @property
+ 
+        .. versionadded:: 3.0 
+        """ 
+        return "".join( 
+            content for (prefix, content) in self.get_sections("Captured stdout") 
+        ) 
+ 
+    @property 
     def capstderr(self) -> str:
         """Return captured text from stderr, if capturing is enabled.
-
-        .. versionadded:: 3.0
-        """
-        return "".join(
-            content for (prefix, content) in self.get_sections("Captured stderr")
-        )
-
-    passed = property(lambda x: x.outcome == "passed")
-    failed = property(lambda x: x.outcome == "failed")
-    skipped = property(lambda x: x.outcome == "skipped")
-
-    @property
+ 
+        .. versionadded:: 3.0 
+        """ 
+        return "".join( 
+            content for (prefix, content) in self.get_sections("Captured stderr") 
+        ) 
+ 
+    passed = property(lambda x: x.outcome == "passed") 
+    failed = property(lambda x: x.outcome == "failed") 
+    skipped = property(lambda x: x.outcome == "skipped") 
+ 
+    @property 
     def fspath(self) -> str:
-        return self.nodeid.split("::")[0]
-
+        return self.nodeid.split("::")[0] 
+ 
     @property
     def count_towards_summary(self) -> bool:
         """**Experimental** Whether this report should be counted towards the
         totals shown at the end of the test session: "1 passed, 1 failure, etc".
-
+ 
         .. note::
 
             This function is considered **experimental**, so beware that it is subject to changes
@@ -227,17 +227,17 @@ def _report_unserialization_failure(
 
 
 @final
-class TestReport(BaseReport):
+class TestReport(BaseReport): 
     """Basic test report object (also used for setup and teardown calls if
     they fail)."""
-
+ 
     __test__ = False
 
-    def __init__(
-        self,
+    def __init__( 
+        self, 
         nodeid: str,
         location: Tuple[str, Optional[int], str],
-        keywords,
+        keywords, 
         outcome: "Literal['passed', 'failed', 'skipped']",
         longrepr: Union[
             None, ExceptionInfo[BaseException], Tuple[str, int, str], str, TerminalRepr
@@ -249,46 +249,46 @@ class TestReport(BaseReport):
         **extra,
     ) -> None:
         #: Normalized collection nodeid.
-        self.nodeid = nodeid
-
+        self.nodeid = nodeid 
+ 
         #: A (filesystempath, lineno, domaininfo) tuple indicating the
-        #: actual location of a test item - it might be different from the
-        #: collected one e.g. if a method is inherited from a different module.
+        #: actual location of a test item - it might be different from the 
+        #: collected one e.g. if a method is inherited from a different module. 
         self.location: Tuple[str, Optional[int], str] = location
-
+ 
         #: A name -> value dictionary containing all keywords and
-        #: markers associated with a test invocation.
-        self.keywords = keywords
-
+        #: markers associated with a test invocation. 
+        self.keywords = keywords 
+ 
         #: Test outcome, always one of "passed", "failed", "skipped".
-        self.outcome = outcome
-
-        #: None or a failure representation.
-        self.longrepr = longrepr
-
+        self.outcome = outcome 
+ 
+        #: None or a failure representation. 
+        self.longrepr = longrepr 
+ 
         #: One of 'setup', 'call', 'teardown' to indicate runtest phase.
-        self.when = when
-
+        self.when = when 
+ 
         #: User properties is a list of tuples (name, value) that holds user
         #: defined properties of the test.
-        self.user_properties = list(user_properties or [])
-
+        self.user_properties = list(user_properties or []) 
+ 
         #: List of pairs ``(str, str)`` of extra information which needs to
-        #: marshallable. Used by pytest to add captured text
-        #: from ``stdout`` and ``stderr``, but may be used by other plugins
-        #: to add arbitrary information to reports.
-        self.sections = list(sections)
-
+        #: marshallable. Used by pytest to add captured text 
+        #: from ``stdout`` and ``stderr``, but may be used by other plugins 
+        #: to add arbitrary information to reports. 
+        self.sections = list(sections) 
+ 
         #: Time it took to run just the test.
-        self.duration = duration
-
-        self.__dict__.update(extra)
-
+        self.duration = duration 
+ 
+        self.__dict__.update(extra) 
+ 
     def __repr__(self) -> str:
         return "<{} {!r} when={!r} outcome={!r}>".format(
             self.__class__.__name__, self.nodeid, self.when, self.outcome
-        )
-
+        ) 
+ 
     @classmethod
     def from_item_and_call(cls, item: Item, call: "CallInfo[None]") -> "TestReport":
         """Create and fill a TestReport with standard item and call info."""
@@ -337,14 +337,14 @@ class TestReport(BaseReport):
             duration,
             user_properties=item.user_properties,
         )
-
-
+ 
+ 
 @final
 class CollectReport(BaseReport):
     """Collection report object."""
 
     when = "collect"
-
+ 
     def __init__(
         self,
         nodeid: str,
@@ -355,42 +355,42 @@ class CollectReport(BaseReport):
         **extra,
     ) -> None:
         #: Normalized collection nodeid.
-        self.nodeid = nodeid
+        self.nodeid = nodeid 
 
         #: Test outcome, always one of "passed", "failed", "skipped".
-        self.outcome = outcome
+        self.outcome = outcome 
 
         #: None or a failure representation.
-        self.longrepr = longrepr
+        self.longrepr = longrepr 
 
         #: The collected items and collection nodes.
-        self.result = result or []
+        self.result = result or [] 
 
         #: List of pairs ``(str, str)`` of extra information which needs to
         #: marshallable.
         # Used by pytest to add captured text : from ``stdout`` and ``stderr``,
         # but may be used by other plugins : to add arbitrary information to
         # reports.
-        self.sections = list(sections)
+        self.sections = list(sections) 
 
-        self.__dict__.update(extra)
-
-    @property
-    def location(self):
-        return (self.fspath, None, self.fspath)
-
+        self.__dict__.update(extra) 
+ 
+    @property 
+    def location(self): 
+        return (self.fspath, None, self.fspath) 
+ 
     def __repr__(self) -> str:
         return "<CollectReport {!r} lenresult={} outcome={!r}>".format(
             self.nodeid, len(self.result), self.outcome
-        )
-
-
-class CollectErrorRepr(TerminalRepr):
+        ) 
+ 
+ 
+class CollectErrorRepr(TerminalRepr): 
     def __init__(self, msg: str) -> None:
-        self.longrepr = msg
-
+        self.longrepr = msg 
+ 
     def toterminal(self, out: TerminalWriter) -> None:
-        out.line(self.longrepr, red=True)
+        out.line(self.longrepr, red=True) 
 
 
 def pytest_report_to_serializable(

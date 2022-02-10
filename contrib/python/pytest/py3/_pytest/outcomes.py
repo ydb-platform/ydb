@@ -1,15 +1,15 @@
 """Exception classes and constants handling test outcomes as well as
 functions creating them."""
-import sys
+import sys 
 from typing import Any
 from typing import Callable
 from typing import cast
 from typing import Optional
 from typing import Type
 from typing import TypeVar
-
+ 
 TYPE_CHECKING = False  # Avoid circular import through compat.
-
+ 
 if TYPE_CHECKING:
     from typing import NoReturn
     from typing_extensions import Protocol
@@ -22,10 +22,10 @@ else:
     Protocol = Generic
 
 
-class OutcomeException(BaseException):
+class OutcomeException(BaseException): 
     """OutcomeException and its subclass instances indicate and contain info
     about test and collection outcomes."""
-
+ 
     def __init__(self, msg: Optional[str] = None, pytrace: bool = True) -> None:
         if msg is not None and not isinstance(msg, str):
             error_msg = (  # type: ignore[unreachable]
@@ -33,53 +33,53 @@ class OutcomeException(BaseException):
                 "Perhaps you meant to use a mark?"
             )
             raise TypeError(error_msg.format(type(self).__name__, type(msg).__name__))
-        BaseException.__init__(self, msg)
-        self.msg = msg
-        self.pytrace = pytrace
-
+        BaseException.__init__(self, msg) 
+        self.msg = msg 
+        self.pytrace = pytrace 
+ 
     def __repr__(self) -> str:
         if self.msg is not None:
             return self.msg
         return f"<{self.__class__.__name__} instance>"
-
-    __str__ = __repr__
-
-
-TEST_OUTCOME = (OutcomeException, Exception)
-
-
-class Skipped(OutcomeException):
-    # XXX hackish: on 3k we fake to live in the builtins
-    # in order to have Skipped exception printing shorter/nicer
-    __module__ = "builtins"
-
+ 
+    __str__ = __repr__ 
+ 
+ 
+TEST_OUTCOME = (OutcomeException, Exception) 
+ 
+ 
+class Skipped(OutcomeException): 
+    # XXX hackish: on 3k we fake to live in the builtins 
+    # in order to have Skipped exception printing shorter/nicer 
+    __module__ = "builtins" 
+ 
     def __init__(
         self,
         msg: Optional[str] = None,
         pytrace: bool = True,
         allow_module_level: bool = False,
     ) -> None:
-        OutcomeException.__init__(self, msg=msg, pytrace=pytrace)
-        self.allow_module_level = allow_module_level
-
-
-class Failed(OutcomeException):
+        OutcomeException.__init__(self, msg=msg, pytrace=pytrace) 
+        self.allow_module_level = allow_module_level 
+ 
+ 
+class Failed(OutcomeException): 
     """Raised from an explicit call to pytest.fail()."""
-
-    __module__ = "builtins"
-
-
+ 
+    __module__ = "builtins" 
+ 
+ 
 class Exit(Exception):
     """Raised for immediate program exits (no tracebacks/summaries)."""
-
+ 
     def __init__(
         self, msg: str = "unknown reason", returncode: Optional[int] = None
     ) -> None:
-        self.msg = msg
-        self.returncode = returncode
+        self.msg = msg 
+        self.returncode = returncode 
         super().__init__(msg)
-
-
+ 
+ 
 # Elaborate hack to work around https://github.com/python/mypy/issues/2087.
 # Ideally would just be `exit.Exception = Exit` etc.
 
@@ -102,82 +102,82 @@ def _with_exception(exception_type: _ET) -> Callable[[_F], _WithException[_F, _E
 
 
 # Exposed helper methods.
-
-
+ 
+ 
 @_with_exception(Exit)
 def exit(msg: str, returncode: Optional[int] = None) -> "NoReturn":
     """Exit testing process.
-
+ 
     :param str msg: Message to display upon exit.
     :param int returncode: Return code to be used when exiting pytest.
-    """
-    __tracebackhide__ = True
-    raise Exit(msg, returncode)
-
-
+    """ 
+    __tracebackhide__ = True 
+    raise Exit(msg, returncode) 
+ 
+ 
 @_with_exception(Skipped)
 def skip(msg: str = "", *, allow_module_level: bool = False) -> "NoReturn":
     """Skip an executing test with the given message.
-
-    This function should be called only during testing (setup, call or teardown) or
+ 
+    This function should be called only during testing (setup, call or teardown) or 
     during collection by using the ``allow_module_level`` flag.  This function can
     be called in doctests as well.
-
+ 
     :param bool allow_module_level:
         Allows this function to be called at module level, skipping the rest
         of the module. Defaults to False.
-
-    .. note::
+ 
+    .. note:: 
         It is better to use the :ref:`pytest.mark.skipif ref` marker when
         possible to declare a test to be skipped under certain conditions
         like mismatching platforms or dependencies.
         Similarly, use the ``# doctest: +SKIP`` directive (see `doctest.SKIP
         <https://docs.python.org/3/library/doctest.html#doctest.SKIP>`_)
         to skip a doctest statically.
-    """
-    __tracebackhide__ = True
-    raise Skipped(msg=msg, allow_module_level=allow_module_level)
-
-
+    """ 
+    __tracebackhide__ = True 
+    raise Skipped(msg=msg, allow_module_level=allow_module_level) 
+ 
+ 
 @_with_exception(Failed)
 def fail(msg: str = "", pytrace: bool = True) -> "NoReturn":
     """Explicitly fail an executing test with the given message.
-
+ 
     :param str msg:
         The message to show the user as reason for the failure.
     :param bool pytrace:
         If False, msg represents the full failure information and no
-        python traceback will be reported.
-    """
-    __tracebackhide__ = True
-    raise Failed(msg=msg, pytrace=pytrace)
-
-
+        python traceback will be reported. 
+    """ 
+    __tracebackhide__ = True 
+    raise Failed(msg=msg, pytrace=pytrace) 
+ 
+ 
 class XFailed(Failed):
     """Raised from an explicit call to pytest.xfail()."""
-
-
+ 
+ 
 @_with_exception(XFailed)
 def xfail(reason: str = "") -> "NoReturn":
     """Imperatively xfail an executing test or setup function with the given reason.
-
-    This function should be called only during testing (setup, call or teardown).
-
-    .. note::
+ 
+    This function should be called only during testing (setup, call or teardown). 
+ 
+    .. note:: 
         It is better to use the :ref:`pytest.mark.xfail ref` marker when
         possible to declare a test to be xfailed under certain conditions
         like known bugs or missing features.
-    """
-    __tracebackhide__ = True
-    raise XFailed(reason)
-
-
+    """ 
+    __tracebackhide__ = True 
+    raise XFailed(reason) 
+ 
+ 
 def importorskip(
     modname: str, minversion: Optional[str] = None, reason: Optional[str] = None
 ) -> Any:
     """Import and return the requested module ``modname``, or skip the
     current test if the module cannot be imported.
-
+ 
     :param str modname:
         The name of the module to import.
     :param str minversion:
@@ -186,42 +186,42 @@ def importorskip(
     :param str reason:
         If given, this reason is shown as the message when the module cannot
         be imported.
-
+ 
     :returns:
         The imported module. This should be assigned to its canonical name.
 
     Example::
 
         docutils = pytest.importorskip("docutils")
-    """
-    import warnings
-
-    __tracebackhide__ = True
-    compile(modname, "", "eval")  # to catch syntaxerrors
-
-    with warnings.catch_warnings():
+    """ 
+    import warnings 
+ 
+    __tracebackhide__ = True 
+    compile(modname, "", "eval")  # to catch syntaxerrors 
+ 
+    with warnings.catch_warnings(): 
         # Make sure to ignore ImportWarnings that might happen because
-        # of existing directories with the same name we're trying to
+        # of existing directories with the same name we're trying to 
         # import but without a __init__.py file.
-        warnings.simplefilter("ignore")
-        try:
-            __import__(modname)
+        warnings.simplefilter("ignore") 
+        try: 
+            __import__(modname) 
         except ImportError as exc:
             if reason is None:
                 reason = f"could not import {modname!r}: {exc}"
             raise Skipped(reason, allow_module_level=True) from None
-    mod = sys.modules[modname]
-    if minversion is None:
-        return mod
-    verattr = getattr(mod, "__version__", None)
-    if minversion is not None:
+    mod = sys.modules[modname] 
+    if minversion is None: 
+        return mod 
+    verattr = getattr(mod, "__version__", None) 
+    if minversion is not None: 
         # Imported lazily to improve start-up time.
         from packaging.version import Version
 
         if verattr is None or Version(verattr) < Version(minversion):
-            raise Skipped(
-                "module %r has __version__ %r, required is: %r"
-                % (modname, verattr, minversion),
-                allow_module_level=True,
-            )
-    return mod
+            raise Skipped( 
+                "module %r has __version__ %r, required is: %r" 
+                % (modname, verattr, minversion), 
+                allow_module_level=True, 
+            ) 
+    return mod 

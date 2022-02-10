@@ -35,19 +35,19 @@ def uniq_suffix(path, unit):
         return ''
     return '.{}'.format(pathid(path)[:4])
 
-def pb2_arg(suf, path, mod, unit):
-    return '{path}__int__{suf}={mod}{modsuf}'.format(
-        path=stripext(to_build_root(path, unit)),
-        suf=suf,
-        mod=mod,
-        modsuf=stripext(suf)
-    )
+def pb2_arg(suf, path, mod, unit): 
+    return '{path}__int__{suf}={mod}{modsuf}'.format( 
+        path=stripext(to_build_root(path, unit)), 
+        suf=suf, 
+        mod=mod, 
+        modsuf=stripext(suf) 
+    ) 
 
 def proto_arg(path, mod, unit):
     return '{}.proto={}'.format(stripext(to_build_root(path, unit)), mod)
 
-def pb_cc_arg(suf, path, unit):
-    return '{}{suf}'.format(stripext(to_build_root(path, unit)), suf=suf)
+def pb_cc_arg(suf, path, unit): 
+    return '{}{suf}'.format(stripext(to_build_root(path, unit)), suf=suf) 
 
 def ev_cc_arg(path, unit):
     return '{}.ev.pb.cc'.format(stripext(to_build_root(path, unit)))
@@ -143,23 +143,23 @@ def add_python_lint_checks(unit, py_ver, files):
         unit.onadd_check(["flake8.py{}".format(py_ver), flake8_cfg] + resolved_files)
 
 
-def is_py3(unit):
-    return unit.get("PYTHON3") == "yes"
-
-
+def is_py3(unit): 
+    return unit.get("PYTHON3") == "yes" 
+ 
+ 
 def on_py_program(unit, *args):
     py_program(unit, is_py3(unit))
 
 
-def py_program(unit, py3):
+def py_program(unit, py3): 
     """
     Documentation: https://wiki.yandex-team.ru/devtools/commandsandvars/py_srcs/#modulpyprogramimakrospymain
     """
-    if py3:
+    if py3: 
         peers = ['library/python/runtime_py3/main']
         if unit.get('PYTHON_SQLITE3') != 'no':
             peers.append('contrib/tools/python3/src/Modules/_sqlite')
-    else:
+    else: 
         peers = ['library/python/runtime/main']
         if unit.get('PYTHON_SQLITE3') != 'no':
             peers.append('contrib/tools/python/src/Modules/_sqlite')
@@ -193,7 +193,7 @@ def onpy_srcs(unit, *args):
     # and "modname" will be used as a module name.
 
     upath = unit.path()[3:]
-    py3 = is_py3(unit)
+    py3 = is_py3(unit) 
     py_main_only = unit.get('PROCESS_PY_MAIN_ONLY')
     with_py = not unit.get('PYBUILD_NO_PY')
     with_pyc = not unit.get('PYBUILD_NO_PYC')
@@ -207,7 +207,7 @@ def onpy_srcs(unit, *args):
 
     unit_needs_main = unit.get('MODULE_TYPE') in ('PROGRAM', 'DLL')
     if unit_needs_main:
-        py_program(unit, py3)
+        py_program(unit, py3) 
 
     py_namespace_value = unit.get('PY_NAMESPACE_VALUE')
     if py_namespace_value == ".":
@@ -285,7 +285,7 @@ def onpy_srcs(unit, *args):
                 arg = next(args)
 
             if '=' in arg:
-                main_py = False
+                main_py = False 
                 path, mod = arg.split('=', 1)
             else:
                 if trim:
@@ -295,7 +295,7 @@ def onpy_srcs(unit, *args):
                     path = '{}.proto'.format(arg[:-9])
                 else:
                     path = arg
-                main_py = (path == '__main__.py' or path.endswith('/__main__.py'))
+                main_py = (path == '__main__.py' or path.endswith('/__main__.py')) 
                 if not py3 and unit_needs_main and main_py:
                     mod = '__main__'
                 else:
@@ -313,9 +313,9 @@ def onpy_srcs(unit, *args):
                     mod = ns + mod_name
 
             if main_mod:
-                py_main(unit, mod + ":main")
+                py_main(unit, mod + ":main") 
             elif py3 and unit_needs_main and main_py:
-                py_main(unit, mod)
+                py_main(unit, mod) 
 
             if py_main_only:
                 continue
@@ -406,7 +406,7 @@ def onpy_srcs(unit, *args):
                 ] + cython_directives
 
                 cython(cython_args)
-                py_register(unit, mod, py3)
+                py_register(unit, mod, py3) 
                 process_pyx(filename, path, out_suffix, noext)
 
         if files2res:
@@ -440,9 +440,9 @@ def onpy_srcs(unit, *args):
 
         res = []
 
-        if py3:
+        if py3: 
             mod_list_md5 = md5()
-            for path, mod in pys:
+            for path, mod in pys: 
                 mod_list_md5.update(mod)
                 if not (venv and is_extended_source_search_enabled(path, unit)):
                     dest = 'py/' + mod.replace('.', '/') + '.py'
@@ -463,11 +463,11 @@ def onpy_srcs(unit, *args):
                     ns_res += ['-', '{}="{}"'.format(key, namespaces)]
                 unit.onresource(ns_res)
 
-            unit.onresource_files(res)
+            unit.onresource_files(res) 
             add_python_lint_checks(unit, 3, [path for path, mod in pys] + unit.get(['_PY_EXTRA_LINT_FILES_VALUE']).split())
-        else:
-            for path, mod in pys:
-                root_rel_path = rootrel_arc_src(path, unit)
+        else: 
+            for path, mod in pys: 
+                root_rel_path = rootrel_arc_src(path, unit) 
                 if with_py:
                     key = '/py_modules/' + mod
                     res += [
@@ -480,9 +480,9 @@ def onpy_srcs(unit, *args):
                     unit.on_py_compile_bytecode([root_rel_path + '-', src, dst])
                     res += [dst + '.yapyc', '/py_code/' + mod]
 
-            unit.onresource(res)
+            unit.onresource(res) 
             add_python_lint_checks(unit, 2, [path for path, mod in pys] + unit.get(['_PY_EXTRA_LINT_FILES_VALUE']).split())
-
+ 
     use_vanilla_protoc = unit.get('USE_VANILLA_PROTOC') == 'yes'
     if use_vanilla_protoc:
         cpp_runtime_path = 'contrib/libs/protobuf_std'
@@ -497,15 +497,15 @@ def onpy_srcs(unit, *args):
         if not upath.startswith(py_runtime_path) and not upath.startswith(builtin_proto_path):
             unit.onpeerdir(py_runtime_path)
 
-        unit.onpeerdir(unit.get("PY_PROTO_DEPS").split())
+        unit.onpeerdir(unit.get("PY_PROTO_DEPS").split()) 
 
         proto_paths = [path for path, mod in protos]
         unit.on_generate_py_protos_internal(proto_paths)
-        unit.onpy_srcs([
-            pb2_arg(py_suf, path, mod, unit)
-            for path, mod in protos
-            for py_suf in unit.get("PY_PROTO_SUFFIXES").split()
-        ])
+        unit.onpy_srcs([ 
+            pb2_arg(py_suf, path, mod, unit) 
+            for path, mod in protos 
+            for py_suf in unit.get("PY_PROTO_SUFFIXES").split() 
+        ]) 
 
         if optimize_proto and need_gazetteer_peerdir:
             unit.onpeerdir(['kernel/gazetteer/proto'])
@@ -531,28 +531,28 @@ def _check_test_srcs(*args):
 
 def ontest_srcs(unit, *args):
     _check_test_srcs(*args)
-    if unit.get('PY3TEST_BIN' if is_py3(unit) else 'PYTEST_BIN') != 'no':
+    if unit.get('PY3TEST_BIN' if is_py3(unit) else 'PYTEST_BIN') != 'no': 
         unit.onpy_srcs(["NAMESPACE", "__tests__"] + list(args))
 
 
-def onpy_doctests(unit, *args):
+def onpy_doctests(unit, *args): 
     """
     @usage PY_DOCTEST(Packages...)
 
     Add to the test doctests for specified Python packages
     The packages should be part of a test (listed as sources of the test or its PEERDIRs).
     """
-    if unit.get('PY3TEST_BIN' if is_py3(unit) else 'PYTEST_BIN') != 'no':
-        unit.onresource(['-', 'PY_DOCTEST_PACKAGES="{}"'.format(' '.join(args))])
-
-
-def py_register(unit, func, py3):
-    if py3:
-        unit.on_py3_register([func])
-    else:
-        unit.on_py_register([func])
-
-
+    if unit.get('PY3TEST_BIN' if is_py3(unit) else 'PYTEST_BIN') != 'no': 
+        unit.onresource(['-', 'PY_DOCTEST_PACKAGES="{}"'.format(' '.join(args))]) 
+ 
+ 
+def py_register(unit, func, py3): 
+    if py3: 
+        unit.on_py3_register([func]) 
+    else: 
+        unit.on_py_register([func]) 
+ 
+ 
 def onpy_register(unit, *args):
     """
     @usage: PY_REGISTER([package.]module_name)
@@ -569,28 +569,28 @@ def onpy_register(unit, *args):
     Documentation: https://wiki.yandex-team.ru/arcadia/python/pysrcs/#makrospyregister
     """
 
-    py3 = is_py3(unit)
+    py3 = is_py3(unit) 
 
-    for name in args:
+    for name in args: 
         assert '=' not in name, name
         py_register(unit, name, py3)
         if '.' in name:
             shortname = name.rsplit('.', 1)[1]
-            if py3:
+            if py3: 
                 unit.oncflags(['-DPyInit_{}=PyInit_{}'.format(shortname, mangle(name))])
-            else:
+            else: 
                 unit.oncflags(['-Dinit{}=init{}'.format(shortname, mangle(name))])
-
-
-def py_main(unit, arg):
+ 
+ 
+def py_main(unit, arg): 
     if unit.get('IGNORE_PY_MAIN'):
         return
     unit_needs_main = unit.get('MODULE_TYPE') in ('PROGRAM', 'DLL')
     if unit_needs_main:
         py_program(unit, is_py3(unit))
-    unit.onresource(['-', 'PY_MAIN={}'.format(arg)])
-
-
+    unit.onresource(['-', 'PY_MAIN={}'.format(arg)]) 
+ 
+ 
 def onpy_main(unit, arg):
     """
         @usage: PY_MAIN(package.module[:func])
@@ -605,7 +605,7 @@ def onpy_main(unit, arg):
     if ':' not in arg:
         arg += ':main'
 
-    py_main(unit, arg)
+    py_main(unit, arg) 
 
 
 def onpy_constructor(unit, arg):

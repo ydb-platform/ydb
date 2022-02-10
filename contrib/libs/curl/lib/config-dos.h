@@ -40,10 +40,10 @@
 #define PACKAGE  "curl"
 
 #define HAVE_ARPA_INET_H       1
-#define HAVE_ASSERT_H          1
+#define HAVE_ASSERT_H          1 
 #define HAVE_ERRNO_H           1
 #define HAVE_FCNTL_H           1
-#define HAVE_FREEADDRINFO      1
+#define HAVE_FREEADDRINFO      1 
 #define HAVE_GETADDRINFO       1
 #define HAVE_GETNAMEINFO       1
 #define HAVE_GETPROTOBYNAME    1
@@ -86,11 +86,11 @@
 
 #define RETSIGTYPE             void
 #define SIZEOF_INT             4
-#define SIZEOF_LONG            4
+#define SIZEOF_LONG            4 
 #define SIZEOF_LONG_DOUBLE     16
 #define SIZEOF_SHORT           2
 #define SIZEOF_SIZE_T          4
-#define SIZEOF_CURL_OFF_T      4
+#define SIZEOF_CURL_OFF_T      4 
 #define STDC_HEADERS           1
 #define TIME_WITH_SYS_TIME     1
 
@@ -135,8 +135,8 @@
   #define HAVE_LIBZ              1
 #endif
 
-/* USE_OPENSSL on cmd-line */
-#ifdef USE_OPENSSL
+/* USE_OPENSSL on cmd-line */ 
+#ifdef USE_OPENSSL 
   #define HAVE_CRYPTO_CLEANUP_ALL_EX_DATA 1
   #define OPENSSL_NO_KRB5        1
 #endif

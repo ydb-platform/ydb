@@ -26,30 +26,30 @@
 struct contenc_writer {
   const struct content_encoding *handler;  /* Encoding handler. */
   struct contenc_writer *downstream;  /* Downstream writer. */
-  void *params;  /* Encoding-specific storage (variable length). */
-};
+  void *params;  /* Encoding-specific storage (variable length). */ 
+}; 
 
-/* Content encoding writer. */
+/* Content encoding writer. */ 
 struct content_encoding {
-  const char *name;        /* Encoding name. */
-  const char *alias;       /* Encoding name alias. */
+  const char *name;        /* Encoding name. */ 
+  const char *alias;       /* Encoding name alias. */ 
   CURLcode (*init_writer)(struct connectdata *conn,
                           struct contenc_writer *writer);
   CURLcode (*unencode_write)(struct connectdata *conn,
                              struct contenc_writer *writer,
-                             const char *buf, size_t nbytes);
+                             const char *buf, size_t nbytes); 
   void (*close_writer)(struct connectdata *conn,
                        struct contenc_writer *writer);
-  size_t paramsize;
-};
+  size_t paramsize; 
+}; 
 
 
-CURLcode Curl_build_unencoding_stack(struct connectdata *conn,
-                                     const char *enclist, int maybechunked);
+CURLcode Curl_build_unencoding_stack(struct connectdata *conn, 
+                                     const char *enclist, int maybechunked); 
 CURLcode Curl_unencode_write(struct connectdata *conn,
                              struct contenc_writer *writer,
-                             const char *buf, size_t nbytes);
-void Curl_unencode_cleanup(struct connectdata *conn);
-char *Curl_all_content_encodings(void);
-
+                             const char *buf, size_t nbytes); 
+void Curl_unencode_cleanup(struct connectdata *conn); 
+char *Curl_all_content_encodings(void); 
+ 
 #endif /* HEADER_CURL_CONTENT_ENCODING_H */

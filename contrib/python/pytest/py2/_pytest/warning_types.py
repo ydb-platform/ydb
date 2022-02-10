@@ -1,31 +1,31 @@
 # -*- coding: utf-8 -*-
-import attr
-
-
-class PytestWarning(UserWarning):
-    """
-    Bases: :class:`UserWarning`.
-
-    Base class for all warnings emitted by pytest.
-    """
-
-
+import attr 
+ 
+ 
+class PytestWarning(UserWarning): 
+    """ 
+    Bases: :class:`UserWarning`. 
+ 
+    Base class for all warnings emitted by pytest. 
+    """ 
+ 
+ 
 class PytestAssertRewriteWarning(PytestWarning):
-    """
+    """ 
     Bases: :class:`PytestWarning`.
-
+ 
     Warning emitted by the pytest assert rewrite module.
-    """
-
-
+    """ 
+ 
+ 
 class PytestCacheWarning(PytestWarning):
-    """
+    """ 
     Bases: :class:`PytestWarning`.
-
+ 
     Warning emitted by the cache plugin in various situations.
-    """
-
-
+    """ 
+ 
+ 
 class PytestConfigWarning(PytestWarning):
     """
     Bases: :class:`PytestWarning`.
@@ -50,23 +50,23 @@ class PytestDeprecationWarning(PytestWarning, DeprecationWarning):
     """
 
 
-class PytestExperimentalApiWarning(PytestWarning, FutureWarning):
-    """
-    Bases: :class:`pytest.PytestWarning`, :class:`FutureWarning`.
-
-    Warning category used to denote experiments in pytest. Use sparingly as the API might change or even be
-    removed completely in future version
-    """
-
-    @classmethod
-    def simple(cls, apiname):
-        return cls(
-            "{apiname} is an experimental api that may change over time".format(
-                apiname=apiname
-            )
-        )
-
-
+class PytestExperimentalApiWarning(PytestWarning, FutureWarning): 
+    """ 
+    Bases: :class:`pytest.PytestWarning`, :class:`FutureWarning`. 
+ 
+    Warning category used to denote experiments in pytest. Use sparingly as the API might change or even be 
+    removed completely in future version 
+    """ 
+ 
+    @classmethod 
+    def simple(cls, apiname): 
+        return cls( 
+            "{apiname} is an experimental api that may change over time".format( 
+                apiname=apiname 
+            ) 
+        ) 
+ 
+ 
 class PytestUnhandledCoroutineWarning(PytestWarning):
     """
     Bases: :class:`PytestWarning`.
@@ -94,19 +94,19 @@ class RemovedInPytest4Warning(PytestDeprecationWarning):
     """
 
 
-@attr.s
-class UnformattedWarning(object):
-    """Used to hold warnings that need to format their message at runtime, as opposed to a direct message.
-
-    Using this class avoids to keep all the warning types and messages in this module, avoiding misuse.
-    """
-
-    category = attr.ib()
-    template = attr.ib()
-
-    def format(self, **kwargs):
-        """Returns an instance of the warning category, formatted with given kwargs"""
-        return self.category(self.template.format(**kwargs))
-
-
-PYTESTER_COPY_EXAMPLE = PytestExperimentalApiWarning.simple("testdir.copy_example")
+@attr.s 
+class UnformattedWarning(object): 
+    """Used to hold warnings that need to format their message at runtime, as opposed to a direct message. 
+ 
+    Using this class avoids to keep all the warning types and messages in this module, avoiding misuse. 
+    """ 
+ 
+    category = attr.ib() 
+    template = attr.ib() 
+ 
+    def format(self, **kwargs): 
+        """Returns an instance of the warning category, formatted with given kwargs""" 
+        return self.category(self.template.format(**kwargs)) 
+ 
+ 
+PYTESTER_COPY_EXAMPLE = PytestExperimentalApiWarning.simple("testdir.copy_example") 

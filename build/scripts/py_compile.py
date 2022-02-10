@@ -11,7 +11,7 @@ def main():
     srcpathx, in_fname, out_fname = sys.argv[1:]
     srcpath = srcpathx[:-1]
 
-    with open(in_fname, 'r') as in_file:
+    with open(in_fname, 'r') as in_file: 
         source = in_file.read()
 
     code = compile(source, srcpath, 'exec', dont_inherit=True)

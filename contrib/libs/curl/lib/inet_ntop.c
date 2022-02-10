@@ -33,7 +33,7 @@
 #endif
 
 #include "inet_ntop.h"
-#include "curl_printf.h"
+#include "curl_printf.h" 
 
 #define IN6ADDRSZ       16
 #define INADDRSZ         4
@@ -49,21 +49,21 @@
  */
 static char *inet_ntop4 (const unsigned char *src, char *dst, size_t size)
 {
-  char tmp[sizeof("255.255.255.255")];
+  char tmp[sizeof("255.255.255.255")]; 
   size_t len;
 
   DEBUGASSERT(size >= 16);
 
   tmp[0] = '\0';
-  (void)msnprintf(tmp, sizeof(tmp), "%d.%d.%d.%d",
-                  ((int)((unsigned char)src[0])) & 0xff,
-                  ((int)((unsigned char)src[1])) & 0xff,
-                  ((int)((unsigned char)src[2])) & 0xff,
-                  ((int)((unsigned char)src[3])) & 0xff);
+  (void)msnprintf(tmp, sizeof(tmp), "%d.%d.%d.%d", 
+                  ((int)((unsigned char)src[0])) & 0xff, 
+                  ((int)((unsigned char)src[1])) & 0xff, 
+                  ((int)((unsigned char)src[2])) & 0xff, 
+                  ((int)((unsigned char)src[3])) & 0xff); 
 
   len = strlen(tmp);
   if(len == 0 || len >= size) {
-    errno = ENOSPC;
+    errno = ENOSPC; 
     return (NULL);
   }
   strcpy(dst, tmp);
@@ -141,14 +141,14 @@ static char *inet_ntop6 (const unsigned char *src, char *dst, size_t size)
      */
     if(i == 6 && best.base == 0 &&
         (best.len == 6 || (best.len == 5 && words[5] == 0xffff))) {
-      if(!inet_ntop4(src + 12, tp, sizeof(tmp) - (tp - tmp))) {
-        errno = ENOSPC;
+      if(!inet_ntop4(src + 12, tp, sizeof(tmp) - (tp - tmp))) { 
+        errno = ENOSPC; 
         return (NULL);
       }
       tp += strlen(tp);
       break;
     }
-    tp += msnprintf(tp, 5, "%lx", words[i]);
+    tp += msnprintf(tp, 5, "%lx", words[i]); 
   }
 
   /* Was it a trailing run of 0x00's?
@@ -160,7 +160,7 @@ static char *inet_ntop6 (const unsigned char *src, char *dst, size_t size)
   /* Check for overflow, copy, and we're done.
    */
   if((size_t)(tp - tmp) > size) {
-    errno = ENOSPC;
+    errno = ENOSPC; 
     return (NULL);
   }
   strcpy(dst, tmp);
@@ -177,20 +177,20 @@ static char *inet_ntop6 (const unsigned char *src, char *dst, size_t size)
  *
  * On Windows we store the error in the thread errno, not
  * in the winsock error code. This is to avoid losing the
- * actual last winsock error. So when this function returns
- * NULL, check errno not SOCKERRNO.
+ * actual last winsock error. So when this function returns 
+ * NULL, check errno not SOCKERRNO. 
  */
 char *Curl_inet_ntop(int af, const void *src, char *buf, size_t size)
 {
-  switch(af) {
+  switch(af) { 
   case AF_INET:
-    return inet_ntop4((const unsigned char *)src, buf, size);
+    return inet_ntop4((const unsigned char *)src, buf, size); 
 #ifdef ENABLE_IPV6
   case AF_INET6:
-    return inet_ntop6((const unsigned char *)src, buf, size);
+    return inet_ntop6((const unsigned char *)src, buf, size); 
 #endif
   default:
-    errno = EAFNOSUPPORT;
+    errno = EAFNOSUPPORT; 
     return NULL;
   }
 }

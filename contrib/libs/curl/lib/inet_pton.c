@@ -57,15 +57,15 @@ static int      inet_pton6(const char *src, unsigned char *dst);
  * notice:
  *      On Windows we store the error in the thread errno, not
  *      in the winsock error code. This is to avoid losing the
- *      actual last winsock error. So when this function returns
- *      -1, check errno not SOCKERRNO.
+ *      actual last winsock error. So when this function returns 
+ *      -1, check errno not SOCKERRNO. 
  * author:
  *      Paul Vixie, 1996.
  */
 int
 Curl_inet_pton(int af, const char *src, void *dst)
 {
-  switch(af) {
+  switch(af) { 
   case AF_INET:
     return (inet_pton4(src, (unsigned char *)dst));
 #ifdef ENABLE_IPV6
@@ -73,7 +73,7 @@ Curl_inet_pton(int af, const char *src, void *dst)
     return (inet_pton6(src, (unsigned char *)dst));
 #endif
   default:
-    errno = EAFNOSUPPORT;
+    errno = EAFNOSUPPORT; 
     return (-1);
   }
   /* NOTREACHED */
@@ -103,8 +103,8 @@ inet_pton4(const char *src, unsigned char *dst)
   while((ch = *src++) != '\0') {
     const char *pch;
 
-    pch = strchr(digits, ch);
-    if(pch) {
+    pch = strchr(digits, ch); 
+    if(pch) { 
       unsigned int val = *tp * 10 + (unsigned int)(pch - digits);
 
       if(saw_digit && *tp == 0)
@@ -171,8 +171,8 @@ inet_pton6(const char *src, unsigned char *dst)
     const char *xdigits;
     const char *pch;
 
-    pch = strchr((xdigits = xdigits_l), ch);
-    if(!pch)
+    pch = strchr((xdigits = xdigits_l), ch); 
+    if(!pch) 
       pch = strchr((xdigits = xdigits_u), ch);
     if(pch != NULL) {
       val <<= 4;
@@ -191,8 +191,8 @@ inet_pton6(const char *src, unsigned char *dst)
       }
       if(tp + INT16SZ > endp)
         return (0);
-      *tp++ = (unsigned char) ((val >> 8) & 0xff);
-      *tp++ = (unsigned char) (val & 0xff);
+      *tp++ = (unsigned char) ((val >> 8) & 0xff); 
+      *tp++ = (unsigned char) (val & 0xff); 
       saw_xdigit = 0;
       val = 0;
       continue;
@@ -208,8 +208,8 @@ inet_pton6(const char *src, unsigned char *dst)
   if(saw_xdigit) {
     if(tp + INT16SZ > endp)
       return (0);
-    *tp++ = (unsigned char) ((val >> 8) & 0xff);
-    *tp++ = (unsigned char) (val & 0xff);
+    *tp++ = (unsigned char) ((val >> 8) & 0xff); 
+    *tp++ = (unsigned char) (val & 0xff); 
   }
   if(colonp != NULL) {
     /*

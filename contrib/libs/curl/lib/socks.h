@@ -25,7 +25,7 @@
 #include "curl_setup.h"
 
 #ifdef CURL_DISABLE_PROXY
-#define Curl_SOCKS4(a,b,c,d,e) CURLE_NOT_BUILT_IN
+#define Curl_SOCKS4(a,b,c,d,e) CURLE_NOT_BUILT_IN 
 #define Curl_SOCKS5(a,b,c,d,e,f) CURLE_NOT_BUILT_IN
 #define Curl_SOCKS_getsock(x,y,z) 0
 #else
@@ -69,7 +69,7 @@ CURLproxycode Curl_SOCKS5(const char *proxy_name,
 
 #if defined(HAVE_GSSAPI) || defined(USE_WINDOWS_SSPI)
 /*
- * This function handles the SOCKS5 GSS-API negotiation and initialisation
+ * This function handles the SOCKS5 GSS-API negotiation and initialisation 
  */
 CURLcode Curl_SOCKS5_gssapi_negotiate(int sockindex,
                                       struct connectdata *conn);

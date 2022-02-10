@@ -22,11 +22,11 @@
 
 #include "curl_setup.h"
 
-/***********************************************************************
- * Only for IPv6-enabled builds
- **********************************************************************/
-#ifdef CURLRES_IPV6
-
+/*********************************************************************** 
+ * Only for IPv6-enabled builds 
+ **********************************************************************/ 
+#ifdef CURLRES_IPV6 
+ 
 #ifdef HAVE_NETINET_IN_H
 #include <netinet/in.h>
 #endif
@@ -54,13 +54,13 @@
 #include "url.h"
 #include "inet_pton.h"
 #include "connect.h"
-/* The last 3 #include files should be in this order */
-#include "curl_printf.h"
+/* The last 3 #include files should be in this order */ 
+#include "curl_printf.h" 
 #include "curl_memory.h"
 #include "memdebug.h"
 
 /*
- * Curl_ipv6works() returns TRUE if IPv6 seems to work.
+ * Curl_ipv6works() returns TRUE if IPv6 seems to work. 
  */
 bool Curl_ipv6works(struct connectdata *conn)
 {
@@ -78,7 +78,7 @@ bool Curl_ipv6works(struct connectdata *conn)
     /* probe to see if we have a working IPv6 stack */
     curl_socket_t s = socket(PF_INET6, SOCK_DGRAM, 0);
     if(s == CURL_SOCKET_BAD)
-      /* an IPv6 address was requested but we can't get/use one */
+      /* an IPv6 address was requested but we can't get/use one */ 
       ipv6_works = 0;
     else {
       ipv6_works = 1;
@@ -96,7 +96,7 @@ bool Curl_ipvalid(struct connectdata *conn)
 {
   if(conn->ip_version == CURL_IPRESOLVE_V6)
     return Curl_ipv6works(conn);
-
+ 
   return TRUE;
 }
 
@@ -120,7 +120,7 @@ static void dump_addrinfo(struct connectdata *conn,
 #endif
 
 /*
- * Curl_getaddrinfo() when built IPv6-enabled (non-threading and
+ * Curl_getaddrinfo() when built IPv6-enabled (non-threading and 
  * non-ares version).
  *
  * Returns name information about the given hostname and port number. If
@@ -138,17 +138,17 @@ struct Curl_addrinfo *Curl_getaddrinfo(struct connectdata *conn,
   int error;
   char sbuf[12];
   char *sbufptr = NULL;
-#ifndef USE_RESOLVE_ON_IPS
+#ifndef USE_RESOLVE_ON_IPS 
   char addrbuf[128];
-#endif
+#endif 
   int pf;
-#if !defined(CURL_DISABLE_VERBOSE_STRINGS)
-  struct Curl_easy *data = conn->data;
-#endif
+#if !defined(CURL_DISABLE_VERBOSE_STRINGS) 
+  struct Curl_easy *data = conn->data; 
+#endif 
 
   *waitp = 0; /* synchronous response only */
 
-  /* Check if a limited name resolve has been requested */
+  /* Check if a limited name resolve has been requested */ 
   switch(conn->ip_version) {
   case CURL_IPRESOLVE_V4:
     pf = PF_INET;
@@ -162,7 +162,7 @@ struct Curl_addrinfo *Curl_getaddrinfo(struct connectdata *conn,
   }
 
   if((pf != PF_INET) && !Curl_ipv6works(conn))
-    /* The stack seems to be a non-IPv6 one */
+    /* The stack seems to be a non-IPv6 one */ 
     pf = PF_INET;
 
   memset(&hints, 0, sizeof(hints));
@@ -170,37 +170,37 @@ struct Curl_addrinfo *Curl_getaddrinfo(struct connectdata *conn,
   hints.ai_socktype = (conn->transport == TRNSPRT_TCP) ?
     SOCK_STREAM : SOCK_DGRAM;
 
-#ifndef USE_RESOLVE_ON_IPS
-  /*
-   * The AI_NUMERICHOST must not be set to get synthesized IPv6 address from
-   * an IPv4 address on iOS and Mac OS X.
-   */
+#ifndef USE_RESOLVE_ON_IPS 
+  /* 
+   * The AI_NUMERICHOST must not be set to get synthesized IPv6 address from 
+   * an IPv4 address on iOS and Mac OS X. 
+   */ 
   if((1 == Curl_inet_pton(AF_INET, hostname, addrbuf)) ||
      (1 == Curl_inet_pton(AF_INET6, hostname, addrbuf))) {
     /* the given address is numerical only, prevent a reverse lookup */
     hints.ai_flags = AI_NUMERICHOST;
   }
-#endif
+#endif 
 
   if(port) {
-    msnprintf(sbuf, sizeof(sbuf), "%d", port);
-    sbufptr = sbuf;
+    msnprintf(sbuf, sizeof(sbuf), "%d", port); 
+    sbufptr = sbuf; 
   }
-
+ 
   error = Curl_getaddrinfo_ex(hostname, sbufptr, &hints, &res);
   if(error) {
     infof(data, "getaddrinfo(3) failed for %s:%d\n", hostname, port);
     return NULL;
   }
 
-  if(port) {
-    Curl_addrinfo_set_port(res, port);
-  }
-
+  if(port) { 
+    Curl_addrinfo_set_port(res, port); 
+  } 
+ 
   dump_addrinfo(conn, res);
 
   return res;
 }
 #endif /* CURLRES_SYNCH */
-
+ 
 #endif /* CURLRES_IPV6 */

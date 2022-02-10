@@ -1,7 +1,7 @@
-.text	
-
+.text	 
+ 
 .globl	_rsaz_1024_sqr_avx2
-
+ 
 .p2align	6
 _rsaz_1024_sqr_avx2:
 
@@ -650,10 +650,10 @@ L$OOP_REDUCE_1024:
 	leaq	(%rax),%rsp
 
 L$sqr_1024_epilogue:
-	.byte	0xf3,0xc3
-
-
-.globl	_rsaz_1024_mul_avx2
+	.byte	0xf3,0xc3 
+ 
+ 
+.globl	_rsaz_1024_mul_avx2 
 
 .p2align	6
 _rsaz_1024_mul_avx2:
@@ -1407,7 +1407,7 @@ _rsaz_1024_red2norm_avx2:
 
 
 
-.globl	_rsaz_1024_norm2red_avx2
+.globl	_rsaz_1024_norm2red_avx2 
 
 .p2align	5
 _rsaz_1024_norm2red_avx2:
@@ -1566,7 +1566,7 @@ _rsaz_1024_norm2red_avx2:
 	.byte	0xf3,0xc3
 
 
-.globl	_rsaz_1024_scatter5_avx2
+.globl	_rsaz_1024_scatter5_avx2 
 
 .p2align	5
 _rsaz_1024_scatter5_avx2:
@@ -1593,10 +1593,10 @@ L$oop_scatter_1024:
 
 
 
-.globl	_rsaz_1024_gather5_avx2
-
+.globl	_rsaz_1024_gather5_avx2 
+ 
 .p2align	5
-_rsaz_1024_gather5_avx2:
+_rsaz_1024_gather5_avx2: 
 
 	vzeroupper
 	movq	%rsp,%r11
@@ -1710,8 +1710,8 @@ L$oop_gather_1024:
 	vzeroupper
 	leaq	(%r11),%rsp
 
-	.byte	0xf3,0xc3
-
+	.byte	0xf3,0xc3 
+ 
 L$SEH_end_rsaz_1024_gather5:
 
 

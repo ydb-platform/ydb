@@ -54,7 +54,7 @@ RECURSE(
     dr_wav
     dwarflib
     earcut
-    eccodes
+    eccodes 
     eccodes/python
     eccodes/tools
     eigen
@@ -87,7 +87,7 @@ RECURSE(
     geos
     geos/capi/ctypes
     gflags
-    giflib
+    giflib 
     glslang
     google-compute-engine-oslogin
     googleapis-common-protos
@@ -144,7 +144,7 @@ RECURSE(
     libdivide
     libdivsufsort2
     libeatmydata/dynamic
-    libev
+    libev 
     libevent
     libexslt
     libfdk-aac
@@ -205,7 +205,7 @@ RECURSE(
     linenoise
     linux-headers
     linuxvdso
-    liquidfun
+    liquidfun 
     llvm11
     llvm12
     llvm8
@@ -251,7 +251,7 @@ RECURSE(
     opencv/modules/python/src2
     openfst
     opengv
-    openjpeg
+    openjpeg 
     openldap
     openldap/libraries
     openmp

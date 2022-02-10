@@ -22,8 +22,8 @@
 
 #include "curl_setup.h"
 
-#include <curl/curl.h>
-
+#include <curl/curl.h> 
+ 
 #include "llist.h"
 #include "curl_memory.h"
 
@@ -33,7 +33,7 @@
 /*
  * @unittest: 1300
  */
-void
+void 
 Curl_llist_init(struct Curl_llist *l, Curl_llist_dtor dtor)
 {
   l->size = 0;
@@ -49,13 +49,13 @@ Curl_llist_init(struct Curl_llist *l, Curl_llist_dtor dtor)
  * entry is NULL and the list already has elements, the new one will be
  * inserted first in the list.
  *
- * The 'ne' argument should be a pointer into the object to store.
+ * The 'ne' argument should be a pointer into the object to store. 
  *
  * @unittest: 1300
  */
-void
+void 
 Curl_llist_insert_next(struct Curl_llist *list, struct Curl_llist_element *e,
-                       const void *p,
+                       const void *p, 
                        struct Curl_llist_element *ne)
 {
   ne->ptr = (void *) p;
@@ -89,13 +89,13 @@ Curl_llist_insert_next(struct Curl_llist *list, struct Curl_llist_element *e,
 /*
  * @unittest: 1300
  */
-void
+void 
 Curl_llist_remove(struct Curl_llist *list, struct Curl_llist_element *e,
                   void *user)
 {
-  void *ptr;
+  void *ptr; 
   if(e == NULL || list->size == 0)
-    return;
+    return; 
 
   if(e == list->head) {
     list->head = e->next;
@@ -106,18 +106,18 @@ Curl_llist_remove(struct Curl_llist *list, struct Curl_llist_element *e,
       e->next->prev = NULL;
   }
   else {
-    if(!e->prev)
-      list->head = e->next;
-    else
-      e->prev->next = e->next;
-
+    if(!e->prev) 
+      list->head = e->next; 
+    else 
+      e->prev->next = e->next; 
+ 
     if(!e->next)
       list->tail = e->prev;
     else
       e->next->prev = e->prev;
   }
 
-  ptr = e->ptr;
+  ptr = e->ptr; 
 
   e->ptr  = NULL;
   e->prev = NULL;
@@ -125,9 +125,9 @@ Curl_llist_remove(struct Curl_llist *list, struct Curl_llist_element *e,
 
   --list->size;
 
-  /* call the dtor() last for when it actually frees the 'e' memory itself */
-  if(list->dtor)
-    list->dtor(user, ptr);
+  /* call the dtor() last for when it actually frees the 'e' memory itself */ 
+  if(list->dtor) 
+    list->dtor(user, ptr); 
 }
 
 void

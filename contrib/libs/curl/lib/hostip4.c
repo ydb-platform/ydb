@@ -22,11 +22,11 @@
 
 #include "curl_setup.h"
 
-/***********************************************************************
- * Only for plain IPv4 builds
- **********************************************************************/
-#ifdef CURLRES_IPV4 /* plain IPv4 code coming up */
-
+/*********************************************************************** 
+ * Only for plain IPv4 builds 
+ **********************************************************************/ 
+#ifdef CURLRES_IPV4 /* plain IPv4 code coming up */ 
+ 
 #ifdef HAVE_NETINET_IN_H
 #include <netinet/in.h>
 #endif
@@ -52,8 +52,8 @@
 #include "share.h"
 #include "strerror.h"
 #include "url.h"
-/* The last 3 #include files should be in this order */
-#include "curl_printf.h"
+/* The last 3 #include files should be in this order */ 
+#include "curl_printf.h" 
 #include "curl_memory.h"
 #include "memdebug.h"
 
@@ -64,7 +64,7 @@
 bool Curl_ipvalid(struct connectdata *conn)
 {
   if(conn->ip_version == CURL_IPRESOLVE_V6)
-    /* An IPv6 address was requested and we can't get/use one */
+    /* An IPv6 address was requested and we can't get/use one */ 
     return FALSE;
 
   return TRUE; /* OK, proceed */
@@ -73,7 +73,7 @@ bool Curl_ipvalid(struct connectdata *conn)
 #ifdef CURLRES_SYNCH
 
 /*
- * Curl_getaddrinfo() - the IPv4 synchronous version.
+ * Curl_getaddrinfo() - the IPv4 synchronous version. 
  *
  * The original code to this function was from the Dancer source code, written
  * by Bjorn Reese, it has since been patched and modified considerably.

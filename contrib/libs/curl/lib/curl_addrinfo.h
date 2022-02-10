@@ -77,13 +77,13 @@ Curl_ip2addr(int af, const void *inaddr, const char *hostname, int port);
 
 struct Curl_addrinfo *Curl_str2addr(char *dotted, int port);
 
-#ifdef USE_UNIX_SOCKETS
+#ifdef USE_UNIX_SOCKETS 
 struct Curl_addrinfo *Curl_unix2addr(const char *path, bool *longpath,
                                      bool abstract);
-#endif
-
-#if defined(CURLDEBUG) && defined(HAVE_GETADDRINFO) && \
-    defined(HAVE_FREEADDRINFO)
+#endif 
+ 
+#if defined(CURLDEBUG) && defined(HAVE_GETADDRINFO) && \ 
+    defined(HAVE_FREEADDRINFO) 
 void
 curl_dbg_freeaddrinfo(struct addrinfo *freethis, int line, const char *source);
 #endif
@@ -95,12 +95,12 @@ curl_dbg_getaddrinfo(const char *hostname, const char *service,
                      int line, const char *source);
 #endif
 
-#ifdef HAVE_GETADDRINFO
-#ifdef USE_RESOLVE_ON_IPS
+#ifdef HAVE_GETADDRINFO 
+#ifdef USE_RESOLVE_ON_IPS 
 void Curl_addrinfo_set_port(struct Curl_addrinfo *addrinfo, int port);
-#else
-#define Curl_addrinfo_set_port(x,y)
-#endif
-#endif
-
+#else 
+#define Curl_addrinfo_set_port(x,y) 
+#endif 
+#endif 
+ 
 #endif /* HEADER_CURL_ADDRINFO_H */

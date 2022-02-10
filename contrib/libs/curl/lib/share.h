@@ -25,9 +25,9 @@
 #include "curl_setup.h"
 #include <curl/curl.h>
 #include "cookie.h"
-#include "psl.h"
+#include "psl.h" 
 #include "urldata.h"
-#include "conncache.h"
+#include "conncache.h" 
 
 /* SalfordC says "A structure member may not be volatile". Hence:
  */
@@ -45,22 +45,22 @@ struct Curl_share {
   curl_lock_function lockfunc;
   curl_unlock_function unlockfunc;
   void *clientdata;
-  struct conncache conn_cache;
+  struct conncache conn_cache; 
   struct Curl_hash hostcache;
 #if !defined(CURL_DISABLE_HTTP) && !defined(CURL_DISABLE_COOKIES)
   struct CookieInfo *cookies;
 #endif
-#ifdef USE_LIBPSL
-  struct PslCache psl;
-#endif
+#ifdef USE_LIBPSL 
+  struct PslCache psl; 
+#endif 
 
   struct Curl_ssl_session *sslsession;
   size_t max_ssl_sessions;
   long sessionage;
 };
 
-CURLSHcode Curl_share_lock(struct Curl_easy *, curl_lock_data,
-                           curl_lock_access);
-CURLSHcode Curl_share_unlock(struct Curl_easy *, curl_lock_data);
+CURLSHcode Curl_share_lock(struct Curl_easy *, curl_lock_data, 
+                           curl_lock_access); 
+CURLSHcode Curl_share_unlock(struct Curl_easy *, curl_lock_data); 
 
 #endif /* HEADER_CURL_SHARE_H */

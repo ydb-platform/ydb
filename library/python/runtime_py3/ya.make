@@ -22,12 +22,12 @@ ENABLE(PYBUILD_NO_PYC)
 
 PY_SRCS(
     entry_points.py
-    TOP_LEVEL
+    TOP_LEVEL 
 
     CYTHON_DIRECTIVE
     language_level=3
 
-    __res.pyx
+    __res.pyx 
     sitecustomize.pyx
 )
 

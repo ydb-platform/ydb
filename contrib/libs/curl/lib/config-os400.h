@@ -172,15 +172,15 @@
 /* Define if you have GSS API. */
 #define HAVE_GSSAPI
 
-/* Define if you have the GNU gssapi libraries */
-#undef HAVE_GSSGNU
-
-/* Define if you have the Heimdal gssapi libraries */
-#define HAVE_GSSHEIMDAL
-
-/* Define if you have the MIT gssapi libraries */
-#undef HAVE_GSSMIT
-
+/* Define if you have the GNU gssapi libraries */ 
+#undef HAVE_GSSGNU 
+ 
+/* Define if you have the Heimdal gssapi libraries */ 
+#define HAVE_GSSHEIMDAL 
+ 
+/* Define if you have the MIT gssapi libraries */ 
+#undef HAVE_GSSMIT 
+ 
 /* Define if you have the `ucb' library (-lucb). */
 #undef HAVE_LIBUCB
 
@@ -400,15 +400,15 @@
 /* The size of `short', as computed by sizeof. */
 #define SIZEOF_SHORT            2
 
-/* The size of `long', as computed by sizeof. */
-#define SIZEOF_LONG             4
-
+/* The size of `long', as computed by sizeof. */ 
+#define SIZEOF_LONG             4 
+ 
 /* The size of `size_t', as computed by sizeof. */
-#define SIZEOF_SIZE_T           4
+#define SIZEOF_SIZE_T           4 
 
-/* The size of `curl_off_t', as computed by sizeof. */
-#define SIZEOF_CURL_OFF_T       8
-
+/* The size of `curl_off_t', as computed by sizeof. */ 
+#define SIZEOF_CURL_OFF_T       8 
+ 
 /* Whether long long constants must be suffixed by LL. */
 
 #define HAVE_LL
@@ -544,14 +544,14 @@
 #define SEND_TYPE_RETV int
 
 /* Define to use the GSKit package. */
-#define USE_GSKIT
+#define USE_GSKIT 
 
-/* Define to use the OS/400 crypto library. */
-#define USE_OS400CRYPTO
-
-/* Define to use Unix sockets. */
-#define USE_UNIX_SOCKETS
-
+/* Define to use the OS/400 crypto library. */ 
+#define USE_OS400CRYPTO 
+ 
+/* Define to use Unix sockets. */ 
+#define USE_UNIX_SOCKETS 
+ 
 /* Use the system keyring as the default CA bundle. */
 #define CURL_CA_BUNDLE  "/QIBM/UserData/ICSS/Cert/Server/DEFAULT.KDB"
 

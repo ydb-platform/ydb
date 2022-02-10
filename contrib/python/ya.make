@@ -60,9 +60,9 @@ RECURSE(
     apsw
     aresponses
     argcomplete
-    argon2-cffi
+    argon2-cffi 
     argon2-cffi-bindings
-    argparse-addons
+    argparse-addons 
     arq
     arrow
     asciitree
@@ -80,7 +80,7 @@ RECURSE(
     asyncssh
     asynctest
     asyncwhois
-    atomicwrites
+    atomicwrites 
     atpublic
     AttrDict
     attrs
@@ -107,7 +107,7 @@ RECURSE(
     betamax-serializers
     billiard
     binaryornot
-    bincopy
+    bincopy 
     biplist
     bitarray
     black
@@ -251,7 +251,7 @@ RECURSE(
     django-extensions
     django-fernet-fields
     django-filebrowser-no-grappelli
-    django-filter
+    django-filter 
     django-fsm
     django-grappelli
     django-guardian
@@ -278,7 +278,7 @@ RECURSE(
     django-partial-index
     django-pdb
     django-phonenumbers
-    django-picklefield
+    django-picklefield 
     django-post-office
     django-postgrespool2
     django-proxy-storage
@@ -301,7 +301,7 @@ RECURSE(
     django-test-migrations
     django-timezone-field
     django-treebeard
-    django-waffle
+    django-waffle 
     django-webpack-loader
     django-webtest
     django-whatever
@@ -314,7 +314,7 @@ RECURSE(
     djangorestframework-xml
     dm.xmlsec.binding
     dnspython
-    docker
+    docker 
     docopt
     docstring-parser
     docutils
@@ -632,7 +632,7 @@ RECURSE(
     mongolock
     mongomock
     monotonic
-    more-itertools
+    more-itertools 
     moto
     moto/standalone
     motor
@@ -746,7 +746,7 @@ RECURSE(
     platformdirs
     plotly
     plotly/_plotly_utils
-    pluggy
+    pluggy 
     plugincode
     plumbum
     ply
@@ -818,7 +818,7 @@ RECURSE(
     pygit2
     PyGithub
     Pygments
-    pygrib
+    pygrib 
     pygtrie
     PyHamcrest
     pyjavaproperties
@@ -844,7 +844,7 @@ RECURSE(
     PyPDF2
     pyperclip
     PyPika
-    pyproj
+    pyproj 
     pyre2
     pyrepl
     pyresample
@@ -1035,7 +1035,7 @@ RECURSE(
     starlette
     statsd
     statsmodels
-    stevedore
+    stevedore 
     StrEnum
     structlog
     subprocess32

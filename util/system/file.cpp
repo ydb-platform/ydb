@@ -432,12 +432,12 @@ bool TFileHandle::Flush() noexcept {
      * (PIPE, FIFO, or socket) which does not support synchronization.
      * Fail in case of EIO, ENOSPC, EDQUOT - data might be lost.
      */
-    return ret == 0 || errno == EROFS || errno == EINVAL
+    return ret == 0 || errno == EROFS || errno == EINVAL 
     #if defined(_darwin_)
            // ENOTSUP fd does not refer to a vnode
            || errno == ENOTSUP
     #endif
-        ;
+        ; 
 #else
     #error unsupported platform
 #endif

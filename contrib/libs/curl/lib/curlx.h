@@ -34,8 +34,8 @@
    functions while they still are offered publicly. They will be made library-
    private one day */
 
-#include "strcase.h"
-/* "strcase.h" provides the strcasecompare protos */
+#include "strcase.h" 
+/* "strcase.h" provides the strcasecompare protos */ 
 
 #include "strtoofft.h"
 /* "strtoofft.h" provides this function: curlx_strtoofft(), returns a
@@ -70,8 +70,8 @@
    be removed from a future libcurl official API:
    curlx_getenv
    curlx_mprintf (and its variations)
-   curlx_strcasecompare
-   curlx_strncasecompare
+   curlx_strcasecompare 
+   curlx_strncasecompare 
 
 */
 
@@ -90,25 +90,25 @@
 #ifdef ENABLE_CURLX_PRINTF
 /* If this define is set, we define all "standard" printf() functions to use
    the curlx_* version instead. It makes the source code transparent and
-   easier to understand/patch. Undefine them first. */
+   easier to understand/patch. Undefine them first. */ 
 # undef printf
 # undef fprintf
 # undef sprintf
-# undef msnprintf
+# undef msnprintf 
 # undef vprintf
 # undef vfprintf
 # undef vsprintf
-# undef mvsnprintf
+# undef mvsnprintf 
 # undef aprintf
 # undef vaprintf
 
 # define printf curlx_mprintf
 # define fprintf curlx_mfprintf
 # define sprintf curlx_msprintf
-# define msnprintf curlx_msnprintf
+# define msnprintf curlx_msnprintf 
 # define vprintf curlx_mvprintf
 # define vfprintf curlx_mvfprintf
-# define mvsnprintf curlx_mvsnprintf
+# define mvsnprintf curlx_mvsnprintf 
 # define aprintf curlx_maprintf
 # define vaprintf curlx_mvaprintf
 #endif /* ENABLE_CURLX_PRINTF */

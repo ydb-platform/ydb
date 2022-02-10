@@ -8,7 +8,7 @@ OWNER(
 PY_SRCS(
     __init__.py
     main.py
-    rewrite.py
+    rewrite.py 
     yatest_tools.py
     context.py
 )

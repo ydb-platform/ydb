@@ -33,7 +33,7 @@ struct FormInfo {
   size_t namelength;
   char *value;
   bool value_alloc;
-  curl_off_t contentslength;
+  curl_off_t contentslength; 
   char *contenttype;
   bool contenttype_alloc;
   long flags;
@@ -43,14 +43,14 @@ struct FormInfo {
                          file name will be used */
   bool showfilename_alloc;
   char *userp;        /* pointer for the read callback */
-  struct curl_slist *contentheader;
+  struct curl_slist *contentheader; 
   struct FormInfo *more;
 };
 
-CURLcode Curl_getformdata(struct Curl_easy *data,
-                          curl_mimepart *,
+CURLcode Curl_getformdata(struct Curl_easy *data, 
+                          curl_mimepart *, 
                           struct curl_httppost *post,
-                          curl_read_callback fread_func);
+                          curl_read_callback fread_func); 
 #else
 /* disabled */
 #define Curl_getformdata(a,b,c,d) CURLE_NOT_BUILT_IN

@@ -15,7 +15,7 @@ namespace NUnitTest {
                 if (!CheckAccessTest(i->Name_)) {
                     continue;
                 }
-                TTestContext context(this->Processor());
+                TTestContext context(this->Processor()); 
                 try {
                     BeforeTest(i->Name_);
                     {

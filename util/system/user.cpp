@@ -46,12 +46,12 @@ TString GetUsername() {
         passwd pwd;
         passwd* tmpPwd;
         int err = getpwuid_r(geteuid(), &pwd, nameBuf.Data(), nameBuf.Size(), &tmpPwd);
-        if (err == 0 && tmpPwd) {
-            return TString(pwd.pw_name);
-        } else if (err == ERANGE) {
-            nameBuf = TTempBuf(nameBuf.Size() * 2);
+        if (err == 0 && tmpPwd) { 
+            return TString(pwd.pw_name); 
+        } else if (err == ERANGE) { 
+            nameBuf = TTempBuf(nameBuf.Size() * 2); 
         } else {
-            ythrow TSystemError(err) << " getpwuid_r failed";
+            ythrow TSystemError(err) << " getpwuid_r failed"; 
         }
 #endif
     }

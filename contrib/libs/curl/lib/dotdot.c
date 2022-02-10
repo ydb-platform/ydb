@@ -22,22 +22,22 @@
 
 #include "curl_setup.h"
 
-#include <curl/curl.h>
-
+#include <curl/curl.h> 
+ 
 #include "dotdot.h"
-#include "curl_memory.h"
+#include "curl_memory.h" 
 
 /* The last #include file should be: */
 #include "memdebug.h"
 
 /*
  * "Remove Dot Segments"
- * https://tools.ietf.org/html/rfc3986#section-5.2.4
+ * https://tools.ietf.org/html/rfc3986#section-5.2.4 
  */
 
 /*
  * Curl_dedotdotify()
- * @unittest: 1395
+ * @unittest: 1395 
  *
  * This function gets a null-terminated path with dot and dotdot sequences
  * passed in and strips them off according to the rules in RFC 3986 section
@@ -50,12 +50,12 @@
  *
  * an allocated dedotdotified output string
  */
-char *Curl_dedotdotify(const char *input)
+char *Curl_dedotdotify(const char *input) 
 {
   size_t inlen = strlen(input);
   char *clone;
   size_t clen = inlen; /* the length of the cloned input */
-  char *out = malloc(inlen + 1);
+  char *out = malloc(inlen + 1); 
   char *outptr;
   char *orgclone;
   char *queryp;
@@ -63,7 +63,7 @@ char *Curl_dedotdotify(const char *input)
     return NULL; /* out of memory */
 
   *out = 0; /* null-terminates, for inputs like "./" */
-
+ 
   /* get a cloned copy of the input */
   clone = strdup(input);
   if(!clone) {
@@ -73,12 +73,12 @@ char *Curl_dedotdotify(const char *input)
   orgclone = clone;
   outptr = out;
 
-  if(!*clone) {
-    /* zero length string, return that */
-    free(out);
-    return clone;
-  }
-
+  if(!*clone) { 
+    /* zero length string, return that */ 
+    free(out); 
+    return clone; 
+  } 
+ 
   /*
    * To handle query-parts properly, we must find it and remove it during the
    * dotdot-operation and then append it again at the end to the output
@@ -94,25 +94,25 @@ char *Curl_dedotdotify(const char *input)
         remove that prefix from the input buffer; otherwise, */
 
     if(!strncmp("./", clone, 2)) {
-      clone += 2;
-      clen -= 2;
+      clone += 2; 
+      clen -= 2; 
     }
     else if(!strncmp("../", clone, 3)) {
-      clone += 3;
-      clen -= 3;
+      clone += 3; 
+      clen -= 3; 
     }
 
     /*  B.  if the input buffer begins with a prefix of "/./" or "/.", where
         "."  is a complete path segment, then replace that prefix with "/" in
         the input buffer; otherwise, */
     else if(!strncmp("/./", clone, 3)) {
-      clone += 2;
-      clen -= 2;
+      clone += 2; 
+      clen -= 2; 
     }
     else if(!strcmp("/.", clone)) {
       clone[1]='/';
       clone++;
-      clen -= 1;
+      clen -= 1; 
     }
 
     /*  C.  if the input buffer begins with a prefix of "/../" or "/..", where
@@ -121,8 +121,8 @@ char *Curl_dedotdotify(const char *input)
         any) from the output buffer; otherwise, */
 
     else if(!strncmp("/../", clone, 4)) {
-      clone += 3;
-      clen -= 3;
+      clone += 3; 
+      clen -= 3; 
       /* remove the last segment from the output buffer */
       while(outptr > out) {
         outptr--;
@@ -133,8 +133,8 @@ char *Curl_dedotdotify(const char *input)
     }
     else if(!strcmp("/..", clone)) {
       clone[2]='/';
-      clone += 2;
-      clen -= 2;
+      clone += 2; 
+      clen -= 2; 
       /* remove the last segment from the output buffer */
       while(outptr > out) {
         outptr--;
@@ -148,8 +148,8 @@ char *Curl_dedotdotify(const char *input)
         that from the input buffer; otherwise, */
 
     else if(!strcmp(".", clone) || !strcmp("..", clone)) {
-      *clone = 0;
-      *out = 0;
+      *clone = 0; 
+      *out = 0; 
     }
 
     else {
@@ -174,7 +174,7 @@ char *Curl_dedotdotify(const char *input)
        from the correct index. */
     size_t oindex = queryp - orgclone;
     qlen = strlen(&input[oindex]);
-    memcpy(outptr, &input[oindex], qlen + 1); /* include the end zero byte */
+    memcpy(outptr, &input[oindex], qlen + 1); /* include the end zero byte */ 
   }
 
   free(orgclone);

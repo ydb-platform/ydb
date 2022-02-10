@@ -10,9 +10,9 @@ import time
 import urllib2
 import uuid
 
-import fetch_from
+import fetch_from 
 
-
+ 
 ORIGIN_SUFFIX = '?origin=fetch-from-sandbox'
 MDS_PREFIX = 'http://storage-int.mds.yandex.net/get-sandbox/'
 TEMPORARY_ERROR_CODES = (429, 500, 503, 504)
@@ -68,7 +68,7 @@ def download_by_skynet(resource_info, file_name):
     if not skynet_id:
         raise ValueError("Resource does not have skynet_id")
 
-    temp_dir = os.path.abspath(fetch_from.uniq_string_generator())
+    temp_dir = os.path.abspath(fetch_from.uniq_string_generator()) 
     os.mkdir(temp_dir)
     sky_get(skynet_id, temp_dir)
     return os.path.join(temp_dir, file_name)
@@ -132,7 +132,7 @@ def fetch_via_script(script, resource_id):
     return subprocess.check_output([script, str(resource_id)]).rstrip()
 
 
-def fetch(resource_id, custom_fetcher):
+def fetch(resource_id, custom_fetcher): 
     try:
         resource_info = get_resource_info(resource_id, touch=True, no_links=True)
     except Exception as e:
@@ -179,9 +179,9 @@ def fetch(resource_id, custom_fetcher):
             if mds_link is not None:
                 # Don't try too hard here: we will get back to MDS later on
                 yield lambda: fetch_from.fetch_url(mds_link, True, resource_file_name, expected_md5, tries=2)
-        yield lambda: fetch_from.fetch_url(proxy_link, False, resource_file_name, expected_md5)
+        yield lambda: fetch_from.fetch_url(proxy_link, False, resource_file_name, expected_md5) 
         if mds_link is not None:
-            yield lambda: fetch_from.fetch_url(mds_link, True, resource_file_name, expected_md5)
+            yield lambda: fetch_from.fetch_url(mds_link, True, resource_file_name, expected_md5) 
 
     if resource_info.get('attributes', {}).get('ttl') != 'inf':
         sys.stderr.write('WARNING: resource {} ttl is not "inf".\n'.format(resource_id))
@@ -211,7 +211,7 @@ def fetch(resource_id, custom_fetcher):
         else:
             raise Exception("No available protocol and/or server to fetch resource")
 
-    return fetched_file, resource_info['file_name']
+    return fetched_file, resource_info['file_name'] 
 
 
 def _get_resource_info_from_file(resource_file):
@@ -241,7 +241,7 @@ def _get_resource_info_from_file(resource_file):
 
 
 def main(args):
-    custom_fetcher = os.environ.get('YA_CUSTOM_FETCHER')
+    custom_fetcher = os.environ.get('YA_CUSTOM_FETCHER') 
 
     resource_info = _get_resource_info_from_file(args.resource_file)
     if resource_info:
@@ -252,8 +252,8 @@ def main(args):
         fetched_file, file_name = fetch(args.resource_id, custom_fetcher)
 
     fetch_from.process(fetched_file, file_name, args, remove=not custom_fetcher and not resource_info)
-
-
+ 
+ 
 if __name__ == '__main__':
     args = parse_args()
     fetch_from.setup_logging(args, os.path.basename(__file__))

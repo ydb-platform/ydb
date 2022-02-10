@@ -18,14 +18,14 @@ class LoadedModule(_pytest.python.Module):
         self.parent = parent
         self.config = parent.config
         self.keywords = {}
-        self.own_markers = []
+        self.own_markers = [] 
         self.fspath = py.path.local()
 
     @classmethod
     def from_parent(cls, **kwargs):
         namespace = kwargs.pop('namespace', True)
         kwargs.setdefault('fspath', py.path.local())
-
+ 
         loaded_module = getattr(super(LoadedModule, cls), 'from_parent', cls)(**kwargs)
         loaded_module.namespace = namespace
 
@@ -44,7 +44,7 @@ class LoadedModule(_pytest.python.Module):
 
     def _getobj(self):
         module_name = self.name[:-len('.py')]
-        if self.namespace:
+        if self.namespace: 
             module_name = '__tests__.' + module_name
         __import__(module_name)
         return sys.modules[module_name]
@@ -54,13 +54,13 @@ class DoctestModule(LoadedModule):
 
     def collect(self):
         import doctest
-
-        module = self._getobj()
-        # uses internal doctest module parsing mechanism
+ 
+        module = self._getobj() 
+        # uses internal doctest module parsing mechanism 
         finder = doctest.DocTestFinder()
         optionflags = _pytest.doctest.get_optionflags(self)
         runner = doctest.DebugRunner(verbose=0, optionflags=optionflags)
-
+ 
         try:
             for test in finder.find(module, self.name[:-len('.py')]):
                 if test.examples:  # skip empty doctests
@@ -94,9 +94,9 @@ def pytest_ignore_collect(module, session, filenames_from_full_filters, accept_f
 
 
 class CollectionPlugin(object):
-    def __init__(self, test_modules, doctest_modules):
+    def __init__(self, test_modules, doctest_modules): 
         self._test_modules = test_modules
-        self._doctest_modules = doctest_modules
+        self._doctest_modules = doctest_modules 
 
     def pytest_sessionstart(self, session):
 
@@ -124,5 +124,5 @@ class CollectionPlugin(object):
             if os.environ.get('YA_PYTEST_DISABLE_DOCTEST', 'no') == 'no':
                 for doctest_module in self._doctest_modules:
                     yield DoctestModule.from_parent(name=doctest_module, parent=session, namespace=False)
-
+ 
         session.collect = collect

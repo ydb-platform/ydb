@@ -60,23 +60,23 @@ namespace NUnitTest {
     class TAssertException: public yexception {
     };
 
-    class ITestSuiteProcessor;
-
+    class ITestSuiteProcessor; 
+ 
     struct TTestContext {
-        TTestContext()
+        TTestContext() 
             : Processor(nullptr)
         {
-        }
-
-        explicit TTestContext(ITestSuiteProcessor* processor)
+        } 
+ 
+        explicit TTestContext(ITestSuiteProcessor* processor) 
             : Processor(processor)
         {
-        }
-
+        } 
+ 
         using TMetrics = THashMap<TString, double>;
         TMetrics Metrics;
-
-        ITestSuiteProcessor* Processor;
+ 
+        ITestSuiteProcessor* Processor; 
     };
 
     class ITestSuiteProcessor {
@@ -307,22 +307,22 @@ private:                                                   \
         this->TTestBase::Run(std::bind(&T##F##Caller::X, this, context), StaticName(), (#F), FF); \
     }
 
-#define UNIT_TEST_IMPL(F, FF)                                          \
-    UNIT_TEST_CHECK_TEST_IS_DECLARED_ONLY_ONCE(F) {                    \
-        NUnitTest::TTestContext context(this->TTestBase::Processor()); \
-        if (this->CheckAccessTest((#F))) {                             \
-            try {                                                      \
-                UNIT_TEST_RUN(F, FF, context)                          \
-            } catch (const ::NUnitTest::TAssertException&) {           \
-            } catch (const yexception& e) {                            \
-                CATCH_REACTION_BT((#F), e, &context);                  \
-            } catch (const std::exception& e) {                        \
-                CATCH_REACTION((#F), e, &context);                     \
-            } catch (...) {                                            \
-                this->AddError("non-std exception!", &context);        \
-            }                                                          \
-            this->Finish((#F), &context);                              \
-        }                                                              \
+#define UNIT_TEST_IMPL(F, FF)                                          \ 
+    UNIT_TEST_CHECK_TEST_IS_DECLARED_ONLY_ONCE(F) {                    \ 
+        NUnitTest::TTestContext context(this->TTestBase::Processor()); \ 
+        if (this->CheckAccessTest((#F))) {                             \ 
+            try {                                                      \ 
+                UNIT_TEST_RUN(F, FF, context)                          \ 
+            } catch (const ::NUnitTest::TAssertException&) {           \ 
+            } catch (const yexception& e) {                            \ 
+                CATCH_REACTION_BT((#F), e, &context);                  \ 
+            } catch (const std::exception& e) {                        \ 
+                CATCH_REACTION((#F), e, &context);                     \ 
+            } catch (...) {                                            \ 
+                this->AddError("non-std exception!", &context);        \ 
+            }                                                          \ 
+            this->Finish((#F), &context);                              \ 
+        }                                                              \ 
     }
 
 #define UNIT_TEST(F) UNIT_TEST_IMPL(F, false)
@@ -335,7 +335,7 @@ private:                                                   \
         UNIT_TEST_IMPL(F, false);                                                                                      \
         /* forked process (or main without "--fork-tests") treats some exceptions as success - it's exception test! */ \
     } else {                                                                                                           \
-        NUnitTest::TTestContext context(this->TTestBase::Processor());                                                 \
+        NUnitTest::TTestContext context(this->TTestBase::Processor());                                                 \ 
         if (this->CheckAccessTest((#F))) {                                                                             \
             try {                                                                                                      \
                 UNIT_TEST_RUN(F, false, context)                                                                       \
@@ -752,7 +752,7 @@ public:                       \
 
 #define UNIT_ASSERT_TEST_FAILS(A) UNIT_ASSERT_TEST_FAILS_C(A, "")
 
-#define UNIT_ADD_METRIC(name, value) ut_context.Metrics[name] = value
+#define UNIT_ADD_METRIC(name, value) ut_context.Metrics[name] = value 
 
     class TTestFactory {
         friend class TTestBase;
@@ -953,7 +953,7 @@ public:                       \
                     if (!this->CheckAccessTest(i->Name_)) {                                                             \
                         continue;                                                                                       \
                     }                                                                                                   \
-                    NUnitTest::TTestContext context(this->TTestBase::Processor());                                      \
+                    NUnitTest::TTestContext context(this->TTestBase::Processor());                                      \ 
                     try {                                                                                               \
                         this->BeforeTest(i->Name_);                                                                     \
                         {                                                                                               \
@@ -1009,7 +1009,7 @@ public:                       \
 
 #define Y_UNIT_TEST_IMPL(N, FF, F)      \
     Y_UNIT_TEST_IMPL_REGISTER(N, FF, F) \
-    void TTestCase##N::Execute_(NUnitTest::TTestContext& ut_context Y_DECLARE_UNUSED)
+    void TTestCase##N::Execute_(NUnitTest::TTestContext& ut_context Y_DECLARE_UNUSED) 
 
 #define Y_UNIT_TEST(N) Y_UNIT_TEST_IMPL(N, false, TCurrentTestCase)
 #define Y_UNIT_TEST_F(N, F) Y_UNIT_TEST_IMPL(N, false, F)

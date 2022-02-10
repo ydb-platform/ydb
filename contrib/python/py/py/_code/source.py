@@ -193,8 +193,8 @@ class Source(object):
             if flag & _AST_FLAG:
                 return co
             lines = [(x + "\n") for x in self.lines]
-            import linecache
-            linecache.cache[filename] = (1, None, lines, filename)
+            import linecache 
+            linecache.cache[filename] = (1, None, lines, filename) 
             return co
 
 #
@@ -225,8 +225,8 @@ def getfslineno(obj):
         code = py.code.Code(obj)
     except TypeError:
         try:
-            fn = (inspect.getsourcefile(obj) or
-                  inspect.getfile(obj))
+            fn = (inspect.getsourcefile(obj) or 
+                  inspect.getfile(obj)) 
         except TypeError:
             return "", -1
 
@@ -249,7 +249,7 @@ def getfslineno(obj):
 
 def findsource(obj):
     try:
-        sourcelines, lineno = inspect.findsource(obj)
+        sourcelines, lineno = inspect.findsource(obj) 
     except py.builtin._sysex:
         raise
     except:

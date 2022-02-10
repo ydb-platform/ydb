@@ -30,7 +30,7 @@ PY_SRCS(
     py/_code/source.py
     py/_error.py
     py/_io/__init__.py
-    py/_io/capture.py
+    py/_io/capture.py 
     py/_io/saferepr.py
     py/_io/terminalwriter.py
     py/_log/__init__.py
@@ -47,12 +47,12 @@ PY_SRCS(
     py/_process/forkedfunc.py
     py/_process/killproc.py
     py/_std.py
-    py/_vendored_packages/__init__.py
+    py/_vendored_packages/__init__.py 
     py/_vendored_packages/apipkg/__init__.py
     py/_vendored_packages/apipkg/version.py
     py/_vendored_packages/iniconfig/__init__.py
     py/_vendored_packages/iniconfig/__init__.pyi
-    py/_version.py
+    py/_version.py 
     py/_xmlgen.py
     py/error.pyi
     py/iniconfig.pyi

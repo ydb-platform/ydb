@@ -1,21 +1,21 @@
-/*
+/* 
  * Copyright 2017-2019 The OpenSSL Project Authors. All Rights Reserved.
- * Copyright 2015-2016 Cryptography Research, Inc.
- *
- * Licensed under the OpenSSL license (the "License").  You may not use
- * this file except in compliance with the License.  You can obtain a copy
- * in the file LICENSE in the source distribution or at
- * https://www.openssl.org/source/license.html
- *
- * Originally written by Mike Hamburg
- */
-#include "field.h"
-
-#include "point_448.h"
-
-static const curve448_precomputed_s curve448_precomputed_base_table = {
-    {
-        {{
+ * Copyright 2015-2016 Cryptography Research, Inc. 
+ * 
+ * Licensed under the OpenSSL license (the "License").  You may not use 
+ * this file except in compliance with the License.  You can obtain a copy 
+ * in the file LICENSE in the source distribution or at 
+ * https://www.openssl.org/source/license.html 
+ * 
+ * Originally written by Mike Hamburg 
+ */ 
+#include "field.h" 
+ 
+#include "point_448.h" 
+ 
+static const curve448_precomputed_s curve448_precomputed_base_table = { 
+    { 
+        {{ 
             {FIELD_LITERAL(0x00cc3b062366f4ccULL, 0x003d6e34e314aa3cULL,
                            0x00d51c0a7521774dULL, 0x0094e060eec6ab8bULL,
                            0x00d21291b4d80082ULL, 0x00befed12b55ef1eULL,
@@ -28,7 +28,7 @@ static const curve448_precomputed_s curve448_precomputed_base_table = {
                            0x00b3295b95a5a19aULL, 0x00a65f97514bdfb5ULL,
                            0x00b39efba743cab1ULL, 0x0016ba98b862fd2dULL,
                            0x0001508812ee71d7ULL, 0x000a75740eea114aULL)},
-        }}, {{
+        }}, {{ 
             {FIELD_LITERAL(0x00ebcf0eb649f823ULL, 0x00166d332e98ea03ULL,
                            0x0059ddf64f5cd5f6ULL, 0x0047763123d9471bULL,
                            0x00a64065c53ef62fULL, 0x00978e44c480153dULL,
@@ -41,7 +41,7 @@ static const curve448_precomputed_s curve448_precomputed_base_table = {
                            0x000cbb4371cfbe90ULL, 0x0059bac8f7f0a628ULL,
                            0x004b3dff882ff530ULL, 0x0011869df4d90733ULL,
                            0x00595aa71f4abfc2ULL, 0x0070e2d38990c2e6ULL)},
-        }}, {{
+        }}, {{ 
             {FIELD_LITERAL(0x00de2010c0a01733ULL, 0x00c739a612e24297ULL,
                            0x00a7212643141d7cULL, 0x00f88444f6b67c11ULL,
                            0x00484b7b16ec28f2ULL, 0x009c1b8856af9c68ULL,
@@ -54,7 +54,7 @@ static const curve448_precomputed_s curve448_precomputed_base_table = {
                            0x0015b0def7774391ULL, 0x00bc164f1f51af01ULL,
                            0x00d543b0942797b9ULL, 0x003c129b6398099cULL,
                            0x002b114c6e5adf18ULL, 0x00b4e630e4018a7bULL)},
-        }}, {{
+        }}, {{ 
             {FIELD_LITERAL(0x00d490afc95f8420ULL, 0x00b096bf50c1d9b9ULL,
                            0x00799fd707679866ULL, 0x007c74d9334afbeaULL,
                            0x00efaa8be80ff4edULL, 0x0075c4943bb81694ULL,
@@ -67,7 +67,7 @@ static const curve448_precomputed_s curve448_precomputed_base_table = {
                            0x00bcbf0ff4ceff5bULL, 0x00a19c1c94099b91ULL,
                            0x0071e102b49db976ULL, 0x0059e3d004eada1eULL,
                            0x008da78afa58a47eULL, 0x00579c8ebf269187ULL)},
-        }}, {{
+        }}, {{ 
             {FIELD_LITERAL(0x00a16c2905eee75fULL, 0x009d4bcaea2c7e1dULL,
                            0x00d3bd79bfad19dfULL, 0x0050da745193342cULL,
                            0x006abdb8f6b29ab1ULL, 0x00a24fe0a4fef7efULL,
@@ -80,7 +80,7 @@ static const curve448_precomputed_s curve448_precomputed_base_table = {
                            0x00c8712ae7eebd9aULL, 0x000fbd6c1d5f6ff7ULL,
                            0x003a7977246ebf11ULL, 0x00166ed969c6600eULL,
                            0x00aa42e469c98becULL, 0x00dc58f307cf0666ULL)},
-        }}, {{
+        }}, {{ 
             {FIELD_LITERAL(0x004b491f65a9a28bULL, 0x006a10309e8a55b7ULL,
                            0x00b67210185187efULL, 0x00cf6497b12d9b8fULL,
                            0x0085778c56e2b1baULL, 0x0015b4c07a814d85ULL,
@@ -93,7 +93,7 @@ static const curve448_precomputed_s curve448_precomputed_base_table = {
                            0x006029f99915bd97ULL, 0x006a5ba70a17fe2fULL,
                            0x0046111977df7e08ULL, 0x004d8124c89fb6b7ULL,
                            0x00580983b2bb2724ULL, 0x00207bf330d6f3feULL)},
-        }}, {{
+        }}, {{ 
             {FIELD_LITERAL(0x007efdc93972a48bULL, 0x002f5e50e78d5feeULL,
                            0x0080dc11d61c7fe5ULL, 0x0065aa598707245bULL,
                            0x009abba2300641beULL, 0x000c68787656543aULL,
@@ -106,7 +106,7 @@ static const curve448_precomputed_s curve448_precomputed_base_table = {
                            0x009582164acf12afULL, 0x00af4acac4fbbe40ULL,
                            0x005f6ca7c539121aULL, 0x003b6e752ebf9d66ULL,
                            0x00f08a30d5cac5d4ULL, 0x00e399bb5f97c5a9ULL)},
-        }}, {{
+        }}, {{ 
             {FIELD_LITERAL(0x007445a0409c0a66ULL, 0x00a65c369f3829c0ULL,
                            0x0031d248a4f74826ULL, 0x006817f34defbe8eULL,
                            0x00649741d95ebf2eULL, 0x00d46466ab16b397ULL,
@@ -119,7 +119,7 @@ static const curve448_precomputed_s curve448_precomputed_base_table = {
                            0x00a6d72c21dd505dULL, 0x001b832642424169ULL,
                            0x00a6813017b540e5ULL, 0x00a744bd71b385cdULL,
                            0x0022a7d089130a7bULL, 0x004edeec9a133486ULL)},
-        }}, {{
+        }}, {{ 
             {FIELD_LITERAL(0x00b2d6729196e8a9ULL, 0x0088a9bb2031cef4ULL,
                            0x00579e7787dc1567ULL, 0x0030f49feb059190ULL,
                            0x00a0b1d69c7f7d8fULL, 0x0040bdcc6d9d806fULL,
@@ -132,7 +132,7 @@ static const curve448_precomputed_s curve448_precomputed_base_table = {
                            0x00f586a70390553dULL, 0x0075b3229f583cc3ULL,
                            0x00a1aa78227490e4ULL, 0x001bf09cf7957717ULL,
                            0x00cf6bf344325f52ULL, 0x0065bd1c23ca3ecfULL)},
-        }}, {{
+        }}, {{ 
             {FIELD_LITERAL(0x009bff3b3239363cULL, 0x00e17368796ef7c0ULL,
                            0x00528b0fe0971f3aULL, 0x0008014fc8d4a095ULL,
                            0x00d09f2e8a521ec4ULL, 0x006713ab5dde5987ULL,
@@ -145,7 +145,7 @@ static const curve448_precomputed_s curve448_precomputed_base_table = {
                            0x00ef3e38be0c6497ULL, 0x00a9644e1312609aULL,
                            0x004592f61b2558daULL, 0x0082c1df510d7e46ULL,
                            0x0042809a535c0023ULL, 0x00215bcb5afd7757ULL)},
-        }}, {{
+        }}, {{ 
             {FIELD_LITERAL(0x002b9df55a1a4213ULL, 0x00dcfc3b464a26beULL,
                            0x00c4f9e07a8144d5ULL, 0x00c8e0617a92b602ULL,
                            0x008e3c93accafae0ULL, 0x00bf1bcb95b2ca60ULL,
@@ -158,7 +158,7 @@ static const curve448_precomputed_s curve448_precomputed_base_table = {
                            0x001050f1f0644999ULL, 0x004f097a2477ad3cULL,
                            0x006b37913a9947bdULL, 0x001a3d78645af241ULL,
                            0x0057832bbb3008a7ULL, 0x002c1d902b80dc20ULL)},
-        }}, {{
+        }}, {{ 
             {FIELD_LITERAL(0x001a6002bf178877ULL, 0x009bce168aa5af50ULL,
                            0x005fc318ff04a7f5ULL, 0x0052818f55c36461ULL,
                            0x008768f5d4b24afbULL, 0x0037ffbae7b69c85ULL,
@@ -171,7 +171,7 @@ static const curve448_precomputed_s curve448_precomputed_base_table = {
                            0x005594aaecab855bULL, 0x008b12ccaaecbc01ULL,
                            0x002deeb091082bc3ULL, 0x009cca4be2ae7514ULL,
                            0x00142b96e696d047ULL, 0x00ad2a2b1c05256aULL)},
-        }}, {{
+        }}, {{ 
             {FIELD_LITERAL(0x003914f2f144b78bULL, 0x007a95dd8bee6f68ULL,
                            0x00c7f4384d61c8e6ULL, 0x004e51eb60f1bdb2ULL,
                            0x00f64be7aa4621d8ULL, 0x006797bfec2f0ac0ULL,
@@ -184,7 +184,7 @@ static const curve448_precomputed_s curve448_precomputed_base_table = {
                            0x000b68fdad07ae42ULL, 0x0085b909cd4952dfULL,
                            0x0092d2e3c81606f4ULL, 0x009f22f6cac099a0ULL,
                            0x00f59da57f2799a8ULL, 0x00f06c090122f777ULL)},
-        }}, {{
+        }}, {{ 
             {FIELD_LITERAL(0x00ce0bed0a3532bcULL, 0x001a5048a22df16bULL,
                            0x00e31db4cbad8bf1ULL, 0x00e89292120cf00eULL,
                            0x007d1dd1a9b00034ULL, 0x00e2a9041ff8f680ULL,
@@ -197,7 +197,7 @@ static const curve448_precomputed_s curve448_precomputed_base_table = {
                            0x00c8129ad89e4314ULL, 0x000e3d5a23922dcdULL,
                            0x00d91e46f29c31f3ULL, 0x006c728cde8c5947ULL,
                            0x002bc655ba2566c0ULL, 0x002ca94721533108ULL)},
-        }}, {{
+        }}, {{ 
             {FIELD_LITERAL(0x0051e4b3f764d8a9ULL, 0x0019792d46e904a0ULL,
                            0x00853bc13dbc8227ULL, 0x000840208179f12dULL,
                            0x0068243474879235ULL, 0x0013856fbfe374d0ULL,
@@ -210,7 +210,7 @@ static const curve448_precomputed_s curve448_precomputed_base_table = {
                            0x00f74285983bf2b2ULL, 0x00624138b5b5d0f1ULL,
                            0x008820c0b03d38bfULL, 0x00b94e50a18c1572ULL,
                            0x0060f6934841798fULL, 0x00c52f5d66d6ebe2ULL)},
-        }}, {{
+        }}, {{ 
             {FIELD_LITERAL(0x00da23d59f9bcea6ULL, 0x00e0f27007a06a4bULL,
                            0x00128b5b43a6758cULL, 0x000cf50190fa8b56ULL,
                            0x00fc877aba2b2d72ULL, 0x00623bef52edf53fULL,
@@ -223,7 +223,7 @@ static const curve448_precomputed_s curve448_precomputed_base_table = {
                            0x00183ea4368e9b8fULL, 0x00b0815662affc96ULL,
                            0x00b466a5e7ce7c88ULL, 0x00db93b07506e6eeULL,
                            0x0033885f82f62401ULL, 0x0086f9090ec9b419ULL)},
-        }}, {{
+        }}, {{ 
             {FIELD_LITERAL(0x00d95d1c5fcb435aULL, 0x0016d1ed6b5086f9ULL,
                            0x00792aa0b7e54d71ULL, 0x0067b65715f1925dULL,
                            0x00a219755ec6176bULL, 0x00bc3f026b12c28fULL,
@@ -236,7 +236,7 @@ static const curve448_precomputed_s curve448_precomputed_base_table = {
                            0x007ea51794706ef4ULL, 0x00abeb04da6e3c39ULL,
                            0x006b457c1d281060ULL, 0x00fe243e9a66c793ULL,
                            0x00378de0fb6c6ee4ULL, 0x003e4194b9c3cb93ULL)},
-        }}, {{
+        }}, {{ 
             {FIELD_LITERAL(0x00fed3cd80ca2292ULL, 0x0015b043a73ca613ULL,
                            0x000a9fd7bf9be227ULL, 0x003b5e03de2db983ULL,
                            0x005af72d46904ef7ULL, 0x00c0f1b5c49faa99ULL,
@@ -249,7 +249,7 @@ static const curve448_precomputed_s curve448_precomputed_base_table = {
                            0x00bcf1c8cd81402bULL, 0x0056dbb81a68f5beULL,
                            0x0014eced83f12452ULL, 0x00139e1a510150dfULL,
                            0x00bb81140a82d1a3ULL, 0x000febcc1aaf1aa7ULL)},
-        }}, {{
+        }}, {{ 
             {FIELD_LITERAL(0x00a7527958238159ULL, 0x0013ec9537a84cd6ULL,
                            0x001d7fee7d562525ULL, 0x00b9eefa6191d5e5ULL,
                            0x00dbc97db70bcb8aULL, 0x00481affc7a4d395ULL,
@@ -262,7 +262,7 @@ static const curve448_precomputed_s curve448_precomputed_base_table = {
                            0x00c118d1b555fd80ULL, 0x0082e216c732f22aULL,
                            0x00cd2a2993089504ULL, 0x003638e836a3e13dULL,
                            0x000d855ee89b4729ULL, 0x008ec5b7d4810c91ULL)},
-        }}, {{
+        }}, {{ 
             {FIELD_LITERAL(0x001bf51f7d65cdfdULL, 0x00d14cdafa16a97dULL,
                            0x002c38e60fcd10e7ULL, 0x00a27446e393efbdULL,
                            0x000b5d8946a71fddULL, 0x0063df2cde128f2fULL,
@@ -275,7 +275,7 @@ static const curve448_precomputed_s curve448_precomputed_base_table = {
                            0x002c512ad1d8e726ULL, 0x00047611f669318dULL,
                            0x009e68fba591e17eULL, 0x004320dffa803906ULL,
                            0x00a640874951a3d3ULL, 0x00b6353478baa24fULL)},
-        }}, {{
+        }}, {{ 
             {FIELD_LITERAL(0x009696510000d333ULL, 0x00ec2f788bc04826ULL,
                            0x000e4d02b1f67ba5ULL, 0x00659aa8dace08b6ULL,
                            0x00d7a38a3a3ae533ULL, 0x008856defa8c746bULL,
@@ -288,7 +288,7 @@ static const curve448_precomputed_s curve448_precomputed_base_table = {
                            0x00fa50b16ca3e471ULL, 0x005a0e58e17488c8ULL,
                            0x00b2ceccd6d34d19ULL, 0x00f01d5d235e36e9ULL,
                            0x00db2e7e4be6ca44ULL, 0x00260ab77f35fccdULL)},
-        }}, {{
+        }}, {{ 
             {FIELD_LITERAL(0x006f6fd9baac61d5ULL, 0x002a7710a020a895ULL,
                            0x009de0db7fc03d4dULL, 0x00cdedcb1875f40bULL,
                            0x00050caf9b6b1e22ULL, 0x005e3a6654456ab0ULL,
@@ -301,7 +301,7 @@ static const curve448_precomputed_s curve448_precomputed_base_table = {
                            0x006894a4b2f224a6ULL, 0x005bdd8192b9dbdeULL,
                            0x00b38839874b3a9eULL, 0x00f93618b04b7a57ULL,
                            0x003e3ec75fd2c67eULL, 0x00bf5e6bfc29494aULL)},
-        }}, {{
+        }}, {{ 
             {FIELD_LITERAL(0x00f19224ebba2aa5ULL, 0x0074f89d358e694dULL,
                            0x00eea486597135adULL, 0x0081579a4555c7e1ULL,
                            0x0010b9b872930a9dULL, 0x00f002e87a30ecc0ULL,
@@ -314,7 +314,7 @@ static const curve448_precomputed_s curve448_precomputed_base_table = {
                            0x0042922e55940163ULL, 0x005e7fc5601886a3ULL,
                            0x00e88f2cee1d3103ULL, 0x00e7fab135f2e377ULL,
                            0x00b059984dbf0dedULL, 0x0009ce080faa5bb8ULL)},
-        }}, {{
+        }}, {{ 
             {FIELD_LITERAL(0x0085e78af7758979ULL, 0x00275a4ee1631a3aULL,
                            0x00d26bc0ed78b683ULL, 0x004f8355ea21064fULL,
                            0x00d618e1a32696e5ULL, 0x008d8d7b150e5680ULL,
@@ -327,7 +327,7 @@ static const curve448_precomputed_s curve448_precomputed_base_table = {
                            0x00de85c60d32355dULL, 0x0087d2e3565102f4ULL,
                            0x00cde391b8dfc9aaULL, 0x00e18d69efdfefe5ULL,
                            0x004a9d0591954e91ULL, 0x00fa36dd8b50eee5ULL)},
-        }}, {{
+        }}, {{ 
             {FIELD_LITERAL(0x002e788749a865f7ULL, 0x006e4dc3116861eaULL,
                            0x009f1428c37276e6ULL, 0x00e7d2e0fc1e1226ULL,
                            0x003aeebc6b6c45f6ULL, 0x0071a8073bf500c9ULL,
@@ -340,7 +340,7 @@ static const curve448_precomputed_s curve448_precomputed_base_table = {
                            0x00a620ac71c760bfULL, 0x009532b611158b75ULL,
                            0x00547ed7f466f300ULL, 0x003cb5ab53a8401aULL,
                            0x00c7763168ce3120ULL, 0x007e48e33e4b9ab2ULL)},
-        }}, {{
+        }}, {{ 
             {FIELD_LITERAL(0x001b2fc57bf3c738ULL, 0x006a3f918993fb80ULL,
                            0x0026f7a14fdec288ULL, 0x0075a2cdccef08dbULL,
                            0x00d3ecbc9eecdbf1ULL, 0x0048c40f06e5bf7fULL,
@@ -353,7 +353,7 @@ static const curve448_precomputed_s curve448_precomputed_base_table = {
                            0x007692b4cc5a080fULL, 0x009fd4a47ac9259fULL,
                            0x001eeddf7d45928bULL, 0x003c0446fc45f28bULL,
                            0x002c0713aa3e2507ULL, 0x0095706935f0f41eULL)},
-        }}, {{
+        }}, {{ 
             {FIELD_LITERAL(0x00766ae4190ec6d8ULL, 0x0065768cabc71380ULL,
                            0x00b902598416cdc2ULL, 0x00380021ad38df52ULL,
                            0x008f0b89d6551134ULL, 0x004254d4cc62c5a5ULL,
@@ -366,7 +366,7 @@ static const curve448_precomputed_s curve448_precomputed_base_table = {
                            0x009c22475b6f9d67ULL, 0x0024b79dae875f15ULL,
                            0x00616fed3f02c3b0ULL, 0x0000cf39f6af2d3bULL,
                            0x00c46bac0aa9a688ULL, 0x00ab23e2800da204ULL)},
-        }}, {{
+        }}, {{ 
             {FIELD_LITERAL(0x000b3a37617632b0ULL, 0x00597199fe1cfb6cULL,
                            0x0042a7ccdfeafdd6ULL, 0x004cc9f15ebcea17ULL,
                            0x00f436e596a6b4a4ULL, 0x00168861142df0d8ULL,
@@ -379,7 +379,7 @@ static const curve448_precomputed_s curve448_precomputed_base_table = {
                            0x00f95df4974f280bULL, 0x003d8e5ca11aeb51ULL,
                            0x00d4981eb5a70b26ULL, 0x000af9a4f6659f29ULL,
                            0x004598c846faeb43ULL, 0x0049d9a183a47670ULL)},
-        }}, {{
+        }}, {{ 
             {FIELD_LITERAL(0x000a72d23dcb3f1fULL, 0x00a3737f84011727ULL,
                            0x00f870c0fbbf4a47ULL, 0x00a7aadd04b5c9caULL,
                            0x000c7715c67bd072ULL, 0x00015a136afcd74eULL,
@@ -392,7 +392,7 @@ static const curve448_precomputed_s curve448_precomputed_base_table = {
                            0x00851d68220572d5ULL, 0x00557ace1e514d29ULL,
                            0x0031d7c339d91022ULL, 0x00101d0ae2eaceeaULL,
                            0x00246ab3f837b66aULL, 0x00d5216d381ff530ULL)},
-        }}, {{
+        }}, {{ 
             {FIELD_LITERAL(0x0057e7ea35f36daeULL, 0x00f47d7ad15de22eULL,
                            0x00d757ea4b105115ULL, 0x008311457d579d7eULL,
                            0x00b49b75b1edd4ebULL, 0x0081c7ff742fd63aULL,
@@ -405,7 +405,7 @@ static const curve448_precomputed_s curve448_precomputed_base_table = {
                            0x00b3cd2556aeec64ULL, 0x00c0b418267e57a1ULL,
                            0x001799293579bd2eULL, 0x0046ed44590e4d07ULL,
                            0x001d7459b3630a1eULL, 0x00c6afba8b6696aaULL)},
-        }}, {{
+        }}, {{ 
             {FIELD_LITERAL(0x008d6009b26da3f8ULL, 0x00898e88ca06b1caULL,
                            0x00edb22b2ed7fe62ULL, 0x00fbc93516aabe80ULL,
                            0x008b4b470c42ce0dULL, 0x00e0032ba7d0dcbbULL,
@@ -418,7 +418,7 @@ static const curve448_precomputed_s curve448_precomputed_base_table = {
                            0x0048c001f7400bc2ULL, 0x002c21368011958dULL,
                            0x0098a550391e96b5ULL, 0x002d80b66390f379ULL,
                            0x001fa878760cc785ULL, 0x001adfce54b613d5ULL)},
-        }}, {{
+        }}, {{ 
             {FIELD_LITERAL(0x001ed4dc71fa2523ULL, 0x005d0bff19bf9b5cULL,
                            0x00c3801cee065a64ULL, 0x001ed0b504323fbfULL,
                            0x0003ab9fdcbbc593ULL, 0x00df82070178b8d2ULL,
@@ -431,7 +431,7 @@ static const curve448_precomputed_s curve448_precomputed_base_table = {
                            0x002a6c3460dd503aULL, 0x009db1ef11654b54ULL,
                            0x0063e4bf0be79601ULL, 0x00670d34bb2592b9ULL,
                            0x00dcee2f6c4130ceULL, 0x00b2682e88e77f54ULL)},
-        }}, {{
+        }}, {{ 
             {FIELD_LITERAL(0x000d5b4b3da135abULL, 0x00838f3e5064d81dULL,
                            0x00d44eb50f6d94edULL, 0x0008931ab502ac6dULL,
                            0x00debe01ca3d3586ULL, 0x0025c206775f0641ULL,
@@ -444,7 +444,7 @@ static const curve448_precomputed_s curve448_precomputed_base_table = {
                            0x00122765ddd14e42ULL, 0x00f2252904f67157ULL,
                            0x004741965b636f3aULL, 0x006441d296132cb9ULL,
                            0x005e2106f956a5b7ULL, 0x00247029592d335cULL)},
-        }}, {{
+        }}, {{ 
             {FIELD_LITERAL(0x003fe038eb92f894ULL, 0x000e6da1b72e8e32ULL,
                            0x003a1411bfcbe0faULL, 0x00b55d473164a9e4ULL,
                            0x00b9a775ac2df48dULL, 0x0002ddf350659e21ULL,
@@ -457,7 +457,7 @@ static const curve448_precomputed_s curve448_precomputed_base_table = {
                            0x00f746ddd48a5d57ULL, 0x0042f2952b963b7cULL,
                            0x001cbbd6876d5ec2ULL, 0x005e341470bca5c2ULL,
                            0x00871d41e085f413ULL, 0x00e53ab098f45732ULL)},
-        }}, {{
+        }}, {{ 
             {FIELD_LITERAL(0x004d51124797c831ULL, 0x008f5ae3750347adULL,
                            0x0070ced94c1a0c8eULL, 0x00f6db2043898e64ULL,
                            0x000d00c9a5750cd0ULL, 0x000741ec59bad712ULL,
@@ -470,7 +470,7 @@ static const curve448_precomputed_s curve448_precomputed_base_table = {
                            0x002136f97aeb0e73ULL, 0x000cac8268a4afe2ULL,
                            0x0022fd218da471b3ULL, 0x009dcd8dfff8def9ULL,
                            0x00cb9f8181d999bbULL, 0x00143ae56edea349ULL)},
-        }}, {{
+        }}, {{ 
             {FIELD_LITERAL(0x0000623bf87622c5ULL, 0x00a1966fdd069496ULL,
                            0x00c315b7b812f9fcULL, 0x00bdf5efcd128b97ULL,
                            0x001d464f532e3e16ULL, 0x003cd94f081bfd7eULL,
@@ -483,7 +483,7 @@ static const curve448_precomputed_s curve448_precomputed_base_table = {
                            0x004425b5597280edULL, 0x00e7ef5d716c3346ULL,
                            0x0010b53ada410ac8ULL, 0x0092310226060c9bULL,
                            0x0091c26128729c7eULL, 0x0088b42900f8ec3bULL)},
-        }}, {{
+        }}, {{ 
             {FIELD_LITERAL(0x00f1e26e9762d4a8ULL, 0x00d9d74082183414ULL,
                            0x00ffec9bd57a0282ULL, 0x000919e128fd497aULL,
                            0x00ab7ae7d00fe5f8ULL, 0x0054dc442851ff68ULL,
@@ -496,7 +496,7 @@ static const curve448_precomputed_s curve448_precomputed_base_table = {
                            0x00ce4f607d21be98ULL, 0x003ffc084b41df9bULL,
                            0x0043d0bb100502d1ULL, 0x00ec35f575ba3261ULL,
                            0x00ca18f677300ef3ULL, 0x00e8bb0a827d8548ULL)},
-        }}, {{
+        }}, {{ 
             {FIELD_LITERAL(0x00df76b3328ada72ULL, 0x002e20621604a7c2ULL,
                            0x00f910638a105b09ULL, 0x00ef4724d96ef2cdULL,
                            0x00377d83d6b8a2f7ULL, 0x00b4f48805ade324ULL,
@@ -509,7 +509,7 @@ static const curve448_precomputed_s curve448_precomputed_base_table = {
                            0x007633eaf04df19bULL, 0x00aa2d3d77ceab01ULL,
                            0x004a2302fcbb778aULL, 0x00927f225d5afa34ULL,
                            0x004a8e9d5047f237ULL, 0x008224ae9dbce530ULL)},
-        }}, {{
+        }}, {{ 
             {FIELD_LITERAL(0x001cf640859b02f8ULL, 0x00758d1d5d5ce427ULL,
                            0x00763c784ef4604cULL, 0x005fa81aee205270ULL,
                            0x00ac537bfdfc44cbULL, 0x004b919bd342d670ULL,
@@ -522,7 +522,7 @@ static const curve448_precomputed_s curve448_precomputed_base_table = {
                            0x0034f2901cf4662eULL, 0x003b4ae2a67f9834ULL,
                            0x00cca9b96fe94810ULL, 0x00522507ae77abd0ULL,
                            0x00bac7422721e73eULL, 0x0066622b0f3a62b0ULL)},
-        }}, {{
+        }}, {{ 
             {FIELD_LITERAL(0x00f8ac5cf4705b6aULL, 0x00867d82dcb457e3ULL,
                            0x007e13ab2ccc2ce9ULL, 0x009ee9a018d3930eULL,
                            0x008370f8ecb42df8ULL, 0x002d9f019add263eULL,
@@ -535,7 +535,7 @@ static const curve448_precomputed_s curve448_precomputed_base_table = {
                            0x00f27020d90894f4ULL, 0x008d90d52cbd3d7fULL,
                            0x00e1d0137392f3b8ULL, 0x00f017c158b51a8fULL,
                            0x00cac313d3ed7dbcULL, 0x00b99a81e3eb42d3ULL)},
-        }}, {{
+        }}, {{ 
             {FIELD_LITERAL(0x00b54850275fe626ULL, 0x0053a3fd1ec71140ULL,
                            0x00e3d2d7dbe096faULL, 0x00e4ac7b595cce4cULL,
                            0x0077bad449c0a494ULL, 0x00b7c98814afd5b3ULL,
@@ -548,7 +548,7 @@ static const curve448_precomputed_s curve448_precomputed_base_table = {
                            0x006df27c4009f118ULL, 0x00503e9f4e2e8becULL,
                            0x00751a77c82c182dULL, 0x000298937769245bULL,
                            0x00ffb1e8fabf9ee5ULL, 0x0008334706e09abeULL)},
-        }}, {{
+        }}, {{ 
             {FIELD_LITERAL(0x00dbca4e98a7dcd9ULL, 0x00ee29cfc78bde99ULL,
                            0x00e4a3b6995f52e9ULL, 0x0045d70189ae8096ULL,
                            0x00fd2a8a3b9b0d1bULL, 0x00af1793b107d8e1ULL,
@@ -561,7 +561,7 @@ static const curve448_precomputed_s curve448_precomputed_base_table = {
                            0x004f3f56e345b0c7ULL, 0x00f7bf721d5ab8bcULL,
                            0x004313e47b098c50ULL, 0x00e4c7d5c0e1adbbULL,
                            0x002e3e3db365051eULL, 0x00a480c2cd6a96fbULL)},
-        }}, {{
+        }}, {{ 
             {FIELD_LITERAL(0x00417fa30a7119edULL, 0x00af257758419751ULL,
                            0x00d358a487b463d4ULL, 0x0089703cc720b00dULL,
                            0x00ce56314ff7f271ULL, 0x0064db171ade62c1ULL,
@@ -574,7 +574,7 @@ static const curve448_precomputed_s curve448_precomputed_base_table = {
                            0x00b4164cc1730159ULL, 0x004a9f783fe720feULL,
                            0x00a8177b94449dbcULL, 0x0095a24ff49a599fULL,
                            0x0069c1c578250cbcULL, 0x00452019213debf4ULL)},
-        }}, {{
+        }}, {{ 
             {FIELD_LITERAL(0x0021ce99e09ebda3ULL, 0x00fcbd9f91875ad0ULL,
                            0x009bbf6b7b7a0b5fULL, 0x00388886a69b1940ULL,
                            0x00926a56d0f81f12ULL, 0x00e12903c3358d46ULL,
@@ -587,7 +587,7 @@ static const curve448_precomputed_s curve448_precomputed_base_table = {
                            0x0049b3222458fe06ULL, 0x00e7fce73b653a7fULL,
                            0x003ca2ebce60b369ULL, 0x00c5de239a32bea4ULL,
                            0x0063b8b3d71fb6bfULL, 0x0039aeeb78a1a839ULL)},
-        }}, {{
+        }}, {{ 
             {FIELD_LITERAL(0x007dc52da400336cULL, 0x001fded1e15b9457ULL,
                            0x00902e00f5568e3aULL, 0x00219bef40456d2dULL,
                            0x005684161fb3dbc9ULL, 0x004a4e9be49a76eaULL,
@@ -600,7 +600,7 @@ static const curve448_precomputed_s curve448_precomputed_base_table = {
                            0x00c7bf794bb36696ULL, 0x00721ee75097cdc6ULL,
                            0x00f71be9047a2892ULL, 0x00df6ba142564edfULL,
                            0x0069580b7a184e8dULL, 0x00f056e38fca0feeULL)},
-        }}, {{
+        }}, {{ 
             {FIELD_LITERAL(0x009df98566a18c6dULL, 0x00cf3a200968f219ULL,
                            0x0044ba60da6d9086ULL, 0x00dbc9c0e344da03ULL,
                            0x000f9401c4466855ULL, 0x00d46a57c5b0a8d1ULL,
@@ -613,7 +613,7 @@ static const curve448_precomputed_s curve448_precomputed_base_table = {
                            0x00a10df9223c09feULL, 0x00b98a9562e3b154ULL,
                            0x004330b8744c3ed2ULL, 0x00e06812807ec5c4ULL,
                            0x00e4cf6a7db9f1e3ULL, 0x00d95b089f132a34ULL)},
-        }}, {{
+        }}, {{ 
             {FIELD_LITERAL(0x002922b39ca33eecULL, 0x0090d12a5f3ab194ULL,
                            0x00ab60c02fb5f8edULL, 0x00188d292abba1cfULL,
                            0x00e10edec9698f6eULL, 0x0069a4d9934133c8ULL,
@@ -626,7 +626,7 @@ static const curve448_precomputed_s curve448_precomputed_base_table = {
                            0x00116de548b0f7bbULL, 0x0087bd88703affa0ULL,
                            0x0095b2cc34d7fdd2ULL, 0x0084cd81b53f0bc8ULL,
                            0x008562fc995350edULL, 0x00a39abb193651e3ULL)},
-        }}, {{
+        }}, {{ 
             {FIELD_LITERAL(0x0019e23f0474b114ULL, 0x00eb94c2ad3b437eULL,
                            0x006ddb34683b75acULL, 0x00391f9209b564c6ULL,
                            0x00083b3bb3bff7aaULL, 0x00eedcd0f6dceefcULL,
@@ -639,7 +639,7 @@ static const curve448_precomputed_s curve448_precomputed_base_table = {
                            0x0094a7284d9666d6ULL, 0x00bed9022ce7a19dULL,
                            0x00c51553f0cd7682ULL, 0x00c3fb870b124992ULL,
                            0x008d0bc539956c9bULL, 0x00fc8cf258bb8885ULL)},
-        }}, {{
+        }}, {{ 
             {FIELD_LITERAL(0x003667bf998406f8ULL, 0x0000115c43a12975ULL,
                            0x001e662f3b20e8fdULL, 0x0019ffa534cb24ebULL,
                            0x00016be0dc8efb45ULL, 0x00ff76a8b26243f5ULL,
@@ -652,7 +652,7 @@ static const curve448_precomputed_s curve448_precomputed_base_table = {
                            0x00efcde1629170c2ULL, 0x0004225fe91ef535ULL,
                            0x0088049fc73dfda7ULL, 0x004abc74857e1288ULL,
                            0x0024e2434657317cULL, 0x00d98cb3d3e5543cULL)},
-        }}, {{
+        }}, {{ 
             {FIELD_LITERAL(0x00b4b53eab6bdb19ULL, 0x009b22d8b43711d0ULL,
                            0x00d948b9d961785dULL, 0x00cb167b6f279eadULL,
                            0x00191de3a678e1c9ULL, 0x00d9dd9511095c2eULL,
@@ -665,7 +665,7 @@ static const curve448_precomputed_s curve448_precomputed_base_table = {
                            0x0092be7df06dc47cULL, 0x0097cebcd0f5568aULL,
                            0x005a7004d9c4c6a9ULL, 0x00b0ecbb659924c7ULL,
                            0x00d90332dd492a7cULL, 0x0057fc14df11493dULL)},
-        }}, {{
+        }}, {{ 
             {FIELD_LITERAL(0x0008ed8ea0ad95beULL, 0x0041d324b9709645ULL,
                            0x00e25412257a19b4ULL, 0x0058df9f3423d8d2ULL,
                            0x00a9ab20def71304ULL, 0x009ae0dbf8ac4a81ULL,
@@ -678,7 +678,7 @@ static const curve448_precomputed_s curve448_precomputed_base_table = {
                            0x00e0e616a55d7013ULL, 0x00deaf454ed9eac7ULL,
                            0x0073a56bedef4d92ULL, 0x006ccfdf6fc92e19ULL,
                            0x009d1ee1371a7218ULL, 0x00ee3c2ee4462d80ULL)},
-        }}, {{
+        }}, {{ 
             {FIELD_LITERAL(0x00437bce9bccdf9dULL, 0x00e0c8e2f85dc0a3ULL,
                            0x00c91a7073995a19ULL, 0x00856ec9fe294559ULL,
                            0x009e4b33394b156eULL, 0x00e245b0dc497e5cULL,
@@ -691,7 +691,7 @@ static const curve448_precomputed_s curve448_precomputed_base_table = {
                            0x0046de8aab0f2e4eULL, 0x00452d342a67b5fdULL,
                            0x00d4b50f01d4de21ULL, 0x00db6d9fc0cefb79ULL,
                            0x008c184c86a462cdULL, 0x00e17c83764d42daULL)},
-        }}, {{
+        }}, {{ 
             {FIELD_LITERAL(0x007b2743b9a1e01aULL, 0x007847ffd42688c4ULL,
                            0x006c7844d610a316ULL, 0x00f0cb8b250aa4b0ULL,
                            0x00a19060143b3ae6ULL, 0x0014eb10b77cfd80ULL,
@@ -704,7 +704,7 @@ static const curve448_precomputed_s curve448_precomputed_base_table = {
                            0x000803c51962f6b5ULL, 0x0022528582ba563dULL,
                            0x0043f8040e9856d6ULL, 0x0085a29ec81fb860ULL,
                            0x005f9a611549f5ffULL, 0x00c1f974ecbd4b06ULL)},
-        }}, {{
+        }}, {{ 
             {FIELD_LITERAL(0x005b64c6fd65ec97ULL, 0x00c1fdd7f877bc7fULL,
                            0x000d9cc6c89f841cULL, 0x005c97b7f1aff9adULL,
                            0x0075e3c61475d47eULL, 0x001ecb1ba8153011ULL,
@@ -717,7 +717,7 @@ static const curve448_precomputed_s curve448_precomputed_base_table = {
                            0x000008f2d0650bccULL, 0x00d7ed392f8615c3ULL,
                            0x00976750a94da27fULL, 0x003e83bb0ecb69baULL,
                            0x00df8e8d15c14ac6ULL, 0x00f9f7174295d9c2ULL)},
-        }}, {{
+        }}, {{ 
             {FIELD_LITERAL(0x00f11cc8e0e70bcbULL, 0x00e5dc689974e7ddULL,
                            0x0014e409f9ee5870ULL, 0x00826e6689acbd63ULL,
                            0x008a6f4e3d895d88ULL, 0x00b26a8da41fd4adULL,
@@ -730,7 +730,7 @@ static const curve448_precomputed_s curve448_precomputed_base_table = {
                            0x00f0b3e36d4b0f44ULL, 0x003734bd3af1f146ULL,
                            0x00b87e2efc75527eULL, 0x00d230df55ddab50ULL,
                            0x002613257ae56c1dULL, 0x00bc0946d135934dULL)},
-        }}, {{
+        }}, {{ 
             {FIELD_LITERAL(0x00468711bd994651ULL, 0x0033108fa67561bfULL,
                            0x0089d760192a54b4ULL, 0x00adc433de9f1871ULL,
                            0x000467d05f36e050ULL, 0x007847e0f0579f7fULL,
@@ -743,7 +743,7 @@ static const curve448_precomputed_s curve448_precomputed_base_table = {
                            0x00a32b28189e23d2ULL, 0x00d507e5e5eb4c97ULL,
                            0x005a1a84e302821fULL, 0x0006f54c1c5f08c7ULL,
                            0x00a347c8cb2843f0ULL, 0x0009f73e9544bfa5ULL)},
-        }}, {{
+        }}, {{ 
             {FIELD_LITERAL(0x006c59c9ae744185ULL, 0x009fc32f1b4282cdULL,
                            0x004d6348ca59b1acULL, 0x00105376881be067ULL,
                            0x00af4096013147dcULL, 0x004abfb5a5cb3124ULL,
@@ -756,7 +756,7 @@ static const curve448_precomputed_s curve448_precomputed_base_table = {
                            0x0090853872b87338ULL, 0x002362cbf22dc044ULL,
                            0x002c222adff663b8ULL, 0x0067c924495fcb79ULL,
                            0x000e621d983c977cULL, 0x00df77a9eccb66fbULL)},
-        }}, {{
+        }}, {{ 
             {FIELD_LITERAL(0x002809e4bbf1814aULL, 0x00b9e854f9fafb32ULL,
                            0x00d35e67c10f7a67ULL, 0x008f1bcb76e748cfULL,
                            0x004224d9515687d2ULL, 0x005ba0b774e620c4ULL,
@@ -769,7 +769,7 @@ static const curve448_precomputed_s curve448_precomputed_base_table = {
                            0x0022f5a683baa558ULL, 0x00f87319fccdf997ULL,
                            0x009ca09b51ce6a22ULL, 0x005b12baf4af7d77ULL,
                            0x008a46524a1e33e2ULL, 0x00035a77e988be0dULL)},
-        }}, {{
+        }}, {{ 
             {FIELD_LITERAL(0x00a7efe46a7dbe2fULL, 0x002f66fd55014fe7ULL,
                            0x006a428afa1ff026ULL, 0x0056caaa9604ab72ULL,
                            0x0033f3bcd7fac8aeULL, 0x00ccb1aa01c86764ULL,
@@ -782,7 +782,7 @@ static const curve448_precomputed_s curve448_precomputed_base_table = {
                            0x00d5c786fd527764ULL, 0x00b6f4da74f0db2aULL,
                            0x0080f1f8badcd5fcULL, 0x00f36a373ad2e23bULL,
                            0x00f804f9f4343bf2ULL, 0x00d1af40ec623982ULL)},
-        }}, {{
+        }}, {{ 
             {FIELD_LITERAL(0x0082aeace5f1b144ULL, 0x00f68b3108cf4dd3ULL,
                            0x00634af01dde3020ULL, 0x000beab5df5c2355ULL,
                            0x00e8b790d1b49b0bULL, 0x00e48d15854e36f4ULL,
@@ -795,7 +795,7 @@ static const curve448_precomputed_s curve448_precomputed_base_table = {
                            0x00dd8e113e94b7e7ULL, 0x007bbc58febe0cc8ULL,
                            0x0029f51af9bfcad3ULL, 0x007e9311ec7ab6f3ULL,
                            0x009a884de1676343ULL, 0x0050d5f2dce84be9ULL)},
-        }}, {{
+        }}, {{ 
             {FIELD_LITERAL(0x005fa020cca2450aULL, 0x00491c29db6416d8ULL,
                            0x0037cefe3f9f9a85ULL, 0x003d405230647066ULL,
                            0x0049e835f0fdbe89ULL, 0x00feb78ac1a0815cULL,
@@ -808,7 +808,7 @@ static const curve448_precomputed_s curve448_precomputed_base_table = {
                            0x00ad4bbcb43c584bULL, 0x007fe49be601d7e3ULL,
                            0x0077c659789babf4ULL, 0x00eb45fcb06a741bULL,
                            0x005ce244913f9708ULL, 0x0088426401736326ULL)},
-        }}, {{
+        }}, {{ 
             {FIELD_LITERAL(0x007bf562ca768d7cULL, 0x006c1f3a174e387cULL,
                            0x00f024b447fee939ULL, 0x007e7af75f01143fULL,
                            0x003adb70b4eed89dULL, 0x00e43544021ad79aULL,
@@ -821,7 +821,7 @@ static const curve448_precomputed_s curve448_precomputed_base_table = {
                            0x00ffbba205358245ULL, 0x00f9fc2cf8194239ULL,
                            0x008d93b37bf15b4eULL, 0x006ddf2e38be8e95ULL,
                            0x002b6e79bf5fcff9ULL, 0x00ab355da425e2deULL)},
-        }}, {{
+        }}, {{ 
             {FIELD_LITERAL(0x00938f97e20be973ULL, 0x0099141a36aaf306ULL,
                            0x0057b0ca29e545a1ULL, 0x0085db571f9fbc13ULL,
                            0x008b333c554b4693ULL, 0x0043ab6ef3e241cbULL,
@@ -834,7 +834,7 @@ static const curve448_precomputed_s curve448_precomputed_base_table = {
                            0x00c91c6793f84d39ULL, 0x00f869f1b2eba9afULL,
                            0x0059bc547dc3236bULL, 0x00d91611d6d38689ULL,
                            0x00e062daaa2c0214ULL, 0x00ed3c047cc2bc82ULL)},
-        }}, {{
+        }}, {{ 
             {FIELD_LITERAL(0x000050d70c32b31aULL, 0x001939d576d437b3ULL,
                            0x00d709e598bf9fe6ULL, 0x00a885b34bd2ee9eULL,
                            0x00dd4b5c08ab1a50ULL, 0x0091bebd50b55639ULL,
@@ -847,7 +847,7 @@ static const curve448_precomputed_s curve448_precomputed_base_table = {
                            0x000b67d6c4c3020fULL, 0x0012d28469f4e46dULL,
                            0x0031c32939703ec7ULL, 0x00b49f0bce133066ULL,
                            0x00f7e10416181d47ULL, 0x005c90f51867eeccULL)},
-        }}, {{
+        }}, {{ 
             {FIELD_LITERAL(0x0051207abd179101ULL, 0x00fc2a5c20d9c5daULL,
                            0x00fb9d5f2701b6dfULL, 0x002dd040fdea82b8ULL,
                            0x00f163b0738442ffULL, 0x00d9736bd68855b8ULL,
@@ -860,7 +860,7 @@ static const curve448_precomputed_s curve448_precomputed_base_table = {
                            0x009a8a68c445d937ULL, 0x00361b27b07e5e5cULL,
                            0x003c043b1755b974ULL, 0x00b7eb66cf1155eeULL,
                            0x0077af5909eefff2ULL, 0x0098f609877cc806ULL)},
-        }}, {{
+        }}, {{ 
             {FIELD_LITERAL(0x00ab13af436bf8f4ULL, 0x000bcf0a0dac8574ULL,
                            0x00d50c864f705045ULL, 0x00c40e611debc842ULL,
                            0x0085010489bd5caaULL, 0x007c5050acec026fULL,
@@ -873,7 +873,7 @@ static const curve448_precomputed_s curve448_precomputed_base_table = {
                            0x008f591d6b554822ULL, 0x00df08a41ea18adeULL,
                            0x009d7d83e642abeaULL, 0x0098c71bda3b78ffULL,
                            0x0022c89e7021f005ULL, 0x0044d29a3fe1e3c4ULL)},
-        }}, {{
+        }}, {{ 
             {FIELD_LITERAL(0x00e748cd7b5c52f2ULL, 0x00ea9df883f89cc3ULL,
                            0x0018970df156b6c7ULL, 0x00c5a46c2a33a847ULL,
                            0x00cbde395e32aa09ULL, 0x0072474ebb423140ULL,
@@ -886,7 +886,7 @@ static const curve448_precomputed_s curve448_precomputed_base_table = {
                            0x00422dd68b5dabc4ULL, 0x00a6110f0167d28bULL,
                            0x00685a309c252886ULL, 0x00b439ffd5143660ULL,
                            0x003656e29ee7396fULL, 0x00c7c9b9ed5ad854ULL)},
-        }}, {{
+        }}, {{ 
             {FIELD_LITERAL(0x0040f7e7c5b37bf2ULL, 0x0064e4dc81181bbaULL,
                            0x00a8767ae2a366b6ULL, 0x001496b4f90546f2ULL,
                            0x002a28493f860441ULL, 0x0021f59513049a3aULL,
@@ -899,7 +899,7 @@ static const curve448_precomputed_s curve448_precomputed_base_table = {
                            0x004a7a52ef181c8cULL, 0x00be0b781b4b06deULL,
                            0x00e6e3627ded07e1ULL, 0x00e43aa342272b8bULL,
                            0x00e86ab424577d84ULL, 0x00fb292c566e35bbULL)},
-        }}, {{
+        }}, {{ 
             {FIELD_LITERAL(0x00334f5303ea1222ULL, 0x00dfb3dbeb0a5d3eULL,
                            0x002940d9592335c1ULL, 0x00706a7a63e8938aULL,
                            0x005a533558bc4cafULL, 0x00558e33192022a9ULL,
@@ -912,7 +912,7 @@ static const curve448_precomputed_s curve448_precomputed_base_table = {
                            0x0071ffda12d14b66ULL, 0x0037cf4eca7fb3d5ULL,
                            0x00c80bc242c58808ULL, 0x0075bf8c2d08c863ULL,
                            0x008d41f31afc52a7ULL, 0x00197962ecf38741ULL)},
-        }}, {{
+        }}, {{ 
             {FIELD_LITERAL(0x006e9f475cccf2eeULL, 0x00454b9cd506430cULL,
                            0x00224a4fb79ee479ULL, 0x0062e3347ef0b5e2ULL,
                            0x0034fd2a3512232aULL, 0x00b8b3cb0f457046ULL,
@@ -925,7 +925,7 @@ static const curve448_precomputed_s curve448_precomputed_base_table = {
                            0x0068ea95b9ca920eULL, 0x009bdfb70f253595ULL,
                            0x00c68f59186aa02aULL, 0x005aee1cca1c3039ULL,
                            0x00ab79a8a937a1ceULL, 0x00b9a0e549959e6fULL)},
-        }}, {{
+        }}, {{ 
             {FIELD_LITERAL(0x00c79e0b6d97dfbdULL, 0x00917c71fd2bc6e8ULL,
                            0x00db7529ccfb63d8ULL, 0x00be5be957f17866ULL,
                            0x00a9e11fdc2cdac1ULL, 0x007b91a8e1f44443ULL,
@@ -938,7 +938,7 @@ static const curve448_precomputed_s curve448_precomputed_base_table = {
                            0x002e5b5b7c86d8c3ULL, 0x009f6486561f9cfbULL,
                            0x00169e74b0170cf7ULL, 0x00900205af4af696ULL,
                            0x006acfddb77853f3ULL, 0x00df184c90f31068ULL)},
-        }}, {{
+        }}, {{ 
             {FIELD_LITERAL(0x00b37396c3320791ULL, 0x00fc7b67175c5783ULL,
                            0x00c36d2cd73ecc38ULL, 0x0080ebcc0b328fc5ULL,
                            0x0043a5b22b35d35dULL, 0x00466c9f1713c9daULL,
@@ -951,7 +951,7 @@ static const curve448_precomputed_s curve448_precomputed_base_table = {
                            0x00b743a4f7c2a39bULL, 0x00fd9f93ed6cc567ULL,
                            0x00307fae3113e58bULL, 0x0058aa577c93c319ULL,
                            0x00d254556f35b346ULL, 0x00491aada2203f0dULL)},
-        }}, {{
+        }}, {{ 
             {FIELD_LITERAL(0x00dff3103786ff34ULL, 0x000144553b1f20c3ULL,
                            0x0095613baeb930e4ULL, 0x00098058275ea5d4ULL,
                            0x007cd1402b046756ULL, 0x0074d74e4d58aee3ULL,
@@ -964,7 +964,7 @@ static const curve448_precomputed_s curve448_precomputed_base_table = {
                            0x005827a061c4839eULL, 0x0000de2cbb36aac3ULL,
                            0x002efa29d9717478ULL, 0x00f9e928cc8a77baULL,
                            0x00c134b458def9efULL, 0x00958a182223fc48ULL)},
-        }}, {{
+        }}, {{ 
             {FIELD_LITERAL(0x000a9ee23c06881fULL, 0x002c727d3d871945ULL,
                            0x00f47d971512d24aULL, 0x00671e816f9ef31aULL,
                            0x00883af2cfaad673ULL, 0x00601f98583d6c9aULL,
@@ -977,7 +977,7 @@ static const curve448_precomputed_s curve448_precomputed_base_table = {
                            0x006490cf4eaab038ULL, 0x00d925f6c3081561ULL,
                            0x00153b3047de7382ULL, 0x003b421f8bdceb6fULL,
                            0x00761a4a5049da78ULL, 0x00980348c5202433ULL)},
-        }}, {{
+        }}, {{ 
             {FIELD_LITERAL(0x007f8a43da97dd5cULL, 0x00058539c800fc7bULL,
                            0x0040f3cf5a28414aULL, 0x00d68dd0d95283d6ULL,
                            0x004adce9da90146eULL, 0x00befa41c7d4f908ULL,
@@ -990,7 +990,7 @@ static const curve448_precomputed_s curve448_precomputed_base_table = {
                            0x004dabed5f19d605ULL, 0x003abf181870249dULL,
                            0x00b52fd048cc92c4ULL, 0x00b6dd51e415a5c5ULL,
                            0x00d9eb82bd2b4014ULL, 0x002c865a43b46b43ULL)},
-        }}, {{
+        }}, {{ 
             {FIELD_LITERAL(0x0070047189452f4cULL, 0x00f7ad12e1ce78d5ULL,
                            0x00af1ba51ec44a8bULL, 0x005f39f63e667cd6ULL,
                            0x00058eac4648425eULL, 0x00d7fdab42bea03bULL,
@@ -1003,7 +1003,7 @@ static const curve448_precomputed_s curve448_precomputed_base_table = {
                            0x00e7384d16e4db0eULL, 0x004a423970678942ULL,
                            0x00ec0b763345d4baULL, 0x00c477b9f99ed721ULL,
                            0x00c29dad3777b230ULL, 0x001c517b466f7df6ULL)},
-        }}, {{
+        }}, {{ 
             {FIELD_LITERAL(0x006366c380f7b574ULL, 0x001c7d1f09ff0438ULL,
                            0x003e20a7301f5b22ULL, 0x00d3efb1916d28f6ULL,
                            0x0049f4f81060ce83ULL, 0x00c69d91ea43ced1ULL,
@@ -1016,7 +1016,7 @@ static const curve448_precomputed_s curve448_precomputed_base_table = {
                            0x00b7ed13becde260ULL, 0x0075ebb74220f6e9ULL,
                            0x00701079fcfe8a1fULL, 0x001c28fcdff58938ULL,
                            0x002e4544b8f4df6bULL, 0x0060c5bc4f1a7d73ULL)},
-        }}, {{
+        }}, {{ 
             {FIELD_LITERAL(0x00ae307cf069f701ULL, 0x005859f222dd618bULL,
                            0x00212d6c46ec0b0dULL, 0x00a0fe4642afb62dULL,
                            0x00420d8e4a0a8903ULL, 0x00a80ff639bdf7b0ULL,
@@ -1029,7 +1029,7 @@ static const curve448_precomputed_s curve448_precomputed_base_table = {
                            0x007e6f1d79ec73b5ULL, 0x009ac78695a32ac4ULL,
                            0x0001d77fbbcd5682ULL, 0x008cea1fee0aaeedULL,
                            0x00f42bea82a53462ULL, 0x002e46ab96cafcc9ULL)},
-        }}, {{
+        }}, {{ 
             {FIELD_LITERAL(0x0051cfcc5885377aULL, 0x00dce566cb1803caULL,
                            0x00430c7643f2c7d4ULL, 0x00dce1a1337bdcc0ULL,
                            0x0010d5bd7283c128ULL, 0x003b1b547f9b46feULL,
@@ -1042,7 +1042,7 @@ static const curve448_precomputed_s curve448_precomputed_base_table = {
                            0x00f2cebda0cf8fd0ULL, 0x00b6b9d9d1fbdec3ULL,
                            0x00815262e6490611ULL, 0x00ef7f5ce3176760ULL,
                            0x00e49cd0c998d58bULL, 0x005fc6cc269ba57cULL)},
-        }}, {{
+        }}, {{ 
             {FIELD_LITERAL(0x008940211aa0d633ULL, 0x00addae28136571dULL,
                            0x00d68fdbba20d673ULL, 0x003bc6129bc9e21aULL,
                            0x000346cf184ebe9aULL, 0x0068774d741ebc7fULL,
@@ -1055,14 +1055,14 @@ static const curve448_precomputed_s curve448_precomputed_base_table = {
                            0x00744a89d5a310e7ULL, 0x001f20ce4f904833ULL,
                            0x00e746edebe66e29ULL, 0x000912ab1f6c153dULL,
                            0x00f61d77d9b2444cULL, 0x0001499cd6647610ULL)},
-        }}
-    }
-};
-const struct curve448_precomputed_s *curve448_precomputed_base
-    = &curve448_precomputed_base_table;
-
-static const niels_t curve448_wnaf_base_table[32] = {
-    {{
+        }} 
+    } 
+}; 
+const struct curve448_precomputed_s *curve448_precomputed_base 
+    = &curve448_precomputed_base_table; 
+ 
+static const niels_t curve448_wnaf_base_table[32] = { 
+    {{ 
         {FIELD_LITERAL(0x00303cda6feea532ULL, 0x00860f1d5a3850e4ULL,
                        0x00226b9fa4728ccdULL, 0x00e822938a0a0c0cULL,
                        0x00263a61c9ea9216ULL, 0x001204029321b828ULL,
@@ -1075,7 +1075,7 @@ static const niels_t curve448_wnaf_base_table[32] = {
                        0x001f6789da3cb38cULL, 0x006d2ff8ed39073eULL,
                        0x00610bdb69a167f3ULL, 0x00571f306c9689b4ULL,
                        0x00f557e6f84b2df8ULL, 0x002affd38b2c86dbULL)},
-    }}, {{
+    }}, {{ 
         {FIELD_LITERAL(0x00cea0fc8d2e88b5ULL, 0x00821612d69f1862ULL,
                        0x0074c283b3e67522ULL, 0x005a195ba05a876dULL,
                        0x000cddfe557feea4ULL, 0x008046c795bcc5e5ULL,
@@ -1088,7 +1088,7 @@ static const niels_t curve448_wnaf_base_table[32] = {
                        0x00acbfe5efe10539ULL, 0x009c20f43431a65aULL,
                        0x008435d96374a7b3ULL, 0x009ee57566877bd3ULL,
                        0x0044691725ed4757ULL, 0x001e87bb2fe2c6b2ULL)},
-    }}, {{
+    }}, {{ 
         {FIELD_LITERAL(0x000cedc4debf7a04ULL, 0x002ffa45000470acULL,
                        0x002e9f9678201915ULL, 0x0017da1208c4fe72ULL,
                        0x007d558cc7d656cbULL, 0x0037a827287cf289ULL,
@@ -1101,7 +1101,7 @@ static const niels_t curve448_wnaf_base_table[32] = {
                        0x0052e8114c2f6747ULL, 0x0079ac4f94487f92ULL,
                        0x00bffd919b5d749cULL, 0x00261f92ad15e620ULL,
                        0x00718397b7a97895ULL, 0x00c1443e6ebbc0c4ULL)},
-    }}, {{
+    }}, {{ 
         {FIELD_LITERAL(0x00eacd90c1e0a049ULL, 0x008977935b149fbeULL,
                        0x0004cb9ba11c93dcULL, 0x009fbd5b3470844dULL,
                        0x004bc18c9bfc22cfULL, 0x0057679a991839f3ULL,
@@ -1114,7 +1114,7 @@ static const niels_t curve448_wnaf_base_table[32] = {
                        0x00e221865710f910ULL, 0x00cc12bc9e9b8cebULL,
                        0x004faa9518914e35ULL, 0x0017476d89d42f6dULL,
                        0x00b8f637c8fa1c8bULL, 0x0088c7d2790864b8ULL)},
-    }}, {{
+    }}, {{ 
         {FIELD_LITERAL(0x00ef7eafc1c69be6ULL, 0x0085d3855778fbeaULL,
                        0x002c8d5b450cb6f5ULL, 0x004e77de5e1e7fecULL,
                        0x0047c057893abdedULL, 0x001b430b85d51e16ULL,
@@ -1127,7 +1127,7 @@ static const niels_t curve448_wnaf_base_table[32] = {
                        0x0004390233f762a1ULL, 0x00e1d67b83cb6cecULL,
                        0x003eebaa964c78b1ULL, 0x006b0aff965eb664ULL,
                        0x00b313d4470bdc37ULL, 0x008814ffcb3cb9d8ULL)},
-    }}, {{
+    }}, {{ 
         {FIELD_LITERAL(0x009724b8ce68db70ULL, 0x007678b5ed006f3dULL,
                        0x00bdf4b89c0abd73ULL, 0x00299748e04c7c6dULL,
                        0x00ddd86492c3c977ULL, 0x00c5a7febfa30a99ULL,
@@ -1140,7 +1140,7 @@ static const niels_t curve448_wnaf_base_table[32] = {
                        0x00956c71f8d00783ULL, 0x0095c78fcf63235fULL,
                        0x00fc7ff6ba05c222ULL, 0x00cdd8b3f8d74a52ULL,
                        0x00ac5ae16de8256eULL, 0x00e9d4be8ed48624ULL)},
-    }}, {{
+    }}, {{ 
         {FIELD_LITERAL(0x00c0ce11405df2d8ULL, 0x004e3f37b293d7b6ULL,
                        0x002410172e1ac6dbULL, 0x00b8dbff4bf8143dULL,
                        0x003a7b409d56eb66ULL, 0x003e0f6a0dfef9afULL,
@@ -1153,7 +1153,7 @@ static const niels_t curve448_wnaf_base_table[32] = {
                        0x00869da0a77dd268ULL, 0x00bc0b09f8ec83eaULL,
                        0x00d61027f8e82ba9ULL, 0x00aa4c85999dce67ULL,
                        0x00eac3132b9f3fe1ULL, 0x00fb9b0cf1c695d2ULL)},
-    }}, {{
+    }}, {{ 
         {FIELD_LITERAL(0x0043079295512f0dULL, 0x0046a009861758e0ULL,
                        0x003ee2842a807378ULL, 0x0034cc9d1298e4faULL,
                        0x009744eb4d31b3eeULL, 0x00afacec96650cd0ULL,
@@ -1166,7 +1166,7 @@ static const niels_t curve448_wnaf_base_table[32] = {
                        0x00af4931a0195574ULL, 0x007686124fe11aefULL,
                        0x00d1ead3c7b9ef7eULL, 0x00aaf5fc580f8c15ULL,
                        0x00e727be147ee1ecULL, 0x003c61c1e1577b86ULL)},
-    }}, {{
+    }}, {{ 
         {FIELD_LITERAL(0x009d3fca983220cfULL, 0x00cd11acbc853dc4ULL,
                        0x0017590409d27f1dULL, 0x00d2176698082802ULL,
                        0x00fa01251b2838c8ULL, 0x00dd297a0d9b51c6ULL,
@@ -1179,7 +1179,7 @@ static const niels_t curve448_wnaf_base_table[32] = {
                        0x00f20a6535fa6d71ULL, 0x005152d31e5a87cfULL,
                        0x002bac1c8e68ca31ULL, 0x00b0e323db4c1381ULL,
                        0x00f1d596b7d5ae25ULL, 0x00eae458097cb4e0ULL)},
-    }}, {{
+    }}, {{ 
         {FIELD_LITERAL(0x00920ac80f9b0d21ULL, 0x00f80f7f73401246ULL,
                        0x0086d37849b557d6ULL, 0x0002bd4b317b752eULL,
                        0x00b26463993a42bbULL, 0x002070422a73b129ULL,
@@ -1192,7 +1192,7 @@ static const niels_t curve448_wnaf_base_table[32] = {
                        0x00e9491ad262da79ULL, 0x009ef4f48d2d384cULL,
                        0x008992770766f09dULL, 0x001584396b6b1101ULL,
                        0x00af3f8676c9feefULL, 0x0024603c40269118ULL)},
-    }}, {{
+    }}, {{ 
         {FIELD_LITERAL(0x009dd7b31319527cULL, 0x001e7ac948d873a9ULL,
                        0x00fa54b46ef9673aULL, 0x0066efb8d5b02fe6ULL,
                        0x00754b1d3928aeaeULL, 0x0004262ac72a6f6bULL,
@@ -1205,7 +1205,7 @@ static const niels_t curve448_wnaf_base_table[32] = {
                        0x00e54e99c7a16198ULL, 0x0080d57135764e63ULL,
                        0x00751c27b946bc24ULL, 0x00dd389ce4e9e129ULL,
                        0x00a1a2bfd1cd84dcULL, 0x002fae73e5149b32ULL)},
-    }}, {{
+    }}, {{ 
         {FIELD_LITERAL(0x00911657dffb4cddULL, 0x00c100b7cc553d06ULL,
                        0x00449d075ec467ccULL, 0x007062100bc64e70ULL,
                        0x0043cf86f7bd21e7ULL, 0x00f401dc4b797deaULL,
@@ -1218,7 +1218,7 @@ static const niels_t curve448_wnaf_base_table[32] = {
                        0x00871c5963fb6365ULL, 0x00ca2df20014a787ULL,
                        0x00f5d9c1d0b34322ULL, 0x00f6f5942818db0aULL,
                        0x004cc091f49c9906ULL, 0x00e8a188a60bff9fULL)},
-    }}, {{
+    }}, {{ 
         {FIELD_LITERAL(0x0032c7762032fae8ULL, 0x00e4087232e0bc21ULL,
                        0x00f767344b6e8d85ULL, 0x00bbf369b76c2aa2ULL,
                        0x008a1f46c6e1570cULL, 0x001368cd9780369fULL,
@@ -1231,7 +1231,7 @@ static const niels_t curve448_wnaf_base_table[32] = {
                        0x00f6e78795e200b1ULL, 0x005d05b9ecd2473eULL,
                        0x0014f5f17c865786ULL, 0x00c7fd2d166fa995ULL,
                        0x004939a2d8eb80e0ULL, 0x002244ba0942c199ULL)},
-    }}, {{
+    }}, {{ 
         {FIELD_LITERAL(0x00321e767f0262cfULL, 0x002e57d776caf68eULL,
                        0x00bf2c94814f0437ULL, 0x00c339196acd622fULL,
                        0x001db4cce71e2770ULL, 0x001ded5ddba6eee2ULL,
@@ -1244,7 +1244,7 @@ static const niels_t curve448_wnaf_base_table[32] = {
                        0x00ea8ed1e46dfdc0ULL, 0x004fe7ef94c589f4ULL,
                        0x002b8ae9b805ecf3ULL, 0x0025c08d892874a5ULL,
                        0x0023938e98d44c4cULL, 0x00f759134cabf69cULL)},
-    }}, {{
+    }}, {{ 
         {FIELD_LITERAL(0x006c2a84678e4b3bULL, 0x007a194aacd1868fULL,
                        0x00ed0225af424761ULL, 0x00da0a6f293c64b8ULL,
                        0x001062ac5c6a7a18ULL, 0x0030f5775a8aeef4ULL,
@@ -1257,7 +1257,7 @@ static const niels_t curve448_wnaf_base_table[32] = {
                        0x00d75946004aa14cULL, 0x00f601586b42bf1cULL,
                        0x00c74cf1d912fe66ULL, 0x00abcb36974b30adULL,
                        0x007eb78720c9d2b8ULL, 0x009f54ab7bd4df85ULL)},
-    }}, {{
+    }}, {{ 
         {FIELD_LITERAL(0x00db9fc948f73826ULL, 0x00fa8b3746ed8ee9ULL,
                        0x00132cb65aafbeb2ULL, 0x00c36ff3fe7925b8ULL,
                        0x00837daed353d2feULL, 0x00ec661be0667cf4ULL,
@@ -1270,7 +1270,7 @@ static const niels_t curve448_wnaf_base_table[32] = {
                        0x0065f46a4adaae00ULL, 0x001b1a5b2a96e500ULL,
                        0x0043fe24f8233285ULL, 0x0066996d8ae1f2c3ULL,
                        0x00c530f3264169f9ULL, 0x00c0f92d07cf6a57ULL)},
-    }}, {{
+    }}, {{ 
         {FIELD_LITERAL(0x0036a55c6815d943ULL, 0x008c8d1def993db3ULL,
                        0x002e0e1e8ff7318fULL, 0x00d883a4b92db00aULL,
                        0x002f5e781ae33906ULL, 0x001a72adb235c06dULL,
@@ -1283,7 +1283,7 @@ static const niels_t curve448_wnaf_base_table[32] = {
                        0x0003b893175a8314ULL, 0x0061a34ade5703bcULL,
                        0x00ea3ea8bb71d632ULL, 0x00be0df9a1f198c2ULL,
                        0x0046dd8e7c1635fbULL, 0x00f1523fdd25d5e5ULL)},
-    }}, {{
+    }}, {{ 
         {FIELD_LITERAL(0x00633f63fc9dd406ULL, 0x00e713ff80e04a43ULL,
                        0x0060c6e970f2d621ULL, 0x00a57cd7f0df1891ULL,
                        0x00f2406a550650bbULL, 0x00b064290efdc684ULL,
@@ -1296,7 +1296,7 @@ static const niels_t curve448_wnaf_base_table[32] = {
                        0x00d05b1c9e339841ULL, 0x006fac50bd81fd98ULL,
                        0x00cdc7852eaebb09ULL, 0x004ff519b061991bULL,
                        0x009099e8107d4c85ULL, 0x00273e24c36a4a61ULL)},
-    }}, {{
+    }}, {{ 
         {FIELD_LITERAL(0x00070b4441ef2c46ULL, 0x00efa5b02801a109ULL,
                        0x00bf0b8c3ee64adfULL, 0x008a67e0b3452e98ULL,
                        0x001916b1f2fa7a74ULL, 0x00d781a78ff6cdc3ULL,
@@ -1309,7 +1309,7 @@ static const niels_t curve448_wnaf_base_table[32] = {
                        0x0090da9209cf26a0ULL, 0x00de2b2e4c775b84ULL,
                        0x0071d6031c3c15aeULL, 0x00d9e927ef177d70ULL,
                        0x00894ee8c23896fdULL, 0x00e3b3b401e41aadULL)},
-    }}, {{
+    }}, {{ 
         {FIELD_LITERAL(0x00204fef26864170ULL, 0x00819269c5dee0f8ULL,
                        0x00bfb4713ec97966ULL, 0x0026339a6f34df78ULL,
                        0x001f26e64c761dc2ULL, 0x00effe3af313cb60ULL,
@@ -1322,7 +1322,7 @@ static const niels_t curve448_wnaf_base_table[32] = {
                        0x00e6483970dff548ULL, 0x00ddf36ad6874264ULL,
                        0x00e61778523fcce2ULL, 0x0093a66c0c93b24aULL,
                        0x00fd367114db7f86ULL, 0x007652d7ddce26ddULL)},
-    }}, {{
+    }}, {{ 
         {FIELD_LITERAL(0x00d92ced7ba12843ULL, 0x00aea9c7771e86e7ULL,
                        0x0046639693354f7bULL, 0x00a628dbb6a80c47ULL,
                        0x003a0b0507372953ULL, 0x00421113ab45c0d9ULL,
@@ -1335,7 +1335,7 @@ static const niels_t curve448_wnaf_base_table[32] = {
                        0x003736bf1603687aULL, 0x00c47e568c4fe3c7ULL,
                        0x003cd00282848605ULL, 0x0043a487c3b91939ULL,
                        0x004ffc04e1095a06ULL, 0x00a4c989a3d4b918ULL)},
-    }}, {{
+    }}, {{ 
         {FIELD_LITERAL(0x00a8778d0e429f7aULL, 0x004c02b059105a68ULL,
                        0x0016653b609da3ffULL, 0x00d5107bd1a12d27ULL,
                        0x00b4708f9a771cabULL, 0x00bb63b662033f69ULL,
@@ -1348,7 +1348,7 @@ static const niels_t curve448_wnaf_base_table[32] = {
                        0x003adac8ce48dae3ULL, 0x00089276d5c50c0cULL,
                        0x00172fca07ad6717ULL, 0x00cb1a72f54069e5ULL,
                        0x004ee42f133545b3ULL, 0x00785f8651362f16ULL)},
-    }}, {{
+    }}, {{ 
         {FIELD_LITERAL(0x0049cbac38509e11ULL, 0x0015234505d42cdfULL,
                        0x00794fb0b5840f1cULL, 0x00496437344045a5ULL,
                        0x0031b6d944e4f9b0ULL, 0x00b207318ac1f5d8ULL,
@@ -1361,7 +1361,7 @@ static const niels_t curve448_wnaf_base_table[32] = {
                        0x00c360336dadb04cULL, 0x00f38e3d9158a1b8ULL,
                        0x0069ce3b418e84c6ULL, 0x005d1697eca16eadULL,
                        0x00f8bd6a35ece13dULL, 0x007885dfc2b5afeaULL)},
-    }}, {{
+    }}, {{ 
         {FIELD_LITERAL(0x00c3617ae260776cULL, 0x00b20dc3e96922d7ULL,
                        0x00a1a7802246706aULL, 0x00ca6505a5240244ULL,
                        0x002246b62d919782ULL, 0x001439102d7aa9b3ULL,
@@ -1374,7 +1374,7 @@ static const niels_t curve448_wnaf_base_table[32] = {
                        0x00a6200a6815152dULL, 0x0009a4228601d254ULL,
                        0x001c0360559bd374ULL, 0x007563362039cb36ULL,
                        0x00bd75b48d74e32bULL, 0x0017f515ac3499e8ULL)},
-    }}, {{
+    }}, {{ 
         {FIELD_LITERAL(0x001532a7ffe41c5aULL, 0x00eb1edce358d6bfULL,
                        0x00ddbacc7b678a7bULL, 0x008a7b70f3c841a3ULL,
                        0x00f1923bf27d3f4cULL, 0x000b2713ed8f7873ULL,
@@ -1387,7 +1387,7 @@ static const niels_t curve448_wnaf_base_table[32] = {
                        0x00212605350dc57eULL, 0x0028717cd2871123ULL,
                        0x00fb083c100fd979ULL, 0x0045a056ce063fdfULL,
                        0x00a5d604b4dd6a41ULL, 0x001dabc08ba4e236ULL)},
-    }}, {{
+    }}, {{ 
         {FIELD_LITERAL(0x00c4887198d7a7faULL, 0x00244f98fb45784aULL,
                        0x0045911e15a15d01ULL, 0x001d323d374c0966ULL,
                        0x00967c3915196562ULL, 0x0039373abd2f3c67ULL,
@@ -1400,7 +1400,7 @@ static const niels_t curve448_wnaf_base_table[32] = {
                        0x004a7cedb6f93250ULL, 0x00d1df8855b8c357ULL,
                        0x00e73a46086fd058ULL, 0x0048fb0add6dfe59ULL,
                        0x001e03a28f1b4e3dULL, 0x00a871c993308d76ULL)},
-    }}, {{
+    }}, {{ 
         {FIELD_LITERAL(0x0030dbb2d1766ec8ULL, 0x00586c0ad138555eULL,
                        0x00d1a34f9e91c77cULL, 0x0063408ad0e89014ULL,
                        0x00d61231b05f6f5bULL, 0x0009abf569f5fd8aULL,
@@ -1413,7 +1413,7 @@ static const niels_t curve448_wnaf_base_table[32] = {
                        0x0059287d7ce74800ULL, 0x00fb3631b645c3f0ULL,
                        0x00a018e977f78494ULL, 0x0091e27065c27b12ULL,
                        0x007696c1817165e0ULL, 0x008c40be7c45ba3aULL)},
-    }}, {{
+    }}, {{ 
         {FIELD_LITERAL(0x00a0f326327cb684ULL, 0x001c7d0f672680ffULL,
                        0x008c1c81ffb112d1ULL, 0x00f8f801674eddc8ULL,
                        0x00e926d5d48c2a9dULL, 0x005bd6d954c6fe9aULL,
@@ -1426,7 +1426,7 @@ static const niels_t curve448_wnaf_base_table[32] = {
                        0x005b1c794dad050bULL, 0x003f8ec4864cec14ULL,
                        0x00af81058d0b90e5ULL, 0x00ebe43e183997bbULL,
                        0x00a9d610f9f3e615ULL, 0x007acd8eec2e88d3ULL)},
-    }}, {{
+    }}, {{ 
         {FIELD_LITERAL(0x0049b2fab13812a3ULL, 0x00846db32cd60431ULL,
                        0x000177fa578c8d6cULL, 0x00047d0e2ad4bc51ULL,
                        0x00b158ba38d1e588ULL, 0x006a45daad79e3f3ULL,
@@ -1439,7 +1439,7 @@ static const niels_t curve448_wnaf_base_table[32] = {
                        0x005d51f69b5e1a1dULL, 0x004bccb4ea36edcdULL,
                        0x0069be6a7aeef268ULL, 0x0063f4dd9de8d5a7ULL,
                        0x006283783092ca35ULL, 0x0075a31af2c35409ULL)},
-    }}, {{
+    }}, {{ 
         {FIELD_LITERAL(0x00c412365162e8cfULL, 0x00012283fb34388aULL,
                        0x003e6543babf39e2ULL, 0x00eead6b3a804978ULL,
                        0x0099c0314e8b326fULL, 0x00e98e0a8d477a4fULL,
@@ -1452,7 +1452,7 @@ static const niels_t curve448_wnaf_base_table[32] = {
                        0x00239f1a412dc1e7ULL, 0x0046b4b3be74fc5cULL,
                        0x0020c47a2bef5bceULL, 0x00aa17e48f43862bULL,
                        0x00f7e26c96342e5fULL, 0x0008011c530f39a9ULL)},
-    }}, {{
+    }}, {{ 
         {FIELD_LITERAL(0x00aad4ac569bf0f1ULL, 0x00a67adc90b27740ULL,
                        0x0048551369a5751aULL, 0x0031252584a3306aULL,
                        0x0084e15df770e6fcULL, 0x00d7bba1c74b5805ULL,
@@ -1465,7 +1465,7 @@ static const niels_t curve448_wnaf_base_table[32] = {
                        0x00f1607d3e36a570ULL, 0x0039b7fab82991a1ULL,
                        0x00231777065840c5ULL, 0x00998e5afdd346f9ULL,
                        0x00b7dc3e64acc85fULL, 0x00baacc748013ad6ULL)},
-    }}, {{
+    }}, {{ 
         {FIELD_LITERAL(0x008ea6a4177580bfULL, 0x005fa1953e3f0378ULL,
                        0x005fe409ac74d614ULL, 0x00452327f477e047ULL,
                        0x00a4018507fb6073ULL, 0x007b6e71951caac8ULL,
@@ -1478,6 +1478,6 @@ static const niels_t curve448_wnaf_base_table[32] = {
                        0x00b0cfb134ba84c8ULL, 0x001c4b778249419aULL,
                        0x00df4ab3d9c44f40ULL, 0x009f596e6c1a9e3cULL,
                        0x001979c0df237316ULL, 0x00501e953a919b87ULL)},
-    }}
-};
-const niels_t *curve448_wnaf_base = curve448_wnaf_base_table;
+    }} 
+}; 
+const niels_t *curve448_wnaf_base = curve448_wnaf_base_table; 

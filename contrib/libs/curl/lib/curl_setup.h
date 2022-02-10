@@ -22,10 +22,10 @@
  *
  ***************************************************************************/
 
-#if defined(BUILDING_LIBCURL) && !defined(CURL_NO_OLDIES)
-#define CURL_NO_OLDIES
-#endif
-
+#if defined(BUILDING_LIBCURL) && !defined(CURL_NO_OLDIES) 
+#define CURL_NO_OLDIES 
+#endif 
+ 
 /*
  * Disable Visual Studio warnings:
  * 4127 "conditional expression is constant"
@@ -42,21 +42,21 @@
 #define WIN32
 #endif
 
-#ifdef WIN32
+#ifdef WIN32 
 /*
- * Don't include unneeded stuff in Windows headers to avoid compiler
- * warnings and macro clashes.
- * Make sure to define this macro before including any Windows headers.
- */
-#  ifndef WIN32_LEAN_AND_MEAN
-#    define WIN32_LEAN_AND_MEAN
-#  endif
-#  ifndef NOGDI
-#    define NOGDI
-#  endif
-#endif
-
-/*
+ * Don't include unneeded stuff in Windows headers to avoid compiler 
+ * warnings and macro clashes. 
+ * Make sure to define this macro before including any Windows headers. 
+ */ 
+#  ifndef WIN32_LEAN_AND_MEAN 
+#    define WIN32_LEAN_AND_MEAN 
+#  endif 
+#  ifndef NOGDI 
+#    define NOGDI 
+#  endif 
+#endif 
+ 
+/* 
  * Include configuration script results or hand-crafted
  * configuration file for platforms which lack config tool.
  */
@@ -137,21 +137,21 @@
 #  endif
 #endif
 
-/* Solaris needs this to get a POSIX-conformant getpwuid_r */
-#if defined(sun) || defined(__sun)
-#  ifndef _POSIX_PTHREAD_SEMANTICS
-#    define _POSIX_PTHREAD_SEMANTICS 1
-#  endif
-#endif
-
+/* Solaris needs this to get a POSIX-conformant getpwuid_r */ 
+#if defined(sun) || defined(__sun) 
+#  ifndef _POSIX_PTHREAD_SEMANTICS 
+#    define _POSIX_PTHREAD_SEMANTICS 1 
+#  endif 
+#endif 
+ 
 /* ================================================================ */
 /*  If you need to include a system header file for your platform,  */
 /*  please, do it beyond the point further indicated in this file.  */
 /* ================================================================ */
 
-#include <curl/curl.h>
+#include <curl/curl.h> 
 
-#define CURL_SIZEOF_CURL_OFF_T SIZEOF_CURL_OFF_T
+#define CURL_SIZEOF_CURL_OFF_T SIZEOF_CURL_OFF_T 
 
 /*
  * Disable other protocols when http is the only one desired.
@@ -191,9 +191,9 @@
 #  ifndef CURL_DISABLE_GOPHER
 #    define CURL_DISABLE_GOPHER
 #  endif
-#  ifndef CURL_DISABLE_SMB
-#    define CURL_DISABLE_SMB
-#  endif
+#  ifndef CURL_DISABLE_SMB 
+#    define CURL_DISABLE_SMB 
+#  endif 
 #endif
 
 /*
@@ -206,7 +206,7 @@
 
 /* ================================================================ */
 /* No system header file shall be included in this file before this */
-/* point. The only allowed ones are those included from curl/system.h */
+/* point. The only allowed ones are those included from curl/system.h */ 
 /* ================================================================ */
 
 /*
@@ -227,8 +227,8 @@
 
 /*
  * Windows setup file includes some system headers.
- */
-
+ */ 
+ 
 #ifdef HAVE_WINDOWS_H
 #  include "setup-win32.h"
 #endif
@@ -373,11 +373,11 @@
 #  define LSEEK_ERROR (off_t)-1
 #endif
 
-#ifndef SIZEOF_TIME_T
-/* assume default size of time_t to be 32 bit */
-#define SIZEOF_TIME_T 4
-#endif
-
+#ifndef SIZEOF_TIME_T 
+/* assume default size of time_t to be 32 bit */ 
+#define SIZEOF_TIME_T 4 
+#endif 
+ 
 /*
  * Default sizeof(off_t) in case it hasn't been defined in config file.
  */
@@ -405,41 +405,41 @@
 #  endif
 #endif
 
-#if (SIZEOF_CURL_OFF_T == 4)
-#  define CURL_OFF_T_MAX CURL_OFF_T_C(0x7FFFFFFF)
-#else
-   /* assume CURL_SIZEOF_CURL_OFF_T == 8 */
-#  define CURL_OFF_T_MAX CURL_OFF_T_C(0x7FFFFFFFFFFFFFFF)
-#endif
-#define CURL_OFF_T_MIN (-CURL_OFF_T_MAX - CURL_OFF_T_C(1))
-
-#if (SIZEOF_TIME_T == 4)
-#  ifdef HAVE_TIME_T_UNSIGNED
-#  define TIME_T_MAX UINT_MAX
-#  define TIME_T_MIN 0
-#  else
-#  define TIME_T_MAX INT_MAX
-#  define TIME_T_MIN INT_MIN
-#  endif
-#else
-#  ifdef HAVE_TIME_T_UNSIGNED
-#  define TIME_T_MAX 0xFFFFFFFFFFFFFFFF
-#  define TIME_T_MIN 0
-#  else
-#  define TIME_T_MAX 0x7FFFFFFFFFFFFFFF
-#  define TIME_T_MIN (-TIME_T_MAX - 1)
-#  endif
-#endif
-
-#ifndef SIZE_T_MAX
-/* some limits.h headers have this defined, some don't */
-#if defined(SIZEOF_SIZE_T) && (SIZEOF_SIZE_T > 4)
-#define SIZE_T_MAX 18446744073709551615U
-#else
-#define SIZE_T_MAX 4294967295U
-#endif
-#endif
-
+#if (SIZEOF_CURL_OFF_T == 4) 
+#  define CURL_OFF_T_MAX CURL_OFF_T_C(0x7FFFFFFF) 
+#else 
+   /* assume CURL_SIZEOF_CURL_OFF_T == 8 */ 
+#  define CURL_OFF_T_MAX CURL_OFF_T_C(0x7FFFFFFFFFFFFFFF) 
+#endif 
+#define CURL_OFF_T_MIN (-CURL_OFF_T_MAX - CURL_OFF_T_C(1)) 
+ 
+#if (SIZEOF_TIME_T == 4) 
+#  ifdef HAVE_TIME_T_UNSIGNED 
+#  define TIME_T_MAX UINT_MAX 
+#  define TIME_T_MIN 0 
+#  else 
+#  define TIME_T_MAX INT_MAX 
+#  define TIME_T_MIN INT_MIN 
+#  endif 
+#else 
+#  ifdef HAVE_TIME_T_UNSIGNED 
+#  define TIME_T_MAX 0xFFFFFFFFFFFFFFFF 
+#  define TIME_T_MIN 0 
+#  else 
+#  define TIME_T_MAX 0x7FFFFFFFFFFFFFFF 
+#  define TIME_T_MIN (-TIME_T_MAX - 1) 
+#  endif 
+#endif 
+ 
+#ifndef SIZE_T_MAX 
+/* some limits.h headers have this defined, some don't */ 
+#if defined(SIZEOF_SIZE_T) && (SIZEOF_SIZE_T > 4) 
+#define SIZE_T_MAX 18446744073709551615U 
+#else 
+#define SIZE_T_MAX 4294967295U 
+#endif 
+#endif 
+ 
 /*
  * Arg 2 type for gethostname in case it hasn't been defined in config file.
  */
@@ -481,14 +481,14 @@
 
 #  ifdef __minix
      /* Minix 3 versions up to at least 3.1.3 are missing these prototypes */
-     extern char *strtok_r(char *s, const char *delim, char **last);
-     extern struct tm *gmtime_r(const time_t * const timep, struct tm *tmp);
+     extern char *strtok_r(char *s, const char *delim, char **last); 
+     extern struct tm *gmtime_r(const time_t * const timep, struct tm *tmp); 
 #  endif
 
 #  define DIR_CHAR      "/"
 
 #  ifndef fileno /* sunos 4 have this as a macro! */
-     int fileno(FILE *stream);
+     int fileno(FILE *stream); 
 #  endif
 
 #endif /* WIN32 */
@@ -496,10 +496,10 @@
 /*
  * msvc 6.0 requires PSDK in order to have INET6_ADDRSTRLEN
  * defined in ws2tcpip.h as well as to provide IPv6 support.
- * Does not apply if lwIP is used.
+ * Does not apply if lwIP is used. 
  */
 
-#if defined(_MSC_VER) && !defined(__POCC__) && !defined(USE_LWIPSOCK)
+#if defined(_MSC_VER) && !defined(__POCC__) && !defined(USE_LWIPSOCK) 
 #  if !defined(HAVE_WS2TCPIP_H) || \
      ((_MSC_VER < 1300) && !defined(INET6_ADDRSTRLEN))
 #    undef HAVE_GETADDRINFO_THREADSAFE
@@ -549,7 +549,7 @@
 #  define CURLRES_ARES
 /* now undef the stock libc functions just to avoid them being used */
 #  undef HAVE_GETADDRINFO
-#  undef HAVE_FREEADDRINFO
+#  undef HAVE_FREEADDRINFO 
 #  undef HAVE_GETHOSTBYNAME
 #elif defined(USE_THREADS_POSIX) || defined(USE_THREADS_WIN32)
 #  define CURLRES_ASYNCH
@@ -597,18 +597,18 @@ int netware_init(void);
 #endif
 #endif
 
-#if defined(HAVE_LIBIDN2) && defined(HAVE_IDN2_H) && !defined(USE_WIN32_IDN)
-/* The lib and header are present */
-#define USE_LIBIDN2
+#if defined(HAVE_LIBIDN2) && defined(HAVE_IDN2_H) && !defined(USE_WIN32_IDN) 
+/* The lib and header are present */ 
+#define USE_LIBIDN2 
 #endif
 
-#if defined(USE_LIBIDN2) && defined(USE_WIN32_IDN)
-#error "Both libidn2 and WinIDN are enabled, choose one."
+#if defined(USE_LIBIDN2) && defined(USE_WIN32_IDN) 
+#error "Both libidn2 and WinIDN are enabled, choose one." 
 #endif
 
 #define LIBIDN_REQUIRED_VERSION "0.4.1"
 
-#if defined(USE_GNUTLS) || defined(USE_OPENSSL) || defined(USE_NSS) || \
+#if defined(USE_GNUTLS) || defined(USE_OPENSSL) || defined(USE_NSS) || \ 
     defined(USE_MBEDTLS) || \
     defined(USE_WOLFSSL) || defined(USE_SCHANNEL) || \
     defined(USE_SECTRANSP) || defined(USE_GSKIT) || defined(USE_MESALINK) || \
@@ -616,32 +616,32 @@ int netware_init(void);
 #define USE_SSL    /* SSL support has been enabled */
 #endif
 
-/* Single point where USE_SPNEGO definition might be defined */
-#if !defined(CURL_DISABLE_CRYPTO_AUTH) && \
-    (defined(HAVE_GSSAPI) || defined(USE_WINDOWS_SSPI))
-#define USE_SPNEGO
+/* Single point where USE_SPNEGO definition might be defined */ 
+#if !defined(CURL_DISABLE_CRYPTO_AUTH) && \ 
+    (defined(HAVE_GSSAPI) || defined(USE_WINDOWS_SSPI)) 
+#define USE_SPNEGO 
 #endif
 
-/* Single point where USE_KERBEROS5 definition might be defined */
-#if !defined(CURL_DISABLE_CRYPTO_AUTH) && \
-    (defined(HAVE_GSSAPI) || defined(USE_WINDOWS_SSPI))
-#define USE_KERBEROS5
-#endif
-
-/* Single point where USE_NTLM definition might be defined */
-#if !defined(CURL_DISABLE_NTLM) && !defined(CURL_DISABLE_CRYPTO_AUTH)
+/* Single point where USE_KERBEROS5 definition might be defined */ 
+#if !defined(CURL_DISABLE_CRYPTO_AUTH) && \ 
+    (defined(HAVE_GSSAPI) || defined(USE_WINDOWS_SSPI)) 
+#define USE_KERBEROS5 
+#endif 
+ 
+/* Single point where USE_NTLM definition might be defined */ 
+#if !defined(CURL_DISABLE_NTLM) && !defined(CURL_DISABLE_CRYPTO_AUTH) 
 #if defined(USE_OPENSSL) || defined(USE_MBEDTLS) ||                     \
   defined(USE_GNUTLS) || defined(USE_NSS) || defined(USE_SECTRANSP) ||  \
   defined(USE_OS400CRYPTO) || defined(USE_WIN32_CRYPTO) ||              \
   (defined(USE_WOLFSSL) && defined(HAVE_WOLFSSL_DES_ECB_ENCRYPT))
-
+ 
 #define USE_CURL_NTLM_CORE
-
-#  if defined(USE_MBEDTLS)
-/* Get definition of MBEDTLS_MD4_C */
-#  error #include <mbedtls/md4.h>
-#  endif
-
+ 
+#  if defined(USE_MBEDTLS) 
+/* Get definition of MBEDTLS_MD4_C */ 
+#  error #include <mbedtls/md4.h> 
+#  endif 
+ 
 #endif
 
 #if defined(USE_CURL_NTLM_CORE) || defined(USE_WINDOWS_SSPI)
@@ -649,8 +649,8 @@ int netware_init(void);
 #endif
 #endif
 
-#ifdef CURL_WANTS_CA_BUNDLE_ENV
-#error "No longer supported. Set CURLOPT_CAINFO at runtime instead."
+#ifdef CURL_WANTS_CA_BUNDLE_ENV 
+#error "No longer supported. Set CURLOPT_CAINFO at runtime instead." 
 #endif
 
 #if defined(USE_LIBSSH2) || defined(USE_LIBSSH) || defined(USE_WOLFSSH)
@@ -666,10 +666,10 @@ int netware_init(void);
 #if defined(__GNUC__) && ((__GNUC__ >= 3) || \
   ((__GNUC__ == 2) && defined(__GNUC_MINOR__) && (__GNUC_MINOR__ >= 7)))
 #  define UNUSED_PARAM __attribute__((__unused__))
-#  define WARN_UNUSED_RESULT __attribute__((warn_unused_result))
+#  define WARN_UNUSED_RESULT __attribute__((warn_unused_result)) 
 #else
 #  define UNUSED_PARAM /*NOTHING*/
-#  define WARN_UNUSED_RESULT
+#  define WARN_UNUSED_RESULT 
 #endif
 
 /*
@@ -692,7 +692,7 @@ int netware_init(void);
  * Ensure that Winsock and lwIP TCP/IP stacks are not mixed.
  */
 
-#if defined(__LWIP_OPT_H__) || defined(LWIP_HDR_OPT_H)
+#if defined(__LWIP_OPT_H__) || defined(LWIP_HDR_OPT_H) 
 #  if defined(SOCKET) || \
      defined(USE_WINSOCK) || \
      defined(HAVE_WINSOCK_H) || \
@@ -722,72 +722,72 @@ int netware_init(void);
 #define S_ISDIR(m) (((m) & S_IFMT) == S_IFDIR)
 #endif
 
-/* In Windows the default file mode is text but an application can override it.
-Therefore we specify it explicitly. https://github.com/curl/curl/pull/258
-*/
-#if defined(WIN32) || defined(MSDOS)
-#define FOPEN_READTEXT "rt"
-#define FOPEN_WRITETEXT "wt"
-#define FOPEN_APPENDTEXT "at"
-#elif defined(__CYGWIN__)
-/* Cygwin has specific behavior we need to address when WIN32 is not defined.
-https://cygwin.com/cygwin-ug-net/using-textbinary.html
-For write we want our output to have line endings of LF and be compatible with
-other Cygwin utilities. For read we want to handle input that may have line
-endings either CRLF or LF so 't' is appropriate.
-*/
-#define FOPEN_READTEXT "rt"
-#define FOPEN_WRITETEXT "w"
-#define FOPEN_APPENDTEXT "a"
-#else
-#define FOPEN_READTEXT "r"
-#define FOPEN_WRITETEXT "w"
-#define FOPEN_APPENDTEXT "a"
-#endif
-
-/* WinSock destroys recv() buffer when send() failed.
- * Enabled automatically for Windows and for Cygwin as Cygwin sockets are
- * wrappers for WinSock sockets. https://github.com/curl/curl/issues/657
- * Define DONT_USE_RECV_BEFORE_SEND_WORKAROUND to force disable workaround.
- */
-#if !defined(DONT_USE_RECV_BEFORE_SEND_WORKAROUND)
-#  if defined(WIN32) || defined(__CYGWIN__)
-#    define USE_RECV_BEFORE_SEND_WORKAROUND
-#  endif
-#else  /* DONT_USE_RECV_BEFORE_SEND_WORKAROUND */
-#  ifdef USE_RECV_BEFORE_SEND_WORKAROUND
-#    undef USE_RECV_BEFORE_SEND_WORKAROUND
-#  endif
-#endif /* DONT_USE_RECV_BEFORE_SEND_WORKAROUND */
-
-/* Detect Windows App environment which has a restricted access
- * to the Win32 APIs. */
-# if (defined(_WIN32_WINNT) && (_WIN32_WINNT >= 0x0602)) || \
-  defined(WINAPI_FAMILY)
-#  include <winapifamily.h>
-#  if WINAPI_FAMILY_PARTITION(WINAPI_PARTITION_APP) &&  \
-     !WINAPI_FAMILY_PARTITION(WINAPI_PARTITION_DESKTOP)
-#    define CURL_WINDOWS_APP
-#  endif
-# endif
-
-/* for systems that don't detect this in configure, use a sensible default */
-#ifndef CURL_SA_FAMILY_T
-#define CURL_SA_FAMILY_T unsigned short
-#endif
-
-/* Some convenience macros to get the larger/smaller value out of two given.
-   We prefix with CURL to prevent name collisions. */
-#define CURLMAX(x,y) ((x)>(y)?(x):(y))
-#define CURLMIN(x,y) ((x)<(y)?(x):(y))
-
-/* Some versions of the Android SDK is missing the declaration */
-#if defined(HAVE_GETPWUID_R) && defined(HAVE_DECL_GETPWUID_R_MISSING)
-struct passwd;
-int getpwuid_r(uid_t uid, struct passwd *pwd, char *buf,
-               size_t buflen, struct passwd **result);
-#endif
-
+/* In Windows the default file mode is text but an application can override it. 
+Therefore we specify it explicitly. https://github.com/curl/curl/pull/258 
+*/ 
+#if defined(WIN32) || defined(MSDOS) 
+#define FOPEN_READTEXT "rt" 
+#define FOPEN_WRITETEXT "wt" 
+#define FOPEN_APPENDTEXT "at" 
+#elif defined(__CYGWIN__) 
+/* Cygwin has specific behavior we need to address when WIN32 is not defined. 
+https://cygwin.com/cygwin-ug-net/using-textbinary.html 
+For write we want our output to have line endings of LF and be compatible with 
+other Cygwin utilities. For read we want to handle input that may have line 
+endings either CRLF or LF so 't' is appropriate. 
+*/ 
+#define FOPEN_READTEXT "rt" 
+#define FOPEN_WRITETEXT "w" 
+#define FOPEN_APPENDTEXT "a" 
+#else 
+#define FOPEN_READTEXT "r" 
+#define FOPEN_WRITETEXT "w" 
+#define FOPEN_APPENDTEXT "a" 
+#endif 
+ 
+/* WinSock destroys recv() buffer when send() failed. 
+ * Enabled automatically for Windows and for Cygwin as Cygwin sockets are 
+ * wrappers for WinSock sockets. https://github.com/curl/curl/issues/657 
+ * Define DONT_USE_RECV_BEFORE_SEND_WORKAROUND to force disable workaround. 
+ */ 
+#if !defined(DONT_USE_RECV_BEFORE_SEND_WORKAROUND) 
+#  if defined(WIN32) || defined(__CYGWIN__) 
+#    define USE_RECV_BEFORE_SEND_WORKAROUND 
+#  endif 
+#else  /* DONT_USE_RECV_BEFORE_SEND_WORKAROUND */ 
+#  ifdef USE_RECV_BEFORE_SEND_WORKAROUND 
+#    undef USE_RECV_BEFORE_SEND_WORKAROUND 
+#  endif 
+#endif /* DONT_USE_RECV_BEFORE_SEND_WORKAROUND */ 
+ 
+/* Detect Windows App environment which has a restricted access 
+ * to the Win32 APIs. */ 
+# if (defined(_WIN32_WINNT) && (_WIN32_WINNT >= 0x0602)) || \ 
+  defined(WINAPI_FAMILY) 
+#  include <winapifamily.h> 
+#  if WINAPI_FAMILY_PARTITION(WINAPI_PARTITION_APP) &&  \ 
+     !WINAPI_FAMILY_PARTITION(WINAPI_PARTITION_DESKTOP) 
+#    define CURL_WINDOWS_APP 
+#  endif 
+# endif 
+ 
+/* for systems that don't detect this in configure, use a sensible default */ 
+#ifndef CURL_SA_FAMILY_T 
+#define CURL_SA_FAMILY_T unsigned short 
+#endif 
+ 
+/* Some convenience macros to get the larger/smaller value out of two given. 
+   We prefix with CURL to prevent name collisions. */ 
+#define CURLMAX(x,y) ((x)>(y)?(x):(y)) 
+#define CURLMIN(x,y) ((x)<(y)?(x):(y)) 
+ 
+/* Some versions of the Android SDK is missing the declaration */ 
+#if defined(HAVE_GETPWUID_R) && defined(HAVE_DECL_GETPWUID_R_MISSING) 
+struct passwd; 
+int getpwuid_r(uid_t uid, struct passwd *pwd, char *buf, 
+               size_t buflen, struct passwd **result); 
+#endif 
+ 
 #ifdef DEBUGBUILD
 #define UNITTEST
 #else

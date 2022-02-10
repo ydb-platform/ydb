@@ -210,16 +210,16 @@ protected:
             }
         }
     }
-
+ 
     void GetInitialMetadata(std::unordered_multimap<TString, TString>* metadata) {
-        for (const auto& [key, value] : Context.GetServerInitialMetadata()) {
-            metadata->emplace(
-                TString(key.begin(), key.end()),
-                TString(value.begin(), value.end())
-            );
-        }
-    }
-
+        for (const auto& [key, value] : Context.GetServerInitialMetadata()) { 
+            metadata->emplace( 
+                TString(key.begin(), key.end()), 
+                TString(value.begin(), value.end()) 
+            ); 
+        } 
+    } 
+ 
     grpc::Status Status;
     grpc::ClientContext Context;
     std::shared_ptr<IQueueClientContext> LocalContext;
@@ -397,11 +397,11 @@ public:
     virtual void Cancel() = 0;
 
     /**
-     * Scheduled initial server metadata read from the stream
-     */
+     * Scheduled initial server metadata read from the stream 
+     */ 
     virtual void ReadInitialMetadata(std::unordered_multimap<TString, TString>* metadata, TReadCallback callback) = 0;
-
-    /**
+ 
+    /** 
      * Scheduled response read from the stream
      * Callback will be called with the status if it failed
      * Only one Read or Finish call may be active at a time
@@ -560,34 +560,34 @@ public:
     }
 
     void ReadInitialMetadata(std::unordered_multimap<TString, TString>* metadata, TReadCallback callback) override {
-        TGrpcStatus status;
-
+        TGrpcStatus status; 
+ 
         {
             std::unique_lock<std::mutex> guard(Mutex);
-            Y_VERIFY(!ReadActive, "Multiple Read/Finish calls detected");
-            if (!Finished && !HasInitialMetadata) {
-                ReadActive = true;
-                ReadCallback = std::move(callback);
-                InitialMetadata = metadata;
-                if (!ReadFinished) {
-                    Stream->ReadInitialMetadata(OnReadDoneTag.Prepare());
-                }
-                return;
-            }
-            if (!HasInitialMetadata) {
-                if (FinishedOk) {
-                    status = Status;
-                } else {
-                    status = TGrpcStatus::Internal("Unexpected error");
-                }
-            } else {
-                GetInitialMetadata(metadata);
-            }
-        }
-
-        callback(std::move(status));
-    }
-
+            Y_VERIFY(!ReadActive, "Multiple Read/Finish calls detected"); 
+            if (!Finished && !HasInitialMetadata) { 
+                ReadActive = true; 
+                ReadCallback = std::move(callback); 
+                InitialMetadata = metadata; 
+                if (!ReadFinished) { 
+                    Stream->ReadInitialMetadata(OnReadDoneTag.Prepare()); 
+                } 
+                return; 
+            } 
+            if (!HasInitialMetadata) { 
+                if (FinishedOk) { 
+                    status = Status; 
+                } else { 
+                    status = TGrpcStatus::Internal("Unexpected error"); 
+                } 
+            } else { 
+                GetInitialMetadata(metadata); 
+            } 
+        } 
+ 
+        callback(std::move(status)); 
+    } 
+ 
     void Read(TResponse* message, TReadCallback callback) override {
         TGrpcStatus status;
 
@@ -710,15 +710,15 @@ private:
             callback = std::move(ReadCallback);
             ReadCallback = nullptr;
             ReadActive = false;
-            initialMetadata = InitialMetadata;
-            InitialMetadata = nullptr;
-            HasInitialMetadata = true;
+            initialMetadata = InitialMetadata; 
+            InitialMetadata = nullptr; 
+            HasInitialMetadata = true; 
         }
 
-        if (initialMetadata) {
-            GetInitialMetadata(initialMetadata);
-        }
-
+        if (initialMetadata) { 
+            GetInitialMetadata(initialMetadata); 
+        } 
+ 
         callback(std::move(status));
     }
 
@@ -813,7 +813,7 @@ private:
     std::vector<TReadCallback> FinishedCallbacks;
     std::unordered_multimap<TString, TString>* InitialMetadata = nullptr;
     bool Started = false;
-    bool HasInitialMetadata = false;
+    bool HasInitialMetadata = false; 
     bool ReadActive = false;
     bool ReadFinished = false;
     bool Finished = false;
@@ -888,34 +888,34 @@ public:
     }
 
     void ReadInitialMetadata(std::unordered_multimap<TString, TString>* metadata, TReadCallback callback) override {
-        TGrpcStatus status;
-
+        TGrpcStatus status; 
+ 
         {
             std::unique_lock<std::mutex> guard(Mutex);
-            Y_VERIFY(!ReadActive, "Multiple Read/Finish calls detected");
-            if (!Finished && !HasInitialMetadata) {
-                ReadActive = true;
-                ReadCallback = std::move(callback);
-                InitialMetadata = metadata;
-                if (!ReadFinished) {
-                    Stream->ReadInitialMetadata(OnReadDoneTag.Prepare());
-                }
-                return;
-            }
-            if (!HasInitialMetadata) {
-                if (FinishedOk) {
-                    status = Status;
-                } else {
-                    status = TGrpcStatus::Internal("Unexpected error");
-                }
-            } else {
-                GetInitialMetadata(metadata);
-            }
-        }
-
-        callback(std::move(status));
-    }
-
+            Y_VERIFY(!ReadActive, "Multiple Read/Finish calls detected"); 
+            if (!Finished && !HasInitialMetadata) { 
+                ReadActive = true; 
+                ReadCallback = std::move(callback); 
+                InitialMetadata = metadata; 
+                if (!ReadFinished) { 
+                    Stream->ReadInitialMetadata(OnReadDoneTag.Prepare()); 
+                } 
+                return; 
+            } 
+            if (!HasInitialMetadata) { 
+                if (FinishedOk) { 
+                    status = Status; 
+                } else { 
+                    status = TGrpcStatus::Internal("Unexpected error"); 
+                } 
+            } else { 
+                GetInitialMetadata(metadata); 
+            } 
+        } 
+ 
+        callback(std::move(status)); 
+    } 
+ 
     void Read(TResponse* message, TReadCallback callback) override {
         TGrpcStatus status;
 
@@ -1070,15 +1070,15 @@ private:
             callback = std::move(ReadCallback);
             ReadCallback = nullptr;
             ReadActive = false;
-            initialMetadata = InitialMetadata;
-            InitialMetadata = nullptr;
-            HasInitialMetadata = true;
+            initialMetadata = InitialMetadata; 
+            InitialMetadata = nullptr; 
+            HasInitialMetadata = true; 
         }
 
-        if (initialMetadata) {
-            GetInitialMetadata(initialMetadata);
-        }
-
+        if (initialMetadata) { 
+            GetInitialMetadata(initialMetadata); 
+        } 
+ 
         callback(std::move(status));
     }
 
@@ -1221,7 +1221,7 @@ private:
     TWriteCallback WriteCallback;
     std::unordered_multimap<TString, TString>* InitialMetadata = nullptr;
     bool Started = false;
-    bool HasInitialMetadata = false;
+    bool HasInitialMetadata = false; 
     bool ReadActive = false;
     bool ReadFinished = false;
     bool WriteActive = false;

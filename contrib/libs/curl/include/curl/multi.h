@@ -52,11 +52,11 @@
 extern "C" {
 #endif
 
-#if defined(BUILDING_LIBCURL) || defined(CURL_STRICTER)
-typedef struct Curl_multi CURLM;
-#else
+#if defined(BUILDING_LIBCURL) || defined(CURL_STRICTER) 
+typedef struct Curl_multi CURLM; 
+#else 
 typedef void CURLM;
-#endif
+#endif 
 
 typedef enum {
   CURLM_CALL_MULTI_PERFORM = -1, /* please call curl_multi_perform() or
@@ -70,8 +70,8 @@ typedef enum {
   CURLM_UNKNOWN_OPTION,  /* curl_multi_setopt() with unsupported option */
   CURLM_ADDED_ALREADY,   /* an easy handle already added to a multi handle was
                             attempted to get added - again */
-  CURLM_RECURSIVE_API_CALL, /* an api function was called from inside a
-                               callback */
+  CURLM_RECURSIVE_API_CALL, /* an api function was called from inside a 
+                               callback */ 
   CURLM_WAKEUP_FAILURE,  /* wakeup is unavailable or failed */
   CURLM_BAD_FUNCTION_ARGUMENT,  /* function called with a bad parameter */
   CURLM_LAST
@@ -82,11 +82,11 @@ typedef enum {
    curl_multi_perform() and CURLM_CALL_MULTI_PERFORM */
 #define CURLM_CALL_MULTI_SOCKET CURLM_CALL_MULTI_PERFORM
 
-/* bitmask bits for CURLMOPT_PIPELINING */
-#define CURLPIPE_NOTHING   0L
-#define CURLPIPE_HTTP1     1L
-#define CURLPIPE_MULTIPLEX 2L
-
+/* bitmask bits for CURLMOPT_PIPELINING */ 
+#define CURLPIPE_NOTHING   0L 
+#define CURLPIPE_HTTP1     1L 
+#define CURLPIPE_MULTIPLEX 2L 
+ 
 typedef enum {
   CURLMSG_NONE, /* first, not used */
   CURLMSG_DONE, /* This easy handle has completed. 'result' contains
@@ -211,8 +211,8 @@ CURL_EXTERN CURLMcode curl_multi_wakeup(CURLM *multi_handle);
   *
   * Returns: CURLMcode type, general multi error code. *NOTE* that this only
   *          returns errors etc regarding the whole multi stack. There might
-  *          still have occurred problems on individual transfers even when
-  *          this returns OK.
+  *          still have occurred problems on individual transfers even when 
+  *          this returns OK. 
   */
 CURL_EXTERN CURLMcode curl_multi_perform(CURLM *multi_handle,
                                          int *running_handles);
@@ -245,7 +245,7 @@ CURL_EXTERN CURLMcode curl_multi_cleanup(CURLM *multi_handle);
  *          curl_multi_cleanup().
  *
  *          The 'CURLMsg' struct is meant to be very simple and only contain
- *          very basic information. If more involved information is wanted,
+ *          very basic information. If more involved information is wanted, 
  *          we will provide the particular "transfer handle" in that struct
  *          and that should/could/would be used in subsequent
  *          curl_easy_getinfo() calls (or similar). The point being that we
@@ -386,12 +386,12 @@ typedef enum {
   /* maximum number of open connections in total */
   CURLOPT(CURLMOPT_MAX_TOTAL_CONNECTIONS, CURLOPTTYPE_LONG, 13),
 
-   /* This is the server push callback function pointer */
+   /* This is the server push callback function pointer */ 
   CURLOPT(CURLMOPT_PUSHFUNCTION, CURLOPTTYPE_FUNCTIONPOINT, 14),
-
-  /* This is the argument passed to the server push callback */
+ 
+  /* This is the argument passed to the server push callback */ 
   CURLOPT(CURLMOPT_PUSHDATA, CURLOPTTYPE_OBJECTPOINT, 15),
-
+ 
   /* maximum number of concurrent streams to support on a connection */
   CURLOPT(CURLMOPT_MAX_CONCURRENT_STREAMS, CURLOPTTYPE_LONG, 16),
 
@@ -422,33 +422,33 @@ CURL_EXTERN CURLMcode curl_multi_setopt(CURLM *multi_handle,
 CURL_EXTERN CURLMcode curl_multi_assign(CURLM *multi_handle,
                                         curl_socket_t sockfd, void *sockp);
 
-
-/*
- * Name: curl_push_callback
- *
- * Desc: This callback gets called when a new stream is being pushed by the
+ 
+/* 
+ * Name: curl_push_callback 
+ * 
+ * Desc: This callback gets called when a new stream is being pushed by the 
  *       server. It approves or denies the new stream. It can also decide
  *       to completely fail the connection.
- *
+ * 
  * Returns: CURL_PUSH_OK, CURL_PUSH_DENY or CURL_PUSH_ERROROUT
- */
+ */ 
 #define CURL_PUSH_OK       0
 #define CURL_PUSH_DENY     1
 #define CURL_PUSH_ERROROUT 2 /* added in 7.72.0 */
-
-struct curl_pushheaders;  /* forward declaration only */
-
-CURL_EXTERN char *curl_pushheader_bynum(struct curl_pushheaders *h,
-                                        size_t num);
-CURL_EXTERN char *curl_pushheader_byname(struct curl_pushheaders *h,
-                                         const char *name);
-
-typedef int (*curl_push_callback)(CURL *parent,
-                                  CURL *easy,
-                                  size_t num_headers,
-                                  struct curl_pushheaders *headers,
-                                  void *userp);
-
+ 
+struct curl_pushheaders;  /* forward declaration only */ 
+ 
+CURL_EXTERN char *curl_pushheader_bynum(struct curl_pushheaders *h, 
+                                        size_t num); 
+CURL_EXTERN char *curl_pushheader_byname(struct curl_pushheaders *h, 
+                                         const char *name); 
+ 
+typedef int (*curl_push_callback)(CURL *parent, 
+                                  CURL *easy, 
+                                  size_t num_headers, 
+                                  struct curl_pushheaders *headers, 
+                                  void *userp); 
+ 
 #ifdef __cplusplus
 } /* end of extern "C" */
 #endif

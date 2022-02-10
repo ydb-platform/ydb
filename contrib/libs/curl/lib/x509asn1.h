@@ -25,7 +25,7 @@
 
 #include "curl_setup.h"
 
-#if defined(USE_GSKIT) || defined(USE_NSS) || defined(USE_GNUTLS) || \
+#if defined(USE_GSKIT) || defined(USE_NSS) || defined(USE_GNUTLS) || \ 
     defined(USE_WOLFSSL) || defined(USE_SCHANNEL)
 
 #include "urldata.h"
@@ -34,9 +34,9 @@
  * Constants.
  */
 
-/* Largest supported ASN.1 structure. */
-#define CURL_ASN1_MAX                   ((size_t) 0x40000)      /* 256K */
-
+/* Largest supported ASN.1 structure. */ 
+#define CURL_ASN1_MAX                   ((size_t) 0x40000)      /* 256K */ 
+ 
 /* ASN.1 classes. */
 #define CURL_ASN1_UNIVERSAL             0
 #define CURL_ASN1_APPLICATION           1
@@ -124,10 +124,10 @@ const char *Curl_getASN1Element(struct Curl_asn1Element *elem,
 const char *Curl_ASN1tostr(struct Curl_asn1Element *elem, int type);
 const char *Curl_DNtostr(struct Curl_asn1Element *dn);
 int Curl_parseX509(struct Curl_X509certificate *cert,
-                   const char *beg, const char *end);
-CURLcode Curl_extract_certinfo(struct connectdata *conn, int certnum,
-                               const char *beg, const char *end);
-CURLcode Curl_verifyhost(struct connectdata *conn,
-                         const char *beg, const char *end);
+                   const char *beg, const char *end); 
+CURLcode Curl_extract_certinfo(struct connectdata *conn, int certnum, 
+                               const char *beg, const char *end); 
+CURLcode Curl_verifyhost(struct connectdata *conn, 
+                         const char *beg, const char *end); 
 #endif /* USE_GSKIT or USE_NSS or USE_GNUTLS or USE_WOLFSSL or USE_SCHANNEL */
 #endif /* HEADER_CURL_X509ASN1_H */

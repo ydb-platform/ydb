@@ -26,11 +26,11 @@
 
 #define HMAC_MD5_LENGTH 16
 
-typedef void    (* HMAC_hinit_func)(void *context);
-typedef void    (* HMAC_hupdate_func)(void *context,
-                                      const unsigned char *data,
+typedef void    (* HMAC_hinit_func)(void *context); 
+typedef void    (* HMAC_hupdate_func)(void *context, 
+                                      const unsigned char *data, 
                                       unsigned int len);
-typedef void    (* HMAC_hfinal_func)(unsigned char *result, void *context);
+typedef void    (* HMAC_hfinal_func)(unsigned char *result, void *context); 
 
 
 /* Per-hash function HMAC parameters. */
@@ -48,8 +48,8 @@ struct HMAC_params {
 /* HMAC computation context. */
 struct HMAC_context {
   const struct HMAC_params *hmac_hash; /* Hash function definition. */
-  void *hmac_hashctxt1;         /* Hash function context 1. */
-  void *hmac_hashctxt2;         /* Hash function context 2. */
+  void *hmac_hashctxt1;         /* Hash function context 1. */ 
+  void *hmac_hashctxt2;         /* Hash function context 2. */ 
 };
 
 
@@ -58,7 +58,7 @@ struct HMAC_context *Curl_HMAC_init(const struct HMAC_params *hashparams,
                                     const unsigned char *key,
                                     unsigned int keylen);
 int Curl_HMAC_update(struct HMAC_context *context,
-                     const unsigned char *data,
+                     const unsigned char *data, 
                      unsigned int len);
 int Curl_HMAC_final(struct HMAC_context *context, unsigned char *result);
 

@@ -267,19 +267,19 @@ namespace NInterconnect {
     public:
         TImpl(const TString& certificate, const TString& privateKey, const TString& caFilePath,
                 const TString& ciphers) {
-            int ret;
+            int ret; 
             InitOpenSSL();
-#if OPENSSL_VERSION_NUMBER < 0x10100000L
+#if OPENSSL_VERSION_NUMBER < 0x10100000L 
             Ctx.reset(SSL_CTX_new(TLSv1_2_method()));
             Y_VERIFY(Ctx, "SSL_CTX_new() failed");
-#else
-            Ctx.reset(SSL_CTX_new(TLS_method()));
-            Y_VERIFY(Ctx, "SSL_CTX_new() failed");
-            ret = SSL_CTX_set_min_proto_version(Ctx.get(), TLS1_2_VERSION);
-            Y_VERIFY(ret == 1, "failed to set min proto version");
-            ret = SSL_CTX_set_max_proto_version(Ctx.get(), TLS1_2_VERSION);
-            Y_VERIFY(ret == 1, "failed to set max proto version");
-#endif
+#else 
+            Ctx.reset(SSL_CTX_new(TLS_method())); 
+            Y_VERIFY(Ctx, "SSL_CTX_new() failed"); 
+            ret = SSL_CTX_set_min_proto_version(Ctx.get(), TLS1_2_VERSION); 
+            Y_VERIFY(ret == 1, "failed to set min proto version"); 
+            ret = SSL_CTX_set_max_proto_version(Ctx.get(), TLS1_2_VERSION); 
+            Y_VERIFY(ret == 1, "failed to set max proto version"); 
+#endif 
             SSL_CTX_set_verify(Ctx.get(), SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT, &Verify);
             SSL_CTX_set_mode(*this, SSL_MODE_ENABLE_PARTIAL_WRITE | SSL_MODE_ACCEPT_MOVING_WRITE_BUFFER);
 

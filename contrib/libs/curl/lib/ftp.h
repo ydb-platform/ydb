@@ -80,7 +80,7 @@ typedef enum {
 
 struct ftp_parselist_data; /* defined later in ftplistparser.c */
 
-struct ftp_wc {
+struct ftp_wc { 
   struct ftp_parselist_data *parser;
 
   struct {
@@ -96,13 +96,13 @@ typedef enum {
                             file */
 } curl_ftpfile;
 
-/* This FTP struct is used in the Curl_easy. All FTP data that is
+/* This FTP struct is used in the Curl_easy. All FTP data that is 
    connection-oriented must be in FTP_conn to properly deal with the fact that
-   perhaps the Curl_easy is changed between the times the connection is
+   perhaps the Curl_easy is changed between the times the connection is 
    used. */
 struct FTP {
-  char *path;    /* points to the urlpieces struct field */
-  char *pathalloc; /* if non-NULL a pointer to an allocated path */
+  char *path;    /* points to the urlpieces struct field */ 
+  char *pathalloc; /* if non-NULL a pointer to an allocated path */ 
 
   /* transfer a file/body or not, done as a typedefed enum just to make
      debuggers display the full symbol and not just the numerical value */
@@ -127,7 +127,7 @@ struct ftp_conn {
                        should be FALSE when it gets to Curl_ftp_quit() */
   bool cwddone;     /* if it has been determined that the proper CWD combo
                        already has been done */
-  int cwdcount;     /* number of CWD commands issued */
+  int cwdcount;     /* number of CWD commands issued */ 
   bool cwdfail;     /* set TRUE if a CWD command fails, as then we must prevent
                        caching the current directory */
   bool wait_data_conn; /* this is set TRUE if data connection is waited */
@@ -141,14 +141,14 @@ struct ftp_conn {
   ftpstate state_saved; /* transfer type saved to be reloaded after
                            data connection is established */
   curl_off_t retr_size_saved; /* Size of retrieved file saved */
-  char *server_os;     /* The target server operating system. */
+  char *server_os;     /* The target server operating system. */ 
   curl_off_t known_filesize; /* file size is different from -1, if wildcard
                                 LIST parsing was done and wc_statemach set
                                 it */
-  /* newhost is the (allocated) IP addr or host name to connect the data
-     connection to */
-  char *newhost;          /* this is the pair to connect the DATA... */
-  unsigned short newport; /* connection to */
+  /* newhost is the (allocated) IP addr or host name to connect the data 
+     connection to */ 
+  char *newhost;          /* this is the pair to connect the DATA... */ 
+  unsigned short newport; /* connection to */ 
 };
 
 #define DEFAULT_ACCEPT_TIMEOUT   60000 /* milliseconds == one minute */

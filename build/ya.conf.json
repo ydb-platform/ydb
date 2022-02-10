@@ -3007,22 +3007,22 @@
                 }
             ]
         },
-        "ymakeyndexer": {
-            "tools": {
+        "ymakeyndexer": { 
+            "tools": { 
                 "ymakeyndexer": {
                     "bottle": "ymakeyndexer",
                     "executable": "ymakeyndexer"
                 }
-            },
-            "platforms": [
+            }, 
+            "platforms": [ 
                 {
                     "host": {
                         "os": "LINUX"
                     },
                     "default": true
                 }
-            ]
-        },
+            ] 
+        }, 
         "transfer-manager": {
             "tools": {
                 "transfer-manager": {
@@ -4392,7 +4392,7 @@
                     "default": true
                 }
             ]
-        },
+        }, 
         "horadric": {
             "tools": {
                 "horadric": {
@@ -4471,14 +4471,14 @@
                 }
             ]
         },
-        "python3": {
-            "tools": {
+        "python3": { 
+            "tools": { 
                 "python3": {
                     "bottle": "python3",
                     "executable": "python3"
                 }
-            },
-            "platforms": [
+            }, 
+            "platforms": [ 
                 {
                     "host": {
                         "os": "LINUX"
@@ -4504,7 +4504,7 @@
                     },
                     "default": true
                 }
-            ]
+            ] 
         },
         "run_python_udf": {
             "tools": {
@@ -5621,7 +5621,7 @@
                     "default": true
                 }
             ]
-        },
+        }, 
         "skotty": {
             "tools": {
                 "skotty": {
@@ -5650,55 +5650,55 @@
                 }
             ]
         },
-        "gcc102-arm-none-eabi": {
-            "tools": {
-                "cc": {
-                    "bottle": "gcc102-arm-none-eabi",
-                    "executable": "cc"
-                },
-                "c++": {
-                    "bottle": "gcc102-arm-none-eabi",
-                    "executable": "c++"
-                },
-                "gcov": {
-                    "bottle": "gcc102-arm-none-eabi",
-                    "executable": "gcov"
-                },
-                "c++filt": {
-                    "bottle": "gcc102-arm-none-eabi",
-                    "executable": "c++filt"
-                },
-                "nm": {
-                    "bottle": "gcc102-arm-none-eabi",
-                    "executable": "nm"
-                },
-                "strip": {
-                    "bottle": "gcc102-arm-none-eabi",
-                    "executable": "strip"
-                }
-            },
-            "platforms": [
-                {
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "target": {
-                        "os": "NONE",
-                        "arch": "armv8m_cortex_m33"
-                    },
-                    "default": true
-                }
-            ],
-            "params": {
-                "type": "gnu",
-                "match_root": "GCC",
-                "werror_mode": "compiler_specific",
-                "c_compiler": "$(GCC)/bin/arm-none-eabi-gcc",
-                "cxx_compiler": "$(GCC)/bin/arm-none-eabi-g++",
-                "ar": "$(GCC)/bin/arm-none-eabi-ar",
-                "objcopy": "$(GCC)/bin/arm-none-eabi-objcopy",
-                "gcc_version": "10.2.1"
-            }
+        "gcc102-arm-none-eabi": { 
+            "tools": { 
+                "cc": { 
+                    "bottle": "gcc102-arm-none-eabi", 
+                    "executable": "cc" 
+                }, 
+                "c++": { 
+                    "bottle": "gcc102-arm-none-eabi", 
+                    "executable": "c++" 
+                }, 
+                "gcov": { 
+                    "bottle": "gcc102-arm-none-eabi", 
+                    "executable": "gcov" 
+                }, 
+                "c++filt": { 
+                    "bottle": "gcc102-arm-none-eabi", 
+                    "executable": "c++filt" 
+                }, 
+                "nm": { 
+                    "bottle": "gcc102-arm-none-eabi", 
+                    "executable": "nm" 
+                }, 
+                "strip": { 
+                    "bottle": "gcc102-arm-none-eabi", 
+                    "executable": "strip" 
+                } 
+            }, 
+            "platforms": [ 
+                { 
+                    "host": { 
+                        "os": "LINUX" 
+                    }, 
+                    "target": { 
+                        "os": "NONE", 
+                        "arch": "armv8m_cortex_m33" 
+                    }, 
+                    "default": true 
+                } 
+            ], 
+            "params": { 
+                "type": "gnu", 
+                "match_root": "GCC", 
+                "werror_mode": "compiler_specific", 
+                "c_compiler": "$(GCC)/bin/arm-none-eabi-gcc", 
+                "cxx_compiler": "$(GCC)/bin/arm-none-eabi-g++", 
+                "ar": "$(GCC)/bin/arm-none-eabi-ar", 
+                "objcopy": "$(GCC)/bin/arm-none-eabi-objcopy", 
+                "gcc_version": "10.2.1" 
+            } 
         },
         "eductl": {
             "tools": {
@@ -6554,17 +6554,17 @@
                 ]
             }
         },
-        "ymakeyndexer": {
-            "formula": {
+        "ymakeyndexer": { 
+            "formula": { 
                 "sandbox_id": 239256113,
-                "match": "YMAKEYNDEXER"
-            },
-            "executable": {
+                "match": "YMAKEYNDEXER" 
+            }, 
+            "executable": { 
                 "ymakeyndexer": [
                     "ymakeyndexer"
                 ]
-            }
-        },
+            } 
+        }, 
         "transfer-manager": {
             "formula": {
                 "sandbox_id": 135979123,
@@ -7237,17 +7237,17 @@
                     "ptipython"
                 ]
             }
-        },
-        "python3": {
-            "formula": {
+        }, 
+        "python3": { 
+            "formula": { 
                 "sandbox_id": 1020522806,
-                "match": "python3"
-            },
-            "executable": {
+                "match": "python3" 
+            }, 
+            "executable": { 
                 "python3": [
                     "python3"
                 ]
-            }
+            } 
         },
         "run_python_udf": {
             "formula": {
@@ -7906,7 +7906,7 @@
                     "wall-e"
                 ]
             }
-        },
+        }, 
         "skotty": {
             "formula": {
                 "sandbox_id": 1160938937,
@@ -7918,43 +7918,43 @@
                 ]
             }
         },
-        "gcc102-arm-none-eabi": {
-            "formula": {
-                "sandbox_id": 1020757602,
-                "match": "GNU ARM"
-            },
-            "executable": {
-                "c++": [
-                    "bin",
-                    "arm-none-eabi",
-                    "arm-none-eabi-g++"
-                ],
-                "cc": [
-                    "bin",
-                    "arm-none-eabi",
-                    "arm-none-eabi-gcc"
-                ],
-                "gcov": [
-                    "bin",
-                    "arm-none-eabi",
-                    "arm-none-eabi-gcov"
-                ],
-                "c++filt": [
-                    "bin",
-                    "arm-none-eabi",
-                    "arm-none-eabi-c++filt"
-                ],
-                "nm": [
-                    "bin",
-                    "arm-none-eabi",
-                    "arm-none-eabi-nm"
-                ],
-                "strip": [
-                    "bin",
-                    "arm-none-eabi",
-                    "arm-none-eabi-strip"
-                ]
-            }
+        "gcc102-arm-none-eabi": { 
+            "formula": { 
+                "sandbox_id": 1020757602, 
+                "match": "GNU ARM" 
+            }, 
+            "executable": { 
+                "c++": [ 
+                    "bin", 
+                    "arm-none-eabi", 
+                    "arm-none-eabi-g++" 
+                ], 
+                "cc": [ 
+                    "bin", 
+                    "arm-none-eabi", 
+                    "arm-none-eabi-gcc" 
+                ], 
+                "gcov": [ 
+                    "bin", 
+                    "arm-none-eabi", 
+                    "arm-none-eabi-gcov" 
+                ], 
+                "c++filt": [ 
+                    "bin", 
+                    "arm-none-eabi", 
+                    "arm-none-eabi-c++filt" 
+                ], 
+                "nm": [ 
+                    "bin", 
+                    "arm-none-eabi", 
+                    "arm-none-eabi-nm" 
+                ], 
+                "strip": [ 
+                    "bin", 
+                    "arm-none-eabi", 
+                    "arm-none-eabi-strip" 
+                ] 
+            } 
         },
         "eductl": {
             "formula": {

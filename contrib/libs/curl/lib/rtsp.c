@@ -33,13 +33,13 @@
 #include "url.h"
 #include "progress.h"
 #include "rtsp.h"
-#include "strcase.h"
+#include "strcase.h" 
 #include "select.h"
 #include "connect.h"
-#include "strdup.h"
-/* The last 3 #include files should be in this order */
-#include "curl_printf.h"
-#include "curl_memory.h"
+#include "strdup.h" 
+/* The last 3 #include files should be in this order */ 
+#include "curl_printf.h" 
+#include "curl_memory.h" 
 #include "memdebug.h"
 
 #define RTP_PKT_CHANNEL(p)   ((int)((unsigned char)((p)[1])))
@@ -61,14 +61,14 @@ static int rtsp_getsock_do(struct connectdata *conn, curl_socket_t *socks);
  *        data is parsed and k->str is moved up
  * readmore: whether or not the RTP parser needs more data right away
  */
-static CURLcode rtsp_rtp_readwrite(struct Curl_easy *data,
+static CURLcode rtsp_rtp_readwrite(struct Curl_easy *data, 
                                    struct connectdata *conn,
                                    ssize_t *nread,
                                    bool *readmore);
 
 static CURLcode rtsp_setup_connection(struct connectdata *conn);
-static unsigned int rtsp_conncheck(struct connectdata *check,
-                                   unsigned int checks_to_perform);
+static unsigned int rtsp_conncheck(struct connectdata *check, 
+                                   unsigned int checks_to_perform); 
 
 /* this returns the socket to wait for in the DO and DOING state for the multi
    interface and then we're always _sending_ a request and thus we wait for
@@ -103,7 +103,7 @@ const struct Curl_handler Curl_handler_rtsp = {
   ZERO_NULL,                            /* perform_getsock */
   rtsp_disconnect,                      /* disconnect */
   rtsp_rtp_readwrite,                   /* readwrite */
-  rtsp_conncheck,                       /* connection_check */
+  rtsp_conncheck,                       /* connection_check */ 
   PORT_RTSP,                            /* defport */
   CURLPROTO_RTSP,                       /* protocol */
   CURLPROTO_RTSP,                       /* family */
@@ -128,7 +128,7 @@ static CURLcode rtsp_setup_connection(struct connectdata *conn)
  * want to block the application forever while receiving a stream. Therefore,
  * we cannot assume that an RTSP socket is dead just because it is readable.
  *
- * Instead, if it is readable, run Curl_connalive() to peek at the socket
+ * Instead, if it is readable, run Curl_connalive() to peek at the socket 
  * and distinguish between closed and data.
  */
 static bool rtsp_connisdead(struct connectdata *check)
@@ -136,7 +136,7 @@ static bool rtsp_connisdead(struct connectdata *check)
   int sval;
   bool ret_val = TRUE;
 
-  sval = SOCKET_READABLE(check->sock[FIRSTSOCKET], 0);
+  sval = SOCKET_READABLE(check->sock[FIRSTSOCKET], 0); 
   if(sval == 0) {
     /* timeout */
     ret_val = FALSE;
@@ -145,35 +145,35 @@ static bool rtsp_connisdead(struct connectdata *check)
     /* socket is in an error state */
     ret_val = TRUE;
   }
-  else if(sval & CURL_CSELECT_IN) {
-    /* readable with no error. could still be closed */
-    ret_val = !Curl_connalive(check);
+  else if(sval & CURL_CSELECT_IN) { 
+    /* readable with no error. could still be closed */ 
+    ret_val = !Curl_connalive(check); 
   }
 
   return ret_val;
 }
 
-/*
- * Function to check on various aspects of a connection.
- */
-static unsigned int rtsp_conncheck(struct connectdata *check,
-                                   unsigned int checks_to_perform)
-{
-  unsigned int ret_val = CONNRESULT_NONE;
-
-  if(checks_to_perform & CONNCHECK_ISDEAD) {
-    if(rtsp_connisdead(check))
-      ret_val |= CONNRESULT_DEAD;
-  }
-
-  return ret_val;
-}
-
-
+/* 
+ * Function to check on various aspects of a connection. 
+ */ 
+static unsigned int rtsp_conncheck(struct connectdata *check, 
+                                   unsigned int checks_to_perform) 
+{ 
+  unsigned int ret_val = CONNRESULT_NONE; 
+ 
+  if(checks_to_perform & CONNCHECK_ISDEAD) { 
+    if(rtsp_connisdead(check)) 
+      ret_val |= CONNRESULT_DEAD; 
+  } 
+ 
+  return ret_val; 
+} 
+ 
+ 
 static CURLcode rtsp_connect(struct connectdata *conn, bool *done)
 {
   CURLcode httpStatus;
-  struct Curl_easy *data = conn->data;
+  struct Curl_easy *data = conn->data; 
 
   httpStatus = Curl_http_connect(conn, done);
 
@@ -199,7 +199,7 @@ static CURLcode rtsp_disconnect(struct connectdata *conn, bool dead)
 static CURLcode rtsp_done(struct connectdata *conn,
                           CURLcode status, bool premature)
 {
-  struct Curl_easy *data = conn->data;
+  struct Curl_easy *data = conn->data; 
   struct RTSP *rtsp = data->req.p.rtsp;
   CURLcode httpStatus;
 
@@ -211,15 +211,15 @@ static CURLcode rtsp_done(struct connectdata *conn,
 
   if(rtsp) {
     /* Check the sequence numbers */
-    long CSeq_sent = rtsp->CSeq_sent;
-    long CSeq_recv = rtsp->CSeq_recv;
+    long CSeq_sent = rtsp->CSeq_sent; 
+    long CSeq_recv = rtsp->CSeq_recv; 
     if((data->set.rtspreq != RTSPREQ_RECEIVE) && (CSeq_sent != CSeq_recv)) {
       failf(data,
             "The CSeq of this request %ld did not match the response %ld",
             CSeq_sent, CSeq_recv);
       return CURLE_RTSP_CSEQ_ERROR;
     }
-    if(data->set.rtspreq == RTSPREQ_RECEIVE &&
+    if(data->set.rtspreq == RTSPREQ_RECEIVE && 
             (conn->proto.rtspc.rtp_channel == -1)) {
       infof(data, "Got an RTP Receive with a CSeq of %ld\n", CSeq_recv);
     }
@@ -230,8 +230,8 @@ static CURLcode rtsp_done(struct connectdata *conn,
 
 static CURLcode rtsp_do(struct connectdata *conn, bool *done)
 {
-  struct Curl_easy *data = conn->data;
-  CURLcode result = CURLE_OK;
+  struct Curl_easy *data = conn->data; 
+  CURLcode result = CURLE_OK; 
   Curl_RtspReq rtspreq = data->set.rtspreq;
   struct RTSP *rtsp = data->req.p.rtsp;
   struct dynbuf req_buffer;
@@ -247,8 +247,8 @@ static CURLcode rtsp_do(struct connectdata *conn, bool *done)
   const char *p_stream_uri = NULL;
   const char *p_transport = NULL;
   const char *p_uagent = NULL;
-  const char *p_proxyuserpwd = NULL;
-  const char *p_userpwd = NULL;
+  const char *p_proxyuserpwd = NULL; 
+  const char *p_userpwd = NULL; 
 
   *done = TRUE;
 
@@ -261,8 +261,8 @@ static CURLcode rtsp_do(struct connectdata *conn, bool *done)
    **/
   data->set.opt_no_body = TRUE; /* most requests don't contain a body */
   switch(rtspreq) {
-  default:
-    failf(data, "Got invalid RTSP request");
+  default: 
+    failf(data, "Got invalid RTSP request"); 
     return CURLE_BAD_FUNCTION_ARGUMENT;
   case RTSPREQ_OPTIONS:
     p_request = "OPTIONS";
@@ -317,7 +317,7 @@ static CURLcode rtsp_do(struct connectdata *conn, bool *done)
   if(!p_session_id &&
      (rtspreq & ~(RTSPREQ_OPTIONS | RTSPREQ_DESCRIBE | RTSPREQ_SETUP))) {
     failf(data, "Refusing to issue an RTSP request [%s] without a session ID.",
-          p_request);
+          p_request); 
     return CURLE_BAD_FUNCTION_ARGUMENT;
   }
 
@@ -330,7 +330,7 @@ static CURLcode rtsp_do(struct connectdata *conn, bool *done)
   }
 
   /* Transport Header for SETUP requests */
-  p_transport = Curl_checkheaders(conn, "Transport");
+  p_transport = Curl_checkheaders(conn, "Transport"); 
   if(rtspreq == RTSPREQ_SETUP && !p_transport) {
     /* New Transport: setting? */
     if(data->set.str[STRING_RTSP_TRANSPORT]) {
@@ -354,11 +354,11 @@ static CURLcode rtsp_do(struct connectdata *conn, bool *done)
   /* Accept Headers for DESCRIBE requests */
   if(rtspreq == RTSPREQ_DESCRIBE) {
     /* Accept Header */
-    p_accept = Curl_checkheaders(conn, "Accept")?
+    p_accept = Curl_checkheaders(conn, "Accept")? 
       NULL:"Accept: application/sdp\r\n";
 
     /* Accept-Encoding header */
-    if(!Curl_checkheaders(conn, "Accept-Encoding") &&
+    if(!Curl_checkheaders(conn, "Accept-Encoding") && 
        data->set.str[STRING_ENCODING]) {
       Curl_safefree(data->state.aptr.accept_encoding);
       data->state.aptr.accept_encoding =
@@ -379,22 +379,22 @@ static CURLcode rtsp_do(struct connectdata *conn, bool *done)
     Curl_safefree(data->state.aptr.uagent);
     data->state.aptr.uagent = NULL;
   }
-  else if(!Curl_checkheaders(conn, "User-Agent") &&
+  else if(!Curl_checkheaders(conn, "User-Agent") && 
           data->set.str[STRING_USERAGENT]) {
     p_uagent = data->state.aptr.uagent;
   }
 
-  /* setup the authentication headers */
-  result = Curl_http_output_auth(conn, p_request, p_stream_uri, FALSE);
-  if(result)
-    return result;
-
+  /* setup the authentication headers */ 
+  result = Curl_http_output_auth(conn, p_request, p_stream_uri, FALSE); 
+  if(result) 
+    return result; 
+ 
   p_proxyuserpwd = data->state.aptr.proxyuserpwd;
   p_userpwd = data->state.aptr.userpwd;
-
+ 
   /* Referrer */
   Curl_safefree(data->state.aptr.ref);
-  if(data->change.referer && !Curl_checkheaders(conn, "Referer"))
+  if(data->change.referer && !Curl_checkheaders(conn, "Referer")) 
     data->state.aptr.ref = aprintf("Referer: %s\r\n", data->change.referer);
   else
     data->state.aptr.ref = NULL;
@@ -411,7 +411,7 @@ static CURLcode rtsp_do(struct connectdata *conn, bool *done)
      (rtspreq  & (RTSPREQ_PLAY | RTSPREQ_PAUSE | RTSPREQ_RECORD))) {
 
     /* Check to see if there is a range set in the custom headers */
-    if(!Curl_checkheaders(conn, "Range") && data->state.range) {
+    if(!Curl_checkheaders(conn, "Range") && data->state.range) { 
       Curl_safefree(data->state.aptr.rangeline);
       data->state.aptr.rangeline = aprintf("Range: %s\r\n", data->state.range);
       p_range = data->state.aptr.rangeline;
@@ -421,11 +421,11 @@ static CURLcode rtsp_do(struct connectdata *conn, bool *done)
   /*
    * Sanity check the custom headers
    */
-  if(Curl_checkheaders(conn, "CSeq")) {
+  if(Curl_checkheaders(conn, "CSeq")) { 
     failf(data, "CSeq cannot be set as a custom header.");
     return CURLE_RTSP_CSEQ_ERROR;
   }
-  if(Curl_checkheaders(conn, "Session")) {
+  if(Curl_checkheaders(conn, "Session")) { 
     failf(data, "Session ID cannot be set as a custom header.");
     return CURLE_BAD_FUNCTION_ARGUMENT;
   }
@@ -472,14 +472,14 @@ static CURLcode rtsp_do(struct connectdata *conn, bool *done)
                          p_uagent ? p_uagent : "",
                          p_proxyuserpwd ? p_proxyuserpwd : "",
                          p_userpwd ? p_userpwd : "");
-
-  /*
-   * Free userpwd now --- cannot reuse this for Negotiate and possibly NTLM
-   * with basic and digest, it will be freed anyway by the next request
-   */
+ 
+  /* 
+   * Free userpwd now --- cannot reuse this for Negotiate and possibly NTLM 
+   * with basic and digest, it will be freed anyway by the next request 
+   */ 
   Curl_safefree(data->state.aptr.userpwd);
   data->state.aptr.userpwd = NULL;
-
+ 
   if(result)
     return result;
 
@@ -498,13 +498,13 @@ static CURLcode rtsp_do(struct connectdata *conn, bool *done)
      rtspreq == RTSPREQ_GET_PARAMETER) {
 
     if(data->set.upload) {
-      putsize = data->state.infilesize;
+      putsize = data->state.infilesize; 
       data->state.httpreq = HTTPREQ_PUT;
 
     }
     else {
-      postsize = (data->state.infilesize != -1)?
-        data->state.infilesize:
+      postsize = (data->state.infilesize != -1)? 
+        data->state.infilesize: 
         (data->set.postfields? (curl_off_t)strlen(data->set.postfields):0);
       data->state.httpreq = HTTPREQ_POST;
     }
@@ -512,8 +512,8 @@ static CURLcode rtsp_do(struct connectdata *conn, bool *done)
     if(putsize > 0 || postsize > 0) {
       /* As stated in the http comments, it is probably not wise to
        * actually set a custom Content-Length in the headers */
-      if(!Curl_checkheaders(conn, "Content-Length")) {
-        result =
+      if(!Curl_checkheaders(conn, "Content-Length")) { 
+        result = 
           Curl_dyn_addf(&req_buffer,
                         "Content-Length: %" CURL_FORMAT_CURL_OFF_T"\r\n",
                         (data->set.upload ? putsize : postsize));
@@ -523,7 +523,7 @@ static CURLcode rtsp_do(struct connectdata *conn, bool *done)
 
       if(rtspreq == RTSPREQ_SET_PARAMETER ||
          rtspreq == RTSPREQ_GET_PARAMETER) {
-        if(!Curl_checkheaders(conn, "Content-Type")) {
+        if(!Curl_checkheaders(conn, "Content-Type")) { 
           result = Curl_dyn_addf(&req_buffer,
                                  "Content-Type: text/parameters\r\n");
           if(result)
@@ -532,7 +532,7 @@ static CURLcode rtsp_do(struct connectdata *conn, bool *done)
       }
 
       if(rtspreq == RTSPREQ_ANNOUNCE) {
-        if(!Curl_checkheaders(conn, "Content-Type")) {
+        if(!Curl_checkheaders(conn, "Content-Type")) { 
           result = Curl_dyn_addf(&req_buffer,
                                  "Content-Type: application/sdp\r\n");
           if(result)
@@ -588,7 +588,7 @@ static CURLcode rtsp_do(struct connectdata *conn, bool *done)
 }
 
 
-static CURLcode rtsp_rtp_readwrite(struct Curl_easy *data,
+static CURLcode rtsp_rtp_readwrite(struct Curl_easy *data, 
                                    struct connectdata *conn,
                                    ssize_t *nread,
                                    bool *readmore) {
@@ -602,8 +602,8 @@ static CURLcode rtsp_rtp_readwrite(struct Curl_easy *data,
 
   if(rtspc->rtp_buf) {
     /* There was some leftover data the last time. Merge buffers */
-    char *newptr = Curl_saferealloc(rtspc->rtp_buf,
-                                    rtspc->rtp_bufsize + *nread);
+    char *newptr = Curl_saferealloc(rtspc->rtp_buf, 
+                                    rtspc->rtp_bufsize + *nread); 
     if(!newptr) {
       rtspc->rtp_buf = NULL;
       rtspc->rtp_bufsize = 0;
@@ -638,29 +638,29 @@ static CURLcode rtsp_rtp_readwrite(struct Curl_easy *data,
         *readmore = TRUE;
         break;
       }
-      /* We have the full RTP interleaved packet
-       * Write out the header including the leading '$' */
-      DEBUGF(infof(data, "RTP write channel %d rtp_length %d\n",
-             rtspc->rtp_channel, rtp_length));
-      result = rtp_client_write(conn, &rtp[0], rtp_length + 4);
-      if(result) {
-        failf(data, "Got an error writing an RTP packet");
-        *readmore = FALSE;
-        Curl_safefree(rtspc->rtp_buf);
-        rtspc->rtp_buf = NULL;
-        rtspc->rtp_bufsize = 0;
-        return result;
-      }
+      /* We have the full RTP interleaved packet 
+       * Write out the header including the leading '$' */ 
+      DEBUGF(infof(data, "RTP write channel %d rtp_length %d\n", 
+             rtspc->rtp_channel, rtp_length)); 
+      result = rtp_client_write(conn, &rtp[0], rtp_length + 4); 
+      if(result) { 
+        failf(data, "Got an error writing an RTP packet"); 
+        *readmore = FALSE; 
+        Curl_safefree(rtspc->rtp_buf); 
+        rtspc->rtp_buf = NULL; 
+        rtspc->rtp_bufsize = 0; 
+        return result; 
+      } 
 
-      /* Move forward in the buffer */
-      rtp_dataleft -= rtp_length + 4;
-      rtp += rtp_length + 4;
+      /* Move forward in the buffer */ 
+      rtp_dataleft -= rtp_length + 4; 
+      rtp += rtp_length + 4; 
 
-      if(data->set.rtspreq == RTSPREQ_RECEIVE) {
-        /* If we are in a passive receive, give control back
-         * to the app as often as we can.
-         */
-        k->keepon &= ~KEEP_RECV;
+      if(data->set.rtspreq == RTSPREQ_RECEIVE) { 
+        /* If we are in a passive receive, give control back 
+         * to the app as often as we can. 
+         */ 
+        k->keepon &= ~KEEP_RECV; 
       }
     }
     else {
@@ -691,18 +691,18 @@ static CURLcode rtsp_rtp_readwrite(struct Curl_easy *data,
     *nread = 0;
     return CURLE_OK;
   }
-  /* Fix up k->str to point just after the last RTP packet */
-  k->str += *nread - rtp_dataleft;
+  /* Fix up k->str to point just after the last RTP packet */ 
+  k->str += *nread - rtp_dataleft; 
 
-  /* either all of the data has been read or...
-   * rtp now points at the next byte to parse
-   */
-  if(rtp_dataleft > 0)
-    DEBUGASSERT(k->str[0] == rtp[0]);
+  /* either all of the data has been read or... 
+   * rtp now points at the next byte to parse 
+   */ 
+  if(rtp_dataleft > 0) 
+    DEBUGASSERT(k->str[0] == rtp[0]); 
 
-  DEBUGASSERT(rtp_dataleft <= *nread); /* sanity check */
+  DEBUGASSERT(rtp_dataleft <= *nread); /* sanity check */ 
 
-  *nread = rtp_dataleft;
+  *nread = rtp_dataleft; 
 
   /* If we get here, we have finished with the leftover/merge buffer */
   Curl_safefree(rtspc->rtp_buf);
@@ -715,40 +715,40 @@ static CURLcode rtsp_rtp_readwrite(struct Curl_easy *data,
 static
 CURLcode rtp_client_write(struct connectdata *conn, char *ptr, size_t len)
 {
-  struct Curl_easy *data = conn->data;
+  struct Curl_easy *data = conn->data; 
   size_t wrote;
   curl_write_callback writeit;
-  void *user_ptr;
+  void *user_ptr; 
 
   if(len == 0) {
-    failf(data, "Cannot write a 0 size RTP packet.");
+    failf(data, "Cannot write a 0 size RTP packet."); 
     return CURLE_WRITE_ERROR;
   }
 
-  /* If the user has configured CURLOPT_INTERLEAVEFUNCTION then use that
-     function and any configured CURLOPT_INTERLEAVEDATA to write out the RTP
-     data. Otherwise, use the CURLOPT_WRITEFUNCTION with the CURLOPT_WRITEDATA
-     pointer to write out the RTP data. */
-  if(data->set.fwrite_rtp) {
-    writeit = data->set.fwrite_rtp;
-    user_ptr = data->set.rtp_out;
-  }
-  else {
-    writeit = data->set.fwrite_func;
-    user_ptr = data->set.out;
-  }
+  /* If the user has configured CURLOPT_INTERLEAVEFUNCTION then use that 
+     function and any configured CURLOPT_INTERLEAVEDATA to write out the RTP 
+     data. Otherwise, use the CURLOPT_WRITEFUNCTION with the CURLOPT_WRITEDATA 
+     pointer to write out the RTP data. */ 
+  if(data->set.fwrite_rtp) { 
+    writeit = data->set.fwrite_rtp; 
+    user_ptr = data->set.rtp_out; 
+  } 
+  else { 
+    writeit = data->set.fwrite_func; 
+    user_ptr = data->set.out; 
+  } 
 
-  Curl_set_in_callback(data, true);
-  wrote = writeit(ptr, 1, len, user_ptr);
-  Curl_set_in_callback(data, false);
-
+  Curl_set_in_callback(data, true); 
+  wrote = writeit(ptr, 1, len, user_ptr); 
+  Curl_set_in_callback(data, false); 
+ 
   if(CURL_WRITEFUNC_PAUSE == wrote) {
-    failf(data, "Cannot pause RTP");
+    failf(data, "Cannot pause RTP"); 
     return CURLE_WRITE_ERROR;
   }
 
   if(wrote != len) {
-    failf(data, "Failed writing RTP data");
+    failf(data, "Failed writing RTP data"); 
     return CURLE_WRITE_ERROR;
   }
 
@@ -758,7 +758,7 @@ CURLcode rtp_client_write(struct connectdata *conn, char *ptr, size_t len)
 CURLcode Curl_rtsp_parseheader(struct connectdata *conn,
                                char *header)
 {
-  struct Curl_easy *data = conn->data;
+  struct Curl_easy *data = conn->data; 
   long CSeq = 0;
 
   if(checkprefix("CSeq:", header)) {
@@ -780,7 +780,7 @@ CURLcode Curl_rtsp_parseheader(struct connectdata *conn,
     size_t idlen;
 
     /* Find the first non-space letter */
-    start = header + 8;
+    start = header + 8; 
     while(*start && ISSPACE(*start))
       start++;
 
@@ -811,9 +811,9 @@ CURLcode Curl_rtsp_parseheader(struct connectdata *conn,
       }
     }
     else {
-      /* If the Session ID is not set, and we find it in a response, then set
-       * it.
-       */
+      /* If the Session ID is not set, and we find it in a response, then set 
+       * it. 
+       */ 
 
       /* Copy the id substring into a new buffer */
       data->set.str[STRING_RTSP_SESSION_ID] = malloc(idlen + 1);

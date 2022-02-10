@@ -1,10 +1,10 @@
 """Core implementation of the testing process: init, session, runtest loop."""
 import argparse
 import fnmatch
-import functools
+import functools 
 import importlib
-import os
-import sys
+import os 
+import sys 
 from pathlib import Path
 from typing import Callable
 from typing import Dict
@@ -19,40 +19,40 @@ from typing import Tuple
 from typing import Type
 from typing import TYPE_CHECKING
 from typing import Union
-
-import attr
-import py
-
-import _pytest._code
-from _pytest import nodes
+ 
+import attr 
+import py 
+ 
+import _pytest._code 
+from _pytest import nodes 
 from _pytest.compat import final
 from _pytest.config import Config
-from _pytest.config import directory_arg
+from _pytest.config import directory_arg 
 from _pytest.config import ExitCode
-from _pytest.config import hookimpl
+from _pytest.config import hookimpl 
 from _pytest.config import PytestPluginManager
-from _pytest.config import UsageError
+from _pytest.config import UsageError 
 from _pytest.config.argparsing import Parser
 from _pytest.fixtures import FixtureManager
-from _pytest.outcomes import exit
+from _pytest.outcomes import exit 
 from _pytest.pathlib import absolutepath
 from _pytest.pathlib import bestrelpath
 from _pytest.pathlib import visit
 from _pytest.reports import CollectReport
 from _pytest.reports import TestReport
-from _pytest.runner import collect_one_node
+from _pytest.runner import collect_one_node 
 from _pytest.runner import SetupState
-
-
+ 
+ 
 if TYPE_CHECKING:
     from typing_extensions import Literal
-
+ 
 
 def pytest_addoption(parser: Parser) -> None:
-    parser.addini(
-        "norecursedirs",
-        "directory patterns to avoid for recursion",
-        type="args",
+    parser.addini( 
+        "norecursedirs", 
+        "directory patterns to avoid for recursion", 
+        type="args", 
         default=[
             "*.egg",
             ".*",
@@ -64,22 +64,22 @@ def pytest_addoption(parser: Parser) -> None:
             "venv",
             "{arch}",
         ],
-    )
-    parser.addini(
-        "testpaths",
-        "directories to search for tests when no files or directories are given in the "
-        "command line.",
-        type="args",
-        default=[],
-    )
-    group = parser.getgroup("general", "running and selection options")
-    group._addoption(
-        "-x",
-        "--exitfirst",
-        action="store_const",
-        dest="maxfail",
-        const=1,
-        help="exit instantly on first error or failed test.",
+    ) 
+    parser.addini( 
+        "testpaths", 
+        "directories to search for tests when no files or directories are given in the " 
+        "command line.", 
+        type="args", 
+        default=[], 
+    ) 
+    group = parser.getgroup("general", "running and selection options") 
+    group._addoption( 
+        "-x", 
+        "--exitfirst", 
+        action="store_const", 
+        dest="maxfail", 
+        const=1, 
+        help="exit instantly on first error or failed test.", 
     )
     group = parser.getgroup("pytest-warnings")
     group.addoption(
@@ -95,113 +95,113 @@ def pytest_addoption(parser: Parser) -> None:
         "warnings.filterwarnings. "
         "Processed after -W/--pythonwarnings.",
     )
-    group._addoption(
-        "--maxfail",
-        metavar="num",
-        action="store",
-        type=int,
-        dest="maxfail",
-        default=0,
-        help="exit after first num failures or errors.",
-    )
-    group._addoption(
+    group._addoption( 
+        "--maxfail", 
+        metavar="num", 
+        action="store", 
+        type=int, 
+        dest="maxfail", 
+        default=0, 
+        help="exit after first num failures or errors.", 
+    ) 
+    group._addoption( 
         "--strict-config",
         action="store_true",
         help="any warnings encountered while parsing the `pytest` section of the configuration file raise errors.",
     )
     group._addoption(
         "--strict-markers",
-        action="store_true",
+        action="store_true", 
         help="markers not registered in the `markers` section of the configuration file raise errors.",
-    )
-    group._addoption(
+    ) 
+    group._addoption( 
         "--strict", action="store_true", help="(deprecated) alias to --strict-markers.",
     )
     group._addoption(
-        "-c",
-        metavar="file",
-        type=str,
-        dest="inifilename",
-        help="load configuration from `file` instead of trying to locate one of the implicit "
-        "configuration files.",
-    )
-    group._addoption(
-        "--continue-on-collection-errors",
-        action="store_true",
-        default=False,
-        dest="continue_on_collection_errors",
-        help="Force test execution even if collection errors occur.",
-    )
-    group._addoption(
-        "--rootdir",
-        action="store",
-        dest="rootdir",
-        help="Define root directory for tests. Can be relative path: 'root_dir', './root_dir', "
-        "'root_dir/another_dir/'; absolute path: '/home/user/root_dir'; path with variables: "
-        "'$HOME/root_dir'.",
-    )
-
-    group = parser.getgroup("collect", "collection")
-    group.addoption(
-        "--collectonly",
-        "--collect-only",
+        "-c", 
+        metavar="file", 
+        type=str, 
+        dest="inifilename", 
+        help="load configuration from `file` instead of trying to locate one of the implicit " 
+        "configuration files.", 
+    ) 
+    group._addoption( 
+        "--continue-on-collection-errors", 
+        action="store_true", 
+        default=False, 
+        dest="continue_on_collection_errors", 
+        help="Force test execution even if collection errors occur.", 
+    ) 
+    group._addoption( 
+        "--rootdir", 
+        action="store", 
+        dest="rootdir", 
+        help="Define root directory for tests. Can be relative path: 'root_dir', './root_dir', " 
+        "'root_dir/another_dir/'; absolute path: '/home/user/root_dir'; path with variables: " 
+        "'$HOME/root_dir'.", 
+    ) 
+ 
+    group = parser.getgroup("collect", "collection") 
+    group.addoption( 
+        "--collectonly", 
+        "--collect-only", 
         "--co",
-        action="store_true",
-        help="only collect tests, don't execute them.",
+        action="store_true", 
+        help="only collect tests, don't execute them.", 
     )
-    group.addoption(
-        "--pyargs",
-        action="store_true",
-        help="try to interpret all arguments as python packages.",
-    )
-    group.addoption(
-        "--ignore",
-        action="append",
-        metavar="path",
-        help="ignore path during collection (multi-allowed).",
-    )
-    group.addoption(
+    group.addoption( 
+        "--pyargs", 
+        action="store_true", 
+        help="try to interpret all arguments as python packages.", 
+    ) 
+    group.addoption( 
+        "--ignore", 
+        action="append", 
+        metavar="path", 
+        help="ignore path during collection (multi-allowed).", 
+    ) 
+    group.addoption( 
         "--ignore-glob",
         action="append",
         metavar="path",
         help="ignore path pattern during collection (multi-allowed).",
     )
     group.addoption(
-        "--deselect",
-        action="append",
-        metavar="nodeid_prefix",
+        "--deselect", 
+        action="append", 
+        metavar="nodeid_prefix", 
         help="deselect item (via node id prefix) during collection (multi-allowed).",
-    )
-    group.addoption(
-        "--confcutdir",
-        dest="confcutdir",
-        default=None,
-        metavar="dir",
-        type=functools.partial(directory_arg, optname="--confcutdir"),
-        help="only load conftest.py's relative to specified dir.",
-    )
-    group.addoption(
-        "--noconftest",
-        action="store_true",
-        dest="noconftest",
-        default=False,
-        help="Don't load any conftest.py files.",
-    )
-    group.addoption(
-        "--keepduplicates",
-        "--keep-duplicates",
-        action="store_true",
-        dest="keepduplicates",
-        default=False,
-        help="Keep duplicate tests.",
-    )
-    group.addoption(
-        "--collect-in-virtualenv",
-        action="store_true",
-        dest="collect_in_virtualenv",
-        default=False,
-        help="Don't ignore tests in a local virtualenv directory",
-    )
+    ) 
+    group.addoption( 
+        "--confcutdir", 
+        dest="confcutdir", 
+        default=None, 
+        metavar="dir", 
+        type=functools.partial(directory_arg, optname="--confcutdir"), 
+        help="only load conftest.py's relative to specified dir.", 
+    ) 
+    group.addoption( 
+        "--noconftest", 
+        action="store_true", 
+        dest="noconftest", 
+        default=False, 
+        help="Don't load any conftest.py files.", 
+    ) 
+    group.addoption( 
+        "--keepduplicates", 
+        "--keep-duplicates", 
+        action="store_true", 
+        dest="keepduplicates", 
+        default=False, 
+        help="Keep duplicate tests.", 
+    ) 
+    group.addoption( 
+        "--collect-in-virtualenv", 
+        action="store_true", 
+        dest="collect_in_virtualenv", 
+        default=False, 
+        help="Don't ignore tests in a local virtualenv directory", 
+    ) 
     group.addoption(
         "--import-mode",
         default="prepend",
@@ -210,21 +210,21 @@ def pytest_addoption(parser: Parser) -> None:
         help="prepend/append to sys.path when importing test modules and conftest files, "
         "default is to prepend.",
     )
-
-    group = parser.getgroup("debugconfig", "test session debugging and configuration")
-    group.addoption(
-        "--basetemp",
-        dest="basetemp",
-        default=None,
+ 
+    group = parser.getgroup("debugconfig", "test session debugging and configuration") 
+    group.addoption( 
+        "--basetemp", 
+        dest="basetemp", 
+        default=None, 
         type=validate_basetemp,
-        metavar="dir",
-        help=(
-            "base temporary directory for this test run."
-            "(warning: this directory is removed if it exists)"
-        ),
-    )
-
-
+        metavar="dir", 
+        help=( 
+            "base temporary directory for this test run." 
+            "(warning: this directory is removed if it exists)" 
+        ), 
+    ) 
+ 
+ 
 def validate_basetemp(path: str) -> str:
     # GH 7119
     msg = "basetemp must not be empty, the current working directory or any parent directory of it"
@@ -259,29 +259,29 @@ def wrap_session(
     """Skeleton command line program."""
     session = Session.from_config(config)
     session.exitstatus = ExitCode.OK
-    initstate = 0
-    try:
-        try:
-            config._do_configure()
-            initstate = 1
-            config.hook.pytest_sessionstart(session=session)
-            initstate = 2
-            session.exitstatus = doit(config, session) or 0
-        except UsageError:
+    initstate = 0 
+    try: 
+        try: 
+            config._do_configure() 
+            initstate = 1 
+            config.hook.pytest_sessionstart(session=session) 
+            initstate = 2 
+            session.exitstatus = doit(config, session) or 0 
+        except UsageError: 
             session.exitstatus = ExitCode.USAGE_ERROR
-            raise
-        except Failed:
+            raise 
+        except Failed: 
             session.exitstatus = ExitCode.TESTS_FAILED
         except (KeyboardInterrupt, exit.Exception):
             excinfo = _pytest._code.ExceptionInfo.from_current()
             exitstatus: Union[int, ExitCode] = ExitCode.INTERRUPTED
             if isinstance(excinfo.value, exit.Exception):
-                if excinfo.value.returncode is not None:
-                    exitstatus = excinfo.value.returncode
+                if excinfo.value.returncode is not None: 
+                    exitstatus = excinfo.value.returncode 
                 if initstate < 2:
                     sys.stderr.write(f"{excinfo.typename}: {excinfo.value.msg}\n")
-            config.hook.pytest_keyboard_interrupt(excinfo=excinfo)
-            session.exitstatus = exitstatus
+            config.hook.pytest_keyboard_interrupt(excinfo=excinfo) 
+            session.exitstatus = exitstatus 
         except BaseException:
             session.exitstatus = ExitCode.INTERNAL_ERROR
             excinfo = _pytest._code.ExceptionInfo.from_current()
@@ -294,12 +294,12 @@ def wrap_session(
             else:
                 if isinstance(excinfo.value, SystemExit):
                     sys.stderr.write("mainloop: caught unexpected SystemExit!\n")
-
-    finally:
+ 
+    finally: 
         # Explicitly break reference cycle.
         excinfo = None  # type: ignore
-        session.startdir.chdir()
-        if initstate >= 2:
+        session.startdir.chdir() 
+        if initstate >= 2: 
             try:
                 config.hook.pytest_sessionfinish(
                     session=session, exitstatus=session.exitstatus
@@ -308,78 +308,78 @@ def wrap_session(
                 if exc.returncode is not None:
                     session.exitstatus = exc.returncode
                 sys.stderr.write("{}: {}\n".format(type(exc).__name__, exc))
-        config._ensure_unconfigure()
-    return session.exitstatus
-
-
+        config._ensure_unconfigure() 
+    return session.exitstatus 
+ 
+ 
 def pytest_cmdline_main(config: Config) -> Union[int, ExitCode]:
-    return wrap_session(config, _main)
-
-
+    return wrap_session(config, _main) 
+ 
+ 
 def _main(config: Config, session: "Session") -> Optional[Union[int, ExitCode]]:
     """Default command line protocol for initialization, session,
     running tests and reporting."""
-    config.hook.pytest_collection(session=session)
-    config.hook.pytest_runtestloop(session=session)
-
-    if session.testsfailed:
+    config.hook.pytest_collection(session=session) 
+    config.hook.pytest_runtestloop(session=session) 
+ 
+    if session.testsfailed: 
         return ExitCode.TESTS_FAILED
-    elif session.testscollected == 0:
+    elif session.testscollected == 0: 
         return ExitCode.NO_TESTS_COLLECTED
     return None
-
-
+ 
+ 
 def pytest_collection(session: "Session") -> None:
     session.perform_collect()
-
-
+ 
+ 
 def pytest_runtestloop(session: "Session") -> bool:
-    if session.testsfailed and not session.config.option.continue_on_collection_errors:
+    if session.testsfailed and not session.config.option.continue_on_collection_errors: 
         raise session.Interrupted(
             "%d error%s during collection"
             % (session.testsfailed, "s" if session.testsfailed != 1 else "")
         )
-
-    if session.config.option.collectonly:
-        return True
-
-    for i, item in enumerate(session.items):
-        nextitem = session.items[i + 1] if i + 1 < len(session.items) else None
-        item.config.hook.pytest_runtest_protocol(item=item, nextitem=nextitem)
-        if session.shouldfail:
-            raise session.Failed(session.shouldfail)
-        if session.shouldstop:
-            raise session.Interrupted(session.shouldstop)
-    return True
-
-
+ 
+    if session.config.option.collectonly: 
+        return True 
+ 
+    for i, item in enumerate(session.items): 
+        nextitem = session.items[i + 1] if i + 1 < len(session.items) else None 
+        item.config.hook.pytest_runtest_protocol(item=item, nextitem=nextitem) 
+        if session.shouldfail: 
+            raise session.Failed(session.shouldfail) 
+        if session.shouldstop: 
+            raise session.Interrupted(session.shouldstop) 
+    return True 
+ 
+ 
 def _in_venv(path: py.path.local) -> bool:
     """Attempt to detect if ``path`` is the root of a Virtual Environment by
     checking for the existence of the appropriate activate script."""
-    bindir = path.join("Scripts" if sys.platform.startswith("win") else "bin")
-    if not bindir.isdir():
-        return False
-    activates = (
-        "activate",
-        "activate.csh",
-        "activate.fish",
-        "Activate",
-        "Activate.bat",
-        "Activate.ps1",
-    )
-    return any([fname.basename in activates for fname in bindir.listdir()])
-
-
+    bindir = path.join("Scripts" if sys.platform.startswith("win") else "bin") 
+    if not bindir.isdir(): 
+        return False 
+    activates = ( 
+        "activate", 
+        "activate.csh", 
+        "activate.fish", 
+        "Activate", 
+        "Activate.bat", 
+        "Activate.ps1", 
+    ) 
+    return any([fname.basename in activates for fname in bindir.listdir()]) 
+ 
+ 
 def pytest_ignore_collect(path: py.path.local, config: Config) -> Optional[bool]:
-    ignore_paths = config._getconftest_pathlist("collect_ignore", path=path.dirpath())
-    ignore_paths = ignore_paths or []
-    excludeopt = config.getoption("ignore")
-    if excludeopt:
-        ignore_paths.extend([py.path.local(x) for x in excludeopt])
-
-    if py.path.local(path) in ignore_paths:
-        return True
-
+    ignore_paths = config._getconftest_pathlist("collect_ignore", path=path.dirpath()) 
+    ignore_paths = ignore_paths or [] 
+    excludeopt = config.getoption("ignore") 
+    if excludeopt: 
+        ignore_paths.extend([py.path.local(x) for x in excludeopt]) 
+ 
+    if py.path.local(path) in ignore_paths: 
+        return True 
+ 
     ignore_globs = config._getconftest_pathlist(
         "collect_ignore_glob", path=path.dirpath()
     )
@@ -391,87 +391,87 @@ def pytest_ignore_collect(path: py.path.local, config: Config) -> Optional[bool]
     if any(fnmatch.fnmatch(str(path), str(glob)) for glob in ignore_globs):
         return True
 
-    allow_in_venv = config.getoption("collect_in_virtualenv")
-    if not allow_in_venv and _in_venv(path):
-        return True
+    allow_in_venv = config.getoption("collect_in_virtualenv") 
+    if not allow_in_venv and _in_venv(path): 
+        return True 
     return None
-
-
+ 
+ 
 def pytest_collection_modifyitems(items: List[nodes.Item], config: Config) -> None:
-    deselect_prefixes = tuple(config.getoption("deselect") or [])
-    if not deselect_prefixes:
-        return
-
-    remaining = []
-    deselected = []
-    for colitem in items:
-        if colitem.nodeid.startswith(deselect_prefixes):
-            deselected.append(colitem)
-        else:
-            remaining.append(colitem)
-
-    if deselected:
-        config.hook.pytest_deselected(items=deselected)
-        items[:] = remaining
-
-
+    deselect_prefixes = tuple(config.getoption("deselect") or []) 
+    if not deselect_prefixes: 
+        return 
+ 
+    remaining = [] 
+    deselected = [] 
+    for colitem in items: 
+        if colitem.nodeid.startswith(deselect_prefixes): 
+            deselected.append(colitem) 
+        else: 
+            remaining.append(colitem) 
+ 
+    if deselected: 
+        config.hook.pytest_deselected(items=deselected) 
+        items[:] = remaining 
+ 
+ 
 class FSHookProxy:
     def __init__(self, pm: PytestPluginManager, remove_mods) -> None:
         self.pm = pm
         self.remove_mods = remove_mods
-
+ 
     def __getattr__(self, name: str):
         x = self.pm.subset_hook_caller(name, remove_plugins=self.remove_mods)
         self.__dict__[name] = x
         return x
+ 
 
-
-class Interrupted(KeyboardInterrupt):
+class Interrupted(KeyboardInterrupt): 
     """Signals that the test run was interrupted."""
-
+ 
     __module__ = "builtins"  # For py3.
-
-
-class Failed(Exception):
+ 
+ 
+class Failed(Exception): 
     """Signals a stop as failed test run."""
-
-
-@attr.s
+ 
+ 
+@attr.s 
 class _bestrelpath_cache(Dict[Path, str]):
     path = attr.ib(type=Path)
-
+ 
     def __missing__(self, path: Path) -> str:
         r = bestrelpath(self.path, path)
-        self[path] = r
-        return r
-
-
+        self[path] = r 
+        return r 
+ 
+ 
 @final
-class Session(nodes.FSCollector):
-    Interrupted = Interrupted
-    Failed = Failed
+class Session(nodes.FSCollector): 
+    Interrupted = Interrupted 
+    Failed = Failed 
     # Set on the session by runner.pytest_sessionstart.
     _setupstate: SetupState
     # Set on the session by fixtures.pytest_sessionstart.
     _fixturemanager: FixtureManager
     exitstatus: Union[int, ExitCode]
-
+ 
     def __init__(self, config: Config) -> None:
         super().__init__(
             config.rootdir, parent=None, config=config, session=self, nodeid=""
-        )
-        self.testsfailed = 0
-        self.testscollected = 0
+        ) 
+        self.testsfailed = 0 
+        self.testscollected = 0 
         self.shouldstop: Union[bool, str] = False
         self.shouldfail: Union[bool, str] = False
-        self.trace = config.trace.root.get("collection")
+        self.trace = config.trace.root.get("collection") 
         self.startdir = config.invocation_dir
         self._initialpaths: FrozenSet[py.path.local] = frozenset()
 
         self._bestrelpathcache: Dict[Path, str] = _bestrelpath_cache(config.rootpath)
 
-        self.config.pluginmanager.register(self, name="session")
-
+        self.config.pluginmanager.register(self, name="session") 
+ 
     @classmethod
     def from_config(cls, config: Config) -> "Session":
         session: Session = cls._create(config)
@@ -488,30 +488,30 @@ class Session(nodes.FSCollector):
 
     def _node_location_to_relpath(self, node_path: Path) -> str:
         # bestrelpath is a quite slow function.
-        return self._bestrelpathcache[node_path]
-
-    @hookimpl(tryfirst=True)
+        return self._bestrelpathcache[node_path] 
+ 
+    @hookimpl(tryfirst=True) 
     def pytest_collectstart(self) -> None:
-        if self.shouldfail:
-            raise self.Failed(self.shouldfail)
-        if self.shouldstop:
-            raise self.Interrupted(self.shouldstop)
-
-    @hookimpl(tryfirst=True)
+        if self.shouldfail: 
+            raise self.Failed(self.shouldfail) 
+        if self.shouldstop: 
+            raise self.Interrupted(self.shouldstop) 
+ 
+    @hookimpl(tryfirst=True) 
     def pytest_runtest_logreport(
         self, report: Union[TestReport, CollectReport]
     ) -> None:
-        if report.failed and not hasattr(report, "wasxfail"):
-            self.testsfailed += 1
-            maxfail = self.config.getvalue("maxfail")
-            if maxfail and self.testsfailed >= maxfail:
-                self.shouldfail = "stopping after %d failures" % (self.testsfailed)
-
-    pytest_collectreport = pytest_runtest_logreport
-
+        if report.failed and not hasattr(report, "wasxfail"): 
+            self.testsfailed += 1 
+            maxfail = self.config.getvalue("maxfail") 
+            if maxfail and self.testsfailed >= maxfail: 
+                self.shouldfail = "stopping after %d failures" % (self.testsfailed) 
+ 
+    pytest_collectreport = pytest_runtest_logreport 
+ 
     def isinitpath(self, path: py.path.local) -> bool:
-        return path in self._initialpaths
-
+        return path in self._initialpaths 
+ 
     def gethookproxy(self, fspath: py.path.local):
         # Check if we have the common case of running
         # hooks with all conftest.py files.
@@ -527,7 +527,7 @@ class Session(nodes.FSCollector):
             # All plugins are active for this fspath.
             proxy = self.config.hook
         return proxy
-
+ 
     def _recurse(self, direntry: "os.DirEntry[str]") -> bool:
         if direntry.name == "__pycache__":
             return False
@@ -603,10 +603,10 @@ class Session(nodes.FSCollector):
         self._initial_parts: List[Tuple[py.path.local, List[str]]] = []
         self.items: List[nodes.Item] = []
 
-        hook = self.config.hook
+        hook = self.config.hook 
 
         items: Sequence[Union[nodes.Item, nodes.Collector]] = self.items
-        try:
+        try: 
             initialpaths: List[py.path.local] = []
             for arg in args:
                 fspath, parts = resolve_collection_argument(
@@ -633,36 +633,36 @@ class Session(nodes.FSCollector):
                     for node in rep.result:
                         self.items.extend(self.genitems(node))
 
-            self.config.pluginmanager.check_pending()
-            hook.pytest_collection_modifyitems(
-                session=self, config=self.config, items=items
-            )
-        finally:
-            hook.pytest_collection_finish(session=self)
+            self.config.pluginmanager.check_pending() 
+            hook.pytest_collection_modifyitems( 
+                session=self, config=self.config, items=items 
+            ) 
+        finally: 
+            hook.pytest_collection_finish(session=self) 
 
-        self.testscollected = len(items)
-        return items
-
+        self.testscollected = len(items) 
+        return items 
+ 
     def collect(self) -> Iterator[Union[nodes.Item, nodes.Collector]]:
         from _pytest.python import Package
-
+ 
         # Keep track of any collected nodes in here, so we don't duplicate fixtures.
         node_cache1: Dict[py.path.local, Sequence[nodes.Collector]] = {}
         node_cache2: Dict[
             Tuple[Type[nodes.Collector], py.path.local], nodes.Collector
         ] = ({})
-
+ 
         # Keep track of any collected collectors in matchnodes paths, so they
         # are not collected more than once.
         matchnodes_cache: Dict[Tuple[Type[nodes.Collector], str], CollectReport] = ({})
-
+ 
         # Dirnames of pkgs with dunder-init files.
         pkg_roots: Dict[str, Package] = {}
-
+ 
         for argpath, names in self._initial_parts:
             self.trace("processing argument", (argpath, names))
             self.trace.root.indent += 1
-
+ 
             # Start with a Session root, and delve to argpath item (dir or file)
             # and stack all Packages found on the way.
             # No point in finding packages when collecting doctests.
@@ -675,25 +675,25 @@ class Session(nodes.FSCollector):
                     if parent.isdir():
                         pkginit = parent.join("__init__.py")
                         if pkginit.isfile() and pkginit not in node_cache1:
-                            col = self._collectfile(pkginit, handle_dupes=False)
-                            if col:
-                                if isinstance(col[0], Package):
+                            col = self._collectfile(pkginit, handle_dupes=False) 
+                            if col: 
+                                if isinstance(col[0], Package): 
                                     pkg_roots[str(parent)] = col[0]
                                 node_cache1[col[0].fspath] = [col[0]]
-
+ 
             # If it's a directory argument, recurse and look for any Subpackages.
             # Let the Package collector deal with subnodes, don't collect here.
             if argpath.check(dir=1):
                 assert not names, "invalid arg {!r}".format((argpath, names))
-
+ 
                 seen_dirs: Set[py.path.local] = set()
                 for direntry in visit(str(argpath), self._recurse):
                     if not direntry.is_file():
                         continue
-
+ 
                     path = py.path.local(direntry.path)
                     dirpath = path.dirpath()
-
+ 
                     if dirpath not in seen_dirs:
                         # Collect packages first.
                         seen_dirs.add(dirpath)
@@ -714,9 +714,9 @@ class Session(nodes.FSCollector):
                         else:
                             node_cache2[key] = x
                             yield x
-            else:
+            else: 
                 assert argpath.check(file=1)
-
+ 
                 if argpath in node_cache1:
                     col = node_cache1[argpath]
                 else:
@@ -724,7 +724,7 @@ class Session(nodes.FSCollector):
                     col = collect_root._collectfile(argpath, handle_dupes=False)
                     if col:
                         node_cache1[argpath] = col
-
+ 
                 matching = []
                 work: List[
                     Tuple[Sequence[Union[nodes.Item, nodes.Collector]], Sequence[str]]
@@ -732,7 +732,7 @@ class Session(nodes.FSCollector):
                 while work:
                     self.trace("matchnodes", col, names)
                     self.trace.root.indent += 1
-
+ 
                     matchnodes, matchnames = work.pop()
                     for node in matchnodes:
                         if not matchnames:
@@ -766,15 +766,15 @@ class Session(nodes.FSCollector):
                             # specified in the command line because the module could not be
                             # imported (#134).
                             node.ihook.pytest_collectreport(report=rep)
-
+ 
                     self.trace("matchnodes finished -> ", len(matching), "nodes")
                     self.trace.root.indent -= 1
-
+ 
                 if not matching:
                     report_arg = "::".join((str(argpath), *names))
                     self._notfound.append((report_arg, col))
                     continue
-
+ 
                 # If __init__.py was the only file requested, then the matched
                 # node will be the corresponding Package (by default), and the
                 # first yielded item will be the __init__ Module itself, so
@@ -799,17 +799,17 @@ class Session(nodes.FSCollector):
     def genitems(
         self, node: Union[nodes.Item, nodes.Collector]
     ) -> Iterator[nodes.Item]:
-        self.trace("genitems", node)
-        if isinstance(node, nodes.Item):
-            node.ihook.pytest_itemcollected(item=node)
-            yield node
-        else:
-            assert isinstance(node, nodes.Collector)
-            rep = collect_one_node(node)
-            if rep.passed:
-                for subnode in rep.result:
+        self.trace("genitems", node) 
+        if isinstance(node, nodes.Item): 
+            node.ihook.pytest_itemcollected(item=node) 
+            yield node 
+        else: 
+            assert isinstance(node, nodes.Collector) 
+            rep = collect_one_node(node) 
+            if rep.passed: 
+                for subnode in rep.result: 
                     yield from self.genitems(subnode)
-            node.ihook.pytest_collectreport(report=rep)
+            node.ihook.pytest_collectreport(report=rep) 
 
 
 def search_pypath(module_name: str) -> str:

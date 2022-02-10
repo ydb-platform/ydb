@@ -2,10 +2,10 @@ import os
 import sys
 import time
 
-import __res
+import __res 
 
 FORCE_EXIT_TESTSFAILED_ENV = 'FORCE_EXIT_TESTSFAILED'
-
+ 
 
 def main():
     import library.python.pytest.context as context
@@ -39,12 +39,12 @@ def main():
     import library.python.pytest.plugins.ya as ya
     import library.python.pytest.plugins.conftests as conftests
 
-    import _pytest.assertion
-    from _pytest.monkeypatch import MonkeyPatch
+    import _pytest.assertion 
+    from _pytest.monkeypatch import MonkeyPatch 
     from . import rewrite
-    m = MonkeyPatch()
-    m.setattr(_pytest.assertion.rewrite, "AssertionRewritingHook", rewrite.AssertionRewritingHook)
-
+    m = MonkeyPatch() 
+    m.setattr(_pytest.assertion.rewrite, "AssertionRewritingHook", rewrite.AssertionRewritingHook) 
+ 
     prefix = '__tests__.'
 
     test_modules = [
@@ -56,18 +56,18 @@ def main():
     if isinstance(doctest_packages, bytes):
         doctest_packages = doctest_packages.decode('utf-8')
     doctest_packages = doctest_packages.split()
-
-    def is_doctest_module(name):
-        for package in doctest_packages:
+ 
+    def is_doctest_module(name): 
+        for package in doctest_packages: 
             if name == package or name.startswith(str(package) + "."):
-                return True
-        return False
-
-    doctest_modules = [
-        name for name in sys.extra_modules
-        if is_doctest_module(name)
-    ]
-
+                return True 
+        return False 
+ 
+    doctest_modules = [ 
+        name for name in sys.extra_modules 
+        if is_doctest_module(name) 
+    ] 
+ 
     def remove_user_site(paths):
         site_paths = ('site-packages', 'site-python')
 
@@ -86,7 +86,7 @@ def main():
 
     sys.path = remove_user_site(sys.path)
     rc = pytest.main(plugins=[
-        collection.CollectionPlugin(test_modules, doctest_modules),
+        collection.CollectionPlugin(test_modules, doctest_modules), 
         ya,
         conftests,
     ])

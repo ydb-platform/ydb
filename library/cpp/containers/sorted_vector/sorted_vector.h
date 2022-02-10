@@ -8,8 +8,8 @@
 #include <util/ysaveload.h>
 #include <utility>
 
-#include <initializer_list>
-
+#include <initializer_list> 
+ 
 namespace NSorted {
     namespace NPrivate {
         template <class TPredicate>
@@ -80,18 +80,18 @@ namespace NSorted {
         {
         }
 
-        inline TSortedVector(std::initializer_list<value_type> il)
-            : TBase(il)
-        {
-            Sort();
-        }
-
-        inline TSortedVector(std::initializer_list<value_type> il, const typename TBase::allocator_type& a)
-            : TBase(il, a)
-        {
-            Sort();
-        }
-
+        inline TSortedVector(std::initializer_list<value_type> il) 
+            : TBase(il) 
+        { 
+            Sort(); 
+        } 
+ 
+        inline TSortedVector(std::initializer_list<value_type> il, const typename TBase::allocator_type& a) 
+            : TBase(il, a) 
+        { 
+            Sort(); 
+        } 
+ 
         template <class TIter>
         inline TSortedVector(TIter first, TIter last)
             : TBase(first, last)

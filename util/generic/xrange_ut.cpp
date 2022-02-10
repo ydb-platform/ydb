@@ -46,22 +46,22 @@ Y_UNIT_TEST_SUITE(XRange) {
     }
 
     Y_UNIT_TEST(DecrementWorks) {
-        TestSteppedXRangeImpl(10, 0, -1, {10, 9, 8, 7, 6, 5, 4, 3, 2, 1});
-        TestSteppedXRangeImpl(10, -1, -1, {10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0});
-        TestSteppedXRangeImpl(20, 9, -1, {20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10});
+        TestSteppedXRangeImpl(10, 0, -1, {10, 9, 8, 7, 6, 5, 4, 3, 2, 1}); 
+        TestSteppedXRangeImpl(10, -1, -1, {10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0}); 
+        TestSteppedXRangeImpl(20, 9, -1, {20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10}); 
     }
 
     Y_UNIT_TEST(StepWorks) {
-        TestSteppedXRangeImpl(0, 0, 1, {});
-        TestSteppedXRangeImpl(0, 9, 3, {0, 3, 6});
-        TestSteppedXRangeImpl(0, 10, 3, {0, 3, 6, 9});
-        TestSteppedXRangeImpl(0, 11, 3, {0, 3, 6, 9});
-        TestSteppedXRangeImpl(0, 12, 3, {0, 3, 6, 9});
-        TestSteppedXRangeImpl(0, 13, 3, {0, 3, 6, 9, 12});
-        TestSteppedXRangeImpl(0, 10, 2, {0, 2, 4, 6, 8});
-        TestSteppedXRangeImpl(15, 0, -4, {15, 11, 7, 3});
-        TestSteppedXRangeImpl(15, -1, -4, {15, 11, 7, 3});
-        TestSteppedXRangeImpl(15, -2, -4, {15, 11, 7, 3, -1});
+        TestSteppedXRangeImpl(0, 0, 1, {}); 
+        TestSteppedXRangeImpl(0, 9, 3, {0, 3, 6}); 
+        TestSteppedXRangeImpl(0, 10, 3, {0, 3, 6, 9}); 
+        TestSteppedXRangeImpl(0, 11, 3, {0, 3, 6, 9}); 
+        TestSteppedXRangeImpl(0, 12, 3, {0, 3, 6, 9}); 
+        TestSteppedXRangeImpl(0, 13, 3, {0, 3, 6, 9, 12}); 
+        TestSteppedXRangeImpl(0, 10, 2, {0, 2, 4, 6, 8}); 
+        TestSteppedXRangeImpl(15, 0, -4, {15, 11, 7, 3}); 
+        TestSteppedXRangeImpl(15, -1, -4, {15, 11, 7, 3}); 
+        TestSteppedXRangeImpl(15, -2, -4, {15, 11, 7, 3, -1}); 
     }
 
     Y_UNIT_TEST(PointersWorks) {

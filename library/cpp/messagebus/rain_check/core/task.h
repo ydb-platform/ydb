@@ -45,7 +45,7 @@ namespace NRainCheck {
         TSubtaskCompletionFunc(void (TTask::*func)(TSubtaskCompletion*))
             : Func((TFunc)func)
         {
-            static_assert((std::is_base_of<ITaskBase, TTask>::value), "expect (std::is_base_of<ITaskBase, TTask>::value)");
+            static_assert((std::is_base_of<ITaskBase, TTask>::value), "expect (std::is_base_of<ITaskBase, TTask>::value)"); 
         }
 
         bool operator!() const {

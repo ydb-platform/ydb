@@ -10,7 +10,7 @@ namespace NRainCheck {
 
         template <typename TTask, typename ITask, typename TRunner, typename TEnv, typename TParam>
         TIntrusivePtr<TRunner> SpawnTaskWithRunner(TEnv* env, TParam param1, ISubtaskListener* subtaskListener) {
-            static_assert((std::is_base_of<ITask, TTask>::value), "expect (std::is_base_of<ITask, TTask>::value)");
+            static_assert((std::is_base_of<ITask, TTask>::value), "expect (std::is_base_of<ITask, TTask>::value)"); 
             TIntrusivePtr<TRunner> task(new TRunner(env, subtaskListener, new TTask(env, param1)));
             NPrivate::SpawnTaskImpl(task.Get());
             return task;
@@ -18,7 +18,7 @@ namespace NRainCheck {
 
         template <typename TTask, typename ITask, typename TRunner, typename TEnv>
         void SpawnSubtaskWithRunner(TEnv* env, TSubtaskCompletion* completion) {
-            static_assert((std::is_base_of<ITask, TTask>::value), "expect (std::is_base_of<ITask, TTask>::value)");
+            static_assert((std::is_base_of<ITask, TTask>::value), "expect (std::is_base_of<ITask, TTask>::value)"); 
             TTaskRunnerBase* current = TTaskRunnerBase::CurrentTask();
             completion->SetRunning(current);
             NPrivate::SpawnTaskImpl(new TRunner(env, completion, new TTask(env)));
@@ -26,7 +26,7 @@ namespace NRainCheck {
 
         template <typename TTask, typename ITask, typename TRunner, typename TEnv, typename TParam>
         void SpawnSubtaskWithRunner(TEnv* env, TSubtaskCompletion* completion, TParam param) {
-            static_assert((std::is_base_of<ITask, TTask>::value), "expect (std::is_base_of<ITask, TTask>::value)");
+            static_assert((std::is_base_of<ITask, TTask>::value), "expect (std::is_base_of<ITask, TTask>::value)"); 
             TTaskRunnerBase* current = TTaskRunnerBase::CurrentTask();
             completion->SetRunning(current);
             NPrivate::SpawnTaskImpl(new TRunner(env, completion, new TTask(env, param)));

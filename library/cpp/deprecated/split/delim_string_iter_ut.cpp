@@ -19,16 +19,16 @@ static void AssertStringSplit(const TString& str, const TString& delim, const TV
 Y_UNIT_TEST_SUITE(TDelimStrokaIterTestSuite) {
     Y_UNIT_TEST(SingleCharacterAsDelimiter) {
         AssertStringSplit(
-            "Hello words!", " ", {"Hello", "words!"});
+            "Hello words!", " ", {"Hello", "words!"}); 
     }
 
     Y_UNIT_TEST(MultipleCharactersAsDelimiter) {
         AssertStringSplit(
-            "0, 1, 1, 2, 3, 5, 8, 13, 21, 34", "1, ", {"0, ", "", "2, 3, 5, 8, 13, 2", "34"});
+            "0, 1, 1, 2, 3, 5, 8, 13, 21, 34", "1, ", {"0, ", "", "2, 3, 5, 8, 13, 2", "34"}); 
     }
 
     Y_UNIT_TEST(NoDelimitersPresent) {
-        AssertStringSplit("This string could be yours", "\t", {"This string could be yours"});
+        AssertStringSplit("This string could be yours", "\t", {"This string could be yours"}); 
     }
 
     Y_UNIT_TEST(Cdr) {

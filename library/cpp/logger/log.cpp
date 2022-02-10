@@ -94,7 +94,7 @@ public:
 
     inline void CloseLog() noexcept {
         Backend_.Destroy();
- 
+
         Y_ASSERT(!IsOpen());
     }
 

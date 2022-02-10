@@ -67,10 +67,10 @@ namespace NJson {
         return true;
     }
 
-    TParserCallbacks::TParserCallbacks(TJsonValue& value, bool throwOnError, bool notClosedBracketIsError)
+    TParserCallbacks::TParserCallbacks(TJsonValue& value, bool throwOnError, bool notClosedBracketIsError) 
         : TJsonCallbacks(throwOnError)
         , Value(value)
-        , NotClosedBracketIsError(notClosedBracketIsError)
+        , NotClosedBracketIsError(notClosedBracketIsError) 
         , CurrentState(START)
     {
     }
@@ -133,13 +133,13 @@ namespace NJson {
         return true;
     }
 
-    bool TParserCallbacks::OnEnd() {
-        if (NotClosedBracketIsError){
-            return ValuesStack.empty();
-        }
-        return true;
-    }
-
+    bool TParserCallbacks::OnEnd() { 
+        if (NotClosedBracketIsError){ 
+            return ValuesStack.empty(); 
+        } 
+        return true; 
+    } 
+ 
     TJsonReaderConfig::TJsonReaderConfig()
         : BufferSize(DEFAULT_BUFFER_LEN)
     {
@@ -416,16 +416,16 @@ namespace NJson {
         return ReadJsonTreeImpl(in, config, out, throwOnError);
     }
 
-    bool ReadJsonFastTree(TStringBuf in, TJsonValue* out, bool throwOnError, bool notClosedBracketIsError) {
-        TParserCallbacks cb(*out, throwOnError, notClosedBracketIsError);
+    bool ReadJsonFastTree(TStringBuf in, TJsonValue* out, bool throwOnError, bool notClosedBracketIsError) { 
+        TParserCallbacks cb(*out, throwOnError, notClosedBracketIsError); 
 
         return ReadJsonFast(in, &cb);
     }
 
-    TJsonValue ReadJsonFastTree(TStringBuf in, bool notClosedBracketIsError) {
+    TJsonValue ReadJsonFastTree(TStringBuf in, bool notClosedBracketIsError) { 
         TJsonValue value;
         // There is no way to report an error apart from throwing an exception when we return result by value.
-        ReadJsonFastTree(in, &value, /* throwOnError = */ true, notClosedBracketIsError);
+        ReadJsonFastTree(in, &value, /* throwOnError = */ true, notClosedBracketIsError); 
         return value;
     }
 

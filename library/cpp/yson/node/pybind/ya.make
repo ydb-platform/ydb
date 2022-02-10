@@ -1,4 +1,4 @@
-PY23_NATIVE_LIBRARY() 
+PY23_NATIVE_LIBRARY()
 
 OWNER(
     inngonch

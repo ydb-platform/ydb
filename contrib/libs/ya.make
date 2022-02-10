@@ -302,7 +302,7 @@ RECURSE(
     serf
     snappy
     sophos
-    sparrowhawk
+    sparrowhawk 
     sparsehash
     spdk
     speex
@@ -336,7 +336,7 @@ RECURSE(
     tf-2.4
     tf-2.4/sample_python
     tf-2.4/tensorflow/python
-    thrax
+    thrax 
     tinyalsa
     tlsh
     trace_viewer

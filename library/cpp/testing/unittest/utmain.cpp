@@ -40,12 +40,12 @@
 #include <unistd.h>
 #endif
 
-#ifdef WITH_VALGRIND
+#ifdef WITH_VALGRIND 
 #define NOTE_IN_VALGRIND(test) VALGRIND_PRINTF("%s::%s", test->unit->name.data(), test->name)
-#else
+#else 
 #define NOTE_IN_VALGRIND(test)
-#endif
-
+#endif 
+ 
 const size_t MAX_COMMENT_MESSAGE_LENGTH = 1024 * 1024; // 1 MB
 
 using namespace NUnitTest;
@@ -655,9 +655,9 @@ int NUnitTest::RunMain(int argc, char** argv) {
     } catch (...) {
     }
 
-#ifndef UT_SKIP_EXCEPTIONS
+#ifndef UT_SKIP_EXCEPTIONS 
     try {
-#endif
+#endif 
         NTesting::THook::CallBeforeRun();
         Y_DEFER { NTesting::THook::CallAfterRun(); };
 
@@ -761,11 +761,11 @@ int NUnitTest::RunMain(int argc, char** argv) {
             }
         }
         return ret;
-#ifndef UT_SKIP_EXCEPTIONS
+#ifndef UT_SKIP_EXCEPTIONS 
     } catch (...) {
         Cerr << "caught exception in test suite(" << CurrentExceptionMessage() << ")" << Endl;
     }
-#endif
+#endif 
 
     return 1;
 }

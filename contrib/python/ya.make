@@ -309,7 +309,7 @@ RECURSE(
     djangorestframework
     djangorestframework-camel-case
     djangorestframework-csv
-    djangorestframework-filters
+    djangorestframework-filters 
     djangorestframework-jsonp
     djangorestframework-xml
     dm.xmlsec.binding
@@ -482,7 +482,7 @@ RECURSE(
     hpack
     hstspreload
     html2text
-    html5lib
+    html5lib 
     httmock
     http-parser
     httpagentparser
@@ -619,7 +619,7 @@ RECURSE(
     mecab-python3
     meld3
     memory-profiler
-    mercurial
+    mercurial 
     mistune
     mitmproxy
     mkdocs
@@ -887,7 +887,7 @@ RECURSE(
     pytest-vcr
     pytest-xdist
     pytest-xprocess
-    python-crfsuite
+    python-crfsuite 
     python-crontab
     python-daemon
     python-datemath
@@ -898,7 +898,7 @@ RECURSE(
     python-editor
     python-geohash
     python-gnupg
-    python-hglib
+    python-hglib 
     python-i18n
     python-jose
     python-json-logger
@@ -1024,7 +1024,7 @@ RECURSE(
     sqlalchemy
     SQLAlchemy-Continuum
     sqlalchemy-stubs
-    SQLAlchemy-Utils
+    SQLAlchemy-Utils 
     sqlparse
     sqltap
     srptools

@@ -107,7 +107,7 @@ namespace NJson {
             IN_ARRAY,
             FINISH
         } CurrentState;
-
+ 
         template <class T>
         bool SetValue(const T& value) {
             switch (CurrentState) {
@@ -128,12 +128,12 @@ namespace NJson {
                     ythrow yexception() << "TParserCallbacks::SetValue invalid enum";
             }
             return true;
-        }
-
+        } 
+ 
         bool OpenComplexValue(EJsonValueType type);
         bool CloseComplexValue();
     };
-
+ 
     //// relaxed json, used in library/cpp/scheme
     bool ReadJsonFastTree(TStringBuf in, TJsonValue* out, bool throwOnError = false, bool notClosedBracketIsError = false);
     TJsonValue ReadJsonFastTree(TStringBuf in, bool notClosedBracketIsError = false);

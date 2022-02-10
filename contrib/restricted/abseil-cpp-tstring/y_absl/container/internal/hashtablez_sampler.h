@@ -44,14 +44,14 @@
 #include <memory>
 #include <vector>
 
-#include "y_absl/base/internal/per_thread_tls.h"
-#include "y_absl/base/optimization.h"
-#include "y_absl/container/internal/have_sse.h"
+#include "y_absl/base/internal/per_thread_tls.h" 
+#include "y_absl/base/optimization.h" 
+#include "y_absl/container/internal/have_sse.h" 
 #include "y_absl/profiling/internal/sample_recorder.h"
-#include "y_absl/synchronization/mutex.h"
-#include "y_absl/utility/utility.h"
+#include "y_absl/synchronization/mutex.h" 
+#include "y_absl/utility/utility.h" 
 
-namespace y_absl {
+namespace y_absl { 
 ABSL_NAMESPACE_BEGIN
 namespace container_internal {
 
@@ -88,7 +88,7 @@ struct HashtablezInfo : public profiling_internal::Sample<HashtablezInfo> {
   // can only read them during `HashtablezSampler::Iterate` which will hold the
   // lock.
   static constexpr int kMaxStackDepth = 64;
-  y_absl::Time create_time;
+  y_absl::Time create_time; 
   int32_t depth;
   void* stack[kMaxStackDepth];
   size_t inline_element_size;
@@ -165,12 +165,12 @@ class HashtablezInfoHandle {
   HashtablezInfoHandle& operator=(const HashtablezInfoHandle&) = delete;
 
   HashtablezInfoHandle(HashtablezInfoHandle&& o) noexcept
-      : info_(y_absl::exchange(o.info_, nullptr)) {}
+      : info_(y_absl::exchange(o.info_, nullptr)) {} 
   HashtablezInfoHandle& operator=(HashtablezInfoHandle&& o) noexcept {
     if (ABSL_PREDICT_FALSE(info_ != nullptr)) {
       UnsampleSlow(info_);
     }
-    info_ = y_absl::exchange(o.info_, nullptr);
+    info_ = y_absl::exchange(o.info_, nullptr); 
     return *this;
   }
 
@@ -276,6 +276,6 @@ extern "C" bool ABSL_INTERNAL_C_SYMBOL(AbslContainerInternalSampleEverything)();
 
 }  // namespace container_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl
+}  // namespace y_absl 
 
 #endif  // ABSL_CONTAINER_INTERNAL_HASHTABLEZ_SAMPLER_H_

@@ -12,9 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "y_absl/strings/internal/ostringstream.h"
+#include "y_absl/strings/internal/ostringstream.h" 
 
-namespace y_absl {
+namespace y_absl { 
 ABSL_NAMESPACE_BEGIN
 namespace strings_internal {
 
@@ -33,4 +33,4 @@ std::streamsize OStringStream::xsputn(const char* s, std::streamsize n) {
 
 }  // namespace strings_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl
+}  // namespace y_absl 

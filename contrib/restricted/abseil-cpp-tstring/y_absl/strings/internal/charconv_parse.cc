@@ -12,16 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "y_absl/strings/internal/charconv_parse.h"
-#include "y_absl/strings/charconv.h"
+#include "y_absl/strings/internal/charconv_parse.h" 
+#include "y_absl/strings/charconv.h" 
 
 #include <cassert>
 #include <cstdint>
 #include <limits>
 
-#include "y_absl/strings/internal/memutil.h"
+#include "y_absl/strings/internal/memutil.h" 
 
-namespace y_absl {
+namespace y_absl { 
 ABSL_NAMESPACE_BEGIN
 namespace {
 
@@ -501,4 +501,4 @@ template ParsedFloat ParseFloat<16>(const char* begin, const char* end,
 
 }  // namespace strings_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl
+}  // namespace y_absl 

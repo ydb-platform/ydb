@@ -46,7 +46,7 @@ extern "C"
 #endif
 
 #define STRINGPREP_VERSION "1.9"
-#define LIBIDN_STATIC
+#define LIBIDN_STATIC 
 
 /* Libidn Windows DLL */
 #ifndef LIBIDN_API

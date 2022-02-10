@@ -12,11 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "y_absl/container/internal/hashtablez_sampler.h"
+#include "y_absl/container/internal/hashtablez_sampler.h" 
 
-#include "y_absl/base/attributes.h"
+#include "y_absl/base/attributes.h" 
 
-namespace y_absl {
+namespace y_absl { 
 ABSL_NAMESPACE_BEGIN
 namespace container_internal {
 
@@ -28,4 +28,4 @@ extern "C" ABSL_ATTRIBUTE_WEAK bool ABSL_INTERNAL_C_SYMBOL(
 
 }  // namespace container_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl
+}  // namespace y_absl 

@@ -12,26 +12,26 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// The implementation of the y_absl::Time class, which is declared in
-// //y_absl/time.h.
+// The implementation of the y_absl::Time class, which is declared in 
+// //y_absl/time.h. 
 //
-// The representation for an y_absl::Time is an y_absl::Duration offset from the
+// The representation for an y_absl::Time is an y_absl::Duration offset from the 
 // epoch.  We use the traditional Unix epoch (1970-01-01 00:00:00 +0000)
 // for convenience, but this is not exposed in the API and could be changed.
 //
 // NOTE: To keep type verbosity to a minimum, the following variable naming
 // conventions are used throughout this file.
 //
-// tz: An y_absl::TimeZone
-// ci: An y_absl::TimeZone::CivilInfo
-// ti: An y_absl::TimeZone::TimeInfo
-// cd: An y_absl::CivilDay or a cctz::civil_day
-// cs: An y_absl::CivilSecond or a cctz::civil_second
-// bd: An y_absl::Time::Breakdown
+// tz: An y_absl::TimeZone 
+// ci: An y_absl::TimeZone::CivilInfo 
+// ti: An y_absl::TimeZone::TimeInfo 
+// cd: An y_absl::CivilDay or a cctz::civil_day 
+// cs: An y_absl::CivilSecond or a cctz::civil_second 
+// bd: An y_absl::Time::Breakdown 
 // cl: A cctz::time_zone::civil_lookup
 // al: A cctz::time_zone::absolute_lookup
 
-#include "y_absl/time/time.h"
+#include "y_absl/time/time.h" 
 
 #if defined(_MSC_VER)
 #include <winsock2.h>  // for timeval
@@ -41,12 +41,12 @@
 #include <ctime>
 #include <limits>
 
-#include "y_absl/time/internal/cctz/include/cctz/civil_time.h"
-#include "y_absl/time/internal/cctz/include/cctz/time_zone.h"
+#include "y_absl/time/internal/cctz/include/cctz/civil_time.h" 
+#include "y_absl/time/internal/cctz/include/cctz/time_zone.h" 
 
-namespace cctz = y_absl::time_internal::cctz;
+namespace cctz = y_absl::time_internal::cctz; 
 
-namespace y_absl {
+namespace y_absl { 
 ABSL_NAMESPACE_BEGIN
 
 namespace {
@@ -57,24 +57,24 @@ inline cctz::time_point<cctz::seconds> unix_epoch() {
 }
 
 // Floors d to the next unit boundary closer to negative infinity.
-inline int64_t FloorToUnit(y_absl::Duration d, y_absl::Duration unit) {
-  y_absl::Duration rem;
-  int64_t q = y_absl::IDivDuration(d, unit, &rem);
+inline int64_t FloorToUnit(y_absl::Duration d, y_absl::Duration unit) { 
+  y_absl::Duration rem; 
+  int64_t q = y_absl::IDivDuration(d, unit, &rem); 
   return (q > 0 || rem >= ZeroDuration() ||
           q == std::numeric_limits<int64_t>::min())
              ? q
              : q - 1;
 }
 
-inline y_absl::Time::Breakdown InfiniteFutureBreakdown() {
-  y_absl::Time::Breakdown bd;
+inline y_absl::Time::Breakdown InfiniteFutureBreakdown() { 
+  y_absl::Time::Breakdown bd; 
   bd.year = std::numeric_limits<int64_t>::max();
   bd.month = 12;
   bd.day = 31;
   bd.hour = 23;
   bd.minute = 59;
   bd.second = 59;
-  bd.subsecond = y_absl::InfiniteDuration();
+  bd.subsecond = y_absl::InfiniteDuration(); 
   bd.weekday = 4;
   bd.yearday = 365;
   bd.offset = 0;
@@ -83,7 +83,7 @@ inline y_absl::Time::Breakdown InfiniteFutureBreakdown() {
   return bd;
 }
 
-inline y_absl::Time::Breakdown InfinitePastBreakdown() {
+inline y_absl::Time::Breakdown InfinitePastBreakdown() { 
   Time::Breakdown bd;
   bd.year = std::numeric_limits<int64_t>::min();
   bd.month = 1;
@@ -91,7 +91,7 @@ inline y_absl::Time::Breakdown InfinitePastBreakdown() {
   bd.hour = 0;
   bd.minute = 0;
   bd.second = 0;
-  bd.subsecond = -y_absl::InfiniteDuration();
+  bd.subsecond = -y_absl::InfiniteDuration(); 
   bd.weekday = 7;
   bd.yearday = 1;
   bd.offset = 0;
@@ -100,7 +100,7 @@ inline y_absl::Time::Breakdown InfinitePastBreakdown() {
   return bd;
 }
 
-inline y_absl::TimeZone::CivilInfo InfiniteFutureCivilInfo() {
+inline y_absl::TimeZone::CivilInfo InfiniteFutureCivilInfo() { 
   TimeZone::CivilInfo ci;
   ci.cs = CivilSecond::max();
   ci.subsecond = InfiniteDuration();
@@ -110,7 +110,7 @@ inline y_absl::TimeZone::CivilInfo InfiniteFutureCivilInfo() {
   return ci;
 }
 
-inline y_absl::TimeZone::CivilInfo InfinitePastCivilInfo() {
+inline y_absl::TimeZone::CivilInfo InfinitePastCivilInfo() { 
   TimeZone::CivilInfo ci;
   ci.cs = CivilSecond::min();
   ci.subsecond = -InfiniteDuration();
@@ -120,18 +120,18 @@ inline y_absl::TimeZone::CivilInfo InfinitePastCivilInfo() {
   return ci;
 }
 
-inline y_absl::TimeConversion InfiniteFutureTimeConversion() {
-  y_absl::TimeConversion tc;
-  tc.pre = tc.trans = tc.post = y_absl::InfiniteFuture();
-  tc.kind = y_absl::TimeConversion::UNIQUE;
+inline y_absl::TimeConversion InfiniteFutureTimeConversion() { 
+  y_absl::TimeConversion tc; 
+  tc.pre = tc.trans = tc.post = y_absl::InfiniteFuture(); 
+  tc.kind = y_absl::TimeConversion::UNIQUE; 
   tc.normalized = true;
   return tc;
 }
 
 inline TimeConversion InfinitePastTimeConversion() {
-  y_absl::TimeConversion tc;
-  tc.pre = tc.trans = tc.post = y_absl::InfinitePast();
-  tc.kind = y_absl::TimeConversion::UNIQUE;
+  y_absl::TimeConversion tc; 
+  tc.pre = tc.trans = tc.post = y_absl::InfinitePast(); 
+  tc.kind = y_absl::TimeConversion::UNIQUE; 
   tc.normalized = true;
   return tc;
 }
@@ -148,14 +148,14 @@ Time MakeTimeWithOverflow(const cctz::time_point<cctz::seconds>& sec,
     const auto al = tz.lookup(max);
     if (cs > al.cs) {
       if (normalized) *normalized = true;
-      return y_absl::InfiniteFuture();
+      return y_absl::InfiniteFuture(); 
     }
   }
   if (sec == min) {
     const auto al = tz.lookup(min);
     if (cs < al.cs) {
       if (normalized) *normalized = true;
-      return y_absl::InfinitePast();
+      return y_absl::InfinitePast(); 
     }
   }
   const auto hi = (sec - unix_epoch()).count();
@@ -203,16 +203,16 @@ bool FindTransition(const cctz::time_zone& tz,
 // Time
 //
 
-y_absl::Time::Breakdown Time::In(y_absl::TimeZone tz) const {
-  if (*this == y_absl::InfiniteFuture()) return InfiniteFutureBreakdown();
-  if (*this == y_absl::InfinitePast()) return InfinitePastBreakdown();
+y_absl::Time::Breakdown Time::In(y_absl::TimeZone tz) const { 
+  if (*this == y_absl::InfiniteFuture()) return InfiniteFutureBreakdown(); 
+  if (*this == y_absl::InfinitePast()) return InfinitePastBreakdown(); 
 
   const auto tp = unix_epoch() + cctz::seconds(time_internal::GetRepHi(rep_));
   const auto al = cctz::time_zone(tz).lookup(tp);
   const auto cs = al.cs;
   const auto cd = cctz::civil_day(cs);
 
-  y_absl::Time::Breakdown bd;
+  y_absl::Time::Breakdown bd; 
   bd.year = cs.year();
   bd.month = cs.month();
   bd.day = cs.day();
@@ -232,12 +232,12 @@ y_absl::Time::Breakdown Time::In(y_absl::TimeZone tz) const {
 // Conversions from/to other time types.
 //
 
-y_absl::Time FromUDate(double udate) {
-  return time_internal::FromUnixDuration(y_absl::Milliseconds(udate));
+y_absl::Time FromUDate(double udate) { 
+  return time_internal::FromUnixDuration(y_absl::Milliseconds(udate)); 
 }
 
-y_absl::Time FromUniversal(int64_t universal) {
-  return y_absl::UniversalEpoch() + 100 * y_absl::Nanoseconds(universal);
+y_absl::Time FromUniversal(int64_t universal) { 
+  return y_absl::UniversalEpoch() + 100 * y_absl::Nanoseconds(universal); 
 }
 
 int64_t ToUnixNanos(Time t) {
@@ -247,7 +247,7 @@ int64_t ToUnixNanos(Time t) {
             1000 * 1000 * 1000) +
            (time_internal::GetRepLo(time_internal::ToUnixDuration(t)) / 4);
   }
-  return FloorToUnit(time_internal::ToUnixDuration(t), y_absl::Nanoseconds(1));
+  return FloorToUnit(time_internal::ToUnixDuration(t), y_absl::Nanoseconds(1)); 
 }
 
 int64_t ToUnixMicros(Time t) {
@@ -257,7 +257,7 @@ int64_t ToUnixMicros(Time t) {
             1000 * 1000) +
            (time_internal::GetRepLo(time_internal::ToUnixDuration(t)) / 4000);
   }
-  return FloorToUnit(time_internal::ToUnixDuration(t), y_absl::Microseconds(1));
+  return FloorToUnit(time_internal::ToUnixDuration(t), y_absl::Microseconds(1)); 
 }
 
 int64_t ToUnixMillis(Time t) {
@@ -267,35 +267,35 @@ int64_t ToUnixMillis(Time t) {
            (time_internal::GetRepLo(time_internal::ToUnixDuration(t)) /
             (4000 * 1000));
   }
-  return FloorToUnit(time_internal::ToUnixDuration(t), y_absl::Milliseconds(1));
+  return FloorToUnit(time_internal::ToUnixDuration(t), y_absl::Milliseconds(1)); 
 }
 
 int64_t ToUnixSeconds(Time t) {
   return time_internal::GetRepHi(time_internal::ToUnixDuration(t));
 }
 
-time_t ToTimeT(Time t) { return y_absl::ToTimespec(t).tv_sec; }
+time_t ToTimeT(Time t) { return y_absl::ToTimespec(t).tv_sec; } 
 
 double ToUDate(Time t) {
-  return y_absl::FDivDuration(time_internal::ToUnixDuration(t),
-                            y_absl::Milliseconds(1));
+  return y_absl::FDivDuration(time_internal::ToUnixDuration(t), 
+                            y_absl::Milliseconds(1)); 
 }
 
-int64_t ToUniversal(y_absl::Time t) {
-  return y_absl::FloorToUnit(t - y_absl::UniversalEpoch(), y_absl::Nanoseconds(100));
+int64_t ToUniversal(y_absl::Time t) { 
+  return y_absl::FloorToUnit(t - y_absl::UniversalEpoch(), y_absl::Nanoseconds(100)); 
 }
 
-y_absl::Time TimeFromTimespec(timespec ts) {
-  return time_internal::FromUnixDuration(y_absl::DurationFromTimespec(ts));
+y_absl::Time TimeFromTimespec(timespec ts) { 
+  return time_internal::FromUnixDuration(y_absl::DurationFromTimespec(ts)); 
 }
 
-y_absl::Time TimeFromTimeval(timeval tv) {
-  return time_internal::FromUnixDuration(y_absl::DurationFromTimeval(tv));
+y_absl::Time TimeFromTimeval(timeval tv) { 
+  return time_internal::FromUnixDuration(y_absl::DurationFromTimeval(tv)); 
 }
 
 timespec ToTimespec(Time t) {
   timespec ts;
-  y_absl::Duration d = time_internal::ToUnixDuration(t);
+  y_absl::Duration d = time_internal::ToUnixDuration(t); 
   if (!time_internal::IsInfiniteDuration(d)) {
     ts.tv_sec = time_internal::GetRepHi(d);
     if (ts.tv_sec == time_internal::GetRepHi(d)) {  // no time_t narrowing
@@ -303,7 +303,7 @@ timespec ToTimespec(Time t) {
       return ts;
     }
   }
-  if (d >= y_absl::ZeroDuration()) {
+  if (d >= y_absl::ZeroDuration()) { 
     ts.tv_sec = std::numeric_limits<time_t>::max();
     ts.tv_nsec = 1000 * 1000 * 1000 - 1;
   } else {
@@ -315,7 +315,7 @@ timespec ToTimespec(Time t) {
 
 timeval ToTimeval(Time t) {
   timeval tv;
-  timespec ts = y_absl::ToTimespec(t);
+  timespec ts = y_absl::ToTimespec(t); 
   tv.tv_sec = ts.tv_sec;
   if (tv.tv_sec != ts.tv_sec) {  // narrowing
     if (ts.tv_sec < 0) {
@@ -336,7 +336,7 @@ Time FromChrono(const std::chrono::system_clock::time_point& tp) {
       tp - std::chrono::system_clock::from_time_t(0)));
 }
 
-std::chrono::system_clock::time_point ToChronoTime(y_absl::Time t) {
+std::chrono::system_clock::time_point ToChronoTime(y_absl::Time t) { 
   using D = std::chrono::system_clock::duration;
   auto d = time_internal::ToUnixDuration(t);
   if (d < ZeroDuration()) d = Floor(d, FromChrono(D{1}));
@@ -348,9 +348,9 @@ std::chrono::system_clock::time_point ToChronoTime(y_absl::Time t) {
 // TimeZone
 //
 
-y_absl::TimeZone::CivilInfo TimeZone::At(Time t) const {
-  if (t == y_absl::InfiniteFuture()) return InfiniteFutureCivilInfo();
-  if (t == y_absl::InfinitePast()) return InfinitePastCivilInfo();
+y_absl::TimeZone::CivilInfo TimeZone::At(Time t) const { 
+  if (t == y_absl::InfiniteFuture()) return InfiniteFutureCivilInfo(); 
+  if (t == y_absl::InfinitePast()) return InfinitePastCivilInfo(); 
 
   const auto ud = time_internal::ToUnixDuration(t);
   const auto tp = unix_epoch() + cctz::seconds(time_internal::GetRepHi(ud));
@@ -365,7 +365,7 @@ y_absl::TimeZone::CivilInfo TimeZone::At(Time t) const {
   return ci;
 }
 
-y_absl::TimeZone::TimeInfo TimeZone::At(CivilSecond ct) const {
+y_absl::TimeZone::TimeInfo TimeZone::At(CivilSecond ct) const { 
   const cctz::civil_second cs(ct);
   const auto cl = cz_.lookup(cs);
 
@@ -399,7 +399,7 @@ bool TimeZone::PrevTransition(Time t, CivilTransition* trans) const {
 // Conversions involving time zones.
 //
 
-y_absl::TimeConversion ConvertDateTime(int64_t year, int mon, int day, int hour,
+y_absl::TimeConversion ConvertDateTime(int64_t year, int mon, int day, int hour, 
                                      int min, int sec, TimeZone tz) {
   // Avoids years that are too extreme for CivilSecond to normalize.
   if (year > 300000000000) return InfiniteFutureTimeConversion();
@@ -431,7 +431,7 @@ y_absl::TimeConversion ConvertDateTime(int64_t year, int mon, int day, int hour,
   return tc;
 }
 
-y_absl::Time FromTM(const struct tm& tm, y_absl::TimeZone tz) {
+y_absl::Time FromTM(const struct tm& tm, y_absl::TimeZone tz) { 
   civil_year_t tm_year = tm.tm_year;
   // Avoids years that are too extreme for CivilSecond to normalize.
   if (tm_year > 300000000000ll) return InfiniteFuture();
@@ -446,7 +446,7 @@ y_absl::Time FromTM(const struct tm& tm, y_absl::TimeZone tz) {
   return tm.tm_isdst == 0 ? ti.post : ti.pre;
 }
 
-struct tm ToTM(y_absl::Time t, y_absl::TimeZone tz) {
+struct tm ToTM(y_absl::Time t, y_absl::TimeZone tz) { 
   struct tm tm = {};
 
   const auto ci = tz.At(t);
@@ -497,4 +497,4 @@ struct tm ToTM(y_absl::Time t, y_absl::TimeZone tz) {
 }
 
 ABSL_NAMESPACE_END
-}  // namespace y_absl
+}  // namespace y_absl 

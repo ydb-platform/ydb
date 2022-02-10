@@ -44,7 +44,7 @@
 #define ElfW(x) __ElfN(x)
 #endif
 
-namespace y_absl {
+namespace y_absl { 
 ABSL_NAMESPACE_BEGIN
 namespace debugging_internal {
 
@@ -131,7 +131,7 @@ class ElfMemImage {
 
 }  // namespace debugging_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl
+}  // namespace y_absl 
 
 #endif  // ABSL_HAVE_ELF_MEM_IMAGE
 

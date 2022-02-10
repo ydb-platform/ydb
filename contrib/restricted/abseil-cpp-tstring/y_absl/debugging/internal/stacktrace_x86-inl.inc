@@ -29,15 +29,15 @@
 #include <cstdint>
 #include <limits>
 
-#include "y_absl/base/macros.h"
-#include "y_absl/base/port.h"
-#include "y_absl/debugging/internal/address_is_readable.h"
-#include "y_absl/debugging/internal/vdso_support.h"  // a no-op on non-elf or non-glibc systems
-#include "y_absl/debugging/stacktrace.h"
+#include "y_absl/base/macros.h" 
+#include "y_absl/base/port.h" 
+#include "y_absl/debugging/internal/address_is_readable.h" 
+#include "y_absl/debugging/internal/vdso_support.h"  // a no-op on non-elf or non-glibc systems 
+#include "y_absl/debugging/stacktrace.h" 
 
-#include "y_absl/base/internal/raw_logging.h"
+#include "y_absl/base/internal/raw_logging.h" 
 
-using y_absl::debugging_internal::AddressIsReadable;
+using y_absl::debugging_internal::AddressIsReadable; 
 
 #if defined(__linux__) && defined(__i386__)
 // Count "push %reg" instructions in VDSO __kernel_vsyscall(),
@@ -175,11 +175,11 @@ static void **NextStackFrame(void **old_fp, const void *uc,
     static const unsigned char *kernel_vsyscall_address = nullptr;
     if (num_push_instructions == -1) {
 #ifdef ABSL_HAVE_VDSO_SUPPORT
-      y_absl::debugging_internal::VDSOSupport vdso;
+      y_absl::debugging_internal::VDSOSupport vdso; 
       if (vdso.IsPresent()) {
-        y_absl::debugging_internal::VDSOSupport::SymbolInfo
+        y_absl::debugging_internal::VDSOSupport::SymbolInfo 
             rt_sigreturn_symbol_info;
-        y_absl::debugging_internal::VDSOSupport::SymbolInfo vsyscall_symbol_info;
+        y_absl::debugging_internal::VDSOSupport::SymbolInfo vsyscall_symbol_info; 
         if (!vdso.LookupSymbol("__kernel_rt_sigreturn", "LINUX_2.5", STT_FUNC,
                                &rt_sigreturn_symbol_info) ||
             !vdso.LookupSymbol("__kernel_vsyscall", "LINUX_2.5", STT_FUNC,
@@ -351,7 +351,7 @@ static int UnwindImpl(void **result, int *sizes, int max_depth, int skip_count,
   return n;
 }
 
-namespace y_absl {
+namespace y_absl { 
 ABSL_NAMESPACE_BEGIN
 namespace debugging_internal {
 bool StackTraceWorksForTest() {
@@ -359,6 +359,6 @@ bool StackTraceWorksForTest() {
 }
 }  // namespace debugging_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl
+}  // namespace y_absl 
 
 #endif  // ABSL_DEBUGGING_INTERNAL_STACKTRACE_X86_INL_INC_

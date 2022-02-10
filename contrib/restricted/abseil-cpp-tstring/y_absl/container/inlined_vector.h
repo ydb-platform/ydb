@@ -21,16 +21,16 @@
 // that storage for small sequences of the vector are provided inline without
 // requiring any heap allocation.
 //
-// An `y_absl::InlinedVector<T, N>` specifies the default capacity `N` as one of
+// An `y_absl::InlinedVector<T, N>` specifies the default capacity `N` as one of 
 // its template parameters. Instances where `size() <= N` hold contained
 // elements in inline space. Typically `N` is very small so that sequences that
 // are expected to be short do not require allocations.
 //
-// An `y_absl::InlinedVector` does not usually require a specific allocator. If
+// An `y_absl::InlinedVector` does not usually require a specific allocator. If 
 // the inlined vector grows beyond its initial constraints, it will need to
 // allocate (as any normal `std::vector` would). This is usually performed with
 // the default allocator (defined as `std::allocator<T>`). Optionally, a custom
-// allocator type may be specified as `A` in `y_absl::InlinedVector<T, N, A>`.
+// allocator type may be specified as `A` in `y_absl::InlinedVector<T, N, A>`. 
 
 #ifndef ABSL_CONTAINER_INLINED_VECTOR_H_
 #define ABSL_CONTAINER_INLINED_VECTOR_H_
@@ -46,21 +46,21 @@
 #include <type_traits>
 #include <utility>
 
-#include "y_absl/algorithm/algorithm.h"
-#include "y_absl/base/internal/throw_delegate.h"
+#include "y_absl/algorithm/algorithm.h" 
+#include "y_absl/base/internal/throw_delegate.h" 
 #include "y_absl/base/macros.h"
-#include "y_absl/base/optimization.h"
-#include "y_absl/base/port.h"
-#include "y_absl/container/internal/inlined_vector.h"
-#include "y_absl/memory/memory.h"
+#include "y_absl/base/optimization.h" 
+#include "y_absl/base/port.h" 
+#include "y_absl/container/internal/inlined_vector.h" 
+#include "y_absl/memory/memory.h" 
 
-namespace y_absl {
+namespace y_absl { 
 ABSL_NAMESPACE_BEGIN
 // -----------------------------------------------------------------------------
 // InlinedVector
 // -----------------------------------------------------------------------------
 //
-// An `y_absl::InlinedVector` is designed to be a drop-in replacement for
+// An `y_absl::InlinedVector` is designed to be a drop-in replacement for 
 // `std::vector` for use cases where the vector's size is sufficiently small
 // that it can be inlined. If the inlined vector does grow beyond its estimated
 // capacity, it will trigger an initial allocation on the heap, and will behave
@@ -68,7 +68,7 @@ ABSL_NAMESPACE_BEGIN
 // designed to cover the same API footprint as covered by `std::vector`.
 template <typename T, size_t N, typename A = std::allocator<T>>
 class InlinedVector {
-  static_assert(N > 0, "`y_absl::InlinedVector` requires an inlined capacity.");
+  static_assert(N > 0, "`y_absl::InlinedVector` requires an inlined capacity."); 
 
   using Storage = inlined_vector_internal::Storage<T, N, A>;
 
@@ -89,10 +89,10 @@ class InlinedVector {
       inlined_vector_internal::DefaultValueAdapter<TheA>;
 
   template <typename Iterator>
-  using EnableIfAtLeastForwardIterator = y_absl::enable_if_t<
+  using EnableIfAtLeastForwardIterator = y_absl::enable_if_t< 
       inlined_vector_internal::IsAtLeastForwardIterator<Iterator>::value, int>;
   template <typename Iterator>
-  using DisableIfAtLeastForwardIterator = y_absl::enable_if_t<
+  using DisableIfAtLeastForwardIterator = y_absl::enable_if_t< 
       !inlined_vector_internal::IsAtLeastForwardIterator<Iterator>::value, int>;
 
  public:
@@ -199,7 +199,7 @@ class InlinedVector {
   // Thus, the move constructor is non-throwing if the allocator is non-throwing
   // or `value_type`'s move constructor is specified as `noexcept`.
   InlinedVector(InlinedVector&& other) noexcept(
-      y_absl::allocator_is_nothrow<allocator_type>::value ||
+      y_absl::allocator_is_nothrow<allocator_type>::value || 
       std::is_nothrow_move_constructible<value_type>::value)
       : storage_(other.storage_.GetAllocator()) {
     if (IsMemcpyOk<A>::value) {
@@ -758,7 +758,7 @@ class InlinedVector {
 
  private:
   template <typename H, typename TheT, size_t TheN, typename TheA>
-  friend H AbslHashValue(H h, const y_absl::InlinedVector<TheT, TheN, TheA>& a);
+  friend H AbslHashValue(H h, const y_absl::InlinedVector<TheT, TheN, TheA>& a); 
 
   Storage storage_;
 };
@@ -771,8 +771,8 @@ class InlinedVector {
 //
 // Swaps the contents of two inlined vectors.
 template <typename T, size_t N, typename A>
-void swap(y_absl::InlinedVector<T, N, A>& a,
-          y_absl::InlinedVector<T, N, A>& b) noexcept(noexcept(a.swap(b))) {
+void swap(y_absl::InlinedVector<T, N, A>& a, 
+          y_absl::InlinedVector<T, N, A>& b) noexcept(noexcept(a.swap(b))) { 
   a.swap(b);
 }
 
@@ -780,19 +780,19 @@ void swap(y_absl::InlinedVector<T, N, A>& a,
 //
 // Tests for value-equality of two inlined vectors.
 template <typename T, size_t N, typename A>
-bool operator==(const y_absl::InlinedVector<T, N, A>& a,
-                const y_absl::InlinedVector<T, N, A>& b) {
+bool operator==(const y_absl::InlinedVector<T, N, A>& a, 
+                const y_absl::InlinedVector<T, N, A>& b) { 
   auto a_data = a.data();
   auto b_data = b.data();
-  return y_absl::equal(a_data, a_data + a.size(), b_data, b_data + b.size());
+  return y_absl::equal(a_data, a_data + a.size(), b_data, b_data + b.size()); 
 }
 
 // `operator!=(...)`
 //
 // Tests for value-inequality of two inlined vectors.
 template <typename T, size_t N, typename A>
-bool operator!=(const y_absl::InlinedVector<T, N, A>& a,
-                const y_absl::InlinedVector<T, N, A>& b) {
+bool operator!=(const y_absl::InlinedVector<T, N, A>& a, 
+                const y_absl::InlinedVector<T, N, A>& b) { 
   return !(a == b);
 }
 
@@ -801,8 +801,8 @@ bool operator!=(const y_absl::InlinedVector<T, N, A>& a,
 // Tests whether the value of an inlined vector is less than the value of
 // another inlined vector using a lexicographical comparison algorithm.
 template <typename T, size_t N, typename A>
-bool operator<(const y_absl::InlinedVector<T, N, A>& a,
-               const y_absl::InlinedVector<T, N, A>& b) {
+bool operator<(const y_absl::InlinedVector<T, N, A>& a, 
+               const y_absl::InlinedVector<T, N, A>& b) { 
   auto a_data = a.data();
   auto b_data = b.data();
   return std::lexicographical_compare(a_data, a_data + a.size(), b_data,
@@ -814,8 +814,8 @@ bool operator<(const y_absl::InlinedVector<T, N, A>& a,
 // Tests whether the value of an inlined vector is greater than the value of
 // another inlined vector using a lexicographical comparison algorithm.
 template <typename T, size_t N, typename A>
-bool operator>(const y_absl::InlinedVector<T, N, A>& a,
-               const y_absl::InlinedVector<T, N, A>& b) {
+bool operator>(const y_absl::InlinedVector<T, N, A>& a, 
+               const y_absl::InlinedVector<T, N, A>& b) { 
   return b < a;
 }
 
@@ -824,8 +824,8 @@ bool operator>(const y_absl::InlinedVector<T, N, A>& a,
 // Tests whether the value of an inlined vector is less than or equal to the
 // value of another inlined vector using a lexicographical comparison algorithm.
 template <typename T, size_t N, typename A>
-bool operator<=(const y_absl::InlinedVector<T, N, A>& a,
-                const y_absl::InlinedVector<T, N, A>& b) {
+bool operator<=(const y_absl::InlinedVector<T, N, A>& a, 
+                const y_absl::InlinedVector<T, N, A>& b) { 
   return !(b < a);
 }
 
@@ -834,22 +834,22 @@ bool operator<=(const y_absl::InlinedVector<T, N, A>& a,
 // Tests whether the value of an inlined vector is greater than or equal to the
 // value of another inlined vector using a lexicographical comparison algorithm.
 template <typename T, size_t N, typename A>
-bool operator>=(const y_absl::InlinedVector<T, N, A>& a,
-                const y_absl::InlinedVector<T, N, A>& b) {
+bool operator>=(const y_absl::InlinedVector<T, N, A>& a, 
+                const y_absl::InlinedVector<T, N, A>& b) { 
   return !(a < b);
 }
 
 // `AbslHashValue(...)`
 //
-// Provides `y_absl::Hash` support for `y_absl::InlinedVector`. It is uncommon to
+// Provides `y_absl::Hash` support for `y_absl::InlinedVector`. It is uncommon to 
 // call this directly.
 template <typename H, typename T, size_t N, typename A>
-H AbslHashValue(H h, const y_absl::InlinedVector<T, N, A>& a) {
+H AbslHashValue(H h, const y_absl::InlinedVector<T, N, A>& a) { 
   auto size = a.size();
   return H::combine(H::combine_contiguous(std::move(h), a.data(), size), size);
 }
 
 ABSL_NAMESPACE_END
-}  // namespace y_absl
+}  // namespace y_absl 
 
 #endif  // ABSL_CONTAINER_INLINED_VECTOR_H_

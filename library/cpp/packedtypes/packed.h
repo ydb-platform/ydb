@@ -5,8 +5,8 @@
 #include <util/stream/output.h>
 #include <util/ysaveload.h>
 
-#include "longs.h"
-
+#include "longs.h" 
+ 
 struct Stream_traits {
     template <typename T>
     static T get(IInputStream& in) {

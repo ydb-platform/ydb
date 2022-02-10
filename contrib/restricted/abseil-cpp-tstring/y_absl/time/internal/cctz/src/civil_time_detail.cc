@@ -12,7 +12,7 @@
 //   See the License for the specific language governing permissions and
 //   limitations under the License.
 
-#include "y_absl/time/internal/cctz/include/cctz/civil_time_detail.h"
+#include "y_absl/time/internal/cctz/include/cctz/civil_time_detail.h" 
 
 #include <iomanip>
 #include <ostream>
@@ -20,7 +20,7 @@
 
 #include "y_absl/base/config.h"
 
-namespace y_absl {
+namespace y_absl { 
 ABSL_NAMESPACE_BEGIN
 namespace time_internal {
 namespace cctz {
@@ -91,4 +91,4 @@ std::ostream& operator<<(std::ostream& os, weekday wd) {
 }  // namespace cctz
 }  // namespace time_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl
+}  // namespace y_absl 

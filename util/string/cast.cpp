@@ -516,11 +516,11 @@ bool FromStringImpl<bool>(const char* data, size_t len) {
     return result;
 }
 
-template <>
+template <> 
 TString FromStringImpl<TString>(const char* data, size_t len) {
     return TString(data, len);
-}
-
+} 
+ 
 template <>
 TStringBuf FromStringImpl<TStringBuf>(const char* data, size_t len) {
     return TStringBuf(data, len);

@@ -217,13 +217,13 @@ public:
 #endif
 };
 
-class IASTProcessor {
-public:
-    virtual void Process(const Node*) = 0;
-};
-
-void demangleAST(const char *MangledName, IASTProcessor *Processor);
-
+class IASTProcessor { 
+public: 
+    virtual void Process(const Node*) = 0; 
+}; 
+ 
+void demangleAST(const char *MangledName, IASTProcessor *Processor); 
+ 
 class NodeArray {
   Node **Elements;
   size_t NumElements;
@@ -5596,7 +5596,7 @@ Node *AbstractManglingParser<Derived, Alloc>::parseTemplateArg() {
       return nullptr;
     return Arg;
   }
-  case 'I': // 'I' here is an old GCC mangling ABI. It is common in outside binaries.
+  case 'I': // 'I' here is an old GCC mangling ABI. It is common in outside binaries. 
   case 'J': {
     ++First;
     size_t ArgsBegin = Names.size();

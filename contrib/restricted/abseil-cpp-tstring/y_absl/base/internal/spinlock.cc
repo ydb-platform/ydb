@@ -12,18 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "y_absl/base/internal/spinlock.h"
+#include "y_absl/base/internal/spinlock.h" 
 
 #include <algorithm>
 #include <atomic>
 #include <limits>
 
-#include "y_absl/base/attributes.h"
-#include "y_absl/base/internal/atomic_hook.h"
-#include "y_absl/base/internal/cycleclock.h"
-#include "y_absl/base/internal/spinlock_wait.h"
-#include "y_absl/base/internal/sysinfo.h" /* For NumCPUs() */
-#include "y_absl/base/call_once.h"
+#include "y_absl/base/attributes.h" 
+#include "y_absl/base/internal/atomic_hook.h" 
+#include "y_absl/base/internal/cycleclock.h" 
+#include "y_absl/base/internal/spinlock_wait.h" 
+#include "y_absl/base/internal/sysinfo.h" /* For NumCPUs() */ 
+#include "y_absl/base/call_once.h" 
 
 // Description of lock-word:
 //  31..00: [............................3][2][1][0]
@@ -53,7 +53,7 @@
 //          Otherwise, bits [31..3] represent the time spent by the current lock
 //          holder to acquire the lock.  There may be outstanding waiter(s).
 
-namespace y_absl {
+namespace y_absl { 
 ABSL_NAMESPACE_BEGIN
 namespace base_internal {
 
@@ -85,7 +85,7 @@ SpinLock::SpinLock(base_internal::SchedulingMode mode)
 uint32_t SpinLock::SpinLoop() {
   // We are already in the slow path of SpinLock, initialize the
   // adaptive_spin_count here.
-  ABSL_CONST_INIT static y_absl::once_flag init_adaptive_spin_count;
+  ABSL_CONST_INIT static y_absl::once_flag init_adaptive_spin_count; 
   ABSL_CONST_INIT static int adaptive_spin_count = 0;
   base_internal::LowLevelCallOnce(&init_adaptive_spin_count, []() {
     adaptive_spin_count = base_internal::NumCPUs() > 1 ? 1000 : 1;
@@ -226,4 +226,4 @@ uint64_t SpinLock::DecodeWaitCycles(uint32_t lock_value) {
 
 }  // namespace base_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl
+}  // namespace y_absl 

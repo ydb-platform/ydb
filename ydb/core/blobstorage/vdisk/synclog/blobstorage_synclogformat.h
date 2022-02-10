@@ -124,7 +124,7 @@ namespace NKikimr {
                     case RecBlock:      payloadSize = sizeof(TBlockRec); break;
                     case RecBarrier:    payloadSize = sizeof(TBarrierRec); break;
                     case RecBlockV2:    payloadSize = sizeof(TBlockRecV2); break;
-                    default: Y_FAIL("Unsupported type: RecType=%" PRIu64 " Lsn=%" PRIu64, (ui64)RecType, Lsn);
+                    default: Y_FAIL("Unsupported type: RecType=%" PRIu64 " Lsn=%" PRIu64, (ui64)RecType, Lsn); 
                 }
                 return sizeof(*this) + payloadSize;
             }
@@ -169,7 +169,7 @@ namespace NKikimr {
                     case RecBlock:      return GetBlock()->ToString();
                     case RecBarrier:    return GetBarrier()->ToString();
                     case RecBlockV2:    return GetBlockV2()->ToString();
-                    default: Y_FAIL("Unsupported type: RecType=%" PRIu64 " Lsn=%" PRIu64, (ui64)RecType, Lsn);
+                    default: Y_FAIL("Unsupported type: RecType=%" PRIu64 " Lsn=%" PRIu64, (ui64)RecType, Lsn); 
                 }
             }
         };

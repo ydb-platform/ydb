@@ -12,9 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "y_absl/strings/ascii.h"
+#include "y_absl/strings/ascii.h" 
 
-namespace y_absl {
+namespace y_absl { 
 ABSL_NAMESPACE_BEGIN
 namespace ascii_internal {
 
@@ -155,19 +155,19 @@ ABSL_DLL const char kToUpper[256] = {
 
 }  // namespace ascii_internal
 
-void AsciiStrToLower(TString* s) {
+void AsciiStrToLower(TString* s) { 
   for (auto& ch : *s) {
-    ch = y_absl::ascii_tolower(ch);
+    ch = y_absl::ascii_tolower(ch); 
   }
 }
 
-void AsciiStrToUpper(TString* s) {
+void AsciiStrToUpper(TString* s) { 
   for (auto& ch : *s) {
-    ch = y_absl::ascii_toupper(ch);
+    ch = y_absl::ascii_toupper(ch); 
   }
 }
 
-void RemoveExtraAsciiWhitespace(TString* str) {
+void RemoveExtraAsciiWhitespace(TString* str) { 
   auto stripped = StripAsciiWhitespace(*str);
 
   if (stripped.empty()) {
@@ -183,10 +183,10 @@ void RemoveExtraAsciiWhitespace(TString* str) {
   for (; input_it < input_end; ++input_it) {
     if (is_ws) {
       // Consecutive whitespace?  Keep only the last.
-      is_ws = y_absl::ascii_isspace(*input_it);
+      is_ws = y_absl::ascii_isspace(*input_it); 
       if (is_ws) --output_it;
     } else {
-      is_ws = y_absl::ascii_isspace(*input_it);
+      is_ws = y_absl::ascii_isspace(*input_it); 
     }
 
     *output_it = *input_it;
@@ -197,4 +197,4 @@ void RemoveExtraAsciiWhitespace(TString* str) {
 }
 
 ABSL_NAMESPACE_END
-}  // namespace y_absl
+}  // namespace y_absl 

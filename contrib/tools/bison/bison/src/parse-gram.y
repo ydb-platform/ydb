@@ -27,7 +27,7 @@
 {
   /* On column 0 to please syntax-check.  */
 #include <config.h>
-#include "string--.h"
+#include "string--.h" 
 }
 
 %code

@@ -158,7 +158,7 @@ class RODataCXX(iw.CustomCommand):
 
 
 def ro_data(path, unit):
-    if unit.enabled('ARCH_AARCH64') or unit.enabled('ARCH_ARM') or unit.enabled('ARCH_PPC64LE'):
+    if unit.enabled('ARCH_AARCH64') or unit.enabled('ARCH_ARM') or unit.enabled('ARCH_PPC64LE'): 
         return RODataCXX(path, unit)
 
     return ROData(path, unit)

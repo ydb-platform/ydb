@@ -56,7 +56,7 @@ TBusMessageQueue::TBusMessageQueue(const TBusQueueConfig& config, TExecutorPtr e
 }
 
 TBusMessageQueue::~TBusMessageQueue() {
-    Stop();
+    Stop(); 
 }
 
 void TBusMessageQueue::Stop() {
@@ -127,7 +127,7 @@ TString TBusMessageQueue::GetStatus(ui16 flags) const {
 TBusClientSessionPtr TBusMessageQueue::CreateSource(TBusProtocol* proto, IBusClientHandler* handler, const TBusClientSessionConfig& config, const TString& name) {
     TRemoteClientSessionPtr session(new TRemoteClientSession(this, proto, handler, config, name));
     Add(session.Get());
-    return session.Get();
+    return session.Get(); 
 }
 
 TBusServerSessionPtr TBusMessageQueue::CreateDestination(TBusProtocol* proto, IBusServerHandler* handler, const TBusClientSessionConfig& config, const TString& name) {
@@ -189,10 +189,10 @@ void TBusMessageQueue::DestroyAllSessions() {
     }
 }
 
-void TBusMessageQueue::Schedule(IScheduleItemAutoPtr i) {
-    Scheduler.Schedule(i);
+void TBusMessageQueue::Schedule(IScheduleItemAutoPtr i) { 
+    Scheduler.Schedule(i); 
 }
-
+ 
 TString TBusMessageQueue::GetNameInternal() const {
     return Config.Name;
 }

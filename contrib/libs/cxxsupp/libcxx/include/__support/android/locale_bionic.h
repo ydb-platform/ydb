@@ -26,9 +26,9 @@ extern "C" {
 #if defined(__ANDROID__)
 
 #include <android/api-level.h>
-#if defined(__has_include) && __has_include(<android/ndk-version.h>)
-#   include <android/ndk-version.h>
-#endif
+#if defined(__has_include) && __has_include(<android/ndk-version.h>) 
+#   include <android/ndk-version.h> 
+#endif 
 #if __ANDROID_API__ < 21
 #include <__support/xlocale/__posix_l_fallback.h>
 #endif

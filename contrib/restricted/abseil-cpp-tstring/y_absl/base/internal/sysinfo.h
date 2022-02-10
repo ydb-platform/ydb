@@ -31,9 +31,9 @@
 #include <cstdint>
 
 #include "y_absl/base/config.h"
-#include "y_absl/base/port.h"
+#include "y_absl/base/port.h" 
 
-namespace y_absl {
+namespace y_absl { 
 ABSL_NAMESPACE_BEGIN
 namespace base_internal {
 
@@ -69,6 +69,6 @@ pid_t GetCachedTID();
 
 }  // namespace base_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl
+}  // namespace y_absl 
 
 #endif  // ABSL_BASE_INTERNAL_SYSINFO_H_

@@ -45,12 +45,12 @@
 #include <tuple>
 #include <utility>
 
-#include "y_absl/base/config.h"
-#include "y_absl/base/internal/inline_variable.h"
-#include "y_absl/base/internal/invoke.h"
-#include "y_absl/meta/type_traits.h"
+#include "y_absl/base/config.h" 
+#include "y_absl/base/internal/inline_variable.h" 
+#include "y_absl/base/internal/invoke.h" 
+#include "y_absl/meta/type_traits.h" 
 
-namespace y_absl {
+namespace y_absl { 
 ABSL_NAMESPACE_BEGIN
 
 // integer_sequence
@@ -58,7 +58,7 @@ ABSL_NAMESPACE_BEGIN
 // Class template representing a compile-time integer sequence. An instantiation
 // of `integer_sequence<T, Ints...>` has a sequence of integers encoded in its
 // type through its template arguments (which is a common need when
-// working with C++11 variadic templates). `y_absl::integer_sequence` is designed
+// working with C++11 variadic templates). `y_absl::integer_sequence` is designed 
 // to be a drop-in replacement for C++14's `std::integer_sequence`.
 //
 // Example:
@@ -81,7 +81,7 @@ struct integer_sequence {
 // index_sequence
 //
 // A helper template for an `integer_sequence` of `size_t`,
-// `y_absl::index_sequence` is designed to be a drop-in replacement for C++14's
+// `y_absl::index_sequence` is designed to be a drop-in replacement for C++14's 
 // `std::index_sequence`.
 template <size_t... Ints>
 using index_sequence = integer_sequence<size_t, Ints...>;
@@ -169,7 +169,7 @@ using std::in_place;
 // in_place_t
 //
 // Tag type used to specify in-place construction, such as with
-// `y_absl::optional`, designed to be a drop-in replacement for C++17's
+// `y_absl::optional`, designed to be a drop-in replacement for C++17's 
 // `std::in_place_t`.
 struct in_place_t {};
 
@@ -185,7 +185,7 @@ using std::in_place_type_t;
 // in_place_type_t
 //
 // Tag type used for in-place construction when the type to construct needs to
-// be specified, such as with `y_absl::any`, designed to be a drop-in replacement
+// be specified, such as with `y_absl::any`, designed to be a drop-in replacement 
 // for C++17's `std::in_place_type_t`.
 template <typename T>
 using in_place_type_t = void (*)(utility_internal::InPlaceTypeTag<T>);
@@ -202,7 +202,7 @@ using std::in_place_index_t;
 // in_place_index_t
 //
 // Tag type used for in-place construction when the type to construct needs to
-// be specified, such as with `y_absl::any`, designed to be a drop-in replacement
+// be specified, such as with `y_absl::any`, designed to be a drop-in replacement 
 // for C++17's `std::in_place_index_t`.
 template <size_t I>
 using in_place_index_t = void (*)(utility_internal::InPlaceIndexTag<I>);
@@ -218,8 +218,8 @@ void in_place_index(utility_internal::InPlaceIndexTag<I>) {}
 // A constexpr version of `std::move()`, designed to be a drop-in replacement
 // for C++14's `std::move()`.
 template <typename T>
-constexpr y_absl::remove_reference_t<T>&& move(T&& t) noexcept {
-  return static_cast<y_absl::remove_reference_t<T>&&>(t);
+constexpr y_absl::remove_reference_t<T>&& move(T&& t) noexcept { 
+  return static_cast<y_absl::remove_reference_t<T>&&>(t); 
 }
 
 // forward()
@@ -228,7 +228,7 @@ constexpr y_absl::remove_reference_t<T>&& move(T&& t) noexcept {
 // for C++14's `std::forward()`.
 template <typename T>
 constexpr T&& forward(
-    y_absl::remove_reference_t<T>& t) noexcept {  // NOLINT(runtime/references)
+    y_absl::remove_reference_t<T>& t) noexcept {  // NOLINT(runtime/references) 
   return static_cast<T&&>(t);
 }
 
@@ -237,11 +237,11 @@ namespace utility_internal {
 template <typename Functor, typename Tuple, std::size_t... Indexes>
 auto apply_helper(Functor&& functor, Tuple&& t, index_sequence<Indexes...>)
     -> decltype(y_absl::base_internal::invoke(
-        y_absl::forward<Functor>(functor),
-        std::get<Indexes>(y_absl::forward<Tuple>(t))...)) {
+        y_absl::forward<Functor>(functor), 
+        std::get<Indexes>(y_absl::forward<Tuple>(t))...)) { 
   return y_absl::base_internal::invoke(
-      y_absl::forward<Functor>(functor),
-      std::get<Indexes>(y_absl::forward<Tuple>(t))...);
+      y_absl::forward<Functor>(functor), 
+      std::get<Indexes>(y_absl::forward<Tuple>(t))...); 
 }
 
 }  // namespace utility_internal
@@ -252,7 +252,7 @@ auto apply_helper(Functor&& functor, Tuple&& t, index_sequence<Indexes...>)
 // Each element of the tuple corresponds to an argument of the call (in order).
 // Both the Callable argument and the tuple argument are perfect-forwarded.
 // For member-function Callables, the first tuple element acts as the `this`
-// pointer. `y_absl::apply` is designed to be a drop-in replacement for C++17's
+// pointer. `y_absl::apply` is designed to be a drop-in replacement for C++17's 
 // `std::apply`. Unlike C++17's `std::apply`, this is not currently `constexpr`.
 //
 // Example:
@@ -261,65 +261,65 @@ auto apply_helper(Functor&& functor, Tuple&& t, index_sequence<Indexes...>)
 //    public:
 //     void Bar(int);
 //   };
-//   void user_function1(int, TString);
+//   void user_function1(int, TString); 
 //   void user_function2(std::unique_ptr<Foo>);
 //   auto user_lambda = [](int, int) {};
 //
 //   int main()
 //   {
-//       std::tuple<int, TString> tuple1(42, "bar");
-//       // Invokes the first user function on int, TString.
-//       y_absl::apply(&user_function1, tuple1);
+//       std::tuple<int, TString> tuple1(42, "bar"); 
+//       // Invokes the first user function on int, TString. 
+//       y_absl::apply(&user_function1, tuple1); 
 //
-//       std::tuple<std::unique_ptr<Foo>> tuple2(y_absl::make_unique<Foo>());
+//       std::tuple<std::unique_ptr<Foo>> tuple2(y_absl::make_unique<Foo>()); 
 //       // Invokes the user function that takes ownership of the unique
 //       // pointer.
-//       y_absl::apply(&user_function2, std::move(tuple2));
+//       y_absl::apply(&user_function2, std::move(tuple2)); 
 //
-//       auto foo = y_absl::make_unique<Foo>();
+//       auto foo = y_absl::make_unique<Foo>(); 
 //       std::tuple<Foo*, int> tuple3(foo.get(), 42);
 //       // Invokes the method Bar on foo with one argument, 42.
-//       y_absl::apply(&Foo::Bar, tuple3);
+//       y_absl::apply(&Foo::Bar, tuple3); 
 //
 //       std::tuple<int, int> tuple4(8, 9);
 //       // Invokes a lambda.
-//       y_absl::apply(user_lambda, tuple4);
+//       y_absl::apply(user_lambda, tuple4); 
 //   }
 template <typename Functor, typename Tuple>
 auto apply(Functor&& functor, Tuple&& t)
     -> decltype(utility_internal::apply_helper(
-        y_absl::forward<Functor>(functor), y_absl::forward<Tuple>(t),
-        y_absl::make_index_sequence<std::tuple_size<
+        y_absl::forward<Functor>(functor), y_absl::forward<Tuple>(t), 
+        y_absl::make_index_sequence<std::tuple_size< 
             typename std::remove_reference<Tuple>::type>::value>{})) {
   return utility_internal::apply_helper(
-      y_absl::forward<Functor>(functor), y_absl::forward<Tuple>(t),
-      y_absl::make_index_sequence<std::tuple_size<
+      y_absl::forward<Functor>(functor), y_absl::forward<Tuple>(t), 
+      y_absl::make_index_sequence<std::tuple_size< 
           typename std::remove_reference<Tuple>::type>::value>{});
 }
 
 // exchange
 //
 // Replaces the value of `obj` with `new_value` and returns the old value of
-// `obj`.  `y_absl::exchange` is designed to be a drop-in replacement for C++14's
+// `obj`.  `y_absl::exchange` is designed to be a drop-in replacement for C++14's 
 // `std::exchange`.
 //
 // Example:
 //
 //   Foo& operator=(Foo&& other) {
-//     ptr1_ = y_absl::exchange(other.ptr1_, nullptr);
-//     int1_ = y_absl::exchange(other.int1_, -1);
+//     ptr1_ = y_absl::exchange(other.ptr1_, nullptr); 
+//     int1_ = y_absl::exchange(other.int1_, -1); 
 //     return *this;
 //   }
 template <typename T, typename U = T>
 T exchange(T& obj, U&& new_value) {
-  T old_value = y_absl::move(obj);
-  obj = y_absl::forward<U>(new_value);
+  T old_value = y_absl::move(obj); 
+  obj = y_absl::forward<U>(new_value); 
   return old_value;
 }
 
 namespace utility_internal {
 template <typename T, typename Tuple, size_t... I>
-T make_from_tuple_impl(Tuple&& tup, y_absl::index_sequence<I...>) {
+T make_from_tuple_impl(Tuple&& tup, y_absl::index_sequence<I...>) { 
   return T(std::get<I>(std::forward<Tuple>(tup))...);
 }
 }  // namespace utility_internal
@@ -333,18 +333,18 @@ T make_from_tuple_impl(Tuple&& tup, y_absl::index_sequence<I...>) {
 // Example:
 //
 //   std::tuple<const char*, size_t> args("hello world", 5);
-//   auto s = y_absl::make_from_tuple<TString>(args);
+//   auto s = y_absl::make_from_tuple<TString>(args); 
 //   assert(s == "hello");
 //
 template <typename T, typename Tuple>
 constexpr T make_from_tuple(Tuple&& tup) {
   return utility_internal::make_from_tuple_impl<T>(
       std::forward<Tuple>(tup),
-      y_absl::make_index_sequence<
-          std::tuple_size<y_absl::decay_t<Tuple>>::value>{});
+      y_absl::make_index_sequence< 
+          std::tuple_size<y_absl::decay_t<Tuple>>::value>{}); 
 }
 
 ABSL_NAMESPACE_END
-}  // namespace y_absl
+}  // namespace y_absl 
 
 #endif  // ABSL_UTILITY_UTILITY_H_

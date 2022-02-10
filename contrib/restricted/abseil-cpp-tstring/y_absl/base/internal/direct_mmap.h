@@ -18,7 +18,7 @@
 #ifndef ABSL_BASE_INTERNAL_DIRECT_MMAP_H_
 #define ABSL_BASE_INTERNAL_DIRECT_MMAP_H_
 
-#include "y_absl/base/config.h"
+#include "y_absl/base/config.h" 
 
 #if ABSL_HAVE_MMAP
 
@@ -65,7 +65,7 @@ extern "C" void* __mmap2(void*, size_t, int, int, int, size_t);
 #define SYS_mmap2 __NR_mmap2
 #endif
 
-namespace y_absl {
+namespace y_absl { 
 ABSL_NAMESPACE_BEGIN
 namespace base_internal {
 
@@ -138,14 +138,14 @@ inline int DirectMunmap(void* start, size_t length) {
 
 }  // namespace base_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl
+}  // namespace y_absl 
 
 #else  // !__linux__
 
 // For non-linux platforms where we have mmap, just dispatch directly to the
 // actual mmap()/munmap() methods.
 
-namespace y_absl {
+namespace y_absl { 
 ABSL_NAMESPACE_BEGIN
 namespace base_internal {
 
@@ -160,7 +160,7 @@ inline int DirectMunmap(void* start, size_t length) {
 
 }  // namespace base_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl
+}  // namespace y_absl 
 
 #endif  // __linux__
 

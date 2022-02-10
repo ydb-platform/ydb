@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "y_absl/strings/string_view.h"
+#include "y_absl/strings/string_view.h" 
 
 #ifndef ABSL_USES_STD_STRING_VIEW
 
@@ -21,9 +21,9 @@
 #include <cstring>
 #include <ostream>
 
-#include "y_absl/strings/internal/memutil.h"
+#include "y_absl/strings/internal/memutil.h" 
 
-namespace y_absl {
+namespace y_absl { 
 ABSL_NAMESPACE_BEGIN
 
 namespace {
@@ -225,6 +225,6 @@ ABSL_STRING_VIEW_SELECTANY
 constexpr string_view::size_type string_view::kMaxSize;
 
 ABSL_NAMESPACE_END
-}  // namespace y_absl
+}  // namespace y_absl 
 
 #endif  // ABSL_USES_STD_STRING_VIEW

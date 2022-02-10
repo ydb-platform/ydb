@@ -31,34 +31,34 @@
 //    trying to use the unwinder to instrument malloc().
 //
 // Note: if you add a new implementation here, make sure it works
-// correctly when y_absl::GetStackTrace() is called with max_depth == 0.
+// correctly when y_absl::GetStackTrace() is called with max_depth == 0. 
 // Some code may do that.
 
-#include "y_absl/debugging/stacktrace.h"
+#include "y_absl/debugging/stacktrace.h" 
 
 #include <atomic>
 
-#include "y_absl/base/attributes.h"
-#include "y_absl/base/port.h"
-#include "y_absl/debugging/internal/stacktrace_config.h"
+#include "y_absl/base/attributes.h" 
+#include "y_absl/base/port.h" 
+#include "y_absl/debugging/internal/stacktrace_config.h" 
 
 #if defined(ABSL_STACKTRACE_INL_HEADER)
 #include ABSL_STACKTRACE_INL_HEADER
 #else
 # error Cannot calculate stack trace: will need to write for your environment
 
-# include "y_absl/debugging/internal/stacktrace_aarch64-inl.inc"
-# include "y_absl/debugging/internal/stacktrace_arm-inl.inc"
+# include "y_absl/debugging/internal/stacktrace_aarch64-inl.inc" 
+# include "y_absl/debugging/internal/stacktrace_arm-inl.inc" 
 # include "y_absl/debugging/internal/stacktrace_emscripten-inl.inc"
-# include "y_absl/debugging/internal/stacktrace_generic-inl.inc"
-# include "y_absl/debugging/internal/stacktrace_powerpc-inl.inc"
+# include "y_absl/debugging/internal/stacktrace_generic-inl.inc" 
+# include "y_absl/debugging/internal/stacktrace_powerpc-inl.inc" 
 # include "y_absl/debugging/internal/stacktrace_riscv-inl.inc"
-# include "y_absl/debugging/internal/stacktrace_unimplemented-inl.inc"
-# include "y_absl/debugging/internal/stacktrace_win32-inl.inc"
-# include "y_absl/debugging/internal/stacktrace_x86-inl.inc"
+# include "y_absl/debugging/internal/stacktrace_unimplemented-inl.inc" 
+# include "y_absl/debugging/internal/stacktrace_win32-inl.inc" 
+# include "y_absl/debugging/internal/stacktrace_x86-inl.inc" 
 #endif
 
-namespace y_absl {
+namespace y_absl { 
 ABSL_NAMESPACE_BEGIN
 namespace {
 
@@ -139,4 +139,4 @@ int DefaultStackUnwinder(void** pcs, int* sizes, int depth, int skip,
 }
 
 ABSL_NAMESPACE_END
-}  // namespace y_absl
+}  // namespace y_absl 

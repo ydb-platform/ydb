@@ -8,8 +8,8 @@ VERSION(0.2.6)
 
 LICENSE(Apache-2.0)
 
-LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
-
+LICENSE_TEXTS(.yandex_meta/licenses.list.txt) 
+ 
 PEERDIR(
     contrib/restricted/aws/aws-c-common
     contrib/restricted/aws/aws-c-io

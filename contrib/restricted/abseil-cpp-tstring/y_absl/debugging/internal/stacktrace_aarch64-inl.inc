@@ -14,10 +14,10 @@
 #include <cstdint>
 #include <iostream>
 
-#include "y_absl/base/attributes.h"
-#include "y_absl/debugging/internal/address_is_readable.h"
-#include "y_absl/debugging/internal/vdso_support.h"  // a no-op on non-elf or non-glibc systems
-#include "y_absl/debugging/stacktrace.h"
+#include "y_absl/base/attributes.h" 
+#include "y_absl/debugging/internal/address_is_readable.h" 
+#include "y_absl/debugging/internal/vdso_support.h"  // a no-op on non-elf or non-glibc systems 
+#include "y_absl/debugging/stacktrace.h" 
 
 static const uintptr_t kUnknownFrameSize = 0;
 
@@ -34,9 +34,9 @@ static const unsigned char* GetKernelRtSigreturnAddress() {
   address = reinterpret_cast<uintptr_t>(nullptr);
 
 #ifdef ABSL_HAVE_VDSO_SUPPORT
-  y_absl::debugging_internal::VDSOSupport vdso;
+  y_absl::debugging_internal::VDSOSupport vdso; 
   if (vdso.IsPresent()) {
-    y_absl::debugging_internal::VDSOSupport::SymbolInfo symbol_info;
+    y_absl::debugging_internal::VDSOSupport::SymbolInfo symbol_info; 
     auto lookup = [&](int type) {
       return vdso.LookupSymbol("__kernel_rt_sigreturn", "LINUX_2.6.39", type,
                                &symbol_info);
@@ -96,7 +96,7 @@ static void **NextStackFrame(void **old_frame_pointer, const void *uc) {
       // Check that alleged frame pointer is actually readable. This is to
       // prevent "double fault" in case we hit the first fault due to e.g.
       // stack corruption.
-      if (!y_absl::debugging_internal::AddressIsReadable(
+      if (!y_absl::debugging_internal::AddressIsReadable( 
               pre_signal_frame_pointer))
         return nullptr;
 
@@ -152,7 +152,7 @@ static int UnwindImpl(void** result, int* sizes, int max_depth, int skip_count,
   void* prev_return_address = nullptr;
 
   while (frame_pointer && n < max_depth) {
-    // The y_absl::GetStackFrames routine is called when we are in some
+    // The y_absl::GetStackFrames routine is called when we are in some 
     // informational context (the failure signal handler for example).
     // Use the non-strict unwinding rules to produce a stack trace
     // that is as complete as possible (even if it contains a few bogus
@@ -186,7 +186,7 @@ static int UnwindImpl(void** result, int* sizes, int max_depth, int skip_count,
   return n;
 }
 
-namespace y_absl {
+namespace y_absl { 
 ABSL_NAMESPACE_BEGIN
 namespace debugging_internal {
 bool StackTraceWorksForTest() {
@@ -194,6 +194,6 @@ bool StackTraceWorksForTest() {
 }
 }  // namespace debugging_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl
+}  // namespace y_absl 
 
 #endif  // ABSL_DEBUGGING_INTERNAL_STACKTRACE_AARCH64_INL_H_

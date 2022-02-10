@@ -34,7 +34,7 @@
 # include <__support/newlib/xlocale.h>
 #elif defined(__OpenBSD__)
 # include <__support/openbsd/xlocale.h>
-#elif (defined(__APPLE__)      || defined(__FreeBSD__) \
+#elif (defined(__APPLE__)      || defined(__FreeBSD__) \ 
     || defined(__EMSCRIPTEN__) || defined(__IBMCPP__))
 # include <xlocale.h>
 #elif defined(__Fuchsia__)

@@ -755,9 +755,9 @@
                 }
             ]
         },
-        "msvc2019-i686": {
-            "name": "msvc2019",
-            "tools": {
+        "msvc2019-i686": { 
+            "name": "msvc2019", 
+            "tools": { 
                 "cc": {
                     "bottle": "msvc2019",
                     "executable": "msvc"
@@ -766,7 +766,7 @@
                     "bottle": "msvc2019",
                     "executable": "msvc"
                 }
-            },
+            }, 
             "platforms": [
                 {
                     "host": {
@@ -779,19 +779,19 @@
                     "default": true
                 }
             ],
-            "params": {
-                "type": "msvc",
-                "match_root": "MSVC",
-                "werror_mode": "compiler_specific",
-                "c_compiler": "$(MSVC)/bin/Hostx64/x86/cl.exe",
-                "cxx_compiler": "$(MSVC)/bin/Hostx64/x86/cl.exe",
+            "params": { 
+                "type": "msvc", 
+                "match_root": "MSVC", 
+                "werror_mode": "compiler_specific", 
+                "c_compiler": "$(MSVC)/bin/Hostx64/x86/cl.exe", 
+                "cxx_compiler": "$(MSVC)/bin/Hostx64/x86/cl.exe", 
                 "cxx_std": "c++latest",
-                "version": "2019"
-            }
-        },
-        "msvc2019-x86_64": {
-            "name": "msvc2019",
-            "tools": {
+                "version": "2019" 
+            } 
+        }, 
+        "msvc2019-x86_64": { 
+            "name": "msvc2019", 
+            "tools": { 
                 "cc": {
                     "bottle": "msvc2019",
                     "executable": "msvc"
@@ -800,7 +800,7 @@
                     "bottle": "msvc2019",
                     "executable": "msvc"
                 }
-            },
+            }, 
             "platforms": [
                 {
                     "host": {
@@ -809,20 +809,20 @@
                     "default": true
                 }
             ],
-            "params": {
-                "type": "msvc",
-                "match_root": "MSVC",
-                "werror_mode": "compiler_specific",
-                "c_compiler": "$(MSVC)/bin/Hostx64/x64/cl.exe",
-                "cxx_compiler": "$(MSVC)/bin/Hostx64/x64/cl.exe",
+            "params": { 
+                "type": "msvc", 
+                "match_root": "MSVC", 
+                "werror_mode": "compiler_specific", 
+                "c_compiler": "$(MSVC)/bin/Hostx64/x64/cl.exe", 
+                "cxx_compiler": "$(MSVC)/bin/Hostx64/x64/cl.exe", 
                 "cxx_std": "c++latest",
                 "version": "2019",
                 "for_ide": "msvs2019"
-            }
-        },
-        "msvc2019-arm": {
-            "name": "msvc2019",
-            "tools": {
+            } 
+        }, 
+        "msvc2019-arm": { 
+            "name": "msvc2019", 
+            "tools": { 
                 "cc": {
                     "bottle": "msvc2019",
                     "executable": "msvc"
@@ -831,7 +831,7 @@
                     "bottle": "msvc2019",
                     "executable": "msvc"
                 }
-            },
+            }, 
             "platforms": [
                 {
                     "host": {
@@ -844,19 +844,19 @@
                     "default": true
                 }
             ],
-            "params": {
-                "type": "msvc",
-                "match_root": "MSVC",
-                "werror_mode": "compiler_specific",
-                "c_compiler": "$(MSVC)/bin/Hostx64/arm/cl.exe",
-                "cxx_compiler": "$(MSVC)/bin/Hostx64/arm/cl.exe",
+            "params": { 
+                "type": "msvc", 
+                "match_root": "MSVC", 
+                "werror_mode": "compiler_specific", 
+                "c_compiler": "$(MSVC)/bin/Hostx64/arm/cl.exe", 
+                "cxx_compiler": "$(MSVC)/bin/Hostx64/arm/cl.exe", 
                 "cxx_std": "c++latest",
-                "version": "2019"
-            }
-        },
-        "wine-msvc2019-i686": {
-            "name": "msvc2019",
-            "tools": {
+                "version": "2019" 
+            } 
+        }, 
+        "wine-msvc2019-i686": { 
+            "name": "msvc2019", 
+            "tools": { 
                 "cc": {
                     "bottle": "msvc2019",
                     "executable": "msvc"
@@ -865,7 +865,7 @@
                     "bottle": "msvc2019",
                     "executable": "msvc"
                 }
-            },
+            }, 
             "platforms": [
                 {
                     "host": {
@@ -878,20 +878,20 @@
                     "default": true
                 }
             ],
-            "params": {
-                "type": "msvc",
-                "match_root": "MSVC",
-                "werror_mode": "compiler_specific",
-                "c_compiler": "${YMAKE_PYTHON} ${input:\"build/scripts/run_msvc_wine.py\"} $(WINE_TOOL-sbr:1093314933)/bin/wine64 -v140 c $WINE_ENV ${ARCADIA_ROOT} ${ARCADIA_BUILD_ROOT} $(MSVC)/bin/Hostx64/x86/cl.exe",
-                "cxx_compiler": "${YMAKE_PYTHON} ${input:\"build/scripts/run_msvc_wine.py\"} $(WINE_TOOL-sbr:1093314933)/bin/wine64 -v140 cxx $WINE_ENV ${ARCADIA_ROOT} ${ARCADIA_BUILD_ROOT} $(MSVC)/bin/Hostx64/x86/cl.exe",
+            "params": { 
+                "type": "msvc", 
+                "match_root": "MSVC", 
+                "werror_mode": "compiler_specific", 
+                "c_compiler": "${YMAKE_PYTHON} ${input:\"build/scripts/run_msvc_wine.py\"} $(WINE_TOOL-sbr:1093314933)/bin/wine64 -v140 c $WINE_ENV ${ARCADIA_ROOT} ${ARCADIA_BUILD_ROOT} $(MSVC)/bin/Hostx64/x86/cl.exe", 
+                "cxx_compiler": "${YMAKE_PYTHON} ${input:\"build/scripts/run_msvc_wine.py\"} $(WINE_TOOL-sbr:1093314933)/bin/wine64 -v140 cxx $WINE_ENV ${ARCADIA_ROOT} ${ARCADIA_BUILD_ROOT} $(MSVC)/bin/Hostx64/x86/cl.exe", 
                 "cxx_std": "c++latest",
-                "version": "2019",
-                "wine": "yes"
-            }
-        },
-        "wine-msvc2019-x86_64": {
-            "name": "msvc2019",
-            "tools": {
+                "version": "2019", 
+                "wine": "yes" 
+            } 
+        }, 
+        "wine-msvc2019-x86_64": { 
+            "name": "msvc2019", 
+            "tools": { 
                 "cc": {
                     "bottle": "msvc2019",
                     "executable": "msvc"
@@ -900,7 +900,7 @@
                     "bottle": "msvc2019",
                     "executable": "msvc"
                 }
-            },
+            }, 
             "platforms": [
                 {
                     "host": {
@@ -912,20 +912,20 @@
                     "default": true
                 }
             ],
-            "params": {
-                "type": "msvc",
-                "match_root": "MSVC",
-                "werror_mode": "compiler_specific",
-                "c_compiler": "${YMAKE_PYTHON} ${input:\"build/scripts/run_msvc_wine.py\"} $(WINE_TOOL-sbr:1093314933)/bin/wine64 -v140 c $WINE_ENV ${ARCADIA_ROOT} ${ARCADIA_BUILD_ROOT} $(MSVC)/bin/Hostx64/x64/cl.exe",
-                "cxx_compiler": "${YMAKE_PYTHON} ${input:\"build/scripts/run_msvc_wine.py\"} $(WINE_TOOL-sbr:1093314933)/bin/wine64 -v140 cxx $WINE_ENV ${ARCADIA_ROOT} ${ARCADIA_BUILD_ROOT} $(MSVC)/bin/Hostx64/x64/cl.exe",
+            "params": { 
+                "type": "msvc", 
+                "match_root": "MSVC", 
+                "werror_mode": "compiler_specific", 
+                "c_compiler": "${YMAKE_PYTHON} ${input:\"build/scripts/run_msvc_wine.py\"} $(WINE_TOOL-sbr:1093314933)/bin/wine64 -v140 c $WINE_ENV ${ARCADIA_ROOT} ${ARCADIA_BUILD_ROOT} $(MSVC)/bin/Hostx64/x64/cl.exe", 
+                "cxx_compiler": "${YMAKE_PYTHON} ${input:\"build/scripts/run_msvc_wine.py\"} $(WINE_TOOL-sbr:1093314933)/bin/wine64 -v140 cxx $WINE_ENV ${ARCADIA_ROOT} ${ARCADIA_BUILD_ROOT} $(MSVC)/bin/Hostx64/x64/cl.exe", 
                 "cxx_std": "c++latest",
-                "version": "2019",
-                "wine": "yes"
-            }
-        },
-        "wine-msvc2019-arm": {
-            "name": "msvc2019",
-            "tools": {
+                "version": "2019", 
+                "wine": "yes" 
+            } 
+        }, 
+        "wine-msvc2019-arm": { 
+            "name": "msvc2019", 
+            "tools": { 
                 "cc": {
                     "bottle": "msvc2019",
                     "executable": "msvc"
@@ -934,7 +934,7 @@
                     "bottle": "msvc2019",
                     "executable": "msvc"
                 }
-            },
+            }, 
             "platforms": [
                 {
                     "host": {
@@ -947,17 +947,17 @@
                     "default": true
                 }
             ],
-            "params": {
-                "type": "msvc",
-                "match_root": "MSVC",
-                "werror_mode": "compiler_specific",
-                "c_compiler": "${YMAKE_PYTHON} ${input:\"build/scripts/run_msvc_wine.py\"} $(WINE_TOOL-sbr:1093314933)/bin/wine64 -v140 c $WINE_ENV ${ARCADIA_ROOT} ${ARCADIA_BUILD_ROOT} $(MSVC)/bin/Hostx64/arm/cl.exe",
-                "cxx_compiler": "${YMAKE_PYTHON} ${input:\"build/scripts/run_msvc_wine.py\"} $(WINE_TOOL-sbr:1093314933)/bin/wine64 -v140 cxx $WINE_ENV ${ARCADIA_ROOT} ${ARCADIA_BUILD_ROOT} $(MSVC)/bin/Hostx64/arm/cl.exe",
+            "params": { 
+                "type": "msvc", 
+                "match_root": "MSVC", 
+                "werror_mode": "compiler_specific", 
+                "c_compiler": "${YMAKE_PYTHON} ${input:\"build/scripts/run_msvc_wine.py\"} $(WINE_TOOL-sbr:1093314933)/bin/wine64 -v140 c $WINE_ENV ${ARCADIA_ROOT} ${ARCADIA_BUILD_ROOT} $(MSVC)/bin/Hostx64/arm/cl.exe", 
+                "cxx_compiler": "${YMAKE_PYTHON} ${input:\"build/scripts/run_msvc_wine.py\"} $(WINE_TOOL-sbr:1093314933)/bin/wine64 -v140 cxx $WINE_ENV ${ARCADIA_ROOT} ${ARCADIA_BUILD_ROOT} $(MSVC)/bin/Hostx64/arm/cl.exe", 
                 "cxx_std": "c++latest",
-                "version": "2019",
-                "wine": "yes"
-            }
-        },
+                "version": "2019", 
+                "wine": "yes" 
+            } 
+        }, 
         "clang-format": {
             "tools": {
                 "clang-format": {
@@ -1378,8 +1378,8 @@
                 }
             ]
         },
-        "gcc82": {
-            "tools": {
+        "gcc82": { 
+            "tools": { 
                 "cc": {
                     "bottle": "gcc82",
                     "executable": "cc"
@@ -1404,8 +1404,8 @@
                     "bottle": "gcc82",
                     "executable": "strip"
                 }
-            },
-            "platforms": [
+            }, 
+            "platforms": [ 
                 {
                     "host": {
                         "os": "LINUX"
@@ -1416,23 +1416,23 @@
                         "os": "DARWIN"
                     }
                 }
-            ],
-            "params": {
-                "type": "gnu",
-                "match_root": "GCC",
-                "werror_mode": "compiler_specific",
-                "c_compiler": "$(GCC)/gcc/bin/gcc",
-                "cxx_compiler": "$(GCC)/gcc/bin/g++",
+            ], 
+            "params": { 
+                "type": "gnu", 
+                "match_root": "GCC", 
+                "werror_mode": "compiler_specific", 
+                "c_compiler": "$(GCC)/gcc/bin/gcc", 
+                "cxx_compiler": "$(GCC)/gcc/bin/g++", 
                 "cxx_std": "c++17",
-                "gcc_version": "8.2.0",
+                "gcc_version": "8.2.0", 
                 "arch_opt": [
                     "-w"
                 ],
-                "dwarf_tool": {
-                    "DARWIN": "dsymutil -f"
-                }
-            }
-        },
+                "dwarf_tool": { 
+                    "DARWIN": "dsymutil -f" 
+                } 
+            } 
+        }, 
         "clang12-windows": {
             "name": "clang12",
             "tools": {
@@ -2055,270 +2055,270 @@
                 "gcc_version": "13.1"
             }
         },
-        "xcode_11_1": {
-            "tools": {
-                "c++": {
-                    "bottle": "xcode_11_1",
-                    "executable": "c++"
-                },
-                "cc": {
-                    "bottle": "xcode_11_1",
-                    "executable": "cc"
-                },
-                "llvm-cov": {
-                    "bottle": "xcode_11_1",
-                    "executable": "llvm-cov"
-                },
-                "llvm-profdata": {
-                    "bottle": "xcode_11_1",
-                    "executable": "llvm-profdata"
-                },
-                "nm": {
-                    "bottle": "xcode_11_1",
-                    "executable": "llvm-nm"
-                },
-                "strip": {
-                    "bottle": "xcode_11_1",
-                    "executable": "strip"
-                }
-            },
-            "platforms": [
-                {
-                    "host": {
-                        "os": "DARWIN"
-                    },
-                    "target": {
-                        "os": "DARWIN",
-                        "arch": "x86_64"
-                    },
-                    "default": false
-                },
-                {
-                    "host": {
-                        "os": "DARWIN"
-                    },
-                    "target": {
-                        "os": "IOS",
-                        "arch": "i386"
-                    },
-                    "default": false
-                },
-                {
-                    "host": {
-                        "os": "DARWIN"
-                    },
-                    "target": {
-                        "os": "IOS",
-                        "arch": "x86_64"
-                    },
-                    "default": false
-                },
-                {
-                    "host": {
-                        "os": "DARWIN"
-                    },
-                    "target": {
-                        "os": "IOS",
-                        "arch": "armv7"
-                    },
-                    "default": false
-                },
-                {
-                    "host": {
-                        "os": "DARWIN"
-                    },
-                    "target": {
-                        "os": "IOS",
-                        "arch": "arm64"
-                    },
-                    "default": false
-                }
-            ],
-            "params": {
+        "xcode_11_1": { 
+            "tools": { 
+                "c++": { 
+                    "bottle": "xcode_11_1", 
+                    "executable": "c++" 
+                }, 
+                "cc": { 
+                    "bottle": "xcode_11_1", 
+                    "executable": "cc" 
+                }, 
+                "llvm-cov": { 
+                    "bottle": "xcode_11_1", 
+                    "executable": "llvm-cov" 
+                }, 
+                "llvm-profdata": { 
+                    "bottle": "xcode_11_1", 
+                    "executable": "llvm-profdata" 
+                }, 
+                "nm": { 
+                    "bottle": "xcode_11_1", 
+                    "executable": "llvm-nm" 
+                }, 
+                "strip": { 
+                    "bottle": "xcode_11_1", 
+                    "executable": "strip" 
+                } 
+            }, 
+            "platforms": [ 
+                { 
+                    "host": { 
+                        "os": "DARWIN" 
+                    }, 
+                    "target": { 
+                        "os": "DARWIN", 
+                        "arch": "x86_64" 
+                    }, 
+                    "default": false 
+                }, 
+                { 
+                    "host": { 
+                        "os": "DARWIN" 
+                    }, 
+                    "target": { 
+                        "os": "IOS", 
+                        "arch": "i386" 
+                    }, 
+                    "default": false 
+                }, 
+                { 
+                    "host": { 
+                        "os": "DARWIN" 
+                    }, 
+                    "target": { 
+                        "os": "IOS", 
+                        "arch": "x86_64" 
+                    }, 
+                    "default": false 
+                }, 
+                { 
+                    "host": { 
+                        "os": "DARWIN" 
+                    }, 
+                    "target": { 
+                        "os": "IOS", 
+                        "arch": "armv7" 
+                    }, 
+                    "default": false 
+                }, 
+                { 
+                    "host": { 
+                        "os": "DARWIN" 
+                    }, 
+                    "target": { 
+                        "os": "IOS", 
+                        "arch": "arm64" 
+                    }, 
+                    "default": false 
+                } 
+            ], 
+            "params": { 
                 "type": "xcode",
-                "match_root": "CLANG",
-                "werror_mode": "all",
-                "c_compiler": "$(CLANG)/usr/bin/clang",
-                "cxx_compiler": "$(CLANG)/usr/bin/clang++",
+                "match_root": "CLANG", 
+                "werror_mode": "all", 
+                "c_compiler": "$(CLANG)/usr/bin/clang", 
+                "cxx_compiler": "$(CLANG)/usr/bin/clang++", 
                 "ar": "$(CLANG)/usr/bin/libtool",
-                "inplace_tools": true,
-                "gcc_version": "8.0",
-                "dwarf_tool": {
-                    "DARWIN": "$(CLANG)/usr/bin/dsymutil -flat"
-                }
-            }
-        },
-        "xcode_12_1": {
-            "tools": {
-                "c++": {
-                    "bottle": "xcode_12_1",
-                    "executable": "c++"
-                },
-                "cc": {
-                    "bottle": "xcode_12_1",
-                    "executable": "cc"
-                },
-                "llvm-cov": {
-                    "bottle": "xcode_12_1",
-                    "executable": "llvm-cov"
-                },
-                "llvm-profdata": {
-                    "bottle": "xcode_12_1",
-                    "executable": "llvm-profdata"
-                },
-                "nm": {
-                    "bottle": "xcode_12_1",
-                    "executable": "llvm-nm"
-                },
-                "strip": {
-                    "bottle": "xcode_12_1",
-                    "executable": "strip"
-                }
-            },
-            "platforms": [
-                {
-                    "host": {
-                        "os": "DARWIN"
-                    },
-                    "target": {
-                        "os": "DARWIN",
-                        "arch": "x86_64"
-                    },
-                    "default": false
-                },
-                {
-                    "host": {
-                        "os": "DARWIN"
-                    },
-                    "target": {
-                        "os": "IOS",
-                        "arch": "i386"
-                    },
-                    "default": false
-                },
-                {
-                    "host": {
-                        "os": "DARWIN"
-                    },
-                    "target": {
-                        "os": "IOS",
-                        "arch": "x86_64"
-                    },
-                    "default": false
-                },
-                {
-                    "host": {
-                        "os": "DARWIN"
-                    },
-                    "target": {
-                        "os": "IOS",
-                        "arch": "armv7"
-                    },
-                    "default": false
-                },
-                {
-                    "host": {
-                        "os": "DARWIN"
-                    },
-                    "target": {
-                        "os": "IOS",
-                        "arch": "arm64"
-                    },
-                    "default": false
-                }
-            ],
-            "params": {
+                "inplace_tools": true, 
+                "gcc_version": "8.0", 
+                "dwarf_tool": { 
+                    "DARWIN": "$(CLANG)/usr/bin/dsymutil -flat" 
+                } 
+            } 
+        }, 
+        "xcode_12_1": { 
+            "tools": { 
+                "c++": { 
+                    "bottle": "xcode_12_1", 
+                    "executable": "c++" 
+                }, 
+                "cc": { 
+                    "bottle": "xcode_12_1", 
+                    "executable": "cc" 
+                }, 
+                "llvm-cov": { 
+                    "bottle": "xcode_12_1", 
+                    "executable": "llvm-cov" 
+                }, 
+                "llvm-profdata": { 
+                    "bottle": "xcode_12_1", 
+                    "executable": "llvm-profdata" 
+                }, 
+                "nm": { 
+                    "bottle": "xcode_12_1", 
+                    "executable": "llvm-nm" 
+                }, 
+                "strip": { 
+                    "bottle": "xcode_12_1", 
+                    "executable": "strip" 
+                } 
+            }, 
+            "platforms": [ 
+                { 
+                    "host": { 
+                        "os": "DARWIN" 
+                    }, 
+                    "target": { 
+                        "os": "DARWIN", 
+                        "arch": "x86_64" 
+                    }, 
+                    "default": false 
+                }, 
+                { 
+                    "host": { 
+                        "os": "DARWIN" 
+                    }, 
+                    "target": { 
+                        "os": "IOS", 
+                        "arch": "i386" 
+                    }, 
+                    "default": false 
+                }, 
+                { 
+                    "host": { 
+                        "os": "DARWIN" 
+                    }, 
+                    "target": { 
+                        "os": "IOS", 
+                        "arch": "x86_64" 
+                    }, 
+                    "default": false 
+                }, 
+                { 
+                    "host": { 
+                        "os": "DARWIN" 
+                    }, 
+                    "target": { 
+                        "os": "IOS", 
+                        "arch": "armv7" 
+                    }, 
+                    "default": false 
+                }, 
+                { 
+                    "host": { 
+                        "os": "DARWIN" 
+                    }, 
+                    "target": { 
+                        "os": "IOS", 
+                        "arch": "arm64" 
+                    }, 
+                    "default": false 
+                } 
+            ], 
+            "params": { 
                 "type": "xcode",
-                "match_root": "CLANG",
-                "werror_mode": "all",
-                "c_compiler": "$(CLANG)/usr/bin/clang",
-                "cxx_compiler": "$(CLANG)/usr/bin/clang++",
+                "match_root": "CLANG", 
+                "werror_mode": "all", 
+                "c_compiler": "$(CLANG)/usr/bin/clang", 
+                "cxx_compiler": "$(CLANG)/usr/bin/clang++", 
                 "cxx_std": "c++17",
-                "ar": "$(CLANG)/usr/bin/libtool",
-                "inplace_tools": true,
-                "gcc_version": "8.0",
-                "dwarf_tool": {
-                    "DARWIN": "$(CLANG)/usr/bin/dsymutil -flat"
-                }
-            }
-        },
-        "xcode_12_5": {
-            "tools": {
-                "c++": {
-                    "bottle": "xcode_12_5",
-                    "executable": "c++"
-                },
-                "cc": {
-                    "bottle": "xcode_12_5",
-                    "executable": "cc"
-                },
-                "llvm-cov": {
-                    "bottle": "xcode_12_5",
-                    "executable": "llvm-cov"
-                },
-                "llvm-profdata": {
-                    "bottle": "xcode_12_5",
-                    "executable": "llvm-profdata"
-                },
-                "nm": {
-                    "bottle": "xcode_12_5",
-                    "executable": "llvm-nm"
-                },
-                "strip": {
-                    "bottle": "xcode_12_5",
-                    "executable": "strip"
-                }
-            },
-            "platforms": [
-                {
-                    "host": {
-                        "os": "DARWIN"
-                    },
-                    "target": {
-                        "os": "DARWIN",
-                        "arch": "x86_64"
-                    },
-                    "default": false
-                },
-                {
-                    "host": {
-                        "os": "DARWIN"
-                    },
-                    "target": {
-                        "os": "IOS",
-                        "arch": "i386"
-                    },
-                    "default": false
-                },
-                {
-                    "host": {
-                        "os": "DARWIN"
-                    },
-                    "target": {
-                        "os": "IOS",
-                        "arch": "x86_64"
-                    },
-                    "default": false
-                },
-                {
-                    "host": {
-                        "os": "DARWIN"
-                    },
-                    "target": {
-                        "os": "IOS",
-                        "arch": "armv7"
-                    },
-                    "default": false
-                },
-                {
-                    "host": {
-                        "os": "DARWIN"
-                    },
-                    "target": {
-                        "os": "IOS",
-                        "arch": "arm64"
-                    },
-                    "default": false
+                "ar": "$(CLANG)/usr/bin/libtool", 
+                "inplace_tools": true, 
+                "gcc_version": "8.0", 
+                "dwarf_tool": { 
+                    "DARWIN": "$(CLANG)/usr/bin/dsymutil -flat" 
+                } 
+            } 
+        }, 
+        "xcode_12_5": { 
+            "tools": { 
+                "c++": { 
+                    "bottle": "xcode_12_5", 
+                    "executable": "c++" 
+                }, 
+                "cc": { 
+                    "bottle": "xcode_12_5", 
+                    "executable": "cc" 
+                }, 
+                "llvm-cov": { 
+                    "bottle": "xcode_12_5", 
+                    "executable": "llvm-cov" 
+                }, 
+                "llvm-profdata": { 
+                    "bottle": "xcode_12_5", 
+                    "executable": "llvm-profdata" 
+                }, 
+                "nm": { 
+                    "bottle": "xcode_12_5", 
+                    "executable": "llvm-nm" 
+                }, 
+                "strip": { 
+                    "bottle": "xcode_12_5", 
+                    "executable": "strip" 
+                } 
+            }, 
+            "platforms": [ 
+                { 
+                    "host": { 
+                        "os": "DARWIN" 
+                    }, 
+                    "target": { 
+                        "os": "DARWIN", 
+                        "arch": "x86_64" 
+                    }, 
+                    "default": false 
+                }, 
+                { 
+                    "host": { 
+                        "os": "DARWIN" 
+                    }, 
+                    "target": { 
+                        "os": "IOS", 
+                        "arch": "i386" 
+                    }, 
+                    "default": false 
+                }, 
+                { 
+                    "host": { 
+                        "os": "DARWIN" 
+                    }, 
+                    "target": { 
+                        "os": "IOS", 
+                        "arch": "x86_64" 
+                    }, 
+                    "default": false 
+                }, 
+                { 
+                    "host": { 
+                        "os": "DARWIN" 
+                    }, 
+                    "target": { 
+                        "os": "IOS", 
+                        "arch": "armv7" 
+                    }, 
+                    "default": false 
+                }, 
+                { 
+                    "host": { 
+                        "os": "DARWIN" 
+                    }, 
+                    "target": { 
+                        "os": "IOS", 
+                        "arch": "arm64" 
+                    }, 
+                    "default": false 
                 },
                 {
                     "host": {
@@ -2329,23 +2329,23 @@
                         "arch": "arm64"
                     },
                     "default": false
-                }
-            ],
-            "params": {
+                } 
+            ], 
+            "params": { 
                 "type": "xcode",
-                "match_root": "CLANG",
-                "werror_mode": "all",
-                "c_compiler": "$(CLANG)/usr/bin/clang",
-                "cxx_compiler": "$(CLANG)/usr/bin/clang++",
-                "cxx_std": "c++17",
-                "ar": "$(CLANG)/usr/bin/libtool",
-                "inplace_tools": true,
-                "gcc_version": "8.0",
-                "dwarf_tool": {
-                    "DARWIN": "$(CLANG)/usr/bin/dsymutil -flat"
-                }
-            }
-        },
+                "match_root": "CLANG", 
+                "werror_mode": "all", 
+                "c_compiler": "$(CLANG)/usr/bin/clang", 
+                "cxx_compiler": "$(CLANG)/usr/bin/clang++", 
+                "cxx_std": "c++17", 
+                "ar": "$(CLANG)/usr/bin/libtool", 
+                "inplace_tools": true, 
+                "gcc_version": "8.0", 
+                "dwarf_tool": { 
+                    "DARWIN": "$(CLANG)/usr/bin/dsymutil -flat" 
+                } 
+            } 
+        }, 
         "android-ndk-r23": {
             "name": "clang12",
             "tools": {
@@ -2747,10 +2747,10 @@
                     "default": true
                 }
             ],
-            "env": {
-                "TERMINFO": [
+            "env": { 
+                "TERMINFO": [ 
                     "$(ROOT)/gdb/lib/terminfo"
-                ]
+                ] 
             }
         },
         "gdbserver": {
@@ -3946,12 +3946,12 @@
                 }
             ]
         },
-        "cuda": {
-            "tools": {
+        "cuda": { 
+            "tools": { 
                 "cuda": {
                     "bottle": "cuda"
                 }
-            },
+            }, 
             "platforms": [
                 {
                     "host": {
@@ -5724,20 +5724,20 @@
         }
     },
     "bottles": {
-        "msvc2019": {
-            "formula": {
+        "msvc2019": { 
+            "formula": { 
                 "sandbox_id": 887495315,
-                "match": "Microsoft Visual C++"
-            },
-            "executable": {
+                "match": "Microsoft Visual C++" 
+            }, 
+            "executable": { 
                 "msvc": [
                     "bin",
                     "Hostx64",
                     "x64",
                     "cl.exe"
                 ]
-            }
-        },
+            } 
+        }, 
         "ymake": {
             "formula": {
                 "sandbox_id": [
@@ -6133,130 +6133,130 @@
                 ],
                 "llvm-objcopy": [
                     "bin",
-                    "llvm-objcopy"
-                ]
-            }
-        },
-        "xcode_11_1": {
-            "formula": {
-                "sandbox_id": [
-                    542909976
-                ],
-                "match": "toolchain"
-            },
-            "executable": {
-                "c++": [
-                    "usr",
-                    "bin",
-                    "clang++"
-                ],
-                "cc": [
-                    "usr",
-                    "bin",
-                    "clang"
-                ],
-                "llvm-cov": [
-                    "usr",
-                    "bin",
-                    "llvm-cov"
-                ],
-                "llvm-profdata": [
-                    "usr",
-                    "bin",
-                    "llvm-profdata"
-                ],
-                "llvm-nm": [
-                    "usr",
-                    "bin",
-                    "llvm-nm"
-                ],
-                "strip": [
-                    "usr",
-                    "bin",
-                    "strip"
-                ]
-            }
-        },
-        "xcode_12_1": {
-            "formula": {
-                "sandbox_id": [
-                    816448826
-                ],
-                "match": "toolchain"
-            },
-            "executable": {
-                "c++": [
-                    "usr",
-                    "bin",
-                    "clang++"
-                ],
-                "cc": [
-                    "usr",
-                    "bin",
-                    "clang"
-                ],
-                "llvm-cov": [
-                    "usr",
-                    "bin",
-                    "llvm-cov"
-                ],
-                "llvm-profdata": [
-                    "usr",
-                    "bin",
-                    "llvm-profdata"
-                ],
-                "llvm-nm": [
-                    "usr",
-                    "bin",
-                    "llvm-nm"
-                ],
-                "strip": [
-                    "usr",
-                    "bin",
-                    "strip"
-                ]
-            }
-        },
-        "xcode_12_5": {
-            "formula": {
-                "sandbox_id": [
-                    1047943010
-                ],
-                "match": "toolchain"
-            },
-            "executable": {
-                "c++": [
-                    "usr",
-                    "bin",
-                    "clang++"
-                ],
-                "cc": [
-                    "usr",
-                    "bin",
-                    "clang"
-                ],
-                "llvm-cov": [
-                    "usr",
-                    "bin",
-                    "llvm-cov"
-                ],
-                "llvm-profdata": [
-                    "usr",
-                    "bin",
-                    "llvm-profdata"
-                ],
-                "llvm-nm": [
-                    "usr",
-                    "bin",
-                    "llvm-nm"
-                ],
-                "strip": [
-                    "usr",
-                    "bin",
-                    "strip"
-                ]
-            }
-        },
+                    "llvm-objcopy" 
+                ] 
+            } 
+        }, 
+        "xcode_11_1": { 
+            "formula": { 
+                "sandbox_id": [ 
+                    542909976 
+                ], 
+                "match": "toolchain" 
+            }, 
+            "executable": { 
+                "c++": [ 
+                    "usr", 
+                    "bin", 
+                    "clang++" 
+                ], 
+                "cc": [ 
+                    "usr", 
+                    "bin", 
+                    "clang" 
+                ], 
+                "llvm-cov": [ 
+                    "usr", 
+                    "bin", 
+                    "llvm-cov" 
+                ], 
+                "llvm-profdata": [ 
+                    "usr", 
+                    "bin", 
+                    "llvm-profdata" 
+                ], 
+                "llvm-nm": [ 
+                    "usr", 
+                    "bin", 
+                    "llvm-nm" 
+                ], 
+                "strip": [ 
+                    "usr", 
+                    "bin", 
+                    "strip" 
+                ] 
+            } 
+        }, 
+        "xcode_12_1": { 
+            "formula": { 
+                "sandbox_id": [ 
+                    816448826 
+                ], 
+                "match": "toolchain" 
+            }, 
+            "executable": { 
+                "c++": [ 
+                    "usr", 
+                    "bin", 
+                    "clang++" 
+                ], 
+                "cc": [ 
+                    "usr", 
+                    "bin", 
+                    "clang" 
+                ], 
+                "llvm-cov": [ 
+                    "usr", 
+                    "bin", 
+                    "llvm-cov" 
+                ], 
+                "llvm-profdata": [ 
+                    "usr", 
+                    "bin", 
+                    "llvm-profdata" 
+                ], 
+                "llvm-nm": [ 
+                    "usr", 
+                    "bin", 
+                    "llvm-nm" 
+                ], 
+                "strip": [ 
+                    "usr", 
+                    "bin", 
+                    "strip" 
+                ] 
+            } 
+        }, 
+        "xcode_12_5": { 
+            "formula": { 
+                "sandbox_id": [ 
+                    1047943010 
+                ], 
+                "match": "toolchain" 
+            }, 
+            "executable": { 
+                "c++": [ 
+                    "usr", 
+                    "bin", 
+                    "clang++" 
+                ], 
+                "cc": [ 
+                    "usr", 
+                    "bin", 
+                    "clang" 
+                ], 
+                "llvm-cov": [ 
+                    "usr", 
+                    "bin", 
+                    "llvm-cov" 
+                ], 
+                "llvm-profdata": [ 
+                    "usr", 
+                    "bin", 
+                    "llvm-profdata" 
+                ], 
+                "llvm-nm": [ 
+                    "usr", 
+                    "bin", 
+                    "llvm-nm" 
+                ], 
+                "strip": [ 
+                    "usr", 
+                    "bin", 
+                    "strip" 
+                ] 
+            } 
+        }, 
         "android-ndk-r23": {
             "formula": {
                 "sandbox_id": [
@@ -6311,7 +6311,7 @@
                     "bin",
                     "llvm-objcopy"
                 ]
-            }
+            } 
         },
         "android-ndk-r24": {
             "formula": {
@@ -6368,15 +6368,15 @@
                     "llvm-objcopy"
                 ]
             }
-        },
-        "cuda": {
-            "formula": {
+        }, 
+        "cuda": { 
+            "formula": { 
                 "sandbox_id": [
                     29625981
                 ],
-                "match": "CUDA"
-            }
-        },
+                "match": "CUDA" 
+            } 
+        }, 
         "idea_run_plugin": {
             "formula": {
                 "sandbox_id": [
@@ -6646,12 +6646,12 @@
                 ]
             }
         },
-        "gcc61": {
-            "formula": {
-                "sandbox_id": 63189766,
-                "match": "GCC"
-            },
-            "executable": {
+        "gcc61": { 
+            "formula": { 
+                "sandbox_id": 63189766, 
+                "match": "GCC" 
+            }, 
+            "executable": { 
                 "c++": [
                     "gcc",
                     "bin",
@@ -6682,14 +6682,14 @@
                     "bin",
                     "strip"
                 ]
-            }
-        },
-        "gcc82": {
-            "formula": {
-                "sandbox_id": 288125345,
-                "match": "GCC"
-            },
-            "executable": {
+            } 
+        }, 
+        "gcc82": { 
+            "formula": { 
+                "sandbox_id": 288125345, 
+                "match": "GCC" 
+            }, 
+            "executable": { 
                 "c++": [
                     "gcc",
                     "bin",
@@ -6720,8 +6720,8 @@
                     "bin",
                     "strip"
                 ]
-            }
-        },
+            } 
+        }, 
         "gdb": {
             "formula": {
                 "sandbox_id": [

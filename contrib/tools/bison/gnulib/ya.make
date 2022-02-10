@@ -10,10 +10,10 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-IF (NOT MUSL)
-    NO_RUNTIME()
-ENDIF()
-
+IF (NOT MUSL) 
+    NO_RUNTIME() 
+ENDIF() 
+ 
 NO_COMPILER_WARNINGS()
 
 ADDINCL(

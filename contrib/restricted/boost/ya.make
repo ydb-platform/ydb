@@ -1,24 +1,24 @@
 LIBRARY()
 
-LICENSE(
-    BSD-3-Clause AND
-    BSL-1.0 AND
-    MIT AND
-    Mit-Old-Style AND
-    NCSA AND
-    Public-Domain AND
-    Zlib
-)
+LICENSE( 
+    BSD-3-Clause AND 
+    BSL-1.0 AND 
+    MIT AND 
+    Mit-Old-Style AND 
+    NCSA AND 
+    Public-Domain AND 
+    Zlib 
+) 
 
-LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
-
+LICENSE_TEXTS(.yandex_meta/licenses.list.txt) 
+ 
 VERSION(1.67)
 
-OWNER(
-    antoshkka
-    g:cpp-committee
-    g:cpp-contrib
-)
+OWNER( 
+    antoshkka 
+    g:cpp-committee 
+    g:cpp-contrib 
+) 
 
 NO_UTIL()
 

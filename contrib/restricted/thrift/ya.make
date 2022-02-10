@@ -4,8 +4,8 @@ VERSION(0.10.0)
 
 LICENSE(Apache-2.0)
 
-LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
-
+LICENSE_TEXTS(.yandex_meta/licenses.list.txt) 
+ 
 OWNER(
     g:contrib
     g:cpp-contrib
@@ -15,9 +15,9 @@ NO_UTIL()
 
 NO_COMPILER_WARNINGS()
 
-ADDINCL(
-    GLOBAL contrib/restricted/thrift
-)
+ADDINCL( 
+    GLOBAL contrib/restricted/thrift 
+) 
 
 PEERDIR(
     contrib/libs/libevent

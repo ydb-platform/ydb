@@ -63,7 +63,7 @@
 
   /* On column 0 to please syntax-check.  */
 #include <config.h>
-#include "string--.h"
+#include "string--.h" 
 
 #line 68 "src/parse-gram.c" /* yacc.c:316  */
 /* Substitute the type names.  */

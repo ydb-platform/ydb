@@ -18,30 +18,30 @@
 // -----------------------------------------------------------------------------
 //
 // This header file contains functions for joining a range of elements and
-// returning the result as a TString. StrJoin operations are specified by
+// returning the result as a TString. StrJoin operations are specified by 
 // passing a range, a separator string to use between the elements joined, and
 // an optional Formatter responsible for converting each argument in the range
 // to a string. If omitted, a default `AlphaNumFormatter()` is called on the
-// elements to be joined, using the same formatting that `y_absl::StrCat()` uses.
+// elements to be joined, using the same formatting that `y_absl::StrCat()` uses. 
 // This package defines a number of default formatters, and you can define your
 // own implementations.
 //
 // Ranges are specified by passing a container with `std::begin()` and
 // `std::end()` iterators, container-specific `begin()` and `end()` iterators, a
 // brace-initialized `std::initializer_list`, or a `std::tuple` of heterogeneous
-// objects. The separator string is specified as an `y_absl::string_view`.
+// objects. The separator string is specified as an `y_absl::string_view`. 
 //
-// Because the default formatter uses the `y_absl::AlphaNum` class,
-// `y_absl::StrJoin()`, like `y_absl::StrCat()`, will work out-of-the-box on
+// Because the default formatter uses the `y_absl::AlphaNum` class, 
+// `y_absl::StrJoin()`, like `y_absl::StrCat()`, will work out-of-the-box on 
 // collections of strings, ints, floats, doubles, etc.
 //
 // Example:
 //
-//   std::vector<TString> v = {"foo", "bar", "baz"};
-//   TString s = y_absl::StrJoin(v, "-");
+//   std::vector<TString> v = {"foo", "bar", "baz"}; 
+//   TString s = y_absl::StrJoin(v, "-"); 
 //   EXPECT_EQ("foo-bar-baz", s);
 //
-// See comments on the `y_absl::StrJoin()` function for more examples.
+// See comments on the `y_absl::StrJoin()` function for more examples. 
 
 #ifndef ABSL_STRINGS_STR_JOIN_H_
 #define ABSL_STRINGS_STR_JOIN_H_
@@ -55,11 +55,11 @@
 #include <type_traits>
 #include <utility>
 
-#include "y_absl/base/macros.h"
-#include "y_absl/strings/internal/str_join_internal.h"
-#include "y_absl/strings/string_view.h"
+#include "y_absl/base/macros.h" 
+#include "y_absl/strings/internal/str_join_internal.h" 
+#include "y_absl/strings/string_view.h" 
 
-namespace y_absl {
+namespace y_absl { 
 ABSL_NAMESPACE_BEGIN
 
 // -----------------------------------------------------------------------------
@@ -67,25 +67,25 @@ ABSL_NAMESPACE_BEGIN
 // -----------------------------------------------------------------------------
 //
 // A Formatter is a function object that is responsible for formatting its
-// argument as a string and appending it to a given output TString.
+// argument as a string and appending it to a given output TString. 
 // Formatters may be implemented as function objects, lambdas, or normal
-// functions. You may provide your own Formatter to enable `y_absl::StrJoin()` to
+// functions. You may provide your own Formatter to enable `y_absl::StrJoin()` to 
 // work with arbitrary types.
 //
 // The following is an example of a custom Formatter that simply uses
-// `std::to_string()` to format an integer as a TString.
+// `std::to_string()` to format an integer as a TString. 
 //
 //   struct MyFormatter {
-//     void operator()(TString* out, int i) const {
+//     void operator()(TString* out, int i) const { 
 //       out->append(std::to_string(i));
 //     }
 //   };
 //
 // You would use the above formatter by passing an instance of it as the final
-// argument to `y_absl::StrJoin()`:
+// argument to `y_absl::StrJoin()`: 
 //
 //   std::vector<int> v = {1, 2, 3, 4};
-//   TString s = y_absl::StrJoin(v, "-", MyFormatter());
+//   TString s = y_absl::StrJoin(v, "-", MyFormatter()); 
 //   EXPECT_EQ("1-2-3-4", s);
 //
 // The following standard formatters are provided within this file:
@@ -97,7 +97,7 @@ ABSL_NAMESPACE_BEGIN
 
 // AlphaNumFormatter()
 //
-// Default formatter used if none is specified. Uses `y_absl::AlphaNum` to convert
+// Default formatter used if none is specified. Uses `y_absl::AlphaNum` to convert 
 // numeric arguments to strings.
 inline strings_internal::AlphaNumFormatterImpl AlphaNumFormatter() {
   return strings_internal::AlphaNumFormatterImpl();
@@ -110,14 +110,14 @@ inline strings_internal::StreamFormatterImpl StreamFormatter() {
   return strings_internal::StreamFormatterImpl();
 }
 
-// Function Template: PairFormatter(Formatter, y_absl::string_view, Formatter)
+// Function Template: PairFormatter(Formatter, y_absl::string_view, Formatter) 
 //
 // Formats a `std::pair` by putting a given separator between the pair's
 // `.first` and `.second` members. This formatter allows you to specify
 // custom Formatters for both the first and second member of each pair.
 template <typename FirstFormatter, typename SecondFormatter>
 inline strings_internal::PairFormatterImpl<FirstFormatter, SecondFormatter>
-PairFormatter(FirstFormatter f1, y_absl::string_view sep, SecondFormatter f2) {
+PairFormatter(FirstFormatter f1, y_absl::string_view sep, SecondFormatter f2) { 
   return strings_internal::PairFormatterImpl<FirstFormatter, SecondFormatter>(
       std::move(f1), sep, std::move(f2));
 }
@@ -127,7 +127,7 @@ PairFormatter(FirstFormatter f1, y_absl::string_view sep, SecondFormatter f2) {
 inline strings_internal::PairFormatterImpl<
     strings_internal::AlphaNumFormatterImpl,
     strings_internal::AlphaNumFormatterImpl>
-PairFormatter(y_absl::string_view sep) {
+PairFormatter(y_absl::string_view sep) { 
   return PairFormatter(AlphaNumFormatter(), sep, AlphaNumFormatter());
 }
 
@@ -157,8 +157,8 @@ DereferenceFormatter() {
 // StrJoin()
 // -----------------------------------------------------------------------------
 //
-// Joins a range of elements and returns the result as a TString.
-// `y_absl::StrJoin()` takes a range, a separator string to use between the
+// Joins a range of elements and returns the result as a TString. 
+// `y_absl::StrJoin()` takes a range, a separator string to use between the 
 // elements joined, and an optional Formatter responsible for converting each
 // argument in the range to a string.
 //
@@ -167,23 +167,23 @@ DereferenceFormatter() {
 //
 // Example 1:
 //   // Joins a collection of strings. This pattern also works with a collection
-//   // of `y_absl::string_view` or even `const char*`.
-//   std::vector<TString> v = {"foo", "bar", "baz"};
-//   TString s = y_absl::StrJoin(v, "-");
+//   // of `y_absl::string_view` or even `const char*`. 
+//   std::vector<TString> v = {"foo", "bar", "baz"}; 
+//   TString s = y_absl::StrJoin(v, "-"); 
 //   EXPECT_EQ("foo-bar-baz", s);
 //
 // Example 2:
 //   // Joins the values in the given `std::initializer_list<>` specified using
 //   // brace initialization. This pattern also works with an initializer_list
-//   // of ints or `y_absl::string_view` -- any `AlphaNum`-compatible type.
-//   TString s = y_absl::StrJoin({"foo", "bar", "baz"}, "-");
+//   // of ints or `y_absl::string_view` -- any `AlphaNum`-compatible type. 
+//   TString s = y_absl::StrJoin({"foo", "bar", "baz"}, "-"); 
 //   EXPECT_EQ("foo-bar-baz", s);
 //
 // Example 3:
 //   // Joins a collection of ints. This pattern also works with floats,
 //   // doubles, int64s -- any `StrCat()`-compatible type.
 //   std::vector<int> v = {1, 2, 3, -4};
-//   TString s = y_absl::StrJoin(v, "-");
+//   TString s = y_absl::StrJoin(v, "-"); 
 //   EXPECT_EQ("1-2-3--4", s);
 //
 // Example 4:
@@ -194,7 +194,7 @@ DereferenceFormatter() {
 //   // `std::vector<int*>`.
 //   int x = 1, y = 2, z = 3;
 //   std::vector<int*> v = {&x, &y, &z};
-//   TString s = y_absl::StrJoin(v, "-");
+//   TString s = y_absl::StrJoin(v, "-"); 
 //   EXPECT_EQ("1-2-3", s);
 //
 // Example 5:
@@ -203,91 +203,91 @@ DereferenceFormatter() {
 //   v.emplace_back(new int(1));
 //   v.emplace_back(new int(2));
 //   v.emplace_back(new int(3));
-//   TString s = y_absl::StrJoin(v, "-");
+//   TString s = y_absl::StrJoin(v, "-"); 
 //   EXPECT_EQ("1-2-3", s);
 //
 // Example 6:
 //   // Joins a `std::map`, with each key-value pair separated by an equals
 //   // sign. This pattern would also work with, say, a
 //   // `std::vector<std::pair<>>`.
-//   std::map<TString, int> m = {
+//   std::map<TString, int> m = { 
 //       std::make_pair("a", 1),
 //       std::make_pair("b", 2),
 //       std::make_pair("c", 3)};
-//   TString s = y_absl::StrJoin(m, ",", y_absl::PairFormatter("="));
+//   TString s = y_absl::StrJoin(m, ",", y_absl::PairFormatter("=")); 
 //   EXPECT_EQ("a=1,b=2,c=3", s);
 //
 // Example 7:
-//   // These examples show how `y_absl::StrJoin()` handles a few common edge
+//   // These examples show how `y_absl::StrJoin()` handles a few common edge 
 //   // cases:
-//   std::vector<TString> v_empty;
-//   EXPECT_EQ("", y_absl::StrJoin(v_empty, "-"));
+//   std::vector<TString> v_empty; 
+//   EXPECT_EQ("", y_absl::StrJoin(v_empty, "-")); 
 //
-//   std::vector<TString> v_one_item = {"foo"};
-//   EXPECT_EQ("foo", y_absl::StrJoin(v_one_item, "-"));
+//   std::vector<TString> v_one_item = {"foo"}; 
+//   EXPECT_EQ("foo", y_absl::StrJoin(v_one_item, "-")); 
 //
-//   std::vector<TString> v_empty_string = {""};
-//   EXPECT_EQ("", y_absl::StrJoin(v_empty_string, "-"));
+//   std::vector<TString> v_empty_string = {""}; 
+//   EXPECT_EQ("", y_absl::StrJoin(v_empty_string, "-")); 
 //
-//   std::vector<TString> v_one_item_empty_string = {"a", ""};
-//   EXPECT_EQ("a-", y_absl::StrJoin(v_one_item_empty_string, "-"));
+//   std::vector<TString> v_one_item_empty_string = {"a", ""}; 
+//   EXPECT_EQ("a-", y_absl::StrJoin(v_one_item_empty_string, "-")); 
 //
-//   std::vector<TString> v_two_empty_string = {"", ""};
-//   EXPECT_EQ("-", y_absl::StrJoin(v_two_empty_string, "-"));
+//   std::vector<TString> v_two_empty_string = {"", ""}; 
+//   EXPECT_EQ("-", y_absl::StrJoin(v_two_empty_string, "-")); 
 //
 // Example 8:
 //   // Joins a `std::tuple<T...>` of heterogeneous types, converting each to
-//   // a TString using the `y_absl::AlphaNum` class.
-//   TString s = y_absl::StrJoin(std::make_tuple(123, "abc", 0.456), "-");
+//   // a TString using the `y_absl::AlphaNum` class. 
+//   TString s = y_absl::StrJoin(std::make_tuple(123, "abc", 0.456), "-"); 
 //   EXPECT_EQ("123-abc-0.456", s);
 
 template <typename Iterator, typename Formatter>
-TString StrJoin(Iterator start, Iterator end, y_absl::string_view sep,
+TString StrJoin(Iterator start, Iterator end, y_absl::string_view sep, 
                     Formatter&& fmt) {
   return strings_internal::JoinAlgorithm(start, end, sep, fmt);
 }
 
 template <typename Range, typename Formatter>
-TString StrJoin(const Range& range, y_absl::string_view separator,
+TString StrJoin(const Range& range, y_absl::string_view separator, 
                     Formatter&& fmt) {
   return strings_internal::JoinRange(range, separator, fmt);
 }
 
 template <typename T, typename Formatter>
-TString StrJoin(std::initializer_list<T> il, y_absl::string_view separator,
+TString StrJoin(std::initializer_list<T> il, y_absl::string_view separator, 
                     Formatter&& fmt) {
   return strings_internal::JoinRange(il, separator, fmt);
 }
 
 template <typename... T, typename Formatter>
-TString StrJoin(const std::tuple<T...>& value, y_absl::string_view separator,
+TString StrJoin(const std::tuple<T...>& value, y_absl::string_view separator, 
                     Formatter&& fmt) {
   return strings_internal::JoinAlgorithm(value, separator, fmt);
 }
 
 template <typename Iterator>
-TString StrJoin(Iterator start, Iterator end, y_absl::string_view separator) {
+TString StrJoin(Iterator start, Iterator end, y_absl::string_view separator) { 
   return strings_internal::JoinRange(start, end, separator);
 }
 
 template <typename Range>
-TString StrJoin(const Range& range, y_absl::string_view separator) {
+TString StrJoin(const Range& range, y_absl::string_view separator) { 
   return strings_internal::JoinRange(range, separator);
 }
 
 template <typename T>
-TString StrJoin(std::initializer_list<T> il,
-                    y_absl::string_view separator) {
+TString StrJoin(std::initializer_list<T> il, 
+                    y_absl::string_view separator) { 
   return strings_internal::JoinRange(il, separator);
 }
 
 template <typename... T>
-TString StrJoin(const std::tuple<T...>& value,
-                    y_absl::string_view separator) {
+TString StrJoin(const std::tuple<T...>& value, 
+                    y_absl::string_view separator) { 
   return strings_internal::JoinAlgorithm(value, separator, AlphaNumFormatter());
 }
 
 ABSL_NAMESPACE_END
-}  // namespace y_absl
+}  // namespace y_absl 
 
 #endif  // ABSL_STRINGS_STR_JOIN_H_

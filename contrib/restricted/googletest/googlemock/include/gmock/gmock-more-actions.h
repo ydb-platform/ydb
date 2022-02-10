@@ -1,51 +1,51 @@
-// Copyright 2007, Google Inc.
-// All rights reserved.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-//     * Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//     * Redistributions in binary form must reproduce the above
-// copyright notice, this list of conditions and the following disclaimer
-// in the documentation and/or other materials provided with the
-// distribution.
-//     * Neither the name of Google Inc. nor the names of its
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
-// "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
-// LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
-// A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
-// OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
-// SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
-// LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
-// DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
-// THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-// (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
-// OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+// Copyright 2007, Google Inc. 
+// All rights reserved. 
+// 
+// Redistribution and use in source and binary forms, with or without 
+// modification, are permitted provided that the following conditions are 
+// met: 
+// 
+//     * Redistributions of source code must retain the above copyright 
+// notice, this list of conditions and the following disclaimer. 
+//     * Redistributions in binary form must reproduce the above 
+// copyright notice, this list of conditions and the following disclaimer 
+// in the documentation and/or other materials provided with the 
+// distribution. 
+//     * Neither the name of Google Inc. nor the names of its 
+// contributors may be used to endorse or promote products derived from 
+// this software without specific prior written permission. 
+// 
+// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS 
+// "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT 
+// LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR 
+// A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT 
+// OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, 
+// SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT 
+// LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, 
+// DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY 
+// THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT 
+// (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE 
+// OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE. 
+ 
 
-
-// Google Mock - a framework for writing C++ mock classes.
-//
+// Google Mock - a framework for writing C++ mock classes. 
+// 
 // This file implements some commonly used variadic actions.
-
+ 
 // GOOGLETEST_CM0002 DO NOT DELETE
 
 #ifndef GOOGLEMOCK_INCLUDE_GMOCK_GMOCK_MORE_ACTIONS_H_
 #define GOOGLEMOCK_INCLUDE_GMOCK_GMOCK_MORE_ACTIONS_H_
-
+ 
 #include <memory>
 #include <utility>
-
+ 
 #include "gmock/gmock-actions.h"
 #include "gmock/internal/gmock-port.h"
-
+ 
 // Include any custom callback actions added by the local installation.
 #include "gmock/internal/custom/gmock-generated-actions.h"
-
+ 
 // Sometimes you want to give an action explicit template parameters
 // that cannot be inferred from its value parameters.  ACTION() and
 // ACTION_P*() don't support that.  ACTION_TEMPLATE() remedies that
@@ -126,7 +126,7 @@
 // the maximum number of template/value parameters supported.  Without
 // using it, we'd have to devote O(N^2) amount of code to implement all
 // combinations of m and n.
-
+ 
 // Declares the template parameters.
 #define GMOCK_INTERNAL_DECL_HAS_1_TEMPLATE_PARAMS(kind0, name0) kind0 name0
 #define GMOCK_INTERNAL_DECL_HAS_2_TEMPLATE_PARAMS(kind0, name0, kind1, \
@@ -160,7 +160,7 @@
     name6, kind7, name7, kind8, name8, kind9, name9) kind0 name0, \
     kind1 name1, kind2 name2, kind3 name3, kind4 name4, kind5 name5, \
     kind6 name6, kind7 name7, kind8 name8, kind9 name9
-
+ 
 // Lists the template parameters.
 #define GMOCK_INTERNAL_LIST_HAS_1_TEMPLATE_PARAMS(kind0, name0) name0
 #define GMOCK_INTERNAL_LIST_HAS_2_TEMPLATE_PARAMS(kind0, name0, kind1, \
@@ -189,7 +189,7 @@
     name1, kind2, name2, kind3, name3, kind4, name4, kind5, name5, kind6, \
     name6, kind7, name7, kind8, name8, kind9, name9) name0, name1, name2, \
     name3, name4, name5, name6, name7, name8, name9
-
+ 
 // Declares the types of value parameters.
 #define GMOCK_INTERNAL_DECL_TYPE_AND_0_VALUE_PARAMS()
 #define GMOCK_INTERNAL_DECL_TYPE_AND_1_VALUE_PARAMS(p0) , typename p0##_type
@@ -489,18 +489,18 @@
 
 namespace testing {
 
-// The ACTION*() macros trigger warning C4100 (unreferenced formal
-// parameter) in MSVC with -W4.  Unfortunately they cannot be fixed in
-// the macro definition, as the warnings are generated when the macro
-// is expanded and macro expansion cannot contain #pragma.  Therefore
-// we suppress them here.
-#ifdef _MSC_VER
-# pragma warning(push)
-# pragma warning(disable:4100)
-#endif
-
+// The ACTION*() macros trigger warning C4100 (unreferenced formal 
+// parameter) in MSVC with -W4.  Unfortunately they cannot be fixed in 
+// the macro definition, as the warnings are generated when the macro 
+// is expanded and macro expansion cannot contain #pragma.  Therefore 
+// we suppress them here. 
+#ifdef _MSC_VER 
+# pragma warning(push) 
+# pragma warning(disable:4100) 
+#endif 
+ 
 namespace internal {
-
+ 
 // internal::InvokeArgument - a helper for InvokeArgument action.
 // The basic overloads are provided here for generic functors.
 // Overloads for other custom-callables are provided in the
@@ -508,8 +508,8 @@ namespace internal {
 template <typename F, typename... Args>
 auto InvokeArgument(F f, Args... args) -> decltype(f(args...)) {
   return f(args...);
-}
-
+} 
+ 
 template <std::size_t index, typename... Params>
 struct InvokeArgumentAction {
   template <typename... Args>
@@ -524,12 +524,12 @@ struct InvokeArgumentAction {
           std::forward<decltype(callable)>(callable), unpacked_params...);
     });
   }
-
+ 
   internal::FlatTuple<Params...> params;
 };
-
+ 
 }  // namespace internal
-
+ 
 // The InvokeArgument<N>(a1, a2, ..., a_k) action invokes the N-th
 // (0-based) argument, which must be a k-ary callable, of the mock
 // function, with arguments a1, a2, ..., a_k.
@@ -562,12 +562,12 @@ internal::InvokeArgumentAction<index, typename std::decay<Params>::type...>
 InvokeArgument(Params&&... params) {
   return {internal::FlatTuple<typename std::decay<Params>::type...>(
       internal::FlatTupleConstructTag{}, std::forward<Params>(params)...)};
-}
-
-#ifdef _MSC_VER
-# pragma warning(pop)
-#endif
-
-}  // namespace testing
-
+} 
+ 
+#ifdef _MSC_VER 
+# pragma warning(pop) 
+#endif 
+ 
+}  // namespace testing 
+ 
 #endif  // GOOGLEMOCK_INCLUDE_GMOCK_GMOCK_MORE_ACTIONS_H_

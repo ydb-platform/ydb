@@ -12,12 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "y_absl/strings/internal/str_format/output.h"
+#include "y_absl/strings/internal/str_format/output.h" 
 
 #include <errno.h>
 #include <cstring>
 
-namespace y_absl {
+namespace y_absl { 
 ABSL_NAMESPACE_BEGIN
 namespace str_format_internal {
 
@@ -69,4 +69,4 @@ void FILERawSink::Write(string_view v) {
 
 }  // namespace str_format_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl
+}  // namespace y_absl 

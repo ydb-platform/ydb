@@ -16,45 +16,45 @@
 // bad_optional_access.h
 // -----------------------------------------------------------------------------
 //
-// This header file defines the `y_absl::bad_optional_access` type.
+// This header file defines the `y_absl::bad_optional_access` type. 
 
 #ifndef ABSL_TYPES_BAD_OPTIONAL_ACCESS_H_
 #define ABSL_TYPES_BAD_OPTIONAL_ACCESS_H_
 
 #include <stdexcept>
 
-#include "y_absl/base/config.h"
+#include "y_absl/base/config.h" 
 
 #ifdef ABSL_USES_STD_OPTIONAL
 
 #include <optional>
 
-namespace y_absl {
+namespace y_absl { 
 ABSL_NAMESPACE_BEGIN
 using std::bad_optional_access;
 ABSL_NAMESPACE_END
-}  // namespace y_absl
+}  // namespace y_absl 
 
 #else  // ABSL_USES_STD_OPTIONAL
 
-namespace y_absl {
+namespace y_absl { 
 ABSL_NAMESPACE_BEGIN
 
 // -----------------------------------------------------------------------------
 // bad_optional_access
 // -----------------------------------------------------------------------------
 //
-// An `y_absl::bad_optional_access` type is an exception type that is thrown when
-// attempting to access an `y_absl::optional` object that does not contain a
+// An `y_absl::bad_optional_access` type is an exception type that is thrown when 
+// attempting to access an `y_absl::optional` object that does not contain a 
 // value.
 //
 // Example:
 //
-//   y_absl::optional<int> o;
+//   y_absl::optional<int> o; 
 //
 //   try {
 //     int n = o.value();
-//   } catch(const y_absl::bad_optional_access& e) {
+//   } catch(const y_absl::bad_optional_access& e) { 
 //     std::cout << "Bad optional access: " << e.what() << '\n';
 //   }
 class bad_optional_access : public std::exception {
@@ -71,7 +71,7 @@ namespace optional_internal {
 
 }  // namespace optional_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl
+}  // namespace y_absl 
 
 #endif  // ABSL_USES_STD_OPTIONAL
 

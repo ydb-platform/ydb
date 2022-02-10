@@ -18,11 +18,11 @@
 #  pragma warning(disable:4100)
 # endif
 
-# if defined(__clang__)
-#  pragma clang diagnostic push
-#  pragma clang diagnostic ignored "-Wnon-virtual-dtor"
-# endif
-
+# if defined(__clang__) 
+#  pragma clang diagnostic push 
+#  pragma clang diagnostic ignored "-Wnon-virtual-dtor" 
+# endif 
+ 
 namespace boost { namespace concepts {
 
 
@@ -121,10 +121,10 @@ enum                                                    \
 # endif
 }}
 
-# if defined(__clang__)
-#  pragma clang diagnostic pop
-# endif
-
+# if defined(__clang__) 
+#  pragma clang diagnostic pop 
+# endif 
+ 
 # ifdef BOOST_MSVC
 #  pragma warning(pop)
 # endif

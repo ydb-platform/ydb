@@ -18,26 +18,26 @@
 // -----------------------------------------------------------------------------
 //
 // This file contains simple utilities for performing string matching checks.
-// All of these function parameters are specified as `y_absl::string_view`,
-// meaning that these functions can accept `TString`, `y_absl::string_view` or
+// All of these function parameters are specified as `y_absl::string_view`, 
+// meaning that these functions can accept `TString`, `y_absl::string_view` or 
 // NUL-terminated C-style strings.
 //
 // Examples:
-//   TString s = "foo";
-//   y_absl::string_view sv = "f";
-//   assert(y_absl::StrContains(s, sv));
+//   TString s = "foo"; 
+//   y_absl::string_view sv = "f"; 
+//   assert(y_absl::StrContains(s, sv)); 
 //
 // Note: The order of parameters in these functions is designed to mimic the
 // order an equivalent member function would exhibit;
-// e.g. `s.Contains(x)` ==> `y_absl::StrContains(s, x).
+// e.g. `s.Contains(x)` ==> `y_absl::StrContains(s, x). 
 #ifndef ABSL_STRINGS_MATCH_H_
 #define ABSL_STRINGS_MATCH_H_
 
 #include <cstring>
 
-#include "y_absl/strings/string_view.h"
+#include "y_absl/strings/string_view.h" 
 
-namespace y_absl {
+namespace y_absl { 
 ABSL_NAMESPACE_BEGIN
 
 // StrContains()
@@ -95,6 +95,6 @@ bool EndsWithIgnoreCase(y_absl::string_view text,
                         y_absl::string_view suffix) noexcept;
 
 ABSL_NAMESPACE_END
-}  // namespace y_absl
+}  // namespace y_absl 
 
 #endif  // ABSL_STRINGS_MATCH_H_

@@ -23,12 +23,12 @@
 #include <ostream>
 
 #include "y_absl/base/config.h"
-#include "y_absl/base/port.h"
+#include "y_absl/base/port.h" 
 #include "y_absl/meta/type_traits.h"
-#include "y_absl/strings/internal/str_format/output.h"
-#include "y_absl/strings/string_view.h"
+#include "y_absl/strings/internal/str_format/output.h" 
+#include "y_absl/strings/string_view.h" 
 
-namespace y_absl {
+namespace y_absl { 
 ABSL_NAMESPACE_BEGIN
 
 enum class FormatConversionChar : uint8_t;
@@ -440,6 +440,6 @@ inline size_t Excess(size_t used, size_t capacity) {
 }  // namespace str_format_internal
 
 ABSL_NAMESPACE_END
-}  // namespace y_absl
+}  // namespace y_absl 
 
 #endif  // ABSL_STRINGS_INTERNAL_STR_FORMAT_EXTENSION_H_

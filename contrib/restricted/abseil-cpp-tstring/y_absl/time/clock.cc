@@ -12,9 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "y_absl/time/clock.h"
+#include "y_absl/time/clock.h" 
 
-#include "y_absl/base/attributes.h"
+#include "y_absl/base/attributes.h" 
 #include "y_absl/base/optimization.h"
 
 #ifdef _WIN32
@@ -28,25 +28,25 @@
 #include <ctime>
 #include <limits>
 
-#include "y_absl/base/internal/spinlock.h"
-#include "y_absl/base/internal/unscaledcycleclock.h"
-#include "y_absl/base/macros.h"
-#include "y_absl/base/port.h"
-#include "y_absl/base/thread_annotations.h"
+#include "y_absl/base/internal/spinlock.h" 
+#include "y_absl/base/internal/unscaledcycleclock.h" 
+#include "y_absl/base/macros.h" 
+#include "y_absl/base/port.h" 
+#include "y_absl/base/thread_annotations.h" 
 
-namespace y_absl {
+namespace y_absl { 
 ABSL_NAMESPACE_BEGIN
 Time Now() {
   // TODO(bww): Get a timespec instead so we don't have to divide.
-  int64_t n = y_absl::GetCurrentTimeNanos();
+  int64_t n = y_absl::GetCurrentTimeNanos(); 
   if (n >= 0) {
     return time_internal::FromUnixDuration(
         time_internal::MakeDuration(n / 1000000000, n % 1000000000 * 4));
   }
-  return time_internal::FromUnixDuration(y_absl::Nanoseconds(n));
+  return time_internal::FromUnixDuration(y_absl::Nanoseconds(n)); 
 }
 ABSL_NAMESPACE_END
-}  // namespace y_absl
+}  // namespace y_absl 
 
 // Decide if we should use the fast GetCurrentTimeNanos() algorithm
 // based on the cyclecounter, otherwise just get the time directly
@@ -61,32 +61,32 @@ ABSL_NAMESPACE_END
 #endif
 
 #if defined(__APPLE__) || defined(_WIN32)
-#include "y_absl/time/internal/get_current_time_chrono.inc"
+#include "y_absl/time/internal/get_current_time_chrono.inc" 
 #else
-#include "y_absl/time/internal/get_current_time_posix.inc"
+#include "y_absl/time/internal/get_current_time_posix.inc" 
 #endif
 
 // Allows override by test.
 #ifndef GET_CURRENT_TIME_NANOS_FROM_SYSTEM
 #define GET_CURRENT_TIME_NANOS_FROM_SYSTEM() \
-  ::y_absl::time_internal::GetCurrentTimeNanosFromSystem()
+  ::y_absl::time_internal::GetCurrentTimeNanosFromSystem() 
 #endif
 
 #if !ABSL_USE_CYCLECLOCK_FOR_GET_CURRENT_TIME_NANOS
-namespace y_absl {
+namespace y_absl { 
 ABSL_NAMESPACE_BEGIN
 int64_t GetCurrentTimeNanos() { return GET_CURRENT_TIME_NANOS_FROM_SYSTEM(); }
 ABSL_NAMESPACE_END
-}  // namespace y_absl
+}  // namespace y_absl 
 #else  // Use the cyclecounter-based implementation below.
 
 // Allows override by test.
 #ifndef GET_CURRENT_TIME_NANOS_CYCLECLOCK_NOW
 #define GET_CURRENT_TIME_NANOS_CYCLECLOCK_NOW() \
-  ::y_absl::time_internal::UnscaledCycleClockWrapperForGetCurrentTime::Now()
+  ::y_absl::time_internal::UnscaledCycleClockWrapperForGetCurrentTime::Now() 
 #endif
 
-namespace y_absl {
+namespace y_absl { 
 ABSL_NAMESPACE_BEGIN
 namespace time_internal {
 // This is a friend wrapper around UnscaledCycleClock::Now()
@@ -392,7 +392,7 @@ static uint64_t UpdateLastSample(
 // into the fast path.  That causes lots of register spills and reloads that
 // are unnecessary unless the slow path is taken.
 //
-// TODO(y_absl-team): Remove this attribute when our compiler is smart enough
+// TODO(y_absl-team): Remove this attribute when our compiler is smart enough 
 // to do the right thing.
 ABSL_ATTRIBUTE_NOINLINE
 static int64_t GetCurrentTimeNanosSlowPath()
@@ -536,31 +536,31 @@ static uint64_t UpdateLastSample(uint64_t now_cycles, uint64_t now_ns,
   return estimated_base_ns;
 }
 ABSL_NAMESPACE_END
-}  // namespace y_absl
+}  // namespace y_absl 
 #endif  // ABSL_USE_CYCLECLOCK_FOR_GET_CURRENT_TIME_NANOS
 
-namespace y_absl {
+namespace y_absl { 
 ABSL_NAMESPACE_BEGIN
 namespace {
 
 // Returns the maximum duration that SleepOnce() can sleep for.
-constexpr y_absl::Duration MaxSleep() {
+constexpr y_absl::Duration MaxSleep() { 
 #ifdef _WIN32
   // Windows Sleep() takes unsigned long argument in milliseconds.
-  return y_absl::Milliseconds(
+  return y_absl::Milliseconds( 
       std::numeric_limits<unsigned long>::max());  // NOLINT(runtime/int)
 #else
-  return y_absl::Seconds(std::numeric_limits<time_t>::max());
+  return y_absl::Seconds(std::numeric_limits<time_t>::max()); 
 #endif
 }
 
 // Sleeps for the given duration.
 // REQUIRES: to_sleep <= MaxSleep().
-void SleepOnce(y_absl::Duration to_sleep) {
+void SleepOnce(y_absl::Duration to_sleep) { 
 #ifdef _WIN32
-  Sleep(to_sleep / y_absl::Milliseconds(1));
+  Sleep(to_sleep / y_absl::Milliseconds(1)); 
 #else
-  struct timespec sleep_time = y_absl::ToTimespec(to_sleep);
+  struct timespec sleep_time = y_absl::ToTimespec(to_sleep); 
   while (nanosleep(&sleep_time, &sleep_time) != 0 && errno == EINTR) {
     // Ignore signals and wait for the full interval to elapse.
   }
@@ -569,15 +569,15 @@ void SleepOnce(y_absl::Duration to_sleep) {
 
 }  // namespace
 ABSL_NAMESPACE_END
-}  // namespace y_absl
+}  // namespace y_absl 
 
 extern "C" {
 
 ABSL_ATTRIBUTE_WEAK void ABSL_INTERNAL_C_SYMBOL(AbslInternalSleepFor)(
     y_absl::Duration duration) {
-  while (duration > y_absl::ZeroDuration()) {
-    y_absl::Duration to_sleep = std::min(duration, y_absl::MaxSleep());
-    y_absl::SleepOnce(to_sleep);
+  while (duration > y_absl::ZeroDuration()) { 
+    y_absl::Duration to_sleep = std::min(duration, y_absl::MaxSleep()); 
+    y_absl::SleepOnce(to_sleep); 
     duration -= to_sleep;
   }
 }

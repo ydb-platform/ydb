@@ -2,14 +2,14 @@ LIBRARY()
 
 LICENSE(BSL-1.0)
 
-LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
+LICENSE_TEXTS(.yandex_meta/licenses.list.txt) 
 
-OWNER(
-    antoshkka
-    g:cpp-committee
-    g:cpp-contrib
-)
-
+OWNER( 
+    antoshkka 
+    g:cpp-committee 
+    g:cpp-contrib 
+) 
+ 
 INCLUDE(${ARCADIA_ROOT}/contrib/restricted/boost/boost_common.inc)
 
 ADDINCL(
@@ -20,7 +20,7 @@ CFLAGS(
     -DBOOST_LOG_BUILDING_THE_LIB=1
     -DBOOST_LOG_SETUP_BUILDING_THE_LIB=1
 )
-
+ 
 IF (OS_WINDOWS)
     CFLAGS(
         -D_CRT_SECURE_NO_DEPRECATE
@@ -30,7 +30,7 @@ IF (OS_WINDOWS)
 ELSE()
     IF (OS_LINUX AND OS_SDK != "ubuntu-10")
         CFLAGS(
-            -DBOOST_LOG_HAS_PTHREAD_MUTEX_ROBUST
+            -DBOOST_LOG_HAS_PTHREAD_MUTEX_ROBUST 
         )
     ENDIF()
     CFLAGS(

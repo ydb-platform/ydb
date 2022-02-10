@@ -1,5 +1,5 @@
-#pragma once
-
+#pragma once 
+ 
 #include "message_ptr_and_header.h"
 #include "moved.h"
 #include "ybus.h"
@@ -18,7 +18,7 @@ namespace NBus {
         public:
             TTimedMessages();
             ~TTimedMessages();
-
+ 
             struct TItem {
                 THolder<TBusMessage> Message;
 
@@ -36,31 +36,31 @@ namespace NBus {
 
             void Timeout(TInstant before, TMessagesPtrs* r);
             void Clear(TMessagesPtrs* r);
-
+ 
         private:
             TItems Items;
         };
-
+ 
         class TSyncAckMessages : TNonCopyable {
         public:
             TSyncAckMessages();
             ~TSyncAckMessages();
-
+ 
             void Push(TBusMessagePtrAndHeader& m);
             TBusMessage* Pop(TBusKey id);
 
             void Timeout(TInstant before, TMessagesPtrs* r);
 
             void Clear(TMessagesPtrs* r);
-
+ 
             size_t Size() const {
                 return KeyToMessage.size();
             }
-
+ 
             void RemoveAll(const TMessagesPtrs&);
-
+ 
             void Gc();
-
+ 
             void DumpState();
 
         private:

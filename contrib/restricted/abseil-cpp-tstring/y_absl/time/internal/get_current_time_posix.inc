@@ -1,12 +1,12 @@
-#include "y_absl/time/clock.h"
+#include "y_absl/time/clock.h" 
 
 #include <sys/time.h>
 #include <ctime>
 #include <cstdint>
 
-#include "y_absl/base/internal/raw_logging.h"
+#include "y_absl/base/internal/raw_logging.h" 
 
-namespace y_absl {
+namespace y_absl { 
 ABSL_NAMESPACE_BEGIN
 namespace time_internal {
 
@@ -21,4 +21,4 @@ static int64_t GetCurrentTimeNanosFromSystem() {
 
 }  // namespace time_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl
+}  // namespace y_absl 

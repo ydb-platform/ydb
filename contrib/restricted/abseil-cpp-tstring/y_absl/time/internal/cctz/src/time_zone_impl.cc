@@ -24,7 +24,7 @@
 #include "y_absl/base/config.h"
 #include "time_zone_fixed.h"
 
-namespace y_absl {
+namespace y_absl { 
 ABSL_NAMESPACE_BEGIN
 namespace time_internal {
 namespace cctz {
@@ -33,7 +33,7 @@ namespace {
 
 // time_zone::Impls are linked into a map to support fast lookup by name.
 using TimeZoneImplByName =
-    std::unordered_map<TString, const time_zone::Impl*>;
+    std::unordered_map<TString, const time_zone::Impl*>; 
 TimeZoneImplByName* time_zone_map = nullptr;
 
 // Mutual exclusion for time_zone_map.
@@ -48,7 +48,7 @@ std::mutex& TimeZoneMutex() {
 
 time_zone time_zone::Impl::UTC() { return time_zone(UTCImpl()); }
 
-bool time_zone::Impl::LoadTimeZone(const TString& name, time_zone* tz) {
+bool time_zone::Impl::LoadTimeZone(const TString& name, time_zone* tz) { 
   const Impl* const utc_impl = UTCImpl();
 
   // Check for UTC (which is never a key in time_zone_map).
@@ -110,4 +110,4 @@ const time_zone::Impl* time_zone::Impl::UTCImpl() {
 }  // namespace cctz
 }  // namespace time_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl
+}  // namespace y_absl 

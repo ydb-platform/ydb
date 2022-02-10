@@ -19,10 +19,10 @@
 #ifndef ABSL_SYNCHRONIZATION_BARRIER_H_
 #define ABSL_SYNCHRONIZATION_BARRIER_H_
 
-#include "y_absl/base/thread_annotations.h"
-#include "y_absl/synchronization/mutex.h"
+#include "y_absl/base/thread_annotations.h" 
+#include "y_absl/synchronization/mutex.h" 
 
-namespace y_absl {
+namespace y_absl { 
 ABSL_NAMESPACE_BEGIN
 
 // Barrier
@@ -75,5 +75,5 @@ class Barrier {
 };
 
 ABSL_NAMESPACE_END
-}  // namespace y_absl
+}  // namespace y_absl 
 #endif  // ABSL_SYNCHRONIZATION_BARRIER_H_

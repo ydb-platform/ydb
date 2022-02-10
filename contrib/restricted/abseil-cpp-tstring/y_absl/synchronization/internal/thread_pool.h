@@ -22,10 +22,10 @@
 #include <thread>  // NOLINT(build/c++11)
 #include <vector>
 
-#include "y_absl/base/thread_annotations.h"
-#include "y_absl/synchronization/mutex.h"
+#include "y_absl/base/thread_annotations.h" 
+#include "y_absl/synchronization/mutex.h" 
 
-namespace y_absl {
+namespace y_absl { 
 ABSL_NAMESPACE_BEGIN
 namespace synchronization_internal {
 
@@ -43,7 +43,7 @@ class ThreadPool {
 
   ~ThreadPool() {
     {
-      y_absl::MutexLock l(&mu_);
+      y_absl::MutexLock l(&mu_); 
       for (size_t i = 0; i < threads_.size(); i++) {
         queue_.push(nullptr);  // Shutdown signal.
       }
@@ -56,7 +56,7 @@ class ThreadPool {
   // Schedule a function to be run on a ThreadPool thread immediately.
   void Schedule(std::function<void()> func) {
     assert(func != nullptr);
-    y_absl::MutexLock l(&mu_);
+    y_absl::MutexLock l(&mu_); 
     queue_.push(std::move(func));
   }
 
@@ -69,8 +69,8 @@ class ThreadPool {
     while (true) {
       std::function<void()> func;
       {
-        y_absl::MutexLock l(&mu_);
-        mu_.Await(y_absl::Condition(this, &ThreadPool::WorkAvailable));
+        y_absl::MutexLock l(&mu_); 
+        mu_.Await(y_absl::Condition(this, &ThreadPool::WorkAvailable)); 
         func = std::move(queue_.front());
         queue_.pop();
       }
@@ -81,13 +81,13 @@ class ThreadPool {
     }
   }
 
-  y_absl::Mutex mu_;
+  y_absl::Mutex mu_; 
   std::queue<std::function<void()>> queue_ ABSL_GUARDED_BY(mu_);
   std::vector<std::thread> threads_;
 };
 
 }  // namespace synchronization_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl
+}  // namespace y_absl 
 
 #endif  // ABSL_SYNCHRONIZATION_INTERNAL_THREAD_POOL_H_

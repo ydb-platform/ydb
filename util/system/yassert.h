@@ -22,10 +22,10 @@
     #include <cassert>
 #endif
 
-#if !defined(_MSC_VER)
-    #if defined(__has_builtin) && __has_builtin(__debugbreak)
+#if !defined(_MSC_VER) 
+    #if defined(__has_builtin) && __has_builtin(__debugbreak) 
     // Do nothing, use __debugbreak builtin
-    #else
+    #else 
 inline void __debugbreak() {
         #if defined(__x86_64__) || defined(__i386__)
     __asm__ volatile("int $3\n");
@@ -33,27 +33,27 @@ inline void __debugbreak() {
     assert(0);
         #endif
 }
-    #endif
-
+    #endif 
+ 
 inline bool YaIsDebuggerPresent() {
     return false;
 }
 #else
 // __debugbreak is intrinsic in MSVC
-
+ 
 extern "C" {
     __declspec(dllimport) int __stdcall IsDebuggerPresent();
 }
-
+ 
 inline bool YaIsDebuggerPresent() {
     return IsDebuggerPresent() != 0;
 }
-#endif
-
-inline void YaDebugBreak() {
-    __debugbreak();
+#endif 
+ 
+inline void YaDebugBreak() { 
+    __debugbreak(); 
 }
-
+ 
 #undef Y_ASSERT
 
 #if !defined(NDEBUG) && !defined(__GCCXML__)

@@ -114,15 +114,15 @@ void TFiberContext::BeforeSwitch(TFiberContext* old) noexcept {
 
 void TFiberContext::AfterSwitch() noexcept {
 #if defined(_asan_enabled_)
-    __sanitizer_finish_switch_fiber(Token_, nullptr, nullptr);
+    __sanitizer_finish_switch_fiber(Token_, nullptr, nullptr); 
 #endif
 }
-
-void TFiberContext::AfterStart() noexcept {
-#if defined(_asan_enabled_)
-    __sanitizer_finish_switch_fiber(nullptr, nullptr, nullptr);
-#endif
-}
+ 
+void TFiberContext::AfterStart() noexcept { 
+#if defined(_asan_enabled_) 
+    __sanitizer_finish_switch_fiber(nullptr, nullptr, nullptr); 
+#endif 
+} 
 
 #if defined(_tsan_enabled_)
 extern "C" {

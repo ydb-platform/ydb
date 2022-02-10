@@ -84,7 +84,7 @@ static inline bool IsNan(double f) {
 #if defined(_win_)
     return _isnan(f) != 0;
 #else
-    return std::isnan(f);
+    return std::isnan(f); 
 #endif
 }
 

@@ -364,12 +364,12 @@ struct TConvertValue<TColumnType, TDuration, TRawTypeValue> {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-template <typename TColumnType, typename SourceType>
-struct TConvertValue<TColumnType, TRawTypeValue, SourceType> {
+template <typename TColumnType, typename SourceType> 
+struct TConvertValue<TColumnType, TRawTypeValue, SourceType> { 
     TTypeValue Value;
 
     TConvertValue(const SourceType& value)
-        : Value(value, TColumnType::ColumnType)
+        : Value(value, TColumnType::ColumnType) 
     {}
 
     operator const TRawTypeValue&() const {
@@ -377,16 +377,16 @@ struct TConvertValue<TColumnType, TRawTypeValue, SourceType> {
     }
 };
 
-template <typename TColumnType, typename SourceType>
+template <typename TColumnType, typename SourceType> 
 struct TConvertValueFromProtoToRawTypeValue {
     TString Storage;
     TTypeValue Value;
 
     TConvertValueFromProtoToRawTypeValue(const SourceType& value)
         : Storage(value.SerializeAsString())
-        , Value(Storage, TColumnType::ColumnType)
+        , Value(Storage, TColumnType::ColumnType) 
     {
-        static_assert(TColumnType::ColumnType == NScheme::NTypeIds::String,
+        static_assert(TColumnType::ColumnType == NScheme::NTypeIds::String, 
                       "Unsupported ColumnType for proto");
     }
 
@@ -395,14 +395,14 @@ struct TConvertValueFromProtoToRawTypeValue {
     }
 };
 
-template <typename TColumnType, typename SourceType>
+template <typename TColumnType, typename SourceType> 
 struct TConvertValueFromPodToRawTypeValue {
-    typename NSchemeTypeMapper<TColumnType::ColumnType>::Type Storage;
+    typename NSchemeTypeMapper<TColumnType::ColumnType>::Type Storage; 
     TTypeValue Value;
 
     TConvertValueFromPodToRawTypeValue(const SourceType& value)
-        : Storage(static_cast<typename NSchemeTypeMapper<TColumnType::ColumnType>::Type>(value))
-        , Value(Storage, TColumnType::ColumnType)
+        : Storage(static_cast<typename NSchemeTypeMapper<TColumnType::ColumnType>::Type>(value)) 
+        , Value(Storage, TColumnType::ColumnType) 
     {}
 
     operator const TRawTypeValue&() const {
@@ -410,12 +410,12 @@ struct TConvertValueFromPodToRawTypeValue {
     }
 };
 
-template <typename TColumnType>
-struct TConvertValueFromPodToRawTypeValue<TColumnType, typename NSchemeTypeMapper<TColumnType::ColumnType>::Type> {
+template <typename TColumnType> 
+struct TConvertValueFromPodToRawTypeValue<TColumnType, typename NSchemeTypeMapper<TColumnType::ColumnType>::Type> { 
     TTypeValue Value;
 
-    TConvertValueFromPodToRawTypeValue(const typename NSchemeTypeMapper<TColumnType::ColumnType>::Type& value)
-        : Value(value, TColumnType::ColumnType)
+    TConvertValueFromPodToRawTypeValue(const typename NSchemeTypeMapper<TColumnType::ColumnType>::Type& value) 
+        : Value(value, TColumnType::ColumnType) 
     {}
 
     operator const TRawTypeValue&() const {
@@ -453,7 +453,7 @@ struct TConvertValue<ColumnType, TargetType, TRawTypeValue> {
     }
 };
 
-template <typename TColumnType, typename TargetType>
+template <typename TColumnType, typename TargetType> 
 struct TConvertValueFromRawTypeValueToPod {
     TTypeValue Value;
 
@@ -462,7 +462,7 @@ struct TConvertValueFromRawTypeValueToPod {
     {}
 
     operator TargetType() const {
-        return static_cast<TargetType>(static_cast<typename NSchemeTypeMapper<TColumnType::ColumnType>::Type>(Value));
+        return static_cast<TargetType>(static_cast<typename NSchemeTypeMapper<TColumnType::ColumnType>::Type>(Value)); 
     }
 };
 
@@ -486,14 +486,14 @@ struct TConvertValue<ColumnType, TVector<VectorType>, TRawTypeValue> {
     }
 };
 
-template <typename TColumnType, typename VectorType>
-struct TConvertValue<TColumnType, TRawTypeValue, TVector<VectorType>> {
+template <typename TColumnType, typename VectorType> 
+struct TConvertValue<TColumnType, TRawTypeValue, TVector<VectorType>> { 
     TTypeValue Value;
 
     TConvertValue(const TVector<VectorType>& value)
         : Value(value)
     {
-        static_assert(TColumnType::ColumnType == NScheme::NTypeIds::String,
+        static_assert(TColumnType::ColumnType == NScheme::NTypeIds::String, 
                       "Unsupported ColumnType for vector<>");
     }
 
@@ -502,15 +502,15 @@ struct TConvertValue<TColumnType, TRawTypeValue, TVector<VectorType>> {
     }
 };
 
-template <typename TColumnType>
-struct TConvertValue<TColumnType, TRawTypeValue, TStringBuf> {
+template <typename TColumnType> 
+struct TConvertValue<TColumnType, TRawTypeValue, TStringBuf> { 
     TRawTypeValue Value;
 
     TConvertValue(TStringBuf value)
-        : Value(value.data(), value.size(), TColumnType::ColumnType)
+        : Value(value.data(), value.size(), TColumnType::ColumnType) 
     {
-        static_assert(TColumnType::ColumnType == NScheme::NTypeIds::String
-                      || TColumnType::ColumnType == NScheme::NTypeIds::Utf8,
+        static_assert(TColumnType::ColumnType == NScheme::NTypeIds::String 
+                      || TColumnType::ColumnType == NScheme::NTypeIds::Utf8, 
                       "Unsupported ColumnType for TStringBuf");
     }
 

@@ -60,15 +60,15 @@ RECURSE(
     eigen
     expat
     falconn
-    farmhash
-    farmhash/ut
+    farmhash 
+    farmhash/ut 
     faster-rnnlm
     fastlz
     fastops
     fcgi
-    ffmpeg-3
-    ffmpeg-3.4.1
-    fft
+    ffmpeg-3 
+    ffmpeg-3.4.1 
+    fft 
     flatbuffers
     flatbuffers64
     flatbuffers64/flatc
@@ -76,7 +76,7 @@ RECURSE(
     fmath
     fmt
     fontconfig
-    fp16
+    fp16 
     freetype
     fuse
     fxdiv
@@ -101,7 +101,7 @@ RECURSE(
     harfbuzz
     hdf5
     hdr_histogram
-    highwayhash
+    highwayhash 
     hiredis
     httpd24
     hwloc
@@ -147,7 +147,7 @@ RECURSE(
     libev
     libevent
     libexslt
-    libfdk-aac
+    libfdk-aac 
     libfuzzer12
     libgeotiff
     libgit2
@@ -191,12 +191,12 @@ RECURSE(
     libunwind
     liburing
     libuv
-    libvorbis
-    libvorbis/libvorbisenc
-    libvpx
+    libvorbis 
+    libvorbis/libvorbisenc 
+    libvpx 
     libwebp
-    libx264
-    libx265
+    libx264 
+    libx265 
     libxml
     libxml/dynamic
     libxslt
@@ -242,7 +242,7 @@ RECURSE(
     node_nan
     nsync
     numa
-    nvidia
+    nvidia 
     odpi
     onnx
     opencl-headers
@@ -254,7 +254,7 @@ RECURSE(
     openjpeg
     openldap
     openldap/libraries
-    openmp
+    openmp 
     openssl
     opentracing-cpp
     opus
@@ -289,7 +289,7 @@ RECURSE(
     python/ut
     qhull
     quicklz
-    r-lang
+    r-lang 
     re2
     regional-units/library
     regional-units/library/ut
@@ -328,11 +328,11 @@ RECURSE(
     tcmalloc/dynamic
     tensorboard
     termbox
-    tf
-    tf/samples
-    tf/tensorflow
-    tf/tensorflow/compiler
-    tf/tests
+    tf 
+    tf/samples 
+    tf/tensorflow 
+    tf/tensorflow/compiler 
+    tf/tests 
     tf-2.4
     tf-2.4/sample_python
     tf-2.4/tensorflow/python

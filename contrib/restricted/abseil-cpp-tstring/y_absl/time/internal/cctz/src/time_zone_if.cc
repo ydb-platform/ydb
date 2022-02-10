@@ -18,12 +18,12 @@
 #include "time_zone_info.h"
 #include "time_zone_libc.h"
 
-namespace y_absl {
+namespace y_absl { 
 ABSL_NAMESPACE_BEGIN
 namespace time_internal {
 namespace cctz {
 
-std::unique_ptr<TimeZoneIf> TimeZoneIf::Load(const TString& name) {
+std::unique_ptr<TimeZoneIf> TimeZoneIf::Load(const TString& name) { 
   // Support "libc:localtime" and "libc:*" to access the legacy
   // localtime and UTC support respectively from the C library.
   if (name.compare(0, 5, "libc:") == 0) {
@@ -42,4 +42,4 @@ TimeZoneIf::~TimeZoneIf() {}
 }  // namespace cctz
 }  // namespace time_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl
+}  // namespace y_absl 

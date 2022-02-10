@@ -39,17 +39,17 @@
 // output.
 //
 // Example 1:
-//   TString s = Substitute("$1 purchased $0 $2 for $$10. Thanks $1!",
+//   TString s = Substitute("$1 purchased $0 $2 for $$10. Thanks $1!", 
 //                              5, "Bob", "Apples");
 //   EXPECT_EQ("Bob purchased 5 Apples for $10. Thanks Bob!", s);
 //
 // Example 2:
-//   TString s = "Hi. ";
+//   TString s = "Hi. "; 
 //   SubstituteAndAppend(&s, "My name is $0 and I am $1 years old.", "Bob", 5);
 //   EXPECT_EQ("Hi. My name is Bob and I am 5 years old.", s);
 //
 // Supported types:
-//   * y_absl::string_view, TString, const char* (null is equivalent to "")
+//   * y_absl::string_view, TString, const char* (null is equivalent to "") 
 //   * int32_t, int64_t, uint32_t, uint64_t
 //   * float, double
 //   * bool (Printed as "true" or "false")
@@ -75,24 +75,24 @@
 #include <type_traits>
 #include <vector>
 
-#include "y_absl/base/macros.h"
-#include "y_absl/base/port.h"
-#include "y_absl/strings/ascii.h"
-#include "y_absl/strings/escaping.h"
-#include "y_absl/strings/numbers.h"
-#include "y_absl/strings/str_cat.h"
-#include "y_absl/strings/str_split.h"
-#include "y_absl/strings/string_view.h"
-#include "y_absl/strings/strip.h"
+#include "y_absl/base/macros.h" 
+#include "y_absl/base/port.h" 
+#include "y_absl/strings/ascii.h" 
+#include "y_absl/strings/escaping.h" 
+#include "y_absl/strings/numbers.h" 
+#include "y_absl/strings/str_cat.h" 
+#include "y_absl/strings/str_split.h" 
+#include "y_absl/strings/string_view.h" 
+#include "y_absl/strings/strip.h" 
 
-namespace y_absl {
+namespace y_absl { 
 ABSL_NAMESPACE_BEGIN
 namespace substitute_internal {
 
 // Arg
 //
-// This class provides an argument type for `y_absl::Substitute()` and
-// `y_absl::SubstituteAndAppend()`. `Arg` handles implicit conversion of various
+// This class provides an argument type for `y_absl::Substitute()` and 
+// `y_absl::SubstituteAndAppend()`. `Arg` handles implicit conversion of various 
 // types to a string. (`Arg` is very similar to the `AlphaNum` class in
 // `StrCat()`.)
 //
@@ -103,16 +103,16 @@ class Arg {
   //
   // Explicitly overload `const char*` so the compiler doesn't cast to `bool`.
   Arg(const char* value)  // NOLINT(runtime/explicit)
-      : piece_(y_absl::NullSafeStringView(value)) {}
+      : piece_(y_absl::NullSafeStringView(value)) {} 
   template <typename Allocator>
   Arg(  // NOLINT
       const std::basic_string<char, std::char_traits<char>, Allocator>&
           value) noexcept
       : piece_(value) {}
-  Arg(y_absl::string_view value)  // NOLINT(runtime/explicit)
+  Arg(y_absl::string_view value)  // NOLINT(runtime/explicit) 
       : piece_(value) {}
-  Arg(const TString& s)
-      : piece_(s.data(), s.size()) {}
+  Arg(const TString& s) 
+      : piece_(s.data(), s.size()) {} 
 
   // Overloads for primitives
   //
@@ -164,7 +164,7 @@ class Arg {
   // vector<bool>::reference and const_reference require special help to
   // convert to `AlphaNum` because it requires two user defined conversions.
   template <typename T,
-            y_absl::enable_if_t<
+            y_absl::enable_if_t< 
                 std::is_class<T>::value &&
                 (std::is_same<T, std::vector<bool>::reference>::value ||
                  std::is_same<T, std::vector<bool>::const_reference>::value)>* =
@@ -179,17 +179,17 @@ class Arg {
   Arg(const Arg&) = delete;
   Arg& operator=(const Arg&) = delete;
 
-  y_absl::string_view piece() const { return piece_; }
+  y_absl::string_view piece() const { return piece_; } 
 
  private:
-  y_absl::string_view piece_;
+  y_absl::string_view piece_; 
   char scratch_[numbers_internal::kFastToBufferSize];
 };
 
 // Internal helper function. Don't call this from outside this implementation.
 // This interface may change without notice.
-void SubstituteAndAppendArray(TString* output, y_absl::string_view format,
-                              const y_absl::string_view* args_array,
+void SubstituteAndAppendArray(TString* output, y_absl::string_view format, 
+                              const y_absl::string_view* args_array, 
                               size_t num_args);
 
 #if defined(ABSL_BAD_CALL_IF)
@@ -234,76 +234,76 @@ constexpr int PlaceholderBitmask(const char* format) {
 //
 // Example:
 //  template <typename... Args>
-//  void VarMsg(TString* boilerplate, y_absl::string_view format,
+//  void VarMsg(TString* boilerplate, y_absl::string_view format, 
 //      const Args&... args) {
-//    y_absl::SubstituteAndAppend(boilerplate, format, args...);
+//    y_absl::SubstituteAndAppend(boilerplate, format, args...); 
 //  }
 //
-inline void SubstituteAndAppend(TString* output, y_absl::string_view format) {
+inline void SubstituteAndAppend(TString* output, y_absl::string_view format) { 
   substitute_internal::SubstituteAndAppendArray(output, format, nullptr, 0);
 }
 
-inline void SubstituteAndAppend(TString* output, y_absl::string_view format,
+inline void SubstituteAndAppend(TString* output, y_absl::string_view format, 
                                 const substitute_internal::Arg& a0) {
-  const y_absl::string_view args[] = {a0.piece()};
+  const y_absl::string_view args[] = {a0.piece()}; 
   substitute_internal::SubstituteAndAppendArray(output, format, args,
                                                 ABSL_ARRAYSIZE(args));
 }
 
-inline void SubstituteAndAppend(TString* output, y_absl::string_view format,
+inline void SubstituteAndAppend(TString* output, y_absl::string_view format, 
                                 const substitute_internal::Arg& a0,
                                 const substitute_internal::Arg& a1) {
-  const y_absl::string_view args[] = {a0.piece(), a1.piece()};
+  const y_absl::string_view args[] = {a0.piece(), a1.piece()}; 
   substitute_internal::SubstituteAndAppendArray(output, format, args,
                                                 ABSL_ARRAYSIZE(args));
 }
 
-inline void SubstituteAndAppend(TString* output, y_absl::string_view format,
+inline void SubstituteAndAppend(TString* output, y_absl::string_view format, 
                                 const substitute_internal::Arg& a0,
                                 const substitute_internal::Arg& a1,
                                 const substitute_internal::Arg& a2) {
-  const y_absl::string_view args[] = {a0.piece(), a1.piece(), a2.piece()};
+  const y_absl::string_view args[] = {a0.piece(), a1.piece(), a2.piece()}; 
   substitute_internal::SubstituteAndAppendArray(output, format, args,
                                                 ABSL_ARRAYSIZE(args));
 }
 
-inline void SubstituteAndAppend(TString* output, y_absl::string_view format,
+inline void SubstituteAndAppend(TString* output, y_absl::string_view format, 
                                 const substitute_internal::Arg& a0,
                                 const substitute_internal::Arg& a1,
                                 const substitute_internal::Arg& a2,
                                 const substitute_internal::Arg& a3) {
-  const y_absl::string_view args[] = {a0.piece(), a1.piece(), a2.piece(),
+  const y_absl::string_view args[] = {a0.piece(), a1.piece(), a2.piece(), 
                                     a3.piece()};
   substitute_internal::SubstituteAndAppendArray(output, format, args,
                                                 ABSL_ARRAYSIZE(args));
 }
 
-inline void SubstituteAndAppend(TString* output, y_absl::string_view format,
+inline void SubstituteAndAppend(TString* output, y_absl::string_view format, 
                                 const substitute_internal::Arg& a0,
                                 const substitute_internal::Arg& a1,
                                 const substitute_internal::Arg& a2,
                                 const substitute_internal::Arg& a3,
                                 const substitute_internal::Arg& a4) {
-  const y_absl::string_view args[] = {a0.piece(), a1.piece(), a2.piece(),
+  const y_absl::string_view args[] = {a0.piece(), a1.piece(), a2.piece(), 
                                     a3.piece(), a4.piece()};
   substitute_internal::SubstituteAndAppendArray(output, format, args,
                                                 ABSL_ARRAYSIZE(args));
 }
 
-inline void SubstituteAndAppend(TString* output, y_absl::string_view format,
+inline void SubstituteAndAppend(TString* output, y_absl::string_view format, 
                                 const substitute_internal::Arg& a0,
                                 const substitute_internal::Arg& a1,
                                 const substitute_internal::Arg& a2,
                                 const substitute_internal::Arg& a3,
                                 const substitute_internal::Arg& a4,
                                 const substitute_internal::Arg& a5) {
-  const y_absl::string_view args[] = {a0.piece(), a1.piece(), a2.piece(),
+  const y_absl::string_view args[] = {a0.piece(), a1.piece(), a2.piece(), 
                                     a3.piece(), a4.piece(), a5.piece()};
   substitute_internal::SubstituteAndAppendArray(output, format, args,
                                                 ABSL_ARRAYSIZE(args));
 }
 
-inline void SubstituteAndAppend(TString* output, y_absl::string_view format,
+inline void SubstituteAndAppend(TString* output, y_absl::string_view format, 
                                 const substitute_internal::Arg& a0,
                                 const substitute_internal::Arg& a1,
                                 const substitute_internal::Arg& a2,
@@ -311,7 +311,7 @@ inline void SubstituteAndAppend(TString* output, y_absl::string_view format,
                                 const substitute_internal::Arg& a4,
                                 const substitute_internal::Arg& a5,
                                 const substitute_internal::Arg& a6) {
-  const y_absl::string_view args[] = {a0.piece(), a1.piece(), a2.piece(),
+  const y_absl::string_view args[] = {a0.piece(), a1.piece(), a2.piece(), 
                                     a3.piece(), a4.piece(), a5.piece(),
                                     a6.piece()};
   substitute_internal::SubstituteAndAppendArray(output, format, args,
@@ -319,12 +319,12 @@ inline void SubstituteAndAppend(TString* output, y_absl::string_view format,
 }
 
 inline void SubstituteAndAppend(
-    TString* output, y_absl::string_view format,
+    TString* output, y_absl::string_view format, 
     const substitute_internal::Arg& a0, const substitute_internal::Arg& a1,
     const substitute_internal::Arg& a2, const substitute_internal::Arg& a3,
     const substitute_internal::Arg& a4, const substitute_internal::Arg& a5,
     const substitute_internal::Arg& a6, const substitute_internal::Arg& a7) {
-  const y_absl::string_view args[] = {a0.piece(), a1.piece(), a2.piece(),
+  const y_absl::string_view args[] = {a0.piece(), a1.piece(), a2.piece(), 
                                     a3.piece(), a4.piece(), a5.piece(),
                                     a6.piece(), a7.piece()};
   substitute_internal::SubstituteAndAppendArray(output, format, args,
@@ -332,13 +332,13 @@ inline void SubstituteAndAppend(
 }
 
 inline void SubstituteAndAppend(
-    TString* output, y_absl::string_view format,
+    TString* output, y_absl::string_view format, 
     const substitute_internal::Arg& a0, const substitute_internal::Arg& a1,
     const substitute_internal::Arg& a2, const substitute_internal::Arg& a3,
     const substitute_internal::Arg& a4, const substitute_internal::Arg& a5,
     const substitute_internal::Arg& a6, const substitute_internal::Arg& a7,
     const substitute_internal::Arg& a8) {
-  const y_absl::string_view args[] = {a0.piece(), a1.piece(), a2.piece(),
+  const y_absl::string_view args[] = {a0.piece(), a1.piece(), a2.piece(), 
                                     a3.piece(), a4.piece(), a5.piece(),
                                     a6.piece(), a7.piece(), a8.piece()};
   substitute_internal::SubstituteAndAppendArray(output, format, args,
@@ -346,13 +346,13 @@ inline void SubstituteAndAppend(
 }
 
 inline void SubstituteAndAppend(
-    TString* output, y_absl::string_view format,
+    TString* output, y_absl::string_view format, 
     const substitute_internal::Arg& a0, const substitute_internal::Arg& a1,
     const substitute_internal::Arg& a2, const substitute_internal::Arg& a3,
     const substitute_internal::Arg& a4, const substitute_internal::Arg& a5,
     const substitute_internal::Arg& a6, const substitute_internal::Arg& a7,
     const substitute_internal::Arg& a8, const substitute_internal::Arg& a9) {
-  const y_absl::string_view args[] = {
+  const y_absl::string_view args[] = { 
       a0.piece(), a1.piece(), a2.piece(), a3.piece(), a4.piece(),
       a5.piece(), a6.piece(), a7.piece(), a8.piece(), a9.piece()};
   substitute_internal::SubstituteAndAppendArray(output, format, args,
@@ -362,14 +362,14 @@ inline void SubstituteAndAppend(
 #if defined(ABSL_BAD_CALL_IF)
 // This body of functions catches cases where the number of placeholders
 // doesn't match the number of data arguments.
-void SubstituteAndAppend(TString* output, const char* format)
+void SubstituteAndAppend(TString* output, const char* format) 
     ABSL_BAD_CALL_IF(
         substitute_internal::PlaceholderBitmask(format) != 0,
         "There were no substitution arguments "
         "but this format string either has a $[0-9] in it or contains "
         "an unescaped $ character (use $$ instead)");
 
-void SubstituteAndAppend(TString* output, const char* format,
+void SubstituteAndAppend(TString* output, const char* format, 
                          const substitute_internal::Arg& a0)
     ABSL_BAD_CALL_IF(substitute_internal::PlaceholderBitmask(format) != 1,
                      "There was 1 substitution argument given, but "
@@ -377,7 +377,7 @@ void SubstituteAndAppend(TString* output, const char* format,
                      "one of $1-$9, or contains an unescaped $ character (use "
                      "$$ instead)");
 
-void SubstituteAndAppend(TString* output, const char* format,
+void SubstituteAndAppend(TString* output, const char* format, 
                          const substitute_internal::Arg& a0,
                          const substitute_internal::Arg& a1)
     ABSL_BAD_CALL_IF(
@@ -386,7 +386,7 @@ void SubstituteAndAppend(TString* output, const char* format,
         "missing its $0/$1, contains one of $2-$9, or contains an "
         "unescaped $ character (use $$ instead)");
 
-void SubstituteAndAppend(TString* output, const char* format,
+void SubstituteAndAppend(TString* output, const char* format, 
                          const substitute_internal::Arg& a0,
                          const substitute_internal::Arg& a1,
                          const substitute_internal::Arg& a2)
@@ -396,7 +396,7 @@ void SubstituteAndAppend(TString* output, const char* format,
         "this format string is missing its $0/$1/$2, contains one of "
         "$3-$9, or contains an unescaped $ character (use $$ instead)");
 
-void SubstituteAndAppend(TString* output, const char* format,
+void SubstituteAndAppend(TString* output, const char* format, 
                          const substitute_internal::Arg& a0,
                          const substitute_internal::Arg& a1,
                          const substitute_internal::Arg& a2,
@@ -407,7 +407,7 @@ void SubstituteAndAppend(TString* output, const char* format,
         "this format string is missing its $0-$3, contains one of "
         "$4-$9, or contains an unescaped $ character (use $$ instead)");
 
-void SubstituteAndAppend(TString* output, const char* format,
+void SubstituteAndAppend(TString* output, const char* format, 
                          const substitute_internal::Arg& a0,
                          const substitute_internal::Arg& a1,
                          const substitute_internal::Arg& a2,
@@ -419,7 +419,7 @@ void SubstituteAndAppend(TString* output, const char* format,
         "this format string is missing its $0-$4, contains one of "
         "$5-$9, or contains an unescaped $ character (use $$ instead)");
 
-void SubstituteAndAppend(TString* output, const char* format,
+void SubstituteAndAppend(TString* output, const char* format, 
                          const substitute_internal::Arg& a0,
                          const substitute_internal::Arg& a1,
                          const substitute_internal::Arg& a2,
@@ -433,7 +433,7 @@ void SubstituteAndAppend(TString* output, const char* format,
         "$6-$9, or contains an unescaped $ character (use $$ instead)");
 
 void SubstituteAndAppend(
-    TString* output, const char* format, const substitute_internal::Arg& a0,
+    TString* output, const char* format, const substitute_internal::Arg& a0, 
     const substitute_internal::Arg& a1, const substitute_internal::Arg& a2,
     const substitute_internal::Arg& a3, const substitute_internal::Arg& a4,
     const substitute_internal::Arg& a5, const substitute_internal::Arg& a6)
@@ -444,7 +444,7 @@ void SubstituteAndAppend(
         "$7-$9, or contains an unescaped $ character (use $$ instead)");
 
 void SubstituteAndAppend(
-    TString* output, const char* format, const substitute_internal::Arg& a0,
+    TString* output, const char* format, const substitute_internal::Arg& a0, 
     const substitute_internal::Arg& a1, const substitute_internal::Arg& a2,
     const substitute_internal::Arg& a3, const substitute_internal::Arg& a4,
     const substitute_internal::Arg& a5, const substitute_internal::Arg& a6,
@@ -456,7 +456,7 @@ void SubstituteAndAppend(
         "$8-$9, or contains an unescaped $ character (use $$ instead)");
 
 void SubstituteAndAppend(
-    TString* output, const char* format, const substitute_internal::Arg& a0,
+    TString* output, const char* format, const substitute_internal::Arg& a0, 
     const substitute_internal::Arg& a1, const substitute_internal::Arg& a2,
     const substitute_internal::Arg& a3, const substitute_internal::Arg& a4,
     const substitute_internal::Arg& a5, const substitute_internal::Arg& a6,
@@ -468,7 +468,7 @@ void SubstituteAndAppend(
         "contains an unescaped $ character (use $$ instead)");
 
 void SubstituteAndAppend(
-    TString* output, const char* format, const substitute_internal::Arg& a0,
+    TString* output, const char* format, const substitute_internal::Arg& a0, 
     const substitute_internal::Arg& a1, const substitute_internal::Arg& a2,
     const substitute_internal::Arg& a3, const substitute_internal::Arg& a4,
     const substitute_internal::Arg& a5, const substitute_internal::Arg& a6,
@@ -494,106 +494,106 @@ void SubstituteAndAppend(
 //
 // Example:
 //  template <typename... Args>
-//  void VarMsg(y_absl::string_view format, const Args&... args) {
-//    TString s = y_absl::Substitute(format, args...);
+//  void VarMsg(y_absl::string_view format, const Args&... args) { 
+//    TString s = y_absl::Substitute(format, args...); 
 
-ABSL_MUST_USE_RESULT inline TString Substitute(y_absl::string_view format) {
-  TString result;
+ABSL_MUST_USE_RESULT inline TString Substitute(y_absl::string_view format) { 
+  TString result; 
   SubstituteAndAppend(&result, format);
   return result;
 }
 
-ABSL_MUST_USE_RESULT inline TString Substitute(
-    y_absl::string_view format, const substitute_internal::Arg& a0) {
-  TString result;
+ABSL_MUST_USE_RESULT inline TString Substitute( 
+    y_absl::string_view format, const substitute_internal::Arg& a0) { 
+  TString result; 
   SubstituteAndAppend(&result, format, a0);
   return result;
 }
 
-ABSL_MUST_USE_RESULT inline TString Substitute(
-    y_absl::string_view format, const substitute_internal::Arg& a0,
+ABSL_MUST_USE_RESULT inline TString Substitute( 
+    y_absl::string_view format, const substitute_internal::Arg& a0, 
     const substitute_internal::Arg& a1) {
-  TString result;
+  TString result; 
   SubstituteAndAppend(&result, format, a0, a1);
   return result;
 }
 
-ABSL_MUST_USE_RESULT inline TString Substitute(
-    y_absl::string_view format, const substitute_internal::Arg& a0,
+ABSL_MUST_USE_RESULT inline TString Substitute( 
+    y_absl::string_view format, const substitute_internal::Arg& a0, 
     const substitute_internal::Arg& a1, const substitute_internal::Arg& a2) {
-  TString result;
+  TString result; 
   SubstituteAndAppend(&result, format, a0, a1, a2);
   return result;
 }
 
-ABSL_MUST_USE_RESULT inline TString Substitute(
-    y_absl::string_view format, const substitute_internal::Arg& a0,
+ABSL_MUST_USE_RESULT inline TString Substitute( 
+    y_absl::string_view format, const substitute_internal::Arg& a0, 
     const substitute_internal::Arg& a1, const substitute_internal::Arg& a2,
     const substitute_internal::Arg& a3) {
-  TString result;
+  TString result; 
   SubstituteAndAppend(&result, format, a0, a1, a2, a3);
   return result;
 }
 
-ABSL_MUST_USE_RESULT inline TString Substitute(
-    y_absl::string_view format, const substitute_internal::Arg& a0,
+ABSL_MUST_USE_RESULT inline TString Substitute( 
+    y_absl::string_view format, const substitute_internal::Arg& a0, 
     const substitute_internal::Arg& a1, const substitute_internal::Arg& a2,
     const substitute_internal::Arg& a3, const substitute_internal::Arg& a4) {
-  TString result;
+  TString result; 
   SubstituteAndAppend(&result, format, a0, a1, a2, a3, a4);
   return result;
 }
 
-ABSL_MUST_USE_RESULT inline TString Substitute(
-    y_absl::string_view format, const substitute_internal::Arg& a0,
+ABSL_MUST_USE_RESULT inline TString Substitute( 
+    y_absl::string_view format, const substitute_internal::Arg& a0, 
     const substitute_internal::Arg& a1, const substitute_internal::Arg& a2,
     const substitute_internal::Arg& a3, const substitute_internal::Arg& a4,
     const substitute_internal::Arg& a5) {
-  TString result;
+  TString result; 
   SubstituteAndAppend(&result, format, a0, a1, a2, a3, a4, a5);
   return result;
 }
 
-ABSL_MUST_USE_RESULT inline TString Substitute(
-    y_absl::string_view format, const substitute_internal::Arg& a0,
+ABSL_MUST_USE_RESULT inline TString Substitute( 
+    y_absl::string_view format, const substitute_internal::Arg& a0, 
     const substitute_internal::Arg& a1, const substitute_internal::Arg& a2,
     const substitute_internal::Arg& a3, const substitute_internal::Arg& a4,
     const substitute_internal::Arg& a5, const substitute_internal::Arg& a6) {
-  TString result;
+  TString result; 
   SubstituteAndAppend(&result, format, a0, a1, a2, a3, a4, a5, a6);
   return result;
 }
 
-ABSL_MUST_USE_RESULT inline TString Substitute(
-    y_absl::string_view format, const substitute_internal::Arg& a0,
+ABSL_MUST_USE_RESULT inline TString Substitute( 
+    y_absl::string_view format, const substitute_internal::Arg& a0, 
     const substitute_internal::Arg& a1, const substitute_internal::Arg& a2,
     const substitute_internal::Arg& a3, const substitute_internal::Arg& a4,
     const substitute_internal::Arg& a5, const substitute_internal::Arg& a6,
     const substitute_internal::Arg& a7) {
-  TString result;
+  TString result; 
   SubstituteAndAppend(&result, format, a0, a1, a2, a3, a4, a5, a6, a7);
   return result;
 }
 
-ABSL_MUST_USE_RESULT inline TString Substitute(
-    y_absl::string_view format, const substitute_internal::Arg& a0,
+ABSL_MUST_USE_RESULT inline TString Substitute( 
+    y_absl::string_view format, const substitute_internal::Arg& a0, 
     const substitute_internal::Arg& a1, const substitute_internal::Arg& a2,
     const substitute_internal::Arg& a3, const substitute_internal::Arg& a4,
     const substitute_internal::Arg& a5, const substitute_internal::Arg& a6,
     const substitute_internal::Arg& a7, const substitute_internal::Arg& a8) {
-  TString result;
+  TString result; 
   SubstituteAndAppend(&result, format, a0, a1, a2, a3, a4, a5, a6, a7, a8);
   return result;
 }
 
-ABSL_MUST_USE_RESULT inline TString Substitute(
-    y_absl::string_view format, const substitute_internal::Arg& a0,
+ABSL_MUST_USE_RESULT inline TString Substitute( 
+    y_absl::string_view format, const substitute_internal::Arg& a0, 
     const substitute_internal::Arg& a1, const substitute_internal::Arg& a2,
     const substitute_internal::Arg& a3, const substitute_internal::Arg& a4,
     const substitute_internal::Arg& a5, const substitute_internal::Arg& a6,
     const substitute_internal::Arg& a7, const substitute_internal::Arg& a8,
     const substitute_internal::Arg& a9) {
-  TString result;
+  TString result; 
   SubstituteAndAppend(&result, format, a0, a1, a2, a3, a4, a5, a6, a7, a8, a9);
   return result;
 }
@@ -601,20 +601,20 @@ ABSL_MUST_USE_RESULT inline TString Substitute(
 #if defined(ABSL_BAD_CALL_IF)
 // This body of functions catches cases where the number of placeholders
 // doesn't match the number of data arguments.
-TString Substitute(const char* format)
+TString Substitute(const char* format) 
     ABSL_BAD_CALL_IF(substitute_internal::PlaceholderBitmask(format) != 0,
                      "There were no substitution arguments "
                      "but this format string either has a $[0-9] in it or "
                      "contains an unescaped $ character (use $$ instead)");
 
-TString Substitute(const char* format, const substitute_internal::Arg& a0)
+TString Substitute(const char* format, const substitute_internal::Arg& a0) 
     ABSL_BAD_CALL_IF(
         substitute_internal::PlaceholderBitmask(format) != 1,
         "There was 1 substitution argument given, but "
         "this format string is missing its $0, contains one of $1-$9, "
         "or contains an unescaped $ character (use $$ instead)");
 
-TString Substitute(const char* format, const substitute_internal::Arg& a0,
+TString Substitute(const char* format, const substitute_internal::Arg& a0, 
                        const substitute_internal::Arg& a1)
     ABSL_BAD_CALL_IF(
         substitute_internal::PlaceholderBitmask(format) != 3,
@@ -622,7 +622,7 @@ TString Substitute(const char* format, const substitute_internal::Arg& a0,
         "this format string is missing its $0/$1, contains one of "
         "$2-$9, or contains an unescaped $ character (use $$ instead)");
 
-TString Substitute(const char* format, const substitute_internal::Arg& a0,
+TString Substitute(const char* format, const substitute_internal::Arg& a0, 
                        const substitute_internal::Arg& a1,
                        const substitute_internal::Arg& a2)
     ABSL_BAD_CALL_IF(
@@ -631,7 +631,7 @@ TString Substitute(const char* format, const substitute_internal::Arg& a0,
         "this format string is missing its $0/$1/$2, contains one of "
         "$3-$9, or contains an unescaped $ character (use $$ instead)");
 
-TString Substitute(const char* format, const substitute_internal::Arg& a0,
+TString Substitute(const char* format, const substitute_internal::Arg& a0, 
                        const substitute_internal::Arg& a1,
                        const substitute_internal::Arg& a2,
                        const substitute_internal::Arg& a3)
@@ -641,7 +641,7 @@ TString Substitute(const char* format, const substitute_internal::Arg& a0,
         "this format string is missing its $0-$3, contains one of "
         "$4-$9, or contains an unescaped $ character (use $$ instead)");
 
-TString Substitute(const char* format, const substitute_internal::Arg& a0,
+TString Substitute(const char* format, const substitute_internal::Arg& a0, 
                        const substitute_internal::Arg& a1,
                        const substitute_internal::Arg& a2,
                        const substitute_internal::Arg& a3,
@@ -652,7 +652,7 @@ TString Substitute(const char* format, const substitute_internal::Arg& a0,
         "this format string is missing its $0-$4, contains one of "
         "$5-$9, or contains an unescaped $ character (use $$ instead)");
 
-TString Substitute(const char* format, const substitute_internal::Arg& a0,
+TString Substitute(const char* format, const substitute_internal::Arg& a0, 
                        const substitute_internal::Arg& a1,
                        const substitute_internal::Arg& a2,
                        const substitute_internal::Arg& a3,
@@ -664,7 +664,7 @@ TString Substitute(const char* format, const substitute_internal::Arg& a0,
         "this format string is missing its $0-$5, contains one of "
         "$6-$9, or contains an unescaped $ character (use $$ instead)");
 
-TString Substitute(const char* format, const substitute_internal::Arg& a0,
+TString Substitute(const char* format, const substitute_internal::Arg& a0, 
                        const substitute_internal::Arg& a1,
                        const substitute_internal::Arg& a2,
                        const substitute_internal::Arg& a3,
@@ -677,7 +677,7 @@ TString Substitute(const char* format, const substitute_internal::Arg& a0,
         "this format string is missing its $0-$6, contains one of "
         "$7-$9, or contains an unescaped $ character (use $$ instead)");
 
-TString Substitute(const char* format, const substitute_internal::Arg& a0,
+TString Substitute(const char* format, const substitute_internal::Arg& a0, 
                        const substitute_internal::Arg& a1,
                        const substitute_internal::Arg& a2,
                        const substitute_internal::Arg& a3,
@@ -691,7 +691,7 @@ TString Substitute(const char* format, const substitute_internal::Arg& a0,
         "this format string is missing its $0-$7, contains one of "
         "$8-$9, or contains an unescaped $ character (use $$ instead)");
 
-TString Substitute(
+TString Substitute( 
     const char* format, const substitute_internal::Arg& a0,
     const substitute_internal::Arg& a1, const substitute_internal::Arg& a2,
     const substitute_internal::Arg& a3, const substitute_internal::Arg& a4,
@@ -703,7 +703,7 @@ TString Substitute(
         "this format string is missing its $0-$8, contains a $9, or "
         "contains an unescaped $ character (use $$ instead)");
 
-TString Substitute(
+TString Substitute( 
     const char* format, const substitute_internal::Arg& a0,
     const substitute_internal::Arg& a1, const substitute_internal::Arg& a2,
     const substitute_internal::Arg& a3, const substitute_internal::Arg& a4,
@@ -718,6 +718,6 @@ TString Substitute(
 #endif  // ABSL_BAD_CALL_IF
 
 ABSL_NAMESPACE_END
-}  // namespace y_absl
+}  // namespace y_absl 
 
 #endif  // ABSL_STRINGS_SUBSTITUTE_H_

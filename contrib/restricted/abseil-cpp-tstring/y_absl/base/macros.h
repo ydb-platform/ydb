@@ -19,7 +19,7 @@
 //
 // This header file defines the set of language macros used within Abseil code.
 // For the set of macros used to determine supported compilers and platforms,
-// see y_absl/base/config.h instead.
+// see y_absl/base/config.h instead. 
 //
 // This code is compiled directly on many platforms, including client
 // platforms like Windows, Mac, and embedded systems.  Before making
@@ -33,8 +33,8 @@
 
 #include "y_absl/base/attributes.h"
 #include "y_absl/base/config.h"
-#include "y_absl/base/optimization.h"
-#include "y_absl/base/port.h"
+#include "y_absl/base/optimization.h" 
+#include "y_absl/base/port.h" 
 
 // ABSL_ARRAYSIZE()
 //
@@ -42,9 +42,9 @@
 // can be used in defining new arrays. If you use this macro on a pointer by
 // mistake, you will get a compile-time error.
 #define ABSL_ARRAYSIZE(array) \
-  (sizeof(::y_absl::macros_internal::ArraySizeHelper(array)))
+  (sizeof(::y_absl::macros_internal::ArraySizeHelper(array))) 
 
-namespace y_absl {
+namespace y_absl { 
 ABSL_NAMESPACE_BEGIN
 namespace macros_internal {
 // Note: this internal template function declaration is used by ABSL_ARRAYSIZE.
@@ -53,7 +53,7 @@ template <typename T, size_t N>
 auto ArraySizeHelper(const T (&array)[N]) -> char (&)[N];
 }  // namespace macros_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl
+}  // namespace y_absl 
 
 // ABSL_BAD_CALL_IF()
 //

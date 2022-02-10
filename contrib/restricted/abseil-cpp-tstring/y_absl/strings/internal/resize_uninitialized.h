@@ -22,10 +22,10 @@
 #include <type_traits>
 #include <utility>
 
-#include "y_absl/base/port.h"
-#include "y_absl/meta/type_traits.h"  //  for void_t
+#include "y_absl/base/port.h" 
+#include "y_absl/meta/type_traits.h"  //  for void_t 
 
-namespace y_absl {
+namespace y_absl { 
 ABSL_NAMESPACE_BEGIN
 namespace strings_internal {
 
@@ -41,7 +41,7 @@ struct ResizeUninitializedTraits {
 // __resize_default_init is provided by libc++ >= 8.0
 template <typename string_type>
 struct ResizeUninitializedTraits<
-    string_type, y_absl::void_t<decltype(std::declval<string_type&>()
+    string_type, y_absl::void_t<decltype(std::declval<string_type&>() 
                                            .__resize_default_init(237))> > {
   using HasMember = std::true_type;
   static void Resize(string_type* s, size_t new_size) {
@@ -49,8 +49,8 @@ struct ResizeUninitializedTraits<
   }
 };
 
-// Returns true if the TString implementation supports a resize where
-// the new characters added to the TString are left untouched.
+// Returns true if the TString implementation supports a resize where 
+// the new characters added to the TString are left untouched. 
 //
 // (A better name might be "STLStringSupportsUninitializedResize", alluding to
 // the previous function.)
@@ -62,7 +62,7 @@ inline constexpr bool STLStringSupportsNontrashingResize(string_type*) {
 // Like str->resize(new_size), except any new characters added to "*str" as a
 // result of resizing may be left uninitialized, rather than being filled with
 // '0' bytes. Typically used when code is then going to overwrite the backing
-// store of the TString with known data.
+// store of the TString with known data. 
 template <typename string_type, typename = void>
 inline void STLStringResizeUninitialized(string_type* s, size_t new_size) {
   ResizeUninitializedTraits<string_type>::Resize(s, new_size);
@@ -114,6 +114,6 @@ void STLStringResizeUninitializedAmortized(string_type* s, size_t new_size) {
 
 }  // namespace strings_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl
+}  // namespace y_absl 
 
 #endif  // ABSL_STRINGS_INTERNAL_RESIZE_UNINITIALIZED_H_

@@ -21,11 +21,11 @@
 #include <util/generic/string.h>
 #include <type_traits>
 
-#include "y_absl/algorithm/algorithm.h"
-#include "y_absl/base/internal/throw_delegate.h"
-#include "y_absl/meta/type_traits.h"
+#include "y_absl/algorithm/algorithm.h" 
+#include "y_absl/base/internal/throw_delegate.h" 
+#include "y_absl/meta/type_traits.h" 
 
-namespace y_absl {
+namespace y_absl { 
 ABSL_NAMESPACE_BEGIN
 
 namespace span_internal {
@@ -39,8 +39,8 @@ constexpr auto GetDataImpl(C& c, char) noexcept  // NOLINT(runtime/references)
   return c.data();
 }
 
-// Before C++17, TString::data returns a const char* in all cases.
-inline char* GetDataImpl(TString& s,  // NOLINT(runtime/references)
+// Before C++17, TString::data returns a const char* in all cases. 
+inline char* GetDataImpl(TString& s,  // NOLINT(runtime/references) 
                          int) noexcept {
   return &s[0];
 }
@@ -54,7 +54,7 @@ constexpr auto GetData(C& c) noexcept  // NOLINT(runtime/references)
 // Detection idioms for size() and data().
 template <typename C>
 using HasSize =
-    std::is_integral<y_absl::decay_t<decltype(std::declval<C&>().size())>>;
+    std::is_integral<y_absl::decay_t<decltype(std::declval<C&>().size())>>; 
 
 // We want to enable conversion from vector<T*> to Span<const T* const> but
 // disable conversion from vector<Derived> to Span<Base>. Here we use
@@ -64,13 +64,13 @@ using HasSize =
 // which returns a reference.
 template <typename T, typename C>
 using HasData =
-    std::is_convertible<y_absl::decay_t<decltype(GetData(std::declval<C&>()))>*,
+    std::is_convertible<y_absl::decay_t<decltype(GetData(std::declval<C&>()))>*, 
                         T* const*>;
 
 // Extracts value type from a Container
 template <typename C>
 struct ElementType {
-  using type = typename y_absl::remove_reference_t<C>::value_type;
+  using type = typename y_absl::remove_reference_t<C>::value_type; 
 };
 
 template <typename T, size_t N>
@@ -88,7 +88,7 @@ using EnableIfMutable =
 template <template <typename> class SpanT, typename T>
 bool EqualImpl(SpanT<T> a, SpanT<T> b) {
   static_assert(std::is_const<T>::value, "");
-  return y_absl::equal(a.begin(), a.end(), b.begin(), b.end());
+  return y_absl::equal(a.begin(), a.end(), b.begin(), b.end()); 
 }
 
 template <template <typename> class SpanT, typename T>
@@ -123,6 +123,6 @@ using EnableIfConvertibleTo =
     typename std::enable_if<IsConvertible<From, To>::value>::type;
 }  // namespace span_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl
+}  // namespace y_absl 
 
 #endif  // ABSL_TYPES_INTERNAL_SPAN_H_

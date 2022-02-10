@@ -18,11 +18,11 @@
 #include <cstddef>
 #include <functional>
 #include <memory>
-#include <util/generic/string.h>
-
+#include <util/generic/string.h> 
+ 
 #include "y_absl/base/config.h"
 
-namespace y_absl {
+namespace y_absl { 
 ABSL_NAMESPACE_BEGIN
 namespace time_internal {
 namespace cctz {
@@ -38,15 +38,15 @@ class ZoneInfoSource {
   // Until the zoneinfo data supports versioning information, we provide
   // a way for a ZoneInfoSource to indicate it out-of-band.  The default
   // implementation returns an empty string.
-  virtual TString Version() const;
+  virtual TString Version() const; 
 };
 
 }  // namespace cctz
 }  // namespace time_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl
+}  // namespace y_absl 
 
-namespace y_absl {
+namespace y_absl { 
 ABSL_NAMESPACE_BEGIN
 namespace time_internal {
 namespace cctz_extension {
@@ -55,8 +55,8 @@ namespace cctz_extension {
 // given the name of a time zone and a fallback factory.  Returns null
 // when the data for the named zone cannot be found.
 using ZoneInfoSourceFactory =
-    std::unique_ptr<y_absl::time_internal::cctz::ZoneInfoSource> (*)(
-        const TString&,
+    std::unique_ptr<y_absl::time_internal::cctz::ZoneInfoSource> (*)( 
+        const TString&, 
         const std::function<std::unique_ptr<
             y_absl::time_internal::cctz::ZoneInfoSource>(const TString&)>&);
 
@@ -69,9 +69,9 @@ using ZoneInfoSourceFactory =
 //   namespace cctz_extension {
 //   namespace {
 //   std::unique_ptr<cctz::ZoneInfoSource> CustomFactory(
-//       const TString& name,
+//       const TString& name, 
 //       const std::function<std::unique_ptr<cctz::ZoneInfoSource>(
-//           const TString& name)>& fallback_factory) {
+//           const TString& name)>& fallback_factory) { 
 //     if (auto zip = my_factory(name)) return zip;
 //     if (auto zip = fallback_factory(name)) return zip;
 //     if (auto zip = my_other_factory(name)) return zip;
@@ -97,6 +97,6 @@ extern ZoneInfoSourceFactory zone_info_source_factory;
 }  // namespace cctz_extension
 }  // namespace time_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl
+}  // namespace y_absl 
 
 #endif  // ABSL_TIME_INTERNAL_CCTZ_ZONE_INFO_SOURCE_H_

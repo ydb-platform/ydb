@@ -21,10 +21,10 @@
 #include <cmath>
 #include <limits>
 
-#include "y_absl/base/attributes.h"
-#include "y_absl/base/optimization.h"
+#include "y_absl/base/attributes.h" 
+#include "y_absl/base/optimization.h" 
 
-namespace y_absl {
+namespace y_absl { 
 ABSL_NAMESPACE_BEGIN
 namespace profiling_internal {
 
@@ -90,4 +90,4 @@ void ExponentialBiased::Initialize() {
 
 }  // namespace profiling_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl
+}  // namespace y_absl 

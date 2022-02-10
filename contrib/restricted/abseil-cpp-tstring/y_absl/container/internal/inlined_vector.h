@@ -26,13 +26,13 @@
 #include <utility>
 
 #include "y_absl/base/attributes.h"
-#include "y_absl/base/macros.h"
-#include "y_absl/container/internal/compressed_tuple.h"
-#include "y_absl/memory/memory.h"
-#include "y_absl/meta/type_traits.h"
-#include "y_absl/types/span.h"
+#include "y_absl/base/macros.h" 
+#include "y_absl/container/internal/compressed_tuple.h" 
+#include "y_absl/memory/memory.h" 
+#include "y_absl/meta/type_traits.h" 
+#include "y_absl/types/span.h" 
 
-namespace y_absl {
+namespace y_absl { 
 ABSL_NAMESPACE_BEGIN
 namespace inlined_vector_internal {
 
@@ -927,6 +927,6 @@ auto Storage<T, N, A>::Swap(Storage* other_storage_ptr) -> void {
 
 }  // namespace inlined_vector_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl
+}  // namespace y_absl 
 
 #endif  // ABSL_CONTAINER_INTERNAL_INLINED_VECTOR_INTERNAL_H_

@@ -19,16 +19,16 @@
     #include <sys/param.h>
 #endif
 
-#if defined(BSD) || defined(_android_)
-
+#if defined(BSD) || defined(_android_) 
+ 
     #if defined(BSD)
         #include <machine/endian.h>
     #endif
-
+ 
     #if defined(_android_)
         #include <endian.h>
     #endif
-
+ 
     #if (BYTE_ORDER == LITTLE_ENDIAN)
         #define _little_endian_
     #elif (BYTE_ORDER == BIG_ENDIAN)
@@ -36,7 +36,7 @@
     #else
         #error unknown endian not supported
     #endif
-
+ 
 #elif (defined(_sun_) && !defined(__i386__)) || defined(_hpux_) || defined(WHATEVER_THAT_HAS_BIG_ENDIAN)
     #define _big_endian_
 #else

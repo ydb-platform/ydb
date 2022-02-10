@@ -27,7 +27,7 @@
 //
 //   // Splits the given string on commas. Returns the results in a
 //   // vector of strings.
-//   std::vector<TString> v = y_absl::StrSplit("a,b,c", ',');
+//   std::vector<TString> v = y_absl::StrSplit("a,b,c", ','); 
 //   // Can also use ","
 //   // v[0] == "a", v[1] == "b", v[2] == "c"
 //
@@ -43,13 +43,13 @@
 #include <utility>
 #include <vector>
 
-#include "y_absl/base/internal/raw_logging.h"
+#include "y_absl/base/internal/raw_logging.h" 
 #include "y_absl/base/macros.h"
-#include "y_absl/strings/internal/str_split_internal.h"
-#include "y_absl/strings/string_view.h"
-#include "y_absl/strings/strip.h"
+#include "y_absl/strings/internal/str_split_internal.h" 
+#include "y_absl/strings/string_view.h" 
+#include "y_absl/strings/strip.h" 
 
-namespace y_absl {
+namespace y_absl { 
 ABSL_NAMESPACE_BEGIN
 
 //------------------------------------------------------------------------------
@@ -58,12 +58,12 @@ ABSL_NAMESPACE_BEGIN
 //
 // `StrSplit()` uses delimiters to define the boundaries between elements in the
 // provided input. Several `Delimiter` types are defined below. If a string
-// (`const char*`, `TString`, or `y_absl::string_view`) is passed in place of
+// (`const char*`, `TString`, or `y_absl::string_view`) is passed in place of 
 // an explicit `Delimiter` object, `StrSplit()` treats it the same way as if it
 // were passed a `ByString` delimiter.
 //
 // A `Delimiter` is an object with a `Find()` function that knows how to find
-// the first occurrence of itself in a given `y_absl::string_view`.
+// the first occurrence of itself in a given `y_absl::string_view`. 
 //
 // The following `Delimiter` types are available for use within `StrSplit()`:
 //
@@ -75,16 +75,16 @@ ABSL_NAMESPACE_BEGIN
 //
 // A Delimiter's `Find()` member function will be passed an input `text` that is
 // to be split and a position (`pos`) to begin searching for the next delimiter
-// in `text`. The returned y_absl::string_view should refer to the next occurrence
-// (after `pos`) of the represented delimiter; this returned y_absl::string_view
+// in `text`. The returned y_absl::string_view should refer to the next occurrence 
+// (after `pos`) of the represented delimiter; this returned y_absl::string_view 
 // represents the next location where the input `text` should be broken.
 //
-// The returned y_absl::string_view may be zero-length if the Delimiter does not
+// The returned y_absl::string_view may be zero-length if the Delimiter does not 
 // represent a part of the string (e.g., a fixed-length delimiter). If no
-// delimiter is found in the input `text`, a zero-length y_absl::string_view
+// delimiter is found in the input `text`, a zero-length y_absl::string_view 
 // referring to `text.end()` should be returned (e.g.,
 // `text.substr(text.size())`). It is important that the returned
-// y_absl::string_view always be within the bounds of the input `text` given as an
+// y_absl::string_view always be within the bounds of the input `text` given as an 
 // argument--it must not refer to a string that is physically located outside of
 // the given string.
 //
@@ -95,9 +95,9 @@ ABSL_NAMESPACE_BEGIN
 //   struct SimpleDelimiter {
 //     const char c_;
 //     explicit SimpleDelimiter(char c) : c_(c) {}
-//     y_absl::string_view Find(y_absl::string_view text, size_t pos) {
+//     y_absl::string_view Find(y_absl::string_view text, size_t pos) { 
 //       auto found = text.find(c_, pos);
-//       if (found == y_absl::string_view::npos)
+//       if (found == y_absl::string_view::npos) 
 //         return text.substr(text.size());
 //
 //       return text.substr(found, 1);
@@ -112,22 +112,22 @@ ABSL_NAMESPACE_BEGIN
 //
 // Example:
 //
-//   // Because a string literal is converted to an `y_absl::ByString`,
+//   // Because a string literal is converted to an `y_absl::ByString`, 
 //   // the following two splits are equivalent.
 //
-//   std::vector<TString> v1 = y_absl::StrSplit("a, b, c", ", ");
+//   std::vector<TString> v1 = y_absl::StrSplit("a, b, c", ", "); 
 //
-//   using y_absl::ByString;
-//   std::vector<TString> v2 = y_absl::StrSplit("a, b, c",
+//   using y_absl::ByString; 
+//   std::vector<TString> v2 = y_absl::StrSplit("a, b, c", 
 //                                                ByString(", "));
 //   // v[0] == "a", v[1] == "b", v[2] == "c"
 class ByString {
  public:
-  explicit ByString(y_absl::string_view sp);
-  y_absl::string_view Find(y_absl::string_view text, size_t pos) const;
+  explicit ByString(y_absl::string_view sp); 
+  y_absl::string_view Find(y_absl::string_view text, size_t pos) const; 
 
  private:
-  const TString delimiter_;
+  const TString delimiter_; 
 };
 
 // ByChar
@@ -137,26 +137,26 @@ class ByString {
 //
 // Example:
 //
-//   // Because a char literal is converted to a y_absl::ByChar,
+//   // Because a char literal is converted to a y_absl::ByChar, 
 //   // the following two splits are equivalent.
-//   std::vector<TString> v1 = y_absl::StrSplit("a,b,c", ',');
-//   using y_absl::ByChar;
-//   std::vector<TString> v2 = y_absl::StrSplit("a,b,c", ByChar(','));
+//   std::vector<TString> v1 = y_absl::StrSplit("a,b,c", ','); 
+//   using y_absl::ByChar; 
+//   std::vector<TString> v2 = y_absl::StrSplit("a,b,c", ByChar(',')); 
 //   // v[0] == "a", v[1] == "b", v[2] == "c"
 //
 // `ByChar` is also the default delimiter if a single character is given
 // as the delimiter to `StrSplit()`. For example, the following calls are
 // equivalent:
 //
-//   std::vector<TString> v = y_absl::StrSplit("a-b", '-');
+//   std::vector<TString> v = y_absl::StrSplit("a-b", '-'); 
 //
-//   using y_absl::ByChar;
-//   std::vector<TString> v = y_absl::StrSplit("a-b", ByChar('-'));
+//   using y_absl::ByChar; 
+//   std::vector<TString> v = y_absl::StrSplit("a-b", ByChar('-')); 
 //
 class ByChar {
  public:
   explicit ByChar(char c) : c_(c) {}
-  y_absl::string_view Find(y_absl::string_view text, size_t pos) const;
+  y_absl::string_view Find(y_absl::string_view text, size_t pos) const; 
 
  private:
   char c_;
@@ -172,8 +172,8 @@ class ByChar {
 //
 // Example:
 //
-//   using y_absl::ByAnyChar;
-//   std::vector<TString> v = y_absl::StrSplit("a,b=c", ByAnyChar(",="));
+//   using y_absl::ByAnyChar; 
+//   std::vector<TString> v = y_absl::StrSplit("a,b=c", ByAnyChar(",=")); 
 //   // v[0] == "a", v[1] == "b", v[2] == "c"
 //
 // If `ByAnyChar` is given the empty string, it behaves exactly like
@@ -181,11 +181,11 @@ class ByChar {
 //
 class ByAnyChar {
  public:
-  explicit ByAnyChar(y_absl::string_view sp);
-  y_absl::string_view Find(y_absl::string_view text, size_t pos) const;
+  explicit ByAnyChar(y_absl::string_view sp); 
+  y_absl::string_view Find(y_absl::string_view text, size_t pos) const; 
 
  private:
-  const TString delimiters_;
+  const TString delimiters_; 
 };
 
 // ByLength
@@ -198,22 +198,22 @@ class ByAnyChar {
 //
 // Example:
 //
-//   using y_absl::ByLength;
-//   std::vector<TString> v = y_absl::StrSplit("123456789", ByLength(3));
+//   using y_absl::ByLength; 
+//   std::vector<TString> v = y_absl::StrSplit("123456789", ByLength(3)); 
 
 //   // v[0] == "123", v[1] == "456", v[2] == "789"
 //
 // Note that the string does not have to be a multiple of the fixed split
 // length. In such a case, the last substring will be shorter.
 //
-//   using y_absl::ByLength;
-//   std::vector<TString> v = y_absl::StrSplit("12345", ByLength(2));
+//   using y_absl::ByLength; 
+//   std::vector<TString> v = y_absl::StrSplit("12345", ByLength(2)); 
 //
 //   // v[0] == "12", v[1] == "34", v[2] == "5"
 class ByLength {
  public:
   explicit ByLength(ptrdiff_t length);
-  y_absl::string_view Find(y_absl::string_view text, size_t pos) const;
+  y_absl::string_view Find(y_absl::string_view text, size_t pos) const; 
 
  private:
   const ptrdiff_t length_;
@@ -225,7 +225,7 @@ namespace strings_internal {
 // for a particular Delimiter type. The base case simply exposes type Delimiter
 // itself as the delimiter's Type. However, there are specializations for
 // string-like objects that map them to the ByString delimiter object.
-// This allows functions like y_absl::StrSplit() and y_absl::MaxSplits() to accept
+// This allows functions like y_absl::StrSplit() and y_absl::MaxSplits() to accept 
 // string-like objects (e.g., ',') as delimiter arguments but they will be
 // treated as if a ByString delimiter was given.
 template <typename Delimiter>
@@ -246,11 +246,11 @@ struct SelectDelimiter<const char*> {
   using type = ByString;
 };
 template <>
-struct SelectDelimiter<y_absl::string_view> {
+struct SelectDelimiter<y_absl::string_view> { 
   using type = ByString;
 };
 template <>
-struct SelectDelimiter<TString> {
+struct SelectDelimiter<TString> { 
   using type = ByString;
 };
 
@@ -260,9 +260,9 @@ class MaxSplitsImpl {
  public:
   MaxSplitsImpl(Delimiter delimiter, int limit)
       : delimiter_(delimiter), limit_(limit), count_(0) {}
-  y_absl::string_view Find(y_absl::string_view text, size_t pos) {
+  y_absl::string_view Find(y_absl::string_view text, size_t pos) { 
     if (count_++ == limit_) {
-      return y_absl::string_view(text.data() + text.size(),
+      return y_absl::string_view(text.data() + text.size(), 
                                0);  // No more matches.
     }
     return delimiter_.Find(text, pos);
@@ -284,8 +284,8 @@ class MaxSplitsImpl {
 // The collection will contain at most `limit` + 1 elements.
 // Example:
 //
-//   using y_absl::MaxSplits;
-//   std::vector<TString> v = y_absl::StrSplit("a,b,c", MaxSplits(',', 1));
+//   using y_absl::MaxSplits; 
+//   std::vector<TString> v = y_absl::StrSplit("a,b,c", MaxSplits(',', 1)); 
 //
 //   // v[0] == "a", v[1] == "b,c"
 template <typename Delimiter>
@@ -307,7 +307,7 @@ MaxSplits(Delimiter delimiter, int limit) {
 // as an optional third argument to the `StrSplit()` function.
 //
 // Predicates are unary functions (or functors) that take a single
-// `y_absl::string_view` argument and return a bool indicating whether the
+// `y_absl::string_view` argument and return a bool indicating whether the 
 // argument should be included (`true`) or excluded (`false`).
 //
 // Predicates are useful when filtering out empty substrings. By default, empty
@@ -323,21 +323,21 @@ MaxSplits(Delimiter delimiter, int limit) {
 //
 // Example:
 //
-//  std::vector<TString> v = y_absl::StrSplit(" a , ,,b,", ',', AllowEmpty());
+//  std::vector<TString> v = y_absl::StrSplit(" a , ,,b,", ',', AllowEmpty()); 
 //
 //  // v[0] == " a ", v[1] == " ", v[2] == "", v[3] = "b", v[4] == ""
 struct AllowEmpty {
-  bool operator()(y_absl::string_view) const { return true; }
+  bool operator()(y_absl::string_view) const { return true; } 
 };
 
 // SkipEmpty()
 //
-// Returns `false` if the given `y_absl::string_view` is empty, indicating that
+// Returns `false` if the given `y_absl::string_view` is empty, indicating that 
 // `StrSplit()` should omit the empty string.
 //
 // Example:
 //
-//   std::vector<TString> v = y_absl::StrSplit(",a,,b,", ',', SkipEmpty());
+//   std::vector<TString> v = y_absl::StrSplit(",a,,b,", ',', SkipEmpty()); 
 //
 //   // v[0] == "a", v[1] == "b"
 //
@@ -345,26 +345,26 @@ struct AllowEmpty {
 // to be empty. To skip such whitespace as well, use the `SkipWhitespace()`
 // predicate.
 struct SkipEmpty {
-  bool operator()(y_absl::string_view sp) const { return !sp.empty(); }
+  bool operator()(y_absl::string_view sp) const { return !sp.empty(); } 
 };
 
 // SkipWhitespace()
 //
-// Returns `false` if the given `y_absl::string_view` is empty *or* contains only
+// Returns `false` if the given `y_absl::string_view` is empty *or* contains only 
 // whitespace, indicating that `StrSplit()` should omit the string.
 //
 // Example:
 //
-//   std::vector<TString> v = y_absl::StrSplit(" a , ,,b,",
+//   std::vector<TString> v = y_absl::StrSplit(" a , ,,b,", 
 //                                               ',', SkipWhitespace());
 //   // v[0] == " a ", v[1] == "b"
 //
 //   // SkipEmpty() would return whitespace elements
-//   std::vector<TString> v = y_absl::StrSplit(" a , ,,b,", ',', SkipEmpty());
+//   std::vector<TString> v = y_absl::StrSplit(" a , ,,b,", ',', SkipEmpty()); 
 //   // v[0] == " a ", v[1] == " ", v[2] == "b"
 struct SkipWhitespace {
-  bool operator()(y_absl::string_view sp) const {
-    sp = y_absl::StripAsciiWhitespace(sp);
+  bool operator()(y_absl::string_view sp) const { 
+    sp = y_absl::StripAsciiWhitespace(sp); 
     return !sp.empty();
   }
 };
@@ -389,15 +389,15 @@ using EnableSplitIfString =
 //
 // Example:
 //
-//   std::vector<TString> v = y_absl::StrSplit("a,b,c,d", ',');
+//   std::vector<TString> v = y_absl::StrSplit("a,b,c,d", ','); 
 //   // v[0] == "a", v[1] == "b", v[2] == "c", v[3] == "d"
 //
 // You can also provide an explicit `Delimiter` object:
 //
 // Example:
 //
-//   using y_absl::ByAnyChar;
-//   std::vector<TString> v = y_absl::StrSplit("a,b=c", ByAnyChar(",="));
+//   using y_absl::ByAnyChar; 
+//   std::vector<TString> v = y_absl::StrSplit("a,b=c", ByAnyChar(",=")); 
 //   // v[0] == "a", v[1] == "b", v[2] == "c"
 //
 // See above for more information on delimiters.
@@ -408,7 +408,7 @@ using EnableSplitIfString =
 //
 // Example:
 //
-//   std::vector<TString> v = y_absl::StrSplit(" a , ,,b,",
+//   std::vector<TString> v = y_absl::StrSplit(" a , ,,b,", 
 //                                               ',', SkipWhitespace());
 //   // v[0] == " a ", v[1] == "b"
 //
@@ -420,9 +420,9 @@ using EnableSplitIfString =
 //
 // The `StrSplit()` function adapts the returned collection to the collection
 // specified by the caller (e.g. `std::vector` above). The returned collections
-// may contain `TString`, `y_absl::string_view` (in which case the original
+// may contain `TString`, `y_absl::string_view` (in which case the original 
 // string being split must ensure that it outlives the collection), or any
-// object that can be explicitly created from an `y_absl::string_view`. This
+// object that can be explicitly created from an `y_absl::string_view`. This 
 // behavior works for:
 //
 // 1) All standard STL containers including `std::vector`, `std::list`,
@@ -431,19 +431,19 @@ using EnableSplitIfString =
 //
 // Example:
 //
-//   // The results are returned as `y_absl::string_view` objects. Note that we
+//   // The results are returned as `y_absl::string_view` objects. Note that we 
 //   // have to ensure that the input string outlives any results.
-//   std::vector<y_absl::string_view> v = y_absl::StrSplit("a,b,c", ',');
+//   std::vector<y_absl::string_view> v = y_absl::StrSplit("a,b,c", ','); 
 //
-//   // Stores results in a std::set<TString>, which also performs
+//   // Stores results in a std::set<TString>, which also performs 
 //   // de-duplication and orders the elements in ascending order.
-//   std::set<TString> a = y_absl::StrSplit("b,a,c,a,b", ',');
+//   std::set<TString> a = y_absl::StrSplit("b,a,c,a,b", ','); 
 //   // v[0] == "a", v[1] == "b", v[2] = "c"
 //
 //   // `StrSplit()` can be used within a range-based for loop, in which case
-//   // each element will be of type `y_absl::string_view`.
-//   std::vector<TString> v;
-//   for (const auto sv : y_absl::StrSplit("a,b,c", ',')) {
+//   // each element will be of type `y_absl::string_view`. 
+//   std::vector<TString> v; 
+//   for (const auto sv : y_absl::StrSplit("a,b,c", ',')) { 
 //     if (sv != "b") v.emplace_back(sv);
 //   }
 //   // v[0] == "a", v[1] == "c"
@@ -453,7 +453,7 @@ using EnableSplitIfString =
 //   // resulting from the split will be stored as a key to the 1st element. If
 //   // an odd number of elements are resolved, the last element is paired with
 //   // a default-constructed value (e.g., empty string).
-//   std::map<TString, TString> m = y_absl::StrSplit("a,b,c", ',');
+//   std::map<TString, TString> m = y_absl::StrSplit("a,b,c", ','); 
 //   // m["a"] == "b", m["c"] == ""     // last component value equals ""
 //
 // Splitting to `std::pair` is an interesting case because it can hold only two
@@ -467,7 +467,7 @@ using EnableSplitIfString =
 // Example:
 //
 //   // Stores first two split strings as the members in a std::pair.
-//   std::pair<TString, TString> p = y_absl::StrSplit("a,b,c", ',');
+//   std::pair<TString, TString> p = y_absl::StrSplit("a,b,c", ','); 
 //   // p.first == "a", p.second == "b"       // "c" is omitted.
 //
 // The `StrSplit()` function can be used multiple times to perform more
@@ -477,9 +477,9 @@ using EnableSplitIfString =
 //
 //   // The input string "a=b=c,d=e,f=,g" becomes
 //   // { "a" => "b=c", "d" => "e", "f" => "", "g" => "" }
-//   std::map<TString, TString> m;
-//   for (y_absl::string_view sp : y_absl::StrSplit("a=b=c,d=e,f=,g", ',')) {
-//     m.insert(y_absl::StrSplit(sp, y_absl::MaxSplits('=', 1)));
+//   std::map<TString, TString> m; 
+//   for (y_absl::string_view sp : y_absl::StrSplit("a=b=c,d=e,f=,g", ',')) { 
+//     m.insert(y_absl::StrSplit(sp, y_absl::MaxSplits('=', 1))); 
 //   }
 //   EXPECT_EQ("b=c", m.find("a")->second);
 //   EXPECT_EQ("e", m.find("d")->second);
@@ -489,8 +489,8 @@ using EnableSplitIfString =
 // WARNING: Due to a legacy bug that is maintained for backward compatibility,
 // splitting the following empty string_views produces different results:
 //
-//   y_absl::StrSplit(y_absl::string_view(""), '-');  // {""}
-//   y_absl::StrSplit(y_absl::string_view(), '-');    // {}, but should be {""}
+//   y_absl::StrSplit(y_absl::string_view(""), '-');  // {""} 
+//   y_absl::StrSplit(y_absl::string_view(), '-');    // {}, but should be {""} 
 //
 // Try not to depend on this distinction because the bug may one day be fixed.
 template <typename Delimiter>
@@ -543,6 +543,6 @@ StrSplit(StringType&& text, Delimiter d, Predicate p) {
 }
 
 ABSL_NAMESPACE_END
-}  // namespace y_absl
+}  // namespace y_absl 
 
 #endif  // ABSL_STRINGS_STR_SPLIT_H_

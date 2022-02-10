@@ -39,7 +39,7 @@
 #include <functional>
 #include <type_traits>
 
-#include "y_absl/base/config.h"
+#include "y_absl/base/config.h" 
 
 // MSVC constructibility traits do not detect destructor properties and so our
 // implementations should not use them as a source-of-truth.
@@ -55,7 +55,7 @@
 #define ABSL_INTERNAL_DEFAULT_NEW_ALIGNMENT alignof(std::max_align_t)
 #endif  // defined(__STDCPP_DEFAULT_NEW_ALIGNMENT__)
 
-namespace y_absl {
+namespace y_absl { 
 ABSL_NAMESPACE_BEGIN
 
 // Defined and documented later on in this file.
@@ -103,11 +103,11 @@ struct IsTriviallyMoveAssignableReference : std::false_type {};
 
 template <class T>
 struct IsTriviallyMoveAssignableReference<T&>
-    : y_absl::is_trivially_move_assignable<T>::type {};
+    : y_absl::is_trivially_move_assignable<T>::type {}; 
 
 template <class T>
 struct IsTriviallyMoveAssignableReference<T&&>
-    : y_absl::is_trivially_move_assignable<T>::type {};
+    : y_absl::is_trivially_move_assignable<T>::type {}; 
 
 template <typename... Ts>
 struct VoidTImpl {
@@ -211,7 +211,7 @@ struct is_move_assignable : type_traits_internal::is_detected<
 // This metafunction is designed to be a drop-in replacement for the C++17
 // `std::void_t` metafunction.
 //
-// NOTE: `y_absl::void_t` does not use the standard-specified implementation so
+// NOTE: `y_absl::void_t` does not use the standard-specified implementation so 
 // that it can remain compatible with gcc < 5.1. This can introduce slightly
 // different behavior, such as when ordering partial specializations.
 template <typename... Ts>
@@ -492,7 +492,7 @@ template <typename T>
 struct is_trivially_copy_assignable
     : std::integral_constant<
           bool, __has_trivial_assign(typename std::remove_reference<T>::type) &&
-                    y_absl::is_copy_assignable<T>::value> {
+                    y_absl::is_copy_assignable<T>::value> { 
 #ifdef ABSL_HAVE_STD_IS_TRIVIALLY_ASSIGNABLE
  private:
   static constexpr bool compliant =
@@ -543,7 +543,7 @@ namespace type_traits_internal {
 // one non-deleted copy/move constructor/assignment operator, and T is trivially
 // destructible. Arrays of trivially copyable types are trivially copyable.
 //
-// We expose this metafunction only for internal use within y_absl.
+// We expose this metafunction only for internal use within y_absl. 
 template <typename T>
 class is_trivially_copyable_impl {
   using ExtentsRemoved = typename std::remove_all_extents<T>::type;
@@ -551,8 +551,8 @@ class is_trivially_copyable_impl {
       std::is_copy_constructible<ExtentsRemoved>::value ||
       std::is_move_constructible<ExtentsRemoved>::value;
   static constexpr bool kIsCopyOrMoveAssignable =
-      y_absl::is_copy_assignable<ExtentsRemoved>::value ||
-      y_absl::is_move_assignable<ExtentsRemoved>::value;
+      y_absl::is_copy_assignable<ExtentsRemoved>::value || 
+      y_absl::is_move_assignable<ExtentsRemoved>::value; 
 
  public:
   static constexpr bool kValue =
@@ -679,7 +679,7 @@ struct IsHashable : std::false_type {};
 template <typename Key>
 struct IsHashable<
     Key,
-    y_absl::enable_if_t<std::is_convertible<
+    y_absl::enable_if_t<std::is_convertible< 
         decltype(std::declval<std::hash<Key>&>()(std::declval<Key const&>())),
         std::size_t>::value>> : std::true_type {};
 #endif  // !ABSL_META_INTERNAL_STD_HASH_SFINAE_FRIENDLY_
@@ -705,7 +705,7 @@ struct AssertHashEnabledHelper {
     static_assert(
         std::is_copy_constructible<std::hash<Key>>::value,
         "std::hash<Key> must be copy constructible when it is enabled");
-    static_assert(y_absl::is_copy_assignable<std::hash<Key>>::value,
+    static_assert(y_absl::is_copy_assignable<std::hash<Key>>::value, 
                   "std::hash<Key> must be copy assignable when it is enabled");
     // is_destructible is unchecked as it's implied by each of the
     // is_constructible checks.
@@ -735,7 +735,7 @@ namespace swap_internal {
 // Necessary for the traits.
 using std::swap;
 
-// This declaration prevents global `swap` and `y_absl::swap` overloads from being
+// This declaration prevents global `swap` and `y_absl::swap` overloads from being 
 // considered unless ADL picks them up.
 void swap();
 
@@ -754,7 +754,7 @@ using IsNothrowSwappableImpl = typename std::enable_if<IsNoexcept::value>::type;
 // arguments of type `T`.
 template <class T>
 struct IsSwappable
-    : y_absl::type_traits_internal::is_detected<IsSwappableImpl, T> {};
+    : y_absl::type_traits_internal::is_detected<IsSwappableImpl, T> {}; 
 
 // IsNothrowSwappable
 //
@@ -762,13 +762,13 @@ struct IsSwappable
 // arguments of type `T` and is noexcept.
 template <class T>
 struct IsNothrowSwappable
-    : y_absl::type_traits_internal::is_detected<IsNothrowSwappableImpl, T> {};
+    : y_absl::type_traits_internal::is_detected<IsNothrowSwappableImpl, T> {}; 
 
 // Swap()
 //
 // Performs the swap idiom from a namespace where valid candidates may only be
 // found in `std` or via ADL.
-template <class T, y_absl::enable_if_t<IsSwappable<T>::value, int> = 0>
+template <class T, y_absl::enable_if_t<IsSwappable<T>::value, int> = 0> 
 void Swap(T& lhs, T& rhs) noexcept(IsNothrowSwappable<T>::value) {
   swap(lhs, rhs);
 }
@@ -792,6 +792,6 @@ using swap_internal::StdSwapIsUnconstrained;
 
 }  // namespace type_traits_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl
+}  // namespace y_absl 
 
 #endif  // ABSL_META_TYPE_TRAITS_H_

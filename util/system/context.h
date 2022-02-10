@@ -11,7 +11,7 @@
 
 #define STACK_ALIGN (8 * PLATFORM_DATA_ALIGN)
 
-#if defined(_x86_64_) || defined(_i386_) || defined(_arm_) || defined(_ppc64_)
+#if defined(_x86_64_) || defined(_i386_) || defined(_arm_) || defined(_ppc64_) 
     #define STACK_GROW_DOWN 1
 #else
     #error todo
@@ -26,7 +26,7 @@
     #define USE_UCONTEXT_CONT
 #elif defined(_win_)
     #define USE_FIBER_CONT
-#elif (defined(_i386_) || defined(_x86_64_) || defined(_arm64_)) && !defined(_k1om_)
+#elif (defined(_i386_) || defined(_x86_64_) || defined(_arm64_)) && !defined(_k1om_) 
     #define USE_JUMP_CONT
 #else
     #define USE_UCONTEXT_CONT

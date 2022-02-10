@@ -28,10 +28,10 @@
 #include <util/generic/string.h>
 #include <vector>
 
-#include "y_absl/strings/internal/str_format/checker.h"
-#include "y_absl/strings/internal/str_format/extension.h"
+#include "y_absl/strings/internal/str_format/checker.h" 
+#include "y_absl/strings/internal/str_format/extension.h" 
 
-namespace y_absl {
+namespace y_absl { 
 ABSL_NAMESPACE_BEGIN
 namespace str_format_internal {
 
@@ -352,6 +352,6 @@ class ExtendedParsedFormat : public str_format_internal::ParsedFormatBase {
 };
 }  // namespace str_format_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl
+}  // namespace y_absl 
 
 #endif  // ABSL_STRINGS_INTERNAL_STR_FORMAT_PARSER_H_

@@ -133,7 +133,7 @@ def fix_cmd(arch, musl, c):
         f = fix_windows_param
     else:
         prefix = '-Wl,--version-script='
-        if arch in ('DARWIN', 'IOS'):
+        if arch in ('DARWIN', 'IOS'): 
             f = fix_darwin_param
         else:
             f = lambda x: fix_gnu_param(arch, x)

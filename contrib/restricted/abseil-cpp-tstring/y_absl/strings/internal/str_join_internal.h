@@ -24,9 +24,9 @@
 //   - JoinTuple()
 //
 // DO NOT INCLUDE THIS FILE DIRECTLY. Use this file by including
-// y_absl/strings/str_join.h
+// y_absl/strings/str_join.h 
 //
-// IWYU pragma: private, include "y_absl/strings/str_join.h"
+// IWYU pragma: private, include "y_absl/strings/str_join.h" 
 
 #ifndef ABSL_STRINGS_INTERNAL_STR_JOIN_INTERNAL_H_
 #define ABSL_STRINGS_INTERNAL_STR_JOIN_INTERNAL_H_
@@ -38,11 +38,11 @@
 #include <type_traits>
 #include <utility>
 
-#include "y_absl/strings/internal/ostringstream.h"
-#include "y_absl/strings/internal/resize_uninitialized.h"
-#include "y_absl/strings/str_cat.h"
+#include "y_absl/strings/internal/ostringstream.h" 
+#include "y_absl/strings/internal/resize_uninitialized.h" 
+#include "y_absl/strings/str_cat.h" 
 
-namespace y_absl {
+namespace y_absl { 
 ABSL_NAMESPACE_BEGIN
 namespace strings_internal {
 
@@ -59,11 +59,11 @@ struct AlphaNumFormatterImpl {
   // This template is needed in order to support passing in a dereferenced
   // vector<bool>::iterator
   template <typename T>
-  void operator()(TString* out, const T& t) const {
+  void operator()(TString* out, const T& t) const { 
     StrAppend(out, AlphaNum(t));
   }
 
-  void operator()(TString* out, const AlphaNum& t) const {
+  void operator()(TString* out, const AlphaNum& t) const { 
     StrAppend(out, t);
   }
 };
@@ -80,7 +80,7 @@ class StreamFormatterImpl {
   // The method isn't const because it mutates state. Making it const will
   // render StreamFormatterImpl thread-hostile.
   template <typename T>
-  void operator()(TString* out, const T& t) {
+  void operator()(TString* out, const T& t) { 
     // The stream is created lazily to avoid paying the relatively high cost
     // of its construction when joining an empty range.
     if (strm_) {
@@ -101,18 +101,18 @@ class StreamFormatterImpl {
 template <typename F1, typename F2>
 class PairFormatterImpl {
  public:
-  PairFormatterImpl(F1 f1, y_absl::string_view sep, F2 f2)
+  PairFormatterImpl(F1 f1, y_absl::string_view sep, F2 f2) 
       : f1_(std::move(f1)), sep_(sep), f2_(std::move(f2)) {}
 
   template <typename T>
-  void operator()(TString* out, const T& p) {
+  void operator()(TString* out, const T& p) { 
     f1_(out, p.first);
     out->append(sep_);
     f2_(out, p.second);
   }
 
   template <typename T>
-  void operator()(TString* out, const T& p) const {
+  void operator()(TString* out, const T& p) const { 
     f1_(out, p.first);
     out->append(sep_);
     f2_(out, p.second);
@@ -120,7 +120,7 @@ class PairFormatterImpl {
 
  private:
   F1 f1_;
-  TString sep_;
+  TString sep_; 
   F2 f2_;
 };
 
@@ -135,12 +135,12 @@ class DereferenceFormatterImpl {
       : f_(std::forward<Formatter>(f)) {}
 
   template <typename T>
-  void operator()(TString* out, const T& t) {
+  void operator()(TString* out, const T& t) { 
     f_(out, *t);
   }
 
   template <typename T>
-  void operator()(TString* out, const T& t) const {
+  void operator()(TString* out, const T& t) const { 
     f_(out, *t);
   }
 
@@ -168,11 +168,11 @@ struct DefaultFormatter<char*> {
   typedef AlphaNumFormatterImpl Type;
 };
 template <>
-struct DefaultFormatter<TString> {
+struct DefaultFormatter<TString> { 
   typedef NoFormatter Type;
 };
 template <>
-struct DefaultFormatter<y_absl::string_view> {
+struct DefaultFormatter<y_absl::string_view> { 
   typedef NoFormatter Type;
 };
 template <typename ValueType>
@@ -193,10 +193,10 @@ struct DefaultFormatter<std::unique_ptr<ValueType>>
 // iterator range, each separated by the given separator, into an output string,
 // and formats each element using the provided Formatter object.
 template <typename Iterator, typename Formatter>
-TString JoinAlgorithm(Iterator start, Iterator end, y_absl::string_view s,
+TString JoinAlgorithm(Iterator start, Iterator end, y_absl::string_view s, 
                           Formatter&& f) {
-  TString result;
-  y_absl::string_view sep("");
+  TString result; 
+  y_absl::string_view sep(""); 
   for (Iterator it = start; it != end; ++it) {
     result.append(sep.data(), sep.size());
     f(&result, *it);
@@ -208,12 +208,12 @@ TString JoinAlgorithm(Iterator start, Iterator end, y_absl::string_view s,
 // A joining algorithm that's optimized for a forward iterator range of
 // string-like objects that do not need any additional formatting. This is to
 // optimize the common case of joining, say, a std::vector<string> or a
-// std::vector<y_absl::string_view>.
+// std::vector<y_absl::string_view>. 
 //
 // This is an overload of the previous JoinAlgorithm() function. Here the
 // Formatter argument is of type NoFormatter. Since NoFormatter is an internal
 // type, this overload is only invoked when strings::Join() is called with a
-// range of string-like objects (e.g., TString, y_absl::string_view), and an
+// range of string-like objects (e.g., TString, y_absl::string_view), and an 
 // explicit Formatter argument was NOT specified.
 //
 // The optimization is that the needed space will be reserved in the output
@@ -224,9 +224,9 @@ template <typename Iterator,
           typename = typename std::enable_if<std::is_convertible<
               typename std::iterator_traits<Iterator>::iterator_category,
               std::forward_iterator_tag>::value>::type>
-TString JoinAlgorithm(Iterator start, Iterator end, y_absl::string_view s,
+TString JoinAlgorithm(Iterator start, Iterator end, y_absl::string_view s, 
                           NoFormatter) {
-  TString result;
+  TString result; 
   if (start != end) {
     // Sums size
     size_t result_size = start->size();
@@ -262,7 +262,7 @@ TString JoinAlgorithm(Iterator start, Iterator end, y_absl::string_view s,
 template <size_t I, size_t N>
 struct JoinTupleLoop {
   template <typename Tup, typename Formatter>
-  void operator()(TString* out, const Tup& tup, y_absl::string_view sep,
+  void operator()(TString* out, const Tup& tup, y_absl::string_view sep, 
                   Formatter&& fmt) {
     if (I > 0) out->append(sep.data(), sep.size());
     fmt(out, std::get<I>(tup));
@@ -272,20 +272,20 @@ struct JoinTupleLoop {
 template <size_t N>
 struct JoinTupleLoop<N, N> {
   template <typename Tup, typename Formatter>
-  void operator()(TString*, const Tup&, y_absl::string_view, Formatter&&) {}
+  void operator()(TString*, const Tup&, y_absl::string_view, Formatter&&) {} 
 };
 
 template <typename... T, typename Formatter>
-TString JoinAlgorithm(const std::tuple<T...>& tup, y_absl::string_view sep,
+TString JoinAlgorithm(const std::tuple<T...>& tup, y_absl::string_view sep, 
                           Formatter&& fmt) {
-  TString result;
+  TString result; 
   JoinTupleLoop<0, sizeof...(T)>()(&result, tup, sep, fmt);
   return result;
 }
 
 template <typename Iterator>
-TString JoinRange(Iterator first, Iterator last,
-                      y_absl::string_view separator) {
+TString JoinRange(Iterator first, Iterator last, 
+                      y_absl::string_view separator) { 
   // No formatter was explicitly given, so a default must be chosen.
   typedef typename std::iterator_traits<Iterator>::value_type ValueType;
   typedef typename DefaultFormatter<ValueType>::Type Formatter;
@@ -293,7 +293,7 @@ TString JoinRange(Iterator first, Iterator last,
 }
 
 template <typename Range, typename Formatter>
-TString JoinRange(const Range& range, y_absl::string_view separator,
+TString JoinRange(const Range& range, y_absl::string_view separator, 
                       Formatter&& fmt) {
   using std::begin;
   using std::end;
@@ -301,7 +301,7 @@ TString JoinRange(const Range& range, y_absl::string_view separator,
 }
 
 template <typename Range>
-TString JoinRange(const Range& range, y_absl::string_view separator) {
+TString JoinRange(const Range& range, y_absl::string_view separator) { 
   using std::begin;
   using std::end;
   return JoinRange(begin(range), end(range), separator);
@@ -309,6 +309,6 @@ TString JoinRange(const Range& range, y_absl::string_view separator) {
 
 }  // namespace strings_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl
+}  // namespace y_absl 
 
 #endif  // ABSL_STRINGS_INTERNAL_STR_JOIN_INTERNAL_H_

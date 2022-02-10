@@ -530,27 +530,27 @@ TCurrentThreadLimits::TCurrentThreadLimits() noexcept
     StackBegin = pthread_get_stackaddr_np(pthread_self());
     StackLength = pthread_get_stacksize_np(pthread_self());
 #elif defined(_MSC_VER)
-
+ 
     #if _WIN32_WINNT >= _WIN32_WINNT_WIN8
     ULONG_PTR b = 0;
     ULONG_PTR e = 0;
 
-    GetCurrentThreadStackLimits(&b, &e);
+    GetCurrentThreadStackLimits(&b, &e); 
 
     StackBegin = (const void*)b;
     StackLength = e - b;
-
+ 
     #else
-    // Copied from https://github.com/llvm-mirror/compiler-rt/blob/release_40/lib/sanitizer_common/sanitizer_win.cc#L91
-    void* place_on_stack = alloca(16);
-    MEMORY_BASIC_INFORMATION memory_info;
-    Y_VERIFY(VirtualQuery(place_on_stack, &memory_info, sizeof(memory_info)));
-
-    StackBegin = memory_info.AllocationBase;
-    StackLength = static_cast<const char*>(memory_info.BaseAddress) + memory_info.RegionSize - static_cast<const char*>(StackBegin);
-
+    // Copied from https://github.com/llvm-mirror/compiler-rt/blob/release_40/lib/sanitizer_common/sanitizer_win.cc#L91 
+    void* place_on_stack = alloca(16); 
+    MEMORY_BASIC_INFORMATION memory_info; 
+    Y_VERIFY(VirtualQuery(place_on_stack, &memory_info, sizeof(memory_info))); 
+ 
+    StackBegin = memory_info.AllocationBase; 
+    StackLength = static_cast<const char*>(memory_info.BaseAddress) + memory_info.RegionSize - static_cast<const char*>(StackBegin); 
+ 
     #endif
-
+ 
 #else
     #error port me
 #endif

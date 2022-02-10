@@ -21,11 +21,11 @@
 #include <util/generic/string.h>
 
 #include "y_absl/base/config.h"
-#include "y_absl/strings/ascii.h"
-#include "y_absl/strings/internal/charconv_parse.h"
-#include "y_absl/strings/string_view.h"
+#include "y_absl/strings/ascii.h" 
+#include "y_absl/strings/internal/charconv_parse.h" 
+#include "y_absl/strings/string_view.h" 
 
-namespace y_absl {
+namespace y_absl { 
 ABSL_NAMESPACE_BEGIN
 namespace strings_internal {
 
@@ -41,7 +41,7 @@ ABSL_DLL extern const uint32_t kTenToNth[kMaxSmallPowerOfTen + 1];
 // Large, fixed-width unsigned integer.
 //
 // Exact rounding for decimal-to-binary floating point conversion requires very
-// large integer math, but a design goal of y_absl::from_chars is to avoid
+// large integer math, but a design goal of y_absl::from_chars is to avoid 
 // allocating memory.  The integer precision needed for decimal-to-binary
 // conversions is large but bounded, so a huge fixed-width integer class
 // suffices.
@@ -68,7 +68,7 @@ class BigUnsigned {
   // Constructs a BigUnsigned from the given string_view containing a decimal
   // value.  If the input string is not a decimal integer, constructs a 0
   // instead.
-  explicit BigUnsigned(y_absl::string_view sv) : size_(0), words_{} {
+  explicit BigUnsigned(y_absl::string_view sv) : size_(0), words_{} { 
     // Check for valid input, returning a 0 otherwise.  This is reasonable
     // behavior only because this constructor is for unit tests.
     if (std::find_if_not(sv.begin(), sv.end(), ascii_isdigit) != sv.end() ||
@@ -212,7 +212,7 @@ class BigUnsigned {
 
   // Returns this integer as a decimal string.  This is not used in the decimal-
   // to-binary conversion; it is intended to aid in testing.
-  TString ToString() const;
+  TString ToString() const; 
 
   int size() const { return size_; }
   const uint32_t* words() const { return words_; }
@@ -418,6 +418,6 @@ extern template class BigUnsigned<84>;
 
 }  // namespace strings_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl
+}  // namespace y_absl 
 
 #endif  // ABSL_STRINGS_INTERNAL_CHARCONV_BIGINT_H_

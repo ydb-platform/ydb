@@ -31,22 +31,22 @@
 #include <type_traits>
 #include <utility>
 
-#include "y_absl/base/internal/invoke.h"
-#include "y_absl/base/internal/low_level_scheduling.h"
-#include "y_absl/base/internal/raw_logging.h"
-#include "y_absl/base/internal/scheduling_mode.h"
-#include "y_absl/base/internal/spinlock_wait.h"
-#include "y_absl/base/macros.h"
-#include "y_absl/base/optimization.h"
-#include "y_absl/base/port.h"
+#include "y_absl/base/internal/invoke.h" 
+#include "y_absl/base/internal/low_level_scheduling.h" 
+#include "y_absl/base/internal/raw_logging.h" 
+#include "y_absl/base/internal/scheduling_mode.h" 
+#include "y_absl/base/internal/spinlock_wait.h" 
+#include "y_absl/base/macros.h" 
+#include "y_absl/base/optimization.h" 
+#include "y_absl/base/port.h" 
 
-namespace y_absl {
+namespace y_absl { 
 ABSL_NAMESPACE_BEGIN
 
 class once_flag;
 
 namespace base_internal {
-std::atomic<uint32_t>* ControlWord(y_absl::once_flag* flag);
+std::atomic<uint32_t>* ControlWord(y_absl::once_flag* flag); 
 }  // namespace base_internal
 
 // call_once()
@@ -66,15 +66,15 @@ std::atomic<uint32_t>* ControlWord(y_absl::once_flag* flag);
 // class MyInitClass {
 //  public:
 //  ...
-//  mutable y_absl::once_flag once_;
+//  mutable y_absl::once_flag once_; 
 //
 //  MyInitClass* init() const {
-//    y_absl::call_once(once_, &MyInitClass::Init, this);
+//    y_absl::call_once(once_, &MyInitClass::Init, this); 
 //    return ptr_;
 //  }
 //
 template <typename Callable, typename... Args>
-void call_once(y_absl::once_flag& flag, Callable&& fn, Args&&... args);
+void call_once(y_absl::once_flag& flag, Callable&& fn, Args&&... args); 
 
 // once_flag
 //
@@ -103,7 +103,7 @@ namespace base_internal {
 // Like call_once, but uses KERNEL_ONLY scheduling. Intended to be used to
 // initialize entities used by the scheduler implementation.
 template <typename Callable, typename... Args>
-void LowLevelCallOnce(y_absl::once_flag* flag, Callable&& fn, Args&&... args);
+void LowLevelCallOnce(y_absl::once_flag* flag, Callable&& fn, Args&&... args); 
 
 // Disables scheduling while on stack when scheduling mode is non-cooperative.
 // No effect for cooperative scheduling modes.
@@ -190,7 +190,7 @@ inline std::atomic<uint32_t>* ControlWord(once_flag* flag) {
 }
 
 template <typename Callable, typename... Args>
-void LowLevelCallOnce(y_absl::once_flag* flag, Callable&& fn, Args&&... args) {
+void LowLevelCallOnce(y_absl::once_flag* flag, Callable&& fn, Args&&... args) { 
   std::atomic<uint32_t>* once = base_internal::ControlWord(flag);
   uint32_t s = once->load(std::memory_order_acquire);
   if (ABSL_PREDICT_FALSE(s != base_internal::kOnceDone)) {
@@ -203,7 +203,7 @@ void LowLevelCallOnce(y_absl::once_flag* flag, Callable&& fn, Args&&... args) {
 }  // namespace base_internal
 
 template <typename Callable, typename... Args>
-void call_once(y_absl::once_flag& flag, Callable&& fn, Args&&... args) {
+void call_once(y_absl::once_flag& flag, Callable&& fn, Args&&... args) { 
   std::atomic<uint32_t>* once = base_internal::ControlWord(&flag);
   uint32_t s = once->load(std::memory_order_acquire);
   if (ABSL_PREDICT_FALSE(s != base_internal::kOnceDone)) {
@@ -214,6 +214,6 @@ void call_once(y_absl::once_flag& flag, Callable&& fn, Args&&... args) {
 }
 
 ABSL_NAMESPACE_END
-}  // namespace y_absl
+}  // namespace y_absl 
 
 #endif  // ABSL_BASE_CALL_ONCE_H_

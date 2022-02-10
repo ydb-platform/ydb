@@ -52,7 +52,7 @@
 
 #include "y_absl/base/config.h"
 
-namespace y_absl {
+namespace y_absl { 
 ABSL_NAMESPACE_BEGIN
 namespace hash_internal {
 
@@ -73,6 +73,6 @@ uint32_t CityHash32(const char *s, size_t len);
 
 }  // namespace hash_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl
+}  // namespace y_absl 
 
 #endif  // ABSL_HASH_INTERNAL_CITY_H_

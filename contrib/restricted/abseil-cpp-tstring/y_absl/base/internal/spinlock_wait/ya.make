@@ -17,7 +17,7 @@ ADDINCL(
 
 NO_COMPILER_WARNINGS()
 
-SRCDIR(contrib/restricted/abseil-cpp-tstring/y_absl/base/internal)
+SRCDIR(contrib/restricted/abseil-cpp-tstring/y_absl/base/internal) 
 
 SRCS(
     spinlock_wait.cc

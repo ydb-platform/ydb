@@ -12,9 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "y_absl/synchronization/internal/waiter.h"
+#include "y_absl/synchronization/internal/waiter.h" 
 
-#include "y_absl/base/config.h"
+#include "y_absl/base/config.h" 
 
 #ifdef _WIN32
 #include <windows.h>
@@ -43,13 +43,13 @@
 #include <new>
 #include <type_traits>
 
-#include "y_absl/base/internal/raw_logging.h"
-#include "y_absl/base/internal/thread_identity.h"
-#include "y_absl/base/optimization.h"
-#include "y_absl/synchronization/internal/kernel_timeout.h"
+#include "y_absl/base/internal/raw_logging.h" 
+#include "y_absl/base/internal/thread_identity.h" 
+#include "y_absl/base/optimization.h" 
+#include "y_absl/synchronization/internal/kernel_timeout.h" 
 
 
-namespace y_absl {
+namespace y_absl { 
 ABSL_NAMESPACE_BEGIN
 namespace synchronization_internal {
 
@@ -425,4 +425,4 @@ void Waiter::InternalCondVarPoke() {
 
 }  // namespace synchronization_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl
+}  // namespace y_absl 

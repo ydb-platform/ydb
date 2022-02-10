@@ -24,7 +24,7 @@
 // The difference between the mem and str versions is the mem version
 // takes a pointer and a length, rather than a '\0'-terminated string.
 // The memcase* routines defined here assume the locale is "C"
-// (they use y_absl::ascii_tolower instead of tolower).
+// (they use y_absl::ascii_tolower instead of tolower). 
 //
 // These routines are based on the BSD library.
 //
@@ -65,10 +65,10 @@
 #include <cstddef>
 #include <cstring>
 
-#include "y_absl/base/port.h"  // disable some warnings on Windows
-#include "y_absl/strings/ascii.h"  // for y_absl::ascii_tolower
+#include "y_absl/base/port.h"  // disable some warnings on Windows 
+#include "y_absl/strings/ascii.h"  // for y_absl::ascii_tolower 
 
-namespace y_absl {
+namespace y_absl { 
 ABSL_NAMESPACE_BEGIN
 namespace strings_internal {
 
@@ -98,10 +98,10 @@ const char* int_memmatch(const char* haystack, size_t haylen,
   for (; haystack < hayend; ++haystack) {
     char hay = case_sensitive
                    ? *haystack
-                   : y_absl::ascii_tolower(static_cast<unsigned char>(*haystack));
+                   : y_absl::ascii_tolower(static_cast<unsigned char>(*haystack)); 
     char nee = case_sensitive
                    ? *needle
-                   : y_absl::ascii_tolower(static_cast<unsigned char>(*needle));
+                   : y_absl::ascii_tolower(static_cast<unsigned char>(*needle)); 
     if (hay == nee) {
       if (++needle == needleend) {
         return haystack + 1 - neelen;
@@ -143,6 +143,6 @@ const char* memmatch(const char* phaystack, size_t haylen, const char* pneedle,
 
 }  // namespace strings_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl
+}  // namespace y_absl 
 
 #endif  // ABSL_STRINGS_INTERNAL_MEMUTIL_H_

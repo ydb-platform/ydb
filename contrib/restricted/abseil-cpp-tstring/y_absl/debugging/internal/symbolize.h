@@ -35,9 +35,9 @@
 #include <elf.h>
 #include <link.h>  // For ElfW() macro.
 #include <functional>
-#include <util/generic/string.h>
-
-namespace y_absl {
+#include <util/generic/string.h> 
+ 
+namespace y_absl { 
 ABSL_NAMESPACE_BEGIN
 namespace debugging_internal {
 
@@ -58,7 +58,7 @@ bool GetSectionHeaderByName(int fd, const char *name, size_t name_len,
 
 }  // namespace debugging_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl
+}  // namespace y_absl 
 
 #endif  // ABSL_INTERNAL_HAVE_ELF_SYMBOLIZE
 
@@ -74,7 +74,7 @@ ABSL_NAMESPACE_END
 #define ABSL_INTERNAL_HAVE_EMSCRIPTEN_SYMBOLIZE 1
 #endif
 
-namespace y_absl {
+namespace y_absl { 
 ABSL_NAMESPACE_BEGIN
 namespace debugging_internal {
 
@@ -136,7 +136,7 @@ bool GetFileMappingHint(const void** start, const void** end, uint64_t* offset,
 
 }  // namespace debugging_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl
+}  // namespace y_absl 
 
 #endif  // __cplusplus
 

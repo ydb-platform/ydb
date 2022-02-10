@@ -39,7 +39,7 @@
 // equal functions are still bound to T. This is important because some type U
 // can be hashed by/tested for equality differently depending on T. A notable
 // example is `const char*`. `const char*` is treated as a c-style string when
-// the hash function is hash<TString> but as a pointer when the hash
+// the hash function is hash<TString> but as a pointer when the hash 
 // function is hash<void*>.
 //
 #ifndef ABSL_CONTAINER_INTERNAL_HASH_FUNCTION_DEFAULTS_H_
@@ -51,27 +51,27 @@
 #include <util/generic/string.h>
 #include <type_traits>
 
-#include "y_absl/base/config.h"
-#include "y_absl/hash/hash.h"
+#include "y_absl/base/config.h" 
+#include "y_absl/hash/hash.h" 
 #include "y_absl/strings/cord.h"
-#include "y_absl/strings/string_view.h"
+#include "y_absl/strings/string_view.h" 
 
-namespace y_absl {
+namespace y_absl { 
 ABSL_NAMESPACE_BEGIN
 namespace container_internal {
 
-// The hash of an object of type T is computed by using y_absl::Hash.
+// The hash of an object of type T is computed by using y_absl::Hash. 
 template <class T, class E = void>
 struct HashEq {
-  using Hash = y_absl::Hash<T>;
+  using Hash = y_absl::Hash<T>; 
   using Eq = std::equal_to<T>;
 };
 
 struct StringHash {
   using is_transparent = void;
 
-  size_t operator()(y_absl::string_view v) const {
-    return y_absl::Hash<y_absl::string_view>{}(v);
+  size_t operator()(y_absl::string_view v) const { 
+    return y_absl::Hash<y_absl::string_view>{}(v); 
   }
   size_t operator()(const y_absl::Cord& v) const {
     return y_absl::Hash<y_absl::Cord>{}(v);
@@ -101,9 +101,9 @@ struct StringHashEq {
 };
 
 template <>
-struct HashEq<TString> : StringHashEq {};
+struct HashEq<TString> : StringHashEq {}; 
 template <>
-struct HashEq<y_absl::string_view> : StringHashEq {};
+struct HashEq<y_absl::string_view> : StringHashEq {}; 
 template <>
 struct HashEq<y_absl::Cord> : StringHashEq {};
 
@@ -114,7 +114,7 @@ struct HashEq<T*> {
     using is_transparent = void;
     template <class U>
     size_t operator()(const U& ptr) const {
-      return y_absl::Hash<const T*>{}(HashEq::ToPtr(ptr));
+      return y_absl::Hash<const T*>{}(HashEq::ToPtr(ptr)); 
     }
   };
   struct Eq {
@@ -145,19 +145,19 @@ struct HashEq<std::shared_ptr<T>> : HashEq<T*> {};
 // This header's visibility is restricted.  If you need to access the default
 // hasher please use the container's ::hasher alias instead.
 //
-// Example: typename Hash = typename y_absl::flat_hash_map<K, V>::hasher
+// Example: typename Hash = typename y_absl::flat_hash_map<K, V>::hasher 
 template <class T>
 using hash_default_hash = typename container_internal::HashEq<T>::Hash;
 
 // This header's visibility is restricted.  If you need to access the default
 // key equal please use the container's ::key_equal alias instead.
 //
-// Example: typename Eq = typename y_absl::flat_hash_map<K, V, Hash>::key_equal
+// Example: typename Eq = typename y_absl::flat_hash_map<K, V, Hash>::key_equal 
 template <class T>
 using hash_default_eq = typename container_internal::HashEq<T>::Eq;
 
 }  // namespace container_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl
+}  // namespace y_absl 
 
 #endif  // ABSL_CONTAINER_INTERNAL_HASH_FUNCTION_DEFAULTS_H_

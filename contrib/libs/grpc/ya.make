@@ -57,7 +57,7 @@ RECURSE(
 RECURSE_FOR_TESTS(
     src/proto/grpc/testing
     src/proto/grpc/testing/duplicate
-    src/proto/grpc/testing/xds
+    src/proto/grpc/testing/xds 
     src/python/grpcio_tests
     test/core/util
     test/cpp/end2end

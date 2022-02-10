@@ -33,7 +33,7 @@
 
 #include "y_absl/base/config.h"
 
-namespace y_absl {
+namespace y_absl { 
 ABSL_NAMESPACE_BEGIN
 
 // GetStackFrames()
@@ -41,7 +41,7 @@ ABSL_NAMESPACE_BEGIN
 // Records program counter values for up to `max_depth` frames, skipping the
 // most recent `skip_count` stack frames, stores their corresponding values
 // and sizes in `results` and `sizes` buffers, and returns the number of frames
-// stored. (Note that the frame generated for the `y_absl::GetStackFrames()`
+// stored. (Note that the frame generated for the `y_absl::GetStackFrames()` 
 // routine itself is also skipped.)
 //
 // Example:
@@ -51,7 +51,7 @@ ABSL_NAMESPACE_BEGIN
 //      bar() {
 //        void* result[10];
 //        int sizes[10];
-//        int depth = y_absl::GetStackFrames(result, sizes, 10, 1);
+//        int depth = y_absl::GetStackFrames(result, sizes, 10, 1); 
 //      }
 //
 // The current stack frame would consist of three function calls: `bar()`,
@@ -87,7 +87,7 @@ extern int GetStackFrames(void** result, int* sizes, int max_depth,
 // program counter values for up to `max_depth` frames, skipping the most recent
 // `skip_count` stack frames, stores their corresponding values and sizes in
 // `results` and `sizes` buffers, and returns the number of frames stored. (Note
-// that the frame generated for the `y_absl::GetStackFramesWithContext()` routine
+// that the frame generated for the `y_absl::GetStackFramesWithContext()` routine 
 // itself is also skipped.)
 //
 // The `uc` parameter, if non-null, should be a pointer to a `ucontext_t` value
@@ -111,7 +111,7 @@ extern int GetStackFramesWithContext(void** result, int* sizes, int max_depth,
 // Records program counter values for up to `max_depth` frames, skipping the
 // most recent `skip_count` stack frames, stores their corresponding values
 // in `results`, and returns the number of frames
-// stored. Note that this function is similar to `y_absl::GetStackFrames()`
+// stored. Note that this function is similar to `y_absl::GetStackFrames()` 
 // except that it returns the stack trace only, and not stack frame sizes.
 //
 // Example:
@@ -120,7 +120,7 @@ extern int GetStackFramesWithContext(void** result, int* sizes, int max_depth,
 //      foo() { bar(); }
 //      bar() {
 //        void* result[10];
-//        int depth = y_absl::GetStackTrace(result, 10, 1);
+//        int depth = y_absl::GetStackTrace(result, 10, 1); 
 //      }
 //
 // This produces:
@@ -138,7 +138,7 @@ extern int GetStackTrace(void** result, int max_depth, int skip_count);
 // program counter values for up to `max_depth` frames, skipping the most recent
 // `skip_count` stack frames, stores their corresponding values in `results`,
 // and returns the number of frames stored. (Note that the frame generated for
-// the `y_absl::GetStackFramesWithContext()` routine itself is also skipped.)
+// the `y_absl::GetStackFramesWithContext()` routine itself is also skipped.) 
 //
 // The `uc` parameter, if non-null, should be a pointer to a `ucontext_t` value
 // passed to a signal handler registered via the `sa_sigaction` field of a
@@ -163,7 +163,7 @@ extern int GetStackTraceWithContext(void** result, int max_depth,
 // GetStack{Frames,Trace}{,WithContext}() functions above.
 //
 // The arguments passed to the unwinder function will match the
-// arguments passed to `y_absl::GetStackFramesWithContext()` except that sizes
+// arguments passed to `y_absl::GetStackFramesWithContext()` except that sizes 
 // will be non-null iff the caller is interested in frame sizes.
 //
 // If unwinder is set to null, we revert to the default stack-tracing behavior.
@@ -172,9 +172,9 @@ extern int GetStackTraceWithContext(void** result, int max_depth,
 // WARNING
 // *****************************************************************************
 //
-// y_absl::SetStackUnwinder is not suitable for general purpose use.  It is
+// y_absl::SetStackUnwinder is not suitable for general purpose use.  It is 
 // provided for custom runtimes.
-// Some things to watch out for when calling `y_absl::SetStackUnwinder()`:
+// Some things to watch out for when calling `y_absl::SetStackUnwinder()`: 
 //
 // (a) The unwinder may be called from within signal handlers and
 // therefore must be async-signal-safe.
@@ -207,7 +207,7 @@ extern void SetStackUnwinder(int (*unwinder)(void** pcs, int* sizes,
 // be null when called.
 //
 // The semantics are the same as the corresponding `GetStack*()` function in the
-// case where `y_absl::SetStackUnwinder()` was never called. Equivalents are:
+// case where `y_absl::SetStackUnwinder()` was never called. Equivalents are: 
 //
 //                       null sizes         |        non-nullptr sizes
 //             |==========================================================|
@@ -226,6 +226,6 @@ namespace debugging_internal {
 extern bool StackTraceWorksForTest();
 }  // namespace debugging_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl
+}  // namespace y_absl 
 
 #endif  // ABSL_DEBUGGING_STACKTRACE_H_

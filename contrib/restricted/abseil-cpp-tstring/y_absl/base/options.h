@@ -79,7 +79,7 @@
 //
 // ABSL_OPTION_USE_STD_ANY
 //
-// This option controls whether y_absl::any is implemented as an alias to
+// This option controls whether y_absl::any is implemented as an alias to 
 // std::any, or as an independent implementation.
 //
 // A value of 0 means to use Abseil's implementation.  This requires only C++11
@@ -93,19 +93,19 @@
 // useful when you are building your entire program, including all of its
 // dependencies, from source.  It should not be used otherwise -- for example,
 // if you are distributing Abseil in a binary package manager -- since in
-// mode 2, y_absl::any will name a different type, with a different mangled name
+// mode 2, y_absl::any will name a different type, with a different mangled name 
 // and binary layout, depending on the compiler flags passed by the end user.
 // For more info, see https://abseil.io/about/design/dropin-types.
 //
 // User code should not inspect this macro.  To check in the preprocessor if
-// y_absl::any is a typedef of std::any, use the feature macro ABSL_USES_STD_ANY.
+// y_absl::any is a typedef of std::any, use the feature macro ABSL_USES_STD_ANY. 
 
 #define ABSL_OPTION_USE_STD_ANY 2
 
 
 // ABSL_OPTION_USE_STD_OPTIONAL
 //
-// This option controls whether y_absl::optional is implemented as an alias to
+// This option controls whether y_absl::optional is implemented as an alias to 
 // std::optional, or as an independent implementation.
 //
 // A value of 0 means to use Abseil's implementation.  This requires only C++11
@@ -118,13 +118,13 @@
 // and use an alias only if a working std::optional is available.  This option
 // is useful when you are building your program from source.  It should not be
 // used otherwise -- for example, if you are distributing Abseil in a binary
-// package manager -- since in mode 2, y_absl::optional will name a different
+// package manager -- since in mode 2, y_absl::optional will name a different 
 // type, with a different mangled name and binary layout, depending on the
 // compiler flags passed by the end user.  For more info, see
 // https://abseil.io/about/design/dropin-types.
 
 // User code should not inspect this macro.  To check in the preprocessor if
-// y_absl::optional is a typedef of std::optional, use the feature macro
+// y_absl::optional is a typedef of std::optional, use the feature macro 
 // ABSL_USES_STD_OPTIONAL.
 
 #define ABSL_OPTION_USE_STD_OPTIONAL 2
@@ -132,7 +132,7 @@
 
 // ABSL_OPTION_USE_STD_STRING_VIEW
 //
-// This option controls whether y_absl::string_view is implemented as an alias to
+// This option controls whether y_absl::string_view is implemented as an alias to 
 // std::string_view, or as an independent implementation.
 //
 // A value of 0 means to use Abseil's implementation.  This requires only C++11
@@ -145,20 +145,20 @@
 // and use an alias only if a working std::string_view is available.  This
 // option is useful when you are building your program from source.  It should
 // not be used otherwise -- for example, if you are distributing Abseil in a
-// binary package manager -- since in mode 2, y_absl::string_view will name a
+// binary package manager -- since in mode 2, y_absl::string_view will name a 
 // different type, with a different mangled name and binary layout, depending on
 // the compiler flags passed by the end user.  For more info, see
 // https://abseil.io/about/design/dropin-types.
 //
 // User code should not inspect this macro.  To check in the preprocessor if
-// y_absl::string_view is a typedef of std::string_view, use the feature macro
+// y_absl::string_view is a typedef of std::string_view, use the feature macro 
 // ABSL_USES_STD_STRING_VIEW.
 
 #define ABSL_OPTION_USE_STD_STRING_VIEW 2
 
 // ABSL_OPTION_USE_STD_VARIANT
 //
-// This option controls whether y_absl::variant is implemented as an alias to
+// This option controls whether y_absl::variant is implemented as an alias to 
 // std::variant, or as an independent implementation.
 //
 // A value of 0 means to use Abseil's implementation.  This requires only C++11
@@ -171,13 +171,13 @@
 // and use an alias only if a working std::variant is available.  This option
 // is useful when you are building your program from source.  It should not be
 // used otherwise -- for example, if you are distributing Abseil in a binary
-// package manager -- since in mode 2, y_absl::variant will name a different
+// package manager -- since in mode 2, y_absl::variant will name a different 
 // type, with a different mangled name and binary layout, depending on the
 // compiler flags passed by the end user.  For more info, see
 // https://abseil.io/about/design/dropin-types.
 //
 // User code should not inspect this macro.  To check in the preprocessor if
-// y_absl::variant is a typedef of std::variant, use the feature macro
+// y_absl::variant is a typedef of std::variant, use the feature macro 
 // ABSL_USES_STD_VARIANT.
 
 #define ABSL_OPTION_USE_STD_VARIANT 2

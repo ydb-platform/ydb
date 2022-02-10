@@ -20,7 +20,7 @@
 #include "y_absl/base/config.h"
 #include "y_absl/base/macros.h"
 
-namespace y_absl {
+namespace y_absl { 
 ABSL_NAMESPACE_BEGIN
 namespace profiling_internal {
 
@@ -125,6 +125,6 @@ inline uint64_t ExponentialBiased::NextRandom(uint64_t rnd) {
 
 }  // namespace profiling_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl
+}  // namespace y_absl 
 
 #endif  // ABSL_PROFILING_INTERNAL_EXPONENTIAL_BIASED_H_

@@ -16,7 +16,7 @@
 // File: node_hash_map.h
 // -----------------------------------------------------------------------------
 //
-// An `y_absl::node_hash_map<K, V>` is an unordered associative container of
+// An `y_absl::node_hash_map<K, V>` is an unordered associative container of 
 // unique keys and associated values designed to be a more efficient replacement
 // for `std::unordered_map`. Like `unordered_map`, search, insertion, and
 // deletion of map elements can be done as an `O(1)` operation. However,
@@ -40,14 +40,14 @@
 #include <type_traits>
 #include <utility>
 
-#include "y_absl/algorithm/container.h"
-#include "y_absl/container/internal/container_memory.h"
-#include "y_absl/container/internal/hash_function_defaults.h"  // IWYU pragma: export
-#include "y_absl/container/internal/node_hash_policy.h"
-#include "y_absl/container/internal/raw_hash_map.h"  // IWYU pragma: export
-#include "y_absl/memory/memory.h"
+#include "y_absl/algorithm/container.h" 
+#include "y_absl/container/internal/container_memory.h" 
+#include "y_absl/container/internal/hash_function_defaults.h"  // IWYU pragma: export 
+#include "y_absl/container/internal/node_hash_policy.h" 
+#include "y_absl/container/internal/raw_hash_map.h"  // IWYU pragma: export 
+#include "y_absl/memory/memory.h" 
 
-namespace y_absl {
+namespace y_absl { 
 ABSL_NAMESPACE_BEGIN
 namespace container_internal {
 template <class Key, class Value>
@@ -55,10 +55,10 @@ class NodeHashMapPolicy;
 }  // namespace container_internal
 
 // -----------------------------------------------------------------------------
-// y_absl::node_hash_map
+// y_absl::node_hash_map 
 // -----------------------------------------------------------------------------
 //
-// An `y_absl::node_hash_map<K, V>` is an unordered associative container which
+// An `y_absl::node_hash_map<K, V>` is an unordered associative container which 
 // has been optimized for both speed and memory footprint in most common use
 // cases. Its interface is similar to that of `std::unordered_map<K, V>` with
 // the following notable differences:
@@ -70,17 +70,17 @@ class NodeHashMapPolicy;
 //   slots (open, deleted, and empty) within the hash map.
 // * Returns `void` from the `erase(iterator)` overload.
 //
-// By default, `node_hash_map` uses the `y_absl::Hash` hashing framework.
-// All fundamental and Abseil types that support the `y_absl::Hash` framework have
+// By default, `node_hash_map` uses the `y_absl::Hash` hashing framework. 
+// All fundamental and Abseil types that support the `y_absl::Hash` framework have 
 // a compatible equality operator for comparing insertions into `node_hash_map`.
-// If your type is not yet supported by the `y_absl::Hash` framework, see
-// y_absl/hash/hash.h for information on extending Abseil hashing to user-defined
+// If your type is not yet supported by the `y_absl::Hash` framework, see 
+// y_absl/hash/hash.h for information on extending Abseil hashing to user-defined 
 // types.
 //
 // Example:
 //
 //   // Create a node hash map of three strings (that map to strings)
-//   y_absl::node_hash_map<TString, TString> ducks =
+//   y_absl::node_hash_map<TString, TString> ducks = 
 //     {{"a", "huey"}, {"b", "dewey"}, {"c", "louie"}};
 //
 //  // Insert a new element into the node hash map
@@ -90,18 +90,18 @@ class NodeHashMapPolicy;
 //  ducks.rehash(0);
 //
 //  // Find the element with the key "b"
-//  TString search_key = "b";
+//  TString search_key = "b"; 
 //  auto result = ducks.find(search_key);
 //  if (result != ducks.end()) {
 //    std::cout << "Result: " << result->second << std::endl;
 //  }
 template <class Key, class Value,
-          class Hash = y_absl::container_internal::hash_default_hash<Key>,
-          class Eq = y_absl::container_internal::hash_default_eq<Key>,
+          class Hash = y_absl::container_internal::hash_default_hash<Key>, 
+          class Eq = y_absl::container_internal::hash_default_eq<Key>, 
           class Alloc = std::allocator<std::pair<const Key, Value>>>
 class node_hash_map
-    : public y_absl::container_internal::raw_hash_map<
-          y_absl::container_internal::NodeHashMapPolicy<Key, Value>, Hash, Eq,
+    : public y_absl::container_internal::raw_hash_map< 
+          y_absl::container_internal::NodeHashMapPolicy<Key, Value>, Hash, Eq, 
           Alloc> {
   using Base = typename node_hash_map::raw_hash_map;
 
@@ -114,38 +114,38 @@ class node_hash_map
   // *  Default constructor
   //
   //    // No allocation for the table's elements is made.
-  //    y_absl::node_hash_map<int, TString> map1;
+  //    y_absl::node_hash_map<int, TString> map1; 
   //
   // * Initializer List constructor
   //
-  //   y_absl::node_hash_map<int, TString> map2 =
+  //   y_absl::node_hash_map<int, TString> map2 = 
   //       {{1, "huey"}, {2, "dewey"}, {3, "louie"},};
   //
   // * Copy constructor
   //
-  //   y_absl::node_hash_map<int, TString> map3(map2);
+  //   y_absl::node_hash_map<int, TString> map3(map2); 
   //
   // * Copy assignment operator
   //
   //  // Hash functor and Comparator are copied as well
-  //  y_absl::node_hash_map<int, TString> map4;
+  //  y_absl::node_hash_map<int, TString> map4; 
   //  map4 = map3;
   //
   // * Move constructor
   //
   //   // Move is guaranteed efficient
-  //   y_absl::node_hash_map<int, TString> map5(std::move(map4));
+  //   y_absl::node_hash_map<int, TString> map5(std::move(map4)); 
   //
   // * Move assignment operator
   //
   //   // May be efficient if allocators are compatible
-  //   y_absl::node_hash_map<int, TString> map6;
+  //   y_absl::node_hash_map<int, TString> map6; 
   //   map6 = std::move(map5);
   //
   // * Range constructor
   //
-  //   std::vector<std::pair<int, TString>> v = {{1, "a"}, {2, "b"}};
-  //   y_absl::node_hash_map<int, TString> map7(v.begin(), v.end());
+  //   std::vector<std::pair<int, TString>> v = {{1, "a"}, {2, "b"}}; 
+  //   y_absl::node_hash_map<int, TString> map7(v.begin(), v.end()); 
   node_hash_map() {}
   using Base::Base;
 
@@ -174,7 +174,7 @@ class node_hash_map
   // Returns the number of element slots (assigned, deleted, and empty)
   // available within the `node_hash_map`.
   //
-  // NOTE: this member function is particular to `y_absl::node_hash_map` and is
+  // NOTE: this member function is particular to `y_absl::node_hash_map` and is 
   // not provided in the `std::unordered_map` API.
   using Base::capacity;
 
@@ -535,7 +535,7 @@ namespace container_internal {
 
 template <class Key, class Value>
 class NodeHashMapPolicy
-    : public y_absl::container_internal::node_hash_policy<
+    : public y_absl::container_internal::node_hash_policy< 
           std::pair<const Key, Value>&, NodeHashMapPolicy<Key, Value>> {
   using value_type = std::pair<const Key, Value>;
 
@@ -546,30 +546,30 @@ class NodeHashMapPolicy
 
   template <class Allocator, class... Args>
   static value_type* new_element(Allocator* alloc, Args&&... args) {
-    using PairAlloc = typename y_absl::allocator_traits<
+    using PairAlloc = typename y_absl::allocator_traits< 
         Allocator>::template rebind_alloc<value_type>;
     PairAlloc pair_alloc(*alloc);
     value_type* res =
-        y_absl::allocator_traits<PairAlloc>::allocate(pair_alloc, 1);
-    y_absl::allocator_traits<PairAlloc>::construct(pair_alloc, res,
+        y_absl::allocator_traits<PairAlloc>::allocate(pair_alloc, 1); 
+    y_absl::allocator_traits<PairAlloc>::construct(pair_alloc, res, 
                                                  std::forward<Args>(args)...);
     return res;
   }
 
   template <class Allocator>
   static void delete_element(Allocator* alloc, value_type* pair) {
-    using PairAlloc = typename y_absl::allocator_traits<
+    using PairAlloc = typename y_absl::allocator_traits< 
         Allocator>::template rebind_alloc<value_type>;
     PairAlloc pair_alloc(*alloc);
-    y_absl::allocator_traits<PairAlloc>::destroy(pair_alloc, pair);
-    y_absl::allocator_traits<PairAlloc>::deallocate(pair_alloc, pair, 1);
+    y_absl::allocator_traits<PairAlloc>::destroy(pair_alloc, pair); 
+    y_absl::allocator_traits<PairAlloc>::deallocate(pair_alloc, pair, 1); 
   }
 
   template <class F, class... Args>
-  static decltype(y_absl::container_internal::DecomposePair(
+  static decltype(y_absl::container_internal::DecomposePair( 
       std::declval<F>(), std::declval<Args>()...))
   apply(F&& f, Args&&... args) {
-    return y_absl::container_internal::DecomposePair(std::forward<F>(f),
+    return y_absl::container_internal::DecomposePair(std::forward<F>(f), 
                                                    std::forward<Args>(args)...);
   }
 
@@ -584,14 +584,14 @@ class NodeHashMapPolicy
 
 namespace container_algorithm_internal {
 
-// Specialization of trait in y_absl/algorithm/container.h
+// Specialization of trait in y_absl/algorithm/container.h 
 template <class Key, class T, class Hash, class KeyEqual, class Allocator>
 struct IsUnorderedContainer<
-    y_absl::node_hash_map<Key, T, Hash, KeyEqual, Allocator>> : std::true_type {};
+    y_absl::node_hash_map<Key, T, Hash, KeyEqual, Allocator>> : std::true_type {}; 
 
 }  // namespace container_algorithm_internal
 
 ABSL_NAMESPACE_END
-}  // namespace y_absl
+}  // namespace y_absl 
 
 #endif  // ABSL_CONTAINER_NODE_HASH_MAP_H_

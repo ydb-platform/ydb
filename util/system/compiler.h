@@ -307,26 +307,26 @@ _YandexAbort();
 #if defined(_MSC_VER)
     #define __PRETTY_FUNCTION__ __FUNCSIG__
 #endif
-
-#if defined(__GNUC__)
+ 
+#if defined(__GNUC__) 
     #define Y_WEAK __attribute__((weak))
-#else
+#else 
     #define Y_WEAK
-#endif
+#endif 
 
-#if defined(__CUDACC_VER_MAJOR__)
+#if defined(__CUDACC_VER_MAJOR__) 
     #define Y_CUDA_AT_LEAST(x, y) (__CUDACC_VER_MAJOR__ > x || (__CUDACC_VER_MAJOR__ == x && __CUDACC_VER_MINOR__ >= y))
-#else
+#else 
     #define Y_CUDA_AT_LEAST(x, y) 0
 #endif
 
-// NVidia CUDA C++ Compiler did not know about noexcept keyword until version 9.0
-#if !Y_CUDA_AT_LEAST(9, 0)
+// NVidia CUDA C++ Compiler did not know about noexcept keyword until version 9.0 
+#if !Y_CUDA_AT_LEAST(9, 0) 
     #if defined(__CUDACC__) && !defined(noexcept)
         #define noexcept throw()
     #endif
-#endif
-
+#endif 
+ 
 #if defined(__GNUC__)
     #define Y_COLD __attribute__((cold))
     #define Y_LEAF __attribute__((leaf))

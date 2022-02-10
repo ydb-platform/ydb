@@ -312,28 +312,28 @@ TStringBuf CutMPrefix(const TStringBuf url) noexcept {
 
 static inline bool IsSchemeChar(char c) noexcept {
     return IsAsciiAlnum(c); //what about '+' ?..
-}
-
+} 
+ 
 static bool HasPrefix(const TStringBuf url) noexcept {
     TStringBuf scheme, unused;
     if (!url.TrySplit(TStringBuf("://"), scheme, unused))
-        return false;
-
+        return false; 
+ 
     return AllOf(scheme, IsSchemeChar);
-}
-
+} 
+ 
 TString AddSchemePrefix(const TString& url) {
     return AddSchemePrefix(url, TStringBuf("http"));
 }
 
 TString AddSchemePrefix(const TString& url, TStringBuf scheme) {
-    if (HasPrefix(url)) {
-        return url;
-    }
-
+    if (HasPrefix(url)) { 
+        return url; 
+    } 
+ 
     return TString::Join(scheme, TStringBuf("://"), url);
-}
-
+} 
+ 
 #define X(c) (c >= 'A' ? ((c & 0xdf) - 'A') + 10 : (c - '0'))
 
 static inline int x2c(unsigned char* x) {

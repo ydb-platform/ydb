@@ -4,8 +4,8 @@
 #if defined(_win_) || defined(_darwin_)
 #include <ydb/library/yql/public/udf/udf_registrator.h>
 
-#include <exception>
-
+#include <exception> 
+ 
 static NYql::NUdf::TStaticSymbols Symbols;
 
 extern "C" void* UdfAllocate(ui64 size) {
@@ -16,9 +16,9 @@ extern "C" void UdfFree(const void* mem) {
     return Symbols.UdfFreeFunc(mem);
 }
 
-extern "C" [[noreturn]] void UdfTerminate(const char* message) {
+extern "C" [[noreturn]] void UdfTerminate(const char* message) { 
     Symbols.UdfTerminate(message);
-    std::terminate();
+    std::terminate(); 
 }
 
 extern "C" void UdfRegisterObject(::NYql::NUdf::TBoxedValue* object) {

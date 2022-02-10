@@ -17,7 +17,7 @@
 #ifndef ABSL_BASE_INTERNAL_EXCEPTION_SAFETY_TESTING_H_
 #define ABSL_BASE_INTERNAL_EXCEPTION_SAFETY_TESTING_H_
 
-#include "y_absl/base/config.h"
+#include "y_absl/base/config.h" 
 
 #ifdef ABSL_HAVE_EXCEPTIONS
 
@@ -31,12 +31,12 @@
 #include <unordered_map>
 
 #include "gtest/gtest.h"
-#include "y_absl/base/internal/pretty_function.h"
-#include "y_absl/memory/memory.h"
-#include "y_absl/meta/type_traits.h"
-#include "y_absl/strings/string_view.h"
-#include "y_absl/strings/substitute.h"
-#include "y_absl/utility/utility.h"
+#include "y_absl/base/internal/pretty_function.h" 
+#include "y_absl/memory/memory.h" 
+#include "y_absl/meta/type_traits.h" 
+#include "y_absl/strings/string_view.h" 
+#include "y_absl/strings/substitute.h" 
+#include "y_absl/utility/utility.h" 
 
 namespace testing {
 
@@ -44,29 +44,29 @@ enum class TypeSpec;
 enum class AllocSpec;
 
 constexpr TypeSpec operator|(TypeSpec a, TypeSpec b) {
-  using T = y_absl::underlying_type_t<TypeSpec>;
+  using T = y_absl::underlying_type_t<TypeSpec>; 
   return static_cast<TypeSpec>(static_cast<T>(a) | static_cast<T>(b));
 }
 
 constexpr TypeSpec operator&(TypeSpec a, TypeSpec b) {
-  using T = y_absl::underlying_type_t<TypeSpec>;
+  using T = y_absl::underlying_type_t<TypeSpec>; 
   return static_cast<TypeSpec>(static_cast<T>(a) & static_cast<T>(b));
 }
 
 constexpr AllocSpec operator|(AllocSpec a, AllocSpec b) {
-  using T = y_absl::underlying_type_t<AllocSpec>;
+  using T = y_absl::underlying_type_t<AllocSpec>; 
   return static_cast<AllocSpec>(static_cast<T>(a) | static_cast<T>(b));
 }
 
 constexpr AllocSpec operator&(AllocSpec a, AllocSpec b) {
-  using T = y_absl::underlying_type_t<AllocSpec>;
+  using T = y_absl::underlying_type_t<AllocSpec>; 
   return static_cast<AllocSpec>(static_cast<T>(a) & static_cast<T>(b));
 }
 
 namespace exceptions_internal {
 
-TString GetSpecString(TypeSpec);
-TString GetSpecString(AllocSpec);
+TString GetSpecString(TypeSpec); 
+TString GetSpecString(AllocSpec); 
 
 struct NoThrowTag {};
 struct StrongGuaranteeTagType {};
@@ -75,12 +75,12 @@ struct StrongGuaranteeTagType {};
 // exceptions specifically thrown by ThrowingValue.
 class TestException {
  public:
-  explicit TestException(y_absl::string_view msg) : msg_(msg) {}
+  explicit TestException(y_absl::string_view msg) : msg_(msg) {} 
   virtual ~TestException() {}
   virtual const char* what() const noexcept { return msg_.c_str(); }
 
  private:
-  TString msg_;
+  TString msg_; 
 };
 
 // TestBadAllocException exists because allocation functions must throw an
@@ -90,7 +90,7 @@ class TestException {
 // bad_alloc exception in TestExceptionSafety.
 class TestBadAllocException : public std::bad_alloc, public TestException {
  public:
-  explicit TestBadAllocException(y_absl::string_view msg) : TestException(msg) {}
+  explicit TestBadAllocException(y_absl::string_view msg) : TestException(msg) {} 
   using TestException::what;
 };
 
@@ -102,14 +102,14 @@ inline void SetCountdown(int i = 0) { countdown = i; }
 // Sets the countdown to the terminal value -1
 inline void UnsetCountdown() { SetCountdown(-1); }
 
-void MaybeThrow(y_absl::string_view msg, bool throw_bad_alloc = false);
+void MaybeThrow(y_absl::string_view msg, bool throw_bad_alloc = false); 
 
 testing::AssertionResult FailureMessage(const TestException& e,
                                         int countdown) noexcept;
 
 struct TrackedAddress {
   bool is_alive;
-  TString description;
+  TString description; 
 };
 
 // Inspects the constructions and destructions of anything inheriting from
@@ -136,7 +136,7 @@ class ConstructorTracker {
     }
   }
 
-  static void ObjectConstructed(void* address, TString description) {
+  static void ObjectConstructed(void* address, TString description) { 
     if (!CurrentlyTracking()) return;
 
     TrackedAddress& tracked_address =
@@ -172,11 +172,11 @@ class ConstructorTracker {
     return current_tracker_instance_ != nullptr;
   }
 
-  static TString ErrorMessage(void* address,
-                                  const TString& address_description,
+  static TString ErrorMessage(void* address, 
+                                  const TString& address_description, 
                                   int countdown,
-                                  const TString& error_description) {
-    return y_absl::Substitute(
+                                  const TString& error_description) { 
+    return y_absl::Substitute( 
         "With coundtown at $0:\n"
         "  $1\n"
         "  Object originally constructed by $2\n"
@@ -196,7 +196,7 @@ class TrackedObject {
   TrackedObject(TrackedObject&&) = delete;
 
  protected:
-  explicit TrackedObject(TString description) {
+  explicit TrackedObject(TString description) { 
     ConstructorTracker::ObjectConstructed(this, std::move(description));
   }
 
@@ -294,7 +294,7 @@ class ThrowingValue : private exceptions_internal::TrackedObject {
   ThrowingValue(int i, exceptions_internal::NoThrowTag) noexcept
       : TrackedObject(GetInstanceString(i)), dummy_(i) {}
 
-  // y_absl expects nothrow destructors
+  // y_absl expects nothrow destructors 
   ~ThrowingValue() noexcept = default;
 
   ThrowingValue& operator=(const ThrowingValue& other) noexcept(
@@ -592,8 +592,8 @@ class ThrowingValue : private exceptions_internal::TrackedObject {
   const int& Get() const noexcept { return dummy_; }
 
  private:
-  static TString GetInstanceString(int dummy) {
-    return y_absl::StrCat("ThrowingValue<",
+  static TString GetInstanceString(int dummy) { 
+    return y_absl::StrCat("ThrowingValue<", 
                         exceptions_internal::GetSpecString(Spec), ">(", dummy,
                         ")");
   }
@@ -753,8 +753,8 @@ class ThrowingAllocator : private exceptions_internal::TrackedObject {
   friend class ThrowingAllocator;
 
  private:
-  static TString GetInstanceString(int dummy) {
-    return y_absl::StrCat("ThrowingAllocator<",
+  static TString GetInstanceString(int dummy) { 
+    return y_absl::StrCat("ThrowingAllocator<", 
                         exceptions_internal::GetSpecString(Spec), ">(", dummy,
                         ")");
   }
@@ -768,10 +768,10 @@ class ThrowingAllocator : private exceptions_internal::TrackedObject {
     if (*dummy_ < 0) std::abort();
   }
 
-  void ReadStateAndMaybeThrow(y_absl::string_view msg) const {
+  void ReadStateAndMaybeThrow(y_absl::string_view msg) const { 
     if (!IsSpecified(AllocSpec::kNoThrowAllocate)) {
       exceptions_internal::MaybeThrow(
-          y_absl::Substitute("Allocator id $0 threw from $1", *dummy_, msg));
+          y_absl::Substitute("Allocator id $0 threw from $1", *dummy_, msg)); 
     }
   }
 
@@ -834,7 +834,7 @@ template <typename T>
 class DefaultFactory {
  public:
   explicit DefaultFactory(const T& t) : t_(t) {}
-  std::unique_ptr<T> operator()() const { return y_absl::make_unique<T>(t_); }
+  std::unique_ptr<T> operator()() const { return y_absl::make_unique<T>(t_); } 
 
  private:
   T t_;
@@ -842,7 +842,7 @@ class DefaultFactory {
 
 template <size_t LazyContractsCount, typename LazyFactory,
           typename LazyOperation>
-using EnableIfTestable = typename y_absl::enable_if_t<
+using EnableIfTestable = typename y_absl::enable_if_t< 
     LazyContractsCount != 0 &&
     !std::is_same<LazyFactory, UninitializedT>::value &&
     !std::is_same<LazyOperation, UninitializedT>::value>;
@@ -994,7 +994,7 @@ class ExceptionSafetyTestBuilder {
    * method tester.WithInitialValue(...).
    */
   template <typename NewFactory>
-  ExceptionSafetyTestBuilder<y_absl::decay_t<NewFactory>, Operation, Contracts...>
+  ExceptionSafetyTestBuilder<y_absl::decay_t<NewFactory>, Operation, Contracts...> 
   WithFactory(const NewFactory& new_factory) const {
     return {new_factory, operation_, contracts_};
   }
@@ -1005,7 +1005,7 @@ class ExceptionSafetyTestBuilder {
    * newly created tester.
    */
   template <typename NewOperation>
-  ExceptionSafetyTestBuilder<Factory, y_absl::decay_t<NewOperation>, Contracts...>
+  ExceptionSafetyTestBuilder<Factory, y_absl::decay_t<NewOperation>, Contracts...> 
   WithOperation(const NewOperation& new_operation) const {
     return {factory_, new_operation, contracts_};
   }
@@ -1025,11 +1025,11 @@ class ExceptionSafetyTestBuilder {
    */
   template <typename... MoreContracts>
   ExceptionSafetyTestBuilder<Factory, Operation, Contracts...,
-                             y_absl::decay_t<MoreContracts>...>
+                             y_absl::decay_t<MoreContracts>...> 
   WithContracts(const MoreContracts&... more_contracts) const {
     return {
         factory_, operation_,
-        std::tuple_cat(contracts_, std::tuple<y_absl::decay_t<MoreContracts>...>(
+        std::tuple_cat(contracts_, std::tuple<y_absl::decay_t<MoreContracts>...>( 
                                        more_contracts...))};
   }
 
@@ -1053,7 +1053,7 @@ class ExceptionSafetyTestBuilder {
       typename NewOperation,
       typename = EnableIfTestable<sizeof...(Contracts), Factory, NewOperation>>
   testing::AssertionResult Test(const NewOperation& new_operation) const {
-    return TestImpl(new_operation, y_absl::index_sequence_for<Contracts...>());
+    return TestImpl(new_operation, y_absl::index_sequence_for<Contracts...>()); 
   }
 
   /*
@@ -1089,7 +1089,7 @@ class ExceptionSafetyTestBuilder {
 
   template <typename SelectedOperation, size_t... Indices>
   testing::AssertionResult TestImpl(SelectedOperation selected_operation,
-                                    y_absl::index_sequence<Indices...>) const {
+                                    y_absl::index_sequence<Indices...>) const { 
     return ExceptionSafetyTest<FactoryElementType<Factory>>(
                factory_, selected_operation, std::get<Indices>(contracts_)...)
         .Test();

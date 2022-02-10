@@ -494,7 +494,7 @@ private:
 
     /* This method is templated to postpone instantiation of key extraction functor. */
     template <class ValueL>
-    auto get_key(const ValueL& value) const -> decltype(ExtractKey()(value)) {
+    auto get_key(const ValueL& value) const -> decltype(ExtractKey()(value)) { 
         return this->_get_key_extract()(value);
     }
 

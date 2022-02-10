@@ -12,16 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "y_absl/types/bad_any_cast.h"
+#include "y_absl/types/bad_any_cast.h" 
 
 #ifndef ABSL_USES_STD_ANY
 
 #include <cstdlib>
 
-#include "y_absl/base/config.h"
-#include "y_absl/base/internal/raw_logging.h"
+#include "y_absl/base/config.h" 
+#include "y_absl/base/internal/raw_logging.h" 
 
-namespace y_absl {
+namespace y_absl { 
 ABSL_NAMESPACE_BEGIN
 
 bad_any_cast::~bad_any_cast() = default;
@@ -41,6 +41,6 @@ void ThrowBadAnyCast() {
 
 }  // namespace any_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl
+}  // namespace y_absl 
 
 #endif  // ABSL_USES_STD_ANY

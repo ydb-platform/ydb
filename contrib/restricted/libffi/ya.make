@@ -2,22 +2,22 @@
 
 LIBRARY()
 
-OWNER(
-    borman
-    g:cpp-contrib
-)
+OWNER( 
+    borman 
+    g:cpp-contrib 
+) 
 
 VERSION(3.3)
 
 ORIGINAL_SOURCE(https://sourceware.org/pub/libffi/libffi-3.3.tar.gz)
 
-LICENSE(
-    CC-PDDC AND
-    MIT
-)
+LICENSE( 
+    CC-PDDC AND 
+    MIT 
+) 
 
-LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
-
+LICENSE_TEXTS(.yandex_meta/licenses.list.txt) 
+ 
 ADDINCL(
     contrib/restricted/libffi
     contrib/restricted/libffi/include

@@ -1,5 +1,5 @@
-#pragma once
-
+#pragma once 
+ 
 #include "remote_client_session_semaphore.h"
 #include "session_impl.h"
 
@@ -14,7 +14,7 @@
 namespace NBus {
     namespace NPrivate {
         using TRemoteClientSessionPtr = TIntrusivePtr<TRemoteClientSession>;
-
+ 
         class TRemoteClientSession: public TBusClientSession, public TBusSessionImpl {
             friend class TRemoteClientConnection;
             friend class TInvokeOnReply;

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "y_absl/container/internal/hashtablez_sampler.h"
+#include "y_absl/container/internal/hashtablez_sampler.h" 
 
 #include <atomic>
 #include <cassert>
@@ -20,15 +20,15 @@
 #include <functional>
 #include <limits>
 
-#include "y_absl/base/attributes.h"
-#include "y_absl/container/internal/have_sse.h"
-#include "y_absl/debugging/stacktrace.h"
-#include "y_absl/memory/memory.h"
+#include "y_absl/base/attributes.h" 
+#include "y_absl/container/internal/have_sse.h" 
+#include "y_absl/debugging/stacktrace.h" 
+#include "y_absl/memory/memory.h" 
 #include "y_absl/profiling/internal/exponential_biased.h"
 #include "y_absl/profiling/internal/sample_recorder.h"
-#include "y_absl/synchronization/mutex.h"
+#include "y_absl/synchronization/mutex.h" 
 
-namespace y_absl {
+namespace y_absl { 
 ABSL_NAMESPACE_BEGIN
 namespace container_internal {
 constexpr int HashtablezInfo::kMaxStackDepth;
@@ -73,11 +73,11 @@ void HashtablezInfo::PrepareForSampling() {
   hashes_bitwise_xor.store(0, std::memory_order_relaxed);
   max_reserve.store(0, std::memory_order_relaxed);
 
-  create_time = y_absl::Now();
+  create_time = y_absl::Now(); 
   // The inliner makes hardcoded skip_count difficult (especially when combined
   // with LTO).  We use the ability to exclude stacks by regex when encoding
   // instead.
-  depth = y_absl::GetStackTrace(stack, HashtablezInfo::kMaxStackDepth,
+  depth = y_absl::GetStackTrace(stack, HashtablezInfo::kMaxStackDepth, 
                               /* skip_count= */ 0);
 }
 
@@ -187,4 +187,4 @@ void SetHashtablezMaxSamples(int32_t max) {
 
 }  // namespace container_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl
+}  // namespace y_absl 

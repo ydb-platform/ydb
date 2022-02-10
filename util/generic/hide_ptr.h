@@ -1,3 +1,3 @@
-#pragma once
-
-void* HidePointerOrigin(void*);
+#pragma once 
+ 
+void* HidePointerOrigin(void*); 

@@ -19,12 +19,12 @@
 #include <util/generic/string.h>
 #include <vector>
 
-#include "y_absl/hash/hash.h"
-#include "y_absl/strings/match.h"
-#include "y_absl/strings/str_format.h"
-#include "y_absl/strings/str_join.h"
+#include "y_absl/hash/hash.h" 
+#include "y_absl/strings/match.h" 
+#include "y_absl/strings/str_format.h" 
+#include "y_absl/strings/str_join.h" 
 
-namespace y_absl {
+namespace y_absl { 
 ABSL_NAMESPACE_BEGIN
 namespace hash_internal {
 
@@ -40,7 +40,7 @@ namespace hash_internal {
 template <typename T>
 class SpyHashStateImpl : public HashStateBase<SpyHashStateImpl<T>> {
  public:
-  SpyHashStateImpl() : error_(std::make_shared<y_absl::optional<TString>>()) {
+  SpyHashStateImpl() : error_(std::make_shared<y_absl::optional<TString>>()) { 
     static_assert(std::is_void<T>::value, "");
   }
 
@@ -112,11 +112,11 @@ class SpyHashStateImpl : public HashStateBase<SpyHashStateImpl<T>> {
 
   static CompareResult Compare(const SpyHashStateImpl& a,
                                const SpyHashStateImpl& b) {
-    const TString a_flat = y_absl::StrJoin(a.hash_representation_, "");
-    const TString b_flat = y_absl::StrJoin(b.hash_representation_, "");
+    const TString a_flat = y_absl::StrJoin(a.hash_representation_, ""); 
+    const TString b_flat = y_absl::StrJoin(b.hash_representation_, ""); 
     if (a_flat == b_flat) return CompareResult::kEqual;
-    if (y_absl::EndsWith(a_flat, b_flat)) return CompareResult::kBSuffixA;
-    if (y_absl::EndsWith(b_flat, a_flat)) return CompareResult::kASuffixB;
+    if (y_absl::EndsWith(a_flat, b_flat)) return CompareResult::kBSuffixA; 
+    if (y_absl::EndsWith(b_flat, a_flat)) return CompareResult::kASuffixB; 
     return CompareResult::kUnequal;
   }
 
@@ -129,12 +129,12 @@ class SpyHashStateImpl : public HashStateBase<SpyHashStateImpl<T>> {
       size_t offset = 0;
       for (char c : s) {
         if (offset % 16 == 0) {
-          out << y_absl::StreamFormat("\n0x%04x: ", offset);
+          out << y_absl::StreamFormat("\n0x%04x: ", offset); 
         }
         if (offset % 2 == 0) {
           out << " ";
         }
-        out << y_absl::StreamFormat("%02x", c);
+        out << y_absl::StreamFormat("%02x", c); 
         ++offset;
       }
       out << "\n";
@@ -167,7 +167,7 @@ class SpyHashStateImpl : public HashStateBase<SpyHashStateImpl<T>> {
 
   using SpyHashStateImpl::HashStateBase::combine_contiguous;
 
-  y_absl::optional<TString> error() const {
+  y_absl::optional<TString> error() const { 
     if (moved_from_) {
       return "Returned a moved-from instance of the hash state object.";
     }
@@ -183,11 +183,11 @@ class SpyHashStateImpl : public HashStateBase<SpyHashStateImpl<T>> {
   // AbslHashValue directly (because the hash state type does not match).
   static bool direct_absl_hash_value_error_;
 
-  std::vector<TString> hash_representation_;
+  std::vector<TString> hash_representation_; 
   // This is a shared_ptr because we want all instances of the particular
   // SpyHashState run to share the field. This way we can set the error for
   // use-after-move and all the copies will see it.
-  std::shared_ptr<y_absl::optional<TString>> error_;
+  std::shared_ptr<y_absl::optional<TString>> error_; 
   bool moved_from_ = false;
 };
 
@@ -212,7 +212,7 @@ bool RunOnStartup<f>::run = (f(), true);
 template <
     typename T, typename U,
     // Only trigger for when (T != U),
-    typename = y_absl::enable_if_t<!std::is_same<T, U>::value>,
+    typename = y_absl::enable_if_t<!std::is_same<T, U>::value>, 
     // This statement works in two ways:
     //  - First, it instantiates RunOnStartup and forces the initialization of
     //    `run`, which set the global variable.
@@ -226,6 +226,6 @@ using SpyHashState = SpyHashStateImpl<void>;
 
 }  // namespace hash_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl
+}  // namespace y_absl 
 
 #endif  // ABSL_HASH_INTERNAL_SPY_HASH_STATE_H_

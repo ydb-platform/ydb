@@ -1,14 +1,14 @@
 PROGRAM()
 
-LICENSE(
-    Apache-2.0 AND
-    GPL-3.0-or-later WITH Bison-exception-2.2
+LICENSE( 
+    Apache-2.0 AND 
+    GPL-3.0-or-later WITH Bison-exception-2.2 
 )
 
-LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
-
-OWNER(g:contrib)
-
+LICENSE_TEXTS(.yandex_meta/licenses.list.txt) 
+ 
+OWNER(g:contrib) 
+ 
 PEERDIR(
     contrib/restricted/boost
     contrib/restricted/thrift

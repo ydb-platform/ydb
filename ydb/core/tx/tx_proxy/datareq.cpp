@@ -576,10 +576,10 @@ void TKeySpace::Initialize(bool ordered,
     SpaceRange.To.Parse(TSerializedCellVec::Serialize(range.To));
     SpaceRange.ToInclusive = range.InclusiveTo;
 
-    // +INF should not be included
-    if (SpaceRange.To.GetCells().empty())
-        SpaceRange.ToInclusive = false;
-
+    // +INF should not be included 
+    if (SpaceRange.To.GetCells().empty()) 
+        SpaceRange.ToInclusive = false; 
+ 
     OrderedQueue = ordered;
     KeyTypes.assign(keyTypes.begin(), keyTypes.end());
     QueuePoint = SpaceRange.From;

@@ -24,10 +24,10 @@
 #include <cstdint>
 #include <cstring>
 
-#include "y_absl/base/macros.h"
-#include "y_absl/base/port.h"
+#include "y_absl/base/macros.h" 
+#include "y_absl/base/port.h" 
 
-namespace y_absl {
+namespace y_absl { 
 ABSL_NAMESPACE_BEGIN
 namespace strings_internal {
 
@@ -151,6 +151,6 @@ constexpr Charmap PunctCharmap() { return GraphCharmap() & ~AlnumCharmap(); }
 
 }  // namespace strings_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl
+}  // namespace y_absl 
 
 #endif  // ABSL_STRINGS_INTERNAL_CHAR_MAP_H_

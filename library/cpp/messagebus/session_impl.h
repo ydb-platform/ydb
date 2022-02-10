@@ -1,5 +1,5 @@
-#pragma once
-
+#pragma once 
+ 
 #include "acceptor_status.h"
 #include "async_result.h"
 #include "event_loop.h"
@@ -9,7 +9,7 @@
 #include "session_job_count.h"
 #include "shutdown_state.h"
 #include "ybus.h"
-
+ 
 #include <library/cpp/messagebus/actor/actor.h>
 #include <library/cpp/messagebus/actor/queue_in_actor.h>
 #include <library/cpp/messagebus/monitoring/mon_proto.pb.h>
@@ -25,7 +25,7 @@ namespace NBus {
         typedef TIntrusivePtr<TRemoteServerConnection> TRemoteServerConnectionPtr;
 
         typedef TIntrusivePtr<TRemoteServerSession> TRemoteServerSessionPtr;
-
+ 
         typedef TIntrusivePtr<TAcceptor> TAcceptorPtr;
         typedef TVector<TAcceptorPtr> TAcceptorsPtrs;
 
@@ -34,7 +34,7 @@ namespace NBus {
             TVector<TAcceptorPtr> Acceptors;
             ui64 LastConnectionId;
             ui64 LastAcceptorId;
-
+ 
             TConnectionsAcceptorsSnapshot();
         };
 
@@ -96,13 +96,13 @@ namespace NBus {
                             const TBusSessionConfig& config, const TString& name);
 
             ~TBusSessionImpl() override;
-
+ 
             void Shutdown() override;
             bool IsDown();
 
             size_t GetInFlightImpl(const TNetAddr& addr) const;
             size_t GetConnectSyscallsNumForTestImpl(const TNetAddr& addr) const;
-
+ 
             void GetInFlightBulk(TArrayRef<const TNetAddr> addrs, TArrayRef<size_t> results) const override;
             void GetConnectSyscallsNumBulkForTest(TArrayRef<const TNetAddr> addrs, TArrayRef<size_t> results) const override;
 
@@ -123,29 +123,29 @@ namespace NBus {
             void StatusUpdateCachedDumpIfNecessary(TInstant now);
             void Act(TStatusTag);
             void Act(TConnectionTag);
-
+ 
             TBusProtocol* GetProto() const noexcept override;
             const TBusSessionConfig* GetConfig() const noexcept override;
             TBusMessageQueue* GetQueue() const noexcept override;
             TString GetNameInternal() override;
 
             virtual void OnMessageReceived(TRemoteConnection* c, TVectorSwaps<TBusMessagePtrAndHeader>& newMsg) = 0;
-
+ 
             void Listen(int port, TBusMessageQueue* q);
             void Listen(const TVector<TBindResult>& bindTo, TBusMessageQueue* q);
             TBusConnection* Accept(SOCKET listen);
-
+ 
             inline ::NActor::TActor<TBusSessionImpl, TStatusTag>* GetStatusActor() {
                 return this;
             }
             inline ::NActor::TActor<TBusSessionImpl, TConnectionTag>* GetConnectionsActor() {
                 return this;
             }
-
+ 
             typedef THashMap<TBusSocketAddr, TRemoteConnectionPtr> TAddrRemoteConnections;
 
             void SendSnapshotToStatusActor();
-
+ 
             void InsertConnectionLockAcquired(TRemoteConnection* connection);
             void InsertAcceptorLockAcquired(TAcceptor* acceptor);
 
@@ -159,7 +159,7 @@ namespace NBus {
             TAcceptorPtr GetAcceptorById(ui64 id);
 
             void InvokeOnError(TNonDestroyingAutoPtr<TBusMessage>, EMessageStatus);
-
+ 
             void Cron();
 
             TBusSessionJobCount JobCount;
@@ -193,7 +193,7 @@ namespace NBus {
             struct TStatusData {
                 TAtomicSharedPtr<TConnectionsAcceptorsSnapshot> ConnectionsAcceptorsSnapshot;
                 ::NActor::TQueueForActor<TAtomicSharedPtr<TConnectionsAcceptorsSnapshot>> ConnectionsAcceptorsSnapshotsQueue;
-
+ 
                 TAtomicShutdownState ShutdownState;
 
                 TBusSessionStatus Status;
@@ -246,14 +246,14 @@ namespace NBus {
         inline TBusProtocol* TBusSessionImpl::GetProto() const noexcept {
             return Proto;
         }
-
+ 
         inline const TBusSessionConfig* TBusSessionImpl::GetConfig() const noexcept {
             return &Config;
         }
-
+ 
         inline TBusMessageQueue* TBusSessionImpl::GetQueue() const noexcept {
             return Queue;
         }
-
-    }
+ 
+    } 
 }

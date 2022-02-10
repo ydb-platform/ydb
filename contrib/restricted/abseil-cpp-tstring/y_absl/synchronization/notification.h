@@ -52,11 +52,11 @@
 
 #include <atomic>
 
-#include "y_absl/base/macros.h"
-#include "y_absl/synchronization/mutex.h"
-#include "y_absl/time/time.h"
+#include "y_absl/base/macros.h" 
+#include "y_absl/synchronization/mutex.h" 
+#include "y_absl/time/time.h" 
 
-namespace y_absl {
+namespace y_absl { 
 ABSL_NAMESPACE_BEGIN
 
 // -----------------------------------------------------------------------------
@@ -90,14 +90,14 @@ class Notification {
   // Blocks until either the notification's "notified" state is `true` (which
   // may occur immediately) or the timeout has elapsed, returning the value of
   // its "notified" state in either case.
-  bool WaitForNotificationWithTimeout(y_absl::Duration timeout) const;
+  bool WaitForNotificationWithTimeout(y_absl::Duration timeout) const; 
 
   // Notification::WaitForNotificationWithDeadline()
   //
   // Blocks until either the notification's "notified" state is `true` (which
   // may occur immediately) or the deadline has expired, returning the value of
   // its "notified" state in either case.
-  bool WaitForNotificationWithDeadline(y_absl::Time deadline) const;
+  bool WaitForNotificationWithDeadline(y_absl::Time deadline) const; 
 
   // Notification::Notify()
   //
@@ -118,6 +118,6 @@ class Notification {
 };
 
 ABSL_NAMESPACE_END
-}  // namespace y_absl
+}  // namespace y_absl 
 
 #endif  // ABSL_SYNCHRONIZATION_NOTIFICATION_H_

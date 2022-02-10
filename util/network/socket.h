@@ -29,7 +29,7 @@ struct pollfd {
     short events;
     short revents;
 };
-
+ 
         #define POLLIN (1 << 0)
         #define POLLRDNORM (1 << 1)
         #define POLLRDBAND (1 << 2)
@@ -40,7 +40,7 @@ struct pollfd {
         #define POLLERR (1 << 7)
         #define POLLHUP (1 << 8)
         #define POLLNVAL (1 << 9)
-
+ 
 const char* inet_ntop(int af, const void* src, char* dst, socklen_t size);
 int poll(struct pollfd fds[], nfds_t nfds, int timeout) noexcept;
     #else

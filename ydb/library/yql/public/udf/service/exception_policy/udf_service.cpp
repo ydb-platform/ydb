@@ -10,7 +10,7 @@ extern "C" void UdfFree(const void* mem) {
     return ::NKikimr::NMiniKQL::MKQLFreeDeprecated(mem);
 }
 
-extern "C" [[noreturn]] void UdfTerminate(const char* message) {
+extern "C" [[noreturn]] void UdfTerminate(const char* message) { 
     ::NKikimr::NMiniKQL::MKQLTerminate(message);
 }
 

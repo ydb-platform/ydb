@@ -1,8 +1,8 @@
-#pragma once
-
+#pragma once 
+ 
 #include "async_result.h"
 #include "defs.h"
-#include "event_loop.h"
+#include "event_loop.h" 
 #include "left_right_buffer.h"
 #include "lfqueue_batch.h"
 #include "message_ptr_and_header.h"
@@ -15,7 +15,7 @@
 #include "ybus.h"
 #include "misc/granup.h"
 #include "misc/tokenquota.h"
-
+ 
 #include <library/cpp/messagebus/actor/actor.h>
 #include <library/cpp/messagebus/actor/executor.h>
 #include <library/cpp/messagebus/actor/queue_for_actor.h>
@@ -96,7 +96,7 @@ namespace NBus {
             void Shutdown(EMessageStatus status);
 
             inline const TNetAddr& GetAddr() const noexcept;
-
+ 
         private:
             friend class TScheduleConnect;
             friend class TWorkIO;
@@ -111,14 +111,14 @@ namespace NBus {
             bool ReaderProcessBuffer();
             bool ReaderFillBuffer();
             void ReaderFlushMessages();
-
+ 
             void ReadQuotaWakeup();
             ui32 WriteWakeFlags() const;
-
+ 
             virtual bool NeedInterruptRead() {
                 return false;
             }
-
+ 
         public:
             virtual void TryConnect();
             void ProcessItem(TReaderTag, ::NActor::TDefaultTag, TWriterToReaderSocketMessage);
@@ -174,7 +174,7 @@ namespace NBus {
             void WriterErrorMessage(TNonDestroyingAutoPtr<TBusMessage> m, EMessageStatus status);
             // takes ownership of ms
             void WriterErrorMessages(const TArrayRef<TBusMessage*> ms, EMessageStatus status);
-
+ 
             void FireClientConnectionEvent(TClientConnectionEvent::EType);
 
             size_t GetInFlight();
@@ -207,14 +207,14 @@ namespace NBus {
 
                 NEventLoop::TChannelPtr Channel;
                 ui32 SocketVersion;
-
+ 
                 TRemoteConnectionWriterStatus Status;
                 TInstant StatusLastSendTime;
-
+ 
                 TLocalTasks TimeToRotateCounters;
 
                 TAtomic InFlight;
-
+ 
                 TTimedMessages SendQueue;
                 ui32 AwakeFlags;
                 EWriterState State;
@@ -290,5 +290,5 @@ namespace NBus {
 
         typedef TIntrusivePtr<TRemoteConnection> TRemoteConnectionPtr;
 
-    }
+    } 
 }

@@ -20,15 +20,15 @@
 // This file is separate from thread_identity.h because creating a new
 // ThreadIdentity requires slightly higher level libraries (per_thread_sem
 // and low_level_alloc) than accessing an existing one.  This separation allows
-// us to have a smaller //y_absl/base:base.
+// us to have a smaller //y_absl/base:base. 
 
 #ifndef ABSL_SYNCHRONIZATION_INTERNAL_CREATE_THREAD_IDENTITY_H_
 #define ABSL_SYNCHRONIZATION_INTERNAL_CREATE_THREAD_IDENTITY_H_
 
-#include "y_absl/base/internal/thread_identity.h"
-#include "y_absl/base/port.h"
+#include "y_absl/base/internal/thread_identity.h" 
+#include "y_absl/base/port.h" 
 
-namespace y_absl {
+namespace y_absl { 
 ABSL_NAMESPACE_BEGIN
 namespace synchronization_internal {
 
@@ -55,6 +55,6 @@ inline base_internal::ThreadIdentity* GetOrCreateCurrentThreadIdentity() {
 
 }  // namespace synchronization_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl
+}  // namespace y_absl 
 
 #endif  // ABSL_SYNCHRONIZATION_INTERNAL_CREATE_THREAD_IDENTITY_H_

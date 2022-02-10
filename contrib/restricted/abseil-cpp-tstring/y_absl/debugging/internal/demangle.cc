@@ -17,13 +17,13 @@
 //
 // Note that we only have partial C++11 support yet.
 
-#include "y_absl/debugging/internal/demangle.h"
+#include "y_absl/debugging/internal/demangle.h" 
 
 #include <cstdint>
 #include <cstdio>
 #include <limits>
 
-namespace y_absl {
+namespace y_absl { 
 ABSL_NAMESPACE_BEGIN
 namespace debugging_internal {
 
@@ -1956,4 +1956,4 @@ bool Demangle(const char *mangled, char *out, int out_size) {
 
 }  // namespace debugging_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl
+}  // namespace y_absl 

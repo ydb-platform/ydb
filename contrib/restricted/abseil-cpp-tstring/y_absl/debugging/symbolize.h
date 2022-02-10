@@ -25,7 +25,7 @@
 //   * Implicitly, through the installation of an Abseil failure signal handler.
 //     (See failure_signal_handler.h for more information.)
 //   * By calling `Symbolize()` directly on a program counter you obtain through
-//     `y_absl::GetStackTrace()` or `y_absl::GetStackFrames()`. (See stacktrace.h
+//     `y_absl::GetStackTrace()` or `y_absl::GetStackFrames()`. (See stacktrace.h 
 //     for more information.
 //   * By calling `Symbolize()` directly on a program counter you obtain through
 //     other means (which would be platform-dependent).
@@ -38,11 +38,11 @@
 //
 //   int main(int argc, char** argv) {
 //     // Initialize the Symbolizer before installing the failure signal handler
-//     y_absl::InitializeSymbolizer(argv[0]);
+//     y_absl::InitializeSymbolizer(argv[0]); 
 //
 //     // Now you may install the failure signal handler
-//     y_absl::FailureSignalHandlerOptions options;
-//     y_absl::InstallFailureSignalHandler(options);
+//     y_absl::FailureSignalHandlerOptions options; 
+//     y_absl::InstallFailureSignalHandler(options); 
 //
 //     // Start running your main program
 //     ...
@@ -52,9 +52,9 @@
 #ifndef ABSL_DEBUGGING_SYMBOLIZE_H_
 #define ABSL_DEBUGGING_SYMBOLIZE_H_
 
-#include "y_absl/debugging/internal/symbolize.h"
+#include "y_absl/debugging/internal/symbolize.h" 
 
-namespace y_absl {
+namespace y_absl { 
 ABSL_NAMESPACE_BEGIN
 
 // InitializeSymbolizer()
@@ -67,7 +67,7 @@ ABSL_NAMESPACE_BEGIN
 // Example:
 //
 // int main(int argc, char *argv[]) {
-//   y_absl::InitializeSymbolizer(argv[0]);
+//   y_absl::InitializeSymbolizer(argv[0]); 
 //   // Now you can use the symbolizer
 // }
 void InitializeSymbolizer(const char* argv0);
@@ -86,7 +86,7 @@ void InitializeSymbolizer(const char* argv0);
 //   static void DumpPCAndSymbol(void *pc) {
 //     char tmp[1024];
 //     const char *symbol = "(unknown)";
-//     if (y_absl::Symbolize(pc, tmp, sizeof(tmp))) {
+//     if (y_absl::Symbolize(pc, tmp, sizeof(tmp))) { 
 //       symbol = tmp;
 //     }
 //     y_absl::PrintF("%p  %s\n", pc, symbol);
@@ -94,6 +94,6 @@ void InitializeSymbolizer(const char* argv0);
 bool Symbolize(const void *pc, char *out, int out_size);
 
 ABSL_NAMESPACE_END
-}  // namespace y_absl
+}  // namespace y_absl 
 
 #endif  // ABSL_DEBUGGING_SYMBOLIZE_H_

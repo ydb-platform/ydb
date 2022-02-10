@@ -21,7 +21,7 @@
 
 #include "y_absl/base/config.h"
 
-namespace y_absl {
+namespace y_absl { 
 ABSL_NAMESPACE_BEGIN
 namespace time_internal {
 namespace cctz {
@@ -48,7 +48,7 @@ const char* ParseInt(const char* p, int min, int max, int* vp) {
 }
 
 // abbr = <.*?> | [^-+,\d]{3,}
-const char* ParseAbbr(const char* p, TString* abbr) {
+const char* ParseAbbr(const char* p, TString* abbr) { 
   const char* op = p;
   if (*p == '<') {  // special zoneinfo <...> form
     while (*++p != '>') {
@@ -133,7 +133,7 @@ const char* ParseDateTime(const char* p, PosixTransition* res) {
 }  // namespace
 
 // spec = std offset [ dst [ offset ] , datetime , datetime ]
-bool ParsePosixSpec(const TString& spec, PosixTimeZone* res) {
+bool ParsePosixSpec(const TString& spec, PosixTimeZone* res) { 
   const char* p = spec.c_str();
   if (*p == ':') return false;
 
@@ -156,4 +156,4 @@ bool ParsePosixSpec(const TString& spec, PosixTimeZone* res) {
 }  // namespace cctz
 }  // namespace time_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl
+}  // namespace y_absl 

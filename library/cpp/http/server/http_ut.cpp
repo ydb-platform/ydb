@@ -330,7 +330,7 @@ Y_UNIT_TEST_SUITE(THttpServerTest) {
         THttpServer server(&serverImpl, THttpServer::TOptions(port).EnableKeepAlive(true).EnableCompression(true));
 
         for (int i = 0; i < 2; ++i) {
-            UNIT_ASSERT(server.Start());
+            UNIT_ASSERT(server.Start()); 
 
             TTestRequest r(port);
             r.Content = res;

@@ -29,11 +29,11 @@
 #include <type_traits>
 #include <utility>
 
-#include "y_absl/base/internal/identity.h"
-#include "y_absl/base/macros.h"
-#include "y_absl/meta/type_traits.h"
+#include "y_absl/base/internal/identity.h" 
+#include "y_absl/base/macros.h" 
+#include "y_absl/meta/type_traits.h" 
 
-namespace y_absl {
+namespace y_absl { 
 ABSL_NAMESPACE_BEGIN
 
 namespace internal_casts {
@@ -99,7 +99,7 @@ struct is_bitcastable
 //
 // Such implicit cast chaining may be useful within template logic.
 template <typename To>
-constexpr To implicit_cast(typename y_absl::internal::identity_t<To> to) {
+constexpr To implicit_cast(typename y_absl::internal::identity_t<To> to) { 
   return to;
 }
 
@@ -182,6 +182,6 @@ inline Dest bit_cast(const Source& source) {
 }
 
 ABSL_NAMESPACE_END
-}  // namespace y_absl
+}  // namespace y_absl 
 
 #endif  // ABSL_BASE_CASTS_H_

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "y_absl/strings/str_cat.h"
+#include "y_absl/strings/str_cat.h" 
 
 #include <assert.h>
 
@@ -20,11 +20,11 @@
 #include <cstdint>
 #include <cstring>
 
-#include "y_absl/strings/ascii.h"
-#include "y_absl/strings/internal/resize_uninitialized.h"
-#include "y_absl/strings/numbers.h"
+#include "y_absl/strings/ascii.h" 
+#include "y_absl/strings/internal/resize_uninitialized.h" 
+#include "y_absl/strings/numbers.h" 
 
-namespace y_absl {
+namespace y_absl { 
 ABSL_NAMESPACE_BEGIN
 
 AlphaNum::AlphaNum(Hex hex) {
@@ -32,16 +32,16 @@ AlphaNum::AlphaNum(Hex hex) {
                 "This function only works when output buffer >= 32 bytes long");
   char* const end = &digits_[numbers_internal::kFastToBufferSize];
   auto real_width =
-      y_absl::numbers_internal::FastHexToBufferZeroPad16(hex.value, end - 16);
+      y_absl::numbers_internal::FastHexToBufferZeroPad16(hex.value, end - 16); 
   if (real_width >= hex.width) {
-    piece_ = y_absl::string_view(end - real_width, real_width);
+    piece_ = y_absl::string_view(end - real_width, real_width); 
   } else {
     // Pad first 16 chars because FastHexToBufferZeroPad16 pads only to 16 and
     // max pad width can be up to 20.
     std::memset(end - 32, hex.fill, 16);
     // Patch up everything else up to the real_width.
     std::memset(end - real_width - 16, hex.fill, 16);
-    piece_ = y_absl::string_view(end - hex.width, hex.width);
+    piece_ = y_absl::string_view(end - hex.width, hex.width); 
   }
 }
 
@@ -73,7 +73,7 @@ AlphaNum::AlphaNum(Dec dec) {
     if (add_sign_again) *--writer = '-';
   }
 
-  piece_ = y_absl::string_view(writer, end - writer);
+  piece_ = y_absl::string_view(writer, end - writer); 
 }
 
 // ----------------------------------------------------------------------
@@ -95,9 +95,9 @@ static char* Append(char* out, const AlphaNum& x) {
   return after;
 }
 
-TString StrCat(const AlphaNum& a, const AlphaNum& b) {
-  TString result;
-  y_absl::strings_internal::STLStringResizeUninitialized(&result,
+TString StrCat(const AlphaNum& a, const AlphaNum& b) { 
+  TString result; 
+  y_absl::strings_internal::STLStringResizeUninitialized(&result, 
                                                        a.size() + b.size());
   char* const begin = &result[0];
   char* out = begin;
@@ -107,8 +107,8 @@ TString StrCat(const AlphaNum& a, const AlphaNum& b) {
   return result;
 }
 
-TString StrCat(const AlphaNum& a, const AlphaNum& b, const AlphaNum& c) {
-  TString result;
+TString StrCat(const AlphaNum& a, const AlphaNum& b, const AlphaNum& c) { 
+  TString result; 
   strings_internal::STLStringResizeUninitialized(
       &result, a.size() + b.size() + c.size());
   char* const begin = &result[0];
@@ -120,9 +120,9 @@ TString StrCat(const AlphaNum& a, const AlphaNum& b, const AlphaNum& c) {
   return result;
 }
 
-TString StrCat(const AlphaNum& a, const AlphaNum& b, const AlphaNum& c,
+TString StrCat(const AlphaNum& a, const AlphaNum& b, const AlphaNum& c, 
                    const AlphaNum& d) {
-  TString result;
+  TString result; 
   strings_internal::STLStringResizeUninitialized(
       &result, a.size() + b.size() + c.size() + d.size());
   char* const begin = &result[0];
@@ -138,8 +138,8 @@ TString StrCat(const AlphaNum& a, const AlphaNum& b, const AlphaNum& c,
 namespace strings_internal {
 
 // Do not call directly - these are not part of the public API.
-TString CatPieces(std::initializer_list<y_absl::string_view> pieces) {
-  TString result;
+TString CatPieces(std::initializer_list<y_absl::string_view> pieces) { 
+  TString result; 
   size_t total_size = 0;
   for (const y_absl::string_view& piece : pieces) total_size += piece.size();
   strings_internal::STLStringResizeUninitialized(&result, total_size);
@@ -157,7 +157,7 @@ TString CatPieces(std::initializer_list<y_absl::string_view> pieces) {
   return result;
 }
 
-// It's possible to call StrAppend with an y_absl::string_view that is itself a
+// It's possible to call StrAppend with an y_absl::string_view that is itself a 
 // fragment of the string we're appending to.  However the results of this are
 // random. Therefore, check for this in debug mode.  Use unsigned math so we
 // only have to do one comparison. Note, there's an exception case: appending an
@@ -166,8 +166,8 @@ TString CatPieces(std::initializer_list<y_absl::string_view> pieces) {
   assert(((src).size() == 0) ||      \
          (uintptr_t((src).data() - (dest).data()) > uintptr_t((dest).size())))
 
-void AppendPieces(TString* dest,
-                  std::initializer_list<y_absl::string_view> pieces) {
+void AppendPieces(TString* dest, 
+                  std::initializer_list<y_absl::string_view> pieces) { 
   size_t old_size = dest->size();
   size_t total_size = old_size;
   for (const y_absl::string_view& piece : pieces) {
@@ -190,15 +190,15 @@ void AppendPieces(TString* dest,
 
 }  // namespace strings_internal
 
-void StrAppend(TString* dest, const AlphaNum& a) {
+void StrAppend(TString* dest, const AlphaNum& a) { 
   ASSERT_NO_OVERLAP(*dest, a);
   dest->append(a.data(), a.size());
 }
 
-void StrAppend(TString* dest, const AlphaNum& a, const AlphaNum& b) {
+void StrAppend(TString* dest, const AlphaNum& a, const AlphaNum& b) { 
   ASSERT_NO_OVERLAP(*dest, a);
   ASSERT_NO_OVERLAP(*dest, b);
-  TString::size_type old_size = dest->size();
+  TString::size_type old_size = dest->size(); 
   strings_internal::STLStringResizeUninitializedAmortized(
       dest, old_size + a.size() + b.size());
   char* const begin = &(*dest)[0];
@@ -208,12 +208,12 @@ void StrAppend(TString* dest, const AlphaNum& a, const AlphaNum& b) {
   assert(out == begin + dest->size());
 }
 
-void StrAppend(TString* dest, const AlphaNum& a, const AlphaNum& b,
+void StrAppend(TString* dest, const AlphaNum& a, const AlphaNum& b, 
                const AlphaNum& c) {
   ASSERT_NO_OVERLAP(*dest, a);
   ASSERT_NO_OVERLAP(*dest, b);
   ASSERT_NO_OVERLAP(*dest, c);
-  TString::size_type old_size = dest->size();
+  TString::size_type old_size = dest->size(); 
   strings_internal::STLStringResizeUninitializedAmortized(
       dest, old_size + a.size() + b.size() + c.size());
   char* const begin = &(*dest)[0];
@@ -224,13 +224,13 @@ void StrAppend(TString* dest, const AlphaNum& a, const AlphaNum& b,
   assert(out == begin + dest->size());
 }
 
-void StrAppend(TString* dest, const AlphaNum& a, const AlphaNum& b,
+void StrAppend(TString* dest, const AlphaNum& a, const AlphaNum& b, 
                const AlphaNum& c, const AlphaNum& d) {
   ASSERT_NO_OVERLAP(*dest, a);
   ASSERT_NO_OVERLAP(*dest, b);
   ASSERT_NO_OVERLAP(*dest, c);
   ASSERT_NO_OVERLAP(*dest, d);
-  TString::size_type old_size = dest->size();
+  TString::size_type old_size = dest->size(); 
   strings_internal::STLStringResizeUninitializedAmortized(
       dest, old_size + a.size() + b.size() + c.size() + d.size());
   char* const begin = &(*dest)[0];
@@ -243,4 +243,4 @@ void StrAppend(TString* dest, const AlphaNum& a, const AlphaNum& b,
 }
 
 ABSL_NAMESPACE_END
-}  // namespace y_absl
+}  // namespace y_absl 

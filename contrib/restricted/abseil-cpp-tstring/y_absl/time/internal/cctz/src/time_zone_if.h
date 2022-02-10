@@ -21,10 +21,10 @@
 #include <util/generic/string.h>
 
 #include "y_absl/base/config.h"
-#include "y_absl/time/internal/cctz/include/cctz/civil_time.h"
-#include "y_absl/time/internal/cctz/include/cctz/time_zone.h"
+#include "y_absl/time/internal/cctz/include/cctz/civil_time.h" 
+#include "y_absl/time/internal/cctz/include/cctz/time_zone.h" 
 
-namespace y_absl {
+namespace y_absl { 
 ABSL_NAMESPACE_BEGIN
 namespace time_internal {
 namespace cctz {
@@ -34,7 +34,7 @@ namespace cctz {
 class TimeZoneIf {
  public:
   // A factory function for TimeZoneIf implementations.
-  static std::unique_ptr<TimeZoneIf> Load(const TString& name);
+  static std::unique_ptr<TimeZoneIf> Load(const TString& name); 
 
   virtual ~TimeZoneIf();
 
@@ -47,8 +47,8 @@ class TimeZoneIf {
   virtual bool PrevTransition(const time_point<seconds>& tp,
                               time_zone::civil_transition* trans) const = 0;
 
-  virtual TString Version() const = 0;
-  virtual TString Description() const = 0;
+  virtual TString Version() const = 0; 
+  virtual TString Description() const = 0; 
 
  protected:
   TimeZoneIf() {}
@@ -72,6 +72,6 @@ inline time_point<seconds> FromUnixSeconds(std::int_fast64_t t) {
 }  // namespace cctz
 }  // namespace time_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl
+}  // namespace y_absl 
 
 #endif  // ABSL_TIME_INTERNAL_CCTZ_TIME_ZONE_IF_H_

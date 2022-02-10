@@ -21,10 +21,10 @@
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "y_absl/container/internal/hash_generator_testing.h"
-#include "y_absl/container/internal/hash_policy_testing.h"
+#include "y_absl/container/internal/hash_generator_testing.h" 
+#include "y_absl/container/internal/hash_policy_testing.h" 
 
-namespace y_absl {
+namespace y_absl { 
 ABSL_NAMESPACE_BEGIN
 namespace container_internal {
 
@@ -99,7 +99,7 @@ using has_cxx14_std_apis = std::false_type;
 
 template <typename T>
 using expect_cxx14_apis =
-    y_absl::disjunction<y_absl::negation<is_std_unordered_map<T>>,
+    y_absl::disjunction<y_absl::negation<is_std_unordered_map<T>>, 
                       has_cxx14_std_apis>;
 
 template <typename TypeParam>
@@ -149,7 +149,7 @@ using has_alloc_std_constructors = std::false_type;
 
 template <typename T>
 using expect_alloc_constructors =
-    y_absl::disjunction<y_absl::negation<is_std_unordered_map<T>>,
+    y_absl::disjunction<y_absl::negation<is_std_unordered_map<T>>, 
                       has_alloc_std_constructors>;
 
 template <typename TypeParam>
@@ -489,6 +489,6 @@ REGISTER_TYPED_TEST_CASE_P(
 
 }  // namespace container_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl
+}  // namespace y_absl 
 
 #endif  // ABSL_CONTAINER_INTERNAL_UNORDERED_MAP_CONSTRUCTOR_TEST_H_

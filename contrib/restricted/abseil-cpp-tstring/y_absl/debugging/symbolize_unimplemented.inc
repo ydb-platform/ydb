@@ -14,9 +14,9 @@
 
 #include <cstdint>
 
-#include "y_absl/base/internal/raw_logging.h"
+#include "y_absl/base/internal/raw_logging.h" 
 
-namespace y_absl {
+namespace y_absl { 
 ABSL_NAMESPACE_BEGIN
 
 namespace debugging_internal {
@@ -37,4 +37,4 @@ void InitializeSymbolizer(const char*) {}
 bool Symbolize(const void *, char *, int) { return false; }
 
 ABSL_NAMESPACE_END
-}  // namespace y_absl
+}  // namespace y_absl 

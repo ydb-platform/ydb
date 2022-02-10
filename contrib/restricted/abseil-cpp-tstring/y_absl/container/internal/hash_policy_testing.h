@@ -26,10 +26,10 @@
 #include <utility>
 #include <vector>
 
-#include "y_absl/hash/hash.h"
-#include "y_absl/strings/string_view.h"
+#include "y_absl/hash/hash.h" 
+#include "y_absl/strings/string_view.h" 
 
-namespace y_absl {
+namespace y_absl { 
 ABSL_NAMESPACE_BEGIN
 namespace container_internal {
 namespace hash_testing_internal {
@@ -74,7 +74,7 @@ struct WithId {
 
 struct NonStandardLayout {
   NonStandardLayout() {}
-  explicit NonStandardLayout(TString s) : value(std::move(s)) {}
+  explicit NonStandardLayout(TString s) : value(std::move(s)) {} 
   virtual ~NonStandardLayout() {}
 
   friend bool operator==(const NonStandardLayout& a,
@@ -91,20 +91,20 @@ struct NonStandardLayout {
     return H::combine(std::move(h), v.value);
   }
 
-  TString value;
+  TString value; 
 };
 
 struct StatefulTestingHash
-    : y_absl::container_internal::hash_testing_internal::WithId<
+    : y_absl::container_internal::hash_testing_internal::WithId< 
           StatefulTestingHash> {
   template <class T>
   size_t operator()(const T& t) const {
-    return y_absl::Hash<T>{}(t);
+    return y_absl::Hash<T>{}(t); 
   }
 };
 
 struct StatefulTestingEqual
-    : y_absl::container_internal::hash_testing_internal::WithId<
+    : y_absl::container_internal::hash_testing_internal::WithId< 
           StatefulTestingEqual> {
   template <class T, class U>
   bool operator()(const T& t, const U& u) const {
@@ -164,7 +164,7 @@ auto keys(const Set& s)
 
 }  // namespace container_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl
+}  // namespace y_absl 
 
 // ABSL_UNORDERED_SUPPORTS_ALLOC_CTORS is false for glibcxx versions
 // where the unordered containers are missing certain constructors that

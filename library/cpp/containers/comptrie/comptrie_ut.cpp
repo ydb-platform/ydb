@@ -862,14 +862,14 @@ void TCompactTrieTest::TestMergeFromFile() {
 
     {
         TCompactTrieBuilder<> b;
-        UNIT_ASSERT(b.AddSubtreeInFile("com.", GetSystemTempDir() + "/TCompactTrieTest-TestMerge-com"));
+        UNIT_ASSERT(b.AddSubtreeInFile("com.", GetSystemTempDir() + "/TCompactTrieTest-TestMerge-com")); 
         UNIT_ASSERT(b.Add("org.kernel", 22));
-        UNIT_ASSERT(b.AddSubtreeInFile("ru.", GetSystemTempDir() + "/TCompactTrieTest-TestMerge-ru"));
+        UNIT_ASSERT(b.AddSubtreeInFile("ru.", GetSystemTempDir() + "/TCompactTrieTest-TestMerge-ru")); 
         TUnbufferedFileOutput out(GetSystemTempDir() + "/TCompactTrieTest-TestMerge-res");
         b.Save(out);
     }
 
-    TCompactTrie<> trie(TBlob::FromFileSingleThreaded(GetSystemTempDir() + "/TCompactTrieTest-TestMerge-res"));
+    TCompactTrie<> trie(TBlob::FromFileSingleThreaded(GetSystemTempDir() + "/TCompactTrieTest-TestMerge-res")); 
     UNIT_ASSERT_VALUES_EQUAL(12u, trie.Get("ru.yandex"));
     UNIT_ASSERT_VALUES_EQUAL(13u, trie.Get("ru.google"));
     UNIT_ASSERT_VALUES_EQUAL(14u, trie.Get("ru.mail"));

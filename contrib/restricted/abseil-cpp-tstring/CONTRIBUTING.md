@@ -39,16 +39,16 @@ of the following criteria:
     of the libraries we've released have tens of thousands of users.
 *   **Anticipated widespread usage** - Pre-adoption of some standard-compliant
     APIs may not have broad adoption initially but can be expected to pick up
-    usage when it replaces legacy APIs. `y_absl::from_chars`, for example,
+    usage when it replaces legacy APIs. `y_absl::from_chars`, for example, 
     replaces existing code that converts strings to numbers and will therefore
     likely see usage growth.
 *   **High impact** - APIs that provide a key solution to a specific problem,
-    such as `y_absl::FixedArray`, have higher impact than usage numbers may signal
+    such as `y_absl::FixedArray`, have higher impact than usage numbers may signal 
     and are released because of their importance.
 *   **Direct support for a library that falls under one of the above** - When we
     want access to a smaller library as an implementation detail for a
     higher-priority library we plan to release, we may release it, as we did
-    with portions of `y_absl/meta/type_traits.h`. One consequence of this is that
+    with portions of `y_absl/meta/type_traits.h`. One consequence of this is that 
     the presence of a library in Abseil does not necessarily mean that other
     similar libraries would be a high priority.
 

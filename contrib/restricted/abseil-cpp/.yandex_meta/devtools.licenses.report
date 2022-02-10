@@ -502,7 +502,7 @@ BELONGS absl/algorithm/ya.make absl/base/ya.make absl/container/ya.make absl/deb
         absl/types/variant.h [3:13]
         absl/utility/utility.h [3:13]
 
-SKIP     LicenseRef-scancode-warranty-disclaimer 5ba761db85e57267704f71a6bcf20c2a
+SKIP     LicenseRef-scancode-warranty-disclaimer 5ba761db85e57267704f71a6bcf20c2a 
 BELONGS absl/container/ya.make ya.make
     License text:
         // This utility is internal-only. Use at your own risk.
@@ -515,7 +515,7 @@ BELONGS absl/container/ya.make ya.make
         absl/container/internal/hashtablez_sampler.h [37:37]
         absl/profiling/internal/sample_recorder.h [22:22]
 
-SKIP     LicenseRef-scancode-generic-cla 5d780ffa423067f23c6a123ae33e7c18
+SKIP     LicenseRef-scancode-generic-cla 5d780ffa423067f23c6a123ae33e7c18 
 BELONGS ya.make
     License text:
         \## Contributor License Agreement
@@ -527,7 +527,7 @@ BELONGS ya.make
     Files with this license:
         CONTRIBUTING.md [9:9]
 
-SKIP     LicenseRef-scancode-unknown-license-reference 8e1ade755f3bfad0a6736f291073f1ac
+SKIP     LicenseRef-scancode-unknown-license-reference 8e1ade755f3bfad0a6736f291073f1ac 
 BELONGS ya.make
     License text:
         license. See [LICENSE](LICENSE) for more information.
@@ -539,7 +539,7 @@ BELONGS ya.make
     Files with this license:
         README.md [131:131]
 
-SKIP     LicenseRef-scancode-generic-exception 99cf00730bf3973359b67cfa5b7ac051
+SKIP     LicenseRef-scancode-generic-exception 99cf00730bf3973359b67cfa5b7ac051 
 BELONGS absl/synchronization/ya.make
     License text:
           // logging; as a special exception, the function may acquire other mutexes
@@ -575,7 +575,7 @@ BELONGS absl/debugging/internal/ya.make absl/synchronization/internal/ya.make
         absl/debugging/internal/stacktrace_config.h [4:14]
         absl/synchronization/internal/create_thread_identity.h [4:14]
 
-SKIP     LicenseRef-scancode-generic-cla d72fcd21b18e44b666a94e6225ed43eb
+SKIP     LicenseRef-scancode-generic-cla d72fcd21b18e44b666a94e6225ed43eb 
 BELONGS ya.make
     License text:
         Contributions to this project must be accompanied by a Contributor License

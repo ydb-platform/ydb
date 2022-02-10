@@ -65,32 +65,32 @@ supported operating systems, compilers, CPUs, etc.
 
 Abseil contains the following C++ library components:
 
-* [`base`](y_absl/base/) Abseil Fundamentals
+* [`base`](y_absl/base/) Abseil Fundamentals 
   <br /> The `base` library contains initialization code and other code which
   all other Abseil code depends on. Code within `base` may not depend on any
   other code (other than the C++ standard library).
-* [`algorithm`](y_absl/algorithm/)
+* [`algorithm`](y_absl/algorithm/) 
   <br /> The `algorithm` library contains additions to the C++ `<algorithm>`
   library and container-based versions of such algorithms.
 * [`cleanup`](y_absl/cleanup/)
   <br /> The `cleanup` library contains the control-flow-construct-like type
   `y_absl::Cleanup` which is used for executing a callback on scope exit.
-* [`container`](y_absl/container/)
+* [`container`](y_absl/container/) 
   <br /> The `container` library contains additional STL-style containers,
   including Abseil's unordered "Swiss table" containers.
-* [`debugging`](y_absl/debugging/)
+* [`debugging`](y_absl/debugging/) 
   <br /> The `debugging` library contains code useful for enabling leak
   checks, and stacktrace and symbolization utilities.
-* [`hash`](y_absl/hash/)
+* [`hash`](y_absl/hash/) 
   <br /> The `hash` library contains the hashing framework and default hash
   functor implementations for hashable types in Abseil.
-* [`memory`](y_absl/memory/)
+* [`memory`](y_absl/memory/) 
   <br /> The `memory` library contains C++11-compatible versions of
   `std::make_unique()` and related memory management facilities.
-* [`meta`](y_absl/meta/)
+* [`meta`](y_absl/meta/) 
   <br /> The `meta` library contains C++11-compatible versions of type checks
   available within C++14 and C++17 versions of the C++ `<type_traits>` library.
-* [`numeric`](y_absl/numeric/)
+* [`numeric`](y_absl/numeric/) 
   <br /> The `numeric` library contains C++11-compatible 128-bit integers.
 * [`profiling`](y_absl/profiling/)
   <br /> The `profiling` library contains utility code for profiling C++
@@ -98,22 +98,22 @@ Abseil contains the following C++ library components:
 * [`status`](y_absl/status/)
   <br /> The `status` contains abstractions for error handling, specifically
   `y_absl::Status` and `y_absl::StatusOr<T>`.
-* [`strings`](y_absl/strings/)
+* [`strings`](y_absl/strings/) 
   <br /> The `strings` library contains a variety of strings routines and
   utilities, including a C++11-compatible version of the C++17
   `std::string_view` type.
-* [`synchronization`](y_absl/synchronization/)
+* [`synchronization`](y_absl/synchronization/) 
   <br /> The `synchronization` library contains concurrency primitives (Abseil's
-  `y_absl::Mutex` class, an alternative to `std::mutex`) and a variety of
+  `y_absl::Mutex` class, an alternative to `std::mutex`) and a variety of 
   synchronization abstractions.
-* [`time`](y_absl/time/)
+* [`time`](y_absl/time/) 
   <br /> The `time` library contains abstractions for computing with absolute
   points in time, durations of time, and formatting and parsing time within
   time zones.
-* [`types`](y_absl/types/)
+* [`types`](y_absl/types/) 
   <br /> The `types` library contains non-container utility types, like a
   C++11-compatible version of the C++17 `std::optional` type.
-* [`utility`](y_absl/utility/)
+* [`utility`](y_absl/utility/) 
   <br /> The `utility` library contains utility and helper code.
 
 ## Releases

@@ -24,8 +24,8 @@
 #include <utility>
 
 #include "y_absl/base/config.h"
-#include "y_absl/time/internal/cctz/include/cctz/civil_time.h"
-#include "y_absl/time/internal/cctz/include/cctz/time_zone.h"
+#include "y_absl/time/internal/cctz/include/cctz/civil_time.h" 
+#include "y_absl/time/internal/cctz/include/cctz/time_zone.h" 
 
 #if defined(_AIX)
 extern "C" {
@@ -33,7 +33,7 @@ extern long altzone;
 }
 #endif
 
-namespace y_absl {
+namespace y_absl { 
 ABSL_NAMESPACE_BEGIN
 namespace time_internal {
 namespace cctz {
@@ -183,7 +183,7 @@ std::time_t find_trans(std::time_t lo, std::time_t hi, int offset) {
 
 }  // namespace
 
-TimeZoneLibC::TimeZoneLibC(const TString& name)
+TimeZoneLibC::TimeZoneLibC(const TString& name) 
     : local_(name == "localtime") {}
 
 time_zone::absolute_lookup TimeZoneLibC::BreakTime(
@@ -301,15 +301,15 @@ bool TimeZoneLibC::PrevTransition(const time_point<seconds>&,
   return false;
 }
 
-TString TimeZoneLibC::Version() const {
-  return TString();  // unknown
+TString TimeZoneLibC::Version() const { 
+  return TString();  // unknown 
 }
 
-TString TimeZoneLibC::Description() const {
+TString TimeZoneLibC::Description() const { 
   return local_ ? "localtime" : "UTC";
 }
 
 }  // namespace cctz
 }  // namespace time_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl
+}  // namespace y_absl 

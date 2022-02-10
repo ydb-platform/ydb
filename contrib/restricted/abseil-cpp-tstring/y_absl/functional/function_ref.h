@@ -16,15 +16,15 @@
 // File: function_ref.h
 // -----------------------------------------------------------------------------
 //
-// This header file defines the `y_absl::FunctionRef` type for holding a
+// This header file defines the `y_absl::FunctionRef` type for holding a 
 // non-owning reference to an object of any invocable type. This function
 // reference is typically most useful as a type-erased argument type for
 // accepting function types that neither take ownership nor copy the type; using
 // the reference type in this case avoids a copy and an allocation. Best
 // practices of other non-owning reference-like objects (such as
-// `y_absl::string_view`) apply here.
+// `y_absl::string_view`) apply here. 
 //
-//  An `y_absl::FunctionRef` is similar in usage to a `std::function` but has the
+//  An `y_absl::FunctionRef` is similar in usage to a `std::function` but has the 
 //  following differences:
 //
 //  * It doesn't own the underlying object.
@@ -33,10 +33,10 @@
 //  * It's much faster and cheaper to construct.
 //  * It's trivially copyable and destructable.
 //
-// Generally, `y_absl::FunctionRef` should not be used as a return value, data
+// Generally, `y_absl::FunctionRef` should not be used as a return value, data 
 // member, or to initialize a `std::function`. Such usages will often lead to
 // problematic lifetime issues. Once you convert something to an
-// `y_absl::FunctionRef` you cannot make a deep copy later.
+// `y_absl::FunctionRef` you cannot make a deep copy later. 
 //
 // This class is suitable for use wherever a "const std::function<>&"
 // would be used without making a copy. ForEach functions and other versions of
@@ -51,10 +51,10 @@
 #include <type_traits>
 
 #include "y_absl/base/attributes.h"
-#include "y_absl/functional/internal/function_ref.h"
-#include "y_absl/meta/type_traits.h"
+#include "y_absl/functional/internal/function_ref.h" 
+#include "y_absl/meta/type_traits.h" 
 
-namespace y_absl {
+namespace y_absl { 
 ABSL_NAMESPACE_BEGIN
 
 // FunctionRef
@@ -66,8 +66,8 @@ class FunctionRef;
 
 // FunctionRef
 //
-// An `y_absl::FunctionRef` is a lightweight wrapper to any invokable object with
-// a compatible signature. Generally, an `y_absl::FunctionRef` should only be used
+// An `y_absl::FunctionRef` is a lightweight wrapper to any invokable object with 
+// a compatible signature. Generally, an `y_absl::FunctionRef` should only be used 
 // as an argument type and should be preferred as an argument over a const
 // reference to a `std::function`.
 //
@@ -75,15 +75,15 @@ class FunctionRef;
 //
 //   // The following function takes a function callback by const reference
 //   bool Visitor(const std::function<void(my_proto&,
-//                                         y_absl::string_view)>& callback);
+//                                         y_absl::string_view)>& callback); 
 //
 //   // Assuming that the function is not stored or otherwise copied, it can be
-//   // replaced by an `y_absl::FunctionRef`:
-//   bool Visitor(y_absl::FunctionRef<void(my_proto&, y_absl::string_view)>
+//   // replaced by an `y_absl::FunctionRef`: 
+//   bool Visitor(y_absl::FunctionRef<void(my_proto&, y_absl::string_view)> 
 //                  callback);
 //
-// Note: the assignment operator within an `y_absl::FunctionRef` is intentionally
-// deleted to prevent misuse; because the `y_absl::FunctionRef` does not own the
+// Note: the assignment operator within an `y_absl::FunctionRef` is intentionally 
+// deleted to prevent misuse; because the `y_absl::FunctionRef` does not own the 
 // underlying type, assignment likely indicates misuse.
 template <typename R, typename... Args>
 class FunctionRef<R(Args...)> {
@@ -101,8 +101,8 @@ class FunctionRef<R(Args...)> {
   template <typename F, typename = EnableIfCompatible<const F&>>
   // NOLINTNEXTLINE(runtime/explicit)
   FunctionRef(const F& f ABSL_ATTRIBUTE_LIFETIME_BOUND)
-      : invoker_(&y_absl::functional_internal::InvokeObject<F, R, Args...>) {
-    y_absl::functional_internal::AssertNonNull(f);
+      : invoker_(&y_absl::functional_internal::InvokeObject<F, R, Args...>) { 
+    y_absl::functional_internal::AssertNonNull(f); 
     ptr_.obj = &f;
   }
 
@@ -114,9 +114,9 @@ class FunctionRef<R(Args...)> {
   // functions can decay to function pointers implicitly.
   template <
       typename F, typename = EnableIfCompatible<F*>,
-      y_absl::functional_internal::EnableIf<y_absl::is_function<F>::value> = 0>
+      y_absl::functional_internal::EnableIf<y_absl::is_function<F>::value> = 0> 
   FunctionRef(F* f)  // NOLINT(runtime/explicit)
-      : invoker_(&y_absl::functional_internal::InvokeFunction<F*, R, Args...>) {
+      : invoker_(&y_absl::functional_internal::InvokeFunction<F*, R, Args...>) { 
     assert(f != nullptr);
     ptr_.fun = reinterpret_cast<decltype(ptr_.fun)>(f);
   }
@@ -132,11 +132,11 @@ class FunctionRef<R(Args...)> {
   }
 
  private:
-  y_absl::functional_internal::VoidPtr ptr_;
-  y_absl::functional_internal::Invoker<R, Args...> invoker_;
+  y_absl::functional_internal::VoidPtr ptr_; 
+  y_absl::functional_internal::Invoker<R, Args...> invoker_; 
 };
 
 ABSL_NAMESPACE_END
-}  // namespace y_absl
+}  // namespace y_absl 
 
 #endif  // ABSL_FUNCTIONAL_FUNCTION_REF_H_

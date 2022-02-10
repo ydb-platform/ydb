@@ -12,13 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// The implementation of the y_absl::Duration class, which is declared in
-// //y_absl/time.h.  This class behaves like a numeric type; it has no public
+// The implementation of the y_absl::Duration class, which is declared in 
+// //y_absl/time.h.  This class behaves like a numeric type; it has no public 
 // methods and is used only through the operators defined here.
 //
 // Implementation notes:
 //
-// An y_absl::Duration is represented as
+// An y_absl::Duration is represented as 
 //
 //   rep_hi_ : (int64_t)  Whole seconds
 //   rep_lo_ : (uint32_t) Fractions of a second
@@ -66,14 +66,14 @@
 #include <limits>
 #include <util/generic/string.h>
 
-#include "y_absl/base/casts.h"
+#include "y_absl/base/casts.h" 
 #include "y_absl/base/macros.h"
-#include "y_absl/numeric/int128.h"
+#include "y_absl/numeric/int128.h" 
 #include "y_absl/strings/string_view.h"
 #include "y_absl/strings/strip.h"
-#include "y_absl/time/time.h"
+#include "y_absl/time/time.h" 
 
-namespace y_absl {
+namespace y_absl { 
 ABSL_NAMESPACE_BEGIN
 
 namespace {
@@ -189,9 +189,9 @@ inline Duration MakeDurationFromU128(uint128 u128, bool is_neg) {
 // bits, and a two's complement representation." So, we can convert to
 // and from the corresponding uint64_t value using a bit cast.
 inline uint64_t EncodeTwosComp(int64_t v) {
-  return y_absl::bit_cast<uint64_t>(v);
+  return y_absl::bit_cast<uint64_t>(v); 
 }
-inline int64_t DecodeTwosComp(uint64_t v) { return y_absl::bit_cast<int64_t>(v); }
+inline int64_t DecodeTwosComp(uint64_t v) { return y_absl::bit_cast<int64_t>(v); } 
 
 // Note: The overflow detection in this function is done using greater/less *or
 // equal* because kint64max/min is too large to be represented exactly in a
@@ -508,12 +508,12 @@ Duration Trunc(Duration d, Duration unit) {
 }
 
 Duration Floor(const Duration d, const Duration unit) {
-  const y_absl::Duration td = Trunc(d, unit);
+  const y_absl::Duration td = Trunc(d, unit); 
   return td <= d ? td : td - AbsDuration(unit);
 }
 
 Duration Ceil(const Duration d, const Duration unit) {
-  const y_absl::Duration td = Trunc(d, unit);
+  const y_absl::Duration td = Trunc(d, unit); 
   return td >= d ? td : td + AbsDuration(unit);
 }
 
@@ -723,7 +723,7 @@ ABSL_CONST_INIT const DisplayUnit kDisplayMin = {"m", -1, 0.0};  // prec ignored
 ABSL_CONST_INIT const DisplayUnit kDisplayHour = {"h", -1,
                                                   0.0};  // prec ignored
 
-void AppendNumberUnit(TString* out, int64_t n, DisplayUnit unit) {
+void AppendNumberUnit(TString* out, int64_t n, DisplayUnit unit) { 
   char buf[sizeof("2562047788015216")];  // hours in max duration
   char* const ep = buf + sizeof(buf);
   char* bp = Format64(ep, 0, n);
@@ -735,7 +735,7 @@ void AppendNumberUnit(TString* out, int64_t n, DisplayUnit unit) {
 
 // Note: unit.prec is limited to double's digits10 value (typically 15) so it
 // always fits in buf[].
-void AppendNumberUnit(TString* out, double n, DisplayUnit unit) {
+void AppendNumberUnit(TString* out, double n, DisplayUnit unit) { 
   constexpr int kBufferSize = std::numeric_limits<double>::digits10;
   const int prec = std::min(kBufferSize, unit.prec);
   char buf[kBufferSize];  // also large enough to hold integer part
@@ -765,14 +765,14 @@ void AppendNumberUnit(TString* out, double n, DisplayUnit unit) {
 //   (milli-, micro-, or nanoseconds) to ensure that the leading digit
 //   is non-zero.
 // Unlike Go, we format the zero duration as 0, with no unit.
-TString FormatDuration(Duration d) {
+TString FormatDuration(Duration d) { 
   const Duration min_duration = Seconds(kint64min);
   if (d == min_duration) {
     // Avoid needing to negate kint64min by directly returning what the
     // following code should produce in that case.
     return "-2562047788015215h30m8s";
   }
-  TString s;
+  TString s; 
   if (d < ZeroDuration()) {
     s.append("-");
     d = -d;
@@ -939,16 +939,16 @@ bool ParseDuration(y_absl::string_view dur_sv, Duration* d) {
   return true;
 }
 
-bool AbslParseFlag(y_absl::string_view text, Duration* dst, TString*) {
+bool AbslParseFlag(y_absl::string_view text, Duration* dst, TString*) { 
   return ParseDuration(text, dst);
 }
 
-TString AbslUnparseFlag(Duration d) { return FormatDuration(d); }
-bool ParseFlag(const TString& text, Duration* dst, TString* ) {
+TString AbslUnparseFlag(Duration d) { return FormatDuration(d); } 
+bool ParseFlag(const TString& text, Duration* dst, TString* ) { 
   return ParseDuration(text, dst);
 }
 
-TString UnparseFlag(Duration d) { return FormatDuration(d); }
+TString UnparseFlag(Duration d) { return FormatDuration(d); } 
 
 ABSL_NAMESPACE_END
-}  // namespace y_absl
+}  // namespace y_absl 

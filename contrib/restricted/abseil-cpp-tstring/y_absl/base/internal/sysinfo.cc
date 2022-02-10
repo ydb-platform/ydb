@@ -12,9 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "y_absl/base/internal/sysinfo.h"
+#include "y_absl/base/internal/sysinfo.h" 
 
-#include "y_absl/base/attributes.h"
+#include "y_absl/base/attributes.h" 
 
 #ifdef _WIN32
 #include <windows.h>
@@ -50,14 +50,14 @@
 #include <utility>
 #include <vector>
 
-#include "y_absl/base/call_once.h"
+#include "y_absl/base/call_once.h" 
 #include "y_absl/base/config.h"
-#include "y_absl/base/internal/raw_logging.h"
-#include "y_absl/base/internal/spinlock.h"
-#include "y_absl/base/internal/unscaledcycleclock.h"
+#include "y_absl/base/internal/raw_logging.h" 
+#include "y_absl/base/internal/spinlock.h" 
+#include "y_absl/base/internal/unscaledcycleclock.h" 
 #include "y_absl/base/thread_annotations.h"
 
-namespace y_absl {
+namespace y_absl { 
 ABSL_NAMESPACE_BEGIN
 namespace base_internal {
 
@@ -432,7 +432,7 @@ static void FreeTID(void *v) {
   intptr_t tid = reinterpret_cast<intptr_t>(v);
   int word = tid / kBitsPerWord;
   uint32_t mask = ~(1u << (tid % kBitsPerWord));
-  y_absl::base_internal::SpinLockHolder lock(&tid_lock);
+  y_absl::base_internal::SpinLockHolder lock(&tid_lock); 
   assert(0 <= word && static_cast<size_t>(word) < tid_array->size());
   (*tid_array)[word] &= mask;
 }
@@ -445,14 +445,14 @@ static void InitGetTID() {
   }
 
   // Initialize tid_array.
-  y_absl::base_internal::SpinLockHolder lock(&tid_lock);
+  y_absl::base_internal::SpinLockHolder lock(&tid_lock); 
   tid_array = new std::vector<uint32_t>(1);
   (*tid_array)[0] = 1;  // ID 0 is never-allocated.
 }
 
 // Return a per-thread small integer ID from pthread's thread-specific data.
 pid_t GetTID() {
-  y_absl::call_once(tid_once, InitGetTID);
+  y_absl::call_once(tid_once, InitGetTID); 
 
   intptr_t tid = reinterpret_cast<intptr_t>(pthread_getspecific(tid_key));
   if (tid != 0) {
@@ -463,7 +463,7 @@ pid_t GetTID() {
   size_t word;
   {
     // Search for the first unused ID.
-    y_absl::base_internal::SpinLockHolder lock(&tid_lock);
+    y_absl::base_internal::SpinLockHolder lock(&tid_lock); 
     // First search for a word in the array that is not all ones.
     word = 0;
     while (word < tid_array->size() && ~(*tid_array)[word] == 0) {
@@ -505,4 +505,4 @@ pid_t GetCachedTID() {
 
 }  // namespace base_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl
+}  // namespace y_absl 

@@ -17,16 +17,16 @@
 // This allocator is slow and wasteful of memory;
 // it should not be used when performance is key.
 
-#include "y_absl/base/internal/low_level_alloc.h"
+#include "y_absl/base/internal/low_level_alloc.h" 
 
 #include <type_traits>
 
-#include "y_absl/base/call_once.h"
-#include "y_absl/base/config.h"
-#include "y_absl/base/internal/direct_mmap.h"
-#include "y_absl/base/internal/scheduling_mode.h"
-#include "y_absl/base/macros.h"
-#include "y_absl/base/thread_annotations.h"
+#include "y_absl/base/call_once.h" 
+#include "y_absl/base/config.h" 
+#include "y_absl/base/internal/direct_mmap.h" 
+#include "y_absl/base/internal/scheduling_mode.h" 
+#include "y_absl/base/macros.h" 
+#include "y_absl/base/thread_annotations.h" 
 
 // LowLevelAlloc requires that the platform support low-level
 // allocation of virtual memory. Platforms lacking this cannot use
@@ -49,9 +49,9 @@
 #include <cstddef>
 #include <new>                   // for placement-new
 
-#include "y_absl/base/dynamic_annotations.h"
-#include "y_absl/base/internal/raw_logging.h"
-#include "y_absl/base/internal/spinlock.h"
+#include "y_absl/base/dynamic_annotations.h" 
+#include "y_absl/base/internal/raw_logging.h" 
+#include "y_absl/base/internal/spinlock.h" 
 
 // MAP_ANONYMOUS
 #if defined(__APPLE__)
@@ -62,7 +62,7 @@
 #endif  // !MAP_ANONYMOUS
 #endif  // __APPLE__
 
-namespace y_absl {
+namespace y_absl { 
 ABSL_NAMESPACE_BEGIN
 namespace base_internal {
 
@@ -235,7 +235,7 @@ alignas(
 
 // We must use LowLevelCallOnce here to construct the global arenas, rather than
 // using function-level statics, to avoid recursively invoking the scheduler.
-y_absl::once_flag create_globals_once;
+y_absl::once_flag create_globals_once; 
 
 void CreateGlobalArenas() {
   new (&default_arena_storage)
@@ -615,6 +615,6 @@ void *LowLevelAlloc::AllocWithArena(size_t request, Arena *arena) {
 
 }  // namespace base_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl
+}  // namespace y_absl 
 
 #endif  // ABSL_LOW_LEVEL_ALLOC_MISSING

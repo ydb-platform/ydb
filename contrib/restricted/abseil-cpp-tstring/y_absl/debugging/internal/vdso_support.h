@@ -41,8 +41,8 @@
 
 #include <atomic>
 
-#include "y_absl/base/attributes.h"
-#include "y_absl/debugging/internal/elf_mem_image.h"
+#include "y_absl/base/attributes.h" 
+#include "y_absl/debugging/internal/elf_mem_image.h" 
 
 #ifdef ABSL_HAVE_ELF_MEM_IMAGE
 
@@ -52,7 +52,7 @@
 #define ABSL_HAVE_VDSO_SUPPORT 1
 #endif
 
-namespace y_absl {
+namespace y_absl { 
 ABSL_NAMESPACE_BEGIN
 namespace debugging_internal {
 
@@ -151,7 +151,7 @@ int GetCPU();
 
 }  // namespace debugging_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl
+}  // namespace y_absl 
 
 #endif  // ABSL_HAVE_ELF_MEM_IMAGE
 

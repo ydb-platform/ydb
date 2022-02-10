@@ -193,7 +193,7 @@ namespace NBus {
         void Add(TIntrusivePtr< ::NBus::NPrivate::TBusSessionImpl> session);
         void Remove(TBusSession* session);
     };
-
+ 
     /////////////////////////////////////////////////////////////////
     /// Factory methods to construct message queue
     TBusMessageQueuePtr CreateMessageQueue(const char* name = "");

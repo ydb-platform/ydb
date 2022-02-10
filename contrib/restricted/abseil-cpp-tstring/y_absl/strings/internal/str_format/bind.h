@@ -20,13 +20,13 @@
 #include <sstream>
 #include <util/generic/string.h>
 
-#include "y_absl/base/port.h"
-#include "y_absl/strings/internal/str_format/arg.h"
-#include "y_absl/strings/internal/str_format/checker.h"
-#include "y_absl/strings/internal/str_format/parser.h"
-#include "y_absl/types/span.h"
+#include "y_absl/base/port.h" 
+#include "y_absl/strings/internal/str_format/arg.h" 
+#include "y_absl/strings/internal/str_format/checker.h" 
+#include "y_absl/strings/internal/str_format/parser.h" 
+#include "y_absl/types/span.h" 
 
-namespace y_absl {
+namespace y_absl { 
 ABSL_NAMESPACE_BEGIN
 
 class UntypedFormatSpec;
@@ -145,13 +145,13 @@ class FormatSpecTemplate
 class Streamable {
  public:
   Streamable(const UntypedFormatSpecImpl& format,
-             y_absl::Span<const FormatArgImpl> args)
+             y_absl::Span<const FormatArgImpl> args) 
       : format_(format) {
     if (args.size() <= ABSL_ARRAYSIZE(few_args_)) {
       for (size_t i = 0; i < args.size(); ++i) {
         few_args_[i] = args[i];
       }
-      args_ = y_absl::MakeSpan(few_args_, args.size());
+      args_ = y_absl::MakeSpan(few_args_, args.size()); 
     } else {
       many_args_.assign(args.begin(), args.end());
       args_ = many_args_;
@@ -166,7 +166,7 @@ class Streamable {
 
  private:
   const UntypedFormatSpecImpl& format_;
-  y_absl::Span<const FormatArgImpl> args_;
+  y_absl::Span<const FormatArgImpl> args_; 
   // if args_.size() is 4 or less:
   FormatArgImpl few_args_[4] = {FormatArgImpl(0), FormatArgImpl(0),
                                 FormatArgImpl(0), FormatArgImpl(0)};
@@ -175,27 +175,27 @@ class Streamable {
 };
 
 // for testing
-TString Summarize(UntypedFormatSpecImpl format,
-                      y_absl::Span<const FormatArgImpl> args);
+TString Summarize(UntypedFormatSpecImpl format, 
+                      y_absl::Span<const FormatArgImpl> args); 
 bool BindWithPack(const UnboundConversion* props,
-                  y_absl::Span<const FormatArgImpl> pack, BoundConversion* bound);
+                  y_absl::Span<const FormatArgImpl> pack, BoundConversion* bound); 
 
 bool FormatUntyped(FormatRawSinkImpl raw_sink,
                    UntypedFormatSpecImpl format,
-                   y_absl::Span<const FormatArgImpl> args);
+                   y_absl::Span<const FormatArgImpl> args); 
 
-TString& AppendPack(TString* out, UntypedFormatSpecImpl format,
-                        y_absl::Span<const FormatArgImpl> args);
+TString& AppendPack(TString* out, UntypedFormatSpecImpl format, 
+                        y_absl::Span<const FormatArgImpl> args); 
 
-TString FormatPack(const UntypedFormatSpecImpl format,
-                       y_absl::Span<const FormatArgImpl> args);
+TString FormatPack(const UntypedFormatSpecImpl format, 
+                       y_absl::Span<const FormatArgImpl> args); 
 
 int FprintF(std::FILE* output, UntypedFormatSpecImpl format,
-            y_absl::Span<const FormatArgImpl> args);
+            y_absl::Span<const FormatArgImpl> args); 
 int SnprintF(char* output, size_t size, UntypedFormatSpecImpl format,
-             y_absl::Span<const FormatArgImpl> args);
+             y_absl::Span<const FormatArgImpl> args); 
 
-// Returned by Streamed(v). Converts via '%s' to the TString created
+// Returned by Streamed(v). Converts via '%s' to the TString created 
 // by std::ostream << v.
 template <typename T>
 class StreamedWrapper {
@@ -212,6 +212,6 @@ class StreamedWrapper {
 
 }  // namespace str_format_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl
+}  // namespace y_absl 
 
 #endif  // ABSL_STRINGS_INTERNAL_STR_FORMAT_BIND_H_

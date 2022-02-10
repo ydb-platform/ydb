@@ -13,7 +13,7 @@
 //   limitations under the License.
 
 #include "y_absl/base/config.h"
-#include "y_absl/time/internal/cctz/include/cctz/time_zone.h"
+#include "y_absl/time/internal/cctz/include/cctz/time_zone.h" 
 
 #if defined(__ANDROID__)
 #include <sys/system_properties.h>
@@ -42,7 +42,7 @@
 #include "time_zone_fixed.h"
 #include "time_zone_impl.h"
 
-namespace y_absl {
+namespace y_absl { 
 ABSL_NAMESPACE_BEGIN
 namespace time_internal {
 namespace cctz {
@@ -99,7 +99,7 @@ bool time_zone::prev_transition(const time_point<seconds>& tp,
 
 TString time_zone::version() const { return effective_impl().Version(); }
 
-TString time_zone::description() const {
+TString time_zone::description() const { 
   return effective_impl().Description();
 }
 
@@ -112,7 +112,7 @@ const time_zone::Impl& time_zone::effective_impl() const {
   return *impl_;
 }
 
-bool load_time_zone(const TString& name, time_zone* tz) {
+bool load_time_zone(const TString& name, time_zone* tz) { 
   return time_zone::Impl::LoadTimeZone(name, tz);
 }
 
@@ -216,7 +216,7 @@ time_zone local_time_zone() {
     if (localtime_env) zone = localtime_env;
   }
 
-  const TString name = zone;
+  const TString name = zone; 
 #if defined(_MSC_VER)
   free(localtime_env);
   free(tz_env);
@@ -233,4 +233,4 @@ time_zone local_time_zone() {
 }  // namespace cctz
 }  // namespace time_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl
+}  // namespace y_absl 

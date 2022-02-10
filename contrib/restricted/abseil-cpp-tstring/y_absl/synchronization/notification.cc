@@ -12,16 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "y_absl/synchronization/notification.h"
+#include "y_absl/synchronization/notification.h" 
 
 #include <atomic>
 
-#include "y_absl/base/attributes.h"
-#include "y_absl/base/internal/raw_logging.h"
-#include "y_absl/synchronization/mutex.h"
-#include "y_absl/time/time.h"
+#include "y_absl/base/attributes.h" 
+#include "y_absl/base/internal/raw_logging.h" 
+#include "y_absl/synchronization/mutex.h" 
+#include "y_absl/time/time.h" 
 
-namespace y_absl {
+namespace y_absl { 
 ABSL_NAMESPACE_BEGIN
 
 void Notification::Notify() {
@@ -54,7 +54,7 @@ void Notification::WaitForNotification() const {
 }
 
 bool Notification::WaitForNotificationWithTimeout(
-    y_absl::Duration timeout) const {
+    y_absl::Duration timeout) const { 
   bool notified = HasBeenNotifiedInternal(&this->notified_yet_);
   if (!notified) {
     notified = this->mutex_.LockWhenWithTimeout(
@@ -64,7 +64,7 @@ bool Notification::WaitForNotificationWithTimeout(
   return notified;
 }
 
-bool Notification::WaitForNotificationWithDeadline(y_absl::Time deadline) const {
+bool Notification::WaitForNotificationWithDeadline(y_absl::Time deadline) const { 
   bool notified = HasBeenNotifiedInternal(&this->notified_yet_);
   if (!notified) {
     notified = this->mutex_.LockWhenWithDeadline(
@@ -75,4 +75,4 @@ bool Notification::WaitForNotificationWithDeadline(y_absl::Time deadline) const 
 }
 
 ABSL_NAMESPACE_END
-}  // namespace y_absl
+}  // namespace y_absl 

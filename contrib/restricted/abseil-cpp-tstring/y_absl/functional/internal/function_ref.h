@@ -19,10 +19,10 @@
 #include <functional>
 #include <type_traits>
 
-#include "y_absl/base/internal/invoke.h"
-#include "y_absl/meta/type_traits.h"
+#include "y_absl/base/internal/invoke.h" 
+#include "y_absl/meta/type_traits.h" 
 
-namespace y_absl {
+namespace y_absl { 
 ABSL_NAMESPACE_BEGIN
 namespace functional_internal {
 
@@ -43,8 +43,8 @@ union VoidPtr {
 template <typename T>
 constexpr bool PassByValue() {
   return !std::is_lvalue_reference<T>::value &&
-         y_absl::is_trivially_copy_constructible<T>::value &&
-         y_absl::is_trivially_copy_assignable<
+         y_absl::is_trivially_copy_constructible<T>::value && 
+         y_absl::is_trivially_copy_assignable< 
              typename std::remove_cv<T>::type>::value &&
          std::is_trivially_destructible<T>::value &&
          sizeof(T) <= 2 * sizeof(void*);
@@ -101,6 +101,6 @@ using EnableIf = typename ::std::enable_if<C, int>::type;
 
 }  // namespace functional_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl
+}  // namespace y_absl 
 
 #endif  // ABSL_FUNCTIONAL_INTERNAL_FUNCTION_REF_H_

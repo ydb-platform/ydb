@@ -34,18 +34,18 @@
 
 #include <atomic>
 
-#include "y_absl/base/attributes.h"
+#include "y_absl/base/attributes.h" 
 #include "y_absl/base/const_init.h"
-#include "y_absl/base/dynamic_annotations.h"
-#include "y_absl/base/internal/low_level_scheduling.h"
-#include "y_absl/base/internal/raw_logging.h"
-#include "y_absl/base/internal/scheduling_mode.h"
-#include "y_absl/base/internal/tsan_mutex_interface.h"
-#include "y_absl/base/macros.h"
-#include "y_absl/base/port.h"
-#include "y_absl/base/thread_annotations.h"
+#include "y_absl/base/dynamic_annotations.h" 
+#include "y_absl/base/internal/low_level_scheduling.h" 
+#include "y_absl/base/internal/raw_logging.h" 
+#include "y_absl/base/internal/scheduling_mode.h" 
+#include "y_absl/base/internal/tsan_mutex_interface.h" 
+#include "y_absl/base/macros.h" 
+#include "y_absl/base/port.h" 
+#include "y_absl/base/thread_annotations.h" 
 
-namespace y_absl {
+namespace y_absl { 
 ABSL_NAMESPACE_BEGIN
 namespace base_internal {
 
@@ -243,6 +243,6 @@ inline uint32_t SpinLock::TryLockInternal(uint32_t lock_value,
 
 }  // namespace base_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl
+}  // namespace y_absl 
 
 #endif  // ABSL_BASE_INTERNAL_SPINLOCK_H_

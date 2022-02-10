@@ -1,7 +1,7 @@
 #include "tempfile.h"
 
-#include <util/folder/dirut.h>
-#include <util/generic/yexception.h>
+#include <util/folder/dirut.h> 
+#include <util/generic/yexception.h> 
 #include <util/stream/file.h>
 
 #include <cerrno>
@@ -21,11 +21,11 @@ TString MakeTempName(const char* wrkDir, const char* prefix, const char* extensi
 #ifndef _win32_
     TString filePath;
 
-    if (wrkDir && *wrkDir) {
+    if (wrkDir && *wrkDir) { 
         filePath += wrkDir;
-    } else {
+    } else { 
         filePath += GetSystemTempDir();
-    }
+    } 
 
     if (filePath.back() != '/') {
         filePath += '/';

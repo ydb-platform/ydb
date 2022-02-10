@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "y_absl/base/internal/scoped_set_env.h"
+#include "y_absl/base/internal/scoped_set_env.h" 
 
 #ifdef _WIN32
 #include <windows.h>
@@ -20,9 +20,9 @@
 
 #include <cstdlib>
 
-#include "y_absl/base/internal/raw_logging.h"
+#include "y_absl/base/internal/raw_logging.h" 
 
-namespace y_absl {
+namespace y_absl { 
 ABSL_NAMESPACE_BEGIN
 namespace base_internal {
 
@@ -78,4 +78,4 @@ ScopedSetEnv::~ScopedSetEnv() {
 
 }  // namespace base_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl
+}  // namespace y_absl 

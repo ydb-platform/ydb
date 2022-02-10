@@ -16,7 +16,7 @@
 #ifndef ABSL_SYNCHRONIZATION_INTERNAL_WAITER_H_
 #define ABSL_SYNCHRONIZATION_INTERNAL_WAITER_H_
 
-#include "y_absl/base/config.h"
+#include "y_absl/base/config.h" 
 
 #ifdef _WIN32
 #include <sdkddkver.h>
@@ -35,9 +35,9 @@
 #include <atomic>
 #include <cstdint>
 
-#include "y_absl/base/internal/thread_identity.h"
+#include "y_absl/base/internal/thread_identity.h" 
 #include "y_absl/synchronization/internal/futex.h"
-#include "y_absl/synchronization/internal/kernel_timeout.h"
+#include "y_absl/synchronization/internal/kernel_timeout.h" 
 
 // May be chosen at compile time via -DABSL_FORCE_WAITER_MODE=<index>
 #define ABSL_WAITER_MODE_FUTEX 0
@@ -57,7 +57,7 @@
 #define ABSL_WAITER_MODE ABSL_WAITER_MODE_CONDVAR
 #endif
 
-namespace y_absl {
+namespace y_absl { 
 ABSL_NAMESPACE_BEGIN
 namespace synchronization_internal {
 
@@ -150,6 +150,6 @@ class Waiter {
 
 }  // namespace synchronization_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl
+}  // namespace y_absl 
 
 #endif  // ABSL_SYNCHRONIZATION_INTERNAL_WAITER_H_

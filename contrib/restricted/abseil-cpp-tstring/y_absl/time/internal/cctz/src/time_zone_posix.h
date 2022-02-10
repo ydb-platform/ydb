@@ -53,11 +53,11 @@
 #define ABSL_TIME_INTERNAL_CCTZ_TIME_ZONE_POSIX_H_
 
 #include <cstdint>
-#include <util/generic/string.h>
-
+#include <util/generic/string.h> 
+ 
 #include "y_absl/base/config.h"
 
-namespace y_absl {
+namespace y_absl { 
 ABSL_NAMESPACE_BEGIN
 namespace time_internal {
 namespace cctz {
@@ -109,10 +109,10 @@ struct PosixTransition {
 // are not ordered---in the southern hemisphere the transition to end
 // daylight time occurs first in any particular year.
 struct PosixTimeZone {
-  TString std_abbr;
+  TString std_abbr; 
   std::int_fast32_t std_offset;
 
-  TString dst_abbr;
+  TString dst_abbr; 
   std::int_fast32_t dst_offset;
   PosixTransition dst_start;
   PosixTransition dst_end;
@@ -122,11 +122,11 @@ struct PosixTimeZone {
 // filling in any missing values (DST offset, or start/end transition times)
 // with the standard-defined defaults. Returns false if the specification
 // could not be parsed (although some fields of *res may have been altered).
-bool ParsePosixSpec(const TString& spec, PosixTimeZone* res);
+bool ParsePosixSpec(const TString& spec, PosixTimeZone* res); 
 
 }  // namespace cctz
 }  // namespace time_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl
+}  // namespace y_absl 
 
 #endif  // ABSL_TIME_INTERNAL_CCTZ_TIME_ZONE_POSIX_H_

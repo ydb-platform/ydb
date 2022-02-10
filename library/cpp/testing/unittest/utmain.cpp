@@ -742,13 +742,13 @@ int NUnitTest::RunMain(int argc, char** argv) {
                     processor.Enable(name);
                 }
             }
-        }
+        } 
         if (listTests != DONT_LIST) {
             return DoList(listTests == LIST_VERBOSE, *listStream);
         }
 
         TTestFactory::Instance().SetProcessor(&processor);
-
+ 
         unsigned ret;
         for (;;) {
             ret = TTestFactory::Instance().Execute();

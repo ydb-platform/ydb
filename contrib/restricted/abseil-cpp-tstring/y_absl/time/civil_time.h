@@ -20,7 +20,7 @@
 // The term "civil time" refers to the legally recognized human-scale time
 // that is represented by the six fields `YYYY-MM-DD hh:mm:ss`. A "date"
 // is perhaps the most common example of a civil time (represented here as
-// an `y_absl::CivilDay`).
+// an `y_absl::CivilDay`). 
 //
 // Modern-day civil time follows the Gregorian Calendar and is a
 // time-zone-independent concept: a civil time of "2015-06-01 12:00:00", for
@@ -45,37 +45,37 @@
 // arithmetic on civil-time objects, while avoiding complications like
 // daylight-saving time (DST):
 //
-//   * `y_absl::CivilSecond`
-//   * `y_absl::CivilMinute`
-//   * `y_absl::CivilHour`
-//   * `y_absl::CivilDay`
-//   * `y_absl::CivilMonth`
-//   * `y_absl::CivilYear`
+//   * `y_absl::CivilSecond` 
+//   * `y_absl::CivilMinute` 
+//   * `y_absl::CivilHour` 
+//   * `y_absl::CivilDay` 
+//   * `y_absl::CivilMonth` 
+//   * `y_absl::CivilYear` 
 //
 // Example:
 //
 //   // Construct a civil-time object for a specific day
-//   const y_absl::CivilDay cd(1969, 07, 20);
+//   const y_absl::CivilDay cd(1969, 07, 20); 
 //
 //   // Construct a civil-time object for a specific second
-//   const y_absl::CivilSecond cd(2018, 8, 1, 12, 0, 1);
+//   const y_absl::CivilSecond cd(2018, 8, 1, 12, 0, 1); 
 //
 // Note: In C++14 and later, this library is usable in a constexpr context.
 //
 // Example:
 //
 //   // Valid in C++14
-//   constexpr y_absl::CivilDay cd(1969, 07, 20);
+//   constexpr y_absl::CivilDay cd(1969, 07, 20); 
 
 #ifndef ABSL_TIME_CIVIL_TIME_H_
 #define ABSL_TIME_CIVIL_TIME_H_
 
 #include <util/generic/string.h>
 
-#include "y_absl/strings/string_view.h"
-#include "y_absl/time/internal/cctz/include/cctz/civil_time.h"
+#include "y_absl/strings/string_view.h" 
+#include "y_absl/time/internal/cctz/include/cctz/civil_time.h" 
 
-namespace y_absl {
+namespace y_absl { 
 ABSL_NAMESPACE_BEGIN
 
 namespace time_internal {
@@ -108,24 +108,24 @@ struct year_tag : month_tag, cctz::detail::year_tag {};
 //
 // Examples:
 //
-//   y_absl::CivilDay default_value;               // 1970-01-01 00:00:00
+//   y_absl::CivilDay default_value;               // 1970-01-01 00:00:00 
 //
-//   y_absl::CivilDay a(2015, 2, 3);               // 2015-02-03 00:00:00
-//   y_absl::CivilDay b(2015, 2, 3, 4, 5, 6);      // 2015-02-03 00:00:00
-//   y_absl::CivilDay c(2015);                     // 2015-01-01 00:00:00
+//   y_absl::CivilDay a(2015, 2, 3);               // 2015-02-03 00:00:00 
+//   y_absl::CivilDay b(2015, 2, 3, 4, 5, 6);      // 2015-02-03 00:00:00 
+//   y_absl::CivilDay c(2015);                     // 2015-01-01 00:00:00 
 //
-//   y_absl::CivilSecond ss(2015, 2, 3, 4, 5, 6);  // 2015-02-03 04:05:06
-//   y_absl::CivilMinute mm(ss);                   // 2015-02-03 04:05:00
-//   y_absl::CivilHour hh(mm);                     // 2015-02-03 04:00:00
-//   y_absl::CivilDay d(hh);                       // 2015-02-03 00:00:00
-//   y_absl::CivilMonth m(d);                      // 2015-02-01 00:00:00
-//   y_absl::CivilYear y(m);                       // 2015-01-01 00:00:00
+//   y_absl::CivilSecond ss(2015, 2, 3, 4, 5, 6);  // 2015-02-03 04:05:06 
+//   y_absl::CivilMinute mm(ss);                   // 2015-02-03 04:05:00 
+//   y_absl::CivilHour hh(mm);                     // 2015-02-03 04:00:00 
+//   y_absl::CivilDay d(hh);                       // 2015-02-03 00:00:00 
+//   y_absl::CivilMonth m(d);                      // 2015-02-01 00:00:00 
+//   y_absl::CivilYear y(m);                       // 2015-01-01 00:00:00 
 //
-//   m = y_absl::CivilMonth(y);                    // 2015-01-01 00:00:00
-//   d = y_absl::CivilDay(m);                      // 2015-01-01 00:00:00
-//   hh = y_absl::CivilHour(d);                    // 2015-01-01 00:00:00
-//   mm = y_absl::CivilMinute(hh);                 // 2015-01-01 00:00:00
-//   ss = y_absl::CivilSecond(mm);                 // 2015-01-01 00:00:00
+//   m = y_absl::CivilMonth(y);                    // 2015-01-01 00:00:00 
+//   d = y_absl::CivilDay(m);                      // 2015-01-01 00:00:00 
+//   hh = y_absl::CivilHour(d);                    // 2015-01-01 00:00:00 
+//   mm = y_absl::CivilMinute(hh);                 // 2015-01-01 00:00:00 
+//   ss = y_absl::CivilSecond(mm);                 // 2015-01-01 00:00:00 
 //
 // Each civil-time class is aligned to the civil-time field indicated in the
 // class's name after normalization. Alignment is performed by setting all the
@@ -135,20 +135,20 @@ struct year_tag : month_tag, cctz::detail::year_tag {};
 // string format used here is not important; it's just a shorthand way of
 // showing the six YMDHMS fields.)
 //
-//   y_absl::CivilSecond   : 2015-11-22 12:34:56
-//   y_absl::CivilMinute   : 2015-11-22 12:34:00
-//   y_absl::CivilHour     : 2015-11-22 12:00:00
-//   y_absl::CivilDay      : 2015-11-22 00:00:00
-//   y_absl::CivilMonth    : 2015-11-01 00:00:00
-//   y_absl::CivilYear     : 2015-01-01 00:00:00
+//   y_absl::CivilSecond   : 2015-11-22 12:34:56 
+//   y_absl::CivilMinute   : 2015-11-22 12:34:00 
+//   y_absl::CivilHour     : 2015-11-22 12:00:00 
+//   y_absl::CivilDay      : 2015-11-22 00:00:00 
+//   y_absl::CivilMonth    : 2015-11-01 00:00:00 
+//   y_absl::CivilYear     : 2015-01-01 00:00:00 
 //
 // Each civil-time type performs arithmetic on the field to which it is
-// aligned. This means that adding 1 to an y_absl::CivilDay increments the day
-// field (normalizing as necessary), and subtracting 7 from an y_absl::CivilMonth
+// aligned. This means that adding 1 to an y_absl::CivilDay increments the day 
+// field (normalizing as necessary), and subtracting 7 from an y_absl::CivilMonth 
 // operates on the month field (normalizing as necessary). All arithmetic
 // produces a valid civil time. Difference requires two similarly aligned
 // civil-time objects and returns the scalar answer in units of the objects'
-// alignment. For example, the difference between two y_absl::CivilHour objects
+// alignment. For example, the difference between two y_absl::CivilHour objects 
 // will give an answer in units of civil hours.
 //
 // ALIGNMENT CONVERSION
@@ -156,24 +156,24 @@ struct year_tag : month_tag, cctz::detail::year_tag {};
 // The alignment of a civil-time object cannot change, but the object may be
 // used to construct a new object with a different alignment. This is referred
 // to as "realigning". When realigning to a type with the same or more
-// precision (e.g., y_absl::CivilDay -> y_absl::CivilSecond), the conversion may be
+// precision (e.g., y_absl::CivilDay -> y_absl::CivilSecond), the conversion may be 
 // performed implicitly since no information is lost. However, if information
 // could be discarded (e.g., CivilSecond -> CivilDay), the conversion must
 // be explicit at the call site.
 //
 // Examples:
 //
-//   void UseDay(y_absl::CivilDay day);
+//   void UseDay(y_absl::CivilDay day); 
 //
-//   y_absl::CivilSecond cs;
+//   y_absl::CivilSecond cs; 
 //   UseDay(cs);                  // Won't compile because data may be discarded
-//   UseDay(y_absl::CivilDay(cs));  // OK: explicit conversion
+//   UseDay(y_absl::CivilDay(cs));  // OK: explicit conversion 
 //
-//   y_absl::CivilDay cd;
+//   y_absl::CivilDay cd; 
 //   UseDay(cd);                  // OK: no conversion needed
 //
-//   y_absl::CivilMonth cm;
-//   UseDay(cm);                  // OK: implicit conversion to y_absl::CivilDay
+//   y_absl::CivilMonth cm; 
+//   UseDay(cm);                  // OK: implicit conversion to y_absl::CivilDay 
 //
 // NORMALIZATION
 //
@@ -187,11 +187,11 @@ struct year_tag : month_tag, cctz::detail::year_tag {};
 // Examples:
 //
 //   // Out-of-range; normalized to 2016-11-01
-//   y_absl::CivilDay d(2016, 10, 32);
+//   y_absl::CivilDay d(2016, 10, 32); 
 //   // Out-of-range, negative: normalized to 2016-10-30T23
-//   y_absl::CivilHour h1(2016, 10, 31, -1);
+//   y_absl::CivilHour h1(2016, 10, 31, -1); 
 //   // Normalization is cumulative: normalized to 2016-10-30T23
-//   y_absl::CivilHour h2(2016, 10, 32, -25);
+//   y_absl::CivilHour h2(2016, 10, 32, -25); 
 //
 // Note: If normalization is undesired, you can signal an error by comparing
 // the constructor arguments to the normalized values returned by the YMDHMS
@@ -205,17 +205,17 @@ struct year_tag : month_tag, cctz::detail::year_tag {};
 //
 // Examples:
 //
-//   y_absl::CivilDay feb_3(2015, 2, 3);  // 2015-02-03 00:00:00
-//   y_absl::CivilDay mar_4(2015, 3, 4);  // 2015-03-04 00:00:00
+//   y_absl::CivilDay feb_3(2015, 2, 3);  // 2015-02-03 00:00:00 
+//   y_absl::CivilDay mar_4(2015, 3, 4);  // 2015-03-04 00:00:00 
 //   // feb_3 < mar_4
-//   // y_absl::CivilYear(feb_3) == y_absl::CivilYear(mar_4)
+//   // y_absl::CivilYear(feb_3) == y_absl::CivilYear(mar_4) 
 //
-//   y_absl::CivilSecond feb_3_noon(2015, 2, 3, 12, 0, 0);  // 2015-02-03 12:00:00
+//   y_absl::CivilSecond feb_3_noon(2015, 2, 3, 12, 0, 0);  // 2015-02-03 12:00:00 
 //   // feb_3 < feb_3_noon
-//   // feb_3 == y_absl::CivilDay(feb_3_noon)
+//   // feb_3 == y_absl::CivilDay(feb_3_noon) 
 //
 //   // Iterates all the days of February 2015.
-//   for (y_absl::CivilDay d(2015, 2, 1); d < y_absl::CivilMonth(2015, 3); ++d) {
+//   for (y_absl::CivilDay d(2015, 2, 1); d < y_absl::CivilMonth(2015, 3); ++d) { 
 //     // ...
 //   }
 //
@@ -228,13 +228,13 @@ struct year_tag : month_tag, cctz::detail::year_tag {};
 //
 // Example:
 //
-//   y_absl::CivilDay a(2015, 2, 3);
+//   y_absl::CivilDay a(2015, 2, 3); 
 //   ++a;                              // 2015-02-04 00:00:00
 //   --a;                              // 2015-02-03 00:00:00
-//   y_absl::CivilDay b = a + 1;         // 2015-02-04 00:00:00
-//   y_absl::CivilDay c = 1 + b;         // 2015-02-05 00:00:00
+//   y_absl::CivilDay b = a + 1;         // 2015-02-04 00:00:00 
+//   y_absl::CivilDay c = 1 + b;         // 2015-02-05 00:00:00 
 //   int n = c - a;                    // n = 2 (civil days)
-//   int m = c - y_absl::CivilMonth(c);  // Won't compile: different types.
+//   int m = c - y_absl::CivilMonth(c);  // Won't compile: different types. 
 //
 // ACCESSORS
 //
@@ -253,7 +253,7 @@ struct year_tag : month_tag, cctz::detail::year_tag {};
 //
 // Example:
 //
-//   y_absl::CivilDay d(2015, 6, 28);
+//   y_absl::CivilDay d(2015, 6, 28); 
 //   // d.year() == 2015
 //   // d.month() == 6
 //   // d.day() == 28
@@ -300,23 +300,23 @@ struct year_tag : month_tag, cctz::detail::year_tag {};
 //
 // Example:
 //
-//   const y_absl::CivilDay d(2015, 1, 31);
+//   const y_absl::CivilDay d(2015, 1, 31); 
 //
 //   // Answer 1:
 //   // Add 1 to the month field in the constructor, and rely on normalization.
-//   const auto normalized = y_absl::CivilDay(d.year(), d.month() + 1, d.day());
+//   const auto normalized = y_absl::CivilDay(d.year(), d.month() + 1, d.day()); 
 //   // normalized == 2015-03-03 (aka Feb 31)
 //
 //   // Answer 2:
 //   // Add 1 to month field, capping to the end of next month.
-//   const auto next_month = y_absl::CivilMonth(d) + 1;
-//   const auto last_day_of_next_month = y_absl::CivilDay(next_month + 1) - 1;
+//   const auto next_month = y_absl::CivilMonth(d) + 1; 
+//   const auto last_day_of_next_month = y_absl::CivilDay(next_month + 1) - 1; 
 //   const auto capped = std::min(normalized, last_day_of_next_month);
 //   // capped == 2015-02-28
 //
 //   // Answer 3:
 //   // Signal an error if the normalized answer is not in next month.
-//   if (y_absl::CivilMonth(normalized) != next_month) {
+//   if (y_absl::CivilMonth(normalized) != next_month) { 
 //     // error, month overflow
 //   }
 //
@@ -340,9 +340,9 @@ using CivilYear =
 //
 // Example:
 //
-//   y_absl::CivilSecond cs = ...;
-//   y_absl::civil_year_t y = cs.year();
-//   cs = y_absl::CivilSecond(y, 1, 1, 0, 0, 0);  // CivilSecond(CivilYear(cs))
+//   y_absl::CivilSecond cs = ...; 
+//   y_absl::civil_year_t y = cs.year(); 
+//   cs = y_absl::CivilSecond(y, 1, 1, 0, 0, 0);  // CivilSecond(CivilYear(cs)) 
 //
 using civil_year_t = time_internal::cctz::year_t;
 
@@ -355,7 +355,7 @@ using civil_year_t = time_internal::cctz::year_t;
 //
 // Example:
 //
-//   y_absl::civil_diff_t n_sec = cs1 - cs2;             // cs1 == cs2 + n_sec;
+//   y_absl::civil_diff_t n_sec = cs1 - cs2;             // cs1 == cs2 + n_sec; 
 //
 using civil_diff_t = time_internal::cctz::diff_t;
 
@@ -365,18 +365,18 @@ using civil_diff_t = time_internal::cctz::diff_t;
 // The Weekday enum class represents the civil-time concept of a "weekday" with
 // members for all days of the week.
 //
-//   y_absl::Weekday wd = y_absl::Weekday::thursday;
+//   y_absl::Weekday wd = y_absl::Weekday::thursday; 
 //
 using Weekday = time_internal::cctz::weekday;
 
 // GetWeekday()
 //
-// Returns the y_absl::Weekday for the given (realigned) civil-time value.
+// Returns the y_absl::Weekday for the given (realigned) civil-time value. 
 //
 // Example:
 //
-//   y_absl::CivilDay a(2015, 8, 13);
-//   y_absl::Weekday wd = y_absl::GetWeekday(a);  // wd == y_absl::Weekday::thursday
+//   y_absl::CivilDay a(2015, 8, 13); 
+//   y_absl::Weekday wd = y_absl::GetWeekday(a);  // wd == y_absl::Weekday::thursday 
 //
 inline Weekday GetWeekday(CivilSecond cs) {
   return time_internal::cctz::get_weekday(cs);
@@ -385,8 +385,8 @@ inline Weekday GetWeekday(CivilSecond cs) {
 // NextWeekday()
 // PrevWeekday()
 //
-// Returns the y_absl::CivilDay that strictly follows or precedes a given
-// y_absl::CivilDay, and that falls on the given y_absl::Weekday.
+// Returns the y_absl::CivilDay that strictly follows or precedes a given 
+// y_absl::CivilDay, and that falls on the given y_absl::Weekday. 
 //
 // Example, given the following month:
 //
@@ -399,18 +399,18 @@ inline Weekday GetWeekday(CivilSecond cs) {
 //   23 24 25 26 27 28 29
 //   30 31
 //
-//   y_absl::CivilDay a(2015, 8, 13);
-//   // y_absl::GetWeekday(a) == y_absl::Weekday::thursday
-//   y_absl::CivilDay b = y_absl::NextWeekday(a, y_absl::Weekday::thursday);
+//   y_absl::CivilDay a(2015, 8, 13); 
+//   // y_absl::GetWeekday(a) == y_absl::Weekday::thursday 
+//   y_absl::CivilDay b = y_absl::NextWeekday(a, y_absl::Weekday::thursday); 
 //   // b = 2015-08-20
-//   y_absl::CivilDay c = y_absl::PrevWeekday(a, y_absl::Weekday::thursday);
+//   y_absl::CivilDay c = y_absl::PrevWeekday(a, y_absl::Weekday::thursday); 
 //   // c = 2015-08-06
 //
-//   y_absl::CivilDay d = ...
+//   y_absl::CivilDay d = ... 
 //   // Gets the following Thursday if d is not already Thursday
-//   y_absl::CivilDay thurs1 = y_absl::NextWeekday(d - 1, y_absl::Weekday::thursday);
+//   y_absl::CivilDay thurs1 = y_absl::NextWeekday(d - 1, y_absl::Weekday::thursday); 
 //   // Gets the previous Thursday if d is not already Thursday
-//   y_absl::CivilDay thurs2 = y_absl::PrevWeekday(d + 1, y_absl::Weekday::thursday);
+//   y_absl::CivilDay thurs2 = y_absl::PrevWeekday(d + 1, y_absl::Weekday::thursday); 
 //
 inline CivilDay NextWeekday(CivilDay cd, Weekday wd) {
   return CivilDay(time_internal::cctz::next_weekday(cd, wd));
@@ -425,10 +425,10 @@ inline CivilDay PrevWeekday(CivilDay cd, Weekday wd) {
 //
 // Example:
 //
-//   y_absl::CivilDay a(2015, 1, 1);
-//   int yd_jan_1 = y_absl::GetYearDay(a);   // yd_jan_1 = 1
-//   y_absl::CivilDay b(2015, 12, 31);
-//   int yd_dec_31 = y_absl::GetYearDay(b);  // yd_dec_31 = 365
+//   y_absl::CivilDay a(2015, 1, 1); 
+//   int yd_jan_1 = y_absl::GetYearDay(a);   // yd_jan_1 = 1 
+//   y_absl::CivilDay b(2015, 12, 31); 
+//   int yd_dec_31 = y_absl::GetYearDay(b);  // yd_dec_31 = 365 
 //
 inline int GetYearDay(CivilSecond cs) {
   return time_internal::cctz::get_yearday(cs);
@@ -450,19 +450,19 @@ inline int GetYearDay(CivilSecond cs) {
 //
 // Example:
 //
-//   y_absl::CivilDay d = y_absl::CivilDay(1969, 7, 20);
-//   TString day_string = y_absl::FormatCivilTime(d);  // "1969-07-20"
+//   y_absl::CivilDay d = y_absl::CivilDay(1969, 7, 20); 
+//   TString day_string = y_absl::FormatCivilTime(d);  // "1969-07-20" 
 //
-TString FormatCivilTime(CivilSecond c);
-TString FormatCivilTime(CivilMinute c);
-TString FormatCivilTime(CivilHour c);
-TString FormatCivilTime(CivilDay c);
-TString FormatCivilTime(CivilMonth c);
-TString FormatCivilTime(CivilYear c);
+TString FormatCivilTime(CivilSecond c); 
+TString FormatCivilTime(CivilMinute c); 
+TString FormatCivilTime(CivilHour c); 
+TString FormatCivilTime(CivilDay c); 
+TString FormatCivilTime(CivilMonth c); 
+TString FormatCivilTime(CivilYear c); 
 
-// y_absl::ParseCivilTime()
+// y_absl::ParseCivilTime() 
 //
-// Parses a civil-time value from the specified `y_absl::string_view` into the
+// Parses a civil-time value from the specified `y_absl::string_view` into the 
 // passed output parameter. Returns `true` upon successful parsing.
 //
 // The expected form of the input string is as follows:
@@ -478,38 +478,38 @@ TString FormatCivilTime(CivilYear c);
 //
 // Example:
 //
-//   y_absl::CivilDay d;
-//   bool ok = y_absl::ParseCivilTime("2018-01-02", &d); // OK
+//   y_absl::CivilDay d; 
+//   bool ok = y_absl::ParseCivilTime("2018-01-02", &d); // OK 
 //
 // Note that parsing will fail if the string's format does not match the
 // expected type exactly. `ParseLenientCivilTime()` below is more lenient.
 //
-bool ParseCivilTime(y_absl::string_view s, CivilSecond* c);
-bool ParseCivilTime(y_absl::string_view s, CivilMinute* c);
-bool ParseCivilTime(y_absl::string_view s, CivilHour* c);
-bool ParseCivilTime(y_absl::string_view s, CivilDay* c);
-bool ParseCivilTime(y_absl::string_view s, CivilMonth* c);
-bool ParseCivilTime(y_absl::string_view s, CivilYear* c);
+bool ParseCivilTime(y_absl::string_view s, CivilSecond* c); 
+bool ParseCivilTime(y_absl::string_view s, CivilMinute* c); 
+bool ParseCivilTime(y_absl::string_view s, CivilHour* c); 
+bool ParseCivilTime(y_absl::string_view s, CivilDay* c); 
+bool ParseCivilTime(y_absl::string_view s, CivilMonth* c); 
+bool ParseCivilTime(y_absl::string_view s, CivilYear* c); 
 
 // ParseLenientCivilTime()
 //
-// Parses any of the formats accepted by `y_absl::ParseCivilTime()`, but is more
+// Parses any of the formats accepted by `y_absl::ParseCivilTime()`, but is more 
 // lenient if the format of the string does not exactly match the associated
 // type.
 //
 // Example:
 //
-//   y_absl::CivilDay d;
-//   bool ok = y_absl::ParseLenientCivilTime("1969-07-20", &d); // OK
-//   ok = y_absl::ParseLenientCivilTime("1969-07-20T10", &d);   // OK: T10 floored
-//   ok = y_absl::ParseLenientCivilTime("1969-07", &d);   // OK: day defaults to 1
+//   y_absl::CivilDay d; 
+//   bool ok = y_absl::ParseLenientCivilTime("1969-07-20", &d); // OK 
+//   ok = y_absl::ParseLenientCivilTime("1969-07-20T10", &d);   // OK: T10 floored 
+//   ok = y_absl::ParseLenientCivilTime("1969-07", &d);   // OK: day defaults to 1 
 //
-bool ParseLenientCivilTime(y_absl::string_view s, CivilSecond* c);
-bool ParseLenientCivilTime(y_absl::string_view s, CivilMinute* c);
-bool ParseLenientCivilTime(y_absl::string_view s, CivilHour* c);
-bool ParseLenientCivilTime(y_absl::string_view s, CivilDay* c);
-bool ParseLenientCivilTime(y_absl::string_view s, CivilMonth* c);
-bool ParseLenientCivilTime(y_absl::string_view s, CivilYear* c);
+bool ParseLenientCivilTime(y_absl::string_view s, CivilSecond* c); 
+bool ParseLenientCivilTime(y_absl::string_view s, CivilMinute* c); 
+bool ParseLenientCivilTime(y_absl::string_view s, CivilHour* c); 
+bool ParseLenientCivilTime(y_absl::string_view s, CivilDay* c); 
+bool ParseLenientCivilTime(y_absl::string_view s, CivilMonth* c); 
+bool ParseLenientCivilTime(y_absl::string_view s, CivilYear* c); 
 
 namespace time_internal {  // For functions found via ADL on civil-time tags.
 
@@ -520,7 +520,7 @@ namespace time_internal {  // For functions found via ADL on civil-time tags.
 //
 // Example:
 //
-//   y_absl::CivilDay d = y_absl::CivilDay(1969, 7, 20);
+//   y_absl::CivilDay d = y_absl::CivilDay(1969, 7, 20); 
 //   std::cout << "Date is: " << d << "\n";
 //
 std::ostream& operator<<(std::ostream& os, CivilYear y);
@@ -533,6 +533,6 @@ std::ostream& operator<<(std::ostream& os, CivilSecond s);
 }  // namespace time_internal
 
 ABSL_NAMESPACE_END
-}  // namespace y_absl
+}  // namespace y_absl 
 
 #endif  // ABSL_TIME_CIVIL_TIME_H_

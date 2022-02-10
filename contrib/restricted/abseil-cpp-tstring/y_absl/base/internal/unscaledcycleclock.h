@@ -42,7 +42,7 @@
 #include <TargetConditionals.h>
 #endif
 
-#include "y_absl/base/port.h"
+#include "y_absl/base/port.h" 
 
 // The following platforms have an implementation of a hardware counter.
 #if defined(__i386__) || defined(__x86_64__) || defined(__aarch64__) || \
@@ -85,7 +85,7 @@
 #define ABSL_INTERNAL_UNSCALED_CYCLECLOCK_FREQUENCY_IS_CPU_FREQUENCY
 #endif
 
-namespace y_absl {
+namespace y_absl { 
 ABSL_NAMESPACE_BEGIN
 namespace time_internal {
 class UnscaledCycleClockWrapperForGetCurrentTime;
@@ -117,7 +117,7 @@ class UnscaledCycleClock {
 
 }  // namespace base_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl
+}  // namespace y_absl 
 
 #endif  // ABSL_USE_UNSCALED_CYCLECLOCK
 

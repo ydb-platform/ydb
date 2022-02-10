@@ -1894,7 +1894,7 @@ struct dynamic_opts_s {
 	unsigned tcache_ind;
 	unsigned arena_ind;
 };
-
+ 
 JEMALLOC_ALWAYS_INLINE void
 dynamic_opts_init(dynamic_opts_t *dynamic_opts) {
 	dynamic_opts->result = NULL;
@@ -1906,7 +1906,7 @@ dynamic_opts_init(dynamic_opts_t *dynamic_opts) {
 	dynamic_opts->tcache_ind = TCACHE_IND_AUTOMATIC;
 	dynamic_opts->arena_ind = ARENA_IND_AUTOMATIC;
 }
-
+ 
 /* ind is ignored if dopts->alignment > 0. */
 JEMALLOC_ALWAYS_INLINE void *
 imalloc_no_sample(static_opts_t *sopts, dynamic_opts_t *dopts, tsd_t *tsd,

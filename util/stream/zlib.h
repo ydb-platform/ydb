@@ -28,8 +28,8 @@ namespace ZLib {
         Auto = 0, /**< Auto detect format. Can be used for decompression only. */
         ZLib = 1,
         GZip = 2,
-        Raw = 3,
-        Invalid = 4
+        Raw = 3, 
+        Invalid = 4 
     };
 
     enum {

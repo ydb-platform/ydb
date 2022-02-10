@@ -28,23 +28,23 @@
 // (2) When a new edge (x->y) is inserted, do nothing if rank[x] < rank[y].
 // (3) Otherwise: adjust ranks in the neighborhood of x and y.
 
-#include "y_absl/base/attributes.h"
+#include "y_absl/base/attributes.h" 
 // This file is a no-op if the required LowLevelAlloc support is missing.
-#include "y_absl/base/internal/low_level_alloc.h"
+#include "y_absl/base/internal/low_level_alloc.h" 
 #ifndef ABSL_LOW_LEVEL_ALLOC_MISSING
 
-#include "y_absl/synchronization/internal/graphcycles.h"
+#include "y_absl/synchronization/internal/graphcycles.h" 
 
 #include <algorithm>
 #include <array>
 #include <limits>
-#include "y_absl/base/internal/hide_ptr.h"
-#include "y_absl/base/internal/raw_logging.h"
-#include "y_absl/base/internal/spinlock.h"
+#include "y_absl/base/internal/hide_ptr.h" 
+#include "y_absl/base/internal/raw_logging.h" 
+#include "y_absl/base/internal/spinlock.h" 
 
 // Do not use STL.   This module does not use standard memory allocation.
 
-namespace y_absl {
+namespace y_absl { 
 ABSL_NAMESPACE_BEGIN
 namespace synchronization_internal {
 
@@ -693,6 +693,6 @@ int GraphCycles::GetStackTrace(GraphId id, void*** ptr) {
 
 }  // namespace synchronization_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl
+}  // namespace y_absl 
 
 #endif  // ABSL_LOW_LEVEL_ALLOC_MISSING

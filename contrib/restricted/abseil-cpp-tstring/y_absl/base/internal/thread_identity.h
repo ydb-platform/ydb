@@ -31,10 +31,10 @@
 #include <cstdint>
 
 #include "y_absl/base/config.h"
-#include "y_absl/base/internal/per_thread_tls.h"
+#include "y_absl/base/internal/per_thread_tls.h" 
 #include "y_absl/base/optimization.h"
 
-namespace y_absl {
+namespace y_absl { 
 ABSL_NAMESPACE_BEGIN
 
 struct SynchLocksHeld;
@@ -45,9 +45,9 @@ namespace base_internal {
 class SpinLock;
 struct ThreadIdentity;
 
-// Used by the implementation of y_absl::Mutex and y_absl::CondVar.
+// Used by the implementation of y_absl::Mutex and y_absl::CondVar. 
 struct PerThreadSynch {
-  // The internal representation of y_absl::Mutex and y_absl::CondVar rely
+  // The internal representation of y_absl::Mutex and y_absl::CondVar rely 
   // on the alignment of PerThreadSynch. Both store the address of the
   // PerThreadSynch in the high-order bits of their internal state,
   // which means the low kLowZeroBits of the address of PerThreadSynch
@@ -141,7 +141,7 @@ struct ThreadIdentity {
   // ThreadIdentity itself.
   PerThreadSynch per_thread_synch;
 
-  // Private: Reserved for y_absl::synchronization_internal::Waiter.
+  // Private: Reserved for y_absl::synchronization_internal::Waiter. 
   struct WaiterState {
     alignas(void*) char data[128];
   } waiter_state;
@@ -260,6 +260,6 @@ inline ThreadIdentity* CurrentThreadIdentityIfPresent() {
 
 }  // namespace base_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl
+}  // namespace y_absl 
 
 #endif  // ABSL_BASE_INTERNAL_THREAD_IDENTITY_H_

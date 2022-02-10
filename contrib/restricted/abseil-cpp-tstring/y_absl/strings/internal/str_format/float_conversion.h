@@ -15,9 +15,9 @@
 #ifndef ABSL_STRINGS_INTERNAL_STR_FORMAT_FLOAT_CONVERSION_H_
 #define ABSL_STRINGS_INTERNAL_STR_FORMAT_FLOAT_CONVERSION_H_
 
-#include "y_absl/strings/internal/str_format/extension.h"
+#include "y_absl/strings/internal/str_format/extension.h" 
 
-namespace y_absl {
+namespace y_absl { 
 ABSL_NAMESPACE_BEGIN
 namespace str_format_internal {
 
@@ -32,6 +32,6 @@ bool ConvertFloatImpl(long double v, const FormatConversionSpecImpl &conv,
 
 }  // namespace str_format_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl
+}  // namespace y_absl 
 
 #endif  // ABSL_STRINGS_INTERNAL_STR_FORMAT_FLOAT_CONVERSION_H_

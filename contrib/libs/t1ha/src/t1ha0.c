@@ -361,7 +361,7 @@ uint64_t t1ha0_32be(const void *data, size_t len, uint64_t seed) {
 __cold uint64_t t1ha_ia32cpu_features(void) {
   uint32_t features = 0;
   uint32_t extended = 0;
-#if defined(__GNUC__) || defined(__clang__)
+#if defined(__GNUC__) || defined(__clang__) 
   uint32_t eax, ebx, ecx, edx;
   const unsigned cpuid_max = __get_cpuid_max(0, NULL);
   if (cpuid_max >= 1) {

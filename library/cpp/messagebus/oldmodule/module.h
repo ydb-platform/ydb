@@ -407,4 +407,4 @@ namespace NBus {
         TBusStarter* CreateDefaultStarter(TBusMessageQueue& unused, const TBusSessionConfig& config);
     };
 
-}
+} 

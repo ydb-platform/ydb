@@ -23,15 +23,15 @@ const char* getprogname() {
 #endif
 
 #ifdef _win_
-
-void sleep(i64 len) {
-    Sleep((unsigned long)len * 1000);
-}
-
-void usleep(i64 len) {
-    Sleep((unsigned long)len / 1000);
-}
-
+ 
+void sleep(i64 len) { 
+    Sleep((unsigned long)len * 1000); 
+} 
+ 
+void usleep(i64 len) { 
+    Sleep((unsigned long)len / 1000); 
+} 
+ 
     #include <fcntl.h>
 int ftruncate(int fd, i64 length) {
     return _chsize_s(fd, length);

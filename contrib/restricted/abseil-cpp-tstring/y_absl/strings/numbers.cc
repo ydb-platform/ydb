@@ -15,7 +15,7 @@
 // This file contains string processing functions related to
 // numeric values.
 
-#include "y_absl/strings/numbers.h"
+#include "y_absl/strings/numbers.h" 
 
 #include <algorithm>
 #include <cassert>
@@ -31,19 +31,19 @@
 #include <utility>
 
 #include "y_absl/base/attributes.h"
-#include "y_absl/base/internal/raw_logging.h"
+#include "y_absl/base/internal/raw_logging.h" 
 #include "y_absl/numeric/bits.h"
-#include "y_absl/strings/ascii.h"
-#include "y_absl/strings/charconv.h"
-#include "y_absl/strings/escaping.h"
-#include "y_absl/strings/internal/memutil.h"
-#include "y_absl/strings/match.h"
-#include "y_absl/strings/str_cat.h"
+#include "y_absl/strings/ascii.h" 
+#include "y_absl/strings/charconv.h" 
+#include "y_absl/strings/escaping.h" 
+#include "y_absl/strings/internal/memutil.h" 
+#include "y_absl/strings/match.h" 
+#include "y_absl/strings/str_cat.h" 
 
-namespace y_absl {
+namespace y_absl { 
 ABSL_NAMESPACE_BEGIN
 
-bool SimpleAtof(y_absl::string_view str, float* out) {
+bool SimpleAtof(y_absl::string_view str, float* out) { 
   *out = 0.0;
   str = StripAsciiWhitespace(str);
   // std::from_chars doesn't accept an initial +, but SimpleAtof does, so if one
@@ -54,7 +54,7 @@ bool SimpleAtof(y_absl::string_view str, float* out) {
       return false;
     }
   }
-  auto result = y_absl::from_chars(str.data(), str.data() + str.size(), *out);
+  auto result = y_absl::from_chars(str.data(), str.data() + str.size(), *out); 
   if (result.ec == std::errc::invalid_argument) {
     return false;
   }
@@ -74,7 +74,7 @@ bool SimpleAtof(y_absl::string_view str, float* out) {
   return true;
 }
 
-bool SimpleAtod(y_absl::string_view str, double* out) {
+bool SimpleAtod(y_absl::string_view str, double* out) { 
   *out = 0.0;
   str = StripAsciiWhitespace(str);
   // std::from_chars doesn't accept an initial +, but SimpleAtod does, so if one
@@ -85,7 +85,7 @@ bool SimpleAtod(y_absl::string_view str, double* out) {
       return false;
     }
   }
-  auto result = y_absl::from_chars(str.data(), str.data() + str.size(), *out);
+  auto result = y_absl::from_chars(str.data(), str.data() + str.size(), *out); 
   if (result.ec == std::errc::invalid_argument) {
     return false;
   }
@@ -105,7 +105,7 @@ bool SimpleAtod(y_absl::string_view str, double* out) {
   return true;
 }
 
-bool SimpleAtob(y_absl::string_view str, bool* out) {
+bool SimpleAtob(y_absl::string_view str, bool* out) { 
   ABSL_RAW_CHECK(out != nullptr, "Output pointer must not be nullptr.");
   if (EqualsIgnoreCase(str, "true") || EqualsIgnoreCase(str, "t") ||
       EqualsIgnoreCase(str, "yes") || EqualsIgnoreCase(str, "y") ||
@@ -630,7 +630,7 @@ static const int8_t kAsciiToInt[256] = {
     36, 36, 36, 36, 36, 36, 36, 36, 36, 36, 36, 36};
 
 // Parse the sign and optional hex or oct prefix in text.
-inline bool safe_parse_sign_and_base(y_absl::string_view* text /*inout*/,
+inline bool safe_parse_sign_and_base(y_absl::string_view* text /*inout*/, 
                                      int* base_ptr /*inout*/,
                                      bool* negative_ptr /*output*/) {
   if (text->data() == nullptr) {
@@ -642,10 +642,10 @@ inline bool safe_parse_sign_and_base(y_absl::string_view* text /*inout*/,
   int base = *base_ptr;
 
   // Consume whitespace.
-  while (start < end && y_absl::ascii_isspace(start[0])) {
+  while (start < end && y_absl::ascii_isspace(start[0])) { 
     ++start;
   }
-  while (start < end && y_absl::ascii_isspace(end[-1])) {
+  while (start < end && y_absl::ascii_isspace(end[-1])) { 
     --end;
   }
   if (start >= end) {
@@ -694,7 +694,7 @@ inline bool safe_parse_sign_and_base(y_absl::string_view* text /*inout*/,
   } else {
     return false;
   }
-  *text = y_absl::string_view(start, end - start);
+  *text = y_absl::string_view(start, end - start); 
   *base_ptr = base;
   return true;
 }
@@ -914,7 +914,7 @@ const IntType LookupTables<IntType>::kVminOverBase[] =
 #undef X_OVER_BASE_INITIALIZER
 
 template <typename IntType>
-inline bool safe_parse_positive_int(y_absl::string_view text, int base,
+inline bool safe_parse_positive_int(y_absl::string_view text, int base, 
                                     IntType* value_p) {
   IntType value = 0;
   const IntType vmax = std::numeric_limits<IntType>::max();
@@ -950,7 +950,7 @@ inline bool safe_parse_positive_int(y_absl::string_view text, int base,
 }
 
 template <typename IntType>
-inline bool safe_parse_negative_int(y_absl::string_view text, int base,
+inline bool safe_parse_negative_int(y_absl::string_view text, int base, 
                                     IntType* value_p) {
   IntType value = 0;
   const IntType vmin = std::numeric_limits<IntType>::min();
@@ -995,7 +995,7 @@ inline bool safe_parse_negative_int(y_absl::string_view text, int base,
 // Input format based on POSIX.1-2008 strtol
 // http://pubs.opengroup.org/onlinepubs/9699919799/functions/strtol.html
 template <typename IntType>
-inline bool safe_int_internal(y_absl::string_view text, IntType* value_p,
+inline bool safe_int_internal(y_absl::string_view text, IntType* value_p, 
                               int base) {
   *value_p = 0;
   bool negative;
@@ -1010,7 +1010,7 @@ inline bool safe_int_internal(y_absl::string_view text, IntType* value_p,
 }
 
 template <typename IntType>
-inline bool safe_uint_internal(y_absl::string_view text, IntType* value_p,
+inline bool safe_uint_internal(y_absl::string_view text, IntType* value_p, 
                                int base) {
   *value_p = 0;
   bool negative;
@@ -1064,11 +1064,11 @@ ABSL_CONST_INIT ABSL_DLL const char two_ASCII_digits[100][2] = {
     {'9', '0'}, {'9', '1'}, {'9', '2'}, {'9', '3'}, {'9', '4'}, {'9', '5'},
     {'9', '6'}, {'9', '7'}, {'9', '8'}, {'9', '9'}};
 
-bool safe_strto32_base(y_absl::string_view text, int32_t* value, int base) {
+bool safe_strto32_base(y_absl::string_view text, int32_t* value, int base) { 
   return safe_int_internal<int32_t>(text, value, base);
 }
 
-bool safe_strto64_base(y_absl::string_view text, int64_t* value, int base) {
+bool safe_strto64_base(y_absl::string_view text, int64_t* value, int base) { 
   return safe_int_internal<int64_t>(text, value, base);
 }
 
@@ -1076,18 +1076,18 @@ bool safe_strto128_base(y_absl::string_view text, int128* value, int base) {
   return safe_int_internal<y_absl::int128>(text, value, base);
 }
 
-bool safe_strtou32_base(y_absl::string_view text, uint32_t* value, int base) {
+bool safe_strtou32_base(y_absl::string_view text, uint32_t* value, int base) { 
   return safe_uint_internal<uint32_t>(text, value, base);
 }
 
-bool safe_strtou64_base(y_absl::string_view text, uint64_t* value, int base) {
+bool safe_strtou64_base(y_absl::string_view text, uint64_t* value, int base) { 
   return safe_uint_internal<uint64_t>(text, value, base);
 }
 
-bool safe_strtou128_base(y_absl::string_view text, uint128* value, int base) {
-  return safe_uint_internal<y_absl::uint128>(text, value, base);
+bool safe_strtou128_base(y_absl::string_view text, uint128* value, int base) { 
+  return safe_uint_internal<y_absl::uint128>(text, value, base); 
 }
 
 }  // namespace numbers_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl
+}  // namespace y_absl 

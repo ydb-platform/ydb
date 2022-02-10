@@ -22,7 +22,7 @@
 
 #include "y_absl/base/config.h"
 
-namespace y_absl {
+namespace y_absl { 
 ABSL_NAMESPACE_BEGIN
 namespace time_internal {
 namespace cctz {
@@ -52,7 +52,7 @@ int Parse02d(const char* p) {
 
 }  // namespace
 
-bool FixedOffsetFromName(const TString& name, seconds* offset) {
+bool FixedOffsetFromName(const TString& name, seconds* offset) { 
   if (name == "UTC" || name == "UTC0") {
     *offset = seconds::zero();
     return true;
@@ -81,7 +81,7 @@ bool FixedOffsetFromName(const TString& name, seconds* offset) {
   return true;
 }
 
-TString FixedOffsetToName(const seconds& offset) {
+TString FixedOffsetToName(const seconds& offset) { 
   if (offset == seconds::zero()) return "UTC";
   if (offset < std::chrono::hours(-24) || offset > std::chrono::hours(24)) {
     // We don't support fixed-offset zones more than 24 hours
@@ -117,8 +117,8 @@ TString FixedOffsetToName(const seconds& offset) {
   return buf;
 }
 
-TString FixedOffsetToAbbr(const seconds& offset) {
-  TString abbr = FixedOffsetToName(offset);
+TString FixedOffsetToAbbr(const seconds& offset) { 
+  TString abbr = FixedOffsetToName(offset); 
   const std::size_t prefix_len = sizeof(kFixedZonePrefix) - 1;
   if (abbr.size() == prefix_len + 9) {         // <prefix>+99:99:99
     abbr.erase(0, prefix_len);                 // +99:99:99
@@ -137,4 +137,4 @@ TString FixedOffsetToAbbr(const seconds& offset) {
 }  // namespace cctz
 }  // namespace time_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl
+}  // namespace y_absl 

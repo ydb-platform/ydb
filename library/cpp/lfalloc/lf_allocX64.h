@@ -98,17 +98,17 @@ static inline long AtomicSub(TAtomic& a, long b) {
 #include <new>
 #include <errno.h>
 
-#if defined(_linux_)
+#if defined(_linux_) 
 #include <linux/futex.h>
 #include <sys/syscall.h>
 #if !defined(MADV_HUGEPAGE)
 #define MADV_HUGEPAGE 14
-#endif
+#endif 
 #if !defined(MAP_HUGETLB)
 #define MAP_HUGETLB 0x40000
 #endif
 #endif
-
+ 
 #define PERTHREAD __thread
 
 #endif

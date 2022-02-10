@@ -27,9 +27,9 @@
 #include <utility>
 
 #include "y_absl/base/config.h"
-#include "y_absl/time/internal/cctz/include/cctz/civil_time.h"
+#include "y_absl/time/internal/cctz/include/cctz/civil_time.h" 
 
-namespace y_absl {
+namespace y_absl { 
 ABSL_NAMESPACE_BEGIN
 namespace time_internal {
 namespace cctz {
@@ -71,7 +71,7 @@ class time_zone {
   time_zone(const time_zone&) = default;
   time_zone& operator=(const time_zone&) = default;
 
-  TString name() const;
+  TString name() const; 
 
   // An absolute_lookup represents the civil time (cctz::civil_second) within
   // this time_zone at the given absolute time (time_point). There are
@@ -203,8 +203,8 @@ class time_zone {
   // empty when unavailable.
   //
   // Note: These functions are for informational or testing purposes only.
-  TString version() const;  // empty when unknown
-  TString description() const;
+  TString version() const;  // empty when unknown 
+  TString description() const; 
 
   // Relational operators.
   friend bool operator==(time_zone lhs, time_zone rhs) {
@@ -228,7 +228,7 @@ class time_zone {
 // Loads the named time zone. May perform I/O on the initial load.
 // If the name is invalid, or some other kind of error occurs, returns
 // false and "*tz" is set to the UTC time zone.
-bool load_time_zone(const TString& name, time_zone* tz);
+bool load_time_zone(const TString& name, time_zone* tz); 
 
 // Returns a time_zone representing UTC. Cannot fail.
 time_zone utc_time_zone();
@@ -265,10 +265,10 @@ inline time_point<seconds> convert(const civil_second& cs,
 
 namespace detail {
 using femtoseconds = std::chrono::duration<std::int_fast64_t, std::femto>;
-TString format(const TString&, const time_point<seconds>&,
+TString format(const TString&, const time_point<seconds>&, 
                    const femtoseconds&, const time_zone&);
-bool parse(const TString&, const TString&, const time_zone&,
-           time_point<seconds>*, femtoseconds*, TString* err = nullptr);
+bool parse(const TString&, const TString&, const time_zone&, 
+           time_point<seconds>*, femtoseconds*, TString* err = nullptr); 
 template <typename Rep, std::intmax_t Denom>
 bool join_seconds(
     const time_point<seconds>& sec, const femtoseconds& fs,
@@ -312,10 +312,10 @@ bool join_seconds(const time_point<seconds>& sec, const femtoseconds&,
 //   cctz::time_zone lax;
 //   if (!cctz::load_time_zone("America/Los_Angeles", &lax)) { ... }
 //   auto tp = cctz::convert(cctz::civil_second(2013, 1, 2, 3, 4, 5), lax);
-//   TString f = cctz::format("%H:%M:%S", tp, lax);  // "03:04:05"
+//   TString f = cctz::format("%H:%M:%S", tp, lax);  // "03:04:05" 
 //   f = cctz::format("%H:%M:%E3S", tp, lax);            // "03:04:05.000"
 template <typename D>
-inline TString format(const TString& fmt, const time_point<D>& tp,
+inline TString format(const TString& fmt, const time_point<D>& tp, 
                           const time_zone& tz) {
   const auto p = detail::split_seconds(tp);
   const auto n = std::chrono::duration_cast<detail::femtoseconds>(p.second);
@@ -369,7 +369,7 @@ inline TString format(const TString& fmt, const time_point<D>& tp,
 //     ...
 //   }
 template <typename D>
-inline bool parse(const TString& fmt, const TString& input,
+inline bool parse(const TString& fmt, const TString& input, 
                   const time_zone& tz, time_point<D>* tpp) {
   time_point<seconds> sec;
   detail::femtoseconds fs;
@@ -454,6 +454,6 @@ inline bool join_seconds(const time_point<seconds>& sec, const femtoseconds&,
 }  // namespace cctz
 }  // namespace time_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl
+}  // namespace y_absl 
 
 #endif  // ABSL_TIME_INTERNAL_CCTZ_TIME_ZONE_H_

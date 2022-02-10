@@ -17,7 +17,7 @@
 #include <config.h>
 
 /* Specification.  */
-#include "string--.h"
+#include "string--.h" 
 
 /* Find the first occurrence of C in S or the final NUL byte.  */
 char *

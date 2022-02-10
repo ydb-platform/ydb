@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "y_absl/synchronization/mutex.h"
+#include "y_absl/synchronization/mutex.h" 
 
 #ifdef _WIN32
 #include <windows.h>
@@ -38,36 +38,36 @@
 #include <cinttypes>
 #include <thread>  // NOLINT(build/c++11)
 
-#include "y_absl/base/attributes.h"
+#include "y_absl/base/attributes.h" 
 #include "y_absl/base/call_once.h"
-#include "y_absl/base/config.h"
-#include "y_absl/base/dynamic_annotations.h"
-#include "y_absl/base/internal/atomic_hook.h"
-#include "y_absl/base/internal/cycleclock.h"
-#include "y_absl/base/internal/hide_ptr.h"
-#include "y_absl/base/internal/low_level_alloc.h"
-#include "y_absl/base/internal/raw_logging.h"
-#include "y_absl/base/internal/spinlock.h"
-#include "y_absl/base/internal/sysinfo.h"
-#include "y_absl/base/internal/thread_identity.h"
+#include "y_absl/base/config.h" 
+#include "y_absl/base/dynamic_annotations.h" 
+#include "y_absl/base/internal/atomic_hook.h" 
+#include "y_absl/base/internal/cycleclock.h" 
+#include "y_absl/base/internal/hide_ptr.h" 
+#include "y_absl/base/internal/low_level_alloc.h" 
+#include "y_absl/base/internal/raw_logging.h" 
+#include "y_absl/base/internal/spinlock.h" 
+#include "y_absl/base/internal/sysinfo.h" 
+#include "y_absl/base/internal/thread_identity.h" 
 #include "y_absl/base/internal/tsan_mutex_interface.h"
-#include "y_absl/base/port.h"
-#include "y_absl/debugging/stacktrace.h"
-#include "y_absl/debugging/symbolize.h"
-#include "y_absl/synchronization/internal/graphcycles.h"
-#include "y_absl/synchronization/internal/per_thread_sem.h"
-#include "y_absl/time/time.h"
+#include "y_absl/base/port.h" 
+#include "y_absl/debugging/stacktrace.h" 
+#include "y_absl/debugging/symbolize.h" 
+#include "y_absl/synchronization/internal/graphcycles.h" 
+#include "y_absl/synchronization/internal/per_thread_sem.h" 
+#include "y_absl/time/time.h" 
 
-using y_absl::base_internal::CurrentThreadIdentityIfPresent;
-using y_absl::base_internal::PerThreadSynch;
+using y_absl::base_internal::CurrentThreadIdentityIfPresent; 
+using y_absl::base_internal::PerThreadSynch; 
 using y_absl::base_internal::SchedulingGuard;
-using y_absl::base_internal::ThreadIdentity;
-using y_absl::synchronization_internal::GetOrCreateCurrentThreadIdentity;
-using y_absl::synchronization_internal::GraphCycles;
-using y_absl::synchronization_internal::GraphId;
-using y_absl::synchronization_internal::InvalidGraphId;
-using y_absl::synchronization_internal::KernelTimeout;
-using y_absl::synchronization_internal::PerThreadSem;
+using y_absl::base_internal::ThreadIdentity; 
+using y_absl::synchronization_internal::GetOrCreateCurrentThreadIdentity; 
+using y_absl::synchronization_internal::GraphCycles; 
+using y_absl::synchronization_internal::GraphId; 
+using y_absl::synchronization_internal::InvalidGraphId; 
+using y_absl::synchronization_internal::KernelTimeout; 
+using y_absl::synchronization_internal::PerThreadSem; 
 
 extern "C" {
 ABSL_ATTRIBUTE_WEAK void ABSL_INTERNAL_C_SYMBOL(AbslInternalMutexYield)() {
@@ -75,7 +75,7 @@ ABSL_ATTRIBUTE_WEAK void ABSL_INTERNAL_C_SYMBOL(AbslInternalMutexYield)() {
 }
 }  // extern "C"
 
-namespace y_absl {
+namespace y_absl { 
 ABSL_NAMESPACE_BEGIN
 
 namespace {
@@ -101,7 +101,7 @@ ABSL_INTERNAL_ATOMIC_HOOK_ATTRIBUTES
         cond_var_tracer;
 ABSL_INTERNAL_ATOMIC_HOOK_ATTRIBUTES y_absl::base_internal::AtomicHook<
     bool (*)(const void *pc, char *out, int out_size)>
-    symbolizer(y_absl::Symbolize);
+    symbolizer(y_absl::Symbolize); 
 
 }  // namespace
 
@@ -176,7 +176,7 @@ int MutexDelay(int32_t c, int mode) {
       c++;
     } else {
       // Then wait.
-      y_absl::SleepFor(y_absl::Microseconds(10));
+      y_absl::SleepFor(y_absl::Microseconds(10)); 
       c = 0;
     }
     ABSL_TSAN_MUTEX_POST_DIVERT(nullptr, 0);
@@ -424,7 +424,7 @@ static void PostSynchEvent(void *obj, int ev) {
   // or it explicitly says to log
   if (e == nullptr || e->log) {
     void *pcs[40];
-    int n = y_absl::GetStackTrace(pcs, ABSL_ARRAYSIZE(pcs), 1);
+    int n = y_absl::GetStackTrace(pcs, ABSL_ARRAYSIZE(pcs), 1); 
     // A buffer with enough space for the ASCII for all the PCs, even on a
     // 64-bit machine.
     char buffer[ABSL_ARRAYSIZE(pcs) * 24];
@@ -605,13 +605,13 @@ void Mutex::InternalAttemptToUseMutexInFatalSignalHandler() {
 // Return the current time plus the timeout.  Use the same clock as
 // PerThreadSem::Wait() for consistency.  Unfortunately, we don't have
 // such a choice when a deadline is given directly.
-static y_absl::Time DeadlineFromTimeout(y_absl::Duration timeout) {
+static y_absl::Time DeadlineFromTimeout(y_absl::Duration timeout) { 
 #ifndef _WIN32
   struct timeval tv;
   gettimeofday(&tv, nullptr);
-  return y_absl::TimeFromTimeval(tv) + timeout;
+  return y_absl::TimeFromTimeval(tv) + timeout; 
 #else
-  return y_absl::Now() + timeout;
+  return y_absl::Now() + timeout; 
 #endif
 }
 
@@ -1290,7 +1290,7 @@ static char *StackString(void **pcs, int n, char *buf, int maxlen,
 
 static char *CurrentStackString(char *buf, int maxlen, bool symbolize) {
   void *pcs[40];
-  return StackString(pcs, y_absl::GetStackTrace(pcs, ABSL_ARRAYSIZE(pcs), 2), buf,
+  return StackString(pcs, y_absl::GetStackTrace(pcs, ABSL_ARRAYSIZE(pcs), 2), buf, 
                      maxlen, symbolize);
 }
 
@@ -1315,7 +1315,7 @@ struct ScopedDeadlockReportBuffers {
 
 // Helper to pass to GraphCycles::UpdateStackTrace.
 int GetStack(void** stack, int max_depth) {
-  return y_absl::GetStackTrace(stack, max_depth, 3);
+  return y_absl::GetStackTrace(stack, max_depth, 3); 
 }
 }  // anonymous namespace
 
@@ -1329,7 +1329,7 @@ static GraphId DeadlockCheck(Mutex *mu) {
 
   SynchLocksHeld *all_locks = Synch_GetAllLocks();
 
-  y_absl::base_internal::SpinLockHolder lock(&deadlock_graph_mu);
+  y_absl::base_internal::SpinLockHolder lock(&deadlock_graph_mu); 
   const GraphId mu_id = GetGraphIdLocked(mu);
 
   if (all_locks->n == 0) {
@@ -1508,11 +1508,11 @@ void Mutex::LockWhen(const Condition &cond) {
   ABSL_TSAN_MUTEX_POST_LOCK(this, 0, 0);
 }
 
-bool Mutex::LockWhenWithTimeout(const Condition &cond, y_absl::Duration timeout) {
+bool Mutex::LockWhenWithTimeout(const Condition &cond, y_absl::Duration timeout) { 
   return LockWhenWithDeadline(cond, DeadlineFromTimeout(timeout));
 }
 
-bool Mutex::LockWhenWithDeadline(const Condition &cond, y_absl::Time deadline) {
+bool Mutex::LockWhenWithDeadline(const Condition &cond, y_absl::Time deadline) { 
   ABSL_TSAN_MUTEX_PRE_LOCK(this, 0);
   GraphId id = DebugOnlyDeadlockCheck(this);
   bool res = LockSlowWithDeadline(kExclusive, &cond,
@@ -1531,12 +1531,12 @@ void Mutex::ReaderLockWhen(const Condition &cond) {
 }
 
 bool Mutex::ReaderLockWhenWithTimeout(const Condition &cond,
-                                      y_absl::Duration timeout) {
+                                      y_absl::Duration timeout) { 
   return ReaderLockWhenWithDeadline(cond, DeadlineFromTimeout(timeout));
 }
 
 bool Mutex::ReaderLockWhenWithDeadline(const Condition &cond,
-                                       y_absl::Time deadline) {
+                                       y_absl::Time deadline) { 
   ABSL_TSAN_MUTEX_PRE_LOCK(this, __tsan_mutex_read_lock);
   GraphId id = DebugOnlyDeadlockCheck(this);
   bool res = LockSlowWithDeadline(kShared, &cond, KernelTimeout(deadline), 0);
@@ -1556,11 +1556,11 @@ void Mutex::Await(const Condition &cond) {
   }
 }
 
-bool Mutex::AwaitWithTimeout(const Condition &cond, y_absl::Duration timeout) {
+bool Mutex::AwaitWithTimeout(const Condition &cond, y_absl::Duration timeout) { 
   return AwaitWithDeadline(cond, DeadlineFromTimeout(timeout));
 }
 
-bool Mutex::AwaitWithDeadline(const Condition &cond, y_absl::Time deadline) {
+bool Mutex::AwaitWithDeadline(const Condition &cond, y_absl::Time deadline) { 
   if (cond.Eval()) {      // condition already true; nothing to do
     if (kDebugMode) {
       this->AssertReaderHeld();
@@ -2582,11 +2582,11 @@ bool CondVar::WaitCommon(Mutex *mutex, KernelTimeout t) {
   return rc;
 }
 
-bool CondVar::WaitWithTimeout(Mutex *mu, y_absl::Duration timeout) {
+bool CondVar::WaitWithTimeout(Mutex *mu, y_absl::Duration timeout) { 
   return WaitWithDeadline(mu, DeadlineFromTimeout(timeout));
 }
 
-bool CondVar::WaitWithDeadline(Mutex *mu, y_absl::Time deadline) {
+bool CondVar::WaitWithDeadline(Mutex *mu, y_absl::Time deadline) { 
   return WaitCommon(mu, KernelTimeout(deadline));
 }
 
@@ -2748,4 +2748,4 @@ bool Condition::GuaranteedEqual(const Condition *a, const Condition *b) {
 }
 
 ABSL_NAMESPACE_END
-}  // namespace y_absl
+}  // namespace y_absl 

@@ -1,12 +1,12 @@
 LIBRARY()
 
-LICENSE(
+LICENSE( 
     Apache-2.0 AND
     Apache-2.0 WITH LLVM-exception AND
     BSD-2-Clause AND
     MIT AND
     NCSA
-)
+) 
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
@@ -25,9 +25,9 @@ ADDINCL(
 
 CXXFLAGS(-D_LIBCPP_BUILDING_LIBRARY)
 
-IF (OS_ANDROID)
-    DEFAULT(CXX_RT "default")
-    IF (ARCH_I686 OR ARCH_ARM7)
+IF (OS_ANDROID) 
+    DEFAULT(CXX_RT "default") 
+    IF (ARCH_I686 OR ARCH_ARM7) 
         # 32-bit architectures require additional libandroid_support.so to be linked
         # We add --start-group / --end-group statements due to the issue in NDK < r22.
         # See: https://github.com/android/ndk/issues/1130
@@ -41,7 +41,7 @@ IF (OS_ANDROID)
         )
     ELSE()
         LDFLAGS(-lc++abi)
-    ENDIF()
+    ENDIF() 
     CFLAGS(
         -DLIBCXX_BUILDING_LIBCXXABI
     )
@@ -83,13 +83,13 @@ ELSEIF (OS_WINDOWS)
         GLOBAL -D_LIBCPP_VASPRINTF_DEFINED
         GLOBAL -D_WCHAR_H_CPLUSPLUS_98_CONFORMANCE_
     )
-    IF (CLANG_CL)
+    IF (CLANG_CL) 
         PEERDIR(
             contrib/libs/cxxsupp/builtins
         )
-    ENDIF()
+    ENDIF() 
 ELSE()
-    DEFAULT(CXX_RT "glibcxx_static")
+    DEFAULT(CXX_RT "glibcxx_static") 
     CXXFLAGS(
         -Wno-unknown-pragmas
         -nostdinc++
@@ -104,20 +104,20 @@ IF (CLANG)
     CFLAGS(
         GLOBAL -nostdinc++
     )
-ENDIF()
-
-# The CXX_RT variable controls which C++ runtime is used.
-# * libcxxrt        - https://github.com/pathscale/libcxxrt library stored in Arcadia
-# * glibcxx         - GNU C++ Library runtime with default (static) linkage
-# * glibcxx_static  - GNU C++ Library runtime with static linkage
-# * glibcxx_dynamic - GNU C++ Library runtime with dynamic linkage
-# * glibcxx_driver  - GNU C++ Library runtime provided by the compiler driver
-# * default         - default C++ runtime provided by the compiler driver
-#
-# All glibcxx* runtimes are taken from system/compiler SDK
-
-DEFAULT(CXX_RT "default")
-
+ENDIF() 
+ 
+# The CXX_RT variable controls which C++ runtime is used. 
+# * libcxxrt        - https://github.com/pathscale/libcxxrt library stored in Arcadia 
+# * glibcxx         - GNU C++ Library runtime with default (static) linkage 
+# * glibcxx_static  - GNU C++ Library runtime with static linkage 
+# * glibcxx_dynamic - GNU C++ Library runtime with dynamic linkage 
+# * glibcxx_driver  - GNU C++ Library runtime provided by the compiler driver 
+# * default         - default C++ runtime provided by the compiler driver 
+# 
+# All glibcxx* runtimes are taken from system/compiler SDK 
+ 
+DEFAULT(CXX_RT "default") 
+ 
 DISABLE(NEED_GLIBCXX_CXX17_SHIMS)
 
 IF (CXX_RT == "libcxxrt")
@@ -143,7 +143,7 @@ ELSEIF (CXX_RT == "glibcxx" OR CXX_RT == "glibcxx_static")
         -lgcc_eh
         -Wl,-Bdynamic
     )
-    CXXFLAGS(-D__GLIBCXX__=1)
+    CXXFLAGS(-D__GLIBCXX__=1) 
     ENABLE(NEED_GLIBCXX_CXX17_SHIMS)
     CFLAGS(
         GLOBAL -DLIBCXX_BUILDING_LIBGCC
@@ -153,19 +153,19 @@ ELSEIF (CXX_RT == "glibcxx_dynamic")
         -lgcc_s
         -lstdc++
     )
-    CXXFLAGS(-D__GLIBCXX__=1)
+    CXXFLAGS(-D__GLIBCXX__=1) 
     CFLAGS(
         GLOBAL -DLIBCXX_BUILDING_LIBGCC
     )
     ENABLE(NEED_GLIBCXX_CXX17_SHIMS)
 ELSEIF (CXX_RT == "glibcxx_driver")
-    CXXFLAGS(-D__GLIBCXX__=1)
+    CXXFLAGS(-D__GLIBCXX__=1) 
 ELSEIF (CXX_RT == "default")
-    # Do nothing
-ELSE()
+    # Do nothing 
+ELSE() 
     MESSAGE(FATAL_ERROR "Unexpected CXX_RT value: ${CXX_RT}")
-ENDIF()
-
+ENDIF() 
+ 
 IF (NEED_GLIBCXX_CXX17_SHIMS)
     IF (GCC)
         # Assume GCC is bundled with a modern enough version of C++ runtime

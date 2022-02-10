@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "y_absl/base/internal/thread_identity.h"
+#include "y_absl/base/internal/thread_identity.h" 
 
 #ifndef _WIN32
 #include <pthread.h>
@@ -24,18 +24,18 @@
 #include <memory>
 
 #include "y_absl/base/attributes.h"
-#include "y_absl/base/call_once.h"
-#include "y_absl/base/internal/raw_logging.h"
-#include "y_absl/base/internal/spinlock.h"
+#include "y_absl/base/call_once.h" 
+#include "y_absl/base/internal/raw_logging.h" 
+#include "y_absl/base/internal/spinlock.h" 
 
-namespace y_absl {
+namespace y_absl { 
 ABSL_NAMESPACE_BEGIN
 namespace base_internal {
 
 #if ABSL_THREAD_IDENTITY_MODE != ABSL_THREAD_IDENTITY_MODE_USE_CPP11
 namespace {
 // Used to co-ordinate one-time creation of our pthread_key
-y_absl::once_flag init_thread_identity_key_once;
+y_absl::once_flag init_thread_identity_key_once; 
 pthread_key_t thread_identity_pthread_key;
 std::atomic<bool> pthread_key_initialized(false);
 
@@ -75,7 +75,7 @@ void SetCurrentThreadIdentity(
   // barrier to CurrentThreadIdentity() always being async signal safe.
 #if ABSL_THREAD_IDENTITY_MODE == ABSL_THREAD_IDENTITY_MODE_USE_POSIX_SETSPECIFIC
   // NOTE: Not async-safe.  But can be open-coded.
-  y_absl::call_once(init_thread_identity_key_once, AllocateThreadIdentityKey,
+  y_absl::call_once(init_thread_identity_key_once, AllocateThreadIdentityKey, 
                   reclaimer);
 
 #if defined(__EMSCRIPTEN__) || defined(__MINGW32__)
@@ -102,7 +102,7 @@ void SetCurrentThreadIdentity(
 
 #elif ABSL_THREAD_IDENTITY_MODE == ABSL_THREAD_IDENTITY_MODE_USE_TLS
   // NOTE: Not async-safe.  But can be open-coded.
-  y_absl::call_once(init_thread_identity_key_once, AllocateThreadIdentityKey,
+  y_absl::call_once(init_thread_identity_key_once, AllocateThreadIdentityKey, 
                   reclaimer);
   pthread_setspecific(thread_identity_pthread_key,
                       reinterpret_cast<void*>(identity));
@@ -152,4 +152,4 @@ ThreadIdentity* CurrentThreadIdentityIfPresent() {
 
 }  // namespace base_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl
+}  // namespace y_absl 

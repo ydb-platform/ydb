@@ -14,9 +14,9 @@
 // limitations under the License.
 //
 
-#include "y_absl/debugging/failure_signal_handler.h"
+#include "y_absl/debugging/failure_signal_handler.h" 
 
-#include "y_absl/base/config.h"
+#include "y_absl/base/config.h" 
 
 #ifdef _WIN32
 #include <windows.h>
@@ -41,12 +41,12 @@
 #include <cstring>
 #include <ctime>
 
-#include "y_absl/base/attributes.h"
+#include "y_absl/base/attributes.h" 
 #include "y_absl/base/internal/errno_saver.h"
-#include "y_absl/base/internal/raw_logging.h"
-#include "y_absl/base/internal/sysinfo.h"
-#include "y_absl/debugging/internal/examine_stack.h"
-#include "y_absl/debugging/stacktrace.h"
+#include "y_absl/base/internal/raw_logging.h" 
+#include "y_absl/base/internal/sysinfo.h" 
+#include "y_absl/debugging/internal/examine_stack.h" 
+#include "y_absl/debugging/stacktrace.h" 
 
 #ifndef _WIN32
 #define ABSL_HAVE_SIGACTION
@@ -57,7 +57,7 @@
 #endif
 #endif
 
-namespace y_absl {
+namespace y_absl { 
 ABSL_NAMESPACE_BEGIN
 
 ABSL_CONST_INIT static FailureSignalHandlerOptions fsh_options;
@@ -218,7 +218,7 @@ static void InstallOneFailureHandler(FailureSignalData* data,
 
 static void WriteToStderr(const char* data) {
   y_absl::base_internal::ErrnoSaver errno_saver;
-  y_absl::raw_logging_internal::SafeWriteToStderr(data, strlen(data));
+  y_absl::raw_logging_internal::SafeWriteToStderr(data, strlen(data)); 
 }
 
 static void WriteSignalMessage(int signo, int cpu,
@@ -248,7 +248,7 @@ struct WriterFnStruct {
   void (*writerfn)(const char*);
 };
 
-// Many of the y_absl::debugging_internal::Dump* functions in
+// Many of the y_absl::debugging_internal::Dump* functions in 
 // examine_stack.h take a writer function pointer that has a void* arg
 // for historical reasons. failure_signal_handler_writer only takes a
 // data pointer. This function converts between these types.
@@ -266,12 +266,12 @@ ABSL_ATTRIBUTE_NOINLINE static void WriteStackTrace(
   void* stack[kNumStackFrames];
   int frame_sizes[kNumStackFrames];
   int min_dropped_frames;
-  int depth = y_absl::GetStackFramesWithContext(
+  int depth = y_absl::GetStackFramesWithContext( 
       stack, frame_sizes, kNumStackFrames,
       1,  // Do not include this function in stack trace.
       ucontext, &min_dropped_frames);
-  y_absl::debugging_internal::DumpPCAndFrameSizesAndStackTrace(
-      y_absl::debugging_internal::GetProgramCounter(ucontext), stack, frame_sizes,
+  y_absl::debugging_internal::DumpPCAndFrameSizesAndStackTrace( 
+      y_absl::debugging_internal::GetProgramCounter(ucontext), stack, frame_sizes, 
       depth, min_dropped_frames, symbolize_stacktrace, writerfn, writerfn_arg);
 }
 
@@ -286,7 +286,7 @@ static void WriteFailureInfo(int signo, void* ucontext, int cpu,
                   &writerfn_struct);
 }
 
-// y_absl::SleepFor() can't be used here since AbslInternalSleepFor()
+// y_absl::SleepFor() can't be used here since AbslInternalSleepFor() 
 // may be overridden to do something that isn't async-signal-safe on
 // some platforms.
 static void PortableSleepForSeconds(int seconds) {
@@ -311,9 +311,9 @@ static void ImmediateAbortSignalHandler(int) {
 }
 #endif
 
-// y_absl::base_internal::GetTID() returns pid_t on most platforms, but
-// returns y_absl::base_internal::pid_t on Windows.
-using GetTidType = decltype(y_absl::base_internal::GetTID());
+// y_absl::base_internal::GetTID() returns pid_t on most platforms, but 
+// returns y_absl::base_internal::pid_t on Windows. 
+using GetTidType = decltype(y_absl::base_internal::GetTID()); 
 ABSL_CONST_INIT static std::atomic<GetTidType> failed_tid(0);
 
 #ifndef ABSL_HAVE_SIGACTION
@@ -323,7 +323,7 @@ static void AbslFailureSignalHandler(int signo) {
 static void AbslFailureSignalHandler(int signo, siginfo_t*, void* ucontext) {
 #endif
 
-  const GetTidType this_tid = y_absl::base_internal::GetTID();
+  const GetTidType this_tid = y_absl::base_internal::GetTID(); 
   GetTidType previous_failed_tid = 0;
   if (!failed_tid.compare_exchange_strong(
           previous_failed_tid, static_cast<intptr_t>(this_tid),
@@ -331,7 +331,7 @@ static void AbslFailureSignalHandler(int signo, siginfo_t*, void* ucontext) {
     ABSL_RAW_LOG(
         ERROR,
         "Signal %d raised at PC=%p while already in AbslFailureSignalHandler()",
-        signo, y_absl::debugging_internal::GetProgramCounter(ucontext));
+        signo, y_absl::debugging_internal::GetProgramCounter(ucontext)); 
     if (this_tid != previous_failed_tid) {
       // Another thread is already in AbslFailureSignalHandler(), so wait
       // a bit for it to finish. If the other thread doesn't kill us,
@@ -385,4 +385,4 @@ void InstallFailureSignalHandler(const FailureSignalHandlerOptions& options) {
 }
 
 ABSL_NAMESPACE_END
-}  // namespace y_absl
+}  // namespace y_absl 

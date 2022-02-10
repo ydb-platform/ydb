@@ -69,7 +69,7 @@
     #define _win_
 #endif
 
-#if defined(__arm__) || defined(__ARM__) || defined(__ARM_NEON) || defined(__aarch64__) || defined(_M_ARM)
+#if defined(__arm__) || defined(__ARM__) || defined(__ARM_NEON) || defined(__aarch64__) || defined(_M_ARM) 
     #if defined(__arm64) || defined(__arm64__) || defined(__aarch64__)
         #define _arm64_
     #else
@@ -99,15 +99,15 @@
     #define _ia64_
 #endif
 
-#if defined(__powerpc__)
+#if defined(__powerpc__) 
     #define _ppc_
-#endif
-
-#if defined(__powerpc64__)
+#endif 
+ 
+#if defined(__powerpc64__) 
     #define _ppc64_
-#endif
-
-#if !defined(sparc) && !defined(__sparc) && !defined(__hpux__) && !defined(__alpha__) && !defined(_ia64_) && !defined(_x86_64_) && !defined(_arm_) && !defined(_i386_) && !defined(_ppc_) && !defined(_ppc64_)
+#endif 
+ 
+#if !defined(sparc) && !defined(__sparc) && !defined(__hpux__) && !defined(__alpha__) && !defined(_ia64_) && !defined(_x86_64_) && !defined(_arm_) && !defined(_i386_) && !defined(_ppc_) && !defined(_ppc64_) 
     #error "platform not defined, please, define one"
 #endif
 
@@ -115,11 +115,11 @@
     #define _x86_
 #endif
 
-#if defined(__MIC__)
+#if defined(__MIC__) 
     #define _mic_
     #define _k1om_
-#endif
-
+#endif 
+ 
 // stdio or MessageBox
 #if defined(__CONSOLE__) || defined(_CONSOLE)
     #define _console_
@@ -183,7 +183,7 @@
 #endif
 
 // 16, 32 or 64
-#if defined(__sparc_v9__) || defined(_x86_64_) || defined(_ia64_) || defined(_arm64_) || defined(_ppc64_)
+#if defined(__sparc_v9__) || defined(_x86_64_) || defined(_ia64_) || defined(_arm64_) || defined(_ppc64_) 
     #define _64_
 #else
     #define _32_
@@ -214,11 +214,11 @@
 #endif
 
 #define SIZEOF_CHAR 1
-#define SIZEOF_UNSIGNED_CHAR 1
+#define SIZEOF_UNSIGNED_CHAR 1 
 #define SIZEOF_SHORT 2
-#define SIZEOF_UNSIGNED_SHORT 2
+#define SIZEOF_UNSIGNED_SHORT 2 
 #define SIZEOF_INT 4
-#define SIZEOF_UNSIGNED_INT 4
+#define SIZEOF_UNSIGNED_INT 4 
 
 #if defined(_32_)
     #define SIZEOF_LONG 4
@@ -238,7 +238,7 @@
 #endif
 
 #define SIZEOF_LONG_LONG 8
-#define SIZEOF_UNSIGNED_LONG_LONG 8
+#define SIZEOF_UNSIGNED_LONG_LONG 8 
 
 #undef SIZEOF_SIZE_T // in case we include <Python.h> which defines it, too
 #define SIZEOF_SIZE_T SIZEOF_PTR

@@ -21,13 +21,13 @@
 
 #include <util/generic/string.h>
 
-#include "y_absl/base/attributes.h"
+#include "y_absl/base/attributes.h" 
 #include "y_absl/base/config.h"
-#include "y_absl/base/internal/atomic_hook.h"
-#include "y_absl/base/log_severity.h"
-#include "y_absl/base/macros.h"
+#include "y_absl/base/internal/atomic_hook.h" 
+#include "y_absl/base/log_severity.h" 
+#include "y_absl/base/macros.h" 
 #include "y_absl/base/optimization.h"
-#include "y_absl/base/port.h"
+#include "y_absl/base/port.h" 
 
 // This is similar to LOG(severity) << format..., but
 // * it is to be used ONLY by low-level modules that can't use normal LOG()
@@ -44,9 +44,9 @@
 #define ABSL_RAW_LOG(severity, ...)                                            \
   do {                                                                         \
     constexpr const char* absl_raw_logging_internal_basename =                 \
-        ::y_absl::raw_logging_internal::Basename(__FILE__,                       \
+        ::y_absl::raw_logging_internal::Basename(__FILE__,                       \ 
                                                sizeof(__FILE__) - 1);          \
-    ::y_absl::raw_logging_internal::RawLog(ABSL_RAW_LOGGING_INTERNAL_##severity, \
+    ::y_absl::raw_logging_internal::RawLog(ABSL_RAW_LOGGING_INTERNAL_##severity, \ 
                                          absl_raw_logging_internal_basename,   \
                                          __LINE__, __VA_ARGS__);               \
   } while (0)
@@ -85,20 +85,20 @@
 #define ABSL_INTERNAL_CHECK(condition, message)                    \
   do {                                                             \
     if (ABSL_PREDICT_FALSE(!(condition))) {                        \
-      TString death_message = "Check " #condition " failed: "; \
-      death_message += TString(message);                       \
+      TString death_message = "Check " #condition " failed: "; \ 
+      death_message += TString(message);                       \ 
       ABSL_INTERNAL_LOG(FATAL, death_message);                     \
     }                                                              \
   } while (0)
 
-#define ABSL_RAW_LOGGING_INTERNAL_INFO ::y_absl::LogSeverity::kInfo
-#define ABSL_RAW_LOGGING_INTERNAL_WARNING ::y_absl::LogSeverity::kWarning
-#define ABSL_RAW_LOGGING_INTERNAL_ERROR ::y_absl::LogSeverity::kError
-#define ABSL_RAW_LOGGING_INTERNAL_FATAL ::y_absl::LogSeverity::kFatal
+#define ABSL_RAW_LOGGING_INTERNAL_INFO ::y_absl::LogSeverity::kInfo 
+#define ABSL_RAW_LOGGING_INTERNAL_WARNING ::y_absl::LogSeverity::kWarning 
+#define ABSL_RAW_LOGGING_INTERNAL_ERROR ::y_absl::LogSeverity::kError 
+#define ABSL_RAW_LOGGING_INTERNAL_FATAL ::y_absl::LogSeverity::kFatal 
 #define ABSL_RAW_LOGGING_INTERNAL_LEVEL(severity) \
-  ::y_absl::NormalizeLogSeverity(severity)
+  ::y_absl::NormalizeLogSeverity(severity) 
 
-namespace y_absl {
+namespace y_absl { 
 ABSL_NAMESPACE_BEGIN
 namespace raw_logging_internal {
 
@@ -106,7 +106,7 @@ namespace raw_logging_internal {
 // Logs format... at "severity" level, reporting it
 // as called from file:line.
 // This does not allocate memory or acquire locks.
-void RawLog(y_absl::LogSeverity severity, const char* file, int line,
+void RawLog(y_absl::LogSeverity severity, const char* file, int line, 
             const char* format, ...) ABSL_PRINTF_ATTRIBUTE(4, 5);
 
 // Writes the provided buffer directly to stderr, in a safe, low-level manner.
@@ -151,7 +151,7 @@ bool RawLoggingFullySupported();
 // 'buffer' and 'buf_size' are pointers to the buffer and buffer size.  If the
 // hook writes a prefix, it must increment *buffer and decrement *buf_size
 // accordingly.
-using LogPrefixHook = bool (*)(y_absl::LogSeverity severity, const char* file,
+using LogPrefixHook = bool (*)(y_absl::LogSeverity severity, const char* file, 
                                int line, char** buffer, int* buf_size);
 
 // Function type for a raw_logging customization hook called to abort a process
@@ -170,9 +170,9 @@ using AbortHook = void (*)(const char* file, int line, const char* buf_start,
 //
 // TODO(gfalcon): When string_view no longer depends on base, change this
 // interface to take its message as a string_view instead.
-using InternalLogFunction = void (*)(y_absl::LogSeverity severity,
+using InternalLogFunction = void (*)(y_absl::LogSeverity severity, 
                                      const char* file, int line,
-                                     const TString& message);
+                                     const TString& message); 
 
 ABSL_INTERNAL_ATOMIC_HOOK_ATTRIBUTES ABSL_DLL extern base_internal::AtomicHook<
     InternalLogFunction>
@@ -190,6 +190,6 @@ void RegisterInternalLogFunction(InternalLogFunction func);
 
 }  // namespace raw_logging_internal
 ABSL_NAMESPACE_END
-}  // namespace y_absl
+}  // namespace y_absl 
 
 #endif  // ABSL_BASE_INTERNAL_RAW_LOGGING_H_

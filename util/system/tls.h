@@ -15,10 +15,10 @@
     #define Y_DISABLE_THRKEY_OPTIMIZATION
 #endif
 
-#if defined(__GNUC__) && defined(__ANDROID__) && defined(__i686__) // https://st.yandex-team.ru/DEVTOOLS-3352
+#if defined(__GNUC__) && defined(__ANDROID__) && defined(__i686__) // https://st.yandex-team.ru/DEVTOOLS-3352 
     #define Y_DISABLE_THRKEY_OPTIMIZATION
-#endif
-
+#endif 
+ 
 /**
     @def Y_THREAD(TType)
 

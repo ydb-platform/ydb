@@ -2,15 +2,15 @@
 
 PROGRAM()
 
-WITHOUT_LICENSE_TEXTS()
+WITHOUT_LICENSE_TEXTS() 
 
-OWNER(
-    borman
-    g:cpp-contrib
-)
-
-LICENSE(GPL-2.0-only)
-
+OWNER( 
+    borman 
+    g:cpp-contrib 
+) 
+ 
+LICENSE(GPL-2.0-only) 
+ 
 PEERDIR(
     contrib/restricted/libffi
 )

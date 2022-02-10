@@ -4,13 +4,13 @@ LIBRARY()
 
 OWNER(g:cpp-contrib)
 
-LICENSE(
-    Apache-2.0 AND
-    Public-Domain
-)
+LICENSE( 
+    Apache-2.0 AND 
+    Public-Domain 
+) 
 
-LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
-
+LICENSE_TEXTS(.yandex_meta/licenses.list.txt) 
+ 
 PEERDIR(
     contrib/restricted/abseil-cpp/absl/base
     contrib/restricted/abseil-cpp/absl/base/internal/raw_logging

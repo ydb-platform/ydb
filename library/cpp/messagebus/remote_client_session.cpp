@@ -1,10 +1,10 @@
 #include "remote_client_session.h"
-
+ 
 #include "mb_lwtrace.h"
 #include "remote_client_connection.h"
 
 #include <library/cpp/messagebus/scheduler/scheduler.h>
-
+ 
 #include <util/generic/cast.h>
 #include <util/system/defaults.h>
 
@@ -19,9 +19,9 @@ TRemoteClientSession::TRemoteClientSession(TBusMessageQueue* queue,
     : TBusSessionImpl(true, queue, proto, handler, config, name)
     , ClientRemoteInFlight(config.MaxInFlight, "ClientRemoteInFlight")
     , ClientHandler(handler)
-{
-}
-
+{ 
+} 
+ 
 TRemoteClientSession::~TRemoteClientSession() {
     //Cerr << "~TRemoteClientSession" << Endl;
 }
@@ -31,7 +31,7 @@ void TRemoteClientSession::OnMessageReceived(TRemoteConnection* c, TVectorSwaps<
     temp->swap(newMsg);
     c->ReplyQueue.EnqueueAll(temp);
     c->ScheduleWrite();
-}
+} 
 
 EMessageStatus TRemoteClientSession::SendMessageImpl(TBusMessage* msg, const TNetAddr* addr, bool wait, bool oneWay) {
     if (Y_UNLIKELY(IsDown())) {

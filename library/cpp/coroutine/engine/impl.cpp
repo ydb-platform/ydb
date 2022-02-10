@@ -119,14 +119,14 @@ void TCont::ReSchedule() noexcept {
 TContExecutor::TContExecutor(
     uint32_t defaultStackSize,
     THolder<IPollerFace> poller,
-    NCoro::IScheduleCallback* scheduleCallback,
-    NCoro::IEnterPollerCallback* enterPollerCallback,
+    NCoro::IScheduleCallback* scheduleCallback, 
+    NCoro::IEnterPollerCallback* enterPollerCallback, 
     NCoro::NStack::EGuard defaultGuard,
     TMaybe<NCoro::NStack::TPoolAllocatorSettings> poolSettings,
     NCoro::ITime* time
 )
-    : ScheduleCallback_(scheduleCallback)
-    , EnterPollerCallback_(enterPollerCallback)
+    : ScheduleCallback_(scheduleCallback) 
+    , EnterPollerCallback_(enterPollerCallback) 
     , DefaultStackSize_(defaultStackSize)
     , Poller_(std::move(poller))
     , Time_(time)
@@ -171,21 +171,21 @@ void TContExecutor::WaitForIO() {
         //      to prevent ourselves from locking out of io by constantly waking coroutines.
 
         if (ReadyNext_.Empty()) {
-            if (EnterPollerCallback_) {
-                EnterPollerCallback_->OnEnterPoller();
-            }
+            if (EnterPollerCallback_) { 
+                EnterPollerCallback_->OnEnterPoller(); 
+            } 
             Poll(next);
-            if (EnterPollerCallback_) {
-                EnterPollerCallback_->OnExitPoller();
-            }
+            if (EnterPollerCallback_) { 
+                EnterPollerCallback_->OnExitPoller(); 
+            } 
         } else if (LastPoll_ + TDuration::MilliSeconds(5) < now) {
-            if (EnterPollerCallback_) {
-                EnterPollerCallback_->OnEnterPoller();
-            }
+            if (EnterPollerCallback_) { 
+                EnterPollerCallback_->OnEnterPoller(); 
+            } 
             Poll(now);
-            if (EnterPollerCallback_) {
-                EnterPollerCallback_->OnExitPoller();
-            }
+            if (EnterPollerCallback_) { 
+                EnterPollerCallback_->OnExitPoller(); 
+            } 
         }
 
         Ready_.Append(ReadyNext_);
@@ -296,8 +296,8 @@ TCont* RunningCont() {
     return thisThreadExecutor ? thisThreadExecutor->Running() : nullptr;
 }
 
-void TContExecutor::RunScheduler() noexcept {
-    try {
+void TContExecutor::RunScheduler() noexcept { 
+    try { 
         TContExecutor* const prev = ThisThreadExecutor();
         ThisThreadExecutor() = this;
         TCont* caller = Current_;
@@ -306,27 +306,27 @@ void TContExecutor::RunScheduler() noexcept {
             ThisThreadExecutor() = prev;
         };
 
-        while (true) {
-            if (ScheduleCallback_ && Current_) {
-                ScheduleCallback_->OnUnschedule(*this);
+        while (true) { 
+            if (ScheduleCallback_ && Current_) { 
+                ScheduleCallback_->OnUnschedule(*this); 
             }
 
             WaitForIO();
             DeleteScheduled();
-            Ready_.Append(ReadyNext_);
+            Ready_.Append(ReadyNext_); 
 
-            if (Ready_.Empty()) {
+            if (Ready_.Empty()) { 
                 Current_ = nullptr;
                 if (caller) {
                     context->SwitchTo(&SchedContext_);
                 }
-                break;
-            }
+                break; 
+            } 
 
             TCont* cont = Ready_.PopFront();
 
-            if (ScheduleCallback_) {
-                ScheduleCallback_->OnSchedule(*this, *cont);
+            if (ScheduleCallback_) { 
+                ScheduleCallback_->OnSchedule(*this, *cont); 
             }
 
             Current_ = cont;
@@ -343,8 +343,8 @@ void TContExecutor::RunScheduler() noexcept {
             if (caller) {
                 break;
             }
-        }
-    } catch (...) {
+        } 
+    } catch (...) { 
         TBackTrace::FromCurrentException().PrintTo(Cerr);
         Y_FAIL("Uncaught exception in the scheduler: %s", CurrentExceptionMessage().c_str());
     }

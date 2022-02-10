@@ -295,7 +295,7 @@ namespace NCoro {
 
             if (!IsBlocked(err)) {
                 return -err;
-            }
+            } 
 
             err = PollD(cont, s, CONT_POLL_READ, deadline);
 

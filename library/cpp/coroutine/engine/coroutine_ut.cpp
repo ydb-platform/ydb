@@ -36,7 +36,7 @@ class TCoroTest: public TTestBase {
 //    UNIT_TEST(TestFastPathWakeEpoll)
     UNIT_TEST(TestFastPathWakeKqueue)
     UNIT_TEST(TestFastPathWakePoll)
-    UNIT_TEST(TestFastPathWakeSelect)
+    UNIT_TEST(TestFastPathWakeSelect) 
     UNIT_TEST(TestLegacyCancelYieldRaceBug)
     UNIT_TEST(TestJoinRescheduleBug);
     UNIT_TEST(TestEventQueue)
@@ -943,7 +943,7 @@ void TCoroTest::TestPollEngines() {
 }
 
 void TCoroTest::TestPause() {
-    TContExecutor executor{1024*1024, IPollerFace::Default(), nullptr, nullptr, NCoro::NStack::EGuard::Canary, Nothing()};
+    TContExecutor executor{1024*1024, IPollerFace::Default(), nullptr, nullptr, NCoro::NStack::EGuard::Canary, Nothing()}; 
 
     int i = 0;
     executor.CreateOwned([&](TCont*) {
@@ -993,7 +993,7 @@ void TCoroTest::TestOverrideTime() {
     };
 
     TTime time;
-    TContExecutor executor{1024*1024, IPollerFace::Default(), nullptr, nullptr, NCoro::NStack::EGuard::Canary, Nothing(), &time};
+    TContExecutor executor{1024*1024, IPollerFace::Default(), nullptr, nullptr, NCoro::NStack::EGuard::Canary, Nothing(), &time}; 
 
     executor.CreateOwned([&](TCont* cont) {
         UNIT_ASSERT_EQUAL(cont->Executor()->Now(), TInstant::Zero());

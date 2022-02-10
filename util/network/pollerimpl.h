@@ -36,7 +36,7 @@ enum EContPoll {
     CONT_POLL_RDHUP = 4,
     CONT_POLL_ONE_SHOT = 8,        // Disable after first event
     CONT_POLL_MODIFY = 16,         // Modify already added event
-    CONT_POLL_EDGE_TRIGGERED = 32, // Notify only about new events
+    CONT_POLL_EDGE_TRIGGERED = 32, // Notify only about new events 
     CONT_POLL_BACKLOG_EMPTY = 64,  // Backlog is empty (seen end of request, EAGAIN or truncated read)
 };
 
@@ -245,10 +245,10 @@ public:
             e.events |= EPOLLOUT;
         }
 
-        if (what & CONT_POLL_RDHUP) {
-            e.events |= EPOLLRDHUP;
-        }
-
+        if (what & CONT_POLL_RDHUP) { 
+            e.events |= EPOLLRDHUP; 
+        } 
+ 
         e.data.ptr = data;
 
         if ((what & CONT_POLL_MODIFY) || epoll_ctl(Fd_, EPOLL_CTL_ADD, fd, &e) == -1) {
@@ -297,10 +297,10 @@ public:
             ret |= CONT_POLL_WRITE;
         }
 
-        if (event->events & EPOLLRDHUP) {
-            ret |= CONT_POLL_RDHUP;
-        }
-
+        if (event->events & EPOLLRDHUP) { 
+            ret |= CONT_POLL_RDHUP; 
+        } 
+ 
         return ret;
     }
 
@@ -495,11 +495,11 @@ public:
         SOCKET* keysToDeleteEnd = keysToDeleteBegin;
 
     #if defined(_msan_enabled_) // msan doesn't handle FD_ZERO and cause false positive BALANCER-1347
-        memset(in, 0, sizeof(*in));
-        memset(out, 0, sizeof(*out));
-        memset(errFds, 0, sizeof(*errFds));
+        memset(in, 0, sizeof(*in)); 
+        memset(out, 0, sizeof(*out)); 
+        memset(errFds, 0, sizeof(*errFds)); 
     #endif
-
+ 
         FD_ZERO(in);
         FD_ZERO(out);
         FD_ZERO(errFds);
@@ -669,7 +669,7 @@ public:
 
     static inline int ExtractFilter(const TEvent* event) noexcept {
         if (TBase::ExtractStatus(event)) {
-            return CONT_POLL_READ | CONT_POLL_WRITE | CONT_POLL_RDHUP;
+            return CONT_POLL_READ | CONT_POLL_WRITE | CONT_POLL_RDHUP; 
         }
 
         return TBase::ExtractFilterImpl(event);

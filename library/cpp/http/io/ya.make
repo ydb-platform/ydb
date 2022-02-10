@@ -14,9 +14,9 @@ PEERDIR(
 
 SRCS(
     chunk.cpp
-    compression.cpp
+    compression.cpp 
     headers.cpp
-    stream.cpp
+    stream.cpp 
 )
 
 END()

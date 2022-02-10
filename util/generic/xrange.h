@@ -99,7 +99,7 @@ namespace NPrivate {
             T Value;
         };
 
-        using value_type = T;
+        using value_type = T; 
         using iterator = TIterator;
         using const_iterator = TIterator;
 
@@ -205,7 +205,7 @@ namespace NPrivate {
             const TSteppedXRange* Parent_;
         };
 
-        using value_type = T;
+        using value_type = T; 
         using iterator = TIterator;
         using const_iterator = TIterator;
 

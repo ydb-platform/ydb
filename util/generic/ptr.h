@@ -610,7 +610,7 @@ struct THash<TIntrusivePtr<T, Ops>>: THash<const T*> {
     }
 };
 
-// Behaves like TIntrusivePtr but returns const T* to prevent user from accidentally modifying the referenced object. 
+// Behaves like TIntrusivePtr but returns const T* to prevent user from accidentally modifying the referenced object.
 template <class T, class Ops>
 class TIntrusiveConstPtr: public TPointerBase<TIntrusiveConstPtr<T, Ops>, const T> {
 public:
@@ -620,17 +620,17 @@ public:
         Ops();
         Ref();
     }
- 
+
     inline ~TIntrusiveConstPtr() {
         UnRef();
     }
- 
+
     inline TIntrusiveConstPtr(const TIntrusiveConstPtr& p) noexcept
         : T_(p.T_)
     {
         Ref();
     }
- 
+
     inline TIntrusiveConstPtr(TIntrusiveConstPtr&& p) noexcept
         : T_(nullptr)
     {
@@ -642,7 +642,7 @@ public:
     {
         p.T_ = nullptr;
     }
- 
+
     template <class U, class = TGuardConversion<T, U>>
     inline TIntrusiveConstPtr(const TIntrusiveConstPtr<U>& p) noexcept
         : T_(p.T_)
@@ -659,10 +659,10 @@ public:
 
     inline TIntrusiveConstPtr& operator=(TIntrusiveConstPtr p) noexcept {
         p.Swap(*this);
- 
+
         return *this;
     }
- 
+
     // Effectively replace both:
     // Reset(const TIntrusiveConstPtr&)
     // Reset(TIntrusiveConstPtr&&)
@@ -677,15 +677,15 @@ public:
     inline const T* Get() const noexcept {
         return T_;
     }
- 
+
     inline void Swap(TIntrusiveConstPtr& r) noexcept {
         DoSwap(T_, r.T_);
     }
- 
+
     inline void Drop() noexcept {
         TIntrusiveConstPtr(nullptr).Swap(*this);
     }
- 
+
     inline long RefCount() const noexcept {
         return T_ ? Ops::RefCount(T_) : 0;
     }
@@ -700,22 +700,22 @@ private:
     inline void Ref() noexcept {
         if (T_ != nullptr) {
             Ops::Ref(T_);
-        } 
+        }
     }
- 
+
     inline void UnRef() noexcept {
         if (T_ != nullptr) {
             Ops::UnRef(T_);
-        } 
+        }
     }
- 
+
 private:
     T* T_;
 
     template <class U, class O>
     friend class TIntrusiveConstPtr;
-}; 
- 
+};
+
 template <class T, class Ops>
 struct THash<TIntrusiveConstPtr<T, Ops>>: THash<const T*> {
     using THash<const T*>::operator();

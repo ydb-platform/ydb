@@ -453,34 +453,34 @@ void WriteBlock(TChunkedDataWriter& writer, T& t) {
     t.Save(writer);
 }
 
-// Extends TChunkedDataWriter, allowing user to name blocks with arbitrary strings. 
-class TNamedChunkedDataWriter: public TChunkedDataWriter { 
+// Extends TChunkedDataWriter, allowing user to name blocks with arbitrary strings.
+class TNamedChunkedDataWriter: public TChunkedDataWriter {
 public:
     TNamedChunkedDataWriter(IOutputStream& slave);
     ~TNamedChunkedDataWriter() override;
- 
+
     // Start a new unnamed block, overrides TChunkedDataReader::NewBlock().
     void NewBlock();
- 
+
     // Start a new block with given name (possibly empty, in which case block is unnamed).
     // Throws an exception if name is a duplicate.
     void NewBlock(const TString& name);
- 
+
     void WriteFooter();
- 
+
 private:
     TVector<TString> Names;
     THashMap<TString, size_t> NameToIndex;
-}; 
- 
+};
+
 class TNamedChunkedDataReader: public TChunkedDataReader {
 public:
     TNamedChunkedDataReader(const TBlob& blob);
- 
+
     inline bool HasBlock(const char* name) const {
         return NameToIndex.find(name) != NameToIndex.end();
     }
- 
+
     inline size_t GetIndexByName(const char* name) const {
         THashMap<TString, size_t>::const_iterator it = NameToIndex.find(name);
         if (it == NameToIndex.end())
@@ -488,31 +488,31 @@ public:
         else
             return it->second;
     }
- 
+
     // Returns number of blocks written to the file by user of TNamedChunkedDataReader.
     inline size_t GetBlocksCount() const {
         // Last block is for internal usage
         return TChunkedDataReader::GetBlocksCount() - 1;
     }
- 
+
     inline const char* GetBlockName(size_t index) const {
         Y_ASSERT(index < GetBlocksCount());
         return Names[index].data();
     }
- 
+
     inline const void* GetBlockByName(const char* name) const {
         return GetBlock(GetIndexByName(name));
     }
- 
+
     inline size_t GetBlockLenByName(const char* name) const {
         return GetBlockLen(GetIndexByName(name));
     }
- 
+
     inline TBlob GetBlobByName(const char* name) const {
         size_t id = GetIndexByName(name);
         return TBlob::NoCopy(GetBlock(id), GetBlockLen(id));
     }
- 
+
     inline bool GetBlobByName(const char* name, TBlob& blob) const {
         THashMap<TString, size_t>::const_iterator it = NameToIndex.find(name);
         if (it == NameToIndex.end())
@@ -524,7 +524,7 @@ public:
 private:
     TVector<TString> Names;
     THashMap<TString, size_t> NameToIndex;
-}; 
+};
 
 template <class T>
 struct TSaveLoadVectorNonPodElement {

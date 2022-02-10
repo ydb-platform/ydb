@@ -901,7 +901,7 @@ public:
         } catch (...) {
             Cerr << hash_val << Endl;
             throw;
-        }*/ 
+        }*/
 
         s2.assign(Data._0123456(), 2, 2);
         UNIT_ASSERT(s2 == Data._23());

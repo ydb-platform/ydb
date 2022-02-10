@@ -111,7 +111,7 @@ namespace NLastGetopt {
         private:
             TpTarget* Target_;
             const TpFunc Func_;
- 
+
         public:
             TStoreMappedResultFunctor(TpTarget* target, const TpFunc& func)
                 : Target_(target)
@@ -123,7 +123,7 @@ namespace NLastGetopt {
                 *Target_ = Func_(val);
             }
         };
- 
+
         template <typename T, typename TpVal = T>
         class TStoreValueFunctor {
             T* Target;

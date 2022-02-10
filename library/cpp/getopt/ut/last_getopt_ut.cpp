@@ -437,23 +437,23 @@ Y_UNIT_TEST_SUITE(TLastGetoptTests) {
     }
 
     Y_UNIT_TEST(TestStoreValue) {
-        int a = 0, b = 0; 
-        size_t c = 0; 
-        EHasArg e = NO_ARGUMENT; 
- 
+        int a = 0, b = 0;
+        size_t c = 0;
+        EHasArg e = NO_ARGUMENT;
+
         TOptsNoDefault opts;
-        opts.AddLongOption('a', "alpha").NoArgument().StoreValue(&a, 42); 
-        opts.AddLongOption('b', "beta").NoArgument().StoreValue(&b, 24); 
-        opts.AddLongOption('e', "enum").NoArgument().StoreValue(&e, REQUIRED_ARGUMENT).StoreValue(&c, 12345); 
- 
+        opts.AddLongOption('a', "alpha").NoArgument().StoreValue(&a, 42);
+        opts.AddLongOption('b', "beta").NoArgument().StoreValue(&b, 24);
+        opts.AddLongOption('e', "enum").NoArgument().StoreValue(&e, REQUIRED_ARGUMENT).StoreValue(&c, 12345);
+
         TOptsParseResultTestWrapper r(&opts, V({"cmd", "-a", "-e"}));
- 
-        UNIT_ASSERT_VALUES_EQUAL(42, a); 
-        UNIT_ASSERT_VALUES_EQUAL(0, b); 
-        UNIT_ASSERT(e == REQUIRED_ARGUMENT); 
+
+        UNIT_ASSERT_VALUES_EQUAL(42, a);
+        UNIT_ASSERT_VALUES_EQUAL(0, b);
+        UNIT_ASSERT(e == REQUIRED_ARGUMENT);
         UNIT_ASSERT_VALUES_EQUAL(12345u, c);
-    } 
- 
+    }
+
     Y_UNIT_TEST(TestSetFlag) {
         bool a = false, b = true, c = false, d = true;
 

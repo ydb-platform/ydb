@@ -18,10 +18,10 @@
     #include <unistd.h>
 #endif
 
-#include <util/folder/dirut.h> 
-#include <util/generic/singleton.h> 
+#include <util/folder/dirut.h>
+#include <util/generic/singleton.h>
 #include <util/generic/function.h>
-#include <util/generic/yexception.h> 
+#include <util/generic/yexception.h>
 #include <util/memory/tempbuf.h>
 #include <util/stream/file.h>
 #include <util/stream/pipe.h>
@@ -102,31 +102,31 @@ static inline bool FreeBSDGuessExecBasePath(const TString& guessBasePath, TStrin
 
 static TString GetExecPathImpl() {
 #if defined(_solaris_)
-    return execname(); 
+    return execname();
 #elif defined(_darwin_)
     TTempBuf execNameBuf;
     for (size_t i = 0; i < 2; ++i) {
         std::remove_pointer_t<TFunctionArg<decltype(_NSGetExecutablePath), 1>> bufsize = execNameBuf.Size();
-        int r = _NSGetExecutablePath(execNameBuf.Data(), &bufsize); 
-        if (r == 0) { 
-            return execNameBuf.Data(); 
+        int r = _NSGetExecutablePath(execNameBuf.Data(), &bufsize);
+        if (r == 0) {
+            return execNameBuf.Data();
         } else if (r == -1) {
             execNameBuf = TTempBuf(bufsize);
         }
-    } 
+    }
     ythrow yexception() << "GetExecPathImpl() failed";
 #elif defined(_win_)
     TTempBuf execNameBuf;
-    for (;;) { 
+    for (;;) {
         DWORD r = GetModuleFileName(nullptr, execNameBuf.Data(), execNameBuf.Size());
         if (r == execNameBuf.Size()) {
             execNameBuf = TTempBuf(execNameBuf.Size() * 2);
         } else if (r == 0) {
             ythrow yexception() << "GetExecPathImpl() failed: " << LastSystemErrorText();
         } else {
-            return execNameBuf.Data(); 
+            return execNameBuf.Data();
         }
-    } 
+    }
 #elif defined(_linux_) || defined(_cygwin_)
     TString path("/proc/self/exe");
     return NFs::ReadLink(path);
@@ -135,26 +135,26 @@ static TString GetExecPathImpl() {
     TString execPath = FreeBSDGetExecPath();
     if (GoodPath(execPath)) {
         return execPath;
-    } 
+    }
     if (FreeBSDGuessExecPath(FreeBSDGetArgv0(), execPath)) {
         return execPath;
-    } 
+    }
     if (FreeBSDGuessExecPath(getenv("_"), execPath)) {
         return execPath;
-    } 
+    }
     if (FreeBSDGuessExecBasePath(getenv("PWD"), execPath)) {
         return execPath;
     }
     if (FreeBSDGuessExecBasePath(NFs::CurrentWorkingDirectory(), execPath)) {
         return execPath;
     }
- 
+
     ythrow yexception() << "can not resolve exec path";
 #else
     #error dont know how to implement GetExecPath on this platform
 #endif
-} 
- 
+}
+
 static bool GetPersistentExecPathImpl(TString& to) {
 #if defined(_solaris_)
     to = TString("/proc/self/object/a.out");

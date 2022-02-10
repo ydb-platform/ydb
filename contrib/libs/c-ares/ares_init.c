@@ -145,9 +145,9 @@ int ares_init_options(ares_channel *channelptr, struct ares_options *options,
    */
   channel->flags = -1;
   channel->timeout = -1;
-  channel->maxtimeout = -1; 
-  channel->jitter = -1; 
-  channel->jitter_rand_state = -1; 
+  channel->maxtimeout = -1;
+  channel->jitter = -1;
+  channel->jitter_rand_state = -1;
   channel->tries = -1;
   channel->ndots = -1;
   channel->rotate = -1;
@@ -353,8 +353,8 @@ int ares_save_options(ares_channel channel, struct ares_options *options,
   (*optmask) = (ARES_OPT_FLAGS|ARES_OPT_TRIES|ARES_OPT_NDOTS|
                 ARES_OPT_UDP_PORT|ARES_OPT_TCP_PORT|ARES_OPT_SOCK_STATE_CB|
                 ARES_OPT_SERVERS|ARES_OPT_DOMAINS|ARES_OPT_LOOKUPS|
-                ARES_OPT_SORTLIST|ARES_OPT_TIMEOUTMS|ARES_OPT_MAXTIMEOUTMS| 
-                ARES_OPT_JITTER);   
+                ARES_OPT_SORTLIST|ARES_OPT_TIMEOUTMS|ARES_OPT_MAXTIMEOUTMS|
+                ARES_OPT_JITTER);  
   (*optmask) |= (channel->rotate ? ARES_OPT_ROTATE : ARES_OPT_NOROTATE);
 
   if (channel->resolvconf_path)
@@ -366,9 +366,9 @@ int ares_save_options(ares_channel channel, struct ares_options *options,
   /* We return full millisecond resolution but that's only because we don't
      set the ARES_OPT_TIMEOUT anymore, only the new ARES_OPT_TIMEOUTMS */
   options->timeout = channel->timeout;
-  options->maxtimeout = channel->maxtimeout; 
-  options->jitter = channel->jitter; 
-  options->jitter_rand_seed = channel->jitter_rand_state; 
+  options->maxtimeout = channel->maxtimeout;
+  options->jitter = channel->jitter;
+  options->jitter_rand_seed = channel->jitter_rand_state;
   options->tries   = channel->tries;
   options->ndots   = channel->ndots;
   options->udp_port = ntohs(aresx_sitous(channel->udp_port));
@@ -458,13 +458,13 @@ static int init_by_options(ares_channel channel,
     channel->timeout = options->timeout;
   else if ((optmask & ARES_OPT_TIMEOUT) && channel->timeout == -1)
     channel->timeout = options->timeout * 1000;
-  if ((optmask & ARES_OPT_MAXTIMEOUTMS) && channel->maxtimeout == -1) 
-    channel->maxtimeout = options->maxtimeout; 
-  if ((optmask & ARES_OPT_JITTER) && channel->jitter == -1) 
-    { 
-      channel->jitter = options->jitter; 
-      channel->jitter_rand_state = options->jitter_rand_seed; 
-    } 
+  if ((optmask & ARES_OPT_MAXTIMEOUTMS) && channel->maxtimeout == -1)
+    channel->maxtimeout = options->maxtimeout;
+  if ((optmask & ARES_OPT_JITTER) && channel->jitter == -1)
+    {
+      channel->jitter = options->jitter;
+      channel->jitter_rand_state = options->jitter_rand_seed;
+    }
   if ((optmask & ARES_OPT_TRIES) && channel->tries == -1)
     channel->tries = options->tries;
   if ((optmask & ARES_OPT_NDOTS) && channel->ndots == -1)
@@ -2337,24 +2337,24 @@ static int set_options(ares_channel channel, const char *str)
       val = try_option(p, q, "retrans:");
       if (val && channel->timeout == -1)
         channel->timeout = aresx_sltosi(strtol(val, NULL, 10));
-      val = try_option(p, q, "timeout:"); 
-      if (val && channel->timeout == -1) 
-        channel->timeout = aresx_sltosi(strtol(val, NULL, 10)) * 1000; 
-      val = try_option(p, q, "maxtimeout:"); 
-      if (val && channel->maxtimeout == -1) 
-        channel->maxtimeout = aresx_sltosi(strtol(val, NULL, 10)) * 1000; 
+      val = try_option(p, q, "timeout:");
+      if (val && channel->timeout == -1)
+        channel->timeout = aresx_sltosi(strtol(val, NULL, 10)) * 1000;
+      val = try_option(p, q, "maxtimeout:");
+      if (val && channel->maxtimeout == -1)
+        channel->maxtimeout = aresx_sltosi(strtol(val, NULL, 10)) * 1000;
       val = try_option(p, q, "retry:");
       if (val && channel->tries == -1)
         channel->tries = aresx_sltosi(strtol(val, NULL, 10));
-      val = try_option(p, q, "attempts:"); 
-      if (val && channel->tries == -1) 
-        channel->tries = aresx_sltosi(strtol(val, NULL, 10)); 
+      val = try_option(p, q, "attempts:");
+      if (val && channel->tries == -1)
+        channel->tries = aresx_sltosi(strtol(val, NULL, 10));
       val = try_option(p, q, "rotate");
       if (val && channel->rotate == -1)
         channel->rotate = 1;
-      val = try_option(p, q, "jitter:"); 
-      if (val && channel->jitter == -1) 
-        channel->jitter = aresx_sltosi(strtol(val, NULL, 10)); 
+      val = try_option(p, q, "jitter:");
+      if (val && channel->jitter == -1)
+        channel->jitter = aresx_sltosi(strtol(val, NULL, 10));
       p = q;
       while (ISSPACE(*p))
         p++;

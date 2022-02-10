@@ -246,25 +246,25 @@ TWeakPtr<T> MakeWeak(const TIntrusivePtr<T>& p)
     return TWeakPtr<T>(p);
 }
 
-//! A helper for acquiring weak pointer for pointee, resetting intrusive pointer and then 
-//! returning the pointee reference count using the acquired weak pointer. 
-//! This helper is designed for best effort in checking that the object is not leaked after 
-//! destructing (what seems to be) the last pointer to it. 
-//! NB: it is possible to rewrite this helper making it working event with intrinsic refcounted objects, 
-//! but it requires much nastier integration with the intrusive pointer destruction routines. 
-template <typename T> 
-int ResetAndGetResidualRefCount(TIntrusivePtr<T>& pointer) 
-{ 
-    auto weakPointer = MakeWeak(pointer); 
-    pointer.Reset(); 
-    if (pointer = weakPointer.Lock()) { 
-        // This _may_ return 0 if we are again the only holder of the pointee. 
-        return pointer->GetRefCount() - 1; 
-    } else { 
-        return 0; 
-    } 
-} 
- 
+//! A helper for acquiring weak pointer for pointee, resetting intrusive pointer and then
+//! returning the pointee reference count using the acquired weak pointer.
+//! This helper is designed for best effort in checking that the object is not leaked after
+//! destructing (what seems to be) the last pointer to it.
+//! NB: it is possible to rewrite this helper making it working event with intrinsic refcounted objects,
+//! but it requires much nastier integration with the intrusive pointer destruction routines.
+template <typename T>
+int ResetAndGetResidualRefCount(TIntrusivePtr<T>& pointer)
+{
+    auto weakPointer = MakeWeak(pointer);
+    pointer.Reset();
+    if (pointer = weakPointer.Lock()) {
+        // This _may_ return 0 if we are again the only holder of the pointee.
+        return pointer->GetRefCount() - 1;
+    } else {
+        return 0;
+    }
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 // TODO(sandello): Kill comparsions.

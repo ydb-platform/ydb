@@ -43,7 +43,7 @@ struct TRefCountedWrapper final
 
     ~TRefCountedWrapper() = default;
 
-    void DestroyRefCounted() override 
+    void DestroyRefCounted() override
     {
         T::DestroyRefCountedImpl(this);
     }
@@ -63,7 +63,7 @@ public:
 
     ~TRefCountedWrapperWithDeleter() = default;
 
-    void DestroyRefCounted() override 
+    void DestroyRefCounted() override
     {
         Deleter_(this);
     }
@@ -84,7 +84,7 @@ struct TRefCountedWrapperWithCookie final
 
     ~TRefCountedWrapperWithCookie() = default;
 
-    void DestroyRefCounted() override 
+    void DestroyRefCounted() override
     {
         T::DestroyRefCountedImpl(this);
     }
@@ -173,14 +173,14 @@ struct TConstructHelper<T, true>
 template <class T, class... As>
 Y_FORCE_INLINE TIntrusivePtr<T> SafeConstruct(void* ptr, As&&... args)
 {
-    try { 
+    try {
         auto* instance = TConstructHelper<T>::Construct(ptr, std::forward<As>(args)...);
         return TIntrusivePtr<T>(instance, false);
-    } catch (const std::exception& ex) { 
-        // Do not forget to free the memory. 
+    } catch (const std::exception& ex) {
+        // Do not forget to free the memory.
         TFreeMemory<T>::Do(ptr);
-        throw; 
-    } 
+        throw;
+    }
 }
 
 template <size_t Size, size_t Alignment>

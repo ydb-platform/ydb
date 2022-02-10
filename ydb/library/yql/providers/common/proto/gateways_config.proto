@@ -299,17 +299,17 @@ message TStatGatewayConfig {
     repeated TAttr DefaultSettings = 102;
 }
 
-///////////////////////////// CHYT ///////////////////////////// 
- 
-message TChytClusterConfig { 
-    optional string Name = 1; // Short cluster name 
-    optional string YtCluster = 2; // Name of the corresponding YT cluster. 
-} 
- 
-message TChytGatewayConfig { 
-    repeated TChytClusterConfig ClusterMapping = 1; 
-} 
- 
+///////////////////////////// CHYT /////////////////////////////
+
+message TChytClusterConfig {
+    optional string Name = 1; // Short cluster name
+    optional string YtCluster = 2; // Name of the corresponding YT cluster.
+}
+
+message TChytGatewayConfig {
+    repeated TChytClusterConfig ClusterMapping = 1;
+}
+
 ///////////////////////////// S3 /////////////////////////////
 
 message TS3ClusterConfig {
@@ -442,7 +442,7 @@ message TGatewaysConfig {
     optional TRtmrGatewayConfig Rtmr = 4;
     optional TKikimrMvpGatewayConfig KikimrMvp = 5;
     optional TStatGatewayConfig Stat = 6;
-    optional TChytGatewayConfig Chyt = 7; 
+    optional TChytGatewayConfig Chyt = 7;
     optional TSolomonGatewayConfig Solomon = 8;
     optional TFileStorageAdditionalConfig Fs = 9;
     optional TYqlCoreConfig YqlCore = 10;

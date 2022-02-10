@@ -12,5 +12,5 @@ def test_simple():
     assert sv.commit_id()
     assert isinstance(sv.commit_id(), str)
     assert len(sv.commit_id()) > 0
-    assert isinstance(sv.hash(), str) 
+    assert isinstance(sv.hash(), str)
     assert isinstance(sv.patch_number(), int)

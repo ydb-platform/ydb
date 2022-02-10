@@ -130,7 +130,7 @@ char* WriteSignedIntToBufferBackwardsImpl(char* ptr, T value, TStringBuf min)
     // The negative value handling code below works incorrectly for min values.
     if (value == std::numeric_limits<T>::min()) {
         ptr -= min.length();
-        ::memcpy(ptr, min.begin(), min.length()); 
+        ::memcpy(ptr, min.begin(), min.length());
         return ptr;
     }
 
@@ -144,7 +144,7 @@ char* WriteSignedIntToBufferBackwardsImpl(char* ptr, T value, TStringBuf min)
         i64 rem = value % 100;
         i64 quot = value / 100;
         ptr -= 2;
-        ::memcpy(ptr, &DecimalDigits2[rem], 2); 
+        ::memcpy(ptr, &DecimalDigits2[rem], 2);
         value = quot;
     }
 
@@ -174,7 +174,7 @@ char* WriteUnsignedIntToBufferBackwardsImpl(char* ptr, T value)
         i64 rem = value % 100;
         i64 quot = value / 100;
         ptr -= 2;
-        ::memcpy(ptr, &DecimalDigits2[rem], 2); 
+        ::memcpy(ptr, &DecimalDigits2[rem], 2);
         value = quot;
     }
 

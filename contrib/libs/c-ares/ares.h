@@ -168,8 +168,8 @@ extern "C" {
 #define ARES_OPT_EDNSPSZ        (1 << 15)
 #define ARES_OPT_NOROTATE       (1 << 16)
 #define ARES_OPT_RESOLVCONF     (1 << 17)
-#define ARES_OPT_MAXTIMEOUTMS   (1 << 18) 
-#define ARES_OPT_JITTER         (1 << 19) 
+#define ARES_OPT_MAXTIMEOUTMS   (1 << 18)
+#define ARES_OPT_JITTER         (1 << 19)
 
 /* Nameinfo flag values */
 #define ARES_NI_NOFQDN                  (1 << 0)
@@ -262,9 +262,9 @@ struct apattern;
 struct ares_options {
   int flags;
   int timeout; /* in seconds or milliseconds, depending on options */
-  int maxtimeout; /* in milliseconds */ 
-  int jitter; /* in .001 */ 
-  unsigned int jitter_rand_seed; 
+  int maxtimeout; /* in milliseconds */
+  int jitter; /* in .001 */
+  unsigned int jitter_rand_seed;
   int tries;
   int ndots;
   unsigned short udp_port;

@@ -68,8 +68,8 @@ public:
 protected:
     TString Buffer_;
 
-    void DoReset() override; 
-    void DoPreallocate(size_t size) override; 
+    void DoReset() override;
+    void DoPreallocate(size_t size) override;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -21,23 +21,23 @@ public:
     //! Constructs an instance from TYsonString.
     TYsonStringBuf(const TYsonString& ysonString);
 
-    //! Constructs a non-null instance with given type and content. 
+    //! Constructs a non-null instance with given type and content.
     explicit TYsonStringBuf(
         const TString& data,
         EYsonType type = EYsonType::Node);
 
-    //! Constructs a non-null instance with given type and content. 
+    //! Constructs a non-null instance with given type and content.
     explicit TYsonStringBuf(
         TStringBuf data,
         EYsonType type = EYsonType::Node);
 
-    //! Constructs a non-null instance with given type and content 
-    //! (without this overload there is no way to construct TYsonStringBuf from 
-    //! string literal). 
-    explicit TYsonStringBuf( 
-        const char* data, 
-        EYsonType type = EYsonType::Node); 
- 
+    //! Constructs a non-null instance with given type and content
+    //! (without this overload there is no way to construct TYsonStringBuf from
+    //! string literal).
+    explicit TYsonStringBuf(
+        const char* data,
+        EYsonType type = EYsonType::Node);
+
     //! Returns |true| if the instance is not null.
     explicit operator bool() const;
 

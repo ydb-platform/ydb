@@ -267,9 +267,9 @@ struct ares_channeldata {
   /* Configuration data */
   int flags;
   int timeout; /* in milliseconds */
-  int maxtimeout; /* in milliseconds */ 
-  int jitter; /* in .001 */ 
-  unsigned int jitter_rand_state; 
+  int maxtimeout; /* in milliseconds */
+  int jitter; /* in .001 */
+  unsigned int jitter_rand_state;
   int tries;
   int ndots;
   int rotate; /* if true, all servers specified are used */

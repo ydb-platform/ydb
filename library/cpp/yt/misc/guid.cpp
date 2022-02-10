@@ -99,22 +99,22 @@ bool TGuid::FromString(TStringBuf str, TGuid* result)
     return true;
 }
 
-TGuid TGuid::FromStringHex32(TStringBuf str) 
-{ 
-    TGuid guid; 
-    if (!FromStringHex32(str, &guid)) { 
+TGuid TGuid::FromStringHex32(TStringBuf str)
+{
+    TGuid guid;
+    if (!FromStringHex32(str, &guid)) {
         throw TSimpleException(Sprintf("Error parsing Hex32 GUID \"%s\"",
             TString(str).c_str()));
-    } 
-    return guid; 
-} 
- 
-bool TGuid::FromStringHex32(TStringBuf str, TGuid* result) 
-{ 
-    if (str.size() != 32) { 
-        return false; 
-    } 
- 
+    }
+    return guid;
+}
+
+bool TGuid::FromStringHex32(TStringBuf str, TGuid* result)
+{
+    if (str.size() != 32) {
+        return false;
+    }
+
     bool ok = true;
     int i = 0;
     auto parseChar = [&] {
@@ -134,11 +134,11 @@ bool TGuid::FromStringHex32(TStringBuf str, TGuid* result)
 
     for (size_t j = 0; j < 16; ++j) {
         result->ReversedParts8[15 - j] = parseChar() * 16 + parseChar();
-    } 
- 
+    }
+
     return ok;
-} 
- 
+}
+
 char* WriteGuidToBuffer(char* ptr, TGuid value)
 {
     auto writeHex1 = [&] (ui8 x) {

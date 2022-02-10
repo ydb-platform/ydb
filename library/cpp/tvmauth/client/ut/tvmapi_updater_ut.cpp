@@ -112,7 +112,7 @@ Y_UNIT_TEST_SUITE(ApiUpdater) {
 
         UNIT_ASSERT_VALUES_EQUAL(
             TStringBuilder()
-                << "6: Disk cache disabled. Please set disk cache directory in settings for best reliability\n"
+                << "6: Disk cache disabled. Please set disk cache directory in settings for best reliability\n" 
                 << "4: Failed to get ServiceTickets: alarm\n"
                 << "4: Failed to get ServiceTickets: alarm\n"
                 << "4: Failed to get ServiceTickets: alarm\n"
@@ -692,7 +692,7 @@ Y_UNIT_TEST_SUITE(ApiUpdater) {
                                        "Failed to start TvmClient. You can retry:");
         UNIT_ASSERT_VALUES_EQUAL(
             TStringBuilder()
-                << "6: Disk cache disabled. Please set disk cache directory in settings for best reliability\n"
+                << "6: Disk cache disabled. Please set disk cache directory in settings for best reliability\n" 
                 << "7: Public keys were successfully fetched from https://tvm-api.yandex.net\n"
                 << "4: Failed to update public keys: Malformed TVM keys\n"
                 << "3: Public keys have not been refreshed for too long period\n",
@@ -848,7 +848,7 @@ Y_UNIT_TEST_SUITE(ApiUpdater) {
 
         UNIT_ASSERT_VALUES_EQUAL(
             TStringBuilder()
-                << "6: Disk cache disabled. Please set disk cache directory in settings for best reliability\n"
+                << "6: Disk cache disabled. Please set disk cache directory in settings for best reliability\n" 
                 << "7: Response with service tickets for 2 destination(s) was successfully fetched from https://tvm-api.yandex.net\n"
                 << "7: Got responses with service tickets with 1 pages for 2 destination(s)\n"
                 << "3: Failed to get service ticket for dst=20: Missing tvm_id in response, should never happend: 20\n"
@@ -903,7 +903,7 @@ Y_UNIT_TEST_SUITE(ApiUpdater) {
         u.ParseTicketsFromResponse(TVM_RESPONSE, NTvmApi::TDstSet{19}, t);
 
         TNotInitedUpdater::TPairTicketsErrors expected{{{19, "3:serv:CBAQ__________9_IgYIKhCUkQY:CX"}}, {}};
-        UNIT_ASSERT_VALUES_EQUAL("6: Disk cache disabled. Please set disk cache directory in settings for best reliability\n",
+        UNIT_ASSERT_VALUES_EQUAL("6: Disk cache disabled. Please set disk cache directory in settings for best reliability\n", 
                                  l->Stream.Str());
         UNIT_ASSERT_EQUAL(expected, t);
 
@@ -916,7 +916,7 @@ Y_UNIT_TEST_SUITE(ApiUpdater) {
                     {{234, "Dst is not found"},
                      {235, "Missing tvm_id in response, should never happend: 235"}}};
         UNIT_ASSERT_EQUAL(expected, t);
-        UNIT_ASSERT_VALUES_EQUAL("6: Disk cache disabled. Please set disk cache directory in settings for best reliability\n",
+        UNIT_ASSERT_VALUES_EQUAL("6: Disk cache disabled. Please set disk cache directory in settings for best reliability\n", 
                                  l->Stream.Str());
 
         t = {};
@@ -933,7 +933,7 @@ Y_UNIT_TEST_SUITE(ApiUpdater) {
                     {{234, "Dst is not found"},
                      {235, "Missing tvm_id in response, should never happend: 235"}}};
         UNIT_ASSERT_EQUAL(expected, t);
-        UNIT_ASSERT_VALUES_EQUAL("6: Disk cache disabled. Please set disk cache directory in settings for best reliability\n",
+        UNIT_ASSERT_VALUES_EQUAL("6: Disk cache disabled. Please set disk cache directory in settings for best reliability\n", 
                                  l->Stream.Str());
     }
 
@@ -951,7 +951,7 @@ Y_UNIT_TEST_SUITE(ApiUpdater) {
                                        "Invalid json from tvm-api");
 
         u.ParseTicketsFromResponse(R"([])", NTvmApi::TDstSet{19}, t);
-        UNIT_ASSERT_VALUES_EQUAL("6: Disk cache disabled. Please set disk cache directory in settings for best reliability\n",
+        UNIT_ASSERT_VALUES_EQUAL("6: Disk cache disabled. Please set disk cache directory in settings for best reliability\n", 
                                  l->Stream.Str());
         TNotInitedUpdater::TPairTicketsErrors expected = {
             {}, {{19, "Missing tvm_id in response, should never happend: 19"}}};
@@ -1043,7 +1043,7 @@ Y_UNIT_TEST_SUITE(ApiUpdater) {
 
         UNIT_ASSERT_VALUES_EQUAL(
             TStringBuilder()
-                << "6: Disk cache disabled. Please set disk cache directory in settings for best reliability\n"
+                << "6: Disk cache disabled. Please set disk cache directory in settings for best reliability\n" 
                 << "7: Response with service tickets for 1 destination(s) was successfully fetched from http://localhost\n"
                 << "7: Got responses with service tickets with 1 pages for 1 destination(s)\n"
                 << "6: Cache was updated with 1 service ticket(s): XXXXXXXXXXX\n"
@@ -1147,7 +1147,7 @@ Y_UNIT_TEST_SUITE(ApiUpdater) {
 
         UNIT_ASSERT_VALUES_EQUAL(
             TStringBuilder()
-                << "6: Disk cache disabled. Please set disk cache directory in settings for best reliability\n"
+                << "6: Disk cache disabled. Please set disk cache directory in settings for best reliability\n" 
                 << "7: Response with service tickets for 2 destination(s) was successfully fetched from http://localhost\n"
                 << "7: Response with service tickets for 2 destination(s) was successfully fetched from http://localhost\n"
                 << "7: Response with service tickets for 1 destination(s) was successfully fetched from http://localhost\n"

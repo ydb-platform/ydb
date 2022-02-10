@@ -5,15 +5,15 @@
 #include <util/folder/dirut.h>
 #include <util/folder/path.h>
 #include <util/generic/singleton.h>
-#include <util/stream/file.h>
+#include <util/stream/file.h> 
 #include <util/stream/fwd.h>
 #include <util/system/env.h>
 #include <util/system/file.h>
 #include <util/system/file_lock.h>
 #include <util/system/guard.h>
 
-#include <library/cpp/json/json_reader.h>
-#include <library/cpp/json/json_value.h>
+#include <library/cpp/json/json_reader.h> 
+#include <library/cpp/json/json_value.h> 
 #include <library/cpp/json/json_writer.h>
 
 TString ArcadiaSourceRoot() {
@@ -41,12 +41,12 @@ TString BinaryPath(TStringBuf path) {
 }
 
 TString GetArcadiaTestsData() {
-    TString atdRoot = NPrivate::GetTestEnv().ArcadiaTestsDataDir;
-    if (atdRoot) {
-        return atdRoot;
+    TString atdRoot = NPrivate::GetTestEnv().ArcadiaTestsDataDir; 
+    if (atdRoot) { 
+        return atdRoot; 
     }
 
-    TString path = NPrivate::GetCwd();
+    TString path = NPrivate::GetCwd(); 
     const char pathsep = GetDirectorySeparator();
     while (!path.empty()) {
         TString dataDir = path + "/arcadia_tests_data";
@@ -65,12 +65,12 @@ TString GetArcadiaTestsData() {
 }
 
 TString GetWorkPath() {
-    TString workPath = NPrivate::GetTestEnv().WorkPath;
-    if (workPath) {
-        return workPath;
+    TString workPath = NPrivate::GetTestEnv().WorkPath; 
+    if (workPath) { 
+        return workPath; 
     }
-
-    return NPrivate::GetCwd();
+ 
+    return NPrivate::GetCwd(); 
 }
 
 TFsPath GetOutputPath() {
@@ -78,7 +78,7 @@ TFsPath GetOutputPath() {
 }
 
 const TString& GetRamDrivePath() {
-    return NPrivate::GetTestEnv().RamDrivePath;
+    return NPrivate::GetTestEnv().RamDrivePath; 
 }
 
 const TString& GetYtHddPath() {
@@ -86,7 +86,7 @@ const TString& GetYtHddPath() {
 }
 
 const TString& GetOutputRamDrivePath() {
-    return NPrivate::GetTestEnv().TestOutputRamDrivePath;
+    return NPrivate::GetTestEnv().TestOutputRamDrivePath; 
 }
 
 const TString& GdbPath() {
@@ -144,68 +144,68 @@ void StopProcessCoreWatching(int pid) {
 }
 
 bool FromYaTest() {
-    return NPrivate::GetTestEnv().IsRunningFromTest;
+    return NPrivate::GetTestEnv().IsRunningFromTest; 
 }
-
-namespace NPrivate {
-    TTestEnv::TTestEnv() {
-        ReInitialize();
-    }
-
-    void TTestEnv::ReInitialize() {
-        IsRunningFromTest = false;
-        ArcadiaTestsDataDir = "";
-        SourceRoot = "";
-        BuildRoot = "";
-        WorkPath = "";
-        RamDrivePath = "";
+ 
+namespace NPrivate { 
+    TTestEnv::TTestEnv() { 
+        ReInitialize(); 
+    } 
+ 
+    void TTestEnv::ReInitialize() { 
+        IsRunningFromTest = false; 
+        ArcadiaTestsDataDir = ""; 
+        SourceRoot = ""; 
+        BuildRoot = ""; 
+        WorkPath = ""; 
+        RamDrivePath = ""; 
         YtHddPath = "";
-        TestOutputRamDrivePath = "";
+        TestOutputRamDrivePath = ""; 
         GdbPath = "";
         CoreSearchFile = "";
         TestParameters.clear();
-
-        const TString contextFilename = GetEnv("YA_TEST_CONTEXT_FILE");
-        if (contextFilename) {
-            NJson::TJsonValue context;
-            NJson::ReadJsonTree(TFileInput(contextFilename).ReadAll(), &context);
-
-            NJson::TJsonValue* value;
-
-            value = context.GetValueByPath("runtime.source_root");
-            if (value) {
-                SourceRoot = value->GetStringSafe("");
-            }
-
-            value = context.GetValueByPath("runtime.build_root");
-            if (value) {
-                BuildRoot = value->GetStringSafe("");
-            }
-
-            value = context.GetValueByPath("runtime.atd_root");
-            if (value) {
-                ArcadiaTestsDataDir = value->GetStringSafe("");
-            }
-
-            value = context.GetValueByPath("runtime.work_path");
-            if (value) {
-                WorkPath = value->GetStringSafe("");
-            }
-
-            value = context.GetValueByPath("runtime.ram_drive_path");
-            if (value) {
-                RamDrivePath = value->GetStringSafe("");
-            }
-
+ 
+        const TString contextFilename = GetEnv("YA_TEST_CONTEXT_FILE"); 
+        if (contextFilename) { 
+            NJson::TJsonValue context; 
+            NJson::ReadJsonTree(TFileInput(contextFilename).ReadAll(), &context); 
+ 
+            NJson::TJsonValue* value; 
+ 
+            value = context.GetValueByPath("runtime.source_root"); 
+            if (value) { 
+                SourceRoot = value->GetStringSafe(""); 
+            } 
+ 
+            value = context.GetValueByPath("runtime.build_root"); 
+            if (value) { 
+                BuildRoot = value->GetStringSafe(""); 
+            } 
+ 
+            value = context.GetValueByPath("runtime.atd_root"); 
+            if (value) { 
+                ArcadiaTestsDataDir = value->GetStringSafe(""); 
+            } 
+ 
+            value = context.GetValueByPath("runtime.work_path"); 
+            if (value) { 
+                WorkPath = value->GetStringSafe(""); 
+            } 
+ 
+            value = context.GetValueByPath("runtime.ram_drive_path"); 
+            if (value) { 
+                RamDrivePath = value->GetStringSafe(""); 
+            } 
+ 
             value = context.GetValueByPath("runtime.yt_hdd_path");
             if (value) {
                 YtHddPath = value->GetStringSafe("");
             }
 
-            value = context.GetValueByPath("runtime.test_output_ram_drive_path");
-            if (value) {
-                TestOutputRamDrivePath = value->GetStringSafe("");
-            }
+            value = context.GetValueByPath("runtime.test_output_ram_drive_path"); 
+            if (value) { 
+                TestOutputRamDrivePath = value->GetStringSafe(""); 
+            } 
 
             value = context.GetValueByPath("runtime.gdb_bin");
             if (value) {
@@ -223,53 +223,53 @@ namespace NPrivate {
             if (value) {
                 CoreSearchFile = value->GetStringSafe("");
             }
-        }
-
+        } 
+ 
         if (!YtHddPath) {
             YtHddPath = GetEnv("HDD_PATH");
         }
 
-        if (!SourceRoot) {
-            SourceRoot = GetEnv("ARCADIA_SOURCE_ROOT");
-        }
-
-        if (!BuildRoot) {
-            BuildRoot = GetEnv("ARCADIA_BUILD_ROOT");
-        }
-
-        if (!ArcadiaTestsDataDir) {
-            ArcadiaTestsDataDir = GetEnv("ARCADIA_TESTS_DATA_DIR");
-        }
-
-        if (!WorkPath) {
-            WorkPath = GetEnv("TEST_WORK_PATH");
-        }
-
-        if (!RamDrivePath) {
-            RamDrivePath = GetEnv("YA_TEST_RAM_DRIVE_PATH");
-        }
-
-        if (!TestOutputRamDrivePath) {
-            TestOutputRamDrivePath = GetEnv("YA_TEST_OUTPUT_RAM_DRIVE_PATH");
-        }
-
-        const TString fromEnv = GetEnv("YA_TEST_RUNNER");
-        IsRunningFromTest = (fromEnv == "1");
-    }
-
+        if (!SourceRoot) { 
+            SourceRoot = GetEnv("ARCADIA_SOURCE_ROOT"); 
+        } 
+ 
+        if (!BuildRoot) { 
+            BuildRoot = GetEnv("ARCADIA_BUILD_ROOT"); 
+        } 
+ 
+        if (!ArcadiaTestsDataDir) { 
+            ArcadiaTestsDataDir = GetEnv("ARCADIA_TESTS_DATA_DIR"); 
+        } 
+ 
+        if (!WorkPath) { 
+            WorkPath = GetEnv("TEST_WORK_PATH"); 
+        } 
+ 
+        if (!RamDrivePath) { 
+            RamDrivePath = GetEnv("YA_TEST_RAM_DRIVE_PATH"); 
+        } 
+ 
+        if (!TestOutputRamDrivePath) { 
+            TestOutputRamDrivePath = GetEnv("YA_TEST_OUTPUT_RAM_DRIVE_PATH"); 
+        } 
+ 
+        const TString fromEnv = GetEnv("YA_TEST_RUNNER"); 
+        IsRunningFromTest = (fromEnv == "1"); 
+    } 
+ 
     void TTestEnv::AddTestParam(TStringBuf name, TStringBuf value) {
         TestParameters[TString{name}] = value;
     }
 
-    TString GetCwd() {
-        try {
-            return NFs::CurrentWorkingDirectory();
-        } catch (...) {
-            return {};
-        }
-    }
-
-    const TTestEnv& GetTestEnv() {
-        return *Singleton<TTestEnv>();
-    }
-}
+    TString GetCwd() { 
+        try { 
+            return NFs::CurrentWorkingDirectory(); 
+        } catch (...) { 
+            return {}; 
+        } 
+    } 
+ 
+    const TTestEnv& GetTestEnv() { 
+        return *Singleton<TTestEnv>(); 
+    } 
+} 

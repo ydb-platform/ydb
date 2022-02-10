@@ -2640,7 +2640,7 @@ bool ValidateName(TPosition position, TStringBuf name, TStringBuf descr, TExprCo
 
     if (!IsUtf8(name)) {
         ctx.AddError(TIssue(position, TStringBuilder() <<
-            TString(descr).to_title() << " name must be a valid utf-8 byte sequence: " << TString{name}.Quote()));
+            TString(descr).to_title() << " name must be a valid utf-8 byte sequence: " << TString{name}.Quote())); 
         return false;
     }
 

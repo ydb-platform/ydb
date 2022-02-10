@@ -36,7 +36,7 @@ TDataProviderInitializer GetSolomonDataProviderInitializer(ISolomonGateway::TPtr
 
         TDataProviderInfo info;
 
-        info.Names.insert({TString{SolomonProviderName}});
+        info.Names.insert({TString{SolomonProviderName}}); 
         info.Source = CreateSolomonDataSource(solomonState);
         info.Sink = CreateSolomonDataSink(solomonState);
 

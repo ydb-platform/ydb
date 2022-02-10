@@ -1090,7 +1090,7 @@ private:
                 for (size_t i = 0; i < commonPrefixLength; ++i) {
                     auto column = sort->GetContent()[i].first.front();
                     auto pos = resultStruct->FindItem(column);
-                    YQL_ENSURE(pos, "Missing column " << TString{column}.Quote() << " in result type");
+                    YQL_ENSURE(pos, "Missing column " << TString{column}.Quote() << " in result type"); 
                     auto resultItemType = resultStruct->GetItems()[*pos];
                     for (size_t childNdx = 0; childNdx < input->ChildrenSize(); ++childNdx) {
                         const auto inputStruct = inputStructs[childNdx];
@@ -3049,7 +3049,7 @@ private:
                     // Sanity check
                     for (size_t i = 0; i < input->ChildrenSize(); ++i) {
                         YQL_ENSURE(input->Child(i)->GetState() >= TExprNode::EState::ConstrComplete,
-                            "Child with index " << i << " of callable " << TString{input->Content()}.Quote() << " has bad state after constraint transform");
+                            "Child with index " << i << " of callable " << TString{input->Content()}.Quote() << " has bad state after constraint transform"); 
                     }
                     input->SetState(TExprNode::EState::ConstrComplete);
                     CheckExpected(*input);

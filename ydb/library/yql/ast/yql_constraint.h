@@ -74,7 +74,7 @@ public:
                       "Should be derived from TConstraintNode");
 
         const auto ret = dynamic_cast<const T*>(this);
-        YQL_ENSURE(ret, "Cannot cast " << TString{Name_}.Quote() << " constraint to " << T::Name());
+        YQL_ENSURE(ret, "Cannot cast " << TString{Name_}.Quote() << " constraint to " << T::Name()); 
         return ret;
     }
 

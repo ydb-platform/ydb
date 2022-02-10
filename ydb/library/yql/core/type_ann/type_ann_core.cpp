@@ -579,7 +579,7 @@ namespace NTypeAnnImpl {
 
             if (!NYql::NDecimal::IsValid(input->Head().Content())) {
                 ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), TStringBuilder() << "Bad atom format for type: "
-                    << input->Content() << ", value: " << TString{input->Head().Content()}.Quote()));
+                    << input->Content() << ", value: " << TString{input->Head().Content()}.Quote())); 
 
                 return IGraphTransformer::TStatus::Error;
             }
@@ -6997,7 +6997,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                     double val = 0.;
                     if (!TryFromString(setting->Child(1)->Content(), val) || val == 0.) {
                         ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(nameNode->Pos()), TStringBuilder()
-                            << "Bad " << TString{nameNode->Content()}.Quote() << " setting value: " << setting->Child(1)->Content()));
+                            << "Bad " << TString{nameNode->Content()}.Quote() << " setting value: " << setting->Child(1)->Content())); 
                         return IGraphTransformer::TStatus::Error;
                     }
                 }
@@ -7005,7 +7005,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                     ui64 val = 0;
                     if (!TryFromString(setting->Child(1)->Content(), val)) {
                         ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(nameNode->Pos()), TStringBuilder()
-                            << "Bad " << TString{nameNode->Content()}.Quote() << " setting value: " << setting->Child(1)->Content()));
+                            << "Bad " << TString{nameNode->Content()}.Quote() << " setting value: " << setting->Child(1)->Content())); 
                         return IGraphTransformer::TStatus::Error;
                     }
                 }

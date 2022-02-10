@@ -221,12 +221,12 @@ namespace NTest {
                     Cerr << (slice.FirstInclusive ? '[' : '(');
                     Cerr << "row " << slice.FirstRowId;
                     for (auto cell : slice.FirstKey.GetCells()) {
-                        Cerr << " cell " << TString{cell.AsBuf()}.Quote();
+                        Cerr << " cell " << TString{cell.AsBuf()}.Quote(); 
                     }
                     Cerr << ", ";
                     Cerr << "row " << slice.LastRowId;
                     for (auto cell : slice.LastKey.GetCells()) {
-                        Cerr << " cell " << TString{cell.AsBuf()}.Quote();
+                        Cerr << " cell " << TString{cell.AsBuf()}.Quote(); 
                     }
                     Cerr << (slice.LastInclusive ? ']' : ')');
                     Cerr << Endl;

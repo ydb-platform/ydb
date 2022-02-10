@@ -110,7 +110,7 @@ RECURSE(
     bincopy
     biplist
     bitarray
-    black
+    black 
     bleach
     blinker
     blis
@@ -721,7 +721,7 @@ RECURSE(
     patched
     path.py
     pathlib2
-    pathspec
+    pathspec 
     pathtools
     pathy
     patsy

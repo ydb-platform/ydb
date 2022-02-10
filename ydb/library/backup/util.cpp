@@ -73,7 +73,7 @@ ui64 SizeFromString(TStringBuf s) {
     TStringBuf number;
     s.SplitAt(pos, number, suffix);
     auto it = SizeSuffix.find(suffix);
-    Y_ENSURE(it != SizeSuffix.end(), "Cannot parse string, unknown suffix# " << TString{suffix}.Quote());
+    Y_ENSURE(it != SizeSuffix.end(), "Cannot parse string, unknown suffix# " << TString{suffix}.Quote()); 
     return FromString<ui64>(number) * it->second;
 }
 

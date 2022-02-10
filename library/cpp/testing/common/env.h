@@ -55,30 +55,30 @@ void WatchProcessCore(int pid, const TFsPath& binaryPath, const TFsPath& cwd = T
 void StopProcessCoreWatching(int pid);
 
 #define SRC_(path) ArcadiaFromCurrentLocation(__SOURCE_FILE__, path)
-
-namespace NPrivate {
-    class TTestEnv {
-    public:
-        TTestEnv();
-
-        void ReInitialize();
-
+ 
+namespace NPrivate { 
+    class TTestEnv { 
+    public: 
+        TTestEnv(); 
+ 
+        void ReInitialize(); 
+ 
         void AddTestParam(TStringBuf name, TStringBuf value);
 
-        bool IsRunningFromTest;
-        TString ArcadiaTestsDataDir;
-        TString SourceRoot;
-        TString BuildRoot;
-        TString WorkPath;
-        TString RamDrivePath;
+        bool IsRunningFromTest; 
+        TString ArcadiaTestsDataDir; 
+        TString SourceRoot; 
+        TString BuildRoot; 
+        TString WorkPath; 
+        TString RamDrivePath; 
         TString YtHddPath;
-        TString TestOutputRamDrivePath;
+        TString TestOutputRamDrivePath; 
         TString GdbPath;
         TString CoreSearchFile;
         std::unordered_map<TString, TString> TestParameters;
-    };
-
-    TString GetCwd();
-
-    const TTestEnv& GetTestEnv();
-}
+    }; 
+ 
+    TString GetCwd(); 
+ 
+    const TTestEnv& GetTestEnv(); 
+} 

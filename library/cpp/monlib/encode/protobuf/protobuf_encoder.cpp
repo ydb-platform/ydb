@@ -93,8 +93,8 @@ namespace NMonitoring {
                 NProto::TLabel* label = (Sample_ == nullptr)
                                             ? Samples_->AddCommonLabels()
                                             : Sample_->AddLabels();
-                label->SetName(TString{name});
-                label->SetValue(TString{value});
+                label->SetName(TString{name}); 
+                label->SetValue(TString{value}); 
             }
 
             void OnDouble(TInstant time, double value) override {
@@ -181,8 +181,8 @@ namespace NMonitoring {
                                             ? Samples_->AddCommonLabels()
                                             : Sample_->AddLabels();
 
-                label->SetName(TString{name});
-                label->SetValue(TString{value});
+                label->SetName(TString{name}); 
+                label->SetValue(TString{value}); 
             }
 
             void OnDouble(TInstant time, double value) override {

@@ -441,8 +441,8 @@
         },
         "ya_sed": {
             "description": "This tool simplifies replacing of some text in Arcadia"
-        },
-        "black": {
+        }, 
+        "black": { 
             "description": "Python styler, Python 3 only"
         },
         "black_py2": {
@@ -5413,32 +5413,32 @@
                     "default": true
                 }
             ]
-        },
-        "black": {
-            "tools": {
-                "black": {
-                    "bottle": "black",
-                    "executable": "black"
-                }
-            },
-            "platforms": [
-                {
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "WIN"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "DARWIN"
-                    },
-                    "default": true
+        }, 
+        "black": { 
+            "tools": { 
+                "black": { 
+                    "bottle": "black", 
+                    "executable": "black" 
+                } 
+            }, 
+            "platforms": [ 
+                { 
+                    "host": { 
+                        "os": "LINUX" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "WIN" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "DARWIN" 
+                    }, 
+                    "default": true 
                 },
                 {
                     "host": {
@@ -5446,8 +5446,8 @@
                         "arch": "arm64"
                     },
                     "default": true
-                }
-            ]
+                } 
+            ] 
         },
         "black_py2": {
             "tools": {
@@ -7814,19 +7814,19 @@
                     "ya_sed"
                 ]
             }
-        },
-        "black": {
-            "formula": {
-                "sandbox_id": [
+        }, 
+        "black": { 
+            "formula": { 
+                "sandbox_id": [ 
                     1209137306
-                ],
-                "match": "black"
-            },
-            "executable": {
-                "black": [
-                    "black"
-                ]
-            }
+                ], 
+                "match": "black" 
+            }, 
+            "executable": { 
+                "black": [ 
+                    "black" 
+                ] 
+            } 
         },
         "black_py2": {
             "formula": {

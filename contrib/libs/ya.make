@@ -168,7 +168,7 @@ RECURSE(
     libogg
     libopendkim
     libopendmarc
-    libosmium
+    libosmium 
     libphonenumber
     libpng
     libpq

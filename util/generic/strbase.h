@@ -36,9 +36,9 @@ namespace NStringPrivate {
 
 template <typename TDerived, typename TCharType, typename TTraitsType = std::char_traits<TCharType>>
 class TStringBase {
-    using TStringView = std::basic_string_view<TCharType>;
+    using TStringView = std::basic_string_view<TCharType>; 
     using TStringViewWithTraits = std::basic_string_view<TCharType, TTraitsType>;
-
+ 
 public:
     using TChar = TCharType;
     using TTraits = TTraitsType;
@@ -210,12 +210,12 @@ public: // style-guide compliant methods
         return 0 == Len();
     }
 
-private:
-    static inline TStringView LegacySubString(const TStringView view, size_t p, size_t n) noexcept {
-        p = Min(p, view.length());
-        return view.substr(p, n);
-    }
-
+private: 
+    static inline TStringView LegacySubString(const TStringView view, size_t p, size_t n) noexcept { 
+        p = Min(p, view.length()); 
+        return view.substr(p, n); 
+    } 
+ 
 public:
     // ~~~ Comparison ~~~ : FAMILY0(int, compare)
     static int compare(const TSelf& s1, const TSelf& s2) noexcept {
@@ -232,7 +232,7 @@ public:
         return s1.AsStringView().compare(p ? p : &null);
     }
 
-    static int compare(const TStringView s1, const TStringView s2) noexcept {
+    static int compare(const TStringView s1, const TStringView s2) noexcept { 
         return TStringViewWithTraits(s1.data(), s1.size()).compare(TStringViewWithTraits(s2.data(), s2.size()));
     }
 
@@ -241,20 +241,20 @@ public:
         return compare(*this, t);
     }
 
-    inline int compare(size_t p, size_t n, const TStringView t) const noexcept {
-        return compare(LegacySubString(*this, p, n), t);
+    inline int compare(size_t p, size_t n, const TStringView t) const noexcept { 
+        return compare(LegacySubString(*this, p, n), t); 
     }
 
-    inline int compare(size_t p, size_t n, const TStringView t, size_t p1, size_t n1) const noexcept {
-        return compare(LegacySubString(*this, p, n), LegacySubString(t, p1, n1));
+    inline int compare(size_t p, size_t n, const TStringView t, size_t p1, size_t n1) const noexcept { 
+        return compare(LegacySubString(*this, p, n), LegacySubString(t, p1, n1)); 
     }
 
-    inline int compare(size_t p, size_t n, const TStringView t, size_t n1) const noexcept {
-        return compare(LegacySubString(*this, p, n), LegacySubString(t, 0, n1));
+    inline int compare(size_t p, size_t n, const TStringView t, size_t n1) const noexcept { 
+        return compare(LegacySubString(*this, p, n), LegacySubString(t, 0, n1)); 
     }
 
     inline int compare(const TCharType* p, size_t len) const noexcept {
-        return compare(*this, TStringView(p, len));
+        return compare(*this, TStringView(p, len)); 
     }
 
     static bool equal(const TSelf& s1, const TSelf& s2) noexcept {
@@ -273,7 +273,7 @@ public:
         return equal(s2, p);
     }
 
-    static bool equal(const TStringView s1, const TStringView s2) noexcept {
+    static bool equal(const TStringView s1, const TStringView s2) noexcept { 
         return TStringViewWithTraits{s1.data(), s1.size()} == TStringViewWithTraits{s2.data(), s2.size()};
     }
 
@@ -282,16 +282,16 @@ public:
         return equal(*this, t);
     }
 
-    inline bool equal(size_t p, size_t n, const TStringView t) const noexcept {
-        return equal(LegacySubString(*this, p, n), t);
+    inline bool equal(size_t p, size_t n, const TStringView t) const noexcept { 
+        return equal(LegacySubString(*this, p, n), t); 
     }
 
-    inline bool equal(size_t p, size_t n, const TStringView t, size_t p1, size_t n1) const noexcept {
-        return equal(LegacySubString(*this, p, n), LegacySubString(t, p1, n1));
+    inline bool equal(size_t p, size_t n, const TStringView t, size_t p1, size_t n1) const noexcept { 
+        return equal(LegacySubString(*this, p, n), LegacySubString(t, p1, n1)); 
     }
 
-    inline bool equal(size_t p, size_t n, const TStringView t, size_t n1) const noexcept {
-        return equal(LegacySubString(*this, p, n), LegacySubString(t, 0, n1));
+    inline bool equal(size_t p, size_t n, const TStringView t, size_t n1) const noexcept { 
+        return equal(LegacySubString(*this, p, n), LegacySubString(t, 0, n1)); 
     }
 
     static inline bool StartsWith(const TCharType* what, size_t whatLen, const TCharType* with, size_t withLen) noexcept {
@@ -306,8 +306,8 @@ public:
         return StartsWith(Ptr(), Len(), s, n);
     }
 
-    inline bool StartsWith(const TStringView s) const noexcept {
-        return StartsWith(s.data(), s.length());
+    inline bool StartsWith(const TStringView s) const noexcept { 
+        return StartsWith(s.data(), s.length()); 
     }
 
     inline bool StartsWith(TCharType ch) const noexcept {
@@ -318,8 +318,8 @@ public:
         return EndsWith(Ptr(), Len(), s, n);
     }
 
-    inline bool EndsWith(const TStringView s) const noexcept {
-        return EndsWith(s.data(), s.length());
+    inline bool EndsWith(const TStringView s) const noexcept { 
+        return EndsWith(s.data(), s.length()); 
     }
 
     inline bool EndsWith(TCharType ch) const noexcept {
@@ -448,7 +448,7 @@ public:
     /**
      * @return                          Position of the substring inside this string, or `npos` if not found.
      */
-    inline size_t find(const TStringView s, size_t pos = 0) const noexcept {
+    inline size_t find(const TStringView s, size_t pos = 0) const noexcept { 
         return find(s.data(), pos, s.size());
     }
 
@@ -471,7 +471,7 @@ public:
         return AsStringView().rfind(c, pos - 1);
     }
 
-    inline size_t rfind(const TStringView str, size_t pos = npos) const {
+    inline size_t rfind(const TStringView str, size_t pos = npos) const { 
         return AsStringView().rfind(str.data(), pos, str.size());
     }
 
@@ -479,8 +479,8 @@ public:
     /**
      * @returns                         Whether this string contains the provided substring.
      */
-    inline bool Contains(const TStringView s, size_t pos = 0) const noexcept {
-        return !s.length() || find(s, pos) != npos;
+    inline bool Contains(const TStringView s, size_t pos = 0) const noexcept { 
+        return !s.length() || find(s, pos) != npos; 
     }
 
     inline bool Contains(TChar c, size_t pos = 0) const noexcept {
@@ -500,11 +500,11 @@ public:
         return find(c, pos);
     }
 
-    inline size_t find_first_of(const TStringView set) const noexcept {
+    inline size_t find_first_of(const TStringView set) const noexcept { 
         return find_first_of(set, 0);
     }
 
-    inline size_t find_first_of(const TStringView set, size_t pos) const noexcept {
+    inline size_t find_first_of(const TStringView set, size_t pos) const noexcept { 
         return AsStringView().find_first_of(set.data(), pos, set.size());
     }
 
@@ -513,14 +513,14 @@ public:
     }
 
     inline size_t find_first_not_of(TCharType c, size_t pos) const noexcept {
-        return find_first_not_of(TStringView(&c, 1), pos);
+        return find_first_not_of(TStringView(&c, 1), pos); 
     }
 
-    inline size_t find_first_not_of(const TStringView set) const noexcept {
+    inline size_t find_first_not_of(const TStringView set) const noexcept { 
         return find_first_not_of(set, 0);
     }
 
-    inline size_t find_first_not_of(const TStringView set, size_t pos) const noexcept {
+    inline size_t find_first_not_of(const TStringView set, size_t pos) const noexcept { 
         return AsStringView().find_first_not_of(set.data(), pos, set.size());
     }
 
@@ -528,8 +528,8 @@ public:
         return find_last_of(&c, pos, 1);
     }
 
-    inline size_t find_last_of(const TStringView set, size_t pos = npos) const noexcept {
-        return find_last_of(set.data(), pos, set.length());
+    inline size_t find_last_of(const TStringView set, size_t pos = npos) const noexcept { 
+        return find_last_of(set.data(), pos, set.length()); 
     }
 
     inline size_t find_last_of(const TCharType* set, size_t pos, size_t n) const noexcept {
@@ -540,8 +540,8 @@ public:
         return AsStringView().find_last_not_of(c, pos);
     }
 
-    inline size_t find_last_not_of(const TStringView set, size_t pos = npos) const noexcept {
-        return find_last_not_of(set.data(), pos, set.length());
+    inline size_t find_last_not_of(const TStringView set, size_t pos = npos) const noexcept { 
+        return find_last_not_of(set.data(), pos, set.length()); 
     }
 
     inline size_t find_last_not_of(const TCharType* set, size_t pos, size_t n) const noexcept {

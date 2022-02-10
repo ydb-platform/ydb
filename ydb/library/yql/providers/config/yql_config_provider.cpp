@@ -613,7 +613,7 @@ namespace {
                     return false;
                 }
                 for (auto arg: args) {
-                    Types.DisableConstraintCheck.erase(TString{arg});
+                    Types.DisableConstraintCheck.erase(TString{arg}); 
                 }
             }
             else if (name == "DisableConstraints") {
@@ -669,7 +669,7 @@ namespace {
                     return false;
                 }
 
-                auto arg = TString{args[0]};
+                auto arg = TString{args[0]}; 
                 if (Find(Types.AvailablePureResultDataSources, DqProviderName) == Types.AvailablePureResultDataSources.end() || arg == "disable") {
                     ; // reserved
                 } else if (arg == "auto") {
@@ -967,8 +967,8 @@ namespace {
                 return false;
             }
 
-            TString codePattern = TString{args[0]};
-            TString action = TString{args[1]};
+            TString codePattern = TString{args[0]}; 
+            TString action = TString{args[1]}; 
 
             TWarningRule rule;
             TString parseError;

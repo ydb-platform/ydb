@@ -201,8 +201,8 @@ namespace NProtobufJson {
             json.WriteKey(key).Write(value);                    \
         }                                                       \
         break;                                                  \
-    }
-
+    } 
+ 
         const Reflection* reflection = proto.GetReflection();
 
         bool shouldPrintField = reflection->HasField(proto, &field);
@@ -218,10 +218,10 @@ namespace NProtobufJson {
 
         if (shouldPrintField) {
             switch (field.cpp_type()) {
-                INT_FIELD_TO_JSON(CPPTYPE_INT32, GetInt32);
-                INT_FIELD_TO_JSON(CPPTYPE_INT64, GetInt64);
-                INT_FIELD_TO_JSON(CPPTYPE_UINT32, GetUInt32);
-                INT_FIELD_TO_JSON(CPPTYPE_UINT64, GetUInt64);
+                INT_FIELD_TO_JSON(CPPTYPE_INT32, GetInt32); 
+                INT_FIELD_TO_JSON(CPPTYPE_INT64, GetInt64); 
+                INT_FIELD_TO_JSON(CPPTYPE_UINT32, GetUInt32); 
+                INT_FIELD_TO_JSON(CPPTYPE_UINT64, GetUInt64); 
                 FIELD_TO_JSON(CPPTYPE_DOUBLE, GetDouble);
                 FIELD_TO_JSON(CPPTYPE_FLOAT, GetFloat);
                 FIELD_TO_JSON(CPPTYPE_BOOL, GetBool);
@@ -487,31 +487,31 @@ namespace NProtobufJson {
         }
     }
 
-    template <class T, class U>
-    std::enable_if_t<!std::is_unsigned<T>::value, bool> ValueInRange(T value, U range) {
-        return value >= -range && value <= range;
-    }
-
-    template <class T, class U>
-    std::enable_if_t<std::is_unsigned<T>::value, bool> ValueInRange(T value, U range) {
-        return value <= (std::make_unsigned_t<U>)(range);
-    }
-
-    template <class T>
-    bool TProto2JsonPrinter::NeedStringifyNumber(T value) const {
-        constexpr long SAFE_INTEGER_RANGE_FLOAT = 16777216;
-        constexpr long long SAFE_INTEGER_RANGE_DOUBLE = 9007199254740992;
-
-        switch (GetConfig().StringifyLongNumbers) {
-            case TProto2JsonConfig::StringifyLongNumbersNever:
-                return false;
-            case TProto2JsonConfig::StringifyLongNumbersForFloat:
-                return !ValueInRange(value, SAFE_INTEGER_RANGE_FLOAT);
-            case TProto2JsonConfig::StringifyLongNumbersForDouble:
-                return !ValueInRange(value, SAFE_INTEGER_RANGE_DOUBLE);
-        }
-
-        return false;
-    }
-
+    template <class T, class U> 
+    std::enable_if_t<!std::is_unsigned<T>::value, bool> ValueInRange(T value, U range) { 
+        return value >= -range && value <= range; 
+    } 
+ 
+    template <class T, class U> 
+    std::enable_if_t<std::is_unsigned<T>::value, bool> ValueInRange(T value, U range) { 
+        return value <= (std::make_unsigned_t<U>)(range); 
+    } 
+ 
+    template <class T> 
+    bool TProto2JsonPrinter::NeedStringifyNumber(T value) const { 
+        constexpr long SAFE_INTEGER_RANGE_FLOAT = 16777216; 
+        constexpr long long SAFE_INTEGER_RANGE_DOUBLE = 9007199254740992; 
+ 
+        switch (GetConfig().StringifyLongNumbers) { 
+            case TProto2JsonConfig::StringifyLongNumbersNever: 
+                return false; 
+            case TProto2JsonConfig::StringifyLongNumbersForFloat: 
+                return !ValueInRange(value, SAFE_INTEGER_RANGE_FLOAT); 
+            case TProto2JsonConfig::StringifyLongNumbersForDouble: 
+                return !ValueInRange(value, SAFE_INTEGER_RANGE_DOUBLE); 
+        } 
+ 
+        return false; 
+    } 
+ 
 }

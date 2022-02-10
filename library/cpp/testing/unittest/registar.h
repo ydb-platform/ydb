@@ -1017,13 +1017,13 @@ public:                       \
 
 #define Y_UNIT_TEST_SUITE_IMPLEMENTATION(N) \
     namespace NTestSuite##N
-
+ 
 #define Y_UNIT_TEST_DECLARE(N) \
     struct TTestCase##N
-
+ 
 #define Y_UNIT_TEST_FRIEND(N, T) \
     friend NTestSuite##N::TTestCase##T \
-
+ 
     TString RandomString(size_t len, ui32 seed = 0);
 }
 

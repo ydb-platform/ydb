@@ -57,9 +57,9 @@ namespace NProtobufJson {
                               const TStringBuf& key, const TString& value,
                               IJsonOutput& json);
 
-        template <class T>
-        bool NeedStringifyNumber(T value) const;
-
+        template <class T> 
+        bool NeedStringifyNumber(T value) const; 
+ 
     protected:
         const TProto2JsonConfig& Config;
         TString TmpBuf;

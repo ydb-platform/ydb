@@ -72,16 +72,16 @@ void TPipeOutput::DoWrite(const void* buf, size_t len) {
     }
 }
 
-void TPipeOutput::Close() {
-    int exitStatus = ::pclose(Impl_->Pipe_);
+void TPipeOutput::Close() { 
+    int exitStatus = ::pclose(Impl_->Pipe_); 
     Impl_->Pipe_ = nullptr;
-    if (exitStatus == -1) {
-        ythrow TSystemError() << "pclose() failed";
-    } else if (exitStatus != 0) {
-        ythrow yexception() << "subprocess exited with non-zero status(" << exitStatus << ")";
-    }
-}
-
+    if (exitStatus == -1) { 
+        ythrow TSystemError() << "pclose() failed"; 
+    } else if (exitStatus != 0) { 
+        ythrow yexception() << "subprocess exited with non-zero status(" << exitStatus << ")"; 
+    } 
+} 
+ 
 TPipedBase::TPipedBase(PIPEHANDLE fd)
     : Handle_(fd)
 {

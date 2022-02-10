@@ -18,13 +18,13 @@ class THttpHeaderParserTestSuite: public TTestBase {
     UNIT_TEST(TestResponseHeaderOnRequest);
     UNIT_TEST(TestRequestHeaderOnResponse);
     UNIT_TEST(TestXRobotsTagUnknownTags);
-    UNIT_TEST(TestXRobotsTagMyBot);
-    UNIT_TEST(TestXRobotsTagOtherBot);
-    UNIT_TEST(TestXRobotsTagUnavailableAfterAware);
-    UNIT_TEST(TestXRobotsTagUnavailableAfterWorks);
+    UNIT_TEST(TestXRobotsTagMyBot); 
+    UNIT_TEST(TestXRobotsTagOtherBot); 
+    UNIT_TEST(TestXRobotsTagUnavailableAfterAware); 
+    UNIT_TEST(TestXRobotsTagUnavailableAfterWorks); 
     UNIT_TEST(TestXRobotsTagOverridePriority);
-    UNIT_TEST(TestXRobotsTagDoesNotBreakCharset);
-    UNIT_TEST(TestXRobotsTagAllowsMultiline);
+    UNIT_TEST(TestXRobotsTagDoesNotBreakCharset); 
+    UNIT_TEST(TestXRobotsTagAllowsMultiline); 
     UNIT_TEST(TestRelCanonical);
     UNIT_TEST(TestHreflang);
     UNIT_TEST(TestHreflangOnLongInput);
@@ -50,13 +50,13 @@ public:
     void TestResponseHeaderOnRequest();
     void TestRequestHeaderOnResponse();
     void TestXRobotsTagUnknownTags();
-    void TestXRobotsTagMyBot();
-    void TestXRobotsTagOtherBot();
-    void TestXRobotsTagUnavailableAfterAware();
-    void TestXRobotsTagUnavailableAfterWorks();
+    void TestXRobotsTagMyBot(); 
+    void TestXRobotsTagOtherBot(); 
+    void TestXRobotsTagUnavailableAfterAware(); 
+    void TestXRobotsTagUnavailableAfterWorks(); 
     void TestXRobotsTagOverridePriority();
-    void TestXRobotsTagDoesNotBreakCharset();
-    void TestXRobotsTagAllowsMultiline();
+    void TestXRobotsTagDoesNotBreakCharset(); 
+    void TestXRobotsTagAllowsMultiline(); 
     void TestRelCanonical();
     void TestHreflang();
     void TestHreflangOnLongInput();
@@ -238,80 +238,80 @@ void THttpHeaderParserTestSuite::TestXRobotsTagUnknownTags() {
     const char* headers =
         "HTTP/1.1 200 OK\r\n"
         "Content-Type: text/html\r\n"
-        "x-robots-tag: asdfasdf asdf asdf,,, , noindex,noodpXXX , NOFOLLOW ,noodpnofollow\r\n\r\n";
+        "x-robots-tag: asdfasdf asdf asdf,,, , noindex,noodpXXX , NOFOLLOW ,noodpnofollow\r\n\r\n"; 
     i32 result = httpHeaderParser->Execute(headers, strlen(headers));
     UNIT_ASSERT_EQUAL(result, 2);
-    UNIT_ASSERT_EQUAL(httpHeader.x_robots_tag, 3);
-    UNIT_ASSERT_EQUAL(httpHeader.x_robots_state, "00xxx");
+    UNIT_ASSERT_EQUAL(httpHeader.x_robots_tag, 3); 
+    UNIT_ASSERT_EQUAL(httpHeader.x_robots_state, "00xxx"); 
     TestFinish();
 }
 
-void THttpHeaderParserTestSuite::TestXRobotsTagMyBot() {
-    TestStart();
-    THttpHeader httpHeader;
-    httpHeaderParser->Init(&httpHeader);
-    const char* headers =
-        "HTTP/1.1 200 OK\r\n"
-        "Content-Type: text/html\r\n"
-        "x-robots-tag: yandex: noindex, nofollow\r\n"
-        "x-robots-tag: yandexbot: noarchive, noodp\r\n\r\n";
-    i32 result = httpHeaderParser->Execute(headers, strlen(headers));
-    UNIT_ASSERT_EQUAL(result, 2);
-    UNIT_ASSERT_EQUAL(httpHeader.x_robots_tag, 15);
-    UNIT_ASSERT_EQUAL(httpHeader.x_robots_state, "0000x");
-    TestFinish();
-}
-
-void THttpHeaderParserTestSuite::TestXRobotsTagOtherBot() {
-    TestStart();
-    THttpHeader httpHeader;
-    httpHeaderParser->Init(&httpHeader);
-    const char* headers =
-        "HTTP/1.1 200 OK\r\n"
-        "Content-Type: text/html\r\n"
-        "x-robots-tag: google: noindex, nofollow\r\n"
-        "x-robots-tag: googlebot: noarchive, noodp\r\n"
-        "x-robots-tag: !still(-other) bot_: foo, noyaca\r\n\r\n";
-    i32 result = httpHeaderParser->Execute(headers, strlen(headers));
-    UNIT_ASSERT_EQUAL(result, 2);
-    UNIT_ASSERT_EQUAL(httpHeader.x_robots_tag, 0);
-    UNIT_ASSERT_EQUAL(httpHeader.x_robots_state, "xxxxx");
-    TestFinish();
-}
-
-void THttpHeaderParserTestSuite::TestXRobotsTagUnavailableAfterAware() {
-    TestStart();
-    THttpHeader httpHeader;
-    httpHeaderParser->Init(&httpHeader);
-    // проверяем только что unavailable_after ничего не ломает
-    const char* headers =
-        "HTTP/1.1 200 OK\r\n"
-        "Content-Type: text/html\r\n"
-        "x-robots-tag: unavailable_after: 01 Jan 2999 00:00 UTC, noindex, nofollow\r\n"
-        "x-robots-tag: yandex: unavailable_after: 01 Jan 2999 00:00 UTC, noarchive, noodp\r\n\r\n";
-    i32 result = httpHeaderParser->Execute(headers, strlen(headers));
-    UNIT_ASSERT_EQUAL(result, 2);
-    UNIT_ASSERT_EQUAL(httpHeader.x_robots_tag, 15);
-    UNIT_ASSERT_EQUAL(httpHeader.x_robots_state, "0000x");
-    TestFinish();
-}
-
-void THttpHeaderParserTestSuite::TestXRobotsTagUnavailableAfterWorks() {
-    TestStart();
-    THttpHeader httpHeader;
-    httpHeaderParser->Init(&httpHeader);
-    // пока не поддерживается
-    const char* headers =
-        "HTTP/1.1 200 OK\r\n"
-        "Content-Type: text/html\r\n"
-        "x-robots-tag: unavailable_after: 01 Jan 2000 00:00 UTC\r\n\r\n";
-    i32 result = httpHeaderParser->Execute(headers, strlen(headers));
-    UNIT_ASSERT_EQUAL(result, 2);
-    //UNIT_ASSERT_EQUAL(httpHeader.x_robots_tag, 1);
-    //UNIT_ASSERT_EQUAL(httpHeader.x_robots_state, "0xxxx");
-    TestFinish();
-}
-
+void THttpHeaderParserTestSuite::TestXRobotsTagMyBot() { 
+    TestStart(); 
+    THttpHeader httpHeader; 
+    httpHeaderParser->Init(&httpHeader); 
+    const char* headers = 
+        "HTTP/1.1 200 OK\r\n" 
+        "Content-Type: text/html\r\n" 
+        "x-robots-tag: yandex: noindex, nofollow\r\n" 
+        "x-robots-tag: yandexbot: noarchive, noodp\r\n\r\n"; 
+    i32 result = httpHeaderParser->Execute(headers, strlen(headers)); 
+    UNIT_ASSERT_EQUAL(result, 2); 
+    UNIT_ASSERT_EQUAL(httpHeader.x_robots_tag, 15); 
+    UNIT_ASSERT_EQUAL(httpHeader.x_robots_state, "0000x"); 
+    TestFinish(); 
+} 
+ 
+void THttpHeaderParserTestSuite::TestXRobotsTagOtherBot() { 
+    TestStart(); 
+    THttpHeader httpHeader; 
+    httpHeaderParser->Init(&httpHeader); 
+    const char* headers = 
+        "HTTP/1.1 200 OK\r\n" 
+        "Content-Type: text/html\r\n" 
+        "x-robots-tag: google: noindex, nofollow\r\n" 
+        "x-robots-tag: googlebot: noarchive, noodp\r\n" 
+        "x-robots-tag: !still(-other) bot_: foo, noyaca\r\n\r\n"; 
+    i32 result = httpHeaderParser->Execute(headers, strlen(headers)); 
+    UNIT_ASSERT_EQUAL(result, 2); 
+    UNIT_ASSERT_EQUAL(httpHeader.x_robots_tag, 0); 
+    UNIT_ASSERT_EQUAL(httpHeader.x_robots_state, "xxxxx"); 
+    TestFinish(); 
+} 
+ 
+void THttpHeaderParserTestSuite::TestXRobotsTagUnavailableAfterAware() { 
+    TestStart(); 
+    THttpHeader httpHeader; 
+    httpHeaderParser->Init(&httpHeader); 
+    // проверяем только что unavailable_after ничего не ломает 
+    const char* headers = 
+        "HTTP/1.1 200 OK\r\n" 
+        "Content-Type: text/html\r\n" 
+        "x-robots-tag: unavailable_after: 01 Jan 2999 00:00 UTC, noindex, nofollow\r\n" 
+        "x-robots-tag: yandex: unavailable_after: 01 Jan 2999 00:00 UTC, noarchive, noodp\r\n\r\n"; 
+    i32 result = httpHeaderParser->Execute(headers, strlen(headers)); 
+    UNIT_ASSERT_EQUAL(result, 2); 
+    UNIT_ASSERT_EQUAL(httpHeader.x_robots_tag, 15); 
+    UNIT_ASSERT_EQUAL(httpHeader.x_robots_state, "0000x"); 
+    TestFinish(); 
+} 
+ 
+void THttpHeaderParserTestSuite::TestXRobotsTagUnavailableAfterWorks() { 
+    TestStart(); 
+    THttpHeader httpHeader; 
+    httpHeaderParser->Init(&httpHeader); 
+    // пока не поддерживается 
+    const char* headers = 
+        "HTTP/1.1 200 OK\r\n" 
+        "Content-Type: text/html\r\n" 
+        "x-robots-tag: unavailable_after: 01 Jan 2000 00:00 UTC\r\n\r\n"; 
+    i32 result = httpHeaderParser->Execute(headers, strlen(headers)); 
+    UNIT_ASSERT_EQUAL(result, 2); 
+    //UNIT_ASSERT_EQUAL(httpHeader.x_robots_tag, 1); 
+    //UNIT_ASSERT_EQUAL(httpHeader.x_robots_state, "0xxxx"); 
+    TestFinish(); 
+} 
+ 
 void THttpHeaderParserTestSuite::TestXRobotsTagOverridePriority() {
     TestStart();
     THttpHeader httpHeader;
@@ -327,59 +327,59 @@ void THttpHeaderParserTestSuite::TestXRobotsTagOverridePriority() {
     TestFinish();
 }
 
-void THttpHeaderParserTestSuite::TestXRobotsTagDoesNotBreakCharset() {
-    TestStart();
-    THttpHeader httpHeader;
-    httpHeaderParser->Init(&httpHeader);
-    const char* headers =
-        "HTTP/1.1 200 OK\r\n"
-        "X-Robots-Tag: noarchive\r\n"
-        "Content-Type: application/json; charset=utf-8\r\n\r\n";
-    i32 result = httpHeaderParser->Execute(headers, strlen(headers));
-    UNIT_ASSERT_EQUAL(result, 2);
-    UNIT_ASSERT_EQUAL(httpHeader.mime_type, static_cast<ui8>(MIME_JSON));
-    UNIT_ASSERT_EQUAL(httpHeader.charset, static_cast<ui8>(CODES_UTF8));
-    TestFinish();
-}
-
-void THttpHeaderParserTestSuite::TestXRobotsTagAllowsMultiline() {
-    TestStart();
-    THttpHeader httpHeader;
-    httpHeaderParser->Init(&httpHeader);
-    const char* headers =
-        "HTTP/1.1 200 OK\r\n"
-        "X-Robots-Tag\r\n"
-        " :\r\n"
-        " unavailable_since\r\n"
-        " :\r\n"
-        " ,\r\n"
-        " unavailable_since\r\n"
-        " :\r\n"
-        " 01 Jan 2000\r\n"
-        " 00:00 UTC\r\n"
-        " ,\r\n"
-        " yandexbot\r\n"
-        " :\r\n"
-        " noindex\r\n"
-        " ,\r\n"
-        " garbage\r\n"
-        " ,\r\n"
-        " nofollow\r\n"
-        " ,\r\n"
-        " other\r\n"
-        " bot\r\n"
-        " :\r\n"
-        " noarchive\r\n"
-        " ,\r\n"
-        "Content-Type: application/json; charset=utf-8\r\n\r\n";
-    i32 result = httpHeaderParser->Execute(headers, strlen(headers));
-    UNIT_ASSERT_EQUAL(result, 2);
-    UNIT_ASSERT_EQUAL(httpHeader.x_robots_state, "00xxx");
-    UNIT_ASSERT_EQUAL(httpHeader.mime_type, static_cast<ui8>(MIME_JSON));
-    UNIT_ASSERT_EQUAL(httpHeader.charset, static_cast<ui8>(CODES_UTF8));
-    TestFinish();
-}
-
+void THttpHeaderParserTestSuite::TestXRobotsTagDoesNotBreakCharset() { 
+    TestStart(); 
+    THttpHeader httpHeader; 
+    httpHeaderParser->Init(&httpHeader); 
+    const char* headers = 
+        "HTTP/1.1 200 OK\r\n" 
+        "X-Robots-Tag: noarchive\r\n" 
+        "Content-Type: application/json; charset=utf-8\r\n\r\n"; 
+    i32 result = httpHeaderParser->Execute(headers, strlen(headers)); 
+    UNIT_ASSERT_EQUAL(result, 2); 
+    UNIT_ASSERT_EQUAL(httpHeader.mime_type, static_cast<ui8>(MIME_JSON)); 
+    UNIT_ASSERT_EQUAL(httpHeader.charset, static_cast<ui8>(CODES_UTF8)); 
+    TestFinish(); 
+} 
+ 
+void THttpHeaderParserTestSuite::TestXRobotsTagAllowsMultiline() { 
+    TestStart(); 
+    THttpHeader httpHeader; 
+    httpHeaderParser->Init(&httpHeader); 
+    const char* headers = 
+        "HTTP/1.1 200 OK\r\n" 
+        "X-Robots-Tag\r\n" 
+        " :\r\n" 
+        " unavailable_since\r\n" 
+        " :\r\n" 
+        " ,\r\n" 
+        " unavailable_since\r\n" 
+        " :\r\n" 
+        " 01 Jan 2000\r\n" 
+        " 00:00 UTC\r\n" 
+        " ,\r\n" 
+        " yandexbot\r\n" 
+        " :\r\n" 
+        " noindex\r\n" 
+        " ,\r\n" 
+        " garbage\r\n" 
+        " ,\r\n" 
+        " nofollow\r\n" 
+        " ,\r\n" 
+        " other\r\n" 
+        " bot\r\n" 
+        " :\r\n" 
+        " noarchive\r\n" 
+        " ,\r\n" 
+        "Content-Type: application/json; charset=utf-8\r\n\r\n"; 
+    i32 result = httpHeaderParser->Execute(headers, strlen(headers)); 
+    UNIT_ASSERT_EQUAL(result, 2); 
+    UNIT_ASSERT_EQUAL(httpHeader.x_robots_state, "00xxx"); 
+    UNIT_ASSERT_EQUAL(httpHeader.mime_type, static_cast<ui8>(MIME_JSON)); 
+    UNIT_ASSERT_EQUAL(httpHeader.charset, static_cast<ui8>(CODES_UTF8)); 
+    TestFinish(); 
+} 
+ 
 void THttpHeaderParserTestSuite::TestHreflang() {
     TestStart();
     THttpHeader httpHeader;

@@ -89,7 +89,7 @@ namespace NJson {
     void TJsonWriter::Write(float value) {
         Buf.WriteFloat(value, FloatToStringMode, FloatNDigits);
     }
-
+ 
     void TJsonWriter::Write(double value) {
         Buf.WriteDouble(value, FloatToStringMode, DoubleNDigits);
     }

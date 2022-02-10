@@ -358,15 +358,15 @@ void EraseNodesIf(C& c, P p) {
     }
 }
 
-template <class T1, class T2>
-static inline bool Equal(T1 f1, T1 l1, T2 f2) {
+template <class T1, class T2> 
+static inline bool Equal(T1 f1, T1 l1, T2 f2) { 
     return std::equal(f1, l1, f2);
-}
-
-template <class T1, class T2, class P>
-static inline bool Equal(T1 f1, T1 l1, T2 f2, P p) {
+} 
+ 
+template <class T1, class T2, class P> 
+static inline bool Equal(T1 f1, T1 l1, T2 f2, P p) { 
     return std::equal(f1, l1, f2, p);
-}
+} 
 
 template <class TI, class TO>
 static inline TO Copy(TI f, TI l, TO t) {
@@ -432,11 +432,11 @@ template <class TI1, class TI2, class TO, class TC>
 static inline TO SetIntersection(TI1 f1, TI1 l1, TI2 f2, TI2 l2, TO p, TC c) {
     return std::set_intersection(f1, l1, f2, l2, p, c);
 }
-
-template <class I, class T>
-static inline void Fill(I f, I l, const T& v) {
+ 
+template <class I, class T> 
+static inline void Fill(I f, I l, const T& v) { 
     std::fill(f, l, v);
-}
+} 
 
 template <typename I, typename S, typename T>
 static inline I FillN(I f, S n, const T& v) {

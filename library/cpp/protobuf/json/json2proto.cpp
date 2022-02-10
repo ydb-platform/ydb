@@ -408,7 +408,7 @@ namespace NProtobufJson {
     void MergeJson2Proto(const TStringBuf& json, google::protobuf::Message& proto, const TJson2ProtoConfig& config) {
         NJson::TJsonReaderConfig jsonCfg;
         jsonCfg.DontValidateUtf8 = true;
-        jsonCfg.AllowComments = config.AllowComments;
+        jsonCfg.AllowComments = config.AllowComments; 
 
         NJson::TJsonValue jsonValue;
         ReadJsonTree(json, &jsonCfg, &jsonValue, /* throwOnError = */ true);

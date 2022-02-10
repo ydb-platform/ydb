@@ -93,11 +93,11 @@ namespace NProtobufJson {
             return *this;
         }
 
-        TSelf& SetAllowComments(bool value) {
-            AllowComments = value;
-            return *this;
-        }
-
+        TSelf& SetAllowComments(bool value) { 
+            AllowComments = value; 
+            return *this; 
+        } 
+ 
         TSelf& SetAllowUnknownFields(bool value) {
             AllowUnknownFields = value;
             return *this;
@@ -141,9 +141,9 @@ namespace NProtobufJson {
 
         /// Custom spliter non array value to repeated fields.
         TValueVectorizer ValueVectorizer;
-
-        /// Allow js-style comments (both // and /**/)
-        bool AllowComments = false;
+ 
+        /// Allow js-style comments (both // and /**/) 
+        bool AllowComments = false; 
     };
 
     /// @throw yexception

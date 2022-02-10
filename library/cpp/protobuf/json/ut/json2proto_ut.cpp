@@ -1120,28 +1120,28 @@ Y_UNIT_TEST(TestEmptyStringForCastFromString) {
     UNIT_ASSERT_EQUAL("", proto.GetOneString());
 } // TestEmptyStringForCastFromString
 
-Y_UNIT_TEST(TestAllowComments) {
-    constexpr TStringBuf json = R"(
-{
-    "I32": 4, // comment1
-/*
-    comment2
-    {}
-    qwer
-*/
-    "I64": 3423
-}
-
-)";
-
-    TJson2ProtoConfig config;
-    TFlatOptional proto;
-    UNIT_ASSERT_EXCEPTION_CONTAINS(Json2Proto(json, proto, config), yexception, "Error: Missing a name for object member");
-
-    config.SetAllowComments(true);
-    UNIT_ASSERT_NO_EXCEPTION(Json2Proto(json, proto, config));
-    UNIT_ASSERT_VALUES_EQUAL(proto.GetI32(), 4);
-    UNIT_ASSERT_VALUES_EQUAL(proto.GetI64(), 3423);
-} // TestAllowComments
-
+Y_UNIT_TEST(TestAllowComments) { 
+    constexpr TStringBuf json = R"( 
+{ 
+    "I32": 4, // comment1 
+/* 
+    comment2 
+    {} 
+    qwer 
+*/ 
+    "I64": 3423 
+} 
+ 
+)"; 
+ 
+    TJson2ProtoConfig config; 
+    TFlatOptional proto; 
+    UNIT_ASSERT_EXCEPTION_CONTAINS(Json2Proto(json, proto, config), yexception, "Error: Missing a name for object member"); 
+ 
+    config.SetAllowComments(true); 
+    UNIT_ASSERT_NO_EXCEPTION(Json2Proto(json, proto, config)); 
+    UNIT_ASSERT_VALUES_EQUAL(proto.GetI32(), 4); 
+    UNIT_ASSERT_VALUES_EQUAL(proto.GetI64(), 3423); 
+} // TestAllowComments 
+ 
 } // TJson2ProtoTest

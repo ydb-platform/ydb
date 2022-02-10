@@ -194,7 +194,7 @@ TDnsCache::Resolve(const TString& hostname, int family, bool cacheOnly) {
         } else {
             /* Never resolved, create cache entry */
             LWPROBE(ResolveCacheNew, hostname);
-            p = HostCache.insert(std::make_pair(hostname, THost())).first; 
+            p = HostCache.insert(std::make_pair(hostname, THost())).first;
         }
         ACacheMisses += 1;
     }
@@ -250,7 +250,7 @@ const TDnsCache::TAddr& TDnsCache::ResolveAddr(const in6_addr& addr, int family)
         } else {
             /* Never resolved, create cache entry */
 
-            p = AddrCache.insert(std::make_pair(addr, TAddr())).first; 
+            p = AddrCache.insert(std::make_pair(addr, TAddr())).first;
         }
         PtrCacheMisses += 1;
     }

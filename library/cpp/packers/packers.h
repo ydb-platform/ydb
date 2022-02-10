@@ -160,7 +160,7 @@ namespace NPackers {
                 ui64 val;
                 TIntegralPacker<ui64>().UnpackLeaf(p, val);
                 if (val & 1) {
-                    t = -1 * static_cast<i64>(val >> 1); 
+                    t = -1 * static_cast<i64>(val >> 1);
                 } else {
                     t = static_cast<T>(val >> 1);
                 }
@@ -441,13 +441,13 @@ namespace NPackers {
         return value;
     }
 
-    // TPairPacker --- for std::pair<T1, T2> (any two types; can be nested) 
+    // TPairPacker --- for std::pair<T1, T2> (any two types; can be nested)
     // TPacker<T1> and TPacker<T2> should be valid classes
 
     template <class T1, class T2, class TPacker1 = TPacker<T1>, class TPacker2 = TPacker<T2>>
     class TPairPacker {
     private:
-        typedef std::pair<T1, T2> TMyPair; 
+        typedef std::pair<T1, T2> TMyPair;
 
     public:
         void UnpackLeaf(const char* buffer, TMyPair& pair) const;
@@ -457,14 +457,14 @@ namespace NPackers {
     };
 
     template <class T1, class T2, class TPacker1, class TPacker2>
-    inline void TPairPacker<T1, T2, TPacker1, TPacker2>::UnpackLeaf(const char* buffer, std::pair<T1, T2>& pair) const { 
+    inline void TPairPacker<T1, T2, TPacker1, TPacker2>::UnpackLeaf(const char* buffer, std::pair<T1, T2>& pair) const {
         TPacker1().UnpackLeaf(buffer, pair.first);
         size_t size = TPacker1().SkipLeaf(buffer);
         TPacker2().UnpackLeaf(buffer + size, pair.second);
     }
 
     template <class T1, class T2, class TPacker1, class TPacker2>
-    inline void TPairPacker<T1, T2, TPacker1, TPacker2>::PackLeaf(char* buffer, const std::pair<T1, T2>& data, size_t size) const { 
+    inline void TPairPacker<T1, T2, TPacker1, TPacker2>::PackLeaf(char* buffer, const std::pair<T1, T2>& data, size_t size) const {
         size_t size1 = TPacker1().MeasureLeaf(data.first);
         TPacker1().PackLeaf(buffer, data.first, size1);
         size_t size2 = TPacker2().MeasureLeaf(data.second);
@@ -473,7 +473,7 @@ namespace NPackers {
     }
 
     template <class T1, class T2, class TPacker1, class TPacker2>
-    inline size_t TPairPacker<T1, T2, TPacker1, TPacker2>::MeasureLeaf(const std::pair<T1, T2>& data) const { 
+    inline size_t TPairPacker<T1, T2, TPacker1, TPacker2>::MeasureLeaf(const std::pair<T1, T2>& data) const {
         size_t size1 = TPacker1().MeasureLeaf(data.first);
         size_t size2 = TPacker2().MeasureLeaf(data.second);
         return size1 + size2;

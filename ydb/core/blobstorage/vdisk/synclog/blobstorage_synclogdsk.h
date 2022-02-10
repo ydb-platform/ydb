@@ -137,7 +137,7 @@ namespace NKikimr {
                 Y_VERIFY(inserted);
             }
 
-            static std::pair<TOneChunkPtr, const char *> Construct(const char *serialized); 
+            static std::pair<TOneChunkPtr, const char *> Construct(const char *serialized);
 
         private:
             ui32 ChunkIdx = 0;
@@ -198,7 +198,7 @@ namespace NKikimr {
             ui32 Serialize(IOutputStream &s,
                            const TDeltaToDiskRecLog::TOneAppend &append,
                            ui32 indexBulk) const;
-            static std::pair<TOneChunkIndexPtr, const char *> Construct(const char *serialized); 
+            static std::pair<TOneChunkIndexPtr, const char *> Construct(const char *serialized);
 
             class TIterator;
 
@@ -345,7 +345,7 @@ namespace NKikimr {
             }
 
             void OutputHtml(IOutputStream &str) const;
-            static std::pair<TIndexedChunkPtr, const char *> Construct(const char *serialized); 
+            static std::pair<TIndexedChunkPtr, const char *> Construct(const char *serialized);
             TString ToString() const {
                 TStringStream s;
                 s << "{" << ChunkPtr->ToString() << " " << IndexPtr->ToString() << "}";
@@ -496,9 +496,9 @@ namespace NKikimr {
                 }
             }
 
-            std::pair<ui32, const TDiskIndexRecord *> Get() const { 
+            std::pair<ui32, const TDiskIndexRecord *> Get() const {
                 Y_VERIFY_DEBUG(Valid());
-                return std::pair<ui32, const TDiskIndexRecord *>((*ChunkIt)->GetChunkIdx(), IdxBulkIt.Get()); 
+                return std::pair<ui32, const TDiskIndexRecord *>((*ChunkIt)->GetChunkIdx(), IdxBulkIt.Get());
             }
 
             bool Valid() const {

@@ -195,7 +195,7 @@ namespace NKikimr {
             Y_UNUSED(runtime);
             auto it = TabletRelatedActors.find(parentId);
             if (it != TabletRelatedActors.end()) {
-                TabletRelatedActors.insert(std::make_pair(actorId, it->second)); 
+                TabletRelatedActors.insert(std::make_pair(actorId, it->second));
             }
         }
 
@@ -1149,7 +1149,7 @@ namespace NKikimr {
         void Handle(TEvHive::TEvCreateTablet::TPtr& ev, const TActorContext& ctx) {
             Cout << "FAKEHIVE " << TabletID() << " TEvCreateTablet " << ev->Get()->Record.ShortDebugString() << Endl;
             NKikimrProto::EReplyStatus status = NKikimrProto::OK;
-            const std::pair<ui64, ui64> key(ev->Get()->Record.GetOwner(), ev->Get()->Record.GetOwnerIdx()); 
+            const std::pair<ui64, ui64> key(ev->Get()->Record.GetOwner(), ev->Get()->Record.GetOwnerIdx());
             const auto type = ev->Get()->Record.GetTabletType();
             const auto bootMode = ev->Get()->Record.GetTabletBootMode();
             auto it = State->Tablets.find(key);
@@ -1210,8 +1210,8 @@ namespace NKikimr {
                 it->second.ChannelsProfile = ev->Get()->Record.GetChannelsProfile();
             }
 
-            ctx.Send(ev->Sender, new TEvHive::TEvCreateTabletReply(status, key.first, 
-                key.second, it->second.TabletId, TabletID()), 0, ev->Cookie); 
+            ctx.Send(ev->Sender, new TEvHive::TEvCreateTabletReply(status, key.first,
+                key.second, it->second.TabletId, TabletID()), 0, ev->Cookie);
         }
 
         void TraceAdoptingCases(const std::pair<ui64, ui64> prevKey,

@@ -175,8 +175,8 @@ public:
                 UNIT_ASSERT_EQUAL(reader.RealSize(), sizeof(ui64) + N * sizeof(int*));
             }
         }
-        { /// std::pair<int, int> 
-            typedef std::pair<int, int> TItem; 
+        { /// std::pair<int, int>
+            typedef std::pair<int, int> TItem;
             const size_t N = 3;
             TBufferStream stream;
             {

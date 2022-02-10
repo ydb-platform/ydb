@@ -43,7 +43,7 @@
 #include <util/string/cast.h>
 #include <util/string/hex.h>
 #include <util/string/builder.h>
-#include <utility> 
+#include <utility>
 
 namespace NYql {
 

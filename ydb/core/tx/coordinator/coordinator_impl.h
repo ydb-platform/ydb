@@ -218,7 +218,7 @@ class TTxCoordinator : public TActor<TTxCoordinator>, public TTabletExecutedFlat
             if (it != Low.end())
                 return it->second;
             std::pair<TMap<TStepId, TSlot>::iterator, bool> xit = Low.insert(TSlotQueue::value_type(step, TSlot()));
-            TSlot &ret = xit.first->second; 
+            TSlot &ret = xit.first->second;
             return ret;
         }
 

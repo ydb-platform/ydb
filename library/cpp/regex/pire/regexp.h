@@ -249,7 +249,7 @@ namespace NRegExp {
             return NPire::ShortestPrefix(GetScanner(), b, e);
         }
 
-        typedef std::pair<const size_t*, const size_t*> TMatchedRegexps; 
+        typedef std::pair<const size_t*, const size_t*> TMatchedRegexps;
 
         inline TMatchedRegexps MatchedRegexps() const noexcept {
             return GetScanner().AcceptedRegexps(GetState());

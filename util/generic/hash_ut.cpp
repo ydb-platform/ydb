@@ -295,13 +295,13 @@ void THashTest::TestHMMap1() {
     mmap m;
 
     UNIT_ASSERT(m.count('X') == 0);
-    m.insert(std::pair<const char, int>('X', 10)); // Standard way. 
+    m.insert(std::pair<const char, int>('X', 10)); // Standard way.
     UNIT_ASSERT(m.count('X') == 1);
 
-    m.insert(std::pair<const char, int>('X', 20)); // jbuck: standard way 
+    m.insert(std::pair<const char, int>('X', 20)); // jbuck: standard way
     UNIT_ASSERT(m.count('X') == 2);
 
-    m.insert(std::pair<const char, int>('Y', 32)); // jbuck: standard way 
+    m.insert(std::pair<const char, int>('Y', 32)); // jbuck: standard way
     mmap::iterator i = m.find('X');                // Find first match.
 
     UNIT_ASSERT((*i).first == 'X');
@@ -358,9 +358,9 @@ void THashTest::TestHMMap1() {
 void THashTest::TestHMMapHas() {
     using mmap = THashMultiMap<char, int, THash<char>, TEqualTo<char>>;
     mmap m;
-    m.insert(std::pair<const char, int>('X', 10)); 
-    m.insert(std::pair<const char, int>('X', 20)); 
-    m.insert(std::pair<const char, int>('Y', 32)); 
+    m.insert(std::pair<const char, int>('X', 10));
+    m.insert(std::pair<const char, int>('X', 20));
+    m.insert(std::pair<const char, int>('Y', 32));
     UNIT_ASSERT(m.contains('X'));
     UNIT_ASSERT(m.contains('Y'));
     UNIT_ASSERT(!m.contains('Z'));

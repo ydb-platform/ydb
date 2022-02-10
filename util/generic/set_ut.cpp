@@ -23,7 +23,7 @@ Y_UNIT_TEST_SUITE(YSetTest) {
     Y_UNIT_TEST(TestSet2) {
         using int_set = TSet<int, TLess<int>>;
         int_set s;
-        std::pair<int_set::iterator, bool> p = s.insert(42); 
+        std::pair<int_set::iterator, bool> p = s.insert(42);
         UNIT_ASSERT(p.second == true);
         p = s.insert(42);
         UNIT_ASSERT(p.second == false);

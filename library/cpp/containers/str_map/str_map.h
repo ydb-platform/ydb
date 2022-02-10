@@ -5,7 +5,7 @@
 #include <util/generic/hash.h>
 #include <util/generic/buffer.h>
 #include <util/str_stl.h> // less<> and equal_to<> for const char*
-#include <utility> 
+#include <utility>
 #include <util/generic/noncopyable.h>
 
 template <class T, class HashFcn = THash<const char*>, class EqualTo = TEqualTo<const char*>, class Alloc = std::allocator<const char*>>
@@ -15,9 +15,9 @@ template <class T, class HashFcn = THash<const char*>, class EqualTo = TEqualTo<
 class segmented_string_hash;
 
 template <class Map>
-inline std::pair<typename Map::iterator, bool> 
+inline std::pair<typename Map::iterator, bool>
 pool_insert(Map* m, const char* key, const typename Map::mapped_type& data, TBuffer& pool) {
-    std::pair<typename Map::iterator, bool> ins = m->insert(typename Map::value_type(key, data)); 
+    std::pair<typename Map::iterator, bool> ins = m->insert(typename Map::value_type(key, data));
     if (ins.second) {                    // new?
         size_t buflen = strlen(key) + 1; // strlen???
         const char* old_pool = pool.Begin();
@@ -55,7 +55,7 @@ public:
         pool.Reserve(pool_size); // reserve here
     }
 
-    std::pair<iterator, bool> insert_copy(const char* key, const mapped_type& data) { 
+    std::pair<iterator, bool> insert_copy(const char* key, const mapped_type& data) {
         return ::pool_insert(this, key, data, pool);
     }
 
@@ -122,8 +122,8 @@ public:
             pool.alloc_first_seg();
     }
 
-    std::pair<iterator, bool> insert_copy(const C* key, size_t keylen, const mapped_type& data) { 
-        std::pair<iterator, bool> ins = this->insert(value_type(key, data)); 
+    std::pair<iterator, bool> insert_copy(const C* key, size_t keylen, const mapped_type& data) {
+        std::pair<iterator, bool> ins = this->insert(value_type(key, data));
         if (ins.second) // new?
             (const C*&)(*ins.first).first = pool.append(key, keylen);
         return ins;
@@ -192,7 +192,7 @@ public:
     {
     }
 
-    std::pair<iterator, bool> insert_copy(const char* key, const mapped_type& data) { 
+    std::pair<iterator, bool> insert_copy(const char* key, const mapped_type& data) {
         return Base::insert_copy(key, strlen(key) + 1, data);
     }
 

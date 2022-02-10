@@ -317,7 +317,7 @@ namespace NKikimr {
                 if (!DiskIt.Valid()) {
                     ReadFromMemory(ctx);
                 } else {
-                    std::pair<ui32, const TDiskIndexRecord *> p = DiskIt.Get(); 
+                    std::pair<ui32, const TDiskIndexRecord *> p = DiskIt.Get();
                     ui32 chunkIdx = p.first;
                     const TDiskIndexRecord *idxRec = p.second;
 
@@ -340,7 +340,7 @@ namespace NKikimr {
                 CHECK_PDISK_RESPONSE(SlCtx->VCtx, ev, ctx);
 
                 Y_VERIFY(DiskIt.Valid());
-                std::pair<ui32, const TDiskIndexRecord *> p = DiskIt.Get(); 
+                std::pair<ui32, const TDiskIndexRecord *> p = DiskIt.Get();
                 ui32 chunkIdx = p.first;
                 const TDiskIndexRecord *idxRec = p.second;
                 auto msg = ev->Get();

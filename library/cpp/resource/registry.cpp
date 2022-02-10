@@ -18,7 +18,7 @@ namespace {
         return ret;
     }
 
-    typedef std::pair<TStringBuf, TStringBuf> TDescriptor; 
+    typedef std::pair<TStringBuf, TStringBuf> TDescriptor;
 
     struct TStore: public IStore, public THashMap<TStringBuf, TDescriptor*> {
         void Store(const TStringBuf key, const TStringBuf data) override {

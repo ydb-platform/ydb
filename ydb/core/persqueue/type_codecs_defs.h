@@ -342,7 +342,7 @@ public:
     template <typename TCodec>
     const ICodec* AddCodec() {
         auto codec = Singleton<TCodec>();
-        auto inserted = Codecs.insert(std::make_pair(TCodec::Sig(), codec)); 
+        auto inserted = Codecs.insert(std::make_pair(TCodec::Sig(), codec));
         Y_VERIFY(inserted.second, "Codec signature collision (%u).", ui16(TCodec::Sig()));
         return codec;
     }

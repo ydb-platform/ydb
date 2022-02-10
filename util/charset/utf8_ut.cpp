@@ -108,19 +108,19 @@ Y_UNIT_TEST_SUITE(TUtfUtilTest) {
             UNIT_ASSERT_EXCEPTION(UTF8ToWide(text), yexception);
         }
     }
- 
+
     Y_UNIT_TEST(TestUTF8ToWideScalar) {
         TFileInput in(ArcadiaSourceRoot() + TStringBuf("/util/charset/ut/utf8/test1.txt"));
- 
+
         TString text = in.ReadAll();
         TUtf16String wtextSSE = UTF8ToWide(text);
         TUtf16String wtextScalar = TUtf16String::Uninitialized(text.size());
-        const unsigned char* textBegin = reinterpret_cast<const unsigned char*>(text.c_str()); 
-        wchar16* wtextBegin = wtextScalar.begin(); 
-        ::NDetail::UTF8ToWideImplScalar<false>(textBegin, textBegin + text.size(), wtextBegin); 
-        UNIT_ASSERT(wtextBegin == wtextScalar.begin() + wtextSSE.size()); 
-        UNIT_ASSERT(textBegin == reinterpret_cast<const unsigned char*>(text.end())); 
-        wtextScalar.remove(wtextSSE.size()); 
-        UNIT_ASSERT(wtextScalar == wtextSSE); 
-    } 
+        const unsigned char* textBegin = reinterpret_cast<const unsigned char*>(text.c_str());
+        wchar16* wtextBegin = wtextScalar.begin();
+        ::NDetail::UTF8ToWideImplScalar<false>(textBegin, textBegin + text.size(), wtextBegin);
+        UNIT_ASSERT(wtextBegin == wtextScalar.begin() + wtextSSE.size());
+        UNIT_ASSERT(textBegin == reinterpret_cast<const unsigned char*>(text.end()));
+        wtextScalar.remove(wtextSSE.size());
+        UNIT_ASSERT(wtextScalar == wtextSSE);
+    }
 }

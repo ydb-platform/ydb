@@ -199,8 +199,8 @@ namespace NKikimr {
             // for testing purposes
             TVector<NPrivate::TChainLayoutBuilder::TSeg> GetLayout() const;
             // returns (ChainsSize, SearchTableSize)
-            std::pair<ui32, ui32> GetTablesSize() const { 
-                return std::pair<ui32, ui32>(ChainDelegators.size(), SearchTable.size()); 
+            std::pair<ui32, ui32> GetTablesSize() const {
+                return std::pair<ui32, ui32>(ChainDelegators.size(), SearchTable.size());
             }
             // Builds a map of BlobSize -> THugeSlotsMap::TSlotInfo for THugeBlobCtx
             std::shared_ptr<THugeSlotsMap> BuildHugeSlotsMap() const;

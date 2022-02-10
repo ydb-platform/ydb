@@ -102,7 +102,7 @@ bool TTaskScheduler::Add(ITaskRef task, TInstant expire) {
     with_lock (Lock_) {
         if (!IsStopped_ && Workers_.size() > 0 && GetTaskCount() + 1 <= MaxTaskCount_) {
             ITaskRef newTask = new TTaskWrapper(task, TaskCounter_);
-            Queue_.insert(std::make_pair(expire, TTaskHolder(newTask))); 
+            Queue_.insert(std::make_pair(expire, TTaskHolder(newTask)));
 
             if (!Queue_.begin()->second.WaitingWorker) {
                 CondVar_.Signal();
@@ -216,7 +216,7 @@ void TTaskScheduler::WorkerFunc(TWorkerThread* thread) {
 
             if (!!toDo) {
                 if (repeat < TInstant::Max()) {
-                    Queue_.insert(std::make_pair(repeat, TTaskHolder(toDo))); 
+                    Queue_.insert(std::make_pair(repeat, TTaskHolder(toDo)));
                 }
             }
 

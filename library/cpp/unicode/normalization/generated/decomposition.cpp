@@ -1,7 +1,7 @@
 #include <library/cpp/unicode/normalization/decomposition_table.h>
 
 namespace { namespace NCannonDecompositionTableGenerated {
-    using TV = const NUnicode::NPrivate::TDecompositionTable::TStored; 
+    using TV = const NUnicode::NPrivate::TDecompositionTable::TStored;
 
     static const TV V = {
 #undef V0
@@ -42605,7 +42605,7 @@ namespace NUnicode {
 } // namespace NUnicode
 
 namespace { namespace NCompatDecompositionTableGenerated {
-    using TV = const NUnicode::NPrivate::TDecompositionTable::TStored; 
+    using TV = const NUnicode::NPrivate::TDecompositionTable::TStored;
 
     static const TV V = {
 #undef V0

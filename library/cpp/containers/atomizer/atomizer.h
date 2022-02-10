@@ -5,7 +5,7 @@
 #include <util/generic/vector.h>
 #include <util/generic/utility.h>
 
-#include <utility> 
+#include <utility>
 #include <cstdio>
 
 template <class HashFcn = THash<const char*>, class EqualTo = TEqualTo<const char*>>
@@ -45,7 +45,7 @@ public:
     ui32 string_to_atom(const char* key) {
         const char* old_begin = pool.Begin();
         const char* old_end = pool.End();
-        std::pair<iterator, bool> ins = insert_copy(key, ui32(size() + 1)); 
+        std::pair<iterator, bool> ins = insert_copy(key, ui32(size() + 1));
         if (ins.second) {                  // new?
             if (pool.Begin() != old_begin) // repoint?
                 for (TVector<const char*>::iterator ptr = order.begin(); ptr != order.end(); ++ptr)
@@ -58,7 +58,7 @@ public:
 
     ui32 perm_string_to_atom(const char* key) {
         value_type val(key, ui32(size() + 1));
-        std::pair<iterator, bool> ins = this->insert(val); 
+        std::pair<iterator, bool> ins = this->insert(val);
         if (ins.second)
             order.push_back((*ins.first).first); // == copy of 'key'
         return (ui32)(*ins.first).second;        // == size()+1
@@ -141,22 +141,22 @@ public:
     ui32 string_to_atom(const char* key, const T* atom_data = NULL) {
         const char* old_begin = pool.Begin();
         const char* old_end = pool.End();
-        std::pair<iterator, bool> ins = insert_copy(key, ui32(size() + 1)); 
+        std::pair<iterator, bool> ins = insert_copy(key, ui32(size() + 1));
         if (ins.second) {                  // new?
             if (pool.Begin() != old_begin) // repoint?
                 for (typename TOrder::iterator ptr = order.begin(); ptr != order.end(); ++ptr)
                     if (old_begin <= (*ptr).first && (*ptr).first < old_end) // from old pool?
                         (*ptr).first += pool.Begin() - old_begin;
-            order.push_back(std::pair<const char*, T>((*ins.first).first, atom_data ? *atom_data : T())); 
+            order.push_back(std::pair<const char*, T>((*ins.first).first, atom_data ? *atom_data : T()));
         }
         return (*ins.first).second;
     }
 
     ui32 perm_string_to_atom(const char* key, const T* atom_data = NULL) {
         value_type val(key, ui32(size() + 1));
-        std::pair<iterator, bool> ins = this->insert(val); 
+        std::pair<iterator, bool> ins = this->insert(val);
         if (ins.second)
-            order.push_back(std::pair<const char*, T>((*ins.first).first, atom_data ? *atom_data : T())); 
+            order.push_back(std::pair<const char*, T>((*ins.first).first, atom_data ? *atom_data : T()));
         return (*ins.first).second; // == size()+1
     }
     ui32 find_atom(const char* key) const {

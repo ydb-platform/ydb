@@ -88,10 +88,10 @@ namespace NUnicodeTable {
             return TImpl::Get(val);
         }
 
-        inline TValueRef Get(size_t key) const { 
-            return GetImpl(key); 
-        } 
- 
+        inline TValueRef Get(size_t key) const {
+            return GetImpl(key);
+        }
+
     public:
         TTable(TData data, size_t size)
             : Data(data)

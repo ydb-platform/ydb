@@ -68,7 +68,7 @@ namespace {
             {
                 TWriteGuard guard(L_);
 
-                std::pair<TCache::iterator, bool> updateResult = C_.insert(std::make_pair(TResolveInfo(res->Host, rt.Info.Port), res)); 
+                std::pair<TCache::iterator, bool> updateResult = C_.insert(std::make_pair(TResolveInfo(res->Host, rt.Info.Port), res));
                 TResolvedHost* rh = updateResult.first->second.Get();
 
                 if (updateResult.second) {

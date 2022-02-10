@@ -59,7 +59,7 @@ RECURSE(
     eccodes/tools
     eigen
     expat
-    falconn 
+    falconn
     farmhash
     farmhash/ut
     faster-rnnlm

@@ -84,7 +84,7 @@ namespace NTxMediator {
             if (TabletsToTransaction.size()) {
                 str << "TabletsToTransaction: {";
                 for (size_t i = 0; i < TabletsToTransaction.size(); ++i) {
-                    str << "{tablet# " << TabletsToTransaction[i].first; 
+                    str << "{tablet# " << TabletsToTransaction[i].first;
                     str << " txid# " << Transactions[TabletsToTransaction[i].second].TxId;
                     str << "}";
                 }

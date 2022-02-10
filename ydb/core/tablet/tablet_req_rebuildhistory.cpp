@@ -156,7 +156,7 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
 
     struct TGenerationEntry {
         TVector<TLogEntry> Body;
-        std::pair<ui32, ui32> PrevGeneration; // gen : confirmed-state 
+        std::pair<ui32, ui32> PrevGeneration; // gen : confirmed-state
         ui32 NextGeneration;
         ui32 Base;
         ui32 Cutoff;
@@ -189,9 +189,9 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
     TIntrusivePtr<TTabletStorageInfo> Info;
     const ui32 BlockedGen;
 
-    std::pair<ui32, ui32> LatestKnownStep; 
-    std::pair<ui32, ui32> Snapshot; 
-    std::pair<ui32, ui32> Confirmed; 
+    std::pair<ui32, ui32> LatestKnownStep;
+    std::pair<ui32, ui32> Snapshot;
+    std::pair<ui32, ui32> Confirmed;
 
     TMap<ui32, TGenerationEntry> LogInfo;
     TSet<TLogoBlobID> RefsToCheck;
@@ -207,8 +207,8 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
 
     TGenerationEntry& GenerationInfo(ui32 gen) {
         TGenerationEntry& x = LogInfo[gen];
-        if (gen == Snapshot.first) 
-            x.Base = Snapshot.second; 
+        if (gen == Snapshot.first)
+            x.Base = Snapshot.second;
         return x;
     }
 
@@ -266,7 +266,7 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
             TGenerationEntry &prev = GenerationInfo(prevGeneration);
             prev.NextGeneration = gen;
 
-            if (confirmed.first > 0) 
+            if (confirmed.first > 0)
                 FillGenerationEntries(confirmed, prev, zeroLogEntry);
 
             // here we could erase intermediate entries but who cares as they would be skipped?
@@ -279,20 +279,20 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
         return true;
     }
 
-    void FillGenerationEntries(std::pair<ui32, ui32> &confirmed, TGenerationEntry &prev, NKikimrTabletBase::TTabletLogEntry &logEntry) { 
-        if (confirmed.first == Snapshot.first) 
-            prev.Base = Snapshot.second; 
+    void FillGenerationEntries(std::pair<ui32, ui32> &confirmed, TGenerationEntry &prev, NKikimrTabletBase::TTabletLogEntry &logEntry) {
+        if (confirmed.first == Snapshot.first)
+            prev.Base = Snapshot.second;
 
         const ui32 tailsz = logEntry.GetZeroTailSz();
         Y_VERIFY(logEntry.ZeroTailBitmaskSize() == ((tailsz + 63) / 64));
 
-        const ui32 gensz = confirmed.second + tailsz; 
+        const ui32 gensz = confirmed.second + tailsz;
         prev.Ensure(gensz);
         prev.Cutoff = gensz; // last entry we interested in, later entries has no interest for us
 
         { // static part, mark as confirmed
             ui32 step = prev.Base;
-            for (ui32 end = confirmed.second; step <= end; ++step) { 
+            for (ui32 end = confirmed.second; step <= end; ++step) {
                 TLogEntry &x = prev.Entry(step);
                 x.BecomeConfirmed();
             }
@@ -301,7 +301,7 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
         { // tail part, mark accordingly to flags
             ui64 mask = 0;
             ui64 val = 0;
-            ui32 step = confirmed.second + 1; 
+            ui32 step = confirmed.second + 1;
             for (ui32 i = 0; i < tailsz; ++i, mask <<= 1, ++step) {
                 if (mask == 0) {
                     mask = 1;
@@ -401,7 +401,7 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
             return ReplyAndDie(NKikimrProto::ERROR, "Log entry parse failed");
         }
 
-        LatestKnownStep = std::pair<ui32, ui32>(id.Generation(), id.Step()); 
+        LatestKnownStep = std::pair<ui32, ui32>(id.Generation(), id.Step());
         Snapshot = ExpandGenStepPair(logEntry.GetSnapshot());
 
         BLOG_D("TTabletReqRebuildHistoryGraph::ProcessKeyEntry, LastBlobID: " << id.ToString()
@@ -415,13 +415,13 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
         ui32 lastStep = 0;
 
         if (isZeroStep) {
-            Confirmed = std::pair<ui32, ui32>(LatestKnownStep.first, 0); 
+            Confirmed = std::pair<ui32, ui32>(LatestKnownStep.first, 0);
 
             ProcessZeroEntry(id.Generation(), logEntry);
             lastGen = LatestKnownStep.first;
             lastStep = 0;
         } else {
-            Confirmed = std::pair<ui32, ui32>(LatestKnownStep.first, logEntry.GetConfirmed()); 
+            Confirmed = std::pair<ui32, ui32>(LatestKnownStep.first, logEntry.GetConfirmed());
 
             ProcessLogEntry(id, logEntry);
             lastGen = LatestKnownStep.first;
@@ -429,7 +429,7 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
 
             TGenerationEntry &gx = GenerationInfo(lastGen);
 
-            for (ui32 i = gx.Base, e = Confirmed.second; i <= e; ++i) 
+            for (ui32 i = gx.Base, e = Confirmed.second; i <= e; ++i)
                 gx.Entry(i).BecomeConfirmed();
         }
 
@@ -537,10 +537,10 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
     }
 
     void ScanRefsToCheck() {
-        if (LatestKnownStep.first != Confirmed.first) 
+        if (LatestKnownStep.first != Confirmed.first)
             return;
 
-        const ui32 tailGeneration = LatestKnownStep.first; 
+        const ui32 tailGeneration = LatestKnownStep.first;
         TGenerationEntry *gx = LogInfo.FindPtr(tailGeneration);
         if (!gx)
             return;
@@ -549,7 +549,7 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
 
         for (i64 pi = gx->Body.size() - 1; pi >= 0; --pi) {
             const ui32 step = gx->Base + (ui32)pi;
-            if (step <= Confirmed.second) 
+            if (step <= Confirmed.second)
                 break;
             TLogEntry &entry = gx->Entry(step);
 
@@ -601,12 +601,12 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
     void BuildHistory() {
         TAutoPtr<TEvTablet::TDependencyGraph> graph(new TEvTablet::TDependencyGraph(Snapshot));
 
-        std::pair<ui32, ui32> invalidLogEntry = std::make_pair(Max<ui32>(), Max<ui32>()); 
-        ui32 lastUnbrokenTailEntry = Confirmed.second; 
+        std::pair<ui32, ui32> invalidLogEntry = std::make_pair(Max<ui32>(), Max<ui32>());
+        ui32 lastUnbrokenTailEntry = Confirmed.second;
         for (TMap<ui32, TGenerationEntry>::iterator gen = LogInfo.begin(), egen = LogInfo.end();;) {
             const ui32 generation = gen->first;
             TGenerationEntry &gx = gen->second;
-            const bool isTailGeneration = LatestKnownStep.first == generation && Confirmed.first == generation; 
+            const bool isTailGeneration = LatestKnownStep.first == generation && Confirmed.first == generation;
             bool hasSnapshotInGeneration = (generation == 0);
 
             BLOG_D("TTabletReqRebuildHistoryGraph::BuildHistory - Process generation " << generation
@@ -614,11 +614,11 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
 
             for (ui32 i = 0, e = (ui32)gx.Body.size(); i != e; ++i) {
                 const ui32 step = gx.Base + i;
-                const bool isTail = isTailGeneration && step > Confirmed.second; 
+                const bool isTail = isTailGeneration && step > Confirmed.second;
                 ui32 generationSnapshotStep = 0;
 
                 TLogEntry &entry = gx.Entry(step);
-                std::pair<ui32, ui32> id(generation, step); 
+                std::pair<ui32, ui32> id(generation, step);
 
                 if (isTail) {
                     // Ignore unconfirmed commits on followers
@@ -683,8 +683,8 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
                                 else
                                     graph->AddEntry(id, entry.References, entry.IsSnapshot, entry.GcDiscovered, entry.GcLeft);
 
-                                if (lastUnbrokenTailEntry + 1 == id.second) 
-                                    lastUnbrokenTailEntry = id.second; 
+                                if (lastUnbrokenTailEntry + 1 == id.second)
+                                    lastUnbrokenTailEntry = id.second;
 
                                 if (entry.IsSnapshot) {
                                     generationSnapshotStep = step;
@@ -738,7 +738,7 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
             if (!hasSnapshotInGeneration && !gx.HasZeroEntry) {
                 graph->Invalidate();
                 if (invalidLogEntry.first < generation)
-                    invalidLogEntry =  std::make_pair(generation, 0); 
+                    invalidLogEntry =  std::make_pair(generation, 0);
             }
 
             if (gx.NextGeneration == 0) {
@@ -747,7 +747,7 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
                     break;
 
                 graph->Invalidate();
-                invalidLogEntry = std::make_pair(generation, Max<ui32>()); 
+                invalidLogEntry = std::make_pair(generation, Max<ui32>());
             } else {
                 gen = LogInfo.find(gx.NextGeneration);
                 Y_VERIFY(gen != egen);
@@ -758,7 +758,7 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
             LOG_ALERT(*TlsActivationContext, NKikimrServices::TABLET_MAIN, [&]() {
                 TStringBuilder sb;
                 sb << "TTabletReqRebuildHistoryGraph::BuildHistory - Graph rebuild error - no Log entry for ";
-                sb << Info->TabletID << ":" << invalidLogEntry.first << ":" << invalidLogEntry.second; 
+                sb << Info->TabletID << ":" << invalidLogEntry.first << ":" << invalidLogEntry.second;
                 return (TString)sb;
             }());
             if (IntrospectionTrace) {

@@ -9,7 +9,7 @@
 
 #include <util/generic/list.h>
 
-#include <utility> 
+#include <utility>
 
 // For historical reasons TCrawlerModule need to access
 // APIs that should be private.

@@ -45,7 +45,7 @@ RECURSE(
     unbound/build
     vowpal_wabbit
     wapiti
-    word2vec 
+    word2vec
     xdelta3
     xsltproc
     yasm

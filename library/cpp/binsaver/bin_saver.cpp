@@ -29,7 +29,7 @@ void IBinSaver::StoreObject(IObjectBase* pObject) {
                 id = pFound->second;
             else {
                 id = PtrIds->ysize() + 1;
-                PtrIds->insert(std::make_pair(pObject, id)); 
+                PtrIds->insert(std::make_pair(pObject, id));
             }
         }
         ptrId = id;

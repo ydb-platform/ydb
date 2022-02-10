@@ -3,7 +3,7 @@
 
 #include <util/generic/singleton.h>
 #include <util/generic/yexception.h>
-#include <utility> 
+#include <utility>
 
 #include <util/thread/singleton.h>
 
@@ -121,7 +121,7 @@ namespace {
     template <size_t N, class A, class B>
     class TLinePredictor {
     public:
-        using TSample = std::pair<A, B>; 
+        using TSample = std::pair<A, B>;
 
         inline TLinePredictor()
             : C_(0)

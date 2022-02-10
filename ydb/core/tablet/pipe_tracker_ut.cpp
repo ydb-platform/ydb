@@ -19,7 +19,7 @@ Y_UNIT_TEST_SUITE(TPipeTrackerTest) {
         UNIT_ASSERT(tracker.FindTx(tablet1).size() == 1);
         UNIT_ASSERT(tracker.FindTablets(txid1).size() == 1);
         UNIT_ASSERT_EQUAL(*tracker.FindTx(tablet1).begin(), txid1);
-        UNIT_ASSERT_EQUAL(tracker.FindTablets(txid1).begin()->second, tablet1); 
+        UNIT_ASSERT_EQUAL(tracker.FindTablets(txid1).begin()->second, tablet1);
         UNIT_ASSERT(tracker.IsTxAlive(txid1));
         UNIT_ASSERT(tracker.DetachTablet(txid1, tablet1));
         UNIT_ASSERT(!tracker.IsTxAlive(txid1));

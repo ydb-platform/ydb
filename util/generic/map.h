@@ -6,7 +6,7 @@
 #include <util/str_stl.h>
 #include <util/memory/alloc.h>
 
-#include <utility> 
+#include <utility>
 #include <initializer_list>
 #include <map>
 #include <memory>

@@ -7,7 +7,7 @@
 
 #include <util/generic/hash.h>
 #include <util/generic/ptr.h>
-#include <utility> 
+#include <utility>
 
 namespace NKiwiAggr {
     template <class TMyHistogram>
@@ -51,7 +51,7 @@ namespace NKiwiAggr {
         void Add(ui64 id, double value, double weight) {
             THistogramsMap::const_iterator it = Histograms.find(id);
             if (it == Histograms.end()) {
-                it = Histograms.insert(std::make_pair(id, IHistogramPtr(new TMyHistogram(Intervals, id)))).first; 
+                it = Histograms.insert(std::make_pair(id, IHistogramPtr(new TMyHistogram(Intervals, id)))).first;
             }
             it->second->Add(value, weight);
         }

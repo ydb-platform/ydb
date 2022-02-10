@@ -801,7 +801,7 @@ namespace NKikimr {
 
         TString GenerateHtmlStateForSkeletonFrontActor(const TActorContext &ctx) const {
             constexpr ui32 threshold = 10000u;
-            std::pair<ui32, ui32> actorQueues = ctx.CountMailboxEvents(threshold); 
+            std::pair<ui32, ui32> actorQueues = ctx.CountMailboxEvents(threshold);
 
             TStringStream str;
             HTML(str) {

@@ -1919,7 +1919,7 @@ namespace NKikimr {
 
         void RenderState(IOutputStream &str, const TActorContext &ctx) {
             constexpr ui32 threshold = 10000u;
-            std::pair<ui32, ui32> actorQueues = ctx.CountMailboxEvents(threshold); 
+            std::pair<ui32, ui32> actorQueues = ctx.CountMailboxEvents(threshold);
 
             HTML(str) {
                 DIV_CLASS("panel panel-info") {

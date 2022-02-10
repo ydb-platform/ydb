@@ -47,7 +47,7 @@ public:
         auto it = MapById.find(typeId);
         if (it == MapById.end())
             return nullptr;
-        return it->second; 
+        return it->second;
     }
 
     const ITypeMetadata* GetKnownType(TTypeId typeId) const {
@@ -64,7 +64,7 @@ public:
         auto it = MapByName.find(name);
         if (it == MapByName.end())
             return nullptr;
-        return it->second; 
+        return it->second;
     }
 
     TMapById::const_iterator begin() const {

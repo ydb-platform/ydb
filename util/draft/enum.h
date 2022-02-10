@@ -6,7 +6,7 @@
 #include <util/stream/str.h>
 #include <util/string/cast.h>
 #include <util/string/split.h>
-#include <utility> 
+#include <utility>
 
 class TEnumNotFoundException: public yexception {
 };
@@ -20,7 +20,7 @@ class TEnumNotFoundException: public yexception {
 #define PrintEnumItems(entries) PrintEnumItemsImpl(entries, Y_ARRAY_SIZE(entries))
 
 template <class K1, class K2, class V>
-const V* FindEnumFromStringImpl(K1 key, const std::pair<K2, V>* entries, size_t arraySize) { 
+const V* FindEnumFromStringImpl(K1 key, const std::pair<K2, V>* entries, size_t arraySize) {
     for (size_t i = 0; i < arraySize; i++)
         if (entries[i].first == key)
             return &entries[i].second;
@@ -29,7 +29,7 @@ const V* FindEnumFromStringImpl(K1 key, const std::pair<K2, V>* entries, size_t 
 
 // special version for const char*
 template <class V>
-const V* FindEnumFromStringImpl(const char* key, const std::pair<const char*, V>* entries, size_t arraySize) { 
+const V* FindEnumFromStringImpl(const char* key, const std::pair<const char*, V>* entries, size_t arraySize) {
     for (size_t i = 0; i < arraySize; i++)
         if (entries[i].first && key && !strcmp(entries[i].first, key))
             return &entries[i].second;
@@ -56,7 +56,7 @@ TString PrintEnumItemsImpl(const std::pair<const char*, V>* entries, size_t arra
 }
 
 template <class K1, class K2, class V>
-const V* EnumFromStringImpl(K1 key, const std::pair<K2, V>* entries, size_t arraySize) { 
+const V* EnumFromStringImpl(K1 key, const std::pair<K2, V>* entries, size_t arraySize) {
     const V* res = FindEnumFromStringImpl(key, entries, arraySize);
     if (res)
         return res;
@@ -65,7 +65,7 @@ const V* EnumFromStringImpl(K1 key, const std::pair<K2, V>* entries, size_t arra
 }
 
 template <class K, class V>
-const K* EnumToStringImpl(V value, const std::pair<K, V>* entries, size_t arraySize) { 
+const K* EnumToStringImpl(V value, const std::pair<K, V>* entries, size_t arraySize) {
     for (size_t i = 0; i < arraySize; i++)
         if (entries[i].second == value)
             return &entries[i].first;
@@ -105,7 +105,7 @@ inline void SetEnumFlags(const std::pair<const char*, E> (&str2Enum)[N], TString
 }
 
 template <class E, size_t B>
-inline void SetEnumFlags(const std::pair<const char*, E>* str2Enum, TStringBuf optSpec, 
+inline void SetEnumFlags(const std::pair<const char*, E>* str2Enum, TStringBuf optSpec,
                          std::bitset<B>& flags, const size_t size,
                          bool allIfEmpty = true) {
     if (optSpec.empty()) {

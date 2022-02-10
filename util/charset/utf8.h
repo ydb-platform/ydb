@@ -16,24 +16,24 @@ inline unsigned char UTF8LeadByteMask(size_t utf8_rune_len) {
 }
 
 inline size_t UTF8RuneLen(const unsigned char lead_byte) {
-    //b0XXXXXXX 
-    if ((lead_byte & 0x80) == 0x00) { 
-        return 1; 
-    } 
-    //b110XXXXX 
-    if ((lead_byte & 0xe0) == 0xc0) { 
-        return 2; 
-    } 
-    //b1110XXXX 
-    if ((lead_byte & 0xf0) == 0xe0) { 
-        return 3; 
-    } 
-    //b11110XXX 
-    if ((lead_byte & 0xf8) == 0xf0) { 
-        return 4; 
-    } 
-    //b10XXXXXX 
-    return 0; 
+    //b0XXXXXXX
+    if ((lead_byte & 0x80) == 0x00) {
+        return 1;
+    }
+    //b110XXXXX
+    if ((lead_byte & 0xe0) == 0xc0) {
+        return 2;
+    }
+    //b1110XXXX
+    if ((lead_byte & 0xf0) == 0xe0) {
+        return 3;
+    }
+    //b11110XXX
+    if ((lead_byte & 0xf8) == 0xf0) {
+        return 4;
+    }
+    //b10XXXXXX
+    return 0;
 }
 
 inline size_t UTF8RuneLenByUCS(wchar32 rune) {

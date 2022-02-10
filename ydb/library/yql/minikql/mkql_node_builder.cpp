@@ -153,20 +153,20 @@ TStructLiteral* TStructLiteralBuilder::Build() {
 
     TVector<std::pair<TStringBuf, ui32>> sortedIndicies(Members.size());
     for (ui32 i = 0, e = Members.size(); i < e; ++i) {
-        sortedIndicies[i] = std::make_pair(Members[i].Name, i); 
+        sortedIndicies[i] = std::make_pair(Members[i].Name, i);
     }
 
     Sort(sortedIndicies.begin(), sortedIndicies.end(),
-        [](const std::pair<TStringBuf, ui32>& x, const std::pair<TStringBuf, ui32>& y) { 
-            return x.first < y.first; 
+        [](const std::pair<TStringBuf, ui32>& x, const std::pair<TStringBuf, ui32>& y) {
+            return x.first < y.first;
     });
 
     TVector<TStructMember> sortedMembers(Members.size());
     TVector<TRuntimeNode> sortedValues(Members.size());
 
     for (ui32 i = 0, e = Members.size(); i < e; ++i) {
-        sortedMembers[i] = Members[sortedIndicies[i].second]; 
-        sortedValues[i] = Values[sortedIndicies[i].second]; 
+        sortedMembers[i] = Members[sortedIndicies[i].second];
+        sortedValues[i] = Values[sortedIndicies[i].second];
     }
 
     auto type = TStructType::Create(sortedMembers.size(), sortedMembers.data(), *Env);
@@ -208,7 +208,7 @@ void TDictLiteralBuilder::Reserve(ui32 size) {
 }
 
 TDictLiteralBuilder& TDictLiteralBuilder::Add(TRuntimeNode key, TRuntimeNode payload) {
-    Items.push_back(std::make_pair(key, payload)); 
+    Items.push_back(std::make_pair(key, payload));
     return *this;
 }
 

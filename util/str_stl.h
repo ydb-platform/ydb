@@ -9,7 +9,7 @@
 
 #include <functional>
 #include <typeindex>
-#include <utility> 
+#include <utility>
 
 namespace std {
     template <>

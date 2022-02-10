@@ -2,7 +2,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/stream/output.h>
-#include <utility> 
+#include <utility>
 
 #include <util/charset/wide.h>
 #include <util/generic/algorithm.h>
@@ -1186,8 +1186,8 @@ void TCompactTrieTest::TestTrieWithContainers<std::pair<TUtf16String, TVector<i6
     TCompactTrie<wchar16, TContainer> trie(TBlob::FromFileSingleThreaded(fileName));
     for (size_t i = 0; i < keys.size(); i++) {
         TContainer value = trie.Get(keys[i]);
-        CheckEquality<TContainer::first_type>(value.first, sampleData[i].first); 
-        CheckEquality<TContainer::second_type>(value.second, sampleData[i].second); 
+        CheckEquality<TContainer::first_type>(value.first, sampleData[i].first);
+        CheckEquality<TContainer::second_type>(value.second, sampleData[i].second);
     }
 
     unlink(fileName.data());

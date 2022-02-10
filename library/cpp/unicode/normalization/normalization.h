@@ -9,7 +9,7 @@
 #include <util/generic/algorithm.h>
 #include <util/generic/singleton.h>
 #include <util/generic/noncopyable.h>
-#include <utility> 
+#include <utility>
 
 namespace NUnicode {
     enum ENormalization {
@@ -95,7 +95,7 @@ namespace NUnicode {
             class TKey: public std::pair<wchar32, wchar32> {
             public:
                 inline TKey(wchar32 a, wchar32 b)
-                    : std::pair<wchar32, wchar32>(a, b) 
+                    : std::pair<wchar32, wchar32>(a, b)
                 {
                 }
 
@@ -126,7 +126,7 @@ namespace NUnicode {
             }
         };
 
-        typedef std::pair<wchar32, TCombining> TSymbol; 
+        typedef std::pair<wchar32, TCombining> TSymbol;
         typedef TVector<TSymbol> TBuffer;
 
         template <bool doCompose>

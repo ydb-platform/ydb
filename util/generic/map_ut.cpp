@@ -51,14 +51,14 @@ Y_UNIT_TEST_SUITE(TYMapTest) {
 
         UNIT_ASSERT(m.count('z') == 1);
 
-        std::pair<typename maptype::iterator, bool> p = m.insert(std::pair<const char, int>('c', 100)); 
+        std::pair<typename maptype::iterator, bool> p = m.insert(std::pair<const char, int>('c', 100));
 
         UNIT_ASSERT(p.second);
         UNIT_ASSERT(p.first != m.end());
         UNIT_ASSERT((*p.first).first == 'c');
         UNIT_ASSERT((*p.first).second == 100);
 
-        p = m.insert(std::pair<const char, int>('c', 100)); 
+        p = m.insert(std::pair<const char, int>('c', 100));
 
         UNIT_ASSERT(!p.second); // already existing pair
         UNIT_ASSERT(p.first != m.end());
@@ -72,13 +72,13 @@ Y_UNIT_TEST_SUITE(TYMapTest) {
 
         UNIT_ASSERT(m.count('X') == 0);
 
-        m.insert(std::pair<const char, int>('X', 10)); // Standard way. 
+        m.insert(std::pair<const char, int>('X', 10)); // Standard way.
         UNIT_ASSERT(m.count('X') == 1);
 
-        m.insert(std::pair<const char, int>('X', 20)); // jbuck: standard way 
+        m.insert(std::pair<const char, int>('X', 20)); // jbuck: standard way
         UNIT_ASSERT(m.count('X') == 2);
 
-        m.insert(std::pair<const char, int>('Y', 32)); // jbuck: standard way 
+        m.insert(std::pair<const char, int>('Y', 32)); // jbuck: standard way
         typename mmap::iterator i = m.find('X');       // Find first match.
         ++i;
         UNIT_ASSERT((*i).first == 'X');
@@ -94,7 +94,7 @@ Y_UNIT_TEST_SUITE(TYMapTest) {
     }
 
     Y_UNIT_TEST(TestMMap2) {
-        using pair_type = std::pair<const int, char>; 
+        using pair_type = std::pair<const int, char>;
 
         pair_type p1(3, 'c');
         pair_type p2(6, 'f');
@@ -194,7 +194,7 @@ Y_UNIT_TEST_SUITE(TYMapTest) {
             maptype m;
             m['x'] = 10;
 
-            std::pair<maptype::iterator, maptype::iterator> ret; 
+            std::pair<maptype::iterator, maptype::iterator> ret;
             ret = m.equal_range('x');
             UNIT_ASSERT(ret.first != ret.second);
             UNIT_ASSERT((*(ret.first)).first == 'x');
@@ -212,7 +212,7 @@ Y_UNIT_TEST_SUITE(TYMapTest) {
                 i = m.upper_bound('x');
                 UNIT_ASSERT(i == m.end());
 
-                std::pair<maptype::iterator, maptype::iterator> ret; 
+                std::pair<maptype::iterator, maptype::iterator> ret;
                 ret = m.equal_range('x');
                 UNIT_ASSERT(ret.first == ret.second);
                 UNIT_ASSERT(ret.first == m.end());
@@ -220,7 +220,7 @@ Y_UNIT_TEST_SUITE(TYMapTest) {
 
             {
                 const maptype m;
-                std::pair<maptype::const_iterator, maptype::const_iterator> ret; 
+                std::pair<maptype::const_iterator, maptype::const_iterator> ret;
                 ret = m.equal_range('x');
                 UNIT_ASSERT(ret.first == ret.second);
                 UNIT_ASSERT(ret.first == m.end());
@@ -357,7 +357,7 @@ Y_UNIT_TEST_SUITE(TYMapTest) {
             UNIT_ASSERT(ccont.find(2) != ccont.end());
             UNIT_ASSERT(ccont.lower_bound(2) != ccont.end());
             UNIT_ASSERT(ccont.upper_bound(2) != ccont.end());
-            UNIT_ASSERT(ccont.equal_range(2) != std::make_pair(ccont.end(), ccont.end())); 
+            UNIT_ASSERT(ccont.equal_range(2) != std::make_pair(ccont.end(), ccont.end()));
         }
 
         {
@@ -430,9 +430,9 @@ Y_UNIT_TEST_SUITE(TYMapTest) {
             Container c(direct);
             c = Container(inverse);
 
-            c.insert(std::make_pair(TKey(1), 101)); 
-            c.insert(std::make_pair(TKey(2), 102)); 
-            c.insert(std::make_pair(TKey(3), 103)); 
+            c.insert(std::make_pair(TKey(1), 101));
+            c.insert(std::make_pair(TKey(2), 102));
+            c.insert(std::make_pair(TKey(3), 103));
 
             TVector<int> values;
             for (auto& i : c) {

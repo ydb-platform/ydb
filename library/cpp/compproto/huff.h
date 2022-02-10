@@ -5,7 +5,7 @@
 #include <util/generic/ptr.h>
 #include <util/generic/vector.h>
 #include <util/generic/algorithm.h>
-#include <utility> 
+#include <utility>
 
 #include <queue>
 

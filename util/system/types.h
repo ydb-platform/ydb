@@ -11,9 +11,9 @@ typedef int16_t i16;
 typedef uint8_t ui8;
 typedef uint16_t ui16;
 
-typedef int yssize_t; 
-#define PRIYSZT "d" 
- 
+typedef int yssize_t;
+#define PRIYSZT "d"
+
 #if defined(_darwin_) && defined(_32_)
 typedef unsigned long ui32;
 typedef long i32;

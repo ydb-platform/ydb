@@ -231,17 +231,17 @@ namespace NKikimr {
                 return Header.LastLsn;
             }
 
-            std::pair<const void *, size_t> GetFirstRaw() const { 
-                return std::pair<const void *, size_t>(&Header, sizeof(Header)); 
+            std::pair<const void *, size_t> GetFirstRaw() const {
+                return std::pair<const void *, size_t>(&Header, sizeof(Header));
             }
 
-            std::pair<const void *, size_t> GetSecondRaw() const { 
-                return std::pair<const void *, size_t>(Ptr->Data(), Header.FreePos); 
+            std::pair<const void *, size_t> GetSecondRaw() const {
+                return std::pair<const void *, size_t>(Ptr->Data(), Header.FreePos);
             }
 
-            std::pair<const void *, size_t> GetThirdRaw(ui32 pageSize) const { 
+            std::pair<const void *, size_t> GetThirdRaw(ui32 pageSize) const {
                 size_t s = pageSize - Header.FreePos - sizeof(Header);
-                return std::pair<const void *, size_t>(nullptr, s); 
+                return std::pair<const void *, size_t>(nullptr, s);
             }
 
             TString ToVerboseString() const;

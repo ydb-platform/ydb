@@ -4,7 +4,7 @@
 #include "hash.h"
 
 #include <initializer_list>
-#include <utility> 
+#include <utility>
 
 #undef value_type
 
@@ -156,9 +156,9 @@ public:
         rep.insert_unique(f, l);
     }
 
-    std::pair<iterator, bool> insert(const value_type& obj) { 
-        std::pair<mutable_iterator, bool> p = rep.insert_unique(obj); 
-        return std::pair<iterator, bool>(p.first, p.second); 
+    std::pair<iterator, bool> insert(const value_type& obj) {
+        std::pair<mutable_iterator, bool> p = rep.insert_unique(obj);
+        return std::pair<iterator, bool>(p.first, p.second);
     }
     template <typename... Args>
     std::pair<iterator, bool> emplace(Args&&... args) {
@@ -167,13 +167,13 @@ public:
     }
 
     iterator insert(const_iterator, const value_type& obj) { // insert_hint
-        std::pair<mutable_iterator, bool> p = rep.insert_unique(obj); 
+        std::pair<mutable_iterator, bool> p = rep.insert_unique(obj);
         return p.first;
     }
 
-    std::pair<iterator, bool> insert_noresize(const value_type& obj) { 
-        std::pair<mutable_iterator, bool> p = rep.insert_unique_noresize(obj); 
-        return std::pair<iterator, bool>(p.first, p.second); 
+    std::pair<iterator, bool> insert_noresize(const value_type& obj) {
+        std::pair<mutable_iterator, bool> p = rep.insert_unique_noresize(obj);
+        return std::pair<iterator, bool>(p.first, p.second);
     }
     template <typename... Args>
     std::pair<iterator, bool> emplace_noresize(Args&&... args) {
@@ -214,7 +214,7 @@ public:
     }
 
     template <class TKey>
-    std::pair<iterator, iterator> equal_range(const TKey& key) const { 
+    std::pair<iterator, iterator> equal_range(const TKey& key) const {
         return rep.equal_range(key);
     }
 
@@ -422,7 +422,7 @@ public:
     }
 
     template <class TKey>
-    std::pair<iterator, iterator> equal_range(const TKey& key) const { 
+    std::pair<iterator, iterator> equal_range(const TKey& key) const {
         return rep.equal_range(key);
     }
 

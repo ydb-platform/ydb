@@ -6,7 +6,7 @@
 
 #include <util/generic/ptr.h>
 #include <util/generic/vector.h>
-#include <utility> 
+#include <utility>
 
 namespace NKiwiAggr {
     class TFixedBinHistogram: private TNonCopyable, public IHistogram {
@@ -14,7 +14,7 @@ namespace NKiwiAggr {
         static const size_t DEFAULT_TRAINING_SET_SIZE = 10000;
         static const size_t DEFAULT_INTERVALS = 100;
 
-        typedef std::pair<double, double> TWeightedValue; // value, weight 
+        typedef std::pair<double, double> TWeightedValue; // value, weight
         THolder<TVector<TWeightedValue>> TrainingSet;
         size_t TrainingSetSize;
 

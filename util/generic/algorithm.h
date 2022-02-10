@@ -9,7 +9,7 @@
 #include <numeric>
 #include <algorithm>
 #include <iterator>
-#include <utility> 
+#include <utility>
 
 namespace NPrivate {
     template <class I, class F, class P>
@@ -656,12 +656,12 @@ static inline auto CountIf(const C& c, P pred) {
 }
 
 template <class I1, class I2>
-static inline std::pair<I1, I2> Mismatch(I1 b1, I1 e1, I2 b2) { 
+static inline std::pair<I1, I2> Mismatch(I1 b1, I1 e1, I2 b2) {
     return std::mismatch(b1, e1, b2);
 }
 
 template <class I1, class I2, class P>
-static inline std::pair<I1, I2> Mismatch(I1 b1, I1 e1, I2 b2, P p) { 
+static inline std::pair<I1, I2> Mismatch(I1 b1, I1 e1, I2 b2, P p) {
     return std::mismatch(b1, e1, b2, p);
 }
 
@@ -677,21 +677,21 @@ static inline void NthElement(RandomIterator begin, RandomIterator nth, RandomIt
 
 // no standard implementation until C++14
 template <class I1, class I2>
-static inline std::pair<I1, I2> Mismatch(I1 b1, I1 e1, I2 b2, I2 e2) { 
+static inline std::pair<I1, I2> Mismatch(I1 b1, I1 e1, I2 b2, I2 e2) {
     while (b1 != e1 && b2 != e2 && *b1 == *b2) {
         ++b1;
         ++b2;
     }
-    return std::make_pair(b1, b2); 
+    return std::make_pair(b1, b2);
 }
 
 template <class I1, class I2, class P>
-static inline std::pair<I1, I2> Mismatch(I1 b1, I1 e1, I2 b2, I2 e2, P p) { 
+static inline std::pair<I1, I2> Mismatch(I1 b1, I1 e1, I2 b2, I2 e2, P p) {
     while (b1 != e1 && b2 != e2 && p(*b1, *b2)) {
         ++b1;
         ++b2;
     }
-    return std::make_pair(b1, b2); 
+    return std::make_pair(b1, b2);
 }
 
 template <class It, class Val>
@@ -705,12 +705,12 @@ static inline bool BinarySearch(It begin, It end, const Val& val, Comp comp) {
 }
 
 template <class It, class Val>
-static inline std::pair<It, It> EqualRange(It begin, It end, const Val& val) { 
+static inline std::pair<It, It> EqualRange(It begin, It end, const Val& val) {
     return std::equal_range(begin, end, val);
 }
 
 template <class It, class Val, class Comp>
-static inline std::pair<It, It> EqualRange(It begin, It end, const Val& val, Comp comp) { 
+static inline std::pair<It, It> EqualRange(It begin, It end, const Val& val, Comp comp) {
     return std::equal_range(begin, end, val, comp);
 }
 
@@ -745,12 +745,12 @@ TO CopyIf(TI begin, TI end, TO to, P pred) {
 }
 
 template <class T>
-std::pair<const T&, const T&> MinMax(const T& first, const T& second) { 
+std::pair<const T&, const T&> MinMax(const T& first, const T& second) {
     return std::minmax(first, second);
 }
 
 template <class It>
-std::pair<It, It> MinMaxElement(It first, It last) { 
+std::pair<It, It> MinMaxElement(It first, It last) {
     return std::minmax_element(first, last);
 }
 

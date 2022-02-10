@@ -6,7 +6,7 @@
 #include <util/system/yassert.h>
 
 #include <type_traits>
-#include <utility> 
+#include <utility>
 
 namespace NLevenshtein {
     enum EEditMoveType {
@@ -84,7 +84,7 @@ namespace NLevenshtein {
         for (int i = 1; i <= l1; i++) {
             for (int j = 1; j <= l2; j++) {
                 if (str1[i - 1] == str2[j - 1]) {
-                    ma[i][j] = std::make_pair(ma[i - 1][j - 1].first, EMT_PRESERVE); 
+                    ma[i][j] = std::make_pair(ma[i - 1][j - 1].first, EMT_PRESERVE);
                 } else {
                     const TWeightType replaceWeight = replaceWeigher(str1[i - 1], str2[j - 1]);
                     Y_ASSERT(replaceWeight >= 0);

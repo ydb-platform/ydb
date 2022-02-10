@@ -235,7 +235,7 @@ void TBuiltinFunctionRegistry::CalculateMetadataEtag() {
     }
 
     std::sort(operations.begin(), operations.end(), [](const TFunctionPair& x, const TFunctionPair& y) {
-        return x.first < y.first; 
+        return x.first < y.first;
     });
 
     ui64 hash = 0;
@@ -244,7 +244,7 @@ void TBuiltinFunctionRegistry::CalculateMetadataEtag() {
         const ui64 nameLength = op.first.size();
         hash = MurmurHash<ui64>(&nameLength, sizeof(nameLength), hash);
         hash = MurmurHash<ui64>(op.first.data(), op.first.size(), hash);
-        const auto& descriptions = *op.second; 
+        const auto& descriptions = *op.second;
         const ui64 descriptionCount = descriptions.size();
         hash = MurmurHash<ui64>(&descriptionCount, sizeof(descriptionCount), hash);
         for (const auto& description : descriptions) {

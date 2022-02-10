@@ -735,7 +735,7 @@ namespace NActors {
         }
 
         node->LocalServicesActors[actorId] = cmd.Actor;
-        node->LocalServices.push_back(std::make_pair(actorId, cmd)); 
+        node->LocalServices.push_back(std::make_pair(actorId, cmd));
     }
 
     void TTestActorRuntimeBase::InitNodes() {
@@ -1082,7 +1082,7 @@ namespace NActors {
                     auto mboxId = TEventMailboxId(edgeActor.NodeId(), edgeActor.Hint());
                     auto storeIt = Store.find(mboxId);
                     Y_VERIFY(storeIt == Store.end());
-                    storeIt = Store.insert(std::make_pair(mboxId, new TEventMailBox)).first; 
+                    storeIt = Store.insert(std::make_pair(mboxId, new TEventMailBox)).first;
                     storeIt->second->PushFront(events);
                     if (!events.empty())
                         HasEvents = true;
@@ -1113,10 +1113,10 @@ namespace NActors {
         for (auto mailboxId : options.OnlyMailboxes) {
             auto it = Mailboxes.find(mailboxId);
             if (it == Mailboxes.end()) {
-                it = Mailboxes.insert(std::make_pair(mailboxId, new TEventMailBox())).first; 
+                it = Mailboxes.insert(std::make_pair(mailboxId, new TEventMailBox())).first;
             }
 
-            restrictedMailboxes.insert(std::make_pair(mailboxId, it->second)); 
+            restrictedMailboxes.insert(std::make_pair(mailboxId, it->second));
         }
 
         TAutoPtr<TTempEdgeEventsCaptor> tempEdgeEventsCaptor;
@@ -1720,7 +1720,7 @@ namespace NActors {
         auto mboxId = TEventMailboxId(nodeId, hint);
         auto it = Mailboxes.find(mboxId);
         if (it == Mailboxes.end()) {
-            it = Mailboxes.insert(std::make_pair(mboxId, new TEventMailBox())).first; 
+            it = Mailboxes.insert(std::make_pair(mboxId, new TEventMailBox())).first;
         }
 
         return *it->second;

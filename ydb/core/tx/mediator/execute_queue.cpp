@@ -90,7 +90,7 @@ namespace NTxMediator {
                     const ui64 tttsize = coord.TabletsToTransaction.size();
                     while (readPos < tttsize) {
                         const std::pair<TTabletId, std::size_t> &x = coord.TabletsToTransaction[readPos];
-                        if (x.first != activeTablet) 
+                        if (x.first != activeTablet)
                             break;
 
                         currentTx.emplace_back(coord.Transactions[x.second]);
@@ -99,8 +99,8 @@ namespace NTxMediator {
 
                     if (readPos < tttsize) {
                         const std::pair<TTabletId, std::size_t> &x = coord.TabletsToTransaction[readPos];
-                        if (x.first < lookupTablet) 
-                            lookupTablet = x.first; 
+                        if (x.first < lookupTablet)
+                            lookupTablet = x.first;
                     }
                 }
 
@@ -135,10 +135,10 @@ namespace NTxMediator {
             TTabletId activeTablet = 0;
 
             for (TVector<std::pair<TTabletId, std::size_t>>::const_iterator it = step->TabletsToTransaction.begin(), end = step->TabletsToTransaction.end(); it != end; ++it) {
-                if (activeTablet != it->first) { 
+                if (activeTablet != it->first) {
                     if (activeTablet)
                         SendStepToBucket<TEvTxMediator::TEvOoOTabletStep>(activeTablet, step->Step, currentTx, ctx);
-                    activeTablet = it->first; 
+                    activeTablet = it->first;
                     currentTx.clear();
                 }
 

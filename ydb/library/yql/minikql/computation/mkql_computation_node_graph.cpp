@@ -91,8 +91,8 @@ private:
 
     void Visit(TDictLiteral& node) override {
         for (ui32 i = 0; i < node.GetItemsCount(); ++i) {
-            AddNode(node.GetItem(i).first.GetNode()); 
-            AddNode(node.GetItem(i).second.GetNode()); 
+            AddNode(node.GetItem(i).first.GetNode());
+            AddNode(node.GetItem(i).second.GetNode());
         }
     }
 
@@ -396,7 +396,7 @@ private:
         items.reserve(node.GetItemsCount());
         for (ui32 i = 0, e = node.GetItemsCount(); i < e; ++i) {
             auto item = node.GetItem(i);
-            items.push_back(std::make_pair(GetComputationNode(item.first.GetNode()), GetComputationNode(item.second.GetNode()))); 
+            items.push_back(std::make_pair(GetComputationNode(item.first.GetNode()), GetComputationNode(item.second.GetNode())));
         }
 
         AddNode(node, NodeFactory->CreateDictNode(std::move(items), types, isTuple, encoded ? keyType : nullptr));

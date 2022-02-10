@@ -395,26 +395,26 @@ Y_UNIT_TEST_SUITE(CompProtoTestExtended) {
             for (size_t i = 0; i < params.DataSize; ++i) {
                 meta.BeginElement(i, functor);
                 TMetaInfo<TMeta>& first = meta.BeginRepeated(2, functor);
-                data[i].first.resize(params.ValueArraySize); 
+                data[i].first.resize(params.ValueArraySize);
                 for (ui32 j = 0; j < params.ValueArraySize; j++) {
                     first.BeginElement(j, functor);
 
                     ui32 val = PseudoRandom(42 * 42 * 42);
                     first.SetScalar(0, val, functor);
-                    data[i].first[j] = val; 
+                    data[i].first[j] = val;
 
                     first.EndElement(functor);
                 }
                 first.EndRepeated(functor);
 
                 TMetaInfo<TMeta>& second = meta.BeginRepeated(3, functor);
-                data[i].second.resize(params.ValueArraySize); 
+                data[i].second.resize(params.ValueArraySize);
                 for (ui32 j = 0; j < params.ValueArraySize; j++) {
                     second.BeginElement(j, functor);
 
                     ui32 val = PseudoRandom(42 * 42 * 42);
                     second.SetScalar(0, val, functor);
-                    data[i].second[j] = val; 
+                    data[i].second[j] = val;
 
                     second.EndElement(functor);
                 }
@@ -493,10 +493,10 @@ Y_UNIT_TEST_SUITE(CompProtoTestExtended) {
                     State = InDataElemBeforeSecond;
                     break;
                 case InFirst:
-                    UNIT_ASSERT(element < data[DataInd].first.size()); 
+                    UNIT_ASSERT(element < data[DataInd].first.size());
                     break;
                 case InSecond:
-                    UNIT_ASSERT(element < data[DataInd].second.size()); 
+                    UNIT_ASSERT(element < data[DataInd].second.size());
                     break;
                 default:
                     Cerr << (ui32)State << Endl;
@@ -523,10 +523,10 @@ Y_UNIT_TEST_SUITE(CompProtoTestExtended) {
             UNIT_ASSERT_EQUAL(index, 0);
             switch (State) {
                 case InFirst:
-                    UNIT_ASSERT_EQUAL(val, data[DataInd].first[ArrayInd]); 
+                    UNIT_ASSERT_EQUAL(val, data[DataInd].first[ArrayInd]);
                     break;
                 case InSecond:
-                    UNIT_ASSERT_EQUAL(val, data[DataInd].second[ArrayInd]); 
+                    UNIT_ASSERT_EQUAL(val, data[DataInd].second[ArrayInd]);
                     break;
                 default:
                     UNIT_ASSERT(0);

@@ -469,7 +469,7 @@ public:
         Index = AtomicIncrement(LastIndex);
         if (PartsPtr) {
             for (size_t i = 0; i < PartsPtr->Size(); ++i) {
-                RemainingSize += (*PartsPtr)[i].second; 
+                RemainingSize += (*PartsPtr)[i].second;
             }
         }
         TotalSize = RemainingSize;

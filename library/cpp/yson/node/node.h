@@ -128,9 +128,9 @@ public:
     // Returns true if TNode is neither Null, nor Undefined
     bool HasValue() const;
 
-    template<typename T> 
-    bool IsOfType() const noexcept; 
- 
+    template<typename T>
+    bool IsOfType() const noexcept;
+
     // Int64, Uint64, Double, or Bool
     bool IsArithmetic() const;
 
@@ -161,7 +161,7 @@ public:
 
     // integer types cast
     // makes overflow checks
-    template<typename T> 
+    template<typename T>
     T IntCast() const;
 
     // integers <-> double <-> string
@@ -170,11 +170,11 @@ public:
     T ConvertTo() const;
 
     template<typename T>
-    T& As(); 
- 
-    template<typename T> 
-    const T& As() const; 
- 
+    T& As();
+
+    template<typename T>
+    const T& As() const;
+
     static TNode CreateList();
     static TNode CreateList(TListType list);
     static TNode CreateMap();
@@ -294,7 +294,7 @@ inline bool TNode::IsArithmetic() const {
     return IsInt64() || IsUint64() || IsDouble() || IsBool();
 }
 
-template<typename T> 
+template<typename T>
 inline T TNode::IntCast() const {
     if constexpr (std::is_integral<T>::value) {
         try {
@@ -494,20 +494,20 @@ inline T& TNode::ChildAs(size_t index) {
 }
 
 template<typename T>
-inline bool TNode::IsOfType() const noexcept { 
+inline bool TNode::IsOfType() const noexcept {
     return std::holds_alternative<T>(Value_);
-} 
- 
-template<typename T> 
-inline T& TNode::As() { 
+}
+
+template<typename T>
+inline T& TNode::As() {
     return std::get<T>(Value_);
-} 
- 
-template<typename T> 
-inline const T& TNode::As() const { 
+}
+
+template<typename T>
+inline const T& TNode::As() const {
     return std::get<T>(Value_);
-} 
- 
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 namespace NNodeCmp {

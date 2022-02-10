@@ -9,7 +9,7 @@ class TBlob;
 
 class IModelsArchiveReader {
 public:
-    virtual ~IModelsArchiveReader() = default; 
+    virtual ~IModelsArchiveReader() = default;
     virtual size_t Count() const = 0;
     virtual TString KeyByIndex(size_t n) const = 0;
     virtual bool Has(const TStringBuf key) const = 0;

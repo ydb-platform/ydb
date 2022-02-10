@@ -400,22 +400,22 @@ inline bool IsPrint(wchar32 ch) {
     return IsAlnum(ch) || IsPunct(ch) || IsSymbol(ch) || IsBlank(ch);
 }
 
-inline bool IsRomanDigit(wchar32 ch) { 
-    if (NUnicode::CharHasType(ch, SHIFT(Nl_LETTER)) && 0x2160 <= ch && ch <= 0x2188) 
-        return true; 
-    if (ch < 127) { 
-        switch (static_cast<char>(::ToLower(ch))) { 
-            case 'i': 
-            case 'v': 
-            case 'x': 
-            case 'l': 
-            case 'c': 
-            case 'd': 
-            case 'm': 
-                return true; 
-        } 
-    } 
-    return false; 
-} 
- 
+inline bool IsRomanDigit(wchar32 ch) {
+    if (NUnicode::CharHasType(ch, SHIFT(Nl_LETTER)) && 0x2160 <= ch && ch <= 0x2188)
+        return true;
+    if (ch < 127) {
+        switch (static_cast<char>(::ToLower(ch))) {
+            case 'i':
+            case 'v':
+            case 'x':
+            case 'l':
+            case 'c':
+            case 'd':
+            case 'm':
+                return true;
+        }
+    }
+    return false;
+}
+
 #undef SHIFT

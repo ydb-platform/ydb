@@ -20,7 +20,7 @@
 
 namespace NPrivate {
     template <typename T>
-    class TSimpleXRange { 
+    class TSimpleXRange {
         using TDiff = decltype(T() - T());
 
     public:
@@ -125,21 +125,21 @@ namespace NPrivate {
         T Finish;
     };
 
-    template <typename T> 
-    class TSteppedXRange { 
-        using TDiff = decltype(T() - T()); 
+    template <typename T>
+    class TSteppedXRange {
+        using TDiff = decltype(T() - T());
 
-    public: 
+    public:
         constexpr TSteppedXRange(T start, T finish, TDiff step) noexcept
             : Start_(start)
             , Step_(step)
             , Finish_(CalcRealFinish(Start_, finish, Step_))
         {
             static_assert(std::is_integral<T>::value || std::is_pointer<T>::value, "T should be integral type or pointer");
-        } 
- 
+        }
+
         class TIterator {
-        public: 
+        public:
             using value_type = T;
             using difference_type = TDiff;
             using pointer = const T*;
@@ -150,16 +150,16 @@ namespace NPrivate {
                 : Value_(value)
                 , Parent_(&parent)
             {
-            } 
- 
+            }
+
             constexpr T operator*() const noexcept {
-                return Value_; 
-            } 
- 
+                return Value_;
+            }
+
             constexpr bool operator!=(const TIterator& other) const noexcept {
-                return Value_ != other.Value_; 
-            } 
- 
+                return Value_ != other.Value_;
+            }
+
             constexpr bool operator==(const TIterator& other) const noexcept {
                 return Value_ == other.Value_;
             }
@@ -167,8 +167,8 @@ namespace NPrivate {
             TIterator& operator++() noexcept {
                 Value_ += Parent_->Step_;
                 return *this;
-            } 
- 
+            }
+
             TIterator& operator--() noexcept {
                 Value_ -= Parent_->Step_;
                 return *this;
@@ -200,34 +200,34 @@ namespace NPrivate {
                 return *this;
             }
 
-        private: 
-            T Value_; 
+        private:
+            T Value_;
             const TSteppedXRange* Parent_;
-        }; 
- 
+        };
+
         using value_type = T;
         using iterator = TIterator;
         using const_iterator = TIterator;
 
         constexpr TIterator begin() const noexcept {
-            return TIterator(Start_, *this); 
-        } 
- 
+            return TIterator(Start_, *this);
+        }
+
         constexpr TIterator end() const noexcept {
-            return TIterator(Finish_, *this); 
-        } 
- 
-        static T CalcRealFinish(T start, T expFinish, TDiff step) { 
+            return TIterator(Finish_, *this);
+        }
+
+        static T CalcRealFinish(T start, T expFinish, TDiff step) {
             Y_ASSERT(step != 0);
-            if (step > 0) { 
-                if (expFinish > start) { 
-                    return start + step * ((expFinish - 1 - start) / step + 1); 
-                } 
-                return start; 
-            } 
-            return start - TSteppedXRange<TDiff>::CalcRealFinish(0, start - expFinish, -step); 
-        } 
- 
+            if (step > 0) {
+                if (expFinish > start) {
+                    return start + step * ((expFinish - 1 - start) / step + 1);
+                }
+                return start;
+            }
+            return start - TSteppedXRange<TDiff>::CalcRealFinish(0, start - expFinish, -step);
+        }
+
         constexpr T size() const noexcept {
             return (Finish_ - Start_) / Step_;
         }
@@ -237,12 +237,12 @@ namespace NPrivate {
             return Container(begin(), end());
         }
 
-    private: 
-        const T Start_; 
-        const TDiff Step_; 
-        const T Finish_; 
-    }; 
- 
+    private:
+        const T Start_;
+        const TDiff Step_;
+        const T Finish_;
+    };
+
 }
 
 /**
@@ -250,11 +250,11 @@ namespace NPrivate {
  *
  * @param step must be non-zero
  */
-template <typename T> 
+template <typename T>
 constexpr ::NPrivate::TSteppedXRange<T> xrange(T start, T finish, decltype(T() - T()) step) noexcept {
     return {start, finish, step};
-} 
- 
+}
+
 /// generate sequence [start; finish)
 template <typename T>
 constexpr ::NPrivate::TSimpleXRange<T> xrange(T start, T finish) noexcept {

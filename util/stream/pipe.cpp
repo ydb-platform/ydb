@@ -82,40 +82,40 @@ void TPipeOutput::Close() {
     }
 }
 
-TPipedBase::TPipedBase(PIPEHANDLE fd) 
-    : Handle_(fd) 
-{ 
-} 
- 
+TPipedBase::TPipedBase(PIPEHANDLE fd)
+    : Handle_(fd)
+{
+}
+
 TPipedBase::~TPipedBase() {
     if (Handle_.IsOpen()) {
-        Handle_.Close(); 
+        Handle_.Close();
     }
-} 
- 
+}
+
 TPipedInput::TPipedInput(PIPEHANDLE fd)
-    : TPipedBase(fd) 
-{ 
-} 
- 
+    : TPipedBase(fd)
+{
+}
+
 TPipedInput::~TPipedInput() = default;
- 
-size_t TPipedInput::DoRead(void* buf, size_t len) { 
+
+size_t TPipedInput::DoRead(void* buf, size_t len) {
     if (!Handle_.IsOpen()) {
-        return 0; 
+        return 0;
     }
     return Handle_.Read(buf, len);
-} 
- 
-TPipedOutput::TPipedOutput(PIPEHANDLE fd) 
-    : TPipedBase(fd) 
-{ 
-} 
- 
+}
+
+TPipedOutput::TPipedOutput(PIPEHANDLE fd)
+    : TPipedBase(fd)
+{
+}
+
 TPipedOutput::~TPipedOutput() = default;
- 
-void TPipedOutput::DoWrite(const void* buf, size_t len) { 
-    if (!Handle_.IsOpen() || static_cast<ssize_t>(len) != Handle_.Write(buf, len)) { 
-        ythrow TSystemError() << "pipe writing failed"; 
-    } 
-} 
+
+void TPipedOutput::DoWrite(const void* buf, size_t len) {
+    if (!Handle_.IsOpen() || static_cast<ssize_t>(len) != Handle_.Write(buf, len)) {
+        ythrow TSystemError() << "pipe writing failed";
+    }
+}

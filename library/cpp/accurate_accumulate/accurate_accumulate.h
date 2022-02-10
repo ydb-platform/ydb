@@ -42,24 +42,24 @@ public:
     template <typename TFloatType>
     inline bool operator<(const TKahanAccumulator<TFloatType>& other) const {
         return Get() < other.Get();
-    } 
- 
-    template <typename TFloatType> 
+    }
+
+    template <typename TFloatType>
     inline bool operator<=(const TKahanAccumulator<TFloatType>& other) const {
-        return !(other < *this); 
-    } 
- 
-    template <typename TFloatType> 
+        return !(other < *this);
+    }
+
+    template <typename TFloatType>
     inline bool operator>(const TKahanAccumulator<TFloatType>& other) const {
-        return other < *this; 
-    } 
- 
-    template <typename TFloatType> 
+        return other < *this;
+    }
+
+    template <typename TFloatType>
     inline bool operator>=(const TKahanAccumulator<TFloatType>& other) const {
-        return !(*this < other); 
-    } 
- 
-    template <typename TFloatType> 
+        return !(*this < other);
+    }
+
+    template <typename TFloatType>
     inline TKahanAccumulator& operator+=(const TFloatType x) {
         const TValueType y = TValueType(x) - Compensation_;
         const TValueType t = Sum_ + y;

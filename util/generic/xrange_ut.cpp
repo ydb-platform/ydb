@@ -31,26 +31,26 @@ Y_UNIT_TEST_SUITE(XRange) {
     }
 
     void TestSteppedXRangeImpl(int begin, int end, int step, const TVector<int>& expected) {
-        size_t expInd = 0; 
+        size_t expInd = 0;
         for (auto i : xrange(begin, end, step)) {
-            UNIT_ASSERT(expInd < expected.size()); 
-            UNIT_ASSERT_VALUES_EQUAL(i, expected[expInd]); 
-            ++expInd; 
-        } 
-        UNIT_ASSERT_VALUES_EQUAL(expInd, expected.size()); 
-    } 
- 
+            UNIT_ASSERT(expInd < expected.size());
+            UNIT_ASSERT_VALUES_EQUAL(i, expected[expInd]);
+            ++expInd;
+        }
+        UNIT_ASSERT_VALUES_EQUAL(expInd, expected.size());
+    }
+
     Y_UNIT_TEST(IncrementWorks) {
         TestXRangeImpl(0, 10);
         TestXRangeImpl(10, 20);
     }
- 
+
     Y_UNIT_TEST(DecrementWorks) {
         TestSteppedXRangeImpl(10, 0, -1, {10, 9, 8, 7, 6, 5, 4, 3, 2, 1});
         TestSteppedXRangeImpl(10, -1, -1, {10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0});
         TestSteppedXRangeImpl(20, 9, -1, {20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10});
-    } 
- 
+    }
+
     Y_UNIT_TEST(StepWorks) {
         TestSteppedXRangeImpl(0, 0, 1, {});
         TestSteppedXRangeImpl(0, 9, 3, {0, 3, 6});
@@ -62,22 +62,22 @@ Y_UNIT_TEST_SUITE(XRange) {
         TestSteppedXRangeImpl(15, 0, -4, {15, 11, 7, 3});
         TestSteppedXRangeImpl(15, -1, -4, {15, 11, 7, 3});
         TestSteppedXRangeImpl(15, -2, -4, {15, 11, 7, 3, -1});
-    } 
- 
+    }
+
     Y_UNIT_TEST(PointersWorks) {
         TVector<size_t> data = {3, 1, 4, 1, 5, 9, 2, 6};
-        const size_t digSumExpected = Accumulate(data.begin(), data.end(), static_cast<size_t>(0)); 
-        size_t digSumByIt = 0; 
+        const size_t digSumExpected = Accumulate(data.begin(), data.end(), static_cast<size_t>(0));
+        size_t digSumByIt = 0;
         for (auto ptr : xrange(data.begin(), data.end())) {
-            digSumByIt += *ptr; 
-        } 
-        UNIT_ASSERT_VALUES_EQUAL(digSumByIt, digSumExpected); 
-        size_t digSumByPtr = 0; 
+            digSumByIt += *ptr;
+        }
+        UNIT_ASSERT_VALUES_EQUAL(digSumByIt, digSumExpected);
+        size_t digSumByPtr = 0;
         for (auto ptr : xrange(&data[0], &data[0] + data.size())) {
-            digSumByPtr += *ptr; 
-        } 
-        UNIT_ASSERT_VALUES_EQUAL(digSumByPtr, digSumExpected); 
-    } 
+            digSumByPtr += *ptr;
+        }
+        UNIT_ASSERT_VALUES_EQUAL(digSumByPtr, digSumExpected);
+    }
 
     Y_UNIT_TEST(SizeMethodCheck) {
         UNIT_ASSERT_VALUES_EQUAL(xrange(5).size(), 5);

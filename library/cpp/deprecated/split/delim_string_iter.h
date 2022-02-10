@@ -22,13 +22,13 @@ public:
     }
 
     inline TDelimStringIter(TStringBuf str, TStringBuf delim)
-        : IsValid(true) 
+        : IsValid(true)
         , Str(str)
-        , Delim(delim) 
-    { 
+        , Delim(delim)
+    {
         UpdateCurrent();
-    } 
- 
+    }
+
     inline TDelimStringIter()
         : IsValid(false)
     {

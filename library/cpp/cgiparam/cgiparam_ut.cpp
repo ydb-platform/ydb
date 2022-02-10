@@ -205,16 +205,16 @@ Y_UNIT_TEST_SUITE(TCgiParametersTest) {
 
     Y_UNIT_TEST(TestContInit) {
         TCgiParameters c = {std::make_pair("a", "a1"), std::make_pair("b", "b1"), std::make_pair("a", "a2")};
- 
-        UNIT_ASSERT_VALUES_EQUAL(c.NumOfValues("a"), 2u); 
-        UNIT_ASSERT_VALUES_EQUAL(c.NumOfValues("b"), 1u); 
- 
-        UNIT_ASSERT_VALUES_EQUAL(c.Get("b"), "b1"); 
-        UNIT_ASSERT_VALUES_EQUAL(c.Get("a", 0), "a1"); 
-        UNIT_ASSERT_VALUES_EQUAL(c.Get("a", 1), "a2"); 
- 
-        UNIT_ASSERT_VALUES_EQUAL(c.Print(), "a=a1&a=a2&b=b1"); 
-    } 
+
+        UNIT_ASSERT_VALUES_EQUAL(c.NumOfValues("a"), 2u);
+        UNIT_ASSERT_VALUES_EQUAL(c.NumOfValues("b"), 1u);
+
+        UNIT_ASSERT_VALUES_EQUAL(c.Get("b"), "b1");
+        UNIT_ASSERT_VALUES_EQUAL(c.Get("a", 0), "a1");
+        UNIT_ASSERT_VALUES_EQUAL(c.Get("a", 1), "a2");
+
+        UNIT_ASSERT_VALUES_EQUAL(c.Print(), "a=a1&a=a2&b=b1");
+    }
 
     Y_UNIT_TEST(TestPrintAsQuote) {
         TCgiParameters c = {

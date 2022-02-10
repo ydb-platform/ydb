@@ -1,27 +1,27 @@
-import sys 
-import xml.etree.ElementTree as et 
-import argparse 
+import sys
+import xml.etree.ElementTree as et
+import argparse
 import os
 import json
 import base64
 import re
- 
- 
-DEFAULT_YANDEX_GROUP_ID = 'ru.yandex' 
-DEFAULT_NAMESPACE = 'http://maven.apache.org/POM/4.0.0' 
-XSI_NAMESPACE = 'http://www.w3.org/2001/XMLSchema-instance' 
-SCHEMA_LOCATION = 'http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd' 
-MODEL_VERSION = '4.0.0' 
- 
-MAVEN_PLUGIN_GROUP_ID = 'org.apache.maven.plugins' 
-MAVEN_PLUGIN_ARTIFACT_ID = 'maven-compiler-plugin' 
-MAVEN_PLUGIN_VERSION = '3.3' 
-JAVA_LANGUAGE_LEVEL = '1.8' 
- 
+
+
+DEFAULT_YANDEX_GROUP_ID = 'ru.yandex'
+DEFAULT_NAMESPACE = 'http://maven.apache.org/POM/4.0.0'
+XSI_NAMESPACE = 'http://www.w3.org/2001/XMLSchema-instance'
+SCHEMA_LOCATION = 'http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd'
+MODEL_VERSION = '4.0.0'
+
+MAVEN_PLUGIN_GROUP_ID = 'org.apache.maven.plugins'
+MAVEN_PLUGIN_ARTIFACT_ID = 'maven-compiler-plugin'
+MAVEN_PLUGIN_VERSION = '3.3'
+JAVA_LANGUAGE_LEVEL = '1.8'
+
 MAVEN_BUILD_HELPER_GROUP_ID = 'org.codehaus.mojo'
 MAVEN_BUILD_HELPER_ARTIFACT_ID = 'build-helper-maven-plugin'
 MAVEN_BUILD_HELPER_VERSION = '1.9.1'
- 
+
 MAVEN_EXEC_GROUP_ID = 'org.codehaus.mojo'
 MAVEN_EXEC_ARTIFACT_ID = 'exec-maven-plugin'
 MAVEN_EXEC_VERSION = '1.5.0'
@@ -31,10 +31,10 @@ MAVEN_SUREFIRE_ARTIFACT_ID = 'maven-surefire-plugin'
 MAVEN_SUREFIRE_VERSION = '2.12.2'
 
 
-def target_from_contrib(target_path): 
-    return target_path.startswith('contrib') 
- 
- 
+def target_from_contrib(target_path):
+    return target_path.startswith('contrib')
+
+
 def split_artifacts(s):
     m = re.match('^([^:]*:[^:]*:[^:]*:[^:]*)(.*)$', s)
     if not m or not m.groups():
@@ -62,40 +62,40 @@ def build_pom_and_export_to_maven(**kwargs):
     run_java_programs = [json.loads(base64.b64decode(i)) for i in kwargs.get('run_java_programs')]
     test_source_dirs = kwargs.get('test_source_dirs')
     test_resource_dirs = kwargs.get('test_resource_dirs')
- 
+
     modules = []
 
-    def _indent(elem, level=0): 
-        ind = "\n" + level * "  " 
-        if len(elem): 
-            if not elem.text or not elem.text.strip(): 
-                elem.text = ind + "  " 
-            if not elem.tail or not elem.tail.strip(): 
-                elem.tail = ind 
-            for elem in elem: 
-                _indent(elem, level + 1) 
-            if not elem.tail or not elem.tail.strip(): 
-                elem.tail = ind 
-        else: 
-            if level and (not elem.tail or not elem.tail.strip()): 
-                elem.tail = ind 
- 
-    project = et.Element( 
-        '{}{}{}project'.format('{', DEFAULT_NAMESPACE, '}'), 
-        attrib={'{}{}{}schemaLocation'.format('{', XSI_NAMESPACE, '}'): SCHEMA_LOCATION} 
-    ) 
- 
-    group_id, artifact_id, version = target.split(':') 
- 
-    et.SubElement(project, 'modelVersion').text = MODEL_VERSION 
-    et.SubElement(project, 'groupId').text = group_id 
-    et.SubElement(project, 'artifactId').text = artifact_id 
-    et.SubElement(project, 'version').text = version 
+    def _indent(elem, level=0):
+        ind = "\n" + level * "  "
+        if len(elem):
+            if not elem.text or not elem.text.strip():
+                elem.text = ind + "  "
+            if not elem.tail or not elem.tail.strip():
+                elem.tail = ind
+            for elem in elem:
+                _indent(elem, level + 1)
+            if not elem.tail or not elem.tail.strip():
+                elem.tail = ind
+        else:
+            if level and (not elem.tail or not elem.tail.strip()):
+                elem.tail = ind
+
+    project = et.Element(
+        '{}{}{}project'.format('{', DEFAULT_NAMESPACE, '}'),
+        attrib={'{}{}{}schemaLocation'.format('{', XSI_NAMESPACE, '}'): SCHEMA_LOCATION}
+    )
+
+    group_id, artifact_id, version = target.split(':')
+
+    et.SubElement(project, 'modelVersion').text = MODEL_VERSION
+    et.SubElement(project, 'groupId').text = group_id
+    et.SubElement(project, 'artifactId').text = artifact_id
+    et.SubElement(project, 'version').text = version
     et.SubElement(project, 'packaging').text = packaging
- 
-    properties = et.SubElement(project, 'properties') 
-    et.SubElement(properties, 'project.build.sourceEncoding').text = 'UTF-8' 
- 
+
+    properties = et.SubElement(project, 'properties')
+    et.SubElement(properties, 'project.build.sourceEncoding').text = 'UTF-8'
+
     if prop_vars:
         for property, value in json.loads(base64.b64decode(prop_vars)).items():
             et.SubElement(properties, property).text = value
@@ -134,14 +134,14 @@ def build_pom_and_export_to_maven(**kwargs):
     plugins = et.SubElement(build, 'plugins')
 
     if packaging != 'pom':
-        maven_plugin = et.SubElement(plugins, 'plugin') 
-        et.SubElement(maven_plugin, 'groupId').text = MAVEN_PLUGIN_GROUP_ID 
-        et.SubElement(maven_plugin, 'artifactId').text = MAVEN_PLUGIN_ARTIFACT_ID 
-        et.SubElement(maven_plugin, 'version').text = MAVEN_PLUGIN_VERSION 
-        configuration = et.SubElement(maven_plugin, 'configuration') 
-        et.SubElement(configuration, 'source').text = JAVA_LANGUAGE_LEVEL 
-        et.SubElement(configuration, 'target').text = JAVA_LANGUAGE_LEVEL 
- 
+        maven_plugin = et.SubElement(plugins, 'plugin')
+        et.SubElement(maven_plugin, 'groupId').text = MAVEN_PLUGIN_GROUP_ID
+        et.SubElement(maven_plugin, 'artifactId').text = MAVEN_PLUGIN_ARTIFACT_ID
+        et.SubElement(maven_plugin, 'version').text = MAVEN_PLUGIN_VERSION
+        configuration = et.SubElement(maven_plugin, 'configuration')
+        et.SubElement(configuration, 'source').text = JAVA_LANGUAGE_LEVEL
+        et.SubElement(configuration, 'target').text = JAVA_LANGUAGE_LEVEL
+
     if source_dirs or external_jars or test_source_dirs:
         build_helper_plugin = et.SubElement(plugins, 'plugin')
         et.SubElement(build_helper_plugin, 'groupId').text = MAVEN_BUILD_HELPER_GROUP_ID
@@ -214,9 +214,9 @@ def build_pom_and_export_to_maven(**kwargs):
         for target_dependency in target_dependencies + test_target_dependencies:
             dependency = et.SubElement(dependencies, 'dependency')
             dependency_info = split_artifacts(target_dependency)
- 
+
             group_id, artifact_id, version, classifier = dependency_info[0].split(':')
- 
+
             et.SubElement(dependency, 'groupId').text = group_id
             et.SubElement(dependency, 'artifactId').text = artifact_id
             et.SubElement(dependency, 'version').text = version
@@ -224,7 +224,7 @@ def build_pom_and_export_to_maven(**kwargs):
                 et.SubElement(dependency, 'classifier').text = classifier
             if target_dependency in test_target_dependencies:
                 et.SubElement(dependency, 'scope').text = 'test'
- 
+
             if len(dependency_info) > 1:
                 exclusions = et.SubElement(dependency, 'exclusions')
                 for exclude in dependency_info[1:]:
@@ -242,17 +242,17 @@ def build_pom_and_export_to_maven(**kwargs):
         for classpath_exclude in test_target_dependencies_exclude:
             et.SubElement(classpath_excludes, 'classpathDependencyExclude').text = classpath_exclude
 
-    et.register_namespace('', DEFAULT_NAMESPACE) 
-    et.register_namespace('xsi', XSI_NAMESPACE) 
- 
-    _indent(project) 
- 
+    et.register_namespace('', DEFAULT_NAMESPACE)
+    et.register_namespace('xsi', XSI_NAMESPACE)
+
+    _indent(project)
+
     et.ElementTree(project).write(pom_path)
     sys.stderr.write("[MAVEN EXPORT] Generated {} file for target {}\n".format(os.path.basename(pom_path), target_path))
- 
- 
-if __name__ == '__main__': 
-    parser = argparse.ArgumentParser() 
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
     parser.add_argument('--target-path', action='store', default='')
     parser.add_argument('--target', action='store')
     parser.add_argument('--pom-path', action='store')
@@ -270,6 +270,6 @@ if __name__ == '__main__':
     parser.add_argument('--properties')
     parser.add_argument('--test-source-dirs', action='append', default=[])
     parser.add_argument('--test-resource-dirs', action='append', default=[])
-    args = parser.parse_args() 
- 
+    args = parser.parse_args()
+
     build_pom_and_export_to_maven(**vars(args))

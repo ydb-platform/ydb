@@ -91,7 +91,7 @@
     #define _x86_64_
 #endif
 
-#if defined(__i386__) || defined(_M_IX86) 
+#if defined(__i386__) || defined(_M_IX86)
     #define _i386_
 #endif
 

@@ -10,5 +10,5 @@ constexpr size_t MultiHash(const TOne& one) noexcept {
 }
 template <typename THead, typename... TTail>
 constexpr size_t MultiHash(const THead& head, const TTail&... tail) noexcept {
-    return CombineHashes(MultiHash(tail...), THash<THead>()(head)); 
+    return CombineHashes(MultiHash(tail...), THash<THead>()(head));
 }

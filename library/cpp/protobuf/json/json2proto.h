@@ -88,11 +88,11 @@ namespace NProtobufJson {
             return *this;
         }
 
-        TSelf& SetVectorizeScalars(bool vectorizeScalars) { 
-            VectorizeScalars = vectorizeScalars; 
-            return *this; 
-        } 
- 
+        TSelf& SetVectorizeScalars(bool vectorizeScalars) {
+            VectorizeScalars = vectorizeScalars;
+            return *this;
+        }
+
         TSelf& SetAllowComments(bool value) {
             AllowComments = value;
             return *this;
@@ -135,9 +135,9 @@ namespace NProtobufJson {
 
         /// Enum value parsing mode.
         EnumValueMode EnumValueMode = EnumCaseSensetive;
- 
-        /// Append scalars to repeated fields 
-        bool VectorizeScalars = false; 
+
+        /// Append scalars to repeated fields
+        bool VectorizeScalars = false;
 
         /// Custom spliter non array value to repeated fields.
         TValueVectorizer ValueVectorizer;

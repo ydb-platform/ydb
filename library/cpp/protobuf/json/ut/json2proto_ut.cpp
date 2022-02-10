@@ -672,24 +672,24 @@ Y_UNIT_TEST(TestCastRobust) {
     UNIT_ASSERT_PROTOS_EQUAL(proto, expected);
 }
 
-Y_UNIT_TEST(TestVectorizeScalars) { 
-    NJson::TJsonValue json; 
-#define DEFINE_FIELD(name, value) \ 
-    json.InsertValue(#name, value); 
+Y_UNIT_TEST(TestVectorizeScalars) {
+    NJson::TJsonValue json;
+#define DEFINE_FIELD(name, value) \
+    json.InsertValue(#name, value);
 #include <library/cpp/protobuf/json/ut/fields.incl>
-#undef DEFINE_FIELD 
- 
-    TFlatRepeated proto; 
-    TJson2ProtoConfig config; 
-    config.SetVectorizeScalars(true); 
-    Json2Proto(json, proto, config); 
- 
-#define DEFINE_FIELD(name, value) \ 
-    UNIT_ASSERT_VALUES_EQUAL(proto.Get ## name(0), value); 
+#undef DEFINE_FIELD
+
+    TFlatRepeated proto;
+    TJson2ProtoConfig config;
+    config.SetVectorizeScalars(true);
+    Json2Proto(json, proto, config);
+
+#define DEFINE_FIELD(name, value) \
+    UNIT_ASSERT_VALUES_EQUAL(proto.Get ## name(0), value);
 #include <library/cpp/protobuf/json/ut/fields.incl>
-#undef DEFINE_FIELD 
-} 
- 
+#undef DEFINE_FIELD
+}
+
 Y_UNIT_TEST(TestValueVectorizer) {
     {
         // No ValueVectorizer

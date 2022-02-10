@@ -143,13 +143,13 @@ public:
     ~TStringStream() override;
 
     /**
-     * @returns                         Whether @c this contains any data 
-     */ 
-    explicit operator bool() const noexcept { 
-        return !Empty(); 
-    } 
- 
-    /** 
+     * @returns                         Whether @c this contains any data
+     */
+    explicit operator bool() const noexcept {
+        return !Empty();
+    }
+
+    /**
      * @returns                         String that this stream is writing into.
      */
     inline TString& Str() noexcept {

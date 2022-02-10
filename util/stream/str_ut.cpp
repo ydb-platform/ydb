@@ -67,15 +67,15 @@ Y_UNIT_TEST_SUITE(TStringInputOutputTest) {
 
         UNIT_ASSERT_VALUES_EQUAL(string2, string1.substr(5));
     }
- 
+
     Y_UNIT_TEST(OperatorBool) {
-        TStringStream str; 
-        UNIT_ASSERT(!str); 
-        str << "data"; 
-        UNIT_ASSERT(str); 
-        str.Clear(); 
-        UNIT_ASSERT(!str); 
-    } 
+        TStringStream str;
+        UNIT_ASSERT(!str);
+        str << "data";
+        UNIT_ASSERT(str);
+        str.Clear();
+        UNIT_ASSERT(!str);
+    }
 
     Y_UNIT_TEST(TestReadTo) {
         TString s("0123456789abc");

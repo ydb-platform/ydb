@@ -11,7 +11,7 @@ PEERDIR(
 
 SRCS(
     is_equal.cpp
-    iterators.h 
+    iterators.h
     merge.cpp
     path.cpp
     pb_io.cpp

@@ -175,7 +175,7 @@ private:
 
     inline void Stop() {
         AtomicSet(ShouldTerminate, 1);
- 
+
         with_lock (QueueMutex) {
             QueuePopCond.BroadCast();
         }
@@ -224,7 +224,7 @@ private:
 
                 job = Queue.Pop();
             }
- 
+
             QueuePopCond.Signal();
 
             if (Catching) {

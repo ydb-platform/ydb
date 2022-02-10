@@ -301,7 +301,7 @@ sure both macros are undefined; an emulation function will then be used. */
 /* Define to any value to allow pcregrep to be linked with libbz2, so that it
    is able to handle .bz2 files. */
 /* #undef SUPPORT_LIBBZ2 */
- 
+
 /* Define to any value to allow pcretest to be linked with libedit. */
 /* #undef SUPPORT_LIBEDIT */
 

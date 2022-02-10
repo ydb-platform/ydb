@@ -131,11 +131,11 @@ Y_UNIT_TEST_SUITE(TCacheTest) {
         UNIT_ASSERT(s.Find(3) != s.End());
         UNIT_ASSERT(*s.Find(3) == "hjkl");
 
-        UNIT_ASSERT(!s.Insert(3, "abcd")); 
-        UNIT_ASSERT(*s.Find(3) == "hjkl"); 
-        s.Update(3, "abcd"); 
-        UNIT_ASSERT(*s.Find(3) == "abcd"); 
- 
+        UNIT_ASSERT(!s.Insert(3, "abcd"));
+        UNIT_ASSERT(*s.Find(3) == "hjkl");
+        s.Update(3, "abcd");
+        UNIT_ASSERT(*s.Find(3) == "abcd");
+
         TCache::TIterator it = s.Find(3);
         s.Erase(it);
         UNIT_ASSERT(s.Find(3) == s.End());
@@ -332,7 +332,7 @@ Y_UNIT_TEST_SUITE(TCacheTest) {
         }
     };
     int TMyDelete::count = 0;
- 
+
     Y_UNIT_TEST(DeleterTest) {
         typedef TLRUCache<int, TString, TMyDelete> TCache;
         TCache s(2);
@@ -345,7 +345,7 @@ Y_UNIT_TEST_SUITE(TCacheTest) {
         s.Erase(it);
         UNIT_ASSERT(TMyDelete::count == 2);
     }
- 
+
     Y_UNIT_TEST(PromoteOnFind) {
         typedef TLRUCache<int, TString> TCache;
         TCache s(2);

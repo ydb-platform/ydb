@@ -1,8 +1,8 @@
 #include "wide.h"
 
 #include <util/generic/mem_copy.h>
-#include <util/string/strip.h> 
- 
+#include <util/string/strip.h>
+
 namespace {
     //! the constants are not zero-terminated
     const wchar16 LT[] = {'&', 'l', 't', ';'};
@@ -32,11 +32,11 @@ namespace {
 }
 
 void Collapse(TUtf16String& w) {
-    CollapseImpl(w, w, 0, IsWhitespace); 
+    CollapseImpl(w, w, 0, IsWhitespace);
 }
 
 size_t Collapse(wchar16* s, size_t n) {
-    return CollapseImpl(s, n, IsWhitespace); 
+    return CollapseImpl(s, n, IsWhitespace);
 }
 
 TWtringBuf StripLeft(const TWtringBuf text) noexcept {

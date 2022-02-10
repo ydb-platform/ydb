@@ -72,13 +72,13 @@ struct TThreadPoolTest {
         UNIT_ASSERT_EQUAL(0, R);
     }
 };
- 
+
 class TFailAddQueue: public IThreadPool {
 public:
     bool Add(IObjectInQueue* /*obj*/) override Y_WARN_UNUSED_RESULT {
         return false;
     }
- 
+
     void Start(size_t, size_t) override {
     }
 

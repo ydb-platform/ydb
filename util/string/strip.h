@@ -196,40 +196,40 @@ inline TString Strip(const TString& s) {
     return ret;
 }
 
-template <class TChar, class TWhitespaceFunc> 
-size_t CollapseImpl(TChar* s, size_t n, const TWhitespaceFunc& isWhitespace) { 
-    size_t newLen = 0; 
-    for (size_t i = 0; i < n; ++i, ++newLen) { 
-        size_t nextNonSpace = i; 
-        while (nextNonSpace < n && isWhitespace(s[nextNonSpace])) { 
-            ++nextNonSpace; 
-        } 
-        size_t numSpaces = nextNonSpace - i; 
-        if (numSpaces > 1 || (numSpaces == 1 && s[i] != ' ')) { 
-            s[newLen] = ' '; 
-            i = nextNonSpace - 1; 
-        } else { 
-            s[newLen] = s[i]; 
-        } 
-    } 
-    return newLen; 
-} 
- 
+template <class TChar, class TWhitespaceFunc>
+size_t CollapseImpl(TChar* s, size_t n, const TWhitespaceFunc& isWhitespace) {
+    size_t newLen = 0;
+    for (size_t i = 0; i < n; ++i, ++newLen) {
+        size_t nextNonSpace = i;
+        while (nextNonSpace < n && isWhitespace(s[nextNonSpace])) {
+            ++nextNonSpace;
+        }
+        size_t numSpaces = nextNonSpace - i;
+        if (numSpaces > 1 || (numSpaces == 1 && s[i] != ' ')) {
+            s[newLen] = ' ';
+            i = nextNonSpace - 1;
+        } else {
+            s[newLen] = s[i];
+        }
+    }
+    return newLen;
+}
+
 template <class TStringType, class TWhitespaceFunc>
 bool CollapseImpl(const TStringType& from, TStringType& to, size_t maxLen, const TWhitespaceFunc& isWhitespace) {
-    to = from; 
+    to = from;
     maxLen = maxLen ? Min(maxLen, to.size()) : to.size();
-    for (size_t i = 0; i < maxLen; ++i) { 
-        if (isWhitespace(to[i]) && (to[i] != ' ' || isWhitespace(to[i + 1]))) { 
-            size_t tailSize = maxLen - i; 
-            size_t newTailSize = CollapseImpl(to.begin() + i, tailSize, isWhitespace); 
-            to.remove(i + newTailSize, tailSize - newTailSize); 
-            return true; 
-        } 
-    } 
-    return false; 
-} 
- 
+    for (size_t i = 0; i < maxLen; ++i) {
+        if (isWhitespace(to[i]) && (to[i] != ' ' || isWhitespace(to[i + 1]))) {
+            size_t tailSize = maxLen - i;
+            size_t newTailSize = CollapseImpl(to.begin() + i, tailSize, isWhitespace);
+            to.remove(i + newTailSize, tailSize - newTailSize);
+            return true;
+        }
+    }
+    return false;
+}
+
 bool Collapse(const TString& from, TString& to, size_t maxLen = 0);
 
 /// Replaces several consequtive space symbols with one (processing is limited to maxLen bytes)

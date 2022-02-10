@@ -234,8 +234,8 @@ private:
     TSimpleIntrusivePtr<TImpl> Impl_;
 };
 
-class TSocket; 
- 
+class TSocket;
+
 class TSocketHolder: public TMoveOnly {
 public:
     inline TSocketHolder()
@@ -290,9 +290,9 @@ public:
 
 private:
     SOCKET Fd_;
- 
-    // do not allow construction of TSocketHolder from TSocket 
-    TSocketHolder(const TSocket& fd); 
+
+    // do not allow construction of TSocketHolder from TSocket
+    TSocketHolder(const TSocket& fd);
 };
 
 class TSocket {

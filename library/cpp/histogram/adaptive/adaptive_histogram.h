@@ -17,27 +17,27 @@ namespace NKiwiAggr {
     private:
         using TPairSet = TSet<TWeightedValue>;
 
-        struct TFastBin { 
-            // these names are for compatibility with TWeightedValue 
-            double first; 
-            double second; 
-            // both sums do not include current bin 
-            double SumBelow; 
-            double SumAbove; 
- 
+        struct TFastBin {
+            // these names are for compatibility with TWeightedValue
+            double first;
+            double second;
+            // both sums do not include current bin
+            double SumBelow;
+            double SumAbove;
+
             TFastBin(double first_, double second_, double sumBelow = 0, double sumAbove = 0)
-                : first(first_) 
-                , second(second_) 
-                , SumBelow(sumBelow) 
-                , SumAbove(sumAbove) 
-            { 
-            } 
- 
+                : first(first_)
+                , second(second_)
+                , SumBelow(sumBelow)
+                , SumAbove(sumAbove)
+            {
+            }
+
             bool operator<(const TFastBin& rhs) const {
-                return first < rhs.first; 
-            } 
-        }; 
- 
+                return first < rhs.first;
+            }
+        };
+
         ui64 Id;
         double MinValue;
         double MaxValue;
@@ -48,7 +48,7 @@ namespace NKiwiAggr {
         TQualityFunction CalcQuality;
 
         TVector<TFastBin> PrecomputedBins;
- 
+
     public:
         TAdaptiveHistogram(size_t intervals, ui64 id = 0, TQualityFunction qualityFunc = CalcWeightQuality);
         TAdaptiveHistogram(const THistogram& histo, size_t defaultIntervals = DEFAULT_INTERVALS, ui64 defaultId = 0, TQualityFunction qualityFunc = nullptr);
@@ -88,18 +88,18 @@ namespace NKiwiAggr {
         double CalcLowerBoundSafe(double sum) final;
 
         void PrecomputePartialSums() final;
- 
+
     private:
         void FromIHistogram(IHistogram* histo);
         void Add(const TWeightedValue& weightedValue, bool initial);
         void Erase(double value);
         void Shrink();
- 
-        template <typename TBins, typename TGetSumAbove> 
-        double GetSumAboveBoundImpl(double bound, const TBins& bins, typename TBins::const_iterator rightBin, const TGetSumAbove& getSumAbove) const; 
- 
-        template <typename TBins, typename TGetSumBelow> 
-        double GetSumBelowBoundImpl(double bound, const TBins& bins, typename TBins::const_iterator rightBin, const TGetSumBelow& getSumBelow) const; 
+
+        template <typename TBins, typename TGetSumAbove>
+        double GetSumAboveBoundImpl(double bound, const TBins& bins, typename TBins::const_iterator rightBin, const TGetSumAbove& getSumAbove) const;
+
+        template <typename TBins, typename TGetSumBelow>
+        double GetSumBelowBoundImpl(double bound, const TBins& bins, typename TBins::const_iterator rightBin, const TGetSumBelow& getSumBelow) const;
     };
 
     template <TQualityFunction QualityFunction>

@@ -29,7 +29,7 @@ RECURSE(
     doc_handle_decode/ut
     doc_url_index_print
     dolbilo
-    domschemec 
+    domschemec
     domschemec/ut
     drawrichtree
     dsindexer

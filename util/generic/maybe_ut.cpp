@@ -103,7 +103,7 @@ Y_UNIT_TEST_SUITE(TMaybeTest) {
         UNIT_ASSERT(!m5.Defined());
         UNIT_ASSERT(m5.Empty());
         UNIT_ASSERT(m5 == TMaybe<int>());
-        UNIT_ASSERT(m5 == Nothing()); 
+        UNIT_ASSERT(m5 == Nothing());
         UNIT_ASSERT(m5 != TMaybe<int>(4));
 
         m5 = 4;
@@ -115,7 +115,7 @@ Y_UNIT_TEST_SUITE(TMaybeTest) {
         UNIT_ASSERT(m5 == TMaybe<int>(4));
         UNIT_ASSERT(m5 != TMaybe<int>(3));
         UNIT_ASSERT(m5 != TMaybe<int>());
-        UNIT_ASSERT(m5 != Nothing()); 
+        UNIT_ASSERT(m5 != Nothing());
 
         m5 = TMaybe<int>(5);
         UNIT_ASSERT(m5.Defined());
@@ -126,16 +126,16 @@ Y_UNIT_TEST_SUITE(TMaybeTest) {
         m5 = TMaybe<int>();
         UNIT_ASSERT(m5.Empty());
         UNIT_ASSERT(m5 == TMaybe<int>());
-        UNIT_ASSERT(m5 == Nothing()); 
+        UNIT_ASSERT(m5 == Nothing());
         UNIT_ASSERT(m5 != TMaybe<int>(5));
- 
-        m5 = 4; 
-        m5 = Nothing(); 
- 
-        UNIT_ASSERT(m5.Empty()); 
-        UNIT_ASSERT(m5 == TMaybe<int>()); 
-        UNIT_ASSERT(m5 == Nothing()); 
-        UNIT_ASSERT(m5 != TMaybe<int>(5)); 
+
+        m5 = 4;
+        m5 = Nothing();
+
+        UNIT_ASSERT(m5.Empty());
+        UNIT_ASSERT(m5 == TMaybe<int>());
+        UNIT_ASSERT(m5 == Nothing());
+        UNIT_ASSERT(m5 != TMaybe<int>(5));
 
         m5 = {};
         UNIT_ASSERT(m5.Empty());

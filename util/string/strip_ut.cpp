@@ -110,17 +110,17 @@ Y_UNIT_TEST_SUITE(TStripStringTest) {
     Y_UNIT_TEST(TestCollapse) {
         TString s;
         Collapse(TString("  123    456  "), s);
-        UNIT_ASSERT(s == " 123 456 "); 
+        UNIT_ASSERT(s == " 123 456 ");
         Collapse(TString("  123    456  "), s, 10);
-        UNIT_ASSERT(s == " 123 456  "); 
- 
+        UNIT_ASSERT(s == " 123 456  ");
+
         s = TString(" a b c ");
         TString s2 = s;
         CollapseInPlace(s2);
- 
-        UNIT_ASSERT(s == s2); 
+
+        UNIT_ASSERT(s == s2);
 #ifndef TSTRING_IS_STD_STRING
-        UNIT_ASSERT(s.c_str() == s2.c_str()); // Collapse() does not change the string at all 
+        UNIT_ASSERT(s.c_str() == s2.c_str()); // Collapse() does not change the string at all
 #endif
     }
 

@@ -129,7 +129,7 @@ namespace NJson {
         unsigned long long GetUIntegerSafe(unsigned long long defaultValue) const;
         double GetDoubleSafe(double defaultValue) const;
         TString GetStringSafe(const TString& defaultValue) const;
- 
+
         bool GetBooleanRobust() const noexcept;
         long long GetIntegerRobust() const noexcept;
         unsigned long long GetUIntegerRobust() const noexcept;

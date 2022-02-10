@@ -427,38 +427,38 @@ namespace NJson {
     bool TJsonValue::GetBooleanSafe() const {
         if (Type != JSON_BOOLEAN)
             ythrow TJsonException() << "Not a boolean";
- 
+
         return Value.Boolean;
     }
- 
+
     long long TJsonValue::GetIntegerSafe() const {
         if (!IsInteger())
             ythrow TJsonException() << "Not an integer";
- 
+
         return GetInteger();
     }
- 
+
     unsigned long long TJsonValue::GetUIntegerSafe() const {
         if (!IsUInteger())
             ythrow TJsonException() << "Not an unsigned integer";
- 
+
         return GetUInteger();
     }
- 
+
     double TJsonValue::GetDoubleSafe() const {
         if (!IsDouble())
             ythrow TJsonException() << "Not a double";
- 
+
         return GetDouble();
     }
- 
+
     const TString& TJsonValue::GetStringSafe() const {
         if (Type != JSON_STRING)
             ythrow TJsonException() << "Not a string";
- 
+
         return Value.String;
     }
- 
+
     bool TJsonValue::GetBooleanSafe(const bool defaultValue) const {
         if (Type == JSON_UNDEFINED)
             return defaultValue;
@@ -497,10 +497,10 @@ namespace NJson {
     const TJsonValue::TMapType& TJsonValue::GetMapSafe() const {
         if (Type != JSON_MAP)
             ythrow TJsonException() << "Not a map";
- 
+
         return *Value.Map;
     }
- 
+
     TJsonValue::TMapType& TJsonValue::GetMapSafe() {
         return const_cast<TJsonValue::TMapType&>(const_cast<const TJsonValue*>(this)->GetMapSafe());
     }
@@ -508,10 +508,10 @@ namespace NJson {
     const TJsonValue::TArray& TJsonValue::GetArraySafe() const {
         if (Type != JSON_ARRAY)
             ythrow TJsonException() << "Not an array";
- 
+
         return *Value.Array;
     }
- 
+
     TJsonValue::TArray& TJsonValue::GetArraySafe() {
         return const_cast<TJsonValue::TArray&>(const_cast<const TJsonValue*>(this)->GetArraySafe());
     }

@@ -1651,31 +1651,31 @@ public:
     const T& at(const TheKey& key) const {
         using namespace ::NPrivate;
         const_iterator it = find(key);
- 
+
         if (Y_UNLIKELY(it == end())) {
             ::NPrivate::ThrowKeyNotFoundInHashTableException(MapKeyToString(key));
         }
 
         return it->second;
-    } 
- 
+    }
+
     template <class TheKey>
     T& at(const TheKey& key) {
         using namespace ::NPrivate;
         iterator it = find(key);
- 
+
         if (Y_UNLIKELY(it == end())) {
             ::NPrivate::ThrowKeyNotFoundInHashTableException(MapKeyToString(key));
         }
- 
+
         return it->second;
-    } 
- 
+    }
+
     template <class TKey>
     size_type count(const TKey& key) const {
         return rep.count(key);
     }
- 
+
     template <class TKey>
     std::pair<iterator, iterator> equal_range(const TKey& key) {
         return rep.equal_range(key);

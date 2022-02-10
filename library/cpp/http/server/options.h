@@ -131,14 +131,14 @@ public:
         return *this;
     }
 
-    inline THttpServerOptions& SetThreadsName(const TString& listenThreadName, const TString& requestsThreadName, const TString& failRequestsThreadName) noexcept { 
-        ListenThreadName = listenThreadName; 
-        RequestsThreadName = requestsThreadName; 
-        FailRequestsThreadName = failRequestsThreadName; 
- 
-        return *this; 
-    } 
- 
+    inline THttpServerOptions& SetThreadsName(const TString& listenThreadName, const TString& requestsThreadName, const TString& failRequestsThreadName) noexcept {
+        ListenThreadName = listenThreadName;
+        RequestsThreadName = requestsThreadName;
+        FailRequestsThreadName = failRequestsThreadName;
+
+        return *this;
+    }
+
     struct TAddr {
         TString Addr;
         ui16 Port;
@@ -169,8 +169,8 @@ public:
 
     TDuration PollTimeout; // timeout of TSocketPoller::WaitT call
     TDuration ExpirationTimeout; // drop inactive connections after ExpirationTimeout (should be > 0)
- 
-    TString ListenThreadName = "HttpListen"; 
-    TString RequestsThreadName = "HttpServer"; 
-    TString FailRequestsThreadName = "HttpServer"; 
+
+    TString ListenThreadName = "HttpListen";
+    TString RequestsThreadName = "HttpServer";
+    TString FailRequestsThreadName = "HttpServer";
 };

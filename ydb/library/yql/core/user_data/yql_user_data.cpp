@@ -29,7 +29,7 @@ void TUserData::FillFromFolder(
         return;
     }
     root = root.RealPath();
-    TDirIterator dir(root, TDirIterator::TOptions(FTS_LOGICAL)); 
+    TDirIterator dir(root, TDirIterator::TOptions(FTS_LOGICAL));
     for (auto file = dir.begin(), end = dir.end(); file != end; ++file) {
         if (file->fts_level == FTS_ROOTLEVEL) {
             continue;

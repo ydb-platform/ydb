@@ -84,11 +84,11 @@ public:
     /// Добавляет заголовок в контейнер.
     void AddHeader(THttpInputHeader header);
 
-    template <typename ValueType> 
+    template <typename ValueType>
     void AddHeader(TString name, const ValueType& value) {
         AddHeader(THttpInputHeader(std::move(name), ToString(value)));
-    } 
- 
+    }
+
     /// Добавляет заголовок в контейнер, если тот не содержит заголовка
     /// c таким же параметром. В противном случае, заменяет существующий
     /// заголовок на новый.

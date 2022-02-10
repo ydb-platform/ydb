@@ -76,7 +76,7 @@ private:
 class TMigratorClient : public IMigratorClient {
 public:
     TMigratorClient()
-        : Pool_(new TThreadPool(TThreadPool::TParams().SetBlocking(true).SetCatching(false))) 
+        : Pool_(new TThreadPool(TThreadPool::TParams().SetBlocking(true).SetCatching(false)))
     {
         Scheduled_.store(0);
     }

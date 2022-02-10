@@ -189,8 +189,8 @@ void TTaskScheduler::ChooseFromQueue(TQueueIterator& toWait) {
 }
 
 void TTaskScheduler::WorkerFunc(TWorkerThread* thread) {
-    TThread::SetCurrentThreadName("TaskSchedWorker"); 
- 
+    TThread::SetCurrentThreadName("TaskSchedWorker");
+
     TQueueIterator toWait = Queue_.end();
     ITaskRef toDo;
 

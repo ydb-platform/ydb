@@ -14,7 +14,7 @@
 #include <util/generic/vector.h>
 #include <util/generic/buffer.h>
 #include <util/generic/hash_set.h>
-#include <util/generic/maybe.h> 
+#include <util/generic/maybe.h>
 #include <util/generic/variant.h>
 
 static inline char* AllocateFromPool(TMemoryPool& pool, size_t len) {
@@ -190,26 +190,26 @@ private:
             Save(&S_, deq);
         }
 
-        { 
-            TMaybe<size_t> h(10); 
-            Save(&S_, h); 
-        } 
- 
-        { 
-            TMaybe<size_t> h(20); 
-            Save(&S_, h); 
-        } 
- 
-        { 
-            TMaybe<size_t> h; 
-            Save(&S_, h); 
-        } 
- 
-        { 
-            TMaybe<size_t> h; 
-            Save(&S_, h); 
-        } 
- 
+        {
+            TMaybe<size_t> h(10);
+            Save(&S_, h);
+        }
+
+        {
+            TMaybe<size_t> h(20);
+            Save(&S_, h);
+        }
+
+        {
+            TMaybe<size_t> h;
+            Save(&S_, h);
+        }
+
+        {
+            TMaybe<size_t> h;
+            Save(&S_, h);
+        }
+
         {
             THashMultiMap<TString, int> mm;
 
@@ -333,32 +333,32 @@ private:
             UNIT_ASSERT_EQUAL(deq[2], 4);
             UNIT_ASSERT_EQUAL(deq[3], 5);
         }
- 
-        { 
-            TMaybe<size_t> h(5); 
-            Load(&S_, h); 
-            UNIT_ASSERT_EQUAL(*h, 10); 
-        } 
- 
-        { 
-            TMaybe<size_t> h; 
-            Load(&S_, h); 
-            UNIT_ASSERT_EQUAL(*h, 20); 
-        } 
- 
-        { 
-            TMaybe<size_t> h; 
-            UNIT_ASSERT(!h); 
-            Load(&S_, h); 
-            UNIT_ASSERT(!h); 
-        } 
- 
-        { 
-            TMaybe<size_t> h(7); 
-            UNIT_ASSERT(!!h); 
-            Load(&S_, h); 
-            UNIT_ASSERT(!h); 
-        } 
+
+        {
+            TMaybe<size_t> h(5);
+            Load(&S_, h);
+            UNIT_ASSERT_EQUAL(*h, 10);
+        }
+
+        {
+            TMaybe<size_t> h;
+            Load(&S_, h);
+            UNIT_ASSERT_EQUAL(*h, 20);
+        }
+
+        {
+            TMaybe<size_t> h;
+            UNIT_ASSERT(!h);
+            Load(&S_, h);
+            UNIT_ASSERT(!h);
+        }
+
+        {
+            TMaybe<size_t> h(7);
+            UNIT_ASSERT(!!h);
+            Load(&S_, h);
+            UNIT_ASSERT(!h);
+        }
 
         {
             THashMultiMap<TString, int> mm;

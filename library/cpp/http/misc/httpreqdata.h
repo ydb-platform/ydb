@@ -51,10 +51,10 @@ public:
         return TStringBuf(Search, SearchLength);
     }
 
-    TStringBuf OrigQueryStringBuf() const { 
-        return OrigSearch; 
-    } 
- 
+    TStringBuf OrigQueryStringBuf() const {
+        return OrigSearch;
+    }
+
     void AppendQueryString(const char* str, size_t length);
     const char* RemoteAddr() const;
     void SetRemoteAddr(TStringBuf addr);
@@ -94,7 +94,7 @@ private:
     char* Path;
     char* Search;
     size_t SearchLength; // length of Search
-    TStringBuf OrigSearch; 
+    TStringBuf OrigSearch;
     THttpHeadersContainer HeadersIn_;
     mutable char AddrData[INET6_ADDRSTRLEN];
     SOCKET Socket;

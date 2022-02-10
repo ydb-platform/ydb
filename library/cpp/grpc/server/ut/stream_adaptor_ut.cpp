@@ -51,7 +51,7 @@ Y_UNIT_TEST_SUITE(StreamAdaptor) {
         const i64 max = 10000;
 
         // Here we will emulate grpc stream (NextReply call after writing)
-        std::unique_ptr<IThreadPool> consumerQueue(new TThreadPool(TThreadPool::TParams().SetBlocking(false).SetCatching(false))); 
+        std::unique_ptr<IThreadPool> consumerQueue(new TThreadPool(TThreadPool::TParams().SetBlocking(false).SetCatching(false)));
         // And make sure only one request inflight (see UNIT_ASSERT on adding to the queue)
         consumerQueue->Start(threads, 1);
 

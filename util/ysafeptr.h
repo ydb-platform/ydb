@@ -1,11 +1,11 @@
 #pragma once
 
-#include <stddef.h> 
-#include <util/system/yassert.h> 
+#include <stddef.h>
+#include <util/system/yassert.h>
 #include <util/system/defaults.h>
-#include <util/system/tls.h> 
- 
-//////////////////////////////////////////////////////////////////////////////////////////////////// 
+#include <util/system/tls.h>
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
 //   There are different templates of pointers:
 //     1. Simple pointers.
 //     2. TPtr with refereces.
@@ -18,18 +18,18 @@
 //        pointer to a forward declared class.
 //     2. It's prohibited to override the 'new' operator, since the standard 'delete' will be used
 //        for destruction of objects (because of 'delete this').
-//////////////////////////////////////////////////////////////////////////////////////////////////// 
+////////////////////////////////////////////////////////////////////////////////////////////////////
 
 #if defined(_MSC_VER) && defined(_DEBUG)
     #include <util/system/winint.h>
     #define CHECK_YPTR2
-#endif 
- 
-struct IBinSaver; 
- 
+#endif
+
+struct IBinSaver;
+
 class IObjectBase {
-private: 
-#ifdef CHECK_YPTR2 
+private:
+#ifdef CHECK_YPTR2
     static Y_POD_THREAD(bool) DisableThreadCheck;
     void CheckThreadId() {
         if (dwThreadId == 0)
@@ -45,7 +45,7 @@ private:
         CheckThreadId();
         ObjData += nRef;
     }
-#else 
+#else
     void CheckThreadId() {
     }
     void AddRef() {
@@ -54,7 +54,7 @@ private:
     void AddObj(int nRef) {
         ObjData += nRef;
     }
-#endif 
+#endif
     void ReleaseRefComplete();
     void ReleaseObjComplete(int nMask);
     void DecRef() {
@@ -78,10 +78,10 @@ private:
             ReleaseObjComplete(nMask);
     }
 
-protected: 
-#ifdef CHECK_YPTR2 
+protected:
+#ifdef CHECK_YPTR2
     DWORD dwThreadId;
-#endif 
+#endif
     ui32 ObjData;
     ui32 RefData;
     // function should clear contents of object, easy to implement via consequent calls to
@@ -93,43 +93,43 @@ protected:
         ObjData |= a.ObjData & 0x80000000;
     }
 
-public: 
+public:
     IObjectBase()
         : ObjData(0)
         , RefData(0)
     {
-#ifdef CHECK_YPTR2 
+#ifdef CHECK_YPTR2
         dwThreadId = 0;
-#endif 
+#endif
     }
     // do not copy refcount when copy object
     IObjectBase(const IObjectBase& a)
         : ObjData(0)
         , RefData(0)
     {
-#ifdef CHECK_YPTR2 
+#ifdef CHECK_YPTR2
         dwThreadId = 0;
-#endif 
+#endif
         CopyValidFlag(a);
     }
     IObjectBase& operator=(const IObjectBase& a) {
         CopyValidFlag(a);
         return *this;
     }
-#ifdef CHECK_YPTR2 
+#ifdef CHECK_YPTR2
     static void SetThreadCheckMode(bool val) {
         DisableThreadCheck = !val;
     }
     void ResetThreadId() {
         Y_ASSERT(RefData == 0 && ObjData == 0); // can reset thread check only for ref free objects
-        dwThreadId = 0; 
-    } 
-#else 
+        dwThreadId = 0;
+    }
+#else
     static void SetThreadCheckMode(bool) {
     }
     void ResetThreadId() {
     }
-#endif 
+#endif
 
     // class name of derived class
     virtual const char* GetClassName() const = 0;
@@ -187,10 +187,10 @@ public:
     friend struct IObjectBase::TRef;
     friend struct IObjectBase::TRefO;
     friend struct IObjectBase::TRefM;
-}; 
-//////////////////////////////////////////////////////////////////////////////////////////////////// 
-// macro that helps to create neccessary members for proper operation of refcount system 
-// if class needs special destructor, use CFundament 
+};
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// macro that helps to create neccessary members for proper operation of refcount system
+// if class needs special destructor, use CFundament
 #define OBJECT_METHODS(classname)                                 \
 public:                                                           \
     virtual const char* GetClassName() const override {           \
@@ -210,7 +210,7 @@ protected:                                                        \
     }                                                             \
                                                                   \
 private:
-#define OBJECT_NOCOPY_METHODS(classname) OBJECT_METHODS(classname) 
+#define OBJECT_NOCOPY_METHODS(classname) OBJECT_METHODS(classname)
 #define BASIC_REGISTER_CLASS(classname)                                              \
     Y_PRAGMA_DIAGNOSTIC_PUSH                                                         \
     Y_PRAGMA_NO_UNUSED_FUNCTION                                                      \
@@ -224,7 +224,7 @@ private:
     }                                                                                \
     Y_PRAGMA_DIAGNOSTIC_POP
 
-//////////////////////////////////////////////////////////////////////////////////////////////////// 
+////////////////////////////////////////////////////////////////////////////////////////////////////
 template <class TUserObj>
 IObjectBase* CastToObjectBaseImpl(TUserObj* p, void*);
 template <class TUserObj>
@@ -236,7 +236,7 @@ TUserObj* CastToUserObjectImpl(IObjectBase* p, TUserObj*, void*);
 template <class TUserObj>
 TUserObj* CastToUserObjectImpl(IObjectBase* _p, TUserObj*, IObjectBase*) {
     return dynamic_cast<TUserObj*>(_p);
-} 
+}
 template <class TUserObj>
 inline IObjectBase* CastToObjectBase(TUserObj* p) {
     return CastToObjectBaseImpl(p, p);
@@ -249,12 +249,12 @@ template <class TUserObj>
 inline TUserObj* CastToUserObject(IObjectBase* p, TUserObj* pu) {
     return CastToUserObjectImpl(p, pu, pu);
 }
-//////////////////////////////////////////////////////////////////////////////////////////////////// 
-// TObject - base object for reference counting, TUserObj - user object name 
-// TRef - struct with AddRef/DecRef/Release methods for refcounting to use 
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// TObject - base object for reference counting, TUserObj - user object name
+// TRef - struct with AddRef/DecRef/Release methods for refcounting to use
 template <class TUserObj, class TRef>
 class TPtrBase {
-private: 
+private:
     TUserObj* ptr;
 
     void AddRef(TUserObj* _ptr) {
@@ -273,7 +273,7 @@ private:
             p.Release(CastToObjectBase(_ptr));
     }
 
-protected: 
+protected:
     void SetObject(TUserObj* _ptr) {
         TUserObj* pOld = ptr;
         ptr = _ptr;
@@ -281,7 +281,7 @@ protected:
         Release(pOld);
     }
 
-public: 
+public:
     TPtrBase()
         : ptr(nullptr)
     {
@@ -337,8 +337,8 @@ public:
         return CastToObjectBase(ptr);
     }
     int operator&(IBinSaver& f);
-}; 
-//////////////////////////////////////////////////////////////////////////////////////////////////// 
+};
+////////////////////////////////////////////////////////////////////////////////////////////////////
 template <class T>
 inline bool IsValid(T* p) {
     return p != nullptr && !CastToObjectBase(p)->IsRefInvalid();
@@ -347,7 +347,7 @@ template <class T, class TRef>
 inline bool IsValid(const TPtrBase<T, TRef>& p) {
     return p.Get() && !p.GetBarePtr()->IsRefInvalid();
 }
-//////////////////////////////////////////////////////////////////////////////////////////////////// 
+////////////////////////////////////////////////////////////////////////////////////////////////////
 #define BASIC_PTR_DECLARE(TPtrName, TRef)        \
     template <class T>                           \
     class TPtrName: public TPtrBase<T, TRef> {   \
@@ -381,7 +381,7 @@ inline bool IsValid(const TPtrBase<T, TRef>& p) {
 BASIC_PTR_DECLARE(TPtr, IObjectBase::TRef)
 BASIC_PTR_DECLARE(TObj, IObjectBase::TRefO)
 BASIC_PTR_DECLARE(TMObj, IObjectBase::TRefM)
-// misuse guard 
+// misuse guard
 template <class T>
 inline bool IsValid(TObj<T>* p) {
     return p->YouHaveMadeMistake();
@@ -394,13 +394,13 @@ template <class T>
 inline bool IsValid(TMObj<T>* p) {
     return p->YouHaveMadeMistake();
 }
-//////////////////////////////////////////////////////////////////////////////////////////////////// 
+////////////////////////////////////////////////////////////////////////////////////////////////////
 // assumes base class is IObjectBase
 template <class T>
 class TDynamicCast {
     T* ptr;
 
-public: 
+public:
     template <class TT>
     TDynamicCast(TT* _ptr) {
         ptr = dynamic_cast<T*>(CastToObjectBase(_ptr));
@@ -422,8 +422,8 @@ public:
     T* Get() const {
         return ptr;
     }
-}; 
-template <class T> 
+};
+template <class T>
 inline bool IsValid(const TDynamicCast<T>& p) {
     return IsValid(p.Get());
 }

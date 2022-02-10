@@ -1,21 +1,21 @@
-#pragma once 
- 
+#pragma once
+
 #include "fhandle.h"
 
 #include <util/generic/ptr.h>
 #include <util/generic/guid.h>
- 
+
 class TSharedMemory: public TThrRefBase {
-    TGUID Id; 
+    TGUID Id;
     FHANDLE Handle;
     void* Data;
-    int Size; 
+    int Size;
 
-public: 
+public:
     TSharedMemory();
     ~TSharedMemory() override;
 
-    bool Create(int Size); 
+    bool Create(int Size);
     bool Open(const TGUID& id, int size);
 
     const TGUID& GetId() {
@@ -29,4 +29,4 @@ public:
     int GetSize() const {
         return Size;
     }
-}; 
+};

@@ -11,7 +11,7 @@
     #pragma intrinsic(_InterlockedExchangeAdd)
     #pragma intrinsic(_InterlockedExchange)
     #pragma intrinsic(_InterlockedCompareExchange)
- 
+
 static inline intptr_t AtomicIncrement(TAtomic& a) {
     return _InterlockedIncrement((volatile long*)&a);
 }

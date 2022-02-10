@@ -1,62 +1,62 @@
 #include "lf_allocX64.h"
 
-////////////////////////////////////////////////////////////////////////// 
-// hooks 
-#if defined(USE_INTELCC) || defined(_darwin_) || defined(_freebsd_) || defined(_STLPORT_VERSION) 
+//////////////////////////////////////////////////////////////////////////
+// hooks
+#if defined(USE_INTELCC) || defined(_darwin_) || defined(_freebsd_) || defined(_STLPORT_VERSION)
 #define OP_THROWNOTHING noexcept
-#else 
-#define OP_THROWNOTHING 
-#endif 
- 
+#else
+#define OP_THROWNOTHING
+#endif
+
 #ifndef _darwin_
 #if !defined(YMAKE)
 void* operator new(size_t size) {
     return LFAlloc(size);
-} 
- 
-void* operator new(size_t size, const std::nothrow_t&) OP_THROWNOTHING { 
+}
+
+void* operator new(size_t size, const std::nothrow_t&) OP_THROWNOTHING {
     return LFAlloc(size);
-} 
- 
+}
+
 void operator delete(void* p)OP_THROWNOTHING {
-    LFFree(p); 
-} 
- 
+    LFFree(p);
+}
+
 void operator delete(void* p, const std::nothrow_t&)OP_THROWNOTHING {
-    LFFree(p); 
-} 
- 
+    LFFree(p);
+}
+
 void* operator new[](size_t size) {
     return LFAlloc(size);
-} 
- 
-void* operator new[](size_t size, const std::nothrow_t&) OP_THROWNOTHING { 
+}
+
+void* operator new[](size_t size, const std::nothrow_t&) OP_THROWNOTHING {
     return LFAlloc(size);
-} 
- 
-void operator delete[](void* p) OP_THROWNOTHING { 
-    LFFree(p); 
-} 
- 
-void operator delete[](void* p, const std::nothrow_t&) OP_THROWNOTHING { 
-    LFFree(p); 
-} 
+}
+
+void operator delete[](void* p) OP_THROWNOTHING {
+    LFFree(p);
+}
+
+void operator delete[](void* p, const std::nothrow_t&) OP_THROWNOTHING {
+    LFFree(p);
+}
 #endif
- 
-//#ifndef _MSC_VER 
- 
-extern "C" void* malloc(size_t size) { 
+
+//#ifndef _MSC_VER
+
+extern "C" void* malloc(size_t size) {
     return LFAlloc(size);
-} 
- 
+}
+
 extern "C" void* valloc(size_t size) {
     return LFVAlloc(size);
 }
 
 extern "C" int posix_memalign(void** memptr, size_t alignment, size_t size) {
     return LFPosixMemalign(memptr, alignment, size);
-} 
- 
+}
+
 extern "C" void* memalign(size_t alignment, size_t size) {
     void* ptr;
     int res = LFPosixMemalign(&ptr, alignment, size);
@@ -74,46 +74,46 @@ extern "C" void* __libc_memalign(size_t alignment, size_t size) {
 }
 #endif
 
-extern "C" void free(void* ptr) { 
-    LFFree(ptr); 
-} 
- 
-extern "C" void* calloc(size_t n, size_t elem_size) { 
-    // Overflow check 
-    const size_t size = n * elem_size; 
+extern "C" void free(void* ptr) {
+    LFFree(ptr);
+}
+
+extern "C" void* calloc(size_t n, size_t elem_size) {
+    // Overflow check
+    const size_t size = n * elem_size;
     if (elem_size != 0 && size / elem_size != n)
         return nullptr;
- 
+
     void* result = LFAlloc(size);
     if (result != nullptr) {
-        memset(result, 0, size); 
-    } 
-    return result; 
-} 
- 
-extern "C" void cfree(void* ptr) { 
-    LFFree(ptr); 
-} 
- 
-extern "C" void* realloc(void* old_ptr, size_t new_size) { 
+        memset(result, 0, size);
+    }
+    return result;
+}
+
+extern "C" void cfree(void* ptr) {
+    LFFree(ptr);
+}
+
+extern "C" void* realloc(void* old_ptr, size_t new_size) {
     if (old_ptr == nullptr) {
         void* result = LFAlloc(new_size);
-        return result; 
-    } 
-    if (new_size == 0) { 
-        LFFree(old_ptr); 
+        return result;
+    }
+    if (new_size == 0) {
+        LFFree(old_ptr);
         return nullptr;
-    } 
- 
+    }
+
     void* new_ptr = LFAlloc(new_size);
     if (new_ptr == nullptr) {
         return nullptr;
-    } 
-    size_t old_size = LFGetSize(old_ptr); 
-    memcpy(new_ptr, old_ptr, ((old_size < new_size) ? old_size : new_size)); 
-    LFFree(old_ptr); 
-    return new_ptr; 
-} 
+    }
+    size_t old_size = LFGetSize(old_ptr);
+    memcpy(new_ptr, old_ptr, ((old_size < new_size) ? old_size : new_size));
+    LFFree(old_ptr);
+    return new_ptr;
+}
 
 extern "C" size_t malloc_usable_size(void* ptr) {
     if (ptr == nullptr) {
@@ -141,4 +141,4 @@ NMalloc::TMallocInfo NMalloc::MallocInfo() {
     r.Name = "system-darwin";
     return r;
 }
-#endif 
+#endif

@@ -1,4 +1,4 @@
-#include "shmat.h" 
+#include "shmat.h"
 
 #include <util/generic/guid.h>
 
@@ -37,8 +37,8 @@ extern "C" {
     BOOL WINAPI UnmapViewOfFile(LPCVOID lpBaseAddress);
     DWORD WINAPI GetLastError(void);
 }
-#endif 
- 
+#endif
+
 #if defined(_bionic_)
 namespace {
     #if !defined(__i386__)
@@ -95,117 +95,117 @@ TSharedMemory::TSharedMemory()
     , Size(0)
 {
 }
- 
+
 #if defined(_win_)
 static void FormatName(char* buf, const TGUID& id) {
-    sprintf(buf, "Global\\shmat-%s", GetGuidAsString(id).c_str()); 
-} 
- 
+    sprintf(buf, "Global\\shmat-%s", GetGuidAsString(id).c_str());
+}
+
 bool TSharedMemory::Open(const TGUID& id, int size) {
     //Y_ASSERT(Data == 0);
-    Id = id; 
-    Size = size; 
- 
-    char name[100]; 
-    FormatName(name, Id); 
+    Id = id;
+    Size = size;
+
+    char name[100];
+    FormatName(name, Id);
     Handle = OpenFileMappingA(FILE_MAP_ALL_ACCESS, FALSE, name);
 
     if (Handle == 0) {
-        return false; 
+        return false;
     }
- 
+
     Data = MapViewOfFile(Handle, FILE_MAP_ALL_ACCESS, 0, 0, size);
 
-    if (Data == 0) { 
+    if (Data == 0) {
         //Y_ASSERT(0);
         CloseHandle(Handle);
         Handle = INVALID_OS_HANDLE;
 
-        return false; 
-    } 
+        return false;
+    }
 
-    return true; 
-} 
- 
+    return true;
+}
+
 bool TSharedMemory::Create(int size) {
     //Y_ASSERT(Data == 0);
-    Size = size; 
- 
-    CreateGuid(&Id); 
- 
-    char name[100]; 
-    FormatName(name, Id); 
+    Size = size;
+
+    CreateGuid(&Id);
+
+    char name[100];
+    FormatName(name, Id);
     Handle = CreateFileMappingA(INVALID_OS_HANDLE, nullptr, PAGE_READWRITE, 0, size, name);
 
     if (Handle == 0) {
         //Y_ASSERT(0);
-        return false; 
-    } 
- 
+        return false;
+    }
+
     Data = MapViewOfFile(Handle, FILE_MAP_ALL_ACCESS, 0, 0, size);
 
-    if (Data == 0) { 
+    if (Data == 0) {
         //Y_ASSERT(0);
         CloseHandle(Handle);
         Handle = INVALID_OS_HANDLE;
 
-        return false; 
-    } 
+        return false;
+    }
 
-    return true; 
-} 
- 
+    return true;
+}
+
 TSharedMemory::~TSharedMemory() {
     if (Data) {
         UnmapViewOfFile(Handle);
     }
 
     CloseHandle(Handle);
-} 
-#else 
+}
+#else
 static key_t GetKey(const TGUID& id) {
     i64 id64 = (ui64)(((ui64)id.dw[0] + (ui64)id.dw[2]) << 32) + (ui64)id.dw[1] + (ui64)id.dw[3];
 
-    return id64; 
-} 
- 
+    return id64;
+}
+
 bool TSharedMemory::Open(const TGUID& id, int size) {
     Y_VERIFY(id, "invalid shared memory guid: %s", GetGuidAsString(id).data());
 
     //Y_ASSERT(Data == 0);
-    Size = size; 
- 
-    key_t k = GetKey(id); 
+    Size = size;
+
+    key_t k = GetKey(id);
     int shmId = shmget(k, Size, 0777); // do not fill Handle, since IPC_RMID should be called by owner
 
     if (shmId < 0) {
-        return false; 
+        return false;
     }
- 
+
     Data = shmat(shmId, nullptr, 0);
 
     if (Data == nullptr) {
         //Y_ASSERT(0);
-        return false; 
-    } 
+        return false;
+    }
 
-    return true; 
-} 
- 
+    return true;
+}
+
 bool TSharedMemory::Create(int size) {
     //Y_ASSERT(Data == 0);
-    Size = size; 
- 
-    CreateGuid(&Id); 
- 
-    key_t k = GetKey(Id); 
+    Size = size;
+
+    CreateGuid(&Id);
+
+    key_t k = GetKey(Id);
     Handle = shmget(k, Size, IPC_CREAT | IPC_EXCL | 0777);
 
     if (Handle < 0) {
         //Y_ASSERT(0);
-        return false; 
-    } 
- 
+        return false;
+    }
+
     Data = shmat(Handle, nullptr, 0);
 
     if (Data == (void*)-1) {
@@ -213,19 +213,19 @@ bool TSharedMemory::Create(int size) {
         shmctl(Handle, IPC_RMID, nullptr);
         Handle = -1;
 
-        return false; 
-    } 
+        return false;
+    }
 
-    return true; 
-} 
- 
+    return true;
+}
+
 TSharedMemory::~TSharedMemory() {
     if (Data) {
-        shmdt(Data); 
+        shmdt(Data);
     }
 
     if (Handle >= 0) {
         shmctl(Handle, IPC_RMID, nullptr);
     }
-} 
-#endif 
+}
+#endif

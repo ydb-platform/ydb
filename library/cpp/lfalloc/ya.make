@@ -21,5 +21,5 @@ PEERDIR(
 )
 
 SET(IDE_FOLDER "util")
- 
-END() 
+
+END()

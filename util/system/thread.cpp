@@ -203,15 +203,15 @@ namespace {
                 }
             }
 
-            { 
+            {
                 TParams* holdP = P_.Release();
-                int err = pthread_create(&H_, pattrs, ThreadProxy, holdP); 
-                if (err) { 
+                int err = pthread_create(&H_, pattrs, ThreadProxy, holdP);
+                if (err) {
                     H_ = {};
-                    P_.Reset(holdP); 
-                    PCHECK(err, "failed to create thread"); 
-                } 
-            } 
+                    P_.Reset(holdP);
+                    PCHECK(err, "failed to create thread");
+                }
+            }
         }
 
     private:

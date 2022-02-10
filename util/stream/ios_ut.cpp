@@ -100,9 +100,9 @@ void TStreamsTest::TestStringStream() {
       << 123.1;
 
     UNIT_ASSERT_EQUAL(s.ReadLine(), "34");
-    UNIT_ASSERT_EQUAL(s.ReadLine(), "123.1"); 
+    UNIT_ASSERT_EQUAL(s.ReadLine(), "123.1");
 
-    UNIT_ASSERT_EQUAL(s.Str(), "qw\r\n1234\n34\r\n123.1"); 
+    UNIT_ASSERT_EQUAL(s.Str(), "qw\r\n1234\n34\r\n123.1");
 
     // Test stream copying
     TStringStream sc = s;

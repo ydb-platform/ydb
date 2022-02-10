@@ -1,9 +1,9 @@
 #pragma once
 
 #include <typeinfo>
-#include <util/generic/hash.h> 
+#include <util/generic/hash.h>
 #include <util/generic/vector.h>
-#include <util/ysafeptr.h> 
+#include <util/ysafeptr.h>
 
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -86,8 +86,8 @@ void TClassFactory<T>::RegisterTypeBase(int nTypeID, newFunc func, VFT vft) {
 
         if (typeid(o1v) != typeid(o2v)) {
             fprintf(stderr, "IBinSaver: Type ID 0x%08X has been already used\n", nTypeID);
-            abort(); 
-        } 
+            abort();
+        }
     }
 
     CTypeIndexHash::iterator typeIndexIt = typeIndex.find(vft);

@@ -1,7 +1,7 @@
-LIBRARY() 
+LIBRARY()
 
 OWNER(a-romanov)
- 
+
 NO_UTIL()
 
 NO_COMPILER_WARNINGS()
@@ -25,5 +25,5 @@ PEERDIR(
 )
 
 SET(IDE_FOLDER "util")
- 
-END() 
+
+END()

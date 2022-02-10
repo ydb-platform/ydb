@@ -22,7 +22,7 @@
     #define get_host_error() h_errno
 #elif defined(_win_)
     #pragma comment(lib, "Ws2_32.lib")
- 
+
     #if _WIN32_WINNT < 0x0600
 struct pollfd {
     SOCKET fd;

@@ -1,12 +1,12 @@
 #include "fs.h"
 #include "defaults.h"
 
-#if defined(_win_) 
+#if defined(_win_)
     #include "fs_win.h"
 #else
     #include <unistd.h>
     #include <errno.h>
-#endif 
+#endif
 
 #include <util/generic/yexception.h>
 #include <util/memory/tempbuf.h>

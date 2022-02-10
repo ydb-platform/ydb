@@ -54,7 +54,7 @@ namespace NMemIoInternals {
                 IBinSaver bs(f, bRead, stableOutput);
                 bs.Add(1, &c);
             }
-        } else { 
+        } else {
             if (bRead) {
                 Y_ASSERT(data->size() == sizeof(T));
                 c = *reinterpret_cast<T*>(&(*data)[0]);
@@ -62,7 +62,7 @@ namespace NMemIoInternals {
                 data->yresize(sizeof(T));
                 *reinterpret_cast<T*>(&(*data)[0]) = c;
             }
-        } 
+        }
     }
 
     ////////////////////////////////////////////////////////////////////////////
@@ -70,11 +70,11 @@ namespace NMemIoInternals {
         TVector<TVector<char>>& Data;
         i64 Block, Pos;
         bool ShrinkOnRead;
- 
+
         enum {
             MAX_BLOCK_SIZE = 1024 * 1024 // Aligned with cache size
         };
- 
+
     public:
         THugeMemoryStream(TVector<TVector<char>>* data, bool shrinkOnRead = false)
             : Data(*data)
@@ -115,19 +115,19 @@ namespace NMemIoInternals {
                     Pos = 0;
                     Data.resize(Block + 1);
                     newSize = Pos + size;
-                } 
+                }
                 Data[Block].yresize(newSize);
-            } 
+            }
             if (size) {
                 memcpy(&Data[Block][Pos], userData, size);
             }
             Pos += size;
             return sizeArg;
-        } 
+        }
         int ReadImpl(void* userDataArg, int sizeArg) override {
             if (sizeArg == 0)
                 return 0;
- 
+
             char* userData = (char*)userDataArg;
             i64 size = sizeArg;
             i64 rv = 0;
@@ -155,11 +155,11 @@ namespace NMemIoInternals {
                     memcpy(userData, &Data[Block][Pos], size);
                     Pos += size;
                     rv += size;
-                    return rv; 
-                } 
-            } 
+                    return rv;
+                }
+            }
             return rv;
-        } 
+        }
     };
 
     template <class T>
@@ -174,7 +174,7 @@ namespace NMemIoInternals {
         }
     }
 }
- 
+
 template <class T>
 inline void SerializeMem(const TVector<char>& data, T& c) {
     if (IBinSaver::HasNonTrivialSerializer<T>(0u)) {
@@ -183,8 +183,8 @@ inline void SerializeMem(const TVector<char>& data, T& c) {
     } else {
         Y_ASSERT(data.size() == sizeof(T));
         c = *reinterpret_cast<const T*>(&data[0]);
-    } 
-} 
+    }
+}
 
 template <class T, class D>
 inline void SerializeToMem(D* data, T& c, bool stableOutput = false) {

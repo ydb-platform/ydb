@@ -4,8 +4,8 @@
 #include <util/generic/singleton.h>
 #include <util/datetime/cputimer.h>
 
-using namespace NHPTimer; 
- 
+using namespace NHPTimer;
+
 namespace {
     struct TFreq {
         inline TFreq()
@@ -13,12 +13,12 @@ namespace {
             , Rate(1.0 / Freq)
             , CyclesPerSecond(static_cast<ui64>(Rate))
         {
-        } 
+        }
 
         static inline const TFreq& Instance() {
             return *SingletonWithPriority<TFreq, 1>();
-        } 
- 
+        }
+
         static double EstimateCPUClock() {
             for (;;) {
                 ui64 startCycle = 0;
@@ -91,28 +91,28 @@ namespace {
         const double Rate;
         const ui64 CyclesPerSecond;
     };
-} 
- 
+}
+
 double NHPTimer::GetSeconds(const STime& a) noexcept {
     return TFreq::Instance().GetSeconds(a);
-} 
- 
+}
+
 double NHPTimer::GetClockRate() noexcept {
     return TFreq::Instance().GetClockRate();
-} 
- 
+}
+
 ui64 NHPTimer::GetCyclesPerSecond() noexcept {
     return TFreq::Instance().GetCyclesPerSecond();
 }
 
 void NHPTimer::GetTime(STime* pTime) noexcept {
-    *pTime = GetCycleCount(); 
-} 
- 
+    *pTime = GetCycleCount();
+}
+
 double NHPTimer::GetTimePassed(STime* pTime) noexcept {
-    STime old(*pTime); 
+    STime old(*pTime);
 
     *pTime = GetCycleCount();
 
-    return GetSeconds(*pTime - old); 
-} 
+    return GetSeconds(*pTime - old);
+}

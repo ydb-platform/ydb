@@ -121,66 +121,66 @@ public:
         AtomicAdd(DequeueCount, -1);
         return false;
     }
-    // add all elements to *res 
+    // add all elements to *res
     // elements are returned in order of dequeue (top to bottom; see example in unittest)
     template <typename TCollection>
     void DequeueAll(TCollection* res) {
-        AtomicAdd(DequeueCount, 1); 
+        AtomicAdd(DequeueCount, 1);
         for (TNode* current = AtomicGet(Head); current; current = AtomicGet(Head)) {
             if (AtomicCas(&Head, (TNode*)nullptr, current)) {
                 for (TNode* x = current; x;) {
                     res->push_back(std::move(x->Value));
-                    x = x->Next; 
-                } 
-                // EraseList(current); // ABA problem 
-                // even more complex node deletion 
-                TryToFreeMemory(); 
-                if (AtomicAdd(DequeueCount, -1) == 0) { 
-                    // no other Dequeue()s, can safely reclaim memory 
-                    EraseList(current); 
-                } else { 
-                    // Dequeue()s in progress, add nodes list to free list 
+                    x = x->Next;
+                }
+                // EraseList(current); // ABA problem
+                // even more complex node deletion
+                TryToFreeMemory();
+                if (AtomicAdd(DequeueCount, -1) == 0) {
+                    // no other Dequeue()s, can safely reclaim memory
+                    EraseList(current);
+                } else {
+                    // Dequeue()s in progress, add nodes list to free list
                     TNode* currentLast = current;
-                    while (currentLast->Next) { 
+                    while (currentLast->Next) {
                         currentLast = currentLast->Next;
-                    } 
-                    for (;;) { 
+                    }
+                    for (;;) {
                         AtomicSet(currentLast->Next, AtomicGet(FreePtr));
-                        if (AtomicCas(&FreePtr, current, currentLast->Next)) 
-                            break; 
-                    } 
-                } 
-                return; 
-            } 
-        } 
-        TryToFreeMemory(); 
-        AtomicAdd(DequeueCount, -1); 
-    } 
+                        if (AtomicCas(&FreePtr, current, currentLast->Next))
+                            break;
+                    }
+                }
+                return;
+            }
+        }
+        TryToFreeMemory();
+        AtomicAdd(DequeueCount, -1);
+    }
     bool DequeueSingleConsumer(T* res) {
         for (TNode* current = AtomicGet(Head); current; current = AtomicGet(Head)) {
-            if (AtomicCas(&Head, current->Next, current)) { 
+            if (AtomicCas(&Head, current->Next, current)) {
                 *res = std::move(current->Value);
-                delete current; // with single consumer thread ABA does not happen 
-                return true; 
-            } 
-        } 
-        return false; 
-    } 
-    // add all elements to *res 
-    // elements are returned in order of dequeue (top to bottom; see example in unittest) 
+                delete current; // with single consumer thread ABA does not happen
+                return true;
+            }
+        }
+        return false;
+    }
+    // add all elements to *res
+    // elements are returned in order of dequeue (top to bottom; see example in unittest)
     template <typename TCollection>
     void DequeueAllSingleConsumer(TCollection* res) {
         for (TNode* current = AtomicGet(Head); current; current = AtomicGet(Head)) {
             if (AtomicCas(&Head, (TNode*)nullptr, current)) {
                 for (TNode* x = current; x;) {
                     res->push_back(std::move(x->Value));
-                    x = x->Next; 
-                } 
-                EraseList(current); // with single consumer thread ABA does not happen 
-                return; 
-            } 
-        } 
-    } 
+                    x = x->Next;
+                }
+                EraseList(current); // with single consumer thread ABA does not happen
+                return;
+            }
+        }
+    }
     bool IsEmpty() {
         AtomicAdd(DequeueCount, 0);        // mem barrier
         return AtomicGet(Head) == nullptr; // without lock, so result is approximate

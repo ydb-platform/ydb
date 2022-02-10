@@ -66,7 +66,7 @@ class Swig(iw.CustomCommand):
             unit.onpeerdir(['build/platform/perl'])
 
         if self._swig_lang in ['jni_cpp', 'java']:
-            self._out_header = os.path.splitext(self._main_out)[0] + '.h' 
+            self._out_header = os.path.splitext(self._main_out)[0] + '.h'
             if (not unit.get('USE_SYSTEM_JDK')) and (unit.get('OS_ANDROID') != "yes"):
                 unit.onpeerdir(['contrib/libs/jdk'])
 
@@ -101,9 +101,9 @@ class Swig(iw.CustomCommand):
             (common.join_intl_paths(self._bindir, self._out_name), (['noauto', 'add_to_outs'] if self._swig_lang != 'java' else [])),
         ] + ([(self._out_header, [])] if self._swig_lang == 'java' else [])
 
-    def output_includes(self): 
+    def output_includes(self):
         return [(self._out_header, [])] if self._swig_lang in ['java', 'jni_cpp'] else []
- 
+
     def run(self, extra_args, binary):
         if self._local_swig:
             binary = self._tool

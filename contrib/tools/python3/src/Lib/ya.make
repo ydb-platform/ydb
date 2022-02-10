@@ -8,14 +8,14 @@ LICENSE(Python-2.0)
 
 NO_LINT()
 
-NO_PYTHON_INCLUDES() 
- 
+NO_PYTHON_INCLUDES()
+
 PEERDIR(
     certs
     contrib/tools/python3/lib/py
 )
 
-PY_SRCS( 
+PY_SRCS(
     TOP_LEVEL
     __future__.py
     _aix_support.py

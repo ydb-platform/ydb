@@ -52,10 +52,10 @@ def onfat_resource(unit, *args):
 
 def onresource_files(unit, *args):
     """
-    @usage: RESOURCE_FILES([DONT_PARSE] [PREFIX {prefix}] [STRIP prefix_to_strip] {path}) 
- 
-    This macro expands into 
-    RESOURCE([DONT_PARSE] {path} resfs/file/{prefix}{path} 
+    @usage: RESOURCE_FILES([DONT_PARSE] [PREFIX {prefix}] [STRIP prefix_to_strip] {path})
+
+    This macro expands into
+    RESOURCE([DONT_PARSE] {path} resfs/file/{prefix}{path}
         - resfs/src/resfs/file/{prefix}{remove_prefix(path, prefix_to_strip)}={rootrel_arc_src(path)}
     )
 
@@ -65,28 +65,28 @@ def onresource_files(unit, *args):
     resfs/file/{key} stores any value whose source was a file on a filesystem.
     resfs/src/resfs/file/{key} must store its path.
 
-    DONT_PARSE disables parsing for source code files (determined by extension) 
-               Please don't abuse: use separate DONT_PARSE macro call only for files subject to parsing 
- 
+    DONT_PARSE disables parsing for source code files (determined by extension)
+               Please don't abuse: use separate DONT_PARSE macro call only for files subject to parsing
+
     This form is for use from other plugins:
     RESOURCE_FILES([DEST {dest}] {path}) expands into RESOURCE({path} resfs/file/{dest})
- 
-    @see: https://wiki.yandex-team.ru/devtools/commandsandvars/resourcefiles/ 
+
+    @see: https://wiki.yandex-team.ru/devtools/commandsandvars/resourcefiles/
     """
     prefix = ''
     prefix_to_strip = None
     dest = None
     res = []
-    first = 0 
+    first = 0
 
     if args and not unit.enabled('_GO_MODULE'):
         # GO_RESOURCE currently doesn't support DONT_PARSE
         res.append('DONT_PARSE')
 
-    if args and args[0] == 'DONT_PARSE': 
-        first = 1 
+    if args and args[0] == 'DONT_PARSE':
+        first = 1
 
-    args = iter(args[first:]) 
+    args = iter(args[first:])
     for arg in args:
         if arg == 'PREFIX':
             prefix, dest = next(args), None

@@ -25,7 +25,7 @@ RECURSE(
     docs/empty
     external_resources
     platform/java
-    platform/local_so 
+    platform/local_so
     platform/perl
     platform/python
     platform/python/ldflags

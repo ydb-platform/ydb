@@ -1,4 +1,4 @@
-PY23_LIBRARY() 
+PY23_LIBRARY()
 
 OWNER(orivej g:python-contrib)
 

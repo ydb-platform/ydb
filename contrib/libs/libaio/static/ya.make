@@ -26,14 +26,14 @@ NO_UTIL()
 
 NO_RUNTIME()
 
-PROVIDES(libaio) 
- 
-SRCDIR(contrib/libs/libaio) 
+PROVIDES(libaio)
+
+SRCDIR(contrib/libs/libaio)
 
 ADDINCL(
     contrib/libs/libaio
 )
- 
+
 SRCS(
     io_cancel.c
     io_destroy.c

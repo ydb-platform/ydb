@@ -285,8 +285,8 @@ RECURSE(
     pugixml
     pybind11
     pycxx
-    python 
-    python/ut 
+    python
+    python/ut
     qhull
     quicklz
     r-lang

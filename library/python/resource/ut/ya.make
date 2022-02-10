@@ -1,6 +1,6 @@
 OWNER(pg)
 
-RECURSE( 
-    py2 
-    py3 
+RECURSE(
+    py2
+    py3
 )

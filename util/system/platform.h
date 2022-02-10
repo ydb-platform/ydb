@@ -146,38 +146,38 @@
     #define _ssse3_
 #endif
 
-#if defined(__SSE4_1__) || defined(SSE41_ENABLED) 
+#if defined(__SSE4_1__) || defined(SSE41_ENABLED)
     #define _sse4_1_
-#endif 
- 
-#if defined(__SSE4_2__) || defined(SSE42_ENABLED) 
+#endif
+
+#if defined(__SSE4_2__) || defined(SSE42_ENABLED)
     #define _sse4_2_
-#endif 
- 
-#if defined(__POPCNT__) || defined(POPCNT_ENABLED) 
+#endif
+
+#if defined(__POPCNT__) || defined(POPCNT_ENABLED)
     #define _popcnt_
 #endif
 
-#if defined(__PCLMUL__) || defined(PCLMUL_ENABLED) 
+#if defined(__PCLMUL__) || defined(PCLMUL_ENABLED)
     #define _pclmul_
-#endif 
- 
-#if defined(__AES__) || defined(AES_ENABLED) 
+#endif
+
+#if defined(__AES__) || defined(AES_ENABLED)
     #define _aes_
-#endif 
- 
-#if defined(__AVX__) || defined(AVX_ENABLED) 
+#endif
+
+#if defined(__AVX__) || defined(AVX_ENABLED)
     #define _avx_
-#endif 
- 
-#if defined(__AVX2__) || defined(AVX2_ENABLED) 
+#endif
+
+#if defined(__AVX2__) || defined(AVX2_ENABLED)
     #define _avx2_
-#endif 
- 
-#if defined(__FMA__) || defined(FMA_ENABLED) 
+#endif
+
+#if defined(__FMA__) || defined(FMA_ENABLED)
     #define _fma_
-#endif 
- 
+#endif
+
 #if defined(__DLL__) || defined(_DLL)
     #define _dll_
 #endif

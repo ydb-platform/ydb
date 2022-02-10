@@ -509,7 +509,7 @@ RECURSE(
     imagesize
     IMAPClient
     imgkit
-    implicit 
+    implicit
     importlib-metadata
     importlib-resources
     incremental

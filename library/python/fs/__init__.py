@@ -466,14 +466,14 @@ def copytree3(
 def walk_relative(path, topdown=True, onerror=None, followlinks=False):
     for dirpath, dirnames, filenames in os.walk(path, topdown=topdown, onerror=onerror, followlinks=followlinks):
         yield os.path.relpath(dirpath, path), dirnames, filenames
- 
 
-def supports_clone(): 
-    if 'darwin' in sys.platform: 
-        import platform 
 
-        return list(map(int, platform.mac_ver()[0].split('.'))) >= [10, 13] 
-    return False 
+def supports_clone():
+    if 'darwin' in sys.platform:
+        import platform
+
+        return list(map(int, platform.mac_ver()[0].split('.'))) >= [10, 13]
+    return False
 
 
 def commonpath(paths):

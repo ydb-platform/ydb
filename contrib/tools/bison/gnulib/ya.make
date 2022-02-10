@@ -1,5 +1,5 @@
-OWNER(g:contrib) 
- 
+OWNER(g:contrib)
+
 LIBRARY()
 
 LICENSE(

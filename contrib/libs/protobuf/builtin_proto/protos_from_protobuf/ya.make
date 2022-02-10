@@ -1,4 +1,4 @@
-PROTO_LIBRARY() 
+PROTO_LIBRARY()
 
 WITHOUT_LICENSE_TEXTS()
 
@@ -6,27 +6,27 @@ LICENSE(BSD-3-Clause)
 
 OWNER(g:yatool)
 
-EXCLUDE_TAGS( 
-    CPP_PROTO 
-    GO_PROTO 
-) 
- 
-NO_MYPY() 
- 
-NO_OPTIMIZE_PY_PROTOS() 
- 
-DISABLE(NEED_GOOGLE_PROTO_PEERDIRS) 
- 
+EXCLUDE_TAGS(
+    CPP_PROTO
+    GO_PROTO
+)
+
+NO_MYPY()
+
+NO_OPTIMIZE_PY_PROTOS()
+
+DISABLE(NEED_GOOGLE_PROTO_PEERDIRS)
+
 PY_NAMESPACE(.)
 
-PROTO_NAMESPACE( 
-    GLOBAL 
-    contrib/libs/protobuf/src 
-) 
+PROTO_NAMESPACE(
+    GLOBAL
+    contrib/libs/protobuf/src
+)
 
 SRCDIR(contrib/libs/protobuf/src)
 
-SRCS( 
+SRCS(
     google/protobuf/any.proto
     google/protobuf/api.proto
     google/protobuf/descriptor.proto

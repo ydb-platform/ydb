@@ -1,4 +1,4 @@
-PY3_LIBRARY() 
+PY3_LIBRARY()
 
 OWNER(
     borman
@@ -20,7 +20,7 @@ NO_PYTHON_INCLUDES()
 
 ENABLE(PYBUILD_NO_PYC)
 
-PY_SRCS( 
+PY_SRCS(
     entry_points.py
     TOP_LEVEL
 

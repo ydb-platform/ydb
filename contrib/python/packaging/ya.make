@@ -1,4 +1,4 @@
-PY23_LIBRARY() 
+PY23_LIBRARY()
 
 LICENSE(Service-Py23-Proxy)
 

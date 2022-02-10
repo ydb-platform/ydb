@@ -1,7 +1,7 @@
-OWNER(spreis) 
- 
-RECURSE( 
-    lib 
-    py2 
-    py3 
-) 
+OWNER(spreis)
+
+RECURSE(
+    lib
+    py2
+    py3
+)

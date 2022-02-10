@@ -5,7 +5,7 @@ import os
 import sys
 import io
 
-import process_command_files as pcf 
+import process_command_files as pcf
 
 class BadMfError(Exception):
     pass
@@ -23,7 +23,7 @@ def process_quotes(s):
 
 
 def parse_args():
-    args = pcf.get_args(sys.argv[1:]) 
+    args = pcf.get_args(sys.argv[1:])
     lics, peers, free_args, credits = [], [], [], []
     current_list = free_args
     for a in args:

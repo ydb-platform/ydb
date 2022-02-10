@@ -143,7 +143,7 @@ FILES(
 )
 
 END()
- 
-RECURSE( 
-    builtin_proto 
-) 
+
+RECURSE(
+    builtin_proto
+)

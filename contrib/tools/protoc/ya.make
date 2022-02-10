@@ -3,7 +3,7 @@ OWNER(
     g:contrib
     g:cpp-contrib
 )
- 
+
 IF (USE_PREBUILT_TOOLS)
     INCLUDE(${ARCADIA_ROOT}/build/prebuilt/contrib/tools/protoc/ya.make.prebuilt)
 ENDIF()

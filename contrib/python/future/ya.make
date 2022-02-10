@@ -1,4 +1,4 @@
-PY23_LIBRARY() 
+PY23_LIBRARY()
 
 LICENSE(MIT)
 
@@ -138,32 +138,32 @@ PY_SRCS(
 )
 
 IF (MODULE_TAG == "PY2")
-    PY_SRCS( 
-        TOP_LEVEL 
-        _dummy_thread/__init__.py 
-        _markupbase/__init__.py 
-        _thread/__init__.py 
-        builtins/__init__.py 
-        copyreg/__init__.py 
-        future/__init__.py 
-        html/__init__.py 
-        html/entities.py 
-        html/parser.py 
-        http/__init__.py 
-        http/client.py 
-        http/cookiejar.py 
-        http/cookies.py 
-        http/server.py 
+    PY_SRCS(
+        TOP_LEVEL
+        _dummy_thread/__init__.py
+        _markupbase/__init__.py
+        _thread/__init__.py
+        builtins/__init__.py
+        copyreg/__init__.py
+        future/__init__.py
+        html/__init__.py
+        html/entities.py
+        html/parser.py
+        http/__init__.py
+        http/client.py
+        http/cookiejar.py
+        http/cookies.py
+        http/server.py
         past/__init__.py
-        queue/__init__.py 
-        reprlib/__init__.py 
-        socketserver/__init__.py 
-        xmlrpc/__init__.py 
-        xmlrpc/client.py 
-        xmlrpc/server.py 
-    ) 
-ENDIF() 
- 
+        queue/__init__.py
+        reprlib/__init__.py
+        socketserver/__init__.py
+        xmlrpc/__init__.py
+        xmlrpc/client.py
+        xmlrpc/server.py
+    )
+ENDIF()
+
 IF (OS_WINDOWS)
     PY_SRCS(
         TOP_LEVEL

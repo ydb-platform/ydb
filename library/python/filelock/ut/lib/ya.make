@@ -1,6 +1,6 @@
 OWNER(g:yatool)
 
-PY23_LIBRARY() 
+PY23_LIBRARY()
 
 TEST_SRCS(test_filelock.py)
 

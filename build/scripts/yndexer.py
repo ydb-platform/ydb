@@ -62,7 +62,7 @@ if __name__ == '__main__':
         yndexer, input_file,
         '-pb2',
         '-i', 'arc::{}'.format(arc_root),
-        '-i', 'build::{}'.format(build_root), 
+        '-i', 'build::{}'.format(build_root),
         '-i', '.IGNORE::/',
         '-o', os.path.dirname(output_file),
         '-n', os.path.basename(output_file).rsplit('.ydx.pb2', 1)[0],

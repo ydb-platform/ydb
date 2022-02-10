@@ -45,15 +45,15 @@ class _Formatting(object):
         return strval.replace(r'\n', '\\n"\\\n' + indent + '"')
 
     @staticmethod
-    def escape_trigraphs(strval): 
-        return strval.replace(r'?', '\\?') 
- 
-    @staticmethod 
+    def escape_trigraphs(strval):
+        return strval.replace(r'?', '\\?')
+
+    @staticmethod
     def escaped_define(strkey, val):
         name = "#define " + strkey + " "
         if _Formatting.is_str(val):
             define = "\"" + _Formatting.escape_line_feed(
-                _Formatting.escape_trigraphs(_Formatting.escape_special_symbols(val))) + "\"" 
+                _Formatting.escape_trigraphs(_Formatting.escape_special_symbols(val))) + "\""
         else:
             define = str(val)
         return name + define
@@ -68,8 +68,8 @@ class _Formatting(object):
 
 def get_default_json():
     return json.loads('''{
-    "ARCADIA_SOURCE_HG_HASH": "0000000000000000000000000000000000000000", 
-    "ARCADIA_SOURCE_LAST_AUTHOR": "<UNKNOWN>", 
+    "ARCADIA_SOURCE_HG_HASH": "0000000000000000000000000000000000000000",
+    "ARCADIA_SOURCE_LAST_AUTHOR": "<UNKNOWN>",
     "ARCADIA_SOURCE_LAST_CHANGE": -1,
     "ARCADIA_SOURCE_PATH": "/",
     "ARCADIA_SOURCE_REVISION": -1,
@@ -79,8 +79,8 @@ def get_default_json():
     "BUILD_TIMESTAMP": 0,
     "BUILD_HOST": "localhost",
     "BUILD_USER": "nobody",
-    "PROGRAM_VERSION": "Arc info:\\n    Branch: unknown-vcs-branch\\n    Commit: 0000000000000000000000000000000000000000\\n    Author: <UNKNOWN>\\n    Summary: No VCS\\n\\n", 
-    "SCM_DATA": "Arc info:\\n    Branch: unknown-vcs-branch\\n    Commit: 0000000000000000000000000000000000000000\\n    Author: <UNKNOWN>\\n    Summary: No VCS\\n", 
+    "PROGRAM_VERSION": "Arc info:\\n    Branch: unknown-vcs-branch\\n    Commit: 0000000000000000000000000000000000000000\\n    Author: <UNKNOWN>\\n    Summary: No VCS\\n\\n",
+    "SCM_DATA": "Arc info:\\n    Branch: unknown-vcs-branch\\n    Commit: 0000000000000000000000000000000000000000\\n    Author: <UNKNOWN>\\n    Summary: No VCS\\n",
     "VCS": "arc",
     "ARCADIA_PATCH_NUMBER": 0,
     "ARCADIA_TAG": ""

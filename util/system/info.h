@@ -8,5 +8,5 @@ namespace NSystemInfo {
     size_t LoadAverage(double* la, size_t len);
     size_t GetPageSize() noexcept;
     size_t TotalMemorySize();
-    size_t MaxOpenFiles(); 
+    size_t MaxOpenFiles();
 }

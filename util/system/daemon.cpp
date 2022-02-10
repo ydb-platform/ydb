@@ -2,7 +2,7 @@
 
 #include <cerrno>
 #include <cstdlib>
-#include <util/system/info.h> 
+#include <util/system/info.h>
 
 #if defined(_win_)
     #include <io.h>
@@ -55,7 +55,7 @@ static void CloseFromToExcept(int from, int to, const int* except) {
     (void)except;
 
 #ifdef _unix_
-    int mfd = NSystemInfo::MaxOpenFiles(); 
+    int mfd = NSystemInfo::MaxOpenFiles();
     for (int s = from; s < mfd && (to == -1 || s < to); s++) {
         for (const int* ex = except; *ex >= 0; ++ex) {
             if (s == *ex) {

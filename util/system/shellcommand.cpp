@@ -14,7 +14,7 @@
 #include <util/stream/pipe.h>
 #include <util/stream/str.h>
 #include <util/string/cast.h>
-#include <util/system/info.h> 
+#include <util/system/info.h>
 
 #include <errno.h>
 
@@ -721,7 +721,7 @@ void TShellCommand::TImpl::OnFork(TPipes& pipes, sigset_t oldmask, char* const* 
         }
 
         if (CloseAllFdsOnExec) {
-            for (int fd = NSystemInfo::MaxOpenFiles(); fd > STDERR_FILENO; --fd) { 
+            for (int fd = NSystemInfo::MaxOpenFiles(); fd > STDERR_FILENO; --fd) {
                 fcntl(fd, F_SETFD, FD_CLOEXEC);
             }
         }

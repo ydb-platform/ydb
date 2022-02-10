@@ -299,24 +299,24 @@ message ClusterStatusResponse {
 
     repeated TServiceNode ServiceNode = 10;
 }
-
-message GetMasterRequest {
-}
-
-message GetMasterResponse {
-    string Host = 1;
-    uint64 Port = 2;
-}
-
-message ConfigureFailureInjectorRequest {
-    string Name = 1;
+ 
+message GetMasterRequest { 
+} 
+ 
+message GetMasterResponse { 
+    string Host = 1; 
+    uint64 Port = 2; 
+} 
+ 
+message ConfigureFailureInjectorRequest { 
+    string Name = 1; 
     uint64 Skip = 2;
     uint64 CountOfFails = 5;
-    uint32 NodeId = 4; // aka actor id
-}
-
-message ConfigureFailureInjectorResponse {
-    bool success = 1;
+    uint32 NodeId = 4; // aka actor id 
+} 
+ 
+message ConfigureFailureInjectorResponse { 
+    bool success = 1; 
 }
 
 message IsReadyRequest {

@@ -7,10 +7,10 @@ SRCS(
     udf_resolver.proto
 )
 
-PEERDIR(
+PEERDIR( 
     ydb/library/yql/protos
-)
-
+) 
+ 
 IF (NOT PY_PROTOS_FOR)
     EXCLUDE_TAGS(GO_PROTO)
 ENDIF()

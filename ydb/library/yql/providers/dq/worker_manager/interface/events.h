@@ -127,31 +127,31 @@ using TDqResManEvents = NDq::TBaseDqResManEvents<NActors::TEvents::EEventSpace::
         TEvRoutesResponse() = default;
     };
 
-    struct TEvGetMasterRequest
-            : NActors::TEventPB<TEvGetMasterRequest, NYql::NDqProto::TEvGetMasterRequest, TDqResManEvents::ES_GET_MASTER> {
-
-        TEvGetMasterRequest() = default;
-    };
-
-    struct TEvGetMasterResponse
-            : NActors::TEventPB<TEvGetMasterResponse, NYql::NDqProto::TEvGetMasterResponse, TDqResManEvents::ES_GET_MASTER_RESPONSE> {
-
-        TEvGetMasterResponse() = default;
-    };
-
-    struct TEvConfigureFailureInjectorRequest
-            : NActors::TEventPB<TEvConfigureFailureInjectorRequest, NYql::NDqProto::TEvConfigureFailureInjectorRequest, TDqResManEvents::ES_CONFIGURE_FAILURE_INJECTOR> {
-
-        TEvConfigureFailureInjectorRequest() = default;
-        TEvConfigureFailureInjectorRequest(const Yql::DqsProto::ConfigureFailureInjectorRequest& request);
-    };
-
-    struct TEvConfigureFailureInjectorResponse
-            : NActors::TEventPB<TEvConfigureFailureInjectorResponse, NYql::NDqProto::TEvConfigureFailureInjectorRequestResponse, TDqResManEvents::ES_CONFIGURE_FAILURE_INJECTOR_RESPONSE> {
-
-        TEvConfigureFailureInjectorResponse() = default;
-    };
-
+    struct TEvGetMasterRequest 
+            : NActors::TEventPB<TEvGetMasterRequest, NYql::NDqProto::TEvGetMasterRequest, TDqResManEvents::ES_GET_MASTER> { 
+ 
+        TEvGetMasterRequest() = default; 
+    }; 
+ 
+    struct TEvGetMasterResponse 
+            : NActors::TEventPB<TEvGetMasterResponse, NYql::NDqProto::TEvGetMasterResponse, TDqResManEvents::ES_GET_MASTER_RESPONSE> { 
+ 
+        TEvGetMasterResponse() = default; 
+    }; 
+ 
+    struct TEvConfigureFailureInjectorRequest 
+            : NActors::TEventPB<TEvConfigureFailureInjectorRequest, NYql::NDqProto::TEvConfigureFailureInjectorRequest, TDqResManEvents::ES_CONFIGURE_FAILURE_INJECTOR> { 
+ 
+        TEvConfigureFailureInjectorRequest() = default; 
+        TEvConfigureFailureInjectorRequest(const Yql::DqsProto::ConfigureFailureInjectorRequest& request); 
+    }; 
+ 
+    struct TEvConfigureFailureInjectorResponse 
+            : NActors::TEventPB<TEvConfigureFailureInjectorResponse, NYql::NDqProto::TEvConfigureFailureInjectorRequestResponse, TDqResManEvents::ES_CONFIGURE_FAILURE_INJECTOR_RESPONSE> { 
+ 
+        TEvConfigureFailureInjectorResponse() = default; 
+    }; 
+ 
     inline NActors::TActorId MakeWorkerManagerActorID(ui32 nodeId) {
         char x[12] = {'r', 'e', 's', 'm', 'a', 'n'};
         memcpy(x + 7, &nodeId, sizeof(ui32));

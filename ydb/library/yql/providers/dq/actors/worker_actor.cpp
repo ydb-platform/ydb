@@ -14,7 +14,7 @@
 
 #include <util/stream/file.h>
 #include <util/string/split.h>
-#include <util/stream/output.h>
+#include <util/stream/output.h> 
 
 using namespace NYql::NDq;
 using namespace NYql::NDq::NTaskRunnerActor;
@@ -22,7 +22,7 @@ using namespace NYql::NDqProto;
 using namespace NActors;
 
 namespace NYql::NDqs {
-
+ 
 struct TInputChannel {
     bool Finished{false};
     bool Requested{false};
@@ -286,7 +286,7 @@ private:
         YQL_LOG(DEBUG) << "TDqWorker::OnDqTask";
 
         TFailureInjector::Reach("dq_task_failure", [] {::_exit(1); });
-
+ 
         Y_VERIFY(!TaskRunnerActor);
 
         Stat.StartCounter(Stat.GetCounterName("Actor", {{"ClusterName", RuntimeData ? RuntimeData->ClusterName : "local"}}, "ProcessInit"));

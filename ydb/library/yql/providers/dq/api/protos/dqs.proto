@@ -244,22 +244,22 @@ message TDqTaskPrepareResult {
     bool Result = 1;
     repeated TMetric Metric = 2;
 }
-
-message TEvGetMasterRequest {
-    bool IsForwarded = 1;
-}
-
-message TEvGetMasterResponse {
-    Yql.DqsProto.GetMasterResponse Response = 1;
-}
-
-message TEvConfigureFailureInjectorRequest {
-    Yql.DqsProto.ConfigureFailureInjectorRequest Request = 1;
-}
-
-message TEvConfigureFailureInjectorRequestResponse {
-    Yql.DqsProto.ConfigureFailureInjectorResponse Response = 1;
-}
+ 
+message TEvGetMasterRequest { 
+    bool IsForwarded = 1; 
+} 
+ 
+message TEvGetMasterResponse { 
+    Yql.DqsProto.GetMasterResponse Response = 1; 
+} 
+ 
+message TEvConfigureFailureInjectorRequest { 
+    Yql.DqsProto.ConfigureFailureInjectorRequest Request = 1; 
+} 
+ 
+message TEvConfigureFailureInjectorRequestResponse { 
+    Yql.DqsProto.ConfigureFailureInjectorResponse Response = 1; 
+} 
 
 message TPingRequest {
 

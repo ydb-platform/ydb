@@ -13,8 +13,8 @@ int a2i(const TString& s) {
 //============================== span =====================================
 
 void str_spn::init(const char* charset, bool extended) {
-    // chars_table_1 is necessary to avoid some unexpected
-    // multi-threading issues
+    // chars_table_1 is necessary to avoid some unexpected 
+    // multi-threading issues 
     ui8 chars_table_1[256];
     memset(chars_table_1, 0, sizeof(chars_table_1));
     if (extended) {
@@ -34,9 +34,9 @@ void str_spn::init(const char* charset, bool extended) {
         }
     }
     memcpy(chars_table, chars_table_1, 256);
-    chars_table_1[0] = 1;
+    chars_table_1[0] = 1; 
     for (int n = 0; n < 256; n++) {
-        c_chars_table[n] = !chars_table_1[n];
+        c_chars_table[n] = !chars_table_1[n]; 
     }
 }
 

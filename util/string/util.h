@@ -45,19 +45,19 @@ inline void addIfAbsent(TString& s, char lastCh1, char lastCh2) {
 
 /// @}
 
-/*
- * ------------------------------------------------------------------
- *
- * A fast implementation of glibc's functions;
- *      strspn, strcspn and strpbrk.
- *
- * ------------------------------------------------------------------
- */
+/* 
+ * ------------------------------------------------------------------ 
+ * 
+ * A fast implementation of glibc's functions; 
+ *      strspn, strcspn and strpbrk. 
+ * 
+ * ------------------------------------------------------------------ 
+ */ 
 struct ui8_256 {
-    // forward chars table
+    // forward chars table 
     ui8 chars_table[256];
-    // reverse (for c* functions) chars table
-    ui8 c_chars_table[256];
+    // reverse (for c* functions) chars table 
+    ui8 c_chars_table[256]; 
 };
 
 class str_spn: public ui8_256 {
@@ -67,16 +67,16 @@ public:
         // interior of brackets [ ], e.g. "a-z0-9"
         init(charset, extended);
     }
-
+ 
     /// Return first character in table, like strpbrk()
     /// That is, skip all characters not in table
     /// [DIFFERENCE FOR NOT_FOUND CASE: Returns end of string, not NULL]
     const char* brk(const char* s) const {
         while (c_chars_table[(ui8)*s])
             ++s;
-        return s;
-    }
-
+        return s; 
+    } 
+ 
     const char* brk(const char* s, const char* e) const {
         while (s < e && c_chars_table[(ui8)*s])
             ++s;
@@ -90,7 +90,7 @@ public:
             ++s;
         return s;
     }
-
+ 
     const char* cbrk(const char* s, const char* e) const {
         while (s < e && chars_table[(ui8)*s])
             ++s;
@@ -101,7 +101,7 @@ public:
     size_t spn(const char* s) const {
         return cbrk(s) - s;
     }
-
+ 
     size_t spn(const char* s, const char* e) const {
         return cbrk(s, e) - s;
     }
@@ -110,7 +110,7 @@ public:
     size_t cspn(const char* s) const {
         return brk(s) - s;
     }
-
+ 
     size_t cspn(const char* s, const char* e) const {
         return brk(s, e) - s;
     }
@@ -118,7 +118,7 @@ public:
     char* brk(char* s) const {
         return const_cast<char*>(brk((const char*)s));
     }
-
+ 
     char* cbrk(char* s) const {
         return const_cast<char*>(cbrk((const char*)s));
     }

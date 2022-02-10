@@ -970,9 +970,9 @@ void TShellCommand::TImpl::Communicate(TProcessInfo* pi) {
                 continue;
             }
 
-            struct pollfd fds[] = { 
-                {REALPIPEHANDLE(pi->InputFd), POLLOUT, 0}, 
-                {REALPIPEHANDLE(pi->OutputFd), POLLIN, 0}, 
+            struct pollfd fds[] = {
+                {REALPIPEHANDLE(pi->InputFd), POLLOUT, 0},
+                {REALPIPEHANDLE(pi->OutputFd), POLLIN, 0},
                 {REALPIPEHANDLE(pi->ErrorFd), POLLIN, 0}};
             int res;
 

@@ -4,10 +4,10 @@
 
 #include <util/generic/ylimits.h>
 
-template <typename TAtomic> 
-class TAtomicTest 
+template <typename TAtomic>
+class TAtomicTest
     : public TTestBase {
-    UNIT_TEST_SUITE(TAtomicTest); 
+    UNIT_TEST_SUITE(TAtomicTest);
     UNIT_TEST(TestAtomicInc1)
     UNIT_TEST(TestAtomicInc2)
     UNIT_TEST(TestAtomicGetAndInc)
@@ -24,30 +24,30 @@ class TAtomicTest
     UNIT_TEST(TestCAS)
     UNIT_TEST(TestGetAndCAS)
     UNIT_TEST(TestLockUnlock)
-    UNIT_TEST_SUITE_END(); 
+    UNIT_TEST_SUITE_END();
 
-private: 
-    inline void TestLockUnlock() { 
-        TAtomic v = 0; 
+private:
+    inline void TestLockUnlock() {
+        TAtomic v = 0;
 
-        UNIT_ASSERT(AtomicTryLock(&v)); 
-        UNIT_ASSERT(!AtomicTryLock(&v)); 
-        UNIT_ASSERT_VALUES_EQUAL(v, 1); 
-        AtomicUnlock(&v); 
-        UNIT_ASSERT_VALUES_EQUAL(v, 0); 
-    } 
+        UNIT_ASSERT(AtomicTryLock(&v));
+        UNIT_ASSERT(!AtomicTryLock(&v));
+        UNIT_ASSERT_VALUES_EQUAL(v, 1);
+        AtomicUnlock(&v);
+        UNIT_ASSERT_VALUES_EQUAL(v, 0);
+    }
 
-    inline void TestCAS() { 
-        TAtomic v = 0; 
+    inline void TestCAS() {
+        TAtomic v = 0;
 
-        UNIT_ASSERT(AtomicCas(&v, 1, 0)); 
-        UNIT_ASSERT(!AtomicCas(&v, 1, 0)); 
-        UNIT_ASSERT_VALUES_EQUAL(v, 1); 
-        UNIT_ASSERT(AtomicCas(&v, 0, 1)); 
-        UNIT_ASSERT_VALUES_EQUAL(v, 0); 
-        UNIT_ASSERT(AtomicCas(&v, Max<intptr_t>(), 0)); 
-        UNIT_ASSERT_VALUES_EQUAL(v, Max<intptr_t>()); 
-    } 
+        UNIT_ASSERT(AtomicCas(&v, 1, 0));
+        UNIT_ASSERT(!AtomicCas(&v, 1, 0));
+        UNIT_ASSERT_VALUES_EQUAL(v, 1);
+        UNIT_ASSERT(AtomicCas(&v, 0, 1));
+        UNIT_ASSERT_VALUES_EQUAL(v, 0);
+        UNIT_ASSERT(AtomicCas(&v, Max<intptr_t>(), 0));
+        UNIT_ASSERT_VALUES_EQUAL(v, Max<intptr_t>());
+    }
 
     inline void TestGetAndCAS() {
         TAtomic v = 0;
@@ -61,23 +61,23 @@ private:
         UNIT_ASSERT_VALUES_EQUAL(v, Max<intptr_t>());
     }
 
-    inline void TestAtomicInc1() { 
-        TAtomic v = 0; 
+    inline void TestAtomicInc1() {
+        TAtomic v = 0;
 
-        UNIT_ASSERT(AtomicAdd(v, 1)); 
-        UNIT_ASSERT_VALUES_EQUAL(v, 1); 
-        UNIT_ASSERT(AtomicAdd(v, 10)); 
-        UNIT_ASSERT_VALUES_EQUAL(v, 11); 
-    } 
+        UNIT_ASSERT(AtomicAdd(v, 1));
+        UNIT_ASSERT_VALUES_EQUAL(v, 1);
+        UNIT_ASSERT(AtomicAdd(v, 10));
+        UNIT_ASSERT_VALUES_EQUAL(v, 11);
+    }
 
-    inline void TestAtomicInc2() { 
-        TAtomic v = 0; 
+    inline void TestAtomicInc2() {
+        TAtomic v = 0;
 
-        UNIT_ASSERT(AtomicIncrement(v)); 
-        UNIT_ASSERT_VALUES_EQUAL(v, 1); 
-        UNIT_ASSERT(AtomicIncrement(v)); 
-        UNIT_ASSERT_VALUES_EQUAL(v, 2); 
-    } 
+        UNIT_ASSERT(AtomicIncrement(v));
+        UNIT_ASSERT_VALUES_EQUAL(v, 1);
+        UNIT_ASSERT(AtomicIncrement(v));
+        UNIT_ASSERT_VALUES_EQUAL(v, 2);
+    }
 
     inline void TestAtomicGetAndInc() {
         TAtomic v = 0;
@@ -88,14 +88,14 @@ private:
         UNIT_ASSERT_VALUES_EQUAL(v, 2);
     }
 
-    inline void TestAtomicDec() { 
-        TAtomic v = 2; 
+    inline void TestAtomicDec() {
+        TAtomic v = 2;
 
-        UNIT_ASSERT(AtomicDecrement(v)); 
-        UNIT_ASSERT_VALUES_EQUAL(v, 1); 
-        UNIT_ASSERT(!AtomicDecrement(v)); 
-        UNIT_ASSERT_VALUES_EQUAL(v, 0); 
-    } 
+        UNIT_ASSERT(AtomicDecrement(v));
+        UNIT_ASSERT_VALUES_EQUAL(v, 1);
+        UNIT_ASSERT(!AtomicDecrement(v));
+        UNIT_ASSERT_VALUES_EQUAL(v, 0);
+    }
 
     inline void TestAtomicGetAndDec() {
         TAtomic v = 2;
@@ -106,15 +106,15 @@ private:
         UNIT_ASSERT_VALUES_EQUAL(v, 0);
     }
 
-    inline void TestAtomicAdd() { 
-        TAtomic v = 0; 
+    inline void TestAtomicAdd() {
+        TAtomic v = 0;
 
-        UNIT_ASSERT_VALUES_EQUAL(AtomicAdd(v, 1), 1); 
-        UNIT_ASSERT_VALUES_EQUAL(AtomicAdd(v, 2), 3); 
-        UNIT_ASSERT_VALUES_EQUAL(AtomicAdd(v, -4), -1); 
-        UNIT_ASSERT_VALUES_EQUAL(v, -1); 
-    } 
- 
+        UNIT_ASSERT_VALUES_EQUAL(AtomicAdd(v, 1), 1);
+        UNIT_ASSERT_VALUES_EQUAL(AtomicAdd(v, 2), 3);
+        UNIT_ASSERT_VALUES_EQUAL(AtomicAdd(v, -4), -1);
+        UNIT_ASSERT_VALUES_EQUAL(v, -1);
+    }
+
     inline void TestAtomicGetAndAdd() {
         TAtomic v = 0;
 
@@ -125,13 +125,13 @@ private:
     }
 
     inline void TestAtomicSub() {
-        TAtomic v = 4; 
+        TAtomic v = 4;
 
-        UNIT_ASSERT_VALUES_EQUAL(AtomicSub(v, 1), 3); 
-        UNIT_ASSERT_VALUES_EQUAL(AtomicSub(v, 2), 1); 
-        UNIT_ASSERT_VALUES_EQUAL(AtomicSub(v, 3), -2); 
-        UNIT_ASSERT_VALUES_EQUAL(v, -2); 
-    } 
+        UNIT_ASSERT_VALUES_EQUAL(AtomicSub(v, 1), 3);
+        UNIT_ASSERT_VALUES_EQUAL(AtomicSub(v, 2), 1);
+        UNIT_ASSERT_VALUES_EQUAL(AtomicSub(v, 3), -2);
+        UNIT_ASSERT_VALUES_EQUAL(v, -2);
+    }
 
     inline void TestAtomicGetAndSub() {
         TAtomic v = 4;
@@ -142,15 +142,15 @@ private:
         UNIT_ASSERT_VALUES_EQUAL(v, -2);
     }
 
-    inline void TestAtomicSwap() { 
-        TAtomic v = 0; 
+    inline void TestAtomicSwap() {
+        TAtomic v = 0;
 
         UNIT_ASSERT_VALUES_EQUAL(AtomicSwap(&v, 3), 0);
         UNIT_ASSERT_VALUES_EQUAL(AtomicSwap(&v, 5), 3);
         UNIT_ASSERT_VALUES_EQUAL(AtomicSwap(&v, -7), 5);
         UNIT_ASSERT_VALUES_EQUAL(AtomicSwap(&v, Max<intptr_t>()), -7);
-        UNIT_ASSERT_VALUES_EQUAL(v, Max<intptr_t>()); 
-    } 
+        UNIT_ASSERT_VALUES_EQUAL(v, Max<intptr_t>());
+    }
 
     inline void TestAtomicOr() {
         TAtomic v = 0xf0;
@@ -191,26 +191,26 @@ private:
 UNIT_TEST_SUITE_REGISTRATION(TAtomicTest<TAtomic>);
 
 #ifndef _MSC_VER
-// chooses type *other than* T1 
+// chooses type *other than* T1
 template <typename T1, typename T2, typename T3>
 struct TChooser {
     using TdType = T2;
-}; 
+};
 
 template <typename T1, typename T2>
 struct TChooser<T1, T1, T2> {
     using TdType = T2;
-}; 
+};
 
 template <typename T1>
 struct TChooser<T1, T1, T1> {};
- 
+
     #if defined(__IOS__) && defined(_32_)
 using TAltAtomic = int;
     #else
 using TAltAtomic = volatile TChooser<TAtomicBase, long, long long>::TdType;
     #endif
- 
+
 class TTTest: public TAtomicTest<TAltAtomic> {
 public:
     TString Name() const noexcept override {

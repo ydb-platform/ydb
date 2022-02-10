@@ -21,13 +21,13 @@ bool TCgiParameters::Erase(const TStringBuf name, size_t pos) {
     const auto pair = equal_range(name);
 
     for (auto it = pair.first; it != pair.second; ++it, --pos) {
-        if (0 == pos) { 
-            erase(it); 
-            return true; 
-        } 
+        if (0 == pos) {
+            erase(it);
+            return true;
+        }
     }
 
-    return false; 
+    return false;
 }
 
 bool TCgiParameters::Erase(const TStringBuf name, const TStringBuf val) {
@@ -47,21 +47,21 @@ bool TCgiParameters::Erase(const TStringBuf name, const TStringBuf val) {
 }
 
 size_t TCgiParameters::EraseAll(const TStringBuf name) {
-    size_t num = 0; 
+    size_t num = 0;
 
     const auto pair = equal_range(name);
 
     for (auto it = pair.first; it != pair.second; erase(it++), ++num)
-        ; 
+        ;
 
-    return num; 
-} 
- 
+    return num;
+}
+
 void TCgiParameters::JoinUnescaped(const TStringBuf key, char sep, TStringBuf val) {
     const auto pair = equal_range(key);
     auto it = pair.first;
 
-    if (it == pair.second) { // not found 
+    if (it == pair.second) { // not found
         if (val.IsInited()) {
             emplace_hint(it, TString(key), TString(val));
         }
@@ -69,17 +69,17 @@ void TCgiParameters::JoinUnescaped(const TStringBuf key, char sep, TStringBuf va
         TString& dst = it->second;
 
         for (++it; it != pair.second; erase(it++)) {
-            dst += sep; 
+            dst += sep;
             dst.AppendNoAlias(it->second.data(), it->second.size());
-        } 
+        }
 
-        if (val.IsInited()) { 
-            dst += sep; 
-            dst += val; 
-        } 
-    } 
-} 
- 
+        if (val.IsInited()) {
+            dst += sep;
+            dst += val;
+        }
+    }
+}
+
 static inline TString DoUnescape(const TStringBuf s) {
     TString res;
 
@@ -155,18 +155,18 @@ char* TCgiParameters::Print(char* res) const {
     }
 
     for (auto i = begin();;) {
-        res = CGIEscape(res, i->first); 
+        res = CGIEscape(res, i->first);
         *res++ = '=';
-        res = CGIEscape(res, i->second); 
+        res = CGIEscape(res, i->second);
 
         if (++i == end()) {
-            break; 
+            break;
         }
 
         *res++ = '&';
     }
 
-    return res; 
+    return res;
 }
 
 size_t TCgiParameters::PrintSize() const noexcept {
@@ -209,11 +209,11 @@ TCgiParameters::const_iterator TCgiParameters::Find(const TStringBuf name, size_
 
     for (auto it = pair.first; it != pair.second; ++it, --pos) {
         if (0 == pos) {
-            return it; 
+            return it;
         }
     }
 
-    return end(); 
+    return end();
 }
 
 bool TCgiParameters::Has(const TStringBuf name, const TStringBuf value) const noexcept {

@@ -82,42 +82,42 @@ private:
     template <typename TBo>
     void DoWrite1(TBo& out, const TString& rem) {
         out.Write(0x0C, 3);
-        UNIT_ASSERT_VALUES_EQUAL_C(out.GetOffset(), 1u, (rem + ", " + ToString(__LINE__))); 
+        UNIT_ASSERT_VALUES_EQUAL_C(out.GetOffset(), 1u, (rem + ", " + ToString(__LINE__)));
         out.Write(0x18, 4);
-        UNIT_ASSERT_VALUES_EQUAL_C(out.GetOffset(), 1u, (rem + ", " + ToString(__LINE__))); 
+        UNIT_ASSERT_VALUES_EQUAL_C(out.GetOffset(), 1u, (rem + ", " + ToString(__LINE__)));
         out.Write(0x0C, 3);
-        UNIT_ASSERT_VALUES_EQUAL_C(out.GetOffset(), 2u, (rem + ", " + ToString(__LINE__))); 
+        UNIT_ASSERT_VALUES_EQUAL_C(out.GetOffset(), 2u, (rem + ", " + ToString(__LINE__)));
         out.Write(0x30000, 17);
-        UNIT_ASSERT_VALUES_EQUAL_C(out.GetOffset(), 4u, (rem + ", " + ToString(__LINE__))); 
+        UNIT_ASSERT_VALUES_EQUAL_C(out.GetOffset(), 4u, (rem + ", " + ToString(__LINE__)));
         out.Write(0x0C, 3);
-        UNIT_ASSERT_VALUES_EQUAL_C(out.GetOffset(), 4u, (rem + ", " + ToString(__LINE__))); 
+        UNIT_ASSERT_VALUES_EQUAL_C(out.GetOffset(), 4u, (rem + ", " + ToString(__LINE__)));
     }
 
     template <typename TBo>
     void DoWrite2(TBo& out, const TString& rem) {
         out.Write(0x0C, 3);
-        UNIT_ASSERT_VALUES_EQUAL_C(out.GetOffset(), 8u, (rem + ", " + ToString(__LINE__))); 
+        UNIT_ASSERT_VALUES_EQUAL_C(out.GetOffset(), 8u, (rem + ", " + ToString(__LINE__)));
 
         out.Write(0x42, 7);
-        UNIT_ASSERT_VALUES_EQUAL_C(out.GetOffset(), 9u, (rem + ", " + ToString(__LINE__))); 
+        UNIT_ASSERT_VALUES_EQUAL_C(out.GetOffset(), 9u, (rem + ", " + ToString(__LINE__)));
 
         DoWrite(out, 1637415112);
-        UNIT_ASSERT_VALUES_EQUAL_C(out.GetOffset(), 13u, (rem + ", " + ToString(__LINE__))); 
+        UNIT_ASSERT_VALUES_EQUAL_C(out.GetOffset(), 13u, (rem + ", " + ToString(__LINE__)));
 
         DoWrite(out, 897998715);
-        UNIT_ASSERT_VALUES_EQUAL_C(out.GetOffset(), 17u, (rem + ", " + ToString(__LINE__))); 
+        UNIT_ASSERT_VALUES_EQUAL_C(out.GetOffset(), 17u, (rem + ", " + ToString(__LINE__)));
 
         DoWrite(out, 201416527);
-        UNIT_ASSERT_VALUES_EQUAL_C(out.GetOffset(), 21u, (rem + ", " + ToString(__LINE__))); 
+        UNIT_ASSERT_VALUES_EQUAL_C(out.GetOffset(), 21u, (rem + ", " + ToString(__LINE__)));
 
         DoWrite(out, 432344219);
-        UNIT_ASSERT_VALUES_EQUAL_C(out.GetOffset(), 25u, (rem + ", " + ToString(__LINE__))); 
+        UNIT_ASSERT_VALUES_EQUAL_C(out.GetOffset(), 25u, (rem + ", " + ToString(__LINE__)));
 
         out.Write(0xAAAAAAAAAAAAAAAAULL, 64);
-        UNIT_ASSERT_VALUES_EQUAL_C(out.GetOffset(), 33u, (rem + ", " + ToString(__LINE__))); 
+        UNIT_ASSERT_VALUES_EQUAL_C(out.GetOffset(), 33u, (rem + ", " + ToString(__LINE__)));
 
         out.Write(0x5555555555555555ULL, 64);
-        UNIT_ASSERT_VALUES_EQUAL_C(out.GetOffset(), 41u, (rem + ", " + ToString(__LINE__))); 
+        UNIT_ASSERT_VALUES_EQUAL_C(out.GetOffset(), 41u, (rem + ", " + ToString(__LINE__)));
     }
 
     void DoBitOutput(NBitIO::TBitOutputYVector& out, const TString& rem) {
@@ -145,36 +145,36 @@ private:
             ui64 val;
 
             val = 0;
-            UNIT_ASSERT_VALUES_EQUAL_C(in.GetOffset(), 0u, (rem + ": " + NBitIO::PrintBits(val))); 
+            UNIT_ASSERT_VALUES_EQUAL_C(in.GetOffset(), 0u, (rem + ": " + NBitIO::PrintBits(val)));
 
             UNIT_ASSERT_C(in.Read(val, 3), (rem + ": " + NBitIO::PrintBits(val)).data());
 
-            UNIT_ASSERT_VALUES_EQUAL_C(val, 0x4u, (rem + ": " + NBitIO::PrintBits(val))); 
-            UNIT_ASSERT_VALUES_EQUAL_C(in.GetOffset(), 1u, (rem + ": " + NBitIO::PrintBits(val))); 
+            UNIT_ASSERT_VALUES_EQUAL_C(val, 0x4u, (rem + ": " + NBitIO::PrintBits(val)));
+            UNIT_ASSERT_VALUES_EQUAL_C(in.GetOffset(), 1u, (rem + ": " + NBitIO::PrintBits(val)));
             UNIT_ASSERT_C(!in.Eof(), (rem + ", " + ToString(__LINE__)).data());
 
             val = 0;
             UNIT_ASSERT_C(in.Read(val, 4), (rem + ": " + NBitIO::PrintBits(val)).data());
 
-            UNIT_ASSERT_VALUES_EQUAL_C(val, 0x8u, (rem + ": " + NBitIO::PrintBits(val))); 
-            UNIT_ASSERT_VALUES_EQUAL_C(in.GetOffset(), 1u, (rem + ": " + NBitIO::PrintBits(val))); 
+            UNIT_ASSERT_VALUES_EQUAL_C(val, 0x8u, (rem + ": " + NBitIO::PrintBits(val)));
+            UNIT_ASSERT_VALUES_EQUAL_C(in.GetOffset(), 1u, (rem + ": " + NBitIO::PrintBits(val)));
             UNIT_ASSERT_C(!in.Eof(), (rem + ", " + ToString(__LINE__)).data());
 
             val = 0;
             UNIT_ASSERT_C(in.Read(val, 3), (rem + ": " + NBitIO::PrintBits(val)).data());
 
-            UNIT_ASSERT_VALUES_EQUAL_C(val, 0x4u, (rem + ": " + NBitIO::PrintBits(val))); 
-            UNIT_ASSERT_VALUES_EQUAL_C(in.GetOffset(), 2u, (rem + ": " + NBitIO::PrintBits(val))); 
+            UNIT_ASSERT_VALUES_EQUAL_C(val, 0x4u, (rem + ": " + NBitIO::PrintBits(val)));
+            UNIT_ASSERT_VALUES_EQUAL_C(in.GetOffset(), 2u, (rem + ": " + NBitIO::PrintBits(val)));
             UNIT_ASSERT_C(!in.Eof(), (rem + ", " + ToString(__LINE__)).data());
 
             val = 0;
             UNIT_ASSERT_C(in.Read(val, 17), (rem + ": " + NBitIO::PrintBits(val)).data());
 
-            UNIT_ASSERT_VALUES_EQUAL_C(val, 0x10000u, (rem + ": " + NBitIO::PrintBits(val))); 
-            UNIT_ASSERT_VALUES_EQUAL_C(in.GetOffset(), 4u, (rem + ": " + NBitIO::PrintBits(val))); 
+            UNIT_ASSERT_VALUES_EQUAL_C(val, 0x10000u, (rem + ": " + NBitIO::PrintBits(val)));
+            UNIT_ASSERT_VALUES_EQUAL_C(in.GetOffset(), 4u, (rem + ": " + NBitIO::PrintBits(val)));
             UNIT_ASSERT_C(!in.Eof(), (rem + ", " + ToString(__LINE__)).data());
 
-            UNIT_ASSERT_VALUES_EQUAL_C(in.GetOffset(), 4u, (rem + ": " + NBitIO::PrintBits(val))); 
+            UNIT_ASSERT_VALUES_EQUAL_C(in.GetOffset(), 4u, (rem + ": " + NBitIO::PrintBits(val)));
 
             {
                 ui32 rt = 0;
@@ -184,56 +184,56 @@ private:
             val = 0;
             UNIT_ASSERT_C(in.Read(val, 3), (rem + ": " + NBitIO::PrintBits(val)).data());
 
-            UNIT_ASSERT_VALUES_EQUAL_C(val, 0x4u, (rem + ": " + NBitIO::PrintBits(val))); 
-            UNIT_ASSERT_VALUES_EQUAL_C(in.GetOffset(), 4u, (rem + ": " + NBitIO::PrintBits(val))); 
+            UNIT_ASSERT_VALUES_EQUAL_C(val, 0x4u, (rem + ": " + NBitIO::PrintBits(val)));
+            UNIT_ASSERT_VALUES_EQUAL_C(in.GetOffset(), 4u, (rem + ": " + NBitIO::PrintBits(val)));
             UNIT_ASSERT_C(!in.Eof(), (rem + ", " + ToString(__LINE__)).data());
 
             val = 0;
             UNIT_ASSERT_C(in.ReadWords<8>(val), (rem + ": " + NBitIO::PrintBits(val)).data());
 
-            UNIT_ASSERT_VALUES_EQUAL_C(val, 0xabcdefU, (rem + ": " + NBitIO::PrintBits(val))); 
-            UNIT_ASSERT_VALUES_EQUAL_C(in.GetOffset(), 8u, (rem + ": " + NBitIO::PrintBits(val))); 
+            UNIT_ASSERT_VALUES_EQUAL_C(val, 0xabcdefU, (rem + ": " + NBitIO::PrintBits(val)));
+            UNIT_ASSERT_VALUES_EQUAL_C(in.GetOffset(), 8u, (rem + ": " + NBitIO::PrintBits(val)));
             UNIT_ASSERT_C(!in.Eof(), (rem + ", " + ToString(__LINE__)).data());
 
             val = 0;
             UNIT_ASSERT_C(in.Read(val, 3), (rem + ", " + ToString(__LINE__)).data());
 
-            UNIT_ASSERT_VALUES_EQUAL_C(val, 0x4u, (rem + ": " + NBitIO::PrintBits(val))); 
-            UNIT_ASSERT_VALUES_EQUAL_C(in.GetOffset(), 8u, (rem + ": " + NBitIO::PrintBits(val))); 
+            UNIT_ASSERT_VALUES_EQUAL_C(val, 0x4u, (rem + ": " + NBitIO::PrintBits(val)));
+            UNIT_ASSERT_VALUES_EQUAL_C(in.GetOffset(), 8u, (rem + ": " + NBitIO::PrintBits(val)));
             UNIT_ASSERT_C(!in.Eof(), (rem + ", " + ToString(__LINE__)).data());
 
             val = 0;
             in.Read(val, 7);
-            UNIT_ASSERT_VALUES_EQUAL_C(val, 0x42u, (rem + ": " + NBitIO::PrintBits(val))); 
+            UNIT_ASSERT_VALUES_EQUAL_C(val, 0x42u, (rem + ": " + NBitIO::PrintBits(val)));
         }
 
         {
             ui32 v = 0;
 
             DoRead(in, v);
-            UNIT_ASSERT_VALUES_EQUAL_C(v, 1637415112ul, (rem + ": " + NBitIO::PrintBits(v))); 
+            UNIT_ASSERT_VALUES_EQUAL_C(v, 1637415112ul, (rem + ": " + NBitIO::PrintBits(v)));
             DoRead(in, v);
             UNIT_ASSERT_VALUES_EQUAL_C(v, 897998715u, (rem + ": " + NBitIO::PrintBits(v)));
             DoRead(in, v);
-            UNIT_ASSERT_VALUES_EQUAL_C(v, 201416527u, (rem + ": " + NBitIO::PrintBits(v))); 
+            UNIT_ASSERT_VALUES_EQUAL_C(v, 201416527u, (rem + ": " + NBitIO::PrintBits(v)));
             DoRead(in, v);
-            UNIT_ASSERT_VALUES_EQUAL_C(v, 432344219u, (rem + ": " + NBitIO::PrintBits(v))); 
+            UNIT_ASSERT_VALUES_EQUAL_C(v, 432344219u, (rem + ": " + NBitIO::PrintBits(v)));
 
-            UNIT_ASSERT_VALUES_EQUAL_C(in.GetOffset(), 25u, (rem + ": " + NBitIO::PrintBits(v))); 
+            UNIT_ASSERT_VALUES_EQUAL_C(in.GetOffset(), 25u, (rem + ": " + NBitIO::PrintBits(v)));
         }
 
         {
             ui64 v8 = 0;
             in.ReadSafe(v8, 64);
 
-            UNIT_ASSERT_VALUES_EQUAL_C(v8, 0xAAAAAAAAAAAAAAAAULL, (rem + ": " + NBitIO::PrintBits(v8))); 
-            UNIT_ASSERT_VALUES_EQUAL_C(in.GetOffset(), 33u, (rem + ": " + NBitIO::PrintBits(v8))); 
+            UNIT_ASSERT_VALUES_EQUAL_C(v8, 0xAAAAAAAAAAAAAAAAULL, (rem + ": " + NBitIO::PrintBits(v8)));
+            UNIT_ASSERT_VALUES_EQUAL_C(in.GetOffset(), 33u, (rem + ": " + NBitIO::PrintBits(v8)));
 
             v8 = 0;
             in.ReadK<64>(v8);
 
-            UNIT_ASSERT_VALUES_EQUAL_C(v8, 0x5555555555555555ULL, (rem + ": " + NBitIO::PrintBits(v8))); 
-            UNIT_ASSERT_VALUES_EQUAL_C(in.GetOffset(), 41u, (rem + ": " + NBitIO::PrintBits(v8))); 
+            UNIT_ASSERT_VALUES_EQUAL_C(v8, 0x5555555555555555ULL, (rem + ": " + NBitIO::PrintBits(v8)));
+            UNIT_ASSERT_VALUES_EQUAL_C(in.GetOffset(), 41u, (rem + ": " + NBitIO::PrintBits(v8)));
         }
 
         ui32 v = 0;

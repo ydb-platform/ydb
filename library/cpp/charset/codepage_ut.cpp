@@ -69,7 +69,7 @@ public:
     }
 
     void TestBrokenRune() {
-        UNIT_ASSERT_VALUES_EQUAL(BROKEN_RUNE, 0xFFFDu); 
+        UNIT_ASSERT_VALUES_EQUAL(BROKEN_RUNE, 0xFFFDu);
     }
 };
 
@@ -198,17 +198,17 @@ void TCodepageTest::TestUTFFromUnknownPlane() {
     UNIT_ASSERT(res == RECODE_OK);
     UNIT_ASSERT(samplelen == readchars);
 
-    size_t writtenbytes2 = 0; 
-    char bytebuffer2[BUFFER_SIZE]; 
-    for (size_t i = 0; i != samplelen; ++i) { 
-        size_t nwr = 0; 
+    size_t writtenbytes2 = 0;
+    char bytebuffer2[BUFFER_SIZE];
+    for (size_t i = 0; i != samplelen; ++i) {
+        size_t nwr = 0;
         const int res = RecodeFromUnicode(CODES_UTF8, sampletext[i], bytebuffer2 + writtenbytes2, BUFFER_SIZE - writtenbytes2, nwr);
-        UNIT_ASSERT_VALUES_EQUAL(res, int(RECODE_OK)); 
-        writtenbytes2 += nwr; 
-        UNIT_ASSERT(BUFFER_SIZE > writtenbytes2); 
-    } 
-    UNIT_ASSERT_VALUES_EQUAL(TStringBuf(bytebuffer, writtenbytes), TStringBuf(bytebuffer2, writtenbytes2)); 
- 
+        UNIT_ASSERT_VALUES_EQUAL(res, int(RECODE_OK));
+        writtenbytes2 += nwr;
+        UNIT_ASSERT(BUFFER_SIZE > writtenbytes2);
+    }
+    UNIT_ASSERT_VALUES_EQUAL(TStringBuf(bytebuffer, writtenbytes), TStringBuf(bytebuffer2, writtenbytes2));
+
     wchar32 charbuffer[BUFFER_SIZE];
     size_t readbytes = 0;
     size_t writtenchars = 0;

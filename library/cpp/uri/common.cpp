@@ -1,11 +1,11 @@
-#include "common.h" 
+#include "common.h"
 
-#include <util/generic/map.h> 
+#include <util/generic/map.h>
 #include <util/generic/singleton.h>
 
-namespace NUri { 
+namespace NUri {
     static_assert(TFeature::FeatureMAX <= sizeof(unsigned long) * 8, "expect TFeature::FeatureMAX <= sizeof(unsigned long) * 8");
- 
+
     const TSchemeInfo TSchemeInfo::Registry[] = {
         TSchemeInfo(TScheme::SchemeEmpty, TStringBuf()), // scheme is empty and inited
         TSchemeInfo(TScheme::SchemeHTTP, TStringBuf("http"), TField::FlagHost | TField::FlagPath, 80),
@@ -17,18 +17,18 @@ namespace NUri {
         // add above
         TSchemeInfo(TScheme::SchemeUnknown, TStringBuf()) // scheme is empty and uninited
     };
- 
+
     namespace {
         struct TLessNoCase {
             bool operator()(const TStringBuf& lt, const TStringBuf& rt) const {
                 return 0 > CompareNoCase(lt, rt);
             }
         };
- 
+
         class TSchemeInfoMap {
             typedef TMap<TStringBuf, TScheme::EKind, TLessNoCase> TdMap;
             TdMap Map_;
- 
+
         public:
             TSchemeInfoMap() {
                 for (int i = TScheme::SchemeEmpty; i < TScheme::SchemeUnknown; ++i) {
@@ -36,7 +36,7 @@ namespace NUri {
                     Map_.insert(std::make_pair(info.Str, info.Kind));
                 }
             }
- 
+
             TScheme::EKind Get(const TStringBuf& scheme) const {
                 const TdMap::const_iterator it = Map_.find(scheme);
                 return Map_.end() == it ? TScheme::SchemeUnknown : it->second;
@@ -51,7 +51,7 @@ namespace NUri {
 
     const TSchemeInfo& TSchemeInfo::Get(const TStringBuf& scheme) {
         return Registry[TSchemeInfoMap::Instance().Get(scheme)];
-    } 
+    }
 
     const char* ParsedStateToString(const TState::EParsed& t) {
         switch (t) {
@@ -79,7 +79,7 @@ namespace NUri {
                 return "Parsed[Unknown]";
         }
     }
- 
+
     const char* FieldToString(const TField::EField& t) {
         switch (t) {
             case TField::FieldScheme:

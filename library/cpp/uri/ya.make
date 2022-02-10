@@ -1,30 +1,30 @@
 LIBRARY()
- 
+
 OWNER(
     mvel
     g:base
 )
 
-SRCS( 
-    assign.cpp 
-    common.cpp 
-    encode.cpp 
+SRCS(
+    assign.cpp
+    common.cpp
+    encode.cpp
     http_url.h
     location.cpp
-    other.cpp 
-    parse.cpp 
+    other.cpp
+    parse.cpp
     qargs.cpp
-    uri.cpp 
+    uri.cpp
     encodefsm.rl6
     parsefsm.rl6
-) 
- 
-PEERDIR( 
-    contrib/libs/libidn 
+)
+
+PEERDIR(
+    contrib/libs/libidn
     library/cpp/charset
-) 
- 
-END() 
+)
+
+END()
 
 RECURSE(
     benchmark

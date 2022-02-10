@@ -35,7 +35,7 @@ Y_UNIT_TEST_SUITE(Opt2Test) {
         UNIT_ASSERT_VALUES_EQUAL(8, d);
         UNIT_ASSERT_VALUES_EQUAL((void*)edef, e);
 
-        UNIT_ASSERT_VALUES_EQUAL(2u, opt.Pos.size()); 
+        UNIT_ASSERT_VALUES_EQUAL(2u, opt.Pos.size());
         UNIT_ASSERT_STRINGS_EQUAL("zz", opt.Pos.at(0));
         UNIT_ASSERT_VALUES_EQUAL((void*)argv[2], opt.Pos.at(0));
         UNIT_ASSERT_STRINGS_EQUAL("ww", opt.Pos.at(1));

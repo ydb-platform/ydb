@@ -364,18 +364,18 @@ static inline int Unescape(char* str) {
 size_t NormalizeUrlName(char* dest, const TStringBuf source, size_t dest_size) {
     if (source.empty() || source[0] == '?')
         return strlcpy(dest, "/", dest_size);
-    size_t len = Min(dest_size - 1, source.length()); 
-    memcpy(dest, source.data(), len); 
-    dest[len] = 0; 
+    size_t len = Min(dest_size - 1, source.length());
+    memcpy(dest, source.data(), len);
+    dest[len] = 0;
     len -= Unescape(dest);
     strlwr(dest);
     return len;
 }
 
 size_t NormalizeHostName(char* dest, const TStringBuf source, size_t dest_size, ui16 defport) {
-    size_t len = Min(dest_size - 1, source.length()); 
-    memcpy(dest, source.data(), len); 
-    dest[len] = 0; 
+    size_t len = Min(dest_size - 1, source.length());
+    memcpy(dest, source.data(), len);
+    dest[len] = 0;
     char buf[8] = ":";
     size_t buflen = 1 + ToString(defport, buf + 1, sizeof(buf) - 2);
     buf[buflen] = '\0';

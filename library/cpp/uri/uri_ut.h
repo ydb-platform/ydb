@@ -1,10 +1,10 @@
-#pragma once 
- 
-#include "uri.h" 
- 
+#pragma once
+
+#include "uri.h"
+
 #include <library/cpp/testing/unittest/registar.h>
- 
-namespace NUri { 
+
+namespace NUri {
     struct TTest {
         TStringBuf Val;
         TParseFlags Flags;
@@ -18,19 +18,19 @@ namespace NUri {
         TStringBuf Query;
         TStringBuf Frag;
     };
- 
-} 
- 
-#define URL_MSG(url1, url2, cmp) \ 
+
+}
+
+#define URL_MSG(url1, url2, cmp) \
     (TString("[") + url1.PrintS() + ("] " cmp " [") + url2.PrintS() + "]")
-#define URL_EQ(url1, url2) \ 
-    UNIT_ASSERT_EQUAL_C(url, url2, URL_MSG(url1, url2, "!=")) 
-#define URL_NEQ(url1, url2) \ 
-    UNIT_ASSERT_UNEQUAL_C(url, url2, URL_MSG(url1, url2, "==")) 
- 
-#define CMP_FLD(url, test, fld) \ 
+#define URL_EQ(url1, url2) \
+    UNIT_ASSERT_EQUAL_C(url, url2, URL_MSG(url1, url2, "!="))
+#define URL_NEQ(url1, url2) \
+    UNIT_ASSERT_UNEQUAL_C(url, url2, URL_MSG(url1, url2, "=="))
+
+#define CMP_FLD(url, test, fld) \
     UNIT_ASSERT_VALUES_EQUAL(url.GetField(TField::Field##fld), test.fld)
- 
+
 #define CMP_URL(url, test)                                  \
     do {                                                    \
         CMP_FLD(url, test, Scheme);                         \
@@ -42,7 +42,7 @@ namespace NUri {
         CMP_FLD(url, test, Query);                          \
         CMP_FLD(url, test, Frag);                           \
     } while (false)
- 
+
 #define URL_TEST_ENC(url, test, enc)                                                                                              \
     do {                                                                                                                          \
         TState::EParsed st = url.ParseUri(test.Val, test.Flags, 0, enc);                                                          \
@@ -76,6 +76,6 @@ namespace NUri {
         CMP_URL(_url, test2);                                                                                                     \
         UNIT_ASSERT_VALUES_EQUAL(url.GetUrlFieldMask(), _url.GetUrlFieldMask());                                                  \
     } while (false)
- 
-#define URL_TEST(url, test) \ 
-    URL_TEST_ENC(url, test, CODES_UTF8) 
+
+#define URL_TEST(url, test) \
+    URL_TEST_ENC(url, test, CODES_UTF8)

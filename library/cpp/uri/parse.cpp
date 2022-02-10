@@ -1,8 +1,8 @@
 #include "parse.h"
-#include "common.h" 
-#include "encode.h" 
+#include "common.h"
+#include "encode.h"
 
-namespace NUri { 
+namespace NUri {
     const TParseFlags TParser::FieldFlags[] =
         {
             TParseFlags(0 // FieldScheme
@@ -23,27 +23,27 @@ namespace NUri {
             TParseFlags(0 // FieldHost
                             | TFeature::FeatureToLower | TFeature::FeatureUpperEncoded | (TFeature::FeaturesMaybeEncode & ~TFeature::FeatureEncodeExtendedDelim),
                         0 | TFeature::FeaturesMaybeDecode)
- 
+
                 ,
             TParseFlags(0 // FieldPort
                         ,
                         0)
- 
+
                 ,
             TParseFlags(0 // FieldPath
                             | TFeature::FeaturesEncodePChar | TFeature::FeaturePathOperation,
                         0 | TFeature::FeatureToLower | TFeature::FeatureEncodeSpaceAsPlus)
- 
+
                 ,
             TParseFlags(0 // FieldQuery
                             | TFeature::FeaturesEncodePChar | TFeature::FeatureEncodeSpaceAsPlus,
                         0 | TFeature::FeatureToLower)
- 
+
                 ,
             TParseFlags(0 // FieldFragment
                             | TFeature::FeaturesEncodePChar,
                         0 | TFeature::FeatureToLower | TFeature::FeatureEncodeSpaceAsPlus)};
- 
+
     namespace NParse {
         void TRange::AddRange(const TRange& range, ui64 mask) {
             FlagsAllPlaintext |= range.FlagsAllPlaintext;
@@ -59,17 +59,17 @@ namespace NUri {
         }
 
     }
- 
+
     void TParser::copyRequirementsImpl(const char* ptr) {
         Y_ASSERT(0 != CurRange.FlagsAllPlaintext);
         Y_UNUSED(ptr);
-#ifdef DO_PRN 
+#ifdef DO_PRN
         PrintHead(ptr, __FUNCTION__)
-            << " all=[" << IntToString<16>(CurRange.FlagsAllPlaintext) 
-            << "] enc=[" << IntToString<16>(CurRange.FlagsEncodeMasked) 
+            << " all=[" << IntToString<16>(CurRange.FlagsAllPlaintext)
+            << "] enc=[" << IntToString<16>(CurRange.FlagsEncodeMasked)
             << " & " << IntToString<16>(Flags.Allow | Flags.Extra) << "]";
         PrintTail(CurRange.Beg, ptr);
-#endif 
+#endif
         for (int i = 0; i < TField::FieldUrlMAX; ++i) {
             const TField::EField fld = TField::EField(i);
             TSection& section = Sections[fld];
@@ -92,22 +92,22 @@ namespace NUri {
     }
 
     void TParser::PctEndImpl(const char* ptr) {
-#ifdef DO_PRN 
+#ifdef DO_PRN
         PrintHead(PctBegin, __FUNCTION__);
         PrintTail(PctBegin, ptr);
-#else 
+#else
         Y_UNUSED(ptr);
-#endif 
+#endif
         setRequirement(PctBegin, TEncoder::GetFlags('%').FeatFlags);
         PctBegin = nullptr;
     }
- 
+
     void TParser::HexSet(const char* ptr) {
         Y_ASSERT(nullptr != PctBegin);
-#ifdef DO_PRN 
+#ifdef DO_PRN
         PrintHead(ptr, __FUNCTION__);
         PrintTail(PctBegin, ptr + 1);
-#endif 
+#endif
         PctBegin = nullptr;
         const unsigned char ch = HexValue;
         ui64 flags = TEncoder::GetFlags('%').FeatFlags | TEncoder::GetFlags(ch).FeatFlags;
@@ -116,14 +116,14 @@ namespace NUri {
     }
 
     TState::EParsed TParser::ParseImpl() {
-#ifdef DO_PRN 
+#ifdef DO_PRN
         PrintHead(UriStr.data(), "[Parsing]") << "URL";
         PrintTail(UriStr);
-#endif 
- 
+#endif
+
         const bool ok = doParse(UriStr.data(), UriStr.length());
- 
-#ifdef DO_PRN 
+
+#ifdef DO_PRN
         Cdbg << (ok ? "[Parsed]" : "[Failed]");
         for (int idx = 0; idx < TField::FieldUrlMAX; ++idx) {
             const TSection& section = Sections[idx];
@@ -131,8 +131,8 @@ namespace NUri {
                 Cdbg << ' ' << TField::EField(idx) << "=[" << section.Get() << ']';
         }
         Cdbg << Endl;
-#endif 
- 
+#endif
+
         if (!ok) {
             if (!(Flags & TFeature::FeatureTryToFix) || !Sections[TField::FieldFrag].Beg)
                 return TState::ParsedBadFormat;
@@ -141,7 +141,7 @@ namespace NUri {
         }
 
         if ((Flags & TFeature::FeatureDenyNetworkPath) && IsNetPath())
-            return TState::ParsedBadFormat; 
+            return TState::ParsedBadFormat;
 
         const TSection& scheme = Sections[TField::FieldScheme];
         Scheme = scheme.IsSet() ? TSchemeInfo::GetKind(scheme.Get()) : TScheme::SchemeEmpty;
@@ -151,19 +151,19 @@ namespace NUri {
             // opaque case happens
             if (schemeInfo.FldReq & TField::FlagHost)
                 return TState::ParsedBadFormat;
- 
+
             if (TScheme::SchemeEmpty == Scheme)
                 return TState::ParsedBadScheme;
- 
+
             if (Flags & TFeature::FeatureAllowRootless)
                 return TState::ParsedOK;
 
             if (!(Flags & TFeature::FeatureSchemeFlexible))
                 return TState::ParsedBadScheme;
- 
+
             return TState::ParsedRootless;
         }
- 
+
         checkSectionCollision(TField::FieldUser, TField::FieldHost);
         checkSectionCollision(TField::FieldPass, TField::FieldPort);
 
@@ -199,9 +199,9 @@ namespace NUri {
             if ((schemeInfo.FldReq & TField::FlagHost) || (Flags & TFeature::FeatureRemoteOnly))
                 if (!host.IsSet() || 0 == host.Len())
                     return TState::ParsedBadFormat;
-        } 
- 
+        }
+
         return TState::ParsedOK;
-    } 
- 
+    }
+
 }

@@ -114,7 +114,7 @@ namespace NFormatPrivate {
         if (str[0] == '-') {
             stream << '-';
             str.Skip(1);
-        } 
+        }
 
         if (value.Flags & HF_ADDX) {
             if (Base == 16) {
@@ -130,7 +130,7 @@ namespace NFormatPrivate {
 
         stream << str;
         return stream;
-    } 
+    }
 
     template <typename Char, size_t Base>
     struct TBaseText {
@@ -275,11 +275,11 @@ static constexpr ::NFormatPrivate::TUnsignedBaseNumber<T, 16> Hex(const T& value
  * @param value                         Value to output.
  * @param flags                         Output flags.
  */
-template <typename T> 
+template <typename T>
 static constexpr ::NFormatPrivate::TBaseNumber<T, 16> SHex(const T& value, const ENumberFormat flags = HF_FULL | HF_ADDX) noexcept {
     return {value, flags};
-} 
- 
+}
+
 /**
  * Output manipulator similar to `std::setbase(2)`.
  *

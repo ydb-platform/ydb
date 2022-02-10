@@ -14,8 +14,8 @@ static void EncodeHtmlPcdataAppendInternal(const TStringBuf str, TString& strout
         strout.AppendNoAlias(s, next - s);
         s = next;
 
-        if (s == e) 
-            break; 
+        if (s == e)
+            break;
 
         switch (*s) {
             case '\"':

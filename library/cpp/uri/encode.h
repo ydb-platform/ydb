@@ -1,10 +1,10 @@
-#pragma once 
- 
-#include "common.h" 
- 
-#include <util/stream/output.h> 
+#pragma once
 
-namespace NUri { 
+#include "common.h"
+
+#include <util/stream/output.h>
+
+namespace NUri {
     namespace NEncode {
 #define CHAR_TYPE_NAME(f) _ECT##f
 #define CHAR_TYPE_FLAG(f) ECF##f = 1u << CHAR_TYPE_NAME(f)
@@ -16,7 +16,7 @@ namespace NUri {
             CHAR_TYPE_NAME(Unres),
             CHAR_TYPE_NAME(Stdrd),
         };
- 
+
         enum ECharFlag {
             CHAR_TYPE_FLAG(Digit),
             CHAR_TYPE_FLAG(Lower),
@@ -30,8 +30,8 @@ namespace NUri {
             ECGStdrd = ECGUnres | ECFStdrd,
         };
 
-#undef CHAR_TYPE_NAME 
-#undef CHAR_TYPE_FLAG 
+#undef CHAR_TYPE_NAME
+#undef CHAR_TYPE_FLAG
 
         struct TCharFlags {
             ui32 TypeFlags;
@@ -65,7 +65,7 @@ namespace NUri {
             // should we decode an encoded character
             bool IsDecode(ui32 fldmask, ui64 flags) const;
         };
- 
+
         class TEncodeMapperBase {
         protected:
             TEncodeMapperBase()
@@ -80,13 +80,13 @@ namespace NUri {
                 , Q_DecodeAny(flags & TFeature::FeatureDecodeANY)
             {
             }
- 
+
         protected:
             const ui64 Flags;
             const ui32 FldMask;
             const bool Q_DecodeAny; // this is a special option for username/password
         };
- 
+
         // maps a sym or hex character and indicates whether it has to be encoded
         class TEncodeMapper
            : public TEncodeMapperBase {
@@ -99,11 +99,11 @@ namespace NUri {
             // negative=sym, positive=hex, zero=maybesym
             int EncodeSym(unsigned char&) const;
             int EncodeHex(unsigned char&) const;
- 
+
         protected:
             const bool Q_EncodeSpcAsPlus;
         };
- 
+
         // indicates whether a character has to be encoded when copying to a field
         class TEncodeToMapper
            : public TEncodeMapperBase {
@@ -121,16 +121,16 @@ namespace NUri {
             }
             bool Encode(unsigned char) const;
         };
- 
+
         class TEncoder {
         public:
             TEncoder(IOutputStream& out, const TEncodeMapper& fldsrc, const TEncodeToMapper& flddst = TEncodeToMapper());
- 
+
             ui64 ReEncode(const TStringBuf& url);
             ui64 ReEncode(const char* str, size_t len) {
                 return ReEncode(TStringBuf(str, len));
             }
- 
+
         protected:
             static bool IsType(unsigned char c, ui64 flags) {
                 return GetFlags(c).TypeFlags & flags;
@@ -188,7 +188,7 @@ namespace NUri {
 
             static IOutputStream& EncodeField(IOutputStream& out, const TStringBuf& val, TField::EField fld);
             static IOutputStream& EncodeField(IOutputStream& out, const TStringBuf& val, TField::EField fld, ui64 flags);
- 
+
             static IOutputStream& Encode(IOutputStream& out, const TStringBuf& val) {
                 return EncodeField(out, val, TField::FieldAllMAX);
             }
@@ -200,20 +200,20 @@ namespace NUri {
         public:
             class TGrammar {
                 TCharFlags Map_[256];
- 
+
             public:
                 TGrammar();
                 const TCharFlags& Get(unsigned char ch) const {
                     return Map_[ch];
                 }
- 
+
                 TCharFlags& GetMutable(unsigned char ch) {
                     return Map_[ch];
                 }
                 TCharFlags& Add(unsigned char ch, const TCharFlags& val) {
                     return GetMutable(ch).Add(val);
                 }
- 
+
                 void AddRng(unsigned char lo, unsigned char hi, const TCharFlags& val) {
                     for (unsigned i = lo; i <= hi; ++i)
                         Add(i, val);
@@ -221,7 +221,7 @@ namespace NUri {
                 void AddRng(unsigned char lo, unsigned char hi, ui32 type, ui64 feat, ui32 decmask = 0, ui32 encmask = 0) {
                     AddRng(lo, hi, TCharFlags(type, feat, decmask, encmask));
                 }
- 
+
                 void Add(const TStringBuf& set, const TCharFlags& val) {
                     for (size_t i = 0; i != set.length(); ++i)
                         Add(set[i], val);
@@ -230,9 +230,9 @@ namespace NUri {
                     Add(set, TCharFlags(type, feat, decmask, encmask));
                 }
             };
- 
+
             static const TGrammar& Grammar();
- 
+
         protected:
             IOutputStream& Out;
             const TEncodeMapper FldSrc;
@@ -276,7 +276,7 @@ namespace NUri {
             void Do(unsigned char, int);
         };
     }
- 
+
     using TEncoder = NEncode::TEncoder;
 
 }

@@ -52,11 +52,11 @@ void TMemoryOutput::DoUndo(size_t len) {
 }
 
 void TMemoryOutput::DoWrite(const void* buf, size_t len) {
-    char* end = Buf_ + len; 
+    char* end = Buf_ + len;
     Y_ENSURE(end <= End_, TStringBuf("memory output stream exhausted"));
 
     memcpy(Buf_, buf, len);
-    Buf_ = end; 
+    Buf_ = end;
 }
 
 void TMemoryOutput::DoWriteC(char c) {

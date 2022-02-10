@@ -29,13 +29,13 @@ namespace NLastGetopt {
                 TOpt* opt;
                 if ((unsigned)o->val < 0x80 && isalnum(o->val)) {
                     opt = &Opts->CharOption(char(o->val));
-                    opt->AddLongName(o->name); 
+                    opt->AddLongName(o->name);
                 } else {
                     Opts->AddLongOption(o->name);
                     opt = const_cast<TOpt*>(&Opts->GetLongOption(o->name));
                 }
                 opt->HasArg_ = EHasArg(o->has_arg);
-                opt->UserValue(o->flag); 
+                opt->UserValue(o->flag);
             }
 
             OptsParser.Reset(new TOptsParser(&*Opts, argc, (const char**)argv));

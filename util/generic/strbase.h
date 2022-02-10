@@ -132,9 +132,9 @@ public:
     }
 
     inline size_t IterOff(const_iterator it) const noexcept {
-        return begin() <= it && end() > it ? size_t(it - begin()) : npos; 
-    } 
- 
+        return begin() <= it && end() > it ? size_t(it - begin()) : npos;
+    }
+
     inline const_iterator begin() const noexcept {
         return Ptr();
     }
@@ -197,26 +197,26 @@ public:
         return !empty();
     }
 
-public: // style-guide compliant methods 
+public: // style-guide compliant methods
     constexpr const TCharType* Data() const noexcept {
-        return Ptr(); 
-    } 
- 
+        return Ptr();
+    }
+
     constexpr size_t Size() const noexcept {
-        return Len(); 
-    } 
- 
+        return Len();
+    }
+
     Y_PURE_FUNCTION constexpr bool Empty() const noexcept {
-        return 0 == Len(); 
-    } 
- 
+        return 0 == Len();
+    }
+
 private:
     static inline TStringView LegacySubString(const TStringView view, size_t p, size_t n) noexcept {
         p = Min(p, view.length());
         return view.substr(p, n);
     }
 
-public: 
+public:
     // ~~~ Comparison ~~~ : FAMILY0(int, compare)
     static int compare(const TSelf& s1, const TSelf& s2) noexcept {
         return s1.AsStringView().compare(s2.AsStringView());
@@ -469,8 +469,8 @@ public:
             return npos;
         }
         return AsStringView().rfind(c, pos - 1);
-    } 
- 
+    }
+
     inline size_t rfind(const TStringView str, size_t pos = npos) const {
         return AsStringView().rfind(str.data(), pos, str.size());
     }
@@ -549,7 +549,7 @@ public:
     }
 
     inline size_t copy(TCharType* pc, size_t n, size_t pos) const {
-        if (pos > Len()) { 
+        if (pos > Len()) {
             throw std::out_of_range("TStringBase::copy");
         }
 
@@ -557,16 +557,16 @@ public:
     }
 
     inline size_t copy(TCharType* pc, size_t n) const noexcept {
-        return CopyImpl(pc, n, 0); 
+        return CopyImpl(pc, n, 0);
     }
 
     inline size_t strcpy(TCharType* pc, size_t n) const noexcept {
         if (n) {
-            n = copy(pc, n - 1); 
-            pc[n] = 0; 
+            n = copy(pc, n - 1);
+            pc[n] = 0;
         }
 
-        return n; 
+        return n;
     }
 
     inline TDerived copy() const Y_WARN_UNUSED_RESULT {

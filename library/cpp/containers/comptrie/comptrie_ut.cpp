@@ -870,13 +870,13 @@ void TCompactTrieTest::TestMergeFromFile() {
     }
 
     TCompactTrie<> trie(TBlob::FromFileSingleThreaded(GetSystemTempDir() + "/TCompactTrieTest-TestMerge-res"));
-    UNIT_ASSERT_VALUES_EQUAL(12u, trie.Get("ru.yandex")); 
-    UNIT_ASSERT_VALUES_EQUAL(13u, trie.Get("ru.google")); 
-    UNIT_ASSERT_VALUES_EQUAL(14u, trie.Get("ru.mail")); 
-    UNIT_ASSERT_VALUES_EQUAL(22u, trie.Get("org.kernel")); 
-    UNIT_ASSERT_VALUES_EQUAL(112u, trie.Get("com.yandex")); 
-    UNIT_ASSERT_VALUES_EQUAL(113u, trie.Get("com.google")); 
-    UNIT_ASSERT_VALUES_EQUAL(114u, trie.Get("com.yahoo")); 
+    UNIT_ASSERT_VALUES_EQUAL(12u, trie.Get("ru.yandex"));
+    UNIT_ASSERT_VALUES_EQUAL(13u, trie.Get("ru.google"));
+    UNIT_ASSERT_VALUES_EQUAL(14u, trie.Get("ru.mail"));
+    UNIT_ASSERT_VALUES_EQUAL(22u, trie.Get("org.kernel"));
+    UNIT_ASSERT_VALUES_EQUAL(112u, trie.Get("com.yandex"));
+    UNIT_ASSERT_VALUES_EQUAL(113u, trie.Get("com.google"));
+    UNIT_ASSERT_VALUES_EQUAL(114u, trie.Get("com.yahoo"));
 
     unlink((GetSystemTempDir() + "/TCompactTrieTest-TestMerge-res").data());
     unlink((GetSystemTempDir() + "/TCompactTrieTest-TestMerge-com").data());

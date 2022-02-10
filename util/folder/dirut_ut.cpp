@@ -70,16 +70,16 @@ Y_UNIT_TEST_SUITE(TDirutTest) {
 #else
         DoTest("bar", "/foo/baz", "/foo/bar");
         DoTest("/foo/bar", "/bar/baz", "/foo/bar");
- 
+
     #ifdef NDEBUG
         DoTest("bar", "./baz", "./bar");
         #if 0 // should we support, for consistency, single-label dirs
         DoTest("bar", "baz", "bar");
         #endif
     #endif
-#endif 
+#endif
     }
- 
+
     Y_UNIT_TEST(TestResolvePathRelative) {
         TTempDir tempDir;
         TTempBuf tempBuf;

@@ -60,8 +60,8 @@ bool NX86::CpuId(ui32 op, ui32* res) noexcept {
 
     return false;
 #endif
-} 
- 
+}
+
 namespace {
     union TX86CpuInfo {
         ui32 Info[4];
@@ -80,11 +80,11 @@ namespace {
         inline TX86CpuInfo(ui32 op, ui32 subOp) noexcept {
             NX86::CpuId(op, subOp, Info);
         }
-    }; 
+    };
 
     static_assert(sizeof(TX86CpuInfo) == 16, "please, fix me");
 }
- 
+
 // https://en.wikipedia.org/wiki/CPUID
 bool NX86::HaveRDTSCP() noexcept {
     return (TX86CpuInfo(0x80000001).EDX >> 27) & 1u;
@@ -96,8 +96,8 @@ bool NX86::HaveSSE() noexcept {
 
 bool NX86::HaveSSE2() noexcept {
     return (TX86CpuInfo(0x1).EDX >> 26) & 1u;
-} 
- 
+}
+
 bool NX86::HaveSSE3() noexcept {
     return TX86CpuInfo(0x1).ECX & 1u;
 }
@@ -116,8 +116,8 @@ bool NX86::HaveSSE41() noexcept {
 
 bool NX86::HaveSSE42() noexcept {
     return (TX86CpuInfo(0x1).ECX >> 20) & 1u;
-} 
- 
+}
+
 bool NX86::HaveF16C() noexcept {
     return (TX86CpuInfo(0x1).ECX >> 29) & 1u;
 }
@@ -253,7 +253,7 @@ const char* CpuBrand(ui32* store) noexcept {
 #endif
 
     return (const char*)store;
-} 
+}
 
 #define Y_DEF_NAME(X)                                               \
     bool NX86::CachedHave##X() noexcept {                           \

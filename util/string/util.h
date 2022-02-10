@@ -102,19 +102,19 @@ public:
         return cbrk(s) - s;
     }
 
-    size_t spn(const char* s, const char* e) const { 
-        return cbrk(s, e) - s; 
-    } 
- 
+    size_t spn(const char* s, const char* e) const {
+        return cbrk(s, e) - s;
+    }
+
     /// Offset of the first character in table, like strcspn().
     size_t cspn(const char* s) const {
         return brk(s) - s;
     }
 
-    size_t cspn(const char* s, const char* e) const { 
-        return brk(s, e) - s; 
-    } 
- 
+    size_t cspn(const char* s, const char* e) const {
+        return brk(s, e) - s;
+    }
+
     char* brk(char* s) const {
         return const_cast<char*>(brk((const char*)s));
     }

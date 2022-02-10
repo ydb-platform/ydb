@@ -178,42 +178,42 @@ namespace NTls {
 
     template <class T>
     class TValue: public TMoveOnly {
-        class TConstructor { 
-        public: 
+        class TConstructor {
+        public:
             TConstructor() noexcept = default;
 
             virtual ~TConstructor() = default;
 
-            virtual T* Construct(void* ptr) const = 0; 
-        }; 
+            virtual T* Construct(void* ptr) const = 0;
+        };
 
-        class TDefaultConstructor: public TConstructor { 
-        public: 
+        class TDefaultConstructor: public TConstructor {
+        public:
             ~TDefaultConstructor() override = default;
 
             T* Construct(void* ptr) const override {
                 //memset(ptr, 0, sizeof(T));
                 return ::new (ptr) T();
-            } 
-        }; 
+            }
+        };
 
-        template <class T1> 
-        class TCopyConstructor: public TConstructor { 
-        public: 
-            inline TCopyConstructor(const T1& value) 
-                : Value(value) 
-            { 
-            } 
+        template <class T1>
+        class TCopyConstructor: public TConstructor {
+        public:
+            inline TCopyConstructor(const T1& value)
+                : Value(value)
+            {
+            }
 
             ~TCopyConstructor() override = default;
 
             T* Construct(void* ptr) const override {
                 return ::new (ptr) T(Value);
-            } 
+            }
 
-        private: 
-            T1 Value; 
-        }; 
+        private:
+            T1 Value;
+        };
 
     public:
         inline TValue()
@@ -239,30 +239,30 @@ namespace NTls {
         }
 
         inline operator T&() {
-            return Get(); 
-        } 
- 
+            return Get();
+        }
+
         inline const T& operator->() const {
             return Get();
         }
 
-        inline T& operator->() { 
-            return Get(); 
-        } 
- 
-        inline const T* operator&() const { 
-            return GetPtr(); 
-        } 
- 
-        inline T* operator&() { 
-            return GetPtr(); 
-        } 
- 
+        inline T& operator->() {
+            return Get();
+        }
+
+        inline const T* operator&() const {
+            return GetPtr();
+        }
+
+        inline T* operator&() {
+            return GetPtr();
+        }
+
         inline T& Get() const {
-            return *GetPtr(); 
-        } 
- 
-        inline T* GetPtr() const { 
+            return *GetPtr();
+        }
+
+        inline T* GetPtr() const {
             T* val = static_cast<T*>(Key_.Get());
 
             if (!val) {
@@ -274,7 +274,7 @@ namespace NTls {
                 val = newval.Release();
             }
 
-            return val; 
+            return val;
         }
 
     private:

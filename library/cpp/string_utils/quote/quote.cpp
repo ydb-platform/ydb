@@ -37,13 +37,13 @@ namespace {
 
         static inline char x2c(TStringBuf& x) {
             if (!IsAsciiHex((ui8)x[0]) || !IsAsciiHex((ui8)x[1]))
-                return '%'; 
-            ui8 c = 0; 
- 
+                return '%';
+            ui8 c = 0;
+
             GETSBXC;
             GETSBXC;
-            return c; 
-        } 
+            return c;
+        }
     };
 
     class TFromHexLenLimited {
@@ -242,13 +242,13 @@ TString CGIUnescapeRet(const TStringBuf from) {
     return to;
 }
 
-char* UrlUnescape(char* to, TStringBuf from) { 
+char* UrlUnescape(char* to, TStringBuf from) {
     while (!from.empty()) {
-        char ch = from[0]; 
+        char ch = from[0];
         from.Skip(1);
-        if ('%' == ch && 2 <= from.length()) 
-            ch = TFromHexZeroTerm::x2c(from); 
-        *to++ = ch; 
+        if ('%' == ch && 2 <= from.length())
+            ch = TFromHexZeroTerm::x2c(from);
+        *to++ = ch;
     }
 
     *to = 0;

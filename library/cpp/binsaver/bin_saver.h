@@ -602,7 +602,7 @@ struct TRegisterSaveLoadType {
 #define REGISTER_SAVELOAD_NM_CLASS(N, nmspace, className) \
     BASIC_REGISTER_CLASS(nmspace::className)              \
     static TRegisterSaveLoadType<nmspace::className> init_##nmspace##_##name##N(N);
- 
+
 #define REGISTER_SAVELOAD_NM2_CLASS(N, nmspace1, nmspace2, className) \
     BASIC_REGISTER_CLASS(nmspace1::nmspace2::className)              \
     static TRegisterSaveLoadType<nmspace1::nmspace2::className> init_##nmspace1##_##nmspace2##_##name##N(N);
@@ -611,12 +611,12 @@ struct TRegisterSaveLoadType {
     typedef nmspace::className<T> temp_init##nmspace##className##T##temp; \
     BASIC_REGISTER_CLASS(nmspace::className<T>)                           \
     static TRegisterSaveLoadType<nmspace::className<T>> temp_init##nmspace##_##name##T##N(N);
- 
-#define REGISTER_SAVELOAD_CLASS_NAME(N, cls, name) \ 
+
+#define REGISTER_SAVELOAD_CLASS_NAME(N, cls, name) \
     BASIC_REGISTER_CLASS(cls)                      \
     static TRegisterSaveLoadType<cls> init##name##N(N);
- 
-#define REGISTER_SAVELOAD_CLASS_NS_PREF(N, cls, ns, pref) \ 
+
+#define REGISTER_SAVELOAD_CLASS_NS_PREF(N, cls, ns, pref) \
     REGISTER_SAVELOAD_CLASS_NAME(N, ns ::cls, _##pref##_##cls)
 
 #define SAVELOAD(...)             \

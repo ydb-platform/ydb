@@ -36,7 +36,7 @@ public:
     const void* Data() const noexcept {
         return Data_;
     }
- 
+
     inline size_t Size() const noexcept {
         return Size_;
     }
@@ -57,7 +57,7 @@ public:
         Y_ASSERT(off <= Size());
         Offset_ = off;
     }
- 
+
     inline void Proceed(size_t off) {
         Y_ASSERT(off <= Left());
 
@@ -225,8 +225,8 @@ char* TTempBuf::Data() noexcept {
 
 const char* TTempBuf::Data() const noexcept {
     return static_cast<const char*>(Impl_->Data());
-} 
- 
+}
+
 size_t TTempBuf::Size() const noexcept {
     return Impl_->Size();
 }
@@ -251,10 +251,10 @@ void TTempBuf::Reset() noexcept {
     Impl_->Reset();
 }
 
-void TTempBuf::SetPos(size_t off) { 
-    Impl_->SetPos(off); 
-} 
- 
+void TTempBuf::SetPos(size_t off) {
+    Impl_->SetPos(off);
+}
+
 char* TTempBuf::Proceed(size_t off) {
     char* ptr = Current();
     Impl_->Proceed(off);

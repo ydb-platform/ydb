@@ -6,10 +6,10 @@
 class IInputStream;
 
 class MD5 {
-public: 
-    MD5() { 
-        Init(); 
-    } 
+public:
+    MD5() {
+        Init();
+    }
 
     void Init();
 
@@ -66,7 +66,7 @@ public:
     static bool IsMD5(TStringBuf data);
     static bool IsMD5(const TArrayRef<const ui8>& data);
 
-private: 
+private:
     void UpdatePart(TArrayRef<const ui8> data);
 
 private:

@@ -4,19 +4,19 @@
 
 template <bool addAll, char sep, char sepKeyVal, class F>
 static inline void ScanKeyValue(TStringBuf s, F&& f) {
-    TStringBuf key, val; 
+    TStringBuf key, val;
 
     while (!s.empty()) {
         val = s.NextTok(sep);
 
         if (val.empty()) {
-            continue; // && case 
+            continue; // && case
         }
 
         key = val.NextTok(sepKeyVal);
 
         if (addAll || val.IsInited()) {
-            f(key, val); // includes empty keys 
+            f(key, val); // includes empty keys
         }
     }
 }

@@ -4,7 +4,7 @@
 
 #include <util/generic/iterator_range.h>
 #include <util/generic/map.h>
-#include <util/generic/strbuf.h> 
+#include <util/generic/strbuf.h>
 #include <util/generic/string.h>
 
 #include <initializer_list>
@@ -17,28 +17,28 @@ struct TStringLess {
 };
 
 class TCgiParameters: public TMultiMap<TString, TString> {
-public: 
+public:
     TCgiParameters() = default;
 
     explicit TCgiParameters(const TStringBuf cgiParamStr) {
         Scan(cgiParamStr);
-    } 
+    }
 
     TCgiParameters(std::initializer_list<std::pair<TString, TString>> il);
 
-    void Flush() { 
-        erase(begin(), end()); 
-    } 
+    void Flush() {
+        erase(begin(), end());
+    }
 
     size_t EraseAll(const TStringBuf name);
 
     size_t NumOfValues(const TStringBuf name) const noexcept {
-        return count(name); 
-    } 
+        return count(name);
+    }
 
     TString operator()() const {
-        return Print(); 
-    } 
+        return Print();
+    }
 
     void Scan(const TStringBuf cgiParStr, bool form = true);
     void ScanAdd(const TStringBuf cgiParStr);
@@ -52,7 +52,7 @@ public:
      * @note Names and values in the returned string are CGI-escaped.
      */
     TString Print() const;
-    char* Print(char* res) const; 
+    char* Print(char* res) const;
 
     Y_PURE_FUNCTION
     size_t PrintSize() const noexcept;
@@ -65,7 +65,7 @@ public:
     Y_PURE_FUNCTION
     auto Range(const TStringBuf name) const noexcept {
         return IterateValues(MakeIteratorRange(equal_range(name)));
-    } 
+    }
 
     Y_PURE_FUNCTION
     const_iterator Find(const TStringBuf name, size_t numOfValue = 0) const noexcept;
@@ -95,7 +95,7 @@ public:
         // is not implicitly constructible from given type.
         // But libc++ pair allows this with C++14.
         emplace(std::forward<TName>(name), std::forward<TValue>(value));
-    } 
+    }
 #else
     template <typename TName, typename TValue>
     inline void InsertUnescaped(TName&& name, TValue&& value) {
@@ -106,7 +106,7 @@ public:
     // replace all values for a given key with new values
     template <typename TIter>
     void ReplaceUnescaped(const TStringBuf key, TIter valuesBegin, const TIter valuesEnd);
- 
+
     void ReplaceUnescaped(const TStringBuf key, std::initializer_list<TStringBuf> values) {
         ReplaceUnescaped(key, values.begin(), values.end());
     }
@@ -116,21 +116,21 @@ public:
     }
 
     // join multiple values into a single one using a separator
-    // if val is a [possibly empty] non-NULL string, append it as well 
+    // if val is a [possibly empty] non-NULL string, append it as well
     void JoinUnescaped(const TStringBuf key, char sep, TStringBuf val = TStringBuf());
- 
+
     bool Erase(const TStringBuf name, size_t numOfValue = 0);
     bool Erase(const TStringBuf name, const TStringBuf val);
 
     inline const char* FormField(const TStringBuf name, size_t numOfValue = 0) const {
-        const_iterator it = Find(name, numOfValue); 
+        const_iterator it = Find(name, numOfValue);
 
-        if (it == end()) { 
+        if (it == end()) {
             return nullptr;
         }
- 
+
         return it->second.data();
-    } 
+    }
 };
 
 template <typename TIter>

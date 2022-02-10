@@ -1,11 +1,11 @@
-#include "other.h" 
+#include "other.h"
 
-#include <util/string/util.h> 
+#include <util/string/util.h>
 #include <util/system/yassert.h>
 
 /********************************************************/
 /********************************************************/
- 
+
 static const Tr InvertTr(".:/?#", "\005\004\003\002\001");
 static const Tr RevertTr("\005\004\003\002\001", ".:/?#");
 

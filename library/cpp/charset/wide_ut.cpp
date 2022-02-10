@@ -151,7 +151,7 @@ public:
 
 UNIT_TEST_SUITE_REGISTRATION(TConversionTest);
 
-// test conversions (char -> wchar32), (wchar32 -> char) and (wchar32 -> wchar16) 
+// test conversions (char -> wchar32), (wchar32 -> char) and (wchar32 -> wchar16)
 #define TEST_WCHAR32(sbuf, wbuf, enc)                                                                                                 \
     do {                                                                                                                              \
         /* convert char to wchar32 */                                                                                                 \
@@ -169,7 +169,7 @@ UNIT_TEST_SUITE_REGISTRATION(TConversionTest);
         UNIT_ASSERT_VALUES_EQUAL(sbuf, s1buf);                                                                                        \
         UNIT_ASSERT_VALUES_EQUAL(wbuf, wstr2);                                                                                        \
     } while (false)
- 
+
 void TConversionTest::TestCharToWide() {
     TUtf16String w = CharToWide(YandexText, CODES_YANDEX);
 
@@ -236,7 +236,7 @@ void TConversionTest::TestRecodeIntoString() {
     UNIT_ASSERT(sYandex.data() == sdata);     // reserved buffer reused
     UNIT_ASSERT(sYandex.data() == sres.data());     // same buffer
     UNIT_ASSERT(sYandex.size() == sres.size());     // same size
-    TEST_WCHAR32(sYandex, UnicodeText, CODES_YANDEX); 
+    TEST_WCHAR32(sYandex, UnicodeText, CODES_YANDEX);
 
     TUtf16String sUnicode;
     sUnicode.reserve(YandexText.size() * 4);
@@ -254,7 +254,7 @@ void TConversionTest::TestRecodeIntoString() {
     UNIT_ASSERT(sUtf8.capacity() > scap); // increased buffer capacity (supplied was too small)
     UNIT_ASSERT(sUtf8.data() == sres.data());         // same buffer
     UNIT_ASSERT(sUtf8.size() == sres.size());         // same size
-    TEST_WCHAR32(sUtf8, UnicodeText, CODES_UTF8); 
+    TEST_WCHAR32(sUtf8, UnicodeText, CODES_UTF8);
 
     sUnicode.clear();
     wdata = sUnicode.data();
@@ -336,11 +336,11 @@ void TConversionTest::TestRecodeAppend() {
     }
 }
 
-template <> 
+template <>
 void Out<RECODE_RESULT>(IOutputStream& out, RECODE_RESULT val) {
-    out << int(val); 
-} 
- 
+    out << int(val);
+}
+
 void TConversionTest::TestRecode() {
     for (int c = 0; c != CODES_MAX; ++c) {
         ECharset enc = static_cast<ECharset>(c);
@@ -367,11 +367,11 @@ void TConversionTest::TestRecode() {
             res = RecodeFromUnicode(enc, &wch, &rch, 1, 1, read, written);
             UNIT_ASSERT(res == RECODE_OK);
 
-            char rch2 = 0; 
-            UNIT_ASSERT_VALUES_EQUAL(RECODE_OK, RecodeFromUnicode(enc, wch, &rch2, 1, written)); 
-            UNIT_ASSERT_VALUES_EQUAL(size_t(1), written); 
-            UNIT_ASSERT_VALUES_EQUAL(rch2, rch); 
- 
+            char rch2 = 0;
+            UNIT_ASSERT_VALUES_EQUAL(RECODE_OK, RecodeFromUnicode(enc, wch, &rch2, 1, written));
+            UNIT_ASSERT_VALUES_EQUAL(size_t(1), written);
+            UNIT_ASSERT_VALUES_EQUAL(rch2, rch);
+
             if (hash.contains(rch)) { // there are some stupid encodings with duplicate characters
                 continue;
             } else {

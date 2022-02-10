@@ -17,7 +17,7 @@ private:
     void TestRead(const T& t, const char* comm) {
         const char* beg = (const char*)NAccessors::Begin(t);
         const char* end = (const char*)NAccessors::End(t);
-        long sz = NAccessors::Size(t) * sizeof(typename TMemoryTraits<T>::TElementType); 
+        long sz = NAccessors::Size(t) * sizeof(typename TMemoryTraits<T>::TElementType);
 
         UNIT_ASSERT_VALUES_EQUAL_C(end - beg, sz, comm);
     }

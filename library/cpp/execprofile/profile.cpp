@@ -7,11 +7,11 @@
 #include <signal.h>
 #include <sys/time.h>
 #include <sys/resource.h>
-#if defined(_darwin_) 
-#include <sys/ucontext.h> 
-#else 
+#if defined(_darwin_)
+#include <sys/ucontext.h>
+#else
 #include <ucontext.h>
-#endif 
+#endif
 #include <dlfcn.h>
 
 #include <util/system/platform.h>
@@ -186,18 +186,18 @@ private:
 #else
         return (void*)mctx->gregs[REG_EIP];
 #endif
-#elif defined _darwin_ 
+#elif defined _darwin_
 #if defined _64_
 #if defined(_arm_)
         return (void*)(*mctx)->__ss.__pc;
 #else
-        return (void*)(*mctx)->__ss.__rip; 
+        return (void*)(*mctx)->__ss.__rip;
 #endif
 #else
 #if defined(__IOS__)
         return (void*)(*mctx)->__ss.__pc;
 #else
-        return (void*)(*mctx)->__ss.__eip; 
+        return (void*)(*mctx)->__ss.__eip;
 #endif
 #endif
 #endif

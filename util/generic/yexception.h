@@ -57,7 +57,7 @@ namespace NPrivateException {
         }
 
         TStringBuf AsStrBuf() const;
- 
+
     private:
         void ZeroTerminate() noexcept;
 
@@ -83,9 +83,9 @@ class yexception: public NPrivateException::yexception {
 };
 
 Y_DECLARE_OUT_SPEC(inline, yexception, stream, value) {
-    stream << value.AsStrBuf(); 
-} 
- 
+    stream << value.AsStrBuf();
+}
+
 class TSystemError: public yexception {
 public:
     TSystemError(int status)

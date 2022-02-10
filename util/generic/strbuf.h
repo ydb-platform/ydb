@@ -16,8 +16,8 @@ private:
     using TdSelf = TBasicStringBuf;
     using TBase = TStringBase<TdSelf, TCharType, TTraits>;
     using TStringView = std::basic_string_view<TCharType>;
- 
-public: 
+
+public:
     using char_type = TCharType; // TODO: DROP
     using traits_type = TTraits;
 
@@ -99,8 +99,8 @@ public:
 
     constexpr inline TBasicStringBuf(const TCharType* data, size_t size) noexcept
         : TStringView(data, size)
-    { 
-    } 
+    {
+    }
 
     constexpr TBasicStringBuf(const TCharType* data) noexcept
         /*
@@ -108,26 +108,26 @@ public:
          * while std::string_view (using std::char_traits) will abort in such case
          */
         : TStringView(data, TBase::StrLen(data))
-    { 
-    } 
+    {
+    }
 
     constexpr inline TBasicStringBuf(const TCharType* beg, const TCharType* end) noexcept
         : TStringView(beg, end - beg)
     {
     }
- 
+
     template <typename D, typename T>
     inline TBasicStringBuf(const TStringBase<D, TCharType, T>& str) noexcept
         : TStringView(str.data(), str.size())
-    { 
-    } 
+    {
+    }
 
-    template <typename T, typename A> 
+    template <typename T, typename A>
     inline TBasicStringBuf(const std::basic_string<TCharType, T, A>& str) noexcept
         : TStringView(str)
-    { 
-    } 
- 
+    {
+    }
+
     template <typename TCharTraits>
     constexpr TBasicStringBuf(std::basic_string_view<TCharType, TCharTraits> view) noexcept
         : TStringView(view)
@@ -143,12 +143,12 @@ public:
          *
          *  This means, that a class with default ctor can not be a constant member of another class with default ctor.
          */
-    } 
+    }
 
     inline TBasicStringBuf(const TBasicStringBuf& src, size_t pos, size_t n) noexcept
         : TBasicStringBuf(src)
     {
-        Skip(pos).Trunc(n); 
+        Skip(pos).Trunc(n);
     }
 
     inline TBasicStringBuf(const TBasicStringBuf& src, size_t pos) noexcept
@@ -162,14 +162,14 @@ public:
         return TBasicStringBuf(data() + pos, n);
     }
 
-public: 
-    void Clear() { 
-        *this = TdSelf(); 
-    } 
- 
+public:
+    void Clear() {
+        *this = TdSelf();
+    }
+
     constexpr bool IsInited() const noexcept {
         return data() != nullptr;
-    } 
+    }
 
 public:
     /**
@@ -184,8 +184,8 @@ public:
      * @returns                         Whether the split was actually performed.
      */
     inline bool TrySplit(TCharType delim, TdSelf& l, TdSelf& r) const noexcept {
-        return TrySplitOn(TBase::find(delim), l, r); 
-    } 
+        return TrySplitOn(TBase::find(delim), l, r);
+    }
 
     /**
      * Tries to split string in two parts using given delimiter character.
@@ -199,8 +199,8 @@ public:
      * @returns                         Whether the split was actually performed.
      */
     inline bool TryRSplit(TCharType delim, TdSelf& l, TdSelf& r) const noexcept {
-        return TrySplitOn(TBase::rfind(delim), l, r); 
-    } 
+        return TrySplitOn(TBase::rfind(delim), l, r);
+    }
 
     /**
      * Tries to split string in two parts using given delimiter sequence.
@@ -234,11 +234,11 @@ public:
 
     inline void Split(TCharType delim, TdSelf& l, TdSelf& r) const noexcept {
         SplitTemplate(delim, l, r);
-    } 
- 
+    }
+
     inline void RSplit(TCharType delim, TdSelf& l, TdSelf& r) const noexcept {
         RSplitTemplate(delim, l, r);
-    } 
+    }
 
     inline void Split(TdSelf delim, TdSelf& l, TdSelf& r) const noexcept {
         SplitTemplate(delim, l, r);
@@ -249,14 +249,14 @@ public:
     }
 
 private:
-    // splits on a delimiter at a given position; delimiter is excluded 
+    // splits on a delimiter at a given position; delimiter is excluded
     void DoSplitOn(size_t pos, TdSelf& l, TdSelf& r, size_t len) const noexcept {
         Y_ASSERT(pos != TBase::npos);
 
-        // make a copy in case one of l/r is really *this 
+        // make a copy in case one of l/r is really *this
         const TdSelf tok = SubStr(pos + len);
-        l = Head(pos); 
-        r = tok; 
+        l = Head(pos);
+        r = tok;
     }
 
 public:
@@ -268,39 +268,39 @@ public:
     // s.TrySplitOn(s.find('z'), ...) is false, but s.TrySplitOn(100500, ...) is true.
 
     bool TrySplitOn(size_t pos, TdSelf& l, TdSelf& r, size_t len = 1) const noexcept {
-        if (TBase::npos == pos) 
-            return false; 
+        if (TBase::npos == pos)
+            return false;
 
         DoSplitOn(pos, l, r, len);
-        return true; 
-    } 
- 
+        return true;
+    }
+
     void SplitOn(size_t pos, TdSelf& l, TdSelf& r, size_t len = 1) const noexcept {
         if (!TrySplitOn(pos, l, r, len)) {
-            l = *this; 
-            r = TdSelf(); 
+            l = *this;
+            r = TdSelf();
         }
-    } 
+    }
 
     bool TrySplitAt(size_t pos, TdSelf& l, TdSelf& r) const noexcept {
         return TrySplitOn(pos, l, r, 0);
-    } 
- 
+    }
+
     void SplitAt(size_t pos, TdSelf& l, TdSelf& r) const noexcept {
         SplitOn(pos, l, r, 0);
-    } 
- 
+    }
+
     /*
     // Not implemented intentionally, use TrySplitOn() instead
     void RSplitOn(size_t pos, TdSelf& l, TdSelf& r) const noexcept;
     void RSplitAt(size_t pos, TdSelf& l, TdSelf& r) const noexcept;
 */
- 
+
 public:
     Y_PURE_FUNCTION inline TdSelf After(TCharType c) const noexcept {
-        TdSelf l, r; 
+        TdSelf l, r;
         return TrySplit(c, l, r) ? r : *this;
-    } 
+    }
 
     Y_PURE_FUNCTION inline TdSelf Before(TCharType c) const noexcept {
         TdSelf l, r;
@@ -308,10 +308,10 @@ public:
     }
 
     Y_PURE_FUNCTION inline TdSelf RAfter(TCharType c) const noexcept {
-        TdSelf l, r; 
+        TdSelf l, r;
         return TryRSplit(c, l, r) ? r : *this;
-    } 
- 
+    }
+
     Y_PURE_FUNCTION inline TdSelf RBefore(TCharType c) const noexcept {
         TdSelf l, r;
         return TryRSplit(c, l, r) ? l : *this;
@@ -346,43 +346,43 @@ public:
 
 public:
     // returns tail, including pos
-    TdSelf SplitOffAt(size_t pos) { 
-        const TdSelf tok = SubStr(pos); 
-        Trunc(pos); 
-        return tok; 
-    } 
- 
+    TdSelf SplitOffAt(size_t pos) {
+        const TdSelf tok = SubStr(pos);
+        Trunc(pos);
+        return tok;
+    }
+
     // returns head, tail includes pos
-    TdSelf NextTokAt(size_t pos) { 
-        const TdSelf tok = Head(pos); 
-        Skip(pos); 
-        return tok; 
-    } 
- 
-    TdSelf SplitOffOn(size_t pos) { 
-        TdSelf tok; 
-        SplitOn(pos, *this, tok); 
-        return tok; 
-    } 
- 
-    TdSelf NextTokOn(size_t pos) { 
-        TdSelf tok; 
-        SplitOn(pos, tok, *this); 
-        return tok; 
-    } 
+    TdSelf NextTokAt(size_t pos) {
+        const TdSelf tok = Head(pos);
+        Skip(pos);
+        return tok;
+    }
+
+    TdSelf SplitOffOn(size_t pos) {
+        TdSelf tok;
+        SplitOn(pos, *this, tok);
+        return tok;
+    }
+
+    TdSelf NextTokOn(size_t pos) {
+        TdSelf tok;
+        SplitOn(pos, tok, *this);
+        return tok;
+    }
     /*
     // See comment on RSplitOn() above
     TdSelf RSplitOffOn(size_t pos);
     TdSelf RNextTokOn(size_t pos);
 */
- 
+
 public:
     TdSelf SplitOff(TCharType delim) {
-        TdSelf tok; 
-        Split(delim, *this, tok); 
-        return tok; 
-    } 
- 
+        TdSelf tok;
+        Split(delim, *this, tok);
+        return tok;
+    }
+
     TdSelf RSplitOff(TCharType delim) {
         TdSelf tok;
         RSplit(delim, tok, *this);
@@ -419,8 +419,8 @@ public:
 
     TdSelf NextTok(TCharType delim) {
         return NextTokTemplate(delim);
-    } 
- 
+    }
+
     TdSelf RNextTok(TCharType delim) {
         return RNextTokTemplate(delim);
     }
@@ -433,29 +433,29 @@ public:
         return RNextTokTemplate(delim);
     }
 
-public: // string subsequences 
+public: // string subsequences
     /// Cut last @c shift characters (or less if length is less than @c shift)
     inline TdSelf& Chop(size_t shift) noexcept {
         this->remove_suffix(std::min(shift, size()));
-        return *this; 
-    } 
+        return *this;
+    }
 
     /// Cut first @c shift characters (or less if length is less than @c shift)
     inline TdSelf& Skip(size_t shift) noexcept {
         this->remove_prefix(std::min(shift, size()));
-        return *this; 
-    } 
+        return *this;
+    }
 
     /// Sets the start pointer to a position relative to the end
     inline TdSelf& RSeek(size_t tailSize) noexcept {
         if (size() > tailSize) {
             //WARN: removing TStringView:: will lead to an infinite recursion
             *this = TStringView::substr(size() - tailSize, tailSize);
-        } 
- 
-        return *this; 
-    } 
- 
+        }
+
+        return *this;
+    }
+
     // coverity[exn_spec_violation]
     inline TdSelf& Trunc(size_t targetSize) noexcept {
         // Coverity false positive issue
@@ -463,30 +463,30 @@ public: // string subsequences
         // fun_call_w_exception: Called function TStringView::substr throws an exception of type "std::out_of_range".
         // Suppress this issue because we pass argument pos=0 and string_view can't throw std::out_of_range.
         *this = TStringView::substr(0, targetSize); //WARN: removing TStringView:: will lead to an infinite recursion
-        return *this; 
-    } 
+        return *this;
+    }
 
     Y_PURE_FUNCTION inline TdSelf SubStr(size_t beg) const noexcept {
-        return TdSelf(*this).Skip(beg); 
-    } 
+        return TdSelf(*this).Skip(beg);
+    }
 
     Y_PURE_FUNCTION inline TdSelf SubStr(size_t beg, size_t len) const noexcept {
-        return SubStr(beg).Trunc(len); 
-    } 
- 
+        return SubStr(beg).Trunc(len);
+    }
+
     Y_PURE_FUNCTION inline TdSelf Head(size_t pos) const noexcept {
-        return TdSelf(*this).Trunc(pos); 
-    } 
- 
+        return TdSelf(*this).Trunc(pos);
+    }
+
     Y_PURE_FUNCTION inline TdSelf Tail(size_t pos) const noexcept {
-        return SubStr(pos); 
-    } 
- 
+        return SubStr(pos);
+    }
+
     Y_PURE_FUNCTION inline TdSelf Last(size_t len) const noexcept {
-        return TdSelf(*this).RSeek(len); 
-    } 
- 
-private: 
+        return TdSelf(*this).RSeek(len);
+    }
+
+private:
     template <typename TDelimiterType>
     TdSelf NextTokTemplate(TDelimiterType delim) {
         TdSelf tok;

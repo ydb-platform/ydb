@@ -7,7 +7,7 @@ SRCS(
     compressor.h
     huff.h
     metainfo.h
-    lib.cpp 
-) 
- 
+    lib.cpp
+)
+
 END()

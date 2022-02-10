@@ -701,7 +701,7 @@ public:                       \
 
             return false;
         }
-    } 
+    }
 
 //values
 #define UNIT_ASSERT_VALUES_EQUAL_IMPL(A, B, C, EQflag, EQstr, NEQstr)                                                                  \
@@ -721,14 +721,14 @@ public:                       \
         }                                                                                                                              \
     } while (false)
 
-#define UNIT_ASSERT_VALUES_EQUAL_C(A, B, C) \ 
-    UNIT_ASSERT_VALUES_EQUAL_IMPL(A, B, C, true, "==", "!=") 
+#define UNIT_ASSERT_VALUES_EQUAL_C(A, B, C) \
+    UNIT_ASSERT_VALUES_EQUAL_IMPL(A, B, C, true, "==", "!=")
 
-#define UNIT_ASSERT_VALUES_UNEQUAL_C(A, B, C) \ 
-    UNIT_ASSERT_VALUES_EQUAL_IMPL(A, B, C, false, "!=", "==") 
- 
+#define UNIT_ASSERT_VALUES_UNEQUAL_C(A, B, C) \
+    UNIT_ASSERT_VALUES_EQUAL_IMPL(A, B, C, false, "!=", "==")
+
 #define UNIT_ASSERT_VALUES_EQUAL(A, B) UNIT_ASSERT_VALUES_EQUAL_C(A, B, "")
-#define UNIT_ASSERT_VALUES_UNEQUAL(A, B) UNIT_ASSERT_VALUES_UNEQUAL_C(A, B, "") 
+#define UNIT_ASSERT_VALUES_UNEQUAL(A, B) UNIT_ASSERT_VALUES_UNEQUAL_C(A, B, "")
 
 // Checks that test will fail while executing given expression
 // Macro for using in unitests for ut helpers

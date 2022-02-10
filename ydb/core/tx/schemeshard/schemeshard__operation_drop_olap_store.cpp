@@ -5,7 +5,7 @@
 #include <ydb/core/base/subdomain.h>
 
 namespace NKikimr {
-namespace NSchemeShard { 
+namespace NSchemeShard {
 
 namespace {
 
@@ -96,7 +96,7 @@ public:
         domainInfo->DecPathsInside();
         parentDir->DecAliveChildren();
 
-        context.SS->TabletCounters->Simple()[COUNTER_USER_ATTRIBUTES_COUNT].Sub(path->UserAttrs->Size()); 
+        context.SS->TabletCounters->Simple()[COUNTER_USER_ATTRIBUTES_COUNT].Sub(path->UserAttrs->Size());
         context.SS->PersistUserAttributes(db, path->PathId, path->UserAttrs, nullptr);
 
         ++parentDir->DirAlterVersion;
@@ -271,7 +271,7 @@ public:
     }
 
 public:
-    THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override { 
+    THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
         const TTabletId ssId = context.SS->SelfTabletId();
 
         const auto& drop = Transaction.GetDrop();
@@ -286,7 +286,7 @@ public:
                          << ", opId: " << OperationId
                          << ", at schemeshard: " << ssId);
 
-        auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId)); 
+        auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
 
         TPath path = drop.HasId()
             ? TPath::Init(context.SS->MakeLocalId(drop.GetId()), context.SS)
@@ -303,7 +303,7 @@ public:
                 .IsOlapStore()
                 .NotUnderDeleting()
                 .NotUnderOperation()
-                .NotChildren(NKikimrScheme::StatusNameConflict); 
+                .NotChildren(NKikimrScheme::StatusNameConflict);
 
             if (!checks) {
                 TString explain = TStringBuilder() << "path fail checks"
@@ -340,7 +340,7 @@ public:
 
         TString errStr;
         if (!context.SS->CheckApplyIf(Transaction, errStr)) {
-            result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr); 
+            result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr);
             return result;
         }
 
@@ -349,7 +349,7 @@ public:
 
         if (!storeInfo->OlapTables.empty()) {
             errStr = TStringBuilder() << "OlapStore cannot be dropped until all tables are dropped";
-            result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr); 
+            result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr);
             return result;
         }
 
@@ -382,9 +382,9 @@ public:
         path.Base()->LastTxId = OperationId.GetTxId();
         context.SS->PersistLastTxId(db, path.Base());
 
-        context.SS->PersistTxState(db, OperationId); 
+        context.SS->PersistTxState(db, OperationId);
 
-        context.SS->TabletCounters->Simple()[COUNTER_OLAP_STORE_COUNT].Sub(1); 
+        context.SS->TabletCounters->Simple()[COUNTER_OLAP_STORE_COUNT].Sub(1);
 
         Y_VERIFY_S(context.SS->PathsById.contains(path.Base()->ParentPathId),
                    "no parent with id: " << path.Base()->ParentPathId << " for node with id: " << path.Base()->PathId);
@@ -472,7 +472,7 @@ private:
 private:
     const TOperationId OperationId;
     TTxState::ETxState State = TTxState::Invalid;
-    const NKikimrSchemeOp::TModifyScheme Transaction; 
+    const NKikimrSchemeOp::TModifyScheme Transaction;
 };
 
 } // namespace
@@ -486,5 +486,5 @@ ISubOperationBase::TPtr CreateDropOlapStore(TOperationId id, TTxState::ETxState 
     return new TDropOlapStore(id, state);
 }
 
-} // namespace NSchemeShard 
+} // namespace NSchemeShard
 } // namespace NKikimr

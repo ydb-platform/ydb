@@ -804,7 +804,7 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
             }
 
             return ProcessKeyEntry(msg->Latest, msg->Buffer);
-        case NKikimrProto::RACE: 
+        case NKikimrProto::RACE:
         case NKikimrProto::NODATA:
             return ReplyAndDie(msg->Status, msg->ErrorReason); // valid condition, nothing known in blob-storage
         default:

@@ -79,12 +79,12 @@ void TGRpcYdbTableService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
     ADD_REQUEST(CopyTable, CopyTableRequest, CopyTableResponse, {
         ActorSystem_->Send(GRpcRequestProxyId_, new TEvCopyTableRequest(ctx));
     })
-    ADD_REQUEST(CopyTables, CopyTablesRequest, CopyTablesResponse, { 
-        ActorSystem_->Send(GRpcRequestProxyId_, new TEvCopyTablesRequest(ctx)); 
-    }) 
-    ADD_REQUEST(RenameTables, RenameTablesRequest, RenameTablesResponse, { 
-        ActorSystem_->Send(GRpcRequestProxyId_, new TEvRenameTablesRequest(ctx)); 
-    }) 
+    ADD_REQUEST(CopyTables, CopyTablesRequest, CopyTablesResponse, {
+        ActorSystem_->Send(GRpcRequestProxyId_, new TEvCopyTablesRequest(ctx));
+    })
+    ADD_REQUEST(RenameTables, RenameTablesRequest, RenameTablesResponse, {
+        ActorSystem_->Send(GRpcRequestProxyId_, new TEvRenameTablesRequest(ctx));
+    })
     ADD_REQUEST(ExplainDataQuery, ExplainDataQueryRequest, ExplainDataQueryResponse, {
         ActorSystem_->Send(GRpcRequestProxyId_, new TEvExplainDataQueryRequest(ctx));
     })

@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 import abc
-import logging 
+import logging
 import time
 
 from ydb.tests.library.common.wait_for import wait_for
@@ -13,10 +13,10 @@ import ydb.public.api.protos.ydb_cms_pb2 as cms_tenants_pb
 from ydb.public.api.protos.ydb_status_codes_pb2 import StatusIds
 
 
-logger = logging.getLogger(__name__) 
-logger.setLevel(logging.DEBUG) 
- 
- 
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+
+
 class KiKiMRClusterInterface(object):
     __metaclass__ = abc.ABCMeta
 
@@ -105,29 +105,29 @@ class KiKiMRClusterInterface(object):
             expected_computational_units=1
         )
 
-    def __wait_tenant_up( 
-            self, 
-            database_name, 
-            expected_computational_units=None, 
-            timeout_seconds=120 
-    ): 
-        def predicate(): 
+    def __wait_tenant_up(
+            self,
+            database_name,
+            expected_computational_units=None,
+            timeout_seconds=120
+    ):
+        def predicate():
             result = self.get_database_status(database_name)
- 
-            if expected_computational_units is None: 
+
+            if expected_computational_units is None:
                 expected = set([2])
-            else: 
-                expected = set([2]) if expected_computational_units > 0 else set([4]) 
- 
-            return result.state in expected 
- 
-        tenant_running = wait_for( 
-            predicate=predicate, 
-            timeout_seconds=timeout_seconds, 
-            step_seconds=1 
-        ) 
-        assert tenant_running 
- 
+            else:
+                expected = set([2]) if expected_computational_units > 0 else set([4])
+
+            return result.state in expected
+
+        tenant_running = wait_for(
+            predicate=predicate,
+            timeout_seconds=timeout_seconds,
+            step_seconds=1
+        )
+        assert tenant_running
+
     def __get_console_op(self, op_id):
         req = GetOperationRequest(op_id)
         response = self.client.send_request(req.protobuf, method='ConsoleRequest')
@@ -150,7 +150,7 @@ class KiKiMRClusterInterface(object):
             self,
             database_name,
             storage_pool_units_count,
-            disable_external_subdomain=False, 
+            disable_external_subdomain=False,
             timeout_seconds=120
     ):
         req = CreateTenantRequest(database_name)
@@ -160,9 +160,9 @@ class KiKiMRClusterInterface(object):
                 units_count,
             )
 
-        if disable_external_subdomain: 
-            req.disable_external_subdomain() 
- 
+        if disable_external_subdomain:
+            req.disable_external_subdomain()
+
         response = self.client.send_request(req.protobuf, method='ConsoleRequest')
         operation = response.CreateTenantResponse.Response.operation
         if not operation.ready and response.Status.Code != StatusIds.STATUS_CODE_UNSPECIFIED:
@@ -172,26 +172,26 @@ class KiKiMRClusterInterface(object):
         if operation.status != StatusIds.SUCCESS:
             raise RuntimeError('create_database failed: %s' % (operation.status,))
 
-        self.__wait_tenant_up( 
-            database_name, 
+        self.__wait_tenant_up(
+            database_name,
             expected_computational_units=0,
-            timeout_seconds=timeout_seconds 
-        ) 
-        return database_name 
+            timeout_seconds=timeout_seconds
+        )
+        return database_name
 
-    def create_hostel_database( 
-            self, 
-            database_name, 
-            storage_pool_units_count, 
-            timeout_seconds=120 
-    ): 
-        req = CreateTenantRequest(database_name) 
-        for storage_pool_type_name, units_count in storage_pool_units_count.items(): 
-            req = req.add_shared_storage_pool( 
-                storage_pool_type_name, 
-                units_count, 
-            ) 
- 
+    def create_hostel_database(
+            self,
+            database_name,
+            storage_pool_units_count,
+            timeout_seconds=120
+    ):
+        req = CreateTenantRequest(database_name)
+        for storage_pool_type_name, units_count in storage_pool_units_count.items():
+            req = req.add_shared_storage_pool(
+                storage_pool_type_name,
+                units_count,
+            )
+
         response = self.client.send_request(req.protobuf, method='ConsoleRequest')
         operation = response.CreateTenantResponse.Response.operation
         if not operation.ready and response.Status.Code != StatusIds.STATUS_CODE_UNSPECIFIED:
@@ -200,37 +200,37 @@ class KiKiMRClusterInterface(object):
             operation = self.__wait_console_op(operation.id, timeout_seconds=timeout_seconds)
         if operation.status != StatusIds.SUCCESS:
             raise RuntimeError('create_hostel_database failed: %s' % (operation.status,))
- 
-        self.__wait_tenant_up( 
-            database_name, 
+
+        self.__wait_tenant_up(
+            database_name,
             expected_computational_units=0,
-            timeout_seconds=timeout_seconds 
+            timeout_seconds=timeout_seconds
         )
         return database_name
 
-    def create_serverless_database( 
-            self, 
-            database_name, 
-            hostel_db, 
+    def create_serverless_database(
+            self,
+            database_name,
+            hostel_db,
             timeout_seconds=120,
             schema_quotas=None,
             disk_quotas=None,
-            attributes=None 
-    ): 
-        req = CreateTenantRequest(database_name) 
- 
-        req.share_resources_with(hostel_db) 
- 
+            attributes=None
+    ):
+        req = CreateTenantRequest(database_name)
+
+        req.share_resources_with(hostel_db)
+
         if schema_quotas is not None:
             req.set_schema_quotas(schema_quotas)
 
         if disk_quotas is not None:
             req.set_disk_quotas(disk_quotas)
 
-        if attributes is not None: 
-            for name, value in attributes.items(): 
+        if attributes is not None:
+            for name, value in attributes.items():
                 req.set_attribute(name, value)
- 
+
         response = self.client.send_request(req.protobuf, method='ConsoleRequest')
         operation = response.CreateTenantResponse.Response.operation
         if not operation.ready and response.Status.Code != StatusIds.STATUS_CODE_UNSPECIFIED:
@@ -239,13 +239,13 @@ class KiKiMRClusterInterface(object):
             operation = self.__wait_console_op(operation.id, timeout_seconds=timeout_seconds)
         if operation.status != StatusIds.SUCCESS:
             raise RuntimeError('create_serverless_database failed: %s' % (operation.status,))
- 
-        self.__wait_tenant_up( 
-            database_name, 
-            timeout_seconds=timeout_seconds 
-        ) 
-        return database_name 
- 
+
+        self.__wait_tenant_up(
+            database_name,
+            timeout_seconds=timeout_seconds
+        )
+        return database_name
+
     def alter_serverless_database(
             self,
             database_name,
@@ -278,13 +278,13 @@ class KiKiMRClusterInterface(object):
         )
         return database_name
 
-    def remove_database( 
-            self, 
-            database_name, 
-            timeout_seconds=120 
-    ): 
-        req = RemoveTenantRequest(database_name) 
- 
+    def remove_database(
+            self,
+            database_name,
+            timeout_seconds=120
+    ):
+        req = RemoveTenantRequest(database_name)
+
         response = self.client.send_request(req.protobuf, method='ConsoleRequest')
         operation = response.RemoveTenantResponse.Response.operation
         if not operation.ready and response.Status.Code != StatusIds.STATUS_CODE_UNSPECIFIED:
@@ -293,20 +293,20 @@ class KiKiMRClusterInterface(object):
             operation = self.__wait_console_op(operation.id, timeout_seconds=timeout_seconds)
         if operation.status not in (StatusIds.SUCCESS, StatusIds.NOT_FOUND):
             raise RuntimeError('remove_database failed: %s' % (operation.status,))
- 
-        def predicate(): 
-            response = self.client.send_request( 
-                GetTenantStatusRequest(database_name).protobuf, method='ConsoleRequest').GetTenantStatusResponse 
-            return response.Response.operation.status == StatusIds.NOT_FOUND 
- 
-        tenant_not_found = wait_for( 
-            predicate=predicate, 
-            timeout_seconds=timeout_seconds, 
-            step_seconds=1 
-        ) 
-        assert tenant_not_found 
-        return database_name 
- 
+
+        def predicate():
+            response = self.client.send_request(
+                GetTenantStatusRequest(database_name).protobuf, method='ConsoleRequest').GetTenantStatusResponse
+            return response.Response.operation.status == StatusIds.NOT_FOUND
+
+        tenant_not_found = wait_for(
+            predicate=predicate,
+            timeout_seconds=timeout_seconds,
+            step_seconds=1
+        )
+        assert tenant_not_found
+        return database_name
+
     def __str__(self):
         return "Cluster type: {ntype}: \nCluster nodes: {nodes}".format(
             ntype=type(self), nodes=map(

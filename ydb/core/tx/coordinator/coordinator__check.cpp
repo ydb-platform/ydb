@@ -1,4 +1,4 @@
-#include "coordinator__check.h" 
+#include "coordinator__check.h"
 
 namespace NKikimr {
 namespace NFlatTxCoordinator {

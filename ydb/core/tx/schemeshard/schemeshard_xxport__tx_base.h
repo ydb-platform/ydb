@@ -6,9 +6,9 @@
 #include <util/generic/vector.h>
 
 namespace NKikimr {
-namespace NSchemeShard { 
+namespace NSchemeShard {
 
-class TSchemeShard::TXxport::TTxBase: public NTabletFlatExecutor::TTransactionBase<TSchemeShard> { 
+class TSchemeShard::TXxport::TTxBase: public NTabletFlatExecutor::TTransactionBase<TSchemeShard> {
     TVector<THolder<IEventHandle>> SendOnComplete;
 
 protected:
@@ -54,21 +54,21 @@ protected:
     template <typename TInfoPtr>
     void SendNotificationsIfFinished(TInfoPtr info, bool force = false) {
         if (!info->IsFinished() && !force) {
-            return; 
-        } 
- 
+            return;
+        }
+
         LOG_TRACE_S(TlsActivationContext->AsActorContext(), NKikimrServices::FLAT_TX_SCHEMESHARD,
             "SendNotifications: "
                 << ": id# " << info->Id
                 << ", subscribers count# " << info->Subscribers.size());
- 
+
         TSet<TActorId> toAnswer;
         toAnswer.swap(info->Subscribers);
-        for (auto& actorId: toAnswer) { 
-            Send(actorId, new TEvSchemeShard::TEvNotifyTxCompletionResult(info->Id)); 
-        } 
-    } 
- 
+        for (auto& actorId: toAnswer) {
+            Send(actorId, new TEvSchemeShard::TEvNotifyTxCompletionResult(info->Id));
+        }
+    }
+
 public:
     virtual bool DoExecute(TTransactionContext& txc, const TActorContext& ctx) = 0;
     virtual void DoComplete(const TActorContext& ctx) = 0;
@@ -87,5 +87,5 @@ public:
 
 }; // TTxBase
 
-} // NSchemeShard 
+} // NSchemeShard
 } // NKikimr

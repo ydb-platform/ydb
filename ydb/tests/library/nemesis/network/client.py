@@ -40,29 +40,29 @@ class NetworkClient(object):
         ]
         return self.__exec_command(drop_outgoing_command)
 
-    def isolate_dns(self, probability=1.0): 
-        drop_input = [ 
-            'sudo', self.__iptables_bin, '-A', 'INPUT', '-p', 'udp', '--sport', '53', 
-            '-m', 'statistic', '--mode', 'random', '--probability', str(probability), '-j', 'DROP' 
-        ] 
- 
-        drop_outout = [ 
-            'sudo', self.__iptables_bin, '-A', 'OUTPUT', '-p', 'udp', '--sport', '1024:65535', '--dport', '53', 
-            '-m', 'statistic', '--mode', 'random', '--probability', str(probability), '-j', 'DROP' 
-        ] 
- 
-        reset_cache = [ 
-            'sudo', '/etc/init.d/bind9', 'restart' 
-        ] 
- 
-        for cmd in [drop_input, drop_outout, reset_cache]: 
-            retcode = self.__exec_command(cmd) 
-            if retcode: 
-                logger.error("retcode %s for command %s", retcode, cmd) 
-                return retcode 
- 
-        return 0 
- 
+    def isolate_dns(self, probability=1.0):
+        drop_input = [
+            'sudo', self.__iptables_bin, '-A', 'INPUT', '-p', 'udp', '--sport', '53',
+            '-m', 'statistic', '--mode', 'random', '--probability', str(probability), '-j', 'DROP'
+        ]
+
+        drop_outout = [
+            'sudo', self.__iptables_bin, '-A', 'OUTPUT', '-p', 'udp', '--sport', '1024:65535', '--dport', '53',
+            '-m', 'statistic', '--mode', 'random', '--probability', str(probability), '-j', 'DROP'
+        ]
+
+        reset_cache = [
+            'sudo', '/etc/init.d/bind9', 'restart'
+        ]
+
+        for cmd in [drop_input, drop_outout, reset_cache]:
+            retcode = self.__exec_command(cmd)
+            if retcode:
+                logger.error("retcode %s for command %s", retcode, cmd)
+                return retcode
+
+        return 0
+
     def isolate_node(self):
         probability = 1.0
         self.drop_incoming_packets(probability)

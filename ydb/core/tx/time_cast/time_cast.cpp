@@ -1,5 +1,5 @@
-#include "time_cast.h" 
- 
+#include "time_cast.h"
+
 #include <library/cpp/actors/core/hfunc.h>
 #include <library/cpp/actors/core/log.h>
 #include <ydb/core/base/tx_processing.h>
@@ -7,7 +7,7 @@
 #include <ydb/core/protos/services.pb.h>
 #include <ydb/core/tx/tx.h>
 #include <ydb/core/tablet/tablet_pipe_client_cache.h>
- 
+
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
 
@@ -75,11 +75,11 @@ class TMediatorTimecastProxy : public TActor<TMediatorTimecastProxy> {
     THashMap<ui64, TMediator> Mediators; // mediator tablet -> info
     THashMap<ui64, TTabletInfo> Tablets;
 
-    TMediator& MediatorInfo(ui64 mediator, const NKikimrSubDomains::TProcessingParams &processing) { 
+    TMediator& MediatorInfo(ui64 mediator, const NKikimrSubDomains::TProcessingParams &processing) {
         auto pr = Mediators.try_emplace(mediator, processing.GetTimeCastBucketsPerMediator());
         if (!pr.second) {
             Y_VERIFY(pr.first->second.BucketsSz == processing.GetTimeCastBucketsPerMediator());
-        } 
+        }
         return pr.first->second;
     }
 
@@ -165,20 +165,20 @@ void TMediatorTimecastProxy::Handle(TEvMediatorTimecast::TEvRegisterTablet::TPtr
     LOG_DEBUG_S(ctx, NKikimrServices::TX_MEDIATOR_TIMECAST, "Actor# " << ctx.SelfID.ToString()
         << " HANDLE " << msg->ToString());
     const ui64 tabletId = msg->TabletId;
-    const NKikimrSubDomains::TProcessingParams &processingParams = msg->ProcessingParams; 
+    const NKikimrSubDomains::TProcessingParams &processingParams = msg->ProcessingParams;
 
     auto& tabletInfo = Tablets[tabletId];
 
-    TMediators mediators(processingParams); 
-    Y_VERIFY(mediators.List().size()); 
+    TMediators mediators(processingParams);
+    Y_VERIFY(mediators.List().size());
     const ui64 mediatorTabletId = mediators.Select(tabletId);
     tabletInfo.MediatorTabletId = mediatorTabletId;
- 
-    TTimeCastBuckets buckets(processingParams); 
-    const ui32 bucketId = buckets.Select(tabletId); 
+
+    TTimeCastBuckets buckets(processingParams);
+    const ui32 bucketId = buckets.Select(tabletId);
     tabletInfo.BucketId = bucketId;
 
-    TMediator &mediator = MediatorInfo(mediatorTabletId, processingParams); 
+    TMediator &mediator = MediatorInfo(mediatorTabletId, processingParams);
     tabletInfo.Mediator = &mediator;
 
     Y_VERIFY(bucketId < mediator.BucketsSz);

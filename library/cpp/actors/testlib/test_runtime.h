@@ -538,7 +538,7 @@ namespace NActors {
     protected:
         struct TNodeDataBase: public TThrRefBase {
             TNodeDataBase();
-            void Stop(); 
+            void Stop();
             virtual ~TNodeDataBase();
             virtual ui64 GetLoggerPoolId() const {
                 return 0;

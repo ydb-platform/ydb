@@ -23,7 +23,7 @@ enum EReplyStatus {
     INVALID_ROUND = 18;
     RESTART = 19;
     NOT_YET = 20;
-    NO_GROUP = 21; 
+    NO_GROUP = 21;
     UNKNOWN = 255;
 };
 

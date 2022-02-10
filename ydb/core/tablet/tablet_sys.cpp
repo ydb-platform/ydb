@@ -1253,7 +1253,7 @@ void TTablet::Handle(TEvBlobStorage::TEvCollectGarbageResult::TPtr &ev) {
     switch (msg->Status) {
     case NKikimrProto::RACE:
     case NKikimrProto::BLOCKED:
-    case NKikimrProto::NO_GROUP: 
+    case NKikimrProto::NO_GROUP:
         // We want to stop after current graph is committed
         if (BlobStorageStatus == NKikimrProto::OK) {
             BlobStorageStatus = msg->Status;

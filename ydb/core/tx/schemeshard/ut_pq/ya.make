@@ -8,7 +8,7 @@ OWNER(
 FORK_SUBTESTS()
 
 SPLIT_FACTOR(10)
- 
+
 IF (SANITIZER_TYPE OR WITH_VALGRIND)
     TIMEOUT(3600)
     SIZE(LARGE)
@@ -29,7 +29,7 @@ PEERDIR(
 )
 
 SRCS(
-    ut_pq.cpp 
+    ut_pq.cpp
 )
 
 END()

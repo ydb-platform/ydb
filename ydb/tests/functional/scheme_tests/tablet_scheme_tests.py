@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-import itertools 
+import itertools
 import os
 import pytest
 import json
@@ -44,18 +44,18 @@ def get_tablets():
 
 class TestTabletSchemes(object):
     @classmethod
-    def teardown_class(cls): 
+    def teardown_class(cls):
         cls.cluster.stop()
- 
+
     @classmethod
     def setup_class(cls):
         cls.cluster = kikimr_cluster_factory()
         cls.cluster.start()
         cls.client = cls.cluster.client
-        cls.shard_index = itertools.count(start=1) 
+        cls.shard_index = itertools.count(start=1)
         cls.to_prepare = (
             TabletTypes.PERSQUEUE, TabletTypes.KEYVALUEFLAT, TabletTypes.FLAT_DATASHARD, TabletTypes.KESUS)
- 
+
     def prepare_tablet(self, tablet_type):
         if tablet_type in self.to_prepare:
             create_tablets_and_wait_for_start(
@@ -64,15 +64,15 @@ class TestTabletSchemes(object):
                 owner_id=next(
                     self.shard_index
                 )
-            ) 
+            )
         return tablet_type
- 
-    def get_tablet_id(self, tablet_type): 
+
+    def get_tablet_id(self, tablet_type):
         resp = self.client.tablet_state(tablet_type)
         infos = [info for info in resp.TabletStateInfo]
         tablet_id = infos[0].TabletId
-        return tablet_id 
- 
+        return tablet_id
+
     @pytest.mark.parametrize(['tablet'], get_tablets())
     def test_tablet_schemes(self, tablet):
         tablet_type = self.prepare_tablet(getattr(TabletTypes, tablet.upper()))

@@ -27,7 +27,7 @@ namespace {
     }
 }
 
-bool FillCreateTableSettingsDesc(NKikimrSchemeOp::TTableDescription& tableDesc, 
+bool FillCreateTableSettingsDesc(NKikimrSchemeOp::TTableDescription& tableDesc,
     const Ydb::Table::CreateTableRequest& proto,
     Ydb::StatusIds::StatusCode& code, TString& error, TList<TString>& warnings, bool tableProfileSet)
 {
@@ -199,7 +199,7 @@ bool FillCreateTableSettingsDesc(NKikimrSchemeOp::TTableDescription& tableDesc,
     return true;
 }
 
-bool FillAlterTableSettingsDesc(NKikimrSchemeOp::TTableDescription& tableDesc, 
+bool FillAlterTableSettingsDesc(NKikimrSchemeOp::TTableDescription& tableDesc,
     const Ydb::Table::AlterTableRequest& proto,
     Ydb::StatusIds::StatusCode& code, TString& error, bool changed)
 {

@@ -1,5 +1,5 @@
 #include "config.h"
-#include "kikimr_services_initializers.h" 
+#include "kikimr_services_initializers.h"
 #include "service_initializer.h"
 #include "version.h"
 
@@ -20,7 +20,7 @@
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/base/tabletid.h>
 #include <ydb/core/base/user_registry.h>
- 
+
 #include <ydb/core/blobstorage/backpressure/unisched.h>
 #include <ydb/core/blobstorage/nodewarden/node_warden.h>
 #include <ydb/core/blobstorage/other/mon_get_blob_page.h>
@@ -31,7 +31,7 @@
 #include <ydb/core/client/server/grpc_proxy_status.h>
 #include <ydb/core/client/server/msgbus_server_pq_metacache.h>
 #include <ydb/core/client/server/msgbus_server_tracer.h>
- 
+
 #include <ydb/core/cms/cms.h>
 #include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/cms/console/configs_cache.h>
@@ -41,15 +41,15 @@
 #include <ydb/core/cms/console/shared_cache_configurator.h>
 #include <ydb/core/cms/console/validators/core_validators.h>
 #include <ydb/core/cms/http.h>
- 
+
 #include <ydb/core/control/immediate_control_board_actor.h>
- 
+
 #include <ydb/core/grpc_services/grpc_mon.h>
 #include <ydb/core/grpc_services/grpc_request_proxy.h>
 
 #include <ydb/core/kesus/proxy/proxy.h>
 #include <ydb/core/kesus/tablet/tablet.h>
- 
+
 #include <ydb/core/keyvalue/keyvalue.h>
 
 #include <ydb/core/test_tablet/test_tablet.h>
@@ -61,7 +61,7 @@
 #include <ydb/core/kqp/rm/kqp_rm.h>
 
 #include <ydb/core/metering/metering.h>
- 
+
 #include <ydb/core/mind/address_classification/net_classifier.h>
 #include <ydb/core/mind/bscontroller/bsc.h>
 #include <ydb/core/mind/configured_tablet_bootstrapper.h>
@@ -72,30 +72,30 @@
 #include <ydb/core/mind/tenant_node_enumeration.h>
 #include <ydb/core/mind/tenant_pool.h>
 #include <ydb/core/mind/tenant_slot_broker.h>
- 
+
 #include <ydb/core/mon/mon.h>
 #include <ydb/core/mon_alloc/monitor.h>
 #include <ydb/core/mon_alloc/profiler.h>
 #include <ydb/core/mon_alloc/stats.h>
 
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
- 
+
 #include <ydb/core/persqueue/cluster_tracker.h>
 #include <ydb/core/persqueue/pq.h>
 #include <ydb/core/persqueue/pq_l2_service.h>
- 
+
 #include <ydb/core/protos/services.pb.h>
 #include <ydb/core/protos/console_config.pb.h>
 
 #include <ydb/core/quoter/quoter_service.h>
 
 #include <ydb/core/scheme/scheme_type_registry.h>
- 
+
 #include <ydb/core/security/ticket_parser.h>
- 
+
 #include <ydb/core/sys_view/processor/processor.h>
 #include <ydb/core/sys_view/service/sysview_service.h>
- 
+
 #include <ydb/core/tablet/bootstrapper.h>
 #include <ydb/core/tablet/node_tablet_monitor.h>
 #include <ydb/core/tablet/resource_broker.h>
@@ -105,7 +105,7 @@
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 
 #include <ydb/core/tracing/tablet_info.h>
- 
+
 #include <ydb/core/tx/coordinator/coordinator.h>
 #include <ydb/core/tx/columnshard/blob_cache.h>
 #include <ydb/core/tx/datashard/datashard.h>
@@ -141,43 +141,43 @@
 
 #include <ydb/library/yql/minikql/comp_nodes/mkql_factories.h>
 
-#include <library/cpp/actors/protos/services_common.pb.h> 
+#include <library/cpp/actors/protos/services_common.pb.h>
 
-#include <library/cpp/actors/core/actor_bootstrapped.h> 
-#include <library/cpp/actors/core/actorsystem.h> 
-#include <library/cpp/actors/core/event_local.h> 
-#include <library/cpp/actors/core/events.h> 
-#include <library/cpp/actors/core/executor_pool_basic.h> 
-#include <library/cpp/actors/core/executor_pool_io.h> 
+#include <library/cpp/actors/core/actor_bootstrapped.h>
+#include <library/cpp/actors/core/actorsystem.h>
+#include <library/cpp/actors/core/event_local.h>
+#include <library/cpp/actors/core/events.h>
+#include <library/cpp/actors/core/executor_pool_basic.h>
+#include <library/cpp/actors/core/executor_pool_io.h>
 #include <library/cpp/actors/core/executor_pool_united.h>
-#include <library/cpp/actors/core/log.h> 
-#include <library/cpp/actors/core/log_settings.h> 
-#include <library/cpp/actors/core/mon.h> 
-#include <library/cpp/actors/core/mon_stats.h> 
+#include <library/cpp/actors/core/log.h>
+#include <library/cpp/actors/core/log_settings.h>
+#include <library/cpp/actors/core/mon.h>
+#include <library/cpp/actors/core/mon_stats.h>
 #include <library/cpp/actors/core/probes.h>
-#include <library/cpp/actors/core/process_stats.h> 
-#include <library/cpp/actors/core/scheduler_basic.h> 
+#include <library/cpp/actors/core/process_stats.h>
+#include <library/cpp/actors/core/scheduler_basic.h>
 #include <library/cpp/actors/core/io_dispatcher.h>
 #include <library/cpp/actors/dnsresolver/dnsresolver.h>
 #include <library/cpp/actors/helpers/selfping_actor.h>
 #include <library/cpp/actors/http/http_proxy.h>
-#include <library/cpp/actors/interconnect/interconnect.h> 
-#include <library/cpp/actors/interconnect/interconnect_mon.h> 
-#include <library/cpp/actors/interconnect/interconnect_tcp_proxy.h> 
+#include <library/cpp/actors/interconnect/interconnect.h>
+#include <library/cpp/actors/interconnect/interconnect_mon.h>
+#include <library/cpp/actors/interconnect/interconnect_tcp_proxy.h>
 #include <library/cpp/actors/interconnect/interconnect_proxy_wrapper.h>
-#include <library/cpp/actors/interconnect/interconnect_tcp_server.h> 
-#include <library/cpp/actors/interconnect/load.h> 
-#include <library/cpp/actors/interconnect/poller_actor.h> 
-#include <library/cpp/actors/interconnect/poller_tcp.h> 
+#include <library/cpp/actors/interconnect/interconnect_tcp_server.h>
+#include <library/cpp/actors/interconnect/load.h>
+#include <library/cpp/actors/interconnect/poller_actor.h>
+#include <library/cpp/actors/interconnect/poller_tcp.h>
 #include <library/cpp/actors/util/affinity.h>
 
-#include <library/cpp/logger/global/global.h> 
-#include <library/cpp/logger/log.h> 
+#include <library/cpp/logger/global/global.h>
+#include <library/cpp/logger/log.h>
 
-#include <library/cpp/monlib/messagebus/mon_messagebus.h> 
+#include <library/cpp/monlib/messagebus/mon_messagebus.h>
 
-#include <library/cpp/svnversion/svnversion.h> 
- 
+#include <library/cpp/svnversion/svnversion.h>
+
 #include <library/cpp/lwtrace/mon/mon_lwtrace.h>
 
 #include <util/digest/city.h>
@@ -738,11 +738,11 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
                 auto &info = Config.GetDynamicNodeConfig().GetNodeInfo();
                 icCommon->TechnicalSelfHostName = info.GetHost();
 
-                TString address = "::"; //bind ipv6 interfaces by default 
-                if (info.GetAddress()) { 
-                    address = info.GetAddress(); 
-                } 
-                auto listener = new TInterconnectListenerTCP(address, info.GetPort(), icCommon); 
+                TString address = "::"; //bind ipv6 interfaces by default
+                if (info.GetAddress()) {
+                    address = info.GetAddress();
+                }
+                auto listener = new TInterconnectListenerTCP(address, info.GetPort(), icCommon);
                 if (int err = listener->Bind()) {
                     Cerr << "Failed to set up IC listener on port " << info.GetPort()
                         << " errno# " << err << " (" << strerror(err) << ")" << Endl;
@@ -910,9 +910,9 @@ void TLocalServiceInitializer::InitializeServices(
         new TTabletSetupInfo(&CreatePersQueue, TMailboxType::ReadAsFilled, appData->UserPoolId, TMailboxType::ReadAsFilled, appData->SystemPoolId));
     localConfig->TabletClassInfo[appData->DefaultTabletTypes.PersQueueReadBalancer] = TLocalConfig::TTabletClassInfo(
         new TTabletSetupInfo(&CreatePersQueueReadBalancer, TMailboxType::ReadAsFilled, appData->UserPoolId, TMailboxType::ReadAsFilled, appData->SystemPoolId));
-    localConfig->TabletClassInfo[appData->DefaultTabletTypes.Coordinator] = TLocalConfig::TTabletClassInfo( 
+    localConfig->TabletClassInfo[appData->DefaultTabletTypes.Coordinator] = TLocalConfig::TTabletClassInfo(
         new TTabletSetupInfo(&CreateFlatTxCoordinator, TMailboxType::Revolving, importantPoolId, TMailboxType::ReadAsFilled, appData->SystemPoolId));
-    localConfig->TabletClassInfo[appData->DefaultTabletTypes.Mediator] = TLocalConfig::TTabletClassInfo( 
+    localConfig->TabletClassInfo[appData->DefaultTabletTypes.Mediator] = TLocalConfig::TTabletClassInfo(
         new TTabletSetupInfo(&CreateTxMediator, TMailboxType::Revolving, importantPoolId, TMailboxType::ReadAsFilled, appData->SystemPoolId));
     localConfig->TabletClassInfo[appData->DefaultTabletTypes.Kesus] = TLocalConfig::TTabletClassInfo(
         new TTabletSetupInfo(&NKesus::CreateKesusTablet, TMailboxType::ReadAsFilled, appData->UserPoolId, TMailboxType::ReadAsFilled, appData->SystemPoolId));
@@ -1282,8 +1282,8 @@ static TIntrusivePtr<TTabletSetupInfo> CreateTablet(
 // TBootstrapperInitializer
 
 TBootstrapperInitializer::TBootstrapperInitializer(
-        const TKikimrRunConfig& runConfig) 
-    : IKikimrServicesInitializer(runConfig) { 
+        const TKikimrRunConfig& runConfig)
+    : IKikimrServicesInitializer(runConfig) {
 }
 
 void TBootstrapperInitializer::InitializeServices(
@@ -1384,23 +1384,23 @@ void TMediatorTimeCastProxyInitializer::InitializeServices(
         NActors::TActorSystemSetup* setup,
         const NKikimr::TAppData* appData) {
     setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(
-            MakeMediatorTimecastProxyID(), 
+            MakeMediatorTimecastProxyID(),
             TActorSetupCmd(CreateMediatorTimecastProxy(), TMailboxType::ReadAsFilled, appData->SystemPoolId)));
 }
 
 // TMiniKQLCompileServiceInitializer
 
-TMiniKQLCompileServiceInitializer::TMiniKQLCompileServiceInitializer(const TKikimrRunConfig& runConfig) 
-    : IKikimrServicesInitializer(runConfig) { 
+TMiniKQLCompileServiceInitializer::TMiniKQLCompileServiceInitializer(const TKikimrRunConfig& runConfig)
+    : IKikimrServicesInitializer(runConfig) {
 }
 
 void TMiniKQLCompileServiceInitializer::InitializeServices(NActors::TActorSystemSetup* setup,
                                                            const NKikimr::TAppData* appData) {
-    const auto compileInFlight = Config.GetBootstrapConfig().GetCompileServiceConfig().GetInflightLimit(); 
-    IActor* compileService = CreateMiniKQLCompileService(compileInFlight); 
+    const auto compileInFlight = Config.GetBootstrapConfig().GetCompileServiceConfig().GetInflightLimit();
+    IActor* compileService = CreateMiniKQLCompileService(compileInFlight);
     setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(MakeMiniKQLCompileServiceID(),
-                                                                       TActorSetupCmd(compileService, 
-                                                                                      TMailboxType::ReadAsFilled, 
+                                                                       TActorSetupCmd(compileService,
+                                                                                      TMailboxType::ReadAsFilled,
                                                                                       appData->UserPoolId)));
 }
 
@@ -1415,9 +1415,9 @@ static bool IsServiceInitialized(NActors::TActorSystemSetup* setup, TActorId ser
 // TMessageBusServicesInitializer
 
 TMessageBusServicesInitializer::TMessageBusServicesInitializer(const TKikimrRunConfig& runConfig,
-                                                               NMsgBusProxy::IMessageBusServer& busServer) 
+                                                               NMsgBusProxy::IMessageBusServer& busServer)
     : IKikimrServicesInitializer(runConfig)
-    , BusServer(busServer) { 
+    , BusServer(busServer) {
 }
 
 void TMessageBusServicesInitializer::InitializeServices(NActors::TActorSystemSetup* setup,
@@ -1477,7 +1477,7 @@ TGRpcServicesInitializer::TGRpcServicesInitializer(
 )
     : IKikimrServicesInitializer(runConfig)
     , Factories(factories)
-{} 
+{}
 
 void TGRpcServicesInitializer::InitializeServices(NActors::TActorSystemSetup* setup,
                                                   const NKikimr::TAppData* appData)
@@ -1749,7 +1749,7 @@ void TTabletMonitorInitializer::InitializeServices(NActors::TActorSystemSetup* s
 
 // TViewerInitializer
 
-TViewerInitializer::TViewerInitializer(const TKikimrRunConfig& runConfig) 
+TViewerInitializer::TViewerInitializer(const TKikimrRunConfig& runConfig)
     : IKikimrServicesInitializer(runConfig)
     , KikimrRunConfig(runConfig)
 {}
@@ -1932,7 +1932,7 @@ TKqpServiceInitializer::TKqpServiceInitializer(
         std::shared_ptr<TModuleFactories> factories)
     : IKikimrServicesInitializer(runConfig)
     , Factories(std::move(factories))
-{} 
+{}
 
 void TKqpServiceInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
     bool enableKqp = true;
@@ -2015,30 +2015,30 @@ void TCmsServiceInitializer::InitializeServices(NActors::TActorSystemSetup* setu
                                       TActorSetupCmd(http, TMailboxType::HTSwap, appData->UserPoolId));
 }
 
-TTxProxyInitializer::TTxProxyInitializer(const TKikimrRunConfig &runConfig) 
-    : IKikimrServicesInitializer(runConfig) 
-{ 
-} 
+TTxProxyInitializer::TTxProxyInitializer(const TKikimrRunConfig &runConfig)
+    : IKikimrServicesInitializer(runConfig)
+{
+}
 
 TVector<ui64> TTxProxyInitializer::CollectAllAllocatorsFromAllDomains(const TAppData *appData) {
     TVector<ui64> allocators;
-    for (auto it: appData->DomainsInfo->Domains) { 
-        auto &domain = it.second; 
-        for (auto tabletId: domain->TxAllocators) { 
-            allocators.push_back(tabletId); 
-        } 
-    } 
-    return allocators; 
-} 
- 
-void TTxProxyInitializer::InitializeServices(TActorSystemSetup *setup, 
-                                             const TAppData *appData) 
-{ 
+    for (auto it: appData->DomainsInfo->Domains) {
+        auto &domain = it.second;
+        for (auto tabletId: domain->TxAllocators) {
+            allocators.push_back(tabletId);
+        }
+    }
+    return allocators;
+}
+
+void TTxProxyInitializer::InitializeServices(TActorSystemSetup *setup,
+                                             const TAppData *appData)
+{
     setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(
-            MakeTxProxyID(), 
-            TActorSetupCmd(CreateTxProxy(CollectAllAllocatorsFromAllDomains(appData)), TMailboxType::ReadAsFilled, appData->UserPoolId))); 
-} 
- 
+            MakeTxProxyID(),
+            TActorSetupCmd(CreateTxProxy(CollectAllAllocatorsFromAllDomains(appData)), TMailboxType::ReadAsFilled, appData->UserPoolId)));
+}
+
 TLongTxServiceInitializer::TLongTxServiceInitializer(const TKikimrRunConfig &runConfig)
     : IKikimrServicesInitializer(runConfig)
 {
@@ -2071,7 +2071,7 @@ TLeaseHolderInitializer::TLeaseHolderInitializer(const TKikimrRunConfig& runConf
     : IKikimrServicesInitializer(runConfig)
 {
 }
- 
+
 void TLeaseHolderInitializer::InitializeServices(NActors::TActorSystemSetup* setup,
                                                 const NKikimr::TAppData* appData)
 {
@@ -2188,34 +2188,34 @@ void TSysViewServiceInitializer::InitializeServices(NActors::TActorSystemSetup* 
         TActorSetupCmd(actor.Release(), TMailboxType::HTSwap, appData->UserPoolId)));
 }
 
-TMeteringWriterInitializer::TMeteringWriterInitializer(const TKikimrRunConfig &runConfig) 
-    : IKikimrServicesInitializer(runConfig) 
-{ 
-} 
- 
-void TMeteringWriterInitializer::InitializeServices(TActorSystemSetup *setup, const TAppData *appData) 
-{ 
-    if (!Config.HasMeteringConfig() || !Config.GetMeteringConfig().HasMeteringFilePath()) { 
-        return; 
-    } 
- 
-    const auto& filePath = Config.GetMeteringConfig().GetMeteringFilePath(); 
- 
-    THolder<TFileLogBackend> fileBackend; 
-    try { 
-        fileBackend = MakeHolder<TFileLogBackend>(filePath); 
-    } catch (const TFileError& ex) { 
-        Cerr << "TMeteringWriterInitializer: failed to open file '" << filePath << "': " << ex.what() << Endl; 
-        exit(1); 
-    } 
- 
-    auto actor = NMetering::CreateMeteringWriter(std::move(fileBackend)); 
- 
-    setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>( 
-        NMetering::MakeMeteringServiceID(), 
-        TActorSetupCmd(actor.Release(), TMailboxType::HTSwap, appData->IOPoolId))); 
-} 
- 
+TMeteringWriterInitializer::TMeteringWriterInitializer(const TKikimrRunConfig &runConfig)
+    : IKikimrServicesInitializer(runConfig)
+{
+}
+
+void TMeteringWriterInitializer::InitializeServices(TActorSystemSetup *setup, const TAppData *appData)
+{
+    if (!Config.HasMeteringConfig() || !Config.GetMeteringConfig().HasMeteringFilePath()) {
+        return;
+    }
+
+    const auto& filePath = Config.GetMeteringConfig().GetMeteringFilePath();
+
+    THolder<TFileLogBackend> fileBackend;
+    try {
+        fileBackend = MakeHolder<TFileLogBackend>(filePath);
+    } catch (const TFileError& ex) {
+        Cerr << "TMeteringWriterInitializer: failed to open file '" << filePath << "': " << ex.what() << Endl;
+        exit(1);
+    }
+
+    auto actor = NMetering::CreateMeteringWriter(std::move(fileBackend));
+
+    setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(
+        NMetering::MakeMeteringServiceID(),
+        TActorSetupCmd(actor.Release(), TMailboxType::HTSwap, appData->IOPoolId)));
+}
+
 TSchemeBoardMonitoringInitializer::TSchemeBoardMonitoringInitializer(const TKikimrRunConfig &runConfig)
     : IKikimrServicesInitializer(runConfig)
 {

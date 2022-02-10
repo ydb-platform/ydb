@@ -3,7 +3,7 @@
 #include <ydb/core/tx/tx_proxy/proxy.h>
 
 namespace NKikimr {
-namespace NSchemeShard { 
+namespace NSchemeShard {
 
 static bool IsIntegerType(NScheme::TTypeId typeId) {
     switch (typeId) {
@@ -202,116 +202,116 @@ const char* ToString(ESplitReason splitReason) {
     }
 }
 
-class TTxPartitionHistogram: public NTabletFlatExecutor::TTransactionBase<TSchemeShard> { 
-    TEvDataShard::TEvGetTableStatsResult::TPtr Ev; 
- 
-    TSideEffects SplitOpSideEffects; 
- 
-public: 
-    explicit TTxPartitionHistogram(TSelf* self, TEvDataShard::TEvGetTableStatsResult::TPtr& ev) 
-        : TBase(self) 
-        , Ev(ev) 
-    { 
-    } 
- 
-    virtual ~TTxPartitionHistogram() = default; 
- 
-    TTxType GetTxType() const override { 
-        return TXTYPE_PARTITION_HISTOGRAM; 
-    } 
- 
-    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override; 
-    void Complete(const TActorContext& ctx) override; 
- 
-}; // TTxStorePartitionStats 
- 
- 
-void TSchemeShard::Handle(TEvDataShard::TEvGetTableStatsResult::TPtr& ev, const TActorContext& ctx) { 
+class TTxPartitionHistogram: public NTabletFlatExecutor::TTransactionBase<TSchemeShard> {
+    TEvDataShard::TEvGetTableStatsResult::TPtr Ev;
+
+    TSideEffects SplitOpSideEffects;
+
+public:
+    explicit TTxPartitionHistogram(TSelf* self, TEvDataShard::TEvGetTableStatsResult::TPtr& ev)
+        : TBase(self)
+        , Ev(ev)
+    {
+    }
+
+    virtual ~TTxPartitionHistogram() = default;
+
+    TTxType GetTxType() const override {
+        return TXTYPE_PARTITION_HISTOGRAM;
+    }
+
+    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
+    void Complete(const TActorContext& ctx) override;
+
+}; // TTxStorePartitionStats
+
+
+void TSchemeShard::Handle(TEvDataShard::TEvGetTableStatsResult::TPtr& ev, const TActorContext& ctx) {
     const auto& rec = ev->Get()->Record;
 
-    auto datashardId = TTabletId(rec.GetDatashardId()); 
-    ui64 dataSize = rec.GetTableStats().GetDataSize(); 
-    ui64 rowCount = rec.GetTableStats().GetRowCount(); 
- 
-    LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, 
-               "Got partition histogran at tablet " << TabletID() 
-               <<" from datashard " << datashardId 
-               << " state: '" << DatashardStateName(rec.GetShardState()) << "'" 
-               << " data size: " << dataSize 
-               << " row count: " << rowCount 
-    ); 
- 
-    Execute(new TTxPartitionHistogram(this, ev), ctx); 
-} 
- 
-THolder<TProposeRequest> SplitRequest( 
-    TSchemeShard* ss, TTxId& txId, TPathId& pathId, TTabletId datashardId, const TString& keyBuff) 
-{ 
-    auto request = MakeHolder<TProposeRequest>(ui64(txId), ui64(ss->SelfTabletId())); 
-    auto& record = request->Record; 
- 
-    TPath tablePath = TPath::Init(pathId, ss); 
- 
-    auto& propose = *record.AddTransaction(); 
-    propose.SetFailOnExist(false); 
-    propose.SetOperationType(NKikimrSchemeOp::ESchemeOpSplitMergeTablePartitions); 
-    propose.SetInternal(true); 
- 
-    propose.SetWorkingDir(tablePath.Parent().PathString()); 
- 
-    auto& split = *propose.MutableSplitMergeTablePartitions(); 
-    split.SetTablePath(tablePath.PathString()); 
-    split.SetSchemeshardId(ss->TabletID()); 
- 
-    split.AddSourceTabletId(ui64(datashardId)); 
-    split.AddSplitBoundary()->SetSerializedKeyPrefix(keyBuff); 
- 
-    return request; 
-} 
- 
-bool TTxPartitionHistogram::Execute(TTransactionContext& txc, const TActorContext& ctx) { 
-    const auto& rec = Ev->Get()->Record; 
- 
-    if (!rec.GetFullStatsReady())
-        return true; 
+    auto datashardId = TTabletId(rec.GetDatashardId());
+    ui64 dataSize = rec.GetTableStats().GetDataSize();
+    ui64 rowCount = rec.GetTableStats().GetRowCount();
 
-    auto datashardId = TTabletId(rec.GetDatashardId()); 
-    TPathId tableId = InvalidPathId; 
-    if (rec.HasTableOwnerId()) { 
-        tableId = TPathId(TOwnerId(rec.GetTableOwnerId()), 
-                          TLocalPathId(rec.GetTableLocalId())); 
-    } else { 
-        tableId = Self->MakeLocalId(TLocalPathId(rec.GetTableLocalId())); 
-    } 
+    LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+               "Got partition histogran at tablet " << TabletID()
+               <<" from datashard " << datashardId
+               << " state: '" << DatashardStateName(rec.GetShardState()) << "'"
+               << " data size: " << dataSize
+               << " row count: " << rowCount
+    );
+
+    Execute(new TTxPartitionHistogram(this, ev), ctx);
+}
+
+THolder<TProposeRequest> SplitRequest(
+    TSchemeShard* ss, TTxId& txId, TPathId& pathId, TTabletId datashardId, const TString& keyBuff)
+{
+    auto request = MakeHolder<TProposeRequest>(ui64(txId), ui64(ss->SelfTabletId()));
+    auto& record = request->Record;
+
+    TPath tablePath = TPath::Init(pathId, ss);
+
+    auto& propose = *record.AddTransaction();
+    propose.SetFailOnExist(false);
+    propose.SetOperationType(NKikimrSchemeOp::ESchemeOpSplitMergeTablePartitions);
+    propose.SetInternal(true);
+
+    propose.SetWorkingDir(tablePath.Parent().PathString());
+
+    auto& split = *propose.MutableSplitMergeTablePartitions();
+    split.SetTablePath(tablePath.PathString());
+    split.SetSchemeshardId(ss->TabletID());
+
+    split.AddSourceTabletId(ui64(datashardId));
+    split.AddSplitBoundary()->SetSerializedKeyPrefix(keyBuff);
+
+    return request;
+}
+
+bool TTxPartitionHistogram::Execute(TTransactionContext& txc, const TActorContext& ctx) {
+    const auto& rec = Ev->Get()->Record;
+
+    if (!rec.GetFullStatsReady())
+        return true;
+
+    auto datashardId = TTabletId(rec.GetDatashardId());
+    TPathId tableId = InvalidPathId;
+    if (rec.HasTableOwnerId()) {
+        tableId = TPathId(TOwnerId(rec.GetTableOwnerId()),
+                          TLocalPathId(rec.GetTableLocalId()));
+    } else {
+        tableId = Self->MakeLocalId(TLocalPathId(rec.GetTableLocalId()));
+    }
     ui64 dataSize = rec.GetTableStats().GetDataSize();
     ui64 rowCount = rec.GetTableStats().GetRowCount();
 
     LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                "TTxPartitionHistogram::Execute partition histogran" 
-                    << " at tablet " << Self->SelfTabletId() 
-                    << " from datashard " << datashardId 
-                    << " for pathId " << tableId 
-                    << " state '" << DatashardStateName(rec.GetShardState()).data() << "'" 
-                    << " dataSize " << dataSize 
-                    << " rowCount " << rowCount); 
+                "TTxPartitionHistogram::Execute partition histogran"
+                    << " at tablet " << Self->SelfTabletId()
+                    << " from datashard " << datashardId
+                    << " for pathId " << tableId
+                    << " state '" << DatashardStateName(rec.GetShardState()).data() << "'"
+                    << " dataSize " << dataSize
+                    << " rowCount " << rowCount);
 
-    if (!Self->Tables.contains(tableId)) 
-        return true; 
+    if (!Self->Tables.contains(tableId))
+        return true;
 
-    TTableInfo::TPtr table = Self->Tables[tableId]; 
+    TTableInfo::TPtr table = Self->Tables[tableId];
 
-    if (!Self->TabletIdToShardIdx.contains(datashardId)) 
-        return true; 
+    if (!Self->TabletIdToShardIdx.contains(datashardId))
+        return true;
 
     // Don't split/merge backup tables
     if (table->IsBackup)
-        return true; 
+        return true;
 
-    auto shardIdx = Self->TabletIdToShardIdx[datashardId]; 
+    auto shardIdx = Self->TabletIdToShardIdx[datashardId];
 
     ESplitReason splitReason = ESplitReason::NO_SPLIT;
-    if (table->CheckFastSplitForPartition(Self->SplitSettings, shardIdx, dataSize, rowCount)) { 
-        const TTableInfo* parentTable = Self->GetMainTableForIndex(tableId); 
+    if (table->CheckFastSplitForPartition(Self->SplitSettings, shardIdx, dataSize, rowCount)) {
+        const TTableInfo* parentTable = Self->GetMainTableForIndex(tableId);
         if (parentTable && table->GetPartitions().size() < parentTable->GetPartitions().size()) {
             splitReason = ESplitReason::FAST_SPLIT_INDEX;
         }
@@ -321,19 +321,19 @@ bool TTxPartitionHistogram::Execute(TTransactionContext& txc, const TActorContex
         splitReason = ESplitReason::SPLIT_BY_SIZE;
     }
 
-    if (splitReason == ESplitReason::NO_SPLIT && table->CheckSplitByLoad(Self->SplitSettings, shardIdx, dataSize, rowCount)) { 
+    if (splitReason == ESplitReason::NO_SPLIT && table->CheckSplitByLoad(Self->SplitSettings, shardIdx, dataSize, rowCount)) {
         splitReason = ESplitReason::SPLIT_BY_LOAD;
     }
 
-    if (splitReason == ESplitReason::NO_SPLIT) { 
-        return true; 
-    } 
+    if (splitReason == ESplitReason::NO_SPLIT) {
+        return true;
+    }
 
 
-    if (table->GetPartitions().size() >= table->GetMaxPartitionsCount()) { 
-        return true; 
-    } 
- 
+    if (table->GetPartitions().size() >= table->GetMaxPartitionsCount()) {
+        return true;
+    }
+
     TSmallVec<NScheme::TTypeId> keyColumnTypes(table->KeyColumnIds.size());
     for (size_t ki = 0; ki < table->KeyColumnIds.size(); ++ki) {
         keyColumnTypes[ki] = table->Columns.FindPtr(table->KeyColumnIds[ki])->PType;
@@ -349,9 +349,9 @@ bool TTxPartitionHistogram::Execute(TTransactionContext& txc, const TActorContex
     } else {
         // Choose number of parts and split boundaries
         const auto& histogram = rec.GetTableStats().GetDataSizeHistogram();
-        if (histogram.BucketsSize() < 2) { 
-            return true; 
-        } 
+        if (histogram.BucketsSize() < 2) {
+            return true;
+        }
 
         splitKey = ChooseSplitKeyByHistogram(histogram, keyColumnTypes);
 
@@ -364,7 +364,7 @@ bool TTxPartitionHistogram::Execute(TTransactionContext& txc, const TActorContex
             LOG_WARN(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                      "Failed to find proper split key for '%s' of datashard %" PRIu64,
                       ToString(splitReason), datashardId);
-            return true; 
+            return true;
         }
     }
 
@@ -372,36 +372,36 @@ bool TTxPartitionHistogram::Execute(TTransactionContext& txc, const TActorContex
         LOG_WARN(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                  "Failed to find proper split key for '%s' of datashard %" PRIu64,
                   ToString(splitReason), datashardId);
-        return true; 
+        return true;
     }
 
-    TTxId txId = Self->GetCachedTxId(ctx); 
- 
-    if (!txId) { 
-        LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, 
-                   "Do not request split op" 
-                   << ", reason: no cached tx ids for internal operation" 
-                   << ", shardIdx: " << shardIdx); 
-        return true; 
-    } 
- 
-    auto request = SplitRequest(Self, txId, tableId, datashardId, splitKey.GetBuffer()); 
+    TTxId txId = Self->GetCachedTxId(ctx);
 
-    TMemoryChanges memChanges; 
-    TStorageChanges dbChanges; 
-    TOperationContext context{Self, txc, ctx, SplitOpSideEffects, memChanges, dbChanges}; 
- 
-    auto response = Self->IgniteOperation(*request, context); 
- 
-    dbChanges.Apply(Self, txc, ctx); 
-    SplitOpSideEffects.ApplyOnExecute(Self, txc, ctx); 
- 
-    return true; 
+    if (!txId) {
+        LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                   "Do not request split op"
+                   << ", reason: no cached tx ids for internal operation"
+                   << ", shardIdx: " << shardIdx);
+        return true;
+    }
+
+    auto request = SplitRequest(Self, txId, tableId, datashardId, splitKey.GetBuffer());
+
+    TMemoryChanges memChanges;
+    TStorageChanges dbChanges;
+    TOperationContext context{Self, txc, ctx, SplitOpSideEffects, memChanges, dbChanges};
+
+    auto response = Self->IgniteOperation(*request, context);
+
+    dbChanges.Apply(Self, txc, ctx);
+    SplitOpSideEffects.ApplyOnExecute(Self, txc, ctx);
+
+    return true;
 }
 
- 
-void TTxPartitionHistogram::Complete(const TActorContext& ctx) { 
-    SplitOpSideEffects.ApplyOnComplete(Self, ctx); 
-} 
- 
+
+void TTxPartitionHistogram::Complete(const TActorContext& ctx) {
+    SplitOpSideEffects.ApplyOnComplete(Self, ctx);
+}
+
 }}

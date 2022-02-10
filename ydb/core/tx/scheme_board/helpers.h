@@ -6,9 +6,9 @@
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
 
 #include <library/cpp/actors/core/log.h>
- 
+
 #include <util/generic/vector.h>
-#include <util/generic/set.h> 
+#include <util/generic/set.h>
 
 #if defined SB_LOG_T || \
     defined SB_LOG_D || \
@@ -31,13 +31,13 @@
 namespace NKikimr {
 namespace NSchemeBoard {
 
-using TDomainId = TPathId; 
+using TDomainId = TPathId;
 
 TActorId MakeInterconnectProxyId(const ui32 nodeId);
-ui64 GetPathVersion(const NKikimrScheme::TEvDescribeSchemeResult& record); 
-TPathId GetPathId(const NKikimrScheme::TEvDescribeSchemeResult& record); 
-TDomainId GetDomainId(const NKikimrScheme::TEvDescribeSchemeResult& record); 
-TSet<ui64> GetAbandonedSchemeShardIds(const NKikimrScheme::TEvDescribeSchemeResult &record); 
+ui64 GetPathVersion(const NKikimrScheme::TEvDescribeSchemeResult& record);
+TPathId GetPathId(const NKikimrScheme::TEvDescribeSchemeResult& record);
+TDomainId GetDomainId(const NKikimrScheme::TEvDescribeSchemeResult& record);
+TSet<ui64> GetAbandonedSchemeShardIds(const NKikimrScheme::TEvDescribeSchemeResult &record);
 
 TIntrusivePtr<TEventSerializedData> SerializeEvent(IEventBase* ev);
 

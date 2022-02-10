@@ -2473,9 +2473,9 @@ function onTreeDataComplete(result, obj, cb) {
                     child.icon = "glyphicon glyphicon-tasks schema-good";
                     break;
                 case 10:    // ExtSubDomain
-                    child.children = true; 
-                    child.icon = "glyphicon glyphicon-asterisk schema-good"; 
-                    break; 
+                    child.children = true;
+                    child.icon = "glyphicon glyphicon-asterisk schema-good";
+                    break;
                 case 12:    // OlapStore
                     child.children = true;
                     child.icon = "glyphicon glyphicon-list schema-good";
@@ -2590,8 +2590,8 @@ function schemaPathTypeToString(pathType) {
         return "PersQueueGroup";
     case 7:
         return "Kesus";
-    case 10: 
-        return "Tenant"; 
+    case 10:
+        return "Tenant";
     case 15:
         return "Sequence";
     case 16:
@@ -2796,8 +2796,8 @@ function onTreeNodeComplete(result, obj) {
                 SchemaTabletElements[pqgroup.BalancerTabletID] = null;
             }
         }
-        if (result.PathDescription.Self.PathType === 4 || result.PathDescription.Self.PathType === 10) { 
-            var subdomain = result.PathDescription.DomainDescription; 
+        if (result.PathDescription.Self.PathType === 4 || result.PathDescription.Self.PathType === 10) {
+            var subdomain = result.PathDescription.DomainDescription;
             if (subdomain !== undefined) {
                 var params = subdomain.ProcessingParams;
                 if (params !== undefined) {
@@ -2815,10 +2815,10 @@ function onTreeNodeComplete(result, obj) {
                             SchemaTabletElements[tablet] = null;
                         }
                     }
-                    if (params.SchemeShard !== undefined) { 
-                        tablet = String(params.SchemeShard); 
-                        SchemaTabletElements[tablet] = null; 
-                    } 
+                    if (params.SchemeShard !== undefined) {
+                        tablet = String(params.SchemeShard);
+                        SchemaTabletElements[tablet] = null;
+                    }
                 }
             }
         }
@@ -3077,49 +3077,49 @@ function onTreeNodeComplete(result, obj) {
         value.innerHTML = partitionConfig.LifetimeSeconds + " seconds";
     }
 
-    if ((result.PathDescription.Self.PathType === 10 || result.PathDescription.Self.PathType === 4) && result.PathDescription.DomainDescription !== undefined) { 
-        if (result.PathDescription.DomainDescription.ProcessingParams !== undefined) { 
-            if (result.PathDescription.DomainDescription.ProcessingParams.Version !== undefined) { 
+    if ((result.PathDescription.Self.PathType === 10 || result.PathDescription.Self.PathType === 4) && result.PathDescription.DomainDescription !== undefined) {
+        if (result.PathDescription.DomainDescription.ProcessingParams !== undefined) {
+            if (result.PathDescription.DomainDescription.ProcessingParams.Version !== undefined) {
                 row = tab.insertRow();
-                row.insertCell(-1).innerHTML = "SubdomainVersion"; 
-                row.insertCell(-1).innerHTML = result.PathDescription.DomainDescription.ProcessingParams.Version; 
+                row.insertCell(-1).innerHTML = "SubdomainVersion";
+                row.insertCell(-1).innerHTML = result.PathDescription.DomainDescription.ProcessingParams.Version;
             }
-            if (result.PathDescription.DomainDescription.ProcessingParams.PlanResolution !== undefined) { 
+            if (result.PathDescription.DomainDescription.ProcessingParams.PlanResolution !== undefined) {
                 row = tab.insertRow();
                 row.insertCell(-1).innerHTML = "Plan Resolution";
-                row.insertCell(-1).innerHTML = result.PathDescription.DomainDescription.ProcessingParams.PlanResolution + "ms"; 
+                row.insertCell(-1).innerHTML = result.PathDescription.DomainDescription.ProcessingParams.PlanResolution + "ms";
             }
         }
-        if (result.PathDescription.DomainDescription.DomainKey !== undefined) { 
-            row = tab.insertRow(); 
-            row.insertCell(-1).innerHTML = "DomainKey"; 
-            row.insertCell(-1).innerHTML = result.PathDescription.DomainDescription.DomainKey.SchemeShard + " : " + result.PathDescription.DomainDescription.DomainKey.PathId; 
-        } 
+        if (result.PathDescription.DomainDescription.DomainKey !== undefined) {
+            row = tab.insertRow();
+            row.insertCell(-1).innerHTML = "DomainKey";
+            row.insertCell(-1).innerHTML = result.PathDescription.DomainDescription.DomainKey.SchemeShard + " : " + result.PathDescription.DomainDescription.DomainKey.PathId;
+        }
         if (result.PathDescription.DomainDescription.ResourcesDomainKey !== undefined) {
             row = tab.insertRow();
             row.insertCell(-1).innerHTML = "ResourcesDomainKey";
             row.insertCell(-1).innerHTML = result.PathDescription.DomainDescription.ResourcesDomainKey.SchemeShard + " : " + result.PathDescription.DomainDescription.ResourcesDomainKey.PathId;
         }
-        if (result.PathDescription.DomainDescription.PathsInside !== undefined) { 
-            row = tab.insertRow(); 
-            row.insertCell(-1).innerHTML = "Pathes inside"; 
-            row.insertCell(-1).innerHTML = result.PathDescription.DomainDescription.PathsInside + " / " + result.PathDescription.DomainDescription.PathsLimit; 
-        } 
-        if (result.PathDescription.DomainDescription.ShardsInside !== undefined) { 
-            row = tab.insertRow(); 
-            row.insertCell(-1).innerHTML = "Shards inside"; 
-            row.insertCell(-1).innerHTML = result.PathDescription.DomainDescription.ShardsInside + " / " + result.PathDescription.DomainDescription.ShardsLimit; 
-        } 
-        if (result.PathDescription.DomainDescription.StoragePools !== undefined) { 
-            var storagePools = result.PathDescription.DomainDescription.StoragePools; 
-            tabLen = storagePools.length; 
-            for (var j = 0; j < tabLen; j++) { 
-                row = tab.insertRow(); 
-                row.insertCell(-1).innerHTML = "Storage pool"; 
-                row.insertCell(-1).innerHTML = storagePools[j].Kind + " -> " + storagePools[j].Name; 
- 
-            } 
-        } 
+        if (result.PathDescription.DomainDescription.PathsInside !== undefined) {
+            row = tab.insertRow();
+            row.insertCell(-1).innerHTML = "Pathes inside";
+            row.insertCell(-1).innerHTML = result.PathDescription.DomainDescription.PathsInside + " / " + result.PathDescription.DomainDescription.PathsLimit;
+        }
+        if (result.PathDescription.DomainDescription.ShardsInside !== undefined) {
+            row = tab.insertRow();
+            row.insertCell(-1).innerHTML = "Shards inside";
+            row.insertCell(-1).innerHTML = result.PathDescription.DomainDescription.ShardsInside + " / " + result.PathDescription.DomainDescription.ShardsLimit;
+        }
+        if (result.PathDescription.DomainDescription.StoragePools !== undefined) {
+            var storagePools = result.PathDescription.DomainDescription.StoragePools;
+            tabLen = storagePools.length;
+            for (var j = 0; j < tabLen; j++) {
+                row = tab.insertRow();
+                row.insertCell(-1).innerHTML = "Storage pool";
+                row.insertCell(-1).innerHTML = storagePools[j].Kind + " -> " + storagePools[j].Name;
+
+            }
+        }
     }
 
     if (result.PathDescription.BackupProgress !== undefined) {

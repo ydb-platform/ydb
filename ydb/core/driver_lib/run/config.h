@@ -30,7 +30,7 @@ union TBasicKikimrServicesMask {
         bool EnableRestartsCountPublisher:1;
         bool EnableBootstrapper:1;
         bool EnableMediatorTimeCastProxy:1;
-        bool EnableTxProxy:1; 
+        bool EnableTxProxy:1;
         bool EnableMiniKQLCompileService:1;
         bool EnableMessageBusServices:1;
         bool EnableStatsCollector:1;
@@ -57,7 +57,7 @@ union TBasicKikimrServicesMask {
         bool EnableNetClassifier:1;
         bool EnablePersQueueClusterTracker:1;
         bool EnableSysViewService:1;
-        bool EnableMeteringWriter:1; 
+        bool EnableMeteringWriter:1;
         bool EnableSchemeBoardMonitoring:1;
         bool EnableConfigsCache:1;
         bool EnableLongTxService:1;

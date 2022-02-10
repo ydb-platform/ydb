@@ -10,11 +10,11 @@ namespace NKikimr {
 
 void MEWarning(const TString& settingName, TList<TString>& warnings);
 
-bool FillCreateTableSettingsDesc(NKikimrSchemeOp::TTableDescription& out, 
+bool FillCreateTableSettingsDesc(NKikimrSchemeOp::TTableDescription& out,
     const Ydb::Table::CreateTableRequest& in,
     Ydb::StatusIds::StatusCode& code, TString& error, TList<TString>& warnings, bool tableProfileSet);
 
-bool FillAlterTableSettingsDesc(NKikimrSchemeOp::TTableDescription& out, 
+bool FillAlterTableSettingsDesc(NKikimrSchemeOp::TTableDescription& out,
     const Ydb::Table::AlterTableRequest& in,
     Ydb::StatusIds::StatusCode& code, TString& error, bool changed);
 
@@ -40,7 +40,7 @@ bool FillTtlSettings(TTtlSettingsEnabled& out, const Ydb::Table::TtlSettings& in
 
         #define CASE_UNIT(type) \
             case Ydb::Table::ValueSinceUnixEpochModeSettings::type: \
-                out.SetColumnUnit(NKikimrSchemeOp::TTTLSettings::type); \ 
+                out.SetColumnUnit(NKikimrSchemeOp::TTTLSettings::type); \
                 break
 
         switch (in.value_since_unix_epoch().column_unit()) {
@@ -60,7 +60,7 @@ bool FillTtlSettings(TTtlSettingsEnabled& out, const Ydb::Table::TtlSettings& in
         return unsupported("Unsupported ttl settings");
     }
 
-    if constexpr (std::is_same_v<TTtlSettingsEnabled, NKikimrSchemeOp::TTTLSettings>) { 
+    if constexpr (std::is_same_v<TTtlSettingsEnabled, NKikimrSchemeOp::TTTLSettings>) {
         if (in.run_interval_seconds()) {
             out.MutableSysSettings()->SetRunInterval(TDuration::Seconds(in.run_interval_seconds()).GetValue());
         }

@@ -47,38 +47,38 @@ bool TPathId::operator!=(const TPathId& x) const {
     return OwnerId != x.OwnerId || LocalPathId != x.LocalPathId;
 }
 
-TPathId TPathId::NextId() const { 
-    if (!this->operator bool()) { 
-        return TPathId(); 
-    } 
- 
-    if (LocalPathId + 1 == InvalidLocalPathId) { 
-        if (OwnerId + 1 == InvalidOwnerId) { 
-            return TPathId(); 
-        } 
- 
-        return TPathId(OwnerId + 1, 0); 
-    } 
- 
-    return TPathId(OwnerId, LocalPathId + 1); 
-} 
- 
-TPathId TPathId::PrevId() const { 
-    if (!this->operator bool()) { 
-        return TPathId(); 
-    } 
- 
-    if (LocalPathId == 0) { 
-        if (OwnerId == 0) { 
-            return TPathId(); 
-        } 
- 
-        return TPathId(OwnerId - 1, Max<ui64>() - 1); 
-    } 
- 
-    return TPathId(OwnerId, LocalPathId - 1); 
-} 
- 
+TPathId TPathId::NextId() const {
+    if (!this->operator bool()) {
+        return TPathId();
+    }
+
+    if (LocalPathId + 1 == InvalidLocalPathId) {
+        if (OwnerId + 1 == InvalidOwnerId) {
+            return TPathId();
+        }
+
+        return TPathId(OwnerId + 1, 0);
+    }
+
+    return TPathId(OwnerId, LocalPathId + 1);
+}
+
+TPathId TPathId::PrevId() const {
+    if (!this->operator bool()) {
+        return TPathId();
+    }
+
+    if (LocalPathId == 0) {
+        if (OwnerId == 0) {
+            return TPathId();
+        }
+
+        return TPathId(OwnerId - 1, Max<ui64>() - 1);
+    }
+
+    return TPathId(OwnerId, LocalPathId - 1);
+}
+
 TPathId::operator bool() const {
     return OwnerId != InvalidOwnerId && LocalPathId != InvalidLocalPathId;
 }

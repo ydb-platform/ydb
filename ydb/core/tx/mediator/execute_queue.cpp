@@ -1,10 +1,10 @@
-#include "mediator_impl.h" 
- 
+#include "mediator_impl.h"
+
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/tx_processing.h>
 #include <library/cpp/actors/core/hfunc.h>
 #include <ydb/core/tx/time_cast/time_cast.h>
- 
+
 #include <util/generic/hash.h>
 #include <util/string/builder.h>
 
@@ -20,11 +20,11 @@ namespace NTxMediator {
         const ui64 MediatorId;
         const ui64 HashRange;
 
-        TTimeCastBuckets BucketSelector; 
+        TTimeCastBuckets BucketSelector;
         TVector<TBucket> Buckets;
 
         TBucket& SelectBucket(TTabletId tablet) {
-            const ui32 bucketIdx = BucketSelector.Select(tablet); 
+            const ui32 bucketIdx = BucketSelector.Select(tablet);
             Y_VERIFY_DEBUG(bucketIdx < Buckets.size());
             return Buckets[bucketIdx];
         }
@@ -166,8 +166,8 @@ namespace NTxMediator {
         }
 
         void Bootstrap(const TActorContext &ctx) {
-            Buckets.resize(BucketSelector.Buckets()); 
-            for (ui32 bucketIdx = 0; bucketIdx < Buckets.size(); ++bucketIdx) 
+            Buckets.resize(BucketSelector.Buckets());
+            for (ui32 bucketIdx = 0; bucketIdx < Buckets.size(); ++bucketIdx)
                 Buckets[bucketIdx].ActiveActor = ctx.ExecutorThread.RegisterActor(CreateTxMediatorTabletQueue(ctx.SelfID, MediatorId, 1, bucketIdx), TMailboxType::ReadAsFilled);
         }
 
@@ -181,7 +181,7 @@ namespace NTxMediator {
             , Owner(owner)
             , MediatorId(mediator)
             , HashRange(hashRange)
-            , BucketSelector(timecastBuckets) 
+            , BucketSelector(timecastBuckets)
         {
             Y_UNUSED(HashRange);
         }
@@ -204,7 +204,7 @@ namespace NTxMediator {
 }
 
 IActor* CreateTxMediatorExecQueue(const TActorId &owner, ui64 mediator, ui64 hashRange, ui32 timecastBuckets) {
-    return new NTxMediator::TTxMediatorExecQueue(owner, mediator, hashRange, timecastBuckets); 
+    return new NTxMediator::TTxMediatorExecQueue(owner, mediator, hashRange, timecastBuckets);
 }
 
 }

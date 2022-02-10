@@ -22,7 +22,7 @@ public:
         return NKikimrServices::TActivity::VIEWER_HANDLER;
     }
 
-    TJsonConfig(IViewer *viewer, NMon::TEvHttpInfo::TPtr &ev) 
+    TJsonConfig(IViewer *viewer, NMon::TEvHttpInfo::TPtr &ev)
         : Viewer(viewer)
         , Event(ev)
     {}

@@ -60,7 +60,7 @@ public:
 
     void OnExecuted(TSqsEvents::TEvExecuted::TPtr& ev);
 
-    void OnDescribeSchemeResult(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev); 
+    void OnDescribeSchemeResult(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev);
 
     void SendDescribeTable();
     void HandleTableDescription(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev);

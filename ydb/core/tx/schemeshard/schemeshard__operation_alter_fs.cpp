@@ -8,7 +8,7 @@
 namespace {
 
 using namespace NKikimr;
-using namespace NSchemeShard; 
+using namespace NSchemeShard;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -282,7 +282,7 @@ private:
         TOperationContext& context);
 
     const NKikimrFileStore::TConfig* ParseParams(
-        const NKikimrSchemeOp::TFileStoreDescription& operation, 
+        const NKikimrSchemeOp::TFileStoreDescription& operation,
         TString& errStr);
 
     bool ProcessChannelProfiles(
@@ -324,14 +324,14 @@ THolder<TProposeResponse> TAlterFileStore::Propose(
         << ", at schemeshard: " << ssId);
 
     auto result = MakeHolder<TProposeResponse>(
-        NKikimrScheme::StatusAccepted, 
+        NKikimrScheme::StatusAccepted,
         ui64(OperationId.GetTxId()),
         ui64(ssId));
 
     TString errStr;
     if (!operation.HasName() && !operation.HasPathId()) {
         errStr = "Neither name nor pathId are present in FileStore";
-        result->SetError(NKikimrScheme::StatusInvalidParameter, errStr); 
+        result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
         return result;
     }
 
@@ -369,20 +369,20 @@ THolder<TProposeResponse> TAlterFileStore::Propose(
 
     if (fs->AlterConfig) {
         result->SetError(
-            NKikimrScheme::StatusMultipleModifications, 
+            NKikimrScheme::StatusMultipleModifications,
             "There is another operation in flight");
         return result;
     }
 
     const auto* alterConfig = ParseParams(operation, errStr);
     if (!alterConfig) {
-        result->SetError(NKikimrScheme::StatusInvalidParameter, errStr); 
+        result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
         return result;
     }
 
     if (alterConfig->HasVersion() && alterConfig->GetVersion() != fs->Version) {
         result->SetError(
-            NKikimrScheme::StatusPreconditionFailed, 
+            NKikimrScheme::StatusPreconditionFailed,
             "Wrong version in config");
         return result;
     }
@@ -401,7 +401,7 @@ THolder<TProposeResponse> TAlterFileStore::Propose(
     }
 
     if (!context.SS->CheckApplyIf(Transaction, errStr)) {
-        result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr); 
+        result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr);
         return result;
     }
 
@@ -418,7 +418,7 @@ THolder<TProposeResponse> TAlterFileStore::Propose(
 }
 
 const NKikimrFileStore::TConfig* TAlterFileStore::ParseParams(
-    const NKikimrSchemeOp::TFileStoreDescription& operation, 
+    const NKikimrSchemeOp::TFileStoreDescription& operation,
     TString& errStr)
 {
     if (operation.HasIndexTabletId() || operation.HasVersion()) {
@@ -479,7 +479,7 @@ TTxState& TAlterFileStore::PrepareChanges(
         operationId.GetTxId(), fs->AlterVersion);
 
     context.SS->PersistAddFileStoreAlter(db, item->PathId, fs);
-    context.SS->PersistTxState(db, operationId); 
+    context.SS->PersistTxState(db, operationId);
 
     context.OnComplete.ActivateTx(operationId);
     return txState;
@@ -500,13 +500,13 @@ bool TAlterFileStore::ProcessChannelProfiles(
             auto errStr = Sprintf("Wrong number of channels %u , should be [1 .. %lu]",
                 alterEcps.size(), NHive::MAX_TABLET_CHANNELS);
 
-            result.SetError(NKikimrScheme::StatusInvalidParameter, errStr); 
+            result.SetError(NKikimrScheme::StatusInvalidParameter, errStr);
             return false;
         }
 
         // Cannot delete explicit profiles for existing channels
         if (alterConfig.ExplicitChannelProfilesSize() < config.ExplicitChannelProfilesSize()) {
-            result.SetError(NKikimrScheme::StatusInvalidParameter, 
+            result.SetError(NKikimrScheme::StatusInvalidParameter,
                 "Cannot reduce the number of channel profiles");
             return false;
         }
@@ -519,7 +519,7 @@ bool TAlterFileStore::ProcessChannelProfiles(
                 const auto& newProfile = alterConfig.GetExplicitChannelProfiles(i);
                 if (prevProfile.GetPoolKind() != newProfile.GetPoolKind()) {
                     result.SetError(
-                        NKikimrScheme::StatusInvalidParameter, 
+                        NKikimrScheme::StatusInvalidParameter,
                         TStringBuilder() << "Cannot change PoolKind for channel " << i
                             << ", " << prevProfile.GetPoolKind()
                             << " -> " << newProfile.GetPoolKind());
@@ -542,7 +542,7 @@ bool TAlterFileStore::ProcessChannelProfiles(
         storeChannelsBinding);
 
     if (!storeChannelsResolved) {
-        result.SetError(NKikimrScheme::StatusInvalidParameter, 
+        result.SetError(NKikimrScheme::StatusInvalidParameter,
             "Unable to construct channel binding for filestore with the storage pool");
         return false;
     }
@@ -567,7 +567,7 @@ void TAlterFileStore::ApplyChannelBindings(
 }   // namespace
 
 namespace NKikimr {
-namespace NSchemeShard { 
+namespace NSchemeShard {
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -580,5 +580,5 @@ ISubOperationBase::TPtr CreateAlterFileStore(TOperationId id, TTxState::ETxState
     return new TAlterFileStore(id, state);
 }
 
-}   // namespace NSchemeShard 
+}   // namespace NSchemeShard
 }   // namespace NKikimr

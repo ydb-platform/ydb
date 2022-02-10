@@ -20,7 +20,7 @@ public:
     // Methods
 public:
     const char* StrByExt(const char* ext) const;
- 
+
     MimeTypes MimeByStr(const char* str) const;
     MimeTypes MimeByStr(const TStringBuf& str) const;
     const char* StrByMime(MimeTypes mime) const;
@@ -73,7 +73,7 @@ const TMimeTypes::TRecord TMimeTypes::Records[] = {
     {MIME_ODP, "application/vnd.oasis.opendocument.presentation\0", "odp\0"},
     {MIME_ODS, "application/vnd.oasis.opendocument.spreadsheet\0", "ods\0"},
     {MIME_UNKNOWN, nullptr, nullptr},
-    {MIME_IMAGE_BMP, "image/bmp\0image/x-ms-bmp\0image/x-windows-bmp\0", "bmp\0"}, 
+    {MIME_IMAGE_BMP, "image/bmp\0image/x-ms-bmp\0image/x-windows-bmp\0", "bmp\0"},
     {MIME_WAV, "audio/x-wav\0", "wav\0"},
     {MIME_ARCHIVE, "application/x-archive\0", nullptr},
     {MIME_EXE, "application/exe\0application/octet-stream\0application/x-dosexec\0application/x-msdownload\0", "exe\0"},
@@ -87,7 +87,7 @@ const TMimeTypes::TRecord TMimeTypes::Records[] = {
     {MIME_JSON, "application/json\0", "json\0"},
     {MIME_APK, "application/vnd.android.package-archive\0", "apk\0"},
     {MIME_CSS, "text/css\0", "css\0"},
-    {MIME_IMAGE_WEBP, "image/webp\0", "webp\0"}, 
+    {MIME_IMAGE_WEBP, "image/webp\0", "webp\0"},
     {MIME_DJVU, "image/vnd.djvu\0image/x-djvu\0", "djvu\0djv\0"},
     {MIME_CHM, "application/x-chm\0application/vnd.ms-htmlhelp\0", "chm\0"},
     {MIME_FB2ZIP, "application/zip\0", "fb2zip\0"},
@@ -215,8 +215,8 @@ const char* MimeNames[MIME_MAX] = {
     "swf",     // MIME_SWF             //  9
     "xls",     // MIME_XLS             // 10
     "ppt",     // MIME_PPT             // 11
-    "jpg",     // MIME_IMAGE_JPG       // 12 
-    "pjpg",    // MIME_IMAGE_PJPG      // 13 
+    "jpg",     // MIME_IMAGE_JPG       // 12
+    "pjpg",    // MIME_IMAGE_PJPG      // 13
     "png",     // MIME_IMAGE_PNG       // 14
     "gif",     // MIME_IMAGE_GIF       // 15
     "docx",    // MIME_DOCX            // 16
@@ -238,7 +238,7 @@ const char* MimeNames[MIME_MAX] = {
     "json",    // MIME_JSON            // 32
     "apk",     // MIME_APK             // 33
     "css",     // MIME_CSS             // 34
-    "webp",    // MIME_IMAGE_WEBP      // 35 
+    "webp",    // MIME_IMAGE_WEBP      // 35
     "djvu",    // MIME_DJVU            // 36
     "chm",     // MIME_CHM             // 37
     "fb2zip",  // MIME_FB2ZIP          // 38

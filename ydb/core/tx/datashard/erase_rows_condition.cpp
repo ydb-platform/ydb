@@ -11,17 +11,17 @@ namespace NKikimr {
 namespace NDataShard {
 
 class TExpirationCondition: public IEraseRowsCondition {
-    using EUnit = NKikimrSchemeOp::TTTLSettings::EUnit; 
+    using EUnit = NKikimrSchemeOp::TTTLSettings::EUnit;
 
     static TMaybe<ui64> InstantValue(TInstant instant, EUnit unit) {
         switch (unit) {
-        case NKikimrSchemeOp::TTTLSettings::UNIT_SECONDS: 
+        case NKikimrSchemeOp::TTTLSettings::UNIT_SECONDS:
             return instant.Seconds();
-        case NKikimrSchemeOp::TTTLSettings::UNIT_MILLISECONDS: 
+        case NKikimrSchemeOp::TTTLSettings::UNIT_MILLISECONDS:
             return instant.MilliSeconds();
-        case NKikimrSchemeOp::TTTLSettings::UNIT_MICROSECONDS: 
+        case NKikimrSchemeOp::TTTLSettings::UNIT_MICROSECONDS:
             return instant.MicroSeconds();
-        case NKikimrSchemeOp::TTTLSettings::UNIT_NANOSECONDS: 
+        case NKikimrSchemeOp::TTTLSettings::UNIT_NANOSECONDS:
             return instant.NanoSeconds();
         default:
             return Nothing();
@@ -68,13 +68,13 @@ class TExpirationCondition: public IEraseRowsCondition {
         case NScheme::NTypeIds::Uint32:
         case NScheme::NTypeIds::Uint64:
             switch (Unit) {
-            case NKikimrSchemeOp::TTTLSettings::UNIT_SECONDS: 
+            case NKikimrSchemeOp::TTTLSettings::UNIT_SECONDS:
                 return TInstant::Seconds(value) <= WallClockInstant;
-            case NKikimrSchemeOp::TTTLSettings::UNIT_MILLISECONDS: 
+            case NKikimrSchemeOp::TTTLSettings::UNIT_MILLISECONDS:
                 return TInstant::MilliSeconds(value) <= WallClockInstant;
-            case NKikimrSchemeOp::TTTLSettings::UNIT_MICROSECONDS: 
+            case NKikimrSchemeOp::TTTLSettings::UNIT_MICROSECONDS:
                 return TInstant::MicroSeconds(value) <= WallClockInstant;
-            case NKikimrSchemeOp::TTTLSettings::UNIT_NANOSECONDS: 
+            case NKikimrSchemeOp::TTTLSettings::UNIT_NANOSECONDS:
                 return TInstant::MicroSeconds(value / 1000) <= WallClockInstant;
             default:
                 LOG_CRIT_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,

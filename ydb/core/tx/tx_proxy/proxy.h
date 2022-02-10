@@ -1,7 +1,7 @@
 #pragma once
 #include "defs.h"
-#include "mon.h" 
- 
+#include "mon.h"
+
 #include <ydb/public/lib/base/defs.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 #include <ydb/core/base/kikimr_issue.h>
@@ -11,7 +11,7 @@
 #include <ydb/core/scheme/tablet_scheme.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/core/protos/tx_proxy.pb.h>
- 
+
 #include <util/generic/set.h>
 #include <util/generic/hash.h>
 
@@ -82,26 +82,26 @@ struct TEvTxUserProxy {
         {
             Record.SetProxyFlags(proxyFlags);
         }
- 
-        bool HasSchemeProposal() const { 
-                return HasModifyScheme() || HasTransactionalModification(); 
-        } 
- 
-        bool HasModifyScheme() const { 
-            const NKikimrTxUserProxy::TTransaction &tx = Record.GetTransaction(); 
-            return tx.HasModifyScheme(); 
-        } 
- 
-        bool HasTransactionalModification() const { 
-            const NKikimrTxUserProxy::TTransaction &tx = Record.GetTransaction(); 
-            return tx.TransactionalModificationSize(); 
-        } 
- 
-        bool HasMakeProposal() const { 
-                const NKikimrTxUserProxy::TTransaction &tx = Record.GetTransaction(); 
+
+        bool HasSchemeProposal() const {
+                return HasModifyScheme() || HasTransactionalModification();
+        }
+
+        bool HasModifyScheme() const {
+            const NKikimrTxUserProxy::TTransaction &tx = Record.GetTransaction();
+            return tx.HasModifyScheme();
+        }
+
+        bool HasTransactionalModification() const {
+            const NKikimrTxUserProxy::TTransaction &tx = Record.GetTransaction();
+            return tx.TransactionalModificationSize();
+        }
+
+        bool HasMakeProposal() const {
+                const NKikimrTxUserProxy::TTransaction &tx = Record.GetTransaction();
                 return (tx.HasMiniKQLTransaction() && tx.GetMiniKQLTransaction().HasProgram())
                         || tx.HasReadTableTransaction();
-        } 
+        }
 
         bool HasSnapshotProposal() const {
             const auto& tx = Record.GetTransaction();
@@ -257,12 +257,12 @@ struct TEvTxProxyReq {
     };
 };
 
-namespace NTxProxy { 
- 
-    using TTableColumnInfo = TSysTables::TTableColumnInfo; 
- 
-    struct TSchemeCacheConfig; 
- 
+namespace NTxProxy {
+
+    using TTableColumnInfo = TSysTables::TTableColumnInfo;
+
+    struct TSchemeCacheConfig;
+
     struct TRequestControls {
     private:
         bool Registered;
@@ -304,12 +304,12 @@ namespace NTxProxy {
     };
 
     IActor* CreateTxProxyDataReq(const TTxProxyServices &services, const ui64 txid, const TIntrusivePtr<TTxProxyMon>& txProxyMon, const TRequestControls& requestControls);
-    IActor* CreateTxProxyFlatSchemeReq(const TTxProxyServices &services, const ui64 txid, TAutoPtr<TEvTxProxyReq::TEvSchemeRequest> request, const TIntrusivePtr<TTxProxyMon>& txProxyMon); 
-    IActor* CreateTxProxyDescribeFlatSchemeReq(const TTxProxyServices &services, const TIntrusivePtr<TTxProxyMon>& txProxyMon); 
+    IActor* CreateTxProxyFlatSchemeReq(const TTxProxyServices &services, const ui64 txid, TAutoPtr<TEvTxProxyReq::TEvSchemeRequest> request, const TIntrusivePtr<TTxProxyMon>& txProxyMon);
+    IActor* CreateTxProxyDescribeFlatSchemeReq(const TTxProxyServices &services, const TIntrusivePtr<TTxProxyMon>& txProxyMon);
     IActor* CreateTxProxySnapshotReq(const TTxProxyServices &services, const ui64 txid, TEvTxUserProxy::TEvProposeTransaction::TPtr&& ev, const TIntrusivePtr<TTxProxyMon>& mon);
     IActor* CreateTxProxyCommitWritesReq(const TTxProxyServices &services, const ui64 txid, TEvTxUserProxy::TEvProposeTransaction::TPtr&& ev, const TIntrusivePtr<TTxProxyMon>& mon);
-} 
- 
+}
+
 IActor* CreateTxProxy(const TVector<ui64> &allocators);
 TActorId MakeTxProxyID();
 

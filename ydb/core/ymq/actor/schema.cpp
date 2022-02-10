@@ -57,7 +57,7 @@ static bool SuccessStatusCode(ui32 code) {
     }
 }
 
-static void SetCompactionPolicyForSmallTable(NKikimrSchemeOp::TPartitionConfig& partitionConfig) { 
+static void SetCompactionPolicyForSmallTable(NKikimrSchemeOp::TPartitionConfig& partitionConfig) {
     auto& policyPb = *partitionConfig.MutableCompactionPolicy();
     policyPb.SetInMemSizeToSnapshot(100000);
     policyPb.SetInMemStepsToSnapshot(300);
@@ -69,7 +69,7 @@ static void SetCompactionPolicyForSmallTable(NKikimrSchemeOp::TPartitionConfig& 
     policyPb.SetMinDataPageSize(7168);
 }
 
-static void SetCompactionPolicyForTimestampOrdering(NKikimrSchemeOp::TPartitionConfig& partitionConfig) { 
+static void SetCompactionPolicyForTimestampOrdering(NKikimrSchemeOp::TPartitionConfig& partitionConfig) {
     const bool enableCompression = false;
 
     auto& policyPb = *partitionConfig.MutableCompactionPolicy();
@@ -103,9 +103,9 @@ static void SetCompactionPolicyForTimestampOrdering(NKikimrSchemeOp::TPartitionC
     g2.SetKeepInCache(false);
 }
 
-static void SetOnePartitionPerShardSettings(NKikimrSchemeOp::TTableDescription& desc, size_t queueShardsCount) { 
+static void SetOnePartitionPerShardSettings(NKikimrSchemeOp::TTableDescription& desc, size_t queueShardsCount) {
     for (size_t boundary = 1; boundary < queueShardsCount; ++boundary) {
-        NKikimrSchemeOp::TSplitBoundary* splitBoundarySetting = desc.AddSplitBoundary(); 
+        NKikimrSchemeOp::TSplitBoundary* splitBoundarySetting = desc.AddSplitBoundary();
         splitBoundarySetting->MutableKeyPrefix()->AddTuple()->MutableOptional()->SetUint64(boundary);
     }
 }
@@ -138,7 +138,7 @@ THolder<TEvTxUserProxy::TEvProposeTransaction>
     } else {
         trans->SetWorkingDir(root);
     }
-    trans->SetOperationType(NKikimrSchemeOp::ESchemeOpCreateTable); 
+    trans->SetOperationType(NKikimrSchemeOp::ESchemeOpCreateTable);
     // Table info
     auto* desc = trans->MutableCreateTable();
     desc->SetName(table.Name);
@@ -159,7 +159,7 @@ THolder<TEvTxUserProxy::TEvProposeTransaction>
     if (table.InMemory) {
         auto* def = desc->MutablePartitionConfig()->AddColumnFamilies();
         def->SetId(0);
-        def->SetColumnCache(NKikimrSchemeOp::ColumnCacheEver); 
+        def->SetColumnCache(NKikimrSchemeOp::ColumnCacheEver);
     }
 
     if (table.Sequential) {
@@ -194,7 +194,7 @@ THolder<TEvTxUserProxy::TEvProposeTransaction>
     } else {
         trans->SetWorkingDir(root + "/" + ToString(table.Shard));
     }
-    trans->SetOperationType(NKikimrSchemeOp::ESchemeOpDropTable); 
+    trans->SetOperationType(NKikimrSchemeOp::ESchemeOpDropTable);
     trans->MutableDrop()->SetName(table.Name);
 
     return ev;
@@ -207,7 +207,7 @@ THolder<TEvTxUserProxy::TEvProposeTransaction>
     // Transaction info
     auto* trans = ev->Record.MutableTransaction()->MutableModifyScheme();
     trans->SetWorkingDir(root);
-    trans->SetOperationType(NKikimrSchemeOp::ESchemeOpRmDir); 
+    trans->SetOperationType(NKikimrSchemeOp::ESchemeOpRmDir);
     trans->MutableDrop()->SetName(name);
 
     return ev;
@@ -222,7 +222,7 @@ THolder<TEvTxUserProxy::TEvProposeTransaction>
     // Transaction info
     auto* trans = ev->Record.MutableTransaction()->MutableModifyScheme();
     trans->SetWorkingDir(root);
-    trans->SetOperationType(NKikimrSchemeOp::ESchemeOpCreateKesus); 
+    trans->SetOperationType(NKikimrSchemeOp::ESchemeOpCreateKesus);
 
     // Kesus info
     auto* kesusDesc = trans->MutableKesus();
@@ -240,7 +240,7 @@ THolder<TEvTxUserProxy::TEvProposeTransaction>
     // Transaction info
     auto* trans = ev->Record.MutableTransaction()->MutableModifyScheme();
     trans->SetWorkingDir(root);
-    trans->SetOperationType(NKikimrSchemeOp::ESchemeOpDropKesus); 
+    trans->SetOperationType(NKikimrSchemeOp::ESchemeOpDropKesus);
     auto* drop = trans->MutableDrop();
     drop->SetName(kesusName);
 
@@ -285,7 +285,7 @@ THolder<TEvTxUserProxy::TEvProposeTransaction> TCreateUserSchemaActor::MakeMkDir
     auto* trans = ev->Record.MutableTransaction()->MutableModifyScheme();
 
     trans->SetWorkingDir(root);
-    trans->SetOperationType(NKikimrSchemeOp::ESchemeOpMkDir); 
+    trans->SetOperationType(NKikimrSchemeOp::ESchemeOpMkDir);
     trans->MutableMkDir()->SetName(dirName);
     RLOG_SQS_INFO("Making directory [" << dirName << "] as subdir of [" << root << "]");
     return ev;
@@ -342,7 +342,7 @@ void TCreateUserSchemaActor::HandleExecuted(TSqsEvents::TEvExecuted::TPtr& ev) {
     } else {
         // Try to create /Root/SQS directory only if error occurs, because this is very rare operation.
         if (ECreating(SI_) == ECreating::MakeDirectory
-            && record.GetSchemeShardStatus() == NKikimrScheme::EStatus::StatusPathDoesNotExist 
+            && record.GetSchemeShardStatus() == NKikimrScheme::EStatus::StatusPathDoesNotExist
             && !CreateRootSqsDirAttemptWasMade_)
         {
             RLOG_SQS_INFO("Root SQS directory does not exist, making it. Error record: " << record);
@@ -544,10 +544,10 @@ private:
         this->Send(MakeTxProxyID(), std::move(request));
     }
 
-    void HandleDescribeSchemeResult(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev) { 
+    void HandleDescribeSchemeResult(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev) {
         RLOG_SQS_TRACE("HandleDescribeSchemeResult for quoter: " << ev->Get()->GetRecord());
         const auto& pathDescription = ev->Get()->GetRecord().GetPathDescription();
-        if (ev->Get()->GetRecord().GetStatus() != NKikimrScheme::StatusSuccess || !pathDescription.GetKesus().GetKesusTabletId()) { 
+        if (ev->Get()->GetRecord().GetStatus() != NKikimrScheme::StatusSuccess || !pathDescription.GetKesus().GetKesusTabletId()) {
             RLOG_SQS_ERROR("Describe scheme failed: " << ev->Get()->GetRecord());
             SendErrorAndDie("Describe scheme failed.");
             return;
@@ -606,7 +606,7 @@ private:
 
     STATEFN(StateFunc) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, HandleDescribeSchemeResult); 
+            hFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, HandleDescribeSchemeResult);
             hFunc(TEvCmdResult, HandleCmdResult);
             hFunc(TEvTabletPipe::TEvClientDestroyed, HandlePipeClientDisconnected);
             hFunc(TEvTabletPipe::TEvClientConnected, HandlePipeClientConnected);

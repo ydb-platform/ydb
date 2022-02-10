@@ -974,93 +974,93 @@ Y_UNIT_TEST_SUITE(YdbYqlClient) {
         }
     }
 
-    Y_UNIT_TEST(ConnectDbAclIsStrictlyChecked) { 
+    Y_UNIT_TEST(ConnectDbAclIsStrictlyChecked) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableFeatureFlags()->SetCheckDatabaseAccessPermission(true);
-        appConfig.MutableFeatureFlags()->SetAllowYdbRequestsWithoutDatabase(false); 
-        appConfig.MutableDomainsConfig()->MutableSecurityConfig()->SetEnforceUserTokenRequirement(true); 
-        appConfig.MutableDomainsConfig()->MutableSecurityConfig()->AddDefaultUserSIDs("test_user_no_rights@builtin"); 
-        TKikimrWithGrpcAndRootSchemaWithAuth server(appConfig); 
+        appConfig.MutableFeatureFlags()->SetAllowYdbRequestsWithoutDatabase(false);
+        appConfig.MutableDomainsConfig()->MutableSecurityConfig()->SetEnforceUserTokenRequirement(true);
+        appConfig.MutableDomainsConfig()->MutableSecurityConfig()->AddDefaultUserSIDs("test_user_no_rights@builtin");
+        TKikimrWithGrpcAndRootSchemaWithAuth server(appConfig);
 
-        server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::GRPC_PROXY_NO_CONNECT_ACCESS, NActors::NLog::PRI_DEBUG); 
- 
+        server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::GRPC_PROXY_NO_CONNECT_ACCESS, NActors::NLog::PRI_DEBUG);
+
         ui16 grpc = server.GetPort();
- 
-        { // no db 
-            TString location = TStringBuilder() << "localhost:" << grpc; 
-            auto driver = NYdb::TDriver( 
-                TDriverConfig() 
-                    .SetEndpoint(location)); 
- 
-            NYdb::NTable::TClientSettings settings; 
-            settings.AuthToken("root@builtin"); 
- 
-            NYdb::NTable::TTableClient client(driver, settings); 
-            auto call = [] (NYdb::NTable::TTableClient& client) -> NYdb::TStatus { 
-                Cerr << "Call\n"; 
-                return client.CreateSession().ExtractValueSync(); 
-            }; 
-            auto status = client.RetryOperationSync(call); 
- 
-            UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::CLIENT_UNAUTHENTICATED, status.GetIssues().ToString()); 
- 
-        } 
+
+        { // no db
+            TString location = TStringBuilder() << "localhost:" << grpc;
+            auto driver = NYdb::TDriver(
+                TDriverConfig()
+                    .SetEndpoint(location));
+
+            NYdb::NTable::TClientSettings settings;
+            settings.AuthToken("root@builtin");
+
+            NYdb::NTable::TTableClient client(driver, settings);
+            auto call = [] (NYdb::NTable::TTableClient& client) -> NYdb::TStatus {
+                Cerr << "Call\n";
+                return client.CreateSession().ExtractValueSync();
+            };
+            auto status = client.RetryOperationSync(call);
+
+            UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::CLIENT_UNAUTHENTICATED, status.GetIssues().ToString());
+
+        }
         TString location = TStringBuilder() << "localhost:" << grpc;
         auto driver = NYdb::TDriver(
             TDriverConfig()
-                .SetEndpoint(location) 
-                .SetDatabase("/Root")); 
+                .SetEndpoint(location)
+                .SetDatabase("/Root"));
 
-        { // no token 
+        { // no token
             NYdb::NTable::TClientSettings settings;
-            NYdb::NTable::TTableClient client(driver, settings); 
-            auto call = [] (NYdb::NTable::TTableClient& client) -> NYdb::TStatus { 
-                Cerr << "Call\n"; 
-                return client.CreateSession().ExtractValueSync(); 
-            }; 
-            auto status = client.RetryOperationSync(call); 
- 
-            UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::CLIENT_UNAUTHENTICATED, status.GetIssues().ToString()); 
-        } 
- 
- 
-        { // empty token 
-            NYdb::NTable::TClientSettings settings; 
-            settings.AuthToken(""); 
-            NYdb::NTable::TTableClient client(driver, settings); 
- 
-            auto call = [] (NYdb::NTable::TTableClient& client) -> NYdb::TStatus { 
-                Cerr << "Call\n"; 
-                return client.CreateSession().ExtractValueSync(); 
-            }; 
-            auto status = client.RetryOperationSync(call); 
- 
-            UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::CLIENT_UNAUTHENTICATED, status.GetIssues().ToString()); 
-        } 
- 
-        { // no connect right 
-            TString location = TStringBuilder() << "localhost:" << grpc; 
-            auto driver = NYdb::TDriver( 
-                TDriverConfig() 
-                    .SetEndpoint(location) 
-                    .SetDatabase("/Root")); 
- 
-            NYdb::NTable::TClientSettings settings; 
-            settings.AuthToken("test_user@builtin");
             NYdb::NTable::TTableClient client(driver, settings);
- 
-            auto call = [] (NYdb::NTable::TTableClient& client) -> NYdb::TStatus { 
-                return client.CreateSession().ExtractValueSync(); 
-            }; 
-            auto status = client.RetryOperationSync(call); 
- 
-            UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::UNAUTHORIZED, status.GetIssues().ToString()); 
+            auto call = [] (NYdb::NTable::TTableClient& client) -> NYdb::TStatus {
+                Cerr << "Call\n";
+                return client.CreateSession().ExtractValueSync();
+            };
+            auto status = client.RetryOperationSync(call);
+
+            UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::CLIENT_UNAUTHENTICATED, status.GetIssues().ToString());
         }
 
-        { // set connect 
-            NYdb::TCommonClientSettings settings; 
-            settings.AuthToken("root@builtin"); 
-            auto scheme = NYdb::NScheme::TSchemeClient(driver, settings); 
+
+        { // empty token
+            NYdb::NTable::TClientSettings settings;
+            settings.AuthToken("");
+            NYdb::NTable::TTableClient client(driver, settings);
+
+            auto call = [] (NYdb::NTable::TTableClient& client) -> NYdb::TStatus {
+                Cerr << "Call\n";
+                return client.CreateSession().ExtractValueSync();
+            };
+            auto status = client.RetryOperationSync(call);
+
+            UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::CLIENT_UNAUTHENTICATED, status.GetIssues().ToString());
+        }
+
+        { // no connect right
+            TString location = TStringBuilder() << "localhost:" << grpc;
+            auto driver = NYdb::TDriver(
+                TDriverConfig()
+                    .SetEndpoint(location)
+                    .SetDatabase("/Root"));
+
+            NYdb::NTable::TClientSettings settings;
+            settings.AuthToken("test_user@builtin");
+            NYdb::NTable::TTableClient client(driver, settings);
+
+            auto call = [] (NYdb::NTable::TTableClient& client) -> NYdb::TStatus {
+                return client.CreateSession().ExtractValueSync();
+            };
+            auto status = client.RetryOperationSync(call);
+
+            UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::UNAUTHORIZED, status.GetIssues().ToString());
+        }
+
+        { // set connect
+            NYdb::TCommonClientSettings settings;
+            settings.AuthToken("root@builtin");
+            auto scheme = NYdb::NScheme::TSchemeClient(driver, settings);
             auto status = scheme.ModifyPermissions("/Root",
                 NYdb::NScheme::TModifyPermissionsSettings()
                     .AddGrantPermissions(
@@ -1068,105 +1068,105 @@ Y_UNIT_TEST_SUITE(YdbYqlClient) {
                     )
                 ).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::SUCCESS, status.GetIssues().ToString());
-            UNIT_ASSERT_VALUES_EQUAL_C(status.IsTransportError(), false, status.GetIssues().ToString()); 
+            UNIT_ASSERT_VALUES_EQUAL_C(status.IsTransportError(), false, status.GetIssues().ToString());
         }
 
-        ui32 attemps = 2; // system is notified asynchronously, so it may see old acl for awhile 
-        while (attemps) { // accept connect right 
-            --attemps; 
- 
-            NYdb::NTable::TClientSettings settings; 
-            settings.AuthToken("test_user@builtin"); 
-            NYdb::NTable::TTableClient client(driver, settings); 
- 
-            auto call = [] (NYdb::NTable::TTableClient& client) -> NYdb::TStatus { 
-                return client.CreateSession().ExtractValueSync(); 
-            }; 
-            auto status = client.RetryOperationSync(call); 
- 
-            if (attemps && status.GetStatus() == EStatus::UNAUTHORIZED) { 
-                continue; 
-            } 
- 
-            UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::SUCCESS, status.GetIssues().ToString()); 
-        } 
-    } 
- 
-    Y_UNIT_TEST(ConnectDbAclIsOffWhenYdbRequestsWithoutDatabase) { 
-        NKikimrConfig::TAppConfig appConfig; 
-        appConfig.MutableFeatureFlags()->SetCheckDatabaseAccessPermission(true); 
-        appConfig.MutableFeatureFlags()->SetAllowYdbRequestsWithoutDatabase(true); 
-        appConfig.MutableDomainsConfig()->MutableSecurityConfig()->SetEnforceUserTokenRequirement(false); 
-        appConfig.MutableDomainsConfig()->MutableSecurityConfig()->AddDefaultUserSIDs("test_user_no_rights@builtin"); 
-        TKikimrWithGrpcAndRootSchema server(appConfig); 
- 
-        ui16 grpc = server.GetPort(); 
-        {
-            TString location = TStringBuilder() << "localhost:" << grpc; 
-            auto driver = NYdb::TDriver( 
-                TDriverConfig() 
-                    .SetEndpoint(location) 
-                    .SetDatabase("/Root")); 
- 
-            // with db 
+        ui32 attemps = 2; // system is notified asynchronously, so it may see old acl for awhile
+        while (attemps) { // accept connect right
+            --attemps;
+
             NYdb::NTable::TClientSettings settings;
             settings.AuthToken("test_user@builtin");
             NYdb::NTable::TTableClient client(driver, settings);
- 
-            auto call = [] (NYdb::NTable::TTableClient& client) -> NYdb::TStatus { 
-                return client.CreateSession().ExtractValueSync(); 
-            }; 
-            auto status = client.RetryOperationSync(call); 
- 
-            UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::UNAUTHORIZED, status.GetIssues().ToString()); 
+
+            auto call = [] (NYdb::NTable::TTableClient& client) -> NYdb::TStatus {
+                return client.CreateSession().ExtractValueSync();
+            };
+            auto status = client.RetryOperationSync(call);
+
+            if (attemps && status.GetStatus() == EStatus::UNAUTHORIZED) {
+                continue;
+            }
+
+            UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::SUCCESS, status.GetIssues().ToString());
         }
- 
-        { 
-            TString location = TStringBuilder() << "localhost:" << grpc; 
-            auto driver = NYdb::TDriver( 
-                TDriverConfig() 
-                    .SetEndpoint(location)); 
- 
-            // without db 
-            NYdb::NTable::TClientSettings settings; 
-            settings.AuthToken("test_user@builtin"); 
-            NYdb::NTable::TTableClient client(driver, settings); 
- 
-            auto call = [] (NYdb::NTable::TTableClient& client) -> NYdb::TStatus { 
-                return client.CreateSession().ExtractValueSync(); 
-            }; 
-            auto status = client.RetryOperationSync(call); 
- 
-            UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::SUCCESS, status.GetIssues().ToString()); 
-        } 
     }
- 
-    Y_UNIT_TEST(ConnectDbAclIsOffWhenTokenIsOptionalAndNull) { 
-        NKikimrConfig::TAppConfig appConfig; 
-        appConfig.MutableFeatureFlags()->SetCheckDatabaseAccessPermission(true); 
-        appConfig.MutableFeatureFlags()->SetAllowYdbRequestsWithoutDatabase(false); 
-        appConfig.MutableDomainsConfig()->MutableSecurityConfig()->SetEnforceUserTokenRequirement(false); 
-        appConfig.MutableDomainsConfig()->MutableSecurityConfig()->AddDefaultUserSIDs("test_user_no_rights@builtin"); 
-        TKikimrWithGrpcAndRootSchema server(appConfig); 
- 
-        ui16 grpc = server.GetPort(); 
-        TString location = TStringBuilder() << "localhost:" << grpc; 
-        auto driver = NYdb::TDriver( 
-            TDriverConfig() 
-                .SetEndpoint(location)); 
- 
-        { // no token 
-            NYdb::NTable::TClientSettings settings; 
-            NYdb::NTable::TTableClient client(driver, settings); 
- 
-            auto call = [] (NYdb::NTable::TTableClient& client) -> NYdb::TStatus { 
-                return client.CreateSession().ExtractValueSync(); 
-            }; 
-            auto status = client.RetryOperationSync(call); 
- 
-            UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::SUCCESS, status.GetIssues().ToString()); 
-        } 
-    } 
+
+    Y_UNIT_TEST(ConnectDbAclIsOffWhenYdbRequestsWithoutDatabase) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableFeatureFlags()->SetCheckDatabaseAccessPermission(true);
+        appConfig.MutableFeatureFlags()->SetAllowYdbRequestsWithoutDatabase(true);
+        appConfig.MutableDomainsConfig()->MutableSecurityConfig()->SetEnforceUserTokenRequirement(false);
+        appConfig.MutableDomainsConfig()->MutableSecurityConfig()->AddDefaultUserSIDs("test_user_no_rights@builtin");
+        TKikimrWithGrpcAndRootSchema server(appConfig);
+
+        ui16 grpc = server.GetPort();
+        {
+            TString location = TStringBuilder() << "localhost:" << grpc;
+            auto driver = NYdb::TDriver(
+                TDriverConfig()
+                    .SetEndpoint(location)
+                    .SetDatabase("/Root"));
+
+            // with db
+            NYdb::NTable::TClientSettings settings;
+            settings.AuthToken("test_user@builtin");
+            NYdb::NTable::TTableClient client(driver, settings);
+
+            auto call = [] (NYdb::NTable::TTableClient& client) -> NYdb::TStatus {
+                return client.CreateSession().ExtractValueSync();
+            };
+            auto status = client.RetryOperationSync(call);
+
+            UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::UNAUTHORIZED, status.GetIssues().ToString());
+        }
+
+        {
+            TString location = TStringBuilder() << "localhost:" << grpc;
+            auto driver = NYdb::TDriver(
+                TDriverConfig()
+                    .SetEndpoint(location));
+
+            // without db
+            NYdb::NTable::TClientSettings settings;
+            settings.AuthToken("test_user@builtin");
+            NYdb::NTable::TTableClient client(driver, settings);
+
+            auto call = [] (NYdb::NTable::TTableClient& client) -> NYdb::TStatus {
+                return client.CreateSession().ExtractValueSync();
+            };
+            auto status = client.RetryOperationSync(call);
+
+            UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::SUCCESS, status.GetIssues().ToString());
+        }
+    }
+
+    Y_UNIT_TEST(ConnectDbAclIsOffWhenTokenIsOptionalAndNull) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableFeatureFlags()->SetCheckDatabaseAccessPermission(true);
+        appConfig.MutableFeatureFlags()->SetAllowYdbRequestsWithoutDatabase(false);
+        appConfig.MutableDomainsConfig()->MutableSecurityConfig()->SetEnforceUserTokenRequirement(false);
+        appConfig.MutableDomainsConfig()->MutableSecurityConfig()->AddDefaultUserSIDs("test_user_no_rights@builtin");
+        TKikimrWithGrpcAndRootSchema server(appConfig);
+
+        ui16 grpc = server.GetPort();
+        TString location = TStringBuilder() << "localhost:" << grpc;
+        auto driver = NYdb::TDriver(
+            TDriverConfig()
+                .SetEndpoint(location));
+
+        { // no token
+            NYdb::NTable::TClientSettings settings;
+            NYdb::NTable::TTableClient client(driver, settings);
+
+            auto call = [] (NYdb::NTable::TTableClient& client) -> NYdb::TStatus {
+                return client.CreateSession().ExtractValueSync();
+            };
+            auto status = client.RetryOperationSync(call);
+
+            UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::SUCCESS, status.GetIssues().ToString());
+        }
+    }
 /*
     Y_UNIT_TEST(SecurityTokenError) {
         NKikimrConfig::TAppConfig appConfig;
@@ -2505,10 +2505,10 @@ R"___(<main>: Error: Transaction not found: , code: 2015
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
 
-        { 
-            auto result = session.DropTable("Root/Test").ExtractValueSync(); 
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString()); 
-        } 
+        {
+            auto result = session.DropTable("Root/Test").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
     }
 
     Y_UNIT_TEST(AlterTableAddIndex) {
@@ -2959,348 +2959,348 @@ R"___(<main>: Error: Transaction not found: , code: 2015
         sessionResult = client.CreateSession().ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL(sessionResult.GetStatus(), EStatus::SUCCESS);
     }
- 
-    Y_UNIT_TEST(CopyTables) { 
-        TKikimrWithGrpcAndRootSchemaNoSystemViews server;
-        server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_NOTICE); 
- 
-        auto connection = NYdb::TDriver( 
-            TDriverConfig() 
-                .SetEndpoint(TStringBuilder() << "localhost:" << server.GetPort())); 
- 
-        NYdb::NTable::TTableClient client(connection); 
- 
-        auto sessionResult = client.CreateSession().ExtractValueSync(); 
-        UNIT_ASSERT_VALUES_EQUAL(sessionResult.GetStatus(), EStatus::SUCCESS); 
-        auto session = sessionResult.GetSession(); 
- 
-        { 
-            auto tableBuilder = client.GetTableBuilder(); 
-            tableBuilder 
-                .AddNullableColumn("Key", EPrimitiveType::Uint32) 
-                .AddNullableColumn("Value", EPrimitiveType::Utf8); 
-            tableBuilder.SetPrimaryKeyColumn("Key"); 
- 
-            auto result = session.CreateTable("/Root/Table-1", tableBuilder.Build()).ExtractValueSync(); 
-            UNIT_ASSERT_EQUAL(result.IsTransportError(), false); 
-            UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS); 
-        } 
- 
-        { 
-            auto result = session.CopyTables({{"/Root/Table-1", "/Root/Table-2"}}).ExtractValueSync(); 
-            UNIT_ASSERT_EQUAL(result.IsTransportError(), false); 
-            UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS); 
-        } 
- 
-        { 
-            auto result = session.CopyTables( 
-                                     { {"/Root/Table-1", "/Root/Table-3"} 
-                                     , {"/Root/Table-2", "/Root/Table-4"}} 
-                                     ).ExtractValueSync(); 
-            UNIT_ASSERT_EQUAL(result.IsTransportError(), false); 
-            UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS); 
-        } 
- 
-        { 
-            auto result = session.CopyTables( 
-                                     { {"/Root/Table-1", "/Root/Table-5"} 
-                                     , {"/Root/Table-2", "/Root/Table-6"} 
-                                     , {"/Root/Table-3", "/Root/Table-7"} 
-                                     , {"/Root/Table-4", "/Root/Table-8"}} 
-                                     ).ExtractValueSync(); 
-            UNIT_ASSERT_EQUAL(result.IsTransportError(), false); 
-            UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS); 
-        } 
- 
-        { 
-            auto result = session.CopyTables( 
-                                     { }).ExtractValueSync(); 
-            UNIT_ASSERT_EQUAL(result.IsTransportError(), false); 
-            UNIT_ASSERT_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetStatus()); 
-        } 
- 
-        { 
-            auto result = session.CopyTables( 
-                                     { {"/Root/Table-1", "/Root/Table-1"} 
-                                     , {"/Root/Table-2", "/Root/Table-9"}} 
-                                     ).ExtractValueSync(); 
-            UNIT_ASSERT_EQUAL(result.IsTransportError(), false); 
-            UNIT_ASSERT_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetStatus()); 
-        } 
- 
-        { 
-            auto result = session.CopyTables( 
-                                     { {"/Root/Table-1", "/Root/dir_no_exist/Table-1"} 
-                                     , {"/Root/Table-2", "/Root/Table-9"}} 
-                                     ).ExtractValueSync(); 
-            UNIT_ASSERT_EQUAL(result.IsTransportError(), false); 
-            UNIT_ASSERT_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetStatus()); 
-        } 
- 
-        { 
-            auto result = session.CopyTables( 
-                                     { {"/Root/Table-1", "/Root/Table-2"} 
-                                     , {"/Root/Table-2", "/Root/Table-9"}} 
-                                     ).ExtractValueSync(); 
-            UNIT_ASSERT_EQUAL(result.IsTransportError(), false); 
-            UNIT_ASSERT_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetStatus()); 
-        } 
- 
-        { 
-            auto result = session.CopyTables( 
-                                     { {"/Root/Table-1", "/Root/Table-9"} 
-                                     , {"/Root/Table-1", "/Root/Table-10"}} 
-                                     ).ExtractValueSync(); 
-            UNIT_ASSERT_EQUAL(result.IsTransportError(), false); 
-            UNIT_ASSERT_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetStatus()); 
-        } 
- 
-        { 
-            auto result = session.CopyTables( 
-                                     { {"/Root/Table-1", "/Root/Table-3"} 
-                                     , {"/Root/Table-2", "/Root/Table-4"}} 
-                                     ).ExtractValueSync(); 
-            UNIT_ASSERT_EQUAL(result.IsTransportError(), false); 
-            UNIT_ASSERT_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetStatus()); // do not fail on exist
-        } 
- 
-        { 
-            auto tableBuilder = client.GetTableBuilder(); 
-            tableBuilder 
-                .AddNullableColumn("Key", EPrimitiveType::Uint32) 
-                .AddNullableColumn("Value", EPrimitiveType::Utf8); 
-            tableBuilder.SetPrimaryKeyColumn("Key"); 
-            tableBuilder.AddSecondaryIndex("user-index", "Value"); 
- 
-            auto result = session.CreateTable("/Root/Indexed-Table-1", tableBuilder.Build()).ExtractValueSync(); 
-            UNIT_ASSERT_EQUAL(result.IsTransportError(), false); 
-            UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS); 
-        } 
- 
-        { 
-            auto result = session.CopyTables( 
-                                     {NYdb::NTable::TCopyItem("/Root/Indexed-Table-1", "/Root/Indexed-Table-2")}) 
-                              .ExtractValueSync(); 
-            UNIT_ASSERT_EQUAL(result.IsTransportError(), false); 
-            UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS); 
-        } 
- 
-        { 
-            auto result = session.CopyTables( 
-                                     {NYdb::NTable::TCopyItem("/Root/Indexed-Table-1", "/Root/Omited-Indexes-Table-3").SetOmitIndexes()}) 
-                              .ExtractValueSync(); 
-            UNIT_ASSERT_EQUAL(result.IsTransportError(), false); 
-            UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS); 
-        } 
- 
-        { 
-            auto result = session.CopyTables( 
-                                     {NYdb::NTable::TCopyItem("/Root/Indexed-Table-1", "/Root/Omited-Indexes-Table-4").SetOmitIndexes(), 
-                                      NYdb::NTable::TCopyItem("/Root/Indexed-Table-2", "/Root/Omited-Indexes-Table-5").SetOmitIndexes(), 
-                                      NYdb::NTable::TCopyItem("/Root/Omited-Indexes-Table-3", "/Root/Omited-Indexes-Table-6").SetOmitIndexes() 
-                                      }) 
-                              .ExtractValueSync(); 
-            UNIT_ASSERT_EQUAL(result.IsTransportError(), false); 
-            UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS); 
-        } 
- 
-        { 
-            auto result = session.CopyTables( 
-                                     {NYdb::NTable::TCopyItem("/Root/Indexed-Table-1", "/Root/Indexed-Table-7"), 
-                                      NYdb::NTable::TCopyItem("/Root/Indexed-Table-2", "/Root/Omited-Indexes-Table-8").SetOmitIndexes() 
-                                     }) 
-                              .ExtractValueSync(); 
-            UNIT_ASSERT_EQUAL(result.IsTransportError(), false); 
-            UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS); 
-        } 
- 
- 
-        { 
-            auto asyncDescDir = NYdb::NScheme::TSchemeClient(connection).ListDirectory("/Root"); 
-            asyncDescDir.Wait(); 
-            const auto& val = asyncDescDir.GetValue(); 
-            auto entry = val.GetEntry(); 
-            UNIT_ASSERT_EQUAL(entry.Name, "Root"); 
-            UNIT_ASSERT_EQUAL(entry.Type, NYdb::NScheme::ESchemeEntryType::Directory); 
- 
-            auto children = val.GetChildren(); 
-            UNIT_ASSERT_EQUAL(children.size(), 16); 
-            for (const auto& child: children) { 
-                UNIT_ASSERT_EQUAL(child.Type, NYdb::NScheme::ESchemeEntryType::Table); 
- 
-                auto result = session.DropTable(TStringBuilder() << "Root" << "/" <<  child.Name).ExtractValueSync(); 
-                UNIT_ASSERT_EQUAL(result.IsTransportError(), false); 
-                UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS); 
-            } 
-        } 
-    } 
 
-    Y_UNIT_TEST(RenameTables) { 
-        TKikimrWithGrpcAndRootSchemaNoSystemViews server; 
-        server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_NOTICE); 
-        server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::GRPC_SERVER, NActors::NLog::PRI_DEBUG); 
-        server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::TX_PROXY, NActors::NLog::PRI_DEBUG); 
- 
-        auto connection = NYdb::TDriver( 
-            TDriverConfig() 
-                .SetEndpoint(TStringBuilder() << "localhost:" << server.GetPort())); 
- 
-        NYdb::NTable::TTableClient client(connection); 
- 
-        auto sessionResult = client.CreateSession().ExtractValueSync(); 
-        UNIT_ASSERT_VALUES_EQUAL(sessionResult.GetStatus(), EStatus::SUCCESS); 
-        auto session = sessionResult.GetSession(); 
- 
-        { 
-            auto tableBuilder = client.GetTableBuilder(); 
-            tableBuilder 
-                .AddNullableColumn("Key", EPrimitiveType::Uint32) 
-                .AddNullableColumn("Value", EPrimitiveType::Utf8); 
-            tableBuilder.SetPrimaryKeyColumn("Key"); 
- 
-            auto result = session.CreateTable("/Root/Table-1", tableBuilder.Build()).ExtractValueSync(); 
-            UNIT_ASSERT_EQUAL(result.IsTransportError(), false); 
-            UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS); 
-        } 
- 
-        { 
-            auto result = session.RenameTables({{"/Root/Table-1", "/Root/Table-2"}}).ExtractValueSync(); 
-            UNIT_ASSERT_EQUAL(result.IsTransportError(), false); 
-            UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS); 
-        } 
- 
-        { 
-            auto result = session.CopyTables({{"/Root/Table-2", "/Root/Table-1"}}).ExtractValueSync(); 
-            UNIT_ASSERT_EQUAL(result.IsTransportError(), false); 
-            UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS); 
-        } 
- 
-        { 
-            auto result = session.RenameTables( 
-                                     { {"/Root/Table-1", "/Root/Table-2"} } 
-                                     ).ExtractValueSync(); 
-            UNIT_ASSERT_EQUAL(result.IsTransportError(), false); 
-            UNIT_ASSERT_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetStatus()); 
-        } 
- 
-        { 
-            auto result = session.RenameTables( 
-                                     { {"/Root/Table-1", "/Root/Table-3"} 
-                                     , {"/Root/Table-2", "/Root/Table-4"}} 
-                                     ).ExtractValueSync(); 
-            UNIT_ASSERT_EQUAL(result.IsTransportError(), false); 
-            UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS); 
-        } 
- 
-        { 
-            auto result = session.RenameTables( 
-                                     { }).ExtractValueSync(); 
-            UNIT_ASSERT_EQUAL(result.IsTransportError(), false); 
-            UNIT_ASSERT_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetStatus()); 
-        } 
- 
-        { 
-            auto result = session.RenameTables( 
-                                     { {"/Root/Table-1", "/Root/Table-1"} 
-                                     , {"/Root/Table-2", "/Root/Table-9"}} 
-                                     ).ExtractValueSync(); 
-            UNIT_ASSERT_EQUAL(result.IsTransportError(), false); 
-            UNIT_ASSERT_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetStatus()); 
-        } 
- 
-        { 
-            auto result = session.RenameTables( 
-                                     { {"/Root/Table-1", "/Root/dir_no_exist/Table-1"} 
-                                     , {"/Root/Table-2", "/Root/Table-9"}} 
-                                     ).ExtractValueSync(); 
-            UNIT_ASSERT_EQUAL(result.IsTransportError(), false); 
-            UNIT_ASSERT_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetStatus()); 
-        } 
- 
-        { 
-            auto result = session.RenameTables( 
-                                     { {"/Root/Table-1", "/Root/Table-2"} 
-                                     , {"/Root/Table-2", "/Root/Table-9"}} 
-                                     ).ExtractValueSync(); 
-            UNIT_ASSERT_EQUAL(result.IsTransportError(), false); 
-            UNIT_ASSERT_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetStatus()); 
-        } 
- 
-        { 
-            auto result = session.RenameTables( 
-                                     { {"/Root/Table-1", "/Root/Table-9"} 
-                                     , {"/Root/Table-1", "/Root/Table-10"}} 
-                                     ).ExtractValueSync(); 
-            UNIT_ASSERT_EQUAL(result.IsTransportError(), false); 
-            UNIT_ASSERT_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetStatus()); 
-        } 
- 
- 
-        { 
-            auto result = session.RenameTables( 
-                                     { {"/Root/Table-1", "/Root/Table-3"} 
-                                     , {"/Root/Table-2", "/Root/Table-4"}} 
-                                     ).ExtractValueSync(); 
-            UNIT_ASSERT_EQUAL(result.IsTransportError(), false); 
-            UNIT_ASSERT_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetStatus()); // do not fail on exist 
-        } 
- 
-        { 
-            auto result = session.CopyTables( 
-                                     { {"/Root/Table-3", "/Root/Table-1"} 
-                                     , {"/Root/Table-4", "/Root/Table-2"}} 
-                                     ).ExtractValueSync(); 
-            UNIT_ASSERT_EQUAL(result.IsTransportError(), false); 
-            UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS); 
-        } 
- 
-        { 
-            auto result = session.RenameTables( 
-                                     { {"/Root/Table-1", "/Root/Table-3"} 
-                                     , {"/Root/Table-2", "/Root/Table-4"}} 
-                                     ).ExtractValueSync(); 
-            UNIT_ASSERT_EQUAL(result.IsTransportError(), false); 
-            UNIT_ASSERT_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetStatus()); // do not fail on exist 
-        } 
- 
-        { 
-            auto result = session.RenameTables( 
-                                     {NYdb::NTable::TRenameItem("/Root/Table-4", "/Root/Table-1").SetReplaceDestination()}) 
-                              .ExtractValueSync(); 
-            UNIT_ASSERT_EQUAL(result.IsTransportError(), false); 
-            UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS); 
-        } 
- 
-        { 
-            auto result = session.RenameTables( 
-                                     {NYdb::NTable::TRenameItem("/Root/Table-2", "/Root/Table-1").SetReplaceDestination(), 
-                                     {"/Root/Table-3", "/Root/Table-2"}}) 
-                              .ExtractValueSync(); 
-            UNIT_ASSERT_EQUAL(result.IsTransportError(), false); 
-            UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS); 
-        } 
- 
-        { 
-            auto asyncDescDir = NYdb::NScheme::TSchemeClient(connection).ListDirectory("/Root"); 
-            asyncDescDir.Wait(); 
-            const auto& val = asyncDescDir.GetValue(); 
-            auto entry = val.GetEntry(); 
-            UNIT_ASSERT_EQUAL(entry.Name, "Root"); 
-            UNIT_ASSERT_EQUAL(entry.Type, NYdb::NScheme::ESchemeEntryType::Directory); 
- 
-            auto children = val.GetChildren(); 
-            UNIT_ASSERT_EQUAL_C(children.size(), 2, children.size()); 
-            for (const auto& child: children) { 
-                UNIT_ASSERT_EQUAL(child.Type, NYdb::NScheme::ESchemeEntryType::Table); 
- 
-                auto result = session.DropTable(TStringBuilder() << "Root" << "/" <<  child.Name).ExtractValueSync(); 
-                UNIT_ASSERT_EQUAL(result.IsTransportError(), false); 
-                UNIT_ASSERT_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetStatus()); 
-            } 
-        } 
-    } 
- 
- 
+    Y_UNIT_TEST(CopyTables) {
+        TKikimrWithGrpcAndRootSchemaNoSystemViews server;
+        server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_NOTICE);
+
+        auto connection = NYdb::TDriver(
+            TDriverConfig()
+                .SetEndpoint(TStringBuilder() << "localhost:" << server.GetPort()));
+
+        NYdb::NTable::TTableClient client(connection);
+
+        auto sessionResult = client.CreateSession().ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(sessionResult.GetStatus(), EStatus::SUCCESS);
+        auto session = sessionResult.GetSession();
+
+        {
+            auto tableBuilder = client.GetTableBuilder();
+            tableBuilder
+                .AddNullableColumn("Key", EPrimitiveType::Uint32)
+                .AddNullableColumn("Value", EPrimitiveType::Utf8);
+            tableBuilder.SetPrimaryKeyColumn("Key");
+
+            auto result = session.CreateTable("/Root/Table-1", tableBuilder.Build()).ExtractValueSync();
+            UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        }
+
+        {
+            auto result = session.CopyTables({{"/Root/Table-1", "/Root/Table-2"}}).ExtractValueSync();
+            UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        }
+
+        {
+            auto result = session.CopyTables(
+                                     { {"/Root/Table-1", "/Root/Table-3"}
+                                     , {"/Root/Table-2", "/Root/Table-4"}}
+                                     ).ExtractValueSync();
+            UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        }
+
+        {
+            auto result = session.CopyTables(
+                                     { {"/Root/Table-1", "/Root/Table-5"}
+                                     , {"/Root/Table-2", "/Root/Table-6"}
+                                     , {"/Root/Table-3", "/Root/Table-7"}
+                                     , {"/Root/Table-4", "/Root/Table-8"}}
+                                     ).ExtractValueSync();
+            UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        }
+
+        {
+            auto result = session.CopyTables(
+                                     { }).ExtractValueSync();
+            UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetStatus());
+        }
+
+        {
+            auto result = session.CopyTables(
+                                     { {"/Root/Table-1", "/Root/Table-1"}
+                                     , {"/Root/Table-2", "/Root/Table-9"}}
+                                     ).ExtractValueSync();
+            UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetStatus());
+        }
+
+        {
+            auto result = session.CopyTables(
+                                     { {"/Root/Table-1", "/Root/dir_no_exist/Table-1"}
+                                     , {"/Root/Table-2", "/Root/Table-9"}}
+                                     ).ExtractValueSync();
+            UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetStatus());
+        }
+
+        {
+            auto result = session.CopyTables(
+                                     { {"/Root/Table-1", "/Root/Table-2"}
+                                     , {"/Root/Table-2", "/Root/Table-9"}}
+                                     ).ExtractValueSync();
+            UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetStatus());
+        }
+
+        {
+            auto result = session.CopyTables(
+                                     { {"/Root/Table-1", "/Root/Table-9"}
+                                     , {"/Root/Table-1", "/Root/Table-10"}}
+                                     ).ExtractValueSync();
+            UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetStatus());
+        }
+
+        {
+            auto result = session.CopyTables(
+                                     { {"/Root/Table-1", "/Root/Table-3"}
+                                     , {"/Root/Table-2", "/Root/Table-4"}}
+                                     ).ExtractValueSync();
+            UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetStatus()); // do not fail on exist
+        }
+
+        {
+            auto tableBuilder = client.GetTableBuilder();
+            tableBuilder
+                .AddNullableColumn("Key", EPrimitiveType::Uint32)
+                .AddNullableColumn("Value", EPrimitiveType::Utf8);
+            tableBuilder.SetPrimaryKeyColumn("Key");
+            tableBuilder.AddSecondaryIndex("user-index", "Value");
+
+            auto result = session.CreateTable("/Root/Indexed-Table-1", tableBuilder.Build()).ExtractValueSync();
+            UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        }
+
+        {
+            auto result = session.CopyTables(
+                                     {NYdb::NTable::TCopyItem("/Root/Indexed-Table-1", "/Root/Indexed-Table-2")})
+                              .ExtractValueSync();
+            UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        }
+
+        {
+            auto result = session.CopyTables(
+                                     {NYdb::NTable::TCopyItem("/Root/Indexed-Table-1", "/Root/Omited-Indexes-Table-3").SetOmitIndexes()})
+                              .ExtractValueSync();
+            UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        }
+
+        {
+            auto result = session.CopyTables(
+                                     {NYdb::NTable::TCopyItem("/Root/Indexed-Table-1", "/Root/Omited-Indexes-Table-4").SetOmitIndexes(),
+                                      NYdb::NTable::TCopyItem("/Root/Indexed-Table-2", "/Root/Omited-Indexes-Table-5").SetOmitIndexes(),
+                                      NYdb::NTable::TCopyItem("/Root/Omited-Indexes-Table-3", "/Root/Omited-Indexes-Table-6").SetOmitIndexes()
+                                      })
+                              .ExtractValueSync();
+            UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        }
+
+        {
+            auto result = session.CopyTables(
+                                     {NYdb::NTable::TCopyItem("/Root/Indexed-Table-1", "/Root/Indexed-Table-7"),
+                                      NYdb::NTable::TCopyItem("/Root/Indexed-Table-2", "/Root/Omited-Indexes-Table-8").SetOmitIndexes()
+                                     })
+                              .ExtractValueSync();
+            UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        }
+
+
+        {
+            auto asyncDescDir = NYdb::NScheme::TSchemeClient(connection).ListDirectory("/Root");
+            asyncDescDir.Wait();
+            const auto& val = asyncDescDir.GetValue();
+            auto entry = val.GetEntry();
+            UNIT_ASSERT_EQUAL(entry.Name, "Root");
+            UNIT_ASSERT_EQUAL(entry.Type, NYdb::NScheme::ESchemeEntryType::Directory);
+
+            auto children = val.GetChildren();
+            UNIT_ASSERT_EQUAL(children.size(), 16);
+            for (const auto& child: children) {
+                UNIT_ASSERT_EQUAL(child.Type, NYdb::NScheme::ESchemeEntryType::Table);
+
+                auto result = session.DropTable(TStringBuilder() << "Root" << "/" <<  child.Name).ExtractValueSync();
+                UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
+                UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            }
+        }
+    }
+
+    Y_UNIT_TEST(RenameTables) {
+        TKikimrWithGrpcAndRootSchemaNoSystemViews server;
+        server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_NOTICE);
+        server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::GRPC_SERVER, NActors::NLog::PRI_DEBUG);
+        server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::TX_PROXY, NActors::NLog::PRI_DEBUG);
+
+        auto connection = NYdb::TDriver(
+            TDriverConfig()
+                .SetEndpoint(TStringBuilder() << "localhost:" << server.GetPort()));
+
+        NYdb::NTable::TTableClient client(connection);
+
+        auto sessionResult = client.CreateSession().ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(sessionResult.GetStatus(), EStatus::SUCCESS);
+        auto session = sessionResult.GetSession();
+
+        {
+            auto tableBuilder = client.GetTableBuilder();
+            tableBuilder
+                .AddNullableColumn("Key", EPrimitiveType::Uint32)
+                .AddNullableColumn("Value", EPrimitiveType::Utf8);
+            tableBuilder.SetPrimaryKeyColumn("Key");
+
+            auto result = session.CreateTable("/Root/Table-1", tableBuilder.Build()).ExtractValueSync();
+            UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        }
+
+        {
+            auto result = session.RenameTables({{"/Root/Table-1", "/Root/Table-2"}}).ExtractValueSync();
+            UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        }
+
+        {
+            auto result = session.CopyTables({{"/Root/Table-2", "/Root/Table-1"}}).ExtractValueSync();
+            UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        }
+
+        {
+            auto result = session.RenameTables(
+                                     { {"/Root/Table-1", "/Root/Table-2"} }
+                                     ).ExtractValueSync();
+            UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetStatus());
+        }
+
+        {
+            auto result = session.RenameTables(
+                                     { {"/Root/Table-1", "/Root/Table-3"}
+                                     , {"/Root/Table-2", "/Root/Table-4"}}
+                                     ).ExtractValueSync();
+            UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        }
+
+        {
+            auto result = session.RenameTables(
+                                     { }).ExtractValueSync();
+            UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetStatus());
+        }
+
+        {
+            auto result = session.RenameTables(
+                                     { {"/Root/Table-1", "/Root/Table-1"}
+                                     , {"/Root/Table-2", "/Root/Table-9"}}
+                                     ).ExtractValueSync();
+            UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetStatus());
+        }
+
+        {
+            auto result = session.RenameTables(
+                                     { {"/Root/Table-1", "/Root/dir_no_exist/Table-1"}
+                                     , {"/Root/Table-2", "/Root/Table-9"}}
+                                     ).ExtractValueSync();
+            UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetStatus());
+        }
+
+        {
+            auto result = session.RenameTables(
+                                     { {"/Root/Table-1", "/Root/Table-2"}
+                                     , {"/Root/Table-2", "/Root/Table-9"}}
+                                     ).ExtractValueSync();
+            UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetStatus());
+        }
+
+        {
+            auto result = session.RenameTables(
+                                     { {"/Root/Table-1", "/Root/Table-9"}
+                                     , {"/Root/Table-1", "/Root/Table-10"}}
+                                     ).ExtractValueSync();
+            UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetStatus());
+        }
+
+
+        {
+            auto result = session.RenameTables(
+                                     { {"/Root/Table-1", "/Root/Table-3"}
+                                     , {"/Root/Table-2", "/Root/Table-4"}}
+                                     ).ExtractValueSync();
+            UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetStatus()); // do not fail on exist
+        }
+
+        {
+            auto result = session.CopyTables(
+                                     { {"/Root/Table-3", "/Root/Table-1"}
+                                     , {"/Root/Table-4", "/Root/Table-2"}}
+                                     ).ExtractValueSync();
+            UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        }
+
+        {
+            auto result = session.RenameTables(
+                                     { {"/Root/Table-1", "/Root/Table-3"}
+                                     , {"/Root/Table-2", "/Root/Table-4"}}
+                                     ).ExtractValueSync();
+            UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetStatus()); // do not fail on exist
+        }
+
+        {
+            auto result = session.RenameTables(
+                                     {NYdb::NTable::TRenameItem("/Root/Table-4", "/Root/Table-1").SetReplaceDestination()})
+                              .ExtractValueSync();
+            UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        }
+
+        {
+            auto result = session.RenameTables(
+                                     {NYdb::NTable::TRenameItem("/Root/Table-2", "/Root/Table-1").SetReplaceDestination(),
+                                     {"/Root/Table-3", "/Root/Table-2"}})
+                              .ExtractValueSync();
+            UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        }
+
+        {
+            auto asyncDescDir = NYdb::NScheme::TSchemeClient(connection).ListDirectory("/Root");
+            asyncDescDir.Wait();
+            const auto& val = asyncDescDir.GetValue();
+            auto entry = val.GetEntry();
+            UNIT_ASSERT_EQUAL(entry.Name, "Root");
+            UNIT_ASSERT_EQUAL(entry.Type, NYdb::NScheme::ESchemeEntryType::Directory);
+
+            auto children = val.GetChildren();
+            UNIT_ASSERT_EQUAL_C(children.size(), 2, children.size());
+            for (const auto& child: children) {
+                UNIT_ASSERT_EQUAL(child.Type, NYdb::NScheme::ESchemeEntryType::Table);
+
+                auto result = session.DropTable(TStringBuilder() << "Root" << "/" <<  child.Name).ExtractValueSync();
+                UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
+                UNIT_ASSERT_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetStatus());
+            }
+        }
+    }
+
+
     namespace {
 
         TStoragePools CreatePoolsForTenant(TClient& client, const TDomainsInfo::TDomain::TStoragePoolKinds& pool_types, const TString& tenant)

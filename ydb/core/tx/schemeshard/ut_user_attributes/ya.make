@@ -1,17 +1,17 @@
 UNITTEST_FOR(ydb/core/tx/schemeshard)
- 
+
 OWNER(
     svc
     g:kikimr
 )
- 
-FORK_SUBTESTS() 
+
+FORK_SUBTESTS()
 
 TIMEOUT(600)
 
 SIZE(MEDIUM)
- 
-PEERDIR( 
+
+PEERDIR(
     library/cpp/http/io
     library/cpp/http/server
     library/cpp/svnversion
@@ -30,12 +30,12 @@ PEERDIR(
     ydb/core/tx/schemeshard/ut_helpers
     ydb/core/util
     ydb/library/yql/public/issue
-) 
- 
+)
+
 YQL_LAST_ABI_VERSION()
 
-SRCS( 
-    ut_user_attributes.cpp 
-) 
- 
-END() 
+SRCS(
+    ut_user_attributes.cpp
+)
+
+END()

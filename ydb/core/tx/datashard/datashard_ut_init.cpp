@@ -11,7 +11,7 @@
 
 namespace NKikimr {
 
-using namespace NSchemeShard; 
+using namespace NSchemeShard;
 using namespace Tests;
 using NClient::TValue;
 
@@ -42,7 +42,7 @@ TString GetTablePath(TTestActorRuntime &runtime,
     TValue value = TValue::Create(res.GetValue(), res.GetType());
     TString schema = value["myRes"]["Schema"];
 
-    NKikimrSchemeOp::TTableDescription desc; 
+    NKikimrSchemeOp::TTableDescription desc;
     Y_PROTOBUF_SUPPRESS_NODISCARD desc.ParseFromArray(schema.data(), schema.size());
 
     return desc.GetPath();
@@ -143,11 +143,11 @@ Y_UNIT_TEST_SUITE(TTxDataShardTestInit) {
                     NKikimrTxDataShard::TFlatSchemeTransaction tx;
                     Y_PROTOBUF_SUPPRESS_NODISCARD tx.ParseFromArray(body.Data(), body.Size());
                     if (tx.HasCreateTable()) {
-                        tableId = tx.GetCreateTable().GetId_Deprecated(); 
-                        if (tx.GetCreateTable().HasPathId()) { 
-                            UNIT_ASSERT_EQUAL(ChangeStateStorage(Tests::SchemeRoot, serverSettings.Domain), tx.GetCreateTable().GetPathId().GetOwnerId()); 
-                            tableId = tx.GetCreateTable().GetPathId().GetLocalId(); 
-                        } 
+                        tableId = tx.GetCreateTable().GetId_Deprecated();
+                        if (tx.GetCreateTable().HasPathId()) {
+                            UNIT_ASSERT_EQUAL(ChangeStateStorage(Tests::SchemeRoot, serverSettings.Domain), tx.GetCreateTable().GetPathId().GetOwnerId());
+                            tableId = tx.GetCreateTable().GetPathId().GetLocalId();
+                        }
                         if (oldCreate) {
                             tx.MutableCreateTable()->ClearPath();
                             Y_PROTOBUF_SUPPRESS_NODISCARD tx.SerializeToString(&body);
@@ -155,8 +155,8 @@ Y_UNIT_TEST_SUITE(TTxDataShardTestInit) {
                         }
                     }
                 }
-            } else if (event->GetTypeRewrite() == TEvSchemeShard::EvDescribeSchemeResult) { 
-                auto &rec = event->Get<TEvSchemeShard::TEvDescribeSchemeResult>()->GetRecord(); 
+            } else if (event->GetTypeRewrite() == TEvSchemeShard::EvDescribeSchemeResult) {
+                auto &rec = event->Get<TEvSchemeShard::TEvDescribeSchemeResult>()->GetRecord();
                 const bool hasPartitioning = rec.GetPathDescription().TablePartitionsSize();
                 // there are few in-flight TEvDescribeSchemeResult msgs, we need one with no partitioning
                 if (!hasPartitioning && rec.GetPathDescription().GetSelf().GetPathId() == tableId) {
@@ -181,7 +181,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardTestInit) {
             if (oldCreate) {
                 while (!sawResolve) {
                     TDispatchOptions options;
-                    options.FinalEvents.emplace_back(TEvSchemeShard::EvDescribeSchemeResult); 
+                    options.FinalEvents.emplace_back(TEvSchemeShard::EvDescribeSchemeResult);
                     runtime.DispatchEvents(options);
                 }
             }

@@ -447,18 +447,18 @@ public:
         }
     }
 
-    void FillSubdomainCreationInfo(NKikimrSubDomains::TSubDomainSettings &subdomain) 
-    { 
-        subdomain.SetName(Subdomain.second); 
-        if (Tenant->IsExternalSubdomain) { 
-            subdomain.SetExternalSchemeShard(true); 
+    void FillSubdomainCreationInfo(NKikimrSubDomains::TSubDomainSettings &subdomain)
+    {
+        subdomain.SetName(Subdomain.second);
+        if (Tenant->IsExternalSubdomain) {
+            subdomain.SetExternalSchemeShard(true);
             if (Tenant->IsExternalHive) {
                 subdomain.SetExternalHive(true);
             }
             if (Tenant->IsExternalSysViewProcessor) {
                 subdomain.SetExternalSysViewProcessor(true);
             }
-        } 
+        }
 
         if (SharedTenant) {
             const auto &resourcesDomainId = SharedTenant->DomainId;
@@ -466,9 +466,9 @@ public:
             resourcesDomainKey.SetSchemeShard(resourcesDomainId.OwnerId);
             resourcesDomainKey.SetPathId(resourcesDomainId.LocalPathId);
         }
-    } 
- 
-    void FillSubdomainAlterInfo(NKikimrSubDomains::TSubDomainSettings &subdomain, 
+    }
+
+    void FillSubdomainAlterInfo(NKikimrSubDomains::TSubDomainSettings &subdomain,
                            bool tablets)
     {
         subdomain.SetName(Subdomain.second);
@@ -478,15 +478,15 @@ public:
             subdomain.SetPlanResolution(Tenant->PlanResolution);
             subdomain.SetTimeCastBucketsPerMediator(Tenant->TimeCastBucketsPerMediator);
         }
-        if (Tenant->IsExternalSubdomain) { 
-            subdomain.SetExternalSchemeShard(true); 
+        if (Tenant->IsExternalSubdomain) {
+            subdomain.SetExternalSchemeShard(true);
             if (Tenant->IsExternalHive) {
                 subdomain.SetExternalHive(true);
             }
             if (Tenant->IsExternalSysViewProcessor) {
                 subdomain.SetExternalSysViewProcessor(true);
             }
-        } 
+        }
 
         for (auto &pr : (SharedTenant ? SharedTenant->StoragePools : Tenant->StoragePools)) {
             // N.B. only provide schemeshard with pools that have at least one allocated group
@@ -526,7 +526,7 @@ public:
         auto &tx = *request->Record.MutableTransaction()->MutableModifyScheme();
         tx.SetWorkingDir(Subdomain.first);
 
-        tx.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterUserAttributes); 
+        tx.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterUserAttributes);
 
         tx.MutableAlterUserAttributes()->CopyFrom(Tenant->Attributes);
         tx.MutableAlterUserAttributes()->SetPathName(Subdomain.second);
@@ -553,11 +553,11 @@ public:
 
         FillSubdomainAlterInfo(*tx.MutableSubDomain(), true);
 
-        if (Tenant->IsExternalSubdomain) { 
-            tx.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterExtSubDomain); 
-        } else { 
-            tx.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterSubDomain); 
-        } 
+        if (Tenant->IsExternalSubdomain) {
+            tx.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterExtSubDomain);
+        } else {
+            tx.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterSubDomain);
+        }
 
         BLOG_TRACE("TSubdomainManip(" << Tenant->Path << ") send alter subdomain cmd: "
                     << request->ToString());
@@ -575,13 +575,13 @@ public:
         if (Tenant->UserToken.GetUserSID())
             request->Record.SetUserToken(Tenant->UserToken.SerializeAsString());
         auto &tx = *request->Record.MutableTransaction()->MutableModifyScheme();
-        if (Tenant->IsExternalSubdomain) { 
-            tx.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateExtSubDomain); 
-        } else { 
-            tx.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateSubDomain); 
-        } 
+        if (Tenant->IsExternalSubdomain) {
+            tx.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateExtSubDomain);
+        } else {
+            tx.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateSubDomain);
+        }
         tx.SetWorkingDir(Subdomain.first);
-        FillSubdomainCreationInfo(*tx.MutableSubDomain()); 
+        FillSubdomainCreationInfo(*tx.MutableSubDomain());
         if (Tenant->Attributes.UserAttributesSize())
             tx.MutableAlterUserAttributes()->CopyFrom(Tenant->Attributes);
 
@@ -601,11 +601,11 @@ public:
         if (Tenant->UserToken.GetUserSID())
             request->Record.SetUserToken(Tenant->UserToken.SerializeAsString());
         auto &tx = *request->Record.MutableTransaction()->MutableModifyScheme();
-        if (Tenant->IsExternalSubdomain) { 
-            tx.SetOperationType(NKikimrSchemeOp::ESchemeOpForceDropExtSubDomain); 
-        } else { 
-            tx.SetOperationType(NKikimrSchemeOp::ESchemeOpForceDropSubDomain); 
-        } 
+        if (Tenant->IsExternalSubdomain) {
+            tx.SetOperationType(NKikimrSchemeOp::ESchemeOpForceDropExtSubDomain);
+        } else {
+            tx.SetOperationType(NKikimrSchemeOp::ESchemeOpForceDropSubDomain);
+        }
         tx.SetWorkingDir(Subdomain.first);
         tx.MutableDrop()->SetName(Subdomain.second);
 
@@ -691,7 +691,7 @@ public:
         if (!Pipe)
             OpenPipe(ctx);
 
-        auto request = MakeHolder<TEvSchemeShard::TEvNotifyTxCompletion>(); 
+        auto request = MakeHolder<TEvSchemeShard::TEvNotifyTxCompletion>();
         request->Record.SetTxId(TxId);
 
         BLOG_TRACE("TSubdomainManip(" << Tenant->Path << ") send notification request: " << request->ToString());
@@ -705,7 +705,7 @@ public:
         if (!Pipe)
             OpenPipe(ctx);
 
-        auto request = MakeHolder<TEvSchemeShard::TEvDescribeScheme>(Tenant->Path); 
+        auto request = MakeHolder<TEvSchemeShard::TEvDescribeScheme>(Tenant->Path);
         NTabletPipe::SendData(ctx, Pipe, request.Release());
     }
 
@@ -728,12 +728,12 @@ public:
         }
     }
 
-    void Handle(TEvSchemeShard::TEvNotifyTxCompletionRegistered::TPtr &ev, const TActorContext&) { 
+    void Handle(TEvSchemeShard::TEvNotifyTxCompletionRegistered::TPtr &ev, const TActorContext&) {
         BLOG_D("TSubdomainManip(" << Tenant->Path << ") got TEvNotifyTxCompletionRegistered: "
                     << ev->Get()->Record.ShortDebugString());
     }
 
-    void Handle(TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr &ev, const TActorContext& ctx) { 
+    void Handle(TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr &ev, const TActorContext& ctx) {
         BLOG_D("TSubdomainManip(" << Tenant->Path << ") got TEvNotifyTxCompletionResult: "
                     << ev->Get()->Record.ShortDebugString());
 
@@ -786,8 +786,8 @@ public:
         case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecError:
             if (Action == REMOVE) {
                 // Check if removal finished or in-progress.
-                if (rec.GetSchemeShardStatus() == NKikimrScheme::StatusPathDoesNotExist 
-                    || rec.GetSchemeShardStatus() == NKikimrScheme::StatusMultipleModifications) { 
+                if (rec.GetSchemeShardStatus() == NKikimrScheme::StatusPathDoesNotExist
+                    || rec.GetSchemeShardStatus() == NKikimrScheme::StatusMultipleModifications) {
                     BLOG_D("TSubdomainManip(" << Tenant->Path << ") consider dubdomain is removed");
                     ActionFinished(ctx);
                     break;
@@ -802,7 +802,7 @@ public:
         }
     }
 
-    void Handle(TEvSchemeShard::TEvDescribeSchemeResult::TPtr ev, const TActorContext &ctx) 
+    void Handle(TEvSchemeShard::TEvDescribeSchemeResult::TPtr ev, const TActorContext &ctx)
     {
         const auto &rec = ev->Get()->GetRecord();
 
@@ -811,10 +811,10 @@ public:
 
         if (Action == REMOVE) {
             switch (rec.GetStatus()) {
-            case NKikimrScheme::EStatus::StatusPathDoesNotExist: 
+            case NKikimrScheme::EStatus::StatusPathDoesNotExist:
                 ActionFinished(ctx);
                 break;
-            case NKikimrScheme::EStatus::StatusSuccess: 
+            case NKikimrScheme::EStatus::StatusSuccess:
                 DropSubdomain(ctx);
                 break;
             default:
@@ -825,10 +825,10 @@ public:
             return;
         }
 
-        if (rec.GetStatus() != NKikimrScheme::EStatus::StatusSuccess) { 
+        if (rec.GetStatus() != NKikimrScheme::EStatus::StatusSuccess) {
             BLOG_ERROR("TSubdomainManip(" << Tenant->Path << ") "
                         << "Receive TEvDescribeSchemeResult with bad status "
-                        << NKikimrScheme::EStatus_Name(rec.GetStatus()) << 
+                        << NKikimrScheme::EStatus_Name(rec.GetStatus()) <<
                         " reason is <" << rec.GetReason() << ">" <<
                         " while resolving subdomain " << Tenant->Path);
 
@@ -837,13 +837,13 @@ public:
         }
 
         auto pathType = rec.GetPathDescription().GetSelf().GetPathType();
-        auto expectedPathType = Tenant->IsExternalSubdomain ? NKikimrSchemeOp::EPathTypeExtSubDomain : NKikimrSchemeOp::EPathTypeSubDomain; 
-        if (pathType != expectedPathType) { 
+        auto expectedPathType = Tenant->IsExternalSubdomain ? NKikimrSchemeOp::EPathTypeExtSubDomain : NKikimrSchemeOp::EPathTypeSubDomain;
+        if (pathType != expectedPathType) {
             BLOG_ERROR("TSubdomainManip(" << Tenant->Path << ") "
                         << "Resolve subdomain fail, tenant path "
                         << Tenant->Path << " has invalid path type "
-                        << NKikimrSchemeOp::EPathType_Name(pathType) 
-                        << " but expected " << NKikimrSchemeOp::EPathType_Name(expectedPathType)); 
+                        << NKikimrSchemeOp::EPathType_Name(pathType)
+                        << " but expected " << NKikimrSchemeOp::EPathType_Name(expectedPathType));
             ReplyAndDie(new TTenantsManager::TEvPrivate::TEvSubdomainFailed(Tenant, "bad path type"), ctx);
             return;
         }
@@ -866,9 +866,9 @@ public:
 
     STFUNC(StateSubdomain) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(TEvSchemeShard::TEvDescribeSchemeResult, Handle); 
-            HFunc(TEvSchemeShard::TEvNotifyTxCompletionRegistered, Handle); 
-            HFunc(TEvSchemeShard::TEvNotifyTxCompletionResult, Handle); 
+            HFunc(TEvSchemeShard::TEvDescribeSchemeResult, Handle);
+            HFunc(TEvSchemeShard::TEvNotifyTxCompletionRegistered, Handle);
+            HFunc(TEvSchemeShard::TEvNotifyTxCompletionResult, Handle);
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
             HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
             HFunc(TEvTxUserProxy::TEvProposeTransactionStatus, HandleSubdomain);
@@ -882,7 +882,7 @@ public:
 
     STFUNC(GetSubdomainKey) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(TEvSchemeShard::TEvDescribeSchemeResult, Handle); 
+            HFunc(TEvSchemeShard::TEvDescribeSchemeResult, Handle);
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
             HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
 
@@ -1181,7 +1181,7 @@ TTenantsManager::TTenant::TTenant(const TString &path,
     , SubdomainVersion(1)
     , ConfirmedSubdomain(0)
     , Generation(0)
-    , IsExternalSubdomain(false) 
+    , IsExternalSubdomain(false)
     , IsExternalHive(false)
     , IsExternalSysViewProcessor(false)
     , AreResourcesShared(false)
@@ -2245,7 +2245,7 @@ void TTenantsManager::DbAddTenant(TTenant::TPtr tenant,
                 << " confirmedsubdomain=" << tenant->ConfirmedSubdomain
                 << " attrs=" << tenant->Attributes.ShortDebugString()
                 << " generation=" << tenant->Generation
-                << " errorcode=" << tenant->ErrorCode 
+                << " errorcode=" << tenant->ErrorCode
                 << " isExternalSubDomain=" << tenant->IsExternalSubdomain
                 << " isExternalHive=" << tenant->IsExternalHive
                 << " isExternalSysViewProcessor=" << tenant->IsExternalSysViewProcessor
@@ -2266,7 +2266,7 @@ void TTenantsManager::DbAddTenant(TTenant::TPtr tenant,
                 NIceDb::TUpdate<Schema::Tenants::ConfirmedSubdomain>(tenant->ConfirmedSubdomain),
                 NIceDb::TUpdate<Schema::Tenants::Attributes>(tenant->Attributes),
                 NIceDb::TUpdate<Schema::Tenants::Generation>(tenant->Generation),
-                NIceDb::TUpdate<Schema::Tenants::ErrorCode>(tenant->ErrorCode), 
+                NIceDb::TUpdate<Schema::Tenants::ErrorCode>(tenant->ErrorCode),
                 NIceDb::TUpdate<Schema::Tenants::IsExternalSubDomain>(tenant->IsExternalSubdomain),
                 NIceDb::TUpdate<Schema::Tenants::IsExternalHive>(tenant->IsExternalHive),
                 NIceDb::TUpdate<Schema::Tenants::IsExternalSysViewProcessor>(tenant->IsExternalSysViewProcessor),
@@ -2364,14 +2364,14 @@ bool TTenantsManager::DbLoadState(TTransactionContext &txc, const TActorContext 
         TString userToken = tenantRowset.GetValue<Schema::Tenants::UserToken>();
         ui64 subdomainVersion = tenantRowset.GetValueOrDefault<Schema::Tenants::SubdomainVersion>(1);
         ui64 confirmedSubdomain = tenantRowset.GetValueOrDefault<Schema::Tenants::ConfirmedSubdomain>(0);
-        NKikimrSchemeOp::TAlterUserAttributes attrs = tenantRowset.GetValueOrDefault<Schema::Tenants::Attributes>({}); 
+        NKikimrSchemeOp::TAlterUserAttributes attrs = tenantRowset.GetValueOrDefault<Schema::Tenants::Attributes>({});
         ui64 generation = tenantRowset.GetValueOrDefault<Schema::Tenants::Generation>(1);
         const TDomainId domainId = LoadDomainId<Schema::Tenants::SchemeShardId, Schema::Tenants::PathId>(tenantRowset);
         const TDomainId sharedDomainId = LoadDomainId<Schema::Tenants::SharedDomainSchemeShardId, Schema::Tenants::SharedDomainPathId>(tenantRowset);
         TString issue = tenantRowset.GetValueOrDefault<Schema::Tenants::Issue>("");
         Ydb::StatusIds::StatusCode errorCode
             = static_cast<Ydb::StatusIds::StatusCode>(tenantRowset.GetValueOrDefault<Schema::Tenants::ErrorCode>(0));
-        bool isExternalSubDomain = tenantRowset.GetValueOrDefault<Schema::Tenants::IsExternalSubDomain>(false); 
+        bool isExternalSubDomain = tenantRowset.GetValueOrDefault<Schema::Tenants::IsExternalSubDomain>(false);
         bool isExternalHive = tenantRowset.GetValueOrDefault<Schema::Tenants::IsExternalHive>(false);
         bool isExternalSysViewProcessor = tenantRowset.GetValueOrDefault<Schema::Tenants::IsExternalSysViewProcessor>(false);
         const bool areResourcesShared = tenantRowset.GetValueOrDefault<Schema::Tenants::AreResourcesShared>(false);
@@ -2390,7 +2390,7 @@ bool TTenantsManager::DbLoadState(TTransactionContext &txc, const TActorContext 
         tenant->SharedDomainId = sharedDomainId;
         tenant->ErrorCode = errorCode;
         tenant->Issue = issue;
-        tenant->IsExternalSubdomain = isExternalSubDomain; 
+        tenant->IsExternalSubdomain = isExternalSubDomain;
         tenant->IsExternalHive = isExternalHive;
         tenant->IsExternalSysViewProcessor = isExternalSysViewProcessor;
         tenant->AreResourcesShared = areResourcesShared;
@@ -2764,7 +2764,7 @@ void TTenantsManager::DbUpdateTenantAlterIdempotencyKey(TTenant::TPtr tenant,
 }
 
 void TTenantsManager::DbUpdateTenantUserAttributes(TTenant::TPtr tenant,
-                                                   const NKikimrSchemeOp::TAlterUserAttributes &attributes, 
+                                                   const NKikimrSchemeOp::TAlterUserAttributes &attributes,
                                                    TTransactionContext &txc,
                                                    const TActorContext &ctx)
 {

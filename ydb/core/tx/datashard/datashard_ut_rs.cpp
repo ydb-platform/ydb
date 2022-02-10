@@ -10,7 +10,7 @@
 
 namespace NKikimr {
 
-using namespace NSchemeShard; 
+using namespace NSchemeShard;
 using namespace Tests;
 
 ui64 GetRSCount(TTestActorRuntime &runtime, TActorId sender, ui64 shard)

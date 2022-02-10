@@ -199,10 +199,10 @@ public:
         Y_VERIFY(navigate->ResultSet.size() == 1);
         const auto &entry = navigate->ResultSet.front();
 
-        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::GRPC_PROXY, 
-                    "TListEndpointsRPC: handle  TEvNavigateKeySetResult" 
+        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::GRPC_PROXY,
+                    "TListEndpointsRPC: handle  TEvNavigateKeySetResult"
                         << ", entry: " << entry.ToString());
- 
+
         if (navigate->ErrorCount > 0) {
             switch (entry.Status) {
             case NSchemeCache::TSchemeCacheNavigate::EStatus::PathErrorUnknown:
@@ -216,10 +216,10 @@ public:
                 }
             default:
                 {
-                    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::GRPC_PROXY, 
-                                "TListEndpointsRPC: GENERIC_RESOLVE_ERROR" 
+                    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::GRPC_PROXY,
+                                "TListEndpointsRPC: GENERIC_RESOLVE_ERROR"
                                     << ", entry: " << entry.ToString());
- 
+
                     auto issue = MakeIssue(NKikimrIssues::TIssuesIds::GENERIC_RESOLVE_ERROR, "Database resolve failed with no certain result");
                     google::protobuf::RepeatedPtrField<TYdbIssueMessageType> issueMessages;
                     NYql::IssueToMessage(issue, issueMessages.Add());
@@ -284,14 +284,14 @@ public:
         if (RequestScheme) {
             // check presence of database (acl should be checked here too)
             const auto &entry =  SchemeCacheResponse->Request->ResultSet.front();
-            if (entry.Path.size() != 1 
-                && (entry.Kind != NSchemeCache::TSchemeCacheNavigate::KindSubdomain && entry.Kind != NSchemeCache::TSchemeCacheNavigate::KindExtSubdomain)) 
-            { 
-                LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::GRPC_PROXY, 
-                             "TListEndpointsRPC: SchemeCacheResponse path is not a database" 
-                                 << ", entry.Path: " << CanonizePath(entry.Path) 
-                                 << ", entry.Kind: " << (ui64)entry.Kind); 
- 
+            if (entry.Path.size() != 1
+                && (entry.Kind != NSchemeCache::TSchemeCacheNavigate::KindSubdomain && entry.Kind != NSchemeCache::TSchemeCacheNavigate::KindExtSubdomain))
+            {
+                LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::GRPC_PROXY,
+                             "TListEndpointsRPC: SchemeCacheResponse path is not a database"
+                                 << ", entry.Path: " << CanonizePath(entry.Path)
+                                 << ", entry.Kind: " << (ui64)entry.Kind);
+
                 auto issue = MakeIssue(NKikimrIssues::TIssuesIds::ACCESS_DENIED, "Requested path is not database name");
                 google::protobuf::RepeatedPtrField<TYdbIssueMessageType> issueMessages;
                 NYql::IssueToMessage(issue, issueMessages.Add());
@@ -301,11 +301,11 @@ public:
         }
 
         if (LookupResponse->Status != TEvStateStorage::TEvBoardInfo::EStatus::Ok) {
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::GRPC_PROXY, 
-                        "TListEndpointsRPC: LookupResponse in not OK" 
-                            << ", LookupResponse->Status: " << ui64(LookupResponse->Status)); 
- 
-            auto issue = MakeIssue(NKikimrIssues::TIssuesIds::GENERIC_RESOLVE_ERROR, "Database nodes resolve failed with no certain result"); 
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::GRPC_PROXY,
+                        "TListEndpointsRPC: LookupResponse in not OK"
+                            << ", LookupResponse->Status: " << ui64(LookupResponse->Status));
+
+            auto issue = MakeIssue(NKikimrIssues::TIssuesIds::GENERIC_RESOLVE_ERROR, "Database nodes resolve failed with no certain result");
             google::protobuf::RepeatedPtrField<TYdbIssueMessageType> issueMessages;
             NYql::IssueToMessage(issue, issueMessages.Add());
             Request->SendResult(Ydb::StatusIds::UNAVAILABLE, issueMessages);

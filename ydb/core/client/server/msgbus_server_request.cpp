@@ -185,7 +185,7 @@ void TMessageBusServerRequest::FinishReply(const TActorContext &ctx)
     if (Proposal)
         AsyncDestroy(Proposal, ctx, AppData(ctx)->UserPoolId);
 
-    Die(ctx); 
+    Die(ctx);
 }
 
 void TMessageBusServerRequest::Handle(TMiniKQLCompileServiceEvents::TEvCompileStatus::TPtr &ev, const TActorContext &ctx) {
@@ -299,7 +299,7 @@ void TMessageBusServerRequest::Handle(TEvTxUserProxy::TEvProposeTransactionStatu
     case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::EmptyAffectedSet:
     case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecError:
     case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::AccessDenied:
-    case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::DomainLocalityError: 
+    case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::DomainLocalityError:
     case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecResultUnavailable:
     case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecCancelled:
     case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::WrongRequest:

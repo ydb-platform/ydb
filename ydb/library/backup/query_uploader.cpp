@@ -11,15 +11,15 @@ static const char DOC_API_REQUEST_TYPE[] = "_document_api_request";
 // TUploader
 ////////////////////////////////////////////////////////////////////////////////
 
-ui32 TUploader::TOptions::GetRps() const { 
-    return Rate * TDuration::Seconds(1).MilliSeconds() / Interval.MilliSeconds(); 
-} 
- 
+ui32 TUploader::TOptions::GetRps() const {
+    return Rate * TDuration::Seconds(1).MilliSeconds() / Interval.MilliSeconds();
+}
+
 TUploader::TUploader(const TUploader::TOptions &opts, NYdb::NTable::TTableClient& client, const TString &query)
     : Opts(opts)
     , Query(query)
     , ShouldStop(0)
-    , RequestLimiter(opts.GetRps(), opts.GetRps()) 
+    , RequestLimiter(opts.GetRps(), opts.GetRps())
     , Client(client)
 {
     TasksQueue = MakeSimpleShared<TThreadPool>(TThreadPool::TParams().SetBlocking(true).SetCatching(true));
@@ -34,8 +34,8 @@ bool TUploader::Push(const TString& path, TValue&& value) {
     auto task = [this, taskValue = std::move(value), &path, retrySleep = BulkUpsertRetryDuration] () mutable {
         ui32 retry = 0;
         while (true) {
-            while (!RequestLimiter.IsAvail()) { 
-                Sleep(Min(TDuration::MicroSeconds(RequestLimiter.GetWaitTime()), Opts.ReactionTime)); 
+            while (!RequestLimiter.IsAvail()) {
+                Sleep(Min(TDuration::MicroSeconds(RequestLimiter.GetWaitTime()), Opts.ReactionTime));
                 if (IsStopped()) {
                     return;
                 }
@@ -45,8 +45,8 @@ bool TUploader::Push(const TString& path, TValue&& value) {
                 return;
             }
 
-            RequestLimiter.Use(1); 
-             
+            RequestLimiter.Use(1);
+            
             auto upsert = [&] (NYdb::NTable::TSession) -> TStatus {
                 auto settings = NTable::TBulkUpsertSettings()
                     .RequestType(DOC_API_REQUEST_TYPE)
@@ -119,8 +119,8 @@ bool TUploader::Push(TParams params) {
     };
 
     auto task = [this, upload] () {
-        while (!RequestLimiter.IsAvail()) { 
-            Sleep(Min(TDuration::MilliSeconds(RequestLimiter.GetWaitTime()), Opts.ReactionTime)); 
+        while (!RequestLimiter.IsAvail()) {
+            Sleep(Min(TDuration::MilliSeconds(RequestLimiter.GetWaitTime()), Opts.ReactionTime));
             if (IsStopped()) {
                 return;
             }
@@ -130,8 +130,8 @@ bool TUploader::Push(TParams params) {
             return;
         }
 
-        RequestLimiter.Use(1); 
- 
+        RequestLimiter.Use(1);
+
         auto settings = NYdb::NTable::TRetryOperationSettings()
             .MaxRetries(Opts.RetryOperaionMaxRetries)
             .Idempotent(true);

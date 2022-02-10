@@ -18,7 +18,7 @@
 
 namespace NKikimr {
 
-using namespace NSchemeShard; 
+using namespace NSchemeShard;
 using namespace NTenantSlotBroker;
 using namespace NConsole;
 using namespace NConsole::NUT;
@@ -652,7 +652,7 @@ Y_UNIT_TEST_SUITE(TConsoleTxProcessorTests) {
     }
 }
 
- 
+
 Y_UNIT_TEST_SUITE(TConsoleTests) {
     void RunTestCreateTenant(TTenantTestRuntime& runtime, bool shared = false) {
         using EType = TCreateTenantRequest::EType;
@@ -680,16 +680,16 @@ Y_UNIT_TEST_SUITE(TConsoleTests) {
         CheckCounter(runtime, {{ {"status", "SUCCESS"} }}, TTenantsManager::COUNTER_CREATE_RESPONSES, 1);
     }
 
-    Y_UNIT_TEST(TestCreateTenant) { 
+    Y_UNIT_TEST(TestCreateTenant) {
         TTenantTestRuntime runtime(DefaultConsoleTestConfig());
-        RunTestCreateTenant(runtime); 
-    } 
+        RunTestCreateTenant(runtime);
+    }
 
-    Y_UNIT_TEST(TestCreateTenantExtSubdomain) { 
-        TTenantTestRuntime runtime(DefaultConsoleTestConfig(), {}, true); 
-        RunTestCreateTenant(runtime); 
-    } 
- 
+    Y_UNIT_TEST(TestCreateTenantExtSubdomain) {
+        TTenantTestRuntime runtime(DefaultConsoleTestConfig(), {}, true);
+        RunTestCreateTenant(runtime);
+    }
+
     Y_UNIT_TEST(TestCreateSharedTenant) {
         TTenantTestRuntime runtime(DefaultConsoleTestConfig(), {}, true);
         RunTestCreateTenant(runtime, true);
@@ -723,7 +723,7 @@ Y_UNIT_TEST_SUITE(TConsoleTests) {
                 .WithSharedDbPath(TENANT1_1_NAME));
     }
 
-    void RunTestCreateTenantWrongName(TTenantTestRuntime& runtime) { 
+    void RunTestCreateTenantWrongName(TTenantTestRuntime& runtime) {
         // Empty path
         CheckCreateTenant(runtime, Ydb::StatusIds::BAD_REQUEST, TCreateTenantRequest(""));
         // Root path
@@ -746,33 +746,33 @@ Y_UNIT_TEST_SUITE(TConsoleTests) {
         CheckCounter(runtime, {{ {"status", "BAD_REQUEST"} }}, TTenantsManager::COUNTER_CREATE_RESPONSES, 9);
     }
 
-    Y_UNIT_TEST(TestCreateTenantWrongName) { 
+    Y_UNIT_TEST(TestCreateTenantWrongName) {
         TTenantTestRuntime runtime(DefaultConsoleTestConfig());
-        RunTestCreateTenantWrongName(runtime); 
-    } 
+        RunTestCreateTenantWrongName(runtime);
+    }
 
-    Y_UNIT_TEST(TestCreateTenantWrongNameExtSubdomain) { 
-        TTenantTestRuntime runtime(DefaultConsoleTestConfig(), {}, true); 
-        RunTestCreateTenantWrongName(runtime); 
-    } 
- 
-    void RunTestCreateTenantWrongPool(TTenantTestRuntime& runtime) { 
+    Y_UNIT_TEST(TestCreateTenantWrongNameExtSubdomain) {
+        TTenantTestRuntime runtime(DefaultConsoleTestConfig(), {}, true);
+        RunTestCreateTenantWrongName(runtime);
+    }
+
+    void RunTestCreateTenantWrongPool(TTenantTestRuntime& runtime) {
         CheckCreateTenant(runtime, Ydb::StatusIds::BAD_REQUEST, TCreateTenantRequest(TENANT1_1_NAME));
         CheckCreateTenant(runtime, Ydb::StatusIds::BAD_REQUEST, TCreateTenantRequest(TENANT1_1_NAME).WithPools({{"hdd", 0}}));
         CheckCreateTenant(runtime, Ydb::StatusIds::BAD_REQUEST, TCreateTenantRequest(TENANT1_1_NAME).WithPools({{"unknown", 1}}));
     }
 
-    Y_UNIT_TEST(TestCreateTenantWrongPool) { 
+    Y_UNIT_TEST(TestCreateTenantWrongPool) {
         TTenantTestRuntime runtime(DefaultConsoleTestConfig());
-        RunTestCreateTenantWrongPool(runtime); 
-    } 
+        RunTestCreateTenantWrongPool(runtime);
+    }
 
-    Y_UNIT_TEST(TestCreateTenantWrongPoolExtSubdomain) { 
-        TTenantTestRuntime runtime(DefaultConsoleTestConfig(), {}, true); 
-        RunTestCreateTenantWrongPool(runtime); 
-    } 
- 
-    void RunTestCreateTenantWrongComputationalUnit(TTenantTestRuntime& runtime) { 
+    Y_UNIT_TEST(TestCreateTenantWrongPoolExtSubdomain) {
+        TTenantTestRuntime runtime(DefaultConsoleTestConfig(), {}, true);
+        RunTestCreateTenantWrongPool(runtime);
+    }
+
+    void RunTestCreateTenantWrongComputationalUnit(TTenantTestRuntime& runtime) {
         // Unknown unit kind
         CheckCreateTenant(runtime, TENANT1_1_NAME, Ydb::StatusIds::BAD_REQUEST,
                           {{"hdd", 1}, {"hdd-1", 2}},
@@ -791,17 +791,17 @@ Y_UNIT_TEST_SUITE(TConsoleTests) {
                           SLOT1_TYPE, ZONE1, 3);
     }
 
-    Y_UNIT_TEST(TestCreateTenantWrongComputationalUnit) { 
+    Y_UNIT_TEST(TestCreateTenantWrongComputationalUnit) {
         TTenantTestRuntime runtime(DefaultConsoleTestConfig());
-        RunTestCreateTenantWrongComputationalUnit(runtime); 
-    } 
+        RunTestCreateTenantWrongComputationalUnit(runtime);
+    }
 
-    Y_UNIT_TEST(TestCreateTenantWrongComputationalUnitExtSubdomain) { 
-        TTenantTestRuntime runtime(DefaultConsoleTestConfig(), {}, true); 
-        RunTestCreateTenantWrongComputationalUnit(runtime); 
-    } 
- 
-    void RunTestCreateTenantAlreadyExists(TTenantTestRuntime& runtime) { 
+    Y_UNIT_TEST(TestCreateTenantWrongComputationalUnitExtSubdomain) {
+        TTenantTestRuntime runtime(DefaultConsoleTestConfig(), {}, true);
+        RunTestCreateTenantWrongComputationalUnit(runtime);
+    }
+
+    void RunTestCreateTenantAlreadyExists(TTenantTestRuntime& runtime) {
         CheckCreateTenant(runtime, "/dc-1/users/tenant-1", Ydb::StatusIds::SUCCESS,
                           {{"hdd", 1}},
                           SLOT1_TYPE, ZONE1, 3,
@@ -831,18 +831,18 @@ Y_UNIT_TEST_SUITE(TConsoleTests) {
         CheckCounter(runtime, {{ {"status", "ALREADY_EXISTS"} }}, TTenantsManager::COUNTER_CREATE_RESPONSES, 3);
     }
 
- 
-    Y_UNIT_TEST(TestCreateTenantAlreadyExists) { 
-        TTenantTestRuntime runtime(DefaultConsoleTestConfig());
-        RunTestCreateTenantAlreadyExists(runtime); 
-    } 
 
-    Y_UNIT_TEST(TestCreateTenantAlreadyExistsExtSubdomain) { 
-        TTenantTestRuntime runtime(DefaultConsoleTestConfig(), {}, true); 
-        RunTestCreateTenantAlreadyExists(runtime); 
-    } 
- 
-    void RunTestGetUnknownTenantStatus(TTenantTestRuntime& runtime) { 
+    Y_UNIT_TEST(TestCreateTenantAlreadyExists) {
+        TTenantTestRuntime runtime(DefaultConsoleTestConfig());
+        RunTestCreateTenantAlreadyExists(runtime);
+    }
+
+    Y_UNIT_TEST(TestCreateTenantAlreadyExistsExtSubdomain) {
+        TTenantTestRuntime runtime(DefaultConsoleTestConfig(), {}, true);
+        RunTestCreateTenantAlreadyExists(runtime);
+    }
+
+    void RunTestGetUnknownTenantStatus(TTenantTestRuntime& runtime) {
         CheckTenantStatus(runtime, TENANT1_1_NAME, Ydb::StatusIds::NOT_FOUND,
                           Ydb::Cms::GetDatabaseStatusResult::STATE_UNSPECIFIED, {}, {});
 
@@ -850,17 +850,17 @@ Y_UNIT_TEST_SUITE(TConsoleTests) {
         CheckCounter(runtime, {{ {"status", "NOT_FOUND"} }}, TTenantsManager::COUNTER_STATUS_RESPONSES, 1);
     }
 
-    Y_UNIT_TEST(TestGetUnknownTenantStatus) { 
+    Y_UNIT_TEST(TestGetUnknownTenantStatus) {
         TTenantTestRuntime runtime(DefaultConsoleTestConfig());
-        RunTestGetUnknownTenantStatus(runtime); 
-    } 
+        RunTestGetUnknownTenantStatus(runtime);
+    }
 
-    Y_UNIT_TEST(TestGetUnknownTenantStatusExtSubdomain) { 
-        TTenantTestRuntime runtime(DefaultConsoleTestConfig(), {}, true); 
-        RunTestGetUnknownTenantStatus(runtime); 
-    } 
- 
-    void RunTestRestartConsoleAndPools(TTenantTestRuntime& runtime) { 
+    Y_UNIT_TEST(TestGetUnknownTenantStatusExtSubdomain) {
+        TTenantTestRuntime runtime(DefaultConsoleTestConfig(), {}, true);
+        RunTestGetUnknownTenantStatus(runtime);
+    }
+
+    void RunTestRestartConsoleAndPools(TTenantTestRuntime& runtime) {
         runtime.Send(new IEventHandle(MakeTenantPoolID(runtime.GetNodeId(1), 0),
                                       runtime.Sender,
                                       new TEvents::TEvPoisonPill));
@@ -897,18 +897,18 @@ Y_UNIT_TEST_SUITE(TConsoleTests) {
         CheckCounter(runtime, {}, TTenantsManager::COUNTER_TENANTS, 1);
     }
 
- 
-    Y_UNIT_TEST(TestRestartConsoleAndPools) { 
-        TTenantTestRuntime runtime(DefaultConsoleTestConfig());
-        RunTestRestartConsoleAndPools(runtime); 
-    } 
 
-    Y_UNIT_TEST(TestRestartConsoleAndPoolsExtSubdomain) { 
-        TTenantTestRuntime runtime(DefaultConsoleTestConfig(), {}, true); 
-        RunTestRestartConsoleAndPools(runtime); 
-    } 
- 
-    void RunTestAlterTenantModifyComputationalResourcesForPending(TTenantTestRuntime& runtime) { 
+    Y_UNIT_TEST(TestRestartConsoleAndPools) {
+        TTenantTestRuntime runtime(DefaultConsoleTestConfig());
+        RunTestRestartConsoleAndPools(runtime);
+    }
+
+    Y_UNIT_TEST(TestRestartConsoleAndPoolsExtSubdomain) {
+        TTenantTestRuntime runtime(DefaultConsoleTestConfig(), {}, true);
+        RunTestRestartConsoleAndPools(runtime);
+    }
+
+    void RunTestAlterTenantModifyComputationalResourcesForPending(TTenantTestRuntime& runtime) {
         CheckCreateTenant(runtime, Ydb::StatusIds::SUCCESS,
             TCreateTenantRequest(TENANT1_1_NAME).WithPools({{"hdd", 1}}));
 
@@ -926,17 +926,17 @@ Y_UNIT_TEST_SUITE(TConsoleTests) {
                           SLOT1_TYPE, ZONE1, 5, 5);
     }
 
-    Y_UNIT_TEST(TestAlterTenantModifyComputationalResourcesForPending) { 
+    Y_UNIT_TEST(TestAlterTenantModifyComputationalResourcesForPending) {
         TTenantTestRuntime runtime(DefaultConsoleTestConfig());
-        RunTestAlterTenantModifyComputationalResourcesForPending(runtime); 
-    } 
+        RunTestAlterTenantModifyComputationalResourcesForPending(runtime);
+    }
 
-    Y_UNIT_TEST(TestAlterTenantModifyComputationalResourcesForPendingExtSubdomain) { 
-        TTenantTestRuntime runtime(DefaultConsoleTestConfig(), {}, true); 
-        RunTestAlterTenantModifyComputationalResourcesForPending(runtime); 
-    } 
- 
-    void RunTestAlterTenantModifyComputationalResourcesForRunning(TTenantTestRuntime& runtime) { 
+    Y_UNIT_TEST(TestAlterTenantModifyComputationalResourcesForPendingExtSubdomain) {
+        TTenantTestRuntime runtime(DefaultConsoleTestConfig(), {}, true);
+        RunTestAlterTenantModifyComputationalResourcesForPending(runtime);
+    }
+
+    void RunTestAlterTenantModifyComputationalResourcesForRunning(TTenantTestRuntime& runtime) {
         CheckCreateTenant(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
                           {{"hdd", 1}},
                           SLOT1_TYPE, ZONE1, 5,
@@ -955,7 +955,7 @@ Y_UNIT_TEST_SUITE(TConsoleTests) {
         CheckAlterTenantSlots(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
                               {{ {SLOT1_TYPE, ZONE1, 5} }},
                               {{ {SLOT2_TYPE, ZONE1, 3},
-                                {SLOT3_TYPE, ZONE1, 7} }}); 
+                                {SLOT3_TYPE, ZONE1, 7} }});
 
         runtime.WaitForHiveState({{{DOMAIN1_NAME, 8, 8, 8},
                                    {TENANT1_1_NAME, 27, 27, 27}}});
@@ -969,8 +969,8 @@ Y_UNIT_TEST_SUITE(TConsoleTests) {
         CheckAlterTenantSlots(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
                               {},
                               {{ {SLOT1_TYPE, ZONE1, 10},
-                                {SLOT2_TYPE, ZONE1, 5}, 
-                                {SLOT3_TYPE, ZONE1, 3} }}); 
+                                {SLOT2_TYPE, ZONE1, 5},
+                                {SLOT3_TYPE, ZONE1, 3} }});
 
         runtime.WaitForHiveState({{{DOMAIN1_NAME, 8, 8, 8}}});
 
@@ -979,8 +979,8 @@ Y_UNIT_TEST_SUITE(TConsoleTests) {
 
         CheckAlterTenantSlots(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
                               {{ {SLOT1_TYPE, ZONE1, 1},
-                                {SLOT2_TYPE, ZONE1, 2}, 
-                                {SLOT3_TYPE, ZONE1, 3} }}, 
+                                {SLOT2_TYPE, ZONE1, 2},
+                                {SLOT3_TYPE, ZONE1, 3} }},
                               {});
 
         runtime.WaitForHiveState({{{DOMAIN1_NAME, 8, 8, 8},
@@ -996,17 +996,17 @@ Y_UNIT_TEST_SUITE(TConsoleTests) {
         CheckCounter(runtime, {{ {"status", "SUCCESS"} }}, TTenantsManager::COUNTER_ALTER_RESPONSES, 3);
     }
 
-    Y_UNIT_TEST(TestAlterTenantModifyComputationalResourcesForRunning) { 
+    Y_UNIT_TEST(TestAlterTenantModifyComputationalResourcesForRunning) {
         TTenantTestRuntime runtime(DefaultConsoleTestConfig());
-        RunTestAlterTenantModifyComputationalResourcesForRunning(runtime); 
-    } 
+        RunTestAlterTenantModifyComputationalResourcesForRunning(runtime);
+    }
 
-    Y_UNIT_TEST(TestAlterTenantModifyComputationalResourcesForRunningExtSubdomain) { 
-        TTenantTestRuntime runtime(DefaultConsoleTestConfig(), {}, true); 
-        RunTestAlterTenantModifyComputationalResourcesForRunning(runtime); 
-    } 
- 
-    void RunTestAlterTenantModifyStorageResourcesForPending(TTenantTestRuntime& runtime) { 
+    Y_UNIT_TEST(TestAlterTenantModifyComputationalResourcesForRunningExtSubdomain) {
+        TTenantTestRuntime runtime(DefaultConsoleTestConfig(), {}, true);
+        RunTestAlterTenantModifyComputationalResourcesForRunning(runtime);
+    }
+
+    void RunTestAlterTenantModifyStorageResourcesForPending(TTenantTestRuntime& runtime) {
         CheckCreateTenant(runtime, Ydb::StatusIds::SUCCESS,
             TCreateTenantRequest(TENANT1_1_NAME).WithPools({{"hdd", 1}, {"hdd-1", 3}}));
 
@@ -1074,17 +1074,17 @@ Y_UNIT_TEST_SUITE(TConsoleTests) {
         CheckCounter(runtime, {{ {"kind", "hdd-2"} }}, TTenantsManager::COUNTER_ALLOCATED_STORAGE_UNITS, 0);
     }
 
-    Y_UNIT_TEST(TestAlterTenantModifyStorageResourcesForPending) { 
+    Y_UNIT_TEST(TestAlterTenantModifyStorageResourcesForPending) {
         TTenantTestRuntime runtime(DefaultConsoleTestConfig());
-        RunTestAlterTenantModifyStorageResourcesForPending(runtime); 
-    } 
+        RunTestAlterTenantModifyStorageResourcesForPending(runtime);
+    }
 
-    Y_UNIT_TEST(TestAlterTenantModifyStorageResourcesForPendingExtSubdomain) { 
-        TTenantTestRuntime runtime(DefaultConsoleTestConfig(), {}, true); 
-        RunTestAlterTenantModifyStorageResourcesForPending(runtime); 
-    } 
- 
-    void RunTestAlterTenantModifyStorageResourcesForRunning(TTenantTestRuntime& runtime) { 
+    Y_UNIT_TEST(TestAlterTenantModifyStorageResourcesForPendingExtSubdomain) {
+        TTenantTestRuntime runtime(DefaultConsoleTestConfig(), {}, true);
+        RunTestAlterTenantModifyStorageResourcesForPending(runtime);
+    }
+
+    void RunTestAlterTenantModifyStorageResourcesForRunning(TTenantTestRuntime& runtime) {
         CheckCreateTenant(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
                           {{"hdd", 1}, {"hdd-1", 3}},
                           SLOT1_TYPE, ZONE1, 1);
@@ -1130,17 +1130,17 @@ Y_UNIT_TEST_SUITE(TConsoleTests) {
         CheckCounter(runtime, {{ {"status", "BAD_REQUEST"} }}, TTenantsManager::COUNTER_ALTER_RESPONSES, 2);
     }
 
-    Y_UNIT_TEST(TestAlterTenantModifyStorageResourcesForRunning) { 
+    Y_UNIT_TEST(TestAlterTenantModifyStorageResourcesForRunning) {
         TTenantTestRuntime runtime(DefaultConsoleTestConfig());
-        RunTestAlterTenantModifyStorageResourcesForRunning(runtime); 
-    } 
+        RunTestAlterTenantModifyStorageResourcesForRunning(runtime);
+    }
 
-    Y_UNIT_TEST(TestAlterTenantModifyStorageResourcesForRunningExtSubdomain) { 
-        TTenantTestRuntime runtime(DefaultConsoleTestConfig(), {}, true); 
-        RunTestAlterTenantModifyStorageResourcesForRunning(runtime); 
-    } 
- 
-    void RunTestAlterUnknownTenant(TTenantTestRuntime& runtime) { 
+    Y_UNIT_TEST(TestAlterTenantModifyStorageResourcesForRunningExtSubdomain) {
+        TTenantTestRuntime runtime(DefaultConsoleTestConfig(), {}, true);
+        RunTestAlterTenantModifyStorageResourcesForRunning(runtime);
+    }
+
+    void RunTestAlterUnknownTenant(TTenantTestRuntime& runtime) {
         CheckAlterTenantSlots(runtime, TENANT1_1_NAME, Ydb::StatusIds::NOT_FOUND,
                               { }, { });
 
@@ -1148,17 +1148,17 @@ Y_UNIT_TEST_SUITE(TConsoleTests) {
         CheckCounter(runtime, {{ {"status", "NOT_FOUND"} }}, TTenantsManager::COUNTER_ALTER_RESPONSES, 1);
     }
 
- 
-    Y_UNIT_TEST(TestAlterUnknownTenant) { 
-        TTenantTestRuntime runtime(DefaultConsoleTestConfig());
-        RunTestAlterUnknownTenant(runtime); 
-    } 
 
-    Y_UNIT_TEST(TestAlterUnknownTenantExtSubdomain) { 
-        TTenantTestRuntime runtime(DefaultConsoleTestConfig(), {}, true); 
-        RunTestAlterUnknownTenant(runtime); 
-    } 
- 
+    Y_UNIT_TEST(TestAlterUnknownTenant) {
+        TTenantTestRuntime runtime(DefaultConsoleTestConfig());
+        RunTestAlterUnknownTenant(runtime);
+    }
+
+    Y_UNIT_TEST(TestAlterUnknownTenantExtSubdomain) {
+        TTenantTestRuntime runtime(DefaultConsoleTestConfig(), {}, true);
+        RunTestAlterUnknownTenant(runtime);
+    }
+
     Y_UNIT_TEST(TestAlterStorageUnitsOfSharedTenant) {
         TTenantTestRuntime runtime(DefaultConsoleTestConfig(), {}, true);
         // create shared tenant
@@ -1211,7 +1211,7 @@ Y_UNIT_TEST_SUITE(TConsoleTests) {
         CheckCounter(runtime, {{ {"status", "BAD_REQUEST"} }}, TTenantsManager::COUNTER_ALTER_RESPONSES, 1);
     }
 
-    void RunTestListTenants(TTenantTestRuntime& runtime) { 
+    void RunTestListTenants(TTenantTestRuntime& runtime) {
         CheckCreateTenant(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
                           {{"hdd", 1}},
                           SLOT1_TYPE, ZONE1, 1);
@@ -1241,16 +1241,16 @@ Y_UNIT_TEST_SUITE(TConsoleTests) {
         CheckCounter(runtime, {}, TTenantsManager::COUNTER_LIST_REQUESTS, 1);
     }
 
-    Y_UNIT_TEST(TestListTenants) { 
-        TTenantTestRuntime runtime(DefaultConsoleTestConfig()); 
-        RunTestListTenants(runtime); 
-    } 
- 
-    Y_UNIT_TEST(TestListTenantsExtSubdomain) { 
-        TTenantTestRuntime runtime(DefaultConsoleTestConfig(), {}, true); 
-        RunTestListTenants(runtime); 
-    } 
- 
+    Y_UNIT_TEST(TestListTenants) {
+        TTenantTestRuntime runtime(DefaultConsoleTestConfig());
+        RunTestListTenants(runtime);
+    }
+
+    Y_UNIT_TEST(TestListTenantsExtSubdomain) {
+        TTenantTestRuntime runtime(DefaultConsoleTestConfig(), {}, true);
+        RunTestListTenants(runtime);
+    }
+
     Y_UNIT_TEST(TestSetDefaultStorageUnitsQuota) {
         TTenantTestRuntime runtime(DefaultConsoleTestConfig());
 
@@ -1512,7 +1512,7 @@ Y_UNIT_TEST_SUITE(TConsoleTests) {
         }
     }
 
-    void RunTestRemoveTenant(TTenantTestRuntime& runtime) { 
+    void RunTestRemoveTenant(TTenantTestRuntime& runtime) {
         CheckCreateTenant(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
                           {{"hdd", 1}, {"hdd-1", 2}},
                           SLOT1_TYPE, ZONE1, 3,
@@ -1531,7 +1531,7 @@ Y_UNIT_TEST_SUITE(TConsoleTests) {
 
         CheckAlterRegisteredUnits(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
                                   {{ {"host1", 1, "kind1"},
-                                    {"host2", 2, "kind2"} }}, 
+                                    {"host2", 2, "kind2"} }},
                                   {});
 
         CheckTenantStatus(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
@@ -1584,16 +1584,16 @@ Y_UNIT_TEST_SUITE(TConsoleTests) {
         CheckCounter(runtime, {}, TTenantsManager::COUNTER_TENANTS, 0);
     }
 
-    Y_UNIT_TEST(TestRemoveTenant) { 
+    Y_UNIT_TEST(TestRemoveTenant) {
         TTenantTestRuntime runtime(DefaultConsoleTestConfig());
-        RunTestRemoveTenant(runtime); 
-    } 
+        RunTestRemoveTenant(runtime);
+    }
 
-    Y_UNIT_TEST(TestRemoveTenantExtSubdomain) { 
-        TTenantTestRuntime runtime(DefaultConsoleTestConfig(), {}, true); 
-        RunTestRemoveTenant(runtime); 
-    } 
- 
+    Y_UNIT_TEST(TestRemoveTenantExtSubdomain) {
+        TTenantTestRuntime runtime(DefaultConsoleTestConfig(), {}, true);
+        RunTestRemoveTenant(runtime);
+    }
+
     Y_UNIT_TEST(TestRemoveSharedTenantWoServerlessTenants) {
         TTenantTestRuntime runtime(DefaultConsoleTestConfig(), {}, true);
         // create shared tenant
@@ -1666,7 +1666,7 @@ Y_UNIT_TEST_SUITE(TConsoleTests) {
         CheckCounter(runtime, {{ {"status", "SUCCESS"} }}, TTenantsManager::COUNTER_REMOVE_RESPONSES, 1);
     }
 
-    void RunTestCreateSubSubDomain(TTenantTestRuntime& runtime) { 
+    void RunTestCreateSubSubDomain(TTenantTestRuntime& runtime) {
         CheckCreateTenant(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
                           {{"hdd", 1}, {"hdd-1", 2}},
                           SLOT1_TYPE, ZONE1, 3,
@@ -1712,16 +1712,16 @@ Y_UNIT_TEST_SUITE(TConsoleTests) {
         CheckCounter(runtime, {{ {"kind", "hdd-1"} }}, TTenantsManager::COUNTER_ALLOCATED_STORAGE_UNITS, 0);
     }
 
-    Y_UNIT_TEST(TestCreateSubSubDomain) { 
-        TTenantTestRuntime runtime(DefaultConsoleTestConfig()); 
-        RunTestCreateSubSubDomain(runtime); 
-    } 
- 
-    Y_UNIT_TEST(TestCreateSubSubDomainExtSubdomain) { 
-        TTenantTestRuntime runtime(DefaultConsoleTestConfig(), {}, true); 
-        RunTestCreateSubSubDomain(runtime); 
-    } 
- 
+    Y_UNIT_TEST(TestCreateSubSubDomain) {
+        TTenantTestRuntime runtime(DefaultConsoleTestConfig());
+        RunTestCreateSubSubDomain(runtime);
+    }
+
+    Y_UNIT_TEST(TestCreateSubSubDomainExtSubdomain) {
+        TTenantTestRuntime runtime(DefaultConsoleTestConfig(), {}, true);
+        RunTestCreateSubSubDomain(runtime);
+    }
+
     Y_UNIT_TEST(TestDefaultAvailabilityZone) {
         TTenantTestRuntime runtime(DefaultConsoleTestConfig());
 
@@ -1869,7 +1869,7 @@ Y_UNIT_TEST_SUITE(TConsoleTests) {
                           SLOT1_TYPE, ZONE1, 1, 1);
     }
 
-    void RunTestNotifyOperationCompletion(TTenantTestRuntime& runtime) { 
+    void RunTestNotifyOperationCompletion(TTenantTestRuntime& runtime) {
         TAutoPtr<IEventHandle> handle;
 
         // This observer should intercept events about pool creation/removal
@@ -1965,17 +1965,17 @@ Y_UNIT_TEST_SUITE(TConsoleTests) {
         CheckNotificationRequest(runtime, id, Ydb::StatusIds::SUCCESS);
     }
 
-    Y_UNIT_TEST(TestNotifyOperationCompletion) { 
+    Y_UNIT_TEST(TestNotifyOperationCompletion) {
         TTenantTestRuntime runtime(DefaultConsoleTestConfig());
-        RunTestNotifyOperationCompletion(runtime); 
-    } 
- 
-    Y_UNIT_TEST(TestNotifyOperationCompletionExtSubdomain) { 
-        TTenantTestRuntime runtime(DefaultConsoleTestConfig(), {}, true); 
-        RunTestNotifyOperationCompletion(runtime); 
-    } 
- 
-    void RunTestAuthorization(TTenantTestRuntime& runtime) { 
+        RunTestNotifyOperationCompletion(runtime);
+    }
+
+    Y_UNIT_TEST(TestNotifyOperationCompletionExtSubdomain) {
+        TTenantTestRuntime runtime(DefaultConsoleTestConfig(), {}, true);
+        RunTestNotifyOperationCompletion(runtime);
+    }
+
+    void RunTestAuthorization(TTenantTestRuntime& runtime) {
         for (ui32 i = 0; i < runtime.GetNodeCount(); ++i) {
             auto &appData = runtime.GetAppData(i);
             appData.AdministrationAllowedSIDs.push_back("root@builtin");
@@ -2018,24 +2018,24 @@ Y_UNIT_TEST_SUITE(TConsoleTests) {
                           Ydb::StatusIds::UNAUTHORIZED);
     }
 
-    Y_UNIT_TEST(TestAuthorization) { 
+    Y_UNIT_TEST(TestAuthorization) {
         TTenantTestRuntime runtime(DefaultConsoleTestConfig());
-        RunTestAuthorization(runtime); 
-    } 
+        RunTestAuthorization(runtime);
+    }
 
-    Y_UNIT_TEST(TestAuthorizationExtSubdomain) { 
-        TTenantTestRuntime runtime(DefaultConsoleTestConfig(), {}, true); 
-        RunTestAuthorization(runtime); 
-    } 
- 
+    Y_UNIT_TEST(TestAuthorizationExtSubdomain) {
+        TTenantTestRuntime runtime(DefaultConsoleTestConfig(), {}, true);
+        RunTestAuthorization(runtime);
+    }
+
 
     bool CheckAttrsPresent(TTenantTestRuntime& runtime, const TString& tenantName, THashMap<TString, TString> attrs, bool skipAbsent = false) {
-        auto request = MakeHolder<TEvSchemeShard::TEvDescribeScheme>(tenantName); 
+        auto request = MakeHolder<TEvSchemeShard::TEvDescribeScheme>(tenantName);
         ForwardToTablet(runtime, SCHEME_SHARD1_ID, runtime.Sender, request.Release());
 
         TAutoPtr<IEventHandle> handle;
-        auto reply = runtime.GrabEdgeEvent<TEvSchemeShard::TEvDescribeSchemeResult>(handle); 
-        Cerr << "Reply: " << reply->GetRecord().DebugString() << "\n"; 
+        auto reply = runtime.GrabEdgeEvent<TEvSchemeShard::TEvDescribeSchemeResult>(handle);
+        Cerr << "Reply: " << reply->GetRecord().DebugString() << "\n";
         for (auto &attr : reply->GetRecord().GetPathDescription().GetUserAttributes()) {
             if (!skipAbsent) {
                 UNIT_ASSERT(attrs.contains(attr.GetKey()));
@@ -2126,16 +2126,16 @@ Y_UNIT_TEST_SUITE(TConsoleTests) {
         CheckAttrsPresent(runtime, TENANT1_1_NAME, THashMap<TString, TString> {{"name1", "value1"}});
     }
 
-    Y_UNIT_TEST(TestAttributes) { 
-        TTenantTestRuntime runtime(DefaultConsoleTestConfig()); 
-        RunTestAttributes(runtime); 
-    } 
- 
-    Y_UNIT_TEST(TestAttributesExtSubdomain) { 
-        TTenantTestRuntime runtime(DefaultConsoleTestConfig(), {}, true); 
-        RunTestAttributes(runtime); 
-    } 
- 
+    Y_UNIT_TEST(TestAttributes) {
+        TTenantTestRuntime runtime(DefaultConsoleTestConfig());
+        RunTestAttributes(runtime);
+    }
+
+    Y_UNIT_TEST(TestAttributesExtSubdomain) {
+        TTenantTestRuntime runtime(DefaultConsoleTestConfig(), {}, true);
+        RunTestAttributes(runtime);
+    }
+
     Y_UNIT_TEST(TestRemoveAttributes) {
         TTenantTestRuntime runtime(DefaultConsoleTestConfig());
         RunTestRemoveAttributes(runtime);
@@ -2408,7 +2408,7 @@ Y_UNIT_TEST_SUITE(TConsoleTests) {
         CheckCounter(runtime, {{ {"kind", "any"}, {"zone", ZONE_ANY } }}, TTenantsManager::COUNTER_COMPUTATIONAL_UNITS, 12);
     }
 
-    void RunTestTenantGeneration(TTenantTestRuntime& runtime) { 
+    void RunTestTenantGeneration(TTenantTestRuntime& runtime) {
         CheckCreateTenant(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
                           {{"hdd", 1}},
                           SLOT1_TYPE, ZONE1, 1);
@@ -2462,16 +2462,16 @@ Y_UNIT_TEST_SUITE(TConsoleTests) {
                               "alter-key-1");
     }
 
-    Y_UNIT_TEST(TestTenantGeneration) { 
-        TTenantTestRuntime runtime(DefaultConsoleTestConfig()); 
-        RunTestTenantGeneration(runtime); 
-    } 
- 
-    Y_UNIT_TEST(TestTenantGenerationExtSubdomain) { 
-        TTenantTestRuntime runtime(DefaultConsoleTestConfig(), {}, true); 
-        RunTestTenantGeneration(runtime); 
-    } 
- 
+    Y_UNIT_TEST(TestTenantGeneration) {
+        TTenantTestRuntime runtime(DefaultConsoleTestConfig());
+        RunTestTenantGeneration(runtime);
+    }
+
+    Y_UNIT_TEST(TestTenantGenerationExtSubdomain) {
+        TTenantTestRuntime runtime(DefaultConsoleTestConfig(), {}, true);
+        RunTestTenantGeneration(runtime);
+    }
+
     Y_UNIT_TEST(TestSchemeShardErrorForwarding) {
         TTenantTestRuntime runtime(DefaultConsoleTestConfig());
 

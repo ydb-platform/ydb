@@ -1,9 +1,9 @@
-#include "coordinator_impl.h" 
- 
+#include "coordinator_impl.h"
+
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 
-#include <util/generic/hash_set.h> 
- 
+#include <util/generic/hash_set.h>
+
 namespace NKikimr {
 namespace NFlatTxCoordinator {
 
@@ -20,7 +20,7 @@ struct TTxCoordinator::TTxMediatorConfirmations : public TTransactionBase<TTxCoo
     TTxType GetTxType() const override { return TXTYPE_MEDIATOR_CONFIRMATIONS; }
 
     bool Execute(TTransactionContext &txc, const TActorContext &ctx) override {
-        const TTabletId mediatorId = Confirmations->MediatorId; 
+        const TTabletId mediatorId = Confirmations->MediatorId;
         Y_UNUSED(ctx);
         CompleteTransactions = 0;
         NIceDb::TNiceDb db(txc.DB);
@@ -33,7 +33,7 @@ struct TTxCoordinator::TTxMediatorConfirmations : public TTransactionBase<TTxCoo
             auto txit = Self->Transactions.find(txid);
             if (txit == Self->Transactions.end()) {
                 FLOG_DEBUG_S(ctx, NKikimrServices::TX_COORDINATOR,
-                             "at tablet# " << Self->TabletID() 
+                             "at tablet# " << Self->TabletID()
                              << " gen:step " << internalTxGen << ":" << internalTxStep
                              << " Mediator " << mediatorId << " confirmed finish of transaction " << txid << " but transaction wasn't found");
                 for (const TTabletId affected : txidsx.second) {
@@ -47,14 +47,14 @@ struct TTxCoordinator::TTxMediatorConfirmations : public TTransactionBase<TTxCoo
                 THashSet<TTabletId>::size_type result = mediatorAffectedSet.erase(affected);
                 db.Table<Schema::AffectedSet>().Key(mediatorId, txid, affected).Delete();
                 FLOG_DEBUG_S(ctx, NKikimrServices::TX_COORDINATOR,
-                             "at tablet# " << Self->TabletID() 
+                             "at tablet# " << Self->TabletID()
                              << " gen:step " << internalTxGen << ":" << internalTxStep
                              << " Confirmed transaction " << txid << " for mediator " << mediatorId << " tablet " << affected << " result=" << result);
             }
 
             if (mediatorAffectedSet.empty()) {
                 FLOG_DEBUG_S(ctx, NKikimrServices::TX_COORDINATOR,
-                             "at tablet# " << Self->TabletID() 
+                             "at tablet# " << Self->TabletID()
                              << " gen:step " << internalTxGen << ":" << internalTxStep
                              << " Mediator " << mediatorId << " confirmed finish of transaction " << txid);
                 txit->second.UnconfirmedAffectedSet.erase(mediatorId);
@@ -62,7 +62,7 @@ struct TTxCoordinator::TTxMediatorConfirmations : public TTransactionBase<TTxCoo
 
             if (txit->second.UnconfirmedAffectedSet.empty()) { // transaction finished
                 FLOG_DEBUG_S(ctx, NKikimrServices::TX_COORDINATOR,
-                             "at tablet# " << Self->TabletID() 
+                             "at tablet# " << Self->TabletID()
                              << " gen:step " << internalTxGen << ":" << internalTxStep
                              << " Transaction " << txid << " has been completed");
                 db.Table<Schema::Transaction>().Key(txid).Delete();

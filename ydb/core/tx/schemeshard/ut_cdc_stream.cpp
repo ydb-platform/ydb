@@ -1,7 +1,7 @@
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 
 using namespace NKikimr;
-using namespace NSchemeShard; 
+using namespace NSchemeShard;
 using namespace NSchemeShardUT_Private;
 
 Y_UNIT_TEST_SUITE(TCdcStreamTests) {
@@ -58,7 +58,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
               Name: "Stream"
               Mode: ECdcStreamModeKeysOnly
             }
-        )", {NKikimrScheme::StatusNameConflict}); 
+        )", {NKikimrScheme::StatusNameConflict});
 
         TestCreateCdcStream(runtime, ++txId, "/MyRoot", R"(
             TableName: "UnknownTable"
@@ -66,7 +66,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
               Name: "Stream"
               Mode: ECdcStreamModeKeysOnly
             }
-        )", {NKikimrScheme::StatusPathDoesNotExist}); 
+        )", {NKikimrScheme::StatusPathDoesNotExist});
 
         TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
             TableDescription {
@@ -88,7 +88,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
               Name: "Index"
               Mode: ECdcStreamModeKeysOnly
             }
-        )", {NKikimrScheme::StatusNameConflict}); 
+        )", {NKikimrScheme::StatusNameConflict});
 
         TestCreateCdcStream(runtime, ++txId, "/MyRoot/Table/Index", R"(
             TableName: "indexImplTable"
@@ -96,14 +96,14 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
               Name: "Stream"
               Mode: ECdcStreamModeKeysOnly
             }
-        )", {NKikimrScheme::StatusNameConflict}); 
+        )", {NKikimrScheme::StatusNameConflict});
 
         TestCreateCdcStream(runtime, ++txId, "/MyRoot", R"(
             TableName: "Table"
             StreamDescription {
               Name: "Stream"
             }
-        )", {NKikimrScheme::StatusInvalidParameter}); 
+        )", {NKikimrScheme::StatusInvalidParameter});
 
         TestCreateCdcStream(runtime, ++txId, "/MyRoot", R"(
             TableName: "Table"
@@ -123,7 +123,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
               Name: "Stream"
               Mode: ECdcStreamModeKeysOnly
             }
-        )", {NKikimrScheme::StatusPathDoesNotExist}); 
+        )", {NKikimrScheme::StatusPathDoesNotExist});
     }
 
     Y_UNIT_TEST(AlterStream) {
@@ -135,13 +135,13 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
             TableName: "MyRoot"
             StreamName: "Stream"
             Disable {}
-        )", {NKikimrScheme::StatusNameConflict}); 
+        )", {NKikimrScheme::StatusNameConflict});
 
         TestAlterCdcStream(runtime, ++txId, "/MyRoot", R"(
             TableName: "UnknownTable"
             StreamName: "Stream"
             Disable {}
-        )", {NKikimrScheme::StatusPathDoesNotExist}); 
+        )", {NKikimrScheme::StatusPathDoesNotExist});
 
         TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
             TableDescription {
@@ -161,7 +161,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
             TableName: "Table"
             StreamName: "Index"
             Disable {}
-        )", {NKikimrScheme::StatusNameConflict}); 
+        )", {NKikimrScheme::StatusNameConflict});
 
         TestCreateCdcStream(runtime, ++txId, "/MyRoot", R"(
             TableName: "Table"
@@ -175,7 +175,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
         TestAlterCdcStream(runtime, ++txId, "/MyRoot", R"(
             TableName: "Table"
             StreamName: "Stream"
-        )", {NKikimrScheme::StatusInvalidParameter}); 
+        )", {NKikimrScheme::StatusInvalidParameter});
     }
 
     Y_UNIT_TEST(DropStream) {

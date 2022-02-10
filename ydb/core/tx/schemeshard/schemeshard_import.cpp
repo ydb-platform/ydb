@@ -5,7 +5,7 @@
 #include <util/generic/xrange.h>
 
 namespace NKikimr {
-namespace NSchemeShard { 
+namespace NSchemeShard {
 
 namespace {
 
@@ -37,7 +37,7 @@ namespace {
 
 } // anonymous
 
-void TSchemeShard::FromXxportInfo(NKikimrImport::TImport& import, const TImportInfo::TPtr importInfo) { 
+void TSchemeShard::FromXxportInfo(NKikimrImport::TImport& import, const TImportInfo::TPtr importInfo) {
     import.SetId(importInfo->Id);
     import.SetStatus(Ydb::StatusIds::SUCCESS);
 
@@ -94,7 +94,7 @@ void TSchemeShard::FromXxportInfo(NKikimrImport::TImport& import, const TImportI
     }
 }
 
-void TSchemeShard::PersistCreateImport(NIceDb::TNiceDb& db, const TImportInfo::TPtr importInfo) { 
+void TSchemeShard::PersistCreateImport(NIceDb::TNiceDb& db, const TImportInfo::TPtr importInfo) {
     db.Table<Schema::Imports>().Key(importInfo->Id).Update(
         NIceDb::TUpdate<Schema::Imports::Uid>(importInfo->Uid),
         NIceDb::TUpdate<Schema::Imports::Kind>(static_cast<ui8>(importInfo->Kind)),
@@ -120,7 +120,7 @@ void TSchemeShard::PersistCreateImport(NIceDb::TNiceDb& db, const TImportInfo::T
     }
 }
 
-void TSchemeShard::PersistRemoveImport(NIceDb::TNiceDb& db, const TImportInfo::TPtr importInfo) { 
+void TSchemeShard::PersistRemoveImport(NIceDb::TNiceDb& db, const TImportInfo::TPtr importInfo) {
     for (ui32 itemIdx : xrange(importInfo->Items.size())) {
         db.Table<Schema::ImportItems>().Key(importInfo->Id, itemIdx).Delete();
     }
@@ -128,14 +128,14 @@ void TSchemeShard::PersistRemoveImport(NIceDb::TNiceDb& db, const TImportInfo::T
     db.Table<Schema::Imports>().Key(importInfo->Id).Delete();
 }
 
-void TSchemeShard::PersistImportState(NIceDb::TNiceDb& db, const TImportInfo::TPtr importInfo) { 
+void TSchemeShard::PersistImportState(NIceDb::TNiceDb& db, const TImportInfo::TPtr importInfo) {
     db.Table<Schema::Imports>().Key(importInfo->Id).Update(
         NIceDb::TUpdate<Schema::Imports::State>(static_cast<ui8>(importInfo->State)),
         NIceDb::TUpdate<Schema::Imports::Issue>(importInfo->Issue)
     );
 }
 
-void TSchemeShard::PersistImportItemState(NIceDb::TNiceDb& db, const TImportInfo::TPtr importInfo, ui32 itemIdx) { 
+void TSchemeShard::PersistImportItemState(NIceDb::TNiceDb& db, const TImportInfo::TPtr importInfo, ui32 itemIdx) {
     Y_VERIFY(itemIdx < importInfo->Items.size());
     const auto& item = importInfo->Items.at(itemIdx);
 
@@ -147,7 +147,7 @@ void TSchemeShard::PersistImportItemState(NIceDb::TNiceDb& db, const TImportInfo
     );
 }
 
-void TSchemeShard::PersistImportItemScheme(NIceDb::TNiceDb& db, const TImportInfo::TPtr importInfo, ui32 itemIdx) { 
+void TSchemeShard::PersistImportItemScheme(NIceDb::TNiceDb& db, const TImportInfo::TPtr importInfo, ui32 itemIdx) {
     Y_VERIFY(itemIdx < importInfo->Items.size());
     const auto& item = importInfo->Items.at(itemIdx);
 
@@ -156,7 +156,7 @@ void TSchemeShard::PersistImportItemScheme(NIceDb::TNiceDb& db, const TImportInf
     );
 }
 
-void TSchemeShard::PersistImportItemDstPathId(NIceDb::TNiceDb& db, const TImportInfo::TPtr importInfo, ui32 itemIdx) { 
+void TSchemeShard::PersistImportItemDstPathId(NIceDb::TNiceDb& db, const TImportInfo::TPtr importInfo, ui32 itemIdx) {
     Y_VERIFY(itemIdx < importInfo->Items.size());
     const auto& item = importInfo->Items.at(itemIdx);
 
@@ -166,35 +166,35 @@ void TSchemeShard::PersistImportItemDstPathId(NIceDb::TNiceDb& db, const TImport
     );
 }
 
-void TSchemeShard::Handle(TEvImport::TEvCreateImportRequest::TPtr& ev, const TActorContext& ctx) { 
+void TSchemeShard::Handle(TEvImport::TEvCreateImportRequest::TPtr& ev, const TActorContext& ctx) {
     Execute(CreateTxCreateImport(ev), ctx);
 }
 
-void TSchemeShard::Handle(TEvImport::TEvGetImportRequest::TPtr& ev, const TActorContext& ctx) { 
+void TSchemeShard::Handle(TEvImport::TEvGetImportRequest::TPtr& ev, const TActorContext& ctx) {
     Execute(CreateTxGetImport(ev), ctx);
 }
 
-void TSchemeShard::Handle(TEvImport::TEvCancelImportRequest::TPtr& ev, const TActorContext& ctx) { 
+void TSchemeShard::Handle(TEvImport::TEvCancelImportRequest::TPtr& ev, const TActorContext& ctx) {
     Execute(CreateTxCancelImport(ev), ctx);
 }
 
-void TSchemeShard::Handle(TEvImport::TEvForgetImportRequest::TPtr& ev, const TActorContext& ctx) { 
+void TSchemeShard::Handle(TEvImport::TEvForgetImportRequest::TPtr& ev, const TActorContext& ctx) {
     Execute(CreateTxForgetImport(ev), ctx);
 }
 
-void TSchemeShard::Handle(TEvImport::TEvListImportsRequest::TPtr& ev, const TActorContext& ctx) { 
+void TSchemeShard::Handle(TEvImport::TEvListImportsRequest::TPtr& ev, const TActorContext& ctx) {
     Execute(CreateTxListImports(ev), ctx);
 }
 
-void TSchemeShard::Handle(TEvPrivate::TEvImportSchemeReady::TPtr& ev, const TActorContext& ctx) { 
+void TSchemeShard::Handle(TEvPrivate::TEvImportSchemeReady::TPtr& ev, const TActorContext& ctx) {
     Execute(CreateTxProgressImport(ev), ctx);
 }
 
-void TSchemeShard::ResumeImports(const TVector<ui64>& ids, const TActorContext& ctx) { 
+void TSchemeShard::ResumeImports(const TVector<ui64>& ids, const TActorContext& ctx) {
     for (const ui64 id : ids) {
         Execute(CreateTxProgressImport(id), ctx);
     }
 }
 
-} // NSchemeShard 
+} // NSchemeShard
 } // NKikimr

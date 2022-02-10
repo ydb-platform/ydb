@@ -45,7 +45,7 @@ void TTableProfiles::Load(const NKikimrConfig::TTableProfilesConfig &config)
         CachingPolicies[policy.GetName()] = policy;
 }
 
-NKikimrSchemeOp::TFamilyDescription *TTableProfiles::GetNamedFamilyDescription(NKikimrConfig::TStoragePolicy &policy, const TString& name) const { 
+NKikimrSchemeOp::TFamilyDescription *TTableProfiles::GetNamedFamilyDescription(NKikimrConfig::TStoragePolicy &policy, const TString& name) const {
     for (size_t i = 0; i < policy.ColumnFamiliesSize(); ++i) {
         const auto& family = policy.GetColumnFamilies(i);
         if (family.HasName() && name == family.GetName()) {
@@ -57,7 +57,7 @@ NKikimrSchemeOp::TFamilyDescription *TTableProfiles::GetNamedFamilyDescription(N
     return res;
 }
 
-NKikimrSchemeOp::TFamilyDescription *TTableProfiles::GetDefaultFamilyDescription(NKikimrConfig::TStoragePolicy &policy) const { 
+NKikimrSchemeOp::TFamilyDescription *TTableProfiles::GetDefaultFamilyDescription(NKikimrConfig::TStoragePolicy &policy) const {
     for (size_t i = 0; i < policy.ColumnFamiliesSize(); ++i) {
         const auto& family = policy.GetColumnFamilies(i);
         if ((family.HasId() && family.GetId() == 0) ||
@@ -71,7 +71,7 @@ NKikimrSchemeOp::TFamilyDescription *TTableProfiles::GetDefaultFamilyDescription
     return res;
 }
 
-NKikimrSchemeOp::TStorageConfig *TTableProfiles::GetDefaultStorageConfig(NKikimrConfig::TStoragePolicy &policy) const { 
+NKikimrSchemeOp::TStorageConfig *TTableProfiles::GetDefaultStorageConfig(NKikimrConfig::TStoragePolicy &policy) const {
     return GetDefaultFamilyDescription(policy)->MutableStorageConfig();
 }
 
@@ -80,7 +80,7 @@ bool TTableProfiles::HasPresetName(const TString &presetName) const {
 }
 
 bool TTableProfiles::ApplyTableProfile(const Ydb::Table::TableProfile &profile,
-                                       NKikimrSchemeOp::TTableDescription &tableDesc, 
+                                       NKikimrSchemeOp::TTableDescription &tableDesc,
                                        Ydb::StatusIds::StatusCode &code,
                                        TString &error) const
 {
@@ -226,7 +226,7 @@ bool TTableProfiles::ApplyTableProfile(const Ydb::Table::TableProfile &profile,
                 error = "Setting keep_in_memory to ENABLED is not allowed";
                 return false;
             }
-            GetDefaultFamilyDescription(storagePolicy)->SetColumnCache(NKikimrSchemeOp::ColumnCacheEver); 
+            GetDefaultFamilyDescription(storagePolicy)->SetColumnCache(NKikimrSchemeOp::ColumnCacheEver);
             break;
         case Ydb::FeatureFlag::DISABLED:
             GetDefaultFamilyDescription(storagePolicy)->ClearColumnCache();
@@ -277,7 +277,7 @@ bool TTableProfiles::ApplyTableProfile(const Ydb::Table::TableProfile &profile,
                     error = "Setting keep_in_memory to ENABLED is not allowed";
                     return false;
                 }
-                familyProto.SetColumnCache(NKikimrSchemeOp::ColumnCacheEver); 
+                familyProto.SetColumnCache(NKikimrSchemeOp::ColumnCacheEver);
                 break;
             case Ydb::FeatureFlag::DISABLED:
                 familyProto.ClearColumnCache();
@@ -293,10 +293,10 @@ bool TTableProfiles::ApplyTableProfile(const Ydb::Table::TableProfile &profile,
             case Ydb::Table::ColumnFamilyPolicy::COMPRESSION_UNSPECIFIED:
                 break;
             case Ydb::Table::ColumnFamilyPolicy::UNCOMPRESSED:
-                familyProto.SetColumnCodec(NKikimrSchemeOp::ColumnCodecPlain); 
+                familyProto.SetColumnCodec(NKikimrSchemeOp::ColumnCodecPlain);
                 break;
             case Ydb::Table::ColumnFamilyPolicy::COMPRESSED:
-                familyProto.SetColumnCodec(NKikimrSchemeOp::ColumnCodecLZ4); 
+                familyProto.SetColumnCodec(NKikimrSchemeOp::ColumnCodecLZ4);
                 break;
             default:
                 code = Ydb::StatusIds::BAD_REQUEST;
@@ -437,7 +437,7 @@ bool TTableProfiles::ApplyTableProfile(const Ydb::Table::TableProfile &profile,
 }
 
 bool TTableProfiles::ApplyCompactionPolicy(const TString &name,
-    NKikimrSchemeOp::TPartitionConfig &partitionConfig, Ydb::StatusIds::StatusCode &code, 
+    NKikimrSchemeOp::TPartitionConfig &partitionConfig, Ydb::StatusIds::StatusCode &code,
     TString &error, const TAppData* appData) const
 {
     NKikimrConfig::TCompactionPolicy compactionPolicy;

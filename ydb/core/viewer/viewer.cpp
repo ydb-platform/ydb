@@ -129,9 +129,9 @@ public:
         return NKikimrServices::TActivity::TABLET_MONITORING_PROXY;
     }
 
-    TViewer(const TKikimrRunConfig &kikimrRunConfig) 
+    TViewer(const TKikimrRunConfig &kikimrRunConfig)
         : KikimrRunConfig(kikimrRunConfig)
-    {} 
+    {}
 
     void Bootstrap(const TActorContext &ctx) {
         Become(&TThis::StateWork);
@@ -488,9 +488,9 @@ TString IViewer::TContentRequestContext::Dump() const
 
 ui32 CurrentMonitoringPort = 8765;
 
-IActor* CreateViewer(const TKikimrRunConfig &kikimrRunConfig) { 
+IActor* CreateViewer(const TKikimrRunConfig &kikimrRunConfig) {
     CurrentMonitoringPort = kikimrRunConfig.AppConfig.GetMonitoringConfig().GetMonitoringPort();
-    return new TViewer(kikimrRunConfig); 
+    return new TViewer(kikimrRunConfig);
 }
 
 TString IViewer::GetHTTPOKJSON() {

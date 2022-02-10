@@ -2,16 +2,16 @@
 #include <ydb/library/security/util.h>
 
 namespace NKikimr {
-namespace NSchemeShard { 
+namespace NSchemeShard {
 
 using namespace NTabletFlatExecutor;
 
-struct TSchemeShard::TTxLogin : TSchemeShard::TRwTxBase { 
-    TEvSchemeShard::TEvLogin::TPtr Request; 
+struct TSchemeShard::TTxLogin : TSchemeShard::TRwTxBase {
+    TEvSchemeShard::TEvLogin::TPtr Request;
     TPathId SubDomainPathId;
     bool NeedPublishOnComplete = false;
 
-    TTxLogin(TSelf *self, TEvSchemeShard::TEvLogin::TPtr &ev) 
+    TTxLogin(TSelf *self, TEvSchemeShard::TEvLogin::TPtr &ev)
         : TRwTxBase(self)
         , Request(std::move(ev))
     {}
@@ -66,7 +66,7 @@ struct TSchemeShard::TTxLogin : TSchemeShard::TRwTxBase {
         }
 
         NLogin::TLoginProvider::TLoginUserResponse LoginResponse = Self->LoginProvider.LoginUser(GetLoginRequest());
-        THolder<TEvSchemeShard::TEvLoginResult> result = MakeHolder<TEvSchemeShard::TEvLoginResult>(); 
+        THolder<TEvSchemeShard::TEvLoginResult> result = MakeHolder<TEvSchemeShard::TEvLoginResult>();
         if (LoginResponse.Error) {
             result->Record.SetError(LoginResponse.Error);
         }
@@ -84,7 +84,7 @@ struct TSchemeShard::TTxLogin : TSchemeShard::TRwTxBase {
 
 };
 
-NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxLogin(TEvSchemeShard::TEvLogin::TPtr &ev) { 
+NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxLogin(TEvSchemeShard::TEvLogin::TPtr &ev) {
     return new TTxLogin(this, ev);
 }
 

@@ -127,11 +127,11 @@ public:
         Tenant->IsExternalSubdomain = Self->FeatureFlags.GetEnableExternalSubdomains();
         Tenant->IsExternalHive = Self->FeatureFlags.GetEnableExternalHive();
         Tenant->IsExternalSysViewProcessor = Self->FeatureFlags.GetEnablePersistentQueryStats();
- 
-        if (rec.options().disable_external_subdomain()) { 
-            Tenant->IsExternalSubdomain = false; 
-        } 
- 
+
+        if (rec.options().disable_external_subdomain()) {
+            Tenant->IsExternalSubdomain = false;
+        }
+
         if (rec.options().plan_resolution()) {
             Tenant->PlanResolution = rec.options().plan_resolution();
         }
@@ -141,7 +141,7 @@ public:
             Tenant->Mediators = 0;
             Tenant->PlanResolution = 0;
             Tenant->TimeCastBucketsPerMediator = 0;
-            Tenant->IsExternalSubdomain = false; 
+            Tenant->IsExternalSubdomain = false;
             Tenant->IsExternalHive = false;
             Tenant->IsExternalSysViewProcessor = false;
         }

@@ -103,7 +103,7 @@ struct TTestTables {
         : Client(client)
     {
         TOpts opts(var, numFollowers);
-        NKikimrSchemeOp::TTableDescription tableSimple; 
+        NKikimrSchemeOp::TTableDescription tableSimple;
         {
             tableSimple.SetName("Simple");
             auto *c1 = tableSimple.AddColumns();
@@ -133,7 +133,7 @@ struct TTestTables {
             *tableSimple.AddKeyColumnNames() = "key";
         }
 
-        NKikimrSchemeOp::TTableDescription tableByBytes; 
+        NKikimrSchemeOp::TTableDescription tableByBytes;
         {
             tableByBytes.SetName("ByBytes");
             auto *c1 = tableByBytes.AddColumns();
@@ -149,7 +149,7 @@ struct TTestTables {
             *tableByBytes.AddKeyColumnNames() = "key";
         }
 
-        NKikimrSchemeOp::TTableDescription tableComp; 
+        NKikimrSchemeOp::TTableDescription tableComp;
         {
             tableComp.SetName("Comp");
             auto *c1 = tableComp.AddColumns();
@@ -192,7 +192,7 @@ private:
 };
 
 void CreateOldTypesTables(TClient &client) {
-    NKikimrSchemeOp::TTableDescription tableOld; 
+    NKikimrSchemeOp::TTableDescription tableOld;
     {
         tableOld.SetName("Old");
         auto * c1 = tableOld.AddColumns();
@@ -218,7 +218,7 @@ void CreateOldTypesTables(TClient &client) {
         tableOld.SetUniformPartitionsCount(4);
     }
 
-    NKikimrSchemeOp::TTableDescription tableNew; 
+    NKikimrSchemeOp::TTableDescription tableNew;
     {
         tableNew.SetName("New");
         auto * c1 = tableNew.AddColumns();
@@ -251,7 +251,7 @@ void CreateOldTypesTables(TClient &client) {
 }
 
 void AlterTestTables(TClient& client) {
-    NKikimrSchemeOp::TTableDescription alterSimple; 
+    NKikimrSchemeOp::TTableDescription alterSimple;
     {
         alterSimple.SetName("Simple");
         auto* dc1 = alterSimple.AddDropColumns();
@@ -260,7 +260,7 @@ void AlterTestTables(TClient& client) {
 
     client.AlterTable(TablePlacement, alterSimple);
 
-    NKikimrSchemeOp::TTableDescription alterSimple1; 
+    NKikimrSchemeOp::TTableDescription alterSimple1;
     {
         alterSimple1.SetName("Simple");
         auto *c2 = alterSimple1.AddColumns();
@@ -331,14 +331,14 @@ Y_UNIT_TEST_SUITE(TClientTest) {
     Y_UNIT_TEST(TestInspectProxy) {
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
-        auto settings = TServerSettings(port); 
-        settings.SetSupportsRedirect(false); 
+        auto settings = TServerSettings(port);
+        settings.SetSupportsRedirect(false);
 
-        TServer server(settings); 
-        TClient client(settings); 
- 
+        TServer server(settings);
+        TClient client(settings);
+
         NKikimrMiniKQL::TResult res;
-        UNIT_ASSERT(client.LocalQuery(TxAllocator, "(" 
+        UNIT_ASSERT(client.LocalQuery(TxAllocator, "("
             "(let row '('('dummyKey (Bool 'true))))"
             "(let select '('reservedIds))"
             "(return (AsList (SetResult 'reservedIds (SelectRow 'config row select))))"
@@ -355,10 +355,10 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
 
-        const auto settings = TServerSettings(port); 
-        TServer server(settings); 
-        TClient client(settings); 
- 
+        const auto settings = TServerSettings(port);
+        TServer server(settings);
+        TClient client(settings);
+
         NKikimrMiniKQL::TResult res;
         UNIT_ASSERT(client.FlatQuery("("
             "(return (AsList (SetResult 'res1 (Int32 '42))))"
@@ -376,11 +376,11 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
 
-        const auto settings = TServerSettings(port); 
-        TServer server(settings); 
-        TClient client(settings); 
- 
-        client.InitRootScheme(); 
+        const auto settings = TServerSettings(port);
+        TServer server(settings);
+        TClient client(settings);
+
+        client.InitRootScheme();
         TTestTables tables(client, TTestTables::OneShard_NoOpts);
 
         NKikimrMiniKQL::TResult writeRes;
@@ -490,11 +490,11 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
 
-        const auto settings = TServerSettings(port); 
-        TServer server(settings); 
-        TClient client(settings); 
- 
-        client.InitRootScheme(); 
+        const auto settings = TServerSettings(port);
+        TServer server(settings);
+        TClient client(settings);
+
+        client.InitRootScheme();
 
         {
             TTestTables tables(client, TTestTables::OneShard_NoOpts);
@@ -526,11 +526,11 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
 
-        const auto settings = TServerSettings(port); 
-        TServer server(settings); 
-        TClient client(settings); 
- 
-        client.InitRootScheme(); 
+        const auto settings = TServerSettings(port);
+        TServer server(settings);
+        TClient client(settings);
+
+        client.InitRootScheme();
 
         {
             TTestTables tables(client, TTestTables::OneShard_NoOpts);
@@ -549,7 +549,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
             AlterTestTables(client);
             ReadWriteViaMiniKQLBody(client, false, false);
         }
- 
+
         {
             TTestTables tables(client, TTestTables::OneShard_OutOfOrder_SoftUpdates);
             AlterTestTables(client);
@@ -573,7 +573,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
             AlterTestTables(client);
             ReadWriteViaMiniKQLBody(client, false, false);
         }
- 
+
         {
             TTestTables tables(client, TTestTables::Sharded_OutOfOrder_SoftUpdates);
             AlterTestTables(client);
@@ -585,11 +585,11 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
 
-        const auto settings = TServerSettings(port); 
-        TServer server(settings); 
-        TClient client(settings); 
- 
-        client.InitRootScheme(); 
+        const auto settings = TServerSettings(port);
+        TServer server(settings);
+        TClient client(settings);
+
+        client.InitRootScheme();
 
         {
             TTestTables tables(client, TTestTables::OneShard_NoOpts);
@@ -610,11 +610,11 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
 
-        const auto settings = TServerSettings(port); 
-        TServer server(settings); 
-        TClient client(settings); 
- 
-        client.InitRootScheme(); 
+        const auto settings = TServerSettings(port);
+        TServer server(settings);
+        TClient client(settings);
+
+        client.InitRootScheme();
 
         {
             TTestTables tables(client, TTestTables::OneShard_NoOpts);
@@ -622,7 +622,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         }
 
         {
-            NKikimrSchemeOp::TTableDescription tableSimple; 
+            NKikimrSchemeOp::TTableDescription tableSimple;
             tableSimple.SetName("Simple");
             auto *c1 = tableSimple.AddColumns();
             c1->SetName("key");
@@ -658,11 +658,11 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
 
-        const auto settings = TServerSettings(port); 
-        TServer server(settings); 
-        TClient client(settings); 
- 
-        client.InitRootScheme(); 
+        const auto settings = TServerSettings(port);
+        TServer server(settings);
+        TClient client(settings);
+
+        client.InitRootScheme();
 
         {
             TTestTables tables(client, TTestTables::OneShard_NoOpts);
@@ -679,11 +679,11 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
 
-        const auto settings = TServerSettings(port); 
-        TServer server(settings); 
-        TClient client(settings); 
- 
-        client.InitRootScheme(); 
+        const auto settings = TServerSettings(port);
+        TServer server(settings);
+        TClient client(settings);
+
+        client.InitRootScheme();
         TTestTables tables(client, TTestTables::Sharded_NoOpts);
 
         //server.GetRuntime()->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_DEBUG);
@@ -696,15 +696,15 @@ Y_UNIT_TEST_SUITE(TClientTest) {
 
         // Currently followers cannot be started at the same node with leader
         // so we need 2 nodes
-        auto settings = TServerSettings(port); 
-        settings.SetNodeCount(2); 
+        auto settings = TServerSettings(port);
+        settings.SetNodeCount(2);
 
-        TServer server(settings); 
-        TClient client(settings); 
- 
+        TServer server(settings);
+        TClient client(settings);
+
         server.GetRuntime()->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_DEBUG);
 
-        client.InitRootScheme(); 
+        client.InitRootScheme();
 
         {
             TTestTables tables(client, TTestTables::Sharded_NoOpts, 1);
@@ -778,11 +778,11 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
 
-        const auto settings = TServerSettings(port); 
-        TServer server(settings); 
-        TClient client(settings); 
- 
-        client.InitRootScheme(); 
+        const auto settings = TServerSettings(port);
+        TServer server(settings);
+        TClient client(settings);
+
+        client.InitRootScheme();
         TTestTables tables(client, TTestTables::Sharded_NoOpts);
 
         GetStepTxIdBody(client, false);
@@ -792,11 +792,11 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
 
-        const auto settings = TServerSettings(port); 
-        TServer server(settings); 
-        TClient client(settings); 
- 
-        client.InitRootScheme(); 
+        const auto settings = TServerSettings(port);
+        TServer server(settings);
+        TClient client(settings);
+
+        client.InitRootScheme();
         TTestTables tables(client, TTestTables::Sharded_NoOpts);
 
         GetStepTxIdBody(client, true);
@@ -881,11 +881,11 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
 
-        const auto settings = TServerSettings(port); 
-        TServer server(settings); 
-        TClient client(settings); 
- 
-        client.InitRootScheme(); 
+        const auto settings = TServerSettings(port);
+        TServer server(settings);
+        TClient client(settings);
+
+        client.InitRootScheme();
 
         {
             TTestTables tables(client, TTestTables::OneShard_NoOpts);
@@ -901,7 +901,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
             TTestTables tables(client, TTestTables::OneShard_SoftUpdates);
             CASViaMiniKQLBody(client);
         }
- 
+
         {
             TTestTables tables(client, TTestTables::OneShard_OutOfOrder_SoftUpdates);
             CASViaMiniKQLBody(client);
@@ -989,11 +989,11 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
 
-        const auto settings = TServerSettings(port); 
-        TServer server(settings); 
-        TClient client(settings); 
- 
-        client.InitRootScheme(); 
+        const auto settings = TServerSettings(port);
+        TServer server(settings);
+        TClient client(settings);
+
+        client.InitRootScheme();
 
         {
             TTestTables tables(client, TTestTables::OneShard_NoOpts);
@@ -1009,7 +1009,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
             TTestTables tables(client, TTestTables::OneShard_SoftUpdates);
             RowEraseViaMiniKQLBody(client);
         }
- 
+
         {
             TTestTables tables(client, TTestTables::OneShard_OutOfOrder_SoftUpdates);
             RowEraseViaMiniKQLBody(client);
@@ -1085,11 +1085,11 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
 
-        const auto settings = TServerSettings(port); 
-        TServer server(settings); 
-        TClient client(settings); 
- 
-        client.InitRootScheme(); 
+        const auto settings = TServerSettings(port);
+        TServer server(settings);
+        TClient client(settings);
+
+        client.InitRootScheme();
 
         {
             TTestTables tables(client, TTestTables::OneShard_NoOpts);
@@ -1105,7 +1105,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
             TTestTables tables(client, TTestTables::OneShard_SoftUpdates);
             ReadRangeViaMiniKQLBody(client);
         }
- 
+
         {
             TTestTables tables(client, TTestTables::OneShard_OutOfOrder_SoftUpdates);
             ReadRangeViaMiniKQLBody(client);
@@ -1301,11 +1301,11 @@ Y_UNIT_TEST_SUITE(TClientTest) {
     Y_UNIT_TEST(SelectRangeOptions) {
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
-        const auto settings = TServerSettings(port); 
-        TServer server(settings); 
-        TClient client(settings); 
+        const auto settings = TServerSettings(port);
+        TServer server(settings);
+        TClient client(settings);
 
-        client.InitRootScheme(); 
+        client.InitRootScheme();
 
         {
             TTestTables tables(client, TTestTables::OneShard_NoOpts);
@@ -1393,11 +1393,11 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
 
-        const auto settings = TServerSettings(port); 
-        TServer server(settings); 
-        TClient client(settings); 
- 
-        client.InitRootScheme(); 
+        const auto settings = TServerSettings(port);
+        TServer server(settings);
+        TClient client(settings);
+
+        client.InitRootScheme();
 
         {
             TTestTables tables(client, TTestTables::OneShard_NoOpts);
@@ -1413,7 +1413,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
             TTestTables tables(client, TTestTables::OneShard_SoftUpdates);
             MultiSelectBody(client);
         }
- 
+
         {
             TTestTables tables(client, TTestTables::OneShard_OutOfOrder_SoftUpdates);
             MultiSelectBody(client);
@@ -1433,7 +1433,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
             TTestTables tables(client, TTestTables::Sharded_SoftUpdates);
             MultiSelectBody(client);
         }
- 
+
         {
             TTestTables tables(client, TTestTables::Sharded_OutOfOrder_SoftUpdates);
             MultiSelectBody(client);
@@ -1444,11 +1444,11 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
 
-        const auto settings = TServerSettings(port); 
-        TServer server(settings); 
-        TClient client(settings); 
- 
-        client.InitRootScheme(); 
+        const auto settings = TServerSettings(port);
+        TServer server(settings);
+        TClient client(settings);
+
+        client.InitRootScheme();
 
         {
             TTestTables tables(client, TTestTables::OneShard_NoOpts);
@@ -1462,7 +1462,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
     }
 
     void PrepareTestData(TClient& client, bool allowFollowerPromotion) {
-        client.InitRootScheme(); 
+        client.InitRootScheme();
         client.MkDir("/dc-1", "Berkanavt");
         client.MkDir("/dc-1/Berkanavt", "tables");
         client.CreateTable(TablePlacement, Sprintf(
@@ -1529,12 +1529,12 @@ Y_UNIT_TEST_SUITE(TClientTest) {
     Y_UNIT_TEST(ReadFromFollower) {
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
- 
-        auto settings = TServerSettings(port); 
-        settings.SetNodeCount(2); 
-        TServer server(settings); 
-        TClient client(settings); 
- 
+
+        auto settings = TServerSettings(port);
+        settings.SetNodeCount(2);
+        TServer server(settings);
+        TClient client(settings);
+
         SetupLogging(server);
 
         PrepareTestData(client, false);
@@ -1544,12 +1544,12 @@ Y_UNIT_TEST_SUITE(TClientTest) {
     Y_UNIT_TEST(FollowerCacheRefresh) {
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
- 
-        auto settings = TServerSettings(port); 
-        settings.SetNodeCount(2); 
-        TServer server(settings); 
-        TClient client(settings); 
- 
+
+        auto settings = TServerSettings(port);
+        settings.SetNodeCount(2);
+        TServer server(settings);
+        TClient client(settings);
+
         server.GetRuntime()->SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_DEBUG);
 
         client.MarkNodeInHive(server.GetRuntime(), 1, false);
@@ -1629,12 +1629,12 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
 
-        auto settings = TServerSettings(port); 
-        settings.SetNodeCount(2); 
- 
-        TServer server(settings); 
-        TClient client(settings); 
- 
+        auto settings = TServerSettings(port);
+        settings.SetNodeCount(2);
+
+        TServer server(settings);
+        TClient client(settings);
+
         PrepareTestData(client, true);
 
         SetupLogging(server);
@@ -1719,11 +1719,11 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
 
-        const auto settings = TServerSettings(port); 
-        TServer server(settings); 
-        TClient client(settings); 
- 
-        client.InitRootScheme(); 
+        const auto settings = TServerSettings(port);
+        TServer server(settings);
+        TClient client(settings);
+
+        client.InitRootScheme();
 
         {
             TTestTables tables(client, TTestTables::Sharded_NoOpts);
@@ -1739,7 +1739,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
             TTestTables tables(client, TTestTables::Sharded_NoOpts);
             DiagnosticsBody(client, false);
         }
- 
+
         {
             TTestTables tables(client, TTestTables::Sharded_NoOpts, 1);
             DiagnosticsBody(client, false);
@@ -1788,10 +1788,10 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
 
-        const auto settings = TServerSettings(port); 
-        TServer server(settings); 
-        TClient client(settings); 
- 
+        const auto settings = TServerSettings(port);
+        TServer server(settings);
+        TClient client(settings);
+
         NTabletFlatScheme::TSchemeChanges scheme1;
         NTabletFlatScheme::TSchemeChanges scheme2;
         TString err;
@@ -1807,10 +1807,10 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
 
-        const auto settings = TServerSettings(port); 
-        TServer server(settings); 
-        TClient client(settings); 
- 
+        const auto settings = TServerSettings(port);
+        TServer server(settings);
+        TClient client(settings);
+
         NTabletFlatScheme::TSchemeChanges scheme;
         TString err;
         bool success = false;
@@ -1857,10 +1857,10 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
 
-        const auto settings = TServerSettings(port); 
-        TServer server(settings); 
-        TClient client(settings); 
- 
+        const auto settings = TServerSettings(port);
+        TServer server(settings);
+        TClient client(settings);
+
         server.StartDummyTablets();
         WaitForLeaderStart(client, server.GetRuntime(), ChangeStateStorage(Tests::DummyTablet1, TestDomain), TDuration::Seconds(1));
 
@@ -1893,11 +1893,11 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
 
-        const auto settings = TServerSettings(port); 
-        TServer server(settings); 
-        TClient client(settings); 
- 
-        client.InitRootScheme(); 
+        const auto settings = TServerSettings(port);
+        TServer server(settings);
+        TClient client(settings);
+
+        client.InitRootScheme();
         CreateOldTypesTables(client);
 
         const char * writeOldTypes = R"((
@@ -1973,11 +1973,11 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
 
-        const auto settings = TServerSettings(port); 
-        TServer server(settings); 
-        TClient client(settings); 
- 
-        client.InitRootScheme(); 
+        const auto settings = TServerSettings(port);
+        TServer server(settings);
+        TClient client(settings);
+
+        client.InitRootScheme();
         CreateOldTypesTables(client);
 
         const char * paramsOld = R"((

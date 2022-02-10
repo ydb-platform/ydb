@@ -9,11 +9,11 @@
 #include <util/generic/ptr.h>
 
 namespace NKikimr {
-namespace NSchemeShard { 
+namespace NSchemeShard {
 
 using namespace NTabletFlatExecutor;
 
-struct TSchemeShard::TImport::TTxForget: public TSchemeShard::TXxport::TTxBase { 
+struct TSchemeShard::TImport::TTxForget: public TSchemeShard::TXxport::TTxBase {
     TEvImport::TEvForgetImportRequest::TPtr Request;
 
     explicit TTxForget(TSelf *self, TEvImport::TEvForgetImportRequest::TPtr& ev)
@@ -72,9 +72,9 @@ struct TSchemeShard::TImport::TTxForget: public TSchemeShard::TXxport::TTxBase {
 
 }; // TTxForget
 
-ITransaction* TSchemeShard::CreateTxForgetImport(TEvImport::TEvForgetImportRequest::TPtr& ev) { 
+ITransaction* TSchemeShard::CreateTxForgetImport(TEvImport::TEvForgetImportRequest::TPtr& ev) {
     return new TImport::TTxForget(this, ev);
 }
 
-} // NSchemeShard 
+} // NSchemeShard
 } // NKikimr

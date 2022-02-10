@@ -473,7 +473,7 @@ alter_table_action:
   | alter_table_reset_table_setting
   | alter_table_add_index
   | alter_table_drop_index
-  | alter_table_rename_to 
+  | alter_table_rename_to
   | alter_table_add_changefeed
   | alter_table_alter_changefeed
   | alter_table_drop_changefeed
@@ -489,7 +489,7 @@ alter_table_set_table_setting_compat: SET LPAREN alter_table_setting_entry (COMM
 alter_table_reset_table_setting: RESET LPAREN an_id (COMMA an_id)* RPAREN;
 alter_table_add_index: ADD table_index;
 alter_table_drop_index: DROP INDEX an_id;
-alter_table_rename_to: RENAME TO an_id_table; 
+alter_table_rename_to: RENAME TO an_id_table;
 alter_table_add_changefeed: ADD changefeed;
 alter_table_alter_changefeed: ALTER CHANGEFEED an_id changefeed_alter_settings;
 alter_table_drop_changefeed: DROP CHANGEFEED an_id;

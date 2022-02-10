@@ -20,29 +20,29 @@ namespace NKikimr {
         return (tabletId & 0x00000FFFFFFFFFFFull);
     }
 
-    inline ui64 AvoidReservedUniqPart(ui64 candidate, ui64 brokenBegin, ui64 brokenEnd) { 
-        if (candidate >= brokenBegin && candidate < brokenEnd) { 
-            return brokenEnd; 
-        } 
-        return candidate; 
-    } 
- 
+    inline ui64 AvoidReservedUniqPart(ui64 candidate, ui64 brokenBegin, ui64 brokenEnd) {
+        if (candidate >= brokenBegin && candidate < brokenEnd) {
+            return brokenEnd;
+        }
+        return candidate;
+    }
+
     static const ui64 TABLET_ID_BLACKHOLE_BEGIN = 0x800000;
     static const ui64 TABLET_ID_BLACKHOLE_END = 0x900000;
 
-    inline ui64 AvoidReservedUniqPartsBySystemTablets(ui64 candidate) { 
-        // candidate = AvoidReservedUniqPart(candidate, 0x800000, 0x800100); // coordinators 
-        // candidate = AvoidReservedUniqPart(candidate, 0x810000, 0x810100); // mediators 
-        // candidate = AvoidReservedUniqPart(candidate, 0x820000, 0x821000); // allocators 
-        // candidate = AvoidReservedUniqPart(candidate, 0x840000, 0x860000); // schemeshard 
+    inline ui64 AvoidReservedUniqPartsBySystemTablets(ui64 candidate) {
+        // candidate = AvoidReservedUniqPart(candidate, 0x800000, 0x800100); // coordinators
+        // candidate = AvoidReservedUniqPart(candidate, 0x810000, 0x810100); // mediators
+        // candidate = AvoidReservedUniqPart(candidate, 0x820000, 0x821000); // allocators
+        // candidate = AvoidReservedUniqPart(candidate, 0x840000, 0x860000); // schemeshard
         return AvoidReservedUniqPart(candidate, TABLET_ID_BLACKHOLE_BEGIN, TABLET_ID_BLACKHOLE_END); // for sure
-    } 
- 
-    inline bool IsReservedTabletId(ui64 tabletId) { 
-        const ui64 uniqPart = UniqPartFromTabletID(tabletId); 
-        return uniqPart != AvoidReservedUniqPartsBySystemTablets(uniqPart); 
-    } 
- 
+    }
+
+    inline bool IsReservedTabletId(ui64 tabletId) {
+        const ui64 uniqPart = UniqPartFromTabletID(tabletId);
+        return uniqPart != AvoidReservedUniqPartsBySystemTablets(uniqPart);
+    }
+
     // 8 + 12 + 44
     inline ui64 MakeTabletID(ui64 stateStorageGroup, ui64 hiveUid, ui64 uniqPart) {
         Y_VERIFY(stateStorageGroup < (1ull << 8ull) && hiveUid < (1ull << 12ull) && uniqPart < (1ull << 44ull));

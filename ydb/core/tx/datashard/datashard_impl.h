@@ -10,7 +10,7 @@
 #include "datashard_s3_downloads.h"
 #include "datashard_s3_uploads.h"
 #include "datashard_user_table.h"
-#include "datashard_build_index.h" 
+#include "datashard_build_index.h"
 #include "datashard_repl_offsets.h"
 #include "datashard_repl_offsets_client.h"
 #include "datashard_repl_offsets_server.h"
@@ -187,7 +187,7 @@ class TDataShard
     class TTxRefreshVolatileSnapshot;
     class TTxDiscardVolatileSnapshot;
     class TTxCleanupRemovedSnapshots;
-    class TTxMigrateSchemeShard; 
+    class TTxMigrateSchemeShard;
     class TTxGetS3Upload;
     class TTxStoreS3UploadId;
     class TTxChangeS3UploadStatus;
@@ -247,7 +247,7 @@ class TDataShard
     friend class TAsyncTableStatsBuilder;
     friend class TReadTableScan;
     friend class TWaitForStreamClearanceUnit;
-    friend class TBuildIndexScan; 
+    friend class TBuildIndexScan;
     friend class TReadColumnsScan;
     friend class TCondEraseScan;
     friend class TDatashardKeySampler;
@@ -256,7 +256,7 @@ class TDataShard
     friend class TS3DownloadsManager;
     friend class TS3Downloader;
     friend struct TSetupSysLocks;
- 
+
     friend class TTxStartMvccStateChange;
     friend class TTxExecuteMvccStateChange;
 
@@ -773,8 +773,8 @@ class TDataShard
             Sys_LastLocalTid,
             Sys_LastSeqno, // Last sequence number of out read set
             Sys_AliveStep, // Last known step we shouldn't drop at
-            Sys_TxReadSizeLimit_DEPRECATED, // 10// No longer used but is present in old tables 
-            Sys_CurrentSchemeShardId, // TabletID of the schmemeshard that manages the datashard right now 
+            Sys_TxReadSizeLimit_DEPRECATED, // 10// No longer used but is present in old tables
+            Sys_CurrentSchemeShardId, // TabletID of the schmemeshard that manages the datashard right now
             Sys_DstSplitDescription, // Split/Merge operation description at destination shard
             Sys_DstSplitOpId,        // TxId of split operation at destination shard
             Sys_SrcSplitDescription, // Split/Merge operation description at source shard
@@ -782,13 +782,13 @@ class TDataShard
             Sys_LastSchemeShardGeneration,  // LastSchemeOpSeqNo.Generation
             Sys_LastSchemeShardRound,       // LastSchemeOpSeqNo.Round
             Sys_TxReadSizeLimit, // Maximum size in bytes that is allowed to be read by a single Tx
-            Sys_SubDomainInfo,  //19 Subdomain setting which owns this table 
+            Sys_SubDomainInfo,  //19 Subdomain setting which owns this table
             Sys_StatisticsDisabled,
             Sys_DstSplitSchemaInitialized,
             Sys_MinWriteVersionStep, // 22 Minimum Step for new writes (past known snapshots)
             Sys_MinWriteVersionTxId, // 23 Minimum TxId for new writes (past known snapshots)
-            Sys_PathOwnerId, // TabletID of the schmemeshard that allocated the TPathId(ownerId,localId) 
- 
+            Sys_PathOwnerId, // TabletID of the schmemeshard that allocated the TPathId(ownerId,localId)
+
             SysMvcc_State,
             SysMvcc_CompleteEdgeStep,
             SysMvcc_CompleteEdgeTxId,
@@ -938,14 +938,14 @@ class TDataShard
     void Handle(TEvDataShard::TEvGetSlowOpProfilesRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvRefreshVolatileSnapshotRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvDiscardVolatileSnapshotRequest::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvDataShard::TEvMigrateSchemeShardRequest::TPtr& ev, const TActorContext& ctx); 
+    void Handle(TEvDataShard::TEvMigrateSchemeShardRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvGetS3Upload::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvStoreS3UploadId::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvChangeS3UploadStatus::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvGetS3DownloadInfo::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvStoreS3DownloadInfo::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvUnsafeUploadRowsRequest::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, const TActorContext& ctx); 
+    void Handle(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvAsyncJobComplete::TPtr& ev, const TActorContext& ctx);
 
     void Handle(TEvDataShard::TEvCancelBackup::TPtr &ev, const TActorContext &ctx);
@@ -960,7 +960,7 @@ class TDataShard
     void Handle(TEvTxProcessing::TEvInterruptTransaction::TPtr &ev, const TActorContext &ctx) {
         ForwardEventToOperation(ev, ctx);
     }
-    void Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr ev, const TActorContext &ctx); 
+    void Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr ev, const TActorContext &ctx);
 
     void Handle(TEvents::TEvUndelivered::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvInterconnect::TEvNodeDisconnected::TPtr& ev, const TActorContext& ctx);
@@ -1008,7 +1008,7 @@ class TDataShard
     }
 
     void UpdateLagCounters(const TActorContext &ctx);
-    static NTabletPipe::TClientConfig GetPipeClientConfig(); 
+    static NTabletPipe::TClientConfig GetPipeClientConfig();
 
     void OnDetach(const TActorContext &ctx) override;
     void OnTabletStop(TEvTablet::TEvTabletStop::TPtr &ev, const TActorContext &ctx) override;
@@ -1031,18 +1031,18 @@ class TDataShard
         Y_UNUSED(ctx);
     }
 
-    void PersistSys(NIceDb::TNiceDb& db, ui64 key, const TString& value) const; 
+    void PersistSys(NIceDb::TNiceDb& db, ui64 key, const TString& value) const;
     void PersistSys(NIceDb::TNiceDb& db, ui64 key, ui64 value) const;
     void PersistSys(NIceDb::TNiceDb& db, ui64 key, ui32 value) const;
     void PersistSys(NIceDb::TNiceDb& db, ui64 key, bool value) const;
     void PersistUserTable(NIceDb::TNiceDb& db, ui64 tableId, const TUserTable& tableInfo);
     void PersistUserTableFullCompactionTs(NIceDb::TNiceDb& db, ui64 tableId, ui64 ts);
-    void PersistMoveUserTable(NIceDb::TNiceDb& db, ui64 prevTableId, ui64 tableId, const TUserTable& tableInfo); 
+    void PersistMoveUserTable(NIceDb::TNiceDb& db, ui64 prevTableId, ui64 tableId, const TUserTable& tableInfo);
 
     void DropAllUserTables(TTransactionContext& txc);
     void PurgeTxTables(TTransactionContext& txc);
 
-    bool CheckMediatorAuthorisation(ui64 mediatorId); 
+    bool CheckMediatorAuthorisation(ui64 mediatorId);
 
     NTabletFlatExecutor::ITransaction* CreateTxInit();
     NTabletFlatExecutor::ITransaction* CreateTxInitSchema();
@@ -1167,12 +1167,12 @@ public:
         return prefix;
     }
 
-    void RemoveUserTable(const TPathId& tableId) { 
-        TableInfos.erase(tableId.LocalPathId); 
-        SysLocks.RemoveSchema(tableId); 
-        Pipeline.GetDepTracker().RemoveSchema(tableId); 
-    } 
- 
+    void RemoveUserTable(const TPathId& tableId) {
+        TableInfos.erase(tableId.LocalPathId);
+        SysLocks.RemoveSchema(tableId);
+        Pipeline.GetDepTracker().RemoveSchema(tableId);
+    }
+
     void AddUserTable(const TPathId& tableId, TUserTable::TPtr tableInfo) {
         TableInfos[tableId.LocalPathId] = tableInfo;
         SysLocks.UpdateSchema(tableId, *tableInfo);
@@ -1215,7 +1215,7 @@ public:
     }
 
     ui64 GetOutdatedCleanupStep() const {
-        ui64 mediatorTime = MediatorTimeCastEntry ? MediatorTimeCastEntry->Get(TabletID()) : 0; 
+        ui64 mediatorTime = MediatorTimeCastEntry ? MediatorTimeCastEntry->Get(TabletID()) : 0;
         ui64 pipelineTime = Pipeline.OutdatedCleanupStep();
         return Max(mediatorTime, pipelineTime);
     }
@@ -1290,21 +1290,21 @@ public:
 
     bool IsStopping() const { return Stopping; }
 
-    ui64 GetPathOwnerId() const { return PathOwnerId; } 
-    ui64 GetCurrentSchemeShardId() const { return CurrentSchemeShardId; } 
+    ui64 GetPathOwnerId() const { return PathOwnerId; }
+    ui64 GetCurrentSchemeShardId() const { return CurrentSchemeShardId; }
 
     TSchemeOpSeqNo GetLastSchemeOpSeqNo() { return LastSchemeOpSeqNo; }
     void UpdateLastSchemeOpSeqNo(const TSchemeOpSeqNo &newSeqNo,
                                  TTransactionContext &txc);
-    void ResetLastSchemeOpSeqNo(TTransactionContext &txc); 
+    void ResetLastSchemeOpSeqNo(TTransactionContext &txc);
     void PersistProcessingParams(const NKikimrSubDomains::TProcessingParams &params,
                                  NTabletFlatExecutor::TTransactionContext &txc);
-    void PersistCurrentSchemeShardId(ui64 id, 
+    void PersistCurrentSchemeShardId(ui64 id,
                                     NTabletFlatExecutor::TTransactionContext &txc);
     void PersistSubDomainPathId(ui64 ownerId, ui64 localPathId,
                                 NTabletFlatExecutor::TTransactionContext &txc);
-    void PersistOwnerPathId(ui64 id, 
-                            NTabletFlatExecutor::TTransactionContext &txc); 
+    void PersistOwnerPathId(ui64 id,
+                            NTabletFlatExecutor::TTransactionContext &txc);
 
     TDuration CleanupTimeout() const;
     void PlanCleanup(const TActorContext &ctx) {
@@ -1346,11 +1346,11 @@ public:
         const TActorContext& ctx, TTransactionContext& txc,
         const TPathId& pathId, const ui64 tableSchemaVersion,
         bool persist = true);
- 
+
     TUserTable::TPtr AlterTableAddIndex(
         const TActorContext& ctx, TTransactionContext& txc,
         const TPathId& pathId, ui64 tableSchemaVersion,
-        const NKikimrSchemeOp::TIndexDescription& indexDesc); 
+        const NKikimrSchemeOp::TIndexDescription& indexDesc);
 
     TUserTable::TPtr AlterTableDropIndex(
         const TActorContext& ctx, TTransactionContext& txc,
@@ -1360,7 +1360,7 @@ public:
     TUserTable::TPtr AlterTableAddCdcStream(
         const TActorContext& ctx, TTransactionContext& txc,
         const TPathId& pathId, ui64 tableSchemaVersion,
-        const NKikimrSchemeOp::TCdcStreamDescription& streamDesc); 
+        const NKikimrSchemeOp::TCdcStreamDescription& streamDesc);
 
     TUserTable::TPtr AlterTableDisableCdcStream(
         const TActorContext& ctx, TTransactionContext& txc,
@@ -1372,11 +1372,11 @@ public:
         const TPathId& pathId, ui64 tableSchemaVersion,
         const TPathId& streamPathId);
 
-    TUserTable::TPtr CreateUserTable(TTransactionContext& txc, const NKikimrSchemeOp::TTableDescription& tableScheme); 
+    TUserTable::TPtr CreateUserTable(TTransactionContext& txc, const NKikimrSchemeOp::TTableDescription& tableScheme);
     TUserTable::TPtr AlterUserTable(const TActorContext& ctx, TTransactionContext& txc,
-                                    const NKikimrSchemeOp::TTableDescription& tableScheme); 
-    static THashMap<TPathId, TPathId> GetRemapIndexes(const NKikimrTxDataShard::TMoveTable& move); 
-    TUserTable::TPtr MoveUserTable(const TActorContext& ctx, TTransactionContext& txc, const NKikimrTxDataShard::TMoveTable& move); 
+                                    const NKikimrSchemeOp::TTableDescription& tableScheme);
+    static THashMap<TPathId, TPathId> GetRemapIndexes(const NKikimrTxDataShard::TMoveTable& move);
+    TUserTable::TPtr MoveUserTable(const TActorContext& ctx, TTransactionContext& txc, const NKikimrTxDataShard::TMoveTable& move);
     void DropUserTable(TTransactionContext& txc, ui64 tableId);
 
     ui32 GetLastLocalTid() const { return LastLocalTid; }
@@ -1384,16 +1384,16 @@ public:
     ui64 AllocateChangeRecordOrder(NIceDb::TNiceDb& db);
     ui64 AllocateChangeRecordGroup(NIceDb::TNiceDb& db);
     void PersistChangeRecord(NIceDb::TNiceDb& db, const TChangeRecord& record);
-    void MoveChangeRecord(NIceDb::TNiceDb& db, ui64 order, const TPathId& pathId); 
+    void MoveChangeRecord(NIceDb::TNiceDb& db, ui64 order, const TPathId& pathId);
     void RemoveChangeRecord(NIceDb::TNiceDb& db, ui64 order);
     void EnqueueChangeRecords(TVector<TEvChangeExchange::TEvEnqueueRecords::TRecordInfo>&& records);
     void CreateChangeSender(const TActorContext& ctx);
     void KillChangeSender(const TActorContext& ctx);
     void MaybeActivateChangeSender(const TActorContext& ctx);
     const TActorId& GetChangeSender() const { return OutChangeSender; }
-    bool LoadChangeRecords(NIceDb::TNiceDb& db, TVector<TEvChangeExchange::TEvEnqueueRecords::TRecordInfo>& changeRecords); 
+    bool LoadChangeRecords(NIceDb::TNiceDb& db, TVector<TEvChangeExchange::TEvEnqueueRecords::TRecordInfo>& changeRecords);
 
- 
+
     static void PersistSchemeTxResult(NIceDb::TNiceDb &db, const TSchemaOperation& op);
     void NotifySchemeshard(const TActorContext& ctx, ui64 txId = 0);
 
@@ -1410,9 +1410,9 @@ public:
         return SnapshotManager.PromoteCompleteEdge(std::forward<Args>(args)...);
     }
 
-    TBuildIndexManager& GetBuildIndexManager() { return BuildIndexManager; } 
-    const TBuildIndexManager& GetBuildIndexManager() const { return BuildIndexManager; } 
- 
+    TBuildIndexManager& GetBuildIndexManager() { return BuildIndexManager; }
+    const TBuildIndexManager& GetBuildIndexManager() const { return BuildIndexManager; }
+
     // Returns true when datashard is working in mvcc mode
     bool IsMvccEnabled() const;
 
@@ -1892,8 +1892,8 @@ private:
     NTabletPipe::TClientRetryPolicy SchemeShardPipeRetryPolicy;
     TActorId SchemeShardPipe;   // For notifications about schema changes
     TActorId StateReportPipe;   // For notifications about shard state changes
-    ui64 PathOwnerId; // TabletID of the schmemeshard that allocated the TPathId(ownerId,localId) 
-    ui64 CurrentSchemeShardId; // TabletID of SchemeShard wich manages the path right now 
+    ui64 PathOwnerId; // TabletID of the schmemeshard that allocated the TPathId(ownerId,localId)
+    ui64 CurrentSchemeShardId; // TabletID of SchemeShard wich manages the path right now
     ui64 LastKnownMediator;
     bool RegistrationSended;
     std::unique_ptr<NKikimrSubDomains::TProcessingParams> ProcessingParams;
@@ -1964,8 +1964,8 @@ private:
 
     TReplicationSourceOffsetsServerLink ReplicationSourceOffsetsServer;
 
-    TBuildIndexManager BuildIndexManager; 
- 
+    TBuildIndexManager BuildIndexManager;
+
     TS3UploadsManager S3Uploads;
     TS3DownloadsManager S3Downloads;
 
@@ -2145,7 +2145,7 @@ protected:
             HFuncTraced(TEvDataShard::TEvGetS3DownloadInfo, Handle);
             HFuncTraced(TEvDataShard::TEvStoreS3DownloadInfo, Handle);
             HFuncTraced(TEvDataShard::TEvUnsafeUploadRowsRequest, Handle);
-            HFuncTraced(TEvDataShard::TEvMigrateSchemeShardRequest, Handle); 
+            HFuncTraced(TEvDataShard::TEvMigrateSchemeShardRequest, Handle);
             HFuncTraced(TEvTxProcessing::TEvPlanStep, Handle);
             HFuncTraced(TEvTxProcessing::TEvReadSet, Handle);
             HFuncTraced(TEvTxProcessing::TEvReadSetAck, Handle);
@@ -2167,7 +2167,7 @@ protected:
             HFuncTraced(TEvMediatorTimecast::TEvRegisterTabletResult, Handle);
             HFuncTraced(TEvMediatorTimecast::TEvNotifyPlanStep, Handle);
             HFuncTraced(TEvDataShard::TEvCancelTransactionProposal, Handle);
-            HFuncTraced(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, Handle); 
+            HFuncTraced(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, Handle);
             HFunc(TEvDataShard::TEvReturnBorrowedPart, Handle);
             HFunc(TEvDataShard::TEvReturnBorrowedPartAck, Handle);
             HFunc(TEvDataShard::TEvInitSplitMergeDestination, Handle);
@@ -2200,7 +2200,7 @@ protected:
             HFunc(TEvDataShard::TEvGetSlowOpProfilesRequest, Handle);
             HFunc(TEvDataShard::TEvRefreshVolatileSnapshotRequest, Handle);
             HFunc(TEvDataShard::TEvDiscardVolatileSnapshotRequest, Handle);
-            HFuncTraced(TEvDataShard::TEvBuildIndexCreateRequest, Handle); 
+            HFuncTraced(TEvDataShard::TEvBuildIndexCreateRequest, Handle);
             HFunc(TEvPrivate::TEvAsyncJobComplete, Handle);
             CFunc(TEvPrivate::EvPeriodicWakeup, DoPeriodicTasks);
             HFunc(TEvents::TEvUndelivered, Handle);
@@ -2265,7 +2265,7 @@ protected:
             HFuncTraced(TEvTablet::TEvTabletDead, HandleTabletDead);
         default:
             LOG_WARN_S(ctx, NKikimrServices::TX_DATASHARD, "TDataShard::BrokenState at tablet " << TabletID()
-                       << " unhandled event type: " << ev->GetTypeRewrite() 
+                       << " unhandled event type: " << ev->GetTypeRewrite()
                        << " event: " << (ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?"));
             ctx.Send(ev->ForwardOnNondelivery(TEvents::TEvUndelivered::ReasonActorUnknown));
             break;
@@ -2308,7 +2308,7 @@ protected:
 
     void SendViaSchemeshardPipe(const TActorContext &ctx, ui64 tabletId, THolder<TEvDataShard::TEvSchemaChanged> event) {
         Y_VERIFY(tabletId);
-        Y_VERIFY(CurrentSchemeShardId == tabletId); 
+        Y_VERIFY(CurrentSchemeShardId == tabletId);
 
         if (!SchemeShardPipe) {
             NTabletPipe::TClientConfig clientConfig;
@@ -2319,13 +2319,13 @@ protected:
 
     void ReportState(const TActorContext &ctx, ui32 state) {
         LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD, TabletID() << " Reporting state " << DatashardStateName(State)
-                    << " to schemeshard " << CurrentSchemeShardId); 
+                    << " to schemeshard " << CurrentSchemeShardId);
         Y_VERIFY(state != TShardState::Offline || !HasSharedBlobs(),
                  "Datashard %" PRIu64 " tried to go offline while having shared blobs", TabletID());
         if (!StateReportPipe) {
             NTabletPipe::TClientConfig clientConfig;
             clientConfig.RetryPolicy = SchemeShardPipeRetryPolicy;
-            StateReportPipe = ctx.Register(NTabletPipe::CreateClient(ctx.SelfID, CurrentSchemeShardId, clientConfig)); 
+            StateReportPipe = ctx.Register(NTabletPipe::CreateClient(ctx.SelfID, CurrentSchemeShardId, clientConfig));
         }
         THolder<TEvDataShard::TEvStateChanged> ev(new TEvDataShard::TEvStateChanged(ctx.SelfID, TabletID(), state));
         NTabletPipe::SendData(ctx, StateReportPipe, ev.Release());
@@ -2353,10 +2353,10 @@ protected:
 
             if (!DbStatsReportPipe) {
                 NTabletPipe::TClientConfig clientConfig;
-                DbStatsReportPipe = ctx.Register(NTabletPipe::CreateClient(ctx.SelfID, CurrentSchemeShardId, clientConfig)); 
+                DbStatsReportPipe = ctx.Register(NTabletPipe::CreateClient(ctx.SelfID, CurrentSchemeShardId, clientConfig));
             }
 
-            THolder<TEvDataShard::TEvPeriodicTableStats> ev(new TEvDataShard::TEvPeriodicTableStats(TabletID(), PathOwnerId, tableId)); 
+            THolder<TEvDataShard::TEvPeriodicTableStats> ev(new TEvDataShard::TEvPeriodicTableStats(TabletID(), PathOwnerId, tableId));
             ev->Record.SetShardState(State);
             ev->Record.SetGeneration(Executor()->Generation());
             ev->Record.SetRound(StatsReportRound++);

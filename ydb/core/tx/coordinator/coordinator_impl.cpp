@@ -1,4 +1,4 @@
-#include "coordinator_impl.h" 
+#include "coordinator_impl.h"
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
 #include <ydb/core/tablet/tablet_counters_protobuf.h>
 #include <ydb/core/tablet/tablet_counters_aggregator.h>
@@ -45,8 +45,8 @@ static TAutoPtr<TTransactionProposal> MakeTransactionProposal(TEvTxProxy::TEvPro
     return proposal;
 }
 
-const ui32 TTxCoordinator::Schema::CurrentVersion = 1; 
- 
+const ui32 TTxCoordinator::Schema::CurrentVersion = 1;
+
 TTxCoordinator::TTxCoordinator(TTabletStorageInfo *info, const TActorId &tablet)
     : TActor(&TThis::StateInit)
     , TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory)
@@ -79,13 +79,13 @@ void TTxCoordinator::PlanTx(TAutoPtr<TTransactionProposal> &proposal, const TAct
     proposal->AcceptMoment = ctx.Now();
     MonCounters.PlanTxCalls->Inc();
 
-    if (proposal->MaxStep <= VolatileState.LastPlanned) { 
-        MonCounters.PlanTxOutdated->Inc(); 
-        return SendTransactionStatus(proposal->Proxy 
-                                     , TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusOutdated 
-                                     , proposal->TxId, 0, ctx, TabletID()); 
-    } 
- 
+    if (proposal->MaxStep <= VolatileState.LastPlanned) {
+        MonCounters.PlanTxOutdated->Inc();
+        return SendTransactionStatus(proposal->Proxy
+                                     , TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusOutdated
+                                     , proposal->TxId, 0, ctx, TabletID());
+    }
+
     if (Stopping) {
         return SendTransactionStatus(proposal->Proxy,
                 TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusRestarting,
@@ -117,7 +117,7 @@ void TTxCoordinator::PlanTx(TAutoPtr<TTransactionProposal> &proposal, const TAct
     MonCounters.PlanTxAccepted->Inc();
     SendTransactionStatus(proposal->Proxy, TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusAccepted,
         proposal->TxId, planStep, ctx, TabletID());
- 
+
     if (forRapidExecution) {
         TQueueType::TSlot &rapidSlot = VolatileState.Queue.RapidSlot;
         rapidSlot.Queue->Push(proposal.Release());
@@ -168,7 +168,7 @@ void TTxCoordinator::HandleEnqueue(TEvTxProxy::TEvProposeTransaction::TPtr &ev, 
 
 void TTxCoordinator::Handle(TEvPrivate::TEvPlanTick::TPtr &ev, const TActorContext &ctx) {
     Y_UNUSED(ev);
-    //LOG_DEBUG_S(ctx, NKikimrServices::TX_COORDINATOR, "tablet# " << TabletID() << " HANDLE EvPlanTick LastPlanned " << VolatileState.LastPlanned); 
+    //LOG_DEBUG_S(ctx, NKikimrServices::TX_COORDINATOR, "tablet# " << TabletID() << " HANDLE EvPlanTick LastPlanned " << VolatileState.LastPlanned);
 
     if (VolatileState.Queue.Unsorted) {
         while (TAutoPtr<TTransactionProposal> x = VolatileState.Queue.Unsorted->Pop())
@@ -184,11 +184,11 @@ void TTxCoordinator::Handle(TEvPrivate::TEvPlanTick::TPtr &ev, const TActorConte
 
     if (next <= VolatileState.LastPlanned) {
         return SchedulePlanTick(ctx);
-    } 
+    }
 
     TVector<TQueueType::TSlot> slots;
     slots.reserve(1000);
- 
+
     if (VolatileState.Queue.RapidSlot.QueueSize) {
         slots.push_back(VolatileState.Queue.RapidSlot);
         VolatileState.Queue.RapidSlot = TQueueType::TSlot();
@@ -269,37 +269,37 @@ void TTxCoordinator::Handle(TEvTxCoordinator::TEvCoordinatorConfirmPlan::TPtr &e
 }
 
 void TTxCoordinator::DoConfiguration(const TEvSubDomain::TEvConfigure &ev, const TActorContext &ctx, const TActorId &ackTo) {
-    const TEvSubDomain::TEvConfigure::ProtoRecordType &record = ev.Record; 
- 
-    if(0 == record.MediatorsSize()) { 
-        LOG_ERROR_S(ctx, NKikimrServices::TX_COORDINATOR 
-                     , "tablet# " << TabletID() 
-                    << " HANDLE EvCoordinatorConfiguration Version# " << record.GetVersion() 
-                    << " recive empty mediators set"); 
-        Y_FAIL("empty mediators set"); 
-        return; 
-    } 
- 
+    const TEvSubDomain::TEvConfigure::ProtoRecordType &record = ev.Record;
+
+    if(0 == record.MediatorsSize()) {
+        LOG_ERROR_S(ctx, NKikimrServices::TX_COORDINATOR
+                     , "tablet# " << TabletID()
+                    << " HANDLE EvCoordinatorConfiguration Version# " << record.GetVersion()
+                    << " recive empty mediators set");
+        Y_FAIL("empty mediators set");
+        return;
+    }
+
     TVector<TTabletId> mediators;
-    mediators.reserve(record.MediatorsSize()); 
- 
-    for (auto id: record.GetMediators()) { 
-        Y_VERIFY(TabletID() != id, "found self id in mediators list"); 
-        mediators.push_back(id); 
-    } 
- 
+    mediators.reserve(record.MediatorsSize());
+
+    for (auto id: record.GetMediators()) {
+        Y_VERIFY(TabletID() != id, "found self id in mediators list");
+        mediators.push_back(id);
+    }
+
     Execute(CreateTxConfigure(ackTo, record.GetVersion(), record.GetPlanResolution(), mediators, record), ctx);
-} 
- 
-void TTxCoordinator::Handle(TEvSubDomain::TEvConfigure::TPtr &ev, const TActorContext &ctx) { 
-    const TEvSubDomain::TEvConfigure::ProtoRecordType &record = ev->Get()->Record; 
-    LOG_NOTICE_S(ctx, NKikimrServices::TX_COORDINATOR 
-                 , "tablet# " << TabletID() 
-                << " HANDLE TEvConfigure Version# " << record.GetVersion()); 
- 
-    DoConfiguration(*ev->Get(), ctx, ev->Sender); 
-} 
- 
+}
+
+void TTxCoordinator::Handle(TEvSubDomain::TEvConfigure::TPtr &ev, const TActorContext &ctx) {
+    const TEvSubDomain::TEvConfigure::ProtoRecordType &record = ev->Get()->Record;
+    LOG_NOTICE_S(ctx, NKikimrServices::TX_COORDINATOR
+                 , "tablet# " << TabletID()
+                << " HANDLE TEvConfigure Version# " << record.GetVersion());
+
+    DoConfiguration(*ev->Get(), ctx, ev->Sender);
+}
+
 void TTxCoordinator::Handle(TEvents::TEvPoisonPill::TPtr&, const TActorContext& ctx) {
     Become(&TThis::StateBroken);
     ctx.Send(Tablet(), new TEvents::TEvPoisonPill);

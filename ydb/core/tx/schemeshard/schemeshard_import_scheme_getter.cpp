@@ -11,7 +11,7 @@
 #include <util/string/subst.h>
 
 namespace NKikimr {
-namespace NSchemeShard { 
+namespace NSchemeShard {
 
 using namespace NWrappers;
 
@@ -200,5 +200,5 @@ IActor* CreateSchemeGetter(const TActorId& replyTo, TImportInfo::TPtr importInfo
     return new TSchemeGetter(replyTo, importInfo, itemIdx);
 }
 
-} // NSchemeShard 
+} // NSchemeShard
 } // NKikimr

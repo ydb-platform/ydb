@@ -5,25 +5,25 @@
 namespace {
 
 using namespace NKikimr;
-using namespace NSchemeShard; 
+using namespace NSchemeShard;
 
 TOlapTableInfo::TPtr ParseParams(
         const TPath& path, const TOlapTableInfo::TPtr& tableInfo, const TOlapStoreInfo::TPtr& storeInfo,
         const NKikimrSchemeOp::TAlterColumnTable& alter, const TSubDomainInfo& subDomain,
-        NKikimrScheme::EStatus& status, TString& errStr, TOperationContext& context) 
+        NKikimrScheme::EStatus& status, TString& errStr, TOperationContext& context)
 {
     Y_UNUSED(path);
     Y_UNUSED(context);
     Y_UNUSED(subDomain);
 
     if (alter.HasAlterSchema() || alter.HasAlterSchemaPresetName()) {
-        status = NKikimrScheme::StatusInvalidParameter; 
+        status = NKikimrScheme::StatusInvalidParameter;
         errStr = "Changing table schema is not supported";
         return nullptr;
     }
 
     if (alter.HasRESERVED_AlterTtlSettingsPresetName()) {
-        status = NKikimrScheme::StatusInvalidParameter; 
+        status = NKikimrScheme::StatusInvalidParameter;
         errStr = "TTL presets are not supported";
         return nullptr;
     }
@@ -70,12 +70,12 @@ TOlapTableInfo::TPtr ParseParams(
         }
 
         if (!ValidateTtlSettings(alter.GetAlterTtlSettings(), columns, columnsByName, knownTiers, errStr)) {
-            status = NKikimrScheme::StatusInvalidParameter; 
+            status = NKikimrScheme::StatusInvalidParameter;
             return nullptr;
         }
 
         if (!ValidateTtlSettingsChange(tableInfo->Description.GetTtlSettings(), alter.GetAlterTtlSettings(), errStr)) {
-            status = NKikimrScheme::StatusInvalidParameter; 
+            status = NKikimrScheme::StatusInvalidParameter;
             return nullptr;
         }
 
@@ -95,7 +95,7 @@ TOlapTableInfo::TPtr ParseParams(
 #else
         auto it = storeInfo->TtlSettingsPresetByName.find(alter.GetAlterTtlSettingsPresetName());
         if (it == storeInfo->TtlSettingsPresetByName.end()) {
-            status = NKikimrScheme::StatusInvalidParameter; 
+            status = NKikimrScheme::StatusInvalidParameter;
             errStr = TStringBuilder()
                 << "Cannot find ttl settings preset '" << alter.GetAlterTtlSettingsPresetName() << "'";
             return nullptr;
@@ -457,7 +457,7 @@ public:
         SetState(SelectStateFunc(state));
     }
 
-    THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override { 
+    THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
         const TTabletId ssId = context.SS->SelfTabletId();
 
         const auto& alter = Transaction.GetAlterColumnTable();
@@ -471,10 +471,10 @@ public:
                          << ", opId: " << OperationId
                          << ", at schemeshard: " << ssId);
 
-        auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId)); 
+        auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
 
         if (!alter.HasName()) {
-            result->SetError(NKikimrScheme::StatusInvalidParameter, "No table name in Alter"); 
+            result->SetError(NKikimrScheme::StatusInvalidParameter, "No table name in Alter");
             return result;
         }
 
@@ -525,20 +525,20 @@ public:
 
         TString errStr;
         if (!context.SS->CheckApplyIf(Transaction, errStr)) {
-            result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr); 
+            result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr);
             return result;
         }
 
         if (tableInfo->AlterVersion == 0) {
-            result->SetError(NKikimrScheme::StatusMultipleModifications, "Table is not created yet"); 
+            result->SetError(NKikimrScheme::StatusMultipleModifications, "Table is not created yet");
             return result;
         }
         if (tableInfo->AlterData) {
-            result->SetError(NKikimrScheme::StatusMultipleModifications, "There's another Alter in flight"); 
+            result->SetError(NKikimrScheme::StatusMultipleModifications, "There's another Alter in flight");
             return result;
         }
 
-        NKikimrScheme::EStatus status; 
+        NKikimrScheme::EStatus status;
         TOlapTableInfo::TPtr alterData = ParseParams(path, tableInfo, storeInfo, alter, *path.DomainInfo(), status, errStr, context);
         if (!alterData) {
             result->SetError(status, errStr);
@@ -577,7 +577,7 @@ public:
         context.SS->PersistLastTxId(db, storePath.Base());
 
         context.SS->PersistOlapTableAlter(db, path->PathId, *alterData);
-        context.SS->PersistTxState(db, OperationId); 
+        context.SS->PersistTxState(db, OperationId);
 
         context.OnComplete.ActivateTx(OperationId);
 
@@ -604,7 +604,7 @@ public:
 }
 
 namespace NKikimr {
-namespace NSchemeShard { 
+namespace NSchemeShard {
 
 ISubOperationBase::TPtr CreateAlterOlapTable(TOperationId id, const TTxTransaction& tx) {
     return new TAlterOlapTable(id, tx);

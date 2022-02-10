@@ -1847,9 +1847,9 @@ struct Schema {
 
     template <typename Type, typename... Types>
     struct SchemaTables: SchemaTables<Types...> {
-        static bool Precharge(TToughDb& database) { 
-            return SchemaTables<Type>::Precharge(database) & SchemaTables<Types...>::Precharge(database); 
-        } 
+        static bool Precharge(TToughDb& database) {
+            return SchemaTables<Type>::Precharge(database) & SchemaTables<Types...>::Precharge(database);
+        }
 
         static void Materialize(TToughDb& database, EMaterializationMode mode = EMaterializationMode::All) {
             SchemaTables<Type>::Materialize(database, mode);
@@ -1872,10 +1872,10 @@ struct Schema {
             return typeName.substr(typeName.rfind(':') + 1);
         }
 
-        static bool Precharge(TToughDb& database) { 
-            return typename Type::TKey::template Selector<Type>(database).Precharge(); 
-        } 
- 
+        static bool Precharge(TToughDb& database) {
+            return typename Type::TKey::template Selector<Type>(database).Precharge();
+        }
+
         static void Materialize(TToughDb& database, EMaterializationMode mode = EMaterializationMode::All) {
             switch (mode) {
             case EMaterializationMode::All:
@@ -1948,11 +1948,11 @@ public:
     }
 
     template <typename SchemaType>
-    bool Precharge() { 
-        return SchemaType::TTables::Precharge(Database); 
-    } 
- 
-    template <typename SchemaType> 
+    bool Precharge() {
+        return SchemaType::TTables::Precharge(Database);
+    }
+
+    template <typename SchemaType>
     void Materialize() {
         SchemaType::TSettings::Materialize(Database);
         SchemaType::TTables::Materialize(Database, EMaterializationMode::All);

@@ -1016,7 +1016,7 @@ message TDriveData {
 message TEvControllerRegisterNode {
     reserved 1;
     optional uint32 NodeID = 2;
-    repeated uint32 Groups = 4; 
+    repeated uint32 Groups = 4;
     repeated uint32 GroupGenerations = 5; // must be zero entries (for old nodes) and the same number as in Groups for new ones
     repeated TVDiskStatus VDiskStatus = 6; // actual status for currently operating VDisks
     repeated TDriveData DrivesData = 7;

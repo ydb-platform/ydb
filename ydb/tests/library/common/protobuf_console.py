@@ -27,25 +27,25 @@ class CreateTenantRequest(AbstractProtobufBuilder):
         slot.count = count
         return self
 
-    def add_shared_storage_pool(self, pool_type, pool_size): 
-        pool = self.protobuf.CreateTenantRequest.Request.shared_resources.storage_units.add() 
-        pool.unit_kind = pool_type 
-        pool.count = pool_size 
-        return self 
- 
-    def add_shared_slot(self, count, kind='slot', zone='any'): 
-        slot = self.protobuf.CreateTenantRequest.Request.shared_resources.computational_units.add() 
-        slot.unit_kind = kind 
-        slot.availability_zone = zone 
-        slot.count = count 
-        return self 
- 
-    def share_resources_with(self, hostel_db): 
-        self.protobuf.CreateTenantRequest.Request.serverless_resources.shared_database_path = hostel_db 
-        return self 
- 
-    def disable_external_subdomain(self): 
-        self.protobuf.CreateTenantRequest.Request.options.disable_external_subdomain = True 
+    def add_shared_storage_pool(self, pool_type, pool_size):
+        pool = self.protobuf.CreateTenantRequest.Request.shared_resources.storage_units.add()
+        pool.unit_kind = pool_type
+        pool.count = pool_size
+        return self
+
+    def add_shared_slot(self, count, kind='slot', zone='any'):
+        slot = self.protobuf.CreateTenantRequest.Request.shared_resources.computational_units.add()
+        slot.unit_kind = kind
+        slot.availability_zone = zone
+        slot.count = count
+        return self
+
+    def share_resources_with(self, hostel_db):
+        self.protobuf.CreateTenantRequest.Request.serverless_resources.shared_database_path = hostel_db
+        return self
+
+    def disable_external_subdomain(self):
+        self.protobuf.CreateTenantRequest.Request.options.disable_external_subdomain = True
 
     def set_schema_quotas(self, schema_quotas):
         quotas = self.protobuf.CreateTenantRequest.Request.schema_operation_quotas
@@ -54,7 +54,7 @@ class CreateTenantRequest(AbstractProtobufBuilder):
             q = quotas.leaky_bucket_quotas.add()
             q.bucket_size = bucket_size
             q.bucket_seconds = bucket_seconds
- 
+
     def set_disk_quotas(self, disk_quotas):
         quotas = self.protobuf.CreateTenantRequest.Request.database_quotas
         quotas.SetInParent()
@@ -107,16 +107,16 @@ class GetTenantStatusRequest(AbstractProtobufBuilder):
         self.protobuf.GetTenantStatusRequest.Request.path = path
 
 
-class RemoveTenantRequest(AbstractProtobufBuilder): 
-    """ 
+class RemoveTenantRequest(AbstractProtobufBuilder):
+    """
     See /arcadia/ydb/public/api/protos/ydb_cms.proto
-    """ 
- 
-    def __init__(self, path): 
-        super(RemoveTenantRequest, self).__init__(msgbus.TConsoleRequest()) 
-        self.protobuf.RemoveTenantRequest.Request.path = path 
- 
- 
+    """
+
+    def __init__(self, path):
+        super(RemoveTenantRequest, self).__init__(msgbus.TConsoleRequest())
+        self.protobuf.RemoveTenantRequest.Request.path = path
+
+
 class SetConfigRequest(AbstractProtobufBuilder):
     """
     See /arcadia/ydb/core/protos/console.proto

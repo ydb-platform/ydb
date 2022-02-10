@@ -27,15 +27,15 @@ protected:
 
 public:
     TBrowseTable(const TActorId& owner, const IViewer::TBrowseContext& browseContext)
-        : TBrowseTabletsCommon(owner, browseContext) 
+        : TBrowseTabletsCommon(owner, browseContext)
     {}
 
-    void Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr &ev, const TActorContext &ctx) { 
+    void Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr &ev, const TActorContext &ctx) {
         DescribeResult.Reset(ev->Release());
         ++Responses;
         ctx.Send(BrowseContext.Owner, new NViewerEvents::TEvBrowseRequestCompleted(TxProxy, TEvTxUserProxy::EvNavigate));
         const auto& pbRecord(DescribeResult->GetRecord());
-        if (pbRecord.GetStatus() == NKikimrScheme::EStatus::StatusSuccess) { 
+        if (pbRecord.GetStatus() == NKikimrScheme::EStatus::StatusSuccess) {
             if (pbRecord.HasPathDescription()) {
                 const auto& pbPathDescription(pbRecord.GetPathDescription());
                 TVector<ui64> tablets;
@@ -52,7 +52,7 @@ public:
             }
         } else {
             switch (DescribeResult->GetRecord().GetStatus()) {
-                case NKikimrScheme::EStatus::StatusPathDoesNotExist: 
+                case NKikimrScheme::EStatus::StatusPathDoesNotExist:
                     return HandleBadRequest(ctx, "The path is not found");
                 default:
                     return HandleBadRequest(ctx, "Error getting schema information");
@@ -81,7 +81,7 @@ public:
 
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, Handle); 
+            HFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, Handle);
             HFunc(TEvTablet::TEvGetCountersResponse, TBase::Handle);
             HFunc(TEvHive::TEvChannelInfo, TBase::Handle);
             HFunc(TEvBlobStorage::TEvResponseControllerInfo, TBase::Handle);
@@ -115,7 +115,7 @@ public:
         if (!BrowseContext.UserToken.empty()) {
             request->Record.SetUserToken(BrowseContext.UserToken);
         }
-        NKikimrSchemeOp::TDescribePath* record = request->Record.MutableDescribePath(); 
+        NKikimrSchemeOp::TDescribePath* record = request->Record.MutableDescribePath();
         record->SetPath(Path);
         record->SetBackupInfo(true);
         request->Record.SetUserToken(BrowseContext.UserToken);

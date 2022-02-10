@@ -451,7 +451,7 @@ namespace NTabletPipe {
 
         void NotifyConnectFail(const TActorContext &ctx) {
             UnsubscribeNetworkSession(ctx);
-            if (Config.CheckAliveness && !IsReservedTabletId(TabletId)) { 
+            if (Config.CheckAliveness && !IsReservedTabletId(TabletId)) {
                 BLOG_D("connect failed, check aliveness");
 
                 if (!Config.RetryPolicy)

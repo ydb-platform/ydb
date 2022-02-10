@@ -353,7 +353,7 @@ Y_UNIT_TEST_SUITE(DBase) {
     {
         auto alter = MakeAlter(1);
 
-        alter.SetRedo(32).SetFamilyBlobs(1, 0, Max<ui32>(), 24); 
+        alter.SetRedo(32).SetFamilyBlobs(1, 0, Max<ui32>(), 24);
 
         TDbExec me;
 
@@ -445,7 +445,7 @@ Y_UNIT_TEST_SUITE(DBase) {
 
         TDbExec me;
 
-        me.To(10).Begin().Apply(*alter.SetFamilyBlobs(1, 0, 17, 999)).Commit(); 
+        me.To(10).Begin().Apply(*alter.SetFamilyBlobs(1, 0, 17, 999)).Commit();
 
         const TString small17("0123456789abcdef0");
         const TString small21("0123456789abcdef01234");

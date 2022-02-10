@@ -2,8 +2,8 @@
 
 #include "defs.h"
 
-#include <util/stream/output.h> 
- 
+#include <util/stream/output.h>
+
 namespace NKikimr {
     // A helper for check the order of messages sent by a tablet
     struct TMessageSeqNo {
@@ -50,7 +50,7 @@ namespace NKikimr {
         bool operator >= (const TMessageSeqNo& other) const {
             return (other <= *this);
         }
- 
+
         TMessageSeqNo& operator ++ () {
             if (0 == ++Round) {
                 ++Generation;
@@ -58,15 +58,15 @@ namespace NKikimr {
             return *this;
         }
 
-        void Out(IOutputStream& o) const { 
-            o << Generation << ":" << Round; 
-        } 
+        void Out(IOutputStream& o) const {
+            o << Generation << ":" << Round;
+        }
     };
 
 }
- 
- 
-template<> 
-inline void Out<NKikimr::TMessageSeqNo>(IOutputStream& o, const NKikimr::TMessageSeqNo& x) { 
-    return x.Out(o); 
-} 
+
+
+template<>
+inline void Out<NKikimr::TMessageSeqNo>(IOutputStream& o, const NKikimr::TMessageSeqNo& x) {
+    return x.Out(o);
+}

@@ -13,7 +13,7 @@
 namespace NKikimr {
 
 using namespace NKikimr::NDataShard::NKqpHelpers;
-using namespace NSchemeShard; 
+using namespace NSchemeShard;
 using namespace Tests;
 
 namespace {
@@ -337,7 +337,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
         auto sender = runtime.AllocateEdgeActor();
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
-        runtime.GetAppData().AllowShadowDataInSchemeShardForTests = true; 
+        runtime.GetAppData().AllowShadowDataInSchemeShardForTests = true;
 
         InitRoot(server, sender);
 
@@ -418,7 +418,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
         auto sender = runtime.AllocateEdgeActor();
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
-        runtime.GetAppData().AllowShadowDataInSchemeShardForTests = true; 
+        runtime.GetAppData().AllowShadowDataInSchemeShardForTests = true;
 
         InitRoot(server, sender);
 
@@ -517,7 +517,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
         auto sender = runtime.AllocateEdgeActor();
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
-        runtime.GetAppData().AllowShadowDataInSchemeShardForTests = true; 
+        runtime.GetAppData().AllowShadowDataInSchemeShardForTests = true;
 
         InitRoot(server, sender);
 
@@ -619,7 +619,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
         auto sender = runtime.AllocateEdgeActor();
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
-        runtime.GetAppData().AllowShadowDataInSchemeShardForTests = true; 
+        runtime.GetAppData().AllowShadowDataInSchemeShardForTests = true;
 
         InitRoot(server, sender);
 

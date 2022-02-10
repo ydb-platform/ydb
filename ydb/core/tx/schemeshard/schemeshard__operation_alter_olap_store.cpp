@@ -5,12 +5,12 @@
 namespace {
 
 using namespace NKikimr;
-using namespace NSchemeShard; 
+using namespace NSchemeShard;
 
 TOlapStoreInfo::TPtr ParseParams(
         const TPath& path, const TOlapStoreInfo::TPtr& storeInfo,
         const NKikimrSchemeOp::TAlterColumnStore& alter,
-        NKikimrScheme::EStatus& status, TString& errStr, TOperationContext& context) 
+        NKikimrScheme::EStatus& status, TString& errStr, TOperationContext& context)
 {
     Y_UNUSED(path);
     Y_UNUSED(context);
@@ -22,7 +22,7 @@ TOlapStoreInfo::TPtr ParseParams(
 
     for (const auto& removeSchemaPreset : alter.GetRemoveSchemaPresets()) {
         Y_UNUSED(removeSchemaPreset);
-        status = NKikimrScheme::StatusInvalidParameter; 
+        status = NKikimrScheme::StatusInvalidParameter;
         errStr = "Removing schema presets is not supported yet";
         return nullptr;
     }
@@ -32,12 +32,12 @@ TOlapStoreInfo::TPtr ParseParams(
 #if 0
         const TString& presetName = alterSchemaPreset.GetName();
         if (alteredSchemaPresets.contains(presetName)) {
-            status = NKikimrScheme::StatusInvalidParameter; 
+            status = NKikimrScheme::StatusInvalidParameter;
             errStr = TStringBuilder() << "Cannot alter schema preset '" << presetName << "' multiple times";
             return nullptr;
         }
         if (!alterData->SchemaPresetByName.contains(presetName)) {
-            status = NKikimrScheme::StatusInvalidParameter; 
+            status = NKikimrScheme::StatusInvalidParameter;
             errStr = TStringBuilder() << "Cannot alter unknown schema preset '" << presetName << "'";
             return nullptr;
         }
@@ -54,13 +54,13 @@ TOlapStoreInfo::TPtr ParseParams(
             const TString& columnName = dropColumn.GetName();
             const auto* column = preset.FindColumnByName(columnName);
             if (!column) {
-                status = NKikimrScheme::StatusInvalidParameter; 
+                status = NKikimrScheme::StatusInvalidParameter;
                 errStr = TStringBuilder() << "Cannot drop non-existant column '" << columnName << "'";
                 return nullptr;
             }
             const ui32 columnId = column->Id;
             if (column->IsKeyColumn()) {
-                status = NKikimrScheme::StatusInvalidParameter; 
+                status = NKikimrScheme::StatusInvalidParameter;
                 errStr = TStringBuilder() << "Cannot drop key column '" << columnName << "'";
                 return nullptr;
             }
@@ -88,7 +88,7 @@ TOlapStoreInfo::TPtr ParseParams(
 
         for (const auto& alterColumn : alterSchema.GetAlterColumns()) {
             Y_UNUSED(alterColumn);
-            status = NKikimrScheme::StatusInvalidParameter; 
+            status = NKikimrScheme::StatusInvalidParameter;
             errStr = "Altering existing columns is not supported yet";
             return nullptr;
         }
@@ -100,27 +100,27 @@ TOlapStoreInfo::TPtr ParseParams(
             columnProto = addColumn;
             const TString& columnName = columnProto.GetName();
             if (columnName.empty()) {
-                status = NKikimrScheme::StatusInvalidParameter; 
+                status = NKikimrScheme::StatusInvalidParameter;
                 errStr = "Columns cannot have an empty name";
                 return nullptr;
             }
             if (preset.ColumnsByName.contains(columnName)) {
-                status = NKikimrScheme::StatusInvalidParameter; 
+                status = NKikimrScheme::StatusInvalidParameter;
                 errStr = TStringBuilder() << "Cannot add duplicate column '" << columnName << "'";
                 return nullptr;
             }
             if (columnProto.HasId()) {
-                status = NKikimrScheme::StatusInvalidParameter; 
+                status = NKikimrScheme::StatusInvalidParameter;
                 errStr = TStringBuilder() << "New column '" << columnName << "' cannot have an Id specified";
                 return nullptr;
             }
             if (columnProto.HasTypeId()) {
-                status = NKikimrScheme::StatusSchemeError; 
+                status = NKikimrScheme::StatusSchemeError;
                 errStr = TStringBuilder() << "Cannot set TypeId for column '" << columnName << "', use Type";
                 return nullptr;
             }
             if (!columnProto.HasType()) {
-                status = NKikimrScheme::StatusSchemeError; 
+                status = NKikimrScheme::StatusSchemeError;
                 errStr = TStringBuilder() << "Missing Type for column '" << columnName << "'";
                 return nullptr;
             }
@@ -136,7 +136,7 @@ TOlapStoreInfo::TPtr ParseParams(
             auto typeName = NMiniKQL::AdaptLegacyYqlType(columnProto.GetType());
             const NScheme::IType* type = typeRegistry->GetType(typeName);
             if (!type || !NScheme::NTypeIds::IsYqlType(type->GetTypeId())) {
-                status = NKikimrScheme::StatusSchemeError; 
+                status = NKikimrScheme::StatusSchemeError;
                 errStr = TStringBuilder() << "Type '" << columnProto.GetType() << "' specified for column '" << columnName << "' is not supported";
                 return nullptr;
             }
@@ -147,7 +147,7 @@ TOlapStoreInfo::TPtr ParseParams(
 
         for (const auto& addKeyColumnName : alterSchema.GetAddKeyColumnNames()) {
             Y_UNUSED(addKeyColumnName);
-            status = NKikimrScheme::StatusInvalidParameter; 
+            status = NKikimrScheme::StatusInvalidParameter;
             errStr = "Adding key columns is not supported yet";
             return nullptr;
         }
@@ -159,7 +159,7 @@ TOlapStoreInfo::TPtr ParseParams(
 #else
         Y_UNUSED(alterSchemaPreset);
         Y_UNUSED(alteredSchemaPresets);
-        status = NKikimrScheme::StatusInvalidParameter; 
+        status = NKikimrScheme::StatusInvalidParameter;
         errStr = "Altering schema presets is not supported yet";
         return nullptr;
 #endif
@@ -167,14 +167,14 @@ TOlapStoreInfo::TPtr ParseParams(
 
     for (const auto& addSchemaPreset : alter.GetAddSchemaPresets()) {
         Y_UNUSED(addSchemaPreset);
-        status = NKikimrScheme::StatusInvalidParameter; 
+        status = NKikimrScheme::StatusInvalidParameter;
         errStr = "Adding schema presets is not supported yet";
         return nullptr;
     }
 
     for (const auto& removeTtlSettingsPreset : alter.GetRESERVED_RemoveTtlSettingsPresets()) {
         Y_UNUSED(removeTtlSettingsPreset);
-        status = NKikimrScheme::StatusInvalidParameter; 
+        status = NKikimrScheme::StatusInvalidParameter;
         errStr = "TTL presets are not supported";
         return nullptr;
     }
@@ -626,7 +626,7 @@ public:
         SetState(SelectStateFunc(state));
     }
 
-    THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override { 
+    THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
         const TTabletId ssId = context.SS->SelfTabletId();
 
         const auto& alter = Transaction.GetAlterColumnStore();
@@ -640,10 +640,10 @@ public:
                          << ", opId: " << OperationId
                          << ", at schemeshard: " << ssId);
 
-        auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId)); 
+        auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
 
         if (!alter.HasName()) {
-            result->SetError(NKikimrScheme::StatusInvalidParameter, "No store name in Alter"); 
+            result->SetError(NKikimrScheme::StatusInvalidParameter, "No store name in Alter");
             return result;
         }
 
@@ -672,26 +672,26 @@ public:
         TOlapStoreInfo::TPtr storeInfo = context.SS->OlapStores.at(path->PathId);
 
         if (!storeInfo->OlapTablesUnderOperation.empty()) {
-            result->SetError(NKikimrScheme::StatusMultipleModifications, "Store has unfinished table operations"); 
+            result->SetError(NKikimrScheme::StatusMultipleModifications, "Store has unfinished table operations");
             return result;
         }
 
         TString errStr;
         if (!context.SS->CheckApplyIf(Transaction, errStr)) {
-            result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr); 
+            result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr);
             return result;
         }
 
         if (storeInfo->AlterVersion == 0) {
-            result->SetError(NKikimrScheme::StatusMultipleModifications, "Store is not created yet"); 
+            result->SetError(NKikimrScheme::StatusMultipleModifications, "Store is not created yet");
             return result;
         }
         if (storeInfo->AlterData) {
-            result->SetError(NKikimrScheme::StatusMultipleModifications, "There's another Alter in flight"); 
+            result->SetError(NKikimrScheme::StatusMultipleModifications, "There's another Alter in flight");
             return result;
         }
 
-        NKikimrScheme::EStatus status; 
+        NKikimrScheme::EStatus status;
         TOlapStoreInfo::TPtr alterData = ParseParams(path, storeInfo, alter, status, errStr, context);
         if (!alterData) {
             result->SetError(status, errStr);
@@ -716,7 +716,7 @@ public:
         context.SS->PersistLastTxId(db, path.Base());
 
         context.SS->PersistOlapStoreAlter(db, path->PathId, *alterData);
-        context.SS->PersistTxState(db, OperationId); 
+        context.SS->PersistTxState(db, OperationId);
 
         context.OnComplete.ActivateTx(OperationId);
 
@@ -743,7 +743,7 @@ public:
 }
 
 namespace NKikimr {
-namespace NSchemeShard { 
+namespace NSchemeShard {
 
 ISubOperationBase::TPtr CreateAlterOlapStore(TOperationId id, const TTxTransaction& tx) {
     return new TAlterOlapStore(id, tx);

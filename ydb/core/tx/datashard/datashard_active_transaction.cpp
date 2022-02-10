@@ -433,17 +433,17 @@ bool TActiveTransaction::BuildSchemeTx()
     if (!res)
         return false;
 
-    ui32 count = (ui32)SchemeTx->HasCreateTable() 
-        + (ui32)SchemeTx->HasDropTable() 
-        + (ui32)SchemeTx->HasAlterTable() 
-        + (ui32)SchemeTx->HasBackup() 
+    ui32 count = (ui32)SchemeTx->HasCreateTable()
+        + (ui32)SchemeTx->HasDropTable()
+        + (ui32)SchemeTx->HasAlterTable()
+        + (ui32)SchemeTx->HasBackup()
         + (ui32)SchemeTx->HasRestore()
-        + (ui32)SchemeTx->HasSendSnapshot() 
+        + (ui32)SchemeTx->HasSendSnapshot()
         + (ui32)SchemeTx->HasCreatePersistentSnapshot()
-        + (ui32)SchemeTx->HasDropPersistentSnapshot() 
-        + (ui32)SchemeTx->HasInitiateBuildIndex() 
-        + (ui32)SchemeTx->HasFinalizeBuildIndex() 
-        + (ui32)SchemeTx->HasDropIndexNotice() 
+        + (ui32)SchemeTx->HasDropPersistentSnapshot()
+        + (ui32)SchemeTx->HasInitiateBuildIndex()
+        + (ui32)SchemeTx->HasFinalizeBuildIndex()
+        + (ui32)SchemeTx->HasDropIndexNotice()
         + (ui32)SchemeTx->HasMoveTable()
         + (ui32)SchemeTx->HasCreateCdcStreamNotice()
         + (ui32)SchemeTx->HasAlterCdcStreamNotice()
@@ -467,14 +467,14 @@ bool TActiveTransaction::BuildSchemeTx()
         SchemeTxType = TSchemaOperation::ETypeCreatePersistentSnapshot;
     else if (SchemeTx->HasDropPersistentSnapshot())
         SchemeTxType = TSchemaOperation::ETypeDropPersistentSnapshot;
-    else if (SchemeTx->HasInitiateBuildIndex()) 
+    else if (SchemeTx->HasInitiateBuildIndex())
         SchemeTxType = TSchemaOperation::ETypeInitiateBuildIndex;
-    else if (SchemeTx->HasFinalizeBuildIndex()) 
+    else if (SchemeTx->HasFinalizeBuildIndex())
         SchemeTxType = TSchemaOperation::ETypeFinalizeBuildIndex;
-    else if (SchemeTx->HasDropIndexNotice()) 
+    else if (SchemeTx->HasDropIndexNotice())
         SchemeTxType = TSchemaOperation::ETypeDropIndexNotice;
-    else if (SchemeTx->HasMoveTable()) 
-        SchemeTxType = TSchemaOperation::ETypeMoveTable; 
+    else if (SchemeTx->HasMoveTable())
+        SchemeTxType = TSchemaOperation::ETypeMoveTable;
     else if (SchemeTx->HasCreateCdcStreamNotice())
         SchemeTxType = TSchemaOperation::ETypeCreateCdcStream;
     else if (SchemeTx->HasAlterCdcStreamNotice())
@@ -874,10 +874,10 @@ void TActiveTransaction::BuildExecutionPlan(bool loaded)
         plan.push_back(EExecutionUnitKind::DropTable);
         plan.push_back(EExecutionUnitKind::CreatePersistentSnapshot);
         plan.push_back(EExecutionUnitKind::DropPersistentSnapshot);
-        plan.push_back(EExecutionUnitKind::InitiateBuildIndex); 
-        plan.push_back(EExecutionUnitKind::FinalizeBuildIndex); 
-        plan.push_back(EExecutionUnitKind::DropIndexNotice); 
-        plan.push_back(EExecutionUnitKind::MoveTable); 
+        plan.push_back(EExecutionUnitKind::InitiateBuildIndex);
+        plan.push_back(EExecutionUnitKind::FinalizeBuildIndex);
+        plan.push_back(EExecutionUnitKind::DropIndexNotice);
+        plan.push_back(EExecutionUnitKind::MoveTable);
         plan.push_back(EExecutionUnitKind::CreateCdcStream);
         plan.push_back(EExecutionUnitKind::AlterCdcStream);
         plan.push_back(EExecutionUnitKind::DropCdcStream);

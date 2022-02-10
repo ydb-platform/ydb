@@ -114,7 +114,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
     Y_UNIT_TEST(Init) {
         TPortManager pm;
         ui16 port = pm.GetPort(2134);
-        TServer cleverServer = TServer(TServerSettings(port)); 
+        TServer cleverServer = TServer(TServerSettings(port));
         if (true) {
             cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_DEBUG);
             cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_DEBUG);
@@ -260,7 +260,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
 
         TPortManager pm;
         ui16 port = pm.GetPort(2134);
-        TServer cleverServer = TServer(TServerSettings(port)); 
+        TServer cleverServer = TServer(TServerSettings(port));
         if (!true) {
             cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_DEBUG);
             cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_DEBUG);
@@ -379,7 +379,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
     Y_UNIT_TEST(ModifyMultipleRowsCrossShardAllToAll) {
         TPortManager pm;
         ui16 port = pm.GetPort(2134);
-        TServer cleverServer = TServer(TServerSettings(port)); 
+        TServer cleverServer = TServer(TServerSettings(port));
         if (!true) {
             cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_DEBUG);
             cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_DEBUG);
@@ -519,7 +519,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
     Y_UNIT_TEST(CrossRW) {
         TPortManager pm;
         ui16 port = pm.GetPort(2134);
-        TServer cleverServer = TServer(TServerSettings(port)); 
+        TServer cleverServer = TServer(TServerSettings(port));
         if (!true) {
             cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_DEBUG);
             cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_DEBUG);
@@ -896,7 +896,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
     Y_UNIT_TEST(Mix_DML_DDL) {
         TPortManager pm;
         ui16 port = pm.GetPort(2134);
-        TServer cleverServer = TServer(TServerSettings(port)); 
+        TServer cleverServer = TServer(TServerSettings(port));
         if (!true) {
             cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_DEBUG);
             cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_DEBUG);
@@ -1016,7 +1016,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
     Y_UNIT_TEST(MiniKQLRanges) {
         TPortManager pm;
         ui16 port = pm.GetPort(2134);
-        TServer cleverServer = TServer(TServerSettings(port)); 
+        TServer cleverServer = TServer(TServerSettings(port));
         if (!true) {
             cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_DEBUG);
             cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_DEBUG);
@@ -1117,7 +1117,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         TServer cleverServer = TServer(TServerSettings(port).SetEnableSystemViews(false));
 
         TFlatMsgBusClient annoyingClient(port);
-        annoyingClient.InitRoot(); 
+        annoyingClient.InitRoot();
 
         // Listing all domains always works
         TestLsSuccess(annoyingClient, "/", {"dc-1"});
@@ -1143,7 +1143,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
     }
 
     void SetSchemeshardReadOnly(TServer& cleverServer, TFlatMsgBusClient& annoyingClient, bool isReadOnly) {
-        ui64 schemeShardTabletId = Tests::ChangeStateStorage(Tests::SchemeRoot, Tests::TestDomain); 
+        ui64 schemeShardTabletId = Tests::ChangeStateStorage(Tests::SchemeRoot, Tests::TestDomain);
 
         NKikimrMiniKQL::TResult result;
         bool ok = annoyingClient.LocalQuery(schemeShardTabletId, Sprintf(R"(
@@ -1172,7 +1172,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
     Y_UNIT_TEST(ReadOnlyMode) {
         TPortManager pm;
         ui16 port = pm.GetPort(2134);
-        TServer cleverServer = TServer(TServerSettings(port).SetEnableMockOnSingleNode(false)); 
+        TServer cleverServer = TServer(TServerSettings(port).SetEnableMockOnSingleNode(false));
 
         TFlatMsgBusClient annoyingClient(port);
 
@@ -1272,8 +1272,8 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         TestLsPathIdSuccess(annoyingClient, schemeshardId, 3, "arcadia", {});
     }
 
-    ui32 TestInitRoot(TFlatMsgBusClient& annoyingClient, const TString& name) { 
-        TAutoPtr<NBus::TBusMessage> reply = annoyingClient.InitRootSchemeWithReply(name); 
+    ui32 TestInitRoot(TFlatMsgBusClient& annoyingClient, const TString& name) {
+        TAutoPtr<NBus::TBusMessage> reply = annoyingClient.InitRootSchemeWithReply(name);
         TAutoPtr<NMsgBusProxy::TBusResponse> res = dynamic_cast<NMsgBusProxy::TBusResponse*>(reply.Release());
         UNIT_ASSERT(res);
         return res->Record.GetStatus();
@@ -1282,27 +1282,27 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
     Y_UNIT_TEST(InitRoot) {
         TPortManager pm;
         ui16 port = pm.GetPort(2134);
-        TServer cleverServer = TServer(TServerSettings(port)); 
+        TServer cleverServer = TServer(TServerSettings(port));
         if (true) {
             cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_DEBUG);
         }
 
         TFlatMsgBusClient annoyingClient(port);
 
-        UNIT_ASSERT_VALUES_EQUAL(TestInitRoot(annoyingClient, "dc-1"), NMsgBusProxy::MSTATUS_OK); 
+        UNIT_ASSERT_VALUES_EQUAL(TestInitRoot(annoyingClient, "dc-1"), NMsgBusProxy::MSTATUS_OK);
         // Reinitializing same root is Ok
-        UNIT_ASSERT_VALUES_EQUAL(TestInitRoot(annoyingClient, "dc-1"), NMsgBusProxy::MSTATUS_OK); 
+        UNIT_ASSERT_VALUES_EQUAL(TestInitRoot(annoyingClient, "dc-1"), NMsgBusProxy::MSTATUS_OK);
 
         // Unknown roots
-        UNIT_ASSERT_VALUES_EQUAL(TestInitRoot(annoyingClient, ""), NMsgBusProxy::MSTATUS_ERROR); 
-        UNIT_ASSERT_VALUES_EQUAL(TestInitRoot(annoyingClient, "dc-11"), NMsgBusProxy::MSTATUS_ERROR); 
-        UNIT_ASSERT_VALUES_EQUAL(TestInitRoot(annoyingClient, "dc-2"), NMsgBusProxy::MSTATUS_ERROR); 
+        UNIT_ASSERT_VALUES_EQUAL(TestInitRoot(annoyingClient, ""), NMsgBusProxy::MSTATUS_ERROR);
+        UNIT_ASSERT_VALUES_EQUAL(TestInitRoot(annoyingClient, "dc-11"), NMsgBusProxy::MSTATUS_ERROR);
+        UNIT_ASSERT_VALUES_EQUAL(TestInitRoot(annoyingClient, "dc-2"), NMsgBusProxy::MSTATUS_ERROR);
     }
 
     Y_UNIT_TEST(CheckACL) {
         TPortManager pm;
         ui16 port = pm.GetPort(2134);
-        TServer cleverServer = TServer(TServerSettings(port)); 
+        TServer cleverServer = TServer(TServerSettings(port));
         if (!true) {
             cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_DEBUG);
             cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_DEBUG);
@@ -1313,9 +1313,9 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         }
 
         TFlatMsgBusClient annoyingClient(port);
-        annoyingClient.InitRoot(); 
-        annoyingClient.ModifyOwner("/", "dc-1", "berkanavt@" BUILTIN_ACL_DOMAIN); 
-        annoyingClient.SetSecurityToken("berkanavt@" BUILTIN_ACL_DOMAIN); // there is should be something like "234ba4f44ef7c" 
+        annoyingClient.InitRoot();
+        annoyingClient.ModifyOwner("/", "dc-1", "berkanavt@" BUILTIN_ACL_DOMAIN);
+        annoyingClient.SetSecurityToken("berkanavt@" BUILTIN_ACL_DOMAIN); // there is should be something like "234ba4f44ef7c"
 
         NMsgBusProxy::EResponseStatus status;
 
@@ -1365,7 +1365,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
             TAutoPtr<NMsgBusProxy::TBusResponse> response = annoyingClient.Ls("/dc-1/Berkanavt/tables/Students");
             studentsTableId = response.Get()->Record.GetPathDescription().GetSelf().GetPathId();
         }
-        TTableId tabletId(ChangeStateStorage(Tests::SchemeRoot, TestDomain), studentsTableId); 
+        TTableId tabletId(ChangeStateStorage(Tests::SchemeRoot, TestDomain), studentsTableId);
 
         annoyingClient.SetSecurityToken("argonaut@" BUILTIN_ACL_DOMAIN); // there is should be something like "234ba4f44ef7c"
         annoyingClient.FlatQuery("((return (AsList (SetResult 'res1 (Int32 '2016)))))");
@@ -1436,22 +1436,22 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         return;  // TODO https://st.yandex-team.ru/KIKIMR-2279
         TPortManager pm;
         ui16 port = pm.GetPort(2134);
- 
+
         NFake::TStorage diskParams;
         diskParams.DiskSize = 500ull*1024*1024;
         diskParams.SectorSize = 512;
         diskParams.ChunkSize = 50ull*1024*1024;
- 
+
         NKikimrConfig::TImmediateControlsConfig controls;
         controls.MutableTxLimitControls()->SetPerRequestDataSizeLimit(1000000000);
         controls.MutableTxLimitControls()->SetPerShardIncomingReadSetSizeLimit(1000000000);
         controls.MutableTxLimitControls()->SetPerShardReadSizeLimit(1000000000);
 
-        TServer cleverServer = TServer(TServerSettings(port) 
+        TServer cleverServer = TServer(TServerSettings(port)
                                        .SetControls(controls)
-                                       .SetCustomDiskParams(diskParams) 
-                                       .SetEnableMockOnSingleNode(false)); 
- 
+                                       .SetCustomDiskParams(diskParams)
+                                       .SetEnableMockOnSingleNode(false));
+
         TFlatMsgBusClient annoyingClient(port);
 
         const char * table = "Name: \"Table\""
@@ -1578,7 +1578,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
     Y_UNIT_TEST(RejectByPerRequestSize) {
         TPortManager pm;
         ui16 port = pm.GetPort(2134);
- 
+
         NKikimrConfig::TImmediateControlsConfig controls;
         controls.MutableTxLimitControls()->SetPerRequestDataSizeLimit(10000);
         controls.MutableTxLimitControls()->SetPerShardIncomingReadSetSizeLimit(1000000000);
@@ -1586,7 +1586,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
 
         TServer cleverServer = TServer(TServerSettings(port)
                                        .SetControls(controls));
- 
+
         TFlatMsgBusClient annoyingClient(port);
 
         const char * table =
@@ -1658,7 +1658,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
 
         TServer cleverServer = TServer(TServerSettings(port)
                                        .SetControls(controls));
- 
+
         TFlatMsgBusClient annoyingClient(port);
 
         const char * table =
@@ -1890,8 +1890,8 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         TPortManager pm;
         ui16 port = pm.GetPort(2134);
 
-        TServer cleverServer = TServer(TServerSettings(port)); 
- 
+        TServer cleverServer = TServer(TServerSettings(port));
+
         cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::OPS_COMPACT, NActors::NLog::PRI_INFO);
 
         TFlatMsgBusClient annoyingClient(port);
@@ -1932,7 +1932,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         annoyingClient.MkDir("/dc-1", "Dir");
 
         for (int colCount = 1; colCount < 100; ++colCount) {
-            NKikimrSchemeOp::TTableDescription schema; 
+            NKikimrSchemeOp::TTableDescription schema;
             TString name = "Table_" + ToString(colCount);
             schema.SetName(name);
             Cout << name << Endl;
@@ -1976,7 +1976,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
     Y_UNIT_TEST(CopyCopiedTableAndRead) {
         TPortManager pm;
         ui16 port = pm.GetPort(2134);
-        TServer cleverServer = TServer(TServerSettings(port)); 
+        TServer cleverServer = TServer(TServerSettings(port));
 
         cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::OPS_COMPACT, NActors::NLog::PRI_INFO);
 
@@ -2005,7 +2005,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
     Y_UNIT_TEST(CopyTableAndAddFollowers) {
         TPortManager pm;
         ui16 port = pm.GetPort(2134);
-        TServer cleverServer = TServer(TServerSettings(port)); 
+        TServer cleverServer = TServer(TServerSettings(port));
 
         cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::OPS_COMPACT, NActors::NLog::PRI_INFO);
 
@@ -2051,7 +2051,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
     Y_UNIT_TEST(CopyTableAndDropCopy) {
         TPortManager pm;
         ui16 port = pm.GetPort(2134);
-        TServer cleverServer = TServer(TServerSettings(port)); 
+        TServer cleverServer = TServer(TServerSettings(port));
 
         cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::OPS_COMPACT, NActors::NLog::PRI_INFO);
 
@@ -2100,7 +2100,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
     Y_UNIT_TEST(CopyTableAndDropOriginal) {
         TPortManager pm;
         ui16 port = pm.GetPort(2134);
-        TServer cleverServer = TServer(TServerSettings(port)); 
+        TServer cleverServer = TServer(TServerSettings(port));
 
         cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::OPS_COMPACT, NActors::NLog::PRI_INFO);
 
@@ -2138,7 +2138,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
     Y_UNIT_TEST(CopyTableAndReturnPartAfterCompaction) {
         TPortManager pm;
         ui16 port = pm.GetPort(2134);
-        TServer cleverServer = TServer(TServerSettings(port)); 
+        TServer cleverServer = TServer(TServerSettings(port));
 
         cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::OPS_COMPACT, NActors::NLog::PRI_INFO);
 
@@ -2210,7 +2210,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
     Y_UNIT_TEST(CopyTableDropOriginalAndReturnPartAfterCompaction) {
         TPortManager pm;
         ui16 port = pm.GetPort(2134);
-        TServer cleverServer = TServer(TServerSettings(port)); 
+        TServer cleverServer = TServer(TServerSettings(port));
 
         cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::OPS_COMPACT, NActors::NLog::PRI_INFO);
 
@@ -2292,7 +2292,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
     Y_UNIT_TEST(CopyCopiedTableAndDropFirstCopy) {
         TPortManager pm;
         ui16 port = pm.GetPort(2134);
-        TServer cleverServer = TServer(TServerSettings(port)); 
+        TServer cleverServer = TServer(TServerSettings(port));
 
         cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::OPS_COMPACT, NActors::NLog::PRI_INFO);
 
@@ -2404,15 +2404,15 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         annoyingClient.TrySplitTablePartition("/dc-1/Dir1", "SourceTabletId: 100500 SplitBoundary { KeyPrefix {Tuple { Optional { Uint32: 42 } } } }", response);
         // Cerr << response;
         UNIT_ASSERT_VALUES_EQUAL(response.GetStatus(), NMsgBusProxy::MSTATUS_ERROR);
-        UNIT_ASSERT_VALUES_EQUAL(response.GetSchemeStatus(), NKikimrScheme::StatusNameConflict); 
+        UNIT_ASSERT_VALUES_EQUAL(response.GetSchemeStatus(), NKikimrScheme::StatusNameConflict);
     }
 
     Y_UNIT_TEST(SplitEmptyAndWrite) {
         TPortManager pm;
         ui16 port = pm.GetPort(2134);
-        TServer cleverServer = TServer(TServerSettings(port)); 
+        TServer cleverServer = TServer(TServerSettings(port));
         DisableSplitMergePartCountLimit(cleverServer);
- 
+
         cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::OPS_COMPACT, NActors::NLog::PRI_INFO);
 
         TFlatMsgBusClient annoyingClient(port);
@@ -2471,7 +2471,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
     Y_UNIT_TEST(SplitEmptyTwice) {
         TPortManager pm;
         ui16 port = pm.GetPort(2134);
-        TServer cleverServer = TServer(TServerSettings(port)); 
+        TServer cleverServer = TServer(TServerSettings(port));
         DisableSplitMergePartCountLimit(cleverServer);
 
         cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::OPS_COMPACT, NActors::NLog::PRI_INFO);
@@ -2508,7 +2508,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
     Y_UNIT_TEST(MergeEmptyAndWrite) {
         TPortManager pm;
         ui16 port = pm.GetPort(2134);
-        TServer cleverServer = TServer(TServerSettings(port)); 
+        TServer cleverServer = TServer(TServerSettings(port));
         DisableSplitMergePartCountLimit(cleverServer);
 
         cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::OPS_COMPACT, NActors::NLog::PRI_INFO);
@@ -2544,7 +2544,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
     Y_UNIT_TEST(WriteMergeAndRead) {
         TPortManager pm;
         ui16 port = pm.GetPort(2134);
-        TServer cleverServer = TServer(TServerSettings(port)); 
+        TServer cleverServer = TServer(TServerSettings(port));
         DisableSplitMergePartCountLimit(cleverServer);
 
         cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::OPS_COMPACT, NActors::NLog::PRI_INFO);
@@ -2637,7 +2637,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
     Y_UNIT_TEST(SplitThenMerge) {
         TPortManager pm;
         ui16 port = pm.GetPort(2134);
-        TServer cleverServer = TServer(TServerSettings(port)); 
+        TServer cleverServer = TServer(TServerSettings(port));
         DisableSplitMergePartCountLimit(cleverServer);
 
         cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::OPS_COMPACT, NActors::NLog::PRI_INFO);
@@ -2675,7 +2675,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
     Y_UNIT_TEST(WriteSplitAndRead) {
         TPortManager pm;
         ui16 port = pm.GetPort(2134);
-        TServer cleverServer = TServer(TServerSettings(port)); 
+        TServer cleverServer = TServer(TServerSettings(port));
         DisableSplitMergePartCountLimit(cleverServer);
 
         cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::OPS_COMPACT, NActors::NLog::PRI_INFO);
@@ -2715,7 +2715,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
     Y_UNIT_TEST(WriteSplitAndReadFromFollower) {
         TPortManager pm;
         ui16 port = pm.GetPort(2134);
-        TServer cleverServer = TServer(TServerSettings(port).SetNodeCount(2)); 
+        TServer cleverServer = TServer(TServerSettings(port).SetNodeCount(2));
         DisableSplitMergePartCountLimit(cleverServer);
 
         cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::OPS_COMPACT, NActors::NLog::PRI_INFO);
@@ -2771,7 +2771,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
     Y_UNIT_TEST(WriteSplitKillRead) {
         TPortManager pm;
         ui16 port = pm.GetPort(2134);
-        TServer cleverServer = TServer(TServerSettings(port)); 
+        TServer cleverServer = TServer(TServerSettings(port));
         DisableSplitMergePartCountLimit(cleverServer);
 
         cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::OPS_COMPACT, NActors::NLog::PRI_INFO);
@@ -2819,7 +2819,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
     Y_UNIT_TEST(SplitBoundaryRead) {
         TPortManager pm;
         ui16 port = pm.GetPort(2134);
-        TServer cleverServer = TServer(TServerSettings(port)); 
+        TServer cleverServer = TServer(TServerSettings(port));
         DisableSplitMergePartCountLimit(cleverServer);
 
         cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::OPS_COMPACT, NActors::NLog::PRI_INFO);
@@ -2838,7 +2838,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
     Y_UNIT_TEST(WriteSplitWriteSplit) {
         TPortManager pm;
         ui16 port = pm.GetPort(2134);
-        TServer cleverServer = TServer(TServerSettings(port)); 
+        TServer cleverServer = TServer(TServerSettings(port));
         DisableSplitMergePartCountLimit(cleverServer);
 
         cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::OPS_COMPACT, NActors::NLog::PRI_INFO);
@@ -2886,7 +2886,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
     Y_UNIT_TEST(AutoSplitBySize) {
         TPortManager pm;
         ui16 port = pm.GetPort(2134);
-        TServer cleverServer = TServer(TServerSettings(port)); 
+        TServer cleverServer = TServer(TServerSettings(port));
         DisableSplitMergePartCountLimit(cleverServer);
 
         cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::OPS_COMPACT, NActors::NLog::PRI_INFO);
@@ -3237,7 +3237,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
     Y_UNIT_TEST(GetTabletCounters) {
         TPortManager pm;
         ui16 port = pm.GetPort(2134);
-        TServer cleverServer = TServer(TServerSettings(port)); 
+        TServer cleverServer = TServer(TServerSettings(port));
         TFlatMsgBusClient annoyingClient(port);
 
         PrepareSourceTable(annoyingClient);
@@ -3399,7 +3399,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
 
         TPortManager pm;
         ui16 port = pm.GetPort(2134);
-        TServer cleverServer = TServer(TServerSettings(port)); 
+        TServer cleverServer = TServer(TServerSettings(port));
         TFlatMsgBusClient annoyingClient(port);
 
         annoyingClient.InitRoot();

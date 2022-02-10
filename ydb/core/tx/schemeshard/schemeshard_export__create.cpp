@@ -14,11 +14,11 @@
 #include <util/string/builder.h>
 
 namespace NKikimr {
-namespace NSchemeShard { 
+namespace NSchemeShard {
 
 using namespace NTabletFlatExecutor;
 
-struct TSchemeShard::TExport::TTxCreate: public TSchemeShard::TXxport::TTxBase { 
+struct TSchemeShard::TExport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
     TEvExport::TEvCreateExportRequest::TPtr Request;
     bool Progress;
 
@@ -67,7 +67,7 @@ struct TSchemeShard::TExport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
                 .NotDeleted()
                 .NotUnderDeleting()
                 .IsCommonSensePath()
-                .IsLikeDirectory(); 
+                .IsLikeDirectory();
 
             if (!checks) {
                 TString explain;
@@ -216,7 +216,7 @@ private:
 
 }; // TTxCreate
 
-struct TSchemeShard::TExport::TTxProgress: public TSchemeShard::TXxport::TTxBase { 
+struct TSchemeShard::TExport::TTxProgress: public TSchemeShard::TXxport::TTxBase {
     using EState = TExportInfo::EState;
     using ESubState = TExportInfo::TItem::ESubState;
 
@@ -224,8 +224,8 @@ struct TSchemeShard::TExport::TTxProgress: public TSchemeShard::TXxport::TTxBase
 
     ui64 Id;
     TEvTxAllocatorClient::TEvAllocateResult::TPtr AllocateResult = nullptr;
-    TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr ModifyResult = nullptr; 
-    TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr NotifyResult = nullptr; 
+    TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr ModifyResult = nullptr;
+    TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr NotifyResult = nullptr;
 
     explicit TTxProgress(TSelf* self, ui64 id)
         : TXxport::TTxBase(self)
@@ -239,13 +239,13 @@ struct TSchemeShard::TExport::TTxProgress: public TSchemeShard::TXxport::TTxBase
     {
     }
 
-    explicit TTxProgress(TSelf* self, TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr& ev) 
+    explicit TTxProgress(TSelf* self, TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr& ev)
         : TXxport::TTxBase(self)
         , ModifyResult(ev)
     {
     }
 
-    explicit TTxProgress(TSelf* self, TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev) 
+    explicit TTxProgress(TSelf* self, TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev)
         : TXxport::TTxBase(self)
         , NotifyResult(ev)
     {
@@ -376,7 +376,7 @@ private:
     }
 
     void SubscribeTx(TTxId txId) {
-        Send(Self->SelfId(), new TEvSchemeShard::TEvNotifyTxCompletion(ui64(txId))); 
+        Send(Self->SelfId(), new TEvSchemeShard::TEvNotifyTxCompletion(ui64(txId)));
     }
 
     void SubscribeTx(TExportInfo::TPtr exportInfo) {
@@ -401,7 +401,7 @@ private:
         SubscribeTx(item.WaitTxId);
     }
 
-    static TPathId ItemPathId(TSchemeShard* ss, TExportInfo::TPtr exportInfo, ui32 itemIdx) { 
+    static TPathId ItemPathId(TSchemeShard* ss, TExportInfo::TPtr exportInfo, ui32 itemIdx) {
         const TPath itemPath = TPath::Resolve(ExportItemPathName(ss, exportInfo, itemIdx), ss);
 
         if (!itemPath.IsResolved()) {
@@ -422,7 +422,7 @@ private:
         }
 
         auto path = Self->PathsById.at(item.SourcePathId);
-        if (path->PathState != NKikimrSchemeOp::EPathStateCopying) { 
+        if (path->PathState != NKikimrSchemeOp::EPathStateCopying) {
             return InvalidTxId;
         }
 
@@ -445,7 +445,7 @@ private:
         }
 
         auto path = Self->PathsById.at(itemPathId);
-        if (path->PathState != NKikimrSchemeOp::EPathStateBackup) { 
+        if (path->PathState != NKikimrSchemeOp::EPathStateBackup) {
             return InvalidTxId;
         }
 
@@ -606,7 +606,7 @@ private:
     void OnAllocateResult(TTransactionContext&, const TActorContext&) {
         Y_VERIFY(AllocateResult);
 
-        const auto txId = TTxId(AllocateResult->Get()->TxIds.front()); 
+        const auto txId = TTxId(AllocateResult->Get()->TxIds.front());
         const ui64 id = AllocateResult->Cookie;
 
         LOG_D("TExport::TTxProgress: OnAllocateResult"
@@ -691,14 +691,14 @@ private:
         TExportInfo::TPtr exportInfo = Self->Exports.at(id);
         NIceDb::TNiceDb db(txc.DB);
 
-        if (record.GetStatus() != NKikimrScheme::StatusAccepted) { 
+        if (record.GetStatus() != NKikimrScheme::StatusAccepted) {
             Self->TxIdToExport.erase(txId);
             txId = InvalidTxId;
 
             const auto status = record.GetStatus();
-            const bool isMultipleMods = status == NKikimrScheme::StatusMultipleModifications; 
-            const bool isAlreadyExists = status == NKikimrScheme::StatusAlreadyExists; 
-            const bool isNotExist = status == NKikimrScheme::StatusPathDoesNotExist; 
+            const bool isMultipleMods = status == NKikimrScheme::StatusMultipleModifications;
+            const bool isAlreadyExists = status == NKikimrScheme::StatusAlreadyExists;
+            const bool isNotExist = status == NKikimrScheme::StatusPathDoesNotExist;
 
             switch (exportInfo->State) {
             case EState::CreateExportDir:
@@ -781,7 +781,7 @@ private:
 
         switch (exportInfo->State) {
         case EState::CreateExportDir:
-            exportInfo->ExportPathId = Self->MakeLocalId(TLocalPathId(record.GetPathId())); 
+            exportInfo->ExportPathId = Self->MakeLocalId(TLocalPathId(record.GetPathId()));
             Self->PersistExportPathId(db, exportInfo);
 
             exportInfo->WaitTxId = txId;
@@ -837,7 +837,7 @@ private:
         LOG_D("TExport::TTxProgress: OnNotifyResult"
             << ": txId# " << record.GetTxId());
 
-        const auto txId = TTxId(record.GetTxId()); 
+        const auto txId = TTxId(record.GetTxId());
         if (!Self->TxIdToExport.contains(txId)) {
             LOG_E("TExport::TTxProgress: OnNotifyResult received unknown txId"
                 << ": txId# " << txId);
@@ -921,7 +921,7 @@ private:
             return;
 
         default:
-            return SendNotificationsIfFinished(exportInfo); 
+            return SendNotificationsIfFinished(exportInfo);
         }
 
         Self->PersistExportState(db, exportInfo);
@@ -930,25 +930,25 @@ private:
 
 }; // TTxProgress
 
-ITransaction* TSchemeShard::CreateTxCreateExport(TEvExport::TEvCreateExportRequest::TPtr& ev) { 
+ITransaction* TSchemeShard::CreateTxCreateExport(TEvExport::TEvCreateExportRequest::TPtr& ev) {
     return new TExport::TTxCreate(this, ev);
 }
 
-ITransaction* TSchemeShard::CreateTxProgressExport(ui64 id) { 
+ITransaction* TSchemeShard::CreateTxProgressExport(ui64 id) {
     return new TExport::TTxProgress(this, id);
 }
 
-ITransaction* TSchemeShard::CreateTxProgressExport(TEvTxAllocatorClient::TEvAllocateResult::TPtr& ev) { 
+ITransaction* TSchemeShard::CreateTxProgressExport(TEvTxAllocatorClient::TEvAllocateResult::TPtr& ev) {
     return new TExport::TTxProgress(this, ev);
 }
 
-ITransaction* TSchemeShard::CreateTxProgressExport(TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr& ev) { 
+ITransaction* TSchemeShard::CreateTxProgressExport(TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr& ev) {
     return new TExport::TTxProgress(this, ev);
 }
 
-ITransaction* TSchemeShard::CreateTxProgressExport(TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev) { 
+ITransaction* TSchemeShard::CreateTxProgressExport(TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev) {
     return new TExport::TTxProgress(this, ev);
 }
 
-} // NSchemeShard 
+} // NSchemeShard
 } // NKikimr

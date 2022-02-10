@@ -41,8 +41,8 @@ using NYql::TIssue;
 using TIssuesIds = NYql::TIssuesIds;
 using namespace NThreading;
 using namespace NYql::NCommon;
-using namespace NSchemeShard; 
-using namespace NKikimrSchemeOp; 
+using namespace NSchemeShard;
+using namespace NKikimrSchemeOp;
 
 using NKikimrTxUserProxy::TMiniKQLTransaction;
 
@@ -50,7 +50,7 @@ constexpr const IKqpGateway::TKqpSnapshot IKqpGateway::TKqpSnapshot::InvalidSnap
 
 #define STATIC_ASSERT_STATE_EQUAL(name) \
     static_assert(static_cast<ui32>(NYql::TIndexDescription::EIndexState::name) \
-        == NKikimrSchemeOp::EIndexState::EIndexState##name, \ 
+        == NKikimrSchemeOp::EIndexState::EIndexState##name, \
         "index state missmatch, flag: ## name");
 
 STATIC_ASSERT_STATE_EQUAL(Invalid)
@@ -86,11 +86,11 @@ public:
     using TCallbackFunc = typename TBase::TCallbackFunc;
 
     TProxyRequestHandler(TRequest* request, TPromise<TResult> promise, TCallbackFunc callback)
-        : TBase(request, promise, callback) {} 
+        : TBase(request, promise, callback) {}
 
     void Bootstrap(const TActorContext& ctx) {
         TActorId txproxy = MakeTxProxyID();
-        ctx.Send(txproxy, this->Request.Release()); 
+        ctx.Send(txproxy, this->Request.Release());
 
         this->Become(&TProxyRequestHandler::AwaitState);
     }
@@ -495,7 +495,7 @@ public:
     TMkqlRequestHandler(const TAlignedPagePoolCounters& allocCounters, TRequest* request,
         TKqpParamsMap&& paramsMap, TPromise<TResult> promise, TCallbackFunc callback,
         const TActorId& miniKqlComplileServiceActorId)
-        : TBase(request, promise, callback) 
+        : TBase(request, promise, callback)
         , ParamsMap(std::move(paramsMap))
         , CompilationPending(false)
         , CompilationRetried(false)
@@ -641,9 +641,9 @@ private:
         if (!CompilationPending) {
             TAutoPtr<TRequest> ev = new TRequest();
             ev->Record.CopyFrom(this->Request->Record);
- 
+
             TActorId txproxy = MakeTxProxyID();
-            ctx.Send(txproxy, ev.Release()); 
+            ctx.Send(txproxy, ev.Release());
         }
     }
 
@@ -669,12 +669,12 @@ public:
     using TResponse = TEvTxUserProxy::TEvProposeTransactionStatus;
     using TResult = IKqpGateway::TGenericResult;
 
-    TSchemeOpRequestHandler(TRequest* request, TPromise<TResult> promise) 
-        : TBase(request, promise, {}) {} 
+    TSchemeOpRequestHandler(TRequest* request, TPromise<TResult> promise)
+        : TBase(request, promise, {}) {}
 
     void Bootstrap(const TActorContext& ctx) {
         TActorId txproxy = MakeTxProxyID();
-        ctx.Send(txproxy, this->Request.Release()); 
+        ctx.Send(txproxy, this->Request.Release());
 
         this->Become(&TSchemeOpRequestHandler::AwaitState);
     }
@@ -697,7 +697,7 @@ public:
                 Y_VERIFY(pipeActor);
                 ShemePipeActorId = ctx.ExecutorThread.RegisterActor(pipeActor);
 
-                auto request = MakeHolder<TEvSchemeShard::TEvNotifyTxCompletion>(); 
+                auto request = MakeHolder<TEvSchemeShard::TEvNotifyTxCompletion>();
                 request->Record.SetTxId(response.GetTxId());
                 NTabletPipe::SendData(ctx, ShemePipeActorId, request.Release());
 
@@ -719,8 +719,8 @@ public:
             }
 
             case TEvTxUserProxy::TResultStatus::ExecComplete: {
-                if (response.GetSchemeShardStatus() == NKikimrScheme::EStatus::StatusSuccess || 
-                    response.GetSchemeShardStatus() == NKikimrScheme::EStatus::StatusAlreadyExists) 
+                if (response.GetSchemeShardStatus() == NKikimrScheme::EStatus::StatusSuccess ||
+                    response.GetSchemeShardStatus() == NKikimrScheme::EStatus::StatusAlreadyExists)
                 {
                     LOG_DEBUG_S(ctx, NKikimrServices::KQP_GATEWAY, "Successful completion of scheme request"
                     << ", TxId: " << response.GetTxId());
@@ -750,13 +750,13 @@ public:
 
             case TEvTxUserProxy::TResultStatus::ExecError:
                 switch (response.GetSchemeShardStatus()) {
-                    case NKikimrScheme::EStatus::StatusMultipleModifications: { 
+                    case NKikimrScheme::EStatus::StatusMultipleModifications: {
                         Promise.SetValue(ResultFromIssues<TResult>(TIssuesIds::KIKIMR_MULTIPLE_SCHEME_MODIFICATIONS,
                             response.GetSchemeShardReason(), {}));
                         this->Die(ctx);
                         return;
                     }
-                    case NKikimrScheme::EStatus::StatusPathDoesNotExist: { 
+                    case NKikimrScheme::EStatus::StatusPathDoesNotExist: {
                         Promise.SetValue(ResultFromIssues<TResult>(TIssuesIds::KIKIMR_SCHEME_ERROR,
                             response.GetSchemeShardReason(), {}));
                         this->Die(ctx);
@@ -787,7 +787,7 @@ public:
         this->Die(ctx);
     }
 
-    void Handle(TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev, const TActorContext& ctx) { 
+    void Handle(TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev, const TActorContext& ctx) {
         auto& response = ev->Get()->Record;
 
         LOG_DEBUG_S(ctx, NKikimrServices::KQP_GATEWAY, "Received TEvNotifyTxCompletionResult for scheme request"
@@ -804,15 +804,15 @@ public:
         this->Die(ctx);
     }
 
-    void Handle(TEvSchemeShard::TEvNotifyTxCompletionRegistered::TPtr&, const TActorContext&) {} 
+    void Handle(TEvSchemeShard::TEvNotifyTxCompletionRegistered::TPtr&, const TActorContext&) {}
 
     STFUNC(AwaitState) {
         switch (ev->GetTypeRewrite()) {
             HFunc(TResponse, HandleResponse);
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
             HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
-            HFunc(TEvSchemeShard::TEvNotifyTxCompletionResult, Handle); 
-            HFunc(TEvSchemeShard::TEvNotifyTxCompletionRegistered, Handle); 
+            HFunc(TEvSchemeShard::TEvNotifyTxCompletionResult, Handle);
+            HFunc(TEvSchemeShard::TEvNotifyTxCompletionRegistered, Handle);
         default:
             TBase::HandleUnexpectedEvent("TSchemeOpRequestHandler", ev->GetTypeRewrite(), ctx);
         }
@@ -1147,23 +1147,23 @@ public:
                     }
                     auto& schemeTx = *ev->Record.MutableTransaction()->MutableModifyScheme();
                     schemeTx.SetWorkingDir(pathPair.first);
-                    NKikimrSchemeOp::TTableDescription* tableDesc = nullptr; 
+                    NKikimrSchemeOp::TTableDescription* tableDesc = nullptr;
                     if (!metadata->Indexes.empty()) {
-                        schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateIndexedTable); 
+                        schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateIndexedTable);
                         tableDesc = schemeTx.MutableCreateIndexedTable()->MutableTableDescription();
                         for (const auto& index : metadata->Indexes) {
                             auto indexDesc = schemeTx.MutableCreateIndexedTable()->AddIndexDescription();
                             indexDesc->SetName(index.Name);
                             switch (index.Type) {
                                 case NYql::TIndexDescription::EType::GlobalSync:
-                                    indexDesc->SetType(NKikimrSchemeOp::EIndexType::EIndexTypeGlobal); 
+                                    indexDesc->SetType(NKikimrSchemeOp::EIndexType::EIndexTypeGlobal);
                                     break;
                                 case NYql::TIndexDescription::EType::GlobalAsync:
-                                    indexDesc->SetType(NKikimrSchemeOp::EIndexType::EIndexTypeGlobalAsync); 
+                                    indexDesc->SetType(NKikimrSchemeOp::EIndexType::EIndexTypeGlobalAsync);
                                     break;
                             }
 
-                            indexDesc->SetState(static_cast<::NKikimrSchemeOp::EIndexState>(index.State)); 
+                            indexDesc->SetState(static_cast<::NKikimrSchemeOp::EIndexState>(index.State));
                             for (const auto& col : index.KeyColumns) {
                                 indexDesc->AddKeyColumnNames(col);
                             }
@@ -1173,7 +1173,7 @@ public:
                         }
                         FillCreateTableColumnDesc(*tableDesc, pathPair.second, metadata);
                     } else {
-                        schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateTable); 
+                        schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateTable);
                         tableDesc = schemeTx.MutableCreateTable();
                         FillCreateTableColumnDesc(*tableDesc, pathPair.second, metadata);
                     }
@@ -1231,40 +1231,40 @@ public:
         }
     }
 
-    TFuture<TGenericResult> RenameTable(const TString& src, const TString& dst, const TString& cluster) override { 
-        using TRequest = TEvTxUserProxy::TEvProposeTransaction; 
- 
-        try { 
-            if (!CheckCluster(cluster)) { 
-                return InvalidCluster<TGenericResult>(cluster); 
-            } 
- 
-            auto ev = MakeHolder<TRequest>(); 
-            ev->Record.SetDatabaseName(Database); 
-            if (UserToken) { 
-                ev->Record.SetUserToken(UserToken->Serialized); 
-            } 
-            auto& schemeTx = *ev->Record.MutableTransaction()->MutableModifyScheme(); 
-            schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpMoveTable); 
-            auto& op = *schemeTx.MutableMoveTable(); 
-            op.SetSrcPath(src); 
-            op.SetDstPath(dst); 
- 
-            auto movePromise = NewPromise<TGenericResult>(); 
- 
-            SendSchemeRequest(ev.Release()).Apply( 
-                [movePromise](const TFuture<TGenericResult>& future) mutable { 
-                        movePromise.SetValue(future.GetValue()); 
-                }); 
- 
-            return movePromise.GetFuture(); 
- 
-        } 
-        catch (yexception& e) { 
-            return MakeFuture(ResultFromException<TGenericResult>(e)); 
-        } 
-    } 
- 
+    TFuture<TGenericResult> RenameTable(const TString& src, const TString& dst, const TString& cluster) override {
+        using TRequest = TEvTxUserProxy::TEvProposeTransaction;
+
+        try {
+            if (!CheckCluster(cluster)) {
+                return InvalidCluster<TGenericResult>(cluster);
+            }
+
+            auto ev = MakeHolder<TRequest>();
+            ev->Record.SetDatabaseName(Database);
+            if (UserToken) {
+                ev->Record.SetUserToken(UserToken->Serialized);
+            }
+            auto& schemeTx = *ev->Record.MutableTransaction()->MutableModifyScheme();
+            schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpMoveTable);
+            auto& op = *schemeTx.MutableMoveTable();
+            op.SetSrcPath(src);
+            op.SetDstPath(dst);
+
+            auto movePromise = NewPromise<TGenericResult>();
+
+            SendSchemeRequest(ev.Release()).Apply(
+                [movePromise](const TFuture<TGenericResult>& future) mutable {
+                        movePromise.SetValue(future.GetValue());
+                });
+
+            return movePromise.GetFuture();
+
+        }
+        catch (yexception& e) {
+            return MakeFuture(ResultFromException<TGenericResult>(e));
+        }
+    }
+
     TFuture<TGenericResult> DropTable(const TString& cluster, const TString& table) override {
         try {
             if (!CheckCluster(cluster)) {
@@ -1911,7 +1911,7 @@ public:
     }
 
 private:
-    using TDescribeSchemeResponse = TEvSchemeShard::TEvDescribeSchemeResult; 
+    using TDescribeSchemeResponse = TEvSchemeShard::TEvDescribeSchemeResult;
     using TTransactionResponse = TEvTxUserProxy::TEvProposeTransactionStatus;
 
 private:
@@ -2001,7 +2001,7 @@ private:
     TFuture<TGenericResult> SendSchemeRequest(TEvTxUserProxy::TEvProposeTransaction* request)
     {
         auto promise = NewPromise<TGenericResult>();
-        IActor* requestHandler = new TSchemeOpRequestHandler(request, promise); 
+        IActor* requestHandler = new TSchemeOpRequestHandler(request, promise);
         RegisterActor(requestHandler);
 
         return promise.GetFuture();
@@ -2205,7 +2205,7 @@ private:
         return result;
     }
 
-    static void FillCreateTableColumnDesc(NKikimrSchemeOp::TTableDescription& tableDesc, 
+    static void FillCreateTableColumnDesc(NKikimrSchemeOp::TTableDescription& tableDesc,
         const TString& name, NYql::TKikimrTableMetadataPtr metadata)
     {
         tableDesc.SetName(name);
@@ -2235,16 +2235,16 @@ private:
         using TResult = IKikimrGateway::TTableMetadataResult;
 
         switch (status) {
-            case NKikimrScheme::EStatus::StatusSuccess: 
-            case NKikimrScheme::EStatus::StatusPathDoesNotExist: 
+            case NKikimrScheme::EStatus::StatusSuccess:
+            case NKikimrScheme::EStatus::StatusPathDoesNotExist:
                 return true;
-            case NKikimrScheme::EStatus::StatusSchemeError: 
+            case NKikimrScheme::EStatus::StatusSchemeError:
                 error = ResultFromError<TResult>(YqlIssue({}, TIssuesIds::KIKIMR_SCHEME_ERROR, reason));
                 return false;
-            case NKikimrScheme::EStatus::StatusAccessDenied: 
+            case NKikimrScheme::EStatus::StatusAccessDenied:
                 error = ResultFromError<TResult>(YqlIssue({}, TIssuesIds::KIKIMR_ACCESS_DENIED, reason));
                 return false;
-            case NKikimrScheme::EStatus::StatusNotAvailable: 
+            case NKikimrScheme::EStatus::StatusNotAvailable:
                 error = ResultFromError<TResult>(YqlIssue({}, TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE, reason));
                 return false;
             default:
@@ -2609,7 +2609,7 @@ private:
     }
 
     static bool FillCreateTableDesc(NYql::TKikimrTableMetadataPtr metadata,
-        NKikimrSchemeOp::TTableDescription& tableDesc, const NGRpcService::TTableProfiles& profiles, 
+        NKikimrSchemeOp::TTableDescription& tableDesc, const NGRpcService::TTableProfiles& profiles,
         Ydb::StatusIds::StatusCode& code, TString& error, TList<TString>& warnings)
     {
         Ydb::Table::CreateTableRequest createTableProto;

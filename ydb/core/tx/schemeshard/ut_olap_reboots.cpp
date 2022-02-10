@@ -1,8 +1,8 @@
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 
-using namespace NKikimr::NSchemeShard; 
+using namespace NKikimr::NSchemeShard;
 using namespace NKikimr;
-using namespace NKikimrSchemeOp; 
+using namespace NKikimrSchemeOp;
 using namespace NSchemeShardUT_Private;
 
 Y_UNIT_TEST_SUITE(TOlapReboots) {
@@ -150,12 +150,12 @@ Y_UNIT_TEST_SUITE(TOlapReboots) {
                 CreateOlapTableRequest(t.TxId += 2, "/MyRoot/OlapStore", R"(
                     Name: "OlapTable1"
                 )"),
-                {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusAlreadyExists, NKikimrScheme::StatusMultipleModifications}); 
+                {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusAlreadyExists, NKikimrScheme::StatusMultipleModifications});
             t.TestEnv->ReliablePropose(runtime,
                 CreateOlapTableRequest(t.TxId - 1, "/MyRoot/OlapStore", R"(
                     Name: "OlapTable2"
                 )"),
-                {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusAlreadyExists, NKikimrScheme::StatusMultipleModifications}); 
+                {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusAlreadyExists, NKikimrScheme::StatusMultipleModifications});
             t.TestEnv->TestWaitNotification(runtime, {t.TxId - 1, t.TxId});
 
             {
@@ -203,10 +203,10 @@ Y_UNIT_TEST_SUITE(TOlapReboots) {
 
             t.TestEnv->ReliablePropose(runtime,
                 DropOlapTableRequest(t.TxId += 2, "/MyRoot/OlapStore", "OlapTable1"),
-                {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusMultipleModifications}); 
+                {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusMultipleModifications});
             t.TestEnv->ReliablePropose(runtime,
                 DropOlapTableRequest(t.TxId - 1, "/MyRoot/OlapStore", "OlapTable2"),
-                {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusMultipleModifications}); 
+                {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusMultipleModifications});
             t.TestEnv->TestWaitNotification(runtime, {t.TxId - 1, t.TxId});
 
             {
@@ -244,12 +244,12 @@ Y_UNIT_TEST_SUITE(TOlapReboots) {
 
             t.TestEnv->ReliablePropose(runtime,
                 CreateOlapStoreRequest(++t.TxId, "/MyRoot", olapSchema),
-                {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusAlreadyExists, NKikimrScheme::StatusMultipleModifications}); 
+                {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusAlreadyExists, NKikimrScheme::StatusMultipleModifications});
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
             t.TestEnv->ReliablePropose(runtime,
                 DropOlapStoreRequest(++t.TxId, "/MyRoot", "OlapStore"),
-                {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusMultipleModifications}); 
+                {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusMultipleModifications});
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
             {
@@ -291,12 +291,12 @@ Y_UNIT_TEST_SUITE(TOlapReboots) {
 
             t.TestEnv->ReliablePropose(runtime,
                 DropOlapTableRequest(++t.TxId, "/MyRoot/OlapStore", "OlapTable"),
-                {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusMultipleModifications}); 
+                {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusMultipleModifications});
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
             t.TestEnv->ReliablePropose(runtime,
                 DropOlapStoreRequest(++t.TxId, "/MyRoot", "OlapStore"),
-                {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusMultipleModifications}); 
+                {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusMultipleModifications});
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
             {
@@ -358,7 +358,7 @@ Y_UNIT_TEST_SUITE(TOlapReboots) {
                         }
                     }
                 )"),
-                {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusMultipleModifications}); 
+                {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusMultipleModifications});
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
             {
@@ -376,7 +376,7 @@ Y_UNIT_TEST_SUITE(TOlapReboots) {
                         Disabled {}
                     }
                 )"),
-                {NKikimrScheme::StatusInvalidParameter, NKikimrScheme::StatusMultipleModifications}); 
+                {NKikimrScheme::StatusInvalidParameter, NKikimrScheme::StatusMultipleModifications});
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
             {

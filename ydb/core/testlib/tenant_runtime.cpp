@@ -33,7 +33,7 @@
 namespace NKikimr {
 
 using namespace NTabletFlatExecutor;
-using namespace NSchemeShard; 
+using namespace NSchemeShard;
 using namespace NConsole;
 using namespace NTenantSlotBroker;
 
@@ -129,7 +129,7 @@ public:
 };
 
 class TFakeSchemeShard : public TActor<TFakeSchemeShard>, public TTabletExecutedFlat {
-    void Handle(TEvSchemeShard::TEvDescribeScheme::TPtr &ev, const TActorContext &ctx) 
+    void Handle(TEvSchemeShard::TEvDescribeScheme::TPtr &ev, const TActorContext &ctx)
     {
         if (HoldResolve) {
             Queue.push_back(ev.Release());
@@ -142,24 +142,24 @@ class TFakeSchemeShard : public TActor<TFakeSchemeShard>, public TTabletExecuted
         if (!path)
             path = Paths[rec.GetPathId()];
 
-        auto *resp = new TEvSchemeShard::TEvDescribeSchemeResultBuilder; 
+        auto *resp = new TEvSchemeShard::TEvDescribeSchemeResultBuilder;
         resp->Record.SetPath(path);
 
         auto it = SubDomains.find(path);
         if (it != SubDomains.end()) {
-            resp->Record.SetStatus(NKikimrScheme::StatusSuccess); 
+            resp->Record.SetStatus(NKikimrScheme::StatusSuccess);
             auto &self = *resp->Record.MutablePathDescription()->MutableSelf();
             self.SetName(ev->Get()->Record.GetPath());
             self.SetPathId(it->second);
             self.SetSchemeshardId(TabletID());
-            self.SetPathType(NKikimrSchemeOp::EPathTypeSubDomain); 
+            self.SetPathType(NKikimrSchemeOp::EPathTypeSubDomain);
             auto &domain = *resp->Record.MutablePathDescription()->MutableDomainDescription();
             domain.SetSchemeShardId_Depricated(TabletID());
             domain.SetPathId_Depricated(it->second);
             domain.MutableDomainKey()->SetSchemeShard(TabletID());
             domain.MutableDomainKey()->SetPathId(it->second);
         } else {
-            resp->Record.SetStatus(NKikimrScheme::StatusPathDoesNotExist); 
+            resp->Record.SetStatus(NKikimrScheme::StatusPathDoesNotExist);
         }
         ctx.Send(ev->Sender, resp);
     }
@@ -218,7 +218,7 @@ public:
     STFUNC(StateWork)
     {
         switch (ev->GetTypeRewrite()) {
-            HFunc(TEvSchemeShard::TEvDescribeScheme, Handle); 
+            HFunc(TEvSchemeShard::TEvDescribeScheme, Handle);
             HFunc(TEvTest::TEvHoldResolve, Handle);
         default:
             break;
@@ -351,7 +351,7 @@ class TFakeHive : public TActor<TFakeHive>, public TTabletExecutedFlat {
     void ResolveKey(TSubDomainKey key, const TActorContext &ctx)
     {
         TActorId clientId = ctx.Register(NKikimr::NTabletPipe::CreateClient(ctx.SelfID, key.GetSchemeShard()));
-        auto *request = new TEvSchemeShard::TEvDescribeScheme(key.GetSchemeShard(), key.GetPathId()); 
+        auto *request = new TEvSchemeShard::TEvDescribeScheme(key.GetSchemeShard(), key.GetPathId());
         NTabletPipe::SendData(ctx, clientId, request);
         ctx.Send(clientId, new NKikimr::TEvTabletPipe::TEvShutdown);
     }
@@ -362,10 +362,10 @@ class TFakeHive : public TActor<TFakeHive>, public TTabletExecutedFlat {
         CheckState(ctx);
     }
 
-    void Handle(TEvSchemeShard::TEvDescribeSchemeResult::TPtr &ev, const TActorContext &ctx) 
+    void Handle(TEvSchemeShard::TEvDescribeSchemeResult::TPtr &ev, const TActorContext &ctx)
     {
         const auto &rec = ev->Get()->GetRecord();
-        UNIT_ASSERT_VALUES_EQUAL(rec.GetStatus(), NKikimrScheme::StatusSuccess); 
+        UNIT_ASSERT_VALUES_EQUAL(rec.GetStatus(), NKikimrScheme::StatusSuccess);
         auto &path = rec.GetPath();
         auto shardId = rec.GetPathDescription().GetSelf().GetSchemeshardId();
         auto pathId = rec.GetPathDescription().GetSelf().GetPathId();
@@ -427,8 +427,8 @@ class TFakeHive : public TActor<TFakeHive>, public TTabletExecutedFlat {
                 bootstrapperActorId = Boot(ctx, type, &CreateFlatTxCoordinator, DataGroupErasure);
             } else if (type == defaultTabletTypes.Mediator) {
                 bootstrapperActorId = Boot(ctx, type, &CreateTxMediator, DataGroupErasure);
-            } else if (type == defaultTabletTypes.SchemeShard) { 
-                bootstrapperActorId = Boot(ctx, type, &CreateFlatTxSchemeShard, DataGroupErasure); 
+            } else if (type == defaultTabletTypes.SchemeShard) {
+                bootstrapperActorId = Boot(ctx, type, &CreateFlatTxSchemeShard, DataGroupErasure);
             } else if (type == defaultTabletTypes.Hive) {
                 bootstrapperActorId = Boot(ctx, type, &CreateDefaultHive, DataGroupErasure);
             } else if (type == defaultTabletTypes.SysViewProcessor) {
@@ -469,10 +469,10 @@ class TFakeHive : public TActor<TFakeHive>, public TTabletExecutedFlat {
 
     void Handle(TEvHive::TEvDeleteTablet::TPtr &ev, const TActorContext &ctx) {
         NKikimrHive::TEvDeleteTablet& rec = ev->Get()->Record;
-        TVector<ui64> localIds; 
-        for (size_t i = 0; i < rec.ShardLocalIdxSize(); ++i) { 
-            localIds.push_back(rec.GetShardLocalIdx(i)); 
-            auto it = State.Tablets.find(std::make_pair<ui64, ui64>(rec.GetShardOwnerId(), rec.GetShardLocalIdx(i))); 
+        TVector<ui64> localIds;
+        for (size_t i = 0; i < rec.ShardLocalIdxSize(); ++i) {
+            localIds.push_back(rec.GetShardLocalIdx(i));
+            auto it = State.Tablets.find(std::make_pair<ui64, ui64>(rec.GetShardOwnerId(), rec.GetShardLocalIdx(i)));
             if (it != State.Tablets.end()) {
                 ctx.Send(ctx.SelfID, new TEvFakeHive::TEvNotifyTabletDeleted(it->second.TabletId));
 
@@ -486,38 +486,38 @@ class TFakeHive : public TActor<TFakeHive>, public TTabletExecutedFlat {
                 State.Tablets.erase(it);
             }
         }
-        ctx.Send(ev->Sender, new TEvHive::TEvDeleteTabletReply(NKikimrProto::OK, TabletID(), rec.GetTxId_Deprecated(), rec.GetShardOwnerId(), localIds)); 
+        ctx.Send(ev->Sender, new TEvHive::TEvDeleteTabletReply(NKikimrProto::OK, TabletID(), rec.GetTxId_Deprecated(), rec.GetShardOwnerId(), localIds));
     }
 
-    void Handle(TEvHive::TEvDeleteOwnerTablets::TPtr &ev, const TActorContext &ctx) { 
-        NKikimrHive::TEvDeleteOwnerTablets& rec = ev->Get()->Record; 
-        TVector<ui64> toDelete; 
-        for (auto item : State.Tablets) { 
-            if (item.first.first != rec.GetOwner()) { 
-                continue; 
-            } 
-            toDelete.push_back(item.first.second); 
-        } 
- 
-        for (auto idx: toDelete) { 
-            auto it = State.Tablets.find(std::pair<ui64, ui64>(rec.GetOwner(), idx)); 
-            if (it != State.Tablets.end()) { 
-                ctx.Send(ctx.SelfID, new TEvFakeHive::TEvNotifyTabletDeleted(it->second.TabletId)); 
- 
+    void Handle(TEvHive::TEvDeleteOwnerTablets::TPtr &ev, const TActorContext &ctx) {
+        NKikimrHive::TEvDeleteOwnerTablets& rec = ev->Get()->Record;
+        TVector<ui64> toDelete;
+        for (auto item : State.Tablets) {
+            if (item.first.first != rec.GetOwner()) {
+                continue;
+            }
+            toDelete.push_back(item.first.second);
+        }
+
+        for (auto idx: toDelete) {
+            auto it = State.Tablets.find(std::pair<ui64, ui64>(rec.GetOwner(), idx));
+            if (it != State.Tablets.end()) {
+                ctx.Send(ctx.SelfID, new TEvFakeHive::TEvNotifyTabletDeleted(it->second.TabletId));
+
                 TActorId bootstrapperActorId = it->second.BootstrapperActorId;
-                ctx.Send(bootstrapperActorId, new TEvBootstrapper::TEvStandBy()); 
- 
+                ctx.Send(bootstrapperActorId, new TEvBootstrapper::TEvStandBy());
+
                 for (TActorId waiter : it->second.DeletionWaiters) {
-                    SendDeletionNotification(it->second.TabletId, waiter, ctx); 
-                } 
-                State.TabletIdToOwner.erase(it->second.TabletId); 
-                State.Tablets.erase(it); 
-            } 
-        } 
- 
-        ctx.Send(ev->Sender, new TEvHive::TEvDeleteOwnerTabletsReply(NKikimrProto::OK, TabletID(), rec.GetOwner(), rec.GetTxId())); 
-    } 
- 
+                    SendDeletionNotification(it->second.TabletId, waiter, ctx);
+                }
+                State.TabletIdToOwner.erase(it->second.TabletId);
+                State.Tablets.erase(it);
+            }
+        }
+
+        ctx.Send(ev->Sender, new TEvHive::TEvDeleteOwnerTabletsReply(NKikimrProto::OK, TabletID(), rec.GetOwner(), rec.GetTxId()));
+    }
+
     void Handle(TEvLocal::TEvRegisterNode::TPtr &ev, const TActorContext &ctx)
     {
         auto &record = ev->Get()->Record;
@@ -661,10 +661,10 @@ public:
         TRACE_EVENT(NKikimrServices::HIVE);
         switch (ev->GetTypeRewrite()) {
             HFuncTraced(TEvents::TEvUndelivered, Handle);
-            HFuncTraced(TEvSchemeShard::TEvDescribeSchemeResult, Handle); 
+            HFuncTraced(TEvSchemeShard::TEvDescribeSchemeResult, Handle);
             HFuncTraced(TEvHive::TEvCreateTablet, Handle);
             HFuncTraced(TEvHive::TEvDeleteTablet, Handle);
-            HFuncTraced(TEvHive::TEvDeleteOwnerTablets, Handle); 
+            HFuncTraced(TEvHive::TEvDeleteOwnerTablets, Handle);
             HFuncTraced(TEvLocal::TEvRegisterNode, Handle);
             HFuncTraced(TEvLocal::TEvStatus, Handle);
             HFuncTraced(TEvTest::TEvWaitHiveState, Handle);
@@ -787,10 +787,10 @@ void TTenantTestRuntime::Setup(bool createTenantPools)
         SetLogPriority(NKikimrServices::CONFIGS_CACHE, NLog::PRI_TRACE);
         SetLogPriority(NKikimrServices::HIVE, NLog::PRI_DEBUG);
         SetLogPriority(NKikimrServices::BS_CONTROLLER, NLog::PRI_DEBUG);
-        SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NLog::PRI_DEBUG); 
-        SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG); 
-        SetLogPriority(NKikimrServices::TX_PROXY_SCHEME_CACHE, NLog::PRI_DEBUG); 
- 
+        SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NLog::PRI_DEBUG);
+        SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
+        SetLogPriority(NKikimrServices::TX_PROXY_SCHEME_CACHE, NLog::PRI_DEBUG);
+
         //SetLogPriority(NKikimrServices::TX_MEDIATOR, NLog::PRI_DEBUG);
         //SetLogPriority(NKikimrServices::TX_COORDINATOR, NLog::PRI_DEBUG);
         //SetLogPriority(NKikimrServices::BS_CONTROLLER, NLog::PRI_DEBUG);
@@ -809,26 +809,26 @@ void TTenantTestRuntime::Setup(bool createTenantPools)
 
     ui32 planResolution = 500;
     // Add domains info.
-    for (ui32 i = 0; i < Config.Domains.size(); ++i) { 
+    for (ui32 i = 0; i < Config.Domains.size(); ++i) {
         auto &domain = Config.Domains[i];
         NKikimrBlobStorage::TDefineStoragePool hddPool;
         hddPool.SetBoxId(1);
         hddPool.SetErasureSpecies("none");
         hddPool.SetVDiskKind("Default");
         hddPool.AddPDiskFilter()->AddProperty()->SetType(NKikimrBlobStorage::ROT);
-        TDomainsInfo::TDomain::TStoragePoolKinds poolTypes; 
+        TDomainsInfo::TDomain::TStoragePoolKinds poolTypes;
         poolTypes["hdd"] = hddPool;
         poolTypes["hdd-1"] = hddPool;
         poolTypes["hdd-2"] = hddPool;
         poolTypes["hdd-3"] = hddPool;
-        auto domainPtr = TDomainsInfo::TDomain::ConstructDomainWithExplicitTabletIds(domain.Name, i, domain.SchemeShardId, 
+        auto domainPtr = TDomainsInfo::TDomain::ConstructDomainWithExplicitTabletIds(domain.Name, i, domain.SchemeShardId,
                                                                 i, i, TVector<ui32>{i},
-                                                                i, TVector<ui32>{i}, 
+                                                                i, TVector<ui32>{i},
                                                                 planResolution,
-                                                                TVector<ui64>{TDomainsInfo::MakeTxCoordinatorIDFixed(i, 1)}, 
-                                                                TVector<ui64>{TDomainsInfo::MakeTxMediatorIDFixed(i, 1)}, 
-                                                                TVector<ui64>{TDomainsInfo::MakeTxAllocatorIDFixed(i, 1)}, 
-                                                                poolTypes); 
+                                                                TVector<ui64>{TDomainsInfo::MakeTxCoordinatorIDFixed(i, 1)},
+                                                                TVector<ui64>{TDomainsInfo::MakeTxMediatorIDFixed(i, 1)},
+                                                                TVector<ui64>{TDomainsInfo::MakeTxAllocatorIDFixed(i, 1)},
+                                                                poolTypes);
 
         TVector<ui64> ids = GetTxAllocatorTabletIds();
         ids.insert(ids.end(), domainPtr->TxAllocators.begin(), domainPtr->TxAllocators.end());
@@ -850,22 +850,22 @@ void TTenantTestRuntime::Setup(bool createTenantPools)
         Register(NTabletMonitoringProxy::CreateTabletMonitoringProxy());
     }
 
-    for (auto &pr : GetAppData().DomainsInfo->Domains) { 
-        auto &domain = pr.second; 
-        for (auto id : domain->TxAllocators) { 
+    for (auto &pr : GetAppData().DomainsInfo->Domains) {
+        auto &domain = pr.second;
+        for (auto id : domain->TxAllocators) {
             auto aid = CreateTestBootstrapper(*this, CreateTestTabletInfo(id, TTabletTypes::TX_ALLOCATOR), &CreateTxAllocator);
-            EnableScheduleForActor(aid, true); 
-        } 
-        for (auto id : domain->Coordinators) { 
+            EnableScheduleForActor(aid, true);
+        }
+        for (auto id : domain->Coordinators) {
             auto aid = CreateTestBootstrapper(*this, CreateTestTabletInfo(id, TTabletTypes::FLAT_TX_COORDINATOR), &CreateFlatTxCoordinator);
-            EnableScheduleForActor(aid, true); 
-        } 
-        for (auto id : domain->Mediators) { 
+            EnableScheduleForActor(aid, true);
+        }
+        for (auto id : domain->Mediators) {
             auto aid = CreateTestBootstrapper(*this, CreateTestTabletInfo(id, TTabletTypes::TX_MEDIATOR), &CreateTxMediator);
-            EnableScheduleForActor(aid, true); 
-        } 
-    } 
- 
+            EnableScheduleForActor(aid, true);
+        }
+    }
+
     // Create Scheme Shards
     Sender = AllocateEdgeActor();
     for (size_t i = 0; i < Config.Domains.size(); ++i) {
@@ -893,38 +893,38 @@ void TTenantTestRuntime::Setup(bool createTenantPools)
             EnableScheduleForActor(actorId, true);
 
             // Init scheme root.
-            { 
-                auto evTx = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(1, domain.SchemeShardId); 
-                auto transaction = evTx->Record.AddTransaction(); 
-                transaction->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterSubDomain); 
-                transaction->SetWorkingDir("/"); 
-                auto op = transaction->MutableSubDomain(); 
-                op->SetName(domain.Name); 
- 
+            {
+                auto evTx = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(1, domain.SchemeShardId);
+                auto transaction = evTx->Record.AddTransaction();
+                transaction->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterSubDomain);
+                transaction->SetWorkingDir("/");
+                auto op = transaction->MutableSubDomain();
+                op->SetName(domain.Name);
+
                 for (const auto& [kind, pool] : GetAppData().DomainsInfo->GetDomain(0).StoragePoolTypes) {
-                    auto* p = op->AddStoragePools(); 
-                    p->SetKind(kind); 
-                    p->SetName(pool.GetName()); 
+                    auto* p = op->AddStoragePools();
+                    p->SetKind(kind);
+                    p->SetName(pool.GetName());
                 }
- 
-                SendToPipe(domain.SchemeShardId, Sender, evTx.Release(), 0, GetPipeConfigWithRetries()); 
- 
-                { 
-                    TAutoPtr<IEventHandle> handle; 
-                    auto event = GrabEdgeEvent<TEvSchemeShard::TEvModifySchemeTransactionResult>(handle); 
-                    UNIT_ASSERT_VALUES_EQUAL(event->Record.GetSchemeshardId(), domain.SchemeShardId); 
-                    UNIT_ASSERT_VALUES_EQUAL(event->Record.GetStatus(), NKikimrScheme::EStatus::StatusAccepted); 
+
+                SendToPipe(domain.SchemeShardId, Sender, evTx.Release(), 0, GetPipeConfigWithRetries());
+
+                {
+                    TAutoPtr<IEventHandle> handle;
+                    auto event = GrabEdgeEvent<TEvSchemeShard::TEvModifySchemeTransactionResult>(handle);
+                    UNIT_ASSERT_VALUES_EQUAL(event->Record.GetSchemeshardId(), domain.SchemeShardId);
+                    UNIT_ASSERT_VALUES_EQUAL(event->Record.GetStatus(), NKikimrScheme::EStatus::StatusAccepted);
                 }
- 
-                auto evSubscribe = MakeHolder<TEvSchemeShard::TEvNotifyTxCompletion>(1); 
-                SendToPipe(domain.SchemeShardId, Sender, evSubscribe.Release(), 0, GetPipeConfigWithRetries()); 
- 
-                { 
-                    TAutoPtr<IEventHandle> handle; 
-                    auto event = GrabEdgeEvent<TEvSchemeShard::TEvNotifyTxCompletionResult>(handle); 
-                    UNIT_ASSERT_VALUES_EQUAL(event->Record.GetTxId(), 1); 
-                } 
-            } 
+
+                auto evSubscribe = MakeHolder<TEvSchemeShard::TEvNotifyTxCompletion>(1);
+                SendToPipe(domain.SchemeShardId, Sender, evSubscribe.Release(), 0, GetPipeConfigWithRetries());
+
+                {
+                    TAutoPtr<IEventHandle> handle;
+                    auto event = GrabEdgeEvent<TEvSchemeShard::TEvNotifyTxCompletionResult>(handle);
+                    UNIT_ASSERT_VALUES_EQUAL(event->Record.GetTxId(), 1);
+                }
+            }
             Y_VERIFY(domain.Subdomains.empty(), "Pre-initialized subdomains are not supported for real SchemeShard");
         }
     }
@@ -1118,7 +1118,7 @@ void TTenantTestRuntime::Setup(bool createTenantPools)
 }
 
 TTenantTestRuntime::TTenantTestRuntime(const TTenantTestConfig &config,
-                                       const NKikimrConfig::TAppConfig &extension, 
+                                       const NKikimrConfig::TAppConfig &extension,
                                        bool createTenantPools)
     : TTestBasicRuntime(config.Nodes.size(), config.DataCenterCount, false)
     , Config(config)

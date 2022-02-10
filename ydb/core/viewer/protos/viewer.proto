@@ -28,7 +28,7 @@ enum EObjectType {
     RtmrVolume = 14;
     BlockStoreVolume = 15;
     Kesus = 16;
-    SolomonVolume = 17; 
+    SolomonVolume = 17;
     SubDomain = 18;
     FileStore = 19;
     CdcStream = 20;
@@ -45,8 +45,8 @@ message TBrowseInfo {
 }
 
 message TBackupInfo {
-    NKikimrSchemeOp.TBackupProgress Progress = 1; 
-    repeated NKikimrSchemeOp.TLastBackupResult LastResults = 2; 
+    NKikimrSchemeOp.TBackupProgress Progress = 1;
+    repeated NKikimrSchemeOp.TLastBackupResult LastResults = 2;
 }
 
 message TResources {
@@ -178,30 +178,30 @@ message TMetaTopicInfo {
 
 message TMetaRtmrOperationInfo {
     message TSettings {
-            // Options passed to the operation instance 
-            string Options = 1; 
-            // Force pause between operation executions on one key; seconds 
-            uint32 PostponeTimeout = 2; 
+            // Options passed to the operation instance
+            string Options = 1;
+            // Force pause between operation executions on one key; seconds
+            uint32 PostponeTimeout = 2;
             // Pacing period for postponed keys (maximum error added to PostponeTimeout); seconds
             uint32 PostponePacePeriod = 13;
             // Force pause before first operation execution on one key; seconds
             uint32 BatchTimeout = 11;
-            // Max age of data being read for operation execution; seconds 
-            uint32 MaxTimeBack = 3; 
-            // Operation instance recreation period; seconds 
-            uint32 RecycleTimeout = 4; 
-            // Importance of operation for scheduling 
-            uint32 Weight = 5; 
-            // Max data passed to operation per one execution 
-            uint32 MaxInputBytes = 6; 
-            // Discard data if there is too long queue for execution 
-            uint32 SkipIfMoreThanBytes = 7; 
-            // desired revision of dynamic library 
-            uint32 Revision = 8; 
-            // current working directory 
-            string WorkingDirectory = 9; 
-            // Dynamic library name 
-            string LibraryName = 10; 
+            // Max age of data being read for operation execution; seconds
+            uint32 MaxTimeBack = 3;
+            // Operation instance recreation period; seconds
+            uint32 RecycleTimeout = 4;
+            // Importance of operation for scheduling
+            uint32 Weight = 5;
+            // Max data passed to operation per one execution
+            uint32 MaxInputBytes = 6;
+            // Discard data if there is too long queue for execution
+            uint32 SkipIfMoreThanBytes = 7;
+            // desired revision of dynamic library
+            uint32 Revision = 8;
+            // current working directory
+            string WorkingDirectory = 9;
+            // Dynamic library name
+            string LibraryName = 10;
             // Tolerance to failures during operation execution
             uint32 SuspendThreshold = 12;
     };
@@ -221,9 +221,9 @@ message TMetaRtmrOperationInfo {
         string Name = 2;
         uint32 Lifetime = 3; // Lifetime in seconds
         uint64 DataSize = 4; // in bytes
-        uint64 Entries = 5; 
-        uint64 UpdatesCount = 6; 
-        uint64 UpdateTime = 7; // milliseconds since epoch 
+        uint64 Entries = 5;
+        uint64 UpdatesCount = 6;
+        uint64 UpdateTime = 7; // milliseconds since epoch
     };
 
     bool Enabled = 1;

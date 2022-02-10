@@ -1210,8 +1210,8 @@ private:
         TCounterPtr ScanBytes;
         TCounterPtr DatashardRowCount;
         TCounterPtr DatashardSizeBytes;
-        TCounterPtr ResourcesStorageUsedBytes; 
-        TCounterPtr ResourcesStorageLimitBytes; 
+        TCounterPtr ResourcesStorageUsedBytes;
+        TCounterPtr ResourcesStorageLimitBytes;
         TCounterPtr ResourcesStreamUsedShards;
         TCounterPtr ResourcesStreamLimitShards;
         //TCounterPtr ResourcesStreamUsedShardsPercents;
@@ -1237,9 +1237,9 @@ private:
         TCounterPtr DbUniqueDataBytes;
         THistogramPtr ConsumedCpuHistogram;
 
-        TCounterPtr DiskSpaceTablesTotalBytes; 
-        TCounterPtr DiskSpaceSoftQuotaBytes; 
- 
+        TCounterPtr DiskSpaceTablesTotalBytes;
+        TCounterPtr DiskSpaceSoftQuotaBytes;
+
         TCounterPtr StreamShardsCount;
         TCounterPtr StreamShardsQuota;
         TCounterPtr StreamReservedThroughput;
@@ -1274,11 +1274,11 @@ private:
                 "table.datashard.row_count", false);
             DatashardSizeBytes = ydbGroup->GetNamedCounter("name",
                 "table.datashard.size_bytes", false);
- 
-            ResourcesStorageUsedBytes = ydbGroup->GetNamedCounter("name", 
-                "resources.storage.used_bytes", false); 
-            ResourcesStorageLimitBytes = ydbGroup->GetNamedCounter("name", 
-                "resources.storage.limit_bytes", false); 
+
+            ResourcesStorageUsedBytes = ydbGroup->GetNamedCounter("name",
+                "resources.storage.used_bytes", false);
+            ResourcesStorageLimitBytes = ydbGroup->GetNamedCounter("name",
+                "resources.storage.limit_bytes", false);
 
             ResourcesStreamUsedShards = ydbGroup->GetNamedCounter("name",
                 "resources.stream.used_shards", false);
@@ -1331,16 +1331,16 @@ private:
                 DbUniqueDataBytes = execGroup->GetCounter("SUM(DbUniqueDataBytes)");
                 ConsumedCpuHistogram = execGroup->FindHistogram("HIST(ConsumedCPU)");
             }
- 
-            auto schemeshard = FindCountersByTabletType( 
-                TTabletTypes::FLAT_SCHEMESHARD, countersByTabletType); 
- 
-            if (schemeshard && !DiskSpaceTablesTotalBytes) { 
-                auto schemeshardGroup = counters->GetSubgroup("type", "SchemeShard"); 
-                auto appGroup = schemeshardGroup->GetSubgroup("category", "app"); 
- 
-                DiskSpaceTablesTotalBytes = appGroup->GetCounter("SUM(SchemeShard/DiskSpaceTablesTotalBytes)"); 
-                DiskSpaceSoftQuotaBytes = appGroup->GetCounter("SUM(SchemeShard/DiskSpaceSoftQuotaBytes)"); 
+
+            auto schemeshard = FindCountersByTabletType(
+                TTabletTypes::FLAT_SCHEMESHARD, countersByTabletType);
+
+            if (schemeshard && !DiskSpaceTablesTotalBytes) {
+                auto schemeshardGroup = counters->GetSubgroup("type", "SchemeShard");
+                auto appGroup = schemeshardGroup->GetSubgroup("category", "app");
+
+                DiskSpaceTablesTotalBytes = appGroup->GetCounter("SUM(SchemeShard/DiskSpaceTablesTotalBytes)");
+                DiskSpaceSoftQuotaBytes = appGroup->GetCounter("SUM(SchemeShard/DiskSpaceSoftQuotaBytes)");
 
                 StreamShardsCount = appGroup->GetCounter("SUM(SchemeShard/StreamShardsCount)");
                 StreamShardsQuota = appGroup->GetCounter("SUM(SchemeShard/StreamShardsQuota)");
@@ -1348,7 +1348,7 @@ private:
                 StreamReservedStorage = appGroup->GetCounter("SUM(SchemeShard/StreamReservedStorage)");
                 StreamReservedStorageLimit = appGroup->GetCounter("SUM(SchemeShard/StreamReservedStorageQuota)");
 
-            } 
+            }
         }
 
         void Transform() {
@@ -1370,8 +1370,8 @@ private:
                     TransferBuckets(ShardCpuUtilization, ConsumedCpuHistogram);
                 }
             }
- 
-            if (DiskSpaceTablesTotalBytes) { 
+
+            if (DiskSpaceTablesTotalBytes) {
                 ResourcesStorageUsedBytes->Set(DiskSpaceTablesTotalBytes->Val());
                 ResourcesStorageLimitBytes->Set(DiskSpaceSoftQuotaBytes->Val());
 
@@ -1387,7 +1387,7 @@ private:
                 ResourcesStreamReservedThroughput->Set(StreamReservedThroughput->Val());
                 ResourcesStreamReservedStorage->Set(StreamReservedStorage->Val());
                 ResourcesStreamReservedStorageLimit->Set(StreamReservedStorageLimit->Val());
-            } 
+            }
         }
 
         void TransferBuckets(THistogramPtr dst, THistogramPtr src) {

@@ -1,11 +1,11 @@
 #include "schemeshard_impl.h"
 
 namespace NKikimr {
-namespace NSchemeShard { 
+namespace NSchemeShard {
 
-class TTxFindTabletSubDomainPathId : public NTabletFlatExecutor::TTransactionBase<TSchemeShard> { 
+class TTxFindTabletSubDomainPathId : public NTabletFlatExecutor::TTransactionBase<TSchemeShard> {
 public:
-    TTxFindTabletSubDomainPathId(TSchemeShard* self, TEvSchemeShard::TEvFindTabletSubDomainPathId::TPtr& ev) 
+    TTxFindTabletSubDomainPathId(TSchemeShard* self, TEvSchemeShard::TEvFindTabletSubDomainPathId::TPtr& ev)
         : TTransactionBase(self)
         , Ev(ev)
     { }
@@ -21,29 +21,29 @@ public:
 
         auto it1 = Self->TabletIdToShardIdx.find(TTabletId(tabletId));
         if (it1 == Self->TabletIdToShardIdx.end()) {
-            Result = MakeHolder<TEvSchemeShard::TEvFindTabletSubDomainPathIdResult>( 
-                tabletId, NKikimrScheme::TEvFindTabletSubDomainPathIdResult::SHARD_NOT_FOUND); 
+            Result = MakeHolder<TEvSchemeShard::TEvFindTabletSubDomainPathIdResult>(
+                tabletId, NKikimrScheme::TEvFindTabletSubDomainPathIdResult::SHARD_NOT_FOUND);
             return true;
         }
 
         auto shardIdx = it1->second;
         auto it2 = Self->ShardInfos.find(shardIdx);
         if (it2 == Self->ShardInfos.end()) {
-            Result = MakeHolder<TEvSchemeShard::TEvFindTabletSubDomainPathIdResult>( 
-                tabletId, NKikimrScheme::TEvFindTabletSubDomainPathIdResult::SHARD_NOT_FOUND); 
+            Result = MakeHolder<TEvSchemeShard::TEvFindTabletSubDomainPathIdResult>(
+                tabletId, NKikimrScheme::TEvFindTabletSubDomainPathIdResult::SHARD_NOT_FOUND);
             return true;
         }
 
         auto& shardInfo = it2->second;
         auto path = TPath::Init(shardInfo.PathId, Self);
         if (!path) {
-            Result = MakeHolder<TEvSchemeShard::TEvFindTabletSubDomainPathIdResult>( 
-                tabletId, NKikimrScheme::TEvFindTabletSubDomainPathIdResult::PATH_NOT_FOUND); 
+            Result = MakeHolder<TEvSchemeShard::TEvFindTabletSubDomainPathIdResult>(
+                tabletId, NKikimrScheme::TEvFindTabletSubDomainPathIdResult::PATH_NOT_FOUND);
             return true;
         }
 
         auto domainId = path.DomainId();
-        Result = MakeHolder<TEvSchemeShard::TEvFindTabletSubDomainPathIdResult>( 
+        Result = MakeHolder<TEvSchemeShard::TEvFindTabletSubDomainPathIdResult>(
             tabletId, domainId.OwnerId, domainId.LocalPathId);
         return true;
     }
@@ -54,13 +54,13 @@ public:
     }
 
 private:
-    TEvSchemeShard::TEvFindTabletSubDomainPathId::TPtr Ev; 
-    THolder<TEvSchemeShard::TEvFindTabletSubDomainPathIdResult> Result; 
+    TEvSchemeShard::TEvFindTabletSubDomainPathId::TPtr Ev;
+    THolder<TEvSchemeShard::TEvFindTabletSubDomainPathIdResult> Result;
 };
 
-void TSchemeShard::Handle(TEvSchemeShard::TEvFindTabletSubDomainPathId::TPtr& ev, const TActorContext& ctx) { 
+void TSchemeShard::Handle(TEvSchemeShard::TEvFindTabletSubDomainPathId::TPtr& ev, const TActorContext& ctx) {
     Execute(new TTxFindTabletSubDomainPathId(this, ev), ctx);
 }
 
-} // namespace NSchemeShard 
+} // namespace NSchemeShard
 } // namespace NKikimr

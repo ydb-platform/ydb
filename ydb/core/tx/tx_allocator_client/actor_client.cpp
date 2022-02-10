@@ -14,7 +14,7 @@ class TTxAllocatorClientActor: public TActorBootstrapped<TTxAllocatorClientActor
     struct TDelayedRequest {
         TActorId Sender;
         ui64 Cookie;
-        ui64 Count; 
+        ui64 Count;
     };
 
     static NTabletPipe::TClientConfig InitPipeClientConfig() {
@@ -34,12 +34,12 @@ class TTxAllocatorClientActor: public TActorBootstrapped<TTxAllocatorClientActor
     }
 
     void Handle(TEvTxAllocatorClient::TEvAllocate::TPtr& ev, const TActorContext& ctx) {
-        TVector<ui64> txIds = TxAllocatorClient.AllocateTxIds(ev->Get()->Count, ctx); 
+        TVector<ui64> txIds = TxAllocatorClient.AllocateTxIds(ev->Get()->Count, ctx);
 
-        if (txIds) { 
-            Send(ev->Sender, new TEvTxAllocatorClient::TEvAllocateResult(std::move(txIds)), 0, ev->Cookie); 
+        if (txIds) {
+            Send(ev->Sender, new TEvTxAllocatorClient::TEvAllocateResult(std::move(txIds)), 0, ev->Cookie);
         } else {
-            DelayedRequests.push_back({ev->Sender, ev->Cookie, ev->Get()->Count}); 
+            DelayedRequests.push_back({ev->Sender, ev->Cookie, ev->Get()->Count});
         }
     }
 
@@ -47,15 +47,15 @@ class TTxAllocatorClientActor: public TActorBootstrapped<TTxAllocatorClientActor
         TxAllocatorClient.OnAllocateResult(ev, ctx);
 
         while (!DelayedRequests.empty()) {
-            const TDelayedRequest& request = DelayedRequests.front(); 
+            const TDelayedRequest& request = DelayedRequests.front();
 
-            TVector<ui64> txIds = TxAllocatorClient.AllocateTxIds(request.Count, ctx); 
- 
-            if (!txIds) { 
+            TVector<ui64> txIds = TxAllocatorClient.AllocateTxIds(request.Count, ctx);
+
+            if (!txIds) {
                 break;
             }
 
-            Send(request.Sender, new TEvTxAllocatorClient::TEvAllocateResult(std::move(txIds)), 0, request.Cookie); 
+            Send(request.Sender, new TEvTxAllocatorClient::TEvAllocateResult(std::move(txIds)), 0, request.Cookie);
             DelayedRequests.pop_front();
         }
     }

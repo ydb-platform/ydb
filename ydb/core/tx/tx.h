@@ -6,7 +6,7 @@
 #include <ydb/core/protos/subdomains.pb.h>
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/base/appdata.h>
- 
+
 #include <library/cpp/actors/core/event_pb.h>
 
 namespace NKikimr {
@@ -24,7 +24,7 @@ struct TEvTxProxy {
     static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_TX_PROXY), "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_TX_PROXY)");
 
     struct TEvProposeTransaction : public TEventPB<TEvProposeTransaction, NKikimrTx::TEvProposeTransaction, EvProposeTransaction> {
-        TEvProposeTransaction() = default; 
+        TEvProposeTransaction() = default;
 
         TEvProposeTransaction(ui64 coordinator, ui64 txId, ui8 execLevel, ui64 minStep, ui64 maxStep);
     };
@@ -44,9 +44,9 @@ struct TEvTxProxy {
             StatusConfirmed, // execution confirmed by moderator (for synth-exec-level)
         };
 
-        TEvProposeTransactionStatus() = default; 
+        TEvProposeTransactionStatus() = default;
 
-        TEvProposeTransactionStatus(EStatus status, ui64 txid, ui64 stepId); 
+        TEvProposeTransactionStatus(EStatus status, ui64 txid, ui64 stepId);
 
         EStatus GetStatus() const {
             Y_VERIFY_DEBUG(Record.HasStatus());
@@ -108,52 +108,52 @@ struct TExecLevelHierarchy {
 // one scheme shard (#F0)
 
 struct TTestTxConfig {
-    static constexpr ui64 DomainUid = 0; 
-    static constexpr ui64 Coordinator = 0x0000000000800001; 
-    static constexpr ui64 Mediator = 0x0000000000810001; 
-    static constexpr ui64 TxAllocator = 0x0000000000820001; 
-    static constexpr ui64 Moderator = 0x0000000000830001; 
-    static constexpr ui64 TxTablet0 = 0x0000000000900000; 
-    static constexpr ui64 TxTablet1 = 0x0000000000900001; 
-    static constexpr ui64 TxTablet2 = 0x0000000000900002; 
-    static constexpr ui64 TxTablet3 = 0x0000000000900003; 
-    static constexpr ui64 TxTablet4 = 0x0000000000900004; 
-    static constexpr ui64 TxTablet5 = 0x0000000000900005; 
-    static constexpr ui64 TxTablet6 = 0x0000000000900006; 
-    static constexpr ui64 TxTablet7 = 0x0000000000900006; 
-    static constexpr ui64 FakeHiveTablets = 0x000000000090000a; 
-    static constexpr ui64 SchemeShard = 0x00000000008587a0; 
-    static constexpr ui64 Hive =  0x000000000000A001; 
-    static constexpr ui64 UseLessId = 0xFFFFFFFFFFFFFFF; 
+    static constexpr ui64 DomainUid = 0;
+    static constexpr ui64 Coordinator = 0x0000000000800001;
+    static constexpr ui64 Mediator = 0x0000000000810001;
+    static constexpr ui64 TxAllocator = 0x0000000000820001;
+    static constexpr ui64 Moderator = 0x0000000000830001;
+    static constexpr ui64 TxTablet0 = 0x0000000000900000;
+    static constexpr ui64 TxTablet1 = 0x0000000000900001;
+    static constexpr ui64 TxTablet2 = 0x0000000000900002;
+    static constexpr ui64 TxTablet3 = 0x0000000000900003;
+    static constexpr ui64 TxTablet4 = 0x0000000000900004;
+    static constexpr ui64 TxTablet5 = 0x0000000000900005;
+    static constexpr ui64 TxTablet6 = 0x0000000000900006;
+    static constexpr ui64 TxTablet7 = 0x0000000000900006;
+    static constexpr ui64 FakeHiveTablets = 0x000000000090000a;
+    static constexpr ui64 SchemeShard = 0x00000000008587a0;
+    static constexpr ui64 Hive =  0x000000000000A001;
+    static constexpr ui64 UseLessId = 0xFFFFFFFFFFFFFFF;
 };
 
-struct TEvSubDomain { 
-    enum EEv { 
-        EvConfigure = EventSpaceBegin(TKikimrEvents::ES_SUB_DOMAIN), 
-        EvConfigureStatus, 
- 
-        EvEnd 
-    }; 
- 
-    static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_SUB_DOMAIN), "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_SUB_DOMAIN)"); 
- 
-    struct TEvConfigure : public TEventPB<TEvConfigure, NKikimrSubDomains::TProcessingParams, EvConfigure> { 
-        TEvConfigure() = default; 
- 
-        TEvConfigure(const NKikimrSubDomains::TProcessingParams &processing); 
-        TEvConfigure(NKikimrSubDomains::TProcessingParams &&processing); 
-    }; 
- 
-    struct TEvConfigureStatus : public TEventPB<TEvConfigureStatus, NKikimrTx::TEvSubDomainConfigurationAck, EvConfigureStatus> { 
-        TEvConfigureStatus() = default; 
- 
-        TEvConfigureStatus(NKikimrTx::TEvSubDomainConfigurationAck::EStatus status, 
-                           ui64 tabletId); 
-    }; 
-}; 
- 
-TAutoPtr<TEvSubDomain::TEvConfigure> CreateDomainConfigurationFromStatic(const TAppData *appdata, ui64 tabletId); 
- 
+struct TEvSubDomain {
+    enum EEv {
+        EvConfigure = EventSpaceBegin(TKikimrEvents::ES_SUB_DOMAIN),
+        EvConfigureStatus,
+
+        EvEnd
+    };
+
+    static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_SUB_DOMAIN), "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_SUB_DOMAIN)");
+
+    struct TEvConfigure : public TEventPB<TEvConfigure, NKikimrSubDomains::TProcessingParams, EvConfigure> {
+        TEvConfigure() = default;
+
+        TEvConfigure(const NKikimrSubDomains::TProcessingParams &processing);
+        TEvConfigure(NKikimrSubDomains::TProcessingParams &&processing);
+    };
+
+    struct TEvConfigureStatus : public TEventPB<TEvConfigureStatus, NKikimrTx::TEvSubDomainConfigurationAck, EvConfigureStatus> {
+        TEvConfigureStatus() = default;
+
+        TEvConfigureStatus(NKikimrTx::TEvSubDomainConfigurationAck::EStatus status,
+                           ui64 tabletId);
+    };
+};
+
+TAutoPtr<TEvSubDomain::TEvConfigure> CreateDomainConfigurationFromStatic(const TAppData *appdata, ui64 tabletId);
+
 }
 
 template<>
@@ -161,5 +161,5 @@ inline void Out<NKikimr::TEvTxProxy::TEvProposeTransactionStatus::EStatus>(IOutp
         NKikimr::TEvTxProxy::TEvProposeTransactionStatus::EStatus x) {
     o << (ui32)x;
 }
- 
- 
+
+

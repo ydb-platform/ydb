@@ -31,12 +31,12 @@ public:
 private:
     void StateWork(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, Handle); 
+            HFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, Handle);
             default: TBase::StateWork(ev, ctx);
         }
     }
 
-    void Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev, const TActorContext& ctx) { 
+    void Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev, const TActorContext& ctx) {
         const auto& record = ev->Get()->GetRecord();
         const auto status = record.GetStatus();
         if (record.HasReason()) {
@@ -45,7 +45,7 @@ private:
         }
         Ydb::Table::DescribeTableResult describeTableResult;
         switch (status) {
-            case NKikimrScheme::StatusSuccess: { 
+            case NKikimrScheme::StatusSuccess: {
                 const auto& pathDescription = record.GetPathDescription();
                 Ydb::Scheme::Entry* selfEntry = describeTableResult.mutable_self();
                 selfEntry->set_name(pathDescription.GetSelf().GetName());
@@ -90,16 +90,16 @@ private:
                 return ReplyWithResult(Ydb::StatusIds::SUCCESS, describeTableResult, ctx);
             }
 
-            case NKikimrScheme::StatusPathDoesNotExist: 
-            case NKikimrScheme::StatusSchemeError: { 
+            case NKikimrScheme::StatusPathDoesNotExist:
+            case NKikimrScheme::StatusSchemeError: {
                 return Reply(Ydb::StatusIds::SCHEME_ERROR, ctx);
             }
 
-            case NKikimrScheme::StatusAccessDenied: { 
+            case NKikimrScheme::StatusAccessDenied: {
                 return Reply(Ydb::StatusIds::UNAUTHORIZED, ctx);
             }
 
-            case NKikimrScheme::StatusNotAvailable: { 
+            case NKikimrScheme::StatusNotAvailable: {
                 return Reply(Ydb::StatusIds::UNAVAILABLE, ctx);
             }
 
@@ -115,7 +115,7 @@ private:
         std::unique_ptr<TEvTxUserProxy::TEvNavigate> navigateRequest(new TEvTxUserProxy::TEvNavigate());
         SetAuthToken(navigateRequest, *Request_);
         SetDatabase(navigateRequest.get(), *Request_);
-        NKikimrSchemeOp::TDescribePath* record = navigateRequest->Record.MutableDescribePath(); 
+        NKikimrSchemeOp::TDescribePath* record = navigateRequest->Record.MutableDescribePath();
         record->SetPath(req->path());
         if (req->include_shard_key_bounds()) {
             record->MutableOptions()->SetReturnBoundaries(true);

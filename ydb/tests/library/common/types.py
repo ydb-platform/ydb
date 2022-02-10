@@ -146,27 +146,27 @@ class TabletTypes(Enum):
     TX_DUMMY = _tablet_type(8, 999)
     RTMR_PARTITION = _tablet_type(10, 999)
     KEYVALUEFLAT = _tablet_type(12, 999)
- 
+
     KESUS = _tablet_type(29, 999)
-    PERSQUEUE = _tablet_type(20, 999) 
-    FLAT_DATASHARD = _tablet_type(18, 999, service_name='DATASHARD') 
+    PERSQUEUE = _tablet_type(20, 999)
+    FLAT_DATASHARD = _tablet_type(18, 999, service_name='DATASHARD')
     BLOCKSTORE_VOLUME = _tablet_type(25, 999)
     BLOCKSTORE_PARTITION = _tablet_type(26, 999)
- 
+
     FLAT_TX_COORDINATOR = _tablet_type(13, 0x800001, service_name='TX_COORDINATOR')
-    TX_MEDIATOR = _tablet_type(5, 0x810001, service_name='TX_MEDIATOR') 
-    TX_ALLOCATOR = _tablet_type(23, 0x820001, service_name='TX_ALLOCATOR') 
+    TX_MEDIATOR = _tablet_type(5, 0x810001, service_name='TX_MEDIATOR')
+    TX_ALLOCATOR = _tablet_type(23, 0x820001, service_name='TX_ALLOCATOR')
     FLAT_TX_PROXY = _tablet_type(17, 0x820001, service_name='TX_PROXY')
 
-    FLAT_HIVE = _tablet_type(14, 0xA001, is_unique=True, service_name='HIVE') 
-    FLAT_SCHEMESHARD = _tablet_type(16, 0x8587a0, is_unique=True, service_name='FLAT_TX_SCHEMESHARD') 
- 
+    FLAT_HIVE = _tablet_type(14, 0xA001, is_unique=True, service_name='HIVE')
+    FLAT_SCHEMESHARD = _tablet_type(16, 0x8587a0, is_unique=True, service_name='FLAT_TX_SCHEMESHARD')
+
     CMS = _tablet_type(21, 0x2000, is_unique=True, service_name='CMS')
-    NODE_BROKER = _tablet_type(22, 0x2001, is_unique=True, service_name='NODE_BROKER') 
+    NODE_BROKER = _tablet_type(22, 0x2001, is_unique=True, service_name='NODE_BROKER')
     TENANT_SLOT_BROKER = _tablet_type(27, 0x2002, is_unique=True, service_name='TENANT_SLOT_BROKER')
     CONSOLE = _tablet_type(28, 0x2003, is_unique=True, service_name='CONSOLE')
-    FLAT_BS_CONTROLLER = _tablet_type(15, 0x1001, is_unique=True, service_name='BS_CONTROLLER') 
- 
+    FLAT_BS_CONTROLLER = _tablet_type(15, 0x1001, is_unique=True, service_name='BS_CONTROLLER')
+
     USER_TYPE_START = _tablet_type(0xFF, 0)
     TYPE_INVALID = _tablet_type(0xFFFFFFFF, 0)
 
@@ -196,8 +196,8 @@ class TabletTypes(Enum):
 
     def tablet_id_for(self, index, domain_id=1):
         if self.__is_unique:
-            return domain_id << 56 | self.__magic_preset 
- 
+            return domain_id << 56 | self.__magic_preset
+
         raw_tablet_id = self.__magic_preset + index
         return (domain_id << 56) | (domain_id << 44) | (raw_tablet_id & 0x00000FFFFFFFFFFF)
 

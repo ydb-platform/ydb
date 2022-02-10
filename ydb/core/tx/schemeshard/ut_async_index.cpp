@@ -2,7 +2,7 @@
 #include <ydb/core/testlib/tablet_helpers.h>
 
 using namespace NKikimr;
-using namespace NSchemeShard; 
+using namespace NSchemeShard;
 using namespace NSchemeShardUT_Private;
 
 Y_UNIT_TEST_SUITE(TAsyncIndexTests) {
@@ -12,8 +12,8 @@ Y_UNIT_TEST_SUITE(TAsyncIndexTests) {
         ui64 txId = 100;
 
         const auto status = enableAsyncIndexes
-            ? NKikimrScheme::StatusAccepted 
-            : NKikimrScheme::StatusPreconditionFailed; 
+            ? NKikimrScheme::StatusAccepted
+            : NKikimrScheme::StatusPreconditionFailed;
 
         TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
             TableDescription {
@@ -60,7 +60,7 @@ Y_UNIT_TEST_SUITE(TAsyncIndexTests) {
             : Ydb::StatusIds::UNSUPPORTED;
 
         TestBuilIndex(runtime,  ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table", TBuildIndexConfig{
-            "UserDefinedIndex", NKikimrSchemeOp::EIndexTypeGlobalAsync, {"indexed"}, {} 
+            "UserDefinedIndex", NKikimrSchemeOp::EIndexTypeGlobalAsync, {"indexed"}, {}
         }, status);
 
         if (enableAsyncIndexes) {

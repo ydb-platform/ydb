@@ -73,7 +73,7 @@ class TReplicaPopulator: public TMonitorableActor<TReplicaPopulator> {
             deletedLocalPathIds.SetBegin(msg->DeletedPathBegin);
             deletedLocalPathIds.SetEnd(msg->DeletedPathEnd);
 
-            CurPathId = TPathId(Owner, msg->DeletedPathEnd); 
+            CurPathId = TPathId(Owner, msg->DeletedPathEnd);
         }
 
         if (msg->HasDescription()) {
@@ -82,33 +82,33 @@ class TReplicaPopulator: public TMonitorableActor<TReplicaPopulator> {
             if (!record.HasStatus()) {
                 SBP_LOG_E("Ignore description without status"
                     << ": self# " << SelfId());
-            } else if (record.GetStatus() != NKikimrScheme::StatusSuccess) { 
+            } else if (record.GetStatus() != NKikimrScheme::StatusSuccess) {
                 SBP_LOG_E("Ignore description"
                     << ": self# " << SelfId()
-                    << ", status# " << record.GetStatus() 
-                    << ", msg# " << record.ShortDebugString()); 
+                    << ", status# " << record.GetStatus()
+                    << ", msg# " << record.ShortDebugString());
             } else {
-                CurPathId = GetPathId(record); 
+                CurPathId = GetPathId(record);
                 update->SetDescribeSchemeResult(std::move(msg->Description));
             }
         }
 
-        if (msg->HasMigratedPath()) { 
-            SBP_LOG_D("Ignore description of migrated path" 
+        if (msg->HasMigratedPath()) {
+            SBP_LOG_D("Ignore description of migrated path"
                 << ": self# " << SelfId()
                 << ", owner# " << Owner
                 << ", localPathId# " << msg->MigratedPathId);
-            //this path should be described by another owner (tenant schemeshard) 
-            auto& migratedLocalPathIds = *update->Record.MutableMigratedLocalPathIds(); 
-            migratedLocalPathIds.SetBegin(msg->MigratedPathId); 
-            migratedLocalPathIds.SetEnd(msg->MigratedPathId); 
- 
-            CurPathId = TPathId(Owner, msg->MigratedPathId); 
-        } 
- 
+            //this path should be described by another owner (tenant schemeshard)
+            auto& migratedLocalPathIds = *update->Record.MutableMigratedLocalPathIds();
+            migratedLocalPathIds.SetBegin(msg->MigratedPathId);
+            migratedLocalPathIds.SetEnd(msg->MigratedPathId);
+
+            CurPathId = TPathId(Owner, msg->MigratedPathId);
+        }
+
         if (++BatchSize < BatchSizeLimit) {
-            CurPathId = CurPathId.NextId(); 
-            Send(Parent, new TSchemeBoardEvents::TEvRequestDescribe(CurPathId, Replica)); 
+            CurPathId = CurPathId.NextId();
+            Send(Parent, new TSchemeBoardEvents::TEvRequestDescribe(CurPathId, Replica));
         } else {
             update->Record.SetNeedAck(true);
             BatchSize = 0;
@@ -304,9 +304,9 @@ class TReplicaPopulator: public TMonitorableActor<TReplicaPopulator> {
 
         if (!ev->Cookie && ev->Get()->GetPathId() == CurPathId) {
             LastAckedPathId = CurPathId;
- 
-            CurPathId = CurPathId.NextId(); 
-            Send(Parent, new TSchemeBoardEvents::TEvRequestDescribe(CurPathId, Replica)); 
+
+            CurPathId = CurPathId.NextId();
+            Send(Parent, new TSchemeBoardEvents::TEvRequestDescribe(CurPathId, Replica));
         }
 
         DequeueUpdate(ev);
@@ -489,7 +489,7 @@ private:
     THashMap<TPathId, TSet<std::pair<ui64, ui64>>> UpdatesInFlight;
 
     // used during sync
-    TPathId CurPathId; 
+    TPathId CurPathId;
     TPathId LastAckedPathId;
     ui32 BatchSize;
     static constexpr ui32 BatchSizeLimit = 100;
@@ -501,7 +501,7 @@ class TPopulator: public TMonitorableActor<TPopulator> {
         SelectionReplicaCache.clear();
 
         const ui64 pathHash = CityHash64(path);
-        const ui64 idHash = pathId.Hash(); 
+        const ui64 idHash = pathId.Hash();
 
         TStateStorageInfo::TSelection selection;
 
@@ -522,7 +522,7 @@ class TPopulator: public TMonitorableActor<TPopulator> {
         }
     }
 
-    void Update(const TPathId pathId, const bool isDeletion, const ui64 cookie) { 
+    void Update(const TPathId pathId, const bool isDeletion, const ui64 cookie) {
         auto it = Descriptions.find(pathId);
         Y_VERIFY(it != Descriptions.end());
 
@@ -547,7 +547,7 @@ class TPopulator: public TMonitorableActor<TPopulator> {
         SBP_LOG_D("Handle TSchemeBoardEvents::TEvRequestDescribe"
             << ": self# " << SelfId()
             << ", sender# " << ev->Sender
-            << ", pathId# " << ev->Get()->PathId); 
+            << ", pathId# " << ev->Get()->PathId);
 
         const TActorId replicaPopulator = ev->Sender;
         const TActorId replica = ev->Get()->Replica;
@@ -560,85 +560,85 @@ class TPopulator: public TMonitorableActor<TPopulator> {
             return;
         }
 
-        if (Descriptions.empty()) { 
-            Send(replicaPopulator, new TSchemeBoardEvents::TEvDescribeResult(true)); 
-            return; 
-        } 
+        if (Descriptions.empty()) {
+            Send(replicaPopulator, new TSchemeBoardEvents::TEvDescribeResult(true));
+            return;
+        }
 
-        TPathId startPathId = ev->Get()->PathId; 
+        TPathId startPathId = ev->Get()->PathId;
         auto it = Descriptions.end();
- 
-        if (ev->Get()->PathId) { 
-            startPathId = ev->Get()->PathId; 
+
+        if (ev->Get()->PathId) {
+            startPathId = ev->Get()->PathId;
             it = Descriptions.lower_bound(startPathId);
-        } else { 
+        } else {
             it = Descriptions.begin();
             startPathId = it->first;
-        } 
- 
+        }
+
         while (it != Descriptions.end()) { // skip irrelevant to the replica
-            if (it->second.Record.GetStatus() == NKikimrScheme::StatusPathDoesNotExist) { 
-                // KIKIMR-13173 
-                // it is assumed that not deleted pathes present in Descriptions 
-                // but it might be, since we have the difference at path description and init population 
-                // and it is in that path description consider path deteleted even when it only planned to delete (for BSV and PQ) 
-                // mean while init population consider path deteleted consider path deteleted only when it is dpropped 
-                // globally path description should do the same thing, we are correcting it 
-                ++it; 
-                continue; 
-            } 
- 
-            TPathId pathId(it->second.Record.GetPathOwnerId(), it->second.Record.GetPathId()); 
+            if (it->second.Record.GetStatus() == NKikimrScheme::StatusPathDoesNotExist) {
+                // KIKIMR-13173
+                // it is assumed that not deleted pathes present in Descriptions
+                // but it might be, since we have the difference at path description and init population
+                // and it is in that path description consider path deteleted even when it only planned to delete (for BSV and PQ)
+                // mean while init population consider path deteleted consider path deteleted only when it is dpropped
+                // globally path description should do the same thing, we are correcting it
+                ++it;
+                continue;
+            }
+
+            TPathId pathId(it->second.Record.GetPathOwnerId(), it->second.Record.GetPathId());
             TConstArrayRef<TActorId> replicas = SelectReplicas(pathId, it->second.Record.GetPath());
-            if (Find(replicas, replica) != replicas.end()) { 
-                break; 
+            if (Find(replicas, replica) != replicas.end()) {
+                break;
             }
             ++it;
         }
 
         if (it == Descriptions.end()) {
-            if (startPathId >= MaxPathId) { 
-                Send(replicaPopulator, new TSchemeBoardEvents::TEvDescribeResult(true)); 
-                return; 
+            if (startPathId >= MaxPathId) {
+                Send(replicaPopulator, new TSchemeBoardEvents::TEvDescribeResult(true));
+                return;
             }
- 
-            if (startPathId.OwnerId == Owner) { 
-                Send(replicaPopulator, new TSchemeBoardEvents::TEvDescribeResult(startPathId.LocalPathId, MaxPathId.LocalPathId)); 
-            } else { 
-                Send(replicaPopulator, new TSchemeBoardEvents::TEvDescribeResult(1, MaxPathId.LocalPathId)); 
-            } 
-            return; 
+
+            if (startPathId.OwnerId == Owner) {
+                Send(replicaPopulator, new TSchemeBoardEvents::TEvDescribeResult(startPathId.LocalPathId, MaxPathId.LocalPathId));
+            } else {
+                Send(replicaPopulator, new TSchemeBoardEvents::TEvDescribeResult(1, MaxPathId.LocalPathId));
+            }
+            return;
         }
 
-        const auto& description = it->second; 
-        const auto& record = description.Record; 
-        auto pathId = TPathId(it->second.Record.GetPathOwnerId(), it->second.Record.GetPathId()); 
- 
-        if (pathId.OwnerId != Owner) { 
-            // this is an alien migrated migrated path from another owner, push it as a dot 
+        const auto& description = it->second;
+        const auto& record = description.Record;
+        auto pathId = TPathId(it->second.Record.GetPathOwnerId(), it->second.Record.GetPathId());
+
+        if (pathId.OwnerId != Owner) {
+            // this is an alien migrated migrated path from another owner, push it as a dot
             Send(replicaPopulator, new TSchemeBoardEvents::TEvDescribeResult(0, 0, description));
-            return; 
-        } 
- 
-        TLocalPathId deletedBegin = startPathId.LocalPathId; 
+            return;
+        }
+
+        TLocalPathId deletedBegin = startPathId.LocalPathId;
         TLocalPathId deletedEnd = record.GetPathId() - 1;
- 
-        if (startPathId.OwnerId != Owner) { 
-            deletedBegin = 1; 
-        } 
- 
-        if (deletedEnd <= deletedBegin) { 
-            // if pushing migrated pathes hasn'n finished jet, we do not set up deteled ranges between them 
-            deletedBegin = 0; 
-            deletedEnd = 0; 
-        } 
- 
-        if (record.GetStatus() == NKikimrScheme::EStatus::StatusRedirectDomain) { 
-            // this path has been migrated to another owner 
+
+        if (startPathId.OwnerId != Owner) {
+            deletedBegin = 1;
+        }
+
+        if (deletedEnd <= deletedBegin) {
+            // if pushing migrated pathes hasn'n finished jet, we do not set up deteled ranges between them
+            deletedBegin = 0;
+            deletedEnd = 0;
+        }
+
+        if (record.GetStatus() == NKikimrScheme::EStatus::StatusRedirectDomain) {
+            // this path has been migrated to another owner
             Send(replicaPopulator, new TSchemeBoardEvents::TEvDescribeResult(deletedBegin, deletedEnd, it->first.LocalPathId));
-            return; 
-        } 
- 
+            return;
+        }
+
         Send(replicaPopulator, new TSchemeBoardEvents::TEvDescribeResult(deletedBegin, deletedEnd, description));
     }
 
@@ -664,24 +664,24 @@ class TPopulator: public TMonitorableActor<TPopulator> {
         Send(ev->Sender, std::move(update));
     }
 
-    void DelayUpdate(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev) { 
-        SBP_LOG_D("DelayUpdate TEvSchemeShard::TEvDescribeSchemeResult" 
-            << ": self# " << SelfId()
-            << ", sender# " << ev->Sender
-            << ", cookie# " << ev->Cookie);
-        SBP_LOG_T("Message:\n" << ev->Get()->ToString().substr(0, 1000)); 
- 
-        DelayedUpdates.emplace_back(ev.Release());
-    }
-
-    void Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev) { 
-        SBP_LOG_D("Handle TEvSchemeShard::TEvDescribeSchemeResult" 
+    void DelayUpdate(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev) {
+        SBP_LOG_D("DelayUpdate TEvSchemeShard::TEvDescribeSchemeResult"
             << ": self# " << SelfId()
             << ", sender# " << ev->Sender
             << ", cookie# " << ev->Cookie);
         SBP_LOG_T("Message:\n" << ev->Get()->ToString().substr(0, 1000));
 
-        auto* msg = static_cast<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResultBuilder*>(ev->Get()); 
+        DelayedUpdates.emplace_back(ev.Release());
+    }
+
+    void Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev) {
+        SBP_LOG_D("Handle TEvSchemeShard::TEvDescribeSchemeResult"
+            << ": self# " << SelfId()
+            << ", sender# " << ev->Sender
+            << ", cookie# " << ev->Cookie);
+        SBP_LOG_T("Message:\n" << ev->Get()->ToString().substr(0, 1000));
+
+        auto* msg = static_cast<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResultBuilder*>(ev->Get());
         auto& record = msg->Record;
 
         if (!record.HasStatus()) {
@@ -690,32 +690,32 @@ class TPopulator: public TMonitorableActor<TPopulator> {
             return;
         }
 
-        const TPathId pathId = GetPathId(record); 
-        const bool isDeletion = record.GetStatus() == NKikimrScheme::StatusPathDoesNotExist; 
+        const TPathId pathId = GetPathId(record);
+        const bool isDeletion = record.GetStatus() == NKikimrScheme::StatusPathDoesNotExist;
         const ui64 version = isDeletion ? Max<ui64>() : GetPathVersion(record);
 
         SBP_LOG_N("Update description"
             << ": self# " << SelfId()
             << ", owner# " << Owner
-            << ", pathId# " << pathId 
-            << ", cookie# " << ev->Cookie 
+            << ", pathId# " << pathId
+            << ", cookie# " << ev->Cookie
             << ", is deletion# " << (isDeletion ? "true" : "false"));
 
         if (isDeletion) {
-            if (!Descriptions.contains(pathId)) { 
+            if (!Descriptions.contains(pathId)) {
                 SBP_LOG_N("Immediate ack for deleted path"
                     << ": self# " << SelfId()
                     << ", sender# " << ev->Sender
                     << ", cookie# " << ev->Cookie
-                    << ", pathId# " << pathId); 
+                    << ", pathId# " << pathId);
 
-                auto ack = MakeHolder<TSchemeBoardEvents::TEvUpdateAck>(Owner, Generation, pathId, Max<ui64>()); 
+                auto ack = MakeHolder<TSchemeBoardEvents::TEvUpdateAck>(Owner, Generation, pathId, Max<ui64>());
                 Send(ev->Sender, std::move(ack), 0, ev->Cookie);
                 return;
             }
         } else {
             Descriptions[pathId] = TTwoPartDescription(std::move(msg->PreSerializedData), std::move(record));
-            MaxPathId = Max(MaxPathId, pathId.NextId()); 
+            MaxPathId = Max(MaxPathId, pathId.NextId());
         }
 
         auto it = UpdateAcks.find(ev->Cookie);
@@ -724,12 +724,12 @@ class TPopulator: public TMonitorableActor<TPopulator> {
         }
 
         it->second.AckTo = ev->Sender;
-        it->second.PathAcks.emplace(std::make_pair(pathId, version), 0); 
+        it->second.PathAcks.emplace(std::make_pair(pathId, version), 0);
 
-        Update(pathId, isDeletion, ev->Cookie); 
+        Update(pathId, isDeletion, ev->Cookie);
 
         if (isDeletion) {
-            Descriptions.erase(pathId); 
+            Descriptions.erase(pathId);
         }
     }
 
@@ -751,22 +751,22 @@ class TPopulator: public TMonitorableActor<TPopulator> {
             return;
         }
 
-        const TPathId pathId = ev->Get()->GetPathId(); 
+        const TPathId pathId = ev->Get()->GetPathId();
         const ui64 version = record.GetVersion();
 
-        auto pathIt = it->second.PathAcks.lower_bound({pathId, 0}); 
+        auto pathIt = it->second.PathAcks.lower_bound({pathId, 0});
         while (pathIt != it->second.PathAcks.end()
-               && pathIt->first.first == pathId 
+               && pathIt->first.first == pathId
                && pathIt->first.second <= version) {
             if (++pathIt->second > (GroupInfo->NToSelect / 2)) {
                 SBP_LOG_N("Ack update"
                     << ": self# " << SelfId()
                     << ", ack to# " << it->second.AckTo
                     << ", cookie# " << ev->Cookie
-                    << ", pathId# " << pathId 
+                    << ", pathId# " << pathId
                     << ", version# " << pathIt->first.second);
 
-                auto ack = MakeHolder<TSchemeBoardEvents::TEvUpdateAck>(Owner, Generation, pathId, pathIt->first.second); 
+                auto ack = MakeHolder<TSchemeBoardEvents::TEvUpdateAck>(Owner, Generation, pathId, pathIt->first.second);
                 Send(it->second.AckTo, std::move(ack), 0, ev->Cookie);
 
                 auto eraseIt = pathIt;
@@ -804,7 +804,7 @@ class TPopulator: public TMonitorableActor<TPopulator> {
             ReplicaToReplicaPopulator.emplace(replica, Register(replicaPopulator, TMailboxType::ReadAsFilled));
         }
 
-        Become(&TThis::StateWork); 
+        Become(&TThis::StateWork);
         ReplayUpdates(DelayedUpdates);
     }
 
@@ -862,7 +862,7 @@ class TPopulator: public TMonitorableActor<TPopulator> {
 
         TString json;
         if (desc) {
-            NKikimrScheme::TEvDescribeSchemeResult fullProto; 
+            NKikimrScheme::TEvDescribeSchemeResult fullProto;
             Y_PROTOBUF_SUPPRESS_NODISCARD fullProto.ParseFromString(desc->PreSerialized);
             fullProto.MergeFrom(desc->Record);
 
@@ -915,7 +915,7 @@ public:
         , Generation(generation)
         , StateStorageGroup(ssId)
         , Descriptions(std::move(descriptions))
-        , MaxPathId(TPathId(owner, maxPathId)) 
+        , MaxPathId(TPathId(owner, maxPathId))
     {
     }
 
@@ -931,7 +931,7 @@ public:
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvStateStorage::TEvListSchemeBoardResult, Handle);
 
-            hFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, DelayUpdate); 
+            hFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, DelayUpdate);
 
             hFunc(TSchemeBoardMonEvents::TEvInfoRequest, Handle);
             hFunc(TSchemeBoardMonEvents::TEvDescribeRequest, Handle);
@@ -946,7 +946,7 @@ public:
             hFunc(TSchemeBoardEvents::TEvRequestDescribe, Handle);
             hFunc(TSchemeBoardEvents::TEvRequestUpdate, Handle);
 
-            hFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, Handle); 
+            hFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, Handle);
             hFunc(TSchemeBoardEvents::TEvUpdateAck, Handle);
 
             hFunc(TSchemeBoardMonEvents::TEvInfoRequest, Handle);
@@ -971,7 +971,7 @@ private:
     const ui64 StateStorageGroup;
 
     TMap<TPathId, TTwoPartDescription> Descriptions;
-    TPathId MaxPathId; 
+    TPathId MaxPathId;
 
     TDelayedUpdates DelayedUpdates;
 
@@ -982,10 +982,10 @@ private:
 
     struct TUpdateAckInfo {
         TActorId AckTo;
-        TMap<std::pair<TPathId, ui64>, ui32> PathAcks; 
+        TMap<std::pair<TPathId, ui64>, ui32> PathAcks;
     };
 
-    THashMap<ui64, TUpdateAckInfo> UpdateAcks; // ui64 is a cookie 
+    THashMap<ui64, TUpdateAckInfo> UpdateAcks; // ui64 is a cookie
 
 }; // TPopulator
 

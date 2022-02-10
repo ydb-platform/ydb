@@ -16,7 +16,7 @@ namespace NTable {
 
 using namespace NTabletFlatScheme;
 
-using NKikimrSchemeOp::ECompactionStrategy; 
+using NKikimrSchemeOp::ECompactionStrategy;
 
 using TCompactionPolicy = NLocalDb::TCompactionPolicy;
 
@@ -129,7 +129,7 @@ public:
         TDuration LogFlushPeriod = TDuration::MicroSeconds(500);
         ui32 LimitInFlyTx = 0;
         TString ResourceProfile = "default";
-        ECompactionStrategy DefaultCompactionStrategy = NKikimrSchemeOp::CompactionStrategyGenerational; 
+        ECompactionStrategy DefaultCompactionStrategy = NKikimrSchemeOp::CompactionStrategyGenerational;
     };
 
     const TTableInfo* GetTableInfo(ui32 id) const { return const_cast<TScheme*>(this)->GetTableInfo(id); }
@@ -180,11 +180,11 @@ public:
     {
         if (auto *table = GetTableInfo(id)) {
             auto strategy = table->CompactionPolicy->CompactionStrategy;
-            if (strategy != NKikimrSchemeOp::CompactionStrategyUnset) { 
-                if (table->ColdBorrow && strategy == NKikimrSchemeOp::CompactionStrategySharded) { 
+            if (strategy != NKikimrSchemeOp::CompactionStrategyUnset) {
+                if (table->ColdBorrow && strategy == NKikimrSchemeOp::CompactionStrategySharded) {
                     // Sharded strategy does not support cold borrow
                     // Use the safe generational strategy instead
-                    strategy = NKikimrSchemeOp::CompactionStrategyGenerational; 
+                    strategy = NKikimrSchemeOp::CompactionStrategyGenerational;
                 }
                 return strategy;
             }
@@ -220,7 +220,7 @@ public:
     TAlter& AddFamily(ui32 table, ui32 family, ui32 room);
     TAlter& AddColumnToKey(ui32 table, ui32 column);
     TAlter& SetFamily(ui32 table, ui32 family, ECache cache, ECodec codec);
-    TAlter& SetFamilyBlobs(ui32 table, ui32 family, ui32 small, ui32 large); 
+    TAlter& SetFamilyBlobs(ui32 table, ui32 family, ui32 small, ui32 large);
     TAlter& SetRoom(ui32 table, ui32 room, ui32 main, ui32 blobs, ui32 outer);
     TAlter& SetRedo(ui32 annex);
     TAlter& SetExecutorCacheSize(ui64 cacheSize);

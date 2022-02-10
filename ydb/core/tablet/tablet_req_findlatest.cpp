@@ -58,12 +58,12 @@ class TTabletReqFindLatestLogEntry : public TActorBootstrapped<TTabletReqFindLat
         case NKikimrProto::RACE:
         case NKikimrProto::ERROR:
         case NKikimrProto::TIMEOUT:
-        case NKikimrProto::NO_GROUP: 
+        case NKikimrProto::NO_GROUP:
             BLOG_ERROR("Handle::TEvDiscoverResult, result status " << NKikimrProto::EReplyStatus_Name(msg->Status));
             return ReplyAndDie(msg->Status, msg->ErrorReason);
         default:
-            Y_VERIFY(false, "default case status %s", NKikimrProto::EReplyStatus_Name(msg->Status).c_str()); 
- 
+            Y_VERIFY(false, "default case status %s", NKikimrProto::EReplyStatus_Name(msg->Status).c_str());
+
             return ReplyAndDie(NKikimrProto::ERROR, msg->ErrorReason);
         }
     }

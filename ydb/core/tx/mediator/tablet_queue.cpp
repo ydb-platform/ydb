@@ -1,5 +1,5 @@
-#include "mediator_impl.h" 
- 
+#include "mediator_impl.h"
+
 #include <library/cpp/actors/core/log.h>
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/hfunc.h>
@@ -11,7 +11,7 @@
 #include <ydb/core/tx/tx_processing.h>
 #include <ydb/core/tx/time_cast/time_cast.h>
 #include <ydb/core/tablet/tablet_pipe_client_cache.h>
- 
+
 #include <util/string/builder.h>
 #include <util/generic/hash_set.h>
 
@@ -193,30 +193,30 @@ class TTxMediatorTabletQueue : public TActor<TTxMediatorTabletQueue> {
         Y_VERIFY(tabletEntry.State == TTabletEntry::StateConnect);
 
         if (!Pipes->OnConnect(ev)) {
-            if (msg->Dead) { 
+            if (msg->Dead) {
                 LOG_WARN_S(ctx, NKikimrServices::TX_MEDIATOR_TABLETQUEUE, "Actor# " << ctx.SelfID.ToString()
                     << " Mediator# " << Mediator << " HANDLE TEvClientConnected(Dead=true)");
-                while (TTabletEntry::TStep *sx = tabletEntry.Queue->Head()) { 
-                    tabletEntry.MergeOutOfOrder(sx); 
-                    AckOoO(tablet, sx->StepRef->Step, sx->Transactions, ctx); 
-                    --sx->StepRef->RefCounter; 
-                    delete tabletEntry.Queue->Pop(); 
-                } 
-                PerTabletPlanQueue.erase(tablet); 
-                CheckStepHead(ctx); 
-                return; 
-            } 
- 
+                while (TTabletEntry::TStep *sx = tabletEntry.Queue->Head()) {
+                    tabletEntry.MergeOutOfOrder(sx);
+                    AckOoO(tablet, sx->StepRef->Step, sx->Transactions, ctx);
+                    --sx->StepRef->RefCounter;
+                    delete tabletEntry.Queue->Pop();
+                }
+                PerTabletPlanQueue.erase(tablet);
+                CheckStepHead(ctx);
+                return;
+            }
+
             Pipes->Prepare(ctx, tablet);
-            return; 
+            return;
         }
- 
-        tabletEntry.State = TTabletEntry::StateConnected; 
+
+        tabletEntry.State = TTabletEntry::StateConnected;
         TTabletEntry::TQueueType::TReadIterator it = tabletEntry.Queue->Iterator();
-        while (TTabletEntry::TStep *sx = it.Next()) { 
-            tabletEntry.MergeOutOfOrder(sx); 
-            SendToTablet(sx, tablet, ctx); 
-        } 
+        while (TTabletEntry::TStep *sx = it.Next()) {
+            tabletEntry.MergeOutOfOrder(sx);
+            SendToTablet(sx, tablet, ctx);
+        }
     }
 
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr &ev, const TActorContext &ctx) {
@@ -322,19 +322,19 @@ class TTxMediatorTabletQueue : public TActor<TTxMediatorTabletQueue> {
 
         TActor::Die(ctx);
     }
- 
-    static NTabletPipe::TClientConfig GetPipeClientConfig() { 
-        NTabletPipe::TClientConfig config; 
-        config.CheckAliveness = true; 
+
+    static NTabletPipe::TClientConfig GetPipeClientConfig() {
+        NTabletPipe::TClientConfig config;
+        config.CheckAliveness = true;
         config.RetryPolicy = {
             .RetryLimitCount = 30,
             .MinRetryTime = TDuration::MilliSeconds(10),
             .MaxRetryTime = TDuration::MilliSeconds(500),
             .BackoffMultiplier = 2,
         };
-        return config; 
-    } 
- 
+        return config;
+    }
+
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::TX_MEDIATOR_ACTOR;
@@ -347,7 +347,7 @@ public:
         , HashRange(hashRange)
         , HashBucket(hashBucket)
         , StepCommitQueue(new TStepCommitQueue())
-        , Pipes(NTabletPipe::CreateUnboundedClientCache(GetPipeClientConfig())) 
+        , Pipes(NTabletPipe::CreateUnboundedClientCache(GetPipeClientConfig()))
         , AcceptedStep(0)
         , CommitedStep(0)
         , ActiveStep(nullptr)

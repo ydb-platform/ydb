@@ -173,8 +173,8 @@ message TTransaction {
     optional uint32 Flags = 6; // See ydb/core/tx/tx_datashard.h NKikimr::NTxDataShard::TTxFlags
     optional string UserRequestId = 8;
 
-    optional NKikimrSchemeOp.TModifyScheme ModifyScheme = 10; 
-    repeated NKikimrSchemeOp.TModifyScheme TransactionalModification = 11; 
+    optional NKikimrSchemeOp.TModifyScheme ModifyScheme = 10;
+    repeated NKikimrSchemeOp.TModifyScheme TransactionalModification = 11;
 
     optional TReadTableTransaction ReadTableTransaction = 20;
 
@@ -251,7 +251,7 @@ message TEvNavigate {
     reserved 3; // optional bytes TextPath = 3;
     reserved 4; // optional uint64 SchemeShardHint = 4;
 
-    optional NKikimrSchemeOp.TDescribePath DescribePath = 5; 
+    optional NKikimrSchemeOp.TDescribePath DescribePath = 5;
 
     optional string UserToken = 6; // already built and serialized user's token
     optional string DatabaseName = 7;
@@ -267,7 +267,7 @@ message TEvNavigateStatus_Deprecated {
     optional uint32 SchemeShardStatus = 30;
     optional uint32 SchemeShardReportedId = 31;
 
-    optional NKikimrSchemeOp.TPathDescription PathDescription = 40; 
+    optional NKikimrSchemeOp.TPathDescription PathDescription = 40;
 }
 
 message TEvInvalidateTable {

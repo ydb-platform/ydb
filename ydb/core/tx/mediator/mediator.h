@@ -1,10 +1,10 @@
-#pragma once 
-#include "defs.h" 
- 
+#pragma once
+#include "defs.h"
+
 #include <ydb/core/base/blobstorage.h>
- 
-namespace NKikimr { 
- 
+
+namespace NKikimr {
+
 IActor* CreateTxMediator(const TActorId &tablet, TTabletStorageInfo *info);
- 
-} 
+
+}

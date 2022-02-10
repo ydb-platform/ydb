@@ -2285,7 +2285,7 @@ Y_UNIT_TEST_SUITE(TConsoleConfigTests) {
 
     Y_UNIT_TEST(TestAffectedConfigs)
     {
-        TValidatorsRegistry::Instance()->DropInstance(); 
+        TValidatorsRegistry::Instance()->DropInstance();
         TTenantTestRuntime runtime(DefaultConsoleTestConfig());
         InitializeTestConfigItems();
 
@@ -3510,7 +3510,7 @@ Y_UNIT_TEST_SUITE(TConsoleConfigSubscriptionTests) {
             }, 1);
         runtime.DispatchEvents(options);
 
- 
+
         CheckAddConfigSubscription(runtime, Ydb::StatusIds::SUCCESS,
                                    nodeId + 1, "host2", "tenant-2", "type2",
                                    0, TActorId(nodeId + 1, "service"), TVector<ui32>({1}));
@@ -3518,7 +3518,7 @@ Y_UNIT_TEST_SUITE(TConsoleConfigSubscriptionTests) {
                                      id1, nodeId, "host1", "tenant-1", "type1",
                                      0, TActorId(nodeId, "service"), TVector<ui32>({1}));
         CheckListConfigSubscriptions(runtime, Ydb::StatusIds::SUCCESS, 0, TActorId(100, "service"));
- 
+
         CheckListConfigSubscriptions(runtime, Ydb::StatusIds::SUCCESS, 100, TActorId(),
                                      id3, 100, "host100", "tenant-100", "type100",
                                      100, TActorId(), TVector<ui32>({1}));

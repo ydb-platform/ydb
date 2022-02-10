@@ -703,11 +703,11 @@ void ConvertAclToYdb(const TString& owner, const TString& acl, bool isContainer,
 }
 
 using namespace NACLib;
- 
-const THashMap<TString, TACLAttrs> AccessMap_  = { 
-    { "ydb.database.connect", TACLAttrs(EAccessRights::ConnectDatabase, EInheritanceType::InheritNone) }, 
-    { "ydb.tables.modify", TACLAttrs(EAccessRights(UpdateRow | EraseRow)) }, 
-    { "ydb.tables.read", TACLAttrs(EAccessRights::SelectRow | EAccessRights::ReadAttributes) }, 
+
+const THashMap<TString, TACLAttrs> AccessMap_  = {
+    { "ydb.database.connect", TACLAttrs(EAccessRights::ConnectDatabase, EInheritanceType::InheritNone) },
+    { "ydb.tables.modify", TACLAttrs(EAccessRights(UpdateRow | EraseRow)) },
+    { "ydb.tables.read", TACLAttrs(EAccessRights::SelectRow | EAccessRights::ReadAttributes) },
     { "ydb.generic.read", EAccessRights::GenericRead },
     { "ydb.generic.write", EAccessRights::GenericWrite },
     { "ydb.generic.use", EAccessRights::GenericUse },
@@ -742,7 +742,7 @@ static ui32 BitCount(ui32 in) {
 static TVector<std::pair<ui32, TString>> CalcMaskByPower() {
     TVector<std::pair<ui32, TString>> result;
     for (const auto& it : AccessMap_) {
-        result.push_back({it.second.AccessMask, it.first}); 
+        result.push_back({it.second.AccessMask, it.first});
     }
 
     //Sort this vector by number of set bits in mask
@@ -754,7 +754,7 @@ static TVector<std::pair<ui32, TString>> CalcMaskByPower() {
     return result;
 }
 
-TACLAttrs ConvertYdbPermissionNameToACLAttrs(const TString& name) { 
+TACLAttrs ConvertYdbPermissionNameToACLAttrs(const TString& name) {
     auto it = AccessMap_.find(name);
     if (it == AccessMap_.end()) {
         throw NYql::TErrorException(NKikimrIssues::TIssuesIds::DEFAULT_ERROR)
@@ -779,37 +779,37 @@ TVector<TString> ConvertACLMaskToYdbPermissionNames(ui32 mask) {
     return result;
 }
 
-void ConvertDirectoryEntry(const NKikimrSchemeOp::TDirEntry& from, Ydb::Scheme::Entry* to, bool processAcl) { 
+void ConvertDirectoryEntry(const NKikimrSchemeOp::TDirEntry& from, Ydb::Scheme::Entry* to, bool processAcl) {
     to->set_name(from.GetName());
     to->set_owner(from.GetOwner());
 
-    switch (from.GetPathType()) { 
-    case NKikimrSchemeOp::EPathTypeExtSubDomain: 
-        to->set_type(static_cast<Ydb::Scheme::Entry::Type>(NKikimrSchemeOp::EPathTypeSubDomain)); 
-        break; 
-    default: 
-        to->set_type(static_cast<Ydb::Scheme::Entry::Type>(from.GetPathType())); 
-    } 
- 
+    switch (from.GetPathType()) {
+    case NKikimrSchemeOp::EPathTypeExtSubDomain:
+        to->set_type(static_cast<Ydb::Scheme::Entry::Type>(NKikimrSchemeOp::EPathTypeSubDomain));
+        break;
+    default:
+        to->set_type(static_cast<Ydb::Scheme::Entry::Type>(from.GetPathType()));
+    }
+
     if (processAcl) {
-        const bool isDir = from.GetPathType() == NKikimrSchemeOp::EPathTypeDir; 
+        const bool isDir = from.GetPathType() == NKikimrSchemeOp::EPathTypeDir;
         ConvertAclToYdb(from.GetOwner(), from.GetEffectiveACL(), isDir, to->mutable_effective_permissions());
         ConvertAclToYdb(from.GetOwner(), from.GetACL(), isDir, to->mutable_permissions());
     }
 }
 
-void ConvertDirectoryEntry(const NKikimrSchemeOp::TPathDescription& from, Ydb::Scheme::Entry* to, bool processAcl) { 
+void ConvertDirectoryEntry(const NKikimrSchemeOp::TPathDescription& from, Ydb::Scheme::Entry* to, bool processAcl) {
     ConvertDirectoryEntry(from.GetSelf(), to, processAcl);
 
     switch (from.GetSelf().GetPathType()) {
-    case NKikimrSchemeOp::EPathTypeTable: 
+    case NKikimrSchemeOp::EPathTypeTable:
         to->set_size_bytes(from.GetTableStats().GetDataSize() + from.GetTableStats().GetIndexSize());
         for (const auto& index : from.GetTable().GetTableIndexes()) {
             to->set_size_bytes(to->size_bytes() + index.GetDataSize());
         }
         break;
-    case NKikimrSchemeOp::EPathTypeSubDomain: 
-    case NKikimrSchemeOp::EPathTypeExtSubDomain: 
+    case NKikimrSchemeOp::EPathTypeSubDomain:
+    case NKikimrSchemeOp::EPathTypeExtSubDomain:
         to->set_size_bytes(from.GetDomainDescription().GetDiskSpaceUsage().GetTables().GetTotalSize());
         break;
     default:
@@ -853,14 +853,14 @@ void ConvertYdbResultToKqpResult(const Ydb::ResultSet& input, NKikimrMiniKQL::TR
     truncatedValue.SetBool(input.truncated());
 }
 
-TACLAttrs::TACLAttrs(ui32 access, ui32 inheritance) 
-    : AccessMask(access) 
-    , InheritanceType(inheritance) 
-{} 
- 
-TACLAttrs::TACLAttrs(ui32 access) 
-    : AccessMask(access) 
-    , InheritanceType(EInheritanceType::InheritObject | EInheritanceType::InheritContainer) 
-{} 
- 
+TACLAttrs::TACLAttrs(ui32 access, ui32 inheritance)
+    : AccessMask(access)
+    , InheritanceType(inheritance)
+{}
+
+TACLAttrs::TACLAttrs(ui32 access)
+    : AccessMask(access)
+    , InheritanceType(EInheritanceType::InheritObject | EInheritanceType::InheritContainer)
+{}
+
 } // namespace NKikimr

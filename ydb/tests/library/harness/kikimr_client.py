@@ -67,13 +67,13 @@ class KiKiMRMessageBusClient(object):
         self._channel = grpc.insecure_channel("%s:%s" % (self.server, self.port), options=self._options)
         self._stub = grpc_server.TGRpcServerStub(self._channel)
 
-    def describe(self, path, token): 
-        request = msgbus.TSchemeDescribe() 
-        request.Path = path 
-        request.SecurityToken = token 
-        request.Options.ReturnPartitioningInfo = False 
-        return self.send(request, 'SchemeDescribe') 
- 
+    def describe(self, path, token):
+        request = msgbus.TSchemeDescribe()
+        request.Path = path
+        request.SecurityToken = token
+        request.Options.ReturnPartitioningInfo = False
+        return self.send(request, 'SchemeDescribe')
+
     def _get_invoke_callee(self, method):
         return getattr(self._stub, method)
 
@@ -141,7 +141,7 @@ class KiKiMRMessageBusClient(object):
             'SchemeOperationStatus'
         )
 
-    def bind_storage_pools(self, domain_name, spools): 
+    def bind_storage_pools(self, domain_name, spools):
         request = msgbus.TSchemeOperation()
         scheme_transaction = request.Transaction
         scheme_operation = scheme_transaction.ModifyScheme
@@ -149,8 +149,8 @@ class KiKiMRMessageBusClient(object):
         scheme_operation.OperationType = flat_scheme_op.ESchemeOpAlterSubDomain
         domain_description = scheme_operation.SubDomain
         domain_description.Name = domain_name
-        for name, kind in spools.items(): 
-            domain_description.StoragePools.add(Name=name, Kind=kind) 
+        for name, kind in spools.items():
+            domain_description.StoragePools.add(Name=name, Kind=kind)
         return self.ddl_exec_status(
             FlatTxId.from_response(
                 self.invoke(
@@ -186,35 +186,35 @@ class KiKiMRMessageBusClient(object):
             request.SecurityToken = token
         return self.send_and_poll_request(request, 'SchemeOperation')
 
-    def upgrade_subdomain(self, working_dir, name, token=None): 
-        request = msgbus.TSchemeOperation() 
-        request.Transaction.ModifyScheme.OperationType = flat_scheme_op_pb2.ESchemeOpUpgradeSubDomain 
-        request.Transaction.ModifyScheme.WorkingDir = working_dir 
-        request.Transaction.ModifyScheme.UpgradeSubDomain.Name = name 
-        if token: 
-            request.SecurityToken = token 
-        return self.send_and_poll_request(request, 'SchemeOperation') 
- 
-    def commit_upgrade_subdomain(self, working_dir, name, token=None): 
-        request = msgbus.TSchemeOperation() 
-        request.Transaction.ModifyScheme.OperationType = flat_scheme_op_pb2.ESchemeOpUpgradeSubDomainDecision 
-        request.Transaction.ModifyScheme.WorkingDir = working_dir 
-        request.Transaction.ModifyScheme.UpgradeSubDomain.Name = name 
-        request.Transaction.ModifyScheme.UpgradeSubDomain.Decision = flat_scheme_op_pb2.TUpgradeSubDomain.Commit 
-        if token: 
-            request.SecurityToken = token 
-        return self.send_and_poll_request(request, 'SchemeOperation') 
- 
-    def undo_upgrade_subdomain(self, working_dir, name, token=None): 
-        request = msgbus.TSchemeOperation() 
-        request.Transaction.ModifyScheme.OperationType = flat_scheme_op_pb2.ESchemeOpUpgradeSubDomainDecision 
-        request.Transaction.ModifyScheme.WorkingDir = working_dir 
-        request.Transaction.ModifyScheme.UpgradeSubDomain.Name = name 
-        request.Transaction.ModifyScheme.UpgradeSubDomain.Decision = flat_scheme_op_pb2.TUpgradeSubDomain.Undo 
-        if token: 
-            request.SecurityToken = token 
-        return self.send_and_poll_request(request, 'SchemeOperation') 
- 
+    def upgrade_subdomain(self, working_dir, name, token=None):
+        request = msgbus.TSchemeOperation()
+        request.Transaction.ModifyScheme.OperationType = flat_scheme_op_pb2.ESchemeOpUpgradeSubDomain
+        request.Transaction.ModifyScheme.WorkingDir = working_dir
+        request.Transaction.ModifyScheme.UpgradeSubDomain.Name = name
+        if token:
+            request.SecurityToken = token
+        return self.send_and_poll_request(request, 'SchemeOperation')
+
+    def commit_upgrade_subdomain(self, working_dir, name, token=None):
+        request = msgbus.TSchemeOperation()
+        request.Transaction.ModifyScheme.OperationType = flat_scheme_op_pb2.ESchemeOpUpgradeSubDomainDecision
+        request.Transaction.ModifyScheme.WorkingDir = working_dir
+        request.Transaction.ModifyScheme.UpgradeSubDomain.Name = name
+        request.Transaction.ModifyScheme.UpgradeSubDomain.Decision = flat_scheme_op_pb2.TUpgradeSubDomain.Commit
+        if token:
+            request.SecurityToken = token
+        return self.send_and_poll_request(request, 'SchemeOperation')
+
+    def undo_upgrade_subdomain(self, working_dir, name, token=None):
+        request = msgbus.TSchemeOperation()
+        request.Transaction.ModifyScheme.OperationType = flat_scheme_op_pb2.ESchemeOpUpgradeSubDomainDecision
+        request.Transaction.ModifyScheme.WorkingDir = working_dir
+        request.Transaction.ModifyScheme.UpgradeSubDomain.Name = name
+        request.Transaction.ModifyScheme.UpgradeSubDomain.Decision = flat_scheme_op_pb2.TUpgradeSubDomain.Undo
+        if token:
+            request.SecurityToken = token
+        return self.send_and_poll_request(request, 'SchemeOperation')
+
     def hive_create_tablets(self, list_of_tablets):
         request = msgbus.THiveCreateTablet()
         for tablet in list_of_tablets:

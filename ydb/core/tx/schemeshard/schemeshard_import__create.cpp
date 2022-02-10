@@ -15,11 +15,11 @@
 #include <util/string/builder.h>
 
 namespace NKikimr {
-namespace NSchemeShard { 
+namespace NSchemeShard {
 
 using namespace NTabletFlatExecutor;
 
-struct TSchemeShard::TImport::TTxCreate: public TSchemeShard::TXxport::TTxBase { 
+struct TSchemeShard::TImport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
     TEvImport::TEvCreateImportRequest::TPtr Request;
     bool Progress;
 
@@ -214,7 +214,7 @@ private:
 
 }; // TTxCreate
 
-struct TSchemeShard::TImport::TTxProgress: public TSchemeShard::TXxport::TTxBase { 
+struct TSchemeShard::TImport::TTxProgress: public TSchemeShard::TXxport::TTxBase {
     using EState = TImportInfo::EState;
     using ESubState = TImportInfo::TItem::ESubState;
 
@@ -223,9 +223,9 @@ struct TSchemeShard::TImport::TTxProgress: public TSchemeShard::TXxport::TTxBase
     ui64 Id;
     TEvPrivate::TEvImportSchemeReady::TPtr SchemeResult = nullptr;
     TEvTxAllocatorClient::TEvAllocateResult::TPtr AllocateResult = nullptr;
-    TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr ModifyResult = nullptr; 
+    TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr ModifyResult = nullptr;
     TEvIndexBuilder::TEvCreateResponse::TPtr CreateIndexResult = nullptr;
-    TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr NotifyResult = nullptr; 
+    TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr NotifyResult = nullptr;
 
     explicit TTxProgress(TSelf* self, ui64 id)
         : TXxport::TTxBase(self)
@@ -245,7 +245,7 @@ struct TSchemeShard::TImport::TTxProgress: public TSchemeShard::TXxport::TTxBase
     {
     }
 
-    explicit TTxProgress(TSelf* self, TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr& ev) 
+    explicit TTxProgress(TSelf* self, TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr& ev)
         : TXxport::TTxBase(self)
         , ModifyResult(ev)
     {
@@ -257,7 +257,7 @@ struct TSchemeShard::TImport::TTxProgress: public TSchemeShard::TXxport::TTxBase
     {
     }
 
-    explicit TTxProgress(TSelf* self, TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev) 
+    explicit TTxProgress(TSelf* self, TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev)
         : TXxport::TTxBase(self)
         , NotifyResult(ev)
     {
@@ -421,7 +421,7 @@ private:
             << ", item# " << item.ToString(itemIdx));
 
         Y_VERIFY(item.WaitTxId != InvalidTxId);
-        Send(Self->SelfId(), new TEvSchemeShard::TEvNotifyTxCompletion(ui64(item.WaitTxId))); 
+        Send(Self->SelfId(), new TEvSchemeShard::TEvNotifyTxCompletion(ui64(item.WaitTxId)));
     }
 
     TTxId GetActiveRestoreTxId(TImportInfo::TPtr importInfo, ui32 itemIdx) {
@@ -436,7 +436,7 @@ private:
         }
 
         auto path = Self->PathsById.at(item.DstPathId);
-        if (path->PathState != NKikimrSchemeOp::EPathStateRestore) { 
+        if (path->PathState != NKikimrSchemeOp::EPathStateRestore) {
             return InvalidTxId;
         }
 
@@ -682,7 +682,7 @@ private:
     void OnAllocateResult(TTransactionContext&, const TActorContext&) {
         Y_VERIFY(AllocateResult);
 
-        const auto txId = TTxId(AllocateResult->Get()->TxIds.front()); 
+        const auto txId = TTxId(AllocateResult->Get()->TxIds.front());
         const ui64 id = AllocateResult->Cookie;
 
         LOG_D("TImport::TTxProgress: OnAllocateResult"
@@ -772,11 +772,11 @@ private:
         Y_VERIFY(itemIdx < importInfo->Items.size());
         auto& item = importInfo->Items.at(itemIdx);
 
-        if (record.GetStatus() != NKikimrScheme::StatusAccepted) { 
+        if (record.GetStatus() != NKikimrScheme::StatusAccepted) {
             Self->TxIdToImport.erase(txId);
             txId = InvalidTxId;
 
-            if (record.GetStatus() == NKikimrScheme::StatusMultipleModifications) { 
+            if (record.GetStatus() == NKikimrScheme::StatusMultipleModifications) {
                 if (record.GetPathCreateTxId()) {
                     txId = TTxId(record.GetPathCreateTxId());
                 } else if (item.State == EState::Transferring) {
@@ -973,33 +973,33 @@ private:
 
 }; // TTxProgress
 
-ITransaction* TSchemeShard::CreateTxCreateImport(TEvImport::TEvCreateImportRequest::TPtr& ev) { 
+ITransaction* TSchemeShard::CreateTxCreateImport(TEvImport::TEvCreateImportRequest::TPtr& ev) {
     return new TImport::TTxCreate(this, ev);
 }
 
-ITransaction* TSchemeShard::CreateTxProgressImport(ui64 id) { 
+ITransaction* TSchemeShard::CreateTxProgressImport(ui64 id) {
     return new TImport::TTxProgress(this, id);
 }
 
-ITransaction* TSchemeShard::CreateTxProgressImport(TEvPrivate::TEvImportSchemeReady::TPtr& ev) { 
+ITransaction* TSchemeShard::CreateTxProgressImport(TEvPrivate::TEvImportSchemeReady::TPtr& ev) {
     return new TImport::TTxProgress(this, ev);
 }
 
-ITransaction* TSchemeShard::CreateTxProgressImport(TEvTxAllocatorClient::TEvAllocateResult::TPtr& ev) { 
+ITransaction* TSchemeShard::CreateTxProgressImport(TEvTxAllocatorClient::TEvAllocateResult::TPtr& ev) {
     return new TImport::TTxProgress(this, ev);
 }
 
-ITransaction* TSchemeShard::CreateTxProgressImport(TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr& ev) { 
+ITransaction* TSchemeShard::CreateTxProgressImport(TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr& ev) {
     return new TImport::TTxProgress(this, ev);
 }
 
-ITransaction* TSchemeShard::CreateTxProgressImport(TEvIndexBuilder::TEvCreateResponse::TPtr& ev) { 
+ITransaction* TSchemeShard::CreateTxProgressImport(TEvIndexBuilder::TEvCreateResponse::TPtr& ev) {
     return new TImport::TTxProgress(this, ev);
 }
 
-ITransaction* TSchemeShard::CreateTxProgressImport(TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev) { 
+ITransaction* TSchemeShard::CreateTxProgressImport(TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev) {
     return new TImport::TTxProgress(this, ev);
 }
 
-} // NSchemeShard 
+} // NSchemeShard
 } // NKikimr

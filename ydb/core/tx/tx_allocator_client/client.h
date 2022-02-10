@@ -14,36 +14,36 @@ namespace NKikimr {
 class TTxAllocatorClient {
     using TTabletId = ui64;
 
-    void RegisterRequest(const TTabletId& from, const TActorContext& ctx) { 
-        if (AllocationRequestsInFly.insert(from).second) { 
-            SendRequest(from, ctx); 
-        } 
-    } 
- 
-    void DeregisterRequest(const TTabletId& from) { 
-        AllocationRequestsInFly.erase(from); 
-    } 
- 
-    bool IsActualRequest(const TTabletId& from) const { 
-        return AllocationRequestsInFly.contains(from); 
-    } 
- 
-    void AddAllocationRange(const TTabletId& from, const NKikimrTx::TEvTxAllocateResult& allocation); 
- 
-public: 
-    explicit TTxAllocatorClient( 
-        NKikimrServices::EServiceKikimr service, 
-        NTabletPipe::IClientCache* pipeClientCache, 
-        const TVector<TTabletId>& txAllocators); 
- 
-    void Bootstrap(const TActorContext& ctx); 
- 
-    TVector<ui64> AllocateTxIds(ui64 count, const TActorContext& ctx); 
- 
-    void SendRequest(const TTabletId& txAllocator, const TActorContext& ctx); 
-    bool OnAllocateResult(TEvTxAllocator::TEvAllocateResult::TPtr& ev, const TActorContext& ctx); 
- 
-private: 
+    void RegisterRequest(const TTabletId& from, const TActorContext& ctx) {
+        if (AllocationRequestsInFly.insert(from).second) {
+            SendRequest(from, ctx);
+        }
+    }
+
+    void DeregisterRequest(const TTabletId& from) {
+        AllocationRequestsInFly.erase(from);
+    }
+
+    bool IsActualRequest(const TTabletId& from) const {
+        return AllocationRequestsInFly.contains(from);
+    }
+
+    void AddAllocationRange(const TTabletId& from, const NKikimrTx::TEvTxAllocateResult& allocation);
+
+public:
+    explicit TTxAllocatorClient(
+        NKikimrServices::EServiceKikimr service,
+        NTabletPipe::IClientCache* pipeClientCache,
+        const TVector<TTabletId>& txAllocators);
+
+    void Bootstrap(const TActorContext& ctx);
+
+    TVector<ui64> AllocateTxIds(ui64 count, const TActorContext& ctx);
+
+    void SendRequest(const TTabletId& txAllocator, const TActorContext& ctx);
+    bool OnAllocateResult(TEvTxAllocator::TEvAllocateResult::TPtr& ev, const TActorContext& ctx);
+
+private:
     struct TAllocationRange {
         TTabletId Source = 0;
         ui64 Begin = 0;
@@ -81,13 +81,13 @@ private:
 
     TVector<TTabletId> TxAllocators;
     THashSet<TTabletId> AllocationRequestsInFly;
-    static constexpr ui64 BatchAllocationWarning = 500; 
+    static constexpr ui64 BatchAllocationWarning = 500;
     static constexpr ui64 RequestPerAllocator = 5000;
     static constexpr ui64 PreRequestThreshhold = RequestPerAllocator / 3;
 
-    const ui64 MaxCapacity = 0; 
-    ui64 Capacity = 0; 
-    TDeque<TAllocationRange> ReservedRanges; 
+    const ui64 MaxCapacity = 0;
+    ui64 Capacity = 0;
+    TDeque<TAllocationRange> ReservedRanges;
 
 }; // TTxAllocatorClient
 

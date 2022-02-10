@@ -18,14 +18,14 @@ namespace NTxProxy {
         // tx_proxy group
         TIntrusivePtr<NMonitoring::TDynamicCounters> TxGroup;
 
-        NMonitoring::THistogramPtr CacheRequestLatency; 
- 
+        NMonitoring::THistogramPtr CacheRequestLatency;
+
         NMonitoring::TDynamicCounters::TCounterPtr Navigate;
-        NMonitoring::THistogramPtr NavigateLatency; 
-        NMonitoring::TDynamicCounters::TCounterPtr SchemeRequest; 
-        NMonitoring::THistogramPtr SchemeRequestLatency; 
-        NMonitoring::TDynamicCounters::TCounterPtr MakeRequest; 
-        //NMonitoring::THistogramPtr MakeRequestLatency; 
+        NMonitoring::THistogramPtr NavigateLatency;
+        NMonitoring::TDynamicCounters::TCounterPtr SchemeRequest;
+        NMonitoring::THistogramPtr SchemeRequestLatency;
+        NMonitoring::TDynamicCounters::TCounterPtr MakeRequest;
+        //NMonitoring::THistogramPtr MakeRequestLatency;
         NMonitoring::TDynamicCounters::TCounterPtr SnapshotRequest;
         NMonitoring::TDynamicCounters::TCounterPtr CommitWritesRequest;
 
@@ -96,8 +96,8 @@ namespace NTxProxy {
         NMonitoring::TDynamicCounters::TCounterPtr ResolveKeySetReadTableSuccess;
         NMonitoring::TDynamicCounters::TCounterPtr ResolveKeySetFail;
         NMonitoring::TDynamicCounters::TCounterPtr ResolveKeySetWrongRequest;
-        NMonitoring::TDynamicCounters::TCounterPtr ResolveKeySetDomainLocalityFail; 
-        NMonitoring::TDynamicCounters::TCounterPtr ResolveKeySetRedirectUnavaible; 
+        NMonitoring::TDynamicCounters::TCounterPtr ResolveKeySetDomainLocalityFail;
+        NMonitoring::TDynamicCounters::TCounterPtr ResolveKeySetRedirectUnavaible;
 
         NMonitoring::TDynamicCounters::TCounterPtr ClientConnectedOk;
         NMonitoring::TDynamicCounters::TCounterPtr ClientConnectedError;

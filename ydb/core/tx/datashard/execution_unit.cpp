@@ -110,14 +110,14 @@ THolder<TExecutionUnit> CreateExecutionUnit(EExecutionUnitKind kind,
         return CreateCreateVolatileSnapshotUnit(dataShard, pipeline);
     case EExecutionUnitKind::DropVolatileSnapshot:
         return CreateDropVolatileSnapshotUnit(dataShard, pipeline);
-    case EExecutionUnitKind::InitiateBuildIndex: 
-        return CreateInitiateBuildIndexUnit(dataShard, pipeline); 
-    case EExecutionUnitKind::FinalizeBuildIndex: 
-        return CreateFinalizeBuildIndexUnit(dataShard, pipeline); 
-    case EExecutionUnitKind::DropIndexNotice: 
-        return CreateDropIndexNoticeUnit(dataShard, pipeline); 
-    case EExecutionUnitKind::MoveTable: 
-        return CreateMoveTableUnit(dataShard, pipeline); 
+    case EExecutionUnitKind::InitiateBuildIndex:
+        return CreateInitiateBuildIndexUnit(dataShard, pipeline);
+    case EExecutionUnitKind::FinalizeBuildIndex:
+        return CreateFinalizeBuildIndexUnit(dataShard, pipeline);
+    case EExecutionUnitKind::DropIndexNotice:
+        return CreateDropIndexNoticeUnit(dataShard, pipeline);
+    case EExecutionUnitKind::MoveTable:
+        return CreateMoveTableUnit(dataShard, pipeline);
     case EExecutionUnitKind::CreateCdcStream:
         return CreateCreateCdcStreamUnit(dataShard, pipeline);
     case EExecutionUnitKind::AlterCdcStream:

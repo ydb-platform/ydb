@@ -562,8 +562,8 @@ private:
 };
 
 struct TSecurityObject : TAtomicRefCount<TSecurityObject>, NACLib::TSecurityObject {
-    using TPtr = TIntrusivePtr<TSecurityObject>; 
- 
+    using TPtr = TIntrusivePtr<TSecurityObject>;
+
     static NACLib::TSecurityObject FromByteStream(const NACLibProto::TSecurityObject* parent, const TString& owner, const TString& acl, bool isContainer) {
         NACLib::TSecurityObject object(owner, isContainer);
         Y_VERIFY(object.MutableACL()->ParseFromString(acl));

@@ -30,7 +30,7 @@ class TJsonNodes : public TViewerPipeClient<TJsonNodes> {
     std::unique_ptr<TEvInterconnect::TEvNodesInfo> NodesInfo;
     std::unordered_map<TNodeId, THolder<TEvWhiteboard::TEvPDiskStateResponse>> PDiskInfo;
     std::unordered_map<TNodeId, THolder<TEvWhiteboard::TEvSystemStateResponse>> SysInfo;
-    std::unordered_map<TString, THolder<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult>> DescribeResult; 
+    std::unordered_map<TString, THolder<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult>> DescribeResult;
     std::unique_ptr<TEvBlobStorage::TEvControllerConfigResponse> BaseConfig;
     TJsonSettings JsonSettings;
     ui32 Timeout = 0;
@@ -100,7 +100,7 @@ public:
         if (!Event->Get()->UserToken.empty()) {
             request->Record.SetUserToken(Event->Get()->UserToken);
         }
-        NKikimrSchemeOp::TDescribePath* record = request->Record.MutableDescribePath(); 
+        NKikimrSchemeOp::TDescribePath* record = request->Record.MutableDescribePath();
         record->SetPath(path);
         request->Record.SetUserToken(Event->Get()->UserToken);
         TActorId txproxy = MakeTxProxyID();
@@ -161,10 +161,10 @@ public:
         RequestDone();
     }
 
-    void Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev) { 
+    void Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev) {
         TString path = ev->Get()->GetRecord().GetPath();
 
-        const NKikimrSchemeOp::TPathDescription& pathDescription = ev->Get()->GetRecord().GetPathDescription(); 
+        const NKikimrSchemeOp::TPathDescription& pathDescription = ev->Get()->GetRecord().GetPathDescription();
         TTabletId hiveId = pathDescription.GetDomainDescription().GetProcessingParams().GetHive();
         if (hiveId != 0) {
             RequestHiveStorageStats(hiveId);
@@ -225,7 +225,7 @@ public:
             hFunc(TEvInterconnect::TEvNodesInfo, Handle);
             hFunc(TEvWhiteboard::TEvSystemStateResponse, Handle);
             hFunc(TEvWhiteboard::TEvPDiskStateResponse, Handle);
-            hFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, Handle); 
+            hFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, Handle);
             hFunc(TEvBlobStorage::TEvControllerSelectGroupsResult, Handle);
             hFunc(TEvBlobStorage::TEvControllerConfigResponse, Handle);
             hFunc(TEvents::TEvUndelivered, Undelivered);

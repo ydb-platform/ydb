@@ -58,29 +58,29 @@ public:
         Value = value;
         return *this;
     }
- 
+
     TTabletSimpleCounter& Add(ui64 delta) {
         Value += delta;
         return *this;
     }
- 
-    TTabletSimpleCounter& Sub(ui64 delta) { 
-        Value -= delta; 
-        return *this; 
-    } 
- 
+
+    TTabletSimpleCounter& Sub(ui64 delta) {
+        Value -= delta;
+        return *this;
+    }
+
     TTabletSimpleCounter& operator = (ui64 value) {
         return Set(value);
     }
 
-    TTabletSimpleCounter& operator += (ui64 delta) { 
-        return Add(delta); 
-    } 
- 
-    TTabletSimpleCounter& operator -= (ui64 delta) { 
-        return Sub(delta); 
-    } 
- 
+    TTabletSimpleCounter& operator += (ui64 delta) {
+        return Add(delta);
+    }
+
+    TTabletSimpleCounter& operator -= (ui64 delta) {
+        return Sub(delta);
+    }
+
 private:
     //
     void Initialize(const TTabletSimpleCounter& rp) {

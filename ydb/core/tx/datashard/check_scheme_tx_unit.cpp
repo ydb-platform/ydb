@@ -30,10 +30,10 @@ private:
     bool CheckCopy(TActiveTransaction *activeTx);
     bool CheckCreatePersistentSnapshot(TActiveTransaction *activeTx);
     bool CheckDropPersistentSnapshot(TActiveTransaction *activeTx);
-    bool CheckInitiateBuildIndex(TActiveTransaction *activeTx); 
-    bool CheckFinalizeBuildIndex(TActiveTransaction *activeTx); 
-    bool CheckDropIndexNotice(TActiveTransaction *activeTx); 
-    bool CheckMoveTable(TActiveTransaction *activeTx); 
+    bool CheckInitiateBuildIndex(TActiveTransaction *activeTx);
+    bool CheckFinalizeBuildIndex(TActiveTransaction *activeTx);
+    bool CheckDropIndexNotice(TActiveTransaction *activeTx);
+    bool CheckMoveTable(TActiveTransaction *activeTx);
     bool CheckCreateCdcStream(TActiveTransaction *activeTx);
     bool CheckAlterCdcStream(TActiveTransaction *activeTx);
     bool CheckDropCdcStream(TActiveTransaction *activeTx);
@@ -82,7 +82,7 @@ EExecutionStatus TCheckSchemeTxUnit::Execute(TOperation::TPtr op,
             tx.GetAlterTable().GetPartitionConfig().HasFreezeState())
     {
         auto cmd = tx.GetAlterTable().GetPartitionConfig().GetFreezeState();
-        unfreezeTx = cmd == NKikimrSchemeOp::EFreezeState::Unfreeze; 
+        unfreezeTx = cmd == NKikimrSchemeOp::EFreezeState::Unfreeze;
     }
 
     // Check state is proper for scheme transactions.
@@ -343,20 +343,20 @@ bool TCheckSchemeTxUnit::CheckSchemeTx(TActiveTransaction *activeTx)
         res = CheckDropPersistentSnapshot(activeTx);
         break;
     case TSchemaOperation::ETypeInitiateBuildIndex:
-        res = CheckInitiateBuildIndex(activeTx); 
-        break; 
+        res = CheckInitiateBuildIndex(activeTx);
+        break;
     case TSchemaOperation::ETypeFinalizeBuildIndex:
-        res = CheckFinalizeBuildIndex(activeTx); 
-        break; 
+        res = CheckFinalizeBuildIndex(activeTx);
+        break;
     case TSchemaOperation::ETypeDropIndexNotice:
-        res = CheckDropIndexNotice(activeTx); 
-        break; 
-    case TSchemaOperation::ETypeMoveTable: 
-        res = CheckMoveTable(activeTx); 
-        break; 
+        res = CheckDropIndexNotice(activeTx);
+        break;
+    case TSchemaOperation::ETypeMoveTable:
+        res = CheckMoveTable(activeTx);
+        break;
     case TSchemaOperation::ETypeCreateCdcStream:
         res = CheckCreateCdcStream(activeTx);
-        break; 
+        break;
     case TSchemaOperation::ETypeAlterCdcStream:
         res = CheckAlterCdcStream(activeTx);
         break;
@@ -382,14 +382,14 @@ bool TCheckSchemeTxUnit::CheckCreate(TActiveTransaction *activeTx) {
     }
 
     const auto &create = tx.GetCreateTable();
-    ui64 tableId = create.GetId_Deprecated(); 
-    if (create.HasPathId()) { 
-        Y_VERIFY(DataShard.GetPathOwnerId() == create.GetPathId().GetOwnerId() || DataShard.GetPathOwnerId() == INVALID_TABLET_ID); 
-        tableId = create.GetPathId().GetLocalId(); 
-    } 
+    ui64 tableId = create.GetId_Deprecated();
+    if (create.HasPathId()) {
+        Y_VERIFY(DataShard.GetPathOwnerId() == create.GetPathId().GetOwnerId() || DataShard.GetPathOwnerId() == INVALID_TABLET_ID);
+        tableId = create.GetPathId().GetLocalId();
+    }
 
-    Y_VERIFY(!DataShard.GetUserTables().contains(tableId)); 
- 
+    Y_VERIFY(!DataShard.GetUserTables().contains(tableId));
+
     return true;
 }
 
@@ -401,12 +401,12 @@ bool TCheckSchemeTxUnit::CheckDrop(TActiveTransaction *activeTx) {
     }
 
     const auto &drop = tx.GetDropTable();
-    ui64 tableId = drop.GetId_Deprecated(); 
-    if (drop.HasPathId()) { 
-        Y_VERIFY(DataShard.GetPathOwnerId() == drop.GetPathId().GetOwnerId()); 
-        tableId = drop.GetPathId().GetLocalId(); 
-    } 
-    Y_VERIFY(DataShard.GetUserTables().FindPtr(tableId)); 
+    ui64 tableId = drop.GetId_Deprecated();
+    if (drop.HasPathId()) {
+        Y_VERIFY(DataShard.GetPathOwnerId() == drop.GetPathId().GetOwnerId());
+        tableId = drop.GetPathId().GetLocalId();
+    }
+    Y_VERIFY(DataShard.GetUserTables().FindPtr(tableId));
 
     return true;
 }
@@ -451,7 +451,7 @@ bool TCheckSchemeTxUnit::CheckAlter(TActiveTransaction *activeTx)
             return false;
         }
 
-        bool freeze = alter.GetPartitionConfig().GetFreezeState() == NKikimrSchemeOp::EFreezeState::Freeze; 
+        bool freeze = alter.GetPartitionConfig().GetFreezeState() == NKikimrSchemeOp::EFreezeState::Freeze;
         const auto curState = DataShard.GetState();
         bool err = false;
 
@@ -477,14 +477,14 @@ bool TCheckSchemeTxUnit::CheckAlter(TActiveTransaction *activeTx)
         }
     }
 
-    ui64 tableId = alter.GetId_Deprecated(); 
-    if (alter.HasPathId()) { 
-        Y_VERIFY(DataShard.GetPathOwnerId() == alter.GetPathId().GetOwnerId()); 
-        tableId = alter.GetPathId().GetLocalId(); 
-    } 
+    ui64 tableId = alter.GetId_Deprecated();
+    if (alter.HasPathId()) {
+        Y_VERIFY(DataShard.GetPathOwnerId() == alter.GetPathId().GetOwnerId());
+        tableId = alter.GetPathId().GetLocalId();
+    }
 
     const auto tablePtr = DataShard.GetUserTables().FindPtr(tableId);
-    Y_VERIFY_S(tablePtr, "tableId: " << tableId); 
+    Y_VERIFY_S(tablePtr, "tableId: " << tableId);
     const TUserTable &table = **tablePtr;
 
     auto curSchemaVersion = table.GetTableSchemaVersion();
@@ -571,12 +571,12 @@ bool TCheckSchemeTxUnit::CheckCopy(TActiveTransaction *activeTx) {
     }
 
     const auto &snap = tx.GetSendSnapshot();
-    ui64 tableId = snap.GetTableId_Deprecated(); 
-    if (snap.HasTableId()) { 
-        Y_VERIFY(DataShard.GetPathOwnerId() == snap.GetTableId().GetOwnerId()); 
-        tableId = snap.GetTableId().GetTableId(); 
-    } 
-    Y_VERIFY(DataShard.GetUserTables().contains(tableId)); 
+    ui64 tableId = snap.GetTableId_Deprecated();
+    if (snap.HasTableId()) {
+        Y_VERIFY(DataShard.GetPathOwnerId() == snap.GetTableId().GetOwnerId());
+        tableId = snap.GetTableId().GetTableId();
+    }
+    Y_VERIFY(DataShard.GetUserTables().contains(tableId));
 
     return true;
 }
@@ -605,78 +605,78 @@ bool TCheckSchemeTxUnit::CheckDropPersistentSnapshot(TActiveTransaction *activeT
     return true;
 }
 
-bool TCheckSchemeTxUnit::CheckInitiateBuildIndex(TActiveTransaction *activeTx) { 
+bool TCheckSchemeTxUnit::CheckInitiateBuildIndex(TActiveTransaction *activeTx) {
     if (HasDuplicate(activeTx, "InitiateBuildIndex", &TPipeline::HasInitiateBuilIndex)) {
-        return false; 
-    } 
- 
+        return false;
+    }
+
     const auto &initiate = activeTx->GetSchemeTx().GetInitiateBuildIndex();
     if (!HasPathId(activeTx, initiate, "InitiateBuildIndex")) {
         return false;
-    } 
- 
+    }
+
     return CheckSchemaVersion(activeTx, initiate);
-} 
- 
-bool TCheckSchemeTxUnit::CheckFinalizeBuildIndex(TActiveTransaction *activeTx) { 
+}
+
+bool TCheckSchemeTxUnit::CheckFinalizeBuildIndex(TActiveTransaction *activeTx) {
     if (HasDuplicate(activeTx, "FinalizeBuildIndex", &TPipeline::HasFinalizeBuilIndex)) {
-        return false; 
-    } 
- 
+        return false;
+    }
+
     const auto &finalize = activeTx->GetSchemeTx().GetFinalizeBuildIndex();
     if (!HasPathId(activeTx, finalize, "FinalizeBuildIndex")) {
         return false;
-    } 
- 
+    }
+
     const auto pathId = GetPathId(finalize);
-    const auto snapshotKey = TSnapshotKey(pathId.OwnerId, pathId.LocalPathId, finalize.GetSnapshotStep(), finalize.GetSnapshotTxId()); 
- 
-    if (DataShard.GetSnapshotManager().FindAvailable(snapshotKey) == nullptr) { 
-        LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD, 
-                    "FinalizeBuildIndex description has unexisting snapshot key." 
-                        << " Tablet " << DataShard.TabletID() 
-                        << " txId " << activeTx->GetTxId() 
-                        << " pathId " << pathId 
-                        << " snapshotKey " << snapshotKey); 
-        BuildResult(activeTx, NKikimrTxDataShard::TEvProposeTransactionResult::ERROR); 
+    const auto snapshotKey = TSnapshotKey(pathId.OwnerId, pathId.LocalPathId, finalize.GetSnapshotStep(), finalize.GetSnapshotTxId());
+
+    if (DataShard.GetSnapshotManager().FindAvailable(snapshotKey) == nullptr) {
+        LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::TX_DATASHARD,
+                    "FinalizeBuildIndex description has unexisting snapshot key."
+                        << " Tablet " << DataShard.TabletID()
+                        << " txId " << activeTx->GetTxId()
+                        << " pathId " << pathId
+                        << " snapshotKey " << snapshotKey);
+        BuildResult(activeTx, NKikimrTxDataShard::TEvProposeTransactionResult::ERROR);
         return false;
-    } 
- 
+    }
+
     return CheckSchemaVersion(activeTx, pathId.LocalPathId, finalize);
-} 
- 
-bool TCheckSchemeTxUnit::CheckDropIndexNotice(TActiveTransaction *activeTx) { 
+}
+
+bool TCheckSchemeTxUnit::CheckDropIndexNotice(TActiveTransaction *activeTx) {
     if (HasDuplicate(activeTx, "DropIndexNotice", &TPipeline::HasDropIndexNotice)) {
-        return false; 
-    } 
- 
+        return false;
+    }
+
     const auto &notice = activeTx->GetSchemeTx().GetDropIndexNotice();
     if (!HasPathId(activeTx, notice, "DropIndexNotice")) {
         return false;
-    } 
- 
+    }
+
     return CheckSchemaVersion(activeTx, notice);
-} 
- 
- 
-bool TCheckSchemeTxUnit::CheckMoveTable(TActiveTransaction *activeTx) { 
+}
+
+
+bool TCheckSchemeTxUnit::CheckMoveTable(TActiveTransaction *activeTx) {
     if (HasDuplicate(activeTx, "Move", &TPipeline::HasMove)) {
-        return false; 
-    } 
- 
+        return false;
+    }
+
     const auto &mv = activeTx->GetSchemeTx().GetMoveTable();
     if (!HasPathId(activeTx, mv, "Move")) {
         return false;
-    } 
- 
+    }
+
     return CheckSchemaVersion(activeTx, mv);
-} 
- 
+}
+
 bool TCheckSchemeTxUnit::CheckCreateCdcStream(TActiveTransaction *activeTx) {
     if (HasDuplicate(activeTx, "CreateCdcStream", &TPipeline::HasCreateCdcStream)) {
         return false;
     }
- 
+
     const auto &notice = activeTx->GetSchemeTx().GetCreateCdcStreamNotice();
     if (!HasPathId(activeTx, notice, "CreateCdcStream")) {
         return false;

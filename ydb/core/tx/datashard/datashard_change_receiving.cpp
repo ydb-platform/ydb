@@ -358,10 +358,10 @@ void TDataShard::Handle(TEvChangeExchange::TEvHandshake::TPtr& ev, const TActorC
 }
 
 void TDataShard::Handle(TEvChangeExchange::TEvApplyRecords::TPtr& ev, const TActorContext& ctx) {
-    LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Handle TEvChangeExchange::TEvApplyRecords" 
-        << ": origin# " << ev->Get()->Record.GetOrigin() 
-        << ", generation# " << ev->Get()->Record.GetGeneration() 
-        << ", at tablet# " << TabletID()); 
+    LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Handle TEvChangeExchange::TEvApplyRecords"
+        << ": origin# " << ev->Get()->Record.GetOrigin()
+        << ", generation# " << ev->Get()->Record.GetGeneration()
+        << ", at tablet# " << TabletID());
     Execute(new TTxApplyChangeRecords(this, ev), ctx);
 }
 

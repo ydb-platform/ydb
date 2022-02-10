@@ -1447,8 +1447,8 @@ NThreading::TFuture<TResponse> InjectSessionStatusInterception(
     return promise.GetFuture();
 }
 
-static ui32 CalcBackoffTime(const TBackoffSettings& settings, ui32 retryNumber) { 
-    ui32 backoffSlots = 1 << std::min(retryNumber, settings.Ceiling_); 
+static ui32 CalcBackoffTime(const TBackoffSettings& settings, ui32 retryNumber) {
+    ui32 backoffSlots = 1 << std::min(retryNumber, settings.Ceiling_);
     TDuration maxDuration = settings.SlotDuration_ * backoffSlots;
 
     double uncertaintyRatio = std::max(std::min(settings.UncertainRatio_, 1.0), 0.0);
@@ -1551,7 +1551,7 @@ public:
         Connections_->ScheduleOneTimeTask(std::move(fn), timeout);
     }
 
-    void AsyncBackoff(const TBackoffSettings& settings, ui32 retryNumber, const std::function<void()>& fn) { 
+    void AsyncBackoff(const TBackoffSettings& settings, ui32 retryNumber, const std::function<void()>& fn) {
         auto durationMs = CalcBackoffTime(settings, retryNumber);
         ScheduleTask(fn, TDuration::MilliSeconds(durationMs));
     }
@@ -2069,23 +2069,23 @@ public:
     }
 
     TFuture<TStatus> CopyTables(Ydb::Table::CopyTablesRequest&& request, const TCopyTablesSettings& settings)
-    { 
-        return RunSimple<Ydb::Table::V1::TableService, Ydb::Table::CopyTablesRequest, Ydb::Table::CopyTablesResponse>( 
-            std::move(request), 
-            &Ydb::Table::V1::TableService::Stub::AsyncCopyTables, 
+    {
+        return RunSimple<Ydb::Table::V1::TableService, Ydb::Table::CopyTablesRequest, Ydb::Table::CopyTablesResponse>(
+            std::move(request),
+            &Ydb::Table::V1::TableService::Stub::AsyncCopyTables,
             TRpcRequestSettings::Make(settings),
             settings.ClientTimeout_);
-    } 
- 
-    TFuture<TStatus> RenameTables(Ydb::Table::RenameTablesRequest&& request, const TRenameTablesSettings& settings) 
-    { 
-        return RunSimple<Ydb::Table::V1::TableService, Ydb::Table::RenameTablesRequest, Ydb::Table::RenameTablesResponse>( 
-            std::move(request), 
-            &Ydb::Table::V1::TableService::Stub::AsyncRenameTables, 
-            TRpcRequestSettings::Make(settings), 
-            settings.ClientTimeout_); 
-    } 
- 
+    }
+
+    TFuture<TStatus> RenameTables(Ydb::Table::RenameTablesRequest&& request, const TRenameTablesSettings& settings)
+    {
+        return RunSimple<Ydb::Table::V1::TableService, Ydb::Table::RenameTablesRequest, Ydb::Table::RenameTablesResponse>(
+            std::move(request),
+            &Ydb::Table::V1::TableService::Stub::AsyncRenameTables,
+            TRpcRequestSettings::Make(settings),
+            settings.ClientTimeout_);
+    }
+
     TFuture<TStatus> DropTable(const TString& sessionId, const TString& path, const TDropTableSettings& settings) {
         auto request = MakeOperationRequest<Ydb::Table::DropTableRequest>(settings);
         request.set_session_id(sessionId);
@@ -3235,7 +3235,7 @@ struct TRetryState {
     THandleStatusFunc HandleStatusFunc;
 };
 
-static void Backoff(const TBackoffSettings& settings, ui32 retryNumber) { 
+static void Backoff(const TBackoffSettings& settings, ui32 retryNumber) {
     auto durationMs = CalcBackoffTime(settings, retryNumber);
     Sleep(TDuration::MilliSeconds(durationMs));
 }
@@ -3286,7 +3286,7 @@ protected:
         if (status.IsSuccess()) {
             return self->Promise.SetValue(status);
         }
- 
+
         if (self->RetryNumber >= self->Settings.MaxRetries_) {
             return self->Promise.SetValue(status);
         }
@@ -3450,15 +3450,15 @@ TStatus TTableClient::RetryOperationSyncHelper(const TOperationWrapperSyncFunc& 
 
             case EStatus::OVERLOADED:
             case EStatus::CLIENT_RESOURCE_EXHAUSTED: {
-                Backoff(settings.SlowBackoffSettings_, retryNumber); 
+                Backoff(settings.SlowBackoffSettings_, retryNumber);
                 break;
             }
 
-            case EStatus::UNAVAILABLE:{ 
-                Backoff(settings.FastBackoffSettings_, retryNumber); 
-                break; 
-            } 
- 
+            case EStatus::UNAVAILABLE:{
+                Backoff(settings.FastBackoffSettings_, retryNumber);
+                break;
+            }
+
             case EStatus::BAD_SESSION:
             case EStatus::SESSION_BUSY:
                 retryState.Session.Clear();
@@ -3814,42 +3814,42 @@ TAsyncOperation TSession::AlterTableLong(const TString& path, const TAlterTableS
         GetMinTimeToTouch(Client_->Settings_.SessionPoolSettings_));
 }
 
-TAsyncStatus TSession::RenameTables(const TVector<TRenameItem>& renameItems, const TRenameTablesSettings& settings) { 
-    auto request = MakeOperationRequest<Ydb::Table::RenameTablesRequest>(settings); 
-    request.set_session_id(SessionImpl_->GetId()); 
- 
-    for (const auto& item: renameItems) { 
-        auto add = request.add_tables(); 
-        add->set_source_path(item.SourcePath()); 
-        add->set_destination_path(item.DestinationPath()); 
-        add->set_replace_destination(item.ReplaceDestination()); 
-    } 
- 
-    return InjectSessionStatusInterception( 
-        SessionImpl_, 
-        Client_->RenameTables(std::move(request), settings), 
-        false, 
-        GetMinTimeToTouch(Client_->Settings_.SessionPoolSettings_)); 
-} 
- 
-TAsyncStatus TSession::CopyTables(const TVector<TCopyItem>& copyItems, const TCopyTablesSettings& settings) { 
-    auto request = MakeOperationRequest<Ydb::Table::CopyTablesRequest>(settings); 
-    request.set_session_id(SessionImpl_->GetId()); 
- 
-    for (const auto& item: copyItems) { 
-        auto add = request.add_tables(); 
-        add->set_source_path(item.SourcePath()); 
-        add->set_destination_path(item.DestinationPath()); 
-        add->set_omit_indexes(item.OmitIndexes()); 
-    } 
- 
-    return InjectSessionStatusInterception( 
-        SessionImpl_, 
+TAsyncStatus TSession::RenameTables(const TVector<TRenameItem>& renameItems, const TRenameTablesSettings& settings) {
+    auto request = MakeOperationRequest<Ydb::Table::RenameTablesRequest>(settings);
+    request.set_session_id(SessionImpl_->GetId());
+
+    for (const auto& item: renameItems) {
+        auto add = request.add_tables();
+        add->set_source_path(item.SourcePath());
+        add->set_destination_path(item.DestinationPath());
+        add->set_replace_destination(item.ReplaceDestination());
+    }
+
+    return InjectSessionStatusInterception(
+        SessionImpl_,
+        Client_->RenameTables(std::move(request), settings),
+        false,
+        GetMinTimeToTouch(Client_->Settings_.SessionPoolSettings_));
+}
+
+TAsyncStatus TSession::CopyTables(const TVector<TCopyItem>& copyItems, const TCopyTablesSettings& settings) {
+    auto request = MakeOperationRequest<Ydb::Table::CopyTablesRequest>(settings);
+    request.set_session_id(SessionImpl_->GetId());
+
+    for (const auto& item: copyItems) {
+        auto add = request.add_tables();
+        add->set_source_path(item.SourcePath());
+        add->set_destination_path(item.DestinationPath());
+        add->set_omit_indexes(item.OmitIndexes());
+    }
+
+    return InjectSessionStatusInterception(
+        SessionImpl_,
         Client_->CopyTables(std::move(request), settings),
-        false, 
-        GetMinTimeToTouch(Client_->Settings_.SessionPoolSettings_)); 
-} 
- 
+        false,
+        GetMinTimeToTouch(Client_->Settings_.SessionPoolSettings_));
+}
+
 TFuture<TStatus> TSession::CopyTable(const TString& src, const TString& dst, const TCopyTableSettings& settings) {
     return InjectSessionStatusInterception(
         SessionImpl_,
@@ -4245,58 +4245,58 @@ std::function<void(TSession::TImpl*)> TSession::TImpl::GetSmartDeleter(std::shar
     };
 }
 
-//////////////////////////////////////////////////////////////////////////////// 
- 
-TCopyItem::TCopyItem(const TString& source, const TString& destination) 
-    : Source_(source) 
-    , Destination_(destination) 
-    , OmitIndexes_(false) { 
-} 
- 
-const TString& TCopyItem::SourcePath() const { 
-    return Source_; 
-} 
- 
-const TString& TCopyItem::DestinationPath() const { 
-    return Destination_; 
-} 
- 
-TCopyItem& TCopyItem::SetOmitIndexes() { 
-    OmitIndexes_ = true; 
-    return *this; 
-} 
- 
-bool TCopyItem::OmitIndexes() const { 
-    return OmitIndexes_; 
-} 
- 
 ////////////////////////////////////////////////////////////////////////////////
 
-TRenameItem::TRenameItem(const TString& source, const TString& destination) 
-    : Source_(source) 
-    , Destination_(destination) 
-    , ReplaceDestination_(false) { 
-} 
- 
-const TString& TRenameItem::SourcePath() const { 
-    return Source_; 
-} 
- 
-const TString& TRenameItem::DestinationPath() const { 
-    return Destination_; 
-} 
- 
-TRenameItem& TRenameItem::SetReplaceDestination() { 
-    ReplaceDestination_ = true; 
-    return *this; 
-} 
- 
-bool TRenameItem::ReplaceDestination() const { 
-    return ReplaceDestination_; 
-} 
- 
-//////////////////////////////////////////////////////////////////////////////// 
- 
+TCopyItem::TCopyItem(const TString& source, const TString& destination)
+    : Source_(source)
+    , Destination_(destination)
+    , OmitIndexes_(false) {
+}
+
+const TString& TCopyItem::SourcePath() const {
+    return Source_;
+}
+
+const TString& TCopyItem::DestinationPath() const {
+    return Destination_;
+}
+
+TCopyItem& TCopyItem::SetOmitIndexes() {
+    OmitIndexes_ = true;
+    return *this;
+}
+
+bool TCopyItem::OmitIndexes() const {
+    return OmitIndexes_;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+TRenameItem::TRenameItem(const TString& source, const TString& destination)
+    : Source_(source)
+    , Destination_(destination)
+    , ReplaceDestination_(false) {
+}
+
+const TString& TRenameItem::SourcePath() const {
+    return Source_;
+}
+
+const TString& TRenameItem::DestinationPath() const {
+    return Destination_;
+}
+
+TRenameItem& TRenameItem::SetReplaceDestination() {
+    ReplaceDestination_ = true;
+    return *this;
+}
+
+bool TRenameItem::ReplaceDestination() const {
+    return ReplaceDestination_;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 TIndexDescription::TIndexDescription(const TString& name, EIndexType type,
         const TVector<TString>& indexColumns, const TVector<TString>& dataColumns)
     : IndexName_(name)

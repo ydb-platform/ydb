@@ -2,15 +2,15 @@
 #include "schemeshard_export.h"
 
 namespace NKikimr {
-namespace NSchemeShard { 
+namespace NSchemeShard {
 
 using namespace NTabletFlatExecutor;
 
-struct TSchemeShard::TExport::TTxList: public TSchemeShard::TXxport::TTxList< 
+struct TSchemeShard::TExport::TTxList: public TSchemeShard::TXxport::TTxList<
         TExportInfo,
         TEvExport::TEvListExportsRequest,
         TEvExport::TEvListExportsResponse,
-        TSchemeShard::TExport::TTxList 
+        TSchemeShard::TExport::TTxList
 > {
     using TTxListBase::TTxListBase;
 
@@ -34,9 +34,9 @@ struct TSchemeShard::TExport::TTxList: public TSchemeShard::TXxport::TTxList<
 
 }; // TTxList
 
-ITransaction* TSchemeShard::CreateTxListExports(TEvExport::TEvListExportsRequest::TPtr& ev) { 
+ITransaction* TSchemeShard::CreateTxListExports(TEvExport::TEvListExportsRequest::TPtr& ev) {
     return new TExport::TTxList(this, ev);
 }
 
-} // NSchemeShard 
+} // NSchemeShard
 } // NKikimr

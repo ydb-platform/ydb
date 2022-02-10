@@ -21,7 +21,7 @@
 #include <util/random/entropy.h>
 #include <util/string/printf.h>
 #include <util/string/subst.h>
-#include <util/stream/file.h> 
+#include <util/stream/file.h>
 
 #include <google/protobuf/text_format.h>
 #include <library/cpp/testing/unittest/registar.h>
@@ -113,32 +113,32 @@ void SetupServices(TTestActorRuntime &runtime, TString extraPath, TIntrusivePtr<
 
     TAppPrepare app;
 
-    { 
-        TString baseDir = runtime.GetTempDir(); 
+    {
+        TString baseDir = runtime.GetTempDir();
         TString keyfile = Sprintf("%s/key.txt", baseDir.data());
- 
-        TFileOutput file(keyfile); 
-        file << "some data"; 
-        app.SetKeyForNode(keyfile, 0); 
-    } 
- 
+
+        TFileOutput file(keyfile);
+        file << "some data";
+        app.SetKeyForNode(keyfile, 0);
+    }
+
     { // setup domain info
         app.ClearDomainsAndHive();
-        auto domain = TDomainsInfo::TDomain::ConstructDomainWithExplicitTabletIds("dc-1", domainId, 0, 
+        auto domain = TDomainsInfo::TDomain::ConstructDomainWithExplicitTabletIds("dc-1", domainId, 0,
                                                                                   domainId, domainId, TVector<ui32>{domainId},
-                                                                                  domainId, TVector<ui32>{domainId}, 
+                                                                                  domainId, TVector<ui32>{domainId},
                                                                                   100500,
-                                                                                  TVector<ui64>{}, 
-                                                                                  TVector<ui64>{}, 
-                                                                                  TVector<ui64>{}, 
-                                                                                  DefaultPoolKinds(2)); 
-        app.AddDomain(domain.Release()); 
+                                                                                  TVector<ui64>{},
+                                                                                  TVector<ui64>{},
+                                                                                  TVector<ui64>{},
+                                                                                  DefaultPoolKinds(2));
+        app.AddDomain(domain.Release());
         app.AddHive(domainId, MakeDefaultHiveID(stateStorageGroup));
     }
- 
+
     SetupChannelProfiles(app, domainId);
- 
-    if (false) { // setup channel profiles 
+
+    if (false) { // setup channel profiles
         TIntrusivePtr<TChannelProfiles> channelProfiles = new TChannelProfiles;
         channelProfiles->Profiles.emplace_back();
         TChannelProfiles::TProfile &profile = channelProfiles->Profiles.back();
@@ -210,24 +210,24 @@ void SetupServices(TTestActorRuntime &runtime, TString extraPath, TIntrusivePtr<
             ObtainTenantKey(&nodeWardenConfig->TenantKey, app.Keys[0]);
             ObtainStaticKey(&nodeWardenConfig->StaticKey);
 
-            TString baseDir = runtime.GetTempDir(); 
+            TString baseDir = runtime.GetTempDir();
 
             TIntrusivePtr<NPDisk::TSectorMap> sectorMap(new NPDisk::TSectorMap());
             sectorMap->ForceSize(64ull << 30ull);
 
 
             TString pDiskPath0 = TStringBuilder() << "SectorMap:" << baseDir << "pdisk_map";
-            nodeWardenConfig->ServiceSet.MutablePDisks(0)->SetPath(pDiskPath0); 
+            nodeWardenConfig->ServiceSet.MutablePDisks(0)->SetPath(pDiskPath0);
             nodeWardenConfig->SectorMaps[pDiskPath0] = sectorMap;
- 
+
             ui64 pDiskGuid = 1;
             static ui64 iteration = 0;
             ++iteration;
             ::NKikimr::FormatPDisk(pDiskPath0, 0, 4 << 10, 32u << 20u, pDiskGuid,
                 0x1234567890 + iteration, 0x4567890123 + iteration, 0x7890123456 + iteration,
                 NPDisk::YdbDefaultPDiskSequence, "", false, false, sectorMap);
- 
- 
+
+
             // Magic path from testlib, do not change it
             TString pDiskPath1 = TStringBuilder() << baseDir << "pdisk_1.dat";
             TIntrusivePtr<NPDisk::TSectorMap> sectorMap1(new NPDisk::TSectorMap());
@@ -259,18 +259,18 @@ void SetupServices(TTestActorRuntime &runtime, TString extraPath, TIntrusivePtr<
     CreateTestBootstrapper(runtime, CreateTestTabletInfo(MakeBSControllerID(defaultStateStorageGroup),
         TTabletTypes::FLAT_BS_CONTROLLER, TBlobStorageGroupType::ErasureMirror3, groupId),
         &CreateFlatBsController);
- 
+
     SetupBoxAndStoragePool(runtime, runtime.AllocateEdgeActor(), domainId);
 }
 
 void Setup(TTestActorRuntime &runtime, TString extraPath, TIntrusivePtr<NPDisk::TSectorMap> extraSectorMap) {
     SetupLogging(runtime);
     SetupServices(runtime, extraPath, extraSectorMap);
-//    runtime.SetLogPriority(NKikimrServices::BS_CONTROLLER, NLog::PRI_DEBUG); 
+//    runtime.SetLogPriority(NKikimrServices::BS_CONTROLLER, NLog::PRI_DEBUG);
 //    runtime.SetLogPriority(NKikimrServices::BS_NODE, NLog::PRI_DEBUG);
-    runtime.SetLogPriority(NKikimrServices::BS_PROXY, NLog::PRI_DEBUG); 
-    runtime.SetLogPriority(NKikimrServices::BS_PROXY_PUT, NLog::PRI_DEBUG); 
-    runtime.SetLogPriority(NKikimrServices::BS_PROXY_BLOCK, NLog::PRI_DEBUG); 
+    runtime.SetLogPriority(NKikimrServices::BS_PROXY, NLog::PRI_DEBUG);
+    runtime.SetLogPriority(NKikimrServices::BS_PROXY_PUT, NLog::PRI_DEBUG);
+    runtime.SetLogPriority(NKikimrServices::BS_PROXY_BLOCK, NLog::PRI_DEBUG);
 //    runtime.SetLogPriority(NKikimrServices::BS_PDISK, NLog::PRI_DEBUG);
 //    runtime.SetLogPriority(NKikimrServices::BS_QUEUE, NLog::PRI_DEBUG);
 }
@@ -313,176 +313,176 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
         TAutoPtr<IEventHandle> handle;
         auto putResult = runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvPutResult>(handle);
         UNIT_ASSERT(putResult);
-        UNIT_ASSERT_C(putResult->Status == expectAnsver, 
+        UNIT_ASSERT_C(putResult->Status == expectAnsver,
                 "Status# " << NKikimrProto::EReplyStatus_Name(putResult->Status));
         UNIT_ASSERT_EQUAL(handle->Cookie, cookie);
     }
 
-    void CreateStoragePool(TTestBasicRuntime& runtime, ui32 domainId, TString name, TString kind) { 
-        auto stateStorage = runtime.GetAppData().DomainsInfo->GetDefaultStateStorageGroup(domainId); 
+    void CreateStoragePool(TTestBasicRuntime& runtime, ui32 domainId, TString name, TString kind) {
+        auto stateStorage = runtime.GetAppData().DomainsInfo->GetDefaultStateStorageGroup(domainId);
         NKikimrBlobStorage::TDefineStoragePool storagePool = runtime.GetAppData().DomainsInfo->GetDomain(domainId).StoragePoolTypes.at(kind);
- 
+
         TActorId edge = runtime.AllocateEdgeActor();
         auto request = std::make_unique<TEvBlobStorage::TEvControllerConfigRequest>();
-        Y_VERIFY(storagePool.GetKind() == kind); 
+        Y_VERIFY(storagePool.GetKind() == kind);
         storagePool.ClearStoragePoolId();
-        storagePool.SetName(name); 
-        storagePool.SetNumGroups(1); 
-        storagePool.SetEncryptionMode(1); 
-        request->Record.MutableRequest()->AddCommand()->MutableDefineStoragePool()->CopyFrom(storagePool); 
- 
-        NTabletPipe::TClientConfig pipeConfig; 
+        storagePool.SetName(name);
+        storagePool.SetNumGroups(1);
+        storagePool.SetEncryptionMode(1);
+        request->Record.MutableRequest()->AddCommand()->MutableDefineStoragePool()->CopyFrom(storagePool);
+
+        NTabletPipe::TClientConfig pipeConfig;
         pipeConfig.RetryPolicy = NTabletPipe::TClientRetryPolicy::WithRetries();
         runtime.SendToPipe(MakeBSControllerID(stateStorage), edge, request.release(), 0, pipeConfig);
- 
-        auto reply = runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvControllerConfigResponse>(edge); 
-        UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetResponse().GetSuccess(), true); 
-    } 
- 
-    ui32 GetGroupFromPool(TTestBasicRuntime& runtime, ui32 domainId, TString poolName) { 
-        auto stateStorage = runtime.GetAppData().DomainsInfo->GetDefaultStateStorageGroup(domainId); 
- 
+
+        auto reply = runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvControllerConfigResponse>(edge);
+        UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetResponse().GetSuccess(), true);
+    }
+
+    ui32 GetGroupFromPool(TTestBasicRuntime& runtime, ui32 domainId, TString poolName) {
+        auto stateStorage = runtime.GetAppData().DomainsInfo->GetDefaultStateStorageGroup(domainId);
+
         TActorId edge = runtime.AllocateEdgeActor();
         auto selectGroups = std::make_unique<TEvBlobStorage::TEvControllerSelectGroups>();
         auto *record = &selectGroups->Record;
         record->SetReturnAllMatchingGroups(true);
         auto* groupParams = record->AddGroupParameters();
         groupParams->MutableStoragePoolSpecifier()->SetName(poolName);
- 
-        NTabletPipe::TClientConfig pipeConfig; 
+
+        NTabletPipe::TClientConfig pipeConfig;
         pipeConfig.RetryPolicy = NTabletPipe::TClientRetryPolicy::WithRetries();
         runtime.SendToPipe(MakeBSControllerID(stateStorage), edge, selectGroups.release(), 0, pipeConfig);
- 
+
         auto reply = runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvControllerSelectGroupsResult>(edge);
         UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetStatus(), NKikimrProto::OK);
         return reply->Get()->Record.GetMatchingGroups(0).GetGroups(0).GetGroupID();
-    } 
- 
+    }
+
     void SendToBsProxy(TTestBasicRuntime& runtime, TActorId sender, ui32 groupId, IEventBase *ev, ui64 cookie = 0) {
-        auto flags = NActors::IEventHandle::FlagTrackDelivery 
-                    | NActors::IEventHandle::FlagForwardOnNondelivery; 
- 
+        auto flags = NActors::IEventHandle::FlagTrackDelivery
+                    | NActors::IEventHandle::FlagForwardOnNondelivery;
+
         TActorId recipient = MakeBlobStorageProxyID(groupId);
         TActorId nodeWarden = MakeBlobStorageNodeWardenID(sender.NodeId());
-        return runtime.Send(new IEventHandle(recipient, sender, ev, 
-            flags, cookie, &nodeWarden, {}), sender.NodeId() - runtime.GetNodeId(0)); 
-    } 
- 
-    NKikimrBlobStorage::TDefineStoragePool DescribeStoragePool(TTestBasicRuntime& runtime, ui32 domainId, const TString& name) { 
-        auto stateStorage = runtime.GetAppData().DomainsInfo->GetDefaultStateStorageGroup(domainId); 
- 
+        return runtime.Send(new IEventHandle(recipient, sender, ev,
+            flags, cookie, &nodeWarden, {}), sender.NodeId() - runtime.GetNodeId(0));
+    }
+
+    NKikimrBlobStorage::TDefineStoragePool DescribeStoragePool(TTestBasicRuntime& runtime, ui32 domainId, const TString& name) {
+        auto stateStorage = runtime.GetAppData().DomainsInfo->GetDefaultStateStorageGroup(domainId);
+
         TActorId edge = runtime.AllocateEdgeActor();
         auto selectGroups = std::make_unique<TEvBlobStorage::TEvControllerConfigRequest>();
-        auto* request = selectGroups->Record.MutableRequest(); 
-        auto* readPool = request->AddCommand()->MutableReadStoragePool(); 
-        readPool->SetBoxId(1); 
-        readPool->AddName(name); 
- 
-        NTabletPipe::TClientConfig pipeConfig; 
+        auto* request = selectGroups->Record.MutableRequest();
+        auto* readPool = request->AddCommand()->MutableReadStoragePool();
+        readPool->SetBoxId(1);
+        readPool->AddName(name);
+
+        NTabletPipe::TClientConfig pipeConfig;
         pipeConfig.RetryPolicy = NTabletPipe::TClientRetryPolicy::WithRetries();
         runtime.SendToPipe(MakeBSControllerID(stateStorage), edge, selectGroups.release(), 0, pipeConfig);
- 
-        auto reply = runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvControllerConfigResponse>(edge); 
-        UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetResponse().GetSuccess(), true); 
-        return reply->Get()->Record.GetResponse().GetStatus(0).GetStoragePool(0); 
-    } 
- 
-    void RemoveStoragePool(TTestBasicRuntime& runtime, ui32 domainId, const NKikimrBlobStorage::TDefineStoragePool& storagePool) { 
-        auto stateStorage = runtime.GetAppData().DomainsInfo->GetDefaultStateStorageGroup(domainId); 
+
+        auto reply = runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvControllerConfigResponse>(edge);
+        UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetResponse().GetSuccess(), true);
+        return reply->Get()->Record.GetResponse().GetStatus(0).GetStoragePool(0);
+    }
+
+    void RemoveStoragePool(TTestBasicRuntime& runtime, ui32 domainId, const NKikimrBlobStorage::TDefineStoragePool& storagePool) {
+        auto stateStorage = runtime.GetAppData().DomainsInfo->GetDefaultStateStorageGroup(domainId);
         TActorId edge = runtime.AllocateEdgeActor();
         auto selectGroups = std::make_unique<TEvBlobStorage::TEvControllerConfigRequest>();
-        auto* request = selectGroups->Record.MutableRequest(); 
-        auto* deletePool = request->AddCommand()->MutableDeleteStoragePool(); 
-        deletePool->SetBoxId(1); 
-        deletePool->SetStoragePoolId(storagePool.GetStoragePoolId()); 
-        deletePool->SetItemConfigGeneration(storagePool.GetItemConfigGeneration()); 
- 
-        NTabletPipe::TClientConfig pipeConfig; 
+        auto* request = selectGroups->Record.MutableRequest();
+        auto* deletePool = request->AddCommand()->MutableDeleteStoragePool();
+        deletePool->SetBoxId(1);
+        deletePool->SetStoragePoolId(storagePool.GetStoragePoolId());
+        deletePool->SetItemConfigGeneration(storagePool.GetItemConfigGeneration());
+
+        NTabletPipe::TClientConfig pipeConfig;
         pipeConfig.RetryPolicy = NTabletPipe::TClientRetryPolicy::WithRetries();
         runtime.SendToPipe(MakeBSControllerID(stateStorage), edge, selectGroups.release(), 0, pipeConfig);
- 
-        auto reply = runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvControllerConfigResponse>(edge); 
-        UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetResponse().GetSuccess(), true); 
-    } 
- 
-    struct TBlockUpdates { 
-        TTestBasicRuntime* Runtime; 
-        TTestActorRuntime::TEventObserver PrevObserver = nullptr; 
- 
- 
- 
-        TBlockUpdates(TTestBasicRuntime& runtime) 
-        : Runtime(&runtime) 
-        { 
+
+        auto reply = runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvControllerConfigResponse>(edge);
+        UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetResponse().GetSuccess(), true);
+    }
+
+    struct TBlockUpdates {
+        TTestBasicRuntime* Runtime;
+        TTestActorRuntime::TEventObserver PrevObserver = nullptr;
+
+
+
+        TBlockUpdates(TTestBasicRuntime& runtime)
+        : Runtime(&runtime)
+        {
             TTestActorRuntime::TEventObserver observer = [=] (TTestActorRuntimeBase& /*runtime*/, TAutoPtr<IEventHandle>& event) -> TTestActorRuntime::EEventAction {
-                if (event->GetTypeRewrite() == TEvBlobStorage::EvControllerNodeServiceSetUpdate) { 
-                    return TTestActorRuntime::EEventAction::DROP; 
-                } 
-                return TTestActorRuntime::EEventAction::PROCESS; 
-            }; 
-            PrevObserver = Runtime->SetObserverFunc(observer); 
-        } 
- 
-        ~TBlockUpdates() { 
-            Runtime->SetObserverFunc(PrevObserver); 
-        } 
-    }; 
- 
+                if (event->GetTypeRewrite() == TEvBlobStorage::EvControllerNodeServiceSetUpdate) {
+                    return TTestActorRuntime::EEventAction::DROP;
+                }
+                return TTestActorRuntime::EEventAction::PROCESS;
+            };
+            PrevObserver = Runtime->SetObserverFunc(observer);
+        }
+
+        ~TBlockUpdates() {
+            Runtime->SetObserverFunc(PrevObserver);
+        }
+    };
+
     void BlockGroup(TTestBasicRuntime& runtime, TActorId sender, ui64 tabletId, ui32 groupId, ui32 generation, bool isMonitored,
             NKikimrProto::EReplyStatus expectAnsver = NKikimrProto::EReplyStatus::OK) {
         auto request = std::make_unique<TEvBlobStorage::TEvBlock>(tabletId, generation, TInstant::Max());
         request->IsMonitored = isMonitored;
         SendToBsProxy(runtime, sender, groupId, request.release());
-        auto reply = runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvBlockResult>(sender); 
-        UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Status, expectAnsver); 
-    } 
- 
+        auto reply = runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvBlockResult>(sender);
+        UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Status, expectAnsver);
+    }
+
     void CollectGroup(TTestBasicRuntime& runtime, TActorId sender, ui64 tabletId, ui32 groupId, bool isMonitored,
             NKikimrProto::EReplyStatus expectAnsver = NKikimrProto::EReplyStatus::OK) {
         auto request = std::make_unique<TEvBlobStorage::TEvCollectGarbage>(tabletId, Max<ui32>(), Max<ui32>(), ui32(0),
-                                                                     true, Max<ui32>(), Max<ui32>(), 
-                                                                     nullptr, nullptr, TInstant::Max(), 
-                                                                     true, true); 
+                                                                     true, Max<ui32>(), Max<ui32>(),
+                                                                     nullptr, nullptr, TInstant::Max(),
+                                                                     true, true);
         request->IsMonitored = isMonitored;
         SendToBsProxy(runtime, sender, groupId, request.release());
-        auto reply = runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvCollectGarbageResult>(sender); 
-        UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Status, expectAnsver); 
-    } 
- 
-    CUSTOM_UNIT_TEST(TestDeleteStoragePool) { 
-        TTestBasicRuntime runtime(1, false); 
+        auto reply = runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvCollectGarbageResult>(sender);
+        UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Status, expectAnsver);
+    }
+
+    CUSTOM_UNIT_TEST(TestDeleteStoragePool) {
+        TTestBasicRuntime runtime(1, false);
         Setup(runtime, "", nullptr);
- 
-        auto sender0 = runtime.AllocateEdgeActor(0); 
- 
+
+        auto sender0 = runtime.AllocateEdgeActor(0);
+
         CreateStoragePool(runtime, DOMAIN_ID, "test_storage", "pool-kind-1");
         ui32 groupId = GetGroupFromPool(runtime, DOMAIN_ID, "test_storage");
- 
-        ui64 tabletId = 1234; 
-        ui32 generation = 1; 
+
+        ui64 tabletId = 1234;
+        ui32 generation = 1;
         BlockGroup(runtime, sender0, tabletId, groupId, generation, true);
         BlockGroup(runtime, sender0, tabletId, groupId, generation, true, NKikimrProto::EReplyStatus::RACE);
         BlockGroup(runtime, sender0, tabletId, groupId, generation-1, true, NKikimrProto::EReplyStatus::RACE);
- 
+
         auto describePool = DescribeStoragePool(runtime, DOMAIN_ID, "test_storage");
-        { 
-            TBlockUpdates bloker(runtime); 
-            RemoveStoragePool(runtime, DOMAIN_ID, describePool); 
- 
-            ++generation; 
+        {
+            TBlockUpdates bloker(runtime);
+            RemoveStoragePool(runtime, DOMAIN_ID, describePool);
+
+            ++generation;
             BlockGroup(runtime, sender0, tabletId, groupId, generation++, true);
-        } 
- 
-        ++generation; 
+        }
+
+        ++generation;
         BlockGroup(runtime, sender0, tabletId, groupId, generation++, true);
- 
-        auto stateStorage = runtime.GetAppData().DomainsInfo->GetDefaultStateStorageGroup(DOMAIN_ID); 
+
+        auto stateStorage = runtime.GetAppData().DomainsInfo->GetDefaultStateStorageGroup(DOMAIN_ID);
         RebootTablet(runtime, MakeBSControllerID(stateStorage), sender0, sender0.NodeId() - runtime.GetNodeId(0));
- 
-        ++generation; 
+
+        ++generation;
         BlockGroup(runtime, sender0, tabletId, groupId, generation++, true, NKikimrProto::EReplyStatus::NO_GROUP);
-    } 
- 
+    }
+
     CUSTOM_UNIT_TEST(TestSendToInvalidGroupId) {
         TTestBasicRuntime runtime(1, false);
         Setup(runtime, "", nullptr);
@@ -500,32 +500,32 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
         CollectGroup(runtime, sender, tabletId, groupId, true, NKikimrProto::EReplyStatus::ERROR);
     }
 
-    CUSTOM_UNIT_TEST(TestBlockEncriptedGroup) { 
-        TTestBasicRuntime runtime(2, false); 
+    CUSTOM_UNIT_TEST(TestBlockEncriptedGroup) {
+        TTestBasicRuntime runtime(2, false);
         Setup(runtime, "", nullptr);
- 
-        auto sender0 = runtime.AllocateEdgeActor(0); 
-        auto sender1 = runtime.AllocateEdgeActor(1); 
- 
+
+        auto sender0 = runtime.AllocateEdgeActor(0);
+        auto sender1 = runtime.AllocateEdgeActor(1);
+
         CreateStoragePool(runtime, DOMAIN_ID, "test_storage", "pool-kind-1");
         ui32 groupId = GetGroupFromPool(runtime, DOMAIN_ID, "test_storage");
- 
-        ui64 tabletId = 1234; 
-        ui32 generation = 1; 
+
+        ui64 tabletId = 1234;
+        ui32 generation = 1;
         BlockGroup(runtime, sender0, tabletId, groupId, generation, true);
- 
-        Put(runtime, sender0, groupId, TLogoBlobID(tabletId, generation, 0, 0, 5, 0), "hello", NKikimrProto::EReplyStatus::BLOCKED); 
-        Put(runtime, sender0, groupId, TLogoBlobID(tabletId, generation+1, 0, 0, 5, 0), "hello"); 
- 
+
+        Put(runtime, sender0, groupId, TLogoBlobID(tabletId, generation, 0, 0, 5, 0), "hello", NKikimrProto::EReplyStatus::BLOCKED);
+        Put(runtime, sender0, groupId, TLogoBlobID(tabletId, generation+1, 0, 0, 5, 0), "hello");
+
         BlockGroup(runtime, sender1, tabletId, groupId, generation+2, true);
-        Put(runtime, sender1, groupId, TLogoBlobID(tabletId, generation+2, 0, 0, 10, 0), "hellohello", NKikimrProto::EReplyStatus::ERROR); 
-        Put(runtime, sender1, groupId, TLogoBlobID(tabletId, generation+3, 0, 0, 10, 0), "hellohello", NKikimrProto::EReplyStatus::ERROR); 
- 
-        Put(runtime, sender0, groupId, TLogoBlobID(tabletId, generation+1, 0, 0, 11, 0), "hello_again", NKikimrProto::EReplyStatus::BLOCKED); 
- 
+        Put(runtime, sender1, groupId, TLogoBlobID(tabletId, generation+2, 0, 0, 10, 0), "hellohello", NKikimrProto::EReplyStatus::ERROR);
+        Put(runtime, sender1, groupId, TLogoBlobID(tabletId, generation+3, 0, 0, 10, 0), "hellohello", NKikimrProto::EReplyStatus::ERROR);
+
+        Put(runtime, sender0, groupId, TLogoBlobID(tabletId, generation+1, 0, 0, 11, 0), "hello_again", NKikimrProto::EReplyStatus::BLOCKED);
+
         CollectGroup(runtime, sender1, tabletId, groupId, true);
-    } 
- 
+    }
+
     void AssertMonitoringExists(TTestBasicRuntime& runtime, ui32 nodeIdx, TString groupName) {
         auto rootStats = runtime.GetDynamicCounters(nodeIdx);
         auto stats = GetServiceCounters(rootStats, "dsproxy_percentile")->GetSubgroup("blobstorageproxy", groupName);
@@ -569,7 +569,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
     CUSTOM_UNIT_TEST(TestLimitedKeylessGroupThenNoMonitoring) {
         TTestBasicRuntime runtime(2, false);
         Setup(runtime, "", nullptr);
- 
+
         auto sender0 = runtime.AllocateEdgeActor(0);
         auto sender1 = runtime.AllocateEdgeActor(1);
 

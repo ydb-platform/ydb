@@ -29,7 +29,7 @@ void TConsole::OnActivateExecutor(const TActorContext &ctx)
     ctx.RegisterWithSameMailbox(ConfigsManager);
 
     TenantsManager = new TTenantsManager(*this, domains->Domains.at(domainId),
-                                         Counters, 
+                                         Counters,
                                          AppData()->FeatureFlags);
     ctx.RegisterWithSameMailbox(TenantsManager);
 

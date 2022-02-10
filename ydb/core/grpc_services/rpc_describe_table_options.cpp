@@ -11,7 +11,7 @@
 namespace NKikimr {
 namespace NGRpcService {
 
-using namespace NSchemeShard; 
+using namespace NSchemeShard;
 using namespace NActors;
 using namespace NConsole;
 using namespace Ydb;
@@ -50,7 +50,7 @@ private:
 
     void Handle(TEvents::TEvUndelivered::TPtr &/*ev*/, const TActorContext &ctx)
     {
-        LOG_CRIT_S(ctx, NKikimrServices::GRPC_PROXY, 
+        LOG_CRIT_S(ctx, NKikimrServices::GRPC_PROXY,
                    "TDescribeTableOptionsRPC: cannot deliver config request to Configs Dispatcher");
          NYql::TIssues issues;
          issues.AddIssue(NYql::TIssue("Cannot get table profiles (service unavailable)"));
@@ -103,7 +103,7 @@ private:
             for (size_t i = 0; i < pr.second.ColumnFamiliesSize(); ++i) {
                 auto &family = pr.second.GetColumnFamilies(i);
                 if (family.GetId() == 0) {
-                    if (family.GetColumnCache() == NKikimrSchemeOp::ColumnCacheEver) 
+                    if (family.GetColumnCache() == NKikimrSchemeOp::ColumnCacheEver)
                         labels["in_memory"] = "true";
                     else
                         labels["in_memory"] = "false";
@@ -119,7 +119,7 @@ private:
                         labels["medium_threshold"] = ToString(family.GetStorageConfig().GetDataThreshold());
                     if (family.GetStorageConfig().GetExternalThreshold())
                         labels["external_threshold"] = ToString(family.GetStorageConfig().GetExternalThreshold());
-                    if (family.GetColumnCodec() == NKikimrSchemeOp::ColumnCodecLZ4) 
+                    if (family.GetColumnCodec() == NKikimrSchemeOp::ColumnCodecLZ4)
                         labels["codec"] = "lz4";
                     else
                         labels["codec"] = "none";
@@ -179,7 +179,7 @@ private:
     void HandleWakeup(TEvents::TEvWakeup::TPtr &ev, const TActorContext &ctx) {
         switch (ev->Get()->Tag) {
             case WakeupTagGetConfig: {
-                LOG_CRIT_S(ctx, NKikimrServices::GRPC_PROXY, 
+                LOG_CRIT_S(ctx, NKikimrServices::GRPC_PROXY,
                    "TDescribeTableOptionsRPC: cannot get table profiles (timeout)");
                 NYql::TIssues issues;
                 issues.AddIssue(NYql::TIssue("Tables profiles config not available."));

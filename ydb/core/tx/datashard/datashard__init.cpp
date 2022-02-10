@@ -70,7 +70,7 @@ void TDataShard::TTxInit::Complete(const TActorContext &ctx) {
     }
 
     Self->SwitchToWork(ctx);
-    Self->SendRegistrationRequestTimeCast(ctx); 
+    Self->SendRegistrationRequestTimeCast(ctx);
 
     // InReadSets table might have a lot of garbage due to old bug.
     // Run transaction to collect if shard is not going offline.
@@ -178,12 +178,12 @@ bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
     LOAD_SYS_UI64(db, Schema::Sys_NextChangeRecordOrder, Self->NextChangeRecordOrder);
     LOAD_SYS_UI64(db, Schema::Sys_LastChangeRecordGroup, Self->LastChangeRecordGroup);
     LOAD_SYS_UI64(db, Schema::Sys_TxReadSizeLimit, Self->TxReadSizeLimit);
-    LOAD_SYS_UI64(db, Schema::Sys_PathOwnerId, Self->PathOwnerId); 
-    LOAD_SYS_UI64(db, Schema::Sys_CurrentSchemeShardId, Self->CurrentSchemeShardId); 
+    LOAD_SYS_UI64(db, Schema::Sys_PathOwnerId, Self->PathOwnerId);
+    LOAD_SYS_UI64(db, Schema::Sys_CurrentSchemeShardId, Self->CurrentSchemeShardId);
     LOAD_SYS_UI64(db, Schema::Sys_LastSchemeShardGeneration, Self->LastSchemeOpSeqNo.Generation);
     LOAD_SYS_UI64(db, Schema::Sys_LastSchemeShardRound, Self->LastSchemeOpSeqNo.Round);
     LOAD_SYS_UI64(db, Schema::Sys_StatisticsDisabled, Self->StatisticsDisabled);
- 
+
     ui64 subDomainOwnerId = 0;
     ui64 subDomainLocalPathId = 0;
     LOAD_SYS_UI64(db, Schema::Sys_SubDomainOwnerId, subDomainOwnerId);
@@ -196,15 +196,15 @@ bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
     }
     LOAD_SYS_BOOL(db, Schema::Sys_SubDomainOutOfSpace, Self->SubDomainOutOfSpace);
 
-    { 
-        TString rawProcessingParams; 
-        LOAD_SYS_BYTES(db, Schema::Sys_SubDomainInfo, rawProcessingParams); 
+    {
+        TString rawProcessingParams;
+        LOAD_SYS_BYTES(db, Schema::Sys_SubDomainInfo, rawProcessingParams);
         if (!rawProcessingParams.empty()) {
             Self->ProcessingParams.reset(new NKikimrSubDomains::TProcessingParams());
-            Y_VERIFY(Self->ProcessingParams->ParseFromString(rawProcessingParams)); 
-        } 
-    } 
- 
+            Y_VERIFY(Self->ProcessingParams->ParseFromString(rawProcessingParams));
+        }
+    }
+
     if (!Self->Pipeline.Load(db))
         return false;
 
@@ -218,7 +218,7 @@ bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
             ui32 localTid = rowset.GetValue<Schema::UserTables::LocalTid>();
             ui32 shadowTid = rowset.GetValueOrDefault<Schema::UserTables::ShadowTid>();
             TString schema = rowset.GetValue<Schema::UserTables::Schema>();
-            NKikimrSchemeOp::TTableDescription descr; 
+            NKikimrSchemeOp::TTableDescription descr;
             bool parseOk = ParseFromStringNoSizeLimit(descr, schema);
             Y_VERIFY(parseOk);
             Self->AddUserTable(TPathId(Self->GetPathOwnerId(), tableId), new TUserTable(localTid, descr, shadowTid));
@@ -399,7 +399,7 @@ bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
     }
 
     if (Self->State != TShardState::Offline && txc.DB.GetScheme().GetTableInfo(Schema::ChangeRecords::TableId)) {
-        if (!Self->LoadChangeRecords(db, ChangeRecords)) { 
+        if (!Self->LoadChangeRecords(db, ChangeRecords)) {
             return false;
         }
     }
@@ -532,38 +532,38 @@ public:
             Self->MvccSwitchState = TSwitchState::DONE;
         }
 
-        //remove this code after all datashards upgrade Sys_SubDomainInfo row in Sys 
+        //remove this code after all datashards upgrade Sys_SubDomainInfo row in Sys
         if (Self->State == TShardState::Ready ||
             Self->State == TShardState::SplitSrcWaitForNoTxInFlight) {
-            TString rawProcessingParams; 
-            LOAD_SYS_BYTES(db, Schema::Sys_SubDomainInfo, rawProcessingParams) 
- 
+            TString rawProcessingParams;
+            LOAD_SYS_BYTES(db, Schema::Sys_SubDomainInfo, rawProcessingParams)
+
             if (rawProcessingParams.empty()) {
-                auto appdata = AppData(ctx); 
-                const ui32 selfDomain = appdata->DomainsInfo->GetDomainUidByTabletId(Self->TabletID()); 
-                Y_VERIFY(selfDomain != appdata->DomainsInfo->BadDomainId); 
-                const auto& domain = appdata->DomainsInfo->GetDomain(selfDomain); 
- 
-                NKikimrSubDomains::TProcessingParams params = ExtractProcessingParams(domain); 
-                LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD, "TxInitSchema.Execute Persist Sys_SubDomainInfo"); 
-                Self->PersistSys(db, Schema::Sys_SubDomainInfo, params.SerializeAsString()); 
-            } 
-        } 
- 
-        if (!isCreate) { 
-            ui64 currentSchemeShardId = INVALID_TABLET_ID; 
-            LOAD_SYS_UI64(db, Schema::Sys_CurrentSchemeShardId, currentSchemeShardId) 
- 
-            ui64 pathOwnerId = INVALID_TABLET_ID; 
-            LOAD_SYS_UI64(db, Schema::Sys_PathOwnerId, pathOwnerId) 
- 
-            if (pathOwnerId == INVALID_TABLET_ID && currentSchemeShardId != INVALID_TABLET_ID) { 
-                pathOwnerId = currentSchemeShardId; 
-                LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD, "TxInitSchema.Execute Persist Sys_PathOwnerId"); 
+                auto appdata = AppData(ctx);
+                const ui32 selfDomain = appdata->DomainsInfo->GetDomainUidByTabletId(Self->TabletID());
+                Y_VERIFY(selfDomain != appdata->DomainsInfo->BadDomainId);
+                const auto& domain = appdata->DomainsInfo->GetDomain(selfDomain);
+
+                NKikimrSubDomains::TProcessingParams params = ExtractProcessingParams(domain);
+                LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD, "TxInitSchema.Execute Persist Sys_SubDomainInfo");
+                Self->PersistSys(db, Schema::Sys_SubDomainInfo, params.SerializeAsString());
+            }
+        }
+
+        if (!isCreate) {
+            ui64 currentSchemeShardId = INVALID_TABLET_ID;
+            LOAD_SYS_UI64(db, Schema::Sys_CurrentSchemeShardId, currentSchemeShardId)
+
+            ui64 pathOwnerId = INVALID_TABLET_ID;
+            LOAD_SYS_UI64(db, Schema::Sys_PathOwnerId, pathOwnerId)
+
+            if (pathOwnerId == INVALID_TABLET_ID && currentSchemeShardId != INVALID_TABLET_ID) {
+                pathOwnerId = currentSchemeShardId;
+                LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD, "TxInitSchema.Execute Persist Sys_PathOwnerId");
                 Self->PersistSys(db, TDataShard::Schema::Sys_PathOwnerId, pathOwnerId);
-            } 
-        } 
- 
+            }
+        }
+
         return true;
     }
 
@@ -660,7 +660,7 @@ bool TDataShard::SyncSchemeOnFollower(TTransactionContext &txc, const TActorCont
                     ui32 localTid = rowset.GetValue<Schema::UserTables::LocalTid>();
                     ui32 shadowTid = rowset.GetValueOrDefault<Schema::UserTables::ShadowTid>();
                     TString schema = rowset.GetValue<Schema::UserTables::Schema>();
-                    NKikimrSchemeOp::TTableDescription descr; 
+                    NKikimrSchemeOp::TTableDescription descr;
                     bool parseOk = ParseFromStringNoSizeLimit(descr, schema);
                     Y_VERIFY(parseOk);
                     AddUserTable(TPathId(GetPathOwnerId(), tableId), new TUserTable(localTid, descr, shadowTid));
@@ -680,7 +680,7 @@ bool TDataShard::SyncSchemeOnFollower(TTransactionContext &txc, const TActorCont
                     ui32 localTid = rowset.GetValue<Schema::UserTables::LocalTid>();
                     ui32 shadowTid = 0;
                     TString schema = rowset.GetValue<Schema::UserTables::Schema>();
-                    NKikimrSchemeOp::TTableDescription descr; 
+                    NKikimrSchemeOp::TTableDescription descr;
                     bool parseOk = ParseFromStringNoSizeLimit(descr, schema);
                     Y_VERIFY(parseOk);
                     AddUserTable(TPathId(GetPathOwnerId(), tableId), new TUserTable(localTid, descr, shadowTid));

@@ -23,7 +23,7 @@ class TJsonTabletCounters : public TActorBootstrapped<TJsonTabletCounters> {
     TVector<TActorId> PipeClients;
     TVector<ui64> Tablets;
     TMap<TTabletId, THolder<TEvTablet::TEvGetCountersResponse>> Results;
-    THolder<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult> DescribeResult; 
+    THolder<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult> DescribeResult;
     TJsonSettings JsonSettings;
     ui32 Timeout = 0;
     bool Aggregate = false;
@@ -62,13 +62,13 @@ public:
             if (!Event->Get()->UserToken.empty()) {
                 request->Record.SetUserToken(Event->Get()->UserToken);
             }
-            NKikimrSchemeOp::TDescribePath* record = request->Record.MutableDescribePath(); 
+            NKikimrSchemeOp::TDescribePath* record = request->Record.MutableDescribePath();
             record->SetPath(params.Get("path"));
- 
+
             TActorId txproxy = MakeTxProxyID();
-            ctx.Send(txproxy, request.Release()); 
+            ctx.Send(txproxy, request.Release());
             Become(&TThis::StateRequestedDescribe, ctx, TDuration::MilliSeconds(Timeout), new TEvents::TEvWakeup());
-        } else if (params.Has("tablet_id")) { 
+        } else if (params.Has("tablet_id")) {
             TTabletId tabletId = FromStringWithDefault<TTabletId>(params.Get("tablet_id"), 0);
             if (tabletId != 0) {
                 Tablets.emplace_back(tabletId);
@@ -77,10 +77,10 @@ public:
                 PipeClients.emplace_back(PipeClient);
                 Become(&TThis::StateRequestedGetCounters, ctx, TDuration::MilliSeconds(Timeout), new TEvents::TEvWakeup());
             }
- 
-            if (PipeClients.empty()) { 
-                ReplyAndDie(ctx); 
-            } 
+
+            if (PipeClients.empty()) {
+                ReplyAndDie(ctx);
+            }
         }
     }
 
@@ -93,7 +93,7 @@ public:
 
     STFUNC(StateRequestedDescribe) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, Handle); 
+            HFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, Handle);
             CFunc(TEvents::TSystem::Wakeup, HandleTimeout);
         }
     }
@@ -105,9 +105,9 @@ public:
         }
     }
 
-    void Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr &ev, const TActorContext &ctx) { 
+    void Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr &ev, const TActorContext &ctx) {
         DescribeResult = ev->Release();
-        if (DescribeResult->GetRecord().GetStatus() == NKikimrScheme::EStatus::StatusSuccess) { 
+        if (DescribeResult->GetRecord().GetStatus() == NKikimrScheme::EStatus::StatusSuccess) {
             Tablets.reserve(DescribeResult->GetRecord().GetPathDescription().TablePartitionsSize());
             for (const auto& partition : DescribeResult->GetRecord().GetPathDescription().GetTablePartitions()) {
                 Tablets.emplace_back(partition.GetDatashardId());

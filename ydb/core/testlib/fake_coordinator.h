@@ -10,12 +10,12 @@ namespace NKikimr {
     class TFakeCoordinator : public TActor<TFakeCoordinator>, public NTabletFlatExecutor::TTabletExecutedFlat {
     public:
         struct TState : TThrRefBase {
-            ui64 CurrentStep = 5000000; 
-            ui64 FrontStep = 0; 
+            ui64 CurrentStep = 5000000;
+            ui64 FrontStep = 0;
             TMap<std::pair<ui64, ui64>, TVector<TAutoPtr<TEvTxProcessing::TEvPlanStep>>> QueuedPlans; // shard+step->event
             TMap<ui64, TSet<ui64>> TxIds; // txid -> list of shards
 
-            TState() = default; 
+            TState() = default;
 
             typedef TIntrusivePtr<TState> TPtr;
         };
@@ -95,7 +95,7 @@ namespace NKikimr {
             }
 
             State->TxIds.insert(std::make_pair(tx.GetTxId(), shards));
-            Cerr << "FAKE_COORDINATOR: Add transaction: " << tx.GetTxId() << " at step: " << State->CurrentStep << "\n"; 
+            Cerr << "FAKE_COORDINATOR: Add transaction: " << tx.GetTxId() << " at step: " << State->CurrentStep << "\n";
             for (ui64 shard : shards) {
                 auto evPlan = new TEvTxProcessing::TEvPlanStep(State->CurrentStep, 0, shard);
                 auto planTx = evPlan->Record.AddTransactions();
@@ -105,40 +105,40 @@ namespace NKikimr {
                 State->QueuedPlans[std::make_pair(shard, State->CurrentStep)].push_back(evPlan);
             }
 
-            AdvancePlan(ctx); 
+            AdvancePlan(ctx);
         }
 
         void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TActorContext& ctx) {
             if (!Pipes->OnConnect(ev)) {
                 if (ev->Get()->Dead) {
                     AckPlanStepsForDeadTablet(ev->Get()->TabletId);
-                    AdvancePlan(ctx); 
-                } else { 
-                    SendQueued(ctx, ev->Get()->TabletId); 
+                    AdvancePlan(ctx);
+                } else {
+                    SendQueued(ctx, ev->Get()->TabletId);
                 }
- 
+
             }
         }
 
         void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const TActorContext& ctx) {
             Pipes->OnDisconnect(ev);
-            SendQueued(ctx, ev->Get()->TabletId); 
+            SendQueued(ctx, ev->Get()->TabletId);
         }
 
         void Handle(TEvTxProcessing::TEvPlanStepAccepted::TPtr& ev, const TActorContext& ctx) {
             auto stepIt = State->QueuedPlans.find(std::make_pair(ev->Get()->Record.GetTabletId(), ev->Get()->Record.GetStep()));
-            if (stepIt == State->QueuedPlans.end()) { 
-                return; 
-            } 
- 
-            for (auto& tabletData : stepIt->second) { 
-                for (auto& tx : tabletData->Record.GetTransactions()) { 
-                    UnlinkTx(ev->Get()->Record.GetTabletId(), tx.GetTxId()); 
-                }
-            } 
-            State->QueuedPlans.erase(stepIt); 
+            if (stepIt == State->QueuedPlans.end()) {
+                return;
+            }
 
-            AdvancePlan(ctx); 
+            for (auto& tabletData : stepIt->second) {
+                for (auto& tx : tabletData->Record.GetTransactions()) {
+                    UnlinkTx(ev->Get()->Record.GetTabletId(), tx.GetTxId());
+                }
+            }
+            State->QueuedPlans.erase(stepIt);
+
+            AdvancePlan(ctx);
         }
 
         void UnlinkTx(ui64 tabletId, ui64 txId) {
@@ -146,7 +146,7 @@ namespace NKikimr {
             if (txIt != State->TxIds.end()) {
                 txIt->second.erase(tabletId);
                 if (txIt->second.empty()) {
-                    Cerr << "FAKE_COORDINATOR: Erasing txId " << txId << Endl; 
+                    Cerr << "FAKE_COORDINATOR: Erasing txId " << txId << Endl;
                     State->TxIds.erase(txIt);
                 }
             }
@@ -155,7 +155,7 @@ namespace NKikimr {
         void AckPlanStepsForDeadTablet(ui64 tabletId) {
             auto pit = State->QueuedPlans.lower_bound(std::make_pair(tabletId, 0));
             while (pit != State->QueuedPlans.end() && pit->first.first == tabletId) {
-                Cerr << "FAKE_COORDINATOR: forgetting step " << pit->first.second << " for dead tablet " << pit->first.first << Endl; 
+                Cerr << "FAKE_COORDINATOR: forgetting step " << pit->first.second << " for dead tablet " << pit->first.first << Endl;
                 auto toErase = pit;
                 ++pit;
                 for (const auto& evPlan : toErase->second) {
@@ -168,51 +168,51 @@ namespace NKikimr {
             }
         }
 
-        ui64 GetMinStep() const { 
+        ui64 GetMinStep() const {
             ui64 minStep = Max<ui64>();
             for (auto& kv : State->QueuedPlans) {
                 const ui64 step = kv.first.second;
                 minStep = Min(minStep, step);
             }
-            return minStep; 
-        } 
+            return minStep;
+        }
 
-        void AdvancePlan(const TActorContext& ctx, ui64 onlyForTabletId = 0) { 
-            ui64 minStep = GetMinStep(); 
- 
-            if (minStep == Max<ui64>()) { 
-                return; 
-            } 
- 
-            Cerr << "FAKE_COORDINATOR: advance: minStep" << minStep << " State->FrontStep: " << State->FrontStep << "\n"; 
- 
-            if (State->FrontStep >= minStep) { 
-                return; 
-            } 
- 
-            State->FrontStep = minStep; 
- 
-            SendQueued(ctx, onlyForTabletId); 
-        } 
- 
-        void SendQueued(const TActorContext& ctx, ui64 onlyForTabletId = 0) { 
- 
+        void AdvancePlan(const TActorContext& ctx, ui64 onlyForTabletId = 0) {
+            ui64 minStep = GetMinStep();
+
+            if (minStep == Max<ui64>()) {
+                return;
+            }
+
+            Cerr << "FAKE_COORDINATOR: advance: minStep" << minStep << " State->FrontStep: " << State->FrontStep << "\n";
+
+            if (State->FrontStep >= minStep) {
+                return;
+            }
+
+            State->FrontStep = minStep;
+
+            SendQueued(ctx, onlyForTabletId);
+        }
+
+        void SendQueued(const TActorContext& ctx, ui64 onlyForTabletId = 0) {
+
             for (auto& kv : State->QueuedPlans) {
-                ui64 tabletId = kv.first.first; 
-                if (onlyForTabletId && onlyForTabletId != tabletId) { 
-                    continue; 
-                } 
-                const ui64 step = kv.first.second;
-                if (step != State->FrontStep) { 
+                ui64 tabletId = kv.first.first;
+                if (onlyForTabletId && onlyForTabletId != tabletId) {
                     continue;
-                } 
+                }
+                const ui64 step = kv.first.second;
+                if (step != State->FrontStep) {
+                    continue;
+                }
 
                 for (auto& ev : kv.second) {
                     TAllocChunkSerializer serializer;
                     ev->SerializeToArcadiaStream(&serializer);
-                    Cerr << "FAKE_COORDINATOR:  Send Plan to tablet " << tabletId << " for txId: " << ev->Record.GetTransactions(0).GetTxId() << " at step: " << step << "\n"; 
- 
-                    Pipes->Send(ctx, tabletId, ev->EventType, serializer.Release(ev->IsExtendedFormat())); 
+                    Cerr << "FAKE_COORDINATOR:  Send Plan to tablet " << tabletId << " for txId: " << ev->Record.GetTransactions(0).GetTxId() << " at step: " << step << "\n";
+
+                    Pipes->Send(ctx, tabletId, ev->EventType, serializer.Release(ev->IsExtendedFormat()));
                 }
             }
         }

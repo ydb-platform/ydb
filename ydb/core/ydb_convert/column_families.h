@@ -11,11 +11,11 @@ namespace NKikimr {
 
     class TColumnFamilyManager {
     public:
-        TColumnFamilyManager(NKikimrSchemeOp::TPartitionConfig* partitionConfig) 
+        TColumnFamilyManager(NKikimrSchemeOp::TPartitionConfig* partitionConfig)
             : PartitionConfig(partitionConfig)
         { }
 
-        const NKikimrSchemeOp::TFamilyDescription* FindDefaultFamily() const { 
+        const NKikimrSchemeOp::TFamilyDescription* FindDefaultFamily() const {
             if (DefaultFamilyIndex != size_t(-1)) {
                 return &PartitionConfig->GetColumnFamilies(DefaultFamilyIndex);
             }
@@ -30,7 +30,7 @@ namespace NKikimr {
             return nullptr;
         }
 
-        NKikimrSchemeOp::TFamilyDescription* MutableDefaultFamily() { 
+        NKikimrSchemeOp::TFamilyDescription* MutableDefaultFamily() {
             Modified = true;
 
             if (DefaultFamilyIndex != size_t(-1)) {
@@ -51,7 +51,7 @@ namespace NKikimr {
             return family;
         }
 
-        NKikimrSchemeOp::TFamilyDescription* MutableNamedFamily(const TString& name) { 
+        NKikimrSchemeOp::TFamilyDescription* MutableNamedFamily(const TString& name) {
             Modified = true;
 
             if (name == "default") {
@@ -158,10 +158,10 @@ namespace NKikimr {
                 case Ydb::Table::ColumnFamily::COMPRESSION_UNSPECIFIED:
                     break;
                 case Ydb::Table::ColumnFamily::COMPRESSION_NONE:
-                    family->SetColumnCodec(NKikimrSchemeOp::ColumnCodecPlain); 
+                    family->SetColumnCodec(NKikimrSchemeOp::ColumnCodecPlain);
                     break;
                 case Ydb::Table::ColumnFamily::COMPRESSION_LZ4:
-                    family->SetColumnCodec(NKikimrSchemeOp::ColumnCodecLZ4); 
+                    family->SetColumnCodec(NKikimrSchemeOp::ColumnCodecLZ4);
                     break;
                 default:
                     *code = Ydb::StatusIds::BAD_REQUEST;
@@ -227,7 +227,7 @@ namespace NKikimr {
         }
 
     public:
-        static bool IsDefaultFamily(const NKikimrSchemeOp::TFamilyDescription& family) { 
+        static bool IsDefaultFamily(const NKikimrSchemeOp::TFamilyDescription& family) {
             if (family.HasId() && family.GetId() == 0) {
                 return true; // explicit id 0
             }
@@ -238,7 +238,7 @@ namespace NKikimr {
         }
 
     public:
-        NKikimrSchemeOp::TPartitionConfig* const PartitionConfig; 
+        NKikimrSchemeOp::TPartitionConfig* const PartitionConfig;
         bool Modified = false;
 
     private:

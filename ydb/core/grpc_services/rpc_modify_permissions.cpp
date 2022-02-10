@@ -48,8 +48,8 @@ private:
 
         std::unique_ptr<TEvTxUserProxy::TEvProposeTransaction> proposeRequest = CreateProposeTransaction();
         NKikimrTxUserProxy::TEvProposeTransaction& record = proposeRequest->Record;
-        NKikimrSchemeOp::TModifyScheme* modifyScheme = record.MutableTransaction()->MutableModifyScheme(); 
-        modifyScheme->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpModifyACL); 
+        NKikimrSchemeOp::TModifyScheme* modifyScheme = record.MutableTransaction()->MutableModifyScheme();
+        modifyScheme->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpModifyACL);
         modifyScheme->SetWorkingDir(workingDir);
         modifyScheme->MutableModifyACL()->SetName(name);
 
@@ -62,22 +62,22 @@ private:
                 case Ydb::Scheme::PermissionsAction::kSet: {
                     acl.ClearAccessForSid(perm.set().subject());
                     for (const auto& n : perm.set().permission_names()) {
-                        auto aclAttrs = ConvertYdbPermissionNameToACLAttrs(n); 
-                        acl.AddAccess(NACLib::EAccessType::Allow, aclAttrs.AccessMask, perm.set().subject(), aclAttrs.InheritanceType); 
+                        auto aclAttrs = ConvertYdbPermissionNameToACLAttrs(n);
+                        acl.AddAccess(NACLib::EAccessType::Allow, aclAttrs.AccessMask, perm.set().subject(), aclAttrs.InheritanceType);
                     }
                 }
                 break;
                 case Ydb::Scheme::PermissionsAction::kGrant: {
                     for (const auto& n : perm.grant().permission_names()) {
-                        auto aclAttrs = ConvertYdbPermissionNameToACLAttrs(n); 
-                        acl.AddAccess(NACLib::EAccessType::Allow, aclAttrs.AccessMask, perm.grant().subject(), aclAttrs.InheritanceType); 
+                        auto aclAttrs = ConvertYdbPermissionNameToACLAttrs(n);
+                        acl.AddAccess(NACLib::EAccessType::Allow, aclAttrs.AccessMask, perm.grant().subject(), aclAttrs.InheritanceType);
                     }
                 }
                 break;
                 case Ydb::Scheme::PermissionsAction::kRevoke: {
                     for (const auto& n : perm.revoke().permission_names()) {
-                        auto aclAttrs = ConvertYdbPermissionNameToACLAttrs(n); 
-                        acl.RemoveAccess(NACLib::EAccessType::Allow, aclAttrs.AccessMask, perm.revoke().subject(), aclAttrs.InheritanceType); 
+                        auto aclAttrs = ConvertYdbPermissionNameToACLAttrs(n);
+                        acl.RemoveAccess(NACLib::EAccessType::Allow, aclAttrs.AccessMask, perm.revoke().subject(), aclAttrs.InheritanceType);
                     }
                 }
                 break;

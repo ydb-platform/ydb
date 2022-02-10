@@ -256,7 +256,7 @@ TTabletMonitoringProxyActor::Handle(NMon::TEvHttpInfo::TPtr &ev, const TActorCon
                 TABLEBODY() {
                     if (const ui64 schemeRootTabletId = di.second->SchemeRoot) {
                         TABLER() {
-                            TABLED() {str << "<a href=\"tablets?TabletID=" << schemeRootTabletId << "\">SCHEMESHARD</a>";} 
+                            TABLED() {str << "<a href=\"tablets?TabletID=" << schemeRootTabletId << "\">SCHEMESHARD</a>";}
                             TABLED() {str << schemeRootTabletId;}
                             TABLED() {str << " <a href=\"tablets?SsId="
                                         << schemeRootTabletId << "\">"
@@ -336,7 +336,7 @@ TTabletMonitoringProxyActor::Handle(NMon::TEvHttpInfo::TPtr &ev, const TActorCon
                             TABLED() {str << "<a href='tablets?KillTabletID=" << tabletId << "'><span class='glyphicon glyphicon-remove' title='Kill Tablet'/></a>";}
                         }
                     }
-                    for (auto tabletId : di.second->Coordinators) { 
+                    for (auto tabletId : di.second->Coordinators) {
                         TABLER() {
                             TABLED() {str << "<a href=\"tablets?TabletID=" << tabletId << "\">TX_COORDINATOR</a>";}
                             TABLED() {str << tabletId;}
@@ -348,7 +348,7 @@ TTabletMonitoringProxyActor::Handle(NMon::TEvHttpInfo::TPtr &ev, const TActorCon
                             TABLED() {str << "<a href='tablets?KillTabletID=" << tabletId << "'><span class='glyphicon glyphicon-remove' title='Kill Tablet'/></a>";}
                         }
                     }
-                    for (auto tabletId : di.second->Mediators) { 
+                    for (auto tabletId : di.second->Mediators) {
                         TABLER() {
                             TABLED() {str << "<a href=\"tablets?TabletID=" << tabletId << "\">TX_MEDIATOR</a>";}
                             TABLED() {str << tabletId;}
@@ -360,9 +360,9 @@ TTabletMonitoringProxyActor::Handle(NMon::TEvHttpInfo::TPtr &ev, const TActorCon
                             TABLED() {str << "<a href='tablets?KillTabletID=" << tabletId << "'><span class='glyphicon glyphicon-remove' title='Kill Tablet'/></a>";}
                         }
                     }
-                    for (auto tabletId : di.second->TxAllocators) { 
+                    for (auto tabletId : di.second->TxAllocators) {
                         TABLER() {
-                            TABLED() {str << "<a href=\"tablets?TabletID=" << tabletId << "\">TX_ALLOCATOR</a>";} 
+                            TABLED() {str << "<a href=\"tablets?TabletID=" << tabletId << "\">TX_ALLOCATOR</a>";}
                             TABLED() {str << tabletId;}
                             TABLED() {str << " <a href=\"tablets?SsId="
                                         << tabletId << "\">"

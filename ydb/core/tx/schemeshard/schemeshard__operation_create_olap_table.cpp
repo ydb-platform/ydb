@@ -9,15 +9,15 @@
 #include <util/random/shuffle.h>
 
 namespace NKikimr {
-namespace NSchemeShard { 
+namespace NSchemeShard {
 
 namespace {
 
 TOlapTableInfo::TPtr CreateOlapTable(
         const NKikimrSchemeOp::TColumnTableDescription& opSrc,
         TOlapStoreInfo::TPtr storeInfo, const TSubDomainInfo& subDomain,
-        TEvSchemeShard::EStatus& status, TString& errStr, 
-        TSchemeShard* ss) 
+        TEvSchemeShard::EStatus& status, TString& errStr,
+        TSchemeShard* ss)
 {
     Y_UNUSED(subDomain);
 
@@ -28,7 +28,7 @@ TOlapTableInfo::TPtr CreateOlapTable(
     auto& op = tableInfo->Description;
 
     if (op.HasRESERVED_TtlSettingsPresetName() || op.HasRESERVED_TtlSettingsPresetId()) {
-        status = NKikimrScheme::StatusSchemeError; 
+        status = NKikimrScheme::StatusSchemeError;
         errStr = "TTL presets are not supported";
         return nullptr;
     }
@@ -42,7 +42,7 @@ TOlapTableInfo::TPtr CreateOlapTable(
     if (op.HasSchemaPresetName()) {
         const TString presetName = op.GetSchemaPresetName();
         if (!storeInfo->SchemaPresetByName.contains(presetName)) {
-            status = NKikimrScheme::StatusSchemeError; 
+            status = NKikimrScheme::StatusSchemeError;
             errStr = Sprintf("Specified schema preset '%s' does not exist in olap store", presetName.c_str());
             return nullptr;
         }
@@ -51,7 +51,7 @@ TOlapTableInfo::TPtr CreateOlapTable(
             op.SetSchemaPresetId(presetId);
         }
         if (op.GetSchemaPresetId() != presetId) {
-            status = NKikimrScheme::StatusSchemeError; 
+            status = NKikimrScheme::StatusSchemeError;
             errStr = Sprintf("Specified schema preset '%s' and id %" PRIu32 " do not match in olap store", presetName.c_str(), presetId);
             return nullptr;
         }
@@ -59,7 +59,7 @@ TOlapTableInfo::TPtr CreateOlapTable(
     } else if (op.HasSchemaPresetId()) {
         const ui32 presetId = op.GetSchemaPresetId();
         if (!storeInfo->SchemaPresets.contains(presetId)) {
-            status = NKikimrScheme::StatusSchemeError; 
+            status = NKikimrScheme::StatusSchemeError;
             errStr = Sprintf("Specified schema preset %" PRIu32 " does not exist in olap store", presetId);
             return nullptr;
         }
@@ -79,44 +79,44 @@ TOlapTableInfo::TPtr CreateOlapTable(
         THashSet<ui32> usedColumns;
         for (const auto& colProto : opSchema.GetColumns()) {
             if (colProto.GetName().empty()) {
-                status = NKikimrScheme::StatusSchemeError; 
+                status = NKikimrScheme::StatusSchemeError;
                 errStr = "Columns cannot have an empty name";
                 return nullptr;
             }
             const TString& colName = colProto.GetName();
             auto* col = pSchema->FindColumnByName(colName);
             if (!col) {
-                status = NKikimrScheme::StatusSchemeError; 
+                status = NKikimrScheme::StatusSchemeError;
                 errStr = TStringBuilder()
                     << "Column '" << colName << "' does not match schema preset";
                 return nullptr;
             }
             if (colProto.HasId() && colProto.GetId() != col->Id) {
-                status = NKikimrScheme::StatusSchemeError; 
+                status = NKikimrScheme::StatusSchemeError;
                 errStr = TStringBuilder()
                     << "Column '" << colName << "' has id " << colProto.GetId() << " that does not match schema preset";
                 return nullptr;
             }
 
             if (!usedColumns.insert(col->Id).second) {
-                status = NKikimrScheme::StatusSchemeError; 
+                status = NKikimrScheme::StatusSchemeError;
                 errStr = TStringBuilder() << "Column '" << colName << "' is specified multiple times";
                 return nullptr;
             }
             if (col->Id < lastColumnId) {
-                status = NKikimrScheme::StatusSchemeError; 
+                status = NKikimrScheme::StatusSchemeError;
                 errStr = "Column order does not match schema preset";
                 return nullptr;
             }
             lastColumnId = col->Id;
 
             if (colProto.HasTypeId()) {
-                status = NKikimrScheme::StatusSchemeError; 
+                status = NKikimrScheme::StatusSchemeError;
                 errStr = TStringBuilder() << "Cannot set TypeId for column '" << colName << "', use Type";
                 return nullptr;
             }
             if (!colProto.HasType()) {
-                status = NKikimrScheme::StatusSchemeError; 
+                status = NKikimrScheme::StatusSchemeError;
                 errStr = TStringBuilder() << "Missing Type for column '" << colName << "'";
                 return nullptr;
             }
@@ -124,14 +124,14 @@ TOlapTableInfo::TPtr CreateOlapTable(
             auto typeName = NMiniKQL::AdaptLegacyYqlType(colProto.GetType());
             const NScheme::IType* type = typeRegistry->GetType(typeName);
             if (!type || !NScheme::NTypeIds::IsYqlType(type->GetTypeId())) {
-                status = NKikimrScheme::StatusSchemeError; 
+                status = NKikimrScheme::StatusSchemeError;
                 errStr = TStringBuilder()
                     << "Type '" << colProto.GetType() << "' specified for column '" << colName << "' is not supported";
                 return nullptr;
             }
 
             if (type->GetTypeId() != col->TypeId) {
-                status = NKikimrScheme::StatusSchemeError; 
+                status = NKikimrScheme::StatusSchemeError;
                 errStr = TStringBuilder()
                     << "Type '" << colProto.GetType() << "' specified for column '" << colName
                     << "' does not match schema preset";
@@ -141,7 +141,7 @@ TOlapTableInfo::TPtr CreateOlapTable(
 
         for (auto& pr : pSchema->Columns) {
             if (!usedColumns.contains(pr.second.Id)) {
-                status = NKikimrScheme::StatusSchemeError; 
+                status = NKikimrScheme::StatusSchemeError;
                 errStr = "Specified schema is missing some schema preset columns";
                 return nullptr;
             }
@@ -151,20 +151,20 @@ TOlapTableInfo::TPtr CreateOlapTable(
         for (const TString& keyName : opSchema.GetKeyColumnNames()) {
             auto* col = pSchema->FindColumnByName(keyName);
             if (!col) {
-                status = NKikimrScheme::StatusSchemeError; 
+                status = NKikimrScheme::StatusSchemeError;
                 errStr = TStringBuilder() << "Unknown key column '" << keyName << "'";
                 return nullptr;
             }
             keyColumnIds.push_back(col->Id);
         }
         if (keyColumnIds != pSchema->KeyColumnIds) {
-            status = NKikimrScheme::StatusSchemeError; 
+            status = NKikimrScheme::StatusSchemeError;
             errStr = "Specified schema key columns not matching schema preset";
             return nullptr;
         }
 
         if (opSchema.GetEngine() != pSchema->Engine) {
-            status = NKikimrScheme::StatusSchemeError; 
+            status = NKikimrScheme::StatusSchemeError;
             errStr = "Specified schema engine does not match schema preset";
             return nullptr;
         }
@@ -194,7 +194,7 @@ TOlapTableInfo::TPtr CreateOlapTable(
     if (op.HasTtlSettingsPresetName()) {
         const TString presetName = op.GetTtlSettingsPresetName();
         if (!storeInfo->TtlSettingsPresetByName.contains(presetName)) {
-            status = NKikimrScheme::StatusSchemeError; 
+            status = NKikimrScheme::StatusSchemeError;
             errStr = Sprintf("Specified ttl settings preset '%s' does not exist in olap store", presetName.c_str());
             return nullptr;
         }
@@ -203,14 +203,14 @@ TOlapTableInfo::TPtr CreateOlapTable(
             op.SetTtlSettingsPresetId(presetId);
         }
         if (op.GetTtlSettingsPresetId() != presetId) {
-            status = NKikimrScheme::StatusSchemeError; 
+            status = NKikimrScheme::StatusSchemeError;
             errStr = Sprintf("Specified ttl settings preset '%s' and id %" PRIu32 " do not match in olap store", presetName.c_str(), presetId);
             return nullptr;
         }
     } else if (op.HasTtlSettingsPresetId()) {
         const ui32 presetId = op.GetTtlSettingsPresetId();
         if (!storeInfo->TtlSettingsPresets.contains(presetId)) {
-            status = NKikimrScheme::StatusSchemeError; 
+            status = NKikimrScheme::StatusSchemeError;
             errStr = Sprintf("Specified ttl preset %" PRIu32 " does not exist in olap store", presetId);
             return nullptr;
         }
@@ -225,7 +225,7 @@ TOlapTableInfo::TPtr CreateOlapTable(
     // Validate ttl settings and schema compatibility
     if (op.HasTtlSettings()) {
         if (!ValidateTtlSettings(op.GetTtlSettings(), pSchema->Columns, pSchema->ColumnsByName, storageTiers, errStr)) {
-            status = NKikimrScheme::StatusInvalidParameter; 
+            status = NKikimrScheme::StatusInvalidParameter;
             return nullptr;
         }
     }
@@ -247,7 +247,7 @@ TOlapTableInfo::TPtr CreateOlapTable(
         case NKikimrSchemeOp::TColumnTableSharding::kHashSharding: {
             auto& sharding = *tableInfo->Sharding.MutableHashSharding();
             if (sharding.ColumnsSize() == 0) {
-                status = NKikimrScheme::StatusSchemeError; 
+                status = NKikimrScheme::StatusSchemeError;
                 errStr = Sprintf("Hash sharding requires a non-empty list of columns");
                 return nullptr;
             }
@@ -256,7 +256,7 @@ TOlapTableInfo::TPtr CreateOlapTable(
             for (const TString& columnName : sharding.GetColumns()) {
                 auto* pColumn = pSchema->FindColumnByName(columnName);
                 if (!pColumn) {
-                    status = NKikimrScheme::StatusSchemeError; 
+                    status = NKikimrScheme::StatusSchemeError;
                     errStr = Sprintf("Hash sharding is using an unknown column '%s'", columnName.c_str());
                     return nullptr;
                 }
@@ -269,7 +269,7 @@ TOlapTableInfo::TPtr CreateOlapTable(
             break;
         }
         default: {
-            status = NKikimrScheme::StatusSchemeError; 
+            status = NKikimrScheme::StatusSchemeError;
             errStr = "Unsupported sharding method";
             return nullptr;
         }
@@ -277,7 +277,7 @@ TOlapTableInfo::TPtr CreateOlapTable(
 
     const ui32 columnShardCount = Max(ui32(1), op.GetColumnShardCount());
     if (columnShardCount > storeInfo->ColumnShards.size()) {
-        status = NKikimrScheme::StatusSchemeError; 
+        status = NKikimrScheme::StatusSchemeError;
         errStr = Sprintf("Cannot create table with %" PRIu32 " column shards, only %" PRIu32 " are available",
             columnShardCount, ui32(storeInfo->ColumnShards.size()));
         return nullptr;
@@ -652,10 +652,10 @@ public:
         SetState(SelectStateFunc(state));
     }
 
-    THolder<TProposeResponse> Propose(const TString& owner, TOperationContext& context) override { 
+    THolder<TProposeResponse> Propose(const TString& owner, TOperationContext& context) override {
         const TTabletId ssId = context.SS->SelfTabletId();
 
-        const auto acceptExisted = !Transaction.GetFailOnExist(); 
+        const auto acceptExisted = !Transaction.GetFailOnExist();
         const TString& parentPathStr = Transaction.GetWorkingDir();
         auto& createDescription = Transaction.GetCreateColumnTable();
         const TString& name = createDescription.GetName();
@@ -666,12 +666,12 @@ public:
                         << ", opId: " << OperationId
                         << ", at schemeshard: " << ssId);
 
-        TEvSchemeShard::EStatus status = NKikimrScheme::StatusAccepted; 
+        TEvSchemeShard::EStatus status = NKikimrScheme::StatusAccepted;
         auto result = MakeHolder<TProposeResponse>(status, ui64(OperationId.GetTxId()), ui64(ssId));
 
-        NSchemeShard::TPath parentPath = NSchemeShard::TPath::Resolve(parentPathStr, context.SS); 
+        NSchemeShard::TPath parentPath = NSchemeShard::TPath::Resolve(parentPathStr, context.SS);
         {
-            NSchemeShard::TPath::TChecker checks = parentPath.Check(); 
+            NSchemeShard::TPath::TChecker checks = parentPath.Check();
             checks
                 .NotUnderDomainUpgrade()
                 .IsAtLocalSchemeShard()
@@ -693,9 +693,9 @@ public:
 
         const TString acl = Transaction.GetModifyACL().GetDiffACL();
 
-        NSchemeShard::TPath dstPath = parentPath.Child(name); 
+        NSchemeShard::TPath dstPath = parentPath.Child(name);
         {
-            NSchemeShard::TPath::TChecker checks = dstPath.Check(); 
+            NSchemeShard::TPath::TChecker checks = dstPath.Check();
             checks.IsAtLocalSchemeShard();
             if (dstPath.IsResolved()) {
                 checks
@@ -733,7 +733,7 @@ public:
         TString errStr;
 
         if (!context.SS->CheckApplyIf(Transaction, errStr)) {
-            result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr); 
+            result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr);
             return result;
         }
 
@@ -741,7 +741,7 @@ public:
         Y_VERIFY(olapStorePath, "Unexpected failure to find an olap store");
         auto storeInfo = context.SS->OlapStores.at(olapStorePath->PathId);
         {
-            NSchemeShard::TPath::TChecker checks = olapStorePath.Check(); 
+            NSchemeShard::TPath::TChecker checks = olapStorePath.Check();
             checks
                 .NotUnderDomainUpgrade()
                 .IsAtLocalSchemeShard()
@@ -761,7 +761,7 @@ public:
         }
 
         if (!AppData()->FeatureFlags.GetEnableOlapSchemaOperations()) {
-            result->SetError(NKikimrScheme::StatusPreconditionFailed, 
+            result->SetError(NKikimrScheme::StatusPreconditionFailed,
                 "Olap schema operations are not supported");
             return result;
         }
@@ -822,8 +822,8 @@ public:
         olapStorePath.Base()->LastTxId = OperationId.GetTxId();
         context.SS->PersistLastTxId(db, olapStorePath.Base());
 
-        context.SS->PersistTxState(db, OperationId); 
-        context.SS->PersistPath(db, dstPath.Base()->PathId); 
+        context.SS->PersistTxState(db, OperationId);
+        context.SS->PersistPath(db, dstPath.Base()->PathId);
 
         context.OnComplete.ActivateTx(OperationId);
 
@@ -879,5 +879,5 @@ ISubOperationBase::TPtr CreateNewOlapTable(TOperationId id, TTxState::ETxState s
 }
 
 
-} // namespace NSchemeShard 
+} // namespace NSchemeShard
 } // namespace NKikimr

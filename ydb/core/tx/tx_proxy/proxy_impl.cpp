@@ -1,4 +1,4 @@
-#include "proxy.h" 
+#include "proxy.h"
 #include <ydb/core/tx/scheme_board/cache.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/tx/tx_allocator/txallocator.h>
@@ -18,45 +18,45 @@ using namespace NTabletFlatExecutor;
 
 namespace NTxProxy {
 
-template<class EventType> 
-struct TDelayedQueue { 
-    typedef typename EventType::TPtr EventTypePtr; 
-    struct TRequest : public std::pair<typename EventType::TPtr, TInstant> { 
-        typedef std::pair<typename EventType::TPtr, TInstant> TBase; 
- 
-        using TBase::TBase; //import constructors 
- 
-        EventTypePtr& GetRequest() { 
-            return TBase::first; 
-        } 
-        TInstant GetExpireMoment() const { 
-            return TBase::second; 
-        } 
-    }; 
-    typedef TAutoPtr<TRequest> TRequestPtr; 
+template<class EventType>
+struct TDelayedQueue {
+    typedef typename EventType::TPtr EventTypePtr;
+    struct TRequest : public std::pair<typename EventType::TPtr, TInstant> {
+        typedef std::pair<typename EventType::TPtr, TInstant> TBase;
+
+        using TBase::TBase; //import constructors
+
+        EventTypePtr& GetRequest() {
+            return TBase::first;
+        }
+        TInstant GetExpireMoment() const {
+            return TBase::second;
+        }
+    };
+    typedef TAutoPtr<TRequest> TRequestPtr;
     typedef TOneOneQueueInplace<TRequest*, 64> TQueueType;
     typedef TAutoPtr<TQueueType, typename TQueueType::TPtrCleanDestructor> TSafeQueue;
-    TSafeQueue Queue; 
- 
-    TDelayedQueue() 
+    TSafeQueue Queue;
+
+    TDelayedQueue()
         : Queue(new TQueueType())
-    {} 
-}; 
- 
-class TTxProxy : public TActorBootstrapped<TTxProxy> { 
+    {}
+};
+
+class TTxProxy : public TActorBootstrapped<TTxProxy> {
     TTxProxyServices Services;
 
-    THolder<NTabletPipe::IClientCache> PipeClientCache; 
+    THolder<NTabletPipe::IClientCache> PipeClientCache;
     TTxAllocatorClient TxAllocatorClient;
 
-    static const TDuration TimeoutDelayedRequest; 
-    typedef TDelayedQueue<TEvTxUserProxy::TEvProposeTransaction> TDelayedProposal; 
-    TDelayedProposal DelayedProposal; 
+    static const TDuration TimeoutDelayedRequest;
+    typedef TDelayedQueue<TEvTxUserProxy::TEvProposeTransaction> TDelayedProposal;
+    TDelayedProposal DelayedProposal;
     typedef TDelayedQueue<TEvTxUserProxy::TEvProposeKqpTransaction> TDelayedKqpProposal;
     TDelayedKqpProposal DelayedKqpProposal;
     typedef TDelayedQueue<TEvTxUserProxy::TEvAllocateTxId> TDelayedAllocateTxId;
     TDelayedAllocateTxId DelayedAllocateTxId;
- 
+
     TIntrusivePtr<NMonitoring::TDynamicCounters> CacheCounters;
     TIntrusivePtr<TTxProxyMon> TxProxyMon;
     TRequestControls RequestControls;
@@ -66,73 +66,73 @@ class TTxProxy : public TActorBootstrapped<TTxProxy> {
         ctx.Send(Services.LeaderPipeCache, new TEvents::TEvPoisonPill());
         ctx.Send(Services.FollowerPipeCache, new TEvents::TEvPoisonPill());
 
-        PipeClientCache->Detach(ctx); 
-        PipeClientCache.Destroy(); 
+        PipeClientCache->Detach(ctx);
+        PipeClientCache.Destroy();
 
-        return TActor::Die(ctx); 
-    } 
+        return TActor::Die(ctx);
+    }
 
-    void Handle(TEvents::TEvPoisonPill::TPtr &ev, const TActorContext &ctx) { 
-        LOG_NOTICE_S(ctx, NKikimrServices::TX_PROXY, 
-                    "actor# " << SelfId() << 
-                    " HANDLE TEvPoisonPill" << 
-                    " from Sender# " << ev->Sender.ToString()); 
-        Die(ctx); 
-    } 
+    void Handle(TEvents::TEvPoisonPill::TPtr &ev, const TActorContext &ctx) {
+        LOG_NOTICE_S(ctx, NKikimrServices::TX_PROXY,
+                    "actor# " << SelfId() <<
+                    " HANDLE TEvPoisonPill" <<
+                    " from Sender# " << ev->Sender.ToString());
+        Die(ctx);
+    }
 
-    void ReplyDecline(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus status, const TEvTxUserProxy::TEvProposeTransaction::TPtr &ev, const TActorContext &ctx) { 
-        LOG_NOTICE_S(ctx, NKikimrServices::TX_PROXY, 
-                   "actor# " << SelfId() << 
-                   " DECLINE TEvProposeTransactionStatus " << 
-                   " reason# " << status << 
-                   " reply to# " << ev->Sender.ToString()); 
- 
-        ctx.Send(ev->Sender, new TEvTxUserProxy::TEvProposeTransactionStatus(status), 0, ev->Cookie); 
-    } 
+    void ReplyDecline(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus status, const TEvTxUserProxy::TEvProposeTransaction::TPtr &ev, const TActorContext &ctx) {
+        LOG_NOTICE_S(ctx, NKikimrServices::TX_PROXY,
+                   "actor# " << SelfId() <<
+                   " DECLINE TEvProposeTransactionStatus " <<
+                   " reason# " << status <<
+                   " reply to# " << ev->Sender.ToString());
 
-    void ReplyNotImplemented(const TEvTxUserProxy::TEvProposeTransaction::TPtr &ev, const TActorContext &ctx) { 
-        TxProxyMon->TxNotImplemented->Inc(); 
-        const NKikimrTxUserProxy::TTransaction &tx = ev->Get()->Record.GetTransaction(); 
-        LOG_ERROR_S(ctx, NKikimrServices::TX_PROXY, 
-                    "actor# " << SelfId() << 
-                    " Cookie# " << (ui64)ev->Cookie << 
-                    " userReqId# \"" << tx.GetUserRequestId() << "\"" << 
-                    " RESPONSE Status# NotImplemented Type# Unknown"); 
-        return ReplyDecline(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::NotImplemented, ev, ctx); 
-    } 
+        ctx.Send(ev->Sender, new TEvTxUserProxy::TEvProposeTransactionStatus(status), 0, ev->Cookie);
+    }
 
-    void Decline(const TEvTxUserProxy::TEvProposeTransaction::TPtr &ev, const TActorContext &ctx) { 
-        if (ev->Get()->HasSchemeProposal()) { 
-            LOG_WARN_S(ctx, NKikimrServices::TX_PROXY, 
-                       "actor# " << SelfId() << 
-                       " DECLINE TEvProposeTransaction SchemeRequest" << 
-                       " reason# " << TEvTxUserProxy::TResultStatus::EStatus::ProxyNotReady << 
-                       " replyto# " << ev->Sender.ToString()); 
- 
-            TxProxyMon->SchemeRequestProxyNotReady->Inc(); 
-            return ReplyDecline(TEvTxUserProxy::TResultStatus::EStatus::ProxyNotReady, ev, ctx); 
-        } 
- 
-        if (ev->Get()->HasMakeProposal()) { 
-            LOG_WARN_S(ctx, NKikimrServices::TX_PROXY, 
-                       "actor# " << SelfId() << 
-                       " DECLINE TEvProposeTransaction DataReques" << 
-                       " reason# " << TEvTxUserProxy::TResultStatus::EStatus::ProxyNotReady << 
-                       " replyto# " << ev->Sender.ToString()); 
- 
-            TxProxyMon->MakeRequestProxyNotReady->Inc(); 
-            return ReplyDecline(TEvTxUserProxy::TResultStatus::EStatus::ProxyNotReady, ev, ctx); 
-        } 
- 
-        ReplyNotImplemented(ev, ctx); 
-    } 
+    void ReplyNotImplemented(const TEvTxUserProxy::TEvProposeTransaction::TPtr &ev, const TActorContext &ctx) {
+        TxProxyMon->TxNotImplemented->Inc();
+        const NKikimrTxUserProxy::TTransaction &tx = ev->Get()->Record.GetTransaction();
+        LOG_ERROR_S(ctx, NKikimrServices::TX_PROXY,
+                    "actor# " << SelfId() <<
+                    " Cookie# " << (ui64)ev->Cookie <<
+                    " userReqId# \"" << tx.GetUserRequestId() << "\"" <<
+                    " RESPONSE Status# NotImplemented Type# Unknown");
+        return ReplyDecline(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::NotImplemented, ev, ctx);
+    }
 
-    void DelayRequest(TEvTxUserProxy::TEvProposeTransaction::TPtr &ev, const TActorContext &ctx) { 
-        auto request = new TDelayedProposal::TRequest(ev, ctx.Now() + TimeoutDelayedRequest); 
-        DelayedProposal.Queue->Push(request); 
- 
-    } 
- 
+    void Decline(const TEvTxUserProxy::TEvProposeTransaction::TPtr &ev, const TActorContext &ctx) {
+        if (ev->Get()->HasSchemeProposal()) {
+            LOG_WARN_S(ctx, NKikimrServices::TX_PROXY,
+                       "actor# " << SelfId() <<
+                       " DECLINE TEvProposeTransaction SchemeRequest" <<
+                       " reason# " << TEvTxUserProxy::TResultStatus::EStatus::ProxyNotReady <<
+                       " replyto# " << ev->Sender.ToString());
+
+            TxProxyMon->SchemeRequestProxyNotReady->Inc();
+            return ReplyDecline(TEvTxUserProxy::TResultStatus::EStatus::ProxyNotReady, ev, ctx);
+        }
+
+        if (ev->Get()->HasMakeProposal()) {
+            LOG_WARN_S(ctx, NKikimrServices::TX_PROXY,
+                       "actor# " << SelfId() <<
+                       " DECLINE TEvProposeTransaction DataReques" <<
+                       " reason# " << TEvTxUserProxy::TResultStatus::EStatus::ProxyNotReady <<
+                       " replyto# " << ev->Sender.ToString());
+
+            TxProxyMon->MakeRequestProxyNotReady->Inc();
+            return ReplyDecline(TEvTxUserProxy::TResultStatus::EStatus::ProxyNotReady, ev, ctx);
+        }
+
+        ReplyNotImplemented(ev, ctx);
+    }
+
+    void DelayRequest(TEvTxUserProxy::TEvProposeTransaction::TPtr &ev, const TActorContext &ctx) {
+        auto request = new TDelayedProposal::TRequest(ev, ctx.Now() + TimeoutDelayedRequest);
+        DelayedProposal.Queue->Push(request);
+
+    }
+
     void DelayRequest(TEvTxUserProxy::TEvProposeKqpTransaction::TPtr &ev, const TActorContext &ctx) {
         auto request = new TDelayedKqpProposal::TRequest(ev, ctx.Now() + TimeoutDelayedRequest);
         DelayedKqpProposal.Queue->Push(request);
@@ -143,134 +143,134 @@ class TTxProxy : public TActorBootstrapped<TTxProxy> {
         DelayedAllocateTxId.Queue->Push(request);
     }
 
-    template<class EventType> 
-    void PlayQueue(TDelayedQueue<EventType> &delayed, const TActorContext &ctx) { 
-        typedef typename TDelayedQueue<EventType>::TRequestPtr TRequestPtr; 
- 
-        while (delayed.Queue->Head()) { 
-            TVector<ui64> txIds = TxAllocatorClient.AllocateTxIds(1, ctx); 
-            if (!txIds) { 
-                return; 
-            } 
-            TRequestPtr extracted = delayed.Queue->Pop(); 
-            ProcessRequest(extracted->GetRequest(), ctx, txIds.front()); 
-        } 
-    } 
- 
-    void PlayDelayed(const TActorContext &ctx) { 
-        PlayQueue(DelayedProposal, ctx); 
+    template<class EventType>
+    void PlayQueue(TDelayedQueue<EventType> &delayed, const TActorContext &ctx) {
+        typedef typename TDelayedQueue<EventType>::TRequestPtr TRequestPtr;
+
+        while (delayed.Queue->Head()) {
+            TVector<ui64> txIds = TxAllocatorClient.AllocateTxIds(1, ctx);
+            if (!txIds) {
+                return;
+            }
+            TRequestPtr extracted = delayed.Queue->Pop();
+            ProcessRequest(extracted->GetRequest(), ctx, txIds.front());
+        }
+    }
+
+    void PlayDelayed(const TActorContext &ctx) {
+        PlayQueue(DelayedProposal, ctx);
         PlayQueue(DelayedKqpProposal, ctx);
         PlayQueue(DelayedAllocateTxId, ctx);
-    } 
- 
-    template<class EventType> 
-    void CheckTimeout(TDelayedQueue<EventType> &delayed, const TActorContext &ctx) { 
-        typedef typename TDelayedQueue<EventType>::TRequestPtr TRequestPtr; 
- 
-        while (const auto head = delayed.Queue->Head()) { 
-            const TInstant &expireAt = head->GetExpireMoment(); 
-            if (expireAt > ctx.Now()) { 
-                break; 
-            } 
-            TRequestPtr extracted = delayed.Queue->Pop(); 
-            Decline(extracted->GetRequest(), ctx); 
-        } 
-    } 
- 
-    void CheckTimeouts(const TActorContext &ctx) { 
-        CheckTimeout(DelayedProposal, ctx); 
-    } 
- 
-    static NTabletPipe::TClientConfig InitPipeClientConfig() { 
-        NTabletPipe::TClientConfig config; 
+    }
+
+    template<class EventType>
+    void CheckTimeout(TDelayedQueue<EventType> &delayed, const TActorContext &ctx) {
+        typedef typename TDelayedQueue<EventType>::TRequestPtr TRequestPtr;
+
+        while (const auto head = delayed.Queue->Head()) {
+            const TInstant &expireAt = head->GetExpireMoment();
+            if (expireAt > ctx.Now()) {
+                break;
+            }
+            TRequestPtr extracted = delayed.Queue->Pop();
+            Decline(extracted->GetRequest(), ctx);
+        }
+    }
+
+    void CheckTimeouts(const TActorContext &ctx) {
+        CheckTimeout(DelayedProposal, ctx);
+    }
+
+    static NTabletPipe::TClientConfig InitPipeClientConfig() {
+        NTabletPipe::TClientConfig config;
         config.RetryPolicy = {
             .RetryLimitCount = 3,
             .MinRetryTime = TDuration::MilliSeconds(100),
             .MaxRetryTime = TDuration::Seconds(1),
             .BackoffMultiplier = 5,
         };
-        return config; 
+        return config;
     }
 
-    static const NTabletPipe::TClientConfig& GetPipeClientConfig() { 
-        static const NTabletPipe::TClientConfig config = InitPipeClientConfig(); 
-        return config; 
+    static const NTabletPipe::TClientConfig& GetPipeClientConfig() {
+        static const NTabletPipe::TClientConfig config = InitPipeClientConfig();
+        return config;
     }
 
-    void Handle(TEvTxAllocator::TEvAllocateResult::TPtr &ev, const TActorContext &ctx) { 
+    void Handle(TEvTxAllocator::TEvAllocateResult::TPtr &ev, const TActorContext &ctx) {
         if (!TxAllocatorClient.OnAllocateResult(ev, ctx)) {
-            return; 
-        } 
- 
-        PlayDelayed(ctx); 
+            return;
+        }
+
+        PlayDelayed(ctx);
     }
 
-    void Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, const TActorContext &ctx) { 
-        TEvTabletPipe::TEvClientConnected *msg = ev->Get(); 
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_PROXY, 
-                   "actor# " << SelfId() << 
-                   " HANDLE TEvClientConnected " << (PipeClientCache->OnConnect(ev) ? "success connect" : "fail connect") << 
-                   " from tablet# " << msg->TabletId); 
- 
-        if(!PipeClientCache->OnConnect(ev)) { 
-            CheckTimeouts(ctx); 
+    void Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, const TActorContext &ctx) {
+        TEvTabletPipe::TEvClientConnected *msg = ev->Get();
+        LOG_DEBUG_S(ctx, NKikimrServices::TX_PROXY,
+                   "actor# " << SelfId() <<
+                   " HANDLE TEvClientConnected " << (PipeClientCache->OnConnect(ev) ? "success connect" : "fail connect") <<
+                   " from tablet# " << msg->TabletId);
+
+        if(!PipeClientCache->OnConnect(ev)) {
+            CheckTimeouts(ctx);
             TxAllocatorClient.SendRequest(msg->TabletId, ctx);
-            return; 
-        } 
+            return;
+        }
     }
 
-    void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr &ev, const TActorContext &ctx) { 
-        TEvTabletPipe::TEvClientDestroyed *msg = ev->Get(); 
-        LOG_WARN_S(ctx, NKikimrServices::TX_PROXY, 
-                   "actor# " << SelfId() << 
-                   " HANDLE TEvClientDestroyed" << 
-                   " from tablet# " << msg->TabletId); 
- 
-        PipeClientCache->OnDisconnect(ev); 
-        CheckTimeouts(ctx); 
+    void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr &ev, const TActorContext &ctx) {
+        TEvTabletPipe::TEvClientDestroyed *msg = ev->Get();
+        LOG_WARN_S(ctx, NKikimrServices::TX_PROXY,
+                   "actor# " << SelfId() <<
+                   " HANDLE TEvClientDestroyed" <<
+                   " from tablet# " << msg->TabletId);
+
+        PipeClientCache->OnDisconnect(ev);
+        CheckTimeouts(ctx);
         TxAllocatorClient.SendRequest(msg->TabletId, ctx);
-    } 
- 
-    void ProcessRequest(TEvTxUserProxy::TEvProposeTransaction::TPtr &ev, const TActorContext &ctx, ui64 txid) { 
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_PROXY, 
-                    "actor# " << SelfId() << 
-                    " TxId# " << txid << 
-                    " ProcessProposeTransaction"); 
+    }
+
+    void ProcessRequest(TEvTxUserProxy::TEvProposeTransaction::TPtr &ev, const TActorContext &ctx, ui64 txid) {
+        LOG_DEBUG_S(ctx, NKikimrServices::TX_PROXY,
+                    "actor# " << SelfId() <<
+                    " TxId# " << txid <<
+                    " ProcessProposeTransaction");
 
         RequestControls.Reqister(ctx);
 
         // process scheme transactions
-        const NKikimrTxUserProxy::TTransaction &tx = ev->Get()->Record.GetTransaction(); 
-        if (ev->Get()->HasSchemeProposal()) { 
+        const NKikimrTxUserProxy::TTransaction &tx = ev->Get()->Record.GetTransaction();
+        if (ev->Get()->HasSchemeProposal()) {
             // todo: in-fly and shutdown
             Y_VERIFY_DEBUG(txid != 0);
-            ui64 cookie = ev->Cookie; 
-            const TString userRequestId = tx.GetUserRequestId(); 
-            TAutoPtr<TEvTxProxyReq::TEvSchemeRequest> request = new TEvTxProxyReq::TEvSchemeRequest(ev); 
+            ui64 cookie = ev->Cookie;
+            const TString userRequestId = tx.GetUserRequestId();
+            TAutoPtr<TEvTxProxyReq::TEvSchemeRequest> request = new TEvTxProxyReq::TEvSchemeRequest(ev);
             const TActorId reqId = ctx.ExecutorThread.RegisterActor(CreateTxProxyFlatSchemeReq(Services, txid, request, TxProxyMon));
             TxProxyMon->SchemeRequest->Inc();
             LOG_DEBUG_S(ctx, NKikimrServices::TX_PROXY,
-                         "actor# " << SelfId() << 
-                         " Cookie# " << cookie << 
-                         " userReqId# \"" << userRequestId << "\"" 
-                         " txid# " << txid << 
+                         "actor# " << SelfId() <<
+                         " Cookie# " << cookie <<
+                         " userReqId# \"" << userRequestId << "\""
+                         " txid# " << txid <<
                          " SEND to# " << reqId.ToString().data());
             return;
         }
 
         // otherwise process data transaction
-        if (ev->Get()->HasMakeProposal()) { 
+        if (ev->Get()->HasMakeProposal()) {
             // todo: in-fly and shutdown
             Y_VERIFY_DEBUG(txid != 0);
             const TActorId reqId = ctx.ExecutorThread.RegisterActor(CreateTxProxyDataReq(Services, txid, TxProxyMon, RequestControls));
             TxProxyMon->MakeRequest->Inc();
             LOG_DEBUG_S(ctx, NKikimrServices::TX_PROXY,
-                         "actor# " << SelfId() << 
-                         " Cookie# " << (ui64)ev->Cookie << 
-                         " userReqId# \"" << tx.GetUserRequestId() << "\"" << 
-                         " txid# " << txid << 
+                         "actor# " << SelfId() <<
+                         " Cookie# " << (ui64)ev->Cookie <<
+                         " userReqId# \"" << tx.GetUserRequestId() << "\"" <<
+                         " txid# " << txid <<
                          " SEND to# " << reqId.ToString().data() <<
-                         " DataReq marker# P0"); 
+                         " DataReq marker# P0");
             ctx.Send(reqId, new TEvTxProxyReq::TEvMakeRequest(ev));
             return;
         }
@@ -305,35 +305,35 @@ class TTxProxy : public TActorBootstrapped<TTxProxy> {
             return;
         }
 
-        ReplyNotImplemented(ev, ctx); 
+        ReplyNotImplemented(ev, ctx);
     }
 
-    void Handle(TEvTxUserProxy::TEvProposeTransaction::TPtr &ev, const TActorContext &ctx) { 
-        const NKikimrTxUserProxy::TTransaction &tx = ev->Get()->Record.GetTransaction(); 
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_PROXY, 
-                   "actor# " << SelfId() << 
-                   " Handle TEvProposeTransaction"); 
- 
+    void Handle(TEvTxUserProxy::TEvProposeTransaction::TPtr &ev, const TActorContext &ctx) {
+        const NKikimrTxUserProxy::TTransaction &tx = ev->Get()->Record.GetTransaction();
+        LOG_DEBUG_S(ctx, NKikimrServices::TX_PROXY,
+                   "actor# " << SelfId() <<
+                   " Handle TEvProposeTransaction");
+
         const bool needTxId = ev->Get()->NeedTxId();
- 
-        if (needTxId) { 
-            auto txIds = TxAllocatorClient.AllocateTxIds(1, ctx); 
-            if (!txIds) { 
-                LOG_DEBUG_S(ctx, NKikimrServices::TX_PROXY, 
-                           "actor# " << SelfId() << 
-                           " Cookie# " << (ui64)ev->Cookie << 
-                           " userReqId# \"" << tx.GetUserRequestId() << "\"" 
-                           " DELAY REQUEST, wait txids from allocator" << 
-                           " Type# Scheme"); 
-                return DelayRequest(ev, ctx); 
-            } 
- 
-            return ProcessRequest(ev, ctx, txIds.front()); 
-        } 
- 
-        return ProcessRequest(ev, ctx, 0); 
-    } 
- 
+
+        if (needTxId) {
+            auto txIds = TxAllocatorClient.AllocateTxIds(1, ctx);
+            if (!txIds) {
+                LOG_DEBUG_S(ctx, NKikimrServices::TX_PROXY,
+                           "actor# " << SelfId() <<
+                           " Cookie# " << (ui64)ev->Cookie <<
+                           " userReqId# \"" << tx.GetUserRequestId() << "\""
+                           " DELAY REQUEST, wait txids from allocator" <<
+                           " Type# Scheme");
+                return DelayRequest(ev, ctx);
+            }
+
+            return ProcessRequest(ev, ctx, txIds.front());
+        }
+
+        return ProcessRequest(ev, ctx, 0);
+    }
+
     void ProcessRequest(TEvTxUserProxy::TEvProposeKqpTransaction::TPtr& ev, const TActorContext& ctx, ui64 txid) {
         TxProxyMon->KqpRequest->Inc();
         LOG_DEBUG_S(ctx, NKikimrServices::TX_PROXY,
@@ -352,8 +352,8 @@ class TTxProxy : public TActorBootstrapped<TTxProxy> {
                    "actor# " << SelfId() <<
                    " Handle TEvExecuteKqpTransaction");
 
-        auto txIds = TxAllocatorClient.AllocateTxIds(1, ctx); 
-        if (!txIds) { 
+        auto txIds = TxAllocatorClient.AllocateTxIds(1, ctx);
+        if (!txIds) {
             LOG_DEBUG_S(ctx, NKikimrServices::TX_PROXY,
                        "actor# " << SelfId() <<
                        " Cookie# " << (ui64)ev->Cookie <<
@@ -362,7 +362,7 @@ class TTxProxy : public TActorBootstrapped<TTxProxy> {
             return DelayRequest(ev, ctx);
         }
 
-        ProcessRequest(ev, ctx, txIds.front()); 
+        ProcessRequest(ev, ctx, txIds.front());
     }
 
     void ProcessRequest(TEvTxUserProxy::TEvAllocateTxId::TPtr &ev, const TActorContext &ctx, ui64 txId) {
@@ -374,8 +374,8 @@ class TTxProxy : public TActorBootstrapped<TTxProxy> {
         LOG_DEBUG_S(ctx, NKikimrServices::TX_PROXY,
                     "actor# " << SelfId() << " Handle TEvAllocateTxId");
 
-        auto txIds = TxAllocatorClient.AllocateTxIds(1, ctx); 
-        if (!txIds) { 
+        auto txIds = TxAllocatorClient.AllocateTxIds(1, ctx);
+        if (!txIds) {
             LOG_DEBUG_S(ctx, NKikimrServices::TX_PROXY,
                         "actor# " << SelfId()
                         << " Cookie# " << ev->Cookie
@@ -384,7 +384,7 @@ class TTxProxy : public TActorBootstrapped<TTxProxy> {
             return DelayRequest(ev, ctx);
         }
 
-        ProcessRequest(ev, ctx, txIds.front()); 
+        ProcessRequest(ev, ctx, txIds.front());
     }
 
     void Handle(TEvTxUserProxy::TEvGetProxyServicesRequest::TPtr &ev, const TActorContext &ctx) {
@@ -397,27 +397,27 @@ class TTxProxy : public TActorBootstrapped<TTxProxy> {
 
     void Handle(TEvTxUserProxy::TEvNavigate::TPtr &ev, const TActorContext &ctx) {
         TString path = ev->Get()->Record.GetDescribePath().GetPath();
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_PROXY, 
-                     "actor# " << SelfId() << 
-                     " Handle TEvNavigate " << 
-                     " describe path " << path); 
- 
+        LOG_DEBUG_S(ctx, NKikimrServices::TX_PROXY,
+                     "actor# " << SelfId() <<
+                     " Handle TEvNavigate " <<
+                     " describe path " << path);
+
         TxProxyMon->Navigate->Inc();
         TActorId reqId = ctx.ExecutorThread.RegisterActor(CreateTxProxyDescribeFlatSchemeReq(Services, TxProxyMon));
         ctx.Send(reqId, new TEvTxProxyReq::TEvNavigateScheme(ev));
     }
 
     void Handle(TEvTxUserProxy::TEvInvalidateTable::TPtr &ev, const TActorContext &ctx) {
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_PROXY, 
-                    "actor# " << SelfId() << 
-                    " HANDLE EvInvalidateTable"); 
+        LOG_DEBUG_S(ctx, NKikimrServices::TX_PROXY,
+                    "actor# " << SelfId() <<
+                    " HANDLE EvInvalidateTable");
         ctx.Send(Services.SchemeCache, new TEvTxProxySchemeCache::TEvInvalidateTable(TTableId(ev.Get()->Get()->Record.GetSchemeShardId(), ev.Get()->Get()->Record.GetTableId()), ev.Get()->Sender));
     }
 
     void Handle(TEvTxProxySchemeCache::TEvInvalidateTableResult::TPtr &ev, const TActorContext &ctx) {
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_PROXY, 
-                    "actor# " << SelfId() << 
-                    " HANDLE EvInvalidateTableResult"); 
+        LOG_DEBUG_S(ctx, NKikimrServices::TX_PROXY,
+                    "actor# " << SelfId() <<
+                    " HANDLE EvInvalidateTableResult");
         ctx.Send(ev.Get()->Get()->Sender, new TEvTxUserProxy::TEvInvalidateTableResult);
     }
 
@@ -425,18 +425,18 @@ public:
     TTxProxy(const TVector<ui64> &txAllocators)
         : PipeClientCache(NTabletPipe::CreateUnboundedClientCache(GetPipeClientConfig()))
         , TxAllocatorClient(NKikimrServices::TX_PROXY, PipeClientCache.Get(), txAllocators)
-    { 
+    {
     }
 
-    void Bootstrap(const TActorContext &ctx) { 
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_PROXY, 
-                    "actor# " << SelfId() << 
-                    " Bootstrap"); 
-        TxProxyMon = new TTxProxyMon(AppData(ctx)->Counters); 
+    void Bootstrap(const TActorContext &ctx) {
+        LOG_DEBUG_S(ctx, NKikimrServices::TX_PROXY,
+                    "actor# " << SelfId() <<
+                    " Bootstrap");
+        TxProxyMon = new TTxProxyMon(AppData(ctx)->Counters);
         CacheCounters = GetServiceCounters(AppData(ctx)->Counters, "proxy")->GetSubgroup("subsystem", "cache");
- 
-        Services.Proxy = SelfId(); 
- 
+
+        Services.Proxy = SelfId();
+
         auto cacheConfig = MakeIntrusive<NSchemeCache::TSchemeCacheConfig>(AppData(ctx), CacheCounters);
         Services.SchemeCache = ctx.ExecutorThread.RegisterActor(CreateSchemeBoardSchemeCache(cacheConfig.Get()));
         ctx.ExecutorThread.ActorSystem->RegisterLocalService(MakeSchemeCacheID(), Services.SchemeCache);
@@ -444,13 +444,13 @@ public:
         // PipePeNodeCaches are an external dependency
         Services.LeaderPipeCache = MakePipePeNodeCacheID(false);
         Services.FollowerPipeCache = MakePipePeNodeCacheID(true);
- 
+
         TxAllocatorClient.Bootstrap(ctx);
- 
-        Become(&TThis::StateWork); 
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_PROXY, 
-                    "actor# " << SelfId() << 
-                    " Become StateWork"); 
+
+        Become(&TThis::StateWork);
+        LOG_DEBUG_S(ctx, NKikimrServices::TX_PROXY,
+                    "actor# " << SelfId() <<
+                    " Become StateWork");
     }
 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -459,16 +459,16 @@ public:
 
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(TEvTabletPipe::TEvClientDestroyed, Handle); 
-            HFunc(TEvTabletPipe::TEvClientConnected, Handle); 
-            HFunc(TEvTxAllocator::TEvAllocateResult, Handle); 
- 
-            HFunc(TEvTxUserProxy::TEvNavigate, Handle); 
+            HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
+            HFunc(TEvTabletPipe::TEvClientConnected, Handle);
+            HFunc(TEvTxAllocator::TEvAllocateResult, Handle);
+
+            HFunc(TEvTxUserProxy::TEvNavigate, Handle);
             HFunc(TEvTxUserProxy::TEvProposeTransaction, Handle);
- 
+
             HFunc(TEvTxUserProxy::TEvInvalidateTable, Handle);
-            HFunc(TEvTxProxySchemeCache::TEvInvalidateTableResult, Handle); 
- 
+            HFunc(TEvTxProxySchemeCache::TEvInvalidateTableResult, Handle);
+
             HFunc(TEvTxUserProxy::TEvProposeKqpTransaction, Handle);
             HFunc(TEvTxUserProxy::TEvAllocateTxId, Handle);
 
@@ -476,22 +476,22 @@ public:
 
             HFunc(TEvents::TEvPoisonPill, Handle);
         default:
-            LOG_ERROR_S(ctx, NKikimrServices::TX_PROXY, 
-                        "actor# " << SelfId() << 
-                            " IGNORING message type# " <<  ev->GetTypeRewrite() << 
-                            " from Sender# " << ev->Sender.ToString() << 
-                            " at StateWork"); 
+            LOG_ERROR_S(ctx, NKikimrServices::TX_PROXY,
+                        "actor# " << SelfId() <<
+                            " IGNORING message type# " <<  ev->GetTypeRewrite() <<
+                            " from Sender# " << ev->Sender.ToString() <<
+                            " at StateWork");
             break;
         }
     }
 };
 
-const TDuration TTxProxy::TimeoutDelayedRequest = TDuration::Seconds(15); 
- 
+const TDuration TTxProxy::TimeoutDelayedRequest = TDuration::Seconds(15);
+
 }
 
 IActor* CreateTxProxy(const TVector<ui64> &allocators) {
-    return new NTxProxy::TTxProxy(allocators); 
+    return new NTxProxy::TTxProxy(allocators);
 }
 
 }

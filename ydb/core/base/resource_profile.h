@@ -14,7 +14,7 @@ namespace NKikimr {
 
 class TResourceProfiles : public TThrRefBase {
 public:
-    using TResourceProfile = NKikimrSchemeOp::TResourceProfile; 
+    using TResourceProfile = NKikimrSchemeOp::TResourceProfile;
     using TPtr = std::shared_ptr<TResourceProfile>;
 
 private:

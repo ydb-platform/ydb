@@ -236,7 +236,7 @@ private:
     };
     void SetUp() override {
         TClient client(Server->GetSettings());
-        client.InitRootScheme(); 
+        client.InitRootScheme();
         client.MkDir("/Root", "SQS");
     }
 

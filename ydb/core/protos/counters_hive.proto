@@ -54,7 +54,7 @@ enum ETxTypes {
     TXTYPE_UPDATE_TABLET_STATUS = 4                       [(TxTypeOpts) = {Name: "TxUpdateTabletStatus"}];
     TXTYPE_REGISTER_NODE = 5                              [(TxTypeOpts) = {Name: "TxRegisterNode"}];
     TXTYPE_KILL_NODE = 6                                  [(TxTypeOpts) = {Name: "TxKillNode"}];
-    TXTYPE_ADOPT_TABLET = 7                               [(TxTypeOpts) = {Name: "TxAdoptTablet"}]; 
+    TXTYPE_ADOPT_TABLET = 7                               [(TxTypeOpts) = {Name: "TxAdoptTablet"}];
     TXTYPE_UPDATE_TABLET_METRIC = 8                       [(TxTypeOpts) = {Name: "TxUpdateTabletMetric"}];
     TXTYPE_UPDATE_TABLET_GROUPS = 9                       [(TxTypeOpts) = {Name: "TxUpdateTabletGroups"}];
     TXTYPE_UNLOCK_TABLET_EXECUTION = 10                   [(TxTypeOpts) = {Name: "TxUnlockTabletExecution"}];

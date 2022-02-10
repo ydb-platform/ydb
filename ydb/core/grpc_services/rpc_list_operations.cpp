@@ -16,7 +16,7 @@ namespace NKikimr {
 namespace NGRpcService {
 
 using namespace NActors;
-using namespace NSchemeShard; 
+using namespace NSchemeShard;
 using namespace NKikimrIssues;
 using namespace NOperationId;
 using namespace Ydb;

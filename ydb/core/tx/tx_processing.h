@@ -54,13 +54,13 @@ struct TEvTxProcessing {
         TEvPlanStepAck()
         {}
 
-        TEvPlanStepAck(ui64 tabletId, ui64 step, ui64 txid) 
-        { 
-            Record.SetTabletId(tabletId); 
-            Record.SetStep(step); 
-            Record.AddTxId(txid); 
-        } 
- 
+        TEvPlanStepAck(ui64 tabletId, ui64 step, ui64 txid)
+        {
+            Record.SetTabletId(tabletId);
+            Record.SetStep(step);
+            Record.AddTxId(txid);
+        }
+
         template<typename TIterator>
         TEvPlanStepAck(ui64 tabletId, ui64 step, TIterator begin, const TIterator &end)
         {
@@ -68,7 +68,7 @@ struct TEvTxProcessing {
             Record.SetStep(step);
 
             while (begin != end) {
-                const ui64 x = ui64(*begin); 
+                const ui64 x = ui64(*begin);
                 Record.AddTxId(x);
                 ++begin;
             }

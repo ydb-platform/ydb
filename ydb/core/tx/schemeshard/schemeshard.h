@@ -15,16 +15,16 @@
 #include "schemeshard_identificators.h"
 
 namespace NKikimr {
-namespace NSchemeShard { 
+namespace NSchemeShard {
 
 static constexpr ui64 RootSchemeShardId = 0;
 static constexpr ui64 RootPathId = 1;
 
-struct TSchemeLimits; 
- 
-struct TEvSchemeShard { 
+struct TSchemeLimits;
+
+struct TEvSchemeShard {
     enum EEv {
-        EvModifySchemeTransaction = EventSpaceBegin(TKikimrEvents::ES_FLAT_TX_SCHEMESHARD),  // 271122432 
+        EvModifySchemeTransaction = EventSpaceBegin(TKikimrEvents::ES_FLAT_TX_SCHEMESHARD),  // 271122432
         EvModifySchemeTransactionResult = EvModifySchemeTransaction + 1 * 512,
         EvDescribeScheme,
         EvDescribeSchemeResult,
@@ -40,22 +40,22 @@ struct TEvSchemeShard {
         EvNotifyTxCompletionResult,
         EvMeasureSelfResponseTime,
         EvWakeupToMeasureSelfResponseTime,
-        EvInitTenantSchemeShard, 
-        EvInitTenantSchemeShardResult, // 271125002 
-        EvSyncTenantSchemeShard, 
-        EvUpdateTenantSchemeShard, 
-        EvMigrateSchemeShard, 
-        EvMigrateSchemeShardResult, 
-        EvPublishTenantAsReadOnly, 
-        EvPublishTenantAsReadOnlyResult, 
-        EvRewriteOwner, 
-        EvRewriteOwnerResult, 
-        EvPublishTenant, 
-        EvPublishTenantResult,  // 271125012 
+        EvInitTenantSchemeShard,
+        EvInitTenantSchemeShardResult, // 271125002
+        EvSyncTenantSchemeShard,
+        EvUpdateTenantSchemeShard,
+        EvMigrateSchemeShard,
+        EvMigrateSchemeShardResult,
+        EvPublishTenantAsReadOnly,
+        EvPublishTenantAsReadOnlyResult,
+        EvRewriteOwner,
+        EvRewriteOwnerResult,
+        EvPublishTenant,
+        EvPublishTenantResult,  // 271125012
         EvLogin,
         EvLoginResult,
 
- 
+
         EvBackupDatashard = EvModifySchemeTransaction + 6 * 512,
         EvBackupDatashardResult,
         EvCancelTx,
@@ -67,12 +67,12 @@ struct TEvSchemeShard {
     static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_FLAT_TX_SCHEMESHARD), "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_FLAT_TX_SCHEMESHARD)");
 
     struct TEvModifySchemeTransaction : public TEventPB<TEvModifySchemeTransaction,
-                                                        NKikimrScheme::TEvModifySchemeTransaction, 
+                                                        NKikimrScheme::TEvModifySchemeTransaction,
                                                         EvModifySchemeTransaction> {
         TEvModifySchemeTransaction()
         {}
 
-        TEvModifySchemeTransaction(ui64 txid, ui64 tabletId) 
+        TEvModifySchemeTransaction(ui64 txid, ui64 tabletId)
         {
             Record.SetTxId(txid);
             Record.SetTabletId(tabletId);
@@ -94,27 +94,27 @@ struct TEvSchemeShard {
 
     struct TEvCancelTx
         : public TEventPB<TEvCancelTx,
-                          NKikimrScheme::TEvCancelTx, 
+                          NKikimrScheme::TEvCancelTx,
                           EvCancelTx>
     {
     };
 
     struct TEvCancelTxResult:
         public TEventPB<TEvCancelTxResult,
-                        NKikimrScheme::TEvCancelTxResult, 
+                        NKikimrScheme::TEvCancelTxResult,
                         EvCancelTxResult>
     {
         TEvCancelTxResult() = default;
         TEvCancelTxResult(ui64 targetTxId, ui64 txId) {
             Record.SetTargetTxId(targetTxId);
-            Record.SetTxId(txId); 
+            Record.SetTxId(txId);
         }
     };
 
-    using EStatus = NKikimrScheme::EStatus; 
+    using EStatus = NKikimrScheme::EStatus;
 
     struct TEvModifySchemeTransactionResult : public TEventPB<TEvModifySchemeTransactionResult,
-                                                              NKikimrScheme::TEvModifySchemeTransactionResult, 
+                                                              NKikimrScheme::TEvModifySchemeTransactionResult,
                                                               EvModifySchemeTransactionResult> {
 
         TEvModifySchemeTransactionResult()
@@ -134,19 +134,19 @@ struct TEvSchemeShard {
             }
         }
 
-        bool IsAccepted() const { 
+        bool IsAccepted() const {
             return Record.GetReason().empty() && (Record.GetStatus() == EStatus::StatusAccepted);
-        } 
- 
-        bool IsConditionalAccepted() const { 
-            //happens on retries, we answer like StatusAccepted with error message and do nothing in operation 
+        }
+
+        bool IsConditionalAccepted() const {
+            //happens on retries, we answer like StatusAccepted with error message and do nothing in operation
             return !Record.GetReason().empty() && (Record.GetStatus() == EStatus::StatusAccepted);
-        } 
- 
-        bool IsDone() const { 
+        }
+
+        bool IsDone() const {
             return Record.GetReason().empty() && (Record.GetStatus() == EStatus::StatusSuccess);
-        } 
- 
+        }
+
         void SetStatus(EStatus status, const TString& reason = {}) {
             Record.SetStatus(status);
             if (reason) {
@@ -212,12 +212,12 @@ struct TEvSchemeShard {
     };
 
     struct TEvDescribeScheme : public TEventPB<TEvDescribeScheme,
-                                               NKikimrSchemeOp::TDescribePath, 
+                                               NKikimrSchemeOp::TDescribePath,
                                                EvDescribeScheme> {
         TEvDescribeScheme()
         {}
 
-        TEvDescribeScheme(const NKikimrSchemeOp::TDescribePath& describePath) 
+        TEvDescribeScheme(const NKikimrSchemeOp::TDescribePath& describePath)
         {
             Record.CopyFrom(describePath);
         }
@@ -247,16 +247,16 @@ struct TEvSchemeShard {
     };
 
     struct TEvDescribeSchemeResult : public TEventPreSerializedPB<TEvDescribeSchemeResult,
-                                                                  NKikimrScheme::TEvDescribeSchemeResult, 
+                                                                  NKikimrScheme::TEvDescribeSchemeResult,
                                                                   EvDescribeSchemeResult> {
-        TEvDescribeSchemeResult() = default; 
+        TEvDescribeSchemeResult() = default;
 
-        TEvDescribeSchemeResult(const TString& path, ui64 pathOwner, TPathId pathId) 
+        TEvDescribeSchemeResult(const TString& path, ui64 pathOwner, TPathId pathId)
         {
             Record.SetPath(path);
             Record.SetPathOwner(pathOwner);
-            Record.SetPathId(pathId.LocalPathId); 
-            Record.SetPathOwnerId(pathId.OwnerId); 
+            Record.SetPathId(pathId.LocalPathId);
+            Record.SetPathOwnerId(pathId.OwnerId);
         }
     };
 
@@ -265,14 +265,14 @@ struct TEvSchemeShard {
 
         TEvDescribeSchemeResultBuilder() = default;
 
-        TEvDescribeSchemeResultBuilder(const TString& path, ui64 pathOwner, TPathId pathId) 
-            : TEvDescribeSchemeResult(path, pathOwner, pathId) 
+        TEvDescribeSchemeResultBuilder(const TString& path, ui64 pathOwner, TPathId pathId)
+            : TEvDescribeSchemeResult(path, pathOwner, pathId)
         {
         }
     };
 
     struct TEvNotifyTxCompletion : public TEventPB<TEvNotifyTxCompletion,
-                                                     NKikimrScheme::TEvNotifyTxCompletion, 
+                                                     NKikimrScheme::TEvNotifyTxCompletion,
                                                      EvNotifyTxCompletion> {
         explicit TEvNotifyTxCompletion(ui64 txId = 0)
         {
@@ -281,7 +281,7 @@ struct TEvSchemeShard {
     };
 
     struct TEvNotifyTxCompletionRegistered : public TEventPB<TEvNotifyTxCompletionRegistered,
-                                                     NKikimrScheme::TEvNotifyTxCompletionRegistered, 
+                                                     NKikimrScheme::TEvNotifyTxCompletionRegistered,
                                                      EvNotifyTxCompletionRegistered> {
         explicit TEvNotifyTxCompletionRegistered(ui64 txId = 0)
         {
@@ -290,7 +290,7 @@ struct TEvSchemeShard {
     };
 
     struct TEvNotifyTxCompletionResult : public TEventPB<TEvNotifyTxCompletionResult,
-                                                     NKikimrScheme::TEvNotifyTxCompletionResult, 
+                                                     NKikimrScheme::TEvNotifyTxCompletionResult,
                                                      EvNotifyTxCompletionResult> {
         explicit TEvNotifyTxCompletionResult(ui64 txId = 0)
         {
@@ -303,199 +303,199 @@ struct TEvSchemeShard {
 
     struct TEvWakeupToMeasureSelfResponseTime : public TEventLocal<TEvWakeupToMeasureSelfResponseTime, EvWakeupToMeasureSelfResponseTime> {
     };
- 
-    struct TEvInitTenantSchemeShard: public TEventPB<TEvInitTenantSchemeShard, 
-                                                            NKikimrScheme::TEvInitTenantSchemeShard, 
-                                                            EvInitTenantSchemeShard> { 
- 
-        TEvInitTenantSchemeShard() = default; 
- 
-        TEvInitTenantSchemeShard(ui64 selfTabletId, 
-                                 ui64 pathId, TString tenanatRootPath, 
-                                 TString owner, TString effectiveRootACL, ui64 effectiveRootACLVersion, 
-                                 const NKikimrSubDomains::TProcessingParams& processingParams, 
-                                 const TStoragePools& storagePools, 
-                                 const TMap<TString, TString> userAttrData, ui64 UserAttrsVersion, 
+
+    struct TEvInitTenantSchemeShard: public TEventPB<TEvInitTenantSchemeShard,
+                                                            NKikimrScheme::TEvInitTenantSchemeShard,
+                                                            EvInitTenantSchemeShard> {
+
+        TEvInitTenantSchemeShard() = default;
+
+        TEvInitTenantSchemeShard(ui64 selfTabletId,
+                                 ui64 pathId, TString tenanatRootPath,
+                                 TString owner, TString effectiveRootACL, ui64 effectiveRootACLVersion,
+                                 const NKikimrSubDomains::TProcessingParams& processingParams,
+                                 const TStoragePools& storagePools,
+                                 const TMap<TString, TString> userAttrData, ui64 UserAttrsVersion,
                                  const TSchemeLimits& limits, ui64 sharedHive, const TPathId& resourcesDomainId = TPathId());
-    }; 
- 
-    struct TEvInitTenantSchemeShardResult: public TEventPB<TEvInitTenantSchemeShardResult, 
-                                                            NKikimrScheme::TEvInitTenantSchemeShardResult, 
-                                                            EvInitTenantSchemeShardResult> { 
- 
-        TEvInitTenantSchemeShardResult() = default; 
- 
-        TEvInitTenantSchemeShardResult(ui64 tenantSchemeShard, EStatus status) { 
-            Record.SetTenantSchemeShard(tenantSchemeShard); 
-            Record.SetStatus(status); 
-        } 
-    }; 
- 
-    struct TEvMigrateSchemeShard: public TEventPB<TEvMigrateSchemeShard, 
-                                                   NKikimrScheme::TEvMigrate, 
-                                                   EvMigrateSchemeShard> { 
-        TEvMigrateSchemeShard() = default; 
- 
-        TPathId GetPathId() const { 
-            if (!Record.GetPath().HasPathId()) { 
-                return NKikimr::TPathId(); 
-            } 
- 
-            auto& pathId = Record.GetPath().GetPathId(); 
-            return NKikimr::TPathId(pathId.GetOwnerId(), pathId.GetLocalId()); 
-        } 
-    }; 
- 
-    struct TEvMigrateSchemeShardResult: public TEventPB<TEvMigrateSchemeShardResult, 
-                                                   NKikimrScheme::TEvMigrateResult, 
-                                                   EvMigrateSchemeShardResult> { 
-        TEvMigrateSchemeShardResult() = default; 
- 
-        TEvMigrateSchemeShardResult(ui64 tenantSchemeShard) { 
-            Record.SetTenantSchemeShard(tenantSchemeShard); 
-        } 
- 
-        TPathId GetPathId() const { 
-            if (!Record.HasPathId()) { 
-                return NKikimr::TPathId(); 
-            } 
- 
-            auto& pathId = Record.GetPathId(); 
-            return NKikimr::TPathId(pathId.GetOwnerId(), pathId.GetLocalId()); 
-        } 
-    }; 
- 
-    struct TEvPublishTenantAsReadOnly: public TEventPB<TEvPublishTenantAsReadOnly, 
-                                              NKikimrScheme::TEvPublishTenantAsReadOnly, 
-                                              EvPublishTenantAsReadOnly> { 
-        TEvPublishTenantAsReadOnly() = default; 
-        TEvPublishTenantAsReadOnly(ui64 domainSchemeShardID) { 
-            Record.SetDomainSchemeShard(domainSchemeShardID); 
-        } 
-    }; 
- 
-    struct TEvPublishTenantAsReadOnlyResult: public TEventPB<TEvPublishTenantAsReadOnlyResult, 
-                                                        NKikimrScheme::TEvPublishTenantAsReadOnlyResult, 
-                                                        EvPublishTenantAsReadOnlyResult> { 
-        TEvPublishTenantAsReadOnlyResult() = default; 
-        TEvPublishTenantAsReadOnlyResult(ui64 tenantSchemeShard, EStatus status) { 
-            Record.SetTenantSchemeShard(tenantSchemeShard); 
-            Record.SetStatus(status); 
-        } 
-    }; 
- 
-    struct TEvRewriteOwner: public TEventPB<TEvRewriteOwner, 
-                                             NKikimrScheme::TEvRewriteOwner, 
-                                             EvRewriteOwner> { 
-        TEvRewriteOwner() = default; 
-    }; 
- 
-    struct TEvRewriteOwnerResult: public TEventPB<TEvRewriteOwnerResult, 
-                                             NKikimrScheme::TEvRewriteOwnerResult, 
-                                             EvRewriteOwnerResult> { 
-        TEvRewriteOwnerResult() = default; 
-    }; 
- 
-    struct TEvPublishTenant: public TEventPB<TEvPublishTenant, 
-                                                        NKikimrScheme::TEvPublishTenant, 
-                                                        EvPublishTenant> { 
-        TEvPublishTenant() = default; 
-        TEvPublishTenant(ui64 domainSchemeShardID) { 
-            Record.SetDomainSchemeShard(domainSchemeShardID); 
-        } 
-    }; 
- 
-    struct TEvPublishTenantResult: public TEventPB<TEvPublishTenantResult, 
-                                                              NKikimrScheme::TEvPublishTenantResult, 
-                                                              EvPublishTenantResult> { 
-        TEvPublishTenantResult() = default; 
-        TEvPublishTenantResult(ui64 tenantSchemeShard) { 
-            Record.SetTenantSchemeShard(tenantSchemeShard); 
-        } 
-    }; 
- 
-    struct TEvSyncTenantSchemeShard: public TEventPB<TEvSyncTenantSchemeShard, 
-                                                      NKikimrScheme::TEvSyncTenantSchemeShard, 
-                                                      EvSyncTenantSchemeShard> { 
-        TEvSyncTenantSchemeShard() = default; 
- 
-        TEvSyncTenantSchemeShard(const TPathId& domainKey, 
-                                 ui64 tabletId, 
-                                 ui64 generation, 
-                                 ui64 effectiveACLVersion, 
-                                 ui64 subdomainVersion, 
-                                 ui64 userAttrsVersion, 
+    };
+
+    struct TEvInitTenantSchemeShardResult: public TEventPB<TEvInitTenantSchemeShardResult,
+                                                            NKikimrScheme::TEvInitTenantSchemeShardResult,
+                                                            EvInitTenantSchemeShardResult> {
+
+        TEvInitTenantSchemeShardResult() = default;
+
+        TEvInitTenantSchemeShardResult(ui64 tenantSchemeShard, EStatus status) {
+            Record.SetTenantSchemeShard(tenantSchemeShard);
+            Record.SetStatus(status);
+        }
+    };
+
+    struct TEvMigrateSchemeShard: public TEventPB<TEvMigrateSchemeShard,
+                                                   NKikimrScheme::TEvMigrate,
+                                                   EvMigrateSchemeShard> {
+        TEvMigrateSchemeShard() = default;
+
+        TPathId GetPathId() const {
+            if (!Record.GetPath().HasPathId()) {
+                return NKikimr::TPathId();
+            }
+
+            auto& pathId = Record.GetPath().GetPathId();
+            return NKikimr::TPathId(pathId.GetOwnerId(), pathId.GetLocalId());
+        }
+    };
+
+    struct TEvMigrateSchemeShardResult: public TEventPB<TEvMigrateSchemeShardResult,
+                                                   NKikimrScheme::TEvMigrateResult,
+                                                   EvMigrateSchemeShardResult> {
+        TEvMigrateSchemeShardResult() = default;
+
+        TEvMigrateSchemeShardResult(ui64 tenantSchemeShard) {
+            Record.SetTenantSchemeShard(tenantSchemeShard);
+        }
+
+        TPathId GetPathId() const {
+            if (!Record.HasPathId()) {
+                return NKikimr::TPathId();
+            }
+
+            auto& pathId = Record.GetPathId();
+            return NKikimr::TPathId(pathId.GetOwnerId(), pathId.GetLocalId());
+        }
+    };
+
+    struct TEvPublishTenantAsReadOnly: public TEventPB<TEvPublishTenantAsReadOnly,
+                                              NKikimrScheme::TEvPublishTenantAsReadOnly,
+                                              EvPublishTenantAsReadOnly> {
+        TEvPublishTenantAsReadOnly() = default;
+        TEvPublishTenantAsReadOnly(ui64 domainSchemeShardID) {
+            Record.SetDomainSchemeShard(domainSchemeShardID);
+        }
+    };
+
+    struct TEvPublishTenantAsReadOnlyResult: public TEventPB<TEvPublishTenantAsReadOnlyResult,
+                                                        NKikimrScheme::TEvPublishTenantAsReadOnlyResult,
+                                                        EvPublishTenantAsReadOnlyResult> {
+        TEvPublishTenantAsReadOnlyResult() = default;
+        TEvPublishTenantAsReadOnlyResult(ui64 tenantSchemeShard, EStatus status) {
+            Record.SetTenantSchemeShard(tenantSchemeShard);
+            Record.SetStatus(status);
+        }
+    };
+
+    struct TEvRewriteOwner: public TEventPB<TEvRewriteOwner,
+                                             NKikimrScheme::TEvRewriteOwner,
+                                             EvRewriteOwner> {
+        TEvRewriteOwner() = default;
+    };
+
+    struct TEvRewriteOwnerResult: public TEventPB<TEvRewriteOwnerResult,
+                                             NKikimrScheme::TEvRewriteOwnerResult,
+                                             EvRewriteOwnerResult> {
+        TEvRewriteOwnerResult() = default;
+    };
+
+    struct TEvPublishTenant: public TEventPB<TEvPublishTenant,
+                                                        NKikimrScheme::TEvPublishTenant,
+                                                        EvPublishTenant> {
+        TEvPublishTenant() = default;
+        TEvPublishTenant(ui64 domainSchemeShardID) {
+            Record.SetDomainSchemeShard(domainSchemeShardID);
+        }
+    };
+
+    struct TEvPublishTenantResult: public TEventPB<TEvPublishTenantResult,
+                                                              NKikimrScheme::TEvPublishTenantResult,
+                                                              EvPublishTenantResult> {
+        TEvPublishTenantResult() = default;
+        TEvPublishTenantResult(ui64 tenantSchemeShard) {
+            Record.SetTenantSchemeShard(tenantSchemeShard);
+        }
+    };
+
+    struct TEvSyncTenantSchemeShard: public TEventPB<TEvSyncTenantSchemeShard,
+                                                      NKikimrScheme::TEvSyncTenantSchemeShard,
+                                                      EvSyncTenantSchemeShard> {
+        TEvSyncTenantSchemeShard() = default;
+
+        TEvSyncTenantSchemeShard(const TPathId& domainKey,
+                                 ui64 tabletId,
+                                 ui64 generation,
+                                 ui64 effectiveACLVersion,
+                                 ui64 subdomainVersion,
+                                 ui64 userAttrsVersion,
                                  ui64 tenantHive,
-                                 ui64 tenantSysViewProcessor, 
-                                 const TString& rootACL) 
-        { 
-            Record.SetDomainSchemeShard(domainKey.OwnerId); 
-            Record.SetDomainPathId(domainKey.LocalPathId); 
- 
-            Record.SetTabletID(tabletId); 
-            Record.SetGeneration(generation); 
- 
-            Record.SetEffectiveACLVersion(effectiveACLVersion); 
-            Record.SetSubdomainVersion(subdomainVersion); 
-            Record.SetUserAttributesVersion(userAttrsVersion); 
- 
-            Record.SetTenantHive(tenantHive); 
+                                 ui64 tenantSysViewProcessor,
+                                 const TString& rootACL)
+        {
+            Record.SetDomainSchemeShard(domainKey.OwnerId);
+            Record.SetDomainPathId(domainKey.LocalPathId);
+
+            Record.SetTabletID(tabletId);
+            Record.SetGeneration(generation);
+
+            Record.SetEffectiveACLVersion(effectiveACLVersion);
+            Record.SetSubdomainVersion(subdomainVersion);
+            Record.SetUserAttributesVersion(userAttrsVersion);
+
+            Record.SetTenantHive(tenantHive);
             Record.SetTenantSysViewProcessor(tenantSysViewProcessor);
- 
-            Record.SetTenantRootACL(rootACL); 
-        } 
- 
-    }; 
- 
-    struct TEvUpdateTenantSchemeShard: public TEventPB<TEvUpdateTenantSchemeShard, 
-                                                            NKikimrScheme::TEvUpdateTenantSchemeShard, 
-                                                            EvUpdateTenantSchemeShard> { 
- 
-        TEvUpdateTenantSchemeShard() = default; 
- 
-        TEvUpdateTenantSchemeShard(ui64 tabletId, ui64 generation) { 
-            Record.SetTabletId(tabletId); 
-            Record.SetGeneration(generation); 
-        } 
- 
-        void SetEffectiveACL(const TString& owner, const TString& effectiveACL, ui64 version) { 
-            Record.SetOwner(owner); 
-            Record.SetEffectiveACL(effectiveACL); 
-            Record.SetEffectiveACLVersion(version); 
-        } 
- 
-        void SetStoragePools(const TStoragePools& storagePools, ui64 version) { 
-            for (auto& x: storagePools) { 
-                *Record.AddStoragePools() = x; 
-            } 
-            Record.SetSubdomainVersion(version); 
-        } 
- 
-        void SetUserAttrs(const TMap<TString, TString>& userAttrData, ui64 version) { 
-            for (auto& x: userAttrData) { 
-                auto item = Record.AddUserAttributes(); 
-                item->SetKey(x.first); 
-                item->SetValue(x.second); 
-            } 
-            Record.SetUserAttributesVersion(version); 
-        } 
- 
-        void SetTenantHive(ui64 hive) { 
-            Record.SetTenantHive(hive); 
-        } 
+
+            Record.SetTenantRootACL(rootACL);
+        }
+
+    };
+
+    struct TEvUpdateTenantSchemeShard: public TEventPB<TEvUpdateTenantSchemeShard,
+                                                            NKikimrScheme::TEvUpdateTenantSchemeShard,
+                                                            EvUpdateTenantSchemeShard> {
+
+        TEvUpdateTenantSchemeShard() = default;
+
+        TEvUpdateTenantSchemeShard(ui64 tabletId, ui64 generation) {
+            Record.SetTabletId(tabletId);
+            Record.SetGeneration(generation);
+        }
+
+        void SetEffectiveACL(const TString& owner, const TString& effectiveACL, ui64 version) {
+            Record.SetOwner(owner);
+            Record.SetEffectiveACL(effectiveACL);
+            Record.SetEffectiveACLVersion(version);
+        }
+
+        void SetStoragePools(const TStoragePools& storagePools, ui64 version) {
+            for (auto& x: storagePools) {
+                *Record.AddStoragePools() = x;
+            }
+            Record.SetSubdomainVersion(version);
+        }
+
+        void SetUserAttrs(const TMap<TString, TString>& userAttrData, ui64 version) {
+            for (auto& x: userAttrData) {
+                auto item = Record.AddUserAttributes();
+                item->SetKey(x.first);
+                item->SetValue(x.second);
+            }
+            Record.SetUserAttributesVersion(version);
+        }
+
+        void SetTenantHive(ui64 hive) {
+            Record.SetTenantHive(hive);
+        }
 
         void SetTenantSysViewProcessor(ui64 svp) {
             Record.SetTenantSysViewProcessor(svp);
         }
- 
-        void SetUpdateTenantRootACL(const TString& acl) { 
-            Record.SetUpdateTenantRootACL(acl); 
-        } 
-    }; 
+
+        void SetUpdateTenantRootACL(const TString& acl) {
+            Record.SetUpdateTenantRootACL(acl);
+        }
+    };
 
     struct TEvFindTabletSubDomainPathId
         : public TEventPB<TEvFindTabletSubDomainPathId,
-                          NKikimrScheme::TEvFindTabletSubDomainPathId, 
+                          NKikimrScheme::TEvFindTabletSubDomainPathId,
                           EvFindTabletSubDomainPathId>
     {
         TEvFindTabletSubDomainPathId() = default;
@@ -507,10 +507,10 @@ struct TEvSchemeShard {
 
     struct TEvFindTabletSubDomainPathIdResult
         : public TEventPB<TEvFindTabletSubDomainPathIdResult,
-                          NKikimrScheme::TEvFindTabletSubDomainPathIdResult, 
+                          NKikimrScheme::TEvFindTabletSubDomainPathIdResult,
                           EvFindTabletSubDomainPathIdResult>
     {
-        using EStatus = NKikimrScheme::TEvFindTabletSubDomainPathIdResult::EStatus; 
+        using EStatus = NKikimrScheme::TEvFindTabletSubDomainPathIdResult::EStatus;
 
         TEvFindTabletSubDomainPathIdResult() = default;
 
@@ -522,18 +522,18 @@ struct TEvSchemeShard {
 
         // Success
         TEvFindTabletSubDomainPathIdResult(ui64 tabletId, ui64 schemeShardId, ui64 subDomainPathId) {
-            Record.SetStatus(NKikimrScheme::TEvFindTabletSubDomainPathIdResult::SUCCESS); 
+            Record.SetStatus(NKikimrScheme::TEvFindTabletSubDomainPathIdResult::SUCCESS);
             Record.SetTabletId(tabletId);
             Record.SetSchemeShardId(schemeShardId);
             Record.SetSubDomainPathId(subDomainPathId);
         }
     };
 
-    struct TEvLogin : TEventPB<TEvLogin, NKikimrScheme::TEvLogin, EvLogin> { 
+    struct TEvLogin : TEventPB<TEvLogin, NKikimrScheme::TEvLogin, EvLogin> {
         TEvLogin() = default;
     };
 
-    struct TEvLoginResult : TEventPB<TEvLoginResult, NKikimrScheme::TEvLoginResult, EvLoginResult> { 
+    struct TEvLoginResult : TEventPB<TEvLoginResult, NKikimrScheme::TEvLoginResult, EvLoginResult> {
         TEvLoginResult() = default;
     };
 };
@@ -541,11 +541,11 @@ struct TEvSchemeShard {
 }
 
 IActor* CreateFlatTxSchemeShard(const TActorId &tablet, TTabletStorageInfo *info);
-bool PartitionConfigHasExternalBlobsEnabled(const NKikimrSchemeOp::TPartitionConfig &partitionConfig); 
-} 
- 
+bool PartitionConfigHasExternalBlobsEnabled(const NKikimrSchemeOp::TPartitionConfig &partitionConfig);
+}
+
 template<>
-inline void Out<NKikimrScheme::EStatus>(IOutputStream& o, NKikimrScheme::EStatus x) { 
-    o << NKikimrScheme::EStatus_Name(x); 
+inline void Out<NKikimrScheme::EStatus>(IOutputStream& o, NKikimrScheme::EStatus x) {
+    o << NKikimrScheme::EStatus_Name(x);
     return;
 }

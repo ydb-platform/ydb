@@ -1,23 +1,23 @@
 UNITTEST_FOR(ydb/core/tx/schemeshard)
- 
+
 OWNER(
     vvvv
     g:kikimr
 )
- 
-FORK_SUBTESTS() 
 
-IF (WITH_VALGRIND) 
-    SPLIT_FACTOR(40) 
-ENDIF() 
+FORK_SUBTESTS()
+
+IF (WITH_VALGRIND)
+    SPLIT_FACTOR(40)
+ENDIF()
 
 TIMEOUT(2400)
 
-TAG(ya:fat) 
+TAG(ya:fat)
 
-SIZE(LARGE) 
- 
-PEERDIR( 
+SIZE(LARGE)
+
+PEERDIR(
     library/cpp/getopt
     library/cpp/regex/pcre
     library/cpp/svnversion
@@ -26,12 +26,12 @@ PEERDIR(
     ydb/core/tx
     ydb/core/tx/schemeshard/ut_helpers
     ydb/library/yql/public/udf/service/exception_policy
-) 
- 
-SRCS( 
-    ut_index_build_reboots.cpp 
-) 
- 
+)
+
+SRCS(
+    ut_index_build_reboots.cpp
+)
+
 YQL_LAST_ABI_VERSION()
 
-END() 
+END()

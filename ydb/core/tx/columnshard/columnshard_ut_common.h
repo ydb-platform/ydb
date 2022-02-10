@@ -129,8 +129,8 @@ struct TTestSchema {
         return schema;
     }
 
-    static NKikimrSchemeOp::TOlapColumnDescription CreateColumn(ui32 id, const TString& name, TTypeId type) { 
-        NKikimrSchemeOp::TOlapColumnDescription col; 
+    static NKikimrSchemeOp::TOlapColumnDescription CreateColumn(ui32 id, const TString& name, TTypeId type) {
+        NKikimrSchemeOp::TOlapColumnDescription col;
         col.SetId(id);
         col.SetName(name);
         col.SetTypeId(type);

@@ -94,7 +94,7 @@ TDriverConfig& TDriverConfig::SetNetworkThreadsNum(size_t sz) {
 }
 
 TDriverConfig& TDriverConfig::SetClientThreadsNum(size_t sz) {
-    Impl_->ClientThreadsNum = sz; 
+    Impl_->ClientThreadsNum = sz;
     return *this;
 }
 

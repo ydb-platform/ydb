@@ -300,7 +300,7 @@ public:
             PDisk->HttpInfo(*req); // Sends TEvHttpInfoResult inside
         }
     }
- 
+
     void InitHandle(TEvPDiskFormattingFinished::TPtr &ev) {
         FormattingThread->Join();
         IsFormattingNow = false;

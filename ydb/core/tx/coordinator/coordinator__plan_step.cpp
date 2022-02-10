@@ -1,22 +1,22 @@
-#include "coordinator_impl.h" 
- 
+#include "coordinator_impl.h"
+
 #include <util/generic/hash_set.h>
 
 namespace NKikimr {
 namespace NFlatTxCoordinator {
 
-struct TInFlyAccountant { 
-    NMonitoring::TDynamicCounters::TCounterPtr Counter; 
-    TInFlyAccountant(NMonitoring::TDynamicCounters::TCounterPtr counter) 
-        : Counter(counter) 
-    { 
-        Counter->Inc(); 
-    } 
-    ~TInFlyAccountant() { 
-        Counter->Dec(); 
-    } 
-}; 
- 
+struct TInFlyAccountant {
+    NMonitoring::TDynamicCounters::TCounterPtr Counter;
+    TInFlyAccountant(NMonitoring::TDynamicCounters::TCounterPtr counter)
+        : Counter(counter)
+    {
+        Counter->Inc();
+    }
+    ~TInFlyAccountant() {
+        Counter->Dec();
+    }
+};
+
 struct TTxCoordinator::TTxPlanStep : public TTransactionBase<TTxCoordinator> {
     const ui64 PlanOnStep;
     const bool Rapid;
@@ -28,7 +28,7 @@ struct TTxCoordinator::TTxPlanStep : public TTransactionBase<TTxCoordinator> {
     TInstant ExecStartMoment;
     ui64 PlannedCounter;
     ui64 DeclinedCounter;
-    TInFlyAccountant InFlyAccountant; 
+    TInFlyAccountant InFlyAccountant;
 
     TTxPlanStep(ui64 toPlan, TVector<TQueueType::TSlot> &slots, TSelf *coordinator, bool rapid)
         : TBase(coordinator)
@@ -36,7 +36,7 @@ struct TTxCoordinator::TTxPlanStep : public TTransactionBase<TTxCoordinator> {
         , Rapid(rapid)
         , PlannedCounter(0)
         , DeclinedCounter(0)
-        , InFlyAccountant(Self->MonCounters.StepsInFly) 
+        , InFlyAccountant(Self->MonCounters.StepsInFly)
     {
         Slots.swap(slots);
     }
@@ -52,11 +52,11 @@ struct TTxCoordinator::TTxPlanStep : public TTransactionBase<TTxCoordinator> {
         THashMap<TTabletId, TVector<TTabletId>> byMediatorAffected;
 
         // first fill every mediator with something (every mediator must receive step)
-        const ui32 mediatorsSize = Self->Config.Mediators->List().size(); 
+        const ui32 mediatorsSize = Self->Config.Mediators->List().size();
         mediatorSteps.reserve(mediatorsSize);
-        for (TTabletId mediatorId : Self->Config.Mediators->List()) { 
+        for (TTabletId mediatorId : Self->Config.Mediators->List()) {
             mediatorSteps.push_back(new TMediatorStep(mediatorId, PlanOnStep));
-        } 
+        }
 
         // create mediator steps
         ProxyPlanConfirmations.Reset(new TCoordinatorStepConfirmations(PlanOnStep));
@@ -64,9 +64,9 @@ struct TTxCoordinator::TTxPlanStep : public TTransactionBase<TTxCoordinator> {
             TQueueType::TQ &queue = *slot.Queue;
             TQueueType::TQ::TReadIterator iterator = queue.Iterator();
             while (TTransactionProposal *proposal = iterator.Next()) {
-                for (auto &x : byMediatorAffected) { 
-                    x.second.clear(); 
-                } 
+                for (auto &x : byMediatorAffected) {
+                    x.second.clear();
+                }
 
                 const TTxId txId = proposal->TxId;
                 Y_VERIFY(txId);
@@ -134,12 +134,12 @@ struct TTxCoordinator::TTxPlanStep : public TTransactionBase<TTxCoordinator> {
                     Y_VERIFY(!proposal->AffectedSet.empty());
                     for (const auto &txprop : proposal->AffectedSet) {
                         const TTabletId affectedTablet = txprop.TabletId;
-                        const TTabletId mediatorId = Self->Config.Mediators->Select(affectedTablet); 
+                        const TTabletId mediatorId = Self->Config.Mediators->Select(affectedTablet);
 
                         transaction.AffectedSet.insert(affectedTablet);
-                        transaction.UnconfirmedAffectedSet[mediatorId].insert(affectedTablet); 
+                        transaction.UnconfirmedAffectedSet[mediatorId].insert(affectedTablet);
 
-                        byMediatorAffected[mediatorId].push_back(affectedTablet); 
+                        byMediatorAffected[mediatorId].push_back(affectedTablet);
                     }
 
                     TVector<TTabletId> affectedSet(transaction.AffectedSet.begin(), transaction.AffectedSet.end());
@@ -152,7 +152,7 @@ struct TTxCoordinator::TTxPlanStep : public TTransactionBase<TTxCoordinator> {
                 }
 
                 for (ui32 idx = 0; idx < mediatorsSize; ++idx) {
-                    TTabletId mediatorId = mediatorSteps[idx]->MediatorId; 
+                    TTabletId mediatorId = mediatorSteps[idx]->MediatorId;
                     TVector<TTabletId> &affected = byMediatorAffected[mediatorId];
                     if (!affected.empty()) {
                         mediatorSteps[idx]->Transactions.push_back(TMediatorStep::TTx(txId, &affected.front(), affected.size(), 0));
@@ -186,8 +186,8 @@ struct TTxCoordinator::TTxPlanStep : public TTransactionBase<TTxCoordinator> {
             if (mediator.PushUpdates) {
                 StepsToConfirm[mediatorId] = std::pair<ui64, bool *>(mediator.GenCookie, &mp->Confirmed);
                 mediator.Queue->Push(mp.Release());
-            } else if (!StepsToConfirm.empty()) { 
-                FLOG_DEBUG_S(ctx, NKikimrServices::TX_COORDINATOR, "PushUpdates false for mediator " << mediatorId << " step " << PlanOnStep); 
+            } else if (!StepsToConfirm.empty()) {
+                FLOG_DEBUG_S(ctx, NKikimrServices::TX_COORDINATOR, "PushUpdates false for mediator " << mediatorId << " step " << PlanOnStep);
             }
         }
         db.Table<Schema::State>().Key(Schema::State::KeyLastPlanned).Update(NIceDb::TUpdate<Schema::State::StateValue>(PlanOnStep));

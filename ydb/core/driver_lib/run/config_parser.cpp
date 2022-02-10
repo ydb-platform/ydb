@@ -344,7 +344,7 @@ void TRunCommandConfigParser::ApplyParsedOptions() {
     messageBusConfig->SetStartTracingBusProxy(RunOpts.StartTracingBusProxy);
     messageBusConfig->SetTracePath(RunOpts.TracePath);
 
-    Config.AppConfig.MutableBootstrapConfig()->MutableCompileServiceConfig()->SetInflightLimit(RunOpts.CompileInflightLimit); 
+    Config.AppConfig.MutableBootstrapConfig()->MutableCompileServiceConfig()->SetInflightLimit(RunOpts.CompileInflightLimit);
     Config.AppConfig.MutableMonitoringConfig()->SetMonitoringPort(RunOpts.MonitoringPort);
     Config.AppConfig.MutableMonitoringConfig()->SetMonitoringAddress(RunOpts.MonitoringAddress);
     Config.AppConfig.MutableMonitoringConfig()->SetMonitoringThreads(RunOpts.MonitoringThreads);

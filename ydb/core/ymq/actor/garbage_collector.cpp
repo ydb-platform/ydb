@@ -498,9 +498,9 @@ private:
         trans->MutableDrop()->SetName(name);
 
         if (CurrentNode.Kind == TSchemeCacheNavigate::EKind::KindPath) {
-            trans->SetOperationType(NKikimrSchemeOp::ESchemeOpRmDir); 
+            trans->SetOperationType(NKikimrSchemeOp::ESchemeOpRmDir);
         } else if (CurrentNode.Kind == TSchemeCacheNavigate::EKind::KindTable) {
-            trans->SetOperationType(NKikimrSchemeOp::ESchemeOpDropTable); 
+            trans->SetOperationType(NKikimrSchemeOp::ESchemeOpDropTable);
         } else {
             Y_VERIFY("Unexpected node kind");
         }

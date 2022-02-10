@@ -1,10 +1,10 @@
-#include "coordinator_impl.h" 
+#include "coordinator_impl.h"
 
 namespace NKikimr {
 namespace NFlatTxCoordinator {
 
 struct TTxCoordinator::TTxRestartMediatorQueue : public TTransactionBase<TTxCoordinator> {
-    const TTabletId MediatorId; 
+    const TTabletId MediatorId;
     const ui64 GenCookie;
 
     TVector<bool *> StepsToConfirm;

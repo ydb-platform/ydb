@@ -520,13 +520,13 @@ public:
                         NKikimrStoragePool::TChannelBind& bind = tablet.BoundChannels.back();
                         if (tabletChannelRowset.HaveValue<Schema::TabletChannel::Binding>()) {
                             bind = tabletChannelRowset.GetValue<Schema::TabletChannel::Binding>();
-                        } 
+                        }
                         bind.SetStoragePoolName(storagePool);
                         Self->InitDefaultChannelBind(bind);
                         tablet.TabletStorageInfo->Channels.emplace_back(channelId, storagePool);
- 
+
                         TTabletChannelInfo& channel = tablet.TabletStorageInfo->Channels[channelId];
- 
+
                         if (tabletChannelRowset.GetValue<Schema::TabletChannel::NeedNewGroup>()) {
                             tablet.ChannelProfileNewGroup.set(channelId);
                         }

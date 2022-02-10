@@ -7,24 +7,24 @@
 namespace NKikimr {
 
 using TOwnerId = ui64;
-constexpr TOwnerId InvalidOwnerId = Max<ui64>(); 
+constexpr TOwnerId InvalidOwnerId = Max<ui64>();
 
 using TLocalPathId = ui64;
-constexpr TLocalPathId InvalidLocalPathId = Max<ui64>(); 
+constexpr TLocalPathId InvalidLocalPathId = Max<ui64>();
 
 struct TPathId {
     TOwnerId OwnerId;
     TLocalPathId LocalPathId;
 
-    constexpr TPathId() 
-        : OwnerId(InvalidOwnerId) 
-        , LocalPathId(InvalidLocalPathId) 
-    {} 
-    constexpr TPathId(const TOwnerId ownerId, const TLocalPathId localPathId) 
-        : OwnerId(ownerId) 
-        , LocalPathId(localPathId) 
-    { 
-    } 
+    constexpr TPathId()
+        : OwnerId(InvalidOwnerId)
+        , LocalPathId(InvalidLocalPathId)
+    {}
+    constexpr TPathId(const TOwnerId ownerId, const TLocalPathId localPathId)
+        : OwnerId(ownerId)
+        , LocalPathId(localPathId)
+    {
+    }
 
     ui64 Hash() const;
     TString ToString() const;
@@ -38,9 +38,9 @@ struct TPathId {
     bool operator!=(const TPathId& x) const;
     explicit operator bool() const;
 
-    TPathId NextId() const; 
-    TPathId PrevId() const; 
- 
+    TPathId NextId() const;
+    TPathId PrevId() const;
+
 }; // TPathId
 
 TPathId PathIdFromPathId(const NKikimrProto::TPathID& proto);

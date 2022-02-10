@@ -1,146 +1,146 @@
-#include "defs.h" 
-#include "datashard_ut_common.h" 
- 
+#include "defs.h"
+#include "datashard_ut_common.h"
+
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/tx/tx.h>
- 
+
 #include <library/cpp/testing/unittest/registar.h>
- 
- 
-namespace NKikimr { 
- 
-using namespace NSchemeShard; 
-using namespace Tests; 
- 
-TAutoPtr<IEventHandle> EjectDataPropose(TServer::TPtr server, ui64 dataShard) 
-{ 
-    auto &runtime = *server->GetRuntime(); 
-    ui64 schemeShard = ChangeStateStorage(SchemeRoot, server->GetSettings().Domain); 
- 
-    bool hasFound = false; 
-    TAutoPtr<IEventHandle> proposeEvent = nullptr; 
- 
+
+
+namespace NKikimr {
+
+using namespace NSchemeShard;
+using namespace Tests;
+
+TAutoPtr<IEventHandle> EjectDataPropose(TServer::TPtr server, ui64 dataShard)
+{
+    auto &runtime = *server->GetRuntime();
+    ui64 schemeShard = ChangeStateStorage(SchemeRoot, server->GetSettings().Domain);
+
+    bool hasFound = false;
+    TAutoPtr<IEventHandle> proposeEvent = nullptr;
+
     auto captureProposes = [dataShard, schemeShard, &hasFound, &proposeEvent] (TTestActorRuntimeBase&, TAutoPtr<IEventHandle> &event) -> auto
-    { 
-        if (event->GetTypeRewrite() == TEvTxProxy::EvProposeTransaction) { 
-            auto &rec = event->Get<TEvTxProxy::TEvProposeTransaction>()->Record; 
-            bool noSchemeShard = true; 
-            bool hasDataShard = false; 
- 
-            for (auto& affected: rec.GetTransaction().GetAffectedSet()) { 
-                if (schemeShard == affected.GetTabletId()) { 
-                    noSchemeShard = false; 
-                } 
-                if (dataShard == affected.GetTabletId()) { 
-                    hasDataShard = true; 
-                } 
-            } 
- 
-            if (noSchemeShard && hasDataShard) { 
-                Cerr << "\n\n\n got data transaction propose \n\n\n"; 
-                Cerr << rec.DebugString(); 
-                hasFound = true; 
-                proposeEvent = std::move(event); 
-                return TTestActorRuntime::EEventAction::DROP; 
-            } 
-        } 
- 
-        return TTestActorRuntime::EEventAction::PROCESS; 
-    }; 
-    auto prevObserver = runtime.SetObserverFunc(captureProposes); 
- 
-    auto stopCondition = [&hasFound] () -> auto 
-    { 
-        return hasFound; 
-    }; 
- 
-    TDispatchOptions options; 
-    options.CustomFinalCondition = stopCondition; 
-    server->GetRuntime()->DispatchEvents(options); 
-    runtime.SetObserverFunc(prevObserver); 
- 
-    Y_VERIFY(proposeEvent); 
-    return proposeEvent; 
-} 
- 
-Y_UNIT_TEST_SUITE(TDataShardMinStepTest) { 
+    {
+        if (event->GetTypeRewrite() == TEvTxProxy::EvProposeTransaction) {
+            auto &rec = event->Get<TEvTxProxy::TEvProposeTransaction>()->Record;
+            bool noSchemeShard = true;
+            bool hasDataShard = false;
+
+            for (auto& affected: rec.GetTransaction().GetAffectedSet()) {
+                if (schemeShard == affected.GetTabletId()) {
+                    noSchemeShard = false;
+                }
+                if (dataShard == affected.GetTabletId()) {
+                    hasDataShard = true;
+                }
+            }
+
+            if (noSchemeShard && hasDataShard) {
+                Cerr << "\n\n\n got data transaction propose \n\n\n";
+                Cerr << rec.DebugString();
+                hasFound = true;
+                proposeEvent = std::move(event);
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+        }
+
+        return TTestActorRuntime::EEventAction::PROCESS;
+    };
+    auto prevObserver = runtime.SetObserverFunc(captureProposes);
+
+    auto stopCondition = [&hasFound] () -> auto
+    {
+        return hasFound;
+    };
+
+    TDispatchOptions options;
+    options.CustomFinalCondition = stopCondition;
+    server->GetRuntime()->DispatchEvents(options);
+    runtime.SetObserverFunc(prevObserver);
+
+    Y_VERIFY(proposeEvent);
+    return proposeEvent;
+}
+
+Y_UNIT_TEST_SUITE(TDataShardMinStepTest) {
     void TestDropTablePlanComesNotTooEarly(const TString& query, Ydb::StatusIds::StatusCode expectedStatus) {
-        TPortManager pm; 
-        TServerSettings serverSettings(pm.GetPort(2134)); 
-        serverSettings.SetDomainName("Root") 
-            .SetUseRealThreads(false); 
- 
-        Tests::TServer::TPtr server = new TServer(serverSettings); 
-        auto &runtime = *server->GetRuntime(); 
-        auto sender = runtime.AllocateEdgeActor(); 
-        TAutoPtr<IEventHandle> handle; 
- 
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto &runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+        TAutoPtr<IEventHandle> handle;
+
         runtime.SetLogPriority(NKikimrServices::HIVE, NLog::PRI_DEBUG);
-        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG); 
-        runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NLog::PRI_NOTICE); 
-        runtime.SetLogPriority(NKikimrServices::TX_COORDINATOR, NLog::PRI_TRACE); 
-        //runtime.SetLogPriority(NKikimrServices::TX_MEDIATOR_TABLETQUEUE, NLog::PRI_TRACE); 
- 
-        //runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_TRACE); 
-        runtime.SetLogPriority(NKikimrServices::KQP_YQL, NLog::PRI_TRACE); 
- 
-        InitRoot(server, sender); 
-        CreateShardedTable(server, sender, "/Root", "table-1", 1); 
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-1] (key, value) VALUES (1, 1);"); 
-        ui64 shard1 = GetTableShards(server, sender, "/Root/table-1")[0]; 
- 
-        CreateShardedTable(server, sender, "/Root", "table-2", 1); 
-        ui64 shard2 = GetTableShards(server, sender, "/Root/table-2")[0]; 
- 
-        // propose data tx for datashards but not to coordinator 
-        // eject propose message to coordinator 
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NLog::PRI_NOTICE);
+        runtime.SetLogPriority(NKikimrServices::TX_COORDINATOR, NLog::PRI_TRACE);
+        //runtime.SetLogPriority(NKikimrServices::TX_MEDIATOR_TABLETQUEUE, NLog::PRI_TRACE);
+
+        //runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::KQP_YQL, NLog::PRI_TRACE);
+
+        InitRoot(server, sender);
+        CreateShardedTable(server, sender, "/Root", "table-1", 1);
+        ExecSQL(server, sender, "UPSERT INTO [/Root/table-1] (key, value) VALUES (1, 1);");
+        ui64 shard1 = GetTableShards(server, sender, "/Root/table-1")[0];
+
+        CreateShardedTable(server, sender, "/Root", "table-2", 1);
+        ui64 shard2 = GetTableShards(server, sender, "/Root/table-2")[0];
+
+        // propose data tx for datashards but not to coordinator
+        // eject propose message to coordinator
         SendSQL(server, sender, query);
-        auto proposeEvent = EjectDataPropose(server, shard2); 
- 
-        // drop one table while proposes are active 
+        auto proposeEvent = EjectDataPropose(server, shard2);
+
+        // drop one table while proposes are active
         const TInstant dropStart = runtime.GetCurrentTime();
-        ExecSQL(server, sender, "DROP TABLE [/Root/table-1]", false); 
-        WaitTabletBecomesOffline(server, shard1); 
+        ExecSQL(server, sender, "DROP TABLE [/Root/table-1]", false);
+        WaitTabletBecomesOffline(server, shard1);
         const TInstant dropEnd = runtime.GetCurrentTime();
- 
+
         UNIT_ASSERT_C((dropEnd - dropStart) < TDuration::Seconds(35),
             "Drop has taken " << (dropEnd - dropStart) << " of simulated time");
 
-        { // make sure that the ejeceted propose has become outdated 
-            auto request = MakeHolder<TEvTxProxy::TEvProposeTransaction>(); 
-            request->Record.CopyFrom(proposeEvent->Get<TEvTxProxy::TEvProposeTransaction>()->Record); 
-            runtime.SendToPipe(request->Record.GetCoordinatorID(), sender, request.Release()); 
- 
-            TAutoPtr<IEventHandle> handle; 
-            auto reply = runtime.GrabEdgeEventRethrow<TEvTxProxy::TEvProposeTransactionStatus>(handle); 
+        { // make sure that the ejeceted propose has become outdated
+            auto request = MakeHolder<TEvTxProxy::TEvProposeTransaction>();
+            request->Record.CopyFrom(proposeEvent->Get<TEvTxProxy::TEvProposeTransaction>()->Record);
+            runtime.SendToPipe(request->Record.GetCoordinatorID(), sender, request.Release());
+
+            TAutoPtr<IEventHandle> handle;
+            auto reply = runtime.GrabEdgeEventRethrow<TEvTxProxy::TEvProposeTransactionStatus>(handle);
             UNIT_ASSERT_VALUES_EQUAL((TEvTxProxy::TEvProposeTransactionStatus::EStatus)reply->Record.GetStatus(),
                 TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusOutdated);
-        } 
- 
-        { // handle respond from unplanned data transaction because plan ejection 
-            TAutoPtr<IEventHandle> handle; 
-            auto reply = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(handle); 
+        }
+
+        { // handle respond from unplanned data transaction because plan ejection
+            TAutoPtr<IEventHandle> handle;
+            auto reply = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(handle);
             NYql::TIssues issues;
             NYql::IssuesFromMessage(reply->Record.GetRef().GetResponse().GetQueryIssues(), issues);
             UNIT_ASSERT_VALUES_EQUAL_C(reply->Record.GetRef().GetYdbStatus(), expectedStatus,
                 issues.ToString());
-        } 
- 
-        // make sure that second table is still operationable 
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-2] (key, value) VALUES (2, 2);"); 
-        ExecSQL(server, sender, "DROP TABLE [/Root/table-2]", false); 
-        WaitTabletBecomesOffline(server, shard2); 
-    } 
+        }
+
+        // make sure that second table is still operationable
+        ExecSQL(server, sender, "UPSERT INTO [/Root/table-2] (key, value) VALUES (2, 2);");
+        ExecSQL(server, sender, "DROP TABLE [/Root/table-2]", false);
+        WaitTabletBecomesOffline(server, shard2);
+    }
 
     Y_UNIT_TEST(TestDropTablePlanComesNotTooEarlyRO) {
         TestDropTablePlanComesNotTooEarly(
             "SELECT * FROM [/Root/table-1]; SELECT * FROM [/Root/table-2];",
             Ydb::StatusIds::UNAVAILABLE
         );
-    } 
- 
+    }
+
     Y_UNIT_TEST(TestDropTablePlanComesNotTooEarlyRW) {
         TestDropTablePlanComesNotTooEarly(
             "UPSERT INTO [/Root/table-2] (key, value) SELECT key, value FROM [/Root/table-1];",
@@ -485,4 +485,4 @@ Y_UNIT_TEST_SUITE(TDataShardMinStepTest) {
 
 }
 
-} // namespace NKikimr 
+} // namespace NKikimr

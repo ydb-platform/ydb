@@ -1,53 +1,53 @@
-#include "schemeshard__operation_part.h" 
-#include "schemeshard__operation_common.h" 
-#include "schemeshard_impl.h" 
- 
+#include "schemeshard__operation_part.h"
+#include "schemeshard__operation_common.h"
+#include "schemeshard_impl.h"
+
 #include <ydb/core/base/subdomain.h>
 #include <ydb/core/persqueue/config/config.h>
- 
-namespace { 
- 
-using namespace NKikimr; 
-using namespace NSchemeShard; 
- 
-class TConfigureParts: public TSubOperationState { 
-private: 
-    TOperationId OperationId; 
- 
+
+namespace {
+
+using namespace NKikimr;
+using namespace NSchemeShard;
+
+class TConfigureParts: public TSubOperationState {
+private:
+    TOperationId OperationId;
+
     TString DebugHint() const override {
-        return TStringBuilder() 
-            << "TAlterSolomon TConfigureParts" 
-            << ", operationId: " << OperationId; 
-    } 
- 
-public: 
-    TConfigureParts(TOperationId id) 
-        : OperationId(id) 
-    { 
-        IgnoreMessages(DebugHint(), 
-                       {TEvHive::TEvCreateTabletReply::EventType, TEvHive::TEvAdoptTabletReply::EventType}); 
-    } 
- 
-    bool ProgressState(TOperationContext& context) override { 
-        TTabletId ssId = context.SS->SelfTabletId(); 
- 
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, 
-                   DebugHint() << " ProgressState" 
-                               << ", at tablet" << ssId); 
- 
-        TTxState* txState = context.SS->FindTx(OperationId); 
-        Y_VERIFY(txState); 
-        Y_VERIFY(txState->TxType == TTxState::TxAlterSolomonVolume); 
- 
-        auto solomon = context.SS->SolomonVolumes[txState->TargetPathId]; 
-        Y_VERIFY_S(solomon, "solomon volume is null. PathId: " << txState->TargetPathId); 
-        Y_VERIFY_S(solomon->AlterData, "solomon volume alter data is null. PathId: " << txState->TargetPathId); 
- 
-        for (const auto& shard: txState->Shards) { 
-            auto solomonPartition = solomon->AlterData->Partitions[shard.Idx]; 
-            Y_VERIFY_S(solomonPartition, "rtmr partitions is null shard idx: " << shard.Idx << " Path: " << txState->TargetPathId); 
- 
-            auto tabletId = context.SS->ShardInfos[shard.Idx].TabletID; 
+        return TStringBuilder()
+            << "TAlterSolomon TConfigureParts"
+            << ", operationId: " << OperationId;
+    }
+
+public:
+    TConfigureParts(TOperationId id)
+        : OperationId(id)
+    {
+        IgnoreMessages(DebugHint(),
+                       {TEvHive::TEvCreateTabletReply::EventType, TEvHive::TEvAdoptTabletReply::EventType});
+    }
+
+    bool ProgressState(TOperationContext& context) override {
+        TTabletId ssId = context.SS->SelfTabletId();
+
+        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                   DebugHint() << " ProgressState"
+                               << ", at tablet" << ssId);
+
+        TTxState* txState = context.SS->FindTx(OperationId);
+        Y_VERIFY(txState);
+        Y_VERIFY(txState->TxType == TTxState::TxAlterSolomonVolume);
+
+        auto solomon = context.SS->SolomonVolumes[txState->TargetPathId];
+        Y_VERIFY_S(solomon, "solomon volume is null. PathId: " << txState->TargetPathId);
+        Y_VERIFY_S(solomon->AlterData, "solomon volume alter data is null. PathId: " << txState->TargetPathId);
+
+        for (const auto& shard: txState->Shards) {
+            auto solomonPartition = solomon->AlterData->Partitions[shard.Idx];
+            Y_VERIFY_S(solomonPartition, "rtmr partitions is null shard idx: " << shard.Idx << " Path: " << txState->TargetPathId);
+
+            auto tabletId = context.SS->ShardInfos[shard.Idx].TabletID;
 
             if (solomonPartition->TabletId != InvalidTabletId && tabletId != solomonPartition->TabletId) {
                 Y_FAIL_S("Solomon partition tablet id mismatch"
@@ -55,278 +55,278 @@ public:
                     << ", got: " << tabletId);
             }
 
-            solomonPartition->TabletId = tabletId; 
-        } 
- 
-        NIceDb::TNiceDb db(context.Txc.DB); 
-        context.SS->ChangeTxState(db, OperationId, TTxState::Propose); 
-        return true; 
-    } 
-}; 
- 
-class TPropose: public TSubOperationState { 
-private: 
-    TOperationId OperationId; 
- 
+            solomonPartition->TabletId = tabletId;
+        }
+
+        NIceDb::TNiceDb db(context.Txc.DB);
+        context.SS->ChangeTxState(db, OperationId, TTxState::Propose);
+        return true;
+    }
+};
+
+class TPropose: public TSubOperationState {
+private:
+    TOperationId OperationId;
+
     TString DebugHint() const override {
-        return TStringBuilder() 
-            << "TAlterSolomon TPropose" 
-            << ", operationId: " << OperationId; 
-    } 
-public: 
-    TPropose(TOperationId id) 
-        : OperationId(id) 
-    { 
+        return TStringBuilder()
+            << "TAlterSolomon TPropose"
+            << ", operationId: " << OperationId;
+    }
+public:
+    TPropose(TOperationId id)
+        : OperationId(id)
+    {
         IgnoreMessages(DebugHint(),
                        {TEvHive::TEvCreateTabletReply::EventType, TEvHive::TEvAdoptTabletReply::EventType});
-    } 
- 
-    bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override { 
-        TStepId step = TStepId(ev->Get()->StepId); 
-        TTabletId ssId = context.SS->SelfTabletId(); 
- 
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, 
-                   DebugHint() << " HandleReply TEvOperationPlan" 
-                               << ", step: " << step 
-                               << ", at schemeshard: " << ssId); 
- 
-        TTxState* txState = context.SS->FindTx(OperationId); 
-        if(!txState) { 
-            return false; 
-        } 
- 
-        TPathId pathId = txState->TargetPathId; 
-        TPathElement::TPtr path = context.SS->PathsById.at(pathId); 
- 
-        NIceDb::TNiceDb db(context.Txc.DB); 
- 
-        auto solomon = context.SS->SolomonVolumes[txState->TargetPathId]; 
-        Y_VERIFY_S(solomon, "solomon volume is null. PathId: " << txState->TargetPathId); 
-        Y_VERIFY_S(solomon->AlterData, "solomon volume alter data is null. PathId: " << txState->TargetPathId); 
- 
-        context.SS->TabletCounters->Simple()[COUNTER_SOLOMON_PARTITIONS_COUNT].Sub(solomon->Partitions.size()); 
-        context.SS->TabletCounters->Simple()[COUNTER_SOLOMON_PARTITIONS_COUNT].Add(solomon->AlterData->Partitions.size()); 
- 
-        context.SS->PersistSolomonVolume(db, txState->TargetPathId, solomon->AlterData); 
-        context.SS->SolomonVolumes[txState->TargetPathId] = solomon->AlterData; 
- 
-        context.SS->ClearDescribePathCaches(path); 
-        context.OnComplete.PublishToSchemeBoard(OperationId, pathId); 
- 
-        context.SS->ChangeTxState(db, OperationId, TTxState::Done); 
-        return true; 
-    } 
- 
-    bool ProgressState(TOperationContext& context) override { 
-        TTabletId ssId = context.SS->SelfTabletId(); 
- 
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, 
-                   DebugHint() << " ProgressState" 
-                               << ", at schemeshard: " << ssId); 
- 
-        TTxState* txState = context.SS->FindTx(OperationId); 
-        Y_VERIFY(txState); 
-        Y_VERIFY(txState->TxType == TTxState::TxAlterSolomonVolume); 
- 
-        context.OnComplete.ProposeToCoordinator(OperationId, txState->TargetPathId, TStepId(0)); 
-        return false; 
-    } 
-}; 
- 
-class TAlterSolomon: public TSubOperation { 
-    const TOperationId OperationId; 
-    const TTxTransaction Transaction; 
-    TTxState::ETxState State = TTxState::Invalid; 
- 
-    TTxState::ETxState NextState() { 
-        return TTxState::CreateParts; 
-    } 
- 
-    TTxState::ETxState NextState(TTxState::ETxState state) { 
-        switch(state) { 
-        case TTxState::Waiting: 
-        case TTxState::CreateParts: 
-            return TTxState::ConfigureParts; 
-        case TTxState::ConfigureParts: 
-            return TTxState::Propose; 
-        case TTxState::Propose: 
-            return TTxState::Done; 
-        default: 
-            return TTxState::Invalid; 
-        } 
-        return TTxState::Invalid; 
-    } 
- 
-    TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) { 
-        switch(state) { 
-        case TTxState::Waiting: 
-        case TTxState::CreateParts: 
+    }
+
+    bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
+        TStepId step = TStepId(ev->Get()->StepId);
+        TTabletId ssId = context.SS->SelfTabletId();
+
+        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                   DebugHint() << " HandleReply TEvOperationPlan"
+                               << ", step: " << step
+                               << ", at schemeshard: " << ssId);
+
+        TTxState* txState = context.SS->FindTx(OperationId);
+        if(!txState) {
+            return false;
+        }
+
+        TPathId pathId = txState->TargetPathId;
+        TPathElement::TPtr path = context.SS->PathsById.at(pathId);
+
+        NIceDb::TNiceDb db(context.Txc.DB);
+
+        auto solomon = context.SS->SolomonVolumes[txState->TargetPathId];
+        Y_VERIFY_S(solomon, "solomon volume is null. PathId: " << txState->TargetPathId);
+        Y_VERIFY_S(solomon->AlterData, "solomon volume alter data is null. PathId: " << txState->TargetPathId);
+
+        context.SS->TabletCounters->Simple()[COUNTER_SOLOMON_PARTITIONS_COUNT].Sub(solomon->Partitions.size());
+        context.SS->TabletCounters->Simple()[COUNTER_SOLOMON_PARTITIONS_COUNT].Add(solomon->AlterData->Partitions.size());
+
+        context.SS->PersistSolomonVolume(db, txState->TargetPathId, solomon->AlterData);
+        context.SS->SolomonVolumes[txState->TargetPathId] = solomon->AlterData;
+
+        context.SS->ClearDescribePathCaches(path);
+        context.OnComplete.PublishToSchemeBoard(OperationId, pathId);
+
+        context.SS->ChangeTxState(db, OperationId, TTxState::Done);
+        return true;
+    }
+
+    bool ProgressState(TOperationContext& context) override {
+        TTabletId ssId = context.SS->SelfTabletId();
+
+        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                   DebugHint() << " ProgressState"
+                               << ", at schemeshard: " << ssId);
+
+        TTxState* txState = context.SS->FindTx(OperationId);
+        Y_VERIFY(txState);
+        Y_VERIFY(txState->TxType == TTxState::TxAlterSolomonVolume);
+
+        context.OnComplete.ProposeToCoordinator(OperationId, txState->TargetPathId, TStepId(0));
+        return false;
+    }
+};
+
+class TAlterSolomon: public TSubOperation {
+    const TOperationId OperationId;
+    const TTxTransaction Transaction;
+    TTxState::ETxState State = TTxState::Invalid;
+
+    TTxState::ETxState NextState() {
+        return TTxState::CreateParts;
+    }
+
+    TTxState::ETxState NextState(TTxState::ETxState state) {
+        switch(state) {
+        case TTxState::Waiting:
+        case TTxState::CreateParts:
+            return TTxState::ConfigureParts;
+        case TTxState::ConfigureParts:
+            return TTxState::Propose;
+        case TTxState::Propose:
+            return TTxState::Done;
+        default:
+            return TTxState::Invalid;
+        }
+        return TTxState::Invalid;
+    }
+
+    TSubOperationState::TPtr SelectStateFunc(TTxState::ETxState state) {
+        switch(state) {
+        case TTxState::Waiting:
+        case TTxState::CreateParts:
             return MakeHolder<TCreateParts>(OperationId);
-        case TTxState::ConfigureParts: 
+        case TTxState::ConfigureParts:
             return MakeHolder<TConfigureParts>(OperationId);
-        case TTxState::Propose: 
+        case TTxState::Propose:
             return MakeHolder<TPropose>(OperationId);
-        case TTxState::Done: 
+        case TTxState::Done:
             return MakeHolder<TDone>(OperationId);
-        default: 
-            return nullptr; 
-        } 
-    } 
- 
-    void StateDone(TOperationContext& context) override { 
-        State = NextState(State); 
- 
-        if (State != TTxState::Invalid) { 
-            SetState(SelectStateFunc(State)); 
-            context.OnComplete.ActivateTx(OperationId); 
-        } 
-    } 
- 
-public: 
-    TAlterSolomon(TOperationId id, const TTxTransaction& tx) 
-        : OperationId(id) 
-          , Transaction(tx) 
-    { 
-    } 
- 
-    TAlterSolomon(TOperationId id, TTxState::ETxState state) 
-        : OperationId(id) 
-          , State(state) 
-    { 
-        SetState(SelectStateFunc(state)); 
-    } 
- 
-    THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override { 
-        const TTabletId ssId = context.SS->SelfTabletId(); 
- 
-        const auto& alter = Transaction.GetAlterSolomonVolume(); 
- 
-        const TString& parentPathStr = Transaction.GetWorkingDir(); 
-        const TString& name = alter.GetName(); 
-        const ui32 channelProfileId = alter.GetChannelProfileId(); 
- 
-        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, 
-                     "TAlterSolomon Propose" 
-                         << ", path: "<< parentPathStr << "/" << name 
-                         << ", opId: " << OperationId 
-                         << ", channelProfileId: " << channelProfileId 
-                         << ", at schemeshard: " << ssId); 
- 
-        THolder<TProposeResponse> result; 
-        result.Reset(new TEvSchemeShard::TEvModifySchemeTransactionResult( 
-            NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId))); 
- 
-        TString errStr; 
- 
-        TPath path = TPath::Resolve(parentPathStr, context.SS).Dive(name); 
-        { 
-            TPath::TChecker checks = path.Check(); 
-            checks 
-                .NotEmpty() 
-                .NotUnderDomainUpgrade() 
-                .IsAtLocalSchemeShard() 
-                .IsResolved() 
-                .NotDeleted() 
-                .IsSolomon() 
-                .NotUnderOperation() 
-                .IsCommonSensePath(); 
- 
-            if (checks) { 
-                TSolomonVolumeInfo::TPtr solomon = context.SS->SolomonVolumes.at(path.Base()->PathId); 
-                if (alter.GetPartitionCount() > solomon->Partitions.size()) { 
-                    const ui64 shardsToCreate = alter.GetPartitionCount() - solomon->Partitions.size(); 
- 
-                    checks 
-                        .ShardsLimit(shardsToCreate) 
-                        .PathShardsLimit(shardsToCreate); 
-                } 
- 
-            } 
- 
-            if (!checks) { 
-                TString explain = TStringBuilder() << "path fail checks" 
-                                                   << ", path: " << path.PathString(); 
-                auto status = checks.GetStatus(&explain); 
-                result->SetError(status, explain); 
-                return result; 
-            } 
-        } 
- 
-        TSolomonVolumeInfo::TPtr solomon = context.SS->SolomonVolumes.at(path.Base()->PathId); 
- 
-        if (!alter.HasPartitionCount() && !alter.GetUpdateChannelsBinding()) {
-            result->SetError(NKikimrScheme::StatusInvalidParameter, "Empty alter"); 
-            return result; 
-        } 
- 
-        if (alter.GetUpdateChannelsBinding() && !AppData()->FeatureFlags.GetAllowUpdateChannelsBindingOfSolomonPartitions()) {
-            result->SetError(NKikimrScheme::StatusPreconditionFailed, "Updating of channels binding is not available"); 
-        } 
- 
-        if (alter.HasPartitionCount()) {
-            if (alter.GetPartitionCount() < solomon->Partitions.size()) {
-                result->SetError(NKikimrScheme::StatusInvalidParameter, "solomon volume has more shards than requested"); 
-                return result;
+        default:
+            return nullptr;
+        }
+    }
+
+    void StateDone(TOperationContext& context) override {
+        State = NextState(State);
+
+        if (State != TTxState::Invalid) {
+            SetState(SelectStateFunc(State));
+            context.OnComplete.ActivateTx(OperationId);
+        }
+    }
+
+public:
+    TAlterSolomon(TOperationId id, const TTxTransaction& tx)
+        : OperationId(id)
+          , Transaction(tx)
+    {
+    }
+
+    TAlterSolomon(TOperationId id, TTxState::ETxState state)
+        : OperationId(id)
+          , State(state)
+    {
+        SetState(SelectStateFunc(state));
+    }
+
+    THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
+        const TTabletId ssId = context.SS->SelfTabletId();
+
+        const auto& alter = Transaction.GetAlterSolomonVolume();
+
+        const TString& parentPathStr = Transaction.GetWorkingDir();
+        const TString& name = alter.GetName();
+        const ui32 channelProfileId = alter.GetChannelProfileId();
+
+        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                     "TAlterSolomon Propose"
+                         << ", path: "<< parentPathStr << "/" << name
+                         << ", opId: " << OperationId
+                         << ", channelProfileId: " << channelProfileId
+                         << ", at schemeshard: " << ssId);
+
+        THolder<TProposeResponse> result;
+        result.Reset(new TEvSchemeShard::TEvModifySchemeTransactionResult(
+            NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId)));
+
+        TString errStr;
+
+        TPath path = TPath::Resolve(parentPathStr, context.SS).Dive(name);
+        {
+            TPath::TChecker checks = path.Check();
+            checks
+                .NotEmpty()
+                .NotUnderDomainUpgrade()
+                .IsAtLocalSchemeShard()
+                .IsResolved()
+                .NotDeleted()
+                .IsSolomon()
+                .NotUnderOperation()
+                .IsCommonSensePath();
+
+            if (checks) {
+                TSolomonVolumeInfo::TPtr solomon = context.SS->SolomonVolumes.at(path.Base()->PathId);
+                if (alter.GetPartitionCount() > solomon->Partitions.size()) {
+                    const ui64 shardsToCreate = alter.GetPartitionCount() - solomon->Partitions.size();
+
+                    checks
+                        .ShardsLimit(shardsToCreate)
+                        .PathShardsLimit(shardsToCreate);
+                }
+
             }
 
-            if (alter.GetPartitionCount() == solomon->Partitions.size()) {
-                result->SetError(NKikimrScheme::StatusSuccess, "solomon volume has olready the same shards as requested"); 
+            if (!checks) {
+                TString explain = TStringBuilder() << "path fail checks"
+                                                   << ", path: " << path.PathString();
+                auto status = checks.GetStatus(&explain);
+                result->SetError(status, explain);
                 return result;
             }
         }
 
-        if (!context.SS->CheckApplyIf(Transaction, errStr)) { 
-            result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr); 
-            return result; 
-        } 
- 
-        if (!alter.HasChannelProfileId()) { 
-            result->SetError(TEvSchemeShard::EStatus::StatusInvalidParameter, "set channel profile id, please"); 
-            return result; 
-        } 
- 
-        TChannelsBindings channelsBinding; 
-        if (!context.SS->ResolveSolomonChannels(channelProfileId, path.DomainId(), channelsBinding)) { 
-            result->SetError(NKikimrScheme::StatusInvalidParameter, "Unable to construct channel binding with the storage pool"); 
-            return result; 
-        } 
- 
-        result->SetPathId(path.Base()->PathId.LocalPathId); 
- 
-        TSolomonVolumeInfo::TPtr alterSolomon = solomon->CreateAlter(); 
- 
-        NIceDb::TNiceDb db(context.Txc.DB); 
- 
-        TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxAlterSolomonVolume,  path.Base()->PathId); 
- 
-        TShardInfo solomonPartitionInfo = TShardInfo::SolomonPartitionInfo(OperationId.GetTxId(), path.Base()->PathId); 
-        solomonPartitionInfo.BindedChannels = channelsBinding; 
- 
-        path.Base()->LastTxId = OperationId.GetTxId(); 
-        path.Base()->PathState = TPathElement::EPathState::EPathStateAlter; 
- 
-        context.SS->PersistLastTxId(db, path.Base()); 
- 
+        TSolomonVolumeInfo::TPtr solomon = context.SS->SolomonVolumes.at(path.Base()->PathId);
+
+        if (!alter.HasPartitionCount() && !alter.GetUpdateChannelsBinding()) {
+            result->SetError(NKikimrScheme::StatusInvalidParameter, "Empty alter");
+            return result;
+        }
+
+        if (alter.GetUpdateChannelsBinding() && !AppData()->FeatureFlags.GetAllowUpdateChannelsBindingOfSolomonPartitions()) {
+            result->SetError(NKikimrScheme::StatusPreconditionFailed, "Updating of channels binding is not available");
+        }
+
+        if (alter.HasPartitionCount()) {
+            if (alter.GetPartitionCount() < solomon->Partitions.size()) {
+                result->SetError(NKikimrScheme::StatusInvalidParameter, "solomon volume has more shards than requested");
+                return result;
+            }
+
+            if (alter.GetPartitionCount() == solomon->Partitions.size()) {
+                result->SetError(NKikimrScheme::StatusSuccess, "solomon volume has olready the same shards as requested");
+                return result;
+            }
+        }
+
+        if (!context.SS->CheckApplyIf(Transaction, errStr)) {
+            result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr);
+            return result;
+        }
+
+        if (!alter.HasChannelProfileId()) {
+            result->SetError(TEvSchemeShard::EStatus::StatusInvalidParameter, "set channel profile id, please");
+            return result;
+        }
+
+        TChannelsBindings channelsBinding;
+        if (!context.SS->ResolveSolomonChannels(channelProfileId, path.DomainId(), channelsBinding)) {
+            result->SetError(NKikimrScheme::StatusInvalidParameter, "Unable to construct channel binding with the storage pool");
+            return result;
+        }
+
+        result->SetPathId(path.Base()->PathId.LocalPathId);
+
+        TSolomonVolumeInfo::TPtr alterSolomon = solomon->CreateAlter();
+
+        NIceDb::TNiceDb db(context.Txc.DB);
+
+        TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxAlterSolomonVolume,  path.Base()->PathId);
+
+        TShardInfo solomonPartitionInfo = TShardInfo::SolomonPartitionInfo(OperationId.GetTxId(), path.Base()->PathId);
+        solomonPartitionInfo.BindedChannels = channelsBinding;
+
+        path.Base()->LastTxId = OperationId.GetTxId();
+        path.Base()->PathState = TPathElement::EPathState::EPathStateAlter;
+
+        context.SS->PersistLastTxId(db, path.Base());
+
         if (alter.GetUpdateChannelsBinding()) {
             txState.Shards.reserve(alter.HasPartitionCount() ? alter.GetPartitionCount() : solomon->Partitions.size());
         } else {
             Y_VERIFY(alter.HasPartitionCount());
             txState.Shards.reserve(alter.GetPartitionCount() - solomon->Partitions.size());
         }
- 
+
         if (alter.GetUpdateChannelsBinding()) {
             for (const auto& [shardIdx, partitionInfo] : solomon->Partitions) {
                 txState.Shards.emplace_back(shardIdx, TTabletTypes::KeyValue, TTxState::CreateParts);
- 
+
                 auto& shardInfo = context.SS->ShardInfos.at(shardIdx);
                 shardInfo.CurrentTxId = OperationId.GetTxId();
                 shardInfo.BindedChannels = channelsBinding;
- 
+
                 context.SS->PersistShardMapping(db, shardIdx, partitionInfo->TabletId, path.Base()->PathId, OperationId.GetTxId(), solomonPartitionInfo.TabletType);
                 context.SS->PersistChannelsBinding(db, shardIdx, channelsBinding);
             }
-        } 
- 
+        }
+
         if (alter.HasPartitionCount()) {
             const ui64 shardsToCreate = alter.GetPartitionCount() - solomon->Partitions.size();
 
@@ -343,49 +343,49 @@ public:
             path.Base()->IncShardsInside(shardsToCreate);
         }
 
-        solomon->AlterData = alterSolomon; 
-        context.SS->PersistAlterSolomonVolume(db, path.Base()->PathId, solomon); 
- 
-        context.SS->ChangeTxState(db, OperationId, TTxState::CreateParts); 
-        context.OnComplete.ActivateTx(OperationId); 
- 
-        context.SS->PersistTxState(db, OperationId); 
- 
-        path.DomainInfo()->AddInternalShards(txState); 
- 
-        State = NextState(); 
-        SetState(SelectStateFunc(State)); 
-        return result; 
-    } 
- 
-    void AbortPropose(TOperationContext&) override { 
-        Y_FAIL("no AbortPropose for TAlterSolomon"); 
-    } 
- 
-    void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override { 
-        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, 
-                     "TAlterSolomon AbortUnsafe" 
-                         << ", opId: " << OperationId 
-                         << ", forceDropId: " << forceDropTxId 
-                         << ", at schemeshard: " << context.SS->TabletID()); 
- 
-        context.OnComplete.DoneOperation(OperationId); 
-    } 
-}; 
- 
-} 
- 
-namespace NKikimr { 
-namespace NSchemeShard { 
- 
-ISubOperationBase::TPtr CreateAlterSolomon(TOperationId id, const TTxTransaction& tx) { 
-    return new TAlterSolomon(id, tx); 
-} 
- 
-ISubOperationBase::TPtr CreateAlterSolomon(TOperationId id, TTxState::ETxState state) { 
-    Y_VERIFY(state != TTxState::Invalid); 
-    return new TAlterSolomon(id, state); 
-} 
- 
-} 
-} 
+        solomon->AlterData = alterSolomon;
+        context.SS->PersistAlterSolomonVolume(db, path.Base()->PathId, solomon);
+
+        context.SS->ChangeTxState(db, OperationId, TTxState::CreateParts);
+        context.OnComplete.ActivateTx(OperationId);
+
+        context.SS->PersistTxState(db, OperationId);
+
+        path.DomainInfo()->AddInternalShards(txState);
+
+        State = NextState();
+        SetState(SelectStateFunc(State));
+        return result;
+    }
+
+    void AbortPropose(TOperationContext&) override {
+        Y_FAIL("no AbortPropose for TAlterSolomon");
+    }
+
+    void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
+        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                     "TAlterSolomon AbortUnsafe"
+                         << ", opId: " << OperationId
+                         << ", forceDropId: " << forceDropTxId
+                         << ", at schemeshard: " << context.SS->TabletID());
+
+        context.OnComplete.DoneOperation(OperationId);
+    }
+};
+
+}
+
+namespace NKikimr {
+namespace NSchemeShard {
+
+ISubOperationBase::TPtr CreateAlterSolomon(TOperationId id, const TTxTransaction& tx) {
+    return new TAlterSolomon(id, tx);
+}
+
+ISubOperationBase::TPtr CreateAlterSolomon(TOperationId id, TTxState::ETxState state) {
+    Y_VERIFY(state != TTxState::Invalid);
+    return new TAlterSolomon(id, state);
+}
+
+}
+}

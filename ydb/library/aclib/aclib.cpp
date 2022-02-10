@@ -453,8 +453,8 @@ TString TACL::ToString(const NACLibProto::TACE& ace) {
                 rights.emplace_back("GAR");
             if (ar & EAccessRights::WriteUserAttributes)
                 rights.emplace_back("WUA");
-            if (ar & EAccessRights::ConnectDatabase) 
-                rights.emplace_back("ConnDB"); 
+            if (ar & EAccessRights::ConnectDatabase)
+                rights.emplace_back("ConnDB");
             str << '(';
             for (auto jt = rights.begin(); jt != rights.end(); ++jt) {
                 if (jt != rights.begin()) {
@@ -471,8 +471,8 @@ TString TACL::ToString(const NACLibProto::TACE& ace) {
     auto inh = ace.GetInheritanceType();
     if (inh != (EInheritanceType::InheritContainer | EInheritanceType::InheritObject)) {
         str << ':';
-        if (inh == EInheritanceType::InheritNone) 
-            str << '-'; 
+        if (inh == EInheritanceType::InheritNone)
+            str << '-';
         if (inh & EInheritanceType::InheritContainer)
             str << 'C';
         if (inh & EInheritanceType::InheritObject)
@@ -541,8 +541,8 @@ ui32 TACL::SpecialRightsFromString(const TString& string) {
             result |= EAccessRights::DropDatabase;
         if (r == "GAR")
             result |= EAccessRights::GrantAccessRights;
-        if (r == "ConnDB") 
-            result |= EAccessRights::ConnectDatabase; 
+        if (r == "ConnDB")
+            result |= EAccessRights::ConnectDatabase;
     }
     return result;
 }
@@ -616,9 +616,9 @@ void TACL::FromString(NACLibProto::TACE& ace, const TString& string) {
     if (string[end_pos] == ':') {
         while (++end_pos < string.size()) {
             switch(string[end_pos]) {
-            case '-': 
-                inheritanceType |= EInheritanceType::InheritNone; 
-                break; 
+            case '-':
+                inheritanceType |= EInheritanceType::InheritNone;
+                break;
             case 'C':
                 inheritanceType |= EInheritanceType::InheritContainer;
                 break;
@@ -736,10 +736,10 @@ TString AccessRightsToString(ui32 accessRights) {
         rights.emplace_back("DropDatabase");
     if (accessRights & EAccessRights::GrantAccessRights)
         rights.emplace_back("GrantAccessRights");
-    if (accessRights & EAccessRights::WriteUserAttributes) 
-        rights.emplace_back("WriteUserAttributes"); 
-    if (accessRights & EAccessRights::ConnectDatabase) 
-        rights.emplace_back("ConnectDatabase"); 
+    if (accessRights & EAccessRights::WriteUserAttributes)
+        rights.emplace_back("WriteUserAttributes");
+    if (accessRights & EAccessRights::ConnectDatabase)
+        rights.emplace_back("ConnectDatabase");
     TString result;
     for (auto it = rights.begin(); it != rights.end(); ++it) {
         if (it != rights.begin()) {

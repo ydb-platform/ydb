@@ -1,18 +1,18 @@
-LIBRARY() 
- 
-OWNER( 
-    svc 
+LIBRARY()
+
+OWNER(
+    svc
     g:kikimr
-) 
- 
-SRCS( 
-    txallocator__reserve.cpp 
-    txallocator__scheme.cpp 
-    txallocator_impl.cpp 
-    txallocator.cpp 
-) 
- 
-PEERDIR( 
+)
+
+SRCS(
+    txallocator__reserve.cpp
+    txallocator__scheme.cpp
+    txallocator_impl.cpp
+    txallocator.cpp
+)
+
+PEERDIR(
     library/cpp/actors/helpers
     library/cpp/actors/interconnect
     ydb/core/actorlib_impl
@@ -21,9 +21,9 @@ PEERDIR(
     ydb/core/protos
     ydb/core/tablet
     ydb/core/tablet_flat
-) 
- 
-END() 
+)
+
+END()
 
 RECURSE_FOR_TESTS(
     ut

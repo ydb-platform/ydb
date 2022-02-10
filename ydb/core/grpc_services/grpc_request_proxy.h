@@ -51,8 +51,8 @@ protected:
     void Handle(TEvCreateTableRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDropTableRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvCopyTableRequest::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvCopyTablesRequest::TPtr& ev, const TActorContext& ctx); 
-    void Handle(TEvRenameTablesRequest::TPtr& ev, const TActorContext& ctx); 
+    void Handle(TEvCopyTablesRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvRenameTablesRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDescribeTableRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvGetOperationRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvCancelOperationRequest::TPtr& ev, const TActorContext& ctx);

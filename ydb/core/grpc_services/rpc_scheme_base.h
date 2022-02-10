@@ -23,8 +23,8 @@ protected:
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
             HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
             HFunc(TEvTxUserProxy::TEvProposeTransactionStatus, Handle);
-            HFunc(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult, Handle); 
-            HFunc(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionRegistered, Handle); 
+            HFunc(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult, Handle);
+            HFunc(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionRegistered, Handle);
             default: TBase::StateFuncBase(ev, ctx);
         }
     }
@@ -61,8 +61,8 @@ protected:
         auto issueMessage = msg->Record.GetIssues();
         switch (status) {
             case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecComplete: {
-                if (msg->Record.GetSchemeShardStatus() == NKikimrScheme::EStatus::StatusSuccess || 
-                    msg->Record.GetSchemeShardStatus() == NKikimrScheme::EStatus::StatusAlreadyExists) 
+                if (msg->Record.GetSchemeShardStatus() == NKikimrScheme::EStatus::StatusSuccess ||
+                    msg->Record.GetSchemeShardStatus() == NKikimrScheme::EStatus::StatusAlreadyExists)
                 {
                     return this->ReplyWithResult(Ydb::StatusIds::SUCCESS, issueMessage, ctx);
                 }
@@ -74,7 +74,7 @@ protected:
                 Y_VERIFY(pipeActor);
                 SchemePipeActorId_ = ctx.ExecutorThread.RegisterActor(pipeActor);
 
-                auto request = MakeHolder<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion>(); 
+                auto request = MakeHolder<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion>();
                 request->Record.SetTxId(msg->Record.GetTxId());
                 NTabletPipe::SendData(ctx, SchemePipeActorId_, request.Release());
                 return;
@@ -85,28 +85,28 @@ protected:
             case TEvTxUserProxy::TResultStatus::AccessDenied: {
                 return this->ReplyWithResult(Ydb::StatusIds::UNAUTHORIZED, issueMessage, ctx);
             }
-            case TEvTxUserProxy::TResultStatus::ProxyShardNotAvailable: { 
-                return this->ReplyWithResult(Ydb::StatusIds::UNAVAILABLE, issueMessage, ctx); 
-            } 
+            case TEvTxUserProxy::TResultStatus::ProxyShardNotAvailable: {
+                return this->ReplyWithResult(Ydb::StatusIds::UNAVAILABLE, issueMessage, ctx);
+            }
             case TEvTxUserProxy::TResultStatus::ResolveError: {
                 return this->ReplyWithResult(Ydb::StatusIds::SCHEME_ERROR, issueMessage, ctx);
             }
             case TEvTxUserProxy::TResultStatus::ExecError: {
                 switch (msg->Record.GetSchemeShardStatus()) {
-                    case NKikimrScheme::EStatus::StatusMultipleModifications: { 
+                    case NKikimrScheme::EStatus::StatusMultipleModifications: {
                         return this->ReplyWithResult(Ydb::StatusIds::OVERLOADED, issueMessage, ctx);
                     }
-                    case NKikimrScheme::EStatus::StatusSchemeError: 
-                    case NKikimrScheme::EStatus::StatusNameConflict: 
-                    case NKikimrScheme::EStatus::StatusPathDoesNotExist: { 
+                    case NKikimrScheme::EStatus::StatusSchemeError:
+                    case NKikimrScheme::EStatus::StatusNameConflict:
+                    case NKikimrScheme::EStatus::StatusPathDoesNotExist: {
                         return this->ReplyWithResult(Ydb::StatusIds::SCHEME_ERROR, issueMessage, ctx);
                     }
-                    case NKikimrScheme::EStatus::StatusQuotaExceeded: { 
+                    case NKikimrScheme::EStatus::StatusQuotaExceeded: {
                         // FIXME: clients may start aggressive retries when receiving 'overloaded'
                         return this->ReplyWithResult(Ydb::StatusIds::OVERLOADED, issueMessage, ctx);
                     }
-                   case NKikimrScheme::EStatus::StatusResourceExhausted: 
-                    case NKikimrScheme::EStatus::StatusPreconditionFailed: { 
+                   case NKikimrScheme::EStatus::StatusResourceExhausted:
+                    case NKikimrScheme::EStatus::StatusPreconditionFailed: {
                         return this->ReplyWithResult(Ydb::StatusIds::PRECONDITION_FAILED, issueMessage, ctx);
                     }
                     default: {
@@ -126,15 +126,15 @@ protected:
         return this->ReplyWithResult(Ydb::StatusIds::INTERNAL_ERROR, issueMessage, ctx);
     }
 
-    void Handle(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev, const TActorContext& ctx) { 
+    void Handle(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev, const TActorContext& ctx) {
         NTabletPipe::CloseClient(ctx, SchemePipeActorId_);
         return this->ReplyNotifyTxCompletionResult(ev, ctx);
     }
 
-    void Handle(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionRegistered::TPtr&, const TActorContext&) { 
+    void Handle(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionRegistered::TPtr&, const TActorContext&) {
     }
 
-    virtual void ReplyNotifyTxCompletionResult(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev, const TActorContext& ctx) { 
+    virtual void ReplyNotifyTxCompletionResult(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev, const TActorContext& ctx) {
         Y_UNUSED(ev);
         return this->Reply(Ydb::StatusIds::SUCCESS, ctx);
     }

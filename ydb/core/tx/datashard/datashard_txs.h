@@ -208,16 +208,16 @@ public:
 };
 
 class TDataShard::TTxMigrateSchemeShard : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
-public: 
+public:
     TTxMigrateSchemeShard(TDataShard* ds, TEvDataShard::TEvMigrateSchemeShardRequest::TPtr ev);
-    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override; 
-    void Complete(const TActorContext& ctx) override; 
-    TTxType GetTxType() const override { return TXTYPE_MIGRATE_SCHEMESHARD; } 
-private: 
-    TEvDataShard::TEvMigrateSchemeShardRequest::TPtr Ev; 
-    THolder<TEvDataShard::TEvMigrateSchemeShardResponse> Reply; 
-}; 
- 
+    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
+    void Complete(const TActorContext& ctx) override;
+    TTxType GetTxType() const override { return TXTYPE_MIGRATE_SCHEMESHARD; }
+private:
+    TEvDataShard::TEvMigrateSchemeShardRequest::TPtr Ev;
+    THolder<TEvDataShard::TEvMigrateSchemeShardResponse> Reply;
+};
+
 class TDataShard::TTxGetS3Upload: public NTabletFlatExecutor::TTransactionBase<TDataShard> {
 public:
     TTxGetS3Upload(TDataShard* ds, TEvDataShard::TEvGetS3Upload::TPtr ev);

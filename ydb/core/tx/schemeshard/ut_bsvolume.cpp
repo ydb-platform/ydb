@@ -2,7 +2,7 @@
 #include <ydb/core/tx/schemeshard/schemeshard_utils.h>
 
 using namespace NKikimr;
-using namespace NSchemeShard; 
+using namespace NSchemeShard;
 using namespace NSchemeShardUT_Private;
 
 Y_UNIT_TEST_SUITE(TBSV) {
@@ -13,7 +13,7 @@ Y_UNIT_TEST_SUITE(TBSV) {
 
         runtime.GetAppData().DisableSchemeShardCleanupOnDropForTest = true;
 
-        NKikimrSchemeOp::TBlockStoreVolumeDescription vdescr; 
+        NKikimrSchemeOp::TBlockStoreVolumeDescription vdescr;
         vdescr.SetName("BSVolume");
         auto& vc = *vdescr.MutableVolumeConfig();
         vc.SetBlockSize(4096);

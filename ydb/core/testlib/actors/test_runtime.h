@@ -26,7 +26,7 @@ namespace NActors {
     {
     private:
         struct TNodeData: public TNodeDataBase {
-            void Stop(); 
+            void Stop();
             ~TNodeData();
             ui64 GetLoggerPoolId() const override;
             THolder<NActors::TMon> Mon;

@@ -9,7 +9,7 @@
 namespace {
 
 using namespace NKikimr;
-using namespace NSchemeShard; 
+using namespace NSchemeShard;
 
 bool PrepareTier(const NKikimrSchemeOp::TStorageTierConfig& proto, TString& errStr) {
     Y_UNUSED(proto);
@@ -153,10 +153,10 @@ bool PrepareSchemaPreset(NKikimrSchemeOp::TColumnTableSchemaPreset& proto, TOlap
 #if 0
 bool PrepareTtlSettingsPreset(
         NKikimrSchemeOp::TColumnTableTtlSettingsPreset& proto, TOlapStoreInfo& store, size_t protoIndex,
-        TEvSchemeShard::EStatus& status, TString& errStr) 
+        TEvSchemeShard::EStatus& status, TString& errStr)
 {
     if (proto.GetName().empty()) {
-        status = NKikimrScheme::StatusSchemeError; 
+        status = NKikimrScheme::StatusSchemeError;
         errStr = Sprintf("Ttl settings preset name cannot be empty");
         return false;
     }
@@ -164,14 +164,14 @@ bool PrepareTtlSettingsPreset(
         proto.SetId(store.Description.GetNextTtlSettingsPresetId());
         store.Description.SetNextTtlSettingsPresetId(proto.GetId() + 1);
     } else if (proto.GetId() <= 0 || proto.GetId() >= store.Description.GetNextTtlSettingsPresetId()) {
-        status = NKikimrScheme::StatusSchemeError; 
+        status = NKikimrScheme::StatusSchemeError;
         errStr = Sprintf("Ttl settings preset id is incorrect");
         return false;
     }
     if (store.TtlSettingsPresets.contains(proto.GetId()) ||
         store.TtlSettingsPresetByName.contains(proto.GetName()))
     {
-        status = NKikimrScheme::StatusSchemeError; 
+        status = NKikimrScheme::StatusSchemeError;
         errStr = Sprintf("Duplicate ttl settings preset %" PRIu32 " with name '%s'", proto.GetId(), proto.GetName().c_str());
         return false;
     }
@@ -187,7 +187,7 @@ bool PrepareTtlSettingsPreset(
 }
 #endif
 TOlapStoreInfo::TPtr CreateOlapStore(const NKikimrSchemeOp::TColumnStoreDescription& opSrc,
-                                    TEvSchemeShard::EStatus& status, TString& errStr) 
+                                    TEvSchemeShard::EStatus& status, TString& errStr)
 {
     TOlapStoreInfo::TPtr storeInfo = new TOlapStoreInfo;
     storeInfo->AlterVersion = 1;
@@ -195,13 +195,13 @@ TOlapStoreInfo::TPtr CreateOlapStore(const NKikimrSchemeOp::TColumnStoreDescript
     auto& op = storeInfo->Description;
 
     if (op.GetRESERVED_MetaShardCount() != 0) {
-        status = NKikimrScheme::StatusSchemeError; 
+        status = NKikimrScheme::StatusSchemeError;
         errStr = Sprintf("trying to create OLAP store with meta shards (not supported yet)");
         return nullptr;
     }
 
     if (!op.HasColumnShardCount()) {
-        status = NKikimrScheme::StatusSchemeError; 
+        status = NKikimrScheme::StatusSchemeError;
         errStr = Sprintf("trying to create OLAP store without shards number specified");
         return nullptr;
     }
@@ -212,7 +212,7 @@ TOlapStoreInfo::TPtr CreateOlapStore(const NKikimrSchemeOp::TColumnStoreDescript
     size_t protoIndex = 0;
     for (auto& presetProto : *op.MutableSchemaPresets()) {
         if (presetProto.HasId()) {
-            status = NKikimrScheme::StatusSchemeError; 
+            status = NKikimrScheme::StatusSchemeError;
             errStr = Sprintf("Schema preset id cannot be specified explicitly");
             return nullptr;
         }
@@ -231,7 +231,7 @@ TOlapStoreInfo::TPtr CreateOlapStore(const NKikimrSchemeOp::TColumnStoreDescript
         return nullptr;
 #else
         if (presetProto.HasId()) {
-            status = NKikimrScheme::StatusSchemeError; 
+            status = NKikimrScheme::StatusSchemeError;
             errStr = "Ttl settings preset id cannot be specified explicitly";
             return nullptr;
         }
@@ -242,7 +242,7 @@ TOlapStoreInfo::TPtr CreateOlapStore(const NKikimrSchemeOp::TColumnStoreDescript
     }
 
     if (!storeInfo->SchemaPresetByName.contains("default") || storeInfo->SchemaPresets.size() > 1) {
-        status = NKikimrScheme::StatusSchemeError; 
+        status = NKikimrScheme::StatusSchemeError;
         errStr = "A single schema preset named 'default' is required";
         return nullptr;
     }
@@ -254,7 +254,7 @@ TOlapStoreInfo::TPtr CreateOlapStore(const NKikimrSchemeOp::TColumnStoreDescript
 void ApplySharding(TTxId txId, TPathId pathId, TOlapStoreInfo::TPtr storeInfo,
                    const TChannelsBindings& metaChannelsBindings,
                    const TChannelsBindings& channelsBindings,
-                   TTxState& txState, TSchemeShard* ss) 
+                   TTxState& txState, TSchemeShard* ss)
 {
     ui32 numColumnShards = storeInfo->ColumnShards.size();
     ui32 numShards = numColumnShards;
@@ -586,10 +586,10 @@ public:
         SetState(SelectStateFunc(state));
     }
 
-    THolder<TProposeResponse> Propose(const TString& owner, TOperationContext& context) override { 
+    THolder<TProposeResponse> Propose(const TString& owner, TOperationContext& context) override {
         const TTabletId ssId = context.SS->SelfTabletId();
 
-        const auto acceptExisted = !Transaction.GetFailOnExist(); 
+        const auto acceptExisted = !Transaction.GetFailOnExist();
         const TString& parentPathStr = Transaction.GetWorkingDir();
         auto& createDescription = Transaction.GetCreateColumnStore();
         const TString& name = createDescription.GetName();
@@ -600,12 +600,12 @@ public:
                         << ", opId: " << OperationId
                         << ", at schemeshard: " << ssId);
 
-        TEvSchemeShard::EStatus status = NKikimrScheme::StatusAccepted; 
+        TEvSchemeShard::EStatus status = NKikimrScheme::StatusAccepted;
         auto result = MakeHolder<TProposeResponse>(status, ui64(OperationId.GetTxId()), ui64(ssId));
 
-        NSchemeShard::TPath parentPath = NSchemeShard::TPath::Resolve(parentPathStr, context.SS); 
+        NSchemeShard::TPath parentPath = NSchemeShard::TPath::Resolve(parentPathStr, context.SS);
         {
-            NSchemeShard::TPath::TChecker checks = parentPath.Check(); 
+            NSchemeShard::TPath::TChecker checks = parentPath.Check();
             checks
                 .NotUnderDomainUpgrade()
                 .IsAtLocalSchemeShard()
@@ -627,9 +627,9 @@ public:
 
         const TString acl = Transaction.GetModifyACL().GetDiffACL();
 
-        NSchemeShard::TPath dstPath = parentPath.Child(name); 
+        NSchemeShard::TPath dstPath = parentPath.Child(name);
         {
-            NSchemeShard::TPath::TChecker checks = dstPath.Check(); 
+            NSchemeShard::TPath::TChecker checks = dstPath.Check();
             checks.IsAtLocalSchemeShard();
             if (dstPath.IsResolved()) {
                 checks
@@ -666,12 +666,12 @@ public:
 
         TString errStr;
         if (!context.SS->CheckApplyIf(Transaction, errStr)) {
-            result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr); 
+            result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr);
             return result;
         }
 
         if (!AppData()->FeatureFlags.GetEnableOlapSchemaOperations()) {
-            result->SetError(NKikimrScheme::StatusPreconditionFailed, 
+            result->SetError(NKikimrScheme::StatusPreconditionFailed,
                 "Olap schema operations are not supported");
             return result;
         }
@@ -690,7 +690,7 @@ public:
         // Construct channels bindings for columnshards
         TChannelsBindings channelsBindings;
         if (!context.SS->GetOlapChannelsBindings(dstPath.DomainId(), storeInfo->Description.GetStorageConfig(), channelsBindings, errStr)) {
-            result->SetError(NKikimrScheme::StatusInvalidParameter, errStr); 
+            result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
             return result;
         }
 
@@ -700,7 +700,7 @@ public:
 
         const ui64 shardsToCreate = storeInfo->ColumnShards.size();
         {
-            NSchemeShard::TPath::TChecker checks = dstPath.Check(); 
+            NSchemeShard::TPath::TChecker checks = dstPath.Check();
             checks
                 .ShardsLimit(shardsToCreate)
                 .PathShardsLimit(shardsToCreate);
@@ -771,8 +771,8 @@ public:
         context.SS->ChangeTxState(db, OperationId, TTxState::CreateParts);
         context.OnComplete.ActivateTx(OperationId);
 
-        context.SS->PersistTxState(db, OperationId); 
-        context.SS->PersistPath(db, dstPath.Base()->PathId); 
+        context.SS->PersistTxState(db, OperationId);
+        context.SS->PersistPath(db, dstPath.Base()->PathId);
 
         if (!acl.empty()) {
             dstPath.Base()->ApplyACL(acl);
@@ -818,7 +818,7 @@ public:
 }
 
 namespace NKikimr {
-namespace NSchemeShard { 
+namespace NSchemeShard {
 
 ISubOperationBase::TPtr CreateNewOlapStore(TOperationId id, const TTxTransaction& tx) {
     return new TCreateOlapStore(id, tx);

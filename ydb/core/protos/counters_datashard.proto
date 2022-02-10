@@ -391,7 +391,7 @@ enum ETxTypes {
     TXTYPE_REFRESH_VOLATILE_SNAPSHOT = 42                 [(TxTypeOpts) = {Name: "TxRefreshVolatileSnapshot"}];
     TXTYPE_DISCARD_VOLATILE_SNAPSHOT = 43                 [(TxTypeOpts) = {Name: "TxDiscardVolatileSnapshot"}];
     TXTYPE_CLEANUP_REMOVED_SNAPSHOTS = 44                 [(TxTypeOpts) = {Name: "TxCleanupRemovedSnapshots"}];
-    TXTYPE_MIGRATE_SCHEMESHARD = 45                       [(TxTypeOpts) = {Name: "TxMigrateSchemeShard"}]; 
+    TXTYPE_MIGRATE_SCHEMESHARD = 45                       [(TxTypeOpts) = {Name: "TxMigrateSchemeShard"}];
     TXTYPE_GET_S3_UPLOAD_ID = 46                          [(TxTypeOpts) = {Name: "TxGetS3UploadId"}];
     TXTYPE_STORE_S3_UPLOAD_ID = 47                        [(TxTypeOpts) = {Name: "TxStoreS3UploadId"}];
     TXTYPE_ERASE_ROWS = 48                                [(TxTypeOpts) = {Name: "TxEraseRows"}];

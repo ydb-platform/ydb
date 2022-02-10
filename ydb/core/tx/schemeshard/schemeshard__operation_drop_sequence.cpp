@@ -5,7 +5,7 @@
 #include <ydb/core/tx/sequenceshard/public/events.h>
 
 namespace NKikimr {
-namespace NSchemeShard { 
+namespace NSchemeShard {
 
 namespace {
 
@@ -277,7 +277,7 @@ public:
                          << ", opId: " << OperationId
                          << ", at schemeshard: " << ssId);
 
-        auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId)); 
+        auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
 
         TPath path = drop.HasId()
             ? TPath::Init(context.SS->MakeLocalId(drop.GetId()), context.SS)
@@ -352,14 +352,14 @@ public:
                 TString explain = TStringBuilder() << "cannot delete sequence " << path->Name
                     << " used by table " << parent.PathString();
                 // FIXME: status is consistent with rmdir, but is it correct?
-                result->SetError(NKikimrScheme::StatusNameConflict, explain); 
+                result->SetError(NKikimrScheme::StatusNameConflict, explain);
                 return result;
             }
         }
 
         TString errStr;
         if (!context.SS->CheckApplyIf(Transaction, errStr)) {
-            result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr); 
+            result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr);
             return result;
         }
 

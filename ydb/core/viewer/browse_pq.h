@@ -63,16 +63,16 @@ protected:
 
 public:
     TBrowseCommon(const TActorId& owner, const IViewer::TBrowseContext& browseContext)
-        : TBrowseTabletsCommon(owner, browseContext) 
+        : TBrowseTabletsCommon(owner, browseContext)
         , PQ_ROOT_PATH("/Root/PQ") // TODO(xenoxeno)
     {}
 
-    void Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr &ev, const TActorContext &ctx) { 
+    void Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr &ev, const TActorContext &ctx) {
         DescribeResult.Reset(ev->Release());
         ++Responses;
         ctx.Send(BrowseContext.Owner, new NViewerEvents::TEvBrowseRequestCompleted(TxProxy, TEvTxUserProxy::EvNavigate));
         const auto& pbRecord(DescribeResult->GetRecord());
-        if (pbRecord.GetStatus() == NKikimrScheme::EStatus::StatusSuccess) { 
+        if (pbRecord.GetStatus() == NKikimrScheme::EStatus::StatusSuccess) {
             if (pbRecord.HasPathDescription()) {
                 const auto& pbPathDescription(pbRecord.GetPathDescription());
                 TVector<ui64> tablets;
@@ -96,7 +96,7 @@ public:
             }
         } else {
             switch (DescribeResult->GetRecord().GetStatus()) {
-                case NKikimrScheme::EStatus::StatusPathDoesNotExist: 
+                case NKikimrScheme::EStatus::StatusPathDoesNotExist:
                     return HandleBadRequest(ctx, "The path is not found");
                 default:
                     return HandleBadRequest(ctx, "Error getting schema information");
@@ -108,12 +108,12 @@ public:
             if (pbPathDescription.HasSelf()) {
                 const auto& pbChildren(pbPathDescription.GetChildren());
                 for (const auto& pbChild : pbChildren) {
-                    if (pbChild.GetPathType() == NKikimrSchemeOp::EPathType::EPathTypePersQueueGroup) { 
+                    if (pbChild.GetPathType() == NKikimrSchemeOp::EPathType::EPathTypePersQueueGroup) {
                         THolder<TEvTxUserProxy::TEvNavigate> request(new TEvTxUserProxy::TEvNavigate());
                         if (!BrowseContext.UserToken.empty()) {
                             request->Record.SetUserToken(BrowseContext.UserToken);
                         }
-                        NKikimrSchemeOp::TDescribePath* record = request->Record.MutableDescribePath(); 
+                        NKikimrSchemeOp::TDescribePath* record = request->Record.MutableDescribePath();
                         record->SetPath(pbDescribeResult.GetPath() + "/" + pbChild.GetName());
                         ctx.Send(TxProxy, request.Release());
                         ++Requests;
@@ -156,7 +156,7 @@ public:
 
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, Handle); 
+            HFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, Handle);
             HFunc(TEvTablet::TEvGetCountersResponse, TBase::Handle);
             HFunc(TEvPersQueue::TEvPartitionClientInfoResponse, Handle);
             HFunc(TEvHive::TEvChannelInfo, TBase::Handle);
@@ -265,7 +265,7 @@ public:
         if (!BrowseContext.UserToken.empty()) {
             request->Record.SetUserToken(BrowseContext.UserToken);
         }
-        NKikimrSchemeOp::TDescribePath* record = request->Record.MutableDescribePath(); 
+        NKikimrSchemeOp::TDescribePath* record = request->Record.MutableDescribePath();
         TString path(PQ_ROOT_PATH);
         if (!FilterTopic.empty()) {
             path += '/';
@@ -288,7 +288,7 @@ public:
     }
 
     TBrowseConsumers(const TActorId& owner, const IViewer::TBrowseContext& browseContext)
-        : TBrowseCommon(owner, browseContext) 
+        : TBrowseCommon(owner, browseContext)
     {}
 
     void ReplyAndDie(const TActorContext &ctx) {
@@ -309,7 +309,7 @@ public:
 class TBrowseConsumer : public TBrowseCommon {
 public:
     TBrowseConsumer(const TActorId& owner, const IViewer::TBrowseContext& browseContext)
-        : TBrowseCommon(owner, browseContext) 
+        : TBrowseCommon(owner, browseContext)
     {
         FilterConsumer = BrowseContext.GetMyName();
         if (BrowseContext.GetParentType() == NKikimrViewer::EObjectType::Topic) {
@@ -357,7 +357,7 @@ public:
 class TBrowseTopic : public TBrowseCommon {
 public:
     TBrowseTopic(const TActorId& owner, const IViewer::TBrowseContext& browseContext)
-        : TBrowseCommon(owner, browseContext) 
+        : TBrowseCommon(owner, browseContext)
     {
         FilterTopic = BrowseContext.GetMyName();
         if (BrowseContext.GetParentType() == NKikimrViewer::EObjectType::Consumer) {

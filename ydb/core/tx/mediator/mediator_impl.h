@@ -1,6 +1,6 @@
 #pragma once
 #include "defs.h"
- 
+
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/scheme_types/scheme_types.h>
 #include <ydb/core/tx/coordinator/coordinator.h>
@@ -14,11 +14,11 @@
 #include <ydb/core/base/tx_processing.h>
 #include <ydb/core/tx/tx.h>
 
- 
-#include <util/generic/map.h> 
- 
+
+#include <util/generic/map.h>
+
 namespace NKikimr {
-namespace NTxMediator { 
+namespace NTxMediator {
 
     using TStepId = ui64;
     using TTxId = ui64;
@@ -130,7 +130,7 @@ struct TEvTxMediator {
     enum EEv {
         EvCommitStep = EventSpaceBegin(TKikimrEvents::ES_TX_MEDIATOR),
         EvRequestLostAcks,
-        EvMediatorConfiguration, 
+        EvMediatorConfiguration,
 
         EvCommitTabletStep = EvCommitStep + 1 * 512,
         EvStepPlanComplete,
@@ -253,166 +253,166 @@ struct TEvTxMediator {
             return str.Str();
         }
     };
-}; 
+};
 
-namespace NTxMediator { 
- 
-typedef ui64 TCoordinatorId; 
- 
+namespace NTxMediator {
+
+typedef ui64 TCoordinatorId;
+
 using NTabletFlatExecutor::ITransaction;
-using NActors::TActorContext; 
- 
-class TTxMediator : public TActor<TTxMediator>, public NTabletFlatExecutor::TTabletExecutedFlat { 
-    struct TConfig { 
-        ui64 CoordinatorsVersion; 
-        TCoordinators::TPtr CoordinatorSeletor; 
-        TTimeCastBuckets::TPtr Bukets; 
- 
-        TConfig() 
-            : CoordinatorsVersion(0) 
-        {} 
- 
-        TConfig(const TConfig& other) = default; 
-    }; 
- 
-    struct TCoordinatorInfo { 
+using NActors::TActorContext;
+
+class TTxMediator : public TActor<TTxMediator>, public NTabletFlatExecutor::TTabletExecutedFlat {
+    struct TConfig {
+        ui64 CoordinatorsVersion;
+        TCoordinators::TPtr CoordinatorSeletor;
+        TTimeCastBuckets::TPtr Bukets;
+
+        TConfig()
+            : CoordinatorsVersion(0)
+        {}
+
+        TConfig(const TConfig& other) = default;
+    };
+
+    struct TCoordinatorInfo {
         typedef TDeque<TAutoPtr<TCoordinatorStep>> TQueueType; // todo: list/queue
- 
-        ui64 KnownPrevStep; 
+
+        ui64 KnownPrevStep;
         TQueueType Queue;
- 
-        ui64 ActiveCoordinatorGeneration; 
+
+        ui64 ActiveCoordinatorGeneration;
         TActorId AckTo;
- 
-        TCoordinatorInfo() 
-            : KnownPrevStep(0) 
-            , ActiveCoordinatorGeneration(0) 
-        {} 
-    }; 
- 
-    struct TVolatileState { 
+
+        TCoordinatorInfo()
+            : KnownPrevStep(0)
+            , ActiveCoordinatorGeneration(0)
+        {}
+    };
+
+    struct TVolatileState {
         TMap<ui64, TCoordinatorInfo> Domain;
         TMap<ui64, TCoordinatorInfo> Foreign;
- 
-        ui64 CompleteStep; 
-        ui64 LatestKnownStep; 
- 
-        TVolatileState() 
-            : CompleteStep(0) 
-            , LatestKnownStep(0) 
-        {} 
-    }; 
- 
-    struct TTxInit; 
-    struct TTxConfigure; 
-    struct TTxSchema; 
-    struct TTxUpgrade; 
- 
+
+        ui64 CompleteStep;
+        ui64 LatestKnownStep;
+
+        TVolatileState()
+            : CompleteStep(0)
+            , LatestKnownStep(0)
+        {}
+    };
+
+    struct TTxInit;
+    struct TTxConfigure;
+    struct TTxSchema;
+    struct TTxUpgrade;
+
     ITransaction* CreateTxInit();
     ITransaction* CreateTxConfigure(TActorId ackTo, ui64 version, const TVector<TCoordinatorId> &coordinators, ui32 timeCastBuckets);
     ITransaction* CreateTxSchema();
     ITransaction* CreateTxUpgrade();
- 
- 
-    TConfig Config; 
-    TVolatileState VolatileState; 
- 
+
+
+    TConfig Config;
+    TVolatileState VolatileState;
+
     TActorId ExecQueue;
- 
+
     THashMap<TActorId, NKikimrTx::TEvCoordinatorSync> CoordinatorsSyncEnqueued;
     TVector<TEvMediatorTimecast::TEvWatch::TPtr> WatchEnqueued;
- 
-    void Die(const TActorContext &ctx) override; 
-    void OnActivateExecutor(const TActorContext &ctx) override; 
-    void OnDetach(const TActorContext &ctx) override; 
-    void OnTabletDead(TEvTablet::TEvTabletDead::TPtr &ev, const TActorContext &ctx) override; 
-    void DefaultSignalTabletActive(const TActorContext &ctx) override; 
- 
-    void Handle(TEvSubDomain::TEvConfigure::TPtr &ev, const TActorContext &ctx); 
-    void HandleEnqueue(TEvTxCoordinator::TEvCoordinatorSync::TPtr &ev, const TActorContext &ctx); 
-    void HandleEnqueue(TEvMediatorTimecast::TEvWatch::TPtr &ev, const TActorContext &ctx); 
-    void Handle(TEvTxCoordinator::TEvCoordinatorSync::TPtr &ev, const TActorContext &ctx); 
-    void Handle(TEvTxCoordinator::TEvCoordinatorStep::TPtr &ev, const TActorContext &ctx); 
-    void Handle(TEvMediatorTimecast::TEvWatch::TPtr &ev, const TActorContext &ctx); 
-    void Handle(TEvents::TEvPoisonPill::TPtr &ev, const TActorContext &ctx); 
- 
+
+    void Die(const TActorContext &ctx) override;
+    void OnActivateExecutor(const TActorContext &ctx) override;
+    void OnDetach(const TActorContext &ctx) override;
+    void OnTabletDead(TEvTablet::TEvTabletDead::TPtr &ev, const TActorContext &ctx) override;
+    void DefaultSignalTabletActive(const TActorContext &ctx) override;
+
+    void Handle(TEvSubDomain::TEvConfigure::TPtr &ev, const TActorContext &ctx);
+    void HandleEnqueue(TEvTxCoordinator::TEvCoordinatorSync::TPtr &ev, const TActorContext &ctx);
+    void HandleEnqueue(TEvMediatorTimecast::TEvWatch::TPtr &ev, const TActorContext &ctx);
+    void Handle(TEvTxCoordinator::TEvCoordinatorSync::TPtr &ev, const TActorContext &ctx);
+    void Handle(TEvTxCoordinator::TEvCoordinatorStep::TPtr &ev, const TActorContext &ctx);
+    void Handle(TEvMediatorTimecast::TEvWatch::TPtr &ev, const TActorContext &ctx);
+    void Handle(TEvents::TEvPoisonPill::TPtr &ev, const TActorContext &ctx);
+
     void DoConfigure(const TEvSubDomain::TEvConfigure &ev, const TActorContext &ctx, const TActorId &ackTo = TActorId());
- 
-    static ui64 SubjectiveTime(); 
-    void InitSelfState(const TActorContext &ctx); 
-    void ReplyEnqueuedSyncs(const TActorContext &ctx); 
-    void ReplyEnqueuedWatch(const TActorContext &ctx); 
- 
- 
+
+    static ui64 SubjectiveTime();
+    void InitSelfState(const TActorContext &ctx);
+    void ReplyEnqueuedSyncs(const TActorContext &ctx);
+    void ReplyEnqueuedWatch(const TActorContext &ctx);
+
+
     void ReplySync(const TActorId &sender, const NKikimrTx::TEvCoordinatorSync &record, const TActorContext &ctx);
     void ReplyStep(const TActorId &sender, NKikimrTx::TEvCoordinatorStepResult::EStatus status, const NKikimrTx::TEvCoordinatorStep &request, const TActorContext &ctx);
-    ui64 FindProgressCandidate(); 
-    void Progress(ui64 to, const TActorContext &ctx); 
-    void CheckProgress(const TActorContext &ctx); 
+    ui64 FindProgressCandidate();
+    void Progress(ui64 to, const TActorContext &ctx);
+    void CheckProgress(const TActorContext &ctx);
     void RequestLostAcks(const TActorId &sender, const NKikimrTx::TEvCoordinatorStep &request, const TActorContext &ctx);
- 
+
     void ProcessDomainStep(const TActorId &sender, const NKikimrTx::TEvCoordinatorStep &request, ui64 coordinator, TCoordinatorInfo &info, const TActorContext &ctx);
     void ProcessForeignStep(const TActorId &sender, const NKikimrTx::TEvCoordinatorStep &request, ui64 coordinator, TCoordinatorInfo &info, const TActorContext &ctx);
- 
-public: 
-    struct Schema : NIceDb::Schema { 
-        static const ui32 CurrentVersion; 
- 
-        struct State : Table<1> { 
-            enum EKeyType { 
-                DatabaseVersion, 
-            }; 
- 
-            struct StateKey : Column<0, NScheme::NTypeIds::Uint64> { using Type = EKeyType; }; // PK 
-            struct StateValue : Column<1, NScheme::NTypeIds::Uint64> {}; 
- 
-            using TKey = TableKey<StateKey>; 
-            using TColumns = TableColumns<StateKey, StateValue>; 
-        }; 
- 
-        struct DomainConfiguration : Table<2> { 
-            struct Version : Column<1, NScheme::NTypeIds::Uint64> {}; 
+
+public:
+    struct Schema : NIceDb::Schema {
+        static const ui32 CurrentVersion;
+
+        struct State : Table<1> {
+            enum EKeyType {
+                DatabaseVersion,
+            };
+
+            struct StateKey : Column<0, NScheme::NTypeIds::Uint64> { using Type = EKeyType; }; // PK
+            struct StateValue : Column<1, NScheme::NTypeIds::Uint64> {};
+
+            using TKey = TableKey<StateKey>;
+            using TColumns = TableColumns<StateKey, StateValue>;
+        };
+
+        struct DomainConfiguration : Table<2> {
+            struct Version : Column<1, NScheme::NTypeIds::Uint64> {};
             struct Coordinators : Column<2, NScheme::NTypeIds::String> { using Type = TVector<TCoordinatorId>; };
-            struct TimeCastBuckets : Column<3, NScheme::NTypeIds::Uint32> { static constexpr ui32 Default = TDomainsInfo::TDomain::TimecastBucketsPerMediator; }; 
- 
-            using TKey = TableKey<Version>; 
-            using TColumns = TableColumns<Version, Coordinators, TimeCastBuckets>; 
-        }; 
- 
-        using TTables = SchemaTables<State, DomainConfiguration>; 
-    }; 
- 
+            struct TimeCastBuckets : Column<3, NScheme::NTypeIds::Uint32> { static constexpr ui32 Default = TDomainsInfo::TDomain::TimecastBucketsPerMediator; };
+
+            using TKey = TableKey<Version>;
+            using TColumns = TableColumns<Version, Coordinators, TimeCastBuckets>;
+        };
+
+        using TTables = SchemaTables<State, DomainConfiguration>;
+    };
+
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::TX_MEDIATOR_ACTOR;
-    } 
- 
+    }
+
     TTxMediator(TTabletStorageInfo *info, const TActorId &tablet);
- 
-    // no incomming pipes is allowed in StateInit 
-    STFUNC_TABLET_INIT(StateInit, 
-            HFunc(TEvents::TEvPoisonPill, Handle)) 
- 
-    STFUNC_TABLET_DEF(StateSync, 
-                     HFunc(TEvents::TEvPoisonPill, Handle) 
-                     HFunc(TEvTxCoordinator::TEvCoordinatorSync, HandleEnqueue) 
-                     HFunc(TEvSubDomain::TEvConfigure, Handle) 
-                     HFunc(TEvMediatorTimecast::TEvWatch, HandleEnqueue) 
-                     IgnoreFunc(TEvTabletPipe::TEvServerConnected) 
-                     IgnoreFunc(TEvTabletPipe::TEvServerDisconnected)) 
- 
-    STFUNC_TABLET_DEF(StateWork, 
-                     HFunc(TEvents::TEvPoisonPill, Handle) 
-                     HFunc(TEvSubDomain::TEvConfigure, Handle) 
-                     HFunc(TEvTxCoordinator::TEvCoordinatorStep, Handle) 
-                     HFunc(TEvTxCoordinator::TEvCoordinatorSync, Handle) 
-                     HFunc(TEvMediatorTimecast::TEvWatch, Handle) 
-                     HFunc(NMon::TEvRemoteHttpInfo, RenderHtmlPage) 
-                     IgnoreFunc(TEvTabletPipe::TEvServerConnected) 
-                     IgnoreFunc(TEvTabletPipe::TEvServerDisconnected)) 
- 
-    STFUNC_TABLET_IGN(StateBroken,) 
+
+    // no incomming pipes is allowed in StateInit
+    STFUNC_TABLET_INIT(StateInit,
+            HFunc(TEvents::TEvPoisonPill, Handle))
+
+    STFUNC_TABLET_DEF(StateSync,
+                     HFunc(TEvents::TEvPoisonPill, Handle)
+                     HFunc(TEvTxCoordinator::TEvCoordinatorSync, HandleEnqueue)
+                     HFunc(TEvSubDomain::TEvConfigure, Handle)
+                     HFunc(TEvMediatorTimecast::TEvWatch, HandleEnqueue)
+                     IgnoreFunc(TEvTabletPipe::TEvServerConnected)
+                     IgnoreFunc(TEvTabletPipe::TEvServerDisconnected))
+
+    STFUNC_TABLET_DEF(StateWork,
+                     HFunc(TEvents::TEvPoisonPill, Handle)
+                     HFunc(TEvSubDomain::TEvConfigure, Handle)
+                     HFunc(TEvTxCoordinator::TEvCoordinatorStep, Handle)
+                     HFunc(TEvTxCoordinator::TEvCoordinatorSync, Handle)
+                     HFunc(TEvMediatorTimecast::TEvWatch, Handle)
+                     HFunc(NMon::TEvRemoteHttpInfo, RenderHtmlPage)
+                     IgnoreFunc(TEvTabletPipe::TEvServerConnected)
+                     IgnoreFunc(TEvTabletPipe::TEvServerDisconnected))
+
+    STFUNC_TABLET_IGN(StateBroken,)
 };
-} 
+}
 
 IActor* CreateTxMediatorTabletQueue(const TActorId &owner, ui64 mediator, ui64 hashRange, ui64 hashBucket);
 IActor* CreateTxMediatorExecQueue(const TActorId &owner, ui64 mediator, ui64 hashRange, ui32 timecastBuckets);

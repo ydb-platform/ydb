@@ -32,13 +32,13 @@ struct TProto {
     using TDistributedEraseTx = NKikimrTxDataShard::TDistributedEraseTransaction;
 };
 
-using EUnit = NKikimrSchemeOp::TTTLSettings::EUnit; 
+using EUnit = NKikimrSchemeOp::TTTLSettings::EUnit;
 struct TUnit {
-    static constexpr EUnit AUTO = NKikimrSchemeOp::TTTLSettings::UNIT_AUTO; 
-    static constexpr EUnit SECONDS = NKikimrSchemeOp::TTTLSettings::UNIT_SECONDS; 
-    static constexpr EUnit MILLISECONDS = NKikimrSchemeOp::TTTLSettings::UNIT_MILLISECONDS; 
-    static constexpr EUnit MICROSECONDS = NKikimrSchemeOp::TTTLSettings::UNIT_MICROSECONDS; 
-    static constexpr EUnit NANOSECONDS = NKikimrSchemeOp::TTTLSettings::UNIT_NANOSECONDS; 
+    static constexpr EUnit AUTO = NKikimrSchemeOp::TTTLSettings::UNIT_AUTO;
+    static constexpr EUnit SECONDS = NKikimrSchemeOp::TTTLSettings::UNIT_SECONDS;
+    static constexpr EUnit MILLISECONDS = NKikimrSchemeOp::TTTLSettings::UNIT_MILLISECONDS;
+    static constexpr EUnit MICROSECONDS = NKikimrSchemeOp::TTTLSettings::UNIT_MICROSECONDS;
+    static constexpr EUnit NANOSECONDS = NKikimrSchemeOp::TTTLSettings::UNIT_NANOSECONDS;
 };
 
 namespace {
@@ -355,13 +355,13 @@ void DistributedEraseTx(
 } // anonymous
 
 Y_UNIT_TEST_SUITE(EraseRowsTests) {
-    void EraseRowsShouldSuccess(TMaybe<ui64> injectSchemaVersion, bool enableMvcc) { 
+    void EraseRowsShouldSuccess(TMaybe<ui64> injectSchemaVersion, bool enableMvcc) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings
             .SetEnableMvcc(enableMvcc)
             .SetDomainName("Root")
-            .SetUseRealThreads(false); 
+            .SetUseRealThreads(false);
 
         TServer::TPtr server = new TServer(serverSettings);
         auto& runtime = *server->GetRuntime();
@@ -387,7 +387,7 @@ Y_UNIT_TEST_SUITE(EraseRowsTests) {
     }
 
     Y_UNIT_TEST_WITH_MVCC(EraseRowsShouldSuccess) {
-        EraseRowsShouldSuccess(Nothing(), WithMvcc); 
+        EraseRowsShouldSuccess(Nothing(), WithMvcc);
     }
 
     Y_UNIT_TEST_WITH_MVCC(EraseRowsShouldFailOnVariousErrors) {
@@ -396,7 +396,7 @@ Y_UNIT_TEST_SUITE(EraseRowsTests) {
         serverSettings
             .SetEnableMvcc(WithMvcc)
             .SetDomainName("Root")
-            .SetUseRealThreads(false); 
+            .SetUseRealThreads(false);
 
         TServer::TPtr server = new TServer(serverSettings);
         auto& runtime = *server->GetRuntime();
@@ -435,7 +435,7 @@ Y_UNIT_TEST_SUITE(EraseRowsTests) {
         serverSettings
             .SetEnableMvcc(enableMvcc)
             .SetDomainName("Root")
-            .SetUseRealThreads(false); 
+            .SetUseRealThreads(false);
 
         TServer::TPtr server = new TServer(serverSettings);
         auto& runtime = *server->GetRuntime();
@@ -623,7 +623,7 @@ key = 4, value = (empty maybe)
         serverSettings
             .SetEnableMvcc(WithMvcc)
             .SetDomainName("Root")
-            .SetUseRealThreads(false); 
+            .SetUseRealThreads(false);
 
         TServer::TPtr server = new TServer(serverSettings);
         auto& runtime = *server->GetRuntime();
@@ -669,7 +669,7 @@ key = 4, value = (empty maybe)
         serverSettings
             .SetEnableMvcc(WithMvcc)
             .SetDomainName("Root")
-            .SetUseRealThreads(false); 
+            .SetUseRealThreads(false);
 
         TServer::TPtr server = new TServer(serverSettings);
         auto& runtime = *server->GetRuntime();
@@ -732,7 +732,7 @@ key = 4, value = (empty maybe)
         serverSettings
             .SetEnableMvcc(WithMvcc)
             .SetDomainName("Root")
-            .SetUseRealThreads(false); 
+            .SetUseRealThreads(false);
 
         TServer::TPtr server = new TServer(serverSettings);
         auto& runtime = *server->GetRuntime();
@@ -973,7 +973,7 @@ Y_UNIT_TEST_SUITE(DistributedEraseTests) {
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings
             .SetDomainName("Root")
-            .SetUseRealThreads(false); 
+            .SetUseRealThreads(false);
 
         TServer::TPtr server = new TServer(serverSettings);
         auto& runtime = *server->GetRuntime();
@@ -1108,7 +1108,7 @@ tkey = 100, key = 4
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings
             .SetDomainName("Root")
-            .SetUseRealThreads(false); 
+            .SetUseRealThreads(false);
 
         TServer::TPtr server = new TServer(serverSettings);
         auto& runtime = *server->GetRuntime();
@@ -1220,7 +1220,7 @@ tkey = 100, key = 4
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings
             .SetDomainName("Root")
-            .SetUseRealThreads(false); 
+            .SetUseRealThreads(false);
 
         TServer::TPtr server = new TServer(serverSettings);
         auto& runtime = *server->GetRuntime();
@@ -1276,7 +1276,7 @@ tkey = 100, key = 4
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings
             .SetDomainName("Root")
-            .SetUseRealThreads(false); 
+            .SetUseRealThreads(false);
 
         TServer::TPtr server = new TServer(serverSettings);
         auto& runtime = *server->GetRuntime();
@@ -1345,7 +1345,7 @@ tkey = 100, key = 4
 
         check(TEvResponse::ProtoRecordType::SCHEME_ERROR, "Invalid index state", [](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TEvNavigate::EventType) {
-                ev->Get<TEvNavigate>()->Request->ResultSet.at(0).Indexes.at(0).SetState(NKikimrSchemeOp::EIndexStateInvalid); 
+                ev->Get<TEvNavigate>()->Request->ResultSet.at(0).Indexes.at(0).SetState(NKikimrSchemeOp::EIndexStateInvalid);
             }
         });
 
@@ -1448,7 +1448,7 @@ tkey = 100, key = 4
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings
             .SetDomainName("Root")
-            .SetUseRealThreads(false); 
+            .SetUseRealThreads(false);
 
         TServer::TPtr server = new TServer(serverSettings);
         auto& runtime = *server->GetRuntime();
@@ -1492,7 +1492,7 @@ tkey = 100, key = 4
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings
             .SetDomainName("Root")
-            .SetUseRealThreads(false); 
+            .SetUseRealThreads(false);
 
         TServer::TPtr server = new TServer(serverSettings);
         auto& runtime = *server->GetRuntime();
@@ -1532,7 +1532,7 @@ tkey = 100, key = 4
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings
             .SetDomainName("Root")
-            .SetUseRealThreads(false); 
+            .SetUseRealThreads(false);
 
         TServer::TPtr server = new TServer(serverSettings);
         auto& runtime = *server->GetRuntime();
@@ -1571,7 +1571,7 @@ tkey = 100, key = 4
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings
             .SetDomainName("Root")
-            .SetUseRealThreads(false); 
+            .SetUseRealThreads(false);
 
         TServer::TPtr server = new TServer(serverSettings);
         auto& runtime = *server->GetRuntime();
@@ -1631,7 +1631,7 @@ tkey = 100, key = 4
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings
             .SetDomainName("Root")
-            .SetUseRealThreads(false); 
+            .SetUseRealThreads(false);
 
         TServer::TPtr server = new TServer(serverSettings);
         auto& runtime = *server->GetRuntime();

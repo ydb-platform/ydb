@@ -1,4 +1,4 @@
-#include "proxy.h" 
+#include "proxy.h"
 
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/tx/datashard/datashard.h>
@@ -26,7 +26,7 @@
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/hfunc.h>
- 
+
 #include <util/generic/hash_set.h>
 #include <util/generic/queue.h>
 
@@ -357,7 +357,7 @@ private:
     TDuration CpuTime;
 
     TAutoPtr<TEvTxProxySchemeCache::TEvResolveKeySet> PrepareFlatMKQLRequest(TStringBuf miniKQLProgram, TStringBuf miniKQLParams, const TActorContext &ctx);
-    void ProcessFlatMKQLResolve(NSchemeCache::TSchemeCacheRequest *cacheRequest, const TActorContext &ctx); 
+    void ProcessFlatMKQLResolve(NSchemeCache::TSchemeCacheRequest *cacheRequest, const TActorContext &ctx);
     void ProcessReadTableResolve(NSchemeCache::TSchemeCacheRequest *cacheRequest, const TActorContext &ctx);
 
     TIntrusivePtr<TTxProxyMon> TxProxyMon;
@@ -395,8 +395,8 @@ private:
     void FinishShardStream(TEvDataShard::TEvProposeTransactionResult::TPtr &ev, const TActorContext &ctx);
     void FinishStreamResponse(const TActorContext &ctx);
 
-    ui64 SelectCoordinator(NSchemeCache::TSchemeCacheRequest &cacheRequest, const TActorContext &ctx); 
-    const TDomainsInfo::TDomain& SelectDomain(NSchemeCache::TSchemeCacheRequest &cacheRequest, const TActorContext &ctx); 
+    ui64 SelectCoordinator(NSchemeCache::TSchemeCacheRequest &cacheRequest, const TActorContext &ctx);
+    const TDomainsInfo::TDomain& SelectDomain(NSchemeCache::TSchemeCacheRequest &cacheRequest, const TActorContext &ctx);
 
     void HandleWatchdog(const TActorContext &ctx);
 
@@ -439,14 +439,14 @@ private:
     void ProcessStreamClearance(bool cleared, const TActorContext &ctx);
 
     bool ParseRangeKey(const NKikimrMiniKQL::TParams &proto,
-                          TConstArrayRef<NScheme::TTypeId> keyType, 
+                          TConstArrayRef<NScheme::TTypeId> keyType,
                           TSerializedCellVec &buf,
                           EParseRangeKeyExp exp);
 
-    bool CheckDomainLocality(NSchemeCache::TSchemeCacheRequest &cacheRequest); 
+    bool CheckDomainLocality(NSchemeCache::TSchemeCacheRequest &cacheRequest);
     void BuildTxStats(NKikimrQueryStats::TTxStats& stats);
     bool IsReadOnlyRequest() const;
- 
+
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::TX_REQ_PROXY;
@@ -929,7 +929,7 @@ void TDataReq::BuildTxStats(NKikimrQueryStats::TTxStats& stats) {
     stats.SetComputeCpuTimeUsec(CpuTime.MicroSeconds());
 }
 
-void TDataReq::ProcessFlatMKQLResolve(NSchemeCache::TSchemeCacheRequest *cacheRequest, const TActorContext &ctx) { 
+void TDataReq::ProcessFlatMKQLResolve(NSchemeCache::TSchemeCacheRequest *cacheRequest, const TActorContext &ctx) {
     NMiniKQL::IEngineFlat &engine = *FlatMKQLRequest->Engine;
 
     // Restore DbKeys
@@ -1138,7 +1138,7 @@ void TDataReq::ProcessReadTableResolve(NSchemeCache::TSchemeCacheRequest *cacheR
 TAutoPtr<TEvTxProxySchemeCache::TEvResolveKeySet> TDataReq::PrepareFlatMKQLRequest(TStringBuf miniKQLProgram, TStringBuf miniKQLParams, const TActorContext &ctx) {
     Y_UNUSED(ctx);
 
-    TAutoPtr<NSchemeCache::TSchemeCacheRequest> request(new NSchemeCache::TSchemeCacheRequest()); 
+    TAutoPtr<NSchemeCache::TSchemeCacheRequest> request(new NSchemeCache::TSchemeCacheRequest());
 
     *TxProxyMon->MiniKQLParamsSize += miniKQLParams.size();
     *TxProxyMon->MiniKQLProgramSize += miniKQLProgram.size();
@@ -1190,7 +1190,7 @@ void TDataReq::MarkShardError(ui64 shardId, TDataReq::TPerTablet &perTablet, boo
     if (++TabletErrors == TabletsLeft) {
         LOG_ERROR_S_SAMPLED_BY(ctx, NKikimrServices::TX_PROXY, TxId,
             "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId
-            << " invalidateDistCache: " << invalidateDistCache 
+            << " invalidateDistCache: " << invalidateDistCache
             << " DIE TDataReq MarkShardError TabletsLeft# " << TabletsLeft);
         TxProxyMon->MarkShardError->Inc();
         return Die(ctx);
@@ -1260,7 +1260,7 @@ void TDataReq::Handle(TEvTxProxyReq::TEvMakeRequest::TPtr &ev, const TActorConte
         request->DatabaseName = record.GetDatabaseName();
 
         NSchemeCache::TSchemeCacheNavigate::TEntry entry;
-        entry.Path = SplitPath(ReadTableRequest->TablePath); 
+        entry.Path = SplitPath(ReadTableRequest->TablePath);
         entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpTable;
         entry.ShowPrivatePath = true;
         request->ResultSet.push_back(entry);
@@ -1524,7 +1524,7 @@ void TDataReq::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr &ev, 
 
 void TDataReq::Handle(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr &ev, const TActorContext &ctx) {
     TEvTxProxySchemeCache::TEvResolveKeySetResult *msg = ev->Get();
-    NSchemeCache::TSchemeCacheRequest *request = msg->Request.Get(); 
+    NSchemeCache::TSchemeCacheRequest *request = msg->Request.Get();
 
     LOG_LOG_S_SAMPLED_BY(ctx, (request->ErrorCount == 0 ? NActors::NLog::PRI_DEBUG : NActors::NLog::PRI_ERROR),
         NKikimrServices::TX_PROXY, TxId,
@@ -1537,7 +1537,7 @@ void TDataReq::Handle(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr &ev, c
     if (request->ErrorCount > 0) {
         bool gotHardResolveError = false;
         for (const auto &x : request->ResultSet) {
-            if ((ui32)x.Status < (ui32) NSchemeCache::TSchemeCacheRequest::EStatus::OkScheme) { 
+            if ((ui32)x.Status < (ui32) NSchemeCache::TSchemeCacheRequest::EStatus::OkScheme) {
                 TryToInvalidateTable(x.KeyDescription->TableId, ctx);
 
                 TStringStream ss;
@@ -1570,9 +1570,9 @@ void TDataReq::Handle(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr &ev, c
         return Die(ctx);
     }
 
-    if (ProxyFlags & TEvTxUserProxy::TEvProposeTransaction::ProxyReportResolved) 
+    if (ProxyFlags & TEvTxUserProxy::TEvProposeTransaction::ProxyReportResolved)
         ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ProxyResolved, NKikimrIssues::TStatusIds::TRANSIENT, false, ctx);
- 
+
     TxProxyMon->TxPrepareResolveHgram->Collect((WallClockResolved - WallClockResolveStarted).MicroSeconds());
 
     NCpuTime::TCpuTimer timer(CpuTime);
@@ -1627,10 +1627,10 @@ void TDataReq::Handle(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr &ev, c
         }
     }
 
-    if (!CheckDomainLocality(*request)) { 
+    if (!CheckDomainLocality(*request)) {
         IssueManager.RaiseIssue(MakeIssue(NKikimrIssues::TIssuesIds::DOMAIN_LOCALITY_ERROR));
         ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::DomainLocalityError, NKikimrIssues::TStatusIds::BAD_REQUEST, true, ctx);
-        TxProxyMon->ResolveKeySetDomainLocalityFail->Inc(); 
+        TxProxyMon->ResolveKeySetDomainLocalityFail->Inc();
         return Die(ctx);
     }
 
@@ -1802,7 +1802,7 @@ void TDataReq::HandlePrepare(TEvDataShard::TEvProposeTransactionResult::TPtr &ev
 
     switch (msg->GetStatus()) {
     case NKikimrTxDataShard::TEvProposeTransactionResult::PREPARED:
-    { 
+    {
         perTablet->TabletStatus = TPerTablet::ETabletStatus::StatusPrepared;
         perTablet->MinStep = record.GetMinStep();
         perTablet->MaxStep = record.GetMaxStep();
@@ -1828,44 +1828,44 @@ void TDataReq::HandlePrepare(TEvDataShard::TEvProposeTransactionResult::TPtr &ev
         if (record.HasProposeLatency())
             ElapsedPrepareComplete = Max<TDuration>(ElapsedPrepareComplete, TDuration::MilliSeconds(record.GetProposeLatency()));
 
-        ui64 privateCoordinator = TCoordinators(TVector<ui64>( 
-                                                    record.GetDomainCoordinators().begin(), 
-                                                    record.GetDomainCoordinators().end())) 
-                                      .Select(TxId); 
- 
-        if (!SelectedCoordinator) { 
-            SelectedCoordinator = privateCoordinator; 
-        } 
- 
-        if (!SelectedCoordinator || SelectedCoordinator != privateCoordinator) { 
-            CancelProposal(tabletId); 
-            TStringBuilder explanation; 
-            explanation << "tx state canceled, unable to choose coordinator neither by resolved keys nor by TEvProposeTransactionResult from datashard txid#" << TxId; 
-            IssueManager.RaiseIssue(MakeIssue(NKikimrIssues::TIssuesIds::TX_DECLINED_IMPLICIT_COORDINATOR, explanation)); 
-            auto errorCode =TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::DomainLocalityError; 
-            if (SelectedCoordinator == 0) { 
-                errorCode =  TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::CoordinatorUnknown; 
-            } 
-            ReportStatus(errorCode, NKikimrIssues::TStatusIds::INTERNAL_ERROR, true, ctx); 
-            TxProxyMon->TxResultAborted->Inc(); 
-            LOG_ERROR_S(ctx, NKikimrServices::TX_PROXY, 
-                        " HANDLE Prepare TEvProposeTransactionResult TDataReq " 
-                        " all DataShards are prepared successful, " 
-                        " but we unable to choose coordinator neither by resolved keys nor by TEvProposeTransactionResult from datashard, " 
-                        " tx canceled" 
-                                << ", actorId: " << ctx.SelfID.ToString() 
-                                << ", txid: " << TxId 
-                                << ", coordinator selected at resolve keys state: " << SelectedCoordinator 
-                                << ", coordinator selected at propose result state: " << privateCoordinator); 
- 
-            return Die(ctx); 
-        } 
- 
-        if (--TabletsLeft != 0) 
-            return; 
- 
-        return RegisterPlan(ctx); 
-    } 
+        ui64 privateCoordinator = TCoordinators(TVector<ui64>(
+                                                    record.GetDomainCoordinators().begin(),
+                                                    record.GetDomainCoordinators().end()))
+                                      .Select(TxId);
+
+        if (!SelectedCoordinator) {
+            SelectedCoordinator = privateCoordinator;
+        }
+
+        if (!SelectedCoordinator || SelectedCoordinator != privateCoordinator) {
+            CancelProposal(tabletId);
+            TStringBuilder explanation;
+            explanation << "tx state canceled, unable to choose coordinator neither by resolved keys nor by TEvProposeTransactionResult from datashard txid#" << TxId;
+            IssueManager.RaiseIssue(MakeIssue(NKikimrIssues::TIssuesIds::TX_DECLINED_IMPLICIT_COORDINATOR, explanation));
+            auto errorCode =TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::DomainLocalityError;
+            if (SelectedCoordinator == 0) {
+                errorCode =  TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::CoordinatorUnknown;
+            }
+            ReportStatus(errorCode, NKikimrIssues::TStatusIds::INTERNAL_ERROR, true, ctx);
+            TxProxyMon->TxResultAborted->Inc();
+            LOG_ERROR_S(ctx, NKikimrServices::TX_PROXY,
+                        " HANDLE Prepare TEvProposeTransactionResult TDataReq "
+                        " all DataShards are prepared successful, "
+                        " but we unable to choose coordinator neither by resolved keys nor by TEvProposeTransactionResult from datashard, "
+                        " tx canceled"
+                                << ", actorId: " << ctx.SelfID.ToString()
+                                << ", txid: " << TxId
+                                << ", coordinator selected at resolve keys state: " << SelectedCoordinator
+                                << ", coordinator selected at propose result state: " << privateCoordinator);
+
+            return Die(ctx);
+        }
+
+        if (--TabletsLeft != 0)
+            return;
+
+        return RegisterPlan(ctx);
+    }
     case NKikimrTxDataShard::TEvProposeTransactionResult::COMPLETE:
         perTablet->TabletStatus = TPerTablet::ETabletStatus::StatusFinished;
 
@@ -2698,49 +2698,49 @@ void TDataReq::FinishStreamResponse(const TActorContext &ctx) {
     Die(ctx);
 }
 
-NSchemeCache::TDomainInfo::TPtr FindDomainInfo(NSchemeCache::TSchemeCacheRequest &cacheRequest) { 
-    for (const auto& entry :cacheRequest.ResultSet) { 
-        if (entry.DomainInfo) { 
-            return entry.DomainInfo; 
-        } 
-    } 
-    return nullptr; 
-} 
- 
-ui64 GetFirstTablet(NSchemeCache::TSchemeCacheRequest &cacheRequest) { 
-    Y_VERIFY(!cacheRequest.ResultSet.empty()); 
- 
-    NSchemeCache::TSchemeCacheRequest::TEntry& firstEntry= *cacheRequest.ResultSet.begin(); 
-    NKikimr::TKeyDesc& firstKey = *firstEntry.KeyDescription; 
+NSchemeCache::TDomainInfo::TPtr FindDomainInfo(NSchemeCache::TSchemeCacheRequest &cacheRequest) {
+    for (const auto& entry :cacheRequest.ResultSet) {
+        if (entry.DomainInfo) {
+            return entry.DomainInfo;
+        }
+    }
+    return nullptr;
+}
+
+ui64 GetFirstTablet(NSchemeCache::TSchemeCacheRequest &cacheRequest) {
+    Y_VERIFY(!cacheRequest.ResultSet.empty());
+
+    NSchemeCache::TSchemeCacheRequest::TEntry& firstEntry= *cacheRequest.ResultSet.begin();
+    NKikimr::TKeyDesc& firstKey = *firstEntry.KeyDescription;
     Y_VERIFY(!firstKey.Partitions.empty());
     return firstKey.Partitions.begin()->ShardId;
-} 
- 
-const TDomainsInfo::TDomain& TDataReq::SelectDomain(NSchemeCache::TSchemeCacheRequest &cacheRequest, const TActorContext &ctx) { 
-    ui64 firstTabletId = GetFirstTablet(cacheRequest); 
- 
-    auto appdata = AppData(ctx); 
-    const ui32 selfDomain = appdata->DomainsInfo->GetDomainUidByTabletId(firstTabletId); 
-    Y_VERIFY(selfDomain != appdata->DomainsInfo->BadDomainId); 
-    return appdata->DomainsInfo->GetDomain(selfDomain); 
-} 
- 
-ui64 TDataReq::SelectCoordinator(NSchemeCache::TSchemeCacheRequest &cacheRequest, const TActorContext &ctx) { 
-    auto domainInfo = FindDomainInfo(cacheRequest); 
-    if (domainInfo) { 
-        return domainInfo->Coordinators.Select(TxId); 
-    } 
- 
-    // no tablets keys are found in requests keys 
-    // it take place when a transaction have only checks locks 
-    LOG_DEBUG_S(ctx, NKikimrServices::TX_PROXY, 
-                "Actor# " << ctx.SelfID.ToString() << 
-                " txid# " << TxId << 
-                " SelectCoordinator unable to choose coordinator from resolved keys," << 
-                " will try to pick it from TEvProposeTransactionResult from datashard"); 
-    return 0; 
-} 
- 
+}
+
+const TDomainsInfo::TDomain& TDataReq::SelectDomain(NSchemeCache::TSchemeCacheRequest &cacheRequest, const TActorContext &ctx) {
+    ui64 firstTabletId = GetFirstTablet(cacheRequest);
+
+    auto appdata = AppData(ctx);
+    const ui32 selfDomain = appdata->DomainsInfo->GetDomainUidByTabletId(firstTabletId);
+    Y_VERIFY(selfDomain != appdata->DomainsInfo->BadDomainId);
+    return appdata->DomainsInfo->GetDomain(selfDomain);
+}
+
+ui64 TDataReq::SelectCoordinator(NSchemeCache::TSchemeCacheRequest &cacheRequest, const TActorContext &ctx) {
+    auto domainInfo = FindDomainInfo(cacheRequest);
+    if (domainInfo) {
+        return domainInfo->Coordinators.Select(TxId);
+    }
+
+    // no tablets keys are found in requests keys
+    // it take place when a transaction have only checks locks
+    LOG_DEBUG_S(ctx, NKikimrServices::TX_PROXY,
+                "Actor# " << ctx.SelfID.ToString() <<
+                " txid# " << TxId <<
+                " SelectCoordinator unable to choose coordinator from resolved keys," <<
+                " will try to pick it from TEvProposeTransactionResult from datashard");
+    return 0;
+}
+
 void TDataReq::FailProposedRequest(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus status, TString errMsg, const TActorContext &ctx) {
     LOG_ERROR_S_SAMPLED_BY(ctx, NKikimrServices::TX_PROXY, TxId,
         "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId << " FailProposedRequest: " << errMsg << " Status# " << status);
@@ -2753,28 +2753,28 @@ void TDataReq::FailProposedRequest(TEvTxUserProxy::TEvProposeTransactionStatus::
     TxProxyMon->TxResultError->Inc();
 }
 
-bool TDataReq::CheckDomainLocality(NSchemeCache::TSchemeCacheRequest &cacheRequest) { 
-    NSchemeCache::TDomainInfo::TPtr domainInfo; 
-    for (const auto& entry :cacheRequest.ResultSet) { 
-        if (TSysTables::IsSystemTable(entry.KeyDescription->TableId)) { 
-            continue; 
-        } 
- 
-        Y_VERIFY(entry.DomainInfo); 
- 
-        if (!domainInfo) { 
-            domainInfo = entry.DomainInfo; 
-            continue; 
-        } 
- 
-        if (domainInfo->DomainKey != entry.DomainInfo->DomainKey) { 
-            return false; 
-        } 
-    } 
- 
-    return true; 
-} 
- 
+bool TDataReq::CheckDomainLocality(NSchemeCache::TSchemeCacheRequest &cacheRequest) {
+    NSchemeCache::TDomainInfo::TPtr domainInfo;
+    for (const auto& entry :cacheRequest.ResultSet) {
+        if (TSysTables::IsSystemTable(entry.KeyDescription->TableId)) {
+            continue;
+        }
+
+        Y_VERIFY(entry.DomainInfo);
+
+        if (!domainInfo) {
+            domainInfo = entry.DomainInfo;
+            continue;
+        }
+
+        if (domainInfo->DomainKey != entry.DomainInfo->DomainKey) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
 void TDataReq::RegisterPlan(const TActorContext &ctx) {
     WallClockPrepared = Now();
     TDomainsInfo *domainsInfo = AppData(ctx)->DomainsInfo.Get();
@@ -2824,7 +2824,7 @@ void TDataReq::RegisterPlan(const TActorContext &ctx) {
     if (ProxyFlags & TEvTxUserProxy::TEvProposeTransaction::ProxyReportPrepared)
         ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ProxyPrepared, NKikimrIssues::TStatusIds::TRANSIENT, false, ctx);
 
-    Y_VERIFY(SelectedCoordinator, "shouldn't be run with null SelectedCoordinator"); 
+    Y_VERIFY(SelectedCoordinator, "shouldn't be run with null SelectedCoordinator");
     TAutoPtr<TEvTxProxy::TEvProposeTransaction> req(new TEvTxProxy::TEvProposeTransaction(SelectedCoordinator, TxId, 0,
         AggrMinStep, AggrMaxStep));
 

@@ -598,7 +598,7 @@ void TMessageBusServer::UnknownMessage(TBusMessageContext &msg) {
     msg.SendReplyMove(new TBusResponseStatus(MSTATUS_UNKNOWN, "undocumented error 9"));
 }
 
-IActor* TMessageBusServer::CreateProxy() { 
+IActor* TMessageBusServer::CreateProxy() {
     return CreateMessageBusServerProxy(this, PQReadSessionsInfoWorkerFactory);
 }
 

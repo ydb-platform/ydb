@@ -7,11 +7,11 @@
 #define SS_LOG_W(ctx, stream) LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, stream)
 
 namespace NKikimr {
-namespace NSchemeShard { 
+namespace NSchemeShard {
 
 using namespace NTabletFlatExecutor;
 
-struct TSchemeShard::TTxFixBadPaths : public TTransactionBase<TSchemeShard> { 
+struct TSchemeShard::TTxFixBadPaths : public TTransactionBase<TSchemeShard> {
     explicit TTxFixBadPaths(TSelf *self)
         : TBase(self)
     {
@@ -28,14 +28,14 @@ struct TSchemeShard::TTxFixBadPaths : public TTransactionBase<TSchemeShard> {
                 continue;
             }
 
-            if (pathEl->CreateTxId == TTxId(0)) { 
-                pathEl->CreateTxId = TTxId(1); 
+            if (pathEl->CreateTxId == TTxId(0)) {
+                pathEl->CreateTxId = TTxId(1);
                 Self->PersistCreateTxId(db, pathId, pathEl->CreateTxId);
 
                 SS_LOG_W(ctx, "Fix CreateTxId, self# " << Self->TabletID() << ", pathId# " << pathId);
             }
-            if (pathId != Self->RootPathId() && pathEl->StepCreated == InvalidStepId) { 
-                pathEl->StepCreated = TStepId(1); 
+            if (pathId != Self->RootPathId() && pathEl->StepCreated == InvalidStepId) {
+                pathEl->StepCreated = TStepId(1);
                 Self->PersistCreateStep(db, pathId, pathEl->StepCreated);
 
                 SS_LOG_W(ctx, "Fix StepCreated, self# " << Self->TabletID() << ", pathId# " << pathId);
@@ -49,11 +49,11 @@ struct TSchemeShard::TTxFixBadPaths : public TTransactionBase<TSchemeShard> {
         Self->Execute(Self->CreateTxInitPopulator(TSideEffects::TPublications()), ctx);
     }
 
-}; // TSchemeShard::TTxFixBadPaths 
+}; // TSchemeShard::TTxFixBadPaths
 
-NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxFixBadPaths() { 
+NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxFixBadPaths() {
     return new TTxFixBadPaths(this);
 }
 
-} // NSchemeShard 
+} // NSchemeShard
 } // NKikimr

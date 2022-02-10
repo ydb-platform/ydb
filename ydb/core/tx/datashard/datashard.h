@@ -198,8 +198,8 @@ struct TEvDataShard {
         EvSchemaChanged,
         EvStateChanged,
         EvCancelBackup,
-        EvMigrateSchemeShardRequest, 
-        EvMigrateSchemeShardResponse, 
+        EvMigrateSchemeShardRequest,
+        EvMigrateSchemeShardResponse,
         EvCancelRestore,
 
         EvInitDataShardResult = EvProposeTransaction + 5 * 512,
@@ -252,7 +252,7 @@ struct TEvDataShard {
         EvGetRSInfoResponse,
         EvGetDataHistogramRequest,
         EvGetDataHistogramResponse,
-        EvCancelFillIndex_DEPRECATED, 
+        EvCancelFillIndex_DEPRECATED,
         EvRefreshVolatileSnapshotRequest,
         EvRefreshVolatileSnapshotResponse,
         EvDiscardVolatileSnapshotRequest,
@@ -267,9 +267,9 @@ struct TEvDataShard {
         EvConditionalEraseRowsRequest,
         EvConditionalEraseRowsResponse,
 
-        EvBuildIndexCreateRequest, 
-        EvBuildIndexProgressResponse, 
- 
+        EvBuildIndexCreateRequest,
+        EvBuildIndexProgressResponse,
+
         EvGetS3DownloadInfo,
         EvStoreS3DownloadInfo,
         EvS3DownloadInfo,
@@ -364,12 +364,12 @@ struct TEvDataShard {
 
     struct TEvSchemaChangedResult : public TEventPB<TEvSchemaChangedResult, NKikimrTxDataShard::TEvSchemaChangedResult,
                                                 TEvDataShard::EvSchemaChangedResult> {
-        TEvSchemaChangedResult() 
-        {} 
- 
-        explicit TEvSchemaChangedResult(ui64 txId) { 
-            Record.SetTxId(txId); 
-        } 
+        TEvSchemaChangedResult()
+        {}
+
+        explicit TEvSchemaChangedResult(ui64 txId) {
+            Record.SetTxId(txId);
+        }
     };
 
     struct TEvStateChanged : public TEventPB<TEvStateChanged, NKikimrTxDataShard::TEvStateChanged,
@@ -433,13 +433,13 @@ struct TEvDataShard {
 
         TEvProposeTransaction(NKikimrTxDataShard::ETransactionKind txKind, ui64 ssId, const TActorId& source, ui64 txId,
             const TStringBuf& txBody, const NKikimrSubDomains::TProcessingParams &processingParams, ui32 flags = NDataShard::TTxFlags::Default)
-            : TEvProposeTransaction(txKind, source, txId, txBody, flags) 
-        { 
-            Y_VERIFY(txKind == NKikimrTxDataShard::TX_KIND_SCHEME); 
-            Record.SetSchemeShardId(ssId); 
-            Record.MutableProcessingParams()->CopyFrom(processingParams); 
-        } 
- 
+            : TEvProposeTransaction(txKind, source, txId, txBody, flags)
+        {
+            Y_VERIFY(txKind == NKikimrTxDataShard::TX_KIND_SCHEME);
+            Record.SetSchemeShardId(ssId);
+            Record.MutableProcessingParams()->CopyFrom(processingParams);
+        }
+
         TEvProposeTransaction(NKikimrTxDataShard::ETransactionKind txKind, ui64 ssId, ui64 subDomainPathId, const TActorId& source, ui64 txId,
             const TStringBuf& txBody, const NKikimrSubDomains::TProcessingParams &processingParams, ui32 flags = NDataShard::TTxFlags::Default)
             : TEvProposeTransaction(txKind, ssId, source, txId, txBody, processingParams, flags)
@@ -510,10 +510,10 @@ struct TEvDataShard {
             Record.SetStatus(NKikimrTxDataShard::TEvProposeTransactionResult::TRY_LATER);
         }
 
-        void SetDomainCoordinators(const NKikimrSubDomains::TProcessingParams& params) { 
-            Record.MutableDomainCoordinators()->CopyFrom(params.GetCoordinators()); 
-        } 
- 
+        void SetDomainCoordinators(const NKikimrSubDomains::TProcessingParams& params) {
+            Record.MutableDomainCoordinators()->CopyFrom(params.GetCoordinators());
+        }
+
         void SetSchemeTxDuplicate(bool sameTxId = true) {
             if (sameTxId) {
                 Record.SetStatus(NKikimrTxDataShard::TEvProposeTransactionResult::PREPARED);
@@ -689,13 +689,13 @@ struct TEvDataShard {
                                                         TEvDataShard::EvInitSplitMergeDestination> {
         TEvInitSplitMergeDestination() = default;
         TEvInitSplitMergeDestination(ui64 opId, ui64 schemeshardTabletId, ui64 subDomainPathId,
-                                     const NKikimrTxDataShard::TSplitMergeDescription &splitDesc, 
-                                     const NKikimrSubDomains::TProcessingParams &processingParams) { 
+                                     const NKikimrTxDataShard::TSplitMergeDescription &splitDesc,
+                                     const NKikimrSubDomains::TProcessingParams &processingParams) {
             Record.SetOperationCookie(opId);
             Record.SetSchemeshardTabletId(schemeshardTabletId);
             Record.SetSubDomainPathId(subDomainPathId);
-            Record.MutableSplitDescription()->CopyFrom(splitDesc); 
-            Record.MutableProcessingParams()->CopyFrom(processingParams); 
+            Record.MutableSplitDescription()->CopyFrom(splitDesc);
+            Record.MutableProcessingParams()->CopyFrom(processingParams);
         }
     };
 
@@ -804,10 +804,10 @@ struct TEvDataShard {
                                                         NKikimrTxDataShard::TEvGetTableStatsResult,
                                                         TEvDataShard::EvGetTableStatsResult> {
         TEvGetTableStatsResult() = default;
-        TEvGetTableStatsResult(ui64 datashardId, ui64 tableOwnerId, ui64 tableLocalId) { 
+        TEvGetTableStatsResult(ui64 datashardId, ui64 tableOwnerId, ui64 tableLocalId) {
             Record.SetDatashardId(datashardId);
-            Record.SetTableOwnerId(tableOwnerId); 
-            Record.SetTableLocalId(tableLocalId); 
+            Record.SetTableOwnerId(tableOwnerId);
+            Record.SetTableLocalId(tableLocalId);
         }
     };
 
@@ -815,10 +815,10 @@ struct TEvDataShard {
                                                         NKikimrTxDataShard::TEvPeriodicTableStats,
                                                         TEvDataShard::EvPeriodicTableStats> {
         TEvPeriodicTableStats() = default;
-        TEvPeriodicTableStats(ui64 datashardId, ui64 tableOwnerId, ui64 tableLocalId) { 
+        TEvPeriodicTableStats(ui64 datashardId, ui64 tableOwnerId, ui64 tableLocalId) {
             Record.SetDatashardId(datashardId);
-            Record.SetTableOwnerId(tableOwnerId); 
-            Record.SetTableLocalId(tableLocalId); 
+            Record.SetTableOwnerId(tableOwnerId);
+            Record.SetTableLocalId(tableLocalId);
         }
     };
 
@@ -1130,24 +1130,24 @@ struct TEvDataShard {
     {
         using EStatus = NKikimrTxDataShard::TEvDiscardVolatileSnapshotResponse::EStatus;
     };
- 
-    struct TEvMigrateSchemeShardRequest 
-        : public TEventPB<TEvMigrateSchemeShardRequest, 
-                          NKikimrTxDataShard::TEvMigrateSchemeShardRequest, 
-                          TEvDataShard::EvMigrateSchemeShardRequest> 
-    { 
-        ui64 GetDatashardId() const { 
-            return Record.GetTabletId(); 
-        } 
-    }; 
- 
-    struct TEvMigrateSchemeShardResponse 
-        : public TEventPB<TEvMigrateSchemeShardResponse, 
-                          NKikimrTxDataShard::TEvMigrateSchemeShardResponse, 
-                          TEvDataShard::EvMigrateSchemeShardResponse> 
-    { 
-        using EStatus = NKikimrTxDataShard::TEvMigrateSchemeShardResponse::EStatus; 
-    }; 
+
+    struct TEvMigrateSchemeShardRequest
+        : public TEventPB<TEvMigrateSchemeShardRequest,
+                          NKikimrTxDataShard::TEvMigrateSchemeShardRequest,
+                          TEvDataShard::EvMigrateSchemeShardRequest>
+    {
+        ui64 GetDatashardId() const {
+            return Record.GetTabletId();
+        }
+    };
+
+    struct TEvMigrateSchemeShardResponse
+        : public TEventPB<TEvMigrateSchemeShardResponse,
+                          NKikimrTxDataShard::TEvMigrateSchemeShardResponse,
+                          TEvDataShard::EvMigrateSchemeShardResponse>
+    {
+        using EStatus = NKikimrTxDataShard::TEvMigrateSchemeShardResponse::EStatus;
+    };
 
     struct TEvGetS3Upload
         : public TEventLocal<TEvGetS3Upload, TEvDataShard::EvGetS3Upload>
@@ -1332,20 +1332,20 @@ struct TEvDataShard {
                           TEvDataShard::EvConditionalEraseRowsResponse>
     {
     };
- 
-    struct TEvBuildIndexCreateRequest 
-        : public TEventPB<TEvBuildIndexCreateRequest, 
-                          NKikimrTxDataShard::TEvBuildIndexCreateRequest, 
-                          TEvDataShard::EvBuildIndexCreateRequest> 
-    { 
-    }; 
- 
-    struct TEvBuildIndexProgressResponse 
-        : public TEventPB<TEvBuildIndexProgressResponse, 
-                          NKikimrTxDataShard::TEvBuildIndexProgressResponse, 
-                          TEvDataShard::EvBuildIndexProgressResponse> 
-    { 
-    }; 
+
+    struct TEvBuildIndexCreateRequest
+        : public TEventPB<TEvBuildIndexCreateRequest,
+                          NKikimrTxDataShard::TEvBuildIndexCreateRequest,
+                          TEvDataShard::EvBuildIndexCreateRequest>
+    {
+    };
+
+    struct TEvBuildIndexProgressResponse
+        : public TEventPB<TEvBuildIndexProgressResponse,
+                          NKikimrTxDataShard::TEvBuildIndexProgressResponse,
+                          TEvDataShard::EvBuildIndexProgressResponse>
+    {
+    };
 
     struct TEvKqpScan
         : public TEventPB<TEvKqpScan,

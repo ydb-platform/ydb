@@ -25,12 +25,12 @@ class TMessageBusServerFlatDescribeRequest : public TMessageBusSecureRequest<TMe
     THolder<TBusSchemeDescribe> Request;
     NYql::TIssueManager IssueManager;
 
-    void Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev, const TActorContext& ctx) { 
+    void Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev, const TActorContext& ctx) {
         auto &mutableRecord = *ev->Get()->MutableRecord();
         TAutoPtr<ResponseType> response(new ResponseType());
         response->Record.SetSchemeStatus(mutableRecord.GetStatus());
         const auto status = mutableRecord.GetStatus();
-        if (status == NKikimrScheme::StatusSuccess) { 
+        if (status == NKikimrScheme::StatusSuccess) {
             response->Record.SetStatus(MSTATUS_OK);
             response->Record.SetPath(mutableRecord.GetPath());
             response->Record.MutablePathDescription()->Swap(mutableRecord.MutablePathDescription());
@@ -40,7 +40,7 @@ class TMessageBusServerFlatDescribeRequest : public TMessageBusSecureRequest<TMe
             response->Record.SetErrorReason(mutableRecord.GetReason());
 
             switch (status) {
-            case NKikimrScheme::StatusPathDoesNotExist: 
+            case NKikimrScheme::StatusPathDoesNotExist:
                 response->Record.SetStatusCode(NKikimrIssues::TStatusIds::PATH_NOT_EXIST);
                 IssueManager.RaiseIssue(MakeIssue(NKikimrIssues::TIssuesIds::PATH_NOT_EXIST));
                 break;
@@ -56,7 +56,7 @@ class TMessageBusServerFlatDescribeRequest : public TMessageBusSecureRequest<TMe
 
         TBase::SendReplyAutoPtr(response);
         Request.Destroy();
-        this->Die(ctx); 
+        this->Die(ctx);
     }
 
 public:
@@ -72,7 +72,7 @@ public:
     //STFUNC(StateWork)
     void StateWork(TAutoPtr<NActors::IEventHandle>& ev, const NActors::TActorContext& ctx) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, Handle); 
+            HFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, Handle);
         }
     }
 
@@ -83,7 +83,7 @@ public:
 
     void SendRequest(const TActorContext& ctx) {
         TAutoPtr<TEvTxUserProxy::TEvNavigate> req(new TEvTxUserProxy::TEvNavigate());
-        NKikimrSchemeOp::TDescribePath* record = req->Record.MutableDescribePath(); 
+        NKikimrSchemeOp::TDescribePath* record = req->Record.MutableDescribePath();
 
         if (Request->Record.HasPath()) {
             record->SetPath(Request->Record.GetPath());
@@ -169,8 +169,8 @@ void TMessageBusServerProxy::Handle(TEvBusProxy::TEvFlatDescribeRequest::TPtr& e
 void TMessageBusServerProxy::Bootstrap(const TActorContext& ctx) {
     SelfID = ctx.SelfID;
 
-    TxProxy = MakeTxProxyID(); 
- 
+    TxProxy = MakeTxProxyID();
+
     SchemeCacheCounters = GetServiceCounters(AppData(ctx)->Counters, "pqproxy|cache");
     DbOperationsCounters = new TMessageBusDbOpsCounters(AppData(ctx)->Counters);
 

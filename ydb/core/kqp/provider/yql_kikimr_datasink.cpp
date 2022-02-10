@@ -568,7 +568,7 @@ public:
                             return nullptr;
                         }
                     }
- 
+
                     YQL_ENSURE(settings.AlterActions);
                     YQL_ENSURE(!settings.AlterActions.Cast().Empty());
 

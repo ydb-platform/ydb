@@ -33,7 +33,7 @@ namespace NSchemeBoard {
 #define SBR_LOG_E(stream) SB_LOG_E(SCHEME_BOARD_REPLICA, stream)
 
 class TReplica: public TMonitorableActor<TReplica> {
-    using TDescribeSchemeResult = NKikimrScheme::TEvDescribeSchemeResult; 
+    using TDescribeSchemeResult = NKikimrScheme::TEvDescribeSchemeResult;
     using TCapabilities = NKikimrSchemeBoard::TEvSubscribe::TCapabilities;
 
 public:
@@ -222,31 +222,31 @@ public:
         }
 
         explicit TDescription(TReplica* owner, const TString& path, const TPathId& pathId)
-            : Owner(owner) 
-            , Path(path) 
-            , PathId(pathId) 
-        { 
+            : Owner(owner)
+            , Path(path)
+            , PathId(pathId)
+        {
             TrackMemory();
-        } 
- 
-        explicit TDescription( 
+        }
+
+        explicit TDescription(
                 TReplica* owner,
                 const TPathId& pathId,
                 TDescribeSchemeResult&& describeSchemeResult)
             : Owner(owner)
-            , PathId(pathId) 
-            , DescribeSchemeResult(std::move(describeSchemeResult)) 
-        { 
+            , PathId(pathId)
+            , DescribeSchemeResult(std::move(describeSchemeResult))
+        {
             CalculateResultSize();
             TrackMemory();
-        } 
- 
-        explicit TDescription( 
+        }
+
+        explicit TDescription(
                 TReplica* owner,
-                const TString& path, 
-                const TPathId& pathId, 
-                TDescribeSchemeResult&& describeSchemeResult) 
-            : Owner(owner) 
+                const TString& path,
+                const TPathId& pathId,
+                TDescribeSchemeResult&& describeSchemeResult)
+            : Owner(owner)
             , Path(path)
             , PathId(pathId)
             , DescribeSchemeResult(std::move(describeSchemeResult))
@@ -300,7 +300,7 @@ public:
                 << ": self# " << ToString()
                 << ", other# " << other.ToString());
 
-            SBR_LOG_T("Merge descriptions" 
+            SBR_LOG_T("Merge descriptions"
                 << ": self# " << Owner->SelfId()
                 << ", left path# " << Path
                 << ", left pathId# " << PathId
@@ -308,7 +308,7 @@ public:
                 << ", rigth path# " << other.Path
                 << ", rigth pathId# " << other.PathId
                 << ", rigth version# " << other.GetVersion());
- 
+
             UntrackMemory();
             other.UntrackMemory();
             TrackNotify = false;
@@ -374,14 +374,14 @@ public:
             return ::NKikimr::NSchemeBoard::GetPathVersion(DescribeSchemeResult);
         }
 
-        TDomainId GetDomainId() const { 
-            return IsFilled() ? ::NKikimr::NSchemeBoard::GetDomainId(DescribeSchemeResult) : TDomainId(); 
-        } 
- 
-        TSet<ui64> GetAbandonedSchemeShardIds() const { 
-            return IsFilled() ? ::NKikimr::NSchemeBoard::GetAbandonedSchemeShardIds(DescribeSchemeResult) : TSet<ui64>(); 
-        } 
- 
+        TDomainId GetDomainId() const {
+            return IsFilled() ? ::NKikimr::NSchemeBoard::GetDomainId(DescribeSchemeResult) : TDomainId();
+        }
+
+        TSet<ui64> GetAbandonedSchemeShardIds() const {
+            return IsFilled() ? ::NKikimr::NSchemeBoard::GetAbandonedSchemeShardIds(DescribeSchemeResult) : TSet<ui64>();
+        }
+
         bool IsFilled() const {
             return DescribeSchemeResult.ByteSizeLong();
         }
@@ -520,25 +520,25 @@ private:
         return Descriptions.Upsert(path, TDescription(this, path));
     }
 
-    TDescription& UpsertDescription(const TString& path, const TPathId& pathId) { 
-        SBR_LOG_I("Upsert description" 
+    TDescription& UpsertDescription(const TString& path, const TPathId& pathId) {
+        SBR_LOG_I("Upsert description"
             << ": self# " << SelfId()
             << ", path# " << path
             << ", pathId# " << pathId);
- 
-        return Descriptions.Upsert(path, pathId, TDescription(this, path, pathId)); 
-    } 
- 
-    template <typename TPath> 
+
+        return Descriptions.Upsert(path, pathId, TDescription(this, path, pathId));
+    }
+
+    template <typename TPath>
     TDescription& UpsertDescription(const TPath path, TDescription&& description) {
-        SBR_LOG_I("Upsert description" 
+        SBR_LOG_I("Upsert description"
             << ": self# " << SelfId()
             << ", path# " << path);
- 
+
         return Descriptions.Upsert(path, std::move(description));
-    } 
- 
-    TDescription& UpsertDescription( 
+    }
+
+    TDescription& UpsertDescription(
         const TString& path,
         const TPathId& pathId,
         TDescribeSchemeResult&& describeSchemeResult
@@ -567,50 +567,50 @@ private:
             return;
         }
 
-        auto path = desc->GetPath(); 
- 
+        auto path = desc->GetPath();
+
         SBR_LOG_I("Delete description"
             << ": self# " << SelfId()
-            << ", path# " << path 
+            << ", path# " << path
             << ", pathId# " << pathId);
 
-        if (TDescription* descByPath = Descriptions.FindPtr(path)) { 
-            if (descByPath != desc && descByPath->IsFilled()) { 
-                if (descByPath->GetPathId().OwnerId != pathId.OwnerId) { 
-                    auto curPathId = descByPath->GetPathId(); 
-                    auto curDomainId = descByPath->GetDomainId(); 
-                    auto domainId = desc->GetDomainId(); 
- 
-                    if (curDomainId == pathId) { //Deletion from GSS 
-                        SBR_LOG_N("Delete description by GSS" 
+        if (TDescription* descByPath = Descriptions.FindPtr(path)) {
+            if (descByPath != desc && descByPath->IsFilled()) {
+                if (descByPath->GetPathId().OwnerId != pathId.OwnerId) {
+                    auto curPathId = descByPath->GetPathId();
+                    auto curDomainId = descByPath->GetDomainId();
+                    auto domainId = desc->GetDomainId();
+
+                    if (curDomainId == pathId) { //Deletion from GSS
+                        SBR_LOG_N("Delete description by GSS"
                             << ": self# " << SelfId()
                             << ", path# " << path
                             << ", pathId# " << pathId
                             << ", domainId# " << domainId
                             << ", curPathId# " << curPathId
                             << ", curDomainId# " << curDomainId);
- 
-                        Descriptions.DeleteIndex(path); 
-                        UpsertDescription(path, pathId); 
-                        RelinkSubscribers(descByPath, path); 
+
+                        Descriptions.DeleteIndex(path);
+                        UpsertDescription(path, pathId);
+                        RelinkSubscribers(descByPath, path);
 
                         descByPath->Clear();
-                    } 
-                } 
-            } 
-        } 
- 
+                    }
+                }
+            }
+        }
+
         desc->Clear();
     }
 
-    void RelinkSubscribers(TDescription* fromDesc, const TString& path) { 
+    void RelinkSubscribers(TDescription* fromDesc, const TString& path) {
         for (const auto& [subscriber, info] : fromDesc->GetSubscribers(SUBSCRIPTION_BY_PATH)) {
-            fromDesc->Unsubscribe(subscriber); 
+            fromDesc->Unsubscribe(subscriber);
             Subscribers.erase(subscriber);
             SubscribeBy(subscriber, path, info.GetDomainOwnerId(), info.GetCapabilities(), false);
-        } 
-    } 
- 
+        }
+    }
+
     void SoftDeleteDescriptions(const TPathId& begin, const TPathId& end) {
         const auto& pathIdIndex = Descriptions.GetSecondaryIndex();
 
@@ -729,21 +729,21 @@ private:
             return;
         }
 
-        TPathId ackPathId; 
+        TPathId ackPathId;
 
         if (record.HasDeletedLocalPathIds()) {
-            ackPathId = TPathId(owner, record.GetDeletedLocalPathIds().GetEnd()); 
+            ackPathId = TPathId(owner, record.GetDeletedLocalPathIds().GetEnd());
         }
 
         if (record.HasLocalPathId()) {
-            ackPathId = ev->Get()->GetPathId(); 
+            ackPathId = ev->Get()->GetPathId();
         }
 
-        if (record.HasMigratedLocalPathIds()) { 
-            ackPathId = TPathId(owner, record.GetMigratedLocalPathIds().GetEnd()); 
-        } 
- 
-        const ui64 version = GetVersion(ackPathId); 
+        if (record.HasMigratedLocalPathIds()) {
+            ackPathId = TPathId(owner, record.GetMigratedLocalPathIds().GetEnd());
+        }
+
+        const ui64 version = GetVersion(ackPathId);
         Send(ev->Sender, new TSchemeBoardEvents::TEvUpdateAck(owner, generation, ackPathId, version), 0, ev->Cookie);
     }
 
@@ -793,7 +793,7 @@ private:
             << ", cookie# " << ev->Cookie
             << ", owner# " << owner
             << ", generation# " << generation);
-        SBR_LOG_T("Message:\n" << ev->Get()->ToString().substr(0, 10000)); 
+        SBR_LOG_T("Message:\n" << ev->Get()->ToString().substr(0, 10000));
 
         const auto populatorIt = Populators.find(owner);
         if (populatorIt == Populators.end()) {
@@ -825,19 +825,19 @@ private:
         }
 
         const TString& path = record.GetPath();
-        const TPathId pathId = ev->Get()->GetPathId(); 
+        const TPathId pathId = ev->Get()->GetPathId();
 
         SBR_LOG_N("Update description"
             << ": self# " << SelfId()
             << ", path# " << path
-            << ", pathId# " << pathId 
-            << ", deletion# " << (record.GetIsDeletion() ? "true" : "false")); 
+            << ", pathId# " << pathId
+            << ", deletion# " << (record.GetIsDeletion() ? "true" : "false"));
 
         if (record.GetIsDeletion()) {
             SoftDeleteDescription(pathId, true);
-            return AckUpdate(ev); 
-        } 
- 
+            return AckUpdate(ev);
+        }
+
         if (TDescription* desc = Descriptions.FindPtr(pathId)) {
             if (desc->IsExplicitlyDeleted()) {
                 SBR_LOG_N("Path was explicitly deleted, ignoring"
@@ -849,49 +849,49 @@ private:
             }
         }
 
-        TDescription* desc = Descriptions.FindPtr(path); 
-        if (!desc) { 
-            UpsertDescription(path, pathId, std::move(*record.MutableDescribeSchemeResult())); 
-            return AckUpdate(ev); 
-        } 
- 
-        if (!desc->GetPathId()) { 
-            UpsertDescription(path, pathId, std::move(*record.MutableDescribeSchemeResult())); 
-            return AckUpdate(ev); 
-        } 
- 
-        auto curPathId = desc->GetPathId(); 
- 
+        TDescription* desc = Descriptions.FindPtr(path);
+        if (!desc) {
+            UpsertDescription(path, pathId, std::move(*record.MutableDescribeSchemeResult()));
+            return AckUpdate(ev);
+        }
+
+        if (!desc->GetPathId()) {
+            UpsertDescription(path, pathId, std::move(*record.MutableDescribeSchemeResult()));
+            return AckUpdate(ev);
+        }
+
+        auto curPathId = desc->GetPathId();
+
         if (curPathId.OwnerId == pathId.OwnerId || !desc->IsFilled()) {
-            if (curPathId > pathId) { 
+            if (curPathId > pathId) {
                 return AckUpdate(ev);
             }
 
-            if (curPathId < pathId) { 
-                SoftDeleteDescription(desc->GetPathId()); 
+            if (curPathId < pathId) {
+                SoftDeleteDescription(desc->GetPathId());
                 Descriptions.DeleteIndex(path);
                 RelinkSubscribers(desc, path);
             }
 
             UpsertDescription(path, pathId, std::move(*record.MutableDescribeSchemeResult()));
-            return AckUpdate(ev); 
+            return AckUpdate(ev);
         }
 
-        Y_VERIFY_S(desc->IsFilled(), "desc :" 
+        Y_VERIFY_S(desc->IsFilled(), "desc :"
             << ": path# " << desc->GetPath()
             << ", pathId# " << desc->GetPathId()
             << ", domainId# " << desc->GetDomainId()
             << ", version# " << desc->GetVersion());
- 
-        auto curDomainId = desc->GetDomainId(); 
-        auto domainId = GetDomainId(record.GetDescribeSchemeResult()); 
- 
-        if (curPathId == domainId) { //Update from TSS, GSS->TSS 
- 
-            // it is only because we need to manage undo of upgrade subdomain, finally remove it 
-            auto abandonedSchemeShards = desc->GetAbandonedSchemeShardIds(); 
-            if (abandonedSchemeShards.contains(pathId.OwnerId)) { //TSS is ignored, present GSS reverted it 
-                SBR_LOG_N("Replace GSS by TSS description is rejected, GSS implicitly knows that TSS has been reverted" 
+
+        auto curDomainId = desc->GetDomainId();
+        auto domainId = GetDomainId(record.GetDescribeSchemeResult());
+
+        if (curPathId == domainId) { //Update from TSS, GSS->TSS
+
+            // it is only because we need to manage undo of upgrade subdomain, finally remove it
+            auto abandonedSchemeShards = desc->GetAbandonedSchemeShardIds();
+            if (abandonedSchemeShards.contains(pathId.OwnerId)) { //TSS is ignored, present GSS reverted it
+                SBR_LOG_N("Replace GSS by TSS description is rejected, GSS implicitly knows that TSS has been reverted"
                     ", but still inject description only by pathId for safe"
                     << ": self# " << SelfId()
                     << ", path# " << path
@@ -899,44 +899,44 @@ private:
                     << ", domainId# " << domainId
                     << ", curPathId# " << curPathId
                     << ", curDomainId# " << curDomainId);
-                UpsertDescription(pathId, TDescription(this, path, pathId, std::move(*record.MutableDescribeSchemeResult()))); 
-                return AckUpdate(ev); 
-            } 
- 
-            SBR_LOG_N("Replace GSS by TSS description" 
+                UpsertDescription(pathId, TDescription(this, path, pathId, std::move(*record.MutableDescribeSchemeResult())));
+                return AckUpdate(ev);
+            }
+
+            SBR_LOG_N("Replace GSS by TSS description"
                 << ": self# " << SelfId()
                 << ", path# " << path
                 << ", pathId# " << pathId
                 << ", domainId# " << domainId
                 << ", curPathId# " << curPathId
                 << ", curDomainId# " << curDomainId);
-            //unlick GSS desc by path 
-            Descriptions.DeleteIndex(path); 
-            RelinkSubscribers(desc, path); 
-            UpsertDescription(path, pathId, std::move(*record.MutableDescribeSchemeResult())); 
-            return AckUpdate(ev); 
-        } 
- 
-        if (curDomainId == pathId) { //Update from GSS, TSS->GSS 
- 
-            // it is only because we need to manage undo of upgrade subdomain, finally remove it 
-            auto abandonedSchemeShards = GetAbandonedSchemeShardIds(record.GetDescribeSchemeResult()); 
-            if (abandonedSchemeShards.contains(curPathId.OwnerId)) { //GSS reverts TSS 
-                SBR_LOG_N("Replace TSS by GSS description, TSS was implicitly reverted by GSS" 
+            //unlick GSS desc by path
+            Descriptions.DeleteIndex(path);
+            RelinkSubscribers(desc, path);
+            UpsertDescription(path, pathId, std::move(*record.MutableDescribeSchemeResult()));
+            return AckUpdate(ev);
+        }
+
+        if (curDomainId == pathId) { //Update from GSS, TSS->GSS
+
+            // it is only because we need to manage undo of upgrade subdomain, finally remove it
+            auto abandonedSchemeShards = GetAbandonedSchemeShardIds(record.GetDescribeSchemeResult());
+            if (abandonedSchemeShards.contains(curPathId.OwnerId)) { //GSS reverts TSS
+                SBR_LOG_N("Replace TSS by GSS description, TSS was implicitly reverted by GSS"
                     << ": self# " << SelfId()
                     << ", path# " << path
                     << ", pathId# " << pathId
                     << ", domainId# " << domainId
                     << ", curPathId# " << curPathId
                     << ", curDomainId# " << curDomainId);
-                //unlick TSS desc by path 
-                Descriptions.DeleteIndex(path); 
-                RelinkSubscribers(desc, path); 
-                UpsertDescription(path, pathId, std::move(*record.MutableDescribeSchemeResult())); 
-                return AckUpdate(ev); 
-            } 
- 
-            SBR_LOG_N("Inject description only by pathId, it is update from GSS" 
+                //unlick TSS desc by path
+                Descriptions.DeleteIndex(path);
+                RelinkSubscribers(desc, path);
+                UpsertDescription(path, pathId, std::move(*record.MutableDescribeSchemeResult()));
+                return AckUpdate(ev);
+            }
+
+            SBR_LOG_N("Inject description only by pathId, it is update from GSS"
                 << ": self# " << SelfId()
                 << ", path# " << path
                 << ", pathId# " << pathId
@@ -944,60 +944,60 @@ private:
                 << ", curPathId# " << curPathId
                 << ", curDomainId# " << curDomainId);
             UpsertDescription(pathId, TDescription(this, path, pathId, std::move(*record.MutableDescribeSchemeResult())));
-            return AckUpdate(ev); 
-        } 
- 
-        if (curDomainId == domainId) { 
-            if (curPathId > pathId) { 
-                SBR_LOG_N("Totally ignore description, path with obsolete pathId" 
-                          << ": self# " << SelfId() 
-                          << ", path# " << path 
-                          << ", pathId# " << pathId 
-                          << ", domainId# " << domainId 
-                          << ", curPathId# " << curPathId 
-                          << ", curDomainId# " << curDomainId); 
-                return AckUpdate(ev); 
-            } 
- 
-            if (curPathId < pathId) { 
-                SBR_LOG_N("Update description by newest path form tenant schemeshard" 
-                          << ": self# " << SelfId() 
-                          << ", path# " << path 
-                          << ", pathId# " << pathId 
-                          << ", domainId# " << domainId 
-                          << ", curPathId# " << curPathId 
-                          << ", curDomainId# " << curDomainId); 
- 
-                SoftDeleteDescription(desc->GetPathId()); 
-                Descriptions.DeleteIndex(path); 
-                RelinkSubscribers(desc, path); 
-            } 
- 
-            UpsertDescription(path, pathId, std::move(*record.MutableDescribeSchemeResult())); 
-            return AckUpdate(ev); 
-        } else if (curDomainId < domainId) { 
-            SBR_LOG_N("Update description by newest path with newer domainId" 
+            return AckUpdate(ev);
+        }
+
+        if (curDomainId == domainId) {
+            if (curPathId > pathId) {
+                SBR_LOG_N("Totally ignore description, path with obsolete pathId"
+                          << ": self# " << SelfId()
+                          << ", path# " << path
+                          << ", pathId# " << pathId
+                          << ", domainId# " << domainId
+                          << ", curPathId# " << curPathId
+                          << ", curDomainId# " << curDomainId);
+                return AckUpdate(ev);
+            }
+
+            if (curPathId < pathId) {
+                SBR_LOG_N("Update description by newest path form tenant schemeshard"
+                          << ": self# " << SelfId()
+                          << ", path# " << path
+                          << ", pathId# " << pathId
+                          << ", domainId# " << domainId
+                          << ", curPathId# " << curPathId
+                          << ", curDomainId# " << curDomainId);
+
+                SoftDeleteDescription(desc->GetPathId());
+                Descriptions.DeleteIndex(path);
+                RelinkSubscribers(desc, path);
+            }
+
+            UpsertDescription(path, pathId, std::move(*record.MutableDescribeSchemeResult()));
+            return AckUpdate(ev);
+        } else if (curDomainId < domainId) {
+            SBR_LOG_N("Update description by newest path with newer domainId"
                 << ": self# " << SelfId()
                 << ", path# " << path
                 << ", pathId# " << pathId
                 << ", domainId# " << domainId
                 << ", curPathId# " << curPathId
                 << ", curDomainId# " << curDomainId);
-            Descriptions.DeleteIndex(path); 
-            RelinkSubscribers(desc, path); 
-            UpsertDescription(path, pathId, std::move(*record.MutableDescribeSchemeResult())); 
-            return AckUpdate(ev); 
-        } else { 
-            SBR_LOG_N("Totally ignore description, path with obsolete domainId" 
+            Descriptions.DeleteIndex(path);
+            RelinkSubscribers(desc, path);
+            UpsertDescription(path, pathId, std::move(*record.MutableDescribeSchemeResult()));
+            return AckUpdate(ev);
+        } else {
+            SBR_LOG_N("Totally ignore description, path with obsolete domainId"
                 << ": self# " << SelfId()
                 << ", path# " << path
                 << ", pathId# " << pathId
                 << ", domainId# " << domainId
                 << ", curPathId# " << curPathId
                 << ", curDomainId# " << curDomainId);
-            return AckUpdate(ev); 
-        } 
- 
+            return AckUpdate(ev);
+        }
+
         Y_FAIL_S("Can't insert old description, no relation between obj"
             << ": self# " << SelfId()
             << ", path# " << path
@@ -1087,7 +1087,7 @@ private:
         if (record.HasPath()) {
             SubscribeBy(ev->Sender, record.GetPath(), domainOwnerId, capabilities);
         } else {
-            Y_VERIFY(record.HasPathOwnerId() && record.HasLocalPathId()); 
+            Y_VERIFY(record.HasPathOwnerId() && record.HasLocalPathId());
             SubscribeBy(ev->Sender, TPathId(record.GetPathOwnerId(), record.GetLocalPathId()), domainOwnerId, capabilities);
         }
     }
@@ -1103,7 +1103,7 @@ private:
         if (record.HasPath()) {
             UnsubscribeBy(ev->Sender, record.GetPath());
         } else {
-            Y_VERIFY(record.HasPathOwnerId() && record.HasLocalPathId()); 
+            Y_VERIFY(record.HasPathOwnerId() && record.HasLocalPathId());
             UnsubscribeBy(ev->Sender, TPathId(record.GetPathOwnerId(), record.GetLocalPathId()));
         }
     }

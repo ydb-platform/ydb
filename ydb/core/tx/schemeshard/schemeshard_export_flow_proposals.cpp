@@ -5,22 +5,22 @@
 #include <util/string/cast.h>
 
 namespace NKikimr {
-namespace NSchemeShard { 
+namespace NSchemeShard {
 
-THolder<TEvSchemeShard::TEvModifySchemeTransaction> MkDirPropose( 
-    TSchemeShard* ss, 
+THolder<TEvSchemeShard::TEvModifySchemeTransaction> MkDirPropose(
+    TSchemeShard* ss,
     TTxId txId,
     const TExportInfo::TPtr exportInfo
 ) {
-    auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(txId), ss->TabletID()); 
+    auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(txId), ss->TabletID());
     auto& record = propose->Record;
 
     if (exportInfo->UserSID) {
         record.SetOwner(*exportInfo->UserSID);
     }
 
-    auto& modifyScheme = *record.AddTransaction(); 
-    modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpMkDir); 
+    auto& modifyScheme = *record.AddTransaction();
+    modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpMkDir);
     modifyScheme.SetInternal(true);
 
     const TPath domainPath = TPath::Init(exportInfo->DomainPathId, ss);
@@ -32,20 +32,20 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> MkDirPropose(
     return propose;
 }
 
-THolder<TEvSchemeShard::TEvModifySchemeTransaction> CopyTablesPropose( 
-    TSchemeShard* ss, 
+THolder<TEvSchemeShard::TEvModifySchemeTransaction> CopyTablesPropose(
+    TSchemeShard* ss,
     TTxId txId,
     const TExportInfo::TPtr exportInfo
 ) {
-    auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(txId), ss->TabletID()); 
+    auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(txId), ss->TabletID());
     auto& record = propose->Record;
 
     if (exportInfo->UserSID) {
         record.SetOwner(*exportInfo->UserSID);
     }
 
-    auto& modifyScheme = *record.AddTransaction(); 
-    modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateConsistentCopyTables); 
+    auto& modifyScheme = *record.AddTransaction();
+    modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateConsistentCopyTables);
     modifyScheme.SetInternal(true);
 
     auto& copyTables = *modifyScheme.MutableCreateConsistentCopyTables()->MutableCopyTableDescriptions();
@@ -68,8 +68,8 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CopyTablesPropose(
     return propose;
 }
 
-static NKikimrSchemeOp::TPathDescription GetTableDescription(TSchemeShard* ss, const TPathId& pathId) { 
-    NKikimrSchemeOp::TDescribeOptions opts; 
+static NKikimrSchemeOp::TPathDescription GetTableDescription(TSchemeShard* ss, const TPathId& pathId) {
+    NKikimrSchemeOp::TDescribeOptions opts;
     opts.SetReturnPartitioningInfo(false);
     opts.SetReturnPartitionConfig(true);
     opts.SetReturnBoundaries(true);
@@ -80,18 +80,18 @@ static NKikimrSchemeOp::TPathDescription GetTableDescription(TSchemeShard* ss, c
     return record.GetPathDescription();
 }
 
-THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose( 
-    TSchemeShard* ss, 
+THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
+    TSchemeShard* ss,
     TTxId txId,
     const TExportInfo::TPtr exportInfo,
     ui32 itemIdx
 ) {
     Y_VERIFY(itemIdx < exportInfo->Items.size());
 
-    auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(txId), ss->TabletID()); 
+    auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(txId), ss->TabletID());
 
-    auto& modifyScheme = *propose->Record.AddTransaction(); 
-    modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpBackup); 
+    auto& modifyScheme = *propose->Record.AddTransaction();
+    modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpBackup);
     modifyScheme.SetInternal(true);
 
     const TPath exportPath = TPath::Init(exportInfo->ExportPathId, ss);
@@ -139,10 +139,10 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
 
             switch (exportSettings.scheme()) {
             case Ydb::Export::ExportToS3Settings::HTTP:
-                backupSettings.SetScheme(NKikimrSchemeOp::TS3Settings::HTTP); 
+                backupSettings.SetScheme(NKikimrSchemeOp::TS3Settings::HTTP);
                 break;
             case Ydb::Export::ExportToS3Settings::HTTPS:
-                backupSettings.SetScheme(NKikimrSchemeOp::TS3Settings::HTTPS); 
+                backupSettings.SetScheme(NKikimrSchemeOp::TS3Settings::HTTPS);
                 break;
             default:
                 Y_FAIL("Unknown scheme");
@@ -154,16 +154,16 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
     return propose;
 }
 
-THolder<TEvSchemeShard::TEvModifySchemeTransaction> DropPropose( 
-    TSchemeShard* ss, 
+THolder<TEvSchemeShard::TEvModifySchemeTransaction> DropPropose(
+    TSchemeShard* ss,
     TTxId txId,
     const TExportInfo::TPtr exportInfo,
     ui32 itemIdx
 ) {
-    auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(txId), ss->TabletID()); 
+    auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(txId), ss->TabletID());
 
-    auto& modifyScheme = *propose->Record.AddTransaction(); 
-    modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpDropTable); 
+    auto& modifyScheme = *propose->Record.AddTransaction();
+    modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpDropTable);
     modifyScheme.SetInternal(true);
 
     const TPath exportPath = TPath::Init(exportInfo->ExportPathId, ss);
@@ -175,15 +175,15 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> DropPropose(
     return propose;
 }
 
-THolder<TEvSchemeShard::TEvModifySchemeTransaction> DropPropose( 
-    TSchemeShard* ss, 
+THolder<TEvSchemeShard::TEvModifySchemeTransaction> DropPropose(
+    TSchemeShard* ss,
     TTxId txId,
     const TExportInfo::TPtr exportInfo
 ) {
-    auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(txId), ss->TabletID()); 
+    auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(txId), ss->TabletID());
 
-    auto& modifyScheme = *propose->Record.AddTransaction(); 
-    modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpRmDir); 
+    auto& modifyScheme = *propose->Record.AddTransaction();
+    modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpRmDir);
     modifyScheme.SetInternal(true);
 
     const TPath domainPath = TPath::Init(exportInfo->DomainPathId, ss);
@@ -195,11 +195,11 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> DropPropose(
     return propose;
 }
 
-THolder<TEvSchemeShard::TEvCancelTx> CancelPropose( 
+THolder<TEvSchemeShard::TEvCancelTx> CancelPropose(
     const TExportInfo::TPtr exportInfo,
     TTxId backupTxId
 ) {
-    auto propose = MakeHolder<TEvSchemeShard::TEvCancelTx>(); 
+    auto propose = MakeHolder<TEvSchemeShard::TEvCancelTx>();
 
     auto& record = propose->Record;
     record.SetTxId(exportInfo->Id);
@@ -208,7 +208,7 @@ THolder<TEvSchemeShard::TEvCancelTx> CancelPropose(
     return propose;
 }
 
-TString ExportItemPathName(TSchemeShard* ss, const TExportInfo::TPtr exportInfo, ui32 itemIdx) { 
+TString ExportItemPathName(TSchemeShard* ss, const TExportInfo::TPtr exportInfo, ui32 itemIdx) {
     const TPath exportPath = TPath::Init(exportInfo->ExportPathId, ss);
     return ExportItemPathName(exportPath.PathString(), itemIdx);
 }
@@ -217,5 +217,5 @@ TString ExportItemPathName(const TString& exportPathName, ui32 itemIdx) {
     return TStringBuilder() << exportPathName << "/" << itemIdx;
 }
 
-} // NSchemeShard 
+} // NSchemeShard
 } // NKikimr

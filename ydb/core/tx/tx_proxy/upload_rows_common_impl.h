@@ -149,7 +149,7 @@ protected:
     THashMap<ui32, size_t> Id2Position; // columnId -> its position in YdbSchema
 
     bool WriteToTableShadow = false;
-    bool AllowWriteToPrivateTable = false; 
+    bool AllowWriteToPrivateTable = false;
 
     std::shared_ptr<arrow::RecordBatch> Batch;
     float RuCost = 0.0;

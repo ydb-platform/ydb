@@ -5,7 +5,7 @@
 #include <ydb/core/protos/import.pb.h>
 
 namespace NKikimr {
-namespace NSchemeShard { 
+namespace NSchemeShard {
 
 struct TEvImport {
     enum EEv {
@@ -167,5 +167,5 @@ struct TEvImport {
 
 }; // TEvImport
 
-} // NSchemeShard 
+} // NSchemeShard
 } // NKikimr

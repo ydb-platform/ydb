@@ -3,7 +3,7 @@
 #include <util/system/types.h>
 
 namespace NKikimr {
-namespace NSchemeShard { 
+namespace NSchemeShard {
 
 struct TUserAttributesLimits {
     static constexpr ui32 MaxNameLen = 100;

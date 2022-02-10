@@ -24,23 +24,23 @@ using TBase = TActorBootstrapped<TMessageBusHiveCreateTablet<ResponseType>>;
         ui64 OwnerIdx;
         TTabletTypes::EType TabletType;
         TVector<ui32> AllowedNodeIDs;
-        TVector<TSubDomainKey> AllowedDomains; 
-        TChannelsBindings BindedChannels; 
+        TVector<TSubDomainKey> AllowedDomains;
+        TChannelsBindings BindedChannels;
 
         NKikimrProto::EReplyStatus Status;
         ui64 TabletId;
 
         TRequest(ui64 ownerId, ui64 ownerIdx, TTabletTypes::EType tabletType,
-                 TVector<ui32> allowedNodeIDs, 
-                 TVector<TSubDomainKey> allowedDomains, 
-                 TChannelsBindings bindedChannels) 
+                 TVector<ui32> allowedNodeIDs,
+                 TVector<TSubDomainKey> allowedDomains,
+                 TChannelsBindings bindedChannels)
             : Event(TEvHive::EvCreateTablet)
             , OwnerId(ownerId)
             , OwnerIdx(ownerIdx)
             , TabletType(tabletType)
-            , AllowedNodeIDs(std::move(allowedNodeIDs)) 
-            , AllowedDomains(std::move(allowedDomains)) 
-            , BindedChannels(std::move(bindedChannels)) 
+            , AllowedNodeIDs(std::move(allowedNodeIDs))
+            , AllowedDomains(std::move(allowedDomains))
+            , BindedChannels(std::move(bindedChannels))
             , Status(NKikimrProto::UNKNOWN)
             , TabletId(0)
         {}
@@ -85,9 +85,9 @@ public:
                 && cmd.HasTabletType() && (cmd.BindedChannelsSize() > 0);
             if (isOk) {
                 Requests.emplace_back(cmd.GetOwnerId(), cmd.GetOwnerIdx(), cmd.GetTabletType(),
-                    TVector<ui32>(cmd.GetAllowedNodeIDs().begin(), cmd.GetAllowedNodeIDs().end()), 
-                    TVector<TSubDomainKey>(cmd.GetAllowedDomains().begin(), cmd.GetAllowedDomains().end()), 
-                    TChannelsBindings(cmd.GetBindedChannels().begin(), cmd.GetBindedChannels().end())); 
+                    TVector<ui32>(cmd.GetAllowedNodeIDs().begin(), cmd.GetAllowedNodeIDs().end()),
+                    TVector<TSubDomainKey>(cmd.GetAllowedDomains().begin(), cmd.GetAllowedDomains().end()),
+                    TChannelsBindings(cmd.GetBindedChannels().begin(), cmd.GetBindedChannels().end()));
             } else {
                 ErrorReason = Sprintf("Missing arguments for CmdCreateTablet(%" PRIu32 ") call", i);
             }
@@ -97,7 +97,7 @@ public:
             const auto &cmd = record.GetCmdLookupTablet(i);
             isOk = isOk && cmd.HasOwnerId() && cmd.HasOwnerIdx();
             if (isOk) {
-                Requests.emplace_back(cmd.GetOwnerId(), cmd.GetOwnerIdx()); 
+                Requests.emplace_back(cmd.GetOwnerId(), cmd.GetOwnerIdx());
             } else {
                 ErrorReason = Sprintf("Missing arguments for CmdLookupTablet(%" PRIu32 ") call", i);
             }
@@ -269,8 +269,8 @@ public:
                 " or kikimr domian configuration, Marker# HC9", (ui64)DomainUid);
             return SendReplyAndDie(CreateErrorReply(MSTATUS_ERROR, ctx), ctx);
         }
-        auto &domain = domainIt->second; 
-        ui64 hiveUid = domain->DefaultHiveUid; 
+        auto &domain = domainIt->second;
+        ui64 hiveUid = domain->DefaultHiveUid;
         ui64 hiveTabletId = domainsInfo.GetHive(hiveUid);
 
         if (Status == NKikimrProto::OK) {
@@ -280,16 +280,16 @@ public:
                 const TRequest &cmd = Requests[i];
                 switch (cmd.Event) {
                     case TEvHive::EvCreateTablet: {
-                        THolder<TEvHive::TEvCreateTablet> x(new TEvHive::TEvCreateTablet(cmd.OwnerId, 
-                                                                                         cmd.OwnerIdx, 
-                                                                                         cmd.TabletType, 
-                                                                                         cmd.BindedChannels, 
-                                                                                         cmd.AllowedNodeIDs)); 
- 
-                        for (const auto& domainKey: cmd.AllowedDomains) { 
-                           *x->Record.AddAllowedDomains() = domainKey; 
-                        } 
- 
+                        THolder<TEvHive::TEvCreateTablet> x(new TEvHive::TEvCreateTablet(cmd.OwnerId,
+                                                                                         cmd.OwnerIdx,
+                                                                                         cmd.TabletType,
+                                                                                         cmd.BindedChannels,
+                                                                                         cmd.AllowedNodeIDs));
+
+                        for (const auto& domainKey: cmd.AllowedDomains) {
+                           *x->Record.AddAllowedDomains() = domainKey;
+                        }
+
                         NTabletPipe::SendData(ctx, PipeClient, x.Release(), i);
                         break;
                     }

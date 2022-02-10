@@ -141,12 +141,12 @@ EExecutionStatus TAlterTableUnit::Execute(TOperation::TPtr op,
                << " version " << alterTableTx.GetTableSchemaVersion());
 
     TPathId tableId(DataShard.GetPathOwnerId(), alterTableTx.GetId_Deprecated());
-    if (alterTableTx.HasPathId()) { 
-        auto& pathId = alterTableTx.GetPathId(); 
-        Y_VERIFY(DataShard.GetPathOwnerId() == pathId.GetOwnerId()); 
+    if (alterTableTx.HasPathId()) {
+        auto& pathId = alterTableTx.GetPathId();
+        Y_VERIFY(DataShard.GetPathOwnerId() == pathId.GetOwnerId());
         tableId.LocalPathId = pathId.GetLocalId();
-    } 
- 
+    }
+
     TUserTable::TPtr info = DataShard.AlterUserTable(ctx, txc, alterTableTx);
 
     DataShard.AddUserTable(tableId, info);

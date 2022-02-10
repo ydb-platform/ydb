@@ -400,11 +400,11 @@ class TDistEraser: public TActorBootstrapped<TDistEraser> {
 
                 const auto tableId = TTableId(index.GetPathOwnerId(), index.GetLocalPathId(), index.GetSchemaVersion());
                 switch (index.GetState()) {
-                case NKikimrSchemeOp::EIndexStateReady: 
-                case NKikimrSchemeOp::EIndexStateWriteOnly: 
-                case NKikimrSchemeOp::EIndexStateNotReady: 
+                case NKikimrSchemeOp::EIndexStateReady:
+                case NKikimrSchemeOp::EIndexStateWriteOnly:
+                case NKikimrSchemeOp::EIndexStateNotReady:
                     break;
-                case NKikimrSchemeOp::EIndexStateInvalid: 
+                case NKikimrSchemeOp::EIndexStateInvalid:
                     return SchemeError(TStringBuilder() << "Invalid index state"
                         << ": tableId# " << tableId
                         << ", name# " << index.GetName());

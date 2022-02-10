@@ -16,17 +16,17 @@ struct TKikimrEvents : TEvents {
            for the following keywords, you should consider
            issues about "rolling update".
         */
-        ES_KIKIMR_ES_BEGIN = ES_USERSPACE,  //4096 
-        ES_STATESTORAGE, //4097 
+        ES_KIKIMR_ES_BEGIN = ES_USERSPACE,  //4096
+        ES_STATESTORAGE, //4097
         ES_DEPRECATED_4098, //4098
-        ES_BLOBSTORAGE, //4099 
-        ES_HIVE, //4100 
-        ES_TABLETBASE, //4101 
-        ES_TABLET, //4102 
+        ES_BLOBSTORAGE, //4099
+        ES_HIVE, //4100
+        ES_TABLETBASE, //4101
+        ES_TABLET, //4102
         ES_TABLETRESOLVER,
         ES_LOCAL,
         ES_DEPRECATED_4105,
-        ES_TX_PROXY, // generic proxy commands 4106 
+        ES_TX_PROXY, // generic proxy commands 4106
         ES_TX_COORDINATOR,
         ES_TX_MEDIATOR,
         ES_TX_PROCESSING, // 4109
@@ -42,7 +42,7 @@ struct TKikimrEvents : TEvents {
         ES_DEPRECATED_4118,
         ES_TABLET_COUNTERS_AGGREGATOR,
         ES_DEPRECATED_4121,
-        ES_PROXY_BUS, //4122 
+        ES_PROXY_BUS, //4122
         ES_BOOTSTRAPPER,
         ES_TX_MEDIATORTIMECAST,
         ES_DEPRECATED_4125,
@@ -52,17 +52,17 @@ struct TKikimrEvents : TEvents {
         ES_DEPRECATED_4129,
         ES_DEPRECATED_4130,
         ES_DEPRECATED_4131,
-        ES_KEYVALUE, //4132 
+        ES_KEYVALUE, //4132
         ES_MSGBUS_TRACER,
         ES_RTMR_TABLET,
         ES_FLAT_EXECUTOR,
         ES_NODE_WHITEBOARD,
-        ES_FLAT_TX_SCHEMESHARD, // 4137 
+        ES_FLAT_TX_SCHEMESHARD, // 4137
         ES_PQ,
         ES_YQL_KIKIMR_PROXY,
         ES_PQ_META_CACHE,
         ES_DEPRECATED_4141,
-        ES_PQ_L2_CACHE, //4142 
+        ES_PQ_L2_CACHE, //4142
         ES_TOKEN_BUILDER,
         ES_TICKET_PARSER,
         ES_KQP = NYql::NDq::TDqEvents::ES_DQ_COMPUTE_KQP_COMPATIBLE, // 4145
@@ -72,7 +72,7 @@ struct TKikimrEvents : TEvents {
         ES_PQ_PROXY,
         ES_CMS,
         ES_NODE_BROKER,
-        ES_TX_ALLOCATOR, //4152 
+        ES_TX_ALLOCATOR, //4152
         // reserve event space for each RTMR process
         ES_RTMR_STORAGE,
         ES_RTMR_PROXY,
@@ -120,7 +120,7 @@ struct TKikimrEvents : TEvents {
         ES_S3_WRAPPER,
         ES_FILESTORE,
         ES_FILESTORE_PRIVATE,
-        ES_YDB_METERING, 
+        ES_YDB_METERING,
         ES_IMPORT_SERVICE, // 4200
         ES_TX_OLAPSHARD,
         ES_TX_COLUMNSHARD,

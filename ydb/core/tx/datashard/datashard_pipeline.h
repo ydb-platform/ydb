@@ -59,7 +59,7 @@ public:
                 LimitDataTxCache = DefaultLimitDataTxCache();
         }
 
-        void Update(const NKikimrSchemeOp::TPipelineConfig& cfg) { 
+        void Update(const NKikimrSchemeOp::TPipelineConfig& cfg) {
             if (cfg.GetEnableOutOfOrder()) {
                 Flags |= EFlagsOutOfOrder;
             } else {
@@ -90,7 +90,7 @@ public:
     ~TPipeline();
 
     bool Load(NIceDb::TNiceDb& db);
-    void UpdateConfig(NIceDb::TNiceDb& db, const NKikimrSchemeOp::TPipelineConfig& cfg); 
+    void UpdateConfig(NIceDb::TNiceDb& db, const NKikimrSchemeOp::TPipelineConfig& cfg);
 
     bool OutOfOrderLimits() const;
     bool CanRunAnotherOp();
@@ -159,10 +159,10 @@ public:
     bool HasCopy() const { return SchemaTx && SchemaTx->IsCopy(); }
     bool HasCreatePersistentSnapshot() const { return SchemaTx && SchemaTx->IsCreatePersistentSnapshot(); }
     bool HasDropPersistentSnapshot() const { return SchemaTx && SchemaTx->IsDropPersistentSnapshot(); }
-    bool HasInitiateBuilIndex() const { return SchemaTx && SchemaTx->IsInitiateBuildIndex(); } 
-    bool HasFinalizeBuilIndex() const { return SchemaTx && SchemaTx->IsFinalizeBuildIndex(); } 
-    bool HasDropIndexNotice() const { return SchemaTx && SchemaTx->IsDropIndexNotice(); } 
-    bool HasMove() const { return SchemaTx && SchemaTx->IsMove(); } 
+    bool HasInitiateBuilIndex() const { return SchemaTx && SchemaTx->IsInitiateBuildIndex(); }
+    bool HasFinalizeBuilIndex() const { return SchemaTx && SchemaTx->IsFinalizeBuildIndex(); }
+    bool HasDropIndexNotice() const { return SchemaTx && SchemaTx->IsDropIndexNotice(); }
+    bool HasMove() const { return SchemaTx && SchemaTx->IsMove(); }
     bool HasCreateCdcStream() const { return SchemaTx && SchemaTx->IsCreateCdcStream(); }
     bool HasAlterCdcStream() const { return SchemaTx && SchemaTx->IsAlterCdcStream(); }
     bool HasDropCdcStream() const { return SchemaTx && SchemaTx->IsDropCdcStream(); }

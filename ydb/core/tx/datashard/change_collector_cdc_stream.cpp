@@ -65,13 +65,13 @@ bool TCdcStreamChangeCollector::NeedToReadKeys() const {
     for (const auto& [_, tableInfo] : Self->GetUserTables()) {
         for (const auto& [_, streamInfo] : tableInfo->CdcStreams) {
             switch (streamInfo.Mode) {
-            case NKikimrSchemeOp::ECdcStreamModeKeysOnly: 
-            case NKikimrSchemeOp::ECdcStreamModeUpdate: 
+            case NKikimrSchemeOp::ECdcStreamModeKeysOnly:
+            case NKikimrSchemeOp::ECdcStreamModeUpdate:
                 CachedNeedToReadKeys = false;
                 break;
-            case NKikimrSchemeOp::ECdcStreamModeNewImage: 
-            case NKikimrSchemeOp::ECdcStreamModeOldImage: 
-            case NKikimrSchemeOp::ECdcStreamModeNewAndOldImages: 
+            case NKikimrSchemeOp::ECdcStreamModeNewImage:
+            case NKikimrSchemeOp::ECdcStreamModeOldImage:
+            case NKikimrSchemeOp::ECdcStreamModeNewAndOldImages:
                 CachedNeedToReadKeys = true;
                 break;
             default:
@@ -114,15 +114,15 @@ bool TCdcStreamChangeCollector::Collect(const TTableId& tableId, ERowOp rop,
 
     for (const auto& [pathId, stream] : userTable->CdcStreams) {
         switch (stream.Mode) {
-        case NKikimrSchemeOp::ECdcStreamModeKeysOnly: 
+        case NKikimrSchemeOp::ECdcStreamModeKeysOnly:
             Persist(pathId, rop, key, keyTags, {});
             break;
-        case NKikimrSchemeOp::ECdcStreamModeUpdate: 
+        case NKikimrSchemeOp::ECdcStreamModeUpdate:
             Persist(pathId, rop, key, keyTags, updates);
             break;
-        case NKikimrSchemeOp::ECdcStreamModeNewImage: 
-        case NKikimrSchemeOp::ECdcStreamModeOldImage: 
-        case NKikimrSchemeOp::ECdcStreamModeNewAndOldImages: { 
+        case NKikimrSchemeOp::ECdcStreamModeNewImage:
+        case NKikimrSchemeOp::ECdcStreamModeOldImage:
+        case NKikimrSchemeOp::ECdcStreamModeNewAndOldImages: {
             const auto valueTags = MakeValueTags(userTable->Columns);
             const auto oldState = GetCurrentState(localTableId, key, keyTags, valueTags);
 
@@ -130,12 +130,12 @@ bool TCdcStreamChangeCollector::Collect(const TTableId& tableId, ERowOp rop,
                 return false;
             }
 
-            if (stream.Mode == NKikimrSchemeOp::ECdcStreamModeOldImage) { 
+            if (stream.Mode == NKikimrSchemeOp::ECdcStreamModeOldImage) {
                 Persist(pathId, rop, key, keyTags, NullIfErased(&*oldState), nullptr, valueTags);
             } else {
                 const auto newState = PatchState(*oldState, rop, MakeTagToPos(valueTags), MappedUpdates(updates));
 
-                if (stream.Mode == NKikimrSchemeOp::ECdcStreamModeNewImage) { 
+                if (stream.Mode == NKikimrSchemeOp::ECdcStreamModeNewImage) {
                     Persist(pathId, rop, key, keyTags, nullptr, NullIfErased(&newState), valueTags);
                 } else {
                     Persist(pathId, rop, key, keyTags, NullIfErased(&*oldState), NullIfErased(&newState), valueTags);

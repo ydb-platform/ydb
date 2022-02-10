@@ -64,15 +64,15 @@ TFuture<TResult> SendActorRequest(TActorSystem* actorSystem, const TActorId& act
 
 template<typename TIndexProto>
 void IndexProtoToMetadata(const TIndexProto& indexes, NYql::TKikimrTableMetadataPtr tableMeta) {
-    for (const NKikimrSchemeOp::TIndexDescription& index : indexes) { 
+    for (const NKikimrSchemeOp::TIndexDescription& index : indexes) {
         const auto indexState = index.GetState();
 
-        YQL_ENSURE(indexState != NKikimrSchemeOp::EIndexState::EIndexStateInvalid, 
+        YQL_ENSURE(indexState != NKikimrSchemeOp::EIndexState::EIndexStateInvalid,
             "Unexpected index state, probably SchemeShard/SchemeCache bug!");
 
         // Skip index if the state is NotReady - index just has been created but mark as not
         // ready to use.
-        if (indexState == NKikimrSchemeOp::EIndexState::EIndexStateNotReady) { 
+        if (indexState == NKikimrSchemeOp::EIndexState::EIndexStateNotReady) {
             continue;
         }
 

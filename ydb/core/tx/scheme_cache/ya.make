@@ -1,24 +1,24 @@
-LIBRARY() 
- 
-OWNER( 
+LIBRARY()
+
+OWNER(
     ilnaz
-    svc 
+    svc
     g:kikimr
-) 
- 
-PEERDIR( 
+)
+
+PEERDIR(
     ydb/core/base
     ydb/core/protos
     ydb/core/scheme
     ydb/library/aclib
-) 
- 
-SRCS( 
-    scheme_cache.cpp 
-) 
- 
+)
+
+SRCS(
+    scheme_cache.cpp
+)
+
 GENERATE_ENUM_SERIALIZATION(scheme_cache.h)
 
 YQL_LAST_ABI_VERSION()
 
-END() 
+END()

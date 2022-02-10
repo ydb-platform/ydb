@@ -71,10 +71,10 @@ TSchemaObject::TSchemaObject(TKikimr& kikimr, const TString& path, const TString
     , PathId(pathId)
     , PathType(pathType)
 {
-    static_assert((ui32)NKikimrSchemeOp::EPathTypeDir == (ui32)EPathType::Directory, "EPathType::Directory"); 
-    static_assert((ui32)NKikimrSchemeOp::EPathTypeTable == (ui32)EPathType::Table, "EPathType::Table"); 
-    static_assert((ui32)NKikimrSchemeOp::EPathTypePersQueueGroup == (ui32)EPathType::PersQueueGroup, "EPathType::PersQueueGroup"); 
-    static_assert((ui32)NKikimrSchemeOp::EPathTypeSubDomain == (ui32)EPathType::SubDomain, "EPathType::SubDomain"); 
+    static_assert((ui32)NKikimrSchemeOp::EPathTypeDir == (ui32)EPathType::Directory, "EPathType::Directory");
+    static_assert((ui32)NKikimrSchemeOp::EPathTypeTable == (ui32)EPathType::Table, "EPathType::Table");
+    static_assert((ui32)NKikimrSchemeOp::EPathTypePersQueueGroup == (ui32)EPathType::PersQueueGroup, "EPathType::PersQueueGroup");
+    static_assert((ui32)NKikimrSchemeOp::EPathTypeSubDomain == (ui32)EPathType::SubDomain, "EPathType::SubDomain");
 }
 
 void TSchemaObject::ModifySchema(const TModifyScheme& schema) {
@@ -87,26 +87,26 @@ void TSchemaObject::Drop() {
     TModifyScheme drop;
     switch (PathType) {
     case EPathType::Directory:
-        drop.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpRmDir); 
+        drop.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpRmDir);
         break;
     case EPathType::Table:
-        drop.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpDropTable); 
+        drop.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpDropTable);
         break;
     case EPathType::PersQueueGroup:
-        drop.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpDropPersQueueGroup); 
+        drop.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpDropPersQueueGroup);
         break;
     case EPathType::BlockStoreVolume:
-        drop.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpDropBlockStoreVolume); 
+        drop.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpDropBlockStoreVolume);
         break;
     case EPathType::FileStore:
-        drop.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpDropFileStore); 
+        drop.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpDropFileStore);
         break;
     case EPathType::Kesus:
-        drop.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpDropKesus); 
+        drop.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpDropKesus);
         break;
-    case EPathType::SolomonVolume: 
-        drop.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpDropSolomonVolume); 
-        break; 
+    case EPathType::SolomonVolume:
+        drop.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpDropSolomonVolume);
+        break;
     case EPathType::OlapStore:
         drop.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpDropColumnStore);
         break;
@@ -114,7 +114,7 @@ void TSchemaObject::Drop() {
         drop.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpDropColumnTable);
         break;
     case EPathType::Sequence:
-        drop.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpDropSequence); 
+        drop.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpDropSequence);
         break;
     case EPathType::Replication:
         drop.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpDropReplication);
@@ -174,39 +174,39 @@ TSchemaObject TSchemaObject::GetChild(const TString& name) const {
     return *child;
 }
 
-static TSchemaObject::EPathType GetType(const NKikimrSchemeOp::TDirEntry& entry) { 
+static TSchemaObject::EPathType GetType(const NKikimrSchemeOp::TDirEntry& entry) {
     switch (entry.GetPathType()) {
-    case NKikimrSchemeOp::EPathTypeDir: 
+    case NKikimrSchemeOp::EPathTypeDir:
         return TSchemaObject::EPathType::Directory;
-    case NKikimrSchemeOp::EPathTypeTable: 
+    case NKikimrSchemeOp::EPathTypeTable:
         return TSchemaObject::EPathType::Table;
-    case NKikimrSchemeOp::EPathTypePersQueueGroup: 
+    case NKikimrSchemeOp::EPathTypePersQueueGroup:
         return TSchemaObject::EPathType::PersQueueGroup;
-    case NKikimrSchemeOp::EPathTypeSubDomain: 
+    case NKikimrSchemeOp::EPathTypeSubDomain:
         return TSchemaObject::EPathType::SubDomain;
-    case NKikimrSchemeOp::EPathTypeRtmrVolume: 
+    case NKikimrSchemeOp::EPathTypeRtmrVolume:
         return TSchemaObject::EPathType::RtmrVolume;
-    case NKikimrSchemeOp::EPathTypeBlockStoreVolume: 
+    case NKikimrSchemeOp::EPathTypeBlockStoreVolume:
         return TSchemaObject::EPathType::BlockStoreVolume;
-    case NKikimrSchemeOp::EPathTypeFileStore: 
+    case NKikimrSchemeOp::EPathTypeFileStore:
         return TSchemaObject::EPathType::FileStore;
-    case NKikimrSchemeOp::EPathTypeKesus: 
+    case NKikimrSchemeOp::EPathTypeKesus:
         return TSchemaObject::EPathType::Kesus;
-    case NKikimrSchemeOp::EPathTypeSolomonVolume: 
-        return TSchemaObject::EPathType::SolomonVolume; 
+    case NKikimrSchemeOp::EPathTypeSolomonVolume:
+        return TSchemaObject::EPathType::SolomonVolume;
     case NKikimrSchemeOp::EPathTypeColumnStore:
         return TSchemaObject::EPathType::OlapStore;
     case NKikimrSchemeOp::EPathTypeColumnTable:
         return TSchemaObject::EPathType::OlapTable;
-    case NKikimrSchemeOp::EPathTypeSequence: 
+    case NKikimrSchemeOp::EPathTypeSequence:
         return TSchemaObject::EPathType::Sequence;
     case NKikimrSchemeOp::EPathTypeReplication:
         return TSchemaObject::EPathType::Replication;
-    case NKikimrSchemeOp::EPathTypeTableIndex: 
-    case NKikimrSchemeOp::EPathTypeExtSubDomain: 
-    case NKikimrSchemeOp::EPathTypeCdcStream: 
-    case NKikimrSchemeOp::EPathTypeInvalid: 
-        return TSchemaObject::EPathType::Unknown; 
+    case NKikimrSchemeOp::EPathTypeTableIndex:
+    case NKikimrSchemeOp::EPathTypeExtSubDomain:
+    case NKikimrSchemeOp::EPathTypeCdcStream:
+    case NKikimrSchemeOp::EPathTypeInvalid:
+        return TSchemaObject::EPathType::Unknown;
     }
     return TSchemaObject::EPathType::Unknown;
 }
@@ -232,7 +232,7 @@ TVector<TColumn> TSchemaObject::GetColumns() const {
     Y_VERIFY(objects.GetPathDescription().HasTable());
     const auto& table = objects.GetPathDescription().GetTable();
 
-    TMap<ui32, NKikimrSchemeOp::TColumnDescription> columnsMap; 
+    TMap<ui32, NKikimrSchemeOp::TColumnDescription> columnsMap;
     for (const auto& column : table.GetColumns()) {
         columnsMap[column.GetId()] = column;
     }

@@ -12,23 +12,23 @@ struct TChannelProfiles : public TThrRefBase {
             ui64 PDiskCategory;
             NKikimrBlobStorage::TVDiskKind::EVDiskKind VDiskCategory;
 
-            TString PoolKind; 
- 
-            TChannel(TBlobStorageGroupType::EErasureSpecies erasure, 
-                     ui64 pDiskCategory, 
-                     NKikimrBlobStorage::TVDiskKind::EVDiskKind vDiskCategory, 
-                     TString poolKind = TString()) 
+            TString PoolKind;
+
+            TChannel(TBlobStorageGroupType::EErasureSpecies erasure,
+                     ui64 pDiskCategory,
+                     NKikimrBlobStorage::TVDiskKind::EVDiskKind vDiskCategory,
+                     TString poolKind = TString())
                 : Erasure(erasure)
                 , PDiskCategory(pDiskCategory)
                 , VDiskCategory(vDiskCategory)
-                , PoolKind(poolKind) 
+                , PoolKind(poolKind)
             {}
 
             bool operator ==(const TChannel& a) const {
-                return Erasure == a.Erasure 
-                        && PDiskCategory == a.PDiskCategory 
-                        && VDiskCategory == a.VDiskCategory 
-                        && PoolKind == a.PoolKind; 
+                return Erasure == a.Erasure
+                        && PDiskCategory == a.PDiskCategory
+                        && VDiskCategory == a.VDiskCategory
+                        && PoolKind == a.PoolKind;
             }
 
             bool operator !=(const TChannel& a) const {

@@ -98,13 +98,13 @@ class KikimrConfigGenerator(object):
             static_pdisk_size=PDISK_SIZE,
             dynamic_pdisk_size=PDISK_SIZE,
             dynamic_pdisks=[],
-            dynamic_storage_pools=[dict(name="dynamic_storage_pool:1", kind="hdd", pdisk_user_kind=0)], 
-            n_to_select=None, 
+            dynamic_storage_pools=[dict(name="dynamic_storage_pool:1", kind="hdd", pdisk_user_kind=0)],
+            n_to_select=None,
             use_log_files=True,
             grpc_ssl_enable=False,
             use_in_memory_pdisks=False,
             enable_pqcd=False,
-            enable_metering=False, 
+            enable_metering=False,
             grpc_tls_data_path=None,
             yql_config_path=None,
             enable_datastreams=False,
@@ -147,9 +147,9 @@ class KikimrConfigGenerator(object):
         self.__node_ids = list(range(1, nodes + 1))
         self.n_to_select = n_to_select
         if self.n_to_select is None:
-            if erasure == Erasure.MIRROR_3_DC: 
+            if erasure == Erasure.MIRROR_3_DC:
                 self.n_to_select = 9
-            else: 
+            else:
                 self.n_to_select = min(5, nodes)
         self.__use_in_memory_pdisks = use_in_memory_pdisks or os.getenv('YDB_USE_IN_MEMORY_PDISKS') == 'true'
         self.static_erasure = erasure
@@ -172,8 +172,8 @@ class KikimrConfigGenerator(object):
 
         self.__dynamic_pdisks = dynamic_pdisks
 
-        self.__output_path = output_path or yatest_common.output_path() 
- 
+        self.__output_path = output_path or yatest_common.output_path()
+
         self.yaml_config = load_default_yaml(self.__node_ids, self.domain_name, self.static_erasure, self.n_to_select, self.__node_ids, self.__additional_log_configs)
         self.yaml_config["feature_flags"]["enable_public_api_external_blobs"] = enable_public_api_external_blobs
         self.yaml_config["feature_flags"]["enable_mvcc"] = "VALUE_FALSE" if disable_mvcc else "VALUE_TRUE"
@@ -185,9 +185,9 @@ class KikimrConfigGenerator(object):
         with open(self.yaml_config["net_classifier_config"]["net_data_file_path"], "w") as net_data_file:
             net_data_file.write("")
 
-        if enable_metering: 
-            self.__set_enable_metering() 
- 
+        if enable_metering:
+            self.__set_enable_metering()
+
         self.naming_config = config_pb2.TAppConfig()
         dc_it = itertools.cycle(self._dcs)
         rack_it = itertools.count(start=1)
@@ -275,29 +275,29 @@ class KikimrConfigGenerator(object):
     def names_txt(self):
         return self.naming_config.NameserviceConfig
 
-    def __set_enable_metering(self): 
-        def ensure_path_exists(path): 
-            if not os.path.isdir(path): 
-                os.makedirs(path) 
-            return path 
- 
-        def get_cwd_for_test(output_path): 
-            test_name = yatest_common.context.test_name or "" 
-            test_name = test_name.replace(':', '_') 
-            return os.path.join(output_path, test_name) 
- 
-        cwd = get_cwd_for_test(self.__output_path) 
-        ensure_path_exists(cwd) 
-        metering_file_path = os.path.join(cwd, 'metering.txt') 
-        with open(metering_file_path, "w") as metering_file: 
-            metering_file.write('') 
+    def __set_enable_metering(self):
+        def ensure_path_exists(path):
+            if not os.path.isdir(path):
+                os.makedirs(path)
+            return path
+
+        def get_cwd_for_test(output_path):
+            test_name = yatest_common.context.test_name or ""
+            test_name = test_name.replace(':', '_')
+            return os.path.join(output_path, test_name)
+
+        cwd = get_cwd_for_test(self.__output_path)
+        ensure_path_exists(cwd)
+        metering_file_path = os.path.join(cwd, 'metering.txt')
+        with open(metering_file_path, "w") as metering_file:
+            metering_file.write('')
         self.yaml_config['metering_config'] = {'metering_file_path': metering_file_path}
- 
+
     @property
-    def metering_file_path(self): 
+    def metering_file_path(self):
         return self.yaml_config.get('metering_config', {}).get('metering_file_path')
- 
-    @property 
+
+    @property
     def nbs_enable(self):
         return self._enable_nbs
 
@@ -306,10 +306,10 @@ class KikimrConfigGenerator(object):
         return self.yaml_config['sqs_config']['enable_sqs']
 
     @property
-    def output_path(self): 
-        return self.__output_path 
- 
-    @property 
+    def output_path(self):
+        return self.__output_path
+
+    @property
     def binary_path(self):
         return self.__binary_path
 

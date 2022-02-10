@@ -29,7 +29,7 @@ PEERDIR(
 YQL_LAST_ABI_VERSION()
 
 SRCS(
-    ut_rtmr.cpp 
+    ut_rtmr.cpp
 )
 
 END()

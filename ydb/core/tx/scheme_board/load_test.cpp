@@ -23,9 +23,9 @@ namespace NSchemeBoard {
 
 namespace {
 
-    bool IsDir(const NKikimrScheme::TEvDescribeSchemeResult& record) { 
+    bool IsDir(const NKikimrScheme::TEvDescribeSchemeResult& record) {
         const auto& self = record.GetPathDescription().GetSelf();
-        return self.GetParentPathId() == NSchemeShard::RootPathId; 
+        return self.GetParentPathId() == NSchemeShard::RootPathId;
     }
 
     bool IsDir(const TTwoPartDescription& desc) {
@@ -35,9 +35,9 @@ namespace {
 } // anonymous
 
 class TLoadProducer: public TActorBootstrapped<TLoadProducer> {
-    using TDescription = NKikimrScheme::TEvDescribeSchemeResult; 
+    using TDescription = NKikimrScheme::TEvDescribeSchemeResult;
     using TDescriptions = TMap<TPathId, TTwoPartDescription>;
-    using TDescribeSchemeResult = NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResultBuilder; 
+    using TDescribeSchemeResult = NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResultBuilder;
 
     enum EWakeupTag {
         TAG_MODIFY,
@@ -56,7 +56,7 @@ class TLoadProducer: public TActorBootstrapped<TLoadProducer> {
             TTwoPartDescription dirDescTwoPart;
             TDescription& dirDesc = dirDescTwoPart.Record;
 
-            dirDesc.SetStatus(NKikimrScheme::StatusSuccess); 
+            dirDesc.SetStatus(NKikimrScheme::StatusSuccess);
             dirDesc.SetPathOwner(owner);
             dirDesc.SetPathId(nextPathId++);
             dirDesc.SetPath(dirPath);
@@ -65,12 +65,12 @@ class TLoadProducer: public TActorBootstrapped<TLoadProducer> {
             dirSelf.SetName(dirName);
             dirSelf.SetPathId(dirDesc.GetPathId());
             dirSelf.SetSchemeshardId(dirDesc.GetPathOwner());
-            dirSelf.SetPathType(NKikimrSchemeOp::EPathTypeDir); 
+            dirSelf.SetPathType(NKikimrSchemeOp::EPathTypeDir);
             dirSelf.SetCreateFinished(true);
             dirSelf.SetCreateTxId(1);
             dirSelf.SetCreateStep(1);
-            dirSelf.SetParentPathId(NSchemeShard::RootPathId); 
-            dirSelf.SetPathState(NKikimrSchemeOp::EPathStateNoChanges); 
+            dirSelf.SetParentPathId(NSchemeShard::RootPathId);
+            dirSelf.SetPathState(NKikimrSchemeOp::EPathStateNoChanges);
             dirSelf.SetPathVersion(version);
 
             auto& dirChildren = *dirDesc.MutablePathDescription()->MutableChildren();
@@ -83,14 +83,14 @@ class TLoadProducer: public TActorBootstrapped<TLoadProducer> {
                 TTwoPartDescription objDescTwoPart;
                 TDescription& objDesc = objDescTwoPart.Record;
 
-                objDesc.SetStatus(NKikimrScheme::StatusSuccess); 
+                objDesc.SetStatus(NKikimrScheme::StatusSuccess);
                 objDesc.SetPathOwner(owner);
                 objDesc.SetPathId(nextPathId++);
                 objDesc.SetPath(objPath);
 
                 auto& objSelf = *objDesc.MutablePathDescription()->MutableSelf();
                 objSelf.SetName(objName);
-                objSelf.SetPathType(NKikimrSchemeOp::EPathTypeDir); 
+                objSelf.SetPathType(NKikimrSchemeOp::EPathTypeDir);
                 dirChildren.Add()->CopyFrom(objSelf);
 
                 objSelf.SetPathId(objDesc.GetPathId());
@@ -99,7 +99,7 @@ class TLoadProducer: public TActorBootstrapped<TLoadProducer> {
                 objSelf.SetCreateTxId(1);
                 objSelf.SetCreateStep(1);
                 objSelf.SetParentPathId(dirDesc.GetPathId());
-                objSelf.SetPathState(NKikimrSchemeOp::EPathStateNoChanges); 
+                objSelf.SetPathState(NKikimrSchemeOp::EPathStateNoChanges);
                 objSelf.SetPathVersion(version);
 
                 descriptions[TPathId(owner, objDesc.GetPathId())] = std::move(objDescTwoPart);
@@ -111,9 +111,9 @@ class TLoadProducer: public TActorBootstrapped<TLoadProducer> {
         return descriptions;
     }
 
-    TPathId RandomPathId(bool allowDir = true) const { 
+    TPathId RandomPathId(bool allowDir = true) const {
         while (true) {
-            const TPathId pathId(Owner, RandomNumber(NextPathId)); 
+            const TPathId pathId(Owner, RandomNumber(NextPathId));
 
             if (!Descriptions.contains(pathId)) {
                 continue;
@@ -129,7 +129,7 @@ class TLoadProducer: public TActorBootstrapped<TLoadProducer> {
         Y_FAIL("Unreachable");
     }
 
-    void Modify(TPathId pathId) { 
+    void Modify(TPathId pathId) {
         Y_VERIFY(Descriptions.contains(pathId));
 
         TDescription& description = Descriptions.at(pathId).Record;
@@ -143,20 +143,20 @@ class TLoadProducer: public TActorBootstrapped<TLoadProducer> {
         ++*ModifiedPaths;
     }
 
-    void Delete(TPathId pathId) { 
+    void Delete(TPathId pathId) {
         Y_VERIFY(Descriptions.contains(pathId));
 
         TDescription& description = Descriptions.at(pathId).Record;
         Y_VERIFY(!IsDir(description));
 
-        description.SetStatus(NKikimrScheme::StatusPathDoesNotExist); 
+        description.SetStatus(NKikimrScheme::StatusPathDoesNotExist);
 
         auto describeSchemeResult = MakeHolder<TDescribeSchemeResult>();
         describeSchemeResult->Record.CopyFrom(description);
         Send(Populator, std::move(describeSchemeResult));
 
-        Modify(TPathId(description.GetPathDescription().GetSelf().GetSchemeshardId(), 
-                       description.GetPathDescription().GetSelf().GetParentPathId())); 
+        Modify(TPathId(description.GetPathDescription().GetSelf().GetSchemeshardId(),
+                       description.GetPathDescription().GetSelf().GetParentPathId()));
         Descriptions.erase(pathId);
 
         ++*DeletedPaths;
@@ -197,8 +197,8 @@ class TLoadProducer: public TActorBootstrapped<TLoadProducer> {
             Owner, Max<ui64>(), ssId, Descriptions, NextPathId
         ));
 
-        TPathId pathId(Owner, NextPathId - 1); 
-        Y_VERIFY(Descriptions.contains(pathId)); 
+        TPathId pathId(Owner, NextPathId - 1);
+        Y_VERIFY(Descriptions.contains(pathId));
         const TString& topPath = Descriptions.at(pathId).Record.GetPath();
 
         // subscriber will help us to know when sync is completed
@@ -207,7 +207,7 @@ class TLoadProducer: public TActorBootstrapped<TLoadProducer> {
             ESchemeBoardSubscriberDeletionPolicy::Majority
         ));
 
-        *TotalPaths = NextPathId - 1 - NSchemeShard::RootPathId; 
+        *TotalPaths = NextPathId - 1 - NSchemeShard::RootPathId;
 
         Become(&TThis::StatePopulate);
     }
@@ -271,7 +271,7 @@ public:
     explicit TLoadProducer(ui64 owner, const TTestConfig& config)
         : Owner(owner)
         , Config(config)
-        , NextPathId(NSchemeShard::RootPathId + 1) 
+        , NextPathId(NSchemeShard::RootPathId + 1)
     {
         SyncDuration = Config.Counters->GetCounter("Producer/SyncDuration", false);
         TotalPaths = Config.Counters->GetCounter("Producer/TotalPaths", false);
@@ -377,7 +377,7 @@ public:
         : Owner(owner)
         , Config(config)
     {
-        MaxPathId = NSchemeShard::RootPathId 
+        MaxPathId = NSchemeShard::RootPathId
                     + Config.Dirs
                     + Config.Dirs * Config.ObjectsPerDir;
 
@@ -387,7 +387,7 @@ public:
     }
 
     void Bootstrap() {
-        BatchSubscribe(NSchemeShard::RootPathId + 1); 
+        BatchSubscribe(NSchemeShard::RootPathId + 1);
         Become(&TThis::StateWork);
     }
 

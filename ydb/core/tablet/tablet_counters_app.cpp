@@ -13,9 +13,9 @@ THolder<TTabletCountersBase> CreateAppCountersByTabletType(TTabletTypes::EType t
     switch (type) {
     case TTabletTypes::SchemeShard:
         return MakeHolder<TAppProtobufTabletCounters<
-            NSchemeShard::ESimpleCounters_descriptor, 
-            NSchemeShard::ECumulativeCounters_descriptor, 
-            NSchemeShard::EPercentileCounters_descriptor 
+            NSchemeShard::ESimpleCounters_descriptor,
+            NSchemeShard::ECumulativeCounters_descriptor,
+            NSchemeShard::EPercentileCounters_descriptor
         >>();
     case TTabletTypes::DataShard:
         return MakeHolder<TAppProtobufTabletCounters<

@@ -876,9 +876,9 @@ private:
 
         for (const auto& action : node.Actions()) {
             auto name = action.Name().Value();
-            if (name == "renameTo") { 
-                YQL_ENSURE(action.Value().Cast<TCoAtom>().Value()); 
-            } else if (name == "addColumns") { 
+            if (name == "renameTo") {
+                YQL_ENSURE(action.Value().Cast<TCoAtom>().Value());
+            } else if (name == "addColumns") {
                 auto listNode = action.Value().Cast<TExprList>();
                 for (size_t i = 0; i < listNode.Size(); ++i) {
                     auto item = listNode.Item(i);

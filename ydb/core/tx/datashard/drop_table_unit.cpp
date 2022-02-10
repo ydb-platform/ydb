@@ -70,16 +70,16 @@ EExecutionStatus TDropTableUnit::Execute(TOperation::TPtr op,
     LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD,
                "Trying to DROP TABLE at " << DataShard.TabletID());
 
-    ui64 tableId = schemeTx.GetDropTable().GetId_Deprecated(); 
-    if (schemeTx.GetDropTable().HasPathId()) { 
-        Y_VERIFY(DataShard.GetPathOwnerId() == schemeTx.GetDropTable().GetPathId().GetOwnerId()); 
-        tableId = schemeTx.GetDropTable().GetPathId().GetLocalId(); 
-    } 
+    ui64 tableId = schemeTx.GetDropTable().GetId_Deprecated();
+    if (schemeTx.GetDropTable().HasPathId()) {
+        Y_VERIFY(DataShard.GetPathOwnerId() == schemeTx.GetDropTable().GetPathId().GetOwnerId());
+        tableId = schemeTx.GetDropTable().GetPathId().GetLocalId();
+    }
     DataShard.DropUserTable(txc, tableId);
 
     // FIXME: transactions need to specify ownerId
     TVector<TSnapshotKey> snapshotsToRemove;
-    TSnapshotTableKey snapshotsScope(DataShard.GetPathOwnerId(), tableId); 
+    TSnapshotTableKey snapshotsScope(DataShard.GetPathOwnerId(), tableId);
     for (const auto& kv : DataShard.GetSnapshotManager().GetSnapshots(snapshotsScope)) {
         snapshotsToRemove.push_back(kv.first);
     }

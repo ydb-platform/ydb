@@ -78,7 +78,7 @@ class TTabletReqDelete : public TActorBootstrapped<TTabletReqDelete> {
         switch (msg->Status) {
         case NKikimrProto::OK:
         case NKikimrProto::ALREADY:
-        case NKikimrProto::NO_GROUP: 
+        case NKikimrProto::NO_GROUP:
             ++FinishedRequests;
             if (FinishedRequests >= Requests.size()) {
                 if (Generation == std::numeric_limits<ui32>::max()) {

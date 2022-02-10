@@ -7,7 +7,7 @@
 namespace NKikimr {
 
 using namespace NKikimr::NDataShard;
-using namespace NSchemeShard; 
+using namespace NSchemeShard;
 using namespace Tests;
 
 namespace {

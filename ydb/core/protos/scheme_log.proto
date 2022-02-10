@@ -61,7 +61,7 @@ message TAlterRecord {
     optional bool NotNull = 24 [default = false];
 
     optional uint64 ExecutorCacheSize = 100;
-    optional NKikimrSchemeOp.TCompactionPolicy CompactionPolicy = 101; 
+    optional NKikimrSchemeOp.TCompactionPolicy CompactionPolicy = 101;
     optional bool ExecutorAllowLogBatching = 102;
     optional uint64 ExecutorLogFlushPeriod = 103;
     optional uint32 ExecutorLimitInFlyTx = 104;

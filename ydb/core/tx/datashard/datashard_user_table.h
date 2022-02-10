@@ -26,20 +26,20 @@ struct TUserTable : public TThrRefBase {
         using ECodec = NTable::NPage::ECodec;
         using ECache = NTable::NPage::ECache;
 
-        TUserFamily(const NKikimrSchemeOp::TFamilyDescription& family) 
+        TUserFamily(const NKikimrSchemeOp::TFamilyDescription& family)
             : ColumnCodec(family.GetColumnCodec())
             , ColumnCache(family.GetColumnCache())
-            , OuterThreshold(SaveGetThreshold(family.GetStorageConfig().GetDataThreshold())) 
-            , ExternalThreshold(SaveGetThreshold(family.GetStorageConfig().GetExternalThreshold())) 
+            , OuterThreshold(SaveGetThreshold(family.GetStorageConfig().GetDataThreshold()))
+            , ExternalThreshold(SaveGetThreshold(family.GetStorageConfig().GetExternalThreshold()))
             , Storage(family.GetStorage())
             , Codec(ExtractDbCodec(family))
             , Cache(ExtractDbCache(family))
             , Room(new TStorageRoom(family.GetRoom()))
             , Name(family.GetName())
-        { 
-        } 
+        {
+        }
 
-        void Update(const NKikimrSchemeOp::TFamilyDescription& family) { 
+        void Update(const NKikimrSchemeOp::TFamilyDescription& family) {
             if (family.HasColumnCodec()) {
                 ColumnCodec = family.GetColumnCodec();
                 Codec = ToDbCodec(ColumnCodec);
@@ -48,55 +48,55 @@ struct TUserTable : public TThrRefBase {
                 ColumnCache = family.GetColumnCache();
                 Cache = ToDbCache(ColumnCache);
             }
-            if (family.GetStorageConfig().HasDataThreshold()) { 
-                OuterThreshold = SaveGetThreshold(family.GetStorageConfig().GetDataThreshold()); 
-            } 
-            if (family.GetStorageConfig().GetExternalThreshold()) { 
-                ExternalThreshold = SaveGetThreshold(family.GetStorageConfig().GetExternalThreshold()); 
-            } 
+            if (family.GetStorageConfig().HasDataThreshold()) {
+                OuterThreshold = SaveGetThreshold(family.GetStorageConfig().GetDataThreshold());
+            }
+            if (family.GetStorageConfig().GetExternalThreshold()) {
+                ExternalThreshold = SaveGetThreshold(family.GetStorageConfig().GetExternalThreshold());
+            }
             if (family.HasStorage()) {
                 Storage = family.GetStorage();
             }
             Room.Reset(new TStorageRoom(family.GetRoom()));
         }
 
-        static ui32 SaveGetThreshold(ui32 value) { 
-            return 0 == value ? Max<ui32>() : value; 
-        } 
- 
-        void Update(TStorageRoom::TPtr room) { 
-            if (room->GetId() != Room->GetId()) { 
-                return; 
-            } 
- 
-            Room = room; 
-        } 
- 
-        NKikimrSchemeOp::EColumnCodec ColumnCodec; 
-        NKikimrSchemeOp::EColumnCache ColumnCache; 
-        ui32 OuterThreshold; 
-        ui32 ExternalThreshold; 
-        NKikimrSchemeOp::EColumnStorage Storage; 
+        static ui32 SaveGetThreshold(ui32 value) {
+            return 0 == value ? Max<ui32>() : value;
+        }
 
- 
+        void Update(TStorageRoom::TPtr room) {
+            if (room->GetId() != Room->GetId()) {
+                return;
+            }
+
+            Room = room;
+        }
+
+        NKikimrSchemeOp::EColumnCodec ColumnCodec;
+        NKikimrSchemeOp::EColumnCache ColumnCache;
+        ui32 OuterThreshold;
+        ui32 ExternalThreshold;
+        NKikimrSchemeOp::EColumnStorage Storage;
+
+
         ECodec Codec;
         ECache Cache;
-        TStorageRoom::TPtr Room; 
+        TStorageRoom::TPtr Room;
 
         ui32 MainChannel() const {
-            if (!*Room) { 
-                return MainChannelByStorageEnum(); 
-            } 
- 
-            return Room->GetChannel(NKikimrStorageSettings::TChannelPurpose::Data, 1); 
-        } 
- 
-        ui32 MainChannelByStorageEnum() const { 
+            if (!*Room) {
+                return MainChannelByStorageEnum();
+            }
+
+            return Room->GetChannel(NKikimrStorageSettings::TChannelPurpose::Data, 1);
+        }
+
+        ui32 MainChannelByStorageEnum() const {
             switch (Storage) {
-                case NKikimrSchemeOp::EColumnStorage::ColumnStorage2: 
-                case NKikimrSchemeOp::EColumnStorage::ColumnStorage2Ext2: 
-                case NKikimrSchemeOp::EColumnStorage::ColumnStorage2Ext1: 
-                case NKikimrSchemeOp::EColumnStorage::ColumnStorage2Med2Ext2: 
+                case NKikimrSchemeOp::EColumnStorage::ColumnStorage2:
+                case NKikimrSchemeOp::EColumnStorage::ColumnStorage2Ext2:
+                case NKikimrSchemeOp::EColumnStorage::ColumnStorage2Ext1:
+                case NKikimrSchemeOp::EColumnStorage::ColumnStorage2Med2Ext2:
                     return 2;
                 default:
                     break;
@@ -105,40 +105,40 @@ struct TUserTable : public TThrRefBase {
         }
 
         ui32 OuterChannel() const {
-            if (!*Room) { 
-                return OuterChannelByStorageEnum(); 
-            } 
- 
-            return Room->GetChannel(NKikimrStorageSettings::TChannelPurpose::Data, 1); 
-        } 
- 
-        ui32 OuterChannelByStorageEnum() const { 
+            if (!*Room) {
+                return OuterChannelByStorageEnum();
+            }
+
+            return Room->GetChannel(NKikimrStorageSettings::TChannelPurpose::Data, 1);
+        }
+
+        ui32 OuterChannelByStorageEnum() const {
             switch (Storage) {
-                case NKikimrSchemeOp::EColumnStorage::ColumnStorage1Med2Ext2: 
-                case NKikimrSchemeOp::EColumnStorage::ColumnStorage2Med2Ext2: 
+                case NKikimrSchemeOp::EColumnStorage::ColumnStorage1Med2Ext2:
+                case NKikimrSchemeOp::EColumnStorage::ColumnStorage2Med2Ext2:
                     return 2;
                 default:
                     break;
             }
-            return MainChannelByStorageEnum(); 
+            return MainChannelByStorageEnum();
         }
 
         ui32 ExternalChannel() const {
-            if (!*Room) { 
-                return ExternalChannelByStorageEnum(); 
-            } 
- 
-            return Room->GetChannel(NKikimrStorageSettings::TChannelPurpose::External, 1); 
-        } 
- 
-        ui32 ExternalChannelByStorageEnum() const { 
+            if (!*Room) {
+                return ExternalChannelByStorageEnum();
+            }
+
+            return Room->GetChannel(NKikimrStorageSettings::TChannelPurpose::External, 1);
+        }
+
+        ui32 ExternalChannelByStorageEnum() const {
             switch (Storage) {
-                case NKikimrSchemeOp::EColumnStorage::ColumnStorage2: 
-                case NKikimrSchemeOp::EColumnStorage::ColumnStorage2Ext2: 
-                case NKikimrSchemeOp::EColumnStorage::ColumnStorage1Ext2: 
-                case NKikimrSchemeOp::EColumnStorage::ColumnStorage1Med2Ext2: 
-                case NKikimrSchemeOp::EColumnStorage::ColumnStorage2Med2Ext2: 
-                case NKikimrSchemeOp::EColumnStorage::ColumnStorageTest_1_2_1k: 
+                case NKikimrSchemeOp::EColumnStorage::ColumnStorage2:
+                case NKikimrSchemeOp::EColumnStorage::ColumnStorage2Ext2:
+                case NKikimrSchemeOp::EColumnStorage::ColumnStorage1Ext2:
+                case NKikimrSchemeOp::EColumnStorage::ColumnStorage1Med2Ext2:
+                case NKikimrSchemeOp::EColumnStorage::ColumnStorage2Med2Ext2:
+                case NKikimrSchemeOp::EColumnStorage::ColumnStorageTest_1_2_1k:
                     return 2;
                 default:
                     break;
@@ -146,35 +146,35 @@ struct TUserTable : public TThrRefBase {
             return 1;
         }
 
-        ui32 GetOuterThreshold() const { 
-            switch (Storage) { 
-                case NKikimrSchemeOp::EColumnStorage::ColumnStorage1Med2Ext2: 
-                case NKikimrSchemeOp::EColumnStorage::ColumnStorage2Med2Ext2: 
-                    return 12*1024; 
-                case NKikimrSchemeOp::EColumnStorage::ColumnStorageTest_1_2_1k: 
-                    return 512; 
-                default: 
-                    break; 
-            } 
-            return OuterThreshold; 
-        } 
- 
-        ui32 GetExternalThreshold() const { 
+        ui32 GetOuterThreshold() const {
             switch (Storage) {
-                case NKikimrSchemeOp::EColumnStorage::ColumnStorage2: 
-                case NKikimrSchemeOp::EColumnStorage::ColumnStorage1Ext1: 
-                case NKikimrSchemeOp::EColumnStorage::ColumnStorage1Ext2: 
-                case NKikimrSchemeOp::EColumnStorage::ColumnStorage2Ext1: 
-                case NKikimrSchemeOp::EColumnStorage::ColumnStorage2Ext2: 
-                case NKikimrSchemeOp::EColumnStorage::ColumnStorage1Med2Ext2: 
-                case NKikimrSchemeOp::EColumnStorage::ColumnStorage2Med2Ext2: 
-                    return 512*1024; 
-                case NKikimrSchemeOp::EColumnStorage::ColumnStorageTest_1_2_1k: 
-                    return 1024; 
+                case NKikimrSchemeOp::EColumnStorage::ColumnStorage1Med2Ext2:
+                case NKikimrSchemeOp::EColumnStorage::ColumnStorage2Med2Ext2:
+                    return 12*1024;
+                case NKikimrSchemeOp::EColumnStorage::ColumnStorageTest_1_2_1k:
+                    return 512;
                 default:
                     break;
             }
-            return ExternalThreshold; 
+            return OuterThreshold;
+        }
+
+        ui32 GetExternalThreshold() const {
+            switch (Storage) {
+                case NKikimrSchemeOp::EColumnStorage::ColumnStorage2:
+                case NKikimrSchemeOp::EColumnStorage::ColumnStorage1Ext1:
+                case NKikimrSchemeOp::EColumnStorage::ColumnStorage1Ext2:
+                case NKikimrSchemeOp::EColumnStorage::ColumnStorage2Ext1:
+                case NKikimrSchemeOp::EColumnStorage::ColumnStorage2Ext2:
+                case NKikimrSchemeOp::EColumnStorage::ColumnStorage1Med2Ext2:
+                case NKikimrSchemeOp::EColumnStorage::ColumnStorage2Med2Ext2:
+                    return 512*1024;
+                case NKikimrSchemeOp::EColumnStorage::ColumnStorageTest_1_2_1k:
+                    return 1024;
+                default:
+                    break;
+            }
+            return ExternalThreshold;
         }
 
         TString GetName() const {
@@ -183,14 +183,14 @@ struct TUserTable : public TThrRefBase {
             return "default";
         }
 
-        ui32 GetRoomId() const { 
-            return Room->GetId(); 
-        } 
- 
+        ui32 GetRoomId() const {
+            return Room->GetId();
+        }
+
     private:
         TString Name;
 
-        static ECodec ExtractDbCodec(const NKikimrSchemeOp::TFamilyDescription& family) { 
+        static ECodec ExtractDbCodec(const NKikimrSchemeOp::TFamilyDescription& family) {
             if (family.HasColumnCodec())
                 return ToDbCodec(family.GetColumnCodec());
             if (family.GetCodec() == 1) // legacy
@@ -198,31 +198,31 @@ struct TUserTable : public TThrRefBase {
             return ECodec::Plain;
         }
 
-        static ECodec ToDbCodec(NKikimrSchemeOp::EColumnCodec codec) { 
+        static ECodec ToDbCodec(NKikimrSchemeOp::EColumnCodec codec) {
             switch (codec) {
-                case NKikimrSchemeOp::EColumnCodec::ColumnCodecPlain: 
+                case NKikimrSchemeOp::EColumnCodec::ColumnCodecPlain:
                     return ECodec::Plain;
-                case NKikimrSchemeOp::EColumnCodec::ColumnCodecLZ4: 
-                case NKikimrSchemeOp::EColumnCodec::ColumnCodecZSTD: // FIXME: not supported 
+                case NKikimrSchemeOp::EColumnCodec::ColumnCodecLZ4:
+                case NKikimrSchemeOp::EColumnCodec::ColumnCodecZSTD: // FIXME: not supported
                     return ECodec::LZ4;
                 // keep no default
             }
             Y_FAIL("unexpected");
         }
 
-        static ECache ExtractDbCache(const NKikimrSchemeOp::TFamilyDescription& family) { 
+        static ECache ExtractDbCache(const NKikimrSchemeOp::TFamilyDescription& family) {
             if (family.HasInMemory() && family.GetInMemory()) // legacy
                 return ECache::Ever;
             return ECache::None;
         }
 
-        static ECache ToDbCache(NKikimrSchemeOp::EColumnCache cache) { 
+        static ECache ToDbCache(NKikimrSchemeOp::EColumnCache cache) {
             switch (cache) {
-                case NKikimrSchemeOp::EColumnCache::ColumnCacheNone: 
+                case NKikimrSchemeOp::EColumnCache::ColumnCacheNone:
                     return ECache::None;
-                case NKikimrSchemeOp::EColumnCache::ColumnCacheOnce: 
+                case NKikimrSchemeOp::EColumnCache::ColumnCacheOnce:
                     return ECache::Once;
-                case NKikimrSchemeOp::EColumnCache::ColumnCacheEver: 
+                case NKikimrSchemeOp::EColumnCache::ColumnCacheEver:
                     return ECache::Ever;
                 // keep no default
             }
@@ -249,7 +249,7 @@ struct TUserTable : public TThrRefBase {
     };
 
     struct TTableIndex {
-        using EIndexType = NKikimrSchemeOp::EIndexType; 
+        using EIndexType = NKikimrSchemeOp::EIndexType;
 
         TString Name;
         EIndexType Type;
@@ -258,7 +258,7 @@ struct TUserTable : public TThrRefBase {
 
         TTableIndex() = default;
 
-        TTableIndex(const NKikimrSchemeOp::TIndexDescription& indexDesc, const TMap<ui32, TUserColumn>& columns) 
+        TTableIndex(const NKikimrSchemeOp::TIndexDescription& indexDesc, const TMap<ui32, TUserColumn>& columns)
             : Name(indexDesc.GetName())
             , Type(indexDesc.GetType())
         {
@@ -283,8 +283,8 @@ struct TUserTable : public TThrRefBase {
     };
 
     struct TCdcStream {
-        using EMode = NKikimrSchemeOp::ECdcStreamMode; 
-        using EState = NKikimrSchemeOp::ECdcStreamState; 
+        using EMode = NKikimrSchemeOp::ECdcStreamMode;
+        using EState = NKikimrSchemeOp::ECdcStreamState;
 
         TString Name;
         EMode Mode;
@@ -292,7 +292,7 @@ struct TUserTable : public TThrRefBase {
 
         TCdcStream() = default;
 
-        TCdcStream(const NKikimrSchemeOp::TCdcStreamDescription& streamDesc) 
+        TCdcStream(const NKikimrSchemeOp::TCdcStreamDescription& streamDesc)
             : Name(streamDesc.GetName())
             , Mode(streamDesc.GetMode())
             , State(streamDesc.GetState())
@@ -346,7 +346,7 @@ struct TUserTable : public TThrRefBase {
     ui32 ShadowTid = 0;
     TString Name;
     TString Path;
-    TMap<ui32, TStorageRoom::TPtr> Rooms; 
+    TMap<ui32, TStorageRoom::TPtr> Rooms;
     TMap<ui32, TUserFamily> Families;
     TMap<ui32, TUserColumn> Columns;
     TVector<NScheme::TTypeId> KeyColumnTypes;
@@ -369,26 +369,26 @@ struct TUserTable : public TThrRefBase {
 
     TUserTable() { }
 
-    TUserTable(ui32 localTid, const NKikimrSchemeOp::TTableDescription& descr, ui32 shadowTid); // for create 
-    TUserTable(const TUserTable& table, const NKikimrSchemeOp::TTableDescription& descr); // for alter 
+    TUserTable(ui32 localTid, const NKikimrSchemeOp::TTableDescription& descr, ui32 shadowTid); // for create
+    TUserTable(const TUserTable& table, const NKikimrSchemeOp::TTableDescription& descr); // for alter
 
     void ApplyCreate(NTabletFlatExecutor::TTransactionContext& txc, const TString& tableName,
-                     const NKikimrSchemeOp::TPartitionConfig& partConfig) const; 
+                     const NKikimrSchemeOp::TPartitionConfig& partConfig) const;
     void ApplyCreateShadow(NTabletFlatExecutor::TTransactionContext& txc, const TString& tableName,
-                     const NKikimrSchemeOp::TPartitionConfig& partConfig) const; 
+                     const NKikimrSchemeOp::TPartitionConfig& partConfig) const;
     void ApplyAlter(NTabletFlatExecutor::TTransactionContext& txc, const TUserTable& oldTable,
-                    const NKikimrSchemeOp::TTableDescription& alter, TString& strError); 
+                    const NKikimrSchemeOp::TTableDescription& alter, TString& strError);
     void ApplyDefaults(NTabletFlatExecutor::TTransactionContext& txc) const;
 
     TTableRange GetTableRange() const { return Range.ToTableRange(); }
     const TString& GetSchema() const { return Schema; }
 
-    void GetSchema(NKikimrSchemeOp::TTableDescription& description) const { 
+    void GetSchema(NKikimrSchemeOp::TTableDescription& description) const {
         bool ok = description.ParseFromArray(Schema.data(), Schema.size());
         Y_VERIFY(ok);
     }
 
-    void SetSchema(const NKikimrSchemeOp::TTableDescription& description) { 
+    void SetSchema(const NKikimrSchemeOp::TTableDescription& description) {
         Schema.clear();
         Y_PROTOBUF_SUPPRESS_NODISCARD description.SerializeToString(&Schema);
     }
@@ -396,21 +396,21 @@ struct TUserTable : public TThrRefBase {
     void SetPath(const TString &path);
 
     ui64 GetTableSchemaVersion() const { return TableSchemaVersion; }
-    void SetTableSchemaVersion(ui64 schemaVersion); 
+    void SetTableSchemaVersion(ui64 schemaVersion);
     bool ResetTableSchemaVersion();
 
-    void AddIndex(const NKikimrSchemeOp::TIndexDescription& indexDesc); 
+    void AddIndex(const NKikimrSchemeOp::TIndexDescription& indexDesc);
     void DropIndex(const TPathId& indexPathId);
     bool HasAsyncIndexes() const;
 
-    void AddCdcStream(const NKikimrSchemeOp::TCdcStreamDescription& streamDesc); 
+    void AddCdcStream(const NKikimrSchemeOp::TCdcStreamDescription& streamDesc);
     void DisableCdcStream(const TPathId& streamPathId);
     void DropCdcStream(const TPathId& streamPathId);
     bool HasCdcStreams() const;
 
 private:
     void DoApplyCreate(NTabletFlatExecutor::TTransactionContext& txc, const TString& tableName, bool shadow,
-            const NKikimrSchemeOp::TPartitionConfig& partConfig) const; 
+            const NKikimrSchemeOp::TPartitionConfig& partConfig) const;
 
 private:
     TString Schema;
@@ -418,7 +418,7 @@ private:
 
     void CheckSpecialColumns();
     void AlterSchema();
-    void ParseProto(const NKikimrSchemeOp::TTableDescription& descr); 
+    void ParseProto(const NKikimrSchemeOp::TTableDescription& descr);
 };
 
 }}

@@ -8,7 +8,7 @@
 namespace {
 
 using namespace NKikimr;
-using namespace NSchemeShard; 
+using namespace NSchemeShard;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -282,8 +282,8 @@ private:
     }
 
     TFileStoreInfo::TPtr CreateFileStoreInfo(
-        const NKikimrSchemeOp::TFileStoreDescription& op, 
-        TEvSchemeShard::EStatus& status, 
+        const NKikimrSchemeOp::TFileStoreDescription& op,
+        TEvSchemeShard::EStatus& status,
         TString& errStr);
 
     TTxState& PrepareChanges(
@@ -304,7 +304,7 @@ THolder<TProposeResponse> TCreateFileStore::Propose(
 {
     const auto ssId = context.SS->SelfTabletId();
 
-    const auto acceptExisted = !Transaction.GetFailOnExist(); 
+    const auto acceptExisted = !Transaction.GetFailOnExist();
     const auto& operation = Transaction.GetCreateFileStore();
     const TString& parentPathStr = Transaction.GetWorkingDir();
     const TString& name = Transaction.GetCreateFileStore().GetName();
@@ -316,13 +316,13 @@ THolder<TProposeResponse> TCreateFileStore::Propose(
         << ", opId: " << OperationId
         << ", at schemeshard: " << ssId);
 
-    auto status = NKikimrScheme::StatusAccepted; 
+    auto status = NKikimrScheme::StatusAccepted;
     auto result = MakeHolder<TProposeResponse>(
         status,
         ui64(OperationId.GetTxId()),
         ui64(ssId));
 
-    auto parentPath = NSchemeShard::TPath::Resolve(parentPathStr, context.SS); 
+    auto parentPath = NSchemeShard::TPath::Resolve(parentPathStr, context.SS);
     {
         auto checks = parentPath.Check();
         checks
@@ -393,7 +393,7 @@ THolder<TProposeResponse> TCreateFileStore::Propose(
         auto errStr = Sprintf("Wrong number of channels %u , should be [1 .. %lu]",
             ecps.size(), NHive::MAX_TABLET_CHANNELS);
 
-        result->SetError(NKikimrScheme::StatusInvalidParameter, errStr); 
+        result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
         return result;
     }
 
@@ -410,7 +410,7 @@ THolder<TProposeResponse> TCreateFileStore::Propose(
     );
 
     if (!storeChannelsResolved) {
-        result->SetError(NKikimrScheme::StatusInvalidParameter, 
+        result->SetError(NKikimrScheme::StatusInvalidParameter,
                          "Unable to construct channel binding for filestore with the storage pool");
         return result;
     }
@@ -419,7 +419,7 @@ THolder<TProposeResponse> TCreateFileStore::Propose(
 
     TString errStr;
     if (!context.SS->CheckApplyIf(Transaction, errStr)) {
-        result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr); 
+        result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr);
         return result;
     }
 
@@ -463,21 +463,21 @@ THolder<TProposeResponse> TCreateFileStore::Propose(
 }
 
 TFileStoreInfo::TPtr TCreateFileStore::CreateFileStoreInfo(
-    const NKikimrSchemeOp::TFileStoreDescription& op, 
-    TEvSchemeShard::EStatus& status, 
+    const NKikimrSchemeOp::TFileStoreDescription& op,
+    TEvSchemeShard::EStatus& status,
     TString& errStr)
 {
     TFileStoreInfo::TPtr fs = new TFileStoreInfo();
 
     const auto& config = op.GetConfig();
     if (!config.HasBlockSize()) {
-        status = NKikimrScheme::StatusSchemeError; 
+        status = NKikimrScheme::StatusSchemeError;
         errStr = "Block size is required";
         return nullptr;
     }
 
     if (config.HasVersion()) {
-        status = NKikimrScheme::StatusSchemeError; 
+        status = NKikimrScheme::StatusSchemeError;
         errStr = "Setting version is not allowed";
         return nullptr;
     }
@@ -522,7 +522,7 @@ TTxState& TCreateFileStore::PrepareChanges(
     context.SS->ChangeTxState(db, operationId, TTxState::CreateParts);
     context.OnComplete.ActivateTx(operationId);
 
-    context.SS->PersistPath(db, fsPath->PathId); 
+    context.SS->PersistPath(db, fsPath->PathId);
     if (!acl.empty()) {
         fsPath->ApplyACL(acl);
         context.SS->PersistACL(db, fsPath);
@@ -532,7 +532,7 @@ TTxState& TCreateFileStore::PrepareChanges(
     context.SS->PersistFileStoreInfo(db, pathId, fs);
     context.SS->IncrementPathDbRefCount(pathId);
 
-    context.SS->PersistTxState(db, operationId); 
+    context.SS->PersistTxState(db, operationId);
     context.SS->PersistUpdateNextPathId(db);
     context.SS->PersistUpdateNextShardIdx(db);
 
@@ -548,7 +548,7 @@ TTxState& TCreateFileStore::PrepareChanges(
 }   // namespace
 
 namespace NKikimr {
-namespace NSchemeShard { 
+namespace NSchemeShard {
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -561,5 +561,5 @@ ISubOperationBase::TPtr CreateNewFileStore(TOperationId id, TTxState::ETxState s
     return new TCreateFileStore(id, state);
 }
 
-}   // namespace NSchemeShard 
+}   // namespace NSchemeShard
 }   // namespace NKikimr

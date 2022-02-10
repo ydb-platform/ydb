@@ -41,14 +41,14 @@ struct TSchemaOperation {
         ETypeAlter = 2,
         ETypeBackup = 3,
         ETypeCopy = 4,
-        EType_DEPRECATED_05 = 5, 
+        EType_DEPRECATED_05 = 5,
         ETypeCreatePersistentSnapshot = 6,
         ETypeDropPersistentSnapshot = 7,
-        ETypeInitiateBuildIndex = 8, 
-        ETypeFinalizeBuildIndex = 9, 
-        ETypeDropIndexNotice = 10, 
+        ETypeInitiateBuildIndex = 8,
+        ETypeFinalizeBuildIndex = 9,
+        ETypeDropIndexNotice = 10,
         ETypeRestore = 11,
-        ETypeMoveTable = 12, 
+        ETypeMoveTable = 12,
         ETypeCreateCdcStream = 13,
         ETypeAlterCdcStream = 14,
         ETypeDropCdcStream = 15,
@@ -99,10 +99,10 @@ struct TSchemaOperation {
     bool IsCopy() const { return Type == ETypeCopy; }
     bool IsCreatePersistentSnapshot() const { return Type == ETypeCreatePersistentSnapshot; }
     bool IsDropPersistentSnapshot() const { return Type == ETypeDropPersistentSnapshot; }
-    bool IsInitiateBuildIndex() const { return Type == ETypeInitiateBuildIndex; } 
-    bool IsFinalizeBuildIndex() const { return Type == ETypeFinalizeBuildIndex; } 
-    bool IsDropIndexNotice() const { return Type == ETypeDropIndexNotice; } 
-    bool IsMove() const { return Type == ETypeMoveTable; } 
+    bool IsInitiateBuildIndex() const { return Type == ETypeInitiateBuildIndex; }
+    bool IsFinalizeBuildIndex() const { return Type == ETypeFinalizeBuildIndex; }
+    bool IsDropIndexNotice() const { return Type == ETypeDropIndexNotice; }
+    bool IsMove() const { return Type == ETypeMoveTable; }
     bool IsCreateCdcStream() const { return Type == ETypeCreateCdcStream; }
     bool IsAlterCdcStream() const { return Type == ETypeAlterCdcStream; }
     bool IsDropCdcStream() const { return Type == ETypeDropCdcStream; }
@@ -388,7 +388,7 @@ public:
 
     const NKikimrTxDataShard::TFlatSchemeTransaction &GetSchemeTx() const
     {
-        Y_VERIFY_S(SchemeTx, "No ptr"); 
+        Y_VERIFY_S(SchemeTx, "No ptr");
         return *SchemeTx;
     }
     bool BuildSchemeTx();

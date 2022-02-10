@@ -95,7 +95,7 @@ class TestTTL(object):
                 yield row
 
 
-class TestTTLDefaultEnv(TestTTL): 
+class TestTTLDefaultEnv(TestTTL):
     def test_case(self):
         self._run_test()
 

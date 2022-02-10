@@ -13,11 +13,11 @@ message TEvHandshake {
     optional uint64 Generation = 2;
 }
 
-// here and below 
-// Owner is the tablet id of schemeshard witch holds the records 
-// LocalPathId is a second part of TPathId 
-// PathOwnerId is a first part of TPathId 
- 
+// here and below
+// Owner is the tablet id of schemeshard witch holds the records
+// LocalPathId is a second part of TPathId
+// PathOwnerId is a first part of TPathId
+
 message TEvUpdate {
     optional uint64 Owner = 1;
     optional uint64 Generation = 2;
@@ -25,10 +25,10 @@ message TEvUpdate {
     optional string Path = 4;
     optional uint64 LocalPathId = 5;
     optional bool IsDeletion = 6 [default = false];
-    optional NKikimrScheme.TEvDescribeSchemeResult DescribeSchemeResult = 7; 
+    optional NKikimrScheme.TEvDescribeSchemeResult DescribeSchemeResult = 7;
     optional bool NeedAck = 8 [default = false];
-    optional uint64 PathOwnerId = 9; 
-    optional TLocalPathIdRange MigratedLocalPathIds = 10; 
+    optional uint64 PathOwnerId = 9;
+    optional TLocalPathIdRange MigratedLocalPathIds = 10;
 }
 
 message TEvUpdateAck {
@@ -36,7 +36,7 @@ message TEvUpdateAck {
     optional uint64 Generation = 2;
     optional uint64 LocalPathId = 3;
     optional uint64 Version = 4;
-    optional uint64 PathOwnerId = 5; 
+    optional uint64 PathOwnerId = 5;
 }
 
 message TEvCommitGeneration {
@@ -51,7 +51,7 @@ message TEvSubscribe {
 
     optional string Path = 1;
     // or
-    optional uint64 PathOwnerId = 2; 
+    optional uint64 PathOwnerId = 2;
     optional uint64 LocalPathId = 3;
     // common
     optional uint64 DomainOwnerId = 4;
@@ -61,18 +61,18 @@ message TEvSubscribe {
 message TEvUnsubscribe {
     optional string Path = 1;
     // or
-    optional uint64 PathOwnerId = 2; 
+    optional uint64 PathOwnerId = 2;
     optional uint64 LocalPathId = 3;
 }
 
 message TEvNotify {
     optional string Path = 1;
     // and/or
-    optional uint64 PathOwnerId = 2; 
+    optional uint64 PathOwnerId = 2;
     optional uint64 LocalPathId = 3;
     // common fields
     optional bool IsDeletion = 4 [default = false];
-    optional NKikimrScheme.TEvDescribeSchemeResult DescribeSchemeResult = 5; 
+    optional NKikimrScheme.TEvDescribeSchemeResult DescribeSchemeResult = 5;
     optional uint64 Version = 6;
     optional bool Strong = 7 [default = false];
 }
@@ -84,7 +84,7 @@ message TEvNotifyAck {
 message TEvSyncVersionRequest {
     optional string Path = 1;
     // and/or
-    optional uint64 PathOwnerId = 2; 
+    optional uint64 PathOwnerId = 2;
     optional uint64 LocalPathId = 3;
 }
 

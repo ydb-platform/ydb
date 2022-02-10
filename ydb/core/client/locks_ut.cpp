@@ -20,11 +20,11 @@ using namespace Tests;
 class TFlatMsgBusClient : public TClient {
 public:
     TFlatMsgBusClient(ui16 port)
-        : TClient(TServerSettings(port)) 
+        : TClient(TServerSettings(port))
     {}
 
     void InitRoot() {
-        InitRootScheme(); 
+        InitRootScheme();
     }
 
     using TClient::FlatQuery;
@@ -52,7 +52,7 @@ public:
         TActorId txProxy = MakeTxProxyID();
         TActorId sender = runtime->AllocateEdgeActor();
         TAutoPtr<TEvTxUserProxy::TEvInvalidateTable> ev(new TEvTxUserProxy::TEvInvalidateTable(tableId));
-        runtime->Send(new IEventHandle(txProxy, sender, ev.Release())); 
+        runtime->Send(new IEventHandle(txProxy, sender, ev.Release()));
         TAutoPtr<IEventHandle> handle;
         auto readSchemeStringResult = runtime->GrabEdgeEventRethrow<TEvTxUserProxy::TEvInvalidateTableResult>(handle);
         Y_UNUSED(readSchemeStringResult);
@@ -68,7 +68,7 @@ struct TClientServer {
 
     TClientServer(bool outOfOrder = false, bool softUpdates = false, ui16 portNo = 2134)
         : Port(PortManager.GetPort(portNo))
-        , Server(TServerSettings(Port)) 
+        , Server(TServerSettings(Port))
         , Client(Port)
     {
         SetLogging(EnableLogs);

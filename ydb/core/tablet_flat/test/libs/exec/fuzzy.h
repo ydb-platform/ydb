@@ -32,7 +32,7 @@ namespace NFake {
                     delta.SetFamily(table, 0, NPage::ECache::None, NPage::ECodec::LZ4);
                 } else {
                     delta.AddFamily(table, 0, 0);
-                    delta.SetFamilyBlobs(table, 0, 6500, 7000); 
+                    delta.SetFamilyBlobs(table, 0, 6500, 7000);
                 }
 
                 delta.AddColumn(table, "key", KeyId, NScheme::TInt64::TypeId, false);

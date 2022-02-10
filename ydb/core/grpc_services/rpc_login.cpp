@@ -10,13 +10,13 @@
 namespace NKikimr {
 namespace NGRpcService {
 
-using namespace NSchemeShard; 
+using namespace NSchemeShard;
 
 class TLoginRPC : public TRpcRequestActor<TLoginRPC, TEvLoginRequest> {
 public:
     using TRpcRequestActor::TRpcRequestActor;
 
-    THolder<TEvSchemeShard::TEvLoginResult> Result; 
+    THolder<TEvSchemeShard::TEvLoginResult> Result;
     Ydb::StatusIds_StatusCode Status = Ydb::StatusIds::SUCCESS;
     TDuration Timeout = TDuration::MilliSeconds(60000);
     TActorId PipeClient;
@@ -53,7 +53,7 @@ public:
             ui64 schemeShardTabletId = entry.DomainInfo->ExtractSchemeShard();
             IActor* pipe = NTabletPipe::CreateClient(SelfId(), schemeShardTabletId, GetPipeClientConfig());
             PipeClient = RegisterWithSameMailbox(pipe);
-            THolder<TEvSchemeShard::TEvLogin> request = MakeHolder<TEvSchemeShard::TEvLogin>(); 
+            THolder<TEvSchemeShard::TEvLogin> request = MakeHolder<TEvSchemeShard::TEvLogin>();
             const Ydb::Auth::LoginRequest* protoRequest = Request->GetProtoRequest();
             request.Get()->Record.SetUser(protoRequest->user());
             request.Get()->Record.SetPassword(protoRequest->password());
@@ -64,7 +64,7 @@ public:
         ReplyAndPassAway();
     }
 
-    void HandleResult(TEvSchemeShard::TEvLoginResult::TPtr& ev) { 
+    void HandleResult(TEvSchemeShard::TEvLoginResult::TPtr& ev) {
         Status = Ydb::StatusIds::SUCCESS;
         Result = ev->Release();
         ReplyAndPassAway();
@@ -87,7 +87,7 @@ public:
             hFunc(TEvents::TEvUndelivered, HandleUndelivered);
             hFunc(TEvTabletPipe::TEvClientConnected, HandleConnect);
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleNavigate);
-            hFunc(TEvSchemeShard::TEvLoginResult, HandleResult); 
+            hFunc(TEvSchemeShard::TEvLoginResult, HandleResult);
             cFunc(TEvents::TSystem::Wakeup, HandleTimeout);
         }
     }
@@ -99,7 +99,7 @@ public:
         TResponse response;
         Ydb::Operations::Operation& operation = *response.mutable_operation();
         if (Result) {
-            const NKikimrScheme::TEvLoginResult& record = Result->Record; 
+            const NKikimrScheme::TEvLoginResult& record = Result->Record;
             if (record.error()) {
                 Ydb::Issue::IssueMessage* issue = operation.add_issues();
                 issue->set_message(record.error());

@@ -173,10 +173,10 @@ void CheckPolicies(Tests::TClient& client, const TString& tableName) {
     for (const auto family : desc.GetTable().GetPartitionConfig().GetColumnFamilies()) {
         if (family.HasId() && family.GetId() == 0) {
             UNIT_ASSERT_VALUES_EQUAL(static_cast<size_t>(family.GetColumnCodec()),
-                static_cast<size_t>(NKikimrSchemeOp::ColumnCodecPlain)); 
+                static_cast<size_t>(NKikimrSchemeOp::ColumnCodecPlain));
         } else if (family.HasName() && family.GetName() == "Family2") {
             UNIT_ASSERT_VALUES_EQUAL(static_cast<size_t>(family.GetColumnCodec()),
-                static_cast<size_t>(NKikimrSchemeOp::ColumnCodecLZ4)); 
+                static_cast<size_t>(NKikimrSchemeOp::ColumnCodecLZ4));
         }
     }
 }

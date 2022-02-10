@@ -41,7 +41,7 @@ struct TCmsTestSettingsWithAuth : TCmsTestSettings {
 
 using TKikimrWithGrpcAndRootSchema = NYdb::TBasicKikimrWithGrpcAndRootSchema<TCmsTestSettings>;
 
-static Ydb::StatusIds::StatusCode WaitForOperationStatus(std::shared_ptr<grpc::Channel> channel, const TString& opId, const TString &token = "") { 
+static Ydb::StatusIds::StatusCode WaitForOperationStatus(std::shared_ptr<grpc::Channel> channel, const TString& opId, const TString &token = "") {
     std::unique_ptr<Ydb::Operation::V1::OperationService::Stub> stub;
     stub = Ydb::Operation::V1::OperationService::NewStub(channel);
     Ydb::Operations::GetOperationRequest request;
@@ -63,33 +63,33 @@ static Ydb::StatusIds::StatusCode WaitForOperationStatus(std::shared_ptr<grpc::C
     return response.operation().status();
 }
 
-static Ydb::Cms::GetDatabaseStatusResult WaitForTenantState(std::shared_ptr<grpc::Channel> channel, const TString& path, Ydb::Cms::GetDatabaseStatusResult::State state = Ydb::Cms::GetDatabaseStatusResult::RUNNING, const TString &token = "") { 
-    std::unique_ptr<Ydb::Cms::V1::CmsService::Stub> stub; 
-    stub = Ydb::Cms::V1::CmsService::NewStub(channel); 
-    Ydb::Cms::GetDatabaseStatusRequest request; 
-    request.set_path(path); 
-    Ydb::Cms::GetDatabaseStatusResponse response; 
-    while (true) { 
-        grpc::ClientContext context; 
-        if (token) 
+static Ydb::Cms::GetDatabaseStatusResult WaitForTenantState(std::shared_ptr<grpc::Channel> channel, const TString& path, Ydb::Cms::GetDatabaseStatusResult::State state = Ydb::Cms::GetDatabaseStatusResult::RUNNING, const TString &token = "") {
+    std::unique_ptr<Ydb::Cms::V1::CmsService::Stub> stub;
+    stub = Ydb::Cms::V1::CmsService::NewStub(channel);
+    Ydb::Cms::GetDatabaseStatusRequest request;
+    request.set_path(path);
+    Ydb::Cms::GetDatabaseStatusResponse response;
+    while (true) {
+        grpc::ClientContext context;
+        if (token)
             context.AddMetadata(YDB_AUTH_TICKET_HEADER, token);
- 
-        auto status = stub->GetDatabaseStatus(&context, request, &response); 
-        UNIT_ASSERT(status.ok()); 
- 
-        UNIT_ASSERT(response.operation().ready()); 
-        UNIT_ASSERT(response.operation().status() == Ydb::StatusIds::SUCCESS); 
- 
-        Ydb::Cms::GetDatabaseStatusResult result; 
-        auto res = response.operation().result().UnpackTo(&result); 
-        UNIT_ASSERT(res); 
-        UNIT_ASSERT_VALUES_EQUAL(result.path(), path); 
-        if (result.state() == state) { 
-            return result; 
-        } 
-    } 
-} 
- 
+
+        auto status = stub->GetDatabaseStatus(&context, request, &response);
+        UNIT_ASSERT(status.ok());
+
+        UNIT_ASSERT(response.operation().ready());
+        UNIT_ASSERT(response.operation().status() == Ydb::StatusIds::SUCCESS);
+
+        Ydb::Cms::GetDatabaseStatusResult result;
+        auto res = response.operation().result().UnpackTo(&result);
+        UNIT_ASSERT(res);
+        UNIT_ASSERT_VALUES_EQUAL(result.path(), path);
+        if (result.state() == state) {
+            return result;
+        }
+    }
+}
+
 void InitConsoleConfig(TKikimrWithGrpcAndRootSchema &server)
 {
     TClient client(*server.ServerSettings);
@@ -165,7 +165,7 @@ static void doSimpleTenantsTest(bool sync) {
             id = response.operation().id();
         }
     }
- 
+
     if (!sync) {
         auto status = WaitForOperationStatus(channel, id);
         UNIT_ASSERT_EQUAL(status, Ydb::StatusIds::SUCCESS);
@@ -477,7 +477,7 @@ Y_UNIT_TEST_SUITE(TGRpcCmsTest) {
     Y_UNIT_TEST(AlterRemoveTest) {
         TKikimrWithGrpcAndRootSchema server;
         server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::CMS_TENANTS, NLog::PRI_TRACE);
- 
+
         ui16 grpc = server.GetPort();
         TString id;
 

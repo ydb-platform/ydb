@@ -100,7 +100,7 @@ void TMessageBusServerSchemeRequest<TBusPersQueue>::SendProposeRequest(const TAc
         const auto& cmd = Request->Record.GetMetaRequest().GetCmdCreateTopic();
         auto *transaction = record.MutableTransaction()->MutableModifyScheme();
         transaction->SetWorkingDir(TopicPrefix(ctx));
-        transaction->SetOperationType(NKikimrSchemeOp::ESchemeOpCreatePersQueueGroup); 
+        transaction->SetOperationType(NKikimrSchemeOp::ESchemeOpCreatePersQueueGroup);
         auto *pqgroup = transaction->MutableCreatePersQueueGroup();
         pqgroup->SetName(cmd.GetTopic());
         pqgroup->SetTotalGroupCount(cmd.GetNumPartitions());
@@ -112,7 +112,7 @@ void TMessageBusServerSchemeRequest<TBusPersQueue>::SendProposeRequest(const TAc
         const auto& cmd = Request->Record.GetMetaRequest().GetCmdChangeTopic();
         auto *transaction = record.MutableTransaction()->MutableModifyScheme();
         transaction->SetWorkingDir(TopicPrefix(ctx));
-        transaction->SetOperationType(NKikimrSchemeOp::ESchemeOpAlterPersQueueGroup); 
+        transaction->SetOperationType(NKikimrSchemeOp::ESchemeOpAlterPersQueueGroup);
         auto *pqgroup = transaction->MutableAlterPersQueueGroup();
         pqgroup->SetName(cmd.GetTopic());
         if (cmd.HasNumPartitions())
@@ -125,7 +125,7 @@ void TMessageBusServerSchemeRequest<TBusPersQueue>::SendProposeRequest(const TAc
         const auto& cmd = Request->Record.GetMetaRequest().GetCmdDeleteTopic();
         auto *transaction = record.MutableTransaction()->MutableModifyScheme();
         transaction->SetWorkingDir(TopicPrefix(ctx));
-        transaction->SetOperationType(NKikimrSchemeOp::ESchemeOpDropPersQueueGroup); 
+        transaction->SetOperationType(NKikimrSchemeOp::ESchemeOpDropPersQueueGroup);
         auto *pqgroup = transaction->MutableDrop();
         pqgroup->SetName(cmd.GetTopic());
     }
@@ -139,7 +139,7 @@ template <>
 void TMessageBusServerSchemeRequest<TBusPersQueue>::ReplyWithResult(EResponseStatus status, const NKikimrTxUserProxy::TEvProposeTransactionStatus &result, const TActorContext &ctx) {
     TAutoPtr<TBusResponse> response(new TBusResponse());
     FillStatus(status, result, response.Get());
-    if (result.GetSchemeShardStatus() == NKikimrScheme::StatusPathDoesNotExist) { 
+    if (result.GetSchemeShardStatus() == NKikimrScheme::StatusPathDoesNotExist) {
         response->Record.SetErrorCode(NPersQueue::NErrorCode::UNKNOWN_TOPIC);
     } else if (status == MSTATUS_OK || status == MSTATUS_INPROGRESS)
         response->Record.SetErrorCode(NPersQueue::NErrorCode::OK);
@@ -150,7 +150,7 @@ void TMessageBusServerSchemeRequest<TBusPersQueue>::ReplyWithResult(EResponseSta
     }
     SendReplyAutoPtr(response);
     Request.Destroy();
-    Die(ctx); 
+    Die(ctx);
 }
 
 template <>
@@ -168,7 +168,7 @@ void TMessageBusServerSchemeRequest<TBusSchemeOperation>::SendProposeRequest(con
 
     bool needAdminCheck = false;
     switch (Request->Record.GetTransaction().GetModifyScheme().GetOperationType()) {
-        case NKikimrSchemeOp::ESchemeOpSplitMergeTablePartitions: 
+        case NKikimrSchemeOp::ESchemeOpSplitMergeTablePartitions:
             needAdminCheck = true;
             break;
         default:
@@ -201,12 +201,12 @@ void TMessageBusServerSchemeRequest<TBusSchemeOperation>::SendProposeRequest(con
 template <>
 void TMessageBusServerSchemeRequest<TBusSchemeOperation>::ReplyWithResult(EResponseStatus status, const NKikimrTxUserProxy::TEvProposeTransactionStatus &result, const TActorContext &ctx) {
     TAutoPtr<TBusResponse> response(new TBusResponse());
- 
+
     FillStatus(status, result, response.Get());
- 
+
     SendReplyAutoPtr(response);
     Request.Destroy();
-    Die(ctx); 
+    Die(ctx);
 }
 
 void TMessageBusServerProxy::Handle(TEvBusProxy::TEvPersQueue::TPtr& ev, const TActorContext& ctx) {

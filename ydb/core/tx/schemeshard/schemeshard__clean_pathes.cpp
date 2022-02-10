@@ -1,41 +1,41 @@
-#include "schemeshard_impl.h" 
- 
-namespace NKikimr { 
-namespace NSchemeShard { 
- 
-using namespace NTabletFlatExecutor; 
- 
-struct TSchemeShard::TTxCleanTables : public TTransactionBase<TSchemeShard> { 
-    static const ui32 BacketSize = 100; 
-    TVector<TPathId> TablesToClean; 
-    ui32 RemovedCount; 
- 
-    TTxCleanTables(TSelf* self, TVector<TPathId> tablesToClean) 
-        : TTransactionBase<TSchemeShard>(self) 
-        , TablesToClean(std::move(tablesToClean)) 
-        , RemovedCount(0) 
-    {} 
- 
-    TTxType GetTxType() const override { 
-        return TXTYPE_CLEAN_TABLES; 
-    } 
- 
+#include "schemeshard_impl.h"
+
+namespace NKikimr {
+namespace NSchemeShard {
+
+using namespace NTabletFlatExecutor;
+
+struct TSchemeShard::TTxCleanTables : public TTransactionBase<TSchemeShard> {
+    static const ui32 BacketSize = 100;
+    TVector<TPathId> TablesToClean;
+    ui32 RemovedCount;
+
+    TTxCleanTables(TSelf* self, TVector<TPathId> tablesToClean)
+        : TTransactionBase<TSchemeShard>(self)
+        , TablesToClean(std::move(tablesToClean))
+        , RemovedCount(0)
+    {}
+
+    TTxType GetTxType() const override {
+        return TXTYPE_CLEAN_TABLES;
+    }
+
     bool Execute(TTransactionContext &txc, const TActorContext &ctx) override {
-        NIceDb::TNiceDb db(txc.DB); 
- 
-        ui32 RemovedCount = 0; 
-        while (RemovedCount < BacketSize && TablesToClean) { 
-            TPathId tableId = TablesToClean.back(); 
+        NIceDb::TNiceDb db(txc.DB);
+
+        ui32 RemovedCount = 0;
+        while (RemovedCount < BacketSize && TablesToClean) {
+            TPathId tableId = TablesToClean.back();
             Self->PersistRemoveTable(db, tableId, ctx);
- 
-            ++RemovedCount; 
-            TablesToClean.pop_back(); 
-        } 
- 
-        return true; 
-    } 
- 
-    void Complete(const TActorContext &ctx) override { 
+
+            ++RemovedCount;
+            TablesToClean.pop_back();
+        }
+
+        return true;
+    }
+
+    void Complete(const TActorContext &ctx) override {
         if (RemovedCount) {
             LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                        "TTxCleanPathes Complete"
@@ -43,23 +43,23 @@ struct TSchemeShard::TTxCleanTables : public TTransactionBase<TSchemeShard> {
                            << ", left " << TablesToClean.size()
                            << ", at schemeshard: "<< Self->TabletID());
         }
- 
-        if (TablesToClean) { 
-            Self->Execute(Self->CreateTxCleanTables(std::move(TablesToClean)), ctx); 
-        } 
-    } 
-}; 
- 
-NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxCleanTables(TVector<TPathId> tablesToClean) { 
-    return new TTxCleanTables(this, std::move(tablesToClean)); 
-} 
- 
-struct TSchemeShard::TTxCleanBlockStoreVolumes : public TTransactionBase<TSchemeShard> { 
+
+        if (TablesToClean) {
+            Self->Execute(Self->CreateTxCleanTables(std::move(TablesToClean)), ctx);
+        }
+    }
+};
+
+NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxCleanTables(TVector<TPathId> tablesToClean) {
+    return new TTxCleanTables(this, std::move(tablesToClean));
+}
+
+struct TSchemeShard::TTxCleanBlockStoreVolumes : public TTransactionBase<TSchemeShard> {
     static constexpr ui32 BucketSize = 1000;
     TDeque<TPathId> BlockStoreVolumesToClean;
     size_t RemovedCount = 0;
 
-    TTxCleanBlockStoreVolumes(TSchemeShard* self, TDeque<TPathId>&& blockStoreVolumesToClean) 
+    TTxCleanBlockStoreVolumes(TSchemeShard* self, TDeque<TPathId>&& blockStoreVolumesToClean)
         : TTransactionBase(self)
         , BlockStoreVolumesToClean(std::move(blockStoreVolumesToClean))
     { }
@@ -98,16 +98,16 @@ struct TSchemeShard::TTxCleanBlockStoreVolumes : public TTransactionBase<TScheme
     }
 };
 
-NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxCleanBlockStoreVolumes(TDeque<TPathId>&& blockStoreVolumesToClean) { 
+NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxCleanBlockStoreVolumes(TDeque<TPathId>&& blockStoreVolumesToClean) {
     return new TTxCleanBlockStoreVolumes(this, std::move(blockStoreVolumesToClean));
 }
 
-struct TSchemeShard::TTxCleanDroppedPaths : public TTransactionBase<TSchemeShard> { 
+struct TSchemeShard::TTxCleanDroppedPaths : public TTransactionBase<TSchemeShard> {
     static constexpr size_t BucketSize = 1000;
     size_t RemovedCount = 0;
     size_t SkippedCount = 0;
 
-    TTxCleanDroppedPaths(TSchemeShard* self) 
+    TTxCleanDroppedPaths(TSchemeShard* self)
         : TTransactionBase(self)
     { }
 
@@ -168,28 +168,28 @@ struct TSchemeShard::TTxCleanDroppedPaths : public TTransactionBase<TSchemeShard
     }
 };
 
-NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxCleanDroppedPaths() { 
+NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxCleanDroppedPaths() {
     return new TTxCleanDroppedPaths(this);
 }
 
-void TSchemeShard::ScheduleCleanDroppedPaths() { 
+void TSchemeShard::ScheduleCleanDroppedPaths() {
     if (!CleanDroppedPathsCandidates.empty() && !CleanDroppedPathsInFly && !CleanDroppedPathsDisabled) {
         Send(SelfId(), new TEvPrivate::TEvCleanDroppedPaths);
         CleanDroppedPathsInFly = true;
     }
 }
 
-void TSchemeShard::Handle(TEvPrivate::TEvCleanDroppedPaths::TPtr&, const TActorContext& ctx) { 
+void TSchemeShard::Handle(TEvPrivate::TEvCleanDroppedPaths::TPtr&, const TActorContext& ctx) {
     Y_VERIFY(CleanDroppedPathsInFly);
     Execute(CreateTxCleanDroppedPaths(), ctx);
 }
 
-struct TSchemeShard::TTxCleanDroppedSubDomains : public TTransactionBase<TSchemeShard> { 
+struct TSchemeShard::TTxCleanDroppedSubDomains : public TTransactionBase<TSchemeShard> {
     static constexpr size_t BucketSize = 1000;
     size_t RemovedCount = 0;
     size_t SkippedCount = 0;
 
-    TTxCleanDroppedSubDomains(TSchemeShard* self) 
+    TTxCleanDroppedSubDomains(TSchemeShard* self)
         : TTransactionBase(self)
     { }
 
@@ -253,21 +253,21 @@ struct TSchemeShard::TTxCleanDroppedSubDomains : public TTransactionBase<TScheme
     }
 };
 
-NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxCleanDroppedSubDomains() { 
+NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxCleanDroppedSubDomains() {
     return new TTxCleanDroppedSubDomains(this);
 }
 
-void TSchemeShard::ScheduleCleanDroppedSubDomains() { 
+void TSchemeShard::ScheduleCleanDroppedSubDomains() {
     if (!CleanDroppedSubDomainsCandidates.empty() && !CleanDroppedSubDomainsInFly && !CleanDroppedPathsDisabled) {
         Send(SelfId(), new TEvPrivate::TEvCleanDroppedSubDomains);
         CleanDroppedSubDomainsInFly = true;
     }
 }
 
-void TSchemeShard::Handle(TEvPrivate::TEvCleanDroppedSubDomains::TPtr&, const TActorContext& ctx) { 
+void TSchemeShard::Handle(TEvPrivate::TEvCleanDroppedSubDomains::TPtr&, const TActorContext& ctx) {
     Y_VERIFY(CleanDroppedSubDomainsInFly);
     Execute(CreateTxCleanDroppedSubDomains(), ctx);
 }
 
-} // NSchemeShard 
-} // NKikimr 
+} // NSchemeShard
+} // NKikimr

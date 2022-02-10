@@ -6,7 +6,7 @@
 #include <ydb/core/mind/hive/hive.h>
 
 namespace NKikimr {
-namespace NSchemeShard { 
+namespace NSchemeShard {
 
 namespace {
 
@@ -321,12 +321,12 @@ public:
                         << ", opId: " << OperationId
                         << ", at schemeshard: " << ssId);
 
-        TEvSchemeShard::EStatus status = NKikimrScheme::StatusAccepted; 
+        TEvSchemeShard::EStatus status = NKikimrScheme::StatusAccepted;
         auto result = MakeHolder<TProposeResponse>(status, ui64(OperationId.GetTxId()), ui64(ssId));
 
-        NSchemeShard::TPath parentPath = NSchemeShard::TPath::Resolve(parentPathStr, context.SS); 
+        NSchemeShard::TPath parentPath = NSchemeShard::TPath::Resolve(parentPathStr, context.SS);
         {
-            NSchemeShard::TPath::TChecker checks = parentPath.Check(); 
+            NSchemeShard::TPath::TChecker checks = parentPath.Check();
             checks
                 .NotUnderDomainUpgrade()
                 .IsAtLocalSchemeShard()
@@ -370,9 +370,9 @@ public:
 
         const TString acl = Transaction.GetModifyACL().GetDiffACL();
 
-        NSchemeShard::TPath dstPath = parentPath.Child(name); 
+        NSchemeShard::TPath dstPath = parentPath.Child(name);
         {
-            NSchemeShard::TPath::TChecker checks = dstPath.Check(); 
+            NSchemeShard::TPath::TChecker checks = dstPath.Check();
             checks.IsAtLocalSchemeShard();
             if (dstPath.IsResolved()) {
                 checks
@@ -416,12 +416,12 @@ public:
         TString errStr;
 
         if (!TSequenceInfo::ValidateCreate(descr, errStr)) {
-            result->SetError(NKikimrScheme::StatusSchemeError, errStr); 
+            result->SetError(NKikimrScheme::StatusSchemeError, errStr);
             return result;
         }
 
         if (!context.SS->CheckApplyIf(Transaction, errStr)) {
-            result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr); 
+            result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr);
             return result;
         }
 
@@ -429,7 +429,7 @@ public:
         TChannelsBindings channelsBindings;
         if (shardsToCreate) {
             if (!context.SS->ResolveTabletChannels(profileId, dstPath.DomainId(), channelsBindings)) {
-                result->SetError(NKikimrScheme::StatusInvalidParameter, 
+                result->SetError(NKikimrScheme::StatusInvalidParameter,
                             "Unable to construct channel binding for sequence shard with the storage pool");
                 return result;
             }

@@ -62,13 +62,13 @@ Y_UNIT_TEST_SUITE(AsyncIndexChangeExchange) {
 
     TShardedTableOptions::TIndex SimpleSyncIndex() {
         return TShardedTableOptions::TIndex{
-            "by_ikey", {"ikey"}, {}, NKikimrSchemeOp::EIndexTypeGlobal 
+            "by_ikey", {"ikey"}, {}, NKikimrSchemeOp::EIndexTypeGlobal
         };
     }
 
     TShardedTableOptions::TIndex SimpleAsyncIndex() {
         return TShardedTableOptions::TIndex{
-            "by_ikey", {"ikey"}, {}, NKikimrSchemeOp::EIndexTypeGlobalAsync 
+            "by_ikey", {"ikey"}, {}, NKikimrSchemeOp::EIndexTypeGlobalAsync
         };
     }
 
@@ -156,8 +156,8 @@ Y_UNIT_TEST_SUITE(AsyncIndexChangeExchange) {
                 {"i2key", "Uint32", false, false},
             })
             .Indexes({
-                {"by_i1key", {"i1key"}, {}, NKikimrSchemeOp::EIndexTypeGlobalAsync}, 
-                {"by_i2key", {"i2key"}, {}, NKikimrSchemeOp::EIndexTypeGlobalAsync}, 
+                {"by_i1key", {"i1key"}, {}, NKikimrSchemeOp::EIndexTypeGlobalAsync},
+                {"by_i2key", {"i2key"}, {}, NKikimrSchemeOp::EIndexTypeGlobalAsync},
             })
         );
     }

@@ -24,20 +24,20 @@ void ConvertYdbParamsToMiniKQLParams(const ::google::protobuf::Map<TString, Ydb:
 
 void ConvertAclToYdb(const TString& owner, const TString& acl, bool isContainer,
     google::protobuf::RepeatedPtrField<Ydb::Scheme::Permissions> *permissions);
- 
-struct TACLAttrs { 
-    ui32 AccessMask; 
-    ui32 InheritanceType; 
- 
-    TACLAttrs(ui32 access, ui32 inheritance); 
-    TACLAttrs(ui32 access); 
-}; 
- 
-TACLAttrs ConvertYdbPermissionNameToACLAttrs(const TString& name); 
- 
+
+struct TACLAttrs {
+    ui32 AccessMask;
+    ui32 InheritanceType;
+
+    TACLAttrs(ui32 access, ui32 inheritance);
+    TACLAttrs(ui32 access);
+};
+
+TACLAttrs ConvertYdbPermissionNameToACLAttrs(const TString& name);
+
 TVector<TString> ConvertACLMaskToYdbPermissionNames(ui32);
 
-void ConvertDirectoryEntry(const NKikimrSchemeOp::TDirEntry& from, Ydb::Scheme::Entry* to, bool processAcl); 
-void ConvertDirectoryEntry(const NKikimrSchemeOp::TPathDescription& from, Ydb::Scheme::Entry* to, bool processAcl); 
+void ConvertDirectoryEntry(const NKikimrSchemeOp::TDirEntry& from, Ydb::Scheme::Entry* to, bool processAcl);
+void ConvertDirectoryEntry(const NKikimrSchemeOp::TPathDescription& from, Ydb::Scheme::Entry* to, bool processAcl);
 
 } // namespace NKikimr

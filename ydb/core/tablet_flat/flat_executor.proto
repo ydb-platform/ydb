@@ -157,7 +157,7 @@ message TCompactionState {
     }
 
     optional uint32 Table = 1;
-    optional NKikimrSchemeOp.ECompactionStrategy Strategy = 2; 
+    optional NKikimrSchemeOp.ECompactionStrategy Strategy = 2;
     repeated TKeyValue KeyValues = 3; // Key/value mapping (updates or snapshot)
 }
 

@@ -36,7 +36,7 @@ public:
         const auto streamPathId = TPathId(streamDesc.GetPathId().GetOwnerId(), streamDesc.GetPathId().GetLocalId());
         Y_VERIFY(streamPathId.OwnerId == DataShard.GetPathOwnerId());
 
-        Y_VERIFY_S(streamDesc.GetState() == NKikimrSchemeOp::ECdcStreamStateDisabled, "Unexpected alter cdc stream" 
+        Y_VERIFY_S(streamDesc.GetState() == NKikimrSchemeOp::ECdcStreamStateDisabled, "Unexpected alter cdc stream"
             << ": desc# " << streamDesc.ShortDebugString());
         auto tableInfo = DataShard.AlterTableDisableCdcStream(ctx, txc, pathId, params.GetTableSchemaVersion(), streamPathId);
         DataShard.AddUserTable(pathId, tableInfo);

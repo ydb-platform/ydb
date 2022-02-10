@@ -294,11 +294,11 @@ void TLockLocker::UpdateSchema(const TPathId& tableId, const TUserTable& tableIn
     table->UpdateKeyColumnsTypes(tableInfo.KeyColumnTypes);
 }
 
-void TLockLocker::RemoveSchema(const TPathId& tableId) { 
-    Tables.erase(tableId); 
-} 
- 
- 
+void TLockLocker::RemoveSchema(const TPathId& tableId) {
+    Tables.erase(tableId);
+}
+
+
 bool TLockLocker::ForceShardLock(const THashSet<TPathId>& rangeTables) const {
     for (const TPathId& tableId : rangeTables) {
         auto it = Tables.find(tableId);

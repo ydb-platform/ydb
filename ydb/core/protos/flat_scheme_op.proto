@@ -13,8 +13,8 @@ import "ydb/public/api/protos/ydb_coordination.proto";
 import "ydb/public/api/protos/ydb_export.proto";
 import "ydb/library/mkql_proto/protos/minikql.proto";
 
- 
-package NKikimrSchemeOp; 
+
+package NKikimrSchemeOp;
 option java_package = "ru.yandex.kikimr.proto";
 
 message TMkDir {
@@ -23,7 +23,7 @@ message TMkDir {
 
 enum EDropWaitPolicy {
     EDropFailOnChanges = 0;
-    EDropAbortChanges = 1; //depricated 
+    EDropAbortChanges = 1; //depricated
     EDropWaitChanges = 2;
 }
 
@@ -93,8 +93,8 @@ message TStorageConfig {
     optional TStorageSettings Log = 2;
     optional TStorageSettings Data = 3;
     optional TStorageSettings External = 4;
-    optional uint32 DataThreshold = 5; 
-    optional uint32 ExternalThreshold = 6; 
+    optional uint32 DataThreshold = 5;
+    optional uint32 ExternalThreshold = 6;
 }
 
 message TFamilyDescription {
@@ -105,7 +105,7 @@ message TFamilyDescription {
     optional string Name = 5;
     optional EColumnCodec ColumnCodec = 6;
     optional EColumnCache ColumnCache = 7;
-    optional EColumnStorage Storage = 8; // DEPRECATED: use StorageConfig 
+    optional EColumnStorage Storage = 8; // DEPRECATED: use StorageConfig
     optional TStorageConfig StorageConfig = 9;
 }
 
@@ -264,7 +264,7 @@ message TPartitionConfig {
     optional bool DisableStatisticsCalculation = 14; // KIKIMR-3861 hotfix
     optional bool EnableFilterByKey = 15 [default = false]; // Build and use per-part bloom filter for fast key non-existence check
     optional bool ExecutorFastLogPolicy = 16 [default  = true]; // Commit log faster at the expense of bandwidth for cross-DC
-    repeated NKikimrStorageSettings.TStorageRoom StorageRooms = 17; 
+    repeated NKikimrStorageSettings.TStorageRoom StorageRooms = 17;
     optional bool EnableEraseCache = 18 [default = true]; // Use erase cache for faster iteration over erased rows
     optional uint32 EraseCacheMinRows = 19; // Minimum number of erased rows worth caching (default 16)
     optional uint32 EraseCacheMaxBytes = 20; // Maximum number of bytes to use for cached rows (default 1MB)
@@ -321,7 +321,7 @@ message TTTLSettings {
 
 message TTableDescription {
     optional string Name = 1;
-    optional uint64 Id_Deprecated = 2; // LocalPathId, deprecated 
+    optional uint64 Id_Deprecated = 2; // LocalPathId, deprecated
     repeated TColumnDescription Columns = 3;
     repeated string KeyColumnNames = 4;
     repeated uint32 KeyColumnIds = 5;
@@ -332,7 +332,7 @@ message TTableDescription {
     repeated TColumnDescription DropColumns = 8;
     optional string Path = 9;
 
-    // It shouldn't be there 
+    // It shouldn't be there
     optional bytes PartitionRangeBegin = 20;
     optional bytes PartitionRangeEnd = 21;
     optional bool PartitionRangeBeginIsInclusive = 22;
@@ -340,11 +340,11 @@ message TTableDescription {
 
     optional string CopyFromTable = 30;
     repeated TSplitBoundary SplitBoundary = 31;     // Boundaries for non-uniform split
- 
-    repeated TIndexDescription TableIndexes = 32; 
+
+    repeated TIndexDescription TableIndexes = 32;
 
     optional uint64 TableSchemaVersion = 33;
- 
+
     optional NKikimrProto.TPathID PathId = 34; // TPathId, owerride Id = 2
 
     optional TTTLSettings TTLSettings = 35;
@@ -740,27 +740,27 @@ message TDropCdcStream {
     optional string StreamName = 2;
 }
 
-enum EIndexType { 
-    EIndexTypeInvalid = 0; 
-    EIndexTypeGlobal = 1; 
+enum EIndexType {
+    EIndexTypeInvalid = 0;
+    EIndexTypeGlobal = 1;
     EIndexTypeGlobalAsync = 2;
-} 
- 
-enum EIndexState { 
-    EIndexStateInvalid = 0; 
-    EIndexStateReady = 1; 
+}
+
+enum EIndexState {
+    EIndexStateInvalid = 0;
+    EIndexStateReady = 1;
     EIndexStateNotReady = 2;
     EIndexStateWriteOnly = 3;
-} 
- 
-message TIndexDescription { 
-    optional string Name = 1; 
+}
+
+message TIndexDescription {
+    optional string Name = 1;
     optional uint64 LocalPathId = 2;
- 
-    optional EIndexType Type = 3; 
-    optional EIndexState State = 4; 
- 
-    repeated string KeyColumnNames = 5; 
+
+    optional EIndexType Type = 3;
+    optional EIndexState State = 4;
+
+    repeated string KeyColumnNames = 5;
 
     optional uint64 SchemaVersion = 6; // Schema version of abstract index (not impl table)
 
@@ -769,51 +769,51 @@ message TIndexDescription {
     repeated string DataColumnNames = 8;
     // DataSize + IndexSize of indexImplTable
     optional uint64 DataSize = 9;
-} 
- 
-message TIndexCreationConfig { 
-    optional string Name = 1; 
-    repeated string KeyColumnNames = 2; 
-    optional EIndexType Type = 3; 
+}
+
+message TIndexCreationConfig {
+    optional string Name = 1;
+    repeated string KeyColumnNames = 2;
+    optional EIndexType Type = 3;
     optional TTableDescription IndexImplTableDescription = 4; //description for index impl table
     optional EIndexState State = 5; //state of index at the creation time
     repeated string DataColumnNames = 6; //columns to be denormalized to read data just from index
-} 
- 
-message TIndexAlteringConfig { 
-    optional string Name = 1; 
-    optional EIndexState State = 2; 
-} 
- 
-message TIndexedTableCreationConfig { 
-    optional TTableDescription TableDescription = 1; 
-    repeated TIndexCreationConfig IndexDescription = 2; 
+}
+
+message TIndexAlteringConfig {
+    optional string Name = 1;
+    optional EIndexState State = 2;
+}
+
+message TIndexedTableCreationConfig {
+    optional TTableDescription TableDescription = 1;
+    repeated TIndexCreationConfig IndexDescription = 2;
     repeated TSequenceDescription SequenceDescription = 3;
-} 
- 
-message TInitiateBuildIndexMainTable { 
-    optional string TableName = 1; 
-} 
- 
-message TFinalizeBuildIndexMainTable { 
-    optional string TableName = 1; 
-    optional uint64 SnapshotTxId = 2; 
-    optional uint64 BuildIndexId = 3; 
-} 
- 
-message TCopyTableConfig { //TTableDescription implemets copying a table in original and full way 
-    optional string SrcPath = 1; 
-    optional string DstPath = 2; 
- 
-    optional bool OmitIndexes = 3 [default = false]; 
+}
+
+message TInitiateBuildIndexMainTable {
+    optional string TableName = 1;
+}
+
+message TFinalizeBuildIndexMainTable {
+    optional string TableName = 1;
+    optional uint64 SnapshotTxId = 2;
+    optional uint64 BuildIndexId = 3;
+}
+
+message TCopyTableConfig { //TTableDescription implemets copying a table in original and full way
+    optional string SrcPath = 1;
+    optional string DstPath = 2;
+
+    optional bool OmitIndexes = 3 [default = false];
     optional bool OmitFollowers = 4 [default = false];
     optional bool IsBackup = 5 [default = false];
 }
 
-message TConsistentTableCopyingConfig { 
-    repeated TCopyTableConfig CopyTableDescriptions = 1; 
-} 
- 
+message TConsistentTableCopyingConfig {
+    repeated TCopyTableConfig CopyTableDescriptions = 1;
+}
+
 message TYTSettings {
     optional string Host = 1;
     optional string TablePattern = 2;
@@ -964,44 +964,44 @@ message TKesusDescription {
     optional uint64 Version = 5; // do not set
 }
 
-message TSolomonVolumeDescription { 
-    message TPartition { 
-        optional uint64 PartitionId = 1; 
-        optional uint64 TabletId = 2; 
-        optional uint64 ShardIdx = 3; 
+message TSolomonVolumeDescription {
+    message TPartition {
+        optional uint64 PartitionId = 1;
+        optional uint64 TabletId = 2;
+        optional uint64 ShardIdx = 3;
         repeated NKikimrStoragePool.TChannelBind BoundChannels = 4;
-    } 
- 
-    optional string Name = 1; // mandatory 
-    optional uint64 PathId = 2; 
-    optional uint64 PartitionCount = 3; 
-    repeated TPartition Partitions = 4; 
-} 
- 
-message TCreateSolomonVolume { 
-    message TAdoptedPartition { 
-        optional uint64 OwnerId = 1; 
-        optional uint64 ShardIdx = 2; 
-        optional uint64 TabletId = 3; 
-    } 
- 
-    optional string Name = 1; // mandatory 
-    optional uint32 ChannelProfileId = 2; 
- 
-    optional uint64 PartitionCount = 3;                // it is a mutually exclusive parametr 
-    repeated TAdoptedPartition AdoptedPartitions = 4; // with this one 
-} 
- 
-message TAlterSolomonVolume { 
-    optional string Name = 1; // mandatory 
- 
-    optional uint32 ChannelProfileId = 2; 
- 
-    optional uint64 PartitionCount = 3; 
+    }
+
+    optional string Name = 1; // mandatory
+    optional uint64 PathId = 2;
+    optional uint64 PartitionCount = 3;
+    repeated TPartition Partitions = 4;
+}
+
+message TCreateSolomonVolume {
+    message TAdoptedPartition {
+        optional uint64 OwnerId = 1;
+        optional uint64 ShardIdx = 2;
+        optional uint64 TabletId = 3;
+    }
+
+    optional string Name = 1; // mandatory
+    optional uint32 ChannelProfileId = 2;
+
+    optional uint64 PartitionCount = 3;                // it is a mutually exclusive parametr
+    repeated TAdoptedPartition AdoptedPartitions = 4; // with this one
+}
+
+message TAlterSolomonVolume {
+    optional string Name = 1; // mandatory
+
+    optional uint32 ChannelProfileId = 2;
+
+    optional uint64 PartitionCount = 3;
 
     optional bool UpdateChannelsBinding = 4 [default = false];
-} 
- 
+}
+
 message TBlockStoreAssignOp {
     optional string Name = 1; // mandatory
     optional string NewMountToken = 2; // unset to unassign
@@ -1017,28 +1017,28 @@ message TModifyACL {
 message TSplitMergeTablePartitions {
     optional uint64 TxId = 1;
     optional string TablePath = 2;
-    optional uint64 TableLocalId = 3; 
+    optional uint64 TableLocalId = 3;
     repeated uint64 SourceTabletId = 4;
     repeated TSplitBoundary SplitBoundary = 5;  // Points of split (there will be N+1 parts)
     optional uint64 SchemeshardId = 6;          // Only needed if TableId is used instead of path
-    optional uint64 TableOwnerId = 7; 
+    optional uint64 TableOwnerId = 7;
 }
 
-message TUserAttribute { 
-    optional string Key = 1; 
-    optional string Value = 2; 
-} 
- 
-message TAlterUserAttributes { 
-    optional string PathName = 1; 
-    repeated TUserAttribute UserAttributes = 2; 
-} 
- 
-message TMove { // private description of the operation 
-    optional string SrcPath = 1; 
-    optional string DstPath = 2; 
-} 
- 
+message TUserAttribute {
+    optional string Key = 1;
+    optional string Value = 2;
+}
+
+message TAlterUserAttributes {
+    optional string PathName = 1;
+    repeated TUserAttribute UserAttributes = 2;
+}
+
+message TMove { // private description of the operation
+    optional string SrcPath = 1;
+    optional string DstPath = 2;
+}
+
 message TSequenceDescription {
     optional string Name = 1; // mandatory
     optional NKikimrProto.TPathID PathId = 2; // sequence path id, assigned by schemeshard
@@ -1078,8 +1078,8 @@ enum EOperationType {
     ESchemeOpRmDir = 9;
     ESchemeOpSplitMergeTablePartitions = 10;
     ESchemeOpBackup = 11;
-    ESchemeOpCreateSubDomain = 12; 
-    ESchemeOpDropSubDomain = 13; 
+    ESchemeOpCreateSubDomain = 12;
+    ESchemeOpDropSubDomain = 13;
     ESchemeOpCreateRtmrVolume = 14;
     ESchemeOpCreateBlockStoreVolume = 15;
     ESchemeOpAlterBlockStoreVolume = 16;
@@ -1087,49 +1087,49 @@ enum EOperationType {
     ESchemeOpDropBlockStoreVolume = 18;
     ESchemeOpCreateKesus = 19;
     ESchemeOpDropKesus = 20;
-    ESchemeOpForceDropSubDomain = 21; 
-    ESchemeOpCreateSolomonVolume = 22; 
-    ESchemeOpDropSolomonVolume = 23; 
+    ESchemeOpForceDropSubDomain = 21;
+    ESchemeOpCreateSolomonVolume = 22;
+    ESchemeOpDropSolomonVolume = 23;
     ESchemeOpAlterKesus = 24;
-    ESchemeOpAlterSubDomain = 25; 
-    ESchemeOpAlterUserAttributes = 26; 
- 
-    // ************* 
-    // Unsafe operation. Nornally it is used for deleting database. It called by CMS, and CMS takes care of remaining resourses. 
-    // If you apply it manually to an ordinary path in cases of emergenses, be aware of: 
-    // 1 -- data transactions are ignored. Distributed transactions colud be broken so progress on another shards would be blocked forever 
-    // 2 -- boorowed/loans blobs could be lost forever. 
-    // 
-    ESchemeOpForceDropUnsafe = 27; 
-    // 
-    // ************* 
- 
-    ESchemeOpCreateIndexedTable = 28; 
-    ESchemeOpCreateTableIndex = 29; 
-    ESchemeOpCreateConsistentCopyTables = 30; 
-    ESchemeOpDropTableIndex = 31; 
-    ESchemeOpCreateExtSubDomain = 32; 
-    ESchemeOpAlterExtSubDomain = 33; 
-    ESchemeOpForceDropExtSubDomain = 34; 
-    ESchemeOp_DEPRECATED_35 = 35; 
-    ESchemeOpUpgradeSubDomain = 36; 
-    ESchemeOpUpgradeSubDomainDecision = 37; 
-    ESchemeOpCreateIndexBuild = 38; 
-    ESchemeOpInitiateBuildIndexMainTable = 39; 
-    ESchemeOpCreateLockForIndexBuild = 40; 
-    ESchemeOpApplyIndexBuild = 41; 
-    ESchemeOpFinalizeBuildIndexMainTable = 42; 
-    ESchemeOpAlterTableIndex = 43; 
-    ESchemeOpAlterSolomonVolume = 44; 
-    ESchemeOpDropLock = 45; 
- 
-    ESchemeOpFinalizeBuildIndexImplTable = 46; 
-    ESchemeOpInitiateBuildIndexImplTable = 47; 
- 
-    ESchemeOpDropIndex = 48; 
-    ESchemeOpDropTableIndexAtMainTable = 49; 
- 
-    ESchemeOpCancelIndexBuild = 50; 
+    ESchemeOpAlterSubDomain = 25;
+    ESchemeOpAlterUserAttributes = 26;
+
+    // *************
+    // Unsafe operation. Nornally it is used for deleting database. It called by CMS, and CMS takes care of remaining resourses.
+    // If you apply it manually to an ordinary path in cases of emergenses, be aware of:
+    // 1 -- data transactions are ignored. Distributed transactions colud be broken so progress on another shards would be blocked forever
+    // 2 -- boorowed/loans blobs could be lost forever.
+    //
+    ESchemeOpForceDropUnsafe = 27;
+    //
+    // *************
+
+    ESchemeOpCreateIndexedTable = 28;
+    ESchemeOpCreateTableIndex = 29;
+    ESchemeOpCreateConsistentCopyTables = 30;
+    ESchemeOpDropTableIndex = 31;
+    ESchemeOpCreateExtSubDomain = 32;
+    ESchemeOpAlterExtSubDomain = 33;
+    ESchemeOpForceDropExtSubDomain = 34;
+    ESchemeOp_DEPRECATED_35 = 35;
+    ESchemeOpUpgradeSubDomain = 36;
+    ESchemeOpUpgradeSubDomainDecision = 37;
+    ESchemeOpCreateIndexBuild = 38;
+    ESchemeOpInitiateBuildIndexMainTable = 39;
+    ESchemeOpCreateLockForIndexBuild = 40;
+    ESchemeOpApplyIndexBuild = 41;
+    ESchemeOpFinalizeBuildIndexMainTable = 42;
+    ESchemeOpAlterTableIndex = 43;
+    ESchemeOpAlterSolomonVolume = 44;
+    ESchemeOpDropLock = 45;
+
+    ESchemeOpFinalizeBuildIndexImplTable = 46;
+    ESchemeOpInitiateBuildIndexImplTable = 47;
+
+    ESchemeOpDropIndex = 48;
+    ESchemeOpDropTableIndexAtMainTable = 49;
+
+    ESchemeOpCancelIndexBuild = 50;
 
     ESchemeOpCreateFileStore = 51;
     ESchemeOpAlterFileStore = 52;
@@ -1159,9 +1159,9 @@ enum EOperationType {
     ESchemeOpDropCdcStream = 68;
     ESchemeOpDropCdcStreamImpl = 69;
     ESchemeOpDropCdcStreamAtTable = 70;
- 
-    ESchemeOpMoveTable = 71; 
-    ESchemeOpMoveTableIndex = 72; 
+
+    ESchemeOpMoveTable = 71;
+    ESchemeOpMoveTableIndex = 72;
 
     // Sequences
     ESchemeOpCreateSequence = 73;
@@ -1174,57 +1174,57 @@ enum EOperationType {
     ESchemeOpDropReplication = 78;
 }
 
-message TApplyIf { 
-    optional uint64 PathId = 1; 
-    optional uint64 PathVersion = 2; 
-    optional uint64 LockedTxId = 3; 
-} 
- 
-message TUpgradeSubDomain { 
-    optional string Name = 1; 
- 
-    enum EDecision { 
-        Invalid = 0; 
-        Undo = 2; 
-        Commit = 3; 
-    } 
- 
-    optional EDecision Decision = 2; 
-} 
- 
-message TIndexBuildConfig { 
-    optional string Table = 1; 
-    optional TIndexCreationConfig Index = 2; 
-} 
- 
-message TIndexBuildControl { 
-    optional string TablePath = 1; 
-    optional string IndexName = 2; 
-    optional uint64 SnaphotTxId = 3; 
-    optional uint64 BuildIndexId = 4; 
-} 
- 
-message TLockConfig { 
-    optional string Name = 1; 
-} 
- 
-message TLockGuard { 
-    optional uint64 OwnerTxId = 1; 
-} 
- 
-message TDropIndex { 
-    optional string TableName = 1; 
-    optional string IndexName = 2; 
-} 
- 
+message TApplyIf {
+    optional uint64 PathId = 1;
+    optional uint64 PathVersion = 2;
+    optional uint64 LockedTxId = 3;
+}
+
+message TUpgradeSubDomain {
+    optional string Name = 1;
+
+    enum EDecision {
+        Invalid = 0;
+        Undo = 2;
+        Commit = 3;
+    }
+
+    optional EDecision Decision = 2;
+}
+
+message TIndexBuildConfig {
+    optional string Table = 1;
+    optional TIndexCreationConfig Index = 2;
+}
+
+message TIndexBuildControl {
+    optional string TablePath = 1;
+    optional string IndexName = 2;
+    optional uint64 SnaphotTxId = 3;
+    optional uint64 BuildIndexId = 4;
+}
+
+message TLockConfig {
+    optional string Name = 1;
+}
+
+message TLockGuard {
+    optional uint64 OwnerTxId = 1;
+}
+
+message TDropIndex {
+    optional string TableName = 1;
+    optional string IndexName = 2;
+}
+
 // Request for scheme modification
 // Has only one of the operations
 message TModifyScheme {
     optional string WorkingDir = 1;
     optional EOperationType OperationType = 2;
     optional bool Internal = 36 [default = false]; // internal operations are not generated directly by the user
-    optional bool FailOnExist = 50 [default = false]; // as a replacement for TEvModifySchemeTransaction.FailOnExist 
- 
+    optional bool FailOnExist = 50 [default = false]; // as a replacement for TEvModifySchemeTransaction.FailOnExist
+
     optional TMkDir MkDir = 3;
     optional TTableDescription CreateTable = 4;
     optional TPersQueueGroupDescription CreatePersQueueGroup = 5;
@@ -1234,30 +1234,30 @@ message TModifyScheme {
     optional TTableDescription AlterTable = 9;
     optional TSplitMergeTablePartitions SplitMergeTablePartitions = 10;
     optional TBackupTask Backup = 11;
-    optional NKikimrSubDomains.TSubDomainSettings SubDomain = 12; 
+    optional NKikimrSubDomains.TSubDomainSettings SubDomain = 12;
     optional TRtmrVolumeDescription CreateRtmrVolume = 13;
     optional TBlockStoreVolumeDescription CreateBlockStoreVolume = 14;
     optional TBlockStoreVolumeDescription AlterBlockStoreVolume = 15;
     optional TBlockStoreAssignOp AssignBlockStoreVolume = 16;
     optional TKesusDescription Kesus = 17;
-    optional TCreateSolomonVolume CreateSolomonVolume = 18; 
-    optional TAlterUserAttributes AlterUserAttributes = 19; 
-    repeated TApplyIf ApplyIf = 20; 
-    optional TIndexCreationConfig CreateTableIndex = 21; 
-    optional TIndexedTableCreationConfig CreateIndexedTable = 22; 
-    optional TConsistentTableCopyingConfig CreateConsistentCopyTables = 23; 
-    reserved 24; 
-    optional TUpgradeSubDomain UpgradeSubDomain = 25; 
-    optional TIndexBuildConfig InitiateIndexBuild = 26; 
-    optional TInitiateBuildIndexMainTable InitiateBuildIndexMainTable = 27; 
-    optional TLockConfig LockConfig = 28; 
-    optional TLockGuard LockGuard = 29; 
-    optional TIndexAlteringConfig AlterTableIndex = 30; 
-    optional TFinalizeBuildIndexMainTable FinalizeBuildIndexMainTable = 31; 
-    optional TIndexBuildControl ApplyIndexBuild = 32; 
-    optional TAlterSolomonVolume AlterSolomonVolume = 33; 
-    optional TDropIndex DropIndex = 34; 
-    optional TIndexBuildControl CancelIndexBuild = 35; 
+    optional TCreateSolomonVolume CreateSolomonVolume = 18;
+    optional TAlterUserAttributes AlterUserAttributes = 19;
+    repeated TApplyIf ApplyIf = 20;
+    optional TIndexCreationConfig CreateTableIndex = 21;
+    optional TIndexedTableCreationConfig CreateIndexedTable = 22;
+    optional TConsistentTableCopyingConfig CreateConsistentCopyTables = 23;
+    reserved 24;
+    optional TUpgradeSubDomain UpgradeSubDomain = 25;
+    optional TIndexBuildConfig InitiateIndexBuild = 26;
+    optional TInitiateBuildIndexMainTable InitiateBuildIndexMainTable = 27;
+    optional TLockConfig LockConfig = 28;
+    optional TLockGuard LockGuard = 29;
+    optional TIndexAlteringConfig AlterTableIndex = 30;
+    optional TFinalizeBuildIndexMainTable FinalizeBuildIndexMainTable = 31;
+    optional TIndexBuildControl ApplyIndexBuild = 32;
+    optional TAlterSolomonVolume AlterSolomonVolume = 33;
+    optional TDropIndex DropIndex = 34;
+    optional TIndexBuildControl CancelIndexBuild = 35;
     optional TFileStoreDescription CreateFileStore = 37;
     optional TFileStoreDescription AlterFileStore = 38;
     optional TRestoreTask Restore = 39;
@@ -1269,8 +1269,8 @@ message TModifyScheme {
     optional TCreateCdcStream CreateCdcStream = 45;
     optional TAlterCdcStream AlterCdcStream = 46;
     optional TDropCdcStream DropCdcStream = 47;
-    optional TMove MoveTable = 48; 
-    optional TMove MoveTableIndex = 49; 
+    optional TMove MoveTable = 48;
+    optional TMove MoveTableIndex = 49;
     optional TSequenceDescription Sequence = 51;
     optional TReplicationDescription Replication = 52;
 }
@@ -1285,9 +1285,9 @@ message TDescribeOptions {
     optional bool ReturnPartitionConfig = 2 [default = true];
     optional bool BackupInfo = 3 [default = false];
     optional bool ReturnPartitionStats = 4 [default = false];
-    optional bool ReturnChildren = 5 [default = true]; 
+    optional bool ReturnChildren = 5 [default = true];
     optional bool ReturnBoundaries = 6 [default = false];
-    optional bool ShowPrivateTable = 7 [default = false]; 
+    optional bool ShowPrivateTable = 7 [default = false];
     optional bool ReturnChannelsBinding = 8 [default = false];
 }
 
@@ -1309,17 +1309,17 @@ message TDescribePath {
 
 // Must be sync with Ydb::EntryType
 enum EPathType {
-    EPathTypeInvalid = 0; 
+    EPathTypeInvalid = 0;
     EPathTypeDir = 1;
     EPathTypeTable = 2;
     EPathTypePersQueueGroup = 3;
-    EPathTypeSubDomain = 4; 
+    EPathTypeSubDomain = 4;
     EPathTypeRtmrVolume = 5;
     EPathTypeBlockStoreVolume = 6;
     EPathTypeKesus = 7;
-    EPathTypeSolomonVolume = 8; 
+    EPathTypeSolomonVolume = 8;
     EPathTypeTableIndex = 9; // Used for abstract index
-    EPathTypeExtSubDomain = 10; 
+    EPathTypeExtSubDomain = 10;
     EPathTypeFileStore = 11;
     EPathTypeColumnStore = 12;
     EPathTypeColumnTable = 13;
@@ -1343,10 +1343,10 @@ enum EPathState {
     EPathStateDrop = 5;
     EPathStateCopying = 6;
     EPathStateBackup = 7;
-    EPathStateUpgrade = 8; 
-    EPathStateMigrated = 9; 
+    EPathStateUpgrade = 8;
+    EPathStateMigrated = 9;
     EPathStateRestore = 10;
-    EPathStateMoving = 11; 
+    EPathStateMoving = 11;
 }
 
 message TPathVersion {
@@ -1382,17 +1382,17 @@ message TPathVersion {
 message TDirEntry {
     optional string Name = 1;
     optional uint64 PathId = 2;
-    optional uint64 SchemeshardId = 3; // PathOwnerId 
+    optional uint64 SchemeshardId = 3; // PathOwnerId
     optional EPathType PathType = 4;
     optional bool CreateFinished = 5;
     optional uint64 CreateTxId = 6;
     optional uint64 CreateStep = 7;
-    optional uint64 ParentPathId = 8; // parentPathOwnerId ? 
+    optional uint64 ParentPathId = 8; // parentPathOwnerId ?
     optional EPathState PathState = 9;
     optional string Owner = 10;
     optional bytes ACL = 11;
     optional bytes EffectiveACL = 12;
-    optional uint64 PathVersion = 13; 
+    optional uint64 PathVersion = 13;
     optional EPathSubType PathSubType = 14;
     optional TPathVersion Version = 15;
 
@@ -1444,16 +1444,16 @@ message TPathDescription {
     repeated TLastBackupResult LastBackupResult = 7;
     optional NKikimrTableStats.TTableStats TableStats = 8;
     optional NKikimrTabletBase.TMetrics TabletMetrics = 9;
-    optional NKikimrSubDomains.TDomainDescription DomainDescription = 10; 
+    optional NKikimrSubDomains.TDomainDescription DomainDescription = 10;
     optional TRtmrVolumeDescription RtmrVolumeDescription = 11; // for rtmr volume
     optional TBlockStoreVolumeDescription BlockStoreVolumeDescription = 12;
     optional TKesusDescription Kesus = 13;
-    optional TSolomonVolumeDescription SolomonDescription = 14; 
+    optional TSolomonVolumeDescription SolomonDescription = 14;
     repeated NKikimrTableStats.TTableStats TablePartitionStats = 15;
-    repeated TUserAttribute UserAttributes = 16; 
-    optional TIndexDescription TableIndex = 17; 
+    repeated TUserAttribute UserAttributes = 16;
+    optional TIndexDescription TableIndex = 17;
     repeated NKikimrTabletBase.TMetrics TablePartitionMetrics = 18;
-    repeated uint64 AbandonedTenantsSchemeShards = 19; 
+    repeated uint64 AbandonedTenantsSchemeShards = 19;
     optional TFileStoreDescription FileStoreDescription = 20;
     optional TColumnStoreDescription ColumnStoreDescription = 21;
     optional TColumnTableDescription ColumnTableDescription = 22;
@@ -1473,7 +1473,7 @@ message TResourceProfile {
     //  2. Search for profile 'default' for tablet TYPE.
     //  3. Search for profile NAME for tablet 'Unknown'.
     //  4. Search for profile 'default' for tablet 'Unknown'.
-    //  5. Use default NKikimrSchemeOp.TResourceProfile value. 
+    //  5. Use default NKikimrSchemeOp.TResourceProfile value.
     optional NKikimrTabletBase.TTabletTypes.EType TabletType = 1 [default = Unknown];
     optional string Name = 2;
     // Memory used by tablet (not related to transactions and executor cache).

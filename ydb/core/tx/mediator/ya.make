@@ -1,22 +1,22 @@
-LIBRARY() 
- 
-OWNER( 
-    ddoarn 
+LIBRARY()
+
+OWNER(
+    ddoarn
     g:kikimr
-) 
- 
-SRCS( 
-    mediator.cpp 
-    mediator_impl.cpp 
-    mediator__init.cpp 
-    mediator__configure.cpp 
-    mediator__schema.cpp 
-    mediator__schema_upgrade.cpp 
-    tablet_queue.cpp 
-    execute_queue.cpp 
-) 
- 
-PEERDIR( 
+)
+
+SRCS(
+    mediator.cpp
+    mediator_impl.cpp
+    mediator__init.cpp
+    mediator__configure.cpp
+    mediator__schema.cpp
+    mediator__schema_upgrade.cpp
+    tablet_queue.cpp
+    execute_queue.cpp
+)
+
+PEERDIR(
     library/cpp/actors/core
     ydb/core/base
     ydb/core/engine/minikql
@@ -28,6 +28,6 @@ PEERDIR(
     ydb/core/tx/coordinator
     ydb/core/tx/time_cast
     ydb/core/util
-) 
- 
-END() 
+)
+
+END()

@@ -169,7 +169,7 @@ message TDomainsConfig {
     }
 
     message TStoragePoolType {
-        optional string Kind = 1; 
+        optional string Kind = 1;
         optional NKikimrBlobStorage.TDefineStoragePool PoolConfig = 2;
     }
 
@@ -191,9 +191,9 @@ message TDomainsConfig {
         optional string Name = 9;
         optional TTxLimits TxLimits = 10; // DEPRECATED
         repeated TStoragePoolType StoragePoolTypes = 11;
-        repeated fixed64 ExplicitMediators = 12; 
-        repeated fixed64 ExplicitCoordinators = 13; 
-        repeated fixed64 ExplicitAllocators = 14; 
+        repeated fixed64 ExplicitMediators = 12;
+        repeated fixed64 ExplicitCoordinators = 13;
+        repeated fixed64 ExplicitAllocators = 14;
         optional uint32 SchemeBoardSSId = 15;
     }
 
@@ -207,7 +207,7 @@ message TDomainsConfig {
 
     message TNamedCompactionPolicy {
         optional string Name = 1;
-        optional NKikimrSchemeOp.TCompactionPolicy Policy = 2; 
+        optional NKikimrSchemeOp.TCompactionPolicy Policy = 2;
     }
 
     message TSecurityConfig {
@@ -290,10 +290,10 @@ message TLogConfig {
     optional uint64 TimeThresholdMs = 14 [default = 1000];
 }
 
-message TCompileServiceConfig { 
-    optional uint32 InflightLimit = 1 [default = 100000]; 
-} 
- 
+message TCompileServiceConfig {
+    optional uint32 InflightLimit = 1 [default = 100000];
+}
+
 message TBootstrap {
     enum ETabletType {
         TX_DUMMY = 0;
@@ -307,7 +307,7 @@ message TBootstrap {
         FLAT_HIVE = 14;
         FLAT_BS_CONTROLLER = 15;
         FLAT_TX_PROXY = 17;
-        TX_ALLOCATOR = 18; 
+        TX_ALLOCATOR = 18;
 
         BS_DOMAINCONTROLLER = 20;
 
@@ -346,8 +346,8 @@ message TBootstrap {
     optional NKikimrNodeLimits.TNodeLimitsConfig NodeLimits = 5;
     optional NKikimrResourceBroker.TResourceBrokerConfig ResourceBroker = 6;
     optional NKikimrSharedCache.TSharedCacheConfig SharedCacheConfig = 7;
-    repeated NKikimrSchemeOp.TResourceProfile ResourceProfiles = 8; 
-    optional TCompileServiceConfig CompileServiceConfig = 9; //may be need special file with resource limits? 
+    repeated NKikimrSchemeOp.TResourceProfile ResourceProfiles = 8;
+    optional TCompileServiceConfig CompileServiceConfig = 9; //may be need special file with resource limits?
     optional bool EnableIntrospection = 10;
 }
 
@@ -425,7 +425,7 @@ message TChannelProfileConfig {
 
             // this option uses new BS configuration interface to obtain matching groups, and it must not be provided
             // with any of the above fields
-            optional string StoragePoolKind = 5; 
+            optional string StoragePoolKind = 5;
         }
 
         optional uint32 ProfileId = 1;
@@ -530,7 +530,7 @@ message TMessageBusConfig {
     repeated uint64 ProxyBindToProxy = 5;
     optional bool   StartTracingBusProxy = 6 [default = true]; // move to TMessageBusTraceServiceConfig
     optional string TracePath = 7;
-    optional uint64 CompileInflightLimit_Depricated = 8 [default = 100000]; 
+    optional uint64 CompileInflightLimit_Depricated = 8 [default = 100000];
 }
 
 message TTabletsConfig {
@@ -620,13 +620,13 @@ message TFeatureFlags {
     optional bool EnablePerOwnerChunkLimitForPDisk = 5 [default = false];
     optional bool TrimEntireDeviceOnStartup = 6 [default = false];
     optional bool EnableChunkGraceForPDisk = 7 [default = true];
-    optional bool AllowConsistentOperationsForSchemeShard = 8 [default = true]; 
+    optional bool AllowConsistentOperationsForSchemeShard = 8 [default = true];
     optional bool EnableSchemeBoard = 9 [default = true]; // deprecated: always true
     optional bool AllowYdbRequestsWithoutDatabase = 10 [default = true];
-    optional bool EnableExternalSubdomains = 11 [default = true]; 
+    optional bool EnableExternalSubdomains = 11 [default = true];
     optional bool AllowRecursiveMkDir = 12 [default = true]; // deprecated: always true
     optional bool AllowHugeKeyValueDeletes = 13 [default = true]; // delete when all clients limit deletes per request
-    optional bool SendSchemaVersionToDatashard = 14 [default = true]; // deprecated: always true 
+    optional bool SendSchemaVersionToDatashard = 14 [default = true]; // deprecated: always true
     optional bool EnableSchemeBoardCache = 15 [default = true]; // deprecated: always true
     optional bool EnableSystemViews = 16 [default = true];
     optional bool EnableExternalHive = 17 [default = true];
@@ -636,7 +636,7 @@ message TFeatureFlags {
     optional bool ImportantTabletsUseSystemPool = 21 [default = true];
     optional bool EnableOfflineSlaves = 22 [default = true]; // deprecated: always true
     optional bool CheckDatabaseAccessPermission = 23 [default = false];
-    optional bool AllowOnlineIndexBuild = 24 [default = true]; // deprecated: always true 
+    optional bool AllowOnlineIndexBuild = 24 [default = true]; // deprecated: always true
     optional bool EnablePersistentQueryStats = 25 [default = false];
     optional bool DisableDataShardBarrier = 26 [default = false];
     optional bool EnablePutBatchingForBlobStorage = 27 [default = true];
@@ -647,7 +647,7 @@ message TFeatureFlags {
     optional bool AllowUpdateChannelsBindingOfSolomonPartitions = 32 [default = false];
     optional bool DisableLegacyYql = 33 [default = true]; // deprecated: always true
     optional bool EnableDataColumnForIndexTable = 34 [default = true];
-    optional bool AllowServerlessStorageBillingForSchemeShard = 35 [default = false]; 
+    optional bool AllowServerlessStorageBillingForSchemeShard = 35 [default = false];
     optional bool EnableGracefulShutdown = 36 [default = true];
     optional bool EnableDrainOnShutdown = 37 [default = true];
     optional bool EnableConfigurationCache = 38 [default = false];
@@ -660,7 +660,7 @@ message TFeatureFlags {
     optional bool EnableVPatch = 45 [default = false];
     optional bool EnableMvccSnapshotReads = 46 [default = false];
     optional Tribool EnableMvcc = 47 [default = VALUE_TRUE];
-    optional bool EnableSchemeTransactionsAtSchemeShard = 48 [default = false]; 
+    optional bool EnableSchemeTransactionsAtSchemeShard = 48 [default = false];
     optional bool EnableArrowFormatAtDatashard = 49 [default = false];
     optional bool Enable3x3RequestsForMirror3DCMinLatencyPut = 50 [default = false];
     optional bool EnableBackgroundCompaction = 51 [default = true];
@@ -878,13 +878,13 @@ message TConfigsDispatcherConfig {
 
 message TCompactionPolicy {
     optional string Name = 1;
-    optional NKikimrSchemeOp.TCompactionPolicy CompactionPolicy = 2; 
+    optional NKikimrSchemeOp.TCompactionPolicy CompactionPolicy = 2;
 }
 
 message TExecutionPolicy {
     optional string Name = 1;
 
-    optional NKikimrSchemeOp.TPipelineConfig PipelineConfig = 2; 
+    optional NKikimrSchemeOp.TPipelineConfig PipelineConfig = 2;
     optional string ResourceProfile = 3;
     optional bool EnableFilterByKey = 4 [default = false];
     optional bool ExecutorFastLogPolicy = 5 [default  = true];
@@ -907,7 +907,7 @@ message TPartitioningPolicy {
 
 message TStoragePolicy {
     optional string Name = 1;
-    repeated NKikimrSchemeOp.TFamilyDescription ColumnFamilies = 2; 
+    repeated NKikimrSchemeOp.TFamilyDescription ColumnFamilies = 2;
 }
 
 message TReplicationPolicy {
@@ -1187,11 +1187,11 @@ message TImmediateControlsConfig {
     optional TTxLimitControls TxLimitControls = 2;
 };
 
-message TMeteringConfig { 
-    optional string MeteringFilePath = 1; 
+message TMeteringConfig {
+    optional string MeteringFilePath = 1;
     repeated string SystemBackupSIDs = 2;
-}; 
- 
+};
+
 message THiveTabletLimit {
     optional NKikimrTabletBase.TTabletTypes.EType Type = 1;
     optional uint64 MaxCount = 2;
@@ -1374,7 +1374,7 @@ message TAppConfig {
     optional NKikimrNetClassifier.TNetClassifierConfig NetClassifierConfig = 42;
     optional NKikimrNetClassifier.TNetClassifierDistributableConfig NetClassifierDistributableConfig = 43; // also dynamic via cms
     optional NKikimrResourceBroker.TResourceBrokerConfig ResourceBrokerConfig = 44;
-    optional TMeteringConfig MeteringConfig = 45; 
+    optional TMeteringConfig MeteringConfig = 45;
     optional THiveConfig HiveConfig = 46;
     optional TDataShardConfig DataShardConfig = 49;
     optional NYq.NConfig.TConfig YandexQueryConfig = 50;

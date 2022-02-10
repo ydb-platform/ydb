@@ -1,14 +1,14 @@
 IF (NOT WITH_VALGRIND)
     UNITTEST_FOR(ydb/core/tx/schemeshard)
- 
+
     OWNER(g:kikimr)
- 
+
     TIMEOUT(600)
- 
+
     SIZE(MEDIUM)
 
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/supp/ubsan_supp.inc)
- 
+
     PEERDIR(
         library/cpp/getopt
         library/cpp/regex/pcre

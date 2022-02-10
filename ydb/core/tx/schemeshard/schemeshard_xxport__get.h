@@ -6,10 +6,10 @@
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
 namespace NKikimr {
-namespace NSchemeShard { 
+namespace NSchemeShard {
 
 template <typename TInfo, typename TEvRequest, typename TEvResponse>
-struct TSchemeShard::TXxport::TTxGet: public TSchemeShard::TXxport::TTxBase { 
+struct TSchemeShard::TXxport::TTxGet: public TSchemeShard::TXxport::TTxBase {
     using TTxGetBase = TTxGet<TInfo, TEvRequest, TEvResponse>;
 
     typename TEvRequest::TPtr Request;
@@ -45,5 +45,5 @@ struct TSchemeShard::TXxport::TTxGet: public TSchemeShard::TXxport::TTxBase {
 
 }; // TTxGet
 
-} // NSchemeShard 
+} // NSchemeShard
 } // NKikimr

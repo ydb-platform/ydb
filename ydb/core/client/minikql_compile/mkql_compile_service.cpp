@@ -64,7 +64,7 @@ public:
     }
 
     TMiniKQLCompileService(size_t compileInflightLimit, THolder<NYql::IDbSchemeResolver>&& dbSchemeResolver)
-        : COMPILE_INFLIGHT_LIMIT(compileInflightLimit) 
+        : COMPILE_INFLIGHT_LIMIT(compileInflightLimit)
         , DbSchemeResolver(std::move(dbSchemeResolver))
     {
     }
@@ -181,7 +181,7 @@ const TActorId& GetMiniKQLCompileServiceID() {
     return miniKQLCompileServiceID;
 }
 
-IActor* CreateMiniKQLCompileService(size_t compileInflightLimit) { 
+IActor* CreateMiniKQLCompileService(size_t compileInflightLimit) {
     THolder<NYql::IDbSchemeResolver> resolver;
     return new TMiniKQLCompileService(compileInflightLimit, std::move(resolver));
 }

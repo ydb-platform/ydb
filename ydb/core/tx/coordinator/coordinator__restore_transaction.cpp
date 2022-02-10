@@ -1,5 +1,5 @@
-#include "coordinator_impl.h" 
- 
+#include "coordinator_impl.h"
+
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/tablet/tablet_exception.h>
 
@@ -8,8 +8,8 @@
 namespace NKikimr {
 namespace NFlatTxCoordinator {
 
-struct TTxCoordinator::TTxRestoreTransactions : public TTransactionBase<TTxCoordinator> { 
-    TTxRestoreTransactions(TSelf *coordinator) 
+struct TTxCoordinator::TTxRestoreTransactions : public TTransactionBase<TTxCoordinator> {
+    TTxRestoreTransactions(TSelf *coordinator)
         : TBase(coordinator)
     {}
 
@@ -43,7 +43,7 @@ struct TTxCoordinator::TTxRestoreTransactions : public TTransactionBase<TTxCoord
 
             while (!rowset.EndOfSet()) {
                 const TTxId txId = rowset.GetValue<Schema::AffectedSet::TransactionID>();
-                const TTabletId medId = rowset.GetValue<Schema::AffectedSet::MediatorID>(); 
+                const TTabletId medId = rowset.GetValue<Schema::AffectedSet::MediatorID>();
                 const ui64 affectedShardId = rowset.GetValue<Schema::AffectedSet::DataShardID>();
 
                 auto itTransaction = transactions.find(txId);
@@ -90,20 +90,20 @@ struct TTxCoordinator::TTxRestoreTransactions : public TTransactionBase<TTxCoord
 
     void Complete(const TActorContext &ctx) override {
         // start mediator queues
-        for (ui64 mediatorId: Self->Config.Mediators->List()) { 
+        for (ui64 mediatorId: Self->Config.Mediators->List()) {
             TMediator &mediator = Self->Mediator(mediatorId, ctx);
             Y_UNUSED(mediator);
         }
 
         // start plan process.
         Self->Become(&TSelf::StateWork);
-        Self->SignalTabletActive(ctx); 
+        Self->SignalTabletActive(ctx);
         Self->SchedulePlanTick(ctx);
     }
 };
 
 ITransaction* TTxCoordinator::CreateTxRestoreTransactions() {
-    return new TTxRestoreTransactions(this); 
+    return new TTxRestoreTransactions(this);
 }
 
 }

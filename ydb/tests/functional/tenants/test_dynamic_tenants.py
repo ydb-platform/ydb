@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
-import os 
+import os
 import logging
-import time 
+import time
 
 from hamcrest import (
     any_of,
@@ -10,40 +10,40 @@ from hamcrest import (
     equal_to,
     raises,
 )
- 
+
 import ydb
 
-from common import DBWithDynamicSlot, DBForStaticSlots, Runtime 
+from common import DBWithDynamicSlot, DBForStaticSlots, Runtime
 
 logger = logging.getLogger(__name__)
 
 
-class TestCreateTenantNoCPU(DBWithDynamicSlot): 
-    def test_case(self): 
-        database = '/Root/users/database' 
-        self.cluster.create_database( 
-            database, 
-            storage_pool_units_count={ 
-                'hdd': 1 
-            } 
+class TestCreateTenantNoCPU(DBWithDynamicSlot):
+    def test_case(self):
+        database = '/Root/users/database'
+        self.cluster.create_database(
+            database,
+            storage_pool_units_count={
+                'hdd': 1
+            }
         )
-        self.cluster.remove_database(database) 
+        self.cluster.remove_database(database)
 
- 
-class TestCreateTenantWithCPU(DBWithDynamicSlot): 
-    def test_case(self): 
-        database = '/Root/users/database' 
-        self.cluster.create_database( 
-            database, 
-            storage_pool_units_count={ 
-                'hdd': 1 
-            } 
-        ) 
+
+class TestCreateTenantWithCPU(DBWithDynamicSlot):
+    def test_case(self):
+        database = '/Root/users/database'
+        self.cluster.create_database(
+            database,
+            storage_pool_units_count={
+                'hdd': 1
+            }
+        )
         self.cluster.register_and_start_slots(database, count=1)
         self.cluster.wait_tenant_up(database)
-        self.cluster.remove_database(database) 
- 
- 
+        self.cluster.remove_database(database)
+
+
 class TestCreateTenantThenExecYQLEmptyDatabaseHeader(DBWithDynamicSlot):
     def test_case(self):
         database = '/Root/users/database'
@@ -96,8 +96,8 @@ class TestCreateTenantThenExecYQLEmptyDatabaseHeader(DBWithDynamicSlot):
                     session.transaction().execute("select key from `{}`;".format(table_path), commit_tx=True)
 
 
-class TestCreateTenantThenExecYQL(DBWithDynamicSlot): 
-    def test_case(self): 
+class TestCreateTenantThenExecYQL(DBWithDynamicSlot):
+    def test_case(self):
         database = '/Root/users/database'
 
         driver_config = ydb.DriverConfig(
@@ -110,11 +110,11 @@ class TestCreateTenantThenExecYQL(DBWithDynamicSlot):
             database + "/"
         )
 
-        self.cluster.create_database( 
-            database, 
-            storage_pool_units_count={ 
-                'hdd': 1 
-            } 
+        self.cluster.create_database(
+            database,
+            storage_pool_units_count={
+                'hdd': 1
+            }
         )
         self.cluster.register_and_start_slots(database, count=1)
         self.cluster.wait_tenant_up(database)
@@ -137,167 +137,167 @@ class TestCreateTenantThenExecYQL(DBWithDynamicSlot):
                         )
 
                         session.transaction().execute("select key from `{}`;".format(table_path), commit_tx=True)
- 
- 
-class TestCreateAndDropTenants(DBWithDynamicSlot): 
-    def test_case(self): 
-        for iNo in range(10): 
-            database = '/Root/users/database_%d' % iNo 
- 
-            driver_config = ydb.DriverConfig( 
-                "%s:%s" % (self.cluster.nodes[1].host, self.cluster.nodes[1].port), 
-                database 
-            ) 
- 
-            self.cluster.create_database( 
-                database, 
-                storage_pool_units_count={ 
-                    'hdd': 1 
-                } 
-            ) 
+
+
+class TestCreateAndDropTenants(DBWithDynamicSlot):
+    def test_case(self):
+        for iNo in range(10):
+            database = '/Root/users/database_%d' % iNo
+
+            driver_config = ydb.DriverConfig(
+                "%s:%s" % (self.cluster.nodes[1].host, self.cluster.nodes[1].port),
+                database
+            )
+
+            self.cluster.create_database(
+                database,
+                storage_pool_units_count={
+                    'hdd': 1
+                }
+            )
             self.cluster.register_and_start_slots(database, count=1)
             self.cluster.wait_tenant_up(database)
- 
-            with ydb.Driver(driver_config) as driver: 
-                with ydb.SessionPool(driver) as pool: 
-                    def create_table(session, table): 
-                        session.create_table( 
-                            os.path.join(database, table), 
-                            ydb.TableDescription() 
-                            .with_column(ydb.Column('id', ydb.OptionalType(ydb.DataType.Uint64))) 
-                            .with_column(ydb.Column('value', ydb.OptionalType(ydb.DataType.Utf8))) 
-                            .with_primary_key('id') 
-                        ) 
- 
-                    pool.retry_operation_sync(create_table, self.robust_retries, "table") 
-                    pool.retry_operation_sync(create_table, self.robust_retries, "table_for_rm") 
- 
-                    def write_some_data(session, table_one, table_two, value): 
-                        session.transaction().execute( 
-                            "upsert into {table_one} (id, value) " 
-                            "values (1u, \"{val_one}\");" 
-                            "upsert into {table_two} (id, value) " 
+
+            with ydb.Driver(driver_config) as driver:
+                with ydb.SessionPool(driver) as pool:
+                    def create_table(session, table):
+                        session.create_table(
+                            os.path.join(database, table),
+                            ydb.TableDescription()
+                            .with_column(ydb.Column('id', ydb.OptionalType(ydb.DataType.Uint64)))
+                            .with_column(ydb.Column('value', ydb.OptionalType(ydb.DataType.Utf8)))
+                            .with_primary_key('id')
+                        )
+
+                    pool.retry_operation_sync(create_table, self.robust_retries, "table")
+                    pool.retry_operation_sync(create_table, self.robust_retries, "table_for_rm")
+
+                    def write_some_data(session, table_one, table_two, value):
+                        session.transaction().execute(
+                            "upsert into {table_one} (id, value) "
+                            "values (1u, \"{val_one}\");"
+                            "upsert into {table_two} (id, value) "
                             "values (2u, \"{val_two}\");"
-                            "".format(table_one=table_one, val_one=value, 
-                                      table_two=table_two, val_two=value), 
-                            commit_tx=True, 
-                        ) 
-                    pool.retry_operation_sync(write_some_data, self.robust_retries, "table", "table_for_rm", database) 
- 
-                    def read_some_data(session, table_one, table_two): 
-                        result = session.transaction().execute( 
-                            "select id, value FROM {table_one};" 
-                            "select id, value FROM {table_two};" 
-                            "".format(table_one=table_one, table_two=table_two), 
-                            commit_tx=True, 
-                        ) 
-                        return result 
- 
-                    result = pool.retry_operation_sync(read_some_data, self.robust_retries, "table", "table_for_rm") 
- 
-                    assert len(result) == 2 
- 
-                    for lineNo in range(2): 
-                        assert_that( 
-                            (1 + lineNo, database), 
-                            equal_to( 
-                                (result[lineNo].rows[0].id, result[lineNo].rows[0].value) 
-                            ) 
-                        ) 
- 
-                    def drop_table(session, table): 
-                        session.drop_table( 
-                            os.path.join(database, table) 
-                        ) 
-                    pool.retry_operation_sync(drop_table, self.robust_retries, "table_for_rm") 
- 
-            self.cluster.remove_database(database) 
- 
- 
-class TestCreateAndDropTheSameTenant2(DBForStaticSlots): 
-    def test_case(self): 
-        for iNo in range(4): 
-            database = '/Root/users/database' 
-            value = database + "_" + str(iNo) 
- 
-            logger.debug("create_database") 
-            # without dynamic stots, allocate node manually as static slot 
-            self.cluster.create_database( 
-                database, 
-                storage_pool_units_count={ 
-                    'hdd': 1 
-                } 
-            ) 
- 
-            driver_config = ydb.DriverConfig( 
-                "%s:%s" % (self.cluster.nodes[1].host, self.cluster.nodes[1].port), 
-                database 
-            ) 
- 
-            with Runtime(self.cluster, database): 
-                with ydb.Driver(driver_config) as driver: 
-                    with ydb.SessionPool(driver, size=1) as pool: 
-                        def create_table(session, table): 
-                            session.create_table( 
-                                os.path.join(database, table), 
-                                ydb.TableDescription() 
-                                .with_column(ydb.Column('id', ydb.OptionalType(ydb.DataType.Uint64))) 
-                                .with_column(ydb.Column('value', ydb.OptionalType(ydb.DataType.Utf8))) 
-                                .with_primary_key('id') 
-                            ) 
- 
-                        logger.debug("create table one") 
-                        pool.retry_operation_sync(create_table, self.robust_retries, "table") 
-                        logger.debug("create table two") 
-                        pool.retry_operation_sync(create_table, None, "table_for_rm") 
- 
-                        def write_some_data(session, table_one, table_two, value): 
-                            session.transaction().execute( 
-                                "upsert into {table_one} (id, value) " 
-                                "values (1u, \"{val_one}\");" 
-                                "upsert into {table_two} (id, value) " 
+                            "".format(table_one=table_one, val_one=value,
+                                      table_two=table_two, val_two=value),
+                            commit_tx=True,
+                        )
+                    pool.retry_operation_sync(write_some_data, self.robust_retries, "table", "table_for_rm", database)
+
+                    def read_some_data(session, table_one, table_two):
+                        result = session.transaction().execute(
+                            "select id, value FROM {table_one};"
+                            "select id, value FROM {table_two};"
+                            "".format(table_one=table_one, table_two=table_two),
+                            commit_tx=True,
+                        )
+                        return result
+
+                    result = pool.retry_operation_sync(read_some_data, self.robust_retries, "table", "table_for_rm")
+
+                    assert len(result) == 2
+
+                    for lineNo in range(2):
+                        assert_that(
+                            (1 + lineNo, database),
+                            equal_to(
+                                (result[lineNo].rows[0].id, result[lineNo].rows[0].value)
+                            )
+                        )
+
+                    def drop_table(session, table):
+                        session.drop_table(
+                            os.path.join(database, table)
+                        )
+                    pool.retry_operation_sync(drop_table, self.robust_retries, "table_for_rm")
+
+            self.cluster.remove_database(database)
+
+
+class TestCreateAndDropTheSameTenant2(DBForStaticSlots):
+    def test_case(self):
+        for iNo in range(4):
+            database = '/Root/users/database'
+            value = database + "_" + str(iNo)
+
+            logger.debug("create_database")
+            # without dynamic stots, allocate node manually as static slot
+            self.cluster.create_database(
+                database,
+                storage_pool_units_count={
+                    'hdd': 1
+                }
+            )
+
+            driver_config = ydb.DriverConfig(
+                "%s:%s" % (self.cluster.nodes[1].host, self.cluster.nodes[1].port),
+                database
+            )
+
+            with Runtime(self.cluster, database):
+                with ydb.Driver(driver_config) as driver:
+                    with ydb.SessionPool(driver, size=1) as pool:
+                        def create_table(session, table):
+                            session.create_table(
+                                os.path.join(database, table),
+                                ydb.TableDescription()
+                                .with_column(ydb.Column('id', ydb.OptionalType(ydb.DataType.Uint64)))
+                                .with_column(ydb.Column('value', ydb.OptionalType(ydb.DataType.Utf8)))
+                                .with_primary_key('id')
+                            )
+
+                        logger.debug("create table one")
+                        pool.retry_operation_sync(create_table, self.robust_retries, "table")
+                        logger.debug("create table two")
+                        pool.retry_operation_sync(create_table, None, "table_for_rm")
+
+                        def write_some_data(session, table_one, table_two, value):
+                            session.transaction().execute(
+                                "upsert into {table_one} (id, value) "
+                                "values (1u, \"{val_one}\");"
+                                "upsert into {table_two} (id, value) "
                                 "values (2u, \"{val_two}\");"
-                                "".format(table_one=table_one, val_one=value, 
-                                          table_two=table_two, val_two=value), 
-                                commit_tx=True, 
-                            ) 
-                        logger.debug("write_some_data") 
-                        pool.retry_operation_sync(write_some_data, None, "table", "table_for_rm", value) 
- 
-                        def read_some_data(session, table_one, table_two): 
-                            result = session.transaction().execute( 
-                                "select id, value FROM {table_one};" 
-                                "select id, value FROM {table_two};" 
-                                "".format(table_one=table_one, table_two=table_two), 
-                                commit_tx=True, 
-                            ) 
-                            return result 
- 
-                        logger.debug("read_some_data") 
-                        result = pool.retry_operation_sync(read_some_data, None, "table", "table_for_rm") 
- 
-                        assert len(result) == 2 
- 
-                        for lineNo in range(2): 
-                            assert_that( 
-                                (1 + lineNo, value), 
-                                equal_to( 
-                                    (result[lineNo].rows[0].id, result[lineNo].rows[0].value) 
-                                ) 
-                            ) 
- 
-                        def drop_table(session, table): 
-                            session.drop_table( 
-                                os.path.join(database, table) 
-                            ) 
- 
-                        logger.debug("drop table two") 
-                        pool.retry_operation_sync(drop_table, None, "table_for_rm") 
- 
-            logger.debug("remove_database") 
-            self.cluster.remove_database(database) 
- 
-            logger.debug("done %d", iNo) 
+                                "".format(table_one=table_one, val_one=value,
+                                          table_two=table_two, val_two=value),
+                                commit_tx=True,
+                            )
+                        logger.debug("write_some_data")
+                        pool.retry_operation_sync(write_some_data, None, "table", "table_for_rm", value)
+
+                        def read_some_data(session, table_one, table_two):
+                            result = session.transaction().execute(
+                                "select id, value FROM {table_one};"
+                                "select id, value FROM {table_two};"
+                                "".format(table_one=table_one, table_two=table_two),
+                                commit_tx=True,
+                            )
+                            return result
+
+                        logger.debug("read_some_data")
+                        result = pool.retry_operation_sync(read_some_data, None, "table", "table_for_rm")
+
+                        assert len(result) == 2
+
+                        for lineNo in range(2):
+                            assert_that(
+                                (1 + lineNo, value),
+                                equal_to(
+                                    (result[lineNo].rows[0].id, result[lineNo].rows[0].value)
+                                )
+                            )
+
+                        def drop_table(session, table):
+                            session.drop_table(
+                                os.path.join(database, table)
+                            )
+
+                        logger.debug("drop table two")
+                        pool.retry_operation_sync(drop_table, None, "table_for_rm")
+
+            logger.debug("remove_database")
+            self.cluster.remove_database(database)
+
+            logger.debug("done %d", iNo)
 
 
 class TestCheckAccess(DBWithDynamicSlot):

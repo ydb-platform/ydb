@@ -7,7 +7,7 @@
 namespace NKikimr {
 
 Y_UNIT_TEST_SUITE(TRUCalculatorTests) {
-    using TRUCalculator = NSchemeShard::TRUCalculator; 
+    using TRUCalculator = NSchemeShard::TRUCalculator;
 
     Y_UNIT_TEST(TestReadTable) {
         const ui64 costPerMB = 128; // 1 MB = 128 RU

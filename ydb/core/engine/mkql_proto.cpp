@@ -287,12 +287,12 @@ bool CellsFromTuple(const NKikimrMiniKQL::TType* tupleType,
         CASE_SIMPLE_TYPE(Uint64, ui64,  Uint64);
         CASE_SIMPLE_TYPE(Float,  float, Float);
         CASE_SIMPLE_TYPE(Double, double,Double);
-        CASE_SIMPLE_TYPE(Date,   ui16,  Uint32); 
-        CASE_SIMPLE_TYPE(Datetime, ui32, Uint32); 
-        CASE_SIMPLE_TYPE(Timestamp, ui64, Uint64); 
-        CASE_SIMPLE_TYPE(Interval, i64, Int64); 
+        CASE_SIMPLE_TYPE(Date,   ui16,  Uint32);
+        CASE_SIMPLE_TYPE(Datetime, ui32, Uint32);
+        CASE_SIMPLE_TYPE(Timestamp, ui64, Uint64);
+        CASE_SIMPLE_TYPE(Interval, i64, Int64);
 
- 
+
 #undef CASE_SIMPLE_TYPE
 
         case NScheme::NTypeIds::Yson:
@@ -390,23 +390,23 @@ bool CellToValue(NScheme::TTypeId typeId, const TCell& c, NKikimrMiniKQL::TValue
         val.MutableOptional()->SetDouble(ReadUnaligned<double>(c.Data()));
         break;
 
-    case NScheme::NTypeIds::Date: 
-        Y_VERIFY(c.Size() == sizeof(ui16)); 
-        val.MutableOptional()->SetUint32(ReadUnaligned<i16>(c.Data())); 
-        break; 
-    case NScheme::NTypeIds::Datetime: 
-        Y_VERIFY(c.Size() == sizeof(ui32)); 
-        val.MutableOptional()->SetUint32(ReadUnaligned<ui32>(c.Data())); 
-        break; 
-    case NScheme::NTypeIds::Timestamp: 
-        Y_VERIFY(c.Size() == sizeof(ui64)); 
-        val.MutableOptional()->SetUint64(ReadUnaligned<ui64>(c.Data())); 
-        break; 
-    case NScheme::NTypeIds::Interval: 
-        Y_VERIFY(c.Size() == sizeof(i64)); 
-        val.MutableOptional()->SetInt64(ReadUnaligned<i64>(c.Data())); 
-        break; 
- 
+    case NScheme::NTypeIds::Date:
+        Y_VERIFY(c.Size() == sizeof(ui16));
+        val.MutableOptional()->SetUint32(ReadUnaligned<i16>(c.Data()));
+        break;
+    case NScheme::NTypeIds::Datetime:
+        Y_VERIFY(c.Size() == sizeof(ui32));
+        val.MutableOptional()->SetUint32(ReadUnaligned<ui32>(c.Data()));
+        break;
+    case NScheme::NTypeIds::Timestamp:
+        Y_VERIFY(c.Size() == sizeof(ui64));
+        val.MutableOptional()->SetUint64(ReadUnaligned<ui64>(c.Data()));
+        break;
+    case NScheme::NTypeIds::Interval:
+        Y_VERIFY(c.Size() == sizeof(i64));
+        val.MutableOptional()->SetInt64(ReadUnaligned<i64>(c.Data()));
+        break;
+
     case NScheme::NTypeIds::JsonDocument:
     case NScheme::NTypeIds::String:
     case NScheme::NTypeIds::DyNumber:

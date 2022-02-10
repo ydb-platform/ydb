@@ -6,47 +6,47 @@
 #include <ydb/core/tx/scheme_board/populator.h>
 
 namespace NKikimr {
-namespace NSchemeShard { 
+namespace NSchemeShard {
 
 using namespace NTabletFlatExecutor;
 
-struct TSchemeShard::TTxInitPopulator : public TTransactionBase<TSchemeShard> { 
+struct TSchemeShard::TTxInitPopulator : public TTransactionBase<TSchemeShard> {
     using TDescription = NSchemeBoard::TTwoPartDescription;
 
     TMap<TPathId, TDescription> Descriptions;
-    TSideEffects::TPublications DelayedPublications; 
+    TSideEffects::TPublications DelayedPublications;
 
-    explicit TTxInitPopulator(TSelf *self, TSideEffects::TPublications&& publications) 
+    explicit TTxInitPopulator(TSelf *self, TSideEffects::TPublications&& publications)
         : TBase(self)
-        , DelayedPublications(publications) 
+        , DelayedPublications(publications)
     {
     }
 
-    TTxType GetTxType() const override { return TXTYPE_INIT_POPULATOR; } 
- 
-    bool Execute(TTransactionContext&, const TActorContext& ctx) override {
-        Y_VERIFY(Self->IsShemeShardConfigured()); 
- 
-        for (auto item: Self->PathsById) { 
-            TPathId pathId = item.first; 
-            TPathElement::TPtr pathEl = item.second; 
+    TTxType GetTxType() const override { return TXTYPE_INIT_POPULATOR; }
 
-            // KIKIMR-13173 
-            // planned to drop pathes are added to populator 
-            // also such pathes (like BSV PQ) can be considered as deleted by path description however they aren't dropped jet 
- 
-            if (pathEl->Dropped())   { 
-                // migrated pathes should be published directly 
-                // but once they published on the quorum replicas as deleted directly, further publishing is unnecessary 
-                // actually they are publishing strongly on the quorum as part of deleting operation 
-                // so it's ok to skip migrated pathes is they has beem marked as deleted 
+    bool Execute(TTransactionContext&, const TActorContext& ctx) override {
+        Y_VERIFY(Self->IsShemeShardConfigured());
+
+        for (auto item: Self->PathsById) {
+            TPathId pathId = item.first;
+            TPathElement::TPtr pathEl = item.second;
+
+            // KIKIMR-13173
+            // planned to drop pathes are added to populator
+            // also such pathes (like BSV PQ) can be considered as deleted by path description however they aren't dropped jet
+
+            if (pathEl->Dropped())   {
+                // migrated pathes should be published directly
+                // but once they published on the quorum replicas as deleted directly, further publishing is unnecessary
+                // actually they are publishing strongly on the quorum as part of deleting operation
+                // so it's ok to skip migrated pathes is they has beem marked as deleted
                 continue;
             }
 
-            if (!Self->PathIsActive(pathId)) { 
-                continue; 
-            } 
- 
+            if (!Self->PathIsActive(pathId)) {
+                continue;
+            }
+
             auto result = DescribePath(Self, ctx, pathId);
             TDescription description(std::move(result->PreSerializedData), std::move(result->Record));
             Descriptions.emplace(pathId, std::move(description));
@@ -63,21 +63,21 @@ struct TSchemeShard::TTxInitPopulator : public TTransactionBase<TSchemeShard> {
 
         IActor* populator = CreateSchemeBoardPopulator(
             tabletId, Self->Generation(), boardSSId,
-            std::move(Descriptions), Self->NextLocalPathId 
+            std::move(Descriptions), Self->NextLocalPathId
         );
- 
-        Y_VERIFY(!Self->SchemeBoardPopulator); 
+
+        Y_VERIFY(!Self->SchemeBoardPopulator);
         Self->SchemeBoardPopulator = Self->Register(populator);
 
         Self->PublishToSchemeBoard(std::move(DelayedPublications), ctx);
         Self->SignalTabletActive(ctx);
     }
 
-}; // TSchemeShard::TTxInitPopulator 
+}; // TSchemeShard::TTxInitPopulator
 
-NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxInitPopulator(TSideEffects::TPublications&& publications) { 
-    return new TTxInitPopulator(this, std::move(publications)); 
+NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxInitPopulator(TSideEffects::TPublications&& publications) {
+    return new TTxInitPopulator(this, std::move(publications));
 }
 
-} // NSchemeShard 
+} // NSchemeShard
 } // NKikimr

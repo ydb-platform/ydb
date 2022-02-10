@@ -28,7 +28,7 @@ public:
 
         SendReplyAutoPtr(response);
 
-        this->Die(ctx); 
+        this->Die(ctx);
     }
 };
 

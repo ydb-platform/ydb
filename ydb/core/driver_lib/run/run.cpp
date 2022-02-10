@@ -145,39 +145,39 @@ public:
             const ui64 schemeRoot = domain.HasSchemeRoot() ? domain.GetSchemeRoot() : 0;
             const ui64 planResolution = domain.HasPlanResolution() ? domain.GetPlanResolution() : 500;
             const TString domainName = domain.HasName() ? domain.GetName() : Sprintf("domain-%" PRIu32, domainId);
-            TDomainsInfo::TDomain::TStoragePoolKinds poolTypes; 
+            TDomainsInfo::TDomain::TStoragePoolKinds poolTypes;
             for (auto &type : domain.GetStoragePoolTypes()) {
                 Y_VERIFY(!poolTypes.contains(type.GetKind()), "duplicated slot type");
-                poolTypes[type.GetKind()] = type.GetPoolConfig(); 
+                poolTypes[type.GetKind()] = type.GetPoolConfig();
             }
 
-            bool isExplicitTabletIds = domain.ExplicitCoordinatorsSize() + domain.ExplicitMediatorsSize() + domain.ExplicitAllocatorsSize(); 
- 
+            bool isExplicitTabletIds = domain.ExplicitCoordinatorsSize() + domain.ExplicitMediatorsSize() + domain.ExplicitAllocatorsSize();
+
             const ui32 defaultSSId = domainId;
             const ui32 schemeBoardSSId = (domain.HasSchemeBoardSSId() && domain.GetSchemeBoardSSId()) ? domain.GetSchemeBoardSSId() : defaultSSId;
             Y_VERIFY(Find(domain.GetSSId(), defaultSSId) != domain.GetSSId().end());
             Y_VERIFY(Find(domain.GetSSId(), schemeBoardSSId) != domain.GetSSId().end());
 
-            TDomainsInfo::TDomain::TPtr domainPtr = nullptr; 
-            if (isExplicitTabletIds) { 
-                domainPtr = TDomainsInfo::TDomain::ConstructDomainWithExplicitTabletIds(domainName, domainId, schemeRoot, 
+            TDomainsInfo::TDomain::TPtr domainPtr = nullptr;
+            if (isExplicitTabletIds) {
+                domainPtr = TDomainsInfo::TDomain::ConstructDomainWithExplicitTabletIds(domainName, domainId, schemeRoot,
                                                                                      defaultSSId, schemeBoardSSId, domain.GetSSId(),
-                                                                                     domainId, domain.GetHiveUid(), 
+                                                                                     domainId, domain.GetHiveUid(),
                                                                                      planResolution,
-                                                                                     domain.GetExplicitCoordinators(), 
-                                                                                     domain.GetExplicitMediators(), 
-                                                                                     domain.GetExplicitAllocators(), 
-                                                                                     poolTypes); 
-            } else { 
-                domainPtr = TDomainsInfo::TDomain::ConstructDomain(domainName, domainId, schemeRoot, 
+                                                                                     domain.GetExplicitCoordinators(),
+                                                                                     domain.GetExplicitMediators(),
+                                                                                     domain.GetExplicitAllocators(),
+                                                                                     poolTypes);
+            } else {
+                domainPtr = TDomainsInfo::TDomain::ConstructDomain(domainName, domainId, schemeRoot,
                                                                 defaultSSId, schemeBoardSSId, domain.GetSSId(),
-                                                                domainId, domain.GetHiveUid(), 
+                                                                domainId, domain.GetHiveUid(),
                                                                 planResolution,
-                                                                domain.GetCoordinator(), domain.GetMediator(), 
-                                                                domain.GetProxy(), poolTypes); 
-            } 
- 
-            appData->DomainsInfo->AddDomain(domainPtr.Release()); 
+                                                                domain.GetCoordinator(), domain.GetMediator(),
+                                                                domain.GetProxy(), poolTypes);
+            }
+
+            appData->DomainsInfo->AddDomain(domainPtr.Release());
         }
 
         for (const NKikimrConfig::TDomainsConfig::THiveConfig &hiveConfig : Config.GetDomainsConfig().GetHiveConfig()) {
@@ -200,7 +200,7 @@ public:
             appData->DefaultUserSIDs = std::move(defaultUserSIDs);
         }
         appData->AllAuthenticatedUsers = securityConfig.GetAllAuthenticatedUsers();
- 
+
         appData->FeatureFlags = Config.GetFeatureFlags();
         appData->AllowHugeKeyValueDeletes = Config.GetFeatureFlags().GetAllowHugeKeyValueDeletes();
         appData->EnableKqpSpilling = Config.GetTableServiceConfig().GetSpillingServiceConfig().GetLocalFileConfig().GetEnable();
@@ -249,9 +249,9 @@ public:
                 }
                 const ui64 pDiskCategory = channel.GetPDiskCategory();
                 const NKikimrBlobStorage::TVDiskKind::EVDiskKind vDiskCategory = static_cast<NKikimrBlobStorage::TVDiskKind::EVDiskKind>(channel.GetVDiskCategory());
- 
-                const TString kind = channel.GetStoragePoolKind(); 
-                outProfile.Channels.push_back(TChannelProfiles::TProfile::TChannel(erasure, pDiskCategory, vDiskCategory, kind)); 
+
+                const TString kind = channel.GetStoragePoolKind();
+                outProfile.Channels.push_back(TChannelProfiles::TProfile::TChannel(erasure, pDiskCategory, vDiskCategory, kind));
                 ++channelIdx;
             }
         }
@@ -1197,27 +1197,27 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
         sil->AddServiceInitializer(new TRestartsCountPublisher(runConfig));
     }
     if (serviceMask.EnableBootstrapper) {
-        sil->AddServiceInitializer(new TBootstrapperInitializer(runConfig)); 
+        sil->AddServiceInitializer(new TBootstrapperInitializer(runConfig));
     }
     if (serviceMask.EnableMediatorTimeCastProxy) {
         sil->AddServiceInitializer(new TMediatorTimeCastProxyInitializer(runConfig));
     }
-    if (serviceMask.EnableTxProxy) { 
-        sil->AddServiceInitializer(new TTxProxyInitializer(runConfig)); 
-    } 
+    if (serviceMask.EnableTxProxy) {
+        sil->AddServiceInitializer(new TTxProxyInitializer(runConfig));
+    }
 
     if (serviceMask.EnableSecurityServices) {
         sil->AddServiceInitializer(new TSecurityServicesInitializer(runConfig, ModuleFactories));
     }
 
-    if (BusServer && serviceMask.EnableMessageBusServices) { 
-        sil->AddServiceInitializer(new TMessageBusServicesInitializer(runConfig, *BusServer)); 
+    if (BusServer && serviceMask.EnableMessageBusServices) {
+        sil->AddServiceInitializer(new TMessageBusServicesInitializer(runConfig, *BusServer));
     }
 
-    if (serviceMask.EnableMiniKQLCompileService) { 
-        sil->AddServiceInitializer(new TMiniKQLCompileServiceInitializer(runConfig)); 
-    } 
- 
+    if (serviceMask.EnableMiniKQLCompileService) {
+        sil->AddServiceInitializer(new TMiniKQLCompileServiceInitializer(runConfig));
+    }
+
     if (serviceMask.EnableHealthCheckService) {
         sil->AddServiceInitializer(new THealthCheckInitializer(runConfig));
     }
@@ -1242,7 +1242,7 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
     }
 
     if (serviceMask.EnableViewerService) {
-        sil->AddServiceInitializer(new TViewerInitializer(runConfig)); 
+        sil->AddServiceInitializer(new TViewerInitializer(runConfig));
     }
     if (serviceMask.EnableLoadService) {
         sil->AddServiceInitializer(new TLoadInitializer(runConfig));
@@ -1303,10 +1303,10 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
         sil->AddServiceInitializer(new TSysViewServiceInitializer(runConfig));
     }
 
-    if (serviceMask.EnableMeteringWriter) { 
-        sil->AddServiceInitializer(new TMeteringWriterInitializer(runConfig)); 
-    } 
- 
+    if (serviceMask.EnableMeteringWriter) {
+        sil->AddServiceInitializer(new TMeteringWriterInitializer(runConfig));
+    }
+
     if (serviceMask.EnableLongTxService) {
         sil->AddServiceInitializer(new TLongTxServiceInitializer(runConfig));
     }
@@ -1514,12 +1514,12 @@ void TKikimrRunner::SetSignalHandlers() {
 #endif
     signal(SIGINT, &TKikimrRunner::OnTerminate);
     signal(SIGTERM, &TKikimrRunner::OnTerminate);
- 
-#if !defined(_win_) 
-    SetAsyncSignalHandler(SIGHUP, [](int) { 
-        TLogBackend::ReopenAllBackends(); 
-    }); 
-#endif 
+
+#if !defined(_win_)
+    SetAsyncSignalHandler(SIGHUP, [](int) {
+        TLogBackend::ReopenAllBackends();
+    });
+#endif
 }
 
 void TKikimrRunner::InitializeRegistries(const TKikimrRunConfig& runConfig) {

@@ -106,15 +106,15 @@ class HiveClient(object):
             timeout=TIMEOUT
         )
 
-    def set_max_boot_batch_size(self, max_boot_batch_size=10): 
+    def set_max_boot_batch_size(self, max_boot_batch_size=10):
         self.__get(
-            self.__url + "&page=Settings&maxBootBatchSize={max_boot_batch_size}".format( 
-                max_boot_batch_size=max_boot_batch_size 
-            ), 
-            timeout=TIMEOUT 
-        ) 
+            self.__url + "&page=Settings&maxBootBatchSize={max_boot_batch_size}".format(
+                max_boot_batch_size=max_boot_batch_size
+            ),
+            timeout=TIMEOUT
+        )
 
- 
+
 class SwaggerClient(object):
     def __init__(self, host, port, hive_id=DEFAULT_HIVE_ID):
         super(SwaggerClient, self).__init__()

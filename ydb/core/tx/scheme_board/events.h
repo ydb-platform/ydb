@@ -15,7 +15,7 @@
 namespace NKikimr {
 
 struct TSchemeBoardEvents {
-    using TDescribeSchemeResult = NKikimrScheme::TEvDescribeSchemeResult; 
+    using TDescribeSchemeResult = NKikimrScheme::TEvDescribeSchemeResult;
 
     enum EEv {
         // populator events
@@ -52,13 +52,13 @@ struct TSchemeBoardEvents {
 
     // populator events
     struct TEvRequestDescribe: public TEventLocal<TEvRequestDescribe, EvRequestDescribe> {
-        const TPathId PathId; 
+        const TPathId PathId;
         const TActorId Replica;
 
         TEvRequestDescribe() = default;
 
         explicit TEvRequestDescribe(const TPathId pathId, const TActorId& replica)
-            : PathId(pathId) 
+            : PathId(pathId)
             , Replica(replica)
         {
         }
@@ -66,9 +66,9 @@ struct TSchemeBoardEvents {
 
     struct TEvDescribeResult: public TEventLocal<TEvDescribeResult, EvDescribeResult> {
         const bool Commit = false;
-        const TLocalPathId DeletedPathBegin = 0; // The points are inclusive 
-        const TLocalPathId DeletedPathEnd = 0; // [DeletedPathBegin; DeletedPathEnd] 
-        const TLocalPathId MigratedPathId = InvalidLocalPathId; 
+        const TLocalPathId DeletedPathBegin = 0; // The points are inclusive
+        const TLocalPathId DeletedPathEnd = 0; // [DeletedPathBegin; DeletedPathEnd]
+        const TLocalPathId MigratedPathId = InvalidLocalPathId;
         NSchemeBoard::TTwoPartDescription Description;
 
         TEvDescribeResult() = default;
@@ -95,36 +95,36 @@ struct TSchemeBoardEvents {
         {
         }
 
-        explicit TEvDescribeResult( 
-                TLocalPathId deletedPathBegin, TLocalPathId deletedPathEnd, 
-                TLocalPathId migratedPathId) 
-            : Commit(false) 
-            , DeletedPathBegin(deletedPathBegin) 
-            , DeletedPathEnd(deletedPathEnd) 
-            , MigratedPathId(migratedPathId) 
-        { 
-        } 
- 
+        explicit TEvDescribeResult(
+                TLocalPathId deletedPathBegin, TLocalPathId deletedPathEnd,
+                TLocalPathId migratedPathId)
+            : Commit(false)
+            , DeletedPathBegin(deletedPathBegin)
+            , DeletedPathEnd(deletedPathEnd)
+            , MigratedPathId(migratedPathId)
+        {
+        }
+
         bool HasDeletedLocalPathIds() const {
             return DeletedPathBegin != 0;
         }
 
         bool HasMigratedPath() const {
-            return MigratedPathId != InvalidLocalPathId; 
-        } 
- 
+            return MigratedPathId != InvalidLocalPathId;
+        }
+
         bool HasDescription() const {
             return Description;
         }
- 
-        TString ToString() const override { 
-            return TStringBuilder() << ToStringHeader() << " {" 
-                << " Commit: " << (Commit ? "true" : "false") 
-                << " DeletedPathBegin: " << DeletedPathBegin 
-                << " DeletedPathEnd: " << DeletedPathEnd 
-                << " msg: " << Description.Record.ShortDebugString() 
-            << " }"; 
-        } 
+
+        TString ToString() const override {
+            return TStringBuilder() << ToStringHeader() << " {"
+                << " Commit: " << (Commit ? "true" : "false")
+                << " DeletedPathBegin: " << DeletedPathBegin
+                << " DeletedPathEnd: " << DeletedPathEnd
+                << " msg: " << Description.Record.ShortDebugString()
+            << " }";
+        }
     };
 
     struct TEvRequestUpdate: public TEventLocal<TEvRequestUpdate, EvRequestUpdate> {
@@ -198,28 +198,28 @@ struct TSchemeBoardEvents {
         ) {
             Record.SetOwner(owner);
             Record.SetGeneration(generation);
-            if (describeSchemeResult.HasPath()) { 
-                Record.SetPath(describeSchemeResult.GetPath()); 
-            } 
-            if (describeSchemeResult.HasPathDescription() 
-                && describeSchemeResult.GetPathDescription().HasSelf()) { 
-                Record.SetPathOwnerId(describeSchemeResult.GetPathDescription().GetSelf().GetSchemeshardId()); 
-            } 
+            if (describeSchemeResult.HasPath()) {
+                Record.SetPath(describeSchemeResult.GetPath());
+            }
+            if (describeSchemeResult.HasPathDescription()
+                && describeSchemeResult.GetPathDescription().HasSelf()) {
+                Record.SetPathOwnerId(describeSchemeResult.GetPathDescription().GetSelf().GetSchemeshardId());
+            }
             Record.SetLocalPathId(describeSchemeResult.GetPathId());
-            if (describeSchemeResult.HasPathOwnerId()) { 
-                Record.SetPathOwnerId(describeSchemeResult.GetPathOwnerId()); 
-            } 
+            if (describeSchemeResult.HasPathOwnerId()) {
+                Record.SetPathOwnerId(describeSchemeResult.GetPathOwnerId());
+            }
             Record.SetIsDeletion(isDeletion);
         }
- 
+
         void SetDescribeSchemeResult(TString preSerialized) {
             PreSerializedData = NSchemeBoard::PreSerializedProtoField(
                 std::move(preSerialized), Record.kDescribeSchemeResultFieldNumber);
         }
- 
+
         void SetDescribeSchemeResult(TDescribeSchemeResult describeSchemeResult) {
             *Record.MutableDescribeSchemeResult() = std::move(describeSchemeResult);
-        } 
+        }
 
         void SetDescribeSchemeResult(TString preSerialized, TDescribeSchemeResult describeSchemeResult) {
             SetDescribeSchemeResult(std::move(preSerialized));
@@ -237,22 +237,22 @@ struct TSchemeBoardEvents {
         explicit TEvUpdateAck(
             const ui64 owner,
             const ui64 generation,
-            const TPathId pathId, 
+            const TPathId pathId,
             const ui64 version
         ) {
             Record.SetOwner(owner);
             Record.SetGeneration(generation);
-            Record.SetLocalPathId(pathId.LocalPathId); 
+            Record.SetLocalPathId(pathId.LocalPathId);
             Record.SetVersion(version);
-            Record.SetPathOwnerId(pathId.OwnerId); 
+            Record.SetPathOwnerId(pathId.OwnerId);
         }
- 
-        TPathId GetPathId() const { 
-            return TPathId( 
-                Record.HasPathOwnerId() ? Record.GetPathOwnerId() : Record.GetOwner(), 
-                Record.GetLocalPathId() 
+
+        TPathId GetPathId() const {
+            return TPathId(
+                Record.HasPathOwnerId() ? Record.GetPathOwnerId() : Record.GetOwner(),
+                Record.GetLocalPathId()
             );
-        } 
+        }
     };
 
     struct TEvCommitRequest: public TEventPB<TEvCommitRequest, NKikimrSchemeBoard::TEvCommitGeneration, EvCommitRequest> {
@@ -284,7 +284,7 @@ struct TSchemeBoardEvents {
         }
 
         explicit TEvSubscribe(const TPathId& pathId, const ui64 domainOwnerId) {
-            Record.SetPathOwnerId(pathId.OwnerId); 
+            Record.SetPathOwnerId(pathId.OwnerId);
             Record.SetLocalPathId(pathId.LocalPathId);
             Record.SetDomainOwnerId(domainOwnerId);
             FillCapabilities(Record);
@@ -303,7 +303,7 @@ struct TSchemeBoardEvents {
         }
 
         explicit TEvUnsubscribe(const TPathId& pathId) {
-            Record.SetPathOwnerId(pathId.OwnerId); 
+            Record.SetPathOwnerId(pathId.OwnerId);
             Record.SetLocalPathId(pathId.LocalPathId);
         }
     };
@@ -323,7 +323,7 @@ struct TSchemeBoardEvents {
         }
 
         explicit TEvNotifyBuilder(const TPathId& pathId, const bool isDeletion = false) {
-            Record.SetPathOwnerId(pathId.OwnerId); 
+            Record.SetPathOwnerId(pathId.OwnerId);
             Record.SetLocalPathId(pathId.LocalPathId);
             Record.SetIsDeletion(isDeletion);
         }
@@ -334,7 +334,7 @@ struct TSchemeBoardEvents {
             const bool isDeletion = false
         ) {
             Record.SetPath(path);
-            Record.SetPathOwnerId(pathId.OwnerId); 
+            Record.SetPathOwnerId(pathId.OwnerId);
             Record.SetLocalPathId(pathId.LocalPathId);
             Record.SetIsDeletion(isDeletion);
         }
@@ -361,7 +361,7 @@ struct TSchemeBoardEvents {
         }
 
         explicit TEvSyncVersionRequest(const TPathId& pathId) {
-            Record.SetPathOwnerId(pathId.OwnerId); 
+            Record.SetPathOwnerId(pathId.OwnerId);
             Record.SetLocalPathId(pathId.LocalPathId);
         }
     };

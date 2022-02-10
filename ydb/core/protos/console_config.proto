@@ -106,7 +106,7 @@ message TConfigItem {
         NetClassifierConfigItem = 42;
         NetClassifierDistributableConfigItem = 43;
         ResourceBrokerConfigItem = 44;
-        MeteringConfigItem = 45; 
+        MeteringConfigItem = 45;
         HiveConfigItem = 46;
         DataShardConfigItem = 49;
         YandexQueryConfigItem = 50;

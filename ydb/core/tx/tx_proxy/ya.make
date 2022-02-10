@@ -1,29 +1,29 @@
-LIBRARY() 
- 
+LIBRARY()
+
 OWNER(g:kikimr)
- 
-SRCS( 
-    mon.cpp 
-    proxy_impl.cpp 
-    schemereq.cpp 
-    datareq.cpp 
-    describe.cpp 
-    proxy.cpp 
+
+SRCS(
+    mon.cpp
+    proxy_impl.cpp
+    schemereq.cpp
+    datareq.cpp
+    describe.cpp
+    proxy.cpp
     read_table_impl.cpp
     resolvereq.cpp
     snapshotreq.cpp
     commitreq.cpp
     upload_rows_common_impl.cpp
     upload_rows.cpp
-) 
- 
+)
+
 GENERATE_ENUM_SERIALIZATION(read_table_impl.h)
 
-PEERDIR( 
+PEERDIR(
     library/cpp/actors/core
     library/cpp/actors/helpers
     library/cpp/actors/interconnect
-    util/draft 
+    util/draft
     ydb/core/actorlib_impl
     ydb/core/base
     ydb/core/blobstorage/base
@@ -46,8 +46,8 @@ PEERDIR(
     ydb/library/aclib
     ydb/library/mkql_proto/protos
     ydb/public/lib/base
-) 
- 
+)
+
 YQL_LAST_ABI_VERSION()
 
 END()

@@ -22,7 +22,7 @@ SRCS(
     rpc_cms.cpp
     rpc_commit_transaction.cpp
     rpc_copy_table.cpp
-    rpc_copy_tables.cpp 
+    rpc_copy_tables.cpp
     rpc_export.cpp
     rpc_create_coordination_node.cpp
     rpc_create_session.cpp
@@ -62,7 +62,7 @@ SRCS(
     rpc_read_columns.cpp
     rpc_read_table.cpp
     rpc_remove_directory.cpp
-    rpc_rename_tables.cpp 
+    rpc_rename_tables.cpp
     rpc_rollback_transaction.cpp
     rpc_s3_listing.cpp
     rpc_scheme_base.cpp

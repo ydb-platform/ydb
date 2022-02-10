@@ -42,23 +42,23 @@
         break;                                                                      \
     }
 
-#define hTemplFunc(TEvType, HandleFunc)                                             \
-    case TEvType::EventType: {                                                      \
-        typename TEvType::TPtr* x = reinterpret_cast<typename TEvType::TPtr*>(&ev); \
-        HandleFunc(*x);                                                             \
-        break;                                                                      \
-    }
-
-#define SFunc(TEvType, HandleFunc) \
-    case TEvType::EventType:       \
-        HandleFunc(ctx);           \
-        break;
-
-#define sFunc(TEvType, HandleFunc) \
-    case TEvType::EventType:       \
-        HandleFunc();              \
-        break;
-
+#define hTemplFunc(TEvType, HandleFunc)                                             \ 
+    case TEvType::EventType: {                                                      \ 
+        typename TEvType::TPtr* x = reinterpret_cast<typename TEvType::TPtr*>(&ev); \ 
+        HandleFunc(*x);                                                             \ 
+        break;                                                                      \ 
+    } 
+ 
+#define SFunc(TEvType, HandleFunc) \ 
+    case TEvType::EventType:       \ 
+        HandleFunc(ctx);           \ 
+        break; 
+ 
+#define sFunc(TEvType, HandleFunc) \ 
+    case TEvType::EventType:       \ 
+        HandleFunc();              \ 
+        break; 
+ 
 #define CFunc(TEventType, HandleFunc) \
     case TEventType:                  \
         HandleFunc(ctx);              \

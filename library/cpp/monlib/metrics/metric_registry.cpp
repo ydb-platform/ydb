@@ -40,10 +40,10 @@ namespace NMonitoring {
         CommonLabels_ = commonLabels;
     }
 
-    TMetricRegistry* TMetricRegistry::Instance() {
-        return Singleton<TMetricRegistry>();
-    }
-
+    TMetricRegistry* TMetricRegistry::Instance() { 
+        return Singleton<TMetricRegistry>(); 
+    } 
+ 
     TGauge* TMetricRegistry::Gauge(TLabels labels) {
         return Metric<TGauge, EMetricType::GAUGE>(std::move(labels));
     }

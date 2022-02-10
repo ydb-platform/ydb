@@ -10,7 +10,7 @@
 #include "scheduler_actor.h"
 #include "log.h"
 #include "probes.h"
-#include "ask.h"
+#include "ask.h" 
 #include <library/cpp/actors/util/affinity.h>
 #include <library/cpp/actors/util/datetime.h>
 #include <util/generic/hash.h>
@@ -145,14 +145,14 @@ namespace NActors {
         return CpuManager->GetExecutorPool(executorPool)->Register(actor, mailboxType, revolvingCounter, parentId);
     }
 
-    NThreading::TFuture<THolder<IEventBase>> TActorSystem::AskGeneric(TMaybe<ui32> expectedEventType,
+    NThreading::TFuture<THolder<IEventBase>> TActorSystem::AskGeneric(TMaybe<ui32> expectedEventType, 
                                                                       TActorId recipient, THolder<IEventBase> event,
-                                                                      TDuration timeout) {
-        auto promise = NThreading::NewPromise<THolder<IEventBase>>();
-        Register(MakeAskActor(expectedEventType, recipient, std::move(event), timeout, promise).Release());
-        return promise.GetFuture();
-    }
-
+                                                                      TDuration timeout) { 
+        auto promise = NThreading::NewPromise<THolder<IEventBase>>(); 
+        Register(MakeAskActor(expectedEventType, recipient, std::move(event), timeout, promise).Release()); 
+        return promise.GetFuture(); 
+    } 
+ 
     ui64 TActorSystem::AllocateIDSpace(ui64 count) {
         Y_VERIFY_DEBUG(count < Max<ui32>() / 65536);
 

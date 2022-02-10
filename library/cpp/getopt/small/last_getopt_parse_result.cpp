@@ -42,7 +42,7 @@ namespace NLastGetopt {
         const TOptParseResult* r = FindOptParseResult(opt, includeDefault);
         if (!r || r->Empty()) {
             try {
-                throw TUsageException() << "option " << opt->ToShortString() << " is unspecified";
+                throw TUsageException() << "option " << opt->ToShortString() << " is unspecified"; 
             } catch (...) {
                 HandleError();
                 // unreachable
@@ -99,10 +99,10 @@ namespace NLastGetopt {
         return Parser_->ProgramName_;
     }
 
-    void TOptsParseResult::PrintUsage(IOutputStream& os) const {
-        Parser_->Opts_->PrintUsage(Parser_->ProgramName_, os);
-    }
-
+    void TOptsParseResult::PrintUsage(IOutputStream& os) const { 
+        Parser_->Opts_->PrintUsage(Parser_->ProgramName_, os); 
+    } 
+ 
     size_t TOptsParseResult::GetFreeArgsPos() const {
         return Parser_->Pos_;
     }
@@ -147,7 +147,7 @@ namespace NLastGetopt {
             if (Parser_->Opts_->FindLongOption("help") != nullptr) {
                 Cerr << "Try '" << Parser_->ProgramName_ << " --help' for more information." << Endl;
             } else {
-                PrintUsage();
+                PrintUsage(); 
             }
         }
         exit(1);

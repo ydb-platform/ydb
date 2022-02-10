@@ -533,7 +533,7 @@ namespace NThreading {
     ////////////////////////////////////////////////////////////////////////////////
 
     template <typename T>
-    inline TFuture<T>::TFuture(const TIntrusivePtr<TFutureState>& state) noexcept
+    inline TFuture<T>::TFuture(const TIntrusivePtr<TFutureState>& state) noexcept 
         : State(state)
     {
     }
@@ -655,7 +655,7 @@ namespace NThreading {
 
     ////////////////////////////////////////////////////////////////////////////////
 
-    inline TFuture<void>::TFuture(const TIntrusivePtr<TFutureState>& state) noexcept
+    inline TFuture<void>::TFuture(const TIntrusivePtr<TFutureState>& state) noexcept 
         : State(state)
     {
     }
@@ -758,7 +758,7 @@ namespace NThreading {
     ////////////////////////////////////////////////////////////////////////////////
 
     template <typename T>
-    inline TPromise<T>::TPromise(const TIntrusivePtr<TFutureState>& state) noexcept
+    inline TPromise<T>::TPromise(const TIntrusivePtr<TFutureState>& state) noexcept 
         : State(state)
     {
     }
@@ -864,7 +864,7 @@ namespace NThreading {
 
     ////////////////////////////////////////////////////////////////////////////////
 
-    inline TPromise<void>::TPromise(const TIntrusivePtr<TFutureState>& state) noexcept
+    inline TPromise<void>::TPromise(const TIntrusivePtr<TFutureState>& state) noexcept 
         : State(state)
     {
     }

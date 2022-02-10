@@ -7,10 +7,10 @@ PEERDIR(
 )
 
 SRCS(
-    completer.cpp
-    completer_command.cpp
-    completion_generator.cpp
-    formatted_output.cpp
+    completer.cpp 
+    completer_command.cpp 
+    completion_generator.cpp 
+    formatted_output.cpp 
     last_getopt.cpp
     last_getopt_easy_setup.cpp
     last_getopt_opt.cpp
@@ -21,7 +21,7 @@ SRCS(
     opt.cpp
     opt2.cpp
     posix_getopt.cpp
-    wrap.cpp
+    wrap.cpp 
     ygetopt.cpp
 )
 

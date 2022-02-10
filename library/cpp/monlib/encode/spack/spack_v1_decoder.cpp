@@ -284,119 +284,119 @@ namespace NMonitoring {
     } // namespace
 
     EValueType DecodeValueType(ui8 byte) {
-        EValueType result;
-        if (!TryDecodeValueType(byte, &result)) {
+        EValueType result; 
+        if (!TryDecodeValueType(byte, &result)) { 
             throw TSpackDecodeError() << "unknown value type: " << byte;
-        }
-        return result;
-    }
-
-    bool TryDecodeValueType(ui8 byte, EValueType* result) {
+        } 
+        return result; 
+    } 
+ 
+    bool TryDecodeValueType(ui8 byte, EValueType* result) { 
         if (byte == EncodeValueType(EValueType::NONE)) {
-            if (result) {
-                *result = EValueType::NONE;
-            }
-            return true;
+            if (result) { 
+                *result = EValueType::NONE; 
+            } 
+            return true; 
         } else if (byte == EncodeValueType(EValueType::ONE_WITHOUT_TS)) {
-            if (result) {
-                *result = EValueType::ONE_WITHOUT_TS;
-            }
-            return true;
+            if (result) { 
+                *result = EValueType::ONE_WITHOUT_TS; 
+            } 
+            return true; 
         } else if (byte == EncodeValueType(EValueType::ONE_WITH_TS)) {
-            if (result) {
-                *result = EValueType::ONE_WITH_TS;
-            }
-            return true;
+            if (result) { 
+                *result = EValueType::ONE_WITH_TS; 
+            } 
+            return true; 
         } else if (byte == EncodeValueType(EValueType::MANY_WITH_TS)) {
-            if (result) {
-                *result = EValueType::MANY_WITH_TS;
-            }
-            return true;
+            if (result) { 
+                *result = EValueType::MANY_WITH_TS; 
+            } 
+            return true; 
         } else {
-            return false;
+            return false; 
         }
     }
 
     ETimePrecision DecodeTimePrecision(ui8 byte) {
-        ETimePrecision result;
-        if (!TryDecodeTimePrecision(byte, &result)) {
+        ETimePrecision result; 
+        if (!TryDecodeTimePrecision(byte, &result)) { 
             throw TSpackDecodeError() << "unknown time precision: " << byte;
-        }
-        return result;
-    }
-
-    bool TryDecodeTimePrecision(ui8 byte, ETimePrecision* result) {
+        } 
+        return result; 
+    } 
+ 
+    bool TryDecodeTimePrecision(ui8 byte, ETimePrecision* result) { 
         if (byte == EncodeTimePrecision(ETimePrecision::SECONDS)) {
-            if (result) {
-                *result = ETimePrecision::SECONDS;
-            }
-            return true;
+            if (result) { 
+                *result = ETimePrecision::SECONDS; 
+            } 
+            return true; 
         } else if (byte == EncodeTimePrecision(ETimePrecision::MILLIS)) {
-            if (result) {
-                *result = ETimePrecision::MILLIS;
-            }
-            return true;
+            if (result) { 
+                *result = ETimePrecision::MILLIS; 
+            } 
+            return true; 
         } else {
-            return false;
+            return false; 
         }
     }
 
     EMetricType DecodeMetricType(ui8 byte) {
-        EMetricType result;
-        if (!TryDecodeMetricType(byte, &result)) {
+        EMetricType result; 
+        if (!TryDecodeMetricType(byte, &result)) { 
             throw TSpackDecodeError() << "unknown metric type: " << byte;
-        }
-        return result;
-    }
-
-    bool TryDecodeMetricType(ui8 byte, EMetricType* result) {
+        } 
+        return result; 
+    } 
+ 
+    bool TryDecodeMetricType(ui8 byte, EMetricType* result) { 
         if (byte == EncodeMetricType(EMetricType::GAUGE)) {
-            if (result) {
-                *result = EMetricType::GAUGE;
-            }
-            return true;
+            if (result) { 
+                *result = EMetricType::GAUGE; 
+            } 
+            return true; 
         } else if (byte == EncodeMetricType(EMetricType::COUNTER)) {
-            if (result) {
-                *result = EMetricType::COUNTER;
-            }
-            return true;
+            if (result) { 
+                *result = EMetricType::COUNTER; 
+            } 
+            return true; 
         } else if (byte == EncodeMetricType(EMetricType::RATE)) {
-            if (result) {
-                *result = EMetricType::RATE;
-            }
-            return true;
+            if (result) { 
+                *result = EMetricType::RATE; 
+            } 
+            return true; 
         } else if (byte == EncodeMetricType(EMetricType::IGAUGE)) {
-            if (result) {
-                *result = EMetricType::IGAUGE;
-            }
-            return true;
+            if (result) { 
+                *result = EMetricType::IGAUGE; 
+            } 
+            return true; 
         } else if (byte == EncodeMetricType(EMetricType::HIST)) {
-            if (result) {
-                *result = EMetricType::HIST;
-            }
-            return true;
+            if (result) { 
+                *result = EMetricType::HIST; 
+            } 
+            return true; 
         } else if (byte == EncodeMetricType(EMetricType::HIST_RATE)) {
-            if (result) {
-                *result = EMetricType::HIST_RATE;
-            }
-            return true;
+            if (result) { 
+                *result = EMetricType::HIST_RATE; 
+            } 
+            return true; 
         } else if (byte == EncodeMetricType(EMetricType::DSUMMARY)) {
-            if (result) {
-                *result = EMetricType::DSUMMARY;
-            }
-            return true;
+            if (result) { 
+                *result = EMetricType::DSUMMARY; 
+            } 
+            return true; 
         } else if (byte == EncodeMetricType(EMetricType::LOGHIST)) {
-            if (result) {
-                *result = EMetricType::LOGHIST;
-            }
-            return true;
+            if (result) { 
+                *result = EMetricType::LOGHIST; 
+            } 
+            return true; 
         } else if (byte == EncodeMetricType(EMetricType::UNKNOWN)) {
-            if (result) {
-                *result = EMetricType::UNKNOWN;
-            }
-            return true;
+            if (result) { 
+                *result = EMetricType::UNKNOWN; 
+            } 
+            return true; 
         } else {
-            return false;
+            return false; 
         }
     }
 
@@ -417,36 +417,36 @@ namespace NMonitoring {
     }
 
     ECompression DecodeCompression(ui8 byte) {
-        ECompression result;
-        if (!TryDecodeCompression(byte, &result)) {
+        ECompression result; 
+        if (!TryDecodeCompression(byte, &result)) { 
             throw TSpackDecodeError() << "unknown compression alg: " << byte;
-        }
-        return result;
-    }
-
-    bool TryDecodeCompression(ui8 byte, ECompression* result) {
+        } 
+        return result; 
+    } 
+ 
+    bool TryDecodeCompression(ui8 byte, ECompression* result) { 
         if (byte == EncodeCompression(ECompression::IDENTITY)) {
-            if (result) {
-                *result = ECompression::IDENTITY;
-            }
-            return true;
+            if (result) { 
+                *result = ECompression::IDENTITY; 
+            } 
+            return true; 
         } else if (byte == EncodeCompression(ECompression::ZLIB)) {
-            if (result) {
-                *result = ECompression::ZLIB;
-            }
-            return true;
+            if (result) { 
+                *result = ECompression::ZLIB; 
+            } 
+            return true; 
         } else if (byte == EncodeCompression(ECompression::ZSTD)) {
-            if (result) {
-                *result = ECompression::ZSTD;
-            }
-            return true;
+            if (result) { 
+                *result = ECompression::ZSTD; 
+            } 
+            return true; 
         } else if (byte == EncodeCompression(ECompression::LZ4)) {
-            if (result) {
-                *result = ECompression::LZ4;
-            }
-            return true;
+            if (result) { 
+                *result = ECompression::LZ4; 
+            } 
+            return true; 
         } else {
-            return false;
+            return false; 
         }
     }
 

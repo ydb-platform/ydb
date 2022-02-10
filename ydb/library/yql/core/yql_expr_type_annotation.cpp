@@ -472,210 +472,210 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
         node = ctx.NewCallable(node->Pos(), "AsStruct", std::move(nodeChildren));
         return IGraphTransformer::TStatus::Repeat;
     }
-    else if (expectedType.GetKind() == ETypeAnnotationKind::Variant && node->IsCallable("Variant")) {
-        auto from = sourceType.Cast<TVariantExprType>();
-        auto to = expectedType.Cast<TVariantExprType>();
-
-        if (from->GetUnderlyingType()->GetKind() != to->GetUnderlyingType()->GetKind()) {
-            return IGraphTransformer::TStatus::Error;
-        }
-
-        switch (from->GetUnderlyingType()->GetKind()) {
-            case ETypeAnnotationKind::Struct:
-            {
-                auto fromUnderlying = from->GetUnderlyingType()->Cast<TStructExprType>();
-                auto toUnderlying = to->GetUnderlyingType()->Cast<TStructExprType>();
-
-                if (fromUnderlying->GetSize() > toUnderlying->GetSize()) {
-                    return IGraphTransformer::TStatus::Error;
-                }
-
-                auto fromTargetIndex = fromUnderlying->FindItem(node->Child(1)->Content());
-                if (fromTargetIndex.Empty()) {
-                    return IGraphTransformer::TStatus::Error;
-                }
-                auto toTargetIndex = toUnderlying->FindItem(node->Child(1)->Content());
-                if (toTargetIndex.Empty()) {
-                    return IGraphTransformer::TStatus::Error;
-                }
+    else if (expectedType.GetKind() == ETypeAnnotationKind::Variant && node->IsCallable("Variant")) { 
+        auto from = sourceType.Cast<TVariantExprType>(); 
+        auto to = expectedType.Cast<TVariantExprType>(); 
+ 
+        if (from->GetUnderlyingType()->GetKind() != to->GetUnderlyingType()->GetKind()) { 
+            return IGraphTransformer::TStatus::Error; 
+        } 
+ 
+        switch (from->GetUnderlyingType()->GetKind()) { 
+            case ETypeAnnotationKind::Struct: 
+            { 
+                auto fromUnderlying = from->GetUnderlyingType()->Cast<TStructExprType>(); 
+                auto toUnderlying = to->GetUnderlyingType()->Cast<TStructExprType>(); 
+ 
+                if (fromUnderlying->GetSize() > toUnderlying->GetSize()) { 
+                    return IGraphTransformer::TStatus::Error; 
+                } 
+ 
+                auto fromTargetIndex = fromUnderlying->FindItem(node->Child(1)->Content()); 
+                if (fromTargetIndex.Empty()) { 
+                    return IGraphTransformer::TStatus::Error; 
+                } 
+                auto toTargetIndex = toUnderlying->FindItem(node->Child(1)->Content()); 
+                if (toTargetIndex.Empty()) { 
+                    return IGraphTransformer::TStatus::Error; 
+                } 
                 auto targetItem = node->HeadPtr();
-                auto status = TryConvertToImpl(
-                    ctx, targetItem,
-                    *fromUnderlying->GetItems()[*fromTargetIndex]->GetItemType(),
+                auto status = TryConvertToImpl( 
+                    ctx, targetItem, 
+                    *fromUnderlying->GetItems()[*fromTargetIndex]->GetItemType(), 
                     *toUnderlying->GetItems()[*toTargetIndex]->GetItemType(), flags);
-                if (status.Level == IGraphTransformer::TStatus::Error) {
-                    return status;
-                }
-
-                for (auto item: fromUnderlying->GetItems()) {
-                    if (item->GetName() == node->Child(1)->Content()) {
-                        continue;  // Already checked when converting targetItem
-                    }
-
-                    auto toIndex = toUnderlying->FindItem(item->GetName());
-                    if (toIndex.Empty()) {
-                        return IGraphTransformer::TStatus::Error;
-                    }
-                    auto fromElement = item->GetItemType();
-                    auto toElement = toUnderlying->GetItems()[*toIndex]->GetItemType();
+                if (status.Level == IGraphTransformer::TStatus::Error) { 
+                    return status; 
+                } 
+ 
+                for (auto item: fromUnderlying->GetItems()) { 
+                    if (item->GetName() == node->Child(1)->Content()) { 
+                        continue;  // Already checked when converting targetItem 
+                    } 
+ 
+                    auto toIndex = toUnderlying->FindItem(item->GetName()); 
+                    if (toIndex.Empty()) { 
+                        return IGraphTransformer::TStatus::Error; 
+                    } 
+                    auto fromElement = item->GetItemType(); 
+                    auto toElement = toUnderlying->GetItems()[*toIndex]->GetItemType(); 
                     auto arg = ctx.NewArgument(TPositionHandle(), "arg");
                     auto status1 = TryConvertToImpl(ctx, arg, *fromElement, *toElement, flags);
-                    if (status1.Level == IGraphTransformer::TStatus::Error) {
-                        return status1;
-                    }
-                }
-
-                node = ctx.Builder(node->Pos())
-                    .Callable("Variant")
-                        .Add(0, std::move(targetItem))
-                        .Add(1, node->ChildPtr(1))
-                        .Add(2, ExpandType(node->Pos(), *to, ctx))
-                    .Seal()
-                    .Build();
-
-                break;
-            }
-            case ETypeAnnotationKind::Tuple:
-            {
-                auto fromUnderlying = from->GetUnderlyingType()->Cast<TTupleExprType>();
-                auto toUnderlying = to->GetUnderlyingType()->Cast<TTupleExprType>();
-
-                if (fromUnderlying->GetSize() != toUnderlying->GetSize()) {
-                    return IGraphTransformer::TStatus::Error;
-                }
-
-                auto targetIndex = FromString<size_t>(node->Child(1)->Content());
+                    if (status1.Level == IGraphTransformer::TStatus::Error) { 
+                        return status1; 
+                    } 
+                } 
+ 
+                node = ctx.Builder(node->Pos()) 
+                    .Callable("Variant") 
+                        .Add(0, std::move(targetItem)) 
+                        .Add(1, node->ChildPtr(1)) 
+                        .Add(2, ExpandType(node->Pos(), *to, ctx)) 
+                    .Seal() 
+                    .Build(); 
+ 
+                break; 
+            } 
+            case ETypeAnnotationKind::Tuple: 
+            { 
+                auto fromUnderlying = from->GetUnderlyingType()->Cast<TTupleExprType>(); 
+                auto toUnderlying = to->GetUnderlyingType()->Cast<TTupleExprType>(); 
+ 
+                if (fromUnderlying->GetSize() != toUnderlying->GetSize()) { 
+                    return IGraphTransformer::TStatus::Error; 
+                } 
+ 
+                auto targetIndex = FromString<size_t>(node->Child(1)->Content()); 
                 auto targetItem = node->HeadPtr();
-                auto status = TryConvertToImpl(
-                    ctx, targetItem,
-                    *fromUnderlying->GetItems()[targetIndex],
+                auto status = TryConvertToImpl( 
+                    ctx, targetItem, 
+                    *fromUnderlying->GetItems()[targetIndex], 
                     *toUnderlying->GetItems()[targetIndex], flags);
-                if (status.Level == IGraphTransformer::TStatus::Error) {
-                    return status;
-                }
-
-                for (size_t i = 0; i < fromUnderlying->GetSize(); i++) {
-                    if (i == targetIndex) {
-                        continue;  // Already checked when converting targetItem
-                    }
+                if (status.Level == IGraphTransformer::TStatus::Error) { 
+                    return status; 
+                } 
+ 
+                for (size_t i = 0; i < fromUnderlying->GetSize(); i++) { 
+                    if (i == targetIndex) { 
+                        continue;  // Already checked when converting targetItem 
+                    } 
                     auto arg = ctx.NewArgument(TPositionHandle(), "arg");
                     auto status1 = TryConvertToImpl(ctx, arg, *fromUnderlying->GetItems()[i],
                         *toUnderlying->GetItems()[i], flags);
-                    if (status1.Level == IGraphTransformer::TStatus::Error) {
-                        return status1;
-                    }
-                }
-
-                node = ctx.Builder(node->Pos())
-                    .Callable("Variant")
-                        .Add(0, std::move(targetItem))
-                        .Add(1, node->ChildPtr(1))
-                        .Add(2, ExpandType(node->Pos(), *to, ctx))
-                    .Seal()
-                    .Build();
-
-                break;
-            }
-            default:
-                Y_UNREACHABLE();
-        }
-
-        return IGraphTransformer::TStatus::Repeat;
-    }
-    else if (expectedType.GetKind() == ETypeAnnotationKind::Variant && sourceType.GetKind() == ETypeAnnotationKind::Variant) {
-        auto from = sourceType.Cast<TVariantExprType>();
-        auto to = expectedType.Cast<TVariantExprType>();
-
-        if (from->GetUnderlyingType()->GetKind() != to->GetUnderlyingType()->GetKind()) {
-            return IGraphTransformer::TStatus::Error;
-        }
-
-        auto outTypeExpr = ExpandType(node->Pos(), *to, ctx);
-
-        THashMap<TString, TExprNode::TPtr> transforms;
-
-        switch (from->GetUnderlyingType()->GetKind()) {
-            case ETypeAnnotationKind::Struct:
-            {
-                auto fromUnderlying = from->GetUnderlyingType()->Cast<TStructExprType>();
-                auto toUnderlying = to->GetUnderlyingType()->Cast<TStructExprType>();
-
-                if (fromUnderlying->GetSize() > toUnderlying->GetSize()) {
-                    return IGraphTransformer::TStatus::Error;
-                }
-
-                for (auto item: fromUnderlying->GetItems()) {
-                    auto toIndex = toUnderlying->FindItem(item->GetName());
-                    if (toIndex.Empty()) {
-                        return IGraphTransformer::TStatus::Error;
-                    }
-                    auto fromElement = item->GetItemType();
-                    auto toElement = toUnderlying->GetItems()[*toIndex]->GetItemType();
-
-                    auto arg = ctx.NewArgument(node->Pos(), "item");
-                    auto originalArg = arg;
-
+                    if (status1.Level == IGraphTransformer::TStatus::Error) { 
+                        return status1; 
+                    } 
+                } 
+ 
+                node = ctx.Builder(node->Pos()) 
+                    .Callable("Variant") 
+                        .Add(0, std::move(targetItem)) 
+                        .Add(1, node->ChildPtr(1)) 
+                        .Add(2, ExpandType(node->Pos(), *to, ctx)) 
+                    .Seal() 
+                    .Build(); 
+ 
+                break; 
+            } 
+            default: 
+                Y_UNREACHABLE(); 
+        } 
+ 
+        return IGraphTransformer::TStatus::Repeat; 
+    } 
+    else if (expectedType.GetKind() == ETypeAnnotationKind::Variant && sourceType.GetKind() == ETypeAnnotationKind::Variant) { 
+        auto from = sourceType.Cast<TVariantExprType>(); 
+        auto to = expectedType.Cast<TVariantExprType>(); 
+ 
+        if (from->GetUnderlyingType()->GetKind() != to->GetUnderlyingType()->GetKind()) { 
+            return IGraphTransformer::TStatus::Error; 
+        } 
+ 
+        auto outTypeExpr = ExpandType(node->Pos(), *to, ctx); 
+ 
+        THashMap<TString, TExprNode::TPtr> transforms; 
+ 
+        switch (from->GetUnderlyingType()->GetKind()) { 
+            case ETypeAnnotationKind::Struct: 
+            { 
+                auto fromUnderlying = from->GetUnderlyingType()->Cast<TStructExprType>(); 
+                auto toUnderlying = to->GetUnderlyingType()->Cast<TStructExprType>(); 
+ 
+                if (fromUnderlying->GetSize() > toUnderlying->GetSize()) { 
+                    return IGraphTransformer::TStatus::Error; 
+                } 
+ 
+                for (auto item: fromUnderlying->GetItems()) { 
+                    auto toIndex = toUnderlying->FindItem(item->GetName()); 
+                    if (toIndex.Empty()) { 
+                        return IGraphTransformer::TStatus::Error; 
+                    } 
+                    auto fromElement = item->GetItemType(); 
+                    auto toElement = toUnderlying->GetItems()[*toIndex]->GetItemType(); 
+ 
+                    auto arg = ctx.NewArgument(node->Pos(), "item"); 
+                    auto originalArg = arg; 
+ 
                     auto status = TryConvertToImpl(ctx, arg, *fromElement, *toElement, flags);
-                    if (status.Level == IGraphTransformer::TStatus::Error) {
-                        return status;
-                    }
-
-                    arg = ctx.Builder(node->Pos())
-                        .Callable("Variant")
-                            .Add(0, std::move(arg))
-                            .Atom(1, item->GetName())
-                            .Add(2, outTypeExpr)
-                        .Seal()
-                        .Build();
-
-                    auto lambda = ctx.NewLambda(node->Pos(), ctx.NewArguments(node->Pos(), {originalArg}), std::move(arg));
-
-                    transforms.emplace(item->GetName(), std::move(lambda));
-                }
-                break;
-            }
-            case ETypeAnnotationKind::Tuple:
-            {
-                auto fromUnderlying = from->GetUnderlyingType()->Cast<TTupleExprType>();
-                auto toUnderlying = to->GetUnderlyingType()->Cast<TTupleExprType>();
-
-                if (fromUnderlying->GetSize() != toUnderlying->GetSize()) {
-                    return IGraphTransformer::TStatus::Error;
-                }
-
-                for (size_t i = 0; i < fromUnderlying->GetSize(); i++) {
-                    auto fromElement = fromUnderlying->GetItems()[i];
-                    auto toElement = toUnderlying->GetItems()[i];
-
-                    auto arg = ctx.NewArgument(node->Pos(), "item");
-                    auto originalArg = arg;
-
+                    if (status.Level == IGraphTransformer::TStatus::Error) { 
+                        return status; 
+                    } 
+ 
+                    arg = ctx.Builder(node->Pos()) 
+                        .Callable("Variant") 
+                            .Add(0, std::move(arg)) 
+                            .Atom(1, item->GetName()) 
+                            .Add(2, outTypeExpr) 
+                        .Seal() 
+                        .Build(); 
+ 
+                    auto lambda = ctx.NewLambda(node->Pos(), ctx.NewArguments(node->Pos(), {originalArg}), std::move(arg)); 
+ 
+                    transforms.emplace(item->GetName(), std::move(lambda)); 
+                } 
+                break; 
+            } 
+            case ETypeAnnotationKind::Tuple: 
+            { 
+                auto fromUnderlying = from->GetUnderlyingType()->Cast<TTupleExprType>(); 
+                auto toUnderlying = to->GetUnderlyingType()->Cast<TTupleExprType>(); 
+ 
+                if (fromUnderlying->GetSize() != toUnderlying->GetSize()) { 
+                    return IGraphTransformer::TStatus::Error; 
+                } 
+ 
+                for (size_t i = 0; i < fromUnderlying->GetSize(); i++) { 
+                    auto fromElement = fromUnderlying->GetItems()[i]; 
+                    auto toElement = toUnderlying->GetItems()[i]; 
+ 
+                    auto arg = ctx.NewArgument(node->Pos(), "item"); 
+                    auto originalArg = arg; 
+ 
                     auto status = TryConvertToImpl(ctx, arg, *fromElement, *toElement, flags);
-                    if (status.Level == IGraphTransformer::TStatus::Error) {
-                        return status;
-                    }
-
-                    arg = ctx.Builder(node->Pos())
-                        .Callable("Variant")
-                            .Add(0, std::move(arg))
+                    if (status.Level == IGraphTransformer::TStatus::Error) { 
+                        return status; 
+                    } 
+ 
+                    arg = ctx.Builder(node->Pos()) 
+                        .Callable("Variant") 
+                            .Add(0, std::move(arg)) 
                             .Atom(1, ToString(i), TNodeFlags::Default)
-                            .Add(2, outTypeExpr)
-                        .Seal()
-                        .Build();
-
-                    auto lambda = ctx.NewLambda(node->Pos(), ctx.NewArguments(node->Pos(), {originalArg}), std::move(arg));
-
-                    transforms.emplace(ToString(i), std::move(lambda));
-                }
-                break;
-            }
-            default:
-                Y_UNREACHABLE();
-        }
-
+                            .Add(2, outTypeExpr) 
+                        .Seal() 
+                        .Build(); 
+ 
+                    auto lambda = ctx.NewLambda(node->Pos(), ctx.NewArguments(node->Pos(), {originalArg}), std::move(arg)); 
+ 
+                    transforms.emplace(ToString(i), std::move(lambda)); 
+                } 
+                break; 
+            } 
+            default: 
+                Y_UNREACHABLE(); 
+        } 
+ 
         node = RebuildVariant(node, transforms, ctx);
-        return IGraphTransformer::TStatus::Repeat;
-    }
+        return IGraphTransformer::TStatus::Repeat; 
+    } 
     else if (expectedType.GetKind() == ETypeAnnotationKind::Tuple && node->IsList()) {
         auto from = sourceType.Cast<TTupleExprType>();
         auto to = expectedType.Cast<TTupleExprType>();

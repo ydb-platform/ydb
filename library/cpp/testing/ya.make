@@ -11,10 +11,10 @@ RECURSE(
     gmock
     gmock_in_unittest
     gmock_in_unittest/example_ut
-    gtest
+    gtest 
     gtest_boost_extensions
-    gtest_extensions
-    gtest_main
+    gtest_extensions 
+    gtest_main 
     gtest_protobuf
     hook
     mock_server

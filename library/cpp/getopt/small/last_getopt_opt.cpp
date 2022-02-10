@@ -54,7 +54,7 @@ namespace NLastGetopt {
     TOpt& TOpt::AddShortName(unsigned char c) {
         ;
         if (!IsAllowedShortName(c))
-            throw TUsageException() << "option char '" << c << "' is not allowed";
+            throw TUsageException() << "option char '" << c << "' is not allowed"; 
         Chars_.push_back(c);
         return *this;
     }
@@ -75,7 +75,7 @@ namespace NLastGetopt {
         ;
         unsigned char c = 0;
         if (!IsAllowedLongName(name, &c))
-            throw TUsageException() << "option char '" << c
+            throw TUsageException() << "option char '" << c 
                                      << "' in long '" << name << "' is not allowed";
         LongNames_.push_back(name);
         return *this;
@@ -102,12 +102,12 @@ namespace NLastGetopt {
         }
     }
 
-    TOpt& TOpt::IfPresentDisableCompletionFor(const TOpt& opt) {
-        if (opt.GetLongNames()) {
-            IfPresentDisableCompletionFor(opt.GetName());
-        } else {
-            IfPresentDisableCompletionFor(opt.GetChar());
-        }
-        return *this;
-    }
+    TOpt& TOpt::IfPresentDisableCompletionFor(const TOpt& opt) { 
+        if (opt.GetLongNames()) { 
+            IfPresentDisableCompletionFor(opt.GetName()); 
+        } else { 
+            IfPresentDisableCompletionFor(opt.GetChar()); 
+        } 
+        return *this; 
+    } 
 }

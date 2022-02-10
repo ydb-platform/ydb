@@ -24,24 +24,24 @@ namespace YAML {
 class Node;
 class RegEx;
 
-/**
- * A scanner transforms a stream of characters into a stream of tokens.
- */
+/** 
+ * A scanner transforms a stream of characters into a stream of tokens. 
+ */ 
 class Scanner {
  public:
-  explicit Scanner(std::istream &in);
+  explicit Scanner(std::istream &in); 
   ~Scanner();
 
-  /** Returns true if there are no more tokens to be read. */
+  /** Returns true if there are no more tokens to be read. */ 
   bool empty();
-
-  /** Removes the next token in the queue. */
+ 
+  /** Removes the next token in the queue. */ 
   void pop();
-
-  /** Returns, but does not remove, the next token in the queue. */
+ 
+  /** Returns, but does not remove, the next token in the queue. */ 
   Token &peek();
-
-  /** Returns the current mark in the input stream. */
+ 
+  /** Returns the current mark in the input stream. */ 
   Mark mark() const;
 
  private:
@@ -61,29 +61,29 @@ class Scanner {
 
  private:
   // scanning
-
-  /**
-   * Scans until there's a valid token at the front of the queue, or the queue
-   * is empty. The state can be checked by {@link #empty}, and the next token
-   * retrieved by {@link #peek}.
-   */
+ 
+  /** 
+   * Scans until there's a valid token at the front of the queue, or the queue 
+   * is empty. The state can be checked by {@link #empty}, and the next token 
+   * retrieved by {@link #peek}. 
+   */ 
   void EnsureTokensInQueue();
-
-  /**
-   * The main scanning function; this method branches out to scan whatever the
-   * next token should be.
-   */
+ 
+  /** 
+   * The main scanning function; this method branches out to scan whatever the 
+   * next token should be. 
+   */ 
   void ScanNextToken();
-
-  /** Eats the input stream until it reaches the next token-like thing. */
+ 
+  /** Eats the input stream until it reaches the next token-like thing. */ 
   void ScanToNextToken();
-
-  /** Sets the initial conditions for starting a stream. */
+ 
+  /** Sets the initial conditions for starting a stream. */ 
   void StartStream();
-
-  /** Closes out the stream, finish up, etc. */
+ 
+  /** Closes out the stream, finish up, etc. */ 
   void EndStream();
-
+ 
   Token *PushToken(Token::TYPE type);
 
   bool InFlowContext() const { return !m_flows.empty(); }
@@ -91,29 +91,29 @@ class Scanner {
   std::size_t GetFlowLevel() const { return m_flows.size(); }
 
   Token::TYPE GetStartTokenFor(IndentMarker::INDENT_TYPE type) const;
-
-  /**
-   * Pushes an indentation onto the stack, and enqueues the proper token
-   * (sequence start or mapping start).
-   *
-   * @return the indent marker it generates (if any).
-   */
+ 
+  /** 
+   * Pushes an indentation onto the stack, and enqueues the proper token 
+   * (sequence start or mapping start). 
+   * 
+   * @return the indent marker it generates (if any). 
+   */ 
   IndentMarker *PushIndentTo(int column, IndentMarker::INDENT_TYPE type);
-
-  /**
-   * Pops indentations off the stack until it reaches the current indentation
-   * level, and enqueues the proper token each time. Then pops all invalid
-   * indentations off.
-   */
+ 
+  /** 
+   * Pops indentations off the stack until it reaches the current indentation 
+   * level, and enqueues the proper token each time. Then pops all invalid 
+   * indentations off. 
+   */ 
   void PopIndentToHere();
-
-  /**
-   * Pops all indentations (except for the base empty one) off the stack, and
-   * enqueues the proper token each time.
-   */
+ 
+  /** 
+   * Pops all indentations (except for the base empty one) off the stack, and 
+   * enqueues the proper token each time. 
+   */ 
   void PopAllIndents();
-
-  /** Pops a single indent, pushing the proper token. */
+ 
+  /** Pops a single indent, pushing the proper token. */ 
   void PopIndent();
   int GetTopIndent() const;
 
@@ -125,17 +125,17 @@ class Scanner {
   bool VerifySimpleKey();
   void PopAllSimpleKeys();
 
-  /**
-   * Throws a ParserException with the current token location (if available),
-   * and does not parse any more tokens.
-   */
+  /** 
+   * Throws a ParserException with the current token location (if available), 
+   * and does not parse any more tokens. 
+   */ 
   void ThrowParserException(const std::string &msg) const;
 
   bool IsWhitespaceToBeEaten(char ch);
-
-  /**
-   * Returns the appropriate regex to check if the next token is a value token.
-   */
+ 
+  /** 
+   * Returns the appropriate regex to check if the next token is a value token. 
+   */ 
   const RegEx &GetValueRegex() const;
 
   struct SimpleKey {

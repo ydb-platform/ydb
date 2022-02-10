@@ -12,7 +12,7 @@
 
 namespace NDatetime {
     extern const ui32 MonthDays[2][12];        // !leapYear; !!leapYear
-    extern const ui32 MonthDaysNewYear[2][13]; // !leapYear; !!leapYear
+    extern const ui32 MonthDaysNewYear[2][13]; // !leapYear; !!leapYear 
 
     inline ui32 YearDaysAD(ui32 year) {
         year = Max<ui32>(year, 1) - 1; //1 AD comes straight after 1 BC, no 0 AD
@@ -27,8 +27,8 @@ namespace NDatetime {
         return MonthDaysNewYear[isleap][Min(month, (ui32)11u)] + mday - 1;
     }
 
-    void YDayToMonthAndDay(ui32 yday /*0 - based*/, bool isleap, ui32* month /*0 - based*/, ui32* mday /*1 - based*/);
-
+    void YDayToMonthAndDay(ui32 yday /*0 - based*/, bool isleap, ui32* month /*0 - based*/, ui32* mday /*1 - based*/); 
+ 
     struct TSimpleTM {
         enum EField {
             F_NONE = 0,

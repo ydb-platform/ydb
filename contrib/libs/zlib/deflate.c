@@ -153,7 +153,7 @@ local const config configuration_table[10] = {
  */
 
 /* rank Z_BLOCK between Z_NO_FLUSH and Z_PARTIAL_FLUSH */
-#define RANK(f) (((f) * 2) - ((f) > 4 ? 9 : 0))
+#define RANK(f) (((f) * 2) - ((f) > 4 ? 9 : 0)) 
 
 /* ===========================================================================
  * Update a hash value with the given input byte

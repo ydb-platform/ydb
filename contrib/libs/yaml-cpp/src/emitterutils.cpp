@@ -9,7 +9,7 @@
 #include "stringsource.h"
 #include "yaml-cpp/binary.h"  // IWYU pragma: keep
 #include "yaml-cpp/ostream_wrapper.h"
-#include "yaml-cpp/null.h"
+#include "yaml-cpp/null.h" 
 
 namespace YAML {
 namespace Utils {
@@ -154,7 +154,7 @@ void WriteCodePoint(ostream_wrapper& out, int codePoint) {
 bool IsValidPlainScalar(const std::string& str, FlowType::value flowType,
                         bool allowOnlyAscii) {
   // check against null
-  if (IsNullString(str)) {
+  if (IsNullString(str)) { 
     return false;
   }
 
@@ -354,7 +354,7 @@ bool WriteDoubleQuotedString(ostream_wrapper& out, const std::string& str,
 }
 
 bool WriteLiteralString(ostream_wrapper& out, const std::string& str,
-                        std::size_t indent) {
+                        std::size_t indent) { 
   out << "|\n";
   out << IndentTo(indent);
   int codePoint;
@@ -380,8 +380,8 @@ bool WriteChar(ostream_wrapper& out, char ch) {
     out << "\"\\n\"";
   } else if (ch == '\b') {
     out << "\"\\b\"";
-  } else if (ch == '\\') {
-    out << "\"\\\\\"";
+  } else if (ch == '\\') { 
+    out << "\"\\\\\""; 
   } else if ((0x20 <= ch && ch <= 0x7e) || ch == ' ') {
     out << "\"" << ch << "\"";
   } else {
@@ -393,7 +393,7 @@ bool WriteChar(ostream_wrapper& out, char ch) {
 }
 
 bool WriteComment(ostream_wrapper& out, const std::string& str,
-                  std::size_t postCommentIndent) {
+                  std::size_t postCommentIndent) { 
   const std::size_t curIndent = out.col();
   out << "#" << Indentation(postCommentIndent);
   out.set_comment();

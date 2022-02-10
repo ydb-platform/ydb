@@ -32,8 +32,8 @@ namespace NProtobufJson {
 
         enum EnumValueMode {
             EnumCaseSensetive = 0, // default
-            EnumCaseInsensetive,
-            EnumSnakeCaseInsensitive
+            EnumCaseInsensetive, 
+            EnumSnakeCaseInsensitive 
         };
 
         TSelf& SetFieldNameMode(FldNameMode mode) {

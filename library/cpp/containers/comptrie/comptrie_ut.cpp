@@ -1249,7 +1249,7 @@ void TCompactTrieTest::TestTrieForPairWtrokaVectorInt64() {
     TVector<TVector<i64>> values = GetSampleVectorData<TVector<i64>>(10);
     TVector<std::pair<TUtf16String, TVector<i64>>> data;
     for (size_t i = 0; i < 10; i++)
-        data.push_back(std::pair<TUtf16String, TVector<i64>>(keys[i] + u"_v", values[i]));
+        data.push_back(std::pair<TUtf16String, TVector<i64>>(keys[i] + u"_v", values[i])); 
     TestTrieWithContainers<std::pair<TUtf16String, TVector<i64>>>(keys, data, "pair-str-v-i64");
 }
 
@@ -1273,9 +1273,9 @@ void TCompactTrieTest::TestFindLongestPrefixWithEmptyValue() {
     TBufferOutput buffer;
     {
         TCompactTrieBuilder<wchar16, ui32> builder;
-        builder.Add(u"", 42);
-        builder.Add(u"yandex", 271828);
-        builder.Add(u"ya", 31415);
+        builder.Add(u"", 42); 
+        builder.Add(u"yandex", 271828); 
+        builder.Add(u"ya", 31415); 
         builder.Save(buffer);
     }
     {
@@ -1283,11 +1283,11 @@ void TCompactTrieTest::TestFindLongestPrefixWithEmptyValue() {
         size_t prefixLen = 123;
         ui32 value = 0;
 
-        UNIT_ASSERT(trie.FindLongestPrefix(u"google", &prefixLen, &value));
+        UNIT_ASSERT(trie.FindLongestPrefix(u"google", &prefixLen, &value)); 
         UNIT_ASSERT(prefixLen == 0);
         UNIT_ASSERT(value == 42);
 
-        UNIT_ASSERT(trie.FindLongestPrefix(u"yahoo", &prefixLen, &value));
+        UNIT_ASSERT(trie.FindLongestPrefix(u"yahoo", &prefixLen, &value)); 
         UNIT_ASSERT(prefixLen == 2);
         UNIT_ASSERT(value == 31415);
     }
@@ -1562,18 +1562,18 @@ void TCompactTrieTest::TestBuilderFindLongestPrefix(size_t keysCount, double bra
 
 void TCompactTrieTest::TestBuilderFindLongestPrefixWithEmptyValue() {
     TCompactTrieBuilder<wchar16, ui32> builder;
-    builder.Add(u"", 42);
-    builder.Add(u"yandex", 271828);
-    builder.Add(u"ya", 31415);
+    builder.Add(u"", 42); 
+    builder.Add(u"yandex", 271828); 
+    builder.Add(u"ya", 31415); 
 
     size_t prefixLen = 123;
     ui32 value = 0;
 
-    UNIT_ASSERT(builder.FindLongestPrefix(u"google", &prefixLen, &value));
+    UNIT_ASSERT(builder.FindLongestPrefix(u"google", &prefixLen, &value)); 
     UNIT_ASSERT_VALUES_EQUAL(prefixLen, 0);
     UNIT_ASSERT_VALUES_EQUAL(value, 42);
 
-    UNIT_ASSERT(builder.FindLongestPrefix(u"yahoo", &prefixLen, &value));
+    UNIT_ASSERT(builder.FindLongestPrefix(u"yahoo", &prefixLen, &value)); 
     UNIT_ASSERT_VALUES_EQUAL(prefixLen, 2);
     UNIT_ASSERT_VALUES_EQUAL(value, 31415);
 

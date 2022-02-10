@@ -1,5 +1,5 @@
-from __future__ import print_function
-
+from __future__ import print_function 
+ 
 import os
 import sys
 import json
@@ -86,7 +86,7 @@ def declare_recipe(start, stop):
     parsed_args, argv = get_options()
 
     if parsed_args.show_cwd:
-        print("Recipe \"{} {}\" working dir is {}".format(sys.argv[0], " ".join(argv), os.getcwd()))
+        print("Recipe \"{} {}\" working dir is {}".format(sys.argv[0], " ".join(argv), os.getcwd())) 
 
     try:
         if argv[0] == RECIPE_START_OPTION:

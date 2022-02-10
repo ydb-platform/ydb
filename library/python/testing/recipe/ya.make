@@ -3,7 +3,7 @@ OWNER(
     g:yatest
 )
 
-PY23_LIBRARY()
+PY23_LIBRARY() 
 
 PY_SRCS(
     __init__.py

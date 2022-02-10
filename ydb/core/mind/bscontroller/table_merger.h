@@ -70,7 +70,7 @@ namespace NKikimr {
                     // the row has been added or modified
                     adapter->IssueUpdateRow(txc, cur->first, cur->second);
                 }
-                auto processInline = [&](const auto (TRow::*cell), const auto *table) {
+                auto processInline = [&](const auto (TRow::*cell), const auto *table) { 
                     auto [prev, cur] = row;
                     using TCell = std::remove_reference_t<decltype(std::declval<TRow>().*cell)>;
                     const TCell *prevInline = prev ? &(prev->second.*cell) : nullptr;

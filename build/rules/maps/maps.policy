@@ -29,11 +29,11 @@ ALLOW netsys/tiles-vcdiff/gen-tiles -> maps/libs/deprecated/localeutils
 # Use maps/libs/geolib instead
 ALLOW maps/streetview/backoffice/lib -> maps/libs/deprecated/coordtrans_pymod
 
-# Use std::chrono or util/datetime instead
-ALLOW maps/analyzer -> maps/libs/deprecated/boost_time
-ALLOW maps/routing -> maps/libs/deprecated/boost_time
-ALLOW maps/tools/naviguide/lib -> maps/libs/deprecated/boost_time
-
+# Use std::chrono or util/datetime instead 
+ALLOW maps/analyzer -> maps/libs/deprecated/boost_time 
+ALLOW maps/routing -> maps/libs/deprecated/boost_time 
+ALLOW maps/tools/naviguide/lib -> maps/libs/deprecated/boost_time 
+ 
 # Stop spreading deprecated stuff
 ALLOW maps/libs/deprecated -> maps/libs/deprecated
 DENY .* -> maps/libs/deprecated
@@ -50,7 +50,7 @@ ALLOW .* -> maps/libs/http
 ALLOW .* -> maps/libs/json
 ALLOW .* -> maps/libs/nirvana
 ALLOW .* -> maps/libs/local_postgres
-ALLOW .* -> maps/libs/locale
+ALLOW .* -> maps/libs/locale 
 ALLOW .* -> maps/libs/pgpool
 ALLOW .* -> maps/libs/s3mds
 ALLOW .* -> maps/libs/sql_chemistry

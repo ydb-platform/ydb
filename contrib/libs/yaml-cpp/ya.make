@@ -27,7 +27,7 @@ SRCS(
     src/emitter.cpp
     src/emitterstate.cpp
     src/emitterutils.cpp
-    src/exceptions.cpp
+    src/exceptions.cpp 
     src/exp.cpp
     src/memory.cpp
     src/nodebuilder.cpp

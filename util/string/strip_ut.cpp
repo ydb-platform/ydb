@@ -103,8 +103,8 @@ Y_UNIT_TEST_SUITE(TStripStringTest) {
         UNIT_ASSERT_EQUAL(
             StripString(
                 TWtringBuf(u"/abc/"),
-                EqualsStripAdapter(u'/')),
-            u"abc");
+                EqualsStripAdapter(u'/')), 
+            u"abc"); 
     }
 
     Y_UNIT_TEST(TestCollapse) {

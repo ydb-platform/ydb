@@ -16,11 +16,11 @@
 
 namespace YAML {
 namespace detail {
-class node {
+class node { 
  public:
   node() : m_pRef(new node_ref) {}
-  node(const node&) = delete;
-  node& operator=(const node&) = delete;
+  node(const node&) = delete; 
+  node& operator=(const node&) = delete; 
 
   bool is(const node& rhs) const { return m_pRef == rhs.m_pRef; }
   const node_ref* ref() const { return m_pRef.get(); }
@@ -66,7 +66,7 @@ class node {
     m_pRef->set_data(*rhs.m_pRef);
   }
 
-  void set_mark(const Mark& mark) { m_pRef->set_mark(mark); }
+  void set_mark(const Mark& mark) { m_pRef->set_mark(mark); } 
 
   void set_type(NodeType::value type) {
     if (type != NodeType::Undefined)
@@ -106,9 +106,9 @@ class node {
   node_iterator end() { return m_pRef->end(); }
 
   // sequence
-  void push_back(node& input, shared_memory_holder pMemory) {
-    m_pRef->push_back(input, pMemory);
-    input.add_dependency(*this);
+  void push_back(node& input, shared_memory_holder pMemory) { 
+    m_pRef->push_back(input, pMemory); 
+    input.add_dependency(*this); 
   }
   void insert(node& key, node& value, shared_memory_holder pMemory) {
     m_pRef->insert(key, value, pMemory);

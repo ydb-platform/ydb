@@ -14,11 +14,11 @@
 
 namespace YAML {
 namespace detail {
-class node_ref {
+class node_ref { 
  public:
   node_ref() : m_pData(new node_data) {}
-  node_ref(const node_ref&) = delete;
-  node_ref& operator=(const node_ref&) = delete;
+  node_ref(const node_ref&) = delete; 
+  node_ref& operator=(const node_ref&) = delete; 
 
   bool is_defined() const { return m_pData->is_defined(); }
   const Mark& mark() const { return m_pData->mark(); }

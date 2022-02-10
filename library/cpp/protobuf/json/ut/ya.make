@@ -11,7 +11,7 @@ SRCS(
     string_transform_ut.cpp
     filter_ut.proto
     test.proto
-    util_ut.cpp
+    util_ut.cpp 
 )
 
 GENERATE_ENUM_SERIALIZATION(test.pb.h)

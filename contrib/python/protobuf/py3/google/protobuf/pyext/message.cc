@@ -551,7 +551,7 @@ PyObject* PickleError_class;
 
 // Format an error message for unexpected types.
 // Always return with an exception set.
-void FormatTypeError(PyObject* arg, const char* expected_types) {
+void FormatTypeError(PyObject* arg, const char* expected_types) { 
   // This function is often called with an exception set.
   // Clear it to call PyObject_Repr() in good conditions.
   PyErr_Clear();

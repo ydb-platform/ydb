@@ -110,18 +110,18 @@ JsonString2Field(const NJson::TJsonValue& json,
         reflection->SetString(&proto, &field, value);
 }
 
-static const NProtoBuf::EnumValueDescriptor*
-FindEnumValue(const NProtoBuf::EnumDescriptor* enumField,
-              TStringBuf target, bool (*equals)(TStringBuf, TStringBuf)) {
-    for (int i = 0; i < enumField->value_count(); i++) {
-        auto* valueDescriptor = enumField->value(i);
-        if (equals(valueDescriptor->name(), target)) {
-            return valueDescriptor;
-        }
-    }
-    return nullptr;
-}
-
+static const NProtoBuf::EnumValueDescriptor* 
+FindEnumValue(const NProtoBuf::EnumDescriptor* enumField, 
+              TStringBuf target, bool (*equals)(TStringBuf, TStringBuf)) { 
+    for (int i = 0; i < enumField->value_count(); i++) { 
+        auto* valueDescriptor = enumField->value(i); 
+        if (equals(valueDescriptor->name(), target)) { 
+            return valueDescriptor; 
+        } 
+    } 
+    return nullptr; 
+} 
+ 
 static void
 JsonEnum2Field(const NJson::TJsonValue& json,
                google::protobuf::Message& proto,
@@ -148,7 +148,7 @@ JsonEnum2Field(const NJson::TJsonValue& json,
         const auto& value = json.GetString();
         if (config.EnumValueMode == NProtobufJson::TJson2ProtoConfig::EnumCaseInsensetive) {
             enumFieldValue = FindEnumValue(enumField, value, AsciiEqualsIgnoreCase);
-        } else if (config.EnumValueMode == NProtobufJson::TJson2ProtoConfig::EnumSnakeCaseInsensitive) {
+        } else if (config.EnumValueMode == NProtobufJson::TJson2ProtoConfig::EnumSnakeCaseInsensitive) { 
             enumFieldValue = FindEnumValue(enumField, value, NProtobufJson::EqualsIgnoringCaseAndUnderscores);
         } else {
             enumFieldValue = enumField->FindValueByName(value);

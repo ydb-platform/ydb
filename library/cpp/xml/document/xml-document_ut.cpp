@@ -84,11 +84,11 @@ Y_UNIT_TEST_SUITE(TestXmlDocument) {
 
         TConstNode text = root.Node("h:text", false, nss);
         UNIT_ASSERT_EQUAL(text.Value<TString>(), "Некоторый текст");
-
-        // For performance you can create xpath context once using nss and pass it.
-        TXPathContextPtr ctxt = root.CreateXPathContext(nss);
-        UNIT_ASSERT(root.Node("text", true, *ctxt).IsNull());
-        UNIT_ASSERT_EXCEPTION(root.Node("text", false, *ctxt), yexception);
+ 
+        // For performance you can create xpath context once using nss and pass it. 
+        TXPathContextPtr ctxt = root.CreateXPathContext(nss); 
+        UNIT_ASSERT(root.Node("text", true, *ctxt).IsNull()); 
+        UNIT_ASSERT_EXCEPTION(root.Node("text", false, *ctxt), yexception); 
         UNIT_ASSERT_EQUAL(root.Node("h:text", false, *ctxt).Value<TString>(), "Некоторый текст");
     }
     Y_UNIT_TEST(XmlNodes) {
@@ -119,37 +119,37 @@ Y_UNIT_TEST_SUITE(TestXmlDocument) {
             iterLog << node2.Name() << ';';
         }
         UNIT_ASSERT_STRINGS_EQUAL(iterLog.Str(), "a;c;");
-
-        // get only element nodes, ignore text nodes with empty "name" param
+ 
+        // get only element nodes, ignore text nodes with empty "name" param 
         node = root.FirstChild(TString());
-        UNIT_ASSERT_EQUAL(node.IsText(), false);
-        UNIT_ASSERT_EQUAL(node.Name(), "a");
+        UNIT_ASSERT_EQUAL(node.IsText(), false); 
+        UNIT_ASSERT_EQUAL(node.Name(), "a"); 
         node = node.NextSibling(TString());
-        UNIT_ASSERT_EQUAL(node.IsText(), false);
-        UNIT_ASSERT_EQUAL(node.Name(), "c");
-
-        // use exact "name" to retrieve children and siblings
-        node = root.FirstChild("a");
-        UNIT_ASSERT_EQUAL(node.IsNull(), false);
-        UNIT_ASSERT_EQUAL(node.Name(), "a");
-        node = node.NextSibling("c");
-        UNIT_ASSERT_EQUAL(node.IsNull(), false);
-        UNIT_ASSERT_EQUAL(node.Name(), "c");
-        node = root.FirstChild("c"); // skip "a"
-        UNIT_ASSERT_EQUAL(node.IsNull(), false);
-        UNIT_ASSERT_EQUAL(node.Name(), "c");
-
-        // node not found: no exceptions, null nodes are returned
-        node = root.FirstChild("b"); // b is not direct child of root
-        UNIT_ASSERT_EQUAL(node.IsNull(), true);
-        node = root.FirstChild("nosuchnode");
-        UNIT_ASSERT_EQUAL(node.IsNull(), true);
-        node = root.FirstChild();
-        node = root.NextSibling("unknownnode");
-        UNIT_ASSERT_EQUAL(node.IsNull(), true);
-        UNIT_ASSERT_EXCEPTION(node.Name(), yexception);
+        UNIT_ASSERT_EQUAL(node.IsText(), false); 
+        UNIT_ASSERT_EQUAL(node.Name(), "c"); 
+ 
+        // use exact "name" to retrieve children and siblings 
+        node = root.FirstChild("a"); 
+        UNIT_ASSERT_EQUAL(node.IsNull(), false); 
+        UNIT_ASSERT_EQUAL(node.Name(), "a"); 
+        node = node.NextSibling("c"); 
+        UNIT_ASSERT_EQUAL(node.IsNull(), false); 
+        UNIT_ASSERT_EQUAL(node.Name(), "c"); 
+        node = root.FirstChild("c"); // skip "a" 
+        UNIT_ASSERT_EQUAL(node.IsNull(), false); 
+        UNIT_ASSERT_EQUAL(node.Name(), "c"); 
+ 
+        // node not found: no exceptions, null nodes are returned 
+        node = root.FirstChild("b"); // b is not direct child of root 
+        UNIT_ASSERT_EQUAL(node.IsNull(), true); 
+        node = root.FirstChild("nosuchnode"); 
+        UNIT_ASSERT_EQUAL(node.IsNull(), true); 
+        node = root.FirstChild(); 
+        node = root.NextSibling("unknownnode"); 
+        UNIT_ASSERT_EQUAL(node.IsNull(), true); 
+        UNIT_ASSERT_EXCEPTION(node.Name(), yexception); 
         UNIT_ASSERT_EXCEPTION(node.Value<TString>(), yexception);
-        UNIT_ASSERT_EXCEPTION(node.IsText(), yexception);
+        UNIT_ASSERT_EXCEPTION(node.IsText(), yexception); 
     }
     Y_UNIT_TEST(DefVal) {
         using namespace NXml;
@@ -235,49 +235,49 @@ Y_UNIT_TEST_SUITE(TestXmlDocument) {
             UNIT_ASSERT_VALUES_EQUAL(n.ToString(), "<a><b len=\"15\" correct=\"1\">hello world</b></a>");
         }
     }
-
+ 
     Y_UNIT_TEST(ReuseXPathContext) {
-        using namespace NXml;
-
-        TDocument xml(
-            "<?xml version=\"1.0\"?>\n"
-            "<root>\n"
-            "<a><b><c>Hello, world!</c></b></a>\n"
-            "<text x=\"10\">First</text>\n"
-            "<text y=\"20\">Second</text>\n"
-            "</root>",
-            TDocument::String);
-
-        TXPathContextPtr rootCtxt = xml.Root().CreateXPathContext();
-
-        // Check Node()
-        TConstNode b = xml.Root().Node("a/b", false, *rootCtxt);
-
-        // We can use root node context for xpath evaluation in any node
-        TConstNode c1 = b.Node("c", false, *rootCtxt);
+        using namespace NXml; 
+ 
+        TDocument xml( 
+            "<?xml version=\"1.0\"?>\n" 
+            "<root>\n" 
+            "<a><b><c>Hello, world!</c></b></a>\n" 
+            "<text x=\"10\">First</text>\n" 
+            "<text y=\"20\">Second</text>\n" 
+            "</root>", 
+            TDocument::String); 
+ 
+        TXPathContextPtr rootCtxt = xml.Root().CreateXPathContext(); 
+ 
+        // Check Node() 
+        TConstNode b = xml.Root().Node("a/b", false, *rootCtxt); 
+ 
+        // We can use root node context for xpath evaluation in any node 
+        TConstNode c1 = b.Node("c", false, *rootCtxt); 
         UNIT_ASSERT_EQUAL(c1.Value<TString>(), "Hello, world!");
-
-        TXPathContextPtr bCtxt = b.CreateXPathContext();
-        TConstNode c2 = b.Node("c", false, *bCtxt);
+ 
+        TXPathContextPtr bCtxt = b.CreateXPathContext(); 
+        TConstNode c2 = b.Node("c", false, *bCtxt); 
         UNIT_ASSERT_EQUAL(c2.Value<TString>(), "Hello, world!");
-
-        // Mixing contexts from different documents is forbidden
-        TDocument otherXml("<root></root>", TDocument::String);
-        TXPathContextPtr otherCtxt = otherXml.Root().CreateXPathContext();
-        UNIT_ASSERT_EXCEPTION(b.Node("c", false, *otherCtxt), yexception);
-
-        // Check Nodes()
-        TConstNodes texts = xml.Root().Nodes("text", true, *rootCtxt);
-        UNIT_ASSERT_EQUAL(texts.Size(), 2);
-
-        // Nodes() does't work for non-element nodes
-        UNIT_ASSERT_EXCEPTION(xml.Root().Nodes("text/@x", true, *rootCtxt), yexception);
-
-        // Check XPath()
-        TConstNodes ys = xml.Root().XPath("text/@y", true, *rootCtxt);
-        UNIT_ASSERT_EQUAL(ys.Size(), 1);
-        UNIT_ASSERT_EQUAL(ys[0].Value<int>(), 20);
-    }
+ 
+        // Mixing contexts from different documents is forbidden 
+        TDocument otherXml("<root></root>", TDocument::String); 
+        TXPathContextPtr otherCtxt = otherXml.Root().CreateXPathContext(); 
+        UNIT_ASSERT_EXCEPTION(b.Node("c", false, *otherCtxt), yexception); 
+ 
+        // Check Nodes() 
+        TConstNodes texts = xml.Root().Nodes("text", true, *rootCtxt); 
+        UNIT_ASSERT_EQUAL(texts.Size(), 2); 
+ 
+        // Nodes() does't work for non-element nodes 
+        UNIT_ASSERT_EXCEPTION(xml.Root().Nodes("text/@x", true, *rootCtxt), yexception); 
+ 
+        // Check XPath() 
+        TConstNodes ys = xml.Root().XPath("text/@y", true, *rootCtxt); 
+        UNIT_ASSERT_EQUAL(ys.Size(), 1); 
+        UNIT_ASSERT_EQUAL(ys[0].Value<int>(), 20); 
+    } 
 
     Y_UNIT_TEST(Html) {
         using namespace NXml;
@@ -291,19 +291,19 @@ Y_UNIT_TEST_SUITE(TestXmlDocument) {
         videoNode.SaveAsHtml(ss);
         UNIT_ASSERT_EQUAL(ss.Str(), "<video controls></video>");
     }
-
-    Y_UNIT_TEST(Move) {
-        using namespace NXml;
-
-        TDocument xml1("foo", TDocument::RootName);
-        xml1.Root().AddChild("bar");
-
-        UNIT_ASSERT_VALUES_EQUAL(xml1.Root().ToString(), "<foo><bar/></foo>");
-
-        TDocument xml2 = std::move(xml1);
-        UNIT_ASSERT_EXCEPTION(xml1.Root(), yexception);
-        UNIT_ASSERT_VALUES_EQUAL(xml2.Root().ToString(), "<foo><bar/></foo>");
-    }
+ 
+    Y_UNIT_TEST(Move) { 
+        using namespace NXml; 
+ 
+        TDocument xml1("foo", TDocument::RootName); 
+        xml1.Root().AddChild("bar"); 
+ 
+        UNIT_ASSERT_VALUES_EQUAL(xml1.Root().ToString(), "<foo><bar/></foo>"); 
+ 
+        TDocument xml2 = std::move(xml1); 
+        UNIT_ASSERT_EXCEPTION(xml1.Root(), yexception); 
+        UNIT_ASSERT_VALUES_EQUAL(xml2.Root().ToString(), "<foo><bar/></foo>"); 
+    } 
 
     Y_UNIT_TEST(StringConversion) {
         using namespace NXml;

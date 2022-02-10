@@ -297,8 +297,8 @@ void Scanner::ScanPlainScalar() {
 
   // set up the scanning parameters
   ScanScalarParams params;
-  params.end =
-      (InFlowContext() ? &Exp::ScanScalarEndInFlow() : &Exp::ScanScalarEnd());
+  params.end = 
+      (InFlowContext() ? &Exp::ScanScalarEndInFlow() : &Exp::ScanScalarEnd()); 
   params.eatEnd = false;
   params.indent = (InFlowContext() ? 0 : GetTopIndent() + 1);
   params.fold = FOLD_FLOW;
@@ -338,8 +338,8 @@ void Scanner::ScanQuotedScalar() {
 
   // setup the scanning parameters
   ScanScalarParams params;
-  RegEx end = (single ? RegEx(quote) && !Exp::EscSingleQuote() : RegEx(quote));
-  params.end = &end;
+  RegEx end = (single ? RegEx(quote) && !Exp::EscSingleQuote() : RegEx(quote)); 
+  params.end = &end; 
   params.eatEnd = true;
   params.escape = (single ? '\'' : '\\');
   params.indent = 0;

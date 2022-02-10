@@ -39,7 +39,7 @@ namespace {
         }
     }
 }
-
+ 
 namespace NProtobufJson {
     void ToSnakeCase(TString* const name) {
         ToSnakeCaseImpl(name, [](const char prev) { return prev != '_'; });
@@ -49,28 +49,28 @@ namespace NProtobufJson {
         ToSnakeCaseImpl(name, [](const char prev) { return prev != '_' && !IsAsciiUpper(prev); });
     }
 
-    bool EqualsIgnoringCaseAndUnderscores(TStringBuf s1, TStringBuf s2) {
-        size_t i1 = 0, i2 = 0;
-
-        while (i1 < s1.size() && i2 < s2.size()) {
-            if (s1[i1] == '_') {
-                ++i1;
-            } else if (s2[i2] == '_') {
-                ++i2;
-            } else if (AsciiToUpper(s1[i1]) != AsciiToUpper(s2[i2])) {
-                return false;
-            } else {
-                ++i1, ++i2;
-            }
-        }
-
-        while (i1 < s1.size() && s1[i1] == '_') {
-            ++i1;
-        }
-        while (i2 < s2.size() && s2[i2] == '_') {
-            ++i2;
-        }
-
-        return (i1 == s1.size() && i2 == s2.size());
-    }
+    bool EqualsIgnoringCaseAndUnderscores(TStringBuf s1, TStringBuf s2) { 
+        size_t i1 = 0, i2 = 0; 
+ 
+        while (i1 < s1.size() && i2 < s2.size()) { 
+            if (s1[i1] == '_') { 
+                ++i1; 
+            } else if (s2[i2] == '_') { 
+                ++i2; 
+            } else if (AsciiToUpper(s1[i1]) != AsciiToUpper(s2[i2])) { 
+                return false; 
+            } else { 
+                ++i1, ++i2; 
+            } 
+        } 
+ 
+        while (i1 < s1.size() && s1[i1] == '_') { 
+            ++i1; 
+        } 
+        while (i2 < s2.size() && s2[i2] == '_') { 
+            ++i2; 
+        } 
+ 
+        return (i1 == s1.size() && i2 == s2.size()); 
+    } 
 }

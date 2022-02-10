@@ -171,7 +171,7 @@ RECURSE(
     libosmium
     libphonenumber
     libpng
-    libpq
+    libpq 
     libpqxx
     libpsl
     libraw
@@ -226,7 +226,7 @@ RECURSE(
     minilzo
     minizip
     mlir11
-    mms
+    mms 
     mongo-c-driver
     mongo-cxx-driver
     msgpack

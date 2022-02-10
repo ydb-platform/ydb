@@ -85,8 +85,8 @@ def pytest_ignore_collect(module, session, filenames_from_full_filters, accept_f
     if filenames_from_full_filters is not None and module.name not in filenames_from_full_filters:
         return True
 
-    test_file_filter = getattr(session.config.option, 'test_file_filter', None)
-    if test_file_filter is None:
+    test_file_filter = getattr(session.config.option, 'test_file_filter', None) 
+    if test_file_filter is None: 
         return False
     if module.name != test_file_filter.replace('/', '.'):
         return True

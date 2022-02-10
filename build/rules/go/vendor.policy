@@ -531,20 +531,20 @@ ALLOW .* -> vendor/github.com/golang/mock
 # Go load generator. Can be used as library for custom load tools. CONTRIB-1420
 ALLOW .* -> vendor/github.com/yandex/pandora
 
-# CONTRIB-1450 Apple notifcation service client 
-ALLOW .* -> vendor/github.com/sideshow/apns2 
- 
+# CONTRIB-1450 Apple notifcation service client
+ALLOW .* -> vendor/github.com/sideshow/apns2
+
 # CONTRIB-1459 Merging same-type structs with exported fields initialized as zero value of their type and same-types maps
 ALLOW .* -> vendor/github.com/imdario/mergo
 
 # CONTRIB-1468 Terminal interactive progress bar
 ALLOW .* -> vendor/github.com/vbauerster/mpb
 
-# CONTRIB-1451 Google firebase library 
-ALLOW .* -> vendor/firebase.google.com/go 
-#transitive dependency for firebase 
-ALLOW .* -> vendor/google.golang.org/api/option 
- 
+# CONTRIB-1451 Google firebase library
+ALLOW .* -> vendor/firebase.google.com/go
+#transitive dependency for firebase
+ALLOW .* -> vendor/google.golang.org/api/option
+
 # CONTRIB-1899 Firebase Remote Config client library
 ALLOW .* -> vendor/google.golang.org/api/firebaseremoteconfig/v1
 

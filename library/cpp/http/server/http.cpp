@@ -59,13 +59,13 @@ public:
 
     inline void Activate(TInstant now) noexcept;
     inline void DeActivate();
-    inline void Reject();
+    inline void Reject(); 
 
 public:
     TSocket Socket_;
     NAddr::IRemoteAddrRef ListenerSockAddrRef_;
     THttpServer::TImpl* HttpServ_ = nullptr;
-    bool Reject_ = false;
+    bool Reject_ = false; 
     TInstant LastUsed;
     TInstant AcceptMoment;
     size_t ReceivedRequests = 0;
@@ -112,7 +112,7 @@ public:
 
         bool TryRemovingUnsafe(TInstant border) noexcept {
             if (Conns_.Empty()) {
-                return false;
+                return false; 
             }
             TClientConnection* c = &*(Conns_.Begin());
             if (c->LastUsed > border) {
@@ -120,7 +120,7 @@ public:
             }
             EraseUnsafe(c);
             delete c;
-            return true;
+            return true; 
         }
 
         void EraseUnsafe(TClientConnection* c) noexcept {
@@ -154,13 +154,13 @@ public:
     }
 
     void AddRequestFromSocket(const TSocket& s, TInstant now, NAddr::IRemoteAddrRef listenerSockAddrRef) {
-        if (MaxRequestsReached()) {
+        if (MaxRequestsReached()) { 
             Cb_->OnMaxConn();
             bool wasRemoved = Connections->RemoveOld(TInstant::Max());
-            if (!wasRemoved && Options_.RejectExcessConnections) {
+            if (!wasRemoved && Options_.RejectExcessConnections) { 
                 (new TClientConnection(s, this, listenerSockAddrRef))->Reject();
-                return;
-            }
+                return; 
+            } 
         }
 
         auto connection = new TClientConnection(s, this, listenerSockAddrRef);
@@ -242,7 +242,7 @@ public:
         // ignore result
     }
 
-    void AddRequest(TAutoPtr<TClientRequest> req, bool fail) {
+    void AddRequest(TAutoPtr<TClientRequest> req, bool fail) { 
         struct TFailRequest: public THttpClientRequestEx {
             inline TFailRequest(TAutoPtr<TClientRequest> parent) {
                 Conn_.Reset(parent->Conn_.Release());
@@ -259,7 +259,7 @@ public:
             }
         };
 
-        if (!fail && Requests->Add(req.Get())) {
+        if (!fail && Requests->Add(req.Get())) { 
             Y_UNUSED(req.Release());
         } else {
             req = new TFailRequest(req);
@@ -438,10 +438,10 @@ public:
         return AtomicGet(ConnectionCount);
     }
 
-    inline bool MaxRequestsReached() const {
+    inline bool MaxRequestsReached() const { 
         return Options_.MaxConnections && ((size_t)GetClientCount() >= Options_.MaxConnections);
-    }
-
+    } 
+ 
     THolder<TThread> ListenThread;
     TPipeHandle ListenWakeupReadFd;
     TPipeHandle ListenWakeupWriteFd;
@@ -547,10 +547,10 @@ const IThreadPool& THttpServer::GetFailQueue() const {
     return Impl_->GetFailQueue();
 }
 
-bool THttpServer::MaxRequestsReached() const {
-    return Impl_->MaxRequestsReached();
-}
-
+bool THttpServer::MaxRequestsReached() const { 
+    return Impl_->MaxRequestsReached(); 
+} 
+ 
 TClientConnection::TClientConnection(const TSocket& s, THttpServer::TImpl* serv, NAddr::IRemoteAddrRef listenerSockAddrRef)
     : Socket_(s)
     , ListenerSockAddrRef_(listenerSockAddrRef)
@@ -591,7 +591,7 @@ void TClientConnection::OnPollEvent(TInstant now) {
     THolder<TClientRequest> obj(HttpServ_->CreateRequest(this_));
     AcceptMoment = now;
 
-    HttpServ_->AddRequest(obj, Reject_);
+    HttpServ_->AddRequest(obj, Reject_); 
 }
 
 void TClientConnection::Activate(TInstant now) noexcept {
@@ -604,12 +604,12 @@ void TClientConnection::DeActivate() {
     HttpServ_->Connections->Add(this);
 }
 
-void TClientConnection::Reject() {
-    Reject_ = true;
-
-    HttpServ_->Connections->Add(this);
-}
-
+void TClientConnection::Reject() { 
+    Reject_ = true; 
+ 
+    HttpServ_->Connections->Add(this); 
+} 
+ 
 TClientRequest::TClientRequest() {
 }
 

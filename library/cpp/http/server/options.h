@@ -44,12 +44,12 @@ public:
         return *this;
     }
 
-    inline THttpServerOptions& EnableRejectExcessConnections(bool enable) noexcept {
-        RejectExcessConnections = enable;
-
-        return *this;
-    }
-
+    inline THttpServerOptions& EnableRejectExcessConnections(bool enable) noexcept { 
+        RejectExcessConnections = enable; 
+ 
+        return *this; 
+    } 
+ 
     inline THttpServerOptions& EnableReusePort(bool enable) noexcept {
         ReusePort = enable;
 
@@ -148,7 +148,7 @@ public:
 
     bool KeepAliveEnabled = true;
     bool CompressionEnabled = false;
-    bool RejectExcessConnections = false;
+    bool RejectExcessConnections = false; 
     bool ReusePort = false; // set SO_REUSEPORT socket option
     bool ReuseAddress = true; // set SO_REUSEADDR socket option
     TAddrs BindSockaddr;

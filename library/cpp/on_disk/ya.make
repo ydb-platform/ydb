@@ -24,8 +24,8 @@ RECURSE(
     mms
     mms/ut
     multi_blob
-    tar_archive
-    tar_archive/ut
+    tar_archive 
+    tar_archive/ut 
     st_hash
     st_hash/ut
 )

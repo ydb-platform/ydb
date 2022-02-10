@@ -1,9 +1,9 @@
 #pragma once
 
-#if defined(_MSC_VER) 
+#if defined(_MSC_VER)
     #include <intrin.h>
-#endif 
- 
+#endif
+
 // useful cross-platfrom definitions for compilers
 
 /**
@@ -623,11 +623,11 @@ _YandexAbort();
         do {                                        \
         } while (0)
 #endif
- 
-#ifdef __cplusplus 
- 
+
+#ifdef __cplusplus
+
 void UseCharPointerImpl(volatile const char*);
- 
+
 template <typename T>
 Y_FORCE_INLINE void DoNotOptimizeAway(T&& datum) {
     #if defined(_MSC_VER)
@@ -641,10 +641,10 @@ Y_FORCE_INLINE void DoNotOptimizeAway(T&& datum) {
     Y_FAKE_READ(datum);
     #endif
 }
- 
+
     /**
- * Use this macro to prevent unused variables elimination. 
- */ 
+ * Use this macro to prevent unused variables elimination.
+ */
     #define Y_DO_NOT_OPTIMIZE_AWAY(X) ::DoNotOptimizeAway(X)
- 
-#endif 
+
+#endif

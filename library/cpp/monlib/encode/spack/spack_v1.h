@@ -78,7 +78,7 @@ namespace NMonitoring {
     ///////////////////////////////////////////////////////////////////////////////
     struct Y_PACKED TSpackHeader {
         ui16 Magic = 0x5053;   // "SP"
-        ui16 Version;          // MSB - major version, LSB - minor version 
+        ui16 Version;          // MSB - major version, LSB - minor version
         ui16 HeaderSize = sizeof(TSpackHeader);
         ui8 TimePrecision;
         ui8 Compression;
@@ -89,12 +89,12 @@ namespace NMonitoring {
         // add new fields here
     };
 
-    enum ESpackV1Version: ui16 { 
-        SV1_00 = 0x0100, 
-        SV1_01 = 0x0101, 
-        SV1_02 = 0x0102 
-    }; 
- 
+    enum ESpackV1Version: ui16 {
+        SV1_00 = 0x0100,
+        SV1_01 = 0x0101,
+        SV1_02 = 0x0102
+    };
+
     IMetricEncoderPtr EncoderSpackV1(
         IOutputStream* out,
         ETimePrecision timePrecision,
@@ -102,14 +102,14 @@ namespace NMonitoring {
         EMetricsMergingMode mergingMode = EMetricsMergingMode::DEFAULT
     );
 
-    IMetricEncoderPtr EncoderSpackV12( 
-        IOutputStream* out, 
-        ETimePrecision timePrecision, 
-        ECompression compression, 
-        EMetricsMergingMode mergingMode = EMetricsMergingMode::DEFAULT, 
-        TStringBuf metricNameLabel = "name" 
-    ); 
+    IMetricEncoderPtr EncoderSpackV12(
+        IOutputStream* out,
+        ETimePrecision timePrecision,
+        ECompression compression,
+        EMetricsMergingMode mergingMode = EMetricsMergingMode::DEFAULT,
+        TStringBuf metricNameLabel = "name"
+    );
 
-    void DecodeSpackV1(IInputStream* in, IMetricConsumer* c, TStringBuf metricNameLabel = "name"); 
- 
+    void DecodeSpackV1(IInputStream* in, IMetricConsumer* c, TStringBuf metricNameLabel = "name");
+
 }

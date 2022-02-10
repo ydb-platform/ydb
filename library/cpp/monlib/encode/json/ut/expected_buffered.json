@@ -37,16 +37,16 @@
         "value":3.14
       },
       {
-        "kind":"IGAUGE", 
-        "labels": 
-          { 
+        "kind":"IGAUGE",
+        "labels":
+          {
             "labels":"l4",
             "metric":"single_igauge"
-          }, 
-        "ts":1509843723, 
-        "value":42 
-      }, 
-      { 
+          },
+        "ts":1509843723,
+        "value":42
+      },
+      {
         "kind":"GAUGE",
         "labels":
           {
@@ -71,11 +71,11 @@
       },
       {
         "kind":"COUNTER",
-        "labels": 
-          { 
+        "labels":
+          {
             "labels":"l6",
             "metric":"multiple"
-          }, 
+          },
         "timeseries":
           [
             {
@@ -86,7 +86,7 @@
               "ts":1509843738,
               "value":1338
             }
-          ] 
+          ]
       }
     ]
 }

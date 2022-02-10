@@ -119,8 +119,8 @@
 #include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
 
 #include <util/folder/dirut.h>
-#include <util/system/file.h> 
-#include <util/system/getpid.h> 
+#include <util/system/file.h>
+#include <util/system/getpid.h>
 #include <util/system/hostname.h>
 
 #include <ydb/core/tracing/tablet_info.h>

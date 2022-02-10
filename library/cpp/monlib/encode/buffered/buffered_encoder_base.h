@@ -82,10 +82,10 @@ protected:
         TMetricTimeSeries TimeSeries;
     };
 
-protected: 
-    TString FormatLabels(const TPooledLabels& labels) const; 
- 
-protected: 
+protected:
+    TString FormatLabels(const TPooledLabels& labels) const;
+
+protected:
     TEncoderState State_;
 
     TStringPoolBuilder LabelNamesPool_;

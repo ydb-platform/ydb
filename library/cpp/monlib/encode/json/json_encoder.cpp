@@ -14,21 +14,21 @@
 
 namespace NMonitoring {
     namespace {
-        enum class EJsonStyle { 
-            Solomon, 
-            Cloud 
-        }; 
- 
+        enum class EJsonStyle {
+            Solomon,
+            Cloud
+        };
+
         ///////////////////////////////////////////////////////////////////////
         // TJsonWriter
         ///////////////////////////////////////////////////////////////////////
         class TJsonWriter {
         public:
-            TJsonWriter(IOutputStream* out, int indentation, EJsonStyle style, TStringBuf metricNameLabel) 
+            TJsonWriter(IOutputStream* out, int indentation, EJsonStyle style, TStringBuf metricNameLabel)
                 : Buf_(NJsonWriter::HEM_UNSAFE, out)
-                , Style_(style) 
-                , MetricNameLabel_(metricNameLabel) 
-                , CurrentMetricName_() 
+                , Style_(style)
+                , MetricNameLabel_(metricNameLabel)
+                , CurrentMetricName_()
             {
                 Buf_.SetIndentSpaces(indentation);
                 Buf_.SetWriteNanAsString();
@@ -37,11 +37,11 @@ namespace NMonitoring {
             void WriteTime(TInstant time) {
                 if (time != TInstant::Zero()) {
                     Buf_.WriteKey(TStringBuf("ts"));
-                    if (Style_ == EJsonStyle::Solomon) { 
-                        Buf_.WriteULongLong(time.Seconds()); 
-                    } else { 
-                        Buf_.WriteString(time.ToString()); 
-                    } 
+                    if (Style_ == EJsonStyle::Solomon) {
+                        Buf_.WriteULongLong(time.Seconds());
+                    } else {
+                        Buf_.WriteString(time.ToString());
+                    }
                 }
             }
 
@@ -61,8 +61,8 @@ namespace NMonitoring {
             }
 
             void WriteValue(IHistogramSnapshot* s) {
-                Y_ENSURE(Style_ == EJsonStyle::Solomon); 
- 
+                Y_ENSURE(Style_ == EJsonStyle::Solomon);
+
                 Buf_.WriteKey(TStringBuf("hist"));
                 Buf_.BeginObject();
                 if (ui32 count = s->Count()) {
@@ -94,8 +94,8 @@ namespace NMonitoring {
             }
 
             void WriteValue(ISummaryDoubleSnapshot* s) {
-                Y_ENSURE(Style_ == EJsonStyle::Solomon); 
- 
+                Y_ENSURE(Style_ == EJsonStyle::Solomon);
+
                 Buf_.WriteKey(TStringBuf("summary"));
                 Buf_.BeginObject();
 
@@ -118,8 +118,8 @@ namespace NMonitoring {
             }
 
             void WriteValue(TLogHistogramSnapshot* s) {
-                Y_ENSURE(Style_ == EJsonStyle::Solomon); 
- 
+                Y_ENSURE(Style_ == EJsonStyle::Solomon);
+
                 Buf_.WriteKey(TStringBuf("log_hist"));
                 Buf_.BeginObject();
 
@@ -169,64 +169,64 @@ namespace NMonitoring {
                         break;
 
                     case EMetricValueType::UNKNOWN:
-                        ythrow yexception() << "unknown metric value type"; 
+                        ythrow yexception() << "unknown metric value type";
                 }
             }
 
             void WriteLabel(TStringBuf name, TStringBuf value) {
                 Y_ENSURE(IsUtf(name), "label name is not valid UTF-8 string");
                 Y_ENSURE(IsUtf(value), "label value is not valid UTF-8 string");
-                if (Style_ == EJsonStyle::Cloud && name == MetricNameLabel_) { 
-                    CurrentMetricName_ = value; 
-                } else { 
-                    Buf_.WriteKey(name); 
-                    Buf_.WriteString(value); 
-                } 
+                if (Style_ == EJsonStyle::Cloud && name == MetricNameLabel_) {
+                    CurrentMetricName_ = value;
+                } else {
+                    Buf_.WriteKey(name);
+                    Buf_.WriteString(value);
+                }
             }
 
-            void WriteMetricType(EMetricType type) { 
-                if (Style_ == EJsonStyle::Cloud) { 
-                    Buf_.WriteKey("type"); 
-                    Buf_.WriteString(MetricTypeToCloudStr(type)); 
-                } else { 
-                    Buf_.WriteKey("kind"); 
-                    Buf_.WriteString(MetricTypeToStr(type)); 
-                } 
-            } 
- 
-            void WriteName() { 
-                if (Style_ != EJsonStyle::Cloud) { 
-                    return; 
-                } 
-                if (CurrentMetricName_.Empty()) { 
-                    ythrow yexception() << "label '" << MetricNameLabel_ << "' is not defined"; 
-                } 
-                Buf_.WriteKey("name"); 
-                Buf_.WriteString(CurrentMetricName_); 
-                CurrentMetricName_.clear(); 
-            } 
- 
-        private: 
-            static TStringBuf MetricTypeToCloudStr(EMetricType type) { 
-                switch (type) { 
-                    case EMetricType::GAUGE: 
-                        return TStringBuf("DGAUGE"); 
-                    case EMetricType::COUNTER: 
-                        return TStringBuf("COUNTER"); 
-                    case EMetricType::RATE: 
-                        return TStringBuf("RATE"); 
-                    case EMetricType::IGAUGE: 
-                        return TStringBuf("IGAUGE"); 
-                    default: 
-                        ythrow yexception() << "metric type '" << type << "' is not supported by cloud json format"; 
-                } 
-            } 
- 
+            void WriteMetricType(EMetricType type) {
+                if (Style_ == EJsonStyle::Cloud) {
+                    Buf_.WriteKey("type");
+                    Buf_.WriteString(MetricTypeToCloudStr(type));
+                } else {
+                    Buf_.WriteKey("kind");
+                    Buf_.WriteString(MetricTypeToStr(type));
+                }
+            }
+
+            void WriteName() {
+                if (Style_ != EJsonStyle::Cloud) {
+                    return;
+                }
+                if (CurrentMetricName_.Empty()) {
+                    ythrow yexception() << "label '" << MetricNameLabel_ << "' is not defined";
+                }
+                Buf_.WriteKey("name");
+                Buf_.WriteString(CurrentMetricName_);
+                CurrentMetricName_.clear();
+            }
+
+        private:
+            static TStringBuf MetricTypeToCloudStr(EMetricType type) {
+                switch (type) {
+                    case EMetricType::GAUGE:
+                        return TStringBuf("DGAUGE");
+                    case EMetricType::COUNTER:
+                        return TStringBuf("COUNTER");
+                    case EMetricType::RATE:
+                        return TStringBuf("RATE");
+                    case EMetricType::IGAUGE:
+                        return TStringBuf("IGAUGE");
+                    default:
+                        ythrow yexception() << "metric type '" << type << "' is not supported by cloud json format";
+                }
+            }
+
         protected:
             NJsonWriter::TBuf Buf_;
-            EJsonStyle Style_; 
-            TString MetricNameLabel_; 
-            TString CurrentMetricName_; 
+            EJsonStyle Style_;
+            TString MetricNameLabel_;
+            TString CurrentMetricName_;
         };
 
         ///////////////////////////////////////////////////////////////////////
@@ -234,8 +234,8 @@ namespace NMonitoring {
         ///////////////////////////////////////////////////////////////////////
         class TEncoderJson final: public IMetricEncoder, public TJsonWriter {
         public:
-            TEncoderJson(IOutputStream* out, int indentation, EJsonStyle style, TStringBuf metricNameLabel) 
-                : TJsonWriter{out, indentation, style, metricNameLabel} 
+            TEncoderJson(IOutputStream* out, int indentation, EJsonStyle style, TStringBuf metricNameLabel)
+                : TJsonWriter{out, indentation, style, metricNameLabel}
             {
             }
 
@@ -267,11 +267,11 @@ namespace NMonitoring {
                 State_.Switch(TEncoderState::EState::ROOT, TEncoderState::EState::METRIC);
                 if (Buf_.KeyExpected()) {
                     // first metric, so open metrics array
-                    Buf_.WriteKey(TStringBuf(Style_ == EJsonStyle::Solomon ? "sensors" : "metrics")); 
+                    Buf_.WriteKey(TStringBuf(Style_ == EJsonStyle::Solomon ? "sensors" : "metrics"));
                     Buf_.BeginList();
                 }
                 Buf_.BeginObject();
-                WriteMetricType(type); 
+                WriteMetricType(type);
             }
 
             void OnMetricEnd() override {
@@ -300,7 +300,7 @@ namespace NMonitoring {
                 }
                 if (State_ == TEncoderState::EState::ROOT) {
                     State_ = TEncoderState::EState::COMMON_LABELS;
-                    Buf_.WriteKey(TStringBuf(Style_ == EJsonStyle::Solomon ? "commonLabels" : "labels")); 
+                    Buf_.WriteKey(TStringBuf(Style_ == EJsonStyle::Solomon ? "commonLabels" : "labels"));
                 } else if (State_ == TEncoderState::EState::METRIC) {
                     State_ = TEncoderState::EState::METRIC_LABELS;
                     Buf_.WriteKey(TStringBuf("labels"));
@@ -323,9 +323,9 @@ namespace NMonitoring {
 
                 Y_ENSURE(!EmptyLabels_, "Labels cannot be empty");
                 Buf_.EndObject();
-                if (State_ == TEncoderState::EState::METRIC) { 
-                    WriteName(); 
-                } 
+                if (State_ == TEncoderState::EState::METRIC) {
+                    WriteName();
+                }
             }
 
             void OnLabel(TStringBuf name, TStringBuf value) override {
@@ -420,8 +420,8 @@ namespace NMonitoring {
         ///////////////////////////////////////////////////////////////////////
         class TBufferedJsonEncoder : public TBufferedEncoderBase, public TJsonWriter {
         public:
-            TBufferedJsonEncoder(IOutputStream* out, int indentation, EJsonStyle style, TStringBuf metricNameLabel) 
-                : TJsonWriter{out, indentation, style, metricNameLabel} 
+            TBufferedJsonEncoder(IOutputStream* out, int indentation, EJsonStyle style, TStringBuf metricNameLabel)
+                : TJsonWriter{out, indentation, style, metricNameLabel}
             {
                 MetricsMergingMode_ = EMetricsMergingMode::MERGE_METRICS;
             }
@@ -464,12 +464,12 @@ namespace NMonitoring {
 
                 WriteTime(CommonTime_);
                 if (CommonLabels_.size() > 0) {
-                    Buf_.WriteKey(TStringBuf(Style_ == EJsonStyle::Solomon ? "commonLabels": "labels")); 
-                    WriteLabels(CommonLabels_, true); 
+                    Buf_.WriteKey(TStringBuf(Style_ == EJsonStyle::Solomon ? "commonLabels": "labels"));
+                    WriteLabels(CommonLabels_, true);
                 }
 
                 if (Metrics_.size() > 0) {
-                    Buf_.WriteKey(TStringBuf(Style_ == EJsonStyle::Solomon ? "sensors" : "metrics")); 
+                    Buf_.WriteKey(TStringBuf(Style_ == EJsonStyle::Solomon ? "sensors" : "metrics"));
                     WriteMetrics();
                 }
 
@@ -488,10 +488,10 @@ namespace NMonitoring {
             void WriteMetric(TMetric& metric) {
                 Buf_.BeginObject();
 
-                WriteMetricType(metric.MetricType); 
+                WriteMetricType(metric.MetricType);
 
                 Buf_.WriteKey(TStringBuf("labels"));
-                WriteLabels(metric.Labels, false); 
+                WriteLabels(metric.Labels, false);
 
                 metric.TimeSeries.SortByTs();
                 if (metric.TimeSeries.Size() == 1) {
@@ -515,7 +515,7 @@ namespace NMonitoring {
                 Buf_.EndObject();
             }
 
-            void WriteLabels(const TPooledLabels& labels, bool isCommon) { 
+            void WriteLabels(const TPooledLabels& labels, bool isCommon) {
                 Buf_.BeginObject();
 
                 for (auto i = 0u; i < labels.size(); ++i) {
@@ -526,10 +526,10 @@ namespace NMonitoring {
                 }
 
                 Buf_.EndObject();
- 
-                if (!isCommon) { 
-                    WriteName(); 
-                } 
+
+                if (!isCommon) {
+                    WriteName();
+                }
             }
 
         private:
@@ -539,18 +539,18 @@ namespace NMonitoring {
     }
 
     IMetricEncoderPtr EncoderJson(IOutputStream* out, int indentation) {
-        return MakeHolder<TEncoderJson>(out, indentation, EJsonStyle::Solomon, ""); 
+        return MakeHolder<TEncoderJson>(out, indentation, EJsonStyle::Solomon, "");
     }
 
     IMetricEncoderPtr BufferedEncoderJson(IOutputStream* out, int indentation) {
-        return MakeHolder<TBufferedJsonEncoder>(out, indentation, EJsonStyle::Solomon, ""); 
+        return MakeHolder<TBufferedJsonEncoder>(out, indentation, EJsonStyle::Solomon, "");
     }
- 
-    IMetricEncoderPtr EncoderCloudJson(IOutputStream* out, int indentation, TStringBuf metricNameLabel) { 
-        return MakeHolder<TEncoderJson>(out, indentation, EJsonStyle::Cloud, metricNameLabel); 
-    } 
- 
-    IMetricEncoderPtr BufferedEncoderCloudJson(IOutputStream* out, int indentation, TStringBuf metricNameLabel) { 
-        return MakeHolder<TBufferedJsonEncoder>(out, indentation, EJsonStyle::Cloud, metricNameLabel); 
-    } 
+
+    IMetricEncoderPtr EncoderCloudJson(IOutputStream* out, int indentation, TStringBuf metricNameLabel) {
+        return MakeHolder<TEncoderJson>(out, indentation, EJsonStyle::Cloud, metricNameLabel);
+    }
+
+    IMetricEncoderPtr BufferedEncoderCloudJson(IOutputStream* out, int indentation, TStringBuf metricNameLabel) {
+        return MakeHolder<TBufferedJsonEncoder>(out, indentation, EJsonStyle::Cloud, metricNameLabel);
+    }
 }

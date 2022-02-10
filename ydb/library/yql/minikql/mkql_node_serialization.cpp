@@ -210,19 +210,19 @@ namespace {
                 IsProcessed0 = false;
             }
 
-            void Visit(TBlockType& node) override { 
-                if (node.GetCookie() != 0) { 
-                    Owner.WriteReference(node); 
-                    IsProcessed0 = true; 
-                    return; 
-                } 
- 
-                Owner.Write(TypeMarker | (char)TType::EKind::Block); 
-                auto itemType = node.GetItemType(); 
-                Owner.AddChildNode(*itemType); 
-                IsProcessed0 = false; 
-            } 
- 
+            void Visit(TBlockType& node) override {
+                if (node.GetCookie() != 0) {
+                    Owner.WriteReference(node);
+                    IsProcessed0 = true;
+                    return;
+                }
+
+                Owner.Write(TypeMarker | (char)TType::EKind::Block);
+                auto itemType = node.GetItemType();
+                Owner.AddChildNode(*itemType);
+                IsProcessed0 = false;
+            }
+
             void Visit(TTaggedType& node) override {
                 if (node.GetCookie() != 0) {
                     Owner.WriteReference(node);
@@ -596,11 +596,11 @@ namespace {
                 Owner.RegisterReference(node);
             }
 
-            void Visit(TBlockType& node) override { 
-                Owner.Write(static_cast<ui8>(node.GetShape())); 
-                Owner.RegisterReference(node); 
-            } 
- 
+            void Visit(TBlockType& node) override {
+                Owner.Write(static_cast<ui8>(node.GetShape()));
+                Owner.RegisterReference(node);
+            }
+
             void Visit(TTaggedType& node) override {
                 auto tag = node.GetTagStr();
                 Owner.WriteName(tag);
@@ -1196,7 +1196,7 @@ namespace {
             case TType::EKind::Variant:
                 return ReadVariantType();
             case TType::EKind::Flow:
-                return ReadFlowOrBlockType(code); 
+                return ReadFlowOrBlockType(code);
             case TType::EKind::Null:
                 return ReadNullType();
             default:
@@ -1313,15 +1313,15 @@ namespace {
             return node;
         }
 
-        TNode* ReadFlowOrBlockType(char code) { 
-            switch ((TType::EKind)(code & TypeMask)) { 
-                case TType::EKind::Flow: return ReadFlowType(); 
-                case TType::EKind::Block: return ReadBlockType(); 
-                default: 
-                    ThrowCorrupted(); 
-            } 
-        } 
- 
+        TNode* ReadFlowOrBlockType(char code) {
+            switch ((TType::EKind)(code & TypeMask)) {
+                case TType::EKind::Flow: return ReadFlowType();
+                case TType::EKind::Block: return ReadBlockType();
+                default:
+                    ThrowCorrupted();
+            }
+        }
+
         TNode* ReadFlowType() {
             auto itemTypeNode = PopNode();
             if (itemTypeNode->GetType()->GetKind() != TType::EKind::Type)
@@ -1333,26 +1333,26 @@ namespace {
             return node;
         }
 
-        TNode* ReadBlockType() { 
-            auto itemTypeNode = PopNode(); 
-            if (itemTypeNode->GetType()->GetKind() != TType::EKind::Type) { 
-                ThrowCorrupted(); 
-            } 
- 
-            const auto shapeChar = Read(); 
-            if (shapeChar != static_cast<char>(TBlockType::EShape::Single) && 
-                shapeChar != static_cast<char>(TBlockType::EShape::Many)) 
-            { 
-                ThrowCorrupted(); 
-            } 
-            const auto shape = static_cast<TBlockType::EShape>(shapeChar); 
- 
-            auto itemType = static_cast<TType*>(itemTypeNode); 
-            auto node = TBlockType::Create(itemType, shape, Env); 
-            Nodes.push_back(node); 
-            return node; 
-        } 
- 
+        TNode* ReadBlockType() {
+            auto itemTypeNode = PopNode();
+            if (itemTypeNode->GetType()->GetKind() != TType::EKind::Type) {
+                ThrowCorrupted();
+            }
+
+            const auto shapeChar = Read();
+            if (shapeChar != static_cast<char>(TBlockType::EShape::Single) &&
+                shapeChar != static_cast<char>(TBlockType::EShape::Many))
+            {
+                ThrowCorrupted();
+            }
+            const auto shape = static_cast<TBlockType::EShape>(shapeChar);
+
+            auto itemType = static_cast<TType*>(itemTypeNode);
+            auto node = TBlockType::Create(itemType, shape, Env);
+            Nodes.push_back(node);
+            return node;
+        }
+
         TNode* ReadTaggedType() {
             auto baseTypeNode = PopNode();
             if (baseTypeNode->GetType()->GetKind() != TType::EKind::Type)

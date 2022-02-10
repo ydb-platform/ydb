@@ -286,10 +286,10 @@ private:
         VisitType<TFlowType>(node);
     }
 
-    void Visit(TBlockType& node) override { 
-        VisitType<TBlockType>(node); 
-    } 
- 
+    void Visit(TBlockType& node) override {
+        VisitType<TBlockType>(node);
+    }
+
     void Visit(TTaggedType& node) override {
         VisitType<TTaggedType>(node);
     }
@@ -535,7 +535,7 @@ public:
         HolderFactory = MakeHolder<THolderFactory>(CompOpts.AllocState, *MemInfo, patternNodes->HolderFactory->GetFunctionRegistry());
         ValueBuilder = MakeHolder<TDefaultValueBuilder>(*HolderFactory.Get(), compOpts.ValidatePolicy);
         ValueBuilder->SetSecureParamsProvider(CompOpts.SecureParamsProvider);
-        ArrowMemoryPool = MakeArrowMemoryPool(CompOpts.AllocState); 
+        ArrowMemoryPool = MakeArrowMemoryPool(CompOpts.AllocState);
     }
 
     ~TComputationGraph() {
@@ -553,11 +553,11 @@ public:
 
     void Prepare() override {
         if (!IsPrepared) {
-            Ctx.Reset(new TComputationContext(*HolderFactory, 
-                ValueBuilder.Get(), 
-                CompOpts, 
-                PatternNodes->GetMutables(), 
-                *ArrowMemoryPool)); 
+            Ctx.Reset(new TComputationContext(*HolderFactory,
+                ValueBuilder.Get(),
+                CompOpts,
+                PatternNodes->GetMutables(),
+                *ArrowMemoryPool));
             ValueBuilder->SetCalleePositionHolder(Ctx->CalleePosition);
             for (auto& node : PatternNodes->GetNodes()) {
                 node->InitNode(*Ctx);
@@ -650,7 +650,7 @@ private:
     const TIntrusivePtr<TMemoryUsageInfo> MemInfo;
     THolder<THolderFactory> HolderFactory;
     THolder<TDefaultValueBuilder> ValueBuilder;
-    std::unique_ptr<arrow::MemoryPool> ArrowMemoryPool; 
+    std::unique_ptr<arrow::MemoryPool> ArrowMemoryPool;
     THolder<TComputationContext> Ctx;
     TComputationOptsFull CompOpts;
     bool IsPrepared = false;

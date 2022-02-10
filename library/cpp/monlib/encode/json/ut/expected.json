@@ -11,7 +11,7 @@
         "labels":
           {
             "metric":"single",
-            "labels":"l1" 
+            "labels":"l1"
           },
         "ts":1509843723,
         "value":17
@@ -21,7 +21,7 @@
         "labels":
           {
             "metric":"single",
-            "labels":"l2" 
+            "labels":"l2"
           },
         "ts":1509843723,
         "value":17
@@ -31,27 +31,27 @@
         "labels":
           {
             "metric":"single",
-            "labels":"l3" 
+            "labels":"l3"
           },
         "ts":1509843723,
         "value":3.14
       },
       {
-        "kind":"IGAUGE", 
-        "labels": 
-          { 
-            "metric":"single_igauge", 
-            "labels":"l4" 
-          }, 
-        "ts":1509843723, 
-        "value":42 
-      }, 
-      { 
+        "kind":"IGAUGE",
+        "labels":
+          {
+            "metric":"single_igauge",
+            "labels":"l4"
+          },
+        "ts":1509843723,
+        "value":42
+      },
+      {
         "kind":"GAUGE",
         "labels":
           {
             "metric":"multiple",
-            "labels":"l5" 
+            "labels":"l5"
           },
         "timeseries":
           [
@@ -85,7 +85,7 @@
         "labels":
           {
             "metric":"multiple",
-            "labels":"l6" 
+            "labels":"l6"
           }
       }
     ]

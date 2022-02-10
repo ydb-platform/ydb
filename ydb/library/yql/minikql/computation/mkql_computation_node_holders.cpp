@@ -3042,10 +3042,10 @@ NUdf::TSingleBlockPtr THolderFactory::CreateSingleBlock(const NUdf::TUnboxedValu
     return AllocateOn<TSingleBlockImpl>(CurrentAllocState, &MemInfo, value);
 }
 
-NUdf::TUnboxedValuePod THolderFactory::CreateArrowBlock(arrow::Datum&& datum) const { 
-    return Create<TArrowBlock>(std::move(datum)); 
-} 
- 
+NUdf::TUnboxedValuePod THolderFactory::CreateArrowBlock(arrow::Datum&& datum) const {
+    return Create<TArrowBlock>(std::move(datum));
+}
+
 NUdf::TUnboxedValuePod THolderFactory::VectorAsArray(TUnboxedValueVector& values) const {
     if (values.empty())
         return GetEmptyContainer();

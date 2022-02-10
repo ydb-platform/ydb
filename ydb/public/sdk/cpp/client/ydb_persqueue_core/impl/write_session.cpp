@@ -1127,11 +1127,11 @@ void TWriteSession::HandleWakeUpImpl() {
         LastTokenUpdate = TInstant::Now();
         UpdateTokenIfNeededImpl();
     }
- 
-    const auto flushAfter = CurrentBatch.StartedAt == TInstant::Zero() 
-        ? WakeupInterval 
-        : WakeupInterval - Min(Now() - CurrentBatch.StartedAt, WakeupInterval); 
-    Connections->ScheduleCallback(flushAfter, std::move(callback)); 
+
+    const auto flushAfter = CurrentBatch.StartedAt == TInstant::Zero()
+        ? WakeupInterval
+        : WakeupInterval - Min(Now() - CurrentBatch.StartedAt, WakeupInterval);
+    Connections->ScheduleCallback(flushAfter, std::move(callback));
 }
 
 void TWriteSession::UpdateTimedCountersImpl() {

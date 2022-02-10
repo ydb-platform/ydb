@@ -168,10 +168,10 @@ namespace NMonitoring {
         ///////////////////////////////////////////////////////////////////////
         class TPrometheusReader {
         public:
-            TPrometheusReader(TStringBuf data, IMetricConsumer* c, TStringBuf metricNameLabel) 
+            TPrometheusReader(TStringBuf data, IMetricConsumer* c, TStringBuf metricNameLabel)
                 : Data_(data)
                 , Consumer_(c)
-                , MetricNameLabel_(metricNameLabel) 
+                , MetricNameLabel_(metricNameLabel)
             {
             }
 
@@ -516,12 +516,12 @@ namespace NMonitoring {
             }
 
             void ConsumeLabels(TStringBuf name, const TLabelsMap& labels) {
-                Y_PARSER_ENSURE(labels.count(MetricNameLabel_) == 0, 
-                    "label name '" << MetricNameLabel_ << 
+                Y_PARSER_ENSURE(labels.count(MetricNameLabel_) == 0,
+                    "label name '" << MetricNameLabel_ <<
                     "' is reserved, but is used with metric: " << name << LabelsToStr(labels));
 
                 Consumer_->OnLabelsBegin();
-                Consumer_->OnLabel(MetricNameLabel_, TString(name)); // TODO: remove this string allocation 
+                Consumer_->OnLabel(MetricNameLabel_, TString(name)); // TODO: remove this string allocation
                 for (const auto& it: labels) {
                     Consumer_->OnLabel(it.first, it.second);
                 }
@@ -579,7 +579,7 @@ namespace NMonitoring {
         private:
             TStringBuf Data_;
             IMetricConsumer* Consumer_;
-            TStringBuf MetricNameLabel_; 
+            TStringBuf MetricNameLabel_;
             THashMap<TString, EPrometheusMetricType> SeenTypes_;
             THistogramBuilder HistogramBuilder_;
 
@@ -589,8 +589,8 @@ namespace NMonitoring {
         };
     } // namespace
 
-void DecodePrometheus(TStringBuf data, IMetricConsumer* c, TStringBuf metricNameLabel) { 
-    TPrometheusReader reader(data, c, metricNameLabel); 
+void DecodePrometheus(TStringBuf data, IMetricConsumer* c, TStringBuf metricNameLabel) {
+    TPrometheusReader reader(data, c, metricNameLabel);
     reader.Read();
 }
 

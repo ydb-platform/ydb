@@ -17,21 +17,21 @@
 
 namespace YAML {
 namespace detail {
-struct node_pair: public std::pair<Node, Node> { 
-    node_pair() = default; 
-    node_pair(const Node& first, const Node& second) 
-        : std::pair<Node, Node>(first, second) 
-    { 
-    } 
-}; 
- 
-struct iterator_value : public Node, node_pair { 
+struct node_pair: public std::pair<Node, Node> {
+    node_pair() = default;
+    node_pair(const Node& first, const Node& second)
+        : std::pair<Node, Node>(first, second)
+    {
+    }
+};
+
+struct iterator_value : public Node, node_pair {
   iterator_value() {}
   explicit iterator_value(const Node& rhs)
       : Node(rhs),
-        node_pair(Node(Node::ZombieNode), Node(Node::ZombieNode)) {} 
+        node_pair(Node(Node::ZombieNode), Node(Node::ZombieNode)) {}
   explicit iterator_value(const Node& key, const Node& value)
-      : Node(Node::ZombieNode), node_pair(key, value) {} 
+      : Node(Node::ZombieNode), node_pair(key, value) {}
 };
 }
 }

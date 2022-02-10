@@ -143,7 +143,7 @@ class Recipe(object):
             return os.path.join(self.arguments.ydb_working_dir, self.recipe_metafile)
         if os.getenv(self.recipe_metafile_var) is not None:
             return os.getenv(self.recipe_metafile_var)
-        return os.path.join(self.generate_data_path(), self.recipe_metafile) 
+        return os.path.join(self.generate_data_path(), self.recipe_metafile)
 
     def database_file_path(self):
         if self.arguments.ydb_working_dir:

@@ -125,7 +125,7 @@ class Static {
     return cpu_cache_active_;
   }
   static void ActivateCPUCache() { cpu_cache_active_ = true; }
-  static void DeactivateCPUCache() { cpu_cache_active_ = false; } 
+  static void DeactivateCPUCache() { cpu_cache_active_ = false; }
 
   static bool ForkSupportEnabled() { return fork_support_enabled_; }
   static void EnableForkSupport() { fork_support_enabled_ = true; }

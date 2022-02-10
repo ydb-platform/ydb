@@ -147,8 +147,8 @@ class TTypeEnvironment;
     XX(ReservedKind, 15)    \
     XX(EmptyList, 16 + 2)   \
     XX(EmptyDict, 32 + 2)   \
-    XX(Tagged, 48 + 7)      \ 
-    XX(Block, 16 + 13) 
+    XX(Tagged, 48 + 7)      \
+    XX(Block, 16 + 13)
 
 class TType : public TNode {
 public:
@@ -1321,44 +1321,44 @@ private:
     ui32 Index;
 };
 
-class TBlockType : public TType { 
-    friend class TType; 
- 
-public: 
-    enum class EShape: ui8 { 
-        Single = 0, 
-        Many = 1 
-    }; 
- 
-public: 
-    static TBlockType* Create(TType* itemType, EShape shape, const TTypeEnvironment& env); 
- 
-    using TType::IsSameType; 
-    bool IsSameType(const TBlockType& typeToCompare) const; 
- 
-    using TType::IsConvertableTo; 
-    bool IsConvertableTo(const TBlockType& typeToCompare, bool ignoreTagged = false) const; 
- 
-    inline TType* GetItemType() const noexcept { 
-        return ItemType; 
-    } 
- 
-    inline EShape GetShape() const noexcept { 
-        return Shape; 
-    } 
- 
-private: 
-    TBlockType(TType* itemType, EShape shape, const TTypeEnvironment& env); 
- 
-    void DoUpdateLinks(const THashMap<TNode*, TNode*>& links); 
-    TNode* DoCloneOnCallableWrite(const TTypeEnvironment& env) const; 
-    void DoFreeze(const TTypeEnvironment& env); 
- 
-private: 
-    TType* ItemType; 
-    EShape Shape; 
-}; 
- 
+class TBlockType : public TType {
+    friend class TType;
+
+public:
+    enum class EShape: ui8 {
+        Single = 0,
+        Many = 1
+    };
+
+public:
+    static TBlockType* Create(TType* itemType, EShape shape, const TTypeEnvironment& env);
+
+    using TType::IsSameType;
+    bool IsSameType(const TBlockType& typeToCompare) const;
+
+    using TType::IsConvertableTo;
+    bool IsConvertableTo(const TBlockType& typeToCompare, bool ignoreTagged = false) const;
+
+    inline TType* GetItemType() const noexcept {
+        return ItemType;
+    }
+
+    inline EShape GetShape() const noexcept {
+        return Shape;
+    }
+
+private:
+    TBlockType(TType* itemType, EShape shape, const TTypeEnvironment& env);
+
+    void DoUpdateLinks(const THashMap<TNode*, TNode*>& links);
+    TNode* DoCloneOnCallableWrite(const TTypeEnvironment& env) const;
+    void DoFreeze(const TTypeEnvironment& env);
+
+private:
+    TType* ItemType;
+    EShape Shape;
+};
+
 inline bool TRuntimeNode::operator==(const TRuntimeNode& other) const {
     return IsImmediate() == other.IsImmediate() && GetNode()->Equals(*other.GetNode());
 }

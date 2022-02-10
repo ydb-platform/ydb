@@ -68,9 +68,9 @@ public:
     void Visit(TTaggedType&) override {
         Out << "TaggedType";
     }
-    void Visit(TBlockType&) override { 
-        Out << "BlockType"; 
-    } 
+    void Visit(TBlockType&) override {
+        Out << "BlockType";
+    }
 
     // Values
     void Visit(TVoid&) override {

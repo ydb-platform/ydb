@@ -112,10 +112,10 @@ namespace NMonitoring {
             return AtomicGet(Value) == 0;
         }
 
-        TAtomic& GetAtomic() { 
-            return Value; 
-        } 
- 
+        TAtomic& GetAtomic() {
+            return Value;
+        }
+
     private:
         TAtomic Value;
         bool Derivative;

@@ -5,11 +5,11 @@ OWNER(
 )
 
 SRCS(
-    mkql_memory_pool.cpp 
+    mkql_memory_pool.cpp
 )
 
 PEERDIR(
-    contrib/libs/apache/arrow 
+    contrib/libs/apache/arrow
     ydb/library/yql/minikql
 )
 

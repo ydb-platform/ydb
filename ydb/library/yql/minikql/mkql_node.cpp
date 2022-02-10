@@ -209,7 +209,7 @@ TStringBuf TType::GetKindAsStr() const {
     xx(EmptyList, TEmptyListType) \
     xx(EmptyDict, TEmptyDictType) \
     xx(Tagged, TTaggedType) \
-    xx(Block, TBlockType) \ 
+    xx(Block, TBlockType) \
 
 void TType::Accept(INodeVisitor& visitor) {
     switch (Kind) {
@@ -2138,48 +2138,48 @@ void TVariantLiteral::DoFreeze(const TTypeEnvironment& env) {
     Item.Freeze();
 }
 
-TBlockType::TBlockType(TType* itemType, EShape shape, const TTypeEnvironment& env) 
-    : TType(EKind::Block, env.GetTypeOfType()) 
-    , ItemType(itemType) 
-    , Shape(shape) 
-{ 
-} 
- 
-TBlockType* TBlockType::Create(TType* itemType, EShape shape, const TTypeEnvironment& env) { 
-    return ::new(env.Allocate<TBlockType>()) TBlockType(itemType, shape, env); 
-} 
- 
-bool TBlockType::IsSameType(const TBlockType& typeToCompare) const { 
-    return GetItemType()->IsSameType(*typeToCompare.GetItemType()) && Shape == typeToCompare.Shape; 
-} 
- 
-bool TBlockType::IsConvertableTo(const TBlockType& typeToCompare, bool ignoreTagged) const { 
-    return Shape == typeToCompare.Shape && 
-        GetItemType()->IsConvertableTo(*typeToCompare.GetItemType(), ignoreTagged); 
-} 
- 
-void TBlockType::DoUpdateLinks(const THashMap<TNode*, TNode*>& links) { 
-    const auto itemTypeIt = links.find(ItemType); 
-    if (itemTypeIt != links.end()) { 
-        auto* newNode = itemTypeIt->second; 
-        Y_VERIFY_DEBUG(ItemType->Equals(*newNode)); 
-        ItemType = static_cast<TType*>(newNode); 
-    } 
-} 
- 
-TNode* TBlockType::DoCloneOnCallableWrite(const TTypeEnvironment& env) const { 
-    auto newTypeNode = (TNode*)ItemType->GetCookie(); 
-    if (!newTypeNode) { 
-        return const_cast<TBlockType*>(this); 
-    } 
- 
-    return ::new(env.Allocate<TBlockType>()) TBlockType(static_cast<TType*>(newTypeNode), Shape, env); 
-} 
- 
-void TBlockType::DoFreeze(const TTypeEnvironment& env) { 
-    Y_UNUSED(env); 
-} 
- 
+TBlockType::TBlockType(TType* itemType, EShape shape, const TTypeEnvironment& env)
+    : TType(EKind::Block, env.GetTypeOfType())
+    , ItemType(itemType)
+    , Shape(shape)
+{
+}
+
+TBlockType* TBlockType::Create(TType* itemType, EShape shape, const TTypeEnvironment& env) {
+    return ::new(env.Allocate<TBlockType>()) TBlockType(itemType, shape, env);
+}
+
+bool TBlockType::IsSameType(const TBlockType& typeToCompare) const {
+    return GetItemType()->IsSameType(*typeToCompare.GetItemType()) && Shape == typeToCompare.Shape;
+}
+
+bool TBlockType::IsConvertableTo(const TBlockType& typeToCompare, bool ignoreTagged) const {
+    return Shape == typeToCompare.Shape &&
+        GetItemType()->IsConvertableTo(*typeToCompare.GetItemType(), ignoreTagged);
+}
+
+void TBlockType::DoUpdateLinks(const THashMap<TNode*, TNode*>& links) {
+    const auto itemTypeIt = links.find(ItemType);
+    if (itemTypeIt != links.end()) {
+        auto* newNode = itemTypeIt->second;
+        Y_VERIFY_DEBUG(ItemType->Equals(*newNode));
+        ItemType = static_cast<TType*>(newNode);
+    }
+}
+
+TNode* TBlockType::DoCloneOnCallableWrite(const TTypeEnvironment& env) const {
+    auto newTypeNode = (TNode*)ItemType->GetCookie();
+    if (!newTypeNode) {
+        return const_cast<TBlockType*>(this);
+    }
+
+    return ::new(env.Allocate<TBlockType>()) TBlockType(static_cast<TType*>(newTypeNode), Shape, env);
+}
+
+void TBlockType::DoFreeze(const TTypeEnvironment& env) {
+    Y_UNUSED(env);
+}
+
 bool IsNumericType(NUdf::TDataTypeId typeId) {
     auto slot = NUdf::FindDataSlot(typeId);
     return slot && NUdf::GetDataTypeInfo(*slot).Features & NUdf::NumericType;
@@ -2236,7 +2236,7 @@ EValueRepresentation GetValueRepresentation(const TType* type) {
         case TType::EKind::Dict:
         case TType::EKind::List:
         case TType::EKind::Resource:
-        case TType::EKind::Block: 
+        case TType::EKind::Block:
         case TType::EKind::Callable:
         case TType::EKind::EmptyList:
         case TType::EKind::EmptyDict:

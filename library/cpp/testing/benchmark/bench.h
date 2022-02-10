@@ -1,9 +1,9 @@
 #pragma once
 
-#include <util/system/compiler.h> 
+#include <util/system/compiler.h>
 #include <util/system/types.h>
 
-#include <utility> 
+#include <utility>
 
 namespace NBench {
     namespace NCpu {
@@ -71,14 +71,14 @@ namespace NBench {
     }
 #endif
 
-    /** 
-     * Use this function to prevent unused variables elimination. 
-     * 
-     * @param       Unused variable (e.g. return value of benchmarked function). 
-     */ 
+    /**
+     * Use this function to prevent unused variables elimination.
+     *
+     * @param       Unused variable (e.g. return value of benchmarked function).
+     */
     template <typename T>
     Y_FORCE_INLINE void DoNotOptimize(T&& datum) {
-        ::DoNotOptimizeAway(std::forward<T>(datum)); 
+        ::DoNotOptimizeAway(std::forward<T>(datum));
     }
 
     int Main(int argc, char** argv);

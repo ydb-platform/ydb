@@ -82,13 +82,13 @@ struct TComputationContext : public TComputationContextLLVM {
     IRandomProvider& RandomProvider;
     ITimeProvider& TimeProvider;
     bool ExecuteLLVM = true;
-    arrow::MemoryPool& ArrowMemoryPool; 
+    arrow::MemoryPool& ArrowMemoryPool;
 
-    TComputationContext(const THolderFactory& holderFactory, 
-        const NUdf::IValueBuilder* builder, 
-        TComputationOptsFull& opts, 
-        const TComputationMutables& mutables, 
-        arrow::MemoryPool& arrowMemoryPool); 
+    TComputationContext(const THolderFactory& holderFactory,
+        const NUdf::IValueBuilder* builder,
+        TComputationOptsFull& opts,
+        const TComputationMutables& mutables,
+        arrow::MemoryPool& arrowMemoryPool);
     ~TComputationContext();
 
     // Returns true if current usage delta exceeds the memory limit

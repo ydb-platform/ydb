@@ -179,7 +179,7 @@ public:
     TType* NewStreamType(TType* itemType);
     TType* NewFlowType(TType* itemType);
     TType* NewTaggedType(TType* baseType, const std::string_view& tag);
-    TType* NewBlockType(TType* itemType, TBlockType::EShape shape); 
+    TType* NewBlockType(TType* itemType, TBlockType::EShape shape);
 
     TType* NewEmptyTupleType();
     TType* NewTupleType(const TArrayRef<TType* const>& elements);
@@ -232,13 +232,13 @@ public:
     TRuntimeNode FromFlow(TRuntimeNode flow);
     TRuntimeNode Steal(TRuntimeNode input);
 
-    TRuntimeNode ToBlocks(TRuntimeNode flow); 
-    TRuntimeNode WideToBlocks(TRuntimeNode flow); 
-    TRuntimeNode FromBlocks(TRuntimeNode flow); 
-    TRuntimeNode AsSingle(TRuntimeNode flow); 
- 
-    TRuntimeNode BlockAdd(TRuntimeNode data1, TRuntimeNode data2); 
- 
+    TRuntimeNode ToBlocks(TRuntimeNode flow);
+    TRuntimeNode WideToBlocks(TRuntimeNode flow);
+    TRuntimeNode FromBlocks(TRuntimeNode flow);
+    TRuntimeNode AsSingle(TRuntimeNode flow);
+
+    TRuntimeNode BlockAdd(TRuntimeNode data1, TRuntimeNode data2);
+
     // udfs
     TRuntimeNode Udf(
             const std::string_view& funcName,

@@ -113,10 +113,10 @@ namespace NMonitoring {
         }
     }
 
-    THolder<ICountableConsumer> AsCountableConsumer(IMetricEncoderPtr encoder, TCountableBase::EVisibility visibility) { 
-        return MakeHolder<TConsumer>(std::move(encoder), visibility); 
-    } 
- 
+    THolder<ICountableConsumer> AsCountableConsumer(IMetricEncoderPtr encoder, TCountableBase::EVisibility visibility) {
+        return MakeHolder<TConsumer>(std::move(encoder), visibility);
+    }
+
     void ToJson(const TDynamicCounters& counters, IOutputStream* out) {
         TConsumer consumer{EncoderJson(out), TCountableBase::EVisibility::Public};
         counters.Accept(TString{}, TString{}, consumer);

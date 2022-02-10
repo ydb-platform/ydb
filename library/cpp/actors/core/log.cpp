@@ -715,26 +715,26 @@ namespace NActors {
         }
     };
 
-    class TCompositeLogBackend: public TLogBackend { 
-    public: 
-        TCompositeLogBackend(TVector<TAutoPtr<TLogBackend>>&& underlyingBackends) 
-            : UnderlyingBackends(std::move(underlyingBackends)) 
-        { 
-        } 
- 
-        void WriteData(const TLogRecord& rec) override { 
-            for (auto& b: UnderlyingBackends) { 
-                b->WriteData(rec); 
-            } 
-        } 
- 
-        void ReopenLog() override { 
-        } 
- 
-    private: 
-        TVector<TAutoPtr<TLogBackend>> UnderlyingBackends; 
-    }; 
- 
+    class TCompositeLogBackend: public TLogBackend {
+    public:
+        TCompositeLogBackend(TVector<TAutoPtr<TLogBackend>>&& underlyingBackends)
+            : UnderlyingBackends(std::move(underlyingBackends))
+        {
+        }
+
+        void WriteData(const TLogRecord& rec) override {
+            for (auto& b: UnderlyingBackends) {
+                b->WriteData(rec);
+            }
+        }
+
+        void ReopenLog() override {
+        }
+
+    private:
+        TVector<TAutoPtr<TLogBackend>> UnderlyingBackends;
+    };
+
     TAutoPtr<TLogBackend> CreateStderrBackend() {
         return new TStderrBackend();
     }
@@ -747,7 +747,7 @@ namespace NActors {
         return new TNullLogBackend();
     }
 
-    TAutoPtr<TLogBackend> CreateCompositeLogBackend(TVector<TAutoPtr<TLogBackend>>&& underlyingBackends) { 
-        return new TCompositeLogBackend(std::move(underlyingBackends)); 
-    } 
+    TAutoPtr<TLogBackend> CreateCompositeLogBackend(TVector<TAutoPtr<TLogBackend>>&& underlyingBackends) {
+        return new TCompositeLogBackend(std::move(underlyingBackends));
+    }
 }

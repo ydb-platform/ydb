@@ -15,9 +15,9 @@ RESOURCE(
     buffered_ts_merge.json /buffered_ts_merge.json
     empty_series.json /empty_series.json
     expected.json /expected.json
-    expected_buffered.json /expected_buffered.json 
-    expected_cloud.json /expected_cloud.json 
-    expected_cloud_buffered.json /expected_cloud_buffered.json 
+    expected_buffered.json /expected_buffered.json
+    expected_cloud.json /expected_cloud.json
+    expected_cloud_buffered.json /expected_cloud_buffered.json
     merged.json /merged.json
     histogram_timeseries.json /histogram_timeseries.json
     histogram_value.json /histogram_value.json

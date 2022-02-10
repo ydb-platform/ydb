@@ -254,18 +254,18 @@ message TBlobStorageFormatConfig {
     repeated TDrive Drive = 1;
 }
 
-message TUAClientConfig { 
-    optional string Uri = 1; 
-    optional string SharedSecretKey = 2; 
-    optional uint64 MaxInflightBytes = 3 [default = 100000000]; 
-    optional uint64 GrpcReconnectDelayMs = 4; 
-    optional uint64 GrpcSendDelayMs = 5; 
-    optional uint64 GrpcMaxMessageSize = 6; 
-    optional string ClientLogFile = 7; 
-    optional uint32 ClientLogPriority = 8; 
-    optional string LogName = 9; 
-} 
- 
+message TUAClientConfig {
+    optional string Uri = 1;
+    optional string SharedSecretKey = 2;
+    optional uint64 MaxInflightBytes = 3 [default = 100000000];
+    optional uint64 GrpcReconnectDelayMs = 4;
+    optional uint64 GrpcSendDelayMs = 5;
+    optional uint64 GrpcMaxMessageSize = 6;
+    optional string ClientLogFile = 7;
+    optional uint32 ClientLogPriority = 8;
+    optional string LogName = 9;
+}
+
 message TLogConfig {
     message TEntry {
         optional bytes Component = 1;
@@ -286,7 +286,7 @@ message TLogConfig {
     optional string BackendFileName = 10;
     optional string SysLogService = 11;
     optional bool SysLogToStdErr = 12; // writes logs to stderr as well as in syslog
-    optional TUAClientConfig UAClientConfig = 13; 
+    optional TUAClientConfig UAClientConfig = 13;
     optional uint64 TimeThresholdMs = 14 [default = 1000];
 }
 

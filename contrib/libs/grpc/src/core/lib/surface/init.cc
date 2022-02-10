@@ -191,7 +191,7 @@ void grpc_shutdown_internal_locked(void) {
     grpc_core::channelz::ChannelzRegistry::Shutdown();
     grpc_stats_shutdown();
   }
-  grpc_core::Fork::GlobalShutdown(); 
+  grpc_core::Fork::GlobalShutdown();
   grpc_core::ExecCtx::GlobalShutdown();
   grpc_core::ApplicationCallbackExecCtx::GlobalShutdown();
   g_shutting_down = false;

@@ -120,60 +120,60 @@ Y_UNIT_TEST_SUITE(TJsonDecoderTest) {
         ValidateCommonParts(std::move(commonParts), true, true);
         ValidateMetrics(collector.Metrics);
     }
- 
-    Y_UNIT_TEST(CanParseHistogramsWithInf) { 
-        const char* metricsData = R"({ 
-"metrics": 
-    [ 
-        { 
-            "hist": { 
-                "bounds": [ 
-                    10 
-                ], 
-                "buckets": [ 
-                    11 
-                ], 
-                "inf": 12 
-            }, 
-            "name":"s1", 
-            "type": "HIST_RATE" 
-        }, 
-        { 
-            "hist": { 
-                "bounds": [ 
-                    20 
-                ], 
-                "buckets": [ 
-                    21 
-                ] 
-            }, 
-            "name":"s2", 
-            "type":"HIST_RATE" 
-        } 
-    ] 
-})"; 
-        TCollectingConsumer consumer(false); 
-        DecodeJson(metricsData, &consumer); 
- 
-        UNIT_ASSERT_VALUES_EQUAL(consumer.Metrics.size(), 2); 
-        { 
-            const auto& m = consumer.Metrics[0]; 
-            UNIT_ASSERT_VALUES_EQUAL(m.Kind, EMetricType::HIST_RATE); 
-            UNIT_ASSERT_VALUES_EQUAL(m.Values->Size(), 1); 
-            const auto* histogram = (*m.Values)[0].GetValue().AsHistogram(); 
-            UNIT_ASSERT_VALUES_EQUAL(histogram->Count(), 2); 
-            UNIT_ASSERT_VALUES_EQUAL(histogram->UpperBound(1), Max<TBucketBound>()); 
-            UNIT_ASSERT_VALUES_EQUAL(histogram->Value(0), 11); 
-            UNIT_ASSERT_VALUES_EQUAL(histogram->Value(1), 12); 
-        } 
-        { 
-            const auto& m = consumer.Metrics[1]; 
-            UNIT_ASSERT_VALUES_EQUAL(m.Kind, EMetricType::HIST_RATE); 
-            UNIT_ASSERT_VALUES_EQUAL(m.Values->Size(), 1); 
-            const auto* histogram = (*m.Values)[0].GetValue().AsHistogram(); 
-            UNIT_ASSERT_VALUES_EQUAL(histogram->Count(), 1); 
-            UNIT_ASSERT_VALUES_EQUAL(histogram->UpperBound(0), 20); 
-            UNIT_ASSERT_VALUES_EQUAL(histogram->Value(0), 21); 
-        } 
-    } 
+
+    Y_UNIT_TEST(CanParseHistogramsWithInf) {
+        const char* metricsData = R"({
+"metrics":
+    [
+        {
+            "hist": {
+                "bounds": [
+                    10
+                ],
+                "buckets": [
+                    11
+                ],
+                "inf": 12
+            },
+            "name":"s1",
+            "type": "HIST_RATE"
+        },
+        {
+            "hist": {
+                "bounds": [
+                    20
+                ],
+                "buckets": [
+                    21
+                ]
+            },
+            "name":"s2",
+            "type":"HIST_RATE"
+        }
+    ]
+})";
+        TCollectingConsumer consumer(false);
+        DecodeJson(metricsData, &consumer);
+
+        UNIT_ASSERT_VALUES_EQUAL(consumer.Metrics.size(), 2);
+        {
+            const auto& m = consumer.Metrics[0];
+            UNIT_ASSERT_VALUES_EQUAL(m.Kind, EMetricType::HIST_RATE);
+            UNIT_ASSERT_VALUES_EQUAL(m.Values->Size(), 1);
+            const auto* histogram = (*m.Values)[0].GetValue().AsHistogram();
+            UNIT_ASSERT_VALUES_EQUAL(histogram->Count(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(histogram->UpperBound(1), Max<TBucketBound>());
+            UNIT_ASSERT_VALUES_EQUAL(histogram->Value(0), 11);
+            UNIT_ASSERT_VALUES_EQUAL(histogram->Value(1), 12);
+        }
+        {
+            const auto& m = consumer.Metrics[1];
+            UNIT_ASSERT_VALUES_EQUAL(m.Kind, EMetricType::HIST_RATE);
+            UNIT_ASSERT_VALUES_EQUAL(m.Values->Size(), 1);
+            const auto* histogram = (*m.Values)[0].GetValue().AsHistogram();
+            UNIT_ASSERT_VALUES_EQUAL(histogram->Count(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(histogram->UpperBound(0), 20);
+            UNIT_ASSERT_VALUES_EQUAL(histogram->Value(0), 21);
+        }
+    }
 }

@@ -8,14 +8,14 @@ namespace NMiniKQL {
 thread_local ITerminator* TBindTerminator::Terminator = nullptr;
 
 TBindTerminator::TBindTerminator(ITerminator* terminator)
-    : PreviousTerminator(Terminator) 
+    : PreviousTerminator(Terminator)
 {
-    Terminator = terminator; 
+    Terminator = terminator;
 }
 
 TBindTerminator::~TBindTerminator()
 {
-    Terminator = PreviousTerminator; 
+    Terminator = PreviousTerminator;
 }
 
 [[noreturn]] void MKQLTerminate(const char* message) {

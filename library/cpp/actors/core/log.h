@@ -299,7 +299,7 @@ namespace NActors {
     TAutoPtr<TLogBackend> CreateStderrBackend();
     TAutoPtr<TLogBackend> CreateFileBackend(const TString& fileName);
     TAutoPtr<TLogBackend> CreateNullBackend();
-    TAutoPtr<TLogBackend> CreateCompositeLogBackend(TVector<TAutoPtr<TLogBackend>>&& underlyingBackends); 
+    TAutoPtr<TLogBackend> CreateCompositeLogBackend(TVector<TAutoPtr<TLogBackend>>&& underlyingBackends);
 
     /////////////////////////////////////////////////////////////////////
     //  Logging adaptors for memory log and logging into filesystem

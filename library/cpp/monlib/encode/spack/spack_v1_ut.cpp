@@ -468,7 +468,7 @@ Y_UNIT_TEST_SUITE(TSpackTest) {
         IMetricEncoderPtr e = EncoderProtobuf(&samples);
 
         TBuffer data(expectedSize);
-        if (SV1_00 == version) { // v1.0 
+        if (SV1_00 == version) { // v1.0
             data.Append(reinterpret_cast<char*>(expectedHeader_v1_0), Y_ARRAY_SIZE(expectedHeader_v1_0));
         } else {
             data.Append(reinterpret_cast<char*>(expectedHeader), Y_ARRAY_SIZE(expectedHeader));
@@ -480,7 +480,7 @@ Y_UNIT_TEST_SUITE(TSpackTest) {
         data.Append(reinterpret_cast<char*>(expectedMetric2), Y_ARRAY_SIZE(expectedMetric2));
         data.Append(reinterpret_cast<char*>(expectedMetric3), Y_ARRAY_SIZE(expectedMetric3));
         data.Append(reinterpret_cast<char*>(expectedMetric4), Y_ARRAY_SIZE(expectedMetric4));
-        if (SV1_00 == version) { // v1.0 
+        if (SV1_00 == version) { // v1.0
             data.Append(reinterpret_cast<char*>(expectedMetric5_v1_0), Y_ARRAY_SIZE(expectedMetric5_v1_0));
         } else {
             data.Append(reinterpret_cast<char*>(expectedMetric5), Y_ARRAY_SIZE(expectedMetric5));
@@ -494,7 +494,7 @@ Y_UNIT_TEST_SUITE(TSpackTest) {
 
     void DecodeDataToSamples(NProto::TMultiSamplesList & samples) {
         TSpackHeader header;
-        header.Version = SV1_01; 
+        header.Version = SV1_01;
         DecodeDataToSamples(samples, header.Version);
     }
 
@@ -689,7 +689,7 @@ Y_UNIT_TEST_SUITE(TSpackTest) {
         // Check that histogram bounds decoded from different versions are the same
         NProto::TMultiSamplesList samples, samples_v1_0;
         DecodeDataToSamples(samples);
-        DecodeDataToSamples(samples_v1_0, /*version = */ SV1_00); 
+        DecodeDataToSamples(samples_v1_0, /*version = */ SV1_00);
 
         const NProto::THistogram& pointHistogram = samples.GetSamples(4).GetPoints(0).GetHistogram();
         const NProto::THistogram& pointHistogram_v1_0 = samples_v1_0.GetSamples(4).GetPoints(0).GetHistogram();
@@ -698,148 +698,148 @@ Y_UNIT_TEST_SUITE(TSpackTest) {
             UNIT_ASSERT_DOUBLES_EQUAL(pointHistogram.GetBounds(i), pointHistogram_v1_0.GetBounds(i), Min<double>());
         }
     }
- 
-    Y_UNIT_TEST(SimpleV12) { 
-        ui8 expectedSerialized[] = { 
-            // header 
-            0x53, 0x50,             // magic "SP"                     (fixed ui16) 
-        // minor, major 
-            0x02, 0x01,             // version                        (fixed ui16) 
-            0x18, 0x00,             // header size                    (fixed ui16) 
-            0x00,                   // time precision                 (fixed ui8) 
-            0x00,                   // compression algorithm          (fixed ui8) 
-            0x0A, 0x00, 0x00, 0x00, // label names size   (fixed ui32) 
-            0x14, 0x00, 0x00, 0x00, // labels values size (fixed ui32) 
-            0x01, 0x00, 0x00, 0x00, // metric count       (fixed ui32) 
-            0x01, 0x00, 0x00, 0x00, // points count       (fixed ui32) 
- 
-            // string pools 
-            0x73, 0x00,                                     // "s\0" 
-            0x70, 0x72, 0x6f, 0x6a, 0x65, 0x63, 0x74, 0x00, // "project\0" 
-            0x73, 0x6f, 0x6c, 0x6f, 0x6d, 0x6f, 0x6e, 0x00, // "solomon\0" 
-            0x74, 0x65, 0x6D, 0x70, 0x65, 0x72, 0x61, 0x74, // temperature 
-            0x75, 0x72, 0x65, 0x00, 
- 
-            // common time 
-            0x00, 0x2f, 0x68, 0x59,                         // common time in seconds                  (fixed ui32) 
- 
-            // common labels 
-            0x00,                                           // common labels count                     (varint) 
- 
-            // metric 
-            0x09,                                           // types (COUNTER | ONE_WITHOUT_TS)        (fixed ui8) 
-            0x00,                                           // flags                                   (fixed ui8) 
-            0x01,                                           // name index                              (varint) 
-            0x01,                                           // metric labels count                     (varint) 
-            0x01,                                           // 'project' label name index              (varint) 
-            0x00,                                           // 'project' label value index             (varint) 
-            0x11, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // value (fixed ui64) 
-        }; 
- 
-        // encode 
-        { 
-            TBuffer actualSerialized; 
-            { 
-                TBufferOutput out(actualSerialized); 
-                auto e = EncoderSpackV12( 
-                    &out, 
-                    ETimePrecision::SECONDS, 
-                    ECompression::IDENTITY, 
-                    EMetricsMergingMode::DEFAULT, 
-                    "s"); 
- 
-                e->OnStreamBegin(); 
-                e->OnCommonTime(TInstant::Seconds(1500000000)); 
- 
-                { 
-                    e->OnMetricBegin(EMetricType::COUNTER); 
-                    { 
-                        e->OnLabelsBegin(); 
+
+    Y_UNIT_TEST(SimpleV12) {
+        ui8 expectedSerialized[] = {
+            // header
+            0x53, 0x50,             // magic "SP"                     (fixed ui16)
+        // minor, major
+            0x02, 0x01,             // version                        (fixed ui16)
+            0x18, 0x00,             // header size                    (fixed ui16)
+            0x00,                   // time precision                 (fixed ui8)
+            0x00,                   // compression algorithm          (fixed ui8)
+            0x0A, 0x00, 0x00, 0x00, // label names size   (fixed ui32)
+            0x14, 0x00, 0x00, 0x00, // labels values size (fixed ui32)
+            0x01, 0x00, 0x00, 0x00, // metric count       (fixed ui32)
+            0x01, 0x00, 0x00, 0x00, // points count       (fixed ui32)
+
+            // string pools
+            0x73, 0x00,                                     // "s\0"
+            0x70, 0x72, 0x6f, 0x6a, 0x65, 0x63, 0x74, 0x00, // "project\0"
+            0x73, 0x6f, 0x6c, 0x6f, 0x6d, 0x6f, 0x6e, 0x00, // "solomon\0"
+            0x74, 0x65, 0x6D, 0x70, 0x65, 0x72, 0x61, 0x74, // temperature
+            0x75, 0x72, 0x65, 0x00,
+
+            // common time
+            0x00, 0x2f, 0x68, 0x59,                         // common time in seconds                  (fixed ui32)
+
+            // common labels
+            0x00,                                           // common labels count                     (varint)
+
+            // metric
+            0x09,                                           // types (COUNTER | ONE_WITHOUT_TS)        (fixed ui8)
+            0x00,                                           // flags                                   (fixed ui8)
+            0x01,                                           // name index                              (varint)
+            0x01,                                           // metric labels count                     (varint)
+            0x01,                                           // 'project' label name index              (varint)
+            0x00,                                           // 'project' label value index             (varint)
+            0x11, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // value (fixed ui64)
+        };
+
+        // encode
+        {
+            TBuffer actualSerialized;
+            {
+                TBufferOutput out(actualSerialized);
+                auto e = EncoderSpackV12(
+                    &out,
+                    ETimePrecision::SECONDS,
+                    ECompression::IDENTITY,
+                    EMetricsMergingMode::DEFAULT,
+                    "s");
+
+                e->OnStreamBegin();
+                e->OnCommonTime(TInstant::Seconds(1500000000));
+
+                {
+                    e->OnMetricBegin(EMetricType::COUNTER);
+                    {
+                        e->OnLabelsBegin();
                         e->OnLabel("project", "solomon");
-                        e->OnLabel("s", "temperature"); 
-                        e->OnLabelsEnd(); 
-                    } 
-                    // Only the last value will be encoded 
-                    e->OnUint64(TInstant::Zero(), 10); 
-                    e->OnUint64(TInstant::Zero(), 13); 
-                    e->OnUint64(TInstant::Zero(), 17); 
-                    e->OnMetricEnd(); 
-                } 
- 
-                e->OnStreamEnd(); 
-                e->Close(); 
-            } 
- 
-            UNIT_ASSERT_VALUES_EQUAL(actualSerialized.Size(), Y_ARRAY_SIZE(expectedSerialized)); 
-            UNIT_ASSERT_BINARY_EQUALS(actualSerialized.Data(), expectedSerialized); 
-        } 
- 
-        // decode 
-        { 
-            NProto::TMultiSamplesList samples; 
-            { 
-                auto input = TMemoryInput(expectedSerialized, Y_ARRAY_SIZE(expectedSerialized)); 
-                auto encoder = EncoderProtobuf(&samples); 
-                DecodeSpackV1(&input, encoder.Get(), "s"); 
-            } 
- 
-            UNIT_ASSERT_VALUES_EQUAL(TInstant::MilliSeconds(samples.GetCommonTime()), 
-                                     TInstant::Seconds(1500000000)); 
- 
-            UNIT_ASSERT_VALUES_EQUAL(samples.CommonLabelsSize(), 0); 
- 
-            UNIT_ASSERT_VALUES_EQUAL(samples.SamplesSize(), 1); 
-            { 
-                const auto& s = samples.GetSamples(0); 
-                UNIT_ASSERT_EQUAL(s.GetMetricType(), NProto::COUNTER); 
-                UNIT_ASSERT_VALUES_EQUAL(s.LabelsSize(), 2); 
-                AssertLabelEqual(s.GetLabels(0), "s", "temperature"); 
-                AssertLabelEqual(s.GetLabels(1), "project", "solomon"); 
- 
-                UNIT_ASSERT_VALUES_EQUAL(s.PointsSize(), 1); 
-                AssertPointEqual(s.GetPoints(0), TInstant::Zero(), ui64(17)); 
-            } 
-        } 
-    } 
- 
-    Y_UNIT_TEST(V12MissingNameForOneMetric) { 
-        TBuffer b; 
-        TBufferOutput out(b); 
-        auto e = EncoderSpackV12( 
-            &out, 
-            ETimePrecision::SECONDS, 
-            ECompression::IDENTITY, 
-            EMetricsMergingMode::DEFAULT, 
-            "s"); 
- 
-        UNIT_ASSERT_EXCEPTION_CONTAINS( 
-            [&]() { 
-                e->OnStreamBegin(); 
-                { 
-                    e->OnMetricBegin(EMetricType::COUNTER); 
-                    { 
-                        e->OnLabelsBegin(); 
-                        e->OnLabel("s", "s1"); 
-                        e->OnLabelsEnd(); 
-                    } 
-                    e->OnUint64(TInstant::Zero(), 1); 
-                    e->OnMetricEnd(); 
- 
-                    e->OnMetricBegin(EMetricType::COUNTER); 
-                    { 
-                        e->OnLabelsBegin(); 
-                        e->OnLabel("project", "solomon"); 
-                        e->OnLabel("m", "v"); 
-                        e->OnLabelsEnd(); 
-                    } 
-                    e->OnUint64(TInstant::Zero(), 2); 
-                    e->OnMetricEnd(); 
-                } 
- 
-                e->OnStreamEnd(); 
-                e->Close(); 
-            }(), 
-            yexception, 
-            "metric name label 's' not found, all metric labels '{m=v, project=solomon}'"); 
-    } 
+                        e->OnLabel("s", "temperature");
+                        e->OnLabelsEnd();
+                    }
+                    // Only the last value will be encoded
+                    e->OnUint64(TInstant::Zero(), 10);
+                    e->OnUint64(TInstant::Zero(), 13);
+                    e->OnUint64(TInstant::Zero(), 17);
+                    e->OnMetricEnd();
+                }
+
+                e->OnStreamEnd();
+                e->Close();
+            }
+
+            UNIT_ASSERT_VALUES_EQUAL(actualSerialized.Size(), Y_ARRAY_SIZE(expectedSerialized));
+            UNIT_ASSERT_BINARY_EQUALS(actualSerialized.Data(), expectedSerialized);
+        }
+
+        // decode
+        {
+            NProto::TMultiSamplesList samples;
+            {
+                auto input = TMemoryInput(expectedSerialized, Y_ARRAY_SIZE(expectedSerialized));
+                auto encoder = EncoderProtobuf(&samples);
+                DecodeSpackV1(&input, encoder.Get(), "s");
+            }
+
+            UNIT_ASSERT_VALUES_EQUAL(TInstant::MilliSeconds(samples.GetCommonTime()),
+                                     TInstant::Seconds(1500000000));
+
+            UNIT_ASSERT_VALUES_EQUAL(samples.CommonLabelsSize(), 0);
+
+            UNIT_ASSERT_VALUES_EQUAL(samples.SamplesSize(), 1);
+            {
+                const auto& s = samples.GetSamples(0);
+                UNIT_ASSERT_EQUAL(s.GetMetricType(), NProto::COUNTER);
+                UNIT_ASSERT_VALUES_EQUAL(s.LabelsSize(), 2);
+                AssertLabelEqual(s.GetLabels(0), "s", "temperature");
+                AssertLabelEqual(s.GetLabels(1), "project", "solomon");
+
+                UNIT_ASSERT_VALUES_EQUAL(s.PointsSize(), 1);
+                AssertPointEqual(s.GetPoints(0), TInstant::Zero(), ui64(17));
+            }
+        }
+    }
+
+    Y_UNIT_TEST(V12MissingNameForOneMetric) {
+        TBuffer b;
+        TBufferOutput out(b);
+        auto e = EncoderSpackV12(
+            &out,
+            ETimePrecision::SECONDS,
+            ECompression::IDENTITY,
+            EMetricsMergingMode::DEFAULT,
+            "s");
+
+        UNIT_ASSERT_EXCEPTION_CONTAINS(
+            [&]() {
+                e->OnStreamBegin();
+                {
+                    e->OnMetricBegin(EMetricType::COUNTER);
+                    {
+                        e->OnLabelsBegin();
+                        e->OnLabel("s", "s1");
+                        e->OnLabelsEnd();
+                    }
+                    e->OnUint64(TInstant::Zero(), 1);
+                    e->OnMetricEnd();
+
+                    e->OnMetricBegin(EMetricType::COUNTER);
+                    {
+                        e->OnLabelsBegin();
+                        e->OnLabel("project", "solomon");
+                        e->OnLabel("m", "v");
+                        e->OnLabelsEnd();
+                    }
+                    e->OnUint64(TInstant::Zero(), 2);
+                    e->OnMetricEnd();
+                }
+
+                e->OnStreamEnd();
+                e->Close();
+            }(),
+            yexception,
+            "metric name label 's' not found, all metric labels '{m=v, project=solomon}'");
+    }
 }

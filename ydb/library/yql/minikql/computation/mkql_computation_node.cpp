@@ -26,15 +26,15 @@
 namespace NKikimr {
 namespace NMiniKQL {
 
-TComputationContext::TComputationContext(const THolderFactory& holderFactory, 
-    const NUdf::IValueBuilder* builder, 
-    TComputationOptsFull& opts, 
-    const TComputationMutables& mutables, 
-    arrow::MemoryPool& arrowMemoryPool) 
+TComputationContext::TComputationContext(const THolderFactory& holderFactory,
+    const NUdf::IValueBuilder* builder,
+    TComputationOptsFull& opts,
+    const TComputationMutables& mutables,
+    arrow::MemoryPool& arrowMemoryPool)
     : TComputationContextLLVM{holderFactory, opts.Stats, std::make_unique<NUdf::TUnboxedValue[]>(mutables.CurValueIndex), builder}
     , RandomProvider(opts.RandomProvider)
     , TimeProvider(opts.TimeProvider)
-    , ArrowMemoryPool(arrowMemoryPool) 
+    , ArrowMemoryPool(arrowMemoryPool)
 {
     std::fill_n(MutableValues.get(), mutables.CurValueIndex, NUdf::TUnboxedValue(NUdf::TUnboxedValuePod::Invalid()));
 }

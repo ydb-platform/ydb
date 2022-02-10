@@ -1365,71 +1365,71 @@ TRuntimeNode TProgramBuilder::Steal(TRuntimeNode input) {
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 
-TRuntimeNode TProgramBuilder::ToBlocks(TRuntimeNode flow) { 
-    auto* flowType = AS_TYPE(TFlowType, flow.GetStaticType()); 
-    auto* blockType = NewBlockType(flowType->GetItemType(), TBlockType::EShape::Many); 
- 
-    TCallableBuilder callableBuilder(Env, __func__, NewFlowType(blockType)); 
-    callableBuilder.Add(flow); 
-    return TRuntimeNode(callableBuilder.Build(), false); 
-} 
- 
-TRuntimeNode TProgramBuilder::WideToBlocks(TRuntimeNode flow) { 
-    TType* outputTupleType; 
-    { 
-        const auto* inputTupleType = AS_TYPE(TTupleType, AS_TYPE(TFlowType, flow.GetStaticType())->GetItemType()); 
-        std::vector<TType*> outputTupleItems; 
-        outputTupleItems.reserve(inputTupleType->GetElementsCount()); 
-        for (size_t i = 0; i < inputTupleType->GetElementsCount(); ++i) { 
-            outputTupleItems.push_back(NewBlockType(inputTupleType->GetElementType(i), TBlockType::EShape::Many)); 
-        } 
-        outputTupleType = NewTupleType(outputTupleItems); 
-    } 
- 
-    TCallableBuilder callableBuilder(Env, __func__, NewFlowType(outputTupleType)); 
-    callableBuilder.Add(flow); 
-    return TRuntimeNode(callableBuilder.Build(), false); 
-} 
- 
-TRuntimeNode TProgramBuilder::FromBlocks(TRuntimeNode flow) { 
-    auto* flowType = AS_TYPE(TFlowType, flow.GetStaticType()); 
-    auto* blockType = AS_TYPE(TBlockType, flowType->GetItemType()); 
- 
-    TCallableBuilder callableBuilder(Env, __func__, NewFlowType(blockType->GetItemType())); 
-    callableBuilder.Add(flow); 
-    return TRuntimeNode(callableBuilder.Build(), false); 
-} 
- 
-TRuntimeNode TProgramBuilder::AsSingle(TRuntimeNode value) { 
-    TCallableBuilder callableBuilder(Env, __func__, NewBlockType(value.GetStaticType(), TBlockType::EShape::Single)); 
-    callableBuilder.Add(value); 
-    return TRuntimeNode(callableBuilder.Build(), false); 
-} 
- 
-TRuntimeNode TProgramBuilder::BlockAdd(TRuntimeNode arg1, TRuntimeNode arg2) { 
-    bool arg1Optional; 
-    auto* arg1BlockType = AS_TYPE(TBlockType, arg1.GetStaticType()); 
-    auto* arg1Type = UnpackOptionalData(arg1BlockType->GetItemType(), arg1Optional); 
- 
-    bool arg2Optional; 
-    auto* arg2BlockType = AS_TYPE(TBlockType, arg2.GetStaticType()); 
-    auto* arg2Type = UnpackOptionalData(arg2BlockType->GetItemType(), arg2Optional); 
- 
-    MKQL_ENSURE(arg1BlockType->GetShape() != TBlockType::EShape::Single || 
-        arg2BlockType->GetShape() != TBlockType::EShape::Single, 
-        "At least one EShape::Many block expected"); 
- 
-    auto* resultDataType = BuildArithmeticCommonType(arg1Type, arg2Type); 
-    if (arg1Optional || arg2Optional) { 
-        resultDataType = NewOptionalType(resultDataType); 
-    } 
-    auto* callableType = TCallableBuilder(Env, __func__, NewBlockType(resultDataType, TBlockType::EShape::Many)) 
-        .Add(arg1) 
-        .Add(arg2) 
-        .Build(); 
-    return TRuntimeNode(callableType, false); 
-} 
- 
+TRuntimeNode TProgramBuilder::ToBlocks(TRuntimeNode flow) {
+    auto* flowType = AS_TYPE(TFlowType, flow.GetStaticType());
+    auto* blockType = NewBlockType(flowType->GetItemType(), TBlockType::EShape::Many);
+
+    TCallableBuilder callableBuilder(Env, __func__, NewFlowType(blockType));
+    callableBuilder.Add(flow);
+    return TRuntimeNode(callableBuilder.Build(), false);
+}
+
+TRuntimeNode TProgramBuilder::WideToBlocks(TRuntimeNode flow) {
+    TType* outputTupleType;
+    {
+        const auto* inputTupleType = AS_TYPE(TTupleType, AS_TYPE(TFlowType, flow.GetStaticType())->GetItemType());
+        std::vector<TType*> outputTupleItems;
+        outputTupleItems.reserve(inputTupleType->GetElementsCount());
+        for (size_t i = 0; i < inputTupleType->GetElementsCount(); ++i) {
+            outputTupleItems.push_back(NewBlockType(inputTupleType->GetElementType(i), TBlockType::EShape::Many));
+        }
+        outputTupleType = NewTupleType(outputTupleItems);
+    }
+
+    TCallableBuilder callableBuilder(Env, __func__, NewFlowType(outputTupleType));
+    callableBuilder.Add(flow);
+    return TRuntimeNode(callableBuilder.Build(), false);
+}
+
+TRuntimeNode TProgramBuilder::FromBlocks(TRuntimeNode flow) {
+    auto* flowType = AS_TYPE(TFlowType, flow.GetStaticType());
+    auto* blockType = AS_TYPE(TBlockType, flowType->GetItemType());
+
+    TCallableBuilder callableBuilder(Env, __func__, NewFlowType(blockType->GetItemType()));
+    callableBuilder.Add(flow);
+    return TRuntimeNode(callableBuilder.Build(), false);
+}
+
+TRuntimeNode TProgramBuilder::AsSingle(TRuntimeNode value) {
+    TCallableBuilder callableBuilder(Env, __func__, NewBlockType(value.GetStaticType(), TBlockType::EShape::Single));
+    callableBuilder.Add(value);
+    return TRuntimeNode(callableBuilder.Build(), false);
+}
+
+TRuntimeNode TProgramBuilder::BlockAdd(TRuntimeNode arg1, TRuntimeNode arg2) {
+    bool arg1Optional;
+    auto* arg1BlockType = AS_TYPE(TBlockType, arg1.GetStaticType());
+    auto* arg1Type = UnpackOptionalData(arg1BlockType->GetItemType(), arg1Optional);
+
+    bool arg2Optional;
+    auto* arg2BlockType = AS_TYPE(TBlockType, arg2.GetStaticType());
+    auto* arg2Type = UnpackOptionalData(arg2BlockType->GetItemType(), arg2Optional);
+
+    MKQL_ENSURE(arg1BlockType->GetShape() != TBlockType::EShape::Single ||
+        arg2BlockType->GetShape() != TBlockType::EShape::Single,
+        "At least one EShape::Many block expected");
+
+    auto* resultDataType = BuildArithmeticCommonType(arg1Type, arg2Type);
+    if (arg1Optional || arg2Optional) {
+        resultDataType = NewOptionalType(resultDataType);
+    }
+    auto* callableType = TCallableBuilder(Env, __func__, NewBlockType(resultDataType, TBlockType::EShape::Many))
+        .Add(arg1)
+        .Add(arg2)
+        .Build();
+    return TRuntimeNode(callableType, false);
+}
+
 TRuntimeNode TProgramBuilder::ListFromRange(TRuntimeNode start, TRuntimeNode end, TRuntimeNode step) {
     MKQL_ENSURE(start.GetStaticType()->IsData(), "Expected data");
     MKQL_ENSURE(end.GetStaticType()->IsSameType(*start.GetStaticType()), "Mismatch type");
@@ -2034,14 +2034,14 @@ TType* TProgramBuilder::NewFlowType(TType* itemType) {
     return TFlowType::Create(itemType, Env);
 }
 
-TType* TProgramBuilder::NewBlockType(TType* itemType, TBlockType::EShape shape) { 
-    bool isOptional; 
-    auto* dataType = UnpackOptionalData(itemType, isOptional); 
-    MKQL_ENSURE(dataType->GetDataSlot() == NUdf::EDataSlot::Uint64, "Expected Uint64"); 
- 
-    return TBlockType::Create(itemType, shape, Env); 
-} 
- 
+TType* TProgramBuilder::NewBlockType(TType* itemType, TBlockType::EShape shape) {
+    bool isOptional;
+    auto* dataType = UnpackOptionalData(itemType, isOptional);
+    MKQL_ENSURE(dataType->GetDataSlot() == NUdf::EDataSlot::Uint64, "Expected Uint64");
+
+    return TBlockType::Create(itemType, shape, Env);
+}
+
 TType* TProgramBuilder::NewTaggedType(TType* baseType, const std::string_view& tag) {
     return TTaggedType::Create(baseType, tag, Env);
 }

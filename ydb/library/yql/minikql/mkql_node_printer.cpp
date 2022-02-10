@@ -189,36 +189,36 @@ namespace {
             WriteNewline();
         }
 
-        void Visit(TBlockType& node) override { 
-            WriteIndentation(); 
-            Out << "Type (Block) {"; 
-            WriteNewline(); 
- 
-            { 
-                TIndentScope scope(this); 
-                WriteIndentation(); 
-                Out << "Block item type: {"; 
-                WriteNewline(); 
- 
-                { 
-                    TIndentScope scope2(this); 
-                    node.GetItemType()->Accept(*this); 
-                } 
- 
-                WriteIndentation(); 
-                Out << "}"; 
-                WriteNewline(); 
- 
-                WriteIndentation(); 
-                Out << "Block shape: " << (node.GetShape() == TBlockType::EShape::Single ? "Single" : "Many"); 
-                WriteNewline(); 
-            } 
- 
-            WriteIndentation(); 
-            Out << "}"; 
-            WriteNewline(); 
-        } 
- 
+        void Visit(TBlockType& node) override {
+            WriteIndentation();
+            Out << "Type (Block) {";
+            WriteNewline();
+
+            {
+                TIndentScope scope(this);
+                WriteIndentation();
+                Out << "Block item type: {";
+                WriteNewline();
+
+                {
+                    TIndentScope scope2(this);
+                    node.GetItemType()->Accept(*this);
+                }
+
+                WriteIndentation();
+                Out << "}";
+                WriteNewline();
+
+                WriteIndentation();
+                Out << "Block shape: " << (node.GetShape() == TBlockType::EShape::Single ? "Single" : "Many");
+                WriteNewline();
+            }
+
+            WriteIndentation();
+            Out << "}";
+            WriteNewline();
+        }
+
         void Visit(TOptionalType& node) override {
             WriteIndentation();
             Out << "Type (Optional) {";

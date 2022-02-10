@@ -9,8 +9,8 @@
 #include <ydb/library/yql/minikql/compact_hash.h>
 #include <ydb/library/yql/minikql/mkql_type_ops.h>
 
-#include <contrib/libs/apache/arrow/cpp/src/arrow/datum.h> 
- 
+#include <contrib/libs/apache/arrow/cpp/src/arrow/datum.h>
+
 #include <util/generic/maybe.h>
 #include <util/memory/pool.h>
 
@@ -321,34 +321,34 @@ private:
     TType* const Type;
 };
 
-class TArrowBlock: public TComputationValue<TArrowBlock> { 
-public: 
-    explicit TArrowBlock(TMemoryUsageInfo* memInfo, arrow::Datum&& datum) 
-        : TComputationValue(memInfo) 
-        , Datum_(std::move(datum)) 
-    { 
-    } 
- 
-    inline static TArrowBlock& From(const NUdf::TUnboxedValue& value) { 
-        return *static_cast<TArrowBlock*>(value.AsBoxed().Get()); 
-    } 
- 
-    inline arrow::Datum& GetDatum() { 
-        return Datum_; 
-    } 
- 
-    NUdf::TStringRef GetResourceTag() const override { 
-        return NUdf::TStringRef::Of("ArrowBlock"); 
-    } 
- 
-    void* GetResource() override { 
-        return &Datum_; 
-    } 
- 
-private: 
-    arrow::Datum Datum_; 
-}; 
- 
+class TArrowBlock: public TComputationValue<TArrowBlock> {
+public:
+    explicit TArrowBlock(TMemoryUsageInfo* memInfo, arrow::Datum&& datum)
+        : TComputationValue(memInfo)
+        , Datum_(std::move(datum))
+    {
+    }
+
+    inline static TArrowBlock& From(const NUdf::TUnboxedValue& value) {
+        return *static_cast<TArrowBlock*>(value.AsBoxed().Get());
+    }
+
+    inline arrow::Datum& GetDatum() {
+        return Datum_;
+    }
+
+    NUdf::TStringRef GetResourceTag() const override {
+        return NUdf::TStringRef::Of("ArrowBlock");
+    }
+
+    void* GetResource() override {
+        return &Datum_;
+    }
+
+private:
+    arrow::Datum Datum_;
+};
+
 //////////////////////////////////////////////////////////////////////////////
 // THolderFactory
 //////////////////////////////////////////////////////////////////////////////
@@ -375,8 +375,8 @@ public:
     NUdf::TFlatArrayBlockPtr CreateFlatArrayBlock(ui32 count) const;
     NUdf::TSingleBlockPtr CreateSingleBlock(const NUdf::TUnboxedValue& value) const;
 
-    NUdf::TUnboxedValuePod CreateArrowBlock(arrow::Datum&& datum) const; 
- 
+    NUdf::TUnboxedValuePod CreateArrowBlock(arrow::Datum&& datum) const;
+
     NUdf::TUnboxedValuePod VectorAsArray(TUnboxedValueVector& values) const;
 
     template <class TForwardIterator>

@@ -371,7 +371,7 @@ public:
             return Value != other.Value;
         }
 
-        TIterator& operator++() noexcept {
+        TIterator& operator++() noexcept { 
             Y_ASSERT(Value < EndIndex);
             TEnum res;
             if (BitMap->FindNext(static_cast<TEnum>(Value), res)) {
@@ -379,8 +379,8 @@ public:
             } else {
                 Value = EndIndex;
             }
-
-            return *this;
+ 
+            return *this; 
         }
 
     private:

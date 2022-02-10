@@ -515,19 +515,19 @@ public:
     }
 };
 
-template <class T1, class T2, class T3, class T4, class T5, class TValue> 
+template <class T1, class T2, class T3, class T4, class T5, class TValue>
 class TSetSerializerInserter<THashMultiMap<T1, T2, T3, T4, T5>, TValue, false>: public TSetSerializerInserterBase<THashMultiMap<T1, T2, T3, T4, T5>, TValue> {
     using TMapType = THashMultiMap<T1, T2, T3, T4, T5>;
     using TBase = TSetSerializerInserterBase<TMapType, TValue>;
- 
-public: 
+
+public:
     inline TSetSerializerInserter(TMapType& m, size_t cnt)
-        : TBase(m) 
-    { 
-        m.reserve(cnt); 
-    } 
-}; 
- 
+        : TBase(m)
+    {
+        m.reserve(cnt);
+    }
+};
+
 template <class T1, class T2, class T3, class T4, class TValue>
 class TSetSerializerInserter<THashSet<T1, T2, T3, T4>, TValue, false>: public TSetSerializerInserterBase<THashSet<T1, T2, T3, T4>, TValue> {
     using TSetType = THashSet<T1, T2, T3, T4>;
@@ -601,10 +601,10 @@ template <class T1, class T2, class T3, class T4, class T5>
 class TSerializer<THashMap<T1, T2, T3, T4, T5>>: public TMapSerializer<THashMap<T1, T2, T3, T4, T5>, false> {
 };
 
-template <class T1, class T2, class T3, class T4, class T5> 
+template <class T1, class T2, class T3, class T4, class T5>
 class TSerializer<THashMultiMap<T1, T2, T3, T4, T5>>: public TMapSerializer<THashMultiMap<T1, T2, T3, T4, T5>, false> {
-}; 
- 
+};
+
 template <class K, class C, class A>
 class TSerializer<TSet<K, C, A>>: public TSetSerializer<TSet<K, C, A>, true> {
 };

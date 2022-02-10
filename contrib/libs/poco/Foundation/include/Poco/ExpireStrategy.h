@@ -81,12 +81,12 @@ public:
 		}
 	}
 
-	void onGet(const void*, const TKey& /*key*/) 
+	void onGet(const void*, const TKey& /*key*/)
 	{
 		// get triggers no changes in an expire
 	}
 
-	void onClear(const void*, const EventArgs& /*args*/) 
+	void onClear(const void*, const EventArgs& /*args*/)
 	{
 		_keys.clear();
 		_keyIndex.clear();

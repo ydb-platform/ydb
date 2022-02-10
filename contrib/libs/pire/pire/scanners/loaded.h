@@ -73,8 +73,8 @@ public:
 		DeadFlag  = 0
 	};
 
-	static const size_t MAX_RE_COUNT = 16;
-
+	static const size_t MAX_RE_COUNT = 16; 
+ 
 protected:
 	LoadedScanner() { Alias(Null()); }
 
@@ -118,8 +118,8 @@ public:
 
 	size_t RegexpsCount() const { return Empty() ? 0 : m.regexpsCount; }
 
-	size_t LettersCount() const { return m.lettersCount; }
-
+	size_t LettersCount() const { return m.lettersCount; } 
+ 
 	const void* Mmap(const void* ptr, size_t size) {
 		return Mmap(ptr, size, nullptr);
 	}
@@ -140,10 +140,10 @@ public:
 
 		Impl::MapPtr(s.m_letters, MaxChar, p, size);
 		Impl::MapPtr(s.m_jumps, s.m.statesCount * s.m.lettersCount, p, size);
-		if (header.Version == Header::RE_VERSION_WITH_MACTIONS) {
-			Action* actions = 0;
-			Impl::MapPtr(actions, s.m.statesCount * s.m.lettersCount, p, size);
-		}
+		if (header.Version == Header::RE_VERSION_WITH_MACTIONS) { 
+			Action* actions = 0; 
+			Impl::MapPtr(actions, s.m.statesCount * s.m.lettersCount, p, size); 
+		} 
 		Impl::MapPtr(s.m_tags, s.m.statesCount, p, size);
 
 		s.m.initial += reinterpret_cast<size_t>(s.m_jumps);
@@ -176,27 +176,27 @@ public:
 				m_letters[character] = letter.second.first;
 	}
 
-	size_t StateSize() const
-	{
-		return m.lettersCount * sizeof(*m_jumps);
-	}
+	size_t StateSize() const 
+	{ 
+		return m.lettersCount * sizeof(*m_jumps); 
+	} 
 
-	size_t TransitionIndex(size_t state, Char c) const
-	{
-		return state * m.lettersCount + m_letters[c];
-	}
-
+	size_t TransitionIndex(size_t state, Char c) const 
+	{ 
+		return state * m.lettersCount + m_letters[c]; 
+	} 
+ 
 	void SetJump(size_t oldState, Char c, size_t newState, Action action)
 	{
 		Y_ASSERT(m_buffer);
 		Y_ASSERT(oldState < m.statesCount);
 		Y_ASSERT(newState < m.statesCount);
 
-		size_t shift = (newState - oldState) * StateSize();
+		size_t shift = (newState - oldState) * StateSize(); 
 		Transition tr;
 		tr.shift = (ui32)shift;
 		tr.action = action;
-		m_jumps[TransitionIndex(oldState, c)] = tr;
+		m_jumps[TransitionIndex(oldState, c)] = tr; 
 	}
 
 	Action RemapAction(Action action) { return action; }
@@ -212,19 +212,19 @@ public:
 
 	i64 SignExtend(i32 i) const { return i; }
 
-	size_t BufSize() const
-	{
-		return
-			MaxChar * sizeof(*m_letters)
-			+ m.statesCount * StateSize()
-			+ m.statesCount * sizeof(*m_tags)
-			;
-	}
-
+	size_t BufSize() const 
+	{ 
+		return 
+			MaxChar * sizeof(*m_letters) 
+			+ m.statesCount * StateSize() 
+			+ m.statesCount * sizeof(*m_tags) 
+			; 
+	} 
+ 
 protected:
 
-	static const Action IncrementMask     = (1 << MAX_RE_COUNT) - 1;
-	static const Action ResetMask         = IncrementMask << MAX_RE_COUNT;
+	static const Action IncrementMask     = (1 << MAX_RE_COUNT) - 1; 
+	static const Action ResetMask         = IncrementMask << MAX_RE_COUNT; 
 
 	// TODO: maybe, put fields in private section and provide data accessors
 
@@ -265,7 +265,7 @@ private:
 	{
 		m_letters = reinterpret_cast<Letter*>(buf);
 		m_jumps   = reinterpret_cast<Transition*>(m_letters + MaxChar);
-		m_tags    = reinterpret_cast<Tag*>(m_jumps + m.statesCount * m.lettersCount);
+		m_tags    = reinterpret_cast<Tag*>(m_jumps + m.statesCount * m.lettersCount); 
 	}
 
 	void Alias(const LoadedScanner& s)

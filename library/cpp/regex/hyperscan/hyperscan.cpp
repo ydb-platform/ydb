@@ -1,5 +1,5 @@
-#include "hyperscan.h"
-
+#include "hyperscan.h" 
+ 
 #include <contrib/libs/hyperscan/runtime_core2/hs_common.h>
 #include <contrib/libs/hyperscan/runtime_core2/hs_runtime.h>
 #include <contrib/libs/hyperscan/runtime_corei7/hs_common.h>
@@ -11,11 +11,11 @@
 
 #include <util/generic/singleton.h>
 
-namespace NHyperscan {
-    using TSerializedDatabase = THolder<char, TDeleter<decltype(&free), &free>>;
-
-    using TCompileError = THolder<hs_compile_error_t, TDeleter<decltype(&hs_free_compile_error), &hs_free_compile_error>>;
-
+namespace NHyperscan { 
+    using TSerializedDatabase = THolder<char, TDeleter<decltype(&free), &free>>; 
+ 
+    using TCompileError = THolder<hs_compile_error_t, TDeleter<decltype(&hs_free_compile_error), &hs_free_compile_error>>; 
+ 
     namespace NPrivate {
         ERuntime DetectCurrentRuntime() {
             if (NX86::HaveAVX512F() && NX86::HaveAVX512BW()) {
@@ -42,12 +42,12 @@ namespace NHyperscan {
                 case ERuntime::AVX512:
                     return CPU_FEATURES_AVX512;
             }
-        }
-
+        } 
+ 
         hs_platform_info_t MakePlatformInfo(TCPUFeatures cpuFeatures) {
             hs_platform_info_t platformInfo{HS_TUNE_FAMILY_GENERIC, cpuFeatures, 0, 0};
             return platformInfo;
-        }
+        } 
 
         hs_platform_info_t MakeCurrentPlatformInfo() {
             return MakePlatformInfo(RuntimeCpuFeatures(DetectCurrentRuntime()));
@@ -82,7 +82,7 @@ namespace NHyperscan {
                     SerializeDatabase = avx512_hs_serialize_database;
                     DeserializeDatabase = avx512_hs_deserialize_database;
             }
-        }
+        } 
 
         TDatabase Compile(const TStringBuf& regex, unsigned int flags, hs_platform_info_t* platform) {
             hs_database_t* rawDb = nullptr;
@@ -97,12 +97,12 @@ namespace NHyperscan {
             TDatabase db(rawDb);
             NHyperscan::TCompileError compileError(rawCompileErr);
             if (status != HS_SUCCESS) {
-                ythrow TCompileException()
+                ythrow TCompileException() 
                         << "Failed to compile regex: " << regex << ". "
                         << "Error message (hyperscan): " << compileError->message;
-            }
+            } 
             return db;
-        }
+        } 
 
         TDatabase CompileMulti(
                 const TVector<const char*>& regexs,
@@ -181,8 +181,8 @@ namespace NHyperscan {
     TDatabase Compile(const TStringBuf& regex, unsigned int flags) {
         auto platformInfo = NPrivate::MakeCurrentPlatformInfo();
         return NPrivate::Compile(regex, flags, &platformInfo);
-    }
-
+    } 
+ 
     TDatabase Compile(const TStringBuf& regex, unsigned int flags, TCPUFeatures cpuFeatures) {
         auto platformInfo = NPrivate::MakePlatformInfo(cpuFeatures);
         return NPrivate::Compile(regex, flags, &platformInfo);
@@ -209,74 +209,74 @@ namespace NHyperscan {
         return NPrivate::CompileMulti(regexs, flags, ids, &platformInfo, extendedParameters);
     }
 
-    TScratch MakeScratch(const TDatabase& db) {
-        hs_scratch_t* rawScratch = nullptr;
+    TScratch MakeScratch(const TDatabase& db) { 
+        hs_scratch_t* rawScratch = nullptr; 
         hs_error_t status = Singleton<NPrivate::TImpl>()->AllocScratch(db.Get(), &rawScratch);
-        NHyperscan::TScratch scratch(rawScratch);
-        if (status != HS_SUCCESS) {
-            ythrow yexception() << "Failed to make scratch for hyperscan database";
-        }
-        return scratch;
-    }
-
-    void GrowScratch(TScratch& scratch, const TDatabase& db) {
-        hs_scratch_t* rawScratch = scratch.Get();
+        NHyperscan::TScratch scratch(rawScratch); 
+        if (status != HS_SUCCESS) { 
+            ythrow yexception() << "Failed to make scratch for hyperscan database"; 
+        } 
+        return scratch; 
+    } 
+ 
+    void GrowScratch(TScratch& scratch, const TDatabase& db) { 
+        hs_scratch_t* rawScratch = scratch.Get(); 
         hs_error_t status = Singleton<NPrivate::TImpl>()->AllocScratch(db.Get(), &rawScratch);
-        if (rawScratch != scratch.Get()) {
+        if (rawScratch != scratch.Get()) { 
             Y_UNUSED(scratch.Release()); // freed by hs_alloc_scratch
-            scratch.Reset(rawScratch);
-        }
-        if (status != HS_SUCCESS) {
-            ythrow yexception() << "Failed to make grow scratch for hyperscan database";
-        }
-    }
-
-    TScratch CloneScratch(const TScratch& scratch) {
-        hs_scratch_t* rawScratch = nullptr;
-        hs_error_t status = hs_clone_scratch(scratch.Get(), &rawScratch);
-        TScratch scratchCopy(rawScratch);
-        if (status != HS_SUCCESS) {
-            ythrow yexception() << "Failed to clone scratch for hyperscan database";
-        }
-        return scratchCopy;
-    }
-
-    bool Matches(
-        const TDatabase& db,
-        const TScratch& scratch,
+            scratch.Reset(rawScratch); 
+        } 
+        if (status != HS_SUCCESS) { 
+            ythrow yexception() << "Failed to make grow scratch for hyperscan database"; 
+        } 
+    } 
+ 
+    TScratch CloneScratch(const TScratch& scratch) { 
+        hs_scratch_t* rawScratch = nullptr; 
+        hs_error_t status = hs_clone_scratch(scratch.Get(), &rawScratch); 
+        TScratch scratchCopy(rawScratch); 
+        if (status != HS_SUCCESS) { 
+            ythrow yexception() << "Failed to clone scratch for hyperscan database"; 
+        } 
+        return scratchCopy; 
+    } 
+ 
+    bool Matches( 
+        const TDatabase& db, 
+        const TScratch& scratch, 
         const TStringBuf& text)
     {
         return NPrivate::Matches(db, scratch, text, *Singleton<NPrivate::TImpl>());
-    }
-
+    } 
+ 
     TString Serialize(const TDatabase& db) {
-        char* databaseBytes = nullptr;
-        size_t databaseLength;
+        char* databaseBytes = nullptr; 
+        size_t databaseLength; 
         hs_error_t status = Singleton<NPrivate::TImpl>()->SerializeDatabase(
-            db.Get(),
-            &databaseBytes,
+            db.Get(), 
+            &databaseBytes, 
             &databaseLength);
-        TSerializedDatabase serialization(databaseBytes);
-        if (status != HS_SUCCESS) {
-            ythrow yexception() << "Failed to serialize hyperscan database";
-        }
+        TSerializedDatabase serialization(databaseBytes); 
+        if (status != HS_SUCCESS) { 
+            ythrow yexception() << "Failed to serialize hyperscan database"; 
+        } 
         return TString(serialization.Get(), databaseLength);
-    }
-
-    TDatabase Deserialize(const TStringBuf& serialization) {
-        hs_database_t* rawDb = nullptr;
+    } 
+ 
+    TDatabase Deserialize(const TStringBuf& serialization) { 
+        hs_database_t* rawDb = nullptr; 
         hs_error_t status = Singleton<NPrivate::TImpl>()->DeserializeDatabase(
-            serialization.begin(),
-            serialization.size(),
+            serialization.begin(), 
+            serialization.size(), 
             &rawDb);
-        TDatabase db(rawDb);
-        if (status != HS_SUCCESS) {
+        TDatabase db(rawDb); 
+        if (status != HS_SUCCESS) { 
             if (status == HS_DB_PLATFORM_ERROR) {
                 ythrow yexception() << "Serialized Hyperscan database is incompatible with current CPU";
             } else {
                 ythrow yexception() << "Failed to deserialize hyperscan database";
             }
-        }
-        return db;
-    }
-}
+        } 
+        return db; 
+    } 
+} 

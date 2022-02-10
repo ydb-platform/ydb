@@ -1,80 +1,80 @@
-/*
+/* 
  * Copyright (c) 2015-2020, Intel Corporation
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
- *
- *  * Redistributions of source code must retain the above copyright notice,
- *    this list of conditions and the following disclaimer.
- *  * Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
- *    documentation and/or other materials provided with the distribution.
- *  * Neither the name of Intel Corporation nor the names of its contributors
- *    may be used to endorse or promote products derived from this software
- *    without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
- */
-
+ * 
+ * Redistribution and use in source and binary forms, with or without 
+ * modification, are permitted provided that the following conditions are met: 
+ * 
+ *  * Redistributions of source code must retain the above copyright notice, 
+ *    this list of conditions and the following disclaimer. 
+ *  * Redistributions in binary form must reproduce the above copyright 
+ *    notice, this list of conditions and the following disclaimer in the 
+ *    documentation and/or other materials provided with the distribution. 
+ *  * Neither the name of Intel Corporation nor the names of its contributors 
+ *    may be used to endorse or promote products derived from this software 
+ *    without specific prior written permission. 
+ * 
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" 
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE 
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE 
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE 
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR 
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF 
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS 
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN 
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) 
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE 
+ * POSSIBILITY OF SUCH DAMAGE. 
+ */ 
+ 
 /**
  * \file
  * \brief Small-write engine build code.
  */
 
-#include "smallwrite/smallwrite_build.h"
-
-#include "grey.h"
-#include "ue2common.h"
+#include "smallwrite/smallwrite_build.h" 
+ 
+#include "grey.h" 
+#include "ue2common.h" 
 #include "compiler/compiler.h"
 #include "nfa/dfa_min.h"
-#include "nfa/mcclellancompile.h"
-#include "nfa/mcclellancompile_util.h"
-#include "nfa/nfa_internal.h"
-#include "nfa/rdfa_merge.h"
+#include "nfa/mcclellancompile.h" 
+#include "nfa/mcclellancompile_util.h" 
+#include "nfa/nfa_internal.h" 
+#include "nfa/rdfa_merge.h" 
 #include "nfa/shengcompile.h"
-#include "nfagraph/ng.h"
+#include "nfagraph/ng.h" 
 #include "nfagraph/ng_depth.h"
-#include "nfagraph/ng_holder.h"
-#include "nfagraph/ng_mcclellan.h"
+#include "nfagraph/ng_holder.h" 
+#include "nfagraph/ng_mcclellan.h" 
 #include "nfagraph/ng_reports.h"
 #include "nfagraph/ng_prune.h"
-#include "nfagraph/ng_util.h"
-#include "smallwrite/smallwrite_internal.h"
-#include "util/alloc.h"
+#include "nfagraph/ng_util.h" 
+#include "smallwrite/smallwrite_internal.h" 
+#include "util/alloc.h" 
 #include "util/bytecode_ptr.h"
-#include "util/charreach.h"
+#include "util/charreach.h" 
 #include "util/compare.h"
-#include "util/compile_context.h"
-#include "util/container.h"
-#include "util/make_unique.h"
+#include "util/compile_context.h" 
+#include "util/container.h" 
+#include "util/make_unique.h" 
 #include "util/ue2_graph.h"
-#include "util/ue2string.h"
-#include "util/verify_types.h"
-
-#include <map>
-#include <set>
-#include <vector>
-#include <utility>
-
+#include "util/ue2string.h" 
+#include "util/verify_types.h" 
+ 
+#include <map> 
+#include <set> 
+#include <vector> 
+#include <utility> 
+ 
 #include <boost/graph/breadth_first_search.hpp>
 
-using namespace std;
-
-namespace ue2 {
-
-#define DFA_MERGE_MAX_STATES 8000
+using namespace std; 
+ 
+namespace ue2 { 
+ 
+#define DFA_MERGE_MAX_STATES 8000 
 #define MAX_TRIE_VERTICES 8000
-
+ 
 struct LitTrieVertexProps {
     LitTrieVertexProps() = default;
     explicit LitTrieVertexProps(u8 c_in) : c(c_in) {}
@@ -116,46 +116,46 @@ std::set<ReportID> all_reports(const LitTrie &trie) {
 using LitTrieVertex = LitTrie::vertex_descriptor;
 using LitTrieEdge = LitTrie::edge_descriptor;
 
-namespace { // unnamed
-
-// Concrete impl class
-class SmallWriteBuildImpl : public SmallWriteBuild {
-public:
+namespace { // unnamed 
+ 
+// Concrete impl class 
+class SmallWriteBuildImpl : public SmallWriteBuild { 
+public: 
     SmallWriteBuildImpl(size_t num_patterns, const ReportManager &rm,
                         const CompileContext &cc);
-
-    // Construct a runtime implementation.
+ 
+    // Construct a runtime implementation. 
     bytecode_ptr<SmallWriteEngine> build(u32 roseQuality) override;
-
+ 
     void add(const NGHolder &g, const ExpressionInfo &expr) override;
-    void add(const ue2_literal &literal, ReportID r) override;
-
+    void add(const ue2_literal &literal, ReportID r) override; 
+ 
     set<ReportID> all_reports() const override;
-
-    const ReportManager &rm;
-    const CompileContext &cc;
-
+ 
+    const ReportManager &rm; 
+    const CompileContext &cc; 
+ 
     vector<unique_ptr<raw_dfa>> dfas;
     LitTrie lit_trie;
     LitTrie lit_trie_nocase;
     size_t num_literals = 0;
-    bool poisoned;
-};
-
-} // namespace
-
+    bool poisoned; 
+}; 
+ 
+} // namespace 
+ 
 SmallWriteBuild::~SmallWriteBuild() = default;
-
+ 
 SmallWriteBuildImpl::SmallWriteBuildImpl(size_t num_patterns,
                                          const ReportManager &rm_in,
-                                         const CompileContext &cc_in)
-    : rm(rm_in), cc(cc_in),
-      /* small write is block mode only */
+                                         const CompileContext &cc_in) 
+    : rm(rm_in), cc(cc_in), 
+      /* small write is block mode only */ 
       poisoned(!cc.grey.allowSmallWrite
                || cc.streaming
                || num_patterns > cc.grey.smallWriteMaxPatterns) {
-}
-
+} 
+ 
 /**
  * \brief Remove any reports from the given vertex that cannot match within
  * max_depth due to their constraints.
@@ -259,24 +259,24 @@ bool mergeDfas(vector<unique_ptr<raw_dfa>> &dfas, const ReportManager &rm,
 }
 
 void SmallWriteBuildImpl::add(const NGHolder &g, const ExpressionInfo &expr) {
-    // If the graph is poisoned (i.e. we can't build a SmallWrite version),
-    // we don't even try.
-    if (poisoned) {
-        return;
-    }
-
+    // If the graph is poisoned (i.e. we can't build a SmallWrite version), 
+    // we don't even try. 
+    if (poisoned) { 
+        return; 
+    } 
+ 
     if (expr.som) {
         DEBUG_PRINTF("no SOM support in small-write engine\n");
-        poisoned = true;
-        return;
-    }
-
+        poisoned = true; 
+        return; 
+    } 
+ 
     if (isVacuous(g)) {
         DEBUG_PRINTF("no vacuous graph support in small-write engine\n");
         poisoned = true;
         return;
     }
-
+ 
     if (any_of_in(::ue2::all_reports(g), [&](ReportID id) {
             return rm.getReport(id).minLength > 0;
         })) {
@@ -287,45 +287,45 @@ void SmallWriteBuildImpl::add(const NGHolder &g, const ExpressionInfo &expr) {
 
     DEBUG_PRINTF("g=%p\n", &g);
 
-    // make a copy of the graph so that we can modify it for our purposes
+    // make a copy of the graph so that we can modify it for our purposes 
     unique_ptr<NGHolder> h = cloneHolder(g);
-
+ 
     pruneOverlong(*h, depth(cc.grey.smallWriteLargestBuffer), rm);
-
+ 
     reduceGraph(*h, SOM_NONE, expr.utf8, cc);
 
     if (can_never_match(*h)) {
         DEBUG_PRINTF("graph can never match in small block\n");
-        return;
-    }
-
-    // Now we can actually build the McClellan DFA
-    assert(h->kind == NFA_OUTFIX);
-    auto r = buildMcClellan(*h, &rm, cc.grey);
-
-    // If we couldn't build a McClellan DFA for this portion, we won't be able
-    // build a smwr which represents the pattern set
-    if (!r) {
-        DEBUG_PRINTF("failed to determinise\n");
-        poisoned = true;
-        return;
-    }
-
+        return; 
+    } 
+ 
+    // Now we can actually build the McClellan DFA 
+    assert(h->kind == NFA_OUTFIX); 
+    auto r = buildMcClellan(*h, &rm, cc.grey); 
+ 
+    // If we couldn't build a McClellan DFA for this portion, we won't be able 
+    // build a smwr which represents the pattern set 
+    if (!r) { 
+        DEBUG_PRINTF("failed to determinise\n"); 
+        poisoned = true; 
+        return; 
+    } 
+ 
     if (clear_deeper_reports(*r, cc.grey.smallWriteLargestBuffer)) {
         minimize_hopcroft(*r, cc.grey);
     }
-
+ 
     dfas.push_back(std::move(r));
 
     if (dfas.size() >= cc.grey.smallWriteMergeBatchSize) {
         if (!mergeDfas(dfas, rm, cc)) {
             dfas.clear();
-            poisoned = true;
-            return;
-        }
-    }
-}
-
+            poisoned = true; 
+            return; 
+        } 
+    } 
+} 
+ 
 static
 bool add_to_trie(const ue2_literal &literal, ReportID report, LitTrie &trie) {
     auto u = trie.root;
@@ -351,19 +351,19 @@ bool add_to_trie(const ue2_literal &literal, ReportID report, LitTrie &trie) {
     return num_vertices(trie) <= MAX_TRIE_VERTICES;
 }
 
-void SmallWriteBuildImpl::add(const ue2_literal &literal, ReportID r) {
-    // If the graph is poisoned (i.e. we can't build a SmallWrite version),
-    // we don't even try.
-    if (poisoned) {
+void SmallWriteBuildImpl::add(const ue2_literal &literal, ReportID r) { 
+    // If the graph is poisoned (i.e. we can't build a SmallWrite version), 
+    // we don't even try. 
+    if (poisoned) { 
         DEBUG_PRINTF("poisoned\n");
-        return;
-    }
-
-    if (literal.length() > cc.grey.smallWriteLargestBuffer) {
+        return; 
+    } 
+ 
+    if (literal.length() > cc.grey.smallWriteLargestBuffer) { 
         DEBUG_PRINTF("exceeded length limit\n");
-        return; /* too long */
-    }
-
+        return; /* too long */ 
+    } 
+ 
     if (++num_literals > cc.grey.smallWriteMaxLiterals) {
         DEBUG_PRINTF("exceeded literal limit\n");
         poisoned = true;
@@ -375,8 +375,8 @@ void SmallWriteBuildImpl::add(const ue2_literal &literal, ReportID r) {
         DEBUG_PRINTF("trie add failed\n");
         poisoned = true;
     }
-}
-
+} 
+ 
 namespace {
 
 /**
@@ -419,7 +419,7 @@ struct ACVisitor : public boost::default_bfs_visitor {
 
         DEBUG_PRINTF("no failure edge\n");
         return LitTrie::null_vertex();
-    }
+    } 
 
     void tree_edge(LitTrieEdge e, const LitTrie &trie) {
         auto u = source(e, trie);
@@ -448,8 +448,8 @@ private:
     unordered_map<LitTrieVertex, LitTrieVertex> &failure_map;
     vector<LitTrieVertex> &ordering; //!< BFS ordering for vertices.
 };
-}
-
+} 
+ 
 static UNUSED
 bool isSaneTrie(const LitTrie &trie) {
     CharReach seen;
@@ -464,7 +464,7 @@ bool isSaneTrie(const LitTrie &trie) {
     }
     return true;
 }
-
+ 
 /**
  * \brief Turn the given literal trie into an AC automaton by adding additional
  * edges and reports.
@@ -497,14 +497,14 @@ void buildAutomaton(LitTrie &trie,
                 add_edge(v, w, trie);
             }
         }
-    }
+    } 
 }
-
+ 
 static
 vector<u32> findDistFromRoot(const LitTrie &trie) {
     vector<u32> dist(num_vertices(trie), UINT32_MAX);
     dist[trie[trie.root].index] = 0;
-
+ 
     // BFS to find dist from root.
     breadth_first_search(
         trie, trie.root,
@@ -512,7 +512,7 @@ vector<u32> findDistFromRoot(const LitTrie &trie) {
             make_iterator_property_map(dist.begin(),
                                        get(&LitTrieVertexProps::index, trie)),
             boost::on_tree_edge()))));
-
+ 
     return dist;
 }
 
@@ -526,9 +526,9 @@ vector<u32> findDistToAccept(const LitTrie &trie) {
         if (!trie[v].reports.empty()) {
             q.push_back(v);
             dist[trie[v].index] = 0;
-        }
-    }
-
+        } 
+    } 
+ 
     // Custom BFS, since we have a pile of sources.
     while (!q.empty()) {
         auto v = q.front();
@@ -542,11 +542,11 @@ vector<u32> findDistToAccept(const LitTrie &trie) {
                 u_dist = d + 1;
             }
         }
-    }
-
+    } 
+ 
     return dist;
 }
-
+ 
 /**
  * \brief Prune all vertices from the trie that do not lie on a path from root
  * to accept of length <= max_depth.
@@ -554,7 +554,7 @@ vector<u32> findDistToAccept(const LitTrie &trie) {
 static
 void pruneTrie(LitTrie &trie, u32 max_depth) {
     DEBUG_PRINTF("pruning trie to %u\n", max_depth);
-
+ 
     auto dist_from_root = findDistFromRoot(trie);
     auto dist_to_accept = findDistToAccept(trie);
 
@@ -575,30 +575,30 @@ void pruneTrie(LitTrie &trie, u32 max_depth) {
             clear_vertex(v, trie);
             dead.push_back(v);
         }
-    }
-
+    } 
+ 
     if (dead.empty()) {
         return;
-    }
-
+    } 
+ 
     for (auto v : dead) {
         remove_vertex(v, trie);
     }
-
+ 
     DEBUG_PRINTF("%zu vertices remain\n", num_vertices(trie));
-
+ 
     renumber_edges(trie);
     renumber_vertices(trie);
 }
-
+ 
 static
 vector<CharReach> getAlphabet(const LitTrie &trie, bool nocase) {
     vector<CharReach> esets = {CharReach::dot()};
     for (auto v : vertices_range(trie)) {
         if (v == trie.root) {
             continue;
-        }
-
+        } 
+ 
         CharReach cr;
         if (nocase) {
             cr.set(mytoupper(trie[v].c));
@@ -618,13 +618,13 @@ vector<CharReach> getAlphabet(const LitTrie &trie, bool nocase) {
                 esets.push_back(t);
             }
         }
-    }
-
+    } 
+ 
     // For deterministic compiles.
     sort(esets.begin(), esets.end());
     return esets;
 }
-
+ 
 static
 u16 buildAlphabet(const LitTrie &trie, bool nocase,
                   array<u16, ALPHABET_SIZE> &alpha,
@@ -639,17 +639,17 @@ u16 buildAlphabet(const LitTrie &trie, bool nocase,
         }
         unalpha[i] = leader;
         i++;
-    }
-
+    } 
+ 
     for (u16 j = N_CHARS; j < ALPHABET_SIZE; j++, i++) {
         alpha[j] = i;
         unalpha[i] = j;
     }
-
+ 
     DEBUG_PRINTF("alphabet size %u\n", i);
     return i;
 }
-
+ 
 /**
  * \brief Calculate state mapping, from vertex in trie to state index in BFS
  * ordering.
@@ -666,8 +666,8 @@ makeStateMap(const LitTrie &trie, const vector<LitTrieVertex> &ordering) {
     }
     assert(state_ids.size() == num_vertices(trie));
     return state_ids;
-}
-
+} 
+ 
 /** \brief Construct a raw_dfa from a literal trie. */
 static
 unique_ptr<raw_dfa> buildDfa(LitTrie &trie, bool nocase) {
@@ -739,49 +739,49 @@ unique_ptr<raw_dfa> buildDfa(LitTrie &trie, bool nocase) {
     return rdfa;
 }
 
-#define MAX_GOOD_ACCEL_DEPTH 4
-
-static
-bool is_slow(const raw_dfa &rdfa, const set<dstate_id_t> &accel,
-             u32 roseQuality) {
-    /* we consider a dfa as slow if there is no way to quickly get into an accel
-     * state/dead state. In these cases, it is more likely that we will be
-     * running at our unaccelerated dfa speeds so the small write engine is only
-     * competitive over a small region where start up costs are dominant. */
-
-    if (roseQuality) {
-        return true;
-    }
-
-    set<dstate_id_t> visited;
-    set<dstate_id_t> next;
-    set<dstate_id_t> curr;
-    curr.insert(rdfa.start_anchored);
-
-    u32 ialpha_size = rdfa.getImplAlphaSize();
-
-    for (u32 i = 0; i < MAX_GOOD_ACCEL_DEPTH; i++) {
-        next.clear();
-        for (dstate_id_t s : curr) {
-            if (contains(visited, s)) {
-                continue;
-            }
-            visited.insert(s);
-            if (s == DEAD_STATE || contains(accel, s)) {
-                return false;
-            }
-
-            for (size_t j = 0; j < ialpha_size; j++) {
-                next.insert(rdfa.states[s].next[j]);
-            }
-        }
-        curr.swap(next);
-    }
-
-    return true;
-}
-
-static
+#define MAX_GOOD_ACCEL_DEPTH 4 
+ 
+static 
+bool is_slow(const raw_dfa &rdfa, const set<dstate_id_t> &accel, 
+             u32 roseQuality) { 
+    /* we consider a dfa as slow if there is no way to quickly get into an accel 
+     * state/dead state. In these cases, it is more likely that we will be 
+     * running at our unaccelerated dfa speeds so the small write engine is only 
+     * competitive over a small region where start up costs are dominant. */ 
+ 
+    if (roseQuality) { 
+        return true; 
+    } 
+ 
+    set<dstate_id_t> visited; 
+    set<dstate_id_t> next; 
+    set<dstate_id_t> curr; 
+    curr.insert(rdfa.start_anchored); 
+ 
+    u32 ialpha_size = rdfa.getImplAlphaSize(); 
+ 
+    for (u32 i = 0; i < MAX_GOOD_ACCEL_DEPTH; i++) { 
+        next.clear(); 
+        for (dstate_id_t s : curr) { 
+            if (contains(visited, s)) { 
+                continue; 
+            } 
+            visited.insert(s); 
+            if (s == DEAD_STATE || contains(accel, s)) { 
+                return false; 
+            } 
+ 
+            for (size_t j = 0; j < ialpha_size; j++) { 
+                next.insert(rdfa.states[s].next[j]); 
+            } 
+        } 
+        curr.swap(next); 
+    } 
+ 
+    return true; 
+} 
+ 
+static 
 bytecode_ptr<NFA> getDfa(raw_dfa &rdfa, const CompileContext &cc,
                          const ReportManager &rm, bool has_non_literals,
                          set<dstate_id_t> &accel_states) {
@@ -812,73 +812,73 @@ bytecode_ptr<NFA> prepEngine(raw_dfa &rdfa, u32 roseQuality,
                              const CompileContext &cc, const ReportManager &rm,
                              bool has_non_literals, u32 *start_offset,
                              u32 *small_region) {
-    *start_offset = remove_leading_dots(rdfa);
-
-    // Unleash the McClellan!
-    set<dstate_id_t> accel_states;
-
+    *start_offset = remove_leading_dots(rdfa); 
+ 
+    // Unleash the McClellan! 
+    set<dstate_id_t> accel_states; 
+ 
     auto nfa = getDfa(rdfa, cc, rm, has_non_literals, accel_states);
-    if (!nfa) {
+    if (!nfa) { 
         DEBUG_PRINTF("DFA compile failed for smallwrite NFA\n");
-        return nullptr;
-    }
-
-    if (is_slow(rdfa, accel_states, roseQuality)) {
+        return nullptr; 
+    } 
+ 
+    if (is_slow(rdfa, accel_states, roseQuality)) { 
         DEBUG_PRINTF("is slow\n");
-        *small_region = cc.grey.smallWriteLargestBufferBad;
-        if (*small_region <= *start_offset) {
-            return nullptr;
-        }
+        *small_region = cc.grey.smallWriteLargestBufferBad; 
+        if (*small_region <= *start_offset) { 
+            return nullptr; 
+        } 
         if (clear_deeper_reports(rdfa, *small_region - *start_offset)) {
             minimize_hopcroft(rdfa, cc.grey);
             if (rdfa.start_anchored == DEAD_STATE) {
                 DEBUG_PRINTF("all patterns pruned out\n");
                 return nullptr;
             }
-
+ 
             nfa = getDfa(rdfa, cc, rm, has_non_literals, accel_states);
             if (!nfa) {
                 DEBUG_PRINTF("DFA compile failed for smallwrite NFA\n");
                 assert(0); /* able to build orig dfa but not the trimmed? */
                 return nullptr;
             }
-        }
-    } else {
-        *small_region = cc.grey.smallWriteLargestBuffer;
-    }
-
+        } 
+    } else { 
+        *small_region = cc.grey.smallWriteLargestBuffer; 
+    } 
+ 
     assert(isDfaType(nfa->type));
-    if (nfa->length > cc.grey.limitSmallWriteOutfixSize
-        || nfa->length > cc.grey.limitDFASize) {
-        DEBUG_PRINTF("smallwrite outfix size too large\n");
-        return nullptr; /* this is just a soft failure - don't build smwr */
-    }
-
-    nfa->queueIndex = 0; /* dummy, small write API does not use queue */
-    return nfa;
-}
-
-// SmallWriteBuild factory
+    if (nfa->length > cc.grey.limitSmallWriteOutfixSize 
+        || nfa->length > cc.grey.limitDFASize) { 
+        DEBUG_PRINTF("smallwrite outfix size too large\n"); 
+        return nullptr; /* this is just a soft failure - don't build smwr */ 
+    } 
+ 
+    nfa->queueIndex = 0; /* dummy, small write API does not use queue */ 
+    return nfa; 
+} 
+ 
+// SmallWriteBuild factory 
 unique_ptr<SmallWriteBuild> makeSmallWriteBuilder(size_t num_patterns,
                                                   const ReportManager &rm,
-                                                  const CompileContext &cc) {
+                                                  const CompileContext &cc) { 
     return ue2::make_unique<SmallWriteBuildImpl>(num_patterns, rm, cc);
-}
-
+} 
+ 
 bytecode_ptr<SmallWriteEngine> SmallWriteBuildImpl::build(u32 roseQuality) {
     const bool has_literals = !is_empty(lit_trie) || !is_empty(lit_trie_nocase);
     const bool has_non_literals = !dfas.empty();
     if (dfas.empty() && !has_literals) {
-        DEBUG_PRINTF("no smallwrite engine\n");
-        poisoned = true;
-        return nullptr;
-    }
-
-    if (poisoned) {
-        DEBUG_PRINTF("some pattern could not be made into a smallwrite dfa\n");
-        return nullptr;
-    }
-
+        DEBUG_PRINTF("no smallwrite engine\n"); 
+        poisoned = true; 
+        return nullptr; 
+    } 
+ 
+    if (poisoned) { 
+        DEBUG_PRINTF("some pattern could not be made into a smallwrite dfa\n"); 
+        return nullptr; 
+    } 
+ 
     // We happen to know that if the rose is high quality, we're going to limit
     // depth further.
     if (roseQuality) {
@@ -904,9 +904,9 @@ bytecode_ptr<SmallWriteEngine> SmallWriteBuildImpl::build(u32 roseQuality) {
 
     if (dfas.empty()) {
         DEBUG_PRINTF("no dfa, pruned everything away\n");
-        return nullptr;
-    }
-
+        return nullptr; 
+    } 
+ 
     if (!mergeDfas(dfas, rm, cc)) {
         dfas.clear();
         return nullptr;
@@ -916,34 +916,34 @@ bytecode_ptr<SmallWriteEngine> SmallWriteBuildImpl::build(u32 roseQuality) {
     auto rdfa = std::move(dfas.front());
     dfas.clear();
 
-    DEBUG_PRINTF("building rdfa %p\n", rdfa.get());
-
-    u32 start_offset;
-    u32 small_region;
+    DEBUG_PRINTF("building rdfa %p\n", rdfa.get()); 
+ 
+    u32 start_offset; 
+    u32 small_region; 
     auto nfa = prepEngine(*rdfa, roseQuality, cc, rm, has_non_literals,
                           &start_offset, &small_region);
-    if (!nfa) {
-        DEBUG_PRINTF("some smallwrite outfix could not be prepped\n");
-        /* just skip the smallwrite optimization */
-        poisoned = true;
-        return nullptr;
-    }
-
-    u32 size = sizeof(SmallWriteEngine) + nfa->length;
+    if (!nfa) { 
+        DEBUG_PRINTF("some smallwrite outfix could not be prepped\n"); 
+        /* just skip the smallwrite optimization */ 
+        poisoned = true; 
+        return nullptr; 
+    } 
+ 
+    u32 size = sizeof(SmallWriteEngine) + nfa->length; 
     auto smwr = make_zeroed_bytecode_ptr<SmallWriteEngine>(size);
-
-    smwr->size = size;
-    smwr->start_offset = start_offset;
-    smwr->largestBuffer = small_region;
-
-    /* copy in nfa after the smwr */
-    assert(ISALIGNED_CL(smwr.get() + 1));
-    memcpy(smwr.get() + 1, nfa.get(), nfa->length);
-
-    DEBUG_PRINTF("smallwrite done %p\n", smwr.get());
-    return smwr;
-}
-
+ 
+    smwr->size = size; 
+    smwr->start_offset = start_offset; 
+    smwr->largestBuffer = small_region; 
+ 
+    /* copy in nfa after the smwr */ 
+    assert(ISALIGNED_CL(smwr.get() + 1)); 
+    memcpy(smwr.get() + 1, nfa.get(), nfa->length); 
+ 
+    DEBUG_PRINTF("smallwrite done %p\n", smwr.get()); 
+    return smwr; 
+} 
+ 
 set<ReportID> SmallWriteBuildImpl::all_reports() const {
     set<ReportID> reports;
     if (poisoned) {
@@ -958,6 +958,6 @@ set<ReportID> SmallWriteBuildImpl::all_reports() const {
     insert(&reports, ::ue2::all_reports(lit_trie_nocase));
 
     return reports;
-}
-
-} // namespace ue2
+} 
+ 
+} // namespace ue2 

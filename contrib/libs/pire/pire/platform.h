@@ -26,13 +26,13 @@
 #include <contrib/libs/pire/pire/stub/defaults.h>
 #include <contrib/libs/pire/pire/static_assert.h>
 
-#ifndef PIRE_FORCED_INLINE
+#ifndef PIRE_FORCED_INLINE 
 #ifdef __GNUC__
-#define PIRE_FORCED_INLINE inline __attribute__((__always_inline__))
+#define PIRE_FORCED_INLINE inline __attribute__((__always_inline__)) 
 #elif _MSC_VER
-#define PIRE_FORCED_INLINE __forceinline
+#define PIRE_FORCED_INLINE __forceinline 
 #else
-#define PIRE_FORCED_INLINE inline
+#define PIRE_FORCED_INLINE inline 
 #endif
 #endif
 

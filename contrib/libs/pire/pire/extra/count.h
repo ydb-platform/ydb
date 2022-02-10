@@ -45,71 +45,71 @@ namespace Impl {
 	AdvancedScanner MakeAdvancedCountingScanner(const Fsm& re, const Fsm& sep, bool* simple);
 };
 
-template<size_t I>
-class IncrementPerformer {
-public:
-	template<typename State, typename Action>
-	PIRE_FORCED_INLINE PIRE_HOT_FUNCTION
-	static void Do(State& s, Action mask)
-	{
-		if (mask & (1 << (I - 1))) {
-			Increment(s);
-		}
-		IncrementPerformer<I - 1>::Do(s, mask);
-	}
-
-private:
-	template<typename State>
-	PIRE_FORCED_INLINE PIRE_HOT_FUNCTION
-	static void Increment(State& s)
-	{
-		++s.m_current[I - 1];
-	}
-};
-
-template<>
-class IncrementPerformer<0> {
-public:
-	template<typename State, typename Action>
-	PIRE_FORCED_INLINE PIRE_HOT_FUNCTION
-	static void Do(State&, Action)
-	{
-	}
-};
-
-template<size_t I>
-class ResetPerformer {
-public:
-	template<typename State, typename Action>
-	PIRE_FORCED_INLINE PIRE_HOT_FUNCTION
-	static void Do(State& s, Action mask)
-	{
-		if (mask & (1 << (LoadedScanner::MAX_RE_COUNT + (I - 1))) && s.m_current[I - 1]) {
-			Reset(s);
-		}
-		ResetPerformer<I - 1>::Do(s, mask);
-	}
-
-private:
-	template<typename State>
-	PIRE_FORCED_INLINE PIRE_HOT_FUNCTION
-	static void Reset(State& s)
-	{
-		s.m_total[I - 1] = ymax(s.m_total[I - 1], s.m_current[I - 1]);
-		s.m_current[I - 1] = 0;
-	}
-};
-
-template<>
-class ResetPerformer<0> {
-public:
-	template<typename State, typename Action>
-	PIRE_FORCED_INLINE PIRE_HOT_FUNCTION
-	static void Do(State&, Action)
-	{
-	}
-};
-
+template<size_t I> 
+class IncrementPerformer { 
+public: 
+	template<typename State, typename Action> 
+	PIRE_FORCED_INLINE PIRE_HOT_FUNCTION 
+	static void Do(State& s, Action mask) 
+	{ 
+		if (mask & (1 << (I - 1))) { 
+			Increment(s); 
+		} 
+		IncrementPerformer<I - 1>::Do(s, mask); 
+	} 
+ 
+private: 
+	template<typename State> 
+	PIRE_FORCED_INLINE PIRE_HOT_FUNCTION 
+	static void Increment(State& s) 
+	{ 
+		++s.m_current[I - 1]; 
+	} 
+}; 
+ 
+template<> 
+class IncrementPerformer<0> { 
+public: 
+	template<typename State, typename Action> 
+	PIRE_FORCED_INLINE PIRE_HOT_FUNCTION 
+	static void Do(State&, Action) 
+	{ 
+	} 
+}; 
+ 
+template<size_t I> 
+class ResetPerformer { 
+public: 
+	template<typename State, typename Action> 
+	PIRE_FORCED_INLINE PIRE_HOT_FUNCTION 
+	static void Do(State& s, Action mask) 
+	{ 
+		if (mask & (1 << (LoadedScanner::MAX_RE_COUNT + (I - 1))) && s.m_current[I - 1]) { 
+			Reset(s); 
+		} 
+		ResetPerformer<I - 1>::Do(s, mask); 
+	} 
+ 
+private: 
+	template<typename State> 
+	PIRE_FORCED_INLINE PIRE_HOT_FUNCTION 
+	static void Reset(State& s) 
+	{ 
+		s.m_total[I - 1] = ymax(s.m_total[I - 1], s.m_current[I - 1]); 
+		s.m_current[I - 1] = 0; 
+	} 
+}; 
+ 
+template<> 
+class ResetPerformer<0> { 
+public: 
+	template<typename State, typename Action> 
+	PIRE_FORCED_INLINE PIRE_HOT_FUNCTION 
+	static void Do(State&, Action) 
+	{ 
+	} 
+}; 
+ 
 /**
  * A scanner which counts occurences of the
  * given regexp separated by another regexp
@@ -134,29 +134,29 @@ public:
 		state.m_updatedMask = 0;
 	}
 
-	PIRE_FORCED_INLINE PIRE_HOT_FUNCTION
-	void TakeAction(State& s, Action a) const
-	{
+	PIRE_FORCED_INLINE PIRE_HOT_FUNCTION 
+	void TakeAction(State& s, Action a) const 
+	{ 
 		static_cast<const DerivedScanner*>(this)->template TakeActionImpl<MAX_RE_COUNT>(s, a);
-	}
-
+	} 
+ 
 	bool CanStop(const State&) const { return false; }
 
-	Char Translate(Char ch) const
-	{
-		return m_letters[static_cast<size_t>(ch)];
-	}
-
-	Action NextTranslated(State& s, Char c) const
-	{
-		Transition x = reinterpret_cast<const Transition*>(s.m_state)[c];
-		s.m_state += SignExtend(x.shift);
-		return x.action;
-	}
-
+	Char Translate(Char ch) const 
+	{ 
+		return m_letters[static_cast<size_t>(ch)]; 
+	} 
+ 
+	Action NextTranslated(State& s, Char c) const 
+	{ 
+		Transition x = reinterpret_cast<const Transition*>(s.m_state)[c]; 
+		s.m_state += SignExtend(x.shift); 
+		return x.action; 
+	} 
+ 
 	Action Next(State& s, Char c) const
 	{
-		return NextTranslated(s, Translate(c));
+		return NextTranslated(s, Translate(c)); 
 	}
 
 	Action Next(const State& current, State& n, Char c) const
@@ -177,28 +177,28 @@ protected:
 	using LoadedScanner::Init;
 	using LoadedScanner::InternalState;
 
-	template<size_t ActualReCount>
+	template<size_t ActualReCount> 
 	void PerformIncrement(State& s, Action mask) const
 	{
 		if (mask) {
-			IncrementPerformer<ActualReCount>::Do(s, mask);
+			IncrementPerformer<ActualReCount>::Do(s, mask); 
 			s.m_updatedMask |= ((size_t)mask) << MAX_RE_COUNT;
 		}
 	}
 
-	template<size_t ActualReCount>
+	template<size_t ActualReCount> 
 	void PerformReset(State& s, Action mask) const
 	{
 		mask &= s.m_updatedMask;
 		if (mask) {
-			ResetPerformer<ActualReCount>::Do(s, mask);
+			ResetPerformer<ActualReCount>::Do(s, mask); 
 			s.m_updatedMask &= (Action)~mask;
 		}
 	}
 
 	void Next(InternalState& s, Char c) const
 	{
-		Transition x = reinterpret_cast<const Transition*>(s)[Translate(c)];
+		Transition x = reinterpret_cast<const Transition*>(s)[Translate(c)]; 
 		s += SignExtend(x.shift);
 	}
 };

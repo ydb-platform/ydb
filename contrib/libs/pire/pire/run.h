@@ -51,7 +51,7 @@ namespace Pire {
 namespace Pire {
 
 template<class Scanner>
-PIRE_FORCED_INLINE PIRE_HOT_FUNCTION
+PIRE_FORCED_INLINE PIRE_HOT_FUNCTION 
 void Step(const Scanner& scanner, typename Scanner::State& state, Char ch)
 {
 	Y_ASSERT(ch < MaxCharUnaligned);
@@ -65,7 +65,7 @@ namespace Impl {
 
 	template<class Scanner>
 	struct RunPred {
-		PIRE_FORCED_INLINE PIRE_HOT_FUNCTION
+		PIRE_FORCED_INLINE PIRE_HOT_FUNCTION 
 		Action operator()(const Scanner&, const typename Scanner::State&, const char*) const { return Continue; }
 	};
 	
@@ -73,7 +73,7 @@ namespace Impl {
 	struct ShortestPrefixPred {
 		explicit ShortestPrefixPred(const char*& pos): m_pos(&pos) {}
 
-		PIRE_FORCED_INLINE PIRE_HOT_FUNCTION
+		PIRE_FORCED_INLINE PIRE_HOT_FUNCTION 
 		Action operator()(const Scanner& sc, const typename Scanner::State& st, const char* pos) const
 		{
 			if (sc.Final(st)) {
@@ -91,7 +91,7 @@ namespace Impl {
 	struct LongestPrefixPred {
 		explicit LongestPrefixPred(const char*& pos): m_pos(&pos) {}
 		
-		PIRE_FORCED_INLINE PIRE_HOT_FUNCTION
+		PIRE_FORCED_INLINE PIRE_HOT_FUNCTION 
 		Action operator()(const Scanner& sc, const typename Scanner::State& st, const char* pos) const
 		{
 			if (sc.Final(st))
@@ -108,37 +108,37 @@ namespace Impl {
 
 namespace Impl {
 
-	template<class Scanner, class Pred>
-	PIRE_FORCED_INLINE PIRE_HOT_FUNCTION
-	Action SafeRunChunk(const Scanner& scanner, typename Scanner::State& state, const size_t* p, size_t pos, size_t size, Pred pred)
-	{
+	template<class Scanner, class Pred> 
+	PIRE_FORCED_INLINE PIRE_HOT_FUNCTION 
+	Action SafeRunChunk(const Scanner& scanner, typename Scanner::State& state, const size_t* p, size_t pos, size_t size, Pred pred) 
+	{ 
 		Y_ASSERT(pos <= sizeof(size_t));
 		Y_ASSERT(size <= sizeof(size_t));
 		Y_ASSERT(pos + size <= sizeof(size_t));
-
-		if (PIRE_UNLIKELY(size == 0))
-			return Continue;
-
-		const char* ptr = (const char*) p + pos;
-		for (; size--; ++ptr) {
-			Step(scanner, state, (unsigned char) *ptr);
-			if (pred(scanner, state, ptr + 1) == Stop)
-				return Stop;
-		}
-		return Continue;
-	}
-
+ 
+		if (PIRE_UNLIKELY(size == 0)) 
+			return Continue; 
+ 
+		const char* ptr = (const char*) p + pos; 
+		for (; size--; ++ptr) { 
+			Step(scanner, state, (unsigned char) *ptr); 
+			if (pred(scanner, state, ptr + 1) == Stop) 
+				return Stop; 
+		} 
+		return Continue; 
+	} 
+ 
 	/// Effectively runs a scanner on a short data chunk, fit completely into one machine word.
 	template<class Scanner, class Pred>
-	PIRE_FORCED_INLINE PIRE_HOT_FUNCTION
+	PIRE_FORCED_INLINE PIRE_HOT_FUNCTION 
 	Action RunChunk(const Scanner& scanner, typename Scanner::State& state, const size_t* p, size_t pos, size_t size, Pred pred)
 	{
 		Y_ASSERT(pos <= sizeof(size_t));
 		Y_ASSERT(size <= sizeof(size_t));
 		Y_ASSERT(pos + size <= sizeof(size_t));
 
-		if (PIRE_UNLIKELY(size == 0))
-			return Continue;
+		if (PIRE_UNLIKELY(size == 0)) 
+			return Continue; 
 
 		size_t chunk = Impl::ToLittleEndian(*p) >> 8*pos;
 		const char* ptr = (const char*) p + pos + size + 1;
@@ -151,7 +151,7 @@ namespace Impl {
 		}
 		return Continue;
 	}
-
+ 
 	template<class Scanner>
 	struct AlignedRunner {
 
@@ -223,7 +223,7 @@ namespace Impl {
 		}
 
 		if (tailSize)
-			Impl::SafeRunChunk(scanner, state, tail, 0, tailSize, pred);
+			Impl::SafeRunChunk(scanner, state, tail, 0, tailSize, pred); 
 
 		st = state;
 	}

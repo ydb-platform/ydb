@@ -1,19 +1,19 @@
-LIBRARY()
-
+LIBRARY() 
+ 
 OWNER(g:antiinfra)
-
-PEERDIR(
-    contrib/libs/hyperscan
+ 
+PEERDIR( 
+    contrib/libs/hyperscan 
     contrib/libs/hyperscan/runtime_core2
     contrib/libs/hyperscan/runtime_corei7
     contrib/libs/hyperscan/runtime_avx2
     contrib/libs/hyperscan/runtime_avx512
-)
-
-SRCS(
-    hyperscan.cpp
-)
-
-END()
+) 
+ 
+SRCS( 
+    hyperscan.cpp 
+) 
+ 
+END() 
 
 RECURSE_FOR_TESTS(ut)

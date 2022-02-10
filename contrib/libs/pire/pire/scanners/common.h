@@ -50,8 +50,8 @@ namespace Pire {
 		ui32 HdrSize;
 
 		static const ui32 MAGIC = 0x45524950;   // "PIRE" on litte-endian
-		static const ui32 RE_VERSION = 7;       // Should be incremented each time when the format of serialized scanner changes
-		static const ui32 RE_VERSION_WITH_MACTIONS = 6;  // LoadedScanner with m_actions, which is ignored
+		static const ui32 RE_VERSION = 7;       // Should be incremented each time when the format of serialized scanner changes 
+		static const ui32 RE_VERSION_WITH_MACTIONS = 6;  // LoadedScanner with m_actions, which is ignored 
 
 		explicit Header(ui32 type, size_t hdrsize)
 			: Magic(MAGIC)
@@ -66,7 +66,7 @@ namespace Pire {
 		{
 			if (Magic != MAGIC || PtrSize != sizeof(void*) || MaxWordSize != sizeof(Impl::MaxSizeWord))
 				throw Error("Serialized regexp incompatible with your system");
-			if (Version != RE_VERSION && Version != RE_VERSION_WITH_MACTIONS)
+			if (Version != RE_VERSION && Version != RE_VERSION_WITH_MACTIONS) 
 				throw Error("You are trying to used an incompatible version of a serialized regexp");
 			if (type != ScannerIOTypes::NoScanner && type != Type &&
 			   !(type == ScannerIOTypes::LoadedScanner && Type == ScannerIOTypes::NoGlueLimitCountingScanner)) {
@@ -101,21 +101,21 @@ namespace Pire {
 				throw Error("Tried to mmap scanner at misaligned address");
 		}
 
-		inline Header ValidateHeader(const size_t*& ptr, size_t& size, ui32 type, size_t hdrsize)
+		inline Header ValidateHeader(const size_t*& ptr, size_t& size, ui32 type, size_t hdrsize) 
 		{
 			const Header* hdr;
 			MapPtr(hdr, 1, ptr, size);
 			hdr->Validate(type, hdrsize);
-			return *hdr;
+			return *hdr; 
 		}
 
-		inline Header ValidateHeader(yistream* s, ui32 type, size_t hdrsize)
+		inline Header ValidateHeader(yistream* s, ui32 type, size_t hdrsize) 
 		{
 			Header hdr(ScannerIOTypes::NoScanner, 0);
 			LoadPodType(s, hdr);
 			AlignLoad(s, sizeof(hdr));
 			hdr.Validate(type, hdrsize);
-			return hdr;
+			return hdr; 
 		}
 	}
 }

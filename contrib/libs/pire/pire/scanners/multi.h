@@ -161,21 +161,21 @@ public:
 	/// Returns an initial state for this scanner
 	void Initialize(State& state) const { state = m.initial; }
 
-	Char Translate(Char ch) const
+	Char Translate(Char ch) const 
 	{
-		return m_letters[static_cast<size_t>(ch)];
-	}
-
-	/// Handles one letter
-	Action NextTranslated(State& state, Char letter) const
-	{
+		return m_letters[static_cast<size_t>(ch)]; 
+	} 
+ 
+	/// Handles one letter 
+	Action NextTranslated(State& state, Char letter) const 
+	{ 
 		PIRE_IFDEBUG(
 			Y_ASSERT(state >= (size_t)m_transitions);
 			Y_ASSERT(state < (size_t)(m_transitions + RowSize()*Size()));
 			Y_ASSERT((state - (size_t)m_transitions) % (RowSize()*sizeof(Transition)) == 0);
 		);
 
-		state = Relocation::Go(state, reinterpret_cast<const Transition*>(state)[letter]);
+		state = Relocation::Go(state, reinterpret_cast<const Transition*>(state)[letter]); 
 
 		PIRE_IFDEBUG(
 			Y_ASSERT(state >= (size_t)m_transitions);
@@ -186,12 +186,12 @@ public:
 		return 0;
 	}
 
-	/// Handles one character
-	Action Next(State& state, Char c) const
-	{
-		return NextTranslated(state, Translate(c));
-	}
-
+	/// Handles one character 
+	Action Next(State& state, Char c) const 
+	{ 
+		return NextTranslated(state, Translate(c)); 
+	} 
+ 
 	void TakeAction(State&, Action) const {}
 
 	Scanner(const Scanner& s): m(s.m)
@@ -636,7 +636,7 @@ private:
 
 	template<class ScannerRowHeader, unsigned N>
 	struct MaskCheckerBase {
-		static PIRE_FORCED_INLINE PIRE_HOT_FUNCTION
+		static PIRE_FORCED_INLINE PIRE_HOT_FUNCTION 
 		bool Check(const ScannerRowHeader& hdr, size_t alignOffset, Word chunk)
 		{
 			Word mask = CheckBytes(hdr.Mask(N, alignOffset), chunk);
@@ -646,7 +646,7 @@ private:
 			return !IsAnySet(mask);
 		}
 
-		static PIRE_FORCED_INLINE PIRE_HOT_FUNCTION
+		static PIRE_FORCED_INLINE PIRE_HOT_FUNCTION 
 		const Word* DoRun(const ScannerRowHeader& hdr, size_t alignOffset, const Word* begin, const Word* end)
 		{
 			for (; begin != end && Check(hdr, alignOffset, ToLittleEndian(*begin)); ++begin) {}
@@ -659,7 +659,7 @@ private:
 		typedef MaskCheckerBase<ScannerRowHeader, N> Base;
 		typedef MaskChecker<ScannerRowHeader, N+1, Nmax> Next;
 
-		static PIRE_FORCED_INLINE PIRE_HOT_FUNCTION
+		static PIRE_FORCED_INLINE PIRE_HOT_FUNCTION 
 		const Word* Run(const ScannerRowHeader& hdr, size_t alignOffset, const Word* begin, const Word* end)
 		{
 			if (hdr.Mask(N) == hdr.Mask(N + 1))
@@ -673,7 +673,7 @@ private:
 	struct MaskChecker<ScannerRowHeader, N, N> : MaskCheckerBase<ScannerRowHeader, N>  {
 		typedef MaskCheckerBase<ScannerRowHeader, N> Base;
 
-		static PIRE_FORCED_INLINE PIRE_HOT_FUNCTION
+		static PIRE_FORCED_INLINE PIRE_HOT_FUNCTION 
 		const Word* Run(const ScannerRowHeader& hdr, size_t alignOffset, const Word* begin, const Word* end)
 		{
 			return Base::DoRun(hdr, alignOffset, begin, end);
@@ -682,7 +682,7 @@ private:
 
 	// Compares the ExitMask[0] value without SSE reads which seems to be more optimal
 	template <class Relocation>
-	static PIRE_FORCED_INLINE PIRE_HOT_FUNCTION
+	static PIRE_FORCED_INLINE PIRE_HOT_FUNCTION 
 	bool CheckFirstMask(const Scanner<Relocation, ExitMasks<MaskCount> >& scanner, typename Scanner<Relocation, ExitMasks<MaskCount> >::State state, size_t val)
 	{
 		return (scanner.Header(state).Mask(0) == val);
@@ -717,7 +717,7 @@ public:
 			return *p;
 		}
 
-		PIRE_FORCED_INLINE PIRE_HOT_FUNCTION
+		PIRE_FORCED_INLINE PIRE_HOT_FUNCTION 
 		size_t Mask(size_t i) const
 		{
 			Y_ASSERT(i < ExitMaskCount);
@@ -791,21 +791,21 @@ public:
 	}
 
 	template <class Relocation>
-	static PIRE_FORCED_INLINE PIRE_HOT_FUNCTION
+	static PIRE_FORCED_INLINE PIRE_HOT_FUNCTION 
 	bool NoExit(const Scanner<Relocation, ExitMasks<MaskCount> >& scanner, typename Scanner<Relocation, ExitMasks<MaskCount> >::State state)
 	{
 		return CheckFirstMask(scanner, state, NO_EXIT_MASK);
 	}
 
 	template <class Relocation>
-	static PIRE_FORCED_INLINE PIRE_HOT_FUNCTION
+	static PIRE_FORCED_INLINE PIRE_HOT_FUNCTION 
 	bool NoShortcut(const Scanner<Relocation, ExitMasks<MaskCount> >& scanner, typename Scanner<Relocation, ExitMasks<MaskCount> >::State state)
 	{
 		return CheckFirstMask(scanner, state, NO_SHORTCUT_MASK);
 	}
 
 	template <class Relocation>
-	static PIRE_FORCED_INLINE PIRE_HOT_FUNCTION
+	static PIRE_FORCED_INLINE PIRE_HOT_FUNCTION 
 	const Word* Run(const Scanner<Relocation, ExitMasks<MaskCount> >& scanner, typename Scanner<Relocation, ExitMasks<MaskCount> >::State state, size_t alignOffset, const Word* begin, const Word* end)
 	{
 		return MaskChecker<typename Scanner<Relocation, ExitMasks<MaskCount> >::ScannerRowHeader, 0, MaskCount - 1>::Run(scanner.Header(state), alignOffset, begin, end);
@@ -846,7 +846,7 @@ struct NoShortcuts {
 	static void FinishMasks(Header&, size_t) {}
 
 	template <class Relocation>
-	static PIRE_FORCED_INLINE PIRE_HOT_FUNCTION
+	static PIRE_FORCED_INLINE PIRE_HOT_FUNCTION 
 	bool NoExit(const Scanner<Relocation, NoShortcuts>&, typename Scanner<Relocation, NoShortcuts>::State)
 	{
 		// Cannot exit prematurely
@@ -854,7 +854,7 @@ struct NoShortcuts {
 	}
 
 	template <class Relocation>
-	static PIRE_FORCED_INLINE PIRE_HOT_FUNCTION
+	static PIRE_FORCED_INLINE PIRE_HOT_FUNCTION 
 	bool NoShortcut(const Scanner<Relocation, NoShortcuts>&, typename Scanner<Relocation, NoShortcuts>::State)
 	{
 		// There's no shortcut regardless of the state
@@ -862,7 +862,7 @@ struct NoShortcuts {
 	}
 
 	template <class Relocation>
-	static PIRE_FORCED_INLINE PIRE_HOT_FUNCTION
+	static PIRE_FORCED_INLINE PIRE_HOT_FUNCTION 
 	const Word* Run(const Scanner<Relocation, NoShortcuts>&, typename Scanner<Relocation, NoShortcuts>::State, size_t, const Word* begin, const Word*)
 	{
 		// Stop shortcutting right at the beginning
@@ -879,7 +879,7 @@ template <class Scanner, unsigned Count>
 struct MultiChunk {
 	// Process Word-sized chunk which consist of >=1 size_t-sized chunks
 	template<class Pred>
-	static PIRE_FORCED_INLINE PIRE_HOT_FUNCTION
+	static PIRE_FORCED_INLINE PIRE_HOT_FUNCTION 
 	Action Process(const Scanner& scanner, typename Scanner::State& state, const size_t* p, Pred pred)
 	{
 		if (RunChunk(scanner, state, p, 0, sizeof(void*), pred) == Continue)
@@ -893,7 +893,7 @@ template <class Scanner>
 struct MultiChunk<Scanner, 0> {
 	// Process Word-sized chunk which consist of >=1 size_t-sized chunks
 	template<class Pred>
-	static PIRE_FORCED_INLINE PIRE_HOT_FUNCTION
+	static PIRE_FORCED_INLINE PIRE_HOT_FUNCTION 
 	Action Process(const Scanner&, typename Scanner::State, const size_t*, Pred)
 	{
 		return Continue;
@@ -909,7 +909,7 @@ private:
 	// Processes Word-sized chuck of memory (depending on the platform a Word might
 	// consist of multiple size_t chuncks)
 	template <class Pred>
-	static PIRE_FORCED_INLINE PIRE_HOT_FUNCTION
+	static PIRE_FORCED_INLINE PIRE_HOT_FUNCTION 
 	Action RunMultiChunk(const ScannerType& scanner, typename ScannerType::State& st, const size_t* begin, Pred pred)
 	{
 		return MultiChunk<ScannerType, sizeof(Word)/sizeof(size_t)>::Process(scanner, st, begin, pred);

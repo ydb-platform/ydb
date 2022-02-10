@@ -157,23 +157,23 @@ term
 
 int yylex(YYSTYPE* lval, Pire::Lexer& rlex)
 {
-    try {
-        Pire::Term term = rlex.Lex();
-        if (!term.Value().Empty())
-            *lval = new Any(term.Value());
+    try { 
+        Pire::Term term = rlex.Lex(); 
+        if (!term.Value().Empty()) 
+            *lval = new Any(term.Value()); 
         else
             *lval = nullptr;
-        return term.Type();
-    } catch (Pire::Error &e) {
-        rlex.SetError(e.what());
-        return 0;
-    }
+        return term.Type(); 
+    } catch (Pire::Error &e) { 
+        rlex.SetError(e.what()); 
+        return 0; 
+    } 
 }
 
-void yyerror(Pire::Lexer& rlex, const char* str)
+void yyerror(Pire::Lexer& rlex, const char* str) 
 {
-    if (rlex.GetError().length() == 0)
-        rlex.SetError(ystring("Regexp parse error: ").append(str));
+    if (rlex.GetError().length() == 0) 
+        rlex.SetError(ystring("Regexp parse error: ").append(str)); 
 }
 
 void AppendRange(const Encoding& encoding, Fsm& a, const Term::CharacterRange& cr)
@@ -235,13 +235,13 @@ Fsm& ConvertToFSM(const Encoding& encoding, Any* any)
 
 namespace Pire {
     namespace Impl {
-        int yre_parse(Pire::Lexer& rlex)
-        {
-            int rc = yyparse(rlex);
-
-            if (rlex.GetError().length() != 0)
-                throw Error(rlex.GetError());
-            return rc;
-        }
+        int yre_parse(Pire::Lexer& rlex) 
+        { 
+            int rc = yyparse(rlex); 
+ 
+            if (rlex.GetError().length() != 0) 
+                throw Error(rlex.GetError()); 
+            return rc; 
+        } 
     }
 }

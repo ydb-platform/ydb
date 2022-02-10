@@ -62,19 +62,19 @@ namespace NPrivate {
             Cache.Clear();
         }
 
-        void Erase(TArgs... args) { 
-            Key key = Callbacks.GetKey(args...); 
+        void Erase(TArgs... args) {
+            Key key = Callbacks.GetKey(args...);
             if (!Contains(key)) {
                 return;
-            } 
-            TWriteGuard w(Mutex); 
-            typename TInternalCache::TIterator i = Cache.Find(key); 
-            if (i == Cache.End()) { 
-                return; 
-            } 
-            Cache.Erase(i); 
-        } 
- 
+            }
+            TWriteGuard w(Mutex);
+            typename TInternalCache::TIterator i = Cache.Find(key);
+            if (i == Cache.End()) {
+                return;
+            }
+            Cache.Erase(i);
+        }
+
         bool Contains(const Key& key) const {
             TReadGuard r(Mutex);
             auto iter = Cache.FindWithoutPromote(key);
@@ -87,11 +87,11 @@ namespace NPrivate {
         }
 
         template <class TCallbacks>
-        static const TPtr Erase(TArgs... args) { 
-            return TThreadSafeCacheSingleton<TCallbacks>::Erase(args...); 
-        } 
- 
-        template <class TCallbacks> 
+        static const TPtr Erase(TArgs... args) {
+            return TThreadSafeCacheSingleton<TCallbacks>::Erase(args...);
+        }
+
+        template <class TCallbacks>
         static void Clear() {
             return TThreadSafeCacheSingleton<TCallbacks>::Clear();
         }
@@ -144,10 +144,10 @@ namespace NPrivate {
                 return Singleton<TThreadSafeCacheSingleton>()->Cache.Get(args...);
             }
 
-            static const TPtr Erase(TArgs... args) { 
-                return Singleton<TThreadSafeCacheSingleton>()->Cache.Erase(args...); 
-            } 
- 
+            static const TPtr Erase(TArgs... args) {
+                return Singleton<TThreadSafeCacheSingleton>()->Cache.Erase(args...);
+            }
+
             static void Clear() {
                 return Singleton<TThreadSafeCacheSingleton>()->Cache.Clear();
             }

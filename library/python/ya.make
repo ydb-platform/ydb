@@ -170,7 +170,7 @@ RECURSE(
     sendmsg
     stubmaker
     solomon
-    spack 
+    spack
     spyt
     ssh_client
     ssh_sign

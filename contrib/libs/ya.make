@@ -397,9 +397,9 @@ IF (OS_LINUX)
         luajit_21
         libaio
         libcap
-        libmnl
-        libnfnetlink
-        libnetfilter_log
+        libmnl 
+        libnfnetlink 
+        libnetfilter_log 
         libnetfilter_conntrack
         openmpi
         sdbus-cpp

@@ -1,6 +1,6 @@
 #include "uri_ut.h"
 #include "other.h"
-#include "qargs.h"
+#include "qargs.h" 
 #include <library/cpp/html/entity/htmlentity.h>
 
 #include <util/system/maxlen.h>
@@ -947,13 +947,13 @@ namespace NUri {
         const char* skipName = static_cast<const char*>(filterData);
         return arg.Name != skipName;
     }
-
+ 
     TString FilterQargs(TString url, const char* name) {
         TString r;
         ProcessQargs(url, r, &QueryArgsFilter, const_cast<char*>(name));
         return r;
     }
-
+ 
     Y_UNIT_TEST_SUITE(QargsTest) {
         Y_UNIT_TEST(TestSorting) {
             UNIT_ASSERT_STRINGS_EQUAL(SortQargs("http://ya.ru/"), "http://ya.ru/");
@@ -961,62 +961,62 @@ namespace NUri {
             UNIT_ASSERT_STRINGS_EQUAL(SortQargs("http://ya.ru/?some=value"), "http://ya.ru/?some=value");
             UNIT_ASSERT_STRINGS_EQUAL(SortQargs("http://ya.ru/?b=1&a=2"), "http://ya.ru/?a=2&b=1");
             UNIT_ASSERT_STRINGS_EQUAL(SortQargs("http://ya.ru/?b=1&a=2&a=3"), "http://ya.ru/?a=3&a=2&b=1");
-
+ 
             UNIT_ASSERT_STRINGS_EQUAL(SortQargs("http://ya.ru/?aaa=3&b=b&a=1&aa=2"), "http://ya.ru/?a=1&aa=2&aaa=3&b=b");
-
+ 
             UNIT_ASSERT_STRINGS_EQUAL(SortQargs("http://ya.ru/?a=1&b=1&c=1"), "http://ya.ru/?a=1&b=1&c=1");
             UNIT_ASSERT_STRINGS_EQUAL(SortQargs("http://ya.ru/?b=1&a=1&c=1"), "http://ya.ru/?a=1&b=1&c=1");
             UNIT_ASSERT_STRINGS_EQUAL(SortQargs("http://ya.ru/?c=1&a=1&b=1"), "http://ya.ru/?a=1&b=1&c=1");
-
+ 
             UNIT_ASSERT_STRINGS_EQUAL(SortQargs("http://ya.ru/?c=1&a=1&a=1&b=1&c=1&b=1"), "http://ya.ru/?a=1&a=1&b=1&b=1&c=1&c=1");
-
+ 
             UNIT_ASSERT_STRINGS_EQUAL(SortQargs("http://ya.ru/?b==&a=&&c="), "http://ya.ru/?a=&b==&c=");
         }
-
+ 
         Y_UNIT_TEST(TestParsingCorners) {
             TString s;
-
-            UNIT_ASSERT_EQUAL(ProcessQargs("http://ya.ru/?=", s), TQueryArg::ProcessedOK);
-            UNIT_ASSERT_EQUAL(ProcessQargs("http://ya.ru/?some", s), TQueryArg::ProcessedOK);
-            UNIT_ASSERT_EQUAL(ProcessQargs("http://ya.ru/?some=", s), TQueryArg::ProcessedOK);
+ 
+            UNIT_ASSERT_EQUAL(ProcessQargs("http://ya.ru/?=", s), TQueryArg::ProcessedOK); 
+            UNIT_ASSERT_EQUAL(ProcessQargs("http://ya.ru/?some", s), TQueryArg::ProcessedOK); 
+            UNIT_ASSERT_EQUAL(ProcessQargs("http://ya.ru/?some=", s), TQueryArg::ProcessedOK); 
             UNIT_ASSERT_EQUAL(ProcessQargs("http://ya.ru/", s), TQueryArg::ProcessedOK);
             UNIT_ASSERT_EQUAL(ProcessQargs("http://ya.ru/?&", s), TQueryArg::ProcessedOK);
             UNIT_ASSERT_EQUAL(ProcessQargs("http://ya.ru/?&&", s), TQueryArg::ProcessedOK);
             UNIT_ASSERT_EQUAL(ProcessQargs("http://ya.ru/?some=", s), TQueryArg::ProcessedOK);
             UNIT_ASSERT_EQUAL(ProcessQargs("http://ya.ru/?some==", s), TQueryArg::ProcessedOK);
             UNIT_ASSERT_EQUAL(ProcessQargs("http://ya.ru/?some=&&", s), TQueryArg::ProcessedOK);
-
-            UNIT_ASSERT_STRINGS_EQUAL(SortQargs("http://ya.ru/?="), "http://ya.ru/?=");
-            UNIT_ASSERT_STRINGS_EQUAL(SortQargs("http://ya.ru/?some=="), "http://ya.ru/?some==");
-            UNIT_ASSERT_STRINGS_EQUAL(SortQargs("http://ya.ru/?&&"), "http://ya.ru/?&&");
-            UNIT_ASSERT_STRINGS_EQUAL(SortQargs("http://ya.ru/?a"), "http://ya.ru/?a");
+ 
+            UNIT_ASSERT_STRINGS_EQUAL(SortQargs("http://ya.ru/?="), "http://ya.ru/?="); 
+            UNIT_ASSERT_STRINGS_EQUAL(SortQargs("http://ya.ru/?some=="), "http://ya.ru/?some=="); 
+            UNIT_ASSERT_STRINGS_EQUAL(SortQargs("http://ya.ru/?&&"), "http://ya.ru/?&&"); 
+            UNIT_ASSERT_STRINGS_EQUAL(SortQargs("http://ya.ru/?a"), "http://ya.ru/?a"); 
         }
-
+ 
         Y_UNIT_TEST(TestFiltering) {
             UNIT_ASSERT_STRINGS_EQUAL(FilterQargs("http://ya.ru/?some=value", "missing"), "http://ya.ru/?some=value");
             UNIT_ASSERT_STRINGS_EQUAL(FilterQargs("http://ya.ru/?b=1&a=2", "b"), "http://ya.ru/?a=2");
             UNIT_ASSERT_STRINGS_EQUAL(FilterQargs("http://ya.ru/?b=1&a=2&a=3", "a"), "http://ya.ru/?b=1");
             UNIT_ASSERT_STRINGS_EQUAL(FilterQargs("http://ya.ru/?some=&another=", "another"), "http://ya.ru/?some=");
         }
-
+ 
         Y_UNIT_TEST(TestRemoveEmptyFeature) {
             TUri uri;
             uri.Parse("http://ya.ru/?", NUri::TFeature::FeaturesRecommended);
-
+ 
             TQueryArgProcessing processing(TQueryArg::FeatureRemoveEmptyQuery | TQueryArg::FeatureRewriteDirty);
             auto result = processing.Process(uri);
             UNIT_ASSERT_EQUAL(result, TQueryArg::ProcessedOK);
             UNIT_ASSERT_STRINGS_EQUAL(uri.PrintS(), "http://ya.ru/");
         }
-
+ 
         Y_UNIT_TEST(TestNoRemoveEmptyFeature) {
             TUri uri;
             uri.Parse("http://ya.ru/?", NUri::TFeature::FeaturesRecommended);
-
+ 
             TQueryArgProcessing processing(0);
             auto result = processing.Process(uri);
             UNIT_ASSERT_EQUAL(result, TQueryArg::ProcessedOK);
             UNIT_ASSERT_STRINGS_EQUAL(uri.PrintS(), "http://ya.ru/?");
         }
     }
-}
+} 

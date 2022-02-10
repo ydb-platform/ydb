@@ -13,7 +13,7 @@ SRCS(
     location.cpp
     other.cpp
     parse.cpp
-    qargs.cpp
+    qargs.cpp 
     uri.cpp
     encodefsm.rl6
     parsefsm.rl6

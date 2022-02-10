@@ -11,7 +11,7 @@ namespace NXml {
         : Stream(stream)
         , IsError(false)
     {
-        Impl.Reset(xmlReaderForIO(ReadFromInputStreamCallback, nullptr, this, nullptr, nullptr, options.GetMask())); 
+        Impl.Reset(xmlReaderForIO(ReadFromInputStreamCallback, nullptr, this, nullptr, nullptr, options.GetMask()));
 
         if (!Impl) {
             ythrow yexception() << "cannot instantiate underlying xmlTextReader structure";

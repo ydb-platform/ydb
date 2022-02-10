@@ -1,7 +1,7 @@
 #pragma once
 
 #include "string_transform.h"
-#include "name_generator.h" 
+#include "name_generator.h"
 
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/json_value.h>
@@ -105,7 +105,7 @@ namespace NProtobufJson {
 
         FldNameMode FieldNameMode = FieldNameOriginalCase;
         bool AllowUnknownFields = true;
- 
+
         /// Use 'json_name' protobuf option for field name, mutually exclusive
         /// with FieldNameMode.
         bool UseJsonName = false;
@@ -126,7 +126,7 @@ namespace NProtobufJson {
 
         /// Throw exception if there is no required fields in json object.
         bool CheckRequiredFields = true;
- 
+
         /// Replace repeated fields content during merging
         bool ReplaceRepeatedFields = false;
 
@@ -145,7 +145,7 @@ namespace NProtobufJson {
         /// Allow js-style comments (both // and /**/)
         bool AllowComments = false;
     };
- 
+
     /// @throw yexception
     void MergeJson2Proto(const NJson::TJsonValue& json, google::protobuf::Message& proto,
                     const TJson2ProtoConfig& config = TJson2ProtoConfig());
@@ -173,7 +173,7 @@ namespace NProtobufJson {
                            const TJson2ProtoConfig& config = TJson2ProtoConfig()) {
         Json2Proto(TStringBuf(json), proto, config);
     }
- 
+
     /// @throw yexception
     inline void Json2Proto(IInputStream& in, google::protobuf::Message& proto,
                            const TJson2ProtoConfig& config = TJson2ProtoConfig()) {
@@ -190,7 +190,7 @@ namespace NProtobufJson {
         Json2Proto(jsonValue, protoValue, config);
         return protoValue;
     }
- 
+
     /// @throw yexception
     template <typename T>
     T Json2Proto(IInputStream& in, const TJson2ProtoConfig& config = TJson2ProtoConfig()) {
@@ -219,4 +219,4 @@ namespace NProtobufJson {
         return Json2Proto<T>(TStringBuf(ptr), config);
     }
 
-} 
+}

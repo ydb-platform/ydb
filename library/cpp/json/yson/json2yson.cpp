@@ -93,11 +93,11 @@ namespace NJson2Yson {
         NYson::TYsonParser ysonParser(&writer, inputStream, ::NYson::EYsonType::Node);
         ysonParser.Parse();
     }
- 
+
     void ConvertYson2Json(TStringBuf yson, IOutputStream* outputStream) {
         TMemoryInput inputStream(yson);
         ConvertYson2Json(&inputStream, outputStream);
-    } 
+    }
 
     TString ConvertYson2Json(TStringBuf yson) {
         TString json;

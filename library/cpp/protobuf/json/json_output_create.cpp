@@ -16,7 +16,7 @@ namespace NProtobufJson {
     TJsonMapOutputPtr CreateJsonMapOutput(TString& str, const TProto2JsonConfig& config) {
         return MakeHolder<TJsonStringWriterOutput>(&str, config);
     }
- 
+
     TJsonMapOutputPtr CreateJsonMapOutput(TStringStream& out, const TProto2JsonConfig& config) {
         return MakeHolder<TJsonWriterOutput>(&out, config);
     }

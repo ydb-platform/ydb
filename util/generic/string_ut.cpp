@@ -742,7 +742,7 @@ public:
     UNIT_TEST(TestStrCpy);
     UNIT_TEST(TestPrefixSuffix);
 #ifndef TSTRING_IS_STD_STRING
-    UNIT_TEST(TestCharRef); 
+    UNIT_TEST(TestCharRef);
 #endif
     UNIT_TEST(TestBack)
     UNIT_TEST(TestFront)
@@ -804,7 +804,7 @@ public:
     UNIT_TEST(TestStrCpy);
     UNIT_TEST(TestPrefixSuffix);
 #ifndef TSTRING_IS_STD_STRING
-    UNIT_TEST(TestCharRef); 
+    UNIT_TEST(TestCharRef);
 #endif
     UNIT_TEST(TestBack);
     UNIT_TEST(TestFront)

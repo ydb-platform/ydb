@@ -36,10 +36,10 @@
 
 static TString GetFieldName(const google::protobuf::FieldDescriptor& field,
                             const NProtobufJson::TJson2ProtoConfig& config) {
-    if (config.NameGenerator) { 
-        return config.NameGenerator(field); 
-    } 
- 
+    if (config.NameGenerator) {
+        return config.NameGenerator(field);
+    }
+
     if (config.UseJsonName) {
         Y_ASSERT(!field.json_name().empty());
         TString name = field.json_name();
@@ -409,10 +409,10 @@ namespace NProtobufJson {
         NJson::TJsonReaderConfig jsonCfg;
         jsonCfg.DontValidateUtf8 = true;
         jsonCfg.AllowComments = config.AllowComments;
- 
+
         NJson::TJsonValue jsonValue;
         ReadJsonTree(json, &jsonCfg, &jsonValue, /* throwOnError = */ true);
- 
+
         MergeJson2Proto(jsonValue, proto, config);
     }
 
@@ -425,4 +425,4 @@ namespace NProtobufJson {
         proto.Clear();
         MergeJson2Proto(json, proto, config);
     }
-} 
+}

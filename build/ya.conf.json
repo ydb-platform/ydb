@@ -3562,14 +3562,14 @@
                 }
             ]
         },
-        "yp-util": { 
-            "tools": { 
+        "yp-util": {
+            "tools": {
                 "yp-util": {
                     "bottle": "yp-util",
                     "executable": "yp-util"
                 }
-            }, 
-            "platforms": [ 
+            },
+            "platforms": [
                 {
                     "host": {
                         "os": "LINUX"
@@ -3582,16 +3582,16 @@
                     },
                     "default": true
                 }
-            ] 
-        }, 
-        "yp": { 
-            "tools": { 
+            ]
+        },
+        "yp": {
+            "tools": {
                 "yp": {
                     "bottle": "yp",
                     "executable": "yp"
                 }
-            }, 
-            "platforms": [ 
+            },
+            "platforms": [
                 {
                     "host": {
                         "os": "LINUX"
@@ -3604,8 +3604,8 @@
                     },
                     "default": true
                 }
-            ] 
-        }, 
+            ]
+        },
         "yd-migrate": {
             "tools": {
                 "yd-migrate": {
@@ -6824,32 +6824,32 @@
             },
             "executable": "rtmr-deploy"
         },
-        "yp-util": { 
-            "formula": { 
+        "yp-util": {
+            "formula": {
                 "sandbox_id": [
                     1204918529
                 ],
                 "match": "yp_util"
-            }, 
-            "executable": { 
+            },
+            "executable": {
                 "yp-util": [
                     "yp_util"
                 ]
-            } 
-        }, 
-        "yp": { 
-            "formula": { 
+            }
+        },
+        "yp": {
+            "formula": {
                 "sandbox_id": [
                     1204919943
                 ],
                 "match": "YP"
-            }, 
-            "executable": { 
+            },
+            "executable": {
                 "yp": [
                     "yp"
                 ]
-            } 
-        }, 
+            }
+        },
         "yd-migrate": {
             "formula": {
                 "sandbox_id": [

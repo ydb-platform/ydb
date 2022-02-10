@@ -1,7 +1,7 @@
 #include "httpreqdata.h"
 
-#include <util/stream/mem.h> 
- 
+#include <util/stream/mem.h>
+
 TBaseServerRequestData::TBaseServerRequestData(SOCKET s)
     : Addr(nullptr)
     , Host()
@@ -46,14 +46,14 @@ void TBaseServerRequestData::AppendQueryString(const char* str, size_t length) {
     SearchLength = ModifiedQueryString.size() - 1; // ignore terminator
 }
 
-void TBaseServerRequestData::SetRemoteAddr(TStringBuf addr) { 
-    TMemoryOutput out(AddrData, Y_ARRAY_SIZE(AddrData) - 1); 
-    out.Write(addr.substr(0, Y_ARRAY_SIZE(AddrData) - 1)); 
-    *out.Buf() = '\0'; 
- 
-    Addr = AddrData; 
-} 
- 
+void TBaseServerRequestData::SetRemoteAddr(TStringBuf addr) {
+    TMemoryOutput out(AddrData, Y_ARRAY_SIZE(AddrData) - 1);
+    out.Write(addr.substr(0, Y_ARRAY_SIZE(AddrData) - 1));
+    *out.Buf() = '\0';
+
+    Addr = AddrData;
+}
+
 const char* TBaseServerRequestData::RemoteAddr() const {
     if (!Addr) {
         *AddrData = 0;

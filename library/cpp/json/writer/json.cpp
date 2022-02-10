@@ -188,7 +188,7 @@ namespace NJsonWriter {
         RawWriteChar(':');
         return TAfterColonContext(*this);
     }
- 
+
     TBuf& TBuf::EndList() {
         CheckAndPop(JE_LIST);
         EndValue();

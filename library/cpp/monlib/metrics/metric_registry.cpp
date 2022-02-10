@@ -161,7 +161,7 @@ namespace NMonitoring {
     TMetric* TMetricRegistry::Metric(TLabelsType&& labels, Args&&... args) {
         {
             TReadGuard g{Lock_};
- 
+
             auto it = Metrics_.find(labels);
             if (it != Metrics_.end()) {
                 Y_ENSURE(it->second->Type() == type, "cannot create metric " << labels
@@ -170,7 +170,7 @@ namespace NMonitoring {
                 return static_cast<TMetric*>(it->second.Get());
             }
         }
- 
+
         {
             IMetricPtr metric = MakeHolder<TMetric>(std::forward<Args>(args)...);
 
@@ -186,7 +186,7 @@ namespace NMonitoring {
             return static_cast<TMetric*>(it->second.Get());
         }
     }
- 
+
     void TMetricRegistry::RemoveMetric(const ILabels& labels) noexcept {
         TWriteGuard g{Lock_};
         Metrics_.erase(labels);
@@ -214,7 +214,7 @@ namespace NMonitoring {
 
         consumer->OnStreamEnd();
     }
- 
+
     void TMetricRegistry::Append(TInstant time, IMetricConsumer* consumer) const {
         TReadGuard g{Lock_};
 

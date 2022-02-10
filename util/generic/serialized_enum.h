@@ -1,9 +1,9 @@
 #pragma once
 
-#include <util/generic/fwd.h> 
+#include <util/generic/fwd.h>
 #include <util/generic/vector.h>
 #include <util/generic/map.h>
- 
+
 #include <cstddef>
 #include <type_traits>
 
@@ -30,7 +30,7 @@ in your ya.make
  */
 template <typename EnumT>
 Y_CONST_FUNCTION constexpr size_t GetEnumItemsCount();
- 
+
 namespace NEnumSerializationRuntime {
     namespace NDetail {
         template <typename EEnum>
@@ -83,12 +83,12 @@ namespace NEnumSerializationRuntime {
     const TVector<TString>& GetEnumAllCppNamesImpl();
 }
 
-/** 
- * Returns names for items in enum or enum class 
- * 
- * @tparam EnumT     enum type 
- */ 
-template <typename EnumT> 
+/**
+ * Returns names for items in enum or enum class
+ *
+ * @tparam EnumT     enum type
+ */
+template <typename EnumT>
 Y_CONST_FUNCTION ::NEnumSerializationRuntime::TMappedDictView<EnumT, TString> GetEnumNames() {
     return ::NEnumSerializationRuntime::GetEnumNamesImpl<EnumT>();
 }

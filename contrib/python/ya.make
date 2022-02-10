@@ -980,7 +980,7 @@ RECURSE(
     scour
     scp
     Scrapy
-    seaborn 
+    seaborn
     selectors2
     selenium
     semantic-version

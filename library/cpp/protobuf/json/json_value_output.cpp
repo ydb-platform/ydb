@@ -1,5 +1,5 @@
-#include "json_value_output.h" 
- 
+#include "json_value_output.h"
+
 #include <library/cpp/json/json_reader.h>
 
 namespace NProtobufJson {
@@ -17,7 +17,7 @@ namespace NProtobufJson {
 
     void TJsonValueOutput::DoWrite(const TStringBuf& s) {
         WriteImpl(s);
-    } 
+    }
 
     void TJsonValueOutput::DoWrite(const TString& s) {
         WriteImpl(s);
@@ -34,7 +34,7 @@ namespace NProtobufJson {
     void TJsonValueOutput::DoWrite(long long i) {
         WriteImpl(i);
     }
- 
+
     void TJsonValueOutput::DoWrite(unsigned long long i) {
         WriteImpl(i);
     }
@@ -69,7 +69,7 @@ namespace NProtobufJson {
     void TJsonValueOutput::DoEndList() {
         Y_ASSERT(Context.top().Type == TContext::JSON_ARRAY);
         Context.pop();
-    } 
+    }
 
     void TJsonValueOutput::DoBeginObject() {
         Y_ASSERT(Context.top().Type == TContext::JSON_ARRAY || Context.top().Type == TContext::JSON_AFTER_KEY);
@@ -85,7 +85,7 @@ namespace NProtobufJson {
     void TJsonValueOutput::DoWriteKey(const TStringBuf& key) {
         Y_ASSERT(Context.top().Type == TContext::JSON_MAP);
         Context.emplace(TContext::JSON_AFTER_KEY, Context.top().Value[key]);
-    } 
+    }
 
     void TJsonValueOutput::DoEndObject() {
         Y_ASSERT(Context.top().Type == TContext::JSON_MAP);

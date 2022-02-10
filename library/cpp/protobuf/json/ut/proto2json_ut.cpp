@@ -75,31 +75,31 @@ Y_UNIT_TEST_SUITE(TProto2JsonFlatTest) {
     }
 
     Y_UNIT_TEST(TestNameGenerator) {
-        TNameGeneratorType proto; 
-        proto.SetField(42); 
- 
-        TProto2JsonConfig cfg; 
+        TNameGeneratorType proto;
+        proto.SetField(42);
+
+        TProto2JsonConfig cfg;
         cfg.SetNameGenerator([](const NProtoBuf::FieldDescriptor&) { return "42"; });
- 
-        TStringStream str; 
-        Proto2Json(proto, str, cfg); 
- 
-        UNIT_ASSERT_STRINGS_EQUAL(R"({"42":42})", str.Str()); 
-    } 
- 
+
+        TStringStream str;
+        Proto2Json(proto, str, cfg);
+
+        UNIT_ASSERT_STRINGS_EQUAL(R"({"42":42})", str.Str());
+    }
+
     Y_UNIT_TEST(TestEnumValueGenerator) {
-        TEnumValueGeneratorType proto; 
-        proto.SetEnum(TEnumValueGeneratorType::ENUM_42); 
- 
-        TProto2JsonConfig cfg; 
+        TEnumValueGeneratorType proto;
+        proto.SetEnum(TEnumValueGeneratorType::ENUM_42);
+
+        TProto2JsonConfig cfg;
         cfg.SetEnumValueGenerator([](const NProtoBuf::EnumValueDescriptor&) { return "42"; });
- 
-        TStringStream str; 
-        Proto2Json(proto, str, cfg); 
- 
-        UNIT_ASSERT_STRINGS_EQUAL(R"({"Enum":"42"})", str.Str()); 
-    } 
- 
+
+        TStringStream str;
+        Proto2Json(proto, str, cfg);
+
+        UNIT_ASSERT_STRINGS_EQUAL(R"({"Enum":"42"})", str.Str());
+    }
+
     Y_UNIT_TEST(TestFlatOptional){
         {TFlatOptional proto;
     FillFlatProto(&proto);

@@ -474,11 +474,11 @@ Y_UNIT_TEST_SUITE(TLastGetoptTests) {
     Y_UNIT_TEST(TestDefaultValue) {
         TOptsNoDefault opts;
         opts.AddLongOption("path").DefaultValue("/etc");
-        int value = 42; 
-        opts.AddLongOption("value").StoreResult(&value).DefaultValue(32); 
+        int value = 42;
+        opts.AddLongOption("value").StoreResult(&value).DefaultValue(32);
         TOptsParseResultTestWrapper r(&opts, V({"cmd", "dfdf"}));
         UNIT_ASSERT_VALUES_EQUAL("/etc", r.Get("path"));
-        UNIT_ASSERT_VALUES_EQUAL(32, value); 
+        UNIT_ASSERT_VALUES_EQUAL(32, value);
     }
 
     Y_UNIT_TEST(TestSplitValue) {

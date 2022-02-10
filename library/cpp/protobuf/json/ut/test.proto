@@ -135,18 +135,18 @@ message TMapType {
     map<string, string> Items = 1;
 };
 
-message TNameGeneratorType { 
-    optional int32 Field = 1; 
-}; 
- 
-message TEnumValueGeneratorType { 
-    enum EEnum { 
-        ENUM_42 = 1; 
-    }; 
- 
-    optional EEnum Enum = 1; 
-}; 
- 
+message TNameGeneratorType {
+    optional int32 Field = 1;
+};
+
+message TEnumValueGeneratorType {
+    enum EEnum {
+        ENUM_42 = 1;
+    };
+
+    optional EEnum Enum = 1;
+};
+
 message TComplexMapType {
     map<int32, int32> I32 = 1;
     map<int64, int64> I64 = 2;

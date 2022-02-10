@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 import abc
-import os 
+import os
 import ydb.tests.library.common.yatest_common as yatest_common
 
 
@@ -144,10 +144,10 @@ class KikimrFixedNodePortAllocator(KikimrNodePortAllocatorInterface):
             self.__mon_port = int(os.getenv('MON_PORT'))
         else:
             self.__mon_port = mon_port
-        if os.getenv('GRPC_PORT') is not None: 
-            self.__grpc_port = int(os.getenv('GRPC_PORT')) 
-        else: 
-            self.__grpc_port = grpc_port 
+        if os.getenv('GRPC_PORT') is not None:
+            self.__grpc_port = int(os.getenv('GRPC_PORT'))
+        else:
+            self.__grpc_port = grpc_port
         self.__mbus_port = mbus_port
         if os.getenv('IC_PORT') is not None:
             self.__ic_port = int(os.getenv('IC_PORT'))

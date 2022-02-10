@@ -8,7 +8,7 @@
 #include <library/cpp/actors/util/unordered_cache.h>
 #include <library/cpp/threading/queue/mpsc_htswap.h>
 #include <library/cpp/threading/queue/mpsc_read_as_filled.h>
-#include <util/generic/hash.h> 
+#include <util/generic/hash.h>
 #include <util/system/hp_timer.h>
 #include <util/generic/ptr.h>
 // TODO: clean all broken arcadia atomic stuff and replace with intrinsics
@@ -17,8 +17,8 @@ namespace NActors {
     class IActor;
     class IExecutorPool;
 
-    const ui64 ARRAY_CAPACITY = 8; 
- 
+    const ui64 ARRAY_CAPACITY = 8;
+
     // structure of hint:
     // 1 bit: is service or direct hint
     // 2 bits: pool index
@@ -29,12 +29,12 @@ namespace NActors {
         struct TMailboxActorPack {
             enum EType {
                 Simple = 0,
-                Array = 1, 
-                Map = 2 
+                Array = 1,
+                Map = 2
             };
         };
 
-        using TActorMap = THashMap<ui64, IActor*>; 
+        using TActorMap = THashMap<ui64, IActor*>;
 
         struct TExecutionState {
             enum EState {
@@ -59,26 +59,26 @@ namespace NActors {
         ui32 ActorPack : 2;
         ui32 Knobs : 22;
 
-        struct TActorPair { 
-            IActor *Actor; 
-            ui64 ActorId; 
-        }; 
- 
-        struct alignas(64) TActorArray { 
-            TActorPair Actors[ARRAY_CAPACITY]; 
-        }; 
- 
-        union TActorsInfo { 
-            TActorPair Simple; 
-            struct { 
-                TActorArray* ActorsArray; 
-                ui64 ActorsCount; 
-            } Array; 
-            struct { 
-                TActorMap* ActorsMap; 
-            } Map; 
-        } ActorsInfo; 
- 
+        struct TActorPair {
+            IActor *Actor;
+            ui64 ActorId;
+        };
+
+        struct alignas(64) TActorArray {
+            TActorPair Actors[ARRAY_CAPACITY];
+        };
+
+        union TActorsInfo {
+            TActorPair Simple;
+            struct {
+                TActorArray* ActorsArray;
+                ui64 ActorsCount;
+            } Array;
+            struct {
+                TActorMap* ActorsMap;
+            } Map;
+        } ActorsInfo;
+
         TMailboxHeader(TMailboxType::EType type);
         ~TMailboxHeader();
 
@@ -96,7 +96,7 @@ namespace NActors {
         bool UnlockAsFree(bool wouldReschedule);         // preceed with releasing lock, but mark as free one
 
         bool IsEmpty() const noexcept {
-            return (ActorPack == TMailboxActorPack::Simple && ActorsInfo.Simple.ActorId == 0); 
+            return (ActorPack == TMailboxActorPack::Simple && ActorsInfo.Simple.ActorId == 0);
         }
 
         template<typename T>
@@ -125,25 +125,25 @@ namespace NActors {
 
         IActor* FindActor(ui64 localActorId) noexcept {
             switch (ActorPack) {
-                case TMailboxActorPack::Simple: { 
-                    if (ActorsInfo.Simple.ActorId == localActorId) 
-                        return ActorsInfo.Simple.Actor; 
+                case TMailboxActorPack::Simple: {
+                    if (ActorsInfo.Simple.ActorId == localActorId)
+                        return ActorsInfo.Simple.Actor;
                     break;
-                } 
+                }
                 case TMailboxActorPack::Map: {
-                    TActorMap::iterator it = ActorsInfo.Map.ActorsMap->find(localActorId); 
-                    if (it != ActorsInfo.Map.ActorsMap->end()) 
+                    TActorMap::iterator it = ActorsInfo.Map.ActorsMap->find(localActorId);
+                    if (it != ActorsInfo.Map.ActorsMap->end())
                         return it->second;
-                    break; 
-                } 
-                case TMailboxActorPack::Array: { 
-                    for (ui64 i = 0; i < ActorsInfo.Array.ActorsCount; ++i) { 
-                        if (ActorsInfo.Array.ActorsArray->Actors[i].ActorId == localActorId) { 
-                            return ActorsInfo.Array.ActorsArray->Actors[i].Actor; 
-                        } 
-                    } 
-                    break; 
-                } 
+                    break;
+                }
+                case TMailboxActorPack::Array: {
+                    for (ui64 i = 0; i < ActorsInfo.Array.ActorsCount; ++i) {
+                        if (ActorsInfo.Array.ActorsArray->Actors[i].ActorId == localActorId) {
+                            return ActorsInfo.Array.ActorsArray->Actors[i].Actor;
+                        }
+                    }
+                    break;
+                }
                 default:
                     Y_FAIL();
             }
@@ -152,41 +152,41 @@ namespace NActors {
 
         void AttachActor(ui64 localActorId, IActor* actor) noexcept {
             switch (ActorPack) {
-                case TMailboxActorPack::Simple: { 
-                    if (ActorsInfo.Simple.ActorId == 0) { 
-                        ActorsInfo.Simple.ActorId = localActorId; 
-                        ActorsInfo.Simple.Actor = actor; 
+                case TMailboxActorPack::Simple: {
+                    if (ActorsInfo.Simple.ActorId == 0) {
+                        ActorsInfo.Simple.ActorId = localActorId;
+                        ActorsInfo.Simple.Actor = actor;
                         return;
                     } else {
-                        auto ar = new TActorArray; 
-                        ar->Actors[0] = ActorsInfo.Simple; 
-                        ar->Actors[1] = TActorPair{actor, localActorId}; 
-                        ActorsInfo.Array.ActorsCount = 2; 
-                        ActorPack = TMailboxActorPack::Array; 
-                        ActorsInfo.Array.ActorsArray = ar; 
-                    } 
-                    break; 
-                } 
-                case TMailboxActorPack::Map: { 
-                    ActorsInfo.Map.ActorsMap->insert(TActorMap::value_type(localActorId, actor)); 
-                    break; 
-                } 
-                case TMailboxActorPack::Array: { 
-                    if (ActorsInfo.Array.ActorsCount == ARRAY_CAPACITY) { 
-                        TActorMap* mp = new TActorMap(); 
-                        for (ui64 i = 0; i < ARRAY_CAPACITY; ++i) { 
-                            mp->emplace(ActorsInfo.Array.ActorsArray->Actors[i].ActorId, ActorsInfo.Array.ActorsArray->Actors[i].Actor); 
-                        } 
-                        mp->emplace(localActorId, actor); 
-                        ActorPack = TMailboxActorPack::Map;
-                        ActorsInfo.Array.ActorsCount = 0; 
-                        delete ActorsInfo.Array.ActorsArray; 
-                        ActorsInfo.Map.ActorsMap = mp; 
-                    } else { 
-                        ActorsInfo.Array.ActorsArray->Actors[ActorsInfo.Array.ActorsCount++] = TActorPair{actor, localActorId}; 
+                        auto ar = new TActorArray;
+                        ar->Actors[0] = ActorsInfo.Simple;
+                        ar->Actors[1] = TActorPair{actor, localActorId};
+                        ActorsInfo.Array.ActorsCount = 2;
+                        ActorPack = TMailboxActorPack::Array;
+                        ActorsInfo.Array.ActorsArray = ar;
                     }
                     break;
-                } 
+                }
+                case TMailboxActorPack::Map: {
+                    ActorsInfo.Map.ActorsMap->insert(TActorMap::value_type(localActorId, actor));
+                    break;
+                }
+                case TMailboxActorPack::Array: {
+                    if (ActorsInfo.Array.ActorsCount == ARRAY_CAPACITY) {
+                        TActorMap* mp = new TActorMap();
+                        for (ui64 i = 0; i < ARRAY_CAPACITY; ++i) {
+                            mp->emplace(ActorsInfo.Array.ActorsArray->Actors[i].ActorId, ActorsInfo.Array.ActorsArray->Actors[i].Actor);
+                        }
+                        mp->emplace(localActorId, actor);
+                        ActorPack = TMailboxActorPack::Map;
+                        ActorsInfo.Array.ActorsCount = 0;
+                        delete ActorsInfo.Array.ActorsArray;
+                        ActorsInfo.Map.ActorsMap = mp;
+                    } else {
+                        ActorsInfo.Array.ActorsArray->Actors[ActorsInfo.Array.ActorsCount++] = TActorPair{actor, localActorId};
+                    }
+                    break;
+                }
                 default:
                     Y_FAIL();
             }
@@ -198,55 +198,55 @@ namespace NActors {
             IActor* actorToDestruct = nullptr;
 
             switch (ActorPack) {
-                case TMailboxActorPack::Simple: { 
-                    Y_VERIFY(ActorsInfo.Simple.ActorId == localActorId); 
-                    actorToDestruct = ActorsInfo.Simple.Actor; 
+                case TMailboxActorPack::Simple: {
+                    Y_VERIFY(ActorsInfo.Simple.ActorId == localActorId);
+                    actorToDestruct = ActorsInfo.Simple.Actor;
 
-                    ActorsInfo.Simple.ActorId = 0; 
-                    ActorsInfo.Simple.Actor = nullptr; 
+                    ActorsInfo.Simple.ActorId = 0;
+                    ActorsInfo.Simple.Actor = nullptr;
                     break;
-                } 
+                }
                 case TMailboxActorPack::Map: {
-                    TActorMap::iterator it = ActorsInfo.Map.ActorsMap->find(localActorId); 
-                    Y_VERIFY(it != ActorsInfo.Map.ActorsMap->end()); 
+                    TActorMap::iterator it = ActorsInfo.Map.ActorsMap->find(localActorId);
+                    Y_VERIFY(it != ActorsInfo.Map.ActorsMap->end());
 
                     actorToDestruct = it->second;
-                    ActorsInfo.Map.ActorsMap->erase(it); 
+                    ActorsInfo.Map.ActorsMap->erase(it);
 
-                    if (ActorsInfo.Map.ActorsMap->size() == ARRAY_CAPACITY) { 
-                        auto ar = new TActorArray; 
-                        ui64 i = 0; 
-                        for (auto& [actorId, actor] : *ActorsInfo.Map.ActorsMap) { 
-                           ar->Actors[i++] = TActorPair{actor, actorId}; 
-                        } 
-                        delete ActorsInfo.Map.ActorsMap; 
-                        ActorPack = TMailboxActorPack::Array; 
-                        ActorsInfo.Array.ActorsArray = ar; 
-                        ActorsInfo.Array.ActorsCount = ARRAY_CAPACITY; 
-                    } 
-                    break; 
-                } 
-                case TMailboxActorPack::Array: { 
-                    bool found = false; 
-                    for (ui64 i = 0; i < ActorsInfo.Array.ActorsCount; ++i) { 
-                        if (ActorsInfo.Array.ActorsArray->Actors[i].ActorId == localActorId) { 
-                            found = true; 
-                            actorToDestruct = ActorsInfo.Array.ActorsArray->Actors[i].Actor; 
-                            ActorsInfo.Array.ActorsArray->Actors[i] = ActorsInfo.Array.ActorsArray->Actors[ActorsInfo.Array.ActorsCount - 1]; 
-                            ActorsInfo.Array.ActorsCount -= 1; 
-                            break; 
-                        } 
-                    } 
-                    Y_VERIFY(found); 
- 
-                    if (ActorsInfo.Array.ActorsCount == 1) { 
-                        const TActorPair Actor = ActorsInfo.Array.ActorsArray->Actors[0]; 
-                        delete ActorsInfo.Array.ActorsArray; 
-                        ActorPack = TMailboxActorPack::Simple;
-                        ActorsInfo.Simple = Actor; 
+                    if (ActorsInfo.Map.ActorsMap->size() == ARRAY_CAPACITY) {
+                        auto ar = new TActorArray;
+                        ui64 i = 0;
+                        for (auto& [actorId, actor] : *ActorsInfo.Map.ActorsMap) {
+                           ar->Actors[i++] = TActorPair{actor, actorId};
+                        }
+                        delete ActorsInfo.Map.ActorsMap;
+                        ActorPack = TMailboxActorPack::Array;
+                        ActorsInfo.Array.ActorsArray = ar;
+                        ActorsInfo.Array.ActorsCount = ARRAY_CAPACITY;
                     }
-                    break; 
-                } 
+                    break;
+                }
+                case TMailboxActorPack::Array: {
+                    bool found = false;
+                    for (ui64 i = 0; i < ActorsInfo.Array.ActorsCount; ++i) {
+                        if (ActorsInfo.Array.ActorsArray->Actors[i].ActorId == localActorId) {
+                            found = true;
+                            actorToDestruct = ActorsInfo.Array.ActorsArray->Actors[i].Actor;
+                            ActorsInfo.Array.ActorsArray->Actors[i] = ActorsInfo.Array.ActorsArray->Actors[ActorsInfo.Array.ActorsCount - 1];
+                            ActorsInfo.Array.ActorsCount -= 1;
+                            break;
+                        }
+                    }
+                    Y_VERIFY(found);
+
+                    if (ActorsInfo.Array.ActorsCount == 1) {
+                        const TActorPair Actor = ActorsInfo.Array.ActorsArray->Actors[0];
+                        delete ActorsInfo.Array.ActorsArray;
+                        ActorPack = TMailboxActorPack::Simple;
+                        ActorsInfo.Simple = Actor;
+                    }
+                    break;
+                }
             }
 
             return actorToDestruct;

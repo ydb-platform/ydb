@@ -227,9 +227,9 @@ mime_type       = "text/plain"i                     %{c(MIME_TEXT)}
                 | "application/x-gzip"i             %{c(MIME_GZIP)}
                 | "application/json"i               %{c(MIME_JSON)}
                 | ("application/javascript"i | "text/javascript"i) %{c(MIME_JAVASCRIPT)}
-                | "application/vnd.android.package-archive"i %{c(MIME_APK)} 
-                | ("image/x-icon"i | "image/vnd.microsoft.icon"i) %{c(MIME_IMAGE_ICON)} 
-                ; 
+                | "application/vnd.android.package-archive"i %{c(MIME_APK)}
+                | ("image/x-icon"i | "image/vnd.microsoft.icon"i) %{c(MIME_IMAGE_ICON)}
+                ;
 
 
 charset_name    = token_char+ >clear_buf $update_buf;
@@ -266,7 +266,7 @@ refresh         = "refresh"i def int ';' lws "url="i loc_url eoh %set_location;
 
 ################# x-robots-tag ################
 action set_x_robots {
-    if (hd && AcceptingXRobots) { 
+    if (hd && AcceptingXRobots) {
         if (I > 0)
             hd->x_robots_tag |= I;
 
@@ -277,10 +277,10 @@ action set_x_robots {
     }
 }
 
-action accept_x_robots { 
-    AcceptingXRobots = (bool)I; 
-} 
- 
+action accept_x_robots {
+    AcceptingXRobots = (bool)I;
+}
+
 x_robots_directive = "none"i      %{c(3)} | "all"i     %{c(-3)}
                    | "noindex"i   %{c(1)} | "index"i   %{c(-1)}
                    | "nofollow"i  %{c(2)} | "follow"i  %{c(-2)}
@@ -288,19 +288,19 @@ x_robots_directive = "none"i      %{c(3)} | "all"i     %{c(-3)}
                    | "noyaca"i    %{c(16)}
                    | "noodp"i     %{c(8)};
 
-any_value = (any_text_char - [, \t])+ (lws (any_text_char - [, \t])+)*; 
-any_key = (any_text_char - [:, \t])+ (lws (any_text_char - [:, \t])+)*; 
- 
-unavailable_after_directive = "unavailable_after"i def any_value; 
- 
-yandex_robot = "yandex"i | "yandexbot"i; 
-other_robot = any_key - "unavailable_after"i - yandex_robot; 
-robot_specifier = yandex_robot %{c(1)} | other_robot %{c(0)}; 
- 
-x_robots_value = (robot_specifier def %accept_x_robots)? (unavailable_after_directive | (x_robots_directive %set_x_robots) | any_value? ); 
- 
-x_robots_tag = "x-robots-tag"i def >{ AcceptingXRobots = true; } x_robots_value (lws ',' lws x_robots_value)* eoh; 
- 
+any_value = (any_text_char - [, \t])+ (lws (any_text_char - [, \t])+)*;
+any_key = (any_text_char - [:, \t])+ (lws (any_text_char - [:, \t])+)*;
+
+unavailable_after_directive = "unavailable_after"i def any_value;
+
+yandex_robot = "yandex"i | "yandexbot"i;
+other_robot = any_key - "unavailable_after"i - yandex_robot;
+robot_specifier = yandex_robot %{c(1)} | other_robot %{c(0)};
+
+x_robots_value = (robot_specifier def %accept_x_robots)? (unavailable_after_directive | (x_robots_directive %set_x_robots) | any_value? );
+
+x_robots_tag = "x-robots-tag"i def >{ AcceptingXRobots = true; } x_robots_value (lws ',' lws x_robots_value)* eoh;
+
 ################# rel_canonical ###############
 action set_canonical {
     if (hd && buflen < FETCHER_URL_MAX) {

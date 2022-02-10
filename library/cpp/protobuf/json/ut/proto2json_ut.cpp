@@ -981,31 +981,31 @@ Y_UNIT_TEST(TestStringifyLongNumbers) {
             UNIT_ASSERT_EQUAL(jsonStr.Str(), "{\"SI64\":" #value "}");     \
         }                                                                  \
     } while (false)
- 
+
     TEST_SINGLE(TProto2JsonConfig::StringifyLongNumbersNever, 1, false);
     TEST_SINGLE(TProto2JsonConfig::StringifyLongNumbersNever, 1000000000, false);
     TEST_SINGLE(TProto2JsonConfig::StringifyLongNumbersNever, 10000000000000000, false);
     TEST_SINGLE(TProto2JsonConfig::StringifyLongNumbersNever, -1, false);
     TEST_SINGLE(TProto2JsonConfig::StringifyLongNumbersNever, -1000000000, false);
     TEST_SINGLE(TProto2JsonConfig::StringifyLongNumbersNever, -10000000000000000, false);
- 
+
     TEST_SINGLE(TProto2JsonConfig::StringifyLongNumbersForDouble, 1, false);
     TEST_SINGLE(TProto2JsonConfig::StringifyLongNumbersForDouble, 1000000000, false);
     TEST_SINGLE(TProto2JsonConfig::StringifyLongNumbersForDouble, 10000000000000000, true);
     TEST_SINGLE(TProto2JsonConfig::StringifyLongNumbersForDouble, -1, false);
     TEST_SINGLE(TProto2JsonConfig::StringifyLongNumbersForDouble, -1000000000, false);
     TEST_SINGLE(TProto2JsonConfig::StringifyLongNumbersForDouble, -10000000000000000, true);
- 
+
     TEST_SINGLE(TProto2JsonConfig::StringifyLongNumbersForFloat, 1, false);
     TEST_SINGLE(TProto2JsonConfig::StringifyLongNumbersForFloat, 1000000000, true);
     TEST_SINGLE(TProto2JsonConfig::StringifyLongNumbersForFloat, 10000000000000000, true);
     TEST_SINGLE(TProto2JsonConfig::StringifyLongNumbersForFloat, -1, false);
     TEST_SINGLE(TProto2JsonConfig::StringifyLongNumbersForFloat, -1000000000, true);
     TEST_SINGLE(TProto2JsonConfig::StringifyLongNumbersForFloat, -10000000000000000, true);
- 
-#undef TEST_SINGLE 
+
+#undef TEST_SINGLE
 } // TestStringifyLongNumbers
- 
+
 Y_UNIT_TEST(TestExtension) {
     TExtensionField proto;
     proto.SetExtension(bar, 1);

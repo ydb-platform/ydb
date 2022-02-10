@@ -308,7 +308,7 @@ namespace NMonitoring {
             return groups->Find(name) != nullptr;
         }
 
-        G* Find(const T& name) const { 
+        G* Find(const T& name) const {
             TCollection* groups = Groups;
             return groups->Find(name);
         }

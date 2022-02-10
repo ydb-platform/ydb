@@ -82,7 +82,7 @@ namespace NProtobufJson {
 
         /// Custom field names generator.
         TNameGenerator NameGenerator = {};
- 
+
         /// Custom enum values generator.
         TEnumValueGenerator EnumValueGenerator = {};
 
@@ -144,7 +144,7 @@ namespace NProtobufJson {
             StringifyLongNumbers = stringify;
             return *this;
         }
- 
+
         TSelf& SetNameGenerator(TNameGenerator callback) {
             NameGenerator = callback;
             return *this;

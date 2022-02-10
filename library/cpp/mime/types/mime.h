@@ -53,7 +53,7 @@ enum MimeTypes {
     MIME_IMAGE_TIFF = 39,
     MIME_IMAGE_PNM = 40,
     MIME_IMAGE_SVG = 41,
-    MIME_IMAGE_ICON = 42, 
+    MIME_IMAGE_ICON = 42,
     MIME_WOFF = 43,
     MIME_WOFF2 = 44,
     MIME_TTF = 45,

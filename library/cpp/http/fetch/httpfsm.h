@@ -58,8 +58,8 @@ struct THttpHeaderParser {
     char* hreflangpos;
     size_t hreflangspace;
 
-    bool AcceptingXRobots; 
- 
+    bool AcceptingXRobots;
+
     THttpAuthHeader* auth_hd;
     THttpRequestHeader* request_hd;
 
